@@ -45,7 +45,6 @@
 // Stub_Draw. Declared at FILE SCOPE on purpose: a block-scope `extern` inside
 // Stub_Draw is declared in the enclosing ANONYMOUS namespace, which links
 // against a symbol that does not exist rather than the real one.
-void RtObjectFactoryDtorsProbe();
 void DlgCtrlRoute_Arm();                  // standalone/dlgctrl_route.cpp
 #include "UpdateLoop.h"
 #include "Game/menudialogloopt_funcs.h"

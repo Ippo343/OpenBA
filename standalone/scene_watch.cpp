@@ -439,7 +439,6 @@ bool LodEnabled() {
 // docs/runtime_port/WAVE27_LANE_GFXMESH.md §7.
 // ---------------------------------------------------------------------------
 bool IsMeshInstance(void* obj) {
-    static uintptr_t s_addDrawItemsDll  = 0;
     static uintptr_t s_addDrawItemsOurs = 0;
     static bool      s_resolved         = false;
     // Resolved once, lazily. Safe here and nowhere near the pre-init freeze
@@ -450,16 +449,14 @@ bool IsMeshInstance(void* obj) {
     // picked up -- and there is no such thing in this tree.
     if (!s_resolved) {
         s_resolved = true;
-        s_addDrawItemsDll  = ResolveRuntimeRaw(0x180100f20);
         s_addDrawItemsOurs =
             reinterpret_cast<uintptr_t>(RtPortLookupAddr(0x180100f20));
     }
-    if (!s_addDrawItemsDll && !s_addDrawItemsOurs) return false;
+    if (!s_addDrawItemsOurs) return false;
     void** vt = *reinterpret_cast<void***>(obj);
     if (!VtableLooksLikeCode(vt)) return false;
     const uintptr_t slot3 = reinterpret_cast<uintptr_t>(vt[3]);
-    return (s_addDrawItemsDll  && slot3 == s_addDrawItemsDll)
-        || (s_addDrawItemsOurs && slot3 == s_addDrawItemsOurs);
+    return slot3 == s_addDrawItemsOurs;
 }
 
 struct MeshInfo {

@@ -67,7 +67,7 @@
 //       deleting destructor and the constructor this file reaches THROUGH THE
 //       REGISTRY DOOR (see `ImageBufferCtor()` and the kill-switch note there).
 //
-//   Serialize   `RtSaveTrace::Compare`, WRITING direction, two independent
+//   Serialize   the emission oracle, WRITING direction, two independent
 //       synthetic sinks, **with a prefix stop at 10 emissions**. The prefix is
 //       not caution, it is required: `PlatformSerialize` calls the object's own
 //       vtable slot 9 (`Create`) on BOTH directions when `kind` is not 4/5
@@ -88,7 +88,6 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/video/ImageBuffer.h"
 #include "../../types/io/Serializer.h"
-#include "../io/save_trace.h"
 
 using rt::io::Encoding;
 using rt::io::ReaderWriter;
@@ -226,36 +225,6 @@ void EmitUInt(ReaderWriter* rw, uint32_t* p) {
     using Fn = void (*)(ReaderWriter*, uint32_t*, const char*);
     reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kScalarUInt / 8])(rw, p, nullptr);
 }
-
-// ---------------------------------------------------------------------------
-// The save-trace probe scaffolding, in the shape goal_serialize.cpp established.
-// ---------------------------------------------------------------------------
-using StreamMemberFn = void (*)(void*, Stream*);
-
-Stream* StreamOf(void* serializer) {
-    return static_cast<Serializer*>(serializer)->stream;
-}
-
-// `Compare` guards against `ours == theirs` by comparing function pointers;
-// an adapter lambda defeats that, so the equivalent check is made here on the
-// thing that matters — whether the registry hands OUR body back for this name.
-bool PortIsLive(const char* mangled, const void* ours) {
-    void* viaRegistry = ResolveExport(mangled);
-    if (viaRegistry == ours) return true;
-    std::fprintf(stderr,
-                 "[RtSaveTrace] FAIL %s: the port is NOT registered (registry -> %p, "
-                 "ours %p), so this comparison would prove nothing\n",
-                 mangled, viaRegistry, ours);
-    return false;
-}
-
-// Re-entrancy guard: `Compare` calls `ours`, which is the very body that
-// started the comparison. One flag, set for the duration.
-bool g_probing = false;
-struct ProbeGuard {
-    ProbeGuard() { g_probing = true; }
-    ~ProbeGuard() { g_probing = false; }
-};
 
 }  // namespace
 
@@ -488,7 +457,7 @@ extern "C" void* Video_ImageBuffer_Reconstruct(ImageBuffer* self) {
 // header by comment rather than by rename, so that no other lane's file has to
 // move in this wave.
 //
-// ORACLE: see the file banner — RtSaveTrace prefix oracle, stop at 10.
+// ORACLE: see the file banner — emission prefix oracle, stop at 10.
 // ============================================================================
 extern "C" bool Video_ImageBuffer_Serialize(ImageBuffer* self, Stream* stream) {
     Serializer ser;

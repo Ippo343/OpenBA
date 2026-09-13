@@ -124,7 +124,6 @@
 #include "../../types/collection/Collection.h"
 #include "../../types/ui/Dialog.h"
 #include "../../types/ui/DialogInstance.h"
-#include "../object/factory_dispatch_probe.h"   // WAVE 11 follow-up 5 (lane TINFO)
 
 // ---- ResolveExport / ResolveAddr -------------------------------------------
 // Forward-declared rather than pulled in from standalone/resolve.h, for the
@@ -454,8 +453,6 @@ void RtUiDialogInstance_AddControllerTab(void* self, uint32_t typeId, void* data
     // info+0x20 (`factoryFn`), and RCX is left holding `info`. The callee is
     // `?CreateNewObject@…@SAPEAVBase@Object@@XZ`, a STATIC that ignores it; the
     // argument is passed anyway so the register state matches retail exactly.
-    // WAVE 11 follow-up 5 (lane TINFO) -- see factory_dispatch_probe.h.
-    RtFactoryDispatchObserve(RT_FACTORY_DISPATCH_ADD_CONTROLLER, info);
     void* const created =
         reinterpret_cast<void* (*)(void*)>(info->factoryFn)(info);
 

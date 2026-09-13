@@ -99,7 +99,7 @@
 // ---------------------------------------------------------------------------
 // ORACLE
 // ---------------------------------------------------------------------------
-// `RtSaveTrace::Compare` in the WRITING direction against two synthetic sinks,
+// the emission oracle in the WRITING direction against two synthetic sinks,
 // in situ on the first 16 real calls — the same instrument
 // `runtime/src/achievement/goal_serialize.cpp` uses, and this file follows its
 // shape deliberately.

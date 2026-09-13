@@ -30,9 +30,7 @@
 // DIFFERENT answer to "how do you oracle a function with a real side effect,
 // without performing that side effect twice":
 //   * EnableCursor's own body has NO direct Win32 call at all — see its own
-//     banner below — so it gets the rt_predict.h PREDICTING oracle: ours
-//     predicts and writes nothing, theirs runs for real exactly once. This is
-//     the literal motivating case rt_predict.h's own banner names by name.
+//     banner below — and is written against the live sink (rt_sink.h).
 //   * LaunchProcess spawns a real process or opens a real shell document; a
 //     predicting oracle cannot help because the state it changes (the OS
 //     process table, or whatever ShellExecuteW launches) is not a memory
@@ -46,7 +44,7 @@
 #include <cstdint>
 #include <cstring>
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_predict.h"   // RtSink, the write sink EnableCursorBody takes
+#include "../../funcs/rt_sink.h"   // RtSink, the write sink EnableCursorBody takes
 #include "../../types/application/Application.h"
 #include "../collection/set_avl.h"
 #include "../system/timer.h"
@@ -190,16 +188,8 @@ void RtApp_YieldToThreads(Application* /*self*/) {
 // constant WM_SETCURSOR instead of the live message id. Verified against
 // `rtsetavl::Node`'s pinned layout (set_avl.h) rather than re-derived.
 //
-// THE ORACLE: rt_predict.h's PREDICTING oracle, not a replay. This is the
-// literal motivating case rt_predict.h's own banner names by name: "our body
-// would have already set the Application flag, so the DLL's replay takes the
-// early-out and never exercises the tree walk at all" — a naive
-// ours-then-theirs replay would show retail EITHER a no-op (state already
-// matches, early return, dispatch never runs) or, on the rare frame where a
-// callback IS registered, a SECOND live SetCursor/ShowCursor(TRUE). Predicting
-// avoids both failure modes: ours writes nothing, so theirs runs on pristine
-// state and is the ONE real execution — exactly one toggle, exactly one
-// dispatch (if any), for real, every time the oracle is armed.
+// The body is written against the live sink (rt_sink.h); every store below
+// goes through it.
 // ============================================================================
 namespace {
 
@@ -217,9 +207,8 @@ struct CursorCallbackElement {
     CursorCallbackFn callback;  // +0x08
 };
 
-// The body, written ONCE against an RtSink (rt_predict.h): a plain RtSink()
-// writes through for real (the shipping path); a predicting RtSink records
-// what it would have written and performs no I/O.
+// The body, written against the live sink (rt_sink.h): every store goes
+// through `out` and lands for real.
 void EnableCursorBody(Application* self, bool enabled, RtSink& out) {
     const uint8_t prev = out.ReadU8(&self->_cursorEnabled);
     if (prev == static_cast<uint8_t>(enabled)) return;          // 0x18009f803
@@ -325,8 +314,7 @@ void RtApp_EnableCursor(Application* self, bool enabled) {
 // DLL's own copy afterward would spawn a SECOND real child process (wait
 // path) or open a SECOND real shell document (no-wait path). Neither side
 // effect lands in any memory region either implementation could snapshot or
-// restore, so rt_predict.h's technique (which needs an in-object post-state
-// to compare) does not apply here the way it does to EnableCursor.
+// restore.
 // the diff oracle'd like PlatformUpdate/SleepThread/YieldToThreads above, for
 // the identical reason.
 // ============================================================================

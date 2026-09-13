@@ -18,7 +18,6 @@ extern int RtVideoImageBufferVtableRegister();  // imagebuffer_vtable.cpp (Wave 
 extern int RtVideoCompanionRegister(); // companion_data.cpp (Wave 9 lane B2)
 extern int RtVideoDynamicResourcesRegister();  // dynamic_resources.cpp (Wave 9 lane VID)
 extern int RtVideoContextLifecycleRegister();  // context_lifecycle.cpp (Wave 9 lane VID2)
-extern "C" int  RtVideoShaderConstantsVerify();         // constant_buffer.cpp
 extern int      RtVideoContextCtorRegister();             // context_ctor.cpp
 extern int      RtVideoContextBindRegister();            // context_bind.cpp (lane CTX)
 extern int      RtVideoDeviceEnumTypesRegister();          // device_enum_types.cpp (Wave 18 GFXIF)
@@ -54,7 +53,6 @@ void RtVideoPortInit() {
     // only reads the DLL's .rdata — no allocation, no ordering hazard.
     extern int RtVideoConstantBufferRegister();
     n += RtVideoConstantBufferRegister();
-    RtVideoShaderConstantsVerify();
     // Wave 9 lane VID2 phase 4: the Context ctor and CreateVideoContext. Its
     // probe is armed here and RUN from the top of PlatformStartup for the same
     // allocator reason as the two above.

@@ -339,11 +339,6 @@ extern "C" void RtGraphics_MaterialInstance_Setup(const MaterialInstance* self,
 // 21/41 when it was 27/41
 // (reference_census_cannot_see_nonliteral_registrations.md).
 // ============================================================================
-// standalone/matsetup_detour.cpp (Wave 24 lane GFXMAT). Forward-declared here
-// rather than pulled from a header for the reason rt_port.h gives:
-// runtime_detour.h drags in <windows.h>, which collides with the engine's own
-// type names.
-extern "C" bool RtGraphicsMatSetupInstallDetour(void* ourFn);
 
 int RtGraphicsWave21GfxbodyRegister() {
     int count = 0;
@@ -355,19 +350,6 @@ int RtGraphicsWave21GfxbodyRegister() {
     RegisterRuntimeExport("?Setup@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z",
                           (void*)&RtGraphics_MaterialInstance_Setup); ++count;
 
-    // WAVE 24 LANE GFXMAT. The name registration above reaches OUR call sites
-    // and, through runtime/src/ui/spritecontext_flush.cpp:267, ONE of retail's
-    // two internal callers. It cannot reach the other — the rel32 CALL at
-    // 0x180105572 inside Graphics::Renderer::DrawItemList, the every-frame 3D
-    // material bind. Only a detour reaches that one, and a registration is not
-    // a door for rel32.
-    //
-    // OPT-IN: it returns false unless RT_MATSETUP_DETOUR=1, so this
-    // line changes nothing on a default run. The measured rel32 census (with
-    // its positive control), the prologue bytes and the recursion argument are
-    // all in standalone/matsetup_detour.cpp. `count` is NOT incremented —
-    // nothing new was registered here.
-    RtGraphicsMatSetupInstallDetour((void*)&RtGraphics_MaterialInstance_Setup);
 
     return count;   // 3
 }

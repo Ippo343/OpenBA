@@ -225,18 +225,13 @@ void* FindModalDialog() {
     // BANISHED_MODAL_DRIVER_TEST run HUNG to its timeout with no error line --
     // an instrument confidently reporting nothing, about the wrong thing.
     //
-    // The signature this function wants is "either implementation of
-    // UpdateStandAloneUI", so it must name both doors explicitly:
-    //   * the RAW DLL address, which is what the DLL's ShowDialog installs;
-    //   * the registry address, which is what OUR ShowDialog port installs.
-    // A null from either (the DLL is absent at cutover; nothing registered)
-    // simply never matches, which is the correct degenerate behaviour.
+    // The registry address is what OUR ShowDialog port installs; a null
+    // (nothing registered) simply never matches.
     void* wantedPort = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, kUpdateStandAloneUI));
-    void* wantedRaw  = reinterpret_cast<void*>(ResolveRuntimeRaw(kUpdateStandAloneUI));
 
     for (int i = 0; i < count; ++i) {
         void* const fn = arr[i].fn;
-        if ((!wantedPort || fn != wantedPort) && (!wantedRaw || fn != wantedRaw)) continue;
+        if (!wantedPort || fn != wantedPort) continue;
         void* nestedUi = arr[i].ctx;
         if (!nestedUi) continue;
         // nestedUI->_dialogs head at +0x00; node->dialog at +0x00.

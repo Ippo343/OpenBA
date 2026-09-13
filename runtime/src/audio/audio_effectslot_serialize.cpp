@@ -70,9 +70,9 @@
 // ORACLE — none of its own, for the reason audio.cpp gives for
 // `Audio::Scene::Serialize`: a Serialize cannot be replayed into one stream
 // twice. The WRITE path is a pure read of the object, so the existing
-// save-stream A/B (runtime/src/io/save_trace.h), which already covers
+// save-stream A/B (the Wave 9 lane S emission oracle), which already covers
 // `Audio::Scene::Serialize` and therefore covers this bulk pass underneath it,
-// is the instrument. save_trace.cpp:209 already names 0x180052640 as the body
+// is the instrument. The emission oracle already named 0x180052640 as the body
 // "the bulk element pass ... derives its own reader/writer from" — that note
 // is corrected in this commit to say it is ours.
 // ============================================================================

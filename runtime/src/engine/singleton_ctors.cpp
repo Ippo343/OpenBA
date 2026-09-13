@@ -867,37 +867,6 @@ void ControlMustDetect(size_t n) {
 }  // namespace
 
 // ---------------------------------------------------------------------------
-// RtLaneXSingletonCtorProbe — called from RuntimePortInit() AFTER
-// RtDataMintInit(), NOT from RtSingletonCtorsPortInit().
-//
-// The registrations must happen BEFORE the mint (its verdict for a storage row
-// depends on whether that row's writer is registered), but the probe must
-// happen AFTER it, and the reason is this lane's own subject matter.
-//
-// RT_DATA_SLOT caches a hit. The first thing the probe does with each of the
-// fourteen names is resolve it, so probing before the mint would warm those
-// caches with the DLL's .data address and freeze them there -- and then, on a
-// run where the mint IS armed, every ported constructor would publish into the
-// DLL's copy and leave the minted row zero forever. That is precisely the
-// failure this lane exists to close, displaced into the lane's own harness.
-//
-// Not hypothetical: the first version of this file probed from inside PortInit,
-// and [RtResolveEarly] reported ELEVEN of these names resolving before
-// RtResolvePortInitDone(). They were reported `benign` only because the mint
-// registers nothing unless RT_MINT=1 -- i.e. benign on every run we do
-// today and wrong on the first run that matters. Moving the call is the whole
-// fix, and it also makes the probe verify the door against the storage the
-// constructors will actually be handed.
-// ---------------------------------------------------------------------------
-void RtLaneXSingletonCtorProbe() {
-    // A3/A4: this was the lane X differential probe -- every ported singleton
-    // constructor run once against the SHIPPED one reached through the raw
-    // door. With Runtime-x64.dll gone there is no shipped side, so the whole
-    // comparison is dead. The symbol stays because standalone/resolve_
-    // standalone.cpp still calls it (rt_port.h declares it).
-}
-
-// ---------------------------------------------------------------------------
 // Registration.
 //
 // Registering redirects OUR call sites and nothing else, and our tree has NO

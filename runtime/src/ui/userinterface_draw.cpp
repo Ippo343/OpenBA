@@ -132,7 +132,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_predict.h"
+#include "../../funcs/rt_sink.h"
 #include "../../types/ui/UserInterface.h"
 #include "../../types/ui/SpriteContext.h"
 #include "../../types/video/Context.h"
@@ -226,7 +226,7 @@ constexpr int32_t kSpriteEntryWidth  = 0x1c;
 constexpr int32_t kSpriteEntryHeight = 0x20;
 
 // ============================================================================
-// The body. ONE body, two modes — the rt_predict.h contract.
+// The body, written against the live sink (rt_sink.h).
 // ============================================================================
 // `out` is a live sink: every write is a store, every `Call` returns true.
 //
@@ -646,11 +646,7 @@ void DrawBody(UserInterface* self, void* ctx, RtSink& out) {
     }
 
     // ---- 0x1801221e6: restore the context scissor to the whole target ------
-    // ABSTAINED FROM in predict mode: the branch reads `_scissor`, which the
-    // suppressed `Flush` overwrites on every batch, so the condition is
-    // unknowable and either arm would be a guess. Same rule lane UI1 applied to
-    // `Update`'s drag-drop teardown.
-    if (!out.predicting()) {
+    {
         uint8_t* const dev = static_cast<uint8_t*>(*VideoDeviceSingleton());
         const int32_t devW = *reinterpret_cast<int32_t*>(dev + 4);
         const int32_t devH = *reinterpret_cast<int32_t*>(dev + 8);

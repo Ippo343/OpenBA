@@ -99,7 +99,7 @@
 // anyway for TextFileStream.
 //
 // ---------------------------------------------------------------------------
-// ORACLE — RtSaveTrace::Compare, WRITING direction, FULL replay
+// ORACLE — the emission oracle, WRITING direction, FULL replay
 // ---------------------------------------------------------------------------
 // "No oracle possible" has been wrong four times across three waves for exactly
 // this shape (reference_write_path_serialize_is_replayable.md), and it is wrong
@@ -126,7 +126,6 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
-#include "save_trace.h"
 
 using rt::io::Stream;
 using rt::io::Encoding;

@@ -259,8 +259,6 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 // which must read the SHIPPED instruction stream and not our own prologue
 // (reference_resolveaddr_consults_port_registry_first.md, and the thirteen
 // detour installers lane FNHOOK found aimed at our own bytes). Byte-identical
-// to standalone/resolve.h:108; the linker checks the two against each other.
-uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr);
 
 namespace {
 

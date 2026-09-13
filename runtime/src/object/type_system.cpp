@@ -839,13 +839,10 @@ int RtObjectTypeSystemRegister() {
     RegisterRuntimeAddr(0x1800c0c40, (void*)&RtObject_Type_Serialize);
     RegisterRuntimeAddr(0x180006320, (void*)&RtObject_BaseTypeInfo_Ctor);
 
-    // Ordinals: engine/funcs/engine_funcs.cpp:4552 falls back to
-    // the ordinal door(2991) for GetTypeIdFromName and :4566 to
-    // the ordinal door(3089) for IsA when the name lookup fails. Both names DO
-    // resolve, so these are belt-and-braces — but an unregistered ordinal
-    // fallback is exactly how a port goes silently inert.
-    RegisterRuntimeOrdinal(3089, (void*)&RtObject_Base_IsA);
-    RegisterRuntimeOrdinal(2991, (void*)&RtObject_Factory_GetTypeIdFromName);
+    // (Ordinals 3089 for IsA and 2991 for GetTypeIdFromName used to be
+    // registered here as well. ENDGAME A.3 deleted the ordinal door; both
+    // functions are registered by mangled name above, which is the only door
+    // left.)
 
     // BATCH 5 (2026-09-12): the private CRC helper. Both doors — the name is a
     // real export (ordinal 2989) despite the `AEBA` private mangling.

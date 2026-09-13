@@ -63,11 +63,7 @@
 //
 // THE ORACLE, AND EXACTLY WHAT IT DOES AND DOES NOT COVER
 // -------------------------------------------------------
-// Predictive (runtime/funcs/rt_predict.h): ours predicts and writes nothing,
-// the shipped DLL runs for real on pristine state, and we compare. Because ours
-// writes nothing, the two CreateInstance calls do not happen twice — retail
-// makes them, and THE CALLER STILL GETS RETAIL'S ANSWER IN ITS RETURN SLOT, so
-// a predicting run is a working run.
+// The body is written against the live sink (runtime/funcs/rt_sink.h).
 //
 //   COMPARED, and non-vacuously (`changed=` is >= 1 every round because the
 //   tab count always moves):
@@ -113,7 +109,7 @@
 #include <cstdio>
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_predict.h"
+#include "../../funcs/rt_sink.h"
 #include "../../types/ui/Element.h"
 #include "../../types/ui/TabElement.h"
 

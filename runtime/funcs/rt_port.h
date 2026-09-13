@@ -22,7 +22,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include "rt_diff.h"
 
 // The seam's four entry points, DECLARED HERE rather than pulled in from
 // standalone/resolve.h. That header includes <windows.h>, and rt_port.h is
@@ -39,12 +38,9 @@
 // and by standalone/resolve_standalone.cpp, which includes both.
 void  RegisterRuntimeExport(const char* mangled_name, void* our_fn);
 void  RegisterRuntimeAddr(uintptr_t ghidra_addr, void* our_fn);
-void  RegisterRuntimeOrdinal(uint16_t ordinal, void* our_fn);
-void* ResolveExportRaw(const char* mangled_name);
-// The PORT-REGISTRY-AWARE resolver — checks our registrations first and only
-// then the shipped DLL. Note the difference from ResolveExportRaw above, which
-// deliberately skips the registry for the diff oracle: this is the one to use
-// when runtime/ code wants to CALL a function, so that a port of it is reached.
+// The PORT-REGISTRY resolver: returns our registration for the name, or null
+// (reported once by RecordResolveMiss). This is the one to use when runtime/
+// code wants to CALL a function.
 //
 // Declared here 2026-09-07 (Wave 9 lane R) because the runtime tree had no
 // port-aware name resolver at all, and that absence had a cost:
@@ -109,54 +105,8 @@ void     RtResolveEarlySummary();
 // standalone/resolve_standalone.cpp, which owns the table.
 bool     RuntimeExportIsRegistered(const char* mangled_name);
 
-// Per-wave kill switch: BANISHED_RT_<NAME>=0 leaves the wave unregistered, so
-// every call goes to the DLL exactly as before. Checked once, at init.
-inline bool RtWaveEnabled(const char* envName) {
-    const char* e = std::getenv(envName);
-    return !(e && (std::strcmp(e, "0") == 0 || std::strcmp(e, "false") == 0));
-}
-
-// The shipped DLL's implementation of an export, for the diff harness and for
-// detour trampolines. NEVER use ResolveExport here: once the port registers,
-// that would hand back our own function and the oracle would compare ours to
-// ours and always agree.
-//
-// *** THIS IS NOT A CHEAP ACCESSOR. *** ResolveExportRaw is GetProcAddress: an
-// export-table binary search by string, taken under the loader lock, EVERY time
-// you call it. It reads like a table lookup and costs like a syscall.
-//
-// That is not a theoretical worry — it is the whole of the Wave 2 perf-gate
-// breach. Two calls sitting in the BODY of System::Time's ctor and AsSeconds
-// (the value type every Update(const Time&) passes) cost 5.6 percentage points
-// of sim time on their own, and hiding as ntdll self time they were invisible
-// to both the sampling profiler's self-time column and the per-component
-// profile. See docs/runtime_port/WAVE3_LANE_P.md.
-//
-// So: inside RT_DIFF_* it is fine (the macro only evaluates it when diffing is
-// on, which no shipping run does). ANYWHERE ELSE — that is, on a path a normal
-// run executes — resolve once and cache. RT_ORIGINAL_ONCE does exactly that;
-// prefer it, and reach for bare RtOriginal only inside a diff guard.
-template <typename Fn>
-inline Fn RtOriginal(const char* mangled) {
-    return reinterpret_cast<Fn>(ResolveExportRaw(mangled));
-}
-
-// Resolve once per call site, then reuse. Same value as RtOriginal(MANGLED),
-// minus the GetProcAddress on every call after the first.
-//
-//   using SecondsToTicksFn = int64_t(*)(float);
-//   self->ticks = RT_ORIGINAL_ONCE(SecondsToTicksFn,
-//                                  "?SecondsToTicks@Timer@System@@SA_JM@Z")(seconds);
-//
-// The static lives in the enclosing function, so one cache per call site. Fn
-// must be a typedef'd name rather than an inline function-pointer type: a bare
-// `float(*)(const char*)` contains a comma the preprocessor would split on.
-#define RT_ORIGINAL_ONCE(Fn, MANGLED)                                              ([]() -> Fn {                                                                      static Fn rt_once__ = RtOriginal<Fn>(MANGLED);                                 return rt_once__;                                                          }())
-
 // A DEPENDENCY a ported body calls, resolved through the PORT REGISTRY and
-// cached, i.e. RT_ORIGINAL_ONCE's shape with ResolveExport instead of
-// ResolveExportRaw. Use this whenever the call is part of the work, and
-// RT_ORIGINAL_ONCE only when the point is to reach the SHIPPED body (an oracle).
+// cached once per call site.
 //
 //   using QuatMulFn = void* (*)(const void*, void*, const void*);
 //   return RT_EXPORT_ONCE(QuatMulFn, "??DQuaternion@Math@@QEBA?AV01@AEBV01@@Z");
@@ -269,12 +219,3 @@ void RtObjectDeletingDtorPortInit();  // runtime/src/object/ -- Wave 9 lane K
 // bodies before cutover -- runs at the end of it and only when the diff harness
 // is on.
 void RtSingletonCtorsPortInit();      // runtime/src/engine/ -- Wave 9 lane X
-// Lane X's oracle, and the ONLY thing that executes those fourteen bodies
-// before cutover (their callers are Engine::Engine and Engine::Startup, inside
-// the DLL). Called from RuntimePortInit() AFTER RtDataMintInit(), never from
-// RtSingletonCtorsPortInit(): the probe resolves all fourteen `?_singleton@...`
-// names through RT_DATA_SLOT, which caches a hit, so probing before the mint
-// would freeze those caches on the DLL's .data and make every ported ctor
-// publish into the wrong storage on a minted run. No-ops unless the diff
-// harness is on.
-void RtLaneXSingletonCtorProbe();     // runtime/src/engine/ -- Wave 9 lane X

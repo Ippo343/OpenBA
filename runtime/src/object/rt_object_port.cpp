@@ -197,14 +197,3 @@ void RtObjectPortInit() {
 }
 
 // ============================================================================
-// A3-HOLD: no-op stubs for probes whose bodies were deleted with the DLL.
-// Their remaining callers live outside runtime/src/{io,save,object} —
-// standalone/main.cpp, standalone/menudialogloopt_stubs.cpp,
-// runtime/src/ui/dialog_create.cpp and code/Game/Game/* — so the definitions
-// stay only to keep the link green. They die with those call sites.
-// ============================================================================
-extern "C" void RtFactoryDispatchObserve(int, const void*) {}
-extern "C" void RtFactoryDispatchReport() {}
-extern "C" void RtObjectPersistABRun() {}
-void RtObjectFactoryDtorsProbe() {}
-void RtObjectExternalRefTableProbeSummary() {}

@@ -36,28 +36,8 @@
 //     so retail running second takes a DIFFERENT branch and the compare passes
 //     while the branch under test never ran.
 //
-// So the oracle here is `runtime/funcs/rt_predict.h` — the PREDICTIVE shadow,
-// where OUR body runs in a mode that writes nothing and merely records the
-// value it WOULD have written at each location, THEIRS then runs for real on
-// pristine state, and the two are compared location by location. The authority
-// is the shipped DLL, not our own expectation. This is deliberately NOT
-// `the diff oracle`: the ~250 shadow sites in this tree take the port's own
-// verdict and never consult the DLL, so a shared misunderstanding of retail
-// passes every one of them
-// (reference_shadow_marker_is_not_an_oracle.md).
-//
-// Each body is therefore written ONCE, against an `RtSink`. A live sink
-// stores; a predicting sink records. One body, one set of offsets, one control
-// flow — a separate predictor would be its own divergence hazard.
-//
-// GATE: the old DLL-era switch, with the old DLL-era switch as the
-// negative control. Off by default and free when off.
-//
-// ----------------------------------------------------------------------------
-// WHAT THE PREDICTOR CANNOT REACH, stated per body rather than in general,
-// because a partial oracle that reads like a full one is worse than none:
-// every suppressed callee's footprint is declared with `Exclude()`, and the
-// per-site summary prints `excluded=` so the hole stays countable.
+// Each body below is written against the live sink (`runtime/funcs/rt_sink.h`):
+// every store goes through `out` and lands for real.
 // ============================================================================
 
 #include <cstdint>
@@ -66,7 +46,7 @@
 
 #include <windows.h>   // ResetEvent / SetEvent -- UpdateList state 0 calls both
 
-#include "../../funcs/rt_predict.h"
+#include "../../funcs/rt_sink.h"
 #include "saveload_internal.h"
 #include "../../types/io/Persistence.h"
 #include "../../types/io/Modification.h"   // UpdateLoad reorders the mod list
@@ -265,7 +245,7 @@ void UpdateDeleteBody(SaveLoad* self, RtSink& out) {
 // is the honest reading: the argument trace is the evidence here, not the
 // post-state.
 // ============================================================================
-void OnVideoRestartBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
+void OnVideoRestartBody(SaveLoad* self, RtSink& out) {
     const int32_t count = self->_savesSize;
     for (int32_t i = 0; i < count; ++i) {
         uint8_t* row = static_cast<uint8_t*>(out.ReadPtr(&self->_savesData))
@@ -280,16 +260,10 @@ void OnVideoRestartBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
         if (out.Call("Video::ImageBuffer::Recreate", (const void*)recreate,
                      reinterpret_cast<int64_t>(buffer))) {
             recreate(buffer);
-        } else if (round != nullptr) {
-            // Recreate reallocates the GPU-side resource and rewrites the
-            // ImageBuffer's own fields. Not modelled; declared so the coverage
-            // control counts it instead of reporting it as an unpredicted write.
-            round->Exclude(buffer, 0x80, "Video::ImageBuffer::Recreate footprint");
         }
 
         void** device = DeviceSingletonSlot();
-        const bool live = !out.predicting();
-        if (live) RtVideoDeviceLock(device);
+        RtVideoDeviceLock(device);
 
         // Retail RE-READS `_savesData` here (0x1800c0f7d) rather than reusing
         // the pointer it loaded before the lock. Transcribed: Recreate can run
@@ -309,11 +283,9 @@ void OnVideoRestartBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
                      reinterpret_cast<int64_t>(obj),
                      reinterpret_cast<int64_t>(pixels), w, h)) {
             upload(obj, pixels, w, h);
-        } else if (round != nullptr) {
-            round->Exclude(obj, 0x40, "ImageBufferData upload footprint");
         }
 
-        if (live) RtVideoDeviceUnlock(device);
+        RtVideoDeviceUnlock(device);
     }
 }
 
@@ -410,7 +382,7 @@ using GetSaveFilenameFn = const char** (*)(void* persistence, const char** ret,
 // Excluding it keeps the coverage control honest: the byte really is not
 // covered, and `excluded=` says so rather than a silent pass.
 // ============================================================================
-void UpdateLoadFromFileBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
+void UpdateLoadFromFileBody(SaveLoad* self, RtSink& out) {
     const uint32_t progress = out.ReadU32(&self->_progress);
 
     if (progress == 0) {
@@ -441,9 +413,6 @@ void UpdateLoadFromFileBody(SaveLoad* self, RtSink& out, RtPredictRound* round) 
                 fresh->_data = nullptr;
             }
             self->_saveState = fresh;
-        } else if (round != nullptr) {
-            round->Exclude(&self->_saveState, sizeof(void*),
-                           "the address MemAlloc returns is not predictable");
         }
 
         RtIo::SaveBlock block{};
@@ -750,7 +719,7 @@ ModDtorFn ModEntryDtor() {
 // reference_mods_off_breaks_save_loading.md, so it wants its own lane and its
 // own copy of the game directory, not a corner of this one.
 // ============================================================================
-void UpdateLoadBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
+void UpdateLoadBody(SaveLoad* self, RtSink& out) {
     const uint32_t progress = out.ReadU32(&self->_progress);
 
     if (progress == 0) {
@@ -796,7 +765,6 @@ void UpdateLoadBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
         // and the `JS` at 0x1800c2741 skips the whole loop when the save
         // recorded no mods at all — which is every unmodded save, and the case
         // in which this body's predictions are verified end to end.
-        bool modsExcluded = false;
         const SaveInfo* pickedRow = SaveInfoAt(self, out, self->_selectedIndex);
         for (int32_t m = pickedRow->modsSize - 1; m >= 0; --m) {
             // full = GetDataDirectory() + modInfo.path, then AdjustDelimiters.
@@ -872,15 +840,6 @@ void UpdateLoadBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
             // `if (k != k-1)`, which is never false; it is the inlined remains
             // of Modification::Swap's `a == b` early-out and is transcribed as
             // the unconditional body it compiles to.
-            if (found >= 1 && round != nullptr && !modsExcluded) {
-                // The predictor's blind spot opens exactly HERE — see the
-                // banner. Declared at the first swap, not up front, so the
-                // unmodded and already-ordered cases stay fully compared.
-                round->Exclude(mods->mods, static_cast<size_t>(mods->count) * 0x80,
-                               "a predicting body cannot reorder, so every later "
-                               "search reads a list retail has already permuted");
-                modsExcluded = true;
-            }
             for (int32_t k = found; k >= 1; --k) {
                 out.U8(&mods->dirty, 1, "Modification::_dirty = 1 (swap)");
 
@@ -923,9 +882,6 @@ void UpdateLoadBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
             // called on it. Retail's OOM path, reproduced: a guard here would
             // skip behaviour rather than restore it.
             self->_saveState = fresh;
-        } else if (round != nullptr) {
-            round->Exclude(&self->_saveState, sizeof(void*),
-                           "the address MemAlloc returns is not predictable");
         }
 
         RtIo::SaveBlock block{};
@@ -1022,7 +978,7 @@ void UpdateLoadBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
 // entire Serialize chain twice is exactly the "not idempotent" case that rules
 // FULL DIFF out for this file.
 // ============================================================================
-void UpdateSaveBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
+void UpdateSaveBody(SaveLoad* self, RtSink& out) {
     const uint32_t progress = out.ReadU32(&self->_progress);
 
     if (progress == 0) {
@@ -1087,9 +1043,6 @@ void UpdateSaveBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
                 fresh->_data = nullptr;
             }
             self->_saveState = fresh;
-        } else if (round != nullptr) {
-            round->Exclude(&self->_saveState, sizeof(void*),
-                           "the address MemAlloc returns is not predictable");
         }
 
         // MainLoop::_singleton->_updateLoop->vtable[7] — the call that serialises
@@ -1150,8 +1103,6 @@ void UpdateSaveBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
                          reinterpret_cast<int64_t>(loop), 1,
                          reinterpret_cast<int64_t>(fresh), 0)) {
                 saveRestore(loop, 1, fresh, nullptr);
-            } else if (round != nullptr) {
-                round->Exclude(loop, 0x40, "the game's whole Serialize chain");
             }
         }
 
@@ -1629,7 +1580,7 @@ void InitSaveInfoTemplate(SaveInfo* row, int32_t saveIndex) {
     row->modsCapacity    = 0;         // +0x54
 }
 
-void UpdateListBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
+void UpdateListBody(SaveLoad* self, RtSink& out) {
     // Retail loads the Persistence singleton ONCE, at 0x1800c1ec9, before it
     // looks at `_progress` — so every state below shares this one read even
     // though Ghidra's C re-materialises `IO::Persistence::_singleton` inside
@@ -1639,10 +1590,6 @@ void UpdateListBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
 
     // ---- state 0 -----------------------------------------------------------
     if (progress == 0) {
-        if (round != nullptr) {
-            round->Exclude(&self->_savesData, 0x10,
-                           "Array<SaveInfo>{data,size,capacity} — ~Array is suppressed");
-        }
         ArrayDtorFn arrayDtor = ArraySaveInfoDtorFn();
         if (out.Call("Collection::Array<SaveInfo>::~Array [0x1800329c0]",
                      (const void*)arrayDtor,
@@ -1656,9 +1603,6 @@ void UpdateListBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
                          (const void*)clear,
                          reinterpret_cast<int64_t>(persistence + 0x80))) {
                 clear(persistence + 0x80);
-            } else if (round != nullptr) {
-                round->Exclude(persistence + 0x80, 0x10,
-                               "the cached save list the worker refills");
             }
             // The worker handshake, in retail's order: request code first, then
             // the result word, then the two events.
@@ -1703,10 +1647,6 @@ void UpdateListBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
 
     // ---- state 1 -----------------------------------------------------------
     if (progress == 1) {
-        if (round != nullptr) {
-            round->Exclude(&self->_savesData, 0x10,
-                           "Array<SaveInfo>{data,size,capacity} — SetSize/qsort are suppressed");
-        }
         ArraySetSizeFn setSize   = ArraySaveInfoSetSize();
         SaveInfoDtorFn rowDtor   = SaveInfoDtor();
 
@@ -1893,21 +1833,6 @@ void UpdateListBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
 
     // ---- state 3 -----------------------------------------------------------
     if (progress == 3) {
-        if (round != nullptr) {
-            // UNCONDITIONAL, and the word matters — see THE WORKER-THREAD RACE
-            // in the banner. `persistence[0x48]` is written by the save/load
-            // WORKER THREAD, so our predicting pass and the DLL's real pass read
-            // two different values of it and can take DIFFERENT ARMS: we skip,
-            // they run, and ?SetupLoad@SavedState@Save@@ (0x1800c0c60 — it frees
-            // `_data`, looks the save's byte count up in Persistence's slot
-            // table at +0x60/+0x68, then stores that count at `this+4` and a
-            // fresh allocation at `this+8`) writes into watched state that an
-            // arm-local Exclude would not have covered.
-            round->Exclude(&self->_embeddedState, sizeof(SavedState),
-                           "Save::SavedState::SetupLoad rewrites the embedded "
-                           "state's _size and _data — and the guard deciding "
-                           "whether it runs at all is a worker-thread race");
-        }
         // The guard is INSIDE the state; the transition is not. See point 2.
         if ((persistence[0x18] & 1) == 0 &&
             *reinterpret_cast<const int32_t*>(persistence + 0x48) == 1) {
@@ -1943,18 +1868,6 @@ void UpdateListBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
         const int32_t at  = static_cast<int32_t>(out.ReadU32(&self->field38));
         SaveInfo*     row = SaveInfoAt(self, out, at);
 
-        if (round != nullptr) {
-            // UNCONDITIONAL for the same worker-thread race as state 3: the two
-            // arms below write the SAME row with DIFFERENT values, and which arm
-            // runs is decided by a flag another thread owns. Excluding only
-            // inside the arm we happen to take would let a round where we took
-            // the failure arm and the DLL took the success arm report our
-            // `field44 = 0` as a MISMATCH against retail's real value — a
-            // confident, wrong finding about a correct port.
-            round->Exclude(row, 0x58,
-                           "state 4 writes the row from LoadMetaData out-params "
-                           "we suppress, and the arm is a worker-thread race");
-        }
 
         if ((persistence[0x18] & 1) == 0 &&
             *reinterpret_cast<const int32_t*>(persistence + 0x48) == 1) {
@@ -1972,16 +1885,6 @@ void UpdateListBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
                          reinterpret_cast<int64_t>(&pixels),
                          reinterpret_cast<int64_t>(&w))) {
                 loadMeta(self, &description, &pixels, &w, &h, &field44, &row->modsData);
-            } else if (round != nullptr) {
-                // Everything below this point on this arm derives from
-                // LoadMetaData's out-params, which the suppressed call never
-                // filled. Predicting from zeroed locals would be a guaranteed
-                // false failure rather than a check — so the whole row is
-                // declared out of model and the predictions that follow are
-                // recorded for read-back only.
-                round->Exclude(row, 0x58,
-                               "state 4 success arm: every value is a suppressed "
-                               "LoadMetaData out-param");
             }
 
             SetThumbnailFn setThumb = SaveInfoSetThumbnail();
@@ -2023,17 +1926,6 @@ void UpdateListBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
 
             SaveInfo* row2 = SaveInfoAt(self, out,
                                          static_cast<int32_t>(out.ReadU32(&self->field38)));
-            if (round != nullptr) {
-                // String::Set is suppressed above, so `empty` is still null and
-                // the value we are about to predict for row.description is null
-                // — while retail leaves a real, freshly allocated empty String.
-                // That is not a defect to report, it is a consequence of the
-                // suppression, so the slot is declared out of model rather than
-                // compared. The refcount write on the OLD description is left
-                // comparable: both sides decrement the same word by one.
-                round->Exclude(&row2->description, sizeof(void*),
-                               "row.description — System::String::Set is suppressed");
-            }
             if (row2->description != empty) {
                 ReleaseStringSlotSink(&row2->description, out, "row.description release");
                 RetainIntoSink(&row2->description, empty, out, "row.description = \"\"");
@@ -2077,10 +1969,6 @@ void UpdateListBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
                          reinterpret_cast<int64_t>(row4),
                          reinterpret_cast<int64_t>(pixels), w3, h3)) {
                 setThumb(row4, pixels, w3, h3);
-            } else if (round != nullptr) {
-                round->Exclude(reinterpret_cast<uint8_t*>(row4) + 0x18, 0x18,
-                               "SetThumbnail writes imageBuffer/w/h/pixels; the "
-                               "MemAlloc address is not predictable either");
             }
         }
 
@@ -2111,12 +1999,7 @@ void UpdateListBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
 // ============================================================================
 // The registered entry points.
 //
-// Each is the same three lines: declare the site, and either run a predicting
-// round (ours predicts, theirs runs for real, Verify compares) or run the body
-// live. `RT_PREDICT_ROUND`'s increment expression is `Verify()`, so an early
-// return out of the block still verifies rather than silently dropping a round
-// (reference_uncalled_port_is_not_verified.md is about the neighbouring
-// failure: a green line over a body nothing ever entered).
+// Each is the same two lines: make a live sink and run the body through it.
 // ============================================================================
 
 void RtSave_SaveLoad_UpdateDelete(SaveLoad* self) {
@@ -2126,13 +2009,13 @@ void RtSave_SaveLoad_UpdateDelete(SaveLoad* self) {
 
 void RtSave_SaveLoad_OnVideoRestart(SaveLoad* self) {
     RtSink live;
-    OnVideoRestartBody(self, live, nullptr);
+    OnVideoRestartBody(self, live);
 }
 
 
 void RtSave_SaveLoad_UpdateLoadFromFile(SaveLoad* self) {
     RtSink live;
-    UpdateLoadFromFileBody(self, live, nullptr);
+    UpdateLoadFromFileBody(self, live);
 }
 
 // UpdateLoad watches TWO objects, which none of its siblings do: the SaveLoad
@@ -2143,17 +2026,17 @@ void RtSave_SaveLoad_UpdateLoadFromFile(SaveLoad* self) {
 // (+0x10): the flag this body writes, plus the two fields it must NOT.
 void RtSave_SaveLoad_UpdateLoad(SaveLoad* self) {
     RtSink live;
-    UpdateLoadBody(self, live, nullptr);
+    UpdateLoadBody(self, live);
 }
 
 void RtSave_SaveLoad_UpdateSave(SaveLoad* self) {
     RtSink live;
-    UpdateSaveBody(self, live, nullptr);
+    UpdateSaveBody(self, live);
 }
 
 void RtSave_SaveLoad_UpdateList(SaveLoad* self) {
     RtSink live;
-    UpdateListBody(self, live, nullptr);
+    UpdateListBody(self, live);
 }
 
 // ============================================================================

@@ -31,12 +31,8 @@
 // SO: the DEFAULT is our own libm, and the DLL's routines are available only as
 // a DIAGNOSTIC, to answer "is this divergence really just libm rounding?"
 //
-//   BANISHED_RT_LIBM=dll   route Sqrt/Sin/Cos/Atan2 through Runtime-x64.dll's
-//                          own CRT. If a diff site that was diverging goes
-//                          silent under this, the divergence WAS libm rounding
-//                          and nothing else. Never a shipping configuration —
-//                          it stops working the moment the DLL is unloaded.
-//   (unset, the default)   std::sqrt / sin / cos / atan2 from our own libm.
+//   (ENDGAME A.3: the DLL routing arm is gone; the ported MSVC CRT bodies in
+//   runtime/src/crt/msvc_libm.cpp are the only implementation.)
 //
 // Resolution happens once, in RtLibmInit(), called from RtMathPortInit() — i.e.
 // after ResolveInit() has mapped the DLL and before anything caches a pointer.
@@ -54,11 +50,8 @@ extern float (*Cos)(float);
 extern float (*Atan2)(float y, float x);
 extern float (*Pow)(float base, float exp);
 
-// Reads BANISHED_RT_LIBM and, when it says "dll", repoints the four above at
-// Runtime-x64.dll's CRT. Reports which set is live. Safe to call more than once.
+// Registers the ported CRT math bodies and installs them behind the five
+// pointers above. Safe to call more than once.
 void Init();
-
-// True when the DLL's CRT is live — for a port that wants to say so in a log.
-bool UsingDllLibm();
 
 }  // namespace RtLibm

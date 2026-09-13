@@ -99,9 +99,9 @@ SetSizeFn AddDialogsSetSize() {
 // ---------------------------------------------------------------------------
 // ENTRY COUNTERS — the evidence that a registered body RAN AT ALL.
 //
-// Deliberately separate from any oracle counter. `calls=` on an RtPredictSite
-// counts SUPPRESSED INDIRECT CALLS and cannot distinguish "the port ran and the
-// oracle was quiet" from "the port was never reached"
+// Deliberately separate from any oracle counter: none of those could
+// distinguish "the port ran and the oracle was quiet" from "the port was never
+// reached"
 // (reference_calls_zero_can_mean_always_took_the_uncovered_branch.md,
 // reference_uncalled_port_is_not_verified.md). These count EVERY entry in EVERY
 // configuration and print unconditionally, so a zero here means the row is

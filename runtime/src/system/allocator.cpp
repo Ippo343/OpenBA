@@ -1163,10 +1163,7 @@ namespace {
 //   48 85 D2             TEST RDX,RDX
 //   0F 84 4F 02 00 00    JZ Free+0x258      (rel32: same bytes under ASLR)
 //   48 8B C4             MOV RAX,RSP
-RtAllocDetourInstaller g_installDetours = nullptr;
 RtAllocCutoverArmer    g_armCutover     = nullptr;
-RtAllocLockRetirer     g_retireLock     = nullptr;
-RtAllocLockRestorer    g_restoreLock    = nullptr;
 
 // Which member of the platform seam is still null. Returns nullptr when the
 // table is complete. Naming it matters: `g_platInstalled` is one bool over ten
@@ -1192,18 +1189,8 @@ int RegisterAllocatorExports(void* allocateEntry, void* freeEntry);
 int RegisterAllocatorAddresses(void* allocateEntry, void* freeEntry);
 }
 
-extern "C" void RtSystemAllocatorSetDetourInstaller(RtAllocDetourInstaller fn) {
-    g_installDetours = fn;
-}
-
 extern "C" void RtSystemAllocatorSetCutoverArmer(RtAllocCutoverArmer fn) {
     g_armCutover = fn;
-}
-
-extern "C" void RtSystemAllocatorSetLockRetirer(RtAllocLockRetirer retire,
-                                                RtAllocLockRestorer restore) {
-    g_retireLock  = retire;
-    g_restoreLock = restore;
 }
 
 // WAVE 22 LANE ALLOC -- SELF-ATTESTATION, and why it is fprintf and not printf.

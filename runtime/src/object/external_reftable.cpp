@@ -88,12 +88,10 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/object/External.h"
-#include "../io/save_trace.h"
 #include "../system/string.h"
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr);
 
 namespace RtSystem {
 // 0x1800c9930 — ?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z, ported in

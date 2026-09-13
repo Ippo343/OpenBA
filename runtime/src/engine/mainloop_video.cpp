@@ -414,13 +414,6 @@ const ArraySpec kSpec_VideoResource = {           // 0x18004f620
     /*init   unwritten*/ 0,    0,
     /*seed zero       */ 0x10, 0x18 };
 
-// One Site per registered address — see array.cpp's "Live instrumentation".
-// STATIC STORAGE DURATION IS LOAD-BEARING: the diff oracle keeps the POINTER and
-// re-reads it at summary time, so a stack Site is reported as harness
-// corruption.
-Site g_j3_18004f620 = { { "Collection::Array::SetSize @0x18004f620", 0, 0, false, false },
-                        0x18004f620 };
-
 }  // namespace rtcoll
 
 extern "C" void RtColl_ArraySetSizeFill_18004f620(void* a, int n, const void* fill) {

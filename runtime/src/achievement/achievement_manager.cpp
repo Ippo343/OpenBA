@@ -18,7 +18,7 @@
 //
 // *** THAT HOLDBACK IS DISCHARGED. WAVE 23 LANE ACHIEVE, 2026-09-11. ***
 // The blocker was real when written and stopped being true in Wave 9, when lane
-// S built runtime/src/io/save_trace.h: it runs each side against its OWN
+// S built the save-stream emission oracle: it ran each side against its OWN
 // INDEPENDENT SYNTHETIC SINK, so there is no shared stream to desync and each
 // side constructs its own codec. Lane P discharged the IDENTICAL blocker, in
 // the identical words, for Goal::Serialize and GoalInstance::Persist
@@ -882,9 +882,6 @@ int RtAch_Achievement_GetFileVersion(const void* self) {
 void RtAch_Achievement_Dtor(void* selfRaw) {
 
     Achievement* self = static_cast<Achievement*>(selfRaw);
-
-    char*   beforeData[3] = { self->spriteName.data, self->description.data, self->title.data };
-    int32_t beforeRc[3]   = { 0, 0, 0 };
 
     self->base._vftable = VtableAchievement();
     ArrayFreeGoalPtrs()(&self->goals);

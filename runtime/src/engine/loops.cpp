@@ -115,9 +115,6 @@
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 void*     ResolveExport(const char* mangled_name);
-// Original-DLL resolution, bypassing the port registry (resolve.h). Used ONLY
-// by the Wave 25 lane VTIO oracle below, which must reach the SHIPPED body.
-uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr);
 
 // System::Thread::Start, already ported by Wave 2 (thread_win.cpp).
 namespace System { struct Thread; }

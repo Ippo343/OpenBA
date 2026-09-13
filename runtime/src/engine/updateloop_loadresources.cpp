@@ -318,22 +318,11 @@ extern "C" void RtEngineLoadResourcesSummary() {
 // ============================================================================
 // Registration — name AND address, one literal per line for the census.
 // ============================================================================
-// standalone/loadresources_detour.cpp. Read its banner before arming this:
-// registration alone is INERT here, because our tree has zero callers and the
-// one live caller is the DLL's own Loader::Run reaching us by in-DLL rel32.
-extern "C" bool RtEngineLoadResourcesDetourOptedIn();
-extern "C" bool RtEngineLoadResourcesInstallDetour(void* ourFn);
 
 int RtEngineLoadResourcesRegister() {
     RegisterRuntimeExport("?LoadResources@UpdateLoop@Engine@@QEAAXXZ",
                           (void*)&RtEngine_UpdateLoop_LoadResources);
     RegisterRuntimeAddr(0x1800dd7d0, (void*)&RtEngine_UpdateLoop_LoadResources);
-
-    // OPT-IN (RT_ENGINELOADRES_DETOUR=1). Not default-on: boot depends
-    // on this load, so a defective port fails the boot rather than degrading,
-    // and that risk must not ride along on another lane's run.
-    if (RtEngineLoadResourcesDetourOptedIn())
-        RtEngineLoadResourcesInstallDetour((void*)&RtEngine_UpdateLoop_LoadResources);
 
     return 1;
 }

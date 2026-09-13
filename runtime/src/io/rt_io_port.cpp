@@ -335,7 +335,3 @@ void RtIoPortInit() {
 }
 
 // ============================================================================
-// A3-HOLD: no-op stub for a probe whose body was deleted with the DLL. Its only
-// caller is code/Game/Game/camera_input.cpp, outside this batch's scope.
-// ============================================================================
-extern "C" void RtIo_PersistenceSavesProbeEntry() {}

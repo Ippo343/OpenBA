@@ -11,9 +11,7 @@
 // (docs/runtime_port/WAVE10_LANE_UI1.md §1b): the NO-GO is a verdict on
 // REPLACING the allocator arena, not on a ported body CALLING the shipped one,
 // and this function's allocator use is two inlined `MemFree`s plus a
-// `DynArrayPush`, all of which have exported doors. UI1 also retired the
-// recursion objection — `RtPredictRound`'s state is a stack of `kMaxDepth`
-// slots, not a single slot.
+// `DynArrayPush`, all of which have exported doors.
 //
 // The blocker UI1 said would survive is ORACLE COVERAGE, and it does survive,
 // but it is SMALLER than UI1 predicted. UI1 wrote:
@@ -146,7 +144,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_predict.h"
+#include "../../funcs/rt_sink.h"
 #include "../../types/ui/UserInterface.h"
 
 // Same file-scope declaration userinterface.cpp, dialog.cpp and
@@ -226,11 +224,10 @@ static_assert(sizeof(EventRecord) == 0x30, "UI::Event stride");
 
 // THE INVOCATION COUNTER — the evidence that the ported body RAN AT ALL.
 //
-// It is separate from every oracle counter on purpose. `calls=` on an
-// `RtPredictSite` counts SUPPRESSED INDIRECT CALLS, and `rounds=` counts rounds
-// the oracle armed; NEITHER can distinguish "the port ran and the oracle was
-// quiet" from "the port was never reached and something upstream still holds
-// the DLL's pointer". `fn_UI_CloseDialog` is resolved ONCE, in
+// It is separate from every oracle counter on purpose: none of those could
+// distinguish "the port ran and the oracle was quiet" from "the port was never
+// reached and something upstream still holds the DLL's pointer".
+// `fn_UI_CloseDialog` is resolved ONCE, in
 // `engine/funcs/engine_funcs.cpp:1606`, through `ResolveExport` — and whether
 // that lands on the port or on the DLL depends entirely on whether `RtPortInit`
 // has already run at that moment. No oracle counter can express that question
@@ -259,11 +256,7 @@ CloseDlgSummary g_closeDlgSummary;
 // sites in retail are the same instructions with a different register holding
 // the dialog, so they are one function here.
 //
-// `round` is null in live mode. In predict mode it is used to enumerate the
-// graph this body is about to write into — the parent's list header and the two
-// neighbour nodes — which is the thing UI1 said had to happen before `Watch`
-// could see any of it.
-void UnlinkFromParent(uint8_t* dlg, RtSink& out, RtPredictRound* round) {
+void UnlinkFromParent(uint8_t* dlg, RtSink& out) {
     uint8_t* par = *reinterpret_cast<uint8_t**>(dlg + 0x28);
     if (!par) return;                                   // 0x18012105e / 0x180121255
 
@@ -272,21 +265,6 @@ void UnlinkFromParent(uint8_t* dlg, RtSink& out, RtPredictRound* round) {
 
     for (Node* n = head; n; n = n->next) {              // +0x10 is `next`
         if (n->value != reinterpret_cast<void*>(dlg)) continue;
-
-        if (round) {
-            // ENUMERATED, not guessed: the extent is known only now, after the
-            // walk. Safe to snapshot here because a predicting body has written
-            // nothing yet — the DLL has not run.
-            round->Watch(par + 0x38, 0x18, "parent DialogInstance list head/tail/count");
-            if (n->prev) round->Watch(n->prev, sizeof(Node), "neighbour node (prev)");
-            if (n->next) round->Watch(n->next, sizeof(Node), "neighbour node (next)");
-            // The node itself is handed back to the allocator two instructions
-            // after these stores, so its post-state is the allocator's, not
-            // retail's. Recorded for read-back, never compared.
-            round->Exclude(n, sizeof(Node),
-                           "the unlinked node is MemFree'd by retail: its "
-                           "post-state belongs to the allocator");
-        }
 
         if (n == head)                                              // 0x180121088
             out.Ptr(par + 0x38, n->next, "parent list head = node->next");
@@ -349,10 +327,9 @@ void PushRemovedUnlessPresent(UserInterface* self, void** dlgPtr, const void* sr
 }
 
 // ---------------------------------------------------------------------------
-// The body. ONE body, two modes — the rt_predict.h contract.
+// The body, written against the live sink (rt_sink.h).
 // ---------------------------------------------------------------------------
-void CloseDialogBody(UserInterface* self, void** dlgPtr, RtSink& out,
-                     RtPredictRound* round) {
+void CloseDialogBody(UserInterface* self, void** dlgPtr, RtSink& out) {
     uint8_t* const S   = reinterpret_cast<uint8_t*>(self);
     uint8_t* const dlg = *reinterpret_cast<uint8_t**>(dlgPtr);   // RBX at 0x180120f43
 
@@ -441,7 +418,7 @@ void CloseDialogBody(UserInterface* self, void** dlgPtr, RtSink& out,
         // ---- Block F, 0x180121054..0x18012110b -----------------------------
         // Retail RE-LOADS the dialog out of the node here (0x180121054), after
         // OnClosed has run. Reproduced rather than reused from above.
-        UnlinkFromParent(*reinterpret_cast<uint8_t**>(node), out, round);
+        UnlinkFromParent(*reinterpret_cast<uint8_t**>(node), out);
 
         // ---- 0x18012110d..0x180121165 --------------------------------------
         VoidFn updEvents = RT_EXPORT_ONCE(VoidFn, kUpdateEvents);
@@ -475,10 +452,6 @@ void CloseDialogBody(UserInterface* self, void** dlgPtr, RtSink& out,
 
         uint8_t* slot = table + static_cast<int64_t>(index) * 0x70;
 
-        if (round) {
-            round->Watch(slot,      0x70, "audio channel slot");
-            round->Watch(scene + 8, 4,    "audio scene counter");
-        }
         out.Ptr(slot + 0x00, sound, "audio slot: the sound");             // 0x1801211d0
         out.U32(slot + 0x08, 1,     "audio slot: state = 1");             // 0x1801211d3
         out.U64(slot + 0x10, static_cast<uint64_t>(ticks),                // 0x1801211d6
@@ -510,9 +483,6 @@ void CloseDialogBody(UserInterface* self, void** dlgPtr, RtSink& out,
     // ---- Block J, 0x180121229..0x1801213a5 -------------------------------
     int64_t off = static_cast<int64_t>(i) * 8;                         // RBX, MOVSXD
 
-    if (round)
-        round->Watch(base, static_cast<size_t>(count) * 8, "_addDialogs storage");
-
     {
         void*  d    = *reinterpret_cast<void**>(base + off);
         void** vtbl = *reinterpret_cast<void***>(d);
@@ -524,7 +494,7 @@ void CloseDialogBody(UserInterface* self, void** dlgPtr, RtSink& out,
     // The array base is RE-LOADED after the virtual (0x180121246): OnClosed can
     // reallocate the queue. Reproduced.
     uint8_t* base2 = *reinterpret_cast<uint8_t**>(S + 0x28);
-    UnlinkFromParent(*reinterpret_cast<uint8_t**>(base2 + off), out, round);
+    UnlinkFromParent(*reinterpret_cast<uint8_t**>(base2 + off), out);
 
     VoidFn updEvents = RT_EXPORT_ONCE(VoidFn, kUpdateEvents);
     if (out.Call("UpdateEvents", (const void*)updEvents,
@@ -580,7 +550,7 @@ extern "C" void RtUi_UserInterface_CloseDialog(UserInterface* self, void** dlgPt
     }
 
     RtSink live;
-    CloseDialogBody(self, dlgPtr, live, nullptr);
+    CloseDialogBody(self, dlgPtr, live);
 }
 
 // ---------------------------------------------------------------------------

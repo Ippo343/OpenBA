@@ -87,7 +87,7 @@
 // ---------------------------------------------------------------------------
 // THE ORACLE
 // ---------------------------------------------------------------------------
-// Lane S's emission oracle (`runtime/src/io/save_trace.h`,
+// Lane S's emission oracle (deleted with the DLL in ENDGAME A.4,
 // `the old DLL-era switch`) on the WRITE path, and it reaches this body
 // WITHOUT a new harness, because `runtime/src/achievement/goal_serialize.cpp`
 // already probes the two functions that call it:

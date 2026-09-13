@@ -83,43 +83,10 @@
 // ----------------------------------------------------------------------------
 // VERIFICATION — TWO SCREENS, SCORED SEPARATELY
 // ----------------------------------------------------------------------------
-// There is NO predicting gameplay route to this body, and the reason is worth
-// writing down because it is not obvious. Ghidra lists three callers
-// (UpdateList 0x1800c2227, UpdateLoadFromFile 0x1800c25d4, UpdateLoad
-// 0x1800c29a6) and every one is an in-DLL rel32 — not a door. Our own ported
-// copies of those three DO reach us, by name, through RT_EXPORT_ONCE — but
-// only in LIVE mode: under the old DLL-era switch each of them SUPPRESSES the
-// call (`if (out.Call(...)) setup(...)`) and hands the frame to the DLL, whose
-// rel32 goes straight past us. So the standard "predicting round inside the
-// registered entry" shape is structurally unreachable here, and shipping only
-// that would have been a green line over a body no round ever entered
-// (reference_uncalled_port_is_not_verified.md).
-//
-//   SCREEN A — the SYNTHESISED predicting sweep.  the old DLL-era switch
-//   together with the old DLL-era switch. Driven per frame from
-//   standalone/saveload_harness.cpp. It builds SavedStates of its own, sweeps
-//   the id space over EVERY id the live slot table carries plus ids that are
-//   provably absent, and over both `_data == nullptr` and `_data != nullptr`,
-//   and for each runs a real RtPredictRound: ours predicts and writes nothing,
-//   the SHIPPED body runs for real, Verify() compares. Negative control is the
-//   harness's own: the old DLL-era switch corrupts one prediction per
-//   round and the site must report it caught.
-//
-//   SCREEN B — the LIVE MIRROR.  the old DLL-era switch, predict OFF.
-//   This is the screen that uses the game's REAL inputs. At each real entry it
-//   runs the SHIPPED body first on a MIRROR SavedState carrying the same _id
-//   and its own heap block, then runs ours for real on the true object, then
-//   compares the two answers. A replay oracle is safe here only because the
-//   mirror owns its own buffer — running the shipped body on the caller's own
-//   SavedState after ours had already replaced _data would free a live block
-//   twice. Pointer VALUES cannot be compared (two allocations), so the pointer
-//   is checked STRUCTURALLY (ret->data is this->_data; both non-null).
-//   Negative control: the old DLL-era switch corrupts our _size after
-//   the body and the screen must report it.
-//
-// Screen A can see the table walk and the field-by-field post-state but not
-// the real ids; screen B sees the real ids but cannot compare the allocation.
-// Neither is scored on the other's total.
+// The body below is written against the live sink (runtime/funcs/rt_sink.h).
+// Ghidra lists three callers (UpdateList 0x1800c2227, UpdateLoadFromFile
+// 0x1800c25d4, UpdateLoad 0x1800c29a6); our own ported copies of those three
+// reach us by name through RT_EXPORT_ONCE.
 // ============================================================================
 
 #include <cstdint>
@@ -127,7 +94,7 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "../../funcs/rt_predict.h"
+#include "../../funcs/rt_sink.h"
 #include "saveload_internal.h"
 #include "../../types/io/Persistence.h"
 
@@ -199,11 +166,10 @@ uint32_t LookupSlotSize(const uint8_t* persistence, int32_t id, bool* found) {
 }  // namespace
 
 // ============================================================================
-// The body, written ONCE against the sink so the live path and the predicting
-// path cannot drift (rt_predict.h, "HOW A BODY SERVES BOTH MODES").
+// The body, written against the live sink (rt_sink.h).
 // ============================================================================
 SaveBlock* RtSave_SavedState_SetupLoadBody(SavedState* self, SaveBlock* ret,
-                                           RtSink& out, RtPredictRound* round) {
+                                           RtSink& out) {
     // ---- 1. free the previous buffer ---------------------------------------
     void* old = out.ReadPtr(&self->_data);
     if (old != nullptr) {
@@ -224,18 +190,6 @@ SaveBlock* RtSave_SavedState_SetupLoadBody(SavedState* self, SaveBlock* ret,
             "SavedState::_size = Persistence slot-table size (0 when absent)");
 
     // ---- 4. the fresh buffer ------------------------------------------------
-    // In predict mode this call is suppressed, so the pointer cannot be
-    // predicted — the DLL's allocator picks it. Both slots that receive it are
-    // declared out of model rather than compared against a null we invented.
-    // This is a real hole and it is the reason screen B exists.
-    if (round != nullptr) {
-        round->Exclude(&self->_data, sizeof(void*),
-                       "MemAlloc is suppressed in predict mode, so the address "
-                       "the DLL's allocator returns is unpredictable — screen B "
-                       "(the live mirror) is what checks this slot");
-        round->Exclude(&ret->data, sizeof(void*),
-                       "the same suppressed allocation, copied into the block");
-    }
     void* buf = nullptr;
     if (out.Call("System::MemoryAllocator::MemAlloc(this->_size, 4)",
                  MemAllocTarget(), static_cast<int64_t>(size), 4)) {
@@ -252,10 +206,6 @@ SaveBlock* RtSave_SavedState_SetupLoadBody(SavedState* self, SaveBlock* ret,
     return ret;
 }
 
-namespace {
-
-}  // namespace
-
 // ============================================================================
 // The registered entry point.
 //
@@ -263,18 +213,17 @@ namespace {
 // ============================================================================
 SaveBlock* RtSave_SavedState_SetupLoad(SavedState* self, SaveBlock* ret) {
     RtSink live;
-    return RtSave_SavedState_SetupLoadBody(self, ret, live, nullptr);
+    return RtSave_SavedState_SetupLoadBody(self, ret, live);
 }
 
 // ============================================================================
-// A3-HOLD: the two per-frame ticks and the mirror summary were the screens of a
-// DLL-vs-port oracle. With no DLL they can never compare anything again, so the
-// machinery is gone; the three entry points stay as no-ops only because
-// standalone/saveload_harness.cpp and standalone/main.cpp still call them.
+// A3-HOLD: the two per-frame ticks were the screens of a DLL-vs-port oracle.
+// With no DLL they can never compare anything again, so the machinery is gone;
+// these two entry points stay as no-ops only because
+// standalone/saveload_harness.cpp still calls them.
 // ============================================================================
 extern "C" void RtSaveSetupLoadSweepTick(int) {}
 extern "C" void RtSaveEmbeddedStateWatchTick(int) {}
-extern "C" void RtSaveSetupLoadMirrorSummary() {}
 
 // ============================================================================
 // Registration — BOTH doors.

@@ -117,22 +117,12 @@
 // not optional, and NOT releasing would leak the save name on every save.
 //
 // ----------------------------------------------------------------------------
-// WHY THERE IS NO RtSink PREDICT BODY IN THIS FILE
+// WHY THIS BODY IS NOT WRITTEN AGAINST AN RtSink
 // ----------------------------------------------------------------------------
-// The five Wave 13 state machines next door are written as predicting bodies
-// against runtime/funcs/rt_predict.h. That shape does not fit here and pretending
-// otherwise would produce a shadow marker, not an oracle
-// (reference_shadow_marker_is_not_an_oracle.md): this body's entire observable
-// output is a heap block produced by running a real compressor over a real
-// stream, and there is nothing to "predict" short of reimplementing deflate.
-//
-// It does not need one. This is a WRITE path, and a write path is REPLAYABLE
-// (reference_write_path_serialize_is_replayable.md): the function is a pure
-// read of its arguments and of two singletons, so it can be run TWICE into TWO
-// SINKS and the bytes compared. See RtSaveMetaOracle below — ours runs into the
-// caller's real SaveLoad, the shipped DLL runs into a scratch one, and the two
-// SavedStates are compared. That is a predictive oracle in the sense that
-// matters: THEIRS actually runs, and it never sees our answer.
+// The five Wave 13 state machines next door take an RtSink (runtime/funcs/
+// rt_sink.h). This one does not: its entire observable output is a heap block
+// produced by running a real compressor over a real stream, so there is no set
+// of scalar stores for a sink to carry.
 // ============================================================================
 
 #include <cstdint>

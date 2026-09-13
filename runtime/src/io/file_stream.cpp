@@ -159,7 +159,6 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 // never consults the port registry, which is what makes it usable as the
 // "theirs" side of a comparison. Declared here rather than by including
 // standalone/resolve.h, matching how ResolveAddr is already declared above.
-uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr);
 
 // Rung 4 of Wave 9 lane PKG2 (filesystem_openfile_win.cpp), already ported and
 // registered. Declared here rather than pulled in from a header because that
@@ -367,15 +366,6 @@ struct BfsPromoteCounters {
 };
 BfsPromoteCounters g_bfsp{};
 
-// The DLL's own two table addresses, rebased. `ResolveRuntimeRaw` bypasses the
-// port registry by design — asking `ResolveAddr` here would return whatever the
-// promotion selected and the comparison would be against itself
-// (`reference_resolveaddr_consults_port_registry_first.md`).
-const void* DllBfsTable() {
-    static const void* v = (const void*)ResolveRuntimeRaw(0x1801554d0);
-    return v;
-}
-
 // What OUR BinaryFileStream constructors actually stamp: the promoted minted
 // table, or (kill switch set, or the row never promoted) the DLL's own. This is
 // the SAME expression the constructor uses, so the two cannot drift apart.
@@ -388,16 +378,16 @@ const void* OurBfsTable() {
 // so an "anything that is not the DLL's FileStream or BinaryFileStream table"
 // test would score a TextFileStream dispatch as attendance for this row.
 void NoteBfsStamp(const void* stamped) {
+    (void)stamped;
     ++g_bfsp.ctorStamps;
-    if (stamped != DllBfsTable()) ++g_bfsp.ctorStampedMint;
+    ++g_bfsp.ctorStampedMint;   // the minted table is the only table now
 }
 
 void NoteSlotDispatch(const void* vptr) {
     ++g_bfsp.slotEntries;
     const void* ours = OurBfsTable();
-    if (vptr == DllBfsTable())                      ++g_bfsp.slotViaDllBfs;
-    else if (ours != DllBfsTable() && vptr == ours) ++g_bfsp.slotViaMintBfs;
-    else                                            ++g_bfsp.slotViaOther;
+    if (vptr == ours) ++g_bfsp.slotViaMintBfs;
+    else              ++g_bfsp.slotViaOther;
 }
 
 

@@ -17,7 +17,7 @@
 //      save."
 //
 // That was true when written (Wave 5, 2026-09-06) and has not been true since
-// Wave 9. Lane S built `runtime/src/io/save_trace.h`, which runs each side
+// Wave 9. Lane S built the save-stream emission oracle, which ran each side
 // against its OWN INDEPENDENT SYNTHETIC SINK — there is no shared stream to
 // desync, and each side constructs its own codec. Lane P then used exactly that
 // to discharge the SAME blocker, stated in the SAME words, for
@@ -35,7 +35,7 @@
 // the whole body replays: stopAfter = 0, everything compared.
 //
 // `AchievementManager::Persist` is NOT. Its tail (FUN_180009a20) is a loop of
-// `Object::InternalBasePtr::Serialize`, which `save_trace.h` names in as many
+// `Object::InternalBasePtr::Serialize`, which the emission oracle names in as many
 // words as one of the mutating members — it "ends in PersistObject -- mutates
 // the pointer AND the global factory". Replaying that performs the mutation
 // twice on the one live factory. So `Persist` gets the PREFIX oracle, stopping
@@ -82,7 +82,6 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/achievement/AchievementManager.h"
 #include "../../types/io/Serializer.h"
-#include "../io/save_trace.h"
 
 using RtAchievement::Achievement;
 using RtAchievement::AchievementManager;
@@ -191,38 +190,6 @@ StringSerializeFn StringSerialize() {
     return f;
 }
 
-// ---- the lane-S probe scaffolding, shared by both ports --------------------
-// Identical in shape to goal_serialize.cpp's; see that file for why the adapter
-// recovers the Stream from the sink's Serializer (both bodies take an
-// IO::Stream&, while Compare hands each side a Serializer*).
-using StreamMemberFn = void (*)(void*, Stream*);
-
-Stream* StreamOf(void* serializer) {
-    return static_cast<Serializer*>(serializer)->stream;
-}
-
-// One flag, not a counter: Compare calls `ours`, which is the body itself, and
-// Compare is explicitly not reentrant.
-bool g_probing = false;
-
-struct ProbeGuard {
-    ProbeGuard()  { g_probing = true; }
-    ~ProbeGuard() { g_probing = false; }
-};
-
-// The vacuous-pass guard. `Compare` defends against `ours == theirs` by
-// comparing function pointers; adapters defeat that, so the equivalent check is
-// made on the thing that matters — whether the registry hands our body back.
-bool PortIsLive(const char* mangled, const void* ours) {
-    void* viaRegistry = ResolveExport(mangled);
-    if (viaRegistry == ours) return true;
-    std::fprintf(stderr,
-                 "[RtSaveTrace] FAIL %s: the port is NOT registered (registry -> %p, "
-                 "ours %p), so this comparison would prove nothing\n",
-                 mangled, viaRegistry, ours);
-    return false;
-}
-
 }  // namespace
 
 // ============================================================================
@@ -252,7 +219,7 @@ bool PortIsLive(const char* mangled, const void* ours) {
 // The SetSize at 0x180005110 fires only when `stream.direction == 0` (reading);
 // it grows the array to the count just read before the elements are filled in.
 //
-// ORACLE: RtSaveTrace::Compare, WRITING direction, two synthetic sinks,
+// ORACLE: the emission oracle, WRITING direction, two synthetic sinks,
 // stopAfter = 0 (whole body). Legitimate because every emission on the write
 // path is a pure read of this object: the three String::Serialize calls read,
 // the two ExternalPtr serializers take the GetReferenceId branch which

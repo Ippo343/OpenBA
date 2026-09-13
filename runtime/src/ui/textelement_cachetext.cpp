@@ -23,11 +23,7 @@
 //    freed. WAVE9.md finding (1). A prefix replay here is not a weak oracle,
 //    it is a use-after-free.
 //
-//  * NEEDS THE PREDICTIVE ORACLE — TRUE, AND IT NOW EXISTS.
-//    runtime/funcs/rt_predict.h landed in this same wave. Ours predicts and
-//    writes NOTHING (so nothing is released and nothing is freed), THEIRS runs
-//    for real on pristine state, and we compare. That inversion is exactly
-//    what dissolves the blocker above.
+//  * The body is written against the live sink (runtime/funcs/rt_sink.h).
 //
 //  * THE ALLOCATOR "NO-GO" IS NOT LOad-BEARING FOR THIS ROW. This body does not
 //    contain an allocator: every allocation and every free it performs is a
@@ -78,7 +74,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_predict.h"
+#include "../../funcs/rt_sink.h"
 #include "../../types/ui/TextElement.h"
 
 // ----------------------------------------------------------------------------
@@ -234,7 +230,7 @@ void SetParameterCountBody(void* self) {
 // `outNew` receives the String the body decided on, still holding its
 // reference. The caller releases it AFTER Verify(), so the comparison never
 // reads a buffer either side has dropped.
-void CacheTextBody(void* self, RtSink& out, Str* outNew) {
+void CacheTextBody(void* self, RtSink& out) {
     SetParameterCountBody(self);                              // 0x18011ec29
 
     Str tmp{nullptr};
@@ -259,60 +255,26 @@ void CacheTextBody(void* self, RtSink& out, Str* outNew) {
 
     char* cur = *reinterpret_cast<char**>(B(self, TE::kCachedText));
     if (cur != newData) {                                     // 0x18011ec55 / ecdb
-        if (!out.predicting()) {
-            if (cur) {
-                if (--RefCount(cur) == 0) {
-                    // Retail stores the decremented pointer back into the
-                    // MEMBER before freeing (`ADD qword ptr [RDI+0xf8],-0x8;
-                    // MOV RCX,[RDI+0xf8]`), so MemFree's argument comes out of
-                    // the element, not out of a register. Reproduced literally.
-                    *reinterpret_cast<char**>(B(self, TE::kCachedText)) = cur - 8;
-                    MemFree()(*reinterpret_cast<void**>(B(self, TE::kCachedText)));
-                } else {
-                    *reinterpret_cast<char**>(B(self, TE::kCachedText)) = nullptr;
-                }
+        if (cur) {
+            if (--RefCount(cur) == 0) {
+                // Retail stores the decremented pointer back into the
+                // MEMBER before freeing (`ADD qword ptr [RDI+0xf8],-0x8;
+                // MOV RCX,[RDI+0xf8]`), so MemFree's argument comes out of
+                // the element, not out of a register. Reproduced literally.
+                *reinterpret_cast<char**>(B(self, TE::kCachedText)) = cur - 8;
+                MemFree()(*reinterpret_cast<void**>(B(self, TE::kCachedText)));
+            } else {
+                *reinterpret_cast<char**>(B(self, TE::kCachedText)) = nullptr;
             }
-        } else if (cur && RefCount(cur) > 1) {
-            // The refcount arm, predicted rather than performed. Only where the
-            // block survives — see the banner above.
-            out.U32(cur - 4, static_cast<uint32_t>(RefCount(cur) - 1),
-                    "old cached text: refcount");
         }
 
         out.Ptr(B(self, TE::kCachedText), newData, "TextElement::_cachedText");
 
-        if (!out.predicting()) {
-            if (newData) ++RefCount(newData);
-        }
+        if (newData) ++RefCount(newData);
     }
 
     // Retail releases `result` and `param0` here (0x18011ed1d, 0x18011ed46) and
-    // `tmp` last (0x18011ed66). The predictor keeps `newData` alive instead and
-    // hands it back; whichever of the three owns it is released by the caller
-    // after Verify().
-    if (out.predicting()) {
-        // Hand back EXACTLY ONE of the references the body already holds on
-        // `newData` and release the rest. Taking a fresh reference instead
-        // would be simpler and WRONG: `newData` can alias `cur` (the cache was
-        // already correct), and a net +1 on a refcount word retail then never
-        // touches would read as a divergence produced by the instrument.
-        // Handing over one existing reference leaves the count exactly where
-        // the live body would have left it.
-        outNew->data = newData;
-        Str* slots[3] = { &result, &param0, &tmp };
-        bool kept = false;
-        for (int i = 0; i < 3; ++i) {
-            if (!kept && slots[i]->data && slots[i]->data == newData) {
-                kept = true;
-                slots[i]->data = nullptr;   // ownership moved to outNew
-                continue;
-            }
-            ReleaseInto(slots[i]);
-        }
-        if (!kept) outNew->data = nullptr;  // newData was null; nothing to hold
-        return;
-    }
-
+    // `tmp` last (0x18011ed66).
     ReleaseInto(&result);
     ReleaseInto(&param0);
     ReleaseInto(&tmp);
@@ -339,7 +301,7 @@ extern "C" void RtUi_TextElement_SetParameterCount(void* self) {
 
 extern "C" void RtUi_TextElement_CacheText(void* self) {
     RtSink live;
-    CacheTextBody(self, live, nullptr);
+    CacheTextBody(self, live);
 }
 
 // ============================================================================

@@ -127,14 +127,14 @@
 // build takes that path.
 //
 // ---- ORACLE, AND THE HONEST LIMIT OF IT ------------------------------------
-// PREFIX, stopAfter = 1, through RtSaveTrace::Compare — the same mechanism
+// PREFIX, stopAfter = 1, through the emission oracle — the same mechanism
 // goal_serialize.cpp and achievement_serialize.cpp use, for the same reason:
 // the tail (`SerializeInstancePtrs`, 0x180009fa0) is a loop of
-// `Object::InternalBasePtr::Serialize`, which save_trace.h names in as many
+// `Object::InternalBasePtr::Serialize`, which the emission oracle names in as many
 // words as a member that "mutates the pointer AND the global factory".
 // Replaying it performs that mutation twice on the one live factory.
 //
-// stopAfter = 1 IS A FLOOR I CHOSE, NOT THE INDEX save_trace.h ASKS FOR. That
+// stopAfter = 1 IS A FLOOR I CHOSE, NOT THE INDEX the emission oracle ASKS FOR. That
 // header says to pick "the emission index of the last call before the first
 // store", read off the disassembly. I could not derive it: the emissions before
 // the mutating loop include however many `ExternalPtr<Achievement>::Serialize`
@@ -149,7 +149,7 @@
 // `GetVersion()` returns 0, BOTH sides take the Skip path and the comparison is
 // vacuous — a pass that proves nothing
 // (reference_probe_needs_an_effectiveness_control.md). The run's own
-// [RtSaveTrace] emission counts are what distinguish that case; a compare that
+// its emission counts are what distinguish that case; a compare that
 // reports zero emissions on both sides is the vacuous one.
 //
 // ---- THREE NEW ADDRESS DOORS, NAMED RATHER THAN HIDDEN ---------------------
@@ -165,7 +165,6 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/achievement/AchievementManager.h"
 #include "../../types/io/Serializer.h"
-#include "../io/save_trace.h"
 
 using RtAchievement::AchievementInstance;
 using rt::io::Encoding;
@@ -279,38 +278,6 @@ ArraySerializeFn SerializeGoalInstancePtrs() {
     static ArraySerializeFn f = nullptr;
     if (!f) f = reinterpret_cast<ArraySerializeFn>(ResolveAddr(Module::Runtime, 0x180009fa0));
     return f;
-}
-
-// The save_trace adapter and its re-entrancy guard, transcribed from
-// goal_serialize.cpp. `Compare` hands each side a `Serializer*` because its
-// first subject took one; this member takes an `IO::Stream&`, and
-// `Serializer::stream` is at +0x00, so the sink's Stream is recovered from it.
-using StreamMemberFn = void (*)(void*, Stream*);
-
-Stream* StreamOf(void* serializer) {
-    return static_cast<Serializer*>(serializer)->stream;
-}
-
-// `Compare` calls `ours`, which is this very body. Without the flag each nested
-// entry would start ANOTHER comparison, and Compare is not reentrant.
-bool g_probing = false;
-
-struct ProbeGuard {
-    ProbeGuard()  { g_probing = true; }
-    ~ProbeGuard() { g_probing = false; }
-};
-
-// Defends against the vacuous `ours == theirs` pass
-// (reference_uncalled_port_is_not_verified.md) on the one thing that decides
-// it: whether the export registry hands OUR body back for this name.
-bool PortIsLive(const char* mangled, const void* ours) {
-    void* viaRegistry = ResolveExport(mangled);
-    if (viaRegistry == ours) return true;
-    std::fprintf(stderr,
-                 "[RtSaveTrace] FAIL %s: the port is NOT registered (registry -> %p, "
-                 "ours %p), so this comparison would prove nothing\n",
-                 mangled, viaRegistry, ours);
-    return false;
 }
 
 }  // namespace

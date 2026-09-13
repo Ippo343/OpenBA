@@ -145,7 +145,7 @@
 // each, and FREES the caller's temporary buffer. Running retail's copy as a
 // second opinion would allocate a second set of instances into the one live
 // factory, leak them, Startup() them a second time, and then double-free the
-// temp. That is the "mutates the global factory" family save_trace.h names, one
+// temp. That is the "mutates the global factory" family the emission oracle names, one
 // level worse — there is no prefix that stops before the first mutation,
 // because the first iteration IS the first mutation.
 //
@@ -267,11 +267,6 @@ SetSizeFn ArraySetSizeGoalInstancePtrs() {
     return f;
 }
 
-// The shadow predicate's input snapshot. Bounded so a pathological count cannot
-// turn a diagnostic into an allocation; a list longer than this is simply not
-// screened, and the report says so.
-constexpr int kMaxSnapshot = 64;
-
 }  // namespace
 
 // ============================================================================
@@ -289,12 +284,6 @@ extern "C" void RtAch_GoalList_Initialize(void* selfRaw, void* srcRaw) {
     // (runtime/types/object/External.h static_asserts sizeof == 8), so the
     // buffer is read as `void**` exactly as retail's `MOV RCX,[R15+RAX]` does.
     Collection::Array<void*>* src = static_cast<Collection::Array<void*>*>(srcRaw);
-
-    // Snapshot the input BEFORE the loop moves it and the tail frees it. This
-    // is the only part of the screen that cannot be reconstructed afterwards.
-    void* snapGoals[kMaxSnapshot];
-    const int snapN = (src->_size >= 0 && src->_size <= kMaxSnapshot) ? src->_size : -1;
-    const int requested = src->_size;
 
     ArraySetSizeGoalInstancePtrs()(self, src->_size);
 

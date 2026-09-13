@@ -4177,9 +4177,7 @@ void RtCollectionPortInit() {
         // other owner and four live callers already reach it by address; see
         // runtime/src/crt/msvc_stricmp.cpp for why it is not std::strcasecmp.
         extern int  RtCrtStrICmpRegister();
-        extern void RtCrtStrICmpCheckLocaleFlag();
         const int icmp = RtCrtStrICmpRegister();
-        RtCrtStrICmpCheckLocaleFlag();
         printf("[RtPort]   Collection keyed Set/Map + sort (lane COLL): "
                     "%d + %d + %d addresses registered\n", avl, sort, icmp);
     }

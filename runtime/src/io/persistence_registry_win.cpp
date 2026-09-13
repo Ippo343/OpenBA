@@ -194,9 +194,6 @@ using RtSystem::StringRefCount;
 // so the linker keeps checking the two against each other.
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-// The RAW address door -- deliberately skipping the port registry, so the
-// WriteSettings oracle below reaches the SHIPPED body and not our own.
-uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr);
 
 namespace {
 

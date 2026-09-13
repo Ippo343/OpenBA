@@ -74,9 +74,6 @@
 // re-enter our own body forever (the raw DLL door IS GetProcAddress —
 // reference_rtoriginal_is_getprocaddress.md).
 // ---------------------------------------------------------------------------
-// Declared locally rather than including standalone/resolve.h, which drags in
-// <windows.h> -- the same reason external_set_probe.cpp:99 declares it.
-uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr);
 
 
 namespace RtSystem {

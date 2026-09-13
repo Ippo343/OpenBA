@@ -248,21 +248,6 @@ EarlySlotRec g_slot[kMaxEarlySlot];
 int          g_slotCount     = 0;
 uint64_t     g_preInitHits   = 0;   // returned WITHOUT freezing (the new rule)
 uint64_t     g_preInitFrozen = 0;   // frozen anyway (negative control armed)
-int          g_freezeEarly   = -1;
-
-// NEGATIVE CONTROL. BANISHED_RT_FREEZE_EARLY=1 restores the pre-Wave-15
-// behaviour — freeze a hit whenever it arrives — so the audit below can be
-// shown going RED on a build where the only difference is this rule. A change
-// here is invisible without an instrument that CAN go red
-// (reference_a_predicate_nobody_evaluates.md).
-bool FreezeEarlyControl() {
-    if (g_freezeEarly < 0) {
-        const char* e = std::getenv("BANISHED_RT_FREEZE_EARLY");
-        g_freezeEarly = (e && *e && std::strcmp(e, "0") != 0 &&
-                         std::strcmp(e, "false") != 0) ? 1 : 0;
-    }
-    return g_freezeEarly == 1;
-}
 
 void NoteEarlySlot(const char* mangled, void* first, bool frozen) {
     for (int i = 0; i < g_slotCount; ++i)
@@ -293,7 +278,7 @@ int RtResolveSlotAudit() {
         "early (control %s). Each name is re-resolved now and compared.\n",
         g_slotCount, (unsigned long long)g_preInitHits,
         (unsigned long long)g_preInitFrozen,
-        FreezeEarlyControl() ? "ARMED: BANISHED_RT_FREEZE_EARLY=1" : "off");
+        "off");
     for (int i = 0; i < g_slotCount; ++i) {
         const EarlySlotRec& r = g_slot[i];
         void* now = ResolveExport(r.name);
@@ -335,7 +320,7 @@ void* RtResolveCached(const char* mangled, void** cache) {
         // §6. An answer obtained before the registry is complete is handed back
         // but not kept, so a later promotion of this name is picked up.
         const bool early  = !RtResolvePortInitDone();
-        const bool freeze = !early || FreezeEarlyControl();
+        const bool freeze = !early;
         if (early) {
             NoteEarlySlot(mangled, p, freeze);
             if (freeze) ++g_preInitFrozen; else ++g_preInitHits;

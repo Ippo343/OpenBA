@@ -26,7 +26,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_predict.h"
+#include "../../funcs/rt_sink.h"
 #include "../../types/ui/Element.h"
 #include "../../types/ui/TableElement.h"
 #include "../../types/ui/ImageElement.h"
@@ -475,10 +475,7 @@ namespace PGE = UI::PageElementOffsets;
 //
 // WAVE 10. Lane E declined this in Wave 7 ("visibility recomputation, not
 // reversed by this lane") and lane V2 confirmed it a REAL DEPENDENCY. It is
-// ported here as the first subject of the PREDICTIVE shadow oracle
-// (runtime/funcs/rt_predict.h), because it is precisely the shape the replay
-// oracle cannot check and the shape lane C described when it wrote that a
-// shadow oracle over the post-state "is the obvious next step".
+// ported here, written against the live sink (runtime/funcs/rt_sink.h).
 //
 // WHY THE REPLAY ORACLE CANNOT DO IT -- two independent reasons:
 //

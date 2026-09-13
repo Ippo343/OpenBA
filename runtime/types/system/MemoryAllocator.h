@@ -294,8 +294,6 @@ extern "C" void RtSysMemPlatformInstall(const rt::system::RtSysMemPlatform* p);
 // allocator_lock patches on the same two prologues first — see
 // docs/runtime_port/WAVE2_ALLOCATOR.md §4. Without this installed,
 // RtSystemAllocatorRegister() registers nothing.
-typedef bool (*RtAllocDetourInstaller)(void* ourAllocate, void* ourFree);
-extern "C" void RtSystemAllocatorSetDetourInstaller(RtAllocDetourInstaller fn);
 
 // ---- CUTOVER ARMING (Wave 9 lane E4) ---------------------------------------
 //
@@ -321,37 +319,7 @@ typedef bool (*RtAllocCutoverArmer)(void* ourAllocate, void* ourFree,
                                     void** outComposedFree);
 extern "C" void RtSystemAllocatorSetCutoverArmer(RtAllocCutoverArmer fn);
 
-// ---- THE LOCK-RETIRE SEAM (Wave 10 lane ALLOC) -----------------------------
-//
-// WAVE9.md records this as "Done with a third seam (RtSystemAllocatorSetLockRetirer)".
-// It was not: no such symbol existed anywhere in the tree, and the ORDERING
-// DEADLOCK the entry describes was still live. Measured, DLL present, 2026-09-08:
-//
-//   [RtPort] MemoryAllocator: REFUSING to arm -- MemoryAllocator::Allocate
-//            (0x1800c6e60) is already patched. ...
-//
-// The deadlock: standalone/main.cpp installs the allocator lock BEFORE
-// RuntimePortInit() (correctly — that fixed the silent-lock-loss trap), so by
-// the time RtSystemAllocatorRegister() runs the two prologues ARE patched and
-// FindPatchedPrologue() refuses. The step that would satisfy the guard,
-// AllocatorLockRetireForPort(), lives INSIDE the detour installer, which is
-// only reached AFTER the guard passes. THE GUARD PREVENTS US FROM EVER REACHING
-// THE THING THAT WOULD SATISFY IT.
-//
-// The guard's actual intent is "refuse if a FOREIGN patch owns these prologues".
-// Ours is not foreign — we know how to retire it. So: RETIRE FIRST, THEN GUARD.
-// Anything still patched afterwards is genuinely foreign and the refusal stands.
-//
-// `restore` is not optional decoration. Retiring hands the two entry points back
-// to retail's UNLOCKED bytes, and every refusal after that point would otherwise
-// leave the process running the DLL's own racy Allocate against a Free that no
-// longer takes the critical section — the exact free-list race allocator_lock.cpp
-// exists to prevent, arrived at by a SAFETY guard firing. So every post-retire
-// refusal path calls `restore` before returning 0.
-typedef bool (*RtAllocLockRetirer)();
-typedef bool (*RtAllocLockRestorer)();
-extern "C" void RtSystemAllocatorSetLockRetirer(RtAllocLockRetirer retire,
-                                                RtAllocLockRestorer restore);
+// (The DLL-present detour-installer and lock-retire seams died with the DLL, ENDGAME A.3.)
 
 // runtime/src/system/allocator_win.cpp — installs the Win32 seam and holds the
 // six exported Platform* bodies. The portable half calls this once, under

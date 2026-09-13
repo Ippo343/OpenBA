@@ -2,8 +2,10 @@
 // WE are the exe, and since ENDGAME.md A.1 we are the runtime too: neither
 // Runtime-x64.dll nor VideoDX11-x64.dll is ever mapped into the process.
 // Module::Exe addresses resolve via a registry of our reimplemented functions;
-// Module::Runtime addresses resolve via the port registry. The ASLR-delta path
-// survives only as the "module not mapped" early-out, which is now always taken.
+// Module::Runtime addresses resolve via the port registry. ENDGAME.md A.3 then
+// deleted the doors that could have reached the DLL at all — the raw
+// GetProcAddress variants, the ordinal registry and the ASLR-delta path — so an
+// unregistered runtime symbol resolves to null and is named once.
 
 
 #include "resolve.h"
@@ -14,12 +16,11 @@
 #include <cstring>
 #include <string>
 #include <map>
-#include <set>
 #include <unordered_map>
 #include <vector>
 #include <algorithm>
 
-// Return address of our own caller, for the BANISHED_RT_STRICT residue census.
+// Return address of our own caller, for the unresolved-symbol census.
 // MSVC spells this `_ReturnAddress()` (an intrinsic in <intrin.h>); this tree
 // builds with MinGW GCC, where the builtin is the portable spelling.
 #if !defined(_MSC_VER)
@@ -165,10 +166,10 @@ RegistryStats GetRegistryStats() {
 // ============================================================
 // Runtime-x64.dll port registry (Wave 0 seam)
 // ============================================================
-// See the comment on RegisterRuntimeExport in resolve.h. Three lookup tables,
-// consulted by ResolveExport / ResolveOrdinal / ResolveAddr(Module::Runtime)
-// BEFORE the DLL is asked. Empty until a runtime port registers, so the
-// default build resolves exactly what it always did.
+// See the comment on RegisterRuntimeExport in resolve.h. Two lookup tables —
+// by mangled name and by retail address — consulted by ResolveExport and
+// ResolveAddr(Module::Runtime). There is nothing behind them: a name or address
+// neither table answers resolves to null and is named by RecordResolveMiss.
 namespace {
 
 std::unordered_map<std::string, void*>& RtExportReg() {
@@ -179,119 +180,20 @@ std::unordered_map<uintptr_t, void*>& RtAddrReg() {
     static std::unordered_map<uintptr_t, void*> m;
     return m;
 }
-std::unordered_map<uint16_t, void*>& RtOrdinalReg() {
-    static std::unordered_map<uint16_t, void*> m;
-    return m;
-}
 size_t g_rtHits = 0;
 
-// ---- WAVE 29 LANE VERIFY: PER-ROW PORT-DOOR ATTENDANCE --------------------
-//
-// WHAT THIS MEASURES, exactly: for each REGISTERED runtime port row, how many
-// times the port registry HANDED OUR FUNCTION POINTER to a caller. Nothing
-// more. It is a door counter, not an execution counter, and the difference is
-// load-bearing in both directions:
-//
-//   * count > 0 does NOT mean the body ran N times. `RT_EXPORT_ONCE` and every
-//     other caching door resolve ONCE and then call through the cached pointer
-//     forever, so a body that ran 16.9M times can report count=1.
-//   * count == 0 does NOT always mean the body never ran. A row reached through
-//     a MINTED VTABLE SLOT or a static-initialiser-stamped pointer never passes
-//     through this door at all — that is the whole "a stamp is not a DOOR"
-//     finding, and it is why the 206-row factory family is attendance-0 BY
-//     DESIGN (reference_a_ported_row_can_be_permanently_unpromotable.md).
-//
-// What it DOES establish, and what no instrument in the tree established
-// before it: the set of ported rows for which NOTHING IN THE PROCESS EVER
-// ASKED. For a row whose only door is the name/addr/ordinal registry, count==0
-// is a PROOF OF NON-EXECUTION, not a silence. That is the half of the ~280-body
-// verification debt that can be settled without writing 1294 counters.
-//
-// ARMED WITH BANISHED_RT_ATTEND=1, and OFF by default on purpose: this adds a
-// hash lookup to the registry-hit path, and `ResolveExport` sits inside hot
-// bodies in this tree (the Wave 2 perf breach was two resolves in System::Time).
-// The report PRINTS ITS ARM STATE unconditionally, so an unarmed run cannot be
-// misread as a run in which nothing was resolved
-// (reference_the_gate_was_never_a_control.md).
-bool RtAttendEnabled() {
-    static int on = -1;
-    if (on < 0) {
-        const char* e = getenv("BANISHED_RT_ATTEND");
-        on = (e && *e && strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return on != 0;
-}
-std::map<std::string, unsigned long long>&   RtAttendExport()  { static std::map<std::string, unsigned long long> m; return m; }
-std::map<uintptr_t, unsigned long long>&     RtAttendAddr()    { static std::map<uintptr_t, unsigned long long> m; return m; }
-std::map<uint16_t, unsigned long long>&      RtAttendOrdinal() { static std::map<uint16_t, unsigned long long> m; return m; }
-
-// BANISHED_RT_PORT=0 disables every runtime port at once (the master
-// kill-switch for an A/B run). Individual ports keep their own
-// BANISHED_RT_<CLASS> switches; this one short-circuits the whole seam.
-bool RtPortEnabled() {
-    static int on = -1;
-    if (on < 0) {
-        const char* e = getenv("BANISHED_RT_PORT");
-        on = (e && (e[0] == '0' || e[0] == 'f' || e[0] == 'F')) ? 0 : 1;
-        if (!on) {
-            fprintf(stderr, "[RtPort] BANISHED_RT_PORT=0 — every runtime port bypassed, "
-                            "all calls go to Runtime-x64.dll\n");
-            fflush(stderr);
-        }
-    }
-    return on != 0;
-}
-
-bool RtCensusEnabled() {
-    static int on = -1;
-    if (on < 0) {
-        const char* e = getenv("BANISHED_RT_CENSUS");
-        on = (e && *e && strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return on != 0;
-}
-
-// ---- Cutover residue census (BANISHED_RT_STRICT) --------------------------
-// See the comment on RecordRuntimeResidue in resolve.h. Records every resolve
-// that misses the port registry and falls through to the shipped DLL, so the
-// wave 9 work list is what the PROCESS reaches rather than what the tree
-// mentions. Off unless the env var is set; one map insert per distinct miss.
-bool RtStrictEnabled() {
-    static int on = -1;
-    if (on < 0) {
-        const char* e = getenv("BANISHED_RT_STRICT");
-        on = (e && *e && strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return on != 0;
-}
-
+// ---- Unresolved-symbol census (the Wave 9 lane F null-resolve policy) ------
+// See the comment on RecordResolveMiss in resolve.h. Always on: the only cost
+// is on the path where a resolve returned NOTHING, and with the DLL gone that
+// path is the residue census -- a symbol nothing registered is a symbol
+// nothing implements.
 struct ResidueEntry {
     unsigned long long count;
     void* firstCaller;   // return address of the first asker, for attribution
 };
-// Keyed by the printable form of the request so all three doors share one
-// table and one sort order: the mangled name, "addr:0x1800xxxxx", or "ord:N".
-std::map<std::string, ResidueEntry>& RtResidue() {
-    static std::map<std::string, ResidueEntry> m;
-    return m;
-}
-
-// ---- Unresolved-symbol census (the Wave 9 lane F null-resolve policy) ------
-// See the comment on RecordResolveMiss in resolve.h. Always on: the only cost
-// is on the path where a resolve returned NOTHING, which in a healthy pre-
-// cutover run never happens.
 std::map<std::string, ResidueEntry>& RtResolveMiss() {
     static std::map<std::string, ResidueEntry> m;
     return m;
-}
-
-bool RtFatalResolveEnabled() {
-    static int on = -1;
-    if (on < 0) {
-        const char* e = getenv("BANISHED_RT_FATAL_RESOLVE");
-        on = (e && *e && strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return on != 0;
 }
 
 } // namespace
@@ -362,11 +264,6 @@ void RegisterRuntimeAddr(uintptr_t ghidra_addr, void* our_fn) {
     }
 }
 
-void RegisterRuntimeOrdinal(uint16_t ordinal, void* our_fn) {
-    if (!our_fn) return;
-    RtOrdinalReg()[ordinal] = our_fn;
-}
-
 // Wave 9 lane H: did a PORT register this name? ResolveExport cannot answer
 // that -- its return value cannot distinguish a registry hit from a DLL hit,
 // and the whole early-snapshot question is exactly that distinction.
@@ -377,118 +274,7 @@ bool RuntimeExportIsRegistered(const char* mangled_name) {
 }
 
 RuntimeRegistryStats GetRuntimeRegistryStats() {
-    return { RtExportReg().size(), RtAddrReg().size(), RtOrdinalReg().size(), g_rtHits };
-}
-
-void DumpRuntimeRegistry() {
-    if (!RtCensusEnabled()) return;
-    RuntimeRegistryStats st = GetRuntimeRegistryStats();
-    fprintf(stderr, "[RtCensus] ==== %zu exports, %zu addrs, %zu ordinals ported; %zu hits ====\n",
-            st.exports, st.addrs, st.ordinals, st.hits);
-    // Sorted so two runs diff cleanly.
-    {
-        std::vector<std::string> names;
-        names.reserve(RtExportReg().size());
-        for (auto& kv : RtExportReg()) names.push_back(kv.first);
-        std::sort(names.begin(), names.end());
-        for (auto& n : names)
-            fprintf(stderr, "[RtCensus] export %s\n", n.c_str());
-    }
-    {
-        std::vector<uintptr_t> addrs;
-        addrs.reserve(RtAddrReg().size());
-        for (auto& kv : RtAddrReg()) addrs.push_back(kv.first);
-        std::sort(addrs.begin(), addrs.end());
-        for (uintptr_t a : addrs)
-            fprintf(stderr, "[RtCensus] addr 0x%llx\n", (unsigned long long)a);
-    }
-    {
-        std::vector<uint16_t> ords;
-        ords.reserve(RtOrdinalReg().size());
-        for (auto& kv : RtOrdinalReg()) ords.push_back(kv.first);
-        std::sort(ords.begin(), ords.end());
-        for (uint16_t o : ords)
-            fprintf(stderr, "[RtCensus] ordinal %u\n", (unsigned)o);
-    }
-    fflush(stderr);
-}
-
-// ---- WAVE 29 LANE VERIFY: the per-row attendance report -------------------
-// Prints UNCONDITIONALLY, including (especially) when unarmed, because the two
-// readings it must never be allowed to confuse are "nothing resolved" and
-// "nothing was counting".
-//
-// Three populations, SCORED SEPARATELY and never as a union
-// (reference_union_control_hides_a_blind_screen.md): the name door, the address
-// door and the ordinal door each get their own asked/silent split, because a
-// row can be registered at one door and reached at another (the ordinal->name
-// bridge in ResolveOrdinal is exactly that case).
-//
-// The per-row listing is printed for the SILENT rows, not the asked ones: the
-// asked set is the part that needs no further work.
-extern "C" void RtRowAttendanceReport() {
-    const bool armed = RtAttendEnabled();
-    const size_t nE = RtExportReg().size(), nA = RtAttendExport().size();
-    const size_t nD = RtAddrReg().size(),   nB = RtAttendAddr().size();
-    const size_t nO = RtOrdinalReg().size(), nC = RtAttendOrdinal().size();
-    printf("[RtAttend] ARM=%s (BANISHED_RT_ATTEND)  "
-           "name %zu/%zu asked  addr %zu/%zu asked  ord %zu/%zu asked\n",
-           armed ? "ARMED" : "UNARMED -- every zero below means NOTHING WAS COUNTING",
-           nA, nE, nB, nD, nC, nO);
-    if (!armed) { fflush(stdout); return; }
-    // Aggregate. A door counter is not an execution counter; see the block
-    // comment on RtAttendEnabled above, which this line points the reader at.
-    unsigned long long tot = 0;
-    for (auto& kv : RtAttendExport())  tot += kv.second;
-    for (auto& kv : RtAttendAddr())    tot += kv.second;
-    for (auto& kv : RtAttendOrdinal()) tot += kv.second;
-    printf("[RtAttend] total port-door handouts = %llu  (a DOOR count, NOT a call "
-           "count: a caching door resolves once and calls forever)\n", tot);
-    printf("[RtAttend] SILENT rows below are rows NOTHING ASKED FOR this run. For a "
-           "row whose only door is this registry that is a proof of non-execution; "
-           "for a row reached through a minted vtable slot or a static-init stamp "
-           "it is expected and says nothing.\n");
-    for (auto& kv : RtExportReg())
-        if (RtAttendExport().find(kv.first) == RtAttendExport().end())
-            printf("[RtAttend] SILENT export %s\n", kv.first.c_str());
-    for (auto& kv : RtAddrReg())
-        if (RtAttendAddr().find(kv.first) == RtAttendAddr().end())
-            printf("[RtAttend] SILENT addr 0x%llx\n", (unsigned long long)kv.first);
-    for (auto& kv : RtOrdinalReg())
-        if (RtAttendOrdinal().find(kv.first) == RtAttendOrdinal().end())
-            printf("[RtAttend] SILENT ordinal %u\n", (unsigned)kv.first);
-    // And the asked rows with their counts, so the file is self-contained and a
-    // reader can tell "asked once" from "asked a million times" without a
-    // second run.
-    for (auto& kv : RtAttendExport())
-        printf("[RtAttend] ASKED export %llu %s\n", kv.second, kv.first.c_str());
-    for (auto& kv : RtAttendAddr())
-        printf("[RtAttend] ASKED addr %llu 0x%llx\n", kv.second, (unsigned long long)kv.first);
-    for (auto& kv : RtAttendOrdinal())
-        printf("[RtAttend] ASKED ordinal %llu %u\n", kv.second, (unsigned)kv.first);
-    // CONTROLS, printed with the screen (kickoff warning 7).
-    //  (1) EFFECTIVENESS: if nothing at all was asked, the counters are not
-    //      "all silent", the instrument is dead. Say which.
-    //  (2) KNOWN POSITIVE: `?Update@Device@Audio@@` is registered by
-    //      runtime/src/audio/audio_device.cpp:461 and resolved BY NAME from
-    //      `EngineFuncsInit()` (engine/funcs/engine_funcs.cpp:1558), which runs
-    //      unconditionally on every boot with no env gate. It is therefore a
-    //      positive this screen MUST see. Chosen over a Wave 2 String ctor
-    //      precisely because that one's only literal resolve site is in
-    //      standalone/mouse_inject.cpp, which an unattended run may not reach --
-    //      a "known positive" that is not actually known is a control that
-    //      manufactures a FAIL.
-    printf("[RtAttend] CONTROL 1 (effectiveness): %s\n",
-           tot == 0 ? "ZERO handouts on an ARMED run -- INSTRUMENT DEAD, not a finding"
-                    : "non-zero handouts, the counter is live");
-    const char* kPos = "?Update@Device@Audio@@QEAAXAEBVTime@System@@@Z";
-    bool posReg = RtExportReg().count(kPos) != 0;
-    bool posSaw = RtAttendExport().count(kPos) != 0;
-    printf("[RtAttend] CONTROL 2 (known positive %s): registered=%s asked=%s -> %s\n",
-           kPos, posReg ? "yes" : "NO", posSaw ? "yes" : "no",
-           !posReg ? "INCONCLUSIVE -- the control row is not registered in this build"
-                   : (posSaw ? "PASS" : "FAIL -- a row known to resolve reads SILENT"));
-    fflush(stdout);
+    return { RtExportReg().size(), RtAddrReg().size(), g_rtHits };
 }
 
 void RuntimePortInit() {
@@ -577,15 +363,12 @@ void RuntimePortInit() {
     // because a
     // vtable slot is filled with our port only if that port is registered by
     // now — anything registered later stays a trap until the next run.
-    // Minting allocates and fills; it does not register anything unless
-    // BANISHED_RT_MINT=1. See standalone/rt_data_mint.h.
+    // See standalone/rt_data_mint.h.
     // Nothing to resolve at this point — the tables hold our own function
     // pointers, not DLL addresses — so the rest of this only reports.
     RuntimeRegistryStats st = GetRuntimeRegistryStats();
-    printf("[RtPort] runtime registry: %zu exports, %zu addrs, %zu ordinals%s\n",
-           st.exports, st.addrs, st.ordinals,
-           RtPortEnabled() ? "" : "  (DISABLED via BANISHED_RT_PORT=0)");
-    DumpRuntimeRegistry();
+    printf("[RtPort] runtime registry: %zu exports, %zu addrs\n",
+           st.exports, st.addrs);
 
     // Wave 9 lane H: everything resolved from here on sees the full registry.
     // Anything recorded BEFORE this line resolved against a partly-built one,
@@ -597,11 +380,9 @@ void RuntimePortInit() {
     // initialising entirely: no vtable, no BaseTypeInfo and no storage row was
     // ever built or registered.
     //
-    // Nothing on an ordinary run could see that.  The mint REGISTERS nothing
-    // unless BANISHED_RT_MINT=1 and its shadow only PRINTS under
-    // BANISHED_RT_MINT_SHADOW=1, and lane X's verification cell set neither --
-    // so a green BANISHED_RT_DIFF run was entirely consistent with the mint
-    // being absent.  The FIRST controlled DLL-absent boot found it immediately:
+    // Nothing on an ordinary run could see that, because the mint registered
+    // and reported only when it was explicitly armed, which no routine run did.
+    // The FIRST controlled DLL-absent boot found it immediately:
     // ResolveAddr(Module::Runtime, 0x1801fc718) returned null and
     // engine_funcs.cpp:1623 dereferenced it, because
     // ?_singleton@MemoryAllocator@System@@ is a minted row that was never
@@ -623,25 +404,6 @@ void RuntimePortInit() {
     // reg_unreg_lane3.cpp resolves four ?_typeInfo@Graphics@@ rows by name to
     // fill dispatch slots. Marking here read all four as ATTENDANCE and would
     // have handed four rows a route that is really a registration.
-
-    // Wave 9 lane X's oracle. LAST, after the mint AND after the mark above,
-    // and both halves of that placement are deliberate.
-    //
-    //  * After RtDataMintInit(): its REGISTRATIONS ran earlier (the mint needs
-    //    them to rank a storage row), but the probe RESOLVES all fourteen
-    //    `?_singleton@...` names through a caching door, and those are the very
-    //    caches the ported constructors publish through. Probing before the
-    //    mint would freeze them on the DLL's .data, so on a minted run every
-    //    one of the fourteen would write the copy nothing reads -- the exact
-    //    failure lane X exists to close.
-    //  * After RtResolveMarkPortInitDone(): with every registration done, the
-    //    answers it caches are final, so they are not "early" in the sense lane
-    //    H's recorder means and do not belong in that report. Placing it before
-    //    the mark put twelve rows of this lane's own harness into a diagnostic
-    //    other lanes read.
-    //
-    // No-ops unless BANISHED_RT_DIFF is on.
-    RtLaneXSingletonCtorProbe();
 }
 
 // ============================================================
@@ -673,38 +435,21 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr) {
         return 0;
     }
 
-    // Runtime — the historical ASLR-delta path.
-    //
-    // Return 0 when the module is not mapped. Without this the delta is 0 and
-    // the function hands back `ghidra_addr` unchanged — 0x1800187c8 and the
-    // like — which is not null, looks like a perfectly good pointer, and points
-    // at nothing. That is strictly worse than null for every caller, all of
-    // which either null-check or crash immediately. Since ENDGAME.md A.1 the
-    // handle is ALWAYS null, so every Module::Runtime address that the port
-    // registry above does not answer returns 0.
-    //
-    // Guard on the handle, not the delta: a module CAN legitimately load at its
-    // preferred base and have delta == 0.
     // Runtime port seam: an address we have reimplemented resolves to OUR code.
-    // Checked before the module handle, so a port stays live even for a module
-    // that failed to load — that is the whole point of the endgame (§4.1).
-    if (mod == Module::Runtime && RtPortEnabled()) {
+    // An address nothing registered resolves to 0, NOT to `ghidra_addr` itself:
+    // 0x1800187c8 and the like are not null, look like perfectly good pointers,
+    // and point at nothing, which is strictly worse than null for every caller.
+    if (mod == Module::Runtime) {
         auto& reg = RtAddrReg();
         auto it = reg.find(ghidra_addr);
         if (it != reg.end()) {
             g_rtHits++;
-            if (RtAttendEnabled()) ++RtAttendAddr()[ghidra_addr];   // Wave 29 VERIFY
             return reinterpret_cast<uintptr_t>(it->second);
         }
-        RecordRuntimeResidue(nullptr, ghidra_addr, 0, _ReturnAddress());
         RtResolveNoteEarly(nullptr, ghidra_addr, 0, _ReturnAddress());   // Wave 9 lane H
     }
 
-    const ModuleInfo& mi = g_modules[static_cast<int>(mod)];
-    if (!mi.handle) return 0;
-    return static_cast<uintptr_t>(
-        static_cast<intptr_t>(ghidra_addr) + mi.delta
-    );
+    return 0;
 }
 
 // ============================================================
@@ -719,14 +464,14 @@ bool ResolveInit() {
 
     // Runtime-x64.dll is NEVER loaded (docs/runtime_port/ENDGAME.md A.1). Our
     // ports, the mint and our allocator are the runtime; a null handle is the
-    // only correct state, and every DllExport/DllAddr/raw door returns null.
+    // only correct state, and since A.3 no door exists that could use one.
     g_modules[1].handle      = nullptr;
     g_modules[1].runtimeBase = 0;
     g_modules[1].delta       = 0;
 
-    // Nothing in the process may map it, either: a mapped copy would give the
-    // raw doors a live base again and half the tree would silently go back to
-    // calling retail.
+    // Nothing in the process may map it, either. Kept as a fail-fast rather
+    // than dropped with the raw doors: a mapped copy means something in the
+    // build is still pulling the DLL in, and that is worth stopping on.
     if (GetModuleHandleA("Runtime-x64.dll")) {
         fprintf(stderr, "[Standalone] FATAL: Runtime-x64.dll is mapped in the "
                         "process -- the exe must never load it (ENDGAME A.1)\n");
@@ -737,14 +482,9 @@ bool ResolveInit() {
     fflush(stderr);
 
     // The mint owns every exported data symbol and our allocator owns the heap,
-    // because nothing else exists; a cutover boot has no other meaning. The
-    // readers still key on these variables (standalone/rt_data_mint.cpp,
-    // runtime/src/system/rt_system_port.cpp, runtime/src/object/internal.cpp),
-    // so setting them unconditionally here is the minimal correct step until
-    // ENDGAME A.3/A.4/C delete the readers. An explicit =0 no longer wins.
-    _putenv_s("BANISHED_RT_MINT",   "1");
-    _putenv_s("BANISHED_RT_ALLOC",  "1");
-    _putenv_s("BANISHED_RT_NO_DLL", "1");
+    // because nothing else exists; a cutover boot has no other meaning. That
+    // used to be published as three BANISHED_RT_* variables set from here;
+    // ENDGAME C.1 deleted the readers, so there is nothing left to announce.
 
 #ifdef _DEBUG
     for (int i = 0; i < static_cast<int>(Module::COUNT); i++) {
@@ -772,105 +512,8 @@ const ModuleInfo* GetModuleInfo(Module mod) {
     return &g_modules[static_cast<int>(mod)];
 }
 
-// One residue key -> one row. Shared by the port-registry doors below and by
-// the *Raw* doors, which use the "raw:" / "rawaddr:" prefixes.
-static void RecordResidueKey(const char* key, void* caller) {
-    ResidueEntry& e = RtResidue()[key];
-    if (e.count == 0) e.firstCaller = caller;
-    e.count++;
-}
-
-void RecordRuntimeResidue(const char* mangled_name, uintptr_t ghidra_addr,
-                          uint16_t ordinal, void* caller) {
-    if (!RtStrictEnabled()) return;
-    char key[512];
-    if (mangled_name) {
-        snprintf(key, sizeof(key), "%s", mangled_name);
-    } else if (ghidra_addr) {
-        snprintf(key, sizeof(key), "addr:0x%llx", (unsigned long long)ghidra_addr);
-    } else {
-        snprintf(key, sizeof(key), "ord:%u", (unsigned)ordinal);
-    }
-    RecordResidueKey(key, caller);
-}
-
-// ---- The *Raw* doors --------------------------------------------------------
-// Added 2026-09-07 (wave 9 lane 0) after lane D found that ResolveRuntimeRaw was
-// invisible to strict mode: 0x18007fbfc is the DLL's own _beginthreadex, every
-// System::Thread in the process goes through it, and it appeared in NO residue
-// run. An absence produced by the instrument, read as a fact about the program
-// -- the same shape as reference_truncated_tool_output_manufactures_calls_zero.md.
-//
-// The Raw doors BYPASS the port registry BY DESIGN (resolve.h): the diff oracle,
-// the detour trampolines and RT_ORIGINAL_ONCE must reach the shipped code even
-// when a port is registered. So a raw hit is NOT the same kind of event as a
-// port-registry miss, and merging the two would make the port residue read as
-// permanently non-empty. They are recorded under their own "raw:" / "rawaddr:"
-// prefixes instead, counted separately, and reported in their own block.
-//
-// They are still cutover work: with the DLL gone, a raw resolve returns null,
-// and whether that is fatal or merely disables an oracle has to be decided per
-// call site. The dump says so rather than deciding it here.
-static void RecordRawResidue(const char* mangled_name, uintptr_t ghidra_addr,
-                             uint16_t ordinal, void* caller) {
-    if (!RtStrictEnabled()) return;
-    char key[512];
-    if (mangled_name) {
-        snprintf(key, sizeof(key), "raw:%s", mangled_name);
-    } else if (ghidra_addr) {
-        snprintf(key, sizeof(key), "rawaddr:0x%llx", (unsigned long long)ghidra_addr);
-    } else {
-        snprintf(key, sizeof(key), "raword:%u", (unsigned)ordinal);
-    }
-    RecordResidueKey(key, caller);
-}
-
-void DumpRuntimeResidue() {
-    if (!RtStrictEnabled()) return;
-    const std::map<std::string, ResidueEntry>& m = RtResidue();
-    // Two populations, counted apart (see RecordRawResidue): a PORT-REGISTRY
-    // MISS is a symbol we have not taken over; a RAW hit is a site that asked
-    // for the shipped code on purpose. Both must be empty or accounted for
-    // before the DLL can go, and only the first is "unported".
-    size_t raw = 0;
-    for (std::map<std::string, ResidueEntry>::const_iterator it = m.begin();
-         it != m.end(); ++it) {
-        const std::string& k = it->first;
-        if (k.compare(0, 4, "raw:") == 0 || k.compare(0, 8, "rawaddr:") == 0 ||
-            k.compare(0, 7, "raword:") == 0) raw++;
-    }
-    fprintf(stderr,
-            "[RtResidue] ==== %zu distinct requests still fell through to "
-            "Runtime-x64.dll ====\n", m.size() - raw);
-    // Sorted (std::map) so two runs diff cleanly, same contract as [RtCensus].
-    for (std::map<std::string, ResidueEntry>::const_iterator it = m.begin();
-         it != m.end(); ++it) {
-        const std::string& k = it->first;
-        if (k.compare(0, 4, "raw:") == 0 || k.compare(0, 8, "rawaddr:") == 0 ||
-            k.compare(0, 7, "raword:") == 0) continue;
-        fprintf(stderr, "[RtResidue] %-8llu %-16p %s\n",
-                it->second.count, it->second.firstCaller, k.c_str());
-    }
-    fprintf(stderr, "[RtResidue] ==== end (0 means no symbol is missing) ====\n");
-    fprintf(stderr,
-            "[RtRawResidue] ==== %zu distinct requests took a *Raw* door "
-            "(ResolveExportRaw / ResolveOrdinalRaw / ResolveRuntimeRaw) ====\n", raw);
-    for (std::map<std::string, ResidueEntry>::const_iterator it = m.begin();
-         it != m.end(); ++it) {
-        const std::string& k = it->first;
-        if (k.compare(0, 4, "raw:") != 0 && k.compare(0, 8, "rawaddr:") != 0 &&
-            k.compare(0, 7, "raword:") != 0) continue;
-        fprintf(stderr, "[RtRawResidue] %-8llu %-16p %s\n",
-                it->second.count, it->second.firstCaller, k.c_str());
-    }
-    fprintf(stderr, "[RtRawResidue] ==== end (these BYPASS the port registry by "
-                    "design; each needs a per-site cutover verdict) ====\n");
-    fflush(stderr);
-}
-
 // ---- The unresolved-symbol census -----------------------------------------
-// Wave 9 lane F. See resolve.h for the policy and why it is not fatal by
-// default.
+// Wave 9 lane F. See resolve.h for the policy and why it is not fatal.
 void RecordResolveMiss(const char* mangled_name, uint16_t ordinal, void* caller) {
     char key[512];
     if (mangled_name) snprintf(key, sizeof(key), "%s", mangled_name);
@@ -887,13 +530,6 @@ void RecordResolveMiss(const char* mangled_name, uint16_t ordinal, void* caller)
         fflush(stderr);
     }
     e.count++;
-
-    if (RtFatalResolveEnabled()) {
-        fprintf(stderr, "[RtUnresolved] BANISHED_RT_FATAL_RESOLVE is set -- "
-                        "aborting on the first missing symbol.\n");
-        fflush(stderr);
-        abort();
-    }
 }
 
 void DumpUnresolvedSymbols() {
@@ -911,112 +547,21 @@ void DumpUnresolvedSymbols() {
     fflush(stderr);
 }
 
-// The bodies, with no residue recording. ResolveExport / ResolveOrdinal call
-// THESE on their fall-through path: recording there as well would file every
-// port-registry miss twice, once under its own name and once under "raw:",
-// and the raw block is meant to name the sites that ask for the shipped code
-// DELIBERATELY.
-static void* ResolveExportRawImpl(const char* mangled_name) {
-    if (!g_modules[1].handle || !mangled_name) return nullptr;
-    return reinterpret_cast<void*>(
-        GetProcAddress(g_modules[1].handle, mangled_name)
-    );
-}
-
-static void* ResolveOrdinalRawImpl(uint16_t ordinal) {
-    if (!g_modules[1].handle) return nullptr;
-    return reinterpret_cast<void*>(
-        GetProcAddress(g_modules[1].handle, MAKEINTRESOURCEA(ordinal))
-    );
-}
-
 // ---- Residue-free registry queries (Wave 9 lane C2) -----------------------
-// See the comment in resolve.h. These deliberately do NOT fall through to the
-// DLL and do NOT record residue: they answer "is this ported", not "give me
-// something callable".
+// See the comment in resolve.h. These record no miss and print nothing: they
+// answer "is this ported", not "give me something callable".
 void* RtPortLookupExport(const char* mangled_name) {
-    if (!mangled_name || !RtPortEnabled()) return nullptr;
+    if (!mangled_name) return nullptr;
     auto& reg = RtExportReg();
     auto it = reg.find(mangled_name);
     return it == reg.end() ? nullptr : it->second;
 }
 
 void* RtPortLookupAddr(uintptr_t ghidra_addr) {
-    if (!ghidra_addr || !RtPortEnabled()) return nullptr;
+    if (!ghidra_addr) return nullptr;
     auto& reg = RtAddrReg();
     auto it = reg.find(ghidra_addr);
     return it == reg.end() ? nullptr : it->second;
-}
-
-// ---- Export-table walk (Wave 20 lane DOORS) --------------------------------
-//
-// See the comment in resolve.h. Parses the loaded module's PE export directory
-// directly rather than going through any resolver, so that a screen wanting a
-// subject can take one from the BINARY. Named exports only: an ordinal-only
-// export has no name to hand back and is skipped, which is stated here because
-// the count returned is the screen's denominator.
-int RtEnumRuntimeExports(bool (*visit)(const char* name, void* addr,
-                                       uintptr_t ghidraAddr, void* ctx),
-                         void* ctx) {
-    if (!visit) return 0;
-    const ModuleInfo& mi = g_modules[static_cast<int>(Module::Runtime)];
-    HMODULE h = mi.handle;
-    if (!h) return 0;
-
-    const auto* base = reinterpret_cast<const unsigned char*>(h);
-    const auto* dos  = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
-    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return 0;
-    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(base + dos->e_lfanew);
-    if (nt->Signature != IMAGE_NT_SIGNATURE) return 0;
-    const IMAGE_DATA_DIRECTORY& dd =
-        nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
-    if (!dd.VirtualAddress || !dd.Size) return 0;
-
-    const auto* ex = reinterpret_cast<const IMAGE_EXPORT_DIRECTORY*>(base + dd.VirtualAddress);
-    const auto* nameRvas = reinterpret_cast<const uint32_t*>(base + ex->AddressOfNames);
-    const auto* ordinals = reinterpret_cast<const uint16_t*>(base + ex->AddressOfNameOrdinals);
-    const auto* funcRvas = reinterpret_cast<const uint32_t*>(base + ex->AddressOfFunctions);
-
-    int seen = 0;
-    for (uint32_t i = 0; i < ex->NumberOfNames; ++i) {
-        const char* name = reinterpret_cast<const char*>(base + nameRvas[i]);
-        const uint16_t ord = ordinals[i];
-        void* addr = (ord < ex->NumberOfFunctions)
-                   ? const_cast<unsigned char*>(base + funcRvas[ord])
-                   : nullptr;
-        // NOT `- base + nt->OptionalHeader.ImageBase`: the Windows loader
-        // REWRITES the in-memory OptionalHeader.ImageBase to the address it
-        // actually mapped the module at, so that expression collapses to the
-        // loaded address and prints a plausible-looking wrong number. The first
-        // measured run of this walk printed `0x7fff975453d0` as a Ghidra
-        // address, which is how it was found. `mi.delta` is the relocation the
-        // resolver itself uses, and it is computed from the PREFERRED base the
-        // module table records rather than from the header.
-        const uintptr_t ghidra =
-            addr ? (reinterpret_cast<uintptr_t>(addr) - mi.delta) : 0;
-        ++seen;
-        if (!visit(name, addr, ghidra, ctx)) break;
-    }
-    return seen;
-}
-
-void* ResolveExportRaw(const char* mangled_name) {
-    RecordRawResidue(mangled_name, 0, 0, _ReturnAddress());
-    return ResolveExportRawImpl(mangled_name);
-}
-
-void* ResolveOrdinalRaw(uint16_t ordinal) {
-    RecordRawResidue(nullptr, 0, ordinal, _ReturnAddress());
-    return ResolveOrdinalRawImpl(ordinal);
-}
-
-uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr) {
-    RecordRawResidue(nullptr, ghidra_addr, 0, _ReturnAddress());
-    const ModuleInfo& mi = g_modules[static_cast<int>(Module::Runtime)];
-    if (!mi.handle) return 0;
-    return static_cast<uintptr_t>(
-        static_cast<intptr_t>(ghidra_addr) + mi.delta
-    );
 }
 
 void* ResolveExport(const char* mangled_name) {
@@ -1024,110 +569,18 @@ void* ResolveExport(const char* mangled_name) {
     // short-circuit, so a row that IS registered is still counted; off unless
     // BANISHED_W17_ATTEND=1, and one strcmp against a 63-entry list when on.
     { extern void Wave17DoorAttendNote(const char*); Wave17DoorAttendNote(mangled_name); }
-    // WAVE 24 LANE TINFO — `?_typeInfo@` name-door attendance. Also FIRST, and
-    // for a sharper reason than the line above: a promoted row is EXACTLY the
-    // row the registry short-circuit returns early for, so counting after it
-    // would report `resolves=0` for every promoted row and manufacture the
-    // "inert" verdict the screen exists to test. Cost is one strncmp.
-    { extern void RtTInfoDoorNote(const char*); RtTInfoDoorNote(mangled_name); }
-    if (mangled_name && RtPortEnabled()) {
+    if (mangled_name) {
         auto& reg = RtExportReg();
         auto it = reg.find(mangled_name);
         if (it != reg.end()) {
             g_rtHits++;
-            if (RtAttendEnabled()) ++RtAttendExport()[mangled_name];   // Wave 29 VERIFY
             return it->second;
         }
     }
-    // Missed the port registry: this request is cutover residue.
+    // Nothing registered this name and there is nothing behind the registry,
+    // so the answer is null and the symbol is unimplemented. Name it once.
     void* caller = _ReturnAddress();
-    RecordRuntimeResidue(mangled_name, 0, 0, caller);
     RtResolveNoteEarly(mangled_name, 0, 0, caller);   // Wave 9 lane H
-    void* fn = ResolveExportRawImpl(mangled_name);
-    // Wave 9 lane F: nothing catches a null from here any more. Say so.
-    if (!fn) RecordResolveMiss(mangled_name, 0, caller);
-    return fn;
-}
-
-// ---- The ORDINAL door's bridge into the NAME registry ---------------------
-// Wave 9, cutover attempt 07. `Device::Lock`/`Unlock` were PORTED (lane VID,
-// registered by name and by address) and the residue list STILL carried
-// `ord:3214` / `ord:4462` as null. The reason is structural and applies to
-// every ordinal site, not to those two: `ResolveOrdinal` consulted only
-// `RtOrdinalReg()`, a registry of its own, so a port registered by NAME is
-// INVISIBLE to an ordinal caller. Registered, census-counted, audit-clean, and
-// still null at cutover.
-//
-// Two lanes were each right and the combination was wrong: one identified the
-// ordinals as Lock/Unlock and handed them on unported; the other ported those
-// names and predicted they would leave the residue list. Neither could see the
-// door between them.
-//
-// Fixed here rather than by asking every lane to also call
-// RegisterRuntimeOrdinal, because that is a rule people forget exactly once and
-// the failure is silent. The ordinal->name map is a LINK-TIME CONSTANT read out
-// of the shipped export directory, so it still works with the DLL absent, which
-// is the only moment it matters.
-namespace {
-struct OrdinalName { uint16_t ordinal; const char* mangled; };
-
-// Every ordinal this tree passes to ResolveOrdinal, with the name the shipped
-// export directory gives it. Verified against Runtime-x64.dll with pefile.
-const OrdinalName kOrdinalNames[] = {
-    {  443, "??0Thread@System@@QEAA@I@Z" },
-    {  798, "??2GroupDescription@UI@@SAPEAX_KPEAX@Z" },
-    { 2990, "?GetTypeIdForFileExtension@Factory@Object@@QEBAIPEBD@Z" },
-    { 2991, "?GetTypeIdFromName@Factory@Object@@QEBAIPEBD_N@Z" },
-    { 3089, "?IsA@Base@Object@@QEBA_NI@Z" },
-    { 3214, "?Lock@Device@Video@@QEAAXXZ" },
-    { 4462, "?Unlock@Device@Video@@QEAAXXZ" },
-};
-
-const char* MangledForOrdinal(uint16_t ordinal) {
-    for (const OrdinalName& o : kOrdinalNames)
-        if (o.ordinal == ordinal) return o.mangled;
+    RecordResolveMiss(mangled_name, 0, caller);
     return nullptr;
 }
-}  // namespace
-
-void* ResolveOrdinal(uint16_t ordinal) {
-    if (RtPortEnabled()) {
-        auto& reg = RtOrdinalReg();
-        auto it = reg.find(ordinal);
-        if (it != reg.end()) {
-            g_rtHits++;
-            if (RtAttendEnabled()) ++RtAttendOrdinal()[ordinal];   // Wave 29 VERIFY
-            return it->second;
-        }
-        // Not registered by ordinal -- try the NAME this ordinal denotes.
-        if (const char* mangled = MangledForOrdinal(ordinal)) {
-            auto& nreg = RtExportReg();
-            auto nit = nreg.find(mangled);
-            if (nit != nreg.end()) {
-                g_rtHits++;
-                // Credited to the NAME row, which is the row that is registered.
-                if (RtAttendEnabled()) ++RtAttendExport()[mangled];   // Wave 29 VERIFY
-                return nit->second;
-            }
-        } else {
-            // An ordinal with no table row cannot reach the name registry, so a
-            // port of that function would be silently bypassed here. Say so
-            // ONCE rather than letting it pass as an ordinary DLL call.
-            static std::set<uint16_t> warned;
-            if (warned.insert(ordinal).second) {
-                fprintf(stderr,
-                        "[RtResolve] ordinal %u has no kOrdinalNames row -- a "
-                        "PORT of this function registered by name would be "
-                        "INVISIBLE here. Add the row (resolve_standalone.cpp).\n",
-                        ordinal);
-            }
-        }
-    }
-    void* caller = _ReturnAddress();
-    RecordRuntimeResidue(nullptr, 0, ordinal, caller);
-    RtResolveNoteEarly(nullptr, 0, ordinal, caller);   // Wave 9 lane H
-    void* fn = ResolveOrdinalRawImpl(ordinal);
-    if (!fn) RecordResolveMiss(nullptr, ordinal, caller);
-    return fn;
-}
-

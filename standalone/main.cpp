@@ -24,15 +24,13 @@
 #include "sampler.h"
 #include "hw_watch.h"
 #include "redzone_alloc.h"
-#include "allocator_lock.h"
 #include "rt_port.h"                        // RtResolveMissSummary
-#include "system/MemoryAllocator.h"   // RtSystemAllocatorSetDetourInstaller
+#include "system/MemoryAllocator.h"   // RtSystemAllocatorSetCutoverArmer
 #include "Game/game_main.h"
 #include "Object/factory_registration.h"
 #include "Object/internal_factory_audit.h"   // ObjAudit::ReportLeaks from the crash handler
 #include "Dialog/dialog_controller_vtable.h" // Wave 10D: inherited base slots
 // WAVE 11 follow-up 5 (lane TINFO): the BaseTypeInfo::factoryFn dispatch census.
-#include "../runtime/src/object/factory_dispatch_probe.h"
 
 // Wave 9 lane N's work-scheduler probe tally (code/Game/Action/action_base_complete.cpp).
 // Declared here rather than in a header: it has exactly one caller, the crash handler.
@@ -46,7 +44,6 @@ extern "C" void WorkSchedProbe_Report();
 #include <dbghelp.h>
 
 // WAVE 14 LANE SAVEMETA -- runtime/src/save/saveload_meta.cpp.
-extern "C" void RtSaveMetaSummary();
 // ============================================================
 // GPU preference exports (match original exe)
 // ============================================================
@@ -1366,15 +1363,6 @@ static bool Init() {
 
     // 2b-i. Allocator ownership, in the ONE order that is safe.
     //
-    //     These two patch MemoryAllocator::Allocate/Free to take the allocator's
-    //     critical section: Allocate takes no lock while Free does, and the
-    //     background Loader thread allocates concurrently with the main thread's
-    //     menu scene build -> free-list corruption -> intermittent heap crash.
-    //
-    //     Both only need ResolveInit (done at 2.), not the address registry.
-    InstallAllocatorLock();
-    InstallFreeLock();
-
     //     The DLL-ABSENT arming path for the ported allocator: with no DLL there
     //     are no DLL-internal callers to redirect, so registering the exports IS
     //     the complete swap -- but the composed (locked) Allocate/Free entry
@@ -1383,18 +1371,6 @@ static bool Init() {
     //     MemAlloc/MemFree are left unresolved.
     RtSystemAllocatorSetCutoverArmer(&RtAllocSwapArmCutover);
 
-    //     ...and the LOCK-RETIRE seam (Wave 10 lane ALLOC). WAVE9.md records this
-    //     as already done; it was not, and the ordering deadlock it describes was
-    //     still live and MEASURED on 2026-09-08 with the DLL present:
-    //       [RtPort] MemoryAllocator: REFUSING to arm -- MemoryAllocator::Allocate
-    //                (0x1800c6e60) is already patched. ...
-    //     InstallAllocatorLock() above owns the two prologues by the time
-    //     RuntimePortInit() runs, and the retire step lived INSIDE the detour
-    //     installer, which the guard gates. Handing the retire (and its undo)
-    //     across the seam lets RtSystemAllocatorRegister() retire first and guard
-    //     second, so a surviving patch is genuinely foreign.
-    RtSystemAllocatorSetLockRetirer(&AllocatorLockRetireForPort,
-                                    &AllocatorLockRestoreAfterRefusal);
 
     // 2c. Runtime-x64.dll port registry (docs/runtime_port/PLAN.md §4.1).
     //     Must run BEFORE AddressRegistryInit and EngineFuncsInit: both cache
@@ -1598,10 +1574,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // Unregistered-address census (BANISHED_UNREG_CENSUS=1). Dumped here and
     // not from atexit: the crash handler ends in ExitProcess, which skips it.
     DumpUnregCensus();
-    // Runtime port: which ports were live this run. Same reason as above for
-    // not using atexit.
-    DumpRuntimeRegistry();
-    DumpRuntimeResidue();
     // Wave 9 lane F: symbols that resolved to NOTHING. Always on, prints only
     // when the list is non-empty. After lane G this is the missing-symbol list.
     DumpUnresolvedSymbols();
@@ -1620,16 +1592,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // 104 minted factory abort traps reachable in principle; this says whether
     // any of them is reachable in fact. Always printed, including zero, and it
     // carries its own two controls -- read them before trusting the zero.
-    RtFactoryDispatchReport();
     { extern void RtObjectTypeInfoAccessorsReport();
       RtObjectTypeInfoAccessorsReport(); }
-    // WAVE 10 LANE UI4: says so out loud when its deferred probe never fired,
-    // so a silent log cannot be mistaken for a passing one. No-op otherwise.
-    { extern void RtUiSpriteCaptureProbeReport(); RtUiSpriteCaptureProbeReport(); }
-    // WAVE 14 LANE SAVEMETA: one line, always, including calls=0 -- calls=0 has
-    // four different causes and they invert the conclusion, so bodyCalls is
-    // printed beside it (runtime/src/save/saveload_meta.cpp).
-    RtSaveMetaSummary();
     // WAVE 11 LANE OBJLIFE: attendance for Object::Internal's TABLE tier. One
     // line, ALWAYS, including zero -- a tier that is armed and never entered
     // looks exactly like a tier that is armed and correct if nothing counts
@@ -1639,11 +1603,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // WAVE 11 FOLLOW-UP 5 (lane TINFO): which vtable our Internal ctor stamps.
     // Condition (b) of the WAVE11.md advisor amendment, as a log line.
     { extern void RtObjectInternalVtblPin(); RtObjectInternalVtblPin(); }
-    // WAVE 11 LANE OBJLIFE: the synthesised factory-dtor oracle's safety net.
-    // It normally reports from RtObjectPortInit; if the allocator was not
-    // readable that early it defers to here rather than reporting a vacuous
-    // screen 2. Self-guarded, so this is a no-op when it already ran.
-    { extern void RtObjectFactoryDtorsProbe(); RtObjectFactoryDtorsProbe(); }
     // Wave 9 lane FLUSH: UI::SpriteContext::Flush's per-branch counts. A
     // `divergences=0` with no idea WHICH branches ran is the shape lane UIF's
     // own section 11.3 mis-read, so the branch split is printed next to it.
@@ -1708,12 +1667,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // instrument outside its subject's live window prints a plausible ZERO
     // rather than an error.
     { extern void RtObjectExternalRefTableSummary();      RtObjectExternalRefTableSummary(); }
-    { extern void RtObjectExternalRefTableProbeSummary(); RtObjectExternalRefTableProbeSummary(); }
-    // WAVE 29 LANE VERIFY — per-row port-door attendance. Here rather than in a
-    // static destructor for the reason every instrument above gives: by
-    // static-destructor time the registry is torn down and every row would read
-    // as unregistered, which its own screen would print as a plausible zero.
-    RtRowAttendanceReport();
 
     return rc;
 }

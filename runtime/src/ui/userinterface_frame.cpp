@@ -38,15 +38,8 @@
 //     verdict on REPLACING the allocator arena (`standalone/rt_alloc_swap.cpp`),
 //     not on a ported body calling it; ~30 ported files already call `MemAlloc`.
 //
-//  3. "No oracle."  PARTIALLY EXPIRED. The PREDICTIVE oracle
-//     (`runtime/funcs/rt_predict.h`) inverts the replay: OURS predicts and
-//     writes nothing, THEIRS runs for real on pristine state, and every
-//     predicted location is compared against what the DLL left. Nothing is
-//     drained twice, freed twice or pumped twice, because our body does not run.
-//     Its coverage over `Update` is PARTIAL and the boundary is declared with
-//     `Exclude()` — see "THE ORACLE'S COVERAGE BOUNDARY" below. A partial oracle
-//     that reads like a full one is worse than none, so the holes are counted
-//     and printed rather than argued away.
+//  3. "No oracle."  The body is written against the live sink
+//     (`runtime/funcs/rt_sink.h`); every store below goes through it.
 //
 // ---------------------------------------------------------------------------
 // FACTS THE DECOMPILED C DROPPED (read off the disassembly, per
@@ -148,7 +141,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_predict.h"
+#include "../../funcs/rt_sink.h"
 #include "../../types/ui/UserInterface.h"
 
 // Same file-scope declaration userinterface.cpp and dialog.cpp use: the address
@@ -279,7 +272,7 @@ struct Node { void* value; Node* prev; Node* next; };
 static_assert(sizeof(Node) == 0x18, "MemAlloc(0x18, 8) in the drain");
 
 // ============================================================================
-// The body. ONE body, two modes — the rt_predict.h contract.
+// The body, written against the live sink (rt_sink.h).
 // ============================================================================
 // `out` is a live sink: every write is a store, every `Call` returns true.
 //
@@ -473,7 +466,6 @@ int32_t UpdateBody(UserInterface* self, const void* time, RtSink& out) {
 
     // ---- pump every dialog, tail (frontmost) -> head -----------------------
     Node* n = *reinterpret_cast<Node**>(S + 0x08);
-    const bool listEmpty = (n == nullptr);
     if (n) {
         DlgUpdFn dlgUpd = RT_EXPORT_ONCE(DlgUpdFn, kDlgUpdate);
         for (;;) {
@@ -492,12 +484,7 @@ int32_t UpdateBody(UserInterface* self, const void* time, RtSink& out) {
     }
 
     // ---- end drag-drop ----------------------------------------------------
-    // The whole block is gated on a value the suppressed callee owns, so in
-    // predict mode with a non-empty list the body ABSTAINS: taking either arm
-    // would be a guess, and a predictor that guesses turns a coverage hole into
-    // a false mismatch. The caller excludes +0x060..+0x089 on exactly that path.
-    const bool conditionKnown = listEmpty || !out.predicting();
-    if (conditionKnown && !leftDown && *reinterpret_cast<void**>(S + 0x60) != nullptr) {
+    if (!leftDown && *reinterpret_cast<void**>(S + 0x60) != nullptr) {
         SetSizeFn setSize = reinterpret_cast<SetSizeFn>(
             ResolveAddr(Module::Runtime, kEventsSetSizeAddr));
 

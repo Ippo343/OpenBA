@@ -202,7 +202,6 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/Dialog.h"
-#include "../io/save_trace.h"
 
 // Forward-declared rather than pulled in from standalone/resolve.h, for the
 // reason rt_port.h gives: that header drags in <windows.h> and runtime/src/
@@ -510,7 +509,7 @@ extern "C" void* RtUiDialog_Reconstruct(void* self) {
 // ---------------------------------------------------------------------------
 // ORACLE
 // ---------------------------------------------------------------------------
-// `RtSaveTrace::Compare` in the WRITING direction against two synthetic sinks —
+// the emission oracle in the WRITING direction against two synthetic sinks —
 // on the write path a Serialize is a pure read of the object, so ours and
 // theirs can both run provided they emit into DIFFERENT sinks
 // (reference_write_path_serialize_is_replayable.md).

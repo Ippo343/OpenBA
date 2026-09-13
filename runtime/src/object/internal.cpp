@@ -132,7 +132,6 @@
 
 #include "../../types/object/Internal.h"
 #include "../../funcs/rt_port.h"
-#include "../io/save_trace.h"   // Wave 9 lane S
 
 namespace RtObject {
 namespace {
@@ -1081,34 +1080,3 @@ int RtObjectInternalRegister() {
     printf("[RtPort]   Object::Internal: %d exports registered (INCLUDING the table tier)\n", n);
     return n;
 }
-
-namespace RtObject {
-
-// ============================================================================
-// Wave 9 lane S probe — InternalBasePtr::Serialize, the "no oracle at all" one
-// ============================================================================
-// WAVE3.md listed this as the residual issue that survives even a fully green
-// shadow: "`InternalBasePtr::Serialize` has no oracle at all and lands in the
-// save/load path". That was true when it was written. It is not any more.
-//
-// Why the full A/B still cannot be used: the body ends in
-// `self->ptr = InternalFactory::PersistObject(...)`, which mutates the pointer
-// AND the global factory, so replaying the whole thing would persist twice.
-//
-// Why the PREFIX oracle is nonetheless the WHOLE answer here: every byte this
-// function contributes to the stream is emitted by its four calls -- bool
-// `present`, int `index`, uint `gen`, uint `type` -- and all four happen BEFORE
-// the mutation. Stopping after 4 skips only `PersistObject`, which is shared
-// code both sides would call identically. So the prefix is not a partial view
-// of the emission sequence; it IS the emission sequence.
-//
-// The subject is a real live object taken from the factory's own table
-// (`InternalFactory::objects`), not a synthetic one: the port reads
-// `_factoryIndex`, `_generation` and dispatches `Type()` through the object's
-// vtable, none of which a hand-built stand-in would exercise honestly.
-// A3-HOLD: the probe compared our emission sequence with the shipped DLL's and
-// can never run again. The entry point stays as a no-op only because
-// code/Game/Game/camera_input.cpp still calls it.
-extern "C" void RtObject_InternalBasePtr_SerializeTraceProbe() {}
-
-}  // namespace RtObject

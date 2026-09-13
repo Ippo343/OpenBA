@@ -11,7 +11,7 @@
 // cursor ... because no oracle can run both implementations without
 // double-consuming the stream"). That reason was correct when it was written
 // and is no longer the whole truth: Wave 9 lane S built
-// runtime/src/io/save_trace.h, which replays a WRITE-path Serialize into two
+// the Wave 9 lane S emission oracle, which replayed a WRITE-path Serialize into two
 // INDEPENDENT SYNTHETIC SINKS and compares the emission sequence. A write-path
 // Serialize is a pure read of the object, so the replay is legitimate; what
 // made it impossible before was the shared stream, not the function.
@@ -101,7 +101,6 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/achievement/Goal.h"
 #include "../../types/io/Serializer.h"
-#include "../io/save_trace.h"
 
 using RtAchievement::Goal;
 using RtAchievement::GoalInstance;
@@ -187,54 +186,6 @@ void DestroyCodec(ReaderWriter* rw) {
     reinterpret_cast<DtorFn>(rw->vtable[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
 }
 
-// ---------------------------------------------------------------------------
-// The lane-S probe, shared by both ports.
-// ---------------------------------------------------------------------------
-// `RtSaveTrace::Compare` hands each side `&sink.serializer`, because its first
-// subject (`Audio::Scene::Serialize`) takes an `IO::Serializer&`. BOTH functions
-// in this file take an `IO::Stream&` instead — the mangled names say
-// `AEAVStream@IO@@`, and the bodies read the parameter at +0x08 (direction) and
-// +0x10 (encoding), which are Stream fields, not Serializer ones. Passing the
-// Serializer straight through would read 16 bytes past the end of a 16-byte
-// object.
-//
-// `Serializer.stream` is at +0x00, so the adapter below recovers the sink's
-// Stream from the Serializer it was given. That is not a workaround for a bug
-// in lane S; it is the two calling conventions this family genuinely has.
-using StreamMemberFn = void (*)(void*, Stream*);
-
-Stream* StreamOf(void* serializer) {
-    return static_cast<Serializer*>(serializer)->stream;
-}
-
-// Compare defends against `ours == theirs` (the vacuous pass that
-// reference_uncalled_port_is_not_verified.md is about) by comparing the two
-// function pointers. Adapters defeat that check, so the equivalent check is
-// made here instead, on the thing that actually matters: whether the export
-// registry hands our body back for this name.
-// Re-entrancy guard, and it is not optional. `Compare` calls `ours`, which is
-// this very body; a counter alone would let each nested entry start ANOTHER
-// comparison, and `Compare` says in as many words that it is not reentrant (its
-// sinks and recorders are function-level statics shared by both sides). One
-// flag, set for the duration, is what makes the nested call fall straight
-// through to the real work.
-bool g_probing = false;
-
-struct ProbeGuard {
-    explicit ProbeGuard() { g_probing = true; }
-    ~ProbeGuard() { g_probing = false; }
-};
-
-bool PortIsLive(const char* mangled, const void* ours) {
-    void* viaRegistry = ResolveExport(mangled);
-    if (viaRegistry == ours) return true;
-    std::fprintf(stderr,
-                 "[RtSaveTrace] FAIL %s: the port is NOT registered (registry -> %p, "
-                 "ours %p), so this comparison would prove nothing\n",
-                 mangled, viaRegistry, ours);
-    return false;
-}
-
 }  // namespace
 
 // ============================================================================
@@ -256,7 +207,7 @@ bool PortIsLive(const char* mangled, const void* ours) {
 //
 // PORTING THIS COMPLETES Achievement::Goal (5 of 5 members).
 //
-// ORACLE: RtSaveTrace::Compare, in the WRITING direction against two synthetic
+// ORACLE: the emission oracle, in the WRITING direction against two synthetic
 // sinks, run in situ on the first 16 real calls. No prefix stop is needed: this
 // body mutates nothing (the two field serializers read the object; the codec is
 // the sink's own stub), so the whole emission sequence is replayable.
@@ -298,7 +249,7 @@ bool RtAch_Goal_Serialize(Goal* self, Stream* stream) {
 //
 // PORTING THIS COMPLETES Achievement::GoalInstance (7 of 7 members).
 //
-// ORACLE: as above — RtSaveTrace::Compare, writing direction, synthetic sinks,
+// ORACLE: as above — the emission oracle, writing direction, synthetic sinks,
 // first 16 real calls, no prefix stop needed.
 // ============================================================================
 void RtAch_GoalInstance_Persist(GoalInstance* self, Stream* stream) {

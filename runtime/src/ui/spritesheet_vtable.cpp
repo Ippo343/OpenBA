@@ -87,7 +87,6 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/SpriteSheet.h"
-#include "../io/save_trace.h"
 
 // Forward-declared rather than pulled in from standalone/resolve.h, for the
 // reason rt_port.h gives: that header drags in <windows.h> and runtime/src/
@@ -339,7 +338,7 @@ extern "C" void* RtUi_SpriteSheet_Reconstruct(void* self) {
 // ---------------------------------------------------------------------------
 // ORACLE
 // ---------------------------------------------------------------------------
-// `RtSaveTrace::Compare` in the WRITING direction against two synthetic sinks,
+// the emission oracle in the WRITING direction against two synthetic sinks,
 // the same instrument elementdescription_serialize.cpp uses and for the same
 // reason: on the write path a Serialize is a pure read of the object, so ours
 // and theirs can both run provided they emit into DIFFERENT sinks
@@ -360,8 +359,7 @@ using rt::io::ReaderWriter;
 using rt::io::Serializer;
 using rt::io::Stream;
 
-using SerMemberFn    = void (*)(void*, Serializer*);
-using StreamMemberFn = void (*)(void*, Stream*);
+using SerMemberFn = void (*)(void*, Serializer*);
 
 SerMemberFn ByAddr(uintptr_t addr) {
     return reinterpret_cast<SerMemberFn>(ResolveAddr(Module::Runtime, addr));

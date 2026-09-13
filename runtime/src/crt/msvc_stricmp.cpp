@@ -109,8 +109,6 @@
 
 #include "../../funcs/rt_port.h"
 
-uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr);
-
 namespace rtcrt {
 
 // ---------------------------------------------------------------------------
@@ -200,25 +198,6 @@ int StrICmp(const char* a, const char* b) {
     return AsciiStrICmp(a, b);
 }
 
-// ---------------------------------------------------------------------------
-// The live check on the locale premise. Reads the SHIPPED flag through the raw
-// door, which is only meaningful while the DLL is mapped; at cutover it reports
-// that it could not check, rather than reporting zero.
-// ---------------------------------------------------------------------------
-void CheckLocaleFlag() {
-    const uintptr_t p = ResolveRuntimeRaw(0x1801fba28);
-    if (!p) {
-        printf("[RtCrt] _stricmp locale flag: NOT CHECKED (the DLL is not "
-                    "mapped). The static argument stands on its own.\n");
-        return;
-    }
-    const int v = *reinterpret_cast<const int*>(p);
-    printf("[RtCrt] _stricmp locale flag [0x1801fba28] = %d %s\n", v,
-                v == 0 ? "(as measured -- the _stricmp_l arm is dead)"
-                       : "*** NON-ZERO: the locale arm IS reachable and is NOT "
-                         "ported ***");
-}
-
 }  // namespace rtcrt
 
 // ============================================================================
@@ -232,4 +211,3 @@ int RtCrtStrICmpRegister() {
     return n;
 }
 
-void RtCrtStrICmpCheckLocaleFlag() { rtcrt::CheckLocaleFlag(); }

@@ -75,7 +75,6 @@
 #include "../../types/audio/Audio.h"
 #include "../../../engine/types/common.h"   // Vector3
 #include "../../types/io/Serializer.h"        // Stream / Serializer / rw_vtbl (Wave 4)
-#include "../io/save_trace.h"                 // Wave 9 lane S
 #include "../system/timer.h"                  // Wave 9 lane W: TimerSecondsPerTick
 
 // ----------------------------------------------------------------------------
@@ -661,11 +660,11 @@ bool RtAudio_Configuration_Startup(void* selfPtr) {
 // freshly grown _effects array must skip that window per element.
 //
 // ORACLE: the Wave 9 lane S save-stream A/B harness
-// (runtime/src/io/save_trace.h). There is no call-level replay for anything on
+// (the Wave 9 lane S emission oracle). There is no call-level replay for anything on
 // the save path -- ours then theirs would emit twice into one stream -- but on
 // the WRITE path a Serialize is a PURE READ of the object, so the two calls can
 // be replayed into two INDEPENDENT recording sinks and their emission sequences
-// compared. That is what `RtSaveTrace::Compare` does, and it is why this port
+// compared. That is what the emission oracle does, and it is why this port
 // is not held back for "no oracle".
 using AudioArrayResizeFn = void (*)(void* array, int32_t newCount);
 using AudioBulkSerFn     = void (*)(void* serializer, int32_t count, void* data);
@@ -957,25 +956,6 @@ void RtAudio_Scene_Pause(void* selfPtr, int32_t soundType, bool paused) {
         }
         self->paused[t] = (uint8_t)paused;
     }
-
-    // SHADOW: the DLL's own IsPaused (0x180050990, ord 3151) is a one-byte read
-    // of paused[soundType] and cannot disturb anything.
-    //
-    // The early-out is INSIDE the shadow's reach on purpose. Written the
-    // faithful way -- `if (paused[t] == paused) return;` before any reporting --
-    // this port ran on both a fresh autostart and a Save9 load and reported
-    // `calls=0` on BOTH, because every one of the six live call sites asks for
-    // a state the scene is already in. The site appeared in the site list (so
-    // the body WAS entered) while the count said zero, which is precisely the
-    // shape of reference_uncalled_port_is_not_verified.md and would have been
-    // read as a dead port. `calls=` has to mean "entered".
-    using IsPausedFn = bool (*)(void*, int32_t);
-    // The CALL is inside the guard, not just the resolve (Wave 9 lane R,
-    // 2026-09-07). It used to sit outside it, so an ordinary run -- one with
-    // the diff oracle off -- paid a cross-DLL call whose result it then threw
-    // away, and at cutover it becomes a call through a null pointer. Storing the
-    // pointer outside a guard is harmless; CALLING outside one is not.
-    bool theirs = false;
 }
 
 // ============================================================================
@@ -1188,21 +1168,3 @@ int RtAudioConfigurationRegister() {
     return n;
 }
 
-// ============================================================================
-// Wave 9 lane S probe — verify Audio::Scene::Serialize against the shipped body
-// ============================================================================
-// Called once, from the menu loop where a live `Audio::Scene` is in hand
-// (`MenuDLT + 0xb30`). Any harness path reaches the menu, so this needs no
-// gameplay and no save.
-//
-// It runs BOTH bodies against synthetic recording sinks in the WRITING
-// direction, so neither touches a real stream and neither mutates the Scene --
-// see runtime/src/io/save_trace.h for why a write-path Serialize is replayable
-// at all when the family was held back for "no oracle possible".
-extern "C" void RtAudio_Scene_SerializeTraceProbe(void* scene) {
-    // A3/A4: the save-trace oracle compared our Serialize against the SHIPPED
-    // body reached through the raw door. With Runtime-x64.dll gone there is no
-    // shipped body, so nothing is left to compare against. Kept as a no-op
-    // because code/Game/Game/menudialogloopt.cpp still calls it.
-    (void)scene;
-}

@@ -363,7 +363,7 @@ int RtMintRegisterPromotedRows() {
     // any of the four boots: the sheet that is actually deserialised at boot is
     // built by the DLL's own ExternalFactory and dispatches slot 5 off the
     // DLL's table. `?Serialize@SpriteSheet@UI@@` is therefore **PORTED, NOT
-    // VERIFIED** — its write-path oracle (RtSaveTrace, wired in
+    // VERIFIED** — its write-path oracle (the emission oracle, wired in
     // spritesheet_vtable.cpp) reported no entry, which is the `calls=0` column
     // and not a pass (reference_uncalled_port_is_not_verified.md). Promoting is
     // still the right call and this is why: TRAP=0 means the slot can no longer
@@ -883,7 +883,7 @@ int RtMintRegisterPromotedRows() {
     // `Reconstruct`, `Destruct`, `Construct`) report NO `[RtDiff]` site in
     // EITHER half, because no site is registered until the body is entered —
     // they were never dispatched on this route. `Serialize`'s save-trace oracle
-    // reported no entry at all (the only `[RtSaveTrace]` lines in either run
+    // reported no entry at all (the only emission-oracle lines in either run
     // are `Achievement::Goal::Serialize`), which is the `calls=0` column and
     // not a pass (reference_uncalled_port_is_not_verified.md).
     //

@@ -286,7 +286,6 @@
 #include "../../types/io/FileSystem.h"
 #include "../../types/system/String.h"
 #include "../../src/system/string.h"
-#include "save_trace.h"   // Wave 27 IOTEXT: the Serialize oracle gate
 
 namespace RtIO {
 
