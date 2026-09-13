@@ -421,8 +421,63 @@ extern "C" void RtUi_SpriteCapture_Draw(const void* selfv, void* ctxv, int ox, i
     }
 }
 
+// ============================================================================
+// The `_entries` element serialize walk   0x18004c0d0   (batch D1)
+// ============================================================================
+// Serialize above already calls this by address. The element is
+// UI::SpriteCapture::CaptureEntry, stride 0x28 — the same stride array.cpp's
+// kSpec_CaptureEntry carries — and the walk reads it field by field:
+//
+//   18004c0fe  kScalarInt   (+0xa0)   e+0x00   sheet index
+//   18004c10b  0x1800c9930            e+0x08   System::String name
+//   18004c11d  kScalarInt             e+0x10
+//   18004c131  kScalarInt             e+0x14
+//   18004c145  kScalarInt             e+0x18
+//   18004c159  kScalarInt             e+0x1c
+//   18004c16d  kScalarFloat (+0x80)   e+0x20
+//   18004c181  kScalarUInt  (+0x98)   e+0x24
+//
+// `ser->readerWriter` is RE-READ before every one of the seven virtual calls
+// (`MOV RCX,[RDI+8]` each time). That is not redundancy to tidy away: a
+// ReaderWriter is free to replace itself on the Serializer, and the visitor
+// pass does exactly that.
+extern "C" void RtUi_SpriteCapture_SerializeEntries(void* serv, int count, void* basev) {
+    if (count <= 0) return;                                   // 18004c0d0 TEST/JLE
+    Serializer* ser = static_cast<Serializer*>(serv);
+    uint8_t*    e   = static_cast<uint8_t*>(basev);
+
+    using StrSerFn = void (*)(void* str, Serializer* ser);
+    StrSerFn strSer = RtAddr<StrSerFn>(0x1800c9930ull);
+
+    for (int i = 0; i < count; ++i, e += 0x28) {
+        void* rw = ser->readerWriter;
+        void** rvt = VTableOf(rw);
+        reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, e + 0x00, nullptr);
+
+        strSer(e + 0x08, ser);                                // 18004c10b
+
+        rw = ser->readerWriter; rvt = VTableOf(rw);
+        reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, e + 0x10, nullptr);
+        rw = ser->readerWriter; rvt = VTableOf(rw);
+        reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, e + 0x14, nullptr);
+        rw = ser->readerWriter; rvt = VTableOf(rw);
+        reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, e + 0x18, nullptr);
+        rw = ser->readerWriter; rvt = VTableOf(rw);
+        reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, e + 0x1c, nullptr);
+        rw = ser->readerWriter; rvt = VTableOf(rw);
+        reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarFloat / 8])(rw, e + 0x20, nullptr);
+        rw = ser->readerWriter; rvt = VTableOf(rw);
+        reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarUInt / 8])(rw, e + 0x24, nullptr);
+    }
+}
+
 int RtUiSpriteCaptureClassRegister() {
     int n = 0;
+
+    // Batch D1. Unexported in both builds (a file-static of the Serialize
+    // translation unit), so the address is the only door.
+    RegisterRuntimeAddr(0x18004c0d0ull, (void*)&RtUi_SpriteCapture_SerializeEntries); ++n;
+
     RegisterRuntimeExport("?Type@SpriteCapture@UI@@UEBAIXZ",
                           (void*)&RtUi_SpriteCapture_Type);                 ++n;
     RegisterRuntimeAddr(0x18003c7f0ull, (void*)&RtUi_SpriteCapture_Type);
