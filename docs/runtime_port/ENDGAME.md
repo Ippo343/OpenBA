@@ -71,6 +71,13 @@ Mostly deletion. The coupling is centralised; the cost is losing the oracle.
    `make sa-run` + pause-menu quit; `BANISHED_AUTOQUIT`; `BANISHED_AUTOLOAD=Gate` (the gate);
    the Load Game dialog (`BANISHED_AUTOMENU_BUTTON=2`); the Mods route; `make sa-stress`
    on the perf exe. Screenshot pairs against the tagged build for the menu and the world.
+   `[done 2026-09-13: A CLOSED. On the phase-C-closed main (5fdd5715+) with all three DLL files
+   physically moved out of the game directory: sa-run + pause-menu quit, the Mods route and the
+   resave gate (PASS) all exit 0 with empty crash logs; AUTOQUIT, Load Game and sa-stress passed
+   the same day with the files present but never loaded. `grep -c RtOriginal` = 0 (3c19f083).
+   Screenshot pairs against the dll-present-last tag: docs/runtime_port/endgame_a_screens/
+   (menu identical; world same scene/assets/shadows/toolbar, ground tone slightly darker in the
+   current build, within the known frame variance).]`
 6. **What stays after A:** the registry seam (`RegisterRuntimeExport/Addr`, `ResolveExport`),
    the mint (`rt_data_mint.cpp`, `rt_export_addrs.inc`), the 155 `reg_*.cpp` files and the
    hand-built vtables. Ported bodies still find each other through them. They die in B.
