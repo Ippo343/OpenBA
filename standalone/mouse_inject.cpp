@@ -911,8 +911,8 @@ void PostUpdate(void* uiRaw) {
     // `DialogInstance::Update` (0x180113980) only sets `_hovering` after the
     // pointer has sat on the SAME PIXEL for 0.25 s (the double at 0x1801616b8,
     // divided by _secondsPerTick). It keeps the last position in the pair at
-    // +0x90/+0x94 -- which runtime/types/ui/DialogInstance.h currently calls
-    // `_timerHandle`, a single field, and it is NOT: 0x180113a1b and
+    // +0x90/+0x94 -- which runtime/types/ui/DialogInstance.h once called
+    // `_timerHandle`, a single field (now `_hoverMouseX/Y`); it is NOT: 0x180113a1b and
     // 0x180113a26 compare them against UpdateState mouseX and mouseY
     // separately, and 0x180113a60/0x180113a69 store the new pair.
     //

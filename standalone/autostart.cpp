@@ -362,6 +362,22 @@ void TickMenu(void* menuDLT) {
             void* dlg = ModDialog_LastOpened();
             int id = std::atoi(tok);
             fprintf(stderr, "[AutoStart] AUTOMENU_CLICKS: ModDialog=%p id=%d\n", dlg, id);
+            // A fabricated click on a per-row id (1000..5999: row = id % 1000)
+            // must name a row the dialog actually built. The real UI cannot
+            // deliver such a click without the element, but this driver can,
+            // and with no .pkm installed (WinData/_mods_off holds them) the
+            // entry array count at +0xC0 is 0 and the row handler faults reading
+            // its entry. Mirror WaitLoadDialog's saveCount gate: skip loudly.
+            if (dlg && id >= 1000 && id < 6000) {
+                const int rows = *reinterpret_cast<int*>(static_cast<uint8_t*>(dlg) + 0xC0);
+                const int row  = id % 1000;
+                if (row >= rows) {
+                    fprintf(stderr, "[AutoStart] WARN: AUTOMENU_CLICKS token %d names row %d "
+                                    "but the ModDialog has %d row(s) -- skipped (are any "
+                                    ".pkm files installed in WinData?)\n", id, row, rows);
+                    dlg = nullptr;
+                }
+            }
             if (dlg) {
                 // ModDialog::OnElementEvent is the 8-arg shape and reads *param2 as
                 // the element InternalPtr, so hand it a real (null) qword.

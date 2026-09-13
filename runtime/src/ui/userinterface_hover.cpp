@@ -199,7 +199,11 @@ void ReleaseString(RtSystem::String* s) {
     if (!data) return;
     if (--RtSystem::StringRefCount(data) == 0) {
         s->data = data - 8;
-        RT_ORIGINAL_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(s->data);
+        // RT_EXPORT_ONCE, not RT_ORIGINAL_ONCE: this release is LIVE work in
+        // BeginToolTip (0x18012096a / 0x1801209dc), not an oracle. The raw door
+        // resolves NULL with the DLL absent and this would call it (found by the
+        // strict gate's RtRawResidue table, 2026-09-12).
+        RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(s->data);
     } else {
         s->data = nullptr;
     }

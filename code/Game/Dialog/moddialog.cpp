@@ -550,16 +550,26 @@ void ModDialog_Slot4(ModDialog* self) {
 // ============================================================
 // ModDialog_ToggleMod_Impl (was fn_ModDialog_ToggleMod, FUN_14006e930)
 //
-// Toggles the enabled state of a mod at the given index.
-// Reads the mod's actual enabled state and inverts it, then refreshes display.
+// Pushes the row's checkbox state into the mod list, then refreshes.
+//
+// Retail (0x14006e930) does NOT read the model: it takes row `index` of the
+// entry array (+0xB8, stride 0x58), CheckPtr's the checkLoaded InternalPtr at
+// entry+0x28, and passes THAT element's already-toggled bool at +0xd8 to
+// Modification::Enable. The previous port read Mod::enabled and inverted it,
+// which only agrees while widget and model are in lockstep, and it is why the
+// no-mods crash read 0xd0 (GetModification on an empty list) instead of
+// faulting on the row itself. No null check: with the row present the deref is
+// load-bearing, as in retail; the row's presence is the caller's contract
+// (standalone/autostart.cpp gates its fabricated clicks on the row count).
 // ============================================================
 static void ModDialog_ToggleMod_Impl(ModDialog* self, int index) {
+    uintptr_t s = (uintptr_t)self;
     void* modSingleton = *(void**)g_ppModificationSingleton;
 
-    // Read the mod's actual enabled state and invert it
-    void* mod = fn_Modification_GetMod(modSingleton, index);
-    bool currentEnabled = *(uint8_t*)((uintptr_t)mod + 0x50) != 0;
-    fn_Modification_Enable(modSingleton, index, !currentEnabled);
+    uintptr_t entry = *(uintptr_t*)(s + 0xB8) + (uintptr_t)(int64_t)index * 0x58;
+    fn_InternalBasePtr_CheckPtr((void*)(entry + 0x28));
+    uintptr_t checkElem = *(uintptr_t*)(entry + 0x28);
+    fn_Modification_Enable(modSingleton, index, *(uint8_t*)(checkElem + 0xD8) != 0);
 
     ModDialog_RefreshDisplay_Impl(self);
 }
