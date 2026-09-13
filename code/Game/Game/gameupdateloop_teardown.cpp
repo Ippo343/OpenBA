@@ -279,6 +279,9 @@ extern "C" void EntityList_Shutdown_c3d30(void* selfV) {
                     entity,
                     (unsigned long long)(entity ? *reinterpret_cast<uint64_t*>(entity) : 0));
                 std::fflush(stderr);
+                // Name the owner of the block written past, repair the tag, arm a
+                // watchpoint on the dword (TEARDOWN_WILD_WRITE.md section 3).
+                RedzoneAlloc_ReportWildWrite(bad);
             }
         }
     }

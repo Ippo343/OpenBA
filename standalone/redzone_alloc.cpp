@@ -1188,3 +1188,149 @@ static DWORD WINAPI RedzoneWatchdog(LPVOID) {
     return 0;
 }
 
+
+// ---------------------------------------------------------------------------
+// TEARDOWN_WILD_WRITE.md §3 — name the OWNER of the block that was written past.
+//
+// Every capture of the teardown wild write has the same geometry: the corrupt tag
+// sits immediately after a 24-byte block whose 16-byte payload is small ints, and
+// the smashed dword is that block's user+0x14. Four out of four is not a
+// coincidence of heap neighbours: the writer owns the PRECEDING block and stores
+// past its end. So when the teardown bracket first sees a dirty tag this reports
+// (1) the preceding block (tag, payload, allocation caller if ALLOC_STATS is on),
+// (2) every live block holding a pointer to that payload — the owner object, whose
+//     user+0 vtable resolves to a symbol in reimpl-x64.exe — found by one walk that
+//     scans each block's payload, (3) repairs the tag so teardown can finish and
+//     arms a hardware write watchpoint on the smashed dword so a REPEAT write from
+//     the same code lands with a full stack in standalone_crash.log.
+// One walk, once, only after detection: no cost inside the cascade.
+// ---------------------------------------------------------------------------
+#include "hw_watch.h"
+
+extern "C" void RedzoneAlloc_PrintBacktrace(const char* tag) {
+    void* bt[32];
+    USHORT n = CaptureStackBackTrace(1, 32, bt, nullptr);
+    RZOut("[WILDWRITE] backtrace (%s):\n", tag ? tag : "");
+    for (USHORT i = 0; i < n; ++i) PrintModOff("  bt", (uint64_t)(uintptr_t)bt[i]);
+    fflush(stderr);
+}
+
+extern "C" void RedzoneAlloc_ReportWildWrite(void* badV) {
+    uint8_t* bad = static_cast<uint8_t*>(badV);
+    if (!bad || !g_pMemAllocSingleton) return;
+    uint8_t* alloc = reinterpret_cast<uint8_t*>(g_pMemAllocSingleton);
+    uint8_t* ranges   = *reinterpret_cast<uint8_t**>(alloc + 0x00);
+    int      rangeCnt = *reinterpret_cast<int*>(alloc + 0x08);
+    if (!ranges || rangeCnt <= 0 || rangeCnt >= 4096) return;
+
+    const uint64_t badTag = *reinterpret_cast<uint64_t*>(bad);
+    // The observed damage never touches the low dword (the size), so the block's
+    // true extent is recoverable from it and the walk can step OVER the victim.
+    auto blockBytes = [&](uint8_t* p) -> size_t {
+        uint64_t t = *reinterpret_cast<uint64_t*>(p);
+        if (p == bad) t &= 0xffffffffULL;
+        return (size_t)(t & 0x1ffffffffffULL) * 4;
+    };
+
+    // Pass 1: locate the physically-preceding block.
+    uint8_t* prev = nullptr;
+    int badRange = -1;
+    for (int r = 0; r < rangeCnt && badRange < 0; ++r) {
+        uint8_t* rng = ranges + (size_t)r * 0x18;
+        uint8_t* start = *reinterpret_cast<uint8_t**>(rng + 0x00);
+        uint8_t* end   = *reinterpret_cast<uint8_t**>(rng + 0x08);
+        if (!start || !end || end <= start || bad < start || bad >= end) continue;
+        badRange = r;
+        uint8_t* p = start; int guard = 0;
+        while (p < end && ++guard < 4000000) {
+            if (!ReadablePtr(p, 8)) break;
+            if (p == bad) break;
+            size_t nb = blockBytes(p);
+            if (nb < 8 || p + nb > end) break;
+            prev = p; p += nb;
+        }
+    }
+    RZOut("[WILDWRITE] victim tag @%p = 0x%016llx (size dword intact: %llu bytes); range %d\n",
+          (void*)bad, (unsigned long long)badTag,
+          (unsigned long long)((badTag & 0xffffffffULL) * 4), badRange);
+    if (!prev) { RZOut("[WILDWRITE] no preceding block found\n"); fflush(stderr); return; }
+
+    uint8_t* prevUser = prev + 8;
+    size_t   prevBytes = blockBytes(prev);
+    size_t   prevPay   = prevBytes >= 8 ? prevBytes - 8 : 0;
+    RZOut("[WILDWRITE] preceding block @%p user=%p tag=0x%016llx payload=%zu bytes; "
+          "victim dword = user+0x%zx\n",
+          (void*)prev, (void*)prevUser, (unsigned long long)*reinterpret_cast<uint64_t*>(prev),
+          prevPay, prevPay + 4);
+    {
+        size_t q = prevPay / 8; if (q > 8) q = 8;
+        for (size_t i = 0; i < q; ++i) {
+            const uint32_t* d = reinterpret_cast<const uint32_t*>(prevUser + i * 8);
+            RZOut("[WILDWRITE]   user+0x%02zx = %08x %08x\n", i * 8, d[0], d[1]);
+        }
+        PrintModOff("preceding user+0 as vtable", *reinterpret_cast<uint64_t*>(prevUser));
+        uint64_t sz = 0; void* caller = nullptr; void* actx = nullptr;
+        if (AllocStats_Lookup(prevUser, &sz, &caller, &actx)) {
+            RZOut("[WILDWRITE] preceding block ALLOCSTATS size=%llu arrayHeader=%p\n",
+                  (unsigned long long)sz, actx);
+            PrintModOff("preceding block alloc caller", (uint64_t)(uintptr_t)caller);
+        }
+    }
+
+    // Pass 2: who points at the preceding block's payload? Scan every live block's
+    // payload for the user pointer (a DynArray header stores exactly that).
+    int hits = 0;
+    for (int r = 0; r < rangeCnt; ++r) {
+        uint8_t* rng = ranges + (size_t)r * 0x18;
+        uint8_t* start = *reinterpret_cast<uint8_t**>(rng + 0x00);
+        uint8_t* end   = *reinterpret_cast<uint8_t**>(rng + 0x08);
+        if (!start || !end || end <= start) continue;
+        uint8_t* p = start; int guard = 0;
+        while (p < end && ++guard < 4000000) {
+            if (!ReadablePtr(p, 8)) break;
+            size_t nb = blockBytes(p);
+            if (nb < 8 || p + nb > end) break;
+            const uint64_t tag = *reinterpret_cast<uint64_t*>(p);
+            const bool isFree = (tag & 0x0000200000000000ull) != 0;   // kTagThisFree, bit 45
+            if (!isFree && p != prev && nb >= 16 && ReadablePtr(p, nb)) {
+                const uint64_t* q = reinterpret_cast<const uint64_t*>(p + 8);
+                size_t nq = (nb - 8) / 8;
+                for (size_t i = 0; i < nq; ++i) {
+                    if (q[i] != (uint64_t)(uintptr_t)prevUser) continue;
+                    ++hits;
+                    if (hits <= 12) {
+                        RZOut("[WILDWRITE] OWNER candidate #%d: block @%p user=%p size=%zu holds the "
+                              "pointer at user+0x%zx; next qwords: %016llx %016llx\n",
+                              hits, (void*)p, (void*)(p + 8), nb, i * 8,
+                              (unsigned long long)(i + 1 < nq ? q[i + 1] : 0),
+                              (unsigned long long)(i + 2 < nq ? q[i + 2] : 0));
+                        PrintModOff("  owner user+0 (vtable?)", q[0]);
+                        // A DynArray header {data, count, capacity} usually sits INSIDE the
+                        // owning object: report any module pointer found before it too.
+                        for (size_t back = 1; back <= i && back <= 24; ++back) {
+                            HMODULE mod = nullptr;
+                            if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                                   GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                                   (LPCSTR)(uintptr_t)q[i - back], &mod) && mod) {
+                                char lbl[96];
+                                snprintf(lbl, sizeof lbl, "  module ptr at user+0x%zx", (i - back) * 8);
+                                PrintModOff(lbl, q[i - back]);
+                            }
+                        }
+                    }
+                }
+            }
+            p += nb;
+        }
+    }
+    RZOut("[WILDWRITE] %d pointer(s) to the preceding block's payload found in live heap blocks\n", hits);
+
+    // Repair + watch. Clearing the high dword restores the size; the prev-size/prev-free
+    // bits it also carried are lost, which only matters if this block is freed while its
+    // neighbour is free — acceptable in a run whose purpose is to name the writer.
+    *reinterpret_cast<uint64_t*>(bad) = badTag & 0xffffffffULL;
+    RZOut("[WILDWRITE] tag REPAIRED to 0x%016llx; arming write watchpoint on %p (4 bytes)\n",
+          (unsigned long long)*reinterpret_cast<uint64_t*>(bad), (void*)(bad + 4));
+    fflush(stderr);
+    HwWatch_Arm(bad + 4, 4, "teardown wild write victim dword (user+payload+4 of preceding block)");
+}

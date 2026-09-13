@@ -20,6 +20,7 @@
 #include "FishingWork.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "redzone_alloc.h"   // RedzoneAlloc_PrintBacktrace (wild-write diagnostic)
 #include "Object/factory_registration.h"   // GetTypeIdByName (drop-spot occupancy dump)
 #include <cstdio>
 #include <cstdlib>
@@ -969,6 +970,17 @@ int FishingWork_Slot6_Impl(FishingWork* self, void* param2, void* param3, uint32
     if ((param4 >> 15) & 1) {
         uint32_t spotIdx = (param4 >> 4) & 0xf;
         uintptr_t spotStates = *(uintptr_t*)(selfAddr + 0x58);
+        // TEARDOWN_WILD_WRITE.md: same unbounded retail store (0x1400e9eb0) as
+        // ConsumeProduce::OnComplete; report an index past the spot count first.
+        if ((int)spotIdx >= *(int*)(selfAddr + 0x60) || (int)citizenSlot >= *(int*)(selfAddr + 0x50)) {
+            std::fprintf(stderr,
+                "[WILDWRITE] FishingWork::Slot6 OUT OF RANGE: work=%p entity=%p workId=%d "
+                "param4=0x%x -> spotIdx=%u (count %d, cap %d, array %p) citizenSlot=%u (count %d)\n",
+                (void*)self, *(void**)(selfAddr + 0x10), *(int*)(selfAddr + 0x20), param4,
+                spotIdx, *(int*)(selfAddr + 0x60), *(int*)(selfAddr + 0x64), (void*)spotStates,
+                citizenSlot, *(int*)(selfAddr + 0x50));
+            RedzoneAlloc_PrintBacktrace("FishingWork::Slot6");
+        }
         *(int32_t*)(spotStates + (uintptr_t)spotIdx * 4) = 2;
     }
 
@@ -981,15 +993,28 @@ int FishingWork_Slot6_Impl(FishingWork* self, void* param2, void* param3, uint32
 // The decompiled code copies param2 and param3 then calls
 // vtable[+0x30](self, &copy2, &copy3).
 // ============================================================
-int FishingWork_Slot7_Impl(FishingWork* self, void* param2, void* param3) {
+//
+// THE TEARDOWN WILD WRITE (docs/runtime_port/TEARDOWN_WILD_WRITE.md, closed 2026-09-13).
+// Retail 0x1400e9e80 is 11 instructions and never touches R9: the caller
+// (CompleteTask::CheckEntity -> 0x1400f8800 TaskReassign) loads R9 = the action's
+// packed slot word, and Slot6 reads the SAME R9 — the 4th argument is forwarded by
+// register passthrough, which Ghidra renders as a 3-parameter function. This port
+// copied the decompile: three parameters, three arguments, and Slot6 read whatever
+// GCC had left in R9 (measured: 0xc9309598, the low half of a code address), so
+// `spotStates[(R9 >> 4) & 0xf] = 2` and `citizenRefs[R9 & 0xf] = 0` landed up to
+// 60 bytes past two 4-entry arrays on every cancelled fishing action. The 4-byte
+// `2` that hit a neighbouring boundary tag was the crash in EntityList::Shutdown.
+// See [[feedback_ghidra_dropped_args]]: an indirect call's register args are not
+// in the decompile; read the disassembly for every slot that forwards.
+int FishingWork_Slot7_Impl(FishingWork* self, void* param2, void* param3, uint32_t param4) {
     // Copy the pointed-to values
     uintptr_t copy2 = *(uintptr_t*)param2;
     uintptr_t copy3 = *(uintptr_t*)param3;
 
-    // Call vtable slot +0x30 (Slot6)
+    // Call vtable slot +0x30 (Slot6) with the packed slot word forwarded.
     uintptr_t vt = *(uintptr_t*)self;
-    typedef int (*VtSlot30_t)(FishingWork*, void*, void*);
-    (*(VtSlot30_t*)(vt + 0x30))(self, &copy2, &copy3);
+    typedef int (*VtSlot30_t)(FishingWork*, void*, void*, uint32_t);
+    (*(VtSlot30_t*)(vt + 0x30))(self, &copy2, &copy3, param4);
     return 0;
 }
 

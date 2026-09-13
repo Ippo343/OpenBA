@@ -20,14 +20,13 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
-- **Open defect (2026-09-13 evening, 3 h root-cause, stopped by the user):** the stress-town
-  teardown crash/hang is ONE stray 4-byte small-int store into allocator boundary-tag metadata
-  during a single `MarkForRemoval` cascade in `EntityList::Shutdown` (WorkComponent::OnRemove ->
-  RegisterWorkSlot -> 0x1400f8e30 -> MarketWork slot8 -> TaskListCleanup -> DropOffRawMaterial
-  cancel -> SpillAllStorage); the `rtalloc::Free` stack is the victim. Writer not yet proven; two
-  candidates named. Everything, incl. the recipe (3/5 at 6000 frames on the debug exe; reproduce on
-  the perf exe first) and the next experiment: `TEARDOWN_WILD_WRITE.md`. The loader race in
-  `ExternalFactory::Add` was not reached.
+- **CLOSED (2026-09-13):** the stress-town teardown crash/hang was `FishingWork::OnCancel`
+  ported with three parameters where retail forwards a fourth (the packed slot word) by
+  register passthrough — Slot6 then stored a `2` and a null past two 4-entry arrays on every
+  cancelled fishing action. One-line fix in `code/Game/Work/fishingwork.cpp`; root cause,
+  measurement and what the earlier analysis got wrong: `TEARDOWN_WILD_WRITE.md` §0. Verified:
+  debug exe reproduced 1/1 before the fix with the writer named, 0/2 after (both teardown
+  brackets clean, clean exit). The loader race in `ExternalFactory::Add` was not reached.
 
 The plan for what follows the gate is `ENDGAME.md`: A remove the DLL, C remove the flags,
 B fold the C bodies into real classes, in that order. **2026-09-13: A.1 and A.2 are done.**

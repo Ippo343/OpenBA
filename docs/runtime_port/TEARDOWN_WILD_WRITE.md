@@ -1,4 +1,4 @@
-# The teardown wild write (open, 2026-09-13)
+# The teardown wild write (CLOSED 2026-09-13 — see section 0)
 
 **One 4-byte wild write, not three bugs.** This is the defect that shows up as
 `sa-stress-debug` crashing in teardown inside `rtalloc::Free`, and — on the same
@@ -12,6 +12,76 @@ happened to sit next to.
 
 This document records what is established, what is not, and the exact next
 experiment. Nothing here is fixed yet.
+
+
+## 0. Root cause and fix (2026-09-13, later the same day)
+
+**`FishingWork::OnCancel` (vtable +0x38, retail 0x1400e9e80) dropped its fourth argument
+in the port.** Retail's body is eleven instructions that copy the two ref args to the stack
+and `CALL [RAX+0x30]` — it never writes R9, so the packed slot word the caller
+(`CompleteTask::CheckEntity` -> `0x1400f8800` TaskReassign) loaded into R9 reaches
+`FishingWork::Slot6` (OnComplete) by **register passthrough**. Ghidra renders that as a
+three-parameter function and `FishingWork_Slot7_Impl` was ported with three parameters
+and a three-argument call, so Slot6 read whatever GCC had left in R9. Slot6 then does,
+faithfully and unbounded like retail:
+
+```
+citizenRefs[param4 & 0xf]        = 0     (8-byte store, 4-entry IBP array)
+if (param4 >> 15 & 1) spotStates[(param4 >> 4) & 0xf] = 2   (4-byte store, 4-entry int array)
+```
+
+Measured on the instrumented debug run (`perf/results/20260913_171631_wwdbga`):
+
+```
+[WILDWRITE] FishingWork::Slot6 OUT OF RANGE: work=000001cb0ff32ee8 workId=59
+  param4=0xc9309598 -> spotIdx=9 (count 4) citizenSlot=8 (count 4)
+  FishingWork_Slot6_Impl <- FishingWork_Slot7_Impl <- ActCt_TaskReassign_8800
+  <- CompleteTask_CheckEntity_Impl <- WorkBase_TaskListCleanup_c5400 <- FishingWork_Slot8_Impl
+  <- ActCt_TaskCleanup_8e30 <- WorkComponent_RegisterWorkSlot <- WorkComponent_OnRemove_CancelWork
+  <- ActHunt_MarkEntityRemoval_c2ea0 <- EntityList_Shutdown_c3d30 <- GameUpdateLoop_Shutdown
+```
+
+`0xc9309598` is the low half of a code address in this build (`0x7ff6c9309598`): the
+leftover in R9 is build-dependent, which is why the smashed index differed between builds
+(the earlier captures were all `spotStates[5]`, i.e. `+0x14` of a 16-byte array) and why
+the perf exe never reproduced (its leftover happened to land elsewhere, and four perf runs
+in a row were clean). Every cancelled fishing action — every one, on every quit — wrote
+past the dock's two 4-entry arrays; the bracket only ever saw it when the stray `2`
+happened to hit a boundary tag, and the other stores silently corrupted a neighbour's
+payload.
+
+**Fix:** `FishingWork_Slot7_Impl` takes and forwards `uint32_t param4`
+(`code/Game/Work/fishingwork.cpp`, `fishingwork_funcs.h`). Audit of every other Work
+OnCancel port: `ConsumeProduce_OnCancel_Impl` already forwards the word; the rest
+(Forester/Herbalist/Hunt/Market/Tend/Trade/ClearStorage/Pasture/…) implement the cancel
+inline via `BSTFindRemove` and do not forward, so nothing else has this shape.
+
+### What the sections below got wrong, kept for the record
+
+* §1.5's two candidates (a freed WorkComponent, the 8e30 bucket erase) were wrong. Both
+  AVL removers keep their balance/height words at 0 mod 8 and cannot store at 4 mod 8.
+* §1.6 dismissed the "overflower" because its payload varied. The variation was the
+  signal: in all four captures the block before the victim is a 24-byte block holding
+  four small ints starting with 1 — a dock's `spotStates` (0 free / 1 in use / 2 done),
+  and the victim dword is that array's `+0x14`. The writer OWNED the preceding block.
+* "The in-cascade probes suppress it" (§2) and "the shim hides a race" were timing
+  folklore: the run is single-threaded here. What varied was the build (R9 leftover).
+
+### How it was found
+
+1. The four captures' preceding-block shape (above) said "under-run/over-run of a 16-byte
+   int array by its owner", not "stale pointer".
+2. `grep` for constant-2 stores through a computed index in `code/Game/Work` gave two
+   candidates, `ConsumeProduce::OnComplete` and `FishingWork::Slot6`; both are unbounded
+   in retail too, so the index had to be wrong, not the store.
+3. An out-of-range report in both (kept, `[WILDWRITE]` on stderr, no behaviour change)
+   plus a preceding-block/owner report at the bracket (`RedzoneAlloc_ReportWildWrite`,
+   which also repairs the tag and arms a hardware watchpoint on the victim dword) named
+   the caller on the first debug run.
+4. Retail disassembly of the caller showed the untouched R9.
+
+The instruments stay in the tree; all cost nothing unless they fire or the bracket flag
+is set.
 
 ## 1. What is established
 

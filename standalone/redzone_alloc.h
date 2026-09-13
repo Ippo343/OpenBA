@@ -56,6 +56,11 @@ extern "C" void RedzoneAlloc_HeapDump(const char* tag);
 // to call after every step of a teardown loop and bracket the moment corruption
 // appears. See the comment on the definition (Wave 9 lane N, Finding 3).
 extern "C" void* RedzoneAlloc_FindCorruptBlockNative();
+// TEARDOWN_WILD_WRITE.md: on the first dirty tag, report the preceding block and its
+// owner, repair the tag, arm a write watchpoint on the smashed dword.
+extern "C" void RedzoneAlloc_ReportWildWrite(void* badBlock);
+// Print the caller's stack as module+offset lines (exe offsets symbolize with nm).
+extern "C" void RedzoneAlloc_PrintBacktrace(const char* tag);
 
 // Free-list LINK validation at a code checkpoint. Aborts (exit 0x124) naming
 // the tag at the first corrupt forward link. Only active under BANISHED_REDZONE.

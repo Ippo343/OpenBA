@@ -20,6 +20,7 @@
 #include "BuildActions.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "redzone_alloc.h"   // RedzoneAlloc_PrintBacktrace (wild-write diagnostic)
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
@@ -1193,6 +1194,19 @@ int ConsumeProduce_OnComplete_Impl(ConsumeProduceAction* self, void* /*param2*/,
     if ((param4 >> 15) & 1) {
         int* intArray = (int*)self->field_68;
         uint32_t intIdx = (param4 >> 8) & 0x7F;
+        // TEARDOWN_WILD_WRITE.md: retail (0x1400e77c0) stores this 2 unbounded, and a
+        // 4-mod-8 store of a 2 past a small int array is exactly the teardown damage.
+        // Report an index past the array's own count BEFORE the faithful store below,
+        // with everything needed to say how the index and the array came apart.
+        if ((int)intIdx >= self->field_70 || slotIdx >= (uint32_t)self->field_60) {
+            std::fprintf(stderr,
+                "[WILDWRITE] ConsumeProduce::OnComplete OUT OF RANGE: work=%p entity=%p "
+                "workId=%d param4=0x%x -> posIdx=%u (count %d, cap %d, array %p) "
+                "slotIdx=%u (count %d)\n",
+                (void*)self, self->field_10, self->field_20, param4, intIdx,
+                self->field_70, self->field_74, (void*)intArray, slotIdx, self->field_60);
+            RedzoneAlloc_PrintBacktrace("ConsumeProduce::OnComplete");
+        }
         intArray[intIdx] = 2;
     }
 

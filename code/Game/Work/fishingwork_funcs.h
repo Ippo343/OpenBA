@@ -25,7 +25,7 @@ int FishingWork_Slot6_Impl(FishingWork* self, void* param2, void* param3, uint32
 // Slot7 (vtable +0x38, 0x1400e9e80):
 // Delegates to Slot6 (vtable +0x30) with copied parameters.
 // Returns int per bug class 7.
-int FishingWork_Slot7_Impl(FishingWork* self, void* param2, void* param3);
+int FishingWork_Slot7_Impl(FishingWork* self, void* param2, void* param3, uint32_t param4);
 
 // Slot8/CancelAll (vtable +0x40, 0x1400ea830):
 // Cancels all active fishing work. Iterates citizen slots and cancels
