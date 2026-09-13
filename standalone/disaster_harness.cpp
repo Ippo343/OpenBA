@@ -104,6 +104,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "options.h"
 #include "Object/factory_registration.h"
 #include "Dialog/ui_panels.h"          // DebugUI, DebugUI_Slot9
 #include "Component/diseasecomponent_funcs.h"  // DiseaseComp_CheckCure (0x1400481b0)
@@ -119,9 +120,7 @@ namespace {
 
 struct Arm {
     const char* name;       // grep tag / log name
-    const char* envCount;
-    const char* envFrame;
-    const char* envPeriod;
+    int  armIndex;          // FIRE=0, TORNADO=1, SICK=2, INFEST=3 — indexes Opt().disaster*[]
     int  count;             // 0 = disabled
     int  frame;
     int  period;
@@ -130,10 +129,10 @@ struct Arm {
 };
 
 Arm s_arms[] = {
-    { "Fire",    "BANISHED_FORCE_FIRE",    "BANISHED_FORCE_FIRE_FRAME",    "BANISHED_FORCE_FIRE_PERIOD",    0, 2400, 0, false, -1 },
-    { "Tornado", "BANISHED_FORCE_TORNADO", "BANISHED_FORCE_TORNADO_FRAME", "BANISHED_FORCE_TORNADO_PERIOD", 0, 2400, 0, false, -1 },
-    { "Sick",    "BANISHED_FORCE_SICK",    "BANISHED_FORCE_SICK_FRAME",    "BANISHED_FORCE_SICK_PERIOD",    0, 2400, 0, false, -1 },
-    { "Infest",  "BANISHED_FORCE_INFEST",  "BANISHED_FORCE_INFEST_FRAME",  "BANISHED_FORCE_INFEST_PERIOD",  0, 2400, 0, false, -1 },
+    { "Fire",    0, 0, 2400, 0, false, -1 },
+    { "Tornado", 1, 0, 2400, 0, false, -1 },
+    { "Sick",    2, 0, 2400, 0, false, -1 },
+    { "Infest",  3, 0, 2400, 0, false, -1 },
 };
 enum { ARM_FIRE = 0, ARM_TORNADO = 1, ARM_SICK = 2, ARM_INFEST = 3, ARM_COUNT = 4 };
 
@@ -144,10 +143,9 @@ bool s_initialized    = false;
     do { std::fprintf(stderr, "[" tag "] " __VA_ARGS__);           \
          std::fflush(stderr); } while (0)
 
-int EnvInt(const char* name, int dflt) {
-    const char* e = std::getenv(name);
-    if (!e || !e[0]) return dflt;
-    return std::atoi(e);
+int ParseInt(const char* v, int dflt) {
+    if (!v || !v[0]) return dflt;
+    return std::atoi(v);
 }
 
 void Init() {
@@ -157,12 +155,12 @@ void Init() {
     bool any = false;
     for (int i = 0; i < ARM_COUNT; ++i) {
         Arm& a = s_arms[i];
-        const char* e = std::getenv(a.envCount);
+        const char* e = Opt().disasterCount[a.armIndex];
         a.count = (e && e[0] && e[0] != '0') ? std::atoi(e) : 0;
         if (a.count <= 0) { a.count = 0; continue; }
-        a.frame  = EnvInt(a.envFrame,  2400);
+        a.frame  = ParseInt(Opt().disasterFrame[a.armIndex],  2400);
         if (a.frame  < 1) a.frame  = 1;
-        a.period = EnvInt(a.envPeriod, 0);
+        a.period = ParseInt(Opt().disasterPeriod[a.armIndex], 0);
         if (a.period < 0) a.period = 0;
         any = true;
         DLOG("Disaster", "%s ENABLED — %d target(s) at frame %d%s\n",
@@ -171,7 +169,7 @@ void Init() {
         if (a.period)
             DLOG("Disaster", "%s repeat period = %d frames\n", a.name, a.period);
     }
-    s_sickDiseaseIdx = EnvInt("BANISHED_FORCE_SICK_DISEASE", 0);
+    s_sickDiseaseIdx = ParseInt(Opt().forceSickDisease, 0);
     if (s_sickDiseaseIdx < 0) s_sickDiseaseIdx = 0;
 
     if (any)

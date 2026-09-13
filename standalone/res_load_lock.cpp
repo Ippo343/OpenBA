@@ -24,6 +24,7 @@
 // ============================================================================
 
 #include "res_load_lock.h"
+#include "options.h"
 
 #include <windows.h>
 #include <cstdlib>
@@ -39,8 +40,7 @@ BOOL CALLBACK ResLoadInitOnce(PINIT_ONCE, PVOID, PVOID*) {
     // Read the kill switch ONCE and cache it. Reading it per call would let a
     // mid-run _putenv_s turn the lock off between an acquire and its release —
     // a leaked lock rather than an A/B.
-    const char* noLock = getenv("BANISHED_NO_FOL_LOCK");
-    g_armed = !(noLock && noLock[0] && noLock[0] != '0');
+    g_armed = !Opt().noFolLock;
     if (g_armed) {
         // Spin count 0: contention here is a real load on another thread doing
         // file I/O, so spinning burns a core for nothing.

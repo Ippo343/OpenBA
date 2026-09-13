@@ -52,9 +52,6 @@ extern "C" void FillTypeIdGlobals_w2lane3() {
         std::fprintf(stderr,
             "[W2Lane3] ERROR: GetTypeIdByName(\"ParticleDescription\") returned 0 — "
             "slot 0x1401c4758 is live but EMPTY; every reader falls back by name\n");
-    } else if (std::getenv("BANISHED_W2LANE3_TRACE")) {
-        std::fprintf(stderr, "[W2Lane3] 0x1401c4758 ParticleDescription = %u (0x%08X)\n",
-                     g_tid_ParticleDescription, g_tid_ParticleDescription);
     }
     std::fflush(stderr);
 }

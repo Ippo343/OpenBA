@@ -187,10 +187,6 @@ static void RtMintTiTrapEnter(int typeInfoIndex, int which) {
 // ============================================================
 // Residue-free lookups
 // ============================================================
-static bool EnvOn(const char* name) {
-    const char* e = getenv(name);
-    return e && *e && strcmp(e, "0") != 0;
-}
 
 // A printable name for a row that may have none. An UNEXPORTED table head is
 // carried by ADDRESS -- see EXTRA_VTABLES_BY_ADDR in tools/rt_mint_gen.py --

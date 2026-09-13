@@ -33,6 +33,7 @@
 // reads go through ForceWork's VirtualQuery-backed probes.
 
 
+#include "options.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "force_work.h"
@@ -60,17 +61,13 @@ extern "C" bool  BuildStructure_DepsReady();
 // machine uses to transition 1 -> 8.
 extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp);
 
+// The DropOff→CompleteTask executor gap is bridged by Options::buildSyncDelivered,
+// which OptionsInit derives from this same flag (standalone/options.cpp): with
+// BANISHED_FORCE_CONSTRUCT on, GatherRawMaterials::Execute re-syncs delivered from
+// the live site storage. That used to be a mid-run `_putenv_s` here, racing the
+// cached read on the other side; it is decided once, at boot, now.
 static bool ForceConstructEnvOn() {
-    static int s = -1;
-    if (s < 0) {
-        const char* e = std::getenv("BANISHED_FORCE_CONSTRUCT");
-        s = (e && e[0] && e[0] != '0') ? 1 : 0;
-        // Bridge the DropOff→CompleteTask executor gap so delivered credits from the live
-        // site storage each Execute (see file header). Set before GatherRawMaterials::Execute
-        // caches its own getenv, so the harness is self-contained.
-        if (s == 1) _putenv_s("BANISHED_BUILD_SYNC_DELIVERED", "1");
-    }
-    return s == 1;
+    return Opt().forceConstruct;
 }
 
 // Build-labor progress bridge (BANISHED_BUILD_SYNC_LABOR, default ON when FORCE_CONSTRUCT).
@@ -84,12 +81,7 @@ static bool ForceConstructEnvOn() {
 // frames, and requests 8 -> 2 once progress >= target. Ramp paced over BANISHED_BUILD_DEMO_FRAMES
 // (default 600 ≈ 10s) so the rise is watchable.
 static bool BuildSyncLaborOn() {
-    static int s = -1;
-    if (s < 0) {
-        const char* e = std::getenv("BANISHED_BUILD_SYNC_LABOR");
-        s = (e && e[0] == '0') ? 0 : 1;   // default ON; only "=0" disables
-    }
-    return s == 1;
+    return Opt().buildSyncLabor;          // default ON; only "=0" disables
 }
 static void CreditBuildProgress(void* bc, bool trace) {
     if (!bc || !ForceWork::Readable(bc, 0x50)) return;

@@ -4,6 +4,7 @@
 #include "async_loader.h"
 #include "stall_debug.h"
 #include "UpdateLoop.h"
+#include "options.h"
 #include <atomic>
 #include <cstdio>
 #include <cstdint>
@@ -91,12 +92,7 @@ void DrainPriorJob() {
 // for experimentation, e.g. once the allocator is made thread-safe by patching
 // Allocate to take the critical section.
 static bool AsyncLoadOptIn() {
-    static int cached = -1;
-    if (cached < 0) {
-        const char* e = getenv("BANISHED_ASYNC_LOAD");
-        cached = (e && *e && e[0] != '0') ? 1 : 0;
-    }
-    return cached != 0;
+    return Opt().asyncLoad;
 }
 
 void StartAsyncLoad(UpdateLoop* loop, bool forceThreaded) {

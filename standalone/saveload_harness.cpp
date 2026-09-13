@@ -14,6 +14,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "options.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -28,7 +29,7 @@ namespace {
 int TriggerFrame() {
     static int s = -2;
     if (s == -2) {
-        const char* e = std::getenv("BANISHED_SAVE_TEST");
+        const char* e = Opt().saveTest;
         if (!e || !e[0] || (e[0] == '0' && !e[1]) ||
             _stricmp(e, "false") == 0 ||
             _stricmp(e, "roundtrip") == 0) {   // the in-process gate, not a frame trigger
@@ -46,7 +47,7 @@ int TriggerFrame() {
 // Documents/Banished).
 void DumpSaveDir(const char* tag) {
     char path[MAX_PATH];
-    const char* prof = std::getenv("USERPROFILE");
+    const char* prof = Opt().userProfile;
     if (!prof) return;
     snprintf(path, sizeof(path), "%s\\Documents\\Banished\\Save\\*", prof);
 
@@ -156,8 +157,7 @@ extern "C" void SaveLoadHarness_Tick(void* gul, int frameNum) {
             // proves nothing — re-arm and keep probing as the town ages.
             static int s_repeat = -2;
             if (s_repeat == -2) {
-                const char* e = std::getenv("BANISHED_SAVE_TEST_REPEAT");
-                s_repeat = (e && e[0]) ? std::atoi(e) : 0;
+                s_repeat = Opt().saveTestRepeat;
             }
             if (s_repeat > 0) {
                 s_triggeredFrame = frameNum + s_repeat;

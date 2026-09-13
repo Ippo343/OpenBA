@@ -7,6 +7,7 @@
 // closure-safe. The convenience helper TownRegistry_RegisterWorkplace is called
 // directly by the spawn wiring (not via ResolveAddr), so it needs no registration.
 #include "resolve.h"
+#include "options.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -29,8 +30,7 @@ extern "C" void TownRegistry_ShuffleProfessionList(int64_t townMgr, uint64_t pro
 // BANISHED_LIVE_SEAT_SHUFFLE=1 against the unset default before proposing it for
 // kDefaultOnFlags.
 static bool SeatShuffleOn() {
-    const char* e = std::getenv("BANISHED_LIVE_SEAT_SHUFFLE");
-    return e && e[0] && e[0] != '0';
+    return Opt().liveSeatShuffle;
 }
 
 void RegisterTownWorkplaceRegistry() {

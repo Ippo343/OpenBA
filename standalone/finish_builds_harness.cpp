@@ -31,6 +31,7 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "Object/factory_registration.h"
+#include "options.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -42,7 +43,7 @@ int s_finished = 0;
 
 void Init() {
     if (s_interval != -2) return;
-    const char* e = std::getenv("BANISHED_FINISH_BUILDS");
+    const char* e = Opt().finishBuilds;
     if (!e || !e[0] || e[0] == '0') { s_interval = -1; return; }
     const int v = std::atoi(e);
     s_interval = (v > 1) ? v : 600;

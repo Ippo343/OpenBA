@@ -42,6 +42,7 @@
 #include "engine_funcs.h"
 #include "Object/factory_registration.h"
 #include "Player/edittool_funcs.h"
+#include "options.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -56,8 +57,9 @@ namespace {
 const int kFirstFrame   = 600;    // let the world and its buildings settle first
 const int kIntervalDflt = 300;
 
-bool EnvOn(const char* n) {
-    const char* v = std::getenv(n);
+// Same truthy test the driver has always used, but over a value already read (the RAW Options
+// fields hold exactly what getenv returned).
+bool EnvOnValue(const char* v) {
     return v && v[0] && std::strcmp(v, "0") != 0 && std::strcmp(v, "false") != 0;
 }
 
@@ -66,8 +68,8 @@ bool s_trace    = false;
 
 void Init() {
     if (s_interval != -2) return;
-    s_trace = EnvOn("BANISHED_AUTOSTAFF_TRACE");
-    const char* e = std::getenv("BANISHED_AUTOSTAFF");
+    s_trace = EnvOnValue(Opt().autoStaffTrace);
+    const char* e = Opt().autoStaff;
     if (e && e[0]) {
         if (e[0] == '0') { s_interval = -1; return; }
         const int v = std::atoi(e);
@@ -93,7 +95,7 @@ void Init() {
         // BANISHED_AUTOQUIT is the honest signal: a run that intends to exit on its own
         // is one nobody is watching. An interactive session that still wants the virtual
         // player can ask for it explicitly with BANISHED_AUTOSTAFF=1.
-        const bool unattended = EnvOn("BANISHED_AUTOQUIT");
+        const bool unattended = Opt().autoquit;
         s_interval = unattended ? kIntervalDflt : -1;
     }
     if (s_interval > 0) {
@@ -172,7 +174,7 @@ int SeatViaPanel(void* entityUI, void* ent, uintptr_t wpc, int want) {
             // getter, hit when the player LOWERS a count"), and an add-only soak never
             // touches it, so removing those guards can only be called measured if this
             // runs. The seat loop below immediately refills the seat.
-            static const int unseat = EnvOn("BANISHED_AUTOSTAFF_UNSEAT") ? 1 : 0;
+            static const int unseat = EnvOnValue(Opt().autoStaffUnseat) ? 1 : 0;
             if (unseat && *reinterpret_cast<int32_t*>(wpc + 0x60) > 0) {
                 const int b = *reinterpret_cast<int32_t*>(wpc + 0x60);
                 reinterpret_cast<void (*)(void*, void*, int, int, int, int)>(slot9)(
@@ -236,7 +238,7 @@ extern "C" void PanelStaffingDriver_Tick(void* entityUI, int frameNum) {
         // mode is to drive the down-click, and a building at capacity is exactly where a
         // player lowers a count.
         const bool wants = key != 0 && accept != 0 &&
-                           (roster < cap || (EnvOn("BANISHED_AUTOSTAFF_UNSEAT") && roster > 0));
+                           (roster < cap || (EnvOnValue(Opt().autoStaffUnseat) && roster > 0));
         if (s_trace)
             std::fprintf(stderr, "[AutoStaff]   ent=%p key=0x%llx accepting=%d roster=%d cap=%d %s\n",
                          ent, (unsigned long long)key, accept, roster, cap,

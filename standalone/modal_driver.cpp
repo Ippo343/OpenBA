@@ -105,6 +105,7 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "options.h"
 #include "ui/Dialogs.h"      // MessageDialogAddr::Vtable, for the self-test subject
 
 namespace ModalDriver {
@@ -145,19 +146,15 @@ int   s_seenTicks  = 0;
 void ParseEnv() {
     if (s_parsed) return;
     s_parsed = true;
-    const char* v = std::getenv("BANISHED_MODAL_DRIVER");
     // Deliberately NOT the usual `=0 means off` rule: 0 is a legitimate dialog
     // result (MessageDialog Cancel). Presence of the variable arms the driver.
-    if (!v || v[0] == '\0') return;
+    if (!Opt().modalDriver) return;
     s_enabled = true;
-    s_answer  = std::atoi(v);
-    if (const char* comma = std::strchr(v, ',')) {
-        int t = std::atoi(comma + 1);
-        if (t > 0) s_ticks = t;
-    }
+    s_answer  = Opt().modalDriverAnswer;
+    if (Opt().modalDriverTicks > 0) s_ticks = Opt().modalDriverTicks;   // "<answer>,<ticks>"
     std::fprintf(stderr,
         "[ModalDriver] ARMED (BANISHED_MODAL_DRIVER=\"%s\") - will answer any modal "
-        "with result %d after %d nested tick(s)\n", v, s_answer, s_ticks);
+        "with result %d after %d nested tick(s)\n", Opt().modalDriverRaw, s_answer, s_ticks);
 }
 
 void* MainLoopSingleton() {

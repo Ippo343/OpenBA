@@ -31,6 +31,7 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "options.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -47,7 +48,7 @@ bool s_fired  = false;
 void Init() {
     if (s_want != -2) return;
     s_want = -1;
-    const char* e = std::getenv("BANISHED_BUILDERS");
+    const char* e = Opt().builders;
     if (!e || !e[0]) return;
     int n = std::atoi(e);
     if (n <= 0) return;
@@ -100,7 +101,7 @@ extern "C" void BuilderSeat_Tick(int frameNum) {
     // Correlation for the ValidateTask crash (BANISHED_WORKVALIDATE_TRACE): list the
     // citizens now holding the builder key, so a later [WorkValidate] BAD VTABLE obj=
     // can be matched against the set this harness actually converted.
-    if (const char* t = std::getenv("BANISHED_WORKVALIDATE_TRACE")) if (t[0] && t[0] != '0') {
+    if (const char* t = Opt().workValidateTrace) if (t[0] && t[0] != '0') {
         void** carr = *reinterpret_cast<void***>(townMgr + 0xa0);
         int    cn   = *reinterpret_cast<int*>(townMgr + 0xa8);
         std::fprintf(stderr, "[BuilderSeat] converted citizens (roster %d):", cn);

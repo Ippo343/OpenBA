@@ -58,6 +58,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include "Tutorial/tutorialinstance_funcs.h"
+#include "options.h"
 
 namespace {
 
@@ -81,8 +82,7 @@ void* g_TutorialInstance_Vtable_SA[4] = {
 };
 
 bool Enabled() {
-    const char* v = std::getenv("BANISHED_LIVE_TUTORIALINSTANCE_VT");
-    return v && *v && v[0] != '0';
+    return Opt().liveTutorialInstVt;
 }
 
 }  // namespace

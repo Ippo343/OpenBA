@@ -21,6 +21,7 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "Object/factory_registration.h"
+#include "options.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -40,7 +41,7 @@ int   s_doneN = 0;
 void Init() {
     if (s_init) return;
     s_init = true;
-    const char* e = std::getenv("BANISHED_CROPFIELD_FORCE_START");
+    const char* e = Opt().cropFieldForceStart;
     if (!e || !e[0] || std::strcmp(e, "0") == 0) {
         std::fprintf(stderr, "[CropStart] disabled (BANISHED_CROPFIELD_FORCE_START unset)\n");
         std::fflush(stderr);

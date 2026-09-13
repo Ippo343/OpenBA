@@ -216,9 +216,12 @@ harness: `BANISHED_MAP_SIZE=small|medium|large`, `BANISHED_CLIMATE=mild|fair|har
 (`standalone/sampler.cpp`, report with `tools/sample_report.py`) — use it before the
 per-component table, which cannot see libm/Runtime/walk time. Heap: `BANISHED_REDZONE=watch`
 (allocator watchdog, no shim) + `standalone/hw_watch.cpp` hardware write watchpoints.
-`getenv`/`std::getenv` are cached process-wide (`standalone/env_cache.h`, force-included), so a
-per-call `if (std::getenv("BANISHED_X_TRACE"))` in tick code is cheap; env changes must go
-through `_putenv_s` (wrapped, invalidates the cache).
+Every `BANISHED_*` flag the exe honours is listed, with its reader, in **`standalone/options.h`**
+(ENDGAME C.3): the environment is read once at boot into one `Options` struct and read
+everywhere else as `Opt().field`. `standalone/` calls no `getenv`. `code/` still does, and
+`getenv`/`std::getenv` there are cached process-wide (`standalone/env_cache.h`, force-included),
+so a per-call `if (std::getenv("BANISHED_X_TRACE"))` in tick code is cheap; that cache goes when
+the `code/` sites move to `Opt()`.
 
 ### Camera Pinning (stable framing — NOT a deterministic frame)
 

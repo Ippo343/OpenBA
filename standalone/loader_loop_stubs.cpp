@@ -33,6 +33,7 @@
 #include "stall_debug.h"
 #include "UpdateLoop.h"
 #include "LoaderLoop.h"
+#include "options.h"
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
@@ -56,12 +57,7 @@ namespace {
 // an opt-OUT purely for investigation (expect a boot crash with it set):
 //   BANISHED_SKIP_ENGINE_LOADER=1  -> skip Engine::Loader::Load
 bool SkipEngineLoader() {
-    static int cached = -1;
-    if (cached < 0) {
-        const char* e = getenv("BANISHED_SKIP_ENGINE_LOADER");
-        cached = (e && *e && e[0] != '0') ? 1 : 0;
-    }
-    return cached != 0;
+    return Opt().skipEngineLoader;
 }
 
 // After fn_Loader_Load spawns the engine Loader thread (Loader::Run ->
@@ -79,12 +75,7 @@ bool SkipEngineLoader() {
 // If the loader crashes mid-run, the standalone CrashHandler ExitProcess'es, so
 // this can't deadlock. Env opt-OUT: BANISHED_SYNC_ENGINE_LOADER=0.
 bool SyncEngineLoader() {
-    static int cached = -1;
-    if (cached < 0) {
-        const char* e = getenv("BANISHED_SYNC_ENGINE_LOADER");
-        cached = (e && (e[0] == '0' || e[0] == 'f' || e[0] == 'F')) ? 0 : 1;
-    }
-    return cached != 0;
+    return Opt().syncEngineLoader;
 }
 
 typedef void (*fn_WaitForFinish_t)(void* thread);
