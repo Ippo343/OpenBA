@@ -189,7 +189,6 @@
 #include <cstdio>
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_diff.h"
 #include "../../types/engine/MainLoop.h"
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
@@ -416,7 +415,7 @@ const ArraySpec kSpec_VideoResource = {           // 0x18004f620
     /*seed zero       */ 0x10, 0x18 };
 
 // One Site per registered address — see array.cpp's "Live instrumentation".
-// STATIC STORAGE DURATION IS LOAD-BEARING: RtDiffRegister keeps the POINTER and
+// STATIC STORAGE DURATION IS LOAD-BEARING: the diff oracle keeps the POINTER and
 // re-reads it at summary time, so a stack Site is reported as harness
 // corruption.
 Site g_j3_18004f620 = { { "Collection::Array::SetSize @0x18004f620", 0, 0, false, false },
@@ -469,7 +468,6 @@ extern "C" void RtColl_ArraySetSizeFill_18004f620(void* a, int n, const void* fi
 //
 // ORACLE: shadow. Replay is invalid — see §5.
 extern "C" void RtEngine_MainLoop_OnVideoError(RtEngine::MainLoop* self) {
-    RT_DIFF_BEGIN("Engine::MainLoop::OnVideoError");
 
     // ---- 1. the ten type ids -------------------------------------------------
     // THE ONE DELIBERATE REORDERING IN THIS FILE, DECLARED RATHER THAN HIDDEN.
@@ -618,25 +616,6 @@ extern "C" void RtEngine_MainLoop_OnVideoError(RtEngine::MainLoop* self) {
     // with a non-null `_data` whenever `_size > 0` is a property SetSizeCore
     // could violate and this body cannot fake, because it never writes those
     // three fields itself.
-    if (rt_diff_on__) {
-        const bool contextOk = self->_context == nullptr;
-        const bool typesOk   = types._data == nullptr && types._size == 0 &&
-                               types._capacity == 0;
-        const bool arrOk     = arr->_size >= 0 && arr->_size <= arr->_capacity &&
-                               (arr->_size == 0 || arr->_data != nullptr);
-        char ours[192], theirs[192];
-        std::snprintf(ours, sizeof(ours),
-                      "context=%p types={%p,%d,%d} res={%p,%d,%d}",
-                      self->_context, static_cast<void*>(types._data),
-                      types._size, types._capacity,
-                      static_cast<void*>(arr->_data), arr->_size, arr->_capacity);
-        std::snprintf(theirs, sizeof(theirs),
-                      "context=null types=empty res=consistent "
-                      "[contextOk=%d typesOk=%d arrOk=%d]",
-                      static_cast<int>(contextOk), static_cast<int>(typesOk),
-                      static_cast<int>(arrOk));
-        RT_DIFF_SHADOW(contextOk && typesOk && arrOk, ours, theirs);
-    }
 }
 
 // ============================================================================
@@ -688,7 +667,6 @@ extern "C" void RtEngine_MainLoop_OnVideoError(RtEngine::MainLoop* self) {
 // ORACLE: shadow. Replay is invalid — running theirs after ours would create a
 // second Video::Context and re-Load every resource.
 extern "C" void RtEngine_MainLoop_OnVideoRestart(RtEngine::MainLoop* self) {
-    RT_DIFF_BEGIN("Engine::MainLoop::OnVideoRestart");
 
     rtcoll::ArrayHdr* const arr =
         reinterpret_cast<rtcoll::ArrayHdr*>(&self->_videoResources);
@@ -781,22 +759,6 @@ extern "C" void RtEngine_MainLoop_OnVideoRestart(RtEngine::MainLoop* self) {
     // value is a STALE number rather than a zero, so a port that "tidied up" by
     // clearing _capacity fails here and nowhere else. `contextOk` is not our
     // own write either — CreateVideoContext stores it.
-    if (rt_diff_on__) {
-        const bool clearedOk = arr->_data == nullptr && arr->_size == 0;
-        const bool contextOk = self->_context != nullptr;
-        const bool capKept   = (sizeAtEntry == 0) || (arr->_capacity >= sizeAtEntry);
-        char ours[192], theirs[192];
-        std::snprintf(ours, sizeof(ours),
-                      "res={%p,%d,%d} sizeAtEntry=%d context=%p",
-                      static_cast<void*>(arr->_data), arr->_size, arr->_capacity,
-                      sizeAtEntry, self->_context);
-        std::snprintf(theirs, sizeof(theirs),
-                      "res={null,0,>=%d} context!=null "
-                      "[clearedOk=%d contextOk=%d capKept=%d]",
-                      sizeAtEntry, static_cast<int>(clearedOk),
-                      static_cast<int>(contextOk), static_cast<int>(capKept));
-        RT_DIFF_SHADOW(clearedOk && contextOk && capKept, ours, theirs);
-    }
 }
 
 // ============================================================================

@@ -77,7 +77,7 @@
 // port: the write is retail's, byte for byte, and `tools/ach_reset.sh` already
 // exists to undo it. NOTHING in this file runs a differential oracle against
 // the DLL for these two, precisely because the DLL's copy would perform the
-// registry write a SECOND time (rt_diff.h's third bullet).
+// registry write a SECOND time (the diff-oracle header's third bullet).
 // ============================================================================
 
 #include <cstdint>
@@ -412,7 +412,7 @@ void* RtAch_Achievement_CreateInstance(const Achievement* self, void** retval) {
 }
 
 // ---- Registration ----------------------------------------------------------
-// Gated by BANISHED_RT_ACHMGR with achievement_manager.cpp, per the
+// Gated by RT_ACHMGR with achievement_manager.cpp, per the
 // class-atomicity rule (PLAN §4.1 decision 5): these five members and the
 // eighteen already in that file are the same three classes.
 //

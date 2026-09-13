@@ -19,7 +19,7 @@
 //
 // `g_imOk` is false if ANY ONE of the twenty entries resolved null. At cutover
 // `ResolveExport` misses the port registry for an unported name and falls
-// through to `ResolveExportRawImpl`, which has no module handle and returns
+// through to `the raw DLL door`, which has no module handle and returns
 // null — so ONE unported Runtime export in that table disables EVERY
 // `ContextData` slot, and there is no shipped body to fall back to:
 // VideoDX11-x64.dll is never loaded. That is a dead renderer on the first
@@ -82,8 +82,8 @@
 // SAYS SO RATHER THAN PRETENDING OTHERWISE.
 // Wave 6's argument stands unchanged: running ours and then theirs releases
 // every live GPU companion twice and recreates it twice, and the second pass
-// operates on freed objects. A `RT_DIFF_SHADOW` has nothing to assert either —
-// the observable effect is entirely inside `dx11/`. So no `RT_DIFF_BEGIN`
+// operates on freed objects. A `the diff oracle` has nothing to assert either —
+// the observable effect is entirely inside `dx11/`. So no `the diff oracle`
 // appears below for those bodies. What IS verified:
 //
 //   * `Device::Lock` / `Device::Unlock` are byte-identical in shape to the
@@ -100,7 +100,7 @@
 //     equivalence is enforced by the compiler instead of asserted in a comment,
 //     and it puts the one piece of real arithmetic in this file under an oracle
 //     that already runs. Retail inlines that ladder, so under
-//     `BANISHED_RT_DIFF` this shows up as extra `Video::ImageBuffer::Width`
+//     `the diff-oracle flag` this shows up as extra `Video::ImageBuffer::Width`
 //     call counts; that is a measurement artefact, not a behaviour change.
 //
 // PLATFORM. Nothing here includes <windows.h>. The Device lock lives in

@@ -25,7 +25,7 @@
 // written. The addresses and ordinals above are that query's output. There are
 // no phantom names here.
 //
-// Kill switch: BANISHED_RT_ENGINELIFE=0.
+// Kill switch: RT_ENGINELIFE=0.
 //
 // ---------------------------------------------------------------------------
 // 1. THE "ALLOCATOR, NO-GO" HOLDBACK WAS REAL WHEN IT WAS WRITTEN AND IS NOW
@@ -89,7 +89,7 @@
 // byte-compared with the literal in `rtalloc::Startup`). This body therefore
 // calls `?Startup@MemoryAllocator@System@@QEAA_N_K0@Z` and does not re-derive
 // them. That is not a shortcut: it is what keeps the DLL-PRESENT path honest
-// too, because with `BANISHED_RT_ALLOC` unset that name resolves to the DLL's
+// too, because with `RT_ALLOC` unset that name resolves to the DLL's
 // own 0x1800c7620 and the arena is created by retail's code exactly as before.
 //
 // The alternative — "arm from Startup and stop arming early" — was considered
@@ -152,7 +152,7 @@
 // manufacture one. Each runs exactly once per process and each mutates global
 // state that a replay would mutate twice — running `Startup` again would create
 // a second FileSystem, a second Video::Device and a second 512 MB arena;
-// running `Shutdown` again would double-free every subsystem. `RT_ORIGINAL_ONCE`
+// running `Shutdown` again would double-free every subsystem. `the raw DLL door`
 // against the shipped body is not a comparison here, it is a second side
 // effect.
 //
@@ -190,7 +190,7 @@
 //     detours the DLL's `Engine::Startup` at 0x1800db8a0 to arm the replica; our
 //     port never executes those bytes, so the detour never fires and the driver
 //     reports `skipped_pre_startup=N`, i.e. INVALID. Any run of
-//     `BANISHED_RT_ALLOC_SHADOW=1` must also set `BANISHED_RT_ENGINELIFE=0`.
+//     `RT_ALLOC_SHADOW=1` must also set `RT_ENGINELIFE=0`.
 // ============================================================================
 
 #include <cstdint>
@@ -218,7 +218,7 @@ void RtEngineLifecyclePlatformFreeLibrary(void* module);
 // singleton_ctors_win.cpp (Wave 9 lane X). `??0MemoryAllocator@System@@` routes
 // to `rtalloc::Construct`, whose first act is `g_plat.lockInit(self->lock)`;
 // `g_plat` is filled by `RtSystemAllocatorInstallPlatform()` and on a run with
-// `BANISHED_RT_ALLOC` unset NOBODY calls it, so that would be an EXEC of 0.
+// `RT_ALLOC` unset NOBODY calls it, so that would be an EXEC of 0.
 // This lane checks the seam at REGISTRATION time, not in the body.
 bool RtLaneXEnsureAllocatorPlatform();
 
@@ -236,7 +236,7 @@ namespace {
 // is picked up automatically, and a name that is missing at cutover is NAMED
 // once by RecordResolveMiss ([RtUnresolved]) instead of dying anonymously.
 //
-// Nothing here uses RtOriginal/ResolveExportRaw. There is no oracle in these
+// Nothing here uses the raw DLL door/the raw DLL door. There is no oracle in these
 // four bodies to need one (§4), and a raw door on this path would be a live
 // bypass at cutover, not an oracle.
 // ---------------------------------------------------------------------------
@@ -270,7 +270,7 @@ void MemFree(void* p) {
 
 // ---- the exported DATA slots, all through the port-aware door ---------------
 // See engine.cpp's "HOW THE DEPENDENCIES ARE RESOLVED" banner for why data is
-// special. It concluded that data must go through ResolveExportRaw so a ported
+// special. It concluded that data must go through the raw DLL door so a ported
 // body writes the storage the DLL's own code reads. That was right FOR WAVE 8,
 // and it is wrong at cutover, where there is no DLL code and the storage is
 // lane C2's mint. RT_DATA_SLOT is the door that gets both: registry first
@@ -385,7 +385,6 @@ extern "C" void RtVideo_Device_OperatorDelete(void* p) {
 // `_platformHandle` is stored between the zeroed fields, from RBX, which was
 // loaded from RDX before the call. Writing it in field order below matches.
 extern "C" Engine* RtEngine_Engine_Ctor(Engine* self, void* platformHandle) {
-    RT_DIFF_BEGIN("Engine::Engine::Engine");
 
     RT_EXPORT_ONCE(CtorFn, "??0MemoryAllocator@System@@QEAA@XZ")(&self->_allocator);
 
@@ -414,34 +413,6 @@ extern "C" Engine* RtEngine_Engine_Ctor(Engine* self, void* platformHandle) {
 
     ++g_ctorRuns;
 
-    if (rt_diff_on__) {
-        Engine** slot = EngineSingletonSlot();
-        const bool singletonOk = (slot != nullptr && *slot == self);
-        const bool handleOk    = self->_platformHandle == platformHandle;
-        const bool zeroedOk    = self->_fileSystem == nullptr &&
-                                 self->_achievementManager == nullptr &&
-                                 self->_startupComplete == 0 &&
-                                 self->_noConfigure == 0;
-        // Written by rtalloc::Construct, not by anything above — this is the
-        // non-tautological half of the check.
-        const bool allocOk     = self->_allocator.ranges == nullptr &&
-                                 self->_allocator.rangeCount == 0 &&
-                                 self->_allocator.minBin == 0xbf &&
-                                 self->_allocator.pageSize == 0;
-        char ours[192], theirs[192];
-        std::snprintf(ours, sizeof(ours),
-                      "singleton=%p handle=%p minBin=%d pageSize=%llu",
-                      static_cast<void*>(slot ? *slot : nullptr),
-                      self->_platformHandle, self->_allocator.minBin,
-                      static_cast<unsigned long long>(self->_allocator.pageSize));
-        std::snprintf(theirs, sizeof(theirs),
-                      "singleton==this, handle==arg, allocator ctor ran "
-                      "[singletonOk=%d handleOk=%d zeroedOk=%d allocOk=%d]",
-                      static_cast<int>(singletonOk), static_cast<int>(handleOk),
-                      static_cast<int>(zeroedOk), static_cast<int>(allocOk));
-        RT_DIFF_SHADOW(singletonOk && handleOk && zeroedOk && allocOk, ours, theirs);
-        RT_DIFF_WORK(true);
-    }
 
     return self;
 }
@@ -467,7 +438,6 @@ extern "C" Engine* RtEngine_Engine_Ctor(Engine* self, void* platformHandle) {
 // The Engine object itself is NOT freed here: game_main.cpp owns the storage
 // (a 0x700-byte stack object), exactly as retail's caller did.
 extern "C" void RtEngine_Engine_Dtor(Engine* self) {
-    RT_DIFF_BEGIN("Engine::Engine::~Engine");
 
     if (Engine** slot = EngineSingletonSlot()) *slot = nullptr;
 
@@ -475,23 +445,6 @@ extern "C" void RtEngine_Engine_Dtor(Engine* self) {
 
     ++g_dtorRuns;
 
-    if (rt_diff_on__) {
-        Engine** eslot = EngineSingletonSlot();
-        RtMemoryAllocator** aslot = RT_DATA_SLOT(RtMemoryAllocator**,
-            "?_singleton@MemoryAllocator@System@@0PEAV12@EA");
-        const bool engineNulled = (eslot != nullptr && *eslot == nullptr);
-        const bool allocNulled  = (aslot != nullptr && *aslot == nullptr);
-        char ours[128], theirs[160];
-        std::snprintf(ours, sizeof(ours), "engineSlot=%p allocSlot=%p",
-                      static_cast<void*>(eslot ? *eslot : nullptr),
-                      static_cast<void*>(aslot ? *aslot : nullptr));
-        std::snprintf(theirs, sizeof(theirs),
-                      "both singleton slots null "
-                      "[engineNulled=%d allocNulled=%d]",
-                      static_cast<int>(engineNulled), static_cast<int>(allocNulled));
-        RT_DIFF_SHADOW(engineNulled && allocNulled, ours, theirs);
-        RT_DIFF_WORK(true);
-    }
 }
 
 // ============================================================================
@@ -523,7 +476,6 @@ extern "C" void RtEngine_Engine_Dtor(Engine* self) {
 extern "C" unsigned RtEngine_Engine_Startup(Engine* self, const char* cmdLine,
                                             unsigned minRangeMB, unsigned maxTotalMB,
                                             bool noConfigure) {
-    RT_DIFF_BEGIN("Engine::Engine::Startup");
 
     ++g_startupRuns;
     g_startupFailAt = 0;
@@ -753,50 +705,6 @@ extern "C" unsigned RtEngine_Engine_Startup(Engine* self, const char* cmdLine,
     // --- 0x1800dbe96 -------------------------------------------------------
     self->_startupComplete = 1;
 
-    if (rt_diff_on__) {
-        const bool completeOk = self->_startupComplete == 1;
-        // Written by AddNewMemoryRange, not by anything above.
-        const bool arenaOk    = self->_allocator.rangeCount >= 1 &&
-                                self->_allocator.ranges != nullptr &&
-                                self->_allocator.pageSize != 0;
-        // The one arithmetic step in the whole function.
-        const bool shiftOk    = self->_allocator.minRangeSize ==
-                                (static_cast<uint64_t>(minRangeMB) << 20) &&
-                                self->_allocator.maxTotalSize ==
-                                (static_cast<uint64_t>(maxTotalMB) << 20);
-        // Written by the sixteen constructors we called.
-        const bool fieldsOk   = self->_fileSystem && self->_persistence &&
-                                self->_modification && self->_configuration &&
-                                self->_application && self->_factory &&
-                                self->_internalFactory && self->_externalFactory &&
-                                self->_videoConfiguration && self->_videoDevice &&
-                                self->_audioConfiguration && self->_audioDevice &&
-                                self->_inputConfiguration && self->_inputDevice &&
-                                self->_achievementManager;
-        const bool singleOk   = [&]() {
-            Engine** slot = EngineSingletonSlot();
-            return slot != nullptr && *slot == self;
-        }();
-        char ours[224], theirs[224];
-        std::snprintf(ours, sizeof(ours),
-                      "complete=%u ranges=%d reserved=%lluMB minRange=%lluMB "
-                      "fs=%p ach=%p",
-                      static_cast<unsigned>(self->_startupComplete),
-                      self->_allocator.rangeCount,
-                      static_cast<unsigned long long>(self->_allocator.totalReserved >> 20),
-                      static_cast<unsigned long long>(self->_allocator.minRangeSize >> 20),
-                      self->_fileSystem, self->_achievementManager);
-        std::snprintf(theirs, sizeof(theirs),
-                      "complete=1, arena live, minRange==%uMB, all 16 subsystems "
-                      "non-null, singleton==this [completeOk=%d arenaOk=%d shiftOk=%d "
-                      "fieldsOk=%d singleOk=%d]",
-                      minRangeMB, static_cast<int>(completeOk),
-                      static_cast<int>(arenaOk), static_cast<int>(shiftOk),
-                      static_cast<int>(fieldsOk), static_cast<int>(singleOk));
-        RT_DIFF_SHADOW(completeOk && arenaOk && shiftOk && fieldsOk && singleOk,
-                       ours, theirs);
-        RT_DIFF_WORK(true);
-    }
 
     return 1;
 }
@@ -825,7 +733,6 @@ extern "C" unsigned RtEngine_Engine_Startup(Engine* self, const char* cmdLine,
 // be dead memory at cutover. The one place that was NOT reducible to an export
 // is flagged inline.
 extern "C" void RtEngine_Engine_Shutdown(Engine* self) {
-    RT_DIFF_BEGIN("Engine::Engine::Shutdown");
 
     ++g_shutdownRuns;
     unsigned steps = 0;
@@ -1018,16 +925,6 @@ extern "C" void RtEngine_Engine_Shutdown(Engine* self) {
 
     g_shutdownSteps = steps;
 
-    if (rt_diff_on__) {
-        char ours[160], theirs[160];
-        std::snprintf(ours, sizeof(ours), "phase1 steps=%u ranges=%d", steps,
-                      self->_allocator.rangeCount);
-        std::snprintf(theirs, sizeof(theirs),
-                      "every non-null subsystem got its save step "
-                      "[steps>0=%d]", static_cast<int>(steps > 0));
-        RT_DIFF_SHADOW(steps > 0, ours, theirs);
-        RT_DIFF_WORK(true);
-    }
 }
 
 // ============================================================================
@@ -1035,7 +932,7 @@ extern "C" void RtEngine_Engine_Shutdown(Engine* self) {
 // ============================================================================
 // Each of the four runs at most once per process, so `divergences=0` from the
 // diff harness says almost nothing on its own: what matters is whether the body
-// executed at all. Printed beside RtDiffSummary().
+// executed at all. Printed beside .
 extern "C" void RtEngineLifecycleSummary() {
     if (g_ctorRuns == 0 && g_startupRuns == 0 &&
         g_dtorRuns == 0 && g_shutdownRuns == 0) return;
@@ -1067,7 +964,7 @@ extern "C" void RtEngineLifecycleSummary() {
 int RtEngineLifecycleRegister() {
     // The allocator platform seam must exist BEFORE Engine::Engine runs:
     // `??0MemoryAllocator@System@@` routes to rtalloc::Construct, whose first
-    // call is g_plat.lockInit. On a run with BANISHED_RT_ALLOC unset nobody
+    // call is g_plat.lockInit. On a run with RT_ALLOC unset nobody
     // else fills that table, and a null there is an EXEC of 0 on the very first
     // line of the boot. Refuse loudly rather than register a landmine — the
     // named-refusal shape lane E4 and lane H both settled on.

@@ -112,7 +112,7 @@ template <typename T> inline T& Field(void* p, size_t off) {
 //
 // This exists because a registered port with no caller reports a clean run and
 // reads as verification (reference_uncalled_port_is_not_verified.md), and
-// because the A/B control for these three is `BANISHED_RT_GFXBODY=0`, under
+// because the A/B control for these three is `RT_GFXBODY=0`, under
 // which the registrations do not happen at all -- so the flag-off arm MUST show
 // zero here. If it did not, the "kill switch" would not be killing anything,
 // which is the failure reference_the_gate_was_never_a_control.md describes.
@@ -137,7 +137,7 @@ unsigned long long g_matNewCalls  = 0;
 // Resolved by ADDRESS through ResolveAddr, which consults the port registry
 // first, exactly as runtime/src/video/context_ctor.cpp:105 does — this is the
 // door that file family already uses and sharing it keeps one allocator arena.
-// Never RtOriginal: that is GetProcAddress, and two of them in a hot body cost
+// Never the raw DLL door: that is GetProcAddress, and two of them in a hot body cost
 // Wave 2 five points of sim time (reference_rtoriginal_is_getprocaddress.md).
 void* MemAlloc(uint64_t bytes, int align) {
     using Fn = void* (*)(uint64_t, int);
@@ -362,7 +362,7 @@ int RtGraphicsWave21GfxbodyRegister() {
     // material bind. Only a detour reaches that one, and a registration is not
     // a door for rel32.
     //
-    // OPT-IN: it returns false unless BANISHED_RT_MATSETUP_DETOUR=1, so this
+    // OPT-IN: it returns false unless RT_MATSETUP_DETOUR=1, so this
     // line changes nothing on a default run. The measured rel32 census (with
     // its positive control), the prologue bytes and the recursion argument are
     // all in standalone/matsetup_detour.cpp. `count` is NOT incremented —

@@ -84,13 +84,13 @@ using RtVideo::RenderBuffer;
 // ResolveExport, forward-declared rather than pulled in from standalone/resolve.h
 //
 // Same reasoning rt_port.h gives for declaring RegisterRuntimeExport /
-// ResolveExportRaw locally, and the same shape runtime/src/io/persistence.cpp
+// the raw DLL door locally, and the same shape runtime/src/io/persistence.cpp
 // uses for ResolveAddr: resolve.h drags in <windows.h>, and PLAN §4.1 decision 1
 // requires runtime/src/ to stay platform-neutral outside a `_win` twin. This
 // declaration must stay byte-identical to resolve.h's; the two are checked
 // against each other by the linker.
 //
-// Note this is the REGISTRY-AWARE resolver, not ResolveExportRaw. That is
+// Note this is the REGISTRY-AWARE resolver, not the raw DLL door. That is
 // deliberate for IO::Persistence::Set below — see Video_Configuration_Save.
 // ----------------------------------------------------------------------------
 void* ResolveExport(const char* mangled_name);
@@ -114,7 +114,7 @@ extern bool RtIo_Persistence_GetBool(void* self, const char* section, const char
 namespace {
 
 // ---- Mangled names, spelled once ------------------------------------------
-// These are used by RtOriginal inside diff guards. The REGISTRATION site at the
+// These are used by the raw DLL door inside diff guards. The REGISTRATION site at the
 // bottom of the file spells every name as a literal a second time, on purpose:
 // tools/runtime_census.py matches `RegisterRuntimeExport("<literal>"` and
 // cannot see through a named constant
@@ -136,7 +136,7 @@ constexpr const char* kGetDefaultResolution     = "?GetDefaultResolution@Device@
 // ---- The three singletons these bodies read --------------------------------
 // Exported DATA symbols: the export address IS the pointer slot.
 //
-// The comment here used to say these went through ResolveExportRaw "because the
+// The comment here used to say these went through the raw DLL door "because the
 // registry holds function redirections only, and nothing has registered — or
 // can register — a data slot before cutover." Both halves were wrong by Wave 9.
 // The code called ResolveExport, not Raw; and RegisterRuntimeExport is a plain
@@ -169,10 +169,8 @@ void** PersistenceSingletonSlot() {
 //   1800d3b4  RET
 // ============================================================================
 int Video_Device_GetInterfaceCount(const Device* self) {
-    RT_DIFF_BEGIN("Video::Device::GetInterfaceCount");
     const int ours = self->interfaceCount;
     using Fn = int (*)(const Device*);
-    RT_DIFF_SCALAR(ours, RtOriginal<Fn>(kGetInterfaceCount)(self));
     return ours;
 }
 
@@ -187,12 +185,9 @@ int Video_Device_GetInterfaceCount(const Device* self) {
 // check".
 // ============================================================================
 const GraphicsInterface* Video_Device_GetInterface(const Device* self, int index) {
-    RT_DIFF_BEGIN("Video::Device::GetInterface");
     const GraphicsInterface* ours = self->interfaceData + index;
     using Fn = const GraphicsInterface* (*)(const Device*, int);
     const void* oursAsPtr = ours;
-    RT_DIFF_SCALAR(oursAsPtr,
-                   static_cast<const void*>(RtOriginal<Fn>(kGetInterface)(self, index)));
     return ours;
 }
 
@@ -200,10 +195,8 @@ const GraphicsInterface* Video_Device_GetInterface(const Device* self, int index
 // Video::Device::GetMultisampleModeCount  —  retail 0x18000d450, ordinal 2803
 // ============================================================================
 int Video_Device_GetMultisampleModeCount(const Device* self) {
-    RT_DIFF_BEGIN("Video::Device::GetMultisampleModeCount");
     const int ours = self->multisampleCount;
     using Fn = int (*)(const Device*);
-    RT_DIFF_SCALAR(ours, RtOriginal<Fn>(kGetMultisampleModeCount)(self));
     return ours;
 }
 
@@ -217,10 +210,8 @@ int Video_Device_GetMultisampleModeCount(const Device* self) {
 // is the low byte either way, and every producer of this array stores 0 or 1.
 // ============================================================================
 bool Video_Device_IsMultisampleModeSupported(const Device* self, int mode) {
-    RT_DIFF_BEGIN("Video::Device::IsMultisampleModeSupported");
     const bool ours = self->multisampleData[mode] != 0;
     using Fn = bool (*)(const Device*, int);
-    RT_DIFF_SCALAR(ours, RtOriginal<Fn>(kIsMultisampleSupported)(self, mode));
     return ours;
 }
 
@@ -269,7 +260,7 @@ namespace {
 // used for Map_Find / Map_Insert.
 //
 // WAVE 9 LANE V2, 2026-09-07 — the door was wrong and the stated reason for it
-// does not survive being checked. It read "RtOriginal (not ResolveExport) on
+// does not survive being checked. It read "the raw DLL door (not ResolveExport) on
 // purpose: this is the DLL's implementation, unaffected by whether some later
 // wave registers a port of it, which keeps this lane's oracle comparing like
 // with like." But this helper has exactly ONE caller
@@ -280,7 +271,7 @@ namespace {
 // further down still calls retail's ValidateConfiguration whole, which is where
 // like-for-like actually comes from.
 //
-// The concrete hazard is cutover: ResolveExportRaw returns NULL with
+// The concrete hazard is cutover: the raw DLL door returns NULL with
 // Runtime-x64.dll absent, so raw here is a null call on the fallback path.
 // GetDefaultResolution is unported today, so nothing about which body runs
 // changes with this edit.
@@ -349,7 +340,6 @@ void Video_Device_ValidateConfiguration(Device* self,
                                         int* width, int* height,
                                         int* refreshNum, int* refreshDen,
                                         int* antialias, int* filter) {
-    RT_DIFF_BEGIN("Video::Device::ValidateConfiguration");
 
     int* args[8] = { renderer, adapterIdx, width, height,
                      refreshNum, refreshDen, antialias, filter };
@@ -357,46 +347,10 @@ void Video_Device_ValidateConfiguration(Device* self,
     // Snapshot the inputs, and the caller's aliasing, BEFORE ours runs.
     int  scratchStore[8] = {0,0,0,0,0,0,0,0};
     int* scratchArgs[8] = {nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr};
-    if (rt_diff_on__) {
-        for (int i = 0; i < 8; ++i) {
-            scratchStore[i] = *args[i];
-            scratchArgs[i]  = &scratchStore[i];
-            for (int j = 0; j < i; ++j) {
-                if (args[j] == args[i]) { scratchArgs[i] = scratchArgs[j]; break; }
-            }
-        }
-    }
 
     ValidateConfigurationBody(self, renderer, adapterIdx, width, height,
                               refreshNum, refreshDen, antialias, filter);
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(Device*, int*, int*, int*, int*, int*, int*, int*, int*);
-        RtOriginal<Fn>(kValidateConfiguration)(
-            self, scratchArgs[0], scratchArgs[1], scratchArgs[2], scratchArgs[3],
-            scratchArgs[4], scratchArgs[5], scratchArgs[6], scratchArgs[7]);
-
-        bool equal = true;
-        int  badIndex = -1;
-        for (int i = 0; i < 8; ++i) {
-            if (*args[i] != *scratchArgs[i]) { equal = false; badIndex = i; break; }
-        }
-        static const char* const kArgNames[8] = {
-            "renderer", "adapter", "width", "height",
-            "refreshNum", "refreshDen", "antialias", "filter"
-        };
-        char oursDesc[96], theirsDesc[96];
-        if (equal) {
-            std::snprintf(oursDesc, sizeof(oursDesc), "all 8 out-params agree");
-            std::snprintf(theirsDesc, sizeof(theirsDesc), "all 8 out-params agree");
-        } else {
-            std::snprintf(oursDesc, sizeof(oursDesc), "%s=%d",
-                          kArgNames[badIndex], *args[badIndex]);
-            std::snprintf(theirsDesc, sizeof(theirsDesc), "%s=%d",
-                          kArgNames[badIndex], *scratchArgs[badIndex]);
-        }
-        RT_DIFF_SHADOW(equal, oursDesc, theirsDesc);
-    }
 }
 
 // ============================================================================
@@ -417,13 +371,11 @@ void Video_Device_ValidateConfiguration(Device* self,
 // nothing matches: displayModeIndex keeps whatever it had. Both are retail.
 // ============================================================================
 bool Video_Device_ApplyChangedSettings(Device* self) {
-    RT_DIFF_BEGIN("Video::Device::ApplyChangedSettings");
 
     // Snapshot the whole object BEFORE ours runs, so the original can be run
     // on a private replica afterwards. The replica shares the mode array by
     // pointer, which is safe: this function only reads it.
     Device scratch{};
-    if (rt_diff_on__) std::memcpy(&scratch, self, sizeof(Device));
 
     const Configuration* cfg = *ConfigSingletonSlot();
 
@@ -440,25 +392,6 @@ bool Video_Device_ApplyChangedSettings(Device* self) {
 
     self->settingsChanged = 1;
 
-    if (rt_diff_on__) {
-        using Fn = bool (*)(Device*);
-        const bool theirsRet = RtOriginal<Fn>(kApplyChangedSettings)(&scratch);
-        const bool equal =
-            self->backBufferWidth  == scratch.backBufferWidth  &&
-            self->backBufferHeight == scratch.backBufferHeight &&
-            self->displayModeIndex == scratch.displayModeIndex &&
-            self->settingsChanged  == scratch.settingsChanged  &&
-            theirsRet == true;
-        char oursDesc[128], theirsDesc[128];
-        std::snprintf(oursDesc, sizeof(oursDesc), "w=%d h=%d mode=%d changed=%u ret=1",
-                      self->backBufferWidth, self->backBufferHeight,
-                      self->displayModeIndex, (unsigned)self->settingsChanged);
-        std::snprintf(theirsDesc, sizeof(theirsDesc), "w=%d h=%d mode=%d changed=%u ret=%d",
-                      scratch.backBufferWidth, scratch.backBufferHeight,
-                      scratch.displayModeIndex, (unsigned)scratch.settingsChanged,
-                      (int)theirsRet);
-        RT_DIFF_SHADOW(equal, oursDesc, theirsDesc);
-    }
 
     return true;
 }
@@ -513,15 +446,10 @@ bool DiffStubCreate(void*) { return true; }
 
 bool Video_RenderBuffer_Create(RenderBuffer* self,
                                const ImageBuffer* color, const ImageBuffer* depth) {
-    RT_DIFF_BEGIN("Video::RenderBuffer::Create");
 
     RenderBuffer scratch{};
     void*        stubVtbl[2] = { nullptr, reinterpret_cast<void*>(&DiffStubCreate) };
     void*        stubData    = &stubVtbl[0];
-    if (rt_diff_on__) {
-        std::memcpy(&scratch, self, sizeof(RenderBuffer));
-        scratch.platformData = &stubData;
-    }
 
     self->colorBuffer = const_cast<ImageBuffer*>(color);
     self->depthBuffer = const_cast<ImageBuffer*>(depth);
@@ -534,14 +462,6 @@ bool Video_RenderBuffer_Create(RenderBuffer* self,
     self->width  = RenderBufferExtent(flags, src->width,  dev->backBufferWidth,  cfg);
     self->height = RenderBufferExtent(flags, src->height, dev->backBufferHeight, cfg);
 
-    if (rt_diff_on__) {
-        using Fn = bool (*)(RenderBuffer*, const ImageBuffer*, const ImageBuffer*);
-        RtOriginal<Fn>(kRenderBufferCreate)(&scratch, color, depth);
-        // Compare only the 0x18 bytes Create writes. The RETURN VALUE is not
-        // compared: theirs came from DiffStubCreate, not from the real
-        // RenderBufferData, so it carries no information.
-        RT_DIFF_BYTES(self, &scratch, 0x18);
-    }
 
     return CallPlatformCreate(self);
 }
@@ -567,19 +487,10 @@ bool Video_RenderBuffer_Create(RenderBuffer* self,
 // DLL (WAVE3_LANE_A.md §6's lesson).
 // ============================================================================
 void Video_RenderStateData_Dtor(void* self) {
-    RT_DIFF_BEGIN("Video::RenderStateData::~RenderStateData");
 
     static void* vtable = ResolveExport("??_7RenderStateData@Video@@6B@");
     *reinterpret_cast<void**>(self) = vtable;
 
-    if (rt_diff_on__) {
-        void* scratch = nullptr;
-        using Fn = void (*)(void*);
-        RtOriginal<Fn>(kRenderStateDataDtor)(&scratch);
-        const void* ours   = *reinterpret_cast<void**>(self);
-        const void* theirs = scratch;
-        RT_DIFF_SCALAR(ours, theirs);
-    }
 }
 
 // ============================================================================
@@ -598,7 +509,7 @@ void Video_RenderStateData_Dtor(void* self) {
 // WriteSettings, which are the registry pair. Save touches no registry key;
 // IO::Persistence::WriteSettings, called from elsewhere at shutdown, does.
 //
-// Set is reached through ResolveExport, NOT RtOriginal, so these 18 calls go to
+// Set is reached through ResolveExport, NOT the raw DLL door, so these 18 calls go to
 // Wave 4's port when it is registered and to the DLL when it is not — which is
 // what retail's own body does relative to its class.
 //
@@ -672,22 +583,9 @@ bool FieldBool(const Configuration* c, uint16_t off) {
 }  // namespace
 
 void Video_Configuration_Save(Configuration* self) {
-    RT_DIFF_BEGIN("Video::Configuration::Save");
 
     void* persistence = *PersistenceSingletonSlot();
 
-    if (rt_diff_on__) {
-        // Poison, so that a key we never wrote cannot pass the readback.
-        for (int i = 0; i < kSaveFieldCount; ++i) {
-            const SaveField& f = kSaveFields[i];
-            if (f.isBool)
-                RT_ORIGINAL_ONCE(PersistSetBoolFn, "?Set@Persistence@IO@@QEAAXPEBD0_N@Z")(
-                    persistence, kSectionVideo, f.key, !FieldBool(self, f.offset));
-            else
-                RT_ORIGINAL_ONCE(PersistSetIntFn, "?Set@Persistence@IO@@QEAAXPEBD0H@Z")(
-                    persistence, kSectionVideo, f.key, FieldInt(self, f.offset) + 1);
-        }
-    }
 
     for (int i = 0; i < kSaveFieldCount; ++i) {
         const SaveField& f = kSaveFields[i];
@@ -697,50 +595,6 @@ void Video_Configuration_Save(Configuration* self) {
             PersistSetInt()(persistence, kSectionVideo, f.key, FieldInt(self, f.offset));
     }
 
-    if (rt_diff_on__) {
-        bool        equal = true;
-        char        oursDesc[96], theirsDesc[96];
-        oursDesc[0] = theirsDesc[0] = '\0';
-
-        for (int i = 0; i < kSaveFieldCount && equal; ++i) {
-            const SaveField& f = kSaveFields[i];
-            if (f.isBool) {
-                const bool want = FieldBool(self, f.offset);
-                bool got = !want;
-                const bool found = RT_ORIGINAL_ONCE(PersistGetBoolFn,
-                    "?Get@Persistence@IO@@QEBA_NPEBD0AEA_N@Z")(
-                        persistence, kSectionVideo, f.key, &got);
-                if (!found || got != want) {
-                    equal = false;
-                    std::snprintf(oursDesc, sizeof(oursDesc), "%s=%d", f.key, (int)want);
-                    std::snprintf(theirsDesc, sizeof(theirsDesc), "%s readback found=%d value=%d",
-                                  f.key, (int)found, (int)got);
-                }
-            } else {
-                const int want = FieldInt(self, f.offset);
-                int got = want + 1;
-                const bool found = RT_ORIGINAL_ONCE(PersistGetIntFn,
-                    "?Get@Persistence@IO@@QEBA_NPEBD0AEAH@Z")(
-                        persistence, kSectionVideo, f.key, &got);
-                if (!found || got != want) {
-                    equal = false;
-                    std::snprintf(oursDesc, sizeof(oursDesc), "%s=%d", f.key, want);
-                    std::snprintf(theirsDesc, sizeof(theirsDesc), "%s readback found=%d value=%d",
-                                  f.key, (int)found, got);
-                }
-            }
-        }
-        if (equal) {
-            std::snprintf(oursDesc, sizeof(oursDesc), "all %d keys read back", kSaveFieldCount);
-            std::snprintf(theirsDesc, sizeof(theirsDesc), "all %d keys read back", kSaveFieldCount);
-        }
-        RT_DIFF_SHADOW(equal, oursDesc, theirsDesc);
-
-        // Let the original run too, so the settings map ends the call in
-        // exactly the state retail would leave it in even if ours was wrong.
-        using Fn = void (*)(Configuration*);
-        RtOriginal<Fn>(kConfigurationSave)(self);
-    }
 }
 
 // ============================================================================
@@ -790,7 +644,6 @@ void Video_Configuration_Save(Configuration* self) {
 //    Nothing here can fail, including a completely empty registry.
 // ============================================================================
 bool Video_Configuration_Startup(Configuration* self) {
-    RT_DIFF_BEGIN("Video::Configuration::Startup");
 
     void* persistence = *PersistenceSingletonSlot();
 
@@ -814,60 +667,6 @@ bool Video_Configuration_Startup(Configuration* self) {
         }
     }
 
-    if (rt_diff_on__) {
-        // A FULL replay oracle is available here and is NOT available for the
-        // sibling Save, because Startup mutates nothing outside `self`: the
-        // only heap traffic is the transient key String each Get formats and
-        // releases. Running retail a second time over the same registry is
-        // therefore free of side effects, which is exactly the property
-        // Input::Configuration::Load lacks (its KeyMap::Load mutates a live
-        // map, so that port could only self-check).
-        const Configuration ours = *self;
-        *self = orig;                       // hand retail OUR input, not our output
-        RtOriginal<bool (*)(Configuration*)>(kConfigurationStartup)(self);
-        const Configuration theirs = *self;
-        *self = ours;                       // our result is what survives the call
-
-        // Name the failing field. A predicate over 18 terms whose message can
-        // only say "not equal" is the shape
-        // reference_shadow_predicate_must_name_its_failing_term.md warns about.
-        bool equal = true;
-        char oursDesc[128], theirsDesc[128];
-        for (int i = 0; i < kSaveFieldCount && equal; ++i) {
-            const SaveField& f = kSaveFields[i];
-            const auto* o = reinterpret_cast<const uint8_t*>(&ours)   + f.offset;
-            const auto* t = reinterpret_cast<const uint8_t*>(&theirs) + f.offset;
-            if (f.isBool) {
-                if (*o != *t) {
-                    equal = false;
-                    std::snprintf(oursDesc,   sizeof(oursDesc),   "%s=%d", f.key, (int)*o);
-                    std::snprintf(theirsDesc, sizeof(theirsDesc), "%s=%d", f.key, (int)*t);
-                }
-            } else {
-                const int32_t ov = *reinterpret_cast<const int32_t*>(o);
-                const int32_t tv = *reinterpret_cast<const int32_t*>(t);
-                if (ov != tv) {
-                    equal = false;
-                    std::snprintf(oursDesc,   sizeof(oursDesc),   "%s=%d", f.key, (int)ov);
-                    std::snprintf(theirsDesc, sizeof(theirsDesc), "%s=%d", f.key, (int)tv);
-                }
-            }
-        }
-        if (equal) {
-            // EFFECTIVENESS CONTROL, printed on the PASSING path on purpose
-            // (reference_probe_needs_an_effectiveness_control.md). `found` is
-            // how many of the 18 keys the registry actually held. At found=0
-            // every field on both sides is still the ctor default and the
-            // comparison is VACUOUS — it would agree just as loudly with a
-            // body that did nothing at all. Read the number, not the verdict.
-            std::snprintf(oursDesc,   sizeof(oursDesc),
-                          "18 fields identical, found=%d/18%s", found,
-                          found == 0 ? " VACUOUS: registry held no Video keys" : "");
-            std::snprintf(theirsDesc, sizeof(theirsDesc),
-                          "18 fields identical, found=%d/18", found);
-        }
-        RT_DIFF_SHADOW(equal, oursDesc, theirsDesc);
-    }
 
     return true;   // 0x1800f6ce4: MOV AL,0x1 — unconditional
 }
@@ -897,14 +696,12 @@ int RtVideoDeviceRegister() {
     RegisterRuntimeExport("?Save@Configuration@Video@@QEAAXXZ",
                           (void*)&Video_Configuration_Save); ++n;
 
-    // Own kill switch, narrower than the file's BANISHED_RT_VIDDEVICE: this is
+    // Own kill switch, narrower than the file's RT_VIDDEVICE: this is
     // the one function here that Engine::Startup calls on the BOOT path
     // (engine_lifecycle.cpp:653), so it must be switchable without taking the
     // other nine registrations down with it.
-    if (RtWaveEnabled("BANISHED_RT_VIDCONFIG")) {
-        RegisterRuntimeExport("?Startup@Configuration@Video@@QEAA_NXZ",
-                              (void*)&Video_Configuration_Startup); ++n;
-    }
+    RegisterRuntimeExport("?Startup@Configuration@Video@@QEAA_NXZ",
+                          (void*)&Video_Configuration_Startup); ++n;
 
     // Address door for the one call site that has an address FALLBACK:
     // dx11/src/renderstatedata.cpp:317-322. Not counted again — it is the same

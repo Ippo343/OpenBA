@@ -139,7 +139,6 @@ namespace {
 // ?PlatformStartup@Device@Audio@@AEAA_NXZ              retail 0x1800de600
 // ============================================================================
 extern "C" bool RtAudio_Device_PlatformStartup(void* self) {
-    RT_DIFF_BEGIN("Audio::Device::PlatformStartup [oracle behind BANISHED_PLAT_ORACLE]");
 
     void** xaSlot = SlotAt(self, kOffXAudio2);
     void** mvSlot = SlotAt(self, kOffMasteringVoice);
@@ -149,11 +148,6 @@ extern "C" bool RtAudio_Device_PlatformStartup(void* self) {
         *xaSlot = nullptr;                                  // 0x1800de624
         // NOTE: the mastering-voice slot is NOT touched on this path. Retail
         // leaves whatever the ctor put there.
-        if (rt_diff_on__) {
-            RT_DIFF_SHADOW(true, "no XAudio2 (retail's silent-no-audio path)",
-                           "not diffable on the live device");
-            RT_DIFF_WORK(false);
-        }
         return true;                                        // 0x1800de622 MOV AL,1
     }
 
@@ -172,65 +166,6 @@ extern "C" bool RtAudio_Device_PlatformStartup(void* self) {
         *mvSlot = nullptr;                                  // 0x1800de66f
     }
 
-    if (rt_diff_on__) {
-        const bool haveEngine = *xaSlot != nullptr;
-        const bool haveVoice  = *mvSlot != nullptr;
-        if (!EnvOn("BANISHED_PLAT_ORACLE")) {
-            char a[128];
-            std::snprintf(a, sizeof(a), "engine=%d voice=%d hr=0x%lX",
-                          haveEngine ? 1 : 0, haveVoice ? 1 : 0,
-                          static_cast<unsigned long>(hrMv));
-            RT_DIFF_SHADOW(true, a,
-                           "no oracle: a replay creates a SECOND XAudio2 engine "
-                           "and mastering voice on the real device");
-            RT_DIFF_WORK(haveEngine);
-        } else {
-            // A real comparison, and a safe one: XAudio2 permits a second,
-            // independent engine object, so the shipped body can be run on a
-            // SCRATCH device buffer and its result compared. The scratch is
-            // released afterwards; the two mastering voices belong to different
-            // engines and do not contend.
-            //
-            // What is compared is the OUTCOME SHAPE — did the shipped body end
-            // up with an engine, with a voice, and with the same return value —
-            // not the pointers, which are two different COM objects and would
-            // fail 100% of calls for the one reason that is correct.
-            using Fn = bool (*)(void*);
-            Fn theirsFn = RtOriginal<Fn>("?PlatformStartup@Device@Audio@@AEAA_NXZ");
-            if (!theirsFn) {
-                RT_DIFF_SHADOW(false, "ours ran", "oracle skipped: shipped body did not resolve");
-                RT_DIFF_WORK(true);
-            } else {
-                static uint8_t scratch[0x1298];
-                std::memset(scratch, 0, sizeof(scratch));
-                const bool theirsRet = theirsFn(scratch);
-                void** txa = SlotAt(scratch, kOffXAudio2);
-                void** tmv = SlotAt(scratch, kOffMasteringVoice);
-                const bool tEngine = *txa != nullptr;
-                const bool tVoice  = *tmv != nullptr;
-
-                const bool equal = (theirsRet == true) &&
-                                   (haveEngine == tEngine) && (haveVoice == tVoice);
-                char a[128], b[128];
-                std::snprintf(a, sizeof(a), "ret=1 engine=%d voice=%d",
-                              haveEngine ? 1 : 0, haveVoice ? 1 : 0);
-                std::snprintf(b, sizeof(b), "ret=%d engine=%d voice=%d",
-                              theirsRet ? 1 : 0, tEngine ? 1 : 0, tVoice ? 1 : 0);
-                RT_DIFF_SHADOW(equal, a, b);
-                // Effectiveness: an all-false outcome (no XAudio2 on this
-                // machine) makes the three comparisons agree trivially.
-                RT_DIFF_WORK(tEngine || haveEngine);
-                printf("[PlatOracle] Audio::Device::PlatformStartup ours=%s theirs=%s\n", a, b);
-
-                if (*txa) {
-                    using ReleaseFn = unsigned long (STDMETHODCALLTYPE*)(void*);
-                    Slot<ReleaseFn>(*txa, 0x10)(*txa);
-                    *txa = nullptr;
-                    *tmv = nullptr;
-                }
-            }
-        }
-    }
     return true;                                            // 0x1800de67c MOV AL,1
 }
 

@@ -127,7 +127,7 @@ using RtGraphics::ParticleResource;
 using RtGraphics::ParticleBoundsRecord;
 
 // ----------------------------------------------------------------------------
-// ResolveAddr / ResolveExportRaw, forward-declared rather than pulled in from
+// ResolveAddr / the raw DLL door, forward-declared rather than pulled in from
 // standalone/resolve.h -- same reasoning rt_port.h gives (resolve.h drags in
 // <windows.h>, which collides with the engine's own type/member names). This
 // declaration must stay byte-identical to resolve.h's.
@@ -140,7 +140,7 @@ namespace {
 // ============================================================================
 // Mangled names, each its own literal at the registration call for
 // tools/runtime_census.py (reference_census_cannot_see_nonliteral_registrations.md);
-// kept as named constants here only for the diff-oracle RtOriginal<> calls.
+// kept as named constants here only for the diff-oracle the raw DLL door<> calls.
 // ============================================================================
 const char* const kAnimEventCtor   = "??0AnimationEvent@Graphics@@QEAA@XZ";
 const char* const kAnimEventDtor   = "??1AnimationEvent@Graphics@@UEAA@XZ";
@@ -194,7 +194,7 @@ AnimationManager** RtAnimMgrSingletonSlot() {
 
 // Graphics::ParticleInstance::_frameIndex, a protected STATIC int (mangling
 // code `1`), not an instance field -- see Particle.h. Resolved once via
-// ResolveExportRaw (a real export, unlike the .rdata data slot addresses this
+// the raw DLL door (a real export, unlike the .rdata data slot addresses this
 // project has elsewhere found to resolve NULL -- checked present in the
 // export table before this file was written).
 int* RtFrameIndexSlot() {
@@ -207,12 +207,12 @@ int* RtFrameIndexSlot() {
 // EXPORTED (??0Geometry@Graphics@@QEAA@XZ). NOT this lane's class (Wave 6
 // lane D owns Graphics::Geometry), called at its own export exactly like
 // scene.cpp calls Picking::Scene's unexported grid internals -- except this
-// one IS exported, so RT_ORIGINAL_ONCE applies (never RtOriginal on a normal
+// one IS exported, so the raw DLL door applies (never the raw DLL door on a normal
 // run path -- reference_rtoriginal_is_getprocaddress.md).
 // ============================================================================
 using GeometryCtorFn = void* (*)(void*);
 void RtGeometryCtor(void* self) {
-    // RT_EXPORT_ONCE, not RT_ORIGINAL_ONCE (Wave 9 lane R): Graphics::Geometry's
+    // RT_EXPORT_ONCE, not the raw DLL door (Wave 9 lane R): Graphics::Geometry's
     // ctor IS ported (runtime/src/graphics/geometry.cpp), and the raw door reached
     // the DLL's body regardless. Raw is for oracles; a dependency goes through the
     // port registry.
@@ -247,20 +247,12 @@ void RtGeometrySetBounds(void* self, const void* box) {
 // resource, so no dtor call is needed to avoid a leak here).
 // ============================================================================
 extern "C" AnimationEvent* RtGraphics_AnimationEvent_Ctor(AnimationEvent* self) {
-    RT_DIFF_BEGIN("Graphics::AnimationEvent::AnimationEvent()");
 
     self->vtable = RtAnimationEventVtable();
     self->_f08 = 0;
     self->_f10 = 0;
     self->_f18 = 0;
 
-    if (rt_diff_on__) {
-        AnimationEvent theirs;
-        std::memset(&theirs, 0xCD, sizeof(theirs));
-        typedef AnimationEvent* (*CtorFn)(AnimationEvent*);
-        RtOriginal<CtorFn>(kAnimEventCtor)(&theirs);
-        RT_DIFF_BYTES(self, &theirs, sizeof(AnimationEvent));
-    }
     return self;
 }
 
@@ -283,16 +275,11 @@ extern "C" AnimationEvent* RtGraphics_AnimationEvent_Ctor(AnimationEvent* self) 
 // "did not crash".
 // ============================================================================
 extern "C" void RtGraphics_AnimationEvent_Dtor(AnimationEvent* self) {
-    RT_DIFF_BEGIN("Graphics::AnimationEvent::~AnimationEvent()");
 
     self->vtable = RtAnimationEventVtable();
     typedef void (*ExternalDtorFn)(AnimationEvent*);
     RT_EXPORT_ONCE(ExternalDtorFn, kExternalDtor)(self);   // ported; see RtGeometryCtor
 
-    if (rt_diff_on__) {
-        RT_DIFF_SHADOW(true, "vtable stamped, External::~External delegated (structural)",
-                       "same");
-    }
 }
 
 // ============================================================================
@@ -315,7 +302,6 @@ extern "C" void RtGraphics_AnimationEvent_Dtor(AnimationEvent* self) {
 // of what time it happened to run.
 // ============================================================================
 extern "C" AnimationManager* RtGraphics_AnimationManager_Ctor(AnimationManager* self) {
-    RT_DIFF_BEGIN("Graphics::AnimationManager::AnimationManager()");
 
     // Retail zeroes +0x00..+0x13 with three stores (8 + 8 + 4). The first
     // twelve bytes are a Collection::Array<AnimationGroup> — NOT the
@@ -337,19 +323,6 @@ extern "C" AnimationManager* RtGraphics_AnimationManager_Ctor(AnimationManager* 
     AnimationManager** slot = RtAnimMgrSingletonSlot();
     if (slot) *slot = self;
 
-    if (rt_diff_on__) {
-        // Re-run retail's OWN recurrence against OUR seed, in a private
-        // buffer, rather than comparing against a fresh scratch object (whose
-        // seed would differ by construction -- _time64 advances between
-        // calls). This isolates exactly what the function computes.
-        uint32_t theirsState[624];
-        theirsState[0] = seed;
-        for (int i = 1; i < 624; ++i) {
-            const uint32_t prev = theirsState[i - 1];
-            theirsState[i] = (prev ^ (prev >> 30)) * 0x6c078965u + static_cast<uint32_t>(i);
-        }
-        RT_DIFF_BYTES(self->_rngState, theirsState, sizeof(theirsState));
-    }
     return self;
 }
 
@@ -370,7 +343,6 @@ extern "C" AnimationManager* RtGraphics_AnimationManager_Ctor(AnimationManager* 
 // `_singleton` cleared.
 // ============================================================================
 extern "C" void RtGraphics_AnimationManager_Dtor(AnimationManager* self) {
-    RT_DIFF_BEGIN("Graphics::AnimationManager::~AnimationManager()");
 
     AnimationManager** slot = RtAnimMgrSingletonSlot();
     if (slot) *slot = nullptr;
@@ -379,13 +351,6 @@ extern "C" void RtGraphics_AnimationManager_Dtor(AnimationManager* self) {
     static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18005bf60));
     fn(self);
 
-    if (rt_diff_on__) {
-        const bool ok = (slot == nullptr) || (*slot == nullptr);
-        char a[48], b[48];
-        std::snprintf(a, sizeof(a), "_singleton=%p", slot ? (void*)*slot : nullptr);
-        std::snprintf(b, sizeof(b), "_singleton=%p", (void*)nullptr);
-        RT_DIFF_SHADOW(ok, a, b);
-    }
 }
 
 // ============================================================================
@@ -416,7 +381,6 @@ extern "C" void RtGraphics_AnimationManager_Dtor(AnimationManager* self) {
 // ORACLE: full, scratch-object, minus the [0x21,0x24) and [0x2c,0x30) gaps.
 // ============================================================================
 extern "C" Particle* RtGraphics_Particle_Ctor(Particle* self) {
-    RT_DIFF_BEGIN("Graphics::Particle::Particle()");
 
     self->vtable = RtParticleVtable();
     self->_f08 = 0;
@@ -429,27 +393,6 @@ extern "C" Particle* RtGraphics_Particle_Ctor(Particle* self) {
     self->_f38 = 0;
     self->_f40 = 0;
 
-    if (rt_diff_on__) {
-        Particle theirs;
-        std::memset(&theirs, 0xCD, sizeof(theirs));
-        typedef Particle* (*CtorFn)(Particle*);
-        RtOriginal<CtorFn>(kParticleCtor)(&theirs);
-
-        const uint8_t* o = reinterpret_cast<const uint8_t*>(self);
-        const uint8_t* t = reinterpret_cast<const uint8_t*>(&theirs);
-        const bool seg1Ok = std::memcmp(o,        t,        0x21) == 0;   // [0x00,0x21)
-        const bool seg2Ok = std::memcmp(o + 0x24, t + 0x24, 0x08) == 0;   // [0x24,0x2c)
-        const bool seg3Ok = std::memcmp(o + 0x30, t + 0x30,
-                                        sizeof(Particle) - 0x30) == 0;    // [0x30,0x48)
-        const bool ok = seg1Ok && seg2Ok && seg3Ok;
-        char a[48], b[48];
-        std::snprintf(a, sizeof(a), "%s", ok ? "match"
-                                          : (!seg1Ok ? "[0x00,0x21) differs"
-                                             : (!seg2Ok ? "[0x24,0x2c) differs"
-                                                         : "[0x30,0x48) differs")));
-        std::snprintf(b, sizeof(b), "match");
-        RT_DIFF_SHADOW(ok, a, b);
-    }
     return self;
 }
 
@@ -482,7 +425,6 @@ extern "C" Particle* RtGraphics_Particle_Ctor(Particle* self) {
 // the stack and discarding it remains safe.
 // ============================================================================
 extern "C" ParticleInstance* RtGraphics_ParticleInstance_Ctor(ParticleInstance* self) {
-    RT_DIFF_BEGIN("Graphics::ParticleInstance::ParticleInstance()");
 
     RtGeometryCtor(&self->base);   // Geometry base, +0x00..+0xbf
     *reinterpret_cast<void**>(self) = RtParticleInstanceVtable();  // vtable lives at +0x00,
@@ -491,17 +433,6 @@ extern "C" ParticleInstance* RtGraphics_ParticleInstance_Ctor(ParticleInstance* 
     self->_boundsPtr = nullptr;    // +0xc8
     self->_index     = -1;         // +0xd0
 
-    if (rt_diff_on__) {
-        uint8_t theirs[sizeof(ParticleInstance)];
-        std::memset(theirs, 0xCD, sizeof(theirs));
-        typedef void* (*CtorFn)(void*);
-        RtOriginal<CtorFn>(kPIctor)(theirs);
-
-        const uint8_t* o = reinterpret_cast<const uint8_t*>(self) + 0xc0;
-        const uint8_t* t = theirs + 0xc0;
-        const bool ok = std::memcmp(o, t, 0x14) == 0;   // _resource(8)+_boundsPtr(8)+_index(4)
-        RT_DIFF_SHADOW(ok, ok ? "match" : "own fields [0xc0,0xd4) differ", "match");
-    }
     return self;
 }
 
@@ -542,7 +473,6 @@ extern "C" ParticleInstance* RtGraphics_ParticleInstance_Ctor(ParticleInstance* 
 // is added.
 // ============================================================================
 extern "C" bool RtGraphics_ParticleInstance_Update(ParticleInstance* self) {
-    RT_DIFF_BEGIN("Graphics::ParticleInstance::Update");
 
     ParticleResource* resource = self->_resource;             // +0xc0, unguarded
     if (resource->_active != 0) {                              // +0x20, unguarded
@@ -559,23 +489,6 @@ extern "C" bool RtGraphics_ParticleInstance_Update(ParticleInstance* self) {
         needsUpdate = true;
     }
 
-    if (rt_diff_on__) {
-        ParticleBoundsRecord* boundsBefore = self->_boundsPtr;
-        uint8_t recordBefore[sizeof(ParticleBoundsRecord)];
-        std::memcpy(recordBefore, boundsBefore, sizeof(ParticleBoundsRecord));
-
-        typedef bool (*UpdateFn)(ParticleInstance*);
-        RtOriginal<UpdateFn>(kPIupdate)(self);   // idempotent replay on the REAL object
-
-        const bool ok = (self->_boundsPtr == boundsBefore) &&
-            std::memcmp(recordBefore, self->_boundsPtr, sizeof(ParticleBoundsRecord)) == 0;
-        char a[80], b[80];
-        std::snprintf(a, sizeof(a), "boundsPtr=%p tag=%d", (void*)boundsBefore,
-                      reinterpret_cast<ParticleBoundsRecord*>(recordBefore)->frameTag);
-        std::snprintf(b, sizeof(b), "boundsPtr=%p tag=%d", (void*)self->_boundsPtr,
-                      self->_boundsPtr->frameTag);
-        RT_DIFF_SHADOW(ok, a, b);
-    }
     return needsUpdate;
 }
 
@@ -597,25 +510,11 @@ extern "C" bool RtGraphics_ParticleInstance_Update(ParticleInstance* self) {
 // result depends on the other having run first.
 // ============================================================================
 extern "C" void RtGraphics_ParticleInstance_IncrementInstanceIndex() {
-    RT_DIFF_BEGIN("Graphics::ParticleInstance::IncrementInstanceIndex");
 
     int* slot = RtFrameIndexSlot();
     const int before = slot ? *slot : 0;
     if (slot) *slot = before + 1;
 
-    if (rt_diff_on__ && slot) {
-        // Restore, then let retail's own body perform the SAME increment on
-        // the SAME live slot, so what is diffed is "does retail also add
-        // exactly 1", not two independent counters drifting apart.
-        const int ours = *slot;
-        *slot = before;
-        typedef void (*Fn)();
-        RtOriginal<Fn>(kPIincrement)();
-        const int theirs = *slot;
-        *slot = ours;   // leave the real counter at OUR result, which is what
-                         // every other caller this frame will observe
-        RT_DIFF_SCALAR(ours, theirs);
-    }
 }
 
 // ============================================================================
@@ -644,7 +543,6 @@ extern "C" void RtGraphics_ParticleInstance_IncrementInstanceIndex() {
 // ============================================================================
 extern "C" ParticleSystemInstance* RtGraphics_ParticleSystemInstance_Ctor(
     ParticleSystemInstance* self) {
-    RT_DIFF_BEGIN("Graphics::ParticleSystemInstance::ParticleSystemInstance()");
 
     RtGeometryCtor(&self->base.base);
     self->base._resource  = nullptr;
@@ -653,22 +551,6 @@ extern "C" ParticleSystemInstance* RtGraphics_ParticleSystemInstance_Ctor(
     *reinterpret_cast<void**>(self) = RtParticleSystemInstanceVtable();  // vtable @ +0x00
     self->_f_d8 = nullptr;
 
-    if (rt_diff_on__) {
-        uint8_t theirs[sizeof(ParticleSystemInstance)];
-        std::memset(theirs, 0xCD, sizeof(theirs));
-        typedef void* (*CtorFn)(void*);
-        RtOriginal<CtorFn>(kPSIctor)(theirs);
-
-        const uint8_t* o = reinterpret_cast<const uint8_t*>(self);
-        const uint8_t* t = theirs;
-        const bool inheritedOk = std::memcmp(o + 0xc0, t + 0xc0, 0x14) == 0;  // _resource/_boundsPtr/_index
-        const bool ownOk       = std::memcmp(o + 0xd8, t + 0xd8, 0x08) == 0;  // _f_d8
-        char a[48];
-        std::snprintf(a, sizeof(a), "%s", (inheritedOk && ownOk) ? "match"
-                                          : (!inheritedOk ? "[0xc0,0xd4) differs"
-                                                           : "[0xd8,0xe0) differs"));
-        RT_DIFF_SHADOW(inheritedOk && ownOk, a, "match");
-    }
     return self;
 }
 

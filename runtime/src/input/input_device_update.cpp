@@ -62,8 +62,8 @@
 // hands BOTH sides the same bytes, so the drain stops existing rather than
 // being recorded around (reference_synthetic_subject_beats_a_fake.md).
 //
-// That probe is input_device_update_probe.cpp (BANISHED_RT_INPUTUPD_PROBE=1).
-// The LIVE registration below carries RT_DIFF_SHADOW + RT_DIFF_WORK and NOT a
+// That probe is input_device_update_probe.cpp (RT_INPUTUPD_PROBE=1).
+// The LIVE registration below carries the diff oracle + the diff oracle and NOT a
 // replay, for the drain reason above — said here rather than left to be
 // inferred from an absent macro.
 //
@@ -153,18 +153,12 @@
 #include <cstddef>
 #include <cstring>
 
-#include "../../funcs/rt_diff.h"
 #include "../../funcs/rt_port.h"
 #include "../../types/input/Input.h"
 
 // Wave 9 lane IOA's body, in input_win.cpp. Retail's Update ends in
 // JMP 0x1800E2130; ours ends in this call.
 extern "C" void RtInput_Device_PlatformUpdate(void* selfPtr);
-
-// input_device_update_probe.cpp. A no-op unless BANISHED_RT_INPUTUPD_PROBE=1,
-// and it runs at most once per process (it sets its own ran-flag BEFORE doing
-// anything, so the recursive call it makes into this function is harmless).
-extern "C" void RtInputDeviceUpdateProbeMaybeRun();
 
 namespace {
 
@@ -340,7 +334,6 @@ using AcquireFn  = uint32_t (*)(void*);
 void Device_UpdateState(void* /*self — loaded by retail, never read*/,
                         State* dst, const State* src, int32_t count,
                         const int64_t* time) {
-    RT_DIFF_BEGIN("Input::Device::UpdateState");
 
     const float  divisor = ValueDivisor();
     const double spt     = *TimerSecondsPerTick();
@@ -380,15 +373,12 @@ void Device_UpdateState(void* /*self — loaded by retail, never read*/,
     // close, one level up from calls=0-reads-as-clean. A run whose work column
     // is 0 has seen no edge at all and has verified only the quiescent case,
     // whatever calls= says.
-    RT_DIFF_WORK(edges > 0);
 
     // No replay. dst IS the live Device state and this is a read-modify-write of
     // it (pressed/released depend on the PREVIOUS value), so running theirs
     // afterwards compares the second application of an update that is only
     // accidentally idempotent. The byte comparison lives in the probe, on a
     // synthetic Device. See the banner.
-    RT_DIFF_SHADOW(true, "updated the state block in place",
-                   "not replayable (read-modify-write of live state)");
 }
 
 // ---------------------------------------------------------------------------
@@ -426,7 +416,6 @@ void Device_UpdateState(void* /*self — loaded by retail, never read*/,
 // filled all 256 bytes.
 // ---------------------------------------------------------------------------
 bool Device_PlatformGetKeyboardState(void* selfPtr, State* out) {
-    RT_DIFF_BEGIN("Input::Device::PlatformGetKeyboardState");
 
     auto* self   = static_cast<uint8_t*>(selfPtr);
     auto* config = static_cast<const uint8_t*>(*InputConfigSingleton());
@@ -440,13 +429,9 @@ bool Device_PlatformGetKeyboardState(void* selfPtr, State* out) {
                 const SHORT s = GetAsyncKeyState(kIndexToVirtualKey[i]);
                 out[i].value = (s & 0x8000) ? kFullScale : 0;
             }
-            RT_DIFF_WORK(true);
         } else {
             for (int i = 0; i < RtInput::kKeyboardInputCount; ++i) out[i].value = 0;
-            RT_DIFF_WORK(false);
         }
-        RT_DIFF_SHADOW(true, "filled the keyboard scratch (legacy path)",
-                       "not replayable (GetAsyncKeyState is ambient OS state)");
         return true;
     }
 
@@ -467,19 +452,12 @@ bool Device_PlatformGetKeyboardState(void* selfPtr, State* out) {
                 reinterpret_cast<AcquireFn>(ComSlot(dev, kComAcquire))(dev);
             if (a != kDiErrInputLost) break;
         }
-        RT_DIFF_WORK(false);
-        RT_DIFF_SHADOW(true,
-                       "GetDeviceState failed; re-acquired and left the scratch zeroed",
-                       "not replayable (the DirectInput read DRAINS the queue)");
         return true;
     }
 
     for (int i = 0; i < 256; ++i)
         out[kScanCodeToIndex[i]].value = (keys[i] & 0x80) ? kFullScale : 0;
 
-    RT_DIFF_WORK(true);
-    RT_DIFF_SHADOW(true, "filled the keyboard scratch (DirectInput path)",
-                   "not replayable (the DirectInput read DRAINS the queue)");
     return true;
 }
 
@@ -521,7 +499,6 @@ bool Device_PlatformGetKeyboardState(void* selfPtr, State* out) {
 // is retail's, not a simplification.
 // ---------------------------------------------------------------------------
 bool Device_PlatformGetMouseState(void* selfPtr, State* out) {
-    RT_DIFF_BEGIN("Input::Device::PlatformGetMouseState");
 
     auto* self   = static_cast<uint8_t*>(selfPtr);
     auto* config = static_cast<const uint8_t*>(*InputConfigSingleton());
@@ -540,9 +517,6 @@ bool Device_PlatformGetMouseState(void* selfPtr, State* out) {
 
         if (GetForegroundWindow() != hwnd) {
             for (int i = 0; i < RtInput::kMouseInputCount; ++i) out[i].value = 0;
-            RT_DIFF_WORK(false);
-            RT_DIFF_SHADOW(true, "not foreground: zeroed the mouse scratch",
-                           "not replayable (ambient OS state)");
             return true;
         }
 
@@ -576,9 +550,6 @@ bool Device_PlatformGetMouseState(void* selfPtr, State* out) {
                                           : static_cast<int16_t>(0x8001));
         *wheel = 0;
 
-        RT_DIFF_WORK(true);
-        RT_DIFF_SHADOW(true, "filled the mouse scratch (legacy path)",
-                       "not replayable (the cursor position is ambient OS state)");
         return true;
     }
 
@@ -601,10 +572,6 @@ bool Device_PlatformGetMouseState(void* selfPtr, State* out) {
                 reinterpret_cast<AcquireFn>(ComSlot(dev, kComAcquire))(dev);
             if (a != kDiErrInputLost) break;
         }
-        RT_DIFF_WORK(false);
-        RT_DIFF_SHADOW(true,
-                       "GetDeviceState failed; re-acquired and left the scratch zeroed",
-                       "not replayable (the DirectInput read DRAINS the queue)");
         return true;
     }
 
@@ -629,9 +596,6 @@ bool Device_PlatformGetMouseState(void* selfPtr, State* out) {
     out[0].value = static_cast<int16_t>(pt.x);
     out[1].value = static_cast<int16_t>(pt.y);
 
-    RT_DIFF_WORK(true);
-    RT_DIFF_SHADOW(true, "filled the mouse scratch (DirectInput path)",
-                   "not replayable (the DirectInput read DRAINS the queue)");
     return true;
 }
 
@@ -691,7 +655,6 @@ void ZeroScratch(State* buf, int32_t count) {
 // observable behaviour, and PlatformUpdate is already ours (lane IOA).
 // ---------------------------------------------------------------------------
 extern "C" void RtInput_Device_Update(void* selfPtr, const int64_t* time) {
-    RT_DIFF_BEGIN("Input::Device::Update");
 
     // NOTE FOR ANYONE LOOKING FOR THE PROBE HOOK: it is NOT here, and the first
     // version of this lane put it here and measured nothing. See the
@@ -723,13 +686,9 @@ extern "C" void RtInput_Device_Update(void* selfPtr, const int64_t* time) {
     // reads below the call count, one of them started returning false and the
     // corresponding dispatch stopped running — which would be invisible
     // otherwise, because the resulting state is "last frame's, unchanged".
-    RT_DIFF_WORK(gotKeyboard && gotMouse);
 
     RtInput_Device_PlatformUpdate(self);   // retail: JMP 0x1800E2130
 
-    RT_DIFF_SHADOW(true, "polled both devices and dispatched their events",
-                   "not replayable (the DirectInput read DRAINS the queue) — the "
-                   "byte comparison is in input_device_update_probe.cpp");
 }
 
 // Entry points the probe needs, to drive the internal bodies under their own

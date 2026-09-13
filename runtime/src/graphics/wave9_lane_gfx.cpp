@@ -28,13 +28,12 @@
 // expression below is transcribed in the order the SUBSS/MULSS/ADDSS sequence
 // gives it and must not be "simplified".
 //
-// KILL SWITCH: BANISHED_RT_GFX9=0 leaves all four on the DLL.
+// KILL SWITCH: RT_GFX9=0 leaves all four on the DLL.
 // ============================================================================
 
 #include <cstdint>
 #include <cstring>
 
-#include "rt_diff.h"
 #include "rt_port.h"
 
 #include "../../types/math/Math.h"
@@ -103,7 +102,7 @@ uint32_t GeneratedImageBufferTypeId() {
 // ---------------------------------------------------------------------------
 // MemAlloc / MemFree, the two halves of the Array helper below.
 //
-// RT_EXPORT_ONCE, not RtOriginal: RtOriginal IS GetProcAddress and it also
+// RT_EXPORT_ONCE, not the raw DLL door: the raw DLL door IS GetProcAddress and it also
 // bypasses our own ported allocator (reference_rtoriginal_is_getprocaddress.md,
 // and allocator.cpp registers both of these names).
 // ---------------------------------------------------------------------------
@@ -216,7 +215,6 @@ void DrawItemArrayResize(Collection::Array<RendererDrawItem>* self,
 // ============================================================================
 Transform* RtMath_Transform_Lerp(const Transform* self, Transform* ret,
                                  const Transform* other, const Scalar* t) {
-    RT_DIFF_BEGIN("Math::Transform::Lerp");
 
     // The oracle runs the shipped body AFTER ours has written `ret`, and `ret`
     // is allowed to be `self` or `other`. Without these snapshots the original
@@ -225,7 +223,6 @@ Transform* RtMath_Transform_Lerp(const Transform* self, Transform* ret,
     // (reference_oracle_must_snapshot_aliased_inputs.md).
     Transform selfSnap{}, otherSnap{};
     Scalar    tSnap{};
-    if (rt_diff_on__) { selfSnap = *self; otherSnap = *other; tSnap = *t; }
 
     const float tv = t->v;
 
@@ -245,17 +242,6 @@ Transform* RtMath_Transform_Lerp(const Transform* self, Transform* ret,
     ret->translation.y = ry;
     ret->translation.z = rz;
 
-    if (rt_diff_on__) {
-        Transform theirs{};
-        using Fn = Transform* (*)(const Transform*, Transform*, const Transform*,
-                                  const Scalar*);
-        RtOriginal<Fn>("?Lerp@Transform@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z")(
-            &selfSnap, &theirs, &otherSnap, &tSnap);
-        // All 0x1c bytes are written by both sides (quaternion 0x10 +
-        // Vector3 0xc, no padding), so a full compare has no unwritten-byte
-        // gap to trip over.
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Transform));
-    }
     return ret;   // retail returns the hidden slot in RAX
 }
 
@@ -287,12 +273,10 @@ Transform* RtMath_Transform_Lerp(const Transform* self, Transform* ret,
 Transform* RtGraphics_InterpolatedStateTransform_Lerp(const void* self,
                                                       Transform* ret,
                                                       const Scalar* t) {
-    RT_DIFF_BEGIN("Graphics::InterpolatedState<Transform>::Lerp");
 
     // Same aliasing rule as above — `ret` may point into `self`'s own 0x38.
     uint8_t selfSnap[0x38];
     Scalar  tSnap{};
-    if (rt_diff_on__) { std::memcpy(selfSnap, self, sizeof(selfSnap)); tSnap = *t; }
 
     const uint8_t* base = static_cast<const uint8_t*>(self);
     RtMath_Transform_Lerp(reinterpret_cast<const Transform*>(base + 0x1c),
@@ -300,14 +284,6 @@ Transform* RtGraphics_InterpolatedStateTransform_Lerp(const void* self,
                           reinterpret_cast<const Transform*>(base),
                           t);
 
-    if (rt_diff_on__) {
-        Transform theirs{};
-        using Fn = Transform* (*)(const void*, Transform*, const Scalar*);
-        RtOriginal<Fn>(
-            "?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@AEBVScalar@4@@Z")(
-                selfSnap, &theirs, &tSnap);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Transform));
-    }
     return ret;
 }
 
@@ -341,14 +317,12 @@ void RtGraphics_MaterialInstance_RenderTextures(const MaterialInstance* self,
                                                 const void* scene,
                                                 const void* camera,
                                                 int arg) {
-    RT_DIFF_BEGIN("Graphics::MaterialInstance::RenderTextures");
 
     // Effectiveness control: how many calls got past BOTH early-outs and could
     // have dispatched anything at all. A green `calls=` column on a site that
     // always returned at 0x180102e0c would mean nothing
     // (reference_probe_needs_an_effectiveness_control.md).
     const bool didWork = (self->hasRenderedTexture != 0) && (self->textures._size > 0);
-    RT_DIFF_WORK(didWork);
 
     if (self->hasRenderedTexture == 0)
         return;
@@ -417,10 +391,10 @@ void RtGraphics_MaterialInstance_RenderTextures(const MaterialInstance* self,
 // share `_data` with the real group (so "theirs" frees memory the live Renderer
 // still points at) or need a deep copy of a group whose other 0x1c0 bytes this
 // lane does not own. What IS instrumented:
-//   * RT_DIFF_WORK records how many calls reached the append at all, so a
+//   * the diff oracle records how many calls reached the append at all, so a
 //     "clean" run on a site that always dropped cannot read as verification
 //     (reference_uncalled_port_is_not_verified.md);
-//   * RT_DIFF_SHADOW checks that the element the ARRAY HELPER landed in memory
+//   * the diff oracle checks that the element the ARRAY HELPER landed in memory
 //     is byte-identical to the record we handed it, over the 0x34 bytes that
 //     are actually written. That tests THE HELPER — the one piece of new
 //     transcription with a mechanical answer — and it does NOT test the port's
@@ -441,7 +415,6 @@ void RtGraphics_Renderer_AddDrawItem(Renderer* self,
                                      int32_t arg8,
                                      const void* arg9,
                                      uint32_t arg10) {
-    RT_DIFF_BEGIN("Graphics::Renderer::AddDrawItem");
 
     // MOVSXD, both of them — Ghidra's C prints these as zero extensions and
     // that misreading produced three Wave 6 defects including a crash
@@ -454,7 +427,6 @@ void RtGraphics_Renderer_AddDrawItem(Renderer* self,
 
     // (a) BT EAX,R11D — 32-bit BT masks the bit index to 5 bits.
     if (((group->passMask >> (static_cast<uint32_t>(pass) & 31u)) & 1u) == 0u) {
-        RT_DIFF_WORK(false);
         return;
     }
 
@@ -462,9 +434,8 @@ void RtGraphics_Renderer_AddDrawItem(Renderer* self,
     const uint8_t* mtl    = static_cast<const uint8_t*>(material->material);  // +0x28
 
     // (b)
-    if (static_cast<int32_t>(shader) < 0) { RT_DIFF_WORK(false); return; }
+    if (static_cast<int32_t>(shader) < 0) {  return; }
     if (static_cast<int32_t>(shader) >= *reinterpret_cast<const int32_t*>(mtl + 0x30)) {
-        RT_DIFF_WORK(false);
         return;
     }
 
@@ -474,15 +445,14 @@ void RtGraphics_Renderer_AddDrawItem(Renderer* self,
         *reinterpret_cast<const uint8_t* const* const*>(mtl + 0x28);
     const uint8_t* prog = programs[shader];
 
-    if (*reinterpret_cast<const void* const*>(prog + 0x20) == nullptr) { RT_DIFF_WORK(false); return; }
+    if (*reinterpret_cast<const void* const*>(prog + 0x20) == nullptr) {  return; }
     const uint8_t* sub28 = *reinterpret_cast<const uint8_t* const*>(prog + 0x28);
-    if (sub28 == nullptr) { RT_DIFF_WORK(false); return; }
-    if (*reinterpret_cast<const int32_t*>(sub28 + 0x48) <= 0) { RT_DIFF_WORK(false); return; }
+    if (sub28 == nullptr) {  return; }
+    if (*reinterpret_cast<const int32_t*>(sub28 + 0x48) <= 0) {  return; }
     const uint8_t* sub30 = *reinterpret_cast<const uint8_t* const*>(prog + 0x30);
-    if (sub30 == nullptr) { RT_DIFF_WORK(false); return; }
-    if (*reinterpret_cast<const int32_t*>(sub30 + 0x48) <= 0) { RT_DIFF_WORK(false); return; }
+    if (sub30 == nullptr) {  return; }
+    if (*reinterpret_cast<const int32_t*>(sub30 + 0x48) <= 0) {  return; }
 
-    RT_DIFF_WORK(true);
 
     // NOT value-initialised, deliberately: retail's record is a raw stack frame
     // and +0x24 / +0x34 are never stored to before the helper copies all seven
@@ -517,18 +487,6 @@ void RtGraphics_Renderer_AddDrawItem(Renderer* self,
     const int32_t oldSize = list->_size;
     DrawItemArrayResize(list, oldSize + 1, &rec);
 
-    if (rt_diff_on__) {
-        // See the ORACLE paragraph in the banner: this checks the HELPER, not
-        // the port. 0x34 bytes, not 0x38 — +0x34..0x37 is never written, and
-        // +0x24..0x27 is skipped for the same reason.
-        const uint8_t* landed = reinterpret_cast<const uint8_t*>(list->_data + oldSize);
-        const uint8_t* mine   = reinterpret_cast<const uint8_t*>(&rec);
-        const bool ok = list->_size == oldSize + 1 &&
-                        std::memcmp(landed, mine, 0x24) == 0 &&
-                        std::memcmp(landed + 0x28, mine + 0x28, 0x0c) == 0;
-        RT_DIFF_SHADOW(ok, "appended record (0x34 written bytes)",
-                       "array helper's copy");
-    }
 
     // The render-to-texture pre-pass. `hasRenderedTexture` is +0x25, the byte
     // BuildParameters sets when any bound texture's +0x2c == 5.

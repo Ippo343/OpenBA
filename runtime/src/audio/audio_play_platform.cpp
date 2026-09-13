@@ -204,7 +204,6 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_diff.h"
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module m, uintptr_t ghidra_addr);
@@ -366,7 +365,6 @@ void ComputePlayPosition(const void* buf, int64_t nowTicks,
 extern "C" bool RtAudio_Device_PlayPlatform(void* device, int32_t slot, void* bufferRef,
                                             const int64_t* startTime, float vol,
                                             float pitch, float third) {
-    RT_DIFF_BEGIN("Audio::Device::PlayPlatform [attendance only, no oracle]");
     (void)third;  // read by NOTHING in retail -- see the banner
     ++g_calls;
 
@@ -374,8 +372,6 @@ extern "C" bool RtAudio_Device_PlayPlatform(void* device, int32_t slot, void* bu
 
     void* engine = Load<void*>(self, kOffXAudio2);                        // 1800de7b4
     if (!engine) {                                                        // 1800de7c4
-        RT_DIFF_SHADOW(true, "no XAudio2 engine, nothing to do",
-                       "not diffable (starts real audio playback)");
         return false;
     }
 
@@ -392,8 +388,6 @@ extern "C" bool RtAudio_Device_PlayPlatform(void* device, int32_t slot, void* bu
     int32_t hr = createSourceVoice(engine, voiceSlot, pFormat, 0, kMaxFrequencyRatio,
                                    record, nullptr, nullptr);                    // 1800de827
     if (hr != 0) {                                                              // 1800de82a
-        RT_DIFF_SHADOW(true, "CreateSourceVoice failed, no cleanup needed",
-                       "not diffable (starts real audio playback)");
         return false;
     }
     ++g_voicesCreated;
@@ -444,8 +438,6 @@ extern "C" bool RtAudio_Device_PlayPlatform(void* device, int32_t slot, void* bu
         hr = submit(voice, &buf, &wma);                                      // 1800de948
         if (hr != 0) {                                                       // 1800de950
             cleanup();
-            RT_DIFF_SHADOW(true, "SubmitSourceBuffer failed, voice destroyed",
-                           "not diffable (starts real audio playback)");
             return false;
         }
     }
@@ -454,8 +446,6 @@ extern "C" bool RtAudio_Device_PlayPlatform(void* device, int32_t slot, void* bu
     hr = setVolume(voice, vol, 0);                                           // 1800de964
     if (hr != 0) {                                                           // 1800de967
         cleanup();
-        RT_DIFF_SHADOW(true, "SetVolume failed, voice destroyed",
-                       "not diffable (starts real audio playback)");
         return false;
     }
 
@@ -464,8 +454,6 @@ extern "C" bool RtAudio_Device_PlayPlatform(void* device, int32_t slot, void* bu
     hr = setFreqRatio(voice, ratio, 0);                                      // 1800de998
     if (hr != 0) {                                                           // 1800de9ae
         cleanup();  // SetFrequencyRatio failure skips Start entirely
-        RT_DIFF_SHADOW(true, "SetFrequencyRatio failed, voice destroyed",
-                       "not diffable (starts real audio playback)");
         return false;
     }
 
@@ -473,8 +461,6 @@ extern "C" bool RtAudio_Device_PlayPlatform(void* device, int32_t slot, void* bu
     hr = start(voice, 0, 0);                                                 // 1800de9b5
     if (hr != 0) {                                                           // 1800de9bd
         cleanup();
-        RT_DIFF_SHADOW(true, "Start failed, voice destroyed",
-                       "not diffable (starts real audio playback)");
         return false;
     }
 
@@ -488,8 +474,6 @@ extern "C" bool RtAudio_Device_PlayPlatform(void* device, int32_t slot, void* bu
         if (streamPlay) streamPlay(self + kDeviceStreamOffset, slot, bytePos);  // 1800de9e4
     }
 
-    RT_DIFF_SHADOW(true, "voice created and playback started",
-                   "not diffable (starts real audio playback)");
     return true;                                                             // 1800de9e9
 }
 

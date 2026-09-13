@@ -197,8 +197,8 @@ const float kBigNeg       = -1.0e8f;
 
 // ============================================================================
 // The DLL internals this port calls, each resolved once per call site.
-// ResolveAddr and NOT ResolveExport/RtOriginal: none of the FUN_ ones is
-// exported, and RtOriginal is GetProcAddress, which must never sit on a
+// ResolveAddr and NOT ResolveExport/the raw DLL door: none of the FUN_ ones is
+// exported, and the raw DLL door is GetProcAddress, which must never sit on a
 // normal-run path (reference_rtoriginal_is_getprocaddress.md — two such calls
 // cost Wave 2 five points of sim time, invisible to both profilers).
 // ============================================================================
@@ -391,7 +391,7 @@ Matrix* RtTransformAsMatrix(const Transform* xf, Matrix* ret) {
 // registry FIRST — so every one of these now executes our body. Their closure
 // went with them: 0x18005f4b0 (the thread-in, in that same file) and
 // 0x18005fb00 (Array<Scene::Node>::SetSize, added to lane Q's family in
-// runtime/src/collection/array.cpp). Kill switch `BANISHED_RT_GFXGRID=0` puts
+// runtime/src/collection/array.cpp). Kill switch `RT_GFXGRID=0` puts
 // all five back on the DLL.
 //
 // The descriptions kept below are what each retail body does and are still
@@ -655,7 +655,6 @@ void DetachBody(Geometry* self, Geometry* child) {
 // destructor: its _attached Array is null.
 // ============================================================================
 extern "C" Geometry* RtGraphics_Geometry_Ctor(Geometry* self) {
-    RT_DIFF_BEGIN("Graphics::Geometry::Geometry()");
 
     self->_vtable            = RtGeometryVtable();
     self->_attachParent      = nullptr;
@@ -707,29 +706,6 @@ extern "C" Geometry* RtGraphics_Geometry_Ctor(Geometry* self) {
     self->_prevTransform.translation.y = 0.0f;
     self->_prevTransform.translation.z = 0.0f;
 
-    if (rt_diff_on__) {
-        Geometry theirs;
-        std::memset(&theirs, 0xCD, sizeof(theirs));
-        typedef Geometry* (*CtorFn)(Geometry*);
-        RtOriginal<CtorFn>(kGeoCtor)(&theirs);
-
-        const PostCheck checks[] = {
-            { "first differing byte", GeometryFirstDiff(self, &theirs), -1 },
-            { "vtable", (long long)(intptr_t)self->_vtable,
-                        (long long)(intptr_t)theirs._vtable },
-        };
-        char a[128], b[128];
-        const int bad = RtFirstFailure(checks, 2, a, sizeof(a), b, sizeof(b));
-        if (bad < 0) {
-            std::snprintf(a, sizeof(a), "vt=%p flags=%u detail=%d op=%g",
-                          self->_vtable, self->_dirtyFlags, self->_detailId,
-                          (double)self->_opacity);
-            std::snprintf(b, sizeof(b), "vt=%p flags=%u detail=%d op=%g",
-                          theirs._vtable, theirs._dirtyFlags, theirs._detailId,
-                          (double)theirs._opacity);
-        }
-        RT_DIFF_SHADOW(bad < 0, a, b);
-    }
     return self;   // retail returns `this` in RAX
 }
 
@@ -748,29 +724,12 @@ extern "C" Geometry* RtGraphics_Geometry_Ctor(Geometry* self) {
 // retail's body must leave behind.
 // ============================================================================
 extern "C" void RtGraphics_Geometry_Dtor(Geometry* self) {
-    RT_DIFF_BEGIN("Graphics::Geometry::~Geometry()");
 
     self->_vtable = RtGeometryVtable();
     while (self->_attached._size > 0)
         DetachBody(self, self->_attached._data[0]);
     RtFreeArrayPtr(&self->_attached);
 
-    if (rt_diff_on__) {
-        const PostCheck checks[] = {
-            { "_attached._data",     (long long)(intptr_t)self->_attached._data, 0 },
-            { "_attached._size",     self->_attached._size,     0 },
-            { "_attached._capacity", self->_attached._capacity, 0 },
-            { "vtable", (long long)(intptr_t)self->_vtable,
-                        (long long)(intptr_t)RtGeometryVtable() },
-        };
-        char a[128], b[128];
-        const int bad = RtFirstFailure(checks, 4, a, sizeof(a), b, sizeof(b));
-        if (bad < 0) {
-            std::snprintf(a, sizeof(a), "detached all, array freed");
-            std::snprintf(b, sizeof(b), "detached all, array freed");
-        }
-        RT_DIFF_SHADOW(bad < 0, a, b);
-    }
 }
 
 // ============================================================================
@@ -790,7 +749,6 @@ extern "C" void RtGraphics_Geometry_Dtor(Geometry* self) {
 // one, and the child no longer appears anywhere in the parent's array.
 // ============================================================================
 extern "C" void RtGraphics_Geometry_Detach(Geometry* self, Geometry* child) {
-    RT_DIFF_BEGIN("Graphics::Geometry::Detach");
 
     const int32_t sizeBefore = self->_attached._size;
     bool wasPresent = false;
@@ -799,30 +757,6 @@ extern "C" void RtGraphics_Geometry_Detach(Geometry* self, Geometry* child) {
 
     DetachBody(self, child);
 
-    if (rt_diff_on__) {
-        int stillThere = 0;
-        for (int32_t i = 0; i < self->_attached._size; ++i)
-            if (self->_attached._data[i] == child) ++stillThere;
-
-        const PostCheck checks[] = {
-            { "_attached._size", self->_attached._size,
-              wasPresent ? sizeBefore - 1 : sizeBefore },
-            { "child still in parent array", stillThere, 0 },
-            { "child->_attachParent", (long long)(intptr_t)child->_attachParent,
-              wasPresent ? 0 : (long long)(intptr_t)child->_attachParent },
-            { "child->_attachNode", child->_attachNode,
-              wasPresent ? -1 : child->_attachNode },
-        };
-        char a[128], b[128];
-        const int bad = RtFirstFailure(checks, 4, a, sizeof(a), b, sizeof(b));
-        if (bad < 0) {
-            std::snprintf(a, sizeof(a), "size %d->%d present=%d",
-                          sizeBefore, self->_attached._size, (int)wasPresent);
-            std::snprintf(b, sizeof(b), "size %d->%d present=%d",
-                          sizeBefore, self->_attached._size, (int)wasPresent);
-        }
-        RT_DIFF_SHADOW(bad < 0, a, b);
-    }
 }
 
 // ============================================================================
@@ -836,18 +770,8 @@ extern "C" void RtGraphics_Geometry_Detach(Geometry* self, Geometry* child) {
 // (UpdateAttached). Retail's compare order is translation first, then rotation,
 // and the `!=` is a float compare, so a NaN in either always counts as changed.
 //
-// ORACLE: FULL REPLAY when the geometry has no children, post-state otherwise.
-// The replay is safe because SetTransform's entire effect is 0xC0 self-contained
-// bytes: snapshot, run ours, snapshot, restore, run theirs, compare, restore
-// ours. With children the tail call reaches into other objects (and, for a
-// subclass, into DLL code we cannot undo), so no replay is attempted there.
 // ============================================================================
 extern "C" void RtGraphics_Geometry_SetTransform(Geometry* self, const Transform* xf) {
-    RT_DIFF_BEGIN("Graphics::Geometry::SetTransform");
-
-    Geometry before;
-    const bool replayable = rt_diff_on__ && self->_attached._size <= 0;
-    if (replayable) std::memcpy(&before, self, sizeof(Geometry));
 
     bool tailCall = false;
     if (TransformDiffers(&self->_transform, xf)) {
@@ -855,48 +779,6 @@ extern "C" void RtGraphics_Geometry_SetTransform(Geometry* self, const Transform
         self->_transform     = *xf;
         self->_dirtyFlags   |= 3u;
         tailCall = self->_attached._size > 0;
-    }
-
-    // The shadow report is emitted BEFORE the tail call on the child-bearing
-    // path: retail's `JMP vt+0x20` never comes back here, and the report has to
-    // describe the state SetTransform itself produced, not the state
-    // UpdateAttached left behind. With BANISHED_RT_DIFF unset this whole block
-    // is one already-false bool test.
-    if (rt_diff_on__) {
-        char a[128], b[128];
-        bool ok;
-        if (replayable) {
-            Geometry ours;
-            std::memcpy(&ours, self, sizeof(Geometry));
-            std::memcpy(self, &before, sizeof(Geometry));
-            typedef void (*Fn)(Geometry*, const Transform*);
-            RtOriginal<Fn>(kGeoSetXform)(self, xf);
-            const long long d = GeometryFirstDiff(&ours, self);
-            std::memcpy(self, &ours, sizeof(Geometry));
-            const PostCheck checks[] = { { "first differing byte", d, -1 } };
-            ok = RtFirstFailure(checks, 1, a, sizeof(a), b, sizeof(b)) < 0;
-            if (ok) {
-                std::snprintf(a, sizeof(a), "replay byte-identical flags=%u", self->_dirtyFlags);
-                std::snprintf(b, sizeof(b), "replay byte-identical flags=%u", self->_dirtyFlags);
-            }
-        } else {
-            // `tailCall` is only true when the compare found a difference, so
-            // the dirty-bit term is asserted only on the path that raises it.
-            const PostCheck checks[] = {
-                { "transform accepted",
-                  TransformDiffers(&self->_transform, xf) ? 1 : 0, 0 },
-                { "dirty bits 0|1 raised",
-                  tailCall ? ((self->_dirtyFlags & 3u) == 3u ? 1 : 0) : 1, 1 },
-            };
-            ok = RtFirstFailure(checks, 2, a, sizeof(a), b, sizeof(b)) < 0;
-            if (ok) {
-                std::snprintf(a, sizeof(a), "children=%d flags=%u",
-                              self->_attached._size, self->_dirtyFlags);
-                std::snprintf(b, sizeof(b), "children=%d flags=%u",
-                              self->_attached._size, self->_dirtyFlags);
-            }
-        }
-        RT_DIFF_SHADOW(ok, a, b);
     }
 
     if (tailCall)
@@ -923,7 +805,6 @@ extern "C" void RtGraphics_Geometry_SetTransform(Geometry* self, const Transform
 // ORACLE: post-state.
 // ============================================================================
 extern "C" void RtGraphics_Geometry_Attach(Geometry* self, Geometry* child, int node) {
-    RT_DIFF_BEGIN("Graphics::Geometry::Attach");
 
     const int32_t sizeBefore = self->_attached._size;
 
@@ -939,32 +820,6 @@ extern "C" void RtGraphics_Geometry_Attach(Geometry* self, Geometry* child, int 
     Transform* p = VGetSubTransform(self, &sub, node);
     RtGraphics_Geometry_SetTransform(child, p);
 
-    if (rt_diff_on__) {
-        // The parent's size only grows by one when the child was not ALREADY a
-        // child of this same parent — in that case Detach removed it first.
-        const bool selfReattach = (sizeBefore > 0) && (self->_attached._size == sizeBefore);
-        const PostCheck checks[] = {
-            { "_attached._size", self->_attached._size,
-              selfReattach ? sizeBefore : sizeBefore + 1 },
-            { "last element is the child",
-              (long long)(intptr_t)self->_attached._data[self->_attached._size - 1],
-              (long long)(intptr_t)child },
-            { "child->_attachParent", (long long)(intptr_t)child->_attachParent,
-              (long long)(intptr_t)self },
-            { "child->_attachNode", child->_attachNode, node },
-            { "child transform == parent sub-transform",
-              TransformDiffers(&child->_transform, p) ? 1 : 0, 0 },
-        };
-        char a[128], b[128];
-        const int bad = RtFirstFailure(checks, 5, a, sizeof(a), b, sizeof(b));
-        if (bad < 0) {
-            std::snprintf(a, sizeof(a), "size %d->%d node=%d",
-                          sizeBefore, self->_attached._size, node);
-            std::snprintf(b, sizeof(b), "size %d->%d node=%d",
-                          sizeBefore, self->_attached._size, node);
-        }
-        RT_DIFF_SHADOW(bad < 0, a, b);
-    }
 }
 
 // ============================================================================
@@ -987,7 +842,6 @@ extern "C" void RtGraphics_Geometry_Attach(Geometry* self, Geometry* child, int 
 // sub-transform for its node.
 // ============================================================================
 extern "C" void RtGraphics_Geometry_UpdateAttached(Geometry* self) {
-    RT_DIFF_BEGIN("Graphics::Geometry::UpdateAttached");
 
     int i = 0;
     if (self->_attached._size > 0) {
@@ -1011,25 +865,6 @@ extern "C" void RtGraphics_Geometry_UpdateAttached(Geometry* self) {
         } while (i < self->_attached._size);
     }
 
-    if (rt_diff_on__) {
-        long long firstStale = -1;
-        for (int32_t k = 0; k < self->_attached._size; ++k) {
-            Geometry* child = self->_attached._data[k];
-            Transform sub;
-            Transform* p = VGetSubTransform(self, &sub, child->_attachNode);
-            if (TransformDiffers(&child->_transform, p)) { firstStale = k; break; }
-        }
-        const PostCheck checks[] = {
-            { "first child still stale", firstStale, -1 },
-        };
-        char a[128], b[128];
-        const int bad = RtFirstFailure(checks, 1, a, sizeof(a), b, sizeof(b));
-        if (bad < 0) {
-            std::snprintf(a, sizeof(a), "%d children up to date", self->_attached._size);
-            std::snprintf(b, sizeof(b), "%d children up to date", self->_attached._size);
-        }
-        RT_DIFF_SHADOW(bad < 0, a, b);
-    }
 }
 
 // ============================================================================
@@ -1063,10 +898,8 @@ extern "C" void RtGraphics_Geometry_UpdateAttached(Geometry* self) {
 // from the same snapshot and be compared byte for byte, return value included.
 // ============================================================================
 extern "C" bool RtGraphics_Geometry_Clean(Geometry* self) {
-    RT_DIFF_BEGIN("Graphics::Geometry::Clean");
 
     Geometry before;
-    if (rt_diff_on__) std::memcpy(&before, self, sizeof(Geometry));
 
     uint32_t f = self->_dirtyFlags;
     bool changed = false;
@@ -1112,27 +945,6 @@ extern "C" bool RtGraphics_Geometry_Clean(Geometry* self) {
     if ((f & 4u) != 0) self->_dirtyFlags = (f & ~4u) | 0x20u;
     else               self->_dirtyFlags = f & ~0x20u;
 
-    if (rt_diff_on__) {
-        Geometry ours;
-        std::memcpy(&ours, self, sizeof(Geometry));
-        std::memcpy(self, &before, sizeof(Geometry));
-        typedef bool (*Fn)(Geometry*);
-        const bool theirs = RtOriginal<Fn>(kGeoClean)(self);
-        const long long d = GeometryFirstDiff(&ours, self);
-        std::memcpy(self, &ours, sizeof(Geometry));
-
-        const PostCheck checks[] = {
-            { "return value",        changed ? 1 : 0, theirs ? 1 : 0 },
-            { "first differing byte", d, -1 },
-        };
-        char a[128], b[128];
-        const int bad = RtFirstFailure(checks, 2, a, sizeof(a), b, sizeof(b));
-        if (bad < 0) {
-            std::snprintf(a, sizeof(a), "ret=%d flags=%u", (int)changed, self->_dirtyFlags);
-            std::snprintf(b, sizeof(b), "ret=%d flags=%u", (int)theirs, self->_dirtyFlags);
-        }
-        RT_DIFF_SHADOW(bad < 0, a, b);
-    }
     return changed;
 }
 
@@ -1148,10 +960,8 @@ extern "C" bool RtGraphics_Geometry_Clean(Geometry* self) {
 // ORACLE: FULL REPLAY. Self-contained, no callees, no allocation.
 // ============================================================================
 extern "C" void RtGraphics_Geometry_SetBounds(Geometry* self, const Box* box) {
-    RT_DIFF_BEGIN("Graphics::Geometry::SetBounds");
 
     Geometry before;
-    if (rt_diff_on__) std::memcpy(&before, self, sizeof(Geometry));
 
     if (self->_localBounds.min.x != box->min.x ||
         self->_localBounds.min.y != box->min.y ||
@@ -1163,24 +973,6 @@ extern "C" void RtGraphics_Geometry_SetBounds(Geometry* self, const Box* box) {
         self->_dirtyFlags |= 2u;
     }
 
-    if (rt_diff_on__) {
-        Geometry ours;
-        std::memcpy(&ours, self, sizeof(Geometry));
-        std::memcpy(self, &before, sizeof(Geometry));
-        typedef void (*Fn)(Geometry*, const Box*);
-        RtOriginal<Fn>(kGeoSetBounds)(self, box);
-        const long long d = GeometryFirstDiff(&ours, self);
-        std::memcpy(self, &ours, sizeof(Geometry));
-
-        const PostCheck checks[] = { { "first differing byte", d, -1 } };
-        char a[128], b[128];
-        const int bad = RtFirstFailure(checks, 1, a, sizeof(a), b, sizeof(b));
-        if (bad < 0) {
-            std::snprintf(a, sizeof(a), "replay byte-identical flags=%u", self->_dirtyFlags);
-            std::snprintf(b, sizeof(b), "replay byte-identical flags=%u", self->_dirtyFlags);
-        }
-        RT_DIFF_SHADOW(bad < 0, a, b);
-    }
 }
 
 // ============================================================================
@@ -1196,29 +988,7 @@ extern "C" void RtGraphics_Geometry_SetBounds(Geometry* self, const Box* box) {
 // compared.
 // ============================================================================
 extern "C" Transform* RtGraphics_Geometry_GetTransform(const Geometry* self, Transform* ret) {
-    RT_DIFF_BEGIN("Graphics::Geometry::GetTransform");
     *ret = self->_transform;
-    if (rt_diff_on__) {
-        Transform theirs;
-        std::memset(&theirs, 0xCD, sizeof(theirs));
-        typedef Transform* (*Fn)(const Geometry*, Transform*);
-        RtOriginal<Fn>(kGeoGetXform)(self, &theirs);
-        const PostCheck checks[] = {
-            { "first differing byte",
-              RtFirstByteDiff(ret, &theirs, sizeof(Transform)), -1 },
-        };
-        char a[128], b[128];
-        const int bad = RtFirstFailure(checks, 1, a, sizeof(a), b, sizeof(b));
-        if (bad < 0) {
-            std::snprintf(a, sizeof(a), "t=(%.9g,%.9g,%.9g)",
-                          (double)ret->translation.x, (double)ret->translation.y,
-                          (double)ret->translation.z);
-            std::snprintf(b, sizeof(b), "t=(%.9g,%.9g,%.9g)",
-                          (double)theirs.translation.x, (double)theirs.translation.y,
-                          (double)theirs.translation.z);
-        }
-        RT_DIFF_SHADOW(bad < 0, a, b);
-    }
     return ret;   // retail returns the hidden slot in RAX
 }
 
@@ -1238,30 +1008,8 @@ extern "C" Transform* RtGraphics_Geometry_GetTransform(const Geometry* self, Tra
 // ============================================================================
 extern "C" Transform* RtGraphics_Geometry_GetSubTransform(const Geometry* self,
                                                           Transform* ret, int node) {
-    RT_DIFF_BEGIN("Graphics::Geometry::GetSubTransform");
     (void)node;   // retail ignores it in the base body
     *ret = self->_transform;
-    if (rt_diff_on__) {
-        Transform theirs;
-        std::memset(&theirs, 0xCD, sizeof(theirs));
-        typedef Transform* (*Fn)(const Geometry*, Transform*, int);
-        RtOriginal<Fn>(kGeoGetSub)(self, &theirs, node);
-        const PostCheck checks[] = {
-            { "first differing byte",
-              RtFirstByteDiff(ret, &theirs, sizeof(Transform)), -1 },
-        };
-        char a[128], b[128];
-        const int bad = RtFirstFailure(checks, 1, a, sizeof(a), b, sizeof(b));
-        if (bad < 0) {
-            std::snprintf(a, sizeof(a), "node=%d t=(%.9g,%.9g,%.9g)", node,
-                          (double)ret->translation.x, (double)ret->translation.y,
-                          (double)ret->translation.z);
-            std::snprintf(b, sizeof(b), "node=%d t=(%.9g,%.9g,%.9g)", node,
-                          (double)theirs.translation.x, (double)theirs.translation.y,
-                          (double)theirs.translation.z);
-        }
-        RT_DIFF_SHADOW(bad < 0, a, b);
-    }
     return ret;
 }
 
@@ -1284,7 +1032,6 @@ extern "C" Transform* RtGraphics_Geometry_GetSubTransform(const Geometry* self,
 // ============================================================================
 extern "C" Matrix* RtGraphics_Geometry_GetInstanceTransform(const Geometry* self, Matrix* ret,
                                                             int node, float t) {
-    RT_DIFF_BEGIN("Graphics::Geometry::GetInstanceTransform");
     (void)node;   // retail ignores it in the base body
 
     const float py = self->_prevTransform.translation.y;
@@ -1303,25 +1050,6 @@ extern "C" Matrix* RtGraphics_Geometry_GetInstanceTransform(const Geometry* self
     tmp.translation.z = pz + (cz - pz) * t;
     RtTransformAsMatrix(&tmp, ret);
 
-    if (rt_diff_on__) {
-        Matrix theirs;
-        std::memset(&theirs, 0xCD, sizeof(theirs));
-        typedef Matrix* (*Fn)(const Geometry*, Matrix*, int, float);
-        RtOriginal<Fn>(kGeoGetInst)(self, &theirs, node, t);
-        const PostCheck checks[] = {
-            { "first differing byte",
-              RtFirstByteDiff(ret, &theirs, sizeof(Matrix)), -1 },
-        };
-        char a[128], b[128];
-        const int bad = RtFirstFailure(checks, 1, a, sizeof(a), b, sizeof(b));
-        if (bad < 0) {
-            std::snprintf(a, sizeof(a), "t=%g m12..14=(%.9g,%.9g,%.9g)", (double)t,
-                          (double)ret->m[12], (double)ret->m[13], (double)ret->m[14]);
-            std::snprintf(b, sizeof(b), "t=%g m12..14=(%.9g,%.9g,%.9g)", (double)t,
-                          (double)theirs.m[12], (double)theirs.m[13], (double)theirs.m[14]);
-        }
-        RT_DIFF_SHADOW(bad < 0, a, b);
-    }
     return ret;
 }
 
@@ -1340,14 +1068,8 @@ extern "C" Matrix* RtGraphics_Geometry_GetInstanceTransform(const Geometry* self
 // ============================================================================
 extern "C" int RtGraphics_Geometry_SetSharedInstanceData(const Geometry* self, void* context,
                                                          int node, float t) {
-    RT_DIFF_BEGIN("Graphics::Geometry::SetSharedInstanceData");
     (void)context; (void)node; (void)t;
     const int ours = 0;
-    if (rt_diff_on__) {
-        typedef int (*Fn)(const Geometry*, void*, int, float);
-        const int theirs = RtOriginal<Fn>(kGeoSetShared)(self, context, node, t);
-        RT_DIFF_SCALAR(ours, theirs);
-    }
     return ours;
 }
 
@@ -1370,81 +1092,12 @@ extern "C" int RtGraphics_Geometry_SetSharedInstanceData(const Geometry* self, v
 // minimap's), not per frame.
 // ============================================================================
 extern "C" Scene* RtGraphics_Scene_Ctor(Scene* self) {
-    RT_DIFF_BEGIN("Graphics::Scene::Scene()");
 
     RtSceneGridInit(self, kSceneCellSize);
     self->_globals._head  = nullptr;
     self->_globals._tail  = nullptr;
     self->_globals._count = 0;
 
-    if (rt_diff_on__) {
-        Scene theirs;
-        std::memset(&theirs, 0xCD, sizeof(theirs));
-        typedef Scene* (*CtorFn)(Scene*);
-        RtOriginal<CtorFn>(kSceneCtor)(&theirs);
-
-        const long long headsDiff =
-            (self->_cellHeads._data && theirs._cellHeads._data &&
-             self->_cellHeads._size == theirs._cellHeads._size)
-                ? RtFirstIntDiff(self->_cellHeads._data, theirs._cellHeads._data,
-                                 self->_cellHeads._size)
-                : -2;
-        const long long countsDiff =
-            (self->_cellCounts._data && theirs._cellCounts._data &&
-             self->_cellCounts._size == theirs._cellCounts._size)
-                ? RtFirstIntDiff(self->_cellCounts._data, theirs._cellCounts._data,
-                                 self->_cellCounts._size)
-                : -2;
-        const long long levelsDiff =
-            (self->_levelOffsets._data && theirs._levelOffsets._data &&
-             self->_levelOffsets._size == theirs._levelOffsets._size)
-                ? RtFirstIntDiff(self->_levelOffsets._data, theirs._levelOffsets._data,
-                                 self->_levelOffsets._size)
-                : -2;
-
-        const PostCheck checks[] = {
-            { "_cellSize(bits)",  (long long)*reinterpret_cast<const uint32_t*>(&self->_cellSize),
-                                  (long long)*reinterpret_cast<const uint32_t*>(&theirs._cellSize) },
-            { "_halfCellX(bits)", (long long)*reinterpret_cast<const uint32_t*>(&self->_halfCellX),
-                                  (long long)*reinterpret_cast<const uint32_t*>(&theirs._halfCellX) },
-            { "_halfCellY(bits)", (long long)*reinterpret_cast<const uint32_t*>(&self->_halfCellY),
-                                  (long long)*reinterpret_cast<const uint32_t*>(&theirs._halfCellY) },
-            { "_levelCount",         self->_levelCount,         theirs._levelCount },
-            { "_nodes._data",        (long long)(intptr_t)self->_nodes._data,
-                                     (long long)(intptr_t)theirs._nodes._data },
-            { "_nodes._size",        self->_nodes._size,        theirs._nodes._size },
-            { "_nodes._capacity",    self->_nodes._capacity,    theirs._nodes._capacity },
-            { "_freeIds._data",      (long long)(intptr_t)self->_freeIds._data,
-                                     (long long)(intptr_t)theirs._freeIds._data },
-            { "_freeIds._size",      self->_freeIds._size,      theirs._freeIds._size },
-            { "_freeIds._capacity",  self->_freeIds._capacity,  theirs._freeIds._capacity },
-            { "_cellHeads._size",    self->_cellHeads._size,    theirs._cellHeads._size },
-            { "_cellHeads._capacity",self->_cellHeads._capacity,theirs._cellHeads._capacity },
-            { "_cellHeads[i] first differing i", headsDiff, -1 },
-            { "_levelOffsets._size", self->_levelOffsets._size, theirs._levelOffsets._size },
-            { "_levelOffsets[i] first differing i", levelsDiff, -1 },
-            { "_cellCounts._size",   self->_cellCounts._size,   theirs._cellCounts._size },
-            { "_cellCounts[i] first differing i", countsDiff, -1 },
-            { "_globals._head", (long long)(intptr_t)self->_globals._head,
-                                (long long)(intptr_t)theirs._globals._head },
-            { "_globals._tail", (long long)(intptr_t)self->_globals._tail,
-                                (long long)(intptr_t)theirs._globals._tail },
-            { "_globals._count", self->_globals._count, theirs._globals._count },
-        };
-        char a[128], b[128];
-        const int bad = RtFirstFailure(checks, (int)(sizeof(checks) / sizeof(checks[0])),
-                                       a, sizeof(a), b, sizeof(b));
-        if (bad < 0) {
-            std::snprintf(a, sizeof(a), "cell=%g levels=%d heads=%d",
-                          (double)self->_cellSize, self->_levelCount, self->_cellHeads._size);
-            std::snprintf(b, sizeof(b), "cell=%g levels=%d heads=%d",
-                          (double)theirs._cellSize, theirs._levelCount, theirs._cellHeads._size);
-        }
-        RT_DIFF_SHADOW(bad < 0, a, b);
-
-        typedef void (*DtorFn)(Scene*);
-        RtOriginal<DtorFn>(kSceneDtor)(&theirs);
-    }
     return self;   // retail returns `this` in RAX
 }
 
@@ -1472,7 +1125,6 @@ extern "C" Scene* RtGraphics_Scene_Ctor(Scene* self) {
 // (BANISHED_REDZONE=watch) can say that.
 // ============================================================================
 extern "C" void RtGraphics_Scene_Dtor(Scene* self) {
-    RT_DIFF_BEGIN("Graphics::Scene::~Scene()");
 
     RtSceneFreeGlobals(&self->_globals);   // +0x60
     RtFreeArrayI32(&self->_cellCounts);    // +0x50
@@ -1481,31 +1133,6 @@ extern "C" void RtGraphics_Scene_Dtor(Scene* self) {
     RtFreeArrayI32(&self->_freeIds);       // +0x20
     RtFreeArrayNode(&self->_nodes);        // +0x10
 
-    if (rt_diff_on__) {
-        const PostCheck checks[] = {
-            { "_globals._head",  (long long)(intptr_t)self->_globals._head, 0 },
-            { "_globals._tail",  (long long)(intptr_t)self->_globals._tail, 0 },
-            { "_globals._count", self->_globals._count, 0 },
-            { "_cellCounts._data",   (long long)(intptr_t)self->_cellCounts._data,   0 },
-            { "_cellCounts._size",   self->_cellCounts._size,   0 },
-            { "_levelOffsets._data", (long long)(intptr_t)self->_levelOffsets._data, 0 },
-            { "_levelOffsets._size", self->_levelOffsets._size, 0 },
-            { "_cellHeads._data",    (long long)(intptr_t)self->_cellHeads._data,    0 },
-            { "_cellHeads._size",    self->_cellHeads._size,    0 },
-            { "_freeIds._data",      (long long)(intptr_t)self->_freeIds._data,      0 },
-            { "_freeIds._size",      self->_freeIds._size,      0 },
-            { "_nodes._data",        (long long)(intptr_t)self->_nodes._data,        0 },
-            { "_nodes._size",        self->_nodes._size,        0 },
-        };
-        char a[128], b[128];
-        const int bad = RtFirstFailure(checks, (int)(sizeof(checks) / sizeof(checks[0])),
-                                       a, sizeof(a), b, sizeof(b));
-        if (bad < 0) {
-            std::snprintf(a, sizeof(a), "list empty, five arrays cleared");
-            std::snprintf(b, sizeof(b), "list empty, five arrays cleared");
-        }
-        RT_DIFF_SHADOW(bad < 0, a, b);
-    }
 }
 
 // ============================================================================
@@ -1525,7 +1152,6 @@ extern "C" void RtGraphics_Scene_Dtor(Scene* self) {
 // cannot be replayed; what is checked is the node the returned id names.
 // ============================================================================
 extern "C" SceneObjectId RtGraphics_Scene_AddObject(Scene* self, Geometry* geo) {
-    RT_DIFF_BEGIN("Graphics::Scene::AddObject");
 
     if (geo->_dirtyFlags != 0)
         VClean(geo);
@@ -1533,28 +1159,6 @@ extern "C" SceneObjectId RtGraphics_Scene_AddObject(Scene* self, Geometry* geo) 
     Geometry* local = geo;
     const SceneObjectId id = RtSceneGridAdd(self, &local);
 
-    if (rt_diff_on__) {
-        const bool inRange = self->_nodes._data != nullptr &&
-                             static_cast<int32_t>(id) >= 0 &&
-                             static_cast<int32_t>(id) < self->_nodes._size;
-        const SceneNode* node = inRange ? &self->_nodes._data[static_cast<int32_t>(id)] : nullptr;
-        const PostCheck checks[] = {
-            { "id in node range", inRange ? 1 : 0, 1 },
-            { "node->_object", node ? (long long)(intptr_t)node->_object : -1,
-                               (long long)(intptr_t)geo },
-            { "node->_cell >= 0", node ? (node->_cell >= 0 ? 1 : 0) : 0, 1 },
-            { "geometry cleaned", (geo->_dirtyFlags & 7u) == 0 ? 1 : 0, 1 },
-        };
-        char a[128], b[128];
-        const int bad = RtFirstFailure(checks, 4, a, sizeof(a), b, sizeof(b));
-        if (bad < 0) {
-            std::snprintf(a, sizeof(a), "id=%u cell=%d nodes=%u", id,
-                          node ? node->_cell : -1, (unsigned)self->_nodes._size);
-            std::snprintf(b, sizeof(b), "id=%u cell=%d nodes=%u", id,
-                          node ? node->_cell : -1, (unsigned)self->_nodes._size);
-        }
-        RT_DIFF_SHADOW(bad < 0, a, b);
-    }
     return id;
 }
 
@@ -1580,7 +1184,6 @@ extern "C" SceneObjectId RtGraphics_Scene_AddObject(Scene* self, Geometry* geo) 
 // ORACLE: post-state.
 // ============================================================================
 extern "C" void RtGraphics_Scene_RemoveObject(Scene* self, SceneObjectId id) {
-    RT_DIFF_BEGIN("Graphics::Scene::RemoveObject");
 
     SceneNode* node = &self->_nodes._data[static_cast<int32_t>(id)];
     const SceneObjectId local = id;
@@ -1595,28 +1198,6 @@ extern "C" void RtGraphics_Scene_RemoveObject(Scene* self, SceneObjectId id) {
     const int32_t freeBefore = self->_freeIds._size;
     RtArrayU32SetSize(&self->_freeIds, self->_freeIds._size + 1, &local);
 
-    if (rt_diff_on__) {
-        const PostCheck checks[] = {
-            { "node->_object", (long long)(intptr_t)node->_object, 0 },
-            { "node->_next",   node->_next, 0 },
-            { "node->_prev",   node->_prev, 0 },
-            { "node->_cell",   node->_cell, -1 },
-            { "_freeIds._size", self->_freeIds._size, freeBefore + 1 },
-            { "_freeIds back",  self->_freeIds._size > 0
-                                    ? (long long)self->_freeIds._data[self->_freeIds._size - 1]
-                                    : -1,
-                                (long long)id },
-        };
-        char a[128], b[128];
-        const int bad = RtFirstFailure(checks, 6, a, sizeof(a), b, sizeof(b));
-        if (bad < 0) {
-            std::snprintf(a, sizeof(a), "id=%u freed, free list %d->%d",
-                          id, freeBefore, self->_freeIds._size);
-            std::snprintf(b, sizeof(b), "id=%u freed, free list %d->%d",
-                          id, freeBefore, self->_freeIds._size);
-        }
-        RT_DIFF_SHADOW(bad < 0, a, b);
-    }
 }
 
 // ============================================================================
@@ -1643,7 +1224,6 @@ extern "C" void RtGraphics_Scene_RemoveObject(Scene* self, SceneObjectId id) {
 // ORACLE: post-state.
 // ============================================================================
 extern "C" void RtGraphics_Scene_AddGlobalObject(Scene* self, Geometry* geo) {
-    RT_DIFF_BEGIN("Graphics::Scene::AddGlobalObject");
 
     typedef Collection::LinkedList<Geometry*>::Node Node;
     const int32_t countBefore = self->_globals._count;
@@ -1666,24 +1246,6 @@ extern "C" void RtGraphics_Scene_AddGlobalObject(Scene* self, Geometry* geo) {
     self->_globals._tail = node;
     self->_globals._count += 1;
 
-    if (rt_diff_on__) {
-        const PostCheck checks[] = {
-            { "_globals._count", self->_globals._count, countBefore + 1 },
-            { "_globals._tail",  (long long)(intptr_t)self->_globals._tail,
-                                 (long long)(intptr_t)node },
-            { "tail->element",   node ? (long long)(intptr_t)node->element : -1,
-                                 (long long)(intptr_t)geo },
-            { "tail->next",      node ? (long long)(intptr_t)node->next : -1, 0 },
-            { "head set",        self->_globals._head != nullptr ? 1 : 0, 1 },
-        };
-        char a[128], b[128];
-        const int bad = RtFirstFailure(checks, 5, a, sizeof(a), b, sizeof(b));
-        if (bad < 0) {
-            std::snprintf(a, sizeof(a), "globals %d->%d", countBefore, self->_globals._count);
-            std::snprintf(b, sizeof(b), "globals %d->%d", countBefore, self->_globals._count);
-        }
-        RT_DIFF_SHADOW(bad < 0, a, b);
-    }
 }
 
 // ============================================================================
@@ -1699,7 +1261,6 @@ extern "C" void RtGraphics_Scene_AddGlobalObject(Scene* self, Geometry* geo) {
 // ORACLE: post-state.
 // ============================================================================
 extern "C" void RtGraphics_Scene_RemoveGlobalObject(Scene* self, Geometry* geo) {
-    RT_DIFF_BEGIN("Graphics::Scene::RemoveGlobalObject");
 
     typedef Collection::LinkedList<Geometry*>::Node Node;
     const int32_t countBefore = self->_globals._count;
@@ -1725,30 +1286,6 @@ extern "C" void RtGraphics_Scene_RemoveGlobalObject(Scene* self, Geometry* geo) 
         } while (n != nullptr);
     }
 
-    if (rt_diff_on__) {
-        long long stillThere = 0;
-        for (Node* w = self->_globals._head; w != nullptr; w = w->next)
-            if (w->element == geo) ++stillThere;
-        const PostCheck checks[] = {
-            { "_globals._count", self->_globals._count,
-                                 removed ? countBefore - 1 : countBefore },
-            { "geometry still on list", stillThere, 0 },
-            { "head/tail agree on empty",
-              (self->_globals._count == 0)
-                  ? ((self->_globals._head == nullptr && self->_globals._tail == nullptr) ? 1 : 0)
-                  : 1,
-              1 },
-        };
-        char a[128], b[128];
-        const int bad = RtFirstFailure(checks, 3, a, sizeof(a), b, sizeof(b));
-        if (bad < 0) {
-            std::snprintf(a, sizeof(a), "globals %d->%d removed=%d",
-                          countBefore, self->_globals._count, (int)removed);
-            std::snprintf(b, sizeof(b), "globals %d->%d removed=%d",
-                          countBefore, self->_globals._count, (int)removed);
-        }
-        RT_DIFF_SHADOW(bad < 0, a, b);
-    }
 }
 
 // ============================================================================
@@ -1774,22 +1311,6 @@ extern "C" void RtGraphics_Scene_RemoveGlobalObject(Scene* self, Geometry* geo) 
 // sites and by the scene watch, not here.
 // ============================================================================
 extern "C" void RtGraphics_Scene_Clean(Scene* self) {
-    // WAVE 9 LANE GFXD -- the deferred half of that lane's oracle.
-    //
-    // Its phase-2 arms ALLOCATE (Renderer::AddScene grows the scene
-    // array from empty), and its own registration runs right after
-    // ResolveInit()'s LoadLibrary, where the DLL's MemoryAllocator is
-    // constructed but not STARTED. So the arms are armed at init and
-    // fired HERE instead: Scene::Clean runs per frame and cannot be
-    // reached before Engine::Startup has built a scene, which is the
-    // same self-scheduling contract scene_grid.cpp uses two files over.
-    //
-    // Costs one predictable not-taken branch per frame in a normal run,
-    // and nothing at all unless BANISHED_RT_GFXD_PROBE armed it.
-    rtgfxd::ProbeGate();
-
-    RT_DIFF_BEGIN("Graphics::Scene::Clean");
-
     typedef Collection::LinkedList<Geometry*>::Node Node;
 
     int32_t count = self->_nodes._size;
@@ -1816,33 +1337,6 @@ extern "C" void RtGraphics_Scene_Clean(Scene* self) {
             VClean(geo);
     }
 
-    if (rt_diff_on__) {
-        long long firstDirtyNode = -1;
-        for (int32_t k = 0; k < self->_nodes._size; ++k) {
-            if (self->_nodes._data[k]._cell < 0) continue;
-            if ((self->_nodes._data[k]._object->_dirtyFlags & 7u) != 0) {
-                firstDirtyNode = k;
-                break;
-            }
-        }
-        long long firstDirtyGlobal = -1, gi = 0;
-        for (Node* n = self->_globals._head; n != nullptr; n = n->next, ++gi) {
-            if ((n->element->_dirtyFlags & 7u) != 0) { firstDirtyGlobal = gi; break; }
-        }
-        const PostCheck checks[] = {
-            { "first still-dirty node",   firstDirtyNode,   -1 },
-            { "first still-dirty global", firstDirtyGlobal, -1 },
-        };
-        char a[128], b[128];
-        const int bad = RtFirstFailure(checks, 2, a, sizeof(a), b, sizeof(b));
-        if (bad < 0) {
-            std::snprintf(a, sizeof(a), "%d nodes, %d globals clean",
-                          self->_nodes._size, self->_globals._count);
-            std::snprintf(b, sizeof(b), "%d nodes, %d globals clean",
-                          self->_nodes._size, self->_globals._count);
-        }
-        RT_DIFF_SHADOW(bad < 0, a, b);
-    }
 }
 
 // ============================================================================

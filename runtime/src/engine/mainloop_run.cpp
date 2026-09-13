@@ -124,7 +124,7 @@
 //
 // The real test for both is a BOOT: with the DLL present, `game_main.cpp:176`
 // resolves 0x1800dd3c0 through the registry, finds this body, and it drives the
-// actual game. MEASURED, 2026-09-08, DLL present, BANISHED_RT_DIFF=1,
+// actual game. MEASURED, 2026-09-08, DLL present, the diff oracle armed,
 // BANISHED_AUTOSTART=1 through menu -> New Game -> Start -> in-game -> quit:
 //
 //     Engine::MainLoop::Run     calls=0  worked=1  divergences=0
@@ -202,18 +202,15 @@ inline int64_t CurrentTimeTicksViaGlobals() {
 //   1800dd095  return false                        ; !running, nothing queued
 //   1800dd0a0  CMP  [RBX+0x28],0 / JE  1800dd0eb   ; running: nothing queued -> true
 extern "C" bool RtEngine_MainLoop_Update(MainLoop* self, const void* time) {
-    RT_DIFF_BEGIN("Engine::MainLoop::Update");
 
     void* current = self->_currentLoop;
     const bool running =
         reinterpret_cast<LoopUpdateFn>(LoopVtable(current)[3])(current, time);
 
     if (!running && self->_nextLoop == nullptr) {
-        RT_DIFF_WORK(false);
         return false;                                    // 0x1800dd095
     }
     if (running && self->_nextLoop == nullptr) {
-        RT_DIFF_WORK(false);
         return true;                                     // 0x1800dd0eb
     }
 
@@ -258,26 +255,11 @@ extern "C" bool RtEngine_MainLoop_Update(MainLoop* self, const void* time) {
     // SELF-CONSISTENCY SHADOW, not an oracle (§4). These are post-conditions
     // this body itself establishes; a green row here means the transition was
     // internally coherent, NOT that it matched retail.
-    if (rt_diff_on__) {
-        const bool ok = clearedOk && (self->_contextDirty == 1);
-        char ours[192], theirs[192];
-        std::snprintf(ours, sizeof(ours),
-                      "cleared=%d dirty=%u cur=%p (nextLoop now %p -- may be "
-                      "non-null, Startup is allowed to re-queue)",
-                      (int)clearedOk, (unsigned)self->_contextDirty,
-                      (void*)self->_currentLoop, (void*)self->_nextLoop);
-        std::snprintf(theirs, sizeof(theirs),
-                      "expected cleared=1 dirty=1 cur=%p (old loop %p torn down)",
-                      next, old);
-        RT_DIFF_SHADOW(ok, ours, theirs);
-    }
-    RT_DIFF_WORK(true);
     return true;
 }
 
 // ?Run@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z   retail 0x1800dd3c0  ord 3601
 extern "C" void RtEngine_MainLoop_Run(MainLoop* self, void* loop) {
-    RT_DIFF_BEGIN("Engine::MainLoop::Run");
 
     // The three subsystem pointers hang off Engine, which Run reaches through
     // _engine (+0x78). The offsets are Run's own: +0x6e0 Input::Device,
@@ -345,7 +327,6 @@ extern "C" void RtEngine_MainLoop_Run(MainLoop* self, void* loop) {
 
     // No oracle is possible here (§4); the site is registered so that its call
     // count is still visible in the diff report.
-    RT_DIFF_WORK(true);
 }
 
 // ============================================================================

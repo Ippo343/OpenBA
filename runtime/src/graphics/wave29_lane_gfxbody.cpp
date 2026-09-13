@@ -152,8 +152,8 @@
 //   and a port that baked in "the constant" would have baked in ZERO. It is
 //   read at runtime, through the name door above.
 //
-// Kill switch: BANISHED_RT_GFXBODY29=0. Its own variable, deliberately NOT
-// shared with BANISHED_RT_GFXBODY28 or BANISHED_RT_PARTSYS, so that with
+// Kill switch: RT_GFXBODY29=0. Its own variable, deliberately NOT
+// shared with RT_GFXBODY28 or RT_PARTSYS, so that with
 // PARTSYS armed and this off, PARTSYS's SunLight::AddDrawItems runs and reaches
 // the DLL for exactly these three callees — which separates "the caller is
 // wrong" from "one of its callees is". Sharing a variable destroys that A/B.

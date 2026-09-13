@@ -124,7 +124,7 @@ const char* const kSetMaterial =
 //
 // Resolved through ResolveExport / ResolveAddr — which consult the runtime
 // registry FIRST — and cached in a function-local static, never through
-// RtOriginal outside a diff guard. RtOriginal is GetProcAddress: an export-table
+// the raw DLL door outside a diff guard. the raw DLL door is GetProcAddress: an export-table
 // binary search by string taken under the loader lock on every call. Two of them
 // sitting in the body of System::Time cost Wave 2 five points of sim time and
 // were invisible to both profilers (reference_rtoriginal_is_getprocaddress.md).
@@ -212,7 +212,7 @@ void RtArrayDtorSceneEntries(void* arrayTriple) {
 // NON-TRIVIAL element types in that lane -- the `INC dword ptr [*element - 4]`
 // refcount bump described below is reproduced literally in the port, and the old
 // buffer's element release still goes to retail's 0x180005930 by address.
-// Disarm on its own with BANISHED_RT_ARRAY_NONTRIVIAL=0.
+// Disarm on its own with RT_ARRAY_NONTRIVIAL=0.
 //
 // Array<{String, ExternalPtr}>::SetSize(n, fillValue). Retail 0x180061480: grows
 // (capacity*3 on a by-one append from non-empty), copy-CONSTRUCTS the tail from
@@ -286,9 +286,7 @@ const Matrix kZUpToYUp = {{
 // bytes, which is precisely the kind of "harmless" difference that turns into a
 // mystery three waves later.
 extern "C" void RtGraphics_Camera_SetFrustum(Camera* self, const Frustum* frustum) {
-    RT_DIFF_BEGIN("Graphics::Camera::SetFrustum");
     Camera before;
-    if (rt_diff_on__) std::memcpy(&before, self, sizeof(Camera));
 
     std::memcpy(&self->frustum, frustum, 0x60);
     self->frustum.isOrthographic = frustum->isOrthographic;
@@ -302,11 +300,6 @@ extern "C" void RtGraphics_Camera_SetFrustum(Camera* self, const Frustum* frustu
         RtFrustumProjection(&self->frustum, &self->projection, zeroToOne);
     }
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(Camera*, const Frustum*);
-        RtOriginal<Fn>(kSetFrustum)(&before, frustum);
-        RT_DIFF_BYTES(self, &before, sizeof(Camera));
-    }
 }
 
 // ??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z
@@ -317,9 +310,7 @@ extern "C" void RtGraphics_Camera_SetFrustum(Camera* self, const Frustum* frustu
 // +0xd4 reads the value just written and its output overwrites the zeros.
 extern "C" Camera* RtGraphics_Camera_Ctor(Camera* self, const Frustum* frustum,
                                           const Transform3* cameraToWorld, bool swapZUpToYUp) {
-    RT_DIFF_BEGIN("Graphics::Camera::Camera");
     Camera before;
-    if (rt_diff_on__) std::memcpy(&before, self, sizeof(Camera));
 
     // 25 dwords: the ctor DOES move +0x60 as a dword, so the frustum's pad
     // bytes come across too. (SetFrustum, above, does not.)
@@ -329,28 +320,16 @@ extern "C" Camera* RtGraphics_Camera_Ctor(Camera* self, const Frustum* frustum,
     self->swapZUpToYUp = swapZUpToYUp ? 1 : 0;
     RtGraphics_Camera_SetFrustum(self, frustum);
 
-    if (rt_diff_on__) {
-        using Fn = Camera* (*)(Camera*, const Frustum*, const Transform3*, bool);
-        RtOriginal<Fn>(kCameraCtor)(&before, frustum, cameraToWorld, swapZUpToYUp);
-        RT_DIFF_BYTES(self, &before, sizeof(Camera));
-    }
     return self;
 }
 
 // ?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z
 // — retail 0x1800feb00. Twelve dwords into +0x64.
 extern "C" void RtGraphics_Camera_SetCameraToWorld(Camera* self, const Transform3* cameraToWorld) {
-    RT_DIFF_BEGIN("Graphics::Camera::SetCameraToWorld");
     Camera before;
-    if (rt_diff_on__) std::memcpy(&before, self, sizeof(Camera));
 
     std::memcpy(&self->cameraToWorld, cameraToWorld, sizeof(Transform3));
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(Camera*, const Transform3*);
-        RtOriginal<Fn>(kSetCameraToWorld)(&before, cameraToWorld);
-        RT_DIFF_BYTES(self, &before, sizeof(Camera));
-    }
 }
 
 // ?SnapCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z
@@ -366,17 +345,10 @@ extern "C" void RtGraphics_Camera_SetCameraToWorld(Camera* self, const Transform
 // each against its OWN export, and so a future divergence between them (a
 // different build, a modded DLL) would show up instead of being assumed away.
 extern "C" void RtGraphics_Camera_SnapCameraToWorld(Camera* self, const Transform3* cameraToWorld) {
-    RT_DIFF_BEGIN("Graphics::Camera::SnapCameraToWorld");
     Camera before;
-    if (rt_diff_on__) std::memcpy(&before, self, sizeof(Camera));
 
     std::memcpy(&self->cameraToWorld, cameraToWorld, sizeof(Transform3));
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(Camera*, const Transform3*);
-        RtOriginal<Fn>(kSnapCameraToWorld)(&before, cameraToWorld);
-        RT_DIFF_BYTES(self, &before, sizeof(Camera));
-    }
 }
 
 // ?GetFrustum@Camera@Graphics@@QEBA?AVFrustum@Volume@@XZ — retail 0x1800fe3e0.
@@ -391,15 +363,8 @@ extern "C" void RtGraphics_Camera_SnapCameraToWorld(Camera* self, const Transfor
 //
 // Retail moves 25 dwords, so the frustum's three pad bytes travel too.
 extern "C" Frustum* RtGraphics_Camera_GetFrustum(const Camera* self, Frustum* ret) {
-    RT_DIFF_BEGIN("Graphics::Camera::GetFrustum");
     std::memcpy(ret, &self->frustum, sizeof(Frustum));
 
-    if (rt_diff_on__) {
-        Frustum theirs;
-        using Fn = Frustum* (*)(const Camera*, Frustum*);
-        RtOriginal<Fn>(kGetFrustum)(self, &theirs);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Frustum));
-    }
     return ret;
 }
 
@@ -416,9 +381,7 @@ extern "C" Frustum* RtGraphics_Camera_GetFrustum(const Camera* self, Frustum* re
 // being byte-identical to the DLL's, and the scratch oracle below would report
 // a divergence on whatever the two buffers happened to contain.
 extern "C" Renderer* RtGraphics_Renderer_Ctor(Renderer* self) {
-    RT_DIFF_BEGIN("Graphics::Renderer::Renderer");
     Renderer before;
-    if (rt_diff_on__) std::memcpy(&before, self, sizeof(Renderer));
 
     self->scenes._data        = nullptr;
     self->scenes._size        = 0;
@@ -436,11 +399,6 @@ extern "C" Renderer* RtGraphics_Renderer_Ctor(Renderer* self) {
     self->contextSerial       = -1;
     self->field_48            = 0;
 
-    if (rt_diff_on__) {
-        using Fn = Renderer* (*)(Renderer*);
-        RtOriginal<Fn>(kRendererCtor)(&before);
-        RT_DIFF_BYTES(self, &before, sizeof(Renderer));
-    }
     return self;
 }
 
@@ -451,10 +409,9 @@ extern "C" Renderer* RtGraphics_Renderer_Ctor(Renderer* self) {
 // scratch copy of the object would hand the allocator the SAME `_data` pointers
 // our call just released — a double free, which is a defect the harness would be
 // creating rather than detecting. So there is no "theirs" to compare against and
-// RT_DIFF_SHADOW carries what can be checked: that all three array triples come
+// the diff oracle carries what can be checked: that all three array triples come
 // back fully zeroed, which is what each of the three DLL destructors ends with.
 extern "C" void RtGraphics_Renderer_Dtor(Renderer* self) {
-    RT_DIFF_BEGIN("Graphics::Renderer::~Renderer");
 
     // The retail order is drawables, then draw groups, then scenes. It matters:
     // the group and scene destructors walk their elements' own arrays, and doing
@@ -470,10 +427,6 @@ extern "C" void RtGraphics_Renderer_Dtor(Renderer* self) {
                          self->drawGroups._capacity == 0 &&
                          self->drawables._data == nullptr && self->drawables._size == 0 &&
                          self->drawables._capacity == 0;
-    RT_DIFF_SHADOW(cleared,
-                   cleared ? "all three array triples zeroed"
-                           : "an array triple survived the destructor",
-                   "post-state check only; the original cannot be re-run (double free)");
 }
 
 // ?GetCullCamera@Renderer@Graphics@@QEAAAEBVCamera@2@XZ — retail 0x180017f90.
@@ -481,30 +434,16 @@ extern "C" void RtGraphics_Renderer_Dtor(Renderer* self) {
 // bounds check in retail, and none added here (CLAUDE.md — a guard retail lacks
 // does not restore the behaviour, it skips it).
 extern "C" const Camera* RtGraphics_Renderer_GetCullCamera(Renderer* self) {
-    RT_DIFF_BEGIN("Graphics::Renderer::GetCullCamera");
     const Camera* ours = &self->drawGroups._data[self->currentDrawGroup].cullCamera;
 
-    if (rt_diff_on__) {
-        using Fn = const Camera* (*)(Renderer*);
-        const Camera* theirs = RtOriginal<Fn>(kGetCullCamera)(self);
-        char a[64], b[64];
-        RtDiffFormat(a, sizeof(a), static_cast<const void*>(ours));
-        RtDiffFormat(b, sizeof(b), static_cast<const void*>(theirs));
-        RtDiffReport(&rt_diff_site__, ours == theirs, a, b);
-    }
     return ours;
 }
 
 // ?GetShader@Renderer@Graphics@@QEBAHXZ — retail 0x180018010.
 // `_drawGroups[_currentDrawGroup].shader`.
 extern "C" int RtGraphics_Renderer_GetShader(const Renderer* self) {
-    RT_DIFF_BEGIN("Graphics::Renderer::GetShader");
     const int ours = self->drawGroups._data[self->currentDrawGroup].shader;
 
-    if (rt_diff_on__) {
-        using Fn = int (*)(const Renderer*);
-        RT_DIFF_SCALAR(ours, RtOriginal<Fn>(kGetShader)(self));
-    }
     return ours;
 }
 
@@ -550,11 +489,9 @@ extern "C" int RtGraphics_Renderer_GetShader(const Renderer* self) {
 //      code/Game/Component/statusicon_geometry.cpp:328 builds a Geometry vtable,
 //      not a MaterialInstance one, and is not affected by this port at all.
 //   4. The ctor allocates nothing and installs nothing global, so a
-//      BANISHED_RT_GFXRENDER=0 run and a default run produce the same object.
+//      RT_GFXRENDER=0 run and a default run produce the same object.
 extern "C" MaterialInstance* RtGraphics_MaterialInstance_Ctor(MaterialInstance* self) {
-    RT_DIFF_BEGIN("Graphics::MaterialInstance::MaterialInstance");
     MaterialInstance before;
-    if (rt_diff_on__) std::memcpy(&before, self, sizeof(MaterialInstance));
 
     static void* const vtBase = ResolveExport("??_7Base@Object@@6B@");
     static void* const vtExternal = ResolveExport("??_7External@Object@@6B@");
@@ -580,11 +517,6 @@ extern "C" MaterialInstance* RtGraphics_MaterialInstance_Ctor(MaterialInstance* 
     self->textures._size = 0;
     self->textures._capacity = 0;
 
-    if (rt_diff_on__) {
-        using Fn = MaterialInstance* (*)(MaterialInstance*);
-        RtOriginal<Fn>(kMaterialInstCtor)(&before);
-        RT_DIFF_BYTES(self, &before, sizeof(MaterialInstance));
-    }
     return self;
 }
 
@@ -596,17 +528,10 @@ extern "C" MaterialInstance* RtGraphics_MaterialInstance_Ctor(MaterialInstance* 
 // refcount here — the caller's ExternalPtr and the member end up sharing one,
 // which is why BuildParameters can read `_material` back without owning it.
 extern "C" void RtGraphics_MaterialInstance_SetMaterial(MaterialInstance* self, void* material) {
-    RT_DIFF_BEGIN("Graphics::MaterialInstance::SetMaterial");
     MaterialInstance before;
-    if (rt_diff_on__) std::memcpy(&before, self, sizeof(MaterialInstance));
 
     self->material = material;
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(MaterialInstance*, void*);
-        RtOriginal<Fn>(kSetMaterial)(&before, material);
-        RT_DIFF_BYTES(self, &before, sizeof(MaterialInstance));
-    }
 }
 
 // ?AddTexture@MaterialInstance@Graphics@@QEAAXAEBVString@System@@V?$ExternalPtr@VImageBuffer@Video@@@Object@@@Z
@@ -624,12 +549,11 @@ extern "C" void RtGraphics_MaterialInstance_SetMaterial(MaterialInstance* self, 
 // ORACLE: POST-STATE ONLY. A scratch-copy replay is not merely unhelpful here,
 // it is destructive: the copy would share `_textures._data` with the live object,
 // and the grow helper frees the old buffer on reallocation — so "theirs" would
-// release memory the real MaterialInstance still points at. RT_DIFF_SHADOW
+// release memory the real MaterialInstance still points at. the diff oracle
 // therefore checks what our own call can prove: the size went up by exactly one
 // and the new tail element holds the two values we were handed.
 extern "C" void RtGraphics_MaterialInstance_AddTexture(MaterialInstance* self,
                                                        const void* name, void* image) {
-    RT_DIFF_BEGIN("Graphics::MaterialInstance::AddTexture");
     const int32_t sizeBefore = self->textures._size;
 
     MaterialTexture local;
@@ -649,17 +573,6 @@ extern "C" void RtGraphics_MaterialInstance_AddTexture(MaterialInstance* self,
         if (--*refCount == 0) RtMemFree(local.name - 8);
     }
 
-    if (rt_diff_on__) {
-        const bool ok = self->textures._size == sizeBefore + 1 &&
-                        self->textures._data != nullptr &&
-                        self->textures._data[sizeBefore].name == data &&
-                        self->textures._data[sizeBefore].image == image;
-        RT_DIFF_SHADOW(ok,
-                       ok ? "tail element holds the name and image passed in"
-                          : "append did not land at _size-1",
-                       "post-state check only; the original cannot be re-run "
-                       "(it would free the live element buffer)");
-    }
 }
 
 // ============================================================================

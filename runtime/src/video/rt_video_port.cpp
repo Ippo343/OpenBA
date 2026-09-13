@@ -1,32 +1,6 @@
 // ============================================================================
 // runtime/src/video/rt_video_port.cpp — RtVideoPortInit()  Wave 6 (Video)
 // ============================================================================
-// Kill switches (PLAN.md §4.1 decision 3; unset = ON):
-//   BANISHED_RT_VIDEO=0      leave the whole Video namespace on the DLL
-//   BANISHED_RT_VIDCONTEXT=0 ... just Video::Context            (lane A)
-//   BANISHED_RT_VIDDEVICE=0  ... just Video::Device/Configuration/RenderBuffer (lane B)
-//   BANISHED_RT_VIDBUFFERS=0 ... just Video::ImageBuffer/Index/VertexBuffer (lane C)
-//   BANISHED_RT_VIDIMGVT=0   ... just the seven ??_7ImageBuffer@Video@@6B@ vtable
-//                            slots (Wave 18 lane VDATA)
-//   BANISHED_RT_VIDCOMPANION=0 ... just the twelve Video::*Data companion bases,
-//                            the buffer Lock/Unlock/Bind trampolines and
-//                            Device::DisplayMode          (Wave 9 lane B2)
-//   BANISHED_RT_VIDDYNAMIC=0 ... just Device::{Lock,Unlock,Release/RecreateDynamic},
-//                            the eight class-static list walkers and
-//                            RenderBuffer::Recreate       (Wave 9 lane VID)
-//   BANISHED_RT_VIDCTXBIND=0 ... just Context::BindResources/BindTextures, the
-//                            two Context methods dx11/ calls once per draw
-//                                                        (Wave 9 lane CTX)
-//   BANISHED_RT_CTXBIND_PROBE=1 runs lane CTX's 37-case oracle at init.
-//   BANISHED_RT_VIDRES=0     ... just the Video resource lifecycle: RenderBuffer
-//                            ctor/dtor/Bind, ImageBuffer::Recreate, and the
-//                            Configuration/Device dtors  (Wave 18 lane VRES)
-//   BANISHED_RT_VIDSAVEIMG=0 ... just ImageBuffer::SaveImageToFile, which is
-//                            the one VRES row with unported IO dependencies
-//   BANISHED_RT_VIDIMGSER=0  ... just ImageBuffer::PlatformSerialize
-//   BANISHED_RT_VRES_PROBE=1 runs lane VRES's replay oracle (=neg adds the
-//                            four negative controls)
-//
 // Each lane owns exactly one .cpp and exposes one Register function returning
 // the number of RegisterRuntime* calls it made. A lane with nothing landed yet
 // returns 0 from a weak stub below.
@@ -44,18 +18,11 @@ extern int RtVideoImageBufferVtableRegister();  // imagebuffer_vtable.cpp (Wave 
 extern int RtVideoCompanionRegister(); // companion_data.cpp (Wave 9 lane B2)
 extern int RtVideoDynamicResourcesRegister();  // dynamic_resources.cpp (Wave 9 lane VID)
 extern int RtVideoContextLifecycleRegister();  // context_lifecycle.cpp (Wave 9 lane VID2)
-extern "C" void RtVideoContextLifecycleProbe();
-extern "C" void RtVideoDeviceStartupProbeArm(bool on);  // device_startup_probe.cpp
 extern "C" int  RtVideoShaderConstantsVerify();         // constant_buffer.cpp
-extern "C" void RtVideoAssignConstantsProbeArm(bool on);  // constant_buffer.cpp
 extern int      RtVideoContextCtorRegister();             // context_ctor.cpp
-extern "C" void RtVideoContextCtorProbeArm(bool on);     // context_ctor.cpp
 extern int      RtVideoContextBindRegister();            // context_bind.cpp (lane CTX)
-extern "C" void RtVideoContextBindProbe();               // context_bind.cpp (lane CTX)
 extern int      RtVideoDeviceEnumTypesRegister();          // device_enum_types.cpp (Wave 18 GFXIF)
 extern int      RtVideoVideoProgramRegister();              // video_program.cpp (Wave 23 lane VIDVT)
-extern "C" int  RtVideoVideoProgramSweep();                 // video_program.cpp (Wave 23 lane VIDVT)
-extern "C" void RtVideoDeviceEnumTypesProbeArm(bool on);   // device_enum_types_probe.cpp
 
 // BATCH C registration entry point (batchc_*.cpp).
 extern "C" int RtVideoBatchCSetLightRegister();
@@ -66,97 +33,46 @@ void RtVideoPortInit() {
         printf("[RtPort] BATCH C: %d video leaf registered\n",
                RtVideoBatchCSetLightRegister());
     }
-    if (!RtWaveEnabled("BANISHED_RT_VIDEO")) {
-        printf("[RtPort] BANISHED_RT_VIDEO=0 -- Video namespace port disabled\n");
-        return;
-    }
     int n = 0;
-    if (RtWaveEnabled("BANISHED_RT_VIDCONTEXT")) n += RtVideoContextRegister();
-    if (RtWaveEnabled("BANISHED_RT_VIDDEVICE"))  n += RtVideoDeviceRegister();
-    if (RtWaveEnabled("BANISHED_RT_VIDBUFFERS")) n += RtVideoBuffersRegister();
+    n += RtVideoContextRegister();
+    n += RtVideoDeviceRegister();
+    n += RtVideoBuffersRegister();
     // Wave 18 lane VDATA: the seven abort-trap slots of
     // ??_7ImageBuffer@Video@@6B@. Its own switch rather than VIDBUFFERS' so the
     // vtable row's promotion can be A/B'd with the SAME BINARY one flag apart.
-    if (RtWaveEnabled("BANISHED_RT_VIDIMGVT")) n += RtVideoImageBufferVtableRegister();
-    if (RtWaveEnabled("BANISHED_RT_VIDCOMPANION")) n += RtVideoCompanionRegister();
-    if (RtWaveEnabled("BANISHED_RT_VIDDYNAMIC"))   n += RtVideoDynamicResourcesRegister();
-    // Wave 9 lane VID2. The probe runs only when BANISHED_RT_CTXCLEAR_PROBE is
-    // set: it makes 513 calls into the shipped ?ClearResources@ and is a
-    // verification step, not boot work. It allocates nothing (two .bss
-    // Contexts), so it is safe at this point in boot, but it is still opt-in.
+    n += RtVideoImageBufferVtableRegister();
+    n += RtVideoCompanionRegister();
+    n += RtVideoDynamicResourcesRegister();
     // Wave 9 lane VID2: the Device startup cluster. `?PlatformStartup@` is the
     // next cutover boot wall after the IO chain — Engine::Startup calls it at
     // engine_lifecycle.cpp:719 and a null there ends the boot with
     // g_startupFailAt == 11.
-    if (RtWaveEnabled("BANISHED_RT_VIDDEVSTART")) {
-        extern int RtVideoDeviceStartupRegister();
-        n += RtVideoDeviceStartupRegister();
-        // Armed, not run — it allocates. It self-schedules at the top of
-        // PlatformStartup, which is the first moment the allocator is live.
-        const char* dp = std::getenv("BANISHED_RT_VIDDEVSTART_PROBE");
-        RtVideoDeviceStartupProbeArm(dp && *dp && std::strcmp(dp, "0") != 0);
-    }
+    extern int RtVideoDeviceStartupRegister();
+    n += RtVideoDeviceStartupRegister();
     // Wave 9 lane VID2 phase 3: Video::ConstantBuffer, the first link in the
     // chain to CreateVideoContext. The literal self-check runs here because it
     // only reads the DLL's .rdata — no allocation, no ordering hazard.
-    if (RtWaveEnabled("BANISHED_RT_VIDCONSTBUF")) {
-        extern int RtVideoConstantBufferRegister();
-        n += RtVideoConstantBufferRegister();
-        RtVideoShaderConstantsVerify();
-        // The AssignConstants oracle: ARMED here, RUN from the top of
-        // Video::Device::PlatformStartup. It drives the SHIPPED body once and
-        // ours once over two .bss Contexts, which allocates ~124 Strings and 14
-        // arrays (all released again) — and at THIS point in boot the
-        // MemoryAllocator singleton is constructed but not started, so running
-        // it here faults inside the DLL's MemAlloc. Measured, not assumed.
-        const char* ap = std::getenv("BANISHED_RT_ASSIGNCONST_PROBE");
-        RtVideoAssignConstantsProbeArm(ap && *ap && std::strcmp(ap, "0") != 0);
-    }
+    extern int RtVideoConstantBufferRegister();
+    n += RtVideoConstantBufferRegister();
+    RtVideoShaderConstantsVerify();
     // Wave 9 lane VID2 phase 4: the Context ctor and CreateVideoContext. Its
     // probe is armed here and RUN from the top of PlatformStartup for the same
     // allocator reason as the two above.
-    if (RtWaveEnabled("BANISHED_RT_VIDCTXCTOR")) {
-        n += RtVideoContextCtorRegister();
-        const char* cp = std::getenv("BANISHED_RT_CTXCTOR_PROBE");
-        RtVideoContextCtorProbeArm(cp && *cp && std::strcmp(cp, "0") != 0);
-    }
+    n += RtVideoContextCtorRegister();
     // Wave 9 lane CTX: ?BindResources@ / ?BindTextures@ — the two Context
     // methods our OWN dx11/ backend calls back into, once per draw call. The
     // probe allocates nothing (three .bss Contexts plus fixed fakes) and makes
     // no call outside this file, so unlike the three above it can run right
     // here; it does not need PlatformStartup's allocator.
-    if (RtWaveEnabled("BANISHED_RT_VIDCTXBIND")) {
-
-        n += RtVideoContextBindRegister();
-        const char* bp = std::getenv("BANISHED_RT_CTXBIND_PROBE");
-        if (bp && *bp && std::strcmp(bp, "0") != 0)
-            RtVideoContextBindProbe();
-    }
+    n += RtVideoContextBindRegister();
     // WAVE 29 lane AVBODY: ?GetConstantName@ShaderProgram@Video@@ and
     // ?GetTextureName@ShaderProgram@Video@@ -- Video's ENTIRE remaining body
     // surface (re-derived: the other 18 unported Video rows are 12 NO-OP
     // vtables + 6 HARMFUL data slots, all tagged UNPROMOTABLE). Both return
     // System::String BY VALUE, i.e. through a hidden RDX slot.
-    //
-    // The sweep needs no allocator and no gameplay route: both bodies are pure
-    // apart from a refcount INC, so it synthesises its own ShaderProgram and
-    // String blocks and compares against the SHIPPED export via
-    // ResolveExportRaw. It is safe to run right here, like lane CTX's.
-    if (RtWaveEnabled("BANISHED_RT_VIDSHADERNAME")) {
-        extern int RtVideoShaderProgramNamesRegister();
-        n += RtVideoShaderProgramNamesRegister();
-        const char* sp = std::getenv("BANISHED_RT_SHADERNAME_SWEEP");
-        if (sp && *sp && std::strcmp(sp, "0") != 0) {
-            extern int RtVideoShaderProgramNamesSweep();
-            RtVideoShaderProgramNamesSweep();
-        }
-    }
-    if (RtWaveEnabled("BANISHED_RT_VIDCTXLIFE")) {
-        n += RtVideoContextLifecycleRegister();
-        const char* probe = std::getenv("BANISHED_RT_CTXCLEAR_PROBE");
-        if (probe && *probe && std::strcmp(probe, "0") != 0)
-            RtVideoContextLifecycleProbe();
-    }
+    extern int RtVideoShaderProgramNamesRegister();
+    n += RtVideoShaderProgramNamesRegister();
+    n += RtVideoContextLifecycleRegister();
     // Wave 9 lane EVM: the plugin-loading half of the
     // EnumerateVideoModes chain. InitializeInterfaces is the body
     // standalone/video_interface.cpp has been asking for in writing since
@@ -164,27 +80,21 @@ void RtVideoPortInit() {
     // detour cannot exist.
     // ONE switch for the whole lane, so the cutover-residue set-diff can be
     // taken with the SAME BINARY one flag apart rather than against a rebuild.
-    if (RtWaveEnabled("BANISHED_RT_EVM")) {
-        extern int RtVideoInterfacesRegister();
-        n += RtVideoInterfacesRegister();
-    }
+    extern int RtVideoInterfacesRegister();
+    n += RtVideoInterfacesRegister();
 
     // Wave 9 lane EVM: the two introsort instantiations
     // EnumerateVideoModes runs over the enumerated tree, plus their two
     // small-range passes and the DisplayMode deep swap. ADDRESSES ONLY --
     // none of the five is exported in either build.
-    if (RtWaveEnabled("BANISHED_RT_EVM")) {
-        extern int RtVideoModeSortRegister();
-        const int sorts = RtVideoModeSortRegister();
-        printf("[LaneEVM] mode/refresh sort addresses registered=%d\n", sorts);
-    }
+    extern int RtVideoModeSortRegister();
+    const int sorts = RtVideoModeSortRegister();
+    printf("[LaneEVM] mode/refresh sort addresses registered=%d\n", sorts);
 
     // Wave 9 lane EVM: attempt 22's wall itself. Registered AFTER the two
     // blocks above, because its body calls both of them.
-    if (RtWaveEnabled("BANISHED_RT_EVM")) {
-        extern int RtVideoEnumerateModesRegister();
-        n += RtVideoEnumerateModesRegister();
-    }
+    extern int RtVideoEnumerateModesRegister();
+    n += RtVideoEnumerateModesRegister();
 
     // Wave 18 lane GFXIF: Video::Device::Adapter and ::GraphicsInterface, plus
     // AdjustDisplay / FindOrAddMode / GetDisplayMode. These nine names are the
@@ -195,14 +105,7 @@ void RtVideoPortInit() {
     // VID2 registers above — the calls are by C++ symbol, not through the
     // registry, so the order is documentation rather than a dependency, but it
     // should stay this way so that reading the file in order reads correctly.
-    if (RtWaveEnabled("BANISHED_RT_VIDENUMTYPES")) {
-        n += RtVideoDeviceEnumTypesRegister();
-        // ARMED here, RUN from the top of Video::Device::PlatformStartup: the
-        // probe allocates, and the MemoryAllocator singleton is not started yet
-        // at this point in boot.
-        const char* ep = std::getenv("BANISHED_RT_VIDENUMTYPES_PROBE");
-        RtVideoDeviceEnumTypesProbeArm(ep && *ep && std::strcmp(ep, "0") != 0);
-    }
+    n += RtVideoDeviceEnumTypesRegister();
 
     // Wave 23 lane VIDVT: ?SetupShaders@VideoProgram@Video@@, the single BODY
     // row in Video's nineteen-row gap. It has NO dependency on anything above
@@ -210,19 +113,14 @@ void RtVideoPortInit() {
     // here is arbitrary and its own switch exists only so the row can be A/B'd
     // with the same binary one flag apart. Its ONLY caller in this tree is
     // Wave 21's ?Setup@MaterialInstance@Graphics@@, which reaches it by name
-    // through ResolveExport, so with BANISHED_RT_VIDPROGRAM=0 that call falls
-    // through to the DLL exactly as it did before this lane.
-    if (RtWaveEnabled("BANISHED_RT_VIDPROGRAM")) {
-        n += RtVideoVideoProgramRegister();
-        // The VERIFICATION, because this row has no caller: an input sweep
-        // against the shipped export. Opt-in because it calls into the DLL 128
-        // times and is a check, not boot work. It allocates NOTHING (two .bss
-        // Contexts and a stack VideoProgram), so it is safe this early --
-        // unlike the enum-types and device-startup probes above, which is why
-        // it runs here rather than being armed for later.
-        const char* sw = std::getenv("BANISHED_RT_VIDPROGRAM_SWEEP");
-        if (sw && *sw && std::strcmp(sw, "0") != 0) RtVideoVideoProgramSweep();
-    }
+    // through ResolveExport.
+    n += RtVideoVideoProgramRegister();
+    // The VERIFICATION, because this row has no caller: an input sweep
+    // against the shipped export. Opt-in because it calls into the DLL 128
+    // times and is a check, not boot work. It allocates NOTHING (two .bss
+    // Contexts and a stack VideoProgram), so it is safe this early --
+    // unlike the enum-types and device-startup probes above, which is why
+    // it runs here rather than being armed for later.
 
     // Wave 18 lane VRES: the Video resource lifecycle — RenderBuffer
     // ctor/dtor/Bind, ImageBuffer::Recreate, and the Configuration and Device
@@ -244,37 +142,28 @@ void RtVideoPortInit() {
     { extern int RtVideoPixelProgramRegister();  n += RtVideoPixelProgramRegister(); }
     { extern int RtVideoRenderStateRegister();   n += RtVideoRenderStateRegister(); }
 
-    if (RtWaveEnabled("BANISHED_RT_VIDRES")) {
-        extern int RtVideoResourcesRegister();
-        n += RtVideoResourcesRegister();
-        // ARMED here, RUN from the first ?Bind@RenderBuffer@ — it allocates
-        // ~40 blocks and at THIS point in boot the MemoryAllocator singleton is
-        // constructed but not started. `=neg` additionally runs the four
-        // negative controls. See video_resources_probe.cpp.
-        // Wave 18 lane VRES row 7. Separate from the six above because it is
-        // the only row that depends on unported IO exports, so an A/B that
-        // needs the rest of the lane on and this one off has a switch for it.
-        extern int RtVideoSaveImageRegister();
-        if (RtWaveEnabled("BANISHED_RT_VIDSAVEIMG")) n += RtVideoSaveImageRegister();
-        // Wave 18 lane VRES tranche 2. Its own switch for the same reason: it
-        // used to be the only row that reached an unported Collection helper
-        // (0x180053f00), so an A/B that needs the rest of the lane on and this
-        // one off has a switch for it.
-        // *** 2026-09-12: 0x180053f00 IS NOW PORTED *** —
-        // runtime/src/collection/array.cpp `kSpec_InnerArrayU8`, landed with
-        // Video::ShaderProgram, whose PlatformSerialize is its other caller.
-        // The switch is kept (it still isolates this row's OWN body) but the
-        // reason quoted above no longer applies.
-        extern int RtVideoImageBufferSerializeRegister();
-        if (RtWaveEnabled("BANISHED_RT_VIDIMGSER"))
-            n += RtVideoImageBufferSerializeRegister();
-        extern void RtVideoImageBufferSerializeProbeArm(bool on);
-        const char* ip = std::getenv("BANISHED_RT_VIDIMGSER_PROBE");
-        RtVideoImageBufferSerializeProbeArm(ip && *ip && std::strcmp(ip, "0") != 0);
-        extern void RtVideoResourcesProbeArm(bool on);
-        const char* vp = std::getenv("BANISHED_RT_VRES_PROBE");
-        RtVideoResourcesProbeArm(vp && *vp && std::strcmp(vp, "0") != 0);
-    }
+    extern int RtVideoResourcesRegister();
+    n += RtVideoResourcesRegister();
+    // ARMED here, RUN from the first ?Bind@RenderBuffer@ — it allocates
+    // ~40 blocks and at THIS point in boot the MemoryAllocator singleton is
+    // constructed but not started. `=neg` additionally runs the four
+    // negative controls. See video_resources_probe.cpp.
+    // Wave 18 lane VRES row 7. Separate from the six above because it is
+    // the only row that depends on unported IO exports, so an A/B that
+    // needs the rest of the lane on and this one off has a switch for it.
+    extern int RtVideoSaveImageRegister();
+    n += RtVideoSaveImageRegister();
+    // Wave 18 lane VRES tranche 2. Its own switch for the same reason: it
+    // used to be the only row that reached an unported Collection helper
+    // (0x180053f00), so an A/B that needs the rest of the lane on and this
+    // one off has a switch for it.
+    // *** 2026-09-12: 0x180053f00 IS NOW PORTED *** —
+    // runtime/src/collection/array.cpp `kSpec_InnerArrayU8`, landed with
+    // Video::ShaderProgram, whose PlatformSerialize is its other caller.
+    // The switch is kept (it still isolates this row's OWN body) but the
+    // reason quoted above no longer applies.
+    extern int RtVideoImageBufferSerializeRegister();
+    n += RtVideoImageBufferSerializeRegister();
 
     printf("[RtPort] Video: %d exports registered\n", n);
 }

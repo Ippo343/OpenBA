@@ -367,7 +367,6 @@ void SerScalar(ReaderWriter* rw, size_t slot, void* field) {
 // THREE ADDRESS DOORS, all commented at their call sites below.
 // ============================================================================
 extern "C" bool RtGraphics_Particle_Serialize(void* selfv, void* streamv) {
-    RT_DIFF_BEGIN("Graphics::Particle::Serialize[ATTENDANCE]");
     ++g_particleSerialize;
 
     uint8_t* self  = B(selfv);
@@ -476,7 +475,6 @@ extern "C" bool RtGraphics_Particle_Serialize(void* selfv, void* streamv) {
 extern "C" void RtGraphics_ParticleInstance_GetInstanceTransform(
         void* selfv, Matrix* out, int32_t /*index — ignored, see banner*/,
         float alpha) {
-    RT_DIFF_BEGIN("Graphics::ParticleInstance::GetInstanceTransform[ATTENDANCE]");
     ++g_piGetInstanceXform;
 
     const Geometry* self = static_cast<const Geometry*>(selfv);
@@ -579,7 +577,6 @@ extern "C" void RtGraphics_ParticleInstance_GetInstanceTransform(
 // ============================================================================
 extern "C" void RtGraphics_ParticleInstance_AddDrawItems(
         void* selfv, const void* /*scene — never read, see banner*/, void* rendererv) {
-    RT_DIFF_BEGIN("Graphics::ParticleInstance::AddDrawItems[ATTENDANCE]");
     ++g_piAddDrawItems;
 
     const Geometry*         self = static_cast<const Geometry*>(selfv);
@@ -682,7 +679,6 @@ extern "C" void RtGraphics_ParticleInstance_AddDrawItems(
 extern "C" void* RtGraphics_ParticlePool_OperatorNew();
 
 extern "C" void RtGraphics_ParticleInstance_SetParticle(void* selfv, void* particlev) {
-    RT_DIFF_BEGIN("Graphics::ParticleInstance::SetParticle[ATTENDANCE]");
     ++g_piSetParticle;
 
     ParticleInstance* pi   = static_cast<ParticleInstance*>(selfv);
@@ -806,7 +802,6 @@ extern "C" void RtGraphics_ParticleInstance_SetParticle(void* selfv, void* parti
 // ResolveExport so a minted copy is followed at cutover.
 // ============================================================================
 extern "C" void RtGraphics_ParticleSystemInstance_SetParticle(void* selfv, void* particlev) {
-    RT_DIFF_BEGIN("Graphics::ParticleSystemInstance::SetParticle[ATTENDANCE]");
     ++g_psiSetParticle;
 
     ParticleSystemInstance* psi = static_cast<ParticleSystemInstance*>(selfv);
@@ -963,7 +958,6 @@ extern "C" void RtGraphics_ParticleInstance_Draw(
         void* /*material ExternalPtr — never read*/, float alpha,
         int32_t /*arg5 — never read*/, int32_t /*arg6 — never read*/,
         int32_t instances) {
-    RT_DIFF_BEGIN("Graphics::ParticleInstance::Draw[ATTENDANCE]");
     ++g_piDraw;
 
     const Geometry*         self = static_cast<const Geometry*>(selfv);

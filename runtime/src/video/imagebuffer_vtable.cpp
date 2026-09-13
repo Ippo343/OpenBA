@@ -86,7 +86,6 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_diff.h"
 #include "../../types/video/ImageBuffer.h"
 #include "../../types/io/Serializer.h"
 #include "../io/save_trace.h"
@@ -131,8 +130,8 @@ const uint8_t* TypeInfoImageBuffer() {
 // REACHED THROUGH THE REGISTRY DOOR, NOT AS A C++ CALL, and the first draft of
 // this file had it wrong. `Video_ImageBuffer_Ctor` has external linkage, so a
 // direct call compiles and reaches our body — but `buffers.cpp`'s registration
-// is gated on `BANISHED_RT_VIDBUFFERS`, and a kill switch gates the
-// REGISTRATION, not a C++ call. With `BANISHED_RT_VIDBUFFERS=0` a direct call
+// is gated on `RT_VIDBUFFERS`, and a kill switch gates the
+// REGISTRATION, not a C++ call. With `RT_VIDBUFFERS=0` a direct call
 // would still run our constructor while every other caller in the process ran
 // the DLL's, and no counter would report it. That is exactly
 // `reference_off_by_default_was_not_true.md`, where an unarmed run mutated
@@ -271,16 +270,14 @@ struct ProbeGuard {
 // reading mainloop_video.cpp §4 pins for all eleven of these globals.
 //
 // ORACLE: full. Pure read of a static; ours and theirs are both called and
-// compared on every call under BANISHED_RT_DIFF.
+// compared on every call under the diff-oracle flag.
 // ============================================================================
 extern "C" uint32_t Video_ImageBuffer_Type(const ImageBuffer* self) {
-    RT_DIFF_BEGIN("Video::ImageBuffer::Type");
     (void)self;   // retail never touches RCX
 
     const uint32_t ours = *reinterpret_cast<const uint32_t*>(TypeInfoImageBuffer());
 
     using Fn = uint32_t (*)(const ImageBuffer*);
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, "?Type@ImageBuffer@Video@@UEBAIXZ")(self));
     return ours;
 }
 
@@ -305,20 +302,11 @@ extern "C" uint32_t Video_ImageBuffer_Type(const ImageBuffer* self) {
 // a name whose TEXT differs.
 // ============================================================================
 extern "C" const char* Video_ImageBuffer_TypeName(const ImageBuffer* self) {
-    RT_DIFF_BEGIN("Video::ImageBuffer::TypeName");
     (void)self;
 
     const char* ours =
         *reinterpret_cast<const char* const*>(TypeInfoImageBuffer() + 8);
 
-    if (rt_diff_on__) {
-        using Fn = const char* (*)(const ImageBuffer*);
-        const char* theirs =
-            RT_ORIGINAL_ONCE(Fn, "?TypeName@ImageBuffer@Video@@UEBAPEBDXZ")(self);
-        const bool equal = (ours == theirs) ||
-                           (ours && theirs && std::strcmp(ours, theirs) == 0);
-        RT_DIFF_SHADOW(equal, ours ? ours : "(null)", theirs ? theirs : "(null)");
-    }
     return ours;
 }
 
@@ -335,14 +323,11 @@ extern "C" const char* Video_ImageBuffer_TypeName(const ImageBuffer* self) {
 // ORACLE: full.
 // ============================================================================
 extern "C" int Video_ImageBuffer_GetFileVersion(const ImageBuffer* self) {
-    RT_DIFF_BEGIN("Video::ImageBuffer::GetFileVersion");
     (void)self;
 
     const int ours = 7;
 
     using Fn = int (*)(const ImageBuffer*);
-    RT_DIFF_SCALAR(ours,
-                   RT_ORIGINAL_ONCE(Fn, "?GetFileVersion@ImageBuffer@Video@@UEBAHXZ")(self));
     return ours;
 }
 
@@ -368,7 +353,6 @@ extern "C" int Video_ImageBuffer_GetFileVersion(const ImageBuffer* self) {
 // object is a double destruction.
 // ============================================================================
 extern "C" void Video_ImageBuffer_Destruct(ImageBuffer* self) {
-    RT_DIFF_BEGIN("Video::ImageBuffer::Destruct");
 
     void* const vtBefore = self->vtable;
     void** vt = static_cast<void**>(vtBefore);
@@ -383,9 +367,6 @@ extern "C" void Video_ImageBuffer_Destruct(ImageBuffer* self) {
     // the code above it. A predicate that cannot fail is not a check
     // (`reference_a_predicate_nobody_evaluates.md`) — the first draft of this
     // line was `x ? true : true` and would have passed forever.
-    RT_DIFF_SHADOW(self->vtable != vtBefore,
-                   "vptr moved off ImageBuffer's table (destructed, not freed)",
-                   "retail: JMP vtable[0](this, 0)");
 }
 
 // ============================================================================
@@ -417,15 +398,10 @@ extern "C" void Video_ImageBuffer_Destruct(ImageBuffer* self) {
 // constructing twice over one object leaks its platform data.
 // ============================================================================
 extern "C" void* Video_ImageBuffer_Construct(ImageBuffer* self) {
-    RT_DIFF_BEGIN("Video::ImageBuffer::Construct");
 
     if (self == nullptr) return nullptr;
     ImageBufferCtor()(self);
 
-    RT_DIFF_SHADOW(self->kind == 2 && self->filter == 1 && self->width == 0 &&
-                       self->height == 0 && self->pixelData == nullptr,
-                   "ctor post-state (kind=2, filter=1, 0,0, null)",
-                   "retail: tail JMP ??0ImageBuffer@Video@@QEAA@XZ");
     return self;
 }
 
@@ -456,7 +432,6 @@ extern "C" void* Video_ImageBuffer_Construct(ImageBuffer* self) {
 // ORACLE: shadow post-condition. No replay, for both reasons at once.
 // ============================================================================
 extern "C" void* Video_ImageBuffer_Reconstruct(ImageBuffer* self) {
-    RT_DIFF_BEGIN("Video::ImageBuffer::Reconstruct");
 
     void** vt = static_cast<void**>(self->vtable);
     using DelDtorFn = void* (*)(ImageBuffer*, unsigned);
@@ -464,10 +439,6 @@ extern "C" void* Video_ImageBuffer_Reconstruct(ImageBuffer* self) {
 
     ImageBufferCtor()(self);
 
-    RT_DIFF_SHADOW(self->kind == 2 && self->filter == 1 && self->width == 0 &&
-                       self->height == 0 && self->pixelData == nullptr,
-                   "destructed then re-constructed in place",
-                   "retail: vtable[0](this,0) then JMP ??0ImageBuffer@Video@@");
     return self;
 }
 
@@ -520,29 +491,6 @@ extern "C" void* Video_ImageBuffer_Reconstruct(ImageBuffer* self) {
 // ORACLE: see the file banner — RtSaveTrace prefix oracle, stop at 10.
 // ============================================================================
 extern "C" bool Video_ImageBuffer_Serialize(ImageBuffer* self, Stream* stream) {
-    static int probes = 0;
-    if (RtSaveTrace::Enabled() && !g_probing && probes < 16) {
-        ++probes;
-        ProbeGuard guard__;
-        static const char* const kMangled =
-            "?Serialize@ImageBuffer@Video@@UEAA_NAEAVStream@IO@@@Z";
-        auto theirs = reinterpret_cast<StreamMemberFn>(ResolveExportRaw(kMangled));
-        if (theirs && PortIsLive(kMangled, (const void*)&Video_ImageBuffer_Serialize)) {
-            RtSaveTrace::Compare(
-                "Video::ImageBuffer::Serialize", self,
-                [](void* obj, void* ser) {
-                    Video_ImageBuffer_Serialize(static_cast<ImageBuffer*>(obj),
-                                                StreamOf(ser));
-                },
-                [](void* obj, void* ser) {
-                    reinterpret_cast<StreamMemberFn>(ResolveExportRaw(
-                        "?Serialize@ImageBuffer@Video@@UEAA_NAEAVStream@IO@@@Z"))(
-                            obj, StreamOf(ser));
-                },
-                /*stopAfter=*/10);
-        }
-    }
-
     Serializer ser;
     ReaderWriter* rw = MakeCodec(stream, &ser);
 

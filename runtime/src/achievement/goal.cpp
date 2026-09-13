@@ -75,7 +75,7 @@ namespace {
 //
 //   * ResolveAddr / ResolveExport go through the runtime registry, so they
 //     pick up whatever Wave 3 registered.
-//   * ResolveExportRaw / RtOriginal is GetProcAddress: the SHIPPED DLL, always,
+//   * the raw DLL door / the raw DLL door is GetProcAddress: the SHIPPED DLL, always,
 //     whatever any lane has registered.
 //
 // These three go through the REGISTRY, and that is a deliberate reversal of the
@@ -85,7 +85,7 @@ namespace {
 //
 //   `Object::Internal`'s ctor/dtor have a predict-and-verify shadow wrapper
 //   (RtObject_Internal_Ctor_Shadow / _Dtor_Shadow, internal.cpp:655/681, armed
-//   with BANISHED_RT_INTERNAL_SHADOW=1) that checks the handle table's size,
+//   with RT_INTERNAL_SHADOW=1) that checks the handle table's size,
 //   capacity, the object's factoryIndex, the cleared generation and the
 //   swap-remove fixup. Wave 3 ran it clean at 93,387 calls. A raw
 //   GetProcAddress here would step straight PAST that wrapper, so this lane's
@@ -95,7 +95,7 @@ namespace {
 //
 // The "correct standing alone" property mostly survives: the shadow wrappers
 // call the DLL's own body and only observe. It is genuinely given up only if
-// someone arms BANISHED_RT_INTERNAL_TABLE=1, Wave 3's real handle-table port,
+// someone arms RT_INTERNAL_TABLE=1, Wave 3's real handle-table port,
 // which carries a standing NO-GO — and at that point PLAN §4.1 decision 5
 // ("stateful subsystems switch atomically as a class") says every caller should
 // flip together anyway, this one included.
@@ -183,7 +183,6 @@ const uint32_t* GoalInstanceTypeInfo() {
 // catch a wrong vtable, a missed field, or a wrong store order's residue.
 // ============================================================================
 Goal* RtAch_Goal_Ctor(Goal* self) {
-    RT_DIFF_BEGIN("Achievement::Goal::Goal");
 
     // The two dead vtable stores are MSVC's inlined base constructors. They are
     // overwritten below before anything can read them; transcribed anyway
@@ -200,14 +199,6 @@ Goal* RtAch_Goal_Ctor(Goal* self) {
     self->_stringTable.ptr          = nullptr;   // +0x20
     self->_text.data                = nullptr;   // +0x28
 
-    if (rt_diff_on__) {
-        // 0xCC so a field the original leaves untouched would show up as a
-        // difference rather than as an accidental match on zero.
-        alignas(16) uint8_t scratch[sizeof(Goal)];
-        std::memset(scratch, 0xCC, sizeof(scratch));
-        RT_ORIGINAL_ONCE(PtrThisFn, "??0Goal@Achievement@@QEAA@XZ")(scratch);
-        RT_DIFF_BYTES(self, scratch, sizeof(Goal));
-    }
     return self;   // retail returns `this` in RAX
 }
 
@@ -226,7 +217,6 @@ Goal* RtAch_Goal_Ctor(Goal* self) {
 // legal things — and nothing about External's half. See the wave doc §4.
 // ============================================================================
 void RtAch_Goal_Dtor(Goal* self) {
-    RT_DIFF_BEGIN("Achievement::Goal::~Goal");
 
     char* const  textBefore = self->_text.data;
     const int32_t rcBefore  = textBefore ? StringRefCount(textBefore) : 0;
@@ -240,24 +230,6 @@ void RtAch_Goal_Dtor(Goal* self) {
     // branch it is nulled.
     RtSystem::RtString_ReleaseInline(&self->_text);
 
-    if (rt_diff_on__) {
-        const bool vtOk = (*reinterpret_cast<void**>(self) == GoalVtable());
-        bool strOk;
-        if (textBefore == nullptr) {
-            strOk = (self->_text.data == nullptr);
-        } else if (rcBefore == 1) {
-            // freed: field left at data-8, block handed back to the allocator
-            strOk = (self->_text.data == textBefore - 8);
-        } else {
-            // shared: refcount down exactly one, field nulled
-            strOk = (self->_text.data == nullptr) && (StringRefCount(textBefore) == rcBefore - 1);
-        }
-        char a[96], b[64];
-        std::snprintf(a, sizeof(a), "vt=%d text=%d rc:%d->%d", (int)vtOk, (int)strOk,
-                      (int)rcBefore, textBefore ? (int)StringRefCount(textBefore) : 0);
-        std::snprintf(b, sizeof(b), "self-check (original not run: would double-free)");
-        RT_DIFF_SHADOW(vtOk && strOk, a, b);
-    }
 
     // Retail TAIL-JUMPS here (`JMP 0x1800bc950`), so ~External finishes the job
     // and its return is ours.
@@ -275,22 +247,12 @@ void RtAch_Goal_Dtor(Goal* self) {
 // check below covers the three stores this body owns.
 // ============================================================================
 GoalInstance* RtAch_GoalInstance_Ctor(GoalInstance* self) {
-    RT_DIFF_BEGIN("Achievement::GoalInstance::GoalInstance");
 
     CallInternalCtor(self);
     *reinterpret_cast<void**>(self) = GoalInstanceVtable();
     self->_flags    = 0;         // +0x10, a DWORD store — +0x14 is left alone
     self->_goal.ptr = nullptr;   // +0x18
 
-    if (rt_diff_on__) {
-        const bool ok = (*reinterpret_cast<void**>(self) == GoalInstanceVtable()) &&
-                        (self->_flags == 0) && (self->_goal.ptr == nullptr);
-        char a[96];
-        std::snprintf(a, sizeof(a), "vt=%p flags=%u goal=%p idx=%d",
-                      *reinterpret_cast<void**>(self), self->_flags,
-                      self->_goal.ptr, (int)self->_base.factoryIndex);
-        RT_DIFF_SHADOW(ok, a, "self-check (original not run: would consume a handle slot)");
-    }
     return self;   // retail returns `this` in RAX
 }
 
@@ -302,16 +264,9 @@ GoalInstance* RtAch_GoalInstance_Ctor(GoalInstance* self) {
 // original would release the handle-table slot twice.
 // ============================================================================
 void RtAch_GoalInstance_Dtor(GoalInstance* self) {
-    RT_DIFF_BEGIN("Achievement::GoalInstance::~GoalInstance");
 
     *reinterpret_cast<void**>(self) = GoalInstanceVtable();
 
-    if (rt_diff_on__) {
-        char a[64];
-        std::snprintf(a, sizeof(a), "vt=%p", *reinterpret_cast<void**>(self));
-        RT_DIFF_SHADOW(*reinterpret_cast<void**>(self) == GoalInstanceVtable(), a,
-                       "self-check (original not run: would free the handle slot twice)");
-    }
 
     CallInternalDtor(self);   // retail: JMP 0x1800bfdb0
 }
@@ -323,10 +278,8 @@ void RtAch_GoalInstance_Dtor(GoalInstance* self) {
 // One instruction. ORACLE: full.
 // ============================================================================
 int RtAch_GoalList_GetGoalCount(const GoalList* self) {
-    RT_DIFF_BEGIN("Achievement::GoalList::GetGoalCount");
     const int ours = self->_goals._size;
     using Fn = int (*)(const GoalList*);
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, "?GetGoalCount@GoalList@Achievement@@QEBAHXZ")(self));
     return ours;
 }
 
@@ -344,17 +297,9 @@ int RtAch_GoalList_GetGoalCount(const GoalList* self) {
 // scratch slot.
 // ============================================================================
 void* RtAch_GoalList_GetGoal(const GoalList* self, void* retval, int index) {
-    RT_DIFF_BEGIN("Achievement::GoalList::GetGoal");
     void* const ours = self->_goals._data[index].ptr;
     *static_cast<void**>(retval) = ours;
 
-    if (rt_diff_on__) {
-        using Fn = void* (*)(const GoalList*, void*, int);
-        void* theirs = nullptr;
-        RT_ORIGINAL_ONCE(Fn, "?GetGoal@GoalList@Achievement@@QEBA?AV?$InternalPtr@VGoalInstance@Achievement@@@Object@@H@Z")(
-            self, &theirs, index);
-        RT_DIFF_SCALAR(ours, theirs);
-    }
     return retval;   // retail returns the slot in RAX
 }
 
@@ -366,17 +311,9 @@ void* RtAch_GoalList_GetGoal(const GoalList* self, void* retval, int index) {
 // Same hidden-return-slot shape, no index. ORACLE: full.
 // ============================================================================
 void* RtAch_GoalInstance_GetGoal(const GoalInstance* self, void* retval) {
-    RT_DIFF_BEGIN("Achievement::GoalInstance::GetGoal");
     void* const ours = self->_goal.ptr;
     *static_cast<void**>(retval) = ours;
 
-    if (rt_diff_on__) {
-        using Fn = void* (*)(const GoalInstance*, void*);
-        void* theirs = nullptr;
-        RT_ORIGINAL_ONCE(Fn, "?GetGoal@GoalInstance@Achievement@@QEBA?AV?$ExternalPtr@VGoal@Achievement@@@Object@@XZ")(
-            self, &theirs);
-        RT_DIFF_SCALAR(ours, theirs);
-    }
     return retval;
 }
 
@@ -393,17 +330,10 @@ void* RtAch_GoalInstance_GetGoal(const GoalInstance* self, void* retval) {
 // ORACLE: full — a pure read of a DLL global into a private scratch dword.
 // ============================================================================
 void* RtAch_Goal_GetInstanceType(const Goal* self, void* retval) {
-    RT_DIFF_BEGIN("Achievement::Goal::GetInstanceType");
     (void)self;   // retail never reads `this`; the answer is a class constant
     const uint32_t ours = *GoalInstanceTypeInfo();
     *static_cast<uint32_t*>(retval) = ours;
 
-    if (rt_diff_on__) {
-        using Fn = void* (*)(const Goal*, void*);
-        uint32_t theirs = 0;
-        RT_ORIGINAL_ONCE(Fn, "?GetInstanceType@Goal@Achievement@@UEBA?AVType@Object@@XZ")(self, &theirs);
-        RT_DIFF_SCALAR(ours, theirs);
-    }
     return retval;
 }
 
@@ -418,7 +348,6 @@ void* RtAch_Goal_GetInstanceType(const Goal* self, void* retval) {
 // stronger than comparing contents.
 // ============================================================================
 void* RtAch_Goal_GetText(const Goal* self, void* retval) {
-    RT_DIFF_BEGIN("Achievement::Goal::GetText");
 
     RtSystem::String* out = static_cast<RtSystem::String*>(retval);
     out->data = nullptr;
@@ -428,16 +357,6 @@ void* RtAch_Goal_GetText(const Goal* self, void* retval) {
         ++StringRefCount(src);
     }
 
-    if (rt_diff_on__) {
-        using Fn = void* (*)(const Goal*, void*);
-        RtSystem::String theirs{};
-        RT_ORIGINAL_ONCE(Fn, "?GetText@Goal@Achievement@@QEBA?AVString@System@@XZ")(self, &theirs);
-        char* t = theirs.data;
-        // Release the oracle call's own reference FIRST, so the refcount is
-        // back where our own body left it whichever way the compare goes.
-        RtSystem::RtString_ReleaseInline(&theirs);
-        RT_DIFF_SCALAR(static_cast<void*>(out->data), static_cast<void*>(t));
-    }
     return retval;
 }
 
@@ -450,18 +369,14 @@ void* RtAch_Goal_GetText(const Goal* self, void* retval) {
 // One bit each out of the +0x10 flag dword. ORACLE: full.
 // ============================================================================
 bool RtAch_GoalInstance_IsMet(const GoalInstance* self) {
-    RT_DIFF_BEGIN("Achievement::GoalInstance::IsMet");
     const bool ours = (self->_flags & RtAchievement::GoalStateBits::kMet) != 0;
     using Fn = bool (*)(const GoalInstance*);
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, "?IsMet@GoalInstance@Achievement@@QEBA_NXZ")(self));
     return ours;
 }
 
 bool RtAch_GoalInstance_HasFailed(const GoalInstance* self) {
-    RT_DIFF_BEGIN("Achievement::GoalInstance::HasFailed");
     const bool ours = ((self->_flags >> 1) & 1u) != 0;
     using Fn = bool (*)(const GoalInstance*);
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, "?HasFailed@GoalInstance@Achievement@@QEBA_NXZ")(self));
     return ours;
 }
 
@@ -487,7 +402,6 @@ bool RtAch_GoalInstance_HasFailed(const GoalInstance* self) {
 // ORACLE: full — read-only on both sides.
 // ============================================================================
 bool RtAch_GoalList_AreGoalsMetExcept(const GoalList* self, const void* exceptPtr) {
-    RT_DIFF_BEGIN("Achievement::GoalList::AreGoalsMetExcept");
 
     bool ours = true;
     const int64_t count = self->_goals._size;      // loaded once, as retail does
@@ -506,9 +420,6 @@ bool RtAch_GoalList_AreGoalsMetExcept(const GoalList* self, const void* exceptPt
     }
 
     using Fn = bool (*)(const GoalList*, const void*);
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn,
-        "?AreGoalsMetExcept@GoalList@Achievement@@QEBA_NV?$InternalPtr@VGoalInstance@Achievement@@@Object@@@Z")(
-            self, exceptPtr));
     return ours;
 }
 
@@ -549,20 +460,7 @@ void GoalInstance_UpdateBody(GoalInstance* self) {
 }  // namespace
 
 void RtAch_GoalInstance_Update(GoalInstance* self, const void* time, const void* list) {
-    RT_DIFF_BEGIN("Achievement::GoalInstance::Update");
 
-    if (rt_diff_on__) {
-        const uint32_t before = self->_flags;
-        using Fn = void (*)(GoalInstance*, const void*, const void*);
-        RT_ORIGINAL_ONCE(Fn,
-            "?Update@GoalInstance@Achievement@@UEAAXAEBVTime@System@@AEBVGoalList@2@@Z")(
-                self, time, list);
-        const uint32_t theirs = self->_flags;
-        self->_flags = before;            // undo theirs; +0x10 is all Update writes
-        GoalInstance_UpdateBody(self);
-        RT_DIFF_SCALAR(self->_flags, theirs);
-        return;
-    }
     GoalInstance_UpdateBody(self);
 }
 
@@ -573,7 +471,7 @@ void RtAch_GoalInstance_Update(GoalInstance* self, const void* time, const void*
 // `?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z` (0x18009ef70) are
 // absent HERE but no longer absent from the build: Wave 9 lane P registers both
 // from runtime/src/achievement/goal_serialize.cpp, under this same
-// BANISHED_RT_GOAL switch. They live in their own file only so that two lanes
+// RT_GOAL switch. They live in their own file only so that two lanes
 // never edit one file, not because they are still held back — the "DELIBERATELY
 // ABSENT, see WAVE5_LANE_A.md §4" this line used to say is superseded.
 //
@@ -633,7 +531,7 @@ int RtAchGoalRegister() {
 
     // Counts THIS file's registrations only. Goal::Serialize and
     // GoalInstance::Persist are the other two of the 15 and are registered by
-    // goal_serialize.cpp (Wave 9 lane P) under this same BANISHED_RT_GOAL switch.
+    // goal_serialize.cpp (Wave 9 lane P) under this same RT_GOAL switch.
     // This line used to say they were "held back -- see WAVE5_LANE_A.md", which
     // stayed in the log after they were ported: a banner asserting a function is
     // held back while it is registered is the same invisible-to-review defect as

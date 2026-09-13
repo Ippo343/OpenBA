@@ -45,9 +45,8 @@ extern void RtIo_Persistence_SetBool(void* self, const char* section, const char
 // been constructed but not started — a probe that allocates from a *PortInit
 // faults on a null `_singleton` at +0x640 (lane PKG2). The first RegisterInput
 // call is provably safe because the caller is itself about to allocate a node.
-extern "C" void RtCollectionSetAvlE24ProbeMaybeRun();
 // Wave 9 lane ENGIO. Runs at most once, and only when
-// BANISHED_RT_INPUTUPD_PROBE=1. Hooked from KeyMap::GetValue rather than
+// RT_INPUTUPD_PROBE=1. Hooked from KeyMap::GetValue rather than
 // from the function it verifies, because Input::Device::Update has NO
 // CALLER in this tree -- the live per-frame call is a near call inside the
 // DLL's held-back MainLoop::Run, which no registration can intercept, so a
@@ -56,7 +55,6 @@ extern "C" void RtCollectionSetAvlE24ProbeMaybeRun();
 // function measured at calls=9000 on the autostart route, which is late
 // enough that Application::_singleton and Input::Configuration::_singleton
 // are both published.
-extern "C" void RtInputDeviceUpdateProbeMaybeRun();
 
 namespace {
 
@@ -152,7 +150,6 @@ using SetDestroySubtreeFn = void (*)(void* setPtr, BindingNode* node);
 using SetFreeNodeFn       = void (*)(void* setPtr, BindingNode* node);
 
 void RtInput_KeyMap_ClearAll(void* self) {
-    RT_DIFF_BEGIN("Input::KeyMap::ClearAll");
     static auto destroySubtree = reinterpret_cast<SetDestroySubtreeFn>(
         ResolveAddr(Module::Runtime, 0x180023130));
     static auto freeNode = reinterpret_cast<SetFreeNodeFn>(
@@ -169,14 +166,12 @@ void RtInput_KeyMap_ClearAll(void* self) {
     km->_count = 0;
     km->_root = nullptr;
 
-    RT_DIFF_SHADOW(km->_root == nullptr && km->_count == 0, "root=null count=0", "same (self-check)");
 }
 
 // ?ClearInput@KeyMap@Input@@QEAAXHH@Z  retail 0x1800a7d70  ord 1709
 // ClearInput(id, slot): unbind ONE slot of the binding with this id.
 // Un-guarded on a missing id, faithfully (retail's RAX==0 write-through).
 void RtInput_KeyMap_ClearInput_HH(void* self, int32_t id, int32_t slot) {
-    RT_DIFF_BEGIN("Input::KeyMap::ClearInput(id,slot)");
     auto* km = static_cast<KeyMap*>(self);
     BindingNode* n = FindBinding(km, static_cast<uint8_t>(id));
     // Faithful to retail: a missing id leaves n==nullptr and the write below
@@ -185,7 +180,6 @@ void RtInput_KeyMap_ClearInput_HH(void* self, int32_t id, int32_t slot) {
     n->element.inputId[slot] = 0;
 
     bool ok = n && n->element.device[slot] == 0xFF && n->element.inputId[slot] == 0;
-    RT_DIFF_SHADOW(ok, "device=0xFF inputId=0", "same (self-check)");
 }
 
 // ?ClearInput@KeyMap@Input@@QEAAXHHH@Z  retail 0x1800a7db0  ord 1710
@@ -194,7 +188,6 @@ void RtInput_KeyMap_ClearInput_HH(void* self, int32_t id, int32_t slot) {
 // not early-out on a match — see 0x1800a7db0: JNZ 0x1800a7e02 from the match
 // branch too, straight into the increment).
 void RtInput_KeyMap_ClearInput_HHH(void* self, int32_t id, int32_t device, int32_t inputId) {
-    RT_DIFF_BEGIN("Input::KeyMap::ClearInput(id,device,inputId)");
     auto* km = static_cast<KeyMap*>(self);
     BindingNode* n = FindBinding(km, static_cast<uint8_t>(id));
     // n may be nullptr here (retail: RAX=0 -> the array base is address 0);
@@ -209,7 +202,6 @@ void RtInput_KeyMap_ClearInput_HHH(void* self, int32_t id, int32_t device, int32
             n->element.inputId[slot] = 0;
         }
     }
-    RT_DIFF_SHADOW(true, "matching slots cleared", "same (self-check)");
 }
 
 // ?RegisterInput@KeyMap@Input@@QEAAXHHHPEBD_N@Z  retail 0x1800a7e70  ord 3529
@@ -250,7 +242,7 @@ void RtInput_KeyMap_ClearInput_HHH(void* self, int32_t id, int32_t device, int32
 // ours and then theirs would insert the same id twice (the second call would in
 // fact return early, silently making the oracle vacuous). Instead the insert is
 // verified by asking the DLL'S OWN accessors, resolved through
-// ResolveExportRaw so they are the shipped bodies, to read back what we wrote:
+// the raw DLL door so they are the shipped bodies, to read back what we wrote:
 // GetDeviceForId / GetInputForId must report the pair we inserted for slot 0
 // and `unbound` for slot 1, GetIdForDeviceInput -- which walks the WHOLE tree
 // through Leftmost/Successor rather than doing a lookup -- must find the id,
@@ -262,8 +254,6 @@ using SetRebalanceFn  = void (*)(void* setPtr, BindingNode** parentSlot);
 
 void RtInput_KeyMap_RegisterInput(void* self, int32_t id, int32_t device,
                                   int32_t inputId, const char* name, bool exclusive) {
-    RT_DIFF_BEGIN("Input::KeyMap::RegisterInput");
-    RtCollectionSetAvlE24ProbeMaybeRun();   // no-op unless BANISHED_RT_SETAVL24_PROBE=1
     static auto allocNode = reinterpret_cast<SetAllocNodeFn>(
         ResolveAddr(Module::Runtime, 0x180023060));
     static auto rebalance = reinterpret_cast<SetRebalanceFn>(
@@ -283,12 +273,6 @@ void RtInput_KeyMap_RegisterInput(void* self, int32_t id, int32_t device,
     // such pairs. The port was correct both times; the ORACLE was wrong.
     // Recorded here rather than only in the wave doc, per PLAN §6 step 8.
     int32_t preFound = -1;
-    if (rt_diff_on__) {
-        using PairFn = int32_t (*)(const void*, int32_t, int32_t);
-        if (auto f = reinterpret_cast<PairFn>(
-                ResolveExportRaw("?GetIdForDeviceInput@KeyMap@Input@@QEBAHHH@Z")))
-            preFound = f(km, device, inputId);
-    }
 
     // 1. Already registered? Retail's first descent (0x1800a7e90) tracks no
     //    parent and leaves the root in RBX untouched, which is what the
@@ -346,66 +330,16 @@ void RtInput_KeyMap_RegisterInput(void* self, int32_t id, int32_t device,
         km->_count += 1;
     }
 
-    if (rt_diff_on__) {
-        // Their readers, on our tree. ResolveExportRaw so these are the shipped
-        // bodies even once the ports are registered
-        // (reference_resolveaddr_consults_port_registry_first.md).
-        using PairFn = int32_t (*)(const void*, int32_t, int32_t);
-        auto theirDevice = reinterpret_cast<PairFn>(
-            ResolveExportRaw("?GetDeviceForId@KeyMap@Input@@QEBAHHH@Z"));
-        auto theirInput = reinterpret_cast<PairFn>(
-            ResolveExportRaw("?GetInputForId@KeyMap@Input@@QEBAHHH@Z"));
-        auto theirFind = reinterpret_cast<PairFn>(
-            ResolveExportRaw("?GetIdForDeviceInput@KeyMap@Input@@QEBAHHH@Z"));
-
-        bool ok = theirDevice && theirInput && theirFind;
-        int32_t d0 = ok ? theirDevice(km, id, 0) : 0;
-        int32_t i0 = ok ? theirInput(km, id, 0) : 0;
-        int32_t d1 = ok ? theirDevice(km, id, 1) : 0;
-        int32_t found = ok ? theirFind(km, device, inputId) : -1;
-        // The pair may already belong to another id. `GetIdForDeviceInput` is an
-        // IN-ORDER walk returning the FIRST match, so after our insert the
-        // answer is whichever of the two ids sorts lower in the tree's UNSIGNED
-        // byte order — which is not necessarily the pre-existing one. Getting
-        // this half-right (expecting `preFound` unconditionally) still fired on
-        // the id that sorts BEFORE the incumbent; the run that found it is in
-        // docs/runtime_port/WAVE9_LANE_INPUT.md.
-        const int32_t expectFound =
-            (preFound >= 0 && static_cast<uint8_t>(preFound) < key)
-                ? preFound
-                : static_cast<int32_t>(key);
-        ok = ok
-          && d0 == static_cast<int32_t>(static_cast<int8_t>(device))
-          && i0 == static_cast<int32_t>(static_cast<uint8_t>(inputId))
-          && d1 == -1                                   // slot 1 unbound (0xFF)
-          && found == expectFound                       // reachable by a FULL tree walk
-          && km->_count == countBefore + 1;
-
-        char a[176], b[112];
-        std::snprintf(a, sizeof(a),
-                      "theirs read back dev0=%d in0=%d dev1=%d walkFound=%d count=%d",
-                      (int)d0, (int)i0, (int)d1, (int)found, (int)km->_count);
-        std::snprintf(b, sizeof(b), "dev0=%d in0=%d dev1=-1 walkFound=%d count=%d",
-                      (int)static_cast<int8_t>(device), (int)static_cast<uint8_t>(inputId),
-                      (int)expectFound, (int)countBefore + 1);
-        RT_DIFF_SHADOW(ok, a, b);
-    }
 }
 
 // ?GetDeviceForId@KeyMap@Input@@QEBAHHH@Z  retail 0x1800a7970  ord 2571
 // Returns -1 both for "id not registered" AND "slot unbound" (0xFF sign-
 // extends to -1 through the SAME `MOVSX` retail uses — 0x1800a7995..799d).
 int32_t RtInput_KeyMap_GetDeviceForId(const void* self, int32_t id, int32_t slot) {
-    RT_DIFF_BEGIN("Input::KeyMap::GetDeviceForId");
     auto* km = const_cast<KeyMap*>(static_cast<const KeyMap*>(self));
     BindingNode* n = FindBinding(km, static_cast<uint8_t>(id));
     int32_t ours = n ? static_cast<int8_t>(n->element.device[slot]) : -1;
 
-    if (rt_diff_on__) {
-        using Fn = int32_t (*)(const void*, int32_t, int32_t);
-        int32_t theirs = RT_ORIGINAL_ONCE(Fn, "?GetDeviceForId@KeyMap@Input@@QEBAHHH@Z")(self, id, slot);
-        RT_DIFF_SCALAR(ours, theirs);
-    }
     return ours;
 }
 
@@ -414,16 +348,10 @@ int32_t RtInput_KeyMap_GetDeviceForId(const void* self, int32_t id, int32_t slot
 // unbound slot's inputId byte is 0, which is already a valid "no input" value
 // with nothing to sign-extend.
 int32_t RtInput_KeyMap_GetInputForId(const void* self, int32_t id, int32_t slot) {
-    RT_DIFF_BEGIN("Input::KeyMap::GetInputForId");
     auto* km = const_cast<KeyMap*>(static_cast<const KeyMap*>(self));
     BindingNode* n = FindBinding(km, static_cast<uint8_t>(id));
     int32_t ours = n ? static_cast<int32_t>(n->element.inputId[slot]) : -1;
 
-    if (rt_diff_on__) {
-        using Fn = int32_t (*)(const void*, int32_t, int32_t);
-        int32_t theirs = RT_ORIGINAL_ONCE(Fn, "?GetInputForId@KeyMap@Input@@QEBAHHH@Z")(self, id, slot);
-        RT_DIFF_SCALAR(ours, theirs);
-    }
     return ours;
 }
 
@@ -434,7 +362,6 @@ int32_t RtInput_KeyMap_GetInputForId(const void* self, int32_t id, int32_t slot)
 // successor shape (0x1800a78a0..0x1800a791d) — see FindBinding's neighbours
 // above, Leftmost/Successor.
 int32_t RtInput_KeyMap_GetIdForDeviceInput(const void* self, int32_t device, int32_t inputId) {
-    RT_DIFF_BEGIN("Input::KeyMap::GetIdForDeviceInput");
     auto* km = const_cast<KeyMap*>(static_cast<const KeyMap*>(self));
     int32_t ours = -1;
     for (BindingNode* n = Leftmost(static_cast<BindingNode*>(km->_root)); n; n = Successor(n)) {
@@ -449,11 +376,6 @@ int32_t RtInput_KeyMap_GetIdForDeviceInput(const void* self, int32_t device, int
         if (matched) { ours = n->element.id; break; }
     }
 
-    if (rt_diff_on__) {
-        using Fn = int32_t (*)(const void*, int32_t, int32_t);
-        int32_t theirs = RT_ORIGINAL_ONCE(Fn, "?GetIdForDeviceInput@KeyMap@Input@@QEBAHHH@Z")(self, device, inputId);
-        RT_DIFF_SCALAR(ours, theirs);
-    }
     return ours;
 }
 
@@ -467,8 +389,6 @@ int32_t RtInput_KeyMap_GetIdForDeviceInput(const void* self, int32_t device, int
 // id is unregistered: FindBinding returns nullptr and the slot loop reads
 // through a null-based pointer, exactly like retail's RAX==0 path.
 int16_t RtInput_KeyMap_GetValue(const void* self, int32_t deviceCtx, int32_t id) {
-    RT_DIFF_BEGIN("Input::KeyMap::GetValue");
-    RtInputDeviceUpdateProbeMaybeRun();  // no-op unless BANISHED_RT_INPUTUPD_PROBE=1
     auto* km = const_cast<KeyMap*>(static_cast<const KeyMap*>(self));
     BindingNode* n = FindBinding(km, static_cast<uint8_t>(id));
     uint8_t* deviceSingleton = DeviceSingleton();
@@ -485,11 +405,6 @@ int16_t RtInput_KeyMap_GetValue(const void* self, int32_t deviceCtx, int32_t id)
         }
     }
 done:
-    if (rt_diff_on__) {
-        using Fn = int16_t (*)(const void*, int32_t, int32_t);
-        int16_t theirs = RT_ORIGINAL_ONCE(Fn, "?GetValue@KeyMap@Input@@QEBAFHH@Z")(self, deviceCtx, id);
-        RT_DIFF_SCALAR(ours, theirs);
-    }
     return ours;
 }
 
@@ -498,7 +413,6 @@ done:
 // State::value (+0x04), and returning the raw byte (retail: MOVZX EAX,CL —
 // preserved as `!= 0` here since the field is declared `bool`).
 bool RtInput_KeyMap_Pressed(const void* self, int32_t deviceCtx, int32_t id) {
-    RT_DIFF_BEGIN("Input::KeyMap::Pressed");
     auto* km = const_cast<KeyMap*>(static_cast<const KeyMap*>(self));
     BindingNode* n = FindBinding(km, static_cast<uint8_t>(id));
     uint8_t* deviceSingleton = DeviceSingleton();
@@ -515,11 +429,6 @@ bool RtInput_KeyMap_Pressed(const void* self, int32_t deviceCtx, int32_t id) {
         }
     }
 done:
-    if (rt_diff_on__) {
-        using Fn = bool (*)(const void*, int32_t, int32_t);
-        bool theirs = RT_ORIGINAL_ONCE(Fn, "?Pressed@KeyMap@Input@@QEBA_NHH@Z")(self, deviceCtx, id);
-        RT_DIFF_SCALAR(ours, theirs);
-    }
     return ours;
 }
 
@@ -528,7 +437,6 @@ done:
 // search over the two slots — the caller names which one). Faithfully
 // unguarded on a missing id.
 void RtInput_KeyMap_SetInput(void* self, int32_t id, int32_t slot, int32_t device, int32_t inputId) {
-    RT_DIFF_BEGIN("Input::KeyMap::SetInput");
     auto* km = static_cast<KeyMap*>(self);
     BindingNode* n = FindBinding(km, static_cast<uint8_t>(id));
     n->element.inputId[slot] = static_cast<uint8_t>(inputId);
@@ -536,7 +444,6 @@ void RtInput_KeyMap_SetInput(void* self, int32_t id, int32_t slot, int32_t devic
 
     bool ok = n && n->element.device[slot] == static_cast<uint8_t>(device) &&
               n->element.inputId[slot] == static_cast<uint8_t>(inputId);
-    RT_DIFF_SHADOW(ok, "device/inputId written", "same (self-check)");
 }
 
 // ============================================================================
@@ -547,7 +454,6 @@ void RtInput_KeyMap_SetInput(void* self, int32_t id, int32_t slot, int32_t devic
 // ord 3004. Const read of already-latched state (WAVE8.md §5's carve-out) —
 // full replay oracle.
 int16_t RtInput_Device_GetValue(const void* self, InputDevice device, int32_t deviceCtx, int32_t inputIdx) {
-    RT_DIFF_BEGIN("Input::Device::GetValue");
     // DeviceArrayBase returns nullptr for a device value outside {0,1,2} —
     // faithful to retail (its R8 stays 0 in that branch too), NOT guarded
     // here: the State* below reproduces retail's exact near-null address.
@@ -556,48 +462,28 @@ int16_t RtInput_Device_GetValue(const void* self, InputDevice device, int32_t de
     auto* state = reinterpret_cast<State*>(base) + inputIdx;
     int16_t ours = state->value;
 
-    if (rt_diff_on__) {
-        using Fn = int16_t (*)(const void*, InputDevice, int32_t, int32_t);
-        int16_t theirs = RT_ORIGINAL_ONCE(Fn, "?GetValue@Device@Input@@QEBAFW4InputDevice@12@HH@Z")(
-            self, device, deviceCtx, inputIdx);
-        RT_DIFF_SCALAR(ours, theirs);
-    }
     return ours;
 }
 
 // ?Pressed@Device@Input@@QEBA_NW4InputDevice@12@HH@Z  retail 0x1800e16c0
 // ord 3431.
 bool RtInput_Device_Pressed(const void* self, InputDevice device, int32_t deviceCtx, int32_t inputIdx) {
-    RT_DIFF_BEGIN("Input::Device::Pressed");
     auto* base = DeviceArrayBase(const_cast<uint8_t*>(static_cast<const uint8_t*>(self)),
                                   static_cast<int32_t>(device), deviceCtx);
     auto* state = reinterpret_cast<State*>(base) + inputIdx;
     bool ours = state->pressed;
 
-    if (rt_diff_on__) {
-        using Fn = bool (*)(const void*, InputDevice, int32_t, int32_t);
-        bool theirs = RT_ORIGINAL_ONCE(Fn, "?Pressed@Device@Input@@QEBA_NW4InputDevice@12@HH@Z")(
-            self, device, deviceCtx, inputIdx);
-        RT_DIFF_SCALAR(ours, theirs);
-    }
     return ours;
 }
 
 // ?Released@Device@Input@@QEBA_NW4InputDevice@12@HH@Z  retail 0x1800e1720
 // ord 3545.
 bool RtInput_Device_Released(const void* self, InputDevice device, int32_t deviceCtx, int32_t inputIdx) {
-    RT_DIFF_BEGIN("Input::Device::Released");
     auto* base = DeviceArrayBase(const_cast<uint8_t*>(static_cast<const uint8_t*>(self)),
                                   static_cast<int32_t>(device), deviceCtx);
     auto* state = reinterpret_cast<State*>(base) + inputIdx;
     bool ours = state->released;
 
-    if (rt_diff_on__) {
-        using Fn = bool (*)(const void*, InputDevice, int32_t, int32_t);
-        bool theirs = RT_ORIGINAL_ONCE(Fn, "?Released@Device@Input@@QEBA_NW4InputDevice@12@HH@Z")(
-            self, device, deviceCtx, inputIdx);
-        RT_DIFF_SCALAR(ours, theirs);
-    }
     return ours;
 }
 
@@ -608,7 +494,6 @@ bool RtInput_Device_Released(const void* self, InputDevice device, int32_t devic
 // state, so no replay (WAVE8.md §5 / the brief's explicit carve-out) — shadow
 // verifies our own write, no call into the original.
 void RtInput_Device_ResetState(void* self) {
-    RT_DIFF_BEGIN("Input::Device::ResetState");
     auto* base = static_cast<uint8_t*>(self);
     std::memset(base, 0, kJoystickCount * kJoystickStride);
     std::memset(base + kKeyboardOffset, 0, kKeyboardInputCount * sizeof(State));
@@ -616,7 +501,6 @@ void RtInput_Device_ResetState(void* self) {
 
     bool zeroed = true;
     for (int i = 0; i < kJoystickCount * kJoystickStride && zeroed; ++i) zeroed = (base[i] == 0);
-    RT_DIFF_SHADOW(zeroed, "3 ranges zeroed", "same (self-check)");
 }
 
 // ============================================================================
@@ -649,14 +533,13 @@ void RtInput_Device_ResetState(void* self) {
 // passed a literal `true`.
 //
 // ONE BEHAVIOURAL CONSEQUENCE, stated rather than buried: with
-// BANISHED_RT_INPUTCFGSTART=0 the name door used to reach this body. Both doors
+// RT_INPUTCFGSTART=0 the name door used to reach this body. Both doors
 // now reach lane ENG's regardless of that switch -- the switch gates
 // ?Startup@'s registration, never the linkage of a body this file registers.
 extern "C" void RtInput_Configuration_Load(Configuration* self);
 
 // ?Save@Configuration@Input@@QEAAXXZ  retail 0x1800e0c00  ord 3604
 void RtInput_Configuration_Save(void* self) {
-    RT_DIFF_BEGIN("Input::Configuration::Save");
     auto* cfg = static_cast<Configuration*>(self);
 
     using KeyMapSaveFn = void (*)(void*);
@@ -671,7 +554,6 @@ void RtInput_Configuration_Save(void* self) {
     RtIo_Persistence_SetBool(persistence, "Input", "Legacy", cfg->legacy);
     RtIo_Persistence_SetBool(persistence, "Input", "MouseDisplay", cfg->mouseDisplay);
 
-    RT_DIFF_SHADOW(true, "3 bools saved via Persistence::Set", "Persistence::Set already self-verifies (Wave 4)");
 }
 
 // ============================================================================
@@ -704,13 +586,10 @@ void RtInput_Configuration_Save(void* self) {
 // identity rather than a second reading of the same source.
 // ---------------------------------------------------------------------------
 void RtInput_Configuration_Dtor(void* /*selfPtr - never read*/) {
-    RT_DIFF_BEGIN("Input::Configuration::~Configuration");
-    RT_DIFF_WORK(true);          // unconditional; there is no branch
+          // unconditional; there is no branch
 
     *RT_DATA_SLOT(void**, "?_singleton@Configuration@Input@@0PEAV12@EA") = nullptr;
 
-    RT_DIFF_SHADOW(true, "cleared Input::Configuration::_singleton",
-                   "no return value and one observable store");
 }
 
 int RtInputRegister() {
@@ -718,7 +597,7 @@ int RtInputRegister() {
     // WAVE 23 LANE TAIL. Reached by name from
     // runtime/src/engine/engine_lifecycle.cpp's Engine::Shutdown teardown.
     // Registered from HERE rather than from RtInputConfigStartupRegister(),
-    // which is gated behind BANISHED_RT_INPUTCFGSTART: a gated registration is
+    // which is gated behind RT_INPUTCFGSTART: a gated registration is
     // not a port and tools/runtime_census.py will not count it.
     RegisterRuntimeExport("??1Configuration@Input@@QEAA@XZ", (void*)&RtInput_Configuration_Dtor);
     RegisterRuntimeAddr(0x1800e0e10, (void*)&RtInput_Configuration_Dtor); ++n;
@@ -770,7 +649,7 @@ int RtInputRegister() {
 
     // Both doors, one body -- and that body is input_config_startup.cpp's. This
     // file keeps the registration because RtInputRegister is ungated, so the
-    // export stays bound whatever BANISHED_RT_INPUTCFGSTART says.
+    // export stays bound whatever RT_INPUTCFGSTART says.
     RegisterRuntimeExport("?Load@Configuration@Input@@QEAAXXZ", (void*)&RtInput_Configuration_Load);
     RegisterRuntimeAddr(0x1800e0c80, (void*)&RtInput_Configuration_Load); ++n;
 

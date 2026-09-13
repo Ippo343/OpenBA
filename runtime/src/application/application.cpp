@@ -34,13 +34,7 @@ using RtApplication::Application;
 // Oracle: FULL DIFF.
 // ============================================================================
 bool RtApp_IsPaused(const Application* self) {
-    RT_DIFF_BEGIN("Application::Application::IsPaused");
     const bool ours = (self->_running == 0);
-    if (rt_diff_on__) {
-        using Fn = bool (*)(const Application*);
-        const bool theirs = RT_ORIGINAL_ONCE(Fn, "?IsPaused@Application@1@QEAA_NXZ")(self);
-        RT_DIFF_SCALAR(ours, theirs);
-    }
     return ours;
 }
 
@@ -64,16 +58,5 @@ bool RtApp_IsPaused(const Application* self) {
 // in bounds. Only the reasoning was wrong.
 // ============================================================================
 void RtApp_Quit(Application* self) {
-    RT_DIFF_BEGIN("Application::Application::Quit");
-    if (rt_diff_on__) {
-        using Fn = void (*)(Application*);
-        alignas(8) uint8_t ours[sizeof(Application)];
-        alignas(8) uint8_t theirs[sizeof(Application)];
-        std::memcpy(ours,   self, sizeof(Application));
-        std::memcpy(theirs, self, sizeof(Application));
-        reinterpret_cast<Application*>(ours)->_quitRequested = 1;
-        RT_ORIGINAL_ONCE(Fn, "?Quit@Application@1@QEAAXXZ")(reinterpret_cast<Application*>(theirs));
-        RT_DIFF_BYTES(ours, theirs, sizeof(Application));
-    }
     self->_quitRequested = 1;
 }

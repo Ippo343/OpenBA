@@ -23,7 +23,7 @@
 //      restore of the Random state as well, which is a real and bounded next
 //      step rather than a missing tool."
 //
-// That snapshot/restore HAS EXISTED SINCE WAVE 2. `RtDiffRandomShadow` in
+// That snapshot/restore HAS EXISTED SINCE WAVE 2. `the diff oracle` in
 // runtime/src/system/value_types.cpp snapshots the live `Random`, lets ours
 // mutate it, and replays the original on an independent scratch copy -- exactly
 // the shape Wave 8 described as the missing step. `System::Random` is a flat
@@ -195,7 +195,7 @@
 // Plus one virtual call, `(*(vtbl+0x60))(platformChannel, volume, 0)` at
 // 0x1800dfc06, on a platform-channel object this body does not own.
 //
-// KILL SWITCH: BANISHED_RT_AUDIOSCENEUPDATE, DEFAULT ON (kickoff section 2.2 --
+// KILL SWITCH: RT_AUDIOSCENEUPDATE, DEFAULT ON (kickoff section 2.2 --
 // a registration behind an opt-in switch moves neither the live count nor the
 // cutover wall). Its OWN switch, separate from audio.cpp's, so this 1816-byte
 // body can be A/B'd out in one variable without taking the other 16 Audio ports
@@ -209,7 +209,6 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/audio/Audio.h"
-#include "../../funcs/rt_diff.h"
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module m, uintptr_t ghidra_addr);
@@ -725,9 +724,6 @@ extern "C" bool RtAudio_Scene_Update(void* selfv, int64_t deltaTicks, int64_t no
 // Registration
 // ============================================================================
 int RtAudioSceneUpdateRegister() {
-    const char* v = std::getenv("BANISHED_RT_AUDIOSCENEUPDATE");
-    if (v && v[0] == '0') return 0;
-
     int n = 0;
     RegisterRuntimeExport(
         "?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z",

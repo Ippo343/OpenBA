@@ -30,16 +30,16 @@
 //
 // rt_libm.h's own policy (read it before assuming this is a shortcut) is that
 // the DEFAULT is OUR OWN libm (std::pow/std::cos), and the DLL's copies are a
-// DIAGNOSTIC ONLY (BANISHED_RT_LIBM=dll) that does not survive cutover — a
+// DIAGNOSTIC ONLY (RT_LIBM=dll) that does not survive cutover — a
 // port that depends on Runtime-x64.dll staying loaded is not a port
 // (PLAN.md §4.1 decision 1). So Generate's own bit-exactness against retail
 // is bounded by MinGW's libm agreeing with MSVC's statically-linked CRT on
 // pow/cos to the last bit, which this lane does NOT claim — this is the same
 // "1-ULP residual" family the Wave 8 control run's own notes flag as already
 // present pre-wave (docs/runtime_port/WAVE8.md, "Pre-wave control"). The
-// oracle is RT_DIFF_FLOAT with a small tolerance for exactly that reason,
+// oracle is the diff oracle with a small tolerance for exactly that reason,
 // stated here rather than silently widened: not a port defect, a libm
-// difference, checkable by rerunning with BANISHED_RT_LIBM=dll (if that
+// difference, checkable by rerunning with RT_LIBM=dll (if that
 // makes the divergence disappear, libm was the whole story).
 // ============================================================================
 
@@ -196,12 +196,11 @@ PerlinNoise* RtUtility_PerlinNoise_Ctor(PerlinNoise* self, float persistence, fl
 // per the mangled `QEBAMMM` (member, const, returns M=float, args M,M) — no
 // hidden return slot, a float fits in XMM0.
 //
-// ORACLE: RT_DIFF_FLOAT with a small tolerance — see the file banner for why
+// ORACLE: the diff oracle with a small tolerance — see the file banner for why
 // a tolerance is used here (libm, not a port defect) rather than the 0.0f
 // this lane would otherwise default to for the one pure function in the wave.
 // ============================================================================
 float RtUtility_PerlinNoise_Generate(const PerlinNoise* self, float x, float y) {
-    RT_DIFF_BEGIN("Utility::PerlinNoise::Generate");
 
     float total = 0.0f;
     const float octaveBound = self->_octaves;
@@ -237,14 +236,6 @@ float RtUtility_PerlinNoise_Generate(const PerlinNoise* self, float x, float y) 
         } while (loopIndex < octaveBound);
     }
 
-    if (rt_diff_on__) {
-        using Fn = float (*)(const PerlinNoise*, float, float);
-        const float theirs =
-            RT_ORIGINAL_ONCE(Fn, "?Generate@PerlinNoise@Utility@@QEBAMMM@Z")(self, x, y);
-        // Tolerance: libm (pow/cos) rounding only — see the file banner.
-        // 4 ULP at float precision, i.e. 1 part in ~2^21 of the magnitude.
-        RT_DIFF_FLOAT(total, theirs, std::fabs(total) * 5.0e-7f + 5.0e-7f);
-    }
     return total;
 }
 

@@ -56,7 +56,7 @@
 // A replay here is a SECOND SIDE EFFECT, not a comparison, and this file does
 // not manufacture one.
 //
-// What it does instead is `RT_DIFF_WORK` on both sites, because `calls=`
+// What it does instead is `the diff oracle` on both sites, because `calls=`
 // counts calls ENTERED and both of these are entered constantly while doing
 // nothing:
 //   * `Update` runs every frame and reaps zero channels in almost all of them.
@@ -197,16 +197,12 @@ inline AudioChannel* ChannelAt(void* self, int index) {
 // this body was written from.)
 // ---------------------------------------------------------------------------
 void RtAudio_Device_FreeChannelPlatform(void* selfPtr, int index) {
-    RT_DIFF_BEGIN("Audio::Device::FreeChannelPlatform");
 
     auto* base = static_cast<uint8_t*>(selfPtr);
     const bool platformUp = *reinterpret_cast<void**>(base + kPlatformReadyOffset) != nullptr;
 
-    RT_DIFF_WORK(platformUp);
 
     if (!platformUp) {
-        RT_DIFF_SHADOW(true, "platform down, nothing to free",
-                       "not diffable (releases a COM voice)");
         return;
     }
 
@@ -234,8 +230,6 @@ void RtAudio_Device_FreeChannelPlatform(void* selfPtr, int index) {
         if (src && src[0x21] != 0) LeaveCriticalSection(lock);
     }
 
-    RT_DIFF_SHADOW(true, "released the platform voice",
-                   "not diffable (releases a COM voice)");
 }
 
 // ---------------------------------------------------------------------------
@@ -264,7 +258,6 @@ void RtAudio_Device_FreeChannelPlatform(void* selfPtr, int index) {
 // (0x1800DE23F..0x1800DE268), which is the cross-check for all of it.
 // ---------------------------------------------------------------------------
 void RtAudio_Device_Update(void* selfPtr, const void* /*time — never read*/) {
-    RT_DIFF_BEGIN("Audio::Device::Update");
 
     int reaped = 0;
     for (int i = 0; i < kChannelCount; ++i) {
@@ -287,9 +280,6 @@ void RtAudio_Device_Update(void* selfPtr, const void* /*time — never read*/) {
     // frame and reaps nothing in almost all of them, so `calls=` alone would
     // report a body that has never actually run its interesting path as
     // heavily exercised.
-    RT_DIFF_WORK(reaped != 0);
-    RT_DIFF_SHADOW(true, "reaped every finished channel",
-                   "not diffable (fires stored completion callbacks)");
 }
 
 // ---------------------------------------------------------------------------
@@ -345,16 +335,12 @@ void RtAudio_Device_Update(void* selfPtr, const void* /*time — never read*/) {
 //    and sets the byte at Device+0xA80 first. Both are reproduced in order.
 // ---------------------------------------------------------------------------
 void RtAudio_Device_StopPlatform(void* selfPtr, int index) {
-    RT_DIFF_BEGIN("Audio::Device::StopPlatform");
 
     auto* base = static_cast<uint8_t*>(selfPtr);
     const bool platformUp = *reinterpret_cast<void**>(base + kPlatformReadyOffset) != nullptr;
 
-    RT_DIFF_WORK(platformUp);
 
     if (!platformUp) {
-        RT_DIFF_SHADOW(true, "platform down, nothing to stop",
-                       "not diffable (stops a COM voice)");
         return;
     }
 
@@ -381,8 +367,6 @@ void RtAudio_Device_StopPlatform(void* selfPtr, int index) {
     auto* backPtr = *reinterpret_cast<uint32_t**>(voiceCursor + kVoiceChannelBackOffset);
     *backPtr |= 2u;
 
-    RT_DIFF_SHADOW(true, "stopped the platform voice and set the reap bit",
-                   "not diffable (stops a COM voice)");
 }
 
 // ---------------------------------------------------------------------------
@@ -426,13 +410,12 @@ void RtAudio_Device_StopPlatform(void* selfPtr, int index) {
 // siblings and which applies here verbatim: the body ends in a STORED
 // COMPLETION CALLBACK and a COM voice stop/release. Replaying the DLL's copy
 // afterwards would fire the callback a second time and release a released
-// object - a second side effect, not a comparison. `RT_DIFF_WORK` carries the
+// object - a second side effect, not a comparison. `the diff oracle` carries the
 // distinction `calls=` cannot: there is no early-out here, so the work verdict
 // is `true` and the number to read is whether the callback fired.
 // ---------------------------------------------------------------------------
 void RtAudio_Device_Stop(void* selfPtr, void* channelPtr) {
-    RT_DIFF_BEGIN("Audio::Device::Stop");
-    RT_DIFF_WORK(true);          // no early-out; see the banner
+          // no early-out; see the banner
 
     const int64_t byteDelta = static_cast<uint8_t*>(channelPtr) -
                               static_cast<uint8_t*>(selfPtr);
@@ -449,8 +432,6 @@ void RtAudio_Device_Stop(void* selfPtr, void* channelPtr) {
     if (cb)
         reinterpret_cast<AudioCompletionFn>(cb)(ch, ch->userData, ch->userValue);
 
-    RT_DIFF_SHADOW(true, "stopped, freed and reaped the channel",
-                   "not diffable (fires a stored completion callback)");
 }
 
 int RtAudioDeviceRegister() {

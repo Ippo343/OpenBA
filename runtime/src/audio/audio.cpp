@@ -77,7 +77,6 @@
 #include "../../types/io/Serializer.h"        // Stream / Serializer / rw_vtbl (Wave 4)
 #include "../io/save_trace.h"                 // Wave 9 lane S
 #include "../system/timer.h"                  // Wave 9 lane W: TimerSecondsPerTick
-#include "../../funcs/rt_diff.h"              // Wave 9 lane W: the [branch:] counters
 
 // ----------------------------------------------------------------------------
 // ResolveAddr / Module, forward-declared rather than pulled in from
@@ -97,18 +96,18 @@ namespace {
 // ----------------------------------------------------------------------------
 // Dependencies out of this lane's scope.
 //
-// WAVE 9 LANE V2, 2026-09-07: these two were RT_ORIGINAL_ONCE, with the reason
+// WAVE 9 LANE V2, 2026-09-07: these two were the raw DLL door, with the reason
 // "never through ResolveExport, or a diff would compare ours to ours". That
 // reason is right for an ORACLE and wrong for these: nothing diffs MemAlloc /
 // MemFree here, they are the allocation the ported bodies actually perform, so
 // they are a REAL DEPENDENCY and belong on the port door. The raw door is
-// ResolveExportRaw, which returns NULL the moment Runtime-x64.dll is absent —
+// the raw DLL door, which returns NULL the moment Runtime-x64.dll is absent —
 // i.e. a null call at cutover, not a degradation (rawdoor_audit.py).
 //
 // RT_EXPORT_ONCE keeps the one-resolve-per-call-site caching that made
-// RT_ORIGINAL_ONCE attractive here in the first place
+// the raw DLL door attractive here in the first place
 // (reference_rtoriginal_is_getprocaddress.md) and routes through the registry,
-// so when `BANISHED_RT_ALLOC` arms the allocator port these allocate on the
+// so when `RT_ALLOC` arms the allocator port these allocate on the
 // same heap as the ~20 `code/` sites that already resolve these two names with
 // ResolveExport. A heap cannot be half-ours (WAVE9.md sec3).
 // ----------------------------------------------------------------------------
@@ -228,7 +227,6 @@ void RtAudio_Scene_Dtor(void* selfPtr) {
 // SAME slot afterward, since both implementations share one Scene object).
 // ============================================================================
 void RtAudio_Scene_AddEmitter(void* selfPtr, uint32_t id, const Vector3* pos, float volume) {
-    RT_DIFF_BEGIN("Audio::Scene::AddEmitter");
     auto* self = static_cast<Scene*>(selfPtr);
     EffectSlot* slot = FindEffectSlot(self, id);
     if (slot) {
@@ -236,15 +234,6 @@ void RtAudio_Scene_AddEmitter(void* selfPtr, uint32_t id, const Vector3* pos, fl
         ArraySetSize(&slot->positions, slot->positions._size + 1, inst);
     }
 
-    if (rt_diff_on__) {
-        using GetCountFn = int (*)(void*, uint32_t);
-        int theirsCount = RT_ORIGINAL_ONCE(GetCountFn, "?GetEmitterCount@Scene@Audio@@QEBAHI@Z")(self, id);
-        int oursCount = slot ? slot->positions._size : 0;
-        char a[32], b[32];
-        std::snprintf(a, sizeof(a), "count=%d", oursCount);
-        std::snprintf(b, sizeof(b), "count=%d", theirsCount);
-        RT_DIFF_SHADOW(oursCount == theirsCount, a, b);
-    }
 }
 
 // ============================================================================
@@ -254,7 +243,6 @@ void RtAudio_Scene_AddEmitter(void* selfPtr, uint32_t id, const Vector3* pos, fl
 // ============================================================================
 void RtAudio_Scene_MoveEmitter(void* selfPtr, uint32_t id, const Vector3* oldPos,
                                 const Vector3* newPos) {
-    RT_DIFF_BEGIN("Audio::Scene::MoveEmitter");
     auto* self = static_cast<Scene*>(selfPtr);
     EffectSlot* slot = FindEffectSlot(self, id);
     bool moved = false;
@@ -268,7 +256,6 @@ void RtAudio_Scene_MoveEmitter(void* selfPtr, uint32_t id, const Vector3* oldPos
             }
         }
     }
-    RT_DIFF_SHADOW(true, moved ? "moved" : "no-match (matches retail no-op)", "not independently checkable");
 }
 
 // ============================================================================
@@ -278,7 +265,6 @@ void RtAudio_Scene_MoveEmitter(void* selfPtr, uint32_t id, const Vector3* oldPos
 // so a duplicate position is fully removed in one call). SHADOW oracle.
 // ============================================================================
 void RtAudio_Scene_RemoveEmitter(void* selfPtr, uint32_t id, const Vector3* pos) {
-    RT_DIFF_BEGIN("Audio::Scene::RemoveEmitter");
     auto* self = static_cast<Scene*>(selfPtr);
     EffectSlot* slot = FindEffectSlot(self, id);
     int removed = 0;
@@ -298,15 +284,6 @@ void RtAudio_Scene_RemoveEmitter(void* selfPtr, uint32_t id, const Vector3* pos)
         }
     }
 
-    if (rt_diff_on__) {
-        using GetCountFn = int (*)(void*, uint32_t);
-        int theirsCount = RT_ORIGINAL_ONCE(GetCountFn, "?GetEmitterCount@Scene@Audio@@QEBAHI@Z")(self, id);
-        int oursCount = slot ? slot->positions._size : 0;
-        char a[32], b[32];
-        std::snprintf(a, sizeof(a), "count=%d", oursCount);
-        std::snprintf(b, sizeof(b), "count=%d", theirsCount);
-        RT_DIFF_SHADOW(oursCount == theirsCount, a, b);
-    }
 }
 
 // ============================================================================
@@ -315,7 +292,6 @@ void RtAudio_Scene_RemoveEmitter(void* selfPtr, uint32_t id, const Vector3* pos)
 // pos and overwrites its volume. SHADOW oracle.
 // ============================================================================
 void RtAudio_Scene_SetEmitterVolume(void* selfPtr, uint32_t id, const Vector3* pos, float volume) {
-    RT_DIFF_BEGIN("Audio::Scene::SetEmitterVolume");
     auto* self = static_cast<Scene*>(selfPtr);
     EffectSlot* slot = FindEffectSlot(self, id);
     bool set = false;
@@ -329,7 +305,6 @@ void RtAudio_Scene_SetEmitterVolume(void* selfPtr, uint32_t id, const Vector3* p
             }
         }
     }
-    RT_DIFF_SHADOW(true, set ? "set" : "no-match (matches retail no-op)", "not independently checkable");
 }
 
 // ============================================================================
@@ -337,13 +312,11 @@ void RtAudio_Scene_SetEmitterVolume(void* selfPtr, uint32_t id, const Vector3* p
 // Pure read. Full replay oracle.
 // ============================================================================
 int RtAudio_Scene_GetEmitterCount(void* selfPtr, uint32_t id) {
-    RT_DIFF_BEGIN("Audio::Scene::GetEmitterCount");
     auto* self = static_cast<Scene*>(selfPtr);
     EffectSlot* slot = FindEffectSlot(self, id);
     int ours = slot ? slot->positions._size : 0;
 
     using GetCountFn = int (*)(void*, uint32_t);
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(GetCountFn, "?GetEmitterCount@Scene@Audio@@QEBAHI@Z")(self, id));
     return ours;
 }
 
@@ -353,7 +326,6 @@ int RtAudio_Scene_GetEmitterCount(void* selfPtr, uint32_t id) {
 // EffectSlot functions above — see the header note). Full replay oracle.
 // ============================================================================
 bool RtAudio_Scene_IsEffectPlaying(void* selfPtr, uint32_t handle) {
-    RT_DIFF_BEGIN("Audio::Scene::IsEffectPlaying");
     auto* self = static_cast<Scene*>(selfPtr);
     uint32_t idx = (handle >> 1) & 0xff;
     bool ours = false;
@@ -361,7 +333,6 @@ bool RtAudio_Scene_IsEffectPlaying(void* selfPtr, uint32_t handle) {
         ours = ((self->channels._data[idx].handleTag ^ handle) & 0xfffffe00) == 0;
 
     using IsPlayingFn = bool (*)(void*, uint32_t);
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(IsPlayingFn, "?IsEffectPlaying@Scene@Audio@@QEBA_NI@Z")(self, handle));
     return ours;
 }
 
@@ -371,7 +342,6 @@ bool RtAudio_Scene_IsEffectPlaying(void* selfPtr, uint32_t handle) {
 // a matching soundEffectRef. Full replay oracle.
 // ============================================================================
 uint32_t RtAudio_Scene_FindEffect3D(void* selfPtr, uint64_t soundRef) {
-    RT_DIFF_BEGIN("Audio::Scene::FindEffect3D");
     auto* self = static_cast<Scene*>(selfPtr);
     uint32_t ours = 0;
     for (int32_t i = 0; i < self->effects._size; ++i) {
@@ -382,8 +352,6 @@ uint32_t RtAudio_Scene_FindEffect3D(void* selfPtr, uint64_t soundRef) {
     }
 
     using FindFn = uint32_t (*)(void*, uint64_t);
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(FindFn,
-        "?FindEffect3D@Scene@Audio@@QEAAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@@Z")(self, soundRef));
     return ours;
 }
 
@@ -398,7 +366,6 @@ uint32_t RtAudio_Scene_FindEffect3D(void* selfPtr, uint64_t soundRef) {
 // the DLL's own read-only IsEffectPlaying on the handle we just minted.
 // ============================================================================
 uint32_t RtAudio_Scene_PlayEffect(void* selfPtr, uint64_t soundRef, int32_t soundType, const Time* time) {
-    RT_DIFF_BEGIN("Audio::Scene::PlayEffect");
     auto* self = static_cast<Scene*>(selfPtr);
     uint32_t handle = 0;
     if (soundRef != 0) {
@@ -417,15 +384,6 @@ uint32_t RtAudio_Scene_PlayEffect(void* selfPtr, uint64_t soundRef, int32_t soun
         }
     }
 
-    if (rt_diff_on__) {
-        using IsPlayingFn = bool (*)(void*, uint32_t);
-        bool theirsPlaying = handle != 0 &&
-            RT_ORIGINAL_ONCE(IsPlayingFn, "?IsEffectPlaying@Scene@Audio@@QEBA_NI@Z")(self, handle);
-        char a[32], b[32];
-        std::snprintf(a, sizeof(a), "handle=0x%x", handle);
-        std::snprintf(b, sizeof(b), "DLL sees playing=%d", (int)theirsPlaying);
-        RT_DIFF_SHADOW(handle == 0 || theirsPlaying, a, b);
-    }
     return handle;
 }
 
@@ -440,7 +398,7 @@ uint32_t RtAudio_Scene_PlayEffect(void* selfPtr, uint64_t soundRef, int32_t soun
 // and calls into retail for that one sub-decision. Wave 9 lane V then read the
 // row as REAL DEPENDENCY (MIGRATED): the door moved to RT_EXPORT_ONCE, but with
 // no port and no mint entry `ResolveExport` falls through to
-// `ResolveExportRawImpl` and returns null, so at cutover PlayEffect3D calls
+// `the raw DLL door` and returns null, so at cutover PlayEffect3D calls
 // through null on the first positional sound the game plays.
 //
 // The stated blocker is smaller than it sounds, which is the shape
@@ -486,7 +444,6 @@ uint32_t RtAudio_Scene_PlayEffect(void* selfPtr, uint64_t soundRef, int32_t soun
 // ============================================================================
 int32_t RtAudio_Scene_FindFree3DEffect(void* selfPtr, uint64_t soundRef,
                                        const Time* time, const Vector3* pos) {
-    RT_DIFF_BEGIN("Audio::Scene::FindFree3DEffect");
     const auto* self = static_cast<const Scene*>(selfPtr);
 
     // The reuse window, in ticks. Retail seeds it from Scene::time — which is a
@@ -534,32 +491,7 @@ int32_t RtAudio_Scene_FindFree3DEffect(void* selfPtr, uint64_t soundRef,
     // and "no free slot" is the 4096-iteration boundary. A green summary made
     // entirely of the first-free case would leave the arithmetic this port was
     // written for completely unverified -- the SetValueInt shape.
-    if (rt_diff_on__) {
-        static RtDiffSite brReuse = { "Audio::Scene::FindFree3DEffect[branch:reuse-hit, -1 -- the ONLY path through the distance+window test]", 0, 0, false, false };
-        static RtDiffSite brFree  = { "Audio::Scene::FindFree3DEffect[branch:free-slot returned]", 0, 0, false, false };
-        static RtDiffSite brFull  = { "Audio::Scene::FindFree3DEffect[branch:table FULL, -1 after 4096]", 0, 0, false, false };
-        // Register FIRST and unconditionally: RtDiffReport does not register
-        // (rt_diff.cpp:82), so "report if taken, register if not" prints only the
-        // branches that never ran -- exactly inverted. See buffers.cpp's
-        // CountBranch for the full note.
-        RtDiffRegister(&brReuse); RtDiffRegister(&brFree); RtDiffRegister(&brFull);
-        if (early)               RtDiffReport(&brReuse, true, "taken", "taken");
-        if (!early && ours >= 0) RtDiffReport(&brFree,  true, "taken", "taken");
-        if (!early && ours < 0)  RtDiffReport(&brFull,  true, "taken", "taken");
-    }
 
-    if (rt_diff_on__) {
-        // Pure: nothing above wrote anything, so theirs sees byte-identical
-        // inputs and needs no snapshot. That is a property of THIS function,
-        // checked instruction by instruction, not assumed —
-        // reference_oracle_must_snapshot_aliased_inputs.md is the cost of
-        // assuming it.
-        using Fn = int32_t (*)(const void*, uint64_t, const Time*, const Vector3*);
-        const int32_t theirs = RT_ORIGINAL_ONCE(Fn,
-            "?FindFree3DEffect@Scene@Audio@@AEBAHV?$ExternalPtr@VSoundEffect@Audio@@@Object@@AEBVTime@System@@AEBVVector3@Math@@@Z"
-            )(self, soundRef, time, pos);
-        RT_DIFF_SCALAR(ours, theirs);
-    }
     return ours;
 }
 
@@ -583,7 +515,6 @@ int32_t RtAudio_Scene_FindFree3DEffect(void* selfPtr, uint64_t soundRef,
 // ============================================================================
 uint32_t RtAudio_Scene_PlayEffect3D(void* selfPtr, uint64_t soundRef, int32_t soundType,
                                      const Time* time, const Vector3* pos) {
-    RT_DIFF_BEGIN("Audio::Scene::PlayEffect3D");
     auto* self = static_cast<Scene*>(selfPtr);
     uint32_t handle = 0;
     if (soundRef != 0) {
@@ -604,34 +535,19 @@ uint32_t RtAudio_Scene_PlayEffect3D(void* selfPtr, uint64_t soundRef, int32_t so
         }
     }
 
-    if (rt_diff_on__) {
-        using FindFn = uint32_t (*)(void*, uint64_t);
-        uint32_t theirsFound = handle != 0
-            ? RT_ORIGINAL_ONCE(FindFn,
-                "?FindEffect3D@Scene@Audio@@QEAAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@@Z")(self, soundRef)
-            : 0;
-        char a[32], b[32];
-        std::snprintf(a, sizeof(a), "handle=0x%x", handle);
-        std::snprintf(b, sizeof(b), "DLL FindEffect3D=0x%x", theirsFound);
-        // We just wrote idTag=handle at the SAME slot the DLL's own
-        // FindEffect3D scans (soundEffectRef -> idTag), on the SAME live
-        // table, so the round trip must land exactly on `handle`.
-        RT_DIFF_SHADOW(handle == 0 || theirsFound == handle, a, b);
-    }
     return handle;
 }
 
 // ============================================================================
 // void Audio::Configuration::Save() — retail 0x1800dde10. Four
 // IO::Persistence::Set(int) calls, already ported (Wave 4 lane C,
-// runtime/src/io/persistence.cpp) but called here via RT_ORIGINAL_ONCE
+// runtime/src/io/persistence.cpp) but called here via the raw DLL door
 // against the shipped DLL, matching this project's convention that a lane
 // stands alone against the DLL rather than depending on another lane's port
 // being enabled. SHADOW oracle: verified via IO::Persistence::Get(int) — a
 // full round trip, same shape as Wave 4's own Set(int) oracle.
 // ============================================================================
 void RtAudio_Configuration_Save(void* selfPtr) {
-    RT_DIFF_BEGIN("Audio::Configuration::Save");
     auto* self = static_cast<Configuration*>(selfPtr);
 
     using SetIntFn = void (*)(void*, const char*, const char*, int);
@@ -649,20 +565,6 @@ void RtAudio_Configuration_Save(void* selfPtr) {
         setFn(persistence, "Audio", "EffectVolume",  self->effectVolume);
     }
 
-    if (rt_diff_on__ && persistence) {
-        // RT_ORIGINAL_ONCE here, deliberately, and RT_EXPORT_ONCE on the setFn above.
-        // This is the "our writer, their readers" shape: the write is the work and
-        // must go through our port, the readback is the ORACLE and is worth more
-        // when it is the DLL's own reader. Ours-writes/ours-reads would agree with
-        // itself. Inside the diff guard, so it costs a normal run nothing.
-        auto getFn = RT_ORIGINAL_ONCE(GetIntFn, "?Get@Persistence@IO@@QEBA_NPEBD0AEAH@Z");
-        int v0 = 0, v1 = 0, v2 = 0, v3 = 0;
-        bool ok = getFn(persistence, "Audio", "UIVolume", &v0) && v0 == self->uiVolume
-               && getFn(persistence, "Audio", "MusicVolume", &v1) && v1 == self->musicVolume
-               && getFn(persistence, "Audio", "AmbientVolume", &v2) && v2 == self->ambientVolume
-               && getFn(persistence, "Audio", "EffectVolume", &v3) && v3 == self->effectVolume;
-        RT_DIFF_SHADOW(ok, "wrote all 4", ok ? "readback matches" : "readback MISMATCH");
-    }
 }
 
 // ============================================================================
@@ -675,7 +577,6 @@ void RtAudio_Configuration_Save(void* selfPtr) {
 // is exactly what the diff below checks.
 // ============================================================================
 bool RtAudio_Configuration_Startup(void* selfPtr) {
-    RT_DIFF_BEGIN("Audio::Configuration::Startup");
     auto* self = static_cast<Configuration*>(selfPtr);
 
     using GetIntFn = bool (*)(void*, const char*, const char*, int*);
@@ -695,7 +596,7 @@ bool RtAudio_Configuration_Startup(void* selfPtr) {
         if (getFn(persistence, "Audio", "EffectVolume", &v))  self->effectVolume = v;
     }
 
-    RT_DIFF_SCALAR(true, true);  // retail's own body always returns true (no failure path)
+  // retail's own body always returns true (no failure path)
     return true;
 }
 
@@ -770,7 +671,6 @@ using AudioArrayResizeFn = void (*)(void* array, int32_t newCount);
 using AudioBulkSerFn     = void (*)(void* serializer, int32_t count, void* data);
 
 void RtAudio_Scene_Serialize(void* self, void* serializer) {
-    RT_DIFF_BEGIN("Audio::Scene::Serialize");
     static auto arrayResize = reinterpret_cast<AudioArrayResizeFn>(
         ResolveAddr(Module::Runtime, 0x180051390));
     static auto bulkSerialize = reinterpret_cast<AudioBulkSerFn>(
@@ -958,7 +858,6 @@ static bool ChannelHandleMatches(const Scene* self, uint32_t handle, uint32_t* o
 // hazard WAVE8.md §1 warns about.
 // ============================================================================
 void RtAudio_Scene_PauseEffect(void* selfPtr, uint32_t handle) {
-    RT_DIFF_BEGIN("Audio::Scene::PauseEffect");
     auto* self = static_cast<Scene*>(selfPtr);
     uint32_t idx;
     const bool matched = ChannelHandleMatches(self, handle, &idx);
@@ -971,9 +870,6 @@ void RtAudio_Scene_PauseEffect(void* selfPtr, uint32_t handle) {
     // placed after the return makes `calls=` mean "did work" when every reader
     // of that column takes it to mean "was entered".
     using IsPlayingFn = bool (*)(void*, uint32_t);
-    RT_DIFF_SHADOW(matched == RT_ORIGINAL_ONCE(IsPlayingFn,
-                       "?IsEffectPlaying@Scene@Audio@@QEBA_NI@Z")(self, handle),
-                   matched ? "handle matches" : "handle rejected", "DLL IsEffectPlaying");
     if (!matched) return;
     ReleasePlatformChannels(self, idx * 0x70u, /*clearSlots=*/true);
 
@@ -982,7 +878,6 @@ void RtAudio_Scene_PauseEffect(void* selfPtr, uint32_t handle) {
     const Channel& ch = self->channels._data[idx];
     bool anyLeft = false;
     for (int b = 0; b < 8; ++b) if (ch.platformChannel[b]) anyLeft = true;
-    RT_DIFF_SHADOW(!anyLeft, "0 platform channels, record kept", "post-condition");
 }
 
 // ============================================================================
@@ -993,17 +888,10 @@ void RtAudio_Scene_PauseEffect(void* selfPtr, uint32_t handle) {
 // StopEffect3D; ported for the same reason as PauseEffect.
 // ============================================================================
 void RtAudio_Scene_StopEffect(void* selfPtr, uint32_t handle) {
-    RT_DIFF_BEGIN("Audio::Scene::StopEffect");
     auto* self = static_cast<Scene*>(selfPtr);
     uint32_t idx;
     const bool matched = ChannelHandleMatches(self, handle, &idx);
 
-    // SHADOW: the same full replay of the guard as PauseEffect, reported before
-    // the early return for the same reason.
-    using IsPlayingFn = bool (*)(void*, uint32_t);
-    auto isPlaying = RT_ORIGINAL_ONCE(IsPlayingFn, "?IsEffectPlaying@Scene@Audio@@QEBA_NI@Z");
-    RT_DIFF_SHADOW(matched == isPlaying(self, handle),
-                   matched ? "handle matches" : "handle rejected", "DLL IsEffectPlaying");
     if (!matched) return;
     ReleasePlatformChannels(self, idx * 0x70u, /*clearSlots=*/false);
     ResetChannel(&self->channels._data[idx]);
@@ -1014,8 +902,6 @@ void RtAudio_Scene_StopEffect(void* selfPtr, uint32_t handle) {
     // a zeroed tag in retail too. That predicate reported 2 divergences in 236
     // live calls and every one of them was the PREDICATE being wrong about
     // retail, not the port (reference_shadow_predicate_must_name_its_failing_term.md).
-    RT_DIFF_SHADOW(self->channels._data[idx].handleTag == 0,
-                   "channel record reset", "post-condition");
 }
 
 // ============================================================================
@@ -1045,7 +931,6 @@ void RtAudio_Scene_StopEffect(void* selfPtr, uint32_t handle) {
 // retail too. Left faithful (CLAUDE.md: do not "fix" a faithful deref).
 // ============================================================================
 void RtAudio_Scene_Pause(void* selfPtr, int32_t soundType, bool paused) {
-    RT_DIFF_BEGIN("Audio::Scene::Pause");
     auto* self = static_cast<Scene*>(selfPtr);
     int64_t t = soundType;
     const bool alreadyThere = (self->paused[t] == (uint8_t)paused);
@@ -1087,17 +972,10 @@ void RtAudio_Scene_Pause(void* selfPtr, int32_t soundType, bool paused) {
     using IsPausedFn = bool (*)(void*, int32_t);
     // The CALL is inside the guard, not just the resolve (Wave 9 lane R,
     // 2026-09-07). It used to sit outside it, so an ordinary run -- one with
-    // BANISHED_RT_DIFF unset -- paid a cross-DLL call whose result it then threw
+    // the diff oracle off -- paid a cross-DLL call whose result it then threw
     // away, and at cutover it becomes a call through a null pointer. Storing the
     // pointer outside a guard is harmless; CALLING outside one is not.
     bool theirs = false;
-    if (rt_diff_on__) {
-        theirs = RT_ORIGINAL_ONCE(IsPausedFn, "?IsPaused@Scene@Audio@@QEBA_NH@Z")(self, soundType);
-    }
-    RT_DIFF_SHADOW(theirs == paused,
-                   alreadyThere ? (paused ? "paused (early-out)" : "unpaused (early-out)")
-                                : (paused ? "paused" : "unpaused"),
-                   "DLL IsPaused");
 }
 
 // ============================================================================
@@ -1121,7 +999,6 @@ using AudioArrayAssignFn = void (*)(void* dst, const void* src);
 using AudioArrayDtorFn   = void (*)(void* arr);
 
 void RtAudio_Scene_StopEffect3D(void* selfPtr, uint32_t id) {
-    RT_DIFF_BEGIN("Audio::Scene::StopEffect3D");
     static auto arrayAssign = reinterpret_cast<AudioArrayAssignFn>(
         ResolveAddr(Module::Runtime, 0x180050d30));
     static auto arrayDtor = reinterpret_cast<AudioArrayDtorFn>(
@@ -1130,9 +1007,6 @@ void RtAudio_Scene_StopEffect3D(void* selfPtr, uint32_t id) {
     auto* self = static_cast<Scene*>(selfPtr);
     uint32_t idx = (id >> 1) & 0xfff;
     EffectSlot* slot = &self->effects._data[idx];
-    using GetCountFn = int (*)(void*, uint32_t);
-    auto getCount = RT_ORIGINAL_ONCE(GetCountFn, "?GetEmitterCount@Scene@Audio@@QEBAHI@Z");
-
     if ((slot->idTag >> 13) != (id >> 13)) {
         // SHADOW on the reject path -- reported rather than returned silently,
         // for the same reason as Pause's early-out: `calls=` must mean
@@ -1145,8 +1019,6 @@ void RtAudio_Scene_StopEffect3D(void* selfPtr, uint32_t id) {
         // same predicate this guard spells as `(idTag >> 13) != (id >> 13)`, so
         // a reject here means a reject there and GetEmitterCount must answer 0.
         // A full replay of the guard, against the DLL, on live ids.
-        RT_DIFF_SHADOW(getCount(self, id) == 0,
-                       "generation rejected", "DLL GetEmitterCount");
         return;
     }
 
@@ -1170,7 +1042,6 @@ void RtAudio_Scene_StopEffect3D(void* selfPtr, uint32_t id) {
 
     // SHADOW: the DLL's read-only GetEmitterCount on the id we just retired
     // must report 0 -- the slot is default and its idTag no longer validates.
-    RT_DIFF_SHADOW(getCount(self, id) == 0, "slot reset", "DLL GetEmitterCount");
 }
 
 // ============================================================================
@@ -1194,7 +1065,6 @@ void RtAudio_Scene_StopEffect3D(void* selfPtr, uint32_t id) {
 // is invisible in a normal run — and reproducing it costs one line.
 // ============================================================================
 void RtAudio_Scene_StopAll(void* selfPtr) {
-    RT_DIFF_BEGIN("Audio::Scene::StopAll");
     auto* self = static_cast<Scene*>(selfPtr);
 
     // The set this call is OBLIGED to retire, computed BEFORE any of it runs
@@ -1205,15 +1075,6 @@ void RtAudio_Scene_StopAll(void* selfPtr) {
     // still has a tag" is FALSE of retail, because a channel whose tag names a
     // DIFFERENT channel keeps its own tag while the other one is reset. That
     // predicate reported 8 divergences in 9 calls and all 8 were the predicate.
-    using IsPlayingFn = bool (*)(void*, uint32_t);
-    auto isPlaying = RT_ORIGINAL_ONCE(IsPlayingFn, "?IsEffectPlaying@Scene@Audio@@QEBA_NI@Z");
-    uint8_t owed[256];
-    if (rt_diff_on__) {
-        for (int i = 0; i < 256; ++i) {
-            uint32_t tag = self->channels._data[i].handleTag;
-            owed[i] = (uint8_t)(tag != 0 && isPlaying(self, tag) ? ((tag >> 1) & 0xff) + 1 : 0);
-        }
-    }
 
     for (uint32_t off = 0; off < 0x7000u; off += 0x70u) {
         auto* base = reinterpret_cast<uint8_t*>(self->channels._data);
@@ -1225,13 +1086,6 @@ void RtAudio_Scene_StopAll(void* selfPtr) {
         ResetChannel(&self->channels._data[idx]);
     }
 
-    if (rt_diff_on__) {
-        bool ok = true;
-        for (int i = 0; i < 256; ++i)
-            if (owed[i] && self->channels._data[owed[i] - 1].handleTag != 0) ok = false;
-        RT_DIFF_SHADOW(ok, "every channel a live handle named was reset",
-                       "pre-computed from DLL IsEffectPlaying");
-    }
 }
 
 int RtAudioSceneRegister() {
@@ -1315,14 +1169,11 @@ int RtAudioSceneRegister() {
 // NOT promoted today regardless.
 // ---------------------------------------------------------------------------
 void RtAudio_Configuration_Dtor(void* /*selfPtr - never read*/) {
-    RT_DIFF_BEGIN("Audio::Configuration::~Configuration");
-    RT_DIFF_WORK(true);          // unconditional; there is no branch
+          // unconditional; there is no branch
 
     // `this` is genuinely unused - retail's two instructions never touch RCX.
     *RT_DATA_SLOT(void**, "?_singleton@Configuration@Audio@@0PEAV12@EA") = nullptr;
 
-    RT_DIFF_SHADOW(true, "cleared Audio::Configuration::_singleton",
-                   "no return value and one observable store");
 }
 
 int RtAudioConfigurationRegister() {
@@ -1349,24 +1200,9 @@ int RtAudioConfigurationRegister() {
 // see runtime/src/io/save_trace.h for why a write-path Serialize is replayable
 // at all when the family was held back for "no oracle possible".
 extern "C" void RtAudio_Scene_SerializeTraceProbe(void* scene) {
-    if (!scene || !RtSaveTrace::Enabled()) return;
-    static bool done = false;
-    if (done) return;
-    done = true;
-
-    auto theirs = reinterpret_cast<void (*)(void*, void*)>(
-        ResolveExportRaw("?Serialize@Scene@Audio@@QEAAXAEAVSerializer@IO@@@Z"));
-    if (!theirs) {
-        std::fprintf(stderr, "[RtSaveTrace] SKIP Audio::Scene::Serialize: "
-                             "the shipped body did not resolve\n");
-        return;
-    }
-    RtSaveTrace::Compare("Audio::Scene::Serialize", scene,
-                         &RtAudio_Scene_Serialize, theirs);
-    // Self-test of the lane S PREFIX STOP on a subject already known clean:
-    // the same comparison truncated to 8 emissions must still pass and must
-    // say PREFIX ONLY. Proving the stop on a known-good subject is the only
-    // way to tell a working stop from a stop that silently compares nothing.
-    RtSaveTrace::Compare("Audio::Scene::Serialize[prefix8]", scene,
-                         &RtAudio_Scene_Serialize, theirs, 8);
+    // A3/A4: the save-trace oracle compared our Serialize against the SHIPPED
+    // body reached through the raw door. With Runtime-x64.dll gone there is no
+    // shipped body, so nothing is left to compare against. Kept as a no-op
+    // because code/Game/Game/menudialogloopt.cpp still calls it.
+    (void)scene;
 }

@@ -117,7 +117,6 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 void*     ResolveExport(const char* mangled_name);
 // Original-DLL resolution, bypassing the port registry (resolve.h). Used ONLY
 // by the Wave 25 lane VTIO oracle below, which must reach the SHIPPED body.
-void*     ResolveExportRaw(const char* mangled_name);
 uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr);
 
 // System::Thread::Start, already ported by Wave 2 (thread_win.cpp).
@@ -139,7 +138,7 @@ namespace {
 // so a named constant used at the registration site is invisible to it and has
 // twice produced a false progress report
 // (reference_census_cannot_see_nonliteral_registrations.md). These constants
-// therefore exist ONLY for RT_ORIGINAL_ONCE lookups inside diff guards; every
+// therefore exist ONLY for the raw DLL door lookups inside diff guards; every
 // RegisterRuntimeExport call at the bottom of this file repeats the literal.
 const char* const kUpdateLoopCtor    = "??0UpdateLoop@Engine@@QEAA@XZ";
 const char* const kIsRunning         = "?IsRunning@UpdateLoop@Engine@@QEBA_NXZ";
@@ -161,8 +160,6 @@ const char* const kDialogLoaderCtor  = "??0DialogLoaderLoopT@Engine@@QEAA@AEBVSt
 //    registry FIRST (standalone/resolve_standalone.cpp), so reading bytes or
 //    taking a pointer at an address you also register hands back your own
 //    prologue (reference_resolveaddr_consults_port_registry_first.md).
-//  * RtOriginal / RT_ORIGINAL_ONCE — "the DLL, always". Only inside a diff
-//    guard, or for a shipped body the oracle must compare against.
 
 using MemFreeFn        = void (*)(void*);
 using AdjustDelimFn    = void (*)(void*);                       // Filename&
@@ -387,11 +384,6 @@ void StringAcquire(RtSystem::String* dst, const RtSystem::String* src) {
 // Wave 2 already took for System::Time's own ctor and AsSeconds
 // (runtime/src/system/value_types.cpp) — same reasoning, same two exports.
 //
-// RT_ORIGINAL_ONCE rather than RtOriginal: DialogLoopT::Update runs once per
-// frame for the whole of the front end, and a bare RtOriginal is a
-// GetProcAddress under the loader lock on every call — 5.6 points of sim time
-// when Wave 2 did it in System::Time (reference_rtoriginal_is_getprocaddress.md).
-//
 // RT_EXPORT_ONCE since 2026-09-07 (Wave 9 lane R), and the reason is a good
 // advertisement for running the checker after every landing: both names were
 // UNPORTED when the paragraph above was written, so raw and non-raw reached the
@@ -557,26 +549,8 @@ void ReleaseBitFor(const UpdateLoop* built) {
 
 // ---- ??0UpdateLoop@Engine@@QEAA@XZ  0x1800ddd30 ord 468 ---------------------
 extern "C" UpdateLoop* RtEngine_UpdateLoop_Ctor(UpdateLoop* self) {
-    RT_DIFF_BEGIN("Engine::UpdateLoop::ctor");
     UpdateLoopCtorBody(self);
 
-    if (rt_diff_on__) {
-        ScratchGuard g;
-        if (g.held) {
-            using CtorFn = UpdateLoop* (*)(void*);
-            constexpr size_t n = sizeof(UpdateLoop);
-            std::memset(g_scratchOurs, kPoison, n);
-            std::memset(g_scratchTheirs, kPoison, n);
-
-            UpdateLoopCtorBody(reinterpret_cast<UpdateLoop*>(g_scratchOurs));
-            ReleaseBitFor(reinterpret_cast<UpdateLoop*>(g_scratchOurs));
-
-            RT_ORIGINAL_ONCE(CtorFn, kUpdateLoopCtor)(g_scratchTheirs);
-            ReleaseBitFor(reinterpret_cast<UpdateLoop*>(g_scratchTheirs));
-
-            RT_DIFF_BYTES(g_scratchOurs, g_scratchTheirs, n);
-        }
-    }
     return self;
 }
 
@@ -589,7 +563,6 @@ extern "C" UpdateLoop* RtEngine_UpdateLoop_Ctor(UpdateLoop* self) {
 // one failed rather than "something differed"
 // (reference_shadow_predicate_must_name_its_failing_term.md).
 extern "C" void RtEngine_UpdateLoop_Dtor(UpdateLoop* self) {
-    RT_DIFF_BEGIN("Engine::UpdateLoop::dtor");
 
     // The standard MSVC base-destructor step: re-stamp the base vtable, so a
     // virtual dispatched during the rest of the teardown reaches the BASE
@@ -613,19 +586,6 @@ extern "C" void RtEngine_UpdateLoop_Dtor(UpdateLoop* self) {
         factory->_cleanBitMask &= ~(1u << self->_loadBit);
     }
 
-    if (rt_diff_on__) {
-        const bool vtableRestamped = (self->_vtable == VTableUpdateLoop());
-        RtObject::ExternalFactory* factory = Factory();
-        const uint32_t mask = factory ? factory->_cleanBitMask : 0u;
-        const bool bitReleased = (bit < 0) || ((mask & (1u << bit)) == 0);
-        const bool cleanBitPublished = (bit < 0) || (factory && factory->_cleanBitIndex == bit);
-        char ours[128], theirs[128];
-        std::snprintf(ours, sizeof(ours),
-                      "vtable=%d bitReleased=%d cleanBitPublished=%d (bit=%d)",
-                      (int)vtableRestamped, (int)bitReleased, (int)cleanBitPublished, (int)bit);
-        std::snprintf(theirs, sizeof(theirs), "vtable=1 bitReleased=1 cleanBitPublished=1");
-        RT_DIFF_SHADOW(vtableRestamped && bitReleased && cleanBitPublished, ours, theirs);
-    }
 
     // Tail call in retail: `LEA RCX,[RBX+0x10]; JMP 0x180010ab0`.
     ListCleanup()(&self->_internalListA);
@@ -661,7 +621,6 @@ void UpdateLoopBaseTeardown(UpdateLoop* self) {
 // written, which is reproduced here as two statements rather than one,
 // exactly because retail's own listing has two stores.
 extern "C" void RtEngine_LoaderLoop_Dtor(LoaderLoop* self) {
-    RT_DIFF_BEGIN("Engine::LoaderLoop::dtor");
     self->_base._vtable = VTableLoaderLoop();
     UpdateLoopBaseTeardown(&self->_base);
 }
@@ -673,7 +632,6 @@ extern "C" void RtEngine_LoaderLoop_Dtor(LoaderLoop* self) {
 // (StringRelease, above) BEFORE the base teardown restamps the vtable to
 // UpdateLoop's and runs the ExternalFactory/ListCleanup pair.
 extern "C" void RtEngine_DialogLoopT_Dtor(DialogLoopT* self) {
-    RT_DIFF_BEGIN("Engine::DialogLoopT::dtor");
     self->_base._vtable = VTableDialogLoopT();
     UserInterfaceDtor()(&self->_ui);
     StringRelease(&self->_dialogFilename);
@@ -687,7 +645,6 @@ extern "C" void RtEngine_DialogLoopT_Dtor(DialogLoopT* self) {
 // LoaderLoop-vtable restamp plus UpdateLoopBaseTeardown, per the note above
 // ~LoaderLoop on why those two collapse into one sequence.
 extern "C" void RtEngine_DialogLoaderLoopT_Dtor(DialogLoaderLoopT* self) {
-    RT_DIFF_BEGIN("Engine::DialogLoaderLoopT::dtor");
     self->_base._base._vtable = VTableDialogLoaderLoopT();
     UserInterfaceDtor()(&self->_ui);
     StringRelease(&self->_dialogFilename);
@@ -701,7 +658,6 @@ extern "C" void RtEngine_DialogLoaderLoopT_Dtor(DialogLoaderLoopT* self) {
 // retail really does `TEST RCX,RCX / JZ`, so the guard is FAITHFUL, not one we
 // added (CLAUDE.md's rule cuts the other way here — removing it would diverge).
 extern "C" bool RtEngine_UpdateLoop_IsRunning(const UpdateLoop* self) {
-    RT_DIFF_BEGIN("Engine::UpdateLoop::IsRunning");
     bool ours = false;
     if (self) {
         // _currentLoop (+0x20) is the loop MainLoop::Run is driving right now.
@@ -710,7 +666,6 @@ extern "C" bool RtEngine_UpdateLoop_IsRunning(const UpdateLoop* self) {
         ours = (MainLoopSingleton()->_currentLoop == self);
     }
     using Fn = bool (*)(const UpdateLoop*);
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, kIsRunning)(self));
     return ours;
 }
 
@@ -718,26 +673,8 @@ extern "C" bool RtEngine_UpdateLoop_IsRunning(const UpdateLoop* self) {
 //      0x1800dc1e0 ord 261
 extern "C" LoaderLoop* RtEngine_LoaderLoop_Ctor(LoaderLoop* self, void* nextLoop,
                                                 const ::Time* delay) {
-    RT_DIFF_BEGIN("Engine::LoaderLoop::ctor");
     LoaderLoopCtorBody(self, nextLoop, delay);
 
-    if (rt_diff_on__) {
-        ScratchGuard g;
-        if (g.held) {
-            using CtorFn = void* (*)(void*, void*, const void*);
-            constexpr size_t n = sizeof(LoaderLoop);
-            std::memset(g_scratchOurs, kPoison, n);
-            std::memset(g_scratchTheirs, kPoison, n);
-
-            LoaderLoopCtorBody(reinterpret_cast<LoaderLoop*>(g_scratchOurs), nextLoop, delay);
-            ReleaseBitFor(&reinterpret_cast<LoaderLoop*>(g_scratchOurs)->_base);
-
-            RT_ORIGINAL_ONCE(CtorFn, kLoaderLoopCtor)(g_scratchTheirs, nextLoop, delay);
-            ReleaseBitFor(&reinterpret_cast<LoaderLoop*>(g_scratchTheirs)->_base);
-
-            RT_DIFF_BYTES(g_scratchOurs, g_scratchTheirs, n);
-        }
-    }
     return self;
 }
 
@@ -750,7 +687,6 @@ extern "C" LoaderLoop* RtEngine_LoaderLoop_Ctor(LoaderLoop* self, void* nextLoop
 // the ORDER and the two byte flags, and those are stated field by field below
 // so a reviewer can check them against the disassembly without re-deriving it.
 extern "C" void RtEngine_Loader_Load(Loader* self, void* loop) {
-    RT_DIFF_BEGIN("Engine::Loader::Load");
 
     self->_loop = loop;
 
@@ -794,45 +730,13 @@ extern "C" void RtEngine_Loader_Load(Loader* self, void* loop) {
     // the platform seam instead of dragging <windows.h> into this file.
     RtSystem_Thread_Start(reinterpret_cast<System::Thread*>(&self->_thread));
 
-    RT_DIFF_SHADOW(true,
-                   "no oracle: mounts the mod filesystem and wakes the loader thread",
-                   "not called");
 }
 
 // ---- ??0DialogLoopT@Engine@@QEAA@AEBVString@System@@@Z  0x1800db3f0 ord 153 -
 extern "C" DialogLoopT* RtEngine_DialogLoopT_Ctor(DialogLoopT* self,
                                                   const RtSystem::String* filename) {
-    RT_DIFF_BEGIN("Engine::DialogLoopT::ctor");
     DialogLoopTCtorBody(self, filename);
 
-    if (rt_diff_on__) {
-        ScratchGuard g;
-        if (g.held) {
-            using CtorFn = void* (*)(void*, const void*);
-            constexpr size_t n = sizeof(DialogLoopT);
-            std::memset(g_scratchOurs, kPoison, n);
-            std::memset(g_scratchTheirs, kPoison, n);
-
-            DialogLoopT* ours   = reinterpret_cast<DialogLoopT*>(g_scratchOurs);
-            DialogLoopT* theirs = reinterpret_cast<DialogLoopT*>(g_scratchTheirs);
-
-            DialogLoopTCtorBody(ours, filename);
-            ReleaseBitFor(&ours->_base);
-
-            RT_ORIGINAL_ONCE(CtorFn, kDialogLoopTCtor)(theirs, filename);
-            ReleaseBitFor(&theirs->_base);
-
-            RT_DIFF_BYTES(g_scratchOurs, g_scratchTheirs, n);
-
-            // Each scratch run took one reference on the caller's filename.
-            // Give both back before the buffers are reused. This is the whole
-            // of the undo: neither run allocated anything else — the embedded
-            // UserInterface ctor (0x180120de0) is a pure field-zeroing body
-            // with no allocation and no global registration.
-            StringRelease(&ours->_dialogFilename);
-            StringRelease(&theirs->_dialogFilename);
-        }
-    }
     return self;
 }
 
@@ -842,7 +746,6 @@ extern "C" DialogLoopT* RtEngine_DialogLoopT_Ctor(DialogLoopT* self,
 // Running it twice is a second cache lookup with a real side effect on the
 // clean-bit usage masks, and on a cold cache a second file read.
 extern "C" void RtEngine_DialogLoopT_Load(DialogLoopT* self) {
-    RT_DIFF_BEGIN("Engine::DialogLoopT::Load");
 
     // The local is a System::Filename, layout-identical to String; retail
     // copies the String field into it and normalises the delimiters in place.
@@ -861,9 +764,6 @@ extern "C" void RtEngine_DialogLoopT_Load(DialogLoopT* self) {
 
     StringRelease(&tmp);
 
-    RT_DIFF_SHADOW(true,
-                   "no oracle: ExternalFactory::FindOrLoad has a load side effect",
-                   "not called");
 }
 
 // ---- ?Startup@DialogLoopT@Engine@@UEAAXXZ  0x1800db2f0 ord 4093 -------------
@@ -871,7 +771,6 @@ extern "C" void RtEngine_DialogLoopT_Load(DialogLoopT* self) {
 // handle-table entry) and the body then queues it for display. A replay builds
 // a second dialog and shows two.
 extern "C" void RtEngine_DialogLoopT_Startup(DialogLoopT* self) {
-    RT_DIFF_BEGIN("Engine::DialogLoopT::Startup");
 
     // Slot 12, CreateDialog, returns InternalPtr<UI::DialogInstance> BY VALUE —
     // an 8-byte class type, so MSVC still gives it a HIDDEN RETURN SLOT in RDX
@@ -899,9 +798,6 @@ extern "C" void RtEngine_DialogLoopT_Startup(DialogLoopT* self) {
     // (runtime/types/ui/UserInterface.h).
     ArraySetSizeFill()(&self->_ui._addDialogs, self->_ui._addDialogs._size + 1, &ret);
 
-    RT_DIFF_SHADOW(self->_dialogInstance == dialog,
-                   "no oracle: slot 12 constructs a live DialogInstance",
-                   "not called");
 }
 
 // ---- ?Update@DialogLoopT@Engine@@UEAA_NAEBVTime@System@@@Z  0x1800db270 -----
@@ -913,7 +809,6 @@ extern "C" void RtEngine_DialogLoopT_Startup(DialogLoopT* self) {
 // only arithmetic in the function. The UI call is not replayed, for the obvious
 // reason.
 extern "C" bool RtEngine_DialogLoopT_Update(DialogLoopT* self, const ::Time* time) {
-    RT_DIFF_BEGIN("Engine::DialogLoopT::Update[time]");
 
     // CVTSI2SD / MULSD / CVTPD2PS / CVTPS2PD / DIVSD / CVTTSD2SI — i.e. the
     // tick count narrowed to a float number of seconds and converted straight
@@ -922,24 +817,6 @@ extern "C" bool RtEngine_DialogLoopT_Update(DialogLoopT* self, const ::Time* tim
     ::Time rounded;
     rounded.ticks = SecondsToTicks(TicksToSeconds(time->ticks));
 
-    if (rt_diff_on__) {
-        // What this checks is that OUR composition is the one retail
-        // inlined: same two conversions, same order, float in between. A port
-        // that dropped the float narrowing, or applied the conversions the
-        // other way round, fails here on the first tick count that does not
-        // round-trip.
-        //
-        // Until Wave 9 lane B3 ported System::Timer, both sides of this
-        // comparison called the DLL and only the COMPOSITION was under test.
-        // Now the left side (`rounded`, via the RT_EXPORT_ONCE helpers above)
-        // runs our Timer and the right side is still the shipped body, so this
-        // site tests the composition AND the two conversions at once.
-        const int64_t theirs = RT_ORIGINAL_ONCE(SecondsToTicksFn,
-                                    "?SecondsToTicks@Timer@System@@SA_JM@Z")(
-                               RT_ORIGINAL_ONCE(TicksToSecondsFn,
-                                    "?TicksToSeconds@Timer@System@@SAM_J@Z")(time->ticks));
-        RT_DIFF_SCALAR(rounded.ticks, theirs);
-    }
 
     UserInterfaceUpdate()(&self->_ui, &rounded);
     return true;   // MOV AL,1 — unconditional
@@ -949,32 +826,8 @@ extern "C" bool RtEngine_DialogLoopT_Update(DialogLoopT* self, const ::Time* tim
 extern "C" DialogLoaderLoopT* RtEngine_DialogLoaderLoopT_Ctor(
         DialogLoaderLoopT* self, const RtSystem::String* filename,
         void* nextLoop, const ::Time* delay) {
-    RT_DIFF_BEGIN("Engine::DialogLoaderLoopT::ctor");
     DialogLoaderLoopTCtorBody(self, filename, nextLoop, delay);
 
-    if (rt_diff_on__) {
-        ScratchGuard g;
-        if (g.held) {
-            using CtorFn = void* (*)(void*, const void*, void*, const void*);
-            constexpr size_t n = sizeof(DialogLoaderLoopT);
-            std::memset(g_scratchOurs, kPoison, n);
-            std::memset(g_scratchTheirs, kPoison, n);
-
-            DialogLoaderLoopT* ours   = reinterpret_cast<DialogLoaderLoopT*>(g_scratchOurs);
-            DialogLoaderLoopT* theirs = reinterpret_cast<DialogLoaderLoopT*>(g_scratchTheirs);
-
-            DialogLoaderLoopTCtorBody(ours, filename, nextLoop, delay);
-            ReleaseBitFor(&ours->_base._base);
-
-            RT_ORIGINAL_ONCE(CtorFn, kDialogLoaderCtor)(theirs, filename, nextLoop, delay);
-            ReleaseBitFor(&theirs->_base._base);
-
-            RT_DIFF_BYTES(g_scratchOurs, g_scratchTheirs, n);
-
-            StringRelease(&ours->_dialogFilename);
-            StringRelease(&theirs->_dialogFilename);
-        }
-    }
     return self;
 }
 
@@ -983,7 +836,6 @@ extern "C" DialogLoaderLoopT* RtEngine_DialogLoaderLoopT_Ctor(
 // +0x20 offsets. Written out rather than shared, because retail emitted two
 // bodies and a shared helper would hide a divergence between them.
 extern "C" void RtEngine_DialogLoaderLoopT_Load(DialogLoaderLoopT* self) {
-    RT_DIFF_BEGIN("Engine::DialogLoaderLoopT::Load");
 
     RtSystem::String tmp;
     StringAcquire(&tmp, &self->_dialogFilename);
@@ -998,9 +850,6 @@ extern "C" void RtEngine_DialogLoaderLoopT_Load(DialogLoaderLoopT* self) {
 
     StringRelease(&tmp);
 
-    RT_DIFF_SHADOW(true,
-                   "no oracle: ExternalFactory::FindOrLoad has a load side effect",
-                   "not called");
 }
 
 // ---- ?Startup@DialogLoaderLoopT@Engine@@UEAAXXZ  0x1800db000 ord 4092 -------
@@ -1011,7 +860,6 @@ extern "C" void RtEngine_DialogLoaderLoopT_Load(DialogLoaderLoopT* self) {
 //     JMP 0x1800dc050              ; Engine::Loader::Load
 // Note RCX is a LEA, not a load: `_loader` IS the object, not a pointer to one.
 extern "C" void RtEngine_DialogLoaderLoopT_Startup(DialogLoaderLoopT* self) {
-    RT_DIFF_BEGIN("Engine::DialogLoaderLoopT::Startup");
 
     using CreateDialogFn = void* (*)(void*, void*);
     void*  ret = nullptr;
@@ -1029,10 +877,6 @@ extern "C" void RtEngine_DialogLoaderLoopT_Startup(DialogLoaderLoopT* self) {
 
     ArraySetSizeFill()(&self->_ui._addDialogs, self->_ui._addDialogs._size + 1, &ret);
 
-    RT_DIFF_SHADOW(self->_dialogInstance == dialog,
-                   "no oracle: slot 12 constructs a live DialogInstance, "
-                   "then the loader thread is started",
-                   "not called");
 
     // The DLL's own static Loader instance, by NAME. Resolved, never minted:
     // the DLL's loader thread was created on THAT object and waits on ITS
@@ -1109,219 +953,32 @@ extern "C" void RtEngine_DialogLoaderLoopT_Startup(DialogLoaderLoopT* self) {
 // real check on all six is the [ORACLE] probe below, which consults the DLL.
 
 extern "C" void RtEngine_UpdateLoop_DrawFailed(void* /*self*/) {
-    RT_DIFF_BEGIN("[ATTENDANCE] Engine::UpdateLoop::DrawFailed");
-    RT_DIFF_WORK(true);
     // retail 0x180031740: `ret`. Nothing else.
 }
 
 extern "C" void RtEngine_UpdateLoop_SaveRestore(void* /*self*/, bool /*saving*/,
                                                 void* /*savedState*/) {
-    RT_DIFF_BEGIN("[ATTENDANCE] Engine::UpdateLoop::SaveRestore");
-    RT_DIFF_WORK(true);
     // retail 0x180031750: `ret`. Both arguments are ignored by the base class.
 }
 
 extern "C" void RtEngine_UpdateLoop_OnVideoError(void* /*self*/) {
-    RT_DIFF_BEGIN("[ATTENDANCE] Engine::UpdateLoop::OnVideoError");
-    RT_DIFF_WORK(true);
     // retail 0x180031760: `ret`.  NOTE this is UpdateLoop's OnVideoError;
     // LoaderLoop overrides it with its OWN body at 0x1800dc360, which is a
     // different function and is NOT ported here.
 }
 
 extern "C" void RtEngine_UpdateLoop_OnVideoRestart(void* /*self*/) {
-    RT_DIFF_BEGIN("[ATTENDANCE] Engine::UpdateLoop::OnVideoRestart");
-    RT_DIFF_WORK(true);
     // retail 0x180031770: `ret`.
 }
 
-extern "C" const char* RtEngine_UpdateLoop_GetResourceFilename(void* self) {
-    RT_DIFF_BEGIN("[ORACLE] Engine::UpdateLoop::GetResourceFilename");
-    const char* ours = nullptr;   // retail 0x180031780: xor eax,eax ; ret
-    // ORACLE: the shipped body, reached through ResolveExportRaw (GetProcAddress),
-    // NOT ResolveExport — which would hand back this very function once this
-    // file registers the name, and compare the port with itself.  Safe to call
-    // on the live `self` because the shipped bytes never read RCX.
-    using GetResFn = const char* (*)(void*);
-    RT_DIFF_SCALAR((const void*)ours,
-                   (const void*)RT_ORIGINAL_ONCE(
-                       GetResFn, "?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ")(self));
-    RT_DIFF_WORK(true);
-    return ours;
+extern "C" const char* RtEngine_UpdateLoop_GetResourceFilename(void* /*self*/) {
+    return nullptr;   // retail 0x180031780: xor eax,eax ; ret
 }
 
-extern "C" bool RtEngine_UpdateLoop_AllowsModChanges(void* self) {
-    RT_DIFF_BEGIN("[ORACLE] Engine::UpdateLoop::AllowsModChanges");
-    const bool ours = false;      // retail 0x180031790: xor al,al ; ret
-    using AllowsFn = bool (*)(void*);
-    RT_DIFF_SCALAR(ours,
-                   RT_ORIGINAL_ONCE(AllowsFn,
-                                    "?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ")(self));
-    RT_DIFF_WORK(true);
-    return ours;
+extern "C" bool RtEngine_UpdateLoop_AllowsModChanges(void* /*self*/) {
+    return false;     // retail 0x180031790: xor al,al ; ret
 }
 
-// ----------------------------------------------------------------------------
-// [ORACLE] RtEngineUpdateLoopBaseSlotsOracle — the probe, and why it exists
-// ----------------------------------------------------------------------------
-// These six bodies have NO DISPATCH ROUTE TODAY: their only route is a vtable
-// that is not promoted, so a shadow site inside them would report `calls=0`
-// forever and read as a pass (reference_uncalled_port_is_not_verified.md).
-// "No route" is NOT "no oracle" — so this probe synthesises one.  It runs once,
-// at registration, only when BANISHED_RT_VTIO_ORACLE is set.
-//
-// IT CONSULTS THE DLL.  Every "theirs" value below comes from ResolveExportRaw
-// (GetProcAddress), never from ResolveExport or ResolveAddr — both of which
-// check the port registry FIRST and would compare this port with itself
-// (reference_resolveaddr_consults_port_registry_first.md).
-//
-// THREE SCREENS, SCORED SEPARATELY — never unioned, because a union score hides
-// a screen that caught nothing (reference_union_control_hides_a_blind_screen.md):
-//
-//   S1 BINDING   does each mangled name resolve to the address whose bytes were
-//                read?  This is the screen that would catch the `??1`/`QEAA`
-//                family of manglings resolving somewhere unexpected, and it is
-//                the only one that can fail if the six addresses were misread.
-//   S2 NO-WRITE  hand retail's body a 0x100-byte subject filled with a pattern
-//                and confirm it writes NOTHING.  This is the Wave 12
-//                `?PlatformDestruct@Application@1@` template: "verified to do
-//                NOTHING, which is the whole row".
-//   S3 RETURN    for the two value-returning slots, compare OUR return with the
-//                SHIPPED body's return, on the same subject.
-//
-// EACH SCREEN CARRIES AN EFFECTIVENESS COUNTER (how many cases it actually
-// examined), because a green screen that examined nothing is not evidence.
-// S2 is an ABSENCE screen, so it is HANDED A POSITIVE SHAPE: a control writer
-// that DOES write into the subject must be caught, or "0 writes detected" is
-// indistinguishable from a dead comparison.
-
-extern "C" int RtEngineUpdateLoopBaseSlotsOracle() {
-    struct Row { const char* name; uintptr_t ghidra; };
-    static const Row kRows[6] = {
-        { "?DrawFailed@UpdateLoop@Engine@@UEAAXXZ",          0x180031740ull },
-        { "?SaveRestore@UpdateLoop@Engine@@UEAAX_NPEAVSavedState@Save@@@Z",
-                                                            0x180031750ull },
-        { "?OnVideoError@UpdateLoop@Engine@@UEAAXXZ",        0x180031760ull },
-        { "?OnVideoRestart@UpdateLoop@Engine@@UEAAXXZ",      0x180031770ull },
-        { "?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ", 0x180031780ull },
-        { "?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ",   0x180031790ull },
-    };
-
-    int problems = 0;
-    printf("[VTIO-ORACLE] SUBJECT: the 6 shared UpdateLoop base slots of "
-           "??_7{UpdateLoop,LoaderLoop,DialogLoopT,DialogLoaderLoopT}@Engine@@6B@\n");
-    printf("[VTIO-ORACLE] 'theirs' is ResolveExportRaw == GetProcAddress, never "
-           "the port registry.\n");
-
-    // ---- S1 BINDING --------------------------------------------------------
-    int s1_examined = 0, s1_bad = 0;
-    for (const Row& r : kRows) {
-        void* byName = ResolveExportRaw(r.name);
-        void* byAddr = reinterpret_cast<void*>(ResolveRuntimeRaw(r.ghidra));
-        ++s1_examined;
-        if (byName != byAddr || byName == nullptr) {
-            ++s1_bad;
-            printf("[VTIO-ORACLE] S1 MISMATCH %-56s name->%p addr(0x%llx)->%p\n",
-                   r.name, byName, (unsigned long long)r.ghidra, byAddr);
-        }
-    }
-    // S1 negative control: a name the DLL does not export must NOT bind.
-    //
-    // THE PHANTOM NAME IS ASSEMBLED AT RUN TIME, ON PURPOSE, and this is a
-    // measured finding rather than a style choice.  Written as a STRING LITERAL
-    // it read as a real resolve door: `tools/runtime_census.py` scans for a
-    // mangled literal at a resolve call site, cannot know the symbol does not
-    // exist, and MINTED A GAP ROW for it — the row-set diff of this lane went
-    // from +2 to +3 and the third row was
-    // `?NoSuchSlot@UpdateLoop@Engine@@UEAAXXZ`, a symbol nobody will ever port
-    // because it was invented here as a control.  A negative control that
-    // inflates the board is a control that costs a future lane a lookup.
-    // Splitting the name defeats the literal scan while changing nothing about
-    // what the control tests.
-    char phantom[64];
-    std::snprintf(phantom, sizeof(phantom), "%s%s%s",
-                  "?NoSuchSlot", "@UpdateLoop@Engine", "@@UEAAXXZ");
-    const bool s1_ctl = (ResolveExportRaw(phantom) == nullptr);
-    printf("[VTIO-ORACLE] S1 BINDING  examined %d  mismatches %d  "
-           "CONTROL(neg, phantom name resolves NULL) %s\n",
-           s1_examined, s1_bad, s1_ctl ? "GREEN" : "*** RED -- S1 SAYS YES TO ANYTHING ***");
-    problems += s1_bad + (s1_ctl ? 0 : 1);
-
-    // ---- S2 NO-WRITE -------------------------------------------------------
-    // The subject is 0x100 bytes of a pattern, handed to the SHIPPED body as
-    // `this`.  Safe because the bytes read above never touch RCX; that is
-    // exactly what this screen re-checks at run time rather than assuming.
-    unsigned char subject[0x100];
-    unsigned char before[0x100];
-    int s2_examined = 0, s2_wrote = 0;
-    for (const Row& r : kRows) {
-        using VoidFn = void (*)(void*);
-        VoidFn theirs = reinterpret_cast<VoidFn>(ResolveExportRaw(r.name));
-        if (!theirs) continue;
-        std::memset(subject, 0xC5, sizeof(subject));
-        std::memcpy(before, subject, sizeof(subject));
-        theirs(subject);
-        ++s2_examined;
-        if (std::memcmp(before, subject, sizeof(subject)) != 0) {
-            ++s2_wrote;
-            printf("[VTIO-ORACLE] S2 WROTE   %s modified its subject\n", r.name);
-        }
-    }
-    // S2 POSITIVE SHAPE: an absence screen with no positive case cannot tell a
-    // real "nothing wrote" from a dead memcmp.  Hand it a writer.
-    std::memset(subject, 0xC5, sizeof(subject));
-    std::memcpy(before, subject, sizeof(subject));
-    subject[0x80] = 0x01;                       // the synthetic writer
-    const bool s2_ctl = (std::memcmp(before, subject, sizeof(subject)) != 0);
-    printf("[VTIO-ORACLE] S2 NO-WRITE examined %d  wrote %d  "
-           "CONTROL(pos, synthetic writer caught) %s\n",
-           s2_examined, s2_wrote, s2_ctl ? "GREEN" : "*** RED -- S2 COMPARISON IS DEAD ***");
-    problems += s2_wrote + (s2_ctl ? 0 : 1);
-
-    // ---- S3 RETURN ---------------------------------------------------------
-    int s3_examined = 0, s3_bad = 0;
-    {
-        using GetResFn = const char* (*)(void*);
-        GetResFn theirs = reinterpret_cast<GetResFn>(
-            ResolveExportRaw("?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ"));
-        if (theirs) {
-            const char* t = theirs(subject);
-            const char* o = RtEngine_UpdateLoop_GetResourceFilename(subject);
-            ++s3_examined;
-            if (t != o) {
-                ++s3_bad;
-                printf("[VTIO-ORACLE] S3 RETURN  GetResourceFilename ours=%p theirs=%p\n",
-                       (const void*)o, (const void*)t);
-            }
-        }
-        using AllowsFn = bool (*)(void*);
-        AllowsFn theirsB = reinterpret_cast<AllowsFn>(
-            ResolveExportRaw("?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ"));
-        if (theirsB) {
-            const bool t = theirsB(subject);
-            const bool o = RtEngine_UpdateLoop_AllowsModChanges(subject);
-            ++s3_examined;
-            if (t != o) {
-                ++s3_bad;
-                printf("[VTIO-ORACLE] S3 RETURN  AllowsModChanges ours=%d theirs=%d\n",
-                       (int)o, (int)t);
-            }
-        }
-    }
-    // S3 negative control: corrupt a value the screen DOES compare, and confirm
-    // it is caught.  (A control that corrupts a value nothing compares indicts a
-    // sound instrument -- reference_control_must_pick_a_compared_subject.md.)
-    const char* s3_ctl_ours = reinterpret_cast<const char*>(0x1);
-    const bool  s3_ctl = (s3_ctl_ours != (const char*)nullptr);
-    printf("[VTIO-ORACLE] S3 RETURN   examined %d  mismatches %d  "
-           "CONTROL(neg, corrupted return caught) %s\n",
-           s3_examined, s3_bad, s3_ctl ? "GREEN" : "*** RED -- S3 COMPARISON IS DEAD ***");
-    problems += s3_bad + (s3_ctl ? 0 : 1);
-
-    printf("[VTIO-ORACLE] TOTAL problems %d  (S1 %d/%d, S2 %d/%d, S3 %d/%d examined)\n",
-           problems, s1_bad, s1_examined, s2_wrote, s2_examined, s3_bad, s3_examined);
-    return problems;
-}
 
 // ============================================================================
 // WAVE 27 lane LOOPS — the twelve remaining slot bodies of the four tables
@@ -1458,8 +1115,6 @@ void LoaderLoopAdvance(LoaderLoop* self, const ::Time* time) {
 // `?_loader@LoaderLoop@` UNPROMOTABLE tag names as the reason a RIP-relative
 // read/write census reports R=0 for that row.
 extern "C" void RtEngine_LoaderLoop_Startup(LoaderLoop* self) {
-    RT_DIFF_BEGIN("Engine::LoaderLoop::Startup");
-    RT_DIFF_WORK(true);
     static LoaderLoadFn2 load = reinterpret_cast<LoaderLoadFn2>(
         ResolveExport("?Load@Loader@Engine@@QEAAXPEAVUpdateLoop@2@@Z"));
     load(LoaderLoopLoader(), self->_nextLoop);
@@ -1471,8 +1126,6 @@ extern "C" void RtEngine_LoaderLoop_Startup(LoaderLoop* self) {
 //     jmp  *WaitForSingleObject
 // `self` is not read at all — the wait is on the one static loader.
 extern "C" void RtEngine_LoaderLoop_Shutdown(LoaderLoop* /*self*/) {
-    RT_DIFF_BEGIN("Engine::LoaderLoop::Shutdown");
-    RT_DIFF_WORK(true);
     static ThreadWaitFn wait = reinterpret_cast<ThreadWaitFn>(
         ResolveExport("?WaitForFinish@Thread@System@@QEAAXXZ"));
     wait(&LoaderLoopLoader()->_thread);
@@ -1487,8 +1140,6 @@ extern "C" void RtEngine_LoaderLoop_Shutdown(LoaderLoop* /*self*/) {
 // ??_7DialogLoaderLoopT@; DialogLoopT's slot 8 is the BASE
 // `?OnVideoError@UpdateLoop@` (0x180031760, a bare `ret`, ported in Wave 25).
 extern "C" void RtEngine_LoaderLoop_OnVideoError(LoaderLoop* /*self*/) {
-    RT_DIFF_BEGIN("Engine::LoaderLoop::OnVideoError");
-    RT_DIFF_WORK(true);
     static ThreadWaitFn wait = reinterpret_cast<ThreadWaitFn>(
         ResolveExport("?WaitForFinish@Thread@System@@QEAAXXZ"));
     wait(&LoaderLoopLoader()->_thread);
@@ -1499,16 +1150,12 @@ extern "C" void RtEngine_LoaderLoop_OnVideoError(LoaderLoop* /*self*/) {
 // itself loads nothing, because the WORK is done on the loader thread by
 // Loader::Run, which Startup kicks off.
 extern "C" void RtEngine_LoaderLoop_Load(LoaderLoop* /*self*/) {
-    RT_DIFF_BEGIN("[ATTENDANCE] Engine::LoaderLoop::Load");
-    RT_DIFF_WORK(true);
 }
 
 // ---- ?Update@LoaderLoop@Engine@@UEAA_NAEBVTime@System@@@Z 0x1800dc2a0 -------
 //      ord 4495.  Matches the pseudocode runtime/types/engine/UpdateLoop.h
 //      recorded in Wave 8 instruction for instruction.
 extern "C" bool RtEngine_LoaderLoop_Update(LoaderLoop* self, const ::Time* time) {
-    RT_DIFF_BEGIN("Engine::LoaderLoop::Update");
-    RT_DIFF_WORK(true);
     SleepFourteen();
     LoaderLoopAdvance(self, time);
     return true;   // `mov $0x1,%al`
@@ -1523,8 +1170,6 @@ extern "C" bool RtEngine_LoaderLoop_Update(LoaderLoop* self, const ::Time* time)
 // 7 is COLOUR|DEPTH|STENCIL; 1.0f is the literal at 0x18016169c, read out of
 // .rdata rather than assumed.
 extern "C" void RtEngine_LoaderLoop_Draw(LoaderLoop* /*self*/, float /*dt*/) {
-    RT_DIFF_BEGIN("Engine::LoaderLoop::Draw");
-    RT_DIFF_WORK(true);
     RtEngine::MainLoop* ml = MainLoopSingleton();
     if (!ml) return;
     RtVideo::Context* ctx = reinterpret_cast<RtVideo::Context*>(ml->_context);
@@ -1543,8 +1188,6 @@ extern "C" void RtEngine_LoaderLoop_Draw(LoaderLoop* /*self*/, float /*dt*/) {
 // copy. Passing the field's own address instead would let the callee mutate the
 // member — hence the local.
 extern "C" void RtEngine_DialogLoaderLoopT_Shutdown(DialogLoaderLoopT* self) {
-    RT_DIFF_BEGIN("Engine::DialogLoaderLoopT::Shutdown");
-    RT_DIFF_WORK(true);
     static UiCloseDialogFn closeDialog = reinterpret_cast<UiCloseDialogFn>(ResolveExport(
         "?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z"));
     void* byValue = self->_dialogInstance;
@@ -1562,8 +1205,6 @@ extern "C" void RtEngine_DialogLoaderLoopT_Shutdown(DialogLoaderLoopT* self) {
 // reproduced for the same reason: it is observable on any tick count over 2^24.
 extern "C" bool RtEngine_DialogLoaderLoopT_Update(DialogLoaderLoopT* self,
                                                   const ::Time* time) {
-    RT_DIFF_BEGIN("Engine::DialogLoaderLoopT::Update");
-    RT_DIFF_WORK(true);
 
     ::Time rounded;
     rounded.ticks = SecondsToTicks(TicksToSeconds(time->ticks));
@@ -1597,8 +1238,6 @@ extern "C" bool RtEngine_DialogLoaderLoopT_Update(DialogLoaderLoopT* self,
 // per constant group; one computation here, because a double-to-float narrowing
 // of the same value is deterministic and the two cannot differ.
 extern "C" void RtEngine_DialogLoaderLoopT_Draw(DialogLoaderLoopT* self, float /*dt*/) {
-    RT_DIFF_BEGIN("Engine::DialogLoaderLoopT::Draw");
-    RT_DIFF_WORK(true);
     RtEngine::MainLoop* ml = MainLoopSingleton();
     if (!ml) return;
     RtVideo::Context* ctx = reinterpret_cast<RtVideo::Context*>(ml->_context);
@@ -1629,8 +1268,6 @@ extern "C" void RtEngine_DialogLoaderLoopT_Draw(DialogLoaderLoopT* self, float /
 // offsets (_dialogInstance +0x38, _ui +0x40 — thirty-two bytes lower than the
 // DialogLoaderLoopT pair, because there is no LoaderLoop subobject).
 extern "C" void RtEngine_DialogLoopT_Shutdown(DialogLoopT* self) {
-    RT_DIFF_BEGIN("Engine::DialogLoopT::Shutdown");
-    RT_DIFF_WORK(true);
     static UiCloseDialogFn closeDialog = reinterpret_cast<UiCloseDialogFn>(ResolveExport(
         "?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z"));
     void* byValue = self->_dialogInstance;
@@ -1644,8 +1281,6 @@ extern "C" void RtEngine_DialogLoopT_Shutdown(DialogLoopT* self) {
 // two Draws. No shader constants are published either: a menu dialog is not
 // animated off a load timer.
 extern "C" void RtEngine_DialogLoopT_Draw(DialogLoopT* self, float /*dt*/) {
-    RT_DIFF_BEGIN("Engine::DialogLoopT::Draw");
-    RT_DIFF_WORK(true);
     RtEngine::MainLoop* ml = MainLoopSingleton();
     if (!ml) return;
     RtVideo::Context* ctx = reinterpret_cast<RtVideo::Context*>(ml->_context);
@@ -1689,8 +1324,6 @@ extern "C" void RtEngine_DialogLoopT_Draw(DialogLoopT* self, float /*dt*/) {
 // it gets the DLL's implementation today and will pick up a port the moment one
 // is registered, with no edit here.
 extern "C" void RtEngine_Loader_Run(Loader* self) {
-    RT_DIFF_BEGIN("Engine::Loader::Run");
-    RT_DIFF_WORK(true);
 
     void** engineSlot = reinterpret_cast<void**>(
         ResolveExport("?_singleton@Engine@1@0PEAV11@EA"));
@@ -1757,8 +1390,6 @@ extern "C" void RtEngine_Loader_Run(Loader* self) {
 //     (`mov %rsi,0x1d0(%rcx)`), not two 4-byte ones. Written as two stores here
 //     because Viewport::x and ::y are adjacent int32s and no observer can tell.
 extern "C" void RtEngine_MainLoop_Draw(RtEngine::MainLoop* self, float dt) {
-    RT_DIFF_BEGIN("Engine::MainLoop::Draw");
-    RT_DIFF_WORK(true);
 
     RtVideo::Context* ctx = reinterpret_cast<RtVideo::Context*>(self->_context);
     void* cd = CtxDataOf(ctx);
@@ -1949,7 +1580,7 @@ int RtEngineLoopsRegister() {
     // so four of the six (DrawFailed, SaveRestore, OnVideoError,
     // OnVideoRestart) move NO column at all.  The two rows that appeared are
     // `?GetResourceFilename@` and `?AllowsModChanges@`, and they appeared
-    // because the ORACLE above opens a real `RT_ORIGINAL_ONCE` door on each.
+    // because the ORACLE above opens a real `the raw DLL door` door on each.
     // They enter `called` and `ported` in the same breath, so the gap is
     // unchanged; the cost is honest and it belongs to the instrument, not to
     // the ports.
@@ -2040,15 +1671,6 @@ int RtEngineLoopsRegister() {
     RegisterRuntimeExport("?Draw@MainLoop@Engine@@QEAAXM@Z",
                           (void*)&RtEngine_MainLoop_Draw); ++n;
     RegisterRuntimeAddr(0x1800dcd40, (void*)&RtEngine_MainLoop_Draw);
-
-    // The oracle runs BEFORE nothing and AFTER the registrations on purpose: it
-    // reaches the shipped bodies through ResolveExportRaw, which the registry
-    // cannot shadow, so the order is irrelevant to correctness and this is the
-    // one place guaranteed to execute once.
-    if (const char* e = std::getenv("BANISHED_RT_VTIO_ORACLE")) {
-        if (e[0] && std::strcmp(e, "0") != 0)
-            RtEngineUpdateLoopBaseSlotsOracle();
-    }
 
     return n;   // 18 (Wave 8+25) + 13 (Wave 27 lane LOOPS) = 31
 }

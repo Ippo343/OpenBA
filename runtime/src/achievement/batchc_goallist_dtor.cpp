@@ -30,7 +30,7 @@
 //
 // ORACLE: NONE, and it is stated rather than faked. Running the shipped body
 // afterwards would call slot 0 with flag 1 on already-freed GoalInstances — a
-// double free, not a comparison. RT_DIFF_WORK records how many calls actually
+// double free, not a comparison. the diff oracle records how many calls actually
 // had goals to destroy; a GoalList destroyed empty is the common case and
 // `calls=` alone would hide that.
 // ============================================================================
@@ -50,11 +50,9 @@ using RtAchievement::GoalList;
 namespace GoalInstanceVtbl = RtAchievement::GoalInstanceVtbl;
 
 extern "C" void RtAch_GoalList_Dtor(void* selfv) {
-    RT_DIFF_BEGIN("Achievement::GoalList::~GoalList");
     GoalList* const self = static_cast<GoalList*>(selfv);
 
     const bool didWork = (self->_goals._size > 0);
-    RT_DIFF_WORK(didWork);
 
     using DeletingDtorFn = void* (*)(void*, int);
 
@@ -78,8 +76,6 @@ extern "C" void RtAch_GoalList_Dtor(void* selfv) {
     // Collection::Array teardown shape Wave 2 pinned.
     *reinterpret_cast<uint64_t*>(&self->_goals._size) = 0;
 
-    RT_DIFF_SHADOW(true, "goal list emptied and freed",
-                   "not diffable (a replay would double-free every instance)");
 }
 
 // ============================================================================

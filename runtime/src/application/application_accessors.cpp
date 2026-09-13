@@ -44,15 +44,9 @@ using RtApplication::Application;
 // that file's internal linkage).
 // ============================================================================
 Application* RtApp_Get() {
-    RT_DIFF_BEGIN("Application::Application::Get");
     Application** slot =
         RT_DATA_SLOT(Application**, "?_singleton@Application@1@0PEAV11@EA");
     Application* ours = slot ? *slot : nullptr;
-    if (rt_diff_on__) {
-        using Fn = Application* (*)();
-        Application* theirs = RT_ORIGINAL_ONCE(Fn, "?Get@Application@1@SAPEAV11@XZ")();
-        RT_DIFF_SCALAR(ours, theirs);
-    }
     return ours;
 }
 
@@ -65,13 +59,7 @@ Application* RtApp_Get() {
 // `return this->_platformHandle;` (Application.h +0x08).
 // ============================================================================
 void* RtApp_GetInstance(const Application* self) {
-    RT_DIFF_BEGIN("Application::Application::GetInstance");
     void* ours = self->_platformHandle;
-    if (rt_diff_on__) {
-        using Fn = void* (*)(const Application*);
-        void* theirs = RT_ORIGINAL_ONCE(Fn, "?GetInstance@Application@1@QEBAPEAUHINSTANCE__@@XZ")(self);
-        RT_DIFF_SCALAR(ours, theirs);
-    }
     return ours;
 }
 
@@ -84,13 +72,7 @@ void* RtApp_GetInstance(const Application* self) {
 // `return this->_windowHandle;` (Application.h +0x00).
 // ============================================================================
 void* RtApp_GetWindow(const Application* self) {
-    RT_DIFF_BEGIN("Application::Application::GetWindow");
     void* ours = self->_windowHandle;
-    if (rt_diff_on__) {
-        using Fn = void* (*)(const Application*);
-        void* theirs = RT_ORIGINAL_ONCE(Fn, "?GetWindow@Application@1@QEBAPEAUHWND__@@XZ")(self);
-        RT_DIFF_SCALAR(ours, theirs);
-    }
     return ours;
 }
 
@@ -122,13 +104,7 @@ void* RtApp_GetWindow(const Application* self) {
 // is fixed anyway: faithful-first is the project rule, and "unreachable
 // today" is a property of our own current callers, not of the retail body.
 uint8_t RtApp_IsCursorEnabled(Application* self) {
-    RT_DIFF_BEGIN("Application::Application::IsCursorEnabled");
     const uint8_t ours = self->_cursorEnabled;
-    if (rt_diff_on__) {
-        using Fn = uint8_t (*)(Application*);
-        const uint8_t theirs = RT_ORIGINAL_ONCE(Fn, "?IsCursorEnabled@Application@1@QEAA_NXZ")(self);
-        RT_DIFF_SCALAR(ours, theirs);
-    }
     return ours;
 }
 
@@ -148,13 +124,7 @@ uint8_t RtApp_IsCursorEnabled(Application* self) {
 // the other, it is its own port reading the same byte.
 // ============================================================================
 bool RtApp_PlatformIsPaused(const Application* self) {
-    RT_DIFF_BEGIN("Application::Application::PlatformIsPaused");
     const bool ours = (self->_running == 0);
-    if (rt_diff_on__) {
-        using Fn = bool (*)(const Application*);
-        const bool theirs = RT_ORIGINAL_ONCE(Fn, "?PlatformIsPaused@Application@1@AEAA_NXZ")(self);
-        RT_DIFF_SCALAR(ours, theirs);
-    }
     return ours;
 }
 
@@ -172,6 +142,4 @@ bool RtApp_PlatformIsPaused(const Application* self) {
 // and is registered exactly like the rest.
 // ============================================================================
 void RtApp_PlatformDestruct(Application* /*self*/) {
-    RT_DIFF_BEGIN("Application::Application::PlatformDestruct [retail body is empty]");
-    RT_DIFF_SHADOW(true, "no-op", "no-op (retail body is `ret`)");
 }

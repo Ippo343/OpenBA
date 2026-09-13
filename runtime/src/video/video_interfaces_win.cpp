@@ -92,11 +92,6 @@ inline InterfaceSlot* SlotAt(Device* self, int i) {
         reinterpret_cast<uint8_t*>(self) + kSlot0 + static_cast<uintptr_t>(i) * 0x18);
 }
 
-bool EnvOn(const char* name) {
-    const char* e = std::getenv(name);
-    return e && e[0] && std::strcmp(e, "0") != 0 && std::strcmp(e, "false") != 0;
-}
-
 // Retail's inlined `String::operator=(const String&)` at 0x1800f7b7a (and the
 // two identical copies at 0x1800f7bc9 / 0x1800f7c16). Written out rather than
 // folded into RtString_ReleaseInline + RtString_AdoptInline because the
@@ -151,7 +146,6 @@ void StringAssign(String* dst, char* src) {
 // ============================================================================
 extern "C" String* RtVideo_Device_GetDLLForInterface(const Device* /*this, never read*/,
                                                      String* ret, int32_t index) {
-    RT_DIFF_BEGIN("Video::Device::GetDLLForInterface");
 
     ret->data = nullptr;                          // 0x1800f7b44
 
@@ -182,31 +176,6 @@ extern "C" String* RtVideo_Device_GetDLLForInterface(const Device* /*this, never
         RtSystem::RtString_ReleaseInline(&discarded);
     }
 
-    if (rt_diff_on__) {
-        // A REAL ORACLE, and the only one in this lane that needs no scaffolding:
-        // the body is a pure function of `index` with no device, no COM and no
-        // machine state. Run the shipped body into a scratch String and compare
-        // the TEXT.
-        using Fn = String* (*)(const Device*, String*, int32_t);
-        Fn theirsFn = RtOriginal<Fn>(
-            "?GetDLLForInterface@Device@Video@@QEBA?AVString@System@@H@Z");
-        if (theirsFn) {
-            String theirs{nullptr};
-            theirsFn(nullptr, &theirs, index);   // `this` is never read; null proves it
-            const char* a = ret->data    ? ret->data    : "(null)";
-            const char* b = theirs.data  ? theirs.data  : "(null)";
-            const bool equal = std::strcmp(a, b) == 0;
-            RT_DIFF_SHADOW(equal, a, b);
-            // Effectiveness: an index that produced only the suffixes exercised
-            // neither the switch nor the assignment. `worked` counts the calls
-            // that actually named a plugin.
-            RT_DIFF_WORK(base != nullptr);
-            RtSystem::RtString_ReleaseInline(&theirs);
-        } else {
-            RT_DIFF_SHADOW(false, "ours ran", "shipped body did not resolve");
-            RT_DIFF_WORK(true);
-        }
-    }
     return ret;                                   // 0x1800f7cd8 MOV RAX,RDI
 }
 
@@ -264,7 +233,6 @@ extern "C" String* RtVideo_Device_GetDLLForInterface(const Device* /*this, never
 // detector.
 // ============================================================================
 extern "C" void RtVideo_Device_InitializeInterfaces(Device* self) {
-    RT_DIFF_BEGIN("Video::Device::InitializeInterfaces [no oracle: LoadLibrary on the live process]");
 
     // *** THE LINE THE TREE HAS BEEN ASKING FOR. ***
     // standalone/video_interface.cpp:158 and its DETOUR FAILED message both
@@ -321,96 +289,6 @@ extern "C" void RtVideo_Device_InitializeInterfaces(Device* self) {
         extern void VideoInterfaceFillDx9Placeholder(void* device);
         VideoInterfaceFillDx9Placeholder(self);
     }
-
-    if (rt_diff_on__) {
-        // The postcondition a bad port would break, and the ONE thing this body
-        // exists to guarantee: slot 1 carries OUR two functions and a non-null
-        // module, so nothing will LoadLibrary VideoDX11-x64.dll.
-        const InterfaceSlot* dx11 = SlotAt(self, 1);
-        const bool dx11Ok = dx11->module != nullptr &&
-                            dx11->createDeviceData != nullptr &&
-                            dx11->getDeviceName != nullptr &&
-                            VideoInterfacePrefilled();
-        char a[160];
-        std::snprintf(a, sizeof(a),
-                      "skipped=%d loaded=%d rejected=%d dx11Prefilled=%d",
-                      skipped, loaded, rejected, dx11Ok ? 1 : 0);
-        RT_DIFF_SHADOW(dx11Ok, a,
-                       "no oracle: a replay would LoadLibrary the same DLLs again, "
-                       "and slot 1 is OURS by design so it could not match");
-        // `skipped >= 1` is the effectiveness control: it is exactly the
-        // assertion that the pre-fill happened BEFORE the loop looked at slot 1.
-        // A run reporting skipped=0 means the fill did not take and the loop
-        // went and loaded the real VideoDX11-x64.dll.
-        RT_DIFF_WORK(skipped >= 1);
-        printf("[EVM] InitializeInterfaces %s\n", a);
-    }
-}
-
-// ============================================================================
-// RtLaneEvmGetDllProbe — GetDLLForInterface over its whole input domain
-// ============================================================================
-// The live call site only ever passes 0 and 2 (slot 1 is pre-filled and
-// `continue`s before reaching it), so the diff site above can never exercise
-// index 1 or the default case. This probe closes both gaps against the shipped
-// body, deterministically and with no device.
-//
-// EFFECTIVENESS CONTROL: `cases` and, separately, `named` — the number of
-// inputs that produced a plugin name rather than the bare suffixes. A run with
-// named < 3 has not covered the switch.
-//
-// NEGATIVE CONTROL: BANISHED_EVM_NEGCTL=1 appends the WRONG architecture suffix
-// ("-x86"), which must make every one of the six cases diverge. It perturbs the
-// produced STRING — the thing compared — not the return pointer, which is the
-// same for both sides by construction.
-// ============================================================================
-extern "C" void RtLaneEvmGetDllProbe() {
-    if (!RtDiffEnabled()) return;
-    static bool done = false;
-    if (done) return;
-    done = true;
-
-    using Fn = String* (*)(const Device*, String*, int32_t);
-    Fn theirsFn = RtOriginal<Fn>(
-        "?GetDLLForInterface@Device@Video@@QEBA?AVString@System@@H@Z");
-    if (!theirsFn) {
-        printf("[EvmProbe] GetDLLForInterface SKIPPED: shipped body did not resolve\n");
-        return;
-    }
-    const bool neg = EnvOn("BANISHED_EVM_NEGCTL");
-
-    static const int32_t kCases[] = { 0, 1, 2, 3, -1, 0x7fffffff };
-    int cases = 0, differing = 0, named = 0;
-    char detail[320];
-    detail[0] = 0;
-
-    for (int32_t idx : kCases) {
-        String ours{nullptr};
-        String theirs{nullptr};
-        RtVideo_Device_GetDLLForInterface(nullptr, &ours, idx);
-        if (neg) {
-            // Perturb the RESULT, which is what the comparison reads.
-            String discarded{nullptr};
-            RtSystem::RtSystem_String_AppendAssignCStr(&ours, &discarded, "-x86");
-            RtSystem::RtString_ReleaseInline(&discarded);
-        }
-        theirsFn(nullptr, &theirs, idx);
-
-        const char* a = ours.data   ? ours.data   : "(null)";
-        const char* b = theirs.data ? theirs.data : "(null)";
-        ++cases;
-        if (idx >= 0 && idx <= 2) ++named;
-        if (std::strcmp(a, b) != 0) {
-            ++differing;
-            char one[96];
-            std::snprintf(one, sizeof(one), "idx=%d ours='%s' theirs='%s'; ", idx, a, b);
-            std::strncat(detail, one, sizeof(detail) - std::strlen(detail) - 1);
-        }
-        RtSystem::RtString_ReleaseInline(&ours);
-        RtSystem::RtString_ReleaseInline(&theirs);
-    }
-    printf("[EvmProbe] GetDLLForInterface%s cases=%d named=%d differing=%d %s\n",
-                neg ? " NEGATIVE-CONTROL" : "", cases, named, differing, detail);
 }
 
 // ============================================================================

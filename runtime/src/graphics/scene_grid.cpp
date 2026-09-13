@@ -111,7 +111,6 @@
 #include <cstdint>
 #include <cstring>
 
-#include "../../funcs/rt_diff.h"
 #include "../../funcs/rt_port.h"
 #include "scene_grid.h"
 
@@ -123,19 +122,8 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace rtgfxgrid {
 
-bool g_probePending = false;
-namespace { bool g_probeRunning = false; }
 
 namespace {
-
-// The probe drives these bodies itself, so the gate has to break the recursion.
-inline void ProbeGate() {
-    if (!g_probePending || g_probeRunning) return;
-    g_probeRunning = true;
-    RtGraphicsGridProbe();
-    g_probePending = false;
-    g_probeRunning = false;
-}
 
 // ---------------------------------------------------------------------------
 // The two `Collection::Array` instantiations these bodies call.
@@ -228,8 +216,6 @@ const float kOneF    = FromBits(0x3f800000u);   // DAT_18016169c
 // array CONTENTS are compared.
 // ============================================================================
 Scene* GridInit(Scene* self, float cellSize) {
-    ProbeGate();
-    RT_DIFF_BEGIN("Graphics::Scene grid init (0x18005e4a0)");
 
     self->_halfCellX = 0.0f;                       // 18005e4c5, one qword
     self->_halfCellY = 0.0f;
@@ -263,7 +249,7 @@ Scene* GridInit(Scene* self, float cellSize) {
             reinterpret_cast<uint8_t*>(self->_cellCounts._data) + off) = 0;
     }
 
-    RT_DIFF_WORK(true);                            // no early-out arm exists
+                            // no early-out arm exists
     return self;                                   // 18005e5c0  MOV RAX,RBP
 }
 
@@ -299,8 +285,6 @@ Scene* GridInit(Scene* self, float cellSize) {
 // a zero is reported as a GAP.
 // ============================================================================
 uint32_t GridAdd(Scene* self, Geometry* const* geo) {
-    ProbeGate();
-    RT_DIFF_BEGIN("Graphics::Scene grid add (0x18005e5e0)");
 
     const int32_t freeCount = self->_freeIds._size;      // 18005e5f2  MOVSXD
     int32_t id;
@@ -330,7 +314,6 @@ uint32_t GridAdd(Scene* self, Geometry* const* geo) {
     }
 
     GridReindex(self, id);                                               // 677
-    RT_DIFF_WORK(true);
     return static_cast<uint32_t>(id);                                    // 686
 }
 
@@ -366,8 +349,6 @@ uint32_t GridAdd(Scene* self, Geometry* const* geo) {
 // multi-node chain, a MIDDLE node, and a LONE node — the three arms.
 // ============================================================================
 void GridUnthread(Scene* self, int32_t id) {
-    ProbeGate();
-    RT_DIFF_BEGIN("Graphics::Scene grid unthread (0x18005f090)");
 
     SceneNode* nodes    = self->_nodes._data;                    // 18005f099
     int32_t*   heads    = self->_cellHeads._data;                // 18005f095
@@ -407,13 +388,6 @@ void GridUnthread(Scene* self, int32_t id) {
     // (WAVE9.md, "the effectiveness control was wrong twice, and both times it
     // said PASS"). `wasHead` and `emptied` are the two arms a single-node-per-
     // cell population never separates.
-    RT_DIFF_WORK(true);
-    if (rt_diff_on__) {
-        static RtDiffSite sHead    = { "Graphics::Scene grid unthread[branch:was cell head]" };
-        static RtDiffSite sEmptied = { "Graphics::Scene grid unthread[branch:cell emptied]" };
-        if (wasHead) { RtDiffRegister(&sHead);    RtDiffReport(&sHead, true, "head", "head"); }
-        if (emptied) { RtDiffRegister(&sEmptied); RtDiffReport(&sEmptied, true, "empty", "empty"); }
-    }
 }
 
 // ============================================================================
@@ -441,8 +415,6 @@ void GridUnthread(Scene* self, int32_t id) {
 // without it would have swapped one unregistered door for another.
 // ============================================================================
 void GridThread(Scene* self, int32_t id) {
-    ProbeGate();
-    RT_DIFF_BEGIN("Graphics::Scene grid thread (0x18005f4b0)");
 
     SceneNode* nodes = self->_nodes._data;                       // 18005f4b5
     int32_t*   heads = self->_cellHeads._data;                   // 18005f4b9
@@ -474,14 +446,6 @@ void GridThread(Scene* self, int32_t id) {
         ++self->_cellCounts._data[c];                            // 18005f55c
     }
 
-    RT_DIFF_WORK(true);
-    if (rt_diff_on__) {
-        static RtDiffSite sEmpty = { "Graphics::Scene grid thread[branch:cell was empty]" };
-        static RtDiffSite sRing  = { "Graphics::Scene grid thread[branch:appended to ring]" };
-        RtDiffSite* s = empty ? &sEmpty : &sRing;
-        RtDiffRegister(s);
-        RtDiffReport(s, true, empty ? "self-link" : "ring", empty ? "self-link" : "ring");
-    }
 }
 
 // ============================================================================
@@ -519,8 +483,6 @@ void GridThread(Scene* self, int32_t id) {
 // boxes that move both within a level and across levels.
 // ============================================================================
 void GridReindex(Scene* self, int32_t id) {
-    ProbeGate();
-    RT_DIFF_BEGIN("Graphics::Scene grid reindex (0x18005ee30)");
 
     SceneNode* const nodes = self->_nodes._data;                 // 18005ee4b  R15
     const uint8_t* const geo =
@@ -589,15 +551,6 @@ void GridReindex(Scene* self, int32_t id) {
 
     // `calls` on this site counts ENTRIES, and Scene::Clean enters it for every
     // object every frame. `worked` is the number that actually rethreaded.
-    RT_DIFF_WORK(moved);
-    if (rt_diff_on__) {
-        static RtDiffSite sFirst = { "Graphics::Scene grid reindex[branch:first threading]" };
-        static RtDiffSite sMove  = { "Graphics::Scene grid reindex[branch:moved cell]" };
-        static RtDiffSite sNoop  = { "Graphics::Scene grid reindex[branch:same cell, early out]" };
-        RtDiffSite* s = !moved ? &sNoop : (was < 0 ? &sFirst : &sMove);
-        RtDiffRegister(s);
-        RtDiffReport(s, true, "arm", "arm");
-    }
 }
 
 // ============================================================================
@@ -621,8 +574,6 @@ void GridReindex(Scene* self, int32_t id) {
 // the allocator — and the negative control says whether that check can fail.
 // ============================================================================
 void FreeGlobals(GlobalList* list) {
-    ProbeGate();
-    RT_DIFF_BEGIN("Graphics::Scene free globals (0x18005f1f0)");
 
     int freed = 0;
     for (GlobalNode* n = list->head; n != nullptr; ) {            // 18005f211/214
@@ -635,7 +586,6 @@ void FreeGlobals(GlobalList* list) {
     list->head  = nullptr;                                       // 18005f268
     list->count = 0;                                             // 18005f26b
 
-    RT_DIFF_WORK(freed != 0);
 }
 
 // ============================================================================

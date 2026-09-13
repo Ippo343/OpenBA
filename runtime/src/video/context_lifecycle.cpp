@@ -7,7 +7,7 @@
 // WHY THIS FILE EXISTS
 // --------------------
 // `??1Context@Video@@QEAA@XZ` and `?ClearResources@Context@Video@@QEAAXXZ` are
-// two of the 43 names `BANISHED_RT_STRICT` recorded unresolved on cutover boot
+// two of the 43 names `RT_STRICT` recorded unresolved on cutover boot
 // attempt 14 (docs/runtime_port/wave9_attempt14_unresolved.txt). Lane VID
 // classified both as RESOLVE-ONLY and left them, which was correct as far as it
 // went: `engine/funcs/engine_funcs.cpp` resolves both and nothing calls either.
@@ -55,7 +55,6 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_diff.h"
 #include "../../types/video/Buffers.h"
 #include "../../types/video/Context.h"
 #include "../../types/video/Device.h"
@@ -352,7 +351,6 @@ extern "C" void Video_Buffer_OperatorDelete(void* p)  { MemFree(p); }
 // (reference_oracle_must_not_compare_unwritten_bytes.md).
 // ============================================================================
 extern "C" void RtVideo_Context_ClearResources(Context* self) {
-    RT_DIFF_BEGIN("Video::Context::ClearResources");
 
     uint32_t imageBit = 1;
     for (int i = 0; i < RtVideo::kImageBufferSlots; ++i) {
@@ -376,7 +374,6 @@ extern "C" void RtVideo_Context_ClearResources(Context* self) {
         vertexBit = (vertexBit << 1) | (vertexBit >> 31);   // ROL EDX,1
     }
 
-    RT_DIFF_WORK(true);
 }
 
 // ============================================================================
@@ -451,7 +448,7 @@ extern "C" void RtVideo_Context_Dtor(Context* self) {
 //
 // So the probe supplies the callers. It is NOT a re-derivation of the port: it
 // drives the SAME `RtVideo_Context_ClearResources` the registry hands out, and
-// the reference side is the SHIPPED body reached through `ResolveExportRaw`
+// the reference side is the SHIPPED body reached through `the raw DLL door`
 // (reference_resolveaddr_consults_port_registry_first.md — ResolveExport would
 // hand back our own port once registered, and the comparison would be vacuous).
 //
@@ -535,107 +532,6 @@ void BuildCase(Context* c, unsigned seed) {
 
 }  // namespace
 
-extern "C" void RtVideoContextLifecycleProbe() {
-    using Fn = void (*)(Context*);
-    Fn theirs = reinterpret_cast<Fn>(
-        ResolveExportRaw("?ClearResources@Context@Video@@QEAAXXZ"));
-    if (!theirs) {
-        printf("[CtxClear] SKIP -- the shipped ?ClearResources@Context@Video@@ is not "
-                    "reachable (cutover, or the DLL is absent). No comparison was made.\n");
-        return;
-    }
-
-    // Heap-free: two Context-sized statics. sizeof(Context) is 0x2168, so these
-    // are ~17 KB of .bss, which is cheaper and far more predictable at this
-    // point in boot than touching the allocator.
-    static Context ours;
-    static Context refs;
-
-    int cases = 0, mismatches = 0, cleared = 0, theirsCleared = 0;
-    ClearSnapshot so, st;
-
-    for (unsigned seed = 0; seed < 512u; ++seed) {
-        BuildCase(&ours, seed);
-        std::memcpy(&refs, &ours, sizeof(Context));
-
-        ClearSnapshot before;
-        Capture(&ours, &before);
-
-        theirs(&refs);
-        RtVideo_Context_ClearResources(&ours);
-
-        Capture(&ours, &so);
-        Capture(&refs, &st);
-        ++cases;
-        // EFFECTIVENESS control, measured on BOTH sides. `theirsCleared` is the
-        // authoritative count because it is produced by the shipped body, which
-        // this lane did not write; `cleared` must equal it, and if it does not
-        // the two implementations disagree about WHETHER to act even in cases
-        // where they agree about the resulting state.
-        if (!SameSnapshot(before, so)) ++cleared;
-        if (!SameSnapshot(before, st)) ++theirsCleared;
-        if (!SameSnapshot(so, st)) {
-            if (mismatches < 4) {
-                printf("[CtxClear] MISMATCH seed=%u  ours dirty=%08x/%08x/%08x  "
-                            "theirs=%08x/%08x/%08x\n", seed,
-                            so.dirty, so.imageDirty, so.vertexDirty,
-                            st.dirty, st.imageDirty, st.vertexDirty);
-            }
-            ++mismatches;
-        }
-    }
-
-    // NEGATIVE control: a copy of the port's first loop with the image mask
-    // seeded at 2 instead of 1. It MUST be caught, or the comparison is not
-    // reading _imageBufferDirty and every green case above is meaningless.
-    bool negativeCaught = false;
-    {
-        BuildCase(&ours, 0xFFFFu);
-        std::memcpy(&refs, &ours, sizeof(Context));
-        theirs(&refs);
-        uint32_t bit = 2;                            // deliberately wrong seed
-        for (int i = 0; i < RtVideo::kImageBufferSlots; ++i) {
-            if (ours._imageBuffers[i]) {
-                ours._dirty            |= RtVideo::kDirtyImageBuffers;
-                ours._imageBufferDirty |= bit;
-                ours._imageBuffers[i]   = nullptr;
-            }
-            bit = (bit << 1) | (bit >> 31);
-        }
-        uint32_t vbit = 1;
-        for (int i = 0; i < RtVideo::kVertexBufferSlots; ++i) {
-            if (ours._vertexBuffers[i]) {
-                ours._dirty             |= RtVideo::kDirtyVertexBuffers;
-                ours._vertexBufferDirty |= vbit;
-                ours._vertexBuffers[i]   = nullptr;
-                ours._vertexOffsets[i]   = 0;
-                ours._vertexStrides[i]   = 0;
-            }
-            vbit = (vbit << 1) | (vbit >> 31);
-        }
-        Capture(&ours, &so);
-        Capture(&refs, &st);
-        negativeCaught = !SameSnapshot(so, st);
-    }
-
-    printf("[CtxClear] cases=%d mismatches=%d cleared=%d theirsCleared=%d "
-                "(effectiveness) negative-control=%s\n",
-                cases, mismatches, cleared, theirsCleared,
-                negativeCaught ? "CAUGHT" : "*** MISSED ***");
-    if (cleared == 0)
-        printf("[CtxClear] *** cleared=0: every case was a no-op, this sweep "
-                    "verified NOTHING ***\n");
-    if (cleared != theirsCleared)
-        printf("[CtxClear] *** cleared != theirsCleared: the two bodies disagree "
-                    "about WHEN to act, not just about the result ***\n");
-    if (cleared == cases)
-        printf("[CtxClear] *** cleared == cases: seed 0 builds an all-null Context "
-                    "that neither body can change, so this figure is an artefact -- "
-                    "check Capture's memset ***\n");
-    if (!negativeCaught)
-        printf("[CtxClear] *** the negative control was NOT caught: the comparison "
-                    "does not read the dirty masks, so the sweep above is void ***\n");
-}
 
 // ============================================================================
 // Registration
@@ -652,8 +548,8 @@ extern "C" void RtVideoContextLifecycleProbe() {
 // ?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ (0x1800f4400, ord 3369) was in
 // this list and is NOT any more: buffers.cpp registers both of its doors. See
 // the note beside the declaration at the top of this file. NOTE THE ONE
-// BEHAVIOURAL CONSEQUENCE: that registration now rides BANISHED_RT_VIDBUFFERS
-// instead of BANISHED_RT_VIDCTXLIFE, so VIDBUFFERS=0 now really does leave the
+// BEHAVIOURAL CONSEQUENCE: that registration now rides RT_VIDBUFFERS
+// instead of RT_VIDCTXLIFE, so VIDBUFFERS=0 now really does leave the
 // export on the DLL. It did not before -- this file re-registered it and the
 // kill switch silently failed to kill.
 //

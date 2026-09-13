@@ -75,7 +75,7 @@
 // `Video::Configuration::Shutdown`. It is not: pefile says 0x1800f6d10 is
 // `?Save@Configuration@Video@@QEAAXXZ`. Corrected in that header by this lane.
 //
-// Kill switch: BANISHED_RT_ENGINEPLATFORM=0.
+// Kill switch: RT_ENGINEPLATFORM=0.
 // ============================================================================
 
 #include <cstdint>

@@ -190,18 +190,8 @@ extern "C" Node* RtApp_SetAllocNode(void* /*unused, never read*/,
 // (exactly the trap lane D recorded for `KeyMap::RegisterInput`). Verified by
 // the lockstep probe in set_avl_probe.cpp instead.
 // ============================================================================
-extern "C" void RtCollectionSetAvlProbeMaybeRun();
-
 extern "C" void RtApp_RegisterMessageCallback(Application* app, unsigned id,
                                               void* callback) {
-    // Self-scheduled probe, lane Q's pattern. It cannot run at registration
-    // time: it allocates, and at RuntimePortInit() the MemoryAllocator has been
-    // constructed but not STARTED. The first call into here is provably safe,
-    // because this function is itself about to allocate. It is a no-op unless
-    // BANISHED_RT_SETAVL_PROBE armed it, and it re-entry-guards itself (the
-    // probe drives this very function).
-    RtCollectionSetAvlProbeMaybeRun();
-
     Set* set = CallbackSet(app);
 
     // The element, built on OUR stack exactly as retail builds it on its own —

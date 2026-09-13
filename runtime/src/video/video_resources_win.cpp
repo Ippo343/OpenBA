@@ -33,20 +33,6 @@ extern "C" void RtVideoDeleteDeviceLock(void* device) {
         static_cast<uint8_t*>(device) + kDeviceLock));
 }
 
-// The probe's synthetic Devices need a REAL critical section at +0x60, because
-// both bodies under test call DeleteCriticalSection on it. Seeding that block
-// with the probe's byte pattern instead and letting the DLL delete it would be
-// testing the OS, not the port.
-//
-// The spin count matches ??0Device@Video@@'s own
-// InitializeCriticalSectionAndSpinCount(&this->lock, 5000) — the probe's
-// subject should be the shape retail builds, not a plainer one.
-extern "C" void RtVideoProbeInitDeviceLock(void* device) {
-    InitializeCriticalSectionAndSpinCount(
-        reinterpret_cast<CRITICAL_SECTION*>(static_cast<uint8_t*>(device) + kDeviceLock),
-        5000);
-}
-
 // ============================================================================
 // The three WriteFile calls in ?SaveImageToFile@ImageBuffer@Video@@
 // ============================================================================

@@ -55,9 +55,9 @@
 // whole desktop. Calling the DLL's copy afterwards would clip the cursor a
 // second time to the same rectangle — a repeat of the side effect, not a
 // comparison of it (the same reason application_win.cpp's PlatformUpdate,
-// SleepThread and YieldToThreads are registered with `RT_DIFF_SHADOW(true,…)`).
+// SleepThread and YieldToThreads are registered with ``).
 // What CAN be checked is the field write and the branch taken, so both sites
-// carry `RT_DIFF_WORK` with the port's own guard verdict: `calls=` then counts
+// carry `the diff oracle` with the port's own guard verdict: `calls=` then counts
 // entries and the work column counts the calls that actually reached
 // `ClipCursor` with a rectangle. That is an effectiveness control, not an
 // oracle, and this file does not claim otherwise.
@@ -125,7 +125,6 @@ extern "C" void RtInput_Device_PlatformUpdate(void* selfPtr) {
 namespace {
 
 void Device_PlatformUpdate(void* selfPtr) {
-    RT_DIFF_BEGIN("Input::Device::PlatformUpdate");
 
     auto* self = static_cast<uint8_t*>(selfPtr);
     const bool clipping = self[RtInput::kMouseClippingOffset] != 0;
@@ -135,11 +134,9 @@ void Device_PlatformUpdate(void* selfPtr) {
     // one (every lost-focus message runs it), so without this the site's
     // calls= column would say nothing about whether the port was ever
     // exercised in the state that matters.
-    RT_DIFF_WORK(clipping && focused);
 
     if (!clipping || !focused) {
         ClipCursor(nullptr);
-        RT_DIFF_SHADOW(true, "released the cursor clip", "not diffable (global OS state)");
         return;
     }
 
@@ -153,8 +150,6 @@ void Device_PlatformUpdate(void* selfPtr) {
     ClientToScreen(hwnd, reinterpret_cast<POINT*>(&rc.right));   // (right, bottom)
     ClipCursor(&rc);
 
-    RT_DIFF_SHADOW(true, "clipped the cursor to the client rect",
-                   "not diffable (global OS state)");
 }
 
 }  // namespace
@@ -174,7 +169,6 @@ void Device_PlatformUpdate(void* selfPtr) {
 // raw-byte store stays faithful.
 // ---------------------------------------------------------------------------
 void RtInput_Device_EnableMouseClipping(void* selfPtr, uint8_t enable) {
-    RT_DIFF_BEGIN("Input::Device::EnableMouseClipping");
 
     auto* self = static_cast<uint8_t*>(selfPtr);
     const bool changed = self[RtInput::kMouseClippingOffset] != enable;
@@ -183,12 +177,9 @@ void RtInput_Device_EnableMouseClipping(void* selfPtr, uint8_t enable) {
     // "Did work" = the flag actually changed value. A run whose work column is
     // zero has only ever re-asserted the setting it already had, which is the
     // negative case worth being able to see.
-    RT_DIFF_WORK(changed);
 
     Device_PlatformUpdate(selfPtr);
 
-    RT_DIFF_SHADOW(true, "wrote _mouseClipping and re-applied the clip",
-                   "not diffable (ClipCursor is global OS state)");
 }
 
 int RtInputWinRegister() {

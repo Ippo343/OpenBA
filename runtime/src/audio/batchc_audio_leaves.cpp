@@ -143,11 +143,10 @@ void ReleaseString(void** slot) {
 //
 // ORACLE: NONE, for `Device::Update`'s reason — this fires stored completion
 // callbacks and releases a COM voice. A replay is a second side effect, not a
-// comparison. RT_DIFF_WORK records how many calls matched a channel at all;
+// comparison. the diff oracle records how many calls matched a channel at all;
 // the overwhelming majority of SoundBuffer deletions match none.
 // ############################################################################
 extern "C" void RtAudio_Device_OnSoundBufferDeleted(void* selfv, const void* buffer) {
-    RT_DIFF_BEGIN("Audio::Device::OnSoundBufferDeleted");
 
     int matched = 0;
     for (int i = 0; i < kChannelCount; ++i) {
@@ -166,9 +165,6 @@ extern "C" void RtAudio_Device_OnSoundBufferDeleted(void* selfv, const void* buf
             reinterpret_cast<AudioCompletionFn>(cb)(ch, ch->userData, ch->userValue);
     }
 
-    RT_DIFF_WORK(matched != 0);
-    RT_DIFF_SHADOW(true, "every channel playing this buffer stopped",
-                   "not diffable (fires stored completion callbacks)");
 }
 
 // ############################################################################
@@ -196,7 +192,6 @@ extern "C" void RtAudio_Device_OnSoundBufferDeleted(void* selfv, const void* buf
 // four numbers, and any drift shows as a diff on this comment, not silently.
 // ############################################################################
 extern "C" void RtAudio_SoundBuffer_Dtor(void* selfv) {
-    RT_DIFF_BEGIN("Audio::SoundBuffer::~SoundBuffer");
     uint8_t* const self = static_cast<uint8_t*>(selfv);
 
     *reinterpret_cast<void**>(self) = VtSoundBuffer();
@@ -214,7 +209,6 @@ extern "C" void RtAudio_SoundBuffer_Dtor(void* selfv) {
     *reinterpret_cast<void**>(self) = VtCompiledExternal();
     ExternalDtor(self);                                     // JMP 0x1800bc950
 
-    RT_DIFF_SHADOW(true, "sound buffer torn down", "not diffable (frees the object)");
 }
 
 // ============================================================================

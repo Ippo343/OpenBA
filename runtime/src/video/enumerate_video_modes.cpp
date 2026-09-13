@@ -93,8 +93,6 @@ using RtVideo::InterfaceSlot;
 extern "C" void RtVideo_Device_InitializeInterfaces(Device* self);
 extern "C" void RtVideo_SortDisplayModes(DisplayMode* first, int32_t count);
 extern "C" void RtVideo_SortRefreshRates(RtVideo::RefreshRate* first, int32_t count);
-extern "C" void RtLaneEvmSortProbe();
-extern "C" void RtLaneEvmGetDllProbe();
 
 namespace {
 
@@ -124,7 +122,6 @@ inline void* const* VtblOf(void* obj) {
 
 // ============================================================================
 extern "C" bool RtVideo_Device_EnumerateVideoModes(Device* self) {
-    RT_DIFF_BEGIN("Video::Device::EnumerateVideoModes [no oracle: see the banner; the sort pass is verified separately]");
 
     RtVideo_Device_InitializeInterfaces(self);          // 0x1800f8627
 
@@ -190,28 +187,6 @@ extern "C" bool RtVideo_Device_EnumerateVideoModes(Device* self) {
         }
     }
 
-    if (rt_diff_on__) {
-        char a[192];
-        std::snprintf(a, sizeof(a),
-                      "created=%d enumerated=%d interfaces=%d adapters=%d "
-                      "modeSorts=%d refreshSorts=%d",
-                      created, enumerated, static_cast<int>(self->interfaceCount),
-                      adaptersSeen, modesSorted, refreshSorted);
-        RT_DIFF_SHADOW(true, a,
-                       "no oracle: every device byte this writes is a heap pointer or a "
-                       "module handle; the sort pass is compared in video_mode_sort_probe.cpp");
-        // Work = the call actually enumerated a backend. A run reporting
-        // worked=0 means no interface slot was usable and the sort pass had
-        // nothing to walk, which is a real outcome and must not read as success.
-        RT_DIFF_WORK(enumerated > 0);
-        printf("[EVM] EnumerateVideoModes %s\n", a);
-
-        // Both probes need a live allocator and allocate, so they cannot run
-        // from a *PortInit; this is the first point in the boot that has one and
-        // is inside the function under test. Each is self-latching.
-        RtLaneEvmGetDllProbe();
-        RtLaneEvmSortProbe();
-    }
     return true;                                        // 0x1800f8790 MOV AL,1
 }
 

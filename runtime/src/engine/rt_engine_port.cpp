@@ -1,12 +1,12 @@
 // ============================================================================
 // runtime/src/engine/rt_engine_port.cpp — RtEnginePortInit()   Wave 8 lanes A+B
 // ============================================================================
-//   BANISHED_RT_ENGINE=0      leave the whole Engine namespace on the DLL
-//   BANISHED_RT_ENGINELOOP=0  ... just the loop family (lane A):
+//   RT_ENGINE=0      leave the whole Engine namespace on the DLL
+//   RT_ENGINELOOP=0  ... just the loop family (lane A):
 //                                 UpdateLoop / Loader / LoaderLoop /
 //                                 DialogLoopT / DialogLoaderLoopT
-//   BANISHED_RT_ENGINECORE=0  ... just Engine::Engine + Engine::MainLoop (lane B)
-//   BANISHED_RT_MAINLOOPRUN=0 ... just MainLoop::Run + MainLoop::Update (lane
+//   RT_ENGINECORE=0  ... just Engine::Engine + Engine::MainLoop (lane B)
+//   RT_MAINLOOPRUN=0 ... just MainLoop::Run + MainLoop::Update (lane
 //                                 ADDR). Its own switch because Run is the
 //                                 process's ONE main loop and has no oracle:
 //                                 a defect shows up as "the game does not run",
@@ -58,13 +58,9 @@ extern int RtEnginePlatformRegister();  // engine_platform.cpp  (W23 ENGINE)— 
 extern int RtEngineLoadResourcesRegister();// updateloop_loadresources.cpp  — 1
 
 void RtEnginePortInit() {
-    if (!RtWaveEnabled("BANISHED_RT_ENGINE")) {
-        printf("[RtPort] BANISHED_RT_ENGINE=0 -- Engine namespace port disabled\n");
-        return;
-    }
     int loops = 0, core = 0, life = 0, mlrun = 0, mlvid = 0, mlframe = 0;
-    if (RtWaveEnabled("BANISHED_RT_ENGINELOOP")) loops = RtEngineLoopsRegister();
-    if (RtWaveEnabled("BANISHED_RT_ENGINECORE")) core  = RtEngineCoreRegister();
+    loops = RtEngineLoopsRegister();
+    core  = RtEngineCoreRegister();
     // Wave 9 lane ENG. Kept as its OWN switch rather than folded into
     // ENGINECORE: these four are the first ports in this project that sit on
     // the process's one boot path, and the integrator needs to be able to A/B
@@ -73,21 +69,21 @@ void RtEnginePortInit() {
     // detouring the DLL's Engine::Startup, and our port never executes those
     // bytes, so the shadow would report skipped_pre_startup and call the run
     // INVALID. See docs/runtime_port/WAVE9_LANE_ENG.md §5.
-    if (RtWaveEnabled("BANISHED_RT_ENGINELIFE")) life = RtEngineLifecycleRegister();
+    life = RtEngineLifecycleRegister();
     // Wave 9 lane ADDR. MainLoop::Run + MainLoop::Update, on their OWN switch
     // because Run is the process's single main loop: it is called once from
     // game_main.cpp:176, never returns until quit, and CANNOT have a diff
     // oracle. If it is wrong the symptom is "the game does not run", with no
     // divergence row to read, so the integrator needs to be able to A/B this
     // one function without also giving up the Engine lifecycle ports.
-    if (RtWaveEnabled("BANISHED_RT_MAINLOOPRUN")) mlrun = RtEngineMainLoopRunRegister();
+    mlrun = RtEngineMainLoopRunRegister();
     // Wave 25 lane BODY. MainLoop::Frame, on its OWN switch for the same reason
     // lane ADDR gave Run one, only more so: Frame runs EVERY frame, drives the
     // message pump, the audio channel sweep and the fixed-timestep update, and
     // has NO ORACLE. If it is wrong the symptom is "the game misbehaves", with
     // no divergence row to read, so the integrator must be able to A/B exactly
     // this one function while keeping Run and Update.
-    if (RtWaveEnabled("BANISHED_RT_MAINLOOPFRAME")) mlframe = RtEngineMainLoopFrameRegister();
+    mlframe = RtEngineMainLoopFrameRegister();
     // Wave 9 lane VIDL. MainLoop::OnVideoError + OnVideoRestart, the
     // device-lost pair, on their OWN switch for the same reason lane ADDR has
     // one: they run only after a real (or forced) device reset, so a defect
@@ -97,7 +93,7 @@ void RtEnginePortInit() {
     // regression. They also register the two Collection instantiations they
     // need (0x18004f620 SetSize and 0x180034440 elem-destroy), so turning this
     // switch off returns BOTH of those to the DLL as well.
-    if (RtWaveEnabled("BANISHED_RT_MAINLOOPVIDEO")) mlvid = RtEngineMainLoopVideoRegister();
+    mlvid = RtEngineMainLoopVideoRegister();
     // Wave 23 lane ENGINE. Two OWN switches, and neither is folded into
     // ENGINELIFE, because they fail in opposite ways and an integrator needs to
     // A/B them separately:
@@ -113,8 +109,8 @@ void RtEnginePortInit() {
     //     ?_singleton@Configuration@System@@ — see the file banner for what
     //     that does and does NOT discharge.
     int plat = 0, ldres = 0;
-    if (RtWaveEnabled("BANISHED_RT_ENGINEPLATFORM")) plat = RtEnginePlatformRegister();
-    if (RtWaveEnabled("BANISHED_RT_ENGINELOADRES")) ldres = RtEngineLoadResourcesRegister();
+    plat = RtEnginePlatformRegister();
+    ldres = RtEngineLoadResourcesRegister();
     printf("[RtPort]   Engine loop family (lane A): %d exports registered "
            "(LoadResources held back -- no oracle, see WAVE8_LANE_A.md)\n", loops);
     printf("[RtPort]   Engine::Engine + MainLoop (lane B): %d exports registered "

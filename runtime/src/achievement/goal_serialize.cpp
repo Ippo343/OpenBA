@@ -262,28 +262,6 @@ bool PortIsLive(const char* mangled, const void* ours) {
 // the sink's own stub), so the whole emission sequence is replayable.
 // ============================================================================
 bool RtAch_Goal_Serialize(Goal* self, Stream* stream) {
-    static int probes = 0;
-    if (RtSaveTrace::Enabled() && !g_probing && probes < 16) {
-        ++probes;
-        ProbeGuard guard__;   // Compare re-enters this body; the guard is what
-                              // makes the nested entry skip the probe.
-        static const char* const kMangled =
-            "?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z";
-        auto theirs = reinterpret_cast<StreamMemberFn>(ResolveExportRaw(kMangled));
-        if (theirs && PortIsLive(kMangled, (const void*)&RtAch_Goal_Serialize)) {
-            RtSaveTrace::Compare(
-                "Achievement::Goal::Serialize", self,
-                [](void* obj, void* ser) {
-                    RtAch_Goal_Serialize(static_cast<Goal*>(obj), StreamOf(ser));
-                },
-                [](void* obj, void* ser) {
-                    reinterpret_cast<StreamMemberFn>(ResolveExportRaw(
-                        "?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z"))(
-                            obj, StreamOf(ser));
-                });
-        }
-    }
-
     Serializer ser;
     ReaderWriter* rw = MakeCodec(stream, &ser);
 
@@ -324,27 +302,6 @@ bool RtAch_Goal_Serialize(Goal* self, Stream* stream) {
 // first 16 real calls, no prefix stop needed.
 // ============================================================================
 void RtAch_GoalInstance_Persist(GoalInstance* self, Stream* stream) {
-    static int probes = 0;
-    if (RtSaveTrace::Enabled() && !g_probing && probes < 16) {
-        ++probes;
-        ProbeGuard guard__;
-        static const char* const kMangled =
-            "?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z";
-        auto theirs = reinterpret_cast<StreamMemberFn>(ResolveExportRaw(kMangled));
-        if (theirs && PortIsLive(kMangled, (const void*)&RtAch_GoalInstance_Persist)) {
-            RtSaveTrace::Compare(
-                "Achievement::GoalInstance::Persist", self,
-                [](void* obj, void* ser) {
-                    RtAch_GoalInstance_Persist(static_cast<GoalInstance*>(obj), StreamOf(ser));
-                },
-                [](void* obj, void* ser) {
-                    reinterpret_cast<StreamMemberFn>(ResolveExportRaw(
-                        "?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z"))(
-                            obj, StreamOf(ser));
-                });
-        }
-    }
-
     Serializer ser;
     ReaderWriter* rw = MakeCodec(stream, &ser);
 
@@ -358,7 +315,7 @@ void RtAch_GoalInstance_Persist(GoalInstance* self, Stream* stream) {
 }
 
 // ---- Registration ----------------------------------------------------------
-// Called from RtAchievementPortInit() under BANISHED_RT_GOAL, the same switch
+// Called from RtAchievementPortInit() under RT_GOAL, the same switch
 // that gates goal.cpp — the class-atomicity rule (§4.1 decision 5) means these
 // two must flip together with the ctors and destructors that build the objects
 // they serialize.

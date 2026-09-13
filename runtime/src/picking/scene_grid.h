@@ -97,25 +97,4 @@ void     GridFreeEntry(Scene* scene, uint32_t id);                    // 0x18007
 void     CellIterAdvance(CellIter* it);                               // 0x18007b6d0
 
 // ---------------------------------------------------------------------------
-// Probe scheduling — the same hazard lane Q documents in array_internal.h.
-//
-// The probe MUST NOT run from the registration function. That runs immediately
-// after ResolveInit()'s LoadLibrary, and the DLL's `MemoryAllocator` has been
-// CONSTRUCTED by then but not STARTED — `Engine::Startup` does that later.
-// Allocating from it at that moment is exactly the "works on my boot order"
-// hazard this project keeps paying for, and this probe allocates a lot (two
-// 10,000-entry cell-head tables for a start).
-//
-// So it self-schedules: `g_probePending` is armed at registration and the first
-// call into any of the five top-level entry points runs it. That moment is
-// provably safe, because the caller is itself in the middle of using the grid.
-// `g_probeRunning` breaks the recursion, since the probe drives those same
-// entry points.
-extern bool g_probePending;
-extern bool g_probeRunning;
-
 }  // namespace rtpickgrid
-
-// The probe. Runs only when BANISHED_RT_PICKGRID_PROBE is set; see
-// scene_grid_probe.cpp.
-void RtPickingGridProbe();

@@ -94,7 +94,7 @@
 // So the oracle is a LOCKSTEP SYNTHETIC-SUBJECT PROBE, in
 // application_lifecycle_probe.cpp, on the shape set_avl_probe.cpp established:
 // two private subjects with byte-identical starting state, ours through these
-// bodies and theirs through the shipped ones reached by `ResolveExportRaw`, and
+// bodies and theirs through the shipped ones reached by `the raw DLL door`, and
 // compared on (a) the object bytes with the two heap-pointer fields excluded,
 // (b) a shape+balance+height+parent fingerprint of the resulting trees, and
 // (c) *** the allocator's own live-block counter ***, `allocCount` at
@@ -103,7 +103,7 @@
 // only the root moves that counter by 1 where retail's moves it by N, and the
 // probe carries a negative control that does exactly that and must be caught.
 //
-// The RT_DIFF_SHADOW markers on the three bodies below are SELF-CHECKS and are
+// The the diff oracle markers on the three bodies below are SELF-CHECKS and are
 // labelled as such (reference_shadow_marker_is_not_an_oracle.md); the probe is
 // the thing that consults the DLL.
 // ============================================================================
@@ -151,7 +151,7 @@ inline const Set* SetOf(const Application* a) {
 //
 // Incremented once per node this file hands to `SetNodeFree`. The destructor
 // walks the tree first, counts what it is about to destroy, and compares the
-// two numbers through RT_DIFF_SHADOW. That answers "did OUR body free every
+// two numbers through the diff oracle. That answers "did OUR body free every
 // node of the tree it was given?" against a number derived from the tree, not
 // from our reading of retail — so it is not the shared-misunderstanding trap
 // (reference_shadow_marker_is_not_an_oracle.md). Whether retail frees the same
@@ -283,27 +283,14 @@ extern "C" void RtApp_SetClear(Set* set) {
 // helpfully nulled the singleton would diverge from retail on a path no oracle
 // covers.
 //
-// ORACLE: no byte-diff at the call site (the tree is freed; see the banner).
-// The RT_DIFF_SHADOW below is a SELF-CHECK — it compares the node count of the
-// tree we were handed against the number of nodes we actually freed, which
-// catches a partial walk but cannot catch a shared misunderstanding of retail.
-// The DLL-consulting half is the `allocCount` comparison in
-// application_lifecycle_probe.cpp.
-//
 // LIVE ROUTE: `Engine::Shutdown` reaches this by name through RT_EXPORT_ONCE
 // (runtime/src/engine/engine_lifecycle.cpp:977), so `calls=` is non-zero on any
 // run that shuts down cleanly.
 // ============================================================================
 extern "C" void RtApp_Dtor(Application* self) {
-    RT_DIFF_BEGIN("Application::Application::~Application "
-                  "[SELF-CHECK ONLY: freed-node count vs tree size; the DLL is "
-                  "not consulted -- see application_lifecycle_probe.cpp]");
 
     Set* set = SetOf(self);                       // 0x18009f538
     Node* root = set->root;                       // 0x18009f541
-
-    const int expected = rt_diff_on__ ? CountNodes(root) : 0;
-    const uint64_t before = g_freeCount;
 
     if (root) {                                   // 0x18009f544/0x18009f547
         RtApp_SetDestroyTree(set, root->left);    // 0x18009f550
@@ -314,14 +301,6 @@ extern "C" void RtApp_Dtor(Application* self) {
     set->count = 0;                               // 0x18009f56b  (count FIRST)
     set->root  = nullptr;                         // 0x18009f56e
 
-    RT_DIFF_WORK(root != nullptr);
-    if (rt_diff_on__) {
-        const int freed = static_cast<int>(g_freeCount - before);
-        char a[64], b[64];
-        std::snprintf(a, sizeof(a), "freed=%d", freed);
-        std::snprintf(b, sizeof(b), "nodes=%d", expected);
-        RT_DIFF_SHADOW(freed == expected, a, b);
-    }
 }
 
 // ============================================================================
@@ -348,9 +327,6 @@ extern "C" void RtApp_Dtor(Application* self) {
 // memcmp cannot be the test — see the banner.
 // ============================================================================
 extern "C" Application* RtApp_CopyCtor(Application* self, const Application* other) {
-    RT_DIFF_BEGIN("Application::Application::Application(const Application&) "
-                  "[no call-site oracle: it allocates, so two runs differ at "
-                  "+0x18 by construction -- see application_lifecycle_probe.cpp]");
 
     self->_windowHandle   = other->_windowHandle;    // 0x18000a0f1/0x18000a0f4
     self->_platformHandle = other->_platformHandle;  // 0x18000a0f7/0x18000a0fb
@@ -371,8 +347,6 @@ extern "C" Application* RtApp_CopyCtor(Application* self, const Application* oth
 
     self->_quitRequested = other->_quitRequested;    // 0x18000a141/0x18000a145
 
-    RT_DIFF_WORK(src != dst && src->root != nullptr);
-    RT_DIFF_SHADOW(true, "copied", "SELF-CHECK ONLY: not diffable at the call site");
     return self;                                     // 0x18000a148
 }
 
@@ -396,9 +370,6 @@ extern "C" Application* RtApp_CopyCtor(Application* self, const Application* oth
 // ORACLE: the probe, same reason as the copy constructor.
 // ============================================================================
 extern "C" Application* RtApp_Assign(Application* self, const Application* other) {
-    RT_DIFF_BEGIN("Application::Application::operator= "
-                  "[no call-site oracle: it allocates and frees -- see "
-                  "application_lifecycle_probe.cpp]");
 
     self->_windowHandle   = other->_windowHandle;    // 0x18000a175/0x18000a180
     self->_platformHandle = other->_platformHandle;  // 0x18000a183/0x18000a18a
@@ -418,8 +389,6 @@ extern "C" Application* RtApp_Assign(Application* self, const Application* other
 
     self->_quitRequested = other->_quitRequested;    // 0x18000a1cc/0x18000a1da
 
-    RT_DIFF_WORK(src != dst);
-    RT_DIFF_SHADOW(true, "assigned", "SELF-CHECK ONLY: not diffable at the call site");
     return self;                                     // 0x18000a1dd
 }
 

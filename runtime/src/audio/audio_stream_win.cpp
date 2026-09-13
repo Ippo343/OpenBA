@@ -215,7 +215,7 @@
 // so a "0 divergences" line cannot be confused with a dead screen
 // (KICKOFF §3 rule 3).
 //
-// NEGATIVE CONTROL: `BANISHED_RT_AUDIOSTREAM_CONTROL=1` skips the
+// NEGATIVE CONTROL: `RT_AUDIOSTREAM_CONTROL=1` skips the
 // `[+0x38] = 0` store in the ctor. +0x38 IS in the checked set, so the control
 // corrupts a subject the predicate actually examines
 // (reference_control_must_pick_a_compared_subject.md); and it leaves the two
@@ -224,7 +224,7 @@
 // reference_a_control_can_corrupt_a_byte_that_should_not_be_compared.md).
 //
 // ---------------------------------------------------------------------------
-// ONE KILL SWITCH: BANISHED_RT_AUDIOSTREAM
+// ONE KILL SWITCH: RT_AUDIOSTREAM
 // ---------------------------------------------------------------------------
 // ============================================================================
 
@@ -233,7 +233,6 @@
 #include <cstdlib>
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_diff.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -336,29 +335,18 @@ void ReleaseField30Buffer(void* p) {
     if (fn) fn(p);
 }
 
-bool ControlArmed() {
-    static const int v = []() {
-        const char* e = std::getenv("BANISHED_RT_AUDIOSTREAM_CONTROL");
-        return (e && e[0] && e[0] != '0') ? 1 : 0;
-    }();
-    return v != 0;
-}
-
 }  // namespace
 
 // ============================================================================
 // ??0Stream@Audio@@QEAA@XZ                                 retail 0x1800a0e30
 // ============================================================================
 extern "C" void* RtAudio_Stream_Ctor(void* self) {
-    RT_DIFF_BEGIN("Audio::Stream::Stream [SELF-CHECK, not an oracle]");
     ++g_ctorEntries;
 
     ThreadCtor(self, kStreamStackSize);                  // 0x1800a0e55
     Field<const void*>(self, 0x00) = StreamVtable();     // 0x1800a0e62
     Field<uint64_t>(self, kStreamField30) = 0;           // 0x1800a0e67
-    if (!ControlArmed())                                 // 0x1800a0e6b
-        Field<uint64_t>(self, kStreamField38) = 0;
-
+    Field<uint64_t>(self, kStreamField38) = 0;           // 0x1800a0e6b
     InitializeCriticalSection(                           // 0x1800a0e73
         reinterpret_cast<CRITICAL_SECTION*>(static_cast<uint8_t*>(self) + kStreamLock));
     SetCriticalSectionSpinCount(                         // 0x1800a0e82
@@ -397,40 +385,6 @@ extern "C" void* RtAudio_Stream_Ctor(void* self) {
     // The explicit `!= ThreadBaseVtable()` term is what makes that failure
     // detectable rather than merely improbable; without it the comparison is
     // close to a tautology.
-    if (rt_diff_on__) {
-        ++g_ctorChecks;
-        const HANDLE h1 = Field<HANDLE>(self, kStreamEventFirst);
-        const HANDLE h2 = Field<HANDLE>(self, kStreamEventSecond);
-        const bool ok =
-            Field<const void*>(self, 0x00) == StreamVtable() &&
-            Field<const void*>(self, 0x00) != ThreadBaseVtable() &&
-            Field<uint64_t>(self, kStreamField30) == 0 &&
-            Field<uint64_t>(self, kStreamField38) == 0 &&
-            Field<uint64_t>(self, kStreamField78) == 0 &&
-            Field<uint8_t>(self, kStreamFlag80)   == 0 &&
-            h1 != nullptr && h2 != nullptr && h1 != h2;
-        // The message must name the FAILING term, not restate the verdict: a
-        // shadow predicate's verdict and message are computed separately, and an
-        // N-term predicate whose message cannot say WHICH term failed is
-        // unusable (reference_shadow_predicate_must_name_its_failing_term.md).
-        const char* which =
-            (Field<const void*>(self, 0x00) != StreamVtable()) ? "vptr != ??_7Stream@Audio@@6B@"
-            : (Field<const void*>(self, 0x00) == ThreadBaseVtable())
-                  ? "vptr is STILL ??_7Thread@System@@6B@ -- the Stream stamp did "
-                    "not land after the base ctor"
-            : (Field<uint64_t>(self, kStreamField30) != 0)     ? "+0x30 != 0"
-            : (Field<uint64_t>(self, kStreamField38) != 0)     ? "+0x38 != 0"
-            : (Field<uint64_t>(self, kStreamField78) != 0)     ? "+0x78 != 0"
-            : (Field<uint8_t>(self, kStreamFlag80)   != 0)     ? "+0x80 != 0"
-            : (h1 == nullptr)                                  ? "+0x48 event is NULL"
-            : (h2 == nullptr)                                  ? "+0x40 event is NULL"
-            : (h1 == h2)                                       ? "+0x40 and +0x48 are the SAME handle"
-                                                               : "all terms hold";
-        RT_DIFF_SHADOW(ok, which,
-                       "no second party consulted: the shipped ctor cannot be "
-                       "run against a scratch subject without starting a real "
-                       "OS thread");
-    }
 
     return self;                                         // 0x1800a0ebc
 }
@@ -439,7 +393,6 @@ extern "C" void* RtAudio_Stream_Ctor(void* self) {
 // ??1Stream@Audio@@QEAA@XZ                                 retail 0x1800a0d90
 // ============================================================================
 extern "C" void RtAudio_Stream_Dtor(void* self) {
-    RT_DIFF_BEGIN("Audio::Stream::~Stream [SELF-CHECK, not an oracle]");
     ++g_dtorEntries;
 
     const HANDLE hFirst  = Field<HANDLE>(self, kStreamEventFirst);
@@ -457,19 +410,6 @@ extern "C" void RtAudio_Stream_Dtor(void* self) {
     // Proved equal to the shipped 0x1800ca590 body, which is already ported.
     ThreadDtor(self);                                     // 0x1800a0dda..0x1800a0e22
 
-    if (rt_diff_on__) {
-        ++g_dtorChecks;
-        // The only post-condition this body leaves observable: the +0x30 slot
-        // that 0x18000c4a0 clears. Everything else it touched is a closed
-        // handle, and reading a closed handle is not a check, it is a use.
-        const bool ok = Field<uint64_t>(self, kStreamField30) == 0;
-        RT_DIFF_SHADOW(ok,
-                       ok ? "+0x30 buffer slot cleared"
-                          : "+0x30 buffer slot NOT cleared by 0x18000c4a0",
-                       "no second party consulted: a destructor cannot be "
-                       "replayed -- running theirs after ours double-closes six "
-                       "handles");
-    }
 }
 
 // ============================================================================
@@ -486,11 +426,6 @@ extern "C" void RtAudio_Stream_Dtor(void* self) {
 // sibling row `??1PackageFile@IO@@` genuinely takes the OTHER one.
 // ============================================================================
 int RtAudioStreamRegister() {
-    if (!RtWaveEnabled("BANISHED_RT_AUDIOSTREAM")) {
-        printf("[RtPort] BANISHED_RT_AUDIOSTREAM=0 -- Audio::Stream ctor/dtor "
-               "left on the DLL\n");
-        return 0;
-    }
     int n = 0;
 
     RegisterRuntimeExport("??0Stream@Audio@@QEAA@XZ", (void*)&RtAudio_Stream_Ctor);

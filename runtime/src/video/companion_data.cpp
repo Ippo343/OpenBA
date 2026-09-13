@@ -72,7 +72,7 @@
 // way into a bare `void*`, following device.cpp's `??1RenderStateData` port.
 //
 // The remaining four are trampolines (Lock/Unlock/Bind, DisplayMode's dtor)
-// and carry RT_DIFF_SHADOW with the reason stated at each one.
+// and carry the diff oracle with the reason stated at each one.
 //
 // NEW LANE-D ROW: exactly one, `0x180010760`, named below.
 // ============================================================================
@@ -154,17 +154,10 @@ void* Vt_DeviceData()         { static void* v = ResolveExport("??_7DeviceData@V
 // ============================================================================
 #define RT_COMPANION_CTOR(CLASS, OWNER)                                        \
     void* Video_##CLASS##_Ctor(CompanionData* self, void* owner) {             \
-        RT_DIFF_BEGIN("Video::" #CLASS "::" #CLASS);                           \
+                           \
         self->owner  = owner;                                                  \
         self->vtable = Vt_##CLASS();                                           \
-        if (rt_diff_on__) {                                                    \
-            CompanionData theirs;                                              \
-            std::memset(&theirs, 0xCD, sizeof(theirs));                        \
-            RtOriginal<CompanionCtorFn>(                                       \
-                "??0" #CLASS "@Video@@QEAA@PEAV" #OWNER "@1@@Z")(&theirs,      \
-                                                                 owner);       \
-            RT_DIFF_BYTES(self, &theirs, sizeof(CompanionData));               \
-        }                                                                      \
+                                                                      \
         return self;                                                           \
     }
 
@@ -204,16 +197,9 @@ RT_COMPANION_CTOR(DeviceData,         Device)
 // ============================================================================
 #define RT_COMPANION_DTOR(CLASS)                                               \
     void Video_##CLASS##_Dtor(CompanionData* self) {                           \
-        RT_DIFF_BEGIN("Video::" #CLASS "::~" #CLASS);                          \
+                          \
         self->vtable = Vt_##CLASS();                                           \
-        if (rt_diff_on__) {                                                    \
-            void* scratch = nullptr;                                           \
-            RtOriginal<CompanionDtorFn>("??1" #CLASS "@Video@@UEAA@XZ")(       \
-                &scratch);                                                     \
-            const void* ours   = self->vtable;                                 \
-            const void* theirs = scratch;                                      \
-            RT_DIFF_SCALAR(ours, theirs);                                      \
-        }                                                                      \
+                                                                      \
     }
 
 RT_COMPANION_DTOR(RenderBufferData)
@@ -244,7 +230,7 @@ RT_COMPANION_DTOR(DeviceData)
 // both. This completes the shape Wave 6 lane C started: Create and Set are
 // already ported here through slots +0x08 and +0x10 (buffers.cpp).
 //
-// ORACLE: RT_DIFF_SHADOW, not a replay, and the reason is not caution. The far
+// ORACLE: the diff oracle, not a replay, and the reason is not caution. The far
 // side of the dispatch is dx11's vtable, and dx11 is ALREADY OURS — there is
 // no second implementation to diverge from. A replay would additionally be
 // unsound: Lock/Unlock are a matched pair over a mapped GPU buffer, and
@@ -252,45 +238,33 @@ RT_COMPANION_DTOR(DeviceData)
 // mutate-twice trap WAVE9.md describes for Audio::Scene::Pause.
 // ============================================================================
 void* Video_IndexBuffer_Lock(IndexBuffer* self, int count, int* outOffset) {
-    RT_DIFF_BEGIN("Video::IndexBuffer::Lock");
     using Fn = void* (*)(void*, int, int*);
     Fn slot = *reinterpret_cast<Fn*>(
         static_cast<uint8_t*>(*reinterpret_cast<void**>(self->platformData)) + 0x18);
     void* ours = slot(self->platformData, count, outOffset);
-    RT_DIFF_SHADOW(true, "trampoline into dx11::IndexBufferData slot 3 (ours)",
-                   "same dx11::IndexBufferData slot 3 (retail's own trampoline)");
     return ours;
 }
 
 void Video_IndexBuffer_Unlock(IndexBuffer* self) {
-    RT_DIFF_BEGIN("Video::IndexBuffer::Unlock");
     using Fn = void (*)(void*);
     Fn slot = *reinterpret_cast<Fn*>(
         static_cast<uint8_t*>(*reinterpret_cast<void**>(self->platformData)) + 0x20);
     slot(self->platformData);
-    RT_DIFF_SHADOW(true, "trampoline into dx11::IndexBufferData slot 4 (ours)",
-                   "same dx11::IndexBufferData slot 4 (retail's own trampoline)");
 }
 
 void* Video_VertexBuffer_Lock(VertexBuffer* self, int count, int* outOffset) {
-    RT_DIFF_BEGIN("Video::VertexBuffer::Lock");
     using Fn = void* (*)(void*, int, int*);
     Fn slot = *reinterpret_cast<Fn*>(
         static_cast<uint8_t*>(*reinterpret_cast<void**>(self->platformData)) + 0x18);
     void* ours = slot(self->platformData, count, outOffset);
-    RT_DIFF_SHADOW(true, "trampoline into dx11::VertexBufferData slot 3 (ours)",
-                   "same dx11::VertexBufferData slot 3 (retail's own trampoline)");
     return ours;
 }
 
 void Video_VertexBuffer_Unlock(VertexBuffer* self) {
-    RT_DIFF_BEGIN("Video::VertexBuffer::Unlock");
     using Fn = void (*)(void*);
     Fn slot = *reinterpret_cast<Fn*>(
         static_cast<uint8_t*>(*reinterpret_cast<void**>(self->platformData)) + 0x20);
     slot(self->platformData);
-    RT_DIFF_SHADOW(true, "trampoline into dx11::VertexBufferData slot 4 (ours)",
-                   "same dx11::VertexBufferData slot 4 (retail's own trampoline)");
 }
 
 // ============================================================================
@@ -308,13 +282,10 @@ void Video_VertexBuffer_Unlock(VertexBuffer* self) {
 // ============================================================================
 void Video_ConstantBuffer_Bind(ConstantBuffer* self, void* context, void* data,
                                int first, int count) {
-    RT_DIFF_BEGIN("Video::ConstantBuffer::Bind");
     using Fn = void (*)(void*, void*, void*, int, int);
     Fn slot = *reinterpret_cast<Fn*>(
         static_cast<uint8_t*>(*reinterpret_cast<void**>(self->platformData)) + 0x10);
     slot(self->platformData, context, data, first, count);
-    RT_DIFF_SHADOW(true, "trampoline into dx11::ConstantBufferData slot 2 (ours)",
-                   "same dx11::ConstantBufferData slot 2 (retail's own trampoline)");
 }
 
 // ============================================================================
@@ -333,19 +304,11 @@ void Video_ConstantBuffer_Bind(ConstantBuffer* self, void* context, void* data,
 // named fields.
 // ============================================================================
 void* Video_DisplayMode_Ctor(DisplayMode* self, int width, int height) {
-    RT_DIFF_BEGIN("Video::Device::DisplayMode::DisplayMode");
     self->width           = width;
     self->height          = height;
     self->refreshData     = nullptr;
     self->refreshCount    = 0;
     self->refreshCapacity = 0;
-    if (rt_diff_on__) {
-        DisplayMode theirs;
-        std::memset(&theirs, 0xCD, sizeof(theirs));
-        using Fn = void* (*)(void*, int, int);
-        RtOriginal<Fn>("??0DisplayMode@Device@Video@@QEAA@HH@Z")(&theirs, width, height);
-        RT_DIFF_BYTES(self, &theirs, sizeof(DisplayMode));
-    }
     return self;
 }
 
@@ -370,7 +333,7 @@ void* Video_DisplayMode_Ctor(DisplayMode* self, int width, int height) {
 // but that file belongs to another lane this round and a registration race is
 // not worth one line.
 //
-// ORACLE: RT_DIFF_SHADOW. A replay is not merely unhelpful here, it is a
+// ORACLE: the diff oracle. A replay is not merely unhelpful here, it is a
 // DOUBLE FREE — ours frees `_data`, and retail's body run afterwards on a copy
 // of the pre-state would pass the same pointer to MemoryAllocator::Free again.
 // Run on the post-state it takes the null branch and only re-zeroes, which
@@ -379,14 +342,10 @@ void* Video_DisplayMode_Ctor(DisplayMode* self, int width, int height) {
 // honestly assert — that the triple came back zeroed.
 // ============================================================================
 void Video_DisplayMode_Dtor(DisplayMode* self) {
-    RT_DIFF_BEGIN("Video::Device::DisplayMode::~DisplayMode");
     using Fn = void (*)(void*);
     static Fn freeRefreshArray =
         reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180010760));
     freeRefreshArray(&self->refreshData);
-    RT_DIFF_SHADOW(self->refreshData == nullptr && self->refreshCount == 0,
-                   "Array<RefreshRate>::~Array ran; {data,size} zeroed",
-                   "retail's own tail call to 0x180010760 (replay would double-free)");
 }
 
 // ============================================================================

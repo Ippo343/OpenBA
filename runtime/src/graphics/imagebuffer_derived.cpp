@@ -96,7 +96,7 @@ const char* ReadTypeName(const uint8_t* node) {
 }
 
 // ---------------------------------------------------------------------------
-// The named dependencies. RT_EXPORT_ONCE, not RT_ORIGINAL_ONCE: these calls
+// The named dependencies. RT_EXPORT_ONCE, not the raw DLL door: these calls
 // ARE the work, so they must reach our ports where ports exist.
 // ---------------------------------------------------------------------------
 using VoidThisFn = void  (*)(void*);
