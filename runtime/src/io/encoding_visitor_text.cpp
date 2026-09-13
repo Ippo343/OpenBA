@@ -1,0 +1,135 @@
+// ============================================================================
+// runtime/src/io/encoding_visitor_text.cpp — the two remaining IO::Encoding
+// vtables: VISITOR (0x1801559f8) and TEXT (0x1801559d0). 2026-09-12 cutover walk.
+// ============================================================================
+//
+// Both tables are UNEXPORTED, 5 slots each, the same shape as the BINARY table
+// 0x1801554a8 ported in encoding.cpp: three self-ignoring constants, then
+// CreateReader (+0x18) and CreateWriter (+0x20). Neither table was minted, so
+// at cutover `??0VisitorStream` installed an Encoding whose vtable resolved to
+// NULL and the gate died in MakeCodec reading vtable+0x20 — the "READ of 0x20"
+// wall recorded in STATUS.md. Minting the table (tools/rt_mint_gen.py
+// EXTRA_VTABLES_BY_ADDR) makes the slots exist; these bodies make them ours.
+//
+// Every body below is transcribed from the shipped RETAIL bytes (pefile +
+// objdump on Runtime-x64.dll, not the profile build, not decompiled C — Ghidra
+// has no function at any of the ten addresses).
+//
+// VISITOR table 0x1801559f8 (bounded by ??_7VisitorStream@IO@@6B@ at 0x180155a20):
+//   slot 0  0x1800bafe0   32 C0 C3           -> false
+//   slot 1  0x1800bafd0   32 C0 C3           -> false
+//   slot 2  0x1800bafc0   B8 03 00 00 00 C3  -> 3
+//   slot 3  0x1800baf00   CreateReader — IDENTICAL BYTES to slot 4
+//   slot 4  0x1800bae40   CreateWriter
+//     EnterCriticalSection(_singleton+0x640) / MemoryAllocator::Allocate(0x28,4)
+//     / LeaveCriticalSection  — the inlined ?MemAlloc@MemoryAllocator@System@@
+//     trio, same identification as encoding.cpp. Then, if non-null:
+//       MOV [RDI],0x1801553b0        ??_7ReaderWriter  (inlined base ctor)
+//       MOV byte [RDI+0x08],0        allowCustomSerialize
+//       MOV [RDI+0x10],RSI           serializer
+//       MOV RCX,[RSI]; MOV [RDI+0x18],RCX   serializer->stream
+//       MOV [RDI],0x1801558b0        ??_7Visitor@IO@@6B@
+//       MOV [RDI+0x20],EBP           version (R8D)
+//     No stream header is consumed or emitted — unlike the Binary pair. RCX
+//     (the Encoding) is never read. Allocation failure returns NULL unconstructed.
+//
+// TEXT table 0x1801559d0 (bounded by the Visitor table, see VTABLE_EXTENT):
+//   slot 0  0x1800b9ab0   32 C0 C3           -> false
+//   slot 1  0x1800b9aa0   B0 01 C3           -> true
+//   slot 2  0x1800b9a90   B8 01 00 00 00 C3  -> 1
+//   slot 3  0x1800b9a80   33 C0 C3           -> NULL   (text serialization was
+//   slot 4  0x1800b9a70   33 C0 C3           -> NULL    stripped from the DLL;
+//                                                       text_file_stream_probe.cpp)
+//
+// The {IsBinary, IsText, Kind} reading of slots 0..2 is encoding.cpp's
+// descriptive naming, carried over, not attested: Binary = {true,false,2},
+// Text = {false,true,1}, Visitor = {false,false,3}.
+// ============================================================================
+
+#include <cstdint>
+#include <cstddef>
+
+#include "../../funcs/rt_port.h"
+#include "../../types/io/Serializer.h"
+
+namespace RtIo {
+
+using rt::io::Serializer;
+using rt::io::VisitorCodec;
+
+namespace {
+
+using MemAllocFn = void* (*)(uint64_t, int);
+
+void** VtblReaderWriterV() {
+    static void** v = reinterpret_cast<void**>(ResolveExport("??_7ReaderWriter@IO@@6B@"));
+    return v;
+}
+void** VtblVisitor() {
+    static void** v = reinterpret_cast<void**>(ResolveExport(rt::io::kVisitorVtableName));
+    return v;
+}
+
+// The shared body of 0x1800baf00 and 0x1800bae40 (byte-identical).
+VisitorCodec* MakeVisitor(Serializer* ser, int32_t version) {
+    void* p = RT_EXPORT_ONCE(MemAllocFn,
+        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(sizeof(VisitorCodec), 4);
+    if (p == nullptr) return nullptr;                      // XOR EAX,EAX path
+    VisitorCodec* c = static_cast<VisitorCodec*>(p);
+    c->base.vtable               = VtblReaderWriterV();    // 1800baeb3
+    c->base.allowCustomSerialize = 0;                      // 1800baeb6 BYTE
+    c->base.serializer           = ser;                    // 1800baeba
+    c->base.stream               = ser->stream;            // 1800baec1
+    c->base.vtable               = VtblVisitor();          // 1800baecc
+    c->version                   = version;                // 1800baecf
+    return c;
+}
+
+}  // namespace
+
+// ---- VISITOR encoding, 0x1801559f8 -----------------------------------------
+extern "C" bool RtIo_VisitorEncoding_IsBinary(void* self) { (void)self; return false; }  // 0x1800bafe0
+extern "C" bool RtIo_VisitorEncoding_IsText(void* self)   { (void)self; return false; }  // 0x1800bafd0
+extern "C" int32_t RtIo_VisitorEncoding_GetKind(void* self) { (void)self; return 3; }    // 0x1800bafc0
+extern "C" VisitorCodec* RtIo_VisitorEncoding_CreateReader(void* self, Serializer* ser,
+                                                           int32_t version) {          // 0x1800baf00
+    (void)self;
+    return MakeVisitor(ser, version);
+}
+extern "C" VisitorCodec* RtIo_VisitorEncoding_CreateWriter(void* self, Serializer* ser,
+                                                           int32_t version) {          // 0x1800bae40
+    (void)self;
+    return MakeVisitor(ser, version);
+}
+
+// ---- TEXT encoding, 0x1801559d0 ----------------------------------------------
+extern "C" bool RtIo_TextEncoding_IsBinary(void* self) { (void)self; return false; }     // 0x1800b9ab0
+extern "C" bool RtIo_TextEncoding_IsText(void* self)   { (void)self; return true; }      // 0x1800b9aa0
+extern "C" int32_t RtIo_TextEncoding_GetKind(void* self) { (void)self; return 1; }       // 0x1800b9a90
+extern "C" void* RtIo_TextEncoding_CreateReader(void* self, Serializer* ser, int32_t version) {
+    (void)self; (void)ser; (void)version; return nullptr;                                // 0x1800b9a80
+}
+extern "C" void* RtIo_TextEncoding_CreateWriter(void* self, Serializer* ser, int32_t version) {
+    (void)self; (void)ser; (void)version; return nullptr;                                // 0x1800b9a70
+}
+
+}  // namespace RtIo
+
+// Address doors only: nothing here is exported. The minted tables resolve each
+// RT_MINT_UNNAMED slot through RtPortLookupAddr on its dllVa, so these ten
+// registrations are what turn both tables from named traps into our bodies.
+int RtIoVisitorTextEncodingRegister() {
+    using namespace RtIo;
+    RegisterRuntimeAddr(0x1800bafe0, (void*)&RtIo_VisitorEncoding_IsBinary);
+    RegisterRuntimeAddr(0x1800bafd0, (void*)&RtIo_VisitorEncoding_IsText);
+    RegisterRuntimeAddr(0x1800bafc0, (void*)&RtIo_VisitorEncoding_GetKind);
+    RegisterRuntimeAddr(0x1800baf00, (void*)&RtIo_VisitorEncoding_CreateReader);
+    RegisterRuntimeAddr(0x1800bae40, (void*)&RtIo_VisitorEncoding_CreateWriter);
+
+    RegisterRuntimeAddr(0x1800b9ab0, (void*)&RtIo_TextEncoding_IsBinary);
+    RegisterRuntimeAddr(0x1800b9aa0, (void*)&RtIo_TextEncoding_IsText);
+    RegisterRuntimeAddr(0x1800b9a90, (void*)&RtIo_TextEncoding_GetKind);
+    RegisterRuntimeAddr(0x1800b9a80, (void*)&RtIo_TextEncoding_CreateReader);
+    RegisterRuntimeAddr(0x1800b9a70, (void*)&RtIo_TextEncoding_CreateWriter);
+    return 10;
+}

@@ -9,7 +9,7 @@ Keep this to one screen. Update the closure block after every batch; never copy 
 | reachable functions from our call surface | 2,871 |
 | unported | 128, all C runtime (our CRT covers them) |
 | **engine functions to port (static lower bound)** | **0** (206 → 856 → 145 → 0 in one day) |
-| minted vtables complete | 150 of 150 |
+| minted vtables complete | 152 of 152 (the two unexported IO::Encoding tables joined 2026-09-12 evening) |
 | registry doors | name and address are ONE door (`standalone/rt_export_addrs.inc`) |
 
 Worklist: `docs/runtime_port/closure/WORKLIST.md` (empty). Every function the DLL's call graph
@@ -26,19 +26,25 @@ which implies `RT_MINT` + `RT_ALLOC`, dumps the live registry, restores the DLL;
 with `addr2line -f -C -e standalone/build/reimpl-x64.exe 0x14xxxxxxx`.
 
 Walls passed 2026-09-12: the Video shader family → the UI Description/Element family (53
-classes) → `Font::Serialize`'s two by-address callees (an ExternalPtr row, then the glyph
-Array helper) → **current: a READ of 0x20 in `MakeCodec` (`runtime/src/ui/spritesheet_vtable.cpp:493`)
-from `SpriteSheet::Serialize`, reached `Achievement::Serialize` → `ExternalPtr<SpriteSheet>` →
-`ExternalFactory::FindOrLoad` → `ExternalFactory::Add` → `ExternalSerialize`
-(`object/external_add.cpp:164`).** `stream->encoding` is a non-null object whose vtable is
-null: the Stream this route hands us was built by something that never stamped its Encoding.
-It is the same shape as this morning's first wall (`MaterialInstance::Serialize`, fixed by
-porting the read-side Encoding factory for the Load route); this is the Add route. Start at
-`external_add.cpp` and find who constructs the stream/encoding pair there. It is a null
-handed to us upstream, not a missing function — do not guard it (CLAUDE.md).
+classes) → `Font::Serialize`'s two by-address callees → (evening walk, one session, serial)
+the two unminted `IO::Encoding` tables (Visitor 0x1801559f8, Text 0x1801559d0; both minted
+by address, ten slot bodies in `io/encoding_visitor_text.cpp`) → the two unminted
+`GraphicsMesh::Serialize` statics (0x1801fc69c/0x1801fc6a0, `EXTRA_STORAGE_BY_ADDR`) → a HANG,
+not a crash: `AnimationGroup::Serialize` emitted the +0x30 float BEFORE the tag array (retail:
+after), so the tag count came out of the float's bytes and `CompressedStream::Read` spun on a
+zero-length chunk past EOF (found with `gdb -p`, not the crash log) → **the gate then booted to
+the in-game world** (24 citizens, 21k entities at frame 7200) → the quit path: eleven scalar
+destructors the `RT_DELDTOR` table still resolved to NULL (`object/deleting_dtor_leaves.cpp`:
+SoundEffect, MaterialInstance, AnimationGroup, ToolTipDialog, ReaderWriter, Light, SunLight,
+AchievementInstance, Base, Stream, ParticleInstance) → one `RT_ORIGINAL_ONCE` on a live path
+(`video/buffers.cpp` MemFree) → **`make cutover` with `BANISHED_PAUSEMENU=600
+BANISHED_PAUSEMENU_QUIT=120` exits 0 with an empty crash log and the DLL absent.**
 
-**The next session is walks, not batches:** run the gate, read the frames, fix the upstream,
-repeat. Each walk is one agent, serial, with `make cutover` under the lock.
+**The gate's "done" condition is met: boot to the world, quit cleanly, DLL absent.** What is
+NOT yet established: whether the DLL-absent frame is drawn (the user reports a black window
+during the run; the command-stream oracle `tools/trace_oracle/` is the instrument, a pixel is
+not), and how many of the 651 `RT_ORIGINAL_ONCE`/`RtOriginal<>` sites sit on live (non-oracle)
+paths — the gate found one; a static triage would find the rest before a route does.
 
 ## DLL-present build
 

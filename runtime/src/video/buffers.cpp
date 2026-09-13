@@ -96,8 +96,12 @@ DtorFn ObjectExternalDtor() {
     return RT_EXPORT_ONCE(DtorFn, "??1External@Object@@UEAA@XZ");
 }
 
+// REGISTRY door, not RT_ORIGINAL_ONCE. The raw door reads the DLL's export
+// table directly and is NULL with the DLL absent: the 2026-09-12 cutover walk
+// died here on the first ImageBuffer with a name (Environment\RainTexture.png)
+// once the quit path reached ExternalFactory::Clean.
 MemFreeFn MemFree() {
-    return RT_ORIGINAL_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
+    return RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
 }
 
 // This class's own vtable, restored at dtor entry (the standard MSVC "run the

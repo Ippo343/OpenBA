@@ -157,6 +157,19 @@ constexpr const char* kBinaryWriterVtableName = "??_7BinaryWriter@IO@@6B@";  // 
 // through the run's ASLR delta: 0x1801558b0 == ??_7Visitor@IO@@6B@.
 constexpr const char* kVisitorVtableName = "??_7Visitor@IO@@6B@";  // 0x1801558b0
 
+// IO::Visitor — 0x28 bytes (the VISITOR encoding's two factories at
+// 0x1800baf00 / 0x1800bae40 ask the allocator for exactly 0x28: MOV EDX,0x28 /
+// LEA R8D,[RDX-0x24]). No stream header is read or written: the constructor is
+// the inlined ReaderWriter base ctor, the ??_7Visitor@IO@@6B@ stamp, and one
+// dword store of the version argument at +0x20 (MOV [RDI+0x20],EBP).
+struct VisitorCodec {
+    ReaderWriter base;    // +0x00 .. +0x1f
+    int32_t      version; // +0x20
+    int32_t      _pad24;  // +0x24
+};
+static_assert(offsetof(VisitorCodec, version) == 0x20, "VisitorCodec.version @ 0x20");
+static_assert(sizeof(VisitorCodec) == 0x28, "VisitorCodec is 0x28 bytes (allocator asks for 0x28)");
+
 // ---------------------------------------------------------------------------
 // ReaderWriter vtable — RETAIL byte offsets.
 // ---------------------------------------------------------------------------

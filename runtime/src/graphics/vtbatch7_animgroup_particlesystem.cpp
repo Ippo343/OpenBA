@@ -363,10 +363,6 @@ extern "C" bool RtGraphics_AnimationGroup_Serialize(void* selfv, void* streamv) 
     }
     RtGraphics_AnimationGroup_SerializeClips(&ser, n, self->clipData);
 
-    // +0x30 scalar float
-    rw = ser.readerWriter;
-    RwScalar(rw, rw_vtbl::kScalarFloat, &self->f30);
-
     // +0x38 Array<{String,String,float}>, stride 0x18.
     n = self->tagSize;
     rw = ser.readerWriter;
@@ -386,6 +382,17 @@ extern "C" bool RtGraphics_AnimationGroup_Serialize(void* selfv, void* streamv) 
             RwScalar(rw, rw_vtbl::kScalarFloat, p + 0x10);
         }
     }
+
+    // +0x30 scalar float -- AFTER the tag array, not before it. Retail
+    // 0x1800fb6a0 orders the emissions clips, tags, +0x30, floats (the
+    // `(*rw+0x80)(this+0x30)` call sits between the tag loop and the third
+    // count). This body was written with +0x30 before the tags, and because
+    // it is reached only through the minted vtable it never ran DLL-present:
+    // the first cutover boot to get this far read the tag count out of the
+    // float's bytes (count=1288519116), asked CompressedStream::Read for bytes
+    // past the end of the file, and spun forever in Read's chunk loop.
+    rw = ser.readerWriter;
+    RwScalar(rw, rw_vtbl::kScalarFloat, &self->f30);
 
     // +0x48 Array<float>, bulk kArrayFloat.
     n = self->floatSize;

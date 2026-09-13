@@ -265,6 +265,8 @@
 #include "../../funcs/rt_port.h"
 #include "deleting_dtor_internal.h"
 
+int RtObjectDeletingDtorLeavesRegister();  // deleting_dtor_leaves.cpp
+
 // Same local declaration array.cpp and array_destroy.cpp carry, and for the
 // same reason: standalone/resolve.h drags in <windows.h>, which PLAN.md §4.1
 // keeps out of runtime/src/. The linker checks the two spellings match.
@@ -1316,7 +1318,7 @@ DtorFn RawDtor(int i) {
 void* RtDelDtor_Achievement(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 0);
 }
-// Achievement::AchievementInstance ~AchievementInstance = 0x18009e400  (still the DLL's)
+// Achievement::AchievementInstance ~AchievementInstance = 0x18009e400  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
 void* RtDelDtor_AchievementInstance(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 1);
 }
@@ -1328,11 +1330,11 @@ void* RtDelDtor_Goal(void* self, unsigned flags) {
 void* RtDelDtor_GoalInstance(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 3);
 }
-// Graphics::MaterialInstance ~MaterialInstance = 0x180103a00  (still the DLL's)
+// Graphics::MaterialInstance ~MaterialInstance = 0x180103a00  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
 void* RtDelDtor_MaterialInstance(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 4);
 }
-// UI::SpriteSheet          ~SpriteSheet = 0x18011d670  (still the DLL's)
+// UI::SpriteSheet          ~SpriteSheet = 0x18011d670  (PORTED, ui/spritesheet_new.cpp; this note was stale)
 void* RtDelDtor_SpriteSheet(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 5);
 }
@@ -1340,7 +1342,7 @@ void* RtDelDtor_SpriteSheet(void* self, unsigned flags) {
 void* RtDelDtor_Internal(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 6);
 }
-// Object::Base             ~Base = 0x1800c0360  (still the DLL's)
+// Object::Base             ~Base = 0x1800c0360  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
 void* RtDelDtor_Base(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 7);
 }
@@ -1352,7 +1354,7 @@ void* RtDelDtor_External(void* self, unsigned flags) {
 void* RtDelDtor_CompiledExternal(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 9);
 }
-// IO::Stream               ~Stream = 0x1800b9a40  (still the DLL's)
+// IO::Stream               ~Stream = 0x1800b9a40  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
 void* RtDelDtor_Stream(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 10);
 }
@@ -1373,7 +1375,7 @@ void* RtDelDtor_ImageBuffer(void* self, unsigned flags) {
 void* RtDelDtor_Particle(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 14);
 }
-// Graphics::ParticleInstance ~ParticleInstance = 0x1801041f0  (still the DLL's)
+// Graphics::ParticleInstance ~ParticleInstance = 0x1801041f0  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
 void* RtDelDtor_ParticleInstance(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 15);
 }
@@ -1391,7 +1393,7 @@ void* RtDelDtor_CompressedMemoryStream(void* self, unsigned flags) {
 void* RtDelDtor_UpdateLoop(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 18);
 }
-// UI::Element              ~Element = 0x1801161a0  (still the DLL's)
+// UI::Element              ~Element = 0x1801161a0  (PORTED, ui/element.cpp; this note was stale)
 void* RtDelDtor_Element(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 19);
 }
@@ -1399,7 +1401,7 @@ void* RtDelDtor_Element(void* self, unsigned flags) {
 void* RtDelDtor_DialogController(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 20);
 }
-// UI::DialogInstance       ~DialogInstance = 0x180114d40  (still the DLL's)
+// UI::DialogInstance       ~DialogInstance = 0x180114d40  (PORTED, ui/dialog.cpp; this note was stale)
 void* RtDelDtor_DialogInstance(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 21);
 }
@@ -1467,7 +1469,7 @@ void* RtDelDtor_DeviceData(void* self, unsigned flags) {
 void* RtDelDtor_Dialog(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 37);
 }
-// UI::ToolTipDialog        ~ToolTipDialog = 0x1800dac70  (NOT ported)  [Wave 10D]
+// UI::ToolTipDialog        ~ToolTipDialog = 0x1800dac70  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)  [Wave 10D]
 void* RtDelDtor_ToolTipDialog(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 38);
 }
@@ -1487,7 +1489,7 @@ void* RtDelDtor_CompressedFileStream(void* self, unsigned flags) {
 void* RtDelDtor_TextFileStream(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 41);
 }
-// IO::ReaderWriter         ~ReaderWriter = 0x1800b9150  (NOT ported)  [Wave 21 ENC, item 12]
+// IO::ReaderWriter         ~ReaderWriter = 0x1800b9150  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)  [Wave 21 ENC, item 12]
 void* RtDelDtor_ReaderWriter(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 42);
 }
@@ -1511,11 +1513,11 @@ void* RtDelDtor_MeshInstance(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 46);
 }
 
-// Graphics::Light          ~Light = 0x180058d20  (NOT ported)  [Wave 27 GFXPART]
+// Graphics::Light          ~Light = 0x180058d20  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)  [Wave 27 GFXPART]
 void* RtDelDtor_Light(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 47);
 }
-// Graphics::SunLight       ~SunLight = 0x180108160  (NOT ported)  [Wave 27 GFXPART]
+// Graphics::SunLight       ~SunLight = 0x180108160  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)  [Wave 27 GFXPART]
 void* RtDelDtor_SunLight(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 48);
 }
@@ -1691,7 +1693,7 @@ void* RtDelDtor_LabelDescription(void* self, unsigned flags) {
 // VTABLE BATCH 7 (2026-09-12). Indices 81-84 (renumbered at this merge: batch
 // 8 took 67-70 on main first, concurrently with this batch's own claim on the
 // same range on this branch).
-// Graphics::AnimationGroup  ~AnimationGroup = 0x1800fb620  (NOT ported)
+// Graphics::AnimationGroup  ~AnimationGroup = 0x1800fb620  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
 void* RtDelDtor_AnimationGroup(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 81);
 }
@@ -1707,7 +1709,7 @@ void* RtDelDtor_ParticleSystem(void* self, unsigned flags) {
 void* RtDelDtor_SoundBuffer(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 83);
 }
-// Audio::SoundEffect        ~SoundEffect = 0x1800e0880     (NOT ported)
+// Audio::SoundEffect        ~SoundEffect = 0x1800e0880     (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
 void* RtDelDtor_SoundEffect(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 84);
 }
@@ -2003,6 +2005,10 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180020a70, (void*)&RtDelDtor_ParticleSystem);
     RegisterRuntimeAddr(0x18000bef0, (void*)&RtDelDtor_SoundBuffer);
     RegisterRuntimeAddr(0x180050820, (void*)&RtDelDtor_SoundEffect);
+    // 2026-09-12 cutover walk: the six scalar dtors this table still resolved
+    // to NULL (deleting_dtor_leaves.cpp). Registered here so the address door
+    // is closed before the first Dtor(i) lookup can cache a null.
+    RtObjectDeletingDtorLeavesRegister();
     // UI TEXT PIPELINE batch, rows 71-74 (wrappers above).
     RegisterRuntimeAddr(0x180032130, (void*)&RtDelDtor_Font);
     RegisterRuntimeAddr(0x1800378a0, (void*)&RtDelDtor_CharacterSet);

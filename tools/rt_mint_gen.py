@@ -113,6 +113,24 @@ EXTRA_SIZES = {
     "?_frameIndex@ParticleInstance@Graphics@@1HA": (4, "int"),
     "?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA": (1, "bool"),
     "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA": (8, "BaseTypeInfo* — head of the reflection chain"),
+    # 2026-09-12 cutover walk. Five exported .data rows the generator had been
+    # refusing on since the all-exported-data union (the committed tables were
+    # regenerated before that refusal existed). None is read by our tree today
+    # (grep: zero references outside this file); each size is pinned from the
+    # DLL, adjacent-export gap first, mangled suffix as corroboration.
+    "?_crcTable@CRC@System@@0PAIA":
+        (0x400, "uint32[256] -- the CRC32 table (bytes at 0x1801f9080 are 00000000 77073096 ee0e612c ...); "
+                "adjacent-export gap to ?_lkeyMap@ is exactly 0x400. runtime/src/system/crc.cpp builds its own "
+                "table, so this minted copy is never read and is left zeroed"),
+    "?_lkeyMap@Device@Input@@0PAEA":
+        (0x70, "uint8[0x70] -- adjacent-export gap to ?_keyMap@ is exactly 0x70; PAE is MSVC's array-as-pointer encoding"),
+    "?_keyMap@Device@Input@@0PAEA":
+        (0x100, "uint8[256] -- VK -> DIK map. adjacent-export gap is 0x3a8 but the 0x68 filler run stops at +0xff and "
+                "+0x100 begins a different unexported table (00 01 00 05 06 ...), so 256 is the extent"),
+    "?_exceptionCallback@Debug@System@@0P6A?AW4ErrorResponse@12@PEAXPEADH@ZEA":
+        (8, "function pointer (P6A...@Z); adjacent-export gap to ?_disableHandler@ is 8"),
+    "?_exceptionHandler@Debug@System@@0PEAXEA":
+        (8, "void* (PEAX); adjacent-export gap to ?_singleton@MemoryAllocator@ is 8"),
     # Wave 9 integrator, 2026-09-08. NOT 8 bytes, and the mangled suffix LIES:
     # MSVC encodes a static `char buf[N]` data member as PAD (pointer-to-char),
     # indistinguishable from a real `char*`. The DISASSEMBLY settles it --
@@ -233,12 +251,40 @@ EXTRA_VTABLES_BY_ADDR = {
         "of each of 64 0x20-byte records at Device+0xa98. All seven bodies lie "
         "inside 0x1800501c0..0x180050240 and none is exported. Count proved by "
         "the same not-an-image-address test on slot 7.",
+
+    # --- 2026-09-12 cutover walk: the two remaining IO::Encoding tables --------
+    # Same shape as 0x1801554a8 above: heap-stamped 8-byte policy tags. Both were
+    # left null at cutover, and the first was the wall the gate stopped at
+    # (MakeCodec reading a null Encoding vtable under ExternalFactory::Add).
+    0x1801559f8:
+        "IO VISITOR Encoding vtable, 5 slots, UNEXPORTED. Stamped by "
+        "??0VisitorStream@IO@@QEAA@XZ: 1800bb11d LEA RAX,[0x1801559f8] into the "
+        "MemAlloc(8,4) it installs at Stream::encoding. Count proved by "
+        "adjacency: it ends exactly where ??_7VisitorStream@IO@@6B@ (0x180155a20) "
+        "begins. Bodies: runtime/src/io/encoding_visitor_text.cpp.",
+    0x1801559d0:
+        "IO TEXT Encoding vtable, 5 slots, UNEXPORTED. Stamped by "
+        "??0TextFileStream@IO@@ at 0x1800ba431. Count comes from the "
+        "VTABLE_EXTENT entry below: the next EXPORT is 0x180155a20 and adjacency "
+        "alone would swallow the Visitor table at 0x1801559f8. Bodies: "
+        "runtime/src/io/encoding_visitor_text.cpp.",
 }
 
 # Unexported .data statics our tree reads BY ADDRESS. Same argument as above.
 EXTRA_STORAGE_BY_ADDR = {
     0x1801fc6d0: (8, "IO::Modification's loaded-DLL HMODULE slot, UNEXPORTED - "
                      "code/Game/Game/game_main.cpp FreeLibrary's it at shutdown"),
+    # 2026-09-12 cutover walk, second wall: GraphicsMesh::Serialize zeroes the
+    # first and stores `this` in the second before every mesh (0x1800ff3d5..),
+    # and TriangleList::Serialize reads them back. Both UNEXPORTED, both read
+    # through ResolveAddr(Module::Runtime, ...) in graphicsmesh_vtable.cpp, so
+    # DLL-absent they resolved NULL and the first write faulted. Sizes from the
+    # instructions: MOV dword [0x1801fc69c],0 / MOV qword [0x1801fc6a0],R14; the
+    # next export, ?_singleton@FileSystem@IO@@, begins at 0x1801fc6a8.
+    0x1801fc69c: (4, "Graphics::GraphicsMesh serialize TriangleList counter (int), UNEXPORTED - "
+                     "runtime/src/graphics/graphicsmesh_vtable.cpp SerializeCounter()"),
+    0x1801fc6a0: (8, "Graphics::GraphicsMesh 'current mesh' static (GraphicsMesh*), UNEXPORTED - "
+                     "runtime/src/graphics/graphicsmesh_vtable.cpp SerializeCurrentMesh()"),
 }
 
 # Storage rows whose CORRECT INITIAL VALUE IS KNOWABLE, minted directly.
@@ -338,6 +384,14 @@ VTABLE_EXTENT = {
         "?Create@TextFileStream@IO@@ (0x1800ba940) and slot 10 would be "
         "0x1800b9ab0, the head of a different descending method group. "
         "runtime/types/io/FileStream.h has said 10 since Wave 11."),
+    0x1801559d0: (5,
+        "the unexported TEXT IO::Encoding table. adjacent-export bounds it at "
+        "??_7VisitorStream@ (0x180155a20) = 10 slots, which swallows the "
+        "unexported VISITOR encoding table at 0x1801559f8. That table has its own "
+        "stamping constructor, read as disassembly: ??0VisitorStream@IO@@QEAA@XZ "
+        "1800bb11d  48 8d 05 d4 a8 09 00  LEA RAX,[0x1801559f8], stored into the "
+        "MemAlloc(8,4) at 1800bb0fc..1800bb118. Slot 5 of the text table would be "
+        "0x1800bafe0, the visitor table's slot 0."),
 }
 
 # Storage symbols the DLL's CRT CONSTRUCTS at load, and where the construction
