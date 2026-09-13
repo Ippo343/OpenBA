@@ -39,6 +39,7 @@
 
 #include "Component/quarrycomponent_funcs.h"
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "perf_terrain.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
@@ -60,8 +61,6 @@ extern "C" float* Reimpl_MapGetTerrainPos(void* game, float* outPos3, float* inX
 namespace {
 
 typedef void  (*fn_FindCompOut_t)(void* entity, void* outIbp);
-typedef void* (*fn_TransformCopy_t)(void* self, const void* src);
-typedef void* (*fn_TransformMul_t)(const void* self, void* retVec3, const void* vec);
 typedef void* (*fn_MeshVertices_t)(void* mesh, int lod);
 typedef bool  (*fn_IsDerivedFromId_t)(void* self, uint32_t typeId);
 typedef void  (*fn_CheckPtrSlot_t)(void* ibp);
@@ -70,8 +69,6 @@ fn_FindCompOut_t     s_fn_FindComp_Model = nullptr;   // 0x140003f60
 fn_FindCompOut_t     s_fn_FindComp_Map   = nullptr;   // 0x140004680
 fn_FindCompOut_t     s_fn_FindComp_Decal = nullptr;   // 0x14000b630
 fn_FindCompOut_t     s_fn_FindComp_CP    = nullptr;   // 0x14000b6f0
-fn_TransformCopy_t   s_fn_TransformCopy  = nullptr;   // slot 0x140151418
-fn_TransformMul_t    s_fn_TransformMul   = nullptr;   // slot 0x140151470
 fn_MeshVertices_t    s_fn_MeshVertices   = nullptr;   // slot 0x140151478
 fn_IsDerivedFromId_t s_fn_IsDerivedFrom  = nullptr;   // slot 0x140152a98
 fn_CheckPtrSlot_t    s_fn_CheckPtr       = nullptr;   // slot 0x140152ab0
@@ -95,8 +92,6 @@ void QuarryDeformResolve() {
     s_fn_FindComp_CP    = reinterpret_cast<fn_FindCompOut_t>(ResolveAddr(Module::Exe, 0x14000b6f0));
 
     uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140151418); if (slot) s_fn_TransformCopy = *reinterpret_cast<fn_TransformCopy_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140151470); if (slot) s_fn_TransformMul  = *reinterpret_cast<fn_TransformMul_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140151478); if (slot) s_fn_MeshVertices  = *reinterpret_cast<fn_MeshVertices_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152a98); if (slot) s_fn_IsDerivedFrom = *reinterpret_cast<fn_IsDerivedFromId_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152ab0); if (slot) s_fn_CheckPtr      = *reinterpret_cast<fn_CheckPtrSlot_t*>(slot);
@@ -217,15 +212,12 @@ extern "C" void QuarryComponent_ApplyDepth(void* selfV, float depth) {
     void* entity = QuarryOwnerEntity(self);
     void* model  = QuarryFindComp(s_fn_FindComp_Model, entity);
     if (!model) { QuarryBail("ApplyDepth", "owner has no ModelComponent (finder 0x140003f60 returned null)"); return; }
-    if (!s_fn_TransformCopy) { QuarryBail("ApplyDepth", "slot 0x140151418 Transform copy-ctor unresolved"); return; }
-    if (!s_fn_TransformMul)  { QuarryBail("ApplyDepth", "slot 0x140151470 Transform::operator* unresolved"); return; }
     if (!s_fn_MeshVertices)  { QuarryBail("ApplyDepth", "slot 0x140151478 PickingMesh::Vertices unresolved"); return; }
 
-    // Oversized on purpose so a larger-than-expected Transform cannot clobber the next
-    // local (the out-param-buffer-too-small lesson).
-    alignas(16) uint8_t xform[0x80] = {};
-    s_fn_TransformCopy(xform, reinterpret_cast<const void*>(
-        reinterpret_cast<uintptr_t>(model) + 0x148));
+    // Retail copy-constructs a Transform on the stack (??0Transform@Math@@QEAA@AEBV01@@Z,
+    // slot 0x140151418) from the ModelComponent's +0x148.
+    const Math::Transform xform(*reinterpret_cast<const Math::Transform*>(
+        reinterpret_cast<uintptr_t>(model) + 0x148));   // B.3.1 bridge
 
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     const uintptr_t gameWorld   = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
@@ -252,14 +244,15 @@ extern "C" void QuarryComponent_ApplyDepth(void* selfV, float depth) {
         if (!data) break;
         const void* localVtx = data + static_cast<size_t>(i) * 0xC;
 
-        float world[3] = {0.0f, 0.0f, 0.0f};
-        s_fn_TransformMul(xform, world, localVtx);
+        // Transform::operator*(const Vector3&) — slot 0x140151470.
+        const Math::Vector3 world =
+            xform * *reinterpret_cast<const Math::Vector3*>(localVtx);   // B.3.1 bridge
 
-        float z = world[2];
+        float z = world.z;
         if (z < depth) z = depth;          // floor clamp — this IS the progressive dig
 
-        const int mapX = static_cast<int>(world[0] + s_bias + half);
-        const int mapY = static_cast<int>(world[1] + s_bias + half);
+        const int mapX = static_cast<int>(world.x + s_bias + half);
+        const int mapY = static_cast<int>(world.y + s_bias + half);
 
         *reinterpret_cast<int16_t*>(heightArray +
             (static_cast<int64_t>(stride) * mapY + mapX) * 2) =

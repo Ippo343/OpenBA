@@ -15,6 +15,7 @@
 
 #include "Work/pickup_funcs.h"
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <algorithm>
 #include <cstdint>
@@ -306,7 +307,6 @@ typedef void     (*PiX_PerformWork_t)(void* citizenIBP, uint32_t typeId, void* e
                                       float* pos, int cell, char first);             // 0x1400c0ad0
 typedef void*    (*PiX_MemAlloc_t)(uint64_t size, uint32_t align);                   // slot 0x140152b60
 typedef void     (*PiX_MemFree_t)(void* p);                                          // slot 0x140152b68
-typedef void     (*PiX_V3Ctor_t)(void* self, float x, float y, float z);             // slot 0x140152a30
 
 static PiX_FindRawMat_t      s_x_findRawMat   = nullptr;
 static PiX_FindStorage_t     s_x_findStorage  = nullptr;
@@ -324,7 +324,6 @@ static PiX_GridToWorld_t     s_x_gridToWorld  = nullptr;
 static PiX_PerformWork_t     s_x_performWork  = nullptr;
 static PiX_MemAlloc_t        s_x_memAlloc     = nullptr;
 static PiX_MemFree_t         s_x_memFree      = nullptr;
-static PiX_V3Ctor_t          s_x_v3ctor       = nullptr;
 
 // Type-id globals. Raw .rdata resolves to NULL in standalone (see
 // reference_standalone_rdata_null_fallback), so each falls back to the runtime
@@ -374,9 +373,6 @@ static void Pickup_ResolveExecFuncs() {
     s_x_memFree = reinterpret_cast<PiX_MemFree_t>(slot(0x140152b68));
     if (!s_x_memFree) s_x_memFree = reinterpret_cast<PiX_MemFree_t>(
         ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
-    s_x_v3ctor = reinterpret_cast<PiX_V3Ctor_t>(slot(0x140152a30));
-    if (!s_x_v3ctor) s_x_v3ctor = reinterpret_cast<PiX_V3Ctor_t>(
-        ResolveExport("??0Vector3@Math@@QEAA@MMM@Z"));
 
     s_x_pTid_RawMatDesc = reinterpret_cast<const uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7cb8));
@@ -442,7 +438,7 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
     if (!s_x_wantsRes || !s_x_performWork || !s_x_findRawMat || !s_x_findStorage ||
         !s_x_queryCount || !s_x_findCell || !s_x_validateCell || !s_x_checkAssign ||
         !s_x_findStoreRes || !s_x_calcDist || !s_x_canAdd || !s_x_findComp ||
-        !s_x_gridToWorld || !s_x_memAlloc || !s_x_memFree || !s_x_v3ctor ||
+        !s_x_gridToWorld || !s_x_memAlloc || !s_x_memFree ||
         !fn_InternalBasePtr_CheckPtr || !fn_InternalBasePtr_Ctor ||
         !fn_IsDerivedFrom || !g_pGameWorldSingleton) {
         return 1;
@@ -502,8 +498,8 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
     // Vector3 ctor (both write all three floats). The exe pre-seeds only .z from
     // model+0x160 at 0x1400f3070 and never reads it back -- 0x14008d590 writes
     // param_7[0..2] unconditionally at its return. Kept for fidelity; it is dead.
-    float scratch[3] = {0.0f, 0.0f, 0.0f};
-    scratch[2] = *reinterpret_cast<float*>(model + 0x160);
+    Math::Vector3 scratch(0.0f, 0.0f, 0.0f);
+    scratch.z = *reinterpret_cast<float*>(model + 0x160);
 
     const int dim = *grid;
     int cx = static_cast<int>(*reinterpret_cast<float*>(model + 0x158) +
@@ -549,7 +545,7 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
     fn_InternalBasePtr_CheckPtr(targetIBP);
     s_x_findStoreRes(townMgr, &storeOut, static_cast<uint32_t>(selfAccess),
                      *reinterpret_cast<uint64_t*>(*reinterpret_cast<uintptr_t*>(targetIBP) + 0x28),
-                     amount, 1, scratch, &dropIBP);
+                     amount, 1, &scratch.x, &dropIBP);
     if (storeOut == nullptr) return 1;
 
     // Storage we will haul into -- used to test each candidate for acceptance.
@@ -704,13 +700,13 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
         // Access cell -> world position. off = (dim>>1) - 0.5
         const int gdim = *grid;
         const float off = static_cast<float>(gdim >> 1) - half;
-        s_x_v3ctor(scratch,
+        scratch = Math::Vector3(
                    static_cast<float>(p->accessCell % gdim) - off,
                    static_cast<float>(p->accessCell / gdim) - off,
                    0.0f);
 
         float worldPos[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-        s_x_gridToWorld(grid, worldPos, scratch, 0, nullptr);
+        s_x_gridToWorld(grid, worldPos, &scratch.x, 0, nullptr);
 
         void* entIBP = p->entity;
         void* citIBP = *reinterpret_cast<void**>(citizenIBP);

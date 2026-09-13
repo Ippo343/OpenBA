@@ -12,6 +12,7 @@
 
 #include "Component/boatcomponent_funcs.h"
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -38,10 +39,6 @@ static fn_Serialize_Float_t s_fn_Serialize_Float = nullptr;
 // Object::InternalBasePtr::Serialize -- dispatch slot at 0x140152aa0
 typedef void (*fn_IBP_Serialize_t)(void* ibp, void* serializer);
 static fn_IBP_Serialize_t s_fn_IBP_Serialize = nullptr;
-
-// Math::Vector3::Serialize -- dispatch slot at 0x140152a68
-typedef void (*fn_Vector3_Serialize_t)(void* vec3, void* serializer);
-static fn_Vector3_Serialize_t s_fn_Vector3_Serialize = nullptr;
 
 // IsDerivedFrom dispatch slot at 0x140152a98
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
@@ -106,9 +103,8 @@ void BoatComponent_Shutdown(BoatComponent* self, void* stream) {
         }
     }
 
-    // Serialize Vector3 at +0x40 (position)
-    if (s_fn_Vector3_Serialize)
-        s_fn_Vector3_Serialize((void*)(selfAddr + 0x40), serializer);
+    // Serialize Vector3 at +0x40 (position) -- slot 0x140152a68
+    reinterpret_cast<Math::Vector3*>(selfAddr + 0x40)->Serialize(serializer);   // B.3.1 bridge
 
     // Serialize float at +0x4c
     if (s_fn_Serialize_Float)
@@ -143,8 +139,7 @@ void BoatComponent_Shutdown(BoatComponent* self, void* stream) {
     }
 
     // Serialize Vector3 at +0x50 (direction/target)
-    if (s_fn_Vector3_Serialize)
-        s_fn_Vector3_Serialize((void*)(selfAddr + 0x50), serializer);
+    reinterpret_cast<Math::Vector3*>(selfAddr + 0x50)->Serialize(serializer);   // B.3.1 bridge
 
     // Serialize int at +0x70 (dock ID)
     if (s_fn_Serialize_Int)
@@ -164,10 +159,10 @@ void BoatComponent_Shutdown(BoatComponent* self, void* stream) {
 
     // Serialize each Vector3 in the array (12 bytes each)
     void* arrayBase = *(void**)(selfAddr + 0x60);
-    if ((int)localCount > 0 && s_fn_Vector3_Serialize && arrayBase) {
+    if ((int)localCount > 0 && arrayBase) {
         uint8_t* ptr = (uint8_t*)arrayBase;
         for (uint32_t i = 0; i < localCount; i++) {
-            s_fn_Vector3_Serialize(ptr, serializer);
+            reinterpret_cast<Math::Vector3*>(ptr)->Serialize(serializer);   // B.3.1 bridge
             ptr += 12; // sizeof(Vector3) = 12 bytes
         }
     }
@@ -252,9 +247,6 @@ void BoatComponent_InitFuncs() {
     slot = ResolveAddr(Module::Exe, 0x140152aa0);
     if (slot) s_fn_IBP_Serialize = *reinterpret_cast<fn_IBP_Serialize_t*>(slot);
 
-    slot = ResolveAddr(Module::Exe, 0x140152a68);
-    if (slot) s_fn_Vector3_Serialize = *reinterpret_cast<fn_Vector3_Serialize_t*>(slot);
-
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
 
@@ -272,9 +264,8 @@ void BoatComponent_InitFuncs() {
     s_initialized = true;
 
 #ifdef _DEBUG
-    printf("[BoatComponent] Funcs resolved: CompSerialize=%p IBP_Serialize=%p V3=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_IBP_Serialize,
-           (void*)s_fn_Vector3_Serialize);
+    printf("[BoatComponent] Funcs resolved: CompSerialize=%p IBP_Serialize=%p\n",
+           (void*)s_fn_Component_Serialize, (void*)s_fn_IBP_Serialize);
 #endif
 }
 

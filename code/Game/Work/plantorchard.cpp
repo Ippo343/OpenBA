@@ -18,6 +18,7 @@
 
 #include "Work/plantorchard_funcs.h"
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -50,9 +51,6 @@ static POW_Map_CanPathTo_t          s_fn_Map_CanPathTo = nullptr;
 typedef float* (*POW_GetTerrainPos_t)(int* mapGrid, float* outPos, float* gridPos,
                                       char param4, uint32_t* outNormal);
 static POW_GetTerrainPos_t s_fn_GetTerrainPos = nullptr;
-
-typedef float* (*POW_Vector3_Ctor_t)(float* self, float x, float y, float z);
-static POW_Vector3_Ctor_t s_fn_Vector3_Ctor = nullptr;
 
 // Orchard planting action ctor (FUN_1400be6e0) -- 11 parameters.
 // ⚠ cellIdx / cellIdx2 are INTEGERS, not floats. The call site stores them with
@@ -174,10 +172,6 @@ bool PlantOrchard_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x140051830));
 
     // Dispatch slots
-    uintptr_t iatVec3Ctor = ResolveAddr(Module::Exe, 0x140152a30);
-    if (iatVec3Ctor)
-        s_fn_Vector3_Ctor = *reinterpret_cast<POW_Vector3_Ctor_t*>(iatVec3Ctor);
-
     uintptr_t iatSerCtor = ResolveAddr(Module::Exe, 0x140152ad8);
     if (iatSerCtor)
         s_fn_Serializer_Ctor = *reinterpret_cast<POW_Serializer_Ctor_t*>(iatSerCtor);
@@ -208,7 +202,7 @@ bool PlantOrchard_ResolveFuncs() {
     bool ok = s_fn_FindComp_MatDesc && s_fn_FindComp_OrchardDesc &&
               s_fn_CalcMaxWorkers && s_fn_Map_FindNearestPassable &&
               s_fn_Map_CanPathTo && s_fn_GetTerrainPos &&
-              s_fn_Vector3_Ctor && s_fn_PlantAction_Ctor &&
+              s_fn_PlantAction_Ctor &&
               s_fn_BST_Insert && s_fn_BST_Remove &&
               s_fn_BST_Serialize && s_fn_BST_RecursiveFree &&
               s_fn_ValidateTask && s_fn_TaskCancel &&
@@ -231,7 +225,6 @@ bool PlantOrchard_ResolveFuncs() {
         if (!s_fn_Map_FindNearestPassable) printf("  MISSING: Map_FindNearestPassable\n");
         if (!s_fn_Map_CanPathTo) printf("  MISSING: Map_CanPathTo\n");
         if (!s_fn_GetTerrainPos) printf("  MISSING: GetTerrainPos\n");
-        if (!s_fn_Vector3_Ctor) printf("  MISSING: Vector3_Ctor\n");
         if (!s_fn_PlantAction_Ctor) printf("  MISSING: PlantAction_Ctor\n");
         if (!s_fn_BST_Insert) printf("  MISSING: BST_Insert\n");
         if (!s_fn_BST_Remove) printf("  MISSING: BST_Remove\n");
@@ -390,14 +383,13 @@ int PlantOrchard_Slot4_Impl(PlantOrchard* self, void* entityIBP, uint64_t /*para
             uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
 
             float halfOffset = (float)(*mapGrid >> 1) - *s_fHalfCellOffset;
-            float targetPos[3];
-            s_fn_Vector3_Ctor(targetPos,
+            Math::Vector3 targetPos(
                 (float)(nearestCell % *mapGrid) - halfOffset,
                 (float)(nearestCell / *mapGrid) - halfOffset,
                 0.0f);
 
             float pathPos[4];
-            s_fn_GetTerrainPos(mapGrid, pathPos, targetPos, 0, nullptr);
+            s_fn_GetTerrainPos(mapGrid, pathPos, &targetPos.x, 0, nullptr);
 
             // Get citizen entity
             fn_InternalBasePtr_CheckPtr(entityIBP);

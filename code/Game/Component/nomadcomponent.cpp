@@ -12,6 +12,7 @@
 #include "Component/nomadcomponent_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "math/Math.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -35,10 +36,6 @@ static fn_Serializer_SerializeInt_t s_fn_Serializer_SerializeInt = nullptr;
 // Object::InternalBasePtr::Serialize
 typedef void (*fn_IBP_Serialize_t)(void* ibp, void* serializer);
 static fn_IBP_Serialize_t s_fn_IBP_Serialize = nullptr;
-
-// Math::Vector3::Serialize
-typedef void (*fn_Vector3_Serialize_t)(void* vec3, void* serializer);
-static fn_Vector3_Serialize_t s_fn_Vector3_Serialize = nullptr;
 
 // System::Time::Serialize
 typedef void (*fn_Time_Serialize_t)(void* time, void* serializer);
@@ -95,12 +92,10 @@ void NomadComponent_Shutdown(NomadComponent* self, void* stream) {
     }
 
     // Serialize Vector3 at +0x30 (12 bytes)
-    if (s_fn_Vector3_Serialize)
-        s_fn_Vector3_Serialize((void*)(selfAddr + 0x30), serializer2);
+    reinterpret_cast<Math::Vector3*>(selfAddr + 0x30)->Serialize(serializer2);   // B.3.1 bridge
 
     // Serialize Vector3 at +0x3C (12 bytes)
-    if (s_fn_Vector3_Serialize)
-        s_fn_Vector3_Serialize((void*)(selfAddr + 0x3C), serializer2);
+    reinterpret_cast<Math::Vector3*>(selfAddr + 0x3C)->Serialize(serializer2);   // B.3.1 bridge
 
     // Serialize int at +0x50
     if (s_fn_Serializer_SerializeInt)
@@ -569,8 +564,6 @@ void NomadComponent_InitFuncs() {
 
     s_fn_IBP_Serialize = reinterpret_cast<fn_IBP_Serialize_t>(
         ResolveExport("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z"));
-    s_fn_Vector3_Serialize = reinterpret_cast<fn_Vector3_Serialize_t>(
-        ResolveExport("?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z"));
 
     s_initialized = true;
 }

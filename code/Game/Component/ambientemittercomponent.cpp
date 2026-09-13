@@ -12,6 +12,7 @@
 
 #include "Component/ambientemittercomponent_funcs.h"
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
@@ -37,10 +38,6 @@ static fn_Serialize_Int_t s_fn_Serialize_Int = nullptr;
 // IO::Serializer::GetVersion(this) -- dispatch slot
 typedef int (*fn_Serializer_GetVersion_t)(void* serializer);
 static fn_Serializer_GetVersion_t s_fn_Serializer_GetVersion = nullptr;
-
-// Math::Vector3::Serialize(this, serializer)
-typedef void (*fn_Vector3_Serialize_t)(void* vec3, void* serializer);
-static fn_Vector3_Serialize_t s_fn_Vector3_Serialize = nullptr;
 
 // FUN_1400019a0(InternalBasePtr*, serializer) -- serialize InternalBasePtr
 typedef void (*fn_IBP_Serialize_t)(void* ibp, void* serializer);
@@ -167,8 +164,7 @@ void AmbientEmitterComponent_Shutdown(AmbientEmitterComponent* self, void* strea
     uintptr_t selfAddr = (uintptr_t)self;
 
     // Serialize Vector3 at +0x28
-    if (s_fn_Vector3_Serialize)
-        s_fn_Vector3_Serialize((void*)(selfAddr + 0x28), serializer);
+    reinterpret_cast<Math::Vector3*>(selfAddr + 0x28)->Serialize(serializer);   // B.3.1 bridge
 
     // Read count from +0x40 into local, serialize it
     uint32_t localCount = *(uint32_t*)(selfAddr + 0x40);
@@ -323,11 +319,9 @@ void AmbientEmitterComponent_InitFuncs() {
     slot = ResolveAddr(Module::Exe, 0x140152a60);
     if (slot) s_fn_Serialize_Float = *reinterpret_cast<fn_Serialize_Float_t*>(slot);
 
-    // Math::Vector3::Serialize -- Runtime export.
-    // (Was wrongly pointed at exe 0x14014efd0 = FloorComponent_RegisterType, an
-    //  unrelated type-registration thunk — a dropped/garbled-address caller bug.)
-    s_fn_Vector3_Serialize = reinterpret_cast<fn_Vector3_Serialize_t>(
-        ResolveExport("?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z"));
+    // Math::Vector3::Serialize is now the class member (was a Runtime export here;
+    // before that it was wrongly pointed at exe 0x14014efd0 = FloorComponent_RegisterType,
+    // an unrelated type-registration thunk — a dropped/garbled-address caller bug.)
 
     // InternalBasePtr::Serialize
     s_fn_IBP_Serialize = reinterpret_cast<fn_IBP_Serialize_t>(
@@ -351,8 +345,8 @@ void AmbientEmitterComponent_InitFuncs() {
     s_initialized = true;
 
 #ifdef _DEBUG
-    printf("[AmbientEmitterComponent] Funcs resolved: CompSerialize=%p V3Serialize=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_Vector3_Serialize);
+    printf("[AmbientEmitterComponent] Funcs resolved: CompSerialize=%p\n",
+           (void*)s_fn_Component_Serialize);
 #endif
 }
 

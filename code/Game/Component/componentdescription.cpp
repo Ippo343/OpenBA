@@ -21,6 +21,8 @@
 // + serialize_struct60b_serialize.cpp (the proven External-array FindOrLoad body).
 
 #include "engine_funcs.h"
+#include "system/String.h"
+#include "system/Filename.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -51,8 +53,7 @@ extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayB
     if (!serializer || count <= 0 || !arrayBase) return;
     if (!fn_Serializer_GetEncoding || !fn_ExternalFactory_FindOrLoad ||
         !fn_ExternalFactory_IsReferenceModeEnabled || !fn_External_GetPath ||
-        !fn_Filename_Ctor || !fn_Filename_Dtor || !fn_Filename_AssignOp ||
-        !g_fn_String_Serialize || !fn_Serializer_Serialize_Uint || !g_fn_Serialize_Bool ||
+        !fn_Serializer_Serialize_Uint || !g_fn_Serialize_Bool ||
         !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
         static bool warned = false;
         if (!warned) { fprintf(stderr, "[ComponentDescription] sub-array primitives unwired — skip %d\n", count); fflush(stderr); warned = true; }
@@ -73,15 +74,13 @@ extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayB
 
         if (encState == 3) {                       // path-export walk (read-only)
             if (!*slot) continue;
-            uint8_t pathBuf[8] = {0};
-            void* path = fn_External_GetPath(*slot, pathBuf);
+            System::Filename pathBuf;
+            void* path = fn_External_GetPath(*slot, &pathBuf);
             fn_ExternalFactory_FindOrLoad(factory, path);
-            fn_Filename_Dtor(pathBuf);
             continue;
         }
 
-        uint8_t fnameBuf[8] = {0};
-        fn_Filename_Ctor(fnameBuf);
+        System::Filename fnameBuf;
         bool refMode = fn_ExternalFactory_IsReferenceModeEnabled(factory);
 
         if (refMode) {
@@ -92,10 +91,9 @@ extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayB
                 fn_Serializer_Serialize_Uint(serializer, &refId, nullptr);
                 if (refId != 0xFFFFFFFFu) {
                     if (SerStreamErr(serializer) == 0) {
-                        uint8_t tmpFn[8] = {0};
-                        fn_ExternalFactory_GetPathForReferenceId(factory, tmpFn, refId);
-                        fn_Filename_AssignOp(fnameBuf, tmpFn);
-                        fn_Filename_Dtor(tmpFn);
+                        System::Filename tmpFn;
+                        fn_ExternalFactory_GetPathForReferenceId(factory, &tmpFn, refId);
+                        fnameBuf = tmpFn;
                     }
                     needsPath = true;
                 }
@@ -103,25 +101,23 @@ extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayB
                 fn_Serializer_Serialize_Uint(serializer, &refId, nullptr);
             }
             if (needsPath && SerStreamErr(serializer) == 0) {
-                *slot = fn_ExternalFactory_FindOrLoad(factory, fnameBuf);
+                *slot = fn_ExternalFactory_FindOrLoad(factory, &fnameBuf);
             }
         } else {
             bool hasRef = (*slot != nullptr);
             g_fn_Serialize_Bool(serializer, &hasRef, nullptr);
             if (hasRef) {
                 if (*slot) {
-                    uint8_t pathBuf[8] = {0};
-                    void* path = fn_External_GetPath(*slot, pathBuf);
-                    fn_Filename_AssignOp(fnameBuf, path);
-                    fn_Filename_Dtor(pathBuf);
+                    System::Filename pathBuf;
+                    void* path = fn_External_GetPath(*slot, &pathBuf);
+                    fnameBuf = *static_cast<System::Filename*>(path);  // B.3.1 bridge
                 }
-                g_fn_String_Serialize(fnameBuf, serializer);
+                fnameBuf.AsString().Serialize(serializer);
                 if (SerStreamErr(serializer) == 0) {
-                    *slot = fn_ExternalFactory_FindOrLoad(factory, fnameBuf);
+                    *slot = fn_ExternalFactory_FindOrLoad(factory, &fnameBuf);
                 }
             }
         }
-        fn_Filename_Dtor(fnameBuf);
     }
 }
 

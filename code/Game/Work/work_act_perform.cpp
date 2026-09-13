@@ -18,6 +18,7 @@
 //
 
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
 
@@ -75,7 +76,6 @@ typedef void   (*WAP_fn_DeletePtr_t)(void* ibp);              // 0x140151ab8
 typedef void*  (*WAP_fn_MemAlloc_t)(uint64_t size, uint32_t align); // 0x140152b60
 typedef void*  (*WAP_fn_ObjInternalCtor_t)(void* self);       // 0x140152768
 typedef void*  (*WAP_fn_TimeCtor_t)(void* retval, float seconds);   // 0x140152b00
-typedef void*  (*WAP_fn_Vec3Ctor_t)(void* self, float x, float y, float z); // 0x140152a30
 // 0x1401512c0 — ?Normalize@Vector3@Math@@QEBA?AV12@XZ. Returns a NEW Vector3 BY VALUE,
 // so the Microsoft x64 ABI passes a hidden return-slot pointer in RDX (>=12 bytes) and
 // the retail call site loads it: `lea -0x41(%rbp),%rdx` at 0x1400bab2f, right before
@@ -90,8 +90,9 @@ typedef void*  (*WAP_fn_Vec3Ctor_t)(void* self, float x, float y, float z); // 0
 // well registration landed, the very first bucket run faulted inside Runtime's
 // Vector3::Normalize writing to a Runtime CODE address. See
 // reference_one_retail_fn_ported_twice_diverges and reference_byvalue_return_hidden_rdx.
-typedef void*  (*WAP_fn_Vec3Normalize_t)(void* self, void* outVec3); // 0x1401512c0
-typedef float  (*WAP_fn_Vec3Heading_t)(void* self);           // 0x1401512d8
+// B.3.1 step 2: the three Vector3 slots above (0x140152a30 ctor, 0x1401512c0
+// Normalize, 0x1401512d8 Heading) are now direct calls on Math::Vector3; the
+// typedefs and the hidden-RDX shape they encoded are gone with the DLL.
 
 static WAP_fn_Entity29a0_t          s_wap_Entity29a0      = nullptr;
 static WAP_fn_TaskListCleanup_t     s_wap_TaskCleanup     = nullptr;
@@ -117,9 +118,6 @@ static WAP_fn_DeletePtr_t           s_wap_DeletePtr       = nullptr;
 static WAP_fn_MemAlloc_t            s_wap_MemAlloc        = nullptr;
 static WAP_fn_ObjInternalCtor_t     s_wap_ObjInternalCtor = nullptr;
 static WAP_fn_TimeCtor_t            s_wap_TimeCtor        = nullptr;
-static WAP_fn_Vec3Ctor_t            s_wap_Vec3Ctor        = nullptr;
-static WAP_fn_Vec3Normalize_t       s_wap_Vec3Normalize   = nullptr;
-static WAP_fn_Vec3Heading_t         s_wap_Vec3Heading     = nullptr;
 
 // Inline-object vtables (exe .rdata) + .rdata float/dword constants.
 static void* s_wap_vtable_Action      = nullptr;  // 0x14015faa0
@@ -164,9 +162,6 @@ static void ResolveAll() {
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152768)) s_wap_ObjInternalCtor = *reinterpret_cast<WAP_fn_ObjInternalCtor_t*>(s);
     if (!s_wap_ObjInternalCtor) s_wap_ObjInternalCtor = reinterpret_cast<WAP_fn_ObjInternalCtor_t>(fn_ObjectInternal_Ctor);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b00)) s_wap_TimeCtor        = *reinterpret_cast<WAP_fn_TimeCtor_t*>(s);
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152a30)) s_wap_Vec3Ctor        = *reinterpret_cast<WAP_fn_Vec3Ctor_t*>(s);
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x1401512c0)) s_wap_Vec3Normalize   = *reinterpret_cast<WAP_fn_Vec3Normalize_t*>(s);
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x1401512d8)) s_wap_Vec3Heading     = *reinterpret_cast<WAP_fn_Vec3Heading_t*>(s);
 
     s_wap_vtable_Action      = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x14015faa0));
     s_wap_vtable_PerformWork = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x14015fea0));
@@ -264,15 +259,11 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
 
     // --- headingB via Vector3(pos4-pos3) → Normalize → Heading (0x1400bab05..0x1400bab46; XMM8) ---
     float headingB = 0.0f; // XMM8
-    if (s_wap_Vec3Ctor && pos3 && pos4) {
-        float v3[3];
+    if (pos3 && pos4) {
         // 0x1400bab05: XMM = [pos4+k] - [pos3+k]  (k = 8,4,0 → z,y,x)
-        s_wap_Vec3Ctor(v3, pos4[0] - pos3[0], pos4[1] - pos3[1], pos4[2] - pos3[2]);
-        if (s_wap_Vec3Normalize) {
-            float nv[3] = { 0.0f, 0.0f, 0.0f };   // the hidden RDX return slot
-            void* n = s_wap_Vec3Normalize(v3, nv);
-            if (s_wap_Vec3Heading && n) headingB = s_wap_Vec3Heading(n);
-        }
+        Math::Vector3 v3(pos4[0] - pos3[0], pos4[1] - pos3[1], pos4[2] - pos3[2]);
+        Math::Vector3 nv = v3.Normalize();   // was the hidden RDX return slot
+        headingB = nv.Heading();
     }
 
     float timeC = s_wap_pf_172124 ? *s_wap_pf_172124 : 0.0f; // XMM7 = DAT_140172124 = 0.75f

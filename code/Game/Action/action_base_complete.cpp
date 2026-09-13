@@ -30,6 +30,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "math/Math.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -337,7 +338,8 @@ void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
 namespace {
 // Graphics dispatch slots used by 73b0 / 176e0.
 typedef void  (*fn_SetMesh_t)(void* meshInstance, void* meshPtr);          // 0x140151498 (registered)
-typedef void* (*fn_Vector4Ctor_t)(void* retVec4, const float* scalar);    // 0x140152970
+// Math::Vector4 splat ctor is a direct member of the real class (B.3.1); the old
+// s_Vector4Ctor pointer named 0x140152970, which is GetNodeIndexFromName, not a ctor.
 typedef void  (*fn_TimeCtor_t)(void* retTime, float seconds);             // 0x140152968
 typedef uint32_t (*fn_SceneAddObject_t)(void* scene, void* geometry);     // 0x140151370 (registered)
 
@@ -348,7 +350,6 @@ typedef void (*fn_SceneRemoveObject_t)(void* scene, uint32_t objId);
 typedef int  (*fn_GetNodeIdx_t)(void* graphicsMesh, const char* name);
 
 static fn_SetMesh_t          s_SetMesh        = nullptr;
-static fn_Vector4Ctor_t      s_Vector4Ctor    = nullptr;
 static fn_TimeCtor_t         s_TimeCtorMesh   = nullptr;  // 0x140152968 (MeshInstance update arg)
 static fn_SceneAddObject_t   s_SceneAddObject = nullptr;
 static fn_GeometryAttach_t   s_GeomAttach     = nullptr;
@@ -367,10 +368,9 @@ static void EnsureShow() {
     s_SetMesh        = reinterpret_cast<fn_SetMesh_t>(ReadDispatchSlot(0x140151498));
     // ⚠ 0x140152970 is NOT a Vector4 ctor — the disasm at 0x14011765b shows that slot
     // family is Graphics: 0x140152970 = GraphicsMesh::GetNodeIndexFromName (returns int
-    // in EAX). Calling it as a ctor garbage-derefs the "returned" v[0..3]. Left NULL on
-    // purpose (audit 2026-07-26) so its block stays skipped until the real Vector4 ctor
-    // slot is identified; do NOT register 0x140152970 to "fix" the skip.
-    s_Vector4Ctor    = nullptr;
+    // in EAX). The uv-scale block used to sit behind a permanently-null s_Vector4Ctor
+    // (audit 2026-07-26); B.3.1 calls Math::Vector4 directly, so the block now runs.
+    // Still: do NOT register 0x140152970 as a ctor.
     // ⚠ was ReadDispatchSlot(0x140152968) — that slot is Graphics::Geometry::Attach
     // (dst, src, nodeIdx), not the Time ctor; retail's Time(0.0) there goes through
     // 0x140152b00 (disasm 0x14011766c). Dormant until now only because 0x140152968 is
@@ -550,15 +550,15 @@ void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
     if (s_SetMesh) s_SetMesh(reinterpret_cast<void*>(e + 0xb8), meshPtr);
 
     // write the UV-scale vector (Vector4 broadcast of uvScale) to entity+0x1c4..+0x1d0
-    float scalar = uvScale;
-    uint8_t vec4[32];
-    if (s_Vector4Ctor) {
-        uint32_t* v = reinterpret_cast<uint32_t*>(s_Vector4Ctor(vec4, &scalar));
-        *reinterpret_cast<uint32_t*>(e + 0x1c4) = v[0];
-        *reinterpret_cast<uint32_t*>(e + 0x1c8) = v[1];
-        *reinterpret_cast<uint32_t*>(e + 0x1cc) = v[2];
-        *reinterpret_cast<uint32_t*>(e + 0x1d0) = v[3];
-    }
+    // Retail 0x1401173b0 (Entity_impl_73b0): Math::Vector4::Vector4(local_58, &scalar)
+    // then four dword stores at +0x1c4/+0x1c8/+0x1cc/+0x1d0. B.3.1: this block used to be
+    // skipped behind a permanently-null s_Vector4Ctor (the slot it named, 0x140152970, is
+    // GetNodeIndexFromName); with Math::Vector4 a real class it now runs as retail does.
+    Math::Vector4 vec4((Math::Scalar(uvScale)));
+    *reinterpret_cast<float*>(e + 0x1c4) = vec4.x;
+    *reinterpret_cast<float*>(e + 0x1c8) = vec4.y;
+    *reinterpret_cast<float*>(e + 0x1cc) = vec4.z;
+    *reinterpret_cast<float*>(e + 0x1d0) = vec4.w;
 
     // attach the tool geometry to the model's "tool" node
     CheckPtr(&model);

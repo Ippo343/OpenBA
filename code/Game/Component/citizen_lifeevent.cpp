@@ -21,6 +21,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "system/String.h"
 #include <cstdint>
 
 // code/Game/Game/eventlog.cpp
@@ -56,26 +57,22 @@ extern "C" void CitizenComponent_PostLifeEvent(void* self, int eventType, int se
     }
 
     // --- Build the title System::String from the source's UI::String name pair ---
-    uint8_t titleStr[8] = {};
+    System::String titleStr;
     if (titleSrc && fn_UIString_Ctor && fn_UIString_ToSystemString) {
         uint8_t uiStr[16];
         fn_UIString_Ctor(uiStr, *reinterpret_cast<uint64_t*>(titleSrc + 0x20),
                          reinterpret_cast<void*>(titleSrc + 0x30));
-        fn_UIString_ToSystemString(uiStr, titleStr);
+        fn_UIString_ToSystemString(uiStr, &titleStr);
     } else {
-        fn_String_Ctor_CStr(titleStr, "");
+        titleStr.Set("");   // == String("") (ctor is default + Set)
     }
 
     // --- Extra param string ({4}); retail passes null for most events ---
-    uint8_t paramStr[8] = {};
-    fn_String_Ctor_CStr(paramStr, strParam ? strParam : "");
+    System::String paramStr(strParam ? strParam : "");
 
     // --- Post (null entity IBP: citizen life events carry no map location) ---
     int64_t nullIBP = 0;
     fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
     EventLog_AddCitizenEvent(eventLog, eventType, severity, &nullIBP,
-                             p + 0x28 /* citizen name String */, titleStr, paramStr);
-
-    fn_String_Dtor(paramStr);
-    fn_String_Dtor(titleStr);
+                             p + 0x28 /* citizen name String */, &titleStr, &paramStr);
 }

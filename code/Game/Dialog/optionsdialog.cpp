@@ -11,6 +11,8 @@
 
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include "system/String.h"
+#include "system/Filename.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -90,11 +92,9 @@ enum OptionsElementId {
 // Helper macro: find a named element in the dialog and store in outField.
 #define FIND_ELEMENT(outField, name)                       \
     do {                                                    \
-        uint8_t _nameBuf[8];                               \
+        System::String _nameStr(name);                     \
         uint64_t _retval = 0;                              \
-        fn_String_Ctor_CStr(_nameBuf, (name));             \
-        fn_DialogInstance_FindElement(self, &_retval, _nameBuf); \
-        fn_String_Dtor(_nameBuf);                          \
+        fn_DialogInstance_FindElement(self, &_retval, &_nameStr); \
         (outField) = (void*)_retval;                       \
     } while (0)
 
@@ -170,30 +170,27 @@ static void GetInputKeyName(void* retval, int deviceType, int keyIndex) {
     void* keyMapContainer = GetKeyMapContainer();
     if (!keyMapContainer) return;
 
-    uint8_t tempStr[8];
+    System::String tempStr;
     if (deviceType < 0) {
-        fn_String_Ctor_CStr(tempStr, "Unbound");
+        tempStr = System::String("Unbound");
     } else {
         const char* deviceNames[] = { "Gamepad", "Keyboard", "Mouse" };
         const char* devName = (deviceType >= 0 && deviceType <= 2) ? deviceNames[deviceType] : "Unknown";
-        fn_String_Format(tempStr, "%s%i", devName, keyIndex);
+        tempStr = System::String::Format("%s%i", devName, keyIndex);
     }
 
     // Construct UI::String from the KeyMap container's string table at +0xD0
     uint64_t stringTable = *(uint64_t*)((uintptr_t)keyMapContainer + 0xD0);
-    fn_UIString_Ctor(retval, stringTable, tempStr);
-    fn_String_Dtor(tempStr);
+    fn_UIString_Ctor(retval, stringTable, &tempStr);
 }
 
 // Helper: set the key name text on a button element (replaces FUN_140073490)
 // Finds "textInputKey" child in the element, formats device+key into display text.
 static void SetInputBindButtonText(void* elementPtr, int deviceType, uint32_t keyIndex) {
     // Find "textInputKey" in the element
-    uint8_t nameBuf[8];
-    fn_String_Ctor_CStr(nameBuf, "textInputKey");
+    System::String nameStr("textInputKey");
     uint64_t found = 0;
-    fn_FindElement(*(void**)elementPtr, &found, nameBuf);
-    fn_String_Dtor(nameBuf);
+    fn_FindElement(*(void**)elementPtr, &found, &nameStr);
 
     if (!found) return;
 
@@ -249,11 +246,8 @@ static void EnsureTextElementTypeId() {
 // use via Object::Factory::GetTypeIdFromName ("StringTable", true) — Factory
 // has already populated its tree by Engine::Startup, so this hits a real id.
 static void* LoadStringTable(const char* path) {
-    uint8_t filenameBuf[8];
-    fn_String_Ctor_CStr(filenameBuf, path);
-    fn_Filename_AdjustDelimiters(filenameBuf);
-    void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filenameBuf);
-    fn_String_Dtor(filenameBuf);
+    System::Filename filenameObj(path);   // ctor already normalises delimiters
+    void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filenameObj);
     if (!ext) return nullptr;
 
     if (!g_TypeId_StringTable && fn_Factory_GetTypeIdFromName
@@ -336,53 +330,41 @@ static void OptionsDialog_PopulateFilterCombo(OptionsDialog* self) {
 
     // Item 0: "None" (filter -1)
     {
-        uint8_t textBuf[8];
-        fn_String_Ctor_Default(textBuf);
-        fn_StringTable_GetText(stringTable, textBuf, 0);
+        System::String textStr;
+        fn_StringTable_GetText(stringTable, &textStr, 0);
         uint8_t spriteBuf[16] = {};
         fn_Sprite_DefaultCtor(spriteBuf);
-        fn_ComboElement_AddItem(self->comboFilter, spriteBuf, textBuf, (void*)(intptr_t)-1);
-        fn_String_Dtor(textBuf);
+        fn_ComboElement_AddItem(self->comboFilter, spriteBuf, &textStr, (void*)(intptr_t)-1);
     }
 
     // Item 1: "Bilinear" (filter 0)
     {
-        uint8_t textBuf[8];
-        fn_String_Ctor_Default(textBuf);
-        fn_StringTable_GetText(stringTable, textBuf, 1);
+        System::String textStr;
+        fn_StringTable_GetText(stringTable, &textStr, 1);
         uint8_t spriteBuf[16] = {};
         fn_Sprite_DefaultCtor(spriteBuf);
-        fn_ComboElement_AddItem(self->comboFilter, spriteBuf, textBuf, (void*)(intptr_t)0);
-        fn_String_Dtor(textBuf);
+        fn_ComboElement_AddItem(self->comboFilter, spriteBuf, &textStr, (void*)(intptr_t)0);
     }
 
     // Anisotropic filter levels: "Anisotropic 1x", "Anisotropic 2x", etc.
     int anisoLevels = *(int*)((uintptr_t)vidDev + 0x98);
     if (anisoLevels > 0) {
         // First level: "Anisotropic 1x"
-        uint8_t textBuf[8];
-        fn_String_Ctor_Default(textBuf);
-        fn_StringTable_GetText(stringTable, textBuf, 2);
-        uint8_t fmtBuf[8];
-        fn_String_Format(fmtBuf, "%s 1x", *(void**)textBuf);
-        fn_String_Dtor(textBuf);
+        System::String textStr;
+        fn_StringTable_GetText(stringTable, &textStr, 2);
+        System::String fmtStr = System::String::Format("%s 1x", textStr._data);
         uint8_t spriteBuf[16] = {};
         fn_Sprite_DefaultCtor(spriteBuf);
-        fn_ComboElement_AddItem(self->comboFilter, spriteBuf, fmtBuf, (void*)(intptr_t)1);
-        fn_String_Dtor(fmtBuf);
+        fn_ComboElement_AddItem(self->comboFilter, spriteBuf, &fmtStr, (void*)(intptr_t)1);
     }
     // Higher levels: "Anisotropic 2x", "Anisotropic 4x", etc.
     for (int level = 2; level <= anisoLevels; level += 2) {
-        uint8_t textBuf[8];
-        fn_String_Ctor_Default(textBuf);
-        fn_StringTable_GetText(stringTable, textBuf, 2);
-        uint8_t fmtBuf[8];
-        fn_String_Format(fmtBuf, "%s %ix", *(void**)textBuf, level);
-        fn_String_Dtor(textBuf);
+        System::String textStr;
+        fn_StringTable_GetText(stringTable, &textStr, 2);
+        System::String fmtStr = System::String::Format("%s %ix", textStr._data, level);
         uint8_t spriteBuf[16] = {};
         fn_Sprite_DefaultCtor(spriteBuf);
-        fn_ComboElement_AddItem(self->comboFilter, spriteBuf, fmtBuf, (void*)(intptr_t)level);
-        fn_String_Dtor(fmtBuf);
+        fn_ComboElement_AddItem(self->comboFilter, spriteBuf, &fmtStr, (void*)(intptr_t)level);
     }
 
     // Set current selection based on savedFilter
@@ -421,27 +403,21 @@ static void OptionsDialog_PopulateAntialiasCombo(OptionsDialog* self) {
         int addedIdx;
         if (i == 0) {
             // "None"
-            uint8_t textBuf[8];
-            fn_String_Ctor_Default(textBuf);
-            if (stringTable) fn_StringTable_GetText(stringTable, textBuf, 0);
+            System::String textStr;
+            if (stringTable) fn_StringTable_GetText(stringTable, &textStr, 0);
             uint8_t spriteBuf[16] = {};
             fn_Sprite_DefaultCtor(spriteBuf);
-            addedIdx = fn_ComboElement_AddItem(self->comboAntialias, spriteBuf, textBuf,
+            addedIdx = fn_ComboElement_AddItem(self->comboAntialias, spriteBuf, &textStr,
                                                (void*)(intptr_t)0);
-            fn_String_Dtor(textBuf);
         } else {
             // "Nx multisample" — e.g. "2x Multisample"
-            uint8_t textBuf[8];
-            fn_String_Ctor_Default(textBuf);
-            if (stringTable) fn_StringTable_GetText(stringTable, textBuf, 1);
-            uint8_t fmtBuf[8];
-            fn_String_Format(fmtBuf, "%ix %s", i + 1, *(void**)textBuf);
-            fn_String_Dtor(textBuf);
+            System::String textStr;
+            if (stringTable) fn_StringTable_GetText(stringTable, &textStr, 1);
+            System::String fmtStr = System::String::Format("%ix %s", i + 1, textStr._data);
             uint8_t spriteBuf[16] = {};
             fn_Sprite_DefaultCtor(spriteBuf);
-            addedIdx = fn_ComboElement_AddItem(self->comboAntialias, spriteBuf, fmtBuf,
+            addedIdx = fn_ComboElement_AddItem(self->comboAntialias, spriteBuf, &fmtStr,
                                                (void*)(intptr_t)i);
-            fn_String_Dtor(fmtBuf);
         }
 
         if ((int)self->savedAntialias == i) {
@@ -491,13 +467,11 @@ static void OptionsDialog_PopulateRefreshCombo(OptionsDialog* self) {
         int den = refreshEntry[1];
         int rate = (den != 0) ? (num / den) : 0;
 
-        uint8_t fmtBuf[8];
-        fn_String_Format(fmtBuf, "%i", rate);
+        System::String fmtStr = System::String::Format("%i", rate);
         uint8_t spriteBuf[16] = {};
         fn_Sprite_DefaultCtor(spriteBuf);
         fn_InternalBasePtr_CheckPtr(&self->comboRefresh);
-        fn_ComboElement_AddItem(self->comboRefresh, spriteBuf, fmtBuf, (void*)(intptr_t)i);
-        fn_String_Dtor(fmtBuf);
+        fn_ComboElement_AddItem(self->comboRefresh, spriteBuf, &fmtStr, (void*)(intptr_t)i);
 
         if ((uint32_t)num == self->savedRefreshNum && (uint32_t)den == self->savedRefreshDen)
             currentIdx = i;
@@ -538,13 +512,11 @@ static void OptionsDialog_PopulateResolutionCombo(OptionsDialog* self) {
             printf("[OptionsDialog::PopRes]   mode[%d] = %ux%u%s\n", i, w, h,
                    (w == self->savedWidth && h == self->savedHeight) ? " <-- MATCH" : "");
 
-        uint8_t fmtBuf[8];
-        fn_String_Format(fmtBuf, "%ix%i", w, h);
+        System::String fmtStr = System::String::Format("%ix%i", w, h);
         uint8_t spriteBuf[16] = {};
         fn_Sprite_DefaultCtor(spriteBuf);
         fn_InternalBasePtr_CheckPtr(&self->comboResolution);
-        fn_ComboElement_AddItem(self->comboResolution, spriteBuf, fmtBuf, (void*)(intptr_t)i);
-        fn_String_Dtor(fmtBuf);
+        fn_ComboElement_AddItem(self->comboResolution, spriteBuf, &fmtStr, (void*)(intptr_t)i);
 
         if (w == self->savedWidth && h == self->savedHeight)
             currentIdx = i;
@@ -752,14 +724,12 @@ void OptionsDialog_Startup(OptionsDialog* self) {
         void* stringTable = LoadStringTable("Dialog/StringTable.rsc:autoSave");
         if (stringTable && self->comboAutosave) {
             for (int i = 0; i < 9; i++) {
-                uint8_t textBuf[8];
-                fn_String_Ctor_Default(textBuf);
-                fn_StringTable_GetText(stringTable, textBuf, i);
+                System::String textStr;
+                fn_StringTable_GetText(stringTable, &textStr, i);
                 uint8_t spriteBuf[16] = {};
                 fn_Sprite_DefaultCtor(spriteBuf);
-                fn_ComboElement_AddItem(self->comboAutosave, spriteBuf, textBuf,
+                fn_ComboElement_AddItem(self->comboAutosave, spriteBuf, &textStr,
                                         (void*)(intptr_t)i);
-                fn_String_Dtor(textBuf);
             }
         }
         int autoSaveIdx = (g_pGameSettingsPtr && *g_pGameSettingsPtr) ? (*g_pGameSettingsPtr)[1] : 0;
@@ -1481,12 +1451,10 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
 
         // Find "textInputName" in the row container and set label
         {
-            uint8_t nameBuf[8];
-            fn_String_Ctor_CStr(nameBuf, "textInputName");
+            System::String nameStr("textInputName");
             uint64_t textElem = 0;
             fn_InternalBasePtr_CheckPtr((void*)&rowChild);
-            fn_FindElement((void*)rowChild, &textElem, nameBuf);
-            fn_String_Dtor(nameBuf);
+            fn_FindElement((void*)rowChild, &textElem, &nameStr);
 
             if (textElem) {
                 void* textObj = (void*)textElem;
@@ -1543,17 +1511,14 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
     int inputId = bindIndex + 5;  // Convert bind index to KeyMap input ID
 
     // Load the input bind dialog resource
-    uint8_t filenameBuf[8];
-    fn_String_Ctor_CStr(filenameBuf, "Dialog/Options.rsc:inputBind");
-    fn_Filename_AdjustDelimiters(filenameBuf);
-    void* extResult = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filenameBuf);
+    System::Filename filenameObj("Dialog/Options.rsc:inputBind");   // ctor already normalises
+    void* extResult = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filenameObj);
     // Type check the external resource
     void* external = nullptr;
     if (extResult && g_pExternalTypeId) {
         bool isDerived = fn_IsDerivedFrom(extResult, *g_pExternalTypeId);
         if (isDerived) external = extResult;
     }
-    fn_String_Dtor(filenameBuf);
 
     // Allocate and construct OptionInputBindDialog
     void* mem = fn_MemAlloc(g_pMemAllocSingleton, 200, 8);  // 0xC8 = 200 bytes
@@ -1576,8 +1541,8 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
     fn_UIString_Ctor_Index(inputNameUI, nameTable, inputId);
 
     // Convert to System::String
-    uint8_t inputNameStr[8];
-    fn_UIString_ToSystemString(inputNameUI, inputNameStr);
+    System::String inputNameStr;
+    fn_UIString_ToSystemString(inputNameUI, &inputNameStr);
 
     // Find TextElement in dialog and set parameter 0
     fn_InternalBasePtr_CheckPtr((void*)&dialogPtr);
@@ -1586,7 +1551,7 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
         fn_DialogInstance_FindElementType((void*)dialogPtr, &textElem, *g_TypeId_TextElement);
         if (textElem) {
             fn_InternalBasePtr_CheckPtr((void*)&textElem);
-            fn_TextElement_SetParameter((void*)textElem, 0, inputNameStr);
+            fn_TextElement_SetParameter((void*)textElem, 0, &inputNameStr);
         }
     }
 
@@ -1626,15 +1591,12 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
     // There IS a conflict — show the "already bound" confirmation dialog
     {
         // Load the inputBound dialog resource
-        uint8_t fnameBuf2[8];
-        fn_String_Ctor_CStr(fnameBuf2, "Dialog/Options.rsc:inputBound");
-        fn_Filename_AdjustDelimiters(fnameBuf2);
-        void* extResult2 = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fnameBuf2);
+        System::Filename fnameObj2("Dialog/Options.rsc:inputBound");   // ctor already normalises
+        void* extResult2 = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fnameObj2);
         void* external2 = nullptr;
         if (extResult2 && g_pExternalTypeId) {
             if (fn_IsDerivedFrom(extResult2, *g_pExternalTypeId)) external2 = extResult2;
         }
-        fn_String_Dtor(fnameBuf2);
 
         // Allocate and construct MessageDialog (0xC0 bytes)
         void* mem2 = fn_MemAlloc(g_pMemAllocSingleton, 0xC0, 8);
@@ -1652,21 +1614,21 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
         // Get the name of the key that was pressed (new binding)
         uint8_t newKeyUI[16];
         GetInputKeyName(newKeyUI, capturedDevice, capturedKey);
-        uint8_t newKeyStr[8];
-        fn_UIString_ToSystemString(newKeyUI, newKeyStr);
+        System::String newKeyStr;
+        fn_UIString_ToSystemString(newKeyUI, &newKeyStr);
 
         // Get the name of the existing binding that conflicts
         uint8_t conflictNameUI[16];
         fn_UIString_Ctor_Index(conflictNameUI, nameTable, conflictId);
-        uint8_t conflictNameStr[8];
-        fn_UIString_ToSystemString(conflictNameUI, conflictNameStr);
+        System::String conflictNameStr;
+        fn_UIString_ToSystemString(conflictNameUI, &conflictNameStr);
 
         // Check if the conflicting binding is the same as the current one
         // (in which case no confirmation is needed)
         bool sameBinding = false;
         {
-            const char* str1 = *(const char**)inputNameStr;
-            const char* str2 = *(const char**)conflictNameStr;
+            const char* str1 = inputNameStr._data;
+            const char* str2 = conflictNameStr._data;
             if (str1 && str2) {
                 sameBinding = (strcmp(str1, str2) == 0);
             } else {
@@ -1684,7 +1646,7 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
                 fn_DialogInstance_FindElementType((void*)dialog2Ptr, &textElem2, *g_TypeId_TextElement);
                 if (textElem2) {
                     fn_InternalBasePtr_CheckPtr((void*)&textElem2);
-                    fn_TextElement_SetParameter((void*)textElem2, 0, newKeyStr);
+                    fn_TextElement_SetParameter((void*)textElem2, 0, &newKeyStr);
                 }
 
                 fn_InternalBasePtr_CheckPtr((void*)&dialog2Ptr);
@@ -1692,7 +1654,7 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
                 fn_DialogInstance_FindElementType((void*)dialog2Ptr, &textElem3, *g_TypeId_TextElement);
                 if (textElem3) {
                     fn_InternalBasePtr_CheckPtr((void*)&textElem3);
-                    fn_TextElement_SetParameter((void*)textElem3, 1, conflictNameStr);
+                    fn_TextElement_SetParameter((void*)textElem3, 1, &conflictNameStr);
                 }
 
                 fn_InternalBasePtr_CheckPtr((void*)&dialog2Ptr);
@@ -1700,7 +1662,7 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
                 fn_DialogInstance_FindElementType((void*)dialog2Ptr, &textElem4, *g_TypeId_TextElement);
                 if (textElem4) {
                     fn_InternalBasePtr_CheckPtr((void*)&textElem4);
-                    fn_TextElement_SetParameter((void*)textElem4, 2, inputNameStr);
+                    fn_TextElement_SetParameter((void*)textElem4, 2, &inputNameStr);
                 }
             }
 
@@ -1709,9 +1671,6 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
             confirmResult = fn_UI_ShowDialog(userInterface, &show2Ptr);
             fn_InternalBasePtr_DeletePtr((void*)&dialog2Ptr);
         }
-
-        fn_String_Dtor(conflictNameStr);
-        fn_String_Dtor(newKeyStr);
 
         if (confirmResult >= 1 && confirmResult <= 2) {
             // User confirmed (OK or Yes) — clear the old conflicting binding
@@ -1733,7 +1692,7 @@ set_binding:
     OptionsDialog_PopulateInputBindList(self);
 
 cleanup:
-    fn_String_Dtor(inputNameStr);
+    ;
 }
 
 

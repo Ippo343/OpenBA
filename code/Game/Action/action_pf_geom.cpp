@@ -23,27 +23,14 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "math/Math.h"
 #include <cstdint>
 
 namespace {
 
-// ---- Math::Vector3 engine exports (Runtime-x64.dll), MSVC member ABI ----------
-// 3-float ctor:  ??0Vector3@Math@@QEAA@MMM@Z          (this, x, y, z)
-// single-Scalar ctor (splat): ??0Vector3@Math@@QEAA@AEBVScalar@1@@Z (this, &s)
-// Cross:  ?Cross@Vector3@Math@@QEBA?AV12@AEBV12@@Z    (this, retbuf, &other) -> retbuf
-// Dot:    ?Dot@Vector3@Math@@QEBA?AVScalar@2@AEBV12@@Z (this, retbuf, &other) -> retbuf(float)
-// Normalize: ?Normalize@Vector3@Math@@QEBA?AV12@XZ    (this, retbuf) -> retbuf
-typedef void  (*fn_V3Ctor3_t)(void* self, float x, float y, float z);
-typedef void  (*fn_V3CtorSplat_t)(void* self, const float* s);
-typedef void* (*fn_V3Cross_t)(const void* self, void* retbuf, const void* other);
-typedef void* (*fn_V3Dot_t)(const void* self, void* retbuf, const void* other);
-typedef void* (*fn_V3Normalize_t)(const void* self, void* retbuf);
-
-static fn_V3Ctor3_t     s_v3ctor3     = nullptr;  // slot 0x140152a30
-static fn_V3CtorSplat_t s_v3ctorsplat = nullptr;  // slot 0x140151320
-static fn_V3Cross_t     s_v3cross     = nullptr;  // slot 0x1401526a8
-static fn_V3Dot_t       s_v3dot       = nullptr;  // slot 0x140151298
-static fn_V3Normalize_t s_v3norm      = nullptr;  // slot 0x1401512c0
+// ---- Math::Vector3 (B.3.1: direct members of the real class; the old dispatch-slot
+// pointers were slot 0x140152a30 ctor(x,y,z), 0x140151320 splat ctor, 0x1401526a8 Cross,
+// 0x140151298 Dot, 0x1401512c0 Normalize) ----------------------------------------
 
 // System::MemoryAllocator static MemAlloc/MemFree + System::Random::Rand.
 typedef void* (*fn_MemAllocStatic_t)(uint64_t size, uint32_t align);  // real export is SAPEAX_KH (uint64 size, int align); SAPEAXII does not exist
@@ -62,21 +49,6 @@ static void EnsureFns() {
         uintptr_t s = ResolveAddr(Module::Exe, a);
         return s ? *reinterpret_cast<void**>(s) : nullptr;
     };
-    s_v3ctor3     = reinterpret_cast<fn_V3Ctor3_t>(slot(0x140152a30));
-    if (!s_v3ctor3) s_v3ctor3 = reinterpret_cast<fn_V3Ctor3_t>(
-        ResolveExport("??0Vector3@Math@@QEAA@MMM@Z"));
-    s_v3ctorsplat = reinterpret_cast<fn_V3CtorSplat_t>(slot(0x140151320));
-    if (!s_v3ctorsplat) s_v3ctorsplat = reinterpret_cast<fn_V3CtorSplat_t>(
-        ResolveExport("??0Vector3@Math@@QEAA@AEBVScalar@1@@Z"));
-    s_v3cross = reinterpret_cast<fn_V3Cross_t>(slot(0x1401526a8));
-    if (!s_v3cross) s_v3cross = reinterpret_cast<fn_V3Cross_t>(
-        ResolveExport("?Cross@Vector3@Math@@QEBA?AV12@AEBV12@@Z"));
-    s_v3dot = reinterpret_cast<fn_V3Dot_t>(slot(0x140151298));
-    if (!s_v3dot) s_v3dot = reinterpret_cast<fn_V3Dot_t>(
-        ResolveExport("?Dot@Vector3@Math@@QEBA?AVScalar@2@AEBV12@@Z"));
-    s_v3norm = reinterpret_cast<fn_V3Normalize_t>(slot(0x1401512c0));
-    if (!s_v3norm) s_v3norm = reinterpret_cast<fn_V3Normalize_t>(
-        ResolveExport("?Normalize@Vector3@Math@@QEBA?AV12@XZ"));
     s_memAlloc = reinterpret_cast<fn_MemAllocStatic_t>(slot(0x140152b60));
     if (!s_memAlloc) s_memAlloc = reinterpret_cast<fn_MemAllocStatic_t>(
         ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
@@ -220,23 +192,23 @@ int Pf_RayTriIntersect_aa810(void* /*self*/, const float* P, const float* D,
                              const float* maxT, const float* V0, const float* V1,
                              const float* V2, float* outT, float* outNormal) {
     EnsureFns();
-    float edge1[3], edge2[3], pvec[3], tvec[3], qvec[3];
+    const Math::Vector3& Dv = *reinterpret_cast<const Math::Vector3*>(D);   // B.3.1 bridge
     // edge1 = V1 - V0
-    s_v3ctor3(edge1, V1[0] - V0[0], V1[1] - V0[1], V1[2] - V0[2]);
+    Math::Vector3 edge1(V1[0] - V0[0], V1[1] - V0[1], V1[2] - V0[2]);
     // edge2 = V2 - V0
-    s_v3ctor3(edge2, V2[0] - V0[0], V2[1] - V0[1], V2[2] - V0[2]);
+    Math::Vector3 edge2(V2[0] - V0[0], V2[1] - V0[1], V2[2] - V0[2]);
     // pvec = D.Cross(edge2)
-    s_v3cross(D, pvec, edge2);
+    Math::Vector3 pvec = Dv.Cross(edge2);
     // det = edge1.Dot(pvec)
-    float det; s_v3dot(edge1, &det, pvec);
+    float det = edge1.Dot(pvec).v;
     // tvec = P - V0
-    s_v3ctor3(tvec, P[0] - V0[0], P[1] - V0[1], P[2] - V0[2]);
+    Math::Vector3 tvec(P[0] - V0[0], P[1] - V0[1], P[2] - V0[2]);
     // qvec = tvec.Cross(edge1)
-    s_v3cross(tvec, qvec, edge1);
+    Math::Vector3 qvec = tvec.Cross(edge1);
     // u = tvec.Dot(pvec)
-    float u; s_v3dot(tvec, &u, pvec);
+    float u = tvec.Dot(pvec).v;
     // v = D.Dot(qvec)
-    float v; s_v3dot(D, &v, qvec);
+    float v = Dv.Dot(qvec).v;
 
     const float eps = C_eps();
     if (det <= 0.0f) return 0;
@@ -246,19 +218,18 @@ int Pf_RayTriIntersect_aa810(void* /*self*/, const float* P, const float* D,
     if (v + u > det) return 0;
 
     // t = (1.0/det) * edge2.Dot(qvec)
-    float tdot; s_v3dot(edge2, &tdot, qvec);
+    float tdot = edge2.Dot(qvec).v;
     float t = (C_one() / det) * tdot;
     *outT = t;
     if (t < 0.0f) return 0;
     if (*maxT < t) return 0;
     if (outNormal != nullptr) {
         // outNormal = Normalize(edge1.Cross(edge2))
-        float ncross[3], nnorm[3];
-        s_v3cross(edge1, ncross, edge2);
-        s_v3norm(ncross, nnorm);
-        outNormal[0] = nnorm[0];
-        outNormal[1] = nnorm[1];
-        outNormal[2] = nnorm[2];
+        Math::Vector3 ncross = edge1.Cross(edge2);
+        Math::Vector3 nnorm  = ncross.Normalize();
+        outNormal[0] = nnorm.x;
+        outNormal[1] = nnorm.y;
+        outNormal[2] = nnorm.z;
     }
     return 1;
 }
@@ -448,14 +419,13 @@ void Pf_QuadtreeSubdivide_18880(uintptr_t param_1) {
         // Vector3 stack slots local_a8 (A) and local_9c (B) — each a contiguous
         // 3-float record the ctor writes through. Mapping: a8->A[0],a4->A[1],a0->A[2],
         // 9c->B[0],98->B[1],94->B[2].
-        float A[3], B[3];
-        s_v3ctor3(A, fVar13, fVar10, fVar2);
-        s_v3ctor3(B, A[0] + fVar3, A[1] + fVar4, A[2] + fVar1);
+        Math::Vector3 A(fVar13, fVar10, fVar2);
+        Math::Vector3 B(A.x + fVar3, A.y + fVar4, A.z + fVar1);
         *reinterpret_cast<int*>(param_1 + 8) = *reinterpret_cast<int*>(param_1 + 8) + 1;
         lVar8 = (int64_t)*reinterpret_cast<int*>(param_1 + 8) + 1;
-        *reinterpret_cast<float*>(param_1 + 0x00 + lVar8 * 0x24) = B[0];
-        *reinterpret_cast<float*>(param_1 + 0x04 + lVar8 * 0x24) = B[1];
-        *reinterpret_cast<float*>(param_1 + 0x08 + lVar8 * 0x24) = B[2];
+        *reinterpret_cast<float*>(param_1 + 0x00 + lVar8 * 0x24) = B.x;
+        *reinterpret_cast<float*>(param_1 + 0x04 + lVar8 * 0x24) = B.y;
+        *reinterpret_cast<float*>(param_1 + 0x08 + lVar8 * 0x24) = B.z;
         lVar8 = (int64_t)*reinterpret_cast<int*>(param_1 + 8);
         *reinterpret_cast<float*>(param_1 + 0x30 + lVar8 * 0x24) = fVar13;
         *reinterpret_cast<float*>(param_1 + 0x34 + lVar8 * 0x24) = fVar12;
@@ -464,14 +434,14 @@ void Pf_QuadtreeSubdivide_18880(uintptr_t param_1) {
         *reinterpret_cast<int*>(param_1 + 0x40 + (int64_t)*reinterpret_cast<int*>(param_1 + 8) * 0x24) = iVar9;
         *reinterpret_cast<uint32_t*>(param_1 + 0x44 + (int64_t)*reinterpret_cast<int*>(param_1 + 8) * 0x24) = 0;
 
-        s_v3ctor3(B, fVar11, fVar12, fVar2);
-        s_v3ctor3(A, B[0] + fVar3, B[1] + fVar4, B[2] + fVar1);
+        B = Math::Vector3(fVar11, fVar12, fVar2);
+        A = Math::Vector3(B.x + fVar3, B.y + fVar4, B.z + fVar1);
         *reinterpret_cast<int*>(param_1 + 8) = *reinterpret_cast<int*>(param_1 + 8) + 1;
         float fVar10b = *g_fUVScale;  // g_fUVScale loaded here in the original
         lVar8 = (int64_t)*reinterpret_cast<int*>(param_1 + 8) + 1;
-        *reinterpret_cast<float*>(param_1 + 0x00 + lVar8 * 0x24) = A[0];
-        *reinterpret_cast<float*>(param_1 + 0x04 + lVar8 * 0x24) = A[1];
-        *reinterpret_cast<float*>(param_1 + 0x08 + lVar8 * 0x24) = A[2];
+        *reinterpret_cast<float*>(param_1 + 0x00 + lVar8 * 0x24) = A.x;
+        *reinterpret_cast<float*>(param_1 + 0x04 + lVar8 * 0x24) = A.y;
+        *reinterpret_cast<float*>(param_1 + 0x08 + lVar8 * 0x24) = A.z;
         lVar8 = (int64_t)*reinterpret_cast<int*>(param_1 + 8);
         *reinterpret_cast<float*>(param_1 + 0x30 + lVar8 * 0x24) = fVar13;
         *reinterpret_cast<float*>(param_1 + 0x34 + lVar8 * 0x24) = fVar12;
@@ -480,15 +450,14 @@ void Pf_QuadtreeSubdivide_18880(uintptr_t param_1) {
         *reinterpret_cast<int*>(param_1 + 0x40 + (int64_t)*reinterpret_cast<int*>(param_1 + 8) * 0x24) = iVar9;
         *reinterpret_cast<uint32_t*>(param_1 + 0x44 + (int64_t)*reinterpret_cast<int*>(param_1 + 8) * 0x24) = 0;
 
-        float scaleVec[3];
-        s_v3ctor3(scaleVec, fVar10b, fVar10b, fVar10b);
-        s_v3ctor3(B, fVar13 * scaleVec[0], fVar12 * scaleVec[1], fVar2 * scaleVec[2]);
-        s_v3ctor3(A, B[0] + fVar3, B[1] + fVar4, B[2] + fVar1);
+        Math::Vector3 scaleVec(fVar10b, fVar10b, fVar10b);
+        B = Math::Vector3(fVar13 * scaleVec.x, fVar12 * scaleVec.y, fVar2 * scaleVec.z);
+        A = Math::Vector3(B.x + fVar3, B.y + fVar4, B.z + fVar1);
         *reinterpret_cast<int*>(param_1 + 8) = *reinterpret_cast<int*>(param_1 + 8) + 1;
         lVar8 = (int64_t)*reinterpret_cast<int*>(param_1 + 8) + 1;
-        *reinterpret_cast<float*>(param_1 + 0x00 + lVar8 * 0x24) = A[0];
-        *reinterpret_cast<float*>(param_1 + 0x04 + lVar8 * 0x24) = A[1];
-        *reinterpret_cast<float*>(param_1 + 0x08 + lVar8 * 0x24) = A[2];
+        *reinterpret_cast<float*>(param_1 + 0x00 + lVar8 * 0x24) = A.x;
+        *reinterpret_cast<float*>(param_1 + 0x04 + lVar8 * 0x24) = A.y;
+        *reinterpret_cast<float*>(param_1 + 0x08 + lVar8 * 0x24) = A.z;
         lVar8 = (int64_t)*reinterpret_cast<int*>(param_1 + 8);
         *reinterpret_cast<float*>(param_1 + 0x30 + lVar8 * 0x24) = fVar13;
         *reinterpret_cast<float*>(param_1 + 0x34 + lVar8 * 0x24) = fVar12;
@@ -527,13 +496,12 @@ uintptr_t Pf_QuadtreeInit_18dd0(uintptr_t param_1, float* param_2, uint32_t para
 
     float local_res18 = 0.0f;
     float fVar4 = *param_2 * C_half();   // DAT_140172114 = 0.5
-    float local_38[3];
-    s_v3ctorsplat(local_38, &local_res18);   // splat 0 -> (0,0,0)
+    Math::Vector3 local_38((Math::Scalar(local_res18)));   // splat 0 -> (0,0,0)
     *reinterpret_cast<int*>(param_1 + 8) = *reinterpret_cast<int*>(param_1 + 8) + 1;
     int64_t lVar2b = (int64_t)*reinterpret_cast<int*>(param_1 + 8) + 1;
-    *reinterpret_cast<float*>(param_1 + 0x00 + lVar2b * 0x24) = local_38[0];
-    *reinterpret_cast<float*>(param_1 + 0x04 + lVar2b * 0x24) = local_38[1];
-    *reinterpret_cast<float*>(param_1 + 0x08 + lVar2b * 0x24) = local_38[2];
+    *reinterpret_cast<float*>(param_1 + 0x00 + lVar2b * 0x24) = local_38.x;
+    *reinterpret_cast<float*>(param_1 + 0x04 + lVar2b * 0x24) = local_38.y;
+    *reinterpret_cast<float*>(param_1 + 0x08 + lVar2b * 0x24) = local_38.z;
     lVar2b = (int64_t)*reinterpret_cast<int*>(param_1 + 8);
     *reinterpret_cast<float*>(param_1 + 0x30 + lVar2b * 0x24) = fVar4;
     *reinterpret_cast<float*>(param_1 + 0x34 + lVar2b * 0x24) = fVar4;

@@ -8,6 +8,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 
 // ============================================================
@@ -98,12 +99,10 @@ void StorageCapacityUI_Startup(StorageCapacityUI* self) {
     *(float*)((uintptr_t)progElem + 0x128) = ratio;
 
     // Format percentage string
-    uint8_t strBuf[8];
-    fn_String_Format(strBuf, "%i", (uint64_t)(uint32_t)(int)displayVal);
+    System::String str = System::String::Format("%i", (uint64_t)(uint32_t)(int)displayVal);
 
     // Set on progress element
-    fn_ProgressElement_SetProgressTextParameter(progElem, 0, strBuf);
-    fn_String_Dtor(strBuf);
+    fn_ProgressElement_SetProgressTextParameter(progElem, 0, &str);
 }
 
 // ============================================================

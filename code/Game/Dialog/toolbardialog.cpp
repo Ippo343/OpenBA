@@ -29,6 +29,8 @@
 
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include "system/String.h"
+#include "system/Filename.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
@@ -800,12 +802,11 @@ extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName
         // Probe the dialog's element tree for the minimap content elements — if
         // they exist here, the content is embedded (no MapUI controller needed to
         // locate them; we can bind textures directly).
-        if (fn_DialogInstance_FindElement && fn_String_Ctor_CStr && fn_String_Dtor) {
+        if (fn_DialogInstance_FindElement) {
             const char* names[] = { "imageMap", "imageOverlay", "buttonOk", "map", "image" };
             for (const char* nm : names) {
-                uint8_t nb[8]; fn_String_Ctor_CStr(nb, nm);
-                uint64_t r = 0; fn_DialogInstance_FindElement(dialog, &r, nb);
-                fn_String_Dtor(nb);
+                System::String nb(nm);
+                uint64_t r = 0; fn_DialogInstance_FindElement(dialog, &r, &nb);
                 printf("[HarnessDrive]   FindElement('%s')=%p\n", nm, reinterpret_cast<void*>(r));
             }
         }
@@ -909,19 +910,11 @@ extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys) {
     }
 
     // Step 4: Load "Dialog/Pause.rsc" resource
-    uint8_t filename[16]; // System::Filename is 8-16 bytes
-    if (fn_Filename_CtorCStr) {
-        fn_Filename_CtorCStr(filename, "Dialog/Pause.rsc");
-    }
+    System::Filename filename("Dialog/Pause.rsc");
 
     void* externalRes = nullptr;
     if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton && fn_ExternalFactory_FindOrLoad) {
-        externalRes = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filename);
-    }
-
-    // Clean up filename
-    if (fn_Filename_Dtor) {
-        fn_Filename_Dtor(filename);
+        externalRes = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filename);
     }
 
     // Step 6: Allocate PauseDialog (0xC8 bytes)
@@ -1080,19 +1073,21 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
 
     // --- Step 4: Find key UI elements ---
     // Find "toolbarContent" table element
-    uint8_t strBuf[16];
     uint8_t elemBuf[16];
 
-    fn_String_Ctor_CStr(strBuf, "toolbarContent");
-    void* retPtr = fn_DialogInstance_FindElement(self, elemBuf, strBuf);
-    void* tableElement = *(void**)retPtr;
-    fn_String_Dtor(strBuf);
+    void* tableElement;
+    {
+        System::String strStr("toolbarContent");
+        void* retPtr = fn_DialogInstance_FindElement(self, elemBuf, &strStr);
+        tableElement = *(void**)retPtr;
+    }
 
     // Find "toolBar" radio element
-    fn_String_Ctor_CStr(strBuf, "toolBar");
-    retPtr = fn_DialogInstance_FindElement(self, elemBuf, strBuf);
-    *(uint64_t*)(s + 0xB8) = *(uint64_t*)retPtr;
-    fn_String_Dtor(strBuf);
+    {
+        System::String strStr("toolBar");
+        void* retPtr = fn_DialogInstance_FindElement(self, elemBuf, &strStr);
+        *(uint64_t*)(s + 0xB8) = *(uint64_t*)retPtr;
+    }
 
     // Set radio element ID to 1000
     fn_InternalBasePtr_CheckPtr((void*)(s + 0xB8));
@@ -1238,15 +1233,11 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
         fn_TableElement_SetChild2(tableElement, &elemPtr, buttonIndex);
 
         // Set element name from toolbar item's resource path
-        // Set element name from toolbar item's resource path
-        uint8_t pathBuf[8];
-        fn_External_GetPath((void*)item, pathBuf);
-        uint8_t pathIdBuf[8];
-        fn_Filename_GetPathIdentifier(pathBuf, pathIdBuf);
+        System::Filename pathObj;
+        fn_External_GetPath((void*)item, &pathObj);
+        System::Filename pathIdObj = pathObj.GetPathIdentifer();
         fn_InternalBasePtr_CheckPtr((void*)&newElement);
-        fn_Element_SetName(newElement, pathIdBuf);
-        fn_Filename_Dtor(pathIdBuf);
-        fn_Filename_Dtor(pathBuf);
+        fn_Element_SetName(newElement, &pathIdObj);
 
         // Get toolbar item's display string and sprite
         uint8_t uiString[16];
@@ -1581,16 +1572,12 @@ void ToolbarDialog_Update(void* self, uint64_t /*param2*/, uint64_t /*param3*/, 
             fn_InternalBasePtr_Ctor(&textRef, textElem);
 
             // Format speed string: "%ix" with gameSpeed value
-            uint8_t fmtStr[8];
-            fn_String_Format(fmtStr, "%ix", (uint64_t)gameSpeed);
+            System::String fmtStr = System::String::Format("%ix", (uint64_t)gameSpeed);
 
             // TextElement::SetParameter(textRef, 0, &fmtStr)
             if (textRef != 0) {
-                fn_TextElement_SetParameter((void*)textRef, 0, fmtStr);
+                fn_TextElement_SetParameter((void*)textRef, 0, &fmtStr);
             }
-
-            // Clean up formatted string
-            fn_String_Dtor(fmtStr);
         }
     }
 

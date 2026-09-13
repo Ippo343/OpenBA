@@ -17,6 +17,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "math/Math.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -44,12 +45,13 @@ static fn_DynArrSet_t   s_dynset    = nullptr;
 static fn_MarkRemoval_t s_markrem   = nullptr;
 
 // ---- Math / Volume engine exports (Runtime-x64.dll) -------------------------
-// 3-float ctor:  ??0Vector3@Math@@QEAA@MMM@Z              (this, x, y, z)
-// splat ctor:    ??0Vector3@Math@@QEAA@AEBVScalar@1@@Z    (this, &s)
-// Dot:           ?Dot@Vector3@Math@@QEBA?AVScalar@2@AEBV12@@Z (this, retbuf, &other)->retbuf(float)
-// Box::Intersect:?Intersect@Box@Volume@@QEBA_NAEBV12@@Z   (this, &other)->bool
-// Scalar::Abs:   ?Abs@Scalar@Math@@QEBA?AV12@XZ           (this=val, retbuf)->retbuf
-//   [2026-07-26] This string used to read `?Abs@Scalar@Math@@SA?AV12@V12@@Z` — a STATIC
+// Math::Vector3 ctor(x,y,z) / splat ctor / Dot and Math::Scalar::Abs are now direct
+// members of the real classes (B.3.1). They used to be dispatch-slot pointers:
+//   3-float ctor:  ??0Vector3@Math@@QEAA@MMM@Z              slot 0x140152a30
+//   splat ctor:    ??0Vector3@Math@@QEAA@AEBVScalar@1@@Z    slot 0x140151320
+//   Dot:           ?Dot@Vector3@Math@@QEBA?AVScalar@2@AEBV12@@Z slot 0x140151298
+//   Scalar::Abs:   ?Abs@Scalar@Math@@QEBA?AV12@XZ           slot 0x140152420
+//   [2026-07-26] The Abs string used to read `?Abs@Scalar@Math@@SA?AV12@V12@@Z` — a STATIC
 //   taking a Scalar by value. No such export exists (objdump: ordinal 1530 is
 //   `?Abs@Scalar@Math@@QEBA?AV12@XZ`, a const MEMBER taking nothing), so ResolveExport
 //   returned 0, the dispatch-slot lookup at 0x140152420 is unregistered ("NOT
@@ -60,55 +62,23 @@ static fn_MarkRemoval_t s_markrem   = nullptr;
 //   RCX and the return buffer in RDX, which is exactly `(const float* val, float*
 //   retbuf)` — the old comment's own "disasm shows RCX=val, RDX=retbuf — member-style"
 //   note was right about the shape while the name said static. Only the string changed.
-typedef void  (*fn_V3Ctor3_t)(void* self, float x, float y, float z);
-typedef void  (*fn_V3CtorSplat_t)(void* self, const float* s);
-typedef void* (*fn_V3Dot_t)(const void* self, void* retbuf, const void* other);
+// Box::Intersect:?Intersect@Box@Volume@@QEBA_NAEBV12@@Z   (this, &other)->bool
 typedef bool  (*fn_BoxIntersect_t)(const void* self, const void* other);
-typedef float* (*fn_ScalarAbs_t)(const float* val, float* retbuf);
 
 
-// PERF (2026-09-04): bit-identical inline copies of the trivial Runtime math exports
-// the hot paths called through dispatch slots (a DLL call per 3-float store). Bodies
-// transcribed from the Runtime decompiles — note Dot's operand ORDER (y, x, z), kept
-// so the float result is the same to the bit. Non-trivial helpers (Normalize, Heading,
-// RootAnimationOffset) still go through the Runtime.
-//   ??0Vector3@Math@@QEAA@MMM@Z (0x1800152d0)          -> InlV3(out,x,y,z)
-//   ??0Vector3@Math@@QEAA@AEBVScalar@1@@Z (0x180015360) -> InlV3Splat(out,&s)
-//   ?Dot@Vector3@Math@@ (0x18001dff0)                   -> InlV3Dot(a,&ret,b)
-//   ?Dot@Vector2@Math@@ (0x18006c840)                   -> InlV2Dot(a,&ret,b)
+// PERF (2026-09-04): bit-identical inline copy of the trivial Runtime Volume export
+// the hot path called through a dispatch slot (a DLL call per box test). Body
+// transcribed from the Runtime decompile. (The Math::Vector3 / Math::Vector2 / Scalar
+// inline copies that sat beside it — InlV3, InlV3Splat, InlV3Dot, InlV2Dot,
+// InlScalarMax — were replaced by the real class members in B.3.1; Vector3::Dot keeps
+// the same (y, x, z) operand ORDER, so the float result is the same to the bit.)
 //   ?Intersect@Box@Volume@@ (0x180012160)               -> InlBoxIsect(a,b)
-//   ?Max@Scalar@Math@@ (0x18005ff60)                    -> InlScalarMax(&a,&ret,&b)
-static inline void InlV3(void* out, float x, float y, float z) {
-    float* o = static_cast<float*>(out); o[0] = x; o[1] = y; o[2] = z;
-}
-static inline void InlV3Splat(void* out, const float* s) {
-    float* o = static_cast<float*>(out); o[0] = *s; o[1] = *s; o[2] = *s;
-}
-static inline void* InlV3Dot(const void* a, void* ret, const void* b) {
-    const float* p = static_cast<const float*>(a); const float* q = static_cast<const float*>(b);
-    *static_cast<float*>(ret) = q[1] * p[1] + q[0] * p[0] + q[2] * p[2];
-    return ret;
-}
-static inline void* InlV2Dot(const void* a, void* ret, const void* b) {
-    const float* p = static_cast<const float*>(a); const float* q = static_cast<const float*>(b);
-    *static_cast<float*>(ret) = q[1] * p[1] + q[0] * p[0];
-    return ret;
-}
 static inline bool InlBoxIsect(const void* a, const void* b) {
     const float* p = static_cast<const float*>(a); const float* q = static_cast<const float*>(b);
     return p[0] <= q[3] && q[0] <= p[3] && p[1] <= q[4] && q[1] <= p[4] && p[2] <= q[5] && q[2] <= p[5];
 }
-static inline void* InlScalarMax(const void* a, void* ret, const void* b) {
-    const float x = *static_cast<const float*>(a), y = *static_cast<const float*>(b);
-    *static_cast<float*>(ret) = (y < x) ? x : y;
-    return ret;
-}
 
-static fn_V3Ctor3_t     s_v3ctor3     = nullptr;  // slot 0x140152a30
-static fn_V3CtorSplat_t s_v3ctorsplat = nullptr;  // slot 0x140151320
-static fn_V3Dot_t       s_v3dot       = nullptr;  // slot 0x140151298
 static fn_BoxIntersect_t s_boxisect   = nullptr;  // slot 0x140151e80
-static fn_ScalarAbs_t   s_scalarabs   = nullptr;  // slot 0x140152420
 
 // Type-id / float globals (resolved from exe .rdata).
 static uint32_t* s_pTid_c7858 = nullptr;  // DAT_1401c7858 (StartMigration positive branch)
@@ -129,21 +99,9 @@ static void EnsureFns() {
     s_dynset  = reinterpret_cast<fn_DynArrSet_t>(R(0x140003110));
     s_markrem = reinterpret_cast<fn_MarkRemoval_t>(R(0x1400c2ea0));
 
-    s_v3ctor3 = reinterpret_cast<fn_V3Ctor3_t>(slot(0x140152a30));
-    if (!s_v3ctor3) s_v3ctor3 = reinterpret_cast<fn_V3Ctor3_t>(
-        ResolveExport("??0Vector3@Math@@QEAA@MMM@Z"));
-    s_v3ctorsplat = reinterpret_cast<fn_V3CtorSplat_t>(slot(0x140151320));
-    if (!s_v3ctorsplat) s_v3ctorsplat = reinterpret_cast<fn_V3CtorSplat_t>(
-        ResolveExport("??0Vector3@Math@@QEAA@AEBVScalar@1@@Z"));
-    s_v3dot = reinterpret_cast<fn_V3Dot_t>(slot(0x140151298));
-    if (!s_v3dot) s_v3dot = reinterpret_cast<fn_V3Dot_t>(
-        ResolveExport("?Dot@Vector3@Math@@QEBA?AVScalar@2@AEBV12@@Z"));
     s_boxisect = reinterpret_cast<fn_BoxIntersect_t>(slot(0x140151e80));
     if (!s_boxisect) s_boxisect = reinterpret_cast<fn_BoxIntersect_t>(
         ResolveExport("?Intersect@Box@Volume@@QEBA_NAEBV12@@Z"));
-    s_scalarabs = reinterpret_cast<fn_ScalarAbs_t>(slot(0x140152420));
-    if (!s_scalarabs) s_scalarabs = reinterpret_cast<fn_ScalarAbs_t>(
-        ResolveExport("?Abs@Scalar@Math@@QEBA?AV12@XZ"));
 
     s_pTid_c7858 = reinterpret_cast<uint32_t*>(R(0x1401c7858));
     s_pTid_c6f98 = reinterpret_cast<uint32_t*>(R(0x1401c6f98));
@@ -261,11 +219,10 @@ int Pf_FindPlacementCell_bd40(int* param_1, int param_2, char param_3, int64_t* 
                                                 iVar14 = *param_1;
                                                 iVar12 = iVar14 * iVar18 + iVar20;
                                                 float fVar25 = (float)(iVar14 >> 1) - fHalf;
-                                                float v98[3];
-                                                s_v3ctor3(v98, (float)(iVar12 % iVar14) - fVar25,
-                                                          (float)(iVar12 / iVar14) - fVar25, 0.0f);
+                                                Math::Vector3 v98((float)(iVar12 % iVar14) - fVar25,
+                                                                  (float)(iVar12 / iVar14) - fVar25, 0.0f);
                                                 float v88[3];
-                                                s_f3e0(param_1, v88, v98, '\0', nullptr);
+                                                s_f3e0(param_1, v88, reinterpret_cast<float*>(&v98), '\0', nullptr);   // B.3.1 bridge
                                                 iVar14 = *param_1;
                                                 if ((iVar20 < iVar14) && (iVar18 < iVar14)) {
                                                     iVar12 = iVar14 * iVar18 + iVar20;
@@ -277,16 +234,14 @@ int Pf_FindPlacementCell_bd40(int* param_1, int param_2, char param_3, int64_t* 
                                                         // ext = (local_d0[2], local_c8) contiguous height-sample buffer.
                                                         float ext[3]; ext[2] = 0.0f;  // local_c8 = 0.0
                                                         fVar25 = (float)(iVar14 >> 1) - fHalf;
-                                                        float vB8[3];
-                                                        s_v3ctor3(vB8, (float)(iVar12 % iVar14) - fVar25,
-                                                                  (float)(iVar12 / iVar14) - fVar25, 0.0f);
+                                                        Math::Vector3 vB8((float)(iVar12 % iVar14) - fVar25,
+                                                                          (float)(iVar12 / iVar14) - fVar25, 0.0f);
                                                         float vA8[3];
-                                                        s_f3e0(param_1, vA8, vB8, '\0', ext);
+                                                        s_f3e0(param_1, vA8, reinterpret_cast<float*>(&vB8), '\0', ext);   // B.3.1 bridge
                                                         if (fMinGrowth <= ext[2]) {   // local_c8
-                                                            float local_e0 = vA8[2] - v88[2]; // local_a0 - local_80
-                                                            float absbuf[1];
-                                                            float* pfVar11 = s_scalarabs(&local_e0, absbuf);
-                                                            if (*pfVar11 <= fTol) {
+                                                            Math::Scalar local_e0(vA8[2] - v88[2]); // local_a0 - local_80
+                                                            Math::Scalar absv = local_e0.Abs();
+                                                            if (absv.v <= fTol) {
                                                                 local_e8 = iVar7;
                                                                 return local_e8;  // break -> success path
                                                             }
@@ -374,18 +329,17 @@ int64_t* Pf_SpatialProximityQuery_92260(float* param_1, int64_t* param_2, float*
     float fr2 = fr * fr;                 // radius^2
 
     // Seed the query AABB: min = point - radius (splat), max = point + radius (splat).
-    float vmin[3], vmax[3];
-    InlV3Splat(vmin, reinterpret_cast<const float*>(param_4));   // local_25d8 (splat radius)
-    InlV3Splat(vmax, reinterpret_cast<const float*>(param_4));   // local_25b8 (splat radius)
-    float boxMax[3], boxMin[3];
-    InlV3(boxMax, vmin[0] + param_3[0], vmin[1] + param_3[1], vmin[2] + param_3[2]); // local_25e8
-    InlV3(boxMin, param_3[0] - vmax[0], param_3[1] - vmax[1], param_3[2] - vmax[2]); // local_25c8
+    const Math::Scalar& radius = *reinterpret_cast<const Math::Scalar*>(param_4);   // B.3.1 bridge
+    Math::Vector3 vmin(radius);   // local_25d8 (splat radius)
+    Math::Vector3 vmax(radius);   // local_25b8 (splat radius)
+    Math::Vector3 boxMax(vmin.x + param_3[0], vmin.y + param_3[1], vmin.z + param_3[2]); // local_25e8
+    Math::Vector3 boxMin(param_3[0] - vmax.x, param_3[1] - vmax.y, param_3[2] - vmax.z); // local_25c8
 
     // queryBox layout: [0..2]=min (local_2560..), [3..5]=max (local_2554..) — a Volume::Box
     // (min xyz at +0x00, max xyz at +0xc).
     float queryBox[6];
-    queryBox[0] = boxMin[0]; queryBox[1] = boxMin[1]; queryBox[2] = boxMin[2];
-    queryBox[3] = boxMax[0]; queryBox[4] = boxMax[1]; queryBox[5] = boxMax[2];
+    queryBox[0] = boxMin.x; queryBox[1] = boxMin.y; queryBox[2] = boxMin.z;
+    queryBox[3] = boxMax.x; queryBox[4] = boxMax.y; queryBox[5] = boxMax.z;
 
     // Walker fields: top index at walker+0x08, region backref at walker+0x2428.
     int top = *reinterpret_cast<int*>(walker + 0x08);
@@ -424,38 +378,31 @@ int64_t* Pf_SpatialProximityQuery_92260(float* param_1, int64_t* param_2, float*
 
         // Build the node's child-box and test intersection with the query AABB.
         int64_t rb = (int64_t)recIdx * 0x24;
-        float scaleVec[3];
-        InlV3(scaleVec, f2, f2, fUV);   // local_25d8 = (2.0, 2.0, g_fUVScale)
+        Math::Vector3 scaleVec(f2, f2, fUV);   // local_25d8 = (2.0, 2.0, g_fUVScale)
         float e0 = *reinterpret_cast<float*>(walker + rb + 0x30); // XMM11
         float e1 = *reinterpret_cast<float*>(walker + rb + 0x34); // XMM10
         float e2 = *reinterpret_cast<float*>(walker + rb + 0x38); // XMM9
-        float ext[3];
-        InlV3(ext, scaleVec[0] * e0, scaleVec[1] * e1, scaleVec[2] * e2); // local_258c
+        Math::Vector3 ext(scaleVec.x * e0, scaleVec.y * e1, scaleVec.z * e2); // local_258c
         float c0 = *reinterpret_cast<float*>(walker + rb + 0x2c); // XMM6
         float c1 = *reinterpret_cast<float*>(walker + rb + 0x28); // XMM7
         float c2 = *reinterpret_cast<float*>(walker + rb + 0x24); // XMM8
-        float nmin[3];
-        InlV3(nmin, c2 - ext[0], c1 - ext[1], c0 - ext[2]);   // local_2580
+        Math::Vector3 nmin(c2 - ext.x, c1 - ext.y, c0 - ext.z);   // local_2580
         // base point (record world-origin lo) at walker+0x0c/0x10/0x14 ([RBP+0x1c/0x20/0x24]).
         float baseLo0 = *reinterpret_cast<float*>(walker + 0x0c); // local_24fc
         float baseLo1 = *reinterpret_cast<float*>(walker + 0x10); // local_24f8
         float baseLo2 = *reinterpret_cast<float*>(walker + 0x14); // local_24f4
-        float nodeMin[3];
-        InlV3(nodeMin, baseLo0 + nmin[0], baseLo1 + nmin[1], baseLo2 + nmin[2]); // local_2548
-        float ext2[3];
-        InlV3(ext2, scaleVec[0] * e0, scaleVec[1] * e1, scaleVec[2] * e2); // local_25a4
-        float nmax[3];
-        InlV3(nmax, ext2[0] + c2, ext2[1] + c1, ext2[2] + c0);            // local_2598
+        Math::Vector3 nodeMin(baseLo0 + nmin.x, baseLo1 + nmin.y, baseLo2 + nmin.z); // local_2548
+        Math::Vector3 ext2(scaleVec.x * e0, scaleVec.y * e1, scaleVec.z * e2); // local_25a4
+        Math::Vector3 nmax(ext2.x + c2, ext2.y + c1, ext2.z + c0);            // local_2598
         // base point hi at walker+0x18/0x1c/0x20 ([RBP+0x28/0x2c/0x30]).
         float baseHi0 = *reinterpret_cast<float*>(walker + 0x18); // local_24f0
         float baseHi1 = *reinterpret_cast<float*>(walker + 0x1c); // local_24ec
         float baseHi2 = *reinterpret_cast<float*>(walker + 0x20); // local_24e8
-        float nodeMax[3];
-        InlV3(nodeMax, baseHi0 + nmax[0], baseHi1 + nmax[1], baseHi2 + nmax[2]); // local_2570
+        Math::Vector3 nodeMax(baseHi0 + nmax.x, baseHi1 + nmax.y, baseHi2 + nmax.z); // local_2570
 
         float nodeBox[6];
-        nodeBox[0] = nodeMin[0]; nodeBox[1] = nodeMin[1]; nodeBox[2] = nodeMin[2];
-        nodeBox[3] = nodeMax[0]; nodeBox[4] = nodeMax[1]; nodeBox[5] = nodeMax[2];
+        nodeBox[0] = nodeMin.x; nodeBox[1] = nodeMin.y; nodeBox[2] = nodeMin.z;
+        nodeBox[3] = nodeMax.x; nodeBox[4] = nodeMax.y; nodeBox[5] = nodeMax.z;
 
         if (!InlBoxIsect(queryBox, nodeBox)) {
             top = top - 1;
@@ -506,13 +453,11 @@ int64_t* Pf_SpatialProximityQuery_92260(float* param_1, int64_t* param_2, float*
                         int64_t lVar13 = entRef;
                         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(entRef + 0x68));
                         lVar13 = *reinterpret_cast<int64_t*>(lVar13 + 0x68);
-                        float diff[3];
-                        InlV3(diff,
+                        Math::Vector3 diff(
                                   *reinterpret_cast<float*>(lVar13 + 0x158) - param_3[0],
                                   *reinterpret_cast<float*>(lVar13 + 0x15c) - param_3[1],
                                   *reinterpret_cast<float*>(lVar13 + 0x160) - param_3[2]);
-                        float dsq;
-                        s_v3dot(diff, &dsq, diff);
+                        float dsq = diff.Dot(diff).v;
                         if (dsq < fr2) {
                             *param_2 = entRef;
                             fr2 = dsq;

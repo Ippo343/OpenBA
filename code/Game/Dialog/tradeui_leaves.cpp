@@ -47,7 +47,9 @@
 // These three are the clear-only specialisations retail emitted separately.
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
+#include <new>
 
 namespace {
 // The one observable effect, shared by all three entry points.
@@ -96,18 +98,18 @@ extern "C" void* TradeUI_GetOrderName_15fd0(int64_t tradeState, void* out) {
     const int32_t idx = *reinterpret_cast<int32_t*>(
         reinterpret_cast<uint8_t*>(tradeState) + 0x2c);
     if (idx < 0) {
-        *reinterpret_cast<uint64_t*>(out) = 0;
+        new (out) System::String();
         return out;
     }
     const uintptr_t base = *reinterpret_cast<uintptr_t*>(
         reinterpret_cast<uint8_t*>(tradeState) + 0x30);
-    if (!base || !fn_String_Ctor_Copy) {      // standalone guard: retail derefs blind
-        *reinterpret_cast<uint64_t*>(out) = 0;
+    if (!base) {      // standalone guard: retail derefs blind
+        new (out) System::String();
         return out;
     }
-    const void* src = reinterpret_cast<const void*>(
+    const System::String* src = reinterpret_cast<const System::String*>(
         base + static_cast<uintptr_t>(idx) * 0x20);
-    fn_String_Ctor_Copy(out, src);
+    new (out) System::String(*src);
     return out;
 }
 

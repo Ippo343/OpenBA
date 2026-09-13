@@ -18,12 +18,14 @@
 #include "scene_watch.h"
 #include "Object/internal_factory_audit.h"
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include "perf_experimental.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -36,11 +38,6 @@ static fn_Serialize_Short_t s_fn_Serialize_Short = nullptr;
 // IO::Serializer::Serialize(float*) — dispatch slot at 0x140152a60
 typedef void (*fn_Serialize_Float_t)(void* serializer, float* field, const char* name);
 static fn_Serialize_Float_t s_fn_Serialize_Float = nullptr;
-
-// Math::Transform::Serialize — dispatch slot at 0x1401522e0
-// Note: param order is (transform, serializer) per disassembly (RCX=transform, RDX=serializer)
-typedef void (*fn_Transform_Serialize_t)(void* transform, void* serializer);
-static fn_Transform_Serialize_t s_fn_Transform_Serialize = nullptr;
 
 // Graphics::MeshInstance::Serialize — dispatch slot at 0x140152990
 typedef void (*fn_MeshInstance_Serialize_t)(void* meshInstance, void* serializer);
@@ -84,10 +81,6 @@ static fn_MeshInstance_Ctor_t s_fn_MeshInstance_Ctor = nullptr;
 typedef void (*fn_MeshInstance_Dtor_t)(void* self);
 static fn_MeshInstance_Dtor_t s_fn_MeshInstance_Dtor = nullptr;
 
-// Math::Transform::Transform — default ctor (identity), dispatch slot 0x140151328.
-typedef void* (*fn_Transform_Ctor_t)(void* self);
-static fn_Transform_Ctor_t s_fn_Transform_Ctor = nullptr;
-
 // ModelComponent_helper_2b70 (0x1400c2b70) — notifies entity of model change
 typedef void (*fn_ModelHelper_2b70_t)(void* entity, int param);
 static fn_ModelHelper_2b70_t s_fn_ModelHelper_2b70 = nullptr;
@@ -112,9 +105,6 @@ static void EnsureHelpers() {
 
     slot = ResolveAddr(Module::Exe, 0x140152a60);
     if (slot) s_fn_Serialize_Float = *reinterpret_cast<fn_Serialize_Float_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x1401522e0);
-    if (slot) s_fn_Transform_Serialize = *reinterpret_cast<fn_Transform_Serialize_t*>(slot);
 
     slot = ResolveAddr(Module::Exe, 0x140152990);
     if (slot) s_fn_MeshInstance_Serialize = *reinterpret_cast<fn_MeshInstance_Serialize_t*>(slot);
@@ -146,9 +136,6 @@ static void EnsureHelpers() {
 
     slot = ResolveAddr(Module::Exe, 0x1401514a8);
     if (slot) s_fn_MeshInstance_Dtor = *reinterpret_cast<fn_MeshInstance_Dtor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140151328);
-    if (slot) s_fn_Transform_Ctor = *reinterpret_cast<fn_Transform_Ctor_t*>(slot);
 
     // Direct exe addresses
     s_fn_ModelHelper_2b70 = reinterpret_cast<fn_ModelHelper_2b70_t>(
@@ -302,10 +289,8 @@ void ModelComponent_Shutdown(ModelComponent* self, void* stream) {
         s_fn_Serialize_Short(serializer, (int16_t*)(s + 0x166), nullptr);
     }
 
-    // Serialize Math::Transform at +0x148
-    if (s_fn_Transform_Serialize) {
-        s_fn_Transform_Serialize((void*)(s + 0x148), serializer);
-    }
+    // Serialize Math::Transform at +0x148 (slot 0x1401522e0)
+    reinterpret_cast<Math::Transform*>(s + 0x148)->Serialize(serializer);   // B.3.1 bridge
 
     // Serialize scale float at +0x168
     if (s_fn_Serialize_Float) {
@@ -646,7 +631,7 @@ static void* ModelComponent_InitReal(void* self) {
     // Zero the component body, then construct the embedded sub-objects.
     std::memset(s + 0x28, 0, 0x170 - 0x28);
     if (s_fn_MeshInstance_Ctor) s_fn_MeshInstance_Ctor(s + 0x28);   // +0x28 Graphics::MeshInstance
-    if (s_fn_Transform_Ctor)    s_fn_Transform_Ctor(s + 0x148);     // +0x148 Math::Transform
+    ::new (static_cast<void*>(s + 0x148)) Math::Transform();          // +0x148 Math::Transform (slot 0x140151328)   // B.3.1 bridge
     *(int64_t*)(s + 0x164) = 0;                          // variantIdx / modelVariant / scale
     *(int32_t*)(s + 0x16c) = -1;                         // modelId = not in scene
     return self;

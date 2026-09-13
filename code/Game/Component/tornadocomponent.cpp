@@ -44,6 +44,7 @@
 #include "options.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "math/Math.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -90,7 +91,6 @@ typedef void  (*fn_ComponentSerialize_t)(void* self, void* stream);
 typedef void* (*fn_SerializerCtor_t)(void* self, void* stream, int version);
 typedef void  (*fn_SerializerDtor_t)(void* self);
 typedef void  (*fn_SerializeInt_t)(void* self, int* value, const char* name);
-typedef void  (*fn_Vector3Serialize_t)(void* vec3, void* serializer);
 typedef void  (*fn_TimeSerialize_t)(void* time, void* serializer);
 typedef void  (*fn_ResizeVec3Array_t)(void* arrayPtr, uint32_t newCount);
 
@@ -115,10 +115,7 @@ typedef bool  (*fn_MeshIsAnimating_t)(void* meshInstance);                     /
 typedef void* (*fn_Map_RadiusQuery_t)(float* map, void** out, float* pos, float* radius,
                                       int typeId, void* outArr);               // 0x140092990
 
-// Math leaves reached through the exe's own .rdata dispatch slots.
-typedef void  (*fn_Vec3NormalizeLen_t)(const float* v, float* out, float* outLen); // 0x1401512b8
-typedef void  (*fn_Vec3Normalize_t)(const float* v, float* out);                   // 0x1401512c0
-typedef void  (*fn_Vec3Length_t)(const float* v, float* outLen);                   // 0x140151290
+// Graphics leaf reached through the exe's own .rdata dispatch slot.
 typedef void  (*fn_GeometrySetTransform_t)(void* geometry, void* transform);       // 0x1401512e0
 
 struct Helpers {
@@ -126,7 +123,6 @@ struct Helpers {
     fn_SerializerCtor_t       serializerCtor       = nullptr;
     fn_SerializerDtor_t       serializerDtor       = nullptr;
     fn_SerializeInt_t         serializeInt         = nullptr;
-    fn_Vector3Serialize_t     vector3Serialize     = nullptr;
     fn_TimeSerialize_t        timeSerialize        = nullptr;
     fn_ResizeVec3Array_t      resizeVec3Array      = nullptr;
 
@@ -155,9 +151,6 @@ struct Helpers {
     fn_MeshIsAnimating_t      meshIsAnimating      = nullptr;
     fn_Map_RadiusQuery_t      radiusQuery          = nullptr;
 
-    fn_Vec3NormalizeLen_t     vec3NormalizeLen     = nullptr;
-    fn_Vec3Normalize_t        vec3Normalize        = nullptr;
-    fn_Vec3Length_t           vec3Length           = nullptr;
     fn_GeometrySetTransform_t geometrySetTransform = nullptr;
 };
 
@@ -233,8 +226,6 @@ void TornadoComponent_InitFuncs() {
     g_h.serializerDtor = ResolveSlotPtr<fn_SerializerDtor_t>(0x140152ad0);
     g_h.serializeInt   = ResolveSlotPtr<fn_SerializeInt_t>(0x140152ac8);
     g_h.timeSerialize  = ResolveSlotPtr<fn_TimeSerialize_t>(0x140152aa8);
-    g_h.vector3Serialize = reinterpret_cast<fn_Vector3Serialize_t>(
-        ResolveExport("?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z"));
 
     g_h.findParticle        = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140005200));
     g_h.findAudio           = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140002280));
@@ -294,9 +285,6 @@ void TornadoComponent_InitFuncs() {
     }
 
     g_h.meshIsAnimating      = ResolveSlotPtr<fn_MeshIsAnimating_t>(0x1401514b0);
-    g_h.vec3NormalizeLen     = ResolveSlotPtr<fn_Vec3NormalizeLen_t>(0x1401512b8);
-    g_h.vec3Normalize        = ResolveSlotPtr<fn_Vec3Normalize_t>(0x1401512c0);
-    g_h.vec3Length           = ResolveSlotPtr<fn_Vec3Length_t>(0x140151290);
     g_h.geometrySetTransform = ResolveSlotPtr<fn_GeometrySetTransform_t>(0x1401512e0);
 
     TORNADO_TRACE("init: fire lane %s (e690=%p e7b0=%p ea10=%p) — the building arm is "
@@ -320,7 +308,7 @@ void TornadoComponent_Shutdown(TornadoComponent* self, void* stream) {
     uint8_t serializer[24];
     if (g_h.serializerCtor) g_h.serializerCtor(serializer, stream, 0);
 
-    if (g_h.vector3Serialize) g_h.vector3Serialize(reinterpret_cast<void*>(s + 0x30), serializer);
+    reinterpret_cast<Math::Vector3*>(s + 0x30)->Serialize(serializer);   // B.3.1 bridge
     if (g_h.serializeInt) g_h.serializeInt(serializer, reinterpret_cast<int*>(s + 0x50), nullptr);
 
     int pathCount = *reinterpret_cast<int*>(s + 0x48);
@@ -331,15 +319,15 @@ void TornadoComponent_Shutdown(TornadoComponent* self, void* stream) {
         g_h.resizeVec3Array(reinterpret_cast<void*>(s + 0x40), static_cast<uint32_t>(pathCount));
 
     uint8_t* pVec = *reinterpret_cast<uint8_t**>(s + 0x40);
-    if (pathCount > 0 && g_h.vector3Serialize && pVec) {
+    if (pathCount > 0 && pVec) {
         for (int i = 0; i < pathCount; i++) {
-            g_h.vector3Serialize(pVec, serializer);
+            reinterpret_cast<Math::Vector3*>(pVec)->Serialize(serializer);   // B.3.1 bridge
             pVec += 0xC;  // sizeof(Math::Vector3)
         }
     }
 
     if (g_h.timeSerialize) g_h.timeSerialize(reinterpret_cast<void*>(s + 0x28), serializer);
-    if (g_h.vector3Serialize) g_h.vector3Serialize(reinterpret_cast<void*>(s + 0x58), serializer);
+    reinterpret_cast<Math::Vector3*>(s + 0x58)->Serialize(serializer);   // B.3.1 bridge
 
     if (g_h.serializerDtor) g_h.serializerDtor(serializer);
 }
@@ -366,18 +354,16 @@ extern "C" void Tornado_PathFractal_58980(void* self, float* path, int lo, int h
     const float* a = path + static_cast<ptrdiff_t>(lo) * 3;
     const float* b = path + static_cast<ptrdiff_t>(hi) * 3;
 
-    float seg[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] };
-    float dir[3] = { 0.0f, 0.0f, 0.0f };
-    float len = 0.0f;
-    if (g_h.vec3NormalizeLen) g_h.vec3NormalizeLen(seg, dir, &len);
+    Math::Vector3 seg(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+    Math::Scalar len(0.0f);
+    Math::Vector3 dir = seg.Normalize(len);
 
     const float midX = (a[0] + b[0]) * kHalf;
     const float midY = (a[1] + b[1]) * kHalf;
     const float midZ = (a[2] + b[2]) * kHalf;
 
-    float perpIn[3] = { -dir[1], dir[0], 0.0f };
-    float perp[3]   = { 0.0f, 0.0f, 0.0f };
-    if (g_h.vec3Normalize) g_h.vec3Normalize(perpIn, perp);
+    Math::Vector3 perpIn(-dir.y, dir.x, 0.0f);
+    Math::Vector3 perp = perpIn.Normalize();
 
     void* gw = GameWorld();
     void* rng = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xd8) : nullptr;
@@ -385,9 +371,9 @@ extern "C" void Tornado_PathFractal_58980(void* self, float* path, int lo, int h
 
     const int mid = (lo + hi) >> 1;
     float* m = path + static_cast<ptrdiff_t>(mid) * 3;
-    m[0] = perp[0] * len * kPathJitter * r + midX;
-    m[1] = perp[1] * len * kPathJitter * r + midY;
-    m[2] = perp[2] * len * kPathJitter * r + midZ;
+    m[0] = perp.x * len.v * kPathJitter * r + midX;
+    m[1] = perp.y * len.v * kPathJitter * r + midY;
+    m[2] = perp.z * len.v * kPathJitter * r + midZ;
 
     if (mid - lo > 1) Tornado_PathFractal_58980(self, path, lo, mid);
     if (hi - mid > 1) Tornado_PathFractal_58980(self, path, mid, hi);
@@ -423,11 +409,10 @@ extern "C" int Tornado_PathFindNext_a70c0(uint8_t* block, const float* pos, floa
 // Z forced to 0). Returns false only when the path is exhausted.
 extern "C" bool Tornado_PathAdvance_a71e0(uint8_t* block, const float* pos,
                                           float skipRadius, float arriveRadius) {
-    float d[3] = { *reinterpret_cast<float*>(block + 0x00) - pos[0],
-                   *reinterpret_cast<float*>(block + 0x04) - pos[1],
-                   0.0f };
-    float len = 0.0f;
-    if (g_h.vec3Length) g_h.vec3Length(d, &len);
+    Math::Vector3 d(*reinterpret_cast<float*>(block + 0x00) - pos[0],
+                    *reinterpret_cast<float*>(block + 0x04) - pos[1],
+                    0.0f);
+    const float len = d.Length().v;
 
     if (len < arriveRadius) {
         const int next = Tornado_PathFindNext_a70c0(block, pos, skipRadius);
@@ -935,11 +920,10 @@ void TornadoComponent_OnRemove(TornadoComponent* self, void* time) {
                                                        kSkipRadius, kArriveRadius);
     const int idxAfter = *reinterpret_cast<int32_t*>(s + 0x50);
 
-    float dir[3] = { *reinterpret_cast<float*>(s + 0x30) - *reinterpret_cast<float*>(s + 0x58),
-                     *reinterpret_cast<float*>(s + 0x34) - *reinterpret_cast<float*>(s + 0x5c),
-                     *reinterpret_cast<float*>(s + 0x38) - *reinterpret_cast<float*>(s + 0x60) };
-    float unit[3] = { 0.0f, 0.0f, 0.0f };
-    if (g_h.vec3Normalize) g_h.vec3Normalize(dir, unit);
+    Math::Vector3 dir(*reinterpret_cast<float*>(s + 0x30) - *reinterpret_cast<float*>(s + 0x58),
+                      *reinterpret_cast<float*>(s + 0x34) - *reinterpret_cast<float*>(s + 0x5c),
+                      *reinterpret_cast<float*>(s + 0x38) - *reinterpret_cast<float*>(s + 0x60));
+    Math::Vector3 unit = dir.Normalize();
 
     if (!stillOnPath) {
         // Path exhausted: reverse the particle's playback so the funnel winds down.
@@ -961,9 +945,9 @@ void TornadoComponent_OnRemove(TornadoComponent* self, void* time) {
     const float step = secs * *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(desc) + 0x20);
     // Math::Vector3::operator+= (slot 0x1401514b8), inlined: a componentwise add
     // with no side effects.
-    *reinterpret_cast<float*>(s + 0x58) += unit[0] * step;
-    *reinterpret_cast<float*>(s + 0x5c) += unit[1] * step;
-    *reinterpret_cast<float*>(s + 0x60) += unit[2] * step;
+    *reinterpret_cast<float*>(s + 0x58) += unit.x * step;
+    *reinterpret_cast<float*>(s + 0x5c) += unit.y * step;
+    *reinterpret_cast<float*>(s + 0x60) += unit.z * step;
 
     if (g_h.terrainClamp) {
         float out[3] = { 0.0f, 0.0f, 0.0f };
@@ -978,14 +962,14 @@ void TornadoComponent_OnRemove(TornadoComponent* self, void* time) {
     // --- push the transform to the particle geometry ---
     {
         // Transform = { Quaternion(0,0,0,1), Vector3 position }.
-        float transform[7];
-        if (fn_Quaternion_Ctor) fn_Quaternion_Ctor(transform, 0.0f, 0.0f, 0.0f, 1.0f);
-        transform[4] = *reinterpret_cast<float*>(s + 0x58);
-        transform[5] = *reinterpret_cast<float*>(s + 0x5c);
-        transform[6] = *reinterpret_cast<float*>(s + 0x60);
+        Math::Transform transform;
+        transform.rotation = Math::Quaternion(0.0f, 0.0f, 0.0f, 1.0f);
+        transform.translation.x = *reinterpret_cast<float*>(s + 0x58);
+        transform.translation.y = *reinterpret_cast<float*>(s + 0x5c);
+        transform.translation.z = *reinterpret_cast<float*>(s + 0x60);
         CheckPtr(&particleIbp);
         void* geometry = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(pc + 0x38));
-        if (g_h.geometrySetTransform) g_h.geometrySetTransform(geometry, transform);
+        if (g_h.geometrySetTransform) g_h.geometrySetTransform(geometry, &transform);
     }
 
     // --- move the audio emitters and refresh the volume ---
@@ -1103,8 +1087,7 @@ extern "C" void Tornado_AudioMoveEmitters_42960(void* audioComp, void* newPos) {
     uintptr_t a = reinterpret_cast<uintptr_t>(audioComp);
     float* np = reinterpret_cast<float*>(newPos);
     float* cached = reinterpret_cast<float*>(a + 0x28);
-    if (fn_Vector3_Equals ? fn_Vector3_Equals(np, cached)
-                          : (np[0] == cached[0] && np[1] == cached[1] && np[2] == cached[2]))
+    if (*reinterpret_cast<const Math::Vector3*>(np) == *reinterpret_cast<const Math::Vector3*>(cached))   // B.3.1 bridge
         return;
 
     void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;

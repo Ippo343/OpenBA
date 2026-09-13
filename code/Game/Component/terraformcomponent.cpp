@@ -11,6 +11,7 @@
 
 #include "Component/terraformcomponent_funcs.h"
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -30,9 +31,6 @@ static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
 
 typedef void (*fn_SerializeInt_t)(void* self, int* value, const char* name);
 static fn_SerializeInt_t s_fn_SerializeInt = nullptr;
-
-typedef void (*fn_Vector3_Serialize_t)(void* vec3, void* serializer);
-static fn_Vector3_Serialize_t s_fn_Vector3_Serialize = nullptr;
 
 // FUN_14000d030 — resize Vector3 array
 typedef void (*fn_ResizeVec3Array_t)(void* arrayPtr, uint32_t newCount);
@@ -92,10 +90,10 @@ void TerraformComponent_Shutdown(TerraformComponent* self, void* stream) {
 
     // Serialize each Vector3 (12 bytes each)
     void* vecArray = *(void**)(selfAddr + 0x28);
-    if ((int)localCount > 0 && s_fn_Vector3_Serialize) {
+    if ((int)localCount > 0) {
         uint8_t* pVec = (uint8_t*)vecArray;
         for (uint32_t i = 0; i < localCount; i++) {
-            s_fn_Vector3_Serialize(pVec, serializer);
+            reinterpret_cast<Math::Vector3*>(pVec)->Serialize(serializer);   // B.3.1 bridge
             pVec += 0xC;  // sizeof(Vector3) = 12
         }
     }
@@ -220,9 +218,6 @@ void TerraformComponent_InitFuncs() {
     slot = ResolveAddr(Module::Exe, 0x140152ac8);
     if (slot) s_fn_SerializeInt = *reinterpret_cast<fn_SerializeInt_t*>(slot);
 
-    s_fn_Vector3_Serialize = reinterpret_cast<fn_Vector3_Serialize_t>(
-        ResolveExport("?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z"));
-
     TerraformDeformResolve();
 
     s_initialized = true;
@@ -301,8 +296,6 @@ void TerraformComponent_RegionRecalc(void* terrainGridV, int x, int y) {
 
 typedef void  (*fn_FindCompOut_t)(void* entity, void* outIbp);
 typedef void  (*fn_CheckPtrSlot_t)(void* ibp);
-typedef void* (*fn_TransformCopy_t)(void* self, const void* src);
-typedef void* (*fn_TransformMul_t)(const void* self, void* retVec3, const void* vec);
 typedef void* (*fn_MeshVertices_t)(void* mesh, int lod);
 typedef float* (*fn_TerrainSample_t)(int* tileGrid, float* out, const float* in,
                                      char flag, void* extra);
@@ -313,8 +306,6 @@ typedef bool  (*fn_IsDerivedFromId_t)(void* self, uint32_t typeId);
 static fn_FindCompOut_t     s_fn_FindComp_Model  = nullptr;  // 0x140003f60 (ModelComponent)
 static fn_FindCompOut_t     s_fn_FindComp_Map    = nullptr;  // 0x140004680 (MapComponent)
 static fn_CheckPtrSlot_t    s_fn_CheckPtr        = nullptr;  // slot 0x140152ab0
-static fn_TransformCopy_t   s_fn_TransformCopy   = nullptr;  // slot 0x140151418
-static fn_TransformMul_t    s_fn_TransformMul    = nullptr;  // slot 0x140151470
 static fn_MeshVertices_t    s_fn_MeshVertices    = nullptr;  // slot 0x140151478
 static fn_TerrainSample_t   s_fn_TerrainSample   = nullptr;  // 0x14009f3e0
 static fn_TfMemAlloc_t      s_fn_MemAlloc        = nullptr;  // slot 0x140152b60
@@ -335,10 +326,6 @@ static void TerraformDeformResolve() {
     uintptr_t slot;
     slot = ResolveAddr(Module::Exe, 0x140152ab0);
     if (slot) s_fn_CheckPtr = *reinterpret_cast<fn_CheckPtrSlot_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140151418);
-    if (slot) s_fn_TransformCopy = *reinterpret_cast<fn_TransformCopy_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140151470);
-    if (slot) s_fn_TransformMul = *reinterpret_cast<fn_TransformMul_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140151478);
     if (slot) s_fn_MeshVertices = *reinterpret_cast<fn_MeshVertices_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152b60);
@@ -445,14 +432,11 @@ void TerraformComponent_MeshPass(TerraformComponent* self, bool ceiling) {
     void* model = TerraformFindComp(s_fn_FindComp_Model, TerraformOwnerEntity(selfA));
     if (!model) { bail("owner has no ModelComponent (finder 0x140003f60 returned null)"); return; }
     // Name the exact slot — "one of three is null" cost a whole run to narrow once.
-    if (!s_fn_TransformCopy) { bail("slot 0x140151418 Transform copy-ctor unresolved"); return; }
-    if (!s_fn_TransformMul)  { bail("slot 0x140151470 Transform::operator* unresolved"); return; }
     if (!s_fn_MeshVertices)  { bail("slot 0x140151478 PickingMesh::Vertices unresolved"); return; }
-    // Retail copy-constructs a Transform on the stack. Oversized on purpose so a
-    // larger-than-expected Transform cannot clobber the next local.
-    alignas(16) uint8_t xform[0x80] = {};
-    s_fn_TransformCopy(xform, reinterpret_cast<const void*>(
-        reinterpret_cast<uintptr_t>(model) + 0x148));
+    // Retail copy-constructs a Transform on the stack (??0Transform@Math@@QEAA@AEBV01@@Z,
+    // slot 0x140151418) from the ModelComponent's +0x148.
+    const Math::Transform xform(*reinterpret_cast<const Math::Transform*>(
+        reinterpret_cast<uintptr_t>(model) + 0x148));   // B.3.1 bridge
 
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     const uintptr_t gameWorld = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
@@ -483,12 +467,13 @@ void TerraformComponent_MeshPass(TerraformComponent* self, bool ceiling) {
         const uint8_t* data = *reinterpret_cast<const uint8_t**>(arr);
         const void* localVtx = data + static_cast<size_t>(i) * 0xC;
 
-        float world[3] = {0.0f, 0.0f, 0.0f};
-        s_fn_TransformMul(xform, world, localVtx);
+        // Transform::operator*(const Vector3&) — slot 0x140151470.
+        const Math::Vector3 world =
+            xform * *reinterpret_cast<const Math::Vector3*>(localVtx);   // B.3.1 bridge
 
         // p = transformed vertex, nudged a quarter cell so it lands inside a cell
         // rather than exactly on the shared corner.
-        const float p[3] = { world[0] + bias, world[1] + bias, world[2] + 0.0f };
+        const float p[3] = { world.x + bias, world.y + bias, world.z + 0.0f };
 
         // Original terrain point under p: (x, y, currentHeight). This is the undo record.
         float original[3] = {0.0f, 0.0f, 0.0f};

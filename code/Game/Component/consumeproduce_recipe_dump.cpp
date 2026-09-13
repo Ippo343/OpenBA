@@ -28,7 +28,7 @@
 // also says, directly, which recipe can ever satisfy the happiness goods arm.
 
 #include "engine_funcs.h"
-#include "SystemString.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -42,7 +42,7 @@ bool ReadRawMat(void* c, const char** outName, unsigned* outFlags) {
     if (!c) return false;
     const uintptr_t rd = reinterpret_cast<uintptr_t>(c);
     *outFlags = *reinterpret_cast<unsigned*>(rd + 0x5c);
-    const char* nm = StringGetData(reinterpret_cast<const SystemString*>(rd + 0x38));
+    const char* nm = reinterpret_cast<const System::String*>(rd + 0x38)->_data;   // B.3.1 bridge
     if (nm && nm[0]) *outName = nm;
     return true;
 }
@@ -96,11 +96,10 @@ const char* RecipeLabel(uintptr_t stringTable, uintptr_t nameAddr, char* buf, in
     if (!stringTable || !fn_UIString_Ctor || !fn_UIString_ToSystemString) return buf;
     uint8_t uiStr[16] = {};
     fn_UIString_Ctor(uiStr, stringTable, reinterpret_cast<void*>(nameAddr));
-    SystemString sys = {};
+    System::String sys;
     fn_UIString_ToSystemString(uiStr, &sys);
-    const char* d = StringGetData(&sys);
+    const char* d = sys._data;
     if (d) { int i = 0; for (; i < cap - 1 && d[i]; ++i) buf[i] = d[i]; buf[i] = 0; }
-    if (fn_String_Dtor) fn_String_Dtor(&sys);
     return buf;
 }
 

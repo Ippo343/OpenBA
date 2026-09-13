@@ -24,6 +24,7 @@
 // Decompiled from Application-x64.exe (READ-ONLY recon).
 
 #include "engine_funcs.h"
+#include "system/String.h"
 #include "resolve.h"
 #include <cstdint>
 
@@ -44,16 +45,15 @@ static void SelectDescription_Init(void* self) {
 
 void SelectDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_String_Serialize ||
-        !fn_ExternalPtr_Serialize || !fn_ExternalPtr_Serialize2) {
+    if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !fn_ExternalPtr_Serialize || !fn_ExternalPtr_Serialize2) {
         return;
     }
     uint8_t serializer[24];
     g_fn_Serializer_Ctor(serializer, stream, 0);
     fn_ExternalPtr_Serialize(s + 0x20, serializer);          // ExternalPtr +0x20
-    g_fn_String_Serialize(s + 0x28, serializer);             // String      +0x28
+    reinterpret_cast<System::String*>(s + 0x28)->Serialize(serializer);             // B.3.1 bridge: String      +0x28
     fn_ExternalPtr_Serialize2(s + 0x30, serializer);         // ExternalPtr +0x30
-    g_fn_String_Serialize(s + 0x38, serializer);             // String      +0x38
+    reinterpret_cast<System::String*>(s + 0x38)->Serialize(serializer);             // B.3.1 bridge: String      +0x38
     SerializerEncodingVCall(serializer, 0x98, s + 0x40);     // enum        +0x40
     g_fn_Serializer_Dtor(serializer);
 }
@@ -62,10 +62,8 @@ void* SelectDescription_Dtor(void* self, uint32_t flags) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     uintptr_t vt = ResolveAddr(Module::Exe, kSelectDescriptionVtable);
     if (vt) *(void**)self = (void*)vt;
-    if (fn_String_Dtor) {
-        fn_String_Dtor(s + 0x38);   // String +0x38
-        fn_String_Dtor(s + 0x28);   // String +0x28
-    }
+    reinterpret_cast<System::String*>(s + 0x38)->~String();   // B.3.1 bridge: String +0x38
+    reinterpret_cast<System::String*>(s + 0x28)->~String();   // B.3.1 bridge: String +0x28
     if (fn_External_Dtor) fn_External_Dtor(self);
     if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
     return self;

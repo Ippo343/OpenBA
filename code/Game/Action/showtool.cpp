@@ -11,6 +11,7 @@
 #include "ShowTool.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "math/Math.h"
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
@@ -47,14 +48,14 @@ static uint32_t* s_TypeInfo_ShowToolEntity = nullptr;
 // lookups, so a material template lacking either component simply shows no model
 // instead of crashing. Verified 1:1 against the Ghidra decompile + disassembly of
 // 0x1401173b0; dispatch-slot identities confirmed via Ghidra external xrefs.
-typedef void*        (*fn_Vector4Ctor_t)(void* retbuf, const void* scalar); // slot 0x140152958
+// Math::Vector4 splat ctor (slot 0x140152958, ??0Vector4@Math@@QEAA@AEBVScalar@1@@Z) is a
+// direct member of the real class (B.3.1).
 typedef int          (*fn_GetNodeIndex_t)(void* graphicsMesh, const char* name); // 0x140152970
 typedef void         (*fn_GeomAttach_t)(void* geom, void* attach, int nodeIdx);  // 0x140152968
 typedef void         (*fn_MeshSetMesh_t)(void* meshInstance, void* mesh);        // 0x140151498
 typedef unsigned int (*fn_SceneAdd_t)(void* scene, void* geom);                  // 0x140151370
 typedef void         (*fn_MIDefCtor_t)(void* meshInstance);                      // 0x140151490
 
-static fn_Vector4Ctor_t  s_slot_Vector4Ctor = nullptr;
 static fn_GetNodeIndex_t s_slot_GetNodeIndex = nullptr;
 static fn_GeomAttach_t   s_slot_GeomAttach = nullptr;
 static fn_MeshSetMesh_t  s_slot_SetMesh = nullptr;
@@ -147,7 +148,6 @@ bool ShowTool_ResolveFuncs() {
         uintptr_t s = ResolveAddr(Module::Exe, a);
         return s ? *reinterpret_cast<void**>(s) : nullptr;
     };
-    s_slot_Vector4Ctor  = reinterpret_cast<fn_Vector4Ctor_t>(rslot(0x140152958));
     s_slot_GetNodeIndex = reinterpret_cast<fn_GetNodeIndex_t>(rslot(0x140152970));
     s_slot_GeomAttach   = reinterpret_cast<fn_GeomAttach_t>(rslot(0x140152968));
     s_slot_SetMesh      = reinterpret_cast<fn_MeshSetMesh_t>(rslot(0x140151498));
@@ -295,12 +295,11 @@ static void ShowTool_ShowCarried(void* entityV) {
     if (s_slot_SetMesh) s_slot_SetMesh(e + 0xb8, (void*)mesh);
 
     // Scale Vector4 (splat carryScale) -> entity+0x1c4..0x1d0.
-    float scaleVec[4] = { carryScale, carryScale, carryScale, carryScale };
-    if (s_slot_Vector4Ctor) s_slot_Vector4Ctor(scaleVec, &carryScale);
-    *(float*)(e + 0x1c4) = scaleVec[0];
-    *(float*)(e + 0x1c8) = scaleVec[1];
-    *(float*)(e + 0x1cc) = scaleVec[2];
-    *(float*)(e + 0x1d0) = scaleVec[3];
+    Math::Vector4 scaleVec((Math::Scalar(carryScale)));
+    *(float*)(e + 0x1c4) = scaleVec.x;
+    *(float*)(e + 0x1c8) = scaleVec.y;
+    *(float*)(e + 0x1cc) = scaleVec.z;
+    *(float*)(e + 0x1d0) = scaleVec.w;
 
     // Attach the held-item geometry to the character mesh's "tool" node/bone.
     s_fn_CheckPtr(&charMeshHolder);

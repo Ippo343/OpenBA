@@ -25,6 +25,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include "Object/factory_registration.h"
 #include "resolve.h"
 #include <cstdint>
@@ -151,12 +152,12 @@ void W_Slot4(void* self) {
 
     CropUI_Slot4(reinterpret_cast<CropUI*>(self));   // = 0x140078be0, the base's idx4
 
-    uint8_t nameBuf[8];
-    fn_String_Ctor_CStr(nameBuf, "yield");
-    void* parentElem = *reinterpret_cast<void**>(s + 0x20);
     uint64_t found = 0;
-    fn_FindElement(parentElem, &found, nameBuf);
-    fn_String_Dtor(nameBuf);
+    {
+        System::String nameStr("yield");
+        void* parentElem = *reinterpret_cast<void**>(s + 0x20);
+        fn_FindElement(parentElem, &found, &nameStr);
+    }
 
     void* raw = reinterpret_cast<void*>(found);
     void* checked = fn_IsDerivedFrom(raw, ProgressElementTypeId()) ? raw : nullptr;
@@ -195,11 +196,11 @@ void W_Slot7(void* self) {
     *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(yieldElem) + 0x128) = maturity;
 
     int percent = static_cast<int>(maturity * 100.0f + 0.5f);
-    uint8_t textBuf[16];
-    fn_String_Format(reinterpret_cast<char*>(textBuf), "%i",
-                     static_cast<uint64_t>(static_cast<uint32_t>(percent)));
-    fn_ProgressElement_SetProgressTextParameter(yieldElem, 0, textBuf);
-    fn_String_Dtor(textBuf);
+    {
+        System::String textStr = System::String::Format("%i",
+                         static_cast<uint64_t>(static_cast<uint32_t>(percent)));
+        fn_ProgressElement_SetProgressTextParameter(yieldElem, 0, &textStr);
+    }
 
     if (*reinterpret_cast<uint64_t*>(s + 0x30))
         CropUI_Slot7(reinterpret_cast<CropUI*>(self));   // = 0x140078cb0, the base's idx7

@@ -17,6 +17,7 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -32,39 +33,28 @@ static const float kHalf      = 0.5f;
 
 // ---- Resolved Runtime engine functions ----
 typedef void* (*fn_Lerp_t)(void* self, void* retbuf, const float* t);              // InterpolatedState<Transform>::Lerp
-typedef void* (*fn_TransformAsMatrix_t)(void* self, void* retbuf);                 // Transform::AsMatrix
 typedef void  (*fn_CtxSetTransform_t)(void* ctx, int slot, const void* matrix);    // Context::SetTransform
 typedef void  (*fn_CtxSetColor_t)(void* ctx, const void* v4);                      // Context::SetColor
 typedef bool  (*fn_CtxBeginIV_t)(void* ctx, int vcount, int stride, int icount);   // Context::BeginIndexedVertices
 typedef void  (*fn_CtxAddVerts_t)(void* ctx, int count, const void* data);         // Context::AddVertices
 typedef void  (*fn_CtxEndIV_t)(void* ctx, int primType);                           // Context::EndIndexedVertices
 typedef void  (*fn_GetUVs_t)(void* sheet, int idx, float* u0, float* v0, float* u1, float* v1); // SpriteSheet::GetUVs
-// cc!=0 camera-constant-screen-size projection helpers (all const members → hidden retbuf in RDX).
-typedef void* (*fn_T3Inverse_t)(void* self, void* retbuf);                   // Transform3::Inverse
-typedef void* (*fn_T3AsMatrix_t)(void* self, void* retbuf);                  // Transform3::AsMatrix
-typedef void* (*fn_MatMulMat_t)(void* self, void* retbuf, const void* other);// Matrix::operator*(Matrix)
-typedef void* (*fn_MatMulV4_t)(void* self, void* retbuf, const void* vec4);  // Matrix::operator*(Vector4)
+// cc!=0 camera-constant-screen-size projection uses the Math:: classes directly
+// (Transform3::Inverse / AsMatrix, Matrix::operator*(Matrix|Vector4)).
 
 static fn_Lerp_t              s_Lerp           = nullptr;
-static fn_TransformAsMatrix_t s_AsMatrix       = nullptr;
 static fn_CtxSetTransform_t   s_SetTransform   = nullptr;
 static fn_CtxSetColor_t       s_SetColor       = nullptr;
 static fn_CtxBeginIV_t        s_BeginIV        = nullptr;
 static fn_CtxAddVerts_t       s_AddVerts       = nullptr;
 static fn_CtxEndIV_t          s_EndIV          = nullptr;
 static fn_GetUVs_t            s_GetUVs         = nullptr;
-static fn_T3Inverse_t         s_T3Inverse      = nullptr;
-static fn_T3AsMatrix_t        s_T3AsMatrix     = nullptr;
-static fn_MatMulMat_t         s_MatMulMat      = nullptr;
-static fn_MatMulV4_t          s_MatMulV4       = nullptr;
 static bool                   s_resolved       = false;
 
 static void EnsureDrawFuncs() {
     if (s_resolved) return;
     s_Lerp = reinterpret_cast<fn_Lerp_t>(ResolveExport(
         "?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@AEBVScalar@4@@Z"));
-    s_AsMatrix = reinterpret_cast<fn_TransformAsMatrix_t>(ResolveExport(
-        "?AsMatrix@Transform@Math@@QEBA?AVMatrix@2@XZ"));
     s_SetTransform = reinterpret_cast<fn_CtxSetTransform_t>(ResolveExport(
         "?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z"));
     s_SetColor = reinterpret_cast<fn_CtxSetColor_t>(ResolveExport(
@@ -77,14 +67,6 @@ static void EnsureDrawFuncs() {
         "?EndIndexedVertices@Context@Video@@QEAAXW4PrimitiveType@12@@Z"));
     s_GetUVs = reinterpret_cast<fn_GetUVs_t>(ResolveExport(
         "?GetUVs@SpriteSheet@UI@@QEBAXHAEAM000@Z"));
-    s_T3Inverse = reinterpret_cast<fn_T3Inverse_t>(ResolveExport(
-        "?Inverse@Transform3@Math@@QEBA?AV12@XZ"));
-    s_T3AsMatrix = reinterpret_cast<fn_T3AsMatrix_t>(ResolveExport(
-        "?AsMatrix@Transform3@Math@@QEBA?AVMatrix@2@XZ"));
-    s_MatMulMat = reinterpret_cast<fn_MatMulMat_t>(ResolveExport(
-        "??DMatrix@Math@@QEBA?AV01@AEBV01@@Z"));
-    s_MatMulV4 = reinterpret_cast<fn_MatMulV4_t>(ResolveExport(
-        "??DMatrix@Math@@QEBA?AVVector4@1@AEBV21@@Z"));
     s_resolved = true;
 }
 
@@ -138,14 +120,13 @@ static void StatusIconGeom_Draw(void* geometry, void* ctx, void* camera,
     // 1) Model transform = Lerp(state, t) -> AsMatrix -> Context::SetTransform(0, M).
     //    Keep the Lerp'd Transform around: its position (+0x10) is the billboard origin
     //    used by the cc!=0 camera-constant-screen-size projection below.
-    alignas(16) float xf[8] = {0};   // Math::Transform retbuf (0x1C bytes); pos at xf[4..6]
+    Math::Transform xf;              // Lerp retbuf; .translation is the billboard origin
     bool haveXf = false;
-    if (s_Lerp && s_AsMatrix && s_SetTransform) {
-        alignas(16) float mat[16];    // Math::Matrix retbuf (64 bytes)
-        s_Lerp(g + 0x84, xf, &t);
+    if (s_Lerp && s_SetTransform) {
+        s_Lerp(g + 0x84, &xf, &t);
         haveXf = true;
-        void* m = s_AsMatrix(xf, mat);
-        s_SetTransform(ctx, 0, m ? m : mat);
+        Math::Matrix mat = xf.AsMatrix();
+        s_SetTransform(ctx, 0, &mat);
     }
 
     // 2) Color = (1,1,1, lerp(geom+0x80, geom+0x7c, t)). geom+0x7c/+0x80 hold the
@@ -177,24 +158,22 @@ static void StatusIconGeom_Draw(void* geometry, void* ctx, void* camera,
     //    of the FUN_1400a9c10 cc!=0 block (AsVector3/Vector ctors inlined).
     float    fVar9 = *reinterpret_cast<float*>(g + 0xc0);   // iconSize
     uint8_t  cc    = *reinterpret_cast<uint8_t*>(g + 0xcc);
-    if (cc != 0 && haveXf && s_T3Inverse && s_T3AsMatrix && s_MatMulMat && s_MatMulV4) {
-        alignas(16) uint8_t invBuf[256];    // Transform3 retbuf (Inverse)
-        alignas(16) uint8_t invMat[128];    // Matrix retbuf (AsMatrix)
-        alignas(16) uint8_t vpMat[128];     // Matrix retbuf (invView * proj)
-        const void* proj = reinterpret_cast<uint8_t*>(camera) + 0x94;   // 4x4 projection
-        s_T3Inverse(reinterpret_cast<uint8_t*>(camera) + 0x64, invBuf);  // invView (Transform3)
-        s_T3AsMatrix(invBuf, invMat);                                    // invView as Matrix
-        s_MatMulMat(invMat, vpMat, proj);                                // vp = invView * proj
+    if (cc != 0 && haveXf) {
+        const Math::Matrix& proj =
+            *reinterpret_cast<const Math::Matrix*>(reinterpret_cast<uint8_t*>(camera) + 0x94);   // B.3.1 bridge: 4x4 projection
+        Math::Transform3 invView =
+            reinterpret_cast<const Math::Transform3*>(reinterpret_cast<uint8_t*>(camera) + 0x64)->Inverse();   // B.3.1 bridge
+        Math::Matrix invMat = invView.AsMatrix();                        // invView as Matrix
+        Math::Matrix vpMat  = invMat * proj;                             // vp = invView * proj
 
-        float P[3] = { xf[4], xf[5], xf[6] };                            // billboard origin (Transform pos)
-        alignas(16) float v4a[4] = { P[0],            P[1],            P[2],            1.0f };
-        alignas(16) float v4b[4] = { P[0] + rightU[0], P[1] + rightU[1], P[2] + rightU[2], 1.0f };
-        alignas(16) float clipA[4] = {0}, clipB[4] = {0};
-        s_MatMulV4(vpMat, clipB, v4b);
-        s_MatMulV4(vpMat, clipA, v4a);
-        float wa = clipA[3], wb = clipB[3];
+        float P[3] = { xf.translation.x, xf.translation.y, xf.translation.z };   // billboard origin (Transform pos)
+        Math::Vector4 v4a(P[0],             P[1],             P[2],             1.0f);
+        Math::Vector4 v4b(P[0] + rightU[0], P[1] + rightU[1], P[2] + rightU[2], 1.0f);
+        Math::Vector4 clipB = vpMat * v4b;
+        Math::Vector4 clipA = vpMat * v4a;
+        float wa = clipA.w, wb = clipB.w;
         if (wa != 0.0f && wb != 0.0f) {
-            float d = (clipB[0] / wb) - (clipA[0] / wa);
+            float d = (clipB.x / wb) - (clipA.x / wa);
             float ad = d < 0.0f ? -d : d;
             if (ad > 1e-9f) fVar9 = fVar9 / ad;
         }

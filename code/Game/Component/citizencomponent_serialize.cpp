@@ -75,6 +75,7 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "Game/serialize_externals.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstdlib>
 #include <cstdio>
@@ -167,7 +168,7 @@ extern "C" void CitizenComponent_Serialize(void* self, void* stream) {
     uint8_t ser[24];
     g_fn_Serializer_Ctor(ser, stream, 3);
 
-    if (g_fn_String_Serialize) g_fn_String_Serialize(At(self, 0x28), ser);
+    reinterpret_cast<System::String*>(At(self, 0x28))->Serialize(ser);   // B.3.1 bridge
     if (g_fn_Serialize_Int) g_fn_Serialize_Int(ser, At(self, 0x38), nullptr);
     if (fn_Serializer_Serialize_Float) {
         fn_Serializer_Serialize_Float(ser, reinterpret_cast<float*>(At(self, 0x3c)), nullptr);

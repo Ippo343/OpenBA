@@ -1,5 +1,6 @@
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 
 // EventPopupDialog::Slot4 (0x140068C20) — Setup
@@ -11,23 +12,20 @@ void EventPopupDialog_Slot4(EventPopupDialog* self) {
     uintptr_t s = (uintptr_t)self;
 
     // Find imageIcon element
-    uint8_t nameStr[8], retBuf[16];
-    fn_String_Ctor_CStr(nameStr, "imageIcon");
-    fn_DialogInstance_FindElement(self, retBuf, nameStr);
+    uint8_t retBuf[16];
+    { System::String nameStr("imageIcon");
+      fn_DialogInstance_FindElement(self, retBuf, &nameStr); }
     void* imageIcon = *(void**)retBuf;
-    fn_String_Dtor(nameStr);
 
     // Find textEvent element
-    fn_String_Ctor_CStr(nameStr, "textEvent");
-    fn_DialogInstance_FindElement(self, retBuf, nameStr);
+    { System::String nameStr("textEvent");
+      fn_DialogInstance_FindElement(self, retBuf, &nameStr); }
     void* textEvent = *(void**)retBuf;
-    fn_String_Dtor(nameStr);
 
     // Find buttonOk element
-    fn_String_Ctor_CStr(nameStr, "buttonOk");
-    fn_DialogInstance_FindElement(self, retBuf, nameStr);
+    { System::String nameStr("buttonOk");
+      fn_DialogInstance_FindElement(self, retBuf, &nameStr); }
     void* buttonOk = *(void**)retBuf;
-    fn_String_Dtor(nameStr);
 
     // Get event entry from world event list
     // world->+0x138 -> event manager, +0x18 -> event array
@@ -40,8 +38,7 @@ void EventPopupDialog_Slot4(EventPopupDialog* self) {
 
     // Format sprite name "EventIcon<iconIdx>"
     uint32_t iconIdx = *(uint32_t*)(eventEntry + 0x20);
-    uint8_t fmtStr[8];
-    fn_String_Format(fmtStr, "EventIcon%i", iconIdx);
+    System::String fmtStr = System::String::Format("EventIcon%i", iconIdx);
 
     // Get current sprite from imageIcon (16 bytes: sheetPtr + index)
     uint8_t oldSprite[16];
@@ -51,7 +48,7 @@ void EventPopupDialog_Slot4(EventPopupDialog* self) {
     // Build new sprite: same sheet, new index from name
     int newIndex = -1;
     if (sheetPtr) {
-        newIndex = fn_SpriteSheet_GetSpriteIndexFromName(sheetPtr, fmtStr);
+        newIndex = fn_SpriteSheet_GetSpriteIndexFromName(sheetPtr, &fmtStr);
     }
 
     // Construct 16-byte Sprite: {sheetPtr, index(4b) + pad(4b)}
@@ -62,7 +59,6 @@ void EventPopupDialog_Slot4(EventPopupDialog* self) {
 
     // Set new sprite on imageIcon
     fn_ImageElement_SetSprite(imageIcon, newSprite);
-    fn_String_Dtor(fmtStr);
 
     // Set text parameter 0 on textEvent to event text string at eventEntry+0x08
     fn_TextElement_SetParameter(textEvent, 0, eventEntry + 0x08);

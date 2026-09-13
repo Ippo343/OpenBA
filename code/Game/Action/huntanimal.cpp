@@ -31,6 +31,7 @@
 #include "HuntAnimal.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "math/Math.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
@@ -164,7 +165,7 @@ bool HuntAnimal_ResolveFuncs() {
               s_searchRadius && s_halfOffset &&
               fn_InternalBasePtr_CheckPtr && fn_InternalBasePtr_DeletePtr &&
               fn_InternalBasePtr_Ctor && fn_IsDerivedFrom &&
-              fn_MemFreeStatic && fn_Vector3_Ctor &&
+              fn_MemFreeStatic &&
               g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
               g_fn_Serialize_Bool && g_pGameWorldSingleton;
 
@@ -461,18 +462,15 @@ void HuntAnimal_Enter_Impl(HuntAnimal* self) {
     void* corpseModelIBP = modelCompIBP2[0];
 
     // Convert grid cell to world position
-    float gridPos[3];
     float worldPos[3];
     float halfFloat = (float)(mapSize >> 1) - *s_halfOffset;
     int cellIdx = (int)pathCost;
-    gridPos[0] = (float)(cellIdx % mapSize) - halfFloat;  // x = col
-    gridPos[1] = (float)(cellIdx / mapSize) - halfFloat;  // y = row
-    gridPos[2] = 0.0f;
+    // Math::Vector3 ctor (was the 0x140152a30 slot): x = col, y = row, z = 0
+    Math::Vector3 gridPos((float)(cellIdx % mapSize) - halfFloat,
+                          (float)(cellIdx / mapSize) - halfFloat,
+                          0.0f);
 
-    // Use Vector3 ctor -- note: this is called at 0x140152a30 slot
-    fn_Vector3_Ctor(gridPos, gridPos[0], gridPos[1], 0.0f);
-
-    s_fn_GridToWorld(mapPtr, worldPos, gridPos, 0, nullptr);
+    s_fn_GridToWorld(mapPtr, worldPos, reinterpret_cast<float*>(&gridPos), 0, nullptr);   // B.3.1 bridge
 
     // Spawn the corpse -- call RemoveAnimal_Action_Ctor
     // Params: herdIBP(+0x28), animIndex(-1), worldPos, fromCell, corpseIBP, descPtr, flags(0)

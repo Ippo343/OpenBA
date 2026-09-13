@@ -15,6 +15,8 @@
 
 #include "ui/Panels.h"
 #include "engine_funcs.h"
+#include "system/String.h"
+#include "system/Filename.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -27,11 +29,10 @@
 
 // Find element by name in dialog, wrap as InternalBasePtr
 static uint64_t TownHall_FindElemRaw(void* dialogElem, const char* name) {
-    uint8_t strBuf[8];
-    fn_String_Ctor_CStr(strBuf, name);
+    System::String strBuf(name);
 
     uint64_t foundBuf[2] = {0, 0};
-    fn_FindElement(dialogElem, foundBuf, strBuf);
+    fn_FindElement(dialogElem, foundBuf, &strBuf);
 
     fn_InternalBasePtr_CheckPtr(foundBuf);
     void* elem = *(void**)foundBuf;
@@ -39,18 +40,16 @@ static uint64_t TownHall_FindElemRaw(void* dialogElem, const char* name) {
     uint64_t result = 0;
     fn_InternalBasePtr_Ctor(&result, elem);
 
-    fn_String_Dtor(strBuf);
     return result;
 }
 
 // Find element by name with IsDerivedFrom check
 static uint64_t TownHall_FindElem(void* dialogElem, const char* name, uint32_t typeId) {
-    uint8_t strBuf[8];
-    fn_String_Ctor_CStr(strBuf, name);
+    System::String strBuf(name);
 
     fn_InternalBasePtr_CheckPtr(&dialogElem);
     uint64_t foundBuf[2] = {0, 0};
-    fn_FindElement(dialogElem, foundBuf, strBuf);
+    fn_FindElement(dialogElem, foundBuf, &strBuf);
 
     fn_InternalBasePtr_CheckPtr(foundBuf);
     void* elem = *(void**)foundBuf;
@@ -63,7 +62,6 @@ static uint64_t TownHall_FindElem(void* dialogElem, const char* name, uint32_t t
     uint64_t result = 0;
     fn_InternalBasePtr_Ctor(&result, castElem);
 
-    fn_String_Dtor(strBuf);
     return result;
 }
 
@@ -112,81 +110,69 @@ void TownHallUI_InitGraph(TownHallUI* self) {
 
     uint64_t* numberPtrs = &self->number0;
     for (int i = 0; i < 5; i++) {
-        uint8_t fmtBuf[16];
-        fn_String_Format(fmtBuf, "number%i", (uint64_t)i);
+        System::String fmtBuf = System::String::Format("number%i", (uint64_t)i);
         fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
         uint64_t fb[2] = {0, 0};
-        fn_FindElement(*(void**)(s + 0x20), fb, fmtBuf);
+        fn_FindElement(*(void**)(s + 0x20), fb, &fmtBuf);
         fn_InternalBasePtr_CheckPtr(fb);
         uint64_t bp = 0;
         fn_InternalBasePtr_Ctor(&bp, *(void**)fb);
         numberPtrs[i] = bp;
-        fn_String_Dtor(fmtBuf);
     }
 
     uint64_t* labelPtrs = &self->label0;
     for (int i = 0; i < 4; i++) {
-        uint8_t fmtBuf[16];
-        fn_String_Format(fmtBuf, "label%i", (uint64_t)i);
+        System::String fmtBuf = System::String::Format("label%i", (uint64_t)i);
         fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
         uint64_t fb[2] = {0, 0};
-        fn_FindElement(*(void**)(s + 0x20), fb, fmtBuf);
+        fn_FindElement(*(void**)(s + 0x20), fb, &fmtBuf);
         fn_InternalBasePtr_CheckPtr(fb);
         uint64_t bp = 0;
         fn_InternalBasePtr_Ctor(&bp, *(void**)fb);
         labelPtrs[i] = bp;
-        fn_String_Dtor(fmtBuf);
     }
 
     // Load string tables
     {
-        uint8_t filenameBuf[16];
-        fn_Filename_CtorCStr(filenameBuf, "Dialog/StringTable.rsc:graphYears");
-        void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filenameBuf);
+        System::Filename filenameBuf("Dialog/StringTable.rsc:graphYears");
+        void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filenameBuf);
         self->graphYearsTable = (ext && fn_IsDerivedFrom(ext, *g_TypeId_StringTable)) ? (uint64_t)ext : 0;
-        fn_Filename_Dtor(filenameBuf);
     }
     {
-        uint8_t filenameBuf[16];
-        fn_Filename_CtorCStr(filenameBuf, "Dialog/StringTable.rsc:graphTypes");
-        void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filenameBuf);
+        System::Filename filenameBuf("Dialog/StringTable.rsc:graphTypes");
+        void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filenameBuf);
         self->graphTypesTable = (ext && fn_IsDerivedFrom(ext, *g_TypeId_StringTable)) ? (uint64_t)ext : 0;
-        fn_Filename_Dtor(filenameBuf);
     }
 
     // Populate time combo
     for (int i = 0; i < 7; i++) {
         uint8_t uiStrBuf[16];
         fn_UIString_Ctor_Index(uiStrBuf, self->graphYearsTable, i);
-        uint8_t sysStrBuf[8] = {0};
-        fn_UIString_ToSystemString(uiStrBuf, sysStrBuf);
+        System::String sysStrBuf;
+        fn_UIString_ToSystemString(uiStrBuf, &sysStrBuf);
         fn_InternalBasePtr_CheckPtr((void*)&self->timeCombo);
         uint8_t emptySprite[16];
         fn_Sprite_Default_Ctor(emptySprite);
-        fn_ComboElement_AddItem((void*)self->timeCombo, emptySprite, sysStrBuf, nullptr);
-        fn_String_Dtor(sysStrBuf);
+        fn_ComboElement_AddItem((void*)self->timeCombo, emptySprite, &sysStrBuf, nullptr);
     }
 
     // Populate graph combo (skip empty entries)
     int typeCount = fn_StringTable_GetCount((void*)self->graphTypesTable);
     int maxEntries = (13 < typeCount) ? typeCount : 13;
     for (int i = 0; i < maxEntries; i++) {
-        uint8_t textBuf[8] = {0};
-        fn_StringTable_GetText((void*)self->graphTypesTable, textBuf, i);
-        void* strPtr = *(void**)textBuf;
-        bool isEmpty = !strPtr || (*(int*)((uintptr_t)strPtr - 8) == 0);
-        fn_String_Dtor(textBuf);
+        System::String textBuf;
+        fn_StringTable_GetText((void*)self->graphTypesTable, &textBuf, i);
+        bool isEmpty = textBuf.GetLength() == 0;
 
         if (!isEmpty) {
             uint8_t uiStrBuf[16];
             fn_UIString_Ctor_Index(uiStrBuf, self->graphTypesTable, i);
-            uint8_t sysStrBuf[8] = {0};
-            fn_UIString_ToSystemString(uiStrBuf, sysStrBuf);
+            System::String sysStrBuf;
+            fn_UIString_ToSystemString(uiStrBuf, &sysStrBuf);
             fn_InternalBasePtr_CheckPtr((void*)&self->graphCombo);
             uint8_t emptySprite[16];
             fn_Sprite_Default_Ctor(emptySprite);
-            fn_ComboElement_AddItem((void*)self->graphCombo, emptySprite, sysStrBuf, nullptr);
-            fn_String_Dtor(sysStrBuf);
+            fn_ComboElement_AddItem((void*)self->graphCombo, emptySprite, &sysStrBuf, nullptr);
         }
     }
 
@@ -219,18 +205,16 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     // Find "tableProfessions" and cast to TableElement
-    uint8_t strBuf[8];
-    fn_String_Ctor_CStr(strBuf, "tableProfessions");
+    System::String strBuf("tableProfessions");
     fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
 
     uint64_t foundBuf[2] = {0, 0};
-    fn_FindElement(*(void**)(s + 0x20), foundBuf, strBuf);
+    fn_FindElement(*(void**)(s + 0x20), foundBuf, &strBuf);
     fn_InternalBasePtr_CheckPtr(foundBuf);
     void* foundElem = *(void**)foundBuf;
     void* tableElem = CastElement(foundElem, g_TypeId_TableElement);
     uint64_t tablePtr = 0;
     fn_InternalBasePtr_Ctor(&tablePtr, (void*)tableElem);
-    fn_String_Dtor(strBuf);
 
     // Get profession list from game singleton
     uintptr_t profList = *(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0xb0);
@@ -480,17 +464,15 @@ void TownHallUI_InitProduction(TownHallUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     // Find "limits" and cast to TableElement
-    uint8_t strBuf[8];
-    fn_String_Ctor_CStr(strBuf, "limits");
+    System::String strBuf("limits");
     fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
     uint64_t foundBuf[2] = {0, 0};
-    fn_FindElement(*(void**)(s + 0x20), foundBuf, strBuf);
+    fn_FindElement(*(void**)(s + 0x20), foundBuf, &strBuf);
     fn_InternalBasePtr_CheckPtr(foundBuf);
     void* foundElem = *(void**)foundBuf;
     void* tableElem = CastElement(foundElem, g_TypeId_TableElement);
     uint64_t tablePtr = 0;
     fn_InternalBasePtr_Ctor(&tablePtr, (void*)tableElem);
-    fn_String_Dtor(strBuf);
 
     // Read column count from table
     fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
@@ -542,26 +524,23 @@ void TownHallUI_InitProduction(TownHallUI* self) {
         *(void**)(s + 0x20), "limitPrevProducedHeader", *g_TypeId_TextElement);
 
     // Load graphYears string table and populate combo
-    uint8_t fnameBuf[16];
-    fn_Filename_CtorCStr(fnameBuf, "Dialog/StringTable.rsc:graphYears");
-    void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fnameBuf);
+    System::Filename fnameBuf("Dialog/StringTable.rsc:graphYears");
+    void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fnameBuf);
     uint64_t yearsTable = 0;
     if (ext && fn_IsDerivedFrom(ext, *g_TypeId_StringTable)) {
         yearsTable = (uint64_t)ext;
     }
-    fn_Filename_Dtor(fnameBuf);
 
     // Add 7 combo items from graphYears string table
     for (int i = 0; i < 7; i++) {
         uint8_t uiStrBuf[16];
         fn_UIString_Ctor_Index(uiStrBuf, yearsTable, i);
-        uint8_t sysStrBuf[8] = {0};
-        fn_UIString_ToSystemString(uiStrBuf, sysStrBuf);
+        System::String sysStrBuf;
+        fn_UIString_ToSystemString(uiStrBuf, &sysStrBuf);
         fn_InternalBasePtr_CheckPtr((void*)&self->productionCombo);
         uint8_t emptySprite[16];
         fn_Sprite_Default_Ctor(emptySprite);
-        fn_ComboElement_AddItem((void*)self->productionCombo, emptySprite, sysStrBuf, nullptr);
-        fn_String_Dtor(sysStrBuf);
+        fn_ComboElement_AddItem((void*)self->productionCombo, emptySprite, &sysStrBuf, nullptr);
     }
     fn_InternalBasePtr_CheckPtr((void*)&self->productionCombo);
     fn_ComboElement_SetCurrentItem((void*)self->productionCombo, 0);
@@ -579,17 +558,15 @@ void TownHallUI_InitInventory(TownHallUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     // Find "inventoryTable" and cast to TableElement
-    uint8_t strBuf[8];
-    fn_String_Ctor_CStr(strBuf, "inventoryTable");
+    System::String strBuf("inventoryTable");
     fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
     uint64_t foundBuf[2] = {0, 0};
-    fn_FindElement(*(void**)(s + 0x20), foundBuf, strBuf);
+    fn_FindElement(*(void**)(s + 0x20), foundBuf, &strBuf);
     fn_InternalBasePtr_CheckPtr(foundBuf);
     void* foundElem = *(void**)foundBuf;
     void* tableElem = CastElement(foundElem, g_TypeId_TableElement);
     uint64_t tablePtr = 0;
     fn_InternalBasePtr_Ctor(&tablePtr, (void*)tableElem);
-    fn_String_Dtor(strBuf);
 
     // Count resource types via ExternalFactory::FindNext
     int resourceCount = 0;
@@ -707,14 +684,12 @@ void TownHallUI_InitInventory(TownHallUI* self) {
     }
 
     // Load inventoryType string table
-    uint8_t fnameBuf[16];
-    fn_Filename_CtorCStr(fnameBuf, "Dialog/StringTable.rsc:inventoryType");
-    void* extST = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fnameBuf);
+    System::Filename fnameBuf("Dialog/StringTable.rsc:inventoryType");
+    void* extST = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fnameBuf);
     uint64_t invTypeTable = 0;
     if (extST && fn_IsDerivedFrom(extST, *g_TypeId_StringTable)) {
         invTypeTable = (uint64_t)extST;
     }
-    fn_Filename_Dtor(fnameBuf);
 
     // Find "inventoryCombo" ComboElement
     self->inventoryCombo = TownHall_FindElem(
@@ -724,13 +699,12 @@ void TownHallUI_InitInventory(TownHallUI* self) {
     for (int i = 0; i < 3; i++) {
         uint8_t uiStrBuf[16];
         fn_UIString_Ctor_Index(uiStrBuf, invTypeTable, i);
-        uint8_t sysStrBuf[8] = {0};
-        fn_UIString_ToSystemString(uiStrBuf, sysStrBuf);
+        System::String sysStrBuf;
+        fn_UIString_ToSystemString(uiStrBuf, &sysStrBuf);
         fn_InternalBasePtr_CheckPtr((void*)&self->inventoryCombo);
         uint8_t emptySprite[16];
         fn_Sprite_Default_Ctor(emptySprite);
-        fn_ComboElement_AddItem((void*)self->inventoryCombo, emptySprite, sysStrBuf, nullptr);
-        fn_String_Dtor(sysStrBuf);
+        fn_ComboElement_AddItem((void*)self->inventoryCombo, emptySprite, &sysStrBuf, nullptr);
     }
     fn_InternalBasePtr_CheckPtr((void*)&self->inventoryCombo);
     fn_ComboElement_SetCurrentItem((void*)self->inventoryCombo, 0);
@@ -754,17 +728,15 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     // Find "agriTable" and cast to TableElement
-    uint8_t strBuf[8];
-    fn_String_Ctor_CStr(strBuf, "agriTable");
+    System::String strBuf("agriTable");
     fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
     uint64_t foundBuf[2] = {0, 0};
-    fn_FindElement(*(void**)(s + 0x20), foundBuf, strBuf);
+    fn_FindElement(*(void**)(s + 0x20), foundBuf, &strBuf);
     fn_InternalBasePtr_CheckPtr(foundBuf);
     void* foundElem = *(void**)foundBuf;
     void* tableElem = CastElement(foundElem, g_TypeId_TableElement);
     uint64_t tablePtr = 0;
     fn_InternalBasePtr_Ctor(&tablePtr, (void*)tableElem);
-    fn_String_Dtor(strBuf);
 
     // Iterate ExternalFactory for ComponentDescription entities
     void* factory = *g_pExternalFactorySingleton;
@@ -1208,20 +1180,16 @@ void TownHallUI_UpdateGeneral(TownHallUI* self) {
 
     // Educated % (at +0xa0)
     {
-        uint8_t fmtBuf[8];
-        fn_String_Format(fmtBuf, "%i", (uint64_t)(uint32_t)(int)(educatedPct + 0.5f));
+        System::String fmtBuf = System::String::Format("%i", (uint64_t)(uint32_t)(int)(educatedPct + 0.5f));
         fn_InternalBasePtr_CheckPtr((void*)(s + 0xa0));
-        fn_TextElement_SetParameter(*(void**)(s + 0xa0), 0, fmtBuf);
-        fn_String_Dtor(fmtBuf);
+        fn_TextElement_SetParameter(*(void**)(s + 0xa0), 0, &fmtBuf);
     }
 
     // Clothed % (at +0xa8)
     {
-        uint8_t fmtBuf[8];
-        fn_String_Format(fmtBuf, "%i", (uint64_t)(uint32_t)(int)(clothedPct + 0.5f));
+        System::String fmtBuf = System::String::Format("%i", (uint64_t)(uint32_t)(int)(clothedPct + 0.5f));
         fn_InternalBasePtr_CheckPtr((void*)(s + 0xa8));
-        fn_TextElement_SetParameter(*(void**)(s + 0xa8), 0, fmtBuf);
-        fn_String_Dtor(fmtBuf);
+        fn_TextElement_SetParameter(*(void**)(s + 0xa8), 0, &fmtBuf);
     }
 
     // Family count
@@ -1274,18 +1242,14 @@ void TownHallUI_UpdateProfessions(TownHallUI* self) {
 
     // Set header text parameters
     {
-        uint8_t fmtBuf[8];
-        fn_String_Format(fmtBuf, "%i", (uint64_t)yearSpan);
+        System::String fmtBuf = System::String::Format("%i", (uint64_t)yearSpan);
         fn_InternalBasePtr_CheckPtr((void*)(s + 0x108));
-        fn_TextElement_SetParameter(*(void**)(s + 0x108), 0, fmtBuf);
-        fn_String_Dtor(fmtBuf);
+        fn_TextElement_SetParameter(*(void**)(s + 0x108), 0, &fmtBuf);
     }
     {
-        uint8_t fmtBuf[8];
-        fn_String_Format(fmtBuf, "%i", (uint64_t)yearSpan);
+        System::String fmtBuf = System::String::Format("%i", (uint64_t)yearSpan);
         fn_InternalBasePtr_CheckPtr((void*)(s + 0x110));
-        fn_TextElement_SetParameter(*(void**)(s + 0x110), 0, fmtBuf);
-        fn_String_Dtor(fmtBuf);
+        fn_TextElement_SetParameter(*(void**)(s + 0x110), 0, &fmtBuf);
     }
 
     int* timePtr = *(int**)(*(uintptr_t*)g_pGameSingleton + 0x128);
@@ -2274,11 +2238,10 @@ void TownHallUI_OnProfessionSpinner(TownHallUI* self, int index) {
 void TownHallUI_Serialize(TownHallUI* self) {
     uintptr_t s = (uintptr_t)self;
 
-    uint64_t strBuf[2] = {0, 0};
-    fn_String_Ctor_CStr(strBuf, "tabs");
+    System::String strBuf("tabs");
     fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
     uint64_t foundBuf[2] = {0, 0};
-    fn_FindElement(*(void**)(s + 0x20), foundBuf, strBuf);
+    fn_FindElement(*(void**)(s + 0x20), foundBuf, &strBuf);
     fn_InternalBasePtr_CheckPtr(foundBuf);
     void* element = *(void**)foundBuf;
 
@@ -2291,7 +2254,6 @@ void TownHallUI_Serialize(TownHallUI* self) {
     uint64_t tempIBP = 0;
     fn_InternalBasePtr_Ctor(&tempIBP, tabElement);
     *(uint64_t*)(s + 0x30) = tempIBP;
-    fn_String_Dtor(strBuf);
 
     TownHallUI_InitGeneral(self);
     TownHallUI_InitProfessions(self);

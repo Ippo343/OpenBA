@@ -9,6 +9,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -52,12 +53,11 @@ void StatusIconUI_Serialize(StatusIconUI* self) {
     void* dialogElem = *(void**)((uintptr_t)self + 0x20);
 
     // Find "icons" container element by name
-    uint8_t nameBuf[8];
-    fn_String_Ctor_CStr(nameBuf, "icons");
+    System::String nameBuf("icons");
 
     uint64_t findResult = 0;
     // fn_FindElement: member with non-trivial return: RCX=this, RDX=retval, R8=name
-    fn_FindElement(dialogElem, &findResult, nameBuf);
+    fn_FindElement(dialogElem, &findResult, &nameBuf);
 
     // Dereference InternalPtr result to get raw Element*
     // The original does IsDerivedFrom check here, but we skip it
@@ -66,8 +66,6 @@ void StatusIconUI_Serialize(StatusIconUI* self) {
     uint8_t iconsBuf[8];
     fn_InternalBasePtr_Ctor(iconsBuf, rawElem);
     void* iconsElem = *(void**)iconsBuf;
-
-    fn_String_Dtor(nameBuf);
 
     // Get child count
     int childCount = fn_Element_ChildCount(iconsElem);

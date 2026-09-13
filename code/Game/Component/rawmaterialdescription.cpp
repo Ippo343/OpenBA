@@ -24,6 +24,7 @@
 // Decompiled READ-ONLY from Application-x64.exe.
 
 #include "engine_funcs.h"
+#include "system/String.h"
 #include "resolve.h"
 #include <cstdint>
 
@@ -50,14 +51,14 @@ static void RawMaterialDescription_Init(void* self) {
 void RawMaterialDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int ||
-        !g_fn_Serialize_Bool || !g_fn_String_Serialize || !fn_Serializer_Serialize_Float ||
+        !g_fn_Serialize_Bool || !fn_Serializer_Serialize_Float ||
         !fn_ExternalPtr_BuildSerialize) return;
     uint8_t serializer[24];
     g_fn_Serializer_Ctor(serializer, stream, 0);
     fn_ExternalPtr_BuildSerialize(s + 0x20, serializer);   // ExternalPtr +0x20
     fn_ExternalPtr_BuildSerialize(s + 0x28, serializer);   // ExternalPtr +0x28
-    g_fn_String_Serialize(s + 0x30, serializer);           // String      +0x30
-    g_fn_String_Serialize(s + 0x38, serializer);           // String      +0x38
+    reinterpret_cast<System::String*>(s + 0x30)->Serialize(serializer);           // B.3.1 bridge: String      +0x30
+    reinterpret_cast<System::String*>(s + 0x38)->Serialize(serializer);           // B.3.1 bridge: String      +0x38
     g_fn_Serialize_Int(serializer, s + 0x40, nullptr);
     g_fn_Serialize_Int(serializer, s + 0x44, nullptr);
     g_fn_Serialize_Int(serializer, s + 0x48, nullptr);
@@ -73,7 +74,7 @@ void* RawMaterialDescription_Dtor(void* self, uint32_t flags) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     uintptr_t vt = ResolveAddr(Module::Exe, kRawMaterialDescriptionVtable);
     if (vt) *(void**)self = (void*)vt;
-    if (fn_String_Dtor) { fn_String_Dtor(s + 0x30); fn_String_Dtor(s + 0x38); }
+    reinterpret_cast<System::String*>(s + 0x30)->~String(); reinterpret_cast<System::String*>(s + 0x38)->~String();  // B.3.1 bridge
     if (fn_External_Dtor) fn_External_Dtor(self);
     if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
     return self;

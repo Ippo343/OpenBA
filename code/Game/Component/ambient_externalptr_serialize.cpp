@@ -23,6 +23,7 @@
 // AmbientEmitterComponent / AnimAudioEvent / MenuScene serialize) resolves it.
 
 #include "engine_funcs.h"
+#include "system/Filename.h"
 #include "resolve.h"
 #include <cstdint>
 
@@ -55,10 +56,9 @@ extern "C" void AmbientExternalPtrSerialize_Reimpl(void* fieldPtr, void* seriali
     if (EncodingType(serializer) == 3) {
         if (*field == nullptr) return;
         if (fn_External_GetPath && fn_ExternalFactory_FindOrLoad && factory) {
-            uint8_t path[8] = {0};
-            fn_External_GetPath(*field, path);
-            fn_ExternalFactory_FindOrLoad(factory, path);   // touch/refcount (result unused)
-            if (fn_Filename_Dtor) fn_Filename_Dtor(path);
+            System::Filename path;
+            fn_External_GetPath(*field, &path);
+            fn_ExternalFactory_FindOrLoad(factory, &path);   // touch/refcount (result unused)
         }
         return;
     }
@@ -66,8 +66,7 @@ extern "C" void AmbientExternalPtrSerialize_Reimpl(void* fieldPtr, void* seriali
     int mode = SerializerMode(serializer);
     bool loading = (mode == 0);
 
-    uint8_t pathBuf[8] = {0};                               // System::Filename
-    if (fn_Filename_Ctor) fn_Filename_Ctor(pathBuf);
+    System::Filename pathBuf;
 
     bool refMode = fn_ExternalFactory_IsReferenceModeEnabled && factory &&
                    fn_ExternalFactory_IsReferenceModeEnabled(factory);
@@ -83,7 +82,7 @@ extern "C" void AmbientExternalPtrSerialize_Reimpl(void* fieldPtr, void* seriali
             fn_Serializer_Serialize_Uint(serializer, &refId, nullptr);
         if ((int)refId != -1) {
             if (loading && fn_ExternalFactory_GetPathForReferenceId) {
-                fn_ExternalFactory_GetPathForReferenceId(factory, pathBuf, refId);
+                fn_ExternalFactory_GetPathForReferenceId(factory, &pathBuf, refId);
             }
             doLoad = true;
         }
@@ -94,9 +93,8 @@ extern "C" void AmbientExternalPtrSerialize_Reimpl(void* fieldPtr, void* seriali
             g_fn_Serialize_Bool(serializer, &present, nullptr);
         if (present) {
             if (*field != nullptr && fn_External_GetPath)
-                fn_External_GetPath(*field, pathBuf);        // save: fill path from object
-            if (g_fn_String_Serialize)
-                g_fn_String_Serialize(pathBuf, serializer);  // read/write the path string
+                fn_External_GetPath(*field, &pathBuf);       // save: fill path from object
+            pathBuf.AsString().Serialize(serializer);        // read/write the path string
             doLoad = true;
         }
     }
@@ -104,12 +102,10 @@ extern "C" void AmbientExternalPtrSerialize_Reimpl(void* fieldPtr, void* seriali
     if (doLoad && loading) {
         void* loaded = nullptr;
         if (fn_ExternalFactory_FindOrLoad && factory)
-            loaded = fn_ExternalFactory_FindOrLoad(factory, pathBuf);
+            loaded = fn_ExternalFactory_FindOrLoad(factory, &pathBuf);
         // RELAXED type check (see file header): keep the loaded External.
         *field = loaded;
     }
-
-    if (fn_Filename_Dtor) fn_Filename_Dtor(pathBuf);
 }
 
 #include "address_registry.h"
