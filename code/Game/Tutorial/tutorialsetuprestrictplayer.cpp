@@ -21,10 +21,13 @@
 
 #include "Tutorial/tutorialsetuprestrictplayer_funcs.h"
 #include "engine_funcs.h"
+#include "system/Filename.h"
+#include "system/String.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <new>
 #include <cstdlib>
 
 // ============================================================
@@ -83,7 +86,7 @@ static void TutRestrict_ResolveRefOrLoad(void* ref) {
     if (*(void**)(r + 0x10)) return;            // hit — nothing to do
 
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) return;
-    if (!fn_ExternalFactory_FindOrLoad || !fn_Filename_CtorString || !fn_Filename_Dtor) return;
+    if (!fn_ExternalFactory_FindOrLoad) return;
     void* factory = *g_pExternalFactorySingleton;
 
     const char* name = *(const char* const*)r;
@@ -98,14 +101,10 @@ static void TutRestrict_ResolveRefOrLoad(void* ref) {
     normalized[k] = 0;
 
     void* found = nullptr;
-    if (fn_String_Ctor_CStr && fn_String_Dtor) {
-        uint8_t normStr[8] = {};
-        fn_String_Ctor_CStr(normStr, normalized);
-        uint8_t normFile[8] = {};
-        fn_Filename_CtorString(normFile, normStr);
-        found = fn_ExternalFactory_FindOrLoad(factory, normFile);
-        fn_Filename_Dtor(normFile);
-        fn_String_Dtor(normStr);
+    {
+        System::String   normStr(normalized);
+        System::Filename normFile(normStr);
+        found = fn_ExternalFactory_FindOrLoad(factory, &normFile);
     }
 
     void* result = nullptr;
@@ -158,11 +157,9 @@ void* TutorialSetupRestrictPlayer_Dtor(void* self, uint32_t flags) {
     uintptr_t restrictVtable = ResolveAddr(Module::Exe, TutorialSetupRestrictPlayerAddr::Vtable);
     *(uintptr_t*)s = restrictVtable;
 
-    // Destroy inline String at +0x50 (camera ref name)
-    if (fn_String_Dtor) fn_String_Dtor((void*)(s + 0x50));
-
-    // Destroy inline String at +0x38 (tool ref name)
-    if (fn_String_Dtor) fn_String_Dtor((void*)(s + 0x38));
+    // Destroy inline Strings (B.3.1 bridge: the object is still untyped bytes)
+    reinterpret_cast<System::String*>(s + 0x50)->~String();  // camera ref name
+    reinterpret_cast<System::String*>(s + 0x38)->~String();  // tool ref name
 
     // Set vtable to TutorialSetup base
     uintptr_t setupVtable = ResolveAddr(Module::Exe, TutorialSetupAddr::Vtable);
@@ -285,22 +282,22 @@ void TutorialSetupRestrictPlayer_Slot8(void* self) {
     // Local layout: String(8) + stamp(4) + pad(4) + ptr(8) = 24 bytes
     uint8_t localRef2[24];
     memset(localRef2, 0, sizeof(localRef2));
-    if (fn_String_Ctor_Copy) fn_String_Ctor_Copy(localRef2, (void*)(s + 0x50));
+    new (localRef2) System::String(*reinterpret_cast<const System::String*>(s + 0x50));
     *(int32_t*)(localRef2 + 8) = *(int32_t*)(s + 0x58);
     *(uint64_t*)(localRef2 + 16) = *(uint64_t*)(s + 0x60);
     TutRestrict_ResolveRefOrLoad(localRef2);
     uint64_t cameraRefPtr = *(uint64_t*)(localRef2 + 16);
-    if (fn_String_Dtor) fn_String_Dtor(localRef2);
+    reinterpret_cast<System::String*>(localRef2)->~String();
 
     // Copy ExternalRef1 (+0x38) into local, resolve, get cached ptr
     uint8_t localRef1[24];
     memset(localRef1, 0, sizeof(localRef1));
-    if (fn_String_Ctor_Copy) fn_String_Ctor_Copy(localRef1, (void*)(s + 0x38));
+    new (localRef1) System::String(*reinterpret_cast<const System::String*>(s + 0x38));
     *(int32_t*)(localRef1 + 8) = *(int32_t*)(s + 0x40);
     *(uint64_t*)(localRef1 + 16) = *(uint64_t*)(s + 0x48);
     TutRestrict_ResolveRefOrLoad(localRef1);
     uint64_t toolRefPtr = *(uint64_t*)(localRef1 + 16);
-    if (fn_String_Dtor) fn_String_Dtor(localRef1);
+    reinterpret_cast<System::String*>(localRef1)->~String();
 
     // Write restriction state to PlayerController at GameWorld+0x120
     uintptr_t playerCtrl = *(uintptr_t*)(gameWorld + 0x120);

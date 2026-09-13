@@ -15,6 +15,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -83,11 +84,10 @@ static int CountOccupiedBuildTiles_Impl(void* smComp)
 
 // Helper: find element by name in parent element, returns raw InternalPtr value
 static void* BuildUI_FindChildElem(void* parentElem, const char* name) {
-    uint8_t nameStr[8], retBuf[16];
-    fn_String_Ctor_CStr(nameStr, name);
-    fn_FindElement(parentElem, retBuf, nameStr);
+    uint8_t retBuf[16];
+    System::String nameStr(name);
+    fn_FindElement(parentElem, retBuf, &nameStr);
     void* result = *(void**)retBuf;
-    fn_String_Dtor(nameStr);
     return result;
 }
 
@@ -183,20 +183,16 @@ void BuildUI_Slot4(BuildUI* self) {
 
     // Set header textTotal: param 0 = "0", param 1 = storage capacity
     {
-        uint8_t zeroStr[8];
-        fn_String_Ctor_CStr(zeroStr, "0");
-        fn_TextElement_SetParameter(*(void**)(s + 0x48), 0, zeroStr);
-        fn_String_Dtor(zeroStr);
+        System::String zeroStr("0");
+        fn_TextElement_SetParameter(*(void**)(s + 0x48), 0, &zeroStr);
 
-        uint8_t fmtBuf[8];
         // smComp (the site's build-material storage, found via fn_FindComponent_SM =
         // ClearAreaComponent) can be null in standalone if that component isn't present
         // / its type-id didn't resolve. Retail always has it; guard the deref so a
         // partial panel (no capacity number) beats a crash.
         int capacity = smComp ? *(int*)(smComp + 0x48) : 0;
-        fn_String_Format(fmtBuf, "%d", (uint64_t)(uint32_t)capacity);
-        fn_TextElement_SetParameter(*(void**)(s + 0x48), 1, fmtBuf);
-        fn_String_Dtor(fmtBuf);
+        System::String capStr = System::String::Format("%d", (uint64_t)(uint32_t)capacity);
+        fn_TextElement_SetParameter(*(void**)(s + 0x48), 1, &capStr);
     }
 
     // Iterate storage table rows (skip first child = header)
@@ -274,16 +270,17 @@ void BuildUI_Slot4(BuildUI* self) {
             // Calculate required amount: entry_count * multiplier
             int entryCount = *(int*)(resBase + rowIdx * 0x10 + 8);
             int multiplier = *(int*)(posComp + 0x4C);
-            uint8_t fmtBuf[8];
-            fn_String_Format(fmtBuf, "%d", (uint64_t)(uint32_t)(entryCount * multiplier));
-            fn_TextElement_SetParameter((void*)rowTextTotal, 1, fmtBuf);
-            fn_String_Dtor(fmtBuf);
+            {
+                System::String reqStr =
+                    System::String::Format("%d", (uint64_t)(uint32_t)(entryCount * multiplier));
+                fn_TextElement_SetParameter((void*)rowTextTotal, 1, &reqStr);
+            }
 
             // Set row textTotal param 0 = "0" initially
-            uint8_t zeroStr[8];
-            fn_String_Ctor_CStr(zeroStr, "0");
-            fn_TextElement_SetParameter((void*)rowTextTotal, 0, zeroStr);
-            fn_String_Dtor(zeroStr);
+            {
+                System::String zeroStr("0");
+                fn_TextElement_SetParameter((void*)rowTextTotal, 0, &zeroStr);
+            }
 
             if (resType) {
                 // Set sprite from resource type
@@ -308,22 +305,19 @@ void BuildUI_Slot4(BuildUI* self) {
                 fn_TextElement_SetText((void*)labelStorage, uiStrBuf);
 
                 // Set tooltip: "ResourceTip" string from label's string table
-                uint8_t tipNameStr[8];
-                fn_String_Ctor_CStr(tipNameStr, "ResourceTip");
+                System::String tipNameStr("ResourceTip");
                 uint64_t stringTable = *(uint64_t*)(labelStorage + 0x48);
                 uint8_t tipStrBuf[16];
-                fn_UIString_Ctor(tipStrBuf, stringTable, tipNameStr);
+                fn_UIString_Ctor(tipStrBuf, stringTable, &tipNameStr);
                 fn_Element_SetToolTip((void*)labelStorage, tipStrBuf);
-                fn_String_Dtor(tipNameStr);
             }
         } else if (rowIdx == resourceCount && resourceComp != nullptr) {
             // Total row: shows total required materials
             int totalCount = *(int*)((uintptr_t)resourceComp + 0x30);
             int multiplier = *(int*)(posComp + 0x4C);
-            uint8_t fmtBuf[8];
-            fn_String_Format(fmtBuf, "%d", (uint64_t)(uint32_t)(totalCount * multiplier));
-            fn_TextElement_SetParameter((void*)rowTextTotal, 1, fmtBuf);
-            fn_String_Dtor(fmtBuf);
+            System::String totStr =
+                System::String::Format("%d", (uint64_t)(uint32_t)(totalCount * multiplier));
+            fn_TextElement_SetParameter((void*)rowTextTotal, 1, &totStr);
         } else {
             // Empty row: clear text and sprite (blanks table rows beyond the material
             // count — a WoodHouse uses only 2 of the 7 storageItem cells). This mirrors the
@@ -423,11 +417,11 @@ void BuildUI_Slot7(BuildUI* self) {
     uint32_t remaining = (uint32_t)(capacity - occupied);
 
     // Update header textTotal param 0 with remaining count
-    uint8_t fmtBuf[8];
-    fn_String_Format(fmtBuf, "%d", (uint64_t)remaining);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x48));
-    fn_TextElement_SetParameter(*(void**)(s + 0x48), 0, fmtBuf);
-    fn_String_Dtor(fmtBuf);
+    {
+        System::String remStr = System::String::Format("%d", (uint64_t)remaining);
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0x48));
+        fn_TextElement_SetParameter(*(void**)(s + 0x48), 0, &remStr);
+    }
 
     int totalRequired = 0;
     uint32_t totalDelivered = 0;
@@ -478,11 +472,12 @@ void BuildUI_Slot7(BuildUI* self) {
             }
 
             // Update row textTotal param 0 with delivered count
-            fn_String_Format(fmtBuf, "%d", delivered);
-            fn_InternalBasePtr_CheckPtr((void*)(rowArrayBase + 8 + rowOffset));
-            void* rowTextTotal = *(void**)(rowArrayBase + 8 + rowOffset);
-            fn_TextElement_SetParameter(rowTextTotal, 0, fmtBuf);
-            fn_String_Dtor(fmtBuf);
+            {
+                System::String delStr = System::String::Format("%d", delivered);
+                fn_InternalBasePtr_CheckPtr((void*)(rowArrayBase + 8 + rowOffset));
+                void* rowTextTotal = *(void**)(rowArrayBase + 8 + rowOffset);
+                fn_TextElement_SetParameter(rowTextTotal, 0, &delStr);
+            }
 
             sumDelivered += (int)delivered;
             int entryCount = *(int*)(resBase + i * 0x10 + 8);
@@ -496,11 +491,13 @@ void BuildUI_Slot7(BuildUI* self) {
         fn_InternalBasePtr_CheckPtr((void*)&smComp);
         uintptr_t totalRowPtr = rowCount * 0x10 + *(uintptr_t*)(s + 0x30);
         fn_InternalBasePtr_CheckPtr((void*)&posComp);
-        fn_String_Format(fmtBuf, "%d", (uint64_t)(uint32_t)*(int*)(posComp + 0x48));
-        fn_InternalBasePtr_CheckPtr((void*)(totalRowPtr + 8));
-        void* totalRowText = *(void**)(totalRowPtr + 8);
-        fn_TextElement_SetParameter(totalRowText, 0, fmtBuf);
-        fn_String_Dtor(fmtBuf);
+        {
+            System::String rowStr =
+                System::String::Format("%d", (uint64_t)(uint32_t)*(int*)(posComp + 0x48));
+            fn_InternalBasePtr_CheckPtr((void*)(totalRowPtr + 8));
+            void* totalRowText = *(void**)(totalRowPtr + 8);
+            fn_TextElement_SetParameter(totalRowText, 0, &rowStr);
+        }
 
         // Calculate totals for progress
         fn_InternalBasePtr_CheckPtr((void*)&posComp);
@@ -521,10 +518,9 @@ void BuildUI_Slot7(BuildUI* self) {
     // Update progress bar
     fn_InternalBasePtr_CheckPtr((void*)(s + 0x40));
     *(float*)(*(uintptr_t*)(s + 0x40) + 0x128) = ratio;
-    fn_String_Format(fmtBuf, "%d", (uint64_t)(uint32_t)percent);
+    System::String pctStr = System::String::Format("%d", (uint64_t)(uint32_t)percent);
     fn_InternalBasePtr_CheckPtr((void*)(s + 0x40));
-    fn_ProgressElement_SetProgressTextParameter(*(void**)(s + 0x40), 0, fmtBuf);
-    fn_String_Dtor(fmtBuf);
+    fn_ProgressElement_SetProgressTextParameter(*(void**)(s + 0x40), 0, &pctStr);
 }
 
 // Slot9: On button click (event 0x12, id 6000), toggle workplace enabled state.

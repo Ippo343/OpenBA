@@ -59,6 +59,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/system/String.h"
 #include "../../types/collection/Collection.h"
 #include "../../types/graphics/AnimationManager.h"
 #include "../../types/io/Serializer.h"
@@ -117,12 +118,6 @@ using ExtPtrSerFn = void (*)(void* slot, Serializer* ser);
 ExtPtrSerFn SerializeGroupPtr() {
     static ExtPtrSerFn f = RtAddr<ExtPtrSerFn>(0x18005b840);
     return f;
-}
-
-// System::String::Serialize, called on GraphicsMesh::Node::_name.
-using StringSerFn = void (*)(void* slot, Serializer* ser);
-StringSerFn SerializeString() {
-    return RT_EXPORT_ONCE(StringSerFn, "?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z");
 }
 
 // Math::Quaternion::Lerp — HIDDEN RETURN SLOT in RDX. See the banner.
@@ -308,7 +303,8 @@ extern "C" void RtGraphics_SerializeMeshNodes(Serializer* ser, int count, void* 
     ReaderWriter* rw = ser->readerWriter;
     uint8_t* p = static_cast<uint8_t*>(basev);
     for (int i = 0; i < count; ++i, p += 0x48) {
-        SerializeString()(p + 0x00, ser);
+        // B.3.1 bridge: GraphicsMesh::Node::_name, untyped node storage.
+        reinterpret_cast<System::String*>(p + 0x00)->Serialize(ser);
         RwScalar(rw, rw_vtbl::kScalarInt, p + 0x08);
         RwFloats(rw, 4, p + 0x0c);
         RwFloats(rw, 3, p + 0x1c);

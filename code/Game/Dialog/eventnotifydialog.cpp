@@ -19,9 +19,12 @@
 
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include "system/String.h"
+#include "system/Filename.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <new>
 
 // ============================================================
 // EventNotifyDialog_CreatePopup — modal popup creation (Slot7 popup branch)
@@ -59,10 +62,8 @@ static void* EventNotifyDialog_CreatePopup(EventNotifyDialog* self, int eventInd
     {
         if (fn_ExternalFactory_FindOrLoad && g_pExternalFactorySingleton &&
             *g_pExternalFactorySingleton) {
-            uint8_t filename[8];
-            fn_Filename_CtorCStr(filename, "Dialog/EventPopup.rsc");
-            void* found = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filename);
-            fn_Filename_Dtor(filename);
+            System::Filename filename("Dialog/EventPopup.rsc");
+            void* found = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filename);
             // Accept the loaded resource if it is External-derived — the same guard the
             // exe applies (IsDerivedFrom(External)) before using it as the popup's
             // external context. g_pExternalTypeId is filled by EnsureGlobals each tick.
@@ -153,8 +154,11 @@ static void EventNotifyDialog_ArrayPush_Impl(void* arrayBasePtr, int newCount, v
             *(uint32_t*)((uintptr_t)dst + 0x08) = *(uint32_t*)((uintptr_t)src + 0x08);
             *(uint64_t*)((uintptr_t)dst + 0x10) = *(uint64_t*)((uintptr_t)src + 0x10);
             *(uint64_t*)((uintptr_t)dst + 0x18) = *(uint64_t*)((uintptr_t)src + 0x18);
-            // Copy String at +0x20 with copy ctor
-            fn_String_Ctor_Copy((void*)((uintptr_t)dst + 0x20), (void*)((uintptr_t)src + 0x20));
+            // Copy String at +0x20 with copy ctor (dst is fresh/uninitialized memory,
+            // so this is a placement-new construction, not an assignment).
+            // B.3.1 bridge: field is a raw exe-struct SystemString, not owned here.
+            new ((void*)((uintptr_t)dst + 0x20)) System::String(
+                *reinterpret_cast<System::String*>((uintptr_t)src + 0x20));
             *(uint32_t*)((uintptr_t)dst + 0x28) = *(uint32_t*)((uintptr_t)src + 0x28);
         }
     }
@@ -163,13 +167,13 @@ static void EventNotifyDialog_ArrayPush_Impl(void* arrayBasePtr, int newCount, v
     if (oldData == newData) {
         if (newCount < oldCount) {
             for (int i = newCount; i < oldCount; i++) {
-                fn_String_Dtor((void*)(oldData + (uintptr_t)i * 0x30 + 0x20));
+                reinterpret_cast<System::String*>(oldData + (uintptr_t)i * 0x30 + 0x20)->~String();  // B.3.1 bridge
             }
         }
     } else {
         // Different buffer: dtor all entries in old buf and free it
         for (int i = 0; i < oldCount; i++) {
-            fn_String_Dtor((void*)(oldData + (uintptr_t)i * 0x30 + 0x20));
+            reinterpret_cast<System::String*>(oldData + (uintptr_t)i * 0x30 + 0x20)->~String();  // B.3.1 bridge
         }
         fn_MemFreeStatic((void*)oldData);
     }
@@ -192,8 +196,9 @@ static void EventNotifyDialog_ArrayRemove_Impl(void* arrayBasePtr, int removeInd
     int count      = *countPtr;
 
     if (removeIndex < count) {
-        // Dtor the String at +0x20 within the removed element
-        fn_String_Dtor((void*)(data + (uintptr_t)removeIndex * 0x30 + 0x20));
+        // Dtor the String at +0x20 within the removed element.
+        // B.3.1 bridge: field is a raw exe-struct SystemString, not owned here.
+        reinterpret_cast<System::String*>(data + (uintptr_t)removeIndex * 0x30 + 0x20)->~String();
 
         // Shift subsequent entries down (removeIndex+1 ... count-1 -> removeIndex ... count-2)
         for (int i = removeIndex + 1; i < count; i++) {
@@ -204,8 +209,11 @@ static void EventNotifyDialog_ArrayRemove_Impl(void* arrayBasePtr, int removeInd
             *(uint32_t*)(dst + 0x08) = *(uint32_t*)(src + 0x08);
             *(uint64_t*)(dst + 0x10) = *(uint64_t*)(src + 0x10);
             *(uint64_t*)(dst + 0x18) = *(uint64_t*)(src + 0x18);
-            // Copy String field at +0x20 using String copy ctor
-            fn_String_Ctor_Copy((void*)(dst + 0x20), (void*)(src + 0x20));
+            // Copy String field at +0x20 using String copy ctor (dst slot's old String
+            // was already destroyed by the shift above or by the removal above it, so
+            // this is a placement-new construction). B.3.1 bridge.
+            new ((void*)(dst + 0x20)) System::String(
+                *reinterpret_cast<System::String*>(src + 0x20));
             *(uint32_t*)(dst + 0x28) = *(uint32_t*)(src + 0x28);
         }
     }
@@ -243,23 +251,19 @@ void EventNotifyDialog_Slot4(EventNotifyDialog* self) {
 
     // Find "ribbonNotify" -> store raw InternalPtr value at +0xE8
     {
-        uint8_t nameStr[8];
-        fn_String_Ctor_CStr(nameStr, "ribbonNotify");
+        System::String nameStr("ribbonNotify");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, nameStr);
+        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
         *(uint64_t*)(s + 0xE8) = *(uint64_t*)retBuf;
-        fn_String_Dtor(nameStr);
     }
 
     // Find "notifyContent" element
     void* notifyContent = nullptr;
     {
-        uint8_t nameStr[8];
-        fn_String_Ctor_CStr(nameStr, "notifyContent");
+        System::String nameStr("notifyContent");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, nameStr);
+        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
         notifyContent = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
     }
 
     // Iterate children of notifyContent
@@ -278,8 +282,7 @@ void EventNotifyDialog_Slot4(EventNotifyDialog* self) {
 
         // Find "notifyImage" in child[i] -> entry[1]
         {
-            uint8_t nameStr[8];
-            fn_String_Ctor_CStr(nameStr, "notifyImage");
+            System::String nameStr("notifyImage");
 
             // Get child[i] again for the FindElement base
             uint8_t childBuf[16];
@@ -287,26 +290,23 @@ void EventNotifyDialog_Slot4(EventNotifyDialog* self) {
             void* child = *(void**)childBuf;
 
             uint8_t retBuf[16];
-            fn_FindElement(child, retBuf, nameStr);
+            fn_FindElement(child, retBuf, &nameStr);
             void* found = *(void**)retBuf;
-            fn_String_Dtor(nameStr);
 
             entry[1] = (uint64_t)found;
         }
 
         // Find "notifyButton" in child[i] -> entry[2]
         {
-            uint8_t nameStr[8];
-            fn_String_Ctor_CStr(nameStr, "notifyButton");
+            System::String nameStr("notifyButton");
 
             uint8_t childBuf[16];
             fn_Element_Child(notifyContent, childBuf, i);
             void* child = *(void**)childBuf;
 
             uint8_t retBuf[16];
-            fn_FindElement(child, retBuf, nameStr);
+            fn_FindElement(child, retBuf, &nameStr);
             void* found = *(void**)retBuf;
-            fn_String_Dtor(nameStr);
 
             entry[2] = (uint64_t)found;
         }
@@ -471,9 +471,8 @@ void EventNotifyDialog_Slot7(EventNotifyDialog* self, void* param2) {
                         fn_Time_Ctor_Float(notifyEntry, timerDuration);
 
                         // +0x10 = sprite icon (from "EventIcon%i" format)
-                        uint8_t iconNameStr[8];
                         int iconIndex = *(int*)(entryOffset + 0x1C + eventArray);
-                        fn_String_Format(iconNameStr, "EventIcon%i", (uint64_t)(uint32_t)iconIndex);
+                        System::String iconNameStr = System::String::Format("EventIcon%i", (uint64_t)(uint32_t)iconIndex);
 
                         // Get sprite from first notification slot's image element
                         uintptr_t slotArray = *(uintptr_t*)(s + 0xC8);
@@ -483,11 +482,9 @@ void EventNotifyDialog_Slot7(EventNotifyDialog* self, void* param2) {
 
                         // Create sprite with icon name (copies sprite sheet, sets index)
                         uint8_t newSprite[32];
-                        fn_Sprite_Ctor(newSprite, *(uint64_t*)spriteBuf, iconNameStr);
+                        fn_Sprite_Ctor(newSprite, *(uint64_t*)spriteBuf, &iconNameStr);
                         *(uint64_t*)(notifyEntry + 0x10) = *(uint64_t*)newSprite;
                         *(uint64_t*)(notifyEntry + 0x18) = *(uint64_t*)(newSprite + 8);
-
-                        fn_String_Dtor(iconNameStr);
 
                         // +0x28 = color based on severity
                         int sev = *(int*)(entryOffset + 0x14 + eventArray);
@@ -500,12 +497,13 @@ void EventNotifyDialog_Slot7(EventNotifyDialog* self, void* param2) {
                         *(uint32_t*)(notifyEntry + 0x28) = color;
 
                         // +0x20 = text string (strip category prefix before ':')
-                        // Event text is at eventArray + entryOffset + 0x08
+                        // Event text is at eventArray + entryOffset + 0x08.
+                        // B.3.1 bridge: raw exe-struct SystemString field, not owned here.
                         uintptr_t eventTextAddr = entryOffset + eventArray + 0x08;
-                        void* eventTextStr = (void*)eventTextAddr;
+                        System::String& eventTextStr = *reinterpret_cast<System::String*>(eventTextAddr);
 
                         // Get string data pointer
-                        uintptr_t strData = *(uintptr_t*)eventTextStr;
+                        uintptr_t strData = *(uintptr_t*)&eventTextStr;
                         int strLen = 0;
                         if (strData != 0) {
                             strLen = *(int*)(strData - 8);
@@ -521,14 +519,16 @@ void EventNotifyDialog_Slot7(EventNotifyDialog* self, void* param2) {
                             colonPos = c + 1;
                         }
 
+                        // notifyEntry was memset to 0 above, so +0x20 is already a valid
+                        // default-constructed System::String; assign into it directly.
+                        // B.3.1 bridge: notifyEntry mirrors a raw exe struct layout.
+                        System::String& entryStr = *reinterpret_cast<System::String*>(notifyEntry + 0x20);
+
                         // If colon found, take substring after it; otherwise use whole string
                         if (colonPos == strLen) {
-                            fn_String_Assign((void*)(notifyEntry + 0x20), eventTextStr);
+                            entryStr = eventTextStr;
                         } else {
-                            uint8_t subStr[8];
-                            fn_String_SubString(eventTextStr, subStr, colonPos + 1, strLen - 1);
-                            fn_String_Assign((void*)(notifyEntry + 0x20), subStr);
-                            fn_String_Dtor(subStr);
+                            entryStr = eventTextStr.SubString(colonPos + 1, strLen - 1);
                         }
 
                         // Push entry to active array at +0xD8
@@ -538,7 +538,7 @@ void EventNotifyDialog_Slot7(EventNotifyDialog* self, void* param2) {
                         hasNewEvents = true;
 
                         // Clean up the string in our local entry (array push copied it)
-                        fn_String_Dtor((void*)(notifyEntry + 0x20));
+                        entryStr.~String();
                     }
                 }
 
@@ -787,9 +787,10 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
         fn_InternalBasePtr_CheckPtr(&groupElem);
         {
             void* groupResolved = groupElem;
-            void* groupStr = (void*)((uintptr_t)groupResolved + 0x58);
-            void* srcStr   = (void*)(activeEntry + 0x20);
-            fn_String_Assign(groupStr, srcStr);
+            // B.3.1 bridge: raw exe-struct SystemString fields, not owned here.
+            System::String& groupStr = *reinterpret_cast<System::String*>((uintptr_t)groupResolved + 0x58);
+            System::String& srcStr   = *reinterpret_cast<System::String*>(activeEntry + 0x20);
+            groupStr = srcStr;
         }
     }
 
@@ -831,11 +832,9 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
         {
             fn_InternalBasePtr_CheckPtr(&groupElem);
             void* groupResolved = groupElem;
-            void* groupStr = (void*)((uintptr_t)groupResolved + 0x58);
-            void* nullStr  = nullptr;
-            fn_String_Assign(groupStr, &nullStr);
-            // Note: the original calls String::~String on the temporary after the assign.
-            // The assign takes a const String* (pointing to null), so the empty string dtor is safe.
+            // B.3.1 bridge: raw exe-struct SystemString field, not owned here.
+            System::String& groupStr = *reinterpret_cast<System::String*>((uintptr_t)groupResolved + 0x58);
+            groupStr = System::String();
         }
 
         // Show image element (clear flag 1), hide button element (set flag 1).
@@ -993,7 +992,8 @@ void* Dtor(void* self, uint32_t flags) {
     int activeCnt = *(int*)(s + 0xE0);
     if (activeArr && activeCnt > 0) {
         uintptr_t e = (uintptr_t)activeArr;
-        for (int i = 0; i < activeCnt; i++, e += 0x30) fn_String_Dtor((void*)(e + 0x20));
+        // B.3.1 bridge: raw exe-struct SystemString field, not owned here.
+        for (int i = 0; i < activeCnt; i++, e += 0x30) reinterpret_cast<System::String*>(e + 0x20)->~String();
     }
     if (fn_MemFreeStatic) { fn_MemFreeStatic(activeArr); fn_MemFreeStatic(*(void**)(s + 0xC8)); }
     *(uint64_t*)(s + 0xC8) = 0; *(uint64_t*)(s + 0xD0) = 0;

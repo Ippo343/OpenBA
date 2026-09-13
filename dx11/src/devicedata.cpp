@@ -122,6 +122,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
+#include "system/String.h"   // -Iruntime/types
 
 namespace VideoDX11 {
 namespace {
@@ -174,12 +175,10 @@ struct Imports {
     void  (*DisplayModeDtor)(void*);                   // 0x1800132f8
 
     // --- System::String / WideString -------------------------------------
-    void* (*StringCtorCStr)(void*, const char*);       // 0x180013248
-    void  (*StringDtor)(void*);                        // 0x180013218
-    void* (*StringAssign)(void*, const void*);         // 0x1800132c0
-    void  (*StringAppend)(void*, void*, const void*);  // 0x180013260 operator+= (returns String)
-    void  (*StringAddStr)(void*, const void*, const void*);   // 0x180013270 operator+(S,S)
-    void  (*StringAddCStr)(void*, const void*, const char*);  // 0x180013268 operator+(S,cstr)
+    // ENDGAME B.3.1 step 2: the six System::String imports (0x180013248,
+    // 0x180013218, 0x1800132c0, 0x180013260, 0x180013270, 0x180013268) and
+    // Format (0x180013288) are gone — System::String is a real class in this
+    // build and the plugin calls its members directly.
     void* (*WideStringCtor)(void*, const wchar_t*);    // 0x1800132e0
     void  (*WideStringDtor)(void*);                    // 0x1800132d8
     void  (*WideStringAsUTF8)(const void*, void*);     // 0x180013258 (ret by hidden ptr)
@@ -195,7 +194,6 @@ struct Imports {
 
     // --- System::Error ----------------------------------------------------
     void  (*ErrorSetText)(const char*, bool);          // 0x180013460
-    void  (*StringFormat)(void*, const char*, ...);    // 0x180013288
 
     // --- the three singleton slots ---------------------------------------
     void** appSingleton;                               // 0x180013310
@@ -250,12 +248,6 @@ const Imports* GetImports() {
         { (void**)&g_im.DisplayModeCtor,        "??0DisplayMode@Device@Video@@QEAA@HH@Z",                        0x180013308 },
         { (void**)&g_im.DisplayModeDtor,        "??1DisplayMode@Device@Video@@QEAA@XZ",                          0x1800132f8 },
 
-        { (void**)&g_im.StringCtorCStr,         "??0String@System@@QEAA@PEBD@Z",                                 0x180013248 },
-        { (void**)&g_im.StringDtor,             "??1String@System@@QEAA@XZ",                                     0x180013218 },
-        { (void**)&g_im.StringAssign,           "??4String@System@@QEAAAEAV01@AEBV01@@Z",                        0x1800132c0 },
-        { (void**)&g_im.StringAppend,           "??YString@System@@QEAA?AV01@AEBV01@@Z",                         0x180013260 },
-        { (void**)&g_im.StringAddStr,           "??HSystem@@YA?AVString@0@AEBV10@0@Z",                           0x180013270 },
-        { (void**)&g_im.StringAddCStr,          "??HSystem@@YA?AVString@0@AEBV10@PEBD@Z",                        0x180013268 },
         { (void**)&g_im.WideStringCtor,         "??0WideString@System@@QEAA@PEB_W@Z",                            0x1800132e0 },
         { (void**)&g_im.WideStringDtor,         "??1WideString@System@@QEAA@XZ",                                 0x1800132d8 },
         { (void**)&g_im.WideStringAsUTF8,       "?AsUTF8@WideString@System@@QEBA?AVString@2@XZ",                 0x180013258 },
@@ -270,7 +262,6 @@ const Imports* GetImports() {
         { (void**)&g_im.AppGetInstance,         "?GetInstance@Application@1@QEBAPEAUHINSTANCE__@@XZ",            0x1800132a8 },
 
         { (void**)&g_im.ErrorSetText,           "?SetText@Error@System@@SAXPEBD_N@Z",                            0x180013460 },
-        { (void**)&g_im.StringFormat,           "?Format@String@System@@SA?AV12@PEBDZZ",                         0x180013288 },
 
         { (void**)&g_im.appSingleton,           "?_singleton@Application@1@0PEAV11@EA",                          0x180013310 },
         { (void**)&g_im.configSingleton,        "?_singleton@Configuration@Video@@0PEAV12@EA",                   0x180013480 },
@@ -513,7 +504,6 @@ static_assert(offsetof(GraphicsInterface, adapterCount) == 0x10, "GraphicsInterf
 // [-4], allocation base at [-8] — visible in Video::Configuration::Startup's
 // inlined destructor). We never touch the interior; 8 bytes of storage plus the
 // Runtime ctor/dtor is all this file needs.
-struct StringStorage  { void* p; };
 struct WideStringStorage { void* p; };
 
 // The three OS/DXGI structure offsets slot 1 and slot 2 depend on. The original
@@ -1401,26 +1391,22 @@ bool DeviceData_CreateDevice(DeviceData* self) {
     // 16
     if (!CreateColorBuffer(self, im)) {
         int aa = ResolveMultisampleMode(self, im);
-        StringStorage msg;
-        im->StringFormat(&msg,
-                         "VideoDX11: Failed to create color buffer with format "
-                         "DXGI_FORMAT_B8G8R8A8_UNORM [%ix%i %ixAA]",
-                         Field<int32_t>(dev, Dev::kWidth),
-                         Field<int32_t>(dev, Dev::kHeight), aa);
-        im->ErrorSetText(static_cast<const char*>(msg.p), false);
-        im->StringDtor(&msg);
+        const System::String msg = System::String::Format(
+            "VideoDX11: Failed to create color buffer with format "
+            "DXGI_FORMAT_B8G8R8A8_UNORM [%ix%i %ixAA]",
+            Field<int32_t>(dev, Dev::kWidth),
+            Field<int32_t>(dev, Dev::kHeight), aa);
+        im->ErrorSetText(msg._data, false);
         return false;
     }
     if (!CreateDepthBuffer(self, im)) {
         int aa = ResolveMultisampleMode(self, im);
-        StringStorage msg;
-        im->StringFormat(&msg,
-                         "VideoDX11: Failed to create a valid depth buffer format "
-                         "DXGI_FORMAT_D24_UNORM_S8_UINT [%ix%i %AA]!",
-                         Field<int32_t>(dev, Dev::kWidth),
-                         Field<int32_t>(dev, Dev::kHeight), aa);
-        im->ErrorSetText(static_cast<const char*>(msg.p), false);
-        im->StringDtor(&msg);
+        const System::String msg = System::String::Format(
+            "VideoDX11: Failed to create a valid depth buffer format "
+            "DXGI_FORMAT_D24_UNORM_S8_UINT [%ix%i %AA]!",
+            Field<int32_t>(dev, Dev::kWidth),
+            Field<int32_t>(dev, Dev::kHeight), aa);
+        im->ErrorSetText(msg._data, false);
         return false;
     }
 
@@ -1696,10 +1682,10 @@ static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
     GraphicsInterface gi;
     im->GfxIfaceCtor(&gi);
     {
-        StringStorage name;
-        im->StringCtorCStr(&name, interfaceName);
-        im->StringAssign(&gi, &name);
-        im->StringDtor(&name);
+        // B.3.1 bridge: GraphicsInterface::name is a POD slot on a struct this
+        // plugin shares with the engine and that is not converted yet.
+        const System::String name(interfaceName);
+        reinterpret_cast<System::String&>(gi) = name;
     }
 
     IDXGIFactory1* factory = nullptr;
@@ -1723,10 +1709,15 @@ static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
             {
                 WideStringStorage w;
                 im->WideStringCtor(&w, adapterDesc.Description);
-                StringStorage utf8;
-                im->WideStringAsUTF8(&w, &utf8);
-                im->StringAssign(&rec, &utf8);
-                im->StringDtor(&utf8);
+                {
+                    // System::WideString is not a B.3.1 class, so AsUTF8 stays
+                    // an import; its RESULT is a real System::String, and the
+                    // inner scope releases it before the WideString, which is
+                    // the shipped order.
+                    System::String utf8;
+                    im->WideStringAsUTF8(&w, &utf8);
+                    reinterpret_cast<System::String&>(rec) = utf8;  // B.3.1 bridge
+                }
                 im->WideStringDtor(&w);
             }
             rec.maxAnisotropy = 0x10;
@@ -1752,27 +1743,32 @@ static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
             // (0x180004829-0x1800048e8): prefix, wide, utf8, t1, t2, t3, then
             // destroyed t3, t2, t1, utf8, wide, prefix.
             {
-                StringStorage prefix;
-                im->StringCtorCStr(&prefix, " (Display ");
-
-                const int len = im->WideStringStrLength(mi.szDevice);
-                WideStringStorage tailW;
-                im->WideStringCtor(&tailW, mi.szDevice + (len - 1));
-
-                StringStorage tailU;
-                im->WideStringAsUTF8(&tailW, &tailU);
-
-                StringStorage t1, t2, t3;
-                im->StringAddStr(&t1, &prefix, &tailU);
-                im->StringAddCStr(&t2, &t1, ")");
-                im->StringAppend(&rec, &t3, &t2);
-
-                im->StringDtor(&t3);
-                im->StringDtor(&t2);
-                im->StringDtor(&t1);
-                im->StringDtor(&tailU);
-                im->WideStringDtor(&tailW);
-                im->StringDtor(&prefix);
+                // The nested scopes below reproduce the shipped destruction
+                // order exactly — t3, t2, t1, tailU, tailW, prefix — with each
+                // System::String released by its own destructor. `tailW` is a
+                // System::WideString, which is not a B.3.1 class, so it keeps
+                // its explicit dtor call, placed where the shipped one is.
+                const System::String prefix(" (Display ");
+                {
+                    const int len = im->WideStringStrLength(mi.szDevice);
+                    WideStringStorage tailW;
+                    im->WideStringCtor(&tailW, mi.szDevice + (len - 1));
+                    {
+                        System::String tailU;
+                        im->WideStringAsUTF8(&tailW, &tailU);
+                        {
+                            const System::String t1 = prefix + tailU;
+                            const System::String t2 = t1 + ")";
+                            // operator+= returns the new value BY VALUE and the
+                            // caller discards the copy; that copy is retail's t3.
+                            const System::String t3 =
+                                (reinterpret_cast<System::String&>(rec) += t2);
+                            (void)t3;
+                        }                       // t3, t2, t1
+                    }                           // tailU
+                    im->WideStringDtor(&tailW);
+                }
+                                                // prefix
             }
 
             // Display modes. Format 28 is what the shipped code asks for.

@@ -16,6 +16,8 @@
 #include "PlacementTool.h"
 #include "Tool.h"
 #include "engine_funcs.h"
+#include "math/Math.h"
+#include "system/String.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -58,12 +60,6 @@ static fn_IBP_CheckPtr_t s_fn_IBP_CheckPtr = nullptr;
 typedef bool (*fn_KeyMapPressed_t)(void* keyMap, int slot, int keyId);
 static fn_KeyMapPressed_t s_fn_KeyMapPressed = nullptr;
 
-// Math::Transform::FromYawPitchOffset — IAT dispatch slot [0x140151288]
-// Real signature: static Transform FromYawPitchOffset(Scalar& yaw, Scalar& pitch, Vector3& offset)
-// RCX=retval, RDX=&yaw, R8=&pitch, R9=&offset.
-typedef void (*fn_TransformFromYaw_t)(void* outTransform, const void* yaw, const void* pitch, const void* offset);
-static fn_TransformFromYaw_t s_fn_TransformFromYaw = nullptr;
-
 // Graphics::Geometry::SetTransform — IAT dispatch slot [0x1401512e0]
 // Verified from Serialize disasm at 0x1400fe011: CALL [0x1401512e0]
 typedef void (*fn_GeomSetTransform_t)(void* geometry, void* transform);
@@ -82,16 +78,6 @@ static fn_MeshUpdateHier_t s_fn_MeshUpdateHier = nullptr;
 // Runtime code). Signature: void GetTransform(Geometry* this, Transform* retbuf).
 typedef void (*fn_GeomGetTransform_t)(void* geometry, void* retbuf);
 static fn_GeomGetTransform_t s_fn_GeomGetTransform = nullptr;
-
-// System::String::String (copy ctor) — IAT dispatch slot [0x140151428]
-// Verified from Serialize disasm at 0x1400fe12c and 0x1400fe155
-typedef void* (*fn_StringCtor_t)(void* dst, void* src);
-static fn_StringCtor_t s_fn_StringCtor = nullptr;
-
-// System::String::~String — IAT dispatch slot [0x140152af0]
-// Verified from Serialize disasm at 0x1400fe16c, 0x1400fe183, 0x1400fe207
-typedef void (*fn_StringDtor_t)(void* str);
-static fn_StringDtor_t s_fn_StringDtor = nullptr;
 
 // PlacementTool_sub_d960 — mirror/flip handler at 0x1400fd960
 typedef void (*fn_sub_d960_t)(void* self);
@@ -198,31 +184,10 @@ static void EnsureFuncs() {
     // same one the working camera-input path uses).
     if (!s_fn_KeyMapPressed && fn_KeyMap_Pressed)
         s_fn_KeyMapPressed = reinterpret_cast<fn_KeyMapPressed_t>(fn_KeyMap_Pressed);
-    s_fn_TransformFromYaw  = (fn_TransformFromYaw_t)resolveIAT(0x140151288);
     s_fn_GeomSetTransform  = (fn_GeomSetTransform_t)resolveIAT(0x1401512e0);
     s_fn_MeshUpdateHier    = (fn_MeshUpdateHier_t)resolveIAT(0x140152888);
     s_fn_GeomGetTransform  = (fn_GeomGetTransform_t)resolveIAT(0x140151460);
-    s_fn_StringCtor        = (fn_StringCtor_t)resolveIAT(0x140151428);
-    s_fn_StringDtor        = (fn_StringDtor_t)resolveIAT(0x140152af0);
-    // The String copy-ctor / dtor IAT slots (0x140151428 / 0x140152af0) are unregistered in
-    // standalone → null, so the cost-string tooltip below silently skips (costString stays
-    // 0 → dialog shows a blank cost). Fall back to the export-resolved System::String
-    // ctor/dtor (same slot->export pattern as DragTool).
-    if (!s_fn_StringCtor && fn_String_Ctor_Copy)
-        s_fn_StringCtor = reinterpret_cast<fn_StringCtor_t>(fn_String_Ctor_Copy);
-    if (!s_fn_StringDtor && fn_String_Dtor)
-        s_fn_StringDtor = reinterpret_cast<fn_StringDtor_t>(fn_String_Dtor);
-    // Math::Transform::FromYawPitchOffset is a STATIC fn returning Transform by value
-    // (hidden retbuf: RCX=retbuf, RDX=yaw, R8=pitch, R9=offset) — matches the 4-arg
-    // typedef. Its exe IAT slot 0x140151288 is registered in standalone via
-    // address_registry (RegisterDispatchSlot), so resolveIAT above normally returns it;
-    // this ResolveExport is a belt-and-suspenders fallback if the slot is ever empty.
-    // Without a valid pointer the preview mesh gets a zeroed (degenerate) transform →
-    // invisible ghost. (Name recovered from the exe slot name-table.) Likewise
-    // GeomGetTransform (0x140151460) is now registered; keep an export fallback.
-    if (!s_fn_TransformFromYaw)
-        s_fn_TransformFromYaw = reinterpret_cast<fn_TransformFromYaw_t>(
-            ResolveExport("?FromYawPitchOffset@Transform@Math@@SA?AV12@AEBVScalar@2@0AEBVVector3@2@@Z"));
+    // GeomGetTransform (0x140151460) is registered; keep an export fallback.
     if (!s_fn_GeomGetTransform)
         s_fn_GeomGetTransform = reinterpret_cast<fn_GeomGetTransform_t>(
             ResolveExport("?GetTransform@Geometry@Graphics@@QEBA?AVTransform@Math@@XZ"));
@@ -636,9 +601,11 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
     float zeroPitch = 0.f;
 
     // yaw[0] already has the float yaw value from sub_da00.
-    if (s_fn_TransformFromYaw) {
+    {
         float yawVal = yaw[0];
-        s_fn_TransformFromYaw(localTransform, &yawVal, &zeroPitch, pos);
+        *reinterpret_cast<Math::Transform*>(localTransform) =
+            Math::Transform::FromYawPitchOffset(
+                yawVal, zeroPitch, *reinterpret_cast<const Math::Vector3*>(pos));
     }
 
     // Where the ghost mesh is actually being put this frame. If the preview appears
@@ -720,38 +687,21 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
     // Build cost string: index into string array at (costResult+0x50)
     // Index is 0 (valid) or 1 (invalid), based on tileValid
     uint32_t strIndex = (tileValid == 0) ? 1 : 0;
-    uint64_t costString = 0;  // System::String (8-byte COW refcounted)
-    uint64_t tempString = 0;
-    int cleanupFlags = 0;  // track which strings need cleanup
+    System::String costString;  // System::String (8-byte COW refcounted)
 
     if (costResult != 0 && (int)strIndex < *(int*)(costResult + 0x58)) {
-        // Copy from string array: array at +0x50, each entry is 8 bytes
+        // Copy from string array: array at +0x50, each entry is 8 bytes.
+        // Retail copy-constructs a temporary, copies that into costString and
+        // then releases the temporary — the scope below does both.
         uintptr_t strArrayBase = *(uintptr_t*)(costResult + 0x50);
-        void* srcStr = (void*)(strArrayBase + (uintptr_t)strIndex * 8);
-        if (s_fn_StringCtor) {
-            s_fn_StringCtor(&tempString, srcStr);
-        }
-        cleanupFlags = 1;  // need to cleanup tempString
+        System::String tempString(
+            *reinterpret_cast<const System::String*>(strArrayBase + (uintptr_t)strIndex * 8));
+        costString = tempString;
     } else {
-        // Empty string fallback
+        // Empty-string fallback: retail aliases the zeroed costResult local as an
+        // empty String, copies it and releases it — both no-ops on a null String,
+        // so costString simply stays empty.
         costResult = 0;
-        tempString = 0;  // null string
-        cleanupFlags = 2;  // need to cleanup costResult local (set to 0)
-    }
-
-    // Copy into costString for the dialog update call
-    void* strSrc = (cleanupFlags == 1) ? &tempString : &costResult;
-    if (s_fn_StringCtor) {
-        s_fn_StringCtor(&costString, strSrc);
-    }
-
-    // Cleanup intermediate strings (matching original cleanup order)
-    if (cleanupFlags == 2) {
-        // Cleanup the fallback costResult local
-        if (s_fn_StringDtor) s_fn_StringDtor(&costResult);
-    } else if (cleanupFlags == 1) {
-        // Cleanup tempString
-        if (s_fn_StringDtor) s_fn_StringDtor(&tempString);
     }
 
     // Get bounding box from mesh instance (+0x34 to +0x48 = 6 floats)
@@ -799,11 +749,6 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
             -1,                     // [RSP+0x48]
             bbox,                   // [RSP+0x50]
             meshTransform);         // [RSP+0x58]
-    }
-
-    // Cleanup costString
-    if (s_fn_StringDtor) {
-        s_fn_StringDtor(&costString);
     }
 
     // Check if cell position changed (triggers tick sound)
@@ -1530,9 +1475,9 @@ extern "C" int PlacementTool_HarnessPreviewAtCell(void* toolSelf, int centerCell
         return 0;
     }
 
-    fprintf(stderr, "[Preview] fns: TransformFromYaw=%p SceneAddObject=%p GeomSetTransform=%p "
+    fprintf(stderr, "[Preview] fns: SceneAddObject=%p GeomSetTransform=%p "
             "MeshUpdateHier=%p\n",
-            (void*)s_fn_TransformFromYaw, (void*)s_fn_SceneAddObject,
+            (void*)s_fn_SceneAddObject,
             (void*)s_fn_GeomSetTransform, (void*)s_fn_MeshUpdateHier);
     fflush(stderr);
 
@@ -1559,7 +1504,9 @@ extern "C" int PlacementTool_HarnessPreviewAtCell(void* toolSelf, int centerCell
     uint8_t localTransform[96];
     memset(localTransform, 0, sizeof(localTransform));
     float yawVal = 0.0f, zeroPitch = 0.0f;
-    if (s_fn_TransformFromYaw) s_fn_TransformFromYaw(localTransform, &yawVal, &zeroPitch, pos);
+    *reinterpret_cast<Math::Transform*>(localTransform) =
+        Math::Transform::FromYawPitchOffset(
+            yawVal, zeroPitch, *reinterpret_cast<const Math::Vector3*>(pos));
 
     // Log the first 12 floats so a degenerate (all-zero) transform is obvious and the
     // translation (which should carry pos) is visible.

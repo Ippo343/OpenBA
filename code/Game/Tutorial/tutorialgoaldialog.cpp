@@ -9,6 +9,8 @@
 #include "Tutorial/tutorialgoaldialog_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "system/String.h"
+#include "system/Filename.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -73,10 +75,10 @@ void* TutorialGoalDialog_ScalarDtor(void* self, uint32_t flags) {
     *(void**)self = s_vtable;
 
     // Destroy string at +0x28 (target entity name)
-    fn_String_Dtor((void*)(s + 0x28));
+    reinterpret_cast<System::String*>(s + 0x28)->~String();
 
     // Destroy string at +0x20 (dialog name)
-    fn_String_Dtor((void*)(s + 0x20));
+    reinterpret_cast<System::String*>(s + 0x20)->~String();
 
     // Set vtable to External base
     *(void**)self = s_baseVtable;
@@ -109,17 +111,15 @@ uint64_t TutorialGoalDialog_Shutdown(void* self, void* stream) {
     s_fn_Serializer_Ctor(serializer2, stream, 0);
 
     // Serialize dialog name string at +0x20
-    if (g_fn_String_Serialize)
-        g_fn_String_Serialize((void*)(s + 0x20), serializer2);
+    reinterpret_cast<System::String*>(s + 0x20)->Serialize(serializer2);
 
-    // Filename ctor (stack local, used as temp for scope lifetime)
-    uint8_t tempFilename[8];
-    if (fn_Filename_Ctor)
-        fn_Filename_Ctor(tempFilename);
+    // Filename temp retail's compiler emitted for this scope; only ever
+    // constructed and destroyed.
+    System::Filename tempFilename;
+    (void)tempFilename;
 
     // Serialize target entity string at +0x28
-    if (g_fn_String_Serialize)
-        g_fn_String_Serialize((void*)(s + 0x28), serializer2);
+    reinterpret_cast<System::String*>(s + 0x28)->Serialize(serializer2);
 
     // If loading (serializer mode at +0x08 == 0), resolve external by name
     int serializerMode = *(int*)(*(uintptr_t*)serializer2 + 0x8);
@@ -128,8 +128,6 @@ uint64_t TutorialGoalDialog_Shutdown(void* self, void* stream) {
     }
 
     // Cleanup
-    if (fn_Filename_Dtor)
-        fn_Filename_Dtor(tempFilename);
     s_fn_Serializer_Dtor(serializer2);
 
     return 1;

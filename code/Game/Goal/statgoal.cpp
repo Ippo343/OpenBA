@@ -25,6 +25,9 @@
 #include "engine_funcs.h"
 #include "Goal/goal_exe_helpers.h"
 #include "resolve.h"
+#include "system/String.h"
+#include "system/Filename.h"
+#include <new>
 #include <cstdint>
 #include <cstring>
 
@@ -119,21 +122,13 @@ void StatGoal_Slot5(StatGoal* self, void* stream) {
     }
 
     // Serialize statA string (+0x48) via String::Serialize
-    // First construct a Filename (stack temp)
-    typedef void (*fn_FilenameCtor_t)(void* self);
-    typedef void (*fn_FilenameDtor_t)(void* self);
-    fn_FilenameCtor_t filenameCtor = nullptr;
-    fn_FilenameDtor_t filenameDtor = nullptr;
-
-    uintptr_t fnCtorSlot = ResolveAddr(Module::Exe, 0x140151d40);
-    if (fnCtorSlot) filenameCtor = *reinterpret_cast<fn_FilenameCtor_t*>(fnCtorSlot);
-    uintptr_t fnDtorSlot = ResolveAddr(Module::Exe, 0x1401529e8);
-    if (fnDtorSlot) filenameDtor = *reinterpret_cast<fn_FilenameDtor_t*>(fnDtorSlot);
-
-    if (g_fn_String_Serialize) {
-        uint8_t filenameBuf[8];
-        if (filenameCtor) filenameCtor(filenameBuf);
-        g_fn_String_Serialize((void*)(s + 0x48), serializerBuf);
+    // Each leg is wrapped in the Filename stack temporary retail's compiler
+    // emitted; it is only ever constructed and destroyed.
+    {
+        System::Filename filenameBuf;
+        (void)filenameBuf;
+        // B.3.1 bridge: StatGoal is still an untyped byte struct.
+        reinterpret_cast<System::String*>(s + 0x48)->Serialize(serializerBuf);
 
         // If loading (mode == 0), resolve the ExternalPtr.
         // Original (0x1400da960): RAX = *(serializer+0) [the reader/writer], then
@@ -146,19 +141,20 @@ void StatGoal_Slot5(StatGoal* self, void* stream) {
                 s_fn_ResolveExternalPtr((void*)(s + 0x48));
             }
         }
-        if (filenameDtor) filenameDtor(filenameBuf);
+    }
 
-        // Serialize statB string (+0x60)
-        if (filenameCtor) filenameCtor(filenameBuf);
-        g_fn_String_Serialize((void*)(s + 0x60), serializerBuf);
+    // Serialize statB string (+0x60)
+    {
+        System::Filename filenameBuf;
+        (void)filenameBuf;
+        reinterpret_cast<System::String*>(s + 0x60)->Serialize(serializerBuf);
 
-        reader = *(void**)(serializerBuf + 0);
+        void* reader = *(void**)(serializerBuf + 0);
         if (reader && *(int*)((uintptr_t)reader + 0x8) == 0) {
             if (s_fn_ResolveExternalPtr) {
                 s_fn_ResolveExternalPtr((void*)(s + 0x60));
             }
         }
-        if (filenameDtor) filenameDtor(filenameBuf);
     }
 
     // Serialize statFlags (+0x78) via vtable +0x98
@@ -222,29 +218,6 @@ static void StatGoal_ComputeOperands(StatGoal* self, int& statValueA, int& compa
     EnsureHelpers();
     uintptr_t s = (uintptr_t)self;
 
-    // Resolve dispatch slots for String copy ctor and dtor
-    typedef void* (*fn_StringCopyCtor_t)(void* dst, void* src);
-    typedef void (*fn_StringDtor_dispatch_t)(void* str);
-    static fn_StringCopyCtor_t s_fn_StringCopyCtor = nullptr;
-    static fn_StringDtor_dispatch_t s_fn_StringDtor_dispatch = nullptr;
-    static bool s_copyResolved = false;
-    if (!s_copyResolved) {
-        uintptr_t slot;
-        slot = ResolveAddr(Module::Exe, 0x140151428);
-        if (slot) s_fn_StringCopyCtor = *reinterpret_cast<fn_StringCopyCtor_t*>(slot);
-        slot = ResolveAddr(Module::Exe, 0x140152af0);
-        if (slot) s_fn_StringDtor_dispatch = *reinterpret_cast<fn_StringDtor_dispatch_t*>(slot);
-        // SA fallback: these two dispatch slots (0x140151428 copy ctor / 0x140152af0 dtor)
-        // are unregistered in the standalone exe → null. Unlike the tools' cosmetic cost
-        // string, here the copy feeds the local ExternalPtr that ResolveExternalPtr uses to
-        // look up the stat value, so a null ctor would silently break the comparison. Fall
-        // back to the export-resolved System::String ctor/dtor (same pattern as dragtool).
-        if (!s_fn_StringCopyCtor && fn_String_Ctor_Copy)
-            s_fn_StringCopyCtor = reinterpret_cast<fn_StringCopyCtor_t>(fn_String_Ctor_Copy);
-        if (!s_fn_StringDtor_dispatch && fn_String_Dtor)
-            s_fn_StringDtor_dispatch = reinterpret_cast<fn_StringDtor_dispatch_t>(fn_String_Dtor);
-        s_copyResolved = true;
-    }
 
     // Local ExternalPtr struct layout matching original:
     //   [0x00..0x07]: String (8 bytes, copy)
@@ -260,9 +233,8 @@ static void StatGoal_ComputeOperands(StatGoal* self, int& statValueA, int& compa
     memset(localA, 0, sizeof(localA));
     *(uintptr_t*)(localA + 0x28) = (uintptr_t)localA;  // parent ptr
 
-    if (s_fn_StringCopyCtor) {
-        s_fn_StringCopyCtor(localA, (void*)(s + 0x48));
-    }
+    // B.3.1 bridge: StatGoal and the local ExternalPtr are still untyped bytes.
+    new (localA) System::String(*reinterpret_cast<const System::String*>(s + 0x48));
     *(int32_t*)(localA + 0x08) = *(int32_t*)(s + 0x50);   // generation
     *(void**)(localA + 0x10)   = *(void**)(s + 0x58);      // external ptr
     *(uintptr_t*)(localA + 0x28) = (uintptr_t)localA;      // parent ptr
@@ -274,9 +246,7 @@ static void StatGoal_ComputeOperands(StatGoal* self, int& statValueA, int& compa
     void* extA = *(void**)(localA + 0x10);
 
     // Destroy string copy
-    if (s_fn_StringDtor_dispatch) {
-        s_fn_StringDtor_dispatch(localA);
-    }
+    reinterpret_cast<System::String*>(localA)->~String();
 
     // Look up stat value A
     statValueA = 0;
@@ -292,9 +262,7 @@ static void StatGoal_ComputeOperands(StatGoal* self, int& statValueA, int& compa
         memset(localB, 0, sizeof(localB));
         *(uintptr_t*)(localB + 0x28) = (uintptr_t)localB;
 
-        if (s_fn_StringCopyCtor) {
-            s_fn_StringCopyCtor(localB, (void*)(s + 0x60));
-        }
+        new (localB) System::String(*reinterpret_cast<const System::String*>(s + 0x60));
         *(int32_t*)(localB + 0x08) = *(int32_t*)(s + 0x68);
         *(void**)(localB + 0x10)   = *(void**)(s + 0x70);
         *(uintptr_t*)(localB + 0x28) = (uintptr_t)localB;
@@ -304,9 +272,7 @@ static void StatGoal_ComputeOperands(StatGoal* self, int& statValueA, int& compa
         }
         void* extB = *(void**)(localB + 0x10);
 
-        if (s_fn_StringDtor_dispatch) {
-            s_fn_StringDtor_dispatch(localB);
-        }
+        reinterpret_cast<System::String*>(localB)->~String();
 
         if (s_fn_StatValueDispatch) {
             comparisonValue = s_fn_StatValueDispatch(self, self->statTypeB, extB);
@@ -386,11 +352,9 @@ void* StatGoal_Dtor(StatGoal* self, uint32_t flags) {
         *(void**)self = (void*)vtableAddr;
     }
 
-    // Destroy String fields
-    if (fn_String_Dtor) {
-        fn_String_Dtor((void*)(s + 0x60));  // statBString
-        fn_String_Dtor((void*)(s + 0x48));  // statAString
-    }
+    // Destroy String fields (B.3.1 bridge: StatGoal is still untyped bytes)
+    reinterpret_cast<System::String*>(s + 0x60)->~String();  // statBString
+    reinterpret_cast<System::String*>(s + 0x48)->~String();  // statAString
 
     // Call base Achievement::Goal::~Goal.
     // This used to say "the base dtor is at a dispatch slot; we call it via the

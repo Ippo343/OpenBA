@@ -46,6 +46,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/system/String.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/video/ShaderProgram.h"
 
@@ -95,7 +96,6 @@ void CallSlot0(void* self, int flag) {
 using ScalarFn    = void (*)(ReaderWriter*, void*, const char*);
 using VersionFn   = int  (*)(ReaderWriter*);
 using SetSizeFn   = void (*)(void*, int);
-using StrSerFn    = void (*)(void* str, Serializer* ser);
 using LoopFn      = void (*)(Serializer* ser, int count, void* data);
 using DestroyFn   = void (*)(void* ignoredThis, void* base, int count);
 using ExtPtrSerFn = void (*)(void* field, Serializer* ser);
@@ -159,8 +159,10 @@ void SerializeLegacyV0(Serializer* ser) {
     if (reading) RtAddr<SetSizeFn>(0x1800547e0ull)(&strings8, n);
     {
         uint8_t* e = static_cast<uint8_t*>(strings8.data);
+        // B.3.1 bridge: `strings8` is untyped array storage, one System::String per
+        // 8-byte slot; the cast dies when Collection::Array<T> is a template (B.3.2).
         for (int32_t i = 0; i < n; ++i, e += 8)
-            RT_EXPORT_ONCE(StrSerFn, "?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z")(e, ser);
+            reinterpret_cast<System::String*>(e)->Serialize(ser);
     }
 
     n = 0;
@@ -179,7 +181,7 @@ void SerializeLegacyV0(Serializer* ser) {
     {
         uint8_t* e = static_cast<uint8_t*>(samplers.data);
         for (int32_t i = 0; i < n; ++i, e += 0x10) {
-            RT_EXPORT_ONCE(StrSerFn, "?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z")(e + 0x00, ser);
+            reinterpret_cast<System::String*>(e + 0x00)->Serialize(ser);  // B.3.1 bridge
             RwInt (rw, e + 0x08);
             RwBool(rw, e + 0x0c);
             RwBool(rw, e + 0x0d);

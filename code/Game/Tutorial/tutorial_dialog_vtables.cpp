@@ -173,7 +173,7 @@ void Slot4(void* self) {
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     if (*reinterpret_cast<uint64_t*>(s + 0x18) == 0) return;
     if (*reinterpret_cast<uint64_t*>(s + 0x20) == 0) return;
-    if (!fn_FindElement || !fn_String_Ctor_CStr || !fn_Element_SetElementId) return;
+    if (!fn_FindElement || !fn_Element_SetElementId) return;
     TutorialUI_Serialize(reinterpret_cast<TutorialUI*>(self));
 }
 
@@ -443,7 +443,7 @@ void* Dtor(void* self, uint32_t flags) {
 
 void Slot4_Startup(void* self) {
     if (!self) return;
-    if (!fn_DialogInstance_FindElement || !fn_String_Ctor_CStr || !fn_String_Dtor) return;
+    if (!fn_DialogInstance_FindElement) return;
     TutorialHighlightDialog_Startup(reinterpret_cast<TutorialHighlightDialog*>(self));
 }
 

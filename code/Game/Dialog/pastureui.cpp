@@ -9,6 +9,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 
 // ============================================================
@@ -148,13 +149,11 @@ void PastureUI_Slot4(PastureUI* self) {
     SelectResourceUI_Slot4(self);
 
     // Find "slider" element in parent element at +0x20
-    uint8_t nameBuf[8];
-    fn_String_Ctor_CStr(nameBuf, "slider");
+    System::String nameBuf("slider");
 
     void* parentElem = *(void**)(s + 0x20);
     uint64_t findResult = 0;
-    fn_FindElement(parentElem, &findResult, nameBuf);
-    fn_String_Dtor(nameBuf);
+    fn_FindElement(parentElem, &findResult, &nameBuf);
 
     // Store slider element at +0x38 (skip IsDerivedFrom, null check only)
     void* rawElem = (void*)findResult;
@@ -211,16 +210,17 @@ void PastureUI_Slot7(PastureUI* self) {
     ((fn_SetEnabled_t)vtable[8])(comboElem, enableCombo);
 
     // Format current animal count → slider param 0
-    uint8_t fmtStr[8];
     void* sliderElem = *(void**)(s + 0x38);
-    fn_String_Format(fmtStr, "%i", *(uint32_t*)(comp + 0x38));
-    fn_SliderElement_SetParameter(sliderElem, 0, fmtStr);
-    fn_String_Dtor(fmtStr);
+    {
+        System::String fmtStr = System::String::Format("%i", *(uint32_t*)(comp + 0x38));
+        fn_SliderElement_SetParameter(sliderElem, 0, &fmtStr);
+    }
 
     // Format max animal count → slider param 1
-    fn_String_Format(fmtStr, "%i", *(uint32_t*)(comp + 0x40));
-    fn_SliderElement_SetParameter(sliderElem, 1, fmtStr);
-    fn_String_Dtor(fmtStr);
+    {
+        System::String fmtStr = System::String::Format("%i", *(uint32_t*)(comp + 0x40));
+        fn_SliderElement_SetParameter(sliderElem, 1, &fmtStr);
+    }
 }
 
 // ============================================================

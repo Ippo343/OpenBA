@@ -36,6 +36,7 @@
 //   8. Register the master entity. Return 1.
 
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include "Tool.h"
 #include "FencedTool.h"
@@ -119,14 +120,11 @@ void StampMapRect(void* mapComp, int x, int y, int w, int h, int rotDeg) {
 // yaw cached at +0x168 (UN-normalised float, matching retail), then
 // Geometry::SetTransform. Same helper family as bridgetool_calcpath's ApplyYaw.
 void ApplyModelYaw(void* model, float yawDeg, const float offset[3]) {
-    if (!model || !fn_Transform_FromYawPitchOffset) return;
-    uint8_t xform[96];
-    std::memset(xform, 0, sizeof(xform));
-    float yaw = yawDeg, pitch = 0.f;
-    float off[3] = { offset[0], offset[1], offset[2] };
-    fn_Transform_FromYawPitchOffset(xform, &yaw, &pitch, off);
+    if (!model) return;
+    Math::Vector3 off(offset[0], offset[1], offset[2]);
+    Math::Transform xform = Math::Transform::FromYawPitchOffset(yawDeg, 0.f, off);
     uintptr_t m = reinterpret_cast<uintptr_t>(model);
-    std::memcpy(reinterpret_cast<void*>(m + 0x148), xform, 0x20);
+    std::memcpy(reinterpret_cast<void*>(m + 0x148), &xform, 0x1c);
     *reinterpret_cast<float*>(m + 0x168) = yawDeg;
     if (fn_Geometry_SetTransform)
         fn_Geometry_SetTransform(reinterpret_cast<void*>(m + 0x28),

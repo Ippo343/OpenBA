@@ -15,6 +15,8 @@
 
 #include "Game/menuscene_funcs.h"
 #include "engine_funcs.h"
+#include "math/Math.h"
+#include "system/String.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -234,9 +236,8 @@ void* MenuScene_Dtor(MenuScene* self, uint32_t flags) {
     self->_field38 = nullptr;
 
     // Destroy String at +0x20
-    if (fn_String_Dtor) {
-        fn_String_Dtor(&self->_field20);
-    }
+    // B.3.1 bridge: MenuScene's String field is still a POD member.
+    reinterpret_cast<System::String*>(&self->_field20)->~String();
 
     // Call External base destructor
     if (s_fn_External_BaseDtor) {
@@ -340,14 +341,7 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
     if (stream && g_fn_Serializer_Ctor) {
         g_fn_Serializer_Ctor(outer_ser, stream, 2);
         outer_ctored = true;
-        if (g_fn_String_Serialize) {
-            g_fn_String_Serialize(&self->_field20, outer_ser);
-        } else {
-            printf("[MenuScene::Slot5_Serialize] g_fn_String_Serialize NULL — "
-                   "stream cursor not advanced past type-name; Geometry "
-                   "deserialize will likely read garbage\n");
-            fflush(stdout);
-        }
+        reinterpret_cast<System::String*>(&self->_field20)->Serialize(outer_ser);
     } else {
         printf("[MenuScene::Slot5_Serialize] Serializer ctor unavailable — "
                "skipping outer prelude (terrain will be missing)\n");
@@ -661,28 +655,21 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
 static void MenuScene_TransformInit_Standalone(void* transformObj) {
     if (!transformObj) return;
 
-    if (!fn_Math_Transform_Ctor || !fn_Math_Transform3_Identity ||
-        !fn_Volume_Frustum_Ctor || !fn_Graphics_Camera_Ctor) {
+    if (!fn_Volume_Frustum_Ctor || !fn_Graphics_Camera_Ctor) {
         printf("[MenuScene::TransformInit] missing Runtime fn ptrs "
-               "(TCtor=%p T3Id=%p FrustC=%p CamC=%p) — leaving transform zeroed\n",
-               (void*)fn_Math_Transform_Ctor,
-               (void*)fn_Math_Transform3_Identity,
+               "(FrustC=%p CamC=%p) — leaving transform zeroed\n",
                (void*)fn_Volume_Frustum_Ctor,
                (void*)fn_Graphics_Camera_Ctor);
         return;
     }
 
-    fn_Math_Transform_Ctor(transformObj);
+    *reinterpret_cast<Math::Transform*>(transformObj) = Math::Transform();
 
     // Zero scalars at +0x1C (qword) and +0x24 (dword) per original disasm.
     *reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(transformObj) + 0x1C) = 0;
     *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(transformObj) + 0x24) = 0;
 
-    // Transform3::Identity returns BY VALUE: the hidden return slot is an
-    // argument, not something the callee allocates. Passing nothing left it
-    // writing 0x30 bytes through a stale RCX (see engine_funcs.h).
-    uint8_t identBuf[0x40] = {};
-    void* ident = fn_Math_Transform3_Identity(identBuf);
+    Math::Transform3 ident = Math::Transform3::Identity();
 
     // Frustum ctor: arg order is (near, far, fovX, fovY). Original uses
     // near=1.0, far=100.0, fovX=fovY=90.0 (FUN_140098800).
@@ -693,7 +680,7 @@ static void MenuScene_TransformInit_Standalone(void* transformObj) {
     // Camera lives at transform+0x34 (per the embedded Camera at +0x34 inside
     // the 0x10C-byte Transform block).
     void* cameraObj = reinterpret_cast<uint8_t*>(transformObj) + 0x34;
-    fn_Graphics_Camera_Ctor(cameraObj, frustumBuf, ident, true);
+    fn_Graphics_Camera_Ctor(cameraObj, frustumBuf, &ident, true);
 }
 
 // Standalone vtable for MenuScene (11 slots; matches Object::External shape).

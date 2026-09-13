@@ -31,6 +31,7 @@
 #include "engine_funcs.h"
 #include "perf_terrain.h"
 #include "resolve.h"
+#include "math/Math.h"
 #include <cstdio>
 #include <cstdint>
 #include <cmath>
@@ -67,8 +68,8 @@ static void (*s_fn_Serialize_Float)(void* ser, void* field, const char* name) = 
 // Array serialization: serializer, count, array_ptr, name
 static void (*s_fn_Serialize_IntArray)(void* ser, int count, void* array, const char* name) = nullptr;
 
-// Math::Vector3::Serialize(this, serializer) via IAT at 0x140152a68
-static void (*s_fn_Vector3_Serialize)(void* vec3, void* serializer) = nullptr;
+// ENDGAME B.3.1 step 2: Math::Vector3::Serialize was read from the IAT slot at
+// 0x140152a68; it is now a direct member call on Math::Vector3.
 
 // FUN_140022970 -- ExternalPtr serialize (path description)
 static void (*s_fn_ExternalPtr_Serialize)(void* extPtr, void* serializer) = nullptr;
@@ -76,38 +77,22 @@ static void (*s_fn_ExternalPtr_Serialize)(void* extPtr, void* serializer) = null
 // fn_IsDerivedFrom via IAT at 0x140152a98
 static bool (*s_fn_IsDerivedFrom)(void* obj, uint32_t typeId) = nullptr;
 
-// Math::Scalar Math::Vector2::Dot(Vector2 const& other) const via IAT at 0x140152458
-// Verified in Ghidra (mangled ?Dot@Vector2@Math@@QEBA?AVScalar@2@AEBV12@@Z, callers
-// 0x1400c8b21 / 0x1400c8776): returns Math::Scalar BY VALUE, so this is the member
-// struct-return ABI — RCX=this, RDX=hidden retptr (the out scalar), R8=other. The
-// result IS written to the RDX out-param (the caller reads it back, not XMM0). The
-// bug was calling it 2-arg, leaving R8 (the "other" operand) uninitialized → the dot
-// read garbage floats → NaN distances. Pass the 3rd operand explicitly (self-dot here).
-static void (*s_fn_Vector2_Dot)(void* thisVec, void* outScalar, void* otherVec) = nullptr;
-
-// Math::Vector2::Normalize(this) via IAT at 0x1401526b0
-// Value-return member ABI (verified from exe callers 0x1400cc70c): RCX=this, RDX=retbuf,
-// returns RAX=retbuf. NOT in-place — must pass a separate retbuf and read from it.
-static void* (*s_fn_Vector2_Normalize)(void* thisVec, void* retbuf) = nullptr;
-
-// Math::Vector3::Vector3(this, x, y, z) via IAT at 0x140152a30
-static float* (*s_fn_Vector3_Ctor_Floats)(float* self, float x, float y, float z) = nullptr;
-
-// Math::Vector3::Vector3(this, Scalar*, Scalar*, Scalar*) via IAT at 0x140151268
-static void* (*s_fn_Vector3_Ctor_Scalars)(void* self, void* sx, void* sy, void* sz) = nullptr;
-
-// Math::Vector3::Normalize(this) via IAT at 0x1401512c0
-// Vector3::Normalize() const returns Vector3 BY VALUE (12 bytes > 8): member value-return
-// ABI RCX=this, RDX=hidden retptr. Caller passes a >=12-byte result buffer.
-static void* (*s_fn_Vector3_Normalize)(void* vec3, void* retbuf) = nullptr;
-
-// Math::Vector3::Heading(this) via IAT at 0x1401512d8
-static float (*s_fn_Vector3_Heading)(void* vec3) = nullptr;
-
-// Math::Vector3::Dot(this, retbuf, other) via IAT at 0x140151298
-// Value-return ABI: the Scalar result is written to the caller-supplied retbuf
-// (RDX) and returned in RAX; `other` is the THIRD arg (R8).
-static float* (*s_fn_Vector3_Dot)(const void* a, void* retbuf, const void* b) = nullptr;
+// ENDGAME B.3.1 step 2: the Math value-type helpers below used to be read from the
+// exe's IAT dispatch slots, each with the DLL boundary's (this, hidden-retptr, args)
+// shape. Runtime-x64.dll is gone, so they are now plain member calls on the real
+// Math:: classes (runtime/types/math/Math.h), which return by value and let the
+// compiler place the result. The slots they came from, for provenance:
+//   0x140152458  ?Dot@Vector2@Math@@QEBA?AVScalar@2@AEBV12@@Z   -> Vector2::Dot
+//   0x1401526b0  ?Normalize@Vector2@Math@@QEBA?AV12@XZ          -> Vector2::Normalize
+//   0x140152a30  ??0Vector3@Math@@QEAA@MMM@Z                    -> Vector3(x,y,z)
+//   0x140151268  ??0Vector3@Math@@QEAA@AEBVScalar@1@0 0@Z       -> Vector3(Scalar,Scalar,Scalar)
+//   0x1401512c0  ?Normalize@Vector3@Math@@QEBA?AV12@XZ          -> Vector3::Normalize
+//   0x1401512d8  ?Heading@Vector3@Math@@QEBAMXZ                 -> Vector3::Heading
+//   0x140151298  ?Dot@Vector3@Math@@QEBA?AVScalar@2@AEBV12@@Z   -> Vector3::Dot
+//   0x140152a68  ?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z -> Vector3::Serialize
+// The historical R8-was-uninitialised bug on Vector2::Dot (a 2-arg call left the
+// "other" operand garbage and produced NaN distances) cannot recur: the operand is
+// now a real function parameter.
 
 // FUN_140132010 -- sqrtf implementation
 static float (*s_fn_Sqrtf)(float val) = nullptr;
@@ -204,10 +189,6 @@ bool MoveTo_ResolveFuncs() {
     iat = ResolveAddr(Module::Exe, 0x140151278);
     if (iat) s_fn_Serialize_IntArray = *reinterpret_cast<void(**)(void*, int, void*, const char*)>(iat);
 
-    // Vector3::Serialize via IAT at 0x140152a68
-    iat = ResolveAddr(Module::Exe, 0x140152a68);
-    if (iat) s_fn_Vector3_Serialize = *reinterpret_cast<void(**)(void*, void*)>(iat);
-
     // ExternalPtr serialize (FUN_140022970)
     s_fn_ExternalPtr_Serialize = reinterpret_cast<void(*)(void*, void*)>(
         ResolveAddr(Module::Exe, 0x140022970));
@@ -216,25 +197,8 @@ bool MoveTo_ResolveFuncs() {
     iat = ResolveAddr(Module::Exe, 0x140152a98);
     if (iat) s_fn_IsDerivedFrom = *reinterpret_cast<bool(**)(void*, uint32_t)>(iat);
 
-    // Vector2::Dot via IAT at 0x140152458
-    iat = ResolveAddr(Module::Exe, 0x140152458);
-    if (iat) s_fn_Vector2_Dot = *reinterpret_cast<void(**)(void*, void*, void*)>(iat);
-
-    // Vector2::Normalize via IAT at 0x1401526b0
-    iat = ResolveAddr(Module::Exe, 0x1401526b0);
-    if (iat) s_fn_Vector2_Normalize = *reinterpret_cast<void*(**)(void*, void*)>(iat);
-
-    // Vector3 constructors/methods via IAT
-    iat = ResolveAddr(Module::Exe, 0x140152a30);
-    if (iat) s_fn_Vector3_Ctor_Floats = *reinterpret_cast<float*(**)(float*, float, float, float)>(iat);
-    iat = ResolveAddr(Module::Exe, 0x140151268);
-    if (iat) s_fn_Vector3_Ctor_Scalars = *reinterpret_cast<void*(**)(void*, void*, void*, void*)>(iat);
-    iat = ResolveAddr(Module::Exe, 0x1401512c0);
-    if (iat) s_fn_Vector3_Normalize = *reinterpret_cast<void*(**)(void*, void*)>(iat);
-    iat = ResolveAddr(Module::Exe, 0x1401512d8);
-    if (iat) s_fn_Vector3_Heading = *reinterpret_cast<float(**)(void*)>(iat);
-    iat = ResolveAddr(Module::Exe, 0x140151298);
-    if (iat) s_fn_Vector3_Dot = *reinterpret_cast<float*(**)(const void*, void*, const void*)>(iat);
+    // (B.3.1: the Math::Vector2/Vector3 slots that used to be resolved here are
+    //  direct member calls now — see the header comment above.)
 
     // sqrtf (FUN_140132010)
     s_fn_Sqrtf = reinterpret_cast<float(*)(float)>(
@@ -280,11 +244,8 @@ bool MoveTo_ResolveFuncs() {
               s_fn_Serializer_Ctor && s_fn_Serializer_Dtor && s_fn_Serializer_GetVersion &&
               s_fn_Serialize_Bool && s_fn_Serialize_Int && s_fn_Serialize_UInt &&
               s_fn_Serialize_Float && s_fn_Serialize_IntArray &&
-              s_fn_Vector3_Serialize && s_fn_ExternalPtr_Serialize &&
+              s_fn_ExternalPtr_Serialize &&
               s_fn_IsDerivedFrom &&
-              s_fn_Vector2_Dot && s_fn_Vector2_Normalize &&
-              s_fn_Vector3_Ctor_Floats && s_fn_Vector3_Ctor_Scalars &&
-              s_fn_Vector3_Normalize && s_fn_Vector3_Heading && s_fn_Vector3_Dot &&
               s_fn_Sqrtf && s_fn_SetAnimation &&
               s_fn_BridgeQuery && s_fn_PathSetup && s_fn_UpdateFacing &&
               s_fn_SetTerrainCosts && s_fn_PathfinderQuery && s_fn_CopyPathFromFinder &&
@@ -300,14 +261,8 @@ bool MoveTo_ResolveFuncs() {
            (void*)s_fn_Serializer_GetVersion, (void*)s_fn_Serialize_Bool,
            (void*)s_fn_Serialize_Int, (void*)s_fn_Serialize_UInt,
            (void*)s_fn_Serialize_Float, (void*)s_fn_Serialize_IntArray);
-    printf("[MoveTo]   Vec3Ser=%p ExtPtrSer=%p IsDerived=%p\n",
-           (void*)s_fn_Vector3_Serialize, (void*)s_fn_ExternalPtr_Serialize,
-           (void*)s_fn_IsDerivedFrom);
-    printf("[MoveTo]   V2Dot=%p V2Norm=%p V3CtorF=%p V3CtorS=%p V3Norm=%p V3Head=%p V3Dot=%p\n",
-           (void*)s_fn_Vector2_Dot, (void*)s_fn_Vector2_Normalize,
-           (void*)s_fn_Vector3_Ctor_Floats, (void*)s_fn_Vector3_Ctor_Scalars,
-           (void*)s_fn_Vector3_Normalize, (void*)s_fn_Vector3_Heading,
-           (void*)s_fn_Vector3_Dot);
+    printf("[MoveTo]   ExtPtrSer=%p IsDerived=%p\n",
+           (void*)s_fn_ExternalPtr_Serialize, (void*)s_fn_IsDerivedFrom);
     printf("[MoveTo]   Sqrt=%p SetAnim=%p BridgeQ=%p PathSetup=%p UpdFace=%p\n",
            (void*)s_fn_Sqrtf, (void*)s_fn_SetAnimation,
            (void*)s_fn_BridgeQuery, (void*)s_fn_PathSetup, (void*)s_fn_UpdateFacing);
@@ -386,7 +341,7 @@ void MoveTo_Serialize_Impl(void* self, void* stream) {
     s_fn_Serialize_IntArray(ser1, *(int32_t*)(s + 0x64), s + 0x68, nullptr);
 
     // Destination position (+0x38) as Vector3
-    s_fn_Vector3_Serialize(s + 0x38, ser1);
+    reinterpret_cast<Math::Vector3*>(s + 0x38)->Serialize(ser1);   // B.3.1 bridge
 
     // Terrain flags (+0x5c) as uint
     s_fn_Serialize_UInt(ser1, s + 0x5c, nullptr);
@@ -450,9 +405,8 @@ int MoveTo_AbstractImpl_Impl(void* self, void* actionStack) {
     // Compute 2D distance squared: (curX - destX)^2 + (curY - destY)^2
     float dx = curX - destX;
     float dy = curY - destY;
-    float vec2[2] = { dx, dy };
-    float dotResult = 0.0f;
-    s_fn_Vector2_Dot(vec2, &dotResult, vec2);  // R8=other=self → dx²+dy²
+    Math::Vector2 vec2(dx, dy);
+    float dotResult = vec2.Dot(vec2).v;        // self-dot → dx²+dy²
     float dist = s_fn_Sqrtf(dotResult);
 
     // If already close enough, return 0 (arrived)
@@ -473,7 +427,7 @@ int MoveTo_AbstractImpl_Impl(void* self, void* actionStack) {
 
     // Set up A* path from current position to destination
     // param3 reuses the vec2 pointer, param4 comes from actionStack (R9 in original)
-    s_fn_PathSetup(self, worldPos, vec2, actionStack);
+    s_fn_PathSetup(self, worldPos, &vec2, actionStack);
 
     // Check path setup result
     int32_t pathVersion = *(int32_t*)(s + 0x24);
@@ -517,41 +471,22 @@ int MoveTo_AbstractImpl_Impl(void* self, void* actionStack) {
 // Returns: 0=arrived, 1=moving, 2=no path
 // ============================================================
 
-// PERF (2026-09-04): bit-identical inline copies of the trivial Runtime math exports
-// the hot paths called through dispatch slots (a DLL call per 3-float store). Bodies
-// transcribed from the Runtime decompiles — note Dot's operand ORDER (y, x, z), kept
-// so the float result is the same to the bit. Non-trivial helpers (Normalize, Heading,
-// RootAnimationOffset) still go through the Runtime.
-//   ??0Vector3@Math@@QEAA@MMM@Z (0x1800152d0)          -> InlV3(out,x,y,z)
-//   ??0Vector3@Math@@QEAA@AEBVScalar@1@@Z (0x180015360) -> InlV3Splat(out,&s)
-//   ?Dot@Vector3@Math@@ (0x18001dff0)                   -> InlV3Dot(a,&ret,b)
-//   ?Dot@Vector2@Math@@ (0x18006c840)                   -> InlV2Dot(a,&ret,b)
+// PERF (2026-09-04): these were bit-identical inline copies of the trivial Runtime
+// math exports the hot paths called through dispatch slots (a DLL call per 3-float
+// store). ENDGAME B.3.1 step 2 (2026-09-13) retires the Math ones: Runtime-x64.dll is
+// gone, and the classes in runtime/types/math/Math.h now carry those same bodies —
+// Vector3::Dot still evaluates (y, x, z) in that order, so the float result is
+// unchanged to the bit. The Math transcriptions removed here were
+//   ??0Vector3@Math@@QEAA@MMM@Z (0x1800152d0)           -> Math::Vector3(x, y, z)
+//   ??0Vector3@Math@@QEAA@AEBVScalar@1@@Z (0x180015360) -> Math::Vector3(Scalar) (unused)
+//   ?Dot@Vector3@Math@@ (0x18001dff0)                   -> Math::Vector3::Dot   (unused here)
+//   ?Dot@Vector2@Math@@ (0x18006c840)                   -> Math::Vector2::Dot
+//   ?Max@Scalar@Math@@ (0x18005ff60)                    -> Math::Scalar::Max    (unused)
+// InlBoxIsect stays: Volume::Box is not a Math value type and is not part of B.3.1.
 //   ?Intersect@Box@Volume@@ (0x180012160)               -> InlBoxIsect(a,b)
-//   ?Max@Scalar@Math@@ (0x18005ff60)                    -> InlScalarMax(&a,&ret,&b)
-static inline void InlV3(void* out, float x, float y, float z) {
-    float* o = static_cast<float*>(out); o[0] = x; o[1] = y; o[2] = z;
-}
-static inline void InlV3Splat(void* out, const float* s) {
-    float* o = static_cast<float*>(out); o[0] = *s; o[1] = *s; o[2] = *s;
-}
-static inline void* InlV3Dot(const void* a, void* ret, const void* b) {
-    const float* p = static_cast<const float*>(a); const float* q = static_cast<const float*>(b);
-    *static_cast<float*>(ret) = q[1] * p[1] + q[0] * p[0] + q[2] * p[2];
-    return ret;
-}
-static inline void* InlV2Dot(const void* a, void* ret, const void* b) {
-    const float* p = static_cast<const float*>(a); const float* q = static_cast<const float*>(b);
-    *static_cast<float*>(ret) = q[1] * p[1] + q[0] * p[0];
-    return ret;
-}
 static inline bool InlBoxIsect(const void* a, const void* b) {
     const float* p = static_cast<const float*>(a); const float* q = static_cast<const float*>(b);
     return p[0] <= q[3] && q[0] <= p[3] && p[1] <= q[4] && q[1] <= p[4] && p[2] <= q[5] && q[2] <= p[5];
-}
-static inline void* InlScalarMax(const void* a, void* ret, const void* b) {
-    const float x = *static_cast<const float*>(a), y = *static_cast<const float*>(b);
-    *static_cast<float*>(ret) = (y < x) ? x : y;
-    return ret;
 }
 
 int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
@@ -654,12 +589,10 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
         float dz = curZ - *(float*)(s + 0x40);
         float dy2 = curY - destY;
         float dx2 = curX - destX;
-        float diffVec[3];
-        InlV3(diffVec, dx2, dy2, dz);
+        Math::Vector3 diffVec(dx2, dy2, dz);
 
-        float dotVec[2] = { diffVec[0], diffVec[1] };
-        float dotOut = 0.0f;
-        InlV2Dot(dotVec, &dotOut, dotVec);  // R8=other=self → dx²+dy²
+        Math::Vector2 dotVec(diffVec.x, diffVec.y);
+        float dotOut = dotVec.Dot(dotVec).v;   // self-dot → dx²+dy²
         float distToGoal = s_fn_Sqrtf(dotOut);
 
         if (distToGoal < *s_fMinDistSq) {
@@ -671,37 +604,32 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
         float revDx = destX - curX;
         float revDy = destY - curY;
         float revDz = *(float*)(s + 0x40) - curZ;
-        float revVec[3];
-        InlV3(revVec, revDx, revDy, revDz);
+        Math::Vector3 revVec(revDx, revDy, revDz);
 
-        // Normalize 2D direction (value-return ABI: result written to retbuf, not in place)
-        float dir2d[2] = { revVec[0], revVec[1] };
-        float dir2dN[4] = { dir2d[0], dir2d[1], 0.0f, 0.0f };
-        if (s_fn_Vector2_Normalize) s_fn_Vector2_Normalize(dir2d, dir2dN);
+        // Normalize the 2D direction.
+        Math::Vector2 dir2d(revVec.x, revVec.y);
+        Math::Vector2 dir2dN = dir2d.Normalize();
 
         // Build 3D facing vector and set on character
-        float facing3d[3] = { dir2dN[0], dir2dN[1], 0.0f };
+        Math::Vector3 facing3d(dir2dN.x, dir2dN.y, 0.0f);
         s_fn_CheckPtr(s + 0x28);
         targetEntity = *(uintptr_t*)(s + 0x28);
         *(uint8_t*)(targetEntity + 0x28) = 0;  // Clear animation lock flag
 
         // Build normalized facing vector from 2D components
-        float scalarX = facing3d[0];
-        float scalarY = facing3d[1];
+        float scalarX = facing3d.x;
+        float scalarY = facing3d.y;
         float scalarZ = 0.0f;
-        float tempVec[3];
-        InlV3(tempVec, scalarX, scalarY, scalarZ);   // Vector3(Scalar,Scalar,Scalar) = 3 stores
-        void* normResult = tempVec;
-        float normalized[4] = {0,0,0,0};
-        s_fn_Vector3_Normalize(normResult, normalized);
+        Math::Vector3 tempVec(scalarX, scalarY, scalarZ);   // Vector3(Scalar,Scalar,Scalar) = 3 stores
+        Math::Vector3 normalized = tempVec.Normalize();
 
         // Write facing direction to character (+0x2c, +0x30, +0x34)
-        *(uint32_t*)(targetEntity + 0x2c) = *(uint32_t*)&normalized[0];
-        *(uint32_t*)(targetEntity + 0x30) = *(uint32_t*)&normalized[1];
-        *(uint32_t*)(targetEntity + 0x34) = *(uint32_t*)&normalized[2];
+        *(uint32_t*)(targetEntity + 0x2c) = *(uint32_t*)&normalized.x;
+        *(uint32_t*)(targetEntity + 0x30) = *(uint32_t*)&normalized.y;
+        *(uint32_t*)(targetEntity + 0x34) = *(uint32_t*)&normalized.z;
 
         // Compute heading angle from facing direction
-        float heading = s_fn_Vector3_Heading(facing3d);
+        float heading = facing3d.Heading();
         *(float*)(targetEntity + 0x3c) = heading;
 
         return 1;
@@ -826,21 +754,19 @@ void MoveTo_Enter_Impl(void* self) {
             targetEntity = *(uintptr_t*)(s + 0x28);
 
             // Our entity's facing direction (+0x2c..+0x34)
-            float myFacing[3];
-            myFacing[0] = *(float*)(targetEntity + 0x2c);
-            myFacing[1] = *(float*)(targetEntity + 0x30);
-            myFacing[2] = *(float*)(targetEntity + 0x34);
+            Math::Vector3 myFacing(*(float*)(targetEntity + 0x2c),
+                                   *(float*)(targetEntity + 0x30),
+                                   *(float*)(targetEntity + 0x34));
 
             // Bridge entity's facing direction
             s_fn_CheckPtr(&bridgeResult);
-            float bridgeFacing[3];
-            bridgeFacing[0] = *(float*)(bridgeResult + 0x2c);
-            bridgeFacing[1] = *(float*)(bridgeResult + 0x30);
-            bridgeFacing[2] = *(float*)(bridgeResult + 0x34);
+            Math::Vector3 bridgeFacing(*(float*)(bridgeResult + 0x2c),
+                                       *(float*)(bridgeResult + 0x30),
+                                       *(float*)(bridgeResult + 0x34));
 
-            float dotOut = 0.0f;
-            float* dotResult = s_fn_Vector3_Dot(bridgeFacing, &dotOut, myFacing);
-            if (*dotResult > 0.0f) {
+            // this = bridgeFacing, other = myFacing (the original's RCX / R8).
+            float dotOut = bridgeFacing.Dot(myFacing).v;
+            if (dotOut > 0.0f) {
                 // Facing same direction as bridge -- set road flag
                 *(uint8_t*)(s + 0x474) = 1;
                 return;

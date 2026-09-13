@@ -22,6 +22,8 @@
 
 #include "game_main.h"
 #include "engine_funcs.h"
+#include "system/Filename.h"
+#include "system/String.h"
 #include "resolve.h"
 #include "UpdateLoop.h"
 #include "Game/game.h"
@@ -677,8 +679,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                 //
                 // Both Update stubs return false so Run exits on the first tick.
                 if (s_fn_MainLoop_Run && g_MenuDialogLoopT_Vtable && fn_DialogLoopT_Ctor &&
-                    fn_AudioScene_Ctor && fn_Random_Default_Ctor && fn_String_Ctor_CStr &&
-                    fn_String_Dtor && fn_DialogLoaderLoopT_Ctor && fn_Time_Ctor_Float &&
+                    fn_AudioScene_Ctor && fn_Random_Default_Ctor && fn_DialogLoaderLoopT_Ctor && fn_Time_Ctor_Float &&
                     g_GameLoadDialogLoopT_Vtable) {
 
                     UpdateLoop* menuLoop = reinterpret_cast<UpdateLoop*>(
@@ -688,16 +689,13 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
 
                     if (menuLoop) {
                         // Construct the dialog filename string.
-                        uint8_t menuStr[8] = {};
-                        fn_String_Ctor_CStr(menuStr, "Dialog\\MainMenu.rsc");
+                        System::String menuStr("Dialog\\MainMenu.rsc");
 
                         StallDebug::Mark("settings alloc + MenuDLT alloc");
-                        MenuDialogLoopT_Ctor(menuLoop, menuStr);
+                        MenuDialogLoopT_Ctor(menuLoop, &menuStr);
                         StallDebug::Mark("MenuDialogLoopT_Ctor");
                         printf("[GameMain] MenuDLT ctor done, vtable=%p\n",
                                (void*)menuLoop->vtable);
-
-                        fn_String_Dtor(menuStr);
 
                         // Helper: build a splash DialogLoaderLoopT (0xb60 bytes,
                         // vtable @ 0x140158800) wrapping `next`. Mirrors the
@@ -714,10 +712,9 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                             uint64_t delayTime = 0;
                             fn_Time_Ctor_Float(&delayTime, delaySec);
 
-                            uint8_t fileStr[8] = {};
-                            fn_String_Ctor_CStr(fileStr, filename);
+                            System::String fileStr(filename);
 
-                            fn_DialogLoaderLoopT_Ctor(dlt, fileStr, next, &delayTime);
+                            fn_DialogLoaderLoopT_Ctor(dlt, &fileStr, next, &delayTime);
 
                             uintptr_t lp = reinterpret_cast<uintptr_t>(dlt);
                             *(void***)lp = g_GameLoadDialogLoopT_Vtable;
@@ -728,7 +725,6 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                             *reinterpret_cast<uint64_t*>(lp + 0xb58) = 0;           // text timer
                             *reinterpret_cast<uint8_t*>(lp + 0x40) = 0;             // m_autoAdvance
 
-                            fn_String_Dtor(fileStr);
                             printf("[GameMain] %s ctor done, vtable=%p, next=%p, "
                                    "delay=%.2fs\n",
                                    tag, (void*)dlt->vtable, (void*)next, delaySec);

@@ -123,11 +123,6 @@ extern "C" uint32_t RtVideoWriteFileRaw(void* handle, const void* buf, uint32_t 
 namespace {
 
 // ---- the doors, all by NAME ------------------------------------------------
-using GetPathFilenameFn  = void* (*)(const void* self, void* ret, bool requireExtension);
-using GetPathDirectoryFn = void* (*)(const void* self, void* ret);
-using ConcatStrFn        = void* (*)(void* ret, const void* a, const void* b);
-using ConcatCStrFn       = void* (*)(void* ret, const void* a, const char* b);
-using AdjustDelimFn      = void  (*)(void* self);
 using CreatePathFn       = bool  (*)(void* fileSystem, const void* filename);
 using StreamCtorFn       = void* (*)(void* self);
 using StreamCreateFn     = bool  (*)(void* self, const void* filename);
@@ -136,23 +131,6 @@ using CloseFileFn        = void  (*)(void* fileSystem, void* fileInfo);
 
 void** FileSystemSingletonSlot() {
     return RT_DATA_SLOT(void**, "?_singleton@FileSystem@IO@@0PEAV12@EA");
-}
-
-// One System::String reference release, the refcounted idiom.
-//
-// Reused from lane D2 rather than rewritten: `kD_Str_08` is exactly
-// {stride 8, one offset at 0}, so `ReleaseStringsCore(slot, 1, &kD_Str_08)` is
-// this body's release with lane D2's verification attached.
-//
-// RETAIL SPELLS IT TWO WAYS IN THIS ONE FUNCTION and they are equivalent. The
-// four early releases (0x1800f28d8 onward) call the exported
-// `?MemFree@MemoryAllocator@System@@` with no null re-test, because that
-// function's own `if (p)` covers it; the releases inside the inlined destructor
-// (0x1800f2ba2 onward) inline Enter/Free/Leave behind a `JZ` on the `ADD`'s
-// result. Body B takes the second spelling. Same reads, same writes, same
-// frees.
-void ReleaseString(char** slot) {
-    rtcoll::ReleaseStringsCore(reinterpret_cast<uint8_t*>(slot), 1, &rtcoll::kD_Str_08);
 }
 
 // ---------------------------------------------------------------------------
@@ -208,7 +186,8 @@ void ArraySetSizeByte(rtcoll::ArrayHdr* a, int32_t newSize, uint8_t fill) {
 // ============================================================================
 // The body
 // ============================================================================
-bool Video_ImageBuffer_SaveImageToFile(const void* path, int width, int height,
+bool Video_ImageBuffer_SaveImageToFile(const System::Filename* path,
+                                       int width, int height,
                                        uint32_t* pixels) {
     // ---- 1. build "<dir><name>.bmp" and adjust its delimiters --------------
     //
@@ -218,33 +197,30 @@ bool Video_ImageBuffer_SaveImageToFile(const void* path, int width, int height,
     // constructor writing into its return slot and none reads it first, so the
     // initialisation is unobservable — and leaving them indeterminate would be
     // UB on our side for no gain.
-    char* namePart = nullptr;   // retail [RSP+0x30]
-    char* dirPart  = nullptr;   // retail [RBP-0x71]
-    char* joined   = nullptr;   // retail [RBP-0x61]
-    char* withExt  = nullptr;   // retail [RBP-0x69]
-    char* target   = nullptr;   // retail [RBP-0x79] — the System::Filename
+    // ENDGAME B.3.1 step 2: the four are real System::String/Filename objects
+    // now, so the four explicit releases at the end of this block are their
+    // destructors — and C++ destroys locals in reverse declaration order, which
+    // IS retail's release order (withExt, joined, dirPart, namePart). The inner
+    // scope is what ends their lives at the point retail ends them; `target`
+    // outlives them and is declared outside it.
+    System::Filename target;    // retail [RBP-0x79]
+    {
+        const System::Filename namePart = path->GetPathFilename(true);  // [RSP+0x30]
+        const System::Filename dirPart  = path->GetPathDirectory();     // [RBP-0x71]
+        const System::String   joined   = dirPart.AsString() + namePart.AsString();
+        const System::String   withExt  = joined + ".bmp";              // [RBP-0x69]
 
-    RT_EXPORT_ONCE(GetPathFilenameFn, "?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z")(
-        path, &namePart, true);
-    RT_EXPORT_ONCE(GetPathDirectoryFn, "?GetPathDirectory@Filename@System@@QEBA?AV12@XZ")(
-        path, &dirPart);
-    RT_EXPORT_ONCE(ConcatStrFn, "??HSystem@@YA?AVString@0@AEBV10@0@Z")(
-        &joined, &dirPart, &namePart);
-    RT_EXPORT_ONCE(ConcatCStrFn, "??HSystem@@YA?AVString@0@AEBV10@PEBD@Z")(
-        &withExt, &joined, ".bmp");
-
-    // 0x1800f28bf: the Filename ADOPTS the concatenation's buffer and takes a
-    // reference; it does not copy. `target` stays null when `withExt` is null.
-    if (withExt != nullptr) {
-        target = withExt;
-        ++*reinterpret_cast<int32_t*>(target - 4);
+        // 0x1800f28bf: the Filename ADOPTS the concatenation's buffer and takes
+        // a reference; it does not copy. `target` stays null when `withExt` is.
+        if (withExt._data != nullptr) {
+            target._data = withExt._data;
+            ++*reinterpret_cast<int32_t*>(target._data - 4);   // B.3.1 bridge:
+                                                               // retail's inlined
+                                                               // AddRef on the
+                                                               // adopted block
+        }
+        System::FilenamePrivateAccess::AdjustDelimiters(target);
     }
-    RT_EXPORT_ONCE(AdjustDelimFn, "?AdjustDelimiters@Filename@System@@AEAAXXZ")(&target);
-
-    ReleaseString(&withExt);
-    ReleaseString(&joined);
-    ReleaseString(&dirPart);
-    ReleaseString(&namePart);
 
     // ---- 2. the two BMP headers -------------------------------------------
     //
@@ -291,7 +267,7 @@ bool Video_ImageBuffer_SaveImageToFile(const void* path, int width, int height,
     void** fsSlot = FileSystemSingletonSlot();
     void* fs = fsSlot ? *fsSlot : nullptr;
     RT_EXPORT_ONCE(CreatePathFn, "?CreatePath@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z")(
-        fs, path);
+        fs, path);   // IO::FileSystem is another batch's; still a name lookup
 
     // The stream is a stack object retail constructs, uses and destroys in
     // place. Raw storage plus retail's own constructor, the technique
@@ -404,7 +380,8 @@ bool Video_ImageBuffer_SaveImageToFile(const void* path, int width, int height,
     //   copy stamps FileStream's table directly instead of arriving there
     //   through the thunk, which is the same store.
     RT_EXPORT_ONCE(StreamDtorFn, "??1BinaryFileStream@IO@@UEAA@XZ")(stream);
-    ReleaseString(&target);
+    // …then the Filename: `target`'s destructor runs here, after the stream's,
+    // which is retail's order.
 
     return ok;
 }

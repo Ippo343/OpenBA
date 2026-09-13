@@ -15,6 +15,9 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
+#include "system/String.h"
+#include "system/Filename.h"
+#include "math/Math.h"
 #include <cstdint>
 #include <cmath>
 #include <cstdio>
@@ -23,20 +26,11 @@
 // ============================================================
 // Locally-resolved dispatch-slot / math helpers
 // ============================================================
-// The Math::Vector2 / Math::Vector3 helpers used below are read from the exe's
-// .rdata dispatch slots (function-pointer tables), exactly like moveto.cpp does.
-// They are NOT the slot address itself — the slot holds the runtime function
-// pointer, so we deref one level after ResolveAddr.
-
-// Math::Vector2::Normalize(this) — dispatch slot 0x1401526b0
-// Value-return member ABI (RCX=this, RDX=retbuf, returns retbuf) — not in-place.
-static void* (*s_fn_Vector2_Normalize)(void* thisVec, void* retbuf) = nullptr;
-// Math::Vector3::Normalize(this) const -> Vector3 BY VALUE (12 bytes > 8) — member
-// value-return ABI: RCX=this(input vec3), RDX=hidden retptr, returns retptr in RAX.
-// dispatch slot 0x1401512c0. Caller MUST pass a >=12-byte result buffer.
-static float* (*s_fn_Vector3_Normalize)(void* vec3, void* retbuf) = nullptr;
-// Math::Vector3::Heading(this) — dispatch slot 0x1401512d8
-static float (*s_fn_Vector3_Heading)(void* vec3) = nullptr;
+// ENDGAME B.3.1 step 2: the Math::Vector2 / Math::Vector3 helpers below used to be
+// read from the exe's .rdata dispatch slots — 0x1401526b0 Math::Vector2::Normalize,
+// 0x1401512c0 Math::Vector3::Normalize, 0x1401512d8 Math::Vector3::Heading. Those
+// slots were the DLL boundary's shape; the calls are now direct members on the real
+// Math:: classes (runtime/types/math/Math.h), same bodies, same operand order.
 
 // ============================================================
 // g_pGameWorldSingleton accessor (DAT_1401c3dd8 — declared in engine_funcs.h)
@@ -46,19 +40,6 @@ static float (*s_fn_Vector3_Heading)(void* vec3) = nullptr;
 // ============================================================
 static inline uintptr_t GameWorld() {
     return reinterpret_cast<uintptr_t>(g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr);
-}
-
-static bool s_mvFuncsResolved = false;
-static void EnsureMoveFuncs() {
-    if (s_mvFuncsResolved) return;
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x1401526b0);
-    if (slot) s_fn_Vector2_Normalize = *reinterpret_cast<void*(**)(void*, void*)>(slot);
-    slot = ResolveAddr(Module::Exe, 0x1401512c0);
-    if (slot) s_fn_Vector3_Normalize = *reinterpret_cast<float*(**)(void*, void*)>(slot);
-    slot = ResolveAddr(Module::Exe, 0x1401512d8);
-    if (slot) s_fn_Vector3_Heading = *reinterpret_cast<float(**)(void*)>(slot);
-    s_mvFuncsResolved = true;
 }
 
 // ============================================================
@@ -125,15 +106,15 @@ void* ActMv_FindComponentFamily_12d0(uintptr_t entity, void* retIBP) {
 //   0x1401529d8 ExternalFactory _singleton   -> g_pExternalFactorySingleton
 //   0x140151230 ExternalFactory::FindOrLoad  -> fn_ExternalFactory_FindOrLoad
 //   0x140152a98 IsDerivedFrom                -> fn_IsDerivedFrom
-//   0x140151d40 Filename::Filename()         -> fn_Filename_Ctor
+//   0x140151d40 Filename::Filename()         -> System::Filename ctor (B.3.1)
 //   0x140151218 IsReferenceModeEnabled       -> fn_ExternalFactory_IsReferenceModeEnabled
 //   0x140151220 GetReferenceId               -> fn_ExternalFactory_GetReferenceId
 //   0x140151228 GetPathForReferenceId        -> fn_ExternalFactory_GetPathForReferenceId
-//   0x1401529e0 Filename::operator=          -> fn_Filename_AssignOp
-//   0x1401529e8 Filename::~Filename          -> fn_Filename_Dtor
+//   0x1401529e0 Filename::operator=          -> System::Filename::operator= (B.3.1)
+//   0x1401529e8 Filename::~Filename          -> System::Filename dtor, RAII (B.3.1)
 //   0x140152a50 Serializer::Serialize(uint*) -> local resolve
 //   0x140152a58 Serializer::Serialize(bool*) -> local resolve
-//   0x140151238 String::Serialize            -> g_fn_String_Serialize
+//   0x140151238 String::Serialize            -> System::String::Serialize (B.3.1)
 //   0x1401c70b0 type-ID                       -> local resolve (NOT in engine_funcs.h)
 static void (*s_fn_SerUInt_a50)(void* ser, void* field, const char* name) = nullptr;
 static void (*s_fn_SerBool_a58)(void* ser, void* field, const char* name) = nullptr;
@@ -167,20 +148,18 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
     if (encType == 3) {
         // Read-only text path: drop the External; re-resolve by its current path.
         if (*pSlot == 0) return;
-        uintptr_t fnStorage = 0;  // Filename retbuf (local_res18 in the original)
+        System::Filename fnStorage;  // Filename retbuf (local_res18 in the original)
         void* path = nullptr;
         if (fn_External_GetPath) path = fn_External_GetPath(reinterpret_cast<void*>(*pSlot), &fnStorage);
         if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton && fn_ExternalFactory_FindOrLoad) {
             void* found = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, path);
             if (found && fn_IsDerivedFrom) fn_IsDerivedFrom(found, typeId);
         }
-        if (fn_Filename_Dtor) fn_Filename_Dtor(&fnStorage);
-        return;
+        return;   // ~Filename releases fnStorage (was the manual fn_Filename_Dtor)
     }
 
     // Filename local (default-constructed) used to carry the path through the stream.
-    uintptr_t fnLocal = 0;
-    if (fn_Filename_Ctor) fn_Filename_Ctor(&fnLocal);
+    System::Filename fnLocal;
 
     void* factory = (g_pExternalFactorySingleton && *g_pExternalFactorySingleton)
                         ? *g_pExternalFactorySingleton : nullptr;
@@ -207,11 +186,10 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
             if ((int)refId != -1) {
                 streamFlag = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(serializer) + 8);
                 if (streamFlag == 0 && factory && fn_ExternalFactory_GetPathForReferenceId) {
-                    uintptr_t pathBuf = 0;
+                    System::Filename pathBuf;
                     fn_ExternalFactory_GetPathForReferenceId(factory, &pathBuf, refId);
-                    if (fn_Filename_AssignOp) fn_Filename_AssignOp(&fnLocal, &pathBuf);
-                    if (fn_Filename_Dtor) fn_Filename_Dtor(&pathBuf);
-                }
+                    fnLocal = pathBuf;
+                }   // ~Filename releases pathBuf
                 didFind = true;
             }
         }
@@ -221,12 +199,13 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
         if (s_fn_SerBool_a58) s_fn_SerBool_a58(serializer, &present, nullptr);
         if (present != 0) {
             if (*pSlot != 0 && fn_External_GetPath) {
-                uintptr_t pathBuf = 0;
+                System::Filename pathBuf;
                 fn_External_GetPath(reinterpret_cast<void*>(*pSlot), &pathBuf);
-                if (fn_Filename_AssignOp) fn_Filename_AssignOp(&fnLocal, &pathBuf);
-                if (fn_Filename_Dtor) fn_Filename_Dtor(&pathBuf);
-            }
-            if (g_fn_String_Serialize) g_fn_String_Serialize(&fnLocal, serializer);
+                fnLocal = pathBuf;
+            }   // ~Filename releases pathBuf
+            // Retail serializes the Filename through String::Serialize (the two
+            // classes are layout-identical and it casts between them).
+            fnLocal.AsString().Serialize(serializer);
             didFind = true;
         }
     }
@@ -243,8 +222,7 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
             *pSlot = result;
         }
     }
-
-    if (fn_Filename_Dtor) fn_Filename_Dtor(&fnLocal);
+    // ~Filename releases fnLocal (was the manual fn_Filename_Dtor).
 }
 
 // ============================================================
@@ -254,24 +232,16 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
 // normalizes (x,y,0) into +0x2c..+0x34, stores Heading(dir) at +0x3c.
 // Caller signature: void fn(void* comp, void* vector3)
 void ActMv_SetFacingDirection_a060(void* comp, void* vector3) {
-    EnsureMoveFuncs();
     uintptr_t self = reinterpret_cast<uintptr_t>(comp);
-    float* v = reinterpret_cast<float*>(vector3);
+    const Math::Vector3& dir = *reinterpret_cast<const Math::Vector3*>(vector3);  // B.3.1 bridge
 
     *reinterpret_cast<uint8_t*>(self + 0x28) = 0;
-    float tmp[3];
-    tmp[0] = v[0];
-    tmp[1] = v[1];
-    tmp[2] = 0.0f;
-    if (s_fn_Vector3_Normalize) {
-        float n[4] = {0,0,0,0};
-        s_fn_Vector3_Normalize(tmp, n);
-        *reinterpret_cast<float*>(self + 0x2c) = n[0];
-        *reinterpret_cast<float*>(self + 0x30) = n[1];
-        *reinterpret_cast<float*>(self + 0x34) = n[2];
-    }
-    if (s_fn_Vector3_Heading)
-        *reinterpret_cast<float*>(self + 0x3c) = s_fn_Vector3_Heading(vector3);
+    Math::Vector3 tmp(dir.x, dir.y, 0.0f);
+    Math::Vector3 n = tmp.Normalize();
+    *reinterpret_cast<float*>(self + 0x2c) = n.x;
+    *reinterpret_cast<float*>(self + 0x30) = n.y;
+    *reinterpret_cast<float*>(self + 0x34) = n.z;
+    *reinterpret_cast<float*>(self + 0x3c) = dir.Heading();
 }
 
 // ============================================================
@@ -299,7 +269,6 @@ static void EnsureFacingFuncs() {
 }
 
 void ActMv_UpdateFacing_c8d20(void* selfp) {
-    EnsureMoveFuncs();
     EnsureFacingFuncs();
     uintptr_t self = reinterpret_cast<uintptr_t>(selfp);
     int* grid = reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(GameWorld() + 0xf8));
@@ -329,33 +298,24 @@ void ActMv_UpdateFacing_c8d20(void* selfp) {
     if (s_fn_GridToWorld_f3e0)
         s_fn_GridToWorld_f3e0(grid, outWorld, inGrid, 0, nullptr);
 
-    // dir2 = (worldX - curX, worldY - curY); Vector2::Normalize (value-return -> retbuf).
-    float dir2in[2];
-    dir2in[0] = outWorld[0] - curX;
-    dir2in[1] = outWorld[1] - curY;
-    float dir2[4] = { dir2in[0], dir2in[1], 0.0f, 0.0f };
-    if (s_fn_Vector2_Normalize) s_fn_Vector2_Normalize(dir2in, dir2);
+    // dir2 = (worldX - curX, worldY - curY), normalized.
+    Math::Vector2 dir2in(outWorld[0] - curX, outWorld[1] - curY);
+    Math::Vector2 dir2 = dir2in.Normalize();
 
     // Re-check the IBP, store normalized 3D facing into the movement sub-object.
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x28));
     uintptr_t citizen2 = *reinterpret_cast<uintptr_t*>(self + 0x28);
     *reinterpret_cast<uint8_t*>(citizen2 + 0x28) = 0;
 
-    float dir3[3];
-    dir3[0] = dir2[0];   // local_58 = local_68 (= local_res10 from Vector2::Normalize result lo)
-    dir3[1] = dir2[1];   // local_54 = local_64
-    dir3[2] = 0.0f;      // local_50 = 0
-    if (s_fn_Vector3_Normalize) {
-        float n[4] = {0,0,0,0};
-        s_fn_Vector3_Normalize(dir3, n);
-        *reinterpret_cast<float*>(citizen2 + 0x2c) = n[0];
-        *reinterpret_cast<float*>(citizen2 + 0x30) = n[1];
-        *reinterpret_cast<float*>(citizen2 + 0x34) = n[2];
-    }
-    if (s_fn_Vector3_Heading) {
-        float head3[3] = {dir2[0], dir2[1], 0.0f};
-        *reinterpret_cast<float*>(citizen2 + 0x3c) = s_fn_Vector3_Heading(head3);
-    }
+    // local_58/54/50 = (dir2.x, dir2.y, 0) from the Vector2::Normalize result.
+    Math::Vector3 dir3(dir2.x, dir2.y, 0.0f);
+    Math::Vector3 n = dir3.Normalize();
+    *reinterpret_cast<float*>(citizen2 + 0x2c) = n.x;
+    *reinterpret_cast<float*>(citizen2 + 0x30) = n.y;
+    *reinterpret_cast<float*>(citizen2 + 0x34) = n.z;
+
+    Math::Vector3 head3(dir2.x, dir2.y, 0.0f);
+    *reinterpret_cast<float*>(citizen2 + 0x3c) = head3.Heading();
 }
 
 // ============================================================

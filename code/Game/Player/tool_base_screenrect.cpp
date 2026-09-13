@@ -33,6 +33,7 @@
 // the autostart A/B test, so it is ported from disasm, not the muddled decompile).
 
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -59,67 +60,19 @@
 //   0x140152788 ?Min@Vector2@Math@@QEBA?AV12@AEBV12@@Z                Vector2::Min(Vector2)
 //   0x140151e70 ??XVector2@Math@@QEAAXAEBV01@@Z                       Vector2::operator*=(Vector2)
 
-typedef void* (*fn_Vec4Ctor_t)(void* self, const void* v3, const float* scalar);     // RCX=self,RDX=v3,R8=scalar
-typedef void* (*fn_Xform3CopyCtor_t)(void* self, const void* src);                   // RCX=self,RDX=src
-typedef void* (*fn_Xform3Inverse_t)(const void* self, void* retbuf);                 // RCX=self,RDX=ret
-typedef void* (*fn_Xform3AsMatrix_t)(const void* self, void* retbuf);                // RCX=self,RDX=ret
-typedef void* (*fn_MatMulMat_t)(const void* self, void* retbuf, const void* other);  // RCX=self,RDX=ret,R8=other
-typedef void* (*fn_MatMulVec4_t)(const void* self, void* retbuf, const void* v4);    // RCX=self,RDX=ret,R8=v4
 typedef void* (*fn_RectCtor_t)(void* self);                                          // RCX=self
-typedef void* (*fn_Vec3Ctor_t)(void* self);                                          // RCX=self
 typedef void  (*fn_BoxGetCorners_t)(const void* box, void* outVec3Array);            // RCX=box,RDX=out
-typedef void* (*fn_Vec3Min_t)(const void* self, void* retbuf, const void* other);    // RCX=self,RDX=ret,R8=other
-typedef void* (*fn_XformMulVec3_t)(const void* self, void* retbuf, const void* v3);  // RCX=self,RDX=ret,R8=v3
-typedef void* (*fn_Vec2Max_t)(const void* self, void* retbuf, const void* other);    // RCX=self,RDX=ret,R8=other
-typedef void* (*fn_Vec2Min_t)(const void* self, void* retbuf, const void* other);    // RCX=self,RDX=ret,R8=other
-typedef void  (*fn_Vec2MulEq_t)(void* self, const void* other);                      // RCX=self,RDX=other (in place)
 
-static fn_Vec4Ctor_t       s_Vec4Ctor       = nullptr;
-static fn_Xform3CopyCtor_t s_Xform3CopyCtor = nullptr;
-static fn_Xform3Inverse_t  s_Xform3Inverse  = nullptr;
-static fn_Xform3AsMatrix_t s_Xform3AsMatrix = nullptr;
-static fn_MatMulMat_t      s_MatMulMat      = nullptr;
-static fn_MatMulVec4_t     s_MatMulVec4     = nullptr;
 static fn_RectCtor_t       s_RectCtor       = nullptr;
-static fn_Vec3Ctor_t       s_Vec3Ctor       = nullptr;
 static fn_BoxGetCorners_t  s_BoxGetCorners  = nullptr;
-static fn_Vec3Min_t        s_Vec3Min        = nullptr;
-static fn_XformMulVec3_t   s_XformMulVec3   = nullptr;
-static fn_Vec2Max_t        s_Vec2Max        = nullptr;
-static fn_Vec2Min_t        s_Vec2Min        = nullptr;
-static fn_Vec2MulEq_t      s_Vec2MulEq      = nullptr;
 static bool s_srExportsResolved = false;
 
 static void EnsureScreenRectExports() {
     if (s_srExportsResolved) return;
-    s_Vec4Ctor       = reinterpret_cast<fn_Vec4Ctor_t>(
-        ResolveExport("??0Vector4@Math@@QEAA@AEBVVector3@1@AEBVScalar@1@@Z"));
-    s_Xform3CopyCtor = reinterpret_cast<fn_Xform3CopyCtor_t>(
-        ResolveExport("??0Transform3@Math@@QEAA@AEBV01@@Z"));
-    s_Xform3Inverse  = reinterpret_cast<fn_Xform3Inverse_t>(
-        ResolveExport("?Inverse@Transform3@Math@@QEBA?AV12@XZ"));
-    s_Xform3AsMatrix = reinterpret_cast<fn_Xform3AsMatrix_t>(
-        ResolveExport("?AsMatrix@Transform3@Math@@QEBA?AVMatrix@2@XZ"));
-    s_MatMulMat      = reinterpret_cast<fn_MatMulMat_t>(
-        ResolveExport("??DMatrix@Math@@QEBA?AV01@AEBV01@@Z"));
-    s_MatMulVec4     = reinterpret_cast<fn_MatMulVec4_t>(
-        ResolveExport("??DMatrix@Math@@QEBA?AVVector4@1@AEBV21@@Z"));
     s_RectCtor       = reinterpret_cast<fn_RectCtor_t>(
         ResolveExport("??0Rectangle@Volume@@QEAA@XZ"));
-    s_Vec3Ctor       = reinterpret_cast<fn_Vec3Ctor_t>(
-        ResolveExport("??0Vector3@Math@@QEAA@XZ"));
     s_BoxGetCorners  = reinterpret_cast<fn_BoxGetCorners_t>(
         ResolveExport("?GetCorners@Box@Volume@@QEBAXPEAVVector3@Math@@@Z"));
-    s_Vec3Min        = reinterpret_cast<fn_Vec3Min_t>(
-        ResolveExport("?Min@Vector3@Math@@QEBA?AV12@AEBV12@@Z"));
-    s_XformMulVec3   = reinterpret_cast<fn_XformMulVec3_t>(
-        ResolveExport("??DTransform@Math@@QEBA?AVVector3@1@AEBV21@@Z"));
-    s_Vec2Max        = reinterpret_cast<fn_Vec2Max_t>(
-        ResolveExport("?Max@Vector2@Math@@QEBA?AV12@AEBV12@@Z"));
-    s_Vec2Min        = reinterpret_cast<fn_Vec2Min_t>(
-        ResolveExport("?Min@Vector2@Math@@QEBA?AV12@AEBV12@@Z"));
-    s_Vec2MulEq      = reinterpret_cast<fn_Vec2MulEq_t>(
-        ResolveExport("??XVector2@Math@@QEAAXAEBV01@@Z"));
     s_srExportsResolved = true;
 }
 
@@ -224,8 +177,7 @@ extern "C" uint8_t PlayerScreenRect_WorldToScreen_098210(uintptr_t param_1, floa
     float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;  // DAT_14017214c = 1.0f (the Scalar)
 
     // local_f8 = Vector4(param_2, uvScale)  ([RSP+0x70] in the original)
-    alignas(16) uint8_t v4[16];
-    if (s_Vec4Ctor) s_Vec4Ctor(v4, param_2, &uvScale);
+    Math::Vector4 v4(*reinterpret_cast<const Math::Vector3*>(param_2), uvScale);
 
     // Copy the 64-byte projection Matrix from (param_1 + 0xc8) ([RSP+0x20] in the original).
     alignas(16) uint8_t projMat[64];
@@ -234,27 +186,16 @@ extern "C" uint8_t PlayerScreenRect_WorldToScreen_098210(uintptr_t param_1, floa
             *reinterpret_cast<uint32_t*>(param_1 + 0xc8 + i * 4);
 
     // local_e8 = Transform3(*(param_1 + 0x98))  (copy ctor of the camera transform)
-    alignas(16) uint8_t xform[48];
-    if (s_Xform3CopyCtor) s_Xform3CopyCtor(xform, reinterpret_cast<void*>(param_1 + 0x98));
+    Math::Transform3 xform = *reinterpret_cast<const Math::Transform3*>(param_1 + 0x98);
 
-    // this = xform.Inverse()   (returns Transform3 by value into RDX retbuf, RAX=&ret)
-    alignas(16) uint8_t inv[48];
-    void* invPtr = nullptr;
-    if (s_Xform3Inverse) invPtr = s_Xform3Inverse(xform, inv);
+    // inv = xform.Inverse() ; asMat = inv.AsMatrix() ; mat = asMat * projMat
+    Math::Transform3 inv    = xform.Inverse();
+    Math::Matrix     asMat  = inv.AsMatrix();
+    Math::Matrix     mat    = asMat * *reinterpret_cast<const Math::Matrix*>(projMat);
 
-    // pMVar2 = inv.AsMatrix()  (64-byte Matrix)
-    alignas(16) uint8_t asMat[64];
-    void* asMatPtr = nullptr;
-    if (s_Xform3AsMatrix && invPtr) asMatPtr = s_Xform3AsMatrix(invPtr, asMat);
-
-    // pMVar2 = asMat * projMat  (RCX=asMat, RDX=&retMat, R8=projMat)
-    alignas(16) uint8_t mat[64];
-    void* matPtr = nullptr;
-    if (s_MatMulMat && asMatPtr) matPtr = s_MatMulMat(asMatPtr, mat, projMat);
-
-    // uVar3 = mat * v4  -> clip Vector4 at local_108(x)/local_104(y)/.../local_fc(w)
-    alignas(16) float clip[4] = {0.0f, 0.0f, 0.0f, 0.0f};  // local_108..local_fc
-    if (s_MatMulVec4 && matPtr) s_MatMulVec4(matPtr, clip, v4);
+    // clip = mat * v4
+    Math::Vector4 clipVec = mat * v4;
+    const float* clip = &clipVec.x;
 
     float w = clip[3];   // local_fc
     if (w <= 0.0f)
@@ -315,16 +256,16 @@ extern "C" uint8_t PlayerScreenRect_AccumulateRect_fe960(uint64_t /*param_1*/, u
         uint8_t ok = PlayerScreenRect_WorldToScreen_098210(camHolder, corner, scr);
         if (ok != 0) {
             // runMin = Vector2::Min(runMin, scr)
-            float retMin[2];
-            if (s_Vec2Min) {
-                float* r = reinterpret_cast<float*>(s_Vec2Min(runMin, retMin, scr));
-                runMin[0] = r[0]; runMin[1] = r[1];
+            {
+                Math::Vector2 r = reinterpret_cast<const Math::Vector2*>(runMin)->Min(
+                    *reinterpret_cast<const Math::Vector2*>(scr));
+                runMin[0] = r.x; runMin[1] = r.y;
             }
             // runMax = Vector2::Max(runMax, scr)
-            float retMax[2];
-            if (s_Vec2Max) {
-                float* r = reinterpret_cast<float*>(s_Vec2Max(runMax, retMax, scr));
-                runMax[0] = r[0]; runMax[1] = r[1];
+            {
+                Math::Vector2 r = reinterpret_cast<const Math::Vector2*>(runMax)->Max(
+                    *reinterpret_cast<const Math::Vector2*>(scr));
+                runMax[0] = r.x; runMax[1] = r.y;
             }
             any = true;
         }
@@ -346,19 +287,21 @@ extern "C" uint8_t PlayerScreenRect_AccumulateRect_fe960(uint64_t /*param_1*/, u
 
     // Clamp runMin to [0, (W,H)] : runMin = Min( Max(runMin, 0), (W,H) ).
     {
-        float zero[2] = {0.0f, 0.0f};
-        float t[2];
-        if (s_Vec2Max) { float* r = reinterpret_cast<float*>(s_Vec2Max(runMin, t, zero)); runMin[0]=r[0]; runMin[1]=r[1]; }
-        float wh[2] = { fW, fH };
-        if (s_Vec2Min) { float* r = reinterpret_cast<float*>(s_Vec2Min(runMin, t, wh)); runMin[0]=r[0]; runMin[1]=r[1]; }
+        Math::Vector2 zero(0.0f, 0.0f);
+        Math::Vector2 wh(fW, fH);
+        {   Math::Vector2 r = reinterpret_cast<const Math::Vector2*>(runMin)->Max(zero);
+            runMin[0]=r.x; runMin[1]=r.y; }
+        {   Math::Vector2 r = reinterpret_cast<const Math::Vector2*>(runMin)->Min(wh);
+            runMin[0]=r.x; runMin[1]=r.y; }
     }
     // Clamp runMax similarly.
     {
-        float zero[2] = {0.0f, 0.0f};
-        float t[2];
-        if (s_Vec2Max) { float* r = reinterpret_cast<float*>(s_Vec2Max(runMax, t, zero)); runMax[0]=r[0]; runMax[1]=r[1]; }
-        float wh[2] = { fW, fH };
-        if (s_Vec2Min) { float* r = reinterpret_cast<float*>(s_Vec2Min(runMax, t, wh)); runMax[0]=r[0]; runMax[1]=r[1]; }
+        Math::Vector2 zero(0.0f, 0.0f);
+        Math::Vector2 wh(fW, fH);
+        {   Math::Vector2 r = reinterpret_cast<const Math::Vector2*>(runMax)->Max(zero);
+            runMax[0]=r.x; runMax[1]=r.y; }
+        {   Math::Vector2 r = reinterpret_cast<const Math::Vector2*>(runMax)->Min(wh);
+            runMax[0]=r.x; runMax[1]=r.y; }
     }
 
     // Scale by (gameSettings UI value / 100.0) on both axes (in place operator*=).
@@ -366,12 +309,12 @@ extern "C" uint8_t PlayerScreenRect_AccumulateRect_fe960(uint64_t /*param_1*/, u
     if (g_pGameSettingsPtr && *g_pGameSettingsPtr)
         uiScale = static_cast<float>((*g_pGameSettingsPtr)[0]) / scaleDiv;
     {
-        float s[2] = { uiScale, uiScale };
-        if (s_Vec2MulEq) s_Vec2MulEq(runMin, s);
+        Math::Vector2 sv(uiScale, uiScale);
+        reinterpret_cast<Math::Vector2*>(runMin)->operator*=(sv);
     }
     {
-        float s[2] = { uiScale, uiScale };
-        if (s_Vec2MulEq) s_Vec2MulEq(runMax, s);
+        Math::Vector2 sv(uiScale, uiScale);
+        reinterpret_cast<Math::Vector2*>(runMax)->operator*=(sv);
     }
 
     // Write rect: param_4[0..1] = runMin.xy ; param_4[2..3] = runMax.xy (two 8-byte stores).
@@ -420,10 +363,8 @@ extern "C" uint8_t PlayerScreenRect_Entity_0380(uintptr_t /*param_1*/, void* par
 
     // local_88 = Vector3[8] (96 bytes), each default-constructed.
     alignas(16) float corners[24];  // 8 * 3
-    for (int i = 0; i < 8; i++) {
-        if (s_Vec3Ctor) s_Vec3Ctor(&corners[i * 3]);
-        else { corners[i*3]=0; corners[i*3+1]=0; corners[i*3+2]=0; }
-    }
+    for (int i = 0; i < 8; i++)
+        *reinterpret_cast<Math::Vector3*>(&corners[i * 3]) = Math::Vector3();
 
     // CheckPtr(param_2) ; ClearPathQueue(*param_2, &entityIBP) -> local_res8 (entity ptr)
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2);
@@ -477,16 +418,16 @@ extern "C" uint8_t PlayerScreenRect_Entity_0380(uintptr_t /*param_1*/, void* par
         for (int i = 0; i < 8; i++) {
             float* c = &corners[i * 3];
             // tmp = c.Min(clampVec) -> write back to c (retbuf = local_98 scratch)
-            float minRet[3];
-            if (s_Vec3Min) {
-                float* r = reinterpret_cast<float*>(s_Vec3Min(c, minRet, clampVec));
-                c[0] = r[0]; c[1] = r[1]; c[2] = r[2];
+            {
+                Math::Vector3 r = reinterpret_cast<const Math::Vector3*>(c)->Min(
+                    *reinterpret_cast<const Math::Vector3*>(clampVec));
+                c[0] = r.x; c[1] = r.y; c[2] = r.z;
             }
             // c = transform * c  (retbuf = local_a8 rect scratch in the original)
-            float mulRet[3];
-            if (s_XformMulVec3) {
-                float* r = reinterpret_cast<float*>(s_XformMulVec3(transform, mulRet, c));
-                c[0] = r[0]; c[1] = r[1]; c[2] = r[2];
+            {
+                Math::Vector3 r = reinterpret_cast<const Math::Transform*>(transform)->operator*(
+                    *reinterpret_cast<const Math::Vector3*>(c));
+                c[0] = r.x; c[1] = r.y; c[2] = r.z;
             }
         }
         cornerCount = 8;

@@ -119,7 +119,6 @@ inline float AbsF(float v) {
 
 using CameraCtorFn = Camera* (*)(Camera*, const Frustum*, const Transform3*, bool);
 using GetCornersFn = void (*)(const Frustum*, Vector3*);
-using FromLookAtFn = Transform3* (*)(Transform3*, const Vector3*, const Vector3*);
 
 void** SlotVideoDevice() { return RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA"); }
 void** SlotVideoConfig() { return RT_DATA_SLOT(void**, "?_singleton@Configuration@Video@@0PEAV12@EA"); }
@@ -147,9 +146,10 @@ extern "C" Camera* RtGraphics_SunLight_GetSunCamera(const void* selfv, Camera* r
 
     // The shadow basis: look from the origin towards the sun direction vector.
     const Vector3    origin = { kZero, kZero, kZero };
-    Transform3       look;
-    RT_EXPORT_ONCE(FromLookAtFn, "?FromLookAt@Transform3@Math@@SA?AV12@AEBVVector3@2@0@Z")
-        (&look, &origin, reinterpret_cast<const Vector3*>(&self->_dirX));
+    // B.3.1 bridge: `self->_dirX` is the first of three consecutive floats on
+    // Graphics::SunCamera, which is not a converted class yet.
+    const Transform3 look = Transform3::FromLookAt(
+        origin, *reinterpret_cast<const Vector3*>(&self->_dirX));
     const float* const p = reinterpret_cast<const float*>(&look);
 
     // ---- pass 1: extrude each near corner, and rotate its direction into world

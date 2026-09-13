@@ -36,6 +36,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "ui/Dialogs.h"
+#include "system/String.h"
+#include "system/Filename.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -49,11 +51,9 @@ extern uintptr_t ThumbVtable_StampSpriteSheet(void* obj);
 // Helper: Find element by name in dialog instance
 // ============================================================
 static uint64_t FindDialogElem(void* dialogInst, const char* name) {
-    uint8_t nameStr[8];
-    fn_String_Ctor_CStr(nameStr, name);
+    System::String nameStr(name);
     uint64_t result = 0;
-    fn_DialogInstance_FindElement(dialogInst, &result, nameStr);
-    fn_String_Dtor(nameStr);
+    fn_DialogInstance_FindElement(dialogInst, &result, &nameStr);
     return result;
 }
 
@@ -61,16 +61,14 @@ static uint64_t FindDialogElem(void* dialogInst, const char* name) {
 // Helper: Find element by name in an Element tree, return InternalBasePtr
 // ============================================================
 static uint64_t FindChildElem(void* parentElem, const char* name) {
-    uint8_t nameStr[8];
-    fn_String_Ctor_CStr(nameStr, name);
+    System::String nameStr(name);
     uint64_t resultPtr = 0;
-    fn_FindElement(parentElem, &resultPtr, nameStr);
+    fn_FindElement(parentElem, &resultPtr, &nameStr);
     fn_InternalBasePtr_CheckPtr(&resultPtr);
     void* rawElem = (void*)resultPtr;
     // Wrap in InternalBasePtr
     uint64_t basePtr = 0;
     fn_InternalBasePtr_Ctor(&basePtr, rawElem);
-    fn_String_Dtor(nameStr);
     return basePtr;
 }
 
@@ -279,10 +277,9 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
             entry[6] = (uint64_t)matInstFinal;
 
             // Load UIMaterialNoBlend material
-            uint8_t matFilename[8] = {};
-            fn_Filename_CtorCStr(matFilename, "Material/UI/UIMaterialNoBlend.rsc");
+            System::Filename matFilename("Material/UI/UIMaterialNoBlend.rsc");
             void* matExternal = fn_ExternalFactory_FindOrLoad(
-                *g_pExternalFactorySingleton, matFilename);
+                *g_pExternalFactorySingleton, &matFilename);
 
             void* matResource = nullptr;
             if (matExternal) {
@@ -297,14 +294,11 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
             // The IsDerivedFrom is checking MaterialExternal type.
             fn_MaterialInstance_SetMaterial(matInstFinal,
                 matExternal ? matExternal : nullptr);
-            fn_Filename_Dtor(matFilename);
 
             // Add texture: "diffuse" -> saveInfo's ImageBuffer at +0x18
-            uint8_t diffuseStr[8] = {};
-            fn_String_Ctor_CStr(diffuseStr, "diffuse");
-            fn_MaterialInstance_AddTexture(matInstFinal, diffuseStr,
+            System::String diffuseStr("diffuse");
+            fn_MaterialInstance_AddTexture(matInstFinal, &diffuseStr,
                 *(void**)((uintptr_t)saveInfo + 0x18));
-            fn_String_Dtor(diffuseStr);
 
             fn_MaterialInstance_BuildParameters(matInstFinal);
 
@@ -325,32 +319,22 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
             int imgHeight = fn_ImageBuffer_Height(imageBuffer);
             int imgWidth = fn_ImageBuffer_Width(imageBuffer);
 
-            // Set spritesheet dimensions
-            uint8_t emptyStr1[8] = {};
-            uint8_t emptyStr2[8] = {};
-            fn_String_Ctor_CStr(emptyStr1, "");
-            fn_String_Ctor_CStr(emptyStr2, "");
-            fn_String_Assign((void*)((uintptr_t)sheetFinal + 0x40), emptyStr1);
-            fn_String_Assign((void*)((uintptr_t)sheetFinal + 0x38), emptyStr2);
+            // Set spritesheet dimensions (raw SpriteSheet fields; not our struct)
+            System::String emptyStr1(""), emptyStr2("");
+            *reinterpret_cast<System::String*>((uintptr_t)sheetFinal + 0x40) = emptyStr1;  // B.3.1 bridge
+            *reinterpret_cast<System::String*>((uintptr_t)sheetFinal + 0x38) = emptyStr2;  // B.3.1 bridge
             *(int*)((uintptr_t)sheetFinal + 0x48) = imgWidth;
             *(int*)((uintptr_t)sheetFinal + 0x4C) = imgHeight;
             *(uint64_t*)((uintptr_t)sheetFinal + 0x50) = 0;
-            fn_String_Dtor(emptyStr2);
-            fn_String_Dtor(emptyStr1);
 
             // Add sprite info (full image as single sprite)
-            uint8_t nameStr1[8] = {};
-            uint8_t nameStr2[8] = {};
-            fn_String_Ctor_CStr(nameStr1, "");
-            fn_String_Ctor_CStr(nameStr2, "");
+            System::String nameStr1(""), nameStr2("");
 
             imageBuffer = *(void**)((uintptr_t)saveInfo + 0x18);
             imgHeight = fn_ImageBuffer_Height(imageBuffer);
             imgWidth = fn_ImageBuffer_Width(imageBuffer);
-            fn_SpriteSheet_AddSpriteInfo(sheetFinal, nameStr1, nameStr2,
+            fn_SpriteSheet_AddSpriteInfo(sheetFinal, &nameStr1, &nameStr2,
                                           0, 0, imgWidth, imgHeight);
-            fn_String_Dtor(nameStr1);
-            fn_String_Dtor(nameStr2);
 
             // Set sprite info with UV coordinates
             imageBuffer = *(void**)((uintptr_t)saveInfo + 0x18);
@@ -386,24 +370,20 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
         if (*(int*)((uintptr_t)saveInfo + 0x40) >= 0) {
             if (*(int*)((uintptr_t)saveInfo + 0x44) == 2) {
                 // Valid save: show formatted date string
-                uint8_t dateStr[8] = {};
-                fn_DateTime_AsString((void*)((uintptr_t)saveInfo + 0x30), dateStr);
+                System::String dateStr;
+                fn_DateTime_AsString((void*)((uintptr_t)saveInfo + 0x30), &dateStr);
                 fn_InternalBasePtr_CheckPtr(&entry[1]);
-                fn_TextElement_SetParameter((void*)entry[1], 0, dateStr);
-                fn_String_Dtor(dateStr);
+                fn_TextElement_SetParameter((void*)entry[1], 0, &dateStr);
             } else {
                 // Corrupt save: show "Corrupt" text from string table
-                uint8_t corruptKey[8] = {};
-                fn_String_Ctor_CStr(corruptKey, "Corrupt");
+                System::String corruptKey("Corrupt");
                 uintptr_t keyMapObj = (uintptr_t)*g_pKeyMapSingleton;
                 uint8_t uiStr[16] = {};
-                fn_UIString_Ctor(uiStr, *(uint64_t*)(keyMapObj + 0xD8), corruptKey);
-                uint8_t sysStr[8] = {};
-                fn_UIString_ToSystemString(uiStr, sysStr);
+                fn_UIString_Ctor(uiStr, *(uint64_t*)(keyMapObj + 0xD8), &corruptKey);
+                System::String sysStr;
+                fn_UIString_ToSystemString(uiStr, &sysStr);
                 fn_InternalBasePtr_CheckPtr(&entry[1]);
-                fn_TextElement_SetParameter((void*)entry[1], 0, sysStr);
-                fn_String_Dtor(sysStr);
-                fn_String_Dtor(corruptKey);
+                fn_TextElement_SetParameter((void*)entry[1], 0, &sysStr);
             }
 
             // Set save name: saveInfo+0x10 is the name String
@@ -824,10 +804,12 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
             fn_UpdateLoop_Ctor(gameLoop);
             *(void**)gameLoop = (void*)g_GameUpdateLoop_Vtable;
 
-            // +0x28: empty name string
-            uint8_t nameStr[8];
-            fn_String_Ctor_CStr(nameStr, "");
-            *(uint64_t*)((uintptr_t)gameLoop + 0x28) = *(uint64_t*)nameStr;
+            // +0x28: empty name string. Ownership is transferred into gameLoop by raw
+            // copy (matching retail): null the local out afterward so its destructor
+            // (which never fires in the original) is a no-op rather than a double-free.
+            System::String nameStr("");
+            *(uint64_t*)((uintptr_t)gameLoop + 0x28) = *reinterpret_cast<uint64_t*>(&nameStr);
+            nameStr._data = nullptr;
             *(uint32_t*)((uintptr_t)gameLoop + 0x30) = 0;   // p6
             *(uint32_t*)((uintptr_t)gameLoop + 0x34) = 0;   // p7
             *(uint64_t*)((uintptr_t)gameLoop + 0x38) = 0;
@@ -862,13 +844,11 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
             fn_Time_Ctor_Float((void*)delayTime, 1.0f);
 
             // GetLoadingSoundString reimplemented inline: generates random loading sound variant
-            uint8_t dialogNameStr[8];
-            GetLoadingSoundString(dialogNameStr);
+            System::String dialogNameStr;
+            GetLoadingSoundString(&dialogNameStr);
 
             // Construct base Engine::DialogLoaderLoopT
-            fn_DialogLoaderLoopT_Ctor(dlLoop, dialogNameStr, pGameLoop, (void*)delayTime);
-
-            fn_String_Dtor(dialogNameStr);
+            fn_DialogLoaderLoopT_Ctor(dlLoop, &dialogNameStr, pGameLoop, (void*)delayTime);
 
             // Patch vtable to exe subclass (GameLoadDialogLoopT)
             *(void**)dlLoop = (void*)g_GameLoadDialogLoopT_Vtable;
@@ -960,10 +940,8 @@ static int SaveLoad_ShowConfirmDialog(void* self, const char* rscPath) {
     uintptr_t s = (uintptr_t)self;
 
     // Load the .rsc External resource
-    uint8_t filename[8] = {};
-    fn_Filename_CtorCStr(filename, rscPath);
-    void* externalRes = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filename);
-    fn_Filename_Dtor(filename);
+    System::Filename filename(rscPath);
+    void* externalRes = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filename);
 
     // IsDerivedFrom check — ensure it's a valid External (matches original _typeInfo_exref)
     void* checkedRes = nullptr;
@@ -1042,11 +1020,10 @@ static void SaveLoadDialog_DoSave(SaveLoadDialog* self) {
 
     // Copy save name from the text element at +0xE8 (the name input field)
     // FUN_140011f90 inlined: String::String(retval, *(dialog+0xE8) + 0x28)
-    uint8_t saveName[8] = {};
     void* nameSource = *(void**)(s + 0xE8);
-    fn_String_Ctor_Copy(saveName, (void*)((uintptr_t)nameSource + 0x28));
-    fn_SaveLoad_SetSaveName(saveLoad, saveName, 2);
-    fn_String_Dtor(saveName);
+    System::String saveName(
+        *reinterpret_cast<const System::String*>((uintptr_t)nameSource + 0x28));  // B.3.1 bridge
+    fn_SaveLoad_SetSaveName(saveLoad, &saveName, 2);
 
     // Start save operation (4 = save, with selected slot index)
     fn_SaveLoad_SetOperation(saveLoad, 4, selectedIdx);
@@ -1143,10 +1120,8 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
         else                     warnPath = "Dialog/SaveLoad.rsc:modsMissing";
 
         // Load the warning dialog External resource
-        uint8_t warnFilename[8] = {};
-        fn_Filename_CtorCStr(warnFilename, warnPath);
-        void* warnExt = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, warnFilename);
-        fn_Filename_Dtor(warnFilename);
+        System::Filename warnFilename(warnPath);
+        void* warnExt = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &warnFilename);
 
         void* checkedWarn = nullptr;
         if (warnExt) {
@@ -1195,14 +1170,11 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
         void* modEntry = (void*)((uintptr_t)*(void**)((uintptr_t)saveInfo3 + 0x48) + (uintptr_t)i * 0x20);
         uint32_t isBeta   = *(uint32_t*)((uintptr_t)modEntry + 0x14);
         uint32_t modVer   = *(uint32_t*)((uintptr_t)modEntry + 0x18);
-        uint8_t verStrBuf[8] = {};
-        void* verStr = fn_Configuration_GetVersionString(verStrBuf, isBeta, (bool)(isBeta != 0));
-        uint8_t fmtBuf[8] = {};
-        fn_String_Format(fmtBuf, "%i (%s)", (unsigned)modVer, *(const char**)verStr);
+        System::String verStrBuf;
+        fn_Configuration_GetVersionString(&verStrBuf, isBeta, (bool)(isBeta != 0));
+        System::String fmtBuf = System::String::Format("%i (%s)", (unsigned)modVer, verStrBuf._data);
         fn_InternalBasePtr_CheckPtr(&textPtr);
-        fn_TextElement_SetParameter((void*)textPtr, 2, fmtBuf);
-        fn_String_Dtor(fmtBuf);
-        fn_String_Dtor(verStrBuf);
+        fn_TextElement_SetParameter((void*)textPtr, 2, &fmtBuf);
 
         // Show the warning dialog and check if user confirmed.
         // Retail (0x1400b61e0) copies the dialog InternalPtr into a scratch slot,

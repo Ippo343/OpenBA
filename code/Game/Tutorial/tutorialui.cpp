@@ -8,15 +8,15 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 
 // Helper: FindElemByName with IsDerivedFrom check, stores InternalBasePtr
 static void FindAndStore(uintptr_t self, const char* name, int fieldOffset) {
-    char nameBuf[8] = {};
-    fn_String_Ctor_CStr(nameBuf, name);
+    System::String nameBuf(name);
 
     uint64_t foundResult = 0;
-    fn_FindElement((void*)*(uint64_t*)(self + 0x20), &foundResult, nameBuf);
+    fn_FindElement((void*)*(uint64_t*)(self + 0x20), &foundResult, &nameBuf);
 
     void* found = (void*)foundResult;
     void* checked = nullptr;
@@ -28,8 +28,6 @@ static void FindAndStore(uintptr_t self, const char* name, int fieldOffset) {
     uint64_t stored = 0;
     fn_InternalBasePtr_Ctor(&stored, checked);
     *(uint64_t*)(self + fieldOffset) = stored;
-
-    fn_String_Dtor(nameBuf);
 }
 
 // Serialize (vtable +0x20): Finds named elements, sets button IDs, hides close button.
@@ -48,13 +46,11 @@ void TutorialUI_Serialize(TutorialUI* self) {
     fn_Element_SetElementId((void*)*(uint64_t*)(s + 0x58), 0x579);  // quitButton = 1401
 
     // Hide the "buttonClose" element in the dialog instance
-    char closeName[8] = {};
-    fn_String_Ctor_CStr(closeName, "buttonClose");
+    System::String closeName("buttonClose");
     uint64_t closeElem = 0;
-    fn_DialogInstance_FindElement((void*)*(uint64_t*)(s + 0x18), &closeElem, closeName);
+    fn_DialogInstance_FindElement((void*)*(uint64_t*)(s + 0x18), &closeElem, &closeName);
     // SetFlagsOnOff(elem, hideFlags=1, showFlags=0) — hide element
     fn_Element_SetFlagsOnOff((void*)closeElem, 1, 0);
-    fn_String_Dtor(closeName);
 }
 
 // OnRemove (vtable +0x48): Quit tutorial button handler.
@@ -88,10 +84,8 @@ void TutorialUI_OnRemove(TutorialUI* self, void* param2, int eventType, int even
     void* menuLoop = fn_MemAlloc(g_pMemAllocSingleton, 0xc00, 8);
     void* pMenuLoop = nullptr;
     if (menuLoop) {
-        uint64_t menuNameStr = 0;
-        fn_String_Ctor_CStr(&menuNameStr, "Dialog/MainMenu.rsc");
+        System::String menuNameStr("Dialog/MainMenu.rsc");
         MenuDialogLoopT_Ctor(menuLoop, &menuNameStr);
-        fn_String_Dtor(&menuNameStr);
         pMenuLoop = menuLoop;
     }
 
@@ -104,10 +98,8 @@ void TutorialUI_OnRemove(TutorialUI* self, void* param2, int eventType, int even
         uint64_t delayTime[1];
         fn_Time_Ctor_Float((void*)delayTime, 1.0f);
 
-        uint64_t loadingNameStr = 0;
-        fn_String_Ctor_CStr(&loadingNameStr, "Dialog/Loading.rsc");
+        System::String loadingNameStr("Dialog/Loading.rsc");
         fn_DialogLoaderLoopT_Ctor(dlLoop, &loadingNameStr, pMenuLoop, (void*)delayTime);
-        fn_String_Dtor(&loadingNameStr);
 
         // Patch vtable to exe subclass (GameLoadDialogLoopT)
         *(void**)dlLoop = (void*)g_GameLoadDialogLoopT_Vtable;

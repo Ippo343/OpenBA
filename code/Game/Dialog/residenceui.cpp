@@ -17,6 +17,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -84,12 +85,11 @@ static void ResidenceUI_ArrayPush_Impl(void* arrayBase, int newCount, void* entr
 // Helper: find element by name in parent element, returns raw pointer
 // Original pattern: FindElement → CheckPtr → deref
 static void* FindChildElem(void* parentElem, const char* name) {
-    uint8_t nameStr[8], retBuf[16];
-    fn_String_Ctor_CStr(nameStr, name);
-    fn_FindElement(parentElem, retBuf, nameStr);
+    System::String nameStr(name);
+    uint8_t retBuf[16];
+    fn_FindElement(parentElem, retBuf, &nameStr);
     fn_InternalBasePtr_CheckPtr(retBuf);  // resolve IBP before deref
     void* result = *(void**)retBuf;
-    fn_String_Dtor(nameStr);
     return result;
 }
 
@@ -353,13 +353,11 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
 
                     // Set age text: (int)(age * 5.0f) formatted as "%i"
                     fn_InternalBasePtr_CheckPtr(&citizen);
-                    uint8_t ageStr[8];
                     int ageYears = (int)(*(float*)(citizen + 0x3c) * ageMul);
-                    fn_String_Format(ageStr, "%i", (uint64_t)(uint32_t)ageYears);
+                    System::String ageStr = System::String::Format("%i", (uint64_t)(uint32_t)ageYears);
                     fn_InternalBasePtr_CheckPtr((void*)(rowBase + 0x18));
                     void* textAge = *(void**)(rowBase + 0x18);
-                    if (textAge) fn_TextElement_SetParameter(textAge, 0, ageStr);
-                    fn_String_Dtor(ageStr);
+                    if (textAge) fn_TextElement_SetParameter(textAge, 0, &ageStr);
 
                     // Determine profession text. Faithful to retail 0x1400B51F0:
                     //   if (age < desc.childThreshold(+0x44) || job(+0x208) != 0):
@@ -439,29 +437,27 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
             if (imageFemale) fn_Element_SetFlagsOnOff(imageFemale, 1, 0);
 
             // Clear name text
-            uint8_t emptyStr1[8];
-            fn_String_Ctor_CStr(emptyStr1, "");
-            void* textName = *(void**)(rowBase + 0x10);
-            if (textName) fn_TextElement_SetParameter(textName, 0, emptyStr1);
-            fn_String_Dtor(emptyStr1);
+            {
+                System::String emptyStr1("");
+                void* textName = *(void**)(rowBase + 0x10);
+                if (textName) fn_TextElement_SetParameter(textName, 0, &emptyStr1);
+            }
 
             // Clear age text
-            uint8_t emptyStr2[8];
-            fn_String_Ctor_CStr(emptyStr2, "");
-            void* textAge = *(void**)(rowBase + 0x18);
-            if (textAge) fn_TextElement_SetParameter(textAge, 0, emptyStr2);
-            fn_String_Dtor(emptyStr2);
+            {
+                System::String emptyStr2("");
+                void* textAge = *(void**)(rowBase + 0x18);
+                if (textAge) fn_TextElement_SetParameter(textAge, 0, &emptyStr2);
+            }
 
             // Reset profession text: fn_UIString_Ctor(retbuf, externalPtr from +0xD8, empty string)
             void* textProfession = *(void**)(rowBase + 0x20);
             if (textProfession) {
-                uint8_t emptyStr3[8];
-                fn_String_Ctor_CStr(emptyStr3, "");
+                System::String emptyStr3("");
                 uint64_t origUIStr[2];
                 fn_UIString_Ctor(origUIStr,
-                    *(uint64_t*)((uintptr_t)textProfession + 0xD8), emptyStr3);
+                    *(uint64_t*)((uintptr_t)textProfession + 0xD8), &emptyStr3);
                 fn_TextElement_SetText(textProfession, origUIStr);
-                fn_String_Dtor(emptyStr3);
             }
 
             // Deactivate buttonGoto: vtable[8](this, 0)

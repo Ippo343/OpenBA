@@ -51,6 +51,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/math/Math.h"
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -194,21 +195,30 @@ void RendererDrawItemList(void* renderer, void* ctx, int32_t a, int32_t b, int32
 //   ?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ 0x18001fcd0 (this, ret)
 // Each returns the slot in RAX, which the caller then uses as `this` for the
 // next call in the chain — the shape below preserves that exactly.
-using Ret1Fn = void* (*)(const void* self, void* ret);
-using Ret2Fn = void* (*)(const void* self, void* ret, const void* rhs);
-
+// ENDGAME B.3.1 step 2: all four are members of the real Math classes. The
+// `(self, ret) -> void*` SHAPE is kept because the chain below feeds each
+// call's result in as the next call's `this`, on scratch storage the
+// Graphics::SpotLight body owns; that shape goes when THAT class is converted.
 void* Transform3Inverse(const void* self, void* ret) {
-    return RT_EXPORT_ONCE(Ret1Fn, "?Inverse@Transform3@Math@@QEBA?AV12@XZ")(self, ret);
+    *static_cast<Math::Transform3*>(ret) =
+        static_cast<const Math::Transform3*>(self)->Inverse();
+    return ret;
 }
 void* Transform3AsMatrix(const void* self, void* ret) {
-    return RT_EXPORT_ONCE(Ret1Fn, "?AsMatrix@Transform3@Math@@QEBA?AVMatrix@2@XZ")(self, ret);
+    *static_cast<Math::Matrix*>(ret) =
+        static_cast<const Math::Transform3*>(self)->AsMatrix();
+    return ret;
 }
 void* MatrixMultiply(const void* self, void* ret, const void* rhs) {
-    return RT_EXPORT_ONCE(Ret2Fn, "??DMatrix@Math@@QEBA?AV01@AEBV01@@Z")(self, ret, rhs);
+    *static_cast<Math::Matrix*>(ret) =
+        *static_cast<const Math::Matrix*>(self) *
+        *static_cast<const Math::Matrix*>(rhs);
+    return ret;
 }
 void* TransformAsTransform3(const void* self, void* ret) {
-    return RT_EXPORT_ONCE(Ret1Fn,
-        "?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ")(self, ret);
+    *static_cast<Math::Transform3*>(ret) =
+        static_cast<const Math::Transform*>(self)->AsTransform3();
+    return ret;
 }
 
 // `??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z`

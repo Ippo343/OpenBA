@@ -24,6 +24,7 @@
 
 #include "Work/marketwork_funcs.h"
 #include "engine_funcs.h"
+#include "system/Filename.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -847,15 +848,14 @@ static void MW_ReportTreeMiss(const char* site, int entityIdx, uintptr_t entityI
                               uintptr_t resType, void* rawMat, uintptr_t town) {
     char path[160] = "?";
     if (fn_External_GetPath && resType) {
-        uintptr_t fnStorage = 0;
-        fn_External_GetPath(reinterpret_cast<void*>(resType), &fnStorage);
-        const char* s = reinterpret_cast<const char*>(fnStorage);
+        System::Filename fnPath;   // the hidden return slot GetPath constructs into
+        fn_External_GetPath(reinterpret_cast<void*>(resType), &fnPath);
+        const char* s = fnPath._data;
         if (s) {
             size_t i = 0;
             for (; i + 1 < sizeof(path) && s[i] >= 0x20 && s[i] < 0x7f; i++) path[i] = s[i];
             path[i] = '\0';
         }
-        if (fn_Filename_Dtor) fn_Filename_Dtor(&fnStorage);
     }
     const int regCount = *reinterpret_cast<int32_t*>(town + 0x118);
     fprintf(stderr, "[MarketWork::Execute] TREE MISS at %s: storage entity[%d]=%p holds resType=%p "

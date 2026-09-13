@@ -16,6 +16,7 @@
 
 #include "Work/tendarea_funcs.h"
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -64,8 +65,6 @@ typedef bool  (*TAW_Map_CanPathTo_t)(int* mapGrid, uint32_t pathType, uint32_t d
 // GetTerrainPos
 typedef float*(*TAW_GetTerrainPos_t)(int* mapGrid, float* outPos, float* gridPos,
                                      char param4, uint32_t* outNormal);
-// Vector3 ctor
-typedef float*(*TAW_Vector3_Ctor_t)(float* self, float x, float y, float z);
 // PerformWork (FUN_1400bb0a0 -- the complex work ctor with target/position)
 typedef void  (*TAW_PerformWork_Ctor_t)(void* citizenIBP, int priority, void* workEntityIBP,
                                         int unused, float* targetPos, float* srcPos,
@@ -101,7 +100,6 @@ static TAW_Random_Rand_t             s_fn_Random_Rand = nullptr;
 static TAW_Map_FindNearestPassable_t s_fn_Map_FindNearestPassable = nullptr;
 static TAW_Map_CanPathTo_t           s_fn_Map_CanPathTo = nullptr;
 static TAW_GetTerrainPos_t           s_fn_GetTerrainPos = nullptr;
-static TAW_Vector3_Ctor_t            s_fn_Vector3_Ctor = nullptr;
 static TAW_PerformWork_Ctor_t        s_fn_PerformWork_Ctor = nullptr;
 static TAW_CitizenAI_RegisterWork_t  s_fn_CitizenAI_RegisterWork = nullptr;
 static TAW_CitizenAI_LongTermPlan_t  s_fn_CitizenAI_LongTermPlan = nullptr;
@@ -190,8 +188,6 @@ bool TendArea_ResolveFuncs() {
     // reached its grow path; the same wrong pair was copied into five work classes.
     s_fn_MemAlloc = reinterpret_cast<TAW_MemAlloc_t>(fn_MemAllocStatic);
     s_fn_MemFree  = reinterpret_cast<TAW_MemFree_t>(fn_MemFreeStatic);
-    uintptr_t iatVec3Ctor = ResolveAddr(Module::Exe, 0x140152a30);
-    if (iatVec3Ctor) s_fn_Vector3_Ctor = *reinterpret_cast<TAW_Vector3_Ctor_t*>(iatVec3Ctor);
 
     // Random::Rand from dispatch slot
     uintptr_t iatRand = ResolveAddr(Module::Exe, 0x1401512e8);
@@ -235,7 +231,7 @@ bool TendArea_ResolveFuncs() {
               s_fn_CalcMaxWorkers && s_fn_FindComp_MatDesc &&
               s_fn_FindComp_AreaCrop && s_fn_FindComp_AreaOrchard &&
               s_fn_Random_Rand && s_fn_Map_FindNearestPassable &&
-              s_fn_Map_CanPathTo && s_fn_GetTerrainPos && s_fn_Vector3_Ctor &&
+              s_fn_Map_CanPathTo && s_fn_GetTerrainPos &&
               s_fn_PerformWork_Ctor && s_fn_CitizenAI_RegisterWork &&
               s_fn_CitizenAI_LongTermPlan && s_fn_FindComp_Storage &&
               s_fn_StorageQueryCount &&
@@ -268,7 +264,6 @@ bool TendArea_ResolveFuncs() {
         if (!s_fn_Map_FindNearestPassable) printf("  MISSING: Map_FindNearestPassable\n");
         if (!s_fn_Map_CanPathTo) printf("  MISSING: Map_CanPathTo\n");
         if (!s_fn_GetTerrainPos) printf("  MISSING: GetTerrainPos\n");
-        if (!s_fn_Vector3_Ctor) printf("  MISSING: Vector3_Ctor\n");
         if (!s_fn_PerformWork_Ctor) printf("  MISSING: PerformWork_Ctor\n");
         if (!s_fn_CitizenAI_RegisterWork) printf("  MISSING: CitizenAI_RegisterWork\n");
         if (!s_fn_CitizenAI_LongTermPlan) printf("  MISSING: CitizenAI_LongTermPlan\n");
@@ -388,21 +383,19 @@ int TendArea_Slot4_Impl(TendArea* self, void* citizenIBP, uint64_t /*param3*/, u
 
     // Step 6: Calculate terrain positions
     float halfOffset = (float)(*mapGrid >> 1) - *s_fHalfCellOffset;
-    float targetPos[3];
-    s_fn_Vector3_Ctor(targetPos,
+    Math::Vector3 targetPos(
         (float)(targetCell % *mapGrid) - halfOffset,
         (float)(targetCell / *mapGrid) - halfOffset,
         0.0f);
     float targetTerrain[3];
-    s_fn_GetTerrainPos(mapGrid, targetTerrain, targetPos, '\0', nullptr);
+    s_fn_GetTerrainPos(mapGrid, targetTerrain, &targetPos.x, '\0', nullptr);
 
-    float citizenPos[3];
-    s_fn_Vector3_Ctor(citizenPos,
+    Math::Vector3 citizenPos(
         (float)(nearestCell % *mapGrid) - halfOffset,
         (float)(nearestCell / *mapGrid) - halfOffset,
         0.0f);
     float citizenTerrain[3];
-    s_fn_GetTerrainPos(mapGrid, citizenTerrain, citizenPos, '\0', nullptr);
+    s_fn_GetTerrainPos(mapGrid, citizenTerrain, &citizenPos.x, '\0', nullptr);
 
     // Step 7: Create PerformWork action
     uintptr_t workEntityRef = *(uintptr_t*)(selfAddr + 0x10);

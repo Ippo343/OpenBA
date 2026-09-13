@@ -13,6 +13,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/internal_factory_audit.h"   // ObjAudit::IsRegistered (stale weak-ref guard)
+#include "system/String.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -137,13 +138,11 @@ static void WorkplaceUI_ToggleWorkplace_Impl(void* self)
 
 // Helper: Find element by name in dialog, return InternalPtr value (8 bytes)
 static uint64_t FindElemByName(void* dialogElem, const char* name) {
-    uint8_t nameBuf[8];
-    fn_String_Ctor_CStr(nameBuf, name);
+    System::String nameStr(name);
 
     uint64_t result = 0;
-    fn_FindElement(dialogElem, &result, nameBuf);
+    fn_FindElement(dialogElem, &result, &nameStr);
 
-    fn_String_Dtor(nameBuf);
     return result;
 }
 
@@ -332,18 +331,14 @@ showUpDown:
 
     // Set worker count text parameter 0 on workPlaceCount
     {
-        uint8_t fmtBuf[8];
-        fn_String_Format(fmtBuf, "%d", workerCount);
-        fn_TextElement_SetParameter(*(void**)(s + 0x30), 0, fmtBuf);
-        fn_String_Dtor(fmtBuf);
+        System::String fmtStr = System::String::Format("%d", workerCount);
+        fn_TextElement_SetParameter(*(void**)(s + 0x30), 0, &fmtStr);
     }
 
     // Set max count text parameter 1 on workPlaceCount
     {
-        uint8_t fmtBuf[8];
-        fn_String_Format(fmtBuf, "%d", maxCount);
-        fn_TextElement_SetParameter(*(void**)(s + 0x30), 1, fmtBuf);
-        fn_String_Dtor(fmtBuf);
+        System::String fmtStr = System::String::Format("%d", maxCount);
+        fn_TextElement_SetParameter(*(void**)(s + 0x30), 1, &fmtStr);
     }
 
     // Iterate citizens to count workers assigned to this workplace
@@ -382,10 +377,8 @@ showUpDown:
 
     // Set assigned worker count on buttonPrevious (+0x38) text
     {
-        uint8_t fmtBuf[8];
-        fn_String_Format(fmtBuf, "%d", workplaceWorkerCount);
-        fn_TextElement_SetParameter(*(void**)(s + 0x38), 0, fmtBuf);
-        fn_String_Dtor(fmtBuf);
+        System::String fmtStr = System::String::Format("%d", workplaceWorkerCount);
+        fn_TextElement_SetParameter(*(void**)(s + 0x38), 0, &fmtStr);
     }
 
     // Enable/disable workerCountUp (+0x40) based on laborer count > 0
@@ -802,21 +795,18 @@ void PopulateCounts(void* self) {
                            reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(profession) + 0x30));
             fn_LabelElement_SetSprite(elem30, spriteBuf);
         }
-        if (fn_TextElement_SetParameter && fn_String_Format) {
-            uint8_t fmt[8];
-            fn_String_Format(fmt, "%d", static_cast<uint64_t>(roster));
-            fn_TextElement_SetParameter(elem30, 0, fmt);
-            fn_String_Dtor(fmt);
-            fn_String_Format(fmt, "%d", static_cast<uint64_t>(capacity));
-            fn_TextElement_SetParameter(elem30, 1, fmt);
-            fn_String_Dtor(fmt);
+        if (fn_TextElement_SetParameter) {
+            System::String fmt1 = System::String::Format("%d", static_cast<uint64_t>(roster));
+            fn_TextElement_SetParameter(elem30, 0, &fmt1);
+            System::String fmt2 = System::String::Format("%d", static_cast<uint64_t>(capacity));
+            fn_TextElement_SetParameter(elem30, 1, &fmt2);
         }
     }
 
     // maxCount: town-wide count of adult, unassigned-task citizens whose profession
     // (citizen+0x1f0) matches this workplace's profession — the live "N builders in
     // the town" figure. Pure field reads over the citizen list (no exe helpers).
-    if (elem38 && fn_TextElement_SetParameter && fn_String_Format) {
+    if (elem38 && fn_TextElement_SetParameter) {
         int assigned = 0;
         void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
         void* citizenList = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xf0) : nullptr;
@@ -846,10 +836,8 @@ void PopulateCounts(void* self) {
                 if (*reinterpret_cast<void**>(citizen + 0x1f0) == profession) ++assigned;
             }
         }
-        uint8_t fmt[8];
-        fn_String_Format(fmt, "%d", static_cast<uint64_t>(static_cast<uint32_t>(assigned)));
-        fn_TextElement_SetParameter(elem38, 0, fmt);
-        fn_String_Dtor(fmt);
+        System::String fmt = System::String::Format("%d", static_cast<uint64_t>(static_cast<uint32_t>(assigned)));
+        fn_TextElement_SetParameter(elem38, 0, &fmt);
     }
 
 }

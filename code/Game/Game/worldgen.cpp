@@ -38,6 +38,7 @@
 // workflow (notes/WORLDGEN_TERRAIN_BLUEPRINT.md, 2026-05-30).
 
 #include "engine_funcs.h"
+#include "system/Filename.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -538,13 +539,11 @@ static void* wg_BlendTexture_cf440(int32_t* hf) {
 static void* wg_ResolveMaterial_fd10(void* triple) {
     if (!triple || !g_pExternalFactorySingleton) return nullptr;
     void* factory = *g_pExternalFactorySingleton;
-    if (!factory || !fn_Filename_CtorString || !fn_ExternalFactory_Find) return nullptr;
+    if (!factory || !fn_ExternalFactory_Find) return nullptr;
 
-    uint8_t fnbuf[0x20] = {};                    // System::Filename (small String wrapper)
-    fn_Filename_CtorString(fnbuf, triple);       // String is at +0 of the triple
-    void* result = fn_ExternalFactory_Find(factory, fnbuf);
-    if (fn_Filename_Dtor) fn_Filename_Dtor(fnbuf);
-    return result;
+    // String is at +0 of the triple.
+    System::Filename fnbuf(*reinterpret_cast<const System::String*>(triple));
+    return fn_ExternalFactory_Find(factory, &fnbuf);
 }
 
 // ============================================================

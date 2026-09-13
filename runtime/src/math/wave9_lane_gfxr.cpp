@@ -98,12 +98,14 @@ inline float NegBits(float f) { return BitsToFloat(FloatToBits(f) ^ 0x80000000u)
 //   a20 +0x20  a21 +0x24  a22 +0x28  a23 +0x2c
 //   a30 +0x30  a31 +0x34  a32 +0x38  a33 +0x3c
 // ============================================================================
-Matrix* RtMath_Matrix_Inverse(const Matrix* self, Matrix* ret) {
-
-    // Snapshot BEFORE the first store to `ret`: the hidden return slot is
-    // allowed to alias `self`, and feeding the shipped body an already-written
-    // `self` would manufacture a divergence that is the oracle's fault.
-    Matrix selfSnap{};
+//
+// ENDGAME B.3.1 step 1: MOVED onto Math::Matrix::Inverse unchanged, returning
+// by value. The retired diff oracle's input snapshot (which existed only
+// because the hidden return slot could alias `self`) is gone with the slot.
+Math::Matrix Math::Matrix::Inverse() const {
+    Matrix out;
+    Matrix* const ret = &out;
+    const Matrix* const self = this;
 
     const float a00 = self->m[0],  a01 = self->m[1],  a02 = self->m[2],  a03 = self->m[3];
     const float a10 = self->m[4],  a11 = self->m[5],  a12 = self->m[6],  a13 = self->m[7];
@@ -142,7 +144,7 @@ Matrix* RtMath_Matrix_Inverse(const Matrix* self, Matrix* ret) {
         ret->m[5] = kOneF;
         ret->m[10] = kOneF;
         ret->m[15] = kOneF;
-        return ret;
+        return out;
     }
 
     // 0x1800bb5b3  DIVSS XMM7,XMM5 — ONE reciprocal, then sixteen MULSS. Not
@@ -191,6 +193,15 @@ Matrix* RtMath_Matrix_Inverse(const Matrix* self, Matrix* ret) {
 
     std::memcpy(ret->m, r, sizeof(r));
 
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// TRANSITIONAL SHIM — ENDGAME B.3.1 step 1. One line onto the member above; it
+// and the registry rows below die in step 2 with their last caller.
+// ---------------------------------------------------------------------------
+Matrix* RtMath_Matrix_Inverse(const Matrix* self, Matrix* ret) {
+    *ret = self->Inverse();
     return ret;
 }
 

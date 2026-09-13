@@ -21,6 +21,7 @@
 #include "Tutorial/tutorialimagehotkey_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "system/String.h"
 #include <cstdint>
 
 // hotkeytooltipui.cpp - the existing byte-faithful port of exe 0x140099c20.
@@ -68,9 +69,7 @@ void* TutorialImageHotKey_Dtor(void* self, uint32_t flags) {
     *(uintptr_t*)s = vtable;
 
     // Destroy String at +0x30
-    if (fn_String_Dtor) {
-        fn_String_Dtor((void*)(s + 0x30));
-    }
+    reinterpret_cast<System::String*>(s + 0x30)->~String();
 
     // Set vtable to TutorialImage (base)
     uintptr_t baseVtable = ResolveAddr(Module::Exe, TutorialImageAddr::Vtable);
@@ -133,9 +132,7 @@ void TutorialImageHotKey_Serialize(void* self, void* stream) {
     }
 
     // Serialize String at +0x30
-    if (g_fn_String_Serialize) {
-        g_fn_String_Serialize((void*)(s + 0x30), ser2);
-    }
+    reinterpret_cast<System::String*>(s + 0x30)->Serialize(ser2);
 
     // If loading (version == 0), resolve the hotkey string to an External ref
     if (g_fn_Serializer_GetVersion) {

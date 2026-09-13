@@ -24,6 +24,9 @@
 #include "Component/component_factory_base.h"
 #include "Object/internal_factory_audit.h"
 #include "engine_funcs.h"
+#include "math/Math.h"
+#include "system/String.h"
+#include "system/Filename.h"
 #include "resolve.h"
 #include "stress_harness.h"   // BANISHED_STRESS Update/Draw brackets (standalone/)
 #include "perf_experimental.h" // PerfX non-retail perf knobs (standalone/)
@@ -221,8 +224,6 @@ static fn_Video_Context_SetCamera_t fn_Video_Context_SetCamera = nullptr;
 
 // Math::Transform3::AsMatrix(this) -> Matrix (non-trivial return: 64 bytes)
 // MSVC x64 member function ABI: RCX=this, RDX=hidden retval ptr, returns RAX=retval ptr
-typedef void* (*fn_Transform3_AsMatrix_t)(void* self, void* retval);
-static fn_Transform3_AsMatrix_t fn_Transform3_AsMatrix = nullptr;
 
 // Math::Vector3::Normalize(this)
 // REMOVED 2026-07-31: `fn_Vector3_Normalize` lived here with a ONE-ARG typedef
@@ -404,9 +405,6 @@ typedef void (*fn_ExternalList_Find_t)(void* self, void* retval, void* filename,
 static fn_ExternalList_Find_t fn_ExternalList_Find = nullptr;
 
 // System::Filename::Filename(this, const char*) (Runtime)
-// NOTE: This is the CStr variant, distinct from the default ctor fn_Filename_Ctor in engine_funcs.h
-typedef void* (*fn_Filename_CtorCStr_Local_t)(void* self, const char* path);
-static fn_Filename_CtorCStr_Local_t fn_Filename_CtorCStr_Local = nullptr;
 
 // fn_Filename_Dtor — available from engine_funcs.h
 
@@ -632,8 +630,6 @@ static void EnsureInit() {
         ResolveExport("?SetTime@Context@Video@@QEAAXM@Z"));
     fn_Video_Context_SetCamera = reinterpret_cast<fn_Video_Context_SetCamera_t>(
         ResolveExport("?SetCamera@Context@Video@@QEAAXAEBVMatrix@Math@@0@Z"));
-    fn_Transform3_AsMatrix = reinterpret_cast<fn_Transform3_AsMatrix_t>(
-        ResolveExport("?AsMatrix@Transform3@Math@@QEBA?AVMatrix@2@XZ"));
     // fn_Vector3_Normalize — removed 2026-07-31, see the note at its former declaration.
     // fn_MainLoop_SetNextLoop — resolved by EngineFuncsInit()
     // fn_ImageBuffer_CopyToTexture — resolved by EngineFuncsInit()
@@ -663,8 +659,6 @@ static void EnsureInit() {
         if (dispatchAddr)
             fn_ExternalList_Find = *reinterpret_cast<fn_ExternalList_Find_t*>(dispatchAddr);
     }
-    fn_Filename_CtorCStr_Local = reinterpret_cast<fn_Filename_CtorCStr_Local_t>(
-        ResolveExport("??0Filename@System@@QEAA@PEBD@Z"));
     // fn_Filename_Dtor — resolved by EngineFuncsInit()
     // fn_InternalBasePtr_Ctor — resolved by EngineFuncsInit()
 
@@ -701,12 +695,10 @@ static void EnsureInit() {
     CHECK_FN(fn_Audio_Scene_StopAll);
     CHECK_FN(fn_Video_Context_SetTime);
     CHECK_FN(fn_Video_Context_SetCamera);
-    CHECK_FN(fn_Transform3_AsMatrix);
     CHECK_FN(fn_MainLoop_SetNextLoop);
     CHECK_FN(fn_Time_Ctor_Seconds);
     CHECK_FN(fn_App_IsPaused);
     CHECK_FN(fn_ExternalList_Find);
-    CHECK_FN(fn_Filename_CtorCStr_Local);
     CHECK_FN(fn_SaveLoad_Draw);
     CHECK_FN(fn_AchievementManager_Update);
     CHECK_FN(fn_EventNotifier_Fire);
@@ -1385,8 +1377,9 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
             void* playerCtrl = self->m_playerController;
             void* result = fn_PlayerController_CalcTransform(playerCtrl, transform3);
             // AsTransform3 on the result, then SetCameraToWorld
-            void* t3 = fn_Transform_AsTransform3(result, transform3);
-            fn_Camera_SetCameraToWorld((void*)((uintptr_t)playerCtrl + 0x34), t3);
+            Math::Transform3 t3 =
+                reinterpret_cast<const Math::Transform*>(result)->AsTransform3();
+            fn_Camera_SetCameraToWorld((void*)((uintptr_t)playerCtrl + 0x34), &t3);
         }
         TRACE("[GameUpdateLoop::Update] camera transform done\n");
     }
@@ -1947,9 +1940,8 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
             ((uint32_t*)transform3)[i] = *(uint32_t*)(pc + 0x98 + i * 4);
         }
 
-        // AsMatrix: RCX=this(Transform3*), RDX=hidden retval(Matrix*), returns RAX=retval
-        uint8_t viewMatrix[64]; // 4x4 float Matrix output buffer
-        fn_Transform3_AsMatrix(transform3, viewMatrix);
+        Math::Matrix viewMatrix =
+            reinterpret_cast<const Math::Transform3*>(transform3)->AsMatrix();
 
         // Projection matrix at +0xC8 (16 floats = 64 bytes)
         uint8_t projMatrix[64];
@@ -1957,7 +1949,7 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
             ((uint32_t*)projMatrix)[i] = *(uint32_t*)(pc + 0xC8 + i * 4);
         }
 
-        fn_Video_Context_SetCamera(videoCtx, viewMatrix, projMatrix);
+        fn_Video_Context_SetCamera(videoCtx, &viewMatrix, projMatrix);
     }
     TRACE("[GameUpdateLoop::Draw] camera matrices set\n");
 
@@ -2151,23 +2143,20 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
         if (!s_diag) {
             s_diag = true;
             void* rl = self->m_resourceList;
-            fprintf(stderr, "[HUD-DIAG] probe: m_resourceList=%p Find=%p FilenameCtor=%p "
-                    "Dtor=%p DialogTypeId=%p(val=%u) ToolbarCtor=%p UI_AddDialog=%p IsDerivedFrom=%p\n",
-                    rl, (void*)fn_ExternalList_Find, (void*)fn_Filename_CtorCStr_Local,
-                    (void*)fn_Filename_Dtor, (void*)g_pDialogTypeId,
+            fprintf(stderr, "[HUD-DIAG] probe: m_resourceList=%p Find=%p "
+                    "DialogTypeId=%p(val=%u) ToolbarCtor=%p UI_AddDialog=%p IsDerivedFrom=%p\n",
+                    rl, (void*)fn_ExternalList_Find, (void*)g_pDialogTypeId,
                     g_pDialogTypeId ? *g_pDialogTypeId : 0u,
                     (void*)fn_ToolbarDialog_Ctor, (void*)fn_UI_AddDialog, (void*)fn_IsDerivedFrom);
             fflush(stderr);
-            if (rl && fn_ExternalList_Find && fn_Filename_CtorCStr_Local) {
-                uint8_t fnbuf[8];
-                fn_Filename_CtorCStr_Local(fnbuf, "Dialog/Toolbar.rsc");
+            if (rl && fn_ExternalList_Find) {
+                System::Filename fnbuf("Dialog/Toolbar.rsc");
                 void* foundBase = nullptr;
                 uint32_t typeInfo = g_pDialogTypeId ? *g_pDialogTypeId : 0u;
-                fn_ExternalList_Find(rl, &foundBase, fnbuf, &typeInfo);
+                fn_ExternalList_Find(rl, &foundBase, &fnbuf, &typeInfo);
                 fprintf(stderr, "[HUD-DIAG] ExternalList::Find(\"Dialog/Toolbar.rsc\") -> foundBase=%p\n",
                         foundBase);
                 fflush(stderr);
-                if (fn_Filename_Dtor) fn_Filename_Dtor(fnbuf);
             } else {
                 fprintf(stderr, "[HUD-DIAG] Find probe skipped (resourceList or fns null)\n");
                 fflush(stderr);
@@ -2204,8 +2193,7 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
         // Synthesize the standalone ToolbarDialog vtable + fill the toolbar type-id
         // globals before any toolbar object is constructed. Idempotent.
         ToolbarStandalone_Init();
-        uint8_t filename[8];
-        fn_Filename_CtorCStr_Local(filename, "Dialog/Toolbar.rsc");
+        System::Filename filename("Dialog/Toolbar.rsc");
 
         // Find the Dialog resource. First try the loop's resource list (populated
         // when preload is on); if that is empty or misses, fall back to
@@ -2214,10 +2202,10 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
         void* foundBase = nullptr;
         uint32_t typeInfo = g_pDialogTypeId ? *g_pDialogTypeId : 0; // [GUARD-M5] slot 0x1401c4138 unregistered
         if (self->m_resourceList && fn_ExternalList_Find)
-            fn_ExternalList_Find(self->m_resourceList, &foundBase, filename, &typeInfo);
+            fn_ExternalList_Find(self->m_resourceList, &foundBase, &filename, &typeInfo);
         if (foundBase == nullptr && fn_ExternalFactory_FindOrLoad &&
             g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
-            foundBase = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filename);
+            foundBase = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filename);
         }
 
         void* dialogRes = nullptr;
@@ -2226,7 +2214,6 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
                 dialogRes = foundBase;
             }
         }
-        fn_Filename_Dtor(filename);
 
         fprintf(stderr, "[HUD] Toolbar: foundBase=%p dialogRes=%p Ctor=%p UI=%p\n",
                 foundBase, dialogRes, (void*)fn_ToolbarDialog_Ctor, (void*)self->m_userInterface);
@@ -2270,20 +2257,18 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
     // (the ribbon Update early-returns on a null parent anyway).
     TRACE("[GameUpdateLoop::Startup] creating EventNotify dialog...\n");
     if (g_ribbonParentToolbar != nullptr) {
-        uint8_t filename[8];
-        fn_Filename_CtorCStr_Local(filename, "Dialog/EventNotify.rsc");
+        System::Filename filename("Dialog/EventNotify.rsc");
         void* foundBase = nullptr;
         uint32_t typeInfo = g_pDialogTypeId ? *g_pDialogTypeId : 0;
         if (self->m_resourceList && fn_ExternalList_Find)
-            fn_ExternalList_Find(self->m_resourceList, &foundBase, filename, &typeInfo);
+            fn_ExternalList_Find(self->m_resourceList, &foundBase, &filename, &typeInfo);
         if (foundBase == nullptr && fn_ExternalFactory_FindOrLoad &&
             g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
-            foundBase = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filename);
+            foundBase = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filename);
         }
         void* dialogRes = nullptr;
         if (foundBase != nullptr && g_pDialogTypeId && fn_IsDerivedFrom(foundBase, *g_pDialogTypeId))
             dialogRes = foundBase;
-        fn_Filename_Dtor(filename);
 
         fprintf(stderr, "[HUD] EventNotify: foundBase=%p dialogRes=%p parentToolbar=%p\n",
                 foundBase, dialogRes, g_ribbonParentToolbar);
@@ -2320,20 +2305,18 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
     // since m_resourceList is empty in standalone. Parented to nothing (retail
     // passes a null parent IBP here too).
     {
-        uint8_t filename[8];
-        fn_Filename_CtorCStr_Local(filename, "Dialog/AutoSave.rsc");
+        System::Filename filename("Dialog/AutoSave.rsc");
         void* foundBase = nullptr;
         uint32_t typeInfo = g_pDialogTypeId ? *g_pDialogTypeId : 0;
         if (self->m_resourceList && fn_ExternalList_Find)
-            fn_ExternalList_Find(self->m_resourceList, &foundBase, filename, &typeInfo);
+            fn_ExternalList_Find(self->m_resourceList, &foundBase, &filename, &typeInfo);
         if (foundBase == nullptr && fn_ExternalFactory_FindOrLoad &&
             g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
-            foundBase = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filename);
+            foundBase = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filename);
         }
         void* dialogRes = nullptr;
         if (foundBase != nullptr && g_pDialogTypeId && fn_IsDerivedFrom(foundBase, *g_pDialogTypeId))
             dialogRes = foundBase;
-        fn_Filename_Dtor(filename);
 
         void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0xD0, 8);
         void* autoSave = nullptr;
@@ -2744,22 +2727,21 @@ void GameUpdateLoop_OnScenarioComplete(GameUpdateLoop* self) {
         TRACE("[GameUpdateLoop::OnScenarioComplete] has parent achievement, firing named notification...\n");
 
         // Get achievement title (non-trivial return: self, retval)
-        uint8_t titleStr[8] = {0}; // System::String retval buffer
-        fn_Achievement_GetTitle(achievement, titleStr);
+        System::String titleStr;
+        fn_Achievement_GetTitle(achievement, &titleStr);
 
         // Build UI::String from achievement name
         // fn_UIString_Ctor(retval, stringTable, stringName)
         uint8_t uiStr[24]; // UI::String scratch (non-trivial return in first param)
-        fn_UIString_Ctor(uiStr, *(uint64_t*)((uintptr_t)achievement + 0x20), titleStr);
+        fn_UIString_Ctor(uiStr, *(uint64_t*)((uintptr_t)achievement + 0x20), &titleStr);
 
         // Retail destructs the title String here — it reuses that same stack slot
-        // for the UI::String -> System::String conversion below. We use separate
-        // buffers, so the dtor has to be explicit or the title's heap block leaks.
-        fn_String_Dtor(titleStr);
+        // for the UI::String -> System::String conversion below.
+        titleStr = System::String();
 
         // Convert to System::String (member, non-trivial return: self, retval)
-        uint8_t sysStr[8] = {0}; // System::String
-        fn_UIString_ToSystemString(uiStr, sysStr);
+        System::String sysStr;
+        fn_UIString_ToSystemString(uiStr, &sysStr);
 
         int64_t nullEntity[1] = {0};
         fn_InternalBasePtr_Ctor(nullEntity, nullptr);
@@ -2769,9 +2751,7 @@ void GameUpdateLoop_OnScenarioComplete(GameUpdateLoop* self) {
 
         // 0x1a = scenario won with name (26), 0x1b = scenario failed with name (27)
         int eventType = 0x1b - (int)isMet;
-        fn_EventNotifier_FireWithName(self->m_eventNotifier, eventType, 4, nullEntity, sysStr);
-
-        fn_String_Dtor(sysStr);
+        fn_EventNotifier_FireWithName(self->m_eventNotifier, eventType, 4, nullEntity, &sysStr);
     }
 
     TRACE("[GameUpdateLoop::OnScenarioComplete] EXIT\n");
@@ -2812,7 +2792,8 @@ void* GameUpdateLoop_Destroy(GameUpdateLoop* self, uint32_t flags) {
     *g_pGameWorldSingleton = nullptr;
 
     // Step 3: Destroy System::String at +0x28 (m_saveName)
-    fn_String_Dtor(self->m_saveName);
+    // B.3.1 bridge: GameUpdateLoop's m_saveName is still a POD member.
+    reinterpret_cast<System::String*>(self->m_saveName)->~String();
 
     // Step 4: Call UpdateLoop::~UpdateLoop (base class destructor)
     if (fn_UpdateLoop_Dtor) {

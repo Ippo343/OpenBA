@@ -37,6 +37,8 @@
 // Decompiled from Application-x64.exe (READ-ONLY Ghidra).
 
 #include "engine_funcs.h"
+#include "system/String.h"
+#include <new>
 #include "resolve.h"
 #include <cstdint>
 #if defined(_DEBUG)
@@ -98,8 +100,9 @@ extern "C" void ToolbarDescription_StringArrayResize(void* hdr, unsigned newCoun
     unsigned start = (oldBuf == buf) ? oldCount : 0;
     for (unsigned i = start; i < newCount; ++i) {
         if (i < oldCount) {
-            if (buf && fn_String_Ctor_Copy)
-                fn_String_Ctor_Copy(buf + static_cast<size_t>(i) * 8, oldBuf + static_cast<size_t>(i) * 8);
+            if (buf)
+                ::new (static_cast<void*>(buf + static_cast<size_t>(i) * 8))
+                    System::String(*reinterpret_cast<System::String*>(oldBuf + static_cast<size_t>(i) * 8));  // B.3.1 bridge
         } else if (buf) {
             *reinterpret_cast<void**>(buf + static_cast<size_t>(i) * 8) = nullptr;
         }
@@ -108,12 +111,12 @@ extern "C" void ToolbarDescription_StringArrayResize(void* hdr, unsigned newCoun
         // In-place shrink: destroy the trimmed tail [newCount..oldCount).
         if (static_cast<int>(newCount) < static_cast<int>(oldCount)) {
             for (unsigned i = newCount; i < oldCount; ++i)
-                if (fn_String_Dtor) fn_String_Dtor(oldBuf + static_cast<size_t>(i) * 8);
+                reinterpret_cast<System::String*>(oldBuf + static_cast<size_t>(i) * 8)->~String();  // B.3.1 bridge
         }
     } else {
         // Realloc'd: destroy every old element, then free the old buffer.
         for (unsigned i = 0; i < oldCount; ++i)
-            if (fn_String_Dtor) fn_String_Dtor(oldBuf + static_cast<size_t>(i) * 8);
+            reinterpret_cast<System::String*>(oldBuf + static_cast<size_t>(i) * 8)->~String();  // B.3.1 bridge
         if (oldBuf && fn_MemFreeStatic) fn_MemFreeStatic(oldBuf);
     }
 }
@@ -122,8 +125,7 @@ extern "C" void ToolbarDescription_StringArrayResize(void* hdr, unsigned newCoun
 void ToolbarDescription_Serialize(void* self, void* stream) {
     uintptr_t s = (uintptr_t)self;
     uint8_t serializer[24];
-    if (!g_fn_Serializer_Ctor || !g_fn_Serialize_Int || !g_fn_String_Serialize ||
-        !fn_ExternalPtr_Serialize2) {
+    if (!g_fn_Serializer_Ctor || !g_fn_Serialize_Int || !fn_ExternalPtr_Serialize2) {
         return;
     }
     g_fn_Serializer_Ctor(serializer, stream, 0);
@@ -132,11 +134,11 @@ void ToolbarDescription_Serialize(void* self, void* stream) {
     // a byte-identical stream layout (only the validated typeId differs, trusted
     // in standalone). Use the registered Serialize2 for both.
     fn_ExternalPtr_Serialize2((void*)(s + 0x20), serializer);  // 1. _descRef
-    g_fn_String_Serialize((void*)(s + 0x28), serializer);      // 2. _name
+    reinterpret_cast<System::String*>(s + 0x28)->Serialize(serializer);      // B.3.1 bridge: 2. _name
     fn_ExternalPtr_Serialize2((void*)(s + 0x30), serializer);  // 3. _iconRef (StringTable)
-    g_fn_String_Serialize((void*)(s + 0x38), serializer);      // 4. _str1
-    g_fn_String_Serialize((void*)(s + 0x40), serializer);      // 5. _str2
-    g_fn_String_Serialize((void*)(s + 0x48), serializer);      // 6. _str3
+    reinterpret_cast<System::String*>(s + 0x38)->Serialize(serializer);      // B.3.1 bridge: 4. _str1
+    reinterpret_cast<System::String*>(s + 0x40)->Serialize(serializer);      // B.3.1 bridge: 5. _str2
+    reinterpret_cast<System::String*>(s + 0x48)->Serialize(serializer);      // B.3.1 bridge: 6. _str3
 
     // 7. count — serialize through a LOCAL, exactly like the exe (local_res8), NOT
     //    straight into +0x58. +0x58 is the resize's own count field: if we wrote the
@@ -161,7 +163,7 @@ void ToolbarDescription_Serialize(void* self, void* stream) {
     uint8_t* buf = *(uint8_t**)(s + 0x50);
     if (buf) {
         for (int i = 0; i < count; ++i) {
-            g_fn_String_Serialize(buf + (size_t)i * 8, serializer);
+            reinterpret_cast<System::String*>(buf + (size_t)i * 8)->Serialize(serializer);  // B.3.1 bridge
         }
     }
 
@@ -184,22 +186,20 @@ void* ToolbarDescription_Dtor(void* self, uint32_t flags) {
     uintptr_t s = (uintptr_t)self;
     *(void**)self = (void*)ResolveAddr(Module::Exe, kVtable);
 
-    if (fn_String_Dtor) {
+    {
         uint8_t* buf = *(uint8_t**)(s + 0x50);
         int n = *(int32_t*)(s + 0x58);
         if (buf) {
-            for (int i = 0; i < n; ++i) fn_String_Dtor(buf + (size_t)i * 8);
+            for (int i = 0; i < n; ++i) reinterpret_cast<System::String*>(buf + (size_t)i * 8)->~String();  // B.3.1 bridge
         }
     }
     if (fn_MemFreeStatic) fn_MemFreeStatic(*(void**)(s + 0x50));
     *(uint64_t*)(s + 0x50) = 0;
     *(uint64_t*)(s + 0x58) = 0;
-    if (fn_String_Dtor) {
-        fn_String_Dtor((void*)(s + 0x48));
-        fn_String_Dtor((void*)(s + 0x40));
-        fn_String_Dtor((void*)(s + 0x38));
-        fn_String_Dtor((void*)(s + 0x28));
-    }
+    reinterpret_cast<System::String*>(s + 0x48)->~String();  // B.3.1 bridge
+    reinterpret_cast<System::String*>(s + 0x40)->~String();  // B.3.1 bridge
+    reinterpret_cast<System::String*>(s + 0x38)->~String();  // B.3.1 bridge
+    reinterpret_cast<System::String*>(s + 0x28)->~String();  // B.3.1 bridge
     if (fn_External_Dtor) fn_External_Dtor(self);
     if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
     return self;

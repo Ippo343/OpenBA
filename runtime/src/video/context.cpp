@@ -147,6 +147,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/math/Math.h"
 #include "../../types/video/Context.h"
 
 using RtVideo::Context;
@@ -200,36 +201,40 @@ inline Fn BackendSlot(Context* self, unsigned byteOffset) {
 // against the disassembly of SetCamera itself at 0x18001a165-0x18001a170:
 // `LEA RDX,[RSP+0x20] / MOV RCX,RDI / CALL 0x1800bb310`, i.e. RCX = the matrix,
 // RDX = the scratch return slot.
-using MatrixInverseFn = MatrixRaw* (*)(const MatrixRaw* self, MatrixRaw* ret);
-using MatrixMulFn     = MatrixRaw* (*)(const MatrixRaw* self, MatrixRaw* ret,
-                                       const MatrixRaw* rhs);
-
-// RT_EXPORT_ONCE, not `static Fn fn = ResolveExport(...)`. The plain static is
-// the FROZEN form lane E3 enumerated (~22 sites): the FIRST caller fixes the
-// answer for the process, so if this runs before RtMathPortInit() registers
-// Wave 9 lane GFXR's port of Inverse, the null — or the DLL's address — is
-// cached forever and nothing says which symbol was missing. RT_EXPORT_ONCE
-// caches a hit and RETRIES a miss, naming it once. Behaviour-identical while
-// the DLL answers, which is why it is a change that can be verified TODAY.
-MatrixInverseFn MatrixInverse() {
-    return RT_EXPORT_ONCE(MatrixInverseFn, "?Inverse@Matrix@Math@@QEBA?AV12@XZ");
+// ENDGAME B.3.1 step 2: `Math::Matrix::Inverse` and `Math::Matrix::operator*`,
+// called as members. There is no resolve left, so the RT_EXPORT_ONCE-vs-frozen-
+// static argument this comment used to make no longer applies to either.
+//
+// B.3.1 bridge: `Context::_transforms`, `_inverseView` and `_viewProjection`
+// are `MatrixRaw` because Video::Context is not converted yet (B31_RULES,
+// "members of not-yet-converted structs"); the two are the same 64 bytes, as
+// the static_assert below states.
+MatrixRaw* MatrixInverse(const MatrixRaw* self, MatrixRaw* ret) {
+    *reinterpret_cast<Math::Matrix*>(ret) =
+        reinterpret_cast<const Math::Matrix*>(self)->Inverse();
+    return ret;
 }
-MatrixMulFn MatrixMul() {
-    static MatrixMulFn fn = reinterpret_cast<MatrixMulFn>(
-        ResolveExport("??DMatrix@Math@@QEBA?AV01@AEBV01@@Z"));
-    return fn;
+MatrixRaw* MatrixMul(const MatrixRaw* self, MatrixRaw* ret, const MatrixRaw* rhs) {
+    *reinterpret_cast<Math::Matrix*>(ret) =
+        *reinterpret_cast<const Math::Matrix*>(self) *
+        *reinterpret_cast<const Math::Matrix*>(rhs);
+    return ret;
 }
 
-// Math::Matrix::operator!= (0x18001d850, ordinal 1286) inlined. Retail's body
-// is sixteen `==` comparisons with the same short-circuit structure; inlining
-// it here reproduces the result exactly (including the NaN case, where every
-// `==` is false and the operator reports "not equal") and keeps SetTransform
-// free of a resolve on the hottest setter in the class.
+// ENDGAME B.3.1 step 2: the sixteen-comparison body moved onto
+// `Math::Matrix::operator!=` (runtime/src/math/transform.cpp). This is the one
+// call it has in this file, kept as a named helper because SetTransform and
+// SetTransformScale both use it for their dirty check.
+//
+// B.3.1 bridge — `Context::_transforms` is `RtVideo::MatrixRaw` because
+// `RtVideo::Context` is not converted yet (B31_RULES, "members of
+// not-yet-converted structs"). The two are the same sixty-four bytes; the cast
+// dies when Context is converted.
+static_assert(sizeof(MatrixRaw) == sizeof(Math::Matrix),
+              "B.3.1 bridge: MatrixRaw and Math::Matrix must be the same bytes");
 inline bool MatrixNotEqual(const MatrixRaw* a, const MatrixRaw* b) {
-    for (int i = 0; i < 16; ++i) {
-        if (!(a->m[i] == b->m[i])) return true;
-    }
-    return false;
+    return reinterpret_cast<const Math::Matrix&>(*a) !=
+           reinterpret_cast<const Math::Matrix&>(*b);   // B.3.1 bridge
 }
 
 } // namespace
@@ -238,13 +243,9 @@ inline bool MatrixNotEqual(const MatrixRaw* a, const MatrixRaw* b) {
 // ??9Matrix@Math@@QEBA_NAEBV01@@Z  (Math::Matrix::operator!=)  retail
 // 0x18001d850, ordinal 1286  —  BATCH 8
 // ============================================================================
-// The export itself, wrapping the same `MatrixNotEqual` this file already
-// used inline for SetTransform's dirty check (comment above): sixteen `==`
-// comparisons with retail's own short-circuit nesting, reproduced exactly —
-// see mcp decompile of 0x18001d850 for the nested-if shape this flattens.
-// Registered by BOTH name and address: `Math::Matrix::operator!=` has no
-// other caller in this tree today, but a caller reaching it by address (the
-// shape every other door in this file worries about) gets the same body.
+// ENDGAME B.3.1 step 2: a one-line shim onto `Math::Matrix::operator!=`, kept
+// for the two registry rows at the bottom of this file (by name AND by
+// address, so a by-address caller reaches the port and not a walk past it).
 // ============================================================================
 bool RtMath_Matrix_NotEqual(const MatrixRaw* self, const MatrixRaw* other) {
     return MatrixNotEqual(self, other);
@@ -493,8 +494,8 @@ void RtVideo_Context_SetTransformScale(Context* self, int slot,
 void RtVideo_Context_SetCamera(Context* self, const MatrixRaw* view, const MatrixRaw* projection) {
 
     MatrixRaw scratch;
-    self->_inverseView = *MatrixInverse()(view, &scratch);
-    self->_viewProjection = *MatrixMul()(&self->_inverseView, &scratch, projection);
+    self->_inverseView = *MatrixInverse(view, &scratch);
+    self->_viewProjection = *MatrixMul(&self->_inverseView, &scratch, projection);
 
     self->_cameraPosition.x = view->m[12];
     self->_cameraPosition.y = view->m[13];

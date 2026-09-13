@@ -53,6 +53,7 @@
 // All offsets verified against live Ghidra disassembly of Application-x64.exe.
 
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -127,12 +128,9 @@ static bool s_rangesResolved = false;
 //   ?Normalize@Vector2@Math@@QEBA?AV12@XZ   retail 0x18006c600
 // This adapter resolves the real export and copies its result back into
 // `self` so the in-place call sites below (vec2_normalize2) don't change.
-typedef void* (*fn_Vec2_NormalizeByVal_t)(const void* self, void* ret);
-static fn_Vec2_NormalizeByVal_t s_fn_Vec2NormByVal = nullptr;
 static float* vec2_normalize_real(float* self) {
-    float out[2];
-    s_fn_Vec2NormByVal(self, out);
-    self[0] = out[0]; self[1] = out[1];
+    Math::Vector2 out = reinterpret_cast<const Math::Vector2*>(self)->Normalize();
+    *reinterpret_cast<Math::Vector2*>(self) = out;
     return self;
 }
 
@@ -141,11 +139,10 @@ static void rg_EnsureInit() {
     s_rangesResolved = true;
     s_fn_Rand2        = (fn_Random_Rand2_t)ResolveExport("?Rand@Random@System@@QEAAHHH@Z");
     s_fn_RandFloatTol = (fn_Random_RandFloatTol_t)ResolveExport("?RandFloatTol@Random@System@@QEAAMXZ");
-    s_fn_Vec2NormByVal = (fn_Vec2_NormalizeByVal_t)ResolveExport("?Normalize@Vector2@Math@@QEBA?AV12@XZ");
-    s_fn_Vec2Norm     = s_fn_Vec2NormByVal ? &vec2_normalize_real : nullptr;
-    fprintf(stderr, "[worldgen] ranges resolves: Rand2=%p RandFloatTol=%p Vec2NormByVal=%p "
+    s_fn_Vec2Norm     = &vec2_normalize_real;
+    fprintf(stderr, "[worldgen] ranges resolves: Rand2=%p RandFloatTol=%p "
             "Rand1=%p RandFloat=%p\n",
-            (void*)s_fn_Rand2, (void*)s_fn_RandFloatTol, (void*)s_fn_Vec2NormByVal,
+            (void*)s_fn_Rand2, (void*)s_fn_RandFloatTol,
             (void*)fn_Random_Rand, (void*)fn_Random_RandFloat);
     fflush(stderr);
 }

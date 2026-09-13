@@ -54,6 +54,7 @@
 #include "Component/animalcomponent_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "math/Math.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -115,11 +116,6 @@ typedef void* (*fn_MoveToCtor_t)(void* mem, void* moverIBP, uint32_t pathType,
                                  int a4, float* dest, int a6, int a7,
                                  float speed);                              // 0x1400c9170
 
-// --- Runtime exports the retail body reaches through .rdata dispatch slots --
-typedef void* (*fn_Vector4FromScalar_t)(void* out16, const float* scalar);  // slot 0x140152958
-typedef float* (*fn_Vec3Normalize_t)(const float* self, float* retbuf);     // slot 0x1401512c0
-typedef float  (*fn_Vec3Heading_t)(const float* self);                      // slot 0x1401512d8
-
 fn_FindCharacter_t     s_fnFindCharacter  = nullptr;
 fn_FindModel_t         s_fnFindModel      = nullptr;
 fn_MarkForRemoval_t    s_fnMarkForRemoval = nullptr;
@@ -130,9 +126,6 @@ fn_SetAnimation_t      s_fnSetAnimation   = nullptr;
 fn_ActStackClear_t     s_fnActStackClear  = nullptr;
 fn_ActStackPush_t      s_fnActStackPush   = nullptr;
 fn_MoveToCtor_t        s_fnMoveToCtor     = nullptr;
-fn_Vector4FromScalar_t s_fnVec4FromScalar = nullptr;
-fn_Vec3Normalize_t     s_fnVec3Normalize  = nullptr;
-fn_Vec3Heading_t       s_fnVec3Heading    = nullptr;
 
 const uint32_t* s_pTid_AnimalDescription    = nullptr;  // 0x1401c6fd0
 const uint32_t* s_pTid_CharacterDescription = nullptr;  // 0x1401c70b0
@@ -165,16 +158,6 @@ void EnsureHelpers() {
     s_fnActStackClear  = reinterpret_cast<fn_ActStackClear_t >(ResolveAddr(Module::Exe, 0x1400c5400));
     s_fnActStackPush   = reinterpret_cast<fn_ActStackPush_t  >(ResolveAddr(Module::Exe, 0x1400c54e0));
     s_fnMoveToCtor     = reinterpret_cast<fn_MoveToCtor_t    >(ResolveAddr(Module::Exe, 0x1400c9170));
-
-    // Math helpers the retail body reaches via .rdata dispatch slots. Those slots
-    // are unregistered in standalone, so bind the Runtime exports by name instead
-    // (same functions, name strings cross-checked against the DLL export table).
-    s_fnVec4FromScalar = reinterpret_cast<fn_Vector4FromScalar_t>(
-        ResolveExport("??0Vector4@Math@@QEAA@AEBVScalar@1@@Z"));
-    s_fnVec3Normalize = reinterpret_cast<fn_Vec3Normalize_t>(
-        ResolveExport("?Normalize@Vector3@Math@@QEBA?AV12@XZ"));
-    s_fnVec3Heading = reinterpret_cast<fn_Vec3Heading_t>(
-        ResolveExport("?Heading@Vector3@Math@@QEBAMXZ"));
 
     s_pTid_AnimalDescription    = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c6fd0));
     s_pTid_CharacterDescription = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70b0));
@@ -380,12 +363,14 @@ void AnimalComponent_UpdateBehavior(AnimalComponent* self) {
     if (fn_InternalBasePtr_CheckPtr)
         fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(character + 0x68));
     int64_t model = At<int64_t>(static_cast<uintptr_t>(character), 0x68);
-    if (!model || !s_fnVec4FromScalar) return;
+    if (!model) return;
 
-    float vec4[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-    s_fnVec4FromScalar(vec4, &scale);
-    for (int i = 0; i < 4; ++i)
-        At<float>(static_cast<uintptr_t>(model), 0x134 + i * 4) = vec4[i];
+    const Math::Scalar scaleS(scale);
+    Math::Vector4 vec4(scaleS);   // Vector4(const Scalar&) splat, slot 0x140152958
+    At<float>(static_cast<uintptr_t>(model), 0x134) = vec4.x;
+    At<float>(static_cast<uintptr_t>(model), 0x138) = vec4.y;
+    At<float>(static_cast<uintptr_t>(model), 0x13c) = vec4.z;
+    At<float>(static_cast<uintptr_t>(model), 0x140) = vec4.w;
 }
 
 // ============================================================
@@ -439,28 +424,24 @@ void AnimalComponent_SetWanderTimer(AnimalComponent* self, uint32_t animId, floa
     if (!desc || At<uint8_t>(desc, 0x3c) == 0) return;
 
     void* rng = Rng();
-    if (!rng || !s_fnVec3Normalize) return;
+    if (!rng) return;
 
     const float r1 = fn_Random_RandFloatTol(rng);
     const float r0 = fn_Random_RandFloatTol(rng);
-    const float src[3] = {r0, r1, 0.0f};
+    const Math::Vector3 src(r0, r1, 0.0f);
 
-    float dir[3] = {0.0f, 0.0f, 0.0f};
-    s_fnVec3Normalize(src, dir);
+    Math::Vector3 dir = src.Normalize();
 
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&character);
     At<uint8_t>(static_cast<uintptr_t>(character), 0x28) = 0;
 
-    const float src2[3] = {dir[0], dir[1], 0.0f};
-    float facing[3] = {0.0f, 0.0f, 0.0f};
-    float* out = s_fnVec3Normalize(src2, facing);
-    if (!out) out = facing;
-    At<float>(static_cast<uintptr_t>(character), 0x2c) = out[0];
-    At<float>(static_cast<uintptr_t>(character), 0x30) = out[1];
-    At<float>(static_cast<uintptr_t>(character), 0x34) = out[2];
+    const Math::Vector3 src2(dir.x, dir.y, 0.0f);
+    Math::Vector3 facing = src2.Normalize();
+    At<float>(static_cast<uintptr_t>(character), 0x2c) = facing.x;
+    At<float>(static_cast<uintptr_t>(character), 0x30) = facing.y;
+    At<float>(static_cast<uintptr_t>(character), 0x34) = facing.z;
 
-    if (s_fnVec3Heading)
-        At<float>(static_cast<uintptr_t>(character), 0x3c) = s_fnVec3Heading(dir);
+    At<float>(static_cast<uintptr_t>(character), 0x3c) = dir.Heading();
 }
 
 // ============================================================
@@ -869,12 +850,10 @@ void AnimalComponent_OnAdd(AnimalComponent* self) {
 void AnimalComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[AnimalComponent] find=%p moveTo=%p setBounds=%p vec4=%p norm=%p\n",
+    printf("[AnimalComponent] find=%p moveTo=%p setBounds=%p\n",
            reinterpret_cast<void*>(s_fnFindCharacter),
            reinterpret_cast<void*>(s_fnMoveToCtor),
-           reinterpret_cast<void*>(s_fnSetBounds),
-           reinterpret_cast<void*>(s_fnVec4FromScalar),
-           reinterpret_cast<void*>(s_fnVec3Normalize));
+           reinterpret_cast<void*>(s_fnSetBounds));
 #endif
 }
 

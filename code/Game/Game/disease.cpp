@@ -23,6 +23,7 @@
 //   Dtor          0x140018f60: String::~String(+0x28); External::~External; cond free.
 
 #include "engine_funcs.h"
+#include "system/String.h"
 #include "resolve.h"
 #include <cstdint>
 
@@ -34,8 +35,6 @@ static const uintptr_t kDiseaseVtable = 0x14015e190;
 static void  (*s_fn_Serializer_Ctor)(void* self, void* stream, int version) = nullptr;
 static void  (*s_fn_Serializer_Dtor)(void* self) = nullptr;
 static void  (*s_fn_Serialize_Float)(void* ser, void* field, const char* name) = nullptr;
-static void  (*s_fn_String_Serialize)(void* str, void* serializer) = nullptr;
-static void  (*s_fn_String_Dtor)(void* str) = nullptr;
 static void  (*s_fn_ExternalPtr_Serialize2)(void* field, void* serializer) = nullptr;
 static bool  s_funcsInited = false;
 
@@ -52,8 +51,6 @@ static void Disease_InitFuncs() {
     iat = ResolveAddr(Module::Exe, 0x140152a60);
     if (iat) s_fn_Serialize_Float = *reinterpret_cast<void(**)(void*, void*, const char*)>(iat);
 
-    s_fn_String_Serialize = reinterpret_cast<void(*)(void*, void*)>((uintptr_t)g_fn_String_Serialize);
-    s_fn_String_Dtor      = reinterpret_cast<void(*)(void*)>((uintptr_t)fn_String_Dtor);
     s_fn_ExternalPtr_Serialize2 = reinterpret_cast<void(*)(void*, void*)>(
         ResolveAddr(Module::Exe, 0x14000bf40));
 
@@ -93,7 +90,8 @@ void Disease_Serialize(void* self, void* stream) {
     uint8_t serializer[24];
     s_fn_Serializer_Ctor(serializer, stream, 0);
     if (s_fn_ExternalPtr_Serialize2) s_fn_ExternalPtr_Serialize2((void*)(s + 0x20), serializer);
-    if (s_fn_String_Serialize)       s_fn_String_Serialize((void*)(s + 0x28), serializer);
+    // B.3.1 bridge: Disease is still an untyped byte struct.
+    reinterpret_cast<System::String*>(s + 0x28)->Serialize(serializer);
     if (s_fn_Serialize_Float) {
         s_fn_Serialize_Float(serializer, (float*)(s + 0x30), nullptr);
         s_fn_Serialize_Float(serializer, (float*)(s + 0x34), nullptr);
@@ -110,7 +108,7 @@ void Disease_Serialize(void* self, void* stream) {
 void* Disease_Dtor(void* self, uint32_t flags) {
     Disease_InitFuncs();
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (s_fn_String_Dtor) s_fn_String_Dtor((void*)(s + 0x28));
+    reinterpret_cast<System::String*>(s + 0x28)->~String();
     if (fn_External_Dtor) fn_External_Dtor(self);
     if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
     return self;

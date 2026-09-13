@@ -8,6 +8,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 
 // ============================================================
@@ -30,24 +31,18 @@ void TitleDescToolTipUI_Serialize(TitleDescToolTipUI* self) {
 
     // --- Find "textTitle" element ---
     // FindElement: member with non-trivial return: RCX=this, RDX=retval, R8=name
-    uint8_t titleNameBuf[8];
-    fn_String_Ctor_CStr(titleNameBuf, "textTitle");
+    System::String titleNameStr("textTitle");
 
     void* titleResult = nullptr;
-    fn_FindElement(dialogInstance, &titleResult, titleNameBuf);
+    fn_FindElement(dialogInstance, &titleResult, &titleNameStr);
     void* titleElement = titleResult;
 
-    fn_String_Dtor(titleNameBuf);
-
     // --- Find "textDesc" element ---
-    uint8_t descNameBuf[8];
-    fn_String_Ctor_CStr(descNameBuf, "textDesc");
+    System::String descNameStr("textDesc");
 
     void* descResult = nullptr;
-    fn_FindElement(dialogInstance, &descResult, descNameBuf);
+    fn_FindElement(dialogInstance, &descResult, &descNameStr);
     void* descElement = descResult;
-
-    fn_String_Dtor(descNameBuf);
 
     // --- Check data source type and get user data ---
     // The original checks IsDerivedFrom on the data source, then calls

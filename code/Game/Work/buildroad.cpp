@@ -10,6 +10,7 @@
 
 #include "BuildActions.h"
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdio>
 #include <cstdint>
@@ -392,13 +393,13 @@ static int PosToCellIndex(int* mapGrid, uintptr_t posData) {
     return mapSize * cellY + cellX;
 }
 
-// Helper: convert cell index to world-space Vector3 via dispatch
-static void CellToWorldVec3(int* mapGrid, int cellIndex, float* outVec3) {
+// Helper: convert cell index to world-space Vector3
+static Math::Vector3 CellToWorldVec3(int* mapGrid, int cellIndex) {
     int mapSize = *mapGrid;
     float halfOffset = (float)(mapSize >> 1) - 0.5f;
     float cellX = (float)(cellIndex % mapSize) - halfOffset;
     float cellY = (float)(cellIndex / mapSize) - halfOffset;
-    fn_Vector3_Ctor(outVec3, cellX, cellY, 0.0f);
+    return Math::Vector3(cellX, cellY, 0.0f);
 }
 
 // Shared epilogue: finalize action on citizen entity
@@ -511,11 +512,10 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
             return 1;
         }
 
-        float worldPos[3];
-        CellToWorldVec3(mapGrid, adjacentCell, worldPos);
+        Math::Vector3 worldPos = CellToWorldVec3(mapGrid, adjacentCell);
 
         float terrainPos[4] = {};
-        fn_MapGetTerrainPos(mapGrid, terrainPos, worldPos, '\0', nullptr);
+        fn_MapGetTerrainPos(mapGrid, terrainPos, &worldPos.x, '\0', nullptr);
 
         uint64_t targetRef = natResComp;
         uint64_t citizenRef = *(uint64_t*)entityIBP;
@@ -534,11 +534,10 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
         fn_InternalBasePtr_Ctor(&actionRef, nullptr);
 
         float velocity[3] = { 0.0f, 0.0f, 0.0f };
-        float worldPos[3];
-        CellToWorldVec3(mapGrid, targetCell, worldPos);
+        Math::Vector3 worldPos = CellToWorldVec3(mapGrid, targetCell);
 
         float terrainPos[4] = {};
-        fn_MapGetTerrainPos(mapGrid, terrainPos, worldPos, '\0', nullptr);
+        fn_MapGetTerrainPos(mapGrid, terrainPos, &worldPos.x, '\0', nullptr);
 
         uint64_t citizenRef = *(uint64_t*)entityIBP;
 
@@ -568,11 +567,10 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
             fn_InternalBasePtr_Ctor(&actionRef, nullptr);
 
             float velocity[3] = { 0.0f, 0.0f, 0.0f };
-            float worldPos[3];
-            CellToWorldVec3(mapGrid, targetCell, worldPos);
+            Math::Vector3 worldPos = CellToWorldVec3(mapGrid, targetCell);
 
             float terrainPos[4] = {};
-            fn_MapGetTerrainPos(mapGrid, terrainPos, worldPos, '\0', nullptr);
+            fn_MapGetTerrainPos(mapGrid, terrainPos, &worldPos.x, '\0', nullptr);
 
             uint64_t citizenRef = *(uint64_t*)entityIBP;
 
@@ -624,11 +622,10 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
 
             foundStorageIBP = foundEntity;
 
-            float worldPos[3];
-            CellToWorldVec3(mapGrid, targetCell, worldPos);
+            Math::Vector3 worldPos = CellToWorldVec3(mapGrid, targetCell);
 
             float terrainPos[4] = {};
-            fn_MapGetTerrainPos(mapGrid, terrainPos, worldPos, '\0', nullptr);
+            fn_MapGetTerrainPos(mapGrid, terrainPos, &worldPos.x, '\0', nullptr);
 
             uint64_t citizenRef = *(uint64_t*)entityIBP;
 

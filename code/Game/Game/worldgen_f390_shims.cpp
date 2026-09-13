@@ -4,7 +4,6 @@
 // (which the other f390 stages use). Defined here once so the standalone exe links.
 //
 // All semantics match how rivers.cpp actually calls them (verified at the call sites):
-//   - fn_Vector2_Dot(v,&out)  is only ever self-dot  -> out = |v|^2
 //   - FUN_140014c30           is only called on a null AVL root (dead path) -> no-op
 //   - TradeComponent_helper_f9e0 copies a stride-4 {data,count,cap} int bucket
 //   - fn_Random_RandFloatTol   advances the engine RNG -> must hit the real Runtime export
@@ -21,27 +20,6 @@ float fn_Random_RandFloatTol(void* self) {
     static auto p = reinterpret_cast<float (*)(void*)>(
         ResolveExport("?RandFloatTol@Random@System@@QEAAMXZ"));
     return p ? p(self) : 0.0f;
-}
-
-// rivers.cpp calls fn_Vector2_Dot(diff, &out) purely to get |diff|^2 (self-dot).
-void fn_Vector2_Dot(void* a, void* out) {
-    const float* v = static_cast<const float*>(a);
-    *static_cast<float*>(out) = v[0] * v[0] + v[1] * v[1];
-}
-
-// Vector2::Length() — write length of {v[0],v[1]} into v[0]. (Only the connect pass,
-// currently stubbed, would use this; defined for completeness.)
-void fn_Vector2_Length(void* self_out) {
-    float* v = static_cast<float*>(self_out);
-    v[0] = sqrtf(v[0] * v[0] + v[1] * v[1]);
-}
-
-// Vector2::Normalize() — normalize in place, return self.
-void* fn_Vector2_Normalize(void* self, void* /*scratch*/) {
-    float* v = static_cast<float*>(self);
-    float L = sqrtf(v[0] * v[0] + v[1] * v[1]);
-    if (L > 0.0f) { v[0] /= L; v[1] /= L; }
-    return self;
 }
 
 // vector<int> bucket deep-copy ({data@+0, count@+8, cap@+0xC}, stride-4 elements).

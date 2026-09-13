@@ -110,6 +110,8 @@ leaving the whole body in C shape.
    not a pipe's. Fix every error and every new warning. Also `mingw32-make unit`.
 3. One real run: `tools/game_dir_lock.sh acquire <batch> 900` (shared by several agents;
    wait for it), then deploy: `cp standalone/build/reimpl-x64.exe "/c/GOG Games/Banished/"`,
+   `cmp standalone/build/reimpl-x64.exe "/c/GOG Games/Banished/reimpl-x64.exe"` (another agent
+   overwrote a deployed exe under a held lock once; a run measures whatever is on disk),
    `rm -f "/c/GOG Games/Banished/standalone_{debug,crash,error,hang}.log"`, then from that
    directory `BANISHED_AUTOSTART=1 BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120
    ./reimpl-x64.exe; echo exit=$?`, in the FOREGROUND with a 600000 ms Bash timeout
@@ -131,3 +133,27 @@ Class(es) introduced and where; methods count vs C bodies count (every C body mu
 a home — list any that did not); shims left and their caller counts per directory;
 `reinterpret_cast` count in the files you own before/after; unit test count and result;
 build exit code; run exit code + crash/hang log state; commit hash; anything left and why.
+
+## Closing pass (coordinator notes, added as the caller batches landed)
+
+After every caller batch is merged and green, one agent owns the shared machinery:
+
+1. `engine/funcs/engine_funcs.{h,cpp}`: delete every `fn_String_*`, `fn_Filename_*`,
+   `fn_Vector*`, `fn_Quaternion*`, `fn_Transform*`, `fn_Matrix*`, `fn_ExternalPtr*`
+   typedef/extern/initialiser with zero callers tree-wide; the linker proves it.
+2. `engine/types/SystemString.h` (the `SystemString` POD and its `StringInit/Destroy`
+   helpers), `RtSystem::String`/`Filename` PODs, the `RtMath::*` and common.h aliases:
+   delete when zero users remain; otherwise list the remaining users per struct — they are
+   members of not-yet-converted classes and belong to that class's conversion (§B.2).
+3. Shims in runtime/src/system/string.cpp, filename.cpp, setupdir_helpers.cpp,
+   runtime/src/math/*.cpp, runtime/src/object/*.cpp and their
+   `RegisterRuntimeExport/Addr` rows: delete at zero callers by name AND by address
+   (grep the 0x18… address across the tree and tools/rt_mint_gen.py inputs); then
+   regenerate `standalone/rt_export_addrs.inc` / `rt_data_mint*.inc` with the tool, never
+   by hand.
+4. Performance: two caller batches replaced PERF-motivated inline copies of
+   `Vector3` ctor/splat/Dot (pathfinding, citizen AI) with out-of-line class calls. Make
+   the trivially small Math members (`Vector2/3/4` ctors, Dot, splat, Scalar ops,
+   `Quaternion` identity) `inline` in Math.h — bodies unchanged, operand order unchanged
+   — and confirm with `make sa-stress` against `perf/baselines/current.csv`.
+5. Update the B.4 table in STATUS.md with the per-directory `reinterpret_cast` counts.

@@ -14,6 +14,7 @@
 #include "Game/scenario_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "system/String.h"
 #include <cstdint>
 
 // ============================================================
@@ -101,10 +102,8 @@ void* Scenario_Dtor(Scenario* self, uint32_t flags) {
     self->vtable = s_vtable;
 
     // Destroy String at +0x88 then +0x58 (reverse order of construction)
-    if (fn_String_Dtor) {
-        fn_String_Dtor(&self->_field88);
-        fn_String_Dtor(&self->scenarioName);
-    }
+    reinterpret_cast<System::String*>(&self->_field88)->~String();
+    reinterpret_cast<System::String*>(&self->scenarioName)->~String();
 
     // Call Achievement base destructor
     if (s_fn_Achievement_Dtor) {
@@ -164,9 +163,7 @@ void Scenario_Serialize(Scenario* self, void* stream) {
         g_fn_Serialize_Int(serializer, &self->_field64, nullptr);
     }
 
-    if (g_fn_String_Serialize) {
-        g_fn_String_Serialize(&self->scenarioName, serializer);
-    }
+    reinterpret_cast<System::String*>(&self->scenarioName)->Serialize(serializer);
 
     if (s_fn_ExtPtr_MapGen_Serialize) {
         s_fn_ExtPtr_MapGen_Serialize(&self->mapGenerator, serializer);
@@ -180,9 +177,7 @@ void Scenario_Serialize(Scenario* self, void* stream) {
         s_fn_ExtPtr_ClimateGen_Serialize(&self->climateGenerator, serializer);
     }
 
-    if (g_fn_String_Serialize) {
-        g_fn_String_Serialize(&self->_field88, serializer);
-    }
+    reinterpret_cast<System::String*>(&self->_field88)->Serialize(serializer);
 
     if (g_fn_Serialize_Bool) {
         g_fn_Serialize_Bool(serializer, &self->_field68, nullptr);

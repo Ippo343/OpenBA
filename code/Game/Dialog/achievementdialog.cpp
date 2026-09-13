@@ -9,6 +9,7 @@
 
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 
 // ============================================================
@@ -25,11 +26,11 @@ void AchievementDialog_Slot4(AchievementDialog* self) {
     uintptr_t s = (uintptr_t)self;
 
     // Find "buttonOk" element, set ID 100, set +0xC0 flags = 8
-    uint8_t nameBuf[8];
-    fn_String_Ctor_CStr(nameBuf, "buttonOk");
     uint64_t btnResult = 0;
-    fn_DialogInstance_FindElement((void*)s, &btnResult, nameBuf);
-    fn_String_Dtor(nameBuf);
+    {
+        System::String nameStr("buttonOk");
+        fn_DialogInstance_FindElement((void*)s, &btnResult, &nameStr);
+    }
     void* buttonOk = (void*)btnResult;
     fn_Element_SetElementId(buttonOk, 100);
     *(uint32_t*)((uintptr_t)buttonOk + 0xC0) = 8;
@@ -38,10 +39,11 @@ void AchievementDialog_Slot4(AchievementDialog* self) {
     void* manager = **g_ppAchievementManager;
 
     // Find "tableAchievement" element
-    fn_String_Ctor_CStr(nameBuf, "tableAchievement");
     uint64_t tableResult = 0;
-    fn_DialogInstance_FindElement((void*)s, &tableResult, nameBuf);
-    fn_String_Dtor(nameBuf);
+    {
+        System::String nameStr("tableAchievement");
+        fn_DialogInstance_FindElement((void*)s, &tableResult, &nameStr);
+    }
     void* tableElem = (void*)tableResult;
 
     // Get achievement count
@@ -70,31 +72,35 @@ void AchievementDialog_Slot4(AchievementDialog* self) {
 
         // Find child elements in the cloned row
         // imageIcon
-        fn_String_Ctor_CStr(nameBuf, "imageIcon");
         uint64_t iconResult = 0;
-        fn_FindElement(rowElem, &iconResult, nameBuf);
-        fn_String_Dtor(nameBuf);
+        {
+            System::String nameStr("imageIcon");
+            fn_FindElement(rowElem, &iconResult, &nameStr);
+        }
         void* imageIcon = (void*)iconResult;
 
         // imageStar
-        fn_String_Ctor_CStr(nameBuf, "imageStar");
         uint64_t starResult = 0;
-        fn_FindElement(rowElem, &starResult, nameBuf);
-        fn_String_Dtor(nameBuf);
+        {
+            System::String nameStr("imageStar");
+            fn_FindElement(rowElem, &starResult, &nameStr);
+        }
         void* imageStar = (void*)starResult;
 
         // textTitle
-        fn_String_Ctor_CStr(nameBuf, "textTitle");
         uint64_t titleResult = 0;
-        fn_FindElement(rowElem, &titleResult, nameBuf);
-        fn_String_Dtor(nameBuf);
+        {
+            System::String nameStr("textTitle");
+            fn_FindElement(rowElem, &titleResult, &nameStr);
+        }
         void* textTitle = (void*)titleResult;
 
         // textDescription
-        fn_String_Ctor_CStr(nameBuf, "textDescription");
         uint64_t descResult = 0;
-        fn_FindElement(rowElem, &descResult, nameBuf);
-        fn_String_Dtor(nameBuf);
+        {
+            System::String nameStr("textDescription");
+            fn_FindElement(rowElem, &descResult, &nameStr);
+        }
         void* textDesc = (void*)descResult;
 
         // Get achievement object at index i
@@ -103,34 +109,31 @@ void AchievementDialog_Slot4(AchievementDialog* self) {
         void* achievement = *(void**)achievBuf;
 
         // Set sprite on imageIcon from achievement sprite sheet + sprite name
-        uint8_t spriteNameBuf[8];
-        fn_Achievement_GetSpriteName(achievement, spriteNameBuf);
+        System::String spriteName;
+        fn_Achievement_GetSpriteName(achievement, &spriteName);
         uint64_t spriteSheet = *(uint64_t*)((uintptr_t)achievement + 0x38);
         uint8_t spriteBuf[16];
-        fn_Sprite_Ctor(spriteBuf, spriteSheet, spriteNameBuf);
+        fn_Sprite_Ctor(spriteBuf, spriteSheet, &spriteName);
         fn_ImageElement_SetSprite(imageIcon, spriteBuf);
-        fn_String_Dtor(spriteNameBuf);
 
         // Hide imageStar initially (Slot6 will show it if awarded)
         fn_Element_SetFlagsOnOff(imageStar, 1, 0);
 
         // Set title text
-        uint8_t titleTextBuf[8];
-        fn_Achievement_GetTitle(achievement, titleTextBuf);
+        System::String titleText;
+        fn_Achievement_GetTitle(achievement, &titleText);
         uint8_t titleStrBuf[16];
         fn_UIString_Ctor(titleStrBuf, *(uint64_t*)((uintptr_t)achievement + 0x20),
-                         titleTextBuf);
+                         &titleText);
         fn_TextElement_SetText(textTitle, titleStrBuf);
-        fn_String_Dtor(titleTextBuf);
 
         // Set description text
         uint8_t descStrBuf[16];
-        uint8_t descTextBuf[8];
-        fn_Achievement_GetDescription(achievement, descTextBuf);
+        System::String descText;
+        fn_Achievement_GetDescription(achievement, &descText);
         fn_UIString_Ctor(descStrBuf, *(uint64_t*)((uintptr_t)achievement + 0x20),
-                         descTextBuf);
+                         &descText);
         fn_TextElement_SetText(textDesc, descStrBuf);
-        fn_String_Dtor(descTextBuf);
 
         // Push 4-pointer entry (stride 0x20) to dynamic array at +0xC0
         // Entry: {imageIcon, imageStar, textTitle, textDesc}
@@ -181,10 +184,11 @@ void AchievementDialog_Slot4(AchievementDialog* self) {
     }
 
     // Find "textComplete" element, store at +0xB8
-    fn_String_Ctor_CStr(nameBuf, "textComplete");
     uint64_t completeResult = 0;
-    fn_DialogInstance_FindElement((void*)s, &completeResult, nameBuf);
-    fn_String_Dtor(nameBuf);
+    {
+        System::String nameStr("textComplete");
+        fn_DialogInstance_FindElement((void*)s, &completeResult, &nameStr);
+    }
     *(uint64_t*)(s + 0xB8) = completeResult;
 }
 
@@ -255,12 +259,10 @@ void AchievementDialog_Slot6(AchievementDialog* self) {
 
     // Format percentage: (awarded / total) * 100 + 0.5 (rounding)
     float pct = ((float)awardedCount / (float)count) * 100.0f + 0.5f;
-    uint8_t textBuf[16];
-    fn_String_Format((char*)textBuf, "%i", (uint64_t)(uint32_t)(int)pct);
+    System::String pctStr = System::String::Format("%i", (uint64_t)(uint32_t)(int)pct);
 
     void* pctText = (void*)*(uint64_t*)(s + 0xB8);
-    fn_TextElement_SetParameter(pctText, 0, textBuf);
-    fn_String_Dtor(textBuf);
+    fn_TextElement_SetParameter(pctText, 0, &pctStr);
 }
 
 // ============================================================
@@ -342,10 +344,8 @@ void AchievementDialog_Slot17(AchievementDialog* self) {
     *(float*)((uintptr_t)progressElem + 0x128) = (float)count;
 
     // Format count text and set as progress parameter
-    uint8_t textBuf[16];
-    fn_String_Format((char*)textBuf, "%i", (uint64_t)(uint32_t)count);
-    fn_ProgressElement_SetProgressTextParameter(progressElem, 0, textBuf);
-    fn_String_Dtor(textBuf);
+    System::String countStr = System::String::Format("%i", (uint64_t)(uint32_t)count);
+    fn_ProgressElement_SetProgressTextParameter(progressElem, 0, &countStr);
 }
 
 // ============================================================

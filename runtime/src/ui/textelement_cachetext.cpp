@@ -74,6 +74,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/system/String.h"
 #include "../../funcs/rt_sink.h"
 #include "../../types/ui/TextElement.h"
 
@@ -95,7 +96,10 @@ inline uint8_t* B(void* p, int off) { return reinterpret_cast<uint8_t*>(p) + off
 // System::String is ONE POINTER (runtime/types/system/String.h). The block in
 // front of it is { int32 length; int32 refcount; } and the object's value is
 // block+8.
-struct Str { char* data; };
+// ENDGAME B.3.1 step 2: `Str` IS `System::String`. The local POD is gone; the
+// name is kept as an alias so the offsets/comments below still read the way the
+// disassembly does.
+using Str = System::String;
 
 inline int32_t& RefCount(void* data) {
     return *reinterpret_cast<int32_t*>(static_cast<char*>(data) - 4);
@@ -114,16 +118,11 @@ inline int32_t Length(const void* data) {
 // sprite.cpp. Hidden return slot: RCX=this, RDX=&ret (0x180035020's own
 // `MOV qword ptr [RSP+0x10],RDX` / `MOV RAX,RBX`), so the typedef carries it
 // (reference_hidden_retslot_wild_write.md).
+// UI::String::operator System::String is another batch's class, so this stays
+// a name lookup; only its RESULT is a real System::String now.
 using UiStringToStringFn = Str* (*)(const void* self, Str* ret);
 inline UiStringToStringFn UiStringToString() {
     return RT_EXPORT_ONCE(UiStringToStringFn, "??BString@UI@@QEBA?AV0System@@XZ");
-}
-
-// ?FormatParamCount@String@System@@SAHPEBD@Z (0x1800c8d20) — PORTED, Wave 2,
-// runtime/src/system/string.cpp. Counts the "@1".."@9" slots in the format.
-using FormatParamCountFn = int (*)(const char*);
-inline FormatParamCountFn FormatParamCount() {
-    return RT_EXPORT_ONCE(FormatParamCountFn, "?FormatParamCount@String@System@@SAHPEBD@Z");
 }
 
 // ?FormatParamList@String@System@@SA?AV12@AEBV12@PEBV12@@Z (0x1800c8dc0) —
@@ -133,12 +132,6 @@ inline FormatParamCountFn FormatParamCount() {
 // (`MOV R8,qword ptr [RDI+0xc8]` at 0x18011ecbd) — the exact
 // reference_ghidra_c_output_vs_disassembly.md failure. The params pointer is
 // the parameter Array's DATA pointer, not the Array header.
-using FormatParamListFn = Str* (*)(Str* ret, const Str* fmt, const Str* params);
-inline FormatParamListFn FormatParamList() {
-    return RT_EXPORT_ONCE(FormatParamListFn,
-        "?FormatParamList@String@System@@SA?AV12@AEBV12@PEBV12@@Z");
-}
-
 // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z (0x1800c7ad0) — PORTED, Wave 2.
 using MemFreeFn = void (*)(void*);
 inline MemFreeFn MemFree() {
@@ -159,17 +152,6 @@ inline void ArrayStringSetSize(void* arrayHdr, int32_t n) {
     fn(arrayHdr, n);
 }
 
-// Retail's inlined String::Release, ASYMMETRIC exactly as retail leaves it
-// (runtime/types/system/String.h): the freeing branch leaves `data - 8` in the
-// object, the sharing branch leaves null. Both are reproduced because both are
-// observable to a caller that re-reads the slot.
-inline void ReleaseInto(Str* slot) {
-    char* d = slot->data;
-    if (!d) return;
-    if (--RefCount(d) == 0) { slot->data = d - 8; MemFree()(slot->data); }
-    else                    { slot->data = nullptr; }
-}
-
 // ============================================================================
 // ?SetParameterCount@TextElement@UI@@AEAAXXZ — retail 0x18011e8e0
 // ============================================================================
@@ -185,19 +167,20 @@ inline void ReleaseInto(Str* slot) {
 // call computes the same n and 0x180029a80's first instruction pair
 // (`CMP EDI,ESI; JZ`) returns immediately.
 void SetParameterCountBody(void* self) {
-    Str tmp{nullptr};
-    UiStringToString()(B(self, TE::kTextString), &tmp);      // 0x18011e903
+    Str tmp;
+    UiStringToString()(B(self, TE::kTextString), &tmp);       // 0x18011e903
 
     char* held = nullptr;                                     // RBX
-    if (tmp.data) { held = tmp.data; ++RefCount(tmp.data); }  // 0x18011e91a
+    if (tmp._data) { held = tmp._data; ++RefCount(tmp._data); }  // 0x18011e91a
 
-    const int n = FormatParamCount()(held);                   // 0x18011e928
+    const int n = System::String::FormatParamCount(held);     // 0x18011e928
     ArrayStringSetSize(B(self, TE::kParamArrayData), n);      // 0x18011e936
 
     if (held) {                                               // 0x18011e93c
         if (--RefCount(held) == 0) MemFree()(held - 8);
     }
-    ReleaseInto(&tmp);                                        // 0x18011e962
+    // 0x18011e962 — `tmp`'s destructor, at the end of the body, is retail's
+    // release of the same slot.
 }
 
 // ============================================================================
@@ -233,11 +216,11 @@ void SetParameterCountBody(void* self) {
 void CacheTextBody(void* self, RtSink& out) {
     SetParameterCountBody(self);                              // 0x18011ec29
 
-    Str tmp{nullptr};
+    Str tmp;
     UiStringToString()(B(self, TE::kTextString), &tmp);       // 0x18011ec42 / ec9c
 
-    Str result{nullptr};                                      // [RBP+0x38]
-    Str param0{nullptr};                                      // [RBP+0x40]
+    Str result;                                               // [RBP+0x38]
+    Str param0;                                               // [RBP+0x40]
     char* newData = nullptr;
 
     // The branch selector is the parameter Array's _size, which the call above
@@ -245,12 +228,17 @@ void CacheTextBody(void* self, RtSink& out) {
     // which is immaterial (the operator does not touch `self`) but is why the
     // decompiled C shows the CMP above both arms.
     if (*reinterpret_cast<int32_t*>(B(self, TE::kParamCount)) == 0) {
-        newData = tmp.data;
+        newData = tmp._data;
     } else {
-        if (tmp.data) { param0.data = tmp.data; ++RefCount(tmp.data); }  // 0x18011ecb3
-        FormatParamList()(&result, &param0,
-                          *reinterpret_cast<Str**>(B(self, TE::kParamArrayData)));
-        newData = result.data;                                // 0x18011ecd1: R14 = &result
+        if (tmp._data) { param0._data = tmp._data; ++RefCount(tmp._data); }  // 0x18011ecb3
+        // The params pointer is the parameter Array's DATA pointer, not the
+        // Array header — Ghidra's decompiled C drops this third argument
+        // (reference_ghidra_c_output_vs_disassembly.md). B.3.1 bridge: the
+        // array element storage is untyped until Collection::Array is a
+        // template.
+        result = System::String::FormatParamList(
+            param0, *reinterpret_cast<Str**>(B(self, TE::kParamArrayData)));
+        newData = result._data;                               // 0x18011ecd1: R14 = &result
     }
 
     char* cur = *reinterpret_cast<char**>(B(self, TE::kCachedText));
@@ -274,10 +262,8 @@ void CacheTextBody(void* self, RtSink& out) {
     }
 
     // Retail releases `result` and `param0` here (0x18011ed1d, 0x18011ed46) and
-    // `tmp` last (0x18011ed66).
-    ReleaseInto(&result);
-    ReleaseInto(&param0);
-    ReleaseInto(&tmp);
+    // `tmp` last (0x18011ed66) — which is exactly reverse declaration order,
+    // so the three destructors at the end of this scope are that sequence.
 }
 
 } // namespace

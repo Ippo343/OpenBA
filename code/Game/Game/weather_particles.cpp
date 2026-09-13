@@ -22,6 +22,7 @@
 // the Runtime Graphics/Video primitives are resolved from Runtime-x64.dll.
 
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstring>
@@ -40,15 +41,11 @@ constexpr float kBoundLo  = -1024.0f;  // DAT_1401722ac (SetBounds min)
 constexpr float kUVScale  = 1.0f;      // g_fUVScale
 
 // Local lazy-resolved Runtime helpers not in engine_funcs.h.
-typedef void* (*fn_Vec3_Normalize_t)(void* self, void* retbuf);   // ?Normalize@Vector3@Math@@QEBA?AV12@XZ
 typedef void  (*fn_Geo_SetBounds_t)(void* geo, void* box);        // ?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z
-typedef void  (*fn_Transform_Identity_t)(void* retbuf);           // ?Identity@Transform@Math@@SA?AV12@XZ
 typedef void  (*fn_Geo_BaseDtor_t)(void* geo);                    // ??1Geometry@Graphics@@UEAA@XZ  (Runtime 0x1800a41c0)
 typedef float (*fn_RandFloatTol_t)(void* rng);                    // ?RandFloatTol@Random@System@@QEAAMXZ (Runtime 0x1800c8000) -> [-1,1]
 
-fn_Vec3_Normalize_t     s_fnNormalize    = nullptr;
 fn_Geo_SetBounds_t      s_fnSetBounds    = nullptr;
-fn_Transform_Identity_t s_fnTfIdentity   = nullptr;
 fn_Geo_BaseDtor_t       s_fnGeoBaseDtor  = nullptr;
 fn_RandFloatTol_t       s_fnRandFloatTol = nullptr;
 bool s_resolved = false;
@@ -56,12 +53,8 @@ bool s_resolved = false;
 void EnsureResolved() {
     if (s_resolved) return;
     s_resolved = true;
-    s_fnNormalize = reinterpret_cast<fn_Vec3_Normalize_t>(
-        ResolveExport("?Normalize@Vector3@Math@@QEBA?AV12@XZ"));
     s_fnSetBounds = reinterpret_cast<fn_Geo_SetBounds_t>(
         ResolveExport("?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z"));
-    s_fnTfIdentity = reinterpret_cast<fn_Transform_Identity_t>(
-        ResolveExport("?Identity@Transform@Math@@SA?AV12@XZ"));
     s_fnGeoBaseDtor = reinterpret_cast<fn_Geo_BaseDtor_t>(
         ResolveExport("??1Geometry@Graphics@@UEAA@XZ"));
     s_fnRandFloatTol = reinterpret_cast<fn_RandFloatTol_t>(
@@ -181,10 +174,9 @@ extern "C" void WeatherParticle_Config(void* geo, void* descriptor) {
     float dir[3] = { *reinterpret_cast<float*>(d + 0x2c),
                      *reinterpret_cast<float*>(d + 0x30),
                      *reinterpret_cast<float*>(d + 0x34) };
-    if (s_fnNormalize) {
-        float nd[3];
-        s_fnNormalize(dir, nd);
-        dir[0] = nd[0]; dir[1] = nd[1]; dir[2] = nd[2];
+    {
+        Math::Vector3 nd = reinterpret_cast<const Math::Vector3*>(dir)->Normalize();
+        dir[0] = nd.x; dir[1] = nd.y; dir[2] = nd.z;
     }
 
     float boxSize = *reinterpret_cast<float*>(d + 0x48);   // Weather.size
@@ -231,10 +223,9 @@ extern "C" void WeatherParticle_Config(void* geo, void* descriptor) {
     }
 
     // Identity transform + world bounds [-1024, 1024]^3.
-    if (s_fnTfIdentity && fn_Geometry_SetTransform) {
-        uint8_t tf[0x1c] = {0};
-        s_fnTfIdentity(tf);
-        fn_Geometry_SetTransform(geo, tf);
+    if (fn_Geometry_SetTransform) {
+        Math::Transform tf = Math::Transform::Identity();
+        fn_Geometry_SetTransform(geo, &tf);
     }
     if (s_fnSetBounds) {
         float box[6] = { kBoundLo, kBoundLo, kBoundLo, kBoundHi, kBoundHi, kBoundHi };

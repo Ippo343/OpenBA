@@ -27,6 +27,8 @@
 // drops it entirely.
 
 #include "engine_funcs.h"
+#include "system/Filename.h"
+#include "system/String.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -571,9 +573,7 @@ void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
     // Required Runtime primitives. If any are missing, log once and bail.
     if (!fn_Serializer_GetEncoding || !fn_ExternalFactory_FindOrLoad ||
         !fn_IsDerivedFrom || !fn_ExternalFactory_IsReferenceModeEnabled ||
-        !fn_External_GetPath || !fn_Filename_Ctor || !fn_Filename_Dtor ||
-        !fn_Filename_AssignOp || !g_fn_String_Serialize ||
-        !fn_Serializer_Serialize_Uint || !g_fn_Serialize_Bool ||
+        !fn_External_GetPath || !fn_Serializer_Serialize_Uint || !g_fn_Serialize_Bool ||
         !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
         static bool s_warned = false;
         if (!s_warned) {
@@ -638,9 +638,9 @@ void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
         if (encState == 3) {
             // Path-export mode: only walk existing pointers, never write.
             if (!*slot) continue;
-            uint8_t pathBuf[8] = {0};
+            System::Filename pathBuf;
             void* pathFn = *slot;
-            void* path = fn_External_GetPath(pathFn, pathBuf);
+            void* path = fn_External_GetPath(pathFn, &pathBuf);
             void* found = fn_ExternalFactory_FindOrLoad(factory, path);
             if (found && typeIdResolved) {
                 ::Object::IsDerivedFromOrTrust(found, typeId);
@@ -648,14 +648,12 @@ void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
             // Filename returned by GetPath is a stack-local Filename; it owns
             // a System::String reference that we must release via dtor.
             // Original calls Filename::~Filename on local_70 here.
-            fn_Filename_Dtor(pathBuf);
             continue;
         }
 
         // Load/save mode. Build a temporary Filename used to round-trip the
         // path through the serializer.
-        uint8_t fnameBuf[8] = {0};
-        fn_Filename_Ctor(fnameBuf);
+        System::Filename fnameBuf;
 
         bool refMode = fn_ExternalFactory_IsReferenceModeEnabled(factory);
 
@@ -684,11 +682,10 @@ void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
                     if (serializerInner == 0) {
                         // Loading path: ask the factory for the actual path
                         // and assign into our temp Filename.
-                        uint8_t tmpFn[8] = {0};
+                        System::Filename tmpFn;
                         // Member function with hidden retval: RCX=this, RDX=retbuf, R8=refId.
-                        fn_ExternalFactory_GetPathForReferenceId(factory, tmpFn, refId);
-                        fn_Filename_AssignOp(fnameBuf, tmpFn);
-                        fn_Filename_Dtor(tmpFn);
+                        fn_ExternalFactory_GetPathForReferenceId(factory, &tmpFn, refId);
+                        fnameBuf = tmpFn;
                     }
                     needsPathSerialize = true;
                 }
@@ -700,7 +697,7 @@ void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
                 int innerCheck = *reinterpret_cast<int*>(
                     reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(serializer)) + 8);
                 if (innerCheck == 0) {
-                    void* loaded = fn_ExternalFactory_FindOrLoad(factory, fnameBuf);
+                    void* loaded = fn_ExternalFactory_FindOrLoad(factory, &fnameBuf);
                     void* result = nullptr;
                     if (loaded && (!typeIdResolved || ::Object::IsDerivedFromOrTrust(loaded, typeId))) {
                         result = loaded;
@@ -714,17 +711,16 @@ void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
             g_fn_Serialize_Bool(serializer, &hasRef, nullptr);
             if (hasRef) {
                 if (*slot) {
-                    uint8_t pathBuf[8] = {0};
-                    void* path = fn_External_GetPath(*slot, pathBuf);
-                    fn_Filename_AssignOp(fnameBuf, path);
-                    fn_Filename_Dtor(pathBuf);
+                    System::Filename pathBuf;
+                    fn_External_GetPath(*slot, &pathBuf);
+                    fnameBuf = pathBuf;
                 }
-                g_fn_String_Serialize(fnameBuf, serializer);
+                fnameBuf.AsString().Serialize(serializer);
 
                 int innerCheck = *reinterpret_cast<int*>(
                     reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(serializer)) + 8);
                 if (innerCheck == 0) {
-                    void* loaded = fn_ExternalFactory_FindOrLoad(factory, fnameBuf);
+                    void* loaded = fn_ExternalFactory_FindOrLoad(factory, &fnameBuf);
                     void* result = nullptr;
                     if (loaded && (!typeIdResolved || ::Object::IsDerivedFromOrTrust(loaded, typeId))) {
                         result = loaded;
@@ -734,7 +730,6 @@ void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
             }
         }
 
-        fn_Filename_Dtor(fnameBuf);
     }
 }
 

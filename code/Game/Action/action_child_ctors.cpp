@@ -30,6 +30,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "math/Math.h"
 #include <cstdint>
 
 namespace {
@@ -47,15 +48,12 @@ typedef void* (*fn_entityGetIBP_t)(int64_t inner, void* retIBP);
 // CharacterComponent_impl_f3e0: cell-coord -> world pos. RCX=mapPtr, RDX=outVec3,
 // R8=inVec3, R9B=flag(0), [stack]=ptr(0).
 typedef void  (*fn_cellToWorld_t)(void* mapPtr, float* outVec3, float* inVec3, char flag, void* p5);
-// Math::Vector3::Normalize(this, retbuf) -> retbuf ; Heading(this) -> float.
-typedef void* (*fn_v3Normalize_t)(const void* self, void* retbuf);
-typedef float (*fn_v3Heading_t)(const void* self);
+// Math::Vector3::Normalize (slot 0x1401512c0) and Heading (slot 0x1401512d8) are direct
+// members of the real class (B.3.1).
 
 static fn_entityGetIBP_t s_fn_ClearPathQueue = nullptr;  // 0x140003f60
 static fn_entityGetIBP_t s_fn_GetCellNode    = nullptr;  // 0x140004680
 static fn_cellToWorld_t  s_fn_CellToWorld     = nullptr;  // 0x14009f3e0
-static fn_v3Normalize_t  s_fn_Normalize       = nullptr;  // 0x1401512c0
-static fn_v3Heading_t    s_fn_Heading         = nullptr;  // 0x1401512d8
 
 static bool s_init = false;
 static void EnsureInit() {
@@ -68,13 +66,6 @@ static void EnsureInit() {
     s_fn_ClearPathQueue = reinterpret_cast<fn_entityGetIBP_t>(ResolveAddr(Module::Exe, 0x140003f60));
     s_fn_GetCellNode    = reinterpret_cast<fn_entityGetIBP_t>(ResolveAddr(Module::Exe, 0x140004680));
     s_fn_CellToWorld    = reinterpret_cast<fn_cellToWorld_t >(ResolveAddr(Module::Exe, 0x14009f3e0));
-    // Vector3 ops via the registered dispatch slot (deref once), ResolveExport fallback.
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x1401512c0)) s_fn_Normalize = *reinterpret_cast<fn_v3Normalize_t*>(s);
-    if (!s_fn_Normalize) s_fn_Normalize = reinterpret_cast<fn_v3Normalize_t>(
-        ResolveExport("?Normalize@Vector3@Math@@QEBA?AV12@XZ"));
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x1401512d8)) s_fn_Heading = *reinterpret_cast<fn_v3Heading_t*>(s);
-    if (!s_fn_Heading) s_fn_Heading = reinterpret_cast<fn_v3Heading_t>(
-        ResolveExport("?Heading@Vector3@Math@@QEBAMXZ"));
     s_init = true;
 }
 
@@ -223,11 +214,9 @@ float ActChild_Entity29a0_c29a0(float* worldPos, void* param_2) {
     }
 
     // --- v = pos - worldPos ; Normalize(v) ; return Heading(v) ---
-    float v[3];
-    v[0] = pos[0] - worldPos[0];
-    v[1] = pos[1] - worldPos[1];
-    v[2] = pos[2] - worldPos[2];
-    float normbuf[3];
-    void* n = s_fn_Normalize ? s_fn_Normalize(v, normbuf) : nullptr;
-    return (s_fn_Heading && n) ? s_fn_Heading(n) : 0.0f;
+    Math::Vector3 v(pos[0] - worldPos[0],
+                    pos[1] - worldPos[1],
+                    pos[2] - worldPos[2]);
+    Math::Vector3 n = v.Normalize();
+    return n.Heading();
 }

@@ -27,6 +27,8 @@
 // Decompiled from Application-x64.exe (READ-ONLY Ghidra).
 
 #include "engine_funcs.h"
+#include "system/String.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstring>
@@ -94,7 +96,7 @@ void InteractDescription_Serialize(void* self, void* stream) {
     // (Economy Brick M-D root cause #3).
     bool loading = (*(int*)((uintptr_t)stream + 8) == 0);
     void* ext = *(void**)(s + 0x20);
-    if (loading && ext && fn_String_Equals && fn_Math_Vector3_FromYawPitch) {
+    if (loading && ext) {
         uint8_t* children = *(uint8_t**)((uintptr_t)ext + 0x30);
         int childCount = *(int32_t*)((uintptr_t)ext + 0x38);
         for (int i = 0; children && i < childCount; ++i) {
@@ -106,17 +108,16 @@ void InteractDescription_Serialize(void* self, void* stream) {
             node[0] = *(uint32_t*)(child + 0x08);
             node[1] = *(uint32_t*)(child + 0x0c);
             node[2] = *(uint32_t*)(child + 0x10);
-            float dir[3] = {0, 0, 0};
-            fn_Math_Vector3_FromYawPitch(dir, &yaw, &pitch);
-            node[3] = *(uint32_t*)&dir[0];
-            node[4] = *(uint32_t*)&dir[1];
-            node[5] = *(uint32_t*)&dir[2];
+            Math::Vector3 dir = Math::Vector3::FromYawPitch(yaw, pitch);
+            node[3] = *(uint32_t*)&dir.x;
+            node[4] = *(uint32_t*)&dir.y;
+            node[5] = *(uint32_t*)&dir.z;
 
-            if (fn_String_Equals(child, "use")) {
+            if (*reinterpret_cast<System::String*>(child) == "use") {  // B.3.1 bridge
                 AppendNode((void*)(s + 0x28), node);
-            } else if (fn_String_Equals(child, "build")) {
+            } else if (*reinterpret_cast<System::String*>(child) == "build") {  // B.3.1 bridge
                 AppendNode((void*)(s + 0x38), node);
-            } else if (fn_String_Equals(child, "create")) {
+            } else if (*reinterpret_cast<System::String*>(child) == "create") {  // B.3.1 bridge
                 AppendNode((void*)(s + 0x48), node);
             }
         }

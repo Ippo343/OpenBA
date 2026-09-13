@@ -25,6 +25,7 @@
 // already used by optionsdialog.cpp in standalone.
 
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstdlib>
 #include <cstdio>
@@ -68,31 +69,28 @@ void Hotkey_BuildKeyName(void* retval, int device, int keyIndex) {
     void* container = GetKeyMapContainer();
     if (!container) return;
 
-    uint8_t tempStr[8];
+    System::String tempStr;
     if (device < 0) {
-        fn_String_Ctor_CStr(tempStr, "Unbound");
+        tempStr.Set("Unbound");
     } else {
         static const char* kDeviceNames[] = { "Gamepad", "Keyboard", "Mouse" };
         const char* devName = (device <= 2) ? kDeviceNames[device] : "Unknown";
-        fn_String_Format(tempStr, "%s%i", devName, keyIndex);
+        tempStr = System::String::Format("%s%i", devName, keyIndex);
     }
 
     uint64_t keyNamesTable = *(uint64_t*)((uintptr_t)container + 0xD0);
-    fn_UIString_Ctor(retval, keyNamesTable, tempStr);  // (retbuf, table, name)
-    fn_String_Dtor(tempStr);
+    fn_UIString_Ctor(retval, keyNamesTable, &tempStr);  // (retbuf, table, name)
 }
 
 // Find the named TextElement in the controller's dialog, resolve the bound key
 // into a localized System::String, and set it as the element's parameter.
 static void FillHotKeyText(void* self, const char* elemName, int paramIndex,
                            void* keyMap, int shortcutId) {
-    uint8_t nameBuf[8];
-    fn_String_Ctor_CStr(nameBuf, elemName);
+    System::String nameStr(elemName);
     fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)self + 0x18));
     void* dlgInst = *(void**)((uintptr_t)self + 0x18);
     uint64_t retval = 0;
-    fn_DialogInstance_FindElement(dlgInst, &retval, nameBuf);
-    fn_String_Dtor(nameBuf);
+    fn_DialogInstance_FindElement(dlgInst, &retval, &nameStr);
 
     void* textElem = (void*)retval;
     if (!textElem) return;
@@ -104,20 +102,18 @@ static void FillHotKeyText(void* self, const char* elemName, int paramIndex,
     Hotkey_BuildKeyName(uiStr, device, input);
 
     // UI::String -> System::String (member, hidden retval). TextElement params
-    // take a System::String; the converted string owns a ref we release below.
-    uint8_t sysStr[8] = {0};
-    fn_UIString_ToSystemString(uiStr, sysStr);
+    // take a System::String; the converted string owns a ref released by its dtor.
+    System::String sysStr;
+    fn_UIString_ToSystemString(uiStr, &sysStr);
 
     fn_InternalBasePtr_CheckPtr(&textElem);
-    fn_TextElement_SetParameter(textElem, paramIndex, sysStr);
-    fn_String_Dtor(sysStr);
+    fn_TextElement_SetParameter(textElem, paramIndex, &sysStr);
 }
 
 // HotKeyToolTipUI::Serialize — Slot4 (+0x20). self = the controller.
 void HotKeyToolTipUI_Slot4(void* self) {
     if (!self) return;
     if (!fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr || !fn_IsDerivedFrom
-        || !fn_String_Ctor_CStr || !fn_String_Dtor || !fn_String_Format
         || !fn_UIString_Ctor || !fn_UIString_ToSystemString
         || !fn_DialogInstance_FindElement || !fn_TextElement_SetParameter
         || !fn_KeyMap_GetInputForId || !fn_KeyMap_GetDeviceForId

@@ -58,6 +58,7 @@
 #include "Component/component_factory_base.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "system/Filename.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -260,14 +261,13 @@ void EnsureBaseSlots() {
 // Local copy of MainMenuDialog's Dialog/*.rsc loader (that one is file-static).
 // ---------------------------------------------------------------------------
 void* ModDlg_LoadDialogResource(const char* rscPath) {
-    if (!fn_Filename_CtorCStr || !fn_ExternalFactory_FindOrLoad ||
+    if (!fn_ExternalFactory_FindOrLoad ||
         !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
         printf("[ModDialog] LoadDialogResource('%s'): loader fns unresolved\n", rscPath);
         return nullptr;
     }
-    uint8_t filenameBuf[16];
-    fn_Filename_CtorCStr(filenameBuf, rscPath);
-    void* resource = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filenameBuf);
+    System::Filename filenameObj(rscPath);
+    void* resource = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filenameObj);
     void* extRes = nullptr;
     if (resource) {
         uint32_t* slot = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x140151728));
@@ -285,7 +285,6 @@ void* ModDlg_LoadDialogResource(const char* rscPath) {
     }
     printf("[ModDialog] LoadDialogResource('%s') -> %p (raw %p)\n",
                 rscPath, extRes, resource);
-    fn_Filename_Dtor(filenameBuf);
     return extRes;
 }
 

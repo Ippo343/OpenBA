@@ -11,6 +11,7 @@
 // of the decompiled exe helper; do not "improve" behavior.
 
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -32,44 +33,16 @@
 //   ??DTransform3@Math@@QEBA?AVVector3@1@AEBV21@@Z  Transform3::operator*(Vector3)  slot 0x140152908
 //   ?GetScreenDirection@Frustum@Volume@@QEBA?AVVector3@Math@@MM@Z  GetScreenDirection(float,float) slot 0x140152918
 //   ?Rotate@Transform3@Math@@QEBA?AVVector3@2@AEBV32@@Z  Transform3::Rotate(Vector3)  slot 0x140151860
-typedef float* (*fn_Vec3CtorScalar_t)(float* self, const float* scalar);          // RCX=self, RDX=scalar (broadcast)
-typedef float* (*fn_Xform3Mul_t)(const void* xform, float* retbuf, const float* v); // RCX=xform, RDX=ret, R8=v
-typedef float* (*fn_Xform3Rotate_t)(const void* xform, float* retbuf, const float* v);
 typedef float* (*fn_FrustumScreenDir_t)(const void* frustum, float* retbuf, float u, float v);
 
-static fn_Vec3CtorScalar_t   s_fn_Vec3CtorScalar  = nullptr;
-static fn_Xform3Mul_t        s_fn_Xform3Mul       = nullptr;
-static fn_Xform3Rotate_t     s_fn_Xform3Rotate    = nullptr;
 static fn_FrustumScreenDir_t s_fn_FrustumScreenDir = nullptr;
 static bool s_rayExportsResolved = false;
 
 static void EnsureRayExports() {
     if (s_rayExportsResolved) return;
-    s_fn_Vec3CtorScalar = reinterpret_cast<fn_Vec3CtorScalar_t>(
-        ResolveExport("??0Vector3@Math@@QEAA@AEBVScalar@1@@Z"));
-    s_fn_Xform3Mul = reinterpret_cast<fn_Xform3Mul_t>(
-        ResolveExport("??DTransform3@Math@@QEBA?AVVector3@1@AEBV21@@Z"));
     s_fn_FrustumScreenDir = reinterpret_cast<fn_FrustumScreenDir_t>(
         ResolveExport("?GetScreenDirection@Frustum@Volume@@QEBA?AVVector3@Math@@MM@Z"));
-    s_fn_Xform3Rotate = reinterpret_cast<fn_Xform3Rotate_t>(
-        ResolveExport("?Rotate@Transform3@Math@@QEBA?AVVector3@2@AEBV32@@Z"));
     s_rayExportsResolved = true;
-}
-
-// Math::Vector2::Normalize() const -> Vector2 BY VALUE — dispatch slot 0x1401526b0.
-// 🔑 Mangled ?Normalize@Vector2@Math@@QEBA?AV12@XZ: `?AV12@` = returns Vector2 by value.
-// Math::Vector2 is non-trivial (has ctors) so the MS x64 ABI returns it via a HIDDEN
-// buffer: RCX=retbuf, RDX=this(const). It is NOT in-place. The old `void(void*)` decl
-// put the object in RCX and left RDX(this) = the function-ptr value → the callee wrote
-// through a code address (crash). Correct ABI: (retbuf, self) -> retbuf.
-typedef float* (*fn_Vec2Normalize_t)(float* retbuf, const void* self);
-static fn_Vec2Normalize_t s_fn_Vector2_Normalize = nullptr;
-static bool s_vec2Resolved = false;
-static void EnsureVec2() {
-    if (s_vec2Resolved) return;
-    uintptr_t slot = ResolveAddr(Module::Exe, 0x1401526b0);
-    if (slot) s_fn_Vector2_Normalize = *reinterpret_cast<fn_Vec2Normalize_t*>(slot);
-    s_vec2Resolved = true;
 }
 
 static inline uintptr_t GameWorld() {
@@ -117,7 +90,6 @@ static fn_GridToWorld_t s_fn_GridToWorld() {
 extern "C" uint8_t PlayerRay_TerrainMarch_aa530(uintptr_t param_1, float* param_2,
                                                 float* param_3, float* param_4,
                                                 float* param_5, float* param_6) {
-    EnsureVec2();
     const uint32_t signMask = 0x80000000u;  // DAT_1401722c0
     const float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;  // DAT_14017214c (=1.0)
 
@@ -279,13 +251,11 @@ extern "C" uint8_t PlayerRay_GetMouseRay_1005a0(void* /*param_1*/, float* outOri
     if (fn_Camera_GetFrustum) fn_Camera_GetFrustum(camera, frustum);
 
     // origin = xform * Vector3(0,0,0).  (Vector3(Scalar=0) broadcasts 0 to all lanes.)
-    float zeroScalar = 0.0f;
-    float zeroVec[3] = {0.0f, 0.0f, 0.0f};
-    if (s_fn_Vec3CtorScalar) s_fn_Vec3CtorScalar(zeroVec, &zeroScalar);
-    if (s_fn_Xform3Mul) {
-        float originOut[3];
-        float* r = s_fn_Xform3Mul(xform, originOut, zeroVec);
-        outOrigin[0] = r[0]; outOrigin[1] = r[1]; outOrigin[2] = r[2];
+    Math::Vector3 zeroVec((Math::Scalar(0.0f)));
+    {
+        Math::Vector3 r =
+            reinterpret_cast<const Math::Transform3*>(xform)->operator*(zeroVec);
+        outOrigin[0] = r.x; outOrigin[1] = r.y; outOrigin[2] = r.z;
     }
 
     // screenDir = Frustum.GetScreenDirection(mouseX/width, mouseY/height).
@@ -298,10 +268,10 @@ extern "C" uint8_t PlayerRay_GetMouseRay_1005a0(void* /*param_1*/, float* outOri
     }
 
     // direction = xform.Rotate(screenDir).
-    if (s_fn_Xform3Rotate) {
-        float dirOut[3];
-        float* r = s_fn_Xform3Rotate(xform, dirOut, screenDir);
-        outDir[0] = r[0]; outDir[1] = r[1]; outDir[2] = r[2];
+    {
+        Math::Vector3 r = reinterpret_cast<const Math::Transform3*>(xform)->Rotate(
+            *reinterpret_cast<const Math::Vector3*>(screenDir));
+        outDir[0] = r.x; outDir[1] = r.y; outDir[2] = r.z;
     }
     return 1;
 }

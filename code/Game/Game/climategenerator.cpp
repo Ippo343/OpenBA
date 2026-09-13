@@ -28,6 +28,7 @@
 #include "Game/climategenerator_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstring>
 
@@ -77,9 +78,7 @@ static void EnsureInit() {
 void* ClimateGenerator_Dtor(ClimateGenerator* self, uint32_t flags) {
     EnsureInit();
     // Destroy System::String at +0x28
-    if (fn_String_Dtor) {
-        fn_String_Dtor(reinterpret_cast<uint8_t*>(self) + 0x28);
-    }
+    reinterpret_cast<System::String*>(reinterpret_cast<uint8_t*>(self) + 0x28)->~String();
 
     // Call External base destructor
     fn_External_Dtor(self);
@@ -122,8 +121,7 @@ void ClimateGenerator_Serialize(ClimateGenerator* self, void* stream) {
         fn_ExternalPtr_Serialize2(reinterpret_cast<uint8_t*>(self) + 0x20, serializer);
 
     // Serialize String at +0x28
-    if (g_fn_String_Serialize)
-        g_fn_String_Serialize(reinterpret_cast<uint8_t*>(self) + 0x28, serializer);
+    reinterpret_cast<System::String*>(reinterpret_cast<uint8_t*>(self) + 0x28)->Serialize(serializer);
 
     // Serialize bool at +0x30
     if (g_fn_Serialize_Bool)

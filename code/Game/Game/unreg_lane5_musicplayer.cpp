@@ -87,6 +87,8 @@
 //   citizenai_* files resolve; see code/Game/Component/citizenai_gather.cpp:63)
 
 #include "engine_funcs.h"
+#include "system/Filename.h"
+#include "system/String.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include <cstdint>
@@ -148,21 +150,17 @@ void EnsureTrackList(uint8_t* mp) {
     if (attempted) return;              // one shot — never re-hit the loader
     attempted = true;
 
-    if (!fn_Filename_CtorCStr || !fn_ExternalFactory_FindOrLoad || !fn_Filename_Dtor ||
-        !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+    if (!fn_ExternalFactory_FindOrLoad || !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
         fprintf(stderr, "[MusicPlayer] SKIP — loader unavailable "
-                        "(CtorCStr=%p FindOrLoad=%p Dtor=%p factory=%p)\n",
-                (void*)fn_Filename_CtorCStr, (void*)fn_ExternalFactory_FindOrLoad,
-                (void*)fn_Filename_Dtor,
+                        "(FindOrLoad=%p factory=%p)\n",
+                (void*)fn_ExternalFactory_FindOrLoad,
                 g_pExternalFactorySingleton ? *g_pExternalFactorySingleton : nullptr);
         fflush(stderr);
         return;
     }
 
-    uint8_t fname[16] = {0};
-    fn_Filename_CtorCStr(fname, "Game/MusicTracks.rsc");
-    void* list = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fname);
-    fn_Filename_Dtor(fname);
+    System::Filename fname("Game/MusicTracks.rsc");
+    void* list = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fname);
     *reinterpret_cast<void**>(mp + 0x08) = list;
 
     fprintf(stderr, "[MusicPlayer] MusicTracks.rsc -> %p tracks=%d\n", list,

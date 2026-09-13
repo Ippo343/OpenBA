@@ -19,6 +19,7 @@
 
 #include "Work/cleararea_funcs.h"
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -503,7 +504,7 @@ static fn_ClearArea_GroundInsert_t fn_ClearArea_GroundInsert = nullptr;
 typedef int (*fn_GatherWork_Attempt_t)(void* gatherSys, void* citizenIBP, int resourceTypeId, char pickupBool);
 static fn_GatherWork_Attempt_t fn_GatherWork_Attempt = nullptr;
 
-// Math::Vector3::Vector3 — uses global fn_Vector3_Ctor from engine_funcs.h
+// Math::Vector3::Vector3 — the real class (math/Math.h), B.3.1 step 2
 
 // System::MemoryAllocator::MemFree — dispatch at 0x140152b68
 typedef void (*fn_MemFreeDispatch_t)(void* ptr);
@@ -553,7 +554,6 @@ static bool ResolveClearAreaFuncs() {
         ResolveAddr(Module::Exe, 0x1400f8620));
 
     // Dispatch slots (indirect via .rdata)
-    // fn_Vector3_Ctor resolved globally in engine_funcs.cpp
     {
         void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152b68));
         if (slot) fn_MemFreeDispatch = reinterpret_cast<fn_MemFreeDispatch_t>(*slot);
@@ -815,16 +815,11 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
                 float worldX = (float)(cellIdx % gridSz) - halfOffset;
                 float worldY = (float)(cellIdx / gridSz) - halfOffset;
 
-                float posVec[4];  // Vector3 (padded)
-                if (fn_Vector3_Ctor) {
-                    fn_Vector3_Ctor(posVec, worldX, worldY, 0.0f);
-                } else {
-                    posVec[0] = worldX; posVec[1] = worldY; posVec[2] = 0.0f;
-                }
+                Math::Vector3 posVec(worldX, worldY, 0.0f);
 
                 // Get nearby walkable position
                 float walkPos[4];
-                fn_GetWorldPosition(worldGrid, walkPos, posVec, 0, nullptr);
+                fn_GetWorldPosition(worldGrid, walkPos, &posVec.x, 0, nullptr);
 
                 // Create PerformWork action for tree removal
                 uint64_t targetIBP = natResIBP;
@@ -924,15 +919,10 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
                 float worldX = (float)((int)tileIdx % gridSz) - halfOffset;
                 float worldY = (float)((int)tileIdx / gridSz) - halfOffset;
 
-                float posVec[4];
-                if (fn_Vector3_Ctor) {
-                    fn_Vector3_Ctor(posVec, worldX, worldY, 0.0f);
-                } else {
-                    posVec[0] = worldX; posVec[1] = worldY; posVec[2] = 0.0f;
-                }
+                Math::Vector3 posVec(worldX, worldY, 0.0f);
 
                 float walkPos[4];
-                fn_GetWorldPosition(worldGrid, walkPos, posVec, 0, nullptr);
+                fn_GetWorldPosition(worldGrid, walkPos, &posVec.x, 0, nullptr);
 
                 // Create PerformWork action for ground clearing
                 void* actionStackPtrForWork = *(void**)actionStack;

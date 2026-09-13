@@ -11,6 +11,7 @@
 // helper; do not "improve" behavior. Ghidra-verified against the disassembly.
 
 #include "engine_funcs.h"
+#include "system/Filename.h"
 #include "resolve.h"
 #include <cstdint>
 
@@ -169,8 +170,8 @@ extern "C" void ToolUI_InitChildDialogVtable() {
 //   placementtool.cpp: same shape.
 //
 // Closure (all satisfied):
-//   - fn_UI_CloseDialog, fn_InternalBasePtr_Ctor, fn_Filename_CtorCStr,
-//     fn_Filename_Dtor, fn_ExternalFactory_FindOrLoad, fn_IsDerivedFrom,
+//   - fn_UI_CloseDialog, fn_InternalBasePtr_Ctor,
+//     fn_ExternalFactory_FindOrLoad, fn_IsDerivedFrom,
 //     fn_MemAlloc, fn_DialogInstance_Ctor, fn_UI_AddDialog  — engine_funcs exports
 //   - g_pGameWorldSingleton, g_pExternalFactorySingleton, g_pExternalTypeId,
 //     g_pMemAllocSingleton  — singleton globals
@@ -197,18 +198,16 @@ extern "C" void* ToolUI_OpenToolDialog_ff9e0(void* param_1, void* param_2, uint6
     // (2) Load "Dialog/CreateBar.rsc" and type-check it against the External type.
     void* resource = nullptr;
     {
-        uint8_t fname[16] = {};
-        if (fn_Filename_CtorCStr) fn_Filename_CtorCStr(fname, "Dialog/CreateBar.rsc");
+        System::Filename fname("Dialog/CreateBar.rsc");
         void* obj = nullptr;
         if (fn_ExternalFactory_FindOrLoad && g_pExternalFactorySingleton &&
             *g_pExternalFactorySingleton) {
-            obj = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fname);
+            obj = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fname);
         }
         if (obj && fn_IsDerivedFrom && g_pExternalTypeId &&
             fn_IsDerivedFrom(obj, *g_pExternalTypeId)) {
             resource = obj;
         }
-        if (fn_Filename_Dtor) fn_Filename_Dtor(fname);
     }
 
     // (3) Allocate + construct the DialogInstance, then install our child vtable.

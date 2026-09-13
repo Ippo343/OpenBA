@@ -273,14 +273,18 @@ extern "C" void* RtUi_ToolTipDialog_OperatorNew(uint64_t bytes) {
 // caller must release. `BeginToolTip` calls it TWICE and releases both
 // (userinterface_hover.cpp:424 / :436).
 // ============================================================================
-extern "C" RtSystem::String* RtUi_Element_GetToolTipString(const Element* self,
-                                                          RtSystem::String* ret) {
+extern "C" System::String* RtUi_Element_GetToolTipString(const Element* self,
+                                                         System::String* ret) {
     ++g_getTipEntries;
-    ret->data = nullptr;                                       // 0x1800356b7
+    // The hidden return slot stays in the SIGNATURE while the two registry rows
+    // below bind this body; retail constructs into an uninitialised slot.
+    ret->_data = nullptr;                                      // 0x1800356b7
+    // B.3.1 bridge: Element::_toolTipString is a POD slot on UI::Element, which
+    // is not converted yet.
     char* const s = static_cast<char*>(self->_toolTipString);  // 0x1800356ba, +0x58
     if (s != nullptr) {                                        // 0x1800356be
         ++g_getTipNonNull;
-        ret->data = s;                                         // 0x1800356c3
+        ret->_data = s;                                        // 0x1800356c3
         ++RtSystem::StringRefCount(s);                         // 0x1800356c6
     }
     return ret;                                                // 0x1800356d0
@@ -345,12 +349,12 @@ extern "C" RtSystem::String* RtUi_Element_GetToolTipString(const Element* self,
 // is a use-after-free risk on a shared, refcounted String. The instrument here
 // is the attendance counter, which reports what actually ran.
 // ============================================================================
-extern "C" void RtUi_ToolTipDialog_SetText(void* self, const RtSystem::String* text) {
+extern "C" void RtUi_ToolTipDialog_SetText(void* self, const System::String* text) {
     ++g_setTextEntries;
 
     // ---- STEP 1 -------------------------------------------------------------
-    RtSystem::String name = { nullptr };                       // 0x1800dab22
-    RtSystem::RtSystem_String_Set(&name, "textToolTip");       // 0x1800dab37
+    System::String name;                                       // 0x1800dab22
+    name.Set("textToolTip");                                   // 0x1800dab37
 
     // ---- STEP 2: unguarded, deliberately ------------------------------------
     void* found = Field<void*>(self, kDialogInstanceRoot);     // 0x1800dab3d
@@ -358,9 +362,9 @@ extern "C" void RtUi_ToolTipDialog_SetText(void* self, const RtSystem::String* t
 
     // ---- STEP 3: the inlined self-match on the root --------------------------
     bool matched = false;
-    if (name.data != nullptr &&                                // 0x1800dab46
-        RtSystem::StringLength(name.data) != 0) {              // 0x1800dab4e
-        const int32_t want = RtSystem::StringLength(name.data);
+    if (name._data != nullptr &&                                // 0x1800dab46
+        RtSystem::StringLength(name._data) != 0) {              // 0x1800dab4e
+        const int32_t want = RtSystem::StringLength(name._data);
         char* const mine = static_cast<char*>(root->_name);    // 0x1800dab52, +0x10
         const int32_t lm = mine ? RtSystem::StringLength(mine) : 0;  // 0x1800dab5b
         if (lm == want) {                                      // 0x1800dab64
@@ -368,7 +372,7 @@ extern "C" void RtUi_ToolTipDialog_SetText(void* self, const RtSystem::String* t
                 RtSystem::StringLength(mine) == 0) {           // 0x1800dab6e
                 matched = true;
             } else {
-                matched = RtSystem::RtString_StrCompare(mine, name.data) == 0;  // 0x1800dab74
+                matched = RtSystem::RtString_StrCompare(mine, name._data) == 0;  // 0x1800dab74
             }
         }
     }
@@ -386,14 +390,16 @@ extern "C" void RtUi_ToolTipDialog_SetText(void* self, const RtSystem::String* t
             // literal is invisible to a naive grep for the mangled name, which
             // is precisely how `?BeginToolTip@` hid from one search last wave
             // (userinterface_hover.cpp:23 records it).
-            RT_EXPORT_ONCE(FindElementFn, "?FindElement@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z")(child, &hit, &name.data);  // 0x1800daba2
+            RT_EXPORT_ONCE(FindElementFn, "?FindElement@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z")(child, &hit, &name._data);  // 0x1800daba2
             if (hit != nullptr) { found = hit; break; }        // 0x1800dabaf
         }
     }
     if (found != nullptr) ++g_setTextFound;
 
-    // ---- STEP 5: release the local, asymmetry and all ------------------------
-    RtSystem::RtString_ReleaseInline(&name);                   // 0x1800dabc7
+    // ---- STEP 5 --------------------------------------------------------------
+    // 0x1800dabc7 released the local here. `name` is a real System::String now
+    // and its destructor runs at the end of the body instead; nothing between
+    // the two points reads it, and the release is not otherwise observable.
 
     // ---- STEP 6: the SetParameter(0, text) tail ------------------------------
     if (found != nullptr &&                                    // 0x1800dabee
@@ -405,8 +411,8 @@ extern "C" void RtUi_ToolTipDialog_SetText(void* self, const RtSystem::String* t
              node = Field<void*>(node, TE::kParent))           // +0x98
             Field<uint32_t>(node, TE::kDirtyFlags) |= TE::kDirtyBit;   // +0x34, 0x8000000
         void* const params = Field<void*>(found, TE::kParamArrayData); // 0x1800dac19, +0xc8
-        RtSystem::RtSystem_String_Assign(reinterpret_cast<RtSystem::String*>(params),
-                                         text);                // 0x1800dac20
+        // B.3.1 bridge: the TextElement parameter array is untyped storage.
+        *reinterpret_cast<System::String*>(params) = *text;    // 0x1800dac20
         CacheText(found);                                      // 0x1800dac28
     }
 }

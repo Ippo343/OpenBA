@@ -34,6 +34,8 @@
 // RegisterCodeFunctions().
 
 #include "engine_funcs.h"
+#include "math/Math.h"
+#include "system/Filename.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cmath>
@@ -53,17 +55,13 @@ static inline float C_hScale()  { return 0.00390625f;  }  // DAT_1401720bc (0x3b
 
 // ---- Runtime-x64.dll exports used by the overlay render (resolved lazily). --------
 // Names recovered from the exe dispatch-slot name-table (0x1401c027e..).
-typedef void* (*fn_V3Ctor3_t)(void* self, float x, float y, float z);   // ??0Vector3@Math@@QEAA@MMM@Z (slot 0x140152a30)
 typedef void  (*fn_MatSetup_t)(void* mat, void* ctx, int flag);         // ?Setup@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z (slot 0x140152920)
-typedef void* (*fn_MatIdentity_t)(void* retbuf);                        // ?Identity@Matrix@Math@@SA?AV12@XZ (static, retbuf) (slot 0x140152928)
 typedef void  (*fn_CtxSetTransform_t)(void* ctx, int slot, void* matrix);// ?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z (slot 0x1401525e0)
 typedef bool  (*fn_CtxBeginVerts_t)(void* ctx, int count, int stride);  // ?BeginVertices@Context@Video@@QEAA_NHH@Z (slot 0x140152930)
 typedef void  (*fn_CtxAddVertex_t)(void* ctx, const void* vtx);         // ?AddVertex@Context@Video@@QEAAXPEBX@Z (slot 0x140152948)
 typedef void  (*fn_CtxEndVerts_t)(void* ctx, int primType);             // ?EndVertices@Context@Video@@QEAAXW4PrimitiveType@12@@Z (slot 0x140152938)
 
-static fn_V3Ctor3_t        s_v3ctor3     = nullptr;
 static fn_MatSetup_t       s_matSetup    = nullptr;
-static fn_MatIdentity_t    s_matIdentity = nullptr;
 static fn_CtxSetTransform_t s_ctxSetXform = nullptr;
 static fn_CtxBeginVerts_t  s_ctxBegin    = nullptr;
 static fn_CtxAddVertex_t   s_ctxAddVtx   = nullptr;
@@ -88,12 +86,8 @@ static void EnsureFns() {
         uintptr_t s = ResolveAddr(Module::Exe, a);
         return s ? *reinterpret_cast<void**>(s) : nullptr;
     };
-    s_v3ctor3 = reinterpret_cast<fn_V3Ctor3_t>(slot(0x140152a30));
-    if (!s_v3ctor3) s_v3ctor3 = reinterpret_cast<fn_V3Ctor3_t>(ResolveExport("??0Vector3@Math@@QEAA@MMM@Z"));
     s_matSetup = reinterpret_cast<fn_MatSetup_t>(slot(0x140152920));
     if (!s_matSetup) s_matSetup = reinterpret_cast<fn_MatSetup_t>(ResolveExport("?Setup@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z"));
-    s_matIdentity = reinterpret_cast<fn_MatIdentity_t>(slot(0x140152928));
-    if (!s_matIdentity) s_matIdentity = reinterpret_cast<fn_MatIdentity_t>(ResolveExport("?Identity@Matrix@Math@@SA?AV12@XZ"));
     s_ctxSetXform = reinterpret_cast<fn_CtxSetTransform_t>(slot(0x1401525e0));
     if (!s_ctxSetXform) s_ctxSetXform = reinterpret_cast<fn_CtxSetTransform_t>(ResolveExport("?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z"));
     s_ctxBegin = reinterpret_cast<fn_CtxBeginVerts_t>(slot(0x140152930));
@@ -158,13 +152,8 @@ extern "C" void PlayerTileRender_TerrainCorners_b10e0(int64_t param_1, int col, 
     };
     auto put = [&](int i, float x, float y, int cc, int rr) {
         float z = sampleH(cc, rr);
-        if (s_v3ctor3) {
-            float v[4];
-            s_v3ctor3(v, x, y, z);
-            out[i * 3 + 0] = v[0]; out[i * 3 + 1] = v[1]; out[i * 3 + 2] = v[2];
-        } else {
-            out[i * 3 + 0] = x; out[i * 3 + 1] = y; out[i * 3 + 2] = z;
-        }
+        Math::Vector3 v(x, y, z);
+        out[i * 3 + 0] = v.x; out[i * 3 + 1] = v.y; out[i * 3 + 2] = v.z;
     };
 
     if (((c0 + r0) & 1) == 0) {
@@ -217,13 +206,11 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
     //     the BaseTypeInfo* at .rdata slot 0x140151350 (Graphics::MaterialInstance). ---
     void* material = nullptr;
     {
-        uint8_t fname[32];   // System::Filename is 8-16 bytes; oversized for safety.
-        std::memset(fname, 0, sizeof(fname));
-        if (fn_Filename_CtorCStr) fn_Filename_CtorCStr(fname, "Terrain/Selection.rsc");
+        System::Filename fname("Terrain/Selection.rsc");
         void* factory = (g_pExternalFactorySingleton && *g_pExternalFactorySingleton)
                             ? *g_pExternalFactorySingleton : nullptr;
-        void* obj = (factory && fn_ExternalFactory_FindOrLoad && fn_Filename_CtorCStr)
-                        ? fn_ExternalFactory_FindOrLoad(factory, fname) : nullptr;
+        void* obj = (factory && fn_ExternalFactory_FindOrLoad)
+                        ? fn_ExternalFactory_FindOrLoad(factory, &fname) : nullptr;
         // Exe: material=obj unless IsDerivedFrom(MaterialInstance) is false. In standalone
         // the type-id slot 0x140151350 may be unfilled → can't verify → TRUST the load
         // (IsDerivedFromOrTrust pattern) rather than dropping a valid material.
@@ -231,15 +218,12 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
         if (obj && fn_IsDerivedFrom && g_ppTypeInfo_MaterialInstance && *g_ppTypeInfo_MaterialInstance) {
             if (!fn_IsDerivedFrom(obj, **g_ppTypeInfo_MaterialInstance)) material = nullptr;
         }
-        if (fn_Filename_Dtor) fn_Filename_Dtor(fname);
     }
 
     if (material && s_matSetup) s_matSetup(material, ctx, 0);
-    if (s_matIdentity && s_ctxSetXform) {
-        uint8_t matrix[64];
-        std::memset(matrix, 0, sizeof(matrix));
-        s_matIdentity(matrix);
-        s_ctxSetXform(ctx, 0, matrix);
+    if (s_ctxSetXform) {
+        Math::Matrix matrix = Math::Matrix::Identity();
+        s_ctxSetXform(ctx, 0, &matrix);
     }
 
     // Guard: never iterate a record set whose base pointer is null (a failed alloc in

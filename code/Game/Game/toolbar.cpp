@@ -13,6 +13,7 @@
 #include "Game/toolbar_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "system/String.h"
 #include <cstdint>
 
 // ============================================================
@@ -38,10 +39,8 @@ static void EnsureResolved() {
 // calls External base dtor, conditionally frees memory.
 void* Toolbar_Dtor(Toolbar* self, uint32_t flags) {
     // Destroy String at +0x38 then +0x30
-    if (fn_String_Dtor) {
-        fn_String_Dtor(&self->_field38);
-        fn_String_Dtor(&self->_field30);
-    }
+    reinterpret_cast<System::String*>(&self->_field38)->~String();
+    reinterpret_cast<System::String*>(&self->_field30)->~String();
 
     // Call External base destructor
     if (fn_External_Dtor) {
@@ -83,10 +82,8 @@ void Toolbar_Serialize(Toolbar* self, void* stream) {
     }
 
     // String fields
-    if (g_fn_String_Serialize) {
-        g_fn_String_Serialize(&self->_field30, serializer);
-        g_fn_String_Serialize(&self->_field38, serializer);
-    }
+    reinterpret_cast<System::String*>(&self->_field30)->Serialize(serializer);
+    reinterpret_cast<System::String*>(&self->_field38)->Serialize(serializer);
 
     // Encoding vcall 0x98 for int at +0x48
     SerializerEncodingVCall(serializer, 0x98, (void*)((uintptr_t)self + 0x48));

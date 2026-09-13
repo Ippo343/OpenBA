@@ -7,6 +7,7 @@
 //   CitizenUI_BuildIconArray   — FUN_14006abf0
 
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 
 // ============================================================
@@ -83,8 +84,7 @@ inline void CitizenUI_BuildIconArray_Impl(uintptr_t param1, uintptr_t groupElemI
     for (int childIdx = 0; childIdx < childCount; childIdx++) {
         // --- Whole icon element ---
         {
-            uint8_t nameStr[8];
-            fn_String_Ctor_CStr(nameStr, "whole");
+            System::String nameStr("whole");
 
             uint8_t childBuf[16];
             fn_Element_Child(groupElem, childBuf, childIdx);
@@ -92,8 +92,7 @@ inline void CitizenUI_BuildIconArray_Impl(uintptr_t param1, uintptr_t groupElemI
             void* childElem = *(void**)childBuf;
 
             uint8_t foundBuf[16] = {};
-            fn_FindElement(childElem, foundBuf, nameStr);
-            fn_String_Dtor(nameStr);
+            fn_FindElement(childElem, foundBuf, &nameStr);
 
             fn_InternalBasePtr_CheckPtr((void*)foundBuf);
             void* wholeElem = *(void**)foundBuf;
@@ -132,8 +131,7 @@ inline void CitizenUI_BuildIconArray_Impl(uintptr_t param1, uintptr_t groupElemI
 
         // --- Half icon element ---
         {
-            uint8_t nameStr[8];
-            fn_String_Ctor_CStr(nameStr, "half");
+            System::String nameStr("half");
 
             fn_InternalBasePtr_CheckPtr((void*)groupElemIBP);
             void* groupElem2 = *(void**)groupElemIBP;
@@ -143,8 +141,7 @@ inline void CitizenUI_BuildIconArray_Impl(uintptr_t param1, uintptr_t groupElemI
             void* childElem = *(void**)childBuf;
 
             uint8_t foundBuf[16] = {};
-            fn_FindElement(childElem, foundBuf, nameStr);
-            fn_String_Dtor(nameStr);
+            fn_FindElement(childElem, foundBuf, &nameStr);
 
             fn_InternalBasePtr_CheckPtr((void*)foundBuf);
             void* halfElem = *(void**)foundBuf;

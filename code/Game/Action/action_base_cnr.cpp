@@ -16,6 +16,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "math/Math.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -453,21 +454,12 @@ uint64_t ActCNR_SetupModelAtCell_126540(int64_t self, int cellIndex) {
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&modelIBP);
     // Math::Transform::FromYawPitchOffset(out, &yaw, &pitch(=0), &offset(worldX,worldY,worldZ))
     float pitch = 0.0f;
-    float offset[3] = { worldY, worldX, worldZ };  // FromYawPitchOffset offset = {local_98, local_94, local_90}
+    Math::Vector3 offset(worldY, worldX, worldZ);  // FromYawPitchOffset offset = {local_98, local_94, local_90}
     // NOTE: the original passes local_res8[0]=yaw as the Scalar and local_res10 (Vector3
     // zero-ish) — see disasm; we mirror the documented FromYawPitchOffset ABI.
-    uint8_t xform[80] = {0};
-    if (fn_Transform_FromYawPitchOffset) {
-        fn_Transform_FromYawPitchOffset(xform, &yaw, &pitch, offset);
-        const uint32_t* pv = reinterpret_cast<const uint32_t*>(xform);
-        *reinterpret_cast<uint32_t*>(modelIBP + 0x148) = pv[0];
-        *reinterpret_cast<uint32_t*>(modelIBP + 0x14c) = pv[1];
-        *reinterpret_cast<uint32_t*>(modelIBP + 0x150) = pv[2];
-        *reinterpret_cast<uint32_t*>(modelIBP + 0x154) = pv[3];
-        *reinterpret_cast<uint32_t*>(modelIBP + 0x158) = pv[4];
-        *reinterpret_cast<uint32_t*>(modelIBP + 0x15c) = pv[5];
-        *reinterpret_cast<uint32_t*>(modelIBP + 0x160) = pv[6];
-    }
+    Math::Transform xform = Math::Transform::FromYawPitchOffset(yaw, pitch, offset);
+    // 7 dwords -> modelIBP +0x148..+0x160
+    *reinterpret_cast<Math::Transform*>(modelIBP + 0x148) = xform;   // B.3.1 bridge
     *reinterpret_cast<float*>(modelIBP + 0x168) = yaw;
     if (fn_Geometry_SetTransform)
         fn_Geometry_SetTransform(reinterpret_cast<void*>(modelIBP + 0x28),

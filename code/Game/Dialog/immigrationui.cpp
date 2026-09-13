@@ -10,17 +10,16 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 
 // Helper: Find element by name in dialog, return InternalPtr value (8 bytes)
 static uint64_t FindElemByName(void* dialogElem, const char* name) {
-    uint8_t nameBuf[8];
-    fn_String_Ctor_CStr(nameBuf, name);
+    System::String nameBuf(name);
 
     uint64_t result = 0;
-    fn_FindElement(dialogElem, &result, nameBuf);
+    fn_FindElement(dialogElem, &result, &nameBuf);
 
-    fn_String_Dtor(nameBuf);
     return result;
 }
 
@@ -141,17 +140,14 @@ void ImmigrationUI_Slot7(ImmigrationUI* self) {
         (uint32_t)buildComplete, (uint32_t)!buildComplete);
 
     // Format immigration count as "%i" and set on textNomad parameter 0
-    uint64_t countStr = 0;
-    fn_String_Format(&countStr, "%i", (uint64_t)immigCount);
+    System::String countStr = System::String::Format("%i", (uint64_t)immigCount);
     fn_TextElement_SetParameter((void*)*(uint64_t*)(s + 0x38), 0, &countStr);
-    fn_String_Dtor(&countStr);
 
     // Copy world name from worldSingleton+0x28, set as parameter 1
     void* worldSingleton = *g_pGameWorldSingleton;
-    uint64_t worldNameStr = 0;
-    fn_String_Ctor_Copy(&worldNameStr, (void*)((uintptr_t)worldSingleton + 0x28));
+    System::String worldNameStr(
+        *reinterpret_cast<const System::String*>((uintptr_t)worldSingleton + 0x28));  // B.3.1 bridge
     fn_TextElement_SetParameter((void*)*(uint64_t*)(s + 0x38), 1, &worldNameStr);
-    fn_String_Dtor(&worldNameStr);
 }
 
 // ============================================================

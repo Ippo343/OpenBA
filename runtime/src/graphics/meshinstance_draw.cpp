@@ -64,6 +64,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/math/Math.h"
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -116,22 +117,26 @@ constexpr int kBoneMatrices = 48;
 // The six named dependencies. Every one is EXPORTED and every one is already
 // PORTED, so RT_EXPORT_ONCE (registry-first) lands on our bodies.
 // ---------------------------------------------------------------------------
-using LerpFn      = void* (*)(const void* self, void* ret, const void* other,
-                              const float* scalar);
-using AsMatrixFn  = void* (*)(const void* self, void* ret);
 using GetBonesFn  = int32_t (*)(const void* self, float t, const void* xform, void* out);
 using SetBonesFn  = void (*)(void* ctx, int32_t count, const void* matrices);
 using SetTfsFn    = void (*)(void* ctx, int32_t slot, const void* matrix,
                              const void* scale);
 using NodeToWorldFn = void* (*)(const void* self, void* ret, int32_t node, float t);
 
+// ENDGAME B.3.1 step 2: both are Math:: members. The `(self, ret, ...)` shape
+// stays because the call sites work on raw offsets into MeshInstance's untyped
+// storage; those B.3.1 bridges go when THAT class is converted.
 void* QuaternionLerp(const void* self, void* ret, const void* other, const float* s) {
-    return RT_EXPORT_ONCE(LerpFn,
-        "?Lerp@Quaternion@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z")(self, ret, other, s);
+    *static_cast<Math::Quaternion*>(ret) =
+        static_cast<const Math::Quaternion*>(self)->Lerp(
+            *static_cast<const Math::Quaternion*>(other),
+            *reinterpret_cast<const Math::Scalar*>(s));
+    return ret;
 }
 void* TransformAsMatrix(const void* self, void* ret) {
-    return RT_EXPORT_ONCE(AsMatrixFn,
-        "?AsMatrix@Transform@Math@@QEBA?AVMatrix@2@XZ")(self, ret);
+    *static_cast<Math::Matrix*>(ret) =
+        static_cast<const Math::Transform*>(self)->AsMatrix();
+    return ret;
 }
 int32_t MeshInstanceGetBones(const void* self, float t, const void* xform, void* out) {
     return RT_EXPORT_ONCE(GetBonesFn,

@@ -14,6 +14,8 @@
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "system/String.h"
+#include "system/Filename.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -577,10 +579,9 @@ found_residence:
                             uint32_t genderFlag = (gender != 0) ? 1 : 0;
 
                             // Load citizen template
-                            uint8_t filenameBuf[16];
-                            fn_Filename_CtorCStr(filenameBuf, "Template/Citizen.rsc");
+                            System::Filename filenameBuf("Template/Citizen.rsc");
                             void* factory = *g_pExternalFactorySingleton;
-                            void* extTemplate = fn_ExternalFactory_FindOrLoad(factory, filenameBuf);
+                            void* extTemplate = fn_ExternalFactory_FindOrLoad(factory, &filenameBuf);
 
                             // Determine entity description (RDI in disasm)
                             // If extTemplate is null, use null.
@@ -592,8 +593,6 @@ found_residence:
                                 bool isBuildDesc = fn_IsDerivedFrom(extTemplate, *g_TypeId_ComponentDescription_FC);
                                 entityDesc = isBuildDesc ? extTemplate : nullptr;
                             }
-
-                            fn_Filename_Dtor(filenameBuf);
 
                             // Allocate and create entity (0x48 bytes)
                             void* memBlock = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
@@ -768,10 +767,9 @@ static void Game_SpawnTornado_Impl() {
     uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
 
     // Load tornado template
-    uint8_t filenameBuf[16];
-    fn_Filename_CtorCStr(filenameBuf, "Template/Tornado.rsc");
+    System::Filename filenameBuf("Template/Tornado.rsc");
     void* factory = *g_pExternalFactorySingleton;
-    void* extTemplate = fn_ExternalFactory_FindOrLoad(factory, filenameBuf);
+    void* extTemplate = fn_ExternalFactory_FindOrLoad(factory, &filenameBuf);
 
     // Cast to entity description (must be derived from ComponentDescription type)
     void* entityDesc = nullptr;
@@ -782,8 +780,7 @@ static void Game_SpawnTornado_Impl() {
         }
     }
 
-    // Filename dtor AFTER IsDerivedFrom check (matches original order)
-    fn_Filename_Dtor(filenameBuf);
+    // filenameBuf releases via its destructor (System::Filename) at scope exit.
 
     // Allocate and create entity (0x48 bytes)
     void* newEntity = nullptr;
@@ -1186,11 +1183,9 @@ static void DebugUI_StringTableGetText(void* table, void* retStr, const void* na
 
 // Helper: Find element by name, return raw pointer.
 static void* DebugUI_FindElem(void* parentElem, const char* name) {
-    uint8_t nameBuf[8];
-    fn_String_Ctor_CStr(nameBuf, name);
+    System::String nameBuf(name);
     uint8_t retBuf[16] = {};  // InternalPtr is 16 bytes (hidden return)
-    fn_FindElement(parentElem, retBuf, nameBuf);
-    fn_String_Dtor(nameBuf);
+    fn_FindElement(parentElem, retBuf, &nameBuf);
     return *(void**)retBuf;
 }
 
@@ -1291,14 +1286,13 @@ void DebugUI_Slot4(DebugUI* self) {
                 // Row text = StringTable::GetText(disease->stringTable(+0x20),
                 //                                 &out, disease->stringName(+0x28))
                 // — retail's 0x14006257c call, whose third argument Ghidra hides.
-                uint8_t textBuf[8] = {};
+                System::String textBuf;
                 DebugUI_StringTableGetText(*(void**)((uintptr_t)disease + 0x20),
-                                           textBuf,
+                                           &textBuf,
                                            (void*)((uintptr_t)disease + 0x28));
                 uint8_t spriteBuf[16];
                 fn_Sprite_Default_Ctor(spriteBuf);
-                fn_ComboElement_AddItem(self->diseaseCombo, spriteBuf, textBuf, nullptr);
-                fn_String_Dtor(textBuf);
+                fn_ComboElement_AddItem(self->diseaseCombo, spriteBuf, &textBuf, nullptr);
             }
             fn_ComboElement_SetCurrentItem(self->diseaseCombo, 0);
         }
@@ -1460,12 +1454,10 @@ void DebugUI_Slot4(DebugUI* self) {
 
         if (self->comboWeather) {
             // Add "None" entry with userData = -1
-            uint8_t noneBuf[8];
-            fn_String_Ctor_CStr(noneBuf, "None");
+            System::String noneBuf("None");
             uint8_t spriteBuf[16];
             fn_Sprite_Default_Ctor(spriteBuf);
-            fn_ComboElement_AddItem(self->comboWeather, spriteBuf, noneBuf, (void*)(intptr_t)-1);
-            fn_String_Dtor(noneBuf);
+            fn_ComboElement_AddItem(self->comboWeather, spriteBuf, &noneBuf, (void*)(intptr_t)-1);
 
             // Populate from weather list at gameWorld+0x130.
             // STANDALONE: guard a null weather manager / list.
@@ -1476,18 +1468,14 @@ void DebugUI_Slot4(DebugUI* self) {
             for (int i = 0; i < weatherCount; i++) {
                 void* entry = *(void**)((uintptr_t)i * 0x10 +
                     *(uintptr_t*)(weatherList + 0x28));
-                uint8_t pathBuf[8];
-                fn_External_GetPath(entry, pathBuf);
-                uint8_t filenameBuf[16];
-                fn_Filename_GetPathFilename(pathBuf, filenameBuf, false);
+                System::Filename pathBuf;
+                fn_External_GetPath(entry, &pathBuf);
+                System::Filename filenameBuf = pathBuf.GetPathFilename(false);
 
                 uint8_t spr[16];
                 fn_Sprite_Default_Ctor(spr);
-                fn_ComboElement_AddItem(self->comboWeather, spr, filenameBuf,
+                fn_ComboElement_AddItem(self->comboWeather, spr, &filenameBuf,
                     (void*)(intptr_t)i);
-
-                fn_Filename_Dtor(filenameBuf);
-                fn_Filename_Dtor(pathBuf);
 
                 // Check if this weather is currently active
                 uintptr_t activeCheck = *(uintptr_t*)((uintptr_t)i * 8 +

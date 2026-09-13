@@ -17,6 +17,7 @@
 // The 9-slot vtable in serialize_arrays.cpp points at the functions defined here.
 
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include "perf_experimental.h"
 #include <cstdint>
@@ -116,30 +117,19 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
 
     // 1. Capture cull camera world transform as a Transform3 (camera+0x64
     //    holds the camera-to-world Transform3, 48 bytes).
-    void*    camera = fn_Renderer_GetCullCamera(renderer);
-    uint8_t  cameraTransform3[48] = {0};
+    void* camera = fn_Renderer_GetCullCamera(renderer);
+    Math::Transform3 cameraTransform3;
     if (camera) {
-        const uint8_t* src = reinterpret_cast<const uint8_t*>(camera) + 0x64;
-        fn_Transform3_Copy_Ctor(cameraTransform3, src);
+        cameraTransform3 = *reinterpret_cast<const Math::Transform3*>(
+            reinterpret_cast<const uint8_t*>(camera) + 0x64);
     }
 
     // 2. Compute geometry-space frustum:
     //    frustum_local = (camera_frustum * cameraToWorld * geometry_inverseTransform)
-    uint8_t selfTransform[0x1C]    = {0};   // Math::Transform = 28 bytes
-    uint8_t selfInvTransform[0x1C] = {0};
-    uint8_t selfInvTransform3[48]  = {0};
-    fn_Geometry_GetTransform(self, selfTransform);
-    fn_Transform_Inverse(selfTransform, selfInvTransform);
-    if (!fn_Transform_AsTransform3) {
-        static bool s_warned = false;
-        if (!s_warned) {
-            printf("[Geometry::CollectDraw] fn_Transform_AsTransform3 unwired\n");
-            fflush(stdout);
-            s_warned = true;
-        }
-        return;
-    }
-    fn_Transform_AsTransform3(selfInvTransform, selfInvTransform3);
+    Math::Transform selfTransform;
+    fn_Geometry_GetTransform(self, &selfTransform);
+    Math::Transform  selfInvTransform  = selfTransform.Inverse();
+    Math::Transform3 selfInvTransform3 = selfInvTransform.AsTransform3();
 
     // Get camera frustum, then transform it into geometry space.
     uint8_t cameraFrustumBuf[256] = {0};   // Frustum size unknown; 256 is a safe upper bound
@@ -149,10 +139,10 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
         fn_Camera_GetFrustum(camera, cameraFrustumBuf);
     }
     // worldFrustum = cameraFrustum * cameraTransform3
-    fn_Frustum_MulTransform3(cameraFrustumBuf, worldFrustumBuf, cameraTransform3);
+    fn_Frustum_MulTransform3(cameraFrustumBuf, worldFrustumBuf, &cameraTransform3);
     PerfX::SetWorldFrustum(worldFrustumBuf);   // [PerfX] the sim-side off-screen test uses this frame's planes
     // localFrustum = worldFrustum * geometryInverseTransform3
-    fn_Frustum_MulTransform3(worldFrustumBuf, localFrustumBuf, selfInvTransform3);
+    fn_Frustum_MulTransform3(worldFrustumBuf, localFrustumBuf, &selfInvTransform3);
 
     // 3. Cached values from self.
     float    uvScale     = g_fUVScale ? *g_fUVScale : 1.0f;
@@ -322,9 +312,9 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
     fn_InterpolatedState_Transform_Lerp(selfBytes + 0x84, lerpedTransform, &param5);
 
     // 2. Convert to Matrix and SetTransform(0, matrix).
-    uint8_t matrixBuf[0x40] = {0};   // Math::Matrix is 64 bytes
-    fn_Transform_AsMatrix(lerpedTransform, matrixBuf);
-    fn_Context_SetTransform(context, 0, matrixBuf);
+    Math::Matrix matrixBuf =
+        reinterpret_cast<const Math::Transform*>(lerpedTransform)->AsMatrix();
+    fn_Context_SetTransform(context, 0, &matrixBuf);
 
     // 3. SetColor(1,1,1, lerp(uvScaleA, uvScaleB)).
     //    Layout from disasm: local_78/74/70 = 1.0f, local_6c = lerp result.

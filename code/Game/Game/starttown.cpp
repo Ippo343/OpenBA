@@ -19,6 +19,9 @@
 // the a3300 call site, 0x14009761d).
 
 #include "engine_funcs.h"
+#include "math/Math.h"
+#include "system/Filename.h"
+#include "system/String.h"
 #include "options.h"
 #include "perf_terrain.h"
 #include "resolve.h"
@@ -520,13 +523,11 @@ static void* StartTown_ResolveTemplate(uint8_t* entry) {
     void* tmpl = *(void**)(entry + EXTREF_TEMPLATE);
     if (tmpl) return tmpl;
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton ||
-        !fn_Filename_CtorString || !fn_ExternalFactory_FindOrLoad || !fn_Filename_Dtor)
+        !fn_ExternalFactory_FindOrLoad)
         return nullptr;
     void* factory = *g_pExternalFactorySingleton;
-    uint8_t fname[8] = {0};
-    fn_Filename_CtorString(fname, entry);                    // String -> Filename
-    tmpl = fn_ExternalFactory_FindOrLoad(factory, fname);
-    fn_Filename_Dtor(fname);
+    System::Filename fname(*reinterpret_cast<const System::String*>(entry));  // String -> Filename
+    tmpl = fn_ExternalFactory_FindOrLoad(factory, &fname);
     *(void**)(entry + EXTREF_TEMPLATE) = tmpl;               // cache
     return tmpl;
 }
@@ -1704,7 +1705,9 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                     float yaw = (float)orient, pitch = 0.0f;
                     // FromYawPitchOffset writes the Transform straight into +0x148 (byte-
                     // identical to retail's tmp-retbuf + Transform::operator=(+0x148,tmp)).
-                    fn_Transform_FromYawPitchOffset((void*)(mc + 0x148), &yaw, &pitch, center);
+                    *reinterpret_cast<Math::Transform*>(mc + 0x148) =
+                        Math::Transform::FromYawPitchOffset(
+                            yaw, pitch, *reinterpret_cast<const Math::Vector3*>(center));
                     *(float*)(mc + 0x168) = yaw;   // MOVSS [model+0x168], (float)orient
                     // Graphics::Geometry::SetTransform(model+0x28, model+0x148) — the piece the
                     // old approximation dropped (it assumed ModelComponent_Draw would push it
@@ -2453,11 +2456,9 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                             const int aCount = tbl ? *(int32_t*)(tbl + 0x38) : 0;
                             for (int i = 0; i < aCount; ++i) {
                                 const uintptr_t e = *(uintptr_t*)(tbl + 0x30) + (uintptr_t)i * 0x18;
-                                uint8_t nameBuf[8] = {};
-                                if (!fn_String_Ctor_CStr || !fn_String_Equal) break;
-                                fn_String_Ctor_CStr(nameBuf, "boat");
-                                const bool hit = fn_String_Equal((const void*)e, nameBuf);
-                                if (fn_String_Dtor) fn_String_Dtor(nameBuf);
+                                System::String nameBuf("boat");
+                                const bool hit =
+                                    *reinterpret_cast<const System::String*>(e) == nameBuf;
                                 if (!hit) continue;
                                 pierX = *(const float*)(e + 0x08);
                                 pierY = *(const float*)(e + 0x0c);
@@ -3608,13 +3609,11 @@ extern "C" void StartTown_DeferredSpawn_Tick(int frameNum) {
 // mirroring StartTown_ResolveTemplate but without a pool-entry String.
 static void* ResolveTemplateByPath(const char* path) {
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton ||
-        !fn_Filename_CtorCStr || !fn_ExternalFactory_FindOrLoad || !fn_Filename_Dtor)
+        !fn_ExternalFactory_FindOrLoad)
         return nullptr;
     void* factory = *g_pExternalFactorySingleton;
-    uint8_t fname[8] = {0};
-    fn_Filename_CtorCStr(fname, path);
-    void* tmpl = fn_ExternalFactory_FindOrLoad(factory, fname);
-    fn_Filename_Dtor(fname);
+    System::Filename fname(path);
+    void* tmpl = fn_ExternalFactory_FindOrLoad(factory, &fname);
     return tmpl;
 }
 
@@ -4912,7 +4911,9 @@ static void StartTown_PlaceResourceCell(void* entity, int cellIdx, void* game, v
     if (!m) return;
     float pitch = 0.0f;
     float off[3] = { worldX, worldY, worldZ };
-    fn_Transform_FromYawPitchOffset((void*)(m + 0x148), &yaw, &pitch, off);
+    *reinterpret_cast<Math::Transform*>(m + 0x148) =
+        Math::Transform::FromYawPitchOffset(
+            yaw, pitch, *reinterpret_cast<const Math::Vector3*>(off));
     *(float*)(m + 0x168) = yaw;
     if (fn_Geometry_SetTransform)
         fn_Geometry_SetTransform((void*)(m + 0x28), (void*)(m + 0x148));

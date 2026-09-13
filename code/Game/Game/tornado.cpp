@@ -59,6 +59,7 @@
 
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -214,11 +215,8 @@ typedef bool   (*fn_IsDerived_t)(const void* obj, uint32_t tid);  // Object::Bas
 typedef float  (*fn_AsSeconds_t)(const void* time);
 typedef void   (*fn_TimeCtor_t)(void* retTime, float seconds);
 typedef float  (*fn_RandFloatTol_t)(void* rng);                   // symmetric, [-1,1)
-typedef void*  (*fn_V3CtorScalar_t)(void* self, const float* s);  // Vector3(const Scalar&)
 typedef void*  (*fn_BoxExtend_t)(const void* box, void* ret, const float* v3);
 typedef void   (*fn_SetBounds_t)(void* geometry, const void* box);
-typedef void*  (*fn_V3Lerp_t)(const void* a, void* ret, const void* b, const float* t);
-typedef void*  (*fn_ScalarLerp_t)(void* a, void* ret, const float* b, const float* t);
 
 struct TornadoInstFuncs {
     fn_PIUpdate_t     baseUpdate;
@@ -226,11 +224,8 @@ struct TornadoInstFuncs {
     fn_AsSeconds_t    asSeconds;
     fn_TimeCtor_t     timeCtor;
     fn_RandFloatTol_t randFloatTol;
-    fn_V3CtorScalar_t v3CtorScalar;
     fn_BoxExtend_t    boxExtend;
     fn_SetBounds_t    setBounds;
-    fn_V3Lerp_t       v3Lerp;
-    fn_ScalarLerp_t   scalarLerp;
     void*             rng;        // Graphics::Particle::_rng, the static the retail body uses
     bool              ok;
 };
@@ -245,21 +240,18 @@ const TornadoInstFuncs& InstFuncs() {
     f.asSeconds    = (fn_AsSeconds_t)   ResolveExport("?AsSeconds@Time@System@@QEBAMXZ");
     f.timeCtor     = (fn_TimeCtor_t)    ResolveExport("??0Time@System@@QEAA@M@Z");
     f.randFloatTol = (fn_RandFloatTol_t)ResolveExport("?RandFloatTol@Random@System@@QEAAMXZ");
-    f.v3CtorScalar = (fn_V3CtorScalar_t)ResolveExport("??0Vector3@Math@@QEAA@AEBVScalar@1@@Z");
     f.boxExtend    = (fn_BoxExtend_t)   ResolveExport("?Extend@Box@Volume@@QEBA?AV12@AEBVVector3@Math@@@Z");
     f.setBounds    = (fn_SetBounds_t)   ResolveExport("?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z");
-    f.v3Lerp       = (fn_V3Lerp_t)      ResolveExport("?Lerp@Vector3@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z");
-    f.scalarLerp   = (fn_ScalarLerp_t)  ResolveExport("?Lerp@Scalar@Math@@QEAA?AV12@AEBV12@0@Z");
     f.rng          =                    ResolveExport("?_rng@Particle@Graphics@@1VRandom@System@@A");
     f.ok = f.baseUpdate && f.isDerived && f.asSeconds && f.timeCtor && f.randFloatTol &&
-           f.v3CtorScalar && f.boxExtend && f.setBounds && f.v3Lerp && f.scalarLerp && f.rng;
+           f.boxExtend && f.setBounds && f.rng;
     if (!f.ok) {
         fprintf(stderr, "[Tornado/particle] Update UNRESOLVED leaf: baseUpdate=%p isDerived=%p "
-                "asSeconds=%p timeCtor=%p rand=%p v3ctor=%p extend=%p setBounds=%p v3lerp=%p "
-                "scalarLerp=%p rng=%p -- the funnel will stand still\n",
+                "asSeconds=%p timeCtor=%p rand=%p extend=%p setBounds=%p "
+                "rng=%p -- the funnel will stand still\n",
                 (void*)f.baseUpdate, (void*)f.isDerived, (void*)f.asSeconds, (void*)f.timeCtor,
-                (void*)f.randFloatTol, (void*)f.v3CtorScalar, (void*)f.boxExtend,
-                (void*)f.setBounds, (void*)f.v3Lerp, (void*)f.scalarLerp, f.rng);
+                (void*)f.randFloatTol, (void*)f.boxExtend,
+                (void*)f.setBounds, f.rng);
         fflush(stderr);
     }
     return f;
@@ -336,11 +328,10 @@ void TornadoInstance_Update(void* self, const int64_t* dtPtr) {
         p->color[1] = p->prevColor[1] = cStart[1] / 255.0f;
         p->color[2] = p->prevColor[2] = cStart[0] / 255.0f;
 
-        float zero = 0.0f, v3[3] = { 0.0f, 0.0f, 0.0f };
-        const float* z = reinterpret_cast<const float*>(f.v3CtorScalar(v3, &zero));
-        p->pos[0] = p->prevPos[0] = z[0];
-        p->pos[1] = p->prevPos[1] = z[1];
-        p->pos[2] = p->prevPos[2] = z[2];
+        Math::Vector3 z((Math::Scalar(0.0f)));   // Vector3(const Scalar&) splat
+        p->pos[0] = p->prevPos[0] = z.x;
+        p->pos[1] = p->prevPos[1] = z.y;
+        p->pos[2] = p->prevPos[2] = z.z;
 
         p->angle = p->prevAngle = f.randFloatTol(f.rng) * 180.0f;
         p->size  = p->prevSize  = ResF(res, 0x68);      // _particleStartSize
@@ -349,11 +340,10 @@ void TornadoInstance_Update(void* self, const int64_t* dtPtr) {
     // ---- the growth box is rebuilt from scratch every frame, starting at the
     //      ORIGIN rather than at an inverted-infinite box. Retail, faithfully. ----
     {
-        float zero = 0.0f, a[3], b[3];
-        const float* z1 = reinterpret_cast<const float*>(f.v3CtorScalar(a, &zero));
-        const float* z2 = reinterpret_cast<const float*>(f.v3CtorScalar(b, &zero));
-        pool->box[0] = z2[0]; pool->box[1] = z2[1]; pool->box[2] = z2[2];
-        pool->box[3] = z1[0]; pool->box[4] = z1[1]; pool->box[5] = z1[2];
+        Math::Vector3 z1((Math::Scalar(0.0f)));
+        Math::Vector3 z2((Math::Scalar(0.0f)));
+        pool->box[0] = z2.x; pool->box[1] = z2.y; pool->box[2] = z2.z;
+        pool->box[3] = z1.x; pool->box[4] = z1.y; pool->box[5] = z1.z;
     }
 
     const float startColor[3] = { cStart[2] / 255.0f, cStart[1] / 255.0f, cStart[0] / 255.0f };
@@ -443,15 +433,14 @@ void TornadoInstance_Update(void* self, const int64_t* dtPtr) {
         p->size     = sz;
 
         {
-            float lerped[3];
-            const float* cc =
-                reinterpret_cast<const float*>(f.v3Lerp(startColor, lerped, endColor, &u));
+            Math::Vector3 cc = reinterpret_cast<const Math::Vector3*>(startColor)->Lerp(
+                *reinterpret_cast<const Math::Vector3*>(endColor), u);
             p->prevColor[0] = p->color[0];
             p->prevColor[1] = p->color[1];
             p->prevColor[2] = p->color[2];
-            p->color[0] = cc[0];
-            p->color[1] = cc[1];
-            p->color[2] = cc[2];
+            p->color[0] = cc.x;
+            p->color[1] = cc.y;
+            p->color[2] = cc.z;
         }
 
         // Alpha envelope: fade in over resource +0x80, then fade out over +0x88
@@ -464,11 +453,9 @@ void TornadoInstance_Update(void* self, const int64_t* dtPtr) {
         if (env > 1.0f)      env = 1.0f;
         else if (0.0f > env) env = 0.0f;
 
-        float slot = 0.0f;
-        float a0   = startAlpha;
-        const float* la =
-            reinterpret_cast<const float*>(f.scalarLerp(&a0, &slot, &endAlpha, &u));
-        p->alpha = p->prevAlpha = env * (*la);
+        Math::Scalar a0(startAlpha);
+        Math::Scalar la = a0.Lerp(Math::Scalar(endAlpha), Math::Scalar(u));
+        p->alpha = p->prevAlpha = env * la.v;
     }
 
     f.setBounds(self, pool);

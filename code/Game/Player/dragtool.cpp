@@ -15,6 +15,7 @@
 
 #include "Player/dragtool.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -140,16 +141,6 @@ static fn_Transform_Ctor_t g_fn_TransformCtor = nullptr;
 typedef void* (*fn_Box_Ctor_t)(void* self);
 static fn_Box_Ctor_t g_fn_BoxCtor = nullptr;
 
-// System::String::String(dst, src) — copy ctor
-// Dispatch table at 0x140151428
-typedef void* (*fn_StringCopyCtor_t)(void* dst, const void* src);
-static fn_StringCopyCtor_t g_fn_StringCopyCtor = nullptr;
-
-// System::String::~String(this) — destructor
-// Dispatch table at 0x140152af0
-typedef void (*fn_StringDtor_t)(void* self);
-static fn_StringDtor_t g_fn_StringDtor = nullptr;
-
 // SA no-op fallbacks for cosmetic drag helpers (sounds / dialog open+close). Their exe
 // addresses are frequently unregistered in the standalone exe — RemovalTool is the first
 // tool to actually exercise DragTool_OnKey — so a null call would fault. Pointing any null
@@ -190,31 +181,6 @@ static void ResolveDragToolFuncs() {
         void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401513f8));
         if (d) g_fn_BoxCtor = reinterpret_cast<fn_Box_Ctor_t>(*d);
     }
-    {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151428));
-        if (d) g_fn_StringCopyCtor = reinterpret_cast<fn_StringCopyCtor_t>(*d);
-    }
-    {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152af0));
-        if (d) g_fn_StringDtor = reinterpret_cast<fn_StringDtor_t>(*d);
-    }
-
-    // SA fallback: the String ctor/dtor dispatch slots (0x140151428 / 0x140152af0) are
-    // unregistered in the standalone exe, so g_fn_StringDtor resolves null there — and
-    // RemovalTool is the first DragTool-derived tool to actually drag, so it faulted on the
-    // per-frame cost-string cleanup (before the commit->CalcPath). Fall back to the
-    // export-resolved System::String::~String — same slot->export pattern PlacementTool
-    // uses for KeyMapPressed/CloseDialog.
-    if (!g_fn_StringDtor && fn_String_Dtor)
-        g_fn_StringDtor = reinterpret_cast<fn_StringDtor_t>(fn_String_Dtor);
-
-    // SA fallback: the String copy-ctor dispatch slot (0x140151428) is likewise
-    // unregistered in the standalone exe, so g_fn_StringCopyCtor resolves null there and the
-    // cost-tooltip block gets skipped. Fall back to the export-resolved
-    // System::String::String(dst, src) — same slot->export pattern as g_fn_StringDtor above,
-    // and identical signature (void*(void* dst, const void* src)).
-    if (!g_fn_StringCopyCtor && fn_String_Ctor_Copy)
-        g_fn_StringCopyCtor = reinterpret_cast<fn_StringCopyCtor_t>(fn_String_Ctor_Copy);
 
     // Null cosmetic helpers -> no-ops so the drag lifecycle never faults on them in SA.
     if (!g_fn_PlayTickSound)   g_fn_PlayTickSound   = &DragNoop_Sound;
@@ -358,15 +324,11 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
             pathType, tileH, tileW, &extraParam);
 
         // ---- Cost tooltip (FindDescription -> cost string -> UpdateToolUI) ----
-        // g_fn_StringCopyCtor / g_fn_StringDtor now fall back to the export-resolved
-        // System::String ctor/dtor in SA (see ResolveDragToolFuncs), so the string plumbing
-        // works there. g_fn_UpdateToolUI (exe code 0x1400ffc60) may still resolve null in the
-        // standalone exe if unregistered — in that case this whole COSMETIC block is skipped
-        // (the drag + commit -> CalcPath still run, costString stays 0 / haveCostString=false,
-        // so the cleanup below is a no-op).
-        uint64_t costString = 0;
-        bool haveCostString = false;
-        if (g_fn_FindDescription && g_fn_StringCopyCtor && g_fn_StringDtor && g_fn_UpdateToolUI) {
+        // g_fn_UpdateToolUI (exe code 0x1400ffc60) may still resolve null in the standalone
+        // exe if unregistered — in that case this whole COSMETIC block is skipped (the drag
+        // + commit -> CalcPath still run and costString stays empty).
+        System::String costString;
+        if (g_fn_FindDescription && g_fn_UpdateToolUI) {
             uint64_t descResult = 0;
             g_fn_FindDescription((uint64_t)self->descriptionPtr, &descResult);
 
@@ -374,23 +336,17 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
                 // Description has a string array at +0x50 (ptr) and +0x58 (count).
                 bool costOverflow = (segmentCount >= *(int*)((uintptr_t)descResult + 0x58));
 
-                uint64_t srcString;
-                uint64_t tempString;
                 if (!costOverflow) {
                     uintptr_t strArrayBase = *(uintptr_t*)((uintptr_t)descResult + 0x50);
-                    void* srcStrPtr = (void*)(strArrayBase + (uint64_t)segmentCount * 8);
-                    g_fn_StringCopyCtor(&tempString, srcStrPtr);
-                    srcString = tempString;
-                } else {
-                    srcString = 0;  // empty string (null System::String)
+                    // Retail copy-constructs a temporary from the array slot, copies that
+                    // into costString, then releases the temporary. The scope does both.
+                    System::String tempString(
+                        *reinterpret_cast<const System::String*>(
+                            strArrayBase + (uint64_t)segmentCount * 8));
+                    costString = tempString;
                 }
-
-                g_fn_StringCopyCtor(&costString, &srcString);
-                haveCostString = true;
-
-                // Cleanup intermediate
-                if (!costOverflow) g_fn_StringDtor(&tempString);
-                else               g_fn_StringDtor(&srcString);
+                // else: retail's srcString is the null String, so costString stays empty
+                // and its release is a no-op.
 
                 // ---- Init Transform and Box for UI positioning ----
                 uint8_t transform[40];  // Math::Transform
@@ -482,8 +438,6 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
             }
         }
 
-        // Cleanup cost string
-        if (haveCostString && g_fn_StringDtor) g_fn_StringDtor(&costString);
     }
 
     return 1; // Always returns 1 (event consumed)

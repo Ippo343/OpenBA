@@ -377,11 +377,10 @@ Quaternion* RtQuaternionLerp(const Quaternion* from, Quaternion* ret,
 // line used until 2026-09-07 sent every Graphics::Scene transform through the
 // shipped DLL instead of our own port — one port bypassing another inside
 // runtime/.
+// ENDGAME B.3.1 step 2: a direct member call; there is no door left to bypass.
 Matrix* RtTransformAsMatrix(const Transform* xf, Matrix* ret) {
-    using Fn = Matrix* (*)(const Transform*, Matrix*);
-    static Fn fn = reinterpret_cast<Fn>(
-        ResolveExport("?AsMatrix@Transform@Math@@QEBA?AVMatrix@2@XZ"));
-    return fn(xf, ret);
+    *ret = xf->AsMatrix();
+    return ret;
 }
 
 // ---------------------------------------------------------------------------

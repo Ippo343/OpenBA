@@ -46,6 +46,8 @@
 #include "engine_funcs.h"
 #include "options.h"
 #include "resolve.h"
+#include "system/String.h"
+#include <new>
 #include "address_registry.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -259,7 +261,8 @@ extern "C" void EventLog_Resize_199a0(void* hdrVoid, int newCount) {
         if (i < oldCount) {
             uint8_t* src = oldData + (size_t)i * 0x28;
             *(uint32_t*)dst = *(uint32_t*)src;
-            fn_String_Ctor_Copy(dst + 0x8, src + 0x8);
+            // B.3.1 bridge: the event entry is still untyped bytes.
+            new (dst + 0x8) System::String(*reinterpret_cast<const System::String*>(src + 0x8));
             memcpy(dst + 0x10, src + 0x10, 5 * 4);
         } else {
             *(uint32_t*)dst = 0xffffffff;
@@ -273,10 +276,10 @@ extern "C" void EventLog_Resize_199a0(void* hdrVoid, int newCount) {
     if (oldData == newData) {
         // shrink in place: dtor the removed tail Strings
         for (int i = newCount; i < oldCount; i++)
-            fn_String_Dtor(oldData + (size_t)i * 0x28 + 0x8);
+            reinterpret_cast<System::String*>(oldData + (size_t)i * 0x28 + 0x8)->~String();
     } else if (oldData) {
         for (int i = 0; i < oldCount; i++)
-            fn_String_Dtor(oldData + (size_t)i * 0x28 + 0x8);
+            reinterpret_cast<System::String*>(oldData + (size_t)i * 0x28 + 0x8)->~String();
         fn_MemFreeStatic(oldData);
     }
 }
@@ -305,7 +308,7 @@ extern "C" void EventLog_Serialize_952c0(void* selfVoid, void* stream) {
         for (int i = skip; i < *(int*)(self + 0x20); i++) {
             uint8_t* e = *(uint8_t**)(self + 0x18) + (size_t)i * 0x28;
             g_fn_Serialize_Int(ser, e, nullptr);
-            g_fn_String_Serialize(e + 0x8, ser);
+            reinterpret_cast<System::String*>(e + 0x8)->Serialize(ser);
             g_fn_Serialize_Int(ser, e + 0x10, nullptr);
             g_fn_Serialize_Int(ser, e + 0x14, nullptr);
             g_fn_Serialize_Int(ser, e + 0x18, nullptr);
@@ -833,7 +836,7 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
         g_fn_Serialize_Int(ser, (void*)(self + 0x15c), nullptr);
 
     s_fn_Random_Serialize(*(void**)(self + 0xd8), ser);
-    g_fn_String_Serialize((void*)(self + 0x28), ser);
+    reinterpret_cast<System::String*>(self + 0x28)->Serialize(ser);
     g_fn_Serialize_Bool(ser, (void*)(self + 0x158), nullptr);
 
 

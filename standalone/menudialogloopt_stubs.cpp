@@ -52,6 +52,7 @@ void DlgCtrlRoute_Arm();                  // standalone/dlgctrl_route.cpp
 #include "autostart.h"
 #include <cstdio>
 #include <cstdint>
+#include "system/Filename.h"   // -Iruntime/types
 #include <cstring>
 
 namespace {
@@ -78,7 +79,7 @@ static void EnsureCursorsLoaded() {
         printf("[CursorLoad] WARN: ExternalFactory singleton not populated, skipping\n");
         return;
     }
-    if (!fn_Filename_CtorCStr || !fn_Filename_Dtor || !fn_ExternalFactory_FindOrLoad) {
+    if (!fn_ExternalFactory_FindOrLoad) {
         printf("[CursorLoad] WARN: required engine fns not resolved\n");
         return;
     }
@@ -92,10 +93,8 @@ static void EnsureCursorsLoaded() {
     }
 
     auto loadAndStore = [&](uintptr_t offset, const char* name) {
-        uint8_t fnBuf[16] = {};  // System::Filename is 8-16 bytes
-        fn_Filename_CtorCStr(fnBuf, name);
-        void* ext = fn_ExternalFactory_FindOrLoad(factory, fnBuf);
-        fn_Filename_Dtor(fnBuf);
+        const System::Filename fn(name);
+        void* ext = fn_ExternalFactory_FindOrLoad(factory, &fn);
         *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(keyMap) + offset) = ext;
         printf("[CursorLoad] %-32s -> %p (KeyMap+0x%02llx)\n",
                name, ext, (unsigned long long)offset);
@@ -135,7 +134,7 @@ static void EnsureUISoundsLoaded() {
         printf("[UISoundLoad] WARN: ExternalFactory singleton not populated, skipping\n");
         return;
     }
-    if (!fn_Filename_CtorCStr || !fn_Filename_Dtor || !fn_ExternalFactory_FindOrLoad) {
+    if (!fn_ExternalFactory_FindOrLoad) {
         printf("[UISoundLoad] WARN: required engine fns not resolved\n");
         return;
     }
@@ -150,10 +149,8 @@ static void EnsureUISoundsLoaded() {
     }
 
     auto loadAndStore = [&](uintptr_t offset, const char* name) {
-        uint8_t fnBuf[16] = {};  // System::Filename
-        fn_Filename_CtorCStr(fnBuf, name);
-        void* ext = fn_ExternalFactory_FindOrLoad(factory, fnBuf);
-        fn_Filename_Dtor(fnBuf);
+        const System::Filename fn(name);
+        void* ext = fn_ExternalFactory_FindOrLoad(factory, &fn);
         *reinterpret_cast<void**>(kmBase + offset) = ext;
         printf("[UISoundLoad] %-34s -> %p (KeyMap+0x%02llx)\n",
                name, ext, (unsigned long long)offset);
@@ -190,9 +187,7 @@ static void EnsureUISoundsLoaded() {
 extern "C" void StandaloneEnsureSpriteSheetLoaded() {
     if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) return;
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) return;
-    if (!fn_Filename_CtorCStr || !fn_Filename_Dtor ||
-        !fn_ExternalFactory_FindOrLoad || !fn_Sprite_Ctor ||
-        !fn_String_Ctor_CStr || !fn_String_Dtor) {
+    if (!fn_ExternalFactory_FindOrLoad || !fn_Sprite_Ctor) {
         printf("[SpriteSheetLoad] WARN: missing engine fns, skipping\n");
         return;
     }
@@ -205,10 +200,8 @@ extern "C" void StandaloneEnsureSpriteSheetLoaded() {
     if (*reinterpret_cast<void**>(kmBase + 0xa0)) return;
 
     // Step 1: load Dialog/SpriteSheet.rsc into KeyMap+0xa0.
-    uint8_t fnBuf[16] = {};
-    fn_Filename_CtorCStr(fnBuf, "Dialog/SpriteSheet.rsc");
-    void* spriteSheet = fn_ExternalFactory_FindOrLoad(factory, fnBuf);
-    fn_Filename_Dtor(fnBuf);
+    const System::Filename sheetPath("Dialog/SpriteSheet.rsc");
+    void* spriteSheet = fn_ExternalFactory_FindOrLoad(factory, &sheetPath);
     *reinterpret_cast<void**>(kmBase + 0xa0) = spriteSheet;
     printf("[SpriteSheetLoad] Dialog/SpriteSheet.rsc -> %p (KeyMap+0xa0)\n",
            spriteSheet);
@@ -221,12 +214,10 @@ extern "C" void StandaloneEnsureSpriteSheetLoaded() {
     // buffer as retval and copy it into KeyMap.
     auto buildSprite = [&](uintptr_t kmOffset, const char* name) {
         uint8_t spriteBuf[16] = {};
-        uint8_t nameStr[8] = {};
-        fn_String_Ctor_CStr(nameStr, name);
+        const System::String nameStr(name);
         fn_Sprite_Ctor(spriteBuf,
                        reinterpret_cast<uint64_t>(spriteSheet),
-                       nameStr);
-        fn_String_Dtor(nameStr);
+                       &nameStr);
         *reinterpret_cast<uint64_t*>(kmBase + kmOffset)       =
             *reinterpret_cast<uint64_t*>(&spriteBuf[0]);
         *reinterpret_cast<uint64_t*>(kmBase + kmOffset + 8)   =

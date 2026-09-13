@@ -25,6 +25,8 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "system/String.h"
+#include <new>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -56,7 +58,9 @@ static void EventArray_Grow(void* arrBase, int newCount, const void* newEntry) {
         uintptr_t dst = newData + (uintptr_t)i * 0x28;
         const void* src = (i < oldCount) ? (const void*)(oldData + (uintptr_t)i * 0x28) : newEntry;
         *(uint32_t*)dst = *(const uint32_t*)src;                        // +0x00 color
-        fn_String_Ctor_Copy((void*)(dst + 0x08), (void*)((uintptr_t)src + 0x08));  // +0x08 String
+        // B.3.1 bridge: the 0x28-byte event entry is still untyped bytes.
+        new ((void*)(dst + 0x08)) System::String(
+            *reinterpret_cast<const System::String*>((uintptr_t)src + 0x08));  // +0x08 String
         *(uint32_t*)(dst + 0x10) = *(const uint32_t*)((uintptr_t)src + 0x10);
         *(uint32_t*)(dst + 0x14) = *(const uint32_t*)((uintptr_t)src + 0x14);
         *(uint32_t*)(dst + 0x18) = *(const uint32_t*)((uintptr_t)src + 0x18);
@@ -67,10 +71,10 @@ static void EventArray_Grow(void* arrBase, int newCount, const void* newEntry) {
     if (oldData == newData) {
         // In-place shrink: dtor excess Strings (not hit on append, kept for fidelity)
         for (int i = newCount; i < oldCount; i++)
-            fn_String_Dtor((void*)(oldData + (uintptr_t)i * 0x28 + 0x08));
+            reinterpret_cast<System::String*>(oldData + (uintptr_t)i * 0x28 + 0x08)->~String();
     } else if (oldData) {
         for (int i = 0; i < oldCount; i++)
-            fn_String_Dtor((void*)(oldData + (uintptr_t)i * 0x28 + 0x08));
+            reinterpret_cast<System::String*>(oldData + (uintptr_t)i * 0x28 + 0x08)->~String();
         fn_MemFreeStatic((void*)oldData);
     }
 }
@@ -80,15 +84,15 @@ static void EventArray_Grow(void* arrBase, int newCount, const void* newEntry) {
 // ============================================================
 
 // YearString (0x1400951d0): String::Format("%i", *(int*)clock), clock = *(gw+0x128).
-static void EventLog_YearString(void* gameWorld, void* retStr) {
+static System::String EventLog_YearString(void* gameWorld) {
     void* clock = *(void**)((uintptr_t)gameWorld + 0x128);
     int year = clock ? *(int*)clock : 0;
-    fn_String_Format(retStr, "%i", year);
+    return System::String::Format("%i", year);
 }
 
 // SeasonString (0x140095230): monthIdx = (int)(AsSeconds(clock+8) / 3600 * 12);
 // if monthIdx >= 12 -> 0. seasons table = *(eventlog+0x08). GetText(table, ret, idx).
-static void EventLog_SeasonString(void* gameWorld, void* eventLog, void* retStr) {
+static System::String EventLog_SeasonString(void* gameWorld, void* eventLog) {
     void* clock = *(void**)((uintptr_t)gameWorld + 0x128);
     int idx = 0;
     if (clock && fn_Time_AsSeconds) {
@@ -96,12 +100,14 @@ static void EventLog_SeasonString(void* gameWorld, void* eventLog, void* retStr)
         idx = (int)(secs / 3600.0f * 12.0f);
         if (idx >= 12) idx = 0;
     }
+    System::String retStr;
     void* seasonsTable = *(void**)((uintptr_t)eventLog + 0x08);
     if (seasonsTable && fn_StringTable_GetText) {
-        fn_StringTable_GetText(seasonsTable, retStr, idx);
+        fn_StringTable_GetText(seasonsTable, &retStr, idx);
     } else {
-        fn_String_Ctor_CStr(retStr, "");
+        retStr = System::String("");
     }
+    return retStr;
 }
 
 // SeverityColor: severity -> ARGB text color (shared by both AddEvent variants).
@@ -208,39 +214,35 @@ static void EventLog_AddEventCore(void* eventLog, int eventType, int severity,
     if (!gameWorld) return;
 
     // --- Build the display text ---
-    uint8_t yearStr[8], seasonStr[8], templateStr[8], formatted[8];
-    EventLog_YearString(gameWorld, yearStr);
-    EventLog_SeasonString(gameWorld, eventLog, seasonStr);
+    System::String templateStr, formatted;
+    System::String yearStr   = EventLog_YearString(gameWorld);
+    System::String seasonStr = EventLog_SeasonString(gameWorld, eventLog);
 
     void* eventsTable = *(void**)eventLog;  // +0x00
     if (eventsTable && fn_StringTable_GetText) {
-        fn_StringTable_GetText(eventsTable, templateStr, eventType);
+        fn_StringTable_GetText(eventsTable, &templateStr, eventType);
     } else {
-        fn_String_Ctor_CStr(templateStr, "Event");
+        templateStr = System::String("Event");
     }
 
     // FormatIndexed(fmt=template, %0=season, %1=year, %2..=extra). Args are the
     // String DATA pointers (char*). Fall back to the raw template if the export
     // is unresolved.
-    const char* tmplData = *(const char**)templateStr;
-    const char* seaData  = *(const char**)seasonStr;
-    const char* yrData   = *(const char**)yearStr;
-    if (fn_String_FormatIndexed) {
-        switch (nExtra) {
-            case 0:
-                fn_String_FormatIndexed(formatted, tmplData, seaData, yrData);
-                break;
-            case 1:
-                fn_String_FormatIndexed(formatted, tmplData, seaData, yrData,
-                                        extra[0]);
-                break;
-            default:  // 3 — the citizen variant
-                fn_String_FormatIndexed(formatted, tmplData, seaData, yrData,
-                                        extra[0], extra[1], extra[2]);
-                break;
-        }
-    } else {
-        fn_String_Ctor_Copy(formatted, templateStr);
+    const char* tmplData = templateStr._data;
+    const char* seaData  = seasonStr._data;
+    const char* yrData   = yearStr._data;
+    switch (nExtra) {
+        case 0:
+            formatted = System::String::FormatIndexed(tmplData, seaData, yrData);
+            break;
+        case 1:
+            formatted = System::String::FormatIndexed(tmplData, seaData, yrData,
+                                                      extra[0]);
+            break;
+        default:  // 3 — the citizen variant
+            formatted = System::String::FormatIndexed(tmplData, seaData, yrData,
+                                                      extra[0], extra[1], extra[2]);
+            break;
     }
 
     uint32_t color = EventLog_SeverityColor(severity);
@@ -251,7 +253,7 @@ static void EventLog_AddEventCore(void* eventLog, int eventType, int severity,
     // --- Build the 0x28-byte entry and append ---
     uint8_t entry[0x28];
     *(uint32_t*)(entry + 0x00) = color;
-    fn_String_Ctor_Copy(entry + 0x08, formatted);
+    new (entry + 0x08) System::String(formatted);
     *(int32_t*)(entry + 0x10) = eventType;
     *(int32_t*)(entry + 0x14) = severity;
     *(int32_t*)(entry + 0x18) = tileIdx;
@@ -261,12 +263,9 @@ static void EventLog_AddEventCore(void* eventLog, int eventType, int severity,
     int count = *(int*)((uintptr_t)eventLog + 0x20);
     EventArray_Grow((void*)((uintptr_t)eventLog + 0x18), count + 1, entry);
 
-    // Cleanup temporaries (the grow copied the entry's String).
-    fn_String_Dtor(entry + 0x08);
-    fn_String_Dtor(formatted);
-    fn_String_Dtor(templateStr);
-    fn_String_Dtor(seasonStr);
-    fn_String_Dtor(yearStr);
+    // Cleanup the entry's String (the grow copied it); yearStr/seasonStr/
+    // templateStr/formatted are released by their own scope.
+    reinterpret_cast<System::String*>(entry + 0x08)->~String();
 
     // --- Tail: critical events (0xb/0xc/0x1e/0x1f) drop the game to 1x speed
     // when the settings byte +0x17 ("pause on events") is set. Speed lives in
@@ -423,9 +422,10 @@ extern "C" void EventLog_ArrayGrow_Reg(void* arrBase, int newCount, const void* 
 }
 
 extern "C" void EventLog_YearString_Reg(void* gameWorld, void* retStr) {
-    EventLog_YearString(gameWorld, retStr);
+    // Retail constructs the result String in the caller's return slot.
+    new (retStr) System::String(EventLog_YearString(gameWorld));
 }
 
 extern "C" void EventLog_SeasonString_Reg(void* gameWorld, void* eventLog, void* retStr) {
-    EventLog_SeasonString(gameWorld, eventLog, retStr);
+    new (retStr) System::String(EventLog_SeasonString(gameWorld, eventLog));
 }

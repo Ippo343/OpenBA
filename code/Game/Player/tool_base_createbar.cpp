@@ -41,6 +41,8 @@
 //     read as 0 in standalone — filled lazily via ResolveAddr-then-GetTypeIdByName.
 
 #include "engine_funcs.h"
+#include "math/Math.h"
+#include "system/String.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include <cstdint>
@@ -57,9 +59,7 @@ namespace {
 // 0x140151470 / 0x1401528a8 / 0x140151308).
 // ---------------------------------------------------------------------------
 // Vector3::Min(this, retbuf, other) -> retbuf (member, hidden retbuf, componentwise min)
-typedef float* (*Vec3Min_t)(const void* self, void* retbuf, const void* other);
 // Transform::operator*(this, retbuf, vec) -> retbuf (member, transforms a point)
-typedef float* (*TransformMul_t)(const void* self, void* retbuf, const void* vec);
 // Box::GetCorners(this, outVec3x8) — fills 8 Vector3 (member, no retval)
 typedef void (*BoxGetCorners_t)(const void* self, void* outCorners);
 // Rectangle::Rectangle(this) — default ctor
@@ -71,8 +71,6 @@ typedef uint32_t (*Ec70_t)(uint64_t, int, int, int, int, float*);
 // FUN_1400fe960 (REG) — project N corners into a screen rectangle
 typedef uint8_t (*Fe960_t)(uint64_t, uint32_t, float*, void*);
 
-Vec3Min_t        s_fn_Vec3Min      = nullptr;
-TransformMul_t   s_fn_TransformMul = nullptr;
 BoxGetCorners_t  s_fn_BoxGetCorners = nullptr;
 RectCtor_t       s_fn_RectCtor     = nullptr;
 UIStrToSys_t     s_fn_UIStrToSys   = nullptr;
@@ -82,8 +80,6 @@ Fe960_t          s_fn_fe960        = nullptr;
 void EnsureCreateBarExports() {
     static bool s_ready = false;
     if (s_ready) return;
-    s_fn_Vec3Min       = reinterpret_cast<Vec3Min_t>(ResolveExport("?Min@Vector3@Math@@QEBA?AV12@AEBV12@@Z"));
-    s_fn_TransformMul  = reinterpret_cast<TransformMul_t>(ResolveExport("??DTransform@Math@@QEBA?AVVector3@1@AEBV21@@Z"));
     s_fn_BoxGetCorners = reinterpret_cast<BoxGetCorners_t>(ResolveExport("?GetCorners@Box@Volume@@QEBAXPEAVVector3@Math@@@Z"));
     s_fn_RectCtor      = reinterpret_cast<RectCtor_t>(ResolveExport("??0Rectangle@Volume@@QEAA@XZ"));
     s_fn_UIStrToSys    = reinterpret_cast<UIStrToSys_t>(ResolveExport("??BString@UI@@QEBA?AV0System@@XZ"));
@@ -92,7 +88,7 @@ void EnsureCreateBarExports() {
     s_fn_fe960 = reinterpret_cast<Fe960_t>(ResolveAddr(Module::Exe, 0x1400fe960));
     // Latch once everything critical resolved (retry next call otherwise). The
     // by-value math/rect helpers + fe960 are the ones that would crash if null.
-    if (s_fn_Vec3Min && s_fn_TransformMul && s_fn_BoxGetCorners && s_fn_RectCtor &&
+    if (s_fn_BoxGetCorners && s_fn_RectCtor &&
         s_fn_UIStrToSys && s_fn_ec70 && s_fn_fe960)
         s_ready = true;
 }
@@ -152,27 +148,23 @@ inline bool StringIsEmpty(const void* sysStr) {
 // Finds "textSize" on the controller's DialogInstance (controller+0x18), sets it
 // as text-parameter 0, and hides/shows the element by whether the string is empty.
 extern "C" void UpdateToolUI_e600(void* ctrl, void* str) {
-    uint8_t nameStr[8] = {};                          // System::String "textSize"
-    if (fn_String_Ctor_CStr) fn_String_Ctor_CStr(nameStr, "textSize");
+    System::String nameStr("textSize");
 
     void* dlgIBP = reinterpret_cast<uint8_t*>(ctrl) + 0x18;   // controller+0x18 = DialogInstance IBP
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(dlgIBP);
     void* dialog = *reinterpret_cast<void**>(dlgIBP);
 
     uint64_t elemBuf = 0;                              // InternalPtr retbuf
-    if (fn_DialogInstance_FindElement) fn_DialogInstance_FindElement(dialog, &elemBuf, nameStr);
+    if (fn_DialogInstance_FindElement) fn_DialogInstance_FindElement(dialog, &elemBuf, &nameStr);
     void* elem = reinterpret_cast<void*>(elemBuf);     // *retbuf = element ptr
-    if (fn_String_Dtor) fn_String_Dtor(nameStr);
 
     if (elem) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&elem);
         if (fn_TextElement_SetParameter) fn_TextElement_SetParameter(elem, 0, str);
 
         // hide/show by empty string
-        uint8_t tmp[8] = {};
-        if (fn_String_Ctor_Copy) fn_String_Ctor_Copy(tmp, str);
-        bool isEmpty = StringIsEmpty(tmp);
-        if (fn_String_Dtor) fn_String_Dtor(tmp);
+        System::String tmp(*reinterpret_cast<const System::String*>(str));
+        bool isEmpty = StringIsEmpty(&tmp);
 
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&elem);
         if (fn_Element_SetFlagsOnOff)
@@ -211,15 +203,13 @@ extern "C" void UpdateToolUI_e420(void* ctrl, void* costStr) {
         }
     }
 
-    uint8_t nameStr[8] = {};                           // System::String "textStatus"
-    if (fn_String_Ctor_CStr) fn_String_Ctor_CStr(nameStr, "textStatus");
+    System::String nameStr("textStatus");
     void* dlgIBP = reinterpret_cast<uint8_t*>(ctrl) + 0x18;
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(dlgIBP);
     void* dialog = *reinterpret_cast<void**>(dlgIBP);
     uint64_t elemBuf = 0;
-    if (fn_DialogInstance_FindElement) fn_DialogInstance_FindElement(dialog, &elemBuf, nameStr);
+    if (fn_DialogInstance_FindElement) fn_DialogInstance_FindElement(dialog, &elemBuf, &nameStr);
     void* elem = reinterpret_cast<void*>(elemBuf);
-    if (fn_String_Dtor) fn_String_Dtor(nameStr);
     if (!elem) {
         return;
     }
@@ -249,20 +239,16 @@ extern "C" void UpdateToolUI_e420(void* ctrl, void* costStr) {
     if (fn_UIString_Ctor)
         fn_UIString_Ctor(uiB, reinterpret_cast<uint64_t>(stringTable),
                          reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(comp) + 0x40));
-    uint8_t sysB[8] = {};
-    if (s_fn_UIStrToSys) s_fn_UIStrToSys(uiB, sysB);
+    System::String sysB;
+    if (s_fn_UIStrToSys) s_fn_UIStrToSys(uiB, &sysB);
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&elem);
-    if (fn_TextElement_SetParameter) fn_TextElement_SetParameter(elem, 0, sysB);
-    if (fn_String_Dtor) fn_String_Dtor(sysB);
+    if (fn_TextElement_SetParameter) fn_TextElement_SetParameter(elem, 0, &sysB);
 
     // hide/show by whether costString (UIString_A) is empty.
-    uint8_t sysA[8] = {};
-    if (s_fn_UIStrToSys) s_fn_UIStrToSys(uiA, sysA);
-    uint8_t sysA_copy[8] = {};
-    if (fn_String_Ctor_Copy) fn_String_Ctor_Copy(sysA_copy, sysA);
-    bool isEmpty = StringIsEmpty(sysA_copy);
-    if (fn_String_Dtor) fn_String_Dtor(sysA_copy);
-    if (fn_String_Dtor) fn_String_Dtor(sysA);
+    System::String sysA;
+    if (s_fn_UIStrToSys) s_fn_UIStrToSys(uiA, &sysA);
+    System::String sysA_copy(sysA);
+    bool isEmpty = StringIsEmpty(&sysA_copy);
 
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&elem);
     if (fn_Element_SetFlagsOnOff)
@@ -302,8 +288,7 @@ extern "C" void UpdateToolUI_e700(void* ctrl, uint32_t param_8) {
         int mult = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(ctrl) + 0x38);
         int val = *reinterpret_cast<int*>(sizeArr + static_cast<int64_t>(i) * 4) * mult;
 
-        uint8_t s[8] = {};
-        if (fn_String_Format) fn_String_Format(s, "%i", static_cast<uint64_t>(static_cast<uint32_t>(val)));
+        System::String s = System::String::Format("%i", static_cast<uint64_t>(static_cast<uint32_t>(val)));
 
         uintptr_t elemArr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(ctrl) + 0x40);
         void* elem = nullptr;
@@ -313,7 +298,7 @@ extern "C" void UpdateToolUI_e700(void* ctrl, uint32_t param_8) {
             elem = *reinterpret_cast<void**>(elemIBP);
         }
         if (elem) {
-            if (fn_TextElement_SetParameter) fn_TextElement_SetParameter(elem, 0, s);
+            if (fn_TextElement_SetParameter) fn_TextElement_SetParameter(elem, 0, &s);
         } else {
             // Loud: retail would have faulted here, so this means our controller state is
             // wrong upstream (label array shorter than the requirement count), not that the
@@ -327,7 +312,6 @@ extern "C" void UpdateToolUI_e700(void* ctrl, uint32_t param_8) {
                 fflush(stderr);
             }
         }
-        if (fn_String_Dtor) fn_String_Dtor(s);
     }
 }
 
@@ -338,14 +322,13 @@ extern "C" void UpdateToolUI_e700(void* ctrl, uint32_t param_8) {
 // UI::ImageElement, and calls its virtual slot +0x50 (SetColor) with the tint
 // (0xffffffff valid / 0xffff0000 invalid).
 extern "C" void UpdateToolUI_e360(void* ctrl, uint32_t color) {
-    uint8_t nameStr[8] = {};                           // System::String "imageIcon"
-    if (fn_String_Ctor_CStr) fn_String_Ctor_CStr(nameStr, "imageIcon");
+    System::String nameStr("imageIcon");
 
     void* dlgIBP = reinterpret_cast<uint8_t*>(ctrl) + 0x18;
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(dlgIBP);
     void* dialog = *reinterpret_cast<void**>(dlgIBP);
     uint64_t elemBuf = 0;
-    if (fn_DialogInstance_FindElement) fn_DialogInstance_FindElement(dialog, &elemBuf, nameStr);
+    if (fn_DialogInstance_FindElement) fn_DialogInstance_FindElement(dialog, &elemBuf, &nameStr);
     void* elemIBP = &elemBuf;
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(elemIBP);
     void* obj = *reinterpret_cast<void**>(elemIBP);
@@ -355,7 +338,6 @@ extern "C" void UpdateToolUI_e360(void* ctrl, uint32_t color) {
 
     uint64_t ibp = 0;
     if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&ibp, ptr);
-    if (fn_String_Dtor) fn_String_Dtor(nameStr);
 
     if (ibp != 0) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ibp);
@@ -378,15 +360,15 @@ extern "C" uint32_t UpdateToolUI_ebb0(void* /*dummy*/, void* box, void* transfor
     const float clampConst[3] = { 1000000.0f, 1000000.0f, 2.5f };  // 0x49742400,0x49742400,0x40200000
     float* corner = outCorners;
     for (int i = 0; i < 8; i++) {
-        if (s_fn_Vec3Min) {
-            float ret[3];
-            float* r = s_fn_Vec3Min(corner, ret, clampConst);
-            corner[0] = r[0]; corner[1] = r[1]; corner[2] = r[2];
+        {
+            Math::Vector3 r = reinterpret_cast<const Math::Vector3*>(corner)->Min(
+                *reinterpret_cast<const Math::Vector3*>(clampConst));
+            corner[0] = r.x; corner[1] = r.y; corner[2] = r.z;
         }
-        if (s_fn_TransformMul) {
-            float ret2[3];
-            float* r2 = s_fn_TransformMul(transform, ret2, corner);
-            corner[0] = r2[0]; corner[1] = r2[1]; corner[2] = r2[2];
+        {
+            Math::Vector3 r2 = reinterpret_cast<const Math::Transform*>(transform)->operator*(
+                *reinterpret_cast<const Math::Vector3*>(corner));
+            corner[0] = r2.x; corner[1] = r2.y; corner[2] = r2.z;
         }
         corner += 3;
     }
@@ -438,27 +420,23 @@ extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void*
 
     // --- Size text (controller-cached) ---
     if (param_6 == 0) {
-        uint8_t fmtBuf[8] = {};                        // System::String from Format
+        System::String fmtBuf;                         // System::String from Format
         if (param_7 == 0) {
-            if (fn_String_Format)
-                fn_String_Format(fmtBuf, "%ix%i",
+            fmtBuf = System::String::Format("%ix%i",
                                  static_cast<uint64_t>(static_cast<uint32_t>(param_2)),
                                  static_cast<uint64_t>(static_cast<uint32_t>(param_3)));
         } else {
-            if (fn_String_Format)
-                fn_String_Format(fmtBuf, "%i",
+            fmtBuf = System::String::Format("%i",
                                  static_cast<uint64_t>(static_cast<uint32_t>(param_2)));
         }
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ctrlIBP);
-        UpdateToolUI_e600(reinterpret_cast<void*>(ctrlIBP), fmtBuf);
-        if (fn_String_Dtor) fn_String_Dtor(fmtBuf);
+        UpdateToolUI_e600(reinterpret_cast<void*>(ctrlIBP), &fmtBuf);
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ctrlIBP);
         UpdateToolUI_e700(reinterpret_cast<void*>(ctrlIBP), static_cast<uint32_t>(param_8));
     } else {
-        uint8_t emptyStr[8] = {};                      // null System::String -> clears "textSize"
+        System::String emptyStr;                       // null System::String -> clears "textSize"
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ctrlIBP);
-        UpdateToolUI_e600(reinterpret_cast<void*>(ctrlIBP), emptyStr);
-        if (fn_String_Dtor) fn_String_Dtor(emptyStr);
+        UpdateToolUI_e600(reinterpret_cast<void*>(ctrlIBP), &emptyStr);
     }
 
     // --- Status text (cost) + icon tint ---
@@ -478,12 +456,12 @@ extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void*
         cornerCount = UpdateToolUI_ebb0(nullptr, param_11, param_12, corners);
         const float clampConst[3] = { 1000000.0f, 1000000.0f, 3.0f };  // 0x49742400,0x49742400,0x40400000
         for (int i = 0; i < 8; i++) {
-            if (s_fn_Vec3Min) {
-                float ret[3];
-                float* r = s_fn_Vec3Min(&corners[i * 3], ret, clampConst);
-                corners[i * 3 + 0] = r[0];
-                corners[i * 3 + 1] = r[1];
-                corners[i * 3 + 2] = r[2];
+            {
+                Math::Vector3 r = reinterpret_cast<const Math::Vector3*>(&corners[i * 3])->Min(
+                    *reinterpret_cast<const Math::Vector3*>(clampConst));
+                corners[i * 3 + 0] = r.x;
+                corners[i * 3 + 1] = r.y;
+                corners[i * 3 + 2] = r.z;
             }
         }
     } else {

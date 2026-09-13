@@ -26,6 +26,7 @@
 // stub), so this is unreachable today; it brings the class to parity with the
 // rest of the save/load wave for when the driver lands.
 #include "resolve.h"
+#include "math/Math.h"
 #include <cstdint>
 
 namespace {
@@ -34,13 +35,11 @@ typedef void (*fn_ComponentSerialize_t)(void* self, void* stream);
 typedef void (*fn_SerCtor_t)(void* ser, void* stream, int version);
 typedef void (*fn_SerDtor_t)(void* ser);
 typedef void (*fn_SerInt_t)(void* ser, void* field, const char* name);
-typedef void (*fn_Vector3Serialize_t)(void* vec3, void* ser);
 
 fn_ComponentSerialize_t s_Base = nullptr;  // 0x1401189b0
 fn_SerCtor_t            s_Ctor = nullptr;  // slot 0x140152ad8
 fn_SerDtor_t            s_Dtor = nullptr;  // slot 0x140152ad0
 fn_SerInt_t             s_Int  = nullptr;  // slot 0x140152ac8
-fn_Vector3Serialize_t   s_Vec3 = nullptr;  // Math::Vector3::Serialize (mangled export)
 
 bool s_resolved = false;
 
@@ -59,9 +58,6 @@ void Resolve() {
     if (slot) s_Dtor = *reinterpret_cast<fn_SerDtor_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152ac8);
     if (slot) s_Int = *reinterpret_cast<fn_SerInt_t*>(slot);
-
-    s_Vec3 = reinterpret_cast<fn_Vector3Serialize_t>(
-        ResolveExport("?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z"));
 
     s_resolved = true;
 }
@@ -83,7 +79,7 @@ extern "C" void AmbientEnvironmentComponent_Serialize(void* self, void* stream) 
     uint8_t ser[24];
     s_Ctor(ser, stream, 0);
 
-    if (s_Vec3) s_Vec3(At(self, 0x38), ser);
+    reinterpret_cast<Math::Vector3*>(At(self, 0x38))->Serialize(ser);   // B.3.1 bridge
     s_Int(ser, At(self, 0x28), nullptr);
     s_Int(ser, At(self, 0x2c), nullptr);
     s_Int(ser, At(self, 0x30), nullptr);

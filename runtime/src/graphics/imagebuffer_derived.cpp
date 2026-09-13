@@ -45,6 +45,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/math/Math.h"
 #include "../../types/graphics/FrameCopyImageBuffer.h"
 #include "../../types/graphics/GeneratedImageBuffer.h"
 #include "../../types/io/Serializer.h"
@@ -627,25 +628,17 @@ extern "C" bool RtGraphics_ReflectionImageBuffer_Serialize(void* self, Stream* s
 // the schedule is what the compiler chose, the arithmetic is what the function
 // means, and no observer can tell the two apart.
 // ============================================================================
+// ENDGAME B.3.1 step 2: the body MOVED onto `Math::Transform3::operator*`
+// (declared in runtime/types/math/Math.h, defined in
+// runtime/src/math/transform.cpp), and the derivation above moved with it.
+// What is left here is the one-line shim the registry row at the bottom of
+// this file still binds; it dies when that row does.
 extern "C" void* RtMath_Transform3_Multiply(const void* self, void* ret, const void* rhs);
 
 extern "C" void* RtMath_Transform3_Multiply(const void* self, void* ret, const void* rhs) {
-    const float* const a = static_cast<const float*>(self);
-    const float* const b = static_cast<const float*>(rhs);
-    float* const       o = static_cast<float*>(ret);
-
-    for (int row = 0; row < 4; ++row) {
-        const float x = a[row * 3 + 0];
-        const float y = a[row * 3 + 1];
-        const float z = a[row * 3 + 2];
-        for (int col = 0; col < 3; ++col) {
-            float v = x * b[0 + col];
-            v = v + y * b[3 + col];
-            v = v + z * b[6 + col];
-            if (row == 3) v = v + b[9 + col];      // the translation row only
-            o[row * 3 + col] = v;
-        }
-    }
+    *static_cast<Math::Transform3*>(ret) =
+        *static_cast<const Math::Transform3*>(self) *
+        *static_cast<const Math::Transform3*>(rhs);
     return ret;                                    // MOV RAX,RDX
 }
 
@@ -778,19 +771,11 @@ extern "C" void RtGraphics_ReflectionImageBuffer_Render(void* self, void* render
 
     const float d2 = d * two;                       // MULSS XMM0,XMM10
 
-    float reflect[12];
-    reflect[0]  = one - ((nx * two) * nx);
-    reflect[1]  = (nx * negTwo) * ny;
-    reflect[2]  = (nx * negTwo) * nz;
-    reflect[3]  = (ny * negTwo) * nx;
-    reflect[4]  = one - ((ny * two) * ny);
-    reflect[5]  = (ny * negTwo) * nz;
-    reflect[6]  = (nz * negTwo) * nx;
-    reflect[7]  = (nz * negTwo) * ny;
-    reflect[8]  = one - ((nz * two) * nz);
-    reflect[9]  = nx * d2;
-    reflect[10] = ny * d2;
-    reflect[11] = nz * d2;
+    Math::Transform3 reflect;
+    reflect.axisX       = { one - ((nx * two) * nx), (nx * negTwo) * ny, (nx * negTwo) * nz };
+    reflect.axisY       = { (ny * negTwo) * nx, one - ((ny * two) * ny), (ny * negTwo) * nz };
+    reflect.axisZ       = { (nz * negTwo) * nx, (nz * negTwo) * ny, one - ((nz * two) * nz) };
+    reflect.translation = { nx * d2, ny * d2, nz * d2 };
 
     // ---- mirror the camera --------------------------------------------------
     // The camera's world transform is twelve floats at +0x64 (0x1800a6d27 ..
@@ -798,16 +783,15 @@ extern "C" void RtGraphics_ReflectionImageBuffer_Render(void* self, void* render
     // stack copy — retail does NOT pass &camera->transform directly, and the
     // copy is reproduced because `operator*` takes `this` by pointer and would
     // otherwise alias the live camera).
-    float cameraToWorld[12];
-    std::memcpy(cameraToWorld,
+    Math::Transform3 cameraToWorld;
+    std::memcpy(&cameraToWorld,
                 static_cast<const uint8_t*>(camera) + 0x64, sizeof cameraToWorld);
 
-    float mirrored[12];
-    RtMath_Transform3_Multiply(cameraToWorld, mirrored, reflect);
+    const Math::Transform3 mirrored = cameraToWorld * reflect;
 
     alignas(8) uint8_t mirrorCam[kCameraSize];
     CameraCopyCtor(mirrorCam, camera);
-    std::memcpy(mirrorCam + 0x64, mirrored, sizeof mirrored);
+    std::memcpy(mirrorCam + 0x64, &mirrored, sizeof mirrored);
 
     // ---- the draw group -----------------------------------------------------
     alignas(8) uint8_t group[kGroupSize];

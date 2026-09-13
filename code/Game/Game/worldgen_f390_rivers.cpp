@@ -50,6 +50,7 @@
 // declared extern and must be wired in engine_funcs before this links.
 
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstring>
@@ -91,13 +92,6 @@ static constexpr uint32_t kSignBit = 0x80000000u;// 0x1401722c0               fl
 extern "C" {
 // System::Random::RandFloatTol()  ?RandFloatTol@Random@System@@QEAAMXZ
 float fn_Random_RandFloatTol(void* self);
-// Math::Vector2::Dot(Vector2 const&) — writes dot into out[0] (self·other style);
-// in cd460 it is called Dot(&v,&v) to get LengthSquared into out[0].
-void  fn_Vector2_Dot(void* a, void* out_and_b);
-// Math::Vector2::Length() const — returns length; in cd460 result lands in out[0].
-void  fn_Vector2_Length(void* self_out);
-// Math::Vector2::Normalize() — normalizes in place, returns ptr to packed {x,y}.
-void* fn_Vector2_Normalize(void* self, void* scratch);
 }
 
 // CRT libm leaves (verified: sub_1460 = powf, FUN_140132010 = sqrtf).
@@ -336,8 +330,9 @@ extern "C" void wg_f390_rivers(void* hfp) {
         const uint8_t* sd = *(const uint8_t**)(scratch + 0x00);
         for (int j = 0; j < scratchCount; ++j) {
             const float* sp = (const float*)(sd + (size_t)j * 0xC);
-            float dv[2] = { newX - sp[0], newY - sp[1] };  // {dx, dy} = retail local_res18/1c
-            float dot;  fn_Vector2_Dot(dv, &dot);          // |d|^2 into dot
+            // {dx, dy} = retail local_res18/1c; retail calls Dot(&d, &d) for |d|^2.
+            Math::Vector2 dv(newX - sp[0], newY - sp[1]);
+            float dot = dv.Dot(dv).v;
             float len = wg_sqrtf(dot);
             if (len + fE < sp[2]) { reject = true; break; }
         }
@@ -375,8 +370,8 @@ extern "C" void wg_f390_rivers(void* hfp) {
         int joined = -1;
         for (int j = 0; j < i; ++j) {
             const float* pj = (const float*)(rd + (size_t)j * 0xC);
-            float dv[2] = { pi[0] - pj[0], pi[1] - pj[1] };
-            float dot;  fn_Vector2_Dot(dv, &dot);
+            Math::Vector2 dv(pi[0] - pj[0], pi[1] - pj[1]);
+            float dot = dv.Dot(dv).v;
             float len = wg_sqrtf(dot);
             if (len * kJoinThresh < pi[2] + pj[2]) { joined = labels[j]; break; }
         }

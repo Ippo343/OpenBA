@@ -39,6 +39,7 @@
 //   fog start=1000 end=1001 color(1,1,1,1); clear color 0xff000000 then 0xffff00ff.
 
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "options.h"
 #include "resolve.h"
 #include <cstdint>
@@ -59,9 +60,7 @@ typedef void  (*fn_RenderBuffer_Dtor_t)(void* self);
 typedef void* (*fn_Frustum_Ortho_Ctor_t)(void* self, bool ortho, const void* near_,
                                           const void* far_, const void* s3,
                                           const void* s4, const void* s5, const void* s6);
-typedef void* (*fn_Quaternion_FromYawPitch_t)(void* retQuat, const void* yaw, const void* pitch);
 typedef void  (*fn_Camera_SnapToWorld_t)(void* cam, void* transform3);
-typedef void* (*fn_Transform3_AsMatrix_t)(void* self, void* retMatrix);
 typedef void  (*fn_Context_SetCamera_t)(void* ctx, void* viewMatrix, void* projMatrix);
 typedef void  (*fn_Context_SetViewport_t)(void* ctx, void* viewport);
 typedef void  (*fn_Context_Clear_t)(void* ctx, unsigned flags, unsigned color, float depth, int stencil);
@@ -79,9 +78,7 @@ fn_RenderBuffer_Ctor_t         s_RenderBuffer_Ctor      = nullptr;
 fn_RenderBuffer_Create_t       s_RenderBuffer_Create    = nullptr;
 fn_RenderBuffer_Dtor_t         s_RenderBuffer_Dtor      = nullptr;
 fn_Frustum_Ortho_Ctor_t        s_Frustum_Ortho_Ctor     = nullptr;
-fn_Quaternion_FromYawPitch_t   s_Quaternion_FromYawPitch = nullptr;
 fn_Camera_SnapToWorld_t        s_Camera_SnapToWorld     = nullptr;
-fn_Transform3_AsMatrix_t       s_Transform3_AsMatrix    = nullptr;
 fn_Context_SetCamera_t         s_Context_SetCamera      = nullptr;
 fn_Context_SetViewport_t       s_Context_SetViewport    = nullptr;
 fn_Context_Clear_t             s_Context_Clear          = nullptr;
@@ -103,9 +100,7 @@ bool ResolveFuncs() {
     s_RenderBuffer_Create  = (fn_RenderBuffer_Create_t) ResolveExport("?Create@RenderBuffer@Video@@QEAA_NPEBVImageBuffer@2@0@Z");
     s_RenderBuffer_Dtor    = (fn_RenderBuffer_Dtor_t)   ResolveExport("??1RenderBuffer@Video@@QEAA@XZ");
     s_Frustum_Ortho_Ctor   = (fn_Frustum_Ortho_Ctor_t)  ResolveExport("??0Frustum@Volume@@QEAA@_NAEBVScalar@Math@@11111@Z");
-    s_Quaternion_FromYawPitch = (fn_Quaternion_FromYawPitch_t) ResolveExport("?FromYawPitch@Quaternion@Math@@SA?AV12@AEBVScalar@2@0@Z");
     s_Camera_SnapToWorld   = (fn_Camera_SnapToWorld_t)  ResolveExport("?SnapCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z");
-    s_Transform3_AsMatrix  = (fn_Transform3_AsMatrix_t) ResolveExport("?AsMatrix@Transform3@Math@@QEBA?AVMatrix@2@XZ");
     s_Context_SetCamera    = (fn_Context_SetCamera_t)   ResolveExport("?SetCamera@Context@Video@@QEAAXAEBVMatrix@Math@@0@Z");
     s_Context_SetViewport  = (fn_Context_SetViewport_t) ResolveExport("?SetViewport@Context@Video@@QEAAXAEBVViewport@2@@Z");
     s_Context_Clear        = (fn_Context_Clear_t)       ResolveExport("?Clear@Context@Video@@QEAAXIIMH@Z");
@@ -117,8 +112,8 @@ bool ResolveFuncs() {
     s_Scene_RemoveGlobalObject = (fn_Scene_RemoveGlobalObject_t) ResolveExport("?RemoveGlobalObject@Scene@Graphics@@QEAAXPEAVGeometry@2@@Z");
 
     s_ok = s_RenderBuffer_Ctor && s_RenderBuffer_Create && s_RenderBuffer_Dtor &&
-           s_Frustum_Ortho_Ctor && s_Quaternion_FromYawPitch && s_Camera_SnapToWorld &&
-           s_Transform3_AsMatrix && s_Context_SetCamera && s_Context_SetViewport &&
+           s_Frustum_Ortho_Ctor && s_Camera_SnapToWorld &&
+           s_Context_SetCamera && s_Context_SetViewport &&
            s_Context_Clear && s_Context_SetRenderBuffer && s_Context_SetDefaultRenderBuffer &&
            s_Context_Reset && s_Renderer_Dtor && s_Scene_Dtor && s_Scene_RemoveGlobalObject &&
            // engine_funcs primitives this port relies on:
@@ -131,11 +126,11 @@ bool ResolveFuncs() {
 
     if (!s_ok) {
         printf("[MinimapPaint] primitives unresolved — terrain paint disabled\n"
-               "  RB(ctor=%p create=%p dtor=%p) Frustum=%p Quat=%p Snap=%p AsMat=%p\n"
+               "  RB(ctor=%p create=%p dtor=%p) Frustum=%p Snap=%p\n"
                "  Ctx(cam=%p vp=%p clr=%p srb=%p sdrb=%p reset=%p) Rdtor=%p Sdtor=%p Rmv=%p vcfg=%p\n",
                (void*)s_RenderBuffer_Ctor, (void*)s_RenderBuffer_Create, (void*)s_RenderBuffer_Dtor,
-               (void*)s_Frustum_Ortho_Ctor, (void*)s_Quaternion_FromYawPitch, (void*)s_Camera_SnapToWorld,
-               (void*)s_Transform3_AsMatrix, (void*)s_Context_SetCamera, (void*)s_Context_SetViewport,
+               (void*)s_Frustum_Ortho_Ctor, (void*)s_Camera_SnapToWorld,
+               (void*)s_Context_SetCamera, (void*)s_Context_SetViewport,
                (void*)s_Context_Clear, (void*)s_Context_SetRenderBuffer, (void*)s_Context_SetDefaultRenderBuffer,
                (void*)s_Context_Reset, (void*)s_Renderer_Dtor, (void*)s_Scene_Dtor,
                (void*)s_Scene_RemoveGlobalObject, (void*)g_pVideoConfigSingleton);
@@ -210,38 +205,34 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context,
     // via a hidden return buffer in RCX — the engine_funcs typedef is nullary, so call
     // it through a retbuf-aware signature to avoid writing the identity to a garbage
     // stack slot (which corrupts adjacent buffers -> NaN projection / access violation).
-    typedef void* (*fn_Transform3_Identity_ret_t)(void* retbuf);
-    alignas(16) uint8_t identityBuf[64];
-    ((fn_Transform3_Identity_ret_t)fn_Math_Transform3_Identity)(identityBuf);
-    void* identity = identityBuf;
+    Math::Transform3 identity = Math::Transform3::Identity();
 
     alignas(16) uint8_t camera[256];
-    fn_Graphics_Camera_Ctor(camera, frustumRet, identity, /*isPerspective*/true);
+    fn_Graphics_Camera_Ctor(camera, frustumRet, &identity, /*isPerspective*/true);
 
     // Look straight down (yaw 0, pitch -90deg), positioned at world (0,0,100).
     const float yaw   = 0.0f;
     const float pitch = -90.0f;      // DAT_14017229c
     const float camZ  = 100.0f;      // DAT_140172208
 
-    alignas(16) uint8_t quat[16];
-    s_Quaternion_FromYawPitch(quat, &yaw, &pitch);
+    Math::Quaternion quat = Math::Quaternion::FromYawPitch(yaw, pitch);
 
     // Math::Transform = quaternion (xyzw) + position (xyz).
     alignas(16) uint8_t transform[32];
-    std::memcpy(transform, quat, 16);
+    std::memcpy(transform, &quat, 16);
     *reinterpret_cast<float*>(transform + 0x10) = 0.0f;   // pos.x
     *reinterpret_cast<float*>(transform + 0x14) = 0.0f;   // pos.y
     *reinterpret_cast<float*>(transform + 0x18) = camZ;   // pos.z
 
-    alignas(16) uint8_t transform3[64];
-    fn_Transform_AsTransform3(transform, transform3);
-    s_Camera_SnapToWorld(camera, transform3);
+    Math::Transform3 transform3 =
+        reinterpret_cast<const Math::Transform*>(transform)->AsTransform3();
+    s_Camera_SnapToWorld(camera, &transform3);
 
     // View matrix from the camera's cameraToWorld transform (cam+0x64); projection
     // matrix is stored at cam+0x94 — exactly the raw reads FUN_1400a5140 inlines.
-    alignas(16) uint8_t viewMatrix[64];
-    s_Transform3_AsMatrix((void*)(camera + 0x64), viewMatrix);
-    s_Context_SetCamera(context, viewMatrix, camera + 0x94);
+    Math::Matrix viewMatrix =
+        reinterpret_cast<const Math::Transform3*>(camera + 0x64)->AsMatrix();
+    s_Context_SetCamera(context, &viewMatrix, camera + 0x94);
 
     // Viewport {x=0, y=0, w=width, h=width}.
     int32_t viewport[4] = { 0, 0, width, width };

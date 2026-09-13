@@ -38,6 +38,7 @@
 #include "Game/uifade.h"
 #include <cstdio>
 #include <cstdint>
+#include "system/String.h"   // -Iruntime/types
 #include <windows.h>
 
 // Defined in code/Game/Game/gameupdateloop_load.cpp. Returns true once the
@@ -66,8 +67,6 @@ static void TipBail(const char* why, const void* p) {
 void SetRandomLoadingTip(DialogLoaderLoopT* self) {
     if (!self) { TipBail("self==null", nullptr); return; }
     if (!self->m_dialogInstance) { TipBail("m_dialogInstance==null", self); return; }
-    if (!fn_String_Ctor_CStr)            { TipBail("fn_String_Ctor_CStr", nullptr); return; }
-    if (!fn_String_Dtor)                 { TipBail("fn_String_Dtor", nullptr); return; }
     if (!fn_DialogInstance_FindElement)  { TipBail("fn_DialogInstance_FindElement", nullptr); return; }
     if (!fn_StringTable_GetCount)        { TipBail("fn_StringTable_GetCount", nullptr); return; }
     if (!fn_Random_Rand)                 { TipBail("fn_Random_Rand", nullptr); return; }
@@ -76,11 +75,9 @@ void SetRandomLoadingTip(DialogLoaderLoopT* self) {
 
     // Find "descText" in the dialog instance (member value-return ABI:
     // RCX=this, RDX=retbuf, R8=name — the typedef carries all three).
-    uint8_t nameStr[8];
-    fn_String_Ctor_CStr(nameStr, "descText");
+    const System::String nameStr("descText");
     uint64_t elemBuf = 0;
-    fn_DialogInstance_FindElement(self->m_dialogInstance, &elemBuf, nameStr);
-    fn_String_Dtor(nameStr);
+    fn_DialogInstance_FindElement(self->m_dialogInstance, &elemBuf, &nameStr);
 
     // Normalise the missing-element sentinel (0xffffffff........) to null.
     uintptr_t raw = static_cast<uintptr_t>(elemBuf);

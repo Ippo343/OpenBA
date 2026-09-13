@@ -20,6 +20,7 @@
 // Decompiled from Application-x64.exe (READ-ONLY recon).
 
 #include "engine_funcs.h"
+#include "system/String.h"
 #include "resolve.h"
 #include <cstdint>
 
@@ -38,14 +39,14 @@ static void CaptureBoxDescription_Init(void* self) {
 void CaptureBoxDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!fn_ElementDescription_Serialize || !g_fn_Serializer_Ctor ||
-        !g_fn_Serializer_Dtor || !fn_ExternalPtr_Serialize || !g_fn_String_Serialize) {
+        !g_fn_Serializer_Dtor || !fn_ExternalPtr_Serialize) {
         return;
     }
     fn_ElementDescription_Serialize(self, stream);           // base
     uint8_t serializer[24];
     g_fn_Serializer_Ctor(serializer, stream, 0);
     fn_ExternalPtr_Serialize(s + 0x68, serializer);          // ExternalPtr +0x68
-    g_fn_String_Serialize(s + 0x70, serializer);             // String      +0x70
+    reinterpret_cast<System::String*>(s + 0x70)->Serialize(serializer);             // B.3.1 bridge: String      +0x70
     g_fn_Serializer_Dtor(serializer);
 }
 
@@ -53,7 +54,7 @@ void* CaptureBoxDescription_Dtor(void* self, uint32_t flags) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     uintptr_t vt = ResolveAddr(Module::Exe, kCaptureBoxDescriptionVtable);
     if (vt) *(void**)self = (void*)vt;
-    if (fn_String_Dtor) fn_String_Dtor(s + 0x70);            // String +0x70
+    reinterpret_cast<System::String*>(s + 0x70)->~String();            // B.3.1 bridge: String +0x70
     if (fn_ElementDescription_Dtor) fn_ElementDescription_Dtor(self);
     if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
     return self;

@@ -9,6 +9,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -49,13 +50,15 @@ void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
 
     // Find "comboProduct" element via DialogInstance
     void* dialogInst = *(void**)(s + 0x18);
-    uint8_t nameBuf[8];
-    fn_String_Ctor_CStr(nameBuf, "comboProduct");
 
     // Check if element exists (first FindElement call to test)
-    uint64_t testBuf = 0;
-    fn_DialogInstance_FindElement(dialogInst, &testBuf, nameBuf);
-    bool hasCombo = (testBuf != 0);
+    bool hasCombo;
+    {
+        System::String nameStr("comboProduct");
+        uint64_t testBuf = 0;
+        fn_DialogInstance_FindElement(dialogInst, &testBuf, &nameStr);
+        hasCombo = (testBuf != 0);
+    }
     {
         static int nh = 0;
         if (nh < 6) {
@@ -64,13 +67,12 @@ void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
             fflush(stderr);
         }
     }
-    fn_String_Dtor(nameBuf);
 
     if (hasCombo) {
         // Find "comboProduct" again, wrap as InternalBasePtr, check ComboElement type
-        fn_String_Ctor_CStr(nameBuf, "comboProduct");
+        System::String nameStr("comboProduct");
         uint8_t elemBuf[16];
-        fn_DialogInstance_FindElement(dialogInst, elemBuf, nameBuf);
+        fn_DialogInstance_FindElement(dialogInst, elemBuf, &nameStr);
         void* foundElem = *(void**)elemBuf;
 
         // IsDerivedFrom ComboElement type check
@@ -79,7 +81,6 @@ void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
         uint64_t comboBP = 0;
         fn_InternalBasePtr_Ctor(&comboBP, comboRaw);
         *(uint64_t*)(s + 0x30) = comboBP;
-        fn_String_Dtor(nameBuf);
 
         // Set element ID 22000
         fn_Element_SetElementId((void*)*(uint64_t*)(s + 0x30), 22000);
@@ -148,8 +149,8 @@ void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
             fn_UIString_Ctor(uiStrBuf, stringTable, (void*)nameAddr);
 
             // Convert UI::String to System::String
-            uint8_t sysStrBuf[8];
-            fn_UIString_ToSystemString(uiStrBuf, sysStrBuf);
+            System::String sysStr;
+            fn_UIString_ToSystemString(uiStrBuf, &sysStr);
 
             // Create UI::Sprite from ResourceDescription
             // resourceDesc+0x20 = sprite sheet, resourceDesc+0x38 = sprite name
@@ -159,8 +160,7 @@ void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
             fn_Sprite_Ctor(spriteBuf, *(uint64_t*)(rd + 0x20), (void*)(rd + 0x38));
 
             // Add item to combo: sprite, string, null userData
-            fn_ComboElement_AddItem(comboElem, spriteBuf, sysStrBuf, nullptr);
-            fn_String_Dtor(sysStrBuf);
+            fn_ComboElement_AddItem(comboElem, spriteBuf, &sysStr, nullptr);
         }
 
         // Get current product index and set combo selection
@@ -176,16 +176,18 @@ void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
     }
 
     // Find "progressRemaining" element
-    fn_String_Ctor_CStr(nameBuf, "progressRemaining");
-    uint64_t testBuf2 = 0;
-    fn_DialogInstance_FindElement(dialogInst, &testBuf2, nameBuf);
-    bool hasProgress = (testBuf2 != 0);
-    fn_String_Dtor(nameBuf);
+    bool hasProgress;
+    {
+        System::String nameStr("progressRemaining");
+        uint64_t testBuf2 = 0;
+        fn_DialogInstance_FindElement(dialogInst, &testBuf2, &nameStr);
+        hasProgress = (testBuf2 != 0);
+    }
 
     if (hasProgress) {
-        fn_String_Ctor_CStr(nameBuf, "progressRemaining");
+        System::String nameStr("progressRemaining");
         uint8_t elemBuf2[16];
-        fn_DialogInstance_FindElement(dialogInst, elemBuf2, nameBuf);
+        fn_DialogInstance_FindElement(dialogInst, elemBuf2, &nameStr);
         void* progElem = *(void**)elemBuf2;
 
         // Check ProgressElement type
@@ -194,7 +196,6 @@ void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
         uint64_t progBP = 0;
         fn_InternalBasePtr_Ctor(&progBP, progRaw);
         *(uint64_t*)(s + 0x38) = progBP;
-        fn_String_Dtor(nameBuf);
 
         // Set initial progress to 1.0f at element+0x124
         void* progFinal = (void*)*(uint64_t*)(s + 0x38);
@@ -252,12 +253,10 @@ void ConsumeProduceUI_Slot7(ConsumeProduceUI* self) {
 
     // Format as integer percentage: (int)(ratio * 100.0 + 0.5)
     int percent = (int)(ratio * 100.0f + 0.5f);
-    uint8_t strBuf[8];
-    fn_String_Format(strBuf, "%i", (uint64_t)(uint32_t)percent);
+    System::String str = System::String::Format("%i", (uint64_t)(uint32_t)percent);
 
     // Set on progress element
-    fn_ProgressElement_SetProgressTextParameter(progPtr, 0, strBuf);
-    fn_String_Dtor(strBuf);
+    fn_ProgressElement_SetProgressTextParameter(progPtr, 0, &str);
 }
 
 // ============================================================
