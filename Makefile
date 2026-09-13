@@ -108,6 +108,30 @@ PYTHON ?= python
 check-log-strip:
 	@$(PYTHON) tools/check_log_strip.py
 
+# ============================================================
+# Host unit tests (ENDGAME B): the real classes standing on their own.
+# tests/unit/README.md. `make unit` builds and runs tests/unit/build/unit.exe.
+# Object names flatten the path with "__" like SA_OBJECTS; the rule maps back.
+# ============================================================
+include tests/unit/sources.mk
+UNIT_BUILD_DIR = tests/unit/build
+UNIT_SRCS = $(wildcard tests/unit/*.cpp) $(UNIT_TREE_SRCS)
+UNIT_OBJECTS = $(addprefix $(UNIT_BUILD_DIR)/, $(subst /,__,$(UNIT_SRCS:.cpp=.o)))
+UNIT_CXXFLAGS = -std=c++17 -fno-strict-aliasing -Wall -Wextra -g -O0 -D_DEBUG -DBANISHED_UNIT_TEST -MMD -MP
+.PHONY: unit
+unit: $(UNIT_BUILD_DIR)/unit.exe
+	@$(UNIT_BUILD_DIR)/unit.exe
+$(UNIT_BUILD_DIR)/unit.exe: $(UNIT_OBJECTS)
+	$(CXX) $(UNIT_OBJECTS) -o $@ -static-libgcc -static-libstdc++
+$(UNIT_BUILD_DIR):
+	@mkdir -p $(UNIT_BUILD_DIR)
+define UNIT_OBJ_RULE
+$$(UNIT_BUILD_DIR)/$(subst /,__,$(1:.cpp=.o)): $(1) | $$(UNIT_BUILD_DIR)
+	$$(CXX) $$(UNIT_CXXFLAGS) $$(SA_INCLUDES) -Itests/unit -c $$< -o $$@
+endef
+$(foreach src,$(UNIT_SRCS),$(eval $(call UNIT_OBJ_RULE,$(src))))
+-include $(UNIT_OBJECTS:.o=.d)
+
 # WAVE 26 LANE ATTEND: gate the build on standalone/cutover_manifest.inc, which
 # is a GENERATED file that nothing regenerated.
 #
