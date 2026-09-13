@@ -9,6 +9,9 @@
 #include <windows.h>
 #include "options.h"
 #include <cstdint>
+#include "math/Math.h"
+#include "system/String.h"
+#include "system/Filename.h"
 
 // ============================================================
 // Timer globals (in Runtime-x64.dll .data section)
@@ -159,49 +162,6 @@ extern fn_VideoDevice_Unlock_t fn_VideoDevice_Unlock;
 // System::String function pointers
 // ============================================================
 
-// String::Set(const char*) — releases old data, copies new
-// Member function: RCX=this(String*), RDX=const char* src
-typedef void (*fn_String_Set_t)(void* thisStr, const char* src);
-extern fn_String_Set_t fn_String_Set;
-
-// String::Format(const char*, ...) — static, creates formatted string
-// MSVC ABI: hidden return pointer in RCX (String*), RDX=fmt, R8/R9/stack=varargs
-// Returns: pointer to the return String (same as RCX)
-typedef void* (*fn_String_Format_t)(void* retval, const char* fmt, ...);
-extern fn_String_Format_t fn_String_Format;
-
-// System::String::FormatIndexed(retbuf, fmt, arg0data, arg1data, ...) -> String
-// Static, non-trivial return: RCX=retbuf, RDX=fmt(char*), R8+=positional arg data
-// pointers (char*). The fmt uses %0/%1/... to reference the positional args.
-// ?FormatIndexed@String@System@@SA?AV12@PEBDZZ. Used by the event log (AddEvent).
-typedef void* (*fn_String_FormatIndexed_t)(void* retval, const char* fmt, ...);
-extern fn_String_FormatIndexed_t fn_String_FormatIndexed;
-
-// String::~String() — decrements refcount, frees if reaches 0
-// Member function: RCX=this(String*)
-typedef void (*fn_String_Dtor_t)(void* thisStr);
-extern fn_String_Dtor_t fn_String_Dtor;
-
-// String::operator<(String const&) — lexicographic comparison
-// Member function: RCX=this, RDX=other, returns bool
-typedef bool (*fn_String_LessThan_t)(const void* thisStr, const void* other);
-extern fn_String_LessThan_t fn_String_LessThan;
-
-// String::String() — default ctor, zeroes the data pointer
-// Member function: RCX=this(String*), returns this
-typedef void* (*fn_String_Ctor_Default_t)(void* thisStr);
-extern fn_String_Ctor_Default_t fn_String_Ctor_Default;
-
-// String::String(const char*) — ctor from C string, calls Set internally
-// Member function: RCX=this(String*), RDX=const char* src, returns this
-typedef void* (*fn_String_Ctor_CStr_t)(void* thisStr, const char* src);
-extern fn_String_Ctor_CStr_t fn_String_Ctor_CStr;
-
-// String::String(String const&) — copy ctor, increments refcount
-// Member function: RCX=this(String*), RDX=const String& src, returns this
-typedef void* (*fn_String_Ctor_Copy_t)(void* thisStr, const void* src);
-extern fn_String_Ctor_Copy_t fn_String_Ctor_Copy;
-
 // ============================================================
 // Object::ExternalFactory
 // ============================================================
@@ -262,13 +222,6 @@ extern fn_IsDerivedFrom_t fn_IsDerivedFrom;
 
 // Type ID for External resource (used by dialog Load methods)
 extern uint32_t* g_pExternalTypeId;
-
-// System::Filename::AdjustDelimiters(this) — retail 0x1800c6970.
-// The export is ?AdjustDelimiters@Filename@System@@AEAAXXZ: AEAA, a PRIVATE
-// member. We resolved it as QEAA (public) for months, a mangling the DLL does
-// not contain, and only the ResolveAddr fallback kept the pointer non-null.
-typedef void (*fn_Filename_AdjustDelimiters_t)(void* self);
-extern fn_Filename_AdjustDelimiters_t fn_Filename_AdjustDelimiters;
 
 // UpdateLoop::LoadResources(this) — base class resource loading
 typedef void (*fn_UpdateLoop_LoadResources_t)(void* self);
@@ -351,12 +304,6 @@ extern fn_Persistence_SetInt_t fn_Persistence_SetInt;
 // ============================================================
 // System::Filename helpers
 // ============================================================
-
-// Filename::GetPathFilename(self, retval, stripExt) — const member, non-trivial return
-// Extracts filename portion (no path, optionally no extension).
-// RCX=self(const Filename*), RDX=retval(Filename*), R8B=stripExtension
-typedef void* (*fn_Filename_GetPathFilename_t)(const void* self, void* retval, bool stripExt);
-extern fn_Filename_GetPathFilename_t fn_Filename_GetPathFilename;
 
 // ============================================================
 // Dynamic array operations (for Mod array management)
@@ -1758,12 +1705,6 @@ extern fn_EntityPanel_SyncTracking_t fn_EntityPanel_SyncTracking;
 typedef void* (*fn_CameraSys_ComputeViewTransform_t)(void* cameraSys, void* outTransform);
 extern fn_CameraSys_ComputeViewTransform_t fn_CameraSys_ComputeViewTransform;
 
-// Math::Transform::AsTransform3 — converts compact Transform (0x1C bytes) to Transform3 (48 bytes)
-// Non-trivial return: RCX=this(Transform*), RDX=retval(Transform3*)
-// Runtime export: ?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ
-typedef void* (*fn_Transform_AsTransform3_t)(void* self, void* retval);
-extern fn_Transform_AsTransform3_t fn_Transform_AsTransform3;
-
 // Graphics::Camera::SetCameraToWorld — sets camera world transform from Transform3
 // Runtime export: ?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z
 typedef void (*fn_Camera_SetCameraToWorld_t)(void* camera, void* transform3);
@@ -1795,12 +1736,6 @@ extern uint32_t* g_TypeId_ComboElement;
 typedef void* (*fn_FindDialogByName_t)(void* retval, void* name);
 extern fn_FindDialogByName_t fn_FindDialogByName;
 
-// Forward declarations needed by ResolveExternalByName_Impl below
-typedef void* (*fn_Filename_CtorString_t)(void* self, const void* str);
-extern fn_Filename_CtorString_t fn_Filename_CtorString;
-typedef void (*fn_Filename_Dtor_t)(void* self);
-extern fn_Filename_Dtor_t fn_Filename_Dtor;
-
 // ResolveExternalByName (FUN_14001b1d0 in exe) — REPLACED with inline C++
 // Resolves and caches an External object by filename.
 // Input: nameString points to an ExternalRef struct:
@@ -1822,11 +1757,10 @@ inline void ResolveExternalByName_Impl(void* nameString) {
     int32_t factoryGen = *(int32_t*)((uintptr_t)factory + 0x08);
     if (refGen == factoryGen) return;
 
-    // Convert String to Filename, look up in factory
-    uint8_t filename[8] = {};
-    fn_Filename_CtorString(filename, (const void*)s);
-    void* found = fn_ExternalFactory_Find(factory, filename);
-    fn_Filename_Dtor(filename);
+    // Convert String to Filename, look up in factory.
+    // ??0Filename@System@@QEAA@AEBVString@1@@Z  retail 0x1800c6360
+    System::Filename filename(*reinterpret_cast<const System::String*>(s));
+    void* found = fn_ExternalFactory_Find(factory, &filename);
 
     // Validate the found object is the expected type (Description base).
     // In standalone the exe-side type-id storage (g_TypeId_ComponentDescription_FC ->
@@ -1893,17 +1827,6 @@ extern float* g_pNotifyTimerDuration;
 // ??0Time@System@@QEAA@M@Z
 typedef void* (*fn_Time_Ctor_Float_t)(void* retval, float seconds);
 extern fn_Time_Ctor_Float_t fn_Time_Ctor_Float;
-
-// System::String::SubString(this, retval, startIndex, endIndex) -> String (member, non-trivial return)
-// RCX=this, RDX=retval(String*), R8=startIndex, R9=endIndex
-// ?SubString@String@System@@QEBA?AV12@HH@Z
-typedef void* (*fn_String_SubString_t)(void* self, void* retval, int startIndex, int endIndex);
-extern fn_String_SubString_t fn_String_SubString;
-
-// System::String::operator=(this, other) -> String& — string assignment
-// ?operator=@String@System@@QEAAAEAV12@AEBV12@@Z
-typedef void* (*fn_String_Assign_t)(void* self, const void* other);
-extern fn_String_Assign_t fn_String_Assign;
 
 // UI::String::String(retval, ExternalPtr<StringTable>) — single-arg ctor from string table entry
 // Non-trivial return: RCX=retval(UIString*, 16 bytes), RDX=externalPtr(8 bytes)
@@ -1989,11 +1912,6 @@ extern fn_ContainerElement_SetOffsets_t fn_ContainerElement_SetOffsets;
 // ??0String@UI@@QEAA@V?$ExternalPtr@VStringTable@UI@@@Object@@H@Z
 typedef void* (*fn_UIString_Ctor_Index_t)(void* self, uint64_t stringTable, int textIndex);
 extern fn_UIString_Ctor_Index_t fn_UIString_Ctor_Index;
-
-// System::String::operator==(this, other) -> bool — string equality
-// ??8String@System@@QEBA_NAEBV01@@Z
-typedef bool (*fn_String_Equal_t)(const void* self, const void* other);
-extern fn_String_Equal_t fn_String_Equal;
 
 // StringTable type ID — resolved from _typeInfo_exref at 0x140151488
 // Used for IsDerivedFrom checks on ExternalList entries
@@ -2091,16 +2009,6 @@ inline void fn_TrackerComponent_Rebuild(void* dstArray, void* srcArray) {
 // Member function: RCX=this, RDX=retBuf (Filename, 8 bytes). Returns retBuf in RAX.
 typedef void* (*fn_External_GetPath_t)(void* self, void* retBuf);
 extern fn_External_GetPath_t fn_External_GetPath;
-
-// System::Filename::GetPathIdentifer(this, retval) -> FILENAME, not String.
-// The export is ?GetPathIdentifer@Filename@System@@QEBA?AV12@XZ ("?AV12@" =
-// Filename, the enclosing class); we resolved it for a long time under
-// ?AV...String@2@..., a mangling the DLL does not contain, and only the
-// ResolveAddr fallback below kept the pointer non-null. Both types are a
-// single pointer so the ABI is unaffected, but the name matters: it is what
-// a RegisterRuntimeExport port is keyed on.
-typedef void* (*fn_Filename_GetPathIdentifier_t)(void* self, void* retval);
-extern fn_Filename_GetPathIdentifier_t fn_Filename_GetPathIdentifier;
 
 // BSTRebalance — now inline in professionui.cpp (BSTRebalance_Impl)
 
@@ -2327,19 +2235,6 @@ extern fn_NameDB_GenerateName_t fn_NameDB_GenerateName;  // 0x1400a4b30
 // TypeInfo for NameDatabase IsDerivedFrom check
 extern uint32_t* g_TypeId_NameDatabase;  // DAT_1401c5a60
 
-// fn_String_SubString already declared above (line ~1490)
-
-// System::String::operator==(this, cstr) -> bool
-typedef bool (*fn_String_Equals_t)(void* self, const char* cstr);
-extern fn_String_Equals_t fn_String_Equals;
-
-// System::String::operator+=(this, retval, cstr)
-// Non-trivial return ABI: RCX=this, RDX=retval(String), R8=cstr
-// Modifies self in-place AND returns copy through retval.
-// Resolved from exe dispatch table at 0x140151a18.
-typedef void* (*fn_String_Append_t)(void* self, void* retval, const char* cstr);
-extern fn_String_Append_t fn_String_Append;
-
 // Start game handler: FUN_1400b4540
 // Constructs GameUpdateLoop -> GameLoadDialogLoopT -> LoaderLoop chain and sets next loop.
 // Params: worldSetup, displayName, seed, terrainSize, disasterOff, mapGen, terrainGen, climateGen, scenarioIdx, nullIBP
@@ -2541,25 +2436,6 @@ extern fn_Modification_Find_t fn_Modification_Find;
 // ?GetVersionString@Configuration@System@@SA?AVString@2@I_N@Z
 typedef void* (*fn_Configuration_GetVersionString_t)(void* retval, uint32_t version, bool isBeta);
 extern fn_Configuration_GetVersionString_t fn_Configuration_GetVersionString;
-
-// System::String::operator+=(this, String const&) — appends string in-place
-// Non-exported, resolved from exe dispatch table at 0x140151a00
-// ??YString@System@@QEAA?AV01@AEBV01@@Z -- String::operator+=(const String&) RETURNS
-// a String by value, so the hidden return buffer sits between `this` and `other`.
-// Declared as (self, other) for a long time; the Runtime then read `other` out of R8.
-typedef void* (*fn_String_AppendStr_t)(void* self, void* retval, const void* other);
-extern fn_String_AppendStr_t fn_String_AppendStr;
-
-// System::operator+(lhs, rhs) -> String — free function, hidden ret ptr
-// Non-exported, resolved from exe dispatch table at 0x140151a08
-// RCX=retval(String*), RDX=lhs(String const&), R8=rhs(String const&)
-typedef void* (*fn_String_Concat_t)(void* retval, const void* lhs, const void* rhs);
-extern fn_String_Concat_t fn_String_Concat;
-
-// System::Filename::operator<(this, other) -> bool — lexicographic comparison
-// Non-exported, resolved from exe dispatch table at 0x140151a20
-typedef bool (*fn_Filename_Less_t)(const void* self, const void* other);
-extern fn_Filename_Less_t fn_Filename_Less;
 
 // ModDetails_StringArrayPush — now inline in moddetailsdialog.cpp (ModDetails_StringArrayPush_Impl)
 
@@ -3026,10 +2902,6 @@ extern fn_PerlinNoise_Generate_t fn_PerlinNoise_Generate;
 typedef int (*fn_Random_RandTol_t)(void* self, int range);
 extern fn_Random_RandTol_t fn_Random_RandTol;
 
-// System::String::ToFloat(const char*) -> float — static, parses string to float
-typedef float (*fn_String_ToFloat_t)(const char* str);
-extern fn_String_ToFloat_t fn_String_ToFloat;
-
 // ============================================================
 // DebugUI support
 // ============================================================
@@ -3240,57 +3112,10 @@ extern fn_Graphics_MeshInstance_SetMesh_t fn_Graphics_MeshInstance_SetMesh;
 typedef void (*fn_Graphics_Renderer_Draw_t)(void* self, void* context, float alpha, void* scene, void* camera);
 extern fn_Graphics_Renderer_Draw_t fn_Graphics_Renderer_Draw;
 
-// Math::Vector3::FromYawPitch(retVec, yaw, pitch) — constructs a direction
-// Vector3 from yaw + pitch (each a `Math::Scalar const&` = float*).
-// Static fn returning struct >8B → RCX=retVec (hidden return), RDX=yaw,
-// R8=pitch. Note: Ghidra often drops R8 in the decompile — verified via
-// disassembly of MainMenuDialog_helper_83f0 (0x1400983f0) and MenuDLT::Draw
-// (0x14009b440), both of which set R8 explicitly via LEA before the call.
-typedef void* (*fn_Math_Vector3_FromYawPitch_t)(void* retVec, void* yaw, void* pitch);
-extern fn_Math_Vector3_FromYawPitch_t fn_Math_Vector3_FromYawPitch;
-
-// Math::Transform::FromLookAt(retval, eye, target) — static fn that builds a
-// compact Math::Transform (28B = pos vec3 + quat) looking from `eye` toward
-// `target`. Used by the menu camera derivation (MainMenuDialog_helper_83f0 at
-// exe 0x1400983f0). Mangled: ?FromLookAt@Transform@Math@@SA?AV12@AEBVVector3@2@0@Z
-// Static fn returning struct >8B → RCX=retval, RDX=eye, R8=target.
-typedef void* (*fn_Math_Transform_FromLookAt_t)(void* retval, void* eye, void* target);
-extern fn_Math_Transform_FromLookAt_t fn_Math_Transform_FromLookAt;
-
 // Video::Context::SetFog(fogStart, fogEnd, fogColorVec4) — push fog params.
 // RCX=Context*, XMM1=fogStart, XMM2=fogEnd, R9=Vector4*.
 typedef void (*fn_Video_Context_SetFog_t)(void* context, float fogStart, float fogEnd, void* fogColor);
 extern fn_Video_Context_SetFog_t fn_Video_Context_SetFog;
-
-// Math::Transform::Transform() — default ctor. Object size 0x10C (0x34 transform + 0xD8 camera).
-typedef void* (*fn_Math_Transform_Ctor_t)(void* self);
-extern fn_Math_Transform_Ctor_t fn_Math_Transform_Ctor;
-
-// Math::Transform3::Identity() — retail 0x1800347f0,
-// ?Identity@Transform3@Math@@SA?AV12@XZ.
-//
-// This is a STATIC method RETURNING Math::Transform3 BY VALUE, so under the
-// MSVC x64 ABI the caller passes a hidden return-slot pointer in RCX and the
-// callee returns that same pointer in RAX. It writes 12 dwords (0x30 bytes)
-// through that slot.
-//
-// The old declaration took NO arguments and the comment claimed it "returns a
-// pointer to a static identity transform". Both were wrong. Called with no
-// argument, RCX held whatever the previous call had left there, and Identity
-// wrote 48 bytes of identity matrix over it — a wild write on every menu scene
-// load. It went unnoticed for so long because it is SELF-CONSISTENT: RAX comes
-// back pointing at the same garbage address, the caller hands it to
-// Graphics::Camera::Ctor, and the camera reads a perfectly valid identity
-// matrix back out of the memory that was just corrupted. Nothing looks wrong
-// until the 48 bytes land on something that matters.
-//
-// Found 2026-09-06 by the Wave 1 differential oracle: the leftover RCX happened
-// to be the address of a diff-harness static, whose first dword became 1.0f
-// (0x3F800000) and then faulted when read as a `const char*`.
-//
-// Callers MUST pass a caller-owned buffer of at least sizeof(Transform3) = 0x30.
-typedef void* (*fn_Math_Transform3_Identity_t)(void* retSlot);
-extern fn_Math_Transform3_Identity_t fn_Math_Transform3_Identity;
 
 // Volume::Frustum::Frustum(self, near, far, fovX, fovY) — perspective frustum.
 // Arg ORDER (verified via FUN_140098800 + Frustum::Frustum @ Runtime 0x1800fa1e0):
@@ -3351,11 +3176,6 @@ extern fn_Audio_Scene_GetEmitterCount_t fn_Audio_Scene_GetEmitterCount;
 // Audio::Scene::StopEffect3D(uint id)
 typedef void (*fn_Audio_Scene_StopEffect3D_t)(void* scene, uint32_t id);
 extern fn_Audio_Scene_StopEffect3D_t fn_Audio_Scene_StopEffect3D;
-
-// Math::Vector3::operator== — compares two Vector3 for equality
-// RCX=lhs(Vector3*), RDX=rhs(Vector3*) -> returns bool
-typedef bool (*fn_Vector3_Equals_t)(void* lhs, void* rhs);
-extern fn_Vector3_Equals_t fn_Vector3_Equals;
 
 // DebugUI_OnDaySliderChanged (0x1400607E0) — handles day slider change, updates time/weather
 // RCX=self(DebugUI*)
@@ -3639,7 +3459,9 @@ inline void* GetLoadingSoundString(void* retStr) {
     // after "Dialog\Loading.rsc:gameLoadN" (tools/resave_gate/).
     if (Opt().menuScene >= 0)
         variant = static_cast<unsigned>(Opt().menuScene) % 12u;
-    fn_String_Format(retStr, "Dialog/Loading.rsc:gameLoad%i", variant);
+    // ?Format@String@System@@SA?AV12@PEBDZZ  retail 0x1800c9730
+    *reinterpret_cast<System::String*>(retStr) =
+        System::String::Format("Dialog/Loading.rsc:gameLoad%i", variant);
     return retStr;
 }
 
@@ -3756,28 +3578,6 @@ extern fn_FileSystem_GetSourceDirectory_t fn_FileSystem_GetSourceDirectory;
 // ?SaveText@External@Object@@QEAA_NAEBVFilename@System@@0@Z (0x1800bb9d0, ordinal 364)
 typedef bool (*fn_External_SaveText_t)(void* self, void* pathFilename, void* subdirFilename);
 extern fn_External_SaveText_t fn_External_SaveText;
-
-// System::Filename::Filename(this, String const&) — ctor from System::String
-// ??0Filename@System@@QEAA@AEBVString@1@@Z (0x18000c780, ordinal 192)
-typedef void* (*fn_Filename_CtorString_t)(void* self, const void* str);
-extern fn_Filename_CtorString_t fn_Filename_CtorString;
-
-// System::Filename::Filename(this, const char*) — ctor from C string
-// ??0Filename@System@@QEAA@PEBD@Z (0x180026cf0, ordinal 193)
-typedef void* (*fn_Filename_CtorCStr_t)(void* self, const char* str);
-extern fn_Filename_CtorCStr_t fn_Filename_CtorCStr;
-
-// System::Filename::~Filename(this) — destructor (decrements refcount)
-// ??1Filename@System@@QEAA@XZ (0x180006980, ordinal 595)
-typedef void (*fn_Filename_Dtor_t)(void* self);
-extern fn_Filename_Dtor_t fn_Filename_Dtor;
-
-// System::operator+(retval, String const&, String const&) — non-trivial return
-// RCX=retval(String*, 8 bytes), RDX=lhs, R8=rhs. Returns retval ptr.
-// Dispatch table exref at 0x140151a10 (ordinal 0x100)
-typedef void* (*fn_String_Concat_t)(void* retval, const void* lhs, const void* rhs);
-extern fn_String_Concat_t fn_String_ConcatSS;  // String+String variant (dispatch 0x140151a10)
-extern fn_String_Concat_t fn_String_ConcatSS2; // String+String variant (dispatch 0x140151a08)
 
 // ============================================================
 // Stage 3: OptionsDialog Runtime exports
@@ -4075,7 +3875,8 @@ extern fn_SpriteContext_AddLine_t fn_SpriteContext_AddLine;
 // own correct typedefs and says why), so the defect was LATENT — but two
 // correctly named, wrongly shaped pointers sitting beside a correct one are a
 // trap for the next reader, and `tools/abi_retslot_audit.py` scans this file.
-// The same defect shipped live for a whole wave as `fn_Math_Transform3_Identity`.
+// The same defect shipped live for a whole wave as the Math::Transform3::Identity
+// pointer (deleted with the rest of the C seam in ENDGAME B.3.1).
 typedef void* (*fn_SpriteContext_SetScissor4_t)(void* self, void* retSlot,
                                                 int x, int y, int w, int h);
 extern fn_SpriteContext_SetScissor4_t fn_SpriteContext_SetScissor4;
@@ -4095,10 +3896,6 @@ extern fn_FrustumProject_t fn_FrustumProject;
 // ============================================================
 // Description class reimpl support (shared serialization helpers)
 // ============================================================
-
-// System::String::Serialize(this, Serializer*) — serialize/deserialize a String
-typedef void (*g_fn_String_Serialize_t)(void* thisStr, void* serializer);
-extern g_fn_String_Serialize_t g_fn_String_Serialize;
 
 // UI::ElementDescription::Serialize(this, Stream*) — base class serialize
 typedef void (*fn_ElementDescription_Serialize_t)(void* self, void* stream);
@@ -5076,14 +4873,15 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
 
     // Compute camera view transform and apply
     if (fn_CameraSys_ComputeViewTransform) {
-        uint32_t transformBuf[7] = {}; // 0x1C bytes = compact Math::Transform
-        void* result = fn_CameraSys_ComputeViewTransform((void*)cameraSys, transformBuf);
+        Math::Transform viewTransform;   // 0x1C bytes = compact Math::Transform
+        void* result = fn_CameraSys_ComputeViewTransform((void*)cameraSys, &viewTransform);
 
-        if (fn_Transform_AsTransform3 && fn_Camera_SetCameraToWorld) {
-            uint32_t transform3[12] = {}; // 48 bytes = Math::Transform3
-            fn_Transform_AsTransform3(result, transform3);
+        // ?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ  retail 0x18001fcd0
+        if (fn_Camera_SetCameraToWorld) {
+            Math::Transform3 transform3 =
+                reinterpret_cast<const Math::Transform*>(result)->AsTransform3();
             // Camera object embedded at cameraSys + 0x34 (offset 0xD * sizeof(uint32_t))
-            fn_Camera_SetCameraToWorld((void*)(cameraSys + 0x34), transform3);
+            fn_Camera_SetCameraToWorld((void*)(cameraSys + 0x34), &transform3);
         }
     }
 
@@ -5175,11 +4973,6 @@ extern fn_Map_CheckPassable_t fn_Map_CheckPassable;
 // Returns: cell index (-1 if not found)
 typedef int (*fn_Map_FindNearestPassable_t)(int* mapGrid, int srcCell, int destCell, uint32_t flags);
 extern fn_Map_FindNearestPassable_t fn_Map_FindNearestPassable;
-
-// Math::Vector3::Vector3(this, x, y, z) — dispatch slot at 0x140152a30
-// RCX=outVec3, XMM1=x, XMM2=y, XMM3=z
-typedef float* (*fn_Vector3_Ctor_t)(float* self, float x, float y, float z);
-extern fn_Vector3_Ctor_t fn_Vector3_Ctor;
 
 // FUN_1400bffd0 — PerformWork_Action_Ctor: creates a PerformWork action (11 params)
 // Complex multi-param constructor. Params match Ghidra decompilation signature.
@@ -5495,13 +5288,7 @@ extern fn_BuildingTypeArray_Resize_t fn_BuildingTypeArray_Resize;
 // FUN_14001b1d0 — compute string hash for building type entry
 typedef void (*fn_StringHash_t)(void* str);
 
-// System::String::Serialize — already declared as g_fn_String_Serialize
-
-// System::Filename::Filename() — default ctor (dispatch slot 0x140151d40)
-typedef void* (*fn_Filename_Ctor_t)(void* self);
-extern fn_Filename_Ctor_t fn_Filename_Ctor;
-
-// System::Filename::~Filename() — already declared as fn_Filename_Dtor
+// System::Filename::~Filename() — the class destructor (runtime/types/system/Filename.h)
 // IO::Serializer::Serialize(bool) — already declared as g_fn_Serialize_Bool
 
 // Tutorial Goal helpers (exe-internal)
@@ -5609,14 +5396,6 @@ extern fn_SceneAddObject_t fn_SceneAddObject;
 typedef void (*fn_SceneRemoveObject_t)(void* scene, uint32_t objectId);
 extern fn_SceneRemoveObject_t fn_SceneRemoveObject;
 
-// Math::Transform::FromYawPitchOffset — build transform from yaw + pitch + offset
-// IAT dispatch slot 0x140151288. Static method, hidden retval ptr in RCX.
-// RCX=outTransform, RDX=&yaw(Scalar), R8=&pitch(Scalar), R9=&offset(Vector3).
-// Mangled: ?FromYawPitchOffset@Transform@Math@@SA?AV12@AEBVScalar@2@0AEBVVector3@2@@Z
-// (the `0` after the first AEBVScalar means "same as previous arg" — second Scalar&)
-typedef void (*fn_Transform_FromYawPitchOffset_t)(void* outTransform, const void* yaw, const void* pitch, const void* offset);
-extern fn_Transform_FromYawPitchOffset_t fn_Transform_FromYawPitchOffset;
-
 // Graphics::Geometry::SetTransform — apply transform to geometry/mesh
 // IAT dispatch slot 0x1401512e0. RCX=Geometry*, RDX=Transform*
 typedef void (*fn_Geometry_SetTransform_t)(void* geometry, void* transform);
@@ -5640,16 +5419,6 @@ extern fn_MeshInstance_UpdateHierarchy_t fn_MeshInstance_UpdateHierarchy;
 // NOTE: distinct from fn_MemAlloc (the member form taking the singleton).
 typedef void* (*fn_MemAllocStatic_t)(uint64_t size, int alignment);
 extern fn_MemAllocStatic_t fn_MemAllocStatic;
-
-// Math::Vector3::Vector3() — default ctor (zero). exe slot 0x140152a78
-// ??0Vector3@Math@@QEAA@XZ
-typedef void* (*fn_Vector3_DefaultCtor_t)(void* self);
-extern fn_Vector3_DefaultCtor_t fn_Vector3_DefaultCtor;
-
-// Math::Quaternion::Quaternion(x,y,z,w). exe slot 0x140151348
-// ??0Quaternion@Math@@QEAA@MMMM@Z
-typedef void* (*fn_Quaternion_Ctor_t)(void* self, float x, float y, float z, float w);
-extern fn_Quaternion_Ctor_t fn_Quaternion_Ctor;
 
 // Volume::Box::Box() — default ctor. exe slot 0x1401513f8
 // ??0Box@Volume@@QEAA@XZ
@@ -5834,25 +5603,6 @@ extern fn_Video_VertexBuffer_Ctor_t fn_Video_VertexBuffer_Ctor;
 typedef void (*fn_Video_IndexBuffer_Ctor_t)(void* self);
 extern fn_Video_IndexBuffer_Ctor_t fn_Video_IndexBuffer_Ctor;
 
-// Transform serialize wrapper — FUN_1400988c0. Wraps a Stream in a Serializer
-// then serializes Math::Transform + Vector3 (at +0x1c) + 3 floats (+0x28..+0x30).
-typedef void (*fn_Transform_SerializeWrapper_t)(void* transform, void* stream);
-extern fn_Transform_SerializeWrapper_t fn_Transform_SerializeWrapper;
-
-// Math::Transform::Serialize — Runtime export (28-byte Transform pos/rot/scale).
-typedef void (*fn_Math_Transform_Serialize_t)(void* transform, void* serializer);
-extern fn_Math_Transform_Serialize_t fn_Math_Transform_Serialize;
-
-// Math::Vector3::Serialize — Runtime export (12-byte Vector3).
-typedef void (*fn_Math_Vector3_Serialize_t)(void* vector3, void* serializer);
-extern fn_Math_Vector3_Serialize_t fn_Math_Vector3_Serialize;
-
-// Math::Vector4::Serialize — Runtime export (16-byte Vector4).
-// Slot in exe is 0x140151ed0; mangled name
-// `?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z`.
-typedef void (*fn_Math_Vector4_Serialize_t)(void* vector4, void* serializer);
-extern fn_Math_Vector4_Serialize_t fn_Math_Vector4_Serialize;
-
 // System::Color::Serialize — Runtime export (4-byte ARGB color).
 // Slot in exe is 0x140151ee0; mangled name
 // `?Serialize@Color@System@@QEAAXAEAVSerializer@IO@@@Z`.
@@ -6026,10 +5776,6 @@ extern fn_ExternalFactory_GetReferenceId_t fn_ExternalFactory_GetReferenceId;
 // Member function returning Filename: hidden retval ABI -> RCX=this, RDX=retbuf, R8=refId.
 typedef void* (*fn_ExternalFactory_GetPathForReferenceId_t)(void* self, void* retFilename, uint32_t refId);
 extern fn_ExternalFactory_GetPathForReferenceId_t fn_ExternalFactory_GetPathForReferenceId;
-
-// System::Filename::operator= — dispatch slot 0x1401529e0. Returns dst (Filename&).
-typedef void* (*fn_Filename_AssignOp_t)(void* dst, const void* src);
-extern fn_Filename_AssignOp_t fn_Filename_AssignOp;
 
 // ============================================================
 // MenuScene serialize helper — typeInfo storage (standalone-only)
@@ -6287,20 +6033,12 @@ typedef void* (*fn_Geometry_GetTransform_t)(void* geometry, void* retval);
 extern fn_Geometry_GetTransform_t fn_Geometry_GetTransform;
 // ?GetTransform@Geometry@Graphics@@QEBA?AVTransform@Math@@XZ
 
-typedef void* (*fn_Transform_Inverse_t)(void* xform, void* retval);
-extern fn_Transform_Inverse_t fn_Transform_Inverse;
 // ?Inverse@Transform@Math@@QEBA?AV12@XZ
 
-typedef void* (*fn_Transform_AsMatrix_t)(void* xform, void* retval);
-extern fn_Transform_AsMatrix_t fn_Transform_AsMatrix;
 // ?AsMatrix@Transform@Math@@QEBA?AVMatrix@2@XZ
 
-typedef void* (*fn_Transform3_Copy_Ctor_t)(void* self, const void* other);
-extern fn_Transform3_Copy_Ctor_t fn_Transform3_Copy_Ctor;
 // ??0Transform3@Math@@QEAA@AEBV01@@Z
 
-typedef void* (*fn_Vector3_FromFloats_Ctor_t)(void* self, float x, float y, float z);
-extern fn_Vector3_FromFloats_Ctor_t fn_Vector3_FromFloats_Ctor;
 // ??0Vector3@Math@@QEAA@MMM@Z
 
 typedef void* (*fn_InterpolatedState_Transform_Lerp_t)(void* self, void* retval, void* scalar);

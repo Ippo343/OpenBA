@@ -14,6 +14,7 @@
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "math/Math.h"
 #include "system/String.h"
 #include "system/Filename.h"
 #include <cstdint>
@@ -318,11 +319,12 @@ static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
                     fn_Entity_FindAudioComponent((void*)audioArray[i], audioCompBuf);
 
                     // Check if position differs from zero — if so, move all emitters
-                    float zeroPos[3] = {0.0f, 0.0f, 0.0f};
+                    Math::Vector3 zeroPos;   // ??0Vector3@Math@@QEAA@XZ 0x180015070
                     fn_InternalBasePtr_CheckPtr(audioCompBuf);
                     uintptr_t audioComp = *(uintptr_t*)audioCompBuf;
 
-                    bool posEqual = fn_Vector3_Equals(zeroPos, (void*)(audioComp + 0x28));
+                    // ??8Vector3@Math@@QEBA_NAEBV01@@Z  retail 0x1800150a0
+                    bool posEqual = zeroPos == *reinterpret_cast<const Math::Vector3*>(audioComp + 0x28);
                     if (!posEqual) {
                         int emitterCount = *(int*)(audioComp + 0x40);
                         uintptr_t emitterArray = *(uintptr_t*)(audioComp + 0x38);
@@ -334,7 +336,7 @@ static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
                                 fn_Audio_Scene_MoveEmitter(
                                     audioScene, emitterId,
                                     (void*)(audioComp + 0x28),  // old position
-                                    zeroPos);                    // new position (zero)
+                                    &zeroPos);                   // new position (zero)
                             }
                         }
 

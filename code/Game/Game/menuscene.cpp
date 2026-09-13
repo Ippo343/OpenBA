@@ -412,19 +412,21 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
     // project_terrain_render_status.md (2026-05-01).
     if (stream) {
         void* xform = reinterpret_cast<uint8_t*>(self) + 0x88;
-        // fn_Transform_SerializeWrapper resolves to a NOT_IMPLEMENTED stub via
-        // the address registry — DON'T call it, use the inline path.
+        // Transform::SerializeWrapper (exe 0x1400988c0) resolves to a
+        // NOT_IMPLEMENTED stub via the address registry — DON'T call it, use
+        // the inline path.
         if (g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
-                   fn_Math_Transform_Serialize && fn_Math_Vector3_Serialize &&
                    fn_Serializer_Serialize_Float) {
             // Inline the FUN_1400988c0 body: inner Serializer (v=0) wraps
             // stream; serialize Math::Transform (28B) + Math::Vector3 (12B at
             // +0x1c) + 3 floats (+0x28, +0x2C, +0x30); dtor.
             uint64_t inner_ser[3] = {0, 0, 0};
             g_fn_Serializer_Ctor(inner_ser, stream, 0);
-            fn_Math_Transform_Serialize(xform, inner_ser);
-            fn_Math_Vector3_Serialize(reinterpret_cast<uint8_t*>(xform) + 0x1C,
-                                      inner_ser);
+            // ?Serialize@Transform@Math@@QEAAXAEAVSerializer@IO@@@Z  0x180059b90
+            reinterpret_cast<Math::Transform*>(xform)->Serialize(inner_ser);
+            // ?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z    0x1800150e0
+            reinterpret_cast<Math::Vector3*>(
+                reinterpret_cast<uint8_t*>(xform) + 0x1C)->Serialize(inner_ser);
             fn_Serializer_Serialize_Float(inner_ser,
                 reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(xform) + 0x28),
                 nullptr);
@@ -453,11 +455,8 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
             static bool s_warned = false;
             if (!s_warned) {
                 printf("[MenuScene::Slot5_Serialize] Transform serialize primitives "
-                       "unwired (TWrapper=%p MathT=%p MathV3=%p SerFloat=%p) — "
+                       "unwired (SerFloat=%p) — "
                        "camera will stay at identity, screen black\n",
-                       (void*)fn_Transform_SerializeWrapper,
-                       (void*)fn_Math_Transform_Serialize,
-                       (void*)fn_Math_Vector3_Serialize,
                        (void*)fn_Serializer_Serialize_Float);
                 fflush(stdout);
                 s_warned = true;
@@ -515,9 +514,9 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
         }
 
         // ----- Atmosphere: Vector4 + 3 Colors + 5 Floats -----
-        if (fn_Math_Vector4_Serialize) {
-            fn_Math_Vector4_Serialize(reinterpret_cast<uint8_t*>(self) + 0x1B4, outer_ser);
-        }
+        // ?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x18001d360
+        reinterpret_cast<Math::Vector4*>(
+            reinterpret_cast<uint8_t*>(self) + 0x1B4)->Serialize(outer_ser);
         if (fn_System_Color_Serialize) {
             fn_System_Color_Serialize(&self->ambientColor, outer_ser);
             fn_System_Color_Serialize(&self->sunColor,     outer_ser);

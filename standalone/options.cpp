@@ -315,8 +315,6 @@ void OptionsInit() {
     o.achYearMax    = Raw("BANISHED_ACH_YEAR_MAX");
     {   const char* v = Raw("BANISHED_COMP_VALIDATE");
         o.compValidate = v && v[0] != '0'; }
-    {   const char* v = Raw("BANISHED_FNDTOR_CHECK");
-        o.fnDtorCheck = v && v[0] != '0'; }
     {   const char* v = Raw("BANISHED_SCENE_WATCH");
         o.sceneWatch = v && v[0] != '0'; }
     {   const char* v = Raw("BANISHED_SCENE_ADDTALLY");

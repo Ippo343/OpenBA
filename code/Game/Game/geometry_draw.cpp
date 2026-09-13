@@ -91,11 +91,11 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
     ++s_calls;
 
     // Cascade: every Runtime primitive needed must be wired.
-    if (!fn_Renderer_GetCullCamera || !fn_Transform3_Copy_Ctor ||
-        !fn_Geometry_GetTransform || !fn_Transform_Inverse ||
+    if (!fn_Renderer_GetCullCamera ||
+        !fn_Geometry_GetTransform ||
         !fn_Camera_GetFrustum || !fn_Frustum_MulTransform3 ||
         !fn_Frustum_Contains || !fn_Renderer_AddDrawItem ||
-        !fn_Renderer_GetShader || !fn_Vector3_FromFloats_Ctor) {
+        !fn_Renderer_GetShader) {
         static bool s_warned = false;
         if (!s_warned) {
             printf("[Geometry::CollectDraw] Runtime draw primitives unwired — "
@@ -293,7 +293,7 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
 
     auto* selfBytes = reinterpret_cast<uint8_t*>(self);
 
-    if (!fn_InterpolatedState_Transform_Lerp || !fn_Transform_AsMatrix ||
+    if (!fn_InterpolatedState_Transform_Lerp ||
         !fn_Context_SetTransform || !fn_Context_SetColor) {
         static bool s_warned = false;
         if (!s_warned) {
@@ -308,12 +308,12 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
     // 1. Lerp the InterpolatedState<Transform> at self+0x84 with the alpha.
     //    Original layout: scalar storage on stack at retbuf+0x28; we just
     //    pass &param5 in.
-    uint8_t lerpedTransform[0x1C] = {0};
-    fn_InterpolatedState_Transform_Lerp(selfBytes + 0x84, lerpedTransform, &param5);
+    Math::Transform lerpedTransform;
+    fn_InterpolatedState_Transform_Lerp(selfBytes + 0x84, &lerpedTransform, &param5);
 
     // 2. Convert to Matrix and SetTransform(0, matrix).
-    Math::Matrix matrixBuf =
-        reinterpret_cast<const Math::Transform*>(lerpedTransform)->AsMatrix();
+    //    ?AsMatrix@Transform@Math@@QEBA?AVMatrix@2@XZ  retail 0x18001e5f0
+    Math::Matrix matrixBuf = lerpedTransform.AsMatrix();
     fn_Context_SetTransform(context, 0, &matrixBuf);
 
     // 3. SetColor(1,1,1, lerp(uvScaleA, uvScaleB)).

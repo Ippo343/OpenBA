@@ -119,7 +119,7 @@ bool ResolveFuncs() {
            // engine_funcs primitives this port relies on:
            fn_MemAlloc && g_pMemAllocSingleton && fn_MemFreeStatic &&
            fn_ImageBuffer_Ctor && g_NoiseUI_ImageBufferVtable && fn_ImageBuffer_CopyFromTexture &&
-           fn_Math_Transform3_Identity && fn_Graphics_Camera_Ctor && fn_Transform_AsTransform3 &&
+           fn_Graphics_Camera_Ctor &&
            fn_Video_Context_SetFog && fn_Graphics_Renderer_Ctor && fn_Graphics_Scene_Ctor &&
            fn_Graphics_Renderer_Draw && fn_Graphics_Scene_AddGlobalObject && fn_Graphics_Scene_Clean &&
            g_pVideoConfigSingleton;

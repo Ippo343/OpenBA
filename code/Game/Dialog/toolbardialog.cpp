@@ -896,16 +896,17 @@ extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys) {
 
     // CameraSys_ComputeViewTransform: computes look-at transform from camera params
     // Returns a compact Transform (7 floats = 0x1C bytes) written to outBuf and cameraSys[0..6]
-    uint8_t transformBuf[32]; // enough for 7 dwords
+    Math::Transform viewTransform;
     if (fn_CameraSys_ComputeViewTransform) {
-        void* result = fn_CameraSys_ComputeViewTransform(cameraSys, transformBuf);
+        void* result = fn_CameraSys_ComputeViewTransform(cameraSys, &viewTransform);
 
         // Convert compact Transform to Transform3 (48 bytes) and set on camera
-        if (fn_Transform_AsTransform3 && fn_Camera_SetCameraToWorld) {
-            uint8_t transform3[48];
-            fn_Transform_AsTransform3(result, transform3);
+        // ?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ  retail 0x18001fcd0
+        if (fn_Camera_SetCameraToWorld) {
+            Math::Transform3 transform3 =
+                reinterpret_cast<const Math::Transform*>(result)->AsTransform3();
             // Camera object is at cameraSys+0x34
-            fn_Camera_SetCameraToWorld((void*)((uintptr_t)cameraSys + 0x34), transform3);
+            fn_Camera_SetCameraToWorld((void*)((uintptr_t)cameraSys + 0x34), &transform3);
         }
     }
 

@@ -201,19 +201,18 @@ extern "C" void RegisterGeometryVtable() {
 extern "C" void Reimpl_Transform_SerializeWrapper(void* transform, void* stream) {
     if (!transform || !stream) return;
 
-    if (!g_fn_Serializer_Ctor || !fn_Math_Transform_Serialize ||
-        !fn_Math_Vector3_Serialize || !fn_Serializer_Serialize_Float ||
+    if (!g_fn_Serializer_Ctor ||
+        !fn_Serializer_Serialize_Float ||
         !g_fn_Serializer_Dtor) {
         static bool s_warned = false;
         if (!s_warned) {
             s_warned = true;
             fprintf(stderr,
                     "[Transform::SerializeWrapper] *** a callee is NULL "
-                    "(ctor=%p transform=%p vec3=%p float=%p dtor=%p) — the "
+                    "(ctor=%p float=%p dtor=%p) — the "
                     "transform record is NOT being read and the stream is now "
                     "DESYNCED for everything after it.\n",
-                    (void*)g_fn_Serializer_Ctor, (void*)fn_Math_Transform_Serialize,
-                    (void*)fn_Math_Vector3_Serialize,
+                    (void*)g_fn_Serializer_Ctor,
                     (void*)fn_Serializer_Serialize_Float, (void*)g_fn_Serializer_Dtor);
             fflush(stderr);
         }
@@ -223,8 +222,10 @@ extern "C" void Reimpl_Transform_SerializeWrapper(void* transform, void* stream)
     const uintptr_t t = (uintptr_t)transform;
     uint8_t ser[24];
     g_fn_Serializer_Ctor(ser, stream, 0);
-    fn_Math_Transform_Serialize(transform, ser);            // +0x00 Math::Transform
-    fn_Math_Vector3_Serialize((void*)(t + 0x1c), ser);      // +0x1c Math::Vector3
+    // ?Serialize@Transform@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x180059b90
+    reinterpret_cast<Math::Transform*>(transform)->Serialize(ser);   // +0x00 Math::Transform
+    // ?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z    retail 0x1800150e0
+    reinterpret_cast<Math::Vector3*>(t + 0x1c)->Serialize(ser);      // +0x1c Math::Vector3
     fn_Serializer_Serialize_Float(ser, (float*)(t + 0x28), nullptr);
     fn_Serializer_Serialize_Float(ser, (float*)(t + 0x2c), nullptr);
     fn_Serializer_Serialize_Float(ser, (float*)(t + 0x30), nullptr);

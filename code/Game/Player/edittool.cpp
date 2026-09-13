@@ -205,10 +205,6 @@ static fn_GetPaddedSize_t s_fn_GetPaddedSize = nullptr;
 typedef void (*fn_SetUpperLeft_t)(void* dialog, int x, int y, bool animate);
 static fn_SetUpperLeft_t s_fn_SetUpperLeft = nullptr;
 
-// Math::Vector2::Ctor — IAT dispatch slot [0x1401522d8]
-typedef void (*fn_Vector2Ctor_t)(void* self, float* x, float* y);
-static fn_Vector2Ctor_t s_fn_Vector2Ctor = nullptr;
-
 // KeyMap::Pressed — IAT dispatch slot [0x140151758]
 typedef bool (*fn_KeyMapPressed_t)(uintptr_t keyMap, int slot, int keyId);
 static fn_KeyMapPressed_t s_fn_KeyMapPressed = nullptr;
@@ -238,7 +234,6 @@ static void EnsureEditFuncs() {
     s_fn_GetRoot          = (fn_GetRoot_t)resolveIAT(0x1401517a8);
     s_fn_GetPaddedSize    = (fn_GetPaddedSize_t)resolveIAT(0x140152750);
     s_fn_SetUpperLeft     = (fn_SetUpperLeft_t)resolveIAT(0x140151dd0);
-    s_fn_Vector2Ctor      = (fn_Vector2Ctor_t)resolveIAT(0x1401522d8);
     s_fn_KeyMapPressed    = (fn_KeyMapPressed_t)resolveIAT(0x140151758);
     s_fn_PickingIntersect = (fn_PickingIntersect_t)resolveIAT(0x140152428);
     s_fn_PickingGetUserData = (fn_PickingGetUserData_t)resolveIAT(0x140152890);
@@ -656,18 +651,14 @@ void EditTool_Startup_Impl(EditTool* self) {
 
     float midX = (rectLeft + rectRight) * 0.5f;
 
-    // Construct Vector2 for dialog position
-    float vec2[2];
-    if (s_fn_Vector2Ctor) {
-        s_fn_Vector2Ctor(vec2, &midX, &rectTop);
-    } else {
-        vec2[0] = midX;
-        vec2[1] = rectTop;
-    }
+    // Construct Vector2 for dialog position.
+    // ??0Vector2@Math@@QEAA@AEBVScalar@1@0@Z  retail 0x180070db0 (was the
+    // 0x1401522d8 dispatch slot)
+    Math::Vector2 vec2{Math::Scalar(midX), Math::Scalar(rectTop)};
 
     // Position = (vec2.x - dialogWidth/2, vec2.y - dialogHeight) / uiScale
-    int posX = (int)vec2[0] - (dialogWidth >> 1);
-    int posY = (int)vec2[1] - dialogHeight;
+    int posX = (int)vec2.x - (dialogWidth >> 1);
+    int posY = (int)vec2.y - dialogHeight;
 
     // Get UI scale factor from dialog's UI instance
     if (s_fn_CheckPtr) s_fn_CheckPtr(entityIBP);

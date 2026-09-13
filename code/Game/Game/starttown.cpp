@@ -1679,7 +1679,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         //   Graphics::Geometry::SetTransform(model+0x28, model+0x148)  (0x1400a250f).
         // `game` is the already-deref'd mapGrid (caller: game = *(gw+0xf8), line ~2790),
         // so dim = *(int*)game and f3e0's first arg is `game`, exactly retail's *local_b0.
-        if (game && fn_MapGetTerrainPos && fn_Transform_FromYawPitchOffset) {
+        if (game && fn_MapGetTerrainPos) {
             void* modelComp = FindComponentOnEntity(entity, tidModelComponent);
             if (modelComp) {
                 uintptr_t mcIBP = 0;
@@ -4875,7 +4875,7 @@ static void StartTown_PlaceResourceCell(void* entity, int cellIdx, void* game, v
     // --- jittered ModelComponent transform (the rest of 6540). Mirrors the
     //     committed SetEntityModelTransform but with the per-resource position jitter
     //     (desc+0x60) + random yaw the original applies. ---
-    if (!fn_MapGetTerrainPos || !fn_Transform_FromYawPitchOffset) return;
+    if (!fn_MapGetTerrainPos) return;
 
     // jitter radius from the NaturalResourceDescription (NRComp+0x18, +0x60).
     float jitter = 0.0f;

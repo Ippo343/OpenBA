@@ -52,7 +52,6 @@ extern "C" {
 }
 
 // Session-3 diagnostic installer (standalone/filename_dtor_check.cpp).
-extern "C" void InstallFilenameDtorCheck();
 // The composed (locked) MemoryAllocator entry points (standalone/alloc_cutover_arm.cpp).
 extern "C" bool RtAllocSwapArmCutover(void* ourAllocate, void* ourFree,
                                       void** outComposedAllocate, void** outComposedFree);
@@ -1438,11 +1437,12 @@ static bool Init() {
     //     the allocator free-list. No-op unless the env var is set.
     RedzoneAlloc_Install();
 
-    // 4c. Diagnostic (session 3): interpose fn_Filename_Dtor to catch the
-    //     System::String use-after-free that plants the bucket-12 free-list
-    //     corruption. Env-gated BANISHED_FNDTOR_CHECK (default OFF), logs to
-    //     stderr. See standalone/filename_dtor_check.cpp.
-    InstallFilenameDtorCheck();
+    // 4c. The BANISHED_FNDTOR_CHECK use-after-free interposer used to install
+    //     here. It worked by swapping the global `fn_Filename_Dtor` function
+    //     pointer for a checking wrapper; ENDGAME B.3.1 deleted that pointer
+    //     along with the rest of the C seam (System::Filename is a real class
+    //     with a real destructor now), so the diagnostic has no seam to sit in
+    //     and the flag is gone from standalone/options.h with it.
 
     // 4d. THE MENU CRASH FIX (session 5) used to install here as a pair of DLL
     //     byte patches. It now lives in the ported bodies themselves: the

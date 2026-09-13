@@ -31,7 +31,7 @@
 //
 // Sub-callees: all through already-resolved engine_funcs.h globals
 // (g_fn_Serializer_Ctor/Dtor/GetVersion is NOT used here — version is fixed 0
-// and retail never re-reads it) plus fn_Math_Vector3_Serialize,
+// and retail never re-reads it) plus Math::Vector3::Serialize,
 // fn_Serializer_Serialize_Float, g_fn_Serialize_Bool, g_fn_Serialize_Int,
 // fn_InternalBasePtr_Serialize, fn_IsDerivedFrom, fn_InternalBasePtr_Ctor, and
 // the array-resize helper FUN_1400032e0 (already ported/registered elsewhere —
@@ -114,7 +114,8 @@ extern "C" void CharacterComponent_Serialize(void* self, void* stream) {
     uint8_t ser[24];
     g_fn_Serializer_Ctor(ser, stream, 0);
 
-    if (fn_Math_Vector3_Serialize) fn_Math_Vector3_Serialize(At(self, 0x2c), ser);
+    // ?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800150e0
+    reinterpret_cast<Math::Vector3*>(At(self, 0x2c))->Serialize(ser);
     if (fn_Serializer_Serialize_Float) {
         fn_Serializer_Serialize_Float(ser, reinterpret_cast<float*>(At(self, 0x3c)), nullptr);
         fn_Serializer_Serialize_Float(ser, reinterpret_cast<float*>(At(self, 0x38)), nullptr);

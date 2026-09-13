@@ -344,7 +344,8 @@ extern "C" void WeatherSim_Serialize_93c90(void* selfVoid, void* stream) {
     g_fn_Serialize_Int(ser, (void*)(self + 0x10), nullptr);
     g_fn_Serialize_Int(ser, (void*)(self + 0x14), nullptr);
     fn_Serializer_Serialize_Float(ser, (float*)(self + 0x18), nullptr);
-    fn_Math_Vector4_Serialize((void*)(self + 0x1c), ser);
+    // ?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x18001d360
+    reinterpret_cast<Math::Vector4*>(self + 0x1c)->Serialize(ser);
     fn_Serializer_Serialize_Float(ser, (float*)(self + 0x2c), nullptr);
     fn_Serializer_Serialize_Float(ser, (float*)(self + 0x30), nullptr);
     fn_Serializer_Serialize_Float(ser, (float*)(self + 0x44), nullptr);
@@ -593,7 +594,8 @@ extern "C" void EntityUI_Serialize_102920(void* selfVoid, void* stream) {
         }
         for (uint32_t i = 0; i < count; i++) {
             uint8_t* e = *(uint8_t**)(self + 0x70) + (size_t)i * 0x1c;
-            fn_Math_Vector3_Serialize(e, ser);
+            // ?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800150e0
+            reinterpret_cast<Math::Vector3*>(e)->Serialize(ser);
             fn_Serializer_Serialize_Float(ser, (float*)(e + 0xc), nullptr);
             fn_Serializer_Serialize_Float(ser, (float*)(e + 0x10), nullptr);
             fn_Serializer_Serialize_Float(ser, (float*)(e + 0x14), nullptr);

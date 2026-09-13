@@ -209,7 +209,6 @@ struct Options {
     const char* achYearBoost         = nullptr;// standalone/ach_clock.cpp [no tool reader]
     const char* achYearMax           = nullptr;// standalone/ach_clock.cpp [no tool reader]
     bool        compValidate         = false;  // standalone/entity_comp_validator.cpp [no tool reader]
-    bool        fnDtorCheck          = false;  // standalone/filename_dtor_check.cpp [no tool reader]
     bool        sceneWatch           = false;  // standalone/scene_watch.cpp [no tool reader]
     bool        sceneAddTally        = false;  // standalone/scene_watch.cpp [no tool reader]
     bool        sceneCensus          = false;  // standalone/scene_watch.cpp [no tool reader]

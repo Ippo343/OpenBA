@@ -526,41 +526,38 @@ static void* Reimpl_FUN_14000f090(void* hdr, int n) {
 // fn_PlayerController_CalcTransform (resolved via ResolveAddr) finds it in standalone.
 extern "C" void* Reimpl_FUN_1400983f0(void* self, void* outTransform) {
     uint8_t* p = (uint8_t*)self;
-    if (!fn_Math_Vector3_FromYawPitch || !fn_Math_Transform_FromLookAt) return outTransform;
     float yaw = *(float*)(p + 0x28);
     float pitch = *(float*)(p + 0x2c);
     float distance = *(float*)(p + 0x30);
-    float dir[4] = {};
-    fn_Math_Vector3_FromYawPitch(dir, &yaw, &pitch);
-    float* pos = (float*)(p + 0x1c);
-    float eye[4] = {};
-    eye[0] = pos[0] - dir[0] * distance;
-    eye[1] = pos[1] - dir[1] * distance;
-    eye[2] = pos[2] - dir[2] * distance;
-    uint8_t lookAt[32] = {};
-    void* res = fn_Math_Transform_FromLookAt(lookAt, eye, pos);
-    if (!res) res = lookAt;
-    const uint32_t* src = (const uint32_t*)res;
-    uint32_t* dstSelf = (uint32_t*)p;
-    uint32_t* dstOut = (uint32_t*)outTransform;
-    for (int i = 0; i < 7; ++i) { dstSelf[i] = src[i]; dstOut[i] = dstSelf[i]; }
+    // ?FromYawPitch@Vector3@Math@@SA?AV12@AEBVScalar@2@0@Z  retail 0x1800220b0
+    Math::Vector3 dir = Math::Vector3::FromYawPitch(yaw, pitch);
+    // The camera focus point lives inline at self+0x1c (Transform::translation).
+    const Math::Vector3& pos = *reinterpret_cast<const Math::Vector3*>(p + 0x1c);
+    Math::Vector3 eye(pos.x - dir.x * distance,
+                      pos.y - dir.y * distance,
+                      pos.z - dir.z * distance);
+    // ?FromLookAt@Transform@Math@@SA?AV12@AEBVVector3@2@0@Z  retail 0x18007dbb0
+    Math::Transform lookAt = Math::Transform::FromLookAt(eye, pos);
+    *reinterpret_cast<Math::Transform*>(p) = lookAt;              // self[+0x00..+0x1b]
+    *reinterpret_cast<Math::Transform*>(outTransform) = lookAt;
     return outTransform;
 }
 
 // FUN_1400985b0 — PlayerController camera-system ctor (+0xE0, 0x10c).
 static void* Reimpl_FUN_1400985b0(void* selfMem, void* frustum, float yaw, float pitch, float distance) {
     uint8_t* p = (uint8_t*)selfMem;
-    if (!fn_Math_Transform_Ctor || !fn_Transform_AsTransform3 || !fn_Graphics_Camera_Ctor)
+    if (!fn_Graphics_Camera_Ctor)
         return selfMem;
-    fn_Math_Transform_Ctor(selfMem);
+    // ??0Transform@Math@@QEAA@XZ  retail 0x180015080
+    *reinterpret_cast<Math::Transform*>(selfMem) = Math::Transform();
     *(uint64_t*)(p + 0x1c) = 0;
     *(uint32_t*)(p + 0x24) = 0;
     *(float*)(p + 0x28) = yaw;
     *(float*)(p + 0x2c) = pitch;
     *(float*)(p + 0x30) = distance;
-    uint8_t localTransform[32] = {};
-    void* lt = Reimpl_FUN_1400983f0(selfMem, localTransform);
-    if (!lt) lt = localTransform;
+    Math::Transform localTransform;
+    void* lt = Reimpl_FUN_1400983f0(selfMem, &localTransform);
+    if (!lt) lt = &localTransform;
     Math::Transform3 t3 = reinterpret_cast<const Math::Transform*>(lt)->AsTransform3();
     fn_Graphics_Camera_Ctor((void*)(p + 0x34), frustum, &t3, true);
     return selfMem;

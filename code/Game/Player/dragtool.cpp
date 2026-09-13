@@ -131,11 +131,6 @@ static fn_PlayPlaceSound_t g_fn_PlayPlaceSound = nullptr;
 typedef void (*fn_PlayErrorSound_t)(uint64_t unused);
 static fn_PlayErrorSound_t g_fn_PlayErrorSound = nullptr;
 
-// Math::Transform::Transform() — default ctor
-// Dispatch table at 0x140151328
-typedef void* (*fn_Transform_Ctor_t)(void* self);
-static fn_Transform_Ctor_t g_fn_TransformCtor = nullptr;
-
 // Volume::Box::Box() — default ctor
 // Dispatch table at 0x1401513f8
 typedef void* (*fn_Box_Ctor_t)(void* self);
@@ -173,10 +168,6 @@ static void ResolveDragToolFuncs() {
         ResolveAddr(Module::Exe, 0x140100140));
 
     // Dispatch-table resolved ctors/dtors
-    {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151328));
-        if (d) g_fn_TransformCtor = reinterpret_cast<fn_Transform_Ctor_t>(*d);
-    }
     {
         void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401513f8));
         if (d) g_fn_BoxCtor = reinterpret_cast<fn_Box_Ctor_t>(*d);
@@ -349,9 +340,10 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
                 // and its release is a no-op.
 
                 // ---- Init Transform and Box for UI positioning ----
-                uint8_t transform[40];  // Math::Transform
+                // ??0Transform@Math@@QEAA@XZ  retail 0x180015080 (was the
+                // 0x140151328 dispatch slot)
+                Math::Transform transform;
                 uint8_t box[24];        // Volume::Box
-                if (g_fn_TransformCtor) g_fn_TransformCtor(transform);
                 if (g_fn_BoxCtor) g_fn_BoxCtor(box);
 
                 // ---- Call UpdateToolUI (operator_impl_fc60 at 0x1400ffc60) ----
@@ -367,7 +359,7 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
                     self->startCell,                        // param_9
                     self->endCell,                          // param_10
                     box,                                    // param_11
-                    transform                               // param_12
+                    &transform                              // param_12
                 );
             }
         }

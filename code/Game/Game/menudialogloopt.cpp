@@ -120,24 +120,22 @@ namespace MenuSceneConst {
 //   frustum = Volume::Frustum(near=1, far=100, fovY=90, fovX=90)
 //   Graphics::Camera::Camera(self+0x34, frustum, ident, true /* isPerspective */)
 static void* MenuScene_Helper_8800(void* transformObj) {
-    if (!fn_Math_Transform_Ctor || !fn_Math_Transform3_Identity ||
-        !fn_Volume_Frustum_Ctor || !fn_Graphics_Camera_Ctor) {
-        printf("[MenuDLT::Helper8800] missing fn ptrs (TCtor=%p T3Id=%p FrustC=%p CamC=%p)\n",
-               (void*)fn_Math_Transform_Ctor, (void*)fn_Math_Transform3_Identity,
+    if (!fn_Volume_Frustum_Ctor || !fn_Graphics_Camera_Ctor) {
+        printf("[MenuDLT::Helper8800] missing fn ptrs (FrustC=%p CamC=%p)\n",
                (void*)fn_Volume_Frustum_Ctor, (void*)fn_Graphics_Camera_Ctor);
         return transformObj;
     }
-    fn_Math_Transform_Ctor(transformObj);
+    // ??0Transform@Math@@QEAA@XZ  retail 0x180015080
+    *reinterpret_cast<Math::Transform*>(transformObj) = Math::Transform();
 
     // Zero scalars at +0x1C (qword) and +0x24 (dword) per original.
     Field<uint64_t>(transformObj, 0x1C) = 0;
     Field<uint32_t>(transformObj, 0x24) = 0;
 
-    // Transform3::Identity returns BY VALUE: the hidden return slot is an
-    // argument, not something the callee allocates. Passing nothing left it
-    // writing 0x30 bytes through a stale RCX (see engine_funcs.h).
-    uint8_t identBuf[0x40] = {};
-    void* ident = fn_Math_Transform3_Identity(identBuf);
+    // ?Identity@Transform3@Math@@SA?AV12@XZ  retail 0x1800347f0.
+    // Returns by value onto a caller-owned object; the hidden-return-slot shape
+    // (and the stale-RCX wild write it once caused) went with the C seam.
+    Math::Transform3 ident = Math::Transform3::Identity();
 
     // Frustum ctor takes 4 Scalar* args in order (near, far, fovX, fovY) — the
     // first two are stored as raw plane distances, the last two are interpreted
@@ -153,7 +151,7 @@ static void* MenuScene_Helper_8800(void* transformObj) {
 
     // Camera ctor: self = transform+0x34, frustum, transform3, isPerspective=true
     void* cameraObj = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(transformObj) + 0x34);
-    fn_Graphics_Camera_Ctor(cameraObj, frustumBuf, ident, true);
+    fn_Graphics_Camera_Ctor(cameraObj, frustumBuf, &ident, true);
     return transformObj;
 }
 
@@ -389,15 +387,14 @@ void MenuDialogLoopT_PhaseB_InitState(MenuDialogLoopT_PhaseBState* state,
     if (!self || !menuScene || !scene) return;
     if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_Graphics_MeshInstance_Ctor ||
         !fn_Graphics_MeshInstance_SetMesh || !fn_Graphics_Scene_AddObject ||
-        !fn_Geometry_SetTransform || !fn_Transform_FromYawPitchOffset ||
+        !fn_Geometry_SetTransform ||
         !fn_Time_Ctor_Float) {
         printf("[MenuDLT::PhaseB] missing required fn ptrs "
-               "(MICtor=%p MISetM=%p AddObj=%p GeomSetT=%p T_FYPO=%p TimeC=%p) — skipping\n",
+               "(MICtor=%p MISetM=%p AddObj=%p GeomSetT=%p TimeC=%p) — skipping\n",
                (void*)fn_Graphics_MeshInstance_Ctor,
                (void*)fn_Graphics_MeshInstance_SetMesh,
                (void*)fn_Graphics_Scene_AddObject,
                (void*)fn_Geometry_SetTransform,
-               (void*)fn_Transform_FromYawPitchOffset,
                (void*)fn_Time_Ctor_Float);
         return;
     }
@@ -504,14 +501,13 @@ void MenuDialogLoopT_LoadParticles_PhaseC(void* self, void* menuScene, void* sce
     if (!fn_MemAlloc || !g_pMemAllocSingleton ||
         !fn_Graphics_ParticleSystemInstance_Ctor ||
         !fn_Graphics_Scene_AddObject ||
-        !fn_Geometry_SetTransform || !fn_Transform_FromYawPitchOffset ||
+        !fn_Geometry_SetTransform ||
         !fn_Time_Ctor_Float) {
         printf("[MenuDLT::PhaseC] missing required fn ptrs "
-               "(PSICtor=%p AddObj=%p GeomSetT=%p T_FYPO=%p TimeC=%p) — skipping\n",
+               "(PSICtor=%p AddObj=%p GeomSetT=%p TimeC=%p) — skipping\n",
                (void*)fn_Graphics_ParticleSystemInstance_Ctor,
                (void*)fn_Graphics_Scene_AddObject,
                (void*)fn_Geometry_SetTransform,
-               (void*)fn_Transform_FromYawPitchOffset,
                (void*)fn_Time_Ctor_Float);
         return;
     }
@@ -842,7 +838,7 @@ void MenuDialogLoopT_DrawScene_PhaseA(void* self, float alpha, void* context) {
     void* menuScene = Field<void*>(self, MenuDLTOff::menuSceneExt_b90);
     if (!menuScene || !context) return;
 
-    if (!fn_Math_Vector3_FromYawPitch || !fn_Graphics_SunLight_Set ||
+    if (!fn_Graphics_SunLight_Set ||
         !fn_Video_Context_SetFog || !fn_Graphics_Renderer_Draw) {
         printf("[MenuDLT::DrawScene] missing fn pointers — skipping\n");
         return;
@@ -883,8 +879,8 @@ void MenuDialogLoopT_DrawScene_PhaseA(void* self, float alpha, void* context) {
     float sunYaw   = *reinterpret_cast<float*>(ms + 0x1AC);
     float sunPitch = -*reinterpret_cast<float*>(ms + 0x1B0);
 
-    uint8_t dirVec[16] = {};  // Vector3 = 12 bytes, padded to 16 for safety
-    fn_Math_Vector3_FromYawPitch(dirVec, &sunYaw, &sunPitch);
+    // ?FromYawPitch@Vector3@Math@@SA?AV12@AEBVScalar@2@0@Z  retail 0x1800220b0
+    Math::Vector3 dirVec = Math::Vector3::FromYawPitch(sunYaw, sunPitch);
 
     // Sun color Vector4 — read sun field at +0x198..+0x19A in BGR memory order,
     // pack as RGB (byte+2 → x, byte+1 → y, byte+0 → z, 1.0 → w).
@@ -904,7 +900,7 @@ void MenuDialogLoopT_DrawScene_PhaseA(void* self, float alpha, void* context) {
 
     // Original arg order: SunLight::Set(self, dir, sunVec4, ambientVec4) — R8 is
     // sun, R9 is ambient.
-    fn_Graphics_SunLight_Set(sunLight, dirVec, sunColorVec, ambientVec);
+    fn_Graphics_SunLight_Set(sunLight, &dirVec, sunColorVec, ambientVec);
 
     // Push sky color into Video::Context+0x3b8/+0x288 and OR fog-enable bits.
     // Original disasm:
@@ -975,15 +971,10 @@ void MenuDialogLoopT_UpdateCamera_PhaseA(void* self, float deltaSeconds) {
     void* transform = Field<void*>(self, MenuDLTOff::transform_bb8);
     if (!transform) return;
 
-    if (!fn_Math_Vector3_FromYawPitch || !fn_Math_Transform_FromLookAt ||
-        !fn_Transform_AsTransform3 || !fn_Camera_SetCameraToWorld) {
+    if (!fn_Camera_SetCameraToWorld) {
         static int warned = 0;
         if (warned++ < 3) {
-            printf("[MenuDLT::UpdateCamera] missing fn ptrs (FromYP=%p FromLA=%p "
-                   "AsT3=%p SetCTW=%p) — skipping\n",
-                   (void*)fn_Math_Vector3_FromYawPitch,
-                   (void*)fn_Math_Transform_FromLookAt,
-                   (void*)fn_Transform_AsTransform3,
+            printf("[MenuDLT::UpdateCamera] missing fn ptrs (SetCTW=%p) — skipping\n",
                    (void*)fn_Camera_SetCameraToWorld);
         }
         return;
@@ -1025,21 +1016,18 @@ void MenuDialogLoopT_UpdateCamera_PhaseA(void* self, float deltaSeconds) {
     float* targetPtr  = reinterpret_cast<float*>(
         reinterpret_cast<uintptr_t>(transform) + 0x1C);
 
-    float fwdVec[4] = {};  // Vector3 + pad
-    fn_Math_Vector3_FromYawPitch(fwdVec, &yawScalar, &pitchScalar);
+    // ?FromYawPitch@Vector3@Math@@SA?AV12@AEBVScalar@2@0@Z  retail 0x1800220b0
+    Math::Vector3 fwdVec = Math::Vector3::FromYawPitch(yawScalar, pitchScalar);
 
-    float eyeVec[3];
-    eyeVec[0] = targetPtr[0] - fwdVec[0] * distance;
-    eyeVec[1] = targetPtr[1] - fwdVec[1] * distance;
-    eyeVec[2] = targetPtr[2] - fwdVec[2] * distance;
+    Math::Vector3 eyeVec(targetPtr[0] - fwdVec.x * distance,
+                         targetPtr[1] - fwdVec.y * distance,
+                         targetPtr[2] - fwdVec.z * distance);
 
-    // FromLookAt returns a Math::Transform (28B = pos vec3 + quat).
-    uint8_t newTransformBuf[32] = {};
-    fn_Math_Transform_FromLookAt(newTransformBuf, eyeVec, targetPtr);
-
-    // Copy the 28 bytes back into transform[+0x00..+0x1B] (overwrites pos+quat —
-    // the lookAtTarget at +0x1C and yaw/pitch/distance at +0x28+ are preserved).
-    std::memcpy(transform, newTransformBuf, 28);
+    // ?FromLookAt@Transform@Math@@SA?AV12@AEBVVector3@2@0@Z  retail 0x18007dbb0.
+    // Writes transform[+0x00..+0x1B] (pos+quat); the lookAtTarget at +0x1C and
+    // yaw/pitch/distance at +0x28+ are preserved.
+    *reinterpret_cast<Math::Transform*>(transform) = Math::Transform::FromLookAt(
+        eyeVec, *reinterpret_cast<const Math::Vector3*>(targetPtr));
 
     // 3. Convert to Transform3 (48B = 3x4 matrix) and apply to Camera at +0x34.
     Math::Transform3 t3Buf =
@@ -1057,7 +1045,7 @@ void MenuDialogLoopT_UpdateCamera_PhaseA(void* self, float deltaSeconds) {
                "camPos=(%.2f,%.2f,%.2f)\n",
                logCount, animYaw, yawScalar, pitchScalar, distance,
                targetPtr[0], targetPtr[1], targetPtr[2],
-               eyeVec[0], eyeVec[1], eyeVec[2],
+               eyeVec.x, eyeVec.y, eyeVec.z,
                pos[0], pos[1], pos[2]);
     }
 }

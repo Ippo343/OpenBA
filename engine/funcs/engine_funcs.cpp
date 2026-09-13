@@ -109,16 +109,6 @@ void** g_pVideoDeviceSingleton = nullptr;
 fn_VideoDevice_Lock_t fn_VideoDevice_Lock = nullptr;
 fn_VideoDevice_Unlock_t fn_VideoDevice_Unlock = nullptr;
 
-// String functions
-fn_String_Set_t fn_String_Set = nullptr;
-fn_String_Format_t fn_String_Format = nullptr;
-fn_String_FormatIndexed_t fn_String_FormatIndexed = nullptr;
-fn_String_Dtor_t fn_String_Dtor = nullptr;
-fn_String_LessThan_t fn_String_LessThan = nullptr;
-fn_String_Ctor_Default_t fn_String_Ctor_Default = nullptr;
-fn_String_Ctor_CStr_t fn_String_Ctor_CStr = nullptr;
-fn_String_Ctor_Copy_t fn_String_Ctor_Copy = nullptr;
-
 // ExternalFactory
 void** g_pExternalFactorySingleton = nullptr;
 fn_ExternalFactory_FindOrLoad_t fn_ExternalFactory_FindOrLoad = nullptr;
@@ -132,7 +122,6 @@ static bool IsDerivedFrom_NullSafe(void* self, uint32_t typeId) {
     return s_fn_IsDerivedFrom_real ? s_fn_IsDerivedFrom_real(self, typeId) : false;
 }
 uint32_t* g_pExternalTypeId = nullptr;
-fn_Filename_AdjustDelimiters_t fn_Filename_AdjustDelimiters = nullptr;
 fn_UpdateLoop_LoadResources_t fn_UpdateLoop_LoadResources = nullptr;
 fn_ListCleanup_t fn_ListCleanup = nullptr;
 
@@ -155,9 +144,6 @@ fn_ParseValue_t fn_ParseValue = nullptr;
 void** g_pPersistenceSingleton = nullptr;
 fn_Persistence_SetBool_t fn_Persistence_SetBool = nullptr;
 fn_Persistence_SetInt_t fn_Persistence_SetInt = nullptr;
-
-// Filename helpers
-fn_Filename_GetPathFilename_t fn_Filename_GetPathFilename = nullptr;
 
 // Array<Mod> copy
 fn_ModArrayCopy_t fn_ModArrayCopy = nullptr;
@@ -500,7 +486,6 @@ fn_FindDialogByControllerType_t fn_FindDialogByControllerType = nullptr;
 uint32_t* g_TypeId_MultiObjectComponent = nullptr;
 fn_EntityPanel_SyncTracking_t fn_EntityPanel_SyncTracking = nullptr;
 fn_CameraSys_ComputeViewTransform_t fn_CameraSys_ComputeViewTransform = nullptr;
-fn_Transform_AsTransform3_t fn_Transform_AsTransform3 = nullptr;
 fn_Camera_SetCameraToWorld_t fn_Camera_SetCameraToWorld = nullptr;
 // fn_ToolbarDialog_CloseSubDialog — inlined as ToolbarDialog_CloseSubDialog_Impl in toolbardialog.cpp
 // fn_ToolbarDialog_ChangeSpeed — inlined as ToolbarDialog_ChangeSpeed_Impl in toolbardialog.cpp
@@ -520,8 +505,6 @@ fn_EditTool_SelectEntity_t fn_EditTool_SelectEntity = nullptr;
 float* g_pAgeMultiplier = nullptr;
 float* g_pNotifyTimerDuration = nullptr;
 fn_Time_Ctor_Float_t fn_Time_Ctor_Float = nullptr;
-fn_String_SubString_t fn_String_SubString = nullptr;
-fn_String_Assign_t fn_String_Assign = nullptr;
 fn_UIString_Ctor_Entry_t fn_UIString_Ctor_Entry = nullptr;
 fn_UIString_DefaultCtor_t fn_UIString_DefaultCtor = nullptr;
 fn_Sprite_Default_Ctor_t fn_Sprite_Default_Ctor = nullptr;
@@ -533,7 +516,6 @@ fn_DocumentTextElement_SetText_UIString_t fn_DocumentTextElement_SetText_UIStrin
 fn_DocumentTextElement_SetText_t fn_DocumentTextElement_SetText = nullptr;
 fn_ContainerElement_SetOffsets_t fn_ContainerElement_SetOffsets = nullptr;
 fn_UIString_Ctor_Index_t fn_UIString_Ctor_Index = nullptr;
-fn_String_Equal_t fn_String_Equal = nullptr;
 uint32_t* g_TypeId_StringTable = nullptr;
 uint32_t* g_TypeId_HelpFirstElem = nullptr;
 uint32_t* g_TypeId_HelpComboElem = nullptr;
@@ -549,9 +531,6 @@ fn_Random_RandFloat_t fn_Random_RandFloat = nullptr;
 // fn_GenerateTownName — REMOVED, now reimplemented in newgamedialog.cpp
 fn_NameDB_GenerateName_t fn_NameDB_GenerateName = nullptr;
 uint32_t* g_TypeId_NameDatabase = nullptr;
-// fn_String_SubString already defined above
-fn_String_Equals_t fn_String_Equals = nullptr;
-fn_String_Append_t fn_String_Append = nullptr;
 fn_StartNewGame_t fn_StartNewGame = nullptr;
 uint32_t* g_TypeId_MapGenerator = nullptr;
 uint32_t* g_TypeId_ClimateGenerator = nullptr;
@@ -614,13 +593,10 @@ fn_DialogInstance_GetRoot_t fn_DialogInstance_GetRoot = nullptr;
 // Player/Tool module — shared engine APIs
 fn_SceneAddObject_t fn_SceneAddObject = nullptr;
 fn_SceneRemoveObject_t fn_SceneRemoveObject = nullptr;
-fn_Transform_FromYawPitchOffset_t fn_Transform_FromYawPitchOffset = nullptr;
 fn_Geometry_SetTransform_t fn_Geometry_SetTransform = nullptr;
 fn_MeshInstance_UpdateHierarchy_t fn_MeshInstance_UpdateHierarchy = nullptr;
 // Graphics::EdgeMesh family (selection-outline tessellation)
 fn_MemAllocStatic_t                fn_MemAllocStatic = nullptr;
-fn_Vector3_DefaultCtor_t           fn_Vector3_DefaultCtor = nullptr;
-fn_Quaternion_Ctor_t               fn_Quaternion_Ctor = nullptr;
 fn_Box_Ctor_t                      fn_Box_Ctor = nullptr;
 fn_Box_Extend_t                    fn_Box_Extend = nullptr;
 fn_Box_Assign_t                    fn_Box_Assign = nullptr;
@@ -640,9 +616,6 @@ fn_HighlightRemove_t fn_HighlightRemove = nullptr;
 fn_Element_Hide_t fn_Element_Hide = nullptr;
 fn_Modification_Find_t fn_Modification_Find = nullptr;
 fn_Configuration_GetVersionString_t fn_Configuration_GetVersionString = nullptr;
-fn_String_AppendStr_t fn_String_AppendStr = nullptr;
-fn_String_Concat_t fn_String_Concat = nullptr;
-fn_Filename_Less_t fn_Filename_Less = nullptr;
 // ModDetails_StringArrayPush — now static inline in moddetailsdialog.cpp
 
 // CitizenUI helpers
@@ -657,7 +630,6 @@ void** g_FollowDialog_Vtable = nullptr;
 
 // ProfessionUI support
 fn_External_GetPath_t fn_External_GetPath = nullptr;
-fn_Filename_GetPathIdentifier_t fn_Filename_GetPathIdentifier = nullptr;
 // BSTRebalance — now static inline in professionui.cpp
 // fn_ProfessionUI_HandleSpinner — reimplemented in professionui.cpp
 // fn_ProfessionUI_HandleButton — reimplemented in professionui.cpp
@@ -793,7 +765,6 @@ fn_PerlinNoise_Ctor_t fn_PerlinNoise_Ctor = nullptr;
 fn_PerlinNoise_Generate_t fn_PerlinNoise_Generate = nullptr;
 // Random default ctor: uses existing fn_Random_Default_Ctor
 fn_Random_RandTol_t fn_Random_RandTol = nullptr;
-fn_String_ToFloat_t fn_String_ToFloat = nullptr;
 // --- ModDialog::Slot4 support ---
 fn_MaterialInstance_Ctor_t fn_MaterialInstance_Ctor = nullptr;
 fn_MaterialInstance_SetMaterial_t fn_MaterialInstance_SetMaterial = nullptr;
@@ -850,11 +821,7 @@ fn_Graphics_SunLight_Set_t       fn_Graphics_SunLight_Set       = nullptr;
 fn_Graphics_MeshInstance_Ctor_t  fn_Graphics_MeshInstance_Ctor  = nullptr;
 fn_Graphics_MeshInstance_SetMesh_t fn_Graphics_MeshInstance_SetMesh = nullptr;
 fn_Graphics_Renderer_Draw_t      fn_Graphics_Renderer_Draw      = nullptr;
-fn_Math_Vector3_FromYawPitch_t   fn_Math_Vector3_FromYawPitch   = nullptr;
-fn_Math_Transform_FromLookAt_t   fn_Math_Transform_FromLookAt   = nullptr;
 fn_Video_Context_SetFog_t        fn_Video_Context_SetFog        = nullptr;
-fn_Math_Transform_Ctor_t         fn_Math_Transform_Ctor         = nullptr;
-fn_Math_Transform3_Identity_t    fn_Math_Transform3_Identity    = nullptr;
 fn_Volume_Frustum_Ctor_t         fn_Volume_Frustum_Ctor         = nullptr;
 fn_Graphics_Camera_Ctor_t        fn_Graphics_Camera_Ctor        = nullptr;
 fn_Graphics_Camera_SetFrustum_t  fn_Graphics_Camera_SetFrustum  = nullptr;
@@ -867,7 +834,6 @@ fn_Audio_Scene_AddEmitter_t fn_Audio_Scene_AddEmitter = nullptr;
 fn_Audio_Scene_RemoveEmitter_t fn_Audio_Scene_RemoveEmitter = nullptr;
 fn_Audio_Scene_GetEmitterCount_t fn_Audio_Scene_GetEmitterCount = nullptr;
 fn_Audio_Scene_StopEffect3D_t fn_Audio_Scene_StopEffect3D = nullptr;
-fn_Vector3_Equals_t fn_Vector3_Equals = nullptr;
 fn_DebugUI_OnDaySliderChanged_t fn_DebugUI_OnDaySliderChanged = nullptr;
 fn_DebugUI_WriteLightingColors_t fn_DebugUI_WriteLightingColors = nullptr;
 fn_Game_GetMonthFromTime_t fn_Game_GetMonthFromTime = nullptr;
@@ -921,12 +887,6 @@ fn_UI_EndSpriteCapture_t   fn_UI_EndSpriteCapture   = nullptr;
 void** g_pFileSystemSingleton = nullptr;
 fn_FileSystem_GetSourceDirectory_t fn_FileSystem_GetSourceDirectory = nullptr;
 fn_External_SaveText_t     fn_External_SaveText     = nullptr;
-fn_Filename_CtorString_t   fn_Filename_CtorString   = nullptr;
-fn_Filename_CtorCStr_t     fn_Filename_CtorCStr     = nullptr;
-fn_Filename_Ctor_t         fn_Filename_Ctor         = nullptr;
-fn_Filename_Dtor_t         fn_Filename_Dtor         = nullptr;
-fn_String_Concat_t         fn_String_ConcatSS       = nullptr;
-fn_String_Concat_t         fn_String_ConcatSS2      = nullptr;
 
 // ============================================================
 // Engine globals
@@ -987,8 +947,6 @@ fn_SpriteContext_SetScissor4_t fn_SpriteContext_SetScissor4 = nullptr;
 fn_SpriteContext_SetScissorVP_t fn_SpriteContext_SetScissorVP = nullptr;
 fn_FrustumProject_t fn_FrustumProject = nullptr;
 
-// Description class reimpl support
-g_fn_String_Serialize_t g_fn_String_Serialize = nullptr;
 fn_ElementDescription_Serialize_t fn_ElementDescription_Serialize = nullptr;
 fn_ElementDescription_Dtor_t fn_ElementDescription_Dtor = nullptr;
 fn_ElementDescription_Ctor_t fn_ElementDescription_Ctor = nullptr;
@@ -1050,7 +1008,6 @@ fn_Entity_GetPosition_t fn_Entity_GetPosition = nullptr;  // FUN_140122e20
 // BuildRoad::Execute helpers
 fn_Map_CheckPassable_t fn_Map_CheckPassable = nullptr;
 fn_Map_FindNearestPassable_t fn_Map_FindNearestPassable = nullptr;
-fn_Vector3_Ctor_t fn_Vector3_Ctor = nullptr;
 fn_PerformWork_Action_Ctor_t fn_PerformWork_Action_Ctor = nullptr;
 fn_PerformWork_Action_Ctor3_t fn_PerformWork_Action_Ctor3 = nullptr;
 fn_FindStorageForResource_t fn_FindStorageForResource = nullptr;
@@ -1437,10 +1394,6 @@ fn_Geometry_Init_t fn_Geometry_Init = nullptr;
 fn_Graphics_Geometry_Ctor_t fn_Graphics_Geometry_Ctor = nullptr;
 fn_Video_VertexBuffer_Ctor_t fn_Video_VertexBuffer_Ctor = nullptr;
 fn_Video_IndexBuffer_Ctor_t fn_Video_IndexBuffer_Ctor = nullptr;
-fn_Transform_SerializeWrapper_t fn_Transform_SerializeWrapper = nullptr;
-fn_Math_Transform_Serialize_t   fn_Math_Transform_Serialize   = nullptr;
-fn_Math_Vector3_Serialize_t     fn_Math_Vector3_Serialize     = nullptr;
-fn_Math_Vector4_Serialize_t     fn_Math_Vector4_Serialize     = nullptr;
 fn_System_Color_Serialize_t     fn_System_Color_Serialize     = nullptr;
 fn_Serializer_Serialize_Float_t fn_Serializer_Serialize_Float = nullptr;
 
@@ -1467,7 +1420,6 @@ fn_Serializer_Serialize_Uint_t fn_Serializer_Serialize_Uint = nullptr;
 fn_ExternalFactory_IsReferenceModeEnabled_t fn_ExternalFactory_IsReferenceModeEnabled = nullptr;
 fn_ExternalFactory_GetReferenceId_t fn_ExternalFactory_GetReferenceId = nullptr;
 fn_ExternalFactory_GetPathForReferenceId_t fn_ExternalFactory_GetPathForReferenceId = nullptr;
-fn_Filename_AssignOp_t fn_Filename_AssignOp = nullptr;
 
 uint32_t** g_ppTypeInfo_GraphicsMesh = nullptr;
 uint32_t** g_ppTypeInfo_Particle = nullptr;
@@ -1519,10 +1471,6 @@ fn_Camera_GetFrustum_t                 fn_Camera_GetFrustum                = nul
 fn_Frustum_Contains_t                  fn_Frustum_Contains                 = nullptr;
 fn_Frustum_MulTransform3_t             fn_Frustum_MulTransform3            = nullptr;
 fn_Geometry_GetTransform_t             fn_Geometry_GetTransform            = nullptr;
-fn_Transform_Inverse_t                 fn_Transform_Inverse                = nullptr;
-fn_Transform_AsMatrix_t                fn_Transform_AsMatrix               = nullptr;
-fn_Transform3_Copy_Ctor_t              fn_Transform3_Copy_Ctor             = nullptr;
-fn_Vector3_FromFloats_Ctor_t           fn_Vector3_FromFloats_Ctor          = nullptr;
 fn_InterpolatedState_Transform_Lerp_t  fn_InterpolatedState_Transform_Lerp = nullptr;
 fn_Context_SetTransform_t              fn_Context_SetTransform             = nullptr;
 fn_Context_SetColor_t                  fn_Context_SetColor                 = nullptr;
@@ -1641,35 +1589,6 @@ bool EngineFuncsInit() {
     fn_VideoDevice_Unlock = reinterpret_cast<fn_VideoDevice_Unlock_t>(
         ResolveExport("?Unlock@Device@Video@@QEAAXXZ"));
 
-    // --- String functions ---
-    fn_String_Set = reinterpret_cast<fn_String_Set_t>(
-        ResolveExport("?Set@String@System@@QEAAXPEBD@Z"));
-
-    fn_String_Format = reinterpret_cast<fn_String_Format_t>(
-        ResolveExport("?Format@String@System@@SA?AV12@PEBDZZ"));
-
-    fn_String_FormatIndexed = reinterpret_cast<fn_String_FormatIndexed_t>(
-        ResolveExport("?FormatIndexed@String@System@@SA?AV12@PEBDZZ"));
-
-    fn_String_Dtor = reinterpret_cast<fn_String_Dtor_t>(
-        ResolveExport("??1String@System@@QEAA@XZ"));
-
-    // String::operator< — lexicographic comparison
-    fn_String_LessThan = reinterpret_cast<fn_String_LessThan_t>(
-        ResolveExport("??MString@System@@QEBA_NAEBV01@@Z"));
-
-    // String::String() — default ctor
-    fn_String_Ctor_Default = reinterpret_cast<fn_String_Ctor_Default_t>(
-        ResolveExport("??0String@System@@QEAA@XZ"));
-
-    // String::String(const char*) — ctor from C string
-    fn_String_Ctor_CStr = reinterpret_cast<fn_String_Ctor_CStr_t>(
-        ResolveExport("??0String@System@@QEAA@PEBD@Z"));
-
-    // String::String(String const&) — copy ctor
-    fn_String_Ctor_Copy = reinterpret_cast<fn_String_Ctor_Copy_t>(
-        ResolveExport("??0String@System@@QEAA@AEBV01@@Z"));
-
     // --- ExternalFactory ---
     g_pExternalFactorySingleton = reinterpret_cast<void**>(
         ResolveAddr(Module::Runtime, 0x1801fc6c8));
@@ -1699,9 +1618,6 @@ bool EngineFuncsInit() {
     // Type ID for External resource (dialog resources)
     g_pExternalTypeId = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Runtime, 0x1801faa88));
-
-    fn_Filename_AdjustDelimiters = reinterpret_cast<fn_Filename_AdjustDelimiters_t>(
-        ResolveExport("?AdjustDelimiters@Filename@System@@AEAAXXZ"));
 
     fn_UpdateLoop_LoadResources = reinterpret_cast<fn_UpdateLoop_LoadResources_t>(
         ResolveExport("?LoadResources@UpdateLoop@Engine@@QEAAXXZ"));
@@ -1738,10 +1654,6 @@ bool EngineFuncsInit() {
 
     fn_Persistence_SetInt = reinterpret_cast<fn_Persistence_SetInt_t>(
         ResolveExport("?Set@Persistence@IO@@QEAAXPEBD0H@Z"));
-
-    // --- Filename::GetPathFilename ---
-    fn_Filename_GetPathFilename = reinterpret_cast<fn_Filename_GetPathFilename_t>(
-        ResolveExport("?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z"));
 
     // --- Array<Mod>::operator= (deep copy with CopyCtor per element) ---
     fn_ModArrayCopy = reinterpret_cast<fn_ModArrayCopy_t>(
@@ -2548,8 +2460,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1400666b0));
     fn_CameraSys_ComputeViewTransform = reinterpret_cast<fn_CameraSys_ComputeViewTransform_t>(
         ResolveAddr(Module::Exe, 0x1400983f0));
-    fn_Transform_AsTransform3 = reinterpret_cast<fn_Transform_AsTransform3_t>(
-        ResolveAddr(Module::Runtime, 0x18001fcd0));
     fn_Camera_SetCameraToWorld = reinterpret_cast<fn_Camera_SetCameraToWorld_t>(
         ResolveAddr(Module::Runtime, 0x1800feb00));
     // fn_ToolbarDialog_CloseSubDialog — inlined as ToolbarDialog_CloseSubDialog_Impl in toolbardialog.cpp
@@ -2611,10 +2521,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1401721cc));
     fn_Time_Ctor_Float = reinterpret_cast<fn_Time_Ctor_Float_t>(
         ResolveExport("??0Time@System@@QEAA@M@Z"));
-    fn_String_SubString = reinterpret_cast<fn_String_SubString_t>(
-        ResolveExport("?SubString@String@System@@QEBA?AV12@HH@Z"));
-    fn_String_Assign = reinterpret_cast<fn_String_Assign_t>(
-        ResolveExport("??4String@System@@QEAAAEAV01@AEBV01@@Z"));
     // UI::String::String(ExternalPtr<StringTable>) — single-arg ctor, dispatch at 0x140151300
     {
         void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151300));
@@ -2666,8 +2572,6 @@ bool EngineFuncsInit() {
         ResolveExport("?SetOffsets@ContainerElement@UI@@QEAAXHH@Z"));
     fn_UIString_Ctor_Index = reinterpret_cast<fn_UIString_Ctor_Index_t>(
         ResolveExport("??0String@UI@@QEAA@V?$ExternalPtr@VStringTable@UI@@@Object@@H@Z"));
-    fn_String_Equal = reinterpret_cast<fn_String_Equal_t>(
-        ResolveExport("??8String@System@@QEBA_NAEBV01@@Z"));
     // HelpUI_ArrayResize now inline as HelpUI_ArrayResize_Impl in helpui.cpp
 
     // --- OptionsDialog support — Runtime DLL exports ---
@@ -2793,8 +2697,6 @@ bool EngineFuncsInit() {
     // the better failure (RtResolveMiss records the name; see resolve.h).
     fn_External_GetPath = reinterpret_cast<fn_External_GetPath_t>(
         ResolveExport("?GetPath@External@Object@@QEBA?AVFilename@System@@XZ"));
-    fn_Filename_GetPathIdentifier = reinterpret_cast<fn_Filename_GetPathIdentifier_t>(
-        ResolveExport("?GetPathIdentifer@Filename@System@@QEBA?AV12@XZ"));
     // BSTRebalance — now static inline in professionui.cpp (BSTRebalance_Impl)
     // fn_ProfessionUI_HandleSpinner — reimplemented in professionui.cpp
     // fn_ProfessionUI_HandleButton — reimplemented in professionui.cpp
@@ -2905,20 +2807,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1400a4b30));
     g_TypeId_NameDatabase = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c5a60));
-    // fn_String_SubString already resolved above
-    fn_String_Equals = reinterpret_cast<fn_String_Equals_t>(
-        ResolveExport("??8String@System@@QEBA_NPEBD@Z"));
-    // operator+= with non-trivial return. This used to read the exe dispatch slot
-    // 0x140151a18, which nothing registers in standalone — so *dispatch was 0 and
-    // every caller EXEC'd address 0 (hit by NewGameDialog's "-vill" -> "-ville"
-    // suffix fix-up, which only fires on ~1 name in 20). Resolve the Runtime
-    // export by name instead; the dispatch slot stays a fallback.
-    fn_String_Append = reinterpret_cast<fn_String_Append_t>(
-        ResolveExport("??YString@System@@QEAA?AV01@PEBD@Z"));
-    if (!fn_String_Append) {
-        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151a18));
-        if (dispatch) fn_String_Append = reinterpret_cast<fn_String_Append_t>(*dispatch);
-    }
     fn_StartNewGame = reinterpret_cast<fn_StartNewGame_t>(
         ResolveAddr(Module::Exe, 0x1400b4540));
     g_TypeId_MapGenerator = reinterpret_cast<uint32_t*>(
@@ -3028,10 +2916,7 @@ bool EngineFuncsInit() {
     {
         void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151288));
         if (dispatch && *dispatch) {
-            fn_Transform_FromYawPitchOffset = reinterpret_cast<fn_Transform_FromYawPitchOffset_t>(*dispatch);
         } else {
-            fn_Transform_FromYawPitchOffset = reinterpret_cast<fn_Transform_FromYawPitchOffset_t>(
-                ResolveExport("?FromYawPitchOffset@Transform@Math@@SA?AV12@AEBVScalar@2@0AEBVVector3@2@@Z"));
         }
     }
     // Graphics::Geometry::SetTransform — IAT dispatch slot 0x1401512e0; same fallback.
@@ -3056,10 +2941,6 @@ bool EngineFuncsInit() {
     // 0x140152a78/b60) are empty in standalone, so ResolveExport is primary.
     fn_MemAllocStatic = reinterpret_cast<fn_MemAllocStatic_t>(
         ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
-    fn_Vector3_DefaultCtor = reinterpret_cast<fn_Vector3_DefaultCtor_t>(
-        ResolveExport("??0Vector3@Math@@QEAA@XZ"));
-    fn_Quaternion_Ctor = reinterpret_cast<fn_Quaternion_Ctor_t>(
-        ResolveExport("??0Quaternion@Math@@QEAA@MMMM@Z"));
     fn_Box_Ctor = reinterpret_cast<fn_Box_Ctor_t>(
         ResolveExport("??0Box@Volume@@QEAA@XZ"));
     fn_Box_Extend = reinterpret_cast<fn_Box_Extend_t>(
@@ -3105,7 +2986,6 @@ bool EngineFuncsInit() {
     printf("[EngineFuncs] Player/Tool APIs resolved:\n");
     printf("  SceneAddObject            = %p\n", (void*)fn_SceneAddObject);
     printf("  SceneRemoveObject         = %p\n", (void*)fn_SceneRemoveObject);
-    printf("  Transform_FromYawPitch    = %p\n", (void*)fn_Transform_FromYawPitchOffset);
     printf("  Geometry_SetTransform     = %p\n", (void*)fn_Geometry_SetTransform);
     printf("  MeshInstance_UpdateHier   = %p\n", (void*)fn_MeshInstance_UpdateHierarchy);
     printf("  TileRender                = %p\n", (void*)fn_TileRender);
@@ -3125,17 +3005,14 @@ bool EngineFuncsInit() {
     // String::operator+= — non-exported, resolve from exe dispatch table at 0x140151a00
     {
         void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151a00));
-        if (dispatch) fn_String_AppendStr = reinterpret_cast<fn_String_AppendStr_t>(*dispatch);
     }
     // System::operator+ — non-exported, resolve from exe dispatch table at 0x140151a08
     {
         void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151a08));
-        if (dispatch) fn_String_Concat = reinterpret_cast<fn_String_Concat_t>(*dispatch);
     }
     // Filename::operator< — non-exported, resolve from exe dispatch table at 0x140151a20
     {
         void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151a20));
-        if (dispatch) fn_Filename_Less = reinterpret_cast<fn_Filename_Less_t>(*dispatch);
     }
     // ModDetails_StringArrayPush — now static inline in moddetailsdialog.cpp
 
@@ -3513,8 +3390,6 @@ bool EngineFuncsInit() {
     // Random default ctor — already resolved as fn_Random_Default_Ctor above
     fn_Random_RandTol = reinterpret_cast<fn_Random_RandTol_t>(
         ResolveExport("?RandTol@Random@System@@QEAAHH@Z"));
-    fn_String_ToFloat = reinterpret_cast<fn_String_ToFloat_t>(
-        ResolveExport("?ToFloat@String@System@@SAMPEBD@Z"));
 
     // --- DebugUI helpers ---
     // Weather_ResetTime (exe 0x1400944e0)
@@ -3614,16 +3489,8 @@ bool EngineFuncsInit() {
         ResolveExport("?SetMesh@MeshInstance@Graphics@@QEAAXV?$ExternalPtr@VGraphicsMesh@Graphics@@@Object@@@Z"));
     fn_Graphics_Renderer_Draw = reinterpret_cast<fn_Graphics_Renderer_Draw_t>(
         ResolveExport("?Draw@Renderer@Graphics@@QEAAXAEAVContext@Video@@MAEBVScene@2@AEBVCamera@2@@Z"));
-    fn_Math_Vector3_FromYawPitch = reinterpret_cast<fn_Math_Vector3_FromYawPitch_t>(
-        ResolveExport("?FromYawPitch@Vector3@Math@@SA?AV12@AEBVScalar@2@0@Z"));
-    fn_Math_Transform_FromLookAt = reinterpret_cast<fn_Math_Transform_FromLookAt_t>(
-        ResolveExport("?FromLookAt@Transform@Math@@SA?AV12@AEBVVector3@2@0@Z"));
     fn_Video_Context_SetFog = reinterpret_cast<fn_Video_Context_SetFog_t>(
         ResolveExport("?SetFog@Context@Video@@QEAAXMMAEBVVector4@Math@@@Z"));
-    fn_Math_Transform_Ctor = reinterpret_cast<fn_Math_Transform_Ctor_t>(
-        ResolveExport("??0Transform@Math@@QEAA@XZ"));
-    fn_Math_Transform3_Identity = reinterpret_cast<fn_Math_Transform3_Identity_t>(
-        ResolveExport("?Identity@Transform3@Math@@SA?AV12@XZ"));
     fn_Volume_Frustum_Ctor = reinterpret_cast<fn_Volume_Frustum_Ctor_t>(
         ResolveExport("??0Frustum@Volume@@QEAA@AEBVScalar@Math@@000@Z"));
     fn_Graphics_Camera_Ctor = reinterpret_cast<fn_Graphics_Camera_Ctor_t>(
@@ -3648,14 +3515,6 @@ bool EngineFuncsInit() {
         ResolveExport("?GetEmitterCount@Scene@Audio@@QEBAHI@Z"));
     fn_Audio_Scene_StopEffect3D = reinterpret_cast<fn_Audio_Scene_StopEffect3D_t>(
         ResolveExport("?StopEffect3D@Scene@Audio@@QEAAXI@Z"));
-    // Was resolving under a mangled name that does not exist in the DLL
-    // (Runtime-x64.dll's export table has this as ??8..., the MSVC operator==
-    // mangling, not "?operator==@..."; verified with pefile against the
-    // export table 2026-09-06). fn_Vector3_Equals_t's shape (bool return, no
-    // hidden slot, this in RCX/rhs in RDX) already matches this export's
-    // ABI, so only the name needed fixing.
-    fn_Vector3_Equals = reinterpret_cast<fn_Vector3_Equals_t>(
-        ResolveExport("??8Vector3@Math@@QEBA_NAEBV01@@Z"));  // retail 0x1800150a0
     fn_DebugUI_OnDaySliderChanged = reinterpret_cast<fn_DebugUI_OnDaySliderChanged_t>(
         ResolveAddr(Module::Exe, 0x1400607E0));
     fn_DebugUI_WriteLightingColors = reinterpret_cast<fn_DebugUI_WriteLightingColors_t>(
@@ -3770,12 +3629,6 @@ bool EngineFuncsInit() {
     printf("  UI::Draw                  = %p\n", (void*)fn_UI_Draw);
     printf("  UI::CloseDialog           = %p\n", (void*)fn_UI_CloseDialog);
     printf("  DynArrayPush              = %p\n", (void*)fn_DynArrayPush);
-    printf("  String::Set               = %p\n", (void*)fn_String_Set);
-    printf("  String::Format            = %p\n", (void*)fn_String_Format);
-    printf("  String::~String           = %p\n", (void*)fn_String_Dtor);
-    printf("  String::String()          = %p\n", (void*)fn_String_Ctor_Default);
-    printf("  String::String(cstr)      = %p\n", (void*)fn_String_Ctor_CStr);
-    printf("  String::String(copy)      = %p\n", (void*)fn_String_Ctor_Copy);
     printf("  PostDrawPush              = %p\n", (void*)fn_PostDrawPush);
     printf("  PostUpdatePush            = %p\n", (void*)fn_PostUpdatePush);
     printf("  VideoCtx::Ctor            = %p\n", (void*)fn_VideoCtx_Ctor);
@@ -3792,7 +3645,6 @@ bool EngineFuncsInit() {
     printf("  IsDerivedFrom             = %p\n", (void*)fn_IsDerivedFrom);
     printf("  ExternalTypeId            = %p -> 0x%x\n", (void*)g_pExternalTypeId,
            g_pExternalTypeId ? *g_pExternalTypeId : 0);
-    printf("  Filename::AdjustDelimiters= %p\n", (void*)fn_Filename_AdjustDelimiters);
     printf("  UpdateLoop::LoadResources = %p\n", (void*)fn_UpdateLoop_LoadResources);
     printf("  ListCleanup               = %p\n", (void*)fn_ListCleanup);
     printf("  ModEntry::CopyCtor        = %p\n", (void*)fn_ModEntry_CopyCtor);
@@ -3806,7 +3658,6 @@ bool EngineFuncsInit() {
            g_pPersistenceSingleton ? *g_pPersistenceSingleton : nullptr);
     printf("  Persistence::SetBool      = %p\n", (void*)fn_Persistence_SetBool);
     printf("  Persistence::SetInt       = %p\n", (void*)fn_Persistence_SetInt);
-    printf("  Filename::GetPathFilename = %p\n", (void*)fn_Filename_GetPathFilename);
     printf("  ModArrayCopy              = %p\n", (void*)fn_ModArrayCopy);
     printf("[EngineFuncs] UI infrastructure:\n");
     printf("  DialogController::~Dtor   = %p\n", (void*)fn_DialogController_Dtor);
@@ -3904,31 +3755,6 @@ bool EngineFuncsInit() {
 
     fn_External_SaveText = reinterpret_cast<fn_External_SaveText_t>(
         ResolveExport("?SaveText@External@Object@@QEAA_NAEBVFilename@System@@0@Z"));
-
-    fn_Filename_CtorString = reinterpret_cast<fn_Filename_CtorString_t>(
-        ResolveExport("??0Filename@System@@QEAA@AEBVString@1@@Z"));
-
-    // Default ctor (no-arg). Mangled name verified via Ghidra Runtime DLL
-    // 0x180006220 — body is 8-byte zero-init.
-    fn_Filename_Ctor = reinterpret_cast<fn_Filename_Ctor_t>(
-        ResolveExport("??0Filename@System@@QEAA@XZ"));
-
-    fn_Filename_CtorCStr = reinterpret_cast<fn_Filename_CtorCStr_t>(
-        ResolveExport("??0Filename@System@@QEAA@PEBD@Z"));
-
-    fn_Filename_Dtor = reinterpret_cast<fn_Filename_Dtor_t>(
-        ResolveExport("??1Filename@System@@QEAA@XZ"));
-
-    // String concat operator+ via dispatch table (non-trivial return ABI, free functions)
-    // Dispatch at 0x140151a10 (ordinal 0x100) and 0x140151a08 (ordinal 0xff)
-    {
-        void** d1 = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151a10));
-        if (d1 && *d1)
-            fn_String_ConcatSS = reinterpret_cast<fn_String_Concat_t>(*d1);
-        void** d2 = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151a08));
-        if (d2 && *d2)
-            fn_String_ConcatSS2 = reinterpret_cast<fn_String_Concat_t>(*d2);
-    }
 
     // --- Stage 3: OptionsDialog Runtime exports ---
 
@@ -4072,10 +3898,6 @@ bool EngineFuncsInit() {
     fn_FrustumProject = reinterpret_cast<fn_FrustumProject_t>(
         ResolveAddr(Module::Exe, 0x14006c5b0));
 
-    // --- Description class reimpl support ---
-    // Dispatch table reads for Runtime DLL functions
-    g_fn_String_Serialize = *reinterpret_cast<g_fn_String_Serialize_t*>(
-        ResolveAddr(Module::Exe, 0x140151238));
     fn_ElementDescription_Serialize = *reinterpret_cast<fn_ElementDescription_Serialize_t*>(
         ResolveAddr(Module::Exe, 0x1401518c8));
     fn_ElementDescription_Dtor = *reinterpret_cast<fn_ElementDescription_Dtor_t*>(
@@ -4223,8 +4045,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1400a00f0));
     fn_Map_FindNearestPassable = reinterpret_cast<fn_Map_FindNearestPassable_t>(
         ResolveAddr(Module::Exe, 0x14009ccf0));
-    fn_Vector3_Ctor = *reinterpret_cast<fn_Vector3_Ctor_t*>(
-        ResolveAddr(Module::Exe, 0x140152a30));
     fn_PerformWork_Action_Ctor = reinterpret_cast<fn_PerformWork_Action_Ctor_t>(
         ResolveAddr(Module::Exe, 0x1400bffd0));
     fn_PerformWork_Action_Ctor3 = reinterpret_cast<fn_PerformWork_Action_Ctor3_t>(
@@ -4352,20 +4172,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x14001b030));
     fn_BuildingTypeArray_Resize = reinterpret_cast<fn_BuildingTypeArray_Resize_t>(
         ResolveAddr(Module::Exe, 0x14001b340));
-
-    // Filename ctor/dtor — already resolved from dispatch slots earlier in init
-    // fn_Filename_Ctor at 0x140151d40, fn_Filename_Dtor at 0x1401529e8
-    // Resolve here as fallback if not yet done
-    if (!fn_Filename_Ctor) {
-        void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151d40));
-        if (slot && *slot)
-            fn_Filename_Ctor = reinterpret_cast<fn_Filename_Ctor_t>(*slot);
-    }
-    if (!fn_Filename_Dtor) {
-        void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401529e8));
-        if (slot && *slot)
-            fn_Filename_Dtor = reinterpret_cast<fn_Filename_Dtor_t>(*slot);
-    }
 
 #ifdef _DEBUG
     printf("[EngineFuncs] Achievement Goal support resolved\n");
@@ -4528,14 +4334,6 @@ bool EngineFuncsInit() {
         ResolveExport("??0VertexBuffer@Video@@QEAA@XZ"));
     fn_Video_IndexBuffer_Ctor = reinterpret_cast<fn_Video_IndexBuffer_Ctor_t>(
         ResolveExport("??0IndexBuffer@Video@@QEAA@XZ"));
-    fn_Transform_SerializeWrapper = reinterpret_cast<fn_Transform_SerializeWrapper_t>(
-        ResolveAddr(Module::Exe, 0x1400988c0));
-    fn_Math_Transform_Serialize = reinterpret_cast<fn_Math_Transform_Serialize_t>(
-        ResolveExport("?Serialize@Transform@Math@@QEAAXAEAVSerializer@IO@@@Z"));
-    fn_Math_Vector3_Serialize = reinterpret_cast<fn_Math_Vector3_Serialize_t>(
-        ResolveExport("?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z"));
-    fn_Math_Vector4_Serialize = reinterpret_cast<fn_Math_Vector4_Serialize_t>(
-        ResolveExport("?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z"));
     fn_System_Color_Serialize = reinterpret_cast<fn_System_Color_Serialize_t>(
         ResolveExport("?Serialize@Color@System@@QEAAXAEAVSerializer@IO@@@Z"));
     fn_Serializer_Serialize_Float = reinterpret_cast<fn_Serializer_Serialize_Float_t>(
@@ -4651,12 +4449,6 @@ bool EngineFuncsInit() {
                 reinterpret_cast<fn_ExternalFactory_GetPathForReferenceId_t>(
                     ResolveExport("?GetPathForReferenceId@ExternalFactory@Object@@QEBA?AVFilename@System@@I@Z"));
 
-        slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401529e0));
-        if (slot && *slot)
-            fn_Filename_AssignOp = reinterpret_cast<fn_Filename_AssignOp_t>(*slot);
-        else
-            fn_Filename_AssignOp = reinterpret_cast<fn_Filename_AssignOp_t>(
-                ResolveExport("??4Filename@System@@QEAAAEAV01@AEBV01@@Z"));
     }
 
     // BaseTypeInfo* slots / typeId storage. These get filled by Runtime DLL
@@ -4683,10 +4475,6 @@ bool EngineFuncsInit() {
     printf("  Graphics_Geometry_Ctor  = %p\n", (void*)fn_Graphics_Geometry_Ctor);
     printf("  Video_VertexBuffer_Ctor = %p\n", (void*)fn_Video_VertexBuffer_Ctor);
     printf("  Video_IndexBuffer_Ctor  = %p\n", (void*)fn_Video_IndexBuffer_Ctor);
-    printf("  Transform_SerializeWrap = %p\n", (void*)fn_Transform_SerializeWrapper);
-    printf("  Math_Transform_Serial   = %p\n", (void*)fn_Math_Transform_Serialize);
-    printf("  Math_Vector3_Serial     = %p\n", (void*)fn_Math_Vector3_Serialize);
-    printf("  Math_Vector4_Serial     = %p\n", (void*)fn_Math_Vector4_Serialize);
     printf("  System_Color_Serial     = %p\n", (void*)fn_System_Color_Serialize);
     printf("  Serializer_Float        = %p\n", (void*)fn_Serializer_Serialize_Float);
     printf("  Array_Resize_S20/S08/S14= %p / %p / %p\n",
@@ -4705,7 +4493,6 @@ bool EngineFuncsInit() {
     printf("  EFactory_IsRefModeEn    = %p\n", (void*)fn_ExternalFactory_IsReferenceModeEnabled);
     printf("  EFactory_GetReferenceId = %p\n", (void*)fn_ExternalFactory_GetReferenceId);
     printf("  EFactory_GetPathForRef  = %p\n", (void*)fn_ExternalFactory_GetPathForReferenceId);
-    printf("  Filename_AssignOp       = %p\n", (void*)fn_Filename_AssignOp);
     printf("  TypeInfo Mesh/Particle  = %p / %p\n",
         (void*)g_ppTypeInfo_GraphicsMesh, (void*)g_ppTypeInfo_Particle);
     printf("  TypeId Weather          = %p\n", (void*)g_pTypeId_Weather);
@@ -4846,14 +4633,6 @@ bool EngineFuncsInit() {
         ResolveExport("??DFrustum@Volume@@QEBA?AV01@AEBVTransform3@Math@@@Z"));
     fn_Geometry_GetTransform = reinterpret_cast<fn_Geometry_GetTransform_t>(
         ResolveExport("?GetTransform@Geometry@Graphics@@QEBA?AVTransform@Math@@XZ"));
-    fn_Transform_Inverse = reinterpret_cast<fn_Transform_Inverse_t>(
-        ResolveExport("?Inverse@Transform@Math@@QEBA?AV12@XZ"));
-    fn_Transform_AsMatrix = reinterpret_cast<fn_Transform_AsMatrix_t>(
-        ResolveExport("?AsMatrix@Transform@Math@@QEBA?AVMatrix@2@XZ"));
-    fn_Transform3_Copy_Ctor = reinterpret_cast<fn_Transform3_Copy_Ctor_t>(
-        ResolveExport("??0Transform3@Math@@QEAA@AEBV01@@Z"));
-    fn_Vector3_FromFloats_Ctor = reinterpret_cast<fn_Vector3_FromFloats_Ctor_t>(
-        ResolveExport("??0Vector3@Math@@QEAA@MMM@Z"));
     fn_InterpolatedState_Transform_Lerp = reinterpret_cast<fn_InterpolatedState_Transform_Lerp_t>(
         ResolveExport("?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@AEBVScalar@4@@Z"));
     fn_Context_SetTransform = reinterpret_cast<fn_Context_SetTransform_t>(
@@ -4889,10 +4668,6 @@ bool EngineFuncsInit() {
     printf("  Frustum_Contains         = %p\n", (void*)fn_Frustum_Contains);
     printf("  Frustum_MulTransform3    = %p\n", (void*)fn_Frustum_MulTransform3);
     printf("  Geometry_GetTransform    = %p\n", (void*)fn_Geometry_GetTransform);
-    printf("  Transform_Inverse        = %p\n", (void*)fn_Transform_Inverse);
-    printf("  Transform_AsMatrix       = %p\n", (void*)fn_Transform_AsMatrix);
-    printf("  Transform3_Copy_Ctor     = %p\n", (void*)fn_Transform3_Copy_Ctor);
-    printf("  Vector3_FromFloats_Ctor  = %p\n", (void*)fn_Vector3_FromFloats_Ctor);
     printf("  InterpState_Trans_Lerp   = %p\n", (void*)fn_InterpolatedState_Transform_Lerp);
     printf("  Context_SetTransform     = %p\n", (void*)fn_Context_SetTransform);
     printf("  Context_SetColor         = %p\n", (void*)fn_Context_SetColor);
