@@ -77,14 +77,11 @@ typedef bool (*VertexBufferSet_t   )(void* self, int sizeBytes, int byteOffset, 
 typedef bool (*IndexBufferCreate_t )(void* self, int sizeBytes, bool dynamic, void* initialData);
 typedef bool (*IndexBufferSet_t    )(void* self, int sizeBytes, int byteOffset, void* data);
 
-// Vector3::Normalize uses MSVC hidden-retval ABI: RCX=this, RDX=retbuf.
-typedef void* (*Vector3Normalize_t )(void* self, void* retbuf);
 
 VertexBufferCreate_t s_VertexBufferCreate = nullptr;
 VertexBufferSet_t    s_VertexBufferSet    = nullptr;
 IndexBufferCreate_t  s_IndexBufferCreate  = nullptr;
 IndexBufferSet_t     s_IndexBufferSet     = nullptr;
-Vector3Normalize_t   s_Vector3Normalize   = nullptr;
 bool s_runtimeResolved = false;
 
 void ResolveRuntimePtrs() {
@@ -100,7 +97,6 @@ void ResolveRuntimePtrs() {
     s_VertexBufferSet    = reinterpret_cast<VertexBufferSet_t   >(loadSlot(0x140152690));
     s_IndexBufferCreate  = reinterpret_cast<IndexBufferCreate_t >(loadSlot(0x140152660));
     s_IndexBufferSet     = reinterpret_cast<IndexBufferSet_t    >(loadSlot(0x140152698));
-    s_Vector3Normalize   = reinterpret_cast<Vector3Normalize_t  >(loadSlot(0x1401512c0));
 
     // Fallback: resolve directly from Runtime DLL exports via mangled names.
     if (!s_VertexBufferCreate) {
@@ -118,10 +114,6 @@ void ResolveRuntimePtrs() {
     if (!s_IndexBufferSet) {
         s_IndexBufferSet = reinterpret_cast<IndexBufferSet_t>(
             ResolveExport("?Set@IndexBuffer@Video@@QEAA_NHHPEAX@Z"));
-    }
-    if (!s_Vector3Normalize) {
-        s_Vector3Normalize = reinterpret_cast<Vector3Normalize_t>(
-            ResolveExport("?Normalize@Vector3@Math@@QEBA?AV12@XZ"));
     }
 
     s_runtimeResolved = true;
@@ -200,8 +192,8 @@ extern "C" void* TradeWork_helper_e270_Body(void* self, void* retbuf, int col, i
     // triplanar rock blend (faceted/blocky terrain). RenderDoc A/B vs retail:
     // retail nz byte ~200-249 (unit normals tilting on slopes), ours was 126 flat.
     //
-    // Do it in plain C++ rather than via the runtime Vector3::Normalize: the slot
-    // at 0x1401512c0 / ?Normalize@Vector3@Math@@QEBA?AV12@XZ is the *by-value*
+    // Do it in plain C++ rather than via Math::Vector3::Normalize: that method is
+    // the *by-value*
     // (const) overload — it returns a normalized COPY and leaves `this` unchanged,
     // so it never mutated our vector (that's why nz stayed 2.0).
     float len = std::sqrt(nx * nx + ny * ny + nz * nz);

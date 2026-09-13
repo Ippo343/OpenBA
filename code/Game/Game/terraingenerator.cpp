@@ -34,7 +34,9 @@
 
 #include "Game/terraingenerator_funcs.h"
 #include "engine_funcs.h"
+#include "system/Filename.h"
 #include "resolve.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstring>
 
@@ -54,12 +56,6 @@ static void (*s_fn_TerrainDataResize)(void* arrayField, int newCount) = nullptr;
 // FUN_140020870 -- serialize terrain data array elements
 // Signature: void (void* serializer, uint32_t count, void* arrayPtr)
 static void (*s_fn_TerrainDataSerialize)(void* serializer, uint32_t count, void* arrayPtr) = nullptr;
-
-// System::Filename::Filename() -- default ctor
-static void* (*s_fn_Filename_Ctor)(void* self) = nullptr;
-
-// System::Filename::~Filename()
-static void (*s_fn_Filename_Dtor)(void* self) = nullptr;
 
 // ============================================================
 // Standalone reimplementations of the +0x80 terrain-data-array helpers.
@@ -139,20 +135,6 @@ void TerrainGenerator_InitFuncs() {
         ResolveAddr(Module::Exe, 0x140020870));
     if (!s_fn_TerrainDataSerialize) s_fn_TerrainDataSerialize = &Reimpl_TerrainDataSerialize;
 
-    // Filename ctor/dtor from exports
-    if (fn_Filename_Ctor) {
-        s_fn_Filename_Ctor = reinterpret_cast<void*(*)(void*)>(fn_Filename_Ctor);
-    } else {
-        s_fn_Filename_Ctor = reinterpret_cast<void*(*)(void*)>(
-            ResolveExport("??0Filename@System@@QEAA@XZ"));
-    }
-
-    if (fn_Filename_Dtor) {
-        s_fn_Filename_Dtor = reinterpret_cast<void(*)(void*)>(fn_Filename_Dtor);
-    } else {
-        s_fn_Filename_Dtor = reinterpret_cast<void(*)(void*)>(
-            ResolveExport("??1Filename@System@@QEAA@XZ"));
-    }
 }
 
 // ============================================================
@@ -184,18 +166,15 @@ static inline int GetSerializerVersion(void* serializer) {
 // Pattern from TerrainGenerator Slot5: Filename ctor, String::Serialize,
 // if version==0 resolve filename, Filename dtor.
 static void SerializeFilenameString(void* self_offset, void* serializer) {
-    uint8_t filenameObj[8]; // System::Filename stack object (small)
-    if (s_fn_Filename_Ctor) s_fn_Filename_Ctor(filenameObj);
+    System::Filename filenameObj;   // retail's scope temp; only ctor + dtor
+    (void)filenameObj;
 
-    if (g_fn_String_Serialize)
-        g_fn_String_Serialize(self_offset, serializer);
+    reinterpret_cast<System::String*>(self_offset)->Serialize(serializer);
 
     if (GetSerializerVersion(serializer) == 0) {
         if (s_fn_ResolveFilenameString)
             s_fn_ResolveFilenameString(self_offset);
     }
-
-    if (s_fn_Filename_Dtor) s_fn_Filename_Dtor(filenameObj);
 }
 
 // ============================================================
@@ -216,12 +195,10 @@ void* TerrainGenerator_Dtor(TerrainGenerator* self, uint32_t flags) {
     self->_field88 = nullptr;
 
     // Destroy strings in reverse order: +0x68, +0x50, +0x38, +0x28
-    if (fn_String_Dtor) {
-        fn_String_Dtor(reinterpret_cast<uint8_t*>(self) + 0x68);
-        fn_String_Dtor(reinterpret_cast<uint8_t*>(self) + 0x50);
-        fn_String_Dtor(reinterpret_cast<uint8_t*>(self) + 0x38);
-        fn_String_Dtor(reinterpret_cast<uint8_t*>(self) + 0x28);
-    }
+    reinterpret_cast<System::String*>(reinterpret_cast<uint8_t*>(self) + 0x68)->~String();
+    reinterpret_cast<System::String*>(reinterpret_cast<uint8_t*>(self) + 0x50)->~String();
+    reinterpret_cast<System::String*>(reinterpret_cast<uint8_t*>(self) + 0x38)->~String();
+    reinterpret_cast<System::String*>(reinterpret_cast<uint8_t*>(self) + 0x28)->~String();
 
     // Call External base destructor
     fn_External_Dtor(self);
@@ -264,8 +241,7 @@ void TerrainGenerator_Serialize(TerrainGenerator* self, void* stream) {
         fn_ExternalPtr_Serialize2(reinterpret_cast<uint8_t*>(self) + 0x20, serializer);
 
     // Serialize String at +0x28
-    if (g_fn_String_Serialize)
-        g_fn_String_Serialize(reinterpret_cast<uint8_t*>(self) + 0x28, serializer);
+    reinterpret_cast<System::String*>(reinterpret_cast<uint8_t*>(self) + 0x28)->Serialize(serializer);
 
     // Serialize bool at +0x30
     if (g_fn_Serialize_Bool)

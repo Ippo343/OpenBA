@@ -1,5 +1,6 @@
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 
 // TutorialHighlightDialog::Startup (0x1400E0020)
@@ -15,11 +16,9 @@ void TutorialHighlightDialog_Startup(TutorialHighlightDialog* self) {
     };
 
     for (auto& e : elements) {
-        uint8_t nameStr[8];
-        fn_String_Ctor_CStr(nameStr, e.name);
+        System::String nameStr(e.name);
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, nameStr);
-        fn_String_Dtor(nameStr);
+        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
 
         // Store the found element pointer at the target offset
         void* elem = *(void**)retBuf;

@@ -21,6 +21,7 @@
 #include "Tutorial/tutorialgoalbutton_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -42,9 +43,7 @@ void* TutorialGoalButton_Dtor(void* self, uint32_t flags) {
     *(uintptr_t*)s = vtable;
 
     // Destroy String at +0x20
-    if (fn_String_Dtor) {
-        fn_String_Dtor((void*)(s + 0x20));
-    }
+    reinterpret_cast<System::String*>(s + 0x20)->~String();
 
     // Set vtable to TutorialGoal (base)
     uintptr_t baseVtable = ResolveAddr(Module::Exe, TutorialGoalAddr::Vtable);
@@ -92,9 +91,7 @@ void TutorialGoalButton_Serialize(void* self, void* stream) {
     }
 
     // Serialize elementPath (+0x20)
-    if (g_fn_String_Serialize) {
-        g_fn_String_Serialize((void*)(s + 0x20), ser);
-    }
+    reinterpret_cast<System::String*>(s + 0x20)->Serialize(ser);
 
     // Serialize invertCheck (+0x28) — bool
     if (g_fn_Serialize_Bool) {

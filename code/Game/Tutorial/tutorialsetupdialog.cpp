@@ -29,6 +29,8 @@
 
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include "system/Filename.h"
+#include "system/String.h"
 #include "resolve.h"
 #include <cstdint>
 
@@ -97,10 +99,10 @@ void* TutorialSetupDialog_ScalarDtor(void* self, uint32_t flags) {
     *(void**)self = s_vtable;
 
     // Step 2: destroy inline String at +0x58
-    fn_String_Dtor((void*)(s + 0x58));
+    reinterpret_cast<System::String*>(s + 0x58)->~String();
 
     // Step 3: destroy inline String at +0x40
-    fn_String_Dtor((void*)(s + 0x40));
+    reinterpret_cast<System::String*>(s + 0x40)->~String();
 
     // Step 4-5: destroy 2nd string vector (ptr at +0x30, count at +0x38)
     {
@@ -109,7 +111,7 @@ void* TutorialSetupDialog_ScalarDtor(void* self, uint32_t flags) {
         if (buf && count > 0) {
             uint8_t* p = (uint8_t*)buf;
             for (uint32_t i = 0; i < count; ++i, p += 8) {
-                fn_String_Dtor(p);
+                reinterpret_cast<System::String*>(p)->~String();
             }
         }
         fn_MemFreeStatic(buf);
@@ -124,7 +126,7 @@ void* TutorialSetupDialog_ScalarDtor(void* self, uint32_t flags) {
         if (buf && count > 0) {
             uint8_t* p = (uint8_t*)buf;
             for (uint32_t i = 0; i < count; ++i, p += 8) {
-                fn_String_Dtor(p);
+                reinterpret_cast<System::String*>(p)->~String();
             }
         }
         fn_MemFreeStatic(buf);
@@ -175,16 +177,6 @@ typedef void (*fn_SerializeInt_t)(void* self, void* field, const char* name);
 static fn_SerializeInt_t fn_SerializeInt_local = nullptr;
 
 // System::String::Serialize(this, serializer) — via exref 0x140151238
-typedef void (*fn_StringSerialize_t)(void* self, void* serializer);
-static fn_StringSerialize_t fn_StringSerialize_local = nullptr;
-
-// System::Filename::Filename(this) — default ctor, via exref 0x140151d40
-typedef void (*fn_FilenameCtor_t)(void* self);
-static fn_FilenameCtor_t fn_FilenameCtor_local = nullptr;
-
-// System::Filename::~Filename(this) — dtor, via exref 0x1401529e8
-typedef void (*fn_FilenameDtor_t)(void* self);
-static fn_FilenameDtor_t fn_FilenameDtor_local = nullptr;
 
 static bool s_serializerFuncsResolved = false;
 
@@ -201,9 +193,6 @@ static void ResolveSerializerFuncs() {
     fn_SerializerCtor_local  = (fn_SerializerCtor_t) loadExref(0x140152ad8);
     fn_SerializerDtor_local  = (fn_SerializerDtor_t) loadExref(0x140152ad0);
     fn_SerializeInt_local    = (fn_SerializeInt_t)   loadExref(0x140152ac8);
-    fn_StringSerialize_local = (fn_StringSerialize_t)loadExref(0x140151238);
-    fn_FilenameCtor_local    = (fn_FilenameCtor_t)   loadExref(0x140151d40);
-    fn_FilenameDtor_local    = (fn_FilenameDtor_t)   loadExref(0x1401529e8);
 
     s_serializerFuncsResolved = true;
 }
@@ -230,7 +219,7 @@ uint64_t TutorialSetupDialog_Shutdown(void* self, void* stream) {
     if ((int32_t)count1 > 0) {
         uint8_t* p = *(uint8_t**)(s + 0x20);
         for (uint32_t i = 0; i < count1; ++i, p += 8) {
-            fn_StringSerialize_local(p, serializer);
+            reinterpret_cast<System::String*>(p)->Serialize(serializer);
         }
     }
 
@@ -248,12 +237,12 @@ uint64_t TutorialSetupDialog_Shutdown(void* self, void* stream) {
     if ((int32_t)count2 > 0) {
         uint8_t* p = *(uint8_t**)(s + 0x30);
         for (uint32_t i = 0; i < count2; ++i, p += 8) {
-            fn_StringSerialize_local(p, serializer);
+            reinterpret_cast<System::String*>(p)->Serialize(serializer);
         }
     }
 
-    // Serialize inline String at +0x40
-    fn_StringSerialize_local((void*)(s + 0x40), serializer);
+    // Serialize inline String at +0x40 (B.3.1 bridge: dialog is untyped bytes)
+    reinterpret_cast<System::String*>(s + 0x40)->Serialize(serializer);
 
     // Serialize External* pointer at +0x50 (as external reference)
     fn_SerializeExternalPtr((void*)(s + 0x50), serializer);
@@ -261,12 +250,12 @@ uint64_t TutorialSetupDialog_Shutdown(void* self, void* stream) {
     // Serialize int32 at +0x48
     fn_SerializeInt_local(serializer, (void*)(s + 0x48), nullptr);
 
-    // Construct a temporary Filename on the stack (needed as scope guard by the original)
-    uint8_t tempFilename[8];
-    fn_FilenameCtor_local(tempFilename);
+    // Temporary Filename retail's compiler emitted as this scope's guard.
+    System::Filename tempFilename;
+    (void)tempFilename;
 
     // Serialize inline String at +0x58 (external path)
-    fn_StringSerialize_local((void*)(s + 0x58), serializer);
+    reinterpret_cast<System::String*>(s + 0x58)->Serialize(serializer);
 
     // On load: resolve the external resource by name (FUN_14001b1d0).
     // Checks factory revision stamp at param+8 vs factory+8; if changed,
@@ -277,19 +266,14 @@ uint64_t TutorialSetupDialog_Shutdown(void* self, void* stream) {
         void* factory = *g_pExternalFactorySingleton;
         if (*(int32_t*)((uintptr_t)namePtr + 8) != *(int32_t*)((uintptr_t)factory + 8)) {
             // Construct Filename from the String and look it up in the factory
-            uint8_t filenameBuf[8];
-            fn_Filename_CtorString(filenameBuf, namePtr);
-            void* found = fn_ExternalFactory_Find ? fn_ExternalFactory_Find(factory, filenameBuf) : nullptr;
-            fn_Filename_Dtor(filenameBuf);
+            System::Filename filenameBuf(*reinterpret_cast<const System::String*>(namePtr));
+            void* found = fn_ExternalFactory_Find ? fn_ExternalFactory_Find(factory, &filenameBuf) : nullptr;
             // Cache the result if it passes the BuildComponent type check
             bool valid = found && g_TypeId_ComponentDescription_FC && fn_IsDerivedFrom(found, *g_TypeId_ComponentDescription_FC);
             *(void**)((uintptr_t)namePtr + 0x10) = valid ? found : nullptr;
             *(int32_t*)((uintptr_t)namePtr + 8) = *(int32_t*)((uintptr_t)factory + 8);
         }
     }
-
-    // Destroy temporary Filename
-    fn_FilenameDtor_local(tempFilename);
 
     // Serialize int32 at +0x70
     fn_SerializeInt_local(serializer, (void*)(s + 0x70), nullptr);

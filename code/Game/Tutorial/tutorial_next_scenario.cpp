@@ -41,6 +41,8 @@
 // 0D70's tail.
 
 #include "engine_funcs.h"
+#include "system/Filename.h"
+#include "system/String.h"
 #include "Tutorial/tutorial_funcs.h"
 #include <cstdint>
 #include <cstdio>
@@ -103,11 +105,10 @@ void* BuildLoaderChain(void* pGameLoop) {
         uint64_t delayTime[1];
         fn_Time_Ctor_Float((void*)delayTime, 1.0f);
 
-        uint8_t loadingName[8] = {};
-        GetLoadingSoundString(loadingName);   // 0x140099130
+        System::String loadingName;
+        GetLoadingSoundString(&loadingName);   // 0x140099130
 
-        fn_DialogLoaderLoopT_Ctor(dlLoop, loadingName, pGameLoop, (void*)delayTime);
-        fn_String_Dtor(loadingName);
+        fn_DialogLoaderLoopT_Ctor(dlLoop, &loadingName, pGameLoop, (void*)delayTime);
 
         *reinterpret_cast<void**>(dlLoop) = (void*)g_GameLoadDialogLoopT_Vtable;
         *reinterpret_cast<uint32_t*>(dl + 0x188) = 0xFF000000;
@@ -146,7 +147,6 @@ const char* MissingDependency(bool needSaveLoad) {
     if (!g_GameLoaderLoop_Vtable) return "GameLoaderLoop vtable";
     if (!fn_Time_Ctor_Float) return "Time::Time(float)";
     if (!fn_Random_Default_Ctor) return "Random::Random";
-    if (!fn_String_Ctor_CStr || !fn_String_Assign || !fn_String_Dtor) return "System::String helpers";
     if (!fn_InternalBasePtr_Ctor) return "InternalBasePtr::InternalBasePtr";
     if (!needSaveLoad) return nullptr;
     if (!g_pSaveLoadSingleton || !*g_pSaveLoadSingleton) return "SaveLoad singleton";
@@ -159,7 +159,6 @@ const char* MissingDependency(bool needSaveLoad) {
     if (!fn_SaveLoad_GetSaveState) return "SaveLoad::GetSaveState";
     if (!fn_Persistence_GetSavePath) return "Persistence::GetSavePath";
     if (!fn_FileSystem_GetDataDirectory) return "FileSystem::GetDataDirectory";
-    if (!fn_Filename_Dtor) return "Filename::~Filename";
     return nullptr;
 }
 
@@ -219,12 +218,11 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
         return;
     }
 
-    uint8_t saveNameStr[8];
-    fn_String_Ctor_CStr(saveNameStr, "");
-    fn_String_Assign(saveNameStr, reinterpret_cast<void*>(sc + 0x88));
+    System::String saveNameStr("");
+    // Scenario::GetSaveName -- B.3.1 bridge, the Scenario is still untyped bytes.
+    saveNameStr = *reinterpret_cast<const System::String*>(sc + 0x88);
 
-    uint64_t saveStrPtr = *reinterpret_cast<uint64_t*>(saveNameStr);
-    bool hasSaveState = (saveStrPtr != 0 && *reinterpret_cast<int*>(saveStrPtr - 8) > 0);
+    bool hasSaveState = (saveNameStr._data != nullptr && saveNameStr.GetLength() > 0);
 
     fprintf(stderr, "[TutNext] next scenario index=%d resource=%p hasSaveState=%d\n",
             scenIdx, scenario, (int)hasSaveState);
@@ -239,9 +237,8 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
     if (!hasSaveState) {
         // ---- NEW-SCENARIO branch -------------------------------------------
         // 0x140013A60 -- Scenario::GetDisplayName, String(scenario + 0x58).
-        uint8_t displayNameStr[8];
-        fn_String_Ctor_CStr(displayNameStr, "");
-        fn_String_Assign(displayNameStr, reinterpret_cast<void*>(sc + 0x58));
+        System::String displayNameStr("");
+        displayNameStr = *reinterpret_cast<const System::String*>(sc + 0x58);
 
         // Worldgen params. The outer two of the generator triple are stored in
         // the order mapGen(+0x70) / terrainGen(+0x78) / climateGen(+0x80) --
@@ -259,25 +256,26 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
         if (gameLoop) {
             GameUpdateLoop_Ctor_98060(gameLoop, nullptr, ibpCopy,
                                       static_cast<uint32_t>(scenIdx),
-                                      *reinterpret_cast<uint64_t*>(displayNameStr),
+                                      reinterpret_cast<uint64_t>(displayNameStr._data),
                                       seedVal, terrainSizeVal, disasterOff,
                                       mapGen, terrainGen, climateGen);
             pGameLoop = gameLoop;
+            // The ctor STEALS the COW pointer into the loop at +0x28 (see its
+            // header comment) rather than copy-constructing, so hand ownership
+            // over: null ours so the destructor does not release the loop's.
+            displayNameStr._data = nullptr;
         }
-        // The name String pointer now lives in the loop at +0x28 (retail
-        // copy-constructs it there and destroys its own local); do not free it.
     } else {
         // ---- SAVED-SCENARIO branch -----------------------------------------
         if (const char* missing = MissingDependency(/*needSaveLoad=*/true)) {
             fprintf(stderr, "[TutNext] SAVED branch ABORTED — %s is NULL\n", missing);
             fflush(stderr);
-            fn_String_Dtor(saveNameStr);
             return;
         }
 
         void* saveLoad = *g_pSaveLoadSingleton;
         fn_SaveLoad_SetOperation(saveLoad, 3, 0);
-        fn_SaveLoad_SetSaveName(saveLoad, saveNameStr, 2);
+        fn_SaveLoad_SetSaveName(saveLoad, &saveNameStr, 2);
 
         // Tutorial saves live inside WinData/*.pkg, so Persistence+0x90 must
         // point at the DATA directory for the load, then be restored. Identical
@@ -285,15 +283,14 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
         // System::String (destroyed with String::~String at the very end) while
         // the GetDataDirectory temp is a Filename.
         void* persistence = *g_pPersistenceSingleton;
-        uint8_t savePathBuf[16];
-        fn_Persistence_GetSavePath(persistence, savePathBuf);
+        System::String savePathBuf;
+        fn_Persistence_GetSavePath(persistence, &savePathBuf);
         void* fileSystem = *g_pFileSystemSingleton2;
-        uint8_t dataDirBuf[16];
-        void* dataDir = fn_FileSystem_GetDataDirectory(fileSystem, dataDirBuf);
-        fn_String_Assign(
-            reinterpret_cast<void*>(*reinterpret_cast<uintptr_t*>(g_pPersistenceSingleton) + 0x90),
-            dataDir);
-        fn_Filename_Dtor(dataDirBuf);
+        System::Filename dataDirBuf;
+        fn_FileSystem_GetDataDirectory(fileSystem, &dataDirBuf);
+        *reinterpret_cast<System::String*>(
+            *reinterpret_cast<uintptr_t*>(g_pPersistenceSingleton) + 0x90) =
+            dataDirBuf.AsString();
 
         int operation = fn_SaveLoad_GetOperation(saveLoad);
         int loopCount = 0;
@@ -307,9 +304,8 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
         fprintf(stderr, "[TutNext] SaveLoad pump finished after %d iterations\n", loopCount);
         fflush(stderr);
 
-        fn_String_Assign(
-            reinterpret_cast<void*>(*reinterpret_cast<uintptr_t*>(g_pPersistenceSingleton) + 0x90),
-            savePathBuf);
+        *reinterpret_cast<System::String*>(
+            *reinterpret_cast<uintptr_t*>(g_pPersistenceSingleton) + 0x90) = savePathBuf;
 
         void* savedState = fn_SaveLoad_GetSaveState(saveLoad);
 
@@ -324,7 +320,6 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
             pGameLoop = gameLoop;
         }
 
-        fn_String_Dtor(savePathBuf);   // retail: String::~String(local_res10)
     }
 
     void* pOuterLoop = BuildLoaderChain(pGameLoop);
@@ -336,6 +331,4 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
     fprintf(stderr, "[TutNext] next-scenario loop chain queued (gameLoop=%p loader=%p)\n",
             pGameLoop, pOuterLoop);
     fflush(stderr);
-
-    fn_String_Dtor(saveNameStr);
 }

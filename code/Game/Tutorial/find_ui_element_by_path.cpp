@@ -34,6 +34,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "address_registry.h"
+#include "system/String.h"
+#include "system/Filename.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -43,38 +45,26 @@ namespace {
 constexpr int kMaxParts = 8;   // retail's DynArray grows; no shipped path is longer
 
 
-// A System::String is one pointer; its length lives at data[-8].
-inline const char* StrData(const void* str) { return *reinterpret_cast<const char* const*>(str); }
-inline int StrLen(const void* str) {
-    const char* d = StrData(str);
-    return d ? *reinterpret_cast<const int32_t*>(d - 8) : 0;
-}
-
 // 0x1400E0C90 — cut `path` at every ':' and once more at the end.
 // Returns the number of parts written into `parts` (each a constructed String).
-int SplitPath(const void* path, uint8_t parts[][8]) {
-    const char* data = StrData(path);
-    int len = data ? StrLen(path) : 0;
-    if (!data || len <= 0 || !fn_String_SubString) return 0;
+int SplitPath(const System::String& path, System::String* parts) {
+    const char* data = path._data;
+    int len = data ? path.GetLength() : 0;
+    if (!data || len <= 0) return 0;
 
     int count = 0;
     int start = 0;
     for (int i = 0; i <= len && count < kMaxParts; ++i) {
         bool cut = (i < len && data[i] == ':') || (i == len);
         if (!cut) continue;
-        // SubString(self, retval, startIndex, endIndex) — end is INCLUSIVE
-        // (retail: R9D = EBX-2 at a colon, EBX-1 at the final character), so the
-        // cut point i is one past the last character we want.
-        fn_String_SubString(const_cast<void*>(path), parts[count], start, i - 1);
+        // SubString's end is INCLUSIVE (retail: R9D = EBX-2 at a colon, EBX-1 at
+        // the final character), so the cut point i is one past the last character
+        // we want.
+        parts[count] = path.SubString(start, i - 1);
         ++count;
         start = i + 1;
     }
     return count;
-}
-
-void FreeParts(uint8_t parts[][8], int count) {
-    if (!fn_String_Dtor) return;
-    for (int i = 0; i < count; ++i) fn_String_Dtor(parts[i]);
 }
 
 // 0x1400105B0 — narrow a Base* to ComponentEntity, or null.
@@ -86,7 +76,7 @@ void* NarrowComponentEntity(void* obj) {
 // The 4-part tail: does this dialog's entity come from the named resource file?
 // Retail compares the entity description's path filename (extension stripped)
 // against parts[3] and SKIPS the dialog when they differ.
-bool ResourceNameMismatch(void* dialog, const void* wantName) {
+bool ResourceNameMismatch(void* dialog, const System::String& wantName) {
     if (!fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr) return false;
     void* owner = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(dialog) + 0x30);
     if (!owner) return false;
@@ -97,24 +87,17 @@ bool ResourceNameMismatch(void* dialog, const void* wantName) {
     if (entityIBP == 0) return false;
     fn_InternalBasePtr_CheckPtr(&entityIBP);
 
-    if (!fn_External_GetPath || !fn_Filename_GetPathFilename ||
-        !fn_String_Ctor_Copy || !fn_Filename_Dtor || !fn_String_Dtor) return false;
+    if (!fn_External_GetPath) return false;
 
     void* description = *reinterpret_cast<void**>(entityIBP + 0x28);
     if (!description) return false;
 
-    uint8_t fullPath[8] = {};
-    void* fp = fn_External_GetPath(description, fullPath);
-    uint8_t leafName[8] = {};
-    void* leaf = fn_Filename_GetPathFilename(fp ? fp : fullPath, leafName, true);
-    uint8_t nameStr[8] = {};
-    fn_String_Ctor_Copy(nameStr, leaf ? leaf : leafName);
-    fn_Filename_Dtor(leafName);
-    fn_Filename_Dtor(fullPath);
+    System::Filename fullPath;
+    fn_External_GetPath(description, &fullPath);
+    System::Filename leafName = fullPath.GetPathFilename(true);
+    System::String   nameStr(leafName.AsString());
 
-    bool differs = fn_String_Equal ? !fn_String_Equal(nameStr, wantName) : false;
-    fn_String_Dtor(nameStr);
-    return differs;
+    return !(nameStr == wantName);
 }
 
 }  // namespace
@@ -124,39 +107,40 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
     uint64_t* out = reinterpret_cast<uint64_t*>(outElementIBP);
     *out = 0;
 
-    if (!pathStr || StrData(pathStr) == nullptr || StrLen(pathStr) == 0) {
+    if (!pathStr) return outElementIBP;
+    const System::String& path = *reinterpret_cast<const System::String*>(pathStr);
+    if (path._data == nullptr || path.GetLength() == 0) {
         return outElementIBP;
     }
 
-    uint8_t parts[kMaxParts][8] = {};
-    int partCount = SplitPath(pathStr, parts);
+    System::String parts[kMaxParts];
+    int partCount = SplitPath(path, parts);
     // Fewer than two parts is not a path — retail returns a null InternalBasePtr.
     if (partCount < 2) {
-        FreeParts(parts, partCount); return outElementIBP;
+        return outElementIBP;
     }
 
     if (!g_pFactorySingleton || !*g_pFactorySingleton || !fn_Factory_GetTypeIdFromName ||
         !g_pGameWorldSingleton || !*g_pGameWorldSingleton ||
         !fn_UI_GetFirstDialog || !fn_IsA || !fn_InternalBasePtr_CheckPtr) {
-        FreeParts(parts, partCount);
         return outElementIBP;
     }
     void* factory = *reinterpret_cast<void**>(*g_pFactorySingleton);
-    if (!factory) { FreeParts(parts, partCount); return outElementIBP; }
+    if (!factory) return outElementIBP;
 
-    uint32_t dialogTypeId = fn_Factory_GetTypeIdFromName(factory, StrData(parts[0]), true);
+    uint32_t dialogTypeId = fn_Factory_GetTypeIdFromName(factory, parts[0]._data, true);
     if (dialogTypeId == 0) {
-        FreeParts(parts, partCount); return outElementIBP;
+        return outElementIBP;
     }
 
     uint32_t controllerTypeId = 0;
     if (partCount >= 3)
-        controllerTypeId = fn_Factory_GetTypeIdFromName(factory, StrData(parts[1]), true);
+        controllerTypeId = fn_Factory_GetTypeIdFromName(factory, parts[1]._data, true);
 
     void* ui = *reinterpret_cast<void**>(
         reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x98);
     if (!ui) {
-        FreeParts(parts, partCount); return outElementIBP;
+        return outElementIBP;
     }
 
     // Iterator node: [0] = InternalBasePtr(DialogInstance*), [0x10] = next node.
@@ -176,7 +160,7 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
             if (!fn_DialogInstance_FindElement) continue;
             fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(node));
             uint64_t elemIBP = 0;
-            fn_DialogInstance_FindElement(dialog, &elemIBP, parts[1]);
+            fn_DialogInstance_FindElement(dialog, &elemIBP, &parts[1]);
             if (elemIBP) found = elemIBP;
             continue;
         }
@@ -203,19 +187,18 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
             fn_DialogController_GetContainer(reinterpret_cast<void*>(controller), &containerIBP);
             if (containerIBP) {
                 fn_InternalBasePtr_CheckPtr(&containerIBP);
-                fn_Element_FindElement(reinterpret_cast<void*>(containerIBP), &elemIBP, parts[2]);
+                fn_Element_FindElement(reinterpret_cast<void*>(containerIBP), &elemIBP, &parts[2]);
             }
         }
         // ...then the dialog itself.
         if (elemIBP == 0 && fn_DialogInstance_FindElement) {
             fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(node));
-            fn_DialogInstance_FindElement(dialog, &elemIBP, parts[2]);
+            fn_DialogInstance_FindElement(dialog, &elemIBP, &parts[2]);
         }
         if (elemIBP) found = elemIBP;
     }
 
     *out = found;
-    FreeParts(parts, partCount);
     return outElementIBP;
 }
 

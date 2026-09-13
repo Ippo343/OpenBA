@@ -15,6 +15,8 @@
 
 #include "inputbindings.h"
 #include "engine_funcs.h"
+#include "system/Filename.h"
+#include "system/String.h"
 #include <cstdio>
 
 namespace Game {
@@ -169,9 +171,7 @@ void LoadInputNameTables() {
         return;
     }
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton
-            || !fn_ExternalFactory_FindOrLoad
-            || !fn_String_Ctor_CStr || !fn_String_Dtor
-            || !fn_Filename_AdjustDelimiters) {
+            || !fn_ExternalFactory_FindOrLoad) {
         printf("[InputBindings] LoadInputNameTables: ExternalFactory or string "
                "fns not resolved\n");
         return;
@@ -192,12 +192,11 @@ void LoadInputNameTables() {
     }
 
     auto loadOne = [&](const char* path) -> void* {
-        uint8_t fnameBuf[8];
-        fn_String_Ctor_CStr(fnameBuf, path);
-        fn_Filename_AdjustDelimiters(fnameBuf);
+        // Retail builds a String and then runs Filename::AdjustDelimiters on it;
+        // Filename(const char*) is exactly Set + AdjustDelimiters.
+        System::Filename fnameBuf(path);
         void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton,
-                                                   fnameBuf);
-        fn_String_Dtor(fnameBuf);
+                                                   &fnameBuf);
         if (!ext) {
             printf("[InputBindings]   '%s' -> NOT FOUND\n", path);
             return nullptr;

@@ -20,6 +20,9 @@
 #include "options.h"
 #include "MenuScene.h"
 #include "engine_funcs.h"
+#include "math/Math.h"
+#include "system/Filename.h"
+#include "system/String.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -322,9 +325,9 @@ static int32_t MenuDialogLoopT_PhaseB_ProcessElement(
         *reinterpret_cast<const float*>(elem + 0x04),
         *reinterpret_cast<const float*>(elem + 0x08),
     };
-    uint8_t transformBuf[32] = {};
-    fn_Transform_FromYawPitchOffset(transformBuf, &yaw, &pitch, offset);
-    fn_Geometry_SetTransform(inst, transformBuf);
+    Math::Transform transformBuf = Math::Transform::FromYawPitchOffset(
+        yaw, pitch, *reinterpret_cast<const Math::Vector3*>(offset));
+    fn_Geometry_SetTransform(inst, &transformBuf);
 
     // Copy 3 dwords + scale into MeshInstance fields. Last value is g_fUVScale
     // (exe DAT_14017214c, hardcoded 1.0f to skip an extra ResolveAddr).
@@ -563,9 +566,9 @@ void MenuDialogLoopT_LoadParticles_PhaseC(void* self, void* menuScene, void* sce
             *reinterpret_cast<const float*>(elem + 0x04),
             *reinterpret_cast<const float*>(elem + 0x08),
         };
-        uint8_t transformBuf[32] = {};
-        fn_Transform_FromYawPitchOffset(transformBuf, &yaw, &pitch, offset);
-        fn_Geometry_SetTransform(inst, transformBuf);
+        Math::Transform transformBuf = Math::Transform::FromYawPitchOffset(
+            yaw, pitch, *reinterpret_cast<const Math::Vector3*>(offset));
+        fn_Geometry_SetTransform(inst, &transformBuf);
 
         // Initial Update(Time(0)).
         uint8_t timeBuf[8] = {};
@@ -660,8 +663,7 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
 
     // Required factory
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton ||
-        !fn_ExternalFactory_FindOrLoad || !fn_Filename_CtorCStr || !fn_Filename_Dtor ||
-        !fn_String_Format || !fn_String_Dtor || !fn_Random_Rand || !fn_IsDerivedFrom) {
+        !fn_ExternalFactory_FindOrLoad || !fn_Random_Rand || !fn_IsDerivedFrom) {
         printf("[MenuDLT::LoadScene] missing factory/filename helpers — bailing out\n");
         return false;
     }
@@ -684,24 +686,13 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
     }
 
     // Format the scene path (Game/MenuScene/Scene{0..9}.rsc).
-    uint8_t stringBuf[16] = {};
-    fn_String_Format(stringBuf, "Game/MenuScene/Scene%i.rsc", variant);
+    System::String stringBuf =
+        System::String::Format("Game/MenuScene/Scene%i.rsc", variant);
 
-    uint8_t fnBuf[16] = {};
-    // fn_Filename_CtorString takes a String (not a cstr). The original uses a String
-    // produced by Format. Both fn_Filename_CtorString and fn_Filename_CtorCStr exist
-    // in engine_funcs; we go through the String path because Format gave us a String.
-    if (fn_Filename_CtorString) {
-        fn_Filename_CtorString(fnBuf, stringBuf);
-    } else {
-        // Fallback: synthesize a cstring (the format output is a refcounted String;
-        // peek inside to get the char data — String layout: ptr to data at +0x00).
-        char path[64];
-        std::snprintf(path, sizeof(path), "Game/MenuScene/Scene%u.rsc", variant);
-        fn_Filename_CtorCStr(fnBuf, path);
-    }
+    // Filename(const String&) is what retail builds here: Format gave us a String.
+    System::Filename fnBuf(stringBuf);
 
-    void* obj = fn_ExternalFactory_FindOrLoad(factory, fnBuf);
+    void* obj = fn_ExternalFactory_FindOrLoad(factory, &fnBuf);
 
     // Original validates via IsDerivedFrom against TypeInfo_MenuScene at exe 0x1401c59f0.
     // In standalone the Runtime factory tree doesn't have every base type registered,
@@ -710,9 +701,6 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
     void* menuScene = obj;
 
     Field<void*>(self, MenuDLTOff::menuSceneExt_b90) = menuScene;
-
-    fn_Filename_Dtor(fnBuf);
-    fn_String_Dtor(stringBuf);
 
     if (!menuScene) {
         printf("[MenuDLT::LoadScene] failed to load Game/MenuScene/Scene%u.rsc\n", variant);
@@ -1054,10 +1042,10 @@ void MenuDialogLoopT_UpdateCamera_PhaseA(void* self, float deltaSeconds) {
     std::memcpy(transform, newTransformBuf, 28);
 
     // 3. Convert to Transform3 (48B = 3x4 matrix) and apply to Camera at +0x34.
-    uint8_t t3Buf[64] = {};  // Transform3 = 48B, padded
-    fn_Transform_AsTransform3(transform, t3Buf);
+    Math::Transform3 t3Buf =
+        reinterpret_cast<const Math::Transform*>(transform)->AsTransform3();
     void* camera = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(transform) + 0x34);
-    fn_Camera_SetCameraToWorld(camera, t3Buf);
+    fn_Camera_SetCameraToWorld(camera, &t3Buf);
 
     // Diagnostic: log the first few frames so we can verify the camera transform
     // is non-identity (the underlying bug we're fixing).
@@ -1153,16 +1141,14 @@ void MenuDialogLoopT_TickAudio(void* time) {
 bool MenuDialogLoopT_LoadMusic(void* self) {
     if (!self) return false;
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton ||
-        !fn_ExternalFactory_FindOrLoad || !fn_Filename_CtorCStr || !fn_Filename_Dtor) {
+        !fn_ExternalFactory_FindOrLoad) {
         printf("[MenuDLT::LoadMusic] missing factory/filename helpers — skipping\n");
         return false;
     }
 
     void* factory = *g_pExternalFactorySingleton;
-    uint8_t fnBuf[16] = {};  // System::Filename
-    fn_Filename_CtorCStr(fnBuf, "Audio/Music/Menu.rsc");
-    void* music = fn_ExternalFactory_FindOrLoad(factory, fnBuf);
-    fn_Filename_Dtor(fnBuf);
+    System::Filename fnBuf("Audio/Music/Menu.rsc");  // System::Filename
+    void* music = fn_ExternalFactory_FindOrLoad(factory, &fnBuf);
 
     Field<void*>(self, MenuDLTOff::musicExt_b88) = music;
     printf("[MenuDLT::LoadMusic] Audio/Music/Menu.rsc -> %p (self+0xb88)\n", music);

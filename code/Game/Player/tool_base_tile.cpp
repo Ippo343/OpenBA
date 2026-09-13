@@ -11,6 +11,7 @@
 // "improve" behavior.
 
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (scoped ModelComponent fallback)
@@ -40,15 +41,11 @@
 // NOTE: the Ghidra decompile dropped R9/param_2 and showed a zeroed local as the
 // offset; the disasm passes param_2 through as the offset. Ported per the disasm.
 void ToolTile_SetTransformFromYaw_3870(uintptr_t self, const void* offset, float yaw) {
-    float pitch = 0.0f;
-    float yawLocal = yaw;
-    // FromYawPitchOffset writes a Transform (0x1c bytes here) to outTransform.
-    // Local out buffer sized like the exe stack slot (0x30 bytes / 12 floats).
-    float out[12];
-    if (fn_Transform_FromYawPitchOffset) {
-        fn_Transform_FromYawPitchOffset(out, &yawLocal, &pitch, offset);
-        // Copy 7 dwords (0x148..0x160 inclusive of dword at +0x18 = byte 0x1c).
-        const uint32_t* src = reinterpret_cast<const uint32_t*>(out);
+    Math::Transform out = Math::Transform::FromYawPitchOffset(
+        yaw, 0.0f, *reinterpret_cast<const Math::Vector3*>(offset));
+    // Copy 7 dwords (0x148..0x160 inclusive of dword at +0x18 = byte 0x1c).
+    {
+        const uint32_t* src = reinterpret_cast<const uint32_t*>(&out);
         uint32_t* dst = reinterpret_cast<uint32_t*>(self + 0x148);
         for (int i = 0; i < 7; i++) dst[i] = src[i];
     }

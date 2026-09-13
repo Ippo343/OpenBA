@@ -14,6 +14,7 @@
 #include "Tutorial/tutorialgoalcount_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -153,14 +154,10 @@ void* TutorialGoalCount_Dtor(void* self, uint32_t flags) {
     *(uintptr_t*)s = myVtable;
 
     // Destroy String at +0x48 (elementName)
-    if (fn_String_Dtor) {
-        fn_String_Dtor((void*)(s + 0x48));
-    }
+    reinterpret_cast<System::String*>(s + 0x48)->~String();
 
     // Destroy String at +0x30 (typeName)
-    if (fn_String_Dtor) {
-        fn_String_Dtor((void*)(s + 0x30));
-    }
+    reinterpret_cast<System::String*>(s + 0x30)->~String();
 
     // Set vtable to TutorialGoal base
     uintptr_t baseVtable = ResolveAddr(Module::Exe, TutorialGoalAddr::Vtable);
@@ -224,9 +221,7 @@ void TutorialGoalCount_Serialize(void* self, void* stream) {
     }
 
     // Serialize typeName (+0x30) as String
-    if (g_fn_String_Serialize) {
-        g_fn_String_Serialize((void*)(s + 0x30), ser);
-    }
+    reinterpret_cast<System::String*>(s + 0x30)->Serialize(ser);
 
     // If loading (serializer version == 0), resolve the external ref
     if (g_fn_Serializer_GetVersion) {
@@ -251,9 +246,7 @@ void TutorialGoalCount_Serialize(void* self, void* stream) {
     }
 
     // Serialize elementName (+0x48) as String
-    if (g_fn_String_Serialize) {
-        g_fn_String_Serialize((void*)(s + 0x48), ser);
-    }
+    reinterpret_cast<System::String*>(s + 0x48)->Serialize(ser);
 
     if (g_fn_Serializer_Dtor) {
         g_fn_Serializer_Dtor(ser);

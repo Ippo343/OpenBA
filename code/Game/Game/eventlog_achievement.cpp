@@ -40,6 +40,7 @@
 // ExternalPtr + an index, no owned heap String). Kept faithful.
 
 #include "engine_funcs.h"
+#include "system/String.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -70,30 +71,27 @@ extern "C" void EventLog_OnAchievementAwarded(int achievementId) {
         return;
     }
 
-    uint8_t titleKey[8] = {0};  // System::String — the achievement's title KEY
-    fn_Achievement_GetTitle((void*)achievement, titleKey);
+    System::String titleKey;  // the achievement's title KEY
+    fn_Achievement_GetTitle((void*)achievement, &titleKey);
 
     // UI::String(ExternalPtr<StringTable> = *(achievement+0x20), key), then
     // operator System::String() — the LOOKED-UP display text. This is the
     // NAME-LOOKUP UI::String ctor (0x140151300), not the index one.
     uint8_t uiName[24] = {0};
-    uint8_t titleText[8] = {0};
+    System::String titleText;
     if (fn_UIString_Ctor && fn_UIString_ToSystemString) {
-        fn_UIString_Ctor(uiName, *(uint64_t*)((uintptr_t)achievement + 0x20), titleKey);
-        fn_String_Dtor(titleKey);
-        fn_UIString_ToSystemString(uiName, titleText);
+        fn_UIString_Ctor(uiName, *(uint64_t*)((uintptr_t)achievement + 0x20), &titleKey);
+        titleKey = System::String();   // retail releases the key here
+        fn_UIString_ToSystemString(uiName, &titleText);
     } else {
         // Unresolved exports: announce with the raw key rather than dropping the
         // toast entirely. Standalone-only deviation, stated.
-        fn_String_Ctor_Copy(titleText, titleKey);
-        fn_String_Dtor(titleKey);
+        titleText = titleKey;
     }
 
     int64_t nullEntity[1] = {0};
     if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(nullEntity, nullptr);
 
     EventLog_AddEventWithName(eventLog, /*eventType*/ 0x19, /*severity*/ 4,
-                              nullEntity, titleText);
-
-    fn_String_Dtor(titleText);
+                              nullEntity, &titleText);
 }

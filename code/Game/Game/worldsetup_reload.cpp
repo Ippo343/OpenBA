@@ -42,6 +42,7 @@
 //    +0xD0 = 0; that is a DIFFERENT call site, not a discrepancy with this one.)
 
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -109,11 +110,10 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
         uint64_t delayTime[1];
         fn_Time_Ctor_Float((void*)delayTime, 1.0f);
 
-        uint8_t loadingName[8] = {};
-        GetLoadingSoundString(loadingName);   // FUN_140099130, inline in engine_funcs.h
+        System::String loadingName;
+        GetLoadingSoundString(&loadingName);   // FUN_140099130, inline in engine_funcs.h
 
-        fn_DialogLoaderLoopT_Ctor(dlLoop, loadingName, pGameLoop, (void*)delayTime);
-        fn_String_Dtor(loadingName);
+        fn_DialogLoaderLoopT_Ctor(dlLoop, &loadingName, pGameLoop, (void*)delayTime);
 
         *reinterpret_cast<void**>(dlLoop) = (void*)g_GameLoadDialogLoopT_Vtable;
         *reinterpret_cast<uint32_t*>(dl + 0x188) = 0xFF000000;

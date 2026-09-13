@@ -62,6 +62,7 @@
 //     "PREBUILT-branch ... cellMesh=" line.)
 
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -301,7 +302,7 @@ void EdgeSegment(const float* v0, const float* v1, GrowArr* idx, GrowArr* evtx) 
 
 // convenience: build a world-relative Vector3 (p - origin) into `dst`
 inline void RelVec(float* dst, const float* p, float ox, float oy) {
-    if (fn_Vector3_Ctor) fn_Vector3_Ctor(dst, p[0] - ox, p[1] - oy, p[2] - 0.0f);
+    *reinterpret_cast<Math::Vector3*>(dst) = Math::Vector3(p[0] - ox, p[1] - oy, p[2] - 0.0f);
 }
 
 // ===========================================================================
@@ -334,7 +335,7 @@ void Impl_b930(int64_t self) {
     int centerIdx = g * ((rh >> 1) + ry) + (rw >> 1) + rx;
     float bias = (float)(g >> 1) - kCenterBias;
     float centerCell[3], centerWorld[3];
-    if (fn_Vector3_Ctor) fn_Vector3_Ctor(centerCell,
+    *reinterpret_cast<Math::Vector3*>(centerCell) = Math::Vector3(
         (float)(centerIdx % g) - bias, (float)(centerIdx / g) - bias, 0.0f);
     if (s_f3e0) s_f3e0(mapGrid, centerWorld, centerCell, 0, nullptr);
     float ox = centerWorld[0];
@@ -342,9 +343,8 @@ void Impl_b930(int64_t self) {
 
     // Quaternion(0,0,0,uv) rotation + centre position -> Transform at self+0x100.
     float uv = g_fUVScale ? *g_fUVScale : 1.0f;
-    uint8_t quat[16];
-    if (fn_Quaternion_Ctor) fn_Quaternion_Ctor(quat, 0.0f, 0.0f, 0.0f, uv);
-    std::memcpy(reinterpret_cast<void*>(self + 0x100), quat, 16);
+    Math::Quaternion quat(0.0f, 0.0f, 0.0f, uv);
+    std::memcpy(reinterpret_cast<void*>(self + 0x100), &quat, 16);
     *reinterpret_cast<float*>(self + 0x110) = ox;
     *reinterpret_cast<float*>(self + 0x114) = oy;
     *reinterpret_cast<uint32_t*>(self + 0x118) = 0;
@@ -354,7 +354,7 @@ void Impl_b930(int64_t self) {
 
     auto cellToRel = [&](int idx, float* rel) {
         float cell[3], world[3];
-        if (fn_Vector3_Ctor) fn_Vector3_Ctor(cell,
+        *reinterpret_cast<Math::Vector3*>(cell) = Math::Vector3(
             (float)(idx % g) - (float)(g >> 1), (float)(idx / g) - (float)(g >> 1), 0.0f);
         if (s_f3e0) s_f3e0(mapGrid, world, cell, 0, nullptr);
         RelVec(rel, world, ox, oy);
@@ -401,7 +401,7 @@ void Impl_b930(int64_t self) {
                 GrowTo(&fillIdx, fillIdx.count + 1, &idxVal, 2);
                 // 2. build corner Vector3 + TriangleVertex (8 bytes)
                 float cv[3];
-                if (fn_Vector3_Ctor) fn_Vector3_Ctor(cv, pf[-1] - ox, pf[0] - oy, pf[1] - 0.0f);
+                *reinterpret_cast<Math::Vector3*>(cv) = Math::Vector3(pf[-1] - ox, pf[0] - oy, pf[1] - 0.0f);
                 uint8_t tvtx[8];
                 if (fn_EdgeMesh_TriangleVertex_Ctor) fn_EdgeMesh_TriangleVertex_Ctor(tvtx, cv);
                 // 3. append the TriangleVertex

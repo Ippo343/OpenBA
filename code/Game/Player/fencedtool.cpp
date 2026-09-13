@@ -19,6 +19,7 @@
 #include "Player/fencedtool_funcs.h"
 #include "Tool.h"
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -295,9 +296,10 @@ void FencedTool_Serialize_Impl(FencedTool* self, void* /*param2*/, char param3) 
             // is water, so the preview appeared to be standing in a random lake.
             // PlacementTool's equivalent (0x1400fdff3) already carried a comment saying
             // exactly this; the fenced path was the one that had it wrong.
-            if (fn_Transform_FromYawPitchOffset) {
-                fn_Transform_FromYawPitchOffset(localTransform, outYaw, &zeroPitch, offset);
-            }
+            *reinterpret_cast<Math::Transform*>(localTransform) =
+                Math::Transform::FromYawPitchOffset(
+                    *reinterpret_cast<const Math::Scalar*>(outYaw), zeroPitch,
+                    *reinterpret_cast<const Math::Vector3*>(offset));
 
             {
                 static int n = 0;
@@ -348,40 +350,12 @@ typedef uint64_t (*fn_FencedTool_AnchorCalc_t)(void* self, uint32_t* p2, uint32_
                                                  float* p6, uint32_t* p7);
 static fn_FencedTool_AnchorCalc_t s_fn_FencedTool_AnchorCalc = nullptr;
 
-// Math::Scalar::Abs — `?Abs@Scalar@Math@@QEBA?AV12@XZ` returns Scalar BY VALUE:
-// member ABI is (RCX=this, RDX=&retSlot) -> returns RDX. The old one-arg typedef
-// left the callee writing its result through a garbage RDX (the classic hidden
-// ret-slot clobber; it faulted WRITE-on-own-code the first time the height
-// branch ran, CalcCost_Impl+0x570 2026-07-30).
-typedef float* (*fn_ScalarAbs_t)(const float* self, float* retSlot);
-static fn_ScalarAbs_t s_fn_ScalarAbs = nullptr;
-
-// Math::Vector3::Vector3(out, x, y, z)
-typedef void* (*fn_Vector3_Ctor_local_t)(void* out, float x, float y, float z);
-static fn_Vector3_Ctor_local_t s_fn_Vector3_Ctor_local = nullptr;
-
 static void EnsureCalcCostHelpers() {
     if (!s_fn_TerrainHeightQuery) {
         s_fn_TerrainHeightQuery = reinterpret_cast<fn_TerrainHeightQuery_t>(
             ResolveAddr(Module::Exe, 0x14009f3e0));
         s_fn_FencedTool_AnchorCalc = reinterpret_cast<fn_FencedTool_AnchorCalc_t>(
             ResolveAddr(Module::Exe, 0x1400dbf90));
-        // No by-address fallback on either of these two, deliberately. Both names
-        // are REGISTERED PORTS (runtime/src/math/rt_math_port.cpp:32,51, Wave 1)
-        // and ResolveExport consults the port registry before the DLL, so the
-        // only way to reach a fallback is for the Wave 1 registration itself to
-        // be gone — at which point a null (both call sites are guarded) is a far
-        // better failure than a jump to an address. The two that used to be here
-        // were 0x18008f530 and 0x18008f880, and neither is a function at all:
-        // they are mid-body of FUN_18008f38c (+0x1a4 and +0x4f4), while
-        // ?Abs@Scalar@Math@@ lives at 0x1800646b0 and ??0Vector3@Math@@QEAA@MMM@Z
-        // at 0x1800152d0. They are deleted rather than corrected because a
-        // fallback that cannot fire without the port being deleted is dead weight
-        // that must go before cutover anyway (WAVE9.md lane F, 166 sites).
-        s_fn_ScalarAbs = reinterpret_cast<fn_ScalarAbs_t>(
-            ResolveExport("?Abs@Scalar@Math@@QEBA?AV12@XZ"));
-        s_fn_Vector3_Ctor_local = reinterpret_cast<fn_Vector3_Ctor_local_t>(
-            ResolveExport("??0Vector3@Math@@QEAA@MMM@Z"));
     }
 }
 
@@ -483,20 +457,19 @@ int FencedTool_CalcCost_Impl(FencedTool* self, int startCell, int endCell,
             if (*(uint8_t*)(cellPtr + 0x28) != 0) { allValid = false; break; }
 
             // Height validation
-            if (s_fn_TerrainHeightQuery && s_fn_Vector3_Ctor_local && s_fn_ScalarAbs) {
+            if (s_fn_TerrainHeightQuery) {
                 float halfOffset = (float)(mapWidth >> 1) - HALF_CELL;
-                float inPos[4];
-                s_fn_Vector3_Ctor_local(inPos, (float)(cellIdx % mapWidth) - halfOffset,
-                                  (float)(cellIdx / mapWidth) - halfOffset, 0.0f);
+                float inPos[4] = {0};
+                *reinterpret_cast<Math::Vector3*>(inPos) = Math::Vector3(
+                    (float)(cellIdx % mapWidth) - halfOffset,
+                    (float)(cellIdx / mapWidth) - halfOffset, 0.0f);
                 float outPos[4] = {0};
                 uint32_t extra[2] = {0};
                 s_fn_TerrainHeightQuery(mapGrid, outPos, inPos, '\0', extra);
 
                 if (!heightInitialized) { baseHeight = outPos[2]; heightInitialized = true; }
-                float heightDiff = outPos[2] - baseHeight;
-                float absSlot = 0.0f;
-                float* absResult = s_fn_ScalarAbs(&heightDiff, &absSlot);
-                if (absResult && HEIGHT_TOLERANCE < *absResult) { allValid = false; break; }
+                Math::Scalar heightDiff(outPos[2] - baseHeight);
+                if (HEIGHT_TOLERANCE < heightDiff.Abs().v) { allValid = false; break; }
             }
         }
     }
@@ -768,20 +741,18 @@ void FencedTool_Draw_Impl(FencedTool* self, void* context, char param3) {
                     }
 
                     // Height validation
-                    if (s_fn_TerrainHeightQuery && s_fn_Vector3_Ctor_local && s_fn_ScalarAbs) {
+                    if (s_fn_TerrainHeightQuery) {
                         float halfOffset = (float)(mapWidth >> 1) - HALF_CELL_OFF;
-                        float inPos[4];
-                        s_fn_Vector3_Ctor_local(inPos,
+                        float inPos[4] = {0};
+                        *reinterpret_cast<Math::Vector3*>(inPos) = Math::Vector3(
                             (float)(cellIdx % mapWidth) - halfOffset,
                             (float)(cellIdx / mapWidth) - halfOffset, 0.0f);
                         float outPos[4] = {0};
                         uint32_t extra[2] = {0};
                         s_fn_TerrainHeightQuery(mapGrid, outPos, inPos, '\0', extra);
 
-                        float heightDiff = outPos[2] - 0.0f;
-                        float absSlot = 0.0f;
-                        float* absResult = s_fn_ScalarAbs(&heightDiff, &absSlot);
-                        if (absResult && *absResult <= HEIGHT_TOL) {
+                        Math::Scalar heightDiff(outPos[2] - 0.0f);
+                        if (heightDiff.Abs().v <= HEIGHT_TOL) {
                             valid = true;
                         }
                     } else {

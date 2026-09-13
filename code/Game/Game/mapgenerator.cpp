@@ -14,6 +14,7 @@
 #include "Game/mapgenerator_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
@@ -306,7 +307,7 @@ void MG_ReadRefPool(void* serializer, void* header, void* countField) {
     uint8_t* e = *(uint8_t**)header;
     if (!e) return;
     for (int i = 0; i < n; ++i, e += 0x18) {
-        if (g_fn_String_Serialize) g_fn_String_Serialize(e, serializer);  // in place
+        reinterpret_cast<System::String*>(e)->Serialize(serializer);  // in place
     }
 }
 } // namespace
@@ -315,7 +316,7 @@ void MapGenerator_Serialize(MapGenerator* self, void* stream) {
     EnsureFuncsResolved();
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     uint8_t serializer[24];
-    if (!g_fn_Serializer_Ctor || !g_fn_String_Serialize || !g_fn_Serialize_Int ||
+    if (!g_fn_Serializer_Ctor || !g_fn_Serialize_Int ||
         !g_fn_Serialize_Bool || !fn_Serializer_Serialize_Float || !fn_ExternalPtr_Serialize2) {
         return;  // missing a Runtime serialize primitive — can't proceed
     }
@@ -324,12 +325,12 @@ void MapGenerator_Serialize(MapGenerator* self, void* stream) {
     // --- scalar header (order matches Easy.rsc: _stringTable,_name,_description,
     //     _exposed,_startAreaSize,_citizenRadius,_citizen) ---
     fn_ExternalPtr_Serialize2(s + 0x20, serializer);   // +0x20 _stringTable ref
-    g_fn_String_Serialize(s + 0x28, serializer);       // +0x28 _name
-    g_fn_String_Serialize(s + 0x30, serializer);       // +0x30 _description
+    reinterpret_cast<System::String*>(s + 0x28)->Serialize(serializer);       // +0x28 _name
+    reinterpret_cast<System::String*>(s + 0x30)->Serialize(serializer);       // +0x30 _description
     g_fn_Serialize_Bool(serializer, s + 0x38, nullptr);// +0x38 _exposed
     g_fn_Serialize_Int(serializer, s + 0x3c, nullptr); // +0x3c _startAreaSize (townSize)
     fn_Serializer_Serialize_Float(serializer, &self->scale, nullptr);     // +0x40 _citizenRadius
-    g_fn_String_Serialize(s + 0x48, serializer);       // +0x48 _citizen template ref
+    reinterpret_cast<System::String*>(s + 0x48)->Serialize(serializer);       // +0x48 _citizen template ref
 
     // --- _citizens: InitialFamily[] (stride 8: bool _educated@0, int _maxChildCount@4) ---
     {
@@ -350,7 +351,7 @@ void MapGenerator_Serialize(MapGenerator* self, void* stream) {
         const int n = MG_SerializeCount(serializer, s + 0x80, s + 0x88, 0x30, &MG_InitStructure);
         uint8_t* e = *(uint8_t**)(s + 0x80);
         for (int i = 0; e && i < n; ++i, e += 0x30) {   // FUN_14001b6c0, in place
-            g_fn_String_Serialize(e, serializer);            // _structure ref name
+            reinterpret_cast<System::String*>(e)->Serialize(serializer);            // _structure ref name
             g_fn_Serialize_Int(serializer, e + 0x18, nullptr);  // _offsetX
             g_fn_Serialize_Int(serializer, e + 0x1c, nullptr);  // _offsetY
             g_fn_Serialize_Int(serializer, e + 0x20, nullptr);  // _width
@@ -383,11 +384,11 @@ void MapGenerator_Serialize(MapGenerator* self, void* stream) {
     g_fn_Serialize_Int(serializer, s + 0x114, nullptr);
 
     // --- env template refs + interleaved scalars (EXACT stream order) ---
-    g_fn_String_Serialize(s + 0x118, serializer);       // descRef1 (terrain)
-    g_fn_String_Serialize(s + 0x138, serializer);       // descRef2 (climate)
+    reinterpret_cast<System::String*>(s + 0x118)->Serialize(serializer);       // descRef1 (terrain)
+    reinterpret_cast<System::String*>(s + 0x138)->Serialize(serializer);       // descRef2 (climate)
     fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x130), nullptr); // terrainAmplitude
     g_fn_Serialize_Int(serializer, s + 0x150, nullptr); // chunkSize
-    g_fn_String_Serialize(s + 0x158, serializer);       // descRef3 (vegetation)
+    reinterpret_cast<System::String*>(s + 0x158)->Serialize(serializer);       // descRef3 (vegetation)
     fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x170), nullptr);
 
     if (g_fn_Serializer_Dtor) g_fn_Serializer_Dtor(serializer);

@@ -28,6 +28,7 @@
 // y=cos(p)cos(y), z=sin(p).
 
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -70,17 +71,13 @@ constexpr float kDayLength    = 3600.0f;   // exe DAT_14017225c
 constexpr float kKeyframeSpan = 300.0f;    // exe literal (dayLength / 12)
 
 // Resolved Runtime helpers (lazy, latched).
-typedef void* (*fn_FromYawPitch_t)(void* retVec3, const float* yaw, const float* pitch);
 typedef void  (*fn_Context_SetFog_t)(void* ctx, float fogNear, float fogFar, const float* color);
-fn_FromYawPitch_t   s_fn_FromYawPitch = nullptr;
 fn_Context_SetFog_t s_fn_Context_SetFog = nullptr;
 bool s_resolved = false;
 
 void EnsureResolved() {
     if (s_resolved) return;
     s_resolved = true;
-    s_fn_FromYawPitch = reinterpret_cast<fn_FromYawPitch_t>(
-        ResolveExport("?FromYawPitch@Vector3@Math@@SA?AV12@AEBVScalar@2@0@Z"));
     s_fn_Context_SetFog = reinterpret_cast<fn_Context_SetFog_t>(
         ResolveExport("?SetFog@Context@Video@@QEAAXMMAEBVVector4@Math@@@Z"));
 }
@@ -116,7 +113,7 @@ extern "C" void Weather_SunUpdate(void* self, void* ctx) {
 
     uint8_t* p = reinterpret_cast<uint8_t*>(self);
     void* sun = *reinterpret_cast<void**>(p + 0x100);
-    if (!sun || !fn_Graphics_SunLight_Set || !s_fn_FromYawPitch) return;
+    if (!sun || !fn_Graphics_SunLight_Set) return;
 
     // Game time in seconds (the sim clock). +0x128 -> Time struct, time @ +8.
     float seconds = 0.0f;
@@ -215,7 +212,7 @@ extern "C" void Weather_SunUpdate(void* self, void* ctx) {
     // shadowProjection[0].z sign inverts -> the shadow depth comparison always passes
     // -> NO cast shadows (ground gets ambient-only). Negate Z to match retail.
     float dir[3] = {0.0f, 0.0f, 1.0f};
-    s_fn_FromYawPitch(dir, &heading, &pitch);
+    *reinterpret_cast<Math::Vector3*>(dir) = Math::Vector3::FromYawPitch(heading, pitch);
     dir[2] = -dir[2];
 
 

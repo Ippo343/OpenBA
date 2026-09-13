@@ -18,6 +18,8 @@
 // Registered by standalone/reg_game_leaf.cpp.
 
 #include "engine_funcs.h"
+#include "system/Filename.h"
+#include "system/String.h"
 #include "resolve.h"
 #include <cstdint>
 #include <initializer_list>
@@ -32,10 +34,10 @@ static inline void DestroyStringArray(void* arrayHeader, uint64_t stride, uint64
     uint64_t* hdr = reinterpret_cast<uint64_t*>(arrayHeader);
     uint8_t* base = reinterpret_cast<uint8_t*>(hdr[0]);
     int count = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(hdr) + 8);
-    if (count > 0 && base && fn_String_Dtor) {
+    if (count > 0 && base) {
         uint8_t* p = base;
         for (int i = 0; i < count; ++i) {
-            fn_String_Dtor(p + strOffset);
+            reinterpret_cast<System::String*>(p + strOffset)->~String();
             p += stride;
         }
     }
@@ -175,16 +177,14 @@ void Game_WeatherDtor(void* self) {
 void Game_TerrainResolveMaterial(void* refTriple) {
     if (!refTriple) return;
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) return;
-    if (!fn_ExternalFactory_Find || !fn_Filename_CtorString || !fn_Filename_Dtor) return;
+    if (!fn_ExternalFactory_Find) return;
     void* factory = *g_pExternalFactorySingleton;
     uint8_t* b = reinterpret_cast<uint8_t*>(refTriple);
     int factoryGen = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(factory) + 8);
     if (*reinterpret_cast<int*>(b + 8) == factoryGen) return;
 
-    uint8_t fnameBuf[8] = {0};
-    fn_Filename_CtorString(fnameBuf, b);                 // Filename(self, String const& @ b+0)
-    void* obj = fn_ExternalFactory_Find(factory, fnameBuf);
-    fn_Filename_Dtor(fnameBuf);
+    System::Filename fnameBuf(*reinterpret_cast<const System::String*>(b));  // String @ b+0
+    void* obj = fn_ExternalFactory_Find(factory, &fnameBuf);
 
     void* result = nullptr;
     if (obj) {

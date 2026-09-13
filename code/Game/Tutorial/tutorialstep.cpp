@@ -21,6 +21,7 @@
 #include "Tutorial/tutorialstep_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -143,10 +144,10 @@ static void TutorialStep_DtorBody(void* self) {
     *reinterpret_cast<uint64_t*>(s + 0x48) = 0;
 
     // Destroy String at +0x38 (descStr)
-    if (fn_String_Dtor) fn_String_Dtor(reinterpret_cast<void*>(s + 0x38));
+    reinterpret_cast<System::String*>(s + 0x38)->~String();
 
     // Destroy String at +0x30 (titleStr)
-    if (fn_String_Dtor) fn_String_Dtor(reinterpret_cast<void*>(s + 0x30));
+    reinterpret_cast<System::String*>(s + 0x30)->~String();
 
     // Call External::~External
     if (fn_External_Dtor) fn_External_Dtor(self);

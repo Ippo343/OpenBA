@@ -29,6 +29,9 @@
 //   [8..11] bitmask of possible next chars (bits 0..25 = 'a'..'z', bit 26 = end)
 
 #include "engine_funcs.h"
+#include "system/Filename.h"
+#include "system/String.h"
+#include <new>
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
@@ -188,13 +191,11 @@ static void GenerateName(uintptr_t db, void* rng, int minLen, int maxLen, char* 
 // filename is authoritative.
 static uintptr_t LoadNameDb(const char* path) {
     if (!path || !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton ||
-        !fn_Filename_CtorCStr || !fn_ExternalFactory_FindOrLoad || !fn_Filename_Dtor)
+        !fn_ExternalFactory_FindOrLoad)
         return 0;
 
-    uint8_t fname[8] = {0};
-    fn_Filename_CtorCStr(fname, path);
-    void* obj = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fname);
-    fn_Filename_Dtor(fname);
+    System::Filename fname(path);
+    void* obj = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fname);
     return (uintptr_t)obj;
 }
 
@@ -228,7 +229,8 @@ extern "C" void* NameDB_GenerateName(void* retStr, void* db, void* rng,
     buf[0] = 0;
     if (db && rng && fn_Random_Rand)
         GenerateName((uintptr_t)db, rng, minLen, maxLen, buf);
-    fn_String_Ctor_CStr(retStr, buf);
+    // Retail constructs the result String in the caller's return slot.
+    new (retStr) System::String(buf);
     return retStr;
 }
 
@@ -251,6 +253,6 @@ extern "C" void* NameDB_PickAndGenerate(void* retStr, void* rng, char female) {
     uintptr_t db = LoadNameDb(female ? "Game/Names/Female.ndb" : "Game/Names/Male.ndb");
     if (db && rng && fn_Random_Rand)
         GenerateName(db, rng, 3, 10, buf);
-    fn_String_Ctor_CStr(retStr, buf);
+    new (retStr) System::String(buf);
     return retStr;
 }

@@ -22,6 +22,8 @@
 // Decompiled from Application-x64.exe; ABI/control-flow verified instruction-level.
 
 #include "engine_funcs.h"
+#include "system/Filename.h"
+#include "system/String.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include "Game/serialize_externals.h"
@@ -82,7 +84,7 @@ extern "C" void TutBase_ResolveToolbarRef(void* stringField) {
     if (!stringField || !g_pExternalFactorySingleton) return;
     void* factory = *g_pExternalFactorySingleton;
     if (!factory) return;
-    if (!fn_Filename_CtorString || !fn_ExternalFactory_Find || !fn_Filename_Dtor) return;
+    if (!fn_ExternalFactory_Find) return;
 
     uintptr_t s = reinterpret_cast<uintptr_t>(stringField);
 
@@ -91,9 +93,9 @@ extern "C" void TutBase_ResolveToolbarRef(void* stringField) {
     int32_t factoryGen = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(factory) + 0x08);
     if (refGen == factoryGen) return;
 
-    uint8_t filename[8] = {};
-    fn_Filename_CtorString(filename, reinterpret_cast<const void*>(s));
-    void* found = fn_ExternalFactory_Find(factory, filename);
+    // +0x00 of the ref triple is the name String (B.3.1 bridge: still raw bytes).
+    System::Filename filename(*reinterpret_cast<const System::String*>(s));
+    void* found = fn_ExternalFactory_Find(factory, &filename);
 
     // STANDALONE DEVIATION, deliberate — retail uses Find() alone and would crash
     // on the null below, so this is not papering over a faithful fault: it is the
@@ -118,7 +120,7 @@ extern "C" void TutBase_ResolveToolbarRef(void* stringField) {
     // The real fix is to make the preload leave these in the factory as retail's
     // does; until then this loads on demand, which is what retail's environment
     // has already done by this point.
-    if (!found && fn_ExternalFactory_FindOrLoad && fn_String_Ctor_CStr && fn_String_Dtor) {
+    if (!found && fn_ExternalFactory_FindOrLoad) {
         const char* name = *reinterpret_cast<const char* const*>(s);
         if (name) {
             char normalized[260];
@@ -127,16 +129,11 @@ extern "C" void TutBase_ResolveToolbarRef(void* stringField) {
                 normalized[k] = (name[k] == '\\') ? '/' : name[k];
             normalized[k] = 0;
 
-            uint8_t normStr[8] = {};
-            fn_String_Ctor_CStr(normStr, normalized);
-            uint8_t normFile[8] = {};
-            fn_Filename_CtorString(normFile, normStr);
-            found = fn_ExternalFactory_FindOrLoad(factory, normFile);
-            fn_Filename_Dtor(normFile);
-            fn_String_Dtor(normStr);
+            System::String   normStr(normalized);
+            System::Filename normFile(normStr);
+            found = fn_ExternalFactory_FindOrLoad(factory, &normFile);
         }
     }
-    fn_Filename_Dtor(filename);
 
     // Validate Toolbar type; trust if the type-id global is unresolved (cascade-safe).
     void* result = nullptr;

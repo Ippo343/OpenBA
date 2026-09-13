@@ -18,6 +18,8 @@
 // anonymous namespace, so we duplicate the body here under a new name).
 
 #include "engine_funcs.h"
+#include "system/Filename.h"
+#include "system/String.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -35,9 +37,7 @@ void ExternalPtrSerializeGeneric_7140(void** refField, void* serializer,
 
     if (!fn_Serializer_GetEncoding || !fn_ExternalFactory_FindOrLoad ||
         !fn_IsDerivedFrom || !fn_ExternalFactory_IsReferenceModeEnabled ||
-        !fn_External_GetPath || !fn_Filename_Ctor || !fn_Filename_Dtor ||
-        !fn_Filename_AssignOp || !g_fn_String_Serialize ||
-        !fn_Serializer_Serialize_Uint || !g_fn_Serialize_Bool ||
+        !fn_External_GetPath || !fn_Serializer_Serialize_Uint || !g_fn_Serialize_Bool ||
         !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
         static bool s_warned = false;
         if (!s_warned) {
@@ -89,18 +89,16 @@ void ExternalPtrSerializeGeneric_7140(void** refField, void* serializer,
     if (encState == 3) {
         // Path-export (read-only) mode.
         if (!*refField) return;
-        uint8_t pathBuf[8] = {0};
-        void* path = fn_External_GetPath(*refField, pathBuf);
+        System::Filename pathBuf;
+        void* path = fn_External_GetPath(*refField, &pathBuf);
         void* found = fn_ExternalFactory_FindOrLoad(factory, path);
         if (found && typeIdResolved) {
             ::Object::IsDerivedFromOrTrust(found, typeId);
         }
-        fn_Filename_Dtor(pathBuf);
         return;
     }
 
-    uint8_t fnameBuf[8] = {0};
-    fn_Filename_Ctor(fnameBuf);
+    System::Filename fnameBuf;
 
     bool refMode = fn_ExternalFactory_IsReferenceModeEnabled(factory);
 
@@ -118,10 +116,9 @@ void ExternalPtrSerializeGeneric_7140(void** refField, void* serializer,
             fn_Serializer_Serialize_Uint(serializer, &refId, nullptr);
             if (refId != 0xFFFFFFFFu) {
                 if (serializerInner == 0) {
-                    uint8_t tmpFn[8] = {0};
-                    fn_ExternalFactory_GetPathForReferenceId(factory, tmpFn, refId);
-                    fn_Filename_AssignOp(fnameBuf, tmpFn);
-                    fn_Filename_Dtor(tmpFn);
+                    System::Filename tmpFn;
+                    fn_ExternalFactory_GetPathForReferenceId(factory, &tmpFn, refId);
+                    fnameBuf = tmpFn;
                 }
                 needsLoad = true;
             }
@@ -133,7 +130,7 @@ void ExternalPtrSerializeGeneric_7140(void** refField, void* serializer,
             int innerCheck = *reinterpret_cast<int*>(
                 reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(serializer)) + 8);
             if (innerCheck == 0) {
-                void* loaded = fn_ExternalFactory_FindOrLoad(factory, fnameBuf);
+                void* loaded = fn_ExternalFactory_FindOrLoad(factory, &fnameBuf);
                 void* result = nullptr;
                 if (loaded && (!typeIdResolved || ::Object::IsDerivedFromOrTrust(loaded, typeId))) {
                     result = loaded;
@@ -146,17 +143,16 @@ void ExternalPtrSerializeGeneric_7140(void** refField, void* serializer,
         g_fn_Serialize_Bool(serializer, &hasRef, nullptr);
         if (hasRef) {
             if (*refField) {
-                uint8_t pathBuf[8] = {0};
-                void* path = fn_External_GetPath(*refField, pathBuf);
-                fn_Filename_AssignOp(fnameBuf, path);
-                fn_Filename_Dtor(pathBuf);
+                System::Filename pathBuf;
+                fn_External_GetPath(*refField, &pathBuf);
+                fnameBuf = pathBuf;
             }
-            g_fn_String_Serialize(fnameBuf, serializer);
+            fnameBuf.AsString().Serialize(serializer);
 
             int innerCheck = *reinterpret_cast<int*>(
                 reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(serializer)) + 8);
             if (innerCheck == 0) {
-                void* loaded = fn_ExternalFactory_FindOrLoad(factory, fnameBuf);
+                void* loaded = fn_ExternalFactory_FindOrLoad(factory, &fnameBuf);
                 void* result = nullptr;
                 if (loaded && (!typeIdResolved || ::Object::IsDerivedFromOrTrust(loaded, typeId))) {
                     result = loaded;
@@ -166,7 +162,6 @@ void ExternalPtrSerializeGeneric_7140(void** refField, void* serializer,
         }
     }
 
-    fn_Filename_Dtor(fnameBuf);
 }
 
 } // namespace

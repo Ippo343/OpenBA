@@ -23,6 +23,9 @@
 
 #include "GameUpdateLoop.h"
 #include "engine_funcs.h"
+#include "math/Math.h"
+#include "system/Filename.h"
+#include "system/String.h"
 #include "resolve.h"
 #include "Component/component_factory_base.h"  // ComponentFactory::the live gate
 #include <cstdint>
@@ -128,23 +131,19 @@ extern "C" void* ProfessionList_Factory(void);
 
 static void LoadProfessionList_Step2(uint8_t* p) {
 
-    if (!fn_Filename_CtorCStr || !fn_ExternalFactory_FindOrLoad || !fn_Filename_Dtor ||
-        !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+    if (!fn_ExternalFactory_FindOrLoad || !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
         *(void**)(p + 0xB0) = nullptr;
         fprintf(stderr, "[GUL::ProfList] SKIP — loader fns/factory unavailable "
-                "(CtorCStr=%p FindOrLoad=%p Dtor=%p factory=%p)\n",
-                (void*)fn_Filename_CtorCStr, (void*)fn_ExternalFactory_FindOrLoad,
-                (void*)fn_Filename_Dtor,
+                "(FindOrLoad=%p factory=%p)\n",
+                (void*)fn_ExternalFactory_FindOrLoad,
                 g_pExternalFactorySingleton ? *g_pExternalFactorySingleton : nullptr);
         fflush(stderr);
         return;
     }
 
     void* factory = *g_pExternalFactorySingleton;
-    uint8_t fname[16] = {0};
-    fn_Filename_CtorCStr(fname, "Game/Profession/Profession.rsc");
-    void* profList = fn_ExternalFactory_FindOrLoad(factory, fname);
-    fn_Filename_Dtor(fname);
+    System::Filename fname("Game/Profession/Profession.rsc");
+    void* profList = fn_ExternalFactory_FindOrLoad(factory, &fname);
     *(void**)(p + 0xB0) = profList;
 
     void* defProf  = profList ? *(void**)((uint8_t*)profList + 0x30) : nullptr;
@@ -181,14 +180,11 @@ static void LoadProfessionList_Step2(uint8_t* p) {
 static void LoadUIMaterial_Step3(uint8_t* p) {
     *(void**)(p + 0xB8) = nullptr;
 
-    if (!fn_Filename_CtorCStr || !fn_ExternalFactory_FindOrLoad || !fn_Filename_Dtor ||
-        !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton)
+    if (!fn_ExternalFactory_FindOrLoad || !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton)
         return;
 
-    uint8_t fname[16] = {0};
-    fn_Filename_CtorCStr(fname, "Material/UI/UIMaterialNoBlend.rsc");
-    void* mat = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fname);
-    fn_Filename_Dtor(fname);
+    System::Filename fname("Material/UI/UIMaterialNoBlend.rsc");
+    void* mat = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fname);
 
     // Retail's type gate (exe .rdata Material typeinfo slot is unfilled in SA —
     // resolve Graphics::Material's BaseTypeInfo from the Runtime export).
@@ -207,21 +203,17 @@ static void LoadUIMaterial_Step3(uint8_t* p) {
 static void LoadHelpTopics_Step4(uint8_t* p) {
     *(void**)(p + 0xA0) = nullptr;
 
-    if (!fn_Filename_CtorCStr || !fn_ExternalFactory_FindOrLoad || !fn_Filename_Dtor ||
-        !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+    if (!fn_ExternalFactory_FindOrLoad || !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
         fprintf(stderr, "[GUL::Help] SKIP — loader fns/factory unavailable "
-                "(CtorCStr=%p FindOrLoad=%p Dtor=%p factory=%p)\n",
-                (void*)fn_Filename_CtorCStr, (void*)fn_ExternalFactory_FindOrLoad,
-                (void*)fn_Filename_Dtor,
+                "(FindOrLoad=%p factory=%p)\n",
+                (void*)fn_ExternalFactory_FindOrLoad,
                 g_pExternalFactorySingleton ? *g_pExternalFactorySingleton : nullptr);
         fflush(stderr);
         return;
     }
 
-    uint8_t fname[16] = {0};
-    fn_Filename_CtorCStr(fname, "Game/Help/HelpTopics.rsc");
-    void* list = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fname);
-    fn_Filename_Dtor(fname);
+    System::Filename fname("Game/Help/HelpTopics.rsc");
+    void* list = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fname);
 
     // Retail's type gate. Resolve Object::ExternalList's own BaseTypeInfo from the
     // Runtime (the exe .rdata slot 0x140151ef0 that retail reads is unfilled in SA).
@@ -266,21 +258,17 @@ static void LoadHelpTopics_Step4(uint8_t* p) {
 static void LoadDiseaseList_Step1(uint8_t* p) {
     *(void**)(p + 0xA8) = nullptr;
 
-    if (!fn_Filename_CtorCStr || !fn_ExternalFactory_FindOrLoad || !fn_Filename_Dtor ||
-        !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+    if (!fn_ExternalFactory_FindOrLoad || !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
         fprintf(stderr, "[GUL::DiseaseList] SKIP — loader fns/factory unavailable "
-                "(CtorCStr=%p FindOrLoad=%p Dtor=%p factory=%p)\n",
-                (void*)fn_Filename_CtorCStr, (void*)fn_ExternalFactory_FindOrLoad,
-                (void*)fn_Filename_Dtor,
+                "(FindOrLoad=%p factory=%p)\n",
+                (void*)fn_ExternalFactory_FindOrLoad,
                 g_pExternalFactorySingleton ? *g_pExternalFactorySingleton : nullptr);
         fflush(stderr);
         return;
     }
 
-    uint8_t fname[16] = {0};
-    fn_Filename_CtorCStr(fname, "Game/Disease/Diseases.rsc");
-    void* list = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fname);
-    fn_Filename_Dtor(fname);
+    System::Filename fname("Game/Disease/Diseases.rsc");
+    void* list = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fname);
 
     // Retail's type gate (same Runtime-side BaseTypeInfo as the HelpTopics list; the
     // exe .rdata slot retail reads is unfilled in standalone).
@@ -573,10 +561,8 @@ static void* Reimpl_FUN_1400985b0(void* selfMem, void* frustum, float yaw, float
     uint8_t localTransform[32] = {};
     void* lt = Reimpl_FUN_1400983f0(selfMem, localTransform);
     if (!lt) lt = localTransform;
-    uint8_t t3[64] = {};
-    void* t3p = fn_Transform_AsTransform3(lt, t3);
-    if (!t3p) t3p = t3;
-    fn_Graphics_Camera_Ctor((void*)(p + 0x34), frustum, t3p, true);
+    Math::Transform3 t3 = reinterpret_cast<const Math::Transform*>(lt)->AsTransform3();
+    fn_Graphics_Camera_Ctor((void*)(p + 0x34), frustum, &t3, true);
     return selfMem;
 }
 
@@ -839,13 +825,10 @@ static void BuildSkyMesh_Step28(uint8_t* p) {
 
     // Load the sky dome resource (the `_clear_`-material mesh) via the global factory.
     void* meshRes = nullptr;
-    if (fn_Filename_CtorCStr && fn_ExternalFactory_FindOrLoad && fn_Filename_Dtor &&
-        g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
+    if (fn_ExternalFactory_FindOrLoad && g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
         void* factory = *g_pExternalFactorySingleton;
-        uint8_t fname[16] = {0};
-        fn_Filename_CtorCStr(fname, "Models/Sky/SkyMesh.rsc");
-        meshRes = fn_ExternalFactory_FindOrLoad(factory, fname);
-        fn_Filename_Dtor(fname);
+        System::Filename fname("Models/Sky/SkyMesh.rsc");
+        meshRes = fn_ExternalFactory_FindOrLoad(factory, &fname);
     }
 
     if (meshRes && s_SetMesh) s_SetMesh(mem, meshRes);
@@ -1055,12 +1038,10 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
     // sim still runs its temperature/snow half).
     if (*(void**)(p + 0x130)) {
         void* envRes = nullptr;
-        if (fn_Filename_CtorCStr && fn_ExternalFactory_FindOrLoad &&
-            fn_Filename_Dtor && g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
-            uint8_t fname[16] = {0};
-            fn_Filename_CtorCStr(fname, "Environment/Environment.rsc");
-            envRes = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fname);
-            fn_Filename_Dtor(fname);
+        if (fn_ExternalFactory_FindOrLoad &&
+            g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
+            System::Filename fname("Environment/Environment.rsc");
+            envRes = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fname);
             int wxCount = envRes ? *(int*)((uint8_t*)envRes + 0x30) : 0;
             fprintf(stderr, "[GUL::Weather] Environment.rsc envRes=%p weatherDescCount=%d\n",
                     envRes, wxCount);
@@ -1190,9 +1171,7 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
     // suffix selects the named sub-resource within Dialog/StringTable.rsc.
     {
         void* evStruct = *(void**)(p + 0x138);
-        if (evStruct && fn_String_Ctor_CStr && fn_Filename_AdjustDelimiters &&
-            fn_ExternalFactory_FindOrLoad && fn_String_Dtor &&
-            g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
+        if (evStruct && fn_ExternalFactory_FindOrLoad && g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
             void* factory = *g_pExternalFactorySingleton;
 
             // Lazy-resolve the StringTable type-id from the factory tree (its exe
@@ -1211,11 +1190,10 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
             // Load a StringTable sub-resource. AdjustDelimiters normalizes the
             // "rsc:subname" delimiter so FindOrLoad resolves the named sub-table.
             auto loadStringTable = [&](const char* name) -> void* {
-                uint8_t fname[8];
-                fn_String_Ctor_CStr(fname, name);
-                fn_Filename_AdjustDelimiters(fname);
-                void* ext = fn_ExternalFactory_FindOrLoad(factory, fname);
-                fn_String_Dtor(fname);
+                // Retail: String(name) then Filename::AdjustDelimiters on it —
+                // Filename(const char*) is exactly Set + AdjustDelimiters.
+                System::Filename fname(name);
+                void* ext = fn_ExternalFactory_FindOrLoad(factory, &fname);
                 if (!ext) return nullptr;
                 if (stTid != 0 && fn_IsDerivedFrom && !fn_IsDerivedFrom(ext, stTid)) return nullptr;
                 return ext;

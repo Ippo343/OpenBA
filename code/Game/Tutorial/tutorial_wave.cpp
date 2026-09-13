@@ -40,6 +40,7 @@
 // 0x1400E2700 where the decompiler mis-renders the stack arguments.
 
 #include "engine_funcs.h"
+#include "system/String.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include "Game/serialize_externals.h"
@@ -47,6 +48,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <new>
 
 extern "C" void* GetTutorialHighlightDialogVtable();
 // Port of exe 0x1400E0D70 -- boots the next scenario when a tutorial finishes.
@@ -348,7 +350,8 @@ extern "C" void* TutWave_FindHighlightDialog(void* self, void* outIBP) {
 // ===========================================================================
 extern "C" void* TutWave_ExternalRefCopy(void* dst, void* src) {
     if (!dst || !src) return dst;
-    if (fn_String_Ctor_Copy) fn_String_Ctor_Copy(dst, src);
+    // B.3.1 bridge: the ExternalRef triple is still untyped bytes.
+    new (dst) System::String(*reinterpret_cast<const System::String*>(src));
     uintptr_t d = reinterpret_cast<uintptr_t>(dst);
     uintptr_t s = reinterpret_cast<uintptr_t>(src);
     *reinterpret_cast<uint32_t*>(d + 0x08) = *reinterpret_cast<uint32_t*>(s + 0x08);
@@ -363,7 +366,7 @@ extern "C" void* TutWave_ExternalRefResolve(void* out, void* ref) {
     ResolveExternalByName_Impl(ref);
     *reinterpret_cast<uint64_t*>(out) = *reinterpret_cast<uint64_t*>(
         reinterpret_cast<uintptr_t>(ref) + 0x10);
-    if (fn_String_Dtor) fn_String_Dtor(ref);
+    reinterpret_cast<System::String*>(ref)->~String();
     return out;
 }
 

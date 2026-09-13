@@ -8,9 +8,12 @@
 #include "goal_exe_helpers.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "system/String.h"
+#include "system/Filename.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <new>
 
 // ============================================================
 // StatGoal ExternalPtr resolver (FUN_1400265b0)
@@ -38,10 +41,10 @@ void StatGoal_ResolveExternalPtr(void* externalRef) {
     int32_t factoryGen = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(factory) + 0x08);
     if (refGen == factoryGen) return;
 
-    uint8_t filename[8] = {};
-    if (fn_Filename_CtorString) fn_Filename_CtorString(filename, reinterpret_cast<const void*>(s));
-    void* found = fn_ExternalFactory_Find ? fn_ExternalFactory_Find(factory, filename) : nullptr;
-    if (fn_Filename_Dtor) fn_Filename_Dtor(filename);
+    // +0x00 of the ExternalPtr is the name String (B.3.1 bridge: the containing
+    // ExternalPtr struct is still untyped bytes).
+    System::Filename filename(reinterpret_cast<const System::String&>(*reinterpret_cast<char*>(s)));
+    void* found = fn_ExternalFactory_Find ? fn_ExternalFactory_Find(factory, &filename) : nullptr;
 
     // STANDALONE DEVIATION, deliberate — identical to the one documented at
     // length in TutRestrict_ResolveRefOrLoad (tutorialsetuprestrictplayer.cpp)
@@ -65,8 +68,7 @@ void StatGoal_ResolveExternalPtr(void* externalRef) {
     // a guard over a faithful crash — it is the standalone resource-environment
     // gap. The real fix remains making the preload populate the factory.
     bool loaded = false;
-    if (!found && fn_ExternalFactory_FindOrLoad && fn_String_Ctor_CStr && fn_String_Dtor &&
-        fn_Filename_CtorString && fn_Filename_Dtor) {
+    if (!found && fn_ExternalFactory_FindOrLoad) {
         const char* name = *reinterpret_cast<const char* const*>(s);
         if (name && name[0]) {
             // Only the LOADER rejects backslashes; the factory's key comparison
@@ -77,13 +79,9 @@ void StatGoal_ResolveExternalPtr(void* externalRef) {
                 normalized[k] = (name[k] == '\\') ? '/' : name[k];
             normalized[k] = 0;
 
-            uint8_t normStr[8] = {};
-            fn_String_Ctor_CStr(normStr, normalized);
-            uint8_t normFile[8] = {};
-            fn_Filename_CtorString(normFile, normStr);
-            found = fn_ExternalFactory_FindOrLoad(factory, normFile);
-            fn_Filename_Dtor(normFile);
-            fn_String_Dtor(normStr);
+            System::String   normStr(normalized);
+            System::Filename normFile(normStr);
+            found = fn_ExternalFactory_FindOrLoad(factory, &normFile);
             loaded = true;
         }
     }
@@ -157,7 +155,8 @@ void Goal_RefArray_Resize(void* arr, uint32_t newCount) {
         uint8_t* dst = reinterpret_cast<uint8_t*>(newData) + static_cast<uintptr_t>(i) * 0x18;
         if (i < oldCount) {
             uint8_t* src = reinterpret_cast<uint8_t*>(oldData) + static_cast<uintptr_t>(i) * 0x18;
-            fn_String_Ctor_Copy(dst, src);                                       // +0x00
+            // B.3.1 bridge: the ExternalPtr triple is still untyped bytes.
+            new (dst) System::String(reinterpret_cast<const System::String&>(*src));  // +0x00
             *reinterpret_cast<uint32_t*>(dst + 0x08) = *reinterpret_cast<uint32_t*>(src + 0x08);
             *reinterpret_cast<uint64_t*>(dst + 0x10) = *reinterpret_cast<uint64_t*>(src + 0x10);
         } else {
@@ -169,10 +168,12 @@ void Goal_RefArray_Resize(void* arr, uint32_t newCount) {
 
     if (oldData == newData) {
         for (uint32_t i = newCount; i < oldCount; i++)   // in-place shrink
-            fn_String_Dtor(reinterpret_cast<uint8_t*>(oldData) + static_cast<uintptr_t>(i) * 0x18);
+            reinterpret_cast<System::String*>(reinterpret_cast<uint8_t*>(oldData) +
+                                              static_cast<uintptr_t>(i) * 0x18)->~String();
     } else if (oldData) {
         for (uint32_t i = 0; i < oldCount; i++)
-            fn_String_Dtor(reinterpret_cast<uint8_t*>(oldData) + static_cast<uintptr_t>(i) * 0x18);
+            reinterpret_cast<System::String*>(reinterpret_cast<uint8_t*>(oldData) +
+                                              static_cast<uintptr_t>(i) * 0x18)->~String();
         fn_MemFreeStatic(reinterpret_cast<void*>(oldData));
     }
 }

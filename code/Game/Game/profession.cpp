@@ -13,6 +13,7 @@
 
 #include "Game/profession_funcs.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -32,11 +33,6 @@ static void (*s_fn_Serialize_Int)(void* ser, void* field, const char* name) = nu
 static void (*s_fn_Serialize_Bool)(void* ser, void* field, const char* name) = nullptr;
 // IO::Serializer::Serialize(float*) via IAT at 0x140152a60
 static void (*s_fn_Serialize_Float)(void* ser, void* field, const char* name) = nullptr;
-
-// System::String::Serialize(this, serializer)
-static void (*s_fn_String_Serialize)(void* str, void* serializer) = nullptr;
-// System::String::~String(this)
-static void (*s_fn_String_Dtor)(void* str) = nullptr;
 
 // FUN_14000bf40(ExternalPtr*, Serializer*) -- ExternalPtr serialize variant
 static void (*s_fn_ExternalPtr_Serialize2)(void* field, void* serializer) = nullptr;
@@ -68,10 +64,6 @@ void Profession_InitFuncs() {
     iat = ResolveAddr(Module::Exe, 0x140152a60);
     if (iat) s_fn_Serialize_Float = *reinterpret_cast<void(**)(void*, void*, const char*)>(iat);
 
-    // String funcs from engine_funcs globals
-    s_fn_String_Serialize = reinterpret_cast<void(*)(void*, void*)>((uintptr_t)g_fn_String_Serialize);
-    s_fn_String_Dtor = reinterpret_cast<void(*)(void*)>((uintptr_t)fn_String_Dtor);
-
     // ExternalPtr serialize helpers (direct exe functions)
     s_fn_ExternalPtr_Serialize2 = reinterpret_cast<void(*)(void*, void*)>(
         ResolveAddr(Module::Exe, 0x14000bf40));
@@ -94,8 +86,7 @@ void Profession_InitFuncs() {
     printf("[Profession] InitFuncs: SerCtor=%p SerDtor=%p SerInt=%p SerBool=%p SerFloat=%p\n",
            (void*)s_fn_Serializer_Ctor, (void*)s_fn_Serializer_Dtor,
            (void*)s_fn_Serialize_Int, (void*)s_fn_Serialize_Bool, (void*)s_fn_Serialize_Float);
-    printf("[Profession] InitFuncs: StrSer=%p StrDtor=%p ExtPtrSer=%p ExtPtrSer2=%p\n",
-           (void*)s_fn_String_Serialize, (void*)s_fn_String_Dtor,
+    printf("[Profession] InitFuncs: ExtPtrSer=%p ExtPtrSer2=%p\n",
            (void*)s_fn_ExternalPtr_Serialize, (void*)s_fn_ExternalPtr_Serialize2);
 #endif
 }
@@ -145,11 +136,10 @@ void Profession_Init(Profession* self) {
 // Conditionally frees memory if flags & 1.
 void* Profession_Dtor(Profession* self, uint32_t flags) {
     // Destroy strings in reverse order (matching original)
-    if (s_fn_String_Dtor) {
-        s_fn_String_Dtor(&self->stringTool);  // +0x40
-        s_fn_String_Dtor(&self->stringDesc);  // +0x38
-        s_fn_String_Dtor(&self->stringName);  // +0x30
-    }
+    // B.3.1 bridge: Profession's String fields are still POD members.
+    reinterpret_cast<System::String*>(&self->stringTool)->~String();  // +0x40
+    reinterpret_cast<System::String*>(&self->stringDesc)->~String();  // +0x38
+    reinterpret_cast<System::String*>(&self->stringName)->~String();  // +0x30
 
     // Call External::~External for base cleanup
     if (fn_External_Dtor) {
@@ -214,11 +204,9 @@ void Profession_Serialize(Profession* self, void* stream) {
     }
 
     // Serialize String fields
-    if (s_fn_String_Serialize) {
-        s_fn_String_Serialize(&self->stringName, serializer);  // +0x30
-        s_fn_String_Serialize(&self->stringDesc, serializer);  // +0x38
-        s_fn_String_Serialize(&self->stringTool, serializer);  // +0x40
-    }
+    reinterpret_cast<System::String*>(&self->stringName)->Serialize(serializer);  // +0x30
+    reinterpret_cast<System::String*>(&self->stringDesc)->Serialize(serializer);  // +0x38
+    reinterpret_cast<System::String*>(&self->stringTool)->Serialize(serializer);  // +0x40
 
     // Serialize numeric fields
     if (s_fn_Serialize_Int) {

@@ -31,6 +31,8 @@
 // the per-primitive serialize calls aren't all wired yet, so we soft-fail).
 
 #include "engine_funcs.h"
+#include "system/Filename.h"
+#include "system/String.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -349,9 +351,7 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
     // Required Runtime primitives. If any are missing, log once and bail.
     if (!fn_Serializer_GetEncoding || !fn_ExternalFactory_FindOrLoad ||
         !fn_IsDerivedFrom || !fn_ExternalFactory_IsReferenceModeEnabled ||
-        !fn_External_GetPath || !fn_Filename_Ctor || !fn_Filename_Dtor ||
-        !fn_Filename_AssignOp || !g_fn_String_Serialize ||
-        !fn_Serializer_Serialize_Uint || !g_fn_Serialize_Bool ||
+        !fn_External_GetPath || !fn_Serializer_Serialize_Uint || !g_fn_Serialize_Bool ||
         !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
         static bool s_warned = false;
         if (!s_warned) {
@@ -409,19 +409,17 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
         if (encState == 3) {
             // Path-export (read-only) mode: walk existing pointers only.
             if (!*slot) continue;
-            uint8_t pathBuf[8] = {0};
-            void* path = fn_External_GetPath(*slot, pathBuf);
+            System::Filename pathBuf;
+            void* path = fn_External_GetPath(*slot, &pathBuf);
             void* found = fn_ExternalFactory_FindOrLoad(factory, path);
             if (found && typeIdResolved) {
                 ::Object::IsDerivedFromOrTrust(found, typeId);
             }
-            fn_Filename_Dtor(pathBuf);
             continue;
         }
 
         // Load/save mode.
-        uint8_t fnameBuf[8] = {0};
-        fn_Filename_Ctor(fnameBuf);
+        System::Filename fnameBuf;
 
         bool refMode = fn_ExternalFactory_IsReferenceModeEnabled(factory);
 
@@ -439,10 +437,9 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
                 fn_Serializer_Serialize_Uint(serializer, &refId, nullptr);
                 if (refId != 0xFFFFFFFFu) {
                     if (serializerInner == 0) {
-                        uint8_t tmpFn[8] = {0};
-                        fn_ExternalFactory_GetPathForReferenceId(factory, tmpFn, refId);
-                        fn_Filename_AssignOp(fnameBuf, tmpFn);
-                        fn_Filename_Dtor(tmpFn);
+                        System::Filename tmpFn;
+                        fn_ExternalFactory_GetPathForReferenceId(factory, &tmpFn, refId);
+                        fnameBuf = tmpFn;
                     }
                     needsPathSerialize = true;
                 }
@@ -454,7 +451,7 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
                 int innerCheck = *reinterpret_cast<int*>(
                     reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(serializer)) + 8);
                 if (innerCheck == 0) {
-                    void* loaded = fn_ExternalFactory_FindOrLoad(factory, fnameBuf);
+                    void* loaded = fn_ExternalFactory_FindOrLoad(factory, &fnameBuf);
                     void* result = nullptr;
                     if (loaded && (!typeIdResolved || ::Object::IsDerivedFromOrTrust(loaded, typeId))) {
                         result = loaded;
@@ -467,17 +464,16 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
             g_fn_Serialize_Bool(serializer, &hasRef, nullptr);
             if (hasRef) {
                 if (*slot) {
-                    uint8_t pathBuf[8] = {0};
-                    void* path = fn_External_GetPath(*slot, pathBuf);
-                    fn_Filename_AssignOp(fnameBuf, path);
-                    fn_Filename_Dtor(pathBuf);
+                    System::Filename pathBuf;
+                    fn_External_GetPath(*slot, &pathBuf);
+                    fnameBuf = pathBuf;
                 }
-                g_fn_String_Serialize(fnameBuf, serializer);
+                fnameBuf.AsString().Serialize(serializer);
 
                 int innerCheck = *reinterpret_cast<int*>(
                     reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(serializer)) + 8);
                 if (innerCheck == 0) {
-                    void* loaded = fn_ExternalFactory_FindOrLoad(factory, fnameBuf);
+                    void* loaded = fn_ExternalFactory_FindOrLoad(factory, &fnameBuf);
                     void* result = nullptr;
                     if (loaded && (!typeIdResolved || ::Object::IsDerivedFromOrTrust(loaded, typeId))) {
                         result = loaded;
@@ -487,7 +483,6 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
             }
         }
 
-        fn_Filename_Dtor(fnameBuf);
     }
 }
 

@@ -18,6 +18,8 @@
 
 #include "Tutorial/tutorialimagetoolbaricon_funcs.h"
 #include "engine_funcs.h"
+#include "system/Filename.h"
+#include "system/String.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -48,14 +50,6 @@ static fn_External_Ctor_t s_fn_External_Ctor = nullptr;
 typedef void (*fn_ExternalPtr_SerializeImage_t)(void* externalPtrField, void* serializer);
 static fn_ExternalPtr_SerializeImage_t s_fn_ExternalPtr_SerializeImage = nullptr;
 
-// System::Filename::Filename() -- dispatch slot 0x140151d40
-typedef void* (*fn_Filename_Ctor_local_t)(void* self);
-static fn_Filename_Ctor_local_t s_fn_Filename_Ctor = nullptr;
-
-// System::Filename::~Filename() -- dispatch slot 0x1401529e8
-typedef void (*fn_Filename_Dtor_local_t)(void* self);
-static fn_Filename_Dtor_local_t s_fn_Filename_Dtor = nullptr;
-
 // FUN_140027de0 -- resolves toolbar from String at +0x30
 typedef void (*fn_ResolveToolbar_t)(void* stringField);
 static fn_ResolveToolbar_t s_fn_ResolveToolbar = nullptr;
@@ -69,16 +63,6 @@ static void EnsureFuncs() {
     if (!s_fn_ExternalPtr_SerializeImage) {
         s_fn_ExternalPtr_SerializeImage = reinterpret_cast<fn_ExternalPtr_SerializeImage_t>(
             ResolveAddr(Module::Exe, 0x140027ad0));
-    }
-    if (!s_fn_Filename_Ctor) {
-        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151d40));
-        if (dispatch && *dispatch)
-            s_fn_Filename_Ctor = reinterpret_cast<fn_Filename_Ctor_local_t>(*dispatch);
-    }
-    if (!s_fn_Filename_Dtor) {
-        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401529e8));
-        if (dispatch && *dispatch)
-            s_fn_Filename_Dtor = reinterpret_cast<fn_Filename_Dtor_local_t>(*dispatch);
     }
     if (!s_fn_ResolveToolbar) {
         s_fn_ResolveToolbar = reinterpret_cast<fn_ResolveToolbar_t>(
@@ -96,9 +80,8 @@ void* TutorialImageToolbarIcon_Dtor(void* self, uint32_t flags) {
     // Set own vtable
     *(void**)p = s_vtable_TutorialImageToolbarIcon;
 
-    // Destroy String at +0x30 (dispatch slot 0x140152af0 = String::~String)
-    if (fn_String_Dtor)
-        fn_String_Dtor(p + 0x30);
+    // Destroy String at +0x30 (B.3.1 bridge: the object is still untyped bytes)
+    reinterpret_cast<System::String*>(p + 0x30)->~String();
 
     // Set base vtable
     *(void**)p = s_vtable_TutorialImage;
@@ -144,14 +127,12 @@ void TutorialImageToolbarIcon_Serialize(void* self, void* stream) {
     if (g_fn_Serializer_Ctor)
         g_fn_Serializer_Ctor(serializerBuf2, stream, 0);
 
-    // Filename ctor (stack local, used as temp)
-    uint8_t filenameBuf[8] = {};
-    if (s_fn_Filename_Ctor)
-        s_fn_Filename_Ctor(filenameBuf);
+    // Filename temp retail's compiler emitted for this scope.
+    System::Filename filenameBuf;
+    (void)filenameBuf;
 
     // String::Serialize on +0x30
-    if (g_fn_String_Serialize)
-        g_fn_String_Serialize(p + 0x30, serializerBuf2);
+    reinterpret_cast<System::String*>(p + 0x30)->Serialize(serializerBuf2);
 
     // If loading (serializer stream mode == 0), resolve toolbar
     void* innerStream = *(void**)(serializerBuf2 + 0x00);
@@ -163,10 +144,6 @@ void TutorialImageToolbarIcon_Serialize(void* self, void* stream) {
                 s_fn_ResolveToolbar(p + 0x30);
         }
     }
-
-    // Filename dtor
-    if (s_fn_Filename_Dtor)
-        s_fn_Filename_Dtor(filenameBuf);
 
     if (g_fn_Serializer_Dtor)
         g_fn_Serializer_Dtor(serializerBuf2);

@@ -25,6 +25,9 @@
 #include "Goal/goal_exe_helpers.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "system/String.h"
+#include "system/Filename.h"
+#include <new>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -128,16 +131,13 @@ int BuildingGoal_Slot5(BuildingGoal* self, void* stream) {
     if ((int)countLocal > 0) {
         uint8_t* entry = (uint8_t*)arrayBase;
         for (uint32_t i = 0; i < countLocal; i++) {
-            // Filename ctor on stack (16 bytes)
-            uint8_t filenameBuf[16];
-            if (fn_Filename_Ctor) {
-                fn_Filename_Ctor(filenameBuf);
-            }
+            // Filename temporary retail's compiler emitted for this loop body.
+            System::Filename filenameBuf;
+            (void)filenameBuf;
 
             // String::Serialize — serialize the string at entry+0x00
-            if (g_fn_String_Serialize) {
-                g_fn_String_Serialize(entry, serializer);
-            }
+            // B.3.1 bridge: the ExternalPtr triple is still untyped bytes.
+            reinterpret_cast<System::String*>(entry)->Serialize(serializer);
 
             // On load: resolve the entry's description reference (0x14001b1d0).
             // NOT a string hash despite the old `fn_StringHash` name — it is the
@@ -147,11 +147,6 @@ int BuildingGoal_Slot5(BuildingGoal* self, void* stream) {
             // entry+0x08 (factory generation).
             if (encodingMode == 0) {
                 ResolveExternalByName_Impl(entry);
-            }
-
-            // Filename dtor
-            if (fn_Filename_Dtor) {
-                fn_Filename_Dtor(filenameBuf);
             }
 
             entry += 0x18;
@@ -241,12 +236,13 @@ int BuildingGoal_Slot8(BuildingGoal* self) {
             // pointer. While the resolve never ran it stayed 0, so every goal looked
             // up key 0, matched nothing, and could never be met.
             uint8_t refCopy[0x18];
-            fn_String_Ctor_Copy(refCopy, (void*)entry);                    // +0x00 name
+            // B.3.1 bridge: the ExternalPtr triple is still untyped bytes.
+            new (refCopy) System::String(*reinterpret_cast<const System::String*>(entry));  // +0x00 name
             *(uint32_t*)(refCopy + 0x08) = *(uint32_t*)(entry + 0x08);     // +0x08 generation
             *(uint64_t*)(refCopy + 0x10) = *(uint64_t*)(entry + 0x10);     // +0x10 cached ptr
             ResolveExternalByName_Impl(refCopy);
             uint64_t lookupKey = *(uint64_t*)(refCopy + 0x10);
-            fn_String_Dtor(refCopy);
+            reinterpret_cast<System::String*>(refCopy)->~String();
 
             // BST lookup in world building tree at worldData+0x160
             uint64_t* node = *(uint64_t**)(worldData + 0x160);
@@ -365,7 +361,6 @@ REGISTER_TYPE(BuildingGoal, "Achievement::Goal",
 // the starting town builds one).
 extern "C" void BuildingGoal_Probe(const char* templateName) {
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    if (!fn_String_Ctor_CStr || !fn_String_Dtor) return;
     uintptr_t gameWorld = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
     uintptr_t worldData = *reinterpret_cast<uintptr_t*>(gameWorld + 0xF0);
     if (!worldData) return;
@@ -402,18 +397,18 @@ extern "C" void BuildingGoal_Probe(const char* templateName) {
             *reinterpret_cast<int32_t*>(entry + 0x08),
             *reinterpret_cast<void**>(entry + 0x10));
 
-    fn_String_Ctor_CStr(entry, templateName);          // +0x00 name
+    new (entry) System::String(templateName);          // +0x00 name  (B.3.1 bridge)
 
     // Resolve a copy for reporting — Slot8 deliberately resolves into a throwaway
     // triple and leaves the array entry alone, so read the pointer from our own copy.
     uint8_t refCopy[0x18];
     memset(refCopy, 0, sizeof(refCopy));
-    fn_String_Ctor_Copy(refCopy, entry);
+    new (refCopy) System::String(reinterpret_cast<const System::String&>(*entry));
     *reinterpret_cast<uint32_t*>(refCopy + 0x08) = *reinterpret_cast<uint32_t*>(entry + 0x08);
     *reinterpret_cast<uint64_t*>(refCopy + 0x10) = *reinterpret_cast<uint64_t*>(entry + 0x10);
     ResolveExternalByName_Impl(refCopy);
     void* resolved = *reinterpret_cast<void**>(refCopy + 0x10);
-    fn_String_Dtor(refCopy);
+    reinterpret_cast<System::String*>(refCopy)->~String();
 
     *reinterpret_cast<uint64_t*>(goal + 0x40) = 1;     // count = 1
     int verdict = BuildingGoal_Slot8(reinterpret_cast<BuildingGoal*>(goal));
@@ -428,6 +423,6 @@ extern "C" void BuildingGoal_Probe(const char* templateName) {
     }
     fflush(stderr);
 
-    fn_String_Dtor(entry);
+    reinterpret_cast<System::String*>(entry)->~String();
     if (fn_MemFreeStatic) fn_MemFreeStatic(entry);
 }

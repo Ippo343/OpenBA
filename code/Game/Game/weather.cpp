@@ -13,6 +13,7 @@
 
 #include "Game/weather_funcs.h"
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
 
@@ -104,8 +105,6 @@ void Weather_Init(Weather* self) {
 // Local function pointers resolved on first call (not in engine_funcs.h)
 // IO::Serializer::Serialize(float&, const char*) via IAT at 0x140152a60
 static void (*s_fn_Serialize_Float)(void* serializer, void* field, const char* name) = nullptr;
-// Math::Vector3::Serialize(this, serializer) via IAT at 0x140152a68
-static void (*s_fn_Vector3_Serialize)(void* vec3, void* serializer) = nullptr;
 // System::Color::Serialize(this, serializer) via IAT at 0x140151ee0
 static void (*s_fn_Color_Serialize)(void* color, void* serializer) = nullptr;
 
@@ -120,10 +119,6 @@ static void Weather_Serialize_InitFuncs() {
     // Serialize_Float via IAT at [0x140152a60]
     iat = ResolveAddr(Module::Exe, 0x140152a60);
     if (iat) s_fn_Serialize_Float = *reinterpret_cast<void(**)(void*, void*, const char*)>(iat);
-
-    // Vector3::Serialize via IAT at [0x140152a68]
-    iat = ResolveAddr(Module::Exe, 0x140152a68);
-    if (iat) s_fn_Vector3_Serialize = *reinterpret_cast<void(**)(void*, void*)>(iat);
 
     // Color::Serialize via IAT at [0x140151ee0]
     iat = ResolveAddr(Module::Exe, 0x140151ee0);
@@ -144,7 +139,8 @@ void Weather_Serialize(Weather* self, void* stream) {
     g_fn_Serialize_Int(serializer, &self->particleCount, nullptr);
 
     // Vector3 velocityDir (+0x2C..+0x34)  — member function: this=vec3, arg=serializer
-    s_fn_Vector3_Serialize(&self->velocityDirX, serializer);
+    // B.3.1 bridge: WeatherParticle keeps the three floats as separate members.
+    reinterpret_cast<Math::Vector3*>(&self->velocityDirX)->Serialize(serializer);
 
     // float velocity (+0x38)
     s_fn_Serialize_Float(serializer, &self->velocity, nullptr);
