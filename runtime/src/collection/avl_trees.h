@@ -90,14 +90,5 @@ void SubtreeFree(void* ignoredThis, rtsetavl::Node* node);             // 0x1800
 
 }  // namespace rtavl
 
-// The probe. Armed by RtCollectionAvlTreesPortInit, run on the first real call
-// into any registered entry point — it ALLOCATES, and a probe that allocates
-// cannot run from a *PortInit (WAVE9.md, lane PKG2: the allocator has not
-// published its singleton yet and the first allocation faults at null+0x640).
-void RtCollectionAvlProbeArm(bool on);
-bool RtCollectionAvlProbeArmed();
-void RtCollectionAvlProbeRun();
-extern "C" void RtCollectionAvlProbeMaybeRun();
-
 int RtCollectionAvlTreesRegister();
 int RtCollectionSortRegister();

@@ -246,7 +246,6 @@ extern "C" void* RtSystem_ConfigMap_Find(void* map, const String* wanted) {
 // "returned without touching the map", and the check reads the map's ROOT,
 // which this body never writes.
 extern "C" void RtSystem_Configuration_SetCommandLine(void* self, const String* cmd) {
-    RT_DIFF_BEGIN("System::Configuration::SetCommandLine");
 
     void* map = static_cast<uint8_t*>(self) + 0x10;
     MapNode* rootBefore = *static_cast<MapNode**>(map);
@@ -292,24 +291,6 @@ extern "C" void RtSystem_Configuration_SetCommandLine(void* self, const String* 
         }
     }
 
-    if (rt_diff_on__) {
-        const bool emptyCmd  = (d == nullptr) || RtSystem::StringLength(d) <= 0;
-        MapNode* rootAfter   = *static_cast<MapNode**>(map);
-        // On an empty command line the map must be UNTOUCHED; on a non-empty one
-        // a first insert must have created a root. Either way the term is about
-        // storage this body never writes -- the insert does.
-        const bool mapOk = emptyCmd ? (rootAfter == rootBefore)
-                                    : (rootAfter != nullptr);
-        char ours[160], theirs[160];
-        RtDiffFormat(ours, sizeof(ours), static_cast<const void*>(rootAfter));
-        std::snprintf(theirs, sizeof(theirs),
-                      "len=%d pos=%d root %s [mapOk=%d]",
-                      (d ? RtSystem::StringLength(d) : -1), pos,
-                      emptyCmd ? "unchanged" : "non-null",
-                      static_cast<int>(mapOk));
-        RT_DIFF_SHADOW(mapOk, ours, theirs);
-        RT_DIFF_WORK(true);
-    }
 }
 
 // ============================================================================
@@ -414,7 +395,6 @@ bool SameString(const String* a, const String* b) {
 // Skip blanks, then take the run up to the next blank.
 extern "C" String* RtSystem_Configuration_ParseValue(String* ret, int* pos,
                                                      const String* src) {
-    RT_DIFF_BEGIN("System::Configuration::ParseValue");
     const int posIn = *pos;
 
     while (*pos < RtSystem::RtString_GetLength(src) && IsBlank(src->data[*pos]))
@@ -433,35 +413,10 @@ extern "C" String* RtSystem_Configuration_ParseValue(String* ret, int* pos,
     // so the original is replayed from the SNAPSHOT `posIn`, never from the
     // value our body just advanced
     // (reference_oracle_must_snapshot_aliased_inputs.md).
-    if (rt_diff_on__) {
-        int theirPos = posIn;
-        String theirRet;
-        theirRet.data = nullptr;
-        RT_ORIGINAL_ONCE(ParseFn,
-            "?ParseValue@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z")(
-                &theirRet, &theirPos, src);
-
-        const bool eq = (theirPos == *pos) && SameString(ret, &theirRet);
-        // The verdict is TWO terms, so both are printed on either outcome and
-        // the failing one is readable without a second run
-        // (reference_shadow_predicate_must_name_its_failing_term.md).
-        char ours[192], theirs[192];
-        std::snprintf(ours, sizeof(ours), "pos=%d str=\"%.80s\"",
-                      *pos, ret->data ? ret->data : "(null)");
-        std::snprintf(theirs, sizeof(theirs), "pos=%d str=\"%.80s\"",
-                      theirPos, theirRet.data ? theirRet.data : "(null)");
-        RT_DIFF_SHADOW(eq, ours, theirs);
-
-        // The oracle's String is a real allocation on the DLL's heap. Release
-        // it through the same inlined idiom retail uses, or the diff run leaks
-        // one block per call.
-        RtSystem::RtString_ReleaseInline(&theirRet);
-    }
 
     // EFFECTIVENESS CONTROL: how many calls actually consumed input. A run
     // whose ParseValue rows are all `work=0` has proved nothing, however green
     // (reference_probe_needs_an_effectiveness_control.md).
-    RT_DIFF_WORK(*pos != posIn);
     return ret;
 }
 
@@ -471,7 +426,6 @@ extern "C" String* RtSystem_Configuration_ParseValue(String* ret, int* pos,
 // blank or ':'. If there is no '/', return an empty String.
 extern "C" String* RtSystem_Configuration_ParseCommand(String* ret, int* pos,
                                                        const String* src) {
-    RT_DIFF_BEGIN("System::Configuration::ParseCommand");
     const int posIn = *pos;
 
     while (*pos < RtSystem::RtString_GetLength(src) && IsBlank(src->data[*pos]))
@@ -485,7 +439,6 @@ extern "C" String* RtSystem_Configuration_ParseCommand(String* ret, int* pos,
     // taken, which is precisely what retail does.
     if (src->data[*pos] != '/') {
         ret->data = nullptr;                                 // detail 3
-        RT_DIFF_WORK(false);
         return ret;
     }
     ++*pos;                                                  // step over the '/'
@@ -508,25 +461,7 @@ extern "C" String* RtSystem_Configuration_ParseCommand(String* ret, int* pos,
 
     RtSystem::RtSystem_String_SubString(src, ret, start, end - 1);   // inclusive
 
-    if (rt_diff_on__) {
-        int theirPos = posIn;
-        String theirRet;
-        theirRet.data = nullptr;
-        RT_ORIGINAL_ONCE(ParseFn,
-            "?ParseCommand@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z")(
-                &theirRet, &theirPos, src);
 
-        const bool eq = (theirPos == *pos) && SameString(ret, &theirRet);
-        char ours[192], theirs[192];
-        std::snprintf(ours, sizeof(ours), "pos=%d str=\"%.80s\"",
-                      *pos, ret->data ? ret->data : "(null)");
-        std::snprintf(theirs, sizeof(theirs), "pos=%d str=\"%.80s\"",
-                      theirPos, theirRet.data ? theirRet.data : "(null)");
-        RT_DIFF_SHADOW(eq, ours, theirs);
-        RtSystem::RtString_ReleaseInline(&theirRet);
-    }
-
-    RT_DIFF_WORK(*pos != posIn);
     return ret;
 }
 
@@ -594,7 +529,6 @@ extern "C" String* RtSystem_Configuration_ParseCommand(String* ret, int* pos,
 // could ever be freed.
 extern "C" String* RtSystem_Configuration_GetCommandLineString(
         void* self, String* ret, const String* key) {
-    RT_DIFF_BEGIN("System::Configuration::GetCommandLineString");
 
     MapNode* node = static_cast<MapNode*>(
         RtSystem_ConfigMap_Find(static_cast<uint8_t*>(self) + 0x10, key));
@@ -616,28 +550,10 @@ extern "C" String* RtSystem_Configuration_GetCommandLineString(
         RtSystem::RtString_ReleaseInline(&tmpObj);
     }
 
-    if (rt_diff_on__) {
-        String theirRet;
-        theirRet.data = nullptr;
-        RT_ORIGINAL_ONCE(GetCmdLineStrFn,
-            "?GetCommandLineString@Configuration@System@@QEBA?AVString@2@AEBV32@@Z")(
-                self, &theirRet, key);
-
-        const bool eq = (ret->data == theirRet.data);
-        char ours[128], theirs[128];
-        std::snprintf(ours, sizeof(ours), "data=%p \"%.60s\"",
-                      (void*)ret->data, ret->data ? ret->data : "(null)");
-        std::snprintf(theirs, sizeof(theirs), "data=%p \"%.60s\"",
-                      (void*)theirRet.data, theirRet.data ? theirRet.data : "(null)");
-        RT_DIFF_SHADOW(eq, ours, theirs);
-
-        RtSystem::RtString_ReleaseInline(&theirRet);
-    }
 
     // EFFECTIVENESS CONTROL. A run in which every lookup MISSED has exercised
     // the null arm only and said nothing about the arm that matters; `work`
     // counts the hits (reference_probe_needs_an_effectiveness_control.md).
-    RT_DIFF_WORK(ret->data != nullptr);
     return ret;
 }
 
@@ -699,7 +615,6 @@ extern "C" String* RtSystem_Configuration_GetCommandLineString(
 // this name through RT_EXPORT_ONCE, i.e. through a DOOR, so registering moves
 // that call to this body, and `work` counts the objects actually destroyed.
 extern "C" void RtSystem_Configuration_Dtor(void* self) {
-    RT_DIFF_BEGIN("System::Configuration::~Configuration");
 
     typedef void (*CleanupFn)(void*);
 
@@ -713,7 +628,6 @@ extern "C" void RtSystem_Configuration_Dtor(void* self) {
             ResolveAddr(Module::Runtime, 0x180010ab0)))
         arrayDtor(self);
 
-    RT_DIFF_WORK(true);
 }
 
 // ============================================================================

@@ -15,7 +15,6 @@
 
 #include <cstdint>
 
-#include "../../funcs/rt_diff.h"
 #include "../../types/collection/Collection.h"
 
 namespace rtcoll {
@@ -63,40 +62,15 @@ struct ArraySpec {
     uint32_t    seedZeroLo, seedZeroHi;
 };
 
-// One diff site per REGISTERED ADDRESS. See array.cpp's "Live instrumentation".
-//
-// *** A Site MUST HAVE STATIC STORAGE DURATION. *** RtDiffRegister stores the
-// POINTER and rt_diff.cpp re-reads it at summary time, so a stack Site dangles
-// and the summary reports it as "sites were CORRUPTED -- a stray write hit the
-// harness's own statics". The probe's first draft did exactly that 144 times;
-// the full account is in array.cpp above SetSizeCore.
-struct Site { RtDiffSite d; uintptr_t addr; };
-
 // The allocator boundary (by address; see array.cpp's banner and the lane E
 // dependency stated there).
 void* MemAlloc(uint64_t bytes, int align);
 void  MemFree(void* p);
 
-// ---------------------------------------------------------------------------
-// Probe scheduling.
-//
-// The probe MUST NOT run from RtCollectionPortInit(). That runs immediately
-// after ResolveInit()'s LoadLibrary (standalone/main.cpp:1655), and the DLL's
-// MemoryAllocator has been CONSTRUCTED by then but not STARTED — Engine::Startup
-// does that later. Allocating from it at that moment is exactly the kind of
-// "works on my boot order" hazard this project keeps paying for.
-//
-// So the probe self-schedules: `g_probePending` is armed at init and the first
-// call into ANY registered entry point runs it. That moment is provably safe,
-// because the caller is itself in the middle of using an Array.
-extern bool g_probePending;
-
 // The two ported bodies.
-// `site` may be NULL, which means "run the body, touch nothing in the diff
-// registry". The probe passes NULL.
 void* ArrayDtorImpl(ArrayHdr* a);
 void  SetSizeCore(ArrayHdr* a, int newSize, const uint8_t* fill,
-                  const ArraySpec* spec, Site* site);
+                  const ArraySpec* spec);
 
 // The per-address specs, in the order of the parameterization table in
 // docs/runtime_port/WAVE9_LANE_Q.md.
@@ -147,9 +121,3 @@ extern const ArraySpec kSpec_ExtArrayElem;   // 0x18002c6a0   NON-TRIVIAL
 extern const ArraySpec kSpec_StringPair10;    // 0x180078c90   NON-TRIVIAL
 
 }  // namespace rtcoll
-
-// Runs the synthetic-subject replay probe. Driven by rtcoll::g_probePending —
-// see the note above for why it is not called from RtCollectionPortInit().
-void RtCollectionProbeRun();
-// True when BANISHED_RT_ARRAY_PROBE selects a mode. Read once, at init.
-bool RtCollectionProbeArmed();

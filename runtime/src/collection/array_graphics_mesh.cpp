@@ -338,10 +338,10 @@ void Rt_DestroyInnerArrays_180014af0(void* t, void* base, int n) {
 }
 
 void Rt_SetSize_18005d840(void* a, int n) {   // Array<TriangleList>
-    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_TriangleList, nullptr);
+    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_TriangleList);
 }
 void Rt_SetSize_18005cda0(void* a, int n) {   // Array<Array<T>>
-    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_InnerArray, nullptr);
+    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_InnerArray);
 }
 
 void* Rt_TriangleListCtor_1800fefc0(void* p)                  { return TriangleListCtor(p); }

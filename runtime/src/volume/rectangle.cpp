@@ -15,13 +15,7 @@
 // Default ctor: empty rectangle (min = +1.0e8f, max = -1.0e8f), the same
 // empty-sentinel convention as Volume::Box.
 Rectangle* RtVolume_Rectangle_Ctor(Rectangle* self) {
-    RT_DIFF_BEGIN("Volume::Rectangle::Rectangle (ctor)");
     self->min = { RtMathConst::kBigPos, RtMathConst::kBigPos };
     self->max = { RtMathConst::kBigNeg, RtMathConst::kBigNeg };
-    if (rt_diff_on__) {
-        Rectangle theirs{};
-        RtOriginal<Rectangle*(*)(Rectangle*)>("??0Rectangle@Volume@@QEAA@XZ")(&theirs);
-        RT_DIFF_BYTES(self, &theirs, sizeof(Rectangle));
-    }
     return self;
 }

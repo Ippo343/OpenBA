@@ -866,7 +866,7 @@ float Fmodf(float xf, float yf) {
 // not port (msvc_libm.h's FAITHFULNESS BOUNDARY -- every RETURN VALUE is
 // ported, the errno/_matherr traffic is not).
 //
-// Registering here does NOT disturb the BANISHED_RT_LIBM=dll diagnostic:
+// Registering here does NOT disturb the RtLibm seam:
 // rt_libm.cpp reaches the DLL bodies through ResolveRuntimeRaw, which skips the
 // port registry on purpose.
 static float RtCrt_Sqrtf (float x)          { return MsvcLibm::Sqrtf(x); }

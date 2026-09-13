@@ -27,11 +27,8 @@
 // Transcendentals (sqrtf/sinf/cosf) go through RtLibm (runtime/funcs/rt_libm.h)
 // rather than a direct call into Runtime-x64.dll's own CRT (at 0x180128110 /
 // 0x180127d90 / 0x180126d10 respectively, confirmed by disassembly below) —
-// calling the DLL directly would make the diff oracle green by construction
-// while leaving the port permanently dependent on a DLL PLAN.md §4.1 says
-// must eventually be absent. RtLibm defaults to our own libm; BANISHED_RT_LIBM=dll
-// is a diagnostic-only escape hatch to tell libm-rounding divergence apart
-// from a real bug.
+// calling the DLL directly would leave the port permanently dependent on a DLL
+// PLAN.md §4.1 says must be absent. RtLibm is our own libm.
 // Known .rdata constants (RtMathConst in Math.h):
 //   kDegToRad, kHalf, kOne, kTwo, kMinusOne, kSignMask
 // Two more thresholds used only by FromDirection, not in Math.h's shared
@@ -64,17 +61,10 @@ constexpr uint32_t kNearParallelNegBits = 0xbf7fbe77u; // -0.998573... (0x180161
 // retail 0x18001e260  ??0Quaternion@Math@@QEAA@MMMM@Z
 // ============================================================================
 Quaternion* RtMath_Quaternion_Ctor4(Quaternion* self, float x, float y, float z, float w) {
-    RT_DIFF_BEGIN("Math::Quaternion::Quaternion(float,float,float,float)");
     self->x = x;
     self->y = y;
     self->w = w;   // retail writes w (this+0xc) before z (this+8); independent
     self->z = z;   // field stores, order is inconsequential here.
-    if (rt_diff_on__) {
-        Quaternion theirs{};
-        typedef void (*OrigFn)(Quaternion*, float, float, float, float);
-        RtOriginal<OrigFn>("??0Quaternion@Math@@QEAA@MMMM@Z")(&theirs, x, y, z, w);
-        RT_DIFF_BYTES(self, &theirs, sizeof(Quaternion));
-    }
     return self;
 }
 
@@ -83,7 +73,6 @@ Quaternion* RtMath_Quaternion_Ctor4(Quaternion* self, float x, float y, float z,
 // retail 0x180015080  ??0Transform@Math@@QEAA@XZ
 // ============================================================================
 Transform* RtMath_Transform_CtorDefault(Transform* self) {
-    RT_DIFF_BEGIN("Math::Transform::Transform()");
     self->rotation.x = 0.0f;
     self->rotation.y = 0.0f;
     self->rotation.z = 0.0f;
@@ -91,12 +80,6 @@ Transform* RtMath_Transform_CtorDefault(Transform* self) {
     self->translation.x = 0.0f;
     self->translation.y = 0.0f;
     self->translation.z = 0.0f;
-    if (rt_diff_on__) {
-        Transform theirs{};
-        typedef void (*OrigFn)(Transform*);
-        RtOriginal<OrigFn>("??0Transform@Math@@QEAA@XZ")(&theirs);
-        RT_DIFF_BYTES(self, &theirs, sizeof(Transform));
-    }
     return self;
 }
 
@@ -106,14 +89,7 @@ Transform* RtMath_Transform_CtorDefault(Transform* self) {
 // A plain 7-dword field copy in retail; memcpy is bit-identical.
 // ============================================================================
 Transform* RtMath_Transform_CtorCopy(Transform* self, const Transform* other) {
-    RT_DIFF_BEGIN("Math::Transform::Transform(const Transform&)");
     std::memcpy(self, other, sizeof(Transform));
-    if (rt_diff_on__) {
-        Transform theirs{};
-        typedef void (*OrigFn)(Transform*, const Transform*);
-        RtOriginal<OrigFn>("??0Transform@Math@@QEAA@AEBV01@@Z")(&theirs, other);
-        RT_DIFF_BYTES(self, &theirs, sizeof(Transform));
-    }
     return self;
 }
 
@@ -124,16 +100,7 @@ Transform* RtMath_Transform_CtorCopy(Transform* self, const Transform* other) {
 // return); the only "output" is the mutation of `self` itself.
 // ============================================================================
 Transform* RtMath_Transform_Assign(Transform* self, const Transform* other) {
-    RT_DIFF_BEGIN("Math::Transform::operator=(const Transform&)");
     std::memcpy(self, other, sizeof(Transform));
-    if (rt_diff_on__) {
-        // The result depends only on `other`, so run the original on a fresh
-        // scratch object rather than touching live state a second time.
-        Transform scratch{};
-        typedef Transform* (*OrigFn)(Transform*, const Transform*);
-        RtOriginal<OrigFn>("??4Transform@Math@@QEAAAEAV01@AEBV01@@Z")(&scratch, other);
-        RT_DIFF_BYTES(self, &scratch, sizeof(Transform));
-    }
     return self;
 }
 
@@ -142,14 +109,7 @@ Transform* RtMath_Transform_Assign(Transform* self, const Transform* other) {
 // retail 0x18001dee0  ??0Transform3@Math@@QEAA@AEBV01@@Z
 // ============================================================================
 Transform3* RtMath_Transform3_CtorCopy(Transform3* self, const Transform3* other) {
-    RT_DIFF_BEGIN("Math::Transform3::Transform3(const Transform3&)");
     std::memcpy(self, other, sizeof(Transform3));
-    if (rt_diff_on__) {
-        Transform3 theirs{};
-        typedef void (*OrigFn)(Transform3*, const Transform3*);
-        RtOriginal<OrigFn>("??0Transform3@Math@@QEAA@AEBV01@@Z")(&theirs, other);
-        RT_DIFF_BYTES(self, &theirs, sizeof(Transform3));
-    }
     return self;
 }
 
@@ -160,7 +120,6 @@ Transform3* RtMath_Transform3_CtorCopy(Transform3* self, const Transform3* other
 // this+0x00 = cos, +0x04 = sin, +0x08 = -sin, +0x0c = cos, +0x10 = offset.
 // ============================================================================
 Transform2* RtMath_Transform2_Ctor(Transform2* self, const Scalar* angleDeg, const Vector2* offset) {
-    RT_DIFF_BEGIN("Math::Transform2::Transform2(const Scalar&, const Vector2&)");
     self->translation = *offset;             // retail writes the offset qword first
     float rad = angleDeg->v * RtMathConst::kDegToRad;
     float s = RtLibm::Sin(rad);
@@ -169,12 +128,6 @@ Transform2* RtMath_Transform2_Ctor(Transform2* self, const Scalar* angleDeg, con
     self->rotX.y = s;
     self->rotY.x = -s;   // bit-exact XOR sign-flip in retail
     self->rotY.y = c;
-    if (rt_diff_on__) {
-        Transform2 theirs{};
-        typedef void (*OrigFn)(Transform2*, const Scalar*, const Vector2*);
-        RtOriginal<OrigFn>("??0Transform2@Math@@QEAA@AEBVScalar@1@AEBVVector2@1@@Z")(&theirs, angleDeg, offset);
-        RT_DIFF_BYTES(self, &theirs, sizeof(Transform2));
-    }
     return self;
 }
 
@@ -188,7 +141,6 @@ Transform2* RtMath_Transform2_Ctor(Transform2* self, const Scalar* angleDeg, con
 // `self`/`other` (legal under the retail ABI) cannot corrupt an in-flight read.
 // ============================================================================
 Matrix* RtMath_Matrix_MulMatrix(const Matrix* self, Matrix* ret, const Matrix* other) {
-    RT_DIFF_BEGIN("Math::Matrix::operator*(const Matrix&)");
     float out[16];
     for (int r = 0; r < 4; ++r) {
         for (int c = 0; c < 4; ++c) {
@@ -200,12 +152,6 @@ Matrix* RtMath_Matrix_MulMatrix(const Matrix* self, Matrix* ret, const Matrix* o
         }
     }
     std::memcpy(ret->m, out, sizeof(out));
-    if (rt_diff_on__) {
-        Matrix theirs{};
-        typedef void (*OrigFn)(const Matrix*, Matrix*, const Matrix*);
-        RtOriginal<OrigFn>("??DMatrix@Math@@QEBA?AV01@AEBV01@@Z")(self, &theirs, other);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Matrix));
-    }
     return ret;
 }
 
@@ -217,19 +163,12 @@ Matrix* RtMath_Matrix_MulMatrix(const Matrix* self, Matrix* ret, const Matrix* o
 // per-component; term order y,x,z,w is retail's, not a typo).
 // ============================================================================
 Vector4* RtMath_Matrix_MulVector4(const Matrix* self, Vector4* ret, const Vector4* v) {
-    RT_DIFF_BEGIN("Math::Matrix::operator*(const Vector4&)");
     float out[4];
     for (int c = 0; c < 4; ++c) {
         out[c] = v->y * self->m[4 + c] + v->x * self->m[0 + c] +
                  v->z * self->m[8 + c] + v->w * self->m[12 + c];
     }
     ret->x = out[0]; ret->y = out[1]; ret->z = out[2]; ret->w = out[3];
-    if (rt_diff_on__) {
-        Vector4 theirs{};
-        typedef void (*OrigFn)(const Matrix*, Vector4*, const Vector4*);
-        RtOriginal<OrigFn>("??DMatrix@Math@@QEBA?AVVector4@1@AEBV21@@Z")(self, &theirs, v);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Vector4));
-    }
     return ret;
 }
 
@@ -239,7 +178,6 @@ Vector4* RtMath_Matrix_MulVector4(const Matrix* self, Vector4* ret, const Vector
 // retail 0x180078650  ??DTransform2@Math@@QEBA?AV01@AEBV01@@Z
 // ============================================================================
 Transform2* RtMath_Transform2_MulTransform2(const Transform2* self, Transform2* ret, const Transform2* other) {
-    RT_DIFF_BEGIN("Math::Transform2::operator*(const Transform2&)");
     float rotXx = self->rotX.x * other->rotX.x + self->rotX.y * other->rotY.x;
     float rotXy = self->rotX.x * other->rotX.y + self->rotX.y * other->rotY.y;
     float rotYx = self->rotY.x * other->rotX.x + self->rotY.y * other->rotY.x;
@@ -249,12 +187,6 @@ Transform2* RtMath_Transform2_MulTransform2(const Transform2* self, Transform2* 
     ret->rotX.x = rotXx; ret->rotX.y = rotXy;
     ret->rotY.x = rotYx; ret->rotY.y = rotYy;
     ret->translation.x = tx; ret->translation.y = ty;
-    if (rt_diff_on__) {
-        Transform2 theirs{};
-        typedef void (*OrigFn)(const Transform2*, Transform2*, const Transform2*);
-        RtOriginal<OrigFn>("??DTransform2@Math@@QEBA?AV01@AEBV01@@Z")(self, &theirs, other);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Transform2));
-    }
     return ret;
 }
 
@@ -264,16 +196,9 @@ Transform2* RtMath_Transform2_MulTransform2(const Transform2* self, Transform2* 
 // retail 0x18006c8e0  ??DTransform2@Math@@QEBA?AVVector2@1@AEBV21@@Z
 // ============================================================================
 Vector2* RtMath_Transform2_MulVector2(const Transform2* self, Vector2* ret, const Vector2* v) {
-    RT_DIFF_BEGIN("Math::Transform2::operator*(const Vector2&)");
     float x = v->y * self->rotY.x + v->x * self->rotX.x + self->translation.x;
     float y = v->y * self->rotY.y + v->x * self->rotX.y + self->translation.y;
     ret->x = x; ret->y = y;
-    if (rt_diff_on__) {
-        Vector2 theirs{};
-        typedef void (*OrigFn)(const Transform2*, Vector2*, const Vector2*);
-        RtOriginal<OrigFn>("??DTransform2@Math@@QEBA?AVVector2@1@AEBV21@@Z")(self, &theirs, v);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Vector2));
-    }
     return ret;
 }
 
@@ -283,17 +208,10 @@ Vector2* RtMath_Transform2_MulVector2(const Transform2* self, Vector2* ret, cons
 // retail 0x18001fbc0  ??DTransform3@Math@@QEBA?AVVector3@1@AEBV21@@Z
 // ============================================================================
 Vector3* RtMath_Transform3_MulVector3(const Transform3* self, Vector3* ret, const Vector3* v) {
-    RT_DIFF_BEGIN("Math::Transform3::operator*(const Vector3&)");
     float x = v->y * self->axisY.x + v->x * self->axisX.x + v->z * self->axisZ.x + self->translation.x;
     float z = v->y * self->axisY.z + v->x * self->axisX.z + v->z * self->axisZ.z + self->translation.z;
     float y = v->y * self->axisY.y + v->x * self->axisX.y + v->z * self->axisZ.y + self->translation.y;
     ret->x = x; ret->y = y; ret->z = z;
-    if (rt_diff_on__) {
-        Vector3 theirs{};
-        typedef void (*OrigFn)(const Transform3*, Vector3*, const Vector3*);
-        RtOriginal<OrigFn>("??DTransform3@Math@@QEBA?AVVector3@1@AEBV21@@Z")(self, &theirs, v);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Vector3));
-    }
     return ret;
 }
 
@@ -303,7 +221,6 @@ Vector3* RtMath_Transform3_MulVector3(const Transform3* self, Vector3* ret, cons
 // retail 0x18001e5f0  ?AsMatrix@Transform@Math@@QEBA?AVMatrix@2@XZ
 // ============================================================================
 Matrix* RtMath_Transform_AsMatrix(const Transform* self, Matrix* ret) {
-    RT_DIFF_BEGIN("Math::Transform::AsMatrix()");
     float qx = self->rotation.x;
     float qy = self->rotation.y;
     float qz = self->rotation.z;
@@ -335,12 +252,6 @@ Matrix* RtMath_Transform_AsMatrix(const Transform* self, Matrix* ret) {
     out[14] = self->translation.z;
     out[15] = RtMathConst::kOne;
     std::memcpy(ret->m, out, sizeof(out));
-    if (rt_diff_on__) {
-        Matrix theirs{};
-        typedef void (*OrigFn)(const Transform*, Matrix*);
-        RtOriginal<OrigFn>("?AsMatrix@Transform@Math@@QEBA?AVMatrix@2@XZ")(self, &theirs);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Matrix));
-    }
     return ret;
 }
 
@@ -351,7 +262,6 @@ Matrix* RtMath_Transform_AsMatrix(const Transform* self, Matrix* ret) {
 // Pure rearrangement, no arithmetic — order does not matter for fidelity.
 // ============================================================================
 Matrix* RtMath_Transform3_AsMatrix(const Transform3* self, Matrix* ret) {
-    RT_DIFF_BEGIN("Math::Transform3::AsMatrix()");
     float out[16] = {0};
     out[0] = self->axisX.x; out[1] = self->axisX.y; out[2] = self->axisX.z; out[3] = 0.0f;
     out[4] = self->axisY.x; out[5] = self->axisY.y; out[6] = self->axisY.z; out[7] = 0.0f;
@@ -359,12 +269,6 @@ Matrix* RtMath_Transform3_AsMatrix(const Transform3* self, Matrix* ret) {
     out[12] = self->translation.x; out[13] = self->translation.y; out[14] = self->translation.z;
     out[15] = RtMathConst::kOne;
     std::memcpy(ret->m, out, sizeof(out));
-    if (rt_diff_on__) {
-        Matrix theirs{};
-        typedef void (*OrigFn)(const Transform3*, Matrix*);
-        RtOriginal<OrigFn>("?AsMatrix@Transform3@Math@@QEBA?AVMatrix@2@XZ")(self, &theirs);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Matrix));
-    }
     return ret;
 }
 
@@ -378,7 +282,6 @@ Matrix* RtMath_Transform3_AsMatrix(const Transform3* self, Matrix* ret) {
 // formula, retail's exact term order.
 // ============================================================================
 Transform* RtMath_Transform_Inverse(const Transform* self, Transform* ret) {
-    RT_DIFF_BEGIN("Math::Transform::Inverse()");
     float qx = self->rotation.x;
     float negQx = -qx;
     float negTx = -self->translation.x;
@@ -402,12 +305,6 @@ Transform* RtMath_Transform_Inverse(const Transform* self, Transform* ret) {
     ret->translation.x = (t6 * qx + t10 * qw + t7 * qy) - t11 * qz;
     ret->translation.y = (t11 * qw - t7 * qx) + t6 * qy + t10 * qz;
     ret->translation.z = ((t11 * qx + t7 * qw) - t10 * qy) + t6 * qz;
-    if (rt_diff_on__) {
-        Transform theirs{};
-        typedef void (*OrigFn)(const Transform*, Transform*);
-        RtOriginal<OrigFn>("?Inverse@Transform@Math@@QEBA?AV12@XZ")(self, &theirs);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Transform));
-    }
     return ret;
 }
 
@@ -419,7 +316,6 @@ Transform* RtMath_Transform_Inverse(const Transform* self, Transform* ret) {
 // -transpose(R) * translation.
 // ============================================================================
 Transform3* RtMath_Transform3_Inverse(const Transform3* self, Transform3* ret) {
-    RT_DIFF_BEGIN("Math::Transform3::Inverse()");
     float negTz = -self->translation.z;
     float negTx = -self->translation.x;
     float negTy = -self->translation.y;
@@ -437,12 +333,6 @@ Transform3* RtMath_Transform3_Inverse(const Transform3* self, Transform3* ret) {
     ret->translation.x = negTy * self->axisX.y + negTx * self->axisX.x + negTz * self->axisX.z;
     ret->translation.y = negTy * self->axisY.y + negTx * self->axisY.x + negTz * self->axisY.z;
     ret->translation.z = negTy * self->axisZ.y + negTx * self->axisZ.x + negTz * self->axisZ.z;
-    if (rt_diff_on__) {
-        Transform3 theirs{};
-        typedef void (*OrigFn)(const Transform3*, Transform3*);
-        RtOriginal<OrigFn>("?Inverse@Transform3@Math@@QEBA?AV12@XZ")(self, &theirs);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Transform3));
-    }
     return ret;
 }
 
@@ -455,7 +345,6 @@ Transform3* RtMath_Transform3_Inverse(const Transform3* self, Transform3* ret) {
 // Math::Quaternion surface, and registered as its own export too.
 // ============================================================================
 Quaternion* RtMath_Quaternion_MulQuaternion(const Quaternion* self, Quaternion* ret, const Quaternion* other) {
-    RT_DIFF_BEGIN("Math::Quaternion::operator*(const Quaternion&)");
     float x = (self->x * other->w + other->x * self->w + self->z * other->y) - self->y * other->z;
     float y = (self->y * other->w - self->z * other->x) + other->y * self->w + other->z * self->x;
     float w = ((other->w * self->w - self->x * other->x) - self->y * other->y) - other->z * self->z;
@@ -469,12 +358,6 @@ Quaternion* RtMath_Quaternion_MulQuaternion(const Quaternion* self, Quaternion* 
     // diverged on 82% and 100% of calls respectively.
     float z = ((self->z * other->w + self->y * other->x) - other->y * self->x) + other->z * self->w;
     ret->x = x; ret->y = y; ret->w = w; ret->z = z;
-    if (rt_diff_on__) {
-        Quaternion theirs{};
-        typedef void (*OrigFn)(const Quaternion*, Quaternion*, const Quaternion*);
-        RtOriginal<OrigFn>("??DQuaternion@Math@@QEBA?AV01@AEBV01@@Z")(self, &theirs, other);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Quaternion));
-    }
     return ret;
 }
 
@@ -488,19 +371,12 @@ Quaternion* RtMath_Quaternion_MulQuaternion(const Quaternion* self, Quaternion* 
 // textbook conj(q)*v*q.
 // ============================================================================
 Vector3* RtMath_Quaternion_Rotate(const Quaternion* self, Vector3* ret, const Vector3* v) {
-    RT_DIFF_BEGIN("Math::Quaternion::Rotate(const Vector3&)");
     Quaternion vectorQuat{v->x, v->y, v->z, 0.0f};
     Quaternion conj{-self->x, -self->y, -self->z, self->w};
     Quaternion tmp{}, rotated{};
     RtMath_Quaternion_MulQuaternion(self, &tmp, &vectorQuat);
     RtMath_Quaternion_MulQuaternion(&tmp, &rotated, &conj);
     ret->x = rotated.x; ret->y = rotated.y; ret->z = rotated.z;
-    if (rt_diff_on__) {
-        Vector3 theirs{};
-        typedef void (*OrigFn)(const Quaternion*, Vector3*, const Vector3*);
-        RtOriginal<OrigFn>("?Rotate@Quaternion@Math@@QEBA?AVVector3@2@AEBV32@@Z")(self, &theirs, v);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Vector3));
-    }
     return ret;
 }
 
@@ -511,17 +387,10 @@ Vector3* RtMath_Quaternion_Rotate(const Quaternion* self, Vector3* ret, const Ve
 // Same as MulVector3 but WITHOUT adding translation (a basis rotate only).
 // ============================================================================
 Vector3* RtMath_Transform3_Rotate(const Transform3* self, Vector3* ret, const Vector3* v) {
-    RT_DIFF_BEGIN("Math::Transform3::Rotate(const Vector3&)");
     float x = v->y * self->axisY.x + v->x * self->axisX.x + v->z * self->axisZ.x;
     float z = v->y * self->axisY.z + v->x * self->axisX.z + v->z * self->axisZ.z;
     float y = v->y * self->axisY.y + v->x * self->axisX.y + v->z * self->axisZ.y;
     ret->x = x; ret->y = y; ret->z = z;
-    if (rt_diff_on__) {
-        Vector3 theirs{};
-        typedef void (*OrigFn)(const Transform3*, Vector3*, const Vector3*);
-        RtOriginal<OrigFn>("?Rotate@Transform3@Math@@QEBA?AVVector3@2@AEBV32@@Z")(self, &theirs, v);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Vector3));
-    }
     return ret;
 }
 
@@ -556,22 +425,10 @@ Vector3* RtMath_Transform3_Rotate(const Transform3* self, Vector3* ret, const Ve
 // ============================================================================
 Matrix* RtMath_Matrix_CtorColumns(Matrix* self, const Vector4* c0, const Vector4* c1,
                                   const Vector4* c2, const Vector4* c3) {
-    RT_DIFF_BEGIN("Math::Matrix::Matrix(4 x const Vector4&)");
     std::memcpy(&self->m[0],  c0, 16);
     std::memcpy(&self->m[4],  c1, 16);
     std::memcpy(&self->m[8],  c2, 16);
     std::memcpy(&self->m[12], c3, 16);
-    if (rt_diff_on__) {
-        // 0xCD-filled, not zeroed: a byte NEITHER side writes must not compare
-        // equal by accident (reference_oracle_must_not_compare_unwritten_bytes.md).
-        Matrix theirs;
-        std::memset(&theirs, 0xCD, sizeof(theirs));
-        typedef void (*OrigFn)(Matrix*, const Vector4*, const Vector4*,
-                               const Vector4*, const Vector4*);
-        RtOriginal<OrigFn>("??0Matrix@Math@@QEAA@AEBVVector4@1@000@Z")(
-            &theirs, c0, c1, c2, c3);
-        RT_DIFF_BYTES(self, &theirs, sizeof(Matrix));
-    }
     return self;   // retail leaves `this` in RAX
 }
 
@@ -580,16 +437,9 @@ Matrix* RtMath_Matrix_CtorColumns(Matrix* self, const Vector4* c0, const Vector4
 // retail 0x18002c030  ?Identity@Matrix@Math@@SA?AV12@XZ
 // ============================================================================
 Matrix* RtMath_Matrix_Identity(Matrix* ret) {
-    RT_DIFF_BEGIN("Math::Matrix::Identity()");
     float out[16] = {0};
     out[0] = out[5] = out[10] = out[15] = RtMathConst::kOne;
     std::memcpy(ret->m, out, sizeof(out));
-    if (rt_diff_on__) {
-        Matrix theirs{};
-        typedef void (*OrigFn)(Matrix*);
-        RtOriginal<OrigFn>("?Identity@Matrix@Math@@SA?AV12@XZ")(&theirs);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Matrix));
-    }
     return ret;
 }
 
@@ -598,7 +448,6 @@ Matrix* RtMath_Matrix_Identity(Matrix* ret) {
 // retail 0x18001fab0  ?Identity@Transform@Math@@SA?AV12@XZ
 // ============================================================================
 Transform* RtMath_Transform_Identity(Transform* ret) {
-    RT_DIFF_BEGIN("Math::Transform::Identity()");
     ret->rotation.x = 0.0f;
     ret->rotation.y = 0.0f;
     ret->rotation.z = 0.0f;
@@ -606,12 +455,6 @@ Transform* RtMath_Transform_Identity(Transform* ret) {
     ret->translation.x = 0.0f;
     ret->translation.y = 0.0f;
     ret->translation.z = 0.0f;
-    if (rt_diff_on__) {
-        Transform theirs{};
-        typedef void (*OrigFn)(Transform*);
-        RtOriginal<OrigFn>("?Identity@Transform@Math@@SA?AV12@XZ")(&theirs);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Transform));
-    }
     return ret;
 }
 
@@ -620,17 +463,10 @@ Transform* RtMath_Transform_Identity(Transform* ret) {
 // retail 0x1800347f0  ?Identity@Transform3@Math@@SA?AV12@XZ
 // ============================================================================
 Transform3* RtMath_Transform3_Identity(Transform3* ret) {
-    RT_DIFF_BEGIN("Math::Transform3::Identity()");
     ret->axisX = {RtMathConst::kOne, 0.0f, 0.0f};
     ret->axisY = {0.0f, RtMathConst::kOne, 0.0f};
     ret->axisZ = {0.0f, 0.0f, RtMathConst::kOne};
     ret->translation = {0.0f, 0.0f, 0.0f};
-    if (rt_diff_on__) {
-        Transform3 theirs{};
-        typedef void (*OrigFn)(Transform3*);
-        RtOriginal<OrigFn>("?Identity@Transform3@Math@@SA?AV12@XZ")(&theirs);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Transform3));
-    }
     return ret;
 }
 
@@ -641,7 +477,6 @@ Transform3* RtMath_Transform3_Identity(Transform3* ret) {
 // Identical construction to the Transform2 ctor above.
 // ============================================================================
 Transform2* RtMath_Transform2_FromYawOffset(Transform2* ret, const Scalar* yawDeg, const Vector2* offset) {
-    RT_DIFF_BEGIN("Math::Transform2::FromYawOffset(const Scalar&, const Vector2&)");
     float rad = yawDeg->v * RtMathConst::kDegToRad;
     float s = RtLibm::Sin(rad);
     float c = RtLibm::Cos(rad);
@@ -650,12 +485,6 @@ Transform2* RtMath_Transform2_FromYawOffset(Transform2* ret, const Scalar* yawDe
     ret->rotY.x = -s;
     ret->rotY.y = c;
     ret->translation = *offset;
-    if (rt_diff_on__) {
-        Transform2 theirs{};
-        typedef void (*OrigFn)(Transform2*, const Scalar*, const Vector2*);
-        RtOriginal<OrigFn>("?FromYawOffset@Transform2@Math@@SA?AV12@AEBVScalar@2@AEBVVector2@2@@Z")(&theirs, yawDeg, offset);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Transform2));
-    }
     return ret;
 }
 
@@ -668,7 +497,6 @@ Transform2* RtMath_Transform2_FromYawOffset(Transform2* ret, const Scalar* yawDe
 // difference from FromYawPitchOffset below cannot diverge).
 // ============================================================================
 Quaternion* RtMath_Quaternion_FromYawPitch(Quaternion* ret, const Scalar* yawDeg, const Scalar* pitchDeg) {
-    RT_DIFF_BEGIN("Math::Quaternion::FromYawPitch(const Scalar&, const Scalar&)");
     float yawHalfRad = yawDeg->v * RtMathConst::kHalf * RtMathConst::kDegToRad;
     float pitchHalfRad = pitchDeg->v * RtMathConst::kHalf * RtMathConst::kDegToRad;
     float sinYaw = RtLibm::Sin(yawHalfRad);
@@ -680,12 +508,6 @@ Quaternion* RtMath_Quaternion_FromYawPitch(Quaternion* ret, const Scalar* yawDeg
     ret->x = -(cosYaw * sinPitch);
     ret->y = -(sinPitch * sinYaw);
     ret->z = -(cosPitch * sinYaw);
-    if (rt_diff_on__) {
-        Quaternion theirs{};
-        typedef void (*OrigFn)(Quaternion*, const Scalar*, const Scalar*);
-        RtOriginal<OrigFn>("?FromYawPitch@Quaternion@Math@@SA?AV12@AEBVScalar@2@0@Z")(&theirs, yawDeg, pitchDeg);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Quaternion));
-    }
     return ret;
 }
 
@@ -697,7 +519,6 @@ Quaternion* RtMath_Quaternion_FromYawPitch(Quaternion* ret, const Scalar* yawDeg
 // ============================================================================
 Transform* RtMath_Transform_FromYawPitchOffset(Transform* ret, const Scalar* yawDeg, const Scalar* pitchDeg,
                                                 const Vector3* offset) {
-    RT_DIFF_BEGIN("Math::Transform::FromYawPitchOffset(const Scalar&, const Scalar&, const Vector3&)");
     float yawHalfRad = yawDeg->v * RtMathConst::kHalf * RtMathConst::kDegToRad;
     float pitchHalfRad = pitchDeg->v * RtMathConst::kHalf * RtMathConst::kDegToRad;
     float sinYaw = RtLibm::Sin(yawHalfRad);
@@ -710,12 +531,6 @@ Transform* RtMath_Transform_FromYawPitchOffset(Transform* ret, const Scalar* yaw
     ret->rotation.z = -(cosPitch * sinYaw);
     ret->rotation.w = cosPitch * cosYaw;
     ret->translation = *offset;
-    if (rt_diff_on__) {
-        Transform theirs{};
-        typedef void (*OrigFn)(Transform*, const Scalar*, const Scalar*, const Vector3*);
-        RtOriginal<OrigFn>("?FromYawPitchOffset@Transform@Math@@SA?AV12@AEBVScalar@2@0AEBVVector3@2@@Z")(&theirs, yawDeg, pitchDeg, offset);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Transform));
-    }
     return ret;
 }
 
@@ -730,7 +545,6 @@ Transform* RtMath_Transform_FromYawPitchOffset(Transform* ret, const Scalar* yaw
 // resulting rotation's matrix column 0, etc — see AsMatrix's column layout).
 // ============================================================================
 Quaternion* RtMath_Quaternion_CtorBasis(Quaternion* self, const Vector3* right, const Vector3* forward, const Vector3* up) {
-    RT_DIFF_BEGIN("Math::Quaternion::Quaternion(const Vector3&, const Vector3&, const Vector3&)");
     float sumX = (right->x + RtMathConst::kOne - forward->y) - up->z;
     if (sumX < 0.0f) sumX = 0.0f;
     float x = RtLibm::Sqrt(sumX) * RtMathConst::kHalf;
@@ -752,12 +566,6 @@ Quaternion* RtMath_Quaternion_CtorBasis(Quaternion* self, const Vector3* right, 
     self->y = std::copysignf(y, right->z - up->x);
     self->z = std::copysignf(z, forward->x - right->y);
     self->w = w;
-    if (rt_diff_on__) {
-        Quaternion theirs{};
-        typedef void (*OrigFn)(Quaternion*, const Vector3*, const Vector3*, const Vector3*);
-        RtOriginal<OrigFn>("??0Quaternion@Math@@QEAA@AEBVVector3@1@00@Z")(&theirs, right, forward, up);
-        RT_DIFF_BYTES(self, &theirs, sizeof(Quaternion));
-    }
     return self;
 }
 
@@ -774,7 +582,6 @@ Quaternion* RtMath_Quaternion_CtorBasis(Quaternion* self, const Vector3* right, 
 // re-normalize it here (FromLookAt normalizes before calling in).
 // ============================================================================
 Transform* RtMath_Transform_FromDirection(Transform* ret, const Vector3* direction, const Vector3* offset) {
-    RT_DIFF_BEGIN("Math::Transform::FromDirection(const Vector3&, const Vector3&)");
     float dz = direction->z; // dot(direction, world +Z)
 
     float refY, refZ;
@@ -806,9 +613,7 @@ Transform* RtMath_Transform_FromDirection(Transform* ret, const Vector3* directi
     // decompilation at 0x180021d70 adds them in that order), and float addition
     // is not associative. Summing upZ^2 first instead diverged from the DLL on
     // 7 of 980 calls by ~20 ULP in the resulting quaternion — caught by the
-    // Wave 1 diff oracle, and NOT attributable to libm: it persisted with
-    // BANISHED_RT_LIBM=dll, which is what separated it from the 1-ULP sin/cos
-    // noise at the other three divergent sites.
+    // Wave 1 diff oracle, and NOT attributable to libm rounding.
     float upLen = RtLibm::Sqrt(upY * upY + upX * upX + upZ * upZ);
     if (upLen != 0.0f) {
         float inv = RtMathConst::kOne / upLen;
@@ -819,12 +624,6 @@ Transform* RtMath_Transform_FromDirection(Transform* ret, const Vector3* directi
     Vector3 up{upX, upY, upZ};
     RtMath_Quaternion_CtorBasis(&ret->rotation, &right, direction, &up);
     ret->translation = *offset;
-    if (rt_diff_on__) {
-        Transform theirs{};
-        typedef void (*OrigFn)(Transform*, const Vector3*, const Vector3*);
-        RtOriginal<OrigFn>("?FromDirection@Transform@Math@@SA?AV12@AEBVVector3@2@0@Z")(&theirs, direction, offset);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Transform));
-    }
     return ret;
 }
 
@@ -835,7 +634,6 @@ Transform* RtMath_Transform_FromDirection(Transform* ret, const Vector3* directi
 // direction = normalize(to - from); FromDirection(direction, from).
 // ============================================================================
 Transform* RtMath_Transform_FromLookAt(Transform* ret, const Vector3* from, const Vector3* to) {
-    RT_DIFF_BEGIN("Math::Transform::FromLookAt(const Vector3&, const Vector3&)");
     float dx = to->x - from->x;
     float dy = to->y - from->y;
     float dz = to->z - from->z;
@@ -846,12 +644,6 @@ Transform* RtMath_Transform_FromLookAt(Transform* ret, const Vector3* from, cons
         dir.x = inv * dx; dir.y = inv * dy; dir.z = inv * dz;
     }
     RtMath_Transform_FromDirection(ret, &dir, from);
-    if (rt_diff_on__) {
-        Transform theirs{};
-        typedef void (*OrigFn)(Transform*, const Vector3*, const Vector3*);
-        RtOriginal<OrigFn>("?FromLookAt@Transform@Math@@SA?AV12@AEBVVector3@2@0@Z")(&theirs, from, to);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Transform));
-    }
     return ret;
 }
 
@@ -866,10 +658,8 @@ Transform* RtMath_Transform_FromLookAt(Transform* ret, const Vector3* from, cons
 // header). count=4 serializes the Quaternion (this+0x00), count=3 the
 // translation Vector3 (this+0x10).
 //
-// MUTATES the IO stream — NOT diffable via rt_diff.h (running "ours" and
-// "theirs" would both try to read/write the same stream position). No
-// RT_DIFF wrapper here; correctness is exercised by save/load parity in
-// sa-run per PLAN.md §6 step 6, not by the differential oracle.
+// MUTATES the IO stream; correctness is exercised by save/load parity in
+// sa-run per PLAN.md §6 step 6.
 // ============================================================================
 namespace {
 constexpr int kEncSlotSerializeFloatArr = 0x28;
@@ -930,7 +720,6 @@ void RtMath_Transform_Serialize(Transform* self, void* serializer /* io::Seriali
 //     ret = this->rotation.Rotate(v) + this->translation
 // ============================================================================
 Vector3* RtMath_Transform_MulVector3(const Transform* self, Vector3* ret, const Vector3* v) {
-    RT_DIFF_BEGIN("Math::Transform::operator*(const Vector3&)");
     // Snapshot the inputs BEFORE computing, because `ret` may alias `v` or
     // `self` — `vec = transform * vec;` is an ordinary thing for a caller to
     // write, and it is what most of our call sites actually do. Retail is safe
@@ -942,7 +731,6 @@ Vector3* RtMath_Transform_MulVector3(const Transform* self, Vector3* ret, const 
     // "theirs" value gave it away.
     Vector3   vIn;
     Transform selfIn;
-    if (rt_diff_on__) { vIn = *v; selfIn = *self; }
 
     Vector3 rotated;
     RtMath_Quaternion_Rotate(&self->rotation, &rotated, v);
@@ -953,12 +741,6 @@ Vector3* RtMath_Transform_MulVector3(const Transform* self, Vector3* ret, const 
     ret->y = self->translation.y + rotated.y;
     ret->x = rotated.x + self->translation.x;
     ret->z = self->translation.z + rotated.z;
-    if (rt_diff_on__) {
-        Vector3 theirs{};
-        typedef void (*OrigFn)(const Transform*, Vector3*, const Vector3*);
-        RtOriginal<OrigFn>("??DTransform@Math@@QEBA?AVVector3@1@AEBV21@@Z")(&selfIn, &theirs, &vIn);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Vector3));
-    }
     return ret;
 }
 
@@ -982,11 +764,9 @@ Vector3* RtMath_Transform_MulVector3(const Transform* self, Vector3* ret, const 
 // fails to write, and this port is byte-faithful first.
 // ============================================================================
 Transform* RtMath_Transform_MulTransform(const Transform* self, Transform* ret, const Transform* other) {
-    RT_DIFF_BEGIN("Math::Transform::operator*(const Transform&)");
     // Same aliasing snapshot as operator*(Vector3) above: `ret` may be `self`
     // or `other`, and the diff must hand the original the ORIGINAL inputs.
     Transform selfIn, otherIn;
-    if (rt_diff_on__) { selfIn = *self; otherIn = *other; }
 
     ret->rotation.x = 0.0f;
     ret->rotation.y = 0.0f;
@@ -1006,58 +786,7 @@ Transform* RtMath_Transform_MulTransform(const Transform* self, Transform* ret, 
     RtMath_Quaternion_MulQuaternion(&other->rotation, &combined, &self->rotation);
     ret->rotation = combined;
 
-    if (rt_diff_on__) {
-        Transform theirs{};
-        typedef void (*OrigFn)(const Transform*, Transform*, const Transform*);
-        RtOriginal<OrigFn>("??DTransform@Math@@QEBA?AV01@AEBV01@@Z")(&selfIn, &theirs, &otherIn);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Transform));
-    }
     return ret;
-}
-
-// ============================================================================
-// The Matrix column ctor's sweep — WAVE 9 LANE SAVE2
-// ----------------------------------------------------------------------------
-// WHY A SWEEP AND NOT THE LIVE SITE. The one caller in the tree is
-// `code/Game/Game/weather_particle_draw.cpp`, and a full autostart-to-pause-menu
-// run reached it ZERO times: the port's RT_DIFF site never registered, which is
-// `calls=0` over a green line — this project's canonical unverified port
-// (reference_uncalled_port_is_not_verified.md). A sweep is what turns that into
-// a number.
-//
-// It runs from the registration hook, which is safe here for a reason that does
-// NOT generalise (lane PKG2's null+0x640): this body allocates nothing, touches
-// no singleton and calls nothing but the shipped DLL's own copy of itself.
-//
-// The corpus deliberately includes negative zero, denormals and both infinities
-// — a pure 16-dword copy cannot mangle them, and that is the point: if any of
-// them came back different the port would be doing arithmetic it must not do.
-// 24 quadruples, tolerance ZERO, compared over the whole 64-byte object.
-// ============================================================================
-static void RtMathMatrixCtorSweep() {
-    if (!RtDiffEnabled()) return;
-    static const uint32_t kBits[] = {
-        0x00000000u, 0x80000000u, 0x3f800000u, 0xbf800000u, 0x7f800000u,
-        0xff800000u, 0x00000001u, 0x007fffffu, 0x4b7fffffu, 0xcb7fffffu,
-        0x3eaaaaabu, 0x40490fdbu,
-    };
-    constexpr int kN = static_cast<int>(sizeof(kBits) / sizeof(kBits[0]));
-    int cases = 0;
-    for (int q = 0; q < 24; ++q) {
-        Vector4 c[4];
-        float* f = &c[0].x;
-        for (int i = 0; i < 16; ++i) {
-            const uint32_t b = kBits[(q * 16 + i * 5 + i) % kN];
-            std::memcpy(&f[i], &b, 4);
-        }
-        Matrix ours;
-        RtMath_Matrix_CtorColumns(&ours, &c[0], &c[1], &c[2], &c[3]);
-        ++cases;
-    }
-    std::fprintf(stderr, "[RtMathTransform] Matrix column-ctor sweep: %d cases "
-                         "(each self-compared against the shipped body; read the "
-                         "RtDiff line for Math::Matrix::Matrix(4 x const "
-                         "Vector4&) for the verdict)\n", cases);
 }
 
 // ============================================================================
@@ -1111,5 +840,4 @@ void RtMathTransformRegister() {
     fprintf(stderr, "[RtMathTransform] registered %d functions (Matrix/Quaternion/Transform/Transform2/Transform3)\n", count);
 
     // AFTER the registrations, so the sweep drives the REGISTERED body.
-    RtMathMatrixCtorSweep();
 }

@@ -131,29 +131,11 @@ uint64_t g_largestRequestedSize = 0;
 // own Error class" -- Wave 9 lane ENG, iteration 3, is when that happened, and
 // the door had to change with it.
 //
-// `?SetText@` now goes through the PORT-AWARE `ResolveExport`. It was
-// `RtOriginal<>` (GetProcAddress, registry-bypassing), which was correct while
-// nothing was ported and became a live BYPASS the moment
-// runtime/src/system/error.cpp registered the name -- caught by
-// tools/port_bypass_audit.py in the same commit that created it
-// (`BYPASS ... allocator.cpp:128 ?SetText@Error@System@@ [live path]`), which is
-// exactly the class reference_bypassed_port_needs_a_source_checker.md exists for.
-//
-// `?Display@` USED TO STAY a raw door on purpose, on the ground that it had no
-// port: "Converting a door on a symbol with NO port changes only which residue
-// list it prints in (reference_converting_a_door_is_not_satisfying_it.md)."
-//
-// CONVERTED 2026-09-11 by Wave 22 lane ERRCFG, because that ground is gone:
-// runtime/src/system/error.cpp now ports AND registers
-// `?Display@Error@System@@SAXXZ`. The moment it did, this `RtOriginal<>` became
-// the SAME live bypass the `?SetText@` line above was -- a registered port sat
-// next to a GetProcAddress that walks straight past it -- which is precisely
-// what tools/port_bypass_audit.py exists to catch and what
-// reference_bypassed_port_needs_a_source_checker.md records. Converted in the
-// same commit that created the hazard rather than leaving it for the audit.
+// Both `?SetText@` and `?Display@` go through the PORT-AWARE `ResolveExport`;
+// runtime/src/system/error.cpp ports and registers them.
 //
 // The `if (display)` guard below is kept: ResolveExport still yields null if
-// neither the port nor the DLL can supply the symbol.
+// nothing has registered the symbol.
 typedef void (*ErrorSetTextFn)(const char* text, bool stopApplication);
 typedef void (*ErrorDisplayFn)();
 
@@ -729,11 +711,11 @@ int64_t PointerOffset(void* a, void* b) {
 }  // namespace rtalloc
 
 // ============================================================================
-// SHADOW ORACLE  (PLAN.md §4.3 risk 2, rt_diff.h "shadow mode")
+// SHADOW ORACLE  (PLAN.md §4.3 risk 2)
 // ============================================================================
 //
 // An allocator cannot be diffed the Wave 1 way: running both implementations
-// mutates the heap twice. RT_DIFF_SHADOW's contract is "ours computes into a
+// mutates the heap twice. Shadow mode's contract is "ours computes into a
 // private replica, theirs executes for real, and the port asserts the replica
 // still matches". Concretely, here:
 //
@@ -795,12 +777,6 @@ inline size_t ShadowHash(void* p) {
 uint64_t g_shadowMapFull    = 0;   // insert found no free slot at all
 uint64_t g_shadowFreeUnmapped = 0; // Free arrived for a pointer we never mapped
 
-// Negative-control switches — see RtAllocShadowStartup. Off unless the env var
-// asks for them; they exist to prove the oracle can fail.
-bool g_shadowNegCtlMinBin = false;
-bool g_shadowNegCtlSize   = false;
-bool g_shadowNegCtlGrow   = false;
-
 // ---------------------------------------------------------------------------
 // ARENA-GROWTH COVERAGE (Wave 9 lane E3)
 // ---------------------------------------------------------------------------
@@ -858,7 +834,6 @@ int64_t  g_gapDBytes     = 0;
 int64_t  g_gapDRanges    = 0;
 int64_t  g_gapDReserved  = 0;
 int      g_gapPrinted    = 0;
-bool     g_gapCtl        = false;   // negative control on the detector itself
 uint64_t g_gapCtlInjected = 0;
 struct GapSnap { int32_t alloc, freeTag, ranges; int64_t bytes; uint64_t reserved; };
 GapSnap g_gapSnap = {};
@@ -960,51 +935,6 @@ extern "C" bool RtAllocShadowStartup(uint64_t minRangeMB, uint64_t maxTotalMB) {
     std::memset(&g_shadow, 0, sizeof(g_shadow));
     g_shadow.minBin = 0xbf;
 
-    // ---- NEGATIVE CONTROL (Wave 9 lane E2) --------------------------------
-    // A probe that has never reported a divergence has not been shown to be
-    // ABLE to. BANISHED_RT_ALLOC_SHADOW_NEGCTL deliberately breaks the replica
-    // and the run must go red; if it does not, the green runs mean nothing.
-    // Two modes, because the predicate has two independent halves and a
-    // control that only exercises one is not a control for the other
-    // (reference_shadow_predicate_must_name_its_failing_term.md):
-    //   minbin — start the replica's search floor one bin low. Fires the
-    //            COUNTER half (minBin/allocCount/freeTagCount/allocatedBytes).
-    //   size   — inflate every 100,000th replica request by 8 bytes. Fires the
-    //            GEOMETRY half (rangeIndex, offsetWithinRange), which is the
-    //            term that actually proves the allocator's placement logic, and
-    //            which no counter perturbation can reach.
-    //   grow   — (lane E3) enlarge every range AFTER the first by one page.
-    //            Fires the GROWTH half and NOTHING ELSE: range 0 is created
-    //            below at retail's exact size before the perturbation is
-    //            applied, so the replica is byte-identical until the first
-    //            Allocate-driven AddNewMemoryRange — at which point
-    //            `totalReserved` differs by 0x1000 on that very call and can
-    //            never converge back (AddNewMemoryRange only ever adds to it),
-    //            and `rangeIndex`/`offsetWithinRange` follow once the longer
-    //            range 1 fills one allocation later than theirs.
-    //
-    //            It is deliberately SILENT when the growth path does not run.
-    //            A green `=grow` run therefore means one of two things and the
-    //            `grow=` counter is what tells them apart: grow=0 means the
-    //            cell never reached the path (the run proves nothing), grow>0
-    //            with divergences=0 means the ORACLE IS BLIND to growth and
-    //            every green growth run must be thrown away.
-    if (const char* nc = getenv("BANISHED_RT_ALLOC_SHADOW_NEGCTL")) {
-        if (nc[0] == 'm') { g_shadowNegCtlMinBin = true; g_shadow.minBin = 0xbe; }
-        else if (nc[0] == 's') { g_shadowNegCtlSize = true; }
-        else if (nc[0] == 'g') { g_shadowNegCtlGrow = true; }
-        fprintf(stderr, "[RtAllocShadow] NEGATIVE CONTROL ACTIVE (%s) — this run is "
-                        "REQUIRED to go red; a clean result here invalidates every "
-                        "other run.\n", nc);
-    }
-    if (const char* gc = getenv("BANISHED_RT_ALLOC_SHADOW_GAPCTL")) {
-        if (gc[0] && gc[0] != '0') {
-            g_gapCtl = true;
-            fprintf(stderr, "[RtAllocShadow] GAP DETECTOR NEGATIVE CONTROL ACTIVE — every "
-                            "100,000th post-op snapshot is perturbed by +1 allocCount; the "
-                            "gap count MUST track the injected count.\n");
-        }
-    }
     g_plat.lockInit(g_shadow.lock);
     g_shadow.pageSize = 0;
 
@@ -1015,7 +945,6 @@ extern "C" bool RtAllocShadowStartup(uint64_t minRangeMB, uint64_t maxTotalMB) {
 
     // AFTER range 0 exists, so range 0 matches retail byte for byte and only
     // the growth path can ever notice. See the `grow` note above.
-    if (g_shadowNegCtlGrow) g_shadow.minRangeSize += 0x1000;
 
     g_shadowArmed = true;
     fprintf(stderr, "[RtAllocShadow] armed (min=%lluMB max=%lluMB)\n",
@@ -1028,11 +957,9 @@ extern "C" bool RtAllocShadowStartup(uint64_t minRangeMB, uint64_t maxTotalMB) {
 // live allocator whose counters we compare against.
 extern "C" void RtAllocShadowAlloc(uint64_t size, int align, void* theirs,
                                    const MemoryAllocator* theirSelf) {
-    RT_DIFF_BEGIN("System::MemoryAllocator::Allocate [shadow]");
     if (!g_shadowArmed) return;
 
     uint64_t reqSize = size;
-    if (g_shadowNegCtlSize && (g_shadowCalls % 100000) == 99999) reqSize = size + 8;
 
     // Growth coverage is measured as a state DELTA across the replica's own
     // Allocate, so nothing is added to the ported bodies.
@@ -1075,11 +1002,9 @@ extern "C" void RtAllocShadowAlloc(uint64_t size, int align, void* theirs,
                   ti, (unsigned long long)to, theirSelf->allocCount, theirSelf->freeTagCount,
                   (long long)theirSelf->allocatedBytes, theirSelf->minBin,
                   theirSelf->rangeCount, (unsigned long long)theirSelf->totalReserved);
-    RT_DIFF_SHADOW(equal, a, b);
 }
 
 extern "C" void RtAllocShadowFree(void* theirs, const MemoryAllocator* theirSelf) {
-    RT_DIFF_BEGIN("System::MemoryAllocator::Free [shadow]");
     if (!g_shadowArmed || theirs == nullptr) return;
 
     void* ours = ShadowMapTake(theirs);
@@ -1107,7 +1032,6 @@ extern "C" void RtAllocShadowFree(void* theirs, const MemoryAllocator* theirSelf
                   theirSelf->allocCount, theirSelf->freeTagCount,
                   (long long)theirSelf->allocatedBytes, theirSelf->minBin,
                   theirSelf->rangeCount, (unsigned long long)theirSelf->totalReserved);
-    RT_DIFF_SHADOW(equal, a, b);
 }
 
 // ---------------------------------------------------------------------------
@@ -1147,14 +1071,6 @@ extern "C" void RtAllocShadowPostOp(const MemoryAllocator* theirSelf) {
     g_gapSnap.bytes    = theirSelf->allocatedBytes;
     g_gapSnap.ranges   = theirSelf->rangeCount;
     g_gapSnap.reserved = theirSelf->totalReserved;
-    // NEGATIVE CONTROL on the detector, not on the port. It perturbs the
-    // SNAPSHOT -- which is one of the two operands the pre-op comparison reads
-    // -- so a detector that cannot see this cannot see a real gap either.
-    // Expected catches = floor(postops / 100000); reported beside the count.
-    if (g_gapCtl && (g_shadowCalls % 100000) == 99999) {
-        g_gapSnap.alloc += 1;
-        g_gapCtlInjected++;
-    }
     g_gapValid = true;
 }
 
@@ -1247,26 +1163,6 @@ namespace {
 //   48 85 D2             TEST RDX,RDX
 //   0F 84 4F 02 00 00    JZ Free+0x258      (rel32: same bytes under ASLR)
 //   48 8B C4             MOV RAX,RSP
-const uint8_t kAllocatePrologue[13] = {
-    0x40,0x53,0x57,0x41,0x54,0x41,0x56,0x41,0x57,0x48,0x83,0xEC,0x20
-};
-const uint8_t kFreePrologue[12] = {
-    0x48,0x85,0xD2, 0x0F,0x84,0x4F,0x02,0x00,0x00, 0x48,0x8B,0xC4
-};
-
-// Returns nullptr when both prologues are untouched, else the name of the one
-// that is not.
-const char* FindPatchedPrologue() {
-    const void* alloc = ResolveExportRaw("?Allocate@MemoryAllocator@System@@QEAAPEAX_KH@Z");
-    const void* freeF = ResolveExportRaw("?Free@MemoryAllocator@System@@QEAAXPEAX@Z");
-    if (!alloc || !freeF) return "unresolved (Runtime-x64.dll not loaded?)";
-    if (std::memcmp(alloc, kAllocatePrologue, sizeof(kAllocatePrologue)) != 0)
-        return "MemoryAllocator::Allocate (0x1800c6e60)";
-    if (std::memcmp(freeF, kFreePrologue, sizeof(kFreePrologue)) != 0)
-        return "MemoryAllocator::Free (0x1800c6c00)";
-    return nullptr;
-}
-
 RtAllocDetourInstaller g_installDetours = nullptr;
 RtAllocCutoverArmer    g_armCutover     = nullptr;
 RtAllocLockRetirer     g_retireLock     = nullptr;
@@ -1288,15 +1184,6 @@ const char* PlatformSeamMissing() {
     if (!g_plat.lockLeave)     return "lockLeave (LeaveCriticalSection)";
     if (!g_plat.lockDelete)    return "lockDelete (DeleteCriticalSection)";
     return nullptr;
-}
-
-// Is the shipped DLL there at all? Asked STRUCTURALLY rather than from an env
-// var: both raw lookups resolving null means the module is not mapped.
-// ResolveExportRaw deliberately bypasses the port registry, so this cannot be
-// fooled by our own registrations.
-bool RuntimeDllPresent() {
-    return ResolveExportRaw("?Allocate@MemoryAllocator@System@@QEAAPEAX_KH@Z") != nullptr ||
-           ResolveExportRaw("?Free@MemoryAllocator@System@@QEAAXPEAX@Z") != nullptr;
 }
 
 // Defined below, after RtSystemAllocatorRegister, next to the export list it
@@ -1325,8 +1212,8 @@ extern "C" void RtSystemAllocatorSetLockRetirer(RtAllocLockRetirer retire,
 // `printf`, and the PERF build compiles printf to `((void)0)`
 // (standalone/log_strip.h). So the one binary an A/B is measured on is
 // precisely the binary that cannot say whether it armed. A perf run with
-// BANISHED_RT_ALLOC=1 that silently REFUSED (missing platform seam, missing
-// detour installer, foreign prologue patch) is indistinguishable from an armed
+// whose allocator silently REFUSED (missing platform seam, missing
+// cutover armer) is indistinguishable from an armed
 // one, and the A/B would then be comparing a build against itself and would
 // report `no regression` -- the measurement reading GREEN because the subject
 // never ran. That is this project's own recurring defect shape.
@@ -1354,24 +1241,12 @@ int RtSystemAllocatorRegister() {
         return 0;
     }
 
-    // ---- CUTOVER: no DLL, so no detour is possible OR necessary -------------
-    //
-    // Everything below this block is DLL-present machinery. The detour exists
-    // only to redirect the DLL's own internal callers; the prologue guard reads
-    // the DLL's bytes. With the module gone, FindPatchedPrologue() resolves null
-    // and reports "unresolved", so the guard REFUSES -- correct by its own logic
-    // and wrong for the situation. That is exactly why BANISHED_RT_ALLOC=1 did
-    // not take on the DLL-absent boot: the arming path was wired, and its safety
-    // guard was the thing blocking it.
-    //
-    // With no DLL there is no second allocator, so the atomicity requirement
-    // ("register nothing unless the swap took") has nothing left to protect
-    // against: registering the exports IS the complete swap. The one thing that
-    // does NOT come for free is the critical section, which normally arrives via
-    // allocator_lock.cpp's patches or the composed detour stub -- neither of
-    // which exists here. The host hands the composed (locked) entry points back
-    // through the cutover armer, and they are what gets registered.
-    if (!RuntimeDllPresent()) {
+    // There is no DLL, so no detour is possible OR necessary: there is no second
+    // allocator and no DLL-internal caller to redirect, so registering the
+    // exports IS the complete swap. The one thing that does NOT come for free is
+    // the critical section; the host hands the composed (locked) entry points
+    // back through the cutover armer, and they are what gets registered.
+    {
         if (g_armCutover == nullptr) {
             printf("[RtPort] MemoryAllocator: REFUSING to arm -- Runtime-x64.dll is absent "
                    "and no cutover armer is installed. Registering the raw bodies alone "
@@ -1403,64 +1278,9 @@ int RtSystemAllocatorRegister() {
         AttestArming("ARMED (cutover, DLL absent)", n);
         return n;
     }
-
-    // The installer check comes FIRST, before anything is retired. A build with
-    // no installer must refuse having touched nothing at all -- retiring the lock
-    // and then discovering we cannot detour would leave retail's unlocked bytes
-    // in place for the whole run.
-    if (g_installDetours == nullptr) {
-        printf("[RtPort] MemoryAllocator: no detour installer -- registering the exports "
-                    "alone would let us allocate while the DLL frees. REFUSING. "
-                    "See docs/runtime_port/WAVE2_ALLOCATOR.md\n");
-        AttestArming("REFUSED: no detour installer", 0);
-        return 0;
-    }
-
-    // ---- RETIRE FIRST, THEN GUARD (Wave 10 lane ALLOC) ----------------------
-    //
-    // See the seam comment in runtime/types/system/MemoryAllocator.h. Until this
-    // ran in the right order, BANISHED_RT_ALLOC=1 with the DLL present ALWAYS
-    // died on the prologue guard, because main.cpp installs the allocator lock
-    // before RuntimePortInit() and the retire step lived inside the installer,
-    // downstream of the guard. The guard's intent is "refuse a FOREIGN patch";
-    // ours is not foreign, so hand it back before asking the question.
-    const bool retired = (g_retireLock != nullptr) && g_retireLock();
-
-    // HARD REFUSE if anything STILL owns these two prologues -- now that ours is
-    // gone, anything left really is foreign. Proceeding would silently drop the
-    // allocator lock; see the comment on FindPatchedPrologue.
-    if (const char* patched = FindPatchedPrologue()) {
-        printf("[RtPort] MemoryAllocator: REFUSING to arm -- %s is already "
-                    "patched by something that is NOT the allocator lock (ours was "
-                    "retired first and this survived it). Detouring over a foreign "
-                    "patch would leave the ported allocator running WITHOUT the "
-                    "critical section that Runtime's own direct calls to Free rely "
-                    "on (docs/runtime_port/WAVE2_ALLOCATOR.md section 4).\n", patched);
-        if (retired && g_restoreLock) g_restoreLock();
-        AttestArming("REFUSED: foreign prologue patch", 0);
-        return 0;
-    }
-
-    // Atomic swap: the DLL's own callers first, then ours. If the detours do
-    // not take, register nothing at all -- and put the lock back, because the
-    // process is about to keep running on retail's UNLOCKED Allocate/Free.
-    if (!g_installDetours(reinterpret_cast<void*>(&rtalloc::Allocate),
-                          reinterpret_cast<void*>(&rtalloc::Free))) {
-        printf("[RtPort] MemoryAllocator: detour install FAILED -- registering nothing\n");
-        if (retired && g_restoreLock) g_restoreLock();
-        AttestArming("REFUSED: detour install failed", 0);
-        return 0;
-    }
-
-    const int n = RegisterAllocatorExports(reinterpret_cast<void*>(&rtalloc::Allocate),
-                                           reinterpret_cast<void*>(&rtalloc::Free));
-    printf("[RtAlloc] ARMED (atomic swap taken, Runtime-x64.dll present) -- %d exports "
-           "registered; the DLL's own Allocate/Free now JMP to our composed stubs.\n", n);
-    AttestArming("ARMED (atomic swap, DLL present)", n);
-    return n;
 }
 
-// The registration block, shared by both arming paths. `allocateEntry` and
+// The registration block. `allocateEntry` and
 // `freeEntry` are what the two MEMBER exports point at: the raw ported bodies on
 // the DLL-present path (where the composed stub is reached through the detour,
 // and RtAllocSwapPostRegister repoints these afterwards), or the composed locked
@@ -1595,7 +1415,7 @@ int RegisterAllocatorExports(void* allocateEntry, void* freeEntry) {
 //
 // `rtalloc::MemFree` is `Get(); lockEnter; rtalloc::Free(self, p); lockLeave` —
 // OUR ported free logic, run against whatever `_singleton` names. With the DLL
-// present and `BANISHED_RT_ALLOC` unarmed, `_singleton` is RETAIL's arena. So a
+// present and the allocator port unarmed, `_singleton` is RETAIL's arena. So a
 // registration that is unconditional and default-on was running the ported Free
 // on the shipped allocator's heap, never entering the DLL's `Free`
 // (0x1800c6c00) — which is where standalone/allocator_lock.cpp's patch, and
@@ -1631,27 +1451,7 @@ int RegisterAllocatorExports(void* allocateEntry, void* freeEntry) {
 // path supplies the address, and a caller that ran first would otherwise freeze
 // a null in for the life of the process.
 //
-// DIAGNOSTIC CONTROL, default off. `BANISHED_RT_ALLOC_LEGACY_DIRECTFREE=1`
-// reinstates the direct call, so the attribution is a ONE-BINARY, ONE-ENV-VAR
-// A/B rather than a comparison of two builds. It is a control, not an option:
-// it puts back a defect this comment describes.
-bool LegacyDirectFree() {
-    static int v = -1;
-    if (v < 0) {
-        const char* e = getenv("BANISHED_RT_ALLOC_LEGACY_DIRECTFREE");
-        v = (e && e[0] && e[0] != '0') ? 1 : 0;
-        if (v) {
-            fprintf(stderr, "[RtAlloc] LEGACY CONTROL: 0x180009c30 calls rtalloc::MemFree "
-                            "DIRECTLY again — the ported Free runs on RETAIL's arena and "
-                            "the allocator shadow cannot observe it.\n");
-            std::fflush(stderr);
-        }
-    }
-    return v != 0;
-}
-
 void FreeLockedIgnoringSelf(void* /*ignoredThis*/, void* p) {
-    if (LegacyDirectFree()) { rtalloc::MemFree(p); return; }
     using Fn = void (*)(void*);
     static Fn fn = nullptr;
     if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
@@ -1666,7 +1466,7 @@ void FreeLockedIgnoringSelf(void* /*ignoredThis*/, void* p) {
 // each with a different body:
 //
 //     runtime/src/system/allocator.cpp        (mine, cutover-only)
-//     runtime/src/collection/linkedlist.cpp   (gated on BANISHED_RT_LINKEDLIST)
+//     runtime/src/collection/linkedlist.cpp   (lane UIC)
 //     runtime/src/io/modification.cpp         (lane MOD)
 //
 // The registry's LAST BINDING WINS, so two of the three were dead code and

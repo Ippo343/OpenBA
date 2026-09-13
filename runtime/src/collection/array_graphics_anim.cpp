@@ -387,26 +387,26 @@ void Rt_DestroyInstances_18005c550(void* t, void* base, int n) {
 
 // ---- J3: SetSize ----------------------------------------------------------
 void Rt_SetSize_18005aa30(void* a, int n) {   // Array<GraphicsMesh::Node>
-    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_MeshNode, nullptr);
+    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_MeshNode);
 }
 void Rt_SetSize_18005b1e0(void* a, int n) {   // Array<AnimationState>
-    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_AnimState, nullptr);
+    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_AnimState);
 }
 void Rt_SetSize_18005c8a0(void* a, int n) {   // Array<AnimationState::Layer>
-    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_AnimLayer, nullptr);
+    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_AnimLayer);
 }
 void Rt_SetSize_18005ac50(void* a, int n) {   // Array<InterpolatedState<Transform>>
-    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_InterpTransform, nullptr);
+    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_InterpTransform);
 }
 void Rt_SetSize_18005c3d0(void* a, int n) {   // Array<Instance>, no fill
-    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_AnimInstance, nullptr);
+    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_AnimInstance);
 }
 // The one THREE-argument row in this batch. Its new elements are copy-assigned
 // from `fill` instead of default-constructed, which is what distinguishes it
 // from 0x18005c3d0 above; the rest of the body is the same instantiation.
 void Rt_SetSize_18005be30(void* a, int n, const void* fill) {
     rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n,
-                        static_cast<const uint8_t*>(fill), &kSpec_AnimInstance, nullptr);
+                        static_cast<const uint8_t*>(fill), &kSpec_AnimInstance);
 }
 
 // ---- J4: operator= --------------------------------------------------------

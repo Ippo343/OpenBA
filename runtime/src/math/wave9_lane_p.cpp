@@ -27,8 +27,8 @@
 #include "rt_port.h"
 #include "../../types/math/Math.h"
 
-// transform.cpp, Wave 1 lane 2 — the same class family, registered together
-// under BANISHED_RT_MATH. Declared rather than resolved: see the note on
+// transform.cpp, Wave 1 lane 2 — the same class family, registered together.
+// Declared rather than resolved: see the note on
 // RtTransformAsMatrix() below for why this one is a direct call.
 Matrix* RtMath_Transform_AsMatrix(const Transform* self, Matrix* ret);
 
@@ -41,8 +41,7 @@ namespace {
 // address registry, and Wave 1 registered AsMatrix by NAME, so a by-address
 // call inside runtime/ walks past our port into the DLL.
 //
-// Resolved once and cached — never RtOriginal on a live path
-// (reference_rtoriginal_is_getprocaddress.md).
+// Resolved once and cached.
 Matrix* CallAsMatrix(const Transform* self, Matrix* ret) {
     using Fn = Matrix* (*)(const Transform*, Matrix*);
     static Fn fn = reinterpret_cast<Fn>(
@@ -87,7 +86,6 @@ Matrix* CallAsMatrix(const Transform* self, Matrix* ret) {
 // ============================================================================
 Quaternion* RtMath_Quaternion_Lerp(const Quaternion* self, Quaternion* ret,
                                    const Quaternion* other, const Scalar* t) {
-    RT_DIFF_BEGIN("Math::Quaternion::Lerp");
 
     // Input snapshots for the oracle, taken before a single byte of `ret` is
     // written. `ret` is a hidden return slot the caller chose and it is allowed
@@ -97,7 +95,6 @@ Quaternion* RtMath_Quaternion_Lerp(const Quaternion* self, Quaternion* ret,
     // AFTER we have written `ret` feeds it corrupted input.
     Quaternion selfSnap{}, otherSnap{};
     Scalar     tSnap{};
-    if (rt_diff_on__) { selfSnap = *self; otherSnap = *other; tSnap = *t; }
 
     const float ax = self->x,  ay = self->y,  az = self->z,  aw = self->w;
     const float bx = other->x, by = other->y, bz = other->z, bw = other->w;
@@ -137,14 +134,6 @@ Quaternion* RtMath_Quaternion_Lerp(const Quaternion* self, Quaternion* ret,
     ret->z = rz * inv;
     ret->w = rw * inv;
 
-    if (rt_diff_on__) {
-        Quaternion theirs{};
-        RtOriginal<Quaternion* (*)(const Quaternion*, Quaternion*, const Quaternion*,
-                                   const Scalar*)>(
-            "?Lerp@Quaternion@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z")(
-                &selfSnap, &theirs, &otherSnap, &tSnap);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Quaternion));
-    }
     return ret;   // retail returns the hidden slot in RAX
 }
 
@@ -170,7 +159,6 @@ Quaternion* RtMath_Quaternion_Lerp(const Quaternion* self, Quaternion* ret,
 // reference_oracle_must_not_compare_unwritten_bytes.md describes does not apply.
 // ============================================================================
 Transform3* RtMath_Transform_AsTransform3(const Transform* self, Transform3* ret) {
-    RT_DIFF_BEGIN("Math::Transform::AsTransform3");
 
     // *** `ret` CAN BE THE SAME BUFFER AS `self`, AND AT LEAST ONE CALL SITE
     // *** RELIES ON IT. code/Game/Game/gameupdateloop.cpp:1496, the per-frame
@@ -195,17 +183,6 @@ Transform3* RtMath_Transform_AsTransform3(const Transform* self, Transform3* ret
     // `ours` is correct. The snapshot below is taken before any store, and the
     // shipped body is run on THAT.
     //
-    // GENERAL RULE, because this is not specific to AsTransform3: a differential
-    // oracle for an out-parameter function must run the original on a SNAPSHOT of
-    // the inputs, not on the live ones, whenever the out-parameter is a
-    // caller-chosen buffer. rt_diff.h already says "never let the original write
-    // into live state"; this is the mirror image — never let OUR write reach the
-    // original's input. Sibling of
-    // reference_oracle_must_not_compare_unwritten_bytes.md: a harness defect that
-    // presents as a catastrophic port defect.
-    Transform selfSnapshot{};
-    if (rt_diff_on__) selfSnapshot = *self;
-
     Matrix m;
     CallAsMatrix(self, &m);
 
@@ -214,18 +191,11 @@ Transform3* RtMath_Transform_AsTransform3(const Transform* self, Transform3* ret
     ret->axisZ       = { m.m[8],  m.m[9],  m.m[10] };
     ret->translation = { m.m[12], m.m[13], m.m[14] };
 
-    if (rt_diff_on__) {
-        Transform3 theirs{};
-        RtOriginal<Transform3* (*)(const Transform*, Transform3*)>(
-            "?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ")(&selfSnapshot, &theirs);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Transform3));
-    }
     return ret;
 }
 
 // ---- Registration ----------------------------------------------------------
-// Called from RtMathPortInit() alongside RtMathTransformRegister(), so the one
-// BANISHED_RT_MATH switch covers these two as well.
+// Called from RtMathPortInit() alongside RtMathTransformRegister().
 //
 // Lerp is registered BY ADDRESS as well as by name: its only in-tree caller
 // today, runtime/src/graphics/scene.cpp's RtQuaternionLerp, reaches it through

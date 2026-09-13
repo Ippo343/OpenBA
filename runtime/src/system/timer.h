@@ -5,9 +5,7 @@
 //
 // Wave 9 lane B3. `timer.cpp` ports the whole class AND owns the storage
 // behind its five private statics, so the four consumers in the tree that were
-// reading the DLL's copies through the raw data door
-// (`RT_ORIGINAL_ONCE(double*, "?_secondsPerTick@…")` and friends) can read ours
-// instead. Those reads are lane V's DATA READ rows for
+// reading the DLL's copies through the raw data door can read ours instead. Those reads are lane V's DATA READ rows for
 // `?_secondsPerTick@Timer@System@@0NA`
 // (application_win.cpp:45, engine/engine.cpp:217, save/saveload.cpp:163) plus
 // the three sibling slots application_win.cpp resolves alongside it.

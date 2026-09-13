@@ -17,14 +17,8 @@
 // hardware sqrtss/plain libm call. Transcendentals go through the RtLibm seam
 // (runtime/funcs/rt_libm.h) rather than calling std:: or the DLL directly:
 // our own libm by default (so the port survives Runtime-x64.dll's eventual
-// removal, PLAN.md §4.1 decision 1), with BANISHED_RT_LIBM=dll available as a
+// removal, PLAN.md §4.1 decision 1), with the DLL's own CRT available as a
 // diagnostic to tell a real bug from ordinary last-bit libm rounding.
-//
-// DIFF HARNESS NOTE: every hidden-slot-returning function here writes `ours`
-// through `ret` first (so a normal, non-diffing run costs nothing beyond the
-// port itself), then — only when BANISHED_RT_DIFF is on — calls the original
-// into a private scratch value and compares. The original is never allowed to
-// write into `*ret` directly.
 // ============================================================================
 
 #include <cmath>
@@ -45,40 +39,20 @@ constexpr float kRadToDeg = 57.29578f;  // 0x180161708
 
 // ?Abs@Scalar@Math@@QEBA?AV12@XZ  retail 0x1800646b0
 Scalar* RtMath_Scalar_Abs(const Scalar* self, Scalar* ret) {
-    RT_DIFF_BEGIN("Math::Scalar::Abs");
     ret->v = std::fabs(self->v);
-    if (rt_diff_on__) {
-        Scalar theirs{};
-        RtOriginal<Scalar*(*)(const Scalar*, Scalar*)>("?Abs@Scalar@Math@@QEBA?AV12@XZ")(self, &theirs);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Scalar));
-    }
     return ret;
 }
 
 // ?Lerp@Scalar@Math@@QEAA?AV12@AEBV12@0@Z  retail 0x1800218c0
 // Non-const (QEAA) but reads only `this`; t is the 3rd arg (R9).
 Scalar* RtMath_Scalar_Lerp(const Scalar* self, Scalar* ret, const Scalar* to, const Scalar* t) {
-    RT_DIFF_BEGIN("Math::Scalar::Lerp");
     ret->v = self->v + (to->v - self->v) * t->v;
-    if (rt_diff_on__) {
-        Scalar theirs{};
-        RtOriginal<Scalar*(*)(const Scalar*, Scalar*, const Scalar*, const Scalar*)>(
-            "?Lerp@Scalar@Math@@QEAA?AV12@AEBV12@0@Z")(self, &theirs, to, t);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Scalar));
-    }
     return ret;
 }
 
 // ?Max@Scalar@Math@@QEBA?AV12@AEBV12@@Z  retail 0x18005ff60
 Scalar* RtMath_Scalar_Max(const Scalar* self, Scalar* ret, const Scalar* other) {
-    RT_DIFF_BEGIN("Math::Scalar::Max");
     ret->v = (other->v < self->v) ? self->v : other->v;
-    if (rt_diff_on__) {
-        Scalar theirs{};
-        RtOriginal<Scalar*(*)(const Scalar*, Scalar*, const Scalar*)>(
-            "?Max@Scalar@Math@@QEBA?AV12@AEBV12@@Z")(self, &theirs, other);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Scalar));
-    }
     return ret;
 }
 
@@ -111,74 +85,38 @@ void RtMath_Vector2_MulAssign(Vector2* self, const Vector2* rhs) {
 
 // ?Dot@Vector2@Math@@QEBA?AVScalar@2@AEBV12@@Z  retail 0x18006c840
 Scalar* RtMath_Vector2_Dot(const Vector2* self, Scalar* ret, const Vector2* rhs) {
-    RT_DIFF_BEGIN("Math::Vector2::Dot");
     ret->v = self->x * rhs->x + self->y * rhs->y;
-    if (rt_diff_on__) {
-        Scalar theirs{};
-        RtOriginal<Scalar*(*)(const Vector2*, Scalar*, const Vector2*)>(
-            "?Dot@Vector2@Math@@QEBA?AVScalar@2@AEBV12@@Z")(self, &theirs, rhs);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Scalar));
-    }
     return ret;
 }
 
 // ?Max@Vector2@Math@@QEBA?AV12@AEBV12@@Z  retail 0x180060330
 Vector2* RtMath_Vector2_Max(const Vector2* self, Vector2* ret, const Vector2* rhs) {
-    RT_DIFF_BEGIN("Math::Vector2::Max");
     ret->x = (self->x <= rhs->x) ? rhs->x : self->x;
     ret->y = (self->y <= rhs->y) ? rhs->y : self->y;
-    if (rt_diff_on__) {
-        Vector2 theirs{};
-        RtOriginal<Vector2*(*)(const Vector2*, Vector2*, const Vector2*)>(
-            "?Max@Vector2@Math@@QEBA?AV12@AEBV12@@Z")(self, &theirs, rhs);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Vector2));
-    }
     return ret;
 }
 
 // ?Min@Vector2@Math@@QEBA?AV12@AEBV12@@Z  retail 0x1800602e0
 Vector2* RtMath_Vector2_Min(const Vector2* self, Vector2* ret, const Vector2* rhs) {
-    RT_DIFF_BEGIN("Math::Vector2::Min");
     ret->x = (rhs->x <= self->x) ? rhs->x : self->x;
     ret->y = (rhs->y <= self->y) ? rhs->y : self->y;
-    if (rt_diff_on__) {
-        Vector2 theirs{};
-        RtOriginal<Vector2*(*)(const Vector2*, Vector2*, const Vector2*)>(
-            "?Min@Vector2@Math@@QEBA?AV12@AEBV12@@Z")(self, &theirs, rhs);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Vector2));
-    }
     return ret;
 }
 
 // ?Length@Vector2@Math@@QEBA?AVScalar@2@XZ  retail 0x18006c880
 Scalar* RtMath_Vector2_Length(const Vector2* self, Scalar* ret) {
-    RT_DIFF_BEGIN("Math::Vector2::Length");
     ret->v = RtLibm::Sqrt(self->x * self->x + self->y * self->y);
-    if (rt_diff_on__) {
-        Scalar theirs{};
-        RtOriginal<Scalar*(*)(const Vector2*, Scalar*)>(
-            "?Length@Vector2@Math@@QEBA?AVScalar@2@XZ")(self, &theirs);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Scalar));
-    }
     return ret;
 }
 
 // ?LengthSquared@Vector2@Math@@QEBA?AVScalar@2@XZ  retail 0x18006c860
 Scalar* RtMath_Vector2_LengthSquared(const Vector2* self, Scalar* ret) {
-    RT_DIFF_BEGIN("Math::Vector2::LengthSquared");
     ret->v = self->x * self->x + self->y * self->y;
-    if (rt_diff_on__) {
-        Scalar theirs{};
-        RtOriginal<Scalar*(*)(const Vector2*, Scalar*)>(
-            "?LengthSquared@Vector2@Math@@QEBA?AVScalar@2@XZ")(self, &theirs);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Scalar));
-    }
     return ret;
 }
 
 // ?Normalize@Vector2@Math@@QEBA?AV12@XZ  retail 0x18006c600  (by value; self unchanged)
 Vector2* RtMath_Vector2_Normalize(const Vector2* self, Vector2* ret) {
-    RT_DIFF_BEGIN("Math::Vector2::Normalize");
     float len = RtLibm::Sqrt(self->x * self->x + self->y * self->y);
     if (len == 0.0f) {
         *ret = *self;
@@ -187,19 +125,12 @@ Vector2* RtMath_Vector2_Normalize(const Vector2* self, Vector2* ret) {
         ret->x = self->x * inv;
         ret->y = self->y * inv;
     }
-    if (rt_diff_on__) {
-        Vector2 theirs{};
-        RtOriginal<Vector2*(*)(const Vector2*, Vector2*)>(
-            "?Normalize@Vector2@Math@@QEBA?AV12@XZ")(self, &theirs);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Vector2));
-    }
     return ret;
 }
 
 // ?Normalize@Vector2@Math@@QEBA?AV12@AEAVScalar@2@@Z  retail 0x18006c7b0
 // Same as above but also writes the pre-normalize length out through `mag`.
 Vector2* RtMath_Vector2_NormalizeWithMag(const Vector2* self, Vector2* ret, Scalar* mag) {
-    RT_DIFF_BEGIN("Math::Vector2::NormalizeWithMag");
     float len = RtLibm::Sqrt(self->x * self->x + self->y * self->y);
     mag->v = len;
     if (len == 0.0f) {
@@ -208,14 +139,6 @@ Vector2* RtMath_Vector2_NormalizeWithMag(const Vector2* self, Vector2* ret, Scal
         float inv = RtMathConst::kOne / len;
         ret->x = self->x * inv;
         ret->y = self->y * inv;
-    }
-    if (rt_diff_on__) {
-        Vector2 theirsVec{};
-        Scalar theirsMag{};
-        RtOriginal<Vector2*(*)(const Vector2*, Vector2*, Scalar*)>(
-            "?Normalize@Vector2@Math@@QEBA?AV12@AEAVScalar@2@@Z")(self, &theirsVec, &theirsMag);
-        RT_DIFF_BYTES(ret, &theirsVec, sizeof(Vector2));
-        RT_DIFF_BYTES(mag, &theirsMag, sizeof(Scalar));
     }
     return ret;
 }
@@ -273,39 +196,24 @@ Vector3* RtMath_Vector3_Ctor_s(Vector3* self, const Scalar* s) {
 
 // ?Cross@Vector3@Math@@QEBA?AV12@AEBV12@@Z  retail 0x180021b10
 Vector3* RtMath_Vector3_Cross(const Vector3* self, Vector3* ret, const Vector3* rhs) {
-    RT_DIFF_BEGIN("Math::Vector3::Cross");
     float x = self->y * rhs->z - self->z * rhs->y;
     float y = rhs->x * self->z - self->x * rhs->z;
     float z = self->x * rhs->y - rhs->x * self->y;
     ret->x = x;
     ret->y = y;
     ret->z = z;
-    if (rt_diff_on__) {
-        Vector3 theirs{};
-        RtOriginal<Vector3*(*)(const Vector3*, Vector3*, const Vector3*)>(
-            "?Cross@Vector3@Math@@QEBA?AV12@AEBV12@@Z")(self, &theirs, rhs);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Vector3));
-    }
     return ret;
 }
 
 // ?Dot@Vector3@Math@@QEBA?AVScalar@2@AEBV12@@Z  retail 0x18001dff0
 Scalar* RtMath_Vector3_Dot(const Vector3* self, Scalar* ret, const Vector3* rhs) {
-    RT_DIFF_BEGIN("Math::Vector3::Dot");
     ret->v = rhs->y * self->y + rhs->x * self->x + rhs->z * self->z;
-    if (rt_diff_on__) {
-        Scalar theirs{};
-        RtOriginal<Scalar*(*)(const Vector3*, Scalar*, const Vector3*)>(
-            "?Dot@Vector3@Math@@QEBA?AVScalar@2@AEBV12@@Z")(self, &theirs, rhs);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Scalar));
-    }
     return ret;
 }
 
 // ?FromYawPitch@Vector3@Math@@SA?AV12@AEBVScalar@2@0@Z  retail 0x1800220b0 (static)
 // x = -cos(pitch_rad) * sin(yaw_rad); y = cos(pitch_rad) * cos(yaw_rad); z = sin(pitch_rad)
 Vector3* RtMath_Vector3_FromYawPitch(Vector3* ret, const Scalar* yaw, const Scalar* pitch) {
-    RT_DIFF_BEGIN("Math::Vector3::FromYawPitch");
     float yawRad = yaw->v * RtMathConst::kDegToRad;
     float pitchRad = pitch->v * RtMathConst::kDegToRad;
     float sinYaw = RtLibm::Sin(yawRad);
@@ -315,12 +223,6 @@ Vector3* RtMath_Vector3_FromYawPitch(Vector3* ret, const Scalar* yaw, const Scal
     ret->z = sinPitch;
     ret->x = -cosPitch * sinYaw;
     ret->y = cosPitch * cosYaw;
-    if (rt_diff_on__) {
-        Vector3 theirs{};
-        RtOriginal<Vector3*(*)(Vector3*, const Scalar*, const Scalar*)>(
-            "?FromYawPitch@Vector3@Math@@SA?AV12@AEBVScalar@2@0@Z")(&theirs, yaw, pitch);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Vector3));
-    }
     return ret;
 }
 
@@ -328,61 +230,36 @@ Vector3* RtMath_Vector3_FromYawPitch(Vector3* ret, const Scalar* yaw, const Scal
 // FUN_180126680 was decompiled and is the CRT double atan2() (its own
 // domain-error fallback even names it "atan2f"); RtLibm::Atan2 reproduces it.
 float RtMath_Vector3_Heading(const Vector3* self) {
-    RT_DIFF_BEGIN("Math::Vector3::Heading");
     float ours = RtLibm::Atan2(-self->x, self->y) * kRadToDeg;
-    RT_DIFF_FLOAT(ours, RtOriginal<float(*)(const Vector3*)>(
-        "?Heading@Vector3@Math@@QEBAMXZ")(self), 0.0f);
     return ours;
 }
 
 // ?Length@Vector3@Math@@QEBA?AVScalar@2@XZ  retail 0x1800219a0
 Scalar* RtMath_Vector3_Length(const Vector3* self, Scalar* ret) {
-    RT_DIFF_BEGIN("Math::Vector3::Length");
     ret->v = RtLibm::Sqrt(self->x * self->x + self->y * self->y + self->z * self->z);
-    if (rt_diff_on__) {
-        Scalar theirs{};
-        RtOriginal<Scalar*(*)(const Vector3*, Scalar*)>(
-            "?Length@Vector3@Math@@QEBA?AVScalar@2@XZ")(self, &theirs);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Scalar));
-    }
     return ret;
 }
 
 // ?Lerp@Vector3@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z  retail 0x18001d450
 Vector3* RtMath_Vector3_Lerp(const Vector3* self, Vector3* ret, const Vector3* to, const Scalar* t) {
-    RT_DIFF_BEGIN("Math::Vector3::Lerp");
     float tt = t->v;
     ret->x = self->x + tt * (to->x - self->x);
     ret->y = self->y + (to->y - self->y) * tt;
     ret->z = self->z + (to->z - self->z) * tt;
-    if (rt_diff_on__) {
-        Vector3 theirs{};
-        RtOriginal<Vector3*(*)(const Vector3*, Vector3*, const Vector3*, const Scalar*)>(
-            "?Lerp@Vector3@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z")(self, &theirs, to, t);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Vector3));
-    }
     return ret;
 }
 
 // ?Min@Vector3@Math@@QEBA?AV12@AEBV12@@Z  retail 0x180015280
 Vector3* RtMath_Vector3_Min(const Vector3* self, Vector3* ret, const Vector3* rhs) {
-    RT_DIFF_BEGIN("Math::Vector3::Min");
     ret->x = (rhs->x <= self->x) ? rhs->x : self->x;
     ret->y = (rhs->y <= self->y) ? rhs->y : self->y;
     ret->z = (rhs->z <= self->z) ? rhs->z : self->z;
-    if (rt_diff_on__) {
-        Vector3 theirs{};
-        RtOriginal<Vector3*(*)(const Vector3*, Vector3*, const Vector3*)>(
-            "?Min@Vector3@Math@@QEBA?AV12@AEBV12@@Z")(self, &theirs, rhs);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Vector3));
-    }
     return ret;
 }
 
 // ?Normalize@Vector3@Math@@QEBA?AV12@AEAVScalar@2@@Z  retail 0x180021a20
 // Takes an explicit Scalar& out-param for the pre-normalize magnitude.
 Vector3* RtMath_Vector3_NormalizeWithMag(const Vector3* self, Vector3* ret, Scalar* mag) {
-    RT_DIFF_BEGIN("Math::Vector3::NormalizeWithMag");
     float len = RtLibm::Sqrt(self->x * self->x + self->y * self->y + self->z * self->z);
     mag->v = len;
     if (len != 0.0f) {
@@ -394,14 +271,6 @@ Vector3* RtMath_Vector3_NormalizeWithMag(const Vector3* self, Vector3* ret, Scal
         ret->x = self->x;
         ret->y = self->y;
         ret->z = self->z;
-    }
-    if (rt_diff_on__) {
-        Vector3 theirsVec{};
-        Scalar theirsMag{};
-        RtOriginal<Vector3*(*)(const Vector3*, Vector3*, Scalar*)>(
-            "?Normalize@Vector3@Math@@QEBA?AV12@AEAVScalar@2@@Z")(self, &theirsVec, &theirsMag);
-        RT_DIFF_BYTES(ret, &theirsVec, sizeof(Vector3));
-        RT_DIFF_BYTES(mag, &theirsMag, sizeof(Scalar));
     }
     return ret;
 }
@@ -418,10 +287,7 @@ Vector3* RtMath_Vector3_Normalize(const Vector3* self, Vector3* ret) {
 
 // ??8Vector3@Math@@QEBA_NAEBV01@@Z  retail 0x1800150a0  (operator==, bool in AL, no hidden slot)
 bool RtMath_Vector3_Equals(const Vector3* self, const Vector3* rhs) {
-    RT_DIFF_BEGIN("Math::Vector3::Equals");
     bool ours = self->x == rhs->x && self->y == rhs->y && self->z == rhs->z;
-    RT_DIFF_SCALAR(ours, RtOriginal<bool(*)(const Vector3*, const Vector3*)>(
-        "??8Vector3@Math@@QEBA_NAEBV01@@Z")(self, rhs));
     return ours;
 }
 

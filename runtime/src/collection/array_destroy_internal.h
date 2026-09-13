@@ -70,11 +70,3 @@ extern const DestroySpec kD_Str_18;          // 0x180034440
 extern const DestroySpec kD_Str2_38;         // 0x1800059e0
 
 }  // namespace rtcoll
-
-// Runs the synthetic-subject replay probe. Armed by RtCollectionDestroyPortInit
-// and RUN on the first call into any registered entry point — never at init,
-// where the DLL's MemoryAllocator is constructed but not started (lane Q's
-// array_internal.h "Probe scheduling" note applies unchanged).
-void RtCollectionDestroyProbeRun();
-// True when BANISHED_RT_ARRAY_DESTROY_PROBE selects a mode. Read once, at init.
-bool RtCollectionDestroyProbeArmed();

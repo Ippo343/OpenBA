@@ -40,29 +40,10 @@
 //   The worker thread's entry point WAS intentionally left as the DLL's own
 //   ?ThreadFunc@Thread@System@@CAIPEAX@Z, on the grounds that it was not one of
 //   the 8 exports in scope. **Wave 9 lane P ports it** (bottom of this file),
-//   and the ctor below now asks for it BY NAME through the port-aware resolver,
-//   so it gets ours when System is enabled and the DLL's under
-//   BANISHED_RT_THREAD=0. The old reasoning stays true of the LAYOUT — it only
-//   touches +0x00 vtable, +0x08 runFlags, +0x10/0x18/0x20/0x28 handles, all of
-//   which this header reproduces exactly — which is what made it safe to port.
-//
-//   CRT OWNERSHIP: the ctor calls the DLL's OWN _beginthreadex (0x18007fbfc),
-//   resolved by raw address via ResolveRuntimeRaw, not MinGW/UCRT's. ThreadFunc
-//   is DLL code compiled against the DLL's statically-linked CRT; if OUR CRT's
-//   _beginthreadex had set up the per-thread CRT state instead, ThreadFunc
-//   would run under one CRT's bookkeeping and unwind out through the other's
-//   _endthreadex — a CRT boundary crossing of exactly the kind PLAN §4.3 risk 5
-//   warns about. Calling the DLL's own _beginthreadex keeps the whole
-//   thread's CRT lifetime on the DLL side, same as retail.
-//
-// DIFF HARNESS: none of these 8 are diffable with RT_DIFF_SCALAR/RT_DIFF_SHADOW
-// — they mutate OS state (create a CRITICAL_SECTION / OS thread / kernel
-// events, or block on them). Running "ours" and "theirs" back to back would
-// double-initialize or double-start a real OS object, not compare pure
-// outputs. There is also no side-channel replica to shadow-check against
-// (unlike the allocator, there's no independent expected value to compute).
-// So these are left undiffed by design; correctness rests on the byte-for-
-// byte transcription above instead of a runtime oracle.
+//   and the ctor below now asks for it BY NAME through the port-aware resolver.
+//   The old reasoning stays true of the LAYOUT — it only touches +0x00 vtable,
+//   +0x08 runFlags, +0x10/0x18/0x20/0x28 handles, all of which this header
+//   reproduces exactly — which is what made it safe to port.
 // ============================================================================
 
 #include "../../types/system/Thread.h"
@@ -76,23 +57,6 @@
 using System::CriticalSection;
 using System::Thread;
 
-// Declared in standalone/resolve.h (Module::Runtime ASLR-delta resolver for a
-// raw, non-exported address). Not re-declared in rt_port.h — that header's
-// seam is exports-only — so this file adds the one declaration it needs
-// rather than including resolve.h (which pulls in <windows.h> in a way that
-// collides with Math's `near`/`far`/`Rectangle` names; irrelevant here since
-// this file already includes <windows.h> for its own reasons, but the
-// declaration is kept local rather than assuming resolve.h stays includable).
-uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr);
-
-// OPT-IN, unlike RtWaveEnabled(): absent env means OFF. RtWaveEnabled is a kill
-// switch and defaults to true when unset, which is the wrong polarity for a
-// diagnostic. Read once into a function-local static — cheap, and getenv is
-// process-cached anyway (standalone/env_cache.h).
-static bool RtWaveTraceOn(const char* envName) {
-    const char* e = std::getenv(envName);
-    return e && *e && std::strcmp(e, "0") != 0 && std::strcmp(e, "false") != 0;
-}
 
 // ---- System::CriticalSection -----------------------------------------------
 
@@ -183,50 +147,22 @@ static void* RtSystemThreadVftable() {
 
 // The worker entry point. Asked for BY NAME through the PORT-AWARE resolver, so
 // this hands back our own RtSystem_Thread_ThreadFunc (below) once
-// RtSystemThreadRegister has run, and the shipped 0x1800ca440 under
-// BANISHED_RT_THREAD=0. That is deliberate and is the only A/B this function
-// gets: it cannot be diffed (see the DIFF HARNESS note in the banner), so
-// "boot with the port, boot without it, compare behaviour" is the oracle.
+// RtSystemThreadRegister has run.
 //
-// It was ResolveExportRaw until Wave 9 lane P. Leaving it raw after porting
-// would have been the port-bypass defect in its purest form — the port
-// registered, the census counting it, and the DLL's body still the one every
-// thread in the process actually runs.
-//
-// WAVE 9 LANE SYS2: same freeze hazard as the vtable above, and worse in one
-// respect — this one has a PORT (RtSystem_Thread_ThreadFunc, below), so a null
-// or pre-registration answer frozen here is a bypassed port, not just a miss.
-// RT_EXPORT_ONCE retries a miss.
+// WAVE 9 LANE SYS2: same freeze hazard as the vtable above — a null or
+// pre-registration answer frozen here is a bypassed port. RT_EXPORT_ONCE
+// retries a miss.
 static unsigned(__stdcall* RtSystemThreadFunc())(void*) {
     using Fn = unsigned(__stdcall*)(void*);
     return RT_EXPORT_ONCE(Fn, "?ThreadFunc@Thread@System@@CAIPEAX@Z");
 }
 
-// The DLL's OWN _beginthreadex (its statically-linked CRT's, not MinGW/UCRT's
-// — see the CRT OWNERSHIP note in the file banner), resolved by raw address:
-// 0x18007fbfc, confirmed as the ctor's CALL target in the disassembly.
+// _beginthreadex. Retail called its own statically-linked CRT's copy
+// (0x18007fbfc, the ctor's CALL target in the disassembly); ours is the
+// identical routine with the same contract.
 using BeginThreadExFn = uintptr_t(__cdecl*)(void*, unsigned, unsigned(__stdcall*)(void*), void*, unsigned, unsigned*);
 static BeginThreadExFn RtDllBeginThreadEx() {
-    // 0x18007fbfc is the DLL's OWN copy of the CRT's _beginthreadex -- a
-    // statically-linked MSVC CRT routine, not engine code.  Resolving it by
-    // address made this a REAL DEPENDENCY on the raw door (lane V's row
-    // "CRT: addr:0x18007fbfc"), and the THIRD controlled DLL-absent boot died
-    // exactly here: ResolveRuntimeRaw returns null with the module gone and the
-    // call is an EXEC of 0, inside ConstructLoader -> Thread ctor, on the boot
-    // path.
-    //
-    // Our own CRT provides the identical routine, so prefer it and keep the
-    // DLL's only as a fallback while the DLL is present.  This is NOT a
-    // behavioural change: both are _beginthreadex with the same contract, and
-    // retail's call site passes CREATE_SUSPENDED for the reason documented
-    // below.  It is the difference between a boot and a null call at cutover.
-    static BeginThreadExFn f = []() -> BeginThreadExFn {
-        BeginThreadExFn dll =
-            reinterpret_cast<BeginThreadExFn>(ResolveRuntimeRaw(0x18007fbfc));
-        if (dll) return dll;
-        return reinterpret_cast<BeginThreadExFn>(&_beginthreadex);
-    }();
-    return f;
+    return reinterpret_cast<BeginThreadExFn>(&_beginthreadex);
 }
 
 // 0x1800ca4e0  ??0Thread@System@@QEAA@I@Z
@@ -315,54 +251,12 @@ void RtSystem_Thread_WaitForFinish(Thread* self) {
 // which all report -1. Nothing in the DLL reads it; it lands in the thread's
 // exit code.
 //
-// ORACLE: NONE, by construction, and this function is the reason the file
-// banner's "DIFF HARNESS: none of these 8" paragraph exists at all. It blocks
-// on kernel objects and dispatches into caller-supplied virtual work; running
-// it twice would run the work twice and drain the events. The A/B is
-// BANISHED_RT_THREAD=0 (see RtSystemThreadFunc above), and the observable is
-// coarse but real: the async pathfinder and the game-teardown worker are
-// System::Thread subclasses, so a wrong ThreadFunc is a hang or a dead
-// pathfinder, not a subtle drift.
-//
-// *** IT ALSO HAS NO `calls=` COLUMN, AND THAT NEEDED FIXING SEPARATELY. ***
-//
-// RT_DIFF_BEGIN is not usable here and the reason is not squeamishness:
-// runtime/funcs/rt_diff.cpp has NO synchronisation at all — a bare
-// `RtDiffSite* g_sites[]`, a bare `g_siteCount++`, bare `site->calls++`. This
-// body runs on a WORKER THREAD, so a diff site inside it would be a data race
-// in every thread the game creates, and the counter it produced could not be
-// trusted anyway.
-//
-// So the port carries the witness below instead. This matters because of the
-// exact hat `reference_uncalled_port_is_not_verified.md` describes: the residue
-// census shows `?ThreadFunc@Thread@System@@CAIPEAX@Z` being RESOLVED, and
-// resolved is not called. An eagerly-resolved name appears whether or not
-// anything ever calls through the pointer. Without a witness, this port would
-// land looking fine and be entirely unexercised, which is how a wrong
-// Quaternion::operator* survived the whole of Wave 1.
-//
-// BANISHED_RT_THREADFUNC_TRACE=1 prints ONE line the first time each worker
-// dispatches work, naming the Thread object and its vtable — which identifies
-// the subclass, so the log says WHICH workers ran, not just that some did.
-// Bounded by the number of threads (a handful), so it is cheap enough to leave
-// in, and `getenv` is process-cached (standalone/env_cache.h).
-//
-// **Zero lines under that variable means zero dispatches, and that is the
-// signal to read.** It is an EXECUTION WITNESS, not a correctness oracle;
-// nothing about it says the body is right, only that it ran.
-//
-// The second line it can print is a real measurement rather than a tautology:
-// retail RELOADS the vtable between slot 0 and slot 1 (0x1800ca48c), and
-// whether that reload ever observes a different pointer decides whether a port
-// that cached it would be wrong. If the line never appears, the reload is dead
-// in practice and we know it; if it appears, our fidelity to it is load-bearing.
+// Retail RELOADS the vtable between slot 0 and slot 1 (0x1800ca48c); that
+// reload is reproduced faithfully below, because a port that cached the vtable
+// would call the wrong OnCompleted if it ever changed.
 // ============================================================================
 unsigned int __stdcall RtSystem_Thread_ThreadFunc(void* param) {
     Thread* self = static_cast<Thread*>(param);
-
-    const bool trace = RtWaveTraceOn("BANISHED_RT_THREADFUNC_TRACE");
-    bool announced = false;        // per-thread: this frame is one worker
-    bool reloadReported = false;
 
     HANDLE handles[2] = { reinterpret_cast<HANDLE>(self->hStart),
                           reinterpret_cast<HANDLE>(self->hStop) };
@@ -372,23 +266,10 @@ unsigned int __stdcall RtSystem_Thread_ThreadFunc(void* param) {
         using WorkFn = void (*)(Thread*);
 
         void** vt = static_cast<void**>(self->vtable);
-        if (trace && !announced) {
-            announced = true;
-            std::fprintf(stderr,
-                         "[RtThreadFunc] PORT DISPATCHED work: thread=%lu self=%p vtable=%p\n",
-                         GetCurrentThreadId(), (void*)self, (void*)vt);
-        }
         self->runFlags |= 1u;
         reinterpret_cast<WorkFn>(vt[0])(self);        // slot 0 — the work
 
         void** vtAfter = static_cast<void**>(self->vtable);   // reloaded, as retail does
-        if (trace && !reloadReported && vtAfter != vt) {
-            reloadReported = true;
-            std::fprintf(stderr,
-                         "[RtThreadFunc] vtable RELOAD IS LOAD-BEARING: thread=%lu %p -> %p "
-                         "(a port that cached the vtable would call the wrong OnCompleted)\n",
-                         GetCurrentThreadId(), (void*)vt, (void*)vtAfter);
-        }
         reinterpret_cast<WorkFn>(vtAfter[1])(self);   // slot 1 — OnCompleted
 
         HANDLE finished = reinterpret_cast<HANDLE>(self->hFinished);
@@ -416,30 +297,9 @@ unsigned int __stdcall RtSystem_Thread_ThreadFunc(void* param) {
 // the two while slot 1 is the same function. Lane C2's mint picks this up with
 // no regeneration.
 //
-// NO DIFF SITE, and this is a rule rather than a judgement call. This body runs
-// on a WORKER thread (ThreadFunc dispatches it), and `runtime/funcs/rt_diff.cpp`
-// contains zero synchronisation primitives -- no mutex, no atomic, no
-// Interlocked, no CRITICAL_SECTION -- so registration is a bare
-// `g_sites[g_siteCount++]` and counting a bare `site->calls++`. A site here
-// would be a data race in every worker the game creates and would produce a
-// count nobody could trust (WAVE9.md §2). Lane P hit exactly this porting
-// ThreadFunc and shipped an opt-in execution witness instead; the same witness
-// is used below, and the same property holds for it: ZERO LINES MEANS ZERO
-// DISPATCHES, so an absence is informative rather than merely quiet.
-//
-// There is also nothing an oracle could compare: the shipped body is `RET`, so
-// ours and theirs agree on every input by construction and a green row would be
-// a no-op (reference_probe_needs_an_effectiveness_control.md).
 void RtSystem_Thread_OnCompleted(Thread* self) {
-    static const bool trace = std::getenv("BANISHED_RT_THREADFUNC_TRACE") != nullptr;
-    static bool announced = false;
-    if (trace && !announced) {
-        announced = true;
-        std::fprintf(stderr,
-                     "[RtThreadFunc] PORT DISPATCHED OnCompleted: thread=%lu self=%p\n",
-                     GetCurrentThreadId(), (void*)self);
-    }
-    // Retail's body, in full.
+    (void)self;
+    // Retail's body, in full: the shipped 0x1800ca580 is a bare RET.
 }
 
 // ---- Registration ------------------------------------------------------------

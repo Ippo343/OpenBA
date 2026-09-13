@@ -6,9 +6,6 @@
 // Registers every Volume::Box / Volume::Rectangle / Volume::Frustum port
 // (box.cpp, rectangle.cpp, frustum.cpp) so our ~1,180 call sites flip to them.
 // Called from RuntimePortInit() in standalone/resolve_standalone.cpp.
-//
-// Kill switch: BANISHED_RT_VOLUME=0 leaves the whole namespace unregistered,
-// so every caller keeps going through Runtime-x64.dll exactly as before.
 // ============================================================================
 
 #include <cstdio>
@@ -40,11 +37,6 @@ Vector3* RtVolume_Frustum_GetScreenDirection(const Frustum* self, Vector3* ret, 
 Matrix*  RtVolume_Frustum_Projection(const Frustum* self, Matrix* ret, bool zeroToOneDepth);
 
 void RtVolumePortInit() {
-    if (!RtWaveEnabled("BANISHED_RT_VOLUME")) {
-        printf("[RtVolume] wave disabled (BANISHED_RT_VOLUME=0) — Runtime-x64.dll originals in use\n");
-        return;
-    }
-
     RegisterRuntimeExport("??0Box@Volume@@QEAA@XZ", (void*)&RtVolume_Box_Ctor);
     RegisterRuntimeExport("??4Box@Volume@@QEAAAEAV01@AEBV01@@Z", (void*)&RtVolume_Box_Assign);
     RegisterRuntimeExport("?Extend@Box@Volume@@QEBA?AV12@AEBVVector3@Math@@@Z", (void*)&RtVolume_Box_Extend);

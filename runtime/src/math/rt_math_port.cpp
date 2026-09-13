@@ -3,8 +3,8 @@
 // ============================================================================
 // Registers Lane 1's ports (Scalar/Vector2/Vector3/Vector4) with the runtime
 // registry, then calls Lane 2's RtMathTransformRegister() (Matrix/Quaternion/
-// Transform family) so a single BANISHED_RT_MATH switch controls the whole
-// Math namespace. See docs/runtime_port/PLAN.md §6 step 5.
+// Transform family) so the whole Math namespace is registered from one place.
+// See docs/runtime_port/PLAN.md §6 step 5.
 // ============================================================================
 
 #include <cstdio>
@@ -12,8 +12,7 @@
 #include "../../funcs/rt_libm.h"
 #include "vector.h"
 
-// Lane 2's half of Math (runtime/src/math/transform.cpp), registered here so
-// BANISHED_RT_MATH is the one switch for the whole namespace.
+// Lane 2's half of Math (runtime/src/math/transform.cpp).
 extern void RtMathTransformRegister();
 // Wave 9 lane P (runtime/src/math/wave9_lane_p.cpp): Quaternion::Lerp and
 // Transform::AsTransform3, the two Math exports waves 1-8 left on the DLL.
@@ -24,15 +23,9 @@ extern int RtMathWave9LanePRegister();
 extern int RtMathWave9LaneGfxrRegister();
 
 void RtMathPortInit() {
-    // Must run before the BANISHED_RT_MATH check below: Volume's ports use the
-    // same RtLibm seam and RtVolumePortInit() must not depend on whether Math
-    // happens to be enabled. Safe to call more than once.
+    // Volume's ports use the same RtLibm seam, so this must run before
+    // RtVolumePortInit(). Safe to call more than once.
     RtLibm::Init();
-
-    if (!RtWaveEnabled("BANISHED_RT_MATH")) {
-        printf("[RtMathPortInit] BANISHED_RT_MATH=0 -- Math namespace port disabled, DLL exports stay live\n");
-        return;
-    }
 
     int n = 0;
     // Scalar

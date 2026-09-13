@@ -9,6 +9,6 @@
 // ============================================================================
 
 // Registers every function this file ports with RegisterRuntimeExport().
-// Called by Lane 1's RtMathPortInit() once BANISHED_RT_MATH has been checked;
+// Called by Lane 1's RtMathPortInit();
 // do NOT read the env var here.
 void RtMathTransformRegister();

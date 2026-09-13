@@ -45,7 +45,6 @@ extern void RtIo_Persistence_SetBool(void* self, const char* section, const char
 // been constructed but not started — a probe that allocates from a *PortInit
 // faults on a null `_singleton` at +0x640 (lane PKG2). The first RegisterInput
 // call is provably safe because the caller is itself about to allocate a node.
-extern "C" void RtCollectionSetAvlE24ProbeMaybeRun();
 // Wave 9 lane ENGIO. Runs at most once, and only when
 // BANISHED_RT_INPUTUPD_PROBE=1. Hooked from KeyMap::GetValue rather than
 // from the function it verifies, because Input::Device::Update has NO
@@ -263,7 +262,6 @@ using SetRebalanceFn  = void (*)(void* setPtr, BindingNode** parentSlot);
 void RtInput_KeyMap_RegisterInput(void* self, int32_t id, int32_t device,
                                   int32_t inputId, const char* name, bool exclusive) {
     RT_DIFF_BEGIN("Input::KeyMap::RegisterInput");
-    RtCollectionSetAvlE24ProbeMaybeRun();   // no-op unless BANISHED_RT_SETAVL24_PROBE=1
     static auto allocNode = reinterpret_cast<SetAllocNodeFn>(
         ResolveAddr(Module::Runtime, 0x180023060));
     static auto rebalance = reinterpret_cast<SetRebalanceFn>(

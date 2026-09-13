@@ -126,7 +126,6 @@ void SortByKey70(void** first, int32_t count) {
     // allocates, so it cannot run from a *PortInit. In practice THIS is the
     // first of the lane's entry points the boot reaches, because LoadPackages
     // runs before Object::Factory::Startup.
-    RtCollectionAvlProbeMaybeRun();
     void** stackLo[62];
     void** stackHi[62];
     int64_t depth = 0;

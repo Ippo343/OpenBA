@@ -49,8 +49,7 @@
 // PORTABILITY: this file calls the allocator by ADDRESS (0x1800c7a50 /
 // 0x1800c7ad0), the door runtime/src/collection/array.cpp opened and for the
 // same two reasons — it keeps <windows.h> out of runtime/src (PLAN.md §4.1),
-// and it keeps the heap whole (BANISHED_RT_ALLOC's standing NO-GO: a heap
-// cannot be half ours). The LANE E DEPENDENCY stated in array.cpp's banner
+// and it keeps the heap whole (a heap cannot be half ours). The LANE E DEPENDENCY stated in array.cpp's banner
 // covers this file too.
 // ============================================================================
 
@@ -192,8 +191,7 @@ int RtClosure2bIoRegister();
 // ============================================================================
 // Registration — the one hook standalone/resolve_standalone.cpp calls.
 //
-// Unconditional: DIRECTION.md §2.3, "a port registers unconditionally". No
-// BANISHED_RT_* switch is added by this batch.
+// Unconditional: DIRECTION.md §2.3, "a port registers unconditionally".
 //
 // Every address is a LITERAL so tools/runtime_census.py can see it
 // (reference_census_cannot_see_nonliteral_registrations.md).

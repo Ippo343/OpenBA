@@ -16,21 +16,10 @@
 // C++ methods returning by value is the wild write described in the memory
 // note reference_hidden_retslot_wild_write.md.
 //
-// ALLOCATION MUST STAY ON THE DLL'S HEAP. String objects cross the DLL
-// boundary in both directions constantly (2,388 inbound call edges), so a
-// buffer we allocate is routinely freed by the DLL and vice versa. Everything
-// here allocates and frees through Runtime-x64.dll's own
-// System::MemoryAllocator, resolved with RtOriginal<>() rather than
-// ResolveExport() so that a future MemoryAllocator port (opt-in, another
-// lane) cannot silently split the heap in two.
-//
-// DIFFABILITY. Most of this class mutates: a ctor writes into a live object, a
-// dtor decrements a SHARED refcount, Set/operator=/operator+= do both. Running
-// the original as an oracle would mutate twice, and on a refcounted buffer
-// that is a double free. Those functions are therefore left undiffed, each
-// with a comment saying so. What IS diffed: the three comparisons, ToFloat,
-// SubString, and both free operator+ overloads — all const on their inputs,
-// each producing an output the original can be handed its own copy of.
+// ALLOCATION GOES THROUGH THE ONE REGISTERED ALLOCATOR. String objects and
+// their refcounted buffers are handed around the whole tree, so every buffer
+// must come from and go back to the same heap. Both ends resolve
+// System::MemoryAllocator's MemAlloc/MemFree through the registry.
 // ============================================================================
 
 #include <cstdarg>
@@ -50,9 +39,7 @@ namespace RtSystem {
 // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z     retail 0x1800c7ad0
 // Both are the lock-wrapped statics: MemAlloc = EnterCS(_singleton+0x640);
 // Allocate(_singleton, size, align); LeaveCS. String::SetLength inlines that
-// same sequence rather than calling MemAlloc, so the two are interchangeable,
-// and calling the export keeps standalone/allocator_lock.cpp's detour on
-// Allocate/Free in the path exactly as before.
+// same sequence rather than calling MemAlloc, so the two are interchangeable.
 //
 // NOTE: the ...@SAPEAXII@Z ("unsigned, unsigned") spelling of MemAlloc that
 // circulates in this project's notes is NOT an export of Runtime-x64.dll. The
@@ -64,49 +51,21 @@ MemAllocFn g_memAlloc = nullptr;
 MemFreeFn  g_memFree  = nullptr;
 }  // namespace
 
-// ---------------------------------------------------------------------------
-// CUTOVER: the raw door has nothing behind it, so fall back to the PORT
-// ---------------------------------------------------------------------------
-// The choice of RtOriginal<>() over ResolveExport() above is deliberate and
-// still right WHILE THE DLL IS PRESENT: it pins both halves of every String
-// buffer to one heap, so a half-ported MemoryAllocator cannot free on our heap
-// something the DLL allocated. Lane IOA found the other half of that story.
-//
-// With Runtime-x64.dll ABSENT, RtOriginal<>() returns NULL and `g_memFree(p)`
-// is an EXEC-of-0 -- on a tree where ?MemFree@MemoryAllocator@System@@ IS
-// ported and registered (allocator.cpp:1274). The port exists and this door
-// refuses to use it. That is the MIRROR of the failure this wave has been
-// chasing (closing a raw door over a symbol with NO port); same file family,
-// opposite direction, and it is TREE-WIDE, not one lane's: every landed
-// String-using port on the boot path frees through here, IO::Persistence
-// included.
-//
-// The fix keeps the original guarantee EXACTLY. The raw door is still tried
-// first, so with the DLL present behaviour is byte-identical and the heap
-// cannot split. Only when the raw door yields null -- which means there is no
-// DLL heap to split with -- does it fall through to the registered port, which
-// is then the only allocator in the process. Registration is all-or-nothing
-// (RegisterAllocatorExports registers MemAlloc and MemFree together), so the
-// two halves can never disagree about whose heap they are on.
-
+// Registration is all-or-nothing (RegisterAllocatorExports registers MemAlloc
+// and MemFree together), so the two halves can never disagree about whose heap
+// they are on.
 
 void* RtMemAlloc(uint64_t size, int align) {
-    if (!g_memAlloc) {
-        g_memAlloc = RtOriginal<MemAllocFn>("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z");
-        if (!g_memAlloc)   // DLL absent -- see the CUTOVER note above
-            g_memAlloc = reinterpret_cast<MemAllocFn>(
-                ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
-    }
+    if (!g_memAlloc)
+        g_memAlloc = reinterpret_cast<MemAllocFn>(
+            ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
     return g_memAlloc(size, align);
 }
 
 void RtMemFree(void* p) {
-    if (!g_memFree) {
-        g_memFree = RtOriginal<MemFreeFn>("?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
-        if (!g_memFree)    // DLL absent -- see the CUTOVER note above
-            g_memFree = reinterpret_cast<MemFreeFn>(
-                ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
-    }
+    if (!g_memFree)
+        g_memFree = reinterpret_cast<MemFreeFn>(
+            ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
     g_memFree(p);
 }
 
@@ -261,20 +220,11 @@ static String* RtStringConcatImpl(String* ret, const String* lhs, const String* 
 }
 
 String* RtSystem_String_Concat(String* ret, const String* lhs, const String* rhs) {
-    RT_DIFF_BEGIN("System::operator+(String,String)");
     RtStringConcatImpl(ret, lhs, rhs);
     // `ret` aliasing an input would mean ours had overwritten the oracle's
     // input before it ran (WAVE1.md, "the oracle must not corrupt its own
     // experiment"). A hidden return slot is always a fresh temporary in
     // practice; the guard says so rather than assuming it.
-    if (rt_diff_on__ && ret != lhs && ret != rhs) {
-        String theirs{nullptr};
-        RtOriginal<String* (*)(String*, const String*, const String*)>(
-            "??HSystem@@YA?AVString@0@AEBV10@0@Z")(&theirs, lhs, rhs);
-        RT_DIFF_SHADOW(RtStringSameText(ret, &theirs), ret->data ? ret->data : "(null)",
-                       theirs.data ? theirs.data : "(null)");
-        RtString_ReleaseInline(&theirs);
-    }
     return ret;
 }
 
@@ -321,16 +271,7 @@ static String* RtStringConcatCStrImpl(String* ret, const String* lhs, const char
 }
 
 String* RtSystem_String_ConcatCStr(String* ret, const String* lhs, const char* rhs) {
-    RT_DIFF_BEGIN("System::operator+(String,char*)");
     RtStringConcatCStrImpl(ret, lhs, rhs);
-    if (rt_diff_on__ && ret != lhs) {
-        String theirs{nullptr};
-        RtOriginal<String* (*)(String*, const String*, const char*)>(
-            "??HSystem@@YA?AVString@0@AEBV10@PEBD@Z")(&theirs, lhs, rhs);
-        RT_DIFF_SHADOW(RtStringSameText(ret, &theirs), ret->data ? ret->data : "(null)",
-                       theirs.data ? theirs.data : "(null)");
-        RtString_ReleaseInline(&theirs);
-    }
     return ret;
 }
 
@@ -446,7 +387,6 @@ String* RtSystem_String_AppendAssignCStr(String* self, String* ret, const char* 
 // Compares the STORED lengths first (data[-8]), not strlen; two strings of
 // different stored length are unequal without touching the characters.
 bool RtSystem_String_Equals(const String* self, const String* other) {
-    RT_DIFF_BEGIN("System::String::operator==(String)");
     const char* a = self->data;
     const char* b = other->data;
     const int la = a ? StringLength(a) : 0;
@@ -460,15 +400,11 @@ bool RtSystem_String_Equals(const String* self, const String* other) {
     else
         ours = true;
 
-    RT_DIFF_SCALAR(ours,
-        RtOriginal<bool (*)(const String*, const String*)>(
-            "??8String@System@@QEBA_NAEBV01@@Z")(self, other));
     return ours;
 }
 
 // ??8String@System@@QEBA_NPEBD@Z  retail 0x180053c00
 bool RtSystem_String_EqualsCStr(const String* self, const char* other) {
-    RT_DIFF_BEGIN("System::String::operator==(char*)");
     bool ours;
     if (self->data == nullptr)
         ours = (other == nullptr);
@@ -477,9 +413,6 @@ bool RtSystem_String_EqualsCStr(const String* self, const char* other) {
     else
         ours = false;
 
-    RT_DIFF_SCALAR(ours,
-        RtOriginal<bool (*)(const String*, const char*)>(
-            "??8String@System@@QEBA_NPEBD@Z")(self, other));
     return ours;
 }
 
@@ -488,7 +421,6 @@ bool RtSystem_String_EqualsCStr(const String* self, const char* other) {
 // and `null < null` is false, but `null < x` is true. That asymmetry is the
 // ordering every Collection::Set<String> in the DLL is built on.
 bool RtSystem_String_Less(const String* self, const String* other) {
-    RT_DIFF_BEGIN("System::String::operator<");
     bool ours;
     if (other->data == nullptr)
         ours = false;
@@ -497,9 +429,6 @@ bool RtSystem_String_Less(const String* self, const String* other) {
     else
         ours = RtString_StrCompare(self->data, other->data) < 0;
 
-    RT_DIFF_SCALAR(ours,
-        RtOriginal<bool (*)(const String*, const String*)>(
-            "??MString@System@@QEBA_NAEBV01@@Z")(self, other));
     return ours;
 }
 
@@ -515,7 +444,6 @@ bool RtSystem_String_Less(const String* self, const String* other) {
 // and the inclusive-end convention is load-bearing: Filename::AdjustDelimiters
 // and String::FormatParamList both depend on it.
 String* RtSystem_String_SubString(const String* self, String* ret, int start, int end) {
-    RT_DIFF_BEGIN("System::String::SubString");
     const int count = (end - start) + 1;
     ret->data = nullptr;
     RtString_SetLength(ret, count);
@@ -529,19 +457,6 @@ String* RtSystem_String_SubString(const String* self, String* ret, int start, in
     // practice, but if it ever were not, ours would have overwritten the input
     // before theirs ran and the oracle would manufacture a divergence
     // (WAVE1.md, "the oracle must not corrupt its own experiment").
-    if (rt_diff_on__ && ret != self) {
-        String theirs{nullptr};
-        RtOriginal<String* (*)(const String*, String*, int, int)>(
-            "?SubString@String@System@@QEBA?AV12@HH@Z")(self, &theirs, start, end);
-        const bool equal =
-            ((ret->data == nullptr) == (theirs.data == nullptr)) &&
-            (ret->data == nullptr ||
-             (StringLength(ret->data) == StringLength(theirs.data) &&
-              std::strcmp(ret->data, theirs.data) == 0));
-        RT_DIFF_SHADOW(equal, ret->data ? ret->data : "(null)",
-                       theirs.data ? theirs.data : "(null)");
-        RtString_ReleaseInline(&theirs);
-    }
     return ret;
 }
 
@@ -555,7 +470,6 @@ String* RtSystem_String_SubString(const String* self, String* ret, int start, in
 // in chunks of 1e20 / 1e8 / 10, which is NOT the same rounding as a single
 // pow10 table lookup — hence the literal transcription.
 float RtSystem_String_ToFloat(const char* s) {
-    RT_DIFF_BEGIN("System::String::ToFloat");
     float ours;
     if (s == nullptr) {
         ours = 0.0f;
@@ -644,8 +558,6 @@ float RtSystem_String_ToFloat(const char* s) {
 
     // Bit equality demanded: this is integer-and-multiply arithmetic with no
     // transcendental in it, so a faithful port must round identically.
-    RT_DIFF_FLOAT(ours,
-        RtOriginal<float (*)(const char*)>("?ToFloat@String@System@@SAMPEBD@Z")(s), 0.0f);
     return ours;
 }
 
@@ -768,7 +680,6 @@ void StringArray_DestroyRange(String* p, int n) {
 // `CMP R9D,R8D / JGE`) skips the case. `fmt == nullptr` returns 0 before the
 // strlen.
 int RtSystem_String_FormatParamCount(const char* fmt) {
-    RT_DIFF_BEGIN("System::String::FormatParamCount");
     int result = 0;
     if (fmt != nullptr) {
         int len = 0;
@@ -782,7 +693,6 @@ int RtSystem_String_FormatParamCount(const char* fmt) {
         }
     }
     using Fn = int (*)(const char*);
-    RT_DIFF_SCALAR(result, RtOriginal<Fn>("?FormatParamCount@String@System@@SAHPEBD@Z")(fmt));
     return result;
 }
 
@@ -813,7 +723,6 @@ int RtSystem_String_FormatParamCount(const char* fmt) {
 //    `end < start`, i.e. a zero-length append, rather than skipping the append.
 //    Transcribed as written.
 String* RtSystem_String_FormatParamList(String* ret, const String* fmt, const String* params) {
-    RT_DIFF_BEGIN("System::String::FormatParamList");
 
     String work{nullptr};
     RtString_AdoptInline(&work, fmt->data);          // refcounted copy of fmt
@@ -862,19 +771,6 @@ String* RtSystem_String_FormatParamList(String* ret, const String* fmt, const St
     // (reference_oracle_must_snapshot_aliased_inputs.md): if it ever did, ours
     // would have destroyed the input before theirs ran and the oracle would
     // manufacture a divergence rather than find one.
-    if (rt_diff_on__ && ret != fmt && ret != params) {
-        String theirs{nullptr};
-        RtOriginal<String* (*)(String*, const String*, const String*)>(
-            "?FormatParamList@String@System@@SA?AV12@AEBV12@PEBV12@@Z")(&theirs, fmt, params);
-        const bool equal =
-            ((ret->data == nullptr) == (theirs.data == nullptr)) &&
-            (ret->data == nullptr ||
-             (StringLength(ret->data) == StringLength(theirs.data) &&
-              std::strcmp(ret->data, theirs.data) == 0));
-        RT_DIFF_SHADOW(equal, ret->data ? ret->data : "(null)",
-                       theirs.data ? theirs.data : "(null)");
-        RtString_ReleaseInline(&theirs);
-    }
     return ret;
 }
 
@@ -884,10 +780,8 @@ String* RtSystem_String_FormatIndexed(String* ret, const char* fmt, ...) {
         return ret;
     }
 
-    // Called DIRECTLY now that both are ported below — not through
-    // RT_ORIGINAL_ONCE (which would be a port bypass and a GetProcAddress) and
-    // not through RT_EXPORT_ONCE either, since the callee is in this same
-    // translation unit and needs no resolution at all.
+    // Called DIRECTLY: the callee is in this same translation unit and needs
+    // no resolution at all.
     const int paramCount = RtSystem_String_FormatParamCount(fmt);
 
     if (paramCount == 0) {
@@ -939,12 +833,10 @@ String* RtSystem_String_FormatIndexed(String* ret, const char* fmt, ...) {
 // is either nulled or holds block-8), which is a weaker claim than a diff and
 // is labelled as one.
 void RtSystem_String_Release(String* self) {
-    RT_DIFF_BEGIN("System::String::Release [no oracle: mutates a shared refcount]");
     char* before = self->data;
     RtString_ReleaseInline(self);
     const bool ok = (before == nullptr) ? (self->data == nullptr)
                                         : (self->data == nullptr || self->data == before - 8);
-    RT_DIFF_SHADOW(ok, "released", "not diffable");
 }
 
 // ?ToInteger@String@System@@SAHPEBD@Z  retail 0x18003f620
@@ -962,7 +854,6 @@ void RtSystem_String_Release(String* self) {
 // No overflow handling and no errno: past INT_MAX retail simply wraps, and so
 // do we.
 int RtSystem_String_ToInteger(const char* s) {
-    RT_DIFF_BEGIN("System::String::ToInteger");
     int result = 0;
     if (s != nullptr) {
         const char* p = s;
@@ -977,7 +868,6 @@ int RtSystem_String_ToInteger(const char* s) {
         result *= sign;
     }
     using Fn = int (*)(const char*);
-    RT_DIFF_SCALAR(result, RtOriginal<Fn>("?ToInteger@String@System@@SAHPEBD@Z")(s));
     return result;
 }
 
@@ -1139,174 +1029,6 @@ void RtSystem_String_Serialize(String* self, void* serializerRaw) {
 
 }  // namespace RtSystem
 
-namespace RtSystem {
-
-// ============================================================================
-// WAVE 22 LANE SYSBODY — the StrCompare input sweep
-// ============================================================================
-// WHY A SWEEP AND NOT A CALL COUNT. `RtString_StrCompare` has had a correct
-// body since Wave 2 and was never registered, so until this wave it was
-// reachable only from six in-tree callers and never from the exported name.
-// The obvious "verification" — register it, boot, read `calls=` — is exactly
-// the trap reference_uniform_population_is_not_a_verification.md names: a
-// previously ported inline strcmp returned 0 for EVERY distinct pair sharing a
-// first byte, the shared BST find still "worked" because equal-compares are
-// what a find mostly does, and thousands of agreeing calls read as thorough.
-// A population whose answers are all the same cannot distinguish a comparator
-// from a constant.
-//
-// So this is an INPUT SWEEP against the shipped export, over a corpus chosen
-// so the answers are NOT uniform, and it compares the FULL int — not the sign.
-// Sign-only agreement is the weaker claim, and retail's contract here is the
-// magnitude too: `String::operator<` and the mod-list tie-break both only read
-// the sign, but `StrCompare` is exported and returns a difference, and the
-// walk-then-test ordering in the body above gets the sign right by accident
-// while getting the magnitude wrong (see the comment inside the loop). A
-// sign-only oracle would pass the very defect that comment exists to prevent.
-//
-// THE EFFECTIVENESS CONTROL. The sweep prints, per class, how many pairs it
-// actually produced AND how many of those returned non-zero:
-//
-//   diffAtN — pairs that SHARE byte 0 and differ at some index > 0. This is
-//             the precise defect class from the memory note. If its non-zero
-//             count is not equal to its total, our body is the broken one; if
-//             its total is 0 the corpus is the broken one. Both are printed.
-//   diffAt0 — differ at the first byte.
-//   prefix  — one string is a proper prefix of the other (the terminator is
-//             the differing byte, so this exercises the "walked one past"
-//             arm).
-//   equal   — must return 0 on both sides.
-//   highBit — the differing byte is >= 0x80 on at least one side. This is the
-//             MOVSX class; with a MOVZX port these are the ONLY pairs whose
-//             magnitude changes, so a zero here means the signedness fix above
-//             is untested rather than confirmed.
-//   nulls   — null/null, null/x, x/null.
-//
-// It also prints the number of DISTINCT return values observed. One distinct
-// value over N cases is the uniform-population signature and is reported as a
-// failure of the sweep, not a pass of the port.
-//
-// PURE, SO NO ALLOCATOR ORDERING PROBLEM. StrCompare touches no heap and no
-// singleton, unlike the Compression probe one file over, so this can and does
-// run from RtSystemPortInit rather than needing a live-heap hook.
-namespace {
-
-struct StrCmpClassCounts {
-    long long cases = 0;
-    long long nonZero = 0;
-};
-
-void StrCmpTally(StrCmpClassCounts* c, int v) { ++c->cases; if (v != 0) ++c->nonZero; }
-
-}  // namespace
-
-void RtSystem_StrCompareProbe() {
-    using StrCompareFn = int (*)(const char*, const char*);
-    // RT_RAW_OK: this is an ORACLE. It must reach the SHIPPED body, so it is
-    // ResolveExportRaw on purpose and not ResolveExport — going through the
-    // registry after the line below registers our port would compare our body
-    // with itself (reference_registering_an_address_converts_a_selfcheck_into_an_oracle.md).
-    StrCompareFn theirs = RtOriginal<StrCompareFn>("?StrCompare@String@System@@SAHPEBD0@Z");
-    if (theirs == nullptr) {
-        printf("[SYSBODY/StrCompare] sweep SKIPPED: no shipped export (cutover build?)\n");
-        return;
-    }
-    // Deliberately NOT reinterpret_cast<StrCompareFn>(&RtString_StrCompare):
-    // ours is called as a plain C++ call to the body in this translation unit.
-    // Nothing here reaches it by address or by name.
-
-    static const char* const kCorpus[] = {
-        "",  "a", "b", "A",
-        "ab", "aa", "ba", "abc", "abd", "abcd", "abce",
-        "banished", "banisher", "banishe", "banished2",
-        "the quick brown fox", "the quick brown fix",
-        "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
-        "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzy",
-        // High-bit bytes: the MOVSX class. \x80 and \xff are negative as
-        // signed chars and positive as unsigned, so these pairs are the only
-        // ones whose MAGNITUDE separates the two widenings.
-        "\x7f", "\x80", "\xff", "a\x80", "a\x7f", "a\xff", "\x80\x80", "\x80\x01",
-    };
-    const int kN = static_cast<int>(sizeof(kCorpus) / sizeof(kCorpus[0]));
-
-    StrCmpClassCounts equal, diffAt0, diffAtN, prefixCls, highBit, nulls;
-    long long cases = 0, divergences = 0;
-    // Distinct return values, for the uniform-population control. A small
-    // fixed table is enough: a comparator over this corpus returns a handful
-    // of small differences, and anything beyond 64 distinct values is already
-    // far past the "it is not a constant" bar.
-    int seen[64];
-    int seenCount = 0;
-
-    const char* const kNullSide = nullptr;
-    for (int i = -1; i < kN; ++i) {
-        for (int j = -1; j < kN; ++j) {
-            const char* a = (i < 0) ? kNullSide : kCorpus[i];
-            const char* b = (j < 0) ? kNullSide : kCorpus[j];
-
-            const int ours = RtString_StrCompare(a, b);
-            const int them = theirs(a, b);
-            ++cases;
-            if (ours != them) {
-                if (divergences < 8) {
-                    printf("[SYSBODY/StrCompare] DIVERGENCE a=%d b=%d ours=%d theirs=%d\n",
-                           i, j, ours, them);
-                }
-                ++divergences;
-            }
-
-            bool isNew = true;
-            for (int k = 0; k < seenCount; ++k) if (seen[k] == ours) { isNew = false; break; }
-            if (isNew && seenCount < 64) seen[seenCount++] = ours;
-
-            // Classify on the INPUTS, never on the answer — a class derived
-            // from the return value would agree with any body by construction
-            // (reference_recheck_must_match_its_own_proof.md).
-            if (a == nullptr || b == nullptr) { StrCmpTally(&nulls, ours); continue; }
-
-            int d = 0;
-            while (a[d] != '\0' && b[d] != '\0' && a[d] == b[d]) ++d;
-            const bool same    = (a[d] == '\0' && b[d] == '\0');
-            const bool isPfx   = !same && (a[d] == '\0' || b[d] == '\0');
-            if (same)                 StrCmpTally(&equal, ours);
-            else if (isPfx)           StrCmpTally(&prefixCls, ours);
-            else if (d == 0)          StrCmpTally(&diffAt0, ours);
-            else                      StrCmpTally(&diffAtN, ours);
-            if (!same && (static_cast<unsigned char>(a[d]) >= 0x80 ||
-                          static_cast<unsigned char>(b[d]) >= 0x80))
-                StrCmpTally(&highBit, ours);
-        }
-    }
-
-    printf("[SYSBODY/StrCompare] sweep: %lld cases, %lld divergences (FULL int, not sign)\n",
-           cases, divergences);
-    printf("[SYSBODY/StrCompare] classes (cases/non-zero): equal=%lld/%lld diffAt0=%lld/%lld "
-           "diffAtN=%lld/%lld prefix=%lld/%lld highBit=%lld/%lld nulls=%lld/%lld\n",
-           equal.cases, equal.nonZero, diffAt0.cases, diffAt0.nonZero,
-           diffAtN.cases, diffAtN.nonZero, prefixCls.cases, prefixCls.nonZero,
-           highBit.cases, highBit.nonZero, nulls.cases, nulls.nonZero);
-
-    // The control, evaluated rather than merely described. A predicate written
-    // into a warrant and never evaluated is not a check
-    // (reference_a_predicate_nobody_evaluates.md).
-    const bool populated = diffAtN.cases > 0 && diffAt0.cases > 0 &&
-                           prefixCls.cases > 0 && equal.cases > 0 &&
-                           highBit.cases > 0 && nulls.cases > 0;
-    const bool discriminating = diffAtN.nonZero == diffAtN.cases &&
-                                diffAt0.nonZero == diffAt0.cases &&
-                                prefixCls.nonZero == prefixCls.cases &&
-                                equal.nonZero == 0;
-    printf("[SYSBODY/StrCompare] control: %d distinct return values; corpus %s; "
-           "answers %s -- %s\n",
-           seenCount,
-           populated ? "POPULATES ALL SIX CLASSES" : "*** A CLASS IS EMPTY ***",
-           discriminating ? "DISCRIMINATE" : "*** UNIFORM WITHIN A CLASS ***",
-           (divergences == 0 && populated && discriminating && seenCount > 4)
-               ? "VERIFIED"
-               : "*** NOT a verification ***");
-}
-
-}  // namespace RtSystem
 
 // ============================================================
 // Registration
