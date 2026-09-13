@@ -746,8 +746,11 @@ void DrawBody(SaveLoad* self, Context* ctx, void* material) {
     }
 
     {
+        // Was `Matrix identity; memset(&identity, 0, sizeof(identity));`.
+        // ENDGAME B.3.1 made Math::Matrix a real class whose default ctor
+        // (retail 0x18001d770) zeroes all sixteen cells, so the declaration
+        // alone is the memset, and -Wclass-memaccess is not tripped.
         Matrix identity;
-        std::memset(&identity, 0, sizeof(identity));
         identity.m[0] = 1.0f; identity.m[5] = 1.0f; identity.m[10] = 1.0f; identity.m[15] = 1.0f;
         RT_EXPORT_ONCE(SetTransformFn, "?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z")(
             ctx, 0, &identity);

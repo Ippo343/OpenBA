@@ -5,10 +5,17 @@
 // Wave 1, Lane 1 of the Runtime-x64.dll port (docs/runtime_port/PLAN.md §4.2/§6).
 // Every function below is a byte-faithful port of the decompilation at the
 // retail address named in its comment (Runtime-x64.dll, image base
-// 0x180000000, decompiled 2026-09-06). See runtime/types/math/Math.h for the
-// governing ABI note: every one of these classes has a user-declared ctor, so
-// MSVC returns it BY MEMORY (hidden return-slot pointer, RAX = that pointer
-// on return).
+// 0x180000000, decompiled 2026-09-06).
+//
+// ENDGAME B.3.1 step 1: the bodies MOVED onto the real classes in
+// runtime/types/math/Math.h. They were not rewritten — every expression, every
+// term order and every branch is the one Wave 1 transcribed. What changed is
+// only the plumbing: the hidden return slot the DLL boundary needed is gone
+// (there is no cross-compiler ABI any more, B31_RULES), so a function that
+// wrote `*ret` and returned it now returns by value. The `RtMath_*` free
+// functions at the bottom of this file are one-line shims onto the members,
+// kept so that no caller has to move in the same commit; they and their
+// registry rows die in step 2.
 //
 // FUN_180128110 (sqrt) and FUN_180126680/FUN_180127d90/FUN_180126d10
 // (atan2/sinf/cosf) were decompiled and confirmed to be plain CRT math
@@ -33,26 +40,31 @@ namespace {
 constexpr float kRadToDeg = 57.29578f;  // 0x180161708
 }  // namespace
 
+namespace Math {
+
 // ============================================================
 // Math::Scalar
 // ============================================================
 
 // ?Abs@Scalar@Math@@QEBA?AV12@XZ  retail 0x1800646b0
-Scalar* RtMath_Scalar_Abs(const Scalar* self, Scalar* ret) {
-    ret->v = std::fabs(self->v);
+Scalar Scalar::Abs() const {
+    Scalar ret;
+    ret.v = std::fabs(this->v);
     return ret;
 }
 
 // ?Lerp@Scalar@Math@@QEAA?AV12@AEBV12@0@Z  retail 0x1800218c0
 // Non-const (QEAA) but reads only `this`; t is the 3rd arg (R9).
-Scalar* RtMath_Scalar_Lerp(const Scalar* self, Scalar* ret, const Scalar* to, const Scalar* t) {
-    ret->v = self->v + (to->v - self->v) * t->v;
+Scalar Scalar::Lerp(const Scalar& to, const Scalar& t) {
+    Scalar ret;
+    ret.v = this->v + (to.v - this->v) * t.v;
     return ret;
 }
 
 // ?Max@Scalar@Math@@QEBA?AV12@AEBV12@@Z  retail 0x18005ff60
-Scalar* RtMath_Scalar_Max(const Scalar* self, Scalar* ret, const Scalar* other) {
-    ret->v = (other->v < self->v) ? self->v : other->v;
+Scalar Scalar::Max(const Scalar& other) const {
+    Scalar ret;
+    ret.v = (other.v < this->v) ? this->v : other.v;
     return ret;
 }
 
@@ -60,85 +72,87 @@ Scalar* RtMath_Scalar_Max(const Scalar* self, Scalar* ret, const Scalar* other) 
 // Math::Vector2
 // ============================================================
 
-// ??0Vector2@Math@@QEAA@XZ  retail 0x180060030 (default ctor, RAX = this, not diffed: a ctor
-// has no independent "original" result to compare — it just zeroes memory).
-Vector2* RtMath_Vector2_Ctor(Vector2* self) {
-    self->x = 0.0f;
-    self->y = 0.0f;
-    return self;
-}
+// ??0Vector2@Math@@QEAA@XZ  retail 0x180060030 — the default ctor. It zeroes
+// both fields; that body is now the constexpr member initialiser in Math.h
+// (B31_RULES rule 5: read retail's, and it is not a no-op).
 
 // ??0Vector2@Math@@QEAA@AEBVScalar@1@0@Z  retail 0x180070db0
-Vector2* RtMath_Vector2_Ctor_ss(Vector2* self, const Scalar* x, const Scalar* y) {
-    self->x = x->v;
-    self->y = y->v;
-    return self;
+Vector2::Vector2(const Scalar& x_, const Scalar& y_) {
+    this->x = x_.v;
+    this->y = y_.v;
 }
 
 // ??XVector2@Math@@QEAAXAEBV01@@Z  retail 0x18005ffd0  (operator*=, void return, mutates self
 // in place — not diffed here since diffing would require running the original on live state
 // twice; the formula is a two-multiply and trivially verified by inspection).
-void RtMath_Vector2_MulAssign(Vector2* self, const Vector2* rhs) {
-    self->x *= rhs->x;
-    self->y *= rhs->y;
+void Vector2::operator*=(const Vector2& rhs) {
+    this->x *= rhs.x;
+    this->y *= rhs.y;
 }
 
 // ?Dot@Vector2@Math@@QEBA?AVScalar@2@AEBV12@@Z  retail 0x18006c840
-Scalar* RtMath_Vector2_Dot(const Vector2* self, Scalar* ret, const Vector2* rhs) {
-    ret->v = self->x * rhs->x + self->y * rhs->y;
+Scalar Vector2::Dot(const Vector2& rhs) const {
+    Scalar ret;
+    ret.v = this->x * rhs.x + this->y * rhs.y;
     return ret;
 }
 
 // ?Max@Vector2@Math@@QEBA?AV12@AEBV12@@Z  retail 0x180060330
-Vector2* RtMath_Vector2_Max(const Vector2* self, Vector2* ret, const Vector2* rhs) {
-    ret->x = (self->x <= rhs->x) ? rhs->x : self->x;
-    ret->y = (self->y <= rhs->y) ? rhs->y : self->y;
+Vector2 Vector2::Max(const Vector2& rhs) const {
+    Vector2 ret;
+    ret.x = (this->x <= rhs.x) ? rhs.x : this->x;
+    ret.y = (this->y <= rhs.y) ? rhs.y : this->y;
     return ret;
 }
 
 // ?Min@Vector2@Math@@QEBA?AV12@AEBV12@@Z  retail 0x1800602e0
-Vector2* RtMath_Vector2_Min(const Vector2* self, Vector2* ret, const Vector2* rhs) {
-    ret->x = (rhs->x <= self->x) ? rhs->x : self->x;
-    ret->y = (rhs->y <= self->y) ? rhs->y : self->y;
+Vector2 Vector2::Min(const Vector2& rhs) const {
+    Vector2 ret;
+    ret.x = (rhs.x <= this->x) ? rhs.x : this->x;
+    ret.y = (rhs.y <= this->y) ? rhs.y : this->y;
     return ret;
 }
 
 // ?Length@Vector2@Math@@QEBA?AVScalar@2@XZ  retail 0x18006c880
-Scalar* RtMath_Vector2_Length(const Vector2* self, Scalar* ret) {
-    ret->v = RtLibm::Sqrt(self->x * self->x + self->y * self->y);
+Scalar Vector2::Length() const {
+    Scalar ret;
+    ret.v = RtLibm::Sqrt(this->x * this->x + this->y * this->y);
     return ret;
 }
 
 // ?LengthSquared@Vector2@Math@@QEBA?AVScalar@2@XZ  retail 0x18006c860
-Scalar* RtMath_Vector2_LengthSquared(const Vector2* self, Scalar* ret) {
-    ret->v = self->x * self->x + self->y * self->y;
+Scalar Vector2::LengthSquared() const {
+    Scalar ret;
+    ret.v = this->x * this->x + this->y * this->y;
     return ret;
 }
 
 // ?Normalize@Vector2@Math@@QEBA?AV12@XZ  retail 0x18006c600  (by value; self unchanged)
-Vector2* RtMath_Vector2_Normalize(const Vector2* self, Vector2* ret) {
-    float len = RtLibm::Sqrt(self->x * self->x + self->y * self->y);
+Vector2 Vector2::Normalize() const {
+    Vector2 ret;
+    float len = RtLibm::Sqrt(this->x * this->x + this->y * this->y);
     if (len == 0.0f) {
-        *ret = *self;
+        ret = *this;
     } else {
         float inv = RtMathConst::kOne / len;
-        ret->x = self->x * inv;
-        ret->y = self->y * inv;
+        ret.x = this->x * inv;
+        ret.y = this->y * inv;
     }
     return ret;
 }
 
 // ?Normalize@Vector2@Math@@QEBA?AV12@AEAVScalar@2@@Z  retail 0x18006c7b0
 // Same as above but also writes the pre-normalize length out through `mag`.
-Vector2* RtMath_Vector2_NormalizeWithMag(const Vector2* self, Vector2* ret, Scalar* mag) {
-    float len = RtLibm::Sqrt(self->x * self->x + self->y * self->y);
-    mag->v = len;
+Vector2 Vector2::Normalize(Scalar& mag) const {
+    Vector2 ret;
+    float len = RtLibm::Sqrt(this->x * this->x + this->y * this->y);
+    mag.v = len;
     if (len == 0.0f) {
-        *ret = *self;
+        ret = *this;
     } else {
         float inv = RtMathConst::kOne / len;
-        ret->x = self->x * inv;
-        ret->y = self->y * inv;
+        ret.x = this->x * inv;
+        ret.y = this->y * inv;
     }
     return ret;
 }
@@ -150,127 +164,121 @@ Vector2* RtMath_Vector2_NormalizeWithMag(const Vector2* self, Vector2* ret, Scal
 // `*(this+8)` is the Serializer's Stream*, and slot +0x28 on the Stream's
 // vtable is "serialize N floats starting at this pointer" (retail passes the
 // float count as arg 2: 2/3/4 for Vector2/3/4).
-void RtMath_Vector2_Serialize(Vector2* self, void* serializer) {
+void Vector2::Serialize(void* serializer) {
     void* stream = *reinterpret_cast<void**>(reinterpret_cast<char*>(serializer) + 8);
     void* vtbl = *reinterpret_cast<void**>(stream);
     using SerializeFloatsFn = void(*)(void*, int, void*);
     SerializeFloatsFn fn = *reinterpret_cast<SerializeFloatsFn*>(reinterpret_cast<char*>(vtbl) + 0x28);
-    fn(stream, 2, self);
+    fn(stream, 2, this);
 }
 
 // ============================================================
 // Math::Vector3
 // ============================================================
 
-// ??0Vector3@Math@@QEAA@XZ  retail 0x180015070
-Vector3* RtMath_Vector3_Ctor(Vector3* self) {
-    self->x = 0.0f;
-    self->y = 0.0f;
-    self->z = 0.0f;
-    return self;
-}
-
-// ??0Vector3@Math@@QEAA@MMM@Z  retail 0x1800152d0  (three plain floats)
-Vector3* RtMath_Vector3_Ctor_fff(Vector3* self, float x, float y, float z) {
-    self->x = x;
-    self->y = y;
-    self->z = z;
-    return self;
-}
+// ??0Vector3@Math@@QEAA@XZ  retail 0x180015070 — zeroes x/y/z; that body is the
+// constexpr default ctor in Math.h.
+// ??0Vector3@Math@@QEAA@MMM@Z  retail 0x1800152d0 — three plain float stores;
+// that body is the constexpr (float,float,float) ctor in Math.h.
 
 // ??0Vector3@Math@@QEAA@AEBVScalar@1@00@Z  retail 0x180015120
-Vector3* RtMath_Vector3_Ctor_sss(Vector3* self, const Scalar* x, const Scalar* y, const Scalar* z) {
-    self->x = x->v;
-    self->y = y->v;
-    self->z = z->v;
-    return self;
+Vector3::Vector3(const Scalar& x_, const Scalar& y_, const Scalar& z_) {
+    this->x = x_.v;
+    this->y = y_.v;
+    this->z = z_.v;
 }
 
 // ??0Vector3@Math@@QEAA@AEBVScalar@1@@Z  retail 0x180015360  (splat one Scalar to x/y/z)
-Vector3* RtMath_Vector3_Ctor_s(Vector3* self, const Scalar* s) {
-    self->x = s->v;
-    self->y = s->v;
-    self->z = s->v;
-    return self;
+Vector3::Vector3(const Scalar& s) {
+    this->x = s.v;
+    this->y = s.v;
+    this->z = s.v;
 }
 
 // ?Cross@Vector3@Math@@QEBA?AV12@AEBV12@@Z  retail 0x180021b10
-Vector3* RtMath_Vector3_Cross(const Vector3* self, Vector3* ret, const Vector3* rhs) {
-    float x = self->y * rhs->z - self->z * rhs->y;
-    float y = rhs->x * self->z - self->x * rhs->z;
-    float z = self->x * rhs->y - rhs->x * self->y;
-    ret->x = x;
-    ret->y = y;
-    ret->z = z;
+Vector3 Vector3::Cross(const Vector3& rhs) const {
+    Vector3 ret;
+    float x_ = this->y * rhs.z - this->z * rhs.y;
+    float y_ = rhs.x * this->z - this->x * rhs.z;
+    float z_ = this->x * rhs.y - rhs.x * this->y;
+    ret.x = x_;
+    ret.y = y_;
+    ret.z = z_;
     return ret;
 }
 
 // ?Dot@Vector3@Math@@QEBA?AVScalar@2@AEBV12@@Z  retail 0x18001dff0
-Scalar* RtMath_Vector3_Dot(const Vector3* self, Scalar* ret, const Vector3* rhs) {
-    ret->v = rhs->y * self->y + rhs->x * self->x + rhs->z * self->z;
+Scalar Vector3::Dot(const Vector3& rhs) const {
+    Scalar ret;
+    ret.v = rhs.y * this->y + rhs.x * this->x + rhs.z * this->z;
     return ret;
 }
 
 // ?FromYawPitch@Vector3@Math@@SA?AV12@AEBVScalar@2@0@Z  retail 0x1800220b0 (static)
 // x = -cos(pitch_rad) * sin(yaw_rad); y = cos(pitch_rad) * cos(yaw_rad); z = sin(pitch_rad)
-Vector3* RtMath_Vector3_FromYawPitch(Vector3* ret, const Scalar* yaw, const Scalar* pitch) {
-    float yawRad = yaw->v * RtMathConst::kDegToRad;
-    float pitchRad = pitch->v * RtMathConst::kDegToRad;
+Vector3 Vector3::FromYawPitch(const Scalar& yaw, const Scalar& pitch) {
+    Vector3 ret;
+    float yawRad = yaw.v * RtMathConst::kDegToRad;
+    float pitchRad = pitch.v * RtMathConst::kDegToRad;
     float sinYaw = RtLibm::Sin(yawRad);
     float sinPitch = RtLibm::Sin(pitchRad);
     float cosYaw = RtLibm::Cos(yawRad);
     float cosPitch = RtLibm::Cos(pitchRad);
-    ret->z = sinPitch;
-    ret->x = -cosPitch * sinYaw;
-    ret->y = cosPitch * cosYaw;
+    ret.z = sinPitch;
+    ret.x = -cosPitch * sinYaw;
+    ret.y = cosPitch * cosYaw;
     return ret;
 }
 
 // ?Heading@Vector3@Math@@QEBAMXZ  retail 0x18007c900  (returns a plain float in XMM0)
 // FUN_180126680 was decompiled and is the CRT double atan2() (its own
 // domain-error fallback even names it "atan2f"); RtLibm::Atan2 reproduces it.
-float RtMath_Vector3_Heading(const Vector3* self) {
-    float ours = RtLibm::Atan2(-self->x, self->y) * kRadToDeg;
+float Vector3::Heading() const {
+    float ours = RtLibm::Atan2(-this->x, this->y) * kRadToDeg;
     return ours;
 }
 
 // ?Length@Vector3@Math@@QEBA?AVScalar@2@XZ  retail 0x1800219a0
-Scalar* RtMath_Vector3_Length(const Vector3* self, Scalar* ret) {
-    ret->v = RtLibm::Sqrt(self->x * self->x + self->y * self->y + self->z * self->z);
+Scalar Vector3::Length() const {
+    Scalar ret;
+    ret.v = RtLibm::Sqrt(this->x * this->x + this->y * this->y + this->z * this->z);
     return ret;
 }
 
 // ?Lerp@Vector3@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z  retail 0x18001d450
-Vector3* RtMath_Vector3_Lerp(const Vector3* self, Vector3* ret, const Vector3* to, const Scalar* t) {
-    float tt = t->v;
-    ret->x = self->x + tt * (to->x - self->x);
-    ret->y = self->y + (to->y - self->y) * tt;
-    ret->z = self->z + (to->z - self->z) * tt;
+Vector3 Vector3::Lerp(const Vector3& to, const Scalar& t) const {
+    Vector3 ret;
+    float tt = t.v;
+    ret.x = this->x + tt * (to.x - this->x);
+    ret.y = this->y + (to.y - this->y) * tt;
+    ret.z = this->z + (to.z - this->z) * tt;
     return ret;
 }
 
 // ?Min@Vector3@Math@@QEBA?AV12@AEBV12@@Z  retail 0x180015280
-Vector3* RtMath_Vector3_Min(const Vector3* self, Vector3* ret, const Vector3* rhs) {
-    ret->x = (rhs->x <= self->x) ? rhs->x : self->x;
-    ret->y = (rhs->y <= self->y) ? rhs->y : self->y;
-    ret->z = (rhs->z <= self->z) ? rhs->z : self->z;
+Vector3 Vector3::Min(const Vector3& rhs) const {
+    Vector3 ret;
+    ret.x = (rhs.x <= this->x) ? rhs.x : this->x;
+    ret.y = (rhs.y <= this->y) ? rhs.y : this->y;
+    ret.z = (rhs.z <= this->z) ? rhs.z : this->z;
     return ret;
 }
 
 // ?Normalize@Vector3@Math@@QEBA?AV12@AEAVScalar@2@@Z  retail 0x180021a20
 // Takes an explicit Scalar& out-param for the pre-normalize magnitude.
-Vector3* RtMath_Vector3_NormalizeWithMag(const Vector3* self, Vector3* ret, Scalar* mag) {
-    float len = RtLibm::Sqrt(self->x * self->x + self->y * self->y + self->z * self->z);
-    mag->v = len;
+Vector3 Vector3::Normalize(Scalar& mag) const {
+    Vector3 ret;
+    float len = RtLibm::Sqrt(this->x * this->x + this->y * this->y + this->z * this->z);
+    mag.v = len;
     if (len != 0.0f) {
         float inv = RtMathConst::kOne / len;
-        ret->x = self->x * inv;
-        ret->y = self->y * inv;
-        ret->z = self->z * inv;
+        ret.x = this->x * inv;
+        ret.y = this->y * inv;
+        ret.z = this->z * inv;
     } else {
-        ret->x = self->x;
-        ret->y = self->y;
-        ret->z = self->z;
+        ret.x = this->x;
+        ret.y = this->y;
+        ret.z = this->z;
     }
     return ret;
 }
@@ -280,25 +288,25 @@ Vector3* RtMath_Vector3_NormalizeWithMag(const Vector3* self, Vector3* ret, Scal
 // calls the Scalar&-out overload above, discarding the magnitude. Ported the
 // same way (no independent diff site — it is exactly NormalizeWithMag's diff,
 // twice, so a bare forwarding call keeps the two implementations in sync).
-Vector3* RtMath_Vector3_Normalize(const Vector3* self, Vector3* ret) {
+Vector3 Vector3::Normalize() const {
     Scalar scratchMag{};
-    return RtMath_Vector3_NormalizeWithMag(self, ret, &scratchMag);
+    return this->Normalize(scratchMag);
 }
 
 // ??8Vector3@Math@@QEBA_NAEBV01@@Z  retail 0x1800150a0  (operator==, bool in AL, no hidden slot)
-bool RtMath_Vector3_Equals(const Vector3* self, const Vector3* rhs) {
-    bool ours = self->x == rhs->x && self->y == rhs->y && self->z == rhs->z;
+bool Vector3::operator==(const Vector3& rhs) const {
+    bool ours = this->x == rhs.x && this->y == rhs.y && this->z == rhs.z;
     return ours;
 }
 
 // ?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800150e0 — see the Vector2
 // Serialize comment above; NOT diffable, same vtable-slot pattern, count = 3.
-void RtMath_Vector3_Serialize(Vector3* self, void* serializer) {
+void Vector3::Serialize(void* serializer) {
     void* stream = *reinterpret_cast<void**>(reinterpret_cast<char*>(serializer) + 8);
     void* vtbl = *reinterpret_cast<void**>(stream);
     using SerializeFloatsFn = void(*)(void*, int, void*);
     SerializeFloatsFn fn = *reinterpret_cast<SerializeFloatsFn*>(reinterpret_cast<char*>(vtbl) + 0x28);
-    fn(stream, 3, self);
+    fn(stream, 3, this);
 }
 
 // ============================================================
@@ -306,29 +314,77 @@ void RtMath_Vector3_Serialize(Vector3* self, void* serializer) {
 // ============================================================
 
 // ??0Vector4@Math@@QEAA@AEBVScalar@1@@Z  retail 0x18001d750  (splat one Scalar to x/y/z/w)
-Vector4* RtMath_Vector4_Ctor_s(Vector4* self, const Scalar* s) {
-    self->x = s->v;
-    self->y = s->v;
-    self->z = s->v;
-    self->w = s->v;
-    return self;
+Vector4::Vector4(const Scalar& s) {
+    this->x = s.v;
+    this->y = s.v;
+    this->z = s.v;
+    this->w = s.v;
 }
 
 // ??0Vector4@Math@@QEAA@AEBVVector3@1@AEBVScalar@1@@Z  retail 0x18001e070
-Vector4* RtMath_Vector4_Ctor_v3s(Vector4* self, const Vector3* xyz, const Scalar* w) {
-    self->x = xyz->x;
-    self->y = xyz->y;
-    self->z = xyz->z;
-    self->w = w->v;
-    return self;
+Vector4::Vector4(const Vector3& xyz, const Scalar& w_) {
+    this->x = xyz.x;
+    this->y = xyz.y;
+    this->z = xyz.z;
+    this->w = w_.v;
 }
 
 // ?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x18001d360 — see the Vector2
 // Serialize comment above; NOT diffable, same vtable-slot pattern, count = 4.
-void RtMath_Vector4_Serialize(Vector4* self, void* serializer) {
+void Vector4::Serialize(void* serializer) {
     void* stream = *reinterpret_cast<void**>(reinterpret_cast<char*>(serializer) + 8);
     void* vtbl = *reinterpret_cast<void**>(stream);
     using SerializeFloatsFn = void(*)(void*, int, void*);
     SerializeFloatsFn fn = *reinterpret_cast<SerializeFloatsFn*>(reinterpret_cast<char*>(vtbl) + 0x28);
-    fn(stream, 4, self);
+    fn(stream, 4, this);
 }
+
+}  // namespace Math
+
+// ============================================================================
+// TRANSITIONAL SHIMS — ENDGAME B.3.1 step 1
+// ----------------------------------------------------------------------------
+// One line each, onto the members above. They keep every existing caller and
+// every `RegisterRuntimeExport` row in rt_math_port.cpp working without any
+// caller moving in this commit. STEP 2 DELETES THEM: as each directory's call
+// sites become member calls, the shim and its registry row go with the last
+// caller (B31_RULES, "step 2 — the callers").
+// ============================================================================
+
+Scalar* RtMath_Scalar_Abs(const Scalar* self, Scalar* ret) { *ret = self->Abs(); return ret; }
+Scalar* RtMath_Scalar_Lerp(const Scalar* self, Scalar* ret, const Scalar* to, const Scalar* t) {
+    *ret = const_cast<Scalar*>(self)->Lerp(*to, *t); return ret;
+}
+Scalar* RtMath_Scalar_Max(const Scalar* self, Scalar* ret, const Scalar* other) { *ret = self->Max(*other); return ret; }
+
+Vector2* RtMath_Vector2_Ctor(Vector2* self) { *self = Vector2(); return self; }
+Vector2* RtMath_Vector2_Ctor_ss(Vector2* self, const Scalar* x, const Scalar* y) { *self = Vector2(*x, *y); return self; }
+void     RtMath_Vector2_MulAssign(Vector2* self, const Vector2* rhs) { *self *= *rhs; }
+Scalar*  RtMath_Vector2_Dot(const Vector2* self, Scalar* ret, const Vector2* rhs) { *ret = self->Dot(*rhs); return ret; }
+Vector2* RtMath_Vector2_Max(const Vector2* self, Vector2* ret, const Vector2* rhs) { *ret = self->Max(*rhs); return ret; }
+Vector2* RtMath_Vector2_Min(const Vector2* self, Vector2* ret, const Vector2* rhs) { *ret = self->Min(*rhs); return ret; }
+Scalar*  RtMath_Vector2_Length(const Vector2* self, Scalar* ret) { *ret = self->Length(); return ret; }
+Scalar*  RtMath_Vector2_LengthSquared(const Vector2* self, Scalar* ret) { *ret = self->LengthSquared(); return ret; }
+Vector2* RtMath_Vector2_Normalize(const Vector2* self, Vector2* ret) { *ret = self->Normalize(); return ret; }
+Vector2* RtMath_Vector2_NormalizeWithMag(const Vector2* self, Vector2* ret, Scalar* mag) { *ret = self->Normalize(*mag); return ret; }
+void     RtMath_Vector2_Serialize(Vector2* self, void* serializer) { self->Serialize(serializer); }
+
+Vector3* RtMath_Vector3_Ctor(Vector3* self) { *self = Vector3(); return self; }
+Vector3* RtMath_Vector3_Ctor_fff(Vector3* self, float x, float y, float z) { *self = Vector3(x, y, z); return self; }
+Vector3* RtMath_Vector3_Ctor_sss(Vector3* self, const Scalar* x, const Scalar* y, const Scalar* z) { *self = Vector3(*x, *y, *z); return self; }
+Vector3* RtMath_Vector3_Ctor_s(Vector3* self, const Scalar* s) { *self = Vector3(*s); return self; }
+Vector3* RtMath_Vector3_Cross(const Vector3* self, Vector3* ret, const Vector3* rhs) { *ret = self->Cross(*rhs); return ret; }
+Scalar*  RtMath_Vector3_Dot(const Vector3* self, Scalar* ret, const Vector3* rhs) { *ret = self->Dot(*rhs); return ret; }
+Vector3* RtMath_Vector3_FromYawPitch(Vector3* ret, const Scalar* yaw, const Scalar* pitch) { *ret = Vector3::FromYawPitch(*yaw, *pitch); return ret; }
+float    RtMath_Vector3_Heading(const Vector3* self) { return self->Heading(); }
+Scalar*  RtMath_Vector3_Length(const Vector3* self, Scalar* ret) { *ret = self->Length(); return ret; }
+Vector3* RtMath_Vector3_Lerp(const Vector3* self, Vector3* ret, const Vector3* to, const Scalar* t) { *ret = self->Lerp(*to, *t); return ret; }
+Vector3* RtMath_Vector3_Min(const Vector3* self, Vector3* ret, const Vector3* rhs) { *ret = self->Min(*rhs); return ret; }
+Vector3* RtMath_Vector3_NormalizeWithMag(const Vector3* self, Vector3* ret, Scalar* mag) { *ret = self->Normalize(*mag); return ret; }
+Vector3* RtMath_Vector3_Normalize(const Vector3* self, Vector3* ret) { *ret = self->Normalize(); return ret; }
+bool     RtMath_Vector3_Equals(const Vector3* self, const Vector3* rhs) { return *self == *rhs; }
+void     RtMath_Vector3_Serialize(Vector3* self, void* serializer) { self->Serialize(serializer); }
+
+Vector4* RtMath_Vector4_Ctor_s(Vector4* self, const Scalar* s) { *self = Vector4(*s); return self; }
+Vector4* RtMath_Vector4_Ctor_v3s(Vector4* self, const Vector3* xyz, const Scalar* w) { *self = Vector4(*xyz, *w); return self; }
+void     RtMath_Vector4_Serialize(Vector4* self, void* serializer) { self->Serialize(serializer); }

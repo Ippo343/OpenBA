@@ -14,6 +14,25 @@ confirm against the retail DLL before porting one.
 ## Original files (0 cpp, 0 h)
 
 
+## ENDGAME B.3.1 step 1 — real classes (2026-09-13)
+
+The Math value types are no longer PODs plus `RtMath_*` free functions. They are
+real C++ classes under retail's names in `namespace Math`
+(`runtime/types/math/Math.h`): `Scalar`, `Vector2`, `Vector3`, `Vector4`,
+`Quaternion`, `Matrix`, `Transform`, `Transform2`, `Transform3`. Every body in
+this directory MOVED onto them — same expressions, same term order, same
+branches; only the DLL boundary's hidden return slot is gone, so the methods
+return by value. Retail's address stays as a comment on each body.
+
+The `RtMath_*` names survive as one-line shims at the bottom of each file, and
+the `RegisterRuntimeExport` rows register the shims, so no caller had to move in
+the same commit. **They die in step 2** (`B31_RULES.md`), when each directory's
+call sites become member calls. The global type names (`Vector3`, `Transform`,
+…) are transitional aliases: `Vector2/3/4` in `engine/types/common.h`, the rest
+at the bottom of `Math.h`.
+
+Host unit tests: `tests/unit/math_test.cpp`, run by `mingw32-make unit`.
+
 ## Ported here
 
 - `vector.cpp` / `vector.h` — Math::Scalar, Math::Vector2, Math::Vector3, Math::Vector4

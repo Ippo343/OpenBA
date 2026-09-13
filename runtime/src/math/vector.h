@@ -2,8 +2,13 @@
 // ============================================================================
 // runtime/src/math/vector.h — declarations for runtime/src/math/vector.cpp
 // ============================================================================
-// See vector.cpp for the retail address / mangled name of each function and
-// the ABI note in runtime/types/math/Math.h.
+// ENDGAME B.3.1 step 1: every function declared below is now a ONE-LINE SHIM
+// onto a member of the real class in runtime/types/math/Math.h. The bodies
+// moved; these keep the existing callers and the RegisterRuntimeExport rows in
+// rt_math_port.cpp working unchanged. They die in step 2, when the last caller
+// of each becomes a member call.
+//
+// See vector.cpp for the retail address / mangled name of each function.
 // ============================================================================
 
 #include "../../types/math/Math.h"

@@ -28,8 +28,8 @@
 #include "../../types/math/Math.h"
 
 // transform.cpp, Wave 1 lane 2 — the same class family, registered together.
-// Declared rather than resolved: see the note on
-// RtTransformAsMatrix() below for why this one is a direct call.
+// Declared rather than resolved: see the note on CallAsMatrix() below for why
+// this one is a direct call.
 Matrix* RtMath_Transform_AsMatrix(const Transform* self, Matrix* ret);
 
 namespace {
@@ -42,6 +42,11 @@ namespace {
 // call inside runtime/ walks past our port into the DLL.
 //
 // Resolved once and cached.
+//
+// ENDGAME B.3.1 note: this whole indirection is a step-2 casualty. The DLL is
+// gone, `Transform::AsMatrix` is an ordinary member of our own class, and the
+// registry lookup can only ever land back on the shim in transform.cpp. It is
+// left exactly as it was here because step 1 moves bodies, not call sites.
 Matrix* CallAsMatrix(const Transform* self, Matrix* ret) {
     using Fn = Matrix* (*)(const Transform*, Matrix*);
     static Fn fn = reinterpret_cast<Fn>(
@@ -84,22 +89,19 @@ Matrix* CallAsMatrix(const Transform* self, Matrix* ret) {
 // into a private scratch. Pure function of (this, other, t) — nothing else is
 // read and nothing is written outside the return slot.
 // ============================================================================
-Quaternion* RtMath_Quaternion_Lerp(const Quaternion* self, Quaternion* ret,
-                                   const Quaternion* other, const Scalar* t) {
+//
+// ENDGAME B.3.1 step 1: MOVED onto Math::Quaternion::Lerp unchanged. The
+// hidden return slot is gone (no cross-compiler ABI left), which also retires
+// the aliasing hazard the retired diff oracle needed snapshots for; the
+// snapshot locals were dead and are removed, the reasoning is kept above.
+Math::Quaternion Math::Quaternion::Lerp(const Quaternion& other, const Scalar& t) const {
+    Quaternion out;
+    Quaternion* const ret = &out;
 
-    // Input snapshots for the oracle, taken before a single byte of `ret` is
-    // written. `ret` is a hidden return slot the caller chose and it is allowed
-    // to alias `self` or `other`; retail tolerates that because it reads every
-    // input into registers before its first store, and so does the body below.
-    // The ORACLE is what cannot tolerate it: running the shipped body on `self`
-    // AFTER we have written `ret` feeds it corrupted input.
-    Quaternion selfSnap{}, otherSnap{};
-    Scalar     tSnap{};
+    const float ax = this->x,  ay = this->y,  az = this->z,  aw = this->w;
+    const float bx = other.x, by = other.y, bz = other.z, bw = other.w;
 
-    const float ax = self->x,  ay = self->y,  az = self->z,  aw = self->w;
-    const float bx = other->x, by = other->y, bz = other->z, bw = other->w;
-
-    float tv = t->v;
+    float tv = t.v;
     // XMM4 = 1.0f - t, computed at 0x18001d597 — i.e. BEFORE the sign flip
     // below, so it always uses the caller's t, never the negated one.
     const float s = RtMathConst::kOne - tv;
@@ -125,16 +127,16 @@ Quaternion* RtMath_Quaternion_Lerp(const Quaternion* self, Quaternion* ret,
     const float len = RtLibm::Sqrt(len2);          // CALL 0x180128110 (sqrtf)
     const float inv = RtMathConst::kOne / len;     // DIVSS XMM10,XMM0
 
-    // ALIASING: the snapshots above are taken BEFORE these stores, because `ret`
-    // may be the same buffer as `self` or `other`. See the block comment on
-    // AsTransform3 below — this is the same trap, and it cost 901 phantom
-    // divergences there before it was understood.
+    // ALIASING (historical): the old out-pointer signature let `ret` be the
+    // same buffer as `self` or `other`. See the block comment on AsTransform3
+    // below — the same trap cost 901 phantom divergences there before it was
+    // understood. The by-value return makes it impossible.
     ret->x = rx * inv;
     ret->y = ry * inv;
     ret->z = rz * inv;
     ret->w = rw * inv;
 
-    return ret;   // retail returns the hidden slot in RAX
+    return out;   // retail returned the hidden slot in RAX
 }
 
 // ============================================================================
@@ -158,7 +160,15 @@ Quaternion* RtMath_Quaternion_Lerp(const Quaternion* self, Quaternion* ret,
 // unwritten-byte trap here — the failure mode
 // reference_oracle_must_not_compare_unwritten_bytes.md describes does not apply.
 // ============================================================================
-Transform3* RtMath_Transform_AsTransform3(const Transform* self, Transform3* ret) {
+//
+// ENDGAME B.3.1 step 1: MOVED onto Math::Transform::AsTransform3 unchanged,
+// returning by value. The aliasing note below is kept because it is the
+// history of a 901-divergence investigation, but a by-value return cannot
+// alias its input at all.
+Math::Transform3 Math::Transform::AsTransform3() const {
+    Transform3 out;
+    Transform3* const ret = &out;
+    const Transform* const self = this;
 
     // *** `ret` CAN BE THE SAME BUFFER AS `self`, AND AT LEAST ONE CALL SITE
     // *** RELIES ON IT. code/Game/Game/gameupdateloop.cpp:1496, the per-frame
@@ -191,6 +201,21 @@ Transform3* RtMath_Transform_AsTransform3(const Transform* self, Transform3* ret
     ret->axisZ       = { m.m[8],  m.m[9],  m.m[10] };
     ret->translation = { m.m[12], m.m[13], m.m[14] };
 
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// TRANSITIONAL SHIMS — ENDGAME B.3.1 step 1. One line each onto the members
+// above; they and their registry rows die in step 2 with their last caller.
+// ---------------------------------------------------------------------------
+Quaternion* RtMath_Quaternion_Lerp(const Quaternion* self, Quaternion* ret,
+                                   const Quaternion* other, const Scalar* t) {
+    *ret = self->Lerp(*other, *t);
+    return ret;
+}
+
+Transform3* RtMath_Transform_AsTransform3(const Transform* self, Transform3* ret) {
+    *ret = self->AsTransform3();
     return ret;
 }
 
