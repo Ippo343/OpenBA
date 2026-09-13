@@ -510,6 +510,37 @@ EXTPTR_THUNK(RtObject_ExternalPtrSerialize_Font,
 EXTPTR_THUNK(RtObject_ExternalPtrSerialize_AnimationEvent,
              "?_typeInfo@AnimationEvent@Graphics@@0VBaseTypeInfo@Object@@A")
 
+// ---- BATCH B (2026-09-12): the last three single-pointer instantiations -----
+//
+// Each T is the RIP-relative `_typeInfo` operand the body itself loads, read
+// out of the SHIPPED DLL with objdump (both `MOV EDX,[rip+…]` sites in each
+// body load the same global, as they must), then that absolute address turned
+// back into a name TWO independent ways that agree: `standalone/
+// rt_data_mint_tables.inc` and `pefile` over the export directory. No T is
+// inferred from the caller.
+//
+//   0x180076e90 -> 0x1801f9cf8  UI::CharacterSet        (UI::Font +0x28)
+//   0x180052a50 -> 0x1801fa4d8  Audio::SoundBuffer
+//   0x18003dc90 -> 0x1801f9be0  Object::ExternalList    (DocumentTextDescription +0xe0)
+//
+// Callers, confirmed in Ghidra (get_function_callers on the retail program):
+//   0x180076e90  <- Serialize @ 0x1801176d0  = UI::Font::Serialize, the current
+//                   cutover wall; our port calls it at runtime/src/ui/font.cpp:381.
+//   0x180052a50  <- 0x180053100, 0x180053300, 0x1800e0780 (the Audio side).
+//   0x18003dc90  <- runtime/src/ui/documenttextdescription.cpp:194 resolves it
+//                   by address for the +0xe0 container field.
+// 0x180076e90 — ExternalPtr<UI::CharacterSet>
+EXTPTR_THUNK(RtObject_ExternalPtrSerialize_CharacterSet,
+             "?_typeInfo@CharacterSet@UI@@0VBaseTypeInfo@Object@@A")
+// 0x180052a50 — ExternalPtr<Audio::SoundBuffer>
+EXTPTR_THUNK(RtObject_ExternalPtrSerialize_SoundBuffer,
+             "?_typeInfo@SoundBuffer@Audio@@0VBaseTypeInfo@Object@@A")
+// 0x18003dc90 — ExternalPtr<Object::ExternalList>. The export spells the
+// enclosing namespace with a back-reference (`@2@`), exactly as
+// `?_typeInfo@External@Object@@0VBaseTypeInfo@2@A` does.
+EXTPTR_THUNK(RtObject_ExternalPtrSerialize_ExternalList,
+             "?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A")
+
 #undef EXTPTR_THUNK
 
 // ============================================================================
@@ -562,6 +593,29 @@ EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_MaterialInstance,
 // closure because Material::Serialize is reached only through a vtable slot)
 EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_VideoProgram,
                    "?_typeInfo@VideoProgram@Video@@0VBaseTypeInfo@Object@@A")
+
+// ---- BATCH B (2026-09-12): the last three array instantiations -------------
+//
+// Shape re-checked in the shipped DLL rather than taken from the byte size:
+// each of these three opens `TEST EDX,EDX / JLE <epilogue>` and indexes
+// `(%r15,%r14,8)`, i.e. `(Serializer* rcx, int count edx, External** r8)` with
+// R9 spilled and never read — the 818-byte array form, not the 748-byte one.
+// typeInfo derived and cross-checked exactly as for the single-pointer rows.
+//
+//   0x18003e710 -> 0x1801fab68  UI::Font              (DocumentTextDescription +0xb0)
+//   0x18003eb60 -> 0x1801fadd0  UI::SpriteSheet       (+0xc0, and SpriteCapture +0x20)
+//   0x1800667f0 -> 0x1801fa820  Collision2D::Surface  (callers 0x180065b10,
+//                                0x180065f00, Serialize @ 0x180108cd0)
+//
+// Three call sites in our tree resolve these by address today and therefore
+// still run retail's copies until this registration block runs:
+// documenttextdescription.cpp:171 and :177, spritecapture_class.cpp:216.
+EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_Font,
+                   "?_typeInfo@Font@UI@@0VBaseTypeInfo@Object@@A")
+EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_SpriteSheet,
+                   "?_typeInfo@SpriteSheet@UI@@0VBaseTypeInfo@Object@@A")
+EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_Surface,
+                   "?_typeInfo@Surface@Collision2D@@0VBaseTypeInfo@Object@@A")
 
 #undef EXTPTR_ARRAY_THUNK
 
@@ -686,5 +740,16 @@ int RtObjectExternalPtrSerializeRegister() {
     RegisterRuntimeAddr(0x1800493d0, (void*)&RtObject_ExternalPtrArraySerialize_ElementDescription); ++n;
     RegisterRuntimeAddr(0x18005d4a0, (void*)&RtObject_ExternalPtrArraySerialize_MaterialInstance);   ++n;
     RegisterRuntimeAddr(0x1800605e0, (void*)&RtObject_ExternalPtrArraySerialize_VideoProgram);        ++n;
+
+    // ---- BATCH B (2026-09-12): the six remaining instantiations -------------
+    // With these the family is complete: every address the masked sweep found
+    // is now ours. 0x180076e90 is the one the Font wall needs
+    // (runtime/src/ui/font.cpp:381).
+    RegisterRuntimeAddr(0x180076e90, (void*)&RtObject_ExternalPtrSerialize_CharacterSet);            ++n;
+    RegisterRuntimeAddr(0x180052a50, (void*)&RtObject_ExternalPtrSerialize_SoundBuffer);             ++n;
+    RegisterRuntimeAddr(0x18003dc90, (void*)&RtObject_ExternalPtrSerialize_ExternalList);            ++n;
+    RegisterRuntimeAddr(0x18003e710, (void*)&RtObject_ExternalPtrArraySerialize_Font);               ++n;
+    RegisterRuntimeAddr(0x18003eb60, (void*)&RtObject_ExternalPtrArraySerialize_SpriteSheet);        ++n;
+    RegisterRuntimeAddr(0x1800667f0, (void*)&RtObject_ExternalPtrArraySerialize_Surface);            ++n;
     return n;
 }
