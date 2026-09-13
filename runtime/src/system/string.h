@@ -6,6 +6,12 @@
 // These are the inlined-everywhere idioms of the class (AddRef / Release /
 // SetLength) plus the two ported entry points Filename reuses by pointer cast.
 // Everything here is defined in string.cpp.
+//
+// ENDGAME B.3.1 step 1: THESE ARE ALL SHIMS NOW. The bodies moved onto
+// `System::String` (runtime/types/system/String.h); every function declared
+// below kept its exact signature — hidden return slot included — and is one
+// line over the member on the same eight bytes, so no caller had to move.
+// They die in step 2, each when its last caller is converted.
 // ============================================================================
 
 #include "../../types/system/String.h"
