@@ -46,15 +46,20 @@ showed 6 draws (DLL-present: 453); `Renderer::AddDrawItem` dropped every item on
 "VideoProgram+0x20 null" arm because every `MeshLayout\*.rsc` load failed External::Load's
 version check (`[ExtLoad] badVer=65`, 0 DLL-present): `VertexLayout::GetFileVersion` returned
 1, retail returns 3. Fixed; the DLL-absent frame is now 460 actions like DLL-present, and the
-menu, title and terrain draw. **Still wrong DLL-absent, from the two captures side by side**
-(`tools/trace_oracle/capture_arm.sh` with the DLL moved aside; images were in the session
-scratchpad, regenerate rather than look for them):
-- no building or tree meshes in the menu background town (terrain only) — the MeshInstance /
-  GraphicsMesh draw path or its buffers, first place to look is what those 453 draws bind;
-- text draws only the FIRST glyph of every label ("n" for New, "l" for Load); the Font glyph
-  Array helper was this morning's by-address wall, and `Font::Serialize` is suspect;
-- a large translucent grey rectangle covers the right half of the screen (a dialog panel or
-  tooltip with a wrong size).
+menu, title and terrain draw. **The three render defects from the side-by-side captures are fixed (2026-09-12 late):**
+- no building or tree meshes: `MeshInstance::Update` reads two UNEXPORTED `.data` statics by
+  address (guard 0x1801ff30c, 48-entry identity Transform table 0x1801ff310) and declined the
+  whole update when they resolved NULL. Both minted (`EXTRA_STORAGE_BY_ADDR`). The tell was one
+  `[SLOTS29] ... declining` line in the DLL-absent log that the DLL-present log did not have.
+- first glyph only, and the wrong glyph: `Font::ComputeLineLayout` stored the codepoint in the
+  layout entry where retail stores the GLYPH index (0x180116d99, EDX from the table load at
+  0x180116d1a). AddFont uses it as the sheet sprite index; the sheet has 96 sprites.
+- the grey rectangle went away with the glyph fix (a label's measured width, presumably).
+Menu (town, market, text) and the in-game world (trees, rocks, shadows, toolbar) now look
+right DLL-absent by screenshot (`tools/capture_window.ps1`). **The DLL-present build never
+enters the ported text path** (a trace in our `AddFont` fired 0 times with the DLL present),
+so a text-path port can only be seen DLL-absent; assume the same of any path a DLL-internal
+caller reaches.
 Method that worked twice tonight and should be the default for render walks: capture under
 RenderDoc DLL-absent, look at the frame overview and one draw's state, then put a
 count-limited `fprintf` on the silent-drop arms of the body the numbers point at, one gate
