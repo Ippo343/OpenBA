@@ -110,6 +110,8 @@ leaving the whole body in C shape.
    not a pipe's. Fix every error and every new warning. Also `mingw32-make unit`.
 3. One real run: `tools/game_dir_lock.sh acquire <batch> 900` (shared by several agents;
    wait for it), then deploy: `cp standalone/build/reimpl-x64.exe "/c/GOG Games/Banished/"`,
+   `cmp standalone/build/reimpl-x64.exe "/c/GOG Games/Banished/reimpl-x64.exe"` (another agent
+   overwrote a deployed exe under a held lock once; a run measures whatever is on disk),
    `rm -f "/c/GOG Games/Banished/standalone_{debug,crash,error,hang}.log"`, then from that
    directory `BANISHED_AUTOSTART=1 BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120
    ./reimpl-x64.exe; echo exit=$?`, in the FOREGROUND with a 600000 ms Bash timeout
