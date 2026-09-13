@@ -28,6 +28,16 @@ UNIT_TREE_SRCS += \
 # covered by the real run, not by make unit. No tree sources to link.
 UNIT_TREE_SRCS +=
 
+# ENDGAME B.3.2 Set core (tests/unit/set_test.cpp): header-only on the host.
+# `Collection::Set<T, Compare, Allocator, Key>` lives in
+# runtime/types/collection/Collection.h. Its out-of-line half — the two
+# allocator doors, retail's inlined strcmp and one forwarder per ported AVL
+# core — is runtime/src/collection/set_core.cpp, which stands on the address
+# registry and the allocator singleton; under BANISHED_UNIT_TEST the header
+# compiles the generic core instead (the same bodies over a node type), and the
+# test drives it with a counting allocator policy. The ported cores are
+# verified by the real run, not here. No tree sources to link.
+UNIT_TREE_SRCS +=
 # ENDGAME B.3.2 LIST core (tests/unit/list_test.cpp): Collection::LinkedList<T>
 # and the two ported introsorts. linkedlist.cpp holds the node-allocation seam
 # the header template calls through (and, under -DBANISHED_UNIT_TEST, the

@@ -48,6 +48,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <new>       // placement new: Collection::Set builds its element in the node
 
 namespace Collection {
 
@@ -538,12 +539,521 @@ class LinkedList {
 // Because the pointer tail's offsets are a function of sizeof(T), MSVC emits a
 // SEPARATE copy of insert/find/rebalance per instantiation with the offsets
 // baked in. Do not assume one ported Set body serves two element types.
+//
+// ============================================================================
+// ENDGAME B.3.2 step 1 (2026-09-13): `Set` IS NOW THE REAL CLASS.
+// ----------------------------------------------------------------------------
+// What changed: the POD above became a class with retail's member names
+// (`Insert`, `Find`, `Remove`, `Clear`, `GetCount`, `Iterator`). What did NOT
+// change: one byte of the layout, and not one of the AVL bodies. The class is a
+// WRAPPER around the three already-ported AVL cores, selected by
+// `align8(sizeof(T))`:
+//
+//   | element width | node  | ported core                       | file |
+//   |---------------|-------|-----------------------------------|------|
+//   | 0x10          | 0x30  | 0x18000adc0/b040/b170/aba0        | runtime/src/collection/set_avl.cpp |
+//   | 0x18          | 0x38  | 0x180023170/23570/236a0           | runtime/src/collection/set_avl_e24.cpp |
+//   | 0x30          | 0x50  | 0x180030540/307b0/308e0          | runtime/src/collection/avl_trees.cpp |
+//
+// The rotations are NOT re-derived here (COLLECTION_INVENTORY.md §5 hazard 3:
+// re-decompiling a body that is already ported is how a dropped argument gets
+// re-introduced). `detail::AvlOps<Node, W>` forwards to those bodies through
+// `runtime/src/collection/set_core.cpp`.
+//
+// `detail::AvlGeneric<Node>` is the SAME algorithm written once over a node
+// type instead of over baked-in offsets, and it is used for two things only:
+//   * a width retail never instantiated (there is no ported body to call), and
+//   * the host unit test (`BANISHED_UNIT_TEST`), which must not link the
+//     address-door machinery the ported bodies stand on.
+// It is a generalisation OF the ported bodies — set_avl.cpp's Recompute,
+// RotateLeft (0x18000b040), RotateRight (0x18000b170), Retrace (0x18000adc0)
+// and Erase (0x18000aba0), transcribed with `Node*` in place of the offsets —
+// not an independent re-derivation, and the retail addresses are on each body.
+//
+// THE THREE NODE LAYOUTS STAY DISTINCT. They are distinct here for the same
+// reason set_avl.h and set_avl_e24.h are two files:
+// `reference_one_bst_find_two_node_layouts.md` — one walk over two layouts
+// returns the right answer for a key that happens to be the root and is
+// permanently wrong for the next one. The layout is computed from `sizeof(T)`
+// by the `Node` struct below, exactly as before, and the static_asserts at the
+// bottom of this header still check all three widths field by field.
+//
+// DUPLICATE KEYS: `Insert` returns the EXISTING node and does NOT insert again
+// and does NOT bump `_count` — retail's equal arm (0x180030418 -> 0x180030443,
+// and the same arm in every other insert core). That rule is a unit test.
 // ============================================================
 template <class T,
+          class Compare   = AVLCompare,
           class Allocator = DefaultAllocator,
-          class Key       = T,
-          class Compare   = AVLCompare>
-struct Set {
+          class Key       = T>
+class Set;
+
+namespace detail {
+
+// ---------------------------------------------------------------------------
+// The node-allocation seam. Retail's Set nodes come from
+// `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` (0x1800c7a50) and go back
+// through 0x180009c30, the allocator-lock Free wrapper WHOSE FIRST ARGUMENT IS
+// IGNORED (set_avl.cpp's "THE FIFTH HELPER" banner). Both are reached by
+// address, so the definitions live in runtime/src/collection/set_core.cpp and
+// this header stays free of <windows.h> and of the registry (PLAN §4.1).
+// ---------------------------------------------------------------------------
+void* SetNodeAlloc(uint64_t bytes, int align);
+void  SetNodeFree(void* node);
+
+// A non-default `Allocator` policy (the counting allocator the unit tests use)
+// supplies its own statics; `DefaultAllocator` means retail's two doors.
+template <class Allocator>
+struct AllocTraits {
+    static void* Alloc(uint64_t bytes, int align) { return Allocator::Allocate(bytes, align); }
+    static void  Free(void* p)                    { Allocator::Free(p); }
+    // The free as a POINTER. The erase core takes it by pointer, and the
+    // `AvlOps<…,0x10>` forwarder recognises retail's own door by comparing
+    // against `&SetNodeFree` — so this must be the door itself for
+    // `DefaultAllocator`, not a wrapper around it.
+    static void (*FreeFn())(void*) { return &AllocTraits::Free; }
+};
+template <>
+struct AllocTraits<DefaultAllocator> {
+    static void* Alloc(uint64_t bytes, int align) { return SetNodeAlloc(bytes, align); }
+    static void  Free(void* p)                    { SetNodeFree(p); }
+    static void (*FreeFn())(void*) { return &SetNodeFree; }
+};
+
+// ---------------------------------------------------------------------------
+// Key traits. Only a POINTER key has a null state, and retail's descent treats
+// it asymmetrically (a null SEARCH key goes LEFT, a null NODE key goes RIGHT) —
+// see avl_trees.cpp's group-B banner. Every other key type has no null arm at
+// all, which is why `IsNull` is a compile-time false for them and the arms fold
+// away.
+// ---------------------------------------------------------------------------
+template <class K> struct KeyTraits {
+    static bool IsNull(const K&) { return false; }
+};
+template <> struct KeyTraits<char*> {
+    static bool IsNull(char* const& k) { return k == nullptr; }
+};
+template <> struct KeyTraits<const char*> {
+    static bool IsNull(const char* const& k) { return k == nullptr; }
+};
+
+// `Collection::AVLCompare`, retail's inlined comparison (0x18002a1c4): a
+// lexicographic byte scan finished with a SIGNED char subtraction. Defined in
+// set_core.cpp so the one transcription serves every instantiation; it is the
+// same body avl_trees.cpp's `StrCmpSigned` carries for the string map.
+int AvlStrCmpSigned(const char* a, const char* b);
+
+template <class Compare, class K>
+struct CompareTraits {
+    static bool Less(const K& a, const K& b) { return Compare::Less(a, b); }
+};
+template <class K>
+struct CompareTraits<AVLCompare, K> {
+    static bool Less(const K& a, const K& b) { return a < b; }
+};
+template <>
+struct CompareTraits<AVLCompare, char*> {
+    static bool Less(char* const& a, char* const& b) { return AvlStrCmpSigned(a, b) < 0; }
+};
+template <>
+struct CompareTraits<AVLCompare, const char*> {
+    static bool Less(const char* const& a, const char* const& b) {
+        return AvlStrCmpSigned(a, b) < 0;
+    }
+};
+
+// ---------------------------------------------------------------------------
+// The container header the cores mutate: {root, count}, 0x10 bytes. Every Set
+// instantiation and every ported core agrees on it (set_avl.h, set_avl_e24.h,
+// and Set's own layout below), which is why the cores can be reached through a
+// `void*`.
+// ---------------------------------------------------------------------------
+template <class NodeT>
+struct SetHdr {
+    NodeT*  root;
+    int32_t count;
+    int32_t pad0c;
+};
+
+// ---------------------------------------------------------------------------
+// AvlGeneric<NodeT> — set_avl.cpp's four bodies with `NodeT*` in place of the
+// baked-in offsets. Read set_avl.cpp's banners for the evidence behind every
+// line here; the transcription notes that matter to a reader of THIS file are
+// repeated inline.
+// ---------------------------------------------------------------------------
+template <class NodeT>
+struct AvlGeneric {
+    using Hdr = SetHdr<NodeT>;
+
+    // 0x18000adee..0x18000ae1f. 16-BIT arithmetic throughout, and the max
+    // DEFAULTS TO THE RIGHT height (`MOVZX EAX,CX / CMOVG AX,DX`).
+    static void Recompute(NodeT* n) {
+        const int16_t l = n->left  ? static_cast<int16_t>(n->left->height  + 1) : 0;
+        const int16_t r = n->right ? static_cast<int16_t>(n->right->height + 1) : 0;
+        n->balance = static_cast<int16_t>(r - l);
+        n->height  = (l > r) ? l : r;
+    }
+
+    // retail 0x18000b040 — rotate LEFT about `n`.
+    static NodeT* RotateLeft(void* setRaw, NodeT* n) {
+        Hdr* set = static_cast<Hdr*>(setRaw);
+        if (n == set->root) set->root = n->right;
+
+        NodeT* p = n->parent;
+        if (p) {
+            if (p->left == n) p->left  = n->right;
+            else              p->right = n->right;
+        }
+
+        NodeT* r  = n->right;
+        r->parent = n->parent;
+        n->right  = r->left;
+        if (n->right) n->right->parent = n;
+        r->left   = n;
+        n->parent = r;
+
+        if (r->left)  Recompute(r->left);
+        if (r->right) Recompute(r->right);
+        Recompute(r);
+        return r;
+    }
+
+    // retail 0x18000b170 — the exact mirror.
+    static NodeT* RotateRight(void* setRaw, NodeT* n) {
+        Hdr* set = static_cast<Hdr*>(setRaw);
+        if (n == set->root) set->root = n->left;
+
+        NodeT* p = n->parent;
+        if (p) {
+            if (p->left == n) p->left  = n->left;
+            else              p->right = n->left;
+        }
+
+        NodeT* l  = n->left;
+        l->parent = n->parent;
+        n->left   = l->right;
+        if (n->left) n->left->parent = n;
+        l->right  = n;
+        n->parent = l;
+
+        if (l->left)  Recompute(l->left);
+        if (l->right) Recompute(l->right);
+        Recompute(l);
+        return l;
+    }
+
+    // retail 0x18000adc0 — the retrace. THE SECOND PARAMETER IS A SLOT, NOT A
+    // NODE, and retail re-reads it after every rotation because a rotation can
+    // move a different node into the position being examined. A null child
+    // skips the rotation ENTIRELY, not just the pre-rotation.
+    static void Retrace(void* setRaw, NodeT** slot) {
+        if (*slot == nullptr) return;
+
+        for (;;) {
+            NodeT* n      = *slot;
+            NodeT* parent = n->parent;      // captured BEFORE any rotation
+
+            Recompute(n);
+
+            NodeT* cur = *slot;
+            if (cur->balance > 1) {
+                NodeT* r = cur->right;
+                if (r) {
+                    if (r->balance < 0) {
+                        RotateRight(setRaw, r);
+                        cur = *slot;
+                    }
+                    RotateLeft(setRaw, cur);
+                }
+            }
+
+            cur = *slot;
+            if (cur->balance < -1) {
+                NodeT* l = cur->left;
+                if (l) {
+                    if (l->balance > 0) {
+                        RotateLeft(setRaw, l);
+                        cur = *slot;
+                    }
+                    RotateRight(setRaw, cur);
+                }
+            }
+
+            *slot = parent;
+            if (!parent) return;
+        }
+    }
+
+    // retail 0x18000aba0 — erase `z`, free its node, retrace. Case 3 is a
+    // PREDECESSOR splice (the rightmost node of z->left), not the textbook
+    // successor: reading it the other way produces a valid AVL tree with the
+    // same keys and a DIFFERENT SHAPE.
+    //
+    // `freeNode` is the node deallocation. For `DefaultAllocator` the caller
+    // passes retail's own 0x180009c30 door, so this is byte-for-byte retail's
+    // free; a test allocator passes its own.
+    static void Erase(void* setRaw, NodeT* z, void (*freeNode)(void*)) {
+        Hdr* set = static_cast<Hdr*>(setRaw);
+
+        NodeT* retraceFromParent = z->parent;
+        set->count -= 1;                         // 0x18000abae, before anything else
+
+        NodeT* retraceFromChild = nullptr;
+        NodeT* replacement      = nullptr;
+
+        if (z->right == nullptr || z->left == nullptr) {
+            // ---- cases 1 and 2 (retail JMPs case 2 into case 1's tail) -----
+            NodeT* p     = z->parent;
+            NodeT* child = z->right == nullptr ? z->left : z->right;
+            if (p) { if (p->left == z) p->left = child; else p->right = child; }
+            else   { set->root = child; }
+
+            replacement      = child;
+            retraceFromChild = replacement;
+            if (replacement) replacement->parent = z->parent;
+
+            freeNode(z);
+            Retrace(setRaw, replacement ? &retraceFromChild : &retraceFromParent);
+            return;
+        }
+
+        // ---- case 3: both children -------------------------------------
+        NodeT* s = z->left;
+        while (s->right) s = s->right;           // the PREDECESSOR
+
+        replacement       = nullptr;
+        retraceFromParent = nullptr;
+
+        if (s != z->left) {
+            NodeT* sp = s->parent;
+            sp->right = s->left;
+            if (s->left) s->left->parent = sp;
+            retraceFromParent = sp;
+            replacement       = sp;
+            s->left = z->left;
+            Recompute(sp);
+        }
+
+        s->right = z->right;
+        if (s->left)  s->left->parent  = s;
+        if (s->right) s->right->parent = s;
+        s->parent = z->parent;
+
+        if (z->parent == nullptr) {
+            set->root = s;
+            s->parent = nullptr;                 // 0x18000ad28, a SECOND store
+            retraceFromChild = set->root;
+        } else {
+            retraceFromChild = s;
+            NodeT* p = z->parent;
+            if (p->left == z) p->left = s; else p->right = s;
+        }
+
+        freeNode(z);
+        Retrace(setRaw, replacement ? &retraceFromParent : &retraceFromChild);
+    }
+};
+
+// ---------------------------------------------------------------------------
+// The ported cores, reached through one forwarder each. Defined in
+// runtime/src/collection/set_core.cpp, which is the only file that knows the
+// three node types; the widths that have no ported body fall through to
+// AvlGeneric.
+//
+// Under BANISHED_UNIT_TEST every width uses AvlGeneric: the host test links
+// none of the address-door machinery the ported bodies stand on, and the
+// generic core IS those bodies (see the banner above).
+// ---------------------------------------------------------------------------
+#if !defined(BANISHED_UNIT_TEST)
+void  PortedRetrace16(void* set, void** slot);        // 0x18000adc0
+void* PortedRotateLeft16(void* set, void* n);         // 0x18000b040
+void* PortedRotateRight16(void* set, void* n);        // 0x18000b170
+void  PortedErase16(void* set, void* z);              // 0x18000aba0
+void  PortedRetrace24(void* set, void** slot);        // 0x180023170
+void* PortedRotateLeft24(void* set, void* n);         // 0x180023570
+void* PortedRotateRight24(void* set, void* n);        // 0x1800236a0
+void  PortedRetrace48(void* set, void** slot);        // 0x180030540
+void* PortedRotateLeft48(void* set, void* n);         // 0x1800307b0
+void* PortedRotateRight48(void* set, void* n);        // 0x1800308e0
+#endif
+
+template <class NodeT, unsigned ElemWidth>
+struct AvlOps : AvlGeneric<NodeT> {};
+
+#if !defined(BANISHED_UNIT_TEST)
+template <class NodeT>
+struct AvlOps<NodeT, 0x10> : AvlGeneric<NodeT> {
+    static void Retrace(void* set, NodeT** slot) {
+        PortedRetrace16(set, reinterpret_cast<void**>(slot));
+    }
+    static NodeT* RotateLeft(void* set, NodeT* n) {
+        return static_cast<NodeT*>(PortedRotateLeft16(set, n));
+    }
+    static NodeT* RotateRight(void* set, NodeT* n) {
+        return static_cast<NodeT*>(PortedRotateRight16(set, n));
+    }
+    // The ported erase frees through retail's own 0x180009c30 door, so the
+    // `freeNode` a DefaultAllocator Set hands it is the same function; a Set
+    // with any other allocator gets the generic body instead of a node freed
+    // to the wrong heap.
+    static void Erase(void* set, NodeT* z, void (*freeNode)(void*)) {
+        if (freeNode == &SetNodeFree) PortedErase16(set, z);
+        else                          AvlGeneric<NodeT>::Erase(set, z, freeNode);
+    }
+};
+
+template <class NodeT>
+struct AvlOps<NodeT, 0x18> : AvlGeneric<NodeT> {
+    static void Retrace(void* set, NodeT** slot) {
+        PortedRetrace24(set, reinterpret_cast<void**>(slot));
+    }
+    static NodeT* RotateLeft(void* set, NodeT* n) {
+        return static_cast<NodeT*>(PortedRotateLeft24(set, n));
+    }
+    static NodeT* RotateRight(void* set, NodeT* n) {
+        return static_cast<NodeT*>(PortedRotateRight24(set, n));
+    }
+    // No erase was ever emitted for this width (set_avl_e24.h's table: "erase
+    // (no door)") — the generic body, which is the same algorithm, serves it.
+};
+
+template <class NodeT>
+struct AvlOps<NodeT, 0x30> : AvlGeneric<NodeT> {
+    static void Retrace(void* set, NodeT** slot) {
+        PortedRetrace48(set, reinterpret_cast<void**>(slot));
+    }
+    static NodeT* RotateLeft(void* set, NodeT* n) {
+        return static_cast<NodeT*>(PortedRotateLeft48(set, n));
+    }
+    static NodeT* RotateRight(void* set, NodeT* n) {
+        return static_cast<NodeT*>(PortedRotateRight48(set, n));
+    }
+};
+#endif  // !BANISHED_UNIT_TEST
+
+// ---------------------------------------------------------------------------
+// InsertCorePattern — the keyed BST descent that EVERY retail
+// `Set::InsertCore` is one copy of:
+//
+//   0x180030380  Set<Pair<u32,TypeRecord>>   (avl_trees.cpp, group A)
+//   0x18002a170  Set<Pair<String,String>>    (avl_trees.cpp, group B)
+//   0x180025c70  Set<Pair<Filename,u64>>     (avl_trees.cpp, group D)
+//   0x1800275e0  Set<Pair<Filename,u32>>     (set_avl_pathid.cpp)
+//
+// and which `Set<T>::Insert` below also uses. The four ported cores are now
+// one-line calls into this with their own policy; nothing about their
+// comparators, their allocation doors, their probe counters or their re-reads
+// moved. What the policy supplies is exactly what differed between them.
+//
+// The shape, arm for arm (avl_trees.cpp's group-B banner has the flags):
+//
+//   goLeft  = nodeKey   != null && (searchKey == null || Less(search, node))
+//   goRight = searchKey != null && (nodeKey   == null || Less(node, search))
+//   neither -> EQUAL: *outSlot = the existing node, RETURN WITHOUT counting.
+//
+// `searchKey` is RE-READ before the right test (0x18002a212), and the count is
+// incremented on the insert arms only.
+// ---------------------------------------------------------------------------
+template <class P>
+typename P::Node** InsertCorePattern(typename P::SetT* set,
+                                     typename P::Node** outSlot,
+                                     const typename P::Element* pair) {
+    using Node = typename P::Node;
+
+    Node* node = P::Root(set);
+    if (node == nullptr) {
+        P::OnRootInsert();
+        Node* n = P::Alloc(set, pair, nullptr);
+        P::Count(set) += 1;
+        P::Root(set) = n;
+        *outSlot     = n;
+        return outSlot;
+    }
+
+    Node* fresh = nullptr;
+
+    for (;;) {
+        // Retail re-reads both keys every iteration; neither is hoisted.
+        // Bound by reference, not copied: a `Key` can be the whole element.
+        const auto& nodeKey = P::NodeKey(node);
+
+        bool goLeft = false;
+        {
+            const auto& searchKey = P::SearchKey(pair);
+            if (!P::IsNull(nodeKey)) {
+                if (P::IsNull(searchKey))            { goLeft = true; P::OnNullSearchKey(); }
+                else if (P::Less(searchKey, nodeKey))  goLeft = true;
+            } else {
+                P::OnNullNodeKey();
+            }
+        }
+        if (goLeft) {
+            P::OnDescLeft();
+            Node* l = node->left;
+            if (l == nullptr) {
+                fresh      = P::Alloc(nullptr, pair, node);
+                node->left = fresh;
+                break;
+            }
+            node = l;
+            continue;
+        }
+
+        const auto& searchKey = P::SearchKey(pair);   // 0x18002a212 — retail re-reads
+        bool goRight = false;
+        if (!P::IsNull(searchKey)) {
+            if (P::IsNull(nodeKey))              goRight = true;
+            else if (P::Less(nodeKey, searchKey)) goRight = true;
+        }
+        if (!goRight) {                          // EQUAL — a lookup, not an insert
+            P::OnEqual();
+            *outSlot = node;
+            return outSlot;
+        }
+        P::OnDescRight();
+        Node* r = node->right;
+        if (r == nullptr) {
+            fresh       = P::Alloc(nullptr, pair, node);
+            node->right = fresh;
+            break;
+        }
+        node = r;
+    }
+
+    // *** THE RETRACE TAKES A SLOT, NOT A NODE. *** Retail hands it the stack
+    // cell the descent has been updating and re-reads it after every rotation.
+    Node* slot = node;
+    P::Retrace(set, &slot);
+    P::Count(set) += 1;
+    *outSlot = fresh;
+    return outSlot;
+}
+
+// Counter hooks default to nothing; the ported cores' policies override the
+// ones whose probe counters they keep (avl_trees.h's ProbeCounters).
+struct NoCounters {
+    static void OnRootInsert() {}
+    static void OnDescLeft() {}
+    static void OnDescRight() {}
+    static void OnEqual() {}
+    static void OnNullSearchKey() {}
+    static void OnNullNodeKey() {}
+};
+
+}  // namespace detail
+
+// ============================================================
+// Collection::Set<T, Compare, Allocator, Key> — the class.
+//
+// Parameter ORDER note: retail's mangled name spells the parameters
+// `Set<T, Allocator, Key, Compare>`. The class takes `Compare` second because
+// that is the one a caller actually varies (B32_RULES step 1); `Key` and
+// `Allocator` keep their retail defaults and `Key == T` remains the rule (the
+// key is the element or its leading sub-object).
+// ============================================================
+template <class T, class Compare, class Allocator, class Key>
+class Set {
+public:
     struct Node {
         T        element;   // +0x00
         Node*    parent;    // align8(sizeof(T)) + 0x00
@@ -554,13 +1064,203 @@ struct Set {
         uint32_t _padTail;  // align8(sizeof(T)) + 0x1c  zeroed together with
                             //   balance and height as one dword by the node ctor
     };
-    struct Iterator {
-        Node* node;         // +0x00 — NOT PINNED. No Set::Iterator is exported
-                            //   or returned by value anywhere in the DLL; this
-                            //   is shaped after LinkedList::Iterator, which IS
-                            //   pinned. Treat as a GUESS until a consumer pins it.
+
+    // +0x00 — NOT PINNED. No Set::Iterator is exported or returned by value
+    // anywhere in the DLL; this is shaped after LinkedList::Iterator, which IS
+    // pinned. Treat the LAYOUT as a guess; the WALK is retail's (the textbook
+    // parent-pointer successor walk inlined into 0x1800a76c0, no threading).
+    class Iterator {
+    public:
+        Iterator() : node(nullptr) {}
+        explicit Iterator(Node* n) : node(n) {}
+        T&   operator*() const { return node->element; }
+        T*   operator->() const { return &node->element; }
+        Node* GetNode() const { return node; }
+        bool operator==(const Iterator& o) const { return node == o.node; }
+        bool operator!=(const Iterator& o) const { return node != o.node; }
+        Iterator& operator++() { node = Successor(node); return *this; }
+    private:
+        static Node* Successor(Node* n) {
+            if (n->right) { n = n->right; while (n->left) n = n->left; return n; }
+            Node* p = n->parent;
+            while (p && p->right == n) { n = p; p = p->parent; }
+            return p;
+        }
+        Node* node;         // +0x00 — the entire iterator
     };
 
+    // Retail's ctor is the compiler's: two stores of zero. `= default` is not
+    // used because the two fields must be zeroed, not left indeterminate
+    // (B31_RULES class rule 5).
+    Set() : _root(nullptr), _count(0), _pad0c(0) {}
+
+    // The class OWNS its nodes, so the destructor is Clear. Retail's containers
+    // are destroyed the same way (set_clear.cpp's 0x18000f7d0 is exactly this
+    // body, and the ported Clear is now a shim onto it).
+    ~Set() { Clear(); }
+
+    Set(const Set&)            = delete;   // retail never copies one
+    Set& operator=(const Set&) = delete;
+
+    // ---- Insert -------------------------------------------------------
+    // Returns the node holding `element`. ON A DUPLICATE KEY IT RETURNS THE
+    // EXISTING NODE, inserts nothing and does not bump the count.
+    Node* Insert(const T& element) {
+        Node* out = nullptr;
+        detail::InsertCorePattern<Policy>(this, &out, &element);
+        return out;
+    }
+
+    // ---- Find (retail 0x18002ace0) ------------------------------------
+    // Descends left while searchKey < nodeKey and right while nodeKey <
+    // searchKey, returns the node when neither holds and null on falling off
+    // the tree — with the same null arms the insert descent uses.
+    Node* Find(const Key& key) const {
+        Node* node = _root;
+        while (node) {
+            const Key& nodeKey = KeyOf(node->element);
+            bool goLeft = false;
+            if (!detail::KeyTraits<Key>::IsNull(nodeKey)) {
+                if (detail::KeyTraits<Key>::IsNull(key))    goLeft = true;
+                else if (Cmp::Less(key, nodeKey))           goLeft = true;
+            }
+            if (goLeft) { node = node->left; continue; }
+
+            bool goRight = false;
+            if (!detail::KeyTraits<Key>::IsNull(key)) {
+                if (detail::KeyTraits<Key>::IsNull(nodeKey)) goRight = true;
+                else if (Cmp::Less(nodeKey, key))            goRight = true;
+            }
+            if (!goRight) return node;
+            node = node->right;
+        }
+        return nullptr;
+    }
+
+    // ---- Remove -------------------------------------------------------
+    // The element is destroyed, then the node is unlinked, freed and the tree
+    // retraced by the erase core. For every retail instantiation `T` is
+    // trivially destructible and the first step compiles away, which is why the
+    // ported 0x18000aba0 has no element destructor in it.
+    void Remove(Node* n) {
+        if (!n) return;
+        n->element.~T();
+        Ops::Erase(this, n, Alloc::FreeFn());
+    }
+    bool Remove(const Key& key) {
+        Node* n = Find(key);
+        if (!n) return false;
+        Remove(n);
+        return true;
+    }
+
+    // ---- Clear (retail 0x18000f7d0) -----------------------------------
+    // Post-order: both of the root's subtrees, then the root's element, then
+    // the root's node, then the two zero stores — which retail performs even
+    // when the tree was already empty (it branches to a second copy of them).
+    void Clear() {
+        Node* n = _root;
+        if (n) {
+            DestroySubtree(n->left);
+            DestroySubtree(n->right);
+            n->element.~T();
+            Alloc::Free(n);
+        }
+        _root  = nullptr;
+        _count = 0;
+    }
+
+    // retail 0x18000f890 / 0x180023130 / 0x180008340 — the recursive
+    // post-order destroy Clear stands on, exposed so the ported free functions
+    // can be one-line shims onto it. Both children are loaded BEFORE the free:
+    // the allocator writes a boundary tag into the block it takes back.
+    static void DestroySubtree(Node* n) {
+        if (!n) return;
+        DestroySubtree(n->left);
+        DestroySubtree(n->right);
+        n->element.~T();
+        Alloc::Free(n);
+    }
+
+    int32_t GetCount() const { return _count; }
+    bool    IsEmpty()  const { return _count == 0; }
+    Node*   GetRoot()  const { return _root; }
+
+    Iterator Begin() const {
+        Node* n = _root;
+        if (!n) return Iterator(nullptr);
+        while (n->left) n = n->left;
+        return Iterator(n);
+    }
+    Iterator End() const { return Iterator(nullptr); }
+
+private:
+    // The key is the element, or its leading sub-object for a `Pair` element —
+    // retail's rule (Key == T in both mangled names that spell the parameters
+    // out). The cast is the leading-subobject one, not a type pun.
+    static const Key& KeyOf(const T& e) {
+        return *reinterpret_cast<const Key*>(&e);
+    }
+
+    enum : unsigned { kElemWidth = (sizeof(T) + 7u) & ~7u };
+    using Ops   = detail::AvlOps<Node, kElemWidth>;
+    using Alloc = detail::AllocTraits<Allocator>;
+    using Cmp   = detail::CompareTraits<Compare, Key>;
+
+    // The node allocator: `align8(sizeof(T)) + 0x20` bytes at alignment 8, the
+    // element copy-constructed in place, parent linked, children null, balance
+    // and height zeroed as one dword. That is every retail node ctor
+    // (0x18000fb00, 0x180023060, 0x1800087c0, 0x1800278c0) with the element
+    // copy written as `T`'s copy constructor instead of the monomorphised
+    // qword stores.
+    //
+    // A NULL ALLOCATION RETURNS NULL AND THE CALLER STORES IT AS THE CHILD —
+    // retail does not check either (CLAUDE.md: do not "fix" a faithful crash).
+    static Node* AllocNode(const T* src, Node* parent) {
+        void* mem = Alloc::Alloc(sizeof(Node), 8);
+        if (!mem) return nullptr;
+        Node* n = static_cast<Node*>(mem);
+        new (static_cast<void*>(&n->element)) T(*src);
+        n->parent   = parent;
+        n->left     = nullptr;
+        n->right    = nullptr;
+        n->balance  = 0;
+        n->height   = 0;
+        // `_padTail` is deliberately NOT written: retail's node constructors
+        // zero balance and height as ONE dword and leave the tail dword
+        // holding allocator bytes (set_avl.h's pad2c, set_avl_e24.h's pad34).
+        return n;
+    }
+
+    // The policy `InsertCorePattern` runs on. It is the same shape the four
+    // ported insert cores now hand it.
+    struct Policy : detail::NoCounters {
+        using Node    = typename Set::Node;
+        using SetT    = Set;
+        using Element = T;
+        static Node*&   Root(Set* s)  { return s->_root; }
+        static int32_t& Count(Set* s) { return s->_count; }
+        static const Key& NodeKey(const Node* n)   { return KeyOf(n->element); }
+        static const Key& SearchKey(const T* e)    { return KeyOf(*e); }
+        static bool IsNull(const Key& k) { return detail::KeyTraits<Key>::IsNull(k); }
+        static bool Less(const Key& a, const Key& b) { return Cmp::Less(a, b); }
+        static Node* Alloc(Set* /*ignored*/, const T* e, Node* parent) {
+            return AllocNode(e, parent);
+        }
+        static Node* Alloc(decltype(nullptr), const T* e, Node* parent) {
+            return AllocNode(e, parent);
+        }
+        static void Retrace(Set* s, Node** slot) { Ops::Retrace(s, slot); }
+    };
+    friend struct Policy;
+
+public:
+    // PUBLIC, and deliberately so until the classes that EMBED a Set are
+    // converted (§B.2): `Object::ExternalFactory`'s two trees, `Input::KeyMap`
+    // and the exe's `EntityList` all reach these by name or by offset today,
+    // and the layout probe at the bottom of this header takes `offsetof` of
+    // them. All three members share one access specifier, so the type stays
+    // standard-layout and that `offsetof` stays well defined.
     Node*   _root;          // +0x00
     int32_t _count;         // +0x08
     int32_t _pad0c;         // +0x0c: NOT PINNED — never read or written
