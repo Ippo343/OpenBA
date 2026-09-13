@@ -91,17 +91,23 @@ constexpr uint32_t kNegPole  = 0xbf7fbe77u;   // 0x180161758   -0.999f
 }  // namespace
 
 // ?FromLookAt@Transform3@Math@@SA?AV12@AEBVVector3@2@0@Z — retail 0x180064750.
-// `ret` is the HIDDEN RETURN SLOT (RCX). See the banner.
-extern "C" Transform3* RtMath_Transform3_FromLookAt(Transform3* ret,
-                                                    const Vector3* position,
-                                                    const Vector3* target) {
+//
+// ENDGAME B.3.1 step 1: the body MOVED onto Math::Transform3::FromLookAt. It
+// is unchanged line for line; only the hidden return slot is gone (there is no
+// cross-compiler ABI left, B31_RULES), so it returns by value. The banner
+// above still explains why the ARGUMENT order is what it is, which is the part
+// Ghidra got wrong and which the static-member signature preserves exactly.
+Math::Transform3 Math::Transform3::FromLookAt(const Vector3& position, const Vector3& target) {
+    Transform3 out;
+    Transform3* const ret = &out;
+
     const float one  = F32(kPosOne);
     const float zero = 0.0f;
 
     // forward = target - position                                 0x180064767
-    float fx = target->x - position->x;
-    float fy = target->y - position->y;
-    float fz = target->z - position->z;
+    float fx = target.x - position.x;
+    float fy = target.y - position.y;
+    float fz = target.z - position.z;
 
     // 0x1800647aa..0x1800647da: (fx*fx + fy*fy) + fz*fz, then sqrtf.
     float len = RtLibm::Sqrt((fx * fx + fy * fy) + fz * fz);
@@ -172,9 +178,20 @@ extern "C" Transform3* RtMath_Transform3_FromLookAt(Transform3* ret,
     ret->axisZ.z = uz;
     // Retail copies the position through GP registers (`MOV EAX,[RDI]` ...),
     // i.e. a bit copy, so a signalling NaN in the argument survives unquieted.
-    std::memcpy(&ret->translation.x, &position->x, 4);
-    std::memcpy(&ret->translation.y, &position->y, 4);
-    std::memcpy(&ret->translation.z, &position->z, 4);
+    std::memcpy(&ret->translation.x, &position.x, 4);
+    std::memcpy(&ret->translation.y, &position.y, 4);
+    std::memcpy(&ret->translation.z, &position.z, 4);
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// TRANSITIONAL SHIM — ENDGAME B.3.1 step 1. One line onto the member above;
+// it and the registry rows below die in step 2 with their last caller.
+// ---------------------------------------------------------------------------
+extern "C" Transform3* RtMath_Transform3_FromLookAt(Transform3* ret,
+                                                    const Vector3* position,
+                                                    const Vector3* target) {
+    *ret = Math::Transform3::FromLookAt(*position, *target);
     return ret;
 }
 

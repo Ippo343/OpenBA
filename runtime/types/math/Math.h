@@ -1,33 +1,71 @@
 #pragma once
 // ============================================================================
-// runtime/types/math/Math.h — binary layouts for the Math namespace
+// runtime/types/math/Math.h — the real Math value classes
 // ============================================================================
 //
-// Wave 1 of the Runtime-x64.dll port (docs/runtime_port/PLAN.md §4.2).
+// Wave 1 of the Runtime-x64.dll port introduced these as PODs plus a wall of
+// `RtMath_*` free functions with the DLL's raw ABI. ENDGAME B.3.1 step 1
+// (docs/runtime_port/endgame_b/B31_RULES.md) turns them into REAL C++ classes
+// under retail's own names in `namespace Math`, with the ported bodies MOVED
+// (not rewritten) onto them as members.
+//
 // Every layout below was read out of Runtime-x64.dll in Ghidra, not guessed;
-// the function whose decompilation pins each one is named next to it.
+// the function whose decompilation pins each one is named next to it. Every
+// `static_assert` Wave 1 wrote is kept, plus a `sizeof` assert on every type.
 //
-// Vector2 / Vector3 / Vector4 are NOT redefined here: they already exist in
-// engine/types/common.h with the same layout and are shared by the exe port.
+// THE ABI NOTE THAT GOVERNED WAVE 1 NO LONGER APPLIES
+// ---------------------------------------------------
+// It used to read: "every one of these classes has a user-declared
+// constructor, so MSVC returns it BY MEMORY: the caller passes a hidden return
+// slot pointer in RDX (after `this` in RCX) and the callee returns that same
+// pointer in RAX ... do NOT write them as C++ methods returning by value and
+// hope the ABI lines up." That was true while the callee lived in
+// Runtime-x64.dll and the caller was compiled by GCC. The DLL is gone: every
+// caller and callee is now compiled by the same compiler, so the
+// hidden-return-slot shape is just the C body's shape and it goes (B31_RULES,
+// "the one fact that changes the rules since the port"). What still binds is
+// the OBJECT LAYOUT, which is why every assert below stays.
 //
-// ABI NOTE THAT GOVERNS EVERY PORT IN THIS WAVE
-// ---------------------------------------------
-// Every one of these classes has a user-declared constructor, so MSVC returns
-// it BY MEMORY: the caller passes a hidden return-slot pointer in RDX (after
-// `this` in RCX) and the callee returns that same pointer in RAX. Our ports are
-// therefore written as plain free functions with the hidden slot as an explicit
-// parameter, mirroring the fn_* typedefs the exe port already uses
-// (engine/funcs/engine_funcs.h). Do NOT write them as C++ methods returning by
-// value and hope the ABI lines up.
+// The `RtMath_*` free functions still exist, in runtime/src/math/*.cpp, as
+// one-line shims onto these members, and the `RegisterRuntimeExport` rows
+// register the shims. They die in step 2, when the last caller moves.
 //
-//   retail: Math::Scalar Math::Vector3::Length() const
-//   ours:   Scalar* RtMath_Vector3_Length(const Vector3* self, Scalar* ret)
-//           ... and it must `return ret;`
+// TRIVIAL COPYABILITY IS LOAD-BEARING AND IS PRESERVED
+// ----------------------------------------------------
+// These are value types with no ownership. Retail's copy ctor / operator= are
+// plain field copies (`Transform`'s is literally seven dword moves at
+// 0x180015020), so they are spelled `= default` here rather than as
+// user-provided bodies: that reproduces retail exactly AND keeps every type
+// trivially copyable, so the tree's memcpy / reinterpret_cast traffic over
+// these bytes stays well defined and by-value passing keeps the register shape
+// it has today. The retail address of each is a comment on the declaration;
+// the shim the registry points at keeps the memcpy body.
+//
+// DEFAULT CONSTRUCTORS (B31_RULES rule 5)
+// ---------------------------------------
+// Read out of the disassembly, one by one — NONE of them is a no-op, so none
+// is `= default` and none is a forbidden user-provided empty body:
+//   Scalar()     0x180021930  stores 0 at +0x00
+//   Vector2()    0x180060030  zeroes 8 bytes
+//   Vector3()    0x180015070  zeroes 12 bytes
+//   Vector4()    0x18001e0a0  zeroes 16 bytes
+//   Quaternion() 0x180015050  zeroes x/y/z, stores 1.0f at +0x0c  -> IDENTITY
+//   Matrix()     0x18001d770  zeroes all 64 bytes (NOT the identity)
+//   Transform()  0x180015080  identity quaternion + zero translation
+//   Transform2() 0x18006c8b0  zeroes 0x18 bytes (NOT the identity)
+//   Transform3() 0x18005cc20  zeroes 0x30 bytes (NOT the identity)
+// They are `constexpr` so a namespace-scope `const Math::Vector3 k{...}` is
+// still constant-initialised, which a non-constexpr ctor would silently turn
+// into a dynamic initialiser.
+//
+// A few (float, float, ...) constructors below are marked NOT RETAIL. They
+// exist because Wave 1's PODs were aggregates and the tree brace-initialises
+// them (`Vector3 v{x, y, z}`); B31_RULES step 1 says such a site is fixed by
+// giving the class the matching constructor, not by editing the caller.
 // ============================================================================
 
 #include <cstdint>
 #include <cstddef>
-#include "../../../engine/types/common.h"   // Vector2, Vector3, Vector4
 
 namespace RtMathConst {
 // Float constants the DLL keeps in .rdata and that the ports must reproduce
@@ -44,23 +82,124 @@ constexpr float kBigPos = 1.0e8f;             // 0x4cbebc20
 constexpr float kBigNeg = -1.0e8f;            // 0xccbebc20
 }  // namespace RtMathConst
 
+namespace Math {
+
+class Scalar;
+class Vector2;
+class Vector3;
+class Vector4;
+class Quaternion;
+class Matrix;
+class Transform;
+class Transform2;
+class Transform3;
+
 // ============================================================
 // Math::Scalar — a single float in a class wrapper.
 // Pinned by ?Length@Vector3@Math@@QEBA?AVScalar@2@XZ (0x1800219a0), which
 // writes one float through the hidden return slot in RDX.
 // ============================================================
-struct Scalar {
+class Scalar {
+public:
     float v;
+
+    constexpr Scalar() : v(0.0f) {}                 // ??0Scalar@Math@@QEAA@XZ   0x180021930
+    constexpr Scalar(float f) : v(f) {}             // ??0Scalar@Math@@QEAA@M@Z  0x180015340
+
+    Scalar Abs() const;                             // 0x1800646b0
+    Scalar Lerp(const Scalar& to, const Scalar& t); // 0x1800218c0 (QEAA: non-const in retail)
+    Scalar Max(const Scalar& other) const;          // 0x18005ff60
 };
 static_assert(sizeof(Scalar) == 4, "Math::Scalar must be 4 bytes");
+
+// ============================================================
+// Math::Vector2 — {x, y}. The global `Vector2` that the exe-side tree spells
+// (engine/types/common.h) is an alias of this class.
+// ============================================================
+class Vector2 {
+public:
+    float x, y;
+
+    constexpr Vector2() : x(0.0f), y(0.0f) {}                       // 0x180060030
+    constexpr Vector2(float x_, float y_) : x(x_), y(y_) {}         // NOT RETAIL (brace-init sites)
+    Vector2(const Scalar& x_, const Scalar& y_);                    // 0x180070db0
+
+    void    operator*=(const Vector2& rhs);                         // 0x18005ffd0 (void return in retail)
+    Scalar  Dot(const Vector2& rhs) const;                          // 0x18006c840
+    Vector2 Max(const Vector2& rhs) const;                          // 0x180060330
+    Vector2 Min(const Vector2& rhs) const;                          // 0x1800602e0
+    Scalar  Length() const;                                         // 0x18006c880
+    Scalar  LengthSquared() const;                                  // 0x18006c860
+    Vector2 Normalize() const;                                      // 0x18006c600
+    Vector2 Normalize(Scalar& mag) const;                           // 0x18006c7b0
+    // Retail takes IO::Serializer&; IO::Serializer is not a typed struct in
+    // this header's layer, so the seam stays a void*. See the body.
+    void    Serialize(void* serializer);                            // 0x18005ff40
+};
+static_assert(sizeof(Vector2) == 8, "Math::Vector2 must be 8 bytes");
+
+// ============================================================
+// Math::Vector3 — {x, y, z}.
+// ============================================================
+class Vector3 {
+public:
+    float x, y, z;
+
+    constexpr Vector3() : x(0.0f), y(0.0f), z(0.0f) {}                        // 0x180015070
+    constexpr Vector3(float x_, float y_, float z_) : x(x_), y(y_), z(z_) {}  // 0x1800152d0
+    Vector3(const Scalar& x_, const Scalar& y_, const Scalar& z_);            // 0x180015120
+    explicit Vector3(const Scalar& s);                                        // 0x180015360 (splat)
+
+    Vector3 Cross(const Vector3& rhs) const;                        // 0x180021b10
+    Scalar  Dot(const Vector3& rhs) const;                          // 0x18001dff0
+    static Vector3 FromYawPitch(const Scalar& yaw, const Scalar& pitch);      // 0x1800220b0
+    float   Heading() const;                                        // 0x18007c900 (plain float in XMM0)
+    Scalar  Length() const;                                         // 0x1800219a0
+    Vector3 Lerp(const Vector3& to, const Scalar& t) const;         // 0x18001d450
+    Vector3 Min(const Vector3& rhs) const;                          // 0x180015280
+    Vector3 Normalize(Scalar& mag) const;                           // 0x180021a20
+    Vector3 Normalize() const;                                      // 0x180021ae0
+    bool    operator==(const Vector3& rhs) const;                   // 0x1800150a0
+    void    Serialize(void* serializer);                            // 0x1800150e0
+};
+static_assert(sizeof(Vector3) == 12, "Math::Vector3 must be 12 bytes");
+
+// ============================================================
+// Math::Vector4 — {x, y, z, w}.
+// ============================================================
+class Vector4 {
+public:
+    float x, y, z, w;
+
+    constexpr Vector4() : x(0.0f), y(0.0f), z(0.0f), w(0.0f) {}     // 0x18001e0a0
+    constexpr Vector4(float x_, float y_, float z_, float w_)       // NOT RETAIL (brace-init sites)
+        : x(x_), y(y_), z(z_), w(w_) {}
+    explicit Vector4(const Scalar& s);                              // 0x18001d750 (splat)
+    Vector4(const Vector3& xyz, const Scalar& w_);                  // 0x18001e070
+
+    void Serialize(void* serializer);                               // 0x18001d360
+};
+static_assert(sizeof(Vector4) == 16, "Math::Vector4 must be 16 bytes");
 
 // ============================================================
 // Math::Quaternion — {x, y, z, w}, w LAST.
 // Pinned by ??0Quaternion@Math@@QEAA@MMMM@Z (0x18001e260): param 1->+0x00,
 // 2->+0x04, 3->+0x08, 4->+0x0c.
 // ============================================================
-struct Quaternion {
+class Quaternion {
+public:
     float x, y, z, w;
+
+    // 0x180015050 — zeroes x/y/z and writes 1.0f at +0x0c, i.e. the IDENTITY.
+    constexpr Quaternion() : x(0.0f), y(0.0f), z(0.0f), w(RtMathConst::kOne) {}
+    Quaternion(float x_, float y_, float z_, float w_);             // 0x18001e260
+    // Mike Day / Shepperd construction from an orthonormal basis.  0x180021b70
+    Quaternion(const Vector3& right, const Vector3& forward, const Vector3& up);
+
+    Quaternion operator*(const Quaternion& other) const;            // 0x18001e280
+    Vector3    Rotate(const Vector3& v) const;                      // 0x18001e140
+    Quaternion Lerp(const Quaternion& other, const Scalar& t) const;// 0x18001d500
+    static Quaternion FromYawPitch(const Scalar& yawDeg, const Scalar& pitchDeg);  // 0x18007d710
 };
 static_assert(sizeof(Quaternion) == 16, "Math::Quaternion must be 16 bytes");
 
@@ -70,8 +209,29 @@ static_assert(sizeof(Quaternion) == 16, "Math::Quaternion must be 16 bytes");
 // m[0..2], m[4..6], m[8..10]; the translation in m[12..14]; m[3]/m[7]/m[11]
 // are cleared and m[15] is 1.0f.
 // ============================================================
-struct Matrix {
+class Matrix {
+public:
     float m[16];
+
+    // 0x18001d770 — zeroes all sixteen cells. NOT the identity; Identity() is.
+    constexpr Matrix() : m{} {}
+    // NOT RETAIL. Wave 1's Matrix was an aggregate and one site brace-initialises
+    // the cell array directly — `const Matrix kZUpToYUp = {{ ...16 floats... }}`
+    // in runtime/src/graphics/renderer.cpp. B31_RULES step 1: a brace-init site
+    // that breaks is fixed by giving the class the matching constructor, not by
+    // editing the caller.
+    constexpr Matrix(const float (&cells)[16])
+        : m{cells[0],  cells[1],  cells[2],  cells[3],
+            cells[4],  cells[5],  cells[6],  cells[7],
+            cells[8],  cells[9],  cells[10], cells[11],
+            cells[12], cells[13], cells[14], cells[15]} {}
+    Matrix(const Vector4& c0, const Vector4& c1,                    // 0x18001e540
+           const Vector4& c2, const Vector4& c3);
+
+    Matrix  operator*(const Matrix& other) const;                   // 0x18001d980
+    Vector4 operator*(const Vector4& v) const;                      // 0x18007d030
+    Matrix  Inverse() const;                                        // 0x1800bb310
+    static Matrix Identity();                                       // 0x18002c030
 };
 static_assert(sizeof(Matrix) == 64, "Math::Matrix must be 64 bytes");
 
@@ -81,9 +241,30 @@ static_assert(sizeof(Matrix) == 64, "Math::Matrix must be 64 bytes");
 // writes 1.0f at +0x0c (quaternion w) and zeroes +0x10..+0x1b; and by the copy
 // ctor (0x180015020) which copies exactly seven dwords.
 // ============================================================
-struct Transform {
+class Transform {
+public:
     Quaternion rotation;      // +0x00
     Vector3    translation;   // +0x10
+
+    constexpr Transform() : rotation(), translation() {}            // 0x180015080
+    // Retail's copy ctor (0x180015020) and operator= (0x180014fd0) are plain
+    // seven-dword field copies; `= default` is that, and keeps the type
+    // trivially copyable. The registered shims keep the memcpy body.
+    Transform(const Transform&) = default;                          // 0x180015020
+    Transform& operator=(const Transform&) = default;               // 0x180014fd0
+
+    Vector3    operator*(const Vector3& v) const;                   // 0x18001e200
+    Transform  operator*(const Transform& other) const;             // 0x18001e3c0
+    Matrix     AsMatrix() const;                                    // 0x18001e5f0
+    Transform3 AsTransform3() const;                                // 0x18001fcd0
+    Transform  Inverse() const;                                     // 0x18005db50
+    void       Serialize(void* serializer);                         // 0x180059b90
+
+    static Transform Identity();                                    // 0x18001fab0
+    static Transform FromDirection(const Vector3& direction, const Vector3& offset);  // 0x180021d70
+    static Transform FromLookAt(const Vector3& from, const Vector3& to);              // 0x18007dbb0
+    static Transform FromYawPitchOffset(const Scalar& yawDeg, const Scalar& pitchDeg, // 0x18007da70
+                                        const Vector3& offset);
 };
 static_assert(sizeof(Transform) == 0x1c, "Math::Transform must be 0x1c bytes");
 static_assert(offsetof(Transform, translation) == 0x10, "Transform::translation @ +0x10");
@@ -94,10 +275,20 @@ static_assert(offsetof(Transform, translation) == 0x10, "Transform::translation 
 // (0x18007dca0): +0x00 = cos, +0x04 = sin, +0x08 = -sin, +0x0c = cos,
 // +0x10 = the Vector2 offset (written first, as one qword).
 // ============================================================
-struct Transform2 {
+class Transform2 {
+public:
     Vector2 rotX;             // +0x00  { cos,  sin }
     Vector2 rotY;             // +0x08  { -sin, cos }
     Vector2 translation;      // +0x10
+
+    // 0x18006c8b0 — zeroes all 0x18 bytes. NOT the identity rotation.
+    constexpr Transform2() : rotX(), rotY(), translation() {}
+    Transform2(const Scalar& angleDeg, const Vector2& offset);      // 0x18007dca0
+
+    Transform2 operator*(const Transform2& other) const;            // 0x180078650
+    Vector2    operator*(const Vector2& v) const;                   // 0x18006c8e0
+
+    static Transform2 FromYawOffset(const Scalar& yawDeg, const Vector2& offset);  // 0x1800787f0
 };
 static_assert(sizeof(Transform2) == 0x18, "Math::Transform2 must be 0x18 bytes");
 static_assert(offsetof(Transform2, translation) == 0x10, "Transform2::translation @ +0x10");
@@ -109,13 +300,55 @@ static_assert(offsetof(Transform2, translation) == 0x10, "Transform2::translatio
 // matrix[8,9,10] <- +0x18,+0x1c,+0x20; matrix[12,13,14] <- +0x24,+0x28,+0x2c.
 // So the three basis vectors are contiguous Vector3s and translation follows.
 // ============================================================
-struct Transform3 {
+class Transform3 {
+public:
     Vector3 axisX;            // +0x00
     Vector3 axisY;            // +0x0c
     Vector3 axisZ;            // +0x18
     Vector3 translation;      // +0x24
+
+    // 0x18005cc20 — zeroes all 0x30 bytes. NOT the identity basis.
+    constexpr Transform3() : axisX(), axisY(), axisZ(), translation() {}
+    // 0x18001dee0 is a straight 0x30-byte field copy; see Transform above for
+    // why this is `= default` rather than a user-provided memcpy body.
+    Transform3(const Transform3&) = default;                        // 0x18001dee0
+    Transform3& operator=(const Transform3&) = default;
+
+    Vector3    operator*(const Vector3& v) const;                   // 0x18001fbc0
+    Matrix     AsMatrix() const;                                    // 0x1800346e0
+    Transform3 Inverse() const;                                     // 0x180060040
+    Vector3    Rotate(const Vector3& v) const;                      // 0x18001e470
+
+    static Transform3 Identity();                                   // 0x1800347f0
+    // NOTE the argument roles, which the export name does not give away:
+    // `position` is the eye (it lands in the translation row) and `target` is
+    // what is looked at. See runtime/src/math/from_lookat.cpp.
+    static Transform3 FromLookAt(const Vector3& position, const Vector3& target);  // 0x180064750
 };
 static_assert(sizeof(Transform3) == 0x30, "Math::Transform3 must be 0x30 bytes");
 static_assert(offsetof(Transform3, axisY) == 0x0c, "Transform3::axisY @ +0x0c");
 static_assert(offsetof(Transform3, axisZ) == 0x18, "Transform3::axisZ @ +0x18");
 static_assert(offsetof(Transform3, translation) == 0x24, "Transform3::translation @ +0x24");
+
+}  // namespace Math
+
+// ============================================================================
+// Transitional global aliases (ENDGAME B.3.1 step 1).
+//
+// Wave 1 declared these types at GLOBAL scope, and ~800 sites across code/,
+// engine/, runtime/, standalone/ and dx11/ still spell them that way. The
+// aliases keep every one of them compiling while the classes move to retail's
+// namespace; step 2 converts the callers and deletes the aliases.
+//
+// Vector2/Vector3/Vector4 are aliased in engine/types/common.h instead — that
+// is the header the exe-side tree includes for them, and it is where they were
+// defined before this batch.
+// ============================================================================
+using Scalar     = Math::Scalar;
+using Quaternion = Math::Quaternion;
+using Matrix     = Math::Matrix;
+using Transform  = Math::Transform;
+using Transform2 = Math::Transform2;
+using Transform3 = Math::Transform3;
+
+#include "../../../engine/types/common.h"   // the Vector2/Vector3/Vector4 aliases

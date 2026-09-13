@@ -288,7 +288,13 @@ const Matrix kZUpToYUp = {{
 extern "C" void RtGraphics_Camera_SetFrustum(Camera* self, const Frustum* frustum) {
     Camera before;
 
-    std::memcpy(&self->frustum, frustum, 0x60);
+    // The `void*` cast is deliberate and is NOT a behaviour change: ENDGAME
+    // B.3.1 gave Math::Vector4 retail's zeroing default ctor, which makes
+    // Volume::Frustum non-trivially-default-constructible, and -Wclass-memaccess
+    // then objects that this DELIBERATELY partial copy (0x60 of 0x64 bytes —
+    // see the banner: SetFrustum must not carry the pad across) leaves four
+    // bytes unchanged. Copying through void* says "yes, on purpose".
+    std::memcpy(static_cast<void*>(&self->frustum), frustum, 0x60);
     self->frustum.isOrthographic = frustum->isOrthographic;
 
     const bool zeroToOne = RtVideoDeviceUsesZeroToOneDepth();
@@ -316,7 +322,11 @@ extern "C" Camera* RtGraphics_Camera_Ctor(Camera* self, const Frustum* frustum,
     // bytes come across too. (SetFrustum, above, does not.)
     std::memcpy(&self->frustum, frustum, sizeof(Frustum));
     std::memcpy(&self->cameraToWorld, cameraToWorld, sizeof(Transform3));
-    std::memset(&self->projection, 0, sizeof(Matrix));
+    // Was `memset(&self->projection, 0, sizeof(Matrix))`. ENDGAME B.3.1 made
+    // Math::Matrix a real class whose default ctor (retail 0x18001d770) zeroes
+    // all sixteen cells, so value-initialising it is the same sixteen stores
+    // and does not trip -Wclass-memaccess.
+    self->projection = Matrix();
     self->swapZUpToYUp = swapZUpToYUp ? 1 : 0;
     RtGraphics_Camera_SetFrustum(self, frustum);
 
