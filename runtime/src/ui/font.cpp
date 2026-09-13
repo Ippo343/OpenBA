@@ -558,7 +558,13 @@ extern "C" int32_t RtUi_Font_ComputeLineLayout(const void* selfv, const char* te
 
                         if (layout != nullptr) {                     // 180116d8d
                             int32_t entry[4];                        // [RSP+0x58]
-                            entry[0] = cp;                           // 180116d99
+                            // GLYPH index, not the codepoint: EDX still holds
+                            // the MOVSXD from the codepoint table (0x180116d1a)
+                            // and nothing rewrites it before this store. This
+                            // is what SpriteContext::AddFont draws by, and the
+                            // sheet has only as many sprites as there are
+                            // glyphs (storing `cp` here drew "n" for "New").
+                            entry[0] = glyph;                        // 180116d99
                             entry[1] = penX;                         // 180116db1
                             entry[2] = baseY -
                                        *reinterpret_cast<const int32_t*>(e + 0xc) -
