@@ -28,6 +28,33 @@
 // directory by VA with pefile before this file was written.
 //
 // ---------------------------------------------------------------------------
+// ⚠ ATTENDANCE IS ZERO ON A DLL-PRESENT RUN, AND THAT IS STRUCTURAL
+// ---------------------------------------------------------------------------
+// MEASURED, 2026-09-12, one `BANISHED_AUTOSTART=1 BANISHED_RT_DIFF=1
+// BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120` run to the in-game world
+// and a clean self-quit (exit 0, empty standalone_crash.log, 154 `startTown`
+// lines): NONE of the ten sites below entered, so none appears in the RtDiff
+// summary at all.
+//
+// THAT IS NOT "the ports are dead code". It is what the seam does while the DLL
+// is loaded. Every caller of `DrawItemList` in this tree is one of the five
+// light `Draw` arms in lights_vtable.cpp, and those are VTABLE SLOTS of
+// ??_7{Ambient,Spot,Sun}Light@Graphics@@6B@ — rows the mint has not promoted.
+// With the DLL present those tables still hold the DLL's own bodies, so the
+// DLL's `SunLight::Draw` reaches the DLL's `DrawItemList` by rel32 and never
+// consults the port registry. The same holds for `Context::SetLight` (reached
+// only from those same arms) and for the four destructors, which the DLL's own
+// deleting-dtor slots call internally. The proof that the seam itself is fine
+// is in the same log: `Graphics::SunLight::SunLight` and
+// `Graphics::ParticleSystemInstance::ParticleSystemInstance` — the NAME-reached
+// members of the very same classes — entered 123 times between them.
+//
+// So these ten are verified by TRANSCRIPTION against the disassembly, and their
+// first execution will be at cutover, where the mint's vtable rows are ours.
+// A reader who meets a green RtDiff summary must not read it as coverage of
+// this file (reference_uncalled_port_is_not_verified.md).
+//
+// ---------------------------------------------------------------------------
 // FIVE THINGS THAT WOULD BE WRONG IF READ FROM THE DECOMPILER
 // ---------------------------------------------------------------------------
 // 1. `Renderer::DrawItemList` TAKES FIVE VALUES (this + four ints) and the
