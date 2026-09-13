@@ -31,10 +31,15 @@
 //      order — see SerializeLegacyV0 below.
 //
 // Everything said in vertexprogram.cpp about the v0 block applies here too:
-// it can only run when reading a pre-v1 file, it keeps nothing, and the two
-// unexported helpers it needs (0x1800547e0 / 0x180054920 for the first array,
-// 0x180054a20 / 0x180054ba0 for the fourth) are reached through ResolveAddr and
-// resolve to nothing once the DLL is gone.
+// it can only run when reading a pre-v1 file and it keeps nothing.
+//
+// CORRECTION (cutover closure batch D1, 2026-09-12). This banner used to end
+// "...are reached through ResolveAddr and RESOLVE TO NOTHING ONCE THE DLL IS
+// GONE". All four are now ported and registered: 0x1800547e0 and 0x180054a20
+// as `kSpec_StringRefZ_PP` / `kSpec_PpSampler10` in
+// runtime/src/collection/array.cpp, 0x180054920 and 0x180054ba0 as the
+// `kD_Str_08` / `kD_Str_10` Body-B rows in array_destroy.cpp. ResolveAddr is
+// registry-first, so the four calls below already land on our bodies.
 // ============================================================================
 #include <cstddef>
 #include <cstdint>

@@ -3409,6 +3409,344 @@ void RtColl_ArraySetSize_180052330(void* a, int n) {
 
 
 // ============================================================================
+// CUTOVER CLOSURE BATCH D1 (2026-09-12) — the unnamed helper bodies below
+// 0x1800571b0 that today's vtable ports reach by address.
+// ============================================================================
+//
+// Every row below was read out of its OWN disassembly in retail
+// Runtime-x64.dll. Where a row ends up parameter-identical to an existing
+// kSpec_* that is SAID, and the row is reused only when stride, align, the
+// element assign, the init arm AND the destroy callee all agree — the rule the
+// kSpec_U64ZeroA4 / kSpec_Fill16A4 notes above exist for.
+//
+//   J1  (115 B, the parameterless `~Array`)  ten more copies
+//   J3  thirteen SetSize instantiations, two of them constant-folded and two
+//       three-argument
+// The J2/J4/destroy halves of the same batch are in array_destroy.cpp.
+
+// --- 0x18003eea0  Array<int32>, tail ZEROED ---------------------------------
+// Stride 4 / align 4 (`SHL RCX,0x2` + `MOV EDX,0x4` at 0x18003eef3), assign is
+// one dword move, and the else arm is `MOV dword [RDX],R10D` with R10D zeroed
+// at 0x18003ef04 — so this is NOT kSpec_I32 (whose else arm is EMPTY) and not
+// kSpec_Fill4 (no else arm either). One dword of difference, one new row.
+void InitZero4(uint8_t* d) { *reinterpret_cast<uint32_t*>(d) = 0; }
+const ArraySpec kSpec_I32Z = {                    // 0x18003eea0
+    "Array<int32>(zero tail)", 4, 4, &Assign4, &InitZero4, nullptr, true,
+    0, 0, 0, 0, 0, 0 };
+
+// --- 0x18003df80 / 0x18003d1c0  Array<UI::DocumentText::DocumentItem> -------
+// Stride 0x24 (`LEA RCX,[RAX+RAX*8]; SHL RCX,0x2` at 0x18003dfd3), align 4
+// (`MOV EDX,0x4`), assign is NINE plain dword moves at +0x00..+0x20
+// (0x18003e022..0x18003e055). No init arm at all in the three-argument body —
+// its `else` takes the caller's `fill` through the same nine moves
+// (`MOV RDX,R14 / CMP R9,RSI / CMOVL RDX,R10`), so `init` stays null and the
+// one-argument sibling never reaches the loop anyway.
+// NO DESTROY: a DocumentItem holds no refcounted field; both bodies free the
+// old buffer and destroy nothing.
+void Assign24d(uint8_t* d, const uint8_t* s) {
+    for (int k = 0; k < 9; ++k)
+        reinterpret_cast<uint32_t*>(d)[k] = reinterpret_cast<const uint32_t*>(s)[k];
+}
+const ArraySpec kSpec_DocItem24 = {               // 0x18003df80, 0x18003d1c0
+    "Array<UI::DocumentText::DocumentItem>", 0x24, 4, &Assign24d,
+    nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
+
+// --- 0x18003e1a0 / 0x18003d430  Array<UI::DocumentText::Link> ---------------
+// The Link element is {System::String* @+0x00, int32 @+0x08, int32 @+0x0c,
+// bool @+0x10} in a 0x18 slot; 0x18003c760 (the element's own `operator=`,
+// ported in runtime/src/ui/documenttext.cpp in this same commit) reads the same
+// five fields and is the independent confirmation of the layout.
+//   stride 0x18   LEA RCX,[RAX+RAX*2]; SHL RCX,0x3   0x18003e1f8
+//   align  8      MOV EDX,0x8                        0x18003e200
+//   assign        zero the slot, adopt the String (INC [str-4]), then the two
+//                 int32 and the bool                 0x18003e257..0x18003e278
+//   init          slot = 0; ONE QWORD of -1 over +0x08..+0x0f; bool = 0
+//                 0x18003d4f7..0x18003d502 — i.e. both int32 become -1
+//   destroy       0x18003e3e0 (Body B, `kD_Str_18at00`) on BOTH the realloc arm
+//                 (0x18003e296) and the shrink-tail arm (0x18003e2e9)
+// +0x11..+0x17 is written by NEITHER arm.
+void AssignLink18(uint8_t* d, const uint8_t* s) {
+    AssignStringRef(d, s);                                   // +0x00, zero-then-adopt
+    *reinterpret_cast<int32_t*>(d + 0x08) = *reinterpret_cast<const int32_t*>(s + 0x08);
+    *reinterpret_cast<int32_t*>(d + 0x0c) = *reinterpret_cast<const int32_t*>(s + 0x0c);
+    d[0x10] = s[0x10];
+}
+void InitLink18(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
+    *reinterpret_cast<int64_t*>(d + 0x08)  = -1;             // ONE qword, both int32
+    d[0x10] = 0;
+}
+// By ADDRESS, registry-first: 0x18003e3e0 is registered by array_destroy.cpp in
+// this same commit (`B_ENTRY(18003e3e0, kD_Str_18at00)`), so this lands on our
+// body rather than opening a door onto an unported callee.
+void DestroyLinkRange(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18003e3e0));
+    fn(ignoredThis, base, count);
+}
+const ArraySpec kSpec_Link18 = {                  // 0x18003e1a0, 0x18003d430
+    "Array<UI::DocumentText::Link>", 0x18, 8, &AssignLink18, &InitLink18,
+    &DestroyLinkRange, false,
+    /*assign unwritten*/ 0x11, 0x18,
+    /*init   unwritten*/ 0x11, 0x18,
+    /*seed zero       */ 0x00, 0x08 };   // the String slot is dereferenced
+
+// --- 0x1800547e0  Array<System::String>, Video::PixelProgram's name table ---
+// Parameter-identical to kSpec_StringRefZ (stride 8, align 8, AssignStringRef,
+// InitZero8) IN EVERYTHING BUT THE DESTROY CALLEE: that row destroys through
+// 0x180011010 and this body calls 0x180054920 (its own COMDAT copy of Body B,
+// `kD_Str_08`). Both are the same body, but the spec names the ADDRESS our
+// registry hands the call to, so this gets its own row rather than borrowing a
+// sibling's door.
+void DestroyStringRange_180054920(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180054920));
+    fn(ignoredThis, base, count);
+}
+const ArraySpec kSpec_StringRefZ_PP = {           // 0x1800547e0
+    "Array<System::String>(PixelProgram)", 8, 8, &AssignStringRef, &InitZero8,
+    &DestroyStringRange_180054920, false,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0x00, 0x08 };
+
+// --- 0x180054a20  Array<Video::PixelProgram::Sampler> -----------------------
+// Element {System::String* @+0x00, int32 @+0x08, uint8 @+0x0c, uint8 @+0x0d,
+// uint8 @+0x0e} in a 0x10 slot: +0x0f is written by NEITHER arm.
+//   stride 0x10   SHL RCX,0x4        0x180054a71
+//   align  8      MOV EDX,0x8        0x180054a75
+//   assign        0x180054ac4..0x180054aef
+//   init          ONE qword zero at +0x00 (0x180054b00) — +0x08..+0x0f stays
+//   destroy       0x180054ba0 (Body B, `kD_Str_10`), both arms
+void AssignPpSampler10(uint8_t* d, const uint8_t* s) {
+    AssignStringRef(d, s);                                   // +0x00
+    *reinterpret_cast<int32_t*>(d + 0x08) = *reinterpret_cast<const int32_t*>(s + 0x08);
+    d[0x0c] = s[0x0c];
+    d[0x0d] = s[0x0d];
+    d[0x0e] = s[0x0e];
+}
+void DestroyStringRange_180054ba0(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180054ba0));
+    fn(ignoredThis, base, count);
+}
+const ArraySpec kSpec_PpSampler10 = {             // 0x180054a20
+    "Array<Video::PixelProgram::Sampler>", 0x10, 8, &AssignPpSampler10,
+    &InitZero8, &DestroyStringRange_180054ba0, false,
+    /*assign unwritten*/ 0x0f, 0x10,
+    /*init   unwritten*/ 0x08, 0x10,
+    /*seed zero       */ 0x00, 0x08 };
+
+// --- 0x1800567d0  Array<Video::VertexProgram::Element> ----------------------
+// Element {String* @+0x00, String* @+0x08, uint32 @+0x10, int32 @+0x14},
+// stride 0x18 (`LEA RCX,[RAX+RAX*2]; SHL RCX,0x3`), align 8. TWO refcounted
+// slots, which is why its destroy (0x180056960) is the new two-String Body B
+// row `kD_Str2_18` in array_destroy.cpp and not `kD_Str_18at00`.
+//   assign  0x180056878..0x1800568a8   two adopts then two dword moves
+//   init    TWO qword zeros only (0x1800568b9/0x1800568bc) — +0x10..+0x17 is
+//           left holding whatever the allocation contained
+void AssignVtxElement18(uint8_t* d, const uint8_t* s) {
+    AssignStringRef(d + 0x00, s + 0x00);
+    AssignStringRef(d + 0x08, s + 0x08);
+    *reinterpret_cast<uint32_t*>(d + 0x10) = *reinterpret_cast<const uint32_t*>(s + 0x10);
+    *reinterpret_cast<int32_t*>(d + 0x14)  = *reinterpret_cast<const int32_t*>(s + 0x14);
+}
+void InitZero16(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+}
+void DestroyVtxElementRange(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180056960));
+    fn(ignoredThis, base, count);
+}
+const ArraySpec kSpec_VtxElement18 = {            // 0x1800567d0
+    "Array<Video::VertexProgram::Element>", 0x18, 8, &AssignVtxElement18,
+    &InitZero16, &DestroyVtxElementRange, false,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0x10, 0x18,
+    /*seed zero       */ 0x00, 0x10 };   // both String slots are dereferenced
+
+// --- 0x180056af0  Array<Video::VertexProgram::Stream> -----------------------
+// Element {Collection::Array<Element> @+0x00 (the 0x10-byte header), String*
+// @+0x10}, stride 0x18, align 8. The assign ZEROES the nested header and then
+// runs the nested `operator=` (0x1800571b0) into it, then adopts the String.
+// The destroy is 0x180056cb0 — String at +0x10 FIRST, then the nested array —
+// and it runs on both the realloc and the shrink arm.
+//
+// 0x1800571b0 is reached by ADDRESS: it is the sibling batch's row, and
+// registry-first means the day it is ported this call lands on that body with
+// no edit here.
+void AssignVtxStream18(uint8_t* d, const uint8_t* s) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;              // 180056bb3
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;              // 180056bb6
+    {
+        using Fn = void* (*)(void*, const void*);
+        static Fn fn = nullptr;
+        if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800571b0));
+        fn(d + 0x00, s + 0x00);                              // 180056bc5
+    }
+    AssignStringRef(d + 0x10, s + 0x10);                     // 180056bcd..180056bdd
+}
+void DestroyVtxStreamRange(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180056cb0));
+    fn(ignoredThis, base, count);
+}
+const ArraySpec kSpec_VtxStream18 = {             // 0x180056af0
+    "Array<Video::VertexProgram::Stream>", 0x18, 8, &AssignVtxStream18,
+    &InitZero18, &DestroyVtxStreamRange, false,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0x00, 0x18 };   // header freed, String dereferenced
+
+// --- 0x180053190  Array<Audio::SoundEffect::Buffer> -------------------------
+// Element {float @+0x00, Collection::Array<Sample> @+0x08}, stride 0x18,
+// align 8. Confirmed twice over: the element serialize walk 0x180053300 reads
+// a float at +0x00 and the nested array's count at +0x10, and the destroy
+// 0x180052220 is Body A with `offs = {0x08}` and stride 0x18 (`kD_InnerArr_18`).
+//   assign  dword at +0x00, then zero the nested header and run its
+//           `operator=` (0x180052700)              0x180053232..0x18005324e
+//   init    dword 0 at +0x00, qword 0 at +0x08, qword 0 at +0x10
+//           0x180053262..0x180053268 — +0x04..+0x07 stays uninitialised
+void AssignSfxBuffer18(uint8_t* d, const uint8_t* s) {
+    *reinterpret_cast<uint32_t*>(d + 0x00) = *reinterpret_cast<const uint32_t*>(s + 0x00);
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
+    {
+        using Fn = void* (*)(void*, const void*);
+        static Fn fn = nullptr;
+        if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180052700));
+        fn(d + 0x08, s + 0x08);
+    }
+}
+void InitSfxBuffer18(uint8_t* d) {
+    *reinterpret_cast<uint32_t*>(d + 0x00) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
+}
+void DestroySfxBufferRange(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180052220));
+    fn(ignoredThis, base, count);
+}
+const ArraySpec kSpec_SfxBuffer18 = {             // 0x180053190
+    "Array<Audio::SoundEffect::Buffer>", 0x18, 8, &AssignSfxBuffer18,
+    &InitSfxBuffer18, &DestroySfxBufferRange, false,
+    /*assign unwritten*/ 0x04, 0x08,
+    /*init   unwritten*/ 0x04, 0x08,
+    /*seed zero       */ 0x08, 0x18 };   // the nested header is freed
+
+// --- 0x180052e60  Array<Audio::SoundEffect::Sample> -------------------------
+// The nested array of the row above. Element {ExternalPtr @+0x00, float @+0x08,
+// float @+0x0c, float @+0x10}, stride 0x18, align 8, FOUR-WAY UNROLLED in
+// retail.
+//   assign  three plain qword moves (0x180052f41..0x180052f54) — Assign18
+//   init    two qword zeros and then the DWORD 0x3f800000 (1.0f) at +0x10
+//           (0x180052f5f..0x180052f66); +0x14..+0x17 stays uninitialised
+//   destroy NONE — the ExternalPtr is not released on a shrink, and the only
+//           thing either arm does with the old buffer is free it
+void InitSfxSample18(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+    *reinterpret_cast<uint32_t*>(d + 0x10) = 0x3f800000u;     // 1.0f
+}
+const ArraySpec kSpec_SfxSample18 = {             // 0x180052e60
+    "Array<Audio::SoundEffect::Sample>", 0x18, 8, &Assign18, &InitSfxSample18,
+    nullptr, true,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0x14, 0x18,
+    /*seed zero       */ 0,    0 };
+
+#define D1_J1_ENTRY(ADDR)                                                     \
+    Site g_j1_##ADDR = { { "Collection::Array::~Array @0x" #ADDR, 0, 0, false, false }, \
+                         0x##ADDR };                                          \
+    void* RtColl_ArrayDtor_##ADDR(void* a) {                                  \
+        ArrayDtorSited(static_cast<ArrayHdr*>(a), &g_j1_##ADDR);              \
+        return nullptr;                                                       \
+    }
+
+// Ten more COMDAT copies of the parameterless J1 body. Each was disassembled in
+// full and is instruction-for-instruction the canonical body, resolving to the
+// same four absolute operands (0x1801fc718, 0x18014b390, 0x18014b388,
+// 0x1800c6c00) the J1 note at the top of this file pins.
+D1_J1_ENTRY(180013e70)   // Graphics: EdgeMesh's Array<Triangle>, 0x180013640's clear
+D1_J1_ENTRY(18001c020)   // Graphics: 0x18001b270's clear, Array<blk16>
+D1_J1_ENTRY(18001c3b0)   // Graphics
+D1_J1_ENTRY(180021490)   // Graphics: the particle emitter's Array<T>
+D1_J1_ENTRY(180033c50)   // UI:       Font::_glyphs (+0x40)
+D1_J1_ENTRY(18003d8c0)   // UI:       DocumentTextElement +0x110 / Description +0xb0
+D1_J1_ENTRY(18003da00)   // UI:       DocumentTextElement +0x120 / SpriteCapture::_sheets
+D1_J1_ENTRY(18003db40)   // UI:       DocumentTextElement +0x130 / Description +0xd0
+D1_J1_ENTRY(18003e0c0)   // UI:       DocumentTextElement +0x148
+D1_J1_ENTRY(1800527a0)   // Audio:    SoundEffect's Array<Sample>, 0x180052700's clear
+
+#undef D1_J1_ENTRY
+
+#define D1_J3_ENTRY2(ADDR, SPEC)                                              \
+    Site g_j3_##ADDR = { { "Collection::Array::SetSize @0x" #ADDR, 0, 0, false, false }, \
+                         0x##ADDR };                                          \
+    void RtColl_ArraySetSize_##ADDR(void* a, int n) {                         \
+        SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &SPEC, &g_j3_##ADDR); \
+    }
+
+D1_J3_ENTRY2(18003e600, kSpec_PtrZero)        // UI: DocumentTextDescription +0xb0
+D1_J3_ENTRY2(18003ea50, kSpec_PtrZero)        // UI: Description +0xc0 / SpriteCapture::_sheets
+D1_J3_ENTRY2(18003eea0, kSpec_I32Z)           // UI: DocumentTextDescription +0xd0
+D1_J3_ENTRY2(1800547e0, kSpec_StringRefZ_PP)  // Video: PixelProgram's string table
+D1_J3_ENTRY2(180054a20, kSpec_PpSampler10)    // Video: PixelProgram::_samplers
+D1_J3_ENTRY2(1800567d0, kSpec_VtxElement18)   // Video: VertexProgram::Stream::_elements
+D1_J3_ENTRY2(180056af0, kSpec_VtxStream18)    // Video: VertexProgram::_streams
+D1_J3_ENTRY2(180053190, kSpec_SfxBuffer18)    // Audio: SoundEffect::_buffers
+D1_J3_ENTRY2(180052e60, kSpec_SfxSample18)    // Audio: SoundEffect::Buffer::_samples
+
+#undef D1_J3_ENTRY2
+
+#define D1_J3_ENTRY3(ADDR, SPEC)                                              \
+    Site g_j3_##ADDR = { { "Collection::Array::SetSize @0x" #ADDR, 0, 0, false, false }, \
+                         0x##ADDR };                                          \
+    void RtColl_ArraySetSizeFill_##ADDR(void* a, int n, const void* fill) {   \
+        SetSizeCore(static_cast<ArrayHdr*>(a), n,                             \
+                    static_cast<const uint8_t*>(fill), &SPEC, &g_j3_##ADDR);  \
+    }
+
+D1_J3_ENTRY3(18003df80, kSpec_DocItem24)      // UI: DocumentTextElement::_items append
+D1_J3_ENTRY3(18003e1a0, kSpec_Link18)         // UI: DocumentTextElement::_links append
+
+#undef D1_J3_ENTRY3
+
+// --- The two constant-folded one-argument forms -----------------------------
+// 0x18003d1c0 and 0x18003d430 are `SetSize(0)` with the new size folded to the
+// immediate 0 — the shape 0x18002aae0 and 0x1800783d0 already have. They are
+// driven through SetSizeCore rather than hand-written as `_size = 0` so that
+// the branches retail cannot reach here (the grow test, and the copy loop,
+// which MSVC compiled as `JS` because `i < 0` is never true) are reproduced
+// rather than assumed away.
+//
+// 0x18003d430's shrink arm IS reachable and is the whole point of the call:
+// it runs 0x18003e3e0 over the old elements, which is how the link table
+// releases its Strings before it is rebuilt.
+Site g_j3_18003d1c0 = { { "Collection::Array<DocumentItem>::SetSize(0) @0x18003d1c0",
+                          0, 0, false, false }, 0x18003d1c0 };
+void RtColl_ArraySetSize_18003d1c0(void* a) {
+    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_DocItem24,
+                &g_j3_18003d1c0);
+}
+Site g_j3_18003d430 = { { "Collection::Array<Link>::SetSize(0) @0x18003d430",
+                          0, 0, false, false }, 0x18003d430 };
+void RtColl_ArraySetSize_18003d430(void* a) {
+    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_Link18,
+                &g_j3_18003d430);
+}
+
+
+// ============================================================================
 // CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12)
 // ============================================================================
 //
@@ -3816,6 +4154,22 @@ void RtColl_ArraySetSize_180076a40(void* a) {
                 &g_j3_180076a40);
 }
 
+// ---- the two element COPY CONSTRUCTORS, at their own addresses -------------
+// AssignFace28Impl / AssignSubMesh80Impl above ARE 0x180065b70 and 0x1800734a0,
+// so they get entry points with retail's signature (RCX = dst, RDX = src,
+// return RAX = dst) rather than a second body. Registering them matters at
+// cutover: retail's SetSize reaches each by rel32, and our SetSize reaches
+// them through the ArraySpec, but a THIRD caller resolving the address (or the
+// mint) would otherwise find nothing.
+void* RtColl_ElemCopyCtor_180065b70(void* dst, const void* src) {
+    return AssignFace28Impl(static_cast<uint8_t*>(dst),
+                            static_cast<const uint8_t*>(src));
+}
+void* RtColl_ElemCopyCtor_1800734a0(void* dst, const void* src) {
+    return AssignSubMesh80Impl(static_cast<uint8_t*>(dst),
+                               static_cast<const uint8_t*>(src));
+}
+
 
 }  // namespace rtcoll
 
@@ -4186,6 +4540,39 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x180021220, (void*)&RtColl_ArraySetSize_180021220);
     RegisterRuntimeAddr(0x180020e90, (void*)&RtColl_ArraySetSize_180020e90);
 
+
+    // ---- CUTOVER CLOSURE BATCH D1 (2026-09-12) ----------------------------
+    // Ten J1, nine two-argument J3, two three-argument J3 and two
+    // constant-folded SetSize(0). Every address is a LITERAL so
+    // tools/runtime_census.py can see it.
+    RegisterRuntimeAddr(0x180013e70, (void*)&RtColl_ArrayDtor_180013e70);
+    RegisterRuntimeAddr(0x18001c020, (void*)&RtColl_ArrayDtor_18001c020);
+    RegisterRuntimeAddr(0x18001c3b0, (void*)&RtColl_ArrayDtor_18001c3b0);
+    RegisterRuntimeAddr(0x180021490, (void*)&RtColl_ArrayDtor_180021490);
+    RegisterRuntimeAddr(0x180033c50, (void*)&RtColl_ArrayDtor_180033c50);
+    RegisterRuntimeAddr(0x18003d8c0, (void*)&RtColl_ArrayDtor_18003d8c0);
+    RegisterRuntimeAddr(0x18003da00, (void*)&RtColl_ArrayDtor_18003da00);
+    RegisterRuntimeAddr(0x18003db40, (void*)&RtColl_ArrayDtor_18003db40);
+    RegisterRuntimeAddr(0x18003e0c0, (void*)&RtColl_ArrayDtor_18003e0c0);
+    RegisterRuntimeAddr(0x1800527a0, (void*)&RtColl_ArrayDtor_1800527a0);
+
+    RegisterRuntimeAddr(0x18003e600, (void*)&RtColl_ArraySetSize_18003e600);
+    RegisterRuntimeAddr(0x18003ea50, (void*)&RtColl_ArraySetSize_18003ea50);
+    RegisterRuntimeAddr(0x18003eea0, (void*)&RtColl_ArraySetSize_18003eea0);
+    RegisterRuntimeAddr(0x1800547e0, (void*)&RtColl_ArraySetSize_1800547e0);
+    RegisterRuntimeAddr(0x180054a20, (void*)&RtColl_ArraySetSize_180054a20);
+    RegisterRuntimeAddr(0x1800567d0, (void*)&RtColl_ArraySetSize_1800567d0);
+    RegisterRuntimeAddr(0x180056af0, (void*)&RtColl_ArraySetSize_180056af0);
+    RegisterRuntimeAddr(0x180053190, (void*)&RtColl_ArraySetSize_180053190);
+    RegisterRuntimeAddr(0x180052e60, (void*)&RtColl_ArraySetSize_180052e60);
+
+    RegisterRuntimeAddr(0x18003df80, (void*)&RtColl_ArraySetSizeFill_18003df80);
+    RegisterRuntimeAddr(0x18003e1a0, (void*)&RtColl_ArraySetSizeFill_18003e1a0);
+
+    RegisterRuntimeAddr(0x18003d1c0, (void*)&RtColl_ArraySetSize_18003d1c0);
+    RegisterRuntimeAddr(0x18003d430, (void*)&RtColl_ArraySetSize_18003d430);
+
+
     // ---- CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12) --------------
     // The Collection::Array half of the 48 unnamed helper bodies at or above
     // 0x1800571b0 that our ports reach by address. Spelled as LITERALS so
@@ -4214,7 +4601,10 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x18007aa40, (void*)&RtColl_ArraySetSize_18007aa40);
     // J3, three-argument (UI::Font::ComputeLineLayout appends one glyph).
     RegisterRuntimeAddr(0x180076d10, (void*)&RtColl_ArraySetSizeFill_180076d10);
-    // J3, constant-folded one-argument (the fourth of its kind).
+    // The two element copy constructors the non-trivial specs above call.
+    RegisterRuntimeAddr(0x180065b70, (void*)&RtColl_ElemCopyCtor_180065b70);
+    RegisterRuntimeAddr(0x1800734a0, (void*)&RtColl_ElemCopyCtor_1800734a0);
+    // J3, constant-folded one-argument.
     RegisterRuntimeAddr(0x180076a40, (void*)&RtColl_ArraySetSize_180076a40);
 
     rtcoll::g_probePending = RtCollectionProbeArmed();

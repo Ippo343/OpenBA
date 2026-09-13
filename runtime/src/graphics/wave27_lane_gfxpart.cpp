@@ -1122,6 +1122,47 @@ extern "C" void RtGraphics_ParticleInstance_Draw(
 }
 
 // ============================================================================
+// The emitter's allocate / destroy / free trio   (cutover closure batch D1)
+// ============================================================================
+// SetParticle above already reaches two of these by address (0x1800205a0 to
+// make an emitter, 0x180020d60 to release one). All three were read out of
+// their own disassembly:
+//
+//   0x1800205a0  `operator new` for the 0x18-byte emitter record. The size AND
+//                the alignment are immediates: `MOV EDX,0x18` then
+//                `LEA R8D,[RDX-0x10]` — i.e. align 8, computed from the size
+//                rather than written out, which is why a reader who skims it
+//                sees "0x18, 0x18" and gets the alignment wrong.
+//   0x180020600  the matching per-class `operator delete`: the `if (p)` test
+//                plus the Enter / Free(_singleton, p) / Leave triple, i.e. the
+//                body runtime/src/system/closure_batch2b.cpp's banner names as
+//                this family's single constant.
+//   0x180020d60  `~X` then that `operator delete`, returning `this` — the
+//                shape MSVC emits for a scalar deleting destructor whose flag
+//                argument has been constant-folded away. The `~X` it calls,
+//                0x180021490, is the twenty-somethingth copy of the
+//                parameterless J1 `~Array` body and is registered as such in
+//                runtime/src/collection/array.cpp; it is reached HERE by
+//                address so the two cannot drift.
+//
+// The allocator is reached by address for lane Q's reason (array.cpp's "THE
+// ALLOCATOR BOUNDARY"): a heap cannot be half ours.
+extern "C" void* RtGraphics_Emitter_OperatorNew(void) {
+    return rtcoll::MemAlloc(0x18, 8);                  // 1800205d1 / 1800205d6
+}
+extern "C" void RtGraphics_Emitter_OperatorDelete(void* p) {
+    if (!p) return;                                    // 180020600 TEST/JZ
+    using FreeFn = void (*)(void*);
+    RtAddr<FreeFn>(0x1800c7ad0ull)(p);                 // 0x1800c7ad0 re-tests null
+}
+extern "C" void* RtGraphics_Emitter_DeleteDtor(void* p) {
+    using DtorFn = void* (*)(void*);
+    RtAddr<DtorFn>(0x180021490ull)(p);                 // 180020d76  ~X (a J1 body)
+    RtGraphics_Emitter_OperatorDelete(p);              // 180020d7e
+    return p;                                          // 180020d83  MOV RAX,RBX
+}
+
+// ============================================================================
 // Registration
 // ============================================================================
 // ============================================================================
@@ -1194,6 +1235,13 @@ extern "C" void* RtGraphics_ParticlePoolRecord_Ctor(void* recv, void* particlev)
 int RtGraphicsWave27GfxpartRegister() {
     int count = 0;
 
+    // Cutover closure batch D1. No exported name in either build; the address
+    // is the only door. Registered unconditionally (DIRECTION.md §2).
+    RegisterRuntimeAddr(0x1800205a0ull, (void*)&RtGraphics_Emitter_OperatorNew);    ++count;
+    RegisterRuntimeAddr(0x180020600ull, (void*)&RtGraphics_Emitter_OperatorDelete); ++count;
+    RegisterRuntimeAddr(0x180020d60ull, (void*)&RtGraphics_Emitter_DeleteDtor);     ++count;
+
+
     RegisterRuntimeExport("?Serialize@Particle@Graphics@@UEAA_NAEAVStream@IO@@@Z",
                           (void*)&RtGraphics_Particle_Serialize); ++count;
     RegisterRuntimeExport(
@@ -1222,7 +1270,7 @@ int RtGraphicsWave27GfxpartRegister() {
     RegisterRuntimeAddr(0x180061a80, (void*)&RtGraphics_ParticlePool_OperatorNew);
     RegisterRuntimeAddr(0x180103bf0, (void*)&RtGraphics_ParticlePoolRecord_Ctor);
 
-    return count;   // 6
+    return count;   // 6 exports + 3 batch-D1 addresses + 2 batch-D2
 }
 
 // The attendance line names THIS lane, so a run log carries a line only this

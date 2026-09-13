@@ -72,9 +72,17 @@
 // whole body, including the two-level sample/variant walk, is transcribed and
 // its evidence is set out above the function.
 // `Serialize`'s two nested-array helpers (0x180053190 SetSize,
-// 0x180053300 element loop) are NOT ported by this batch: reached through
-// ResolveAddr (port registry first, DLL fallback), same reasoning as the
-// AnimationGroup SetSize calls in vtbatch7_animgroup_particlesystem.cpp.
+// 0x180053300 element loop) were NOT ported by batch 7; they are reached
+// through ResolveAddr (port registry first, DLL fallback), same reasoning as
+// the AnimationGroup SetSize calls in vtbatch7_animgroup_particlesystem.cpp.
+//
+// UPDATE (cutover closure batch D1, 2026-09-12): BOTH ARE NOW PORTED —
+// 0x180053190 as `kSpec_SfxBuffer18` in runtime/src/collection/array.cpp, and
+// 0x180053300 at the bottom of THIS file. The ResolveAddr calls are unchanged
+// because the registry is consulted first; they now land on our bodies. The
+// element layouts the two ports settled are recorded with them:
+//   _buffers element  {float @+0x00, Array<Sample> @+0x08}      stride 0x18
+//   Sample   element  {ExternalPtr @+0x00, 3x float @+0x08..}   stride 0x18
 // ============================================================================
 
 #include <cstddef>
@@ -492,8 +500,59 @@ extern "C" bool RtAudio_SoundEffect_Serialize(void* selfv, void* streamv) {
     return true;
 }
 
+// ============================================================================
+// The `_buffers` element serialize walk   0x180053300   (batch D1)
+// ============================================================================
+// Serialize above calls this by address. Element {float @+0x00,
+// Collection::Array<Sample> @+0x08}, stride 0x18:
+//
+//   18005333e  kScalarFloat  e+0x00
+//   180053344  n = e->samples._size   (e+0x10)
+//   18005335a  kScalarInt(&n)                     — a LOCAL, not the field
+//   180053360  if (reading) 0x180052e60(&e->samples, n)    SetSize
+//   180053379  p = e->samples._data   (e+0x08)
+//   180053390  per sample (stride 0x18):
+//                 0x180052a50(p+0x00, ser)        ExternalPtr<SoundBuffer>
+//                 kScalarFloat p+0x08 / p+0x0c / p+0x10
+//
+// `ser->readerWriter` is re-read before every virtual call, as retail does.
+// 0x180052a50 is the ExternalPtr serialize helper of the sibling batch and is
+// reached BY ADDRESS — registry-first, so it needs no edit here when it lands.
+extern "C" void RtAudio_SoundEffect_SerializeBuffers(void* serv, int32_t count,
+                                                    void* basev) {
+    if (count <= 0) return;                                   // 180053300 TEST/JLE
+    Serializer* ser = static_cast<Serializer*>(serv);
+    uint8_t*    e   = static_cast<uint8_t*>(basev);
+
+    using ExtPtrSerFn = void (*)(void* field, Serializer* ser);
+    ExtPtrSerFn extSer = RtAddr<ExtPtrSerFn>(0x180052a50ull);
+    using SetSizeFn = void (*)(void*, int32_t);
+
+    for (int32_t i = 0; i < count; ++i, e += 0x18) {
+        RwScalar(ser->readerWriter, rw_vtbl::kScalarFloat, e + 0x00);
+
+        int32_t n = *reinterpret_cast<int32_t*>(e + 0x10);     // 180053344
+        RwScalar(ser->readerWriter, rw_vtbl::kScalarInt, &n);  // 18005335a
+
+        if (IsReading(ser->stream))                            // 180053360
+            RtAddr<SetSizeFn>(0x180052e60ull)(e + 0x08, n);    // 180053370
+
+        uint8_t* p = *reinterpret_cast<uint8_t**>(e + 0x08);   // 180053379
+        for (int32_t k = 0; k < n; ++k, p += 0x18) {           // 180053390
+            extSer(p + 0x00, ser);
+            RwScalar(ser->readerWriter, rw_vtbl::kScalarFloat, p + 0x08);
+            RwScalar(ser->readerWriter, rw_vtbl::kScalarFloat, p + 0x0c);
+            RwScalar(ser->readerWriter, rw_vtbl::kScalarFloat, p + 0x10);
+        }
+    }
+}
+
 int RtAudioBatch7SoundBufferSoundEffectRegister() {
     int n = 0;
+
+    // Batch D1: unexported in both builds, address door only.
+    RegisterRuntimeAddr  (0x180053300ull, (void*)&RtAudio_SoundEffect_SerializeBuffers); ++n;
+
     RegisterRuntimeExport("?TypeName@SoundBuffer@Audio@@UEBAPEBDXZ", (void*)&RtAudio_SoundBuffer_TypeName); ++n;
     RegisterRuntimeAddr  (0x18000b8b0ull, (void*)&RtAudio_SoundBuffer_TypeName);
     RegisterRuntimeExport("?Type@SoundBuffer@Audio@@UEBAIXZ", (void*)&RtAudio_SoundBuffer_Type); ++n;
