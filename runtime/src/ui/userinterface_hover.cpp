@@ -79,11 +79,10 @@ using CloseDialogFn  = void  (*)(void* ui, void* dlgPtr);
 using OperatorNewFn  = void* (*)(uint64_t size);
 using DlgInstCtorFn  = void* (*)(void* self, void* ui, const void* dialog, void* parentPtr,
                                  void* dataSource, void* userData, int32_t userFlags);
-using GetTipStringFn = RtSystem::String* (*)(const void* element, RtSystem::String* ret);
-using UiStrCastFn    = RtSystem::String* (*)(const void* uiString, RtSystem::String* ret);
-using SetTextFn      = void  (*)(void* toolTipDialog, const RtSystem::String* text);
+using GetTipStringFn = System::String* (*)(const void* element, System::String* ret);
+using UiStrCastFn    = System::String* (*)(const void* uiString, System::String* ret);
+using SetTextFn      = void  (*)(void* toolTipDialog, const System::String* text);
 using SetUpperLeftFn = void  (*)(void* dlg, int32_t x, int32_t y, bool centered);
-using MemFreeFn      = void  (*)(void* p);
 
 SetSizeFn EventsSetSize() {
     static SetSizeFn fn = reinterpret_cast<SetSizeFn>(
@@ -167,27 +166,11 @@ static_assert(offsetof(EventRecord, dragId)    == 0x20, "");
 static_assert(offsetof(EventRecord, dragData)  == 0x28, "");
 
 // ---------------------------------------------------------------------------
-// Retail's System::String release idiom, transcribed from
-// runtime/types/system/String.h and from the two copies inlined in
-// BeginToolTip (0x18012096a..0x180120993 and 0x1801209dc..0x180120a05).
-//
-// The asymmetry is NOT tidied: on the FREEING branch retail leaves the object
-// holding `data - 8`, a dangling pointer, and only the SHARING branch nulls it.
-// String.h says in so many words "Reproduce it; do not tidy it."
-//
-// ---------------------------------------------------------------------------
-void ReleaseString(RtSystem::String* s) {
-    char* data = s->data;
-    if (!data) return;
-    if (--RtSystem::StringRefCount(data) == 0) {
-        s->data = data - 8;
-        // This release is LIVE work in BeginToolTip (0x18012096a /
-        // 0x1801209dc), through the port-registry door.
-        RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(s->data);
-    } else {
-        s->data = nullptr;
-    }
-}
+// ENDGAME B.3.1 step 2: the two release idioms inlined in BeginToolTip
+// (0x18012096a..0x180120993 and 0x1801209dc..0x180120a05) are `~String`, retail
+// asymmetry and all (runtime/types/system/String.h). The hand-written copy that
+// lived here is gone; the two call sites are inner scopes that end exactly
+// where retail's releases are.
 
 }  // namespace
 
@@ -403,32 +386,35 @@ extern "C" void RtUi_UserInterface_BeginToolTip(UserInterface* self,
     // The double call is retail's (0x180120948 and 0x18012099f); it is not
     // hoisted, because GetToolTipString is not obviously pure and hoisting it
     // would change the refcount traffic the DLL sees.
-    RtSystem::String probe = { nullptr };
-    RT_EXPORT_ONCE(GetTipStringFn,
-        "?GetToolTipString@Element@UI@@QEBA?AVString@System@@XZ")(elem, &probe);  // 0x180120948
-
-    // 0x18012094e..0x180120966: empty == (data == 0) || (length == 0), then
-    // SETE inverts it, so `nonEmpty` is what the branch below actually tests.
-    const bool nonEmpty = !(probe.data == nullptr ||
-                            RtSystem::StringLength(probe.data) == 0);
-    ReleaseString(&probe);                                             // 0x18012096a
-
-    RtSystem::String text = { nullptr };
-    if (nonEmpty) {
-        ++g_tipNonEmpty;
+    bool nonEmpty;
+    {
+        System::String probe;
         RT_EXPORT_ONCE(GetTipStringFn,
-            "?GetToolTipString@Element@UI@@QEBA?AVString@System@@XZ")(elem, &text);  // 0x18012099f
-    } else {
-        // A 16-byte copy of the element's UI::String, then the exported
-        // conversion operator UI::String -> System::String.
-        ::UIString tmp = elem->_toolTip;                               // 0x1801209b4
-        RT_EXPORT_ONCE(UiStrCastFn,
-            "??BString@UI@@QEBA?AV0System@@XZ")(&tmp, &text);           // 0x1801209c8
-    }
-    RT_EXPORT_ONCE(SetTextFn,
-        "?SetText@ToolTipDialog@UI@@QEAAXAEBVString@System@@@Z")
-        (self->_toolTipDialog, &text);                                  // 0x1801209ac / 0x1801209d6
-    ReleaseString(&text);                                               // 0x1801209dc
+            "?GetToolTipString@Element@UI@@QEBA?AVString@System@@XZ")(elem, &probe);  // 0x180120948
+
+        // 0x18012094e..0x180120966: empty == (data == 0) || (length == 0), then
+        // SETE inverts it, so `nonEmpty` is what the branch below actually tests.
+        nonEmpty = !(probe._data == nullptr ||
+                     RtSystem::StringLength(probe._data) == 0);
+    }                                                                  // 0x18012096a
+
+    {
+        System::String text;
+        if (nonEmpty) {
+            ++g_tipNonEmpty;
+            RT_EXPORT_ONCE(GetTipStringFn,
+                "?GetToolTipString@Element@UI@@QEBA?AVString@System@@XZ")(elem, &text);  // 0x18012099f
+        } else {
+            // A 16-byte copy of the element's UI::String, then the exported
+            // conversion operator UI::String -> System::String.
+            ::UIString tmp = elem->_toolTip;                           // 0x1801209b4
+            RT_EXPORT_ONCE(UiStrCastFn,
+                "??BString@UI@@QEBA?AV0System@@XZ")(&tmp, &text);       // 0x1801209c8
+        }
+        RT_EXPORT_ONCE(SetTextFn,
+            "?SetText@ToolTipDialog@UI@@QEAAXAEBVString@System@@@Z")
+            (self->_toolTipDialog, &text);                              // 0x1801209ac / 0x1801209d6
+    }                                                                   // 0x1801209dc
 
     // --- position it, open it, queue it -------------------------------------
     self->_toolTipOwner = *dlgPtr;                                      // 0x180120a05

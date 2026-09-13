@@ -468,6 +468,129 @@ Transform3 Transform3::Identity() {
 }
 
 // ============================================================================
+// Math::Matrix::operator!=(const Matrix&) const
+// retail 0x18001d850, ordinal 1286  ??9Matrix@Math@@QEBA_NAEBV01@@Z
+// ============================================================================
+// ENDGAME B.3.1 step 2: moved here from runtime/src/video/context.cpp, where
+// it had been ported as the C free function `RtMath_Matrix_NotEqual` (and used
+// inline for Context::SetTransform's dirty check). Retail's body is sixteen
+// `==` comparisons with a nested short-circuit shape; the flat loop below is
+// the same result instruction for instruction, NaN included — every `==` is
+// false on a NaN cell, so the operator reports "not equal", which is what
+// retail does and is why this is not spelled `!(*this == other)` (there is no
+// retail `operator==` for Matrix at all).
+// ============================================================================
+bool Matrix::operator!=(const Matrix& other) const {
+    for (int i = 0; i < 16; ++i) {
+        if (!(m[i] == other.m[i])) return true;
+    }
+    return false;
+}
+
+// ============================================================================
+// Math::Transform Math::Transform::Lerp(const Transform&, const Scalar&) const
+// retail 0x18001d690, ordinal 3193
+// ?Lerp@Transform@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z
+// ============================================================================
+// ENDGAME B.3.1 step 2: moved here from runtime/src/graphics/wave9_lane_gfx.cpp
+// unchanged. The full instruction-level derivation stays at that file's shim.
+//
+// TRANSLATION, from 0x18001d696..0x18001d6fa, term for term:
+//   x:  XMM2 = to.x - this->x ; XMM1 = t ; XMM1 = XMM1 * XMM2 ;
+//       XMM8 = this->x        ; XMM8 = XMM8 + XMM1
+//   y:  XMM4 = to.y - this->y ; XMM4 = XMM4 * t ; XMM7 = this->y + XMM4
+//   z:  XMM3 = to.z - this->z ; XMM3 = XMM3 * t ; XMM6 = this->z + XMM3
+//
+// i.e. `a + t*(b - a)`, NOT `a*(1-t) + b*t`. Those two are not the same float.
+// The x lane multiplies `t * (b-a)` and the y/z lanes `(b-a) * t`; IEEE
+// multiplication is commutative to the bit, so the mirrored operand order is
+// kept only for readers diffing against the listing.
+//
+// ROTATION: `CALL 0x18001d500` at 0x18001d6fe with RCX unchanged — Transform::
+// rotation is at +0x00, so `this` doubles as `&this->rotation`. That is
+// Quaternion::Lerp.
+//
+// The old hidden-return-slot signature allowed `ret == this` or `ret == other`;
+// returning by value removes the hazard entirely, but the three translation
+// floats are still computed into locals before anything is stored, which is
+// also retail's own order.
+// ============================================================================
+Transform Transform::Lerp(const Transform& other, const Scalar& t) const {
+    const float tv = t.v;
+
+    const float ax = translation.x;
+    const float ay = translation.y;
+    const float az = translation.z;
+
+    const float rx = ax + tv * (other.translation.x - ax);   // 0x18001d6d8/e1/ed
+    const float ry = ay + (other.translation.y - ay) * tv;   // 0x18001d6dd/e5/f2
+    const float rz = az + (other.translation.z - az) * tv;   // 0x18001d6e9/f6/fa
+
+    Transform ret;
+    ret.rotation = rotation.Lerp(other.rotation, t);  // the copy at 0x18001d703..716
+    ret.translation.x = rx;                           // 0x18001d71c/728/732
+    ret.translation.y = ry;
+    ret.translation.z = rz;
+    return ret;
+}
+
+// ============================================================================
+// Math::Transform3 Math::Transform3::operator*(const Transform3&) const
+// retail 0x180022680  ??DTransform3@Math@@QEBA?AV01@AEBV01@@Z
+// ============================================================================
+// ENDGAME B.3.1 step 2: moved here from
+// runtime/src/graphics/imagebuffer_derived.cpp, where it had been ported as the
+// C free function `RtMath_Transform3_Multiply` because ReflectionImageBuffer::
+// Render could not run without it.
+//
+// Derived instruction by instruction from 0x1800226bd..0x18002295d. A
+// Transform3 is four ROWS of three floats: rows 0..2 are the 3x3 basis, row 3
+// is the translation.
+//
+//     out.row[i] = a.row[i][0]*b.row[0] + a.row[i][1]*b.row[1]
+//                                       + a.row[i][2]*b.row[2]     (i = 0,1,2)
+//     out.row[3] = same, PLUS b.row[3]
+//
+// *** THE ADD ORDER IS LOAD-BEARING AND IS RETAIL'S. *** Every one of the
+// twelve outputs accumulates strictly left to right — `(x0*b0 + x1*b3) + x2*b6`
+// and, for the translation row, `((t0*b0 + t1*b3) + t2*b6) + b9`. Float
+// addition is not associative, so a different grouping is a different number.
+// The build uses no `-march` beyond the x86-64 baseline, so GCC cannot emit an
+// FMA here and cannot contract a product into an add; the C below is therefore
+// bit-exact against the shipped MULSS/ADDSS sequence.
+//
+// Retail's register scheduling interleaves all four rows and is NOT reproduced:
+// the schedule is what the compiler chose, the arithmetic is what the function
+// means, and no observer can tell the two apart.
+//
+// The rows are addressed as twelve contiguous floats rather than as the four
+// named Vector3 fields, exactly as the C body did; the class layout
+// static_asserts in Math.h are what make that legal (axisY @ +0x0c, axisZ @
+// +0x18, translation @ +0x24 — contiguous, no padding).
+// ============================================================================
+Transform3 Transform3::operator*(const Transform3& other) const {
+    const float* const a = &axisX.x;
+    const float* const b = &other.axisX.x;
+
+    Transform3 out;
+    float* const o = &out.axisX.x;
+
+    for (int row = 0; row < 4; ++row) {
+        const float x = a[row * 3 + 0];
+        const float y = a[row * 3 + 1];
+        const float z = a[row * 3 + 2];
+        for (int col = 0; col < 3; ++col) {
+            float v = x * b[0 + col];
+            v = v + y * b[3 + col];
+            v = v + z * b[6 + col];
+            if (row == 3) v = v + b[9 + col];      // the translation row only
+            o[row * 3 + col] = v;
+        }
+    }
+    return out;
+}
+
+// ============================================================================
 // Math::Transform2::FromYawOffset(const Scalar& yawDeg, const Vector2& offset)
 // static, struct return: RCX=hidden ret, RDX=yawDeg, R8=offset
 // retail 0x1800787f0  ?FromYawOffset@Transform2@Math@@SA?AV12@AEBVScalar@2@AEBVVector2@2@@Z

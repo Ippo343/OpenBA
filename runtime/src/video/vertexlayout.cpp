@@ -43,6 +43,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/system/String.h"
 #include "../../../standalone/resolve.h"
 #include "../../types/collection/Collection.h"
 #include "../../types/io/Serializer.h"
@@ -188,9 +189,10 @@ extern "C" void RtVideo_VertexLayout_Dtor(void* selfv) {
 extern "C" void RtVideo_VertexLayout_SerializeElements(Serializer* ser, int count, void* data) {
     ReaderWriter* rw = ser->readerWriter;
     VertexElement* e = static_cast<VertexElement*>(data);
-    using StrSerFn = void (*)(void* str, Serializer* ser);
     for (int i = 0; i < count; ++i, ++e) {
-        RT_EXPORT_ONCE(StrSerFn, "?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z")(&e->name, ser);
+        // B.3.1 bridge: VertexElement::name is `void*` because Video::VertexLayout
+        // is not converted yet; the eight bytes are a System::String.
+        reinterpret_cast<System::String&>(e->name).Serialize(ser);
         reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt  / 8])(rw, &e->stream,     nullptr);
         reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt  / 8])(rw, &e->usage,      nullptr);
         reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarUInt / 8])(rw, &e->usageIndex, nullptr);

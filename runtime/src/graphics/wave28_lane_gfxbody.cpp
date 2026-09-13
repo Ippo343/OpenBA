@@ -790,13 +790,14 @@ extern "C" void RtGraphics_AnimationState_UpdateRootOnly(void* self, float dt, f
         const float dz = (az - cz) * t;
         ax = cx + dx; ay = cy + dy; az = cz + dz;
 
-        // FOUR floats out of Lerp, and only four.
-        float lerped[4];
-        const float* const q = RT_EXPORT_ONCE(QuatLerpFn,
-            "?Lerp@Quaternion@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z")(
-                cur.q, lerped, accum.q, &t);
-        accum.q[0] = q[0]; accum.q[1] = q[1];
-        accum.q[2] = q[2]; accum.q[3] = q[3];
+        // FOUR floats out of Lerp, and only four. B.3.1 bridge: `cur.q` and
+        // `accum.q` are float[4] slots in this file's own scratch layout.
+        const Math::Quaternion q =
+            reinterpret_cast<const Math::Quaternion*>(cur.q)->Lerp(
+                *reinterpret_cast<const Math::Quaternion*>(accum.q),
+                reinterpret_cast<const Math::Scalar&>(t));
+        accum.q[0] = q.x; accum.q[1] = q.y;
+        accum.q[2] = q.z; accum.q[3] = q.w;
         accum.v[0] = ax; accum.v[1] = ay; accum.v[2] = az;
         ++g_updateRootLayers;
     }

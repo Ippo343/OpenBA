@@ -26,6 +26,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/system/String.h"
 #include "../../funcs/rt_sink.h"
 #include "../../types/ui/Element.h"
 #include "../../types/ui/TableElement.h"
@@ -101,10 +102,13 @@ void RtTextElementCacheText(void* self) {
 void RtTabElementUpdateContainers(void* self);
 
 // ??4String@System@@QEAAAEAV01@AEBV01@@Z -- System::String::operator=.
+//
+// B.3.1 bridge: the destination is a slot in the untyped array storage
+// TextElement keeps its parameters in, so the eight bytes are cast here at the
+// one use site; the cast dies when Collection::Array<T> is a template.
 void RtStringAssign(void* self, const void* other) {
-    using Fn = void* (*)(void*, const void*);
-    // RT_EXPORT_ONCE (Wave 9 lane R): String::operator= is ported; raw bypassed it.
-    RT_EXPORT_ONCE(Fn, "??4String@System@@QEAAAEAV01@AEBV01@@Z")(self, other);
+    *reinterpret_cast<System::String*>(self) =
+        *reinterpret_cast<const System::String*>(other);
 }
 
 // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z

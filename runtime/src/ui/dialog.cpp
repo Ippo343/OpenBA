@@ -201,6 +201,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/system/Filename.h"
 #include "../../types/ui/Dialog.h"
 #include "../../types/ui/DialogInstance.h"
 #include "../../types/ui/ElementDescription.h"
@@ -1569,31 +1570,23 @@ void** RtUiDialog_CreateElement(const Dialog* self, void** ret, void* desc) {
     // Both temporaries are released before the scan, with a STRONG REFERENCE
     // taken on the identifier's buffer first (0x180112f3e `INC [RCX-4]`) —
     // which is why the scan can still read it afterwards.
+    // Object::External::GetPath is another batch's class and is still a name
+    // lookup; GetPathIdentifer is System::Filename's own member (B.3.1 step 2).
     using GetPathFn  = void* (*)(const void* self, void* out);
-    using GetIdentFn = void* (*)(void* self, void* out);
     static GetPathFn  getPath  = reinterpret_cast<GetPathFn>(
         ResolveExport("?GetPath@External@Object@@QEBA?AVFilename@System@@XZ"));
-    static GetIdentFn getIdent = reinterpret_cast<GetIdentFn>(
-        ResolveExport("?GetPathIdentifer@Filename@System@@QEBA?AV12@XZ"));
 
-    void* pathTmp  = nullptr;   // System::Filename — first qword is its String
-    char* identTmp = nullptr;   // System::String
-    char* name     = nullptr;
+    char* name = nullptr;
 
-    if (getPath && getIdent) {
-        void* fn = getPath(desc, &pathTmp);
-        void* id = getIdent(fn, &identTmp);
-        name = *static_cast<char**>(id);
-        if (name) { ++RtSystem::StringRefCount(name); }
-
-        // Release identTmp, then pathTmp — retail's order, with retail's
-        // asymmetry (the freeing branch leaves the local holding `data - 8`,
-        // the sharing branch nulls it). See runtime/types/system/String.h.
-        ReleaseStringLocal(identTmp);
-        // System::Filename's first qword IS its String buffer — retail releases
-        // the Filename temporary by exactly this inline String release on
-        // [RSP+0x28] (0x180112f6e..0x180112f9b), never through a ~Filename.
-        ReleaseStringLocal(*reinterpret_cast<char**>(&pathTmp));
+    if (getPath) {
+        // Declared in this order so that the destructors run identTmp first and
+        // pathTmp second — retail's release order (0x180112f6e..0x180112f9b),
+        // and at retail's point, which is why they live in this inner scope.
+        System::Filename pathTmp;
+        getPath(desc, &pathTmp);
+        const System::Filename identTmp = pathTmp.GetPathIdentifer();
+        name = identTmp._data;
+        if (name) { ++RtSystem::StringRefCount(name); }   // 0x180112f3e INC [RCX-4]
     }
 
     // Linear scan of Dialog::_namedTemplates for an entry whose name equals
@@ -2014,41 +2007,43 @@ void EdCreateInstanceBody(const ElementDescription* self, void** elemPtr) {
     const uint8_t* d = reinterpret_cast<const uint8_t*>(self);
 
     // ---- 1. elem->_name = this->GetPath().GetPathIdentifer() --------------
+    // Object::External::GetPath stays a name lookup (another batch's class);
+    // GetPathIdentifer is System::Filename's member.
     using GetPathFn  = void* (*)(const void* self, void* out);
-    using GetIdentFn = void* (*)(void* self, void* out);
     static GetPathFn  getPath  = reinterpret_cast<GetPathFn>(
         ResolveExport("?GetPath@External@Object@@QEBA?AVFilename@System@@XZ"));
-    static GetIdentFn getIdent = reinterpret_cast<GetIdentFn>(
-        ResolveExport("?GetPathIdentifer@Filename@System@@QEBA?AV12@XZ"));
-
-    void*  pathTmp  = nullptr;   // System::Filename — its first qword IS a String
-    char*  identTmp = nullptr;
-    char** idSlot   = nullptr;
-    if (getPath && getIdent) {
-        void* fn = getPath(self, &pathTmp);
-        idSlot = static_cast<char**>(getIdent(fn, &identTmp));
-    }
 
     uint8_t* elem = static_cast<uint8_t*>(*elemPtr);
-    char*    want = idSlot ? *idSlot : nullptr;
-    char*    old  = *reinterpret_cast<char**>(elem + 0x10);
-    if (old != want) {
-        if (old) {
-            if (--RtSystem::StringRefCount(old) == 0) {
-                // Retail's asymmetry: the FREEING branch leaves the FIELD
-                // holding `data - 8` and frees that; the sharing branch nulls it.
-                *reinterpret_cast<char**>(elem + 0x10) = old - 8;
-                MemFreeStatic(*reinterpret_cast<char**>(elem + 0x10));
-            } else {
-                *reinterpret_cast<char**>(elem + 0x10) = nullptr;
-            }
-        }
-        *reinterpret_cast<char**>(elem + 0x10) = want;
-        if (want) ++RtSystem::StringRefCount(want);
-    }
 
-    ReleaseStringLocal(identTmp);
-    ReleaseStringLocal(*reinterpret_cast<char**>(&pathTmp));
+    // The inner scope ends the two temporaries' lives where retail's two
+    // inlined releases are, in retail's order (identTmp, then pathTmp).
+    {
+        System::Filename pathTmp;
+        System::Filename identTmp;
+        if (getPath) {
+            getPath(self, &pathTmp);
+            identTmp = pathTmp.GetPathIdentifer();
+        }
+
+        char*    want = identTmp._data;
+        // B.3.1 bridge: Element::_name at +0x10 is a POD slot on UI::Element,
+        // which is not converted yet, so retail's inlined assign stays.
+        char*    old  = *reinterpret_cast<char**>(elem + 0x10);
+        if (old != want) {
+            if (old) {
+                if (--RtSystem::StringRefCount(old) == 0) {
+                    // Retail's asymmetry: the FREEING branch leaves the FIELD
+                    // holding `data - 8` and frees that; sharing nulls it.
+                    *reinterpret_cast<char**>(elem + 0x10) = old - 8;
+                    MemFreeStatic(*reinterpret_cast<char**>(elem + 0x10));
+                } else {
+                    *reinterpret_cast<char**>(elem + 0x10) = nullptr;
+                }
+            }
+            *reinterpret_cast<char**>(elem + 0x10) = want;
+            if (want) ++RtSystem::StringRefCount(want);
+        }
+    }
 
     // ---- 2. the eleven scalar copies --------------------------------------
     // `*elemPtr` is RE-READ before every store, exactly as retail does. Nothing

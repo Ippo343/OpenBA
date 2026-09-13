@@ -121,6 +121,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/system/String.h"
 #include "../../types/collection/Collection.h"
 #include "../../types/ui/Dialog.h"
 #include "../../types/ui/DialogInstance.h"
@@ -256,13 +257,6 @@ bool IsDerivedFrom(const void* obj, uint32_t typeId) {
     return fn(obj, typeId);
 }
 
-// ?StrCompare@String@System@@SAHPEBD0@Z  0x1800c98a0
-int32_t StrCompare(const char* a, const char* b) {
-    using Fn = int32_t (*)(const char*, const char*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveExport("?StrCompare@String@System@@SAHPEBD0@Z"));
-    return fn(a, b);
-}
 
 // ?FindElement@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z
 // 0x180115650. HIDDEN RETURN SLOT in RDX, returns that same pointer in RAX
@@ -547,7 +541,7 @@ void RtUiDialogInstance_AddController6(void* self, uint32_t typeId, void* dataSo
                 // matches without a compare. Transcribed as written.
                 if (!have) useRoot = true;
                 else if (*reinterpret_cast<const int32_t*>(have - 8) == 0) useRoot = true;
-                else if (StrCompare(have, want) == 0) useRoot = true;
+                else if (System::String::StrCompare(have, want) == 0) useRoot = true;
             }
         }
 

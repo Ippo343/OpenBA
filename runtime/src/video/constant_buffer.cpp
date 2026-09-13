@@ -60,6 +60,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/system/String.h"
 
 // Declared locally rather than by including standalone/resolve.h (PLAN §4.1
 // decision 1). Byte-identical to array.cpp:133.
@@ -166,9 +167,9 @@ template <typename T> inline T& Field(void* self, size_t off) {
 // self-assignment must not decrement to zero and free the thing it is about to
 // adopt.
 // ---------------------------------------------------------------------------
-void StringAssign(void** dst, void* const* src) {
+void StringAssign(void** dst, void* src) {
     void* cur = *dst;
-    if (cur == *src) return;                       // 0x1800eed34
+    if (cur == src) return;                        // 0x1800eed34
     if (cur) {
         int32_t* rc = reinterpret_cast<int32_t*>(static_cast<uint8_t*>(cur) - 4);
         *rc -= 1;
@@ -179,9 +180,8 @@ void StringAssign(void** dst, void* const* src) {
             *dst = nullptr;                        // 0x1800eed57
         }
     }
-    void* s = *src;
-    *dst = s;
-    if (s) *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(s) - 4) += 1;
+    *dst = src;
+    if (src) *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(src) - 4) += 1;
 }
 
 // The ADOPT-INTO-A-FRESH-SLOT half, used where the destination is known empty
@@ -302,13 +302,15 @@ extern "C" void RtVideo_ConstEntryArraySetSize(void* arrv, int32_t newSize,
 // stack slots are read out of order. Harmless, and kept.
 // ============================================================================
 extern "C" void RtVideo_ConstantBuffer_BeginConstants(void* self,
-                                                      void* const* name,
-                                                      void* const* prefix,
+                                                      const System::String* name,
+                                                      const System::String* prefix,
                                                       int32_t i10, int32_t i14,
                                                       bool b18, bool b19,
                                                       int32_t i20) {
-    StringAssign(&Field<void*>(self, kName),   name);    // 0x1800eed34 -> +0x08
-    StringAssign(&Field<void*>(self, kPrefix), prefix);  // 0x1800eed6e -> +0x00
+    // B.3.1 bridge: the destinations are POD slots on Video::ConstantBuffer,
+    // which is not converted yet, so retail's inlined assign stays.
+    StringAssign(&Field<void*>(self, kName),   name->_data);    // 0x1800eed34 -> +0x08
+    StringAssign(&Field<void*>(self, kPrefix), prefix->_data);  // 0x1800eed6e -> +0x00
 
     Field<int32_t>(self, kInt10) = i10;
     Field<int32_t>(self, kInt14) = i14;
@@ -338,12 +340,14 @@ extern "C" void RtVideo_ConstantBuffer_BeginConstants(void* self,
 // The stack element's `offset` field is explicitly zeroed (0x1800eec90).
 // ============================================================================
 extern "C" void RtVideo_ConstantBuffer_AddConstant(void* self,
-                                                   void* const* name,
-                                                   void* const* typeName,
+                                                   const System::String* name,
+                                                   const System::String* typeName,
                                                    int32_t size) {
     Entry elem;
-    StringAdopt(&elem.name,     *name);       // 0x1800eec66 -> elem+0x00
-    StringAdopt(&elem.typeName, *typeName);   // 0x1800eec7b -> elem+0x08
+    // B.3.1 bridge: `Entry` is the raw array element Video::ConstantBuffer
+    // stores; it keeps its POD slots until that class is converted.
+    StringAdopt(&elem.name,     name->_data);       // 0x1800eec66 -> elem+0x00
+    StringAdopt(&elem.typeName, typeName->_data);   // 0x1800eec7b -> elem+0x08
     elem.size   = size;                       // 0x1800eec8b
     elem.offset = 0;                          // 0x1800eec90
 
@@ -560,14 +564,11 @@ const char* RtVideoShaderConstantLiteral(int index) {
 // ============================================================================
 namespace {
 
-using StringSetFn    = void  (*)(void** self, const char* text);
-using StringFormatFn = void** (*)(void** ret, const char* fmt, ...);
-
 // Build a fresh String temporary from one LIFTED literal.
-void StrSetLit(void** s, int litIndex) {
-    *s = nullptr;
-    RT_EXPORT_ONCE(StringSetFn, "?Set@String@System@@QEAAXPEBD@Z")(
-        s, RtVideoShaderConstantLiteral(litIndex));
+System::String StrLit(int litIndex) {
+    System::String s;
+    s.Set(RtVideoShaderConstantLiteral(litIndex));
+    return s;
 }
 
 // `slot = prev->companion ? prev->companion->vtbl[3]() : prev->+0x14 + 1`
@@ -584,24 +585,19 @@ int32_t NextSlotAfter(void* prev, int* tookVirtual, int* tookArithmetic) {
 
 void BeginBuffer(void* buf, int prefixLit, int nameLit, int32_t i10,
                  int32_t i14, bool b18, bool b19, int32_t i20) {
-    void* prefix = nullptr;
-    void* name   = nullptr;
-    StrSetLit(&prefix, prefixLit);          // retail Sets the PREFIX first
-    StrSetLit(&name,   nameLit);
+    System::String prefix = StrLit(prefixLit);   // retail Sets the PREFIX first
+    System::String name   = StrLit(nameLit);
     RtVideo_ConstantBuffer_BeginConstants(buf, &name, &prefix,
                                           i10, i14, b18, b19, i20);
-    StringRelease(&name);                   // …and releases the NAME first
-    StringRelease(&prefix);
+    // …and releases the NAME first: reverse declaration order, which is the
+    // destruction order the two locals now get for free.
 }
 
 void AddDecl(void* buf, int typeLit, int nameLit, int32_t size) {
-    void* type = nullptr;
-    void* name = nullptr;
-    StrSetLit(&type, typeLit);              // retail Sets the TYPE first
-    StrSetLit(&name, nameLit);
+    System::String type = StrLit(typeLit);       // retail Sets the TYPE first
+    System::String name = StrLit(nameLit);
     RtVideo_ConstantBuffer_AddConstant(buf, &name, &type, size);
-    StringRelease(&name);                   // …and releases the NAME first
-    StringRelease(&type);
+    // …and releases the NAME first: reverse declaration order again.
 }
 
 struct DeclRow  { int16_t typeLit; int16_t nameLit; int32_t size; };
@@ -726,18 +722,13 @@ extern "C" void RtVideo_Context_AssignConstants(void* self) {
         BeginBuffer(buf, kLit_tc_, kLit_TransformConstants, 5, slot,
                     true, true, 0x40);
 
-        void* type = nullptr;
-        StrSetLit(&type, kLit_float4x4);
+        System::String type = StrLit(kLit_float4x4);
         // Retail leaves this slot uninitialised and lets Format CONSTRUCT into
-        // it. A null is the empty String and is equivalent for a constructing
-        // Format; it is not equivalent for an assigning one, so do not "fix"
-        // this by pre-filling it with anything else.
-        void* name = nullptr;
-        RT_EXPORT_ONCE(StringFormatFn, "?Format@String@System@@SA?AV12@PEBDZZ")(
-            &name, RtVideoShaderConstantLiteral(kLit_transformFmt), 52);
+        // it; `Format` returns a fresh String by value, which is the same thing.
+        System::String name =
+            System::String::Format(RtVideoShaderConstantLiteral(kLit_transformFmt), 52);
         RtVideo_ConstantBuffer_AddConstant(buf, &name, &type, 208);
-        StringRelease(&name);
-        StringRelease(&type);
+        // name then type, retail's release order — reverse declaration order.
 
         RtVideo_ConstantBuffer_EndConstants(buf, 0);   // the arg is UNSET at the
                                                        // retail call site, and

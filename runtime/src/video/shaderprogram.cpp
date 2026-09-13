@@ -71,6 +71,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/system/String.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/video/ShaderProgram.h"
 
@@ -120,7 +121,6 @@ using ArrayFn   = void (*)(ReaderWriter*, int, void*, const char*);
 using VersionFn = int  (*)(ReaderWriter*);
 using SkipFn    = void (*)(ReaderWriter*);
 using SetSizeFn = void (*)(void*, int);
-using StrSerFn  = void (*)(void* str, Serializer* ser);
 
 inline void RwInt(ReaderWriter* rw, void* p) {
     reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8])(rw, p, nullptr);
@@ -161,7 +161,10 @@ void SerializeParameters(Serializer* ser, Array<ShaderParameter>* arr, uintptr_t
 
     ShaderParameter* e = arr->_data;
     for (int32_t i = 0; i < n; ++i, ++e) {
-        RT_EXPORT_ONCE(StrSerFn, "?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z")(&e->name, ser);
+        // B.3.1 bridge: ShaderParameter::name is `void*` because
+        // Video::ShaderProgram is not converted yet (B31_RULES, "members of
+        // not-yet-converted structs"); the eight bytes are a System::String.
+        reinterpret_cast<System::String&>(e->name).Serialize(ser);
         RwInt(rw, &e->dest);
         if (RwVersion(rw) >= 1) RwBool(rw, &e->internal);
     }

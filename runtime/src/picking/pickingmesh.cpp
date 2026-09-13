@@ -49,6 +49,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/system/String.h"
 // ResolveAddr, declared locally rather than via standalone/resolve.h -- that header
 // pulls in <windows.h>, which collides with names this file (or a header it
 // includes) uses -- see runtime/src/collection/array_internal.h for the same fix.
@@ -231,12 +232,10 @@ void SerializeTrianglesBody(Collection::Array<Triangle>* arr, Serializer* ser) {
 // third argument on most of these indirect calls.
 void SerializeSubMeshesBody(Serializer* ser, int32_t count, SubMesh* base) {
     if (count <= 0) return;
-    using StrSerFn      = void (*)(void* str, Serializer* ser);
     using ScalarIntFn   = void (*)(ReaderWriter*, int32_t*, const char*);
     using ArrayFloatFn  = void (*)(ReaderWriter*, int32_t, void*, const char*);
     using ArrayUShortFn = void (*)(ReaderWriter*, int32_t, void*, const char*);
     ReaderWriter* rw = ser->readerWriter;
-    auto strSer = RT_EXPORT_ONCE(StrSerFn, "?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z");
     auto scalarInt   = reinterpret_cast<ScalarIntFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8]);
     auto arrayFloat  = reinterpret_cast<ArrayFloatFn>(rw->vtable[rt::io::rw_vtbl::kArrayFloat / 8]);
     auto arrayUShort = reinterpret_cast<ArrayUShortFn>(rw->vtable[rt::io::rw_vtbl::kArrayUShort / 8]);
@@ -244,7 +243,8 @@ void SerializeSubMeshesBody(Serializer* ser, int32_t count, SubMesh* base) {
 
     for (int32_t i = 0; i < count; ++i) {
         SubMesh* s = &base[i];
-        strSer(&s->_name, ser);
+        // B.3.1 bridge: SubMesh::_name is a POD slot on a not-yet-converted struct.
+        reinterpret_cast<System::String&>(s->_name).Serialize(ser);
         scalarInt(rw, &s->_parent, nullptr);
         arrayFloat(rw, 4, &s->_local.rotation, nullptr);
         arrayFloat(rw, 3, &s->_local.translation, nullptr);
@@ -330,10 +330,9 @@ extern "C" bool RtPicking_PickingMesh_Serialize(void* selfv, void* streamv) {
     ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 0);
     ser.readerWriter = rw;
 
-    using StrSerFn = void (*)(void* str, Serializer* ser);
-    auto strSer = RT_EXPORT_ONCE(StrSerFn, "?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z");
-    strSer(&self->_name1, &ser);
-    strSer(&self->_name2, &ser);
+    // B.3.1 bridge: _name1/_name2 are POD slots on a not-yet-converted struct.
+    reinterpret_cast<System::String&>(self->_name1).Serialize(&ser);
+    reinterpret_cast<System::String&>(self->_name2).Serialize(&ser);
 
     using ScalarBoolFn   = void (*)(ReaderWriter*, bool*, const char*);
     using ScalarIntFn    = void (*)(ReaderWriter*, int32_t*, const char*);

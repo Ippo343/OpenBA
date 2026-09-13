@@ -156,13 +156,6 @@ using RtGraphics::ParticleSystemInstance;
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
-// Wave 25 lane ported this and registers it by name; retail CALLs it with a
-// rel32, so this port calls OUR body directly rather than going through the
-// registry — the two halves of one frame must come from one build.
-Transform* RtMath_Transform_FromDirection(Transform* ret,
-                                                    const Vector3* direction,
-                                                    const Vector3* offset);
-
 namespace {
 
 // ---------------------------------------------------------------------------
@@ -729,8 +722,11 @@ extern "C" void RtGraphics_ParticleSystemInstance_Update(void* selfv, const void
 
         Vector3 dirArg;  dirArg.x = dir.x; dirArg.y = dir.y; dirArg.z = dir.z;
         Vector3 zeroArg; zeroArg.x = 0.0f; zeroArg.y = 0.0f; zeroArg.z = 0.0f;
-        Transform basis;
-        RtMath_Transform_FromDirection(&basis, &dirArg, &zeroArg);
+        // ENDGAME B.3.1 step 2: `Math::Transform::FromDirection`, called as the
+        // static member it is. Retail CALLs 0x180021d70 with a rel32, so this
+        // is a direct call and not a registry hop — the two halves of one frame
+        // must come from one build.
+        const Transform basis = Transform::FromDirection(dirArg, zeroArg);
 
         // Rotate the freshly drawn velocity into that basis, in place.
         const Vec3f v = { F(ext, kExt_Vel + 0), F(ext, kExt_Vel + 4), F(ext, kExt_Vel + 8) };

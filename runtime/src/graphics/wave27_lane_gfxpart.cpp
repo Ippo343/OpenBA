@@ -489,24 +489,9 @@ extern "C" Matrix* RtGraphics_ParticleInstance_GetInstanceTransform(
     // tools/port_bypass_audit.py exists for.
     // CONSEQUENCE: a null leaves `out` untouched, so the caller would draw with
     // stack garbage; both are therefore checked once and named.
-    using QuatLerpFn = Quaternion* (*)(const void*, Quaternion*,
-                                               const void*, const float*);
-    using AsMatrixFn = Matrix* (*)(const void*, Matrix*);
-    static QuatLerpFn quatLerp = nullptr;
-    static AsMatrixFn asMatrix = nullptr;
-    static bool resolved = false;
-    if (!resolved) {
-        resolved = true;
-        quatLerp = reinterpret_cast<QuatLerpFn>(
-            ResolveExport("?Lerp@Quaternion@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z"));
-        asMatrix = reinterpret_cast<AsMatrixFn>(
-            ResolveExport("?AsMatrix@Transform@Math@@QEBA?AVMatrix@2@XZ"));
-        if (!quatLerp || !asMatrix)
-            std::fprintf(stderr, "[GFXPART27] GetInstanceTransform: Lerp=%p AsMatrix=%p "
-                                 "-- the returned matrix is UNWRITTEN\n",
-                         (void*)quatLerp, (void*)asMatrix);
-    }
-    if (!quatLerp || !asMatrix) return out;   // hidden slot back in RAX, unwritten
+    // ENDGAME B.3.1 step 2: Quaternion::Lerp and Transform::AsMatrix are
+    // members now. There is no resolve left to fail, so the "resolved to null"
+    // arm that used to return the matrix UNWRITTEN is gone with it.
 
     const float t = alpha;
 
@@ -520,11 +505,13 @@ extern "C" Matrix* RtGraphics_ParticleInstance_GetInstanceTransform(
     Quaternion q;
     // `this` is the PREVIOUS rotation and the argument is the CURRENT one, so the
     // lerp runs prev -> cur, matching the translation blend above.
-    quatLerp(prv, &q, cur, &t);
+    q = reinterpret_cast<const Quaternion*>(prv)->Lerp(
+                *reinterpret_cast<const Quaternion*>(cur),
+                reinterpret_cast<const Scalar&>(t));   // B.3.1 bridge
     blended.rotation = q;
 
     Matrix m;
-    asMatrix(&blended, &m);
+    m = blended.AsMatrix();
 
     const float one = One();
     out->m[0]  = m.m[0];  out->m[1]  = m.m[1];  out->m[2]  = m.m[2];  out->m[3]  = one;
@@ -971,9 +958,8 @@ extern "C" void RtGraphics_ParticleInstance_Draw(
 
     // ---- A: the single-instance transform --------------------------------
     if (instances <= 1) {
-        using QuatLerpFn = Quaternion* (*)(const void*, Quaternion*,
-                                                   const void*, const float*);
-        using AsMatrixFn = Matrix* (*)(const void*, Matrix*);
+        // ENDGAME B.3.1 step 2: Quaternion::Lerp and Transform::AsMatrix are
+        // members now; only Video::Context::SetTransformScale is still a door.
         // NAME DOOR — SYMBOL: ?SetTransformScale@Context@Video@@QEAAXHAEBVMatrix@Math@@
         // AEBVVector4@4@@Z (0x18001a400), plus the two Math exports described at
         // GetInstanceTransform above. CONDITION: all three are public exports and
@@ -982,25 +968,18 @@ extern "C" void RtGraphics_ParticleInstance_Draw(
         // is worse than a crash to debug, so it is reported.
         using SetTransformScaleFn = void (*)(void*, int32_t, const Matrix*,
                                              const float*);
-        static QuatLerpFn          quatLerp = nullptr;
-        static AsMatrixFn          asMatrix = nullptr;
         static SetTransformScaleFn setXform = nullptr;
         static bool resolved = false;
         if (!resolved) {
             resolved = true;
-            quatLerp = reinterpret_cast<QuatLerpFn>(
-                ResolveExport("?Lerp@Quaternion@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z"));
-            asMatrix = reinterpret_cast<AsMatrixFn>(
-                ResolveExport("?AsMatrix@Transform@Math@@QEBA?AVMatrix@2@XZ"));
             setXform = reinterpret_cast<SetTransformScaleFn>(ResolveExport(
                 "?SetTransformScale@Context@Video@@QEAAXHAEBVMatrix@Math@@AEBVVector4@4@@Z"));
-            if (!quatLerp || !asMatrix || !setXform)
-                std::fprintf(stderr, "[GFXPART27] PI::Draw part A: Lerp=%p AsMatrix=%p "
+            if (!setXform)
+                std::fprintf(stderr, "[GFXPART27] PI::Draw part A: "
                                      "SetTransformScale=%p -- the particle transform is "
-                                     "NOT set\n",
-                             (void*)quatLerp, (void*)asMatrix, (void*)setXform);
+                                     "NOT set\n", (void*)setXform);
         }
-        if (quatLerp && asMatrix && setXform) {
+        if (setXform) {
             const uint8_t* cur = B(&self->_transform);
             const uint8_t* prv = B(&self->_prevTransform);
 
@@ -1012,11 +991,13 @@ extern "C" void RtGraphics_ParticleInstance_Draw(
 
             Quaternion q;
             const float t = alpha;          // retail spills alpha and passes &it
-            quatLerp(prv, &q, cur, &t);
+            q = reinterpret_cast<const Quaternion*>(prv)->Lerp(
+                *reinterpret_cast<const Quaternion*>(cur),
+                reinterpret_cast<const Scalar&>(t));   // B.3.1 bridge
             blended.rotation = q;
 
             Matrix m;
-            asMatrix(&blended, &m);
+            m = blended.AsMatrix();
 
             // Retail: XMM0 = alpha * _opacity; XMM1 = (1 - alpha) * _opacityPrev;
             // XMM1 = XMM1 + XMM0. The three 1.0f are separate immediate stores.
