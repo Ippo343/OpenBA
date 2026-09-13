@@ -219,6 +219,10 @@ For one class `Ns::C` with retail vtable `??_7C@Ns@@6B@`:
 6. Build. The offset asserts catch layout drift; the linker catches every caller that still
    asked for the name.
 7. Run the gate (B.1.8). Merge.
+8. **Cast check.** The converted class's files have no `reinterpret_cast` left except in
+   the four legitimate categories below. Every other cast in the tree is a symptom of the
+   C-body shape and goes with the step that removes its cause; a class whose file still
+   has one is not converted.
 
 Callers in not-yet-converted files keep working through decision 1 and 2: they read the
 same offsets and dispatch through the same slot indices.
@@ -235,6 +239,25 @@ same offsets and dispatch through the same slot indices.
 6. `UI` (53 Description/Element classes, the largest batch, fully parallel).
 7. `Engine`, `Save`, `Achievement`, `Audio`, `Input`, `Pathfinding`, `Picking`.
 8. `code/Game`: components and dialogs, the 56 multiple-inheritance types last.
+
+### B.4 The casts are the progress metric
+
+Measured 2026-09-13: ~35,700 `reinterpret_cast` sites (code 24.7k, runtime 6.8k,
+standalone 3.1k, engine 1.0k, dx11 0.1k). Neither A nor C touches them; B removes almost
+all of them as a consequence, one kind per step, and the count per directory is a better
+measure of B's progress than "classes converted":
+
+| kind | example | removed by |
+|---|---|---|
+| resolved function pointers | `RT_EXPORT_ONCE(fn_X, "?M@C@Ns@@…")`, the `fn_*` typedefs | recipe step 3 (direct member call) and step 5 (registry rows gone); the linker proves it |
+| `self` from `void*` in slot thunks, factories, `*_LIVE_FACTORY` macros | `Name##_UpdateVSlot(void* s, …)` | decision 2: compiler-generated vtables, the thunks stop existing |
+| raw offset reads | `*(int*)((uint8_t*)self + 0x48)` and the per-file offset macros | recipe step 2/3: named members, `self->x` becomes `x` |
+| downcasts after a type check | `Object::Base*` to a component after `IsDerivedFrom` | stay, as `static_cast` or one typed `Cast<T>()` helper (what retail's compiler had) |
+
+What legitimately remains: COM interop in dx11/, the allocator, byte-level serializer
+reads, and the hardware-watchpoint code in standalone/. Acceptance for B adds:
+`grep -c reinterpret_cast` outside those files is zero, and no `static_cast` crosses an
+unrelated type.
 
 Every converted class shrinks the registry; when `standalone/address_registry.cpp`,
 `rt_data_mint*.inc` and `rt_export_addrs.inc` are empty they are deleted with
