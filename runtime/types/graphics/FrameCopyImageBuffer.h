@@ -73,6 +73,18 @@ static_assert(offsetof(FrameCopyImageBuffer, _destTarget) == 0x80, "_destTarget 
 // `??_7GeneratedImageBuffer@Graphics@@6B@` is 0x180154f60, the address the
 // ctor stamps before its own and the dtor restores on the way out (the MSVC
 // "hand the object back to my base class" idiom).
+//
+// CORRECTION (2026-09-12, vtable batch 6): that sentence is right about the
+// mechanism and understates what the other table IS. `Graphics::
+// GeneratedImageBuffer` is a REAL INTERMEDIATE CLASS with its own 0x70 layout,
+// its own constructor (0x1800a3e70), destructor (0x1800a3e40), `?_typeInfo@`
+// node and five vtable slots — all of them now in
+// runtime/types/graphics/GeneratedImageBuffer.h and
+// runtime/src/graphics/imagebuffer_derived.cpp. The field this header calls
+// `_generation` at +0x68 is ITS member, inherited here, not FrameCopy's own,
+// which is why `Graphics::ReflectionImageBuffer` has a field at the same offset
+// doing the same job. The hierarchy is
+// Video::ImageBuffer -> GeneratedImageBuffer -> {FrameCopy, Reflection}.
 // ----------------------------------------------------------------------------
 constexpr uintptr_t kVtFrameCopyImageBuffer = 0x180154f00ull;
 constexpr uintptr_t kVtGeneratedImageBuffer = 0x180154f60ull;

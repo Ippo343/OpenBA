@@ -1075,6 +1075,45 @@ static const DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x18004ca90, 0x1800da360, 0x108, "UI::TabElement"),
     RT_DELDTOR(0x180079600, 0x18011e2a0, 0x0f0, "UI::TableElement"),
     RT_DELDTOR(0x1800422f0, 0x18011eda0, 0x100, "UI::TextElement"),
+    // ---- Vtable batch 6 (2026-09-12): graphics buffers, meshes and lights ----
+    // INDICES 103-108, appended after batch 4 elem_B's 89-102. The table is
+    // POSITIONAL and these six have been RE-COUNTED TWICE: 71-76 -> 89-94 ->
+    // 103-108, once for batches 1/5/7 and once for batch 4. That is the merge
+    // hazard the banner and kSpecCount both record, met twice by one batch.
+    //
+    // Every row's two constants were read from that deleting destructor's OWN
+    // bytes — the `LEA R9` of the vector arm and its `MOV EDX,imm`:
+    //     0x180059080  LEA R9,[0x180058f30]  MOV EDX,0xd8   Graphics::AmbientLight
+    //     0x18001eee0  LEA R9,[0x1800a3e40]  MOV EDX,0x70   Graphics::GeneratedImageBuffer
+    //     0x18001f260  LEA R9,[0x1800a3c80]  MOV EDX,0x88   Graphics::FrameCopyImageBuffer
+    //     0x180022600  LEA R9,[0x1800a70b0]  MOV EDX,0x90   Graphics::ReflectionImageBuffer
+    //     0x180012bd0  LEA R9,[0x1800ff270]  MOV EDX,0x98   Graphics::GraphicsMesh
+    //     0x1800642b0  LEA R9,[0x180106270]  MOV EDX,0x168  Graphics::SpotLight
+    //
+    // *** THE AmbientLight ROW'S dtorVa IS A THUNK, AND THAT IS DELIBERATE. ***
+    // `??1AmbientLight@Graphics@@UEAA@XZ` at 0x180058f30 is five instructions
+    // that tail-jump `??1Geometry@Graphics@@UEAA@XZ` (0x1800a41c0) — the linker
+    // folded the two — and 0x180059080's SCALAR arm calls 0x1800a41c0 directly
+    // while its VECTOR arm names the thunk. The row carries the thunk, because
+    // that is what `tools/rt_deleting_dtor_verify.py` reads out of the shipped
+    // bytes, and runtime/src/graphics/lights_vtable.cpp registers our port at
+    // BOTH addresses so either door lands on our body.
+    //
+    // Four of the five remaining destructors are ported by this batch
+    // (runtime/src/graphics/imagebuffer_derived.cpp, graphicsmesh_vtable.cpp,
+    // lights_vtable.cpp); ~FrameCopyImageBuffer was ported by Wave 23.
+    //
+    // NONE is a probe subject, on the UI::ElementDescription row's test: every
+    // one of them either releases a refcounted System::String (GraphicsMesh's
+    // name, TriangleList's name) or destroys GPU objects through a platform
+    // companion pointer. A fabricated subject would decrement a refcount nothing
+    // incremented and hand the driver a garbage handle.
+    RT_DELDTOR(0x180059080, 0x180058f30, 0x0d8, "Graphics::AmbientLight"),
+    RT_DELDTOR(0x18001eee0, 0x1800a3e40, 0x070, "Graphics::GeneratedImageBuffer"),
+    RT_DELDTOR(0x18001f260, 0x1800a3c80, 0x088, "Graphics::FrameCopyImageBuffer"),
+    RT_DELDTOR(0x180022600, 0x1800a70b0, 0x090, "Graphics::ReflectionImageBuffer"),
+    RT_DELDTOR(0x180012bd0, 0x1800ff270, 0x098, "Graphics::GraphicsMesh"),
+    RT_DELDTOR(0x1800642b0, 0x180106270, 0x168, "Graphics::SpotLight"),
 };
 static DtorFn g_dtorCache[kSpecCount];
 static Site   g_sites[kSpecCount];
@@ -1595,6 +1634,30 @@ void* RtDelDtor_SoundBuffer(void* self, unsigned flags) {
 void* RtDelDtor_SoundEffect(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 84);
 }
+// Vtable batch 6 (2026-09-12): the graphics buffer / mesh / light slot-0 rows.
+// INDICES 103-108, RE-COUNTED OFF THE TABLE AFTER THE THIRD MERGE OF main.
+// These six were 71-76, then 89-94, and are now 103-108: batches 1, 5 and 7
+// took 71-88 and batch 4 elem_B took 89-102 while this branch held them. That
+// is the positional-merge hazard the banner and kSpecCount describe, and it has
+// now bitten this one batch twice. RE-COUNT after every merge, never before.
+void* RtDelDtor_AmbientLight(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 103);
+}
+void* RtDelDtor_GeneratedImageBuffer(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 104);
+}
+void* RtDelDtor_FrameCopyImageBuffer(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 105);
+}
+void* RtDelDtor_ReflectionImageBuffer(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 106);
+}
+void* RtDelDtor_GraphicsMesh(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 107);
+}
+void* RtDelDtor_SpotLight(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 108);
+}
 
 // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12), rows 85..98 ------------
 // All fourteen ~Class bodies are PORTED (runtime/src/ui/<class>element.cpp).
@@ -1756,6 +1819,12 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x1800378a0, (void*)&RtDelDtor_CharacterSet);
     RegisterRuntimeAddr(0x18003b3a0, (void*)&RtDelDtor_Cursor);
     RegisterRuntimeAddr(0x18003ccf0, (void*)&RtDelDtor_SpriteCapture);
+    RegisterRuntimeAddr(0x180059080, (void*)&RtDelDtor_AmbientLight);          // vtable batch 6
+    RegisterRuntimeAddr(0x18001eee0, (void*)&RtDelDtor_GeneratedImageBuffer);  // vtable batch 6
+    RegisterRuntimeAddr(0x18001f260, (void*)&RtDelDtor_FrameCopyImageBuffer);  // vtable batch 6
+    RegisterRuntimeAddr(0x180022600, (void*)&RtDelDtor_ReflectionImageBuffer); // vtable batch 6
+    RegisterRuntimeAddr(0x180012bd0, (void*)&RtDelDtor_GraphicsMesh);          // vtable batch 6
+    RegisterRuntimeAddr(0x1800642b0, (void*)&RtDelDtor_SpotLight);             // vtable batch 6
 
     // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12) --------------------
     RegisterRuntimeAddr(0x180043570, (void*)&RtDelDtor_LayoutElement);
