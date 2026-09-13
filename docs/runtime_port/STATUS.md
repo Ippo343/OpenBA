@@ -2,59 +2,56 @@
 
 Keep this to one screen. Update the closure block after every batch; never copy it into CLAUDE.md.
 
-## Closure (2026-09-12, late night, tools/cutover_closure, roots = census + every minted vtable slot)
+## Closure (2026-09-12 close, tools/cutover_closure, roots = census + every minted vtable slot)
 
 | | |
 |---|---|
-| reachable functions from our call surface | 2,870 |
-| unported | 273 |
-| of which C runtime (our CRT covers them) | 128 |
-| **engine functions to port (static lower bound)** | **145** (34,803 bytes) |
-| minted vtables complete | **150 of 150** |
+| reachable functions from our call surface | 2,871 |
+| unported | 128, all C runtime (our CRT covers them) |
+| **engine functions to port (static lower bound)** | **0** (206 → 856 → 145 → 0 in one day) |
+| minted vtables complete | 150 of 150 |
+| registry doors | name and address are ONE door (`standalone/rt_export_addrs.inc`) |
 
-Worklist: `docs/runtime_port/closure/WORKLIST.md`. The roots now include every non-purecall
-slot of every minted vtable (`build_roots.py` reads `rt_data_mint_tables.inc`), which is what
-turned this morning's "0 to port" into 856 and let the vtable wave run as disjoint class
-batches instead of one gate wall per boot. The 145 left are the callees those slot bodies
-reach by address: ~30 `??3` operator-delete rows (one 93-byte body, register it N times),
-the 748/818-byte `ExternalPtr<T>::Serialize` / `ExternalPtrArray` instantiations still
-unported (`0x180076e90` is the current gate wall), the Graphics leftovers batch 6 left on
-the DLL by name (`Renderer::DrawItemList` 0x180105240, `GraphicsMesh::PlatformSerialize`
-0x1800a48e0, `SpotLight::CreateTargets`, `Context::SetLight`, `~Particle` /
-`~ParticleSystem` / `~Animation`), Video's `PlatformSerialize`, Audio's `~SoundBuffer` /
-`OnSoundBufferDeleted`, and a few Achievement / System / Object leaves.
+Worklist: `docs/runtime_port/closure/WORKLIST.md` (empty). Every function the DLL's call graph
+reaches from our call surface OR from any minted vtable slot is ported, and every port is
+reachable both by mangled name and by retail address. From here the closure cannot help:
+what the gate finds next is state, not code — objects handed to our bodies by a route that
+built them wrong, and callbacks stored in data.
 
 ## Cutover gate
 
 `make cutover` (deploys the debug exe, moves the DLL aside, boots with `BANISHED_RT_NO_DLL=1`,
 which implies `RT_MINT` + `RT_ALLOC`, dumps the live registry, restores the DLL; output in
-`docs/runtime_port/cutover/latest/`). Run it under `tools/game_dir_lock.sh` when agents share
-the game directory.
+`docs/runtime_port/cutover/latest/`). Run it under `tools/game_dir_lock.sh`. Symbolize frames
+with `addr2line -f -C -e standalone/build/reimpl-x64.exe 0x14xxxxxxx`.
 
-Walls passed 2026-09-12, in order: `ExternalPtr<Material>::Serialize` → `MaterialInstance::Serialize`
-serializer pair → `Material::Type` → `??0VideoProgram` → `??0VertexLayout` → `??0VertexProgram`
-(ShaderProgram / VertexProgram / PixelProgram / RenderState) → `MaterialInstance::Serialize+0xfe`
-→ minted `?_typeInfo@Dialog@UI@@` factoryFn → `GroupDescription` → `RibbonDescription` →
-`ImageDescription` → `AnimatedImageDescription` → `TextDescription` (the vtable wave: 53 UI
-Description/Element classes, Font/CharacterSet/Cursor/SpriteCapture, 9 Graphics buffer/light/mesh
-classes, ParticleSystem, AnimationGroup, 3 Audio, 4 spatial, 6 Object/IO classes) →
-**current: `UI::Font::Serialize` (font.cpp:381) calls the field-`+0x28` serializer
-`0x180076e90` by address; it is unported, so `ResolveAddr` returns null and the call is
-EXEC-of-0.** It is one of the 748-byte `ExternalPtr<T>::Serialize` instantiations
-(`object/external_ptr_serialize.cpp` is the template; identify T from the `__typeInfo` it
-checks). No mint trap fires any more: every minted slot has a body.
+Walls passed 2026-09-12: the Video shader family → the UI Description/Element family (53
+classes) → `Font::Serialize`'s two by-address callees (an ExternalPtr row, then the glyph
+Array helper) → **current: a READ of 0x20 in `MakeCodec` (`runtime/src/ui/spritesheet_vtable.cpp:493`)
+from `SpriteSheet::Serialize`, reached `Achievement::Serialize` → `ExternalPtr<SpriteSheet>` →
+`ExternalFactory::FindOrLoad` → `ExternalFactory::Add` → `ExternalSerialize`
+(`object/external_add.cpp:164`).** `stream->encoding` is a non-null object whose vtable is
+null: the Stream this route hands us was built by something that never stamped its Encoding.
+It is the same shape as this morning's first wall (`MaterialInstance::Serialize`, fixed by
+porting the read-side Encoding factory for the Load route); this is the Add route. Start at
+`external_add.cpp` and find who constructs the stream/encoding pair there. It is a null
+handed to us upstream, not a missing function — do not guard it (CLAUDE.md).
 
-**Next batch is the worklist as it stands (145 rows, no vtable work):** port the
-`ExternalPtr` family rows first (each is the same thunk shape), then the Graphics leftovers,
-then the operator-delete rows in one file. Regenerate after; the gate should then reach
-whatever the closure still cannot see (callbacks stored in data).
+**The next session is walks, not batches:** run the gate, read the frames, fix the upstream,
+repeat. Each walk is one agent, serial, with `make cutover` under the lock.
 
 ## DLL-present build
 
 `make sa-run` boots to the in-game world and pause-menu Quit works (re-verified 2026-09-12
-late night on the merged tree after the vtable wave, 973 UI exports registered: `BANISHED_AUTOSTART=1 BANISHED_RT_DIFF=1 BANISHED_PAUSEMENU=600
-BANISHED_PAUSEMENU_QUIT=120`, exit 0, empty crash log, the ten divergent sites are the
-pre-existing negative controls and vtable-identity artefacts).
+at close, 975 UI exports registered, 135 deleting-dtor rows: `BANISHED_AUTOSTART=1 BANISHED_RT_DIFF=1 BANISHED_PAUSEMENU=600
+BANISHED_PAUSEMENU_QUIT=120`, exit 0, empty crash log). Twelve divergent sites: the ten
+pre-existing negative controls and vtable-identity artefacts, plus two that appeared the
+moment the registry doors were unified and two name-only ports went live by address:
+`UI::SpriteContext::Flush` (SHADOW class, "context DIRTY MASK differs", 52,927 of 57,110
+calls) and `Video::VideoProgram::SetupShaders` (ORACLE class, already flagged by the harness
+as "released pointer replayed", a counter at +0x4). The game renders and quits normally.
+Whether these are oracle artefacts of bodies that now run, or port defects the bypass was
+hiding, is unresolved — the first DLL-present question for the next session.
 Known broken route: the unattended Mods menu example (`BANISHED_AUTOMENU_BUTTON=7
 BANISHED_AUTOMENU_CLICKS=1001,5001,d0,4001,101,m6`) dies with an ACCESS_VIOLATION at
 `ModDialog_ToggleMod_Impl+0x43` reading 0xd0. Upstream null, not yet found.
