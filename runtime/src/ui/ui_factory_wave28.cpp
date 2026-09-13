@@ -482,32 +482,17 @@ extern "C" void* RtUiFact_LayoutElement_CreateInPlaceObject(void* p) {
 // SHAPE C: the factory pair is a bare `alloc / null test / call the
 // exported ctor`. The whole body lives in ??0ListDescription@UI@@QEAA@XZ.
 // That ctor IS ported below, so this row does not merely move the wall.
-void* Ctor_ListDescription(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    VPTR(self, "??_7Base@Object@@6B@");
-    VPTR(self, "??_7External@Object@@6B@");
-    U64(self, 0x08, 0);
-    U64(self, 0x10, 0);
-    U64(self, 0x18, 0);
-    VPTR(self, "??_7ElementDescription@UI@@6B@");
-    U64(self, 0x20, 0);
-    U64(self, 0x28, 0);
-    U64(self, 0x30, 0);
-    U32(self, 0x38, 0);
-    U32(self, 0x3c, 0xffffffffu);
-    U64(self, 0x40, 0x3ull);
-    U64(self, 0x48, 0);
-    U64(self, 0x50, 0);
-    U64(self, 0x58, 0);
-    U64(self, 0x60, 0);
-    VPTR(self, "??_7ListDescription@UI@@6B@");
-    U64(self, 0x68, 0);
-    U64(self, 0x70, 0);
-    U64(self, 0x78, 0);
-    U64(self, 0x80, 0);
-    U64(self, 0x88, 0xffffffffff808080ull);
-    return p;
-}
+// ---- VTABLE BATCH 2 (2026-09-12): the eleven constructors below are now
+// ---- ONE-LINE FORWARDERS. Each class file under runtime/src/ui/ owns its
+// ---- own ??0 body (the class-file precedent batch 1 and batch 4 set), and
+// ---- the RegisterRuntimeExport/Addr pair that used to be in this file for
+// ---- each of them was deleted at the merge: one registration per address.
+// ---- The two this file still constructs itself, Layout (0x1800d3a90) and
+// ---- Number (0x180118b60), are NOT in that list -- their class files have no
+// ---- out-of-line ctor to register, because retail inlines theirs into
+// ---- Construct and Reconstruct.
+extern "C" void* RtUi_ListDescription_Ctor(void* self);
+void* Ctor_ListDescription(void* p) { return RtUi_ListDescription_Ctor(p); }
 
 extern "C" void* RtUiFact_ListDescription_CreateNewObject() {
     ++g_new;
@@ -598,32 +583,8 @@ extern "C" void* RtUiFact_NumberDescription_CreateInPlaceObject(void* p) {
 // SHAPE C: the factory pair is a bare `alloc / null test / call the
 // exported ctor`. The whole body lives in ??0NumberEditDescription@UI@@QEAA@XZ.
 // That ctor IS ported below, so this row does not merely move the wall.
-void* Ctor_NumberEditDescription(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    VPTR(self, "??_7Base@Object@@6B@");
-    VPTR(self, "??_7External@Object@@6B@");
-    U64(self, 0x08, 0);
-    U64(self, 0x10, 0);
-    U64(self, 0x18, 0);
-    VPTR(self, "??_7ElementDescription@UI@@6B@");
-    U64(self, 0x20, 0);
-    U64(self, 0x28, 0);
-    U64(self, 0x30, 0);
-    U32(self, 0x38, 0);
-    U32(self, 0x3c, 0xffffffffu);
-    U64(self, 0x40, 0x3ull);
-    U64(self, 0x48, 0);
-    U64(self, 0x50, 0);
-    U64(self, 0x58, 0);
-    U64(self, 0x60, 0);
-    VPTR(self, "??_7NumberEditDescription@UI@@6B@");
-    U64(self, 0x68, 0);
-    U32(self, 0x74, 0x6u);
-    U32(self, 0x78, 0xffff8001u);
-    U32(self, 0x7c, 0x7fffu);
-    U8(self, 0x80, 0x1u);
-    return p;
-}
+extern "C" void* RtUi_NumberEditDescription_Ctor(void* self);
+void* Ctor_NumberEditDescription(void* p) { return RtUi_NumberEditDescription_Ctor(p); }
 
 extern "C" void* RtUiFact_NumberEditDescription_CreateNewObject() {
     ++g_new;
@@ -696,31 +657,8 @@ extern "C" void* RtUiFact_NumberElement_CreateInPlaceObject(void* p) {
 // SHAPE C: the factory pair is a bare `alloc / null test / call the
 // exported ctor`. The whole body lives in ??0PageDescription@UI@@QEAA@XZ.
 // That ctor IS ported below, so this row does not merely move the wall.
-void* Ctor_PageDescription(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    VPTR(self, "??_7Base@Object@@6B@");
-    VPTR(self, "??_7External@Object@@6B@");
-    U64(self, 0x08, 0);
-    U64(self, 0x10, 0);
-    U64(self, 0x18, 0);
-    VPTR(self, "??_7ElementDescription@UI@@6B@");
-    U64(self, 0x20, 0);
-    U64(self, 0x28, 0);
-    U64(self, 0x30, 0);
-    U32(self, 0x38, 0);
-    U32(self, 0x3c, 0xffffffffu);
-    U64(self, 0x40, 0x3ull);
-    U64(self, 0x48, 0);
-    U64(self, 0x50, 0);
-    U64(self, 0x58, 0);
-    U64(self, 0x60, 0);
-    VPTR(self, "??_7GroupDescription@UI@@6B@");
-    U64(self, 0x68, 0);
-    U64(self, 0x70, 0);
-    VPTR(self, "??_7PageDescription@UI@@6B@");
-    U32(self, 0x78, 0);
-    return p;
-}
+extern "C" void* RtUi_PageDescription_Ctor(void* self);
+void* Ctor_PageDescription(void* p) { return RtUi_PageDescription_Ctor(p); }
 
 extern "C" void* RtUiFact_PageDescription_CreateNewObject() {
     ++g_new;
@@ -765,36 +703,8 @@ extern "C" void* RtUiFact_PageElement_CreateInPlaceObject(void* p) {
 // SHAPE C: the factory pair is a bare `alloc / null test / call the
 // exported ctor`. The whole body lives in ??0ProgressDescription@UI@@QEAA@XZ.
 // That ctor IS ported below, so this row does not merely move the wall.
-void* Ctor_ProgressDescription(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    VPTR(self, "??_7Base@Object@@6B@");
-    VPTR(self, "??_7External@Object@@6B@");
-    U64(self, 0x08, 0);
-    U64(self, 0x10, 0);
-    U64(self, 0x18, 0);
-    VPTR(self, "??_7ElementDescription@UI@@6B@");
-    U64(self, 0x20, 0);
-    U64(self, 0x28, 0);
-    U64(self, 0x30, 0);
-    U32(self, 0x38, 0);
-    U32(self, 0x3c, 0xffffffffu);
-    U64(self, 0x40, 0x3ull);
-    U64(self, 0x48, 0);
-    U64(self, 0x50, 0);
-    U64(self, 0x58, 0);
-    U64(self, 0x60, 0);
-    VPTR(self, "??_7ProgressDescription@UI@@6B@");
-    U32(self, 0x68, 0);
-    U64(self, 0x70, 0);
-    U64(self, 0x78, 0);
-    U64(self, 0x80, 0);
-    U64(self, 0x88, 0);
-    U64(self, 0x90, 0);
-    U64(self, 0x98, 0);
-    U64(self, 0xa0, 0);
-    U64(self, 0xa8, 0);
-    return p;
-}
+extern "C" void* RtUi_ProgressDescription_Ctor(void* self);
+void* Ctor_ProgressDescription(void* p) { return RtUi_ProgressDescription_Ctor(p); }
 
 extern "C" void* RtUiFact_ProgressDescription_CreateNewObject() {
     ++g_new;
@@ -842,31 +752,8 @@ extern "C" void* RtUiFact_ProgressElement_CreateInPlaceObject(void* p) {
 // SHAPE C: the factory pair is a bare `alloc / null test / call the
 // exported ctor`. The whole body lives in ??0RadioDescription@UI@@QEAA@XZ.
 // That ctor IS ported below, so this row does not merely move the wall.
-void* Ctor_RadioDescription(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    VPTR(self, "??_7Base@Object@@6B@");
-    VPTR(self, "??_7External@Object@@6B@");
-    U64(self, 0x08, 0);
-    U64(self, 0x10, 0);
-    U64(self, 0x18, 0);
-    VPTR(self, "??_7ElementDescription@UI@@6B@");
-    U64(self, 0x20, 0);
-    U64(self, 0x28, 0);
-    U64(self, 0x30, 0);
-    U32(self, 0x38, 0);
-    U32(self, 0x3c, 0xffffffffu);
-    U64(self, 0x40, 0x3ull);
-    U64(self, 0x48, 0);
-    U64(self, 0x50, 0);
-    U64(self, 0x58, 0);
-    U64(self, 0x60, 0);
-    VPTR(self, "??_7GroupDescription@UI@@6B@");
-    U64(self, 0x68, 0);
-    U64(self, 0x70, 0);
-    VPTR(self, "??_7RadioDescription@UI@@6B@");
-    U32(self, 0x78, 0xffffffffu);
-    return p;
-}
+extern "C" void* RtUi_RadioDescription_Ctor(void* self);
+void* Ctor_RadioDescription(void* p) { return RtUi_RadioDescription_Ctor(p); }
 
 extern "C" void* RtUiFact_RadioDescription_CreateNewObject() {
     ++g_new;
@@ -977,40 +864,8 @@ extern "C" void* RtUiFact_RibbonElement_CreateInPlaceObject(void* p) {
 // SHAPE C: the factory pair is a bare `alloc / null test / call the
 // exported ctor`. The whole body lives in ??0ScrollDescription@UI@@QEAA@XZ.
 // That ctor IS ported below, so this row does not merely move the wall.
-void* Ctor_ScrollDescription(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    VPTR(self, "??_7Base@Object@@6B@");
-    VPTR(self, "??_7External@Object@@6B@");
-    U64(self, 0x08, 0);
-    U64(self, 0x10, 0);
-    U64(self, 0x18, 0);
-    VPTR(self, "??_7ElementDescription@UI@@6B@");
-    U64(self, 0x20, 0);
-    U64(self, 0x28, 0);
-    U64(self, 0x30, 0);
-    U32(self, 0x38, 0);
-    U32(self, 0x3c, 0xffffffffu);
-    U64(self, 0x40, 0x3ull);
-    U64(self, 0x48, 0);
-    U64(self, 0x50, 0);
-    U64(self, 0x58, 0);
-    U64(self, 0x60, 0);
-    VPTR(self, "??_7ScrollDescription@UI@@6B@");
-    U64(self, 0x68, 0);
-    U64(self, 0x70, 0);
-    U64(self, 0x78, 0);
-    U64(self, 0x80, 0);
-    U64(self, 0x88, 0);
-    U64(self, 0x90, 0);
-    U64(self, 0x98, 0);
-    U64(self, 0xa0, 0);
-    U64(self, 0xa8, 0);
-    U64(self, 0xb0, 0);
-    U8(self, 0xb8, 0x1u);
-    U32(self, 0xbc, 0x1u);
-    U64(self, 0xc0, 0xffffffffffffffffull);
-    return p;
-}
+extern "C" void* RtUi_ScrollDescription_Ctor(void* self);
+void* Ctor_ScrollDescription(void* p) { return RtUi_ScrollDescription_Ctor(p); }
 
 extern "C" void* RtUiFact_ScrollDescription_CreateNewObject() {
     ++g_new;
@@ -1058,38 +913,8 @@ extern "C" void* RtUiFact_ScrollElement_CreateInPlaceObject(void* p) {
 // SHAPE C: the factory pair is a bare `alloc / null test / call the
 // exported ctor`. The whole body lives in ??0SliderDescription@UI@@QEAA@XZ.
 // That ctor IS ported below, so this row does not merely move the wall.
-void* Ctor_SliderDescription(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    VPTR(self, "??_7Base@Object@@6B@");
-    VPTR(self, "??_7External@Object@@6B@");
-    U64(self, 0x08, 0);
-    U64(self, 0x10, 0);
-    U64(self, 0x18, 0);
-    VPTR(self, "??_7ElementDescription@UI@@6B@");
-    U64(self, 0x20, 0);
-    U64(self, 0x28, 0);
-    U64(self, 0x30, 0);
-    U32(self, 0x38, 0);
-    U32(self, 0x3c, 0xffffffffu);
-    U64(self, 0x40, 0x3ull);
-    U64(self, 0x48, 0);
-    U64(self, 0x50, 0);
-    U64(self, 0x58, 0);
-    U64(self, 0x60, 0);
-    VPTR(self, "??_7SliderDescription@UI@@6B@");
-    U64(self, 0x68, 0);
-    U64(self, 0x70, 0);
-    U64(self, 0x78, 0);
-    U64(self, 0x80, 0);
-    U64(self, 0x88, 0);
-    U64(self, 0x90, 0);
-    U64(self, 0x98, 0);
-    U64(self, 0xa0, 0);
-    U32(self, 0xa8, 0);
-    U32(self, 0xac, 0x3f800000u);
-    U32(self, 0xb0, 0xau);
-    return p;
-}
+extern "C" void* RtUi_SliderDescription_Ctor(void* self);
+void* Ctor_SliderDescription(void* p) { return RtUi_SliderDescription_Ctor(p); }
 
 extern "C" void* RtUiFact_SliderDescription_CreateNewObject() {
     ++g_new;
@@ -1137,31 +962,8 @@ extern "C" void* RtUiFact_SliderElement_CreateInPlaceObject(void* p) {
 // SHAPE C: the factory pair is a bare `alloc / null test / call the
 // exported ctor`. The whole body lives in ??0SpinnerDescription@UI@@QEAA@XZ.
 // That ctor IS ported below, so this row does not merely move the wall.
-void* Ctor_SpinnerDescription(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    VPTR(self, "??_7Base@Object@@6B@");
-    VPTR(self, "??_7External@Object@@6B@");
-    U64(self, 0x08, 0);
-    U64(self, 0x10, 0);
-    U64(self, 0x18, 0);
-    VPTR(self, "??_7ElementDescription@UI@@6B@");
-    U64(self, 0x20, 0);
-    U64(self, 0x28, 0);
-    U64(self, 0x30, 0);
-    U32(self, 0x38, 0);
-    U32(self, 0x3c, 0xffffffffu);
-    U64(self, 0x40, 0x3ull);
-    U64(self, 0x48, 0);
-    U64(self, 0x50, 0);
-    U64(self, 0x58, 0);
-    U64(self, 0x60, 0);
-    VPTR(self, "??_7SpinnerDescription@UI@@6B@");
-    U64(self, 0x68, 0);
-    U64(self, 0x70, 0);
-    U64(self, 0x78, 0);
-    U32(self, 0x80, 0x1u);
-    return p;
-}
+extern "C" void* RtUi_SpinnerDescription_Ctor(void* self);
+void* Ctor_SpinnerDescription(void* p) { return RtUi_SpinnerDescription_Ctor(p); }
 
 extern "C" void* RtUiFact_SpinnerDescription_CreateNewObject() {
     ++g_new;
@@ -1241,36 +1043,8 @@ extern "C" void* RtUiFact_SpriteCapture_CreateInPlaceObject(void* p) {
 // SHAPE C: the factory pair is a bare `alloc / null test / call the
 // exported ctor`. The whole body lives in ??0TabDescription@UI@@QEAA@XZ.
 // That ctor IS ported below, so this row does not merely move the wall.
-void* Ctor_TabDescription(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    VPTR(self, "??_7Base@Object@@6B@");
-    VPTR(self, "??_7External@Object@@6B@");
-    U64(self, 0x08, 0);
-    U64(self, 0x10, 0);
-    U64(self, 0x18, 0);
-    VPTR(self, "??_7ElementDescription@UI@@6B@");
-    U64(self, 0x20, 0);
-    U64(self, 0x28, 0);
-    U64(self, 0x30, 0);
-    U32(self, 0x38, 0);
-    U32(self, 0x3c, 0xffffffffu);
-    U64(self, 0x40, 0x3ull);
-    U64(self, 0x48, 0);
-    U64(self, 0x50, 0);
-    U64(self, 0x58, 0);
-    U64(self, 0x60, 0);
-    VPTR(self, "??_7TabDescription@UI@@6B@");
-    U64(self, 0x68, 0);
-    U64(self, 0x70, 0);
-    U64(self, 0x78, 0);
-    U64(self, 0x80, 0);
-    U64(self, 0x88, 0);
-    U64(self, 0x90, 0);
-    U64(self, 0x98, 0);
-    U64(self, 0xa8, 0);
-    U64(self, 0xb0, 0);
-    return p;
-}
+extern "C" void* RtUi_TabDescription_Ctor(void* self);
+void* Ctor_TabDescription(void* p) { return RtUi_TabDescription_Ctor(p); }
 
 extern "C" void* RtUiFact_TabDescription_CreateNewObject() {
     ++g_new;
@@ -1318,33 +1092,8 @@ extern "C" void* RtUiFact_TabElement_CreateInPlaceObject(void* p) {
 // SHAPE C: the factory pair is a bare `alloc / null test / call the
 // exported ctor`. The whole body lives in ??0TableDescription@UI@@QEAA@XZ.
 // That ctor IS ported below, so this row does not merely move the wall.
-void* Ctor_TableDescription(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    VPTR(self, "??_7Base@Object@@6B@");
-    VPTR(self, "??_7External@Object@@6B@");
-    U64(self, 0x08, 0);
-    U64(self, 0x10, 0);
-    U64(self, 0x18, 0);
-    VPTR(self, "??_7ElementDescription@UI@@6B@");
-    U64(self, 0x20, 0);
-    U64(self, 0x28, 0);
-    U64(self, 0x30, 0);
-    U32(self, 0x38, 0);
-    U32(self, 0x3c, 0xffffffffu);
-    U64(self, 0x40, 0x3ull);
-    U64(self, 0x48, 0);
-    U64(self, 0x50, 0);
-    U64(self, 0x58, 0);
-    U64(self, 0x60, 0);
-    VPTR(self, "??_7TableDescription@UI@@6B@");
-    U32(self, 0x68, 0x1u);
-    U64(self, 0x6c, 0x1ull);
-    U64(self, 0x78, 0);
-    U64(self, 0x80, 0);
-    U64(self, 0x88, 0);
-    U64(self, 0x90, 0);
-    return p;
-}
+extern "C" void* RtUi_TableDescription_Ctor(void* self);
+void* Ctor_TableDescription(void* p) { return RtUi_TableDescription_Ctor(p); }
 
 extern "C" void* RtUiFact_TableDescription_CreateNewObject() {
     ++g_new;
@@ -1392,34 +1141,8 @@ extern "C" void* RtUiFact_TableElement_CreateInPlaceObject(void* p) {
 // SHAPE C: the factory pair is a bare `alloc / null test / call the
 // exported ctor`. The whole body lives in ??0TextDescription@UI@@QEAA@XZ.
 // That ctor IS ported below, so this row does not merely move the wall.
-void* Ctor_TextDescription(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    VPTR(self, "??_7Base@Object@@6B@");
-    VPTR(self, "??_7External@Object@@6B@");
-    U64(self, 0x08, 0);
-    U64(self, 0x10, 0);
-    U64(self, 0x18, 0);
-    VPTR(self, "??_7ElementDescription@UI@@6B@");
-    U64(self, 0x20, 0);
-    U64(self, 0x28, 0);
-    U64(self, 0x30, 0);
-    U32(self, 0x38, 0);
-    U32(self, 0x3c, 0xffffffffu);
-    U64(self, 0x40, 0x3ull);
-    U64(self, 0x48, 0);
-    U64(self, 0x50, 0);
-    U64(self, 0x58, 0);
-    U64(self, 0x60, 0);
-    VPTR(self, "??_7TextDescription@UI@@6B@");
-    U64(self, 0x68, 0);
-    U64(self, 0x70, 0);
-    U64(self, 0x78, 0);
-    U32(self, 0x80, 0);
-    U16(self, 0x84, 0);
-    U32(self, 0x88, 0xc8u);
-    U32(self, 0x8c, 0xffffffffu);
-    return p;
-}
+extern "C" void* RtUi_TextDescription_Ctor(void* self);
+void* Ctor_TextDescription(void* p) { return RtUi_TextDescription_Ctor(p); }
 
 extern "C" void* RtUiFact_TextDescription_CreateNewObject() {
     ++g_new;
@@ -1564,8 +1287,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@ListDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_ListDescription_CreateInPlaceObject);
     RegisterRuntimeAddr(0x180044d10ull, (void*)&RtUiFact_ListDescription_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0ListDescription@UI@@QEAA@XZ", (void*)&Ctor_ListDescription);
-    RegisterRuntimeAddr(0x1800d49b0ull, (void*)&Ctor_ListDescription); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@ListElement@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_ListElement_CreateNewObject);
@@ -1589,8 +1310,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@NumberEditDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_NumberEditDescription_CreateInPlaceObject);
     RegisterRuntimeAddr(0x180046000ull, (void*)&RtUiFact_NumberEditDescription_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0NumberEditDescription@UI@@QEAA@XZ", (void*)&Ctor_NumberEditDescription);
-    RegisterRuntimeAddr(0x1800d5050ull, (void*)&Ctor_NumberEditDescription); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@NumberEditElement@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_NumberEditElement_CreateNewObject);
@@ -1612,8 +1331,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@PageDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_PageDescription_CreateInPlaceObject);
     RegisterRuntimeAddr(0x180047050ull, (void*)&RtUiFact_PageDescription_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0PageDescription@UI@@QEAA@XZ", (void*)&Ctor_PageDescription);
-    RegisterRuntimeAddr(0x1800d54e0ull, (void*)&Ctor_PageDescription); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@PageElement@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_PageElement_CreateNewObject);
@@ -1628,8 +1345,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@ProgressDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_ProgressDescription_CreateInPlaceObject);
     RegisterRuntimeAddr(0x1800778e0ull, (void*)&RtUiFact_ProgressDescription_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0ProgressDescription@UI@@QEAA@XZ", (void*)&Ctor_ProgressDescription);
-    RegisterRuntimeAddr(0x18011a210ull, (void*)&Ctor_ProgressDescription); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@ProgressElement@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_ProgressElement_CreateNewObject);
@@ -1644,8 +1359,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@RadioDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_RadioDescription_CreateInPlaceObject);
     RegisterRuntimeAddr(0x1800477e0ull, (void*)&RtUiFact_RadioDescription_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0RadioDescription@UI@@QEAA@XZ", (void*)&Ctor_RadioDescription);
-    RegisterRuntimeAddr(0x1800d5b50ull, (void*)&Ctor_RadioDescription); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@RadioElement@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_RadioElement_CreateNewObject);
@@ -1676,8 +1389,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@ScrollDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_ScrollDescription_CreateInPlaceObject);
     RegisterRuntimeAddr(0x18003a290ull, (void*)&RtUiFact_ScrollDescription_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0ScrollDescription@UI@@QEAA@XZ", (void*)&Ctor_ScrollDescription);
-    RegisterRuntimeAddr(0x18011a4e0ull, (void*)&Ctor_ScrollDescription); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@ScrollElement@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_ScrollElement_CreateNewObject);
@@ -1692,8 +1403,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@SliderDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_SliderDescription_CreateInPlaceObject);
     RegisterRuntimeAddr(0x1800498c0ull, (void*)&RtUiFact_SliderDescription_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0SliderDescription@UI@@QEAA@XZ", (void*)&Ctor_SliderDescription);
-    RegisterRuntimeAddr(0x1800d7b60ull, (void*)&Ctor_SliderDescription); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@SliderElement@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_SliderElement_CreateNewObject);
@@ -1708,8 +1417,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@SpinnerDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_SpinnerDescription_CreateInPlaceObject);
     RegisterRuntimeAddr(0x18004aed0ull, (void*)&RtUiFact_SpinnerDescription_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0SpinnerDescription@UI@@QEAA@XZ", (void*)&Ctor_SpinnerDescription);
-    RegisterRuntimeAddr(0x1800d89c0ull, (void*)&Ctor_SpinnerDescription); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@SpinnerElement@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_SpinnerElement_CreateNewObject);
@@ -1733,8 +1440,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@TabDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_TabDescription_CreateInPlaceObject);
     RegisterRuntimeAddr(0x18004c360ull, (void*)&RtUiFact_TabDescription_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0TabDescription@UI@@QEAA@XZ", (void*)&Ctor_TabDescription);
-    RegisterRuntimeAddr(0x1800daa00ull, (void*)&Ctor_TabDescription); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@TabElement@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_TabElement_CreateNewObject);
@@ -1749,8 +1454,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@TableDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_TableDescription_CreateInPlaceObject);
     RegisterRuntimeAddr(0x180079040ull, (void*)&RtUiFact_TableDescription_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0TableDescription@UI@@QEAA@XZ", (void*)&Ctor_TableDescription);
-    RegisterRuntimeAddr(0x18011e7a0ull, (void*)&Ctor_TableDescription); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@TableElement@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_TableElement_CreateNewObject);
@@ -1765,8 +1468,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@TextDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_TextDescription_CreateInPlaceObject);
     RegisterRuntimeAddr(0x180041c40ull, (void*)&RtUiFact_TextDescription_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0TextDescription@UI@@QEAA@XZ", (void*)&Ctor_TextDescription);
-    RegisterRuntimeAddr(0x18011ea20ull, (void*)&Ctor_TextDescription); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@TextElement@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_TextElement_CreateNewObject);

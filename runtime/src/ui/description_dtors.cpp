@@ -66,12 +66,6 @@
 //   Array<ExternalPtr<ElementDescription>> destructor at 0x180039440):
 //     0x18003db40, 0x18003da00, 0x18003d8c0, 0x180043a00, 0x180079870,
 //     0x18004cc90, 0x18003e310, 0x18003e0c0
-//
-// THREE OF THIS FILE'S ORIGINAL ROWS ARE GONE, ON PURPOSE (2026-09-12 merge):
-// ??1ComboElement@, ??1DocumentTextElement@ and ??1EditElement@ are owned by
-// runtime/src/ui/{combo,documenttext,edit}element.cpp, the class files that
-// also carry those classes' vtable slots. One address, one owner; the two
-// transcriptions were compared before this one was dropped and they agree.
 // ============================================================================
 #include <cstddef>
 #include <cstdint>
@@ -136,171 +130,22 @@ void TailElementDtor(uint8_t* p) {
 
 
 // ============================================================================
-// ??1TextDescription@UI@@UEAA@XZ   retail 0x18011eae0
+// THE THIRTEEN UI::*Description ??1 BODIES THAT WERE HERE ARE GONE.
 // ============================================================================
-// Written BEFORE LabelDescription's below, which tail-jumps into this exact
-// function rather than re-resolving it.
-extern "C" void RtUi_TextDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7TextDescription@UI@@6B@");     // 18011eaf6
-    ReleaseStringField(p, 0x78);   // 18011eb00
-
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@");  // 18011eb2a
-    ReleaseStringField(p, 0x60);   // 18011eb34
-    TailExternalDtor(p);           // 18011eb66  JMP
-}
-
-
+// Layout, List, Number, NumberEdit, Progress, Scroll, Slider, Spinner, Tab,
+// Table and Text each own their destructor in their own class file under
+// runtime/src/ui/ (vtable batch 2), the same precedent batch 1's ten set.
+// They were duplicated here and dropped at the merge (2026-09-12): one
+// registration per address, and the class file is the one place the rest of
+// that class's evidence already lives.
+//
+// `RtUi_TextDescription_Dtor` is still DECLARED above because
+// labeldescription.cpp tail-jumps straight into it; it is DEFINED in
+// runtime/src/ui/textdescription.cpp.
 // ============================================================================
-// ??1LayoutDescription@UI@@UEAA@XZ   retail 0x1800d3a10
-// ============================================================================
-extern "C" void RtUi_LayoutDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7LayoutDescription@UI@@6B@");   // 1800d3a26
-    RtAddr<SubDtorFn>(0x180043a00ull)(p + 0x68);   // 1800d3a34, unported
 
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@");  // 1800d3a3a
-    ReleaseStringField(p, 0x60);   // 1800d3a44
-    TailExternalDtor(p);           // 1800d3a76  JMP
-}
 
-// ============================================================================
-// ??1ListDescription@UI@@UEAA@XZ   retail 0x1800d4910
-// ============================================================================
-extern "C" void RtUi_ListDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7ListDescription@UI@@6B@");     // 1800d4926
-    ReleaseStringField(p, 0x80);   // 1800d4930
 
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@");  // 1800d4966
-    ReleaseStringField(p, 0x60);   // 1800d4970
-    TailExternalDtor(p);           // 1800d49a2  JMP
-}
-
-// ============================================================================
-// ??1NumberDescription@UI@@UEAA@XZ   retail 0x180118c00
-// ============================================================================
-extern "C" void RtUi_NumberDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7NumberDescription@UI@@6B@");   // 180118c16
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@");  // 180118c20
-    ReleaseStringField(p, 0x60);   // 180118c2a
-    TailExternalDtor(p);           // 180118c5c  JMP
-}
-
-// ============================================================================
-// ??1NumberEditDescription@UI@@UEAA@XZ   retail 0x1800d4fe0
-// ============================================================================
-extern "C" void RtUi_NumberEditDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7NumberEditDescription@UI@@6B@"); // 1800d4ff6
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@");    // 1800d5000
-    ReleaseStringField(p, 0x60);   // 1800d500a
-    TailExternalDtor(p);           // 1800d503c  JMP
-}
-
-// ============================================================================
-// ??1ProgressDescription@UI@@UEAA@XZ   retail 0x18011a080
-// ============================================================================
-extern "C" void RtUi_ProgressDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7ProgressDescription@UI@@6B@"); // 18011a09b
-
-    ReleaseStringField(p, 0xa0);   // 18011a0a5
-    ReleaseStringField(p, 0x98);   // 18011a0d8
-    ReleaseStringField(p, 0x90);   // 18011a10a
-    ReleaseStringField(p, 0x88);   // 18011a13c
-    ReleaseStringField(p, 0x80);   // 18011a16e
-    ReleaseStringField(p, 0x78);   // 18011a1a0
-
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@");  // 18011a1c6
-    ReleaseStringField(p, 0x60);   // 18011a1d0
-    TailExternalDtor(p);           // 18011a203  JMP
-}
-
-// ============================================================================
-// ??1ScrollDescription@UI@@UEAA@XZ   retail 0x18011a5d0
-// ============================================================================
-// Same nine-field own-member set as BorderDescription (0xb0..0x70), different
-// vtable — the two classes happen to add the same shape of members.
-extern "C" void RtUi_ScrollDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7ScrollDescription@UI@@6B@");   // 18011a5eb
-
-    ReleaseStringField(p, 0xb0);   // 18011a5f5
-    ReleaseStringField(p, 0xa8);   // 18011a628
-    ReleaseStringField(p, 0xa0);   // 18011a65a
-    ReleaseStringField(p, 0x98);   // 18011a68c
-    ReleaseStringField(p, 0x90);   // 18011a6be
-    ReleaseStringField(p, 0x88);   // 18011a6f0
-    ReleaseStringField(p, 0x80);   // 18011a722
-    ReleaseStringField(p, 0x78);   // 18011a754
-    ReleaseStringField(p, 0x70);   // 18011a77a
-
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@");  // 18011a7a0
-    ReleaseStringField(p, 0x60);   // 18011a7aa
-    TailExternalDtor(p);           // 18011a7dd  JMP
-}
-
-// ============================================================================
-// ??1SliderDescription@UI@@UEAA@XZ   retail 0x1800d7a00
-// ============================================================================
-extern "C" void RtUi_SliderDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7SliderDescription@UI@@6B@");   // 1800d7a1b
-
-    ReleaseStringField(p, 0x98);   // 1800d7a25
-    ReleaseStringField(p, 0x90);   // 1800d7a58
-    ReleaseStringField(p, 0x88);   // 1800d7a8a
-    ReleaseStringField(p, 0x80);   // 1800d7abc
-    ReleaseStringField(p, 0x78);   // 1800d7aee
-
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@");  // 1800d7b14
-    ReleaseStringField(p, 0x60);   // 1800d7b1e
-    TailExternalDtor(p);           // 1800d7b51  JMP
-}
-
-// ============================================================================
-// ??1SpinnerDescription@UI@@UEAA@XZ   retail 0x1800d8950
-// ============================================================================
-extern "C" void RtUi_SpinnerDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7SpinnerDescription@UI@@6B@");  // 1800d8966
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@");  // 1800d8970
-    ReleaseStringField(p, 0x60);   // 1800d897a
-    TailExternalDtor(p);           // 1800d89ac  JMP
-}
-
-// ============================================================================
-// ??1TabDescription@UI@@UEAA@XZ   retail 0x1800da8e0
-// ============================================================================
-extern "C" void RtUi_TabDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7TabDescription@UI@@6B@");      // 1800da8fb
-    RtAddr<SubDtorFn>(0x18004cc90ull)(p + 0xa8);   // 1800da90c, unported
-
-    ReleaseStringField(p, 0x98);   // 1800da912
-    ReleaseStringField(p, 0x90);   // 1800da945
-    ReleaseStringField(p, 0x88);   // 1800da977
-
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@");  // 1800da9a9
-    ReleaseStringField(p, 0x60);   // 1800da9b3
-    TailExternalDtor(p);           // 1800da9e6  JMP
-}
-
-// ============================================================================
-// ??1TableDescription@UI@@UEAA@XZ   retail 0x18011e6f0
-// ============================================================================
-extern "C" void RtUi_TableDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7TableDescription@UI@@6B@");    // 18011e706
-    ReleaseStringField(p, 0x90);   // 18011e710
-    RtAddr<SubDtorFn>(0x180079870ull)(p + 0x78);   // 18011e74a, unported
-
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@");  // 18011e750
-    ReleaseStringField(p, 0x60);   // 18011e75a
-    TailExternalDtor(p);           // 18011e78c  JMP
-}
 
 
 
@@ -322,39 +167,6 @@ int RtUiDescriptionDtorsRegister() {
 
 
 
-
-    RegisterRuntimeExport("??1LayoutDescription@UI@@UEAA@XZ", (void*)&RtUi_LayoutDescription_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800d3a10ull, (void*)&RtUi_LayoutDescription_Dtor);
-
-    RegisterRuntimeExport("??1ListDescription@UI@@UEAA@XZ", (void*)&RtUi_ListDescription_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800d4910ull, (void*)&RtUi_ListDescription_Dtor);
-
-    RegisterRuntimeExport("??1NumberDescription@UI@@UEAA@XZ", (void*)&RtUi_NumberDescription_Dtor); ++n;
-    RegisterRuntimeAddr(0x180118c00ull, (void*)&RtUi_NumberDescription_Dtor);
-
-    RegisterRuntimeExport("??1NumberEditDescription@UI@@UEAA@XZ", (void*)&RtUi_NumberEditDescription_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800d4fe0ull, (void*)&RtUi_NumberEditDescription_Dtor);
-
-    RegisterRuntimeExport("??1ProgressDescription@UI@@UEAA@XZ", (void*)&RtUi_ProgressDescription_Dtor); ++n;
-    RegisterRuntimeAddr(0x18011a080ull, (void*)&RtUi_ProgressDescription_Dtor);
-
-    RegisterRuntimeExport("??1ScrollDescription@UI@@UEAA@XZ", (void*)&RtUi_ScrollDescription_Dtor); ++n;
-    RegisterRuntimeAddr(0x18011a5d0ull, (void*)&RtUi_ScrollDescription_Dtor);
-
-    RegisterRuntimeExport("??1SliderDescription@UI@@UEAA@XZ", (void*)&RtUi_SliderDescription_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800d7a00ull, (void*)&RtUi_SliderDescription_Dtor);
-
-    RegisterRuntimeExport("??1SpinnerDescription@UI@@UEAA@XZ", (void*)&RtUi_SpinnerDescription_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800d8950ull, (void*)&RtUi_SpinnerDescription_Dtor);
-
-    RegisterRuntimeExport("??1TabDescription@UI@@UEAA@XZ", (void*)&RtUi_TabDescription_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800da8e0ull, (void*)&RtUi_TabDescription_Dtor);
-
-    RegisterRuntimeExport("??1TableDescription@UI@@UEAA@XZ", (void*)&RtUi_TableDescription_Dtor); ++n;
-    RegisterRuntimeAddr(0x18011e6f0ull, (void*)&RtUi_TableDescription_Dtor);
-
-    RegisterRuntimeExport("??1TextDescription@UI@@UEAA@XZ", (void*)&RtUi_TextDescription_Dtor); ++n;
-    RegisterRuntimeAddr(0x18011eae0ull, (void*)&RtUi_TextDescription_Dtor);
 
 
 

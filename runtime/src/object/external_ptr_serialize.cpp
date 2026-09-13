@@ -493,6 +493,15 @@ EXTPTR_THUNK(RtObject_ExternalPtrSerialize_PixelProgram,
              "?_typeInfo@PixelProgram@Video@@0VBaseTypeInfo@Object@@A")
 EXTPTR_THUNK(RtObject_ExternalPtrSerialize_RenderState,
              "?_typeInfo@RenderState@Video@@0VBaseTypeInfo@Object@@A")
+// 0x18003f1e0 — UI::Font, `UI::TextDescription` +0x68 (vtable batch 2). The
+// pairing is this body's own `MOV EDX,dword ptr [0x1801fab68]` at 0x18003f473
+// (the type id handed to Object::Base::IsDerivedFrom), and 0x1801fab68 is
+// `?_typeInfo@Font@UI@@…` — cross-checked against
+// standalone/rt_data_mint_tables.inc:4373, where the mint carries that same
+// name at that same address. The class UI::Font itself is NOT ported here and
+// is not needed: this body only ever compares its type id.
+EXTPTR_THUNK(RtObject_ExternalPtrSerialize_Font,
+             "?_typeInfo@Font@UI@@0VBaseTypeInfo@Object@@A")
 // VTABLE BATCH 7 (2026-09-12): 0x1800594a0 — Graphics::AnimationEvent. Reached
 // from Graphics::AnimationGroup::Serialize's per-clip event-list element loop
 // (runtime/src/graphics/vtbatch7_animgroup_particlesystem.cpp), the same
@@ -667,6 +676,8 @@ int RtObjectExternalPtrSerializeRegister() {
     RegisterRuntimeAddr(0x1800542a0, (void*)&RtObject_ExternalPtrSerialize_VertexProgram);          ++n;
     RegisterRuntimeAddr(0x180055380, (void*)&RtObject_ExternalPtrSerialize_PixelProgram);           ++n;
     RegisterRuntimeAddr(0x180055670, (void*)&RtObject_ExternalPtrSerialize_RenderState);            ++n;
+    // vtable batch 2: UI::TextDescription::Serialize CALLs this over +0x68.
+    RegisterRuntimeAddr(0x18003f1e0, (void*)&RtObject_ExternalPtrSerialize_Font);                   ++n;
     // VTABLE BATCH 7 (2026-09-12): AnimationGroup's clip event list.
     RegisterRuntimeAddr(0x1800594a0, (void*)&RtObject_ExternalPtrSerialize_AnimationEvent);          ++n;
     // array form

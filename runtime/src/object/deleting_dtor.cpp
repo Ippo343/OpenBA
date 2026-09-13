@@ -1155,6 +1155,35 @@ static const DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x180046e10, 0x180117cc0, 0x0c0, "UI::GroupElement"),
     RT_DELDTOR(0x180036600, 0x180118470, 0x0e0, "UI::ImageElement"),
     RT_DELDTOR(0x180042bb0, 0x1800d25f0, 0x130, "UI::LabelElement"),
+    // 2026-09-12, VTABLE BATCH 2 (the UI::*Description second half), rows
+    // 103..115 -- APPENDED AFTER every row main already had, and the entry
+    // points below were renumbered to match at the merge (the table is
+    // POSITIONAL; see the kSpecCount banner). Thirteen
+    // rows, one per class in that batch. Each pair of constants was read out of
+    // THAT deleting destructor's own bytes — the `LEA R9,[~Class]` and the
+    // `MOV EDX,sizeof` that the eh_vector iterator receives — and not from any
+    // class header or from a sibling that "looks the same": the sizes below
+    // range over 0x78..0xc8 and four of the thirteen would have been wrong if
+    // carried across from a neighbour.
+    //
+    // NONE of them is a probe subject. Every one of these destructors either
+    // releases a refcounted System::String or destroys an Array whose buffer
+    // came from the Runtime heap (most do both), so a fabricated subject would
+    // decrement a refcount nothing incremented and free a garbage pointer —
+    // the same test the UI::ElementDescription row applies.
+    RT_DELDTOR(0x1800431d0, 0x1800d3a10, 0x078, "UI::LayoutDescription"),
+    RT_DELDTOR(0x180044ed0, 0x1800d4910, 0x090, "UI::ListDescription"),
+    RT_DELDTOR(0x18004a760, 0x180118c00, 0x088, "UI::NumberDescription"),
+    RT_DELDTOR(0x180046190, 0x1800d4fe0, 0x088, "UI::NumberEditDescription"),
+    RT_DELDTOR(0x1800471a0, 0x1800d54b0, 0x080, "UI::PageDescription"),
+    RT_DELDTOR(0x180077c80, 0x18011a080, 0x0b0, "UI::ProgressDescription"),
+    RT_DELDTOR(0x180047930, 0x1800d5b20, 0x080, "UI::RadioDescription"),
+    RT_DELDTOR(0x18003a790, 0x18011a5d0, 0x0c8, "UI::ScrollDescription"),
+    RT_DELDTOR(0x180049c60, 0x1800d7a00, 0x0b8, "UI::SliderDescription"),
+    RT_DELDTOR(0x18004b050, 0x1800d8950, 0x088, "UI::SpinnerDescription"),
+    RT_DELDTOR(0x18004c640, 0x1800da8e0, 0x0b8, "UI::TabDescription"),
+    RT_DELDTOR(0x180079210, 0x18011e6f0, 0x098, "UI::TableDescription"),
+    RT_DELDTOR(0x180041e30, 0x18011eae0, 0x090, "UI::TextDescription"),
 };
 static DtorFn g_dtorCache[kSpecCount];
 static Site   g_sites[kSpecCount];
@@ -1770,6 +1799,65 @@ void* RtDelDtor_TabElement(void* self, unsigned flags)        { return DeletingD
 void* RtDelDtor_TableElement(void* self, unsigned flags)      { return DeletingDtorCore(self, flags, 101); }
 void* RtDelDtor_TextElement(void* self, unsigned flags)       { return DeletingDtorCore(self, flags, 102); }
 
+// ---------------------------------------------------------------------------
+// VTABLE BATCH 2 (the UI::*Description second half), table rows 103..115.
+// The indices below were RE-DERIVED after merging main, not carried over
+// from the branch: main had grown the table to 103 rows in the meantime and
+// a stale index dispatches the WRONG destructor with no diagnostic.
+// RtDelDtor_RibbonDescription is NOT here -- main wired it (index 58).
+// UI::LayoutDescription       ~LayoutDescription = 0x1800d3a10
+void* RtDelDtor_LayoutDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 122);
+}
+// UI::ListDescription         ~ListDescription = 0x1800d4910
+void* RtDelDtor_ListDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 123);
+}
+// UI::NumberDescription       ~NumberDescription = 0x180118c00
+void* RtDelDtor_NumberDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 124);
+}
+// UI::NumberEditDescription   ~NumberEditDescription = 0x1800d4fe0
+void* RtDelDtor_NumberEditDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 125);
+}
+// UI::PageDescription         ~PageDescription = 0x1800d54b0
+void* RtDelDtor_PageDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 126);
+}
+// UI::ProgressDescription     ~ProgressDescription = 0x18011a080
+void* RtDelDtor_ProgressDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 127);
+}
+// UI::RadioDescription        ~RadioDescription = 0x1800d5b20
+void* RtDelDtor_RadioDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 128);
+}
+// UI::ScrollDescription       ~ScrollDescription = 0x18011a5d0
+void* RtDelDtor_ScrollDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 129);
+}
+// UI::SliderDescription       ~SliderDescription = 0x1800d7a00
+void* RtDelDtor_SliderDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 130);
+}
+// UI::SpinnerDescription      ~SpinnerDescription = 0x1800d8950
+void* RtDelDtor_SpinnerDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 131);
+}
+// UI::TabDescription          ~TabDescription = 0x1800da8e0
+void* RtDelDtor_TabDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 132);
+}
+// UI::TableDescription        ~TableDescription = 0x18011e6f0
+void* RtDelDtor_TableDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 133);
+}
+// UI::TextDescription         ~TextDescription = 0x18011eae0  (PORTED, textdescription.cpp)
+void* RtDelDtor_TextDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 134);
+}
+
 static const int kProbeSubjects[] = { 7, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 42 };
 const int* ProbeSubjects(int* count) {
     *count = static_cast<int>(sizeof(kProbeSubjects) / sizeof(kProbeSubjects[0]));
@@ -1950,6 +2038,21 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180046e10, (void*)&RtDelDtor_GroupElement);
     RegisterRuntimeAddr(0x180036600, (void*)&RtDelDtor_ImageElement);
     RegisterRuntimeAddr(0x180042bb0, (void*)&RtDelDtor_LabelElement);
+    // ---- VTABLE BATCH 2 (the UI::*Description second half), rows 103..115 --
+    RegisterRuntimeAddr(0x1800431d0, (void*)&RtDelDtor_LayoutDescription);
+    RegisterRuntimeAddr(0x180044ed0, (void*)&RtDelDtor_ListDescription);
+    RegisterRuntimeAddr(0x18004a760, (void*)&RtDelDtor_NumberDescription);
+    RegisterRuntimeAddr(0x180046190, (void*)&RtDelDtor_NumberEditDescription);
+    RegisterRuntimeAddr(0x1800471a0, (void*)&RtDelDtor_PageDescription);
+    RegisterRuntimeAddr(0x180077c80, (void*)&RtDelDtor_ProgressDescription);
+    RegisterRuntimeAddr(0x180047930, (void*)&RtDelDtor_RadioDescription);
+    RegisterRuntimeAddr(0x18003a790, (void*)&RtDelDtor_ScrollDescription);
+    RegisterRuntimeAddr(0x180049c60, (void*)&RtDelDtor_SliderDescription);
+    RegisterRuntimeAddr(0x18004b050, (void*)&RtDelDtor_SpinnerDescription);
+    RegisterRuntimeAddr(0x18004c640, (void*)&RtDelDtor_TabDescription);
+    RegisterRuntimeAddr(0x180079210, (void*)&RtDelDtor_TableDescription);
+    RegisterRuntimeAddr(0x180041e30, (void*)&RtDelDtor_TextDescription);
+
     // The count is taken from kSpecCount rather than typed, so a row added
     // without touching this line cannot make the log say the wrong number --
     // which the hard-coded "38" here would have done for Wave 10D's row.

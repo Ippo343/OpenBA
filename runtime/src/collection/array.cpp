@@ -1648,6 +1648,106 @@ const ArraySpec kSpec_StringPair10 = {            // 0x180078c90
     /*init   unwritten*/ 0,    0,
     /*seed zero       */ 0x00, 0x10 }; // BOTH slots are dereferenced
 
+// ---- VTABLE BATCH 2 (2026-09-12): four rows for the UI::*Description second
+// ---- half. Re-applied by hand after merging main (this file conflicted whole,
+// ---- so every anchor below was re-checked against main's text).
+
+// 0x18004cdf0 - UI::TabDescription's tab array: each element is a PAIR of
+// ExternalPtr<ElementDescription> (?Serialize@TabDescription@UI@@ runs
+// 0x180038f90 over elem+0x00 and elem+0x08 in one loop, 0x1800da881/0x1800da88e)
+// and ~TabDescription's array dtor (0x18004cc90) frees the buffer WITHOUT
+// visiting the elements. So TRIVIAL, and no `destroy`.
+//
+// IT IS *NOT* kSpec_StringPair10, which has the same stride, the same align and
+// the same zeroed tail. That row's two slots are refcounted Strings and it
+// carries AssignStringPair10 and DestroyStringPair10Range; reusing it here would
+// take a reference on two ExternalPtrs on every grow and release them on every
+// shrink, against a class whose own destructor takes none. The three numbers
+// were read from 0x18004cdf0's own body (`<< 4` at the MemAlloc -> stride 0x10,
+// `MOV EDX,0x8` -> align 8, the else arm writing two zero qwords -> InitZero10).
+const ArraySpec kSpec_ExtPtrPair10 = {            // 0x18004cdf0
+    "Array<UI::TabDescription::Tab>", 0x10, 8, &Assign16, &InitZero10, nullptr, true,
+    0, 0, 0, 0, 0, 0 };
+
+// 0x1800799a0 - UI::TableDescription's cell array: {int32 col, int32 row,
+// ExternalPtr<ElementDescription>} (kScalarInt over +0x00 and +0x04 and
+// 0x180038f90 over +0x08, 0x18011e67f/0x18011e694/0x18011e6a2).
+// ~TableDescription's array dtor (0x180079870) does not visit the elements.
+//
+// IT IS *NOT* kSpec_ExtPtrPair10 above, and the difference is the one thing a
+// spec even has beyond stride and align: the DEFAULT TAIL. That row's else arm
+// writes two ZERO qwords; this one writes `0xffffffffffffffff` then zero, i.e.
+// a new cell starts at col = -1, row = -1 - exactly the "wildcard" value
+// TableDescription::CreateInstance's fallback search tests for. A zeroed tail
+// would make every grown cell claim column 0, row 0.
+void InitCellNeg1Ptr0(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d)     = 0xffffffffffffffffull;
+    *reinterpret_cast<uint64_t*>(d + 8) = 0;
+}
+const ArraySpec kSpec_TableCell10 = {             // 0x1800799a0
+    "Array<UI::TableDescription::Cell>", 0x10, 8, &Assign16, &InitCellNeg1Ptr0,
+    nullptr, true, 0, 0, 0, 0, 0, 0 };
+
+// 0x180043d80 - UI::LayoutDescription's entry array. Element 0x38: an
+// ExternalPtr<ElementDescription> at +0x00, THREE refcounted Strings at
+// +0x08/+0x10/+0x18, four scalars at +0x20..+0x2f and a bool at +0x30. Stride
+// and align read from the body's `capacity * 0x38` and `MOV EDX,0x8`.
+//
+// All three element ops are CALLS in retail and are reached BY ADDRESS here,
+// through the registry, for the reason AssignGraphSeries' comment gives: a
+// direct C++ call to the same instructions skips the registered entry point and
+// that body's diff site never fires.
+void AssignLayoutEntry(uint8_t* d, const uint8_t* s) {
+    using Fn = void* (*)(uint8_t*, const uint8_t*);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180043980));
+    fn(d, s);
+}
+// 0x180043d80's `else` (new-tail) arm, transcribed. Note the UNALIGNED QWORD of
+// 1 at +0x24, which sets +0x24 to 1 AND +0x28 to 0 in one store, and that
+// +0x31..+0x37 are NEVER WRITTEN.
+void InitLayoutEntry(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x18) = 0;
+    *reinterpret_cast<uint32_t*>(d + 0x20) = 2;          // DWORD
+    const uint64_t one = 1;
+    std::memcpy(d + 0x24, &one, 8);                      // UNALIGNED QWORD
+    *reinterpret_cast<uint32_t*>(d + 0x2c) = 0;          // DWORD
+    d[0x30] = 0;                                         // BYTE
+}
+// Retail has NO range helper for this element: 0x180044050 destroys ONE entry
+// and both callers (this SetSize's shrink arm and ~Array at 0x180043a00) loop
+// around it. The loop IS the range form.
+// runtime/src/collection/array_destroy.cpp ports and registers 0x180044050.
+void DestroyLayoutEntryRange(void* /*ignoredThis*/, uint8_t* base, int count) {
+    using Fn = void (*)(uint8_t*);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180044050));
+    for (int i = 0; i < count; ++i) fn(base + i * 0x38);
+}
+const ArraySpec kSpec_LayoutEntry38 = {           // 0x180043d80
+    "Array<UI::LayoutDescription::Entry>", 0x38, 8, &AssignLayoutEntry,
+    &InitLayoutEntry, &DestroyLayoutEntryRange, false,
+    /*assign unwritten*/ 0x31, 0x38,
+    /*init   unwritten*/ 0x31, 0x38,
+    /*seed zero       */ 0x00, 0x20 };  // ptr + 3 String slots are dereferenced
+
+// 0x180043b40 - UI::LayoutElement's per-cell info array, the THREE-argument
+// form. Element 0x44 and align 4 (`* 0x44` at the MemAlloc, `MOV EDX,0x4`),
+// copied as SEVENTEEN dwords with no refcount touch anywhere, no destroy and no
+// default-tail arm - TRIVIAL.
+//
+// The caller only ever writes the first 0x24 bytes of the fill record it passes
+// (LayoutDescription::CreateInstance, 0x1800d3568..0x1800d3581), so bytes
+// 0x24..0x43 of every appended element are whatever was on that frame. That is
+// the CALLER's business, not this row's: the copy is 0x44 bytes wide either way.
+void AssignLayoutInfo44(uint8_t* d, const uint8_t* s) { std::memcpy(d, s, 0x44); }
+const ArraySpec kSpec_LayoutInfo44 = {            // 0x180043b40
+    "Array<UI::LayoutElement::Info>", 0x44, 4, &AssignLayoutInfo44,
+    nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
+
 // 0x180075b20 — `Array<UI::DialogControllerConfigEntry>::SetSize(this, int)`.
 // See AssignCfgEntry20 above for the transcription and for the +0x04..+0x07
 // hole that both arms skip.
@@ -2464,6 +2564,12 @@ J1_ENTRY(180024aa0)   // UI:          ComboElement::_userData (+0x108)
 // wrong reads as a finding about the subject.)
 J1_ENTRY(180009460)   // UI:          reached from ?AddController@DialogInstance@ 0x18011363f
 J1_ENTRY(180039440)   // UI:          reached from ?AddController@DialogInstance@ 0x180113649
+// VTABLE BATCH 2 (2026-09-12) - the two canonical free-and-zero ~Array bodies
+// the UI::*Description second half needs. Each read from its own
+// disassembly, not assumed from the element type: both free _data, zero
+// {data, size+cap} and visit no element.
+J1_ENTRY(18004cc90)   // UI:          UI::TabDescription's tab array
+J1_ENTRY(180079870)   // UI:          UI::TableDescription's cell array
 // WAVE 9 LANE PKG2 rung 4b-iii — the two array dtors ?~CompressedStream@IO@@
 // (0x1800aa650) calls on its own members, at +0x40 and +0x30. NOT byte-identical
 // to the already-ported 0x180024aa0 it calls at +0x50 (first difference at byte
@@ -2688,6 +2794,10 @@ J3_ENTRY2(18005cc60, kSpec_Ptr8Zero)    // Graphics:    Array<T*>, plain copy, z
 J3_ENTRY2(1800136f0, kSpec_Tri18A4)     // Graphics:    EdgeMesh's TriangleList (align 4)
 J3_ENTRY2(180061880, kSpec_StringExtZ)  // Graphics:    Material's {String*,ExternalPtr}, zero tail
 J3_ENTRY2(180034010, kSpec_MetaEntry20) // Save:        Persistence metadata entries
+// ---- VTABLE BATCH 2 (2026-09-12) -----------------------------------------
+J3_ENTRY2(18004cdf0, kSpec_ExtPtrPair10) // UI: TabDescription's tab array
+J3_ENTRY2(1800799a0, kSpec_TableCell10)  // UI: TableDescription's cell array
+J3_ENTRY2(180043d80, kSpec_LayoutEntry38) // UI: LayoutDescription's entry array [NON-TRIVIAL]
 
 
 // ---- VTABLE BATCH 7b (2026-09-12) -----------------------------------------
@@ -2717,6 +2827,7 @@ J3_ENTRY2(180020e90, kSpec_Rec14)        // Graphics: one pool record's inner ar
 J3_ENTRY3(180004e30, kSpec_Sprite38)    // UI:       SpriteSheet's 0x38 element [NON-TRIVIAL]
 J3_ENTRY3(18001f990, kSpec_Fill8)       // Graphics: Array<Geometry*>
 J3_ENTRY3(180023830, kSpec_Fill4)       // Graphics: Array<uint32>
+J3_ENTRY3(180043b40, kSpec_LayoutInfo44) // UI: LayoutElement's per-cell info array (batch 2)
 J3_ENTRY3(18004f790, kSpec_Fill16)      // Engine:   MainLoop::_postDraw push
 J3_ENTRY3(18004f8e0, kSpec_Fill16)      // Engine:   MainLoop::_postUpdate push
 // WAVE 29 LANE GFXBODY — Array<RendererDrawable>::SetSize, the append behind
@@ -3371,6 +3482,9 @@ void RtCollectionPortInit() {
     // byte identity to the canonical J1 body, and it is stated as such.
     RegisterRuntimeAddr(0x180009460, (void*)&RtColl_ArrayDtor_180009460);
     RegisterRuntimeAddr(0x180039440, (void*)&RtColl_ArrayDtor_180039440);
+    // VTABLE BATCH 2 (2026-09-12): the Tab and Table description arrays.
+    RegisterRuntimeAddr(0x18004cc90, (void*)&RtColl_ArrayDtor_18004cc90);
+    RegisterRuntimeAddr(0x180079870, (void*)&RtColl_ArrayDtor_180079870);
     // ---- EIGHTEENTH AND NINETEENTH (Wave 25 lane INTERNAL42) ---------------
     // The count above says "expect a seventeenth rather than be surprised by
     // it", and that held: both of these became visible because another lane
@@ -3441,6 +3555,12 @@ void RtCollectionPortInit() {
     // BANISHED_RT_ARRAY_NONTRIVIAL exists to switch off.
     RegisterRuntimeAddr(0x180075d20, (void*)&RtColl_ArraySetSize_180075d20);
     RegisterRuntimeAddr(0x180075b20, (void*)&RtColl_ArraySetSize_180075b20);
+    // VTABLE BATCH 2 (2026-09-12): the three read-path resizes of the
+    // UI::*Description second half, plus LayoutElement's info array.
+    RegisterRuntimeAddr(0x18004cdf0, (void*)&RtColl_ArraySetSize_18004cdf0);
+    RegisterRuntimeAddr(0x1800799a0, (void*)&RtColl_ArraySetSize_1800799a0);
+    RegisterRuntimeAddr(0x180043d80, (void*)&RtColl_ArraySetSize_180043d80);
+    RegisterRuntimeAddr(0x180043b40, (void*)&RtColl_ArraySetSizeFill_180043b40);
     RegisterRuntimeAddr(0x1800298f0, (void*)&RtColl_ArraySetSizeFill_1800298f0);  // PKG2 4c-ii
     RegisterRuntimeAddr(0x18001f990, (void*)&RtColl_ArraySetSizeFill_18001f990);
     RegisterRuntimeAddr(0x180023830, (void*)&RtColl_ArraySetSizeFill_180023830);

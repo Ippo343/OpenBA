@@ -64,7 +64,7 @@ struct DelDtorSpec {
 // stays true of it; the TABLE is the authority and this constant tracks it,
 // and the static_assert next to the table is what forces an appender to
 // notice (it caught CSTREAM's addition, at 41 vs 39).
-constexpr int kSpecCount = 122;  // 109-121: VTABLE BATCH 3 elem_A (13 UI::*Element); 103-108: VTABLE BATCH 6 (Graphics::AmbientLight,
+constexpr int kSpecCount = 135;  // 122-134: VTABLE BATCH 2 desc_B (13 UI::*Description);   // 109-121: VTABLE BATCH 3 elem_A (13 UI::*Element); 103-108: VTABLE BATCH 6 (Graphics::AmbientLight,
                                  //     GeneratedImageBuffer, FrameCopyImageBuffer,
                                  //     ReflectionImageBuffer, GraphicsMesh, SpotLight;
                                  //     2026-09-12). RE-COUNTED TWICE: these six were

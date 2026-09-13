@@ -146,6 +146,21 @@ extern int RtUiGroupDescriptionRegister(); // groupdescription.cpp
 extern int RtUiRibbonDescriptionRegister(); // ribbondescription.cpp
 extern int RtUiImageDescriptionRegister();  // imagedescription.cpp
 extern int RtUiAnimatedImageDescriptionRegister(); // animatedimagedescription.cpp
+// VTABLE BATCH 2 -- the UI::*Description second half (2026-09-12). One file per
+// class; each registers every slot, the ctor and the dtor of its class.
+extern int RtUiTextDescriptionRegister();      // textdescription.cpp
+extern int RtUiRadioDescriptionRegister();     // radiodescription.cpp
+extern int RtUiPageDescriptionRegister();      // pagedescription.cpp
+extern int RtUiNumberEditDescriptionRegister();// numbereditdescription.cpp
+extern int RtUiNumberDescriptionRegister();    // numberdescription.cpp
+extern int RtUiSpinnerDescriptionRegister();   // spinnerdescription.cpp
+extern int RtUiSliderDescriptionRegister();    // sliderdescription.cpp
+extern int RtUiTabDescriptionRegister();       // tabdescription.cpp
+extern int RtUiTableDescriptionRegister();     // tabledescription.cpp
+extern int RtUiProgressDescriptionRegister();  // progressdescription.cpp
+extern int RtUiScrollDescriptionRegister();    // scrolldescription.cpp
+extern int RtUiListDescriptionRegister();      // listdescription.cpp
+extern int RtUiLayoutDescriptionRegister();    // layoutdescription.cpp
 // VTABLE BATCH 1 (2026-09-12): the first half of the UI::*Description family,
 // ten whole classes, one file each, all sharing runtime/src/ui/
 // description_common.h. Registered unconditionally -- these are minted vtable
@@ -288,6 +303,21 @@ void RtUiPortInit() {
     n += RtUiRibbonDescriptionRegister(); // UI::RibbonDescription, all nine bodies
     n += RtUiImageDescriptionRegister();  // UI::ImageDescription + the shared applier
     n += RtUiAnimatedImageDescriptionRegister(); // UI::AnimatedImageDescription
+    // vtable batch 2 -- the UI::*Description second half. One file per class,
+    // each registering every body of that class unconditionally.
+    n += RtUiTextDescriptionRegister();   // UI::TextDescription (+ ??0TextElement)
+    n += RtUiRadioDescriptionRegister();  // UI::RadioDescription
+    n += RtUiPageDescriptionRegister();   // UI::PageDescription (+ PageElement::SetActivePage)
+    n += RtUiNumberEditDescriptionRegister();  // UI::NumberEditDescription
+    n += RtUiNumberDescriptionRegister();      // UI::NumberDescription
+    n += RtUiSpinnerDescriptionRegister();     // UI::SpinnerDescription
+    n += RtUiSliderDescriptionRegister();      // UI::SliderDescription
+    n += RtUiTabDescriptionRegister();         // UI::TabDescription
+    n += RtUiTableDescriptionRegister();       // UI::TableDescription
+    n += RtUiProgressDescriptionRegister();    // UI::ProgressDescription
+    n += RtUiScrollDescriptionRegister();      // UI::ScrollDescription
+    n += RtUiListDescriptionRegister();        // UI::ListDescription
+    n += RtUiLayoutDescriptionRegister();      // UI::LayoutDescription
     // VTABLE BATCH 1 — ten whole UI::*Description classes (2026-09-12)
     n += RtUiBorderDescriptionRegister();
     n += RtUiButtonDescriptionRegister();

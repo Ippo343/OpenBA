@@ -270,6 +270,14 @@ constexpr DestroySpec kD_Str_48 = { "String @+0x000, stride 0x048", 0x048, 1, { 
 constexpr DestroySpec kD_Str_18 = { "String @+0x010, stride 0x018", 0x018, 1, { 0x010 } };
 constexpr DestroySpec kD_Str_20 = { "String @+0x000, stride 0x020", 0x020, 1, { 0x000 } };  // VertexLayout::Element (2026-09-12)
 constexpr DestroySpec kD_Str2_38 = { "2 Strings @+0x008,+0x000, stride 0x038", 0x038, 2, { 0x008, 0x000 } };
+// VTABLE BATCH 2 (2026-09-12) — UI::LayoutDescription's entry, stride 0x38
+// with THREE refcounted Strings. NOT kD_Str2_38 above, which shares the stride
+// and has two Strings at DIFFERENT offsets. The three offsets and their ORDER
+// are read from the per-element destructor 0x180044050's own body, which
+// releases +0x18 first, then +0x10, then +0x08 — descending, like every other
+// multi-String row here.
+constexpr DestroySpec kD_Str3_38at08 = { "3 Strings @+0x018,+0x010,+0x008, stride 0x038",
+                                         0x038, 3, { 0x018, 0x010, 0x008 } };
 // WAVE 27 LANE FRONTIER - UI::StringTable's TextEntry {name, text}, the element
 // of the array at StringTable+0x20. Read out of 0x180005570's own body:
 //   0x1800055a7  MOV RAX,[RBX+0x8]   the FIRST slot released is +0x08
@@ -379,6 +387,9 @@ RTCOLL_FITS(kD_Str_10, 1, 8u);
 RTCOLL_FITS(kD_Str_48, 1, 8u);
 RTCOLL_FITS(kD_Str_18, 1, 8u);
 RTCOLL_FITS(kD_Str2_38, 2, 8u);
+RTCOLL_FITS(kD_Str3_38at08, 3, 8u);
+static_assert(kD_Str3_38at08.offs[1] + 8u <= kD_Str3_38at08.stride, "offs[1]");
+static_assert(kD_Str3_38at08.offs[2] + 8u <= kD_Str3_38at08.stride, "offs[2]");
 RTCOLL_FITS(kD_Str2_10, 2, 8u);
 static_assert(kD_Str2_38.offs[1] + 8u <= kD_Str2_38.stride, "offs[1]");
 RTCOLL_FITS(kD_Str_28at08, 1, 8u);
@@ -786,6 +797,23 @@ J2_ENTRY(1800416d0, FreeInnerArraysCounted, kD_InnerArr_18)  // CALL 0x1800419b0
 J2_ENTRY(180073c90, FreeInnerArraysCounted, kD_InnerArr_48)  // CALL 0x180074100  Body A
 J2_ENTRY(18004fa30, ReleaseStringsCounted,  kD_Str_20)       // CALL 0x18004fe20  Body B  ~VertexLayout (2026-09-12)
 
+// ---- VTABLE BATCH 2 (2026-09-12): UI::LayoutDescription's entry array -------
+//
+// This instantiation has NO range helper in retail. Its per-element destructor
+// 0x180044050 takes ONE element, and both callers (the ~Array at 0x180043a00
+// and the shrink arm of SetSize at 0x180043d80) run their own `for` loop around
+// it. So the entry point below is the SINGLE-element form, which is why it does
+// not use A_ENTRY/B_ENTRY: those are (this, base, count) because retail's
+// helpers are.
+Site g_de_180044050 = { { "Collection::Array elem-destroy(3 Strings) @0x180044050",
+                          0, 0, false, false }, 0x180044050 };
+void RtColl_DestroyElem_180044050(void* elem) {
+    DProbeGate();
+    const int n = ReleaseStringsCounted(static_cast<uint8_t*>(elem), 1, &kD_Str3_38at08);
+    ReportDestroy(&g_de_180044050, &kD_Str3_38at08, 1, n);
+}
+J2_ENTRY(180043a00, ReleaseStringsCounted,  kD_Str3_38at08)  // UI: ~LayoutDescription's entry array
+
 // ---- WAVE 25 LANE INTERNAL42: three more J2 addresses ----------------------
 //
 // *** THE TRAP THESE THREE CARRY, AND IT NEARLY COST TWO WRONG SPECS. ***
@@ -1069,6 +1097,55 @@ void* RtColl_SpriteEntryAssign_180004220(void* dst, const void* src) {
         std::snprintf(o, sizeof(o), "str0=%p str1=%p",
                       *reinterpret_cast<void**>(d), *reinterpret_cast<void**>(d + 8));
         RtDiffReport(&g_da_180004220.d, ok, o, "dst[0x00..0x33] == src[0x00..0x33]");
+    }
+    return dst;
+}
+
+// ---- VTABLE BATCH 2 (2026-09-12): the SECOND element copy-assign -----------
+//
+// 0x180043980, UI::LayoutDescription's entry (stride 0x38, the same stride as
+// the SpriteSheet element above and NOT the same element). Transcribed from its
+// own body:
+//     +0x00  plain 8-byte copy (the ExternalPtr; NO refcount touch)
+//     +0x08, +0x10, +0x18  THREE refcounted Strings: dst is NULLED first, then
+//                          set and incremented only when src is non-null
+//     +0x20, +0x24, +0x28, +0x2c  four dwords
+//     +0x30  one byte
+// *** +0x31 .. +0x37 ARE NEVER WRITTEN. *** Same trap as the row above, one
+// byte later: an oracle that memcmps 0x38 bytes after this runs compares seven
+// bytes of allocator fill. array.cpp's kSpec_LayoutEntry38 carries that exact
+// window as `assignUnwritten = [0x31, 0x38)` so its probe does not.
+Site g_da_180043980 = { { "LayoutDescription entry operator= @0x180043980", 0, 0, false, false },
+                        0x180043980 };
+void* RtColl_LayoutEntryAssign_180043980(void* dst, const void* src) {
+    DProbeGate();
+    uint8_t* d = static_cast<uint8_t*>(dst);
+    const uint8_t* s = static_cast<const uint8_t*>(src);
+
+    *reinterpret_cast<const void**>(d) = *reinterpret_cast<void* const*>(s);
+
+    for (uint32_t off = 0x08; off <= 0x18; off += 8) {
+        *reinterpret_cast<void**>(d + off) = nullptr;
+        void* str = *reinterpret_cast<void* const*>(s + off);
+        if (str) {
+            *reinterpret_cast<void**>(d + off) = str;
+            ++*reinterpret_cast<int32_t*>(static_cast<uint8_t*>(str) - 4);
+        }
+    }
+    for (uint32_t off = 0x20; off <= 0x2c; off += 4)
+        *reinterpret_cast<uint32_t*>(d + off) = *reinterpret_cast<const uint32_t*>(s + off);
+    d[0x30] = s[0x30];
+    /* +0x31 .. +0x37 deliberately untouched -- retail does not write them */
+
+    if (RtDiffEnabled()) {
+        RtDiffRegister(&g_da_180043980.d);
+        const bool ok = std::memcmp(d, s, 0x31) == 0;
+        char o[96];
+        std::snprintf(o, sizeof(o), "str0=%p str1=%p str2=%p",
+                      *reinterpret_cast<void**>(d + 0x08),
+                      *reinterpret_cast<void**>(d + 0x10),
+                      *reinterpret_cast<void**>(d + 0x18));
+        RtDiffReport(&g_da_180043980.d, ok, o, "dst[0x00..0x30] == src[0x00..0x30]");
     }
     return dst;
 }
@@ -1492,10 +1569,16 @@ void RtCollectionDestroyPortInit() {
     // one calls Audio's 0x180050d30 and stays gated with the Wave 8 Audio
     // holdbacks, exactly where lane Q left it.
     RegisterRuntimeAddr(0x180004220, (void*)&RtColl_SpriteEntryAssign_180004220);
+    // VTABLE BATCH 2 (2026-09-12): its caller is array.cpp's kSpec_LayoutEntry38
+    // (0x180043d80), registered in the same commit and reaching this by address.
+    RegisterRuntimeAddr(0x180043980, (void*)&RtColl_LayoutEntryAssign_180043980);
 
     // ---- J2: ~Array with an element-destroy prologue, six addresses --------
     RegisterRuntimeAddr(0x180010ab0, (void*)&RtColl_ArrayDtorElem_180010ab0);
     RegisterRuntimeAddr(0x18004fa30, (void*)&RtColl_ArrayDtorElem_18004fa30);
+    // VTABLE BATCH 2 (2026-09-12): UI::LayoutDescription's entry array.
+    RegisterRuntimeAddr(0x180043a00, (void*)&RtColl_ArrayDtorElem_180043a00);
+    RegisterRuntimeAddr(0x180044050, (void*)&RtColl_DestroyElem_180044050);
     RegisterRuntimeAddr(0x18001c7e0, (void*)&RtColl_ArrayDtorElem_18001c7e0);
     RegisterRuntimeAddr(0x180033880, (void*)&RtColl_ArrayDtorElem_180033880);
     RegisterRuntimeAddr(0x1800416d0, (void*)&RtColl_ArrayDtorElem_1800416d0);
