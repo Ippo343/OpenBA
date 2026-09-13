@@ -150,7 +150,12 @@ extern "C" uint32_t RtVideo_VertexLayout_Type(const void*) {
 extern "C" const char* RtVideo_VertexLayout_TypeName(const void*) {
     const char* v = nullptr; std::memcpy(&v, VertexLayoutTypeInfo() + 8, sizeof v); return v;
 }
-extern "C" int32_t RtVideo_VertexLayout_GetFileVersion(const void*) { return 1; }
+// 0x1800f5e60 is `MOV EAX,3 ; RET`. This port said 1 until the 2026-09-12
+// cutover walk: DLL-present the DLL's own vtable answered, so nothing noticed;
+// DLL-absent every MeshLayout\*.rsc load failed External::Load's version
+// check (badVer=65), every VideoProgram lost its VertexLayout, and
+// Renderer::AddDrawItem silently dropped every draw item -- the black window.
+extern "C" int32_t RtVideo_VertexLayout_GetFileVersion(const void*) { return 3; }
 
 extern "C" void* RtVideo_VertexLayout_Ctor(void* selfv) {
     ConstructBody(static_cast<VertexLayout*>(selfv)); return selfv;
