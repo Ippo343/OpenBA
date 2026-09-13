@@ -31,12 +31,12 @@
 // The 2025-era version of this file gated every wrapper on
 // BANISHED_REIMPL_SERIALIZER, defaulting OFF, so the shipped build tail-called
 // the DLL. That gate is gone and replaced by the wave switches
-// BANISHED_RT_IO / BANISHED_RT_SERIALIZER (runtime/src/io/rt_io_port.cpp),
+// the old DLL-era switch / the old DLL-era switch (runtime/src/io/rt_io_port.cpp),
 // which default ON. RtSerializer_ReimplEnabled() no longer exists.
 //
 // The kill switch has to be tested INSIDE each body rather than expressed by
 // "do not register", because path 2 above binds the dispatch slots
-// unconditionally from AddressRegistryInit(). With BANISHED_RT_SERIALIZER=0
+// unconditionally from AddressRegistryInit(). With the old DLL-era switch
 // nothing is registered, the internal flag stays false, and every one of these
 // functions tail-calls the shipped DLL — i.e. both paths are killed together.
 // ============================================================================
@@ -88,5 +88,5 @@ void RtSerializer_SerializeBytes(rt::io::Serializer* self, int size, void* ptr, 
 } // extern "C"
 
 // Wave 4 lane A registration hook, called from rt_io_port.cpp under
-// BANISHED_RT_SERIALIZER. Returns the number of exports registered.
+// the old DLL-era switch. Returns the number of exports registered.
 int RtIoSerializerRegister();

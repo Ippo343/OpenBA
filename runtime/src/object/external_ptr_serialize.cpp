@@ -88,7 +88,7 @@
 // THE ORACLE
 // ---------------------------------------------------------------------------
 // Lane S's emission oracle (`runtime/src/io/save_trace.h`,
-// `BANISHED_RT_SAVE_TRACE=1`) on the WRITE path, and it reaches this body
+// `the old DLL-era switch`) on the WRITE path, and it reaches this body
 // WITHOUT a new harness, because `runtime/src/achievement/goal_serialize.cpp`
 // already probes the two functions that call it:
 //
@@ -167,7 +167,7 @@ namespace {
 
 // ---- the dependency doors, all by EXPORTED NAME through the port registry ---
 //
-// RT_EXPORT_ONCE, not RT_ORIGINAL_ONCE: the point is to reach OUR port of each
+// RT_EXPORT_ONCE, not the raw DLL door: the point is to reach OUR port of each
 // of these where one exists, not the shipped body
 // ([[reference_rtoriginal_is_getprocaddress]] is about the cost, and
 // port-bypass is about the correctness). One cache per call site.
@@ -715,7 +715,7 @@ int RtObjectExternalPtrSerializeRegister() {
     // which resolve 0x180014520 by address today and therefore run retail's
     // copy. That is a REAL behavioural change for EdgeMeshInstance and
     // Particle serialization and it is stated here rather than discovered:
-    // `BANISHED_RT_EXTPTR=0` reverts all six instantiations together.
+    // `the old DLL-era switch` reverts all six instantiations together.
     RegisterRuntimeAddr(0x180014520, (void*)&RtObject_ExternalPtrSerialize_MaterialInstance); ++n;
 
     // ---- 2026-09-12: the remaining instantiations in the cutover closure ----

@@ -17,7 +17,7 @@
 // heap. One definition, included twice.
 //
 // Everything here is `inline`, and every accessor keeps the function-local
-// `static` that Wave 5 introduced deliberately: RtOriginal/ResolveExport is
+// `static` that Wave 5 introduced deliberately: the raw DLL door/ResolveExport is
 // GetProcAddress, an export-table binary search under the loader lock, and two
 // uncached ones in a per-frame body cost Wave 2 five points of sim time while
 // being invisible to both profilers

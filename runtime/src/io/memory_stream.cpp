@@ -37,7 +37,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Stream.h"
 
-// NO INLINE REPLAY IN THESE BODIES, deliberately. RT_DIFF_SCALAR works by
+// NO INLINE REPLAY IN THESE BODIES, deliberately. the diff oracle works by
 // running the shipped body a second time on the same object and comparing the
 // two answers -- which is exactly wrong for four of the six here, because Read,
 // Write and SetCurrentPos MUTATE _cursor: a replay would advance it twice and
@@ -62,7 +62,6 @@ namespace RtIo {
 // The offset arithmetic that follows really is 64-bit, so the two widths are
 // transcribed separately rather than unified.
 extern "C" bool RtIo_MemoryStream_Read(MemoryStream* self, int32_t count, void* dst) {
-    RT_DIFF_BEGIN("IO::MemoryStream::Read");
 
     const int64_t cursor = static_cast<int32_t>(self->cursor);   // 1800ae95d MOVSXD
     const int64_t n      = count;                                // 1800ae961 MOVSXD
@@ -70,13 +69,11 @@ extern "C" bool RtIo_MemoryStream_Read(MemoryStream* self, int32_t count, void* 
                            static_cast<int32_t>(n);              // 1800ae964 LEA (32-bit)
 
     if (end > static_cast<int32_t>(self->size)) {                // 1800ae96a CMP/JG
-        RT_DIFF_WORK(true);
         return false;                                            // 1800ae991
     }
     std::memcpy(dst, static_cast<const uint8_t*>(self->data) + cursor,
                 static_cast<size_t>(n));                         // 1800ae97c
     self->cursor += static_cast<uint32_t>(n);                    // 1800ae981
-    RT_DIFF_WORK(true);
     return true;
 }
 
@@ -87,7 +84,6 @@ extern "C" bool RtIo_MemoryStream_Read(MemoryStream* self, int32_t count, void* 
 // including the same 32-bit signed bound check, and including the fact that it
 // will NOT grow the buffer: a write past _size fails rather than reallocating.
 extern "C" bool RtIo_MemoryStream_Write(MemoryStream* self, int32_t count, const void* src) {
-    RT_DIFF_BEGIN("IO::MemoryStream::Write");
 
     const int64_t cursor = static_cast<int32_t>(self->cursor);   // 1800ae8fd
     const int64_t n      = count;                                // 1800ae901
@@ -95,13 +91,11 @@ extern "C" bool RtIo_MemoryStream_Write(MemoryStream* self, int32_t count, const
                            static_cast<int32_t>(n);              // 1800ae904
 
     if (end > static_cast<int32_t>(self->size)) {                // 1800ae90a
-        RT_DIFF_WORK(true);
         return false;                                            // 1800ae92e
     }
     std::memcpy(static_cast<uint8_t*>(self->data) + cursor, src,
                 static_cast<size_t>(n));                         // 1800ae919
     self->cursor += static_cast<uint32_t>(n);                    // 1800ae91e
-    RT_DIFF_WORK(true);
     return true;
 }
 
@@ -113,9 +107,7 @@ extern "C" bool RtIo_MemoryStream_Write(MemoryStream* self, int32_t count, const
 // past the end succeeds here and the following Read is what fails. A port that
 // "helpfully" validated would change which of the two calls reports the error.
 extern "C" bool RtIo_MemoryStream_SetCurrentPos(MemoryStream* self, int32_t pos) {
-    RT_DIFF_BEGIN("IO::MemoryStream::SetCurrentPos");
     self->cursor = static_cast<uint32_t>(pos);   // 1800ae9b0
-    RT_DIFF_WORK(true);
     return true;                                 // 1800ae9b3
 }
 
@@ -125,16 +117,12 @@ extern "C" bool RtIo_MemoryStream_SetCurrentPos(MemoryStream* self, int32_t pos)
 // ============================================================================
 // Two instructions each. `UEBAI` — const, returning unsigned.
 extern "C" uint32_t RtIo_MemoryStream_GetCurrentPos(const MemoryStream* self) {
-    RT_DIFF_BEGIN("IO::MemoryStream::GetCurrentPos");
     const uint32_t v = self->cursor;             // 1800ae9c0
-    RT_DIFF_WORK(true);
     return v;
 }
 
 extern "C" uint32_t RtIo_MemoryStream_GetSize(const MemoryStream* self) {
-    RT_DIFF_BEGIN("IO::MemoryStream::GetSize");
     const uint32_t v = self->size;               // 1800ae9d0
-    RT_DIFF_WORK(true);
     return v;
 }
 
@@ -163,9 +151,7 @@ extern "C" uint32_t RtIo_MemoryStream_GetSize(const MemoryStream* self) {
 // anything would double-free against the dtor, which is where the release
 // really lives (0x1800ae890).
 extern "C" void RtIo_MemoryStream_Close(MemoryStream* self) {
-    RT_DIFF_BEGIN("IO::MemoryStream::Close");
     (void)self;
-    RT_DIFF_WORK(true);
     // 1800ae9e0: RET — deliberately empty.
 }
 

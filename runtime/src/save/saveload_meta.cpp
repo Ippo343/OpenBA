@@ -375,21 +375,6 @@ inline void* ReadVtableSlot(const void* obj, int byteOffset) {
 }
 
 // ---------------------------------------------------------------------------
-// Negative-control hook. See RtSaveMetaOracle.
-// ---------------------------------------------------------------------------
-//   0  off (normal)
-//   1  DROP the nameMode field entirely  -> the record is 4 bytes shorter
-//   2  CORRUPT the height VALUE written  -> the record is the same length
-// Read once; `getenv` is cached process-wide (standalone/env_cache.h).
-int ControlMode() {
-    static int mode = -1;
-    if (mode < 0) {
-        const char* e = std::getenv("BANISHED_RT_SAVEMETA_CONTROL");
-        mode = (e && e[0]) ? std::atoi(e) : 0;
-    }
-    return mode;
-}
-
 } // namespace
 
 // ============================================================================
@@ -459,25 +444,15 @@ static void RtSave_SaveLoad_SaveMetaData_Body(SaveLoad* self, void* pixels,
     // (0x1800c1493/0x1800c1497) and hands their addresses to the scalar slot,
     // which takes an `int&`. Our parameters occupy the same role. On the write
     // path the slot only reads them.
+    // The slot takes an `int&` and writes back through it on the read path, so
+    // the argument itself is handed over, exactly as retail hands it the home
+    // slot.
     scalarInt(rw, &width,  nullptr);
-    if (ControlMode() == 2) {
-        // NEGATIVE CONTROL 2 ONLY. The `else` arm hands the slot the ARGUMENT
-        // ITSELF, exactly as retail hands it the home slot, because the slot
-        // takes an `int&` and writes back through it on the read path. Routing
-        // the normal path through a copy "so both arms look alike" would
-        // quietly break that aliasing, so the control gets its own arm and the
-        // faithful call is left untouched.
-        int corrupted = height ^ 1;
-        scalarInt(rw, &corrupted, nullptr);
-    } else {
-        scalarInt(rw, &height, nullptr);
-    }
+    scalarInt(rw, &height, nullptr);
 
     writeBytes(rw, width * height * 4, pixels, nullptr);
 
-    if (ControlMode() != 1) {                    // negative control, see below
-        scalarInt(rw, &nameMode, nullptr);
-    }
+    scalarInt(rw, &nameMode, nullptr);
 
     // ---- collect the enabled mods -----------------------------------------
     // The Modification singleton pointer is hoisted (`MOV R14,[...]` once at
@@ -659,7 +634,7 @@ static void RtSave_SaveLoad_SaveMetaData_Body(SaveLoad* self, void* pixels,
 // THE ORACLE — two sinks, and THEIRS actually runs
 // ============================================================================
 //
-// Armed by BANISHED_RT_SAVEMETA_ORACLE=1. Ours writes into the caller's real
+// Armed by the old DLL-era switch. Ours writes into the caller's real
 // SaveLoad (so the live save is produced by the port, not by the DLL); the
 // shipped DLL writes into a scratch SaveLoad-shaped block; the two resulting
 // Save::SavedState records are compared.
@@ -668,7 +643,7 @@ static void RtSave_SaveLoad_SaveMetaData_Body(SaveLoad* self, void* pixels,
 // name, nameMode) and of two singletons that it does not mutate, so running it
 // twice produces the same record twice. It is NOT a self-check
 // (reference_shadow_marker_is_not_an_oracle.md): the second run is
-// ResolveExportRaw'd out of the DLL and never sees our verdict, our buffer, or
+// the raw export door'd out of the DLL and never sees our verdict, our buffer, or
 // our SaveLoad.
 //
 // THE COMPARED REGION IS BOUNDED to what both sides actually write — `_size`
@@ -691,121 +666,18 @@ static void RtSave_SaveLoad_SaveMetaData_Body(SaveLoad* self, void* pixels,
 
 namespace {
 
-uint64_t g_calls        = 0;   // times the ORACLE ran both sides
-uint64_t g_sizeDiffs    = 0;   // screen 1 failures
-uint64_t g_byteDiffs    = 0;   // screen 2 failures
-uint64_t g_bodyCalls    = 0;   // times the ported body ran at all
-
-bool OracleEnabled() {
-    static int on = -1;
-    if (on < 0) {
-        const char* e = std::getenv("BANISHED_RT_SAVEMETA_ORACLE");
-        on = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return on == 1;
-}
-
-using SaveMetaFn = void (*)(void* self, void* pixels, int w, int h, String* name, int mode);
-
-} // namespace
-
-// Forward declaration so the oracle body can print the summary before exiting
-// on BANISHED_RT_SAVEMETA_QUIT_AFTER.
-extern "C" void RtSaveMetaSummary();
-
-namespace {
-
 } // namespace
 
 extern "C" void RtSave_SaveLoad_SaveMetaData(SaveLoad* self, void* pixels,
                                              int width, int height,
                                              String* name, int nameMode) {
-    ++g_bodyCalls;
-
-    if (!OracleEnabled()) {
-        RtSave_SaveLoad_SaveMetaData_Body(self, pixels, width, height, name, nameMode);
-        return;
-    }
-
-    SaveMetaFn theirs = RtOriginal<SaveMetaFn>(
-        "?SaveMetaData@SaveLoad@Save@@QEAAXPEAXHHVString@System@@H@Z");
-    if (theirs == nullptr) {
-        RtSave_SaveLoad_SaveMetaData_Body(self, pixels, width, height, name, nameMode);
-        return;
-    }
-
-    // Two independent references; then consume the caller's, exactly as one
-    // normal call would. Net effect on the refcount: unchanged.
-    String ours;  ours.data  = nullptr;
-    String their; their.data = nullptr;
-    RtSaveDetail::RetainInto(const_cast<const char**>(&ours.data), name->data);
-    RtSaveDetail::RetainInto(const_cast<const char**>(&their.data), name->data);
-    ReleaseStringSlot(const_cast<const char**>(&name->data));
-
-    // Ours runs live, into the caller's real object.
-    RtSave_SaveLoad_SaveMetaData_Body(self, pixels, width, height, &ours, nameMode);
-
-    // Theirs runs into a scratch SaveLoad. Only +0x28..+0x37 is touched by this
-    // function, and Store() needs `_data` to start null so it does not free a
-    // stack pattern — hence the zero fill.
-    alignas(16) uint8_t scratch[sizeof(SaveLoad)];
-    std::memset(scratch, 0, sizeof(scratch));
-    theirs(scratch, pixels, width, height, &their, nameMode);
-
-    const RtSave::SavedState* a = &self->_embeddedState;
-    const RtSave::SavedState* b =
-        reinterpret_cast<const RtSave::SavedState*>(scratch + 0x28);
-
-    ++g_calls;
-    const bool sizeBad = (a->_size != b->_size);
-    if (sizeBad) ++g_sizeDiffs;
-
-    bool byteBad = sizeBad;
-    if (!sizeBad && a->_size != 0 && a->_data != nullptr && b->_data != nullptr) {
-        byteBad = (std::memcmp(a->_data, b->_data, a->_size) != 0);
-    }
-    if (byteBad) ++g_byteDiffs;
-
-    std::fprintf(stderr,
-        "[SaveMetaOracle] call %llu: SIZE %s (ours=%u theirs=%u)  BYTES %s  control=%d\n",
-        (unsigned long long)g_calls,
-        sizeBad ? "DIFFER" : "match", a->_size, b->_size,
-        byteBad ? "DIFFER" : "match", ControlMode());
-    std::fflush(stderr);
-
-    if (b->_data != nullptr) MemFree(b->_data);
-
-    // HARNESS ONLY, off unless BANISHED_RT_SAVEMETA_QUIT_AFTER is set: end the
-    // process cleanly once N oracle calls have landed, so a verification run
-    // terminates on a COUNT rather than on a wall clock. A wall-clock kill ends
-    // the process at an arbitrary point and takes the summary line with it,
-    // which is exactly the reporting cap that manufactures a false calls=0
-    // (reference_truncated_tool_output_manufactures_calls_zero.md).
-    static const int quitAfter = []() {
-        const char* e = std::getenv("BANISHED_RT_SAVEMETA_QUIT_AFTER");
-        return (e && e[0]) ? std::atoi(e) : 0;
-    }();
-    if (quitAfter > 0 && g_calls >= static_cast<uint64_t>(quitAfter)) {
-        RtSaveMetaSummary();
-        std::fprintf(stderr, "[SaveMetaOracle] QUIT_AFTER=%d reached; exiting.\n", quitAfter);
-        std::fflush(stderr);
-        std::_Exit(0);
-    }
+    RtSave_SaveLoad_SaveMetaData_Body(self, pixels, width, height, name, nameMode);
 }
 
-// One line beside the other RtDiff summaries. Reports `calls=` FIRST and always,
-// including the zero: calls=0 has four different causes and they invert the
-// conclusion (reference_calls_zero_can_mean_always_took_the_uncovered_branch.md),
-// so `bodyCalls` is printed alongside it — bodyCalls>0 with calls=0 means the
-// port RAN and the oracle was simply not armed, which is a completely different
-// statement from "the port never ran".
-extern "C" void RtSaveMetaSummary() {
-    std::fprintf(stderr,
-        "[SaveMetaOracle] bodyCalls=%llu calls=%llu sizeDiffs=%llu byteDiffs=%llu\n",
-        (unsigned long long)g_bodyCalls, (unsigned long long)g_calls,
-        (unsigned long long)g_sizeDiffs, (unsigned long long)g_byteDiffs);
-    std::fflush(stderr);
-}
+// A3-HOLD: the oracle this summarised compared us with the shipped DLL and is
+// gone. The entry point stays as a no-op only because standalone/main.cpp still
+// calls it.
+extern "C" void RtSaveMetaSummary() {}
 
 // ============================================================================
 // Registration — BOTH doors.

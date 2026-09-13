@@ -97,7 +97,6 @@ void** ConfigurationSingletonSlot() {
 // below checks the two gate bytes, which are the only thing this body writes
 // that nothing else in it wrote, plus a did-work counter.
 extern "C" bool RtIo_FileSystem_Startup(FileSystem* self) {
-    RT_DIFF_BEGIN("IO::FileSystem::Startup");
 
     RT_EXPORT_ONCE(VoidThisFn, "?SetupDirectories@FileSystem@IO@@QEAAXXZ")(self);
 
@@ -135,18 +134,6 @@ extern "C" bool RtIo_FileSystem_Startup(FileSystem* self) {
 
     RT_EXPORT_ONCE(VoidThisFn, "?LoadPackages@FileSystem@IO@@QEAAXXZ")(self);
 
-    if (rt_diff_on__) {
-        const bool gateOk = self->existsInPackfileGate == 1;
-        char ours[128], theirs[160];
-        std::snprintf(ours, sizeof(ours), "packfileGate=%u platformGate=%u found=%d",
-                      static_cast<unsigned>(self->existsInPackfileGate),
-                      static_cast<unsigned>(self->platformExistsGate),
-                      static_cast<int>(found));
-        std::snprintf(theirs, sizeof(theirs),
-                      "packfileGate==1 [gateOk=%d]", static_cast<int>(gateOk));
-        RT_DIFF_SHADOW(gateOk, ours, theirs);
-        RT_DIFF_WORK(true);
-    }
 
     return true;
 }

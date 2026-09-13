@@ -118,7 +118,7 @@
 // `RtIo_PackageFile_SweepProbe` (package_file.cpp), which runs at the tail of
 // LoadPackages with every mounted package fully populated, i.e. against REAL
 // subjects rather than a fabricated one. The probe is gated on
-// BANISHED_RT_SAVE_TRACE and does nothing otherwise.
+// the old DLL-era switch and does nothing otherwise.
 // ============================================================================
 
 #include <cstdint>
@@ -254,84 +254,7 @@ inline void*   FieldAt(void* self, int off) {
     return static_cast<uint8_t*>(self) + off;
 }
 
-// ---- probe scaffolding (same contract as goal_serialize.cpp) --------------
-using StreamMemberFn = void (*)(void*, Stream*);
-
-Stream* StreamOf(void* serializer) {
-    return static_cast<Serializer*>(serializer)->stream;
-}
-
-const char* const kMangled = "?Serialize@PackageFile@IO@@UEAA_NAEAVStream@2@@Z";
-
-// `Compare` defends against `ours == theirs` by comparing the two function
-// pointers; the adapters below defeat that check, so the equivalent check is
-// made here on the thing that matters — whether the registry hands OUR body
-// back for this name. Without it a green run would prove nothing
-// (reference_uncalled_port_is_not_verified.md).
-bool PortIsLive(const void* ours) {
-    void* viaRegistry = ResolveExport(kMangled);
-    if (viaRegistry == ours) return true;
-    std::fprintf(stderr,
-                 "[RtSaveTrace] FAIL %s: the port is NOT registered (registry -> %p, "
-                 "ours %p), so this comparison would prove nothing\n",
-                 kMangled, viaRegistry, ours);
-    return false;
-}
-
-bool g_probing = false;
-struct ProbeGuard {
-    ProbeGuard()  { g_probing = true; }
-    ~ProbeGuard() { g_probing = false; }
-};
-
 }  // namespace
-
-// ============================================================================
-// THE ORACLE, AS A SEPARATE ENTRY POINT — and it is separate because the
-// obvious shape CRASHED.
-// ============================================================================
-// The first version of this lane put the probe block INSIDE the body (the shape
-// goal_serialize.cpp and elementdescription_serialize.cpp use) and had the sweep
-// probe drive it with `RtIo_PackageFile_Serialize(pkg, nullptr)` — null being
-// safe "because Compare substitutes its own sink". MEASURED, not reasoned: that
-// died with an ACCESS_VIOLATION, READ of 0x10, in `MakeCodec+0x2b`
-// (reimpl-x64.exe+0x3375B9 <- RtIo_PackageFile_Serialize+0xff <-
-// RtIo_PackageFile_SweepProbe+0x31b), symbolised from standalone_crash.log.
-//
-// AND THE REASON IS SIMPLER AND WORSE THAN A BUDGET. The probe block does not
-// RETURN: after Compare comes back, control falls into the real body, which reads
-// `stream->encoding` at +0x10 off the null. So the crash was not the seventeenth
-// call getting past an exhausted probe budget -- this lane's first reading -- it
-// was EVERY call including the first, and the single `[RtSaveTrace] pass` line in
-// that run is the probe succeeding immediately before the body it tapped killed
-// the process. Recorded that way because a plausible mechanism that fits the
-// evidence is not the measured one: only the stack symbolisation separated them.
-//
-// The in-body shape is right for those two files because they have REAL callers
-// and the probe is a tap on real traffic. This body has no caller at all, so the
-// driver IS the traffic — and a driver that must pass a null `this` argument to
-// reach a probe is a driver calling the wrong function. The fix is not a null
-// guard in the body (which would be a guard on retail's own unguarded deref for
-// the convenience of an instrument); it is to give the instrument its own door.
-extern "C" bool RtIo_PackageFile_Serialize(void* self, Stream* stream);
-
-extern "C" void RtIo_PackageFile_SerializeProbe(void* self) {
-    static int probes = 0;
-    if (!RtSaveTrace::Enabled() || g_probing || probes >= 16) return;
-    ++probes;
-    ProbeGuard guard__;   // Compare re-enters the body, which re-enters here.
-    auto theirs = reinterpret_cast<StreamMemberFn>(ResolveExportRaw(kMangled));
-    if (!theirs || !PortIsLive((const void*)&RtIo_PackageFile_Serialize)) return;
-    RtSaveTrace::Compare(
-        "IO::PackageFile::Serialize", self,
-        [](void* obj, void* ser) {
-            RtIo_PackageFile_Serialize(obj, StreamOf(ser));
-        },
-        [](void* obj, void* ser) {
-            reinterpret_cast<StreamMemberFn>(ResolveExportRaw(kMangled))(
-                obj, StreamOf(ser));
-        });
-}
 
 // ============================================================================
 // bool IO::PackageFile::Serialize(IO::Stream&)

@@ -13,7 +13,6 @@
 // Names and ordinals printed out of Runtime-x64.dll's export directory with
 // `pefile`. `tools/export_name_audit.py` re-checks them.
 //
-// Kill switch: BANISHED_RT_CSREAD=0 leaves all four on the DLL.
 //
 // ---------------------------------------------------------------------------
 // 1. WHERE THIS SITS
@@ -226,7 +225,6 @@ const SetWindowBranchCounts& RtIo_SetWindowBranchCounts() { return g_swBranch; }
 // Pick a window to evict. Free windows first (the LAST free one — §3.2), else
 // the largest useCount (ties keep the earlier index — §3.3).
 extern "C" int32_t RtIo_CompressedStream_GetAvailableWindow(CompressedStream* self) {
-    RT_DIFF_BEGIN("IO::CompressedStream::GetAvailableWindow");
 
     Window* const w = Windows(self);
     const int32_t n = self->windowSize;                 // 1800a999a
@@ -266,10 +264,6 @@ extern "C" int32_t RtIo_CompressedStream_GetAvailableWindow(CompressedStream* se
     // compared. It is verified through the lockstep probe in §5, which compares
     // the whole window array after every read — that is where its effect is
     // visible, and comparing it here would destroy what the probe measures.
-    RT_DIFF_SHADOW(best >= 0 && best < self->windowSize,
-                   "evicted a window in range",
-                   "SHADOW ONLY (mutates; verified by the lockstep probe)");
-    RT_DIFF_WORK(true);
     return best;                                        // 1800a9a8a
 }
 
@@ -279,7 +273,6 @@ extern "C" int32_t RtIo_CompressedStream_GetAvailableWindow(CompressedStream* se
 // Fill the ACTIVE window from block `blk` of the source stream.
 extern "C" bool RtIo_CompressedStream_DecompressFromSource(CompressedStream* self,
                                                            int32_t blk) {
-    RT_DIFF_BEGIN("IO::CompressedStream::DecompressFromSource");
 
     if (blk >= self->headerSize) return false;          // 1800a96c2  JL continues
 
@@ -314,10 +307,6 @@ extern "C" bool RtIo_CompressedStream_DecompressFromSource(CompressedStream* sel
             src, h->uncompressedSize, w->buffer);       // 1800a9755
     }
 
-    RT_DIFF_SHADOW(w->end >= w->start && w->end - w->start <= kWin,
-                   "filled the active window",
-                   "SHADOW ONLY (consumes the source; verified by the lockstep probe)");
-    RT_DIFF_WORK(true);
     return true;                                        // 1800a9768
 }
 
@@ -325,7 +314,6 @@ extern "C" bool RtIo_CompressedStream_DecompressFromSource(CompressedStream* sel
 // ?SetWindow@CompressedStream@IO@@AEAA_NH@Z                  retail 0x1800a9aa0
 // ============================================================================
 extern "C" bool RtIo_CompressedStream_SetWindow(CompressedStream* self, int32_t pos) {
-    RT_DIFF_BEGIN("IO::CompressedStream::SetWindow");
 
     self->position = pos;                               // 1800a9ac0
     const int32_t active = self->activeWindow;          // 1800a9ac3
@@ -337,7 +325,6 @@ extern "C" bool RtIo_CompressedStream_SetWindow(CompressedStream* self, int32_t 
 
     if (activeStart >= 0 && pos >= activeStart && pos < activeStart + kWin) {
         ++g_swBranch.fastPath;
-        RT_DIFF_WORK(false);                            // the no-op fast path
         return true;                                    // 1800a9ae7
     }
 
@@ -357,7 +344,6 @@ extern "C" bool RtIo_CompressedStream_SetWindow(CompressedStream* self, int32_t 
         for (int32_t k = 0; k < self->windowSize; ++k)  // 1800a9b3c
             if (k != found) ++w[k].useCount;            // 1800a9b4d
         self->activeWindow = found;                     // 1800a9b61
-        RT_DIFF_WORK(true);
         return true;
     }
 
@@ -369,7 +355,6 @@ extern "C" bool RtIo_CompressedStream_SetWindow(CompressedStream* self, int32_t 
             RtIo_CompressedStream_GetAvailableWindow(self);   // 1800a9b72
         const bool ok = RtIo_CompressedStream_DecompressFromSource(
             self, self->position >> 15);                      // 1800a9b7d/83
-        RT_DIFF_WORK(true);
         return ok;                                            // 1800a9b88
     }
 
@@ -400,7 +385,6 @@ extern "C" bool RtIo_CompressedStream_SetWindow(CompressedStream* self, int32_t 
             else
                 w->end = w->start + kWin;               // 1800a9e0d
         } while (self->headerSize < blk + 1);           // 1800a9e19
-        RT_DIFF_WORK(true);
         return true;                                    // 1800a9ebb
     }
 
@@ -423,7 +407,6 @@ extern "C" bool RtIo_CompressedStream_SetWindow(CompressedStream* self, int32_t 
     } else {
         std::memcpy(aw->buffer, blocks[b], h->uncompressedSize);  // 1800a9eb6
     }
-    RT_DIFF_WORK(true);
     return true;                                        // 1800a9ebb
 }
 
@@ -439,14 +422,12 @@ extern "C" bool RtIo_CompressedStream_SetWindow(CompressedStream* self, int32_t 
 // Note the loop re-enters SetWindow every iteration with the UPDATED position,
 // which is what makes a read spanning several blocks work.
 extern "C" bool RtIo_CompressedStream_Read(CompressedStream* self, int32_t n, void* dst) {
-    RT_DIFF_BEGIN("IO::CompressedStream::Read");
 
     uint8_t* out = static_cast<uint8_t*>(dst);
     const bool didWork = (n > 0);
 
     while (n > 0) {                                     // 1800aa7a2 / 1800aa806
         if (!RtIo_CompressedStream_SetWindow(self, self->position)) {  // 1800aa7b6
-            RT_DIFF_WORK(didWork);
             return false;                               // 1800aa825
         }
         const Window* const w = &Windows(self)[self->activeWindow];  // 1800aa7bf
@@ -460,7 +441,6 @@ extern "C" bool RtIo_CompressedStream_Read(CompressedStream* self, int32_t n, vo
         out += chunk;                                   // 1800aa801
     }
 
-    RT_DIFF_WORK(didWork);
     return true;                                        // 1800aa808
 }
 

@@ -11,11 +11,6 @@
 // file. This file and runtime/funcs/rt_port.h are the only shared surface and
 // they are already written.
 //
-// Switches, outermost first:
-//   BANISHED_RT_OBJECT=0    leave the whole Object namespace on the DLL
-//   BANISHED_RT_TYPESYS=0   ... just Base / Type / BaseTypeInfo / Factory
-//   BANISHED_RT_INTERNAL=0  ... just Internal / InternalBasePtr / InternalFactory
-//   BANISHED_RT_EXTERNAL=0  ... just External / ExternalFactory / ExternalList
 //
 // STATE WARNING (PLAN.md §4.1 decision 5, §4.3 risk 3). Unlike Waves 1 and 2,
 // these classes own state and are constructed by the DLL. Registration
@@ -89,58 +84,39 @@ extern int RtObjectReferenceSetRegister();          // reference_set.cpp
 extern int RtObjectExternalRefTableRegister();      // external_reftable.cpp
 
 void RtObjectPortInit() {
-    if (!RtWaveEnabled("BANISHED_RT_OBJECT")) {
-        printf("[RtPort] BANISHED_RT_OBJECT=0 -- Object namespace port disabled\n");
-        return;
-    }
     int n = 0;
-    if (RtWaveEnabled("BANISHED_RT_TYPESYS"))  n += RtObjectTypeSystemRegister();
-    if (RtWaveEnabled("BANISHED_RT_FILEEXT"))  n += RtObjectFactoryFileExtensionRegister();
-    if (RtWaveEnabled("BANISHED_RT_INTERNAL")) n += RtObjectInternalRegister();
-    if (RtWaveEnabled("BANISHED_RT_EXTERNAL")) n += RtObjectExternalRegister();
+    n += RtObjectTypeSystemRegister();
+    n += RtObjectFactoryFileExtensionRegister();
+    n += RtObjectInternalRegister();
+    n += RtObjectExternalRegister();
     // Wave 9 lane RES: the resource tree's own Set bodies, plus Clean. Nested
-    // under BANISHED_RT_EXTERNAL because it is the same class's state, with its
+    // under the old DLL-era switch because it is the same class's state, with its
     // own switch so the twelve unexported Set doors can be A/B'd on their own.
-    if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_RESSET"))
         n += RtObjectExternalSetRegister();
     // Wave 9 lane RRES: the path half of the same class -- ExpandRelativePath,
     // the two path-stack readers, and Filename::GetPathExtension. Same nesting
     // and the same reason as lane RES's switch above: it is ExternalFactory
-    // state, and BANISHED_RT_RESPATH=0 A/Bs the four doors on their own.
-    if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_RESPATH"))
+    // state, and the old DLL-era switch A/Bs the four doors on their own.
         n += RtObjectExternalPathRegister();
     // Wave 9 lane RRES follow-on: the private cache lookup the path half
     // feeds. Its own switch, so the one door can be A/B'd against the four
     // above without turning the whole class off.
-    if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_RESFIND"))
         n += RtObjectExternalFindRegister();
-    // Wave 10 lane EXTPTR. Nested under BANISHED_RT_EXTERNAL because it is the
+    // Wave 10 lane EXTPTR. Nested under the old DLL-era switch because it is the
     // ExternalPtr half of the same class, with its own switch so the four
-    // address doors can be A/B'd on their own: BANISHED_RT_EXTPTR=0 leaves all
+    // address doors can be A/B'd on their own: the old DLL-era switch leaves all
     // four ExternalPtr<T>::Serialize instantiations on the DLL, which is also
     // the way to A/B ?Serialize@ElementDescription@ against its callees.
-    if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_EXTPTR"))
         n += RtObjectExternalPtrSerializeRegister();
     n += RtObjectInternalPtrArraySerializeRegister();   // internal_ptr_array_serialize.cpp
-    // Wave 11 lane OBJDATA. BANISHED_RT_OBJTYPEINFO=0 leaves all seven
+    // Wave 11 lane OBJDATA. the old DLL-era switch leaves all seven
     // accessors on the DLL, which re-traps two slots each in
     // ??_7CompiledExternal / ??_7External / ??_7Internal and one in ??_7Base —
     // the same switch coupling reg_mint_promoted.cpp records for
-    // ??_7SpriteSheet and BANISHED_RT_DELDTOR, and for the same reason.
-    if (RtWaveEnabled("BANISHED_RT_OBJTYPEINFO"))
+    // ??_7SpriteSheet and the old DLL-era switch, and for the same reason.
         n += RtObjectTypeInfoAccessorsRegister();
-    if (RtWaveEnabled("BANISHED_RT_FACTORYDTOR")) {
         n += RtObjectFactoryDtorsRegister();
-        // The synthesised oracle for those three. Opt-in
-        // (BANISHED_RT_FACTORYDTOR_PROBE=1) and run right after the
-        // registration, because the "ours" side calls the ported bodies
-        // directly by symbol and the "theirs" side calls RtOriginal, so
-        // neither depends on registration order — but the report reads better
-        // next to the line that registered them.
-        extern void RtObjectFactoryDtorsProbe();
-        RtObjectFactoryDtorsProbe();
-    }
-    // Wave 11 lane OBJEXT. Nested under BANISHED_RT_EXTERNAL because both are
+    // Wave 11 lane OBJEXT. Nested under the old DLL-era switch because both are
     // ExternalFactory state and behaviour, each with its own switch so its
     // doors can be A/B'd without turning the whole class off.
     //
@@ -150,48 +126,41 @@ void RtObjectPortInit() {
     // Registration order does not change which body runs (both are reached by
     // name/address at CALL time, not at init), but keeping the container
     // underneath its user is how every other nest in this file reads.
-    if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_PATHSTACK"))
         n += RtObjectExternalPathStackRegister();
-    if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_COMPILED"))
         n += RtObjectExternalCompiledRegister();
-    // Wave 11 follow-up 2 lane IOSTREAM. Nested under BANISHED_RT_EXTERNAL for
+    // Wave 11 follow-up 2 lane IOSTREAM. Nested under the old DLL-era switch for
     // the same reason as its four neighbours -- it is ExternalFactory state --
     // with its own switch because it is the one body in the class that drives a
-    // stack-constructed IO stream, and BANISHED_RT_EXTADD=0 A/Bs exactly that.
-    if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_EXTADD"))
+    // stack-constructed IO stream, and the old DLL-era switch A/Bs exactly that.
         n += RtObjectExternalAddRegister();
     // Same nest, its own switch. SaveText is the only body in the class that
-    // WRITES a file, so BANISHED_RT_SAVETEXT=0 A/Bs the write path alone --
+    // WRITES a file, so the old DLL-era switch A/Bs the write path alone --
     // which is also how its byte-comparison oracle gets its "theirs" side.
-    if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_SAVETEXT"))
         n += RtObjectExternalSaveTextRegister();
     // Same nest, its own switch. Load is the only body in the class that
     // CREATES objects (through BaseTypeInfo::factoryFn) and the only one on the
-    // resource read path, so BANISHED_RT_EXTLOAD=0 is the A/B that matters most
+    // resource read path, so the old DLL-era switch is the A/B that matters most
     // in this group.
-    if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_EXTLOAD"))
         n += RtObjectExternalLoadRegister();
     // Wave 11 follow-up 3 lane AVL. Same nest, its own switch. The Set family
     // is registered FIRST because SerializeReferenceTable's read path is its
     // only caller in this tree -- registration order does not decide which body
     // runs (both are reached at CALL time), but keeping the container
     // underneath its user is how every other nest in this file reads.
-    if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_REFSET"))
         n += RtObjectReferenceSetRegister();
-    // Its own switch again: BANISHED_RT_REFTABLE=0 leaves the save/load body on
+    // Its own switch again: the old DLL-era switch leaves the save/load body on
     // the DLL while keeping the Set family ours, which is the A/B that
     // separates "the container is wrong" from "the driver is wrong".
-    if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_REFTABLE"))
         n += RtObjectExternalRefTableRegister();
 
     // ---- BATCH 5 (2026-09-12) ---------------------------------------------
     // Registered UNCONDITIONALLY: DIRECTION.md §2 — a port registers
-    // unconditionally, and no new BANISHED_RT_* flag is minted for one.
+    // unconditionally, and no new the old DLL-era switch* flag is minted for one.
     //
     //   external_forceunload.cpp        ?ForceUnload@ExternalFactory@       0x1800beec0
     //   internalfactory_persist.cpp     ?PersistObject@InternalFactory@     0x1800bff10
     //
-    // ForceUnload is deliberately NOT put behind BANISHED_RT_EXTERNAL with the
+    // ForceUnload is deliberately NOT put behind the old DLL-era switch with the
     // Set family: its only mutation is one dword store, its lookup is lane
     // RES's already-registered `rtresset::Find`, and its only caller
     // (IO::Modification::SetupFileSystem) is ported in this same commit. Gating
@@ -226,3 +195,16 @@ void RtObjectPortInit() {
 
     printf("[RtPort] Object: %d exports registered\n", n);
 }
+
+// ============================================================================
+// A3-HOLD: no-op stubs for probes whose bodies were deleted with the DLL.
+// Their remaining callers live outside runtime/src/{io,save,object} —
+// standalone/main.cpp, standalone/menudialogloopt_stubs.cpp,
+// runtime/src/ui/dialog_create.cpp and code/Game/Game/* — so the definitions
+// stay only to keep the link green. They die with those call sites.
+// ============================================================================
+extern "C" void RtFactoryDispatchObserve(int, const void*) {}
+extern "C" void RtFactoryDispatchReport() {}
+extern "C" void RtObjectPersistABRun() {}
+void RtObjectFactoryDtorsProbe() {}
+void RtObjectExternalRefTableProbeSummary() {}

@@ -65,7 +65,6 @@
 #include "external_path_stack.h"
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_diff.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"
 #include "../system/setupdir_helpers.h"
@@ -114,68 +113,11 @@ inline void ReleaseThenAdopt(Filename* dst, char* src) {
     RtString_AdoptInline(AsStr(dst), src);
 }
 
-// The negative control. `0` is the real body and is what every shipping and
-// every measuring run uses. `BANISHED_RT_PATHSTACK_NEGCTL=<n>` forces one.
-//   1  entry filename joined with "-" instead of "."
-//   2  PushPath stores the entry's two Filenames in the WRONG ORDER
-//   3  RemoveAt removes index+1 instead of index (guarded to stay in range)
-//   4  SetSize's fill element is ignored (new tail left as the old bytes)
 }  // namespace
-
-// NOT in the anonymous namespace above, and not for style: the four container
-// bodies at the bottom of this file are `extern "C"` at GLOBAL scope (see the
-// note there), and a member of an anonymous namespace nested in `RtObject`
-// cannot be named from outside `RtObject` at all.
-int g_negCtl = 0;
-
-// The probe MUST NOT run from the register hook. That runs immediately after
-// ResolveInit()'s LoadLibrary, and the DLL's MemoryAllocator has been
-// CONSTRUCTED by then but not STARTED — allocating from it at that moment is
-// the "works on my boot order" hazard array_internal.h warns about, and this
-// probe allocates on both sides. So it self-schedules: the flag is armed at
-// registration and the first call into a registered entry point runs it, a
-// moment that is provably safe because the caller is itself mid-Array.
-bool g_probePending = false;
-
-// ---------------------------------------------------------------------------
-// CONTROL ATTENDANCE — the fix for "a control that catches for the wrong
-// reason". PART 2 reported ctl=4 as CAUGHT when `PushPath` cannot express it
-// at all; it caught because a STALE second implementation of the same control
-// was still live somewhere else and corrupted the element. The green cell had
-// to be withdrawn by hand, after the run, by noticing the mechanism could not
-// have applied.
-//
-// A counter at each perturbation site makes that mechanical: the control is
-// only credited when the branch NAMED BY the control actually executed. A
-// control that catches with attendance 0 caught for some other reason, and the
-// probe says so instead of banking it.
-// ---------------------------------------------------------------------------
-uint64_t g_ctlAttendance[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 
 
 PathStackCounters g_psc = {};
 
-// ---------------------------------------------------------------------------
-// THE PROBE'S SCHEDULING SEAM — and why it is not in PushPath.
-//
-// The obvious place to self-schedule is the first call into a registered entry
-// point. It does not work here, for a MEASURED reason: `PushPath` is never
-// called on a normal run at all. Lane RRES instrumented the read side and
-// reported `stack empty/nonempty = 22583/0` — 22,583 live `ExpandRelativePath`
-// calls, every one of them against an EMPTY stack. A gate inside `PushPath`
-// would therefore never fire, and the probe would silently never run while the
-// registration line still printed "ARMED".
-//
-// So the gate lives on `FindOrLoad`, which does run (it is what drives those
-// 22,583 calls) and which has the LIVE `ExternalFactory` in hand as its `this`
-// — the object part 2 of the probe needs and must not fake.
-// ---------------------------------------------------------------------------
-void PathStackProbeGate(ExternalFactory* live) {
-    if (!g_probePending) return;
-    g_probePending = false;   // cleared BEFORE the run: the probe calls PushPath
-                              // itself, so an un-cleared flag would recurse.
-    RtObjectPathStackProbeRun(live);
-}
 
 // ============================================================================
 // ?PushPath@ExternalFactory@Object@@QEAAXAEBVFilename@System@@@Z   0x1800bd0e0
@@ -203,7 +145,6 @@ void PathStackProbeGate(ExternalFactory* live) {
 // `ext` is used, unlike in GetCompiledPath where the same call's result is
 // computed and DROPPED — see external_compiled.cpp.
 void RtObject_ExternalFactory_PushPath(ExternalFactory* self, const Filename* path) {
-    RT_DIFF_BEGIN("Object::ExternalFactory::PushPath");
     ++g_psc.pushCalls;
 
     Filename ext{nullptr};                                       // [RBP-0x30]
@@ -212,8 +153,7 @@ void RtObject_ExternalFactory_PushPath(ExternalFactory* self, const Filename* pa
     RtSystem_Filename_GetPathFilename(path, &fname, true);
 
     String t1{nullptr}, t2{nullptr};                             // -0x40 / +0x38
-    if (g_negCtl == 1) ++g_ctlAttendance[1];   // control 1 attends HERE
-    RtSystem_String_ConcatCStr(&t1, AsStr(&fname), g_negCtl == 1 ? "-" : kDot);
+    RtSystem_String_ConcatCStr(&t1, AsStr(&fname), kDot);
     RtSystem_String_Concat(&t2, &t1, AsStr(&ext));
 
     Filename file{nullptr};                                      // [RBP+0x20]
@@ -247,7 +187,6 @@ void RtObject_ExternalFactory_PushPath(ExternalFactory* self, const Filename* pa
     RtString_ReleaseInline(AsStr(&fname));
     RtString_ReleaseInline(AsStr(&ext));
 
-    RT_DIFF_WORK(true);
     // NO LIVE SHADOW. PushPath is a destructive mutator on one shared stack:
     // running theirs after ours would push the same entry TWICE and leave the
     // factory two deep where retail leaves it one. Verification is the
@@ -278,7 +217,6 @@ void RtObject_ExternalFactory_PushPath(ExternalFactory* self, const Filename* pa
 // in the tree pops only what it pushed, and a guard here would hide the
 // upstream imbalance rather than the crash.
 void RtObject_ExternalFactory_PopPath(ExternalFactory* self) {
-    RT_DIFF_BEGIN("Object::ExternalFactory::PopPath");
     ++g_psc.popCalls;
 
     PathStackEntry out;                                          // [RSP+0x28]
@@ -287,7 +225,6 @@ void RtObject_ExternalFactory_PopPath(ExternalFactory* self) {
     RtString_ReleaseInline(AsStr(&out.directory));
     g_psc.depthAfterPop = self->_pathStack._size;
 
-    RT_DIFF_WORK(true);
     // No live shadow, same reason as PushPath.
 }
 
@@ -340,15 +277,6 @@ namespace rtcoll {
 // release-then-adopt: the destination is raw MemAlloc memory on the realloc arm
 // and freshly-vacated-by-destroy memory nowhere. It must NOT release `dst`.
 static void AssignPathStackEntry(uint8_t* dst, const uint8_t* src) {
-    if (RtObject::g_negCtl == 2) {
-        ++RtObject::g_ctlAttendance[2];   // control 2 attends HERE
-        // control 2: swap the two halves.
-        RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(dst),
-                                   reinterpret_cast<const RtSystem::Filename*>(src + 8));
-        RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(dst + 8),
-                                   reinterpret_cast<const RtSystem::Filename*>(src));
-        return;
-    }
     RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(dst),
                                reinterpret_cast<const RtSystem::Filename*>(src));
     RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(dst + 8),
@@ -374,7 +302,7 @@ const ArraySpec kSpec_PathStack = {                // 0x18002e220
     /*init   unwritten*/ 0, 0,
     /*seed zero       */ 0x00, 0x10 };
 
-// STATIC STORAGE DURATION IS LOAD-BEARING: RtDiffRegister keeps the POINTER and
+// STATIC STORAGE DURATION IS LOAD-BEARING: the diff oracle keeps the POINTER and
 // re-reads it at summary time, so a stack Site is reported as harness
 // corruption (array_internal.h).
 Site g_pathstack_18002e220 = {
@@ -441,11 +369,6 @@ extern "C" void RtObject_PathStackRemoveAt_18002de30(void* arrVoid, int index) {
     // probe's part 2 with it. A negative control has to survive being wrong:
     // it must produce an observable, COMPARABLE divergence, not undefined
     // behaviour. See WAVE11_LANE_OBJEXT.md §10.
-    if (RtObject::g_negCtl == 3 && index + 1 < a->_size) {
-        ++RtObject::g_ctlAttendance[3];
-        index = index + 1;
-    }
-
     if (index < a->_size) {
         int32_t i = index;
         do {
@@ -507,9 +430,6 @@ int RtObjectExternalPathStackRegister() {
     using namespace RtObject;
     int n = 0;
 
-    const char* nc = std::getenv("BANISHED_RT_PATHSTACK_NEGCTL");
-    g_negCtl = nc ? std::atoi(nc) : 0;
-
     RegisterRuntimeExport("?PushPath@ExternalFactory@Object@@QEAAXAEBVFilename@System@@@Z",
                           (void*)&RtObject_ExternalFactory_PushPath); ++n;
     RegisterRuntimeAddr(0x1800bd0e0, (void*)&RtObject_ExternalFactory_PushPath);
@@ -527,15 +447,7 @@ int RtObjectExternalPathStackRegister() {
     RegisterRuntimeAddr(0x18002ccb0, (void*)&RtObject_PathStackRemoveLast_18002ccb0);
     RegisterRuntimeAddr(0x18002de30, (void*)&RtObject_PathStackRemoveAt_18002de30);
 
-    // Opt-in, not a kill switch: RtWaveEnabled returns true when the variable is
-    // UNSET, which is right for a port and wrong for a probe.
-    const char* pe = std::getenv("BANISHED_RT_PATHSTACK_PROBE");
-    RtObjectPathStackProbeArm(pe != nullptr && std::strcmp(pe, "0") != 0);
-    g_probePending = RtObjectPathStackProbeArmed();
-
     // THE IDENTITY LINE. Nothing else in the tree prints "PathStack".
-    printf("[PathStack] registered %d exports + 4 container addresses "
-                "(negctl=%d, probe=%s)\n",
-                n, g_negCtl, RtObjectPathStackProbeArmed() ? "ARMED" : "off");
+    printf("[PathStack] registered %d exports + 4 container addresses\n", n);
     return n;
 }

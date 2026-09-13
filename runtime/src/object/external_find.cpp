@@ -75,14 +75,11 @@
 #include "external_set.h"
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_diff.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"
 
 // Declared locally rather than including standalone/resolve.h, which drags in
 // <windows.h> — the same reason external_set_probe.cpp:99 declares it.
-extern "C" bool  RtResFindInstallDetour(void* ourFn);
-extern "C" void* RtResFindTrampoline();
 
 namespace RtSystem {
 void      RtSystem_Filename_AdjustDelimiters(Filename* self);              // 0x1800c6970
@@ -128,20 +125,6 @@ inline void ReleaseThenAdopt(Filename* dst, char* src) {
 // would produce a key that never matches anything the factory inserted.
 const char* const kResourceSuffix = ":resource";
 
-// ---------------------------------------------------------------------------
-// THE NEGATIVE CONTROLS. Three, and every one of them is reachable on any call
-// that finds something — which is 22.5k of 22.6k calls in a normal boot. Lane
-// RRES's previous rung shipped two controls that could not fire; these were
-// chosen by asking FIRST what makes them fire.
-//
-//   1  append ":resources" instead of ":resource"  -> the defaulted-identifier
-//      lookups miss. Fires on `identDefaulted` calls only.
-//   2  descend on the UNSUFFIXED key               -> same population, other
-//      direction.
-//   3  return the NODE instead of node->external   -> wrong pointer on EVERY
-//      hit. This one cannot fail to fire if anything is ever found.
-// ---------------------------------------------------------------------------
-int g_negCtl = 0;
 
 }  // namespace
 
@@ -157,10 +140,7 @@ int g_negCtl = 0;
 // pefile before this body was written, not inferred from the mangling.
 // ============================================================================
 External* RtObject_ExternalFactory_Find(ExternalFactory* self, const Filename* path) {
-    RT_DIFF_BEGIN("Object::ExternalFactory::Find");
     ++g_fc.calls;
-
-    const int ctl = g_negCtl;
 
     // ---- 0x1800be0fc-0x1800be149: `Filename key = path`, then adjust again --
     Filename key{nullptr};                               // [RBP+0x28]
@@ -181,7 +161,7 @@ External* RtObject_ExternalFactory_Find(ExternalFactory* self, const Filename* p
         ++g_fc.identDefaulted;
         String tmp{nullptr};                             // [RBP+0x30]
         RtSystem_String_ConcatCStr(&tmp, AsStr(&key),
-                                   ctl == 1 ? ":resources" : kResourceSuffix);
+                                   kResourceSuffix);
         ReleaseThenAdopt(&key, tmp.data);                // 0x1800be186
         RtSystem_Filename_AdjustDelimiters(&key);        // 0x1800be1c7
         RtString_ReleaseInline(&tmp);                    // 0x1800be1cd
@@ -200,7 +180,7 @@ External* RtObject_ExternalFactory_Find(ExternalFactory* self, const Filename* p
     rtsetavl24::Set* const tree =
         reinterpret_cast<rtsetavl24::Set*>(&self->_resources);
     rtsetavl24::Node* const node =
-        rtresset::Find(tree, ctl == 2 ? &key : &probe);
+        rtresset::Find(tree, &probe);
 
     RtString_ReleaseInline(AsStr(&probe));               // 0x1800be26f
 
@@ -212,8 +192,7 @@ External* RtObject_ExternalFactory_Find(ExternalFactory* self, const Filename* p
     External* result = nullptr;
     if (node != nullptr) {
         ++g_fc.hits;
-        result = (ctl == 3) ? reinterpret_cast<External*>(node)
-                            : rtresset::Elem(node)->external;
+        result = rtresset::Elem(node)->external;
     } else {
         ++g_fc.misses;
     }
@@ -221,31 +200,6 @@ External* RtObject_ExternalFactory_Find(ExternalFactory* self, const Filename* p
     RtString_ReleaseInline(AsStr(&ident));               // 0x1800be2a6
     RtString_ReleaseInline(AsStr(&key));                 // 0x1800be2cf
 
-    // ---- the oracle --------------------------------------------------------
-    // READ-ONLY on the tree and on the factory: it allocates and releases only
-    // its own three `Filename`s and returns a pointer it did not create. So the
-    // original can be replayed on the same arguments, and the comparison is
-    // POINTER EQUALITY — not text, not bytes. That is a stronger predicate than
-    // anything the previous rung had: two independent descents of the same live
-    // AVL tree must arrive at the same node or the port is wrong.
-    //
-    // `theirs` is the DETOUR TRAMPOLINE. With the detour installed,
-    // `GetProcAddress` on this name returns the PATCHED address and an
-    // "original" call would re-enter our own body forever
-    // (reference_rtoriginal_is_getprocaddress.md). With no detour there is no
-    // route to the original at all, and the site correctly makes NO comparison
-    // rather than comparing ours to ours.
-    if (rt_diff_on__) {
-        typedef External* (*FindFn)(ExternalFactory*, const Filename*);
-        FindFn theirs = reinterpret_cast<FindFn>(RtResFindTrampoline());
-        if (theirs) {
-            External* mirror = theirs(self, path);
-            RT_DIFF_SHADOW(mirror == result, result ? "ours=<ptr>" : "ours=(null)",
-                           mirror ? "theirs=<ptr>" : "theirs=(null)");
-            if (mirror != result) ++g_fc.divergent;
-            RT_DIFF_WORK(true);
-        }
-    }
     return result;
 }
 
@@ -282,21 +236,7 @@ int RtObjectExternalFindRegister() {
         (void*)&RtObject_ExternalFactory_Find); ++n;
     RegisterRuntimeAddr(0x1800be0e0, (void*)&RtObject_ExternalFactory_Find);
 
-    // The live-coverage seam. OPT-IN, exactly as the ExpandRelativePath detour
-    // is: this body's ONLY caller is retail's own `FindOrLoad` through a direct
-    // rel32 CALL, so registration alone leaves it with zero callers and an
-    // honest `calls=0`.
-    bool detoured = false;
-    if (RtWaveEnabled("BANISHED_RT_RESFIND_DETOUR") &&
-        std::getenv("BANISHED_RT_RESFIND_DETOUR") != nullptr) {
-        detoured = RtResFindInstallDetour((void*)&RtObject_ExternalFactory_Find);
-    }
-
-    if (const char* e = std::getenv("BANISHED_RT_RESFIND_NEGCTL"))
-        g_negCtl = std::atoi(e);
-
-    printf("[ResFind] registered %d door + 1 address (detour=%s negctl=%d)\n",
-                n, detoured ? "ON" : "off", g_negCtl);
+    printf("[ResFind] registered %d door + 1 address\n", n);
     std::fflush(stdout);
 
     std::atexit(&DumpFindCounters);

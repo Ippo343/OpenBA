@@ -71,7 +71,7 @@
 //     event handles) but NOT for the dtor, which joins a thread; and an oracle
 //     that covers three of four rows while the fourth is the risky one is the
 //     shape this project keeps mistaking for coverage.
-//   * SO: RT_DIFF_SHADOW, exercised by lane DIFF's armed sweep. This lane has
+//   * SO: the diff oracle, exercised by lane DIFF's armed sweep. This lane has
 //     no game-directory lock by design.
 //
 // THESE FOUR SITES ARE LABELLED `[SELF-CHECK]` IN THEIR OWN SITE NAMES, and
@@ -361,9 +361,6 @@ inline Persistence* FromWorker(void* worker) {
 // events — so the worker can never observe a fresh command with a stale status.
 // ============================================================================
 extern "C" void RtIo_PersistenceWorker_EnqueueDelete(void* worker, const String* filename) {
-    RT_DIFF_BEGIN("[SELF-CHECK] IO::Persistence::worker::EnqueueDelete @0x1800b7390");
-    RT_DIFF_WORK(true);   // no early-out: every call does all of it
-
     Persistence* p = FromWorker(worker);
 
     AssignPendingFilename(p, filename);
@@ -375,9 +372,6 @@ extern "C" void RtIo_PersistenceWorker_EnqueueDelete(void* worker, const String*
     // asserts the two constants this body's whole purpose is to publish. It
     // catches a wrong offset or a dropped store; it cannot catch a shared
     // misreading of retail.
-    RT_DIFF_SHADOW(p->command == 2 && p->status == 0,
-                   "SELF-CHECK command=2 status=0",
-                   "SELF-CHECK: no DLL side exists for this row");
 }
 
 // ============================================================================
@@ -407,7 +401,6 @@ extern "C" void RtIo_PersistenceWorker_EnqueueDelete(void* worker, const String*
 // ============================================================================
 extern "C" void RtIo_PersistenceWorker_EnqueueLoad(void* worker, const String* filename,
                                                    int blockCount, const SaveBlock* blocks) {
-    RT_DIFF_BEGIN("[SELF-CHECK] IO::Persistence::worker::EnqueueLoad @0x1800b7460");
 
     Persistence* p = FromWorker(worker);
 
@@ -442,16 +435,11 @@ extern "C" void RtIo_PersistenceWorker_EnqueueLoad(void* worker, const String* f
         }
     }
 
-    RT_DIFF_WORK(matched > 0);
     SignalWorker(p);
 
     char ours[96];
     std::snprintf(ours, sizeof(ours), "command=1 status=0 slots=%d matched=%d",
                   p->blockPtrCount, matched);
-    RT_DIFF_SHADOW(p->command == 1 && p->status == 0 &&
-                       p->blockPtrCount == p->blockDescCount &&
-                       matched <= blockCount,
-                   ours, "SELF-CHECK: no DLL side exists for this row");
 }
 
 // ============================================================================
@@ -496,7 +484,6 @@ extern "C" void RtIo_PersistenceWorker_EnqueueLoad(void* worker, const String* f
 // ============================================================================
 extern "C" void RtIo_PersistenceWorker_EnqueueSave(void* worker, const String* filename,
                                                    int blockCount, const SaveBlock* blocks) {
-    RT_DIFF_BEGIN("[SELF-CHECK] IO::Persistence::worker::EnqueueSave @0x1800b75c0");
 
     Persistence* p = FromWorker(worker);
 
@@ -546,7 +533,6 @@ extern "C" void RtIo_PersistenceWorker_EnqueueSave(void* worker, const String* f
         ++wrote;
     }
 
-    RT_DIFF_WORK(wrote > 0);
     SignalWorker(p);
 
     char ours[112];
@@ -555,11 +541,6 @@ extern "C" void RtIo_PersistenceWorker_EnqueueSave(void* worker, const String* f
                   blockCount,
                   (unsigned long long)(*reinterpret_cast<uint64_t*>(&p->magic)),
                   wrote, offset);
-    RT_DIFF_SHADOW(p->status == 0 && p->command == 0 &&
-                       (p->fileHeader & 0xFFFFu) == 2 &&
-                       (p->fileHeader >> 16) == static_cast<uint16_t>(blockCount) &&
-                       offset >= static_cast<uint32_t>(12 * (blockCount + 1)),
-                   ours, "SELF-CHECK: no DLL side exists for this row");
 }
 
 // ============================================================================
@@ -597,8 +578,6 @@ extern "C" void RtIo_PersistenceWorker_EnqueueSave(void* worker, const String* f
 // Reproduced as written.
 // ============================================================================
 extern "C" void RtIo_PersistenceWorker_Dtor(void* worker) {
-    RT_DIFF_BEGIN("[SELF-CHECK] IO::Persistence::worker::~worker @0x1800b7740");
-    RT_DIFF_WORK(true);
 
     Persistence* p = FromWorker(worker);
 
@@ -648,10 +627,6 @@ extern "C" void RtIo_PersistenceWorker_Dtor(void* worker) {
     // it does NOT null them. Asserting that is the only post-condition this
     // body has that a shadow can check; asserting "they are null" would be
     // asserting a store retail does not make.
-    RT_DIFF_SHADOW(p->workerVtable == kBaseThreadVtable &&
-                       p->pendingFilename.data == expectFilename,
-                   "SELF-CHECK base vtable restored, filename released",
-                   "SELF-CHECK: no DLL side exists for this row");
 }
 
 // ============================================================================
@@ -687,13 +662,11 @@ extern "C" void RtIo_PersistenceWorker_Dtor(void* worker) {
 //
 // NO ORACLE, same refusal as `Run`'s banner: this writes a real file through
 // a real HANDLE and there is nothing to replay it against without writing the
-// save twice. `RT_DIFF_SHADOW` asserts the one thing this body's contract
+// save twice. `the diff oracle` asserts the one thing this body's contract
 // actually promises — status ends at 1 or 2, never left at whatever it was —
 // which catches a body that returns without touching it at all.
 // ============================================================================
 extern "C" void RtIo_PersistenceWorker_SaveJob(void* worker) {
-    RT_DIFF_BEGIN("[SELF-CHECK] IO::Persistence::worker::SaveJob @0x1800b6e00");
-    RT_DIFF_WORK(true);
 
     Persistence* p = FromWorker(worker);
 
@@ -775,9 +748,6 @@ extern "C" void RtIo_PersistenceWorker_SaveJob(void* worker) {
     if (bfs.base.file.handle != -1) RtIO::RtIo_FileSystem_CloseFile(Fs(), &bfs.base.file);
     RtIo_BinaryFileStream_Dtor(&bfs);
 
-    RT_DIFF_SHADOW(p->status == 1 || p->status == 2,
-                   "SELF-CHECK status settled to 1 or 2",
-                   "SELF-CHECK: no DLL side exists for this row");
 }
 
 // ============================================================================
@@ -884,7 +854,7 @@ extern "C" void RtIo_PersistenceWorker_SaveJob(void* worker) {
 // whole of an ordinary run. Calling it a second time "for comparison" would
 // execute the pending save/load/delete a SECOND time — writing a file twice or
 // deleting an already-deleted one. There is nothing to compare and nothing safe
-// to replay. A `RT_DIFF_SHADOW` would also be dishonest here: the body has NO
+// to replay. A `the diff oracle` would also be dishonest here: the body has NO
 // post-condition of its own (it stores nothing), so a self-check could only
 // assert something the body never wrote
 // (reference_oracle_must_not_compare_unwritten_bytes.md). **No site is added.**

@@ -147,7 +147,7 @@
 // THE ALLOCATOR — NOT TAKEN
 // ---------------------------------------------------------------------------
 // Every free goes through `rtcoll::MemFree`, lane Q's by-address call to
-// 0x1800c7ad0. This file does NOT arm the allocator: BANISHED_RT_ALLOC is lane
+// 0x1800c7ad0. This file does NOT arm the allocator: the old DLL-era switch is lane
 // E's and carries a standing NO-GO, and a heap cannot be half ours. Lane Q's
 // LANE E DEPENDENCY note in runtime/src/collection/array.cpp covers this file
 // too — repointing rtcoll::MemFree at lane E's allocator repoints these bodies
@@ -232,7 +232,7 @@
 // ---------------------------------------------------------------------------
 // Nothing in our tree calls a deleting destructor today. They live in the DLL's
 // own vtables and the DLL dispatches through them directly, which never
-// consults the port registry. So the `[RtDiff]` per-address `calls=` will read
+// consults the port registry. So the `[the diff oracle]` per-address `calls=` will read
 // 0 for all 37, and reference_uncalled_port_is_not_verified.md would normally
 // stop the lane there. It does not here, because the probe does not depend on a
 // live caller: it runs its own subjects from this file's init. The `calls=`
@@ -250,12 +250,11 @@
 // than left for the integrator to discover from a silent counter.
 //
 // ---------------------------------------------------------------------------
-// KILL SWITCHES
 // ---------------------------------------------------------------------------
-//   BANISHED_RT_DELDTOR=0            all 37 addresses stay on the DLL
-//   BANISHED_RT_DELDTOR_PROBE=1      the byte-comparing cases (default OFF)
-//   BANISHED_RT_DELDTOR_PROBE=neg    ... plus the negative control
-//   BANISHED_RT_DELDTOR_PROBE=all    ... plus the two allocator cases (see above)
+//   the old DLL-era switch            all 37 addresses stay on the DLL
+//   the old DLL-era switch      the byte-comparing cases (default OFF)
+//   the old DLL-era switch    ... plus the negative control
+//   the old DLL-era switch    ... plus the two allocator cases (see above)
 // ============================================================================
 
 #include <cstdint>
@@ -272,10 +271,6 @@ int RtObjectDeletingDtorLeavesRegister();  // deleting_dtor_leaves.cpp
 // keeps out of runtime/src/. The linker checks the two spellings match.
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-// The registry-FREE door, for the probe and for DtorIsPorted below. ResolveAddr
-// consults the port registry first, so it cannot answer "what did the DLL
-// ship here" (reference_resolveaddr_consults_port_registry_first.md).
-uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr);
 
 namespace rtdtor {
 
@@ -1188,11 +1183,9 @@ static const DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x180041e30, 0x18011eae0, 0x090, "UI::TextDescription"),
 };
 static DtorFn g_dtorCache[kSpecCount];
-static Site   g_sites[kSpecCount];
 
 static_assert(sizeof(kSpecs) / sizeof(kSpecs[0]) == kSpecCount,
-              "kSpecCount must match the table -- the probe and the site array "
-              "are sized from it");
+              "kSpecCount must match the table -- the dtor cache is sized from it");
 
 // ---------------------------------------------------------------------------
 // The allocator boundary. ONE call, reusing lane Q's, so lane E has one place
@@ -1267,51 +1260,8 @@ void* DeletingDtorCoreWith(void* self, unsigned flags, int i, DtorFn dtor) {
 }
 
 
-// Armed at init only when BANISHED_RT_DELDTOR_PROBE=all; see the probe's
-// "WHEN IT RUNS". Nothing calls a deleting destructor before cutover, so this
-// gate is expected NOT to fire today -- it exists so that the moment lane C2's
-// mint is armed and something does, the allocating cases run at a point where
-// the Runtime heap is provably started (the caller is destroying an object).
-bool g_allocProbePending = false;
-static bool g_allocProbeRunning = false;
-
 void* DeletingDtorCore(void* self, unsigned flags, int i) {
-    if (g_allocProbePending && !g_allocProbeRunning) {
-        g_allocProbeRunning = true;
-        g_allocProbePending = false;
-        ProbeRunAllocating();
-        g_allocProbeRunning = false;
-    }
-    // Read the array count BEFORE the body runs: on the array path the block is
-    // freed, so afterwards the cookie is either gone or reused.
-    const int n = (flags & 2u)
-        ? *reinterpret_cast<const int32_t*>(static_cast<uint8_t*>(self) - 8) : 1;
-    void* ret = DeletingDtorCoreWith(self, flags, i, Dtor(i));
-    if (RtDiffEnabled()) {
-        Site& st = g_sites[i];
-        if (!st.d.name) st.d.name = kSpecs[i].name;
-        RtDiffRegister(&st.d);
-        char desc[160];
-        std::snprintf(desc, sizeof(desc), "%s flags=%u %s destroyed=%d freed=%d",
-                      kSpecs[i].name, flags, (flags & 2u) ? "array" : "scalar",
-                      n > 0 ? n : 0, (flags & 1u) ? 1 : 0);
-        RtDiffReport(&st.d, true, desc, desc);
-    }
-    return ret;
-}
-
-// The probe's "normal" door: the same destructor the live path uses, without
-// the diff reporting the wrapper adds.
-DtorFn NormalDtor(int i) { return Dtor(i); }
-
-// Whether row `i`'s destructor resolves to OUR port or to the DLL. Reported by
-// the probe so a red line names the right lane.
-bool DtorIsPorted(int i) {
-    return reinterpret_cast<uintptr_t>(Dtor(i)) != ResolveRuntimeRaw(kSpecs[i].dtorVa);
-}
-
-DtorFn RawDtor(int i) {
-    return reinterpret_cast<DtorFn>(ResolveRuntimeRaw(kSpecs[i].dtorVa));
+    return DeletingDtorCoreWith(self, flags, i, Dtor(i));
 }
 
 // Achievement::Achievement ~Achievement = 0x18009e180  (PORTED)
@@ -1867,12 +1817,6 @@ void* RtDelDtor_TextDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 134);
 }
 
-static const int kProbeSubjects[] = { 7, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 42 };
-const int* ProbeSubjects(int* count) {
-    *count = static_cast<int>(sizeof(kProbeSubjects) / sizeof(kProbeSubjects[0]));
-    return kProbeSubjects;
-}
-
 const DelDtorSpec* Specs() { return kSpecs; }
 
 }  // namespace rtdtor
@@ -1898,15 +1842,6 @@ const DelDtorSpec* Specs() { return kSpecs; }
 // instance of that bug the project has had.
 // ============================================================================
 void RtObjectDeletingDtorPortInit() {
-    if (!RtWaveEnabled("BANISHED_RT_DELDTOR")) {
-        // The count is taken from kSpecCount rather than typed, for the same
-        // reason the summary at the bottom of this file already does it: two
-        // earlier lanes appended rows and left this literal reading 37.
-        printf("[RtDelDtor] DISABLED via BANISHED_RT_DELDTOR=0 -- all %d "
-                    "deleting destructors stay on the DLL\n", rtdtor::kSpecCount);
-        return;
-    }
-
     using namespace rtdtor;
 
     RegisterRuntimeAddr(0x180001680, (void*)&RtDelDtor_Achievement);
@@ -2073,15 +2008,4 @@ void RtObjectDeletingDtorPortInit() {
                 "(one body, %d rows); ~Class resolves lazily\n",
                 rtdtor::kSpecCount, rtdtor::kSpecCount);
 
-    // The byte-comparing half of the oracle. It allocates nothing and runs
-    // here rather than on first call, because nothing calls these before
-    // cutover -- see the banner.
-    rtdtor::ProbeRunStatic();
-
-    // The allocating half arms itself for the first real call, which is a
-    // moment we know the Runtime heap is started. Today there is no such call.
-    {
-        const char* m = std::getenv("BANISHED_RT_DELDTOR_PROBE");
-        if (m && std::strcmp(m, "all") == 0) rtdtor::g_allocProbePending = true;
-    }
 }

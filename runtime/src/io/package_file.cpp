@@ -45,7 +45,6 @@
 // an ordinal is exactly the kind of detail that reads as evidence and is never
 // checked by the compiler. `tools/export_name_audit.py` re-checks the names.
 //
-// Kill switch: BANISHED_RT_PKG2=0 removes this entire file — all 21 rows and
 // the sweep probe — and leaves every call on the DLL.
 //
 // NO NEW WIN32 API AND NO NEW IMPORT LIBRARY.
@@ -394,11 +393,6 @@ typedef String*  (*StrGetterFn)(const void*, String*);
 typedef uint32_t (*U32VoidFn)();
 typedef int32_t  (*I32ThisFilenameFn)(void*, const void*);
 
-// Wave 27 lane IOTEXT. Defined in package_file_serialize.cpp; declared rather
-// than included so that file keeps its own banner as the single place the
-// record sequence is documented.
-extern "C" void RtIo_PackageFile_SerializeProbe(void* self);
-
 // The one shared piece of the three String getters: retail nulls the return
 // slot, loads the field, and AddRefs only if it is non-null. The FREEING branch
 // does not exist here — a getter never releases.
@@ -418,27 +412,6 @@ String* StringFieldGetter(String* ret, const String* field) {
     return ret;
 }
 
-// Shared tail for the three String getters' oracle. Replays the shipped body
-// onto a scratch String, compares BY POINTER (both sides AddRef the same buffer
-// rather than allocating, so pointer equality is the strong form: it verifies
-// we read the right FIELD, which a text compare would not), then releases the
-// replay's reference so the probe leaves the refcount exactly as it found it.
-struct StrOracleResult { bool equal; char ours[72]; char theirs[72]; };
-StrOracleResult ReplayStringGetter(const void* self, const String* mine,
-                                   const char* mangled) {
-    StrOracleResult r;
-    String theirs;
-    theirs.data = nullptr;
-    RtOriginal<StrGetterFn>(mangled)(self, &theirs);
-    r.equal = (mine->data == theirs.data);
-    std::snprintf(r.ours,   sizeof(r.ours),   "%p \"%.40s\"",
-                  static_cast<void*>(mine->data), mine->data ? mine->data : "(null)");
-    std::snprintf(r.theirs, sizeof(r.theirs), "%p \"%.40s\"",
-                  static_cast<void*>(theirs.data), theirs.data ? theirs.data : "(null)");
-    RtString_ReleaseInline(&theirs);
-    return r;
-}
-
 }  // namespace
 
 // ============================================================================
@@ -447,117 +420,9 @@ StrOracleResult ReplayStringGetter(const void* self, const String* mine,
 // THE WALL OF ATTEMPT 14. See §1 for the instruction-by-instruction reading and
 // §5 for the oracle.
 extern "C" PackageFileView* RtIo_PackageFile_Ctor(PackageFileView* self) {
-    RT_DIFF_BEGIN("IO::PackageFile::PackageFile");
 
     PackageFileCtorBody(self);
 
-    if (rt_diff_on__) {
-        // Both sides onto private scratch, prefilled identically — §5.
-        alignas(16) uint8_t mine[kPackageFileSize];
-        alignas(16) uint8_t theirs[kPackageFileSize];
-        std::memset(mine,   0xCD, sizeof mine);
-        std::memset(theirs, 0xCD, sizeof theirs);
-
-        PackageFileCtorBody(mine);
-        RtOriginal<CtorFn>("??0PackageFile@IO@@QEAA@XZ")(theirs);
-
-        // Effectiveness control: how many of the 0xF0 bytes our body actually
-        // moved off the prefill. Reported through worked=, and printed once so
-        // the number is on the record rather than inferred.
-        int changed = 0;
-        for (size_t i = 0; i < sizeof mine; ++i)
-            if (mine[i] != 0xCD) ++changed;
-
-        static bool announced = false;
-        if (!announced) {
-            announced = true;
-            int theirsChanged = 0;
-            for (size_t i = 0; i < sizeof theirs; ++i)
-                if (theirs[i] != 0xCD) ++theirsChanged;
-            printf("[PKG2] ctor effectiveness: ours wrote %d/%d bytes, "
-                        "theirs wrote %d/%d (the %d untouched are +0x78,+0x7c,"
-                        "+0x90,+0xad..af,+0xc4,+0xd4)\n",
-                        changed, static_cast<int>(sizeof mine),
-                        theirsChanged, static_cast<int>(sizeof theirs),
-                        static_cast<int>(sizeof mine) - theirsChanged);
-        }
-
-        // ---- WAVE 29 LANE IOLANE: the vtable field, once the row is PROMOTED
-        //
-        // `??_7PackageFile@IO@@6B@` is promoted in standalone/reg_mint_promoted
-        // .cpp. `PackageFileVtable()` is an `RT_DATA_SLOT`, i.e. registry-first,
-        // so from that moment OUR constructor stamps the MINTED table while
-        // `theirs` — reached through `RtOriginal` = `ResolveExportRaw` — stamps
-        // the DLL's. The two objects then differ at the vtable field FOREVER,
-        // by construction. That is the "Construct divergence IS the vtable
-        // identity" shape this project already carries for
-        // `?TypeName@SpriteSheet@UI@@`; an unannotated red line here is how a
-        // sweep gets misread as a regression.
-        //
-        // IT IS NOT SUPPRESSED, IT IS MOVED TO A STRONGER CHECK. Neutralising
-        // the field would only say "we stopped looking". Instead each side is
-        // asserted to hold THE TABLE THAT SIDE'S OWN DOOR NAMES, which is a
-        // statement the old byte compare could not make at all, and the rest of
-        // the object stays a full 240-byte comparison.
-        //
-        // THE OFFSET SET IS DERIVED, NOT WRITTEN DOWN. A literal `+0x00` would
-        // be a second copy of the layout that nothing keeps in step with the
-        // header (and PackageFile stamps more than one table: see BaseVtable()
-        // and ExternalVtable() above). The loop below finds every 8-byte slot
-        // where the two objects differ AND ours holds exactly what our door
-        // returned AND theirs holds exactly what the raw door returned. Any
-        // other differing slot is NOT neutralised and still reaches
-        // RT_DIFF_BYTES as a divergence — which is the direction that matters,
-        // because a window that silently swallows a real difference is the
-        // DEFLATING failure (kickoff warning 8).
-        void* const oursVt   = PackageFileVtable();
-        void* const theirsVt = ResolveExportRaw("??_7PackageFile@IO@@6B@");
-
-        alignas(16) uint8_t mineCmp[kPackageFileSize];
-        alignas(16) uint8_t theirsCmp[kPackageFileSize];
-        std::memcpy(mineCmp,   mine,   sizeof mine);
-        std::memcpy(theirsCmp, theirs, sizeof theirs);
-
-        int vtSlots = 0;
-        bool vtOk   = true;
-        for (size_t off = 0; off + 8 <= kPackageFileSize; off += 8) {
-            void* a = nullptr; void* b = nullptr;
-            std::memcpy(&a, mine   + off, 8);
-            std::memcpy(&b, theirs + off, 8);
-            if (a == b) continue;                        // not a promoted field
-            if (a != oursVt || b != theirsVt) continue;  // a REAL divergence
-            ++vtSlots;
-            // Neutralise in the COPIES only, so the remaining 232 bytes are
-            // still compared whole rather than through a stale window.
-            std::memset(mineCmp   + off, 0, 8);
-            std::memset(theirsCmp + off, 0, 8);
-        }
-        // With the row promoted this must find at least one slot; with the A/B
-        // control `BANISHED_RT_PROMOTE_PKGFILE=0` it must find NONE, because
-        // both doors then return the DLL's table and the field does not differ
-        // at all. Either way the statement below is the one being made, and it
-        // is printed so a reader can see WHICH regime the run was in rather
-        // than inferring it (kickoff warning 6).
-        if (oursVt == nullptr || theirsVt == nullptr) vtOk = false;
-
-        static bool vtAnnounced = false;
-        if (!vtAnnounced) {
-            vtAnnounced = true;
-            printf("[PKG2] vtable field: ours=%p theirs=%p -- %d slot(s) "
-                        "neutralised for the byte compare (%s). %d byte(s) of "
-                        "240 still compared whole.\n",
-                        oursVt, theirsVt, vtSlots,
-                        vtSlots == 0 ? "row NOT promoted, or the A/B control is "
-                                       "set: both doors gave the same table"
-                                     : "row PROMOTED: ours is the minted table",
-                        static_cast<int>(kPackageFileSize) - 8 * vtSlots);
-        }
-
-        RT_DIFF_SHADOW(vtOk, "our ctor stamped the table OUR door names",
-                             "retail's ctor stamped the table the RAW door names");
-        RT_DIFF_BYTES(mineCmp, theirsCmp, sizeof mineCmp);
-        RT_DIFF_WORK(changed > 0);
-    }
     return self;
 }
 
@@ -572,32 +437,13 @@ extern "C" PackageFileView* RtIo_PackageFile_Ctor(PackageFileView* self) {
 // Construct on whatever the allocator returned, including nullptr. Both
 // branches are driven by the sweep probe (§6).
 extern "C" void* RtIo_PackageFile_Construct(void* self) {
-    RT_DIFF_BEGIN("IO::PackageFile::Construct");
     if (self == nullptr) {
-        if (rt_diff_on__) {
-            void* const theirs = RtOriginal<ConstructFn>(
-                "?Construct@PackageFile@IO@@UEAAPEAVExternal@Object@@XZ")(nullptr);
-            RT_DIFF_SHADOW(theirs == nullptr, "null -> null", "null -> null");
-            // The null branch does no work by definition; saying so keeps
-            // worked= honest rather than counting a no-op as a covered case.
-            RT_DIFF_WORK(false);
-        }
         return nullptr;
     }
     // The tail jump. Calling our own ported constructor rather than resolving
     // ??0PackageFile again: it is the same body, and going through the door
     // would make this site the one caller that could silently reach the DLL.
     RtIo_PackageFile_Ctor(static_cast<PackageFileView*>(self));
-    if (rt_diff_on__) {
-        alignas(16) uint8_t theirs[kPackageFileSize];
-        std::memset(theirs, 0xCD, sizeof theirs);
-        void* const ret = RtOriginal<ConstructFn>(
-            "?Construct@PackageFile@IO@@UEAAPEAVExternal@Object@@XZ")(theirs);
-        RT_DIFF_SHADOW(ret == static_cast<void*>(theirs),
-                       "non-null -> constructed, returns this",
-                       "non-null -> constructed, returns this");
-        RT_DIFF_WORK(true);
-    }
     return self;
 }
 
@@ -608,36 +454,25 @@ extern "C" void* RtIo_PackageFile_Construct(void* self) {
 // body here and are still registered separately.
 // ============================================================================
 extern "C" uint32_t RtIo_PackageFile_Type(const void* self) {
-    RT_DIFF_BEGIN("IO::PackageFile::Type");
     (void)self;                       // 0x180025130 never reads RCX
     const uint8_t* const ti = PackageFileTypeInfo();
     uint32_t ours = 0;
     std::memcpy(&ours, ti, sizeof ours);
-    RT_DIFF_SCALAR(ours, RtOriginal<U32ThisFn>("?Type@PackageFile@IO@@UEBAIXZ")(self));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
 extern "C" uint32_t RtIo_PackageFile_TypeId() {
-    RT_DIFF_BEGIN("IO::PackageFile::TypeId");
     const uint8_t* const ti = PackageFileTypeInfo();
     uint32_t ours = 0;
     std::memcpy(&ours, ti, sizeof ours);
-    RT_DIFF_SCALAR(ours, RtOriginal<U32VoidFn>("?TypeId@PackageFile@IO@@SAIXZ")());
-    RT_DIFF_WORK(true);
     return ours;
 }
 
 extern "C" const char* RtIo_PackageFile_TypeName(const void* self) {
-    RT_DIFF_BEGIN("IO::PackageFile::TypeName");
     (void)self;                       // 0x180025150 never reads RCX
     const uint8_t* const ti = PackageFileTypeInfo();
     const char* ours = nullptr;
     std::memcpy(&ours, ti + 8, sizeof ours);
-    RT_DIFF_SCALAR(static_cast<const void*>(ours),
-                   static_cast<const void*>(
-                       RtOriginal<CStrThisFn>("?TypeName@PackageFile@IO@@UEBAPEBDXZ")(self)));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
@@ -648,11 +483,7 @@ extern "C" const char* RtIo_PackageFile_TypeName(const void* self) {
 // accepts. A constant in the CODE, not a field — reading it off the object
 // would be wrong even though it would usually agree.
 extern "C" int32_t RtIo_PackageFile_GetFileVersion(const void* self) {
-    RT_DIFF_BEGIN("IO::PackageFile::GetFileVersion");
     const int32_t ours = 5;
-    RT_DIFF_SCALAR(ours,
-        RtOriginal<I32ThisFn>("?GetFileVersion@PackageFile@IO@@UEBAHXZ")(self));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
@@ -660,13 +491,8 @@ extern "C" int32_t RtIo_PackageFile_GetFileVersion(const void* self) {
 // on every path — a package is never "compiled", so the slot reports the same
 // result whatever Filename it is handed. The parameter is genuinely unread.
 extern "C" int32_t RtIo_PackageFile_Compile(void* self, const void* filename) {
-    RT_DIFF_BEGIN("IO::PackageFile::Compile");
     (void)self; (void)filename;
     const int32_t ours = 1;
-    RT_DIFF_SCALAR(ours, RtOriginal<I32ThisFilenameFn>(
-        "?Compile@PackageFile@IO@@UEAA?AW4CompileResult@External@Object@@AEBVFilename@System@@@Z")(
-            self, filename));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
@@ -731,14 +557,11 @@ extern "C" int32_t RtIo_PackageFile_Compile(void* self, const void* filename) {
 typedef void* (*SlotZeroFn)(void*, unsigned);
 
 extern "C" void RtIo_PackageFile_Destruct(void* self) {
-    RT_DIFF_BEGIN("IO::PackageFile::Destruct");
     void** const vt = *reinterpret_cast<void***>(self);   // 180025300
     reinterpret_cast<SlotZeroFn>(vt[0])(self, 0u);        // 180025305, flags 0
-    RT_DIFF_WORK(true);
 }
 
 extern "C" void* RtIo_PackageFile_Reconstruct(void* self) {
-    RT_DIFF_BEGIN("IO::PackageFile::Reconstruct");
     void** const vt = *reinterpret_cast<void***>(self);   // 1800252d6
     reinterpret_cast<SlotZeroFn>(vt[0])(self, 0u);        // 1800252de, flags 0
     // The tail jump. Calling our own ported constructor directly rather than
@@ -746,7 +569,6 @@ extern "C" void* RtIo_PackageFile_Reconstruct(void* self) {
     // would resolve to this same body and add one more resolve site the
     // cutover census has to carry.
     RtIo_PackageFile_Ctor(static_cast<PackageFileView*>(self));   // 1800252e8
-    RT_DIFF_WORK(true);
     return self;
 }
 
@@ -754,38 +576,17 @@ extern "C" void* RtIo_PackageFile_Reconstruct(void* self) {
 // The three String getters. Shape and oracle in the helpers above.
 // ============================================================================
 extern "C" String* RtIo_PackageFile_GetName(const PackageFileView* self, String* ret) {
-    RT_DIFF_BEGIN("IO::PackageFile::GetName");
     StringFieldGetter(ret, &self->name);          // +0x40
-    if (rt_diff_on__) {
-        const StrOracleResult r = ReplayStringGetter(
-            self, ret, "?GetName@PackageFile@IO@@QEBA?AVString@System@@XZ");
-        RT_DIFF_SHADOW(r.equal, r.ours, r.theirs);
-        RT_DIFF_WORK(true);
-    }
     return ret;
 }
 
 extern "C" String* RtIo_PackageFile_GetAuthor(const PackageFileView* self, String* ret) {
-    RT_DIFF_BEGIN("IO::PackageFile::GetAuthor");
     StringFieldGetter(ret, &self->author);        // +0x48
-    if (rt_diff_on__) {
-        const StrOracleResult r = ReplayStringGetter(
-            self, ret, "?GetAuthor@PackageFile@IO@@QEBA?AVString@System@@XZ");
-        RT_DIFF_SHADOW(r.equal, r.ours, r.theirs);
-        RT_DIFF_WORK(true);
-    }
     return ret;
 }
 
 extern "C" String* RtIo_PackageFile_GetDescription(const PackageFileView* self, String* ret) {
-    RT_DIFF_BEGIN("IO::PackageFile::GetDescription");
     StringFieldGetter(ret, &self->description);   // +0x50
-    if (rt_diff_on__) {
-        const StrOracleResult r = ReplayStringGetter(
-            self, ret, "?GetDescription@PackageFile@IO@@QEBA?AVString@System@@XZ");
-        RT_DIFF_SHADOW(r.equal, r.ours, r.theirs);
-        RT_DIFF_WORK(true);
-    }
     return ret;
 }
 
@@ -794,11 +595,7 @@ extern "C" String* RtIo_PackageFile_GetDescription(const PackageFileView* self, 
 // ============================================================================
 #define RT_PKG2_SCALAR_GETTER(FN, SITE, FIELD, TYPE, ORACLE_FN, MANGLED)       \
     extern "C" TYPE FN(const PackageFileView* self) {                          \
-        RT_DIFF_BEGIN(SITE);                                                   \
-        const TYPE ours = static_cast<TYPE>(self->FIELD);                      \
-        RT_DIFF_SCALAR(ours, RtOriginal<ORACLE_FN>(MANGLED)(self));            \
-        RT_DIFF_WORK(true);                                                    \
-        return ours;                                                           \
+        return static_cast<TYPE>(self->FIELD);                                 \
     }
 
 RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetVersion, "IO::PackageFile::GetVersion",
@@ -833,11 +630,7 @@ RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetIconHeight, "IO::PackageFile::GetIconH
 // LoadPackages' index pass tests, so a wrong width here would change package
 // precedence, not just a returned bool.
 extern "C" bool RtIo_PackageFile_CanOverride(const PackageFileView* self) {
-    RT_DIFF_BEGIN("IO::PackageFile::CanOverride");
     const bool ours = (self->overridable != 0);
-    RT_DIFF_SCALAR(ours,
-        RtOriginal<BoolThisFn>("?CanOverride@PackageFile@IO@@QEBA_NXZ")(self));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
@@ -856,273 +649,24 @@ extern "C" bool RtIo_PackageFile_CanOverride(const PackageFileView* self) {
 // bounds check in either body, and none is added — the caller bounds it with
 // GetFileCount, and a guard here would skip work rather than restore it.
 extern "C" uint32_t RtIo_PackageFile_GetFileSize(const PackageFileView* self, int index) {
-    RT_DIFF_BEGIN("IO::PackageFile::GetFileSize");
     const PackageFileEntry* const e = static_cast<const PackageFileEntry*>(self->entries)
                                     + static_cast<int64_t>(index);
     const uint32_t ours = e->size;                                  // +0x0C
-    // RT_ORIGINAL_ONCE, not bare RtOriginal: the sweep probe calls this once
-    // per FILE in every package — tens of thousands of times — and RtOriginal
+    // the raw DLL door, not bare the raw DLL door: the sweep probe calls this once
+    // per FILE in every package — tens of thousands of times — and the raw DLL door
     // is GetProcAddress under the loader lock on every call
     // (reference_rtoriginal_is_getprocaddress.md). Both reach the shipped body;
     // only one of them does it without a syscall per entry.
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(U32ThisIntFn,
-        "?GetFileSize@PackageFile@IO@@QEBAIH@Z")(self, index));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
 extern "C" uint32_t RtIo_PackageFile_GetFileOffset(const PackageFileView* self, int index) {
-    RT_DIFF_BEGIN("IO::PackageFile::GetFileOffset");
     const PackageFileEntry* const e = static_cast<const PackageFileEntry*>(self->entries)
                                     + static_cast<int64_t>(index);
     const uint32_t ours = e->offset;                                // +0x08
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(U32ThisIntFn,   // per-entry: see GetFileSize
-        "?GetFileOffset@PackageFile@IO@@QEBAIH@Z")(self, index));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
-// ============================================================================
-// The sweep probe — §6
-// ============================================================================
-// Called from the tail of RtIo_FileSystem_LoadPackages, which is the one moment
-// in the process where every mounted package is reachable and fully populated.
-// No-op unless the diff harness is on.
-void RtIo_PackageFile_SweepProbe(const FileSystem* fs) {
-    if (!RtDiffEnabled()) return;
-    if (fs == nullptr || fs->packfiles == nullptr) {
-        printf("[PKG2] sweep: no packfiles to sweep (fs=%p)\n",
-                    static_cast<const void*>(fs));
-        return;
-    }
-
-    // ?Construct@'s two branches, driven here because no caller in this tree
-    // reaches the factory. The non-null case gets a fresh scratch block; the
-    // null case is the early-out.
-    {
-        alignas(16) uint8_t scratch[kPackageFileSize];
-        std::memset(scratch, 0xCD, sizeof scratch);
-        RtIo_PackageFile_Construct(scratch);
-        RtIo_PackageFile_Construct(nullptr);
-    }
-
-    // ---- WAVE 27 lane IOTEXT: the Destruct / Reconstruct oracle -------------
-    // Two scratch blocks, each freshly CONSTRUCTED so that (a) every one of the
-    // kPackageFileSize bytes has been written by a writer -- there are no
-    // unwritten bytes for the memcmp to fail on -- and (b) every String is null
-    // and every Array empty, so the destructor these two slots run releases
-    // nothing and the probe is safe to execute.
-    //
-    // ⚠ THE ONE HOLE, AND IT IS CLOSED BY CONSTRUCTION RATHER THAN BY EXCLUSION.
-    // The constructor does NOT write all 240 bytes. The number is MEASURED, not
-    // reasoned: the `[PKG2] ctor effectiveness` line this same probe prints reads
-    // `ours wrote 213/240 bytes, theirs wrote 213/240 (the 27 untouched are
-    // +0x78,+0x7c,+0x90,+0xad..af,+0xc4,+0xd4)`. A memcmp over the whole object
-    // would therefore compare 27 bytes NEITHER side wrote, which is the exact
-    // shape of reference_oracle_must_not_compare_unwritten_bytes.md -- it fails
-    // on stack garbage and reads like a catastrophic port defect.
-    //
-    // Closed by memsetting BOTH blocks to the same pattern before either
-    // constructor runs, so every untouched byte is equal by construction. That is
-    // preferred over an exclusion window because a window is a second copy of the
-    // header's layout that nothing keeps in step with it.
-    //
-    // `theirs` is reached through ResolveExportRaw, NOT ResolveExport: the
-    // ordinary door is registry-first and, now that these two names are
-    // registered below, would hand back OUR body and compare retail with itself
-    // (reference_registering_an_address_converts_a_selfcheck_into_an_oracle.md).
-    //
-    // EFFECTIVENESS: the two pairs are compared separately and the verdict says
-    // which one ran, so a pass cannot be read as covering a slot that no-op'd
-    // (reference_probe_needs_an_effectiveness_control.md).
-    {
-        typedef void  (*DestructFn)(void*);
-        typedef void* (*ReconstructFn)(void*);
-
-        alignas(16) uint8_t ours[kPackageFileSize];
-        alignas(16) uint8_t theirs[kPackageFileSize];
-
-        DestructFn theirDestruct = reinterpret_cast<DestructFn>(
-            ResolveExportRaw("?Destruct@PackageFile@IO@@UEAAXXZ"));
-        if (theirDestruct) {
-            std::memset(ours, 0xCD, sizeof ours);      // see the ⚠ note above
-            std::memset(theirs, 0xCD, sizeof theirs);
-            RtIo_PackageFile_Ctor(reinterpret_cast<PackageFileView*>(ours));
-            RtIo_PackageFile_Ctor(reinterpret_cast<PackageFileView*>(theirs));
-            RtIo_PackageFile_Destruct(ours);
-            theirDestruct(theirs);
-            printf("[PKG2] Destruct oracle: %s (%d bytes compared)\n",
-                   std::memcmp(ours, theirs, kPackageFileSize) == 0 ? "MATCH"
-                                                                    : "DIVERGED",
-                   static_cast<int>(kPackageFileSize));
-        } else {
-            printf("[PKG2] Destruct oracle SKIPPED: ?Destruct@PackageFile@IO@@ "
-                   "did not resolve raw\n");
-        }
-
-        ReconstructFn theirReconstruct = reinterpret_cast<ReconstructFn>(
-            ResolveExportRaw("?Reconstruct@PackageFile@IO@@UEAAPEAVExternal@Object@@XZ"));
-        if (theirReconstruct) {
-            std::memset(ours, 0xCD, sizeof ours);      // see the ⚠ note above
-            std::memset(theirs, 0xCD, sizeof theirs);
-            RtIo_PackageFile_Ctor(reinterpret_cast<PackageFileView*>(ours));
-            RtIo_PackageFile_Ctor(reinterpret_cast<PackageFileView*>(theirs));
-            void* const rOurs   = RtIo_PackageFile_Reconstruct(ours);
-            void* const rTheirs = theirReconstruct(theirs);
-
-            // ---- WAVE 29 LANE IOLANE, and I PREDICTED THIS WRONG -----------
-            // The warrant for promoting `??_7PackageFile@IO@@6B@` said, in as
-            // many words, that the Destruct and Reconstruct oracles were "NOT
-            // affected... because both build BOTH sides with
-            // RtIo_PackageFile_Ctor". Destruct is indeed unaffected and still
-            // reads MATCH. **RECONSTRUCT DIVERGED on the first promoted run.**
-            // The prediction was caught by a measurement, not by review, and
-            // the mechanism is worth more than the fix:
-            //
-            //   retail's `?Reconstruct@` destructs in place through the
-            //   object's OWN vtable slot 0 (so it runs OUR body -- correct),
-            //   and then TAIL-JUMPS 0x1800b4440, retail's constructor, by an
-            //   in-DLL rel32. **An in-DLL rel32 jump is not a door**, so no
-            //   registration can intercept it, and retail's ctor stamps the
-            //   DLL's table while ours stamps the minted one. Ours ends with
-            //   the minted table, theirs with the DLL's.
-            //
-            // That is `reference_a_ported_row_can_be_permanently_unpromotable`
-            // arriving on the OTHER side of a promotion: not "our row cannot be
-            // installed", but "retail's own body will re-install ITS table over
-            // an object we built, and nothing in our tree can stop it."
-            //
-            // The neutralisation is derived exactly as in the constructor
-            // oracle: a slot is excused only if it differs AND ours holds what
-            // OUR door returned AND theirs holds what the RAW door returned.
-            // Any other difference is still reported.
-            void* const oursVt   = PackageFileVtable();
-            void* const theirsVt = ResolveExportRaw("??_7PackageFile@IO@@6B@");
-            alignas(16) uint8_t oursCmp[kPackageFileSize];
-            alignas(16) uint8_t theirsCmp[kPackageFileSize];
-            std::memcpy(oursCmp,   ours,   kPackageFileSize);
-            std::memcpy(theirsCmp, theirs, kPackageFileSize);
-            int vtSlots = 0;
-            for (size_t off = 0; off + 8 <= kPackageFileSize; off += 8) {
-                void* a = nullptr; void* b = nullptr;
-                std::memcpy(&a, ours   + off, 8);
-                std::memcpy(&b, theirs + off, 8);
-                if (a == b) continue;
-                if (a != oursVt || b != theirsVt) continue;
-                ++vtSlots;
-                std::memset(oursCmp   + off, 0, 8);
-                std::memset(theirsCmp + off, 0, 8);
-            }
-            printf("[PKG2] Reconstruct oracle: %s (%d of %d bytes compared; "
-                   "%d vtable slot(s) excused -- retail's in-DLL tail jump to "
-                   "0x1800b4440 re-stamps the DLL's table), "
-                   "return-is-this ours=%d theirs=%d\n",
-                   std::memcmp(oursCmp, theirsCmp, kPackageFileSize) == 0
-                       ? "MATCH" : "DIVERGED",
-                   static_cast<int>(kPackageFileSize) - 8 * vtSlots,
-                   static_cast<int>(kPackageFileSize), vtSlots,
-                   rOurs == static_cast<void*>(ours) ? 1 : 0,
-                   rTheirs == static_cast<void*>(theirs) ? 1 : 0);
-            // Leave both blocks destructed rather than constructed, so nothing
-            // downstream inherits two live PackageFiles on the stack.
-            RtIo_PackageFile_Destruct(ours);
-            RtIo_PackageFile_Destruct(theirs);
-        } else {
-            printf("[PKG2] Reconstruct oracle SKIPPED: ?Reconstruct@PackageFile@IO@@ "
-                   "did not resolve raw\n");
-        }
-    }
-
-    // ---- WAVE 27 lane IOTEXT: drive ?Serialize@PackageFile@IO@@ -------------
-    // `?Serialize@` (vtable slot 5) has NO GAMEPLAY ROUTE -- nothing in the game
-    // writes a .pkg; that is the ToolKit's job -- so left alone it would report
-    // `calls=0` for ever. "No route" is not "no oracle"
-    // (reference_no_route_is_not_no_oracle.md): its own file carries a
-    // RtSaveTrace::Compare write-path oracle, and this loop is what hands that
-    // oracle a REAL, fully-populated subject instead of a fabricated one. It is
-    // a pure read of the package on the write path (see the callee analysis in
-    // package_file_serialize.cpp), so driving it here mutates nothing.
-    //
-    // THE DRIVER CALLS THE PROBE, NOT THE BODY, AND THAT COST A CRASH TO LEARN.
-    // The first version of this block called `RtIo_PackageFile_Serialize(pkg,
-    // nullptr)` on the argument that Compare substitutes its own sink. It died
-    // with an ACCESS_VIOLATION in MakeCodec on the FIRST package: the probe block
-    // does not RETURN, so the body ran on past it with the null Stream.
-    // `RtIo_PackageFile_SerializeProbe` is the instrument's own
-    // door; see the block above it in package_file_serialize.cpp. It self-gates
-    // on RtSaveTrace::Enabled(), so the check below is belt-and-braces and the
-    // loop costs nothing when the trace is off.
-    if (RtSaveTrace::Enabled()) {
-        for (int32_t i = 0; i < fs->packfileCount; ++i)
-            if (PackageFileView* const pkg = const_cast<PackageFileView*>(fs->packfiles[i]))
-                RtIo_PackageFile_SerializeProbe(pkg);
-    }
-
-    // Distinct-value counters, so a row that is one value repeated N times is
-    // visible as such rather than as N comparisons (§6's stated hole).
-    int32_t  seenVersion = 0, seenPlatform = 0, seenPriority = 0;
-    bool     firstPkg = true;
-    int      distinctVersion = 0, distinctPlatform = 0, distinctPriority = 0;
-    int64_t  entryCalls = 0;
-    const int32_t packs = fs->packfileCount;
-
-    for (int32_t i = 0; i < packs; ++i) {
-        const PackageFileView* const pkg = fs->packfiles[i];
-        if (pkg == nullptr) continue;
-
-        RtIo_PackageFile_Type(pkg);
-        RtIo_PackageFile_TypeId();
-        RtIo_PackageFile_TypeName(pkg);
-        RtIo_PackageFile_GetFileVersion(pkg);
-        RtIo_PackageFile_Compile(const_cast<PackageFileView*>(pkg), nullptr);
-
-        String s;
-        s.data = nullptr;
-        RtIo_PackageFile_GetName(pkg, &s);        RtString_ReleaseInline(&s);
-        s.data = nullptr;
-        RtIo_PackageFile_GetAuthor(pkg, &s);      RtString_ReleaseInline(&s);
-        s.data = nullptr;
-        RtIo_PackageFile_GetDescription(pkg, &s); RtString_ReleaseInline(&s);
-
-        const int32_t v  = RtIo_PackageFile_GetVersion(pkg);
-        RtIo_PackageFile_GetUserVersion(pkg);
-        const int32_t pl = RtIo_PackageFile_GetPlatform(pkg);
-        const int32_t pr = RtIo_PackageFile_GetPriority(pkg);
-        RtIo_PackageFile_GetCRC(pkg);
-        RtIo_PackageFile_CanOverride(pkg);
-        RtIo_PackageFile_GetIconWidth(pkg);
-        RtIo_PackageFile_GetIconHeight(pkg);
-
-        if (firstPkg) {
-            firstPkg = false;
-            seenVersion = v; seenPlatform = pl; seenPriority = pr;
-            distinctVersion = distinctPlatform = distinctPriority = 1;
-        } else {
-            if (v  != seenVersion)  distinctVersion  = 2;
-            if (pl != seenPlatform) distinctPlatform = 2;
-            if (pr != seenPriority) distinctPriority = 2;
-        }
-
-        const int32_t n = RtIo_PackageFile_GetFileCount(pkg);
-        for (int32_t k = 0; k < n; ++k) {
-            RtIo_PackageFile_GetFileSize(pkg, k);
-            RtIo_PackageFile_GetFileOffset(pkg, k);
-            ++entryCalls;
-        }
-    }
-
-    // "at least 2" rather than an exact count: the point is only to separate a
-    // genuinely varied row from a one-value row, and carrying a set per
-    // accessor would cost more than the finding is worth.
-    printf("[PKG2] sweep: %d packages, %lld entries; per-entry accessors got "
-                "%lld calls each. Distinct values across packages: version=%s "
-                "platform=%s priority=%s\n",
-                packs, static_cast<long long>(entryCalls),
-                static_cast<long long>(entryCalls),
-                distinctVersion  >= 2 ? ">=2" : "1",
-                distinctPlatform >= 2 ? ">=2" : "1",
-                distinctPriority >= 2 ? ">=2" : "1");
-}
 
 }  // namespace RtIO
 

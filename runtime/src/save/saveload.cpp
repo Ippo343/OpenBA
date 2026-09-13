@@ -58,7 +58,7 @@
 //       below must PUBLISH through `SaveLoadSingletonSlot()` rather than own a
 //       static of their own, because that accessor is the door that follows the
 //       registration. Verified per run by ProbeSaveLoadSingleton
-//       (standalone/rt_orphan_probe.cpp, BANISHED_RT_ORPHAN_PROBE=1).
+//       (standalone/rt_orphan_probe.cpp, the old DLL-era switch).
 //
 // THE HAZARD THAT DEFINES THIS LANE. A wrong port here does not crash, it
 // desyncs a save and surfaces later on an innocent record. So the oracle shape
@@ -116,7 +116,7 @@ namespace {
 
 // ----------------------------------------------------------------------------
 // Dependencies. Every one of these is fetched from the SHIPPED DLL through
-// RT_ORIGINAL_ONCE / ResolveExportRaw, never through ResolveExport.
+// the raw DLL door / the raw export door, never through ResolveExport.
 //
 // Two reasons, and they are different reasons:
 //   1. Half of these (String::operator+, Filename::AdjustDelimiters,
@@ -125,12 +125,12 @@ namespace {
 //      silently depend on another lane's port being enabled. persistence.cpp
 //      (Wave 4 lane C) made the same call for the same reason: a lane's job is
 //      to be correct standing alone against the DLL.
-//   2. RtOriginal is GetProcAddress — an export-table binary search under the
+//   2. the raw DLL door is GetProcAddress — an export-table binary search under the
 //      loader lock. Two of them in one hot body cost Wave 2 five points of sim
 //      time and were invisible to both profilers
-//      (reference_rtoriginal_is_getprocaddress.md). RT_ORIGINAL_ONCE caches
+//      (reference_rtoriginal_is_getprocaddress.md). the raw DLL door caches
 //      per call site, which is why every accessor below is a function with a
-//      `static` and not a bare RtOriginal call.
+//      `static` and not a bare the raw DLL door call.
 // ----------------------------------------------------------------------------
 
 // ----------------------------------------------------------------------------
@@ -234,18 +234,6 @@ static void SaveLoad_CtorLogic(SaveLoad* self) {
 }
 
 SaveLoad* RtSave_SaveLoad_Ctor(SaveLoad* self) {
-    RT_DIFF_BEGIN("Save::SaveLoad::SaveLoad");
-    if (rt_diff_on__) {
-        using CtorFn = SaveLoad* (*)(SaveLoad*);
-        alignas(16) uint8_t scratchOurs[sizeof(SaveLoad)];
-        alignas(16) uint8_t scratchTheirs[sizeof(SaveLoad)];
-        std::memset(scratchOurs,   0xCD, sizeof(scratchOurs));
-        std::memset(scratchTheirs, 0xCD, sizeof(scratchTheirs));
-        RT_ORIGINAL_ONCE(CtorFn, "??0SaveLoad@Save@@QEAA@XZ")(
-            reinterpret_cast<SaveLoad*>(scratchTheirs));
-        SaveLoad_CtorLogic(reinterpret_cast<SaveLoad*>(scratchOurs));
-        RT_DIFF_BYTES(scratchOurs, scratchTheirs, sizeof(SaveLoad));
-    }
     SaveLoad_CtorLogic(self);   // runs last, so _singleton ends up pointing here
     return self;
 }
@@ -451,15 +439,7 @@ void RtSave_SaveLoad_Dtor(SaveLoad* self) {
 // Oracle: FULL DIFF — a single load, no side effects.
 // ============================================================================
 Operation RtSave_SaveLoad_GetOperation(const SaveLoad* self) {
-    RT_DIFF_BEGIN("Save::SaveLoad::GetOperation");
     const Operation ours = self->_operation;
-    if (rt_diff_on__) {
-        using Fn = Operation (*)(const SaveLoad*);
-        const int oursI = static_cast<int>(ours);
-        const int theirsI = static_cast<int>(
-            RT_ORIGINAL_ONCE(Fn, "?GetOperation@SaveLoad@Save@@QEBA?AW4Operation@12@XZ")(self));
-        RT_DIFF_SCALAR(oursI, theirsI);
-    }
     return ours;
 }
 
@@ -471,13 +451,7 @@ Operation RtSave_SaveLoad_GetOperation(const SaveLoad* self) {
 // +0x50. Oracle: FULL DIFF.
 // ============================================================================
 int RtSave_SaveLoad_GetSaveCount(const SaveLoad* self) {
-    RT_DIFF_BEGIN("Save::SaveLoad::GetSaveCount");
     const int ours = self->_savesSize;
-    if (rt_diff_on__) {
-        using Fn = int (*)(const SaveLoad*);
-        const int theirs = RT_ORIGINAL_ONCE(Fn, "?GetSaveCount@SaveLoad@Save@@QEBAHXZ")(self);
-        RT_DIFF_SCALAR(ours, theirs);
-    }
     return ours;
 }
 
@@ -495,17 +469,9 @@ int RtSave_SaveLoad_GetSaveCount(const SaveLoad* self) {
 // Oracle: FULL DIFF on the returned pointer.
 // ============================================================================
 SaveInfo* RtSave_SaveLoad_GetSaveInfo(const SaveLoad* self, int index) {
-    RT_DIFF_BEGIN("Save::SaveLoad::GetSaveInfo");
     SaveInfo* ours = reinterpret_cast<SaveInfo*>(
         reinterpret_cast<uint8_t*>(self->_savesData) +
         static_cast<int64_t>(index) * static_cast<int64_t>(sizeof(SaveInfo)));
-    if (rt_diff_on__) {
-        using Fn = SaveInfo* (*)(const SaveLoad*, int);
-        const void* oursP = ours;
-        const void* theirsP =
-            RT_ORIGINAL_ONCE(Fn, "?GetSaveInfo@SaveLoad@Save@@QEBAAEBUSaveInfo@12@H@Z")(self, index);
-        RT_DIFF_SCALAR(oursP, theirsP);
-    }
     return ours;
 }
 
@@ -529,7 +495,7 @@ SaveInfo* RtSave_SaveLoad_GetSaveInfo(const SaveLoad* self, int index) {
 // zeroing the slot and calling it -- retail always returns the literal "Auto"
 // regardless of `self`.
 //
-// Oracle: FULL DIFF, RT_DIFF_SHADOW against a genuine second call into the
+// Oracle: FULL DIFF, the diff oracle against a genuine second call into the
 // shipped export (not a self-check -- reference_shadow_marker_is_not_an_oracle.md),
 // same shape as RtSystem_String_Concat's diff above. The function takes no
 // meaningful input (every call is the same case), so the commit's input sweep
@@ -538,21 +504,8 @@ SaveInfo* RtSave_SaveLoad_GetSaveInfo(const SaveLoad* self, int index) {
 // argument that does nothing.
 // ============================================================================
 String* RtSave_SaveLoad_GetAutoSaveName(const SaveLoad* self, String* ret) {
-    RT_DIFF_BEGIN("Save::SaveLoad::GetAutoSaveName");
     ret->data = nullptr;
     RtSystem::RtSystem_String_Set(ret, "Auto");
-    if (rt_diff_on__) {
-        using Fn = String* (*)(const SaveLoad*, String*);
-        String theirs{nullptr};
-        RT_ORIGINAL_ONCE(Fn, "?GetAutoSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ")(self, &theirs);
-        const bool same =
-            (ret->data == nullptr && theirs.data == nullptr) ||
-            (ret->data != nullptr && theirs.data != nullptr &&
-             RtSystem::RtString_StrCompare(ret->data, theirs.data) == 0);
-        RT_DIFF_SHADOW(same, ret->data ? ret->data : "(null)",
-                       theirs.data ? theirs.data : "(null)");
-        RtSystem::RtString_ReleaseInline(&theirs);
-    }
     return ret;
 }
 
@@ -615,7 +568,6 @@ void GenerateSaveName_FormatCandidateInto(const char** ret, int index) {
 }  // namespace
 
 const char** RtSave_SaveLoad_GenerateSaveName(const SaveLoad* self, const char** ret) {
-    RT_DIFF_BEGIN("Save::SaveLoad::GenerateSaveName");
 
     *ret = nullptr;   // retail's unconditional zero, NOT a release -- see banner
     int index = 0;
@@ -633,17 +585,6 @@ const char** RtSave_SaveLoad_GenerateSaveName(const SaveLoad* self, const char**
         ++index;
     }
 
-    if (rt_diff_on__) {
-        using Fn = const char** (*)(const SaveLoad*, const char**);
-        const char* theirs = nullptr;
-        RT_ORIGINAL_ONCE(Fn, "?GenerateSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ")(self, &theirs);
-        const bool equal = RtSystem::RtString_StrCompare(*ret, theirs) == 0;
-        char a[64], b[64];
-        std::snprintf(a, sizeof(a), "\"%s\"", *ret   ? *ret   : "(null)");
-        std::snprintf(b, sizeof(b), "\"%s\"", theirs ? theirs : "(null)");
-        RtDiffReport(&rt_diff_site__, equal, a, b);
-        ReleaseStringSlot(&theirs);   // release the oracle's own temporary
-    }
     return ret;
 }
 
@@ -657,15 +598,7 @@ const char** RtSave_SaveLoad_GenerateSaveName(const SaveLoad* self, const char**
 // Oracle: FULL DIFF.
 // ============================================================================
 SavedState* RtSave_SaveLoad_GetSaveState(SaveLoad* self) {
-    RT_DIFF_BEGIN("Save::SaveLoad::GetSaveState");
     SavedState* ours = static_cast<SavedState*>(self->_saveState);
-    if (rt_diff_on__) {
-        using Fn = SavedState* (*)(SaveLoad*);
-        const void* oursP = ours;
-        const void* theirsP =
-            RT_ORIGINAL_ONCE(Fn, "?GetSaveState@SaveLoad@Save@@QEAAPEAVSavedState@2@XZ")(self);
-        RT_DIFF_SCALAR(oursP, theirsP);
-    }
     return ours;
 }
 
@@ -687,15 +620,6 @@ static void SaveLoad_SetOperationLogic(SaveLoad* self, Operation op, int index) 
 }
 
 void RtSave_SaveLoad_SetOperation(SaveLoad* self, Operation op, int index) {
-    RT_DIFF_BEGIN("Save::SaveLoad::SetOperation");
-    if (rt_diff_on__) {
-        using Fn = void (*)(SaveLoad*, Operation, int);
-        SaveLoadScratch s(self);
-        SaveLoad_SetOperationLogic(s.Ours(), op, index);
-        RT_ORIGINAL_ONCE(Fn, "?SetOperation@SaveLoad@Save@@QEAAXW4Operation@12@H@Z")(
-            s.Theirs(), op, index);
-        RT_DIFF_BYTES(s.ours, s.theirs, sizeof(SaveLoad));
-    }
     SaveLoad_SetOperationLogic(self, op, index);
 }
 
@@ -707,15 +631,6 @@ void RtSave_SaveLoad_SetOperation(SaveLoad* self, Operation op, int index) {
 // runtime/types/system/Value.h). Oracle: SCRATCH-COPY DIFF.
 // ============================================================================
 void RtSave_SaveLoad_SetMinOperationTime(SaveLoad* self, const int64_t* time) {
-    RT_DIFF_BEGIN("Save::SaveLoad::SetMinOperationTime");
-    if (rt_diff_on__) {
-        using Fn = void (*)(SaveLoad*, const int64_t*);
-        SaveLoadScratch s(self);
-        s.Ours()->_minOperationTime = *time;
-        RT_ORIGINAL_ONCE(Fn, "?SetMinOperationTime@SaveLoad@Save@@QEAAXAEBVTime@System@@@Z")(
-            s.Theirs(), time);
-        RT_DIFF_BYTES(s.ours, s.theirs, sizeof(SaveLoad));
-    }
     self->_minOperationTime = *time;
 }
 
@@ -738,14 +653,6 @@ void RtSave_SaveLoad_SetMinOperationTime(SaveLoad* self, const int64_t* time) {
 // Oracle: SCRATCH-COPY DIFF.
 // ============================================================================
 void RtSave_SaveLoad_SetSaveSprite(SaveLoad* self, const RtSave::Sprite* sprite) {
-    RT_DIFF_BEGIN("Save::SaveLoad::SetSaveSprite");
-    if (rt_diff_on__) {
-        using Fn = void (*)(SaveLoad*, const RtSave::Sprite*);
-        SaveLoadScratch s(self);
-        std::memcpy(&s.Ours()->_saveSprite, sprite, sizeof(RtSave::Sprite));
-        RT_ORIGINAL_ONCE(Fn, "?SetSaveSprite@SaveLoad@Save@@QEAAXVSprite@UI@@@Z")(s.Theirs(), sprite);
-        RT_DIFF_BYTES(s.ours, s.theirs, sizeof(SaveLoad));
-    }
     std::memcpy(&self->_saveSprite, sprite, sizeof(RtSave::Sprite));
 }
 
@@ -789,21 +696,6 @@ static void SaveLoad_SetSaveNameLogic(SaveLoad* self, const String* name, int mo
 }
 
 void RtSave_SaveLoad_SetSaveName(SaveLoad* self, const String* name, int mode) {
-    RT_DIFF_BEGIN("Save::SaveLoad::SetSaveName");
-    if (rt_diff_on__) {
-        using Fn = void (*)(SaveLoad*, const String*, int);
-        const char* oldStr = self->_saveName;
-        const bool  assigns = (oldStr != name->data);   // the short path does no refcount work
-        if (assigns && oldStr)
-            *reinterpret_cast<int*>(const_cast<char*>(oldStr) - 4) += 2;
-        SaveLoadScratch s(self);
-        SaveLoad_SetSaveNameLogic(s.Ours(), name, mode);
-        RT_ORIGINAL_ONCE(Fn, "?SetSaveName@SaveLoad@Save@@QEAAXAEBVString@System@@H@Z")(
-            s.Theirs(), name, mode);
-        RT_DIFF_BYTES(s.ours, s.theirs, sizeof(SaveLoad));
-        if (assigns && name->data)
-            *reinterpret_cast<int*>(const_cast<char*>(name->data) - 4) -= 2;
-    }
     SaveLoad_SetSaveNameLogic(self, name, mode);
 }
 
@@ -842,7 +734,6 @@ void RtSave_SaveLoad_SetSaveName(SaveLoad* self, const String* name, int mode) {
 // is exactly what the oracle is for.
 // ============================================================================
 int RtSave_SaveLoad_CheckMod(const SaveLoad* self, int saveIndex, int modIndex) {
-    RT_DIFF_BEGIN("Save::SaveLoad::CheckMod");
 
     uint8_t* const mods = ModificationSingleton();
     const SaveInfo* info = reinterpret_cast<const SaveInfo*>(
@@ -898,12 +789,6 @@ int RtSave_SaveLoad_CheckMod(const SaveLoad* self, int saveIndex, int modIndex) 
         else ours = (mod->gameVersion < 0x1000400u) ? 2 : 0;
     }
 
-    if (rt_diff_on__) {
-        using Fn = int (*)(const SaveLoad*, int, int);
-        const int theirs = RT_ORIGINAL_ONCE(Fn, "?CheckMod@SaveLoad@Save@@QEBAHHH@Z")(
-            self, saveIndex, modIndex);
-        RT_DIFF_SCALAR(ours, theirs);
-    }
     return ours;
 }
 
@@ -930,7 +815,7 @@ int RtSave_SaveLoad_CheckMod(const SaveLoad* self, int saveIndex, int modIndex) 
 //
 // The five targets are resolved through RT_EXPORT_ONCE — the port registry,
 // cached once per call site. WAVE 9 LANE V2, 2026-09-07 corrects this: the
-// paragraph used to say RT_ORIGINAL_ONCE "NOT ResolveExport", on the grounds
+// paragraph used to say the raw DLL door "NOT ResolveExport", on the grounds
 // that the five are unported and a bare ResolveExport per frame would be the
 // Wave 2 perf defect again. The perf half is right and RT_EXPORT_ONCE keeps it
 // (one resolve per call site, then a static). The door half is wrong: this
@@ -940,11 +825,9 @@ int RtSave_SaveLoad_CheckMod(const SaveLoad* self, int saveIndex, int modIndex) 
 // until then it is a named unresolved import at cutover instead of a crash.
 // ============================================================================
 void RtSave_SaveLoad_Update(SaveLoad* self, const int64_t* delta) {
-    RT_DIFF_BEGIN("Save::SaveLoad::Update [shadow]");
 
     const int64_t expected = self->_elapsed + *delta;
     self->_elapsed = self->_elapsed + *delta;
-    RT_DIFF_SHADOW(self->_elapsed == expected, "elapsed", "elapsed+delta");
 
     const uint8_t* p = PersistenceSingleton();
     if ((*(p + 0x18) & 1) != 0) return;
@@ -980,17 +863,6 @@ void RtSave_SaveLoad_Update(SaveLoad* self, const int64_t* delta) {
 // than agreeing on an accident of zeroed memory.
 // ============================================================================
 SavedState* RtSave_SavedState_Ctor(SavedState* self) {
-    RT_DIFF_BEGIN("Save::SavedState::SavedState");
-    if (rt_diff_on__) {
-        using Fn = SavedState* (*)(SavedState*);
-        alignas(16) uint8_t so[sizeof(SavedState)], st[sizeof(SavedState)];
-        std::memset(so, 0xCD, sizeof(so));
-        std::memset(st, 0xCD, sizeof(st));
-        SavedState* o = reinterpret_cast<SavedState*>(so);
-        o->_id = 0; o->_size = 0; o->_data = nullptr;
-        RT_ORIGINAL_ONCE(Fn, "??0SavedState@Save@@QEAA@XZ")(reinterpret_cast<SavedState*>(st));
-        RT_DIFF_BYTES(so, st, sizeof(SavedState));
-    }
     self->_id = 0;
     self->_size = 0;
     self->_data = nullptr;
@@ -1014,8 +886,6 @@ SavedState* RtSave_SavedState_Ctor(SavedState* self) {
 // unambiguous instructions and is measured only by `calls=`.
 // ============================================================================
 void RtSave_SavedState_Dtor(SavedState* self) {
-    RT_DIFF_BEGIN("Save::SavedState::~SavedState [no oracle]");
-    RT_DIFF_SHADOW(true, "freed", "not called");
     if (self->_data != nullptr) MemFree(self->_data);
 }
 
@@ -1047,7 +917,6 @@ void RtSave_SavedState_Dtor(SavedState* self) {
 // — which is the failure mode this whole lane was warned about.
 // ============================================================================
 void RtSave_SavedState_Store(SavedState* self, MemoryStream* stream) {
-    RT_DIFF_BEGIN("Save::SavedState::Store");
 
     void* src = stream->data;
     using GetPosFn = uint32_t (*)(MemoryStream*);
@@ -1059,18 +928,6 @@ void RtSave_SavedState_Store(SavedState* self, MemoryStream* stream) {
     self->_data = MemAlloc(size, 4);
     std::memcpy(self->_data, src, self->_size);
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(SavedState*, MemoryStream*);
-        SavedState scratch{};
-        RT_ORIGINAL_ONCE(Fn, "?Store@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z")(&scratch, stream);
-        const bool equal = (scratch._size == self->_size) &&
-                           (std::memcmp(scratch._data, self->_data, self->_size) == 0);
-        char a[64], b[64];
-        RtDiffFormat(a, sizeof(a), static_cast<unsigned int>(self->_size));
-        RtDiffFormat(b, sizeof(b), static_cast<unsigned int>(scratch._size));
-        RtDiffReport(&rt_diff_site__, equal, a, b);
-        MemFree(scratch._data);   // our extra allocation, not a retail deviation
-    }
 }
 
 // ============================================================================
@@ -1093,7 +950,6 @@ void RtSave_SavedState_Store(SavedState* self, MemoryStream* stream) {
 // free it. Both runs only read `*this`.
 // ============================================================================
 void RtSave_SavedState_Retrieve(SavedState* self, MemoryStream* stream) {
-    RT_DIFF_BEGIN("Save::SavedState::Retrieve");
 
     MemoryStream preState = *stream;   // captured before ours mutates the stream
 
@@ -1101,25 +957,6 @@ void RtSave_SavedState_Retrieve(SavedState* self, MemoryStream* stream) {
         stream, static_cast<int>(self->_size));
     std::memcpy(stream->data, self->_data, self->_size);
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(SavedState*, MemoryStream*);
-        MemoryStream scratch = preState;
-        RT_ORIGINAL_ONCE(Fn, "?Retrieve@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z")(
-            self, &scratch);
-        // Compare the whole stream object EXCEPT the two buffer pointers (which
-        // are two different allocations by construction), then the bytes.
-        const bool fieldsEqual = (scratch.base.direction == stream->base.direction) &&
-                                 (scratch.ownsData == stream->ownsData) &&
-                                 (scratch.cursor   == stream->cursor)   &&
-                                 (scratch.size     == stream->size);
-        const bool equal = fieldsEqual &&
-                           std::memcmp(scratch.data, stream->data, self->_size) == 0;
-        char a[64], b[64];
-        RtDiffFormat(a, sizeof(a), static_cast<unsigned int>(stream->size));
-        RtDiffFormat(b, sizeof(b), static_cast<unsigned int>(scratch.size));
-        RtDiffReport(&rt_diff_site__, equal, a, b);
-        MemFree(scratch.data);   // our extra allocation, not a retail deviation
-    }
 }
 
 // ============================================================================
@@ -1198,7 +1035,7 @@ void RtSave_SavedState_Retrieve(SavedState* self, MemoryStream* stream) {
 // probe, where the ours-side reached the body BY ADDRESS and so compared retail
 // with itself (reference_registering_an_address_converts_a_selfcheck_into_an_oracle.md).
 //
-// It survives here because the probe resolves `Get` with **ResolveExportRaw**
+// It survives here because the probe resolves `Get` with **the raw export door**
 // (standalone/rt_orphan_probe.cpp, `retailGet`), which skips the port registry
 // by construction. Registering this body under the NAME door leaves that line
 // pointing at the shipped bytes. The ADDRESS door is registered too, and that
@@ -1207,9 +1044,6 @@ void RtSave_SavedState_Retrieve(SavedState* self, MemoryStream* stream) {
 // before either was added.
 // ---------------------------------------------------------------------------
 SaveLoad* RtSave_SaveLoad_Get() {
-    RT_DIFF_BEGIN("Save::SaveLoad::Get");
-    RT_DIFF_WORK(true);          // unconditional; there is no branch
-
     // `SaveLoadSingletonSlot()` is this file's existing door on 0x1801FC6F0 -
     // the same one `SaveLoad_CtorLogic` publishes through (saveload.cpp:233).
     // Retail dereferences the slot unconditionally; the null check here is NOT

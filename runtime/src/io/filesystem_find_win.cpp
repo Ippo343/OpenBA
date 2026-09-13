@@ -20,7 +20,6 @@
 // (reference_resolveexport_phantom_names.md). The two internals have NO name in
 // either shipped build, which is why they are `RegisterRuntimeAddr` only.
 //
-// Kill switch: BANISHED_RT_FIND=0 removes this entire file — all five rows —
 // and leaves every call on the DLL.
 //
 // ---------------------------------------------------------------------------
@@ -320,8 +319,8 @@
 // evidence that the port, and nothing else that changed between builds, caused
 // the advance. So run attempt 13 twice on the SAME binary:
 //
-//   BANISHED_RT_FIND unset -> ??0PackageFile@,  #1 RtIo_FileSystem_LoadPackages
-//   BANISHED_RT_FIND=0     -> ?FindFiles@,      #1 RtIo_FileSystem_LoadPackages +0x111
+//   the old DLL-era switch unset -> ??0PackageFile@,  #1 RtIo_FileSystem_LoadPackages
+//   the old DLL-era switch     -> ?FindFiles@,      #1 RtIo_FileSystem_LoadPackages +0x111
 //
 // The =0 arm must reproduce attempt 12 EXACTLY — same symbol, same function,
 // same +0x111, same frame count. If it does not, the advance was not this
@@ -336,7 +335,7 @@
 //  * **A fault still naming `?FindFiles@` falsifies this hardest**, and points
 //    at the REGISTRATION rather than the body — check that
 //    `[RtPort] IO: N exports registered` moved by 3, and that
-//    BANISHED_RT_FIND is not set to 0 in the run's environment.
+//    the old DLL-era switch is not set to 0 in the run's environment.
 //  * A fault naming `?ReadPackfile@` instead means `??0PackageFile@` is
 //    satisfied from somewhere this lane did not find — good news, two rows in
 //    one step, and it would mean lane PKG's mint holdback (§8) is already met.
@@ -487,8 +486,8 @@ static const rtcoll::ArraySpec kSpec_Filename = {
     /*init   unwritten*/ 0, 0,
     /*seed zero       */ 0x00, 0x08 };
 
-// `= { { NAME }, ADDR }`, not an explicit field list — see RT_DIFF_BEGIN's own
-// comment in rt_diff.h: value-initialising the rest of RtDiffSite stays correct
+// `= { { NAME }, ADDR }`, not an explicit field list — see the diff oracle's own
+// comment in the diff oracle: value-initialising the rest of the diff oracle stays correct
 // when fields are appended, where a five-field list silently starts tripping
 // -Wmissing-field-initializers.
 rtcoll::Site g_j3_180026880 = {
@@ -512,7 +511,6 @@ static void AppendFilename(FilenameArray* out, const Filename* value) {
 // See §3. DIFF: full oracle — read-only on both sides.
 // ============================================================================
 bool RtIo_FileSystem_ExistsInPackfile(const void* fsVoid, const Filename* path) {
-    RT_DIFF_BEGIN("IO::FileSystem::ExistsInPackfile");
     const FileSystem* fs = static_cast<const FileSystem*>(fsVoid);
 
     bool ours = false;
@@ -563,7 +561,6 @@ bool RtIo_FileSystem_ExistsInPackfile(const void* fsVoid, const Filename* path) 
         RtString_ReleaseInline(&relPath);
     }
 
-    RT_DIFF_SCALAR(ours, RtOriginal<fn_ExistsOne_t>(kNameExistsInPackfile)(fs, path));
     return ours;
 }
 
@@ -574,7 +571,6 @@ bool RtIo_FileSystem_ExistsInPackfile(const void* fsVoid, const Filename* path) 
 // so running both sides mutates nothing.
 // ============================================================================
 bool RtIo_FileSystem_PlatformExists(const void* fsVoid, const Filename* path) {
-    RT_DIFF_BEGIN("IO::FileSystem::PlatformExists");
     (void)fsVoid;   // retail never reads `this`; RCX is destroyed at 0x1800adc7f
 
     WideString ws{nullptr};
@@ -582,7 +578,6 @@ bool RtIo_FileSystem_PlatformExists(const void* fsVoid, const Filename* path) {
     const bool ours = (::GetFileAttributesW(ws.data) != INVALID_FILE_ATTRIBUTES);
     RtString_ReleaseInline(reinterpret_cast<String*>(&ws));
 
-    RT_DIFF_SCALAR(ours, RtOriginal<fn_ExistsOne_t>(kNamePlatformExists)(fsVoid, path));
     return ours;
 }
 
@@ -694,53 +689,10 @@ static void FindFilesImpl(const void* fs, const String* dir, const String* patte
 
 void RtIo_FileSystem_FindFiles(const void* fs, const String* dir, const String* pattern,
                                bool recursive, FilenameArray* out) {
-    RT_DIFF_BEGIN("IO::FileSystem::FindFiles");
 
     const int32_t before = out->count;
     FindFilesImpl(fs, dir, pattern, recursive, out);
 
-    if (rt_diff_on__) {
-        // §7: a REAL comparison, not a shadow. The shipped body gets its own
-        // empty array, so replaying it neither doubles ours nor is affected by
-        // it. Inputs are not aliased to the output, so there is nothing to
-        // snapshot (reference_oracle_must_snapshot_aliased_inputs.md) — but
-        // note the shipped body ALSO runs AdjustDelimiters on the caller's
-        // shared `dir` buffer, which is idempotent, so the second pass changes
-        // nothing our pass had not already changed.
-        FilenameArray theirs{nullptr, 0, 0};
-        RtOriginal<fn_FindFiles_t>(kNameFindFiles)(fs, dir, pattern, recursive, &theirs);
-
-        const int32_t mine = out->count - before;
-        bool ok = (mine == theirs.count);
-        int firstBad = -1;
-        for (int32_t i = 0; ok && i < theirs.count; ++i) {
-            const char* a = out->data[before + i].data;
-            const char* b = theirs.data[i].data;
-            if ((a == nullptr) != (b == nullptr) ||
-                (a && std::strcmp(a, b) != 0)) { ok = false; firstBad = i; }
-        }
-
-        char ours[256], desc[256];
-        // The COUNT is in the message on purpose. §7: this comparison is worth
-        // exactly as much as the size and variety of the list it compared, and
-        // a reader cannot size it from `divergences=0` alone.
-        std::snprintf(ours, sizeof(ours), "added=%d recursive=%d firstBad=%d first=%.80s",
-                      static_cast<int>(mine), recursive ? 1 : 0, firstBad,
-                      (mine > 0 && out->data[before].data) ? out->data[before].data : "(none)");
-        std::snprintf(desc, sizeof(desc), "added=%d first=%.80s",
-                      static_cast<int>(theirs.count),
-                      (theirs.count > 0 && theirs.data[0].data) ? theirs.data[0].data : "(none)");
-        // RtDiffReport directly, NOT RT_DIFF_SHADOW: that macro's contract is
-        // "no call into the original happens here", and one just did. Same call
-        // the macro makes, without the misleading name on the site.
-        RtDiffReport(&rt_diff_site__, ok, ours, desc);
-        RT_DIFF_WORK(mine > 0);
-
-        // Tear the scratch array down the way retail's own callers do.
-        for (int32_t i = 0; i < theirs.count; ++i)
-            RtString_ReleaseInline(AsString(&theirs.data[i]));
-        RtSystem::RtMemFree(theirs.data);
-    }
 }
 
 }  // namespace RtIO

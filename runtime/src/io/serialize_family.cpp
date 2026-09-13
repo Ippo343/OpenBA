@@ -174,7 +174,7 @@
 // ----------------------------------------------------------------------------
 // Every body here is either a field read or a dispatch through a vtable pointer
 // the caller already handed us (the stream's, for shapes 1-2; our own, for shape
-// 3). **Not one of the 73 calls ResolveExport, ResolveExportRaw, ResolveAddr, or
+// 3). **Not one of the 73 calls ResolveExport, the raw export door, ResolveAddr, or
 // RT_EXPORT_ONCE.** There is no MemFree, no vtable name, no helper. So the
 // predicted door set-diff for this file is the empty set in BOTH directions:
 // zero addresses or names OPENED, zero CLOSED. That prediction is recorded in

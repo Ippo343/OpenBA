@@ -41,7 +41,7 @@
 // value it WOULD have written at each location, THEIRS then runs for real on
 // pristine state, and the two are compared location by location. The authority
 // is the shipped DLL, not our own expectation. This is deliberately NOT
-// `RT_DIFF_SHADOW`: the ~250 shadow sites in this tree take the port's own
+// `the diff oracle`: the ~250 shadow sites in this tree take the port's own
 // verdict and never consult the DLL, so a shared misunderstanding of retail
 // passes every one of them
 // (reference_shadow_marker_is_not_an_oracle.md).
@@ -50,7 +50,7 @@
 // stores; a predicting sink records. One body, one set of offsets, one control
 // flow — a separate predictor would be its own divergence hazard.
 //
-// GATE: BANISHED_RT_PREDICT=1, with BANISHED_RT_PREDICT_SELFTEST=1 as the
+// GATE: the old DLL-era switch, with the old DLL-era switch as the
 // negative control. Off by default and free when off.
 //
 // ----------------------------------------------------------------------------
@@ -66,11 +66,11 @@
 
 #include <windows.h>   // ResetEvent / SetEvent -- UpdateList state 0 calls both
 
+#include "../../funcs/rt_predict.h"
 #include "saveload_internal.h"
 #include "../../types/io/Persistence.h"
 #include "../../types/io/Modification.h"   // UpdateLoad reorders the mod list
 #include "../system/string.h"              // RtString_ReleaseInline
-#include "../../funcs/rt_predict.h"
 #include "resolve.h"   // ResolveAddr / Module -- the port-aware address door
 
 using RtSave::SaveLoad;
@@ -706,7 +706,7 @@ ModDtorFn ModEntryDtor() {
 // (menu -> Load -> select "Auto" -> Load click -> SetOperation(2), i.e. the
 // retail load path, not a synthetic driver).
 //
-//   1. ORACLE ON  (BANISHED_RT_PREDICT=1)
+//   1. ORACLE ON  (the old DLL-era switch)
 //        Save::SaveLoad::UpdateLoad  rounds=90  predictions=7  changed=7
 //                                    wrong=0  unpredicted=0
 //                                    excluded=8 byte(s), 5 suppressed call(s)
@@ -726,7 +726,7 @@ ModDtorFn ModEntryDtor() {
 //          under the min-time gate; the 7 predictions are state 0's progress,
 //          state 1's dirty + progress, and state 2's four-field tail.
 //
-//   2. NEGATIVE CONTROL  (+ BANISHED_RT_PREDICT_SELFTEST=1)
+//   2. NEGATIVE CONTROL  (+ the old DLL-era switch)
 //        wrong=3, and the site reports "self-test caught (the comparison can go
 //        red)". The two named catches are `_progress = 1` and
 //        `Modification::_dirty = 1`. A clean board from a comparison that
@@ -2120,47 +2120,17 @@ void UpdateListBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
 // ============================================================================
 
 void RtSave_SaveLoad_UpdateDelete(SaveLoad* self) {
-    RT_PREDICT_SITE("Save::SaveLoad::UpdateDelete");
-    if (RT_PREDICT_ON) {
-        RT_PREDICT_ROUND(round) {
-            round.Watch(self, sizeof(SaveLoad), "Save::SaveLoad");
-            UpdateDeleteBody(self, round.sink());
-            using Fn = void (*)(SaveLoad*);
-            RT_ORIGINAL_ONCE(Fn, "?UpdateDelete@SaveLoad@Save@@QEAAXXZ")(self);
-        }
-        return;
-    }
     RtSink live;
     UpdateDeleteBody(self, live);
 }
 
 void RtSave_SaveLoad_OnVideoRestart(SaveLoad* self) {
-    RT_PREDICT_SITE("Save::SaveLoad::OnVideoRestart");
-    if (RT_PREDICT_ON) {
-        RT_PREDICT_ROUND(round) {
-            round.Watch(self, sizeof(SaveLoad), "Save::SaveLoad");
-            OnVideoRestartBody(self, round.sink(), &round);
-            using Fn = void (*)(SaveLoad*);
-            RT_ORIGINAL_ONCE(Fn, "?OnVideoRestart@SaveLoad@Save@@QEAAXXZ")(self);
-        }
-        return;
-    }
     RtSink live;
     OnVideoRestartBody(self, live, nullptr);
 }
 
 
 void RtSave_SaveLoad_UpdateLoadFromFile(SaveLoad* self) {
-    RT_PREDICT_SITE("Save::SaveLoad::UpdateLoadFromFile");
-    if (RT_PREDICT_ON) {
-        RT_PREDICT_ROUND(round) {
-            round.Watch(self, sizeof(SaveLoad), "Save::SaveLoad");
-            UpdateLoadFromFileBody(self, round.sink(), &round);
-            using Fn = void (*)(SaveLoad*);
-            RT_ORIGINAL_ONCE(Fn, "?UpdateLoadFromFile@SaveLoad@Save@@QEAAXXZ")(self);
-        }
-        return;
-    }
     RtSink live;
     UpdateLoadFromFileBody(self, live, nullptr);
 }
@@ -2172,63 +2142,16 @@ void RtSave_SaveLoad_UpdateLoadFromFile(SaveLoad* self) {
 // banner). Watching 0x18 covers _dirty (+0x00), _mods (+0x08) and _count
 // (+0x10): the flag this body writes, plus the two fields it must NOT.
 void RtSave_SaveLoad_UpdateLoad(SaveLoad* self) {
-    RT_PREDICT_SITE("Save::SaveLoad::UpdateLoad");
-    if (RT_PREDICT_ON) {
-        RT_PREDICT_ROUND(round) {
-            round.Watch(self, sizeof(SaveLoad), "Save::SaveLoad");
-            if (uint8_t* mods = RtSaveDetail::ModificationSingleton())
-                round.Watch(mods, 0x18, "IO::Modification header");
-            UpdateLoadBody(self, round.sink(), &round);
-            using Fn = void (*)(SaveLoad*);
-            RT_ORIGINAL_ONCE(Fn, "?UpdateLoad@SaveLoad@Save@@QEAAXXZ")(self);
-        }
-        return;
-    }
     RtSink live;
     UpdateLoadBody(self, live, nullptr);
 }
 
 void RtSave_SaveLoad_UpdateSave(SaveLoad* self) {
-    RT_PREDICT_SITE("Save::SaveLoad::UpdateSave");
-    if (RT_PREDICT_ON) {
-        RT_PREDICT_ROUND(round) {
-            round.Watch(self, sizeof(SaveLoad), "Save::SaveLoad");
-            UpdateSaveBody(self, round.sink(), &round);
-            using Fn = void (*)(SaveLoad*);
-            RT_ORIGINAL_ONCE(Fn, "?UpdateSave@SaveLoad@Save@@QEAAXXZ")(self);
-        }
-        return;
-    }
     RtSink live;
     UpdateSaveBody(self, live, nullptr);
 }
 
 void RtSave_SaveLoad_UpdateList(SaveLoad* self) {
-    RT_PREDICT_SITE("Save::SaveLoad::UpdateList");
-    if (RT_PREDICT_ON) {
-        RT_PREDICT_ROUND(round) {
-            // The watch label carries the STATE, because "9 bytes changed
-            // inside Save::SaveLoad that you did not predict" is not actionable
-            // without knowing which of six state machines was running. The first
-            // two attempts at explaining this site's unpredicted writes both
-            // guessed the state wrong; naming it in the label settled it in one
-            // run. `Exclude` counts stayed flat across a build that added two
-            // unconditional Exclude()s, which is what proved the guess wrong —
-            // a quantity that does not move with the thing it measures.
-            static const char* const kStateLabel[7] = {
-                "Save::SaveLoad [state 0 clear]",  "Save::SaveLoad [state 1 build]",
-                "Save::SaveLoad [state 2 scan]",   "Save::SaveLoad [state 3 beginload]",
-                "Save::SaveLoad [state 4 meta]",   "Save::SaveLoad [state 5 finish]",
-                "Save::SaveLoad [state ?]",
-            };
-            const uint32_t st = self->_progress;
-            round.Watch(self, sizeof(SaveLoad), kStateLabel[st < 6 ? st : 6]);
-            UpdateListBody(self, round.sink(), &round);
-            using Fn = void (*)(SaveLoad*);
-            RT_ORIGINAL_ONCE(Fn, "?UpdateList@SaveLoad@Save@@QEAAXXZ")(self);
-        }
-        return;
-    }
     RtSink live;
     UpdateListBody(self, live, nullptr);
 }

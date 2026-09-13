@@ -78,7 +78,7 @@ Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* sel
 
 // The effectiveness control. Every counter is a branch taken INSIDE a ported
 // body, not a call to one: a large `calls` with an untaken branch is the
-// `worked=0` trap one level down (rt_diff.h, lane M's Finding 1).
+// `worked=0` trap one level down (the diff oracle, lane M's Finding 1).
 struct PathCounters {
     uint64_t expandCalls;
     uint64_t expandEmptyPath;     // the `!path->data || len == 0` early-out

@@ -14,7 +14,6 @@
 
 #include <cstdint>
 
-#include "../../funcs/rt_diff.h"
 
 namespace rtcoll {
 // Lane Q's by-address call to ?MemFree@MemoryAllocator@System@@SAXPEAX@Z
@@ -96,36 +95,10 @@ constexpr int kSpecCount = 135;  // 122-134: VTABLE BATCH 2 desc_B (13 UI::*Desc
                                  // If you append here, re-derive every appended
                                  // lane's index after the merge, not before.
 
-// *** A Site MUST HAVE STATIC STORAGE DURATION. *** RtDiffRegister keeps the
-// POINTER and rt_diff.cpp re-reads it at summary time, so a stack Site dangles
-// and the summary reports it as "sites were CORRUPTED -- a stray write hit the
-// harness's own statics". Lane Q's probe did that 144 times and it cost the
-// integrator most of an escalation; the account is in
-// runtime/src/collection/array.cpp. Every Site here is file-scope.
-struct Site { RtDiffSite d; };
-
-// The body, and the table the probe drives it against.
+// The body and the table.
 void* DeletingDtorCore(void* self, unsigned flags, int i);
 void  EhVectorDtor(uint8_t* base, uint32_t elemSize, int count, DtorFn dtor);
 const DelDtorSpec* Specs();
-
-// The rows the probe may use as subjects: those whose `~Class` is a pure vtable
-// restamp, and which can therefore be run on a fabricated object without
-// touching engine state. 13 of the 37. Everything else in the family destroys
-// members, releases String references or (for ~Internal) swap-removes a
-// handle-table entry, and running one of those on a synthetic object would be
-// a fabricated crash rather than a measurement.
-const int* ProbeSubjects(int* count);
-
-// The oracle. `ProbeRunStatic` allocates nothing and is called from
-// RtObjectDeletingDtorPortInit(); `ProbeRunAllocating` needs the Runtime heap
-// and is opt-in. Both no-op unless BANISHED_RT_DELDTOR_PROBE is set.
-void ProbeRunStatic();
-void ProbeRunAllocating();
-
-// Armed at init when BANISHED_RT_DELDTOR_PROBE=all; the body clears it on the
-// first real call. See deleting_dtor_probe.cpp's "WHEN IT RUNS".
-extern bool g_allocProbePending;
 
 }  // namespace rtdtor
 

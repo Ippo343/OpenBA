@@ -53,7 +53,6 @@
 #include "external_path.h"
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_diff.h"
 #include "../../types/io/FileSystem.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"
@@ -70,17 +69,15 @@
 //
 // `RtResPathTrampoline()` returns the trampoline holding retail's displaced
 // prologue, i.e. THE ORIGINAL BODY. The diff oracle must call that and never
-// `RtOriginal("?ExpandRelativePath@...")`: with the detour installed,
+// `the raw DLL door("?ExpandRelativePath@...")`: with the detour installed,
 // GetProcAddress hands back the PATCHED address and the "original" call would
-// re-enter our own body forever (RtOriginal IS GetProcAddress —
+// re-enter our own body forever (the raw DLL door IS GetProcAddress —
 // reference_rtoriginal_is_getprocaddress.md).
 // ---------------------------------------------------------------------------
 // Declared locally rather than including standalone/resolve.h, which drags in
 // <windows.h> -- the same reason external_set_probe.cpp:99 declares it.
 uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr);
 
-extern "C" bool  RtResPathInstallDetour(void* ourFn);
-extern "C" void* RtResPathTrampoline();
 
 namespace RtSystem {
 // Declared locally, house style (see runtime/src/io/filesystem_setupdirs_win.cpp
@@ -178,9 +175,8 @@ inline RtIO::FileSystem* FileSystemSingleton() {
 //
 // The self-test below drives all four in ONE process by setting this global
 // around each call, so a negative control does not cost a game launch each.
-// `BANISHED_RT_RESPATH_NEGCTL=<n>` also forces one for a live run.
+// `the old DLL-era switch=<n>` also forces one for a live run.
 // ---------------------------------------------------------------------------
-int g_negCtl = 0;
 
 // The self-test needs a live `ExternalFactory`, and at registration time there
 // is not one yet — MEASURED, not assumed: the first run of this port printed
@@ -190,11 +186,7 @@ int g_negCtl = 0;
 // call was handed. `g_inSelfTest` suppresses the counters and the live diff
 // while it runs so the measurement it sits inside stays a measurement of the
 // GAME's calls and not of the script's.
-bool g_selfTestArmed = false;
-bool g_selfTestDone  = false;
-bool g_inSelfTest    = false;
 
-void RunSelfTest(const ExternalFactory* factory, const Filename* livePath);
 
 const char* kUnderscore = "_";
 const char* kDot        = ".";
@@ -225,7 +217,6 @@ const char* kResource   = "resource";
 //     values to every caller: `ExpandRelativePath` tests `data == null`.
 // ============================================================================
 Filename* RtSystem_Filename_GetPathExtension(const Filename* self, Filename* ret) {
-    RT_DIFF_BEGIN("System::Filename::GetPathExtension");
     ++g_pc.extCalls;
 
     const char* const d = self->data;
@@ -234,7 +225,6 @@ Filename* RtSystem_Filename_GetPathExtension(const Filename* self, Filename* ret
     if (d == nullptr) {
         ret->data = nullptr;
         ++g_pc.extNullNoData;
-        RT_DIFF_WORK(false);
         return ret;
     }
 
@@ -266,7 +256,6 @@ Filename* RtSystem_Filename_GetPathExtension(const Filename* self, Filename* ret
     if (c < 0) {
         ret->data = nullptr;
         ++g_pc.extNoDot;
-        RT_DIFF_WORK(false);
         return ret;
     }
 
@@ -275,7 +264,6 @@ Filename* RtSystem_Filename_GetPathExtension(const Filename* self, Filename* ret
     if (start > end) {
         ret->data = nullptr;
         ++g_pc.extEmptyAfterDot;
-        RT_DIFF_WORK(false);
         return ret;
     }
 
@@ -290,25 +278,6 @@ Filename* RtSystem_Filename_GetPathExtension(const Filename* self, Filename* ret
     RtString_ReleaseInline(&tmp);               // 0x1800c65c5
     ++g_pc.extOk;
 
-    // Pure: reads a const buffer, allocates its own. Safe to replay, and the
-    // hidden return slot is a fresh temporary at every call site so ours and
-    // theirs never alias (the trap string.cpp:515 guards against).
-    //
-    // SUPPRESSED INSIDE THE SELF-TEST. The script's calls are not the game's,
-    // and letting them into `calls=` would make the site look better exercised
-    // than it is (rt_diff.h, lane M: a large `calls` is not coverage).
-    if (rt_diff_on__ && !g_inSelfTest) {
-        Filename theirs{nullptr};
-        RtOriginal<Filename* (*)(const Filename*, Filename*)>(
-            "?GetPathExtension@Filename@System@@QEBA?AV12@XZ")(self, &theirs);
-        const bool equal =
-            ((ret->data == nullptr) == (theirs.data == nullptr)) &&
-            (ret->data == nullptr || std::strcmp(ret->data, theirs.data) == 0);
-        RT_DIFF_SHADOW(equal, ret->data ? ret->data : "(null)",
-                       theirs.data ? theirs.data : "(null)");
-        RT_DIFF_WORK(true);
-        RtString_ReleaseInline(reinterpret_cast<String*>(&theirs));
-    }
     return ret;
 }
 
@@ -391,7 +360,7 @@ Filename* RtObject_ExternalFactory_GetPathStackDirectory(const ExternalFactory* 
 //     the factory, which is why nothing below touches `self`.
 //
 // THE ORACLE. Replayable: the body reads the factory and the filesystem and
-// writes only its own allocations. `RT_DIFF_SHADOW` compares the returned TEXT
+// writes only its own allocations. `the diff oracle` compares the returned TEXT
 // (the two buffers are always distinct pointers). The original is reached
 // through the DETOUR TRAMPOLINE, never through GetProcAddress — see the
 // `RtResPathTrampoline` note at the top of this file.
@@ -400,7 +369,6 @@ Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* sel
                                                       Filename* ret,
                                                       const Filename* path,
                                                       bool appendIdentifier) {
-    RT_DIFF_BEGIN("Object::ExternalFactory::ExpandRelativePath");
     ResLoadGuard resGuard;   // see THE RESOURCE-LOAD LOCK at the top
     ++g_pc.expandCalls;
 
@@ -408,11 +376,8 @@ Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* sel
     if (path->data == nullptr || BufLength(path->data) == 0) {
         ret->data = nullptr;                          // 0x1800bde7b
         ++g_pc.expandEmptyPath;
-        RT_DIFF_WORK(false);
         return ret;
     }
-
-    const int ctl = g_negCtl;
 
     // ---- 0x1800bd3b9-0x1800bd3ea: the four splits ---------------------------
     // Retail hands these four uninitialised stack slots; every callee writes
@@ -431,7 +396,7 @@ Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* sel
     if (ident.data == nullptr || BufLength(ident.data) == 0) {
         ++g_pc.identDefaulted;
         Filename tmp{nullptr};                                   // [RBP-0x61]
-        RtSystem_String_Set(AsStr(&tmp), ctl == 6 ? "resources" : kResource);
+        RtSystem_String_Set(AsStr(&tmp), kResource);
         RtSystem_Filename_AdjustDelimiters(&tmp);                // 0x1800bd418
         ReleaseThenAdopt(&ident, tmp.data);                      // 0x1800bd422
         RtSystem_Filename_AdjustDelimiters(&ident);              // 0x1800bd468
@@ -486,7 +451,7 @@ Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* sel
         RtSystem_String_Concat(&t1, AsStr(&dataDir), AsStr(&stackDir));
         RtSystem_String_Concat(&t2, &t1, AsStr(&dir));
         RtSystem_String_Concat(&t3, &t2, AsStr(&fname));
-        RtSystem_String_ConcatCStr(&t4, &t3, ctl == 1 ? "-" : kUnderscore);
+        RtSystem_String_ConcatCStr(&t4, &t3, kUnderscore);
         RtSystem_String_Concat(&t5, &t4, AsStr(&ident));
         RtSystem_String_ConcatCStr(&t6, &t5, kCrs);
 
@@ -562,10 +527,10 @@ Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* sel
     if (found) {
         // 0x1800bdabe: <stackDir><dir><fname>.<ext>
         String a{nullptr}, b{nullptr}, c{nullptr}, d{nullptr};
-        RtSystem_String_Concat(&a, AsStr(ctl == 3 ? &dir : &stackDir),
-                                   AsStr(ctl == 3 ? &stackDir : &dir));
-        RtSystem_String_Concat(&b, &a, AsStr(ctl == 5 ? &dir : &fname));
-        RtSystem_String_ConcatCStr(&c, &b, ctl == 2 ? "!" : kDot);
+        RtSystem_String_Concat(&a, AsStr(&stackDir),
+                                   AsStr(&dir));
+        RtSystem_String_Concat(&b, &a, AsStr(&fname));
+        RtSystem_String_ConcatCStr(&c, &b, kDot);
         RtSystem_String_Concat(&d, &c, AsStr(&ext));
         RtString_AdoptInline(AsStr(&result), d.data);            // 0x1800bdb06
         RtString_ReleaseInline(&d);
@@ -575,9 +540,8 @@ Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* sel
     } else {
         // 0x1800bdbc8: <dir><fname>.<ext> — the stack directory is DROPPED.
         String a{nullptr}, b{nullptr}, c{nullptr};
-        RtSystem_String_Concat(&a, AsStr(ctl == 5 ? &fname : &dir),
-                                   AsStr(ctl == 5 ? &dir : &fname));
-        RtSystem_String_ConcatCStr(&b, &a, ctl == 2 ? "!" : kDot);
+        RtSystem_String_Concat(&a, AsStr(&dir), AsStr(&fname));
+        RtSystem_String_ConcatCStr(&b, &a, kDot);
         RtSystem_String_Concat(&c, &b, AsStr(&ext));
         RtString_AdoptInline(AsStr(&result), c.data);            // 0x1800bdbff
         RtString_ReleaseInline(&c);
@@ -586,7 +550,7 @@ Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* sel
     }
 
     // ---- 0x1800bdc8c-0x1800bdd43: `if (appendIdentifier) result += ":" + ident`
-    if (appendIdentifier && ctl != 4) {
+    if (appendIdentifier) {
         ++g_pc.appendedIdentifier;
         String x{nullptr}, y{nullptr};                           // -0x51 / -0x49
         RtSystem_String_ConcatCStr(&x, AsStr(&result), kColon);
@@ -612,302 +576,10 @@ Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* sel
     RtString_ReleaseInline(AsStr(&ident));
     RtString_ReleaseInline(AsStr(&ext));
 
-    // The oracle. `theirs` is the DETOUR TRAMPOLINE — retail's displaced
-    // prologue followed by a jump back past our patch — so this calls the
-    // ORIGINAL body even though our code owns the address. With no detour
-    // installed there is no way to reach the original at all (GetProcAddress
-    // would return our own body once the export is registered), and the site
-    // correctly reports zero comparisons rather than comparing ours to ours
-    // (reference_converting_a_door_is_not_satisfying_it.md).
-    //
-    // SUPPRESSED INSIDE THE SELF-TEST, and that suppression is load-bearing
-    // rather than tidy: with a negative control armed our body is DELIBERATELY
-    // wrong, so a live diff over the script's calls would report the control's
-    // divergences as port defects and destroy the meaning of `divergences=0`.
-    if (rt_diff_on__ && !g_inSelfTest) {
-        typedef Filename* (*ExpandFn)(const ExternalFactory*, Filename*,
-                                      const Filename*, bool);
-        ExpandFn theirs = reinterpret_cast<ExpandFn>(RtResPathTrampoline());
-        if (theirs) {
-            Filename mirror{nullptr};
-            theirs(self, &mirror, path, appendIdentifier);
-            const bool equal =
-                ((ret->data == nullptr) == (mirror.data == nullptr)) &&
-                (ret->data == nullptr || std::strcmp(ret->data, mirror.data) == 0);
-            RT_DIFF_SHADOW(equal, ret->data ? ret->data : "(null)",
-                           mirror.data ? mirror.data : "(null)");
-            RT_DIFF_WORK(true);
-            RtString_ReleaseInline(AsStr(&mirror));
-        }
-    }
-
-    // The self-test rides the FIRST real call, which is the earliest moment a
-    // live `ExternalFactory` exists. `g_selfTestDone` is set BEFORE the call so
-    // the re-entry the script causes cannot re-arm it.
-    if (g_selfTestArmed && !g_selfTestDone && !g_inSelfTest) {
-        g_selfTestDone = true;
-        RunSelfTest(self, path);
-    }
     return ret;
 }
 
-// ============================================================================
-// The self-test: five controls in one process
-// ============================================================================
-//
-// `BANISHED_RT_RESPATH_SELFTEST=1`. Drives our body and the ORIGINAL body over
-// a fixed script of inputs, once with the real code and once for each of the
-// four perturbations, and reports how many of the four made the comparison
-// FAIL. A control that does not fire is reported as a MISS, not explained away
-// (reference_probe_needs_an_effectiveness_control.md).
-//
-// It runs after registration and before the first resource load, on the main
-// thread, so the path stack is empty and the identifier/filename defaults are
-// the branches it can reach. It is NOT a substitute for the live diff — it
-// cannot reach `filenameFromStack` or `hitPackfile` — and the write-up says so.
-// ============================================================================
 namespace {
-
-const char* const kSelfTestPaths[] = {
-    "Terrain/Grass.rsc",
-    "Terrain/Grass.rsc:material",
-    "Dialog/MainMenu.rsc",
-    "Models/House/House.rsc:mesh",
-    "NoExtensionHere",
-    ":identifierOnly",
-    "Deep/Nested/Path/Thing.png",
-};
-
-bool RunOneSelfTestCase(const ExternalFactory* factory, const char* text,
-                        bool appendIdentifier, int ctl, bool* comparedOut) {
-    Filename in{nullptr};
-    RtSystem_String_Set(AsStr(&in), text);
-    RtSystem_Filename_AdjustDelimiters(&in);
-
-    typedef Filename* (*ExpandFn)(const ExternalFactory*, Filename*,
-                                  const Filename*, bool);
-    ExpandFn theirs = reinterpret_cast<ExpandFn>(RtResPathTrampoline());
-    if (!theirs) { *comparedOut = false; RtString_ReleaseInline(AsStr(&in)); return true; }
-
-    Filename ours{nullptr}, mirror{nullptr};
-    g_negCtl = ctl;
-    RtObject_ExternalFactory_ExpandRelativePath(factory, &ours, &in, appendIdentifier);
-    g_negCtl = 0;
-    theirs(factory, &mirror, &in, appendIdentifier);
-
-    const bool equal =
-        ((ours.data == nullptr) == (mirror.data == nullptr)) &&
-        (ours.data == nullptr || std::strcmp(ours.data, mirror.data) == 0);
-
-    if (!equal && ctl == 0) {
-        printf("[ResPath]   MISMATCH on \"%s\" append=%d: ours=\"%s\" theirs=\"%s\"\n",
-                    text, appendIdentifier ? 1 : 0,
-                    ours.data ? ours.data : "(null)",
-                    mirror.data ? mirror.data : "(null)");
-    }
-
-    RtString_ReleaseInline(AsStr(&mirror));
-    RtString_ReleaseInline(AsStr(&ours));
-    RtString_ReleaseInline(AsStr(&in));
-    *comparedOut = true;
-    return equal;
-}
-
-// ---------------------------------------------------------------------------
-// THE SYNTHETIC PATH STACK, and why the script builds one with RETAIL's OWN
-// writer instead of poking the array.
-//
-// The first run of this self-test reported `2 of 4 FIRED` and was right to.
-// The two that missed both perturb code that is UNREACHABLE while the path
-// stack is empty — and it is empty on every one of the game's 22,583 calls
-// (`stack empty/nonempty=22583/0`). With `stackDir` null, the found branch
-// (`stackDir + dir + file + "." + ext`) and the not-found branch
-// (`dir + file + "." + ext`) produce the SAME TEXT, so the entire existence
-// probe has no observable effect and a control that perturbs it cannot fire.
-//
-// So the script pushes a real entry. Not by writing `_pathStack` — that would
-// be a fake whose layout is the very thing under test — but through
-// `?PushPath@ExternalFactory@Object@@QEAAXAEBVFilename@System@@@Z`, the DLL's
-// own writer, resolved RAW. Retail builds the entry; we only read it. The push
-// is popped again with retail's `PopPath` and the depth is asserted back to
-// where it started (reference_synthetic_subject_beats_a_fake.md).
-//
-// The pushed entry is the path of the LIVE call this self-test is riding on,
-// which is the one path we know exists on disk. Querying `":<identifier>"`
-// against it then rebuilds EXACTLY the candidate that live call built and
-// found — so `found` is true AND `stackDir` is non-empty, the one combination
-// in which the found/not-found split is observable at all.
-// ---------------------------------------------------------------------------
-typedef void (*PushPathFn)(ExternalFactory*, const Filename*);
-typedef void (*PopPathFn)(ExternalFactory*);
-
-void RunSelfTest(const ExternalFactory* factory, const Filename* livePath) {
-    if (!factory) {
-        printf("[ResPath] SELFTEST SKIPPED -- no ExternalFactory; "
-                    "NO COMPARISON WAS MADE\n");
-        return;
-    }
-    if (!RtResPathTrampoline()) {
-        printf("[ResPath] SELFTEST SKIPPED -- no detour trampoline, so the "
-                    "original body is unreachable; NO COMPARISON WAS MADE\n");
-        return;
-    }
-
-    const int nPaths = static_cast<int>(sizeof(kSelfTestPaths) / sizeof(kSelfTestPaths[0]));
-    int compared = 0, mismatches = 0;
-    int ctlFired[7] = { 0, 0, 0, 0, 0, 0, 0 };
-
-    // Snapshot/restore rather than a guard at each `++`: the script must leave
-    // NO trace in the effectiveness control, or the control stops measuring the
-    // game and starts measuring itself.
-    const PathCounters saved = g_pc;
-    g_inSelfTest = true;
-
-    // ---- phase 1: the synthetic paths, path stack EMPTY --------------------
-    for (int ctl = 0; ctl <= 6; ++ctl) {
-        for (int i = 0; i < nPaths; ++i) {
-            for (int ap = 0; ap <= 1; ++ap) {
-                bool did = false;
-                const bool eq = RunOneSelfTestCase(factory, kSelfTestPaths[i],
-                                                   ap != 0, ctl, &did);
-                if (!did) continue;
-                if (ctl == 0) { ++compared; if (!eq) ++mismatches; }
-                else if (!eq) ++ctlFired[ctl];
-            }
-        }
-    }
-
-    const uint64_t pkgHitsPhase1 = g_pc.hitPackfile - saved.hitPackfile;
-
-    // ---- phase 2: the same script with a REAL entry on the path stack ------
-    ExternalFactory* mutableFactory = const_cast<ExternalFactory*>(factory);
-    const int32_t depthBefore = factory->_pathStack._size;
-    int  phase2Cases = 0;
-    bool phase2Ran   = false;
-
-    // RAW ADDRESS DOORS, not RtOriginal-by-name, and the reason is a
-    // MEASUREMENT this lane made on itself. Reaching these two by their mangled
-    // names put `?PushPath@` and `?PopPath@` onto
-    // `tools/unsatisfied_export_scan.py`'s list -- two names resolved through a
-    // door with neither a port nor a mint -- so the lane's door SET-DIFF came
-    // out CLOSED 0 / OPENED 2. That is the "closes 3, opens 4" trade the rule
-    // exists to stop, and the instrument caught it, not review.
-    //
-    // `ResolveRuntimeRaw` is the house door for oracle-only reaches into the
-    // shipped DLL (runtime/src/object/external_set_probe.cpp:229-231 uses it
-    // for exactly this). At cutover it resolves null, `phase2Ran` stays false,
-    // and the report says DID NOT RUN instead of comparing against nothing
-    // (reference_by_address_door_dies_at_cutover.md).
-    PushPathFn push = reinterpret_cast<PushPathFn>(ResolveRuntimeRaw(0x1800bd0e0));
-    PopPathFn  pop  = reinterpret_cast<PopPathFn> (ResolveRuntimeRaw(0x1800bd040));
-
-    if (livePath && livePath->data && push && pop) {
-        push(mutableFactory, livePath);
-        phase2Ran = (factory->_pathStack._size == depthBefore + 1);
-
-        if (phase2Ran) {
-            // `":" + <the live path's identifier>` — the exact shape retail
-            // uses for a reference to a sibling of the file being parsed, and
-            // the one that rebuilds the candidate the live call just found.
-            Filename liveIdent{nullptr};
-            RtSystem_Filename_GetPathIdentifer(livePath, &liveIdent);
-            char query[256];
-            std::snprintf(query, sizeof(query), ":%s",
-                          (liveIdent.data && liveIdent.data[0]) ? liveIdent.data
-                                                                : "resource");
-            RtString_ReleaseInline(AsStr(&liveIdent));
-
-            for (int ctl = 0; ctl <= 6; ++ctl) {
-                for (int ap = 0; ap <= 1; ++ap) {
-                    bool did = false;
-                    const bool eq = RunOneSelfTestCase(factory, query, ap != 0,
-                                                       ctl, &did);
-                    if (!did) continue;
-                    ++phase2Cases;
-                    if (ctl == 0) { ++compared; if (!eq) ++mismatches; }
-                    else if (!eq) ++ctlFired[ctl];
-                }
-                for (int i = 0; i < nPaths; ++i) {
-                    bool did = false;
-                    const bool eq = RunOneSelfTestCase(factory, kSelfTestPaths[i],
-                                                       true, ctl, &did);
-                    if (!did) continue;
-                    ++phase2Cases;
-                    if (ctl == 0) { ++compared; if (!eq) ++mismatches; }
-                    else if (!eq) ++ctlFired[ctl];
-                }
-            }
-            pop(mutableFactory);
-        }
-    }
-    const int32_t depthAfter = factory->_pathStack._size;
-
-    const uint64_t pkgHitsTotal  = g_pc.hitPackfile - saved.hitPackfile;
-    const uint64_t pkgHitsPhase2 = pkgHitsTotal - pkgHitsPhase1;
-    g_inSelfTest = false;
-
-    printf("[ResPath] SELFTEST phase2 (synthetic path stack via retail PushPath): "
-                "%s, %d cases, depth %d -> %d -> %d%s | pushed \"%s\" | "
-                "packfile hits phase1/phase2 = %llu/%llu\n",
-                phase2Ran ? "RAN" : "DID NOT RUN", phase2Cases,
-                (int)depthBefore, phase2Ran ? (int)depthBefore + 1 : (int)depthBefore,
-                (int)depthAfter,
-                depthAfter == depthBefore ? "" : "  *** DEPTH NOT RESTORED",
-                (livePath && livePath->data) ? livePath->data : "(none)",
-                (unsigned long long)pkgHitsPhase1,
-                (unsigned long long)pkgHitsPhase2);
-    // The script's own branch coverage, printed BEFORE the restore so it is
-    // visible and separate from the game's.
-    printf("[ResPath] SELFTEST branch coverage (script only): "
-                "calls=%llu earlyOutEmpty=%llu pkgHit=%llu "
-                "ident def/present=%llu/%llu fname stack/present=%llu/%llu "
-                "attrProbe=%llu retry=%llu ext nodot=%llu emptyAfterDot=%llu "
-                "nodata=%llu colonTrim=%llu\n",
-                (unsigned long long)(g_pc.expandCalls       - saved.expandCalls),
-                (unsigned long long)(g_pc.expandEmptyPath   - saved.expandEmptyPath),
-                (unsigned long long)(g_pc.hitPackfile       - saved.hitPackfile),
-                (unsigned long long)(g_pc.identDefaulted    - saved.identDefaulted),
-                (unsigned long long)(g_pc.identPresent      - saved.identPresent),
-                (unsigned long long)(g_pc.filenameFromStack - saved.filenameFromStack),
-                (unsigned long long)(g_pc.filenamePresent   - saved.filenamePresent),
-                (unsigned long long)(g_pc.attrProbeEntered  - saved.attrProbeEntered),
-                (unsigned long long)(g_pc.hitPackfileRetry + g_pc.notFound
-                                     - saved.hitPackfileRetry - saved.notFound),
-                (unsigned long long)(g_pc.extNoDot          - saved.extNoDot),
-                (unsigned long long)(g_pc.extEmptyAfterDot  - saved.extEmptyAfterDot),
-                (unsigned long long)(g_pc.extNullNoData     - saved.extNullNoData),
-                (unsigned long long)(g_pc.extColonTrim      - saved.extColonTrim));
-    g_pc = saved;
-
-    printf("[ResPath] SELFTEST -- %d real comparisons, %d mismatches\n",
-                compared, mismatches);
-    int fired = 0;
-    for (int c = 1; c <= 6; ++c) if (ctlFired[c] > 0) ++fired;
-    printf("[ResPath]   negative controls: %d of 6 FIRED "
-                "(ctl1 candidate '_'->'-': %d, ctl2 answer '.'->'!': %d, "
-                "ctl3 found-branch dir/stackDir swap: %d, ctl4 drop ':'+ident: %d, "
-                "ctl5 answer dir/file swap: %d, ctl6 default ident 'resources': %d)\n",
-                fired, ctlFired[1], ctlFired[2], ctlFired[3], ctlFired[4],
-                ctlFired[5], ctlFired[6]);
-    if (fired != 6)
-        printf("[ResPath]   *** %d control(s) did NOT fire, and they are NOT "
-                    "reshaped until they do. What is MEASURED: phase 2 reached the "
-                    "found branch %llu times, so that branch DOES execute -- what is "
-                    "not demonstrated is an input on which either perturbation changes "
-                    "the OUTPUT. ctl3 swaps dir with stackDir, and every phase-2 case "
-                    "that reaches the found branch has an EMPTY dir (the query is "
-                    "\":<ident>\"), so the swap is a no-op by construction. ctl1 "
-                    "perturbs the candidate, which can only change the answer where "
-                    "the found and not-found spellings differ. Neither is an effective "
-                    "control here: the code they touch is TRANSCRIBED, not "
-                    "differentially verified by this script. The 22.6k live "
-                    "comparisons cover it; this script does not.\n",
-                    6 - fired, (unsigned long long)pkgHitsPhase2);
-    printf("[ResPath]   VERDICT: %s\n",
-                (mismatches == 0 && fired >= 4 && compared > 0)
-                    ? "PASS on the reachable controls; see the line above for the rest"
-                    : "NOT A PASS -- see the lines above.");
-}
 
 void DumpCounters() {
     printf("[ResPath] counters: expand=%llu empty=%llu | ident def/present=%llu/%llu "
@@ -972,24 +644,9 @@ int RtObjectExternalPathRegister() {
     RegisterRuntimeAddr(0x1800bcfd0, (void*)&RtObject_ExternalFactory_GetPathStackDirectory);
     RegisterRuntimeAddr(0x1800bd360, (void*)&RtObject_ExternalFactory_ExpandRelativePath);
 
-    // The live-coverage seam. OPT-IN: nothing goes default-on unproven
-    // (standalone/runtime_detour.h, "every detour gets an env kill-switch").
-    // With it off this port has no caller and honestly reports calls=0.
-    bool detoured = false;
-    if (RtWaveEnabled("BANISHED_RT_RESPATH_DETOUR") &&
-        std::getenv("BANISHED_RT_RESPATH_DETOUR") != nullptr) {
-        detoured = RtResPathInstallDetour(
-            (void*)&RtObject_ExternalFactory_ExpandRelativePath);
-    }
-
-    if (const char* e = std::getenv("BANISHED_RT_RESPATH_NEGCTL"))
-        g_negCtl = std::atoi(e);
-
-    printf("[ResPath] registered %d doors + 4 addresses (detour=%s negctl=%d)\n",
-                n, detoured ? "ON" : "off", g_negCtl);
+    printf("[ResPath] registered %d doors + 4 addresses\n", n);
     std::fflush(stdout);
 
-    g_selfTestArmed = (std::getenv("BANISHED_RT_RESPATH_SELFTEST") != nullptr);
     std::atexit(&DumpCounters);
     return n;
 }

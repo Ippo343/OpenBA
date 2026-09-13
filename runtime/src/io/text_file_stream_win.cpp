@@ -62,7 +62,6 @@
 #include <windows.h>
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_diff.h"
 #include "../../types/io/FileStream.h"
 #include "../../types/io/FileSystem.h"
 #include "../../types/system/String.h"
@@ -218,7 +217,6 @@ uint64_t g_tfsAtt = 0;
 // return type.
 // ============================================================================
 extern "C" uint32_t RtIo_TextFileStream_GetSize(const TextFileStream* self) {
-    RT_DIFF_BEGIN("IO::TextFileStream::GetSize");
     bool useBuffer = (self->buffer != nullptr);
     if (g_tfsCtl == 1) { ++g_tfsAtt; useBuffer = false; }
     if (useBuffer) {                                                // 1800ba8e0
@@ -230,7 +228,6 @@ extern "C" uint32_t RtIo_TextFileStream_GetSize(const TextFileStream* self) {
 }
 
 extern "C" uint32_t RtIo_TextFileStream_GetCurrentPos(const TextFileStream* self) {
-    RT_DIFF_BEGIN("IO::TextFileStream::GetCurrentPos");
     if (self->buffer != nullptr) {                                  // 1800bac30
         ++g_tfs.getPosBuffer;
         return static_cast<uint32_t>(*TfsBufCursor(self));          // 1800bac37  +0x7c
@@ -274,7 +271,6 @@ extern "C" uint32_t RtIo_TextFileStream_GetCurrentPos(const TextFileStream* self
 // it; flagged for whoever owns it.
 // ============================================================================
 extern "C" bool RtIo_TextFileStream_Read(TextFileStream* self, int32_t len, void* buf) {
-    RT_DIFF_BEGIN("IO::TextFileStream::Read");
     ++g_tfs.read;
 
     int32_t* const cursor = TfsBufCursor(self);
@@ -289,7 +285,6 @@ extern "C" bool RtIo_TextFileStream_Read(TextFileStream* self, int32_t len, void
 
     if (g_tfsCtl == 3) { ++g_tfsAtt; }
     else               { *cursor += len; }                         // 1800ba926
-    RT_DIFF_WORK(true);
     return true;                                                   // 1800ba92e
 }
 
@@ -308,7 +303,7 @@ extern "C" bool RtIo_TextFileStream_Read(TextFileStream* self, int32_t len, void
 // file_stream_win.cpp:128 already ports. It is TRANSCRIBED here rather than
 // delegated to that body: retail duplicates the code rather than calling it, so
 // delegating would attribute this slot's calls to the other slot's counters and
-// would make an A/B on `BANISHED_RT_FSSLOTS` silently move this row too.
+// would make an A/B on `the old DLL-era switch` silently move this row too.
 //
 // The discriminator is `CMP dword [RCX+0x20],-0x3 ; JA` and it is **UNSIGNED**:
 // the Win32 path is taken when `handle` is -1 or -2 ("nothing opened" and
@@ -325,7 +320,6 @@ extern "C" bool RtIo_TextFileStream_Read(TextFileStream* self, int32_t len, void
 // ignores the return would still be correctly positioned.
 // ============================================================================
 extern "C" bool RtIo_TextFileStream_SetCurrentPos(TextFileStream* self, int32_t pos) {
-    RT_DIFF_BEGIN("IO::TextFileStream::SetCurrentPos");
 
     if (self->buffer != nullptr) {                                 // 1800babd6
         ++g_tfs.setPosBuffer;
@@ -333,7 +327,6 @@ extern "C" bool RtIo_TextFileStream_SetCurrentPos(TextFileStream* self, int32_t 
         *TfsBufCursor(self) = pos;                                 // 1800babdf  +0x7c
         bool ok = (pos >= 0) && (pos < size);                      // 1800babe2/e6
         if (g_tfsCtl == 2) { ++g_tfsAtt; ok = (pos >= 0) && (pos <= size); }
-        RT_DIFF_WORK(ok);
         return ok;
     }
 
@@ -342,7 +335,6 @@ extern "C" bool RtIo_TextFileStream_SetCurrentPos(TextFileStream* self, int32_t 
 
     // UNSIGNED — see the header note.
     if (static_cast<uint32_t>(self->base.file.handle) <= 0xfffffffdu) {  // 1800babfe/05
-        RT_DIFF_WORK(true);
         return true;                                               // 1800bac07
     }
 
@@ -351,7 +343,6 @@ extern "C" bool RtIo_TextFileStream_SetCurrentPos(TextFileStream* self, int32_t 
         reinterpret_cast<HANDLE>(self->base.file.winHandle),       // 1800bac0f  +0x38
         pos, nullptr, FILE_BEGIN);                                 // 1800bac13/16
     const bool ok = (static_cast<int32_t>(got) == pos);            // 1800bac1f
-    RT_DIFF_WORK(true);
     return ok;
 }
 
@@ -414,7 +405,6 @@ extern "C" bool RtIo_TextFileStream_SetCurrentPos(TextFileStream* self, int32_t 
 extern "C" bool RtIo_TextFileStream_Create(TextFileStream* self, const Filename* path,
                                            int32_t requestedFormat,
                                            int32_t activeEncoding) {
-    RT_DIFF_BEGIN("IO::TextFileStream::Create");
     ++g_tfs.create;
 
     self->requestedFormat = requestedFormat;                 // 1800ba949  +0x68
@@ -422,7 +412,6 @@ extern "C" bool RtIo_TextFileStream_Create(TextFileStream* self, const Filename*
 
     if (!RtIo_FileStream_Create(&self->base, path)) {        // 1800ba951
         ++g_tfs.createFailed;
-        RT_DIFF_WORK(false);
         return false;                                        // 1800ba95a
     }
 
@@ -448,7 +437,6 @@ extern "C" bool RtIo_TextFileStream_Create(TextFileStream* self, const Filename*
         self->base.file.cursor += static_cast<int32_t>(written);              // 1800ba9d3
     }
 
-    RT_DIFF_WORK(true);
     return true;                                             // 1800ba9d6
 }
 
@@ -564,7 +552,7 @@ extern "C" bool RtIo_TextFileStream_Create(TextFileStream* self, const Filename*
 // CLOSES it, and installs an owned buffer at `+0x70`; a replay would run
 // against a closed handle and leak the first buffer, and the second call could
 // not read the same bytes because the first one closed the file. Neither is
-// diffable in either direction. `RT_DIFF_WORK` records liveness only.
+// diffable in either direction. `the diff oracle` records liveness only.
 //
 // UNVERIFIED: neither body has been observed executing.
 // ============================================================================
@@ -650,7 +638,6 @@ using FnMemFree  = void  (*)(void*);
 // ============================================================================
 extern "C" bool RtIo_TextFileStream_Write(TextFileStream* self, int32_t len,
                                           const void* buf) {
-    RT_DIFF_BEGIN("IO::TextFileStream::Write");
     ++g_tfs.write;
 
     int32_t srcFormat = self->requestedFormat;                  // 1800baa03  +0x68
@@ -664,7 +651,6 @@ extern "C" bool RtIo_TextFileStream_Write(TextFileStream* self, int32_t len,
                     buf, static_cast<DWORD>(len), &written, nullptr);     // 1800baa30
         self->base.file.cursor += static_cast<int32_t>(written);          // 1800baa3d
         const bool ok = (static_cast<int32_t>(written) == len);           // 1800baa41
-        RT_DIFF_WORK(ok);
         return ok;                                              // 1800baa48
     }
 
@@ -713,7 +699,6 @@ extern "C" bool RtIo_TextFileStream_Write(TextFileStream* self, int32_t len,
         "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(dst);     // 1800bab94
 
     const bool ok = (static_cast<int32_t>(written) == outBytes);  // 1800bab9e
-    RT_DIFF_WORK(ok);
     return ok;
 }
 
@@ -767,12 +752,10 @@ extern "C" bool RtIo_TextFileStream_Write(TextFileStream* self, int32_t len,
 // ============================================================================
 extern "C" bool RtIo_TextFileStream_Open(TextFileStream* self, const Filename* path,
                                          int32_t format) {
-    RT_DIFF_BEGIN("IO::TextFileStream::Open");
     ++g_tfs.open;
 
     if (!RtIo_FileStream_Open(&self->base, path)) {             // 1800ba652
         ++g_tfs.openFailed;
-        RT_DIFF_WORK(false);
         return false;                                           // 1800ba659
     }
 
@@ -861,7 +844,6 @@ extern "C" bool RtIo_TextFileStream_Open(TextFileStream* self, const Filename* p
     RT_EXPORT_ONCE(FnMemFree,
         "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(raw);     // 1800ba89e
     self->activeEncoding = format;                              // 1800ba8cc  +0x6c
-    RT_DIFF_WORK(true);
     return true;                                                // 1800ba8d0
 }
 
@@ -930,13 +912,13 @@ extern "C" bool RtIo_TextFileStream_Open(TextFileStream* self, const Filename* p
 // two of them take its address, so each does observable work. Not empty.
 //
 // ---- THE ORACLE ------------------------------------------------------------
-// `RT_DIFF_SCALAR(ours, RtOriginal<...>)`: `RtOriginal` is `ResolveExportRaw`,
+// `the diff oracle(ours, the raw DLL door<...>)`: `the raw DLL door` is `the raw export door`,
 // i.e. GetProcAddress against the SHIPPED DLL, which never consults the port
 // registry — so this compares OUR body with RETAIL'S body and not with itself
 // (reference_a_probe_whose_ours_side_reaches_the_body_by_address..., and
 // reference_shadow_marker_is_not_an_oracle.md). It costs a GetProcAddress per
-// call and that is only acceptable because `RT_DIFF_SCALAR` evaluates nothing
-// at all unless `BANISHED_RT_DIFF=1` (the Wave 2 5.6-point perf breach was
+// call and that is only acceptable because `the diff oracle` evaluates nothing
+// at all unless `the old DLL-era switch` (the Wave 2 5.6-point perf breach was
 // exactly this call OUTSIDE a diff guard).
 //
 // Read the `calls=` column and not only `divergences=`: a port with no caller
@@ -948,28 +930,17 @@ using FnGetObjStr = char* const* (*)(const TextFileStream*);
 using FnGetObjVer = int32_t      (*)(const TextFileStream*);
 
 extern "C" int32_t RtIo_TextFileStream_GetObjectVersion(const TextFileStream* self) {
-    RT_DIFF_BEGIN("IO::TextFileStream::GetObjectVersion");
     const int32_t ours = self->objectVersion;                   // 1800ba250  +0x50
-    RT_DIFF_SCALAR(ours, RtOriginal<FnGetObjVer>(
-        "?GetObjectVersion@TextFileStream@IO@@QEBAHXZ")(self));
     return ours;                                                // 1800ba253
 }
 
 extern "C" char* const* RtIo_TextFileStream_GetObjectType(const TextFileStream* self) {
-    RT_DIFF_BEGIN("IO::TextFileStream::GetObjectType");
     char* const* ours = &self->objectType;                      // 1800ba260  +0x60
-    RT_DIFF_SCALAR(static_cast<const void*>(ours),
-                   static_cast<const void*>(RtOriginal<FnGetObjStr>(
-        "?GetObjectType@TextFileStream@IO@@QEBAAEBVString@System@@XZ")(self)));
     return ours;                                                // 1800ba264
 }
 
 extern "C" char* const* RtIo_TextFileStream_GetObjectName(const TextFileStream* self) {
-    RT_DIFF_BEGIN("IO::TextFileStream::GetObjectName");
     char* const* ours = &self->objectName;                      // 1800ba270  +0x58
-    RT_DIFF_SCALAR(static_cast<const void*>(ours),
-                   static_cast<const void*>(RtOriginal<FnGetObjStr>(
-        "?GetObjectName@TextFileStream@IO@@QEBAAEBVString@System@@XZ")(self)));
     return ours;                                                // 1800ba274
 }
 

@@ -16,7 +16,6 @@
 // Names and ordinals printed out of Runtime-x64.dll's export directory with
 // `pefile`. `tools/export_name_audit.py` re-checks them.
 //
-// Kill switch: BANISHED_RT_OPENFILE=0 leaves all of it on the DLL.
 //
 // **THIS FILE IS `_win` BECAUSE IT GENUINELY IS** (PLAN §4.1): the bodies below
 // call CreateFileW, ReadFile, SetFilePointer and GetFileSize. All four were
@@ -214,7 +213,6 @@ inline int32_t StrLenOf(const char* data) {
 // wrapper around it and porting one without the other would leave the wrapper
 // standing on a null at cutover.
 extern "C" FileInfo* RtIo_FileInfo_CopyCtor(FileInfo* dst, const FileInfo* src) {
-    RT_DIFF_BEGIN("IO::FileSystem::FileInfo::FileInfo(const&)");
 
     dst->handle     = src->handle;       // 18000c12e
     dst->_unk04     = src->_unk04;       // 18000c132
@@ -232,10 +230,6 @@ extern "C" FileInfo* RtIo_FileInfo_CopyCtor(FileInfo* dst, const FileInfo* src) 
     // No replay oracle: the Filename copy ctors AddRef, so running the shipped
     // body a second time would leave two extra references on every call. The
     // lockstep probe compares whole FileInfos produced through this path.
-    RT_DIFF_SHADOW(dst->handle == src->handle && dst->size == src->size,
-                   "copied 5 dwords + qword + 2 Filenames",
-                   "SHADOW ONLY (AddRefs; verified by the rung-3 probe)");
-    RT_DIFF_WORK(true);
     return dst;                          // 18000c16e
 }
 
@@ -268,7 +262,6 @@ extern "C" FileInfo* RtIo_FileInfo_CopyCtor(FileInfo* dst, const FileInfo* src) 
 //      the merge point that the self-assignment JZ targets, so it runs even when
 //      nothing was copied.
 extern "C" FileInfo* RtIo_FileInfo_Assign(FileInfo* dst, const FileInfo* src) {
-    RT_DIFF_BEGIN("IO::FileSystem::FileInfo::operator=");
 
     dst->handle     = src->handle;       // 18000c217
     dst->_unk04     = src->_unk04;       // 18000c21c
@@ -302,10 +295,6 @@ extern "C" FileInfo* RtIo_FileInfo_Assign(FileInfo* dst, const FileInfo* src) {
     // leave two extra references on every call. The lockstep probe compares
     // whole FileInfos produced through this path, and rung 4's probe below adds
     // a dedicated comparison with the buffer-identity and null cases forced.
-    RT_DIFF_SHADOW(dst->handle == src->handle && dst->cursor == src->cursor,
-                   "assigned 5 dwords + qword + 2 refcounted Filenames",
-                   "SHADOW ONLY (AddRefs; verified by the rung-4 assign probe)");
-    RT_DIFF_WORK(true);
     return dst;                          // 18000c2d0
 }
 
@@ -317,14 +306,9 @@ extern "C" FileInfo* RtIo_FileInfo_Assign(FileInfo* dst, const FileInfo* src) {
 // CloseFile, which is the independent confirmation of the offset.
 extern "C" FileInfo* RtIo_PackageFile_GetFileInfo(const PackageFileView* self,
                                                   FileInfo* ret) {
-    RT_DIFF_BEGIN("IO::PackageFile::GetFileInfo");
     const FileInfo* const src = reinterpret_cast<const FileInfo*>(
         reinterpret_cast<const uint8_t*>(self) + 0xC0);      // 18002541e
     RtIo_FileInfo_CopyCtor(ret, src);                        // 180025428
-    RT_DIFF_SHADOW(ret->handle == src->handle,
-                   "copied the package's own FileInfo",
-                   "SHADOW ONLY (AddRefs; verified by the rung-3 probe)");
-    RT_DIFF_WORK(true);
     return ret;                                              // 180025436
 }
 
@@ -333,7 +317,6 @@ extern "C" FileInfo* RtIo_PackageFile_GetFileInfo(const PackageFileView* self,
 // ============================================================================
 extern "C" bool RtIo_FileSystem_PlatformOpenFile(FileSystem* self, FileInfo* fi,
                                                  const Filename* name) {
-    RT_DIFF_BEGIN("IO::FileSystem::PlatformOpenFile");
     (void)self;                          // retail never reads `this` here
 
     // An empty FileInfo, assigned over the caller's — retail builds it on the
@@ -376,7 +359,6 @@ extern "C" bool RtIo_FileSystem_PlatformOpenFile(FileSystem* self, FileInfo* fi,
     // the two are only equivalent by accident of those being the only wrap cases.
     const uint64_t hm1 = static_cast<uint64_t>(fi->winHandle) - 1u;
     if (hm1 > static_cast<uint64_t>(-3)) {                   // 1800ade12
-        RT_DIFF_WORK(true);
         return false;                                        // 1800ade3c
     }
 
@@ -384,7 +366,6 @@ extern "C" bool RtIo_FileSystem_PlatformOpenFile(FileSystem* self, FileInfo* fi,
         ::SetFilePointer(h, 0, nullptr, FILE_BEGIN));        // 1800ade20/26
     fi->size = static_cast<int32_t>(::GetFileSize(h, nullptr));  // 1800ade2f/35
 
-    RT_DIFF_WORK(true);
     return true;                                             // 1800ade38
 }
 
@@ -393,7 +374,6 @@ extern "C" bool RtIo_FileSystem_PlatformOpenFile(FileSystem* self, FileInfo* fi,
 // ============================================================================
 extern "C" bool RtIo_FileSystem_ReadFile(FileSystem* self, FileInfo* fi,
                                          int32_t n, void* dst) {
-    RT_DIFF_BEGIN("IO::FileSystem::ReadFile");
 
     // UNSIGNED: -1 and -2 both fall through to the loose path (§1).
     if (static_cast<uint32_t>(fi->handle) > 0xFFFFFFFDu) {   // 1800ace23  JA
@@ -402,7 +382,6 @@ extern "C" bool RtIo_FileSystem_ReadFile(FileSystem* self, FileInfo* fi,
         ::ReadFile(reinterpret_cast<HANDLE>(fi->winHandle), dst,
                    static_cast<DWORD>(n), &got, nullptr);    // 1800acf2a
         fi->cursor += static_cast<int32_t>(got);             // 1800acf37
-        RT_DIFF_WORK(true);
         return static_cast<int32_t>(got) == n;               // 1800acf3c  SETZ
     }
 
@@ -434,7 +413,6 @@ extern "C" bool RtIo_FileSystem_ReadFile(FileSystem* self, FileInfo* fi,
     RtString_ReleaseInline(&pack._name1);                    // 1800acea1
     RtString_ReleaseInline(&pack._name0);                    // 1800aceda
 
-    RT_DIFF_WORK(true);
     return ok;                                               // 1800acf07
 }
 
@@ -446,7 +424,6 @@ extern "C" bool RtIo_FileSystem_ReadFile(FileSystem* self, FileInfo* fi,
 // 0x1800acc2b. Getting that wrong is reference_hidden_retslot_wild_write.md.
 extern "C" FileInfo* RtIo_FileSystem_OpenFile(FileSystem* self, FileInfo* ret,
                                               const Filename* name) {
-    RT_DIFF_BEGIN("IO::FileSystem::OpenFile");
 
     FileInfo lf;                                             // 1800ac8b3..
     lf.handle     = -1;
@@ -550,7 +527,6 @@ extern "C" FileInfo* RtIo_FileSystem_OpenFile(FileSystem* self, FileInfo* ret,
     RtString_ReleaseInline(&lf._name1);                      // 1800acbc9
     RtString_ReleaseInline(&lf._name0);                      // 1800acbfa
 
-    RT_DIFF_WORK(true);
     return ret;                                              // 1800acc2b
 }
 

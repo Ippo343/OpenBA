@@ -146,7 +146,7 @@
 // the source size EXACTLY.
 //
 // Round-tripping our own output would be a SELF-CHECK, not an oracle
-// (reference_shadow_marker_is_not_an_oracle.md: the ~250 RT_DIFF_SHADOW sites
+// (reference_shadow_marker_is_not_an_oracle.md: the ~250 the diff oracle sites
 // take the port's own verdict and never consult the DLL, so a shared
 // misunderstanding of retail passes every time). The probe therefore compares
 // against RETAIL'S BYTES: identical input driven through both writers, and the
@@ -296,8 +296,6 @@ typedef void  (*CloseFileFn)(void*, void*);
 // two differ and Stream.h says so explicitly (+0x1c vs the embedded
 // MemoryStream's +0x8c); both are right for what they measure.
 extern "C" uint32_t RtIo_CompressedStream_GetCurrentPos(const CompressedStream* self) {
-    RT_DIFF_BEGIN("IO::CompressedStream::GetCurrentPos");
-    RT_DIFF_WORK(true);
     return static_cast<uint32_t>(self->position);        // 1800aa850
 }
 
@@ -309,9 +307,7 @@ extern "C" uint32_t RtIo_CompressedStream_GetCurrentPos(const CompressedStream* 
 // value is DISCARDED: this returns true unconditionally even when SetWindow
 // failed. That is retail's behaviour and it is reproduced, not corrected.
 extern "C" bool RtIo_CompressedStream_SetCurrentPos(CompressedStream* self, int32_t pos) {
-    RT_DIFF_BEGIN("IO::CompressedStream::SetCurrentPos");
     RtIo_CompressedStream_SetWindow(self, pos);          // 1800aa834
-    RT_DIFF_WORK(true);
     return true;                                         // 1800aa839  MOV AL,0x1
 }
 
@@ -331,14 +327,12 @@ extern "C" bool RtIo_CompressedStream_SetCurrentPos(CompressedStream* self, int3
 //     spelled by retail as `(headerSize<<15) - 0x8000 + last`. Same value; the
 //     shift is on the SIGNED count, which is why headerSize is read MOVSXD.
 extern "C" uint32_t RtIo_CompressedStream_GetSize(const CompressedStream* self) {
-    RT_DIFF_BEGIN("IO::CompressedStream::GetSize");
 
     CompressedStream* const s = const_cast<CompressedStream*>(self);
     const int32_t nWin = s->windowSize;                  // 1800aa863
     int32_t best = 0;                                    // 1800aa867  XOR EAX,EAX
 
     if (nWin == 0) {                                     // 1800aa869/6b  JZ -> RET
-        RT_DIFF_WORK(false);
         return 0;
     }
     if (nWin > 0) {                                      // 1800aa870  JLE skips the loop
@@ -355,7 +349,6 @@ extern "C" uint32_t RtIo_CompressedStream_GetSize(const CompressedStream* self) 
         if (total < best) total = best;                      // 1800aa8af/b1  CMOVG
         best = total;
     }
-    RT_DIFF_WORK(true);
     return static_cast<uint32_t>(best);
 }
 
@@ -394,7 +387,6 @@ extern "C" uint32_t RtIo_CompressedStream_GetSize(const CompressedStream* self) 
 // compressed_stream_read.cpp §4. See §3 of this file's banner.
 extern "C" bool RtIo_CompressedStream_Write(CompressedStream* self, int32_t n,
                                             const void* src) {
-    RT_DIFF_BEGIN("IO::CompressedStream::Write");
 
     const uint8_t* in = static_cast<const uint8_t*>(src);
     const bool didWork = (n > 0);
@@ -417,7 +409,6 @@ extern "C" bool RtIo_CompressedStream_Write(CompressedStream* self, int32_t n,
             w->end = self->position;                     // 1800aa752
     }
 
-    RT_DIFF_WORK(didWork);
     return true;                                         // 1800aa769  MOV AL,0x1
 }
 
@@ -461,11 +452,9 @@ extern "C" bool RtIo_CompressedStream_Write(CompressedStream* self, int32_t n,
 // value larger than the input, which is exactly the case the JBE turns into
 // "store it raw". So the buffer is not undersized — the protocol handles it.
 extern "C" void RtIo_CompressedStream_CompressWindow(CompressedStream* self, int32_t i) {
-    RT_DIFF_BEGIN("IO::CompressedStream::CompressWindow");
 
     Window* const w = &Windows(self)[i];                 // 1800a9829..31
     if (w->start < 0) {                                  // 1800a9835/39/3b  TEST/JS
-        RT_DIFF_WORK(false);
         return;
     }
 
@@ -499,7 +488,6 @@ extern "C" void RtIo_CompressedStream_CompressWindow(CompressedStream* self, int
                 h->compressedSize != 0 ? static_cast<const void*>(scratch)
                                        : static_cast<const void*>(w->buffer),
                 len);                                    // 1800a98dc..909
-    RT_DIFF_WORK(true);
 }
 
 // ============================================================================
@@ -511,8 +499,6 @@ extern "C" void RtIo_CompressedStream_CompressWindow(CompressedStream* self, int
 // slot 8 virtually and the base genuinely has nothing to do, because a plain
 // CompressedStream writes onto a source that is already the right size.
 extern "C" void RtIo_CompressedStream_PreCommit(CompressedStream* /*self*/) {
-    RT_DIFF_BEGIN("IO::CompressedStream::PreCommit");
-    RT_DIFF_WORK(false);                                 // 1800aa8c0  RET
 }
 
 // ============================================================================
@@ -533,7 +519,6 @@ extern "C" void RtIo_CompressedStream_PreCommit(CompressedStream* /*self*/) {
 // The tail jump means the bool is this function's return value even though the
 // slot is typed `void` — harmless, and reproduced by simply discarding it.
 extern "C" void RtIo_CompressedMemoryStream_PreCommit(CompressedStream* self) {
-    RT_DIFF_BEGIN("IO::CompressedMemoryStream::PreCommit");
 
     const int32_t n = self->headerSize;                  // 1800a9660  MOVSXD
     uint32_t total = 4 + static_cast<uint32_t>(n) * 8;   // 1800a9667  LEA R8D,[4+RAX*8]
@@ -548,7 +533,6 @@ extern "C" void RtIo_CompressedMemoryStream_PreCommit(CompressedStream* self) {
     RT_EXPORT_ONCE(MemStreamCreateFn, "?Create@MemoryStream@IO@@QEAA_NH@Z")(
         reinterpret_cast<uint8_t*>(self) + 0x68,
         static_cast<int32_t>(total));                    // 1800a969b..a2  ADD RCX,0x68 ; JMP
-    RT_DIFF_WORK(true);
 }
 
 // ============================================================================
@@ -579,7 +563,6 @@ extern "C" void RtIo_CompressedMemoryStream_PreCommit(CompressedStream* self) {
 // what makes CompressedStreamHeader's 8-byte stride an ON-DISK fact and not
 // just an in-memory one.
 extern "C" void RtIo_CompressedStream_Commit(CompressedStream* self) {
-    RT_DIFF_BEGIN("IO::CompressedStream::Commit");
 
     // ---- 1. flush resident windows ---------------------------------------
     if (self->windowSize > 0) {                          // 1800a9ef6/f9
@@ -623,7 +606,6 @@ extern "C" void RtIo_CompressedStream_Commit(CompressedStream* self) {
 
     // ---- 5. release the working set ---------------------------------------
     RtIo_CompressedStream_Release(self);                 // 1800a9ff6
-    RT_DIFF_WORK(true);
 }
 
 // ============================================================================
@@ -636,13 +618,10 @@ extern "C" void RtIo_CompressedStream_Commit(CompressedStream* self) {
 // safe to call unconditionally — and the `headerSize > 0` guard is Stream.h's
 // "has anything been written yet".
 extern "C" void RtIo_CompressedStream_Close(CompressedStream* self) {
-    RT_DIFF_BEGIN("IO::CompressedStream::Close");
     if (self->headerSize > 0 && self->base.direction == 1) {   // 1800aa8d0/d6
         RtIo_CompressedStream_Commit(self);              // 1800aa8da  JZ 0x1800a9ee0
-        RT_DIFF_WORK(true);
         return;
     }
-    RT_DIFF_WORK(false);
 }
 
 // ============================================================================
@@ -662,7 +641,6 @@ extern "C" void RtIo_CompressedStream_Close(CompressedStream* self) {
 // name; it becomes lane FILE's code the moment they register, with no change
 // here. This is the door §3 of the banner names.
 extern "C" void RtIo_CompressedFileStream_Close(CompressedStream* self) {
-    RT_DIFF_BEGIN("IO::CompressedFileStream::Close");
 
     if (self->headerSize > 0 && self->base.direction == 1)     // 1800a9496/9f
         RtIo_CompressedStream_Commit(self);                    // 1800a94a5
@@ -674,10 +652,8 @@ extern "C" void RtIo_CompressedFileStream_Close(CompressedStream* self) {
             "?_singleton@FileSystem@IO@@0PEAV12@EA");               // 1800a94b6
         RT_EXPORT_ONCE(CloseFileFn,
             "?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z")(fs, fileInfo);  // 1800a94c2
-        RT_DIFF_WORK(true);
         return;
     }
-    RT_DIFF_WORK(true);
 }
 
 // ============================================================================
@@ -703,7 +679,6 @@ extern "C" void RtIo_CompressedFileStream_Close(CompressedStream* self) {
 // later, once the object is real.
 extern "C" bool RtIo_CompressedStream_Create(CompressedStream* self, Stream* src,
                                              int32_t windows) {
-    RT_DIFF_BEGIN("IO::CompressedStream::Create");
 
     self->base.direction = 1;                            // 1800aa4d4
     self->source         = src;                          // 1800aa4db
@@ -715,7 +690,6 @@ extern "C" bool RtIo_CompressedStream_Create(CompressedStream* self, Stream* src
         : nullptr;                                       // 1800aa531  XOR EAX,EAX
 
     RtIo_CompressedStream_SetWindowCount(self, windows); // 1800aa53c
-    RT_DIFF_WORK(true);
     return true;                                         // 1800aa541  MOV AL,0x1
 }
 

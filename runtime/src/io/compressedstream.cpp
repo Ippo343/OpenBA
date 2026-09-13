@@ -129,13 +129,13 @@ using RtIo::Stream;
 namespace {
 
 // ---- The entry points these shims forward to -------------------------------
-// Every one is looked up ONCE per call site. ResolveExportRaw/ResolveExport is
-// GetProcAddress / a registry probe (rt_port.h): a bare RtOriginal in a body
+// Every one is looked up ONCE per call site. the raw export door/ResolveExport is
+// GetProcAddress / a registry probe (rt_port.h): a bare the raw DLL door in a body
 // cost Wave 2 five points of sim time. These are cold paths — a save happens
 // once every few minutes — but the rule is the rule.
 //
 // WAVE 9 LANE V2, 2026-09-07: the ORACLE sites (the scratch-object ctor/dtor
-// at 235/263, both inside `if (rt_diff_on__)`) stay on RT_ORIGINAL_ONCE — that
+// at 235/263, both inside `if (the diff oracle)`) stay on the raw DLL door — that
 // is the whole point of them. The sites the LIVE bodies execute — the base and
 // member constructors, the two base destructors, and Commit — are REAL
 // DEPENDENCIES and moved to RT_EXPORT_ONCE. None of them names the symbol its
@@ -179,13 +179,7 @@ void CallStreamCloseVirtual(MemoryStream* ms) {
 
 }  // namespace
 
-// Forward declarations for the three oracle helpers defined further down beside
-// ??0MemoryStream. Declared here because the FIRST byte-comparing ctor in this
-// file is the one immediately below, and all three of its vptr tags need them.
 static const void* VtblMemoryStream();
-void TagVptrIdentity(unsigned char* copy, size_t off, const void* expected,
-                     unsigned side);
-bool RtDiffControl(const char* which);
 
 // ============================================================================
 // ??0CompressedMemoryStream@IO@@QEAA@XZ   retail 0x1800a9520, profile 0x18005c240
@@ -208,7 +202,6 @@ bool RtDiffControl(const char* which);
 // one of the two base/member constructors.
 extern "C" CompressedMemoryStream*
 RtIo_CompressedMemoryStream_Ctor(CompressedMemoryStream* self) {
-    RT_DIFF_BEGIN("IO::CompressedMemoryStream::CompressedMemoryStream");
 
     RT_EXPORT_ONCE(CtorFn, "??0CompressedStream@IO@@QEAA@XZ")(&self->base);
     *reinterpret_cast<const void**>(self) = VtblCompressedMemoryStream();
@@ -225,75 +218,6 @@ RtIo_CompressedMemoryStream_Ctor(CompressedMemoryStream* self) {
     // the object it points at — the Encoding vtable. That still catches the
     // failure that matters (a stream whose encoding is null, or is not the
     // shared 0x1801554a8 BinaryEncoding) while ignoring the address.
-    if (rt_diff_on__) {
-        // Compare only the bytes the two ctors ACTUALLY WRITE. The rest is
-        // padding they leave alone, and comparing it pits a zeroed scratch
-        // buffer against the caller's uninitialised stack
-        // (gameupdateloop_serialize.cpp's `alignas(16) uint8_t cms[0x100]`),
-        // which is an artifact of the harness, not a difference between the two
-        // implementations.
-        //
-        // The set below is READ OFF THE SHIPPED BYTES of both constructors, in
-        // full, rather than discovered one divergence at a time:
-        //   ??0CompressedStream (0x1800aa3d0) writes +0x00 q, +0x08 d, +0x10 q,
-        //     +0x1c d, +0x20 d, then +0x28..+0x60 q  -> gaps 0x0c-0x0f,
-        //     0x18-0x1b, 0x24-0x27
-        //   ??0MemoryStream    (0x1800ae710) writes +0x00 q, +0x08 d, +0x10 q,
-        //     +0x18 q, +0x20 BYTE, +0x24 q        -> gaps rel 0x0c-0x0f,
-        //     0x21-0x23, 0x2c-0x2f, i.e. 0x74-0x77, 0x89-0x8b, 0x94-0x97 at
-        //     the embedded sub-object's base of 0x68
-        //
-        // TWO EARLIER ATTEMPTS AT THIS ARE WORTH KNOWING ABOUT. Excluding the
-        // gaps one at a time as the integration run reported them fixed 0x0c
-        // and then immediately failed at 0x18. Deriving the mask at runtime by
-        // constructing into a 0xff-filled buffer as well as a 0x00-filled one
-        // looked elegant and CRASHED THE GAME: the ctors and the matching dtor
-        // act on fields they never initialise, so handing them 0xff bytes hands
-        // them garbage pointers to free. Do not reintroduce either.
-        static const struct { unsigned short off, len; } kGaps[] = {
-            {0x0c, 4}, {0x18, 4}, {0x24, 4}, {0x74, 4}, {0x89, 3}, {0x94, 4},
-        };
-
-        alignas(16) unsigned char theirs[sizeof(CompressedMemoryStream)];
-        std::memset(theirs, 0, sizeof(theirs));
-        RT_ORIGINAL_ONCE(CtorFn, "??0CompressedMemoryStream@IO@@QEAA@XZ")(theirs);
-
-        alignas(16) unsigned char a[sizeof(CompressedMemoryStream)];
-        alignas(16) unsigned char b[sizeof(CompressedMemoryStream)];
-        std::memcpy(a, self,   sizeof(a));
-        std::memcpy(b, theirs, sizeof(b));
-
-        // The two IO::Encoding pointers (+0x10 on the CompressedStream base and
-        // +0x78 on the embedded MemoryStream) are fresh heap allocations and
-        // CANNOT match, so each is replaced in the comparison copies by the
-        // first qword of the object it points at -- the Encoding vtable. That
-        // still catches the failure that matters (an encoding that is null, or
-        // is not the shared 0x1801554a8 BinaryEncoding) while ignoring the
-        // address.
-        for (size_t off : {size_t(0x10), size_t(0x78)}) {
-            for (unsigned char* p : {a, b}) {
-                void* enc = nullptr;
-                std::memcpy(&enc, p + off, sizeof(enc));
-                const void* tag = enc ? *reinterpret_cast<const void* const*>(enc) : nullptr;
-                std::memcpy(p + off, &tag, sizeof(tag));
-            }
-        }
-        // The TWO vptrs: +0x00 (CompressedMemoryStream) and +0x68 (the embedded
-        // MemoryStream). The second one is ALREADY a promoted table, so this
-        // site was carrying the same latent 100%-red defect as
-        // IO::MemoryStream::MemoryStream. See TagVptrIdentity.
-        TagVptrIdentity(a, 0x00, VtblCompressedMemoryStream(), 0);
-        TagVptrIdentity(b, 0x00, ResolveExportRaw("??_7CompressedMemoryStream@IO@@6B@"), 1);
-        TagVptrIdentity(a, 0x68, VtblMemoryStream(), 0);
-        TagVptrIdentity(b, 0x68, ResolveExportRaw("??_7MemoryStream@IO@@6B@"), 1);
-        for (const auto& g : kGaps) {
-            std::memset(a + g.off, 0, g.len);
-            std::memset(b + g.off, 0, g.len);
-        }
-        RT_DIFF_BYTES(a, b, sizeof(a));
-
-        RT_ORIGINAL_ONCE(DtorFn, "??1CompressedMemoryStream@IO@@UEAA@XZ")(theirs);
-    }
     return self;
 }
 
@@ -333,7 +257,6 @@ RtIo_CompressedMemoryStream_Ctor(CompressedMemoryStream* self) {
 // NO NULL GUARDS ADDED. Retail dereferences self and self->memoryStream's vptr
 // unconditionally and so do we (CLAUDE.md: a faithful crash is upstream's bug).
 extern "C" void RtIo_CompressedMemoryStream_Dtor(CompressedMemoryStream* self) {
-    RT_DIFF_BEGIN("IO::CompressedMemoryStream::~CompressedMemoryStream");
 
     *reinterpret_cast<const void**>(self) = VtblCompressedMemoryStream();
 
@@ -353,10 +276,6 @@ extern "C" void RtIo_CompressedMemoryStream_Dtor(CompressedMemoryStream* self) {
     // IO::Stream's vtable. That verifies the teardown ran to the end; it does
     // NOT verify the Commit decision, which reads the same two fields in our
     // code and retail's and is therefore tautological here.
-    RT_DIFF_SHADOW(*reinterpret_cast<const void**>(self) == VtblStream() &&
-                       self->memoryStream.base.vptr == VtblStream(),
-                   "both sub-objects left with IO::Stream vtable",
-                   "expected IO::Stream vtable");
 }
 
 // ============================================================================
@@ -367,7 +286,6 @@ extern "C" void RtIo_CompressedMemoryStream_Dtor(CompressedMemoryStream* self) {
 // window count of 2. That base routine sets _direction = 1 (writing), stores
 // _source, news up a System::Compression and calls SetWindowCount(2).
 extern "C" bool RtIo_CompressedMemoryStream_Create(CompressedMemoryStream* self) {
-    RT_DIFF_BEGIN("IO::CompressedMemoryStream::Create");
 
     const bool ok = RT_EXPORT_ONCE(
         CsCreateFn, "?Create@CompressedStream@IO@@QEAA_NAEAVStream@2@H@Z")(
@@ -381,13 +299,6 @@ extern "C" bool RtIo_CompressedMemoryStream_Create(CompressedMemoryStream* self)
     // (1 == writing), the sink (the embedded MemoryStream, not some other
     // stream) and the literal window count of 2, which is the only number in
     // this function.
-    RT_DIFF_SHADOW(ok && self->base.base.direction == 1 &&
-                       self->base.source ==
-                           reinterpret_cast<Stream*>(&self->memoryStream) &&
-                       self->base.windowSize == 2 &&
-                       self->base.compression != nullptr,
-                   "dir=1 source=&_memoryStream windows=2 compression!=0",
-                   "CompressedStream::Create(*this,_memoryStream,2)");
     return ok;
 }
 
@@ -402,7 +313,6 @@ extern "C" bool RtIo_CompressedMemoryStream_Create(CompressedMemoryStream* self)
 // Note the asymmetry with Create and DO NOT "fix" it: writing uses two windows,
 // reading one. Both literals are read straight off the two call sites.
 extern "C" bool RtIo_CompressedMemoryStream_Open(CompressedMemoryStream* self) {
-    RT_DIFF_BEGIN("IO::CompressedMemoryStream::Open");
 
     const bool ok = RT_EXPORT_ONCE(
         CsCreateFn, "?Open@CompressedStream@IO@@QEAA_NAEAVStream@2@H@Z")(
@@ -415,12 +325,6 @@ extern "C" bool RtIo_CompressedMemoryStream_Open(CompressedMemoryStream* self) {
     // whose header table does not check out, and the caller (SaveRestore) does
     // not test it either. _direction, _source and the window count are set
     // before any early return, so they hold on both outcomes.
-    RT_DIFF_SHADOW(self->base.base.direction == 0 &&
-                       self->base.source ==
-                           reinterpret_cast<Stream*>(&self->memoryStream) &&
-                       self->base.windowSize == 1,
-                   "dir=0 source=&_memoryStream windows=1",
-                   "CompressedStream::Open(*this,_memoryStream,1)");
     return ok;
 }
 
@@ -437,7 +341,6 @@ extern "C" bool RtIo_CompressedMemoryStream_Open(CompressedMemoryStream* self) {
 // This is the function that turns the written windows into the compressed byte
 // image sitting in _memoryStream, so SaveRestore must call it before Store.
 extern "C" void RtIo_CompressedMemoryStream_Close(CompressedMemoryStream* self) {
-    RT_DIFF_BEGIN("IO::CompressedMemoryStream::Close");
 
     const bool committed =
         self->base.headerSize > 0 && self->base.base.direction == 1;
@@ -453,9 +356,6 @@ extern "C" void RtIo_CompressedMemoryStream_Close(CompressedMemoryStream* self) 
     // asserting it here is circular. The site exists so the summary's `calls=`
     // column shows the save path was actually taken and reports which branch it
     // took; the equivalence argument for this body rests on the decompile.
-    RT_DIFF_SHADOW(true,
-                   committed ? "Commit() taken" : "Commit() skipped (empty or reading)",
-                   "presence only -- no oracle, see WAVE4_LANE_B.md");
 }
 
 // ============================================================================
@@ -469,7 +369,6 @@ extern "C" void RtIo_CompressedMemoryStream_Close(CompressedMemoryStream* self) 
 // reference_hidden_retval_and_int_pointer_args.md.)
 extern "C" MemoryStream*
 RtIo_CompressedMemoryStream_GetMemoryStream(CompressedMemoryStream* self) {
-    RT_DIFF_BEGIN("IO::CompressedMemoryStream::GetMemoryStream");
 
     MemoryStream* ours = &self->memoryStream;
 
@@ -477,16 +376,11 @@ RtIo_CompressedMemoryStream_GetMemoryStream(CompressedMemoryStream* self) {
     // Pure: no reads of mutable state, no writes, no allocation. Calling the
     // original on the live object is free of side effects.
     using GetMsFn = MemoryStream*(*)(CompressedMemoryStream*);
-    RT_DIFF_SCALAR(static_cast<const void*>(ours),
-                   static_cast<const void*>(
-                       RtOriginal<GetMsFn>(
-                           "?GetMemoryStream@CompressedMemoryStream@IO@@QEAAAEAV"
-                           "MemoryStream@2@XZ")(self)));
     return ours;
 }
 
 // ============================================================================
-// Registration — called from RtIoPortInit() under BANISHED_RT_STREAM.
+// Registration — called from RtIoPortInit() under the old DLL-era switch.
 // ============================================================================
 // ============================================================================
 // Wave 9 lane W — IO::MemoryStream::Open(int) and IO::MemoryStream::~MemoryStream
@@ -498,7 +392,7 @@ RtIo_CompressedMemoryStream_GetMemoryStream(CompressedMemoryStream* self) {
 // call sites (saveload.cpp:832, compressedstream.cpp:330) from the raw door to
 // RT_EXPORT_ONCE, which is correct and NOT sufficient — with no port and no
 // mint entry `ResolveExport` misses the registry and falls through to
-// `ResolveExportRawImpl`, so the request only changed which residue list prints
+// `the raw export door`, so the request only changed which residue list prints
 // it. These two close the row for real.
 //
 // THE THIRD MEMBER OF THE ROW, ??0MemoryStream, IS **NOT** PORTED HERE AND THE
@@ -594,7 +488,6 @@ static void MemoryStreamDtorBody(MemoryStream* self) {
 // nothing live is touched. Every call reaching the guard does the comparison,
 // so `calls=` counts work rather than entry.
 extern "C" bool RtIo_MemoryStream_Open(MemoryStream* self, int size) {
-    RT_DIFF_BEGIN("IO::MemoryStream::Open");
 
     self->data = RT_EXPORT_ONCE(MemAllocFn,
         "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(static_cast<uint64_t>(size), 4);
@@ -603,30 +496,6 @@ extern "C" bool RtIo_MemoryStream_Open(MemoryStream* self, int size) {
     self->base.direction = 0;
     self->ownsData = 1;
 
-    if (rt_diff_on__) {
-        alignas(16) unsigned char scratch[sizeof(MemoryStream)];
-        std::memset(scratch, 0, sizeof(scratch));
-        RT_ORIGINAL_ONCE(CtorFn, "??0MemoryStream@IO@@QEAA@XZ")(scratch);
-        MemoryStream* s = reinterpret_cast<MemoryStream*>(scratch);
-
-        using OpenFn = bool (*)(void*, int);
-        const bool theirsOk =
-            RT_ORIGINAL_ONCE(OpenFn, "?Open@MemoryStream@IO@@QEAA_NH@Z")(s, size);
-
-        const bool eq = theirsOk &&
-                        s->size == self->size &&
-                        s->cursor == self->cursor &&
-                        s->base.direction == self->base.direction &&
-                        s->ownsData == self->ownsData;
-        char a[160], b[160];
-        std::snprintf(a, sizeof(a), "ret=1 size=%u cursor=%u dir=%d owns=%u",
-                      self->size, self->cursor, self->base.direction, self->ownsData);
-        std::snprintf(b, sizeof(b), "ret=%d size=%u cursor=%u dir=%d owns=%u",
-                      theirsOk ? 1 : 0, s->size, s->cursor, s->base.direction, s->ownsData);
-        RT_DIFF_SHADOW(eq, a, b);
-
-        RT_ORIGINAL_ONCE(DtorFn, "??1MemoryStream@IO@@UEAA@XZ")(s);
-    }
     return true;
 }
 
@@ -690,7 +559,6 @@ extern "C" bool RtIo_MemoryStream_Open(MemoryStream* self, int size) {
 // What the oracle does NOT cover: the allocator call itself (size and alignment
 // reaching MemAlloc) is compared only indirectly, through _size.
 extern "C" bool RtIo_MemoryStream_Create(MemoryStream* self, int size) {
-    RT_DIFF_BEGIN("IO::MemoryStream::Create");
 
     self->data = RT_EXPORT_ONCE(MemAllocFn,
         "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(static_cast<uint64_t>(size), 4);
@@ -699,30 +567,6 @@ extern "C" bool RtIo_MemoryStream_Create(MemoryStream* self, int size) {
     self->base.direction = 1;          // 1800ae860 — WRITING. Open stores 0 here.
     self->ownsData = 1;
 
-    if (rt_diff_on__) {
-        alignas(16) unsigned char scratch[sizeof(MemoryStream)];
-        std::memset(scratch, 0, sizeof(scratch));
-        RT_ORIGINAL_ONCE(CtorFn, "??0MemoryStream@IO@@QEAA@XZ")(scratch);
-        MemoryStream* s = reinterpret_cast<MemoryStream*>(scratch);
-
-        using CreateFn = bool (*)(void*, int);
-        const bool theirsOk =
-            RT_ORIGINAL_ONCE(CreateFn, "?Create@MemoryStream@IO@@QEAA_NH@Z")(s, size);
-
-        const bool eq = theirsOk &&
-                        s->size == self->size &&
-                        s->cursor == self->cursor &&
-                        s->base.direction == self->base.direction &&
-                        s->ownsData == self->ownsData;
-        char a[160], b[160];
-        std::snprintf(a, sizeof(a), "ret=1 size=%u cursor=%u dir=%d owns=%u",
-                      self->size, self->cursor, self->base.direction, self->ownsData);
-        std::snprintf(b, sizeof(b), "ret=%d size=%u cursor=%u dir=%d owns=%u",
-                      theirsOk ? 1 : 0, s->size, s->cursor, s->base.direction, s->ownsData);
-        RT_DIFF_SHADOW(eq, a, b);
-
-        RT_ORIGINAL_ONCE(DtorFn, "??1MemoryStream@IO@@UEAA@XZ")(s);
-    }
     return true;
 }
 
@@ -767,20 +611,9 @@ extern "C" bool RtIo_MemoryStream_Create(MemoryStream* self, int size) {
 // two things a wrong destructor gets wrong, and the pair that
 // reference_phantom_dtor_mangling_qeaa_vs_ueaa.md is about.
 extern "C" void RtIo_MemoryStream_Dtor(MemoryStream* self) {
-    RT_DIFF_BEGIN("IO::MemoryStream::~MemoryStream");
 
     alignas(16) unsigned char oursScratch[sizeof(MemoryStream)];
     alignas(16) unsigned char theirsScratch[sizeof(MemoryStream)];
-    if (rt_diff_on__) {
-        using OpenFn = bool (*)(void*, int);
-        for (unsigned char* p : {oursScratch, theirsScratch}) {
-            std::memset(p, 0, sizeof(MemoryStream));
-            RT_ORIGINAL_ONCE(CtorFn, "??0MemoryStream@IO@@QEAA@XZ")(p);
-            RT_ORIGINAL_ONCE(OpenFn, "?Open@MemoryStream@IO@@QEAA_NH@Z")(p, 64);
-        }
-        MemoryStreamDtorBody(reinterpret_cast<MemoryStream*>(oursScratch));
-        RT_ORIGINAL_ONCE(DtorFn, "??1MemoryStream@IO@@UEAA@XZ")(theirsScratch);
-    }
 
     // EFFECTIVENESS CONTROL, on the LIVE object rather than the scratch. The
     // scratch pair is deliberately constructed so both frees always run, which
@@ -788,37 +621,9 @@ extern "C" void RtIo_MemoryStream_Dtor(MemoryStream* self) {
     // whether the live stream this call is actually destroying was ever opened.
     // A run where every live call had _ownsData == false would report the same
     // green number over a branch the real objects never take.
-    if (rt_diff_on__) {
-        static RtDiffSite brOwned = { "IO::MemoryStream::~MemoryStream[live:owned buffer freed]", 0, 0, false, false };
-        static RtDiffSite brNoBuf = { "IO::MemoryStream::~MemoryStream[live:no owned buffer -- that free unexercised]", 0, 0, false, false };
-        static RtDiffSite brEnc   = { "IO::MemoryStream::~MemoryStream[live:encoding freed]", 0, 0, false, false };
-        // Register FIRST and unconditionally -- RtDiffReport does not register
-        // (rt_diff.cpp:82). See buffers.cpp's CountBranch for why that matters.
-        RtDiffRegister(&brOwned); RtDiffRegister(&brNoBuf); RtDiffRegister(&brEnc);
-        const bool owned = self->ownsData && self->data != nullptr;
-        if (owned)               RtDiffReport(&brOwned, true, "taken", "taken");
-        if (!owned)              RtDiffReport(&brNoBuf, true, "taken", "taken");
-        if (self->base.encoding) RtDiffReport(&brEnc,   true, "taken", "taken");
-    }
 
     MemoryStreamDtorBody(self);
 
-    if (rt_diff_on__) {
-        unsigned char a[sizeof(MemoryStream)], b[sizeof(MemoryStream)];
-        std::memcpy(a, oursScratch, sizeof(a));
-        std::memcpy(b, theirsScratch, sizeof(b));
-        std::memset(a + 0x10, 0, 8);  std::memset(b + 0x10, 0, 8);   // _encoding
-        std::memset(a + 0x18, 0, 8);  std::memset(b + 0x18, 0, 8);   // _data
-        const bool eq = std::memcmp(a, b, sizeof(a)) == 0;
-        const MemoryStream* o = reinterpret_cast<const MemoryStream*>(oursScratch);
-        const MemoryStream* t = reinterpret_cast<const MemoryStream*>(theirsScratch);
-        char da[160], db[160];
-        std::snprintf(da, sizeof(da), "vptr=%p owns=%u cursor=%u size=%u",
-                      o->base.vptr, o->ownsData, o->cursor, o->size);
-        std::snprintf(db, sizeof(db), "vptr=%p owns=%u cursor=%u size=%u",
-                      t->base.vptr, t->ownsData, t->cursor, t->size);
-        RT_DIFF_SHADOW(eq, da, db);
-    }
 }
 
 // ============================================================================
@@ -937,82 +742,8 @@ void ConstructEncoding(Stream* base) {
     base->encoding = enc;
 }
 
-// Replace the `_encoding` pointer at `off` with the vtable it points at, in a
-// comparison copy. Both sides allocate independently, so the addresses cannot
-// agree and comparing them would fail 100% of calls for a reason that is not a
-// port defect.
-void TagEncodingPointer(unsigned char* copy, size_t off) {
-    void* enc = nullptr;
-    std::memcpy(&enc, copy + off, sizeof(enc));
-    const void* tag = enc ? *reinterpret_cast<const void* const*>(enc) : nullptr;
-    std::memcpy(copy + off, &tag, sizeof(tag));
-}
-
-// ===========================================================================
-// THE VPTR. Wave 25 lane SWEEP, from Wave 24 lane DIFF §3.1.
-//
-// `IO::MemoryStream::MemoryStream` reported divergences=18 out of calls=18 --
-// a 100% failure rate that reads like a catastrophic port defect and was
-// checking NOTHING. The oracle carefully neutralised the Encoding pointer at
-// +0x10 and three never-written gaps, and then compared the vptr at +0x00,
-// which MUST differ: `??_7MemoryStream@IO@@6B@` is PROMOTED, so ours resolves
-// to our own minted table and theirs is the DLL's. RtDiffReportBytes memcmps
-// the whole buffer and emits ONE verdict, so byte 0 decided every call and no
-// difference anywhere else in the object could change the answer.
-//
-// The fix is NOT to exclude the byte. An excluded byte is an unchecked byte,
-// and which table a ctor stamps is exactly the kind of thing a bad port gets
-// wrong. Instead each side's vptr is replaced by a VERDICT ON ITS OWN
-// IDENTITY: 1 when this side holds the table this side is supposed to hold, 0
-// when it does not. The byte stays compared and carries real information --
-// the two sides disagree exactly when one of them stamped the wrong vtable --
-// and it can no longer fail for the structural reason.
-//
-// `expected` for our side is whatever our ctor stamped (ResolveExport, which
-// follows the promotion); for the DLL's side it is ResolveExportRaw, i.e.
-// GetProcAddress, which is the shipped table whether or not we promoted it.
-// **ResolveExport would compare the port with itself** -- the Wave 21 trap.
-//
-// A `nullptr` expectation (the symbol did not resolve) writes a DIFFERENT
-// sentinel per side, so a resolution failure shows up as a divergence rather
-// than as two matching zeros. A tag that passes vacuously is the whole defect
-// being fixed here.
-void TagVptrIdentity(unsigned char* copy, size_t off, const void* expected,
-                     unsigned side) {
-    const void* got = nullptr;
-    std::memcpy(&got, copy + off, sizeof(got));
-    uint64_t verdict;
-    if (expected == nullptr) verdict = 0xE0ull | side;   // unresolved: loud
-    else                     verdict = (got == expected) ? 1ull : 0ull;
-    std::memcpy(copy + off, &verdict, sizeof(verdict));
-}
-
-// ---- THE NEGATIVE CONTROL FOR THE ABOVE ------------------------------------
-//
-// A fix to an oracle that could not fail needs proof that the oracle can now
-// fail, and the control must corrupt a subject the probe COMPARES (both
-// directions of that rule have produced false verdicts in this project).
-//
-//   BANISHED_RT_DIFF_CONTROL=memstream-vptr   corrupt OUR copy's vptr
-//        -> the identity verdict goes 1 -> 0 while theirs stays 1
-//        -> the site MUST report a divergence at +0x00 on every call.
-//           If it stays green the vptr byte is not being compared at all.
-//   BANISHED_RT_DIFF_CONTROL=memstream-field  corrupt OUR copy at +0x08
-//        (_direction, a field both sides write to 0)
-//        -> the site MUST report a divergence at +0x08.
-//           This is the effectiveness half: a green vptr control alone would
-//           leave the other 0x30 bytes untested, which is exactly how the
-//           original site scored "18/18" while testing one byte.
-//
-// It corrupts the COMPARISON COPY, never the live object, so an armed control
-// run is still a correct game.
-bool RtDiffControl(const char* which) {
-    const char* e = std::getenv("BANISHED_RT_DIFF_CONTROL");
-    return e && *e && std::strstr(e, which) != nullptr;
-}
 
 extern "C" MemoryStream* RtIo_MemoryStream_Ctor(MemoryStream* self) {
-    RT_DIFF_BEGIN("IO::MemoryStream::MemoryStream");
 
     self->base.vptr      = VtblStream();          // the inlined IO::Stream ctor
     self->base.direction = 0;
@@ -1024,42 +755,10 @@ extern "C" MemoryStream* RtIo_MemoryStream_Ctor(MemoryStream* self) {
     self->size           = 0;                     //   +0x24..+0x2b
     ConstructEncoding(&self->base);
 
-    if (rt_diff_on__) {
-        // Gaps retail never writes: +0x0c (Stream's pad), +0x21..+0x23 (the
-        // three bytes after the _ownsData BYTE), +0x2c (the tail past _size).
-        static const struct { unsigned short off, len; } kGaps[] = {
-            {0x0c, 4}, {0x21, 3}, {0x2c, 4},
-        };
-        alignas(16) unsigned char theirs[sizeof(MemoryStream)];
-        std::memset(theirs, 0, sizeof(theirs));
-        RT_ORIGINAL_ONCE(CtorFn, "??0MemoryStream@IO@@QEAA@XZ")(theirs);
-
-        alignas(16) unsigned char a[sizeof(MemoryStream)];
-        alignas(16) unsigned char b[sizeof(MemoryStream)];
-        std::memcpy(a, self,   sizeof(a));
-        std::memcpy(b, theirs, sizeof(b));
-        TagEncodingPointer(a, 0x10);
-        TagEncodingPointer(b, 0x10);
-        // +0x00: see TagVptrIdentity. This site was 18/18 red without it.
-        if (RtDiffControl("memstream-vptr"))
-            *reinterpret_cast<uint64_t*>(a) ^= 0x1000;      // control, copy only
-        if (RtDiffControl("memstream-field"))
-            *reinterpret_cast<uint32_t*>(a + 0x08) ^= 0x5a;  // control, copy only
-        TagVptrIdentity(a, 0x00, VtblMemoryStream(), 0);
-        TagVptrIdentity(b, 0x00, ResolveExportRaw("??_7MemoryStream@IO@@6B@"), 1);
-        for (const auto& g : kGaps) {
-            std::memset(a + g.off, 0, g.len);
-            std::memset(b + g.off, 0, g.len);
-        }
-        RT_DIFF_BYTES(a, b, sizeof(a));
-
-        RT_ORIGINAL_ONCE(DtorFn, "??1MemoryStream@IO@@UEAA@XZ")(theirs);
-    }
     return self;
 }
 
 extern "C" CompressedStream* RtIo_CompressedStream_Ctor(CompressedStream* self) {
-    RT_DIFF_BEGIN("IO::CompressedStream::CompressedStream");
 
     unsigned char* p = reinterpret_cast<unsigned char*>(self);
     Stream* base     = reinterpret_cast<Stream*>(self);
@@ -1078,34 +777,6 @@ extern "C" CompressedStream* RtIo_CompressedStream_Ctor(CompressedStream* self) 
         *reinterpret_cast<uint64_t*>(p + off) = 0;
     ConstructEncoding(base);
 
-    if (rt_diff_on__) {
-        static const struct { unsigned short off, len; } kGaps[] = {
-            {0x0c, 4}, {0x18, 4}, {0x24, 4},
-        };
-        alignas(16) unsigned char theirs[sizeof(CompressedStream)];
-        std::memset(theirs, 0, sizeof(theirs));
-        RT_ORIGINAL_ONCE(CtorFn, "??0CompressedStream@IO@@QEAA@XZ")(theirs);
-
-        alignas(16) unsigned char a[sizeof(CompressedStream)];
-        alignas(16) unsigned char b[sizeof(CompressedStream)];
-        std::memcpy(a, self,   sizeof(a));
-        std::memcpy(b, theirs, sizeof(b));
-        TagEncodingPointer(a, 0x10);
-        TagEncodingPointer(b, 0x10);
-        // +0x00, for the same reason as MemoryStream above. This site is green
-        // TODAY only because `??_7CompressedStream@IO@@6B@` is not promoted;
-        // the day it is, this oracle would have gone permanently red exactly
-        // like MemoryStream's and reported a port defect that is not there.
-        TagVptrIdentity(a, 0x00, VtblCompressedStream(), 0);
-        TagVptrIdentity(b, 0x00, ResolveExportRaw("??_7CompressedStream@IO@@6B@"), 1);
-        for (const auto& g : kGaps) {
-            std::memset(a + g.off, 0, g.len);
-            std::memset(b + g.off, 0, g.len);
-        }
-        RT_DIFF_BYTES(a, b, sizeof(a));
-
-        RT_ORIGINAL_ONCE(DtorFn, "??1CompressedStream@IO@@UEAA@XZ")(theirs);
-    }
     return self;
 }
 

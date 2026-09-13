@@ -45,7 +45,6 @@
 
 #include "../../types/object/TypeInfo.h"
 #include "../../funcs/rt_port.h"
-#include "factory_dispatch_probe.h"   // WAVE 11 follow-up 5 (lane TINFO)
 
 // ----------------------------------------------------------------------------
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
@@ -216,9 +215,7 @@ uint32_t TypeIdFromName(const char* name) { return TypeNameCRC(name); }
 // slot 2 a side effect, this site becomes unsound; nothing does today.
 // ============================================================================
 bool RtObject_Base_IsA(const void* self, uint32_t typeId) {
-    RT_DIFF_BEGIN("Object::Base::IsA");
     const bool ours = (typeId == GetTypeIdVirtual(self));
-    RT_DIFF_SCALAR(ours, RtOriginal<fn_IsA_t>(kNameIsA)(self, typeId));
     return ours;
 }
 
@@ -250,7 +247,6 @@ bool RtObject_Base_IsA(const void* self, uint32_t typeId) {
 // DIFF: full oracle. Read-only on both sides.
 // ============================================================================
 bool RtObject_Base_IsDerivedFrom(const void* self, uint32_t typeId) {
-    RT_DIFF_BEGIN("Object::Base::IsDerivedFrom");
     ResolveGlobals();
 
     const Factory* factory = *g_factorySingleton;
@@ -273,7 +269,6 @@ bool RtObject_Base_IsDerivedFrom(const void* self, uint32_t typeId) {
         }
     }
 
-    RT_DIFF_SCALAR(ours, RtOriginal<fn_IsDerivedFrom_t>(kNameIsDerivedFrom)(self, typeId));
     return ours;
 }
 
@@ -298,15 +293,12 @@ bool RtObject_Base_IsDerivedFrom(const void* self, uint32_t typeId) {
 // ============================================================================
 uint32_t RtObject_Factory_GetTypeIdFromName(const void* factory, const char* name,
                                             bool existingOnly) {
-    RT_DIFF_BEGIN("Object::Factory::GetTypeIdFromName");
     (void)existingOnly;   // retail-unused; see above
 
     const uint32_t crc = TypeNameCRC(name);
     const uint32_t ours =
         FindNode(static_cast<const Factory*>(factory), crc) ? crc : 0u;
 
-    RT_DIFF_SCALAR(ours,
-        RtOriginal<fn_GetTypeIdFromName_t>(kNameGetTypeIdFromName)(factory, name, existingOnly));
     return ours;
 }
 
@@ -334,7 +326,7 @@ uint32_t RtObject_Factory_GetTypeIdFromName(const void* factory, const char* nam
 // (reference_aeaa_is_private_not_unexported.md). So the NAME door is real and
 // is registered alongside the address door.
 //
-// NO DIFF SITE. A `RT_DIFF_SCALAR` here would compare `TypeNameCRC` against
+// NO DIFF SITE. A `the diff oracle` here would compare `TypeNameCRC` against
 // the shipped 0x1800c0930 — but `RtObject_Factory_GetTypeIdFromName`'s own
 // site already compares a value DERIVED from exactly this computation against
 // the shipped GetTypeIdFromName on every call, which is a strictly stronger
@@ -367,7 +359,6 @@ uint32_t RtObject_Factory_GetTypeFromNameCRC(const void* /*factory*/, const char
 // which is one indirect call through a pointer we did not compute.
 // ============================================================================
 void* RtObject_Factory_CreateObject(const void* factory, uint32_t typeId) {
-    RT_DIFF_BEGIN("Object::Factory::CreateObject");
 
     TypeNode* n = FindNode(static_cast<const Factory*>(factory), typeId);
     // Faithful: retail's `MOV RCX,[RAX+0x10]` at 0x1800c0b03 runs on a null
@@ -376,17 +367,7 @@ void* RtObject_Factory_CreateObject(const void* factory, uint32_t typeId) {
         reinterpret_cast<const TypeRecord*>(reinterpret_cast<const char*>(n) + 8);
     BaseTypeInfo* info = rec->info;
 
-    if (rt_diff_on__) {
-        const char* theirs = RtOriginal<fn_GetTypeName_t>(kNameGetTypeName)(factory, typeId);
-        const char* oursName = info ? info->name : nullptr;
-        char a[64], b[64];
-        std::snprintf(a, sizeof(a), "name=%p", static_cast<const void*>(oursName));
-        std::snprintf(b, sizeof(b), "name=%p", static_cast<const void*>(theirs));
-        RtDiffReport(&rt_diff_site__, oursName == theirs, a, b);
-    }
 
-    // WAVE 11 follow-up 5 (lane TINFO) -- see factory_dispatch_probe.h.
-    RtFactoryDispatchObserve(RT_FACTORY_DISPATCH_FACTORY_CREATE, info);
     return reinterpret_cast<void* (*)()>(info->factoryFn)();
 }
 
@@ -420,13 +401,10 @@ void* RtObject_Factory_CreateObject(const void* factory, uint32_t typeId) {
 // with the DLL N times".
 // ============================================================================
 void RtObject_Type_Serialize(void* self, void* serializer) {
-    RT_DIFF_BEGIN("Object::Type::Serialize [not diffable]");
 
     void*  rw = *reinterpret_cast<void**>(reinterpret_cast<char*>(serializer) + 8);
     void** vt = *reinterpret_cast<void***>(rw);
 
-    RT_DIFF_SHADOW(rw != nullptr && vt != nullptr && vt[0x98 / 8] != nullptr,
-                   "rw+vtable+slot0x98 non-null", "(no oracle: mutates the stream)");
 
     reinterpret_cast<void (*)(void*, void*, int)>(vt[0x98 / 8])(rw, self, 0);
 }
@@ -461,7 +439,7 @@ void RtObject_Type_Serialize(void* self, void* serializer) {
 // left, and compares all seven fields. The DLL's ctor touches nothing else —
 // the disassembly at 0x180006320 is 21 instructions and the only global it
 // reads or writes is `_firstTypeInfo` — so the rewind is complete, not
-// approximate. This runs only under BANISHED_RT_DIFF=1 and only during static
+// approximate. This runs only under the old DLL-era switch and only during static
 // registration, which is single-threaded.
 // ============================================================================
 BaseTypeInfo* RtObject_BaseTypeInfo_Ctor(BaseTypeInfo* self,
@@ -470,7 +448,6 @@ BaseTypeInfo* RtObject_BaseTypeInfo_Ctor(BaseTypeInfo* self,
                                          const char* fileExtension,
                                          void* factoryFn,
                                          void* inPlaceFactoryFn) {
-    RT_DIFF_BEGIN("Object::BaseTypeInfo::BaseTypeInfo");
     ResolveGlobals();
 
     BaseTypeInfo* const prevHead = *g_firstTypeInfo;
@@ -498,33 +475,6 @@ BaseTypeInfo* RtObject_BaseTypeInfo_Ctor(BaseTypeInfo* self,
         self->parentName = q;
     }
 
-    if (rt_diff_on__) {
-        BaseTypeInfo scratch;
-        std::memset(&scratch, 0, sizeof(scratch));
-
-        BaseTypeInfo* const ourHead = *g_firstTypeInfo;   // == self
-        *g_firstTypeInfo = prevHead;                      // rewind
-        RtOriginal<fn_BaseTypeInfoCtor_t>(kNameBaseTypeInfoCtor)(
-            &scratch, name, parentName, fileExtension, factoryFn, inPlaceFactoryFn);
-        *g_firstTypeInfo = ourHead;                       // undo their link
-
-        // Field-by-field, never memcmp: `_pad04` is written by neither side and
-        // comparing it would be the Frustum-padding false alarm from WAVE1.md.
-        const bool equal =
-            scratch.typeId           == self->typeId &&
-            scratch.name             == self->name &&
-            scratch.parentName       == self->parentName &&
-            scratch.fileExtension    == self->fileExtension &&
-            scratch.factoryFn        == self->factoryFn &&
-            scratch.inPlaceFactoryFn == self->inPlaceFactoryFn &&
-            scratch.next             == prevHead &&
-            self->next               == prevHead;
-
-        char a[64], b[64];
-        std::snprintf(a, sizeof(a), "parent=%s", self->parentName ? self->parentName : "(null)");
-        std::snprintf(b, sizeof(b), "parent=%s", scratch.parentName ? scratch.parentName : "(null)");
-        RtDiffReport(&rt_diff_site__, equal, a, b);
-    }
 
     return self;   // MSVC returns `this` from every ctor; so does retail (RAX=R10)
 }
@@ -730,48 +680,6 @@ void FactoryStartupRun(FactorySet* self) {
         setInsert(self, &it, &rec.typeId, &rec);
     }
 
-    // ---- Survey (lane TYPE, 2026-09-08): BANISHED_RT_TYPE_SURVEY=1 --------
-    //
-    // A READ-ONLY pre-pass over the tree pass 1 just built. It resolves every
-    // parentName exactly as pass 2 will and reports the ones that miss --
-    // ALL of them, which is the one thing the faithful fault cannot tell you,
-    // because the fault stops at the first.
-    //
-    // It writes nothing and is skipped entirely unless the env var is set, so
-    // pass 2 below is bit-identical with the var unset. Its EFFECTIVENESS
-    // control is the `withParent` count: a survey reporting 0 missing out of 0
-    // parents resolved has proved nothing, and says so on its own line.
-    if (const char* sv = std::getenv("BANISHED_RT_TYPE_SURVEY")) {
-      if (sv[0] && sv[0] != '0') {
-        int chain = 0, withParent = 0, missing = 0;
-        for (TypeNode* n2 = LeftMost(self->root); n2; n2 = Successor(n2)) {
-            ++chain;
-            BaseTypeInfo* const bi = n2->value.info;
-            if (!bi->parentName) continue;
-            ++withParent;
-            const uint32_t pid = TypeNameCRC(bi->parentName);
-            TypeNode* q = self->root;
-            while (q) {
-                if (pid < q->key)      q = q->left;
-                else if (q->key < pid) q = q->right;
-                else                   break;
-            }
-            if (!q) {
-                ++missing;
-                printf("[RtTypeSurvey] MISSING PARENT: type \"%s\" "
-                            "(id 0x%08X) names parent \"%s\" (id 0x%08X)\n",
-                            bi->name ? bi->name : "(null)",
-                            n2->value.typeId, bi->parentName, pid);
-            }
-        }
-        printf("[RtTypeSurvey build LANETYPE-A2] %d nodes in tree, %d with a parentName, "
-                    "%d parentName(s) UNRESOLVED%s\n",
-                    chain, withParent, missing,
-                    withParent == 0 ? "  (NO PARENTS RESOLVED -- this survey "
-                                      "proved nothing)" : "");
-        std::fflush(stdout);
-      }
-    }
 
     // ---- Pass 2: link parents, fill children ------------------------------
     for (TypeNode* node = LeftMost(self->root); node; node = Successor(node)) {
@@ -848,286 +756,7 @@ void FactoryStartupRun(FactorySet* self) {
     }
 }
 
-// ============================================================================
-// The probe: BANISHED_RT_FACTORY_STARTUP_PROBE=1
-// ============================================================================
-//
-// WHY A PROBE AND NOT RT_DIFF. The live call runs ONCE, on the engine's own
-// factory, and it mutates. "Call ours, call theirs, compare" would insert every
-// type twice into the one tree — the failure
-// docs/runtime_port/WAVE9.md rows 27-28 correctly identify for
-// ExternalFactory::FindOrLoad and ::Clean.
-//
-// WHY A PROBE IS NEVERTHELESS POSSIBLE HERE, and this is the whole argument:
-// Startup's writes are of exactly two kinds.
-//
-//   (a) `info->typeId = CRC(info->name)`, into the SHARED BaseTypeInfo chain.
-//       This is a PURE FUNCTION of a field neither run modifies, so it is
-//       IDEMPOTENT — running Startup three times writes the same 32 bits three
-//       times. It is not state that has to be snapshot and restored.
-//   (b) Everything else — the tree, the nodes, the children arrays — is
-//       reachable only through `this`.
-//
-// So a Factory the probe OWNS is a complete, independent subject: theirs into
-// factory A, ours into factory B, compare A with B. That is
-// reference_synthetic_subject_beats_a_fake.md, and it needs no fake at all —
-// a zeroed 0x10 bytes is a valid empty Factory, which is what the ctor makes.
-//
-// WHAT IT COMPARES, AND WHY BY MAPPING. `value.parent` and every `children[i]`
-// point INTO their own tree, so a byte compare would fail on exactly the
-// fields that represent the work. The comparison is therefore the same shape
-// as lane C2's mint shadow: A's pointer must denote the same TYPE as B's, and
-// `value.info` — a pointer into the one shared chain — is that identity.
-//
-// COST. Both trees are LEAKED: ~N nodes x 0x50 bytes plus the children arrays,
-// on the order of 60 KB for the ~600 types this engine registers. Freeing them
-// would mean writing a post-order teardown of a tree this lane did not build,
-// on the run where the port is least trusted. Opt-in, once per process.
-//
-// NOT RUN. Lane OBJ2 does not build or execute. This probe has never executed.
-// ============================================================================
-
-struct ProbeStats {
-    int nodes = 0;            // node pairs compared
-    int withParent = 0;       // ...whose info->parentName was non-null  <-- the
-                              //    EFFECTIVENESS control for pass 2's main arm
-    int bogusParent = 0;      // ...that resolved to the (TypeRecord*)8 sentinel
-    int withChildren = 0;     // ...that ended up with >= 1 child
-    int childEntries = 0;     // child pointers compared
-    int grownArrays = 0;      // capacity != count, i.e. the *3 rule fired
-                              //    <-- EFFECTIVENESS control for the growth arm
-    int mismatches = 0;
-};
-
-// Returns the mismatch count. `verbose` false is the negative control's mode:
-// count, print nothing.
-int CompareTrees(FactorySet* theirs, FactorySet* ours, ProbeStats* st, bool verbose) {
-    TypeNode* a = LeftMost(theirs->root);
-    TypeNode* b = LeftMost(ours->root);
-
-    while (a && b) {
-        bool bad = false;
-        const char* why = "";
-
-        if (a->key != b->key)                       { bad = true; why = "key"; }
-        else if (a->value.typeId != b->value.typeId){ bad = true; why = "typeId"; }
-        else if (a->value.info != b->value.info)    { bad = true; why = "info"; }
-        else if (a->value.childCount != b->value.childCount)
-                                                    { bad = true; why = "childCount"; }
-        else if (a->value.childCapacity != b->value.childCapacity)
-                                                    { bad = true; why = "childCapacity"; }
-
-        // Parent, by mapping. Three cases have to agree: both null, both the
-        // (TypeRecord*)8 not-found sentinel, or both denoting the same type.
-        if (!bad) {
-            const TypeRecord* pa = a->value.parent;
-            const TypeRecord* pb = b->value.parent;
-            const bool sa = (reinterpret_cast<uintptr_t>(pa) == 8);
-            const bool sb = (reinterpret_cast<uintptr_t>(pb) == 8);
-            if (sa || sb) {
-                if (sa != sb) { bad = true; why = "parent-sentinel"; }
-                else          { ++st->bogusParent; }
-            } else if ((pa == nullptr) != (pb == nullptr)) {
-                bad = true; why = "parent-null";
-            } else if (pa && pa->info != pb->info) {
-                bad = true; why = "parent-mapping";
-            }
-            if (pa) ++st->withParent;
-        }
-
-        if (!bad && a->value.childCount > 0) {
-            ++st->withChildren;
-            if (a->value.childCapacity != a->value.childCount) ++st->grownArrays;
-            for (int i = 0; i < a->value.childCount; ++i) {
-                ++st->childEntries;
-                const TypeRecord* ca = a->value.children[i];
-                const TypeRecord* cb = b->value.children[i];
-                if (!ca || !cb || ca->info != cb->info) {
-                    bad = true; why = "child-mapping"; break;
-                }
-            }
-        }
-
-        if (bad) {
-            ++st->mismatches;
-            if (verbose && st->mismatches <= 20) {
-                const char* nm = (a->value.info && a->value.info->name)
-                                     ? a->value.info->name : "(unnamed)";
-                printf("[FactoryStartupProbe] MISMATCH %-24s field=%s "
-                            "theirs.key=0x%08X ours.key=0x%08X\n",
-                            nm, why, a->key, b->key);
-            }
-        }
-
-        ++st->nodes;
-        a = Successor(a);
-        b = Successor(b);
-    }
-
-    if (a || b) {
-        ++st->mismatches;
-        if (verbose)
-            printf("[FactoryStartupProbe] MISMATCH node counts differ "
-                        "(theirs %s, ours %s past the shorter walk)\n",
-                        a ? "longer" : "equal", b ? "longer" : "equal");
-    }
-    return st->mismatches;
-}
-
-bool g_probeArmed = false;
-bool g_probeRan   = false;
-
-// ---------------------------------------------------------------------------
-// Why `nodes != chain` is an ANSWER, not an alarm
-// ---------------------------------------------------------------------------
-// The probe used to print "pass 1 did not insert what it walked" whenever the
-// tree held fewer nodes than the BaseTypeInfo chain. Wave 9 lane SYS2 reported
-// the resulting `chain=416 nodes=415` as an unowned divergence, and lane PKG2
-// independently confirmed it reproduces on a control exe. It is neither a
-// divergence nor a defect in pass 1.
-//
-// Pass 1 has NO skip: every chain entry gets a `setInsert` call, and the key IS
-// `TypeNameCRC(info->name)`. A Set holds one node per KEY, so 416 inserts
-// landing 415 nodes means two entries share a key -- and retail's Startup runs
-// the identical loop into the identical Set, so retail's tree is 415 too. The
-// old message accused our port of losing an insert it never lost.
-//
-// What the collision DOES mean is worth naming rather than shrugging at: in a
-// CRC-keyed type registry, one of the two colliding types is unreachable by id.
-// So instead of an alarm, print WHICH types collide and let the reader judge.
-// Two distinct names sharing a CRC is a hash collision; the same name twice is
-// a type registered twice, which is a different (and more interesting) fact.
-void ReportKeyCollisions(int chain, int nodes) {
-    printf("[FactoryStartupProbe] chain=%d nodes=%d — the Set holds one "
-                "node per KEY, so %d entr%s share a key with an earlier one. "
-                "Pass 1 inserted all %d; retail's identical loop into its "
-                "identical Set produces the same %d. Naming the collisions:\n",
-                chain, nodes, chain - nodes, (chain - nodes) == 1 ? "y" : "ies",
-                chain, nodes);
-
-    int reported = 0;
-    for (BaseTypeInfo* a = *g_firstTypeInfo; a && reported < 20; a = a->next) {
-        for (BaseTypeInfo* b = *g_firstTypeInfo; b && b != a; b = b->next) {
-            if (TypeNameCRC(a->name) != TypeNameCRC(b->name)) continue;
-            const char* an = a->name ? a->name : "(unnamed)";
-            const char* bn = b->name ? b->name : "(unnamed)";
-            const bool sameName = a->name && b->name && strcmp(an, bn) == 0;
-            printf("[FactoryStartupProbe]   key 0x%08X  %-28s  %-28s  %s\n",
-                        TypeNameCRC(a->name), bn, an,
-                        sameName ? "SAME NAME — this type is registered TWICE"
-                                 : "distinct names — a CRC COLLISION, and one "
-                                   "of the two is unreachable by type id");
-            ++reported;
-            break;                      // one report per later duplicate
-        }
-    }
-    if (reported == 0)
-        printf("[FactoryStartupProbe]   none found — so the shortfall is "
-                    "NOT a duplicate key, and pass 1 really did lose an insert. "
-                    "That IS a defect; do not dismiss it.\n");
-}
-
-// The kill switch, BANISHED_RT_FACTORY_STARTUP=0, set once at registration.
-//
-// It is spelled as a `!g_portOn` fallback INSIDE the body rather than as an
-// `if (switch) RegisterRuntimeExport(...)` around the registration, because
-// runtime_census.py refuses to count a gated registration — "A gated
-// registration is not a port. Arm it, measure it, then move it." — and it is
-// right to: an `if (flag)` registration is how the census once counted 6 dead
-// Object entries as ported (reference_census_counted_gated_and_missed_dx11.md).
-// The registration below is therefore UNCONDITIONAL and the census sees it.
-// `g_portOn` has internal linkage; the identically-named flag in
-// runtime/src/io/serializer.cpp is a different object, and the name is shared
-// deliberately because tools/port_bypass_audit.py classifies this exact
-// spelling as OK-PORT-OFF.
-bool g_portOn = false;
-
-void FactoryStartupProbe() {
-    g_probeRan = true;
-
-    // Chain length first — it is the denominator every other number below is
-    // read against, and if it is 0 nothing that follows means anything.
-    int chain = 0;
-    for (BaseTypeInfo* i = *g_firstTypeInfo; i && chain < 100000; i = i->next) ++chain;
-
-    typedef bool (*StartupFn)(void*);
-    StartupFn orig = RtOriginal<StartupFn>("?Startup@Factory@Object@@QEAA_NXZ");
-    if (!orig) {
-        printf("[FactoryStartupProbe] NO ORACLE — the shipped DLL is not "
-                    "loaded (this is expected at cutover). chain=%d\n", chain);
-        return;
-    }
-
-    FactorySet theirs = { nullptr, 0, 0 };
-    FactorySet ours   = { nullptr, 0, 0 };
-
-    orig(&theirs);              // writes info->typeId (idempotent) + its own tree
-    FactoryStartupRun(&ours);   // writes the same typeIds + our tree
-
-    ProbeStats st;
-    const int mism = CompareTrees(&theirs, &ours, &st, /*verbose=*/true);
-
-    printf("[FactoryStartupProbe] chain=%d nodes=%d theirs.count=%u "
-                "ours.count=%u withParent=%d bogusParent=%d withChildren=%d "
-                "childEntries=%d grownArrays=%d mismatches=%d\n",
-                chain, st.nodes, theirs.count, ours.count, st.withParent,
-                st.bogusParent, st.withChildren, st.childEntries,
-                st.grownArrays, mism);
-
-    // ---- EFFECTIVENESS CONTROL --------------------------------------------
-    // reference_probe_needs_an_effectiveness_control.md: 64 green comparisons
-    // where zero did any work read exactly like a pass. Say so out loud when
-    // an arm never ran, rather than letting `mismatches=0` speak for it.
-    if (st.nodes == 0)
-        printf("[FactoryStartupProbe] VACUOUS: nodes=0 — pass 1 inserted "
-                    "nothing, so every comparison below is empty\n");
-    else if (st.nodes != chain)
-        ReportKeyCollisions(chain, st.nodes);
-    if (st.withParent == 0)
-        printf("[FactoryStartupProbe] VACUOUS: pass 2's parent arm never "
-                    "ran — every comparison below it is untested\n");
-    if (st.grownArrays == 0)
-        printf("[FactoryStartupProbe] WEAK: no children array ever grew "
-                    "past its first element, so the capacity*3 rule is "
-                    "UNTESTED by this run\n");
-
-    // ---- NEGATIVE CONTROLS -------------------------------------------------
-    // A comparator that cannot fail is not evidence. Perturb `ours` — which is
-    // discarded either way — in the two arms that matter and require a hit.
-    // reference_recheck_must_match_its_own_proof.md: these must exercise the
-    // SAME CompareTrees the verdict above came from, not a re-derived one.
-    if (mism == 0) {
-        for (TypeNode* n = LeftMost(ours.root); n; n = Successor(n)) {
-            if (n->value.childCount <= 0) continue;
-
-            const int32_t savedCap = n->value.childCapacity;
-            n->value.childCapacity = savedCap + 1;
-            ProbeStats nc1;
-            const int hit1 = CompareTrees(&theirs, &ours, &nc1, /*verbose=*/false);
-            n->value.childCapacity = savedCap;
-
-            TypeRecord* const savedChild = n->value.children[0];
-            n->value.children[0] = &n->value;      // point it at the wrong type
-            ProbeStats nc2;
-            const int hit2 = CompareTrees(&theirs, &ours, &nc2, /*verbose=*/false);
-            n->value.children[0] = savedChild;
-
-            printf("[FactoryStartupProbe] negative controls: "
-                        "capacity-perturbation detected=%s, "
-                        "child-perturbation detected=%s%s\n",
-                        hit1 > 0 ? "YES" : "NO", hit2 > 0 ? "YES" : "NO",
-                        (hit1 > 0 && hit2 > 0)
-                            ? "" : "  <-- THE COMPARATOR IS BROKEN, IGNORE THE "
-                                   "mismatches=0 ABOVE");
-            break;
-        }
-    }
-
-    printf("[FactoryStartupProbe] VERDICT: %s\n",
-                mism == 0 ? "0 mismatches" : "DIVERGED — see the rows above");
-}
-
-} // namespace
+}  // namespace
 
 // ============================================================================
 // The registered entry point.
@@ -1140,64 +769,10 @@ void FactoryStartupProbe() {
 // own postcondition holds", NOT as "this port agrees with the DLL".
 // ============================================================================
 bool RtObject_Factory_Startup(void* factory) {
-    RT_DIFF_BEGIN("Object::Factory::Startup [probe, not diffable]");
     ResolveGlobals();
-
-    if (!g_portOn) {
-        // NEVER call this unchecked — serializer.cpp's rule. `!g_portOn` means
-        // the port was switched off, and the commonest future reason for that
-        // is the DLL not being there, in which case RT_ORIGINAL_ONCE is null
-        // and calling it is the crash the switch was meant to avoid. With no
-        // shipped body, ours is the only implementation there is.
-        using Orig = bool (*)(void*);
-        Orig orig = RT_ORIGINAL_ONCE(Orig, "?Startup@Factory@Object@@QEAA_NXZ");
-        if (orig) return orig(factory);
-    }
-
-    // Opt-in, once, and BEFORE the real run so a divergence is reported even
-    // if the real run is what faults.
-    if (g_probeArmed && !g_probeRan) FactoryStartupProbe();
 
     FactoryStartupRun(static_cast<FactorySet*>(factory));
 
-    if (rt_diff_on__) {
-        int chain = 0, mismatched = 0;
-        for (BaseTypeInfo* i = *g_firstTypeInfo; i && chain < 100000; i = i->next) {
-            ++chain;
-            if (i->typeId != TypeNameCRC(i->name)) ++mismatched;
-        }
-        int nodes = 0;
-        for (TypeNode* n = LeftMost(static_cast<FactorySet*>(factory)->root);
-             n && nodes < 100000; n = Successor(n)) ++nodes;
-
-        // *** THE `theirs=` SIDE HERE IS NOT A MEASUREMENT OF RETAIL. ***
-        //
-        // This site runs no DLL body -- it is a self-check on OUR result, and
-        // the second string is a CONSTRUCTED EXPECTATION (`chain, chain`). It
-        // was previously formatted exactly like the measured side, so the
-        // report read
-        //
-        //     ours=chain=416 nodes=415   theirs=chain=416 nodes=416
-        //
-        // which any reader would take as "retail's tree has 416 nodes and ours
-        // has 415" -- a port defect. It says nothing of the kind: the 416 is
-        // this line's own assumption that nodes==chain, restated. Wave 9 lane
-        // UIC read it the natural way and reported a false divergence onward to
-        // another lane, which is a fair reading of a badly labelled instrument,
-        // not a mistake on its part.
-        //
-        // reference_recheck_must_match_its_own_proof.md is exactly this shape: a
-        // check whose "expected" side is true by construction. The fix is to
-        // stop dressing an assertion up as a comparison. The genuine question --
-        // whether the shortfall is a lost insert or two entries sharing a key --
-        // is answered empirically by ReportKeyCollisions() in the probe above,
-        // which names the colliding types instead of asserting anything.
-        char a[96], b[96];
-        std::snprintf(a, sizeof(a), "chain=%d nodes=%d badCrc=%d", chain, nodes, mismatched);
-        std::snprintf(b, sizeof(b),
-                      "EXPECTED (no DLL run): nodes==chain==%d, badCrc==0", chain);
-        RtDiffReport(&rt_diff_site__, chain > 0 && nodes == chain && mismatched == 0, a, b);
-    }
 
     return true;   // MOV AL,1 at 0x1800c0907 is Startup's only exit
 }
@@ -1228,7 +803,7 @@ int RtObjectTypeSystemRegister() {
     int n = 0;
 
     // LITERALS, not the kName* constants above (which are still used for the
-    // RtOriginal lookups). tools/runtime_census.py matches
+    // the raw DLL door lookups). tools/runtime_census.py matches
     // `RegisterRuntimeExport("<literal>"` and cannot see through a named
     // constant, so registering through the constants made these six ports
     // INVISIBLE to the census. Found in Wave 4 when lane D repeated the
@@ -1253,25 +828,9 @@ int RtObjectTypeSystemRegister() {
     // 4096) verified present in the shipped DLL's export table with pefile on
     // 2026-09-08 before a line of it was written.
     //
-    // ITS OWN KILL SWITCH, and it is DEFAULT-ON: BANISHED_RT_FACTORY_STARTUP=0
-    // sets `g_portOn` false and the body forwards to the shipped function.
-    // Registration is UNCONDITIONAL so the census counts it — see the comment
-    // on g_portOn. It gets a switch of its own rather than sharing
-    // BANISHED_RT_TYPESYS because it is step 6 of Engine::Startup's queue: if
-    // it is wrong nothing boots, and the bisection wants one variable.
     RegisterRuntimeExport("?Startup@Factory@Object@@QEAA_NXZ",
                           (void*)&RtObject_Factory_Startup); ++n;
     RegisterRuntimeAddr(0x1800c0630, (void*)&RtObject_Factory_Startup);
-    RtObject::g_portOn = RtWaveEnabled("BANISHED_RT_FACTORY_STARTUP");
-    if (!RtObject::g_portOn)
-        printf("[RtPort] BANISHED_RT_FACTORY_STARTUP=0 -- Object::Factory::Startup "
-               "forwards to the DLL\n");
-    // The probe is OPT-IN, so it is an explicit "set and not 0", not
-    // RtWaveEnabled (which means "on unless switched off").
-    {
-        const char* probe = std::getenv("BANISHED_RT_FACTORY_STARTUP_PROBE");
-        RtObject::g_probeArmed = RtObject::g_portOn && probe && std::strcmp(probe, "0") != 0;
-    }
 
     RegisterRuntimeAddr(0x1800491c0, (void*)&RtObject_Base_IsA);
     RegisterRuntimeAddr(0x1800c0390, (void*)&RtObject_Base_IsDerivedFrom);
@@ -1281,8 +840,8 @@ int RtObjectTypeSystemRegister() {
     RegisterRuntimeAddr(0x180006320, (void*)&RtObject_BaseTypeInfo_Ctor);
 
     // Ordinals: engine/funcs/engine_funcs.cpp:4552 falls back to
-    // ResolveOrdinal(2991) for GetTypeIdFromName and :4566 to
-    // ResolveOrdinal(3089) for IsA when the name lookup fails. Both names DO
+    // the ordinal door(2991) for GetTypeIdFromName and :4566 to
+    // the ordinal door(3089) for IsA when the name lookup fails. Both names DO
     // resolve, so these are belt-and-braces — but an unregistered ordinal
     // fallback is exactly how a port goes silently inert.
     RegisterRuntimeOrdinal(3089, (void*)&RtObject_Base_IsA);

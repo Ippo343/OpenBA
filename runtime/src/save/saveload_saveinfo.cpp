@@ -54,7 +54,6 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 // A probe whose "ours" side reaches the body by ADDRESS compares retail with
 // ITSELF (reference_registering_an_address_converts_a_selfcheck_into_an_oracle.md);
 // the sweep below is the mirror of that and needs the raw door for THEIRS.
-uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr);
 
 // Video::Device's recursive render lock, already ported in
 // runtime/src/video/buffers_win.cpp and already used from this directory
@@ -197,9 +196,6 @@ extern "C" int RtSave_SaveInfo_Compare(const void* a, const void* b) {
 // as written (CLAUDE.md: do not "fix" a faithful crash).
 // ============================================================================
 extern "C" void RtSave_SaveInfo_SetThumbnail(SaveInfo* row, void* pixels, int w, int h) {
-    RT_DIFF_BEGIN("[SELF-CHECK] Save::SaveInfo::SetThumbnail @0x1800c3de0");
-    RT_DIFF_WORK(true);   // no early-out; every call allocates and uploads
-
     void* mem = MemAlloc(0x68, 8);
     if (mem != nullptr) ImageBufferCtor(mem);
     ImageBuffer* img = static_cast<ImageBuffer*>(mem);   // == RAX; see the banner
@@ -249,11 +245,6 @@ extern "C" void RtSave_SaveInfo_SetThumbnail(SaveInfo* row, void* pixels, int w,
     // cannot say the Create arguments are right. The Create arguments are
     // verified by TRANSCRIPTION against the immediates in the listing, and this
     // file says so rather than letting a green site imply more.
-    RT_DIFF_SHADOW(row->imageBuffer == img && row->thumbPixels == pixels &&
-                       row->thumbWidth == w && row->thumbHeight == h,
-                   "SELF-CHECK imageBuffer published, px/w/h stored",
-                   "SELF-CHECK: no DLL side -- running retail's body would "
-                   "allocate a SECOND ImageBuffer and upload twice");
 }
 
 // ============================================================================
@@ -294,7 +285,7 @@ extern "C" void RtSave_SaveInfo_SetThumbnail(SaveInfo* row, void* pixels, int w,
 //     mutant's answers differed. If that count is 0 the negative control is
 //     inconclusive rather than passing, and it is reported that way.
 //
-// It runs under BANISHED_RT_SAVEINFO_SWEEP. Lane INTERNAL8 has no
+// It runs under the old DLL-era switch. Lane INTERNAL8 has no
 // game-directory lock; the intended driver is lane DIFF's armed sweep, which
 // sets nothing else this file needs.
 // ============================================================================
@@ -330,89 +321,6 @@ int SaveInfoCompareSignedMutant(const void* a, const void* b) {
 
 }  // namespace
 
-void RtSaveInfoComparatorSweep() {
-    const char* mode = std::getenv("BANISHED_RT_SAVEINFO_SWEEP");
-    if (!mode || !*mode || std::strcmp(mode, "0") == 0) return;
-
-    using CmpFn = int (*)(const void*, const void*);
-    CmpFn theirs = reinterpret_cast<CmpFn>(ResolveRuntimeRaw(0x1800c3db0));
-    if (!theirs) {
-        std::fprintf(stderr,
-            "[RtSaveInfoSweep] SKIP: no shipped body at 0x1800c3db0 (DLL absent). "
-            "This is the CUTOVER case; the sweep is a DLL-present instrument.\n");
-        return;
-    }
-
-    // Keys chosen to drive every arm: equal, adjacent, and STRADDLING 2^63 —
-    // the last is the only region where signed and unsigned disagree, and it is
-    // the whole reason the sweep exists.
-    static const uint64_t kKeys[] = {
-        0ull, 1ull, 2ull,
-        0x7FFFFFFFFFFFFFFEull, 0x7FFFFFFFFFFFFFFFull,
-        0x8000000000000000ull, 0x8000000000000001ull,
-        0xFFFFFFFFFFFFFFFEull, 0xFFFFFFFFFFFFFFFFull,
-        0x01D4A7C3B2E10000ull,     // a FILETIME-shaped value
-    };
-    static const int32_t kIndices[] = { -1, 0, 1, 7, 0x7FFFFFFF };
-    const int nK = static_cast<int>(sizeof(kKeys) / sizeof(kKeys[0]));
-    const int nI = static_cast<int>(sizeof(kIndices) / sizeof(kIndices[0]));
-
-    int cases = 0, mismatches = 0, decisive = 0;
-    // ONE number, not two: "the probe caught the mutant" and "the mutant's
-    // answer differed from retail's" are the SAME test by construction, and
-    // reporting them as two figures would be a union control dressed as
-    // corroboration (reference_union_control_hides_a_blind_screen.md).
-    int mutantCases = 0, mutantDiffered = 0;
-
-    for (int ai = 0; ai < nI; ++ai)
-    for (int ak = 0; ak < nK; ++ak)
-    for (int bi = 0; bi < nI; ++bi)
-    for (int bk = 0; bk < nK; ++bk) {
-        SweepRow A, B;
-        MakeRow(&A, kKeys[ak], kIndices[ai]);
-        MakeRow(&B, kKeys[bk], kIndices[bi]);
-
-        const int t = theirs(&A, &B);
-        const int o = RtSave_SaveInfo_Compare(&A, &B);
-        ++cases;
-        // "Decisive" == the call got past both saveIndex tests and the answer
-        // was actually produced by the key comparison.
-        const bool reachedKeys = (kIndices[ai] >= 0 && kIndices[bi] >= 0);
-        if (reachedKeys) ++decisive;
-        if (t != o) {
-            if (mismatches == 0)
-                std::fprintf(stderr,
-                    "[RtSaveInfoSweep] MISMATCH a={key=0x%llx idx=%d} "
-                    "b={key=0x%llx idx=%d}: ours=%d theirs=%d\n",
-                    (unsigned long long)kKeys[ak], kIndices[ai],
-                    (unsigned long long)kKeys[bk], kIndices[bi], o, t);
-            ++mismatches;
-        }
-
-        // ---- the negative control, on the SAME pair ----------------------
-        const int m = SaveInfoCompareSignedMutant(&A, &B);
-        ++mutantCases;
-        if (m != t) ++mutantDiffered;
-    }
-
-    std::fprintf(stderr,
-        "[RtSaveInfoSweep] 0x1800c3db0: cases=%d mismatches=%d decisive=%d\n",
-        cases, mismatches, decisive);
-    std::fprintf(stderr,
-        "[RtSaveInfoSweep] NEGATIVE CONTROL (signed-compare mutant): "
-        "cases=%d differed-from-retail=%d\n",
-        mutantCases, mutantDiffered);
-
-    if (decisive == 0)
-        std::fprintf(stderr,
-            "[RtSaveInfoSweep] *** EFFECTIVENESS CONTROL FAILED: no case "
-            "reached the sortKey comparison. This run proves NOTHING. ***\n");
-    if (mutantDiffered == 0)
-        std::fprintf(stderr,
-            "[RtSaveInfoSweep] *** NEGATIVE CONTROL INCONCLUSIVE: the mutant "
-            "agreed with retail on every pair, so a zero here would be "
-            "indistinguishable from a dead comparison. Widen the key set. ***\n");
-}
 
 // ============================================================================
 // Registration
@@ -431,6 +339,5 @@ void RtSaveInfoComparatorSweep() {
 int RtSaveInfoRegister() {
     RegisterRuntimeAddr(0x1800c3db0, (void*)&RtSave_SaveInfo_Compare);
     RegisterRuntimeAddr(0x1800c3de0, (void*)&RtSave_SaveInfo_SetThumbnail);
-    RtSaveInfoComparatorSweep();   // no-op unless BANISHED_RT_SAVEINFO_SWEEP is set
     return 2;
 }

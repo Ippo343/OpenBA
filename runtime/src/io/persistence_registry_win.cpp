@@ -140,7 +140,7 @@
 // ORACLE — a real differential one, and it cannot write to HKCU
 // ---------------------------------------------------------------------------
 // `ReadSettings` writes ONLY into the object handed to it. So under
-// `BANISHED_RT_DIFF` this file runs the SHIPPED body (`RT_ORIGINAL_ONCE`, which
+// `the old DLL-era switch` this file runs the SHIPPED body (`the raw DLL door`, which
 // deliberately skips the port registry) against a zeroed SCRATCH
 // `{ root, count }` pair on our own stack, digests the resulting tree, and
 // compares that digest with the digest of the tree our body just built in the
@@ -162,7 +162,7 @@
 // count is small, the number is weak evidence and should be reported as such
 // (reference_probe_needs_an_effectiveness_control.md).
 //
-// `RT_DIFF_WORK(count != 0)` is the effectiveness control: a run whose
+// `the diff oracle(count != 0)` is the effectiveness control: a run whose
 // `worked=` column is 0 read an empty or missing registry key and the oracle
 // did no work at all, whatever `divergences=` says.
 // ============================================================================
@@ -220,7 +220,7 @@ static_assert(kSam == 0xF003F, "retail passes 0xF003F as samDesired");
 // Dependencies
 // ---------------------------------------------------------------------------
 // Every one of these goes through the PORT-AWARE door (RT_EXPORT_ONCE by name,
-// or ResolveAddr for the two unnamed internals), NOT through RT_ORIGINAL_ONCE.
+// or ResolveAddr for the two unnamed internals), NOT through the raw DLL door.
 // This wave's whole point is that the DLL will not be there, so a dependency
 // that insists on the shipped body is a null call at cutover
 // (reference_converting_a_door_is_not_satisfying_it.md).
@@ -366,7 +366,6 @@ uint64_t DigestMap(const void* root, uint32_t* countOut, const char** firstKeyOu
 // ??0Registry@IO@@QEAA@PEBD@Z                              retail 0x1800b9500
 // ============================================================================
 extern "C" Registry* RtIo_Registry_Ctor(Registry* self, const char* subKey) {
-    RT_DIFF_BEGIN("IO::Registry::Registry(const char*)");
 
     // 0x1800b9520-0x1800b952a. The qword store at +0x10 clears BOTH dword
     // cursors; see runtime/types/io/Registry.h.
@@ -442,21 +441,6 @@ extern "C" Registry* RtIo_Registry_Ctor(Registry* self, const char* subKey) {
 
     RtSystem::RtString_ReleaseInline(&wpath);
 
-    if (rt_diff_on__) {
-        // No second run: constructing a Registry twice would call
-        // RegCreateKeyExW twice, and while that is idempotent it is still a
-        // registry mutation this lane will not perform for measurement's sake.
-        // The shadow is the post-condition the body is FOR: a path was built
-        // and a handle was obtained under it.
-        const bool ok = self->path.data != nullptr && self->key != nullptr;
-        char a[192], b[96];
-        std::snprintf(a, sizeof(a), "path=\"%s\" key=%p disp=%lu",
-                      self->path.data ? self->path.data : "(null)",
-                      self->key, static_cast<unsigned long>(disposition));
-        std::snprintf(b, sizeof(b), "path built AND key open [ok=%d]", ok ? 1 : 0);
-        RT_DIFF_SHADOW(ok, a, b);
-        RT_DIFF_WORK(true);
-    }
 
     return self;   // 0x1800b9747: MOV RAX,RDI
 }
@@ -465,7 +449,6 @@ extern "C" Registry* RtIo_Registry_Ctor(Registry* self, const char* subKey) {
 // ?ReadSettings@Persistence@IO@@QEAAXXZ                    retail 0x1800b84b0
 // ============================================================================
 extern "C" void RtIo_Persistence_ReadSettings(Persistence* self) {
-    RT_DIFF_BEGIN("IO::Persistence::ReadSettings");
 
     MapClear(self);                                            // 0x1800b84db
 
@@ -525,47 +508,6 @@ extern "C" void RtIo_Persistence_ReadSettings(Persistence* self) {
     reg.key = nullptr;
     RtSystem::RtString_ReleaseInline(&reg.path);               // 0x1800b8892
 
-    if (rt_diff_on__) {
-        uint32_t    ours     = 0;
-        const char* firstKey = nullptr;
-        const uint64_t oursDigest = DigestMap(self->settingsMapRoot, &ours, &firstKey);
-
-        // The effectiveness control, printed BEFORE the comparison so it is
-        // legible even when the comparison agrees. See the ORACLE banner: a
-        // digest over a two-entry map is not a verification.
-        printf("[BOOT2 ReadSettings] entries=%u count_field=%d first=\"%s\"\n",
-                    ours, self->settingsMapCount,
-                    firstKey ? firstKey : "(none)");
-
-        // Run the SHIPPED body into a zeroed SCRATCH container and digest that.
-        // Written out HERE, inside the guard, rather than in a helper: with the
-        // RT_ORIGINAL_ONCE in a helper, `tools/port_bypass_audit.py` reported it
-        // as BYPASS=1 and it was RIGHT to — the raw door sat in a function whose
-        // own body carried no guard, so nothing but a human reading two call
-        // sites could tell that it never runs on a live path. Keeping the oracle
-        // where its guard is visible is what makes that audit's denominator mean
-        // something (reference_documenting_a_check_can_delete_it.md).
-        //
-        // The scratch is a whole zeroed Persistence, not the two fields the
-        // shipped body is known to touch (root at +0x00, count at +0x08), so
-        // that any field this lane failed to notice lands in our own storage
-        // rather than past the end of a two-field struct.
-        uint64_t theirsDigest = 0;
-        ReadSettingsFn theirs =
-            RT_ORIGINAL_ONCE(ReadSettingsFn, "?ReadSettings@Persistence@IO@@QEAAXXZ");
-        if (theirs != nullptr) {
-            Persistence scratch;
-            std::memset(&scratch, 0, sizeof(scratch));
-            theirs(&scratch);
-            theirsDigest = DigestMap(scratch.settingsMapRoot, nullptr, nullptr);
-            // Retail's own destructor, so the strings the shipped body just
-            // allocated do not leak once per diffed call.
-            MapClear(&scratch);
-        }
-
-        RT_DIFF_SCALAR(oursDigest, theirsDigest);
-        RT_DIFF_WORK(ours != 0);
-    }
 }
 
 // ============================================================================
@@ -758,73 +700,22 @@ void MemFreeRaw(void* p) {
     RT_EXPORT_ONCE(Fn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
 }
 
-// ---- the two mutating calls, behind a recorder seam ------------------------
+// ---- the two mutating calls -----------------------------------------------
 //
-// A recorded emission. `name` and `data` are copied out of the wide buffers
-// rather than aliased, because the caller frees them immediately after the
-// call and a pointer comparison would be reading freed memory on both sides.
-struct RegEmission {
-    int      kind;              // 0 = RegSetValueExW, 1 = RegDeleteKeyW
-    unsigned type;              // dwType, RegSetValueExW only
-    unsigned cb;                // cbData, RegSetValueExW only
-    wchar_t  name[256];
-    wchar_t  data[512];
-};
-
-constexpr int kMaxEmissions = 512;
-
-struct RegRecorder {
-    int         n = 0;
-    int         dropped = 0;    // emissions past the cap; reported, not hidden
-    RegEmission e[kMaxEmissions];
-};
-
-RegRecorder* g_recorder = nullptr;   // armed only inside the probe
-
-void CopyWide(wchar_t* dst, size_t cap, const wchar_t* src) {
-    size_t i = 0;
-    if (src) { for (; src[i] && i + 1 < cap; ++i) dst[i] = src[i]; }
-    dst[i] = 0;
-}
-
-void RecordEmission(int kind, const wchar_t* name, unsigned type,
-                    const wchar_t* data, unsigned cb) {
-    RegRecorder* r = g_recorder;
-    if (!r) return;
-    if (r->n >= kMaxEmissions) { ++r->dropped; return; }
-    RegEmission& e = r->e[r->n++];
-    e.kind = kind; e.type = type; e.cb = cb;
-    CopyWide(e.name, 256, name);
-    CopyWide(e.data, 512, data);
-}
-
-// Effectiveness counters. Unconditional, so they describe the REAL calls too
-// and not only the probed one.
+// Effectiveness counters, unconditional.
 long g_wsSetCalls    = 0;
 long g_wsStaleFound  = 0;
 long g_wsDeleteCalls = 0;
 
-// The negative control's one defect: emit the value's NAME and DATA the wrong
-// way round. That is the exact mistake the banner warns is invisible end to end
-// (a mirrored settings map still round-trips through ReadSettings), so it is
-// the right thing to prove the comparison can see.
-bool g_negativeSwap = false;
-
 void EmitSet(HKEY key, const wchar_t* name, DWORD type,
              const wchar_t* data, DWORD cb) {
     ++g_wsSetCalls;
-    if (g_recorder) {
-        if (g_negativeSwap) RecordEmission(0, data, type, name, cb);
-        else                RecordEmission(0, name, type, data, cb);
-        return;
-    }
     RegSetValueExW(key, name, 0, type,
                    reinterpret_cast<const BYTE*>(data), cb);
 }
 
 void EmitDelete(HKEY key, const wchar_t* name) {
     ++g_wsDeleteCalls;
-    if (g_recorder) { RecordEmission(1, name, 0, nullptr, 0); return; }
     // RegDeleteKeyW, not RegDeleteValueW — see the banner. It is expected to
     // fail with ERROR_FILE_NOT_FOUND every time, and retail ignores the result.
     RegDeleteKeyW(key, name);
@@ -1012,244 +903,10 @@ void WriteSettingsBody(const Persistence* self) {
     }
 }
 
-// ---- the probe -------------------------------------------------------------
-//
-// IAT interception. The two slots are DATA in the DLL's .rdata-adjacent import
-// table; `ResolveAddr(Module::Runtime, …)` supplies the ASLR-corrected address
-// (nothing is registered at either, so no port-registry interception applies —
-// reference_resolveaddr_consults_port_registry_first.md, checked by grep).
-LONG WINAPI ThunkRegSetValueExW(HKEY, LPCWSTR name, DWORD, DWORD type,
-                                const BYTE* data, DWORD cb) {
-    RecordEmission(0, name, type, reinterpret_cast<const wchar_t*>(data), cb);
-    return ERROR_SUCCESS;
-}
-LONG WINAPI ThunkRegDeleteKeyW(HKEY, LPCWSTR name) {
-    RecordEmission(1, name, 0, nullptr, 0);
-    return ERROR_FILE_NOT_FOUND;   // what the real call returns here; see banner
-}
-
-bool PatchSlot(uintptr_t ghidraVa, void* fn, void** saved) {
-    uintptr_t va = ResolveAddr(Module::Runtime, ghidraVa);
-    if (!va) return false;
-    void** slot = reinterpret_cast<void**>(va);
-    DWORD old = 0;
-    if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &old)) return false;
-    *saved = *slot;
-    *slot = fn;
-    VirtualProtect(slot, sizeof(void*), old, &old);
-    return true;
-}
-
-void RestoreSlot(uintptr_t ghidraVa, void* saved) {
-    uintptr_t va = ResolveAddr(Module::Runtime, ghidraVa);
-    if (!va || !saved) return;
-    void** slot = reinterpret_cast<void**>(va);
-    DWORD old = 0;
-    if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &old)) return;
-    *slot = saved;
-    VirtualProtect(slot, sizeof(void*), old, &old);
-}
-
-bool g_probeArmed = false;
-bool g_probeRan   = false;
-
-// The same predicate as CompareRecorders but SILENT — used by the negative
-// control, which EXPECTS a difference and must not print three of them as if
-// they were defects. Split rather than parameterised so the two cannot drift:
-// the verdict and the message are computed from one expression each
-// (reference_shadow_predicate_must_name_its_failing_term.md).
-int CompareRecordersQuiet(const RegRecorder& o, const RegRecorder& t) {
-    int bad = 0;
-    const int n = (o.n < t.n) ? o.n : t.n;
-    for (int i = 0; i < n; ++i) {
-        const RegEmission& a = o.e[i];
-        const RegEmission& b = t.e[i];
-        if (a.kind == b.kind && a.type == b.type && a.cb == b.cb &&
-            std::wcscmp(a.name, b.name) == 0 &&
-            (a.kind != 0 || std::wcscmp(a.data, b.data) == 0))
-            continue;
-        ++bad;
-    }
-    if (o.n != t.n) ++bad;
-    return bad;
-}
-
-int CompareRecorders(const RegRecorder& o, const RegRecorder& t) {
-    int bad = 0;
-    const int n = (o.n < t.n) ? o.n : t.n;
-    for (int i = 0; i < n; ++i) {
-        const RegEmission& a = o.e[i];
-        const RegEmission& b = t.e[i];
-        if (a.kind == b.kind && a.type == b.type && a.cb == b.cb &&
-            std::wcscmp(a.name, b.name) == 0 &&
-            (a.kind != 0 || std::wcscmp(a.data, b.data) == 0))
-            continue;
-        if (bad < 3)
-            printf("[WriteSettings] EMISSION %d DIFFERS: ours[kind=%d "
-                        "type=%u cb=%u name=\"%ls\" data=\"%ls\"] "
-                        "theirs[kind=%d type=%u cb=%u name=\"%ls\" data=\"%ls\"]\n",
-                        i, a.kind, a.type, a.cb, a.name, a.data,
-                        b.kind, b.type, b.cb, b.name, b.data);
-        ++bad;
-    }
-    if (o.n != t.n) {
-        printf("[WriteSettings] EMISSION COUNT DIFFERS: ours=%d theirs=%d\n",
-                    o.n, t.n);
-        ++bad;
-    }
-    return bad;
-}
-
-void MaybeRunProbe(const Persistence* self) {
-    if (!g_probeArmed || g_probeRan) return;
-    g_probeRan = true;
-
-    using WriteFn = void (*)(const Persistence*);
-    WriteFn theirs = reinterpret_cast<WriteFn>(ResolveRuntimeRaw(0x1800b88e0));
-    if (!theirs) {
-        printf("[WriteSettings] SKIP -- the shipped 0x1800b88e0 is not "
-                    "reachable (cutover, or the DLL is absent). "
-                    "NO COMPARISON WAS MADE.\n");
-        return;
-    }
-
-    // ---- THE CORPUS CONTROL, and why it writes one value ------------------
-    // The first run of this probe reported `staleNamesFound=0`: every value
-    // under the key was in the settings map, so phase 2's array append and its
-    // delete pass NEVER RAN and the comparison covered phase 1 only. A green
-    // line over an unexercised half is the failure this project keeps paying
-    // for, so the probe seeds the branch it needs rather than reporting that it
-    // could not reach it.
-    //
-    // One value, under a name no setting will ever collide with, written before
-    // the comparison and removed with `RegDeleteValueW` after it. It is the one
-    // registry mutation anywhere in this file's oracle, it is confined to the
-    // probe's own opt-in env var, and it is undone unconditionally below.
-    //
-    // NOTE it must be a VALUE and not a subkey: what phase 2 enumerates is
-    // values (RegEnumValueW), and what it then calls is RegDeleteKeyW — see
-    // the banner's finding. Seeding a value is what puts a name in the stale
-    // array; retail's delete then correctly fails to remove it, which is the
-    // behaviour under test.
-    static const wchar_t kSeedName[] = L"__WriteSettingsOracle_StaleName__";
-    HKEY seedKey = nullptr;
-    bool seeded = false;
-    {
-        Registry probeReg;
-        RT_EXPORT_ONCE(RegistryCtorFn, "??0Registry@IO@@QEAA@PEBD@Z")(&probeReg, nullptr);
-        seedKey = static_cast<HKEY>(probeReg.key);
-        if (seedKey) {
-            static const wchar_t kSeedData[] = L"stale";
-            seeded = RegSetValueExW(seedKey, kSeedName, 0, REG_SZ,
-                                    reinterpret_cast<const BYTE*>(kSeedData),
-                                    sizeof(kSeedData)) == ERROR_SUCCESS;
-        }
-        // The handle is kept open across the comparison so the seed can be
-        // removed afterwards; only the path String is released here.
-        RtSystem::RtString_ReleaseInline(&probeReg.path);
-    }
-
-    static RegRecorder ours, theirsRec;
-    ours.n = ours.dropped = 0;
-    theirsRec.n = theirsRec.dropped = 0;
-
-    const long set0 = g_wsSetCalls, stale0 = g_wsStaleFound, del0 = g_wsDeleteCalls;
-
-    // OURS: the body's own seam, no patching needed.
-    g_recorder = &ours;
-    WriteSettingsBody(self);
-    g_recorder = nullptr;
-
-    const long dSet = g_wsSetCalls - set0;
-    const long dStale = g_wsStaleFound - stale0;
-    const long dDel = g_wsDeleteCalls - del0;
-
-    // THEIRS: two IAT slots, swapped for the duration and put back.
-    void* savedSet = nullptr;
-    void* savedDel = nullptr;
-    const bool okS = PatchSlot(0x18014b018, (void*)&ThunkRegSetValueExW, &savedSet);
-    const bool okD = PatchSlot(0x18014b008, (void*)&ThunkRegDeleteKeyW, &savedDel);
-    if (!okS || !okD) {
-        RestoreSlot(0x18014b018, savedSet);
-        RestoreSlot(0x18014b008, savedDel);
-        printf("[WriteSettings] SKIP -- could not swap the ADVAPI32 IAT "
-                    "slots (set=%d del=%d). Running the shipped body without "
-                    "them would WRITE TO THE PLAYER'S REGISTRY, so no "
-                    "comparison was made.\n", okS ? 1 : 0, okD ? 1 : 0);
-        return;
-    }
-    g_recorder = &theirsRec;
-    theirs(self);
-    g_recorder = nullptr;
-    RestoreSlot(0x18014b018, savedSet);
-    RestoreSlot(0x18014b008, savedDel);
-
-    const int bad = CompareRecorders(ours, theirsRec);
-
-    // ---- NEGATIVE CONTROL --------------------------------------------------
-    // Re-run OUR body with the name/data swap, into a third recorder, and check
-    // that the comparison rejects it. If it does not, every "mismatches=0"
-    // above is void (reference_probe_needs_an_effectiveness_control.md). The
-    // swapped run records and writes nothing, exactly like the other two.
-    static RegRecorder negRec;
-    negRec.n = negRec.dropped = 0;
-    g_recorder = &negRec;
-    g_negativeSwap = true;
-    WriteSettingsBody(self);
-    g_negativeSwap = false;
-    g_recorder = nullptr;
-    const bool negCaught = CompareRecordersQuiet(negRec, theirsRec) != 0;
-
-    // Remove the seed unconditionally, whichever way the comparisons went, and
-    // ONLY NOW — the negative control must see the same corpus as the other two
-    // runs, or its verdict comes from an emission-COUNT difference the swap did
-    // not cause and it would report CAUGHT for the wrong reason.
-    // RegDeleteValueW, not RegDeleteKeyW: this is the harness cleaning up after
-    // itself and it must actually work, which is precisely what retail's own
-    // delete pass does not do.
-    if (seeded) RegDeleteValueW(seedKey, kSeedName);
-    if (seedKey) RegCloseKey(seedKey);
-
-    printf("[WriteSettings] negative-control name/data swap: %s\n",
-                negCaught ? "CAUGHT" : "*** MISSED ***");
-    if (!negCaught)
-        printf("[WriteSettings] *** the negative control was MISSED: the "
-                    "emission comparison cannot see a swapped name and value, "
-                    "so the green line above is void ***\n");
-
-    printf("[WriteSettings] corpus: stale-name seed %s\n",
-                seeded ? "PLANTED and removed" : "*** NOT PLANTED ***");
-    printf("[WriteSettings] emissions ours=%d theirs=%d mismatches=%d "
-                "dropped(ours=%d theirs=%d)\n"
-                "[WriteSettings] effectiveness (inside our body): "
-                "RegSetValueExW=%ld staleNamesFound=%ld RegDeleteKeyW=%ld\n",
-                ours.n, theirsRec.n, bad, ours.dropped, theirsRec.dropped,
-                dSet, dStale, dDel);
-    if (dSet == 0)
-        printf("[WriteSettings] *** RegSetValueExW=0: the settings map was "
-                    "EMPTY, so phase 1 emitted nothing and this run verified "
-                    "only that both sides emit nothing ***\n");
-    if (dStale == 0)
-        printf("[WriteSettings] *** staleNamesFound=0: every enumerated "
-                    "value was in the map, so phase 2's array append and its "
-                    "delete pass never ran. The corpus, not the port, is what "
-                    "is untested here ***\n");
-}
-
 }  // namespace
 
-void RtIoWriteSettingsProbeArm(bool on) { g_probeArmed = on; }
-
 extern "C" void RtIo_Persistence_WriteSettings(const Persistence* self) {
-    RT_DIFF_BEGIN("IO::Persistence::WriteSettings");
-    MaybeRunProbe(self);
     WriteSettingsBody(self);
-    // No RT_DIFF_* comparison here: the comparison IS the probe above, and it
-    // cannot run on every call (it replays the whole body). Reported through
-    // its own [WriteSettings] channel so a reader is never shown a green
-    // `divergences=0` line that measured nothing.
-    RT_DIFF_SHADOW(true, "emitted (see [WriteSettings] for the comparison)",
-                   "not compared here");
 }
 
 // ============================================================================
@@ -1273,10 +930,6 @@ int RtIoPersistenceRegistryRegister() {
     RegisterRuntimeExport("?WriteSettings@Persistence@IO@@QEBAXXZ",
                           (void*)&RtIo_Persistence_WriteSettings); ++n;
     RegisterRuntimeAddr(0x1800b88e0, (void*)&RtIo_Persistence_WriteSettings);
-    {
-        const char* p = std::getenv("BANISHED_RT_WRITESETTINGS_PROBE");
-        RtIoWriteSettingsProbeArm(p && *p && std::strcmp(p, "0") != 0);
-    }
 
     // DELIBERATELY ABSENT — every dependency this file reaches that is still on
     // the DLL, so the next lane does not have to re-derive the list:

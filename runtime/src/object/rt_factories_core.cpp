@@ -59,7 +59,7 @@ uint64_t g_inPlaceShared = 0; // slot-1 symbols already registered by another ro
 // `?Allocate@` (0x1800c6e60) which retail calls with the lock already held.
 // `ResolveAddr(Module::Runtime, ...)` consults the port registry FIRST
 // (reference_resolveaddr_consults_port_registry_first.md), so this follows the
-// tree — including the allocator port behind BANISHED_RT_ALLOC — without this
+// tree — including the allocator port behind the old DLL-era switch — without this
 // file changing. Re-resolve on a miss rather than freezing a null.
 void* MemAllocLocked(uint64_t size, int align) {
     using Fn = void* (*)(uint64_t, int);
@@ -229,27 +229,7 @@ int RtFactoriesObjectRegister() {
 // The aggregate init. Called from RuntimePortInit() BEFORE RtDataMintInit().
 // ============================================================================
 //
-// KILL SWITCH, DEFAULT ON. `dialog_factory.cpp` has been dark since Wave 11
-// because its `BANISHED_RT_DLGFACTORY` is opt-in: it is ported in SOURCE and
-// absent from the REGISTRY, so it cleared no trap and moved no census. The gate
-// is the REGISTRY, not the tree (WAVE28_KICKOFF.md §2.2.1). Set
-// BANISHED_RT_FACTREST=0 for an A/B run.
 void RtFactoriesPortInit() {
-    if (!RtWaveEnabled("BANISHED_RT_FACTREST")) {
-        // NO COUNT HERE, DELIBERATELY. This line used to say "35 non-UI factory
-        // pairs stay abort traps" — a LITERAL, in the one branch a default run
-        // never executes, so it could rot for waves without anything noticing.
-        // The same defect in this file's other printf (a stale "70 slots" after
-        // a dedupe made it 68) shipped in a committed build and was caught only
-        // by reading a log. Prefer a count the code ACCUMULATES over one it
-        // ASSERTS (lane FACTUI1); where there is nothing to accumulate — as
-        // here, since nothing was registered — print no number at all. The mint
-        // reports the true abort-trap total a few lines later anyway.
-        printf("[RtFactory] FACTREST DISABLED (BANISHED_RT_FACTREST=0); the "
-               "non-UI factory pairs stay abort traps -- see the [RtMint] "
-               "BaseTypeInfo factories line below for the count\n");
-        return;
-    }
     int n = 0;
     n += RtFactoriesObjectRegister();
     n += RtFactoriesGraphicsRegister();

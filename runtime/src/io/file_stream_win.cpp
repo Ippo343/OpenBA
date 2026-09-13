@@ -14,7 +14,6 @@
 // comment is not load-bearing for the code, which is exactly why nothing else
 // would ever have caught it — recorded rather than silently fixed.
 //
-// Kill switch: BANISHED_RT_FSSLOTS=0 (shared with file_stream.cpp's other five
 // slot bodies — the seven are one vtable row and an A/B that could only move
 // some of them could not attribute anything).
 //
@@ -58,7 +57,6 @@
 #include <cstdio>
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_diff.h"
 #include "../../types/io/FileStream.h"
 #include "../../types/io/FileSystem.h"
 
@@ -98,7 +96,6 @@ void NoteSlotDispatch(const void* vptr);
 // so it moves even on the short-write path.
 // ============================================================================
 extern "C" bool RtIo_FileStream_Write(FileStream* self, int32_t len, const void* buf) {
-    RT_DIFF_BEGIN("IO::FileStream::Write");
     ++g_fsWrite;
     NoteSlotDispatch(self->base.vptr);
 
@@ -110,7 +107,6 @@ extern "C" bool RtIo_FileStream_Write(FileStream* self, int32_t len, const void*
 
     const bool ok = (static_cast<int32_t>(written) == len);     // 1800aabd5
     if (ok) ++g_fsWriteFull;
-    RT_DIFF_WORK(written != 0);
     return ok;
 }
 
@@ -135,7 +131,6 @@ extern "C" bool RtIo_FileStream_Write(FileStream* self, int32_t len, const void*
 // as `XOR R9D,R9D` at 0x1800aac2d, the high-order-word pointer as `XOR R8D,R8D`.
 // ============================================================================
 extern "C" bool RtIo_FileStream_SetCurrentPos(FileStream* self, int32_t pos) {
-    RT_DIFF_BEGIN("IO::FileStream::SetCurrentPos");
     ++g_fsSeek;
     NoteSlotDispatch(self->base.vptr);
 
@@ -143,7 +138,6 @@ extern "C" bool RtIo_FileStream_SetCurrentPos(FileStream* self, int32_t pos) {
 
     // Unsigned: -1 and -2 take the Win32 path, a packed descriptor does not.
     if (static_cast<uint32_t>(self->file.handle) <= 0xFFFFFFFDu) {  // 1800aac16/1f
-        RT_DIFF_WORK(true);
         return true;                                     // 1800aac21
     }
 
@@ -151,7 +145,6 @@ extern "C" bool RtIo_FileStream_SetCurrentPos(FileStream* self, int32_t pos) {
     const DWORD got = ::SetFilePointer(
         reinterpret_cast<HANDLE>(self->file.winHandle),   // 1800aac29
         pos, nullptr, FILE_BEGIN);                        // 1800aac33
-    RT_DIFF_WORK(true);
     return static_cast<int32_t>(got) == pos;              // 1800aac39
 }
 
