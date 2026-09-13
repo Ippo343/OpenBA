@@ -475,14 +475,6 @@ Node** InsertCore(Set* set, Node** out, const ReferenceEntry* pair) {
 // field uninitialised for the same reason.
 // ---------------------------------------------------------------------------
 Node** Insert(Set* set, Node** out, const uint32_t* key, const Filename* value) {
-    // The probe's run point. It allocates, so it cannot run from the *PortInit
-    // (WAVE9.md lane PKG2: the allocator singleton is constructed but not
-    // started there and the first allocation faults at null+0x640). The first
-    // real Insert is provably safe because this body is itself about to
-    // allocate a node. Re-entry is impossible: the probe clears its own arm
-    // flag before it drives anything.
-    RtObjectReferenceSetProbeMaybeRun();
-
     ReferenceEntry tmp;
     tmp.id = *key;                     // DWORD; tmp._pad deliberately untouched
     RtSystem::RtSystem_Filename_CtorCopy(&tmp.path, value);
@@ -522,8 +514,6 @@ int RtObjectReferenceSetRegister() {
     RegisterRuntimeAddr(0x18002e5d0, (void*)&rtrefset::AllocNode);    ++n;
     RegisterRuntimeAddr(0x18002d180, (void*)&rtrefset::InsertCore);   ++n;
     RegisterRuntimeAddr(0x18002cb90, (void*)&rtrefset::Insert);       ++n;
-
-    RtObjectReferenceSetProbeArm(true);
 
     printf("[RtPort]   Object::Set<ReferenceEntry>: %d address doors registered "
            "(no export exists for any of them). Their only caller in this tree "

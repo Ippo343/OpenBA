@@ -97,13 +97,11 @@
 
 #include "../system/string.h"
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_diff.h"
 #include "../../types/object/TypeInfo.h"   // BEFORE External.h -- see external_savetext_win.cpp
 #include "../../types/object/External.h"
 #include "../../types/io/Stream.h"
 #include "../../types/io/FileStream.h"
 #include "../../types/io/FileSystem.h"
-#include "factory_dispatch_probe.h"   // WAVE 11 follow-up 5 (lane TINFO)
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -165,7 +163,7 @@ using DeleteFn      = void* (*)(void* self, int flags);
 // THE DOOR IS STILL A DOOR. It resolves through the port registry, which means
 // it is only as good as those three registrations: they are all inside
 // `RtCollectionPortInit` / `RtCollectionDestroyPortInit`, gated on
-// BANISHED_RT_COLLECTION (and BANISHED_RT_ARRAY_DESTROY for the second). With
+// the old DLL-era switch (and the old DLL-era switch for the second). With
 // either gate off at cutover this call site is an EXEC-of-0 again, at the same
 // instruction, and the crash will look identical to attempt 29's.
 void ArraySetSize(void* arr, int32_t n) {
@@ -258,20 +256,10 @@ LoadCounters g_lc{};
 //   1  the two per-element int32s read in the OPPOSITE ORDER
 //   2  the dependency COUNT through the int32 overload instead of the uint32 one
 // ---------------------------------------------------------------------------
-int      g_lcCtl = 0;
-uint64_t g_lcAtt = 0;
-
-// external_load_probe.cpp -- the ours-vs-theirs replay, armed from the tail of
-// the body. Declared here rather than in a header because the probe file
-// exposes none of its own, which is how every other probe in this directory is
-// wired.
-void RtObjectLoadProbeStep(const Filename* path, External* ours);
-
 // ============================================================================
 // Object::External::Load — the body.                     retail 0x1800bc620
 // ============================================================================
 extern "C" External* RtObject_External_Load(const Filename* path, External* existing) {
-    RT_DIFF_BEGIN("Object::External::Load");
     ++g_lc.calls;
 
     External* obj = existing;      // RDI, and it is REASSIGNED at 1800bc745
@@ -367,10 +355,6 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
                         reinterpret_cast<const uint8_t*>(n) + 0x10);
                 const BaseTypeInfo* info = *infoSlot;
 
-                // WAVE 11 follow-up 5 (lane TINFO): record WHICH BaseTypeInfo
-                // this dispatch goes through, BEFORE the call, so a promoted
-                // row's abort trap would be counted and not merely fatal.
-                RtFactoryDispatchObserve(RT_FACTORY_DISPATCH_EXTERNAL_LOAD, info);
                 obj = static_cast<External*>(
                           reinterpret_cast<FactoryFn>(info->factoryFn)());   // 1800bc742
                 ++g_lc.created;
@@ -403,8 +387,7 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
                 // object's CURRENT size and then serializes it, so the same
                 // instruction reads on a load and writes on a save.
                 int32_t depCount = obj->_refs._size;              // 1800bc790
-                if (g_lcCtl == 2) { ++g_lcAtt; SerI32(ser.impl, &depCount); }
-                else SerU32(ser.impl, reinterpret_cast<uint32_t*>(&depCount));
+                SerU32(ser.impl, reinterpret_cast<uint32_t*>(&depCount));
 
                 if (ser.stream->direction == 0) {                 // 1800bc7b0
                     ++g_lc.sizedArray;
@@ -421,14 +404,8 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
                     RT_EXPORT_ONCE(StrSerFn,
                         "?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z")(
                             reinterpret_cast<String*>(elem), &ser);      // 1800bc7e9
-                    if (g_lcCtl == 1) {
-                        ++g_lcAtt;
-                        SerI32(ser.impl, reinterpret_cast<int32_t*>(elem + 0x0c));
-                        SerI32(ser.impl, reinterpret_cast<int32_t*>(elem + 0x08));
-                    } else {
-                        SerI32(ser.impl, reinterpret_cast<int32_t*>(elem + 0x08));  // 1800bc7fc
-                        SerI32(ser.impl, reinterpret_cast<int32_t*>(elem + 0x0c));  // 1800bc811
-                    }
+                    SerI32(ser.impl, reinterpret_cast<int32_t*>(elem + 0x08));  // 1800bc7fc
+                    SerI32(ser.impl, reinterpret_cast<int32_t*>(elem + 0x0c));  // 1800bc811
                 }
 
                 // ---- 1800bc820..1800bc82b -------------------------------
@@ -495,17 +472,6 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
     cfs.base.base.vptr = RT_DATA_SLOT(const void*, "??_7Stream@IO@@6B@");  // 1800bc906
     if (cfs.base.base.encoding) EncodingDelete(cfs.base.base.encoding);    // 1800bc91c
 
-    // The ours-vs-theirs replay. It must run AFTER the stream is fully torn
-    // down: retail's second Load re-opens the same file, and doing that while
-    // our own FileInfo still held a handle would measure a different situation
-    // than the one under test. Opt-in, and it only compares the case the two
-    // sides build comparably -- `existing == nullptr`.
-    {
-        static bool armed = (std::getenv("BANISHED_RT_EXTLOAD_PROBE") != nullptr);
-        if (armed && existing == nullptr) RtObjectLoadProbeStep(path, result);
-    }
-
-    RT_DIFF_WORK(true);
     return result;                                                         // 1800bc921
 }
 

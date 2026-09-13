@@ -509,14 +509,6 @@ Node** InsertCore(Set* set, Node** out, const ResourceEntry* pair) {
 // this ~22.6k times in one menu-to-gameplay run.
 // ---------------------------------------------------------------------------
 Node** Insert(Set* set, Node** out, const Filename* key, const EntryValue* value) {
-    // The probe's run point. It allocates, so it cannot run from the *PortInit
-    // (WAVE9.md lane PKG2: the allocator singleton is constructed but not
-    // started there and the first allocation faults at null+0x640). The first
-    // real Insert is provably safe because the caller is itself about to
-    // allocate a node. Re-entry is impossible: the probe clears its own arm
-    // flag before it drives anything.
-    RtObjectExternalSetProbeMaybeRun();
-
     ResourceEntry tmp;
     tmp.path.data = nullptr;
     RtSystem::RtSystem_Filename_CtorCopy(&tmp.path, key);
@@ -799,8 +791,6 @@ void RtObject_ExternalFactory_Clean(ExternalFactory* self) {
     using rtresset::Elem;
     using rtresset::g_rc;
 
-    RtObjectExternalSetProbeMaybeRun();      // see the note in rtresset::Insert
-
     Set* set = reinterpret_cast<Set*>(&self->_resources);
 
     rtresset::FilenameArray evicted;         // [RSP+0x28]
@@ -935,18 +925,11 @@ int RtObjectExternalSetRegister() {
                           (void*)&RtObject::RtObject_ExternalFactory_Clean);  ++n;
     RegisterRuntimeAddr(0x1800be310, (void*)&RtObject::RtObject_ExternalFactory_Clean);
 
-    // OPT-IN, not a kill switch. `RtWaveEnabled` returns true when the variable
-    // is UNSET, which is right for a port and wrong for a probe: it would arm a
-    // lockstep comparison on every default run.
-    const char* pe = std::getenv("BANISHED_RT_RESSET_PROBE");
-    RtObjectExternalSetProbeArm(pe != nullptr && std::strcmp(pe, "0") != 0);
-
     // THE IDENTITY LINE. WAVE9.md's rule 4: gate every measurement on a string
     // only THIS build emits, read out of the run's own log — not on "I
     // rebuilt", not on a timestamp. Lanes have measured the wrong exe
     // repeatedly. Nothing else in the tree prints "ResSet".
     printf("[ResSet] registered %d doors (12 Set bodies + Clean by name and "
-                "address, resource-tree-instantiation=0x18002xxx, probe=%s)\n",
-                n, RtObjectExternalSetProbeArmed() ? "ARMED" : "off");
+                "address, resource-tree-instantiation=0x18002xxx)\n", n);
     return n;
 }

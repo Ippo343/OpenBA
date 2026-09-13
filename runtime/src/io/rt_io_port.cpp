@@ -9,23 +9,6 @@
 // runtime/funcs/rt_port.h are the only shared surface and they are already
 // written.
 //
-// Switches, outermost first:
-//   BANISHED_RT_IO=0            leave the whole IO namespace on the DLL
-//   BANISHED_RT_SERIALIZER=0    ... just Serializer + Encoding    (lane A)
-//   BANISHED_RT_STREAM=0        ... just the Stream family        (lane B)
-//   BANISHED_RT_PERSISTENCE=0   ... just Persistence + Registry   (lane C)
-//   BANISHED_RT_PERSAVES=0      ... just the Persistence save rows (lane PERSIST)
-//   BANISHED_RT_FILESYSTEM=0    ... just FileSystem + Modification(lane D)
-//   BANISHED_RT_FSSTARTUP=0     ... just FileSystem::Startup       (lane ENG)
-//   BANISHED_RT_PERSSTARTUP=0   ... just Persistence::Startup      (lane ENG)
-//   BANISHED_RT_REGREAD=0       ... just ReadSettings + Registry() (lane BOOT2)
-//   BANISHED_RT_FSDIRS=0        ... just SetupDirectories + friends (lane FS)
-//   BANISHED_RT_PKG=0           ... just LoadPackages + friends     (lane PKG)
-//   BANISHED_RT_IOBASE=0        ... just the IOBASE slot-0 dtors,
-//                                   GetSource and VisitorStream   (lane IOBASE)
-//   BANISHED_RT_FILESTREAM=0    ... just the FileStream family      (lane FILE)
-//   BANISHED_RT_CREATEFILE=0    ... just FileSystem create/close   (lane FILE)
-//   BANISHED_RT_FSSLOTS=0       ... just the FileStream vtable slots (lane FILE)
 //
 // THREE WARNINGS THIS WAVE INHERITS, each already paid for once:
 //
@@ -61,13 +44,13 @@ extern int RtIoFileSystemRegister();    // filesystem.cpp    (lane D)
 // Wave 19 lane PERSIST: the save-ENUMERATION and request-ISSUE half of
 // IO::Persistence — GetSaveCount / GetSaveInfo / GetSaveFilename, the three
 // Begin* request issuers, and ~Persistence. Own switch, separate from
-// BANISHED_RT_PERSISTENCE, because that one gates the SETTINGS half (Get/Set/
+// the old DLL-era switch, because that one gates the SETTINGS half (Get/Set/
 // GetSavePath) which is on the boot path; these seven are on the save/load
 // menu path and must be removable without taking the settings with them.
 extern int RtIoPersistenceSavesRegister();  // persistence_saves{,_win}.cpp (lane PERSIST)
 // Wave 24 lane INTERNAL8: the four UNEXPORTED bodies of the worker Wave 19
 // left as address doors — the three enqueue helpers and the worker destructor.
-// OWN switch, deliberately NOT folded into BANISHED_RT_PERSAVES: these four
+// OWN switch, deliberately NOT folded into the old DLL-era switch: these four
 // are reached by ADDRESS from Wave 19's already-ported Begin* bodies, so with
 // this switch off those callers fall straight back through ResolveAddr into
 // the shipped DLL and the A/B is exactly this lane's four bodies and nothing
@@ -75,7 +58,7 @@ extern int RtIoPersistenceSavesRegister();  // persistence_saves{,_win}.cpp (lan
 // has to be separable from "the save menu is wrong".
 extern int RtIoPersistenceWorkerRegister(); // persistence_worker_win.cpp (Wave 24 INTERNAL8)
 // Wave 9 lane ENG, iteration 2. Its own switch, not folded into
-// BANISHED_RT_FILESYSTEM: this one is on the process's single boot path
+// the old DLL-era switch: this one is on the process's single boot path
 // (Engine::Startup step 3), so the integrator must be able to A/B it without
 // giving up lane D's five read-only accessors.
 extern int RtIoFileSystemStartupRegister();  // filesystem_startup.cpp (lane ENG)
@@ -90,7 +73,7 @@ extern int RtIoPersistenceStartupRegister(); // persistence_startup.cpp (lane EN
 // must be able to take it out on its own. WriteSettings is NOT in it.
 extern int RtIoPersistenceRegistryRegister(); // persistence_registry_win.cpp (lane BOOT2)
 // Wave 9 lane FS: FileSystem::SetupDirectories + GetRootDirectory, the row
-// immediately behind FileSystem::Startup. BANISHED_RT_FSDIRS also gates the
+// immediately behind FileSystem::Startup. the old DLL-era switch also gates the
 // lane's System half (WideString and the three System leaves) in
 // rt_system_port.cpp — one variable removes the whole lane.
 extern int RtIoSetupDirectoriesRegister();   // filesystem_setupdirs_win.cpp (lane FS)
@@ -114,7 +97,7 @@ extern int RtIoFileSystemFindRegister();     // filesystem_find_win.cpp (lane FI
 // dies on (attempt 14), plus the class's twenty leaf accessors. Own switch for
 // the same reason as the rows above, and one more that is specific to this
 // file: the constructor is the ONLY row on the boot path, and the other twenty
-// are exercised only by a probe. If the boot regresses, BANISHED_RT_PKG2=0
+// are exercised only by a probe. If the boot regresses, the old DLL-era switch
 // removes both halves; if the probe is the problem, it is already gated on the
 // diff harness and a normal run does not run it.
 extern int RtIoPackageFileRegister();        // package_file.cpp (lane PKG2)
@@ -198,9 +181,9 @@ extern int RtIoSerializeFamilyRegister();   // serialize_family.cpp (lane SERIAL
 // ITS OWN SWITCH, and the reason is sharper than "blast radius": this is the
 // half of the class that PRODUCES bytes. Every save the game writes goes
 // through ?Commit, so an A/B that could only move the read and write halves
-// together could not attribute a corrupt save to either. BANISHED_RT_CSREAD
+// together could not attribute a corrupt save to either. the old DLL-era switch
 // stays independent of it for the same reason it is independent of
-// BANISHED_RT_STREAM.
+// the old DLL-era switch.
 //
 // NOTE it does NOT make the writer cutover-clean: ?Write reaches ?SetWindow,
 // whose direction!=0 GROW branch is still DELEGATED to the DLL and counted by
@@ -238,9 +221,9 @@ extern int RtIoFileSystemCreateFileRegister();  // filesystem_createfile_win.cpp
 // ITS OWN SWITCH, and the reason is sharper than "blast radius": this is the
 // half of the class that PRODUCES bytes. Every save the game writes goes
 // through ?Commit, so an A/B that could only move the read and write halves
-// together could not attribute a corrupt save to either. BANISHED_RT_CSREAD
+// together could not attribute a corrupt save to either. the old DLL-era switch
 // stays independent of it for the same reason it is independent of
-// BANISHED_RT_STREAM.
+// the old DLL-era switch.
 //
 // NOTE it does NOT make the writer cutover-clean: ?Write reaches ?SetWindow,
 // whose direction!=0 GROW branch is still DELEGATED to the DLL and counted by
@@ -256,7 +239,7 @@ extern int RtIoFileStreamSlotsRegister();       // file_stream.cpp + file_stream
 
 // Wave 20 lane SAVETEXT. Five of the eight unported slots of
 // ??_7TextFileStream@IO@@6B@ (Read, SetCurrentPos, GetCurrentPos, GetSize,
-// Create). Its OWN switch, separate from BANISHED_RT_FSSLOTS, because
+// Create). Its OWN switch, separate from the old DLL-era switch, because
 // TextFileStream's slots and FileStream's slots are reachable by different
 // callers -- text I/O is stripped from the shipped DLL (both TEXT serializer
 // factories at 0x1801559d0+0x18/+0x20 are XOR EAX,EAX;RET), so these five have
@@ -265,68 +248,58 @@ extern int RtIoFileStreamSlotsRegister();       // file_stream.cpp + file_stream
 extern int RtIoTextFileStreamSlotsRegister();   // text_file_stream_win.cpp
 
 void RtIoPortInit() {
-    if (!RtWaveEnabled("BANISHED_RT_IO")) {
-        printf("[RtPort] BANISHED_RT_IO=0 -- IO namespace port disabled\n");
-        return;
-    }
     int n = 0;
-    if (RtWaveEnabled("BANISHED_RT_SERIALIZER"))  n += RtIoSerializerRegister();
-    if (RtWaveEnabled("BANISHED_RT_STREAM"))      n += RtIoCompressedStreamRegister();
-    if (RtWaveEnabled("BANISHED_RT_PERSISTENCE")) n += RtIoPersistenceRegister();
-    if (RtWaveEnabled("BANISHED_RT_PERSAVES"))    n += RtIoPersistenceSavesRegister();
-    if (RtWaveEnabled("BANISHED_RT_PERSWORKER")) n += RtIoPersistenceWorkerRegister();
-    if (RtWaveEnabled("BANISHED_RT_FILESYSTEM"))  n += RtIoFileSystemRegister();
-    if (RtWaveEnabled("BANISHED_RT_FSSTARTUP"))   n += RtIoFileSystemStartupRegister();
-    if (RtWaveEnabled("BANISHED_RT_PERSSTARTUP")) n += RtIoPersistenceStartupRegister();
-    if (RtWaveEnabled("BANISHED_RT_REGREAD"))     n += RtIoPersistenceRegistryRegister();
-    if (RtWaveEnabled("BANISHED_RT_FSDIRS"))      n += RtIoSetupDirectoriesRegister();
-    if (RtWaveEnabled("BANISHED_RT_PKG"))         n += RtIoFileSystemPackagesRegister();
-    if (RtWaveEnabled("BANISHED_RT_FIND"))        n += RtIoFileSystemFindRegister();
-    if (RtWaveEnabled("BANISHED_RT_PKG2"))        n += RtIoPackageFileRegister();
+    n += RtIoSerializerRegister();
+    n += RtIoCompressedStreamRegister();
+    n += RtIoPersistenceRegister();
+    n += RtIoPersistenceSavesRegister();
+    n += RtIoPersistenceWorkerRegister();
+    n += RtIoFileSystemRegister();
+    n += RtIoFileSystemStartupRegister();
+    n += RtIoPersistenceStartupRegister();
+    n += RtIoPersistenceRegistryRegister();
+    n += RtIoSetupDirectoriesRegister();
+    n += RtIoFileSystemPackagesRegister();
+    n += RtIoFileSystemFindRegister();
+    n += RtIoPackageFileRegister();
     // Wave 25 lane BODY. ~PackageFile on its OWN switch, NOT folded into PKG2:
     // it is the first body in this class that FREES, so a defect here is a
     // double free or a leak rather than a wrong value, and the integrator must
     // be able to A/B it while keeping the ctor and the twenty accessors.
-    if (RtWaveEnabled("BANISHED_RT_PKGDTOR"))     n += RtIoPackageFileDtorRegister();
+    n += RtIoPackageFileDtorRegister();
     // Wave 27 lane IOTEXT. Its OWN switch, not folded into PKG2, for the reason
     // above and one more: it is the only PackageFile body that decides a FILE
     // FORMAT, so a defect is a desynced .pkg rather than a wrong value, and it
     // opens one new unported address door (0x180029bb0). The integrator must be
     // able to take the table's ninth slot out without losing the other eight.
-    if (RtWaveEnabled("BANISHED_RT_PKGSER"))      n += RtIoPackageFileSerializeRegister();
-    if (RtWaveEnabled("BANISHED_RT_CSREAD"))      n += RtIoCompressedStreamReadRegister();
-    if (RtWaveEnabled("BANISHED_RT_OPENFILE"))    n += RtIoFileSystemOpenFileRegister();
-    if (RtWaveEnabled("BANISHED_RT_MEMSTREAM"))   n += RtIoMemoryStreamRegister();
-    if (RtWaveEnabled("BANISHED_RT_CSRELEASE"))   n += RtIoCompressedStreamReleaseRegister();
-    if (RtWaveEnabled("BANISHED_RT_CSOPEN"))      n += RtIoCompressedStreamOpenRegister();
-    if (RtWaveEnabled("BANISHED_RT_PKG3"))        n += RtIoPackageFileReadRegister();
-    if (RtWaveEnabled("BANISHED_RT_MOD"))         n += RtIO::RtIoModificationRegister();
-    if (RtWaveEnabled("BANISHED_RT_ENCODING"))    n += RtIoEncodingRegister();
+    n += RtIoPackageFileSerializeRegister();
+    n += RtIoCompressedStreamReadRegister();
+    n += RtIoFileSystemOpenFileRegister();
+    n += RtIoMemoryStreamRegister();
+    n += RtIoCompressedStreamReleaseRegister();
+    n += RtIoCompressedStreamOpenRegister();
+    n += RtIoPackageFileReadRegister();
+    n += RtIO::RtIoModificationRegister();
+    n += RtIoEncodingRegister();
     n += RtIoVisitorTextEncodingRegister();   // unconditional (DIRECTION.md 2)
-    if (RtWaveEnabled("BANISHED_RT_BINWRITER"))   n += RtIoBinaryWriterRegister();
-    if (RtWaveEnabled("BANISHED_RT_SERIALFAM"))   n += RtIoSerializeFamilyRegister();
-    if (RtWaveEnabled("BANISHED_RT_CSWRITE"))     n += RtIoCompressedStreamWriteRegister();
+    n += RtIoBinaryWriterRegister();
+    n += RtIoSerializeFamilyRegister();
+    n += RtIoCompressedStreamWriteRegister();
 
-    if (RtWaveEnabled("BANISHED_RT_IOBASE"))      n += RtIoBaseVtablesRegister();
-    if (RtWaveEnabled("BANISHED_RT_FILESTREAM"))  n += RtIoFileStreamRegister();
-    if (RtWaveEnabled("BANISHED_RT_CREATEFILE"))  n += RtIoFileSystemCreateFileRegister();
-    if (RtWaveEnabled("BANISHED_RT_FSSLOTS"))    n += RtIoFileStreamSlotsRegister();
-    if (RtWaveEnabled("BANISHED_RT_TFSSLOTS"))   n += RtIoTextFileStreamSlotsRegister();
+    n += RtIoBaseVtablesRegister();
+    n += RtIoFileStreamRegister();
+    n += RtIoFileSystemCreateFileRegister();
+    n += RtIoFileStreamSlotsRegister();
+    n += RtIoTextFileStreamSlotsRegister();
 
     // BATCH 8b. Registers unconditionally (DIRECTION.md §2: a port registers,
     // it does not get a flag).
     extern int RtIoModificationSortRegisterC();   // modification_sort.cpp
     n += RtIoModificationSortRegisterC();
 
-    // Lane FILE's screenshot-path door screen. Armed OUTSIDE its two switches
-    // on purpose: the control for this lane is a run with both of them at 0,
-    // and a screen that the control switches off cannot be that control.
-    extern void RtIoFileCutoverProbeArm();
-    RtIoFileCutoverProbeArm();
-
     // ---- BATCH 5 (2026-09-12) ---------------------------------------------
     // Registered UNCONDITIONALLY (DIRECTION.md §2 — a port registers
-    // unconditionally, and no new BANISHED_RT_* flag is minted for one):
+    // unconditionally, and no new the old DLL-era switch* flag is minted for one):
     //
     //   filesystem_timestamp_win.cpp    ?GetFileTimeStamp@FileSystem@  0x1800ae270
     //   persistence_savelist_job.cpp    worker command 4 (unexported)  0x1800b6290
@@ -351,7 +324,7 @@ void RtIoPortInit() {
     extern int RtIoTextCodecRegister();
     n += RtIoPersistenceSaveInfoRegister();
     n += RtIoTextCodecRegister();
-    if (RtWaveEnabled("BANISHED_RT_CSWRITE"))     n += RtIoCompressedStreamWriteRegister();
+    n += RtIoCompressedStreamWriteRegister();
 
     // ---- VTABLE BATCH 9 (2026-09-12), also unconditional -------------------
     //   compressedcopyfilestream.cpp   IO::CompressedCopyFileStream Write/Read/Close
@@ -360,3 +333,9 @@ void RtIoPortInit() {
 
     printf("[RtPort] IO: %d exports registered\n", n);
 }
+
+// ============================================================================
+// A3-HOLD: no-op stub for a probe whose body was deleted with the DLL. Its only
+// caller is code/Game/Game/camera_input.cpp, outside this batch's scope.
+// ============================================================================
+extern "C" void RtIo_PersistenceSavesProbeEntry() {}

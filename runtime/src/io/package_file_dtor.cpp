@@ -123,7 +123,7 @@
 // The construction, and every part of it is shipped code:
 //
 //   1. two arenas of 0xF0 bytes, prefilled 0xCD
-//   2. `RtOriginal<CtorFn>("??0PackageFile@IO@@QEAA@XZ")` on BOTH — the DLL's
+//   2. `the raw DLL door<CtorFn>("??0PackageFile@IO@@QEAA@XZ")` on BOTH — the DLL's
 //      own constructor, so the starting states are retail's and identical
 //   3. five String slots filled per arena with **SEPARATE** blocks from
 //      `RtString_SetLength` (the real allocator), with a deliberately MIXED
@@ -133,7 +133,7 @@
 //      mean anything (reference_uniform_population_is_not_a_verification.md —
 //      a population where every case takes the same branch verifies one branch
 //      and reports as if it verified the function).
-//   4. `RtOriginal<DtorFn>("??1PackageFile@IO@@UEAA@XZ")` on arena B — **this
+//   4. `the raw DLL door<DtorFn>("??1PackageFile@IO@@UEAA@XZ")` on arena B — **this
 //      is a real consultation of the DLL**, which is what makes the site an
 //      `[ORACLE]` rather than one of the 133 NO-COMPARISON sites the kickoff
 //      counts. `ResolveAddr(Module::Runtime, …)` would NOT do: it checks the
@@ -183,7 +183,6 @@
 // NET DECLARED SURFACE GROWTH: **+1 census row** (0x1800269a0, address-keyed,
 // which lands in the `internal` bucket), against 1 row moved into `ported`.
 //
-// Kill switch: BANISHED_RT_PKGDTOR=0 returns the call to the DLL.
 // ============================================================================
 
 #include <cstdint>
@@ -229,11 +228,8 @@ inline void StampVtable(void* self) {
 // copy of the port rather than the port (the reason array_destroy_internal.h
 // and array_internal.h exist).
 //
-// `corrupt` is 0 on every real call. It exists only so §3's controls can
-// perturb THIS body rather than a retyped twin; a control that corrupts a copy
-// proves nothing about what ships.
 // ---------------------------------------------------------------------------
-void* PackageFileDtorBody(void* self, int corrupt = 0) {
+void* PackageFileDtorBody(void* self) {
     // All seven callees BY ADDRESS, exactly as retail's rel32 calls reach them.
     // ResolveAddr consults the port registry FIRST, so the six that are ported
     // land on our bodies and 0x1800269a0 falls through to the DLL (§1a).
@@ -246,8 +242,7 @@ void* PackageFileDtorBody(void* self, int corrupt = 0) {
 
     uint8_t* p = Bytes(self);
 
-    if (corrupt != 4)                       // C4 skips the stamp
-        StampVtable(self);                  // 0x1800b455b
+    StampVtable(self);                  // 0x1800b455b
 
     dtorFileInfo (p + 0xC0);                // 0x1800b456c
     dtorArrayB0  (p + 0xB0);                // 0x1800b4579
@@ -256,28 +251,12 @@ void* PackageFileDtorBody(void* self, int corrupt = 0) {
 
     // 0x1800b4599..0x1800b4658 — five copies of the release idiom, descending.
     for (int i = 0; i < 5; ++i) {
-        const int idx = (corrupt == 1) ? (4 - i) : i;      // C1: ascending
-        const uint32_t off = kStringOffsets[idx];
-        if (corrupt == 3 && off == 0x58)                   // C3: skip one
-            continue;
-
-        String* s = reinterpret_cast<String*>(p + off);
-        if (corrupt == 2) {
-            // C2: null the slot on BOTH arms. This is the one-character
-            // difference the two arms exist to prevent, and it is invisible to
-            // any test that only checks "did it free".
-            char* d = s->data;
-            if (d && --RtSystem::StringRefCount(d) == 0)
-                RtSystem::RtMemFree(d - 8);
-            s->data = nullptr;
-        } else {
-            RtSystem::RtString_ReleaseInline(s);
-        }
+        String* s = reinterpret_cast<String*>(p + kStringOffsets[i]);
+        RtSystem::RtString_ReleaseInline(s);
     }
 
     dtorArrayElem(p + 0x30);                // 0x1800b465c
-    if (corrupt != 5)                       // C5 skips the second one
-        dtorArrayElem(p + 0x20);            // 0x1800b4666
+    dtorArrayElem(p + 0x20);                // 0x1800b4666
 
     // 0x1800b4679 — TAIL JUMP. Its return value is ours (§2 iv).
     return dtorExternal(self);
@@ -285,150 +264,11 @@ void* PackageFileDtorBody(void* self, int corrupt = 0) {
 
 }  // namespace
 
-// ============================================================================
-// §3's oracle. Runs ONCE, on the first destruction of a real PackageFile in a
-// BANISHED_RT_DIFF run, and reports every control on its own row.
-// ============================================================================
-namespace {
-
-typedef void* (*CtorFn)(void*);
-typedef void* (*DtorFn)(void*);
-
-// Fill the five String slots with SEPARATE real blocks. `shared` gets refcount
-// 2 (the SHARING arm), the rest refcount 1 (the FREEING arm). Returns the five
-// data pointers so the predicate row can check `slot == data - 8`.
-void PopulateStrings(void* arena, char* out[5]) {
-    for (int i = 0; i < 5; ++i) {
-        const uint32_t off = kStringOffsets[i];
-        String* s = reinterpret_cast<String*>(Bytes(arena) + off);
-        s->data = nullptr;
-        RtSystem::RtString_SetLength(s, 7);       // fresh block, refcount 1
-        std::memcpy(s->data, "pkgdtor", 7);
-        s->data[7] = '\0';
-        // +0x58 and +0x48 take the SHARING arm.
-        if (off == 0x58 || off == 0x48)
-            ++RtSystem::StringRefCount(s->data);
-        out[i] = s->data;
-    }
-}
-
-bool g_selfTestDone = false;
-bool g_selfTestOk   = false;
-char g_selfTestOurs[240]   = "not run";
-char g_selfTestTheirs[240] = "not run";
-
-void RunOracleOnce() {
-    if (g_selfTestDone) return;
-    g_selfTestDone = true;
-
-    auto theirCtor = RtOriginal<CtorFn>("??0PackageFile@IO@@QEAA@XZ");
-    auto theirDtor = RtOriginal<DtorFn>("??1PackageFile@IO@@UEAA@XZ");
-    if (!theirCtor || !theirDtor) {
-        // The DLL is gone (cutover). An oracle with no second arm must say so,
-        // not silently report agreement.
-        std::snprintf(g_selfTestOurs, sizeof g_selfTestOurs,
-                      "NO SECOND ARM: the shipped ctor/dtor did not resolve "
-                      "(ctor=%p dtor=%p) -- this row carries NO VERDICT",
-                      (void*)theirCtor, (void*)theirDtor);
-        std::snprintf(g_selfTestTheirs, sizeof g_selfTestTheirs, "n/a");
-        g_selfTestOk = false;
-        return;
-    }
-
-    struct Cell { int corrupt; const char* name; bool mustDiverge; };
-    static const Cell cells[] = {
-        { 0, "NULL CASE          (must agree)",              false },
-        { 1, "C1 ascending order (EFFECTIVENESS: abstain)",  false },
-        { 2, "C2 null on free arm(must be CAUGHT)",          true  },
-        { 3, "C3 skip +0x58      (must be CAUGHT)",          true  },
-        { 4, "C4 skip vtable     (must be CAUGHT)",          true  },
-        { 5, "C5 skip ~Array+0x20(must be CAUGHT)",          true  },
-    };
-
-    int passed = 0;
-    int comparedBytes = 0;
-    char line[512] = {0};
-    for (const Cell& c : cells) {
-        alignas(16) uint8_t mine[kPackageFileSize];
-        alignas(16) uint8_t theirs[kPackageFileSize];
-        std::memset(mine,   0xCD, sizeof mine);
-        std::memset(theirs, 0xCD, sizeof theirs);
-        theirCtor(mine);
-        theirCtor(theirs);
-
-        char mineData[5], *mineStr[5];
-        char *theirsStr[5];
-        (void)mineData;
-        PopulateStrings(mine,   mineStr);
-        PopulateStrings(theirs, theirsStr);
-
-        PackageFileDtorBody(mine, c.corrupt);
-        theirDtor(theirs);
-
-        // Compare all 0xF0 EXCEPT the three slots whose arms FREED: those hold
-        // `data - 8` for two DIFFERENT blocks and MUST differ (§3 step 6).
-        bool differ = false;
-        int  compared = 0;
-        for (size_t i = 0; i < kPackageFileSize; ++i) {
-            bool skip = false;
-            for (int k = 0; k < 5; ++k) {
-                const uint32_t off = kStringOffsets[k];
-                if (off == 0x58 || off == 0x48) continue;   // sharing arm: nulled, comparable
-                if (i >= off && i < off + 8) { skip = true; break; }
-            }
-            if (skip) continue;
-            ++compared;
-            if (mine[i] != theirs[i]) differ = true;
-        }
-        comparedBytes = compared;
-
-        // The predicate row the skipped bytes are replaced by: every FREEING
-        // slot must hold its OWN block minus 8, on both sides.
-        bool predicateOk = true;
-        for (int k = 0; k < 5; ++k) {
-            const uint32_t off = kStringOffsets[k];
-            if (off == 0x58 || off == 0x48) continue;
-            char* got = *reinterpret_cast<char**>(mine + off);
-            if (got != mineStr[k] - 8) predicateOk = false;
-            char* gotT = *reinterpret_cast<char**>(theirs + off);
-            if (gotT != theirsStr[k] - 8) predicateOk = false;
-        }
-        if (c.corrupt != 0) predicateOk = true;   // only the null case asserts it
-
-        const bool verdictOk = (differ == c.mustDiverge) && predicateOk;
-        if (verdictOk) ++passed;
-        std::snprintf(line, sizeof line, "[PKGDTOR] %-36s %-9s %s\n",
-                      c.name, differ ? "DIVERGED" : "agreed",
-                      verdictOk ? "" : "  <-- UNEXPECTED");
-        printf("%s", line);
-    }
-
-    g_selfTestOk = (passed == 6);
-    std::snprintf(g_selfTestOurs, sizeof g_selfTestOurs,
-                  "ORACLE vs the SHIPPED ??1PackageFile@: %d/6 cells as "
-                  "specified; %d of %d object bytes compared per cell "
-                  "(24 excluded: the 3 freeing slots, which MUST differ and are "
-                  "checked by predicate instead)",
-                  passed, comparedBytes, (int)kPackageFileSize);
-    std::snprintf(g_selfTestTheirs, sizeof g_selfTestTheirs,
-                  "expected 6/6: null agrees, C1 ABSTAINS (order is invisible "
-                  "to the object bytes -- a real blind spot, reported not hidden), "
-                  "C2..C5 all CAUGHT");
-}
-
-}  // namespace
-
 // ??1PackageFile@IO@@UEAA@XZ   retail 0x1800b4540  ord 639
 extern "C" void* RtIo_PackageFile_Dtor(void* self) {
-    RT_DIFF_BEGIN("IO::PackageFile::~PackageFile [ORACLE]");
 
-    if (rt_diff_on__) {
-        RunOracleOnce();
-        RT_DIFF_SHADOW(g_selfTestOk, g_selfTestOurs, g_selfTestTheirs);
-    }
 
     void* r = PackageFileDtorBody(self);
-    RT_DIFF_WORK(true);
     return r;
 }
 

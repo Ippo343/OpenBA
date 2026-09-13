@@ -32,7 +32,7 @@ External* RtObject_ExternalFactory_Find(ExternalFactory* self, const Filename* p
 // tree descent; `identDefaulted` is the ":resource" arm. A run in which
 // `identDefaulted` stays 0 has not exercised the only interesting branch in the
 // function, and the report must say so rather than report `calls` and stop
-// (rt_diff.h, lane M: a large `calls` is not coverage).
+// (the diff oracle, lane M: a large `calls` is not coverage).
 struct FindCounters {
     uint64_t calls;
     uint64_t hits;

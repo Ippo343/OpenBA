@@ -99,9 +99,8 @@
 // empty command line.
 //
 // ---------------------------------------------------------------------------
-// KILL SWITCH
 // ---------------------------------------------------------------------------
-//   BANISHED_RT_FSDIRS=0   removes THIS ENTIRE LANE — SetupDirectories,
+//   the old DLL-era switch   removes THIS ENTIRE LANE — SetupDirectories,
 //                          GetRootDirectory, Filename::GetPathDirectory,
 //                          Configuration::GetPlatformName/GetBuildName and all
 //                          four System::WideString rows — in one variable, so
@@ -275,7 +274,6 @@ bool SameText(const char* a, const char* b) {
 // GetModuleFileNameW on our own process is not a condition this port should
 // be inventing behaviour for.
 Filename* RtIo_FileSystem_GetRootDirectory(FileSystem* self, Filename* ret) {
-    RT_DIFF_BEGIN("IO::FileSystem::GetRootDirectory");
     (void)self;   // retail loads RCX and never reads it
 
     wchar_t buf[0x1000];
@@ -302,16 +300,6 @@ Filename* RtIo_FileSystem_GetRootDirectory(FileSystem* self, Filename* ret) {
     // Safe to replay: reads no FileSystem state and allocates a fresh buffer
     // every call, so ours and theirs never share a pointer and only the TEXT
     // can be compared — the same shape as GetSaveDirectory's oracle.
-    if (rt_diff_on__) {
-        Filename theirs{nullptr};
-        RtOriginal<Filename* (*)(FileSystem*, Filename*)>(
-            "?GetRootDirectory@FileSystem@IO@@QEAA?AVFilename@System@@XZ")(self, &theirs);
-        RT_DIFF_SHADOW(SameText(ret->data, theirs.data),
-                       ret->data ? ret->data : "(null)",
-                       theirs.data ? theirs.data : "(null)");
-        RT_DIFF_WORK(true);
-        RtString_ReleaseInline(reinterpret_cast<String*>(&theirs));
-    }
     return ret;
 }
 
@@ -319,7 +307,6 @@ Filename* RtIo_FileSystem_GetRootDirectory(FileSystem* self, Filename* ret) {
 // ?SetupDirectories@FileSystem@IO@@QEAAXXZ                 retail 0x1800abd00
 // ============================================================================
 void RtIo_FileSystem_SetupDirectories(FileSystem* self) {
-    RT_DIFF_BEGIN("IO::FileSystem::SetupDirectories");
 
     // --- 0x1800abd28 -------------------------------------------------------
     Filename root{nullptr};
@@ -498,60 +485,6 @@ void RtIo_FileSystem_SetupDirectories(FileSystem* self) {
     // function runs exactly once per process on the single-threaded boot path
     // at Engine::Startup step 3, and the slot is restored on every exit from
     // the block. It is the difference between an oracle and a decoration.
-    if (rt_diff_on__) {
-        void** dllSlot = static_cast<void**>(
-            ResolveExportRaw("?_singleton@Configuration@System@@0PEAV12@EA"));  // RT_RAW_OK
-        if (dllSlot != nullptr && cfg != nullptr) {
-            void* const saved = *dllSlot;
-            *dllSlot = cfg;
-
-            FileSystem scratch;
-            std::memset(&scratch, 0, sizeof(scratch));
-            scratch.existsInPackfileGate = self->existsInPackfileGate;
-            scratch.platformExistsGate   = self->platformExistsGate;
-            RtOriginal<SetupDirectoriesFn>(
-                "?SetupDirectories@FileSystem@IO@@QEAAXXZ")(&scratch);
-
-            *dllSlot = saved;
-
-            const bool equal =
-                SameText(self->sourceDirectory.data, scratch.sourceDirectory.data) &&
-                SameText(self->dataDirectory.data,   scratch.dataDirectory.data) &&
-                SameText(self->packDirectory.data,   scratch.packDirectory.data);
-            char a[768], b[768];
-            std::snprintf(a, sizeof(a), "src=%s | dat=%s | pkg=%s",
-                          self->sourceDirectory.data ? self->sourceDirectory.data : "(null)",
-                          self->dataDirectory.data   ? self->dataDirectory.data   : "(null)",
-                          self->packDirectory.data   ? self->packDirectory.data   : "(null)");
-            std::snprintf(b, sizeof(b), "src=%s | dat=%s | pkg=%s",
-                          scratch.sourceDirectory.data ? scratch.sourceDirectory.data : "(null)",
-                          scratch.dataDirectory.data   ? scratch.dataDirectory.data   : "(null)",
-                          scratch.packDirectory.data   ? scratch.packDirectory.data   : "(null)");
-            RT_DIFF_SHADOW(equal, a, b);
-            RtString_ReleaseInline(&scratch.packDirectory);
-            RtString_ReleaseInline(&scratch.dataDirectory);
-            RtString_ReleaseInline(&scratch.sourceDirectory);
-        } else {
-            // No DLL at all (cutover), or no Configuration to lend. Say what we
-            // DID compute, and check the one post-condition that holds
-            // unconditionally: all three fields are non-null and end in a
-            // delimiter.
-            const char* s = self->sourceDirectory.data;
-            const char* d = self->dataDirectory.data;
-            const char* p = self->packDirectory.data;
-            auto endsSep = [](const char* x) {
-                if (x == nullptr || *x == '\0') return false;
-                const char c = x[std::strlen(x) - 1];
-                return c == '\\' || c == '/';
-            };
-            char a[768];
-            std::snprintf(a, sizeof(a), "src=%s | dat=%s | pkg=%s",
-                          s ? s : "(null)", d ? d : "(null)", p ? p : "(null)");
-            RT_DIFF_SHADOW(endsSep(s) && endsSep(d) && endsSep(p), a,
-                           "no replay: no DLL slot to lend Configuration to");
-        }
-        RT_DIFF_WORK(true);
-    }
 }
 
 }  // namespace RtIO

@@ -79,7 +79,6 @@ ArrayClearFn ClearBlockPtrs() {
 // a wave.
 // ============================================================================
 bool RtIo_Persistence_BeginGetSaveGameInfo(void* self, const void* nameRef, int count) {
-    RT_DIFF_BEGIN("IO::Persistence::BeginGetSaveGameInfo");
 
     auto* p = static_cast<Persistence*>(self);
     if (p->flags & 1u) return false;

@@ -6,7 +6,7 @@
 // WHY THIS FILE EXISTS AND WHY IT IS DIFFERENT FROM EVERY OTHER LANE
 //
 // Every other Wave 9 lane was handed a list of SYMBOL NAMES that
-// unsatisfied_export_scan / BANISHED_RT_STRICT could see. This one came out of
+// unsatisfied_export_scan / the old DLL-era switch could see. This one came out of
 // the address-door census (docs/runtime_port/wave9_unregistered_addr_doors.csv,
 // ce1d8e9 corrected by 4ef55b6): every `ResolveAddr(Module::Runtime, 0x…)` in
 // the tree minus every address anything registers. Ten of the 62 unregistered
@@ -610,10 +610,7 @@ using fn_SaveList_t = void (*)(void*);
 // ?GetCount@Modification@IO@@QEBAHXZ   retail 0x18000da90
 //     MOV EAX,[RCX+0x10] ; RET
 int RtIo_Modification_GetCount(const void* selfv) {
-    RT_DIFF_BEGIN("IO::Modification::GetCount");
     const int ours = static_cast<const Modification*>(selfv)->count;
-    RT_DIFF_SCALAR(ours,
-        RT_ORIGINAL_ONCE(fn_GetCount_t, "?GetCount@Modification@IO@@QEBAHXZ")(selfv));
     return ours;
 }
 
@@ -626,13 +623,9 @@ int RtIo_Modification_GetCount(const void* selfv) {
 // index -1 into an 8-GB forward offset. `static_cast<int64_t>` is the sign
 // extension, and it is load-bearing.
 const void* RtIo_Modification_GetMod(const void* selfv, int index) {
-    RT_DIFF_BEGIN("IO::Modification::GetModification");
     const Modification* self = static_cast<const Modification*>(selfv);
     const void* ours = reinterpret_cast<const uint8_t*>(self->mods)
                      + (static_cast<int64_t>(index) << 7);
-    RT_DIFF_SCALAR(ours,
-        RT_ORIGINAL_ONCE(fn_GetMod_t,
-            "?GetModification@Modification@IO@@QEBAAEBUMod@12@H@Z")(selfv, index));
     return ours;
 }
 
@@ -646,7 +639,6 @@ const void* RtIo_Modification_GetMod(const void* selfv, int index) {
 // mod already held. Nothing in our tree depends on that, but a "no-op returns
 // early" tidy-up would be a real behaviour change to IsDirty.
 void RtIo_Modification_Enable(void* selfv, int index, bool value) {
-    RT_DIFF_BEGIN("IO::Modification::Enable");
     Modification* self = static_cast<Modification*>(selfv);
 
     // A full byte oracle, safe ONLY because this body allocates nothing: run
@@ -654,27 +646,10 @@ void RtIo_Modification_Enable(void* selfv, int index, bool value) {
     uint8_t pre[0x28 + 0x80];
     uint8_t post[0x28 + 0x80];
     Mod* rec = nullptr;
-    if (rt_diff_on__) {
-        rec = self->mods + index;
-        std::memcpy(pre, self, 0x28);
-        std::memcpy(pre + 0x28, rec, 0x80);
-    }
 
     self->dirty = 1;
     self->mods[index].enabled = static_cast<uint8_t>(value);
 
-    if (rt_diff_on__) {
-        std::memcpy(post, self, 0x28);
-        std::memcpy(post + 0x28, rec, 0x80);
-        std::memcpy(self, pre, 0x28);
-        std::memcpy(rec, pre + 0x28, 0x80);
-        RT_ORIGINAL_ONCE(fn_Enable_t,
-            "?Enable@Modification@IO@@QEAAXH_N@Z")(selfv, index, value);
-        uint8_t theirs[0x28 + 0x80];
-        std::memcpy(theirs, self, 0x28);
-        std::memcpy(theirs + 0x28, rec, 0x80);
-        RT_DIFF_BYTES(post, theirs, sizeof(post));
-    }
 }
 
 // ?Swap@Modification@IO@@QEAAXHH@Z   retail 0x1800aeb20
@@ -691,7 +666,6 @@ void RtIo_Modification_Enable(void* selfv, int index, bool value) {
 // RBX,R8D) before the shift and `a` separately (MOVSXD RDI,EDX); both strides
 // are `<< 7`.
 void RtIo_Modification_Swap(void* selfv, int a, int b) {
-    RT_DIFF_BEGIN("IO::Modification::Swap");
     Modification* self = static_cast<Modification*>(selfv);
     if (a == b) return;
 
@@ -700,10 +674,6 @@ void RtIo_Modification_Swap(void* selfv, int a, int b) {
     // photograph is the right one and a deep one would be comparing a copy of
     // our own work.
     Mod preA, preB;
-    if (rt_diff_on__) {
-        std::memcpy(&preA, self->mods + a, sizeof(Mod));
-        std::memcpy(&preB, self->mods + b, sizeof(Mod));
-    }
 
     self->dirty = 1;
 
@@ -714,38 +684,6 @@ void RtIo_Modification_Swap(void* selfv, int a, int b) {
     RtIo_Mod_Assign_180026ef0(self->mods + b, tmp);
     RtIo_Mod_Dtor_180011460(tmp);
 
-    if (rt_diff_on__) {
-        const Mod* A = self->mods + a;
-        const Mod* B = self->mods + b;
-        // Shared (refcounted) members must have exchanged POINTERS exactly —
-        // retail's assign shares rather than duplicates them.
-        const bool sharedOk =
-            A->name == preB.name && A->author == preB.author &&
-            A->description == preB.description && A->file.data == preB.file.data &&
-            B->name == preA.name && B->author == preA.author &&
-            B->description == preA.description && B->file.data == preA.file.data;
-        // Scalars must have exchanged VALUES.
-        const bool scalarOk =
-            A->i18 == preB.i18 && A->i1c == preB.i1c && A->order == preB.order &&
-            A->i24 == preB.i24 && A->i28 == preB.i28 && A->i2c == preB.i2c &&
-            A->enabled == preB.enabled &&
-            B->i18 == preA.i18 && B->i1c == preA.i1c && B->order == preA.order &&
-            B->i24 == preA.i24 && B->i28 == preA.i28 && B->i2c == preA.i2c &&
-            B->enabled == preA.enabled;
-        // Deep-copied members must have exchanged COUNTS (their buffers are new).
-        const bool deepOk =
-            A->ints.size == preB.ints.size && A->bytes.size == preB.bytes.size &&
-            A->files.size == preB.files.size && A->set.count == preB.set.count &&
-            B->ints.size == preA.ints.size && B->bytes.size == preA.bytes.size &&
-            B->files.size == preA.files.size && B->set.count == preA.set.count;
-        // A term must be able to fail on its own, and the message must name
-        // WHICH one did (reference_shadow_predicate_must_name_its_failing_term).
-        char ours[64], theirs[64];
-        std::snprintf(ours, sizeof(ours), "shared=%d scalar=%d deep=%d",
-                      (int)sharedOk, (int)scalarOk, (int)deepOk);
-        std::snprintf(theirs, sizeof(theirs), "shared=1 scalar=1 deep=1");
-        RT_DIFF_SHADOW(sharedOk && scalarOk && deepOk, ours, theirs);
-    }
 }
 
 // ?SaveList@Modification@IO@@QEAAXXZ   retail 0x1800b05f0
@@ -771,23 +709,12 @@ void RtIo_Modification_Swap(void* selfv, int a, int b) {
 // value; transcribed as written so a future change to the first store cannot
 // silently desynchronise the two.
 void RtIo_Modification_SaveList(void* selfv) {
-    RT_DIFF_BEGIN("IO::Modification::SaveList");
     Modification* self = static_cast<Modification*>(selfv);
 
     if (!self->savingSettings) {
         // 0x1800b0619: LEA RDX,[RCX+8] ; ADD RCX,0x18 ; CALL 0x180010110
         RtColl_ArrayModAssign_180010110(&self->savedMods, &self->mods);
         return;
-    }
-
-    // Pre-image of the one column this body mutates. Restored below so the
-    // original can be replayed; nothing else in the object is written, and no
-    // allocation happens on this path, which is what makes the restore legal.
-    int32_t* preOrder = nullptr;
-    if (rt_diff_on__ && self->count > 0) {
-        preOrder = static_cast<int32_t*>(ModMemAlloc(
-            static_cast<uint64_t>(self->count) * 4, 4));
-        for (int i = 0; i < self->count; ++i) preOrder[i] = self->mods[i].order;
     }
 
     using SetBoolFn = void (*)(void*, const char*, const char*, bool);
@@ -832,24 +759,6 @@ void RtIo_Modification_SaveList(void* selfv) {
         }
     }
 
-    if (rt_diff_on__ && preOrder != nullptr) {
-        int32_t* ourOrder = static_cast<int32_t*>(ModMemAlloc(
-            static_cast<uint64_t>(self->count) * 4, 4));
-        for (int i = 0; i < self->count; ++i) {
-            ourOrder[i] = self->mods[i].order;
-            self->mods[i].order = preOrder[i];      // restore the pre-image
-        }
-        RT_ORIGINAL_ONCE(fn_SaveList_t,
-            "?SaveList@Modification@IO@@QEAAXXZ")(selfv);
-        int32_t* theirOrder = static_cast<int32_t*>(ModMemAlloc(
-            static_cast<uint64_t>(self->count) * 4, 4));
-        for (int i = 0; i < self->count; ++i) theirOrder[i] = self->mods[i].order;
-        RT_DIFF_BYTES(ourOrder, theirOrder,
-                      static_cast<size_t>(self->count) * 4);
-        ModMemFree(theirOrder);
-        ModMemFree(ourOrder);
-        ModMemFree(preOrder);
-    }
 }
 
 // ============================================================================
@@ -924,7 +833,7 @@ int RtIoModificationRegister() {
 
     // The second lane-MOD pass: ?RefreshList@ and the seven rows its closure
     // needed (modification_refresh.cpp). Called from here rather than from
-    // rt_io_port.cpp so the two passes share ONE kill switch, BANISHED_RT_MOD --
+    // rt_io_port.cpp so the two passes share ONE kill switch, the old DLL-era switch --
     // an A/B that disables half a cluster is not a control.
     n += RtIoModificationRefreshRegister();
     return n;

@@ -13,7 +13,6 @@
 //   | ?PlatformCreateFile@FileSystem@IO@@AEAA_N…@Z          | 0x1800ade60 | 3357 |  ~95   |
 //   | ?PlatformCloseFile@FileSystem@IO@@AEAAX…@Z            | 0x1800ae020 | —    |   62   |
 //
-// Kill switch: BANISHED_RT_CREATEFILE=0 leaves all of it on the DLL.
 //
 // ---------------------------------------------------------------------------
 // THE LAST THREE ROWS ARE NOT ON THE WAVE 19 ROW LIST, AND THAT IS THE POINT
@@ -88,7 +87,6 @@
 #include <cstdio>
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_diff.h"
 #include "../../types/io/FileSystem.h"
 #include "../../types/io/FileStream.h"
 #include "../../types/system/String.h"
@@ -231,7 +229,6 @@ FsCreateCounters g_fcc{};
 //     it on the singleton rather than on anything of its own.
 // ============================================================================
 bool RtIo_FileSystem_CreatePath(const FileSystem* self, const Filename* path) {
-    RT_DIFF_BEGIN("IO::FileSystem::CreatePath");
     ++g_fcc.createPath;
     (void)self;   // detail 4 — retail reads no field of `this`
 
@@ -268,7 +265,6 @@ bool RtIo_FileSystem_CreatePath(const FileSystem* self, const Filename* path) {
         RtString_ReleaseInline(&dir);                       // 1800ae5bd..629
     }
 
-    RT_DIFF_WORK(created != 0);
     return true;                                            // 1800ae637: MOV AL,1
 }
 
@@ -306,7 +302,6 @@ bool RtIo_FileSystem_CreatePath(const FileSystem* self, const Filename* path) {
 // ============================================================================
 bool RtIo_FileSystem_PlatformCreateFile(FileSystem* self, FileInfo* info,
                                         const Filename* path) {
-    RT_DIFF_BEGIN("IO::FileSystem::PlatformCreateFile");
     ++g_fcc.platCreate;
     (void)self;
 
@@ -329,7 +324,6 @@ bool RtIo_FileSystem_PlatformCreateFile(FileSystem* self, FileInfo* info,
     const uint64_t probe = static_cast<uint64_t>(info->winHandle) - 1;
     if (probe > static_cast<uint64_t>(-3)) {                 // 1800adee9..f0
         ++g_fcc.createFail;
-        RT_DIFF_WORK(false);
         return false;                                        // 1800adffa
     }
 
@@ -370,7 +364,6 @@ bool RtIo_FileSystem_PlatformCreateFile(FileSystem* self, FileInfo* info,
         reinterpret_cast<Filename*>(&info->_name1), path);   // 1800adfea/f1
 
     ++g_fcc.createOk;
-    RT_DIFF_WORK(true);
     return true;                                             // 1800adff6
 }
 
@@ -393,7 +386,6 @@ bool RtIo_FileSystem_PlatformCreateFile(FileSystem* self, FileInfo* info,
 // ============================================================================
 FileInfo* RtIo_FileSystem_CreateFileW(FileSystem* self, FileInfo* ret,
                                       const Filename* path) {
-    RT_DIFF_BEGIN("IO::FileSystem::CreateFileW");
     ++g_fcc.createFileW;
 
     ret->handle      = -1;          // 1800acc6c
@@ -407,7 +399,6 @@ FileInfo* RtIo_FileSystem_CreateFileW(FileSystem* self, FileInfo* ret,
 
     RtIo_FileSystem_PlatformCreateFile(self, ret, path);   // 1800acca4 — result discarded
 
-    RT_DIFF_WORK(ret->handle != -1);
     return ret;                                            // 1800acca9
 }
 
@@ -436,7 +427,6 @@ FileInfo* RtIo_FileSystem_CreateFileW(FileSystem* self, FileInfo* ret,
 //     bare `= nullptr` would leak both buffers.
 // ============================================================================
 void RtIo_FileSystem_PlatformCloseFile(FileSystem* self, FileInfo* info) {
-    RT_DIFF_BEGIN("IO::FileSystem::PlatformCloseFile");
     ++g_fcc.platClose;
     (void)self;
 
@@ -484,7 +474,6 @@ void RtIo_FileSystem_PlatformCloseFile(FileSystem* self, FileInfo* info) {
         RtSystem_Filename_Assign(
             reinterpret_cast<Filename*>(&info->_name1), &empty);  // 1800ae15e
     }
-    RT_DIFF_WORK(true);
 }
 
 // ============================================================================
@@ -506,7 +495,6 @@ void RtIo_FileSystem_PlatformCloseFile(FileSystem* self, FileInfo* info) {
 // (`reference_oracle_must_not_compare_unwritten_bytes.md`).
 // ============================================================================
 void RtIo_FileSystem_CloseFile(FileSystem* self, FileInfo* info) {
-    RT_DIFF_BEGIN("IO::FileSystem::CloseFile");
     ++g_fcc.closeFile;
 
     RtIo_FileSystem_PlatformCloseFile(self, info);   // 1800accde
@@ -524,7 +512,6 @@ void RtIo_FileSystem_CloseFile(FileSystem* self, FileInfo* info) {
 
     RtString_ReleaseInline(&fresh._name1);           // 1800acd20  +0x28 first
     RtString_ReleaseInline(&fresh._name0);           // 1800acd50  +0x20
-    RT_DIFF_WORK(true);
 
     // ---- NOT PART OF THE PORT ------------------------------------------
     // A one-shot trigger for file_stream_slots_probe.cpp, which needs a LIVE
@@ -534,19 +521,6 @@ void RtIo_FileSystem_CloseFile(FileSystem* self, FileInfo* info) {
     // This body is the latest-and-most-attended anchor this lane owns: 2854
     // calls on the gameplay route, all of them after the package mount. Call
     // 2000 is arbitrary but comfortably inside that. It is gated on the probe's
-    // own env var, so an unarmed run does one integer compare and nothing else.
-    //
-    // The probe drives RETAIL's ctor and Create, never ours, so this cannot
-    // recurse back into the bodies under test.
-    {
-        static uint64_t closeSeen = 0;
-        static bool probeRan = false;
-        if (!probeRan && ++closeSeen >= 2000) {
-            probeRan = true;
-            extern void RunFileStreamSlotsProbe();
-            RunFileStreamSlotsProbe();
-        }
-    }
 }
 
 // ============================================================================
@@ -574,7 +548,6 @@ void RtIo_FileSystem_CloseFile(FileSystem* self, FileInfo* info) {
 // destructors that look interchangeable and are not).
 // ============================================================================
 void RtIo_FileSystem_Dtor(FileSystem* self) {
-    RT_DIFF_BEGIN("IO::FileSystem::~FileSystem");
     ++g_fcc.fsDtor;
 
     // Step 1. The tree object is (root, count) at +0x40/+0x48; retail passes
@@ -601,7 +574,6 @@ void RtIo_FileSystem_Dtor(FileSystem* self) {
     RtString_ReleaseInline(&self->packDirectory);     // 1800ac720  +0x10
     RtString_ReleaseInline(&self->dataDirectory);     // 1800ac74a  +0x08
     RtString_ReleaseInline(&self->sourceDirectory);   // 1800ac775  +0x00
-    RT_DIFF_WORK(true);
 }
 
 // Read by file_stream_cutover_probe.cpp, which prints attendance beside the

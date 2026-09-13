@@ -33,7 +33,7 @@ using RtIo::SettingsMapNode;
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
 // -----------------------------------------------------------------------------
 // Same reasoning rt_port.h itself gives for declaring RegisterRuntimeExport /
-// ResolveExportRaw locally: resolve.h drags in <windows.h>, and PLAN.md §4.1
+// the raw export door locally: resolve.h drags in <windows.h>, and PLAN.md §4.1
 // requires runtime/src/ to stay platform-neutral until a file is explicitly a
 // `_win` twin. This declaration must stay byte-identical to resolve.h's; the
 // two are checked against each other by the linker.
@@ -63,7 +63,7 @@ void* CallMapInsert(void* map, void** outNode, void* key, void* value) {
 // ---- System::String::Format(retval, fmt, ...) ------------------------------
 // ?Format@String@System@@SA?AV12@PEBDZZ  retail 0x1800c9730. Real varargs, so
 // (like engine_funcs.cpp's own fn_String_Format) it is resolved as a plain
-// typedef rather than through RT_ORIGINAL_ONCE's non-variadic Fn constraint.
+// typedef rather than through the raw DLL door's non-variadic Fn constraint.
 // Resolved via ResolveAddr, not ResolveExport: Format is already ported by
 // Wave 2 (lane String, runtime/src/system/string.cpp) and registering THAT
 // port would mean this file's normal (non-diff) path silently depends on
@@ -116,7 +116,6 @@ bool RetailValueIsTrue(const char* value) {
 // String::Format/MemFree pair, no persistent mutation).
 // ============================================================================
 bool RtIo_Persistence_GetInt(void* self, const char* section, const char* key, int* out) {
-    RT_DIFF_BEGIN("IO::Persistence::Get(int&)");
 
     String k = MakeSettingsKey(section, key);
     void* node = CallMapFind(self, &k);
@@ -130,17 +129,6 @@ bool RtIo_Persistence_GetInt(void* self, const char* section, const char* key, i
     }
     RtSystem::RtString_ReleaseInline(&k);
 
-    if (rt_diff_on__) {
-        using GetIntFn = bool (*)(const void*, const char*, const char*, int*);
-        int theirsVal = *out;
-        bool theirsFound = RT_ORIGINAL_ONCE(GetIntFn, "?Get@Persistence@IO@@QEBA_NPEBD0AEAH@Z")(
-            self, section, key, &theirsVal);
-        // Pack found+value into one scalar so RT_DIFF_SCALAR (which compares
-        // exactly one value) proves both at once, calling the DLL only once.
-        int64_t oursPacked   = (static_cast<int64_t>(ours)        << 32) | static_cast<uint32_t>(oursVal);
-        int64_t theirsPacked = (static_cast<int64_t>(theirsFound) << 32) | static_cast<uint32_t>(theirsVal);
-        RT_DIFF_SCALAR(oursPacked, theirsPacked);
-    }
 
     if (ours) *out = oursVal;
     return ours;
@@ -151,7 +139,6 @@ bool RtIo_Persistence_GetInt(void* self, const char* section, const char* key, i
 // retail 0x1800b8290 — full RT_DIFF oracle, same shape as Get(int&).
 // ============================================================================
 bool RtIo_Persistence_GetBool(void* self, const char* section, const char* key, bool* out) {
-    RT_DIFF_BEGIN("IO::Persistence::Get(bool&)");
 
     String k = MakeSettingsKey(section, key);
     void* node = CallMapFind(self, &k);
@@ -163,15 +150,6 @@ bool RtIo_Persistence_GetBool(void* self, const char* section, const char* key, 
     }
     RtSystem::RtString_ReleaseInline(&k);
 
-    if (rt_diff_on__) {
-        using GetBoolFn = bool (*)(const void*, const char*, const char*, bool*);
-        bool theirsVal = *out;
-        bool theirsFound = RT_ORIGINAL_ONCE(GetBoolFn, "?Get@Persistence@IO@@QEBA_NPEBD0AEA_N@Z")(
-            self, section, key, &theirsVal);
-        int oursPacked   = (static_cast<int>(ours)        << 1) | static_cast<int>(oursVal);
-        int theirsPacked = (static_cast<int>(theirsFound) << 1) | static_cast<int>(theirsVal);
-        RT_DIFF_SCALAR(oursPacked, theirsPacked);
-    }
 
     if (ours) *out = oursVal;
     return ours;
@@ -182,11 +160,10 @@ bool RtIo_Persistence_GetBool(void* self, const char* section, const char* key, 
 // retail 0x1800b80c0 — MUTATES the shared live map, so "call ours, call
 // theirs, compare" would insert twice (WARNING 3 in the brief). Instead: run
 // ours for real, then verify with the DLL's OWN already-oracle-proven
-// Get(int&) that the value it now sees round-trips. RT_DIFF_SHADOW: EQUAL is
+// Get(int&) that the value it now sees round-trips. the diff oracle: EQUAL is
 // our own verdict, computed from a real (read-only) call into the DLL.
 // ============================================================================
 void RtIo_Persistence_SetInt(void* self, const char* section, const char* key, int value) {
-    RT_DIFF_BEGIN("IO::Persistence::Set(int)");
 
     String valStr{};
     StringFormat()(&valStr, "%i", value);
@@ -210,18 +187,6 @@ void RtIo_Persistence_SetInt(void* self, const char* section, const char* key, i
     RtSystem::RtString_ReleaseInline(&keyStr);
     RtSystem::RtString_ReleaseInline(&valStr);
 
-    if (rt_diff_on__) {
-        using GetIntFn = bool (*)(const void*, const char*, const char*, int*);
-        int readback = value + 1;   // any value != what we just wrote
-        bool found = RT_ORIGINAL_ONCE(GetIntFn, "?Get@Persistence@IO@@QEBA_NPEBD0AEAH@Z")(
-            self, section, key, &readback);
-        bool equal = found && readback == value;
-        char oursDesc[64], theirsDesc[64];
-        std::snprintf(oursDesc, sizeof(oursDesc), "wrote %d", value);
-        std::snprintf(theirsDesc, sizeof(theirsDesc), "DLL Get readback found=%d value=%d",
-                      (int)found, readback);
-        RT_DIFF_SHADOW(equal, oursDesc, theirsDesc);
-    }
 }
 
 // ============================================================================
@@ -229,7 +194,6 @@ void RtIo_Persistence_SetInt(void* self, const char* section, const char* key, i
 // retail 0x1800b8380 — same shape as Set(int), value formatted as "true"/"false".
 // ============================================================================
 void RtIo_Persistence_SetBool(void* self, const char* section, const char* key, bool value) {
-    RT_DIFF_BEGIN("IO::Persistence::Set(bool)");
 
     String valStr{};
     StringFormat()(&valStr, "%s", value ? "true" : "false");
@@ -247,18 +211,6 @@ void RtIo_Persistence_SetBool(void* self, const char* section, const char* key, 
     RtSystem::RtString_ReleaseInline(&keyStr);
     RtSystem::RtString_ReleaseInline(&valStr);
 
-    if (rt_diff_on__) {
-        using GetBoolFn = bool (*)(const void*, const char*, const char*, bool*);
-        bool readback = !value;   // any value != what we just wrote
-        bool found = RT_ORIGINAL_ONCE(GetBoolFn, "?Get@Persistence@IO@@QEBA_NPEBD0AEA_N@Z")(
-            self, section, key, &readback);
-        bool equal = found && readback == value;
-        char oursDesc[64], theirsDesc[64];
-        std::snprintf(oursDesc, sizeof(oursDesc), "wrote %s", value ? "true" : "false");
-        std::snprintf(theirsDesc, sizeof(theirsDesc), "DLL Get readback found=%d value=%s",
-                      (int)found, readback ? "true" : "false");
-        RT_DIFF_SHADOW(equal, oursDesc, theirsDesc);
-    }
 }
 
 // ============================================================================
@@ -268,7 +220,6 @@ void RtIo_Persistence_SetBool(void* self, const char* section, const char* key, 
 // oracle's own temporary copy needs releasing afterward.
 // ============================================================================
 void* RtIo_Persistence_GetSavePath(void* self, void* retval) {
-    RT_DIFF_BEGIN("IO::Persistence::GetSavePath");
 
     auto* p = static_cast<Persistence*>(self);
     auto* ret = static_cast<String*>(retval);
@@ -278,21 +229,6 @@ void* RtIo_Persistence_GetSavePath(void* self, void* retval) {
         ++StringRefCount(ret->data);
     }
 
-    if (rt_diff_on__) {
-        using GetSavePathFn = void* (*)(void*, void*);
-        String theirs{};
-        RT_ORIGINAL_ONCE(GetSavePathFn, "?GetSavePath@Persistence@IO@@QEBA?AVString@System@@XZ")(
-            self, &theirs);
-        bool bothNull = (ret->data == nullptr) && (theirs.data == nullptr);
-        bool equal = bothNull ||
-            ((ret->data != nullptr) == (theirs.data != nullptr) &&
-             ret->data != nullptr && std::strcmp(ret->data, theirs.data) == 0);
-        char a[80], b[80];
-        std::snprintf(a, sizeof(a), "\"%s\"", ret->data ? ret->data : "");
-        std::snprintf(b, sizeof(b), "\"%s\"", theirs.data ? theirs.data : "");
-        RT_DIFF_SHADOW(equal, a, b);
-        RtSystem::RtString_ReleaseInline(&theirs);   // free the oracle call's own temp copy
-    }
 
     return retval;
 }

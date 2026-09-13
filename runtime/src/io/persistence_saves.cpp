@@ -115,7 +115,7 @@ MapClearFn MapClear() {             // 0x18000f7d0 — the settings-map dtor
 // ---- exported dependencies, by NAME ----------------------------------------
 // Both are already ported (String::Format by Wave 2 lane String,
 // Filename::AdjustDelimiters per WAVE19_INTEGRATOR_CORRECTIONS.md C2), so the
-// port-registry-aware door is the right one: RT_ORIGINAL_ONCE here would walk
+// port-registry-aware door is the right one: the raw DLL door here would walk
 // past our own ports into the DLL (rt_port.h's ??DQuaternion note).
 using RtPersistFormatFn           = void* (*)(void* ret, const char* fmt, ...);
 using RtPersistAdjustDelimitersFn = void  (*)(void* self);
@@ -130,16 +130,10 @@ const char kRtPersistSaveFilenameFormat[] = "%sSave\\%s.sav";
 //   testb $1,0x18(rcx) ; je L ; xor eax,eax ; ret ; L: mov 0x88(rcx),eax ; ret
 // ============================================================================
 int RtIo_Persistence_GetSaveCount(const void* self) {
-    RT_DIFF_BEGIN("IO::Persistence::GetSaveCount");
 
     auto* p = static_cast<const Persistence*>(self);
     int ours = (p->flags & 1u) ? 0 : p->saveCount;
 
-    if (rt_diff_on__) {
-        using Fn = int (*)(const void*);
-        int theirs = RT_ORIGINAL_ONCE(Fn, "?GetSaveCount@Persistence@IO@@QEBAHXZ")(self);
-        RT_DIFF_SCALAR(ours, theirs);
-    }
     return ours;
 }
 
@@ -158,7 +152,6 @@ int RtIo_Persistence_GetSaveCount(const void* self) {
 // rule is that an unguarded deref is load-bearing (CLAUDE.md).
 // ============================================================================
 void* RtIo_Persistence_GetSaveInfo(const void* self, void* retval, int index) {
-    RT_DIFF_BEGIN("IO::Persistence::GetSaveInfo");
 
     auto* p   = static_cast<const Persistence*>(self);
     auto* ret = static_cast<SaveGameInfo*>(retval);
@@ -176,30 +169,6 @@ void* RtIo_Persistence_GetSaveInfo(const void* self, void* retval, int index) {
         }
     }
 
-    if (rt_diff_on__) {
-        using Fn = void* (*)(const void*, void*, int);
-        SaveGameInfo theirs;
-        theirs.sortKey = 0;
-        theirs.name.data = nullptr;
-        RT_ORIGINAL_ONCE(Fn, "?GetSaveInfo@Persistence@IO@@QEBA?AUSaveGameInfo@12@H@Z")(
-            self, &theirs, index);
-        // Both sides AddRef the SAME source buffer here, so the pointers do
-        // match — but the comparison is written on CONTENT as well, so it
-        // stays honest if that ever stops being true.
-        bool equal = (ret->name.data == nullptr) == (theirs.name.data == nullptr) &&
-                     ret->sortKey == theirs.sortKey &&
-                     (ret->name.data == nullptr ||
-                      std::strcmp(ret->name.data, theirs.name.data) == 0);
-        char a[96], b[96];
-        std::snprintf(a, sizeof(a), "sortKey=%llu name=\"%s\"",
-                      (unsigned long long)ret->sortKey,
-                      ret->name.data ? ret->name.data : "");
-        std::snprintf(b, sizeof(b), "sortKey=%llu name=\"%s\"",
-                      (unsigned long long)theirs.sortKey,
-                      theirs.name.data ? theirs.name.data : "");
-        RT_DIFF_SHADOW(equal, a, b);
-        RtSystem::RtString_ReleaseInline(&theirs.name);   // drop the oracle's own AddRef
-    }
     return retval;
 }
 
@@ -211,7 +180,6 @@ void* RtIo_Persistence_GetSaveInfo(const void* self, void* retval, int index) {
 // (this=RCX, hiddenSlot=RDX, const String& name=R8).
 // ============================================================================
 void* RtIo_Persistence_GetSaveFilename(const void* self, void* retval, const void* nameRef) {
-    RT_DIFF_BEGIN("IO::Persistence::GetSaveFilename");
 
     auto* p    = static_cast<const Persistence*>(self);
     auto* ret  = static_cast<String*>(retval);      // Filename IS a String (Filename.h)
@@ -231,28 +199,6 @@ void* RtIo_Persistence_GetSaveFilename(const void* self, void* retval, const voi
                    "?AdjustDelimiters@Filename@System@@AEAAXXZ")(ret);
     RtSystem::RtString_ReleaseInline(&tmp);
 
-    if (rt_diff_on__) {
-        using Fn = void* (*)(const void*, void*, const void*);
-        String theirs;
-        theirs.data = nullptr;
-        RT_ORIGINAL_ONCE(Fn,
-            "?GetSaveFilename@Persistence@IO@@AEBA?AVFilename@System@@AEBVString@4@@Z")(
-            self, &theirs, nameRef);
-        // Content comparison is mandatory here and NOT a convenience: the two
-        // sides call Format independently, so they hold two distinct heap
-        // buffers with (if the port is right) identical bytes. Comparing the
-        // pointers, or memcmp'ing the objects, would fail 100% of calls and
-        // read like a catastrophic port failure
-        // (reference_oracle_must_not_compare_unwritten_bytes.md).
-        bool equal = (ret->data == nullptr) == (theirs.data == nullptr) &&
-                     (ret->data == nullptr ||
-                      std::strcmp(ret->data, theirs.data) == 0);
-        char a[160], b[160];
-        std::snprintf(a, sizeof(a), "\"%s\"", ret->data ? ret->data : "<null>");
-        std::snprintf(b, sizeof(b), "\"%s\"", theirs.data ? theirs.data : "<null>");
-        RT_DIFF_SHADOW(equal, a, b);
-        RtSystem::RtString_ReleaseInline(&theirs);
-    }
     return retval;
 }
 
@@ -260,7 +206,6 @@ void* RtIo_Persistence_GetSaveFilename(const void* self, void* retval, const voi
 // bool IO::Persistence::BeginDelete(const String& name)      retail 0x1800b7ab0
 // ============================================================================
 bool RtIo_Persistence_BeginDelete(void* self, const void* nameRef) {
-    RT_DIFF_BEGIN("IO::Persistence::BeginDelete");
 
     auto* p = static_cast<Persistence*>(self);
     if (p->flags & 1u) return false;
@@ -279,7 +224,6 @@ bool RtIo_Persistence_BeginDelete(void* self, const void* nameRef) {
 // ============================================================================
 bool RtIo_Persistence_BeginLoad(void* self, const void* nameRef,
                                 int blockCount, const void* blocks) {
-    RT_DIFF_BEGIN("IO::Persistence::BeginLoad");
 
     auto* p = static_cast<Persistence*>(self);
     if (p->flags & 1u) return false;
@@ -310,7 +254,6 @@ bool RtIo_Persistence_BeginLoad(void* self, const void* nameRef,
 // is not a controlled experiment, it is a crash with extra steps.
 // ============================================================================
 void RtIo_Persistence_dtor(void* self) {
-    RT_DIFF_BEGIN("IO::Persistence::~Persistence");
 
     auto* p = static_cast<Persistence*>(self);
     RtSystem::RtString_ReleaseInline(&p->savePath);

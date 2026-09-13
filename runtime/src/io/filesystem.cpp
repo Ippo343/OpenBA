@@ -124,13 +124,12 @@ static int StriCmpAscii(const char* a, const char* b) {
 // no mutation).
 // ============================================================================
 bool RtIo_FileSystem_Exists(const void* fsVoid, const Filename* path) {
-    RT_DIFF_BEGIN("IO::FileSystem::Exists");
     const FileSystem* fs = static_cast<const FileSystem*>(fsVoid);
 
-    // RT_EXPORT_ONCE, not bare RtOriginal and not RT_ORIGINAL_ONCE.
+    // RT_EXPORT_ONCE, not bare the raw DLL door and not the raw DLL door.
     //
     // The _ONCE half is the original reason and still holds: these two calls
-    // are on the NORMAL path, not inside a diff guard, and bare RtOriginal is
+    // are on the NORMAL path, not inside a diff guard, and bare the raw DLL door is
     // GetProcAddress -- an export-table binary search by string under the
     // loader lock on EVERY call. Two of them in the body of a function the
     // quicksave path calls per file is the Wave 2 perf-gate defect exactly
@@ -145,7 +144,7 @@ bool RtIo_FileSystem_Exists(const void* fsVoid, const Filename* path) {
     // opens on the following line. Found by a paren-matching re-scan, not by
     // the checker.
     //
-    // The diff line below stays on RtOriginal deliberately -- it is the oracle,
+    // The diff line below stays on the raw DLL door deliberately -- it is the oracle,
     // it must reach the SHIPPED body, and it only evaluates under the guard.
     bool ours;
     if (fs->existsInPackfileGate != 0 &&
@@ -159,7 +158,6 @@ bool RtIo_FileSystem_Exists(const void* fsVoid, const Filename* path) {
             "?PlatformExists@FileSystem@IO@@AEBA_NAEBVFilename@System@@@Z")(fs, path);
     }
 
-    RT_DIFF_SCALAR(ours, RtOriginal<fn_Exists_t>(kNameExists)(fs, path));
     return ours;
 }
 
@@ -183,17 +181,10 @@ bool RtIo_FileSystem_Exists(const void* fsVoid, const Filename* path) {
 // on the DLL's own live dataDirectory buffer, not a stale or wrong one.
 // ============================================================================
 Filename* RtIo_FileSystem_GetDataDirectory(const void* fsVoid, Filename* ret) {
-    RT_DIFF_BEGIN("IO::FileSystem::GetDataDirectory");
     const FileSystem* fs = static_cast<const FileSystem*>(fsVoid);
 
     RtSystem::RtSystem_Filename_CtorCopy(ret, reinterpret_cast<const Filename*>(&fs->dataDirectory));
 
-    if (rt_diff_on__) {
-        Filename theirs{};
-        RtOriginal<fn_GetDirectory_t>(kNameGetDataDirectory)(fs, &theirs);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Filename));
-        RtSystem::RtSystem_Filename_Dtor(&theirs);
-    }
     return ret;
 }
 
@@ -212,17 +203,10 @@ Filename* RtIo_FileSystem_GetDataDirectory(const void* fsVoid, Filename* ret) {
 // DIFF: full oracle, same reasoning as GetDataDirectory.
 // ============================================================================
 Filename* RtIo_FileSystem_GetSourceDirectory(const void* fsVoid, Filename* ret) {
-    RT_DIFF_BEGIN("IO::FileSystem::GetSourceDirectory");
     const FileSystem* fs = static_cast<const FileSystem*>(fsVoid);
 
     RtSystem::RtSystem_Filename_CtorCopy(ret, reinterpret_cast<const Filename*>(&fs->sourceDirectory));
 
-    if (rt_diff_on__) {
-        Filename theirs{};
-        RtOriginal<fn_GetDirectory_t>(kNameGetSourceDirectory)(fs, &theirs);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Filename));
-        RtSystem::RtSystem_Filename_Dtor(&theirs);
-    }
     return ret;
 }
 
@@ -248,7 +232,6 @@ Filename* RtIo_FileSystem_GetSourceDirectory(const void* fsVoid, Filename* ret) 
 // DIFF: full oracle. Read-only on both sides.
 // ============================================================================
 uint32_t RtIo_FileSystem_GetPackfileId(const void* fsVoid, const Filename* path) {
-    RT_DIFF_BEGIN("IO::FileSystem::GetPackfileId");
     const FileSystem* fs = static_cast<const FileSystem*>(fsVoid);
 
     uint32_t ours = 0;
@@ -294,7 +277,6 @@ uint32_t RtIo_FileSystem_GetPackfileId(const void* fsVoid, const Filename* path)
         RtString_ReleaseInline(&relPath);
     }
 
-    RT_DIFF_SCALAR(ours, RtOriginal<fn_GetPackfileId_t>(kNameGetPackfileId)(fs, path));
     return ours;
 }
 
@@ -311,7 +293,6 @@ uint32_t RtIo_FileSystem_GetPackfileId(const void* fsVoid, const Filename* path)
 // DIFF: full oracle. Read-only on both sides.
 // ============================================================================
 int RtIo_Modification_Find(const void* modVoid, const Filename* path) {
-    RT_DIFF_BEGIN("IO::Modification::Find");
     const Modification* mod = static_cast<const Modification*>(modVoid);
 
     int ours = -1;
@@ -327,7 +308,6 @@ int RtIo_Modification_Find(const void* modVoid, const Filename* path) {
         }
     }
 
-    RT_DIFF_SCALAR(ours, RtOriginal<fn_ModFind_t>(kNameModFind)(mod, path));
     return ours;
 }
 

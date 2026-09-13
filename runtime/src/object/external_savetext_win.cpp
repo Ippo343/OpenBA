@@ -94,7 +94,6 @@
 
 #include "../system/string.h"
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_diff.h"
 // ORDER IS LOAD-BEARING, and it is a trap in the tree rather than a style
 // choice. `External.h` does `#include "TypeInfo.h"` at its line 322 -- INSIDE
 // its own `namespace RtObject { ... }`. A translation unit that includes
@@ -243,7 +242,6 @@ SaveTextCounters g_st{};
 // ============================================================================
 extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
                                            const Filename* name) {
-    RT_DIFF_BEGIN("Object::External::SaveText");
     ++g_st.calls;
 
     // ---- 1800bb9fd..1800bba3f -------------------------------------------
@@ -373,7 +371,6 @@ extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
     ts.base.base.vptr = RT_DATA_SLOT(const void*, "??_7Stream@IO@@6B@");          // 1800bbbf0
     if (ts.base.base.encoding) EncodingDelete(ts.base.base.encoding);    // 1800bbc04
 
-    RT_DIFF_WORK(true);
     return result;                                                       // 1800bbc09
 }
 

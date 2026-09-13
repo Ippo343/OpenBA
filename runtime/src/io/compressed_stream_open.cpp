@@ -87,7 +87,6 @@ typedef uint32_t (*StreamGetSizeFn)(const Stream*);
 // rather than a restatement of it, since that header was pinned from the
 // CONSTRUCTOR and this is a different function.
 extern "C" void RtIo_CompressedStream_SetWindowCount(CompressedStream* self, int32_t n) {
-    RT_DIFF_BEGIN("IO::CompressedStream::SetWindowCount");
 
     ArraySetSize(0x180024c10, &self->windowData, n);      // 1800aa04e
 
@@ -103,7 +102,6 @@ extern "C" void RtIo_CompressedStream_SetWindowCount(CompressedStream* self, int
 
     self->activeWindow = RtIo_CompressedStream_GetAvailableWindow(self);  // 1800aa0cb/0d0
 
-    RT_DIFF_WORK(true);
 }
 
 // ============================================================================
@@ -129,7 +127,6 @@ extern "C" void RtIo_CompressedStream_SetWindowCount(CompressedStream* self, int
 // in the first means "stored uncompressed".
 extern "C" bool RtIo_CompressedStream_Open(CompressedStream* self, Stream* src,
                                            int32_t windowCount) {
-    RT_DIFF_BEGIN("IO::CompressedStream::Open");
 
     self->source     = src;                               // 1800aa572
     self->base.direction = 0;                             // 1800aa57c  (+0x08)
@@ -141,7 +138,6 @@ extern "C" bool RtIo_CompressedStream_Open(CompressedStream* self, Stream* src,
         reinterpret_cast<StreamGetSizeFn>(svt[6])(self->source));   // 1800aa58f MOVSXD
 
     if (static_cast<uint64_t>(len) < 4u) {                 // 1800aa595 CMP/JNC (UNSIGNED)
-        RT_DIFF_WORK(true);
         return false;                                      // 1800aa59b
     }
 
@@ -150,7 +146,6 @@ extern "C" bool RtIo_CompressedStream_Open(CompressedStream* self, Stream* src,
 
     if (static_cast<int32_t>(blockCount * 8) >
         static_cast<int32_t>(len)) {                       // 1800aa5cb CMP/JG (SIGNED, 32-bit)
-        RT_DIFF_WORK(true);
         return false;
     }
 
@@ -169,7 +164,6 @@ extern "C" bool RtIo_CompressedStream_Open(CompressedStream* self, Stream* src,
     }
 
     const bool ok = (total == static_cast<int32_t>(len));  // 1800aa634 SETZ
-    RT_DIFF_WORK(true);
     return ok;
 }
 

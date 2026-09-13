@@ -147,9 +147,5 @@ Node** Insert     (Set* set, Node** out, const uint32_t* key,
 // into `Insert` — it ALLOCATES, and a probe that allocates cannot run from a
 // *PortInit (WAVE9.md lane PKG2: the allocator singleton is constructed but not
 // started there, and the first allocation faults at null+0x640).
-void RtObjectReferenceSetProbeArm(bool on);
-bool RtObjectReferenceSetProbeArmed();
-void RtObjectReferenceSetProbeRun();
-void RtObjectReferenceSetProbeMaybeRun();
 
 int RtObjectReferenceSetRegister();

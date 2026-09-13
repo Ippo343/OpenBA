@@ -31,7 +31,7 @@
 // retail's signature is.
 //
 // OUT-OF-SCOPE DEPENDENCIES CALLED THROUGH, NOT PORTED: System::WideString
-// and System::Error. Both are exported; both are called via RtOriginal
+// and System::Error. Both are exported; both are called via the raw DLL door
 // exactly as filesystem.cpp calls the out-of-scope ExistsInPackfile/
 // PlatformExists, and as Wave 3's Type::Serialize called the DLL's own
 // ReaderWriter vtable (WAVE3_LANE_A.md §4). WideString was explicitly listed
@@ -52,7 +52,7 @@
 // DIFF: value oracle, not a byte oracle. GetSaveDirectory reads no shared
 // FileSystem state and allocates a FRESH buffer on every call (unlike
 // GetDataDirectory/GetSourceDirectory, which AddRef a shared one), so ours
-// and theirs never share a pointer — RT_DIFF_BYTES on the raw 8-byte struct
+// and theirs never share a pointer — the diff oracle on the raw 8-byte struct
 // would show a "divergence" on every single call even when both sides did
 // the right thing. Comparing by TEXT is what proves anything, the same shape
 // as Filename::GetPathFilename's oracle in runtime/src/system/filename.cpp.
@@ -115,12 +115,12 @@ bool SameFilenameText(const Filename* a, const Filename* b) {
 // The body, independent of the `this` FileSystem pointer (see header note).
 //
 // WAVE 9 LANE V2, 2026-09-07: all three are RT_EXPORT_ONCE, not
-// RT_ORIGINAL_ONCE. The observation that made them RT_ORIGINAL_ONCE is still
-// true and is the reason they are not bare RtOriginal — these run on the NORMAL
-// path and RtOriginal is GetProcAddress on every call (WAVE3_LANE_P.md, the
+// the raw DLL door. The observation that made them the raw DLL door is still
+// true and is the reason they are not bare the raw DLL door — these run on the NORMAL
+// path and the raw DLL door is GetProcAddress on every call (WAVE3_LANE_P.md, the
 // Wave 2 perf-gate defect) — but the DOOR was wrong: they are the work this
 // function does, not an oracle, so they are REAL DEPENDENCIES and belong on the
-// port registry. ResolveExportRaw returns NULL with the DLL absent, which makes
+// port registry. the raw export door returns NULL with the DLL absent, which makes
 // each of these a null call at cutover rather than a named unresolved import.
 // None of the three is ported today, so this changes nothing about which body
 // runs; it changes what happens when one of them IS ported, and what the
@@ -161,20 +161,10 @@ void ComputeSaveDirectory(Filename* ret) {
 }
 
 Filename* RtIo_FileSystem_GetSaveDirectory(const void* fsVoid, Filename* ret) {
-    RT_DIFF_BEGIN("IO::FileSystem::GetSaveDirectory");
     (void)fsVoid;   // retail's `this` is loaded but never dereferenced
 
     ComputeSaveDirectory(ret);
 
-    if (rt_diff_on__) {
-        Filename theirs{nullptr};
-        RtOriginal<fn_GetSaveDirectory_t>(kNameGetSaveDirectory)(fsVoid, &theirs);
-        char a[280], b[280];
-        std::snprintf(a, sizeof(a), "%s", ret->data ? ret->data : "(null)");
-        std::snprintf(b, sizeof(b), "%s", theirs.data ? theirs.data : "(null)");
-        RtDiffReport(&rt_diff_site__, SameFilenameText(ret, &theirs), a, b);
-        RtSystem::RtSystem_Filename_Dtor(&theirs);
-    }
     return ret;
 }
 

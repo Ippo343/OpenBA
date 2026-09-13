@@ -269,13 +269,11 @@ int g_diverged = 0;
 
 }  // namespace
 
+// A3-HOLD: the instrument's "theirs" arm was Runtime-x64.dll, which is gone, so
+// it can never run again. Kept as a false constant only because callers outside
+// this directory still reference it; delete the whole file with them.
 bool Enabled() {
-    static int on = -1;
-    if (on < 0) {
-        const char* e = std::getenv("BANISHED_RT_SAVE_TRACE");
-        on = (e && *e && std::strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return on != 0;
+    return false;
 }
 
 bool Compare(const char* name, void* obj,

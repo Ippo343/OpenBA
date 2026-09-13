@@ -24,7 +24,6 @@
 // not typed from memory. A name the DLL does not contain resolves NULL
 // silently and forever (reference_resolveexport_phantom_names.md).
 //
-// Kill switch: BANISHED_RT_PKG=0 removes this entire file — all four rows —
 // and leaves every call on the DLL.
 //
 // NO NEW WIN32 API AND NO NEW IMPORT LIBRARY. This file calls nothing outside
@@ -185,7 +184,7 @@
 //     reads two bytes and writes three Strings; LoadPackages' output IS the
 //     process's file-system state, and the objects it builds are handed to a
 //     singleton the rest of the engine reads.
-//   * The RT_DIFF_SHADOW below is therefore a SHADOW, not a comparison, and it
+//   * The the diff oracle below is therefore a SHADOW, not a comparison, and it
 //     is labelled as one. It prints the four counts the body produced. It can
 //     catch "the port ran and did nothing"; it CANNOT catch "the port ran and
 //     built the wrong tree", and quoting it as a verification would be the
@@ -283,7 +282,7 @@
 //    falsifies this hardest.** That would mean `FindFiles` is somehow already
 //    satisfied — which the source checker says it is not — or that the gate is
 //    zero and the whole body was skipped. The tell between those two is
-//    trivial: with the gate zero, `[RtDiff] IO::FileSystem::LoadPackages` shows
+//    trivial: with the gate zero, `[the diff oracle] IO::FileSystem::LoadPackages` shows
 //    `calls=1` with the shadow ABSENT, because the early return is before the
 //    shadow. `calls=1` plus a shadow printing `pkgs=0` would mean the body ran
 //    and mounted nothing, which is a different and much more interesting bug.
@@ -321,33 +320,6 @@
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
-namespace RtIO {
-
-// Wave 9 lane PKG2's accessor sweep, defined in package_file.cpp. Called from
-// LoadPackages' tail inside the diff guard — see the comment at the call site.
-void RtIo_PackageFile_SweepProbe(const FileSystem* fs);
-// Lane PKG2 rung 3's lockstep probe (filesystem_openfile_probe.cpp).
-void RtIo_FileSystemOpenFileProbe(const FileSystem* fs);
-// Rung 4's operator= oracle (same file).
-void RtIo_FileInfoAssignProbe();
-// Rung 4b-ii's MemoryStream oracle (memory_stream_probe.cpp, namespace RtIo).
-}  // namespace RtIO
-// Lane PKG2 rung 2's lockstep probe (compressed_stream_probe.cpp). It lives in
-// `RtIo`, not `RtIO`: the tree carries BOTH spellings — runtime/types/io/Stream.h
-// is `RtIo` and runtime/types/io/FileSystem.h is `RtIO` — and rung 2 is built on
-// Stream.h, so it follows Stream.h. Worth a line rather than a silent
-// qualification: the two names differ by one character's case and the linker is
-// the only thing that notices.
-namespace RtIo { void RtIo_CompressedStreamReadProbe(); }
-namespace RtIo { void RtIo_CompressedStreamWriteProbe(); }
-namespace RtIo { void RtIo_MemoryStreamProbe(); }   // rung 4b-ii (memory_stream_probe.cpp)
-namespace RtIo { void RtIo_CompressedStreamOpenProbe(); }  // rung 4b-iii
-namespace RtIo { void RtIo_EncodingProbe(); }        // lane ENC (encoding_probe.cpp)
-namespace RtIo { void RtIo_BinaryWriterProbe(); }    // lane ENC-2 (binary_writer_probe.cpp)
-namespace RtIo { void RtIo_SerializeFamilyProbe(); }  // lane SERIAL (serialize_family_probe.cpp)
-namespace RtUi { void RtUi_DialogSettingsProbe(); }   // lane ENC-2 (dialog_settings_probe.cpp)
-void RtUiElementUpdateProbe();                        // WAVE 10E lane VERIFY (element_update_probe.cpp)
-void RtUiElementPersistProbe();                       // WAVE 10E lane VERIFY (element_persist_probe.cpp)
 namespace RtIO {
 
 using RtSystem::String;
@@ -525,25 +497,10 @@ PackfileIndexNode* IndexFind(PackfileIndexNode* node, const char* key) {
 // What actually pins the field is the disassembly: `LEA RDX,[RCX+0x10]` at
 // 0x180007c2e. The oracle is a regression net, not the evidence.
 extern "C" Filename* RtIo_FileSystem_GetPackDirectory(const FileSystem* self, Filename* ret) {
-    RT_DIFF_BEGIN("IO::FileSystem::GetPackDirectory");
 
     RT_EXPORT_ONCE(FilenameCopyCtorFn, "??0Filename@System@@QEAA@AEBV01@@Z")(
         ret, reinterpret_cast<const Filename*>(&self->packDirectory));
 
-    if (rt_diff_on__) {
-        Filename theirs;
-        theirs.data = nullptr;
-        RtOriginal<GetPackDirectoryFn>(
-            "?GetPackDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ")(self, &theirs);
-        char ours[80], desc[80];
-        std::snprintf(ours, sizeof(ours), "%p \"%.40s\"", static_cast<void*>(ret->data),
-                      ret->data ? ret->data : "(null)");
-        std::snprintf(desc, sizeof(desc), "%p \"%.40s\"", static_cast<void*>(theirs.data),
-                      theirs.data ? theirs.data : "(null)");
-        RT_DIFF_SHADOW(ret->data == theirs.data, ours, desc);
-        RtString_ReleaseInline(reinterpret_cast<String*>(&theirs));
-        RT_DIFF_WORK(true);
-    }
     return ret;
 }
 
@@ -567,31 +524,11 @@ extern "C" Filename* RtIo_FileSystem_GetPackDirectory(const FileSystem* self, Fi
 // GetPackDirectory. Pure; reads `this` and writes only the return slot.
 extern "C" Filename* RtIo_PackageFile_GetFileName(const PackageFileView* self,
                                                   Filename* ret, int index) {
-    RT_DIFF_BEGIN("IO::PackageFile::GetFileName");
 
     const Filename* entry = reinterpret_cast<const Filename*>(
         static_cast<const uint8_t*>(self->entries) + static_cast<int64_t>(index) * 16);
     RT_EXPORT_ONCE(FilenameCopyCtorFn, "??0Filename@System@@QEAA@AEBV01@@Z")(ret, entry);
 
-    if (rt_diff_on__) {
-        Filename theirs;
-        theirs.data = nullptr;
-        RtOriginal<GetFileNameFn>(
-            "?GetFileName@PackageFile@IO@@QEBA?AVFilename@System@@H@Z")(self, &theirs, index);
-        // Same AddRef-not-allocate shape as GetPackDirectory, so pointer
-        // equality is the right predicate. Unlike that one, the population here
-        // is NOT uniform: this runs once per file in every package (tens of
-        // thousands of distinct entries across data0/data1), and reading the
-        // wrong entry — a stride of 8 instead of 16, say — gives a different
-        // pointer on all but the zeroth. The text is printed so a mismatch
-        // names both sides rather than two hex addresses.
-        char ours[64], desc[64];
-        std::snprintf(ours, sizeof(ours), "%.48s", ret->data    ? ret->data    : "(null)");
-        std::snprintf(desc, sizeof(desc), "%.48s", theirs.data ? theirs.data : "(null)");
-        RT_DIFF_SHADOW(ret->data == theirs.data, ours, desc);
-        RtString_ReleaseInline(reinterpret_cast<String*>(&theirs));
-        RT_DIFF_WORK(true);
-    }
     return ret;
 }
 
@@ -630,7 +567,6 @@ extern "C" Filename* RtIo_PackageFile_GetFileName(const PackageFileView* self,
 // twice is a double free, and there is no scratch stand-in because the objects
 // it destroys are the process's real packages.
 extern "C" void RtIo_FileSystem_ClosePackages(FileSystem* self) {
-    RT_DIFF_BEGIN("IO::FileSystem::ClosePackages");
     const int32_t hadPackfiles = self->packfileCount;
     const bool    hadIndex     = self->packfileIndexRoot != nullptr;
 
@@ -694,20 +630,6 @@ extern "C" void RtIo_FileSystem_ClosePackages(FileSystem* self) {
     self->packfileIndexCount = 0;
     self->packfileIndexRoot  = nullptr;
 
-    if (rt_diff_on__) {
-        char ours[96], desc[96];
-        std::snprintf(ours, sizeof(ours), "closed=%d hadIndex=%d -> count=%d root=%p",
-                      hadPackfiles, static_cast<int>(hadIndex), self->packfileCount,
-                      static_cast<void*>(self->packfileIndexRoot));
-        std::snprintf(desc, sizeof(desc), "SHADOW ONLY (destructive, not replayable)");
-        RT_DIFF_SHADOW(self->packfiles == nullptr && self->packfileCount == 0 &&
-                       self->packfileIndexRoot == nullptr && self->packfileIndexCount == 0,
-                       ours, desc);
-        // Deliberately reports work only when there WAS something to close, so
-        // `calls=` does not read as "did work" on the boot call that finds an
-        // empty FileSystem (reference_probe_needs_an_effectiveness_control.md).
-        RT_DIFF_WORK(hadPackfiles != 0 || hadIndex);
-    }
 }
 
 // ============================================================================
@@ -715,7 +637,6 @@ extern "C" void RtIo_FileSystem_ClosePackages(FileSystem* self) {
 // ============================================================================
 // See §2 for the shape and §5 for why there is no oracle.
 extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
-    RT_DIFF_BEGIN("IO::FileSystem::LoadPackages");
 
     // 0x1800ab47f — the packfile gate. See §3: it is 1 by the time we get here,
     // set by FileSystem::Startup between SetupDirectories and this call, so the
@@ -905,90 +826,7 @@ extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
     found.data  = nullptr;
     found.count = 0;
 
-    if (rt_diff_on__) {
-        char ours[160], desc[96];
-        std::snprintf(ours, sizeof(ours),
-                      "pkgs=%d cap=%d found=%d index{ins=%lld over=%lld kept=%lld} n=%d",
-                      self->packfileCount, self->packfileCapacity, foundCount,
-                      static_cast<long long>(inserted), static_cast<long long>(overridden),
-                      static_cast<long long>(kept), self->packfileIndexCount);
-        std::snprintf(desc, sizeof(desc), "SHADOW ONLY (mounts packages, not replayable)");
-        // The predicate is what the body CLAIMS, and every term is named in the
-        // message above, per reference_shadow_predicate_must_name_its_failing_term.md:
-        // the tree got a node for each first-seen path, and the array is
-        // non-empty iff something was mounted.
-        RT_DIFF_SHADOW(self->packfileIndexCount == static_cast<int32_t>(inserted) &&
-                       (self->packfileCount == 0) == (self->packfiles == nullptr),
-                       ours, desc);
-        RT_DIFF_WORK(self->packfileCount != 0);
 
-        // Wave 9 lane PKG2. This is the one moment in the process where every
-        // mounted PackageFile is reachable AND fully populated, so it is the
-        // only place lane PKG2's twenty leaf accessors can get real inputs
-        // instead of reporting calls=0 (reference_uncalled_port_is_not_verified.md).
-        // Inside the diff guard on purpose: it is an oracle driver, not work,
-        // and a normal run must not pay for it. Declared here rather than in a
-        // header because it is one symbol used at one site.
-        RtIo_PackageFile_SweepProbe(self);
-
-        // Rung 2's lockstep probe. Same placement and the same reason as the
-        // two above: it builds two CompressedMemoryStreams, which ALLOCATE, so
-        // it cannot run from a *PortInit where the allocator singleton is still
-        // null. This is the first point on the boot path where the heap is
-        // provably live.
-        RtIo::RtIo_CompressedStreamReadProbe();
-
-        // Wave 19 lane CSTREAM's writer oracle. Same placement and the same
-        // reason as the read probe directly above: it builds several
-        // CompressedMemoryStreams, which ALLOCATE, so it cannot run from a
-        // *PortInit where the allocator singleton at 0x1801fc718 is still null.
-        // It must also run AFTER RtIoPortInit has registered the write path,
-        // which it does -- this call site is on the package-mount path, long
-        // after registration.
-        RtIo::RtIo_CompressedStreamWriteProbe();
-
-        // Rung 3's probe. It needs the packfile INDEX populated, which is what
-        // the loops above just built -- this is the earliest point in the
-        // process where an OpenFile of a packed name can succeed at all.
-        RtIo_FileSystemOpenFileProbe(self);
-        RtIo_FileInfoAssignProbe();
-        RtIo::RtIo_MemoryStreamProbe();
-        RtIo::RtIo_CompressedStreamOpenProbe();
-
-        // Wave 9 lane ENC. Same placement and the same reason as the probes
-        // above: it calls the two IO::Encoding factories, which ALLOCATE, so
-        // it cannot run from a *PortInit where the allocator singleton at
-        // 0x1801fc718 is still null. It needs nothing else from the package
-        // index -- its streams are its own -- so this is simply the earliest
-        // point on the boot path where it can run at all.
-        RtIo::RtIo_EncodingProbe();
-        // Lane ENC-2. Runs immediately after the factory probe and for the
-        // same reason -- it builds whole BinaryWriter records, which allocate.
-        RtIo::RtIo_BinaryWriterProbe();
-        // Lane SERIAL. Unlike every probe above it, this one ALLOCATES NOTHING
-        // -- its stream and its codec are local structs with hand-built vtables
-        // -- so it has no allocator-liveness requirement and could run anywhere
-        // on the boot path. It sits here only so the whole IO probe set reports
-        // from one place and in a predictable order.
-        RtIo::RtIo_SerializeFamilyProbe();
-        // Lane ENC-2 bodies 5-6. Runs here for the same allocator reason and
-        // because it needs the BinaryWriter tail above it to be real.
-        RtUi::RtUi_DialogSettingsProbe();
-    }
-
-    // WAVE 10E lane VERIFY -- two synthetic-subject differentials, placed HERE
-    // for the same allocator reason as the IO probes above (this is the first
-    // point on the boot path where the heap is provably live: the loops above
-    // allocated a 0xF0 PackageFile per package to get this far).
-    //
-    // OUTSIDE the `rt_diff_on__` guard, deliberately. Each has its OWN env
-    // switch and is silent and inert without it, so the guard would only add a
-    // second, undocumented condition -- and a probe that prints nothing because
-    // an UNRELATED switch was not also set reads exactly like a probe that ran
-    // and found nothing. That cost this lane one run: the first attempt sat
-    // inside the guard and both cells reported no output at all.
-    RtUiElementUpdateProbe();    // ?Update@Element@UI@@   (element_update_probe.cpp)
-    RtUiElementPersistProbe();   // ?Persist@Element@UI@@  (element_persist_probe.cpp)
 }
 
 }  // namespace RtIO

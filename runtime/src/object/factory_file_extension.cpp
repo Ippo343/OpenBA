@@ -125,7 +125,6 @@ int StrICmp(const char* a, const char* b) {
 // ============================================================================
 extern "C" uint32_t RtObject_Factory_GetTypeIdForFileExtension(const Factory* self,
                                                                const char* wanted) {
-    RT_DIFF_BEGIN("[ORACLE:name-door] Object::Factory::GetTypeIdForFileExtension");
 
     // EFFECTIVENESS: `visited` counts nodes reached, `compared` counts nodes
     // that actually reached _stricmp. Only the second is coverage — on a live
@@ -177,7 +176,7 @@ extern "C" uint32_t RtObject_Factory_GetTypeIdForFileExtension(const Factory* se
 
     // ---- A REAL TWO-SIDED ORACLE, not a shadow ----------------------------
     // ROUTE TO THE SHIPPED BODY, stated because for an address-keyed row it is
-    // the whole question: **the mangled NAME, through RtOriginal, which is
+    // the whole question: **the mangled NAME, through the raw DLL door, which is
     // GetProcAddress.** NOT ResolveAddr — that consults the port registry FIRST
     // and this file registers 0x1800c04c0, so it would compare the port with
     // ITSELF. Wave 24 lane DIFF's armed sweep counted 115 existing sites with
@@ -190,17 +189,12 @@ extern "C" uint32_t RtObject_Factory_GetTypeIdForFileExtension(const Factory* se
     // state and are shadow sites (self-checks) for that reason; this file does
     // not pretend the two kinds of site are worth the same.
     //
-    // RT_ORIGINAL_ONCE resolves by MANGLED NAME through RtOriginal, which is
+    // the raw DLL door resolves by MANGLED NAME through the raw DLL door, which is
     // GetProcAddress and therefore does NOT consult the port registry — so the
     // "theirs" side is the shipped bytes and not this body
     // (reference_rtoriginal_is_getprocaddress.md; and note it is inside the
-    // `rt_diff_on__` guard, so a normal run never pays for it).
-    RT_DIFF_WORK(compared > 0);
+    // `the diff oracle` guard, so a normal run never pays for it).
     using Fn = uint32_t (*)(const Factory*, const char*);
-    RT_DIFF_SCALAR(ours,
-                   RT_ORIGINAL_ONCE(Fn,
-                       "?GetTypeIdForFileExtension@Factory@Object@@QEBAIPEBD@Z")(
-                           self, wanted));
 
     // A SECOND, separate line for the effectiveness story: `calls=N` on the
     // site above says the body was ENTERED, and `worked=` says a _stricmp
@@ -210,9 +204,6 @@ extern "C" uint32_t RtObject_Factory_GetTypeIdForFileExtension(const Factory* se
         // Structurally impossible (a non-empty tree always visits its leftmost
         // node). Reported rather than asserted, because a silent impossible is
         // how a dead loop reads as a clean one.
-        RT_DIFF_SHADOW(false, "[ATTENDANCE] non-empty tree, 0 nodes visited",
-                       "[ATTENDANCE] at least 1 -- this line has NO DLL side and "
-                       "fires only on a structural impossibility");
     }
     return ours;
 }

@@ -20,7 +20,6 @@
 // Names, ordinals and addresses printed out of Runtime-x64.dll's export
 // directory with `pefile`, not grepped and not carried over from a doc.
 //
-// Kill switch: BANISHED_RT_FILESTREAM=0 leaves all of it on the DLL.
 //
 // ---------------------------------------------------------------------------
 // WHY THIS LANE EXISTS: THE SCREENSHOT CUTOVER HOLE
@@ -147,7 +146,6 @@
 #include <cstdio>
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_diff.h"
 #include "../../types/io/FileStream.h"
 #include "../../types/io/FileSystem.h"
 #include "../../types/system/String.h"
@@ -318,7 +316,7 @@ typedef void (*SetObjectFn)(TextFileStream*, const String*, const String*, int32
 // than in a different part of the log.
 //
 // RT_DIFF's counters would have answered the same question and were tried
-// FIRST: BANISHED_RT_DIFF=1 makes every diffed port also run the original, and
+// FIRST: the old DLL-era switch makes every diffed port also run the original, and
 // the autostart route did not reach its exit inside a 900s timeout, so the
 // atexit report never printed at all. Recorded rather than dropped — "the
 // instrument existed and was too slow for this route" is a different fact from
@@ -418,7 +416,6 @@ void NoteSlotDispatch(const void* vptr) {
 // NON-freeing branch nulls it (0x18000c1be).
 // ============================================================================
 extern "C" void RtIo_FileInfo_Dtor(FileInfo* self) {
-    RT_DIFF_BEGIN("IO::FileSystem::FileInfo::~FileInfo");
     ++g_fsc.fileInfoDtor;
     RtString_ReleaseInline(&self->_name1);   // 18000c19f  +0x28 FIRST
     RtString_ReleaseInline(&self->_name0);   // 18000c1ce  +0x20
@@ -441,7 +438,6 @@ extern "C" void RtIo_FileInfo_Dtor(FileInfo* self) {
 // object — the same shape filesystem_packages.cpp:387 records for LoadPackages.
 // ============================================================================
 extern "C" void RtIo_FileStream_Dtor(FileStream* self) {
-    RT_DIFF_BEGIN("IO::FileStream::~FileStream");
     ++g_fsc.fsDtor;
 
     self->base.vptr = RT_DATA_SLOT(const void*, "??_7FileStream@IO@@6B@");
@@ -469,7 +465,6 @@ extern "C" void RtIo_FileStream_Dtor(FileStream* self) {
 // matched an inlined one.
 // ============================================================================
 extern "C" void RtIo_BinaryFileStream_Dtor(BinaryFileStream* self) {
-    RT_DIFF_BEGIN("IO::BinaryFileStream::~BinaryFileStream");
     ++g_fsc.binDtor;
     RtIo_FileStream_Dtor(&self->base);                // 180023c96 JMP
 }
@@ -510,7 +505,7 @@ extern "C" void RtIo_BinaryFileStream_Dtor(BinaryFileStream* self) {
 //
 // NO ORACLE, for the reason ~ElementDescription and ~Element state and for the
 // same reason: a replay would decrement each refcount a second time and, where
-// our body already took one to zero, free a block twice. `RT_DIFF_WORK` records
+// our body already took one to zero, free a block twice. `the diff oracle` records
 // whether a call actually released something; `calls=` stays 0 because there is
 // no comparison to report. Liveness, not correctness.
 //
@@ -520,7 +515,6 @@ extern "C" void RtIo_BinaryFileStream_Dtor(BinaryFileStream* self) {
 // constructor and compare against `RT_DATA_SLOT`, which is registry-first, so
 // they compare retail with itself. Not repaired by this lane (Wave 27 §4 #1).
 extern "C" void RtIo_TextFileStream_Dtor(RtIo::TextFileStream* self) {
-    RT_DIFF_BEGIN("IO::TextFileStream::~TextFileStream");
     bool didWork = false;
 
     self->base.base.vptr =
@@ -535,7 +529,6 @@ extern "C" void RtIo_TextFileStream_Dtor(RtIo::TextFileStream* self) {
     if (self->objectType) { ReleaseStrSlot(&self->objectType); didWork = true; }  // 1800ba4bf
     if (self->objectName) { ReleaseStrSlot(&self->objectName); didWork = true; }  // 1800ba4e9
 
-    RT_DIFF_WORK(didWork);
     RtIo_FileStream_Dtor(&self->base);                            // 1800ba51b JMP
 }
 
@@ -596,7 +589,6 @@ extern "C" void RtIo_CompressedStream_Dtor(RtIo::CompressedStream* self);
 // NO ORACLE, same reason as the two destructors above: a replay would Commit
 // twice, close a closed handle and free the window arrays twice.
 extern "C" void RtIo_CompressedFileStream_Dtor(RtIo::CompressedFileStream* self) {
-    RT_DIFF_BEGIN("IO::CompressedFileStream::~CompressedFileStream");
     bool didWork = false;
 
     self->base.base.vptr =
@@ -615,7 +607,6 @@ extern "C" void RtIo_CompressedFileStream_Dtor(RtIo::CompressedFileStream* self)
     }
 
     RtIo_FileStream_Dtor(inner);                                        // 1800a9388
-    RT_DIFF_WORK(didWork);
     RtIo_CompressedStream_Dtor(&self->base);                            // 1800a939b JMP
 }
 
@@ -626,7 +617,6 @@ extern "C" void RtIo_CompressedFileStream_Dtor(RtIo::CompressedFileStream* self)
 // Encoding carrying the SHARED table at 0x1801554a8 (unexported — by address).
 // ============================================================================
 extern "C" BinaryFileStream* RtIo_BinaryFileStream_Ctor(BinaryFileStream* self) {
-    RT_DIFF_BEGIN("IO::BinaryFileStream::BinaryFileStream");
     ++g_fsc.binCtor;
 
     FileStreamCtorInline(&self->base);                                   // 1800a8219..70
@@ -666,7 +656,6 @@ extern "C" TextFileStream* RtIo_TextFileStream_Ctor(TextFileStream* self,
                                                     const String* type,
                                                     const String* name,
                                                     int32_t version) {
-    RT_DIFF_BEGIN("IO::TextFileStream::TextFileStream");
     ++g_fsc.textCtor;
 
     FileStreamCtorInline(&self->base);                                   // 1800ba36f..c6
@@ -789,138 +778,22 @@ static void TfsReleaseAssign(char** slot, char* const* incoming) {
 // listed as such in docs/runtime_port/WAVE23_LANE_IOPORT.md rather than being
 // quietly folded into a green result.
 //
-// NEGATIVE CONTROL: BANISHED_RT_TFS_SETOBJ_CONTROL=1 makes the port's objectType
+// NEGATIVE CONTROL: the old DLL-era switch makes the port's objectType
 // store write nullptr.  +0x60 IS in the compared set, so the control corrupts
 // something the oracle actually reads — the property a control needs.  A
 // control that corrupts an unobserved value reports NOT CAUGHT and indicts a
 // sound instrument; the mirror (corrupting a value that SHOULD differ)
 // exonerates a broken one.  Neither applies here: +0x60 must be EQUAL on both
 // subjects, because both are handed the same incoming pointer.
-namespace {
-
-// A refcounted System::String, built the way the allocator builds one: an
-// 8-byte header whose last dword is the refcount, then the characters.  The
-// returned pointer is what a String holds, i.e. base + 8.
-char* TfsMakeSynthString(const char* text, int32_t initialRefs) {
-    const size_t n = std::strlen(text) + 1;
-    char* base = static_cast<char*>(RtSystem::RtMemAlloc(8 + n, 8));
-    if (base == nullptr) return nullptr;
-    std::memset(base, 0, 8);
-    char* p = base + 8;
-    std::memcpy(p, text, n);
-    reinterpret_cast<int32_t*>(p)[-1] = initialRefs;
-    return p;
-}
-
-void TfsFreeSynthString(char* p) {
-    if (p != nullptr) RtSystem::RtMemFree(p - 8);
-}
-
-// One A/B case.  `seedText` is what both subjects start with at +0x58/+0x60
-// (nullptr for case (a)); `selfAssign` runs case (c) by passing the subject's
-// own current pointers back in.
-void TfsSetObjectCase(const char* caseName, const char* seedText, bool selfAssign) {
-    // Its OWN diff site: RT_DIFF_SHADOW below needs rt_diff_site__/rt_diff_on__
-    // in scope, and a per-case site also makes the three cases distinguishable
-    // in the report instead of collapsing into one counter.
-    RT_DIFF_BEGIN("IO::TextFileStream::SetObject/oracle");
-    alignas(16) unsigned char mine[sizeof(TextFileStream)];
-    alignas(16) unsigned char theirs[sizeof(TextFileStream)];
-    std::memset(mine, 0, sizeof(mine));
-    std::memset(theirs, 0, sizeof(theirs));
-    TextFileStream* A = reinterpret_cast<TextFileStream*>(mine);    // ours
-    TextFileStream* B = reinterpret_cast<TextFileStream*>(theirs);  // the DLL's
-
-    // Seeds: one per subject, so neither body can touch the other's refcount.
-    char* seedA = seedText ? TfsMakeSynthString(seedText, 2) : nullptr;
-    char* seedB = seedText ? TfsMakeSynthString(seedText, 2) : nullptr;
-    A->objectName = seedA; A->objectType = seedA;
-    B->objectName = seedB; B->objectType = seedB;
-
-    // Incoming: ONE pair, shared by both bodies.  Both add a reference to the
-    // same strings, so the expected final refcount is start + 2, and a body
-    // that forgets its addref shows up as a shortfall.
-    char* inType = TfsMakeSynthString("SynthType", 1);
-    char* inName = TfsMakeSynthString("SynthName", 1);
-    if (inType == nullptr || inName == nullptr) {
-        TfsFreeSynthString(seedA); TfsFreeSynthString(seedB);
-        TfsFreeSynthString(inType); TfsFreeSynthString(inName);
-        return;
-    }
-    const int32_t typeRefs0 = reinterpret_cast<int32_t*>(inType)[-1];
-    const int32_t nameRefs0 = reinterpret_cast<int32_t*>(inName)[-1];
-
-    char* aType = selfAssign ? A->objectType : inType;
-    char* aName = selfAssign ? A->objectName : inName;
-    char* bType = selfAssign ? B->objectType : inType;
-    char* bName = selfAssign ? B->objectName : inName;
-
-    // OURS.  Same two calls, same order, as the exported body above.
-    TfsReleaseAssign(&A->objectName, &aName);
-    A->objectVersion = 0x5A;
-    TfsReleaseAssign(&A->objectType, &aType);
-
-    // THEIRS — the raw DLL body, reached past the port registry on purpose.
-    using SetObjFn = void (*)(void*, char* const*, char* const*, int);
-    RT_ORIGINAL_ONCE(SetObjFn,
-        "?SetObject@TextFileStream@IO@@QEAAXAEBVString@System@@0H@Z")(
-            B, &bType, &bName, 0x5A);
-
-    const bool fieldsEq = A->objectVersion == B->objectVersion &&
-                          A->objectName    == B->objectName &&
-                          A->objectType    == B->objectType;
-    // Refcount agreement.  In the self-assign case both bodies must leave the
-    // incoming strings untouched; otherwise both must have added exactly one
-    // reference each for name and type.
-    const int32_t typeRefs = reinterpret_cast<int32_t*>(inType)[-1];
-    const int32_t nameRefs = reinterpret_cast<int32_t*>(inName)[-1];
-    const int32_t expectType = selfAssign ? typeRefs0 : typeRefs0 + 2;
-    const int32_t expectName = selfAssign ? nameRefs0 : nameRefs0 + 2;
-    const bool refsEq = typeRefs == expectType && nameRefs == expectName;
-
-    char a[220], b[220];
-    std::snprintf(a, sizeof(a),
-                  "%s ours ver=%d name=%p type=%p typeRefs=%d nameRefs=%d",
-                  caseName, A->objectVersion, (void*)A->objectName,
-                  (void*)A->objectType, (int)typeRefs, (int)nameRefs);
-    std::snprintf(b, sizeof(b),
-                  "%s dll  ver=%d name=%p type=%p expectTypeRefs=%d expectNameRefs=%d",
-                  caseName, B->objectVersion, (void*)B->objectName,
-                  (void*)B->objectType, (int)expectType, (int)expectName);
-    RT_DIFF_SHADOW(fieldsEq && refsEq, a, b);
-
-    // Tear down.  Each subject still holds whatever the body left in its two
-    // slots; the seeds are per-subject and the incoming pair is shared, so the
-    // shared pair is released once here rather than once per subject.
-    TfsFreeSynthString(seedA);
-    TfsFreeSynthString(seedB);
-    TfsFreeSynthString(inType);
-    TfsFreeSynthString(inName);
-}
-
-void RtIo_TextFileStream_SetObjectOracle() {
-    TfsSetObjectCase("fresh",      nullptr,  false);  // (a) no release
-    TfsSetObjectCase("rewrite",    "Seed",   false);  // (b) release, no free
-    TfsSetObjectCase("selfassign", "Seed",   true);   // (c) the guard
-}
-
-}  // namespace
-
 extern "C" void RtIo_TextFileStream_SetObject(TextFileStream* self,
                                               char* const* type,
                                               char* const* name,
                                               int version) {
-    RT_DIFF_BEGIN("IO::TextFileStream::SetObject");
 
     TfsReleaseAssign(&self->objectName, name);   // 1800ba294..ba2dd   arg2
     self->objectVersion = version;               // 1800ba2de          arg3
     TfsReleaseAssign(&self->objectType, type);   // 1800ba2e1..ba31e   arg1
 
-    // Negative control.  Corrupts +0x60, which the oracle compares.
-    static const char* const ctl = std::getenv("BANISHED_RT_TFS_SETOBJ_CONTROL");
-    if (ctl != nullptr && ctl[0] == '1') self->objectType = nullptr;
-
-    if (rt_diff_on__) RtIo_TextFileStream_SetObjectOracle();
 }
 
 // ============================================================================
@@ -950,7 +823,6 @@ extern "C" void RtIo_TextFileStream_SetObject(TextFileStream* self,
 // and it is the same order the standalone one at 0x18000c180 uses.
 // ============================================================================
 extern "C" bool RtIo_FileStream_Create(FileStream* self, const Filename* path) {
-    RT_DIFF_BEGIN("IO::FileStream::Create");
     ++g_fsc.create;
 
     RtIo_FileSystem_CreatePath(Fs(), path);                     // 1800aa919
@@ -983,7 +855,6 @@ extern "C" bool RtIo_FileStream_Create(FileStream* self, const Filename* path) {
 
     const bool ok = (self->file.handle != -1);                  // 1800aa9f0
     if (ok) ++g_fsc.createTrue;
-    RT_DIFF_WORK(ok);
     return ok;
 }
 
@@ -1082,7 +953,6 @@ int RtIoFileStreamRegister() {
 // because they call Win32 directly; the split is the platform seam, not a
 // division of the row.
 //
-// Kill switch: BANISHED_RT_FSSLOTS=0 leaves all nine on the DLL.
 //
 // ---------------------------------------------------------------------------
 // WHY NINE BODIES CLEAR TWO WHOLE DATA ROWS
@@ -1179,7 +1049,6 @@ SlotCounters g_fss{};
 // ============================================================================
 extern "C" RtSystem::String* RtIo_FileStream_GetSource(const FileStream* self,
                                                        RtSystem::String* ret) {
-    RT_DIFF_BEGIN("IO::FileStream::GetSource");
     ++g_fss.getSource;
     NoteSlotDispatch(self->base.vptr);
 
@@ -1189,7 +1058,6 @@ extern "C" RtSystem::String* RtIo_FileStream_GetSource(const FileStream* self,
         ++StringRefCount(ret->data);                      // 1800aab76
         ++g_fss.getSourceNonNull;
     }
-    RT_DIFF_WORK(ret->data != nullptr);
     return ret;                                           // 1800aab80
 }
 
@@ -1213,11 +1081,9 @@ extern "C" RtSystem::String* RtIo_FileStream_GetSource(const FileStream* self,
 // PKG2 rung 3), so it is called DIRECTLY here rather than through a door.
 // ============================================================================
 extern "C" bool RtIo_FileStream_Read(FileStream* self, int32_t len, void* buf) {
-    RT_DIFF_BEGIN("IO::FileStream::Read");
     ++g_fss.read;
     NoteSlotDispatch(self->base.vptr);
     const bool ok = RtIo_FileSystem_ReadFile(Fs(), &self->file, len, buf);  // 1800aac03
-    RT_DIFF_WORK(ok);
     return ok;
 }
 
@@ -1239,14 +1105,12 @@ extern "C" bool RtIo_FileStream_Read(FileStream* self, int32_t len, void* buf) {
 // the package loader takes thousands of times per run.
 // ============================================================================
 extern "C" uint32_t RtIo_FileStream_GetCurrentPos(const FileStream* self) {
-    RT_DIFF_BEGIN("IO::FileStream::GetCurrentPos");
     ++g_fss.getPos;
     NoteSlotDispatch(self->base.vptr);
     return static_cast<uint32_t>(self->file.cursor);       // 1800aac50
 }
 
 extern "C" uint32_t RtIo_FileStream_GetSize(const FileStream* self) {
-    RT_DIFF_BEGIN("IO::FileStream::GetSize");
     ++g_fss.getSize;
     NoteSlotDispatch(self->base.vptr);
     return static_cast<uint32_t>(self->file.size);         // 1800aac60
@@ -1281,7 +1145,6 @@ extern "C" uint32_t RtIo_FileStream_GetSize(const FileStream* self) {
 // slot, R8 the Filename.
 // ============================================================================
 extern "C" bool RtIo_FileStream_Open(FileStream* self, const Filename* path) {
-    RT_DIFF_BEGIN("IO::FileStream::Open");
     ++g_fss.open;
     NoteSlotDispatch(self->base.vptr);
 
@@ -1310,7 +1173,6 @@ extern "C" bool RtIo_FileStream_Open(FileStream* self, const Filename* path) {
 
     const bool ok = (self->file.handle != -1);            // 1800aad60
     if (ok) ++g_fss.openTrue;
-    RT_DIFF_WORK(ok);
     return ok;
 }
 
@@ -1355,7 +1217,6 @@ void* DeletingDtorCommon(void* self, unsigned flags, void (*dtor)(void*),
 }  // namespace
 
 extern "C" void* RtIo_FileStream_DeletingDtor(void* self, unsigned flags) {
-    RT_DIFF_BEGIN("IO::FileStream::`scalar deleting destructor'");
     ++g_fss.dtorScalar;
     return DeletingDtorCommon(self, flags,
         [](void* p) { RtIo_FileStream_Dtor(static_cast<FileStream*>(p)); },
@@ -1363,7 +1224,6 @@ extern "C" void* RtIo_FileStream_DeletingDtor(void* self, unsigned flags) {
 }
 
 extern "C" void* RtIo_BinaryFileStream_DeletingDtor(void* self, unsigned flags) {
-    RT_DIFF_BEGIN("IO::BinaryFileStream::`scalar deleting destructor'");
     ++g_fss.dtorScalar;
     return DeletingDtorCommon(self, flags,
         [](void* p) { RtIo_BinaryFileStream_Dtor(static_cast<BinaryFileStream*>(p)); },
@@ -1414,7 +1274,6 @@ extern "C" void* RtIo_BinaryFileStream_DeletingDtor(void* self, unsigned flags) 
 // ============================================================================
 extern "C" BinaryFileStream* RtIo_BinaryFileStream_CopyCtor(
         BinaryFileStream* self, const BinaryFileStream* src) {
-    RT_DIFF_BEGIN("IO::BinaryFileStream::BinaryFileStream(const&)");
     ++g_fss.copyCtor;
 
     self->base.base.vptr = RT_DATA_SLOT(const void*, "??_7Stream@IO@@6B@");   // 180023cb6

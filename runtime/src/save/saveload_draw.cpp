@@ -142,7 +142,7 @@
 //     and the allocator does not return null here. Left unguarded.
 //
 // ----------------------------------------------------------------------------
-// ORACLE — a REPLAY oracle on the payload, gated by BANISHED_RT_DIFF.
+// ORACLE — a REPLAY oracle on the payload, gated by the old DLL-era switch.
 //
 // The observable of a Draw is not a return value; it is the pixels it produces
 // and the state it leaves behind. Both are compared:
@@ -152,7 +152,7 @@
 //   free ours' buffer, rewind `_capturePixels`, `_captureFlags`,
 //   `_renderBuffer`, `_dirty`, `_viewport` and `_scissor` to their pre-values
 //   THEIRS runs for real on that pristine state
-//   compare, on THREE SEPARATE RtDiff SITES so each is scored on its own:
+//   compare, on THREE SEPARATE the diff oracle SITES so each is scored on its own:
 //     [pixels]                    the w*h*4 readback — the only screen that can
 //                                 see the actual rendering
 //     [SaveLoad post-state]       `_captureFlags` (`_capturePixels` is excluded:
@@ -167,11 +167,11 @@
 // the game continues on the authority's result and there is no leak.
 //
 // The three controls, scored separately in the report:
-//   * BANISHED_RT_DRAW_SELFDIFF=1 — the POSITIVE control. Runs THEIRS on both
+//   * the old DLL-era switch — the POSITIVE control. Runs THEIRS on both
 //     sides. If the pixel compare is not green here the readback is not
 //     deterministic across two draws in one frame and an ours-vs-theirs green
 //     would mean nothing.
-//   * BANISHED_RT_DRAW_CORRUPT=1 — the NEGATIVE control, and it corrupts
+//   * the old DLL-era switch — the NEGATIVE control, and it corrupts
 //     something the comparison ACTUALLY READS
 //     (reference_control_must_pick_a_compared_subject.md): it halves the
 //     frustum's right-plane distance, which changes the projection and so every
@@ -182,7 +182,6 @@
 //     (reference_uncalled_port_is_not_verified.md,
 //      reference_calls_zero_can_mean_always_took_the_uncovered_branch.md).
 //
-// KILL SWITCH: BANISHED_RT_SAVELOAD_DRAW=0 leaves this one export on the DLL,
 // with Wave 5's and Wave 13's Save ports still live.
 // ============================================================================
 
@@ -192,7 +191,6 @@
 #include <cstring>
 
 #include "saveload_internal.h"
-#include "../../funcs/rt_diff.h"
 #include "../../types/math/Math.h"
 #include "../../types/volume/Volume.h"
 #include "../../types/video/Context.h"
@@ -400,16 +398,6 @@ int32_t ImageBufferHeight(const ImageBuffer* ib) {
     int32_t h = ib->height;
     if (f & 0x40u) h >>= (ConfigurationSingleton()->shadowScalar & 0x1f);
     return h;
-}
-
-// The negative control's switch, read once. See the ORACLE section of the
-// banner: it perturbs the frustum, which every compared pixel depends on.
-bool DrawCorruptArmed() {
-    static const int armed = [] {
-        const char* e = std::getenv("BANISHED_RT_DRAW_CORRUPT");
-        return (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-    }();
-    return armed != 0;
 }
 
 // ============================================================================
@@ -703,11 +691,6 @@ void DrawBody(SaveLoad* self, Context* ctx, void* material) {
     frustum.planes[5] = { 0.0f,  0.0f,  1.0f,  fCapH };
     frustum.isOrthographic = true;
 
-    // NEGATIVE CONTROL. Corrupts a value every compared pixel depends on —
-    // the right clip plane — and nothing else. Off unless
-    // BANISHED_RT_DRAW_CORRUPT is set.
-    if (DrawCorruptArmed()) frustum.planes[3].w = -fCapW * 0.5f;
-
     // 0xd8 bytes, pinned twice in runtime/types/graphics/Camera.h. The ctor
     // copies the frustum and the transform in and calls SetFrustum, which fills
     // the projection at +0x94.
@@ -870,142 +853,10 @@ void DrawBody(SaveLoad* self, Context* ctx, void* material) {
 }  // namespace
 
 // ============================================================================
-// 5. The three comparison screens, each its own RtDiff site so each is SCORED
-//    SEPARATELY. Free functions rather than one block because RT_DIFF_BEGIN
-//    declares fixed local names and can only appear once per scope.
-// ============================================================================
-namespace {
-
-// SCREEN 1 — the payload. This is the only screen that can see the rendering.
-void DiffPixels(const uint8_t* ours, const void* theirs, size_t n) {
-    RT_DIFF_BEGIN("Save::SaveLoad::Draw [pixels]");
-    RT_DIFF_WORK(ours != nullptr && theirs != nullptr && n != 0);
-    if (ours != nullptr && theirs != nullptr && n != 0) {
-        RT_DIFF_BYTES(ours, theirs, n);
-    } else {
-        // Not a pass. A round with no buffer on either side is reported so it
-        // cannot be mistaken for a green comparison of real pixels; `worked=`
-        // above is what separates the two.
-        RT_DIFF_SHADOW(ours == nullptr && theirs == nullptr,
-                       "ours: no readback buffer", "theirs: no readback buffer");
-    }
-}
-
-// SCREEN 2 — the handshake byte UpdateSave state 1 waits on.
-void DiffSaveLoadState(uint8_t oursFlags, uint8_t theirsFlags) {
-    RT_DIFF_BEGIN("Save::SaveLoad::Draw [SaveLoad post-state]");
-    RT_DIFF_WORK(true);
-    RT_DIFF_SCALAR(oursFlags, theirsFlags);
-    // `_capturePixels` is deliberately NOT compared: it is a MemAlloc result
-    // and the two runs cannot return the same address. Its CONTENT is screen 1.
-}
-
-// SCREEN 3 — everything Draw leaves behind on the shared Video::Context.
-void DiffContextState(void* oursRb, uint32_t oursDirty,
-                      const Viewport& oursView, const Viewport& oursScis,
-                      const Context* ctx) {
-    RT_DIFF_BEGIN("Save::SaveLoad::Draw [Video::Context post-state]");
-    RT_DIFF_WORK(true);
-    RT_DIFF_SCALAR(oursRb,    ctx->_renderBuffer);
-    RT_DIFF_SCALAR(oursDirty, ctx->_dirty);
-    RT_DIFF_BYTES(&oursView, &ctx->_viewport, sizeof(Viewport));
-    RT_DIFF_BYTES(&oursScis, &ctx->_scissor,  sizeof(Viewport));
-}
-
-}  // namespace
-
-// ============================================================================
-// 6. The export, with the replay oracle in front of it.
+// 5. The export.
 // ============================================================================
 void RtSave_SaveLoad_Draw(SaveLoad* self, Context* ctx, void* material) {
-    RT_DIFF_BEGIN("Save::SaveLoad::Draw");
-
-    // `worked` is the early-out. A run whose worked= is 0 never entered the
-    // body, and its clean board says nothing at all.
-    const bool active = *reinterpret_cast<const uint8_t*>(&self->_captureFlags) != 0;
-    RT_DIFF_WORK(active);
-
-    if (!rt_diff_on__ || !active) {
-        DrawBody(self, ctx, material);
-        return;
-    }
-
-    // ---- the replay round -------------------------------------------------
-    using TheirsFn = void (*)(SaveLoad*, Context*, void*);
-    TheirsFn theirs = RtOriginal<TheirsFn>(
-        "?Draw@SaveLoad@Save@@QEAAXAEAVContext@Video@@V?$ExternalPtr@VMaterial@Graphics@@@Object@@@Z");
-
-    // POSITIVE CONTROL: run THEIRS on both sides. If the pixel compare is not
-    // green under this, two draws in one frame are not deterministic and no
-    // ours-vs-theirs green would mean anything.
-    static const bool selfDiff = [] {
-        const char* e = std::getenv("BANISHED_RT_DRAW_SELFDIFF");
-        return e && e[0] && std::strcmp(e, "0") != 0;
-    }();
-
-    const int32_t  w         = self->_captureWidth;
-    const int32_t  h         = self->_captureHeight;
-    const size_t   nBytes    = static_cast<size_t>(static_cast<int64_t>(w * h) << 2);
-    const uint8_t  preFlags  = *reinterpret_cast<const uint8_t*>(&self->_captureFlags);
-    void* const    prePixels = self->_capturePixels;
-    void* const    preRb     = ctx->_renderBuffer;
-    const uint32_t preDirty  = ctx->_dirty;
-    const Viewport preView   = ctx->_viewport;
-    const Viewport preScis   = ctx->_scissor;
-
-    // The SIZE of the payload screen's comparison, printed once per round.
-    // "0 divergences" over an unknown extent is not a result: a zero-length
-    // buffer compares clean. `worked=` already proves n != 0; this says how big
-    // n actually was, so the number in the report is a measurement.
-    std::fprintf(stderr, "[DrawDiff] capture %dx%d = %llu bytes compared%s\n",
-                 w, h, static_cast<unsigned long long>(nBytes),
-                 selfDiff ? "  (SELFDIFF: theirs vs theirs)" : "");
-
-    if (selfDiff) theirs(self, ctx, material);
-    else          DrawBody(self, ctx, material);
-
-    // Snapshot ours (or the control's first pass) into PRIVATE storage, so the
-    // comparison at the bottom is copy-against-copy and never against a live
-    // object the second run has already moved.
-    uint8_t* oursPixels = (nBytes != 0 && self->_capturePixels != nullptr)
-                            ? static_cast<uint8_t*>(std::malloc(nBytes)) : nullptr;
-    if (oursPixels != nullptr) std::memcpy(oursPixels, self->_capturePixels, nBytes);
-
-    const uint8_t  oursFlags = *reinterpret_cast<const uint8_t*>(&self->_captureFlags);
-    void* const    oursRb    = ctx->_renderBuffer;
-    const uint32_t oursDirty = ctx->_dirty;
-    const Viewport oursView  = ctx->_viewport;
-    const Viewport oursScis  = ctx->_scissor;
-
-    // Hand the buffer back and rewind every piece of live state this body
-    // touched, so THEIRS runs on pristine input. This is the step the two
-    // hold-backs assumed was impossible; it is six assignments and one free.
-    if (self->_capturePixels != nullptr) MemFree(self->_capturePixels);
-    self->_capturePixels = prePixels;
-    *reinterpret_cast<uint8_t*>(&self->_captureFlags) = preFlags;
-    ctx->_renderBuffer = preRb;
-    ctx->_dirty        = preDirty;
-    ctx->_viewport     = preView;
-    ctx->_scissor      = preScis;
-
-    theirs(self, ctx, material);
-
-    // Compare, ON THREE SEPARATE SITES. The live post-state is now RETAIL's,
-    // which is what the game keeps — a diff run cannot leave the save holding
-    // our thumbnail.
-    //
-    // The split is not cosmetic. A single site aggregates six comparisons into
-    // one `divergences=` number, and a number scored over a UNION cannot tell
-    // "all three screens passed" from "two passed and the third is blind"
-    // (reference_union_control_hides_a_blind_screen.md). Three sites means the
-    // negative control below has to name WHICH screen caught it, and the
-    // pixel screen — the only one that can see the actual rendering — reports
-    // its own count.
-    DiffPixels(oursPixels, self->_capturePixels, nBytes);
-    DiffSaveLoadState(oursFlags, *reinterpret_cast<const uint8_t*>(&self->_captureFlags));
-    DiffContextState(oursRb, oursDirty, oursView, oursScis, ctx);
-
-    std::free(oursPixels);
+    DrawBody(self, ctx, material);
 }
 
 // ============================================================================

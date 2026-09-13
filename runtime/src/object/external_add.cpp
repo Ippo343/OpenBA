@@ -83,21 +83,8 @@
 #include "external_set.h"
 #include "../system/string.h"
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_diff.h"
 #include "../../types/object/External.h"
 #include "../../types/io/FileStream.h"
-
-// runtime/src/io/file_stream_probe.cpp -- the oracle for the LAYOUTS this file
-// depends on, armed from the first live call below. Declared at FILE scope and
-// `extern "C"`: a block-scope `extern void` would bind the name into namespace
-// RtObject and link against a symbol nothing defines.
-extern "C" void RtIoProbeRunFileStreamLayoutProbe();
-extern "C" void RtIoProbeRunTextFileStreamProbe();   // Wave 20 lane SAVETEXT
-
-// runtime/src/object/external_savetext_probe.cpp -- the oracle for
-// External::SaveText, which no gameplay route reaches. It needs a live
-// `External*`, and this body is handed one ~7.9k times a run.
-extern "C" void RtObjectSaveTextProbeStepC(void* subject);
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -243,54 +230,7 @@ AddCounters g_ac{};
 // Object::ExternalFactory::Add — the body.               retail 0x1800be570
 // ============================================================================
 extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* external) {
-    RT_DIFF_BEGIN("Object::ExternalFactory::Add");
     ++g_ac.calls;
-
-    // The layout probe's run point. It ALLOCATES (four of the five constructors
-    // it drives install an IO::Encoding), so it cannot run from RtObjectPortInit
-    // -- the MemoryAllocator singleton is constructed but not started there and
-    // the first allocation faults at null+0x640 (WAVE9 lane PKG2). The first
-    // real Add is provably safe because this body is itself about to allocate.
-    //
-    // Scheduling an instrument off a body is a CLAIM THAT THE BODY RUNS, and
-    // lane OBJEXT lost a launch to that claim being false for PushPath
-    // (WAVE11_LANE_OBJEXT.md 10.1). Here it is measured, not assumed: our own
-    // ported FindOrLoad calls Add unconditionally on both branches, ~22.6k times
-    // per menu-to-gameplay run, and g_ac.calls above is the positive control
-    // that says so from inside this function.
-    //
-    // Opt-in, because it drives five constructor/destructor pairs through the
-    // DLL and a normal run should not pay for that. Re-entry is impossible: the
-    // arm flag is cleared BEFORE anything is driven.
-    {
-        static bool armed = (std::getenv("BANISHED_RT_IOSTREAM_PROBE") != nullptr);
-        if (armed) {
-            armed = false;
-            RtIoProbeRunFileStreamLayoutProbe();
-        }
-    }
-
-    // The SaveText oracle's subject feed. Unlike the layout probe this one is
-    // NOT one-shot: it needs several distinct Externals, so it is stepped on
-    // every call until it has its sample and then returns immediately. Opt-in
-    // for the same reason -- it writes and re-reads two files per subject.
-    {
-        static bool stArmed = (std::getenv("BANISHED_RT_SAVETEXT_PROBE") != nullptr);
-        if (stArmed) RtObjectSaveTextProbeStepC(external);
-    }
-
-    // Wave 20 lane SAVETEXT's oracle for the five TextFileStream vtable slots.
-    // Same host, same one-shot shape and the same reason as the layout probe
-    // above: this is the earliest point where the FileSystem singleton is up,
-    // and `Add`'s own call counter is the positive control that the host runs.
-    // Opt-in because screen D writes twelve files.
-    {
-        static bool tfsArmed = (std::getenv("BANISHED_RT_TFS_PROBE") != nullptr);
-        if (tfsArmed) {
-            tfsArmed = false;
-            RtIoProbeRunTextFileStreamProbe();
-        }
-    }
 
     // ---- 1800be589..1800be5d9 -------------------------------------------
     // `Filename path = external->GetPath();`
@@ -407,7 +347,6 @@ extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* ex
     // would leak one string reference per resource.
     ReleaseInline(&path);
 
-    RT_DIFF_WORK(true);
 }
 
 void DumpAddCounters() {

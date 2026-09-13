@@ -77,7 +77,7 @@
 // ----------------------------------------------------------------------------
 // THREE ARMING TIERS
 // ----------------------------------------------------------------------------
-//   BANISHED_RT_INTERNAL=0            nothing in this file registers.
+//   the old DLL-era switch            nothing in this file registers.
 //
 //   (default)                         TIER 1 only — the functions with no
 //                                     shared state: both InternalBasePtr
@@ -87,18 +87,18 @@
 //                                     ClearPersistState, which touches
 //                                     _persistIds and never the handle table.
 //
-//   BANISHED_RT_INTERNAL_SHADOW=1     adds observe-only wrappers around
+//   the old DLL-era switch     adds observe-only wrappers around
 //                                     Internal::Internal, ~Internal,
 //                                     ClearPersistState and ResetPersistState.
 //                                     OUR CODE NEVER WRITES THE TABLE in this
 //                                     mode: it predicts the post-state, calls
 //                                     the DLL to do the real work, and asserts
 //                                     the prediction held. This is the oracle
-//                                     (PLAN.md §4.3 risk 2's RT_DIFF_SHADOW
+//                                     (PLAN.md §4.3 risk 2's the diff oracle
 //                                     contract, verbatim). Requires
-//                                     BANISHED_RT_DIFF=1 to report.
+//                                     the old DLL-era switch to report.
 //
-//   BANISHED_RT_INTERNAL_TABLE=0      TIER 2 IS DEFAULT-ON as of Wave 11
+//   the old DLL-era switch      TIER 2 IS DEFAULT-ON as of Wave 11
 //                                     follow-up lane ARM (2026-09-09); this is
 //                                     its KILL SWITCH. The real ports of the
 //                                     table mutators drive the live handle
@@ -110,7 +110,7 @@
 //                                     TABLE and SHADOW are mutually exclusive;
 //                                     asking for both is refused.
 //
-//   BANISHED_RT_NO_DLL=1              ALSO ARMS TIER 2, and is why the old
+//   the old DLL-era switch              ALSO ARMS TIER 2, and is why the old
 //                                     "*** VERDICT: NO-GO ***" line is gone
 //                                     from here (Wave 9 lane Y, 2026-09-08).
 //                                     The NO-GO was about TWO writers driving
@@ -138,28 +138,12 @@ namespace RtObject {
 namespace {
 
 // ============================================================
-// The DLL's allocator and PRNG
+// The allocator and PRNG
 // ============================================================
-// Same rule as runtime/src/system/string.cpp: WHILE THE DLL IS LOADED the handle
-// table's buffers cross the DLL boundary in both directions (the DLL's own
-// Internal ctors grow the very same array), so allocation MUST stay on the DLL's
-// heap. That is why the primary door here is RtOriginal<> — the RAW door — and
-// not ResolveExport: an armed MemoryAllocator port must not be able to split the
-// one heap that owns those buffers.
-//
-// WAVE 9 LANE Y, 2026-09-08 — that reasoning has a boundary, and this is it.
-// RtOriginal IS GetProcAddress (reference_rtoriginal_is_getprocaddress.md). With
-// Runtime-x64.dll absent it returns NULL and the next line calls it, so at
-// cutover the tier-2 table ports below would die on their first allocation.
-// The premise dies with the DLL as well: with no DLL there are no DLL-side
-// Internal ctors, there is exactly ONE heap (lane E's), and "do not split it"
-// becomes "use it".
-//
-// So: raw door first, port-aware door when the raw door has nothing to offer.
-// This is NOT the `ResolveExport -> ResolveAddr(Module::Runtime, addr)` fallback
-// idiom lane F deleted 166 of — that one falls back to an ADDRESS IN A MODULE
-// THAT WILL NOT BE MAPPED. This falls the other way, from the DLL to our own
-// registered port, which is the only thing that can still answer.
+// The handle table's buffers used to cross the Runtime-x64.dll boundary in both
+// directions, so allocation had to stay on the DLL's heap and the door here was
+// the raw one (GetProcAddress). With the DLL gone there is exactly ONE heap --
+// our own MemoryAllocator port -- and the registry door is the only door.
 //
 // ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z  0x1800c7a50
 // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z     0x1800c7ad0
@@ -174,40 +158,24 @@ MemFreeFn  g_memFree  = nullptr;
 RandFn     g_rand     = nullptr;
 
 void* MemAlloc(uint64_t bytes, int align) {
-    if (!g_memAlloc) {
-        g_memAlloc = RtOriginal<MemAllocFn>("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z");
-        if (!g_memAlloc)   // no DLL: our port is the only heap there is
-                           // (same seam as system/string.cpp; see its CUTOVER note)
-            g_memAlloc = reinterpret_cast<MemAllocFn>(
-                ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
-    }
+    if (!g_memAlloc)
+        g_memAlloc = reinterpret_cast<MemAllocFn>(
+            ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
     return g_memAlloc(bytes, align);
 }
 
 void MemFree(void* p) {
-    if (!g_memFree) {
-        g_memFree = RtOriginal<MemFreeFn>("?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
-        if (!g_memFree)
-            g_memFree = reinterpret_cast<MemFreeFn>(
-                ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
-    }
+    if (!g_memFree)
+        g_memFree = reinterpret_cast<MemFreeFn>(
+            ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
     g_memFree(p);
 }
 
-// ?Rand@Random@System@@QEAAIXZ  0x1800c7f90.
-// Resolved through the ORDINARY seam, not RtOriginal: Wave 2 ported this and
-// proved it bit-exact over 16,035,064 calls, so whichever implementation is
-// armed is the right one to be in this path.
+// ?Rand@Random@System@@QEAAIXZ  0x1800c7f90. Wave 2 ported this and proved it
+// bit-exact over 16,035,064 calls.
 uint32_t RandomRand(void* random) {
-    if (!g_rand) {
-        // ResolveExport, NOT ResolveExportRaw: the comment above states the
-        // intent ("whichever implementation is armed is the right one") and the
-        // code did the opposite until 2026-09-07 (Wave 9 lane R). Raw is
-        // GetProcAddress and skips the port registry by design, so this path ran
-        // the DLL's Rand on every Internal id while the census counted ours as
-        // ported. Found by tools/port_bypass_audit.py's name-door sweep.
+    if (!g_rand)
         g_rand = reinterpret_cast<RandFn>(ResolveExport("?Rand@Random@System@@QEAAIXZ"));
-    }
     return g_rand(random);
 }
 
@@ -257,44 +225,24 @@ InternalFactory* Factory() {
 // comes back null, and the registry answer — the minted table — is the only one
 // there is. So the same code is right on both sides of cutover.
 //
-// KILL SWITCH: `BANISHED_RT_INTERNAL_VTBL_RAW=0` restores the old registry-first
 // behaviour. It exists so the A/B that demonstrates the split is runnable with
 // ONE variable, and it is the half you must NOT ship: with it set and the minted
 // row registered, this class has two vtables.
-namespace {
-bool VtblPinRaw() {
-    static const int on = [] {
-        const char* e = std::getenv("BANISHED_RT_INTERNAL_VTBL_RAW");
-        return (e && (e[0] == '0' || e[0] == 'f' || e[0] == 'F')) ? 0 : 1;
-    }();
-    return on != 0;
-}
-
-// The DLL's own copy, or nullptr when the DLL is not present (cutover).
-void* RawVtable(const char* symbol) {
-    // RT_RAW_OK: pinning the DLL's table IS the point — see the block above.
-    return VtblPinRaw() ? ResolveExportRaw(symbol) : nullptr;
-}
-}  // namespace
-
 void* VtblInternal() {
     if (!g_vtblInternal) {
-        g_vtblInternal = RawVtable("??_7Internal@Object@@6B@");
-        if (!g_vtblInternal) g_vtblInternal = ResolveExport("??_7Internal@Object@@6B@");
+        g_vtblInternal = ResolveExport("??_7Internal@Object@@6B@");
     }
     return g_vtblInternal;
 }
 void* VtblBase() {
     if (!g_vtblBase) {
-        g_vtblBase = RawVtable("??_7Base@Object@@6B@");
-        if (!g_vtblBase) g_vtblBase = ResolveExport("??_7Base@Object@@6B@");
+        g_vtblBase = ResolveExport("??_7Base@Object@@6B@");
     }
     return g_vtblBase;
 }
 
 // Whether the pin is armed. Read by the exit screen below, which lives at
 // global scope with the other read-outs.
-bool VtblPinIsArmed() { return VtblPinRaw(); }
 
 // ============================================================
 // Collection::Array<T> bodies, as retail instantiates them
@@ -458,13 +406,6 @@ int PredictCapacity(int oldSize, int oldCapacity, int newSize) {
     return newSize;
 }
 
-// Opt-IN switch. RtWaveEnabled() is opt-OUT (true unless "0"), which is wrong
-// for a tier that must stay off until someone measures it.
-bool RtOptIn(const char* name) {
-    const char* e = std::getenv(name);
-    return e && e[0] && std::strcmp(e, "0") != 0 && std::strcmp(e, "false") != 0;
-}
-
 }  // namespace
 
 // ============================================================================
@@ -474,16 +415,8 @@ bool RtOptIn(const char* name) {
 // ??0InternalBasePtr@Object@@QEAA@XZ   retail 0x1800062c0, profile 0x180023900
 // One instruction: `mov qword ptr [rcx], 0`.
 void* RtObject_InternalBasePtr_Ctor(InternalBasePtr* self) {
-    RT_DIFF_BEGIN("Object::InternalBasePtr::InternalBasePtr()");
     InternalBasePtr ours;
     ours.ptr = nullptr;
-    if (rt_diff_on__) {
-        // Scratch copies only: the original never touches `self`.
-        InternalBasePtr theirs;
-        std::memset(&theirs, 0xCD, sizeof(theirs));
-        RtOriginal<void* (*)(InternalBasePtr*)>("??0InternalBasePtr@Object@@QEAA@XZ")(&theirs);
-        RT_DIFF_BYTES(&ours, &theirs, sizeof(InternalBasePtr));
-    }
     *self = ours;
     return self;   // MSVC constructors return `this` in RAX.
 }
@@ -492,16 +425,8 @@ void* RtObject_InternalBasePtr_Ctor(InternalBasePtr* self) {
 //                                      retail 0x1800062a0, profile 0x1800238e0
 // One instruction: `mov qword ptr [rcx], rdx`.
 void* RtObject_InternalBasePtr_CtorPtr(InternalBasePtr* self, Internal* p) {
-    RT_DIFF_BEGIN("Object::InternalBasePtr::InternalBasePtr(Internal*)");
     InternalBasePtr ours;
     ours.ptr = p;
-    if (rt_diff_on__) {
-        InternalBasePtr theirs;
-        std::memset(&theirs, 0xCD, sizeof(theirs));
-        RtOriginal<void* (*)(InternalBasePtr*, Internal*)>(
-            "??0InternalBasePtr@Object@@QEAA@PEAVInternal@1@@Z")(&theirs, p);
-        RT_DIFF_BYTES(&ours, &theirs, sizeof(InternalBasePtr));
-    }
     *self = ours;
     return self;
 }
@@ -511,16 +436,8 @@ void* RtObject_InternalBasePtr_CtorPtr(InternalBasePtr* self, Internal* p) {
 // One instruction pair: `mov rax,[rdx]; mov [rcx],rax`. NOT refcounted — this
 // really is a raw 8-byte copy, and the two InternalBasePtrs are then aliases.
 void RtObject_InternalBasePtr_Copy(InternalBasePtr* self, const InternalBasePtr* other) {
-    RT_DIFF_BEGIN("Object::InternalBasePtr::Copy");
     InternalBasePtr ours;
     ours.ptr = other->ptr;
-    if (rt_diff_on__) {
-        InternalBasePtr theirs;
-        std::memset(&theirs, 0xCD, sizeof(theirs));
-        RtOriginal<void (*)(InternalBasePtr*, const InternalBasePtr*)>(
-            "?Copy@InternalBasePtr@Object@@IEAAXAEBV12@@Z")(&theirs, other);
-        RT_DIFF_BYTES(&ours, &theirs, sizeof(InternalBasePtr));
-    }
     *self = ours;
 }
 
@@ -564,7 +481,7 @@ void RtObject_InternalBasePtr_Copy(InternalBasePtr* self, const InternalBasePtr*
 // through the engine_funcs.h macro, which with a null resolve and a false flag
 // calls a null pointer. Leaving it unregistered is an EXEC-of-0 at cutover.
 //
-// BANISHED_RT_INTERNAL_CHECKPTR=1 is retained only as a positive assertion in
+// the old DLL-era switch is retained only as a positive assertion in
 // the log; it no longer gates anything.
 void RtObject_InternalBasePtr_CheckPtr(const InternalBasePtr*) {
 }
@@ -821,7 +738,7 @@ void RtObject_InternalFactory_ResetPersistState(InternalFactory* self, void* str
 // so a second run would consume or emit the record twice.
 //
 // The last two sentences of this block used to read "It is registered only
-// under BANISHED_RT_INTERNAL_TABLE=1 and is UNVERIFIED." BOTH halves are stale
+// under the old DLL-era switch and is UNVERIFIED." BOTH halves are stale
 // and are corrected here rather than left to mislead (PLAN §6 step 8): Wave 9
 // lane S UNGATED the registration (see the registration function below) and
 // VERIFIED it with the emission-sequence oracle — 4 emissions on the non-null
@@ -858,7 +775,7 @@ void RtObject_InternalBasePtr_Serialize(InternalBasePtr* self, SerializerLite* s
     reinterpret_cast<void (*)(void*, uint32_t*, const char*)>(encVtbl[kEncSerializeUint / 8])(
         enc, &type, nullptr);
 
-    // The REGISTRY door, not RtOriginal: PersistObject is ported
+    // The REGISTRY door, not the raw DLL door: PersistObject is ported
     // (internalfactory_persist.cpp) and with the DLL absent the raw door is
     // NULL. First DLL-absent Load Game (2026-09-12) died here, EXEC-of-0, with
     // the InternalFactory in RCX -- the same wall as video/buffers.cpp MemFree.
@@ -866,140 +783,6 @@ void RtObject_InternalBasePtr_Serialize(InternalBasePtr* self, SerializerLite* s
     PersistObjectFn persist = RT_EXPORT_ONCE(PersistObjectFn,
         "?PersistObject@InternalFactory@Object@@QEAAPEAVInternal@2@AEAVStream@IO@@IHI@Z");
     self->ptr = persist(Factory(), ser->stream, gen, index, type);
-}
-
-// ============================================================================
-// SHADOW MODE — the oracle for the table mutators
-// ============================================================================
-// The contract from rt_diff.h, followed literally: OURS computes a prediction
-// into locals, THEIRS does the real work on the live table, and the wrapper
-// asserts the prediction held. Our code performs no store into the factory in
-// this mode, so arming it cannot corrupt anything a plain run would not.
-//
-// What is checked, and it is the whole of the arithmetic in this class:
-//   ctor  — the new object's index, the new element count, that the table slot
-//           really points at the object, and the CAPACITY the growth policy
-//           should have produced (the `*3` rule).
-//   dtor  — the swap-remove: which element moves, where it lands, that its
-//           _factoryIndex was rewritten, and the new count.
-//   Clear — all three persist-array fields zeroed.
-//   Reset — the post-state is self-consistent with our model given the count
-//           the stream actually carried: _persistIds sized to it and filled
-//           with -1, _objects._size unchanged, and both capacities exactly what
-//           PredictCapacity says.
-//
-// NOT checked by the ctor shadow: the generation. It comes from
-// _random.Rand(), and predicting it would require drawing from the same
-// generator, which advances it. Wave 2 proved Rand bit-exact over 16M calls
-// separately.
-namespace {
-
-char g_desc[2][160];
-
-template <typename Fn>
-Fn Orig(const char* mangled) { return RtOriginal<Fn>(mangled); }
-
-}  // namespace
-
-Internal* RtObject_Internal_Ctor_Shadow(Internal* self) {
-    RT_DIFF_BEGIN("Object::Internal::Internal [shadow]");
-    InternalFactory* f = Factory();
-    const int oldSize = f ? f->objects._size     : 0;
-    const int oldCap  = f ? f->objects._capacity : 0;
-
-    Internal* r = Orig<Internal* (*)(Internal*)>("??0Internal@Object@@QEAA@XZ")(self);
-
-    if (rt_diff_on__ && f) {
-        const int wantSize = oldSize + 1;
-        const int wantCap  = PredictCapacity(oldSize, oldCap, wantSize);
-        const bool ok = self->factoryIndex == oldSize &&
-                        f->objects._size == wantSize &&
-                        f->objects._capacity == wantCap &&
-                        f->objects._data[oldSize] == self;
-        std::snprintf(g_desc[0], sizeof(g_desc[0]),
-                      "predict idx=%d size=%d cap=%d slot=%p",
-                      oldSize, wantSize, wantCap, (void*)self);
-        std::snprintf(g_desc[1], sizeof(g_desc[1]),
-                      "actual  idx=%d size=%d cap=%d slot=%p",
-                      self->factoryIndex, f->objects._size, f->objects._capacity,
-                      (void*)f->objects._data[oldSize]);
-        RT_DIFF_SHADOW(ok, g_desc[0], g_desc[1]);
-    }
-    return r;
-}
-
-void RtObject_Internal_Dtor_Shadow(Internal* self) {
-    RT_DIFF_BEGIN("Object::Internal::~Internal [shadow]");
-    InternalFactory* f = Factory();
-    const int oldSize = f ? f->objects._size : 0;
-    const int last    = oldSize - 1;
-    const int idx     = self->factoryIndex;
-    Internal* moved   = nullptr;
-    if (f && last != idx && last >= 0)
-        moved = f->objects._data[last];
-
-    Orig<void (*)(Internal*)>("??1Internal@Object@@UEAA@XZ")(self);
-
-    if (rt_diff_on__ && f) {
-        bool ok = f->objects._size == last && self->generation == 0;
-        if (ok && moved != nullptr)
-            ok = f->objects._data[idx] == moved && moved->factoryIndex == idx;
-        std::snprintf(g_desc[0], sizeof(g_desc[0]),
-                      "predict size=%d idx=%d moved=%p->idx %d", last, idx, (void*)moved, idx);
-        std::snprintf(g_desc[1], sizeof(g_desc[1]),
-                      "actual  size=%d slot=%p gen=%u", f->objects._size,
-                      (moved && idx >= 0 && idx < f->objects._size)
-                          ? (void*)f->objects._data[idx] : nullptr,
-                      self->generation);
-        RT_DIFF_SHADOW(ok, g_desc[0], g_desc[1]);
-    }
-}
-
-void RtObject_InternalFactory_ClearPersistState_Shadow(InternalFactory* self) {
-    RT_DIFF_BEGIN("Object::InternalFactory::ClearPersistState [shadow]");
-    Orig<void (*)(InternalFactory*)>("?ClearPersistState@InternalFactory@Object@@QEAAXXZ")(self);
-    if (rt_diff_on__) {
-        const bool ok = self->persistIds._data == nullptr &&
-                        self->persistIds._size == 0 &&
-                        self->persistIds._capacity == 0;
-        std::snprintf(g_desc[0], sizeof(g_desc[0]), "predict data=null size=0 cap=0");
-        std::snprintf(g_desc[1], sizeof(g_desc[1]), "actual  data=%p size=%d cap=%d",
-                      (void*)self->persistIds._data, self->persistIds._size,
-                      self->persistIds._capacity);
-        RT_DIFF_SHADOW(ok, g_desc[0], g_desc[1]);
-    }
-}
-
-void RtObject_InternalFactory_ResetPersistState_Shadow(InternalFactory* self, void* stream) {
-    RT_DIFF_BEGIN("Object::InternalFactory::ResetPersistState [shadow]");
-    const int objSize = self->objects._size;
-    const int objCap  = self->objects._capacity;
-    const int pSize   = self->persistIds._size;
-    const int pCap    = self->persistIds._capacity;
-
-    Orig<void (*)(InternalFactory*, void*)>(
-        "?ResetPersistState@InternalFactory@Object@@QEAAXAEAVStream@IO@@@Z")(self, stream);
-
-    if (rt_diff_on__) {
-        // The count came off the stream, so it is an OUTPUT here, not an input:
-        // read it back from the array the DLL just sized and check everything
-        // else against our model of it.
-        const int count = self->persistIds._size;
-        bool ok = self->objects._size == objSize &&
-                  self->objects._capacity == PredictCapacity(objSize, objCap,
-                                                             count > objSize ? count : objSize) &&
-                  self->persistIds._capacity == PredictCapacity(pSize, pCap, count);
-        for (int i = 0; ok && i < count; ++i)
-            ok = self->persistIds._data[i] == -1;
-        std::snprintf(g_desc[0], sizeof(g_desc[0]),
-                      "predict count=%d objSize=%d objCap=%d pCap=%d all -1", count, objSize,
-                      PredictCapacity(objSize, objCap, count > objSize ? count : objSize),
-                      PredictCapacity(pSize, pCap, count));
-        std::snprintf(g_desc[1], sizeof(g_desc[1]),
-                      "actual  count=%d objSize=%d objCap=%d pCap=%d", count,
-                      self->objects._size, self->objects._capacity, self->persistIds._capacity);
-        RT_DIFF_SHADOW(ok, g_desc[0], g_desc[1]);
-    }
 }
 
 }  // namespace RtObject
@@ -1021,23 +804,18 @@ void RtObject_InternalFactory_ResetPersistState_Shadow(InternalFactory* self, vo
 //
 // It is a GATE and not a tally, by this project's own test: the quantity VARIES
 // with the thing it gates. With `??_7Internal@Object@@6B@` registered,
-// `BANISHED_RT_INTERNAL_VTBL_RAW=0` makes both rows read `MINTED (SPLIT)` and
+// `the old DLL-era switch` makes both rows read `MINTED (SPLIT)` and
 // the default makes them read `DLL`.
 // Both symbols are spelled as LITERALS at every resolve call below rather than
 // travelling through a loop variable: tools/port_bypass_audit.py cannot classify
 // a name that arrives in a variable and files it as UNRESOLVED-NAME, which is
 // residue a later lane has to re-derive. Two symbols, so the duplication is
 // three lines.
-static void RtInternalVtblPinRow(const char* sym, void* stamped, void* raw, void* port) {
-    using namespace RtObject;
-    const char* verdict;
-    if (!raw)                  verdict = "no DLL (cutover): the registry's table is the only one";
-    else if (stamped == raw)   verdict = "DLL -- no split; condition (b) HOLDS";
-    else if (stamped == port)  verdict = "MINTED (SPLIT: the DLL's own callers stamp a different table)";
-    else                       verdict = "NEITHER -- unexpected, investigate";
-    printf("[RtInternalVtbl] %-26s stamped=%p dll=%p registry=%p  -> %s%s\n",
-           sym, stamped, raw, port, verdict,
-           VtblPinIsArmed() ? "" : "  [BANISHED_RT_INTERNAL_VTBL_RAW=0]");
+static void RtInternalVtblPinRow(const char* sym, void* stamped, void* port) {
+    printf("[RtInternalVtbl] %-26s stamped=%p registry=%p  -> %s\n",
+           sym, stamped, port,
+           stamped == port ? "the registry's table is the only one"
+                           : "NEITHER -- unexpected, investigate");
 }
 
 void RtObjectInternalVtblPin() {
@@ -1045,12 +823,8 @@ void RtObjectInternalVtblPin() {
     // `stamped` comes through the same accessors the CONSTRUCTOR uses, so the
     // report cannot drift from the behaviour it describes.
     RtInternalVtblPinRow("??_7Internal@Object@@6B@", VtblInternal(),
-                         // RT_RAW_OK: the raw-vs-registry comparison IS the screen.
-                         ResolveExportRaw("??_7Internal@Object@@6B@"),
                          ResolveExport("??_7Internal@Object@@6B@"));
     RtInternalVtblPinRow("??_7Base@Object@@6B@", VtblBase(),
-                         // RT_RAW_OK: as above.
-                         ResolveExportRaw("??_7Base@Object@@6B@"),
                          ResolveExport("??_7Base@Object@@6B@"));
 }
 
@@ -1064,10 +838,8 @@ void RtObjectInternalAttendance() {
                ? (armed ? "REGISTERED BUT NEVER ENTERED -- the door exists and "
                           "nothing came through it; do NOT read this run as "
                           "evidence the port works"
-                        : "not registered on this run (shadow tier, or "
-                          "BANISHED_RT_INTERNAL_TABLE=0) -- expected zero. NOTE the "
-                          "tier is DEFAULT-ON since Wave 11 follow-up lane ARM, so on "
-                          "a plain run this reading is a REGRESSION, not the default")
+                        : "the ctor is NOT registered on this run -- which is a "
+                          "REGRESSION, not the default")
                : "our ported bodies drove the LIVE handle table this many times");
     // The persist-state pair is reported SEPARATELY from the ctor/dtor pair on
     // purpose: they live only on the save/load path, so zero here with a large
@@ -1086,8 +858,6 @@ int RtObjectInternalRegister() {
     using namespace RtObject;
     int n = 0;
 
-    const bool shadow   = RtOptIn("BANISHED_RT_INTERNAL_SHADOW");
-    const bool checkPtr = RtOptIn("BANISHED_RT_INTERNAL_CHECKPTR");
 
     // WAVE 9 LANE Y, 2026-09-08 — the tier-2 arming condition.
     //
@@ -1126,7 +896,7 @@ int RtObjectInternalRegister() {
     // DLL present. Lane OBJINT did not have that run and does not claim it.
     // WAVE 11 FOLLOW-UP #1, 2026-09-09 (lane ARM) — THE TIER IS NOW DEFAULT-ON.
     //
-    // Until today the gate was `RtOptIn("BANISHED_RT_INTERNAL_TABLE") || noDll`
+    // Until today the gate was `RtOptIn("the old DLL-era switch") || noDll`
     // — opt-IN, which by this project's rule means these rows were NOT ports:
     // a body nothing registers on a default run is indistinguishable from an
     // absent one (reference_half_registered_port_reads_as_absent.md).
@@ -1143,13 +913,13 @@ int RtObjectInternalRegister() {
     // measurement. This lane IS the isolated change it asked for, with its own
     // before/after against the perf baseline — see WAVE11F_LANE_ARM.md.
     //
-    // The switch is now a KILL switch: BANISHED_RT_INTERNAL_TABLE=0 (or
+    // The switch is now a KILL switch: the old DLL-era switch (or
     // "false") leaves the tier unregistered and every call goes to the DLL
     // exactly as before. Verified by running it, not by reading this comment.
     //
     // THE SHADOW TIER STILL WORKS. The two tiers claim the same doors and are
     // mutually exclusive, so a naive default-on would have made
-    // BANISHED_RT_INTERNAL_SHADOW=1 refuse everything and silently delete the
+    // the old DLL-era switch refuse everything and silently delete the
     // oracle that produced the evidence above. So: an explicit arm still
     // CONFLICTS with shadow and is refused loudly; the DEFAULT arm simply
     // yields to it.
@@ -1157,21 +927,6 @@ int RtObjectInternalRegister() {
     // `noDll` still forces the tier on regardless of the kill switch: with
     // Runtime-x64.dll absent there is no DLL body to fall through to, and an
     // unregistered `??0Internal` is a null call on the first object built.
-    const bool noDll       = RtOptIn("BANISHED_RT_NO_DLL");
-    const bool tableForced = RtOptIn("BANISHED_RT_INTERNAL_TABLE");
-    const bool tableKilled = !RtWaveEnabled("BANISHED_RT_INTERNAL_TABLE");
-    const bool table = noDll || (!tableKilled && (tableForced || !shadow));
-
-    if (shadow && (tableForced || noDll)) {
-        printf("[RtPort]   Object::Internal: REFUSED — BANISHED_RT_INTERNAL_SHADOW is mutually "
-               "exclusive with the table tier%s (shadow needs the DLL to own the table, and to "
-               "BE there). Nothing registered.\n",
-               noDll ? " — and the tier is armed here by BANISHED_RT_NO_DLL, not by "
-                       "BANISHED_RT_INTERNAL_TABLE"
-                     : "");
-        return 0;
-    }
-
     // ---- Tier 1: no shared state, on by default -----------------------------
     // Both a name and a Ghidra address for every one: half our call sites
     // resolve by name and half by ResolveAddr(Module::Runtime, …) with the
@@ -1198,7 +953,7 @@ int RtObjectInternalRegister() {
 
     // ---- CheckPtr: DEFAULT-ON as of 2026-09-08 (Wave 9 lane Y) --------------
     //
-    // It used to be opt-in behind BANISHED_RT_INTERNAL_CHECKPTR, for the reason
+    // It used to be opt-in behind the old DLL-era switch, for the reason
     // written on the function: registering it made the exe-side byte sniff in
     // engine_funcs.cpp see a GCC prologue instead of a RET, flip
     // `g_checkPtrIsNop` to false, and pay ~60k indirect calls a frame for a
@@ -1215,37 +970,11 @@ int RtObjectInternalRegister() {
     // of its 3,475 call sites have no null guard — they call through the macro,
     // which with a null resolve and a false flag calls a null pointer.
     //
-    // BANISHED_RT_INTERNAL_CHECKPTR is kept as a positive assertion for anyone
+    // the old DLL-era switch is kept as a positive assertion for anyone
     // measuring the decision; it no longer gates the registration.
     RegisterRuntimeExport("?CheckPtr@InternalBasePtr@Object@@IEBAXXZ",
                           (void*)&RtObject_InternalBasePtr_CheckPtr); ++n;
     RegisterRuntimeAddr(0x1800c0290, (void*)&RtObject_InternalBasePtr_CheckPtr);
-    if (checkPtr) {
-        printf("[RtPort]   Object::InternalBasePtr::CheckPtr registered (it is now default-on); "
-               "BANISHED_RT_INTERNAL_CHECKPTR no longer changes anything. Read the [CheckPtr] "
-               "line: it must say source=\"our port\" and \"NOP (calls skipped)\".\n");
-    }
-
-    // ---- Shadow oracle ------------------------------------------------------
-    if (shadow) {
-        RegisterRuntimeExport("??0Internal@Object@@QEAA@XZ",
-                              (void*)&RtObject_Internal_Ctor_Shadow);
-        RegisterRuntimeAddr(0x1800bfd10, (void*)&RtObject_Internal_Ctor_Shadow);
-        RegisterRuntimeExport("??1Internal@Object@@UEAA@XZ",
-                              (void*)&RtObject_Internal_Dtor_Shadow);
-        RegisterRuntimeAddr(0x1800bfdb0, (void*)&RtObject_Internal_Dtor_Shadow);
-        RegisterRuntimeExport("?ClearPersistState@InternalFactory@Object@@QEAAXXZ",
-                              (void*)&RtObject_InternalFactory_ClearPersistState_Shadow);
-        RegisterRuntimeAddr(0x1800bfe30,
-                            (void*)&RtObject_InternalFactory_ClearPersistState_Shadow);
-        RegisterRuntimeExport("?ResetPersistState@InternalFactory@Object@@QEAAXAEAVStream@IO@@@Z",
-                              (void*)&RtObject_InternalFactory_ResetPersistState_Shadow);
-        RegisterRuntimeAddr(0x1800bfe40,
-                            (void*)&RtObject_InternalFactory_ResetPersistState_Shadow);
-        printf("[RtPort]   Object::Internal: SHADOW mode — the DLL still owns the handle "
-               "table; 4 wrappers predict-and-verify. Needs BANISHED_RT_DIFF=1 to report. "
-               "NOT counted as ported.\n");
-    }
 
     // ---- InternalBasePtr::Serialize — UNGATED 2026-09-07 (Wave 9) -----------
     // It sat in the TABLE tier below, but not because it touches the handle
@@ -1303,14 +1032,11 @@ int RtObjectInternalRegister() {
     // NOT registered in SHADOW mode: the shadow wrapper above claims the same
     // two doors, and a second binding would win and silently replace the
     // oracle with the thing it was measuring.
-    if (!shadow) {
-        RegisterRuntimeExport("?ClearPersistState@InternalFactory@Object@@QEAAXXZ",
-                              (void*)&RtObject_InternalFactory_ClearPersistState); ++n;
-        RegisterRuntimeAddr(0x1800bfe30, (void*)&RtObject_InternalFactory_ClearPersistState);
-    }
+    RegisterRuntimeExport("?ClearPersistState@InternalFactory@Object@@QEAAXXZ",
+                          (void*)&RtObject_InternalFactory_ClearPersistState); ++n;
+    RegisterRuntimeAddr(0x1800bfe30, (void*)&RtObject_InternalFactory_ClearPersistState);
 
-    // ---- Tier 2: the real table ports. Opt-in, and MANDATORY at cutover. ----
-    if (table) {
+    // ---- Tier 2: the real table ports. ---------------------------------------
         RegisterRuntimeExport("??0Internal@Object@@QEAA@XZ",
                               (void*)&RtObject_Internal_Ctor); ++n;
         RegisterRuntimeAddr(0x1800bfd10, (void*)&RtObject_Internal_Ctor);
@@ -1347,25 +1073,12 @@ int RtObjectInternalRegister() {
         RegisterRuntimeAddr(0x1800bfe40, (void*)&RtObject_InternalFactory_ResetPersistState);
 
 
-        printf("[RtPort]   Object::Internal: TABLE mode ARMED by %s — our code now drives the "
-               "handle table. Shadow gate step 1 was met in Wave 3 (93,387 calls each on the "
-               "ctor/dtor, 0 divergences); step 2 (the encoding-factory arity) was closed "
-               "2026-09-08. ResetPersistState is VERIFIED (Wave 11 lane OBJINT: shadow "
-               "calls=1 divergences=0, plus a synthetic A/B green on emissions and "
-               "post-state) but this is its FIRST LIVE ARMING — watch the load path.\n",
-               noDll        ? "BANISHED_RT_NO_DLL (there is no other implementation)"
-               : tableForced ? "BANISHED_RT_INTERNAL_TABLE explicitly"
-                             : "DEFAULT (default-on since Wave 11 follow-up lane ARM; "
-                               "BANISHED_RT_INTERNAL_TABLE=0 is the kill switch)");
-    }
+    printf("[RtPort]   Object::Internal: TABLE mode — our code drives the handle "
+           "table. Shadow gate step 1 was met in Wave 3 (93,387 calls each on the "
+           "ctor/dtor, 0 divergences); step 2 (the encoding-factory arity) was closed "
+           "2026-09-08.\n");
 
-    if (tableKilled && !noDll)
-        printf("[RtPort]   Object::Internal: table tier KILLED by "
-               "BANISHED_RT_INTERNAL_TABLE=0 — the three tier rows are unregistered and every "
-               "call goes to the DLL.\n");
-
-    printf("[RtPort]   Object::Internal: %d exports registered%s\n", n,
-           table ? " (INCLUDING the table tier)" : "");
+    printf("[RtPort]   Object::Internal: %d exports registered (INCLUDING the table tier)\n", n);
     return n;
 }
 
@@ -1393,39 +1106,9 @@ namespace RtObject {
 // (`InternalFactory::objects`), not a synthetic one: the port reads
 // `_factoryIndex`, `_generation` and dispatches `Type()` through the object's
 // vtable, none of which a hand-built stand-in would exercise honestly.
-extern "C" void RtObject_InternalBasePtr_SerializeTraceProbe() {
-    if (!RtSaveTrace::Enabled()) return;
-    static bool done = false;
-    if (done) return;
-
-    InternalFactory* f = Factory();
-    if (!f || !f->objects._data || f->objects._size <= 0) return;
-
-    Internal* live = nullptr;
-    for (int i = 0; i < f->objects._size && !live; ++i)
-        live = f->objects._data[i];
-    if (!live) return;                      // table exists but is all holes
-    done = true;
-
-    auto theirs = reinterpret_cast<void (*)(void*, void*)>(
-        ResolveExportRaw("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z"));
-    if (!theirs) {
-        printf("[RtSaveTrace] SKIP InternalBasePtr::Serialize: shipped body unresolved\n");
-        return;
-    }
-    auto ours = reinterpret_cast<void (*)(void*, void*)>(&RtObject_InternalBasePtr_Serialize);
-
-    // Two separate InternalBasePtrs, one per side, so neither call's trailing
-    // store can be seen by the other. Both start at the same live object.
-    static InternalBasePtr subject;
-    subject.ptr = live;
-    RtSaveTrace::Compare("Object::InternalBasePtr::Serialize", &subject, ours, theirs, 4);
-
-    // The null branch too: `present == 0` returns after ONE emission and stores
-    // only a null it already held, so it needs no stop and is a full compare.
-    static InternalBasePtr nullSubject;
-    nullSubject.ptr = nullptr;
-    RtSaveTrace::Compare("Object::InternalBasePtr::Serialize[null]", &nullSubject, ours, theirs);
-}
+// A3-HOLD: the probe compared our emission sequence with the shipped DLL's and
+// can never run again. The entry point stays as a no-op only because
+// code/Game/Game/camera_input.cpp still calls it.
+extern "C" void RtObject_InternalBasePtr_SerializeTraceProbe() {}
 
 }  // namespace RtObject

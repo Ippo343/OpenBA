@@ -19,7 +19,6 @@
 // through Runtime's IAT slot 0x18014b0f0, and only on the loose-file branch. A
 // `_posix` twin needs exactly that one seam (PLAN.md §4.1 decision 1).
 //
-// Kill switch: BANISHED_RT_PKG3=0 leaves ReadPackfile on the DLL.
 //
 // ---------------------------------------------------------------------------
 // §91. THE TWO READS §87 REFUSED TO GUESS — BOTH ANSWERED, AND ONE OF THEM
@@ -391,7 +390,7 @@ struct Census {
 } g_census;
 
 bool CensusWanted() {
-    static const int on = (RtDiffEnabled() || std::getenv("BANISHED_PKG3_CENSUS")) ? 1 : 0;
+    static const int on = std::getenv("BANISHED_PKG3_CENSUS") ? 1 : 0;
     return on != 0;
 }
 
@@ -525,7 +524,6 @@ bool TextEqual(const char* a, const char* b) {
 // ============================================================================
 extern "C" bool RtIo_PackageFile_ReadPackfile(PackageFileView* self,
                                               const Filename* name) {
-    RT_DIFF_BEGIN("IO::PackageFile::ReadPackfile");
     ++g_census.calls;
 
     // ---- the re-entrancy flag (0x1800b46e8..0x1800b4795) -------------------
@@ -556,7 +554,6 @@ extern "C" bool RtIo_PackageFile_ReadPackfile(PackageFileView* self,
 
     if (fi->handle == -1) {                                    // 1800b4795  CMP [RDI],-1
         ++g_census.earlyOut;
-        RT_DIFF_WORK(false);
         return false;                                          // 1800b479a  XOR AL,AL
     }
 
@@ -803,174 +800,6 @@ extern "C" bool RtIo_PackageFile_ReadPackfile(PackageFileView* self,
     // ========================================================================
     // The oracle, §95
     // ========================================================================
-    if (rt_diff_on__) {
-        alignas(16) uint8_t scratch[0xF0];
-        std::memset(scratch, 0xCD, sizeof scratch);
-        PackageFileView* const t = reinterpret_cast<PackageFileView*>(scratch);
-        RtIo_PackageFile_Ctor(t);                              // our proven ctor
-
-        const bool theirs =
-            RT_ORIGINAL_ONCE(ReadPackfileFn, kReadPackfile)(t, name);
-
-        char d[192];
-        d[0] = '\0';
-        bool eq = (ours == theirs);
-        if (!eq) std::snprintf(d, sizeof d, "return %d vs %d", (int)ours, (int)theirs);
-
-#define PKG3_CMP(FIELD)                                                        \
-        do {                                                                   \
-            if (eq && self->FIELD != t->FIELD) {                               \
-                eq = false;                                                    \
-                std::snprintf(d, sizeof d, #FIELD " %lld vs %lld",             \
-                              (long long)self->FIELD, (long long)t->FIELD);    \
-            }                                                                  \
-        } while (0)
-        PKG3_CMP(version);      PKG3_CMP(userVersion);
-        PKG3_CMP(priority);     PKG3_CMP(platform);
-        PKG3_CMP(iconWidth);    PKG3_CMP(iconHeight);
-        PKG3_CMP(packfileId);   PKG3_CMP(overridable);
-        PKG3_CMP(entryCount);
-#undef PKG3_CMP
-
-        // +0x90 and the two arrays. Compared by SIZE and by CONTENT — the
-        // content is what a size-only check would let through, and the icon
-        // array is the one field big enough for a transcription slip to hide in.
-        auto cmpArr = [&](size_t sizeOff, size_t dataOff, int32_t elem,
-                          const char* what) {
-            if (!eq) return;
-            const int32_t a = ArrSize(self, sizeOff), b = ArrSize(t, sizeOff);
-            if (a != b) {
-                eq = false;
-                std::snprintf(d, sizeof d, "%s size %d vs %d", what, a, b);
-                return;
-            }
-            if (a > 0 && std::memcmp(ArrData(self, dataOff), ArrData(t, dataOff),
-                                     static_cast<size_t>(a) * elem) != 0) {
-                eq = false;
-                std::snprintf(d, sizeof d, "%s content differs (%d elems)", what, a);
-            }
-        };
-        // *** +0x90 IS ONLY COMPARABLE WHEN IT WAS WRITTEN. *** The write above
-        // is guarded on `formatVersion >= 2` (0x1800b4d62, CMP 2 / JL), so for a
-        // format-1 packfile NEITHER body touches this field: `t` still holds the
-        // 0xCD scratch fill and `self` holds whatever was on the stack. Comparing
-        // it anyway reported 2-3 DIVERGENCEs per run the moment lane MOD's
-        // RefreshList went live and put a PackageFile on the stack — `theirs`
-        // constantly -842150451 (0xCDCDCDCD) against an `ours` that differed
-        // every run, which is the signature of comparing bytes neither side
-        // wrote (reference_oracle_must_not_compare_unwritten_bytes.md).
-        //
-        // The port was never wrong. §95 already makes exactly this exclusion for
-        // `_fileInfo._unk04`; it was applied to one unwritten field and not the
-        // other. Guarded on the SAME condition as the write rather than on a
-        // value test, so a format-2 packfile that legitimately writes 0 is still
-        // compared. Found by lane MOD, which reported it rather than editing
-        // another lane's file mid-wave.
-        if (eq && formatVersion >= 2) {
-            int32_t a90 = ArrSize(self, 0x90), b90 = ArrSize(t, 0x90);
-            if (a90 != b90) {
-                eq = false;
-                std::snprintf(d, sizeof d, "+0x90 %d vs %d", a90, b90);
-            }
-        }
-        cmpArr(0x88, 0x80, 4, "icon[+0x80]");
-        cmpArr(0xa0, 0x98, 1, "flags[+0x98]");
-
-        // The FileInfo. winHandle EXCLUDED (two CreateFileW calls, two
-        // handles), +0x04 EXCLUDED (never written by OpenFile), the two
-        // Filenames compared by TEXT.
-        const FileInfo* const tf =
-            reinterpret_cast<const FileInfo*>(scratch + 0xC0);
-        if (eq && (fi->handle != tf->handle || fi->size != tf->size ||
-                   fi->cursor != tf->cursor || fi->baseOffset != tf->baseOffset)) {
-            eq = false;
-            std::snprintf(d, sizeof d, "FileInfo %d/%d/%d/%d vs %d/%d/%d/%d",
-                          fi->handle, fi->size, fi->cursor, fi->baseOffset,
-                          tf->handle, tf->size, tf->cursor, tf->baseOffset);
-        }
-        if (eq && ((fi->winHandle == -1) != (tf->winHandle == -1))) {
-            eq = false;
-            std::snprintf(d, sizeof d, "winHandle validity differs");
-        }
-        if (eq && (!TextEqual(fi->_name0.data, tf->_name0.data) ||
-                   !TextEqual(fi->_name1.data, tf->_name1.data))) {
-            eq = false;
-            std::snprintf(d, sizeof d, "FileInfo name text differs");
-        }
-
-        // The three metadata Strings and every entry name, by TEXT — but only
-        // where §95 says the answer is determined by bytes that were read.
-        // `g_strNonDet` is the count of the ones this run had to skip, and it
-        // is printed whether it is zero or not.
-        const bool metaDet = (g_census.strNonDet == 0);
-        if (eq && metaDet) {
-            if (!TextEqual(self->name.data, t->name.data) ||
-                !TextEqual(self->author.data, t->author.data) ||
-                !TextEqual(self->description.data, t->description.data)) {
-                eq = false;
-                std::snprintf(d, sizeof d, "metadata text: \"%.40s\"/\"%.40s\"/\"%.40s\"",
-                              self->name.data ? self->name.data : "(null)",
-                              self->author.data ? self->author.data : "(null)",
-                              self->description.data ? self->description.data : "(null)");
-            }
-        }
-        if (eq && self->entryCount == t->entryCount && self->entries && t->entries) {
-            const PackageFileEntry* ea =
-                static_cast<const PackageFileEntry*>(self->entries);
-            const PackageFileEntry* eb =
-                static_cast<const PackageFileEntry*>(t->entries);
-            for (int32_t k = 0; k < self->entryCount; ++k) {
-                if (ea[k].offset != eb[k].offset || ea[k].size != eb[k].size) {
-                    eq = false;
-                    std::snprintf(d, sizeof d, "entry %d %u/%u vs %u/%u", k,
-                                  ea[k].offset, ea[k].size, eb[k].offset, eb[k].size);
-                    break;
-                }
-                if (metaDet && !TextEqual(ea[k].name.data, eb[k].name.data)) {
-                    eq = false;
-                    std::snprintf(d, sizeof d, "entry %d name \"%.60s\" vs \"%.60s\"", k,
-                                  ea[k].name.data ? ea[k].name.data : "(null)",
-                                  eb[k].name.data ? eb[k].name.data : "(null)");
-                    break;
-                }
-            }
-        }
-
-        RT_DIFF_SHADOW(eq, eq ? "all compared fields agree" : d,
-                       eq ? "all compared fields agree" : "shipped ReadPackfile");
-        RT_DIFF_WORK(true);
-
-        // ---- tear the scratch down ----------------------------------------
-        // The shipped body leaves the scratch owning three Strings, one String
-        // per entry, three array blocks and — for a loose file — its OWN
-        // CreateFileW handle. ~PackageFile is unported (package_file.cpp §4),
-        // so the teardown is written out here rather than leaked: a diff run
-        // mounts every package in the install and this would otherwise hold an
-        // extra handle on each for the life of the process.
-        RtString_ReleaseInline(&t->name);
-        RtString_ReleaseInline(&t->author);
-        RtString_ReleaseInline(&t->description);
-        if (t->entries) {
-            PackageFileEntry* te = static_cast<PackageFileEntry*>(t->entries);
-            for (int32_t k = 0; k < t->entryCount; ++k)
-                RtString_ReleaseInline(&te[k].name);
-            MemFree(t->entries);
-        }
-        if (ArrData(t, 0x80)) MemFree(ArrData(t, 0x80));
-        if (ArrData(t, 0x98)) MemFree(ArrData(t, 0x98));
-        FileInfo* const tfi = reinterpret_cast<FileInfo*>(scratch + 0xC0);
-        RtString_ReleaseInline(&tfi->_name0);
-        RtString_ReleaseInline(&tfi->_name1);
-        // ONLY the loose case: handle -2 means PlatformOpenFile did its own
-        // CreateFileW and this HANDLE is the scratch's alone. A packed file's
-        // winHandle belongs to the owning .pkg and closing it would shut down
-        // the live FileSystem.
-        if (tfi->handle == -2 && tfi->winHandle != -1)
-            ::CloseHandle(reinterpret_cast<HANDLE>(
-                static_cast<intptr_t>(tfi->winHandle)));
-    } else {
-        RT_DIFF_WORK(true);
-    }
 
     if (CensusWanted()) {
         printf("[PKG3] ReadPackfile \"%.60s\" -> %d | calls=%lld early=%lld "

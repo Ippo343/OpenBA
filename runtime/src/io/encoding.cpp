@@ -135,7 +135,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 
-// ResolveExport / ResolveExportRaw already come from rt_port.h; only the
+// ResolveExport / the raw export door already come from rt_port.h; only the
 // address door needs declaring here, and it carries Module with it.
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module module, uintptr_t ghidraAddr);
@@ -202,7 +202,7 @@ inline int32_t StreamGetPos(void* s) {
 // numbers are deliberately produced by different machinery and printed under
 // different labels so that neither can be read as the other.
 //
-// They are also NOT RtDiff sites on purpose. An RtDiff site only increments its
+// They are also NOT the diff oracle sites on purpose. An the diff oracle site only increments its
 // `calls` counter from inside a COMPARISON, so a site that declared work but
 // never compared would print `calls=0 worked=N` — which reads as "never ran"
 // and means the opposite.

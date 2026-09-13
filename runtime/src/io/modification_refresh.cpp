@@ -131,14 +131,14 @@
 // leaves a valid BST over the same keys with the same count — a differently
 // SHAPED but equally correct tree. That is stated rather than papered over.
 //
-// EFFECTIVENESS CONTROL. `RT_DIFF_WORK` records how many calls actually built
+// EFFECTIVENESS CONTROL. `the diff oracle` records how many calls actually built
 // something (count > 0). A run whose pack directory holds no .pkm produces
 // `divergences=0` over an empty list — a green line meaning "never ran", which
 // is precisely `reference_uniform_population_is_not_a_verification.md`. The
 // measurement section of WAVE9_LANE_MOD2.md quotes the work count, and a zero
 // there invalidates the run rather than being explained away.
 //
-// NEGATIVE CONTROL. `BANISHED_RT_MOD_NEGCTL=<n>` perturbs OUR photograph after
+// NEGATIVE CONTROL. `the old DLL-era switch=<n>` perturbs OUR photograph after
 // it is taken and before the compare — 1 flips mods[0].enabled, 2 flips a
 // bit in the LAST KEY of the first set's in-order walk, 3 bumps
 // mods[0].order, 4 drops a key from that walk. Crucially 2 is what reaches
@@ -170,8 +170,6 @@
 // statics 0x1800c7a50 / 0x1800c7ad0 are byte-for-byte that sequence. Same lock,
 // same singleton, same order; only the inlining differs.
 //
-// Kill switch: BANISHED_RT_MOD=0 (shared with modification.cpp, which is where
-// this file's registration is called from), under BANISHED_RT_IO.
 //
 // NO NEW WIN32 API AND NO NEW IMPORT LIBRARY.
 // ============================================================================
@@ -699,7 +697,6 @@ static const char* ShotCompare(const ModShot* a, int32_t na,
 
 // ---- the body -------------------------------------------------------------
 extern "C" void RtIo_Modification_RefreshList(void* selfv) {
-    RT_DIFF_BEGIN("IO::Modification::RefreshList");
     Modification* const self = static_cast<Modification*>(selfv);
 
     // `this + 8` is the Array<Mod> header {mods, count, capacity}. Retail holds
@@ -1116,56 +1113,6 @@ extern "C" void RtIo_Modification_RefreshList(void* selfv) {
     // -----------------------------------------------------------------------
     // The oracle. See the banner for why running theirs SECOND is legal here.
     // -----------------------------------------------------------------------
-    RT_DIFF_WORK(self->count > 0);
-    if (rt_diff_on__) {
-        ModShot* ours = nullptr;
-        const int32_t nOurs = TakeShot(self, &ours);
-
-        // Negative control: perturbs OUR photograph only, after it is taken and
-        // before the compare. Each case must make the shadow FAIL and name the
-        // term it broke; the result is in the lane doc.
-        const char* neg = std::getenv("BANISHED_RT_MOD_NEGCTL");
-        if (neg != nullptr && nOurs > 0 && ours != nullptr) {
-            switch (std::atoi(neg)) {
-                case 1: ours[0].enabled ^= 1; break;
-                // 2 corrupts a KEY, which is the only control that reaches
-                // `set.inorder` -- the term the whole AVL port rests on. 4
-                // DROPS one, which fires on the `set.walkLength` length check
-                // BEFORE the key walk ever runs. The first draft had only 4,
-                // so the tree-shape term had no control at all.
-                case 2:
-                    if (ours[0].setKeyCount > 0 && ours[0].setKeys != nullptr) {
-                        char* k = ours[0].setKeys[ours[0].setKeyCount - 1];
-                        if (k != nullptr && k[0] != 0) k[0] = (char)(k[0] ^ 0x20);
-                    }
-                    break;
-                case 3: ours[0].order += 1; break;
-                case 4: if (ours[0].setKeyCount > 0) --ours[0].setKeyCount; break;
-                default: break;
-            }
-        }
-
-        using FnRefresh = void (*)(void*);
-        RT_ORIGINAL_ONCE(FnRefresh, "?RefreshList@Modification@IO@@QEAAXXZ")(selfv);
-
-        ModShot* theirs = nullptr;
-        const int32_t nTheirs = TakeShot(self, &theirs);
-
-        int32_t bad = -1;
-        const char* term = ShotCompare(ours, nOurs, theirs, nTheirs, &bad);
-        char a[96], b[96];
-        if (term == nullptr) {
-            std::snprintf(a, sizeof(a), "mods=%d all terms equal", nOurs);
-            std::snprintf(b, sizeof(b), "mods=%d all terms equal", nTheirs);
-        } else {
-            std::snprintf(a, sizeof(a), "mods=%d TERM=%s index=%d", nOurs, term, bad);
-            std::snprintf(b, sizeof(b), "mods=%d (retail)", nTheirs);
-        }
-        RT_DIFF_SHADOW(term == nullptr, a, b);
-
-        FreeShot(ours, nOurs);
-        FreeShot(theirs, nTheirs);
-    }
 }
 
 // ===========================================================================

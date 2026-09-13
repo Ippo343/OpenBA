@@ -244,44 +244,6 @@ void DestroyScratchModArray(ModArray* arr) {
     f(arr);
 }
 
-bool TraceOn() {
-    static bool v = [] {
-        const char* s = std::getenv("BANISHED_RT_LOADMETA_TRACE");
-        return s != nullptr && s[0] != '\0' && std::strcmp(s, "0") != 0;
-    }();
-    return v;
-}
-
-// Bytes of a value that are non-zero, counting from the low end up to the
-// highest non-zero byte. Printed by the trace because the +0x2c signal's
-// per-round byte count is exactly nzbytes(_size) + nzbytes(_data) when both go
-// to zero — the arithmetic a sibling lane used, reproduced here from the
-// writer's side so the relation can be checked against a real entry list rather
-// than inferred from a capped printout.
-int NonZeroBytes(uint64_t u) {
-    int n = 0;
-    for (int i = 0; i < 8; ++i) if ((u >> (i * 8)) & 0xffull) n = i + 1;
-    return n;
-}
-int NonZeroBytes(uint32_t u) { return NonZeroBytes(static_cast<uint64_t>(u)); }
-int NonZeroBytes(const void* p) {
-    return NonZeroBytes(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(p)));
-}
-
-// ---- the negative control ---------------------------------------------------
-// BANISHED_RT_LOADMETA_NEGCTL=<1..6> corrupts, on the THEIRS side only, exactly
-// one quantity that one screen compares. Theirs is a private scratch that is
-// torn down two dozen lines later, so nothing the game can observe is touched.
-// Six separate values because a union score cannot tell "both screens work"
-// from "one screen is blind" — every screen is scored on its own.
-int NegControl() {
-    static int v = [] {
-        const char* s = std::getenv("BANISHED_RT_LOADMETA_NEGCTL");
-        return (s != nullptr) ? std::atoi(s) : 0;
-    }();
-    return v;
-}
-
 // System::String equality by CONTENT. The two sides are two live allocations, so
 // the POINTERS differ by construction and comparing them would fail 100% of
 // calls on a correct port (reference_oracle_must_not_compare_unwritten_bytes,
@@ -293,11 +255,6 @@ bool StringContentEqual(const char* a, const char* b) {
         RtSystem::RtString_GetLength(reinterpret_cast<const RtSystem::String*>(&b)))
         return false;
     return std::strcmp(a, b) == 0;
-}
-
-void ReportScreen(RtDiffSite* site, bool equal, const char* ours, const char* theirs) {
-    RtDiffRegister(site);
-    RtDiffReport(site, equal, ours, theirs);
 }
 
 }  // namespace
@@ -312,19 +269,7 @@ extern "C" void RtSave_SaveLoad_LoadMetaData(SaveLoad* self,
                                              int*         height,
                                              int*         version,
                                              ModArray*    mods) {
-    RT_DIFF_BEGIN("Save::SaveLoad::LoadMetaData [all six out-params]");
 
-    // ---- the oracle's input snapshot, taken BEFORE the body consumes it -----
-    // The body FREES `_embeddedState._data` and zeroes the SavedState, so by the
-    // time theirs could run the input no longer exists. Copy it first; the copy
-    // is the input both halves are given.
-    const uint32_t inSize = self->_embeddedState._size;
-    void* const    inData = self->_embeddedState._data;
-    void*          inCopy = nullptr;
-    if (rt_diff_on__ && inSize != 0 && self->_embeddedState._data != nullptr) {
-        inCopy = MemAlloc(inSize, 4);
-        std::memcpy(inCopy, self->_embeddedState._data, inSize);
-    }
 
     // ---- 0x1800c1b6c : IO::CompressedMemoryStream cms; ---------------------
     // 0x98 bytes of uninitialised stack, exactly as retail: the ctor writes the
@@ -456,232 +401,9 @@ extern "C" void RtSave_SaveLoad_LoadMetaData(SaveLoad* self,
     self->_embeddedState._data = nullptr;
     self->_embeddedState._size = 0;
 
-    // BANISHED_RT_LOADMETA_TRACE=1 — the entry/exit observation of the embedded
-    // SavedState that only the writer's own body can make cheaply. It is a
-    // POST-STATE reading, not a watchpoint: it shows what this body leaves, and
-    // it does NOT observe the store. See the header for what that grade does and
-    // does not license anyone to write down.
-    if (TraceOn()) {
-        static uint64_t entries = 0;
-        ++entries;
-        std::fprintf(stderr,
-                     "[LoadMeta] entry #%llu  pre _size=%u _data=%p  ->  "
-                     "post _size=%u _data=%p  (nzbytes pre = %d+%d)\n",
-                     static_cast<unsigned long long>(entries),
-                     inSize, inData,
-                     self->_embeddedState._size, self->_embeddedState._data,
-                     NonZeroBytes(inSize), NonZeroBytes(inData));
-    }
-
     // ---- 0x1800c1db6 : ~CompressedMemoryStream, inlined by retail ----------
     RT_EXPORT_ONCE(CmsVoidFn, "??1CompressedMemoryStream@IO@@UEAA@XZ")(cms);
 
-    // Every entry of this body does the full amount of work: there is no
-    // early-out anywhere in it, so `worked` tracks `calls` by construction. It
-    // is declared rather than left blank so the summary prints a number instead
-    // of `worked=?`, which would read as an unknown that is not one.
-    RT_DIFF_WORK(true);
-
-    if (!rt_diff_on__) return;
-
-    // ========================================================================
-    // ORACLE — REPLAY ON A PRIVATE SCRATCH, SIX SCREENS SCORED SEPARATELY
-    // ------------------------------------------------------------------------
-    // OURS ran for real, above, on the live SaveLoad. THEIRS now runs on a
-    // ZEROED 0x90-byte scratch whose only populated fields are the embedded
-    // SavedState's `_size` and a fresh COPY of the input bytes — which is
-    // sufficient because the shipped body touches `this` at EXACTLY five
-    // instructions, all of them +0x2c or +0x30 (0x1800c1b88, 0x1800c1b95,
-    // 0x1800c1b99, 0x1800c1da6, 0x1800c1dae) and nowhere else. That was read off
-    // the disassembly, not assumed.
-    //
-    // So this is a real oracle in the sense rt_predict.h insists on: the
-    // authority is the shipped DLL, running for real on the same input, and the
-    // comparison is over values it produced independently of anything we did.
-    // It is NOT an RT_DIFF_SHADOW self-check.
-    //
-    // WHAT IS COMPARED IS BOUNDED TO WHAT IS WRITTEN. The pixel block is
-    // compared over exactly w*h*4 bytes; the mod elements over the five fields
-    // the record actually contains and NOT over ModInfo+0x1c, which neither side
-    // writes (an oracle that memcmps bytes neither side writes fails every call
-    // and reads like a catastrophic port defect).
-    //
-    // SIX SCREENS, SIX SITES, SIX SEPARATE SCORES. A single aggregate verdict
-    // cannot distinguish "all six screens work" from "five work and one is
-    // structurally incapable of failing", which is exactly the union-control
-    // trap this project has already paid for. The RT_DIFF_BEGIN site above
-    // carries the aggregate; the six below carry the parts.
-    // ========================================================================
-    static RtDiffSite sVersion  = { "Save::SaveLoad::LoadMetaData [S1 version, arg 6 = STACK]" };
-    static RtDiffSite sExtent   = { "Save::SaveLoad::LoadMetaData [S2 width/height, args 4 REG + 5 STACK]" };
-    static RtDiffSite sDesc     = { "Save::SaveLoad::LoadMetaData [S3 description, arg 2]" };
-    static RtDiffSite sPixels   = { "Save::SaveLoad::LoadMetaData [S4 pixel block, arg 3]" };
-    static RtDiffSite sModCount = { "Save::SaveLoad::LoadMetaData [S5 mod count, arg 7 = STACK]" };
-    static RtDiffSite sModElems = { "Save::SaveLoad::LoadMetaData [S6 mod elements, arg 7 = STACK]" };
-    static RtDiffSite sTeardown = { "Save::SaveLoad::LoadMetaData [S7 SIDE EFFECT: embedded SavedState freed and zeroed]" };
-
-    alignas(16) unsigned char scratchSelf[sizeof(SaveLoad)];
-    std::memset(scratchSelf, 0, sizeof(scratchSelf));
-    SaveLoad* theirSelf = reinterpret_cast<SaveLoad*>(scratchSelf);
-    theirSelf->_embeddedState._size = inSize;
-    theirSelf->_embeddedState._data = (inSize != 0) ? MemAlloc(inSize, 4) : nullptr;
-    if (inSize != 0 && inCopy != nullptr)
-        std::memcpy(theirSelf->_embeddedState._data, inCopy, inSize);
-
-    const char* tDesc   = nullptr;
-    void*       tPixels = nullptr;
-    int         tW = 0, tH = 0, tVersion = 0;
-    ModArray    tMods{ nullptr, 0, 0 };
-
-    RT_ORIGINAL_ONCE(LoadMetaDataFn, kLoadMetaData)(
-        theirSelf, &tDesc, &tPixels, &tW, &tH, &tVersion, &tMods);
-
-    // The shipped body's own teardown of the embedded SavedState, read off the
-    // scratch immediately. This is what makes S7 an ORACLE and not a self-check:
-    // the claim "LoadMetaData frees and zeroes +0x2c/+0x30" is tested against
-    // the DLL doing it, on its own copy, not against our expectation of it.
-    const uint32_t tPostSize = theirSelf->_embeddedState._size;
-    void*          tPostData = theirSelf->_embeddedState._data;
-
-    // The real element count, kept aside because negative control 5 deliberately
-    // falsifies `tMods._size` and the teardown below walks the array with it.
-    // A control that corrupted the destructor's trip count would be a control
-    // that crashes the process instead of failing a comparison.
-    const int32_t tModsSizeReal = tMods._size;
-
-    // ---- the negative control, applied to THEIRS only ----------------------
-    switch (NegControl()) {
-        case 1:  // S1: flip a bit of the version
-            tVersion ^= 1;
-            break;
-        case 2:  // S2: move the height, which is argument FIVE (first stack slot)
-            tH += 1;
-            break;
-        case 3:  // S3: change one character of the description
-            if (tDesc != nullptr) const_cast<char*>(tDesc)[0] ^= 0x20;
-            break;
-        case 4:  // S4: flip one byte inside the compared pixel extent
-            if (tPixels != nullptr && byteCount > 0)
-                reinterpret_cast<unsigned char*>(tPixels)[0] ^= 0xffu;
-            break;
-        case 5:  // S5: move the mod count, argument SEVEN
-            tMods._size += 1;
-            break;
-        case 6:  // S6: change a field of mod element 0 that S6 actually compares
-            if (tMods._data != nullptr && tMods._size > 0)
-                tMods._data[0].gameVersion ^= 1u;
-            break;
-        default:
-            break;
-    }
-    uint32_t tPostSizeCtl = tPostSize;
-    void*    tPostDataCtl = tPostData;
-    if (NegControl() == 7) {
-        // S7: make the shipped body look as if it had NOT zeroed the SavedState.
-        // Corrupting the OBSERVATION, not the scratch, so the teardown below is
-        // unaffected.
-        tPostSizeCtl = 1u;
-        tPostDataCtl = reinterpret_cast<void*>(static_cast<uintptr_t>(0x1000));
-    }
-
-    char a[96], b[96];
-
-    // S1 — version. Argument SIX, delivered on the stack; a register screen
-    // could not see it at all.
-    const bool eqVersion = (*version == tVersion);
-    RtDiffFormat(a, sizeof(a), *version);
-    RtDiffFormat(b, sizeof(b), tVersion);
-    ReportScreen(&sVersion, eqVersion, a, b);
-
-    // S2 — width and height. Argument FOUR (last register) and argument FIVE
-    // (first stack slot); the pair is deliberately one screen so a mismatch
-    // names the boundary.
-    const bool eqExtent = (*width == tW) && (*height == tH);
-    std::snprintf(a, sizeof(a), "%dx%d", *width, *height);
-    std::snprintf(b, sizeof(b), "%dx%d", tW, tH);
-    ReportScreen(&sExtent, eqExtent, a, b);
-
-    // S3 — the description String, by CONTENT and LENGTH.
-    const bool eqDesc = StringContentEqual(*description, tDesc);
-    std::snprintf(a, sizeof(a), "\"%.60s\"", *description ? *description : "(null)");
-    std::snprintf(b, sizeof(b), "\"%.60s\"", tDesc ? tDesc : "(null)");
-    ReportScreen(&sDesc, eqDesc, a, b);
-
-    // S4 — the pixel block, over exactly the bytes both sides serialized.
-    const int32_t tBytes = tW * tH * 4;
-    bool eqPixels = (byteCount == tBytes) && (*pixels != nullptr) == (tPixels != nullptr);
-    if (eqPixels && byteCount > 0)
-        eqPixels = std::memcmp(*pixels, tPixels, static_cast<size_t>(byteCount)) == 0;
-    std::snprintf(a, sizeof(a), "%d bytes", byteCount);
-    std::snprintf(b, sizeof(b), "%d bytes%s", tBytes, eqPixels ? "" : " (content differs)");
-    ReportScreen(&sPixels, eqPixels, a, b);
-
-    // S5 — the mod count. Argument SEVEN, on the stack.
-    const bool eqCount = (mods->_size == tMods._size);
-    RtDiffFormat(a, sizeof(a), mods->_size);
-    RtDiffFormat(b, sizeof(b), tMods._size);
-    ReportScreen(&sModCount, eqCount, a, b);
-
-    // S6 — the mod elements: two Strings by content, three uints by value, and
-    // NOT ModInfo+0x1c, which neither body writes.
-    bool eqElems = eqCount;
-    int  firstBad = -1;
-    if (eqElems) {
-        for (int i = 0; i < tMods._size; ++i) {
-            const ModInfo& o = mods->_data[i];
-            const ModInfo& t = tMods._data[i];
-            if (!StringContentEqual(o.name, t.name) ||
-                !StringContentEqual(o.path, t.path) ||
-                o.versionMajor != t.versionMajor ||
-                o.gameVersion  != t.gameVersion  ||
-                o.versionMinor != t.versionMinor) {
-                eqElems = false;
-                firstBad = i;
-                break;
-            }
-        }
-    }
-    std::snprintf(a, sizeof(a), "%d element(s)", eqCount ? mods->_size : -1);
-    if (firstBad >= 0)
-        std::snprintf(b, sizeof(b), "first mismatch at element %d", firstBad);
-    else
-        std::snprintf(b, sizeof(b), "%d element(s)%s", tMods._size,
-                      eqCount ? "" : " (count already differs)");
-    ReportScreen(&sModElems, eqElems, a, b);
-
-    // S7 — THE SIDE EFFECT THE OTHER SIX SCREENS ARE STRUCTURALLY BLIND TO.
-    // S1..S6 compare out-parameters only. A port that produced every out-param
-    // correctly and simply omitted the free-and-zero would pass all six and be
-    // wrong — a leak plus a stale `_size` over a null `_data`, invisible until
-    // something read the slot. So the post-state of the embedded SavedState is
-    // compared on both sides: ours on the live SaveLoad, theirs on the scratch.
-    // Both must be {_size == 0, _data == null} AND must agree.
-    const bool oursTornDown   = (self->_embeddedState._size == 0) &&
-                                (self->_embeddedState._data == nullptr);
-    const bool theirsTornDown = (tPostSizeCtl == 0) && (tPostDataCtl == nullptr);
-    const bool eqTeardown     = oursTornDown && theirsTornDown;
-    std::snprintf(a, sizeof(a), "pre{%u,%p} post{%u,%p}", inSize, inData,
-                  self->_embeddedState._size, self->_embeddedState._data);
-    std::snprintf(b, sizeof(b), "post{%u,%p}", tPostSizeCtl, tPostDataCtl);
-    ReportScreen(&sTeardown, eqTeardown, a, b);
-
-    // The aggregate, on this function's own site.
-    const bool allEqual = eqVersion && eqExtent && eqDesc && eqPixels &&
-                          eqCount && eqElems && eqTeardown;
-    std::snprintf(a, sizeof(a), "v=%d %dx%d %d mods", *version, *width, *height, mods->_size);
-    std::snprintf(b, sizeof(b), "v=%d %dx%d %d mods", tVersion, tW, tH, tMods._size);
-    RtDiffReport(&rt_diff_site__, allEqual, a, b);
-
-    // ---- tear the scratch down ---------------------------------------------
-    // Every one of these is OUR extra allocation, made only because the oracle
-    // ran; none is a deviation from retail. Theirs already freed the input copy
-    // it was handed and zeroed the scratch SavedState — the same tail this port
-    // reproduces — so that block must NOT be freed a second time here.
-    ReleaseStringSlot(&tDesc);
-    if (tPixels != nullptr) MemFree(tPixels);
-    tMods._size = tModsSizeReal;
-    DestroyScratchModArray(&tMods);
-    if (inCopy != nullptr) MemFree(inCopy);
 }
 
 // ============================================================================

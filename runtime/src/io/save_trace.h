@@ -37,7 +37,9 @@
 // SAFETY. `Compare` runs BOTH bodies against synthetic sinks, never against the
 // real save stream, and only ever in the writing direction -- so neither call
 // can touch the game's save, and neither mutates the object under test. It is
-// gated on BANISHED_RT_SAVE_TRACE and does nothing otherwise.
+// A3-HOLD: its "theirs" arm was the shipped DLL, so Enabled() is now always
+// false and the instrument is dead. Callers outside this directory still
+// reference it; it dies with them.
 //
 // WHAT IT DOES NOT COVER. The read path, which consumes the stream and mutates
 // the object, stays hard. It is also the half a write-path oracle indirectly
@@ -49,7 +51,7 @@
 
 namespace RtSaveTrace {
 
-// True when BANISHED_RT_SAVE_TRACE is set. Cheap; cached.
+// Always false: the second arm was the shipped DLL.
 bool Enabled();
 
 // Run `ours` and `theirs` against two independent recording sinks and compare
@@ -90,7 +92,7 @@ bool Compare(const char* name, void* obj,
              void (*ours)(void*, void*), void (*theirs)(void*, void*),
              int stopAfter = 0);
 
-// Totals for the end-of-run summary, printed beside [RtDiff].
+// Totals for the end-of-run summary.
 void Summary();
 
 }  // namespace RtSaveTrace

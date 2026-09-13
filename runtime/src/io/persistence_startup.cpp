@@ -13,7 +13,7 @@
 // Its own file rather than an edit to `persistence.cpp` (Wave 4 lane C) purely
 // so two lanes are not editing one file while both are in flight. Registered
 // through `RtIoPersistenceStartupRegister()`, wired into `rt_io_port.cpp` with
-// its own switch `BANISHED_RT_PERSSTARTUP` — it is on the process's single boot
+// its own switch `the old DLL-era switch` — it is on the process's single boot
 // path, so it must be A/B-able without giving up lane C's `Get`/`Set` family.
 //
 // This file touches nothing under `runtime/src/io/filesystem*`; lane FS owns
@@ -70,7 +70,7 @@
 // registry into the object and a replay would do it twice. The shadow checks
 // the post-condition the assignment produced and this body did not compute:
 // `_savePath` holds the same `data` pointer the temporary did, with a refcount
-// that accounts for both. `RT_DIFF_WORK` is the effectiveness control.
+// that accounts for both. `the diff oracle` is the effectiveness control.
 // ============================================================================
 
 #include <cstdint>
@@ -103,7 +103,6 @@ void** FileSystemSingletonSlot() {
 // ?Startup@Persistence@IO@@QEAA_NXZ                        retail 0x1800b7ee0
 // ============================================================================
 extern "C" bool RtIo_Persistence_Startup(Persistence* self) {
-    RT_DIFF_BEGIN("IO::Persistence::Startup");
 
     RT_EXPORT_ONCE(VoidThisFn, "?ReadSettings@Persistence@IO@@QEAAXXZ")(self);
 
@@ -138,20 +137,6 @@ extern "C" bool RtIo_Persistence_Startup(Persistence* self) {
 
     RT_EXPORT_ONCE(StringDtorFn, "??1String@System@@QEAA@XZ")(&tmp);
 
-    if (rt_diff_on__) {
-        // Written by GetSaveDirectory and by the inlined assignment, not by any
-        // expression this body evaluated on its own.
-        const bool pathOk = self->savePath.data == nullptr ||
-                            RtSystem::StringRefCount(self->savePath.data) >= 1;
-        char a[128], b[128];
-        std::snprintf(a, sizeof(a), "savePath=%p rc=%d",
-                      static_cast<void*>(self->savePath.data),
-                      self->savePath.data ? RtSystem::StringRefCount(self->savePath.data) : 0);
-        std::snprintf(b, sizeof(b), "savePath live with rc>=1 [pathOk=%d]",
-                      static_cast<int>(pathOk));
-        RT_DIFF_SHADOW(pathOk, a, b);
-        RT_DIFF_WORK(true);
-    }
 
     return true;
 }

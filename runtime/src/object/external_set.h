@@ -166,13 +166,4 @@ namespace RtObject {
 void RtObject_ExternalFactory_Clean(ExternalFactory* self);
 }  // namespace RtObject
 
-// The probe. ARMED by RtObjectExternalSetRegister, RUN on the first real call
-// into any registered entry point — it ALLOCATES, and a probe that allocates
-// cannot run from a *PortInit (WAVE9.md lane PKG2: the allocator singleton is
-// constructed but not started, and the first allocation faults at null+0x640).
-void RtObjectExternalSetProbeArm(bool on);
-bool RtObjectExternalSetProbeArmed();
-void RtObjectExternalSetProbeRun();
-void RtObjectExternalSetProbeMaybeRun();
-
 int RtObjectExternalSetRegister();

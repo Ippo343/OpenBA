@@ -77,7 +77,6 @@ inline uint8_t* U8(void* p) { return static_cast<uint8_t*>(p); }
 // arrays before freeing any of the array storage itself, which is the only
 // order in which the element loops can still read their own backing store.
 extern "C" void RtIo_CompressedStream_Release(CompressedStream* self) {
-    RT_DIFF_BEGIN("IO::CompressedStream::Release");
 
     uint8_t* const base = reinterpret_cast<uint8_t*>(self);
 
@@ -139,7 +138,6 @@ extern "C" void RtIo_CompressedStream_Release(CompressedStream* self) {
     *reinterpret_cast<int32_t*>(base + 0x20) = -1;           // 1800aa34c
     *reinterpret_cast<void**> (base + 0x28) = nullptr;       // 1800aa353
 
-    RT_DIFF_WORK(true);
 }
 
 // ============================================================================
@@ -156,7 +154,6 @@ extern "C" void RtIo_CompressedStream_Release(CompressedStream* self) {
 // frame is gone. Reproduced as a call, which is observationally identical here
 // because nothing follows it.
 extern "C" void RtIo_CompressedStream_Dtor(CompressedStream* self) {
-    RT_DIFF_BEGIN("IO::CompressedStream::~CompressedStream");
 
     uint8_t* const base = reinterpret_cast<uint8_t*>(self);
 
@@ -175,7 +172,6 @@ extern "C" void RtIo_CompressedStream_Dtor(CompressedStream* self) {
     void* const enc = *reinterpret_cast<void**>(base + 0x10);
     if (enc) EncodingDelete(enc);                            // 1800aa69e..6ac
 
-    RT_DIFF_WORK(true);
 }
 
 }  // namespace RtIo

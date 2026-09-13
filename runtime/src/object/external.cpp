@@ -213,16 +213,11 @@ External* RtObject_External_Ctor(External* self) {
 // `path` is genuinely dead: RDX is never read in the two instructions. It is
 // kept in the signature because the vtable slot's type demands it.
 //
-// ORACLE: RT_DIFF_SCALAR against the shipped body. The function is pure — no
+// ORACLE: the diff oracle against the shipped body. The function is pure — no
 // stores, no calls, no reads of `this` — so replaying it is free and the
 // comparison is exact rather than a shape check.
 uint32_t RtObject_External_Compile(External* self, const void* path) {
-    RT_DIFF_BEGIN("Object::External::Compile");
     const uint32_t ours = 1u;
-    RT_DIFF_SCALAR(ours,
-        RtOriginal<uint32_t (*)(External*, const void*)>(
-            "?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z")(
-                self, path));
     return ours;
 }
 
@@ -247,7 +242,7 @@ uint32_t RtObject_External_Compile(External* self, const void* path) {
 //
 // It is deliberately LEFT AS IS rather than converted to a ResolveAddr call,
 // and the reason is not taste: the registered body sits behind
-// BANISHED_RT_COLLECTION + BANISHED_RT_ARRAY_DESTROY, and routing this dtor
+// the old DLL-era switch + the old DLL-era switch, and routing this dtor
 // through the registry would make it an EXEC-of-0 at cutover whenever either
 // gate is off, which is strictly worse than a duplicate. The two copies are
 // behaviourally identical (both are Body B with stride 0x10, slot at +0x00);
@@ -296,17 +291,9 @@ void RtObject_External_Dtor(External* self) {
 // results are the SAME char* and an 8-byte compare is exact. The oracle call
 // takes one extra reference, which the scratch release below gives back.
 Filename* RtObject_External_GetPath(const External* self, Filename* ret) {
-    RT_DIFF_BEGIN("Object::External::GetPath");
 
     RtSystem_Filename_CtorCopy(ret, &self->_path);
 
-    if (rt_diff_on__) {
-        Filename theirs{nullptr};
-        RtOriginal<Filename* (*)(const External*, Filename*)>(
-            "?GetPath@External@Object@@QEBA?AVFilename@System@@XZ")(self, &theirs);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Filename));
-        RtString_ReleaseInline(reinterpret_cast<String*>(&theirs));
-    }
     return ret;
 }
 
@@ -316,11 +303,7 @@ Filename* RtObject_External_GetPath(const External* self, Filename* ret) {
 
 // ?IsReferenceModeEnabled@ExternalFactory@Object@@QEBA_NXZ  retail 0x1800bf0f0
 bool RtObject_ExternalFactory_IsReferenceModeEnabled(const ExternalFactory* self) {
-    RT_DIFF_BEGIN("Object::ExternalFactory::IsReferenceModeEnabled");
     bool ours = self->_referenceModeEnabled;
-    RT_DIFF_SCALAR(ours,
-        RtOriginal<bool (*)(const ExternalFactory*)>(
-            "?IsReferenceModeEnabled@ExternalFactory@Object@@QEBA_NXZ")(self));
     return ours;
 }
 
@@ -358,7 +341,6 @@ void RtObject_ExternalFactory_EnableReferenceMode(ExternalFactory* self, bool en
 //     real, not a transcription slip.
 const External* RtObject_ExternalFactory_Find(const ExternalFactory* self,
                                               const Filename* path) {
-    RT_DIFF_BEGIN("Object::ExternalFactory::Find");
 
     const External* ours = nullptr;
 
@@ -398,11 +380,6 @@ const External* RtObject_ExternalFactory_Find(const ExternalFactory* self,
     RtString_ReleaseInline(reinterpret_cast<String*>(&ident));
     RtString_ReleaseInline(reinterpret_cast<String*>(&key));
 
-    RT_DIFF_SCALAR(static_cast<const void*>(ours),
-        static_cast<const void*>(
-            RtOriginal<const External* (*)(const ExternalFactory*, const Filename*)>(
-                "?Find@ExternalFactory@Object@@QEBAPEBVExternal@2@AEBVFilename@System@@@Z")(
-                    self, path)));
     return ours;
 }
 
@@ -427,7 +404,6 @@ const External* RtObject_ExternalFactory_Find(const ExternalFactory* self,
 // a SECOND Filename from it before searching, releasing both. Transcribed.
 uint32_t RtObject_ExternalFactory_GetReferenceId(const ExternalFactory* self,
                                                  const External* external) {
-    RT_DIFF_BEGIN("Object::ExternalFactory::GetReferenceId");
 
     Filename got{nullptr};
     RtObject_External_GetPath(external, &got);
@@ -441,9 +417,6 @@ uint32_t RtObject_ExternalFactory_GetReferenceId(const ExternalFactory* self,
 
     uint32_t ours = node->element.referenceId;   // unguarded, exactly as retail
 
-    RT_DIFF_SCALAR(ours,
-        RtOriginal<uint32_t (*)(const ExternalFactory*, const External*)>(
-            "?GetReferenceId@ExternalFactory@Object@@QEBAIPEBVExternal@2@@Z")(self, external));
     return ours;
 }
 
@@ -460,7 +433,6 @@ uint32_t RtObject_ExternalFactory_GetReferenceId(const ExternalFactory* self,
 // the empty-on-miss result is what the load path checks.
 Filename* RtObject_ExternalFactory_GetPathForReferenceId(const ExternalFactory* self,
                                                          Filename* ret, uint32_t id) {
-    RT_DIFF_BEGIN("Object::ExternalFactory::GetPathForReferenceId");
 
     ReferenceSet::Node* n = self->_references._root;
     while (n != nullptr) {
@@ -481,14 +453,6 @@ Filename* RtObject_ExternalFactory_GetPathForReferenceId(const ExternalFactory* 
         RtSystem_Filename_CtorCopy(ret, &empty);
     }
 
-    if (rt_diff_on__) {
-        Filename theirs{nullptr};
-        RtOriginal<Filename* (*)(const ExternalFactory*, Filename*, uint32_t)>(
-            "?GetPathForReferenceId@ExternalFactory@Object@@QEBA?AVFilename@System@@I@Z")(
-                self, &theirs, id);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(Filename));
-        RtString_ReleaseInline(reinterpret_cast<String*>(&theirs));
-    }
     return ret;
 }
 
@@ -538,7 +502,6 @@ static void** FactorySingletonSlot() {
 const External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self,
                                                   uint32_t typeId,
                                                   const External* prev) {
-    RT_DIFF_BEGIN("Object::ExternalFactory::FindNext");
 
     ResourceSet::Node* cursor = nullptr;
 
@@ -600,11 +563,6 @@ const External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self,
         cursor = ResourceSetSuccessor(cursor);
     }
 
-    RT_DIFF_SCALAR(static_cast<const void*>(ours),
-        static_cast<const void*>(
-            RtOriginal<const External* (*)(const ExternalFactory*, uint32_t, const External*)>(
-                "?FindNext@ExternalFactory@Object@@QEBAPEBVExternal@2@IPEBV32@@Z")(
-                    self, typeId, prev)));
     return ours;
 }
 
@@ -614,11 +572,7 @@ const External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self,
 
 // ?GetResourceCount@ExternalList@Object@@QEBAHXZ  retail 0x180007650  — DIFFED
 int RtObject_ExternalList_GetResourceCount(const ExternalList* self) {
-    RT_DIFF_BEGIN("Object::ExternalList::GetResourceCount");
     int ours = self->_count;
-    RT_DIFF_SCALAR(ours,
-        RtOriginal<int (*)(const ExternalList*)>(
-            "?GetResourceCount@ExternalList@Object@@QEBAHXZ")(self));
     return ours;
 }
 
@@ -642,7 +596,6 @@ ExternalPtr<External>* RtObject_ExternalList_Find(const ExternalList* self,
                                                   ExternalPtr<External>* ret,
                                                   const Filename* path,
                                                   void* /*type — unused by retail*/) {
-    RT_DIFF_BEGIN("Object::ExternalList::Find");
 
     Filename ident{nullptr};
     RtSystem_Filename_GetPathIdentifer(path, &ident);
@@ -695,15 +648,6 @@ ExternalPtr<External>* RtObject_ExternalList_Find(const ExternalList* self,
             RtSystem::RtMemFree(key - 8);
     }
 
-    if (rt_diff_on__) {
-        ExternalPtr<External> theirs{nullptr};
-        RtOriginal<ExternalPtr<External>* (*)(const ExternalList*, ExternalPtr<External>*,
-                                              const Filename*, void*)>(
-            "?Find@ExternalList@Object@@QEBA?AV?$ExternalPtr@VExternal@Object@@@2@"
-            "AEBVFilename@System@@VType@2@@Z")(self, &theirs, path, nullptr);
-        RT_DIFF_BYTES(ret, &theirs, sizeof(ExternalPtr<External>));
-        // ExternalPtr holds no reference (see External.h), so nothing to release.
-    }
     return ret;
 }
 

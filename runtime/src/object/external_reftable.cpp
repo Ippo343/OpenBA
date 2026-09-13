@@ -195,11 +195,6 @@ Counters g_c = {};
 // ============================================================================
 // void Object::ExternalFactory::SerializeReferenceTable(IO::Stream&)
 // ============================================================================
-extern void RtObjectExternalRefTableProbeMaybeRun(ExternalFactory* self, Stream* stream);
-// The MUTATION A post-condition check. Cheap enough to leave unconditional:
-// `CountNodes` walks a tree that is about to be walked and freed anyway.
-extern int  RtObjectExternalRefTableCountNodes(const void* set);
-extern void RtObjectExternalRefTableNoteTeardown(const void* set, int nodesBefore);
 void RtObjectExternalRefTableSummary();
 
 namespace RtObject {
@@ -208,11 +203,6 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
                                                       Stream* stream) {
     ++g_c.calls;
 
-    // The lane-S write-path oracle. Runs BEFORE the real body, against two
-    // synthetic sinks, and only in the writing direction. See
-    // external_reftable_probe.cpp for what it can and cannot say.
-    RtObjectExternalRefTableProbeMaybeRun(self, stream);
-
     // ---- MUTATION A: tear the reference table down --------------------------
     // 1800bcb80. `this` for the teardown is the SET (`ADD RCX,0x20`), not the
     // factory: retail loads RCX = this+0x20. The callee ignores it, but a port
@@ -220,11 +210,9 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
     rtrefset::Set* refs =
         reinterpret_cast<rtrefset::Set*>(reinterpret_cast<uint8_t*>(self) + 0x20);
     if (refs->root) ++g_c.teardownNonEmpty;
-    const int nodesBefore = RtObjectExternalRefTableCountNodes(refs);
     RtObjFactoryDtor::ReferenceSubtreeFree(refs, refs->root);
     refs->root  = nullptr;                       // 1800bcb90, qword
     refs->count = 0;                             // 1800bcb94, DWORD
-    RtObjectExternalRefTableNoteTeardown(refs, nodesBefore);
 
     // ---- the local Serializer and its codec ---------------------------------
     Serializer ser;
