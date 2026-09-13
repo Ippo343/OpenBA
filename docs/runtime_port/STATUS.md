@@ -20,6 +20,14 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
+- **B.3.1 OPEN (2026-09-13 evening, main 6a3f8921):** phase B started. Rule sheet
+  `endgame_b/B31_RULES.md`; host tests `make unit` (tests/unit/). Step 1 (cores, in
+  flight): `System::String`/`Filename` and the `Math` value types as real classes under
+  retail names, old PODs kept behind shims. Step 2 (callers, by directory) follows on a
+  green gate. Smart pointers: design read first (`endgame_b/SMARTPTR_INVENTORY.md`).
+  Progress metric is the per-directory `reinterpret_cast` count (ENDGAME §B.4), start
+  values in B31_RULES.md.
+
 - **CLOSED (2026-09-13):** the stress-town teardown crash/hang was `FishingWork::OnCancel`
   ported with three parameters where retail forwards a fourth (the packed slot word) by
   register passthrough — Slot6 then stored a `2` and a null past two 4-entry arrays on every
