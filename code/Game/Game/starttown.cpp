@@ -5688,13 +5688,14 @@ static constexpr int RES_ARR      = 0x70;     // startConfig+0x70 resource pool 
 static constexpr int RES_CNT      = 0x78;     // startConfig+0x78 resource pool count
 static constexpr int RES_STRIDE   = 0x18;     // pool entry stride (ExternalRef)
 static constexpr int CELL_OCCUPANT = 0x08;    // cell +0x08 = occupant ptr (0 = free)
-// Safety cap (per pool). The original has NO cap — it scatters the full perlin
-// distribution across the whole map (~9k trees on a medium map). A LOW cap is
-// actively harmful: the scatter scans y=0..dim, so a small cap fills up in the
-// map's top strip and never reaches the camera (this is why trees were invisible).
-// Set well above the natural per-pool count so it never clips in practice but
-// still bounds a runaway. Override at runtime with BANISHED_RES_CAP=<n>.
-static constexpr int RES_POOL_CAP = 16384;
+// NO cap by default, like retail (FUN_1400a12b0 scatters the full Perlin
+// distribution across the whole map). A cap is actively harmful because the
+// scatter scans y=0..dim: whatever it cuts off is a whole strip of the map
+// with no resources at all. The old 16384 "safety" cap was sized from a
+// Mountains medium map (~10k trees) and clipped every Valleys map (a large
+// Valleys map wants well over 16k trees) -- seen 2026-09-13 as "no trees on the
+// top half of the map". BANISHED_RES_CAP=<n> (diagnostic) still bounds a pool.
+static constexpr int RES_POOL_CAP = 0x7fffffff;
 
 // ---- Natural-resource model-variant selection (FUN_1401253d0 + the
 // FUN_1400a12b0 NaturalResourceDescription+0x48 tail) -----------------------
