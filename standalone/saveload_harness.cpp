@@ -80,20 +80,7 @@ void DumpSaveDir(const char* tag) {
 
 } // namespace
 
-// Wave 14 lane SETUPLOAD, screen A. Ticked from here because this is already
-// the per-frame hook the save/load lane owns, and the sweep needs a frame
-// counter and a live Persistence singleton. It is a no-op unless
-// BANISHED_RT_SETUPLOAD_SWEEP is set, and it is deliberately called BEFORE the
-// BANISHED_SAVE_TEST early-out below, which is unrelated to it.
-extern "C" void RtSaveSetupLoadSweepTick(int frameNum);
-// BANISHED_RT_SETUPLOAD_WATCH=1 — the confirming measurement for Wave 13's
-// open +0x2c signal (see the banner in savedstate_setupload.cpp).
-extern "C" void RtSaveEmbeddedStateWatchTick(int frameNum);
-
 extern "C" void SaveLoadHarness_Tick(void* gul, int frameNum) {
-    RtSaveSetupLoadSweepTick(frameNum);
-    RtSaveEmbeddedStateWatchTick(frameNum);
-
     const int trigger = TriggerFrame();
     if (trigger < 0) return;
 

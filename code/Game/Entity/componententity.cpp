@@ -47,11 +47,9 @@ static void EnsureResolved() {
 // Resets vtable, calls ShutdownComponents, clears component IBPs,
 // frees component array, calls Object::Internal::~Internal.
 // Called from Dtor (Slot0). Named "Ctor" in Ghidra (misleading).
-extern "C" void WorkSerProbe_NoteEntityDtor(void* entity);  // standalone/work_ser_probe.cpp
 extern "C" int  EntityCompValidate(void*, void*, void*, int);  // standalone/entity_comp_validator.cpp
 
 static void DtorBody(ComponentEntity* self) {
-    WorkSerProbe_NoteEntityDtor(self);
     // Set vtable back (matches original, important for correct virtual dispatch during teardown)
     *(void**)self = s_vtable_ComponentEntity;
 

@@ -118,7 +118,6 @@
 #include <cmath>
 
 #include "resolve.h"
-#include "ui_hover_detour.h"
 // FULL PATHS ON PURPOSE. `engine/types/` also has a `ui/DialogInstance.h`,
 // and `-Iengine/types` precedes `-Iruntime/types` on the standalone command
 // line, so the short spelling silently picks up the WRONG header -- which
@@ -702,13 +701,9 @@ void StartDrag(UI::UserInterface* ui, const Target& t) {
            (void*)t.dlg, (int)t.cx, (int)t.cy, ui->_dragDropDialog);
 
     // ---- Wave 10E lane DRAG: the FIELD DUMP that makes this an oracle -------
-    // Added by lane DRAG, after lane MOUSE published. This code is OUTSIDE the
-    // BANISHED_RT_UIDRAGSTART switch, so it reads back the same five fields
-    // whether the DLL's BeginDragDrop or ours just wrote them. Running the
-    // identical script with the switch on and off therefore compares OURS
-    // against THEIRS on every field the function writes -- not a self-check
-    // (reference_shadow_marker_is_not_an_oracle.md): neither side is asked for
-    // its own verdict, both are asked for their bytes.
+    // Added by lane DRAG, after lane MOUSE published. It reads back the five
+    // fields BeginDragDrop writes, so a script run says what the function
+    // actually did rather than asking the function for its own verdict.
     //
     // The two POINTERS are printed as a match against the argument rather than
     // raw, because the heap address differs between processes and an absolute
@@ -782,12 +777,6 @@ bool Enabled() {
 }
 
 void PreUpdate(void* uiRaw) {
-    // BEFORE the armed test, and unconditionally once per process: the hover
-    // detours have their OWN switch and are deliberately usable without the
-    // injector's script. RtUiHoverInstallDetours() is itself a no-op unless
-    // BANISHED_RT_UIHOVER_DETOUR is set, and self-latches.
-    RtUiHoverInstallDetours();
-
     ReadConfig();
     if (!g_cfg.armed || g_done || !uiRaw) return;
 

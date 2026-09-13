@@ -80,9 +80,9 @@ def main():
     with open(os.path.join(OUT, "roots.txt"), "w") as f:
         f.write("\n".join("%x" % a for a in sorted(roots)) + "\n")
 
-    # The ported set comes from the LIVE registry when a cutover run has left
-    # one behind (tools/cutover_run.sh arms BANISHED_RT_CENSUS=1, which prints
-    # every registered export/address as "[RtCensus] ..." to stderr).  The
+    # The ported set comes from the LIVE registry when a run has left one behind
+    # (the registry dump prints every registered export/address as
+    # "[RtCensus] ..." to stderr).  The
     # census's source parse undercounted it by ~600 rows on 2026-09-12 because
     # it guesses at env gates; the process does not guess.
     live_log = os.path.join(REPO, "docs", "runtime_port", "cutover", "latest", "standalone_error.log")

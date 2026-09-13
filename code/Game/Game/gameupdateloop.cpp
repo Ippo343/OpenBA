@@ -743,11 +743,7 @@ extern "C" void DisasterHarness_Tick(int frameNum);       // standalone/disaster
 extern "C" void PastureFillHarness_Tick(int frameNum);    // standalone/pasture_harness.cpp
 extern "C" void MarketOverstock_Tick(int frameNum);   // standalone/market_overstock_harness.cpp
 extern "C" void PanelStaffingDriver_Tick(void* entityUI, int frameNum);
-extern "C" void TavernStockProbe_Tick(int frameNum);
 extern "C" void PanelHoldHarness_Tick(void* entityUI, int frameNum);  // standalone/panel_staffing_driver.cpp
-extern "C" void SchoolSoakProbe_Tick(int frameNum);       // standalone/school_soak_probe.cpp
-extern "C" void AchievementProbe_Tick(int frameNum);   // standalone/achievement_probe.cpp
-extern "C" void RoadProbe_Tick(int frameNum);          // standalone/road_probe.cpp
 extern "C" void BuilderSeat_Tick(int frameNum);        // standalone/builder_seat_harness.cpp
 static void GameUpdateLoop_TryOpenDebugPanel(GameUpdateLoop* self);  // defined below
 extern "C" float AchClock_TimeScale();                 // standalone/ach_clock.cpp
@@ -765,7 +761,6 @@ extern "C" void OrchardCutHarness_Tick(int frameNum);      // standalone/orchard
 // TownHallUI gate diagnostic (code/Game/Dialog/townhallui.cpp) — one-shot report
 // of the fn-pointer / type-id / town-data gates behind the town-hall panel.
 extern "C" void TownHallSA_Diag(int frameNum);
-extern "C" void TradeProbe_Tick(int frameNum);            // standalone/trade_probe.cpp
 
 // fn_MemFreeStatic is already available from engine_funcs.h
 
@@ -1129,23 +1124,9 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // BANISHED_PASTURE_HERDERS / BANISHED_BUILDER_AUTOPOOL cascade-bypass stand-ins
     // (standalone/panel_staffing_driver.cpp).
     PanelStaffingDriver_Tick(self->m_entityUI, s_frameNum);
-    // Town-stock cross-reference: report which ale recipes the town can actually
-    // supply right now (BANISHED_TAVERN_STOCK=<interval>, off by default).
-    TavernStockProbe_Tick(s_frameNum);
     // Hold one building panel open so its layout can be captured (BANISHED_PANEL_HOLD).
     PanelHoldHarness_Tick(self->m_entityUI, s_frameNum);
 
-    // Age + enrolment census, so "the school is empty" can be told apart from "no minor
-    // has crossed the adult edge yet". No-op unless BANISHED_SCHOOL_SOAK is set
-    // (standalone/school_soak_probe.cpp).
-    SchoolSoakProbe_Tick(s_frameNum);
-
-    // Per-achievement / per-goal census, so a stuck achievement can be told from a
-    // long one: prints awarded + instance state + every goal's live Check(). No-op
-    // unless BANISHED_ACH_TRACE is set (standalone/achievement_probe.cpp).
-    AchievementProbe_Tick(s_frameNum);
-    // Road-paving census for Highwaymen (stat 23). No-op unless BANISHED_ROAD_CENSUS.
-    RoadProbe_Tick(s_frameNum);
     // Player stand-in for the town-hall Builder spinner. No-op unless BANISHED_BUILDERS.
     BuilderSeat_Tick(s_frameNum);
     // The debug panel resource lives in a .pkm mounted after Startup; keep trying.
@@ -1217,10 +1198,6 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // reporting half is gated on BANISHED_TOWNHALL_DIAG.
     TownHallSA_Diag(s_frameNum);
 
-    // Wave-0 gating probe for the trading-post / livestock-acquisition wave:
-    // read-only one-shot dump of the trading-post template and its merchant data.
-    // No-op unless BANISHED_TRADE_PROBE is set (standalone/trade_probe.cpp).
-    TradeProbe_Tick(s_frameNum);
 
     // Apply the deferred founding-house "occupied" visuals now that the scene is live
     // (the Scene mesh-visual can't run during the build-time founding pass — it

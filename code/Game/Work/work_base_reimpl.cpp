@@ -273,7 +273,6 @@ void WorkBase_TaskListCleanup_c5400(void* self) {
 // ⚠ NOT a null-guard on the derefs below: with the env var unset (the default) this
 // returns immediately and the faithful retail deref stands untouched. It exists only
 // to turn "save crashed" into a log line naming the stale Work while diagnosing.
-extern "C" int WorkSerProbe_Check(void* work, void** field, const char* which);
 
 // Reimpl of FUN_1400f7400 (Work::Serialize) — serialize a Work task (version 3 stream).
 // Two task-target IBPs at +0x10 (must derive ComponentEntity) and +0x18 (must derive
@@ -287,13 +286,11 @@ void WorkBase_Serialize_f7400(void* self, void* stream) {
     if (!g_fn_Serializer_Ctor) return;
     g_fn_Serializer_Ctor(ser, stream, 3);
 
-    WorkSerProbe_Check(self, reinterpret_cast<void**>(s + 0x10), "+0x10");
     if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(reinterpret_cast<void*>(s + 0x10), ser);
     if (*reinterpret_cast<void**>(s + 0x10) && fn_IsDerivedFrom && g_TypeId_ComponentEntity) {
         if (!fn_IsDerivedFrom(*reinterpret_cast<void**>(s + 0x10), *g_TypeId_ComponentEntity))
             *reinterpret_cast<void**>(s + 0x10) = nullptr;
     }
-    WorkSerProbe_Check(self, reinterpret_cast<void**>(s + 0x18), "+0x18");
     if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(reinterpret_cast<void*>(s + 0x18), ser);
     if (*reinterpret_cast<void**>(s + 0x18) && fn_IsDerivedFrom && s_pTid_3050) {
         if (!fn_IsDerivedFrom(*reinterpret_cast<void**>(s + 0x18), *s_pTid_3050))

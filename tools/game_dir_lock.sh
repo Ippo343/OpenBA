@@ -356,8 +356,8 @@ break_if_stale() {
 }
 
 # Is a run IN PROGRESS right now? Lane UIW established the reliable test, after
-# three clobbered runs and one COMPLETE, PLAUSIBLE, WRONG RtDiff summary produced
-# from another lane's binary:
+# three clobbered runs and one COMPLETE, PLAUSIBLE, WRONG summary produced from
+# another lane's binary:
 #
 #   `tasklist`-then-launch is NOT sufficient. It is a check followed by an
 #   action with a gap in between, and another lane starts in the gap. That is a

@@ -77,11 +77,7 @@ SA_SRCS = $(GAME_SRC_SRCS) \
           $(DX11_SRC_SRCS) \
           $(wildcard standalone/*.cpp)
 
-# hde64: the x86-64 length disassembler used by standalone/runtime_detour.cpp to
-# relocate a displaced prologue. Upstream C, kept unmodified — compiled with $(CC).
-SA_C_SRCS = standalone/hde/hde64.c
-
-SA_OBJECTS = $(addprefix $(SA_OBJ_DIR)/, $(subst /,__,$(SA_SRCS:.cpp=.o)))              $(addprefix $(SA_OBJ_DIR)/, $(subst /,__,$(SA_C_SRCS:.c=.o)))
+SA_OBJECTS = $(addprefix $(SA_OBJ_DIR)/, $(subst /,__,$(SA_SRCS:.cpp=.o)))
 
 # Windows resources (exe icon)
 SA_RC = standalone/icon.rc
@@ -120,8 +116,8 @@ check-log-strip:
 # --check` existed the whole time, answers in a second, and says STALE; the
 # integrator queue even carried a written instruction to re-derive rather than
 # trust the numbers. None of that fired, because a detector only helps someone
-# who runs it, and the staleness was MASKED: the blanket BANISHED_RT_MINT=1
-# switch published the 14 missing rows anyway, so cutover attempt 26 booted deep
+# who runs it, and the staleness was MASKED: the blanket mint switch of the day
+# published the 14 missing rows anyway, so cutover attempt 26 booted deep
 # and `published 44, withheld 1` READ AS CONFIRMATION. The number matched its
 # prediction BECAUSE it was stale -- 44 was the pre-DATA count.
 #
@@ -277,9 +273,6 @@ $(SA_OBJ_DIR)/dx11__src__%.o: dx11/src/%.cpp | $(SA_OBJ_DIR)
 $(SA_OBJ_DIR)/standalone__%.o: standalone/%.cpp | $(SA_OBJ_DIR)
 	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
 
-$(SA_OBJ_DIR)/standalone__hde__%.o: standalone/hde/%.c | $(SA_OBJ_DIR)
-	$(CC) -std=c99 -O2 -Wall -MMD -MP -c $< -o $@
-
 # Exe icon resource (windres compiles .rc -> COFF object)
 $(SA_RC_OBJ): $(SA_RC) ba_icon.ico | $(SA_OBJ_DIR)
 	$(WINDRES) $(SA_RC) -o $@
@@ -336,90 +329,11 @@ sa-stress: standalone-perf
 sa-stress-debug: sa-deploy
 	tools/stress_run.sh --no-build --debug $(STRESS_ARGS)
 
-# ------------------------------------------------------------------
-# libm bit-exactness sweep (Wave 9 lane L)
-# ------------------------------------------------------------------
-# runtime/src/crt/msvc_libm.cpp is a port of Runtime-x64.dll's own statically
-# linked MSVC CRT sqrtf/sinf/cosf/atan2f/powf. `make libm-sweep` rebuilds the
-# oracle and compares the port against those five bodies at their retail
-# addresses on raw bit patterns, with a branch-coverage effectiveness control
-# and a negative control. It needs the DLL present; it exits non-zero on any
-# divergence AND on a negative control that finds nothing (which would mean the
-# sweep is comparing the DLL against itself).
-#   --quick skips the exhaustive sin/cos band (seconds instead of minutes).
-LIBM_SWEEP_FLAGS = -std=c++17 -O2 -DMSVC_LIBM_COVERAGE -Iruntime/src/crt
-.PHONY: libm-sweep
-libm-sweep:
-	$(CXX) $(LIBM_SWEEP_FLAGS) tools/libm_probe/sweep.cpp \
-	    runtime/src/crt/msvc_libm.cpp -o tools/libm_probe/sweep.exe
-	tools/libm_probe/sweep.exe $(LIBM_SWEEP_ARGS)
-
-# WAVE 23 LANE TAIL. An input-sweep oracle for the two ported UI bodies
-# ?EndAddingSprites@SpriteCapture@UI@@ and ?Set@SpriteSheet@UI@@, built from the
-# REAL wave sources plus an inert registration seam, so "theirs" can only ever
-# be the shipped export (GetProcAddress) and never our own body. It needs the
-# DLL present but NOT the game directory -- it LoadLibrary()s Runtime-x64.dll
-# read-only, which is why it could be run in a wave where the game-directory
-# lock was never free.
-#
-# Three controls, run by `endsprites-sweep-controls`, each with an EXACT
-# expected count rather than "some":
-#   --negctl=compared    corrupt a compared field      -> all 22 cases must fail
-#   --negctl=entry       corrupt a compared ENTRY field -> exactly 15 must fail
-#   --negctl=uncompared  corrupt an uncompared field   -> 0 must fail
-# The exe exits non-zero when any of those expectations is missed, so a control
-# that stops working is a build failure and not a line of prose nobody reads.
-ENDSPRITES_SWEEP_SRCS = tools/endsprites_probe/sweep.cpp \
-                        tools/endsprites_probe/seam_stub.cpp \
-                        runtime/src/ui/spritecapture.cpp \
-                        runtime/src/ui/sprite.cpp \
-                        runtime/src/system/string.cpp \
-                        runtime/funcs/rt_diff.cpp
-.PHONY: endsprites-sweep endsprites-sweep-controls
-endsprites-sweep:
-	$(CXX) -std=c++17 -O1 -g $(ENDSPRITES_SWEEP_SRCS) -o tools/endsprites_probe/sweep.exe
-	tools/endsprites_probe/sweep.exe
-
-endsprites-sweep-controls: endsprites-sweep
-	tools/endsprites_probe/sweep.exe --negctl=compared
-	tools/endsprites_probe/sweep.exe --negctl=entry
-	tools/endsprites_probe/sweep.exe --negctl=uncompared
-
-# Re-extract the coefficient tables from the shipped DLL. Only needed if the
-# table header is ever suspected of drift; the header is checked in.
-.PHONY: libm-tables
-libm-tables:
-	tools/ghidra_mcp/.venv/Scripts/python.exe tools/extract_crt_tables.py \
-	    > runtime/src/crt/msvc_libm_tables.h
-
 # Include auto-generated header dependency files
 -include $(SA_OBJECTS:.o=.d)
 
 clean:
 	rm -rf $(SA_BUILD_DIR) $(SA_OG_DIR) $(SA_PERF_DIR)
-
-# WAVE 24 LANE GFXMAT. A SYNTHESISED differential oracle for the three Graphics
-# `?Serialize@` bodies, needing NO game run and NO game-directory lock -- it
-# LoadLibrary()s Runtime-x64.dll (a read; nothing is written and no game is
-# launched), builds an IO::Stream / Encoding factory / Encoding whose vtables it
-# owns, overwrites the eleven helper callees with recorders in the loaded image,
-# then runs the SHIPPED body and OUR body over two identical arenas and compares
-# the call trace. It compiles the SHIPPING body
-# (runtime/src/graphics/wave24_lane_gfxmat.cpp), not a copy of it.
-#
-# `gfxmat24-sweep` runs the full control matrix with EVERY CELL NAMED, including
-# the CONDITIONAL effectiveness control -- read tools/gfxmat24_probe/probe.cpp's
-# header block before quoting a score.
-GFXMAT24_FLAGS = -std=c++17 -O0 -g -Wall -Wextra -Wno-cast-function-type \
-                 -DGFXMAT24_PROBE -I. -Iruntime/types -Iruntime/funcs -Istandalone
-.PHONY: gfxmat24-probe gfxmat24-sweep
-gfxmat24-probe:
-	$(CXX) $(GFXMAT24_FLAGS) tools/gfxmat24_probe/probe.cpp \
-	    runtime/src/graphics/wave24_lane_gfxmat.cpp -o tools/gfxmat24_probe/probe.exe
-	tools/gfxmat24_probe/probe.exe $(GFXMAT24_ARGS)
-
-gfxmat24-sweep: gfxmat24-probe
-	sh tools/gfxmat24_probe/sweep.sh
 
 # `cutover` is now an alias for the ordinary route: since ENDGAME A.1 the exe
 # never loads Runtime-x64.dll, so there is nothing left to cut over to. Kept

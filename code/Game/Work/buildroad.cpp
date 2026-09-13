@@ -423,13 +423,7 @@ static int FinalizeAction(BuildRoad* self, void* entityIBP, void* actionIBP, int
     return 2;
 }
 
-// Road-wave counters (standalone/road_probe.cpp).
-extern "C" {
-extern long long g_brExecCalls;
-extern long long g_brExecBusy;
-extern long long g_brExecNotPassable;
-extern long long g_brExecPushedAction;
-}
+// Road-wave branch counters.
 extern "C" {
 long long g_brExecStructOnCell = 0;   // cell+0x08 holds an entity (pile / resource)
 long long g_brExecRawMatWait   = 0;   // blocked by a raw-material pile it asked to be cleared
@@ -438,9 +432,7 @@ long long g_brExecClearPath    = 0;   // the plain "walk there and build it" bra
 }
 
 int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
-    ++g_brExecCalls;
     if (self->field_48 != nullptr) {
-        ++g_brExecBusy;
         return 1;
     }
 
@@ -456,7 +448,6 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
 
     uint64_t passResult = fn_Map_CheckPassable(mapGrid, 0xe1f, (uint32_t)cellIndex, targetCell);
     if ((char)passResult == '\0') {
-        ++g_brExecNotPassable;
         return 1;
     }
 

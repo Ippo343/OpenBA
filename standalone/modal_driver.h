@@ -27,13 +27,6 @@
 //       answer 0 (an explicit "0" arms — it is NOT read as "off", unlike the
 //       other BANISHED_* switches, because 0 is a meaningful dialog result).
 //       Leave the variable UNSET to disable.
-//
-//   BANISHED_MODAL_DRIVER_TEST=1
-//       After the driver is armed and the menu has settled, run the
-//       twin-subject differential over ShowDialog: build two identical
-//       synthetic MessageDialogs and show one through the shipped DLL body and
-//       one through whatever the port registry currently resolves, then compare
-//       the post-state each leaves. See ModalDriver::RunSelfTest.
 
 #include <cstdint>
 
@@ -51,9 +44,5 @@ bool Poll();
 // COUNTER: a run that reports armed=1 dismissed=0 proves the route was never
 // exercised, which is a different verdict from "the route does not work".
 int DismissedCount();
-
-// BANISHED_MODAL_DRIVER_TEST. `outerUi` is the UserInterface the synthetic
-// dialogs are parented to (the menu's). Runs at most once per process.
-void RunSelfTest(void* outerUi);
 
 }  // namespace ModalDriver

@@ -151,14 +151,8 @@ bool EnsureDeps() {
     g_deps.videoDeviceSingleton =
         reinterpret_cast<void**>(ResolveAddr(Module::Runtime, 0x1801fe7a8));
 
-    // Lock/Unlock go by ordinal, matching engine/funcs/engine_funcs.cpp, with a
-    // by-name fallback.
-    g_deps.DeviceLock   = reinterpret_cast<void (*)(void*)>(ResolveOrdinal(3214));
-    g_deps.DeviceUnlock = reinterpret_cast<void (*)(void*)>(ResolveOrdinal(4462));
-    if (!g_deps.DeviceLock)
-        g_deps.DeviceLock = Exp<void (*)(void*)>("?Lock@Device@Video@@QEAAXXZ");
-    if (!g_deps.DeviceUnlock)
-        g_deps.DeviceUnlock = Exp<void (*)(void*)>("?Unlock@Device@Video@@QEAAXXZ");
+    g_deps.DeviceLock   = Exp<void (*)(void*)>("?Lock@Device@Video@@QEAAXXZ");
+    g_deps.DeviceUnlock = Exp<void (*)(void*)>("?Unlock@Device@Video@@QEAAXXZ");
 
     g_deps.VertexBufferDataDtor   = Exp<void (*)(void*)>("??1VertexBufferData@Video@@UEAA@XZ");
     g_deps.IndexBufferDataDtor    = Exp<void (*)(void*)>("??1IndexBufferData@Video@@UEAA@XZ");

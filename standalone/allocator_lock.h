@@ -44,7 +44,7 @@ bool AllocatorLockRetireForPort();
 // Put both patches BACK after a retire that did not lead to an armed port.
 //
 // Wave 10 lane ALLOC. RtSystemAllocatorRegister() now retires the lock BEFORE
-// its prologue guard runs (that ordering is the whole reason BANISHED_RT_ALLOC=1
+// its prologue guard runs (that ordering is the whole reason the ported allocator
 // could never arm with the DLL present). Every refusal downstream of that retire
 // -- a foreign patch on the prologues, a detour that would not install -- would
 // otherwise leave the process running retail's own UNLOCKED Allocate against a

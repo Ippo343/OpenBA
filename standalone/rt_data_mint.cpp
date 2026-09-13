@@ -24,14 +24,11 @@
 //
 // RESIDUE DISCIPLINE (this cost a rewrite of the first draft)
 //
-// Nothing in this file may call ResolveExport / ResolveExportRaw /
-// ResolveRuntimeRaw. All three record into the BANISHED_RT_STRICT residue
-// census, and the shadow check asks about ~250 symbols on every pass — it
-// would invent several hundred `[RtResidue]` / `[RtRawResidue]` entries and
-// wreck the one measurement Wave 9's cutover gate actually depends on. The
-// mint uses the residue-free doors instead: RtPortLookupExport /
-// RtPortLookupAddr for our side, and GetProcAddress on the module handle plus
-// the ASLR delta from GetModuleInfo() for the DLL's side.
+// Nothing in this file may call ResolveExport. It records into the residue
+// census, and the mint asks about ~250 symbols on every pass — it would invent
+// several hundred `[RtResidue]` entries and wreck the one measurement the
+// cutover gate depends on. The mint uses the residue-free doors instead:
+// RtPortLookupExport / RtPortLookupAddr.
 // ============================================================================
 
 #include "resolve.h"
@@ -195,22 +192,6 @@ static bool EnvOn(const char* name) {
     return e && *e && strcmp(e, "0") != 0;
 }
 
-// The DLL's copy of an exported symbol, without touching the residue census.
-static void* DllExport(const char* name) {
-    const ModuleInfo* mi = GetModuleInfo(Module::Runtime);
-    if (!mi || !mi->handle || !name) return nullptr;
-    return (void*)GetProcAddress(mi->handle, name);
-}
-
-// A Ghidra VA translated into the loaded DLL, without touching the residue
-// census. Returns nullptr when the DLL is not loaded — which is exactly the
-// state cutover creates, and every caller below treats it as "no oracle".
-static void* DllAddr(unsigned long long ghidraVa) {
-    const ModuleInfo* mi = GetModuleInfo(Module::Runtime);
-    if (!mi || !mi->handle || !ghidraVa) return nullptr;
-    return (void*)(uintptr_t)((intptr_t)(uintptr_t)ghidraVa + mi->delta);
-}
-
 // A printable name for a row that may have none. An UNEXPORTED table head is
 // carried by ADDRESS -- see EXTRA_VTABLES_BY_ADDR in tools/rt_mint_gen.py --
 // so every message has to cope with symbol == nullptr.
@@ -218,28 +199,6 @@ static const char* SymLabel(const char* sym, unsigned long long va, char* buf, s
     if (sym) return sym;
     snprintf(buf, n, "(unexported @0x%llx)", va);
     return buf;
-}
-
-// The DLL's copy of a minted row, by name when it has one and by address when
-// it does not. The address form is not a weaker lookup -- it is the only one
-// that exists for a table the DLL does not export -- but it IS a weaker CHECK:
-// there is no export directory entry to cross-examine, so the "exported where
-// the harvest said" comparison is skipped and counted separately rather than
-// passing vacuously.
-static void* DllRowBase(const char* sym, unsigned long long va) {
-    return sym ? DllExport(sym) : DllAddr(va);
-}
-
-static bool DllContains(void* p) {
-    const ModuleInfo* mi = GetModuleInfo(Module::Runtime);
-    if (!mi || !mi->handle || !p) return false;
-    // The DLL's own image span, derived from the two ends we know: the
-    // preferred base and Ghidra's highest observed address. Generous on
-    // purpose — this is only used to say "that qword looks like a pointer
-    // into the DLL", never to dispatch.
-    uintptr_t base = (uintptr_t)((intptr_t)0x180000000ll + mi->delta);
-    uintptr_t v = (uintptr_t)p;
-    return v >= base && v < base + 0x300000u;
 }
 
 // OUR port of a slot target, or nullptr if lane B has not registered it.
@@ -288,8 +247,7 @@ static const char* StripParent(const char* p) {
 //
 // THE HAZARD IT CLOSES, and it is one no build check can see (kickoff §3.6):
 // a promoted vtable's slots are filled from the LIVE port registry, so any
-// wave kill switch that suppresses a registration (BANISHED_RT_GRAPHICS=0,
-// BANISHED_RT_GFXMAT=0, BANISHED_RT_GFXTI=0, ...) turns that row's slots into
+// registration that does not land turns that row's slots into
 // named abort traps -- and the promotion would then publish a TRAP TABLE into
 // live objects. The build is clean, the link succeeds, and the first virtual
 // call aborts. `??_7BinaryFileStream@IO@@6B@` and the other five promoted
@@ -297,51 +255,9 @@ static const char* StripParent(const char* p) {
 // the first thing in the tree that can answer the question at all.
 static int g_vtableTraps[kVtableCount];
 
-// The count of synthetic trap injections performed this run. Printed by the
-// promotion guard as its EFFECTIVENESS COUNTER: "0 refusals" from a guard that
-// was never handed anything to refuse is not a measurement.
-static int g_trapControlInjections = 0;
-int RtMintTrapControlInjections() { return g_trapControlInjections; }
-
 int RtMintVtableTrapCount(const char* symbol) {
     if (!symbol) return -1;
 
-    // ---- NEGATIVE CONTROL (Wave 25 lane SWEEP) -----------------------------
-    // VTGFX shipped this counter with a refusal path that had NEVER FIRED and
-    // had no control, and said so. A guard that has never refused anything is
-    // an unvalidated screen: its green means nothing, and if it were wired up
-    // backwards nothing in the tree would notice.
-    //
-    // BANISHED_RT_MINT_TRAP_CONTROL=<mangled symbol> makes THIS function report
-    // a synthetic trap count for that one symbol. It corrupts EXACTLY the value
-    // the guard compares -- the trap count -- and nothing else, which is the
-    // rule both directions of this project's control failures come from. The
-    // promotion for that symbol must then REFUSE ITSELF and say so on stderr;
-    // if it promotes anyway, the guard is broken.
-    //
-    // Semicolon-separated list, so several rows can be armed at once, and the
-    // literal `*` arms every row (the whole-harness sweep).
-    const char* ctl = getenv("BANISHED_RT_MINT_TRAP_CONTROL");
-    if (ctl && *ctl) {
-        bool armed = (strcmp(ctl, "*") == 0);
-        if (!armed) {
-            const size_t len = strlen(symbol);
-            for (const char* q = ctl; *q; ) {
-                const char* e = strchr(q, ';');
-                const size_t n = e ? (size_t)(e - q) : strlen(q);
-                if (n == len && strncmp(q, symbol, n) == 0) { armed = true; break; }
-                if (!e) break;
-                q = e + 1;
-            }
-        }
-        if (armed) {
-            ++g_trapControlInjections;
-            fprintf(stderr, "[RtMint] TRAP CONTROL: reporting a synthetic trap "
-                            "count of 99 for %s -- its promotion MUST refuse.\n", symbol);
-            fflush(stderr);
-            return 99;
-        }
-    }
     for (int i = 0; i < kVtableCount; ++i)
         if (kMintVtables[i].symbol && strcmp(kMintVtables[i].symbol, symbol) == 0)
             return g_vtableTraps[i];
@@ -375,22 +291,7 @@ static void MintVtables() {
     }
 }
 
-// WAVE 10C lane TIDENT. How many minted rows should have their `name` aliased
-// to the DLL's own pointer, as the ptr= screen's effectiveness control. Read
-// once, from BANISHED_RT_MINT_PTRALIAS; 0 (the default) is off.
-static int g_ptrAliasRows = 0;
-
 static void MintTypeInfos() {
-    {
-        const char* e = getenv("BANISHED_RT_MINT_PTRALIAS");
-        g_ptrAliasRows = e ? atoi(e) : 0;
-        if (g_ptrAliasRows > 0)
-            printf("[RtMint] BANISHED_RT_MINT_PTRALIAS=%d -- aliasing the first "
-                   "%d rows' name pointer to the DLL's, to prove the ptr= screen "
-                   "is not stuck at \"differs\"\n",
-                   g_ptrAliasRows, g_ptrAliasRows);
-    }
-    int aliasApplied = 0;
     // Fields first. `next` is left for the chain pass below — it is the one
     // field the harvest could NOT read (it is 0x0 on disk for all 14 because
     // the chain is built by running constructors), so it is the one field that
@@ -431,27 +332,6 @@ static void MintTypeInfos() {
         bti->typeId        = t.name ? RtObject::TypeIdFromName(t.name) : 0xFFFFFFFFu;
         bti->_pad04        = 0;
         bti->name          = t.name;
-        // WAVE 10C lane TIDENT -- the ptr= screen's EFFECTIVENESS CONTROL.
-        //
-        // `t.name` is a string literal in OUR image, so `bti->name` is by
-        // construction a DIFFERENT POINTER from the DLL node's `name`, for all
-        // 104 rows. A screen that reports "differs" for every row cannot tell
-        // "it read the value" from "it is stuck on yes" -- so the control has
-        // to drive it the OTHER way. BANISHED_RT_MINT_PTRALIAS=<n> re-points
-        // the first n rows' `name` at the DLL's own pointer; the ptr= screen
-        // must then report those n rows as IDENTICAL and the rest as differing.
-        // Default off, and it names itself in the log when it is on.
-        if (g_ptrAliasRows > 0 && aliasApplied < g_ptrAliasRows) {
-            RtObject::BaseTypeInfo* d =
-                (RtObject::BaseTypeInfo*)DllExport(t.symbol);
-            if (d && d->name) {
-                bti->name = d->name;
-                ++aliasApplied;
-                printf("[RtMint] PTRALIAS %s: name -> the DLL's own pointer %p "
-                       "(effectiveness control; content unchanged)\n",
-                       t.symbol, (const void*)d->name);
-            }
-        }
         bti->parentName    = StripParent(t.parent);
         bti->fileExtension = t.ext;
 
@@ -467,15 +347,6 @@ static void MintTypeInfos() {
 
         bti->next = nullptr;
     }
-    // The control must announce when it did NOT fire, or a run in which
-    // DllExport came back null would read as "the screen did not move" and be
-    // scored as the screen's failure rather than the control's.
-    if (g_ptrAliasRows > 0)
-        printf("[RtMint] PTRALIAS: %d of %d requested row(s) aliased%s\n",
-               aliasApplied, g_ptrAliasRows,
-               aliasApplied == 0 ? "  <-- CONTROL DID NOT FIRE; the ptr= count "
-                                   "below is NOT evidence either way" : "");
-
     // The chain. Factory::Startup (0x1800c0630) walks it once, CRCs each
     // name, and resolves each type's PARENT by name — so a walk that reaches a
     // child before its parent is the order-dependent failure lane C warned
@@ -546,9 +417,7 @@ static void MintTypeInfos() {
 //   * every singleton and every other .data static -- not constructed.
 //
 // Gated, because constructing ?_loader starts a real OS thread and three
-// events. Off in an ordinary run; BANISHED_RT_MINT_CTOR=1 runs the
-// constructions WITHOUT registering the mint, so the shadow check can compare
-// what we built against the DLL's live object while both exist.
+// events.
 // ============================================================
 static void* g_loaderStorage = nullptr;
 
@@ -582,9 +451,8 @@ static bool ConstructLoader(const RtMintStorage& s) {
         // was the tree's ONLY unguarded strcmp on a .symbol field; every other
         // site in this file already wrote `s.symbol && strcmp(...)`.  The
         // second controlled DLL-absent boot faulted here in ucrtbase with
-        // RCX=0, and nothing before it could: this path runs only under
-        // BANISHED_RT_MINT / _MINT_CTOR, and the last such run predated the
-        // first null-symbol row.
+        // RCX=0, and nothing before it could: the last run down this path
+        // predated the first null-symbol row.
         if (kMintVtables[i].symbol &&
             strcmp(kMintVtables[i].symbol, "??_7Loader@Engine@@6B@") == 0)
             vt = kMintVtables[i].table;
@@ -644,7 +512,6 @@ static bool ConstructParticleRng(const RtMintStorage& s) {
 static int g_constructed = 0;
 
 static void MintConstructedStatics() {
-    if (!(EnvOn("BANISHED_RT_MINT") || EnvOn("BANISHED_RT_MINT_CTOR"))) return;
     for (int i = 0; i < kStorageCount; ++i) {
         const RtMintStorage& s = kMintStorage[i];
         if (!s.ctorInit) continue;
@@ -697,7 +564,7 @@ static void MintStorage() {
         printf("[RtMint] seeded %d storage row(s) with a known constant value\n", seeded);
 }
 
-// Registration. OFF unless BANISHED_RT_MINT=1, and it must stay off until
+// Registration. It must stay off until
 // cutover: while Runtime-x64.dll is loaded, the DLL's own code reads the DLL's
 // own singletons, so handing OUR callers a second, empty set of singletons
 // splits the process's state in half. Wired now, with the DLL present, so the
@@ -724,27 +591,10 @@ static void MintStorage() {
 // EnterCriticalSection on a null self) lives entirely in the 38 STORAGE rows
 // and has nothing to do with any vtable or any BaseTypeInfo.
 //
-// So registration is now addressable one row at a time, through THREE doors,
-// in increasing order of commitment:
-//
-//   1. RtMintRegisterRow(symbol) -- the primitive. Both doors (name + address)
-//      for exactly one row, idempotent, returns false for an unknown symbol.
-//      Everything below goes through it, so there is no second copy of the
-//      "register both doors" rule to drift.
-//
-//   2. BANISHED_RT_MINT_ROWS=<csv> -- registers the named rows and nothing
-//      else. This is the measuring instrument: it lets a candidate row be run
-//      in a real boot WITHOUT the storage rows that make the global switch
-//      fatal. A token may be a full mangled symbol or a `pre*` prefix.
-//
-//   3. standalone/reg_mint_promoted.cpp -- rows PROMOTED, i.e. registered
-//      unconditionally on every run because they have been measured safe.
-//      A promoted row is a port by this project's own rule (not gated), and
-//      the census can see it because that file spells the symbol as a literal
-//      at a RegisterRuntimeExport call site.
-//
-// BANISHED_RT_MINT=1 keeps its old meaning exactly: all 197 rows. It remains a
-// hazard, not a route.
+// Registration is also addressable one row at a time, through
+// RtMintRegisterRow(symbol): both doors (name + address) for exactly one row,
+// idempotent, returns false for an unknown symbol.
+// standalone/cutover_manifest.cpp publishes its REQUIRED rows through it.
 // ---------------------------------------------------------------------------
 
 // One addressable row, whatever table it came from.
@@ -790,12 +640,9 @@ static bool FindMintRow(const char* symbol, RtMintRow* out) {
 // Register ONE row through both doors. `?_loader@` carries two interior
 // offsets that an exact-match address registry cannot cover, so they travel
 // with their row rather than living in a second loop that could be forgotten.
-// WAVE 11 FOLLOW-UP 5 (lane TINFO). Every row registered outside
-// reg_mint_promoted.cpp is ARMED FOR MEASUREMENT, and the readiness report
-// prints it for the same reason it prints a promoted one. The bookkeeping lives
-// HERE, at the one choke point both callers go through -- putting it in
-// RtMintRegisterRow missed the BANISHED_RT_MINT_ROWS loop, which calls this
-// function directly, so the first armed run printed no line at all.
+// WAVE 11 FOLLOW-UP 5 (lane TINFO). Which rows were registered individually,
+// for the readiness report. The bookkeeping lives HERE, at the one choke point
+// every caller goes through.
 static const char* g_armedRows[64];
 static int         g_armedRowCount = 0;
 
@@ -832,19 +679,12 @@ bool RtMintRegisterRow(const char* symbol) {
 
 // ---- promotion bookkeeping -------------------------------------------------
 //
-// A PROMOTED row is registered on every run, so the two doors are opened from
-// standalone/reg_mint_promoted.cpp with the symbol spelled as a LITERAL at the
-// RegisterRuntimeExport call site. That is deliberate and it is not
-// decoration: tools/runtime_census.py excludes this file (MINT_FILE) from the
-// ported side entirely, and its non-literal scan cannot see a name that
-// arrives as `v.symbol` from a table walk. A promotion registered from in here
-// would be live in the process and invisible to the census -- the exact shape
-// of reference_half_registered_port_reads_as_absent.md.
-//
-// So this function's job is only the CHECKING half: prove the symbol is really
-// a minted row, prove the VA the promotion file spells matches the generated
-// table, and record it so the readiness report can mark it. If the generator
-// ever drops or moves the row, the promotion dies loudly at boot instead of
+// A PROMOTED row opens its two doors from standalone/reg_mint_promoted.cpp with
+// the symbol spelled as a LITERAL at the RegisterRuntimeExport call site, so
+// tools/runtime_census.py can see it. This function is only the CHECKING half:
+// prove the symbol is really a minted row, prove the VA the promotion file
+// spells matches the generated table, and record it. If the generator ever
+// drops or moves the row, the promotion dies loudly at boot instead of
 // registering storage for something else.
 static const char* g_promoted[64];
 static int         g_promotedCount = 0;
@@ -887,54 +727,6 @@ void* RtMintRowStorage(const char* symbol) {
 unsigned long long RtMintRowDllVa(const char* symbol) {
     RtMintRow r;
     return FindMintRow(symbol, &r) ? r.dllVa : 0ull;
-}
-
-// BANISHED_RT_MINT_ROWS=<csv>. A token matches a row's symbol exactly, or as a
-// prefix when it ends in '*'. Every token MUST match at least one row: a typo
-// that silently registers nothing would look exactly like "the row is safe",
-// which is the failure mode this whole lane exists to avoid.
-static int RegisterMintedRowsFromEnv() {
-    const char* spec = getenv("BANISHED_RT_MINT_ROWS");
-    if (!spec || !*spec) return 0;
-    int rows = 0;
-    const char* p = spec;
-    while (*p) {
-        while (*p == ',' || *p == ' ') ++p;
-        const char* q = p;
-        while (*q && *q != ',') ++q;
-        int len = (int)(q - p);
-        while (len > 0 && p[len - 1] == ' ') --len;
-        if (len > 0) {
-            bool prefix = (p[len - 1] == '*');
-            int mlen = prefix ? len - 1 : len;
-            int hits = 0;
-            for (int k = 0; k < 3; ++k)
-                for (int i = 0; i < MintRowCount(k); ++i) {
-                    RtMintRow r;
-                    MintRowAt(k, i, &r);
-                    if (!r.symbol) continue;
-                    bool match = prefix ? (strncmp(r.symbol, p, (size_t)mlen) == 0)
-                                        : ((int)strlen(r.symbol) == mlen &&
-                                           strncmp(r.symbol, p, (size_t)mlen) == 0);
-                    if (!match) continue;
-                    RegisterOneMintRow(r);
-                    ++hits;
-                    ++rows;
-                    printf("[RtMint] ROW ON (env): %-8s %s\n", r.kind, r.symbol);
-                }
-            if (hits == 0) {
-                fprintf(stderr, "[RtMint] FATAL: BANISHED_RT_MINT_ROWS token \"%.*s\" "
-                                "matches no minted row. A token that matches nothing "
-                                "registers nothing, which reads exactly like a row "
-                                "that was tested and found safe.\n", len, p);
-                fflush(stderr);
-                abort();
-            }
-        }
-        p = q;
-    }
-    printf("[RtMint] BANISHED_RT_MINT_ROWS registered %d row(s) selectively\n", rows);
-    return rows;
 }
 
 static void RegisterMintedData() {
@@ -1010,12 +802,9 @@ static void RtMintReportTypeInfoFactories() {
     printf("[RtMint] BaseTypeInfo factories: %d rows x 2 slots = %d; %d PORTED, "
            "%d ABORT-TRAP, %d absent in retail too (no factory name)\n",
            kTypeInfoCount, kTypeInfoCount * 2, filled, trapped, nullName);
-    if (trapped)
-        printf("[RtMint] %d trapped factory slot(s) remain: EVERY ONE of them is "
-               "a cutover wall of the shape attempt 26 hit. Set "
-               "BANISHED_RT_MINT_FACTORYLIST=1 to print the roster.\n", trapped);
-
-    if (!EnvOn("BANISHED_RT_MINT_FACTORYLIST")) return;
+    if (!trapped) return;
+    printf("[RtMint] %d trapped factory slot(s) remain: EVERY ONE of them is a "
+           "cutover wall of the shape attempt 26 hit.\n", trapped);
     printf("[RtMint] --- unported minted BaseTypeInfo factories ---\n");
     for (int i = 0; i < kTypeInfoCount; ++i) {
         const RtMintTypeInfo& t = kMintTypeInfos[i];
@@ -1059,30 +848,19 @@ void RtDataMintInit() {
     //
     // Note the two [RtMint] log lines now appear in the opposite order: the
     // "registered N by name" line precedes "constructed N of the M statics".
-    if (EnvOn("BANISHED_RT_MINT")) RegisterMintedData();
-
-    // PROMOTED rows: registered on every run, with no env var, because they
-    // have been measured safe one at a time. See standalone/reg_mint_promoted.cpp
-    // for the per-row warrant. Skipped when the global switch already
-    // registered everything, so the counts do not double-report.
-    if (!EnvOn("BANISHED_RT_MINT")) RtMintRegisterPromotedRows();
-
-    // Selective, opt-in, for MEASURING a candidate row before promoting it.
-    // After the promoted rows, so a promoted row named here is a harmless
-    // no-op rather than a different binding.
-    RegisterMintedRowsFromEnv();
+    RegisterMintedData();
 
     // WAVE 25 lane MANIFEST -- the 46 RT_UNPROMOTABLE-tagged gap rows, whose
     // verdicts are ROUTE-SCOPED. 44 of them INVERT to REQUIRED once the DLL is
     // gone; two must still be held. standalone/cutover_manifest.cpp publishes
     // exactly the ones the generated manifest says to publish and NAMES the
-    // ones it holds, which the blanket BANISHED_RT_MINT switch cannot do.
+    // ones it holds.
     //
     // Placed HERE for the same reason RegisterMintedData() is placed above
     // MintConstructedStatics(): registration must precede construction, or the
     // Thread ctor inside ConstructLoader() caches a null for the life of the
     // process (see the banner above RegisterMintedData).
-    RtCutoverPublishManifest(EnvOn("BANISHED_RT_CUTOVER_MANIFEST"));
+    RtCutoverPublishManifest();
 
     MintConstructedStatics();   // after MintStorage: it memsets the block
 
@@ -1091,592 +869,9 @@ void RtDataMintInit() {
            kVtableCount, g_counts.slots, g_counts.filled, g_counts.unportedTraps,
            g_counts.pureTraps, kTypeInfoCount, kStorageCount, sizeof(kStorageBytes));
     printf("[RtMint] %d of %d vtables are COMPLETE (every non-purecall slot is "
-           "our port); registration is %s\n",
-           g_counts.vtablesComplete, kVtableCount,
-           EnvOn("BANISHED_RT_MINT") ? "ON (BANISHED_RT_MINT=1)"
-                                     : "off (set BANISHED_RT_MINT=1 to go live)");
+           "our port)\n", g_counts.vtablesComplete, kVtableCount);
 
     RtMintReportTypeInfoFactories();
-
-    // RegisterMintedData() has already run, above MintConstructedStatics().
-    if (EnvOn("BANISHED_RT_MINT_SHADOW")) RtDataMintShadowReport("init");
-}
-
-// ============================================================
-// The shadow check — BANISHED_RT_MINT_SHADOW=1
-//
-// What it can and cannot compare, stated before the code, because getting
-// this wrong is how an oracle reports 100% green while doing nothing:
-//
-//  * A minted vtable CANNOT be compared byte-for-byte against the DLL's. A
-//    filled slot holds OUR function's address, which is a different number
-//    from the DLL's by construction. Comparing the bytes would fail on every
-//    slot that actually represents progress and pass on every slot that does
-//    not. The comparison that means something is the MAPPING: for each slot,
-//    the DLL's table must hold the function the harvest recorded, and our
-//    table must hold either our registered port OF THAT SAME function or that
-//    slot's trap.
-//
-//  * A singleton's bytes are compared against NOTHING. All 28 storage symbols
-//    are BSS the DLL only ever writes at runtime; a byte comparison there is
-//    the "oracle that compares bytes neither side writes" failure, which
-//    reports either 100% green or 100% red and means neither. What IS worth
-//    recording is which of them the running DLL has actually populated by the
-//    time the report runs — ground truth that also dies at cutover.
-//
-//  * `BaseTypeInfo::next` is excluded, for the same reason with the opposite
-//    sign: the DLL's `next` is a real value built by ITS static-init order,
-//    ours is built by OURS, and they cannot agree. Every other field is a
-//    link-time constant and IS compared.
-//
-//  * `BaseTypeInfo::typeId` is compared only before Factory::Startup has run.
-//    Startup overwrites the DLL's sentinel with the real CRC and never touches
-//    ours, so at "exit" phase a difference is expected and is reported as
-//    information, not as a mismatch.
-//
-// EFFECTIVENESS CONTROL. The report prints, separately, how many comparisons
-// were made and how many of them could have failed. "239 slots checked" means
-// nothing on its own if 239 of them are traps compared against traps: the
-// number that measures the port is `minted from our ported code`, and the
-// report says so in as many words when it is zero.
-// ============================================================
-void RtDataMintShadowReport(const char* phase) {
-    // "exit" relaxes exactly two comparisons -- BaseTypeInfo::typeId and the
-    // constructed-static SHAPE -- because by then the DLL's objects have been
-    // USED and ours have not.  Both are documented at their sites.
-    const bool atExit = phase && !strcmp(phase, "exit");
-    (void)atExit;
-    // Opt-in at both call sites (RtDataMintInit and the exit dump in
-    // standalone/main.cpp), so an ordinary run is byte-identical to one built
-    // without this file.
-    if (!EnvOn("BANISHED_RT_MINT_SHADOW")) return;
-    if (!g_minted) {
-        printf("[RtMintShadow] nothing minted yet (RtDataMintInit has not run)\n");
-        return;
-    }
-    const ModuleInfo* mi = GetModuleInfo(Module::Runtime);
-    const bool haveDll = mi && mi->handle;
-
-    printf("\n[RtMintShadow] ==== phase=%s  DLL=%s ====\n", phase,
-           haveDll ? "present (oracle live)" : "ABSENT (post-cutover; oracle gone)");
-    if (!haveDll) {
-        printf("[RtMintShadow] The DLL is not loaded, so there is nothing to compare\n"
-               "[RtMintShadow] against. This is the expected state AFTER cutover and\n"
-               "[RtMintShadow] the reason this check had to be run BEFORE it.\n");
-        return;
-    }
-
-    int ground = 0, groundBad = 0, byAddrRows = 0;      // harvest vs the DLL's live table
-    int ours = 0, oursBad = 0;          // our slot vs our registered port
-    int traps = 0, sizeSuspect = 0, absent = 0;
-
-    for (int vi = 0; vi < kVtableCount; ++vi) {
-        const RtMintVtable& v = kMintVtables[vi];
-        char lbuf[64];
-        const char* label = SymLabel(v.symbol, v.dllVa, lbuf, sizeof(lbuf));
-        void** dll = (void**)DllRowBase(v.symbol, v.dllVa);
-        if (!dll) {
-            ++absent;
-            printf("[RtMintShadow] MISSING: %s is not in the DLL's export directory\n",
-                   label);
-            continue;
-        }
-        // The DLL's exported table must sit where the harvest said it did. If
-        // it does not, every slot VA below is being read from the wrong place
-        // and the rest of this vtable's result is meaningless.
-        //
-        // Only askable of a row that HAS an export. For an address-keyed row
-        // the two sides are the same computation, so the comparison would pass
-        // without doing any work -- counted, not performed.
-        if (!v.symbol) {
-            ++byAddrRows;
-        } else if ((void*)dll != DllAddr(v.dllVa)) {
-            ++groundBad;
-            printf("[RtMintShadow] MISMATCH %s: exported at %p, harvest says %p\n",
-                   label, (void*)dll, DllAddr(v.dllVa));
-            continue;
-        }
-        for (int i = 0; i < v.slotCount; ++i) {
-            const RtMintVSlot& s = v.slots[i];
-            ++ground;
-            void* expect = DllAddr(s.dllVa);
-            if (dll[i] != expect) {
-                ++groundBad;
-                printf("[RtMintShadow] MISMATCH %s slot %d: DLL holds %p, harvest "
-                       "recorded %p (%s)\n", label, i, dll[i], expect,
-                       s.dllName ? s.dllName : "unnamed");
-            }
-            void* mine = v.table[i];
-            if (mine == (void*)v.traps[i]) {
-                ++traps;
-                continue;
-            }
-            ++ours;
-            void* port = OurPort(s);
-            if (mine != port || mine == dll[i]) {
-                ++oursBad;
-                printf("[RtMintShadow] MISMATCH %s slot %d: minted %p, port registry "
-                       "says %p%s\n", label, i, mine, port,
-                       mine == dll[i] ? " — AND IT IS THE DLL'S OWN ADDRESS, which a "
-                                        "minted slot must never hold" : "");
-            }
-        }
-        // Slot COUNT.  A count that is too short mints a table shorter than the
-        // class's real vtable, and the missing slots dispatch into whatever
-        // follows in .rdata.  The generator proved each count one of two ways,
-        // and the live re-check MUST match the proof it is re-checking:
-        //
-        //   adjacency  - the table ends where the next exported vtable begins.
-        //                Re-check the ADDRESS: &dll[slotCount] must be exactly
-        //                that neighbour's address.  (Until Wave 9 this arm ran
-        //                the non-adjacency test below instead, which asks
-        //                whether the qword past the end is a DLL pointer.  For
-        //                an adjacency-proved table that qword IS the neighbour's
-        //                slot 0, so the test was true BY CONSTRUCTION and fired
-        //                on all 23 such vtables - a permanent red FAIL over zero
-        //                defects.  All 23 were confirmed correct offline:
-        //                gap-to-next-export == our minted count, every one.)
-        //   otherwise  - nothing exported follows, so fall back to asking whether
-        //                the qword past the end even looks like a DLL pointer.
-        //
-        // gap > slotCount is deliberately NOT a defect: .rdata padding between
-        // two vtables is legal, so a larger gap is inconclusive rather than
-        // short.  gap < slotCount IS one - we minted past the neighbour.
-        const char* adj = (v.sizeProof && !strncmp(v.sizeProof, "adjacent-export:", 16))
-                              ? v.sizeProof + 16 : nullptr;
-        if (adj) {
-            void* nextVt = DllExport(adj);
-            void* end    = (void*)&dll[v.slotCount];
-            if (!nextVt) {
-                ++sizeSuspect;
-                printf("[RtMintShadow] SIZE SUSPECT %s: size proof names %s, which is "
-                       "NOT exported - the proof cannot be re-checked\n",
-                       label, adj);
-            } else if (end > nextVt) {
-                ++sizeSuspect;
-                printf("[RtMintShadow] SIZE SUSPECT %s: minted %d slots, which runs %lld "
-                       "qwords PAST %s - the table is too long\n",
-                       label, v.slotCount,
-                       (long long)(((char*)end - (char*)nextVt) / 8), adj);
-            }
-        } else if (v.sizeProof && !strncmp(v.sizeProof, "ctor-stamped-neighbour:", 23)) {
-            // Wave 19 lane MINT. This row is bounded by ANOTHER TABLE whose own
-            // constructor names its address, not by the next export. So the
-            // qword after the last slot IS a DLL pointer BY CONSTRUCTION - it is
-            // the neighbour's slot 0 - and the tail probe below would flag every
-            // such row forever. A screen that is permanently red is a screen
-            // nobody reads, which is worse than the defect it was added for.
-            //
-            // The check INVERTS rather than being suppressed: if the tail is NOT
-            // a DLL pointer then the neighbour this bound rests on is not there,
-            // and the extent is the thing to doubt.
-            void* tail = dll[v.slotCount];
-            if (!DllContains(tail)) {
-                ++sizeSuspect;
-                printf("[RtMintShadow] SIZE SUSPECT %s: minted %d slots bounded by a "
-                       "ctor-stamped neighbour, but the qword after the last slot "
-                       "(%p) is NOT a DLL pointer - the neighbouring table the bound "
-                       "rests on is not there [%s]\n", label, v.slotCount, tail,
-                       v.sizeProof);
-            }
-        } else {
-            void* tail = dll[v.slotCount];
-            if (DllContains(tail)) {
-                ++sizeSuspect;
-                printf("[RtMintShadow] SIZE SUSPECT %s: minted %d slots but the qword "
-                       "after the last one (%p) is a DLL pointer - the real table may "
-                       "be longer [%s]\n", v.symbol, v.slotCount, tail,
-                       v.sizeProof ? v.sizeProof : "no size proof");
-            }
-        }
-    }
-
-    // ---- BaseTypeInfo -----------------------------------------------------
-    int tiFields = 0, tiBad = 0, tiIdInfo = 0;
-    for (int i = 0; i < kTypeInfoCount; ++i) {
-        const RtMintTypeInfo& t = kMintTypeInfos[i];
-        RtObject::BaseTypeInfo* dll = (RtObject::BaseTypeInfo*)DllExport(t.symbol);
-        RtObject::BaseTypeInfo* mine = t.storage;
-        if (!dll) {
-            ++absent;
-            printf("[RtMintShadow] MISSING: %s is not exported\n", t.symbol);
-            continue;
-        }
-        struct { const char* what; const char* a; const char* b; } str[] = {
-            { "name",          mine->name,          dll->name },
-            { "parentName",    mine->parentName,    dll->parentName },
-            { "fileExtension", mine->fileExtension, dll->fileExtension },
-        };
-        for (auto& f : str) {
-            ++tiFields;
-            bool same = (f.a == nullptr && f.b == nullptr) ||
-                        (f.a && f.b && strcmp(f.a, f.b) == 0);
-            if (!same) {
-                ++tiBad;
-                printf("[RtMintShadow] MISMATCH %s.%s: minted \"%s\", DLL \"%s\"\n",
-                       t.symbol, f.what, f.a ? f.a : "(null)", f.b ? f.b : "(null)");
-            }
-        }
-        // The two factory pointers: ground truth only. Ours is our port (or a
-        // trap) and so is a different address on purpose.
-        ++tiFields;
-        if (t.factoryVa && dll->factoryFn != DllAddr(t.factoryVa)) {
-            ++tiBad;
-            printf("[RtMintShadow] MISMATCH %s.factoryFn: DLL holds %p, harvest "
-                   "recorded %p (%s)\n", t.symbol, dll->factoryFn,
-                   DllAddr(t.factoryVa), t.factoryName ? t.factoryName : "?");
-        }
-        ++tiFields;
-        if (t.inPlaceVa && dll->inPlaceFactoryFn != DllAddr(t.inPlaceVa)) {
-            ++tiBad;
-            printf("[RtMintShadow] MISMATCH %s.inPlaceFactoryFn: DLL holds %p, "
-                   "harvest recorded %p (%s)\n", t.symbol, dll->inPlaceFactoryFn,
-                   DllAddr(t.inPlaceVa), t.inPlaceName ? t.inPlaceName : "?");
-        }
-        // ---- typeId: now a REAL comparison, not an INFO line ------------
-        //
-        // Wave 10 lane MINTSEL. This used to be an unconditional INFO line,
-        // because the mint stamped the ctor sentinel 0xFFFFFFFF and so could
-        // never agree with the DLL. MintTypeInfos() now stamps
-        // RtObject::TypeIdFromName(name) -- Factory::Startup's own hash -- so
-        // the two SHOULD be equal and a difference is a defect, not a note.
-        //
-        // The one difference that is genuinely not a defect: the DLL's own
-        // node still holds 0xFFFFFFFF because ITS Factory::Startup has not run
-        // yet (this report can be asked for at "init", inside RuntimePortInit,
-        // long before Engine::Startup step 6). That is a fact about WHEN we
-        // looked, not about the value, so it is counted separately and named
-        // as such. Folding it into the pass count would let a genuinely wrong
-        // id hide behind an early report.
-        ++tiFields;
-        if (dll->typeId == 0xFFFFFFFFu) {
-            ++tiIdInfo;
-            printf("[RtMintShadow] INFO %s.typeId: minted 0x%08x, DLL still holds "
-                   "the ctor sentinel at phase=%s (its Factory::Startup has not "
-                   "run) -- NOT compared\n", t.symbol, mine->typeId, phase);
-        } else if (mine->typeId != dll->typeId) {
-            ++tiBad;
-            printf("[RtMintShadow] MISMATCH %s.typeId: minted 0x%08x, DLL 0x%08x "
-                   "(name \"%s\")\n", t.symbol, mine->typeId, dll->typeId,
-                   t.name ? t.name : "(null)");
-        }
-        // next: NOT compared. See the header comment.
-    }
-
-    // ---- storage ----------------------------------------------------------
-    int live = 0, dead = 0, ourNonZero = 0, shapeChecked = 0, shapeBad = 0, shapeInfo = 0;
-    for (int i = 0; i < kStorageCount; ++i) {
-        const RtMintStorage& s = kMintStorage[i];
-        char sbuf[64];
-        const char* slabel = SymLabel(s.symbol, s.dllVa, sbuf, sizeof(sbuf));
-        void** dll = (void**)DllRowBase(s.symbol, s.dllVa);
-        if (!dll) { ++absent; printf("[RtMintShadow] MISSING: %s is not exported\n", slabel); continue; }
-        if (!s.symbol) {
-            ++byAddrRows;
-        } else if ((void*)dll != DllAddr(s.dllVa)) {
-            printf("[RtMintShadow] MISMATCH %s: exported at %p, harvest says %p\n",
-                   slabel, (void*)dll, DllAddr(s.dllVa));
-        }
-        // WHERE the first non-zero byte is, not just whether there is one.
-        // "DLL=WRITTEN" on a 2500-byte object says nothing about WHAT was
-        // written: a live MT19937 state and one stray byte 2000 bytes in look
-        // identical. Lane C2's claim that Particle::_rng is never seeded was
-        // exactly the kind of statement that boolean cannot check -- and it was
-        // this print, added after the boolean raised the question, that showed
-        // the first non-zero byte at +0x04 with index still 0 and refuted it.
-        // Reported for anything bigger than a pointer.
-        bool dllLive = false;
-        unsigned dllFirst = 0;
-        for (unsigned b = 0; b < s.size; ++b)
-            if (((unsigned char*)dll)[b]) { dllLive = true; dllFirst = b; break; }
-        bool mineLive = false;
-        for (unsigned b = 0; b < s.size; ++b)
-            if (((unsigned char*)s.storage)[b]) { mineLive = true; break; }
-        if (dllLive) ++live; else ++dead;
-        if (mineLive) ++ourNonZero;
-        if (s.size > 8 && dllLive) {
-            const unsigned char* d = (const unsigned char*)dll;
-            printf("[RtMintShadow]   FIRST-NONZERO %s: DLL byte +0x%x = %02x %02x %02x %02x "
-                   "%02x %02x %02x %02x\n", slabel, dllFirst,
-                   d[dllFirst], dllFirst + 1 < s.size ? d[dllFirst + 1] : 0,
-                   dllFirst + 2 < s.size ? d[dllFirst + 2] : 0,
-                   dllFirst + 3 < s.size ? d[dllFirst + 3] : 0,
-                   dllFirst + 4 < s.size ? d[dllFirst + 4] : 0,
-                   dllFirst + 5 < s.size ? d[dllFirst + 5] : 0,
-                   dllFirst + 6 < s.size ? d[dllFirst + 6] : 0,
-                   dllFirst + 7 < s.size ? d[dllFirst + 7] : 0);
-        }
-        printf("[RtMintShadow] storage %-52s %2u bytes  DLL=%s  minted=%s  ctor=%s  (%s)\n",
-               slabel, s.size, dllLive ? "WRITTEN" : "still zero",
-               mineLive ? "written" : "zero",
-               s.ctorInit ? s.ctorInit : "none (plain BSS)", s.note);
-
-        // For a CONSTRUCTED static there IS something to compare, and it is
-        // not the values: our vtable pointer, our HANDLEs and the DLL's are
-        // different numbers by construction. What must agree is the SHAPE --
-        // which qwords the constructor leaves non-null. That is what catches
-        // the failure that matters (our ctor not creating the handles, or
-        // leaving the vtable null), and it is honest about being weaker than
-        // a value comparison. Only meaningful once the ctors have actually
-        // run, i.e. under BANISHED_RT_MINT_CTOR / BANISHED_RT_MINT.
-        if (s.ctorInit && g_constructed > 0 && s.size >= 8) {
-            unsigned words = s.size / 8, differ = 0;
-            for (unsigned k = 0; k < words; ++k) {
-                bool a = ((unsigned long long*)dll)[k] != 0;
-                bool b = ((unsigned long long*)s.storage)[k] != 0;
-                if (a != b) {
-                    ++differ;
-                    // At EXIT this is expected and is INFORMATION, not a
-                    // mismatch -- the same policy this file already applies to
-                    // BaseTypeInfo::typeId, and for the same structural reason.
-                    // The DLL's object is the one in SERVICE; ours is inert by
-                    // design while the DLL is present, so a field the live
-                    // object acquires during the run has nothing to acquire it
-                    // on our side.  Loader::_loop (+0x30) is exactly that: the
-                    // UpdateLoop the loader is loading FOR, null until someone
-                    // asks it to load one.  Comparing a USED object against an
-                    // UNUSED one is the "must not compare what neither side
-                    // writes" trap wearing its other face -- here ONE side
-                    // writes, by design.
-                    //
-                    // At INIT it stays a hard mismatch: right after the ctors
-                    // run, both objects have had exactly one thing done to
-                    // them, and that IS comparable.  This run had 0 SHAPE
-                    // MISMATCH at init and 1 at exit -- which is itself the
-                    // evidence that the field is written after construction.
-                    printf("[RtMintShadow]   %s %s +0x%02x: DLL %s, minted %s\n",
-                           atExit ? "SHAPE-INFO" : "SHAPE", slabel, k * 8,
-                           a ? "set" : "null", b ? "set" : "null");
-                }
-            }
-            ++shapeChecked;
-            if (differ && !atExit) ++shapeBad;
-            if (differ && atExit) ++shapeInfo;
-        }
-    }
-
-    int ctorOwed = 0;
-    for (int i = 0; i < kStorageCount; ++i)
-        if (kMintStorage[i].ctorInit) ++ctorOwed;
-
-    // ---- the summary, with its effectiveness control ----------------------
-    // ---- PER-VTABLE READINESS (Wave 10 lane UIDATA) -----------------------
-    //
-    // The aggregate "195 of 379 non-purecall slots carry our own code" answers
-    // a wave-wide question. It cannot answer the question a lane actually asks,
-    // which is about ONE row: "is ??_7Element@UI@@6B@ safe to register today?"
-    // Registration is per-symbol in principle (RegisterMintedData walks rows),
-    // so the blocker is per-row too, and an aggregate hides which rows are
-    // clean. This loop names them.
-    //
-    // It is also the LIVE answer to a question a source grep gets wrong. Lane
-    // UIDATA first counted these four UI vtables' trap slots by grepping the
-    // tree for `RegisterRuntimeExport("<slot name>")`, which is the literal-
-    // grep screen this project has been burned by repeatedly
-    // (reference_literal_grep_blind_to_variables.md): a registration whose
-    // name arrives through a variable is invisible to it. This loop asks the
-    // PORT REGISTRY itself, through the same OurPort() the mint fills with, so
-    // it sees every door. The two agreed on all four UI rows — which is a
-    // result, not an assumption, and is only a result because both were run.
-    printf("\n[RtMintShadow] ---- per-vtable readiness ----\n");
-    printf("[RtMintShadow] READY = every non-purecall slot is our port, so registering\n"
-           "[RtMintShadow] this row hands callers a table with no abort-trap in it.\n");
-    for (int vi = 0; vi < kVtableCount; ++vi) {
-        const RtMintVtable& v = kMintVtables[vi];
-        char rbuf[64];
-        int rPort = 0, rTrap = 0, rPure = 0;
-        for (int i = 0; i < v.slotCount; ++i) {
-            if (v.slots[i].kind == RT_MINT_PURECALL) { ++rPure; continue; }
-            if (OurPort(v.slots[i])) ++rPort; else ++rTrap;
-        }
-        printf("[RtMintShadow]   %-8s %-52s slots=%2d ported=%2d TRAP=%2d purecall=%2d%s\n",
-               rTrap ? "BLOCKED" : "READY",
-               SymLabel(v.symbol, v.dllVa, rbuf, sizeof(rbuf)),
-               v.slotCount, rPort, rTrap, rPure,
-               RtMintRowIsPromoted(v.symbol) ? "  [PROMOTED]"
-                   : RtMintRowIsArmed(v.symbol) ? "  [ARMED for measurement]" : "");
-        // NAME the trapped slots. "BLOCKED, 1 TRAP" is a number; the lane that
-        // has to expire the blocker needs the symbol. Deliberately from the
-        // LIVE registry (OurPort) and the generated table, never from a source
-        // grep -- a slot registered under a name held in a variable is
-        // invisible to a grep and would be reported as unported work that is
-        // already done.
-        for (int i = 0; rTrap && i < v.slotCount; ++i) {
-            if (v.slots[i].kind == RT_MINT_PURECALL || OurPort(v.slots[i])) continue;
-            printf("[RtMintShadow]              TRAP slot %2d  %s\n", i,
-                   v.slots[i].dllName ? v.slots[i].dllName : "(unexported; known by address only)");
-            if (!v.slots[i].dllName)
-                printf("[RtMintShadow]                            DLL 0x%llx\n",
-                       v.slots[i].dllVa);
-        }
-    }
-
-    // ---- PER-TYPEINFO READINESS (Wave 10 lane MINTSEL) --------------------
-    //
-    // A `?_typeInfo@` row has no slots, so the vtable loop above says nothing
-    // about it, and lane UIDATA's verdict on the nine UI ones ("blocked by a
-    // silent wrong value, and nothing short of cutover fixes it") had no
-    // instrument behind it -- it was read off the INFO lines that the mint's
-    // 0xFFFFFFFF sentinel produced by construction.
-    //
-    // The criterion here is stated rather than assumed, because it is narrow:
-    //
-    //   READY-id  every consumer in this tree reads the FIRST DWORD and
-    //             nothing else, and that dword is now verified EQUAL to the
-    //             loaded DLL's. `idcmp` says whether the comparison was
-    //             actually made this run (the DLL's node still holds the ctor
-    //             sentinel before its own Factory::Startup, and an
-    //             un-run comparison must never read as a pass).
-    //
-    //   fac=      the two factory pointers. Ours is a port or a TRAP; the DLL
-    //             has its own. These are reachable only through a Factory tree
-    //             our minted node is not in, so a trap here does not block a
-    //             dword reader -- but it IS the difference between "safe for
-    //             the consumers we have" and "safe for any consumer", and
-    //             collapsing the two into one word is how a row gets promoted
-    //             for a use nobody checked. It is printed, never hidden.
-    //
-    // strs= counts name/parentName/fileExtension disagreements with the DLL.
-    printf("\n[RtMintShadow] ---- per-typeinfo readiness ----\n");
-    printf("[RtMintShadow] READY = every string field and the typeId AGREE with the\n"
-           "[RtMintShadow] loaded DLL this run. fac=trap is reported, not hidden: it\n"
-           "[RtMintShadow] is unreachable for a dword reader but not for a tree walk.\n");
-    int tiReady = 0, tiBlocked = 0;
-    int tiPtrFields = 0, tiPtrDiff = 0, tiPtrDiffPromoted = 0;
-    for (int i = 0; i < kTypeInfoCount; ++i) {
-        const RtMintTypeInfo& t = kMintTypeInfos[i];
-        RtObject::BaseTypeInfo* dll  = (RtObject::BaseTypeInfo*)DllExport(t.symbol);
-        RtObject::BaseTypeInfo* mine = t.storage;
-        int    strBad = 0;
-        int    ptrDiff = 0;                     // lane TIDENT: identity, not content
-        bool   idCompared = false, idOk = false;
-        if (dll) {
-            const char* a[3] = { mine->name, mine->parentName, mine->fileExtension };
-            const char* b[3] = { dll->name,  dll->parentName,  dll->fileExtension };
-            for (int k = 0; k < 3; ++k) {
-                bool same = (a[k] == nullptr && b[k] == nullptr) ||
-                            (a[k] && b[k] && strcmp(a[k], b[k]) == 0);
-                if (!same) ++strBad;
-                // SCORED SEPARATELY from strBad, and never folded into it or
-                // into `ready`. strs= answers "does the string SAY the same
-                // thing"; ptr= answers "is it the SAME OBJECT". A screen that
-                // only ever computed strcmp is structurally incapable of
-                // expressing the second answer, whatever value it prints.
-                if (a[k] != b[k]) ++ptrDiff;
-            }
-            tiPtrFields += 3;
-            tiPtrDiff   += ptrDiff;
-            if (ptrDiff && RtMintRowIsPromoted(t.symbol)) ++tiPtrDiffPromoted;
-            if (dll->typeId != 0xFFFFFFFFu) {
-                idCompared = true;
-                idOk = (mine->typeId == dll->typeId);
-            }
-        }
-        int facTrap = 0;
-        if (mine->factoryFn        == (void*)t.factoryTrap) ++facTrap;
-        if (mine->inPlaceFactoryFn == (void*)t.inPlaceTrap) ++facTrap;
-        const bool ready = dll && strBad == 0 && idCompared && idOk;
-        if (ready) ++tiReady; else ++tiBlocked;
-        // Only the UI rows and anything not READY are printed: 104 rows of
-        // green would bury the four lines a reader needs.
-        const bool isUi = t.symbol && strstr(t.symbol, "@UI@@") != nullptr;
-        // ...and any row PROMOTED or ARMED for measurement this run: a
-        // candidate whose whole purpose is to be read on this screen printed no
-        // line at all the moment it went READY (WAVE 11 follow-up 5, lane TINFO).
-        if (!ready || isUi || RtMintRowIsPromoted(t.symbol) || RtMintRowIsArmed(t.symbol))
-            printf("[RtMintShadow]   %-8s %-58s id=0x%08x idcmp=%-3s strs=%d ptr=%d "
-                   "fac=%s%s\n",
-                   ready ? "READY" : "BLOCKED",
-                   t.symbol ? t.symbol : "(unexported)",
-                   mine->typeId, idCompared ? "yes" : "NO", strBad, ptrDiff,
-                   facTrap == 0 ? "ported" : facTrap == 1 ? "1trap" : "2traps",
-                   RtMintRowIsPromoted(t.symbol) ? "  [PROMOTED]"
-                       : RtMintRowIsArmed(t.symbol) ? "  [ARMED for measurement]" : "");
-    }
-    printf("[RtMintShadow]   typeinfo rows: %d READY, %d BLOCKED (of %d; only the "
-           "UI rows and the BLOCKED ones are listed)\n", tiReady, tiBlocked,
-           kTypeInfoCount);
-
-    // ---- ptr=  the POINTER-IDENTITY screen (WAVE 10C lane TIDENT) ---------
-    //
-    // WHY THIS EXISTS. Until this wave the only string screen was `strs=`, a
-    // strcmp. Lane DLGV declined to promote ?_typeInfo@DialogController@ on the
-    // ground that promoting it makes ?TypeName@DialogController@ hand out OUR
-    // node's `name` POINTER instead of the DLL's -- and observed that the
-    // instrument which had green-lit eleven already-live rows compares CONTENT,
-    // so it could not have seen that failure mode had it mattered. It could
-    // not: `strs=0` is a true statement about the characters and says nothing
-    // whatever about identity. That is the shape of
-    // reference_diagnostic_field_cannot_express_the_answer.md, so the field is
-    // now separate, computed separately, and never folded into `ready`.
-    //
-    // WHAT IT REPORTS, AND WHY A NON-ZERO ptr= IS NOT A DEFECT. `bti->name` is
-    // a string literal in our own image, so ptr= is 3-of-3 or 2-of-3 for
-    // essentially every row and always will be. It is reported because the
-    // question "does anything compare these pointers?" is answerable, was
-    // answered, and the answer belongs beside the number:
-    // docs/runtime_port/WAVE10C_LANE_TIDENT.md is a census of every consumer of
-    // BaseTypeInfo::name in BOTH shipped binaries, and every one is a CONTENT
-    // consumer. In Runtime-x64.dll the only static readers of any node's +0x08
-    // are the 103 ?TypeName@ accessors themselves, none of which is CALLED
-    // anywhere in the DLL; Factory::Startup CRCs the string, and
-    // Factory::GetTypeName has no caller inside the DLL and is not imported by
-    // the exe at all. In Application-x64.exe all 525 references to the 42
-    // imported ?_typeInfo@ slots read the dword at +0x00 (the typeId) and NOT
-    // ONE reads +0x08.
-    //
-    // So ptr= is a standing statement of a known, measured, benign difference,
-    // in a column that CAN say otherwise -- not a pass hiding behind a metric
-    // that could only ever have said one thing.
-    printf("[RtMintShadow]   ptr= (identity, scored SEPARATELY from strs=): "
-           "%d of %d string fields hold a DIFFERENT POINTER than the DLL's node; "
-           "%d PROMOTED row(s) hand out at least one\n",
-           tiPtrDiff, tiPtrFields, tiPtrDiffPromoted);
-    printf("[RtMintShadow]   ^ EXPECTED, and measured to be harmless: every "
-           "consumer of BaseTypeInfo::name in both shipped binaries compares "
-           "CONTENT (see WAVE10C_LANE_TIDENT.md). Control: "
-           "BANISHED_RT_MINT_PTRALIAS=<n> must drive this count DOWN by n.\n");
-
-    printf("\n[RtMintShadow] ---- summary (phase=%s) ----\n", phase);
-    printf("[RtMintShadow] vtables            : %d, %d slots\n", kVtableCount, g_counts.slots);
-    printf("[RtMintShadow] ground truth       : %d slot comparisons vs the live DLL, "
-           "%d MISMATCH\n", ground, groundBad);
-    printf("[RtMintShadow] minted from OUR    : %d slots, %d MISMATCH   <-- the only "
-           "number that measures the port\n", ours, oursBad);
-    printf("[RtMintShadow] minted as traps    : %d (%d purecall by design, %d not yet "
-           "ported)\n", traps, g_counts.pureTraps, g_counts.unportedTraps);
-    printf("[RtMintShadow] complete vtables   : %d of %d\n",
-           g_counts.vtablesComplete, kVtableCount);
-    printf("[RtMintShadow] slot-count suspects: %d\n", sizeSuspect);
-    printf("[RtMintShadow] BaseTypeInfo       : %d field comparisons, %d MISMATCH, "
-           "%d typeId not-yet-comparable (DLL still at the ctor sentinel); "
-           "next: NOT compared, built from our init order\n",
-           tiFields, tiBad, tiIdInfo);
-    printf("[RtMintShadow] storage            : %d symbols, %d written by the DLL, "
-           "%d still zero, %d of ours written (contents NOT compared: BSS)\n",
-           kStorageCount, live, dead, ourNonZero);
-    printf("[RtMintShadow] constructed statics: %d of %d built (shape compared on %d, "
-           "%d SHAPE MISMATCH, %d SHAPE-INFO)   [BANISHED_RT_MINT_CTOR=1 to build "
-           "them]\n", g_constructed, ctorOwed, shapeChecked, shapeBad, shapeInfo);
-    printf("[RtMintShadow] symbols absent from the DLL: %d\n", absent);
-    printf("[RtMintShadow] carried by ADDRESS   : %d row(s) with no exported name -- "
-           "the export-location cross-check does not apply to them and was not "
-           "counted as a pass\n", byAddrRows);
-
-    if (ours == 0) {
-        printf("[RtMintShadow] *** EFFECTIVENESS: ZERO slots were minted from our own\n"
-               "[RtMintShadow] *** ported code. Every green line above is the harvest\n"
-               "[RtMintShadow] *** agreeing with the DLL it was read from. This run\n"
-               "[RtMintShadow] *** proves the ground truth, NOT the port.\n");
-    } else {
-        printf("[RtMintShadow] effectiveness: %d of %d non-purecall slots carry our own\n"
-               "[RtMintShadow] code; the remaining %d are lane B's worklist.\n",
-               ours, ours + g_counts.unportedTraps, g_counts.unportedTraps);
-    }
-    const int bad = groundBad + oursBad + tiBad + sizeSuspect + absent + shapeBad;
-    printf("[RtMintShadow] ==== %s: %d problem(s) ====\n\n",
-           bad ? "FAIL" : "clean", bad);
-    fflush(stdout);
 }
 
 // ============================================================================

@@ -3,6 +3,14 @@
 //
 // MINTED DATA ROWS THAT ARE LIVE ON EVERY RUN.
 // ============================================================================
+// A3-HOLD (ENDGAME A.3/A.4, 2026-09-13): the CODE below no longer reads any
+// BANISHED_RT_* variable, but the per-row PROSE still quotes the flags and the
+// diff oracle each promotion was measured with. That prose is the warrant -- the
+// evidence record for the row -- and the RT_UNPROMOTABLE: tags in it are parsed
+// by tools/cutover_manifest.py, which gates the build. Rewriting the warrants
+// would destroy the provenance without changing any behaviour, so they stay.
+// RtMintRegisterPromotedRows() is itself no longer called (see rt_data_mint.h).
+//
 //
 // standalone/rt_data_mint.cpp mints 197 exported DATA symbols — 55 `??_7`
 // vtables, 104 `?_typeInfo@` BaseTypeInfo and 38 `.data` statics — and until
@@ -218,14 +226,6 @@ static bool PromoteVtableGuarded(const char* symbol, unsigned long long va, int*
 }
 
 int RtMintRegisterPromotedRows() {
-    // Kill switch, for the A/B this file's warrants were written from and for
-    // anyone bisecting a UI regression onto it. DEFAULT-ON: these rows are
-    // ports, and a port that only runs when asked is not one.
-    const char* off = getenv("BANISHED_RT_MINT_PROMOTED");
-    if (off && strcmp(off, "0") == 0) {
-        printf("[RtMint] BANISHED_RT_MINT_PROMOTED=0 -- no minted row registered\n");
-        return 0;
-    }
     int n = 0;
     void* st = nullptr;
 
@@ -1180,15 +1180,7 @@ int RtMintRegisterPromotedRows() {
     // oracle is runtime/src/io/file_stream_slots_probe.cpp and it is a separate
     // tier. This promotion says our table is installed and dispatched; that
     // probe says the bodies agree with retail's.
-    {
-        const char* off = getenv("BANISHED_RT_PROMOTE_BFS");
-        if (off && strcmp(off, "0") == 0) {
-            printf("[RtMint] BANISHED_RT_PROMOTE_BFS=0 -- "
-                   "??_7BinaryFileStream@IO@@6B@ left on the DLL (A/B control)\n");
-        } else {
-            PromoteVtableGuarded("??_7BinaryFileStream@IO@@6B@", 0x1801554d0ull, &n);
-        }
-    }
+    PromoteVtableGuarded("??_7BinaryFileStream@IO@@6B@", 0x1801554d0ull, &n);
 
     // ========================================================================
     // WAVE 29 LANE IOLANE — ??_7PackageFile@IO@@6B@
@@ -1299,15 +1291,7 @@ int RtMintRegisterPromotedRows() {
     // the other 232 bytes whole.
     //
     // A/B control: `BANISHED_RT_PROMOTE_PKGFILE=0`.
-    {
-        const char* off = getenv("BANISHED_RT_PROMOTE_PKGFILE");
-        if (off && strcmp(off, "0") == 0) {
-            printf("[RtMint] BANISHED_RT_PROMOTE_PKGFILE=0 -- "
-                   "??_7PackageFile@IO@@6B@ left on the DLL (A/B control)\n");
-        } else {
             PromoteVtableGuarded("??_7PackageFile@IO@@6B@", 0x180155700ull, &n);
-        }
-    }
 
     // ---- ??_7TextFileStream@IO@@6B@ — COMPLETE, and NOT PROMOTED ----------
     //
@@ -1479,12 +1463,8 @@ int RtMintRegisterPromotedRows() {
     //   RtMintVtableTrapCount() self-refusal to the five vtables promoted in
     //   Waves 19-20, which have the identical exposure and no guard.
     {
-        const char* off = getenv("BANISHED_RT_PROMOTE_MATINST");
         const int traps = RtMintVtableTrapCount("??_7MaterialInstance@Graphics@@6B@");
-        if (off && strcmp(off, "0") == 0) {
-            printf("[RtMint] BANISHED_RT_PROMOTE_MATINST=0 -- "
-                   "??_7MaterialInstance@Graphics@@6B@ left on the DLL (A/B control)\n");
-        } else if (traps != 0) {
+        if (traps != 0) {
             // traps < 0 means "not a minted vtable row", which is a DIFFERENT
             // failure from "has traps" and must not read as a green light.
             fprintf(stderr,
@@ -1494,9 +1474,7 @@ int RtMintRegisterPromotedRows() {
                     "The row stays on the DLL.\n",
                     traps,
                     traps < 0 ? "The symbol is not a minted VTABLE row at all."
-                              : "A wave kill switch (BANISHED_RT_GRAPHICS / "
-                                "BANISHED_RT_GFXTI / BANISHED_RT_GFXMAT) has "
-                                "suppressed at least one slot's registration.");
+                              : "At least one slot has no registered port.");
             fflush(stderr);
         } else {
             st = RtMintPromotionStorage("??_7MaterialInstance@Graphics@@6B@", 0x1801545e0ull);
@@ -1678,15 +1656,7 @@ int RtMintRegisterPromotedRows() {
     // is a separate tier and is not asserted here.
     //
     // A/B CONTROL: BANISHED_RT_PROMOTE_GEOM=0 leaves the row on the DLL.
-    {
-        const char* off = getenv("BANISHED_RT_PROMOTE_GEOM");
-        if (off && strcmp(off, "0") == 0) {
-            printf("[RtMint] BANISHED_RT_PROMOTE_GEOM=0 -- "
-                   "??_7Geometry@Graphics@@6B@ left on the DLL (A/B control)\n");
-        } else {
             PromoteVtableGuarded("??_7Geometry@Graphics@@6B@", 0x180154e60ull, &n);
-        }
-    }
 
     // ========================================================================
     // WAVE 26 LANE PROMOGFX — ??_7AnimationEvent@Graphics@@6B@ (0x180154bf0)
@@ -1718,15 +1688,7 @@ int RtMintRegisterPromotedRows() {
     // no attendance evidence that the table is dispatched.
     //
     // A/B CONTROL: BANISHED_RT_PROMOTE_ANIMEVT=0 leaves the row on the DLL.
-    {
-        const char* off = getenv("BANISHED_RT_PROMOTE_ANIMEVT");
-        if (off && strcmp(off, "0") == 0) {
-            printf("[RtMint] BANISHED_RT_PROMOTE_ANIMEVT=0 -- "
-                   "??_7AnimationEvent@Graphics@@6B@ left on the DLL (A/B control)\n");
-        } else {
             PromoteVtableGuarded("??_7AnimationEvent@Graphics@@6B@", 0x180154bf0ull, &n);
-        }
-    }
 
     // ========================================================================
     // WAVE 26 LANE PROMOGFX — ??_7UpdateLoop@Engine@@6B@ IS **HELD BACK**
@@ -1855,15 +1817,7 @@ int RtMintRegisterPromotedRows() {
     //
     // A/B: each row has its own kill switch so a bisect can isolate one table.
     // ========================================================================
-    {
-        const char* off = getenv("BANISHED_RT_PROMOTE_UPDATELOOP");
-        if (off && strcmp(off, "0") == 0) {
-            printf("[RtMint] BANISHED_RT_PROMOTE_UPDATELOOP=0 -- "
-                   "??_7UpdateLoop@Engine@@6B@ left on the DLL (A/B control)\n");
-        } else {
             PromoteVtableGuarded("??_7UpdateLoop@Engine@@6B@", 0x180155ba0ull, &n);
-        }
-    }
     // ========================================================================
     // MEASURED, AND IT CHANGED THIS LANE'S MIND — the three DERIVED loop tables
     // below are ARMED-OFF BY DEFAULT. Read this before flipping one on.
@@ -1916,33 +1870,6 @@ int RtMintRegisterPromotedRows() {
     //  oracle to go red at +0x0 when you do; that is item 2, not a bug.]
     // ARM WITH: BANISHED_RT_PROMOTE_LOADERLOOP=1 / _DIALOGLOOPT=1 /
     //           _DIALOGLOADERLOOPT=1   (default OFF, unlike every other row here)
-    {
-        const char* on = getenv("BANISHED_RT_PROMOTE_LOADERLOOP");
-        if (on && on[0] && strcmp(on, "0") != 0) {
-            PromoteVtableGuarded("??_7LoaderLoop@Engine@@6B@", 0x180157940ull, &n);
-            printf("[RtMint] BANISHED_RT_PROMOTE_LOADERLOOP=1 -- ??_7LoaderLoop@Engine@@6B@ PROMOTED "
-                   "(opt-in; expect that class's ctor byte-oracle to diverge at +0x0, "
-                   "which is the promotion, not a defect)\n");
-        }
-    }
-    {
-        const char* on = getenv("BANISHED_RT_PROMOTE_DIALOGLOOPT");
-        if (on && on[0] && strcmp(on, "0") != 0) {
-            PromoteVtableGuarded("??_7DialogLoopT@Engine@@6B@", 0x1801579a0ull, &n);
-            printf("[RtMint] BANISHED_RT_PROMOTE_DIALOGLOOPT=1 -- ??_7DialogLoopT@Engine@@6B@ PROMOTED "
-                   "(opt-in; expect that class's ctor byte-oracle to diverge at +0x0, "
-                   "which is the promotion, not a defect)\n");
-        }
-    }
-    {
-        const char* on = getenv("BANISHED_RT_PROMOTE_DIALOGLOADERLOOPT");
-        if (on && on[0] && strcmp(on, "0") != 0) {
-            PromoteVtableGuarded("??_7DialogLoaderLoopT@Engine@@6B@", 0x1801578d0ull, &n);
-            printf("[RtMint] BANISHED_RT_PROMOTE_DIALOGLOADERLOOPT=1 -- ??_7DialogLoaderLoopT@Engine@@6B@ PROMOTED "
-                   "(opt-in; expect that class's ctor byte-oracle to diverge at +0x0, "
-                   "which is the promotion, not a defect)\n");
-        }
-    }
     // ??_7Loader@Engine@@6B@ (0x180157a08) IS **NOT** PROMOTED, and this is a
     // real blocker rather than an unfinished check.
     // RT_UNPROMOTABLE: ??_7Loader@Engine@@6B@ | 2 slots, both ours as of Wave 27 lane LOOPS (slot 0 ?Run@Loader@Engine@@ new this lane, slot 1 ?OnCompleted@Thread@System@@ ported earlier) | WAVE27_LANE_LOOPS.md §4 | HARMFUL while the DLL is present -- this table has exactly ONE stamper, `??0Loader@Engine@@QEAA@XZ` (0x1800dc0f0, stamp at +0x21), and it is RETAIL AND UNPORTED. Every other table this lane promoted has OUR ctor as its stamper, which is why promoting them is safe; this one does not. The single instance is the static `?_loader@LoaderLoop@Engine@@1VLoader@2@A`, constructed by the DLL's own CRT static-init before any of our code runs, so promoting the symbol would publish OUR table to name-resolving readers while the live object keeps the DLL's -- two tables, one object, and the loader thread is what dispatches through it. *** CORRECTED BEFORE THIS LANE CLOSED: THE REAL STAMPER IS NOT `??0Loader@`. *** The exported `??0Loader@Engine@@QEAA@XZ` (0x1800dc0f0) is NEVER CALLED: 0 direct E8/E9 sites AND its address occurs as a qword in NO PE section (so it is in no vtable, jump table or function-pointer global, which rules out an indirect call too; that absence screen was validated by handing it two known positives, ?Run@Loader@ and the UpdateLoop deleting dtor, each found at exactly its vtable slot 0). The code that actually builds `_loader` is an UNEXPORTED STATIC-INIT THUNK at 0x180148fe0 with the ctor INLINED: `mov $0x40000,%edx` / `lea rcx,[0x1801fe7b8]` / `call 0x1800ca4e0` (Thread::Thread, 256 KB stack), then the vtable stamp at 0x180148fff, then `movq $0x0,[0x1801fe7e8]` (_loop = nullptr, at _loader+0x30), then it registers the atexit dtor. IT RUNS AT DLL LOAD, BEFORE ANY OF OUR CODE EXISTS. *** CONSEQUENCE: THERE IS NO SYMBOL TO PORT THAT RETIRES THIS ROW. *** An expiry naming `??0Loader@` would be satisfiable and would change nothing -- the same defect this lane documented on ?_loader@LoaderLoop@ below, which this tag very nearly reproduced. [SCOPE: DLL-PRESENT. This is a ROUTE-SCOPED refusal, not a permanent one (reference_unpromotable_is_route_scoped_not_permanent.md): while the DLL is present NO port can retire it, because the constructor is DLL-load-time and unexported. At CUTOVER the thunk does not exist, we construct `_loader` ourselves, and the row becomes REQUIRED.] [ADDRESSEE: the lane that runs the next CUTOVER attempt -- not a porting lane.] [CONDITION: do NOT wait for a symbol. Promote this row as part of the cutover changeover, at the same moment our own code takes over constructing `_loader`.] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
@@ -2111,38 +2038,10 @@ int RtMintRegisterPromotedRows() {
     // already cites and which a tidy loop here would have reproduced.
     // PromoteVtableGuarded re-checks TRAP==0 against the LIVE registry and
     // refuses loudly rather than publishing abort traps.
-    {
-        const char* rowOff = getenv("BANISHED_RT_PROMOTE_CFS");
-        if (rowOff && strcmp(rowOff, "0") == 0)
-            printf("[RtMint] BANISHED_RT_PROMOTE_CFS=0 -- "
-                   "??_7CompressedFileStream@IO@@6B@ left on the DLL (A/B control)\n");
-        else
-            PromoteVtableGuarded("??_7CompressedFileStream@IO@@6B@", 0x1801555f0ull, &n);
-    }
-    {
-        const char* rowOff = getenv("BANISHED_RT_PROMOTE_CMS");
-        if (rowOff && strcmp(rowOff, "0") == 0)
-            printf("[RtMint] BANISHED_RT_PROMOTE_CMS=0 -- "
-                   "??_7CompressedMemoryStream@IO@@6B@ left on the DLL (A/B control)\n");
-        else
-            PromoteVtableGuarded("??_7CompressedMemoryStream@IO@@6B@", 0x180155560ull, &n);
-    }
-    {
-        const char* rowOff = getenv("BANISHED_RT_PROMOTE_CS");
-        if (rowOff && strcmp(rowOff, "0") == 0)
-            printf("[RtMint] BANISHED_RT_PROMOTE_CS=0 -- "
-                   "??_7CompressedStream@IO@@6B@ left on the DLL (A/B control)\n");
-        else
-            PromoteVtableGuarded("??_7CompressedStream@IO@@6B@", 0x180155640ull, &n);
-    }
-    {
-        const char* rowOff = getenv("BANISHED_RT_PROMOTE_FS");
-        if (rowOff && strcmp(rowOff, "0") == 0)
-            printf("[RtMint] BANISHED_RT_PROMOTE_FS=0 -- "
-                   "??_7FileStream@IO@@6B@ left on the DLL (A/B control)\n");
-        else
-            PromoteVtableGuarded("??_7FileStream@IO@@6B@", 0x180154960ull, &n);
-    }
+    PromoteVtableGuarded("??_7CompressedFileStream@IO@@6B@",   0x1801555f0ull, &n);
+    PromoteVtableGuarded("??_7CompressedMemoryStream@IO@@6B@", 0x180155560ull, &n);
+    PromoteVtableGuarded("??_7CompressedStream@IO@@6B@",       0x180155640ull, &n);
+    PromoteVtableGuarded("??_7FileStream@IO@@6B@",             0x180154960ull, &n);
 
     // ========================================================================
     // RT_UNPROMOTABLE — rows that are PORTED IN FULL and can NEVER be promoted
@@ -3352,17 +3251,7 @@ int RtMintRegisterPromotedRows() {
     // ------------------------------------------------------------------------
 
     printf("[RtMint] promoted %d minted DATA row(s) -- live on every run\n", n);
-    // The vtable promotion guard's own line. EFFECTIVENESS COUNTER FIRST: a
-    // "0 refused" from a guard that was never handed a bad row is not a
-    // measurement, so the number of synthetic trap injections is printed beside
-    // it. Arm them with BANISHED_RT_MINT_TRAP_CONTROL=<symbol>[;<symbol>...],
-    // or `*` for every row; each armed row MUST appear as a REFUSING line above.
-    printf("[RtMint] vtable promotion guard: %d row(s) evaluated, %d refused, "
-           "%d synthetic trap injection(s) this run%s\n",
-           g_vtGuardEvaluated, g_vtGuardRefused, RtMintTrapControlInjections(),
-           RtMintTrapControlInjections() == 0
-               ? "  (refusal path UNTESTED on this run -- set "
-                 "BANISHED_RT_MINT_TRAP_CONTROL=* to test it)"
-               : "");
+    printf("[RtMint] vtable promotion guard: %d row(s) evaluated, %d refused\n",
+           g_vtGuardEvaluated, g_vtGuardRefused);
     return n;
 }

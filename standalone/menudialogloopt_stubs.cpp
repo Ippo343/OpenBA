@@ -47,7 +47,6 @@
 // against a symbol that does not exist rather than the real one.
 void RtObjectFactoryDtorsProbe();
 void DlgCtrlRoute_Arm();                  // standalone/dlgctrl_route.cpp
-void SpriteSheetSerializeProbe_Run();     // standalone/spritesheet_serialize_probe.cpp
 #include "UpdateLoop.h"
 #include "Game/menudialogloopt_funcs.h"
 #include "Game/uifade.h"
@@ -408,10 +407,6 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     // rationale as the line above -- Object::Factory::Startup has run, and no
     // dialog has been opened yet.
     DlgCtrlRoute_Arm();
-    // Wave 10C lane ROUTES: write-path replay of Serialize@SpriteSheet on the
-    // boot-time sheet (BANISHED_SPRITESHEET_SERIALIZE_PROBE=1, else silent).
-    // Placed here because StandaloneEnsureSpriteSheetLoaded has run by menu time.
-    SpriteSheetSerializeProbe_Run();
     // Per-frame heap-integrity check (no-op unless BANISHED_REDZONE set). Catches
     // free-list poisoning that surfaces during the steady-state menu loop, where
     // our alloc/free are rare so the alloc/free auto-scan rarely fires.
@@ -458,16 +453,8 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     // once appended the callback stays in MainLoop's array for the life of the
     // process, so a single arming covers in-game modals too. See
     // standalone/modal_driver.cpp.
-    if (ModalDriver::Enabled()) {
+    if (ModalDriver::Enabled())
         ModalDriver::Poll();
-        // BANISHED_MODAL_DRIVER_TEST: the twin-subject differential needs the
-        // menu's own UserInterface (MenuDLT +0x38 = DialogInstance, +0x10 = UI).
-        void* menuDlg = *reinterpret_cast<void**>(
-            reinterpret_cast<uintptr_t>(self) + 0x38);
-        if (menuDlg)
-            ModalDriver::RunSelfTest(*reinterpret_cast<void**>(
-                reinterpret_cast<uintptr_t>(menuDlg) + 0x10));
-    }
 
     // Clamp the first tick's dt to ~16ms. Stub_Startup blocks for ~540ms while
     // LoadScene_PhaseA runs synchronously on the main thread; the first
@@ -653,16 +640,6 @@ void Stub_Draw(UpdateLoop* self, float alpha) {
         if (draws == 10) RenderDocIntegration::TriggerCapture();
         RenderDocIntegration::OnFrame();
     }
-
-    // WAVE 11 LANE OBJLIFE — the synthesised factory-dtor oracle's REAL call
-    // site. It needs the DLL's MemoryAllocator singleton live, and that is true
-    // only BETWEEN engine startup and engine shutdown: at RuntimePortInit the
-    // singleton does not exist yet (a MemAlloc there faults on it), and by the
-    // exit summary it has been torn down again. A drawn frame is inside that
-    // window by construction. Self-guarded and one-shot, so this is a single
-    // predictable branch per frame and a no-op unless
-    // BANISHED_RT_FACTORYDTOR_PROBE is set.
-    ::RtObjectFactoryDtorsProbe();
 }
 
 void Stub_DrawFailed(UpdateLoop* self) {

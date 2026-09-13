@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 """Runtime-x64.dll port census: called vs ported vs total, per namespace.
 
+A3-HOLD (ENDGAME A.3/A.4, 2026-09-13): this file still names the raw door
+(ResolveExportRaw / RT_ORIGINAL_ONCE / RtOriginal), the diff oracle (RT_DIFF_*)
+and the BANISHED_RT_* gates, because RECOGNISING those tokens in source is its
+job -- its door tables and gate tables are the census, not decoration. It is
+kept because DIRECTION.md Â§4 still feeds the closure from it. Re-derive the
+tables against the tree once phase B has removed the last of those spellings;
+deleting them piecemeal now would silently move the counts.
+
 The exe port's progress question was "how many of the addresses our tree asks
 for are registered". The runtime port's is the same shape, with three numbers
 instead of two:

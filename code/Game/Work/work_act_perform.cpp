@@ -106,7 +106,6 @@ static WAP_fn_CompleteRoad_t        s_wap_CompleteRoad    = nullptr;
 
 // Road-wave counter (standalone/road_probe.cpp): CompleteRoad actions actually built
 // and appended to a citizen task list.
-extern "C" { extern long long g_wapCompleteRoadBuilt; }
 static WAP_fn_ConsumeRawMaterial_t  s_wap_ConsumeRaw      = nullptr;
 static WAP_fn_PickupStored_t        s_wap_PickupStored    = nullptr;
 static WAP_fn_PerformWork7_t        s_wap_PerformWork7    = nullptr;
@@ -483,7 +482,6 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
     if (obj) {
         // 0x1400c0146: R9D=byte[RBP+0x5f]=param_6 ; R8D=R12D=param_4 ; EDX=[RBP+0x57]=param_5
         if (s_wap_CompleteRoad) cr = s_wap_CompleteRoad(obj, static_cast<int>(completeRoadP5), roadP4, roadByte6); // 0x1400c59d0
-        if (cr) ++g_wapCompleteRoadBuilt;
     }
     WAP_IbpCtor(&ibpA, cr);
     WAP_Append(list, &ibpA);

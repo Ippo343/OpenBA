@@ -91,11 +91,11 @@ tools/game_dir_lock.sh acquire lane-NAME 1500      # BARE, never piped
 #    The third is not optional if you want S3, and S3 is where most of the
 #    verdict-bearing power is.
 bash tools/trace_oracle/capture_arm.sh armed   --frame 150 \
-     --expect-log '\[MYPORT\] .*calls=[1-9]' -- BANISHED_RT_MYPORT=1
+     --expect-log '\[MYPORT\] .*calls=[1-9]' -- BANISHED_MYPORT=1
 bash tools/trace_oracle/capture_arm.sh armed2  --frame 150 \
-     --expect-log '\[MYPORT\] .*calls=[1-9]' -- BANISHED_RT_MYPORT=1
+     --expect-log '\[MYPORT\] .*calls=[1-9]' -- BANISHED_MYPORT=1
 bash tools/trace_oracle/capture_arm.sh unarmed --frame 150 \
-     --expect-log '\[MYPORT\] .*calls=0'      -- BANISHED_RT_MYPORT=0
+     --expect-log '\[MYPORT\] .*calls=0'      -- BANISHED_MYPORT=0
 
 tools/game_dir_lock.sh release lane-NAME
 

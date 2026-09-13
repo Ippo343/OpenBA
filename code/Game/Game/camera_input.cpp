@@ -39,9 +39,6 @@
 #include <cstdlib>
 
 extern "C" bool StartTown_GetSpawnTile(int* x, int* y);   // starttown.cpp (BANISHED_CAMERA_PIN=town)
-extern "C" void RtOrphanProbeInGame(void* keyMap);        // standalone/rt_orphan_probe.cpp
-extern "C" void RtIo_PersistenceSavesProbeEntry();         // runtime/src/io/persistence_saves_probe.cpp
-extern "C" void RtObject_InternalBasePtr_SerializeTraceProbe();  // runtime/src/object/internal.cpp
 
 namespace Game {
 
@@ -123,26 +120,7 @@ void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {
     if (!entityUI) return;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
 
-    // BANISHED_RT_ORPHAN_PROBE: the in-game half of standalone/rt_orphan_probe.cpp.
-    // Input::Device's readers need the Device singleton, which Engine::Startup
-    // builds long after the boot-time probe runs and Engine::Shutdown destroys
-    // before the exit dumps -- so the only place to reach it is a live frame,
-    // and this is the input path. One shot, then it costs one predictable
-    // branch per frame.
     void* keyMap = CamKeyMap();
-    RtOrphanProbeInGame(keyMap);
-    // Wave 19 lane PERSIST's synthesised IO::Persistence oracle. It hangs off
-    // the same in-game moment as the orphan probe (it builds System::String
-    // inputs through System::MemoryAllocator, which does not exist when Init()
-    // runs) but has its OWN call and its OWN env var, BANISHED_RT_PERSIST_PROBE,
-    // deliberately: on this base BANISHED_RT_ORPHAN_PROBE=1 dies at BOOT with a
-    // WRITE to +0x648 of a null allocator singleton, inside
-    // ProbeSaveLoadGenerateSaveName. That is the exact fault
-    // WAVE19_INTEGRATOR_CORRECTIONS.md C4 records as fixed on wave14/genname and
-    // NOT merged here, reproduced independently by this lane. Coupling the two
-    // probes would have made a wave-14 holdback into a wave-19 blocker.
-    RtIo_PersistenceSavesProbeEntry();
-    RtObject_InternalBasePtr_SerializeTraceProbe();  // Wave 9 lane S (needs a live factory)
     if (!keyMap || !fn_KeyMap_GetValue || !fn_KeyMap_Pressed || !fn_Time_AsSeconds) return;
 
     uint8_t* ui = (uint8_t*)entityUI;

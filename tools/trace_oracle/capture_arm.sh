@@ -4,8 +4,8 @@
 #   capture_arm.sh <tag> [--frame N] [--expect-log REGEX] [--out DIR] -- ENV=V ...
 #
 # This is the generalisation of tools/dx11_state_diff/capture.sh, whose two arms
-# are hard-wired to the VideoDX11 A/B seam flags. A Runtime-port lane's arms are
-# its own BANISHED_RT_* kill switch, so the environment is a parameter here.
+# are hard-wired to the VideoDX11 A/B seam flags. An arm is whatever environment
+# the comparison needs, so the environment is a parameter here.
 #
 # WHY A SEPARATE SCRIPT AND NOT A PIXEL SHOT
 # ------------------------------------------

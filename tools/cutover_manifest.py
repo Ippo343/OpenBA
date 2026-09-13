@@ -16,7 +16,7 @@ this tool does not read the prose.  It reads the CANONICAL TOKENS
 measures two things the prose cannot state:
 
   * whether the row exists in the MINT at all -- an unminted row is one the
-    blanket `BANISHED_RT_MINT=1` switch cannot publish, and at cutover a
+    blanket mint switch of the day could not publish, and at cutover a
     by-name door on it resolves NULL (this is exactly how Wave 24 lane CUTOVER
     found `??_7Stream@Audio@@6B@`); and
 
@@ -378,7 +378,7 @@ def emit_table(rows):
 # stop Wave 25 from shipping a `.inc` that was FOURTEEN REQUIRED ROWS SHORT --
 # every one of lane DATA's rows -- through cutover attempt 26 and into Wave 26,
 # because a detector only helps someone who RUNS it, and nobody did.  The
-# staleness was additionally MASKED: `BANISHED_RT_MINT=1` published those 14
+# staleness was additionally MASKED: the blanket mint switch published those 14
 # rows anyway, so the boot went deep and `published 44, withheld 1` read as
 # confirmation.  A generated file with no invalidation is a CACHE, and this one
 # had no detector wired to anything that runs by itself.
@@ -521,7 +521,7 @@ def main():
             for r in rows:
                 if r["disposition"] == "REQUIRED" and not r["mint"]:
                     print("UNMINTED REQUIRED ROW: %s (%s) -- the blanket "
-                          "BANISHED_RT_MINT switch cannot publish it and a "
+                          "blanket mint switch could not publish it and a "
                           "cutover door on it resolves NULL"
                           % (r["symbol"], r["ns"]))
                     bad = 1

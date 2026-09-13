@@ -284,8 +284,6 @@ static void EnsureResidentHelpers() {
         ResolveAddr(Module::Exe, 0x1400032e0));
     s_fn_IBP_Serialize = reinterpret_cast<fn_IBP_Serialize_t>(
         ResolveExport("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z"));
-    if (!s_fn_IBP_Serialize)
-        s_fn_IBP_Serialize = reinterpret_cast<fn_IBP_Serialize_t>(ResolveOrdinal(2990));
     s_TypeId_Resident = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7158));
     s_fn_Entity_FindComponent_MeshInstance = reinterpret_cast<fn_FindComp_t>(

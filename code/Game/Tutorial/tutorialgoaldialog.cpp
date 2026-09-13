@@ -39,8 +39,7 @@ static void EnsureResolved() {
     // IO::Serializer — BY NAME (retail 0x1800b9960 / 0x1800b99b0).
     // Both are ported (runtime/src/io/serializer.cpp:636-637). ResolveAddr
     // consults the ADDRESS registry only, so the by-address form these two lines
-    // used until 2026-09-07 walked past the port into the shipped DLL — live in
-    // all nine of lane 0's residue cells, invisible to BANISHED_RT_DIFF, and
+    // used until 2026-09-07 walked past the port into the shipped DLL, and was
     // counted as ported by the census. Only the name reaches the port, and only
     // the name survives cutover.
     s_fn_Serializer_Ctor = (fn_Serializer_Ctor_t)ResolveExport(

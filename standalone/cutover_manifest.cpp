@@ -20,8 +20,8 @@
 // which fails if the generated header is stale, if any REQUIRED row has no
 // minted storage, or if any tag has gone back to declaring no scope.
 //
-// WHY THIS EXISTS WHEN `BANISHED_RT_MINT=1` ALREADY REGISTERS EVERYTHING
-// ---------------------------------------------------------------------
+// WHY THIS EXISTS WHEN THE MINT ALREADY REGISTERS EVERYTHING
+// ----------------------------------------------------------
 // Attempt 25 (WAVE24_LANE_CUTOVER.md) reached its wall with the blanket switch
 // on, and it registered clean -- `[RtMint] registered 201 by name, 207 by
 // address`. That switch is a SLEDGEHAMMER: it publishes all 205 minted rows,
@@ -33,8 +33,8 @@
 // detect a misregistered port** (kickoff section 3 item 6).
 //
 // So this file EXTENDS the mint's existing per-row door -- `RtMintRegisterRow`,
-// the same call `reg_mint_promoted.cpp` promotions and `BANISHED_RT_MINT_ROWS`
-// both go through -- rather than inventing a second publisher. It is additive
+// the same call the per-row promotions went through -- rather than inventing
+// a second publisher. It is additive
 // and idempotent: a row the blanket switch already registered is re-registered
 // to the same storage, which is a no-op.
 //
@@ -106,35 +106,11 @@ const char* DispName(CutoverDisposition d) {
 
 }  // namespace
 
-// Is Runtime-x64.dll actually loaded right now? This is the SAME test
-// RtDataMintShadowReport uses to print `DLL=ABSENT (post-cutover; oracle
-// gone)`, deliberately: two different cutover detectors would be two different
-// answers to one question.
-bool RtCutoverDllAbsent() {
-    const ModuleInfo* mi = GetModuleInfo(Module::Runtime);
-    return !(mi && mi->handle);
-}
-
-// Publish the manifest. Returns the number of rows registered.
-//
-// `force` registers the REQUIRED rows even with the DLL present. That is what
-// `BANISHED_RT_CUTOVER_MANIFEST=1` is for, and it is a MEASUREMENT knob, not a
-// mode: with the DLL loaded, publishing these rows is precisely the split
-// brain every one of those tags warns about. Nothing calls it with `force`
-// except a lane that means to break its own run on purpose.
-int RtCutoverPublishManifest(bool force) {
-    const bool absent = RtCutoverDllAbsent();
-    if (!absent && !force) {
-        // Not cutover. Say nothing beyond one line -- an ordinary DLL-present
-        // run must not grow 46 lines of output.
-        printf("[CutoverManifest] DLL present -- %d tagged rows held "
-               "(their verdicts are DLL-PRESENT-scoped and still apply)\n",
-               kManifestCount);
-        return 0;
-    }
-
-    printf("\n[CutoverManifest] ==== DLL %s ==== %d tagged gap rows\n",
-           absent ? "ABSENT (cutover)" : "PRESENT (FORCED -- expect a split brain)",
+// Publish the manifest. Returns the number of rows registered. The DLL is
+// never loaded (ENDGAME.md A.1), so every REQUIRED row is published on every
+// run and the old DLL-present hold-back arm is gone.
+int RtCutoverPublishManifest() {
+    printf("\n[CutoverManifest] ==== DLL ABSENT ==== %d tagged gap rows\n",
            kManifestCount);
 
     int published = 0, withheld = 0, conditional = 0, unminted = 0, failed = 0;

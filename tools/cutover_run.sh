@@ -16,14 +16,13 @@ SECS="${2:?usage: cutover_run.sh <outdir> <seconds> [exe]}"
 EXE="${3:-standalone/build/reimpl-x64.exe}"
 mkdir -p "$OUT"
 
-ARM=(BANISHED_RT_CENSUS=1
-     BANISHED_AUTOSTART=1)
+ARM=(BANISHED_AUTOSTART=1)
 
 echo "[cutover] source exe : $EXE"
 echo "[cutover] build md5  : $(md5sum "$EXE" | cut -d' ' -f1)"
 cp -f "$EXE" "$G/reimpl-x64.exe"
 echo "[cutover] deployed md5: $(md5sum "$G/reimpl-x64.exe" | cut -d' ' -f1)"
-echo "[cutover] arm: ${ARM[*]}   (BANISHED_RT_DIFF deliberately UNSET)"
+echo "[cutover] arm: ${ARM[*]}"
 rm -f "$G/standalone_debug.log" "$G/standalone_error.log" "$G/standalone_crash.log" \
       "$G/standalone_boot_state.txt"
 
@@ -49,9 +48,7 @@ done
 # find the live logs before another run overwrites them.
 {
   echo "== arm, as the RUNNING CODE reported it =="
-  grep -hE "never loaded \(ENDGAME A.1\)|registration is (ON|off)|AutoStart\] ENABLED|RtDiff\] ON" \
+  grep -hE "never loaded \(ENDGAME A.1\)|AutoStart\] ENABLED" \
        "$OUT/standalone_error.log" "$OUT/standalone_debug.log" 2>/dev/null
-  echo "== RtDiff ON count (MUST be 0) =="
-  grep -hc "RtDiff] ON" "$OUT/standalone_error.log" "$OUT/standalone_debug.log" 2>/dev/null
 } > "$OUT/attest.txt"
 echo "[cutover] logs + attest.txt copied to $OUT"

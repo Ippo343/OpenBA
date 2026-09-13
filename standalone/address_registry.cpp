@@ -1046,7 +1046,7 @@ static void RegisterCodeFunctions() {
 // The original exe has .rdata slots at 0x140151xxx-0x140152xxx that hold
 // pointers to Runtime DLL functions (filled by the exe's custom loader).
 // In standalone mode, we allocate our own static slots and fill them with
-// the Runtime DLL function pointers resolved via ResolveExport/ResolveOrdinal.
+// the Runtime function pointers resolved via ResolveExport.
 //
 // Each slot is a uintptr_t that code/Game/ reads via:
 //   slot = ResolveAddr(Module::Exe, 0x14015XXXX);

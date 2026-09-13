@@ -1634,11 +1634,11 @@ bool EngineFuncsInit() {
     g_pVideoDeviceSingleton = reinterpret_cast<void**>(
         ResolveAddr(Module::Runtime, 0x1801fe7a8));
 
-    // Video::Device Lock/Unlock (ordinals 3214 / 4462)
+    // Video::Device Lock/Unlock (retail ordinals 3214 / 4462)
     fn_VideoDevice_Lock = reinterpret_cast<fn_VideoDevice_Lock_t>(
-        ResolveOrdinal(3214));
+        ResolveExport("?Lock@Device@Video@@QEAAXXZ"));
     fn_VideoDevice_Unlock = reinterpret_cast<fn_VideoDevice_Unlock_t>(
-        ResolveOrdinal(4462));
+        ResolveExport("?Unlock@Device@Video@@QEAAXXZ"));
 
     // --- String functions ---
     fn_String_Set = reinterpret_cast<fn_String_Set_t>(
@@ -4189,10 +4189,6 @@ bool EngineFuncsInit() {
     // Factory::GetTypeIdFromName — Runtime DLL export
     fn_Factory_GetTypeIdFromName = reinterpret_cast<fn_Factory_GetTypeIdFromName_t>(
         ResolveExport("?GetTypeIdFromName@Factory@Object@@QEBAIPEBD_N@Z"));
-    if (!fn_Factory_GetTypeIdFromName) {
-        fn_Factory_GetTypeIdFromName = reinterpret_cast<fn_Factory_GetTypeIdFromName_t>(
-            ResolveOrdinal(2991));
-    }
     // Factory singleton — dispatch table at 0x140152760 (double-indirect)
     {
         void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152760));
@@ -4203,10 +4199,6 @@ bool EngineFuncsInit() {
     // Object::Base::IsA(uint) — Runtime DLL export
     fn_IsA = reinterpret_cast<fn_IsA_t>(
         ResolveExport("?IsA@Base@Object@@QEBA_NI@Z"));
-    if (!fn_IsA) {
-        fn_IsA = reinterpret_cast<fn_IsA_t>(
-            ResolveOrdinal(3089));
-    }
 #ifdef _DEBUG
     if (fn_Factory_GetTypeIdFromName && g_pFactorySingleton && fn_IsA) {
         printf("[EngineFuncs] Phase H: Factory::GetTypeIdFromName + IsA + Factory singleton resolved\n");

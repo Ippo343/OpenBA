@@ -539,11 +539,11 @@ def scan_source_for_data_symbols(repo):
 
     This exists because the census cannot see all of them. `runtime_census.py`
     recognises a resolve only when the literal sits directly inside
-    `ResolveExport(...)` / `ResolveExportRaw(...)` (RE_EXPORT requires the quote
+    `ResolveExport(...)` (RE_EXPORT requires the quote
     immediately after the paren), so three shapes are invisible to it:
 
         RtVtable("??_7MeshInstance@Graphics@@6B@")     a wrapper
-        ResolveExportRaw(kFrameIndexData)             a named constant
+        ResolveExport(kFrameIndexData)                a named constant
         ResolveExport(s.mangled)                      a table walked in a loop
 
     All three are live in this tree, and all three are exactly the symbols a

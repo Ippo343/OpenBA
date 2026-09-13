@@ -84,12 +84,8 @@ static bool s_helpersResolved = false;
 static void EnsureHelpers() {
     if (s_helpersResolved) return;
 
-    // Resolve IBP::Serialize from Runtime DLL
     s_fn_IBP_Serialize = (fn_IBP_Serialize_t)ResolveExport(
         "?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z");
-    if (!s_fn_IBP_Serialize) {
-        s_fn_IBP_Serialize = (fn_IBP_Serialize_t)ResolveOrdinal(2990);
-    }
 
     // Type IDs from exe .rdata
     s_TypeId_ModelComp2 = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7a50);

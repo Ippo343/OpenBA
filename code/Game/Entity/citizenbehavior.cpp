@@ -147,9 +147,9 @@ static void EnsureResolved() {
     //
     // [MANGLING FIX 2026-07-25] This used to ask for "?Time@Time@System@@QEAA@M@Z",
     // which does not exist: a constructor mangles as "??0", so the real export is
-    // "??0Time@System@@QEAA@M@Z" (ordinal 443) — the spelling every other caller in
-    // the tree already uses. The lookup always failed and fell through to
-    // ResolveOrdinal(0x031e) = 798, which this comment used to name as
+    // "??0Time@System@@QEAA@M@Z" — the spelling every other caller in the tree
+    // already uses. The lookup always failed and fell through to an
+    // ordinal-798 fallback, which this comment used to name as
     // "??2GroupElement@UI@@SAPEAX_K@Z". [NAME CORRECTED 2026-09-08] The shipped
     // export directory says ordinal 798 is
     // "??2GroupDescription@UI@@SAPEAX_KPEAX@Z" — a different CLASS and a
@@ -165,9 +165,6 @@ static void EnsureResolved() {
     //     grew as the history arrays grew.
     s_fn_Time_Ctor = reinterpret_cast<fn_Time_Ctor_t>(
         ResolveExport("??0Time@System@@QEAA@M@Z"));
-    if (!s_fn_Time_Ctor) {
-        s_fn_Time_Ctor = reinterpret_cast<fn_Time_Ctor_t>(ResolveOrdinal(443));
-    }
 
     // System::Random::Rand(unsigned int max) — Runtime export.
     // [MANGLING FIX 2026-07-25] "?Rand@Random@System@@QEAAI@Z" (no argument) is not

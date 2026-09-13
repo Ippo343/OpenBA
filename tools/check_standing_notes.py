@@ -67,16 +67,6 @@ NOTES = [
         "grep -n 'VideoInterfaceFillDx11Slot' runtime/src/video/video_interfaces_win.cpp "
         "-- it is the first statement of RtVideo_Device_InitializeInterfaces.",
     ),
-    (
-        "memorystream-vptr-oracle",
-        "runtime/src/io/compressedstream.cpp",
-        ["TagVptrIdentity", "ResolveExportRaw"],
-        "The MemoryStream ctor oracle was 18/18 red because it compared a vptr that "
-        "MUST differ. The repair keeps the byte COMPARED (as an identity verdict) "
-        "rather than excluding it; excluding it would have been the second defect.",
-        "BANISHED_RT_DIFF=1 BANISHED_RT_DIFF_CONTROL=memstream-vptr -- the site must "
-        "go red under the control and green without it.",
-    ),
 ]
 
 

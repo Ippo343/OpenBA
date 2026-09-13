@@ -2984,31 +2984,7 @@ void BridgeTick(void* entityUI, int frameNum) {
 
 }  // namespace
 
-extern "C" void RtFactoryByteOracle();   // standalone/factory_byte_oracle.cpp (Wave 29 lane VERIFY)
-
 extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
-    // WAVE 29 LANE VERIFY — the factory byte oracle's live-allocator seam.
-    //
-    // BEFORE the s_enabled gate on purpose: this hook is not a tool harness
-    // feature and must not inherit BANISHED_LIVE_TOOLS.
-    //
-    // Three placements were tried for this screen and the first two are
-    // recorded in standalone/factory_byte_oracle.cpp because "run it earlier"
-    // is the obvious fix and is wrong twice over: at the process exit path the
-    // MemoryAllocator singleton is already gone (it faulted inside MemAlloc's
-    // lock), and before GameMain it does not exist yet (Engine::Startup makes
-    // it). This is the first point in the process where the ENGINE'S OWN
-    // allocator is live — which is also the allocator these constructors will
-    // use at cutover, so it is the right one rather than merely a working one.
-    //
-    // Cost when unarmed: one integer compare per in-game frame.
-    {
-        static bool s_factOracleDone = false;
-        if (!s_factOracleDone && frameNum >= 120) {
-            s_factOracleDone = true;
-            RtFactoryByteOracle();     // self-gated on BANISHED_FACTORY_ORACLE
-        }
-    }
     Init();
     if (!s_enabled) return;
 

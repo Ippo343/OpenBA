@@ -11,8 +11,6 @@
 
 
 #include "resolve.h"
-#include "rt_diff.h"
-#include "rt_predict.h"
 #include "engine_funcs.h"
 #include "runtime_funcs.h"
 #include "dx11_seam.h"
@@ -27,7 +25,6 @@
 #include "hw_watch.h"
 #include "redzone_alloc.h"
 #include "allocator_lock.h"
-#include "rt_alloc_swap.h"
 #include "rt_port.h"                        // RtResolveMissSummary
 #include "system/MemoryAllocator.h"   // RtSystemAllocatorSetDetourInstaller
 #include "Game/game_main.h"
@@ -50,13 +47,6 @@ extern "C" void WorkSchedProbe_Report();
 
 // WAVE 14 LANE SAVEMETA -- runtime/src/save/saveload_meta.cpp.
 extern "C" void RtSaveMetaSummary();
-// WAVE 29 LANE VERIFY — standalone/factory_byte_oracle.cpp
-extern "C" void RtFactoryByteOracle();
-
-// Wave 9 lane S save-stream oracle summary (runtime/src/io/save_trace.cpp).
-namespace RtSaveTrace { void Summary(); }
-static inline void RtSaveTraceSummary() { RtSaveTrace::Summary(); }
-
 // ============================================================
 // GPU preference exports (match original exe)
 // ============================================================
@@ -67,14 +57,9 @@ extern "C" {
 
 // Session-3 diagnostic installer (standalone/filename_dtor_check.cpp).
 extern "C" void InstallFilenameDtorCheck();
-// Session-4 diagnostic installer (standalone/filename_runtime_hook.cpp).
-extern "C" void InstallFilenameRuntimeHook();
-extern "C" void InstallPersistObjectProbe();
-// Session-5 diagnostic installer (standalone/filename_runtime_hook.cpp).
-extern "C" void InstallFindOrLoadWatch();
-// Accelerator B (Phase 0): CompressedStream::Read zero-progress guard
-// (standalone/filename_runtime_hook.cpp). Gate BANISHED_READ_GUARD=1.
-extern "C" void InstallReadGuard();
+// The composed (locked) MemoryAllocator entry points (standalone/alloc_cutover_arm.cpp).
+extern "C" bool RtAllocSwapArmCutover(void* ourAllocate, void* ourFree,
+                                      void** outComposedAllocate, void** outComposedFree);
 
 // ============================================================
 // Mirrors Runtime DLL's BaseTypeInfo struct layout (used by both the probe
@@ -1366,13 +1351,6 @@ static bool Init() {
     // stays alive pumping messages while the log goes silent -- which reads exactly like
     // a slow load. See boot_state_watchdog.cpp.
     BootState::Start();
-    // Wave 9 lane M: give the diff oracle's released-pointer detector a way to
-    // ask whether an address is readable before it dereferences it. rt_diff.cpp
-    // keeps windows.h out (PLAN §4.1), so the probe is installed from here.
-    // Installed unconditionally and this early because the detector is skipped
-    // entirely while it is absent -- a detector that is quietly off is the
-    // failure mode this whole instrument exists to stop.
-    RtDiffSetReadableProbe(&HarnessMemoryIsReadable);
     StallDebug::Mark("registry probe + harness guard");
 
     // 2. Address resolution. No engine DLL is loaded (ENDGAME.md A.1).
@@ -1393,32 +1371,16 @@ static bool Init() {
     //     background Loader thread allocates concurrently with the main thread's
     //     menu scene build -> free-list corruption -> intermittent heap crash.
     //
-    //     THEY MUST INSTALL BEFORE RuntimePortInit(), and until 2026-09-07 they
-    //     did not. The ported allocator (BANISHED_RT_ALLOC=1) detours the SAME
-    //     two prologues, and with the old order it patched first, this file's
-    //     memcmp guard then refused, and the ported allocator ran with NO LOCK
-    //     AT ALL — announced by one refusal line in standalone_error.log.
-    //     Installed first there is exactly one sequence: the lock owns the
-    //     prologues, and the swap installer RETIRES it via
-    //     AllocatorLockRetireForPort() before detouring. See
-    //     docs/runtime_port/WAVE2_ALLOCATOR.md §4 and WAVE9_LANE_E.md.
-    //
     //     Both only need ResolveInit (done at 2.), not the address registry.
     InstallAllocatorLock();
     InstallFreeLock();
 
-    //     The atomic-swap installer for the ported allocator. Handing it over
-    //     registers nothing by itself: RtSystemAllocatorRegister() calls it and
-    //     registers NOTHING AT ALL if it returns false, so a failed detour can
-    //     never leave the exports pointing at a port the DLL does not use.
-    //     Inert unless BANISHED_RT_ALLOC=1 arms the allocator port.
-    RtSystemAllocatorSetDetourInstaller(&RtAllocSwapInstall);
-
-    //     ...and the DLL-ABSENT arming path. These are two different jobs, not a
-    //     fallback: the detour installer redirects the DLL's own internal
-    //     callers, and at cutover there are none. Without this seam
-    //     RtSystemAllocatorRegister() refuses at cutover -- which is what the
-    //     DLL-absent boot hit, with MemAlloc/MemFree left unresolved.
+    //     The DLL-ABSENT arming path for the ported allocator: with no DLL there
+    //     are no DLL-internal callers to redirect, so registering the exports IS
+    //     the complete swap -- but the composed (locked) Allocate/Free entry
+    //     points still have to come from somewhere, and they come from here.
+    //     Without this seam RtSystemAllocatorRegister() refuses and
+    //     MemAlloc/MemFree are left unresolved.
     RtSystemAllocatorSetCutoverArmer(&RtAllocSwapArmCutover);
 
     //     ...and the LOCK-RETIRE seam (Wave 10 lane ALLOC). WAVE9.md records this
@@ -1430,38 +1392,15 @@ static bool Init() {
     //     RuntimePortInit() runs, and the retire step lived INSIDE the detour
     //     installer, which the guard gates. Handing the retire (and its undo)
     //     across the seam lets RtSystemAllocatorRegister() retire first and guard
-    //     second, so a surviving patch is genuinely foreign. Inert unless
-    //     BANISHED_RT_ALLOC arms the port.
+    //     second, so a surviving patch is genuinely foreign.
     RtSystemAllocatorSetLockRetirer(&AllocatorLockRetireForPort,
                                     &AllocatorLockRestoreAfterRefusal);
-
-    //     Observe-only shadow oracle for the same port: runs our body into a
-    //     private replica arena beside retail's real work and compares, without
-    //     taking the heap. No-op unless BANISHED_RT_DIFF=1 and
-    //     BANISHED_RT_ALLOC_SHADOW=1. This is the measurement that has to come
-    //     back clean before anyone sets BANISHED_RT_ALLOC.
-    RtAllocShadowInstall();
 
     // 2c. Runtime-x64.dll port registry (docs/runtime_port/PLAN.md §4.1).
     //     Must run BEFORE AddressRegistryInit and EngineFuncsInit: both cache
     //     Runtime function pointers through ResolveExport/ResolveAddr, and a
     //     port registered after they run would be resolved by nobody.
     RuntimePortInit();
-    //     If the allocator swap took, repoint the ?Allocate@/?Free@ export
-    //     registrations at the composed (locked) stubs, so our own call sites
-    //     get the same critical section the DLL's detoured callers get. No-op
-    //     otherwise. See WAVE9_LANE_E.md "Correction 3".
-    RtAllocSwapPostRegister();
-    //     Wave 0 acceptance test for the seam itself (BANISHED_RT_SELFTEST=1;
-    //     no-op otherwise). Runs here because test 4 leaves a pass-through port
-    //     registered, which only reaches EngineFuncsInit if it is in place
-    //     before it caches.
-    extern void RtSelfTest();
-    RtSelfTest();
-    // Ports with no caller in our tree, probed against the DLL directly
-    // (BANISHED_RT_ORPHAN_PROBE=1). Must follow RuntimePortInit().
-    extern void RtOrphanProbe();
-    RtOrphanProbe();
     StallDebug::Mark("RuntimePortInit");
 
     // 3. Populate address registry (exe dispatch slots, code fns, vtables).
@@ -1515,13 +1454,10 @@ static bool Init() {
     VideoDX11::Dx11SeamInstall();
 
     //     Our twelve vtables live in this exe and VideoDX11-x64.dll is never
-    //     loaded. That only holds if Runtime is stopped from LoadLibrary'ing
-    //     it, which is what this does — it pre-fills
-    //     Video::Device+0xc8/+0xd0/+0xd8 from inside a detour on
-    //     Video::Device::InitializeInterfaces, which skips any slot that is
-    //     already populated.
-    InstallVideoInterfacePrefill();
-    StallDebug::Mark("dx11 seam + prefill");
+    //     loaded. The DX11 interface slot (Video::Device+0xc8/+0xd0/+0xd8) is
+    //     filled by VideoInterfaceFillDx11Slot, called as the first statement of
+    //     our ported Video::Device::InitializeInterfaces.
+    StallDebug::Mark("dx11 seam");
 
     // 4a. Optional heap-overflow detector (BANISHED_REDZONE env var). Wraps
     //     fn_MemAlloc/fn_MemFreeStatic with tail-canary redzones so an OOB
@@ -1536,40 +1472,12 @@ static bool Init() {
     //     stderr. See standalone/filename_dtor_check.cpp.
     InstallFilenameDtorCheck();
 
-    // 4d. Diagnostic (session 4): detour the ACTUAL Runtime ~Filename /
-    //     operator= functions (not our global pointers, which fired 0x in
-    //     session 3 because the UAF is Runtime-internal) so every caller routes
-    //     through a refcount==0 check before the dec/inc. Catches the
-    //     Runtime-internal use-after-free that plants the bucket-12 free-list
-    //     corruption, with the geometry call stack. Env-gated BANISHED_FNHOOK
-    //     (default OFF). See standalone/filename_runtime_hook.cpp.
-    InstallFilenameRuntimeHook();
-
-    // 4e. THE MENU CRASH FIX (session 5): serialize the Runtime resource loader
-    //     with one global recursive CS taken at BOTH ExternalFactory::FindOrLoad
-    //     AND External::Load. The intermittent menu heap crash is a concurrency
-    //     race between the main thread and the Runtime background loader thread,
-    //     both calling the non-thread-safe FindOrLoad/External::Load (racy
-    //     factory-cache Add + racy String refcount inc/dec) — corrupting both the
-    //     free-list (the bucket-12 link crash, Runtime+0xC74C3) and the factory
-    //     cache (FindOrLoad returns NULL for a real resource -> texture/dialog
-    //     null deref). Serializing gives 0 crashes / 24 (pure default), all
-    //     drawing the menu, vs ~33% baseline. Locking External::Load too covers
-    //     its other callers + the in-game world-build load path. Default ON; opt
-    //     out with BANISHED_NO_FOL_LOCK=1. See filename_runtime_hook.cpp.
-    InstallFindOrLoadWatch();
-
-    // 4f. Diagnostic: log every Object::InternalFactory::PersistObject call with
-    //     its objId against the id map's real bounds. Off unless
-    //     BANISHED_PERSIST_TRACE=1. See standalone/persistobject_probe.cpp.
-    InstallPersistObjectProbe();
-
-    // 4f. Accelerator B (Phase 0): reimplement IO::CompressedStream::Read with an
-    //     n<=0 progress guard so a serialize-misalignment over-read logs the
-    //     drifting resource + stack and returns false instead of spinning the
-    //     loader forever. Gate BANISHED_READ_GUARD=1 (default OFF → no-op). See
-    //     filename_runtime_hook.cpp.
-    InstallReadGuard();
+    // 4d. THE MENU CRASH FIX (session 5) used to install here as a pair of DLL
+    //     byte patches. It now lives in the ported bodies themselves: the
+    //     recursive CS is standalone/res_load_lock.cpp, taken by
+    //     ExternalFactory::FindOrLoad and External::Load directly. See the
+    //     banner in standalone/res_load_lock.h for why an install site was the
+    //     wrong home for it.
     StallDebug::Mark("redzone/alloc-lock/diagnostic installers");
 
     // 5. PROBE: dump _firstTypeInfo state right after Runtime DLL load.
@@ -1690,21 +1598,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // Unregistered-address census (BANISHED_UNREG_CENSUS=1). Dumped here and
     // not from atexit: the crash handler ends in ExitProcess, which skips it.
     DumpUnregCensus();
-    // Runtime port: which ports were live this run (BANISHED_RT_CENSUS=1) and
-    // what the differential oracle saw (BANISHED_RT_DIFF=1). Same reason as
-    // above for not using atexit.
+    // Runtime port: which ports were live this run. Same reason as above for
+    // not using atexit.
     DumpRuntimeRegistry();
-    // Cutover residue (BANISHED_RT_STRICT=1): what still asked the DLL.
     DumpRuntimeResidue();
     // Wave 9 lane F: symbols that resolved to NOTHING. Always on, prints only
     // when the list is non-empty. After lane G this is the missing-symbol list.
     DumpUnresolvedSymbols();
-    // Wave 9 lane C2: the minted-DATA shadow check (BANISHED_RT_MINT_SHADOW=1).
-    // Run a SECOND time here, at exit, on purpose: the init-phase pass sees the
-    // DLL's singletons before anything has written them, and which of the 28
-    // storage symbols the process actually populates is ground truth that
-    // disappears with the DLL.
-    { extern void RtDataMintShadowReport(const char*); RtDataMintShadowReport("exit"); }
     // WAVE 17 LANE CEIL: door attendance for the 62 Video/IO/Graphics DATA rows
     // (BANISHED_W17_ATTEND=1). Placed HERE, beside the mint shadow report and
     // NOT in a static destructor, for the reason the paragraph above gives —
@@ -1721,14 +1621,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // any of them is reachable in fact. Always printed, including zero, and it
     // carries its own two controls -- read them before trusting the zero.
     RtFactoryDispatchReport();
-    // WAVE 24 LANE TINFO: the factory probe above measures the AVL-TREE door,
-    // which no `?_typeInfo@` symbol is consulted by name for — so its
-    // `minted=0` is silent about what a PROMOTION does. This screen measures
-    // the NAME door instead: per minted row, what ResolveExport hands a caller,
-    // whether that node is zeroed (Wave 23 handover item 1's premise), whether
-    // it agrees with the loaded DLL's node, and how many times the symbol was
-    // asked for. Four controls, printed with it.
-    { extern void RtTInfoDoorReport(); RtTInfoDoorReport(); }
     { extern void RtObjectTypeInfoAccessorsReport();
       RtObjectTypeInfoAccessorsReport(); }
     // WAVE 10 LANE UI4: says so out loud when its deferred probe never fired,
@@ -1748,17 +1640,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // Condition (b) of the WAVE11.md advisor amendment, as a log line.
     { extern void RtObjectInternalVtblPin(); RtObjectInternalVtblPin(); }
     // WAVE 11 LANE OBJLIFE: the synthesised factory-dtor oracle's safety net.
-    // It normally reports from RtObjectPortInit; if the DLL allocator was not
+    // It normally reports from RtObjectPortInit; if the allocator was not
     // readable that early it defers to here rather than reporting a vacuous
-    // screen 2. Self-guarded, so this is a no-op when it already ran and when
-    // BANISHED_RT_FACTORYDTOR_PROBE is unset.
+    // screen 2. Self-guarded, so this is a no-op when it already ran.
     { extern void RtObjectFactoryDtorsProbe(); RtObjectFactoryDtorsProbe(); }
-    RtDiffSummary();
-    // Wave 10: the PREDICTIVE shadow oracle (BANISHED_RT_PREDICT=1). Prints
-    // beside [RtDiff] and is silent when off. Read its `changed=` column
-    // before its `wrong=` one: changed=0 is a green board over a path the
-    // DLL was never required to walk.
-    RtPredict::Summary();
     // Wave 9 lane FLUSH: UI::SpriteContext::Flush's per-branch counts. A
     // `divergences=0` with no idea WHICH branches ran is the shape lane UIF's
     // own section 11.3 mis-read, so the branch split is printed next to it.
@@ -1811,15 +1696,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // reports that these lines were SEEN TO PRINT before any zero in them was
     // believed (reference_uncalled_port_is_not_verified.md).
     { extern void RtGraphicsWave29GfxbodySummary(); RtGraphicsWave29GfxbodySummary(); }
-    RtAllocShadowSummary();
     // Wave 9 lane H: 0 misses == every cached Runtime resolve found its symbol.
     // A non-zero count names the symbols that would be unminted at cutover.
     RtResolveMissSummary();
     // Wave 9 lane H: is the early-snapshot port-bypass class LIVE? A number,
     // not an argument -- see runtime/funcs/rt_resolve_cache.cpp.
     RtResolveEarlySummary();
-    // Wave 9 lane S: the save-stream A/B oracle (BANISHED_RT_SAVE_TRACE=1).
-    RtSaveTraceSummary();
     // Wave 11 follow-up 3 lane AVL: ExternalFactory::SerializeReferenceTable's
     // attendance counters and its MUTATION A post-condition. Printed here, from
     // the process exit path rather than a static destructor, because an
@@ -1827,18 +1709,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // rather than an error.
     { extern void RtObjectExternalRefTableSummary();      RtObjectExternalRefTableSummary(); }
     { extern void RtObjectExternalRefTableProbeSummary(); RtObjectExternalRefTableProbeSummary(); }
-    { extern void RtSelfTestSummary(); RtSelfTestSummary(); }
     // WAVE 29 LANE VERIFY — per-row port-door attendance. Here rather than in a
     // static destructor for the reason every instrument above gives: by
     // static-destructor time the registry is torn down and every row would read
     // as unregistered, which its own screen would print as a plausible zero.
     RtRowAttendanceReport();
-    // WAVE 29 LANE VERIFY -- NO factory-oracle call here, and that is a
-    // MEASURED decision, not an omission. It ran here first and faulted on its
-    // third row: by the exit path the engine has torn down the MemoryAllocator
-    // these constructors need. It now runs from ToolHarness_Tick at in-game
-    // frame 120, the first point where the ENGINE'S OWN allocator is live.
-    // See the placement block in standalone/factory_byte_oracle.cpp.
 
     return rc;
 }
