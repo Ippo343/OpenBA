@@ -612,7 +612,6 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
 
                 uintptr_t storageComp = *(uintptr_t*)retIBP;
                 int storageSlotCount = *(int*)(storageComp + 0x30);
-                int foundSlotIdx = -1;
                 int availableAmount = 0;
 
                 // Search storage slots for matching material type

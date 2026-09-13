@@ -570,7 +570,7 @@ void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
         return;
     }
 
-    int dbgEntities = 0, dbgEntRegionOk = 0, dbgBldRegionOk = 0, dbgPairsAdded = 0;
+    int dbgEntities = 0, dbgEntRegionOk = 0, dbgPairsAdded = 0;
 
     // Get key pointers from the game world singleton
     uint8_t* world = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
@@ -1054,7 +1054,6 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
             int64_t itemEntity = itemEntry[0];
             void* rawMat = nullptr;
             if (itemEntity) {
-                void** subCompArray = *reinterpret_cast<void***>(itemEntity + 0x28);
                 int subCompCount = *reinterpret_cast<int*>(itemEntity + 0x30);
                 uint32_t rawMatTypeId = g_TypeId_RawMaterialDescription ?
                     *g_TypeId_RawMaterialDescription : 0;
