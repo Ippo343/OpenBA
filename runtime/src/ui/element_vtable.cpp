@@ -468,18 +468,20 @@ extern "C" void** RtUi_Element_GetBorder(const Element* self, void** ret) {
 // ---- slot 8  ?Enable@Element@UI@@UEAAX_N@Z  0x180116910 --------------------
 //
 //   old = _flags
-//   _flags = enable ? (old | 0x800000) : (old & ~0x800000)   [bit 23, kDisabled]
+//   _flags = enable ? (old & ~0x800000) : (old | 0x800000)   [bit 23, kDisabled]
 //   if (((_flags ^ old) & 1) != 0) NeedsSizeCalcWalk(this);  [DEAD — see banner]
 //   for (i = 0; i < _children._size; ++i)
 //       children[i]->vt[8](children[i], enable)
 //
-// *** THE SENSE IS INVERTED AND IT IS RETAIL'S. *** `Enable(true)` SETS bit 23,
-// and bit 23 is `kElementFlagDisabled` (`?IsDisabled@` 0x180035520 reads it,
-// `?IsEnabled@` 0x180035500 is `TEST 0x1800000; SETZ`). So the argument is
-// "disable", not "enable", despite the name. That is not a decoding slip:
-// code/Game/Dialog/controlui.cpp:335 already annotates the same bit as
-// "disabled" at an exe call site. Reading the argument as its name would
-// invert every disabled control in the game.
+// THE ARGUMENT MEANS WHAT ITS NAME SAYS. `Enable(true)` CLEARS bit 23
+// (0x180116928: `TEST DL,DL / JZ`, true arm 0x18011692f: `BTR R8D,0x17`), and bit 23 is
+// `kElementFlagDisabled` (`?IsEnabled@` 0x180035500 is `TEST 0x1800000; SETZ`).
+// An earlier revision of this port had the sense INVERTED, with a banner
+// insisting the inversion was retail's. It was not, and the defect was
+// invisible with the DLL present: the exe's dialogs reach slot 8 through the
+// DLL's own vtables, so this body only ran under the diff oracle. The first
+// DLL-absent Load dialog (2026-09-12) called SetEnabled(button, 1) on
+// Load/Cancel/Delete through the minted vtable and all three came up greyed.
 //
 // The child recursion goes through the CHILD's own slot 8, not through this
 // body, so a ButtonElement child reaches `?Enable@ButtonElement@` (0x180110cc0)
@@ -518,8 +520,8 @@ extern "C" void RtUi_Element_Enable(Element* self, bool enable) {
     }
 
     const uint32_t old = self->_flags;
-    if (enable) self->_flags = old |  UI::kElementFlagDisabled;
-    else        self->_flags = old & ~UI::kElementFlagDisabled;
+    if (enable) self->_flags = old & ~UI::kElementFlagDisabled;
+    else        self->_flags = old |  UI::kElementFlagDisabled;
     // DEAD IN THE SHIPPED BUILD (`TEST R8B,0x1` on a diff that can only hold
     // bit 23). Written literally so it is evaluated, not deleted.
     if (((self->_flags ^ old) & UI::kElementFlagHidden) != 0) NeedsSizeCalcWalk(self);
@@ -533,8 +535,8 @@ extern "C" void RtUi_Element_Enable(Element* self, bool enable) {
     if (rt_diff_on__) {
         Element* a = reinterpret_cast<Element*>(oursCopy);
         const uint32_t oldA = a->_flags;
-        if (enable) a->_flags = oldA |  UI::kElementFlagDisabled;
-        else        a->_flags = oldA & ~UI::kElementFlagDisabled;
+        if (enable) a->_flags = oldA & ~UI::kElementFlagDisabled;
+        else        a->_flags = oldA |  UI::kElementFlagDisabled;
         if (((a->_flags ^ oldA) & UI::kElementFlagHidden) != 0) NeedsSizeCalcWalk(a);
 
         using Fn = void (*)(void*, bool);

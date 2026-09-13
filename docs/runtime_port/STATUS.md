@@ -71,6 +71,35 @@ probes, byte-pins, hook installers or `if (!g_portOn)` fall-throughs that degrad
 print "not checked"; the one live dependency was `userinterface_hover.cpp`'s string release in
 BeginToolTip (MemFree through the raw door), now the registry door. The other 600-odd sites were
 not reached by this route; re-run the strict gate on any new route and read the table.
+Load Game route, DLL-absent (2026-09-12, `BANISHED_AUTOMENU_BUTTON=2`): two defects, both fixed.
+- EXEC-of-0 in `SaveLoad::UpdateList` state 1: the save-list sort calls the DLL's own CRT
+  `qsort` by ADDRESS (0x18007f050) and every lane before had filed it "CRT, out of scope";
+  the closure report still counts it among the CRT rows "our CRT already provides", but no
+  body sat behind the retail address. Ported with `shortsort` (0x18007f340) in
+  `runtime/src/crt/msvc_qsort.cpp` (the MSVC algorithm, not `::qsort`, because the
+  comparator is not a strict weak order and the algorithm decides the tie order).
+- Load/Cancel/Delete greyed: `UI::Element::Enable`'s port had the argument sense inverted,
+  under a banner claiming the inversion was retail's. The DLL-present build never runs that
+  body outside the diff oracle (dialogs reach slot 8 through the DLL's vtables), so the
+  screenshot pair present/absent was the first thing to show it. Same lesson as the text path
+  above: a body a DLL-internal caller reaches can only be seen DLL-absent.
+The dialog now matches the DLL-present capture. Clicking Load in that dialog (the actual
+save load, DLL-absent) has not been driven yet; there is no unattended click into
+SaveLoadDialog.
+Pressing Load (attended, DLL-absent, same evening): the save deserialized up to
+`InternalBasePtr::Serialize`, whose PersistObject door was `RtOriginal` (null with no DLL);
+now the registry door. After that the save loads and plays.
+Picking parity, DLL-absent vs DLL-present (2026-09-12, reported as "click-to-highlight a
+touch off"): a seeded, camera-pinned new game (`BANISHED_SEED=12345 BANISHED_CAMERA_PIN=town
+BANISHED_SELECT_DIAG=1`) with the same 54 synthetic clicks (`SetCursorPos` + `mouse_event` at
+fixed client coordinates) in both builds gave IDENTICAL terrain hit positions, cells, picking
+mesh ids and selected entities on every click, and the same house highlighted. Also checked
+against retail bytes: `Frustum::GetScreenDirection`, `Cursor::Serialize`, the cursor block of
+`UserInterface::Draw`, `PickingComponent::OnAdded`'s AddMesh transform; window/client/backbuffer
+sizes are equal in both logs. Whatever the offset is, it is not DLL-absent-specific; the
+cursor is the OS cursor in both builds (the sprite-cursor arm of `UserInterface::Draw` is not
+taken at the menu). Next step if it persists: the same click grid against retail's own
+Application-x64.exe on one shared save.
 
 ## DLL-present build
 

@@ -63,6 +63,9 @@ void InstallPorted() {
 // they were simply never registered, so the cutover closure still listed them
 // and their whole error-reporting subtree as unported.
 int RtCrtLibmRegister();
+// runtime/src/crt/msvc_qsort.cpp — the CRT qsort/shortsort pair at 0x18007f050 /
+// 0x18007f340, reached by ADDRESS from Save::SaveLoad::UpdateList's save-list sort.
+int RtCrtQsortRegister();
 
 namespace RtLibm {
 
@@ -78,6 +81,7 @@ bool UsingDllLibm() { return s_usingDll; }
 
 void Init() {
     ::RtCrtLibmRegister();
+    ::RtCrtQsortRegister();
 
     const char* e = std::getenv("BANISHED_RT_LIBM");
 

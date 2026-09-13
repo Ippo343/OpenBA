@@ -858,11 +858,13 @@ void RtObject_InternalBasePtr_Serialize(InternalBasePtr* self, SerializerLite* s
     reinterpret_cast<void (*)(void*, uint32_t*, const char*)>(encVtbl[kEncSerializeUint / 8])(
         enc, &type, nullptr);
 
+    // The REGISTRY door, not RtOriginal: PersistObject is ported
+    // (internalfactory_persist.cpp) and with the DLL absent the raw door is
+    // NULL. First DLL-absent Load Game (2026-09-12) died here, EXEC-of-0, with
+    // the InternalFactory in RCX -- the same wall as video/buffers.cpp MemFree.
     using PersistObjectFn = Internal* (*)(InternalFactory*, void*, uint32_t, int, uint32_t);
-    static PersistObjectFn persist = nullptr;
-    if (!persist)
-        persist = RtOriginal<PersistObjectFn>(
-            "?PersistObject@InternalFactory@Object@@QEAAPEAVInternal@2@AEAVStream@IO@@IHI@Z");
+    PersistObjectFn persist = RT_EXPORT_ONCE(PersistObjectFn,
+        "?PersistObject@InternalFactory@Object@@QEAAPEAVInternal@2@AEAVStream@IO@@IHI@Z");
     self->ptr = persist(Factory(), ser->stream, gen, index, type);
 }
 

@@ -31,10 +31,10 @@ CUTOVER_ROW("?_rng@Particle@Graphics@@1VRandom@System@@A", CUTOVER_REQUIRED, tru
 CUTOVER_ROW("?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA", CUTOVER_REQUIRED, true, 0x1801fc70bull, "Graphics", 5)
 // Graphics  HARMFUL / DLL-PRESENT  doors=7  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_singleton@AnimationManager@Graphics@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe7b0ull, "Graphics", 7)
-// IO  NO-OP / PERMANENT  doors=5  -- NO-OP is permanent, but 5 by-name door(s) resolve NULL with no DLL loaded
-CUTOVER_ROW("??_7ReaderWriter@IO@@6B@", CUTOVER_REQUIRED, true, 0x1801553b0ull, "IO", 5)
-// IO  NO-OP / DLL-PRESENT  doors=11  -- verdict is DLL-PRESENT only and 11 by-name door(s) would resolve NULL at cutover
-CUTOVER_ROW("??_7Stream@IO@@6B@", CUTOVER_REQUIRED, true, 0x1801549a0ull, "IO", 11)
+// IO  NO-OP / PERMANENT  doors=7  -- NO-OP is permanent, but 7 by-name door(s) resolve NULL with no DLL loaded
+CUTOVER_ROW("??_7ReaderWriter@IO@@6B@", CUTOVER_REQUIRED, true, 0x1801553b0ull, "IO", 7)
+// IO  NO-OP / DLL-PRESENT  doors=12  -- verdict is DLL-PRESENT only and 12 by-name door(s) would resolve NULL at cutover
+CUTOVER_ROW("??_7Stream@IO@@6B@", CUTOVER_REQUIRED, true, 0x1801549a0ull, "IO", 12)
 // IO  HARMFUL / DLL-PRESENT  doors=34  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_singleton@FileSystem@IO@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc6a8ull, "IO", 34)
 // IO  HARMFUL / DLL-PRESENT  doors=7  -- tag states the verdict inverts at cutover
@@ -45,8 +45,8 @@ CUTOVER_ROW("?_singleton@Persistence@IO@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x
 CUTOVER_ROW("?_singleton@Configuration@Input@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe768ull, "Input", 12)
 // Input  HARMFUL (DLL-present) / REQUIRED (cutover) / DLL-PRESENT  doors=12  -- verdict is DLL-PRESENT only and 12 by-name door(s) would resolve NULL at cutover
 CUTOVER_ROW("?_singleton@Device@Input@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe770ull, "Input", 12)
-// Object  NO-OP / DLL-PRESENT  doors=63  -- verdict is DLL-PRESENT only and 63 by-name door(s) would resolve NULL at cutover
-CUTOVER_ROW("??_7Base@Object@@6B@", CUTOVER_REQUIRED, true, 0x180154788ull, "Object", 63)
+// Object  NO-OP / DLL-PRESENT  doors=64  -- verdict is DLL-PRESENT only and 64 by-name door(s) would resolve NULL at cutover
+CUTOVER_ROW("??_7Base@Object@@6B@", CUTOVER_REQUIRED, true, 0x180154788ull, "Object", 64)
 // Object  NO-OP / DLL-PRESENT  doors=11  -- verdict is DLL-PRESENT only and 11 by-name door(s) would resolve NULL at cutover
 CUTOVER_ROW("??_7CompiledExternal@Object@@6B@", CUTOVER_REQUIRED, true, 0x180154a30ull, "Object", 11)
 // Object  NO-OP / DLL-PRESENT  doors=61  -- verdict is DLL-PRESENT only and 61 by-name door(s) would resolve NULL at cutover
