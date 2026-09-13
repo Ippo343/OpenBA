@@ -134,14 +134,6 @@ void SpawnAmbientEntity(uint8_t* w, uint8_t* gw) {
     if (entityList)
         s_fnEntityRegister(entityList, &ibp, typeId);
 
-    static int s_trace = -1;
-    if (s_trace < 0) {
-        const char* e = std::getenv("BANISHED_AMBIENT_TRACE");
-        s_trace = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    if (s_trace)
-        fprintf(stderr, "[wxambient] spawned ambient entity=%p template=%p typeId=%d list=%p\n",
-                entity, templateDesc, typeId, entityList);
 }
 
 // Part 5 — FUN_1400935f0 weather-type state machine. Regenerates the temperature
@@ -220,15 +212,6 @@ extern "C" void WeatherEffect_SetEnabled(void* sim, int slot, int enable);
 // ============================================================
 extern "C" void Weather_ResetTime_Reimpl(void* weatherSelf, void* time) {
     if (!weatherSelf) return;
-
-    // Default ON ("fire in the sim"); BANISHED_LIVE_WEATHER=0 restores the old
-    // hard-zero spring/clear behaviour for A/B comparison.
-    static int s_enabled = -1;
-    if (s_enabled < 0) {
-        const char* e = std::getenv("BANISHED_LIVE_WEATHER");
-        s_enabled = (e && (e[0] == '0' || e[0] == 'f' || e[0] == 'F')) ? 0 : 1;
-    }
-    if (!s_enabled) return;
 
     uint8_t* w = reinterpret_cast<uint8_t*>(weatherSelf);
 
@@ -360,39 +343,12 @@ extern "C" void Weather_ResetTime_Reimpl(void* weatherSelf, void* time) {
     //     condition matches when weather is on and the sim is idle (state 0).
     //     State (w+0x10) is re-read each iteration since SetEnabled mutates it. ---
     {
-        // Debug: BANISHED_WEATHER_FORCE=1 ignores the weather-type gate (w+0x10)
-        // so the temperature-matched precip effect always spawns — lets you see
-        // rain/snow on demand instead of waiting for the type roll to hit 0.
-        static int s_force = -1;
-        if (s_force < 0) {
-            const char* e = std::getenv("BANISHED_WEATHER_FORCE");
-            s_force = (e && e[0] && e[0] != '0') ? 1 : 0;
-        }
         bool cold = *reinterpret_cast<float*>(w + 0x18) <= kColdThresh;   // temp <= 34
         for (int slot = 0; slot < 2; ++slot) {
             int state = *reinterpret_cast<int*>(w + 0x10);
-            int enable = (weatherSetting != 0 && (s_force || state == 0) &&
+            int enable = (weatherSetting != 0 && state == 0 &&
                           ((cold ? 1 : 0) == slot)) ? 1 : 0;
             WeatherEffect_SetEnabled(weatherSelf, slot, enable);
-        }
-        static int s_wxDiag = -1;
-        if (s_wxDiag < 0) {
-            const char* e = std::getenv("BANISHED_WEATHER_TRACE");
-            s_wxDiag = (e && e[0] && e[0] != '0') ? 1 : 0;
-        }
-        if (s_wxDiag) {
-            static int s_dn = 0;
-            if ((s_dn++ % 120) == 0) {
-                void* envRes = *reinterpret_cast<void**>(w + 0x00);
-                int arrCnt = *reinterpret_cast<int*>(w + 0x58);
-                void** arr = *reinterpret_cast<void***>(w + 0x50);
-                fprintf(stderr, "[wxfx] setting=%d state=%d cold=%d envRes=%p arrCnt=%d "
-                        "slot0=%p slot1=%p\n",
-                        weatherSetting, *reinterpret_cast<int*>(w + 0x10), cold ? 1 : 0,
-                        envRes, arrCnt, arr ? arr[0] : nullptr,
-                        (arr && arrCnt > 1) ? arr[1] : nullptr);
-                fflush(stderr);
-            }
         }
     }
 
@@ -402,63 +358,20 @@ extern "C" void Weather_ResetTime_Reimpl(void* weatherSelf, void* time) {
 
     // --- Part 6: ambient-spawn chance (FUN_1400a9290). Spawns the ambient-audio
     //     environment entity (envRes+0x20 template) — the biome wind/nature bed —
-    //     when the roll fires in warm clear weather. Gated by BANISHED_AMBIENT_AUDIO
-    //     so the audio feature stays opt-in / A/B-safe. ---
+    //     when the roll fires in warm clear weather. ---
     {
-        static int s_ambient = -1;
-        if (s_ambient < 0) {
-            const char* e = std::getenv("BANISHED_AMBIENT_AUDIO");
-            s_ambient = (e && e[0] && e[0] != '0' && e[0] != 'f' && e[0] != 'F') ? 1 : 0;
-        }
         void* climate = *reinterpret_cast<void**>(w + 0x08);
         uint32_t disasterBits = *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(gw) + 0xd0);
         void* rng = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(gw) + 0xd8);
-
-        // Debug: BANISHED_AMBIENT_FORCE_SPAWN=1 spawns the ambient entity once on
-        // the first tick (bypassing the rare warm-clear chance roll) so the audio
-        // pipeline can be verified without waiting for the weather to line up.
-        static int s_forceSpawn = -1;
-        if (s_forceSpawn < 0) {
-            const char* e = std::getenv("BANISHED_AMBIENT_FORCE_SPAWN");
-            s_forceSpawn = (e && e[0] && e[0] != '0') ? 1 : 0;
-        }
-        static bool s_forcedOnce = false;
-        if (s_ambient && s_forceSpawn && !s_forcedOnce) {
-            s_forcedOnce = true;
-            SpawnAmbientEntity(w, reinterpret_cast<uint8_t*>(gw));
-        }
 
         if (*reinterpret_cast<float*>(w + 0x18) > kColdThresh &&
             *reinterpret_cast<int*>(w + 0x10) == 0 &&
             ((disasterBits >> 7) & 1) == 0 && climate && rng) {
             const float* p = reinterpret_cast<const float*>(reinterpret_cast<uint8_t*>(climate) + 0x108);
-            if (SpawnChance(w + 0x70, p, rng) && s_ambient) {
+            if (SpawnChance(w + 0x70, p, rng)) {
                 SpawnAmbientEntity(w, reinterpret_cast<uint8_t*>(gw));
             }
         }
     }
 
-    // Optional verification trace: BANISHED_WEATHER_TRACE=1 logs the evolving
-    // temperature + terrain params every ~120 ticks.
-    {
-        static int s_trace = -1;
-        if (s_trace < 0) {
-            const char* e = std::getenv("BANISHED_WEATHER_TRACE");
-            s_trace = (e && e[0] && e[0] != '0') ? 1 : 0;
-        }
-        if (s_trace) {
-            static int s_n = 0;
-            if ((s_n++ % 120) == 0) {
-                fprintf(stderr, "[weather] t=%.1fs temp=%.2f coverage=%.3f "
-                        "fadeA=%.3f fadeB=%.3f intensity=%.3f\n",
-                        sec,
-                        *reinterpret_cast<float*>(w + 0x18),
-                        *reinterpret_cast<float*>(w + 0x1c),
-                        *reinterpret_cast<float*>(w + 0x20),
-                        *reinterpret_cast<float*>(w + 0x24),
-                        *reinterpret_cast<float*>(w + 0x28));
-                fflush(stderr);
-            }
-        }
-    }
 }

@@ -202,7 +202,7 @@ static int EventLog_IconIndex(int eventType) {
 static void EventLog_AddEventCore(void* eventLog, int eventType, int severity,
                                   void* entityIBP,
                                   const char* const* extra, int nExtra,
-                                  const char* traceTag) {
+                                  const char* /*traceTag*/) {
     if (!eventLog) return;
     void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     if (!gameWorld) return;
@@ -257,22 +257,6 @@ static void EventLog_AddEventCore(void* eventLog, int eventType, int severity,
     *(int32_t*)(entry + 0x18) = tileIdx;
     *(int32_t*)(entry + 0x1c) = iconIndex;
     *(int32_t*)(entry + 0x20) = popup;
-
-    // Trace BEFORE destructing the temporaries (reading them after dtor shows null).
-    if (std::getenv("BANISHED_EVENT_TRACE")) {
-        const char* fmtData = *(const char**)formatted;
-        int existing = *(int*)((uintptr_t)eventLog + 0x20);
-        fprintf(stderr, "[EventLog] %s type=%d sev=%d icon=%d popup=%d tile=%d "
-                        "(count now %d)\n           text=\"%s\" template=\"%s\" "
-                        "season=\"%s\" year=\"%s\"\n",
-                traceTag, eventType, severity, iconIndex, popup, tileIdx, existing,
-                fmtData ? fmtData : "(null)", tmplData ? tmplData : "(null)",
-                seaData ? seaData : "(null)", yrData ? yrData : "(null)");
-        for (int i = 0; i < nExtra; i++)
-            fprintf(stderr, "           arg{%d}=\"%s\"\n", i + 2,
-                    extra[i] ? extra[i] : "(null)");
-        fflush(stderr);
-    }
 
     int count = *(int*)((uintptr_t)eventLog + 0x20);
     EventArray_Grow((void*)((uintptr_t)eventLog + 0x18), count + 1, entry);

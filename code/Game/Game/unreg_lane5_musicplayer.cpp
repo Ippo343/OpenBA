@@ -51,7 +51,7 @@
 // GATE: DEFAULT-ON as of the lane D close-out (2026-09-06); BANISHED_LIVE_MUSIC=0
 // is the kill-switch. It was opt-in because the authoring lane could not build or
 // run the game and the port was therefore UNPROVEN. It is proven now -- see the
-// measured PLAY line quoted above MusicEnabled().
+// measured PLAY line quoted above.
 //
 // FAITHFULNESS NOTE (an unguarded deref left in on purpose)
 // ---------------------------------------------------------
@@ -105,18 +105,9 @@ constexpr float kMonthsPerYear     = 12.0f;     // DAT_1401721b8
 // proved this function reaches the mixer:
 //     [MusicPlayer] MusicTracks.rsc -> 00000271db93d780 tracks=15
 //     [MusicPlayer] PLAY track=12/15 ext=271db912ee8 scene=00000271db7aa138 -> handle=1536
-// (autostart new game, BANISHED_LIVE_MUSIC=1, standalone_error.log:2565-2566). The lazy
-// EnsureTrackList Find resolved, all 15 tracks parsed, the month/mood filter selected one
-// and Audio::Scene::PlayEffect returned a live handle. Per CLAUDE.md a feature graduates
-// to default-on once it is proven, with the env var kept as a kill-switch (=0).
-bool MusicEnabled() {
-    static int g = -1;
-    if (g < 0) {
-        const char* e = std::getenv("BANISHED_LIVE_MUSIC");
-        g = (e && (e[0] == '0' || std::strcmp(e, "false") == 0)) ? 0 : 1;
-    }
-    return g != 0;
-}
+// (autostart new game, standalone_error.log:2565-2566). The lazy EnsureTrackList Find
+// resolved, all 15 tracks parsed, the month/mood filter selected one and
+// Audio::Scene::PlayEffect returned a live handle.
 
 // Audio::Scene::IsEffectPlaying(this, uint handle) -> bool
 // ?IsEffectPlaying@Scene@Audio@@QEBA_NI@Z (Runtime ordinal 3118). Not in
@@ -185,7 +176,7 @@ void EnsureTrackList(uint8_t* mp) {
 // MusicPlayer::Update — faithful port of exe 0x1400a40e0
 // ============================================================
 extern "C" void MusicPlayer_Update(void* musicPlayer) {
-    if (!MusicEnabled() || !musicPlayer) return;
+    if (!musicPlayer) return;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     ResolveOnce();
 

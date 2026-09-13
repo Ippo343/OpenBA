@@ -204,7 +204,6 @@ struct alignas(8) StringHandle { void* p; };
 // Signature matches fn_QuickSave_t in gameupdateloop.cpp: void(void*).
 // ============================================================================
 extern "C" void GameUpdateLoop_TakeScreenshot(void* self) {
-    static const bool s_trace = std::getenv("BANISHED_SCREENSHOT_TRACE") != nullptr;
 
     if (!ResolveFuncs()) {
         // See departure (2) in the header comment: consume the request anyway,
@@ -270,8 +269,6 @@ extern "C" void GameUpdateLoop_TakeScreenshot(void* self) {
     s_SaveImageToFile(&path, width, height, pixels);
     s_MemFree(pixels);
 
-    if (s_trace)
-        printf("[TakeScreenshot] %dx%d -> Screenshot%d.bmp\n", width, height, index - 1);
 
     // --- Teardown: exactly what the exe vtable's slot 0 (0x140019d50) does ----
     s_FCIB_Dtor(frameCopy);

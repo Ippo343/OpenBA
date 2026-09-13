@@ -127,11 +127,6 @@ int WorkAreaCenterCell(void* area) {
     return cell;
 }
 
-bool EnvOn(const char* name) {
-    const char* e = std::getenv(name);
-    return e && e[0] && e[0] != '0';
-}
-
 bool CitizenStackIdle(void* citizen) {
     if (!citizen || !Readable(citizen, kCharCompOff + 8)) return false;
     void* charComp = *reinterpret_cast<void**>((uintptr_t)citizen + kCharCompOff);

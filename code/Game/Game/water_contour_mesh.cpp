@@ -64,7 +64,7 @@
 //     is NOT stale — it is [RBP+0x308] = Normalize(interpolated centerline tangent),
 //     built at the top of the resample loop. The gate is
 //       Abs(Dot(Normalize(matchedLeft - matchedRight), tangent)) < 0.02 (DAT_1401720d0)
-//     and rejects skewed cross-sections. See PerpGate() / BANISHED_WATER_NO_PERP_GATE.
+//     and rejects skewed cross-sections.
 //
 // Constants (.rdata, verified via read_memory):
 //   DAT_1401721e4 = 48.0     pos pack scale (pos.xy * 48 -> int16)
@@ -109,33 +109,6 @@ constexpr float kVDenom     = 32.0f;     // DAT_1401721d0 (streamwise-V denomina
                                          //   fb00 emits V = midlineArc/32 + Voffset, Voffset
                                          //   carried across chunks -> cumulativeMidlineArc/32 - 16)
 constexpr float kMinArcGate = 0.001f;    // DAT_1401720b8 (avg-edge degenerate gate)
-
-// Optional band-width tuning (BANISHED_WATER_BAND_MULT, default 1.0 = byte-faithful).
-// The faithful band half-width = centerline.halfWidth + 2.0. Retail's river CARVE is
-// ~3-4x wider than this band (decoupled in retail too), so the carved banks read as
-// bare underwater-tinted terrain. This multiplier optionally widens the rendered water
-// band to cover more of the carve. Any value >1.0 is a DELIBERATE deviation from the
-// b260 geometry; the default keeps the mesh exactly faithful.
-static float WaterBandMult() {
-    static float m = []{
-        const char* e = std::getenv("BANISHED_WATER_BAND_MULT");
-        float v = (e && e[0]) ? (float)std::atof(e) : 1.0f;
-        return (v > 0.0f) ? v : 1.0f;
-    }();
-    return m;
-}
-
-// Perpendicularity gate toggle. fb00 only emits a cross-section when the matched
-// bank-to-bank vector is ~perpendicular to the local flow tangent (|dot| < 0.02,
-// DAT_1401720d0), dropping skewed matches at sharp bends. Faithful and ON by
-// default; opt out (old over-emitting behaviour) via BANISHED_WATER_NO_PERP_GATE.
-static bool PerpGate() {
-    static bool on = []{
-        const char* e = std::getenv("BANISHED_WATER_NO_PERP_GATE");
-        return !(e && e[0] && e[0] != '0');
-    }();
-    return on;
-}
 
 // ============================================================
 // VertexBuffer / IndexBuffer::Create (Runtime DX wiring) — same lazy resolve
@@ -298,7 +271,7 @@ void fb00_BuildBody(void* hf, int bodyIdx, Vec* vtxOut, Vec* idxOut) {
         return { f[0], f[1] };
     };
     // radius = centerline[0].halfWidth + 2.0   (fb00: *(*plVar38+0x14) + DAT_140172174)
-    float radius = (((const float*)cl)[5] + kRadMargin) * WaterBandMult();   // +0x14 == float index 5
+    float radius = (((const float*)cl)[5] + kRadMargin);   // +0x14 == float index 5
     float channelWidth = 2.0f * radius;
     if (channelWidth < 1.0f) channelWidth = 1.0f;
 
@@ -458,7 +431,7 @@ void fb00_BuildBody_Faithful(void* hf, int bodyIdx, Vec* vtxOut, Vec* idxOut) {
     auto CLx = [&](int i) { return ((const float*)(cl + (size_t)i * 0x1c))[0]; };
     auto CLy = [&](int i) { return ((const float*)(cl + (size_t)i * 0x1c))[1]; };
     // radius = centerline[0].halfWidth(+0x14) + 2.0   (fb00: cl[0].halfWidth + DAT_140172174)
-    float radius = (((const float*)cl)[5] + kRadMargin) * WaterBandMult();
+    float radius = (((const float*)cl)[5] + kRadMargin);
 
     // --- Build edge records (shifted endpoints +0.5x / -0.5y, DAT_140172114=0.5). ---
     int ne = ptCount - 1;
@@ -554,8 +527,8 @@ void fb00_BuildBody_Faithful(void* hf, int bodyIdx, Vec* vtxOut, Vec* idxOut) {
         // Abs(Dot(Normalize(crossVec), tangent)) < DAT_1401720d0 = 0.02). Sign of
         // crossVec is irrelevant (Abs), so left/right bank labelling doesn't matter.
         // Skips skewed cross-sections without advancing prevL/prevR (faithful to the
-        // retail goto-skip). Over-emit avoidance only; toggle with BANISHED_WATER_NO_PERP_GATE.
-        if (PerpGate()) {
+        // retail goto-skip). Over-emit avoidance only.
+        {
             V2 cross = V2Norm(V2Sub(leftBank.d[cL], rightBank.d[cR]));
             V2 ta = { CLx(i > 0 ? i - 1 : i),            CLy(i > 0 ? i - 1 : i) };
             V2 tb = { CLx(i < ptCount - 1 ? i + 1 : i),  CLy(i < ptCount - 1 ? i + 1 : i) };
@@ -638,20 +611,13 @@ void b260_Phase1(uint8_t* geom, uint8_t* hf) {
     int bodyCount = *(int32_t*)(hf + 0x20);
     RangeResize(rangeA, bodyCount);       // sub_efd0; sets rangeA.count (geom+0x1c8)
 
-    // Stage A: faithful dense rounded-bank builder by default; env forces the old
-    // approximation. The faithful path also falls back to the approximation for
-    // degenerate (<3-point) bodies that produce no geometry.
-    static const bool useOldStageA = []{
-        const char* e = std::getenv("BANISHED_WATER_OLD_STAGEA");
-        return e && e[0] && e[0] != '0';
-    }();
+    // Stage A: faithful dense rounded-bank builder. It falls back to the older
+    // approximation for degenerate (<3-point) bodies that produce no geometry.
 
     for (int body = 0; body < bodyCount; ++body) {
         Vec vtxOut{ nullptr, 0, 0 };
         Vec idxOut{ nullptr, 0, 0 };
-        if (useOldStageA) {
-            fb00_BuildBody(hf, body, &vtxOut, &idxOut);
-        } else {
+        {
             fb00_BuildBody_Faithful(hf, body, &vtxOut, &idxOut);
             if (vtxOut.count == 0) {   // degenerate body -> approximation fallback
                 if (vtxOut.data) fn_MemFreeStatic(vtxOut.data);
@@ -714,16 +680,6 @@ void b260_Phase2(uint8_t* geom, uint8_t* hf) {
     int   halfGrid = *(int32_t*)(geom + 0xc0) >> 1;
     uint8_t* featBase = *(uint8_t**)(hf + 0x48);
 
-    // [WATER-DIAG] Phase-2 tarn instrumentation. Entry state first so we can see
-    // which early-return gate (if any) fires when nothing emits.
-    const bool diag = std::getenv("BANISHED_WATER_DIAG") != nullptr;
-    long dCells = 0, dUnder = 0, dInterior = 0, dEmitCells = 0;
-    if (diag) {
-        fprintf(stderr, "[WATER-DIAG] b260 Phase2 ENTER: features=%d N(+0xd0)=%d "
-                "hmap(+0xd8)=%p halfGrid=%d featBase(+0x48)=%p\n",
-                featureCount, N, (void*)hmap, halfGrid, (void*)featBase);
-        fflush(stderr);
-    }
 
     if (!hmap || N <= 0) return;
     if (!featBase) return;
@@ -755,7 +711,6 @@ void b260_Phase2(uint8_t* geom, uint8_t* hf) {
         if (est < 16) est = 16;
         WeldSet weld; WeldInit(&weld, 0x10, est);
         int idxAdded = 0;
-        int fUnder = 0, fEmit = 0;
 
         for (int row = ymin; row < ymax; ++row) {
             for (int col = xmin; col < xmax; ++col) {
@@ -796,9 +751,7 @@ void b260_Phase2(uint8_t* geom, uint8_t* hf) {
                     weight[k] = w;
                 }
 
-                if (diag) { ++dCells; if (someUnderwater) { ++dUnder; ++fUnder; } if (someInterior) ++dInterior; }
                 if (!(someInterior && someUnderwater)) continue;
-                if (diag) { ++dEmitCells; ++fEmit; }
 
                 // Weld the 4 corners, then emit two triangles (i0,i1,i2),(i0,i2,i3).
                 uint16_t ci[4];
@@ -830,35 +783,7 @@ void b260_Phase2(uint8_t* geom, uint8_t* hf) {
         re[2] = weld.verts.count;
         re[3] = idxAdded;
 
-        // Per-feature outcome (BANISHED_WATER_DIAG): the question is whether this
-        // feature's bbox (center +/- (radius+2)) actually COVERS its lake. If the
-        // underwater cells inside the bbox saturate its edges, the lake is bigger
-        // than the feature says and the water gets clipped to a rectangle.
-        if (diag) {
-            int bw = xmax - xmin, bh = ymax - ymin;
-            fprintf(stderr, "[WATER-DIAG]   feat[%d] c=(%.1f,%.1f) radius=%.2f "
-                    "bbox=%dx%d cells=%d under=%d emit=%d verts=%d idx=%d\n",
-                    f, cx, cy, radius, bw, bh, bw * bh,
-                    fUnder, fEmit, weld.verts.count, idxAdded);
-            fflush(stderr);
-        }
         WeldFree(&weld);
-    }
-
-    if (diag) {
-        // Global heightmap min + count of underwater cells across the whole map.
-        long globalUnder = 0; float hmin = 1e9f;
-        for (size_t i = 0; i < (size_t)N * N; ++i) {
-            float z = (float)(int)hmap[i] * kHeightStep;
-            if (z < hmin) hmin = z;
-            if (z <= kUnderwater) ++globalUnder;
-        }
-        fprintf(stderr,
-            "[WATER-DIAG] b260 Phase2: features=%d  cellsTested=%ld under(<=%.2f)=%ld "
-            "interior=%ld emit=%ld | map hmin=%.3f globalUnderCells=%ld/%d\n",
-            featureCount, dCells, (double)kUnderwater, dUnder, dInterior, dEmitCells,
-            (double)hmin, globalUnder, N * N);
-        fflush(stderr);
     }
 }
 
@@ -882,14 +807,8 @@ extern "C" void WorldGen_BuildContourWaterMesh(void* self, void* hf) {
     uint8_t* geom = (uint8_t*)self;
     uint8_t* h    = (uint8_t*)hf;
 
-    // Phase 2 can be gated separately (it builds shore rings around hf+0x48
-    // features, which on the first-light map are mountain ranges — may look odd;
-    // default ON to match retail, opt out via BANISHED_WATER_CONTOUR_NOPHASE2).
-    const char* noP2 = std::getenv("BANISHED_WATER_CONTOUR_NOPHASE2");
-    bool doPhase2 = !(noP2 && noP2[0] && noP2[0] != '0');
-
     b260_Phase1(geom, h);
-    if (doPhase2) b260_Phase2(geom, h);
+    b260_Phase2(geom, h);   // shore rings around the hf+0x48 features
 
     // Finalize the GPU buffers (b260 tail). IndexBuffer first, then VertexBuffer.
     Vec* vtxAcc = (Vec*)(geom + 0x1a0);
@@ -900,9 +819,9 @@ extern "C" void WorldGen_BuildContourWaterMesh(void* self, void* hf) {
         s_VertexBufferCreate(geom + 0x160, vtxAcc->count << 4, false, vtxAcc->data);
 
     fprintf(stderr, "[water_contour] built: bodies(+0x1c8)=%d featRanges(+0x1d8)=%d "
-            "verts(+0x1a8)=%d idx(+0x1b8)=%d VB=%p IB=%p (phase2=%d)\n",
+            "verts(+0x1a8)=%d idx(+0x1b8)=%d VB=%p IB=%p\n",
             *(int32_t*)(geom + 0x1c8), *(int32_t*)(geom + 0x1d8),
             vtxAcc->count, idxAcc->count,
-            *(void**)(geom + 0x160 + 8), *(void**)(geom + 0x180 + 8), (int)doPhase2);
+            *(void**)(geom + 0x160 + 8), *(void**)(geom + 0x180 + 8));
     fflush(stderr);
 }

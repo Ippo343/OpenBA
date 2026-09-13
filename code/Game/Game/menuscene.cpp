@@ -401,14 +401,9 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
     // the camera at a zero (degenerate) transform and misaligns the tail
     // (observed: pos/qrot all zero, menu hangs). It is, however, the source of
     // the intermittent menu heap crash — see geometry_serialize.cpp for the
-    // OOB fix. BANISHED_NO_MENU_GEOM=1 skips it (diagnostic only; breaks the menu).
+    // OOB fix.
     {
-        static int s_noGeom = -1;
-        if (s_noGeom < 0) {
-            const char* e = getenv("BANISHED_NO_MENU_GEOM");
-            s_noGeom = (e && e[0] && e[0] != '0') ? 1 : 0;
-        }
-        if (!s_noGeom && self->_field28 && stream) {
+        if (self->_field28 && stream) {
             Reimpl_TradeWork_impl_04d0(self->_field28, stream);
             Reimpl_TradeWork_impl_f1a0(self->_field28, stream);
         }

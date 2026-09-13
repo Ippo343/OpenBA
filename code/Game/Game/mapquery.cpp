@@ -32,7 +32,6 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
-#include "Component/component_factory_base.h"   // ComponentFactory::LiveEnabled
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -122,15 +121,9 @@ void MapQuery_SampleNormal(void* worldGeomVoid, float worldX, float worldZ, floa
     out3[2] = nh * inv;              // vertical (slope) term read by the classifier
 }
 
-// BANISHED_FLOOR_TRACE — shared by this file and floorcomponent.cpp (producer side).
-bool MapQuery_FloorTraceOn() {
-    static int on = -1;
-    if (on < 0) {
-        const char* e = std::getenv("BANISHED_FLOOR_TRACE");
-        on = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    return on == 1;
-}
+// BANISHED_FLOOR_TRACE is gone (ENDGAME C.2). The symbol stays only until
+// code/Game/Component/floorcomponent.cpp drops its call sites; it is dead.
+bool MapQuery_FloorTraceOn() { return false; }
 
 // ---------------------------------------------------------------------------
 // Picking refine — the flag==0 + cellRec+0x2d>0 branch of the original
@@ -150,14 +143,7 @@ static constexpr float kRayMaxDist = 100.0f;   // DAT_140172208
 typedef int (*fn_PickingIntersect_t)(void* scene, const float* rayStart, const float* rayDir,
                                      const float* maxDist, float* hitPosOut, float* hitNormalOut);
 static fn_PickingIntersect_t s_fn_PickingIntersect = nullptr;
-static int  s_floorRefine  = -1;    // -1 unknown, 0 off, 1 on
 static bool s_pickResolved = false;
-
-static bool FloorRefineEnabled() {
-    if (s_floorRefine < 0)
-        s_floorRefine = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_FLOOR") ? 1 : 0;
-    return s_floorRefine == 1;
-}
 
 static void EnsurePickingIntersect() {
     if (s_pickResolved) return;
@@ -214,7 +200,7 @@ extern "C" float* Reimpl_MapGetTerrainPos(void* game, float* outPos3, float* inX
     if (outTri)
         MapQuery_SampleNormal(worldGeom, inX, inZ, (float*)outTri);
 
-    if (flag == 0 && FloorRefineEnabled()) {
+    if (flag == 0) {
         int* mapGrid = CanonicalMapGrid(game);
         const uintptr_t cells = mapGrid ? *(uintptr_t*)((uintptr_t)mapGrid + 0x80) : 0;
         const int dim = mapGrid ? mapGrid[0] : 0;
@@ -244,14 +230,6 @@ extern "C" float* Reimpl_MapGetTerrainPos(void* game, float* outPos3, float* inX
                             ((float*)outTri)[0] = hitNormal[0];
                             ((float*)outTri)[1] = hitNormal[1];
                             ((float*)outTri)[2] = hitNormal[2];
-                        }
-                        if (MapQuery_FloorTraceOn()) {
-                            static long long s_hits = 0;
-                            if ((++s_hits % 240) == 1)
-                                std::fprintf(stderr,
-                                    "[MapQuery] floor hit x%lld at (%.2f,%.2f): deck z=%.3f "
-                                    "(terrain z=%.3f, cell floors=%d)\n",
-                                    s_hits, inX, inZ, hitPos[2], height, (int)floorCount);
                         }
                         outPos3[0] = hitPos[0];
                         outPos3[1] = hitPos[1];

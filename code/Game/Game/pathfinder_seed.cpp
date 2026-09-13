@@ -96,17 +96,6 @@ static void Pf_OnCompleted_noop(void*) {}
 static void* g_pf_vtable[2] = { reinterpret_cast<void*>(&Pf_WorkerLoop_a6360),
                                 reinterpret_cast<void*>(&Pf_OnCompleted_noop) };
 
-static bool MoveTickEnabled() {
-    return ::ComponentFactory::LiveEnabled("BANISHED_LIVE_CHARACTER_MOVETICK");
-}
-
-// Async is the real (shipping) pathfinder mode. Default ON when seeded; BANISHED_PF_SYNC=1
-// forces the old main-thread synchronous mode for A/B perf comparison.
-static bool PfSyncForced() {
-    const char* e = getenv("BANISHED_PF_SYNC");
-    return e && e[0] && e[0] != '0';
-}
-
 // FUN_1400a6110 — pathfinder cell-grid ctor (grid = pf+0x78). dim = map width.
 static void GridCtor(uint8_t* g, int dim) {
     *reinterpret_cast<int*>(g + 0x00)       = 1;
@@ -134,7 +123,6 @@ static void GridCtor(uint8_t* g, int dim) {
 
 // Build + link the pathfinder. gameObj = *(g_pGameWorldSingleton+0xf8); dim = map width.
 extern "C" void Pathfinder_Seed(void* gameObjV, int dim) {
-    if (!MoveTickEnabled()) return;
     if (!gameObjV || dim <= 0 || !fn_MemAlloc) return;
     uint8_t* game = reinterpret_cast<uint8_t*>(gameObjV);
     if (*reinterpret_cast<void**>(game + 0x68) != nullptr) return;   // already seeded
@@ -199,31 +187,12 @@ extern "C" void Pathfinder_Seed(void* gameObjV, int dim) {
             flags[i] = static_cast<uint8_t>((flags[i] & 0x80) | type);
             flags[i] = static_cast<uint8_t>((blocked ? 0x80 : 0) | (flags[i] & 0x7f));
         }
-        // Bug-A diagnostic (BANISHED_PF_TRACE): confirm the primed flags array mirrors
-        // the live cell grid (flags&0x7f == cell+0x29), and tally walkable cells under
-        // the 0xe1f mask. If flags==cellgrid, A* and the region flood-fill see the same
-        // grid; any A* failure on a region-connected pair then points at the region map.
-        const char* e = getenv("BANISHED_PF_TRACE");
-        if (e && e[0] && e[0] != '0') {
-            int mismatch = 0, walkFlags = 0, walkCells = 0, blockedN = 0;
-            for (int i = 0; i < cellN; ++i) {
-                uint8_t cty = cellGrid[i * 0x30 + 0x29];
-                uint8_t fty = flags[i] & 0x7f;
-                if (fty != cty) ++mismatch;
-                if ((0xe1fu >> (cty & 0x1f)) & 1u) ++walkCells;
-                if ((0xe1fu >> (fty & 0x1f)) & 1u) ++walkFlags;
-                if (flags[i] & 0x80) ++blockedN;
-            }
-            fprintf(stderr, "[PfSeedScan] cells=%d flags/cell-mismatch=%d walkable(flags)=%d walkable(cells)=%d blockedBit=%d\n",
-                    cellN, mismatch, walkFlags, walkCells, blockedN);
-            fflush(stderr);
-        }
     }
 
     // Priming is complete. Flip to ASYNC so runtime path queries (cmd 5 via a6c10) queue and
     // wake the worker thread instead of running the A* inline on the main thread. Requires the
     // worker's CS Lock/Unlock + MemFree to be resolved; otherwise stay sync (safe fallback).
-    bool async = !PfSyncForced() && s_fn_CSLock && s_fn_CSUnlock && s_fn_MemFree;
+    bool async = s_fn_CSLock && s_fn_CSUnlock && s_fn_MemFree;
     if (async) p[0x5c] = 0;
 
     fprintf(stderr, "[PfSeed] pathfinder seeded @ game+0x68 = %p (dim=%d, cells=%d, %s mode)\n",
