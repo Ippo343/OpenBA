@@ -62,27 +62,41 @@
 // they need is already written down.
 //
 // ---------------------------------------------------------------------------
-// THE ONE DEPENDENCY THAT IS STILL THE DLL'S: ExternalFactory::FindOrLoad
+// THE FindOrLoad DEPENDENCY: NO LONGER THE DLL'S, AND THE NAME DOOR IS WHY
 // ---------------------------------------------------------------------------
-// `?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z`
-// (0x1800bf320) is unported and belongs to lane OBJ1 (`WAVE10_PARTITION.md`).
-// This lane did NOT take it: it is another lane's row, and porting it here would
-// be the duplicate-registration trap (last binding wins, one body silently
-// becomes dead code).
+// (Updated 2026-09-13, ENDGAME B.3.1 step 2. This block previously said
+// `FindOrLoad` was unported and still fell through to the shipped DLL. That is
+// stale: the port landed, and the prediction the old text made came true
+// without a single edit in this file. The prediction is kept below because it
+// is the reason the outcome was free.)
 //
-// It is reached through `RT_EXPORT_ONCE`, i.e. by EXPORTED NAME through the
-// port-aware resolver — NOT by address. That matters twice over:
-//   * today it falls through to the shipped DLL, exactly as before;
-//   * the moment OBJ1 registers that name, this call site picks their body up
-//     with no edit here.
-// So this file opens no new address door onto an unported callee, which is the
-// [[reference_porting_can_grow_the_cutover_surface]] failure the gate doc
-// flagged. At cutover the wall is OBJ1's row and stays OBJ1's row.
+// `?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z`
+// (0x1800bf320) IS PORTED. `RtObject_ExternalFactory_FindOrLoad` in
+// runtime/src/object/external_compiled.cpp is the body, and that file registers
+// it BOTH ways: by mangled name via `RegisterRuntimeExport` and at the retail
+// address via `RegisterRuntimeAddr(0x1800bf320, ...)`.
+//
+// This file's one call site (`CallFindOrLoad`, below) reaches it through
+// `RT_EXPORT_ONCE`, i.e. by EXPORTED NAME through the PORT-AWARE resolver —
+// never by address. The resolver consults the port registry first
+// ([[reference_resolveaddr_consults_port_registry_first]]), so the name now
+// resolves to our own ported body. That is exactly the outcome the original
+// text predicted for the day the name got registered: "the moment that name is
+// registered, this call site picks that body up with no edit here." It did, and
+// no edit was needed.
+//
+// So this file still opens NO ADDRESS DOOR — not onto the DLL and not onto
+// anything else — which is the [[reference_porting_can_grow_the_cutover_surface]]
+// failure the gate doc flagged. Every callee it reaches, `FindOrLoad` included,
+// is reached by name and is therefore visible to
+// tools/unsatisfied_export_scan.py.
 //
 // Everything else this body calls is already ours: `External::GetPath`,
-// `Base::IsDerivedFrom`, `Filename::AdjustDelimiters`, `MemoryAllocator::MemFree`,
-// `String::Serialize`, `ExternalFactory::GetReferenceId` and
+// `Base::IsDerivedFrom`, `ExternalFactory::GetReferenceId` and
 // `ExternalFactory::GetPathForReferenceId` are all registered by name today.
+// Two former name doors are not doors any more — `Filename::AdjustDelimiters`
+// and `String::Serialize` are called as members of `System::Filename` /
+// `System::String` since B.3.1 step 2, so they are ordinary C++ calls.
 //
 // ---------------------------------------------------------------------------
 // THE ORACLE
@@ -153,6 +167,7 @@
 #include "../../types/system/Filename.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"
+#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 
 using RtObject::External;
 using RtObject::ExternalFactory;
@@ -175,17 +190,16 @@ namespace {
 using GetPathFn        = Filename* (*)(const External*, Filename*);
 using FindOrLoadFn     = const External* (*)(ExternalFactory*, const Filename*);
 using IsDerivedFromFn  = bool (*)(const void*, uint32_t);
-using AdjustDelimFn    = void (*)(Filename*);
 using GetRefIdFn       = uint32_t (*)(const ExternalFactory*, const External*);
 using GetPathForIdFn   = Filename* (*)(const ExternalFactory*, Filename*, uint32_t);
-using StringSerializeFn = void (*)(String*, Serializer*);
 
 Filename* CallGetPath(const External* e, Filename* ret) {
     return RT_EXPORT_ONCE(GetPathFn,
         "?GetPath@External@Object@@QEBA?AVFilename@System@@XZ")(e, ret);
 }
 
-// The ONE unported callee. See the FindOrLoad block in the banner.
+// Ported since this line was first written (external_compiled.cpp), and reached
+// here by name, so it needed no edit. See the FindOrLoad block in the banner.
 const External* CallFindOrLoad(ExternalFactory* f, const Filename* p) {
     return RT_EXPORT_ONCE(FindOrLoadFn,
         "?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z")(f, p);
@@ -194,10 +208,6 @@ const External* CallFindOrLoad(ExternalFactory* f, const Filename* p) {
 bool CallIsDerivedFrom(const void* obj, uint32_t typeId) {
     return RT_EXPORT_ONCE(IsDerivedFromFn,
         "?IsDerivedFrom@Base@Object@@QEBA_NI@Z")(obj, typeId);
-}
-
-void CallAdjustDelimiters(Filename* f) {
-    RT_EXPORT_ONCE(AdjustDelimFn, "?AdjustDelimiters@Filename@System@@AEAAXXZ")(f);
 }
 
 uint32_t CallGetReferenceId(const ExternalFactory* f, const External* e) {
@@ -210,13 +220,12 @@ Filename* CallGetPathForReferenceId(const ExternalFactory* f, Filename* ret, uin
         "?GetPathForReferenceId@ExternalFactory@Object@@QEBA?AVFilename@System@@I@Z")(f, ret, id);
 }
 
-void CallStringSerialize(Filename* f, Serializer* ser) {
-    // Filename and String are layout-identical; retail passes the Filename
-    // straight to String::Serialize (Filename.h records the cast idiom).
-    RT_EXPORT_ONCE(StringSerializeFn,
-        "?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z")(
-            reinterpret_cast<String*>(f), ser);
-}
+// ENDGAME B.3.1 step 2 removed two of this file's name doors:
+// `?AdjustDelimiters@Filename@System@@AEAAXXZ`, which is private and whose two
+// call sites folded into the `Filename::operator=` that already ends in it; and
+// `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z`, now spelled
+// `path.AsString().Serialize(ser)` — the same body, and retail passing the
+// Filename straight into String::Serialize is exactly what `AsString()` is.
 
 // `?_singleton@ExternalFactory@Object@@0PEAV12@EA` — note the `0…EA` spelling;
 // the obvious `1PEAV12@A` guess is not an export (External.h records this).
@@ -231,16 +240,11 @@ ExternalFactory* Factory() {
     return slot ? *slot : nullptr;
 }
 
-// ---- the two inlined String idioms retail open-codes five times -------------
-
-// `dst = *src` with refcounting, retail's exact shape (0x1800043dd..0x18000441a):
-// a same-pointer assignment is a no-op, otherwise release then adopt.
-void AssignFilename(Filename* dst, const Filename* src) {
-    if (dst->data == src->data) return;
-    RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(dst));
-    dst->data = nullptr;
-    RtSystem::RtString_AdoptInline(reinterpret_cast<String*>(dst), src->data);
-}
+// ENDGAME B.3.1 step 2 removed this file's `AssignFilename` helper. Retail's
+// shape at 0x1800043dd..0x18000441a — same-pointer no-op, otherwise release
+// then adopt — is followed at BOTH of its call sites by an explicit
+// AdjustDelimiters, and the pair is `Filename::operator=(const Filename&)`
+// (0x180006770) instruction for instruction. Both sites now say `path = tmp`.
 
 // ---- the codec accessors ---------------------------------------------------
 
@@ -324,22 +328,26 @@ void ExternalPtrSerializeBody(External** self, Serializer& serRef,
         External* cur = *self;
         if (cur == nullptr) return;
 
-        Filename scratch;                       // [rbp+0x38]; GetPath copy-ctors
-        CallGetPath(cur, &scratch);             // into it, so it starts raw.
-        const External* found = CallFindOrLoad(Factory(), &scratch);
+        // ENDGAME B.3.1 step 2: `scratch` is GetPath's hidden return slot, so
+        // it is CONSTRUCTED INTO by the call and must not be constructed twice;
+        // its release is the destructor at the return below.
+        System::Filename scratch;               // [rbp+0x38]
+        CallGetPath(cur, reinterpret_cast<Filename*>(&scratch));
+        const External* found =
+            CallFindOrLoad(Factory(), reinterpret_cast<const Filename*>(&scratch));
         if (found != nullptr) {
             // The answer is genuinely discarded — retail calls it for the side
             // effect of nothing, and keeps the pointer it already had.
             (void)CallIsDerivedFrom(found, *static_cast<const uint32_t*>(typeInfo));
         }
-        RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(&scratch));
         return;
     }
 
     // ---- modes 2 and 3 (0x18000433e) ---------------------------------------
+    // `path` is released on every one of the five exits below; all five are now
+    // its destructor, including the three early returns.
     ExternalFactory* factory = Factory();       // r14
-    Filename path;                              // [rbp+0x40]
-    path.data = nullptr;
+    System::Filename path;                      // [rbp+0x40]
     Stream* stream = ser->stream;
 
     if (factory->_referenceModeEnabled) {
@@ -355,22 +363,21 @@ void ExternalPtrSerializeBody(External** self, Serializer& serRef,
         if (*self != nullptr && stream->direction == rt::io::kDirectionReading &&
             refId == kNoReferenceId) {
             SerializeUInt(ser, &refId);
-            RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(&path));
             return;
         }
 
         SerializeUInt(ser, &refId);             // 0x1800043ad; load overwrites
         if (refId == kNoReferenceId) {          // 0x1800043b7
-            RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(&path));
             return;
         }
 
         if (stream->direction == rt::io::kDirectionReading) {   // 0x1800043c1
-            Filename tmp;                       // [rbp+0x48]
-            CallGetPathForReferenceId(factory, &tmp, refId);
-            AssignFilename(&path, &tmp);
-            CallAdjustDelimiters(&path);
-            RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(&tmp));
+            System::Filename tmp;               // [rbp+0x48], another retslot
+            CallGetPathForReferenceId(factory, reinterpret_cast<Filename*>(&tmp),
+                                      refId);
+            // 0x1800043dd release-then-adopt plus the AdjustDelimiters that
+            // follows it IS `Filename::operator=`, 0x180006770.
+            path = tmp;
         }
         // falls into the load tail
     } else {
@@ -378,19 +385,16 @@ void ExternalPtrSerializeBody(External** self, Serializer& serRef,
         bool present = (*self != nullptr);      // SETNE, one byte
         SerializeBool(ser, &present);
         if (!present) {
-            RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(&path));
             return;
         }
 
         External* cur = *self;
         if (cur != nullptr) {                   // saving: fill `path` from the object
-            Filename tmp;                       // [rbp+0x48]
-            CallGetPath(cur, &tmp);
-            AssignFilename(&path, &tmp);
-            CallAdjustDelimiters(&path);
-            RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(&tmp));
+            System::Filename tmp;               // [rbp+0x48], GetPath's retslot
+            CallGetPath(cur, reinterpret_cast<Filename*>(&tmp));
+            path = tmp;                         // operator=, as above
         }
-        CallStringSerialize(&path, ser);        // 0x180004500; load fills `path`
+        path.AsString().Serialize(ser);         // 0x180004500; load fills `path`
         // falls into the load tail
     }
 
@@ -398,7 +402,8 @@ void ExternalPtrSerializeBody(External** self, Serializer& serRef,
     // Saving skips it entirely: retail re-tests the direction here and jumps
     // straight to the release below.
     if (stream->direction == rt::io::kDirectionReading) {
-        const External* loaded = CallFindOrLoad(Factory(), &path);
+        const External* loaded =
+            CallFindOrLoad(Factory(), reinterpret_cast<const Filename*>(&path));
         External* result = nullptr;
         if (loaded != nullptr &&
             CallIsDerivedFrom(loaded, *static_cast<const uint32_t*>(typeInfo))) {
@@ -410,8 +415,7 @@ void ExternalPtrSerializeBody(External** self, Serializer& serRef,
         }
         *self = result;                         // 0x180004555
     }
-
-    RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(&path));
+    // path's final release is its destructor.
 }
 
 // The array form of the same template — 818 bytes, eight instantiations, and

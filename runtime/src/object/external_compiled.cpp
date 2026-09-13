@@ -56,6 +56,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <new>          // placement new into the retail hidden return slots
 
 #include "external_path.h"
 #include "external_compiled.h"
@@ -65,16 +66,7 @@
 #include "../../types/system/String.h"
 #include "../system/string.h"
 #include "../system/setupdir_helpers.h"
-
-namespace RtSystem {
-Filename* RtSystem_Filename_CtorCStr(Filename* self, const char* src);           // 0x1800c6570
-// Declared locally, house style — filename.cpp exposes no header of its own.
-void      RtSystem_Filename_AdjustDelimiters(Filename* self);              // 0x1800c6970
-Filename* RtSystem_Filename_GetPathFilename(const Filename* self, Filename* ret,
-                                            bool stripExtension);          // 0x1800c6740
-Filename* RtSystem_Filename_GetPathIdentifer(const Filename* self, Filename* ret);
-                                                                           // 0x1800c6610
-}  // namespace RtSystem
+#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 
 namespace RtIO {
 // runtime/src/io/filesystem.cpp:185. Takes the FileSystem as void* there.
@@ -85,29 +77,11 @@ RtSystem::Filename* RtIo_FileSystem_GetDataDirectory(const void* fsVoid,
 namespace RtObject {
 
 using RtSystem::Filename;
-using RtSystem::String;
-using RtSystem::RtString_AdoptInline;
-using RtSystem::RtString_ReleaseInline;
-using RtSystem::RtSystem_String_Concat;
-using RtSystem::RtSystem_String_ConcatCStr;
-using RtSystem::RtSystem_Filename_AdjustDelimiters;
-using RtSystem::RtSystem_Filename_GetPathFilename;
-using RtSystem::RtSystem_Filename_GetPathIdentifer;
-using RtSystem::RtSystem_Filename_GetPathDirectory;
+using RtSystem::Sys;
 
 CompiledCounters g_cc = {};
 
 namespace {
-
-inline String*       AsStr(Filename* f)       { return reinterpret_cast<String*>(f); }
-inline const String* AsStr(const Filename* f) { return reinterpret_cast<const String*>(f); }
-
-// The int32 character count at data-8 (runtime/types/system/String.h). This is
-// the field FindOrLoad's `CMP dword ptr [RAX + -0x8],0x0` at 0x1800bf345 reads,
-// NOT the refcount at data-4.
-inline int32_t BufLength(const char* d) {
-    return reinterpret_cast<const int32_t*>(d)[-2];
-}
 
 // 0x180155b04 and 0x180155afc. Named so the negative controls can swap them.
 const char* const kUnderscore = "_";
@@ -141,41 +115,37 @@ inline const void* FileSystemSingleton() {
 void BuildCompiledPath(const Filename* path, Filename* out) {
     ++g_cc.buildCalls;
 
-    Filename ext{nullptr};                                       // [RBP-0x18]
-    RtSystem_Filename_GetPathExtension(path, &ext);              // value UNUSED, see banner
+    // ENDGAME B.3.1 step 2. `path` is the C entry point's POD parameter, so it
+    // reaches the class through the one transitional bridge.
+    const System::Filename& in = Sys(*path);
 
-    Filename ident{nullptr};                                     // [RBP-0x50]
-    RtSystem_Filename_GetPathIdentifer(path, &ident);
-    Filename fname{nullptr};                                     // [RBP+0x38]
-    RtSystem_Filename_GetPathFilename(path, &fname, true);
-    Filename dir{nullptr};                                       // [RBP+0x30]
-    RtSystem_Filename_GetPathDirectory(path, &dir);
+    System::Filename ext   = in.GetPathExtension();              // [RBP-0x18]
+    (void)ext;                                     // value UNUSED, see banner
+    System::Filename ident = in.GetPathIdentifer();              // [RBP-0x50]
+    System::Filename fname = in.GetPathFilename(true);           // [RBP+0x38]
+    System::Filename dir   = in.GetPathDirectory();              // [RBP+0x30]
 
-    Filename dataDir{nullptr};                                   // [RBP-0x28]
-    RtIO::RtIo_FileSystem_GetDataDirectory(FileSystemSingleton(), &dataDir);
+    // GetDataDirectory is still a C entry point with a hidden return slot; it
+    // placement-constructs into the null local, so this must not construct twice.
+    System::Filename dataDir;                                    // [RBP-0x28]
+    RtIO::RtIo_FileSystem_GetDataDirectory(FileSystemSingleton(),
+                                           reinterpret_cast<Filename*>(&dataDir));
 
-    String t1{nullptr}, t2{nullptr}, t3{nullptr}, t4{nullptr}, t5{nullptr};
-    RtSystem_String_Concat(&t1, AsStr(&dataDir), AsStr(&dir));
-    RtSystem_String_Concat(&t2, &t1, AsStr(&fname));
-    RtSystem_String_ConcatCStr(&t3, &t2, kUnderscore);
-    RtSystem_String_Concat(&t4, &t3, AsStr(&ident));
-    RtSystem_String_ConcatCStr(&t5, &t4, kCrs);
+    System::String t1 = dataDir.AsString() + dir.AsString();
+    System::String t2 = t1 + fname.AsString();
+    System::String t3 = t2 + kUnderscore;
+    System::String t4 = t3 + ident.AsString();
+    System::String t5 = t4 + kCrs;
 
-    out->data = nullptr;                                         // 0x1800becdd
-    RtString_AdoptInline(AsStr(out), t5.data);                   // 0x1800bece0-0x1800beceb
-    RtSystem_Filename_AdjustDelimiters(out);                     // 0x1800becf1
+    // 0x1800becdd-0x1800becf1: null the slot, adopt t5's buffer (a refcount
+    // bump, NOT a character copy), normalise. That is exactly
+    // `Filename::Filename(const String&)`, 0x18000c780. `out` is raw on entry,
+    // hence the placement.
+    new (out) System::Filename(t5);
 
-    // Retail's release order: reversed construction order.
-    RtString_ReleaseInline(&t5);
-    RtString_ReleaseInline(&t4);
-    RtString_ReleaseInline(&t3);
-    RtString_ReleaseInline(&t2);
-    RtString_ReleaseInline(&t1);
-    RtString_ReleaseInline(AsStr(&dataDir));
-    RtString_ReleaseInline(AsStr(&dir));
-    RtString_ReleaseInline(AsStr(&fname));
-    RtString_ReleaseInline(AsStr(&ident));
-    RtString_ReleaseInline(AsStr(&ext));
+    // Retail's release order — t5..t1, dataDir, dir, fname, ident, ext — is
+    // reverse construction order, which is precisely the order these ten
+    // destructors run in. Nothing is released by hand any more.
 }
 
 }  // namespace
@@ -252,18 +222,23 @@ const External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
     // needs and must not fake. Neither test runs unless its own env var armed
     // it, and each clears its flag before running so it cannot recurse.
 
-    // 0x1800bf339 / 0x1800bf345
-    if (path->data == nullptr || BufLength(path->data) == 0) {
+    // 0x1800bf339 / 0x1800bf345 — `GetLength` (0x1800063c0) is retail's own
+    // pair of tests: it returns 0 for a null buffer and otherwise reads the
+    // dword at data-8, which is the field the `CMP [RAX-0x8],0x0` reads.
+    if (Sys(*path).GetLength() == 0) {
         ++g_cc.emptyPath;
         return nullptr;
     }
 
-    Filename expanded{nullptr};                                  // [RBP+0x38]
-    RtObject_ExternalFactory_ExpandRelativePath(self, &expanded, path, true);
+    // ExpandRelativePath writes a hidden return slot; the null local it is
+    // handed is constructed into, not assigned to.
+    System::Filename expanded;                                   // [RBP+0x38]
+    RtObject_ExternalFactory_ExpandRelativePath(
+        self, reinterpret_cast<Filename*>(&expanded), path, true);
 
     External* found = RT_EXPORT_ONCE(FindPrivateFn,
         "?Find@ExternalFactory@Object@@AEAAPEAVExternal@2@AEBVFilename@System@@@Z")
-        (self, &expanded);
+        (self, reinterpret_cast<const Filename*>(&expanded));
 
     const External* result = nullptr;
 
@@ -281,8 +256,9 @@ const External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
     } else {
         // ---- 0x1800bf390: the MISS ----------------------------------------
         ++g_cc.cacheMiss;
-        Filename compiled{nullptr};                              // [RBP+0x40]
-        BuildCompiledPath(&expanded, &compiled);
+        System::Filename compiled;                               // [RBP+0x40]
+        BuildCompiledPath(reinterpret_cast<const Filename*>(&expanded),
+                          reinterpret_cast<Filename*>(&compiled));
 
         // ---- THE ONE INDEPENDENT ORACLE THIS BODY HAS ----------------------
         // The string `compiled` is the whole of the miss path's own work: what
@@ -294,28 +270,27 @@ const External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
 
         External* loaded = RT_EXPORT_ONCE(ExtLoadFn,
             "?Load@External@Object@@SAPEAV12@AEBVFilename@System@@PEAV12@@Z")
-            (&compiled, nullptr);
+            (reinterpret_cast<const Filename*>(&compiled), nullptr);
 
         if (loaded != nullptr) {
             ++g_cc.loaded;
-            // 0x1800bf562-0x1800bf5a6: `loaded->_path = expanded` written out
-            // as retail's release-then-adopt with its own `!=` guard, then
-            // AdjustDelimiters over the object's OWN field (not a temporary).
-            if (loaded->_path.data != expanded.data) {
-                RtString_ReleaseInline(AsStr(&loaded->_path));
-                RtString_AdoptInline(AsStr(&loaded->_path), expanded.data);
-            }
-            RtSystem_Filename_AdjustDelimiters(&loaded->_path);   // 0x1800bf5a6
+            // 0x1800bf562-0x1800bf5a6: retail's release-then-adopt with its own
+            // `!=` guard, then AdjustDelimiters over the object's OWN field, is
+            // `Filename::operator=(const Filename&)` (0x180006770) instruction
+            // for instruction. `_path` is a POD member of the not-yet-converted
+            // `Object::External`, so the left-hand side comes through the bridge.
+            Sys(loaded->_path) = expanded;
             RT_EXPORT_ONCE(AddFn, "?Add@ExternalFactory@Object@@QEAAXPEAVExternal@2@@Z")
                 (self, loaded);                                   // 0x1800bf5b1
             result = loaded;
         } else {
             ++g_cc.loadFailed;
         }
-        RtString_ReleaseInline(AsStr(&compiled));
+        // `compiled` releases here in its destructor, at the end of the else
+        // branch, exactly where retail releases it — and `expanded` after it.
     }
 
-    RtString_ReleaseInline(AsStr(&expanded));
+
     // NO WHOLE-BODY SHADOW, and this is a measured limit rather than a shrug.
     // Both branches MUTATE: the hit branch conditionally re-`Add`s (which ORs a
     // bit into the entry's usage mask and bumps the generation bookkeeping),

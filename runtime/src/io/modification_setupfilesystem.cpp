@@ -160,6 +160,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <new>                // placement new -- see ReloadEntry::file below
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/FileSystem.h"
@@ -174,6 +175,7 @@
 #include "../../types/system/Filename.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"
+#include "../system/pod_bridge.h"
 
 // Declared locally rather than including standalone/resolve.h; byte-identical
 // to the copies in array.cpp and persistence_savelist_job.cpp.
@@ -185,6 +187,7 @@ namespace RtIO {
 using RtSystem::String;
 using RtSystem::Filename;
 using RtSystem::RtString_ReleaseInline;
+using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
 
 namespace {
 
@@ -219,6 +222,14 @@ struct PathIdSet {
 // 0x18, built at [RBP-0x71]. THE FOUR BYTES AT +0x04 ARE NEVER WRITTEN by
 // anybody (retail's first store is a DWORD and the next is at +0x08); the
 // matching `kSpec_ModExternal18` in array.cpp declares the same window.
+// `file` STAYS the POD (`RtSystem::Filename`), not `System::Filename`: the
+// array holding these is grown and appended to by `queueAppend`
+// (0x180028cd0), a raw byte-copy resolve door with no idea what a C++ object
+// is, so a member with a destructor would be double-released the moment that
+// copy and this struct's own local both thought they owned the buffer. Retail
+// itself treats it that way -- see the ENDGAME B.3.1 note on the queueing
+// code below, which promotes `entry.file` to the class only for the span
+// where IT constructs and releases it.
 struct ReloadEntry {
     uint32_t             typeId;    // +0x00
     uint32_t             _hole04;   // +0x04 — NEVER WRITTEN
@@ -235,17 +246,24 @@ struct ReloadArray {
     int32_t      capacity;
 };
 
-// ---- the doors ------------------------------------------------------------
+// ---- the doors --------------------------------------------------------
+// ENDGAME B.3.1 step 2: these are file-local typedefs for calls OUT through a
+// resolve door, not entry-point signatures, so they name the classes that
+// occupy the same eight bytes (filesystem_setupdirs_win.cpp's exemplar
+// treatment of local Fn typedefs). The callee keeps the retail POD shape; the
+// `reinterpret_cast<...Fn>` at each call site is the one that was always
+// there. `AdjustDelimitersFn` is gone -- every call site below was the tail of
+// a mutating Filename entry point and is now spelled as the class's own ctor
+// / operator= (Filename.h's DELIMITERS note).
 typedef const RtObject::External* (*FindNextFn)(const void*, uint32_t,
                                                 const RtObject::External*);
-typedef Filename* (*GetPathFn)(const void*, Filename*);
-typedef Filename* (*GetCompiledPathFn)(Filename*, const Filename*);
-typedef uint32_t  (*GetPackfileIdFn)(const void*, const Filename*);
+typedef System::Filename* (*GetPathFn)(const void*, System::Filename*);
+typedef System::Filename* (*GetCompiledPathFn)(System::Filename*, const System::Filename*);
+typedef uint32_t  (*GetPackfileIdFn)(const void*, const System::Filename*);
 typedef void      (*NoArgFn)(void*);
-typedef bool      (*ExistsInPackfileFn)(const void*, const Filename*);
-typedef void*     (*ExternalLoadFn)(const Filename*, void*);
-typedef void      (*AdjustDelimitersFn)(Filename*);
-typedef void      (*ForceUnloadFn)(void*, const Filename*);
+typedef bool      (*ExistsInPackfileFn)(const void*, const System::Filename*);
+typedef void*     (*ExternalLoadFn)(const System::Filename*, void*);
+typedef void      (*ForceUnloadFn)(void*, const System::Filename*);
 typedef void*     (*WideStringCtorFn)(void*, const String*);
 typedef void      (*MemFreeFn)(void*);
 
@@ -275,15 +293,11 @@ void ReleaseInline(char** slot) {
     }
 }
 
-// Retail's inlined `Filename::operator=`: the `!=` guard is its own, and
-// skipping the whole block on a self-assign is what keeps the refcount from
-// reaching zero mid-assignment (0x1800af06c and 0x1800af341).
-void ReleaseThenAdopt(char** dst, char* src) {
-    if (*dst == src) return;
-    ReleaseInline(dst);
-    *dst = src;
-    if (src) ++reinterpret_cast<int32_t*>(src)[-1];
-}
+// ENDGAME B.3.1 step 2: the file-local `ReleaseThenAdopt` (retail's inlined
+// `Filename::operator=`, the `!=` guard on the buffer at 0x1800af06c and
+// 0x1800af341) is gone -- both call sites are now the class's own
+// `operator=`/copy ctor, which carry the identical guard (Filename.h's
+// DELIMITERS note).
 
 // MSVC's inlined `strcmp`, transcribed from this body's own listing: the scan
 // compares UNSIGNED bytes and the answer is a SIGNED-char subtraction
@@ -329,8 +343,11 @@ PathIdNode* SnapshotFind(PathIdNode* node, const char* search) {
 // UTF-16 copy of the path; anything but INVALID_FILE_ATTRIBUTES counts as
 // present, INCLUDING a directory. Retail compares against -1 and nothing else
 // (0x1800aefce `CMP EAX,-0x1 / SETNZ`).
-bool PlatformFileExists(const Filename* path) {
+bool PlatformFileExists(const System::Filename* path) {
     struct { void* data; } ws = { nullptr };
+    // Filename read AS a String -- the same same-layout cast retail performs
+    // by pointer cast throughout (Filename.h header note); WideString is not
+    // a B.3.1 class, so it still wants the POD String pointer.
     RT_EXPORT_ONCE(WideStringCtorFn, "??0WideString@System@@QEAA@AEBVString@1@@Z")(
         &ws, reinterpret_cast<const String*>(path));           // 0x1800aefbf
     const DWORD attrs = ::GetFileAttributesW(static_cast<LPCWSTR>(ws.data));
@@ -393,7 +410,6 @@ void RtIo_Modification_SetupFileSystem(Modification* self) {
     static void* loadPackagesCache    = nullptr;
     static void* existsInPackCache    = nullptr;
     static void* externalLoadCache    = nullptr;
-    static void* adjustCache          = nullptr;
     static void* forceUnloadCache     = nullptr;
 
     const FindNextFn FindNext = reinterpret_cast<FindNextFn>(RtResolveCached(
@@ -408,9 +424,9 @@ void RtIo_Modification_SetupFileSystem(Modification* self) {
     const GetPackfileIdFn GetPackfileId = reinterpret_cast<GetPackfileIdFn>(
         RtResolveCached("?GetPackfileId@FileSystem@IO@@QEBAIAEBVFilename@System@@@Z",
                         &packfileIdCache));
-    const AdjustDelimitersFn AdjustDelimiters =
-        reinterpret_cast<AdjustDelimitersFn>(RtResolveCached(
-            "?AdjustDelimiters@Filename@System@@AEAAXXZ", &adjustCache));
+    // No AdjustDelimiters resolve any more -- every call site was the tail of
+    // a mutating Filename entry point and is now the class's own ctor /
+    // operator= (see the typedefs block's banner above).
 
     // ========================= ACT 1 — SNAPSHOT =============================
     PathIdSet snapshot = { nullptr, 0, 0 };                    // [RBP-0x49]
@@ -421,18 +437,22 @@ void RtIo_Modification_SetupFileSystem(Modification* self) {
 
     for (const RtObject::External* ext = FindNext(extFactory, kExternalTypeId, nullptr);
          ext != nullptr; ) {
-        Filename raw{nullptr};                                 // [RBP+0x7f]
-        Filename* const got = GetPath(ext, &raw);              // 0x1800aec29
-        Filename compiled{nullptr};                            // [RBP+0x77]
-        GetCompiledPath(&compiled, got);                       // 0x1800aec36
-        ReleaseInline(&raw.data);                              // 0x1800aec3c
+        System::Filename compiled;                             // [RBP+0x77]
+        {
+            // GetPath's hidden return slot: `raw` holds null (default ctor),
+            // so the callee constructing into it overwrites nothing, and
+            // GetPath returns the same pointer it was handed (retail's `got`).
+            System::Filename raw;                              // [RBP+0x7f]
+            GetPath(ext, &raw);                                 // 0x1800aec29
+            GetCompiledPath(&compiled, &raw);                   // 0x1800aec36
+        }  // ~raw releases here, exactly where retail's 0x1800aec3c release sat
 
         const uint32_t id = GetPackfileId(fs, &compiled);      // 0x1800aec9f
         void* outSlot = nullptr;                               // [RBP-0x4?]
-        setInsert(&snapshot, &outSlot, &compiled.data, &id);   // 0x1800aecb7
+        setInsert(&snapshot, &outSlot, &compiled._data, &id);  // 0x1800aecb7
 
         ext = FindNext(extFactory, kExternalTypeId, ext);      // 0x1800aecc8
-        ReleaseInline(&compiled.data);                         // 0x1800aecd3
+        // ~compiled releases here, exactly where retail's 0x1800aecd3 release sat.
     }
 
     // ========================= ACT 2 — RESTACK ==============================
@@ -474,22 +494,24 @@ void RtIo_Modification_SetupFileSystem(Modification* self) {
 
     for (const RtObject::External* ext = FindNext(extFactory, kExternalTypeId, nullptr);
          ext != nullptr; ) {
-        Filename raw{nullptr};                                 // [RBP-0x59]
-        Filename* const got = GetPath(ext, &raw);              // 0x1800aedc7
-        Filename compiled{nullptr};                            // [RBP+0x7f]
-        GetCompiledPath(&compiled, got);                       // 0x1800aedd4
-        ReleaseInline(&raw.data);                              // 0x1800aedda
+        System::Filename compiled;                             // [RBP+0x7f]
+        {
+            System::Filename raw;                              // [RBP-0x59]
+            GetPath(ext, &raw);                                 // 0x1800aedc7
+            GetCompiledPath(&compiled, &raw);                   // 0x1800aedd4
+        }  // ~raw releases here, exactly where retail's 0x1800aedda release sat
 
-        PathIdNode* const hit = SnapshotFind(snapshot.root, compiled.data);
+        PathIdNode* const hit = SnapshotFind(snapshot.root, compiled._data);
 
         // `TEST RBX,RBX` at 0x1800aeefd is redundant on the found path and is
         // kept; the id compare is what decides.
         if (hit != nullptr && hit->value != GetPackfileId(fs, &compiled)) {
-            Filename raw2{nullptr};                            // [RBP-0x51]
-            Filename* const got2 = GetPath(ext, &raw2);        // 0x1800aef22
-            Filename compiled2{nullptr};                       // [RBP+0x77]
-            GetCompiledPath(&compiled2, got2);                 // 0x1800aef2f
-            ReleaseInline(&raw2.data);                         // 0x1800aef35
+            System::Filename compiled2;                         // [RBP+0x77]
+            {
+                System::Filename raw2;                          // [RBP-0x51]
+                GetPath(ext, &raw2);                             // 0x1800aef22
+                GetCompiledPath(&compiled2, &raw2);              // 0x1800aef2f
+            }  // ~raw2 releases here, retail's 0x1800aef35 release
 
             // `FileSystem::Exists` OPEN-CODED with its two gate bytes; see the
             // banner for why this is not a call to Exists.
@@ -504,38 +526,47 @@ void RtIo_Modification_SetupFileSystem(Modification* self) {
 
             if (present) {
                 // ---- queue the reload, 0x1800af03d --------------------------
-                Filename raw3{nullptr};                        // [RBP-0x79]
-                Filename* const got3 = GetPath(ext, &raw3);    // 0x1800af044
-
                 ReloadEntry entry;
                 entry.typeId   = GetTypeIdVirtual(ext);        // 0x1800af052
                 entry.external = const_cast<RtObject::External*>(ext);
-                entry.file.data = nullptr;                     // 0x1800af064
-                ReleaseThenAdopt(&entry.file.data, got3->data);
-                AdjustDelimiters(&entry.file);                 // 0x1800af0a9
-                AdjustDelimiters(&entry.file);                 // 0x1800af0b2
                 // entry._hole04 is DELIBERATELY left uninitialised: retail's
                 // first store is a DWORD and nothing ever writes +0x04..+0x07.
+                {
+                    System::Filename raw3;                      // [RBP-0x79]
+                    GetPath(ext, &raw3);                         // 0x1800af044
+                    // `entry.file` is raw, uninitialised bytes here (a fresh
+                    // ReloadEntry), so placement-construct. Release-then-adopt
+                    // on a null destination is a plain adopt, and the ctor's
+                    // OWN body already carries the duplicated AdjustDelimiters
+                    // (filename.cpp's `Filename(const Filename&)`, retail
+                    // 0x1800067d0, calls it twice) -- so this one construction
+                    // is retail's 0x1800af064..0x1800af0b2 in full.
+                    new (&Sys(entry.file)) System::Filename(raw3);
+                }  // ~raw3 releases here, retail's release after 0x1800af044
 
                 queueAppend(&queue, queue.size + 1, &entry);   // 0x1800af0c7
 
-                ReleaseInline(&entry.file.data);
-                ReleaseInline(&raw3.data);
+                // queueAppend is a raw byte-copy resolve door (not a converted
+                // class), so it never AddRefs: the array's copy inherits
+                // entry.file's own reference, and dropping that reference here
+                // is retail's release of the local -- ownership transfer via
+                // copy-then-release, not a double free.
+                Sys(entry.file).~Filename();
             } else {
                 // ---- drop it, 0x1800af195 ----------------------------------
-                Filename raw4{nullptr};                        // [RBP-0x?]
-                Filename* const got4 = GetPath(ext, &raw4);    // 0x1800af19d
+                System::Filename raw4;                          // [RBP-0x?]
+                GetPath(ext, &raw4);                             // 0x1800af19d
                 reinterpret_cast<ForceUnloadFn>(RtResolveCached(
                     "?ForceUnload@ExternalFactory@Object@@QEAAXAEBVFilename@System@@@Z",
-                    &forceUnloadCache))(extFactory, got4);     // 0x1800af1a9
-                ReleaseInline(&raw4.data);
+                    &forceUnloadCache))(extFactory, &raw4);     // 0x1800af1a9
+                // ~raw4 releases here, retail's release right after ForceUnload
             }
 
-            ReleaseInline(&compiled2.data);                    // 0x1800af243
+            // ~compiled2 releases here, retail's 0x1800af243 release
         }
 
         ext = FindNext(extFactory, kExternalTypeId, ext);      // 0x1800af275
-        ReleaseInline(&compiled.data);                         // 0x1800af281
+        // ~compiled releases here, retail's 0x1800af281 release
     }
 
     // ========================= ACT 4 — RELOAD ===============================
@@ -559,23 +590,30 @@ void RtIo_Modification_SetupFileSystem(Modification* self) {
         // IN-PLACE factory, +0x28 — not the allocating one at +0x20.
         reinterpret_cast<void* (*)(void*)>(info->inPlaceFactoryFn)(ext);
 
-        // re-point `External::_path` (+0x08) at the queued filename
-        ReleaseThenAdopt(&ext->_path.data, e->file.data);      // 0x1800af341
-        AdjustDelimiters(&ext->_path);                         // 0x1800af3b3
+        // re-point `External::_path` (+0x08) at the queued filename. A single
+        // AdjustDelimiters after release-then-adopt on an object that already
+        // owns a string is `Filename::operator=(const Filename&)`, 0x180006770
+        // (Filename.h's DELIMITERS note). `ext->_path` is a `RtSystem::Filename`
+        // MEMBER of the not-yet-converted `Object::External`, reached through
+        // the bridge; `e->file` is the `ReloadEntry` POD member (see its banner).
+        Sys(ext->_path) = Sys(e->file);                         // 0x1800af341/0x1800af3b3
 
-        Filename compiled{nullptr};                            // [RBP+0x6f]
-        GetCompiledPath(&compiled, &e->file);                  // 0x1800af3c0
+        System::Filename compiled;                            // [RBP+0x6f]
+        GetCompiledPath(&compiled, &Sys(e->file));              // 0x1800af3c0
         reinterpret_cast<ExternalLoadFn>(RtResolveCached(
             "?Load@External@Object@@SAPEAV12@AEBVFilename@System@@PEAV12@@Z",
             &externalLoadCache))(&compiled, ext);              // 0x1800af3cc
-        ReleaseInline(&compiled.data);                         // 0x1800af3d2
+        // ~compiled releases here, retail's 0x1800af3d2 release
     }
 
     // ========================= ACT 5 — TEARDOWN =============================
     self->dirty = 0;                                           // 0x1800af447
 
+    // Each surviving entry's Filename dtor, 0x1800af460 -- the queue's own
+    // storage is raw bytes (see ReloadEntry's banner), so the release is
+    // spelled as the explicit destructor rather than a member's own RAII.
     for (int64_t i = 0; i < static_cast<int64_t>(queue.size); ++i)
-        ReleaseInline(&queue.data[i].file.data);               // 0x1800af460
+        Sys(queue.data[i].file).~Filename();
     if (queue.data) MemFree(queue.data);
     queue.data = nullptr;
     queue.size = 0;

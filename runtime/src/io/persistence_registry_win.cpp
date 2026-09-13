@@ -175,17 +175,21 @@
 #include <cstring>
 #include <cwchar>
 
+#include <utility>    // std::move -- the pointer steal out of a POD out-param
+
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Persistence.h"
 #include "../../types/io/Registry.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"   // RtString_ReleaseInline, RtSystem::String
+#include "../system/pod_bridge.h"
 
 using RtIo::Persistence;
 using RtIo::Registry;
 using RtIo::SettingsMapNode;
 using RtSystem::String;
 using RtSystem::StringRefCount;
+using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
 
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
 // — same reasoning persistence.cpp gives (that header drags in <windows.h> and
@@ -384,18 +388,20 @@ extern "C" Registry* RtIo_Registry_Ctor(Registry* self, const char* subKey) {
     static void* formatSlot = nullptr;
     FormatFn format = reinterpret_cast<FormatFn>(
         RtResolveCached("?Format@String@System@@SA?AV12@PEBDZZ", &formatSlot));
-    String tmp;
-    tmp.data = nullptr;
-    format(&tmp, RtIo::kRegistryPathFormat,
+    // Format is reached by NAME through the resolve door (already ported --
+    // see the banner), so it still fills a raw hidden-return-slot. The value
+    // lands in a POD and is then stolen into the class.
+    String tmpPod{nullptr};
+    format(&tmpPod, RtIo::kRegistryPathFormat,
            RtIo::kRegistryCompanyName, RtIo::kRegistryProductName);
+    System::String tmp(std::move(Sys(tmpPod)));
     // The leading equality test is retail's self-assignment guard (see
-    // persistence_startup.cpp's banner for why it must not be tidied away).
-    if (self->path.data != tmp.data) {
-        RtSystem::RtString_ReleaseInline(&self->path);
-        self->path.data = tmp.data;
-        if (tmp.data) ++StringRefCount(tmp.data);
-    }
-    RtSystem::RtString_ReleaseInline(&tmp);
+    // persistence_startup.cpp's banner for why it must not be tidied away) --
+    // this IS `String::operator=` (retail 0x1800c9810). `path` is a
+    // `RtSystem::String` member of the not-yet-converted `Registry`, reached
+    // through the transitional bridge.
+    Sys(self->path) = tmp;
+    // ~tmp is retail's release.
 
     // 0x1800b95c0: `subKey != nullptr && subKey[0] != '\0'`. Retail then walks
     // subKey to its NUL and tests `length <= 0` (0x1800b95d3-0x1800b95ed) —
@@ -403,18 +409,16 @@ extern "C" Registry* RtIo_Registry_Ctor(Registry* self, const char* subKey) {
     // length >= 1. The walk is not reproduced; it computes a value retail then
     // uses for nothing but that dead comparison.
     if (subKey != nullptr && subKey[0] != '\0') {
-        using ConcatCStrFn = String* (*)(String* ret, const String* lhs, const char* rhs);
-        using AssignFn     = String* (*)(String* self, const String* rhs);
-        ConcatCStrFn cat = RT_EXPORT_ONCE(ConcatCStrFn,
-                                          "??HSystem@@YA?AVString@0@AEBV10@PEBD@Z");
-        String withSep;  withSep.data = nullptr;
-        String full;     full.data    = nullptr;
-        cat(&withSep, &self->path, RtIo::kRegistryPathSeparator);   // 0x1800b9605
-        cat(&full, &withSep, subKey);                               // 0x1800b9619
-        RT_EXPORT_ONCE(AssignFn, "??4String@System@@QEAAAEAV01@AEBV01@@Z")
-            (&self->path, &full);                                   // 0x1800b9625
-        RtSystem::RtString_ReleaseInline(&full);                    // 0x1800b962b
-        RtSystem::RtString_ReleaseInline(&withSep);                 // 0x1800b9664
+        // `operator+` and `operator=` are already-ported class members, so
+        // the two exported doors this ctor used to resolve by name
+        // (??HSystem@@... and ??4String@System@@...) are spelled as
+        // themselves rather than through RT_EXPORT_ONCE — table entries
+        // `ConcatCStr` -> `a + p` and `Assign` -> `s = o`.
+        System::String withSep = Sys(self->path) + RtIo::kRegistryPathSeparator; // 0x1800b9605
+        System::String full    = withSep + subKey;                              // 0x1800b9619
+        Sys(self->path) = full;                                                 // 0x1800b9625
+        // ~full, ~withSep are retail's two releases at
+        // 0x1800b962b/0x1800b9664.
     }
 
     // 0x1800b969d onward.
@@ -452,8 +456,13 @@ extern "C" void RtIo_Persistence_ReadSettings(Persistence* self) {
     Registry reg;
     RT_EXPORT_ONCE(RegistryCtorFn, "??0Registry@IO@@QEAA@PEBD@Z")(&reg, nullptr);
 
-    String name;   name.data  = nullptr;                       // 0x1800b84f4
-    String value;  value.data = nullptr;                       // 0x1800b84fc
+    // `name`/`value` stay `RtSystem::String` (not `System::String`) because
+    // `AssignFromWide` and `MapInsert` below are external-door signatures
+    // shared with `WriteSettingsBody` (left in C shape -- see its own
+    // comment); ownership is still proven and expressed through the
+    // transitional bridge at each use.
+    String name{nullptr};                                      // 0x1800b84f4
+    String value{nullptr};                                     // 0x1800b84fc
 
     // Deliberately uninitialised — see banner point 4.
     wchar_t nameBuf[kNameChars];
@@ -488,23 +497,28 @@ extern "C" void RtIo_Persistence_ReadSettings(Persistence* self) {
         // self-assignment guard; see banner points 1 and 2.
         if (node != nullptr) {
             SettingsMapNode* n = static_cast<SettingsMapNode*>(node);
+            // `String::operator=` (retail 0x1800c9810), through the
+            // transitional bridge on both not-yet-converted PODs.
             if (n->value.data != value.data) {
-                RtSystem::RtString_ReleaseInline(&n->value);
-                n->value.data = value.data;
-                if (value.data) ++StringRefCount(value.data);
+                Sys(n->value) = Sys(value);
             }
         }
     }
 
     reg.enumIndex = 0;                                         // 0x1800b8832
-    RtSystem::RtString_ReleaseInline(&value);                  // 0x1800b8837
-    RtSystem::RtString_ReleaseInline(&name);                   // 0x1800b8859
+    // `name`/`value` are plain locals of a type that keeps its POD shape
+    // here (see the declaration comment), so there is no outer RAII to run
+    // this for us; retail's two releases are spelled as the destructors
+    // themselves, through the bridge, in retail's own order.
+    Sys(value).~String();                                      // 0x1800b8837
+    Sys(name).~String();                                       // 0x1800b8859
 
-    // ~Registry, inlined at 0x1800b887d.
+    // ~Registry, inlined at 0x1800b887d. `reg` is a plain local (`Registry`
+    // is not yet converted), so `path`'s release is spelled as the
+    // destructor itself through the bridge.
     if (reg.key != nullptr) RegCloseKey(static_cast<HKEY>(reg.key));
     reg.key = nullptr;
-    RtSystem::RtString_ReleaseInline(&reg.path);               // 0x1800b8892
-
+    Sys(reg.path).~String();                                   // 0x1800b8892
 }
 
 // ============================================================================
@@ -805,6 +819,22 @@ void ArrayDestroy(WideArray* a) {                       // 0x1800b9027-0x1800b90
 }
 
 // ---- the transcription itself, separated from the probe --------------------
+//
+// LEFT AS C (ENDGAME B.3.1 step 2, conv-io batch): this body interleaves two
+// tree walks, a hand-inlined growing `Array<WideString>` with a non-obvious
+// capacity rule, an IAT-swapping emission oracle, and `AssignFromWide`/
+// `MapFind`/`MapInsert` calls shared with `ReadSettings` above -- retyping any
+// one of `key`, `wValue`, `wName`, `w`, or the array's elements would either
+// require changing those shared file-local doors' signatures (risking
+// ReadSettings, which IS converted) or a second parallel spelling of each
+// door. Proving "exactly one release on every path" here means proving it
+// across the growth rule's realloc-vs-no-realloc split AND the shrink-arm
+// comment AND two enumeration loops with early `continue`/`break`; the
+// combination is exactly the "retail unwind bitmask across ten locals" case
+// B31_RULES calls out as a left-alone body being the fine outcome. Every
+// `String`/`WideStringHandle` local here keeps the manual
+// Ctor/Set/ReleaseInline shape it already had; nothing in this function
+// changed.
 void WriteSettingsBody(const Persistence* self) {
     RegistryCtorFn regCtor = RT_EXPORT_ONCE(RegistryCtorFn,
                                             "??0Registry@IO@@QEAA@PEBD@Z");

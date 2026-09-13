@@ -77,45 +77,16 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"
-
-// Declared locally rather than including standalone/resolve.h, which drags in
-// <windows.h> — the same reason external_set_probe.cpp:99 declares it.
-
-namespace RtSystem {
-void      RtSystem_Filename_AdjustDelimiters(Filename* self);              // 0x1800c6970
-Filename* RtSystem_Filename_GetPathIdentifer(const Filename* self, Filename* ret);
-                                                                           // 0x1800c6610
-}  // namespace RtSystem
+#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 
 namespace RtObject {
 
 using RtSystem::Filename;
-using RtSystem::String;
-using RtSystem::RtString_AdoptInline;
-using RtSystem::RtString_ReleaseInline;
-using RtSystem::RtSystem_String_ConcatCStr;
-using RtSystem::RtSystem_Filename_AdjustDelimiters;
-using RtSystem::RtSystem_Filename_GetPathIdentifer;
+using RtSystem::Sys;
 
 FindCounters g_fc = {};
 
 namespace {
-
-inline String*       AsStr(Filename* f)       { return reinterpret_cast<String*>(f); }
-inline const String* AsStr(const Filename* f) { return reinterpret_cast<const String*>(f); }
-
-inline int32_t BufLength(const char* d) {
-    return reinterpret_cast<const int32_t*>(d)[-2];
-}
-
-// Retail's inlined `Filename::operator=`: the `!=` guard is its own, and
-// skipping the whole block on a self-assign is what keeps the refcount from
-// reaching zero mid-assignment.
-inline void ReleaseThenAdopt(Filename* dst, char* src) {
-    if (dst->data == src) return;
-    RtString_ReleaseInline(AsStr(dst));
-    RtString_AdoptInline(AsStr(dst), src);
-}
 
 // 0x180155ae0. Read out of .rdata, not guessed:
 //   180155ae0: 3a 72 65 73 6f 75 72 63 65 00   ":resource"
@@ -143,46 +114,54 @@ External* RtObject_ExternalFactory_Find(ExternalFactory* self, const Filename* p
     ++g_fc.calls;
 
     // ---- 0x1800be0fc-0x1800be149: `Filename key = path`, then adjust again --
-    Filename key{nullptr};                               // [RBP+0x28]
-    ReleaseThenAdopt(&key, path->data);
-    RtSystem_Filename_AdjustDelimiters(&key);            // 0x1800be140 (op= 's own)
-    RtSystem_Filename_AdjustDelimiters(&key);            // 0x1800be145 (retail's extra)
+    // ENDGAME B.3.1 step 2. Retail's null-init + operator= + the redundant
+    // second AdjustDelimiters IS the copy constructor (??0Filename@System@@
+    // QEAA@AEBV01@@Z, 0x1800067d0), whose ported body normalises exactly twice
+    // for that reason. So this one line still spends 0x1800be140 AND
+    // 0x1800be145, and all four of the header's AdjustDelimiters calls are
+    // accounted for inside the two copies. `path` is the registered entry
+    // point's POD parameter, so it comes through the one transitional bridge.
+    System::Filename key(Sys(*path));                    // [RBP+0x28]
 
     // ---- 0x1800be14f: the identifier comes from `path`, NOT from `key` ------
     // Retail passes RBX (the argument) here, not the normalised copy. It cannot
     // matter — AdjustDelimiters does not touch ':' — but it is transcribed the
     // way it is written, because "it cannot matter" is how a port acquires a
     // difference nobody can find later.
-    Filename ident{nullptr};                             // [RBP+0x38]
-    RtSystem_Filename_GetPathIdentifer(path, &ident);
+    System::Filename ident = Sys(*path).GetPathIdentifer();   // [RBP+0x38]
 
     // ---- 0x1800be15c-0x1800be1f6: no identifier -> append ":resource" -------
-    if (ident.data == nullptr || BufLength(ident.data) == 0) {
+    // `GetLength` is retail's own null-or-empty test (0x1800063c0 returns 0 for
+    // a null buffer), so it is the same two branches as the raw header read.
+    if (ident.GetLength() == 0) {
         ++g_fc.identDefaulted;
-        String tmp{nullptr};                             // [RBP+0x30]
-        RtSystem_String_ConcatCStr(&tmp, AsStr(&key),
-                                   kResourceSuffix);
-        ReleaseThenAdopt(&key, tmp.data);                // 0x1800be186
-        RtSystem_Filename_AdjustDelimiters(&key);        // 0x1800be1c7
-        RtString_ReleaseInline(&tmp);                    // 0x1800be1cd
+        // 0x1800be186 (release-then-adopt) + 0x1800be1c7 (AdjustDelimiters) is
+        // exactly `Filename::operator=(const String&)`, 0x180026d40 — ONE
+        // normalise, not two. `tmp`'s 0x1800be1cd release is its destructor.
+        System::String tmp = key.AsString() + kResourceSuffix;   // [RBP+0x30]
+        key = tmp;
     } else {
         ++g_fc.identPresent;
     }
 
     // ---- 0x1800be1f6-0x1800be251: `Filename probe = key`, adjusted twice ----
-    // The redundant second copy; see the file header.
-    Filename probe{nullptr};                             // [RBP+0x30], reused
-    ReleaseThenAdopt(&probe, key.data);
-    RtSystem_Filename_AdjustDelimiters(&probe);          // 0x1800be244
-    RtSystem_Filename_AdjustDelimiters(&probe);          // 0x1800be24d
+    // The redundant second copy; see the file header. Same copy constructor as
+    // `key` above, so 0x1800be244 and 0x1800be24d are both still spent.
+    System::Filename probe(key);                         // [RBP+0x30], reused
 
     // ---- 0x1800be257: descend `this->_resources` (this + 0x10) -------------
     rtsetavl24::Set* const tree =
         reinterpret_cast<rtsetavl24::Set*>(&self->_resources);
+    // TRANSITIONAL CAST, the class->POD direction: `rtresset::Find` is an
+    // unconverted C body (external_set.cpp) whose key parameter is the POD.
+    // Same eight bytes, same single field; it goes when that file converts.
     rtsetavl24::Node* const node =
-        rtresset::Find(tree, &probe);
+        rtresset::Find(tree, reinterpret_cast<const Filename*>(&probe));
 
-    RtString_ReleaseInline(AsStr(&probe));               // 0x1800be26f
+    // (probe's 0x1800be26f release is its destructor now. It runs at the end of
+    // the function instead of here — nothing between the two reads its buffer,
+    // and the DESTRUCTION ORDER is still retail's: probe, then ident
+    // (0x1800be2a6), then key (0x1800be2cf), which is reverse declaration order.)
 
     // ---- 0x1800be298: `return node ? node->element.external : nullptr` ------
     // `MOV RBX,qword ptr [RBX + 0x8]` — ResourceEntry::external at +0x08, which
@@ -197,9 +176,7 @@ External* RtObject_ExternalFactory_Find(ExternalFactory* self, const Filename* p
         ++g_fc.misses;
     }
 
-    RtString_ReleaseInline(AsStr(&ident));               // 0x1800be2a6
-    RtString_ReleaseInline(AsStr(&key));                 // 0x1800be2cf
-
+    // ident (0x1800be2a6) and key (0x1800be2cf) release in their destructors.
     return result;
 }
 

@@ -116,6 +116,8 @@
 // directory as that header, and the unqualified form would also shadow the C
 // library's <string.h> for anything included after it.
 #include "./string.h"
+#include <new>                 // placement new into the retail hidden return slot
+#include "./pod_bridge.h"      // the ONE transitional POD<->class bridge
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -124,7 +126,9 @@ using RtSystem::String;
 
 namespace {
 
-typedef void  (*StringDtorFn)(String*);
+// ENDGAME B.3.1 step 2: the `??1String@System@@QEAA@XZ` door typedef is gone
+// with its two call sites — the locals in SetCommandLine are RAII objects now,
+// so their destructors ARE that call.
 typedef void  (*ParseFn)(String* ret, int* pos, const String* src);
 typedef void* (*MapInsertFn)(void* map, void** ret, const String* key, const String* val);
 // Wave 22 lane ERRCFG. THREE parameters: the hidden String return slot is the
@@ -250,41 +254,57 @@ extern "C" void RtSystem_Configuration_SetCommandLine(void* self, const String* 
     void* map = static_cast<uint8_t*>(self) + 0x10;
     MapNode* rootBefore = *static_cast<MapNode**>(map);
 
+    // ENDGAME B.3.1 step 2: `cmd` is the registered entry point's POD
+    // parameter, so it reaches the class through the one bridge (pod_bridge.h).
+    const System::String& src = RtSystem::Sys(*cmd);
+
     int pos = 0;
-    char* d = cmd->data;
+    char* d = src._data;
     if (d != nullptr) {
-        const int len = RtSystem::StringLength(d);
+        const int len = src.GetLength();
         if (len > 0) {
             for (;;) {
-                String key;
-                key.data = nullptr;
-                RT_EXPORT_ONCE(ParseFn,
-                    "?ParseCommand@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z")(
-                        &key, &pos, cmd);
+                // The inner scope ends exactly where retail's two ~String calls
+                // are (0x1800c4838 / 0x1800c4841), so the destructors fire
+                // there — val then key, retail's own order — and BEFORE the
+                // `pos >= len` test, not after it.
+                {
+                    // `String key; key.data = nullptr;` IS the default ctor
+                    // (??0String@System@@QEAA@XZ, 0x180006760).
+                    System::String key;
+                    RT_EXPORT_ONCE(ParseFn,
+                        "?ParseCommand@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z")(
+                            // TRANSITIONAL CAST, the class->POD direction: the
+                            // door's typedef is the C entry point's ABI shape
+                            // and Configuration is not converted yet. Same
+                            // eight bytes; the callee constructs into this
+                            // hidden return slot.
+                            reinterpret_cast<String*>(&key), &pos, cmd);
 
-                if (key.data == nullptr || RtSystem::StringLength(key.data) == 0) {
-                    RT_EXPORT_ONCE(StringDtorFn, "??1String@System@@QEAA@XZ")(&key);
-                    break;
+                    // GetLength (0x1800063c0) returns 0 for a null buffer, so
+                    // it IS retail's two-part null-or-empty test. The break
+                    // runs ~String on the way out — retail's 0x1800c47f9.
+                    if (key.GetLength() == 0)
+                        break;
+
+                    System::String val;
+                    RT_EXPORT_ONCE(ParseFn,
+                        "?ParseValue@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z")(
+                            reinterpret_cast<String*>(&val), &pos, cmd);
+
+                    // 0x1800c4829. The insert is UNEXPORTED, so it goes by address
+                    // and — unlike every other dependency in this lane — a miss here
+                    // produces NO [RtUnresolved] line, only an EXEC-of-0 whose
+                    // return address symbolises to this source line. Named here so
+                    // that crash is readable. See §2: unreachable on an empty
+                    // command line, which is every automated run in this project.
+                    void* node = nullptr;
+                    reinterpret_cast<MapInsertFn>(
+                        ResolveAddr(Module::Runtime, 0x18002a090))(
+                            map, &node,
+                            reinterpret_cast<const String*>(&key),
+                            reinterpret_cast<const String*>(&val));
                 }
-
-                String val;
-                val.data = nullptr;
-                RT_EXPORT_ONCE(ParseFn,
-                    "?ParseValue@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z")(
-                        &val, &pos, cmd);
-
-                // 0x1800c4829. The insert is UNEXPORTED, so it goes by address
-                // and — unlike every other dependency in this lane — a miss here
-                // produces NO [RtUnresolved] line, only an EXEC-of-0 whose
-                // return address symbolises to this source line. Named here so
-                // that crash is readable. See §2: unreachable on an empty
-                // command line, which is every automated run in this project.
-                void* node = nullptr;
-                reinterpret_cast<MapInsertFn>(
-                    ResolveAddr(Module::Runtime, 0x18002a090))(map, &node, &key, &val);
-
-                RT_EXPORT_ONCE(StringDtorFn, "??1String@System@@QEAA@XZ")(&val);
-                RT_EXPORT_ONCE(StringDtorFn, "??1String@System@@QEAA@XZ")(&key);
 
                 if (pos >= len) break;
             }
@@ -397,15 +417,24 @@ extern "C" String* RtSystem_Configuration_ParseValue(String* ret, int* pos,
                                                      const String* src) {
     const int posIn = *pos;
 
-    while (*pos < RtSystem::RtString_GetLength(src) && IsBlank(src->data[*pos]))
+    // ENDGAME B.3.1 step 2: `src` and `ret` are the registered entry point's
+    // POD parameters, so both reach the class through the one bridge
+    // (pod_bridge.h). `GetLength` is re-evaluated per iteration, as retail's
+    // 0x1800063c0 call in the loop head is.
+    const System::String& s = RtSystem::Sys(*src);
+
+    while (*pos < s.GetLength() && IsBlank(s._data[*pos]))
         ++*pos;
 
     const int start = *pos;                                  // 0x1800c4992
 
-    while (*pos < RtSystem::RtString_GetLength(src) && !IsBlank(src->data[*pos]))
+    while (*pos < s.GetLength() && !IsBlank(s._data[*pos]))
         ++*pos;
 
-    RtSystem::RtSystem_String_SubString(src, ret, start, *pos - 1);   // inclusive
+    // `ret` is the hidden return slot — raw bytes — so SubString's result is
+    // placement-constructed into it (a move: the prvalue is dead afterwards, so
+    // there is no AddRef/Release pair retail did not spend).
+    new (RtSystem::Sys(ret)) System::String(s.SubString(start, *pos - 1)); // inclusive
 
     // ORACLE. Pure in the only sense that matters: given `src` and an input
     // `pos` it writes a fresh String and a new `pos` and touches no process
@@ -428,38 +457,43 @@ extern "C" String* RtSystem_Configuration_ParseCommand(String* ret, int* pos,
                                                        const String* src) {
     const int posIn = *pos;
 
-    while (*pos < RtSystem::RtString_GetLength(src) && IsBlank(src->data[*pos]))
+    // ENDGAME B.3.1 step 2, exactly as ParseValue above.
+    const System::String& s = RtSystem::Sys(*src);
+
+    while (*pos < s.GetLength() && IsBlank(s._data[*pos]))
         ++*pos;
 
-    while (*pos < RtSystem::RtString_GetLength(src) && src->data[*pos] != '/')
+    while (*pos < s.GetLength() && s._data[*pos] != '/')
         ++*pos;
 
     // 0x1800c4a92. Unguarded by design — detail 2 above. When the scan ran off
     // the end this reads the NUL, which is not '/', so the empty return is
     // taken, which is precisely what retail does.
-    if (src->data[*pos] != '/') {
-        ret->data = nullptr;                                 // detail 3
+    if (s._data[*pos] != '/') {
+        // detail 3: retail's `*ret = 0` IS the default ctor (0x180006760),
+        // placement-constructed because `ret` is the raw hidden return slot.
+        new (RtSystem::Sys(ret)) System::String();
         return ret;
     }
     ++*pos;                                                  // step over the '/'
 
-    while (*pos < RtSystem::RtString_GetLength(src) && IsBlank(src->data[*pos]))
+    while (*pos < s.GetLength() && IsBlank(s._data[*pos]))
         ++*pos;
 
     const int start = *pos;                                  // 0x1800c4ad2
 
-    while (*pos < RtSystem::RtString_GetLength(src) &&
-           src->data[*pos] != ' ' && src->data[*pos] != ':')
+    while (*pos < s.GetLength() &&
+           s._data[*pos] != ' ' && s._data[*pos] != ':')
         ++*pos;
 
     // 0x1800c4b02. `end` is where the run stopped. The DELIMITER is CONSUMED
     // (pos = end + 1) but is NOT part of the returned string. Reading
     // src->data[end] is the second unguarded read of detail 2.
     const int end = *pos;
-    if (src->data[end] == ' ' || src->data[end] == ':')
+    if (s._data[end] == ' ' || s._data[end] == ':')
         *pos = end + 1;
 
-    RtSystem::RtSystem_String_SubString(src, ret, start, end - 1);   // inclusive
+    new (RtSystem::Sys(ret)) System::String(s.SubString(start, end - 1)); // inclusive
 
 
     return ret;
@@ -538,16 +572,19 @@ extern "C" String* RtSystem_Configuration_GetCommandLineString(
     if (temp != nullptr) ++RtSystem::StringRefCount(temp);
 
     // 0x1800c537f: the slot is zeroed FIRST and unconditionally, then adopted.
-    ret->data = nullptr;
-    RtSystem::RtString_AdoptInline(ret, temp);
+    // ENDGAME B.3.1 step 2: `ret` is the hidden return slot, so the zero is the
+    // default ctor placement-constructed into it; `Adopt` is String's own
+    // private AddRef half, reached through the transitional accessor.
+    System::String* out = new (RtSystem::Sys(ret)) System::String();
+    System::StringPrivateAccess::Adopt(*out, temp);
 
-    // 0x1800c53a9 / 0x1800c53d5: the temporary dies. Through the shared
-    // primitive, so the freeing branch's dangling-pointer asymmetry (String.h)
-    // is reproduced rather than re-typed.
+    // 0x1800c53a9 / 0x1800c53d5: the temporary dies. Through the class's own
+    // destructor, so the freeing branch's dangling-pointer asymmetry (String.h)
+    // is reproduced rather than re-typed. `_data` is written directly and NOT
+    // adopted, because retail's `++temp[-4]` above already took this reference.
     {
-        String tmpObj;
-        tmpObj.data = temp;
-        RtSystem::RtString_ReleaseInline(&tmpObj);
+        System::String tmpObj;
+        tmpObj._data = temp;
     }
 
 

@@ -20,12 +20,15 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <new>        // placement new into the retail hidden return slot
+#include <utility>    // std::move -- the pointer steal out of a POD out-param
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Persistence.h"
 #include "../system/string.h"   // RtSystem::String, RtString_ReleaseInline (Wave 2, lane String)
+#include "../system/pod_bridge.h"
 
 using RtSystem::String;
-using RtSystem::StringRefCount;
+using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
 using RtIo::Persistence;
 using RtIo::SettingsMapNode;
 
@@ -82,10 +85,14 @@ FormatFn StringFormat() {
 // on disk. Confirmed at all four Get/Set retail sites (0x1800b81e0 + 0x22,
 // 0x1800b8290 + 0x22, 0x1800b80c0 + 0x30, 0x1800b8380 + 0x38): every one calls
 // `String::Format((String*)&local, "%s%s", section, key)`.
-String MakeSettingsKey(const char* section, const char* key) {
+// StringFormat() is resolved through ResolveAddr against the DLL's own export
+// (not our ported System::String::Format -- see the comment above), so it
+// still fills a raw hidden-return-slot. The value lands in a POD and is then
+// stolen into the class: a pure pointer steal, no AddRef, `out` left null.
+System::String MakeSettingsKey(const char* section, const char* key) {
     String out{};
     StringFormat()(&out, "%s%s", section, key);
-    return out;
+    return System::String(std::move(Sys(out)));
 }
 
 // Retail's Get(bool&) (0x1800b8290) is an inlined strcmp against the literal
@@ -117,7 +124,7 @@ bool RetailValueIsTrue(const char* value) {
 // ============================================================================
 bool RtIo_Persistence_GetInt(void* self, const char* section, const char* key, int* out) {
 
-    String k = MakeSettingsKey(section, key);
+    System::String k = MakeSettingsKey(section, key);
     void* node = CallMapFind(self, &k);
     bool ours = (node != nullptr);
     int oursVal = *out;   // retail only ever writes *param_3 when found; preserve the caller's value otherwise
@@ -127,8 +134,7 @@ bool RtIo_Persistence_GetInt(void* self, const char* section, const char* key, i
         // — no need to call the DLL for it, this is not engine-specific.
         oursVal = static_cast<int>(std::strtol(n->value.data ? n->value.data : "", nullptr, 10));
     }
-    RtSystem::RtString_ReleaseInline(&k);
-
+    // ~k is retail's release.
 
     if (ours) *out = oursVal;
     return ours;
@@ -140,7 +146,7 @@ bool RtIo_Persistence_GetInt(void* self, const char* section, const char* key, i
 // ============================================================================
 bool RtIo_Persistence_GetBool(void* self, const char* section, const char* key, bool* out) {
 
-    String k = MakeSettingsKey(section, key);
+    System::String k = MakeSettingsKey(section, key);
     void* node = CallMapFind(self, &k);
     bool ours = (node != nullptr);
     bool oursVal = *out;
@@ -148,8 +154,7 @@ bool RtIo_Persistence_GetBool(void* self, const char* section, const char* key, 
         auto* n = static_cast<SettingsMapNode*>(node);
         oursVal = RetailValueIsTrue(n->value.data);
     }
-    RtSystem::RtString_ReleaseInline(&k);
-
+    // ~k is retail's release.
 
     if (ours) *out = oursVal;
     return ours;
@@ -165,9 +170,13 @@ bool RtIo_Persistence_GetBool(void* self, const char* section, const char* key, 
 // ============================================================================
 void RtIo_Persistence_SetInt(void* self, const char* section, const char* key, int value) {
 
-    String valStr{};
-    StringFormat()(&valStr, "%i", value);
-    String keyStr = MakeSettingsKey(section, key);
+    // StringFormat() is the DLL's own export (see the comment on it above),
+    // so it still fills a raw hidden-return-slot; the value is stolen into
+    // the class the same way MakeSettingsKey's does.
+    String valStrPod{};
+    StringFormat()(&valStrPod, "%i", value);
+    System::String valStr(std::move(Sys(valStrPod)));
+    System::String keyStr = MakeSettingsKey(section, key);
 
     void* outNode = nullptr;
     CallMapInsert(self, &outNode, &keyStr, &valStr);
@@ -178,15 +187,14 @@ void RtIo_Persistence_SetInt(void* self, const char* section, const char* key, i
     // BRAND NEW node (its own internal refcounting already left node->value
     // == valStr in that case, so this branch is skipped); on an EXISTING
     // node Map_Insert leaves the old value untouched and Persistence::Set
-    // itself must swap it.
-    if (node->value.data != valStr.data) {
-        RtSystem::RtString_ReleaseInline(&node->value);
-        node->value.data = valStr.data;
-        if (valStr.data) ++StringRefCount(valStr.data);
+    // itself must swap it. This IS `String::operator=` (0x1800c9810): the
+    // same guard-on-buffer, release, adopt sequence. `value` is a
+    // `RtSystem::String` member of `SettingsMapNode`, not yet converted, so
+    // it is reached through the one transitional bridge.
+    if (node->value.data != valStr._data) {
+        Sys(node->value) = valStr;
     }
-    RtSystem::RtString_ReleaseInline(&keyStr);
-    RtSystem::RtString_ReleaseInline(&valStr);
-
+    // ~keyStr, ~valStr are retail's two releases.
 }
 
 // ============================================================================
@@ -195,22 +203,21 @@ void RtIo_Persistence_SetInt(void* self, const char* section, const char* key, i
 // ============================================================================
 void RtIo_Persistence_SetBool(void* self, const char* section, const char* key, bool value) {
 
-    String valStr{};
-    StringFormat()(&valStr, "%s", value ? "true" : "false");
-    String keyStr = MakeSettingsKey(section, key);
+    String valStrPod{};
+    StringFormat()(&valStrPod, "%s", value ? "true" : "false");
+    System::String valStr(std::move(Sys(valStrPod)));
+    System::String keyStr = MakeSettingsKey(section, key);
 
     void* outNode = nullptr;
     CallMapInsert(self, &outNode, &keyStr, &valStr);
     auto* node = static_cast<SettingsMapNode*>(outNode);
 
-    if (node->value.data != valStr.data) {
-        RtSystem::RtString_ReleaseInline(&node->value);
-        node->value.data = valStr.data;
-        if (valStr.data) ++StringRefCount(valStr.data);
+    // Same shape as Set(int) above -- `String::operator=` on the not-yet-
+    // converted `SettingsMapNode::value`, through the transitional bridge.
+    if (node->value.data != valStr._data) {
+        Sys(node->value) = valStr;
     }
-    RtSystem::RtString_ReleaseInline(&keyStr);
-    RtSystem::RtString_ReleaseInline(&valStr);
-
+    // ~keyStr, ~valStr are retail's two releases.
 }
 
 // ============================================================================
@@ -222,13 +229,13 @@ void RtIo_Persistence_SetBool(void* self, const char* section, const char* key, 
 void* RtIo_Persistence_GetSavePath(void* self, void* retval) {
 
     auto* p = static_cast<Persistence*>(self);
-    auto* ret = static_cast<String*>(retval);
-    ret->data = nullptr;
-    if (p->savePath.data) {
-        ret->data = p->savePath.data;
-        ++StringRefCount(ret->data);
-    }
-
+    // `retval` is the hidden return slot -- raw, uninitialised bytes -- so the
+    // value is placement-constructed into it. `String(const String&)` (retail
+    // 0x180006cb0) is exactly the "adopt savePath's buffer, AddRef if non-null"
+    // sequence the C body wrote out by hand. `savePath` is a `RtSystem::String`
+    // member of the not-yet-converted `Persistence`, reached through the one
+    // transitional bridge.
+    new (static_cast<System::String*>(retval)) System::String(Sys(p->savePath));
 
     return retval;
 }

@@ -85,12 +85,13 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/achievement/AchievementManager.h"
-#include "../system/string.h"   // RtString_ReleaseInline (Wave 2, lane String)
+#include "../../types/system/String.h"
 
 using RtAchievement::Achievement;
 using RtAchievement::AchievementInstance;
 using RtAchievement::AchievementManager;
-using RtSystem::String;
+// ENDGAME B.3.1 step 2: the real class, not the POD.
+using System::String;
 
 // Forward-declared rather than pulled in from standalone/resolve.h: that header
 // drags in <windows.h> and PLAN.md §4.1 requires runtime/src/ to stay
@@ -167,19 +168,12 @@ void** PersistenceSingletonCell() {
     return RT_DATA_SLOT(void**, "?_singleton@Persistence@IO@@0PEAV12@EA");
 }
 
-// ---------------------------------------------------------------------------
-// ?Format@String@System@@SA?AV12@PEBDZZ — retail 0x1800c9730
-// ---------------------------------------------------------------------------
-// Real varargs, so it is a plain typedef rather than an RT_*_ONCE macro (whose
-// Fn constraint is non-variadic) — the same shape engine_funcs.cpp's own
-// fn_String_Format and persistence.cpp:75 already use. The hidden return slot
-// is the FIRST argument.
-using FormatFn = void* (*)(String* retval, const char* fmt, ...);
-FormatFn StringFormat() {
-    static FormatFn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<FormatFn>(ResolveAddr(Module::Runtime, 0x1800c9730));
-    return fn;
-}
+// ENDGAME B.3.1 step 2: `?Format@String@System@@SA?AV12@PEBDZZ` (0x1800c9730)
+// is a static member of `System::String` now, so the by-address door that used
+// to stand here is gone and the two call sites below call it directly. Same
+// body either way — the registry row at that address registers the shim, and
+// the shim is one line over this member — and a direct call is what keeps the
+// body off the DLL at cutover.
 
 // The two string literals, read out of the DLL at 0x180154848 and 0x18015484c
 // rather than guessed: bytes `25 69 00 00 41 63 68 00` = "%i\0\0Ach\0".
@@ -274,13 +268,12 @@ void RtAch_AchievementManager_ReadAchievements(AchievementManager* self) {
     for (int32_t i = 0; i < self->completed._size; ++i) {
         self->completed._data[i] = 0;
 
-        String key{};
-        StringFormat()(&key, kIndexFormat, i);
+        String key = String::Format(kIndexFormat, i);
 
-        getFn(persistence, kSection, key.data,
+        getFn(persistence, kSection, key._data,
               reinterpret_cast<bool*>(self->completed._data + i));
-
-        RtSystem::RtString_ReleaseInline(&key);
+        // `key` releases at the bottom of the iteration — retail's 0x18009ec1a,
+        // now ~String.
     }
 }
 
@@ -312,16 +305,15 @@ bool RtAch_AchievementManager_SetAchievementMet(AchievementManager* self, int in
 
     void* persistence = *PersistenceSingletonCell();
 
-    String key{};
-    StringFormat()(&key, kIndexFormat, index);
+    String key = String::Format(kIndexFormat, index);
 
     auto setFn = RT_EXPORT_ONCE(PersistSetBoolFn, "?Set@Persistence@IO@@QEAAXPEBD0_N@Z");
-    setFn(persistence, kSection, key.data, self->completed._data[index] != 0);
+    setFn(persistence, kSection, key._data, self->completed._data[index] != 0);
 
     auto writeFn = RT_EXPORT_ONCE(PersistWriteFn, "?WriteSettings@Persistence@IO@@QEBAXXZ");
     writeFn(persistence);
 
-    RtSystem::RtString_ReleaseInline(&key);
+    // `key` releases here — retail's 0x18009ed30, now ~String.
     return true;
 }
 

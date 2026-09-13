@@ -58,9 +58,12 @@
 #include <cstdint>
 #include <cstdio>
 
+#include <new>          // placement new into raw node element bytes
+
 #include "reference_set.h"
 #include "../../funcs/rt_port.h"
 #include "../system/string.h"
+#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 
 // Declared locally rather than including standalone/resolve.h, which drags in
 // <windows.h> (PLAN §4.1 decision 1). Byte-identical to external_set.cpp's,
@@ -68,14 +71,11 @@
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
-// Ported in Wave 2 (runtime/src/system/filename.cpp), registered at
-// 0x1800067d0. Declared here rather than pulled from a header because that
-// lane's file exposes none of its own — external.cpp and external_set.cpp do
-// the same. Its FIRST action is `MOV qword ptr [RBX],0`, so it zeroes its own
-// destination and no caller pre-zeroes for it.
-namespace RtSystem {
-Filename* RtSystem_Filename_CtorCopy(Filename* self, const Filename* other);
-}
+// `??0Filename@System@@QEAA@AEBV01@@Z` (0x1800067d0) used to be forward-declared
+// here as a C entry point. ENDGAME B.3.1 step 2 calls it as what it is — the
+// `System::Filename` copy constructor, placement-constructed into the raw node
+// bytes. Its first action is still `MOV qword ptr [RBX],0`: the ported ctor
+// member-initialises `_data` to null, so no caller pre-zeroes for it.
 
 namespace rtrefset {
 
@@ -108,10 +108,11 @@ static void* MemAlloc(uint64_t bytes, int align) {
     return fn ? fn(bytes, align) : nullptr;
 }
 
-// The refcount release idiom retail inlines at 0x18002cbda. `String::Release`'s
-// body, shared with every other Filename holder in this tree.
+// The refcount release idiom retail inlines at 0x18002cbda. ENDGAME B.3.1
+// step 2: that idiom IS `~Filename` (0x180006980), retail's release asymmetry
+// included, so the helper forwards to the destructor instead of re-spelling it.
 static void ReleaseInline(Filename* f) {
-    RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(f));
+    RtSystem::Sys(*f).~Filename();
 }
 
 // ---------------------------------------------------------------------------
@@ -323,7 +324,7 @@ void Retrace(Set* set, Node** slot) {
 Node* PairCtor(Node* node, const ReferenceEntry* src, Node* parent) {
     ReferenceEntry* e = Elem(node);
     e->id = src->id;                                   // DWORD only; _pad untouched
-    RtSystem::RtSystem_Filename_CtorCopy(&e->path, &src->path);
+    new (&e->path) System::Filename(RtSystem::Sys(src->path));
     node->parent  = parent;
     node->left    = nullptr;
     node->right   = nullptr;
@@ -477,7 +478,7 @@ Node** InsertCore(Set* set, Node** out, const ReferenceEntry* pair) {
 Node** Insert(Set* set, Node** out, const uint32_t* key, const Filename* value) {
     ReferenceEntry tmp;
     tmp.id = *key;                     // DWORD; tmp._pad deliberately untouched
-    RtSystem::RtSystem_Filename_CtorCopy(&tmp.path, value);
+    new (&tmp.path) System::Filename(RtSystem::Sys(*value));
 
     InsertCore(set, out, &tmp);
 

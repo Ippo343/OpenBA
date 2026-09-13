@@ -93,6 +93,7 @@
 #include <windows.h>
 
 #include "../system/string.h"
+#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 #include "../../funcs/rt_port.h"
 // ORDER IS LOAD-BEARING, and it is a trap in the tree rather than a style
 // choice. `External.h` does `#include "TypeInfo.h"` at its line 322 -- INSIDE
@@ -114,7 +115,6 @@ namespace RtObject {
 
 using RtSystem::Filename;
 using RtSystem::String;
-using RtSystem::RtString_ReleaseInline;
 
 namespace {
 
@@ -175,8 +175,11 @@ bool ExternalSerialize(External* self, void* stream) {
 // fields are declared as `char*` in FileStream.h (a System::String is exactly
 // that one pointer), so the cast is the same one every Filename port in this
 // tree makes.
+// ENDGAME B.3.1 step 2: the idiom IS `~String` (0x180006c80), retail's release
+// asymmetry included. The fields stay `char*` because `IO::TextFileStream` and
+// `IO::FileStream` are not converted classes yet (B31_RULES).
 void ReleaseStrSlot(char** slot) {
-    RtString_ReleaseInline(reinterpret_cast<String*>(slot));
+    reinterpret_cast<System::String*>(slot)->~String();
 }
 
 // `if (fi->handle != -1) FileSystem::CloseFile(_singleton, fi);`
@@ -272,10 +275,6 @@ extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
         ++g_st.typeMissing;
     }
 
-    String typeStr{};
-    typeStr.data = nullptr;
-    RtSystem::RtSystem_String_Set(&typeStr, typeName);   // 1800bba4a
-
     // ---- 1800bba50..1800bba85 -------------------------------------------
     // `IO::TextFileStream ts(typeStr, *name, 0);`
     //
@@ -286,16 +285,20 @@ extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
     // external_add.cpp takes on VisitorStream).
     RtIo::TextFileStream ts;
     {
-        const String* ctorType = &typeStr;
+        // ENDGAME B.3.1 step 2: 1800bba4a is a null-init followed by
+        // `String::Set`, which is the `const char*` constructor (0x18000b630)
+        // spelled out. The scope ends where retail's 1800bba64 release is, so
+        // the destructor lands on the same instruction the release did.
+        System::String typeStr(typeName);            // 1800bba4a
+
+        const String* ctorType = reinterpret_cast<const String*>(&typeStr);
         const String* ctorName = reinterpret_cast<const String*>(name);
         int           ctorVer  = 0;
         if (g_stCtl == 1) { ++g_stAtt; const String* t = ctorType; ctorType = ctorName; ctorName = t; }
         if (g_stCtl == 2) { ++g_stAtt; ctorVer = 1; }
         RT_EXPORT_ONCE(TextCtorFn, "??0TextFileStream@IO@@QEAA@AEBVString@System@@0H@Z")(
             &ts, ctorType, ctorName, ctorVer);
-    }
-
-    RtString_ReleaseInline(&typeStr);                // 1800bba64
+    }                                                // 1800bba64
 
     // ---- 1800bba85..1800bba9f -------------------------------------------
     bool result = false;                             // 1800bba85: XOR DIL,DIL
@@ -364,8 +367,8 @@ extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
     ts.base.base.vptr = RT_DATA_SLOT(const void*, "??_7FileStream@IO@@6B@");      // 1800bbb9b
     CloseIfOpen(&ts.base.file);                                          // 1800bbba6
     // ~FileInfo (0x18000c180), transcribed -- see the header note.
-    RtString_ReleaseInline(&ts.base.file._name1);                        // 18000c19f  +0x28
-    RtString_ReleaseInline(&ts.base.file._name0);                        // 18000c1ce  +0x20
+    RtSystem::Sys(ts.base.file._name1).~String();                        // 18000c19f  +0x28
+    RtSystem::Sys(ts.base.file._name0).~String();                        // 18000c1ce  +0x20
     ReleaseStrSlot(&ts.base.filename);                                   // 1800bbbc7  +0x18
 
     ts.base.base.vptr = RT_DATA_SLOT(const void*, "??_7Stream@IO@@6B@");          // 1800bbbf0

@@ -44,22 +44,13 @@
 
 #include <cstdio>
 #include <cstring>
+#include <new>          // placement new into the retail hidden return slot
 
 #include "../../types/io/FileSystem.h"
 #include "../../types/io/Modification.h"
 #include "../../funcs/rt_port.h"
 #include "../system/string.h"
-
-// Filename entry points this lane reuses from Wave 2 lane A
-// (runtime/src/system/filename.cpp). They are ordinary (non-static) free
-// functions in namespace RtSystem, declared here rather than by editing that
-// lane's file or its string.h, which this lane does not own.
-namespace RtSystem {
-struct Filename;
-Filename* RtSystem_Filename_CtorCopy(Filename* self, const Filename* other);
-void      RtSystem_Filename_Dtor(Filename* self);
-void      RtSystem_Filename_AdjustDelimiters(Filename* self);
-}  // namespace RtSystem
+#include "../system/pod_bridge.h"
 
 extern int RtIoFileSystemWinRegister();   // filesystem_win.cpp — GetSaveDirectory
 
@@ -68,7 +59,8 @@ namespace RtIO {
 using RtSystem::String;
 using RtSystem::Filename;
 using RtSystem::StringLength;
-using RtSystem::RtString_ReleaseInline;
+using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
+using RtSystem::SysFile;  //   "
 
 // ---- Raw ABI typedefs for the originals -----------------------------------
 typedef bool     (*fn_Exists_t)(const void* fs, const void* filename);
@@ -183,7 +175,12 @@ bool RtIo_FileSystem_Exists(const void* fsVoid, const Filename* path) {
 Filename* RtIo_FileSystem_GetDataDirectory(const void* fsVoid, Filename* ret) {
     const FileSystem* fs = static_cast<const FileSystem*>(fsVoid);
 
-    RtSystem::RtSystem_Filename_CtorCopy(ret, reinterpret_cast<const Filename*>(&fs->dataDirectory));
+    // ENDGAME B.3.1 step 2: retail's copy ctor, spelled as itself. `ret` is the
+    // hidden return slot — raw, uninitialised bytes — so the object is placement-
+    // constructed into it, which is exactly what the CALL at 0x180007c06 does.
+    // `dataDirectory` is a `RtSystem::String` member of the not-yet-converted
+    // `IO::FileSystem`, so it comes through the one transitional bridge.
+    new (ret) System::Filename(SysFile(fs->dataDirectory));
 
     return ret;
 }
@@ -205,7 +202,9 @@ Filename* RtIo_FileSystem_GetDataDirectory(const void* fsVoid, Filename* ret) {
 Filename* RtIo_FileSystem_GetSourceDirectory(const void* fsVoid, Filename* ret) {
     const FileSystem* fs = static_cast<const FileSystem*>(fsVoid);
 
-    RtSystem::RtSystem_Filename_CtorCopy(ret, reinterpret_cast<const Filename*>(&fs->sourceDirectory));
+    // ENDGAME B.3.1 step 2, as GetDataDirectory above. `sourceDirectory` is
+    // FileSystem+0x00, which is why retail's `MOV RDX,RCX` passes `this` itself.
+    new (ret) System::Filename(SysFile(fs->sourceDirectory));
 
     return ret;
 }
@@ -244,11 +243,13 @@ uint32_t RtIo_FileSystem_GetPackfileId(const void* fsVoid, const Filename* path)
     if (dataDirLen < pathLen) {
         // Relative path = pathData + dataDirLen (a suffix of the SAME buffer,
         // not a copy yet — String::Set below is what allocates the copy).
-        String relPath{nullptr};
-        RtSystem::RtSystem_String_Set(&relPath, pathData + dataDirLen);
-        RtSystem::RtSystem_Filename_AdjustDelimiters(reinterpret_cast<Filename*>(&relPath));
+        // ENDGAME B.3.1 step 2: `Filename relPath(pathData + dataDirLen)` is
+        // exactly retail's Set-then-AdjustDelimiters pair (the Filename
+        // const char* ctor, 0x180026cf0). RAII replaces the manual release at
+        // the bottom of the block.
+        System::Filename relPath(pathData + dataDirLen);
 
-        const char* str1 = relPath.data;
+        const char* str1 = relPath._data;
         PackfileIndexNode* node = fs->packfileIndexRoot;
         PackfileIndexNode* found = nullptr;
         while (node) {
@@ -274,7 +275,7 @@ uint32_t RtIo_FileSystem_GetPackfileId(const void* fsVoid, const Filename* path)
         if (found)
             ours = fs->packfiles[found->packIndex]->packfileId;
 
-        RtString_ReleaseInline(&relPath);
+        // (relPath's release is ~Filename now — retail's own 0x1800ab0f2.)
     }
 
     return ours;

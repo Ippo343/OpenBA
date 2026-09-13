@@ -63,28 +63,30 @@
 
 #include <cstdio>
 #include <cstring>
+#include <new>        // placement new into the retail hidden return slot
+#include <utility>    // std::move -- the pointer steal out of a POD out-param
 
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
+#include "../../src/system/pod_bridge.h"
 #include "../../funcs/rt_port.h"
 
-// Wave 2 lane A entry points this file reuses (runtime/src/system/), declared
-// locally rather than by editing that lane's string.h/Filename.h, which this
-// lane does not own. RtSystem_String_Format is not exposed by string.h today
-// (no existing caller outside string.cpp needed it); every other symbol here
-// mirrors an existing declaration in runtime/src/system/string.h.
+// ENDGAME B.3.1 step 2: three of the four Wave-2 lane-A entry points this file
+// forward-declared here are gone from this translation unit.
+// `RtSystem_String_Format` (0x1800c9730) is `System::String::Format`, and the
+// `RtSystem_Filename_AdjustDelimiters` (0x1800c6970) / `RtSystem_Filename_Dtor`
+// (0x180006980) pair were the tail of a mutating Filename entry point and of
+// ~Filename, which the class spells as itself. Only the WideString release is
+// still by hand, because System::WideString is not a B.3.1 class.
 namespace RtSystem {
-String* RtSystem_String_Format(String* ret, const char* fmt, ...);   // 0x1800c9730
 void    RtString_ReleaseInline(String* self);
-void    RtSystem_Filename_AdjustDelimiters(Filename* self);
-void    RtSystem_Filename_Dtor(Filename* self);
 }  // namespace RtSystem
 
 namespace RtIO {
 
 using RtSystem::String;
 using RtSystem::Filename;
-using RtSystem::StringRefCount;
+using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
 
 // WideString is not modelled as its own type (out of this lane's 7-symbol
 // scope): every use here is through a resolved export, and the only fact
@@ -131,32 +133,35 @@ void ComputeSaveDirectory(Filename* ret) {
     if (hr != S_OK) {
         RT_EXPORT_ONCE(fn_ErrorSetText_t, kNameErrorSetText)(
             "FileSystem: Unable to retrive the Documents folder for saving!", true);
-        ret->data = nullptr;
+        // `ret` is the hidden return slot: raw bytes, so retail's
+        // `*(longlong*)in_RDX = 0` is the default ctor (0x180006220), not a
+        // store through a live object.
+        new (ret) System::Filename();
         return;
     }
 
     WideStringHandle ws{nullptr};
     RT_EXPORT_ONCE(fn_WideStringSet_t, kNameWideStringSet)(&ws, buf);
 
-    String utf8{nullptr};
-    RT_EXPORT_ONCE(fn_WideStringAsUTF8_t, kNameWideStringAsUTF8)(&ws, &utf8);
+    // AsUTF8's hidden return slot is still POD-shaped (System::WideString is
+    // not a B.3.1 class), so the value lands in a POD and is then STOLEN into
+    // the class: the move ctor is a pure pointer steal, so `utf8Pod` is left
+    // null and exactly one release happens, `utf8`'s destructor.
+    String utf8Pod{nullptr};
+    RT_EXPORT_ONCE(fn_WideStringAsUTF8_t, kNameWideStringAsUTF8)(&ws, &utf8Pod);
+    System::String utf8(std::move(Sys(utf8Pod)));
 
-    String formatted{nullptr};
-    RtSystem::RtSystem_String_Format(&formatted, "%s\\%s\\",
-                                     utf8.data ? utf8.data : "", "Banished");
+    System::String formatted = System::String::Format(
+        "%s\\%s\\", utf8._data ? utf8._data : "", "Banished");
 
-    // AddRef idiom, not a copy ctor: retail stores the formatted buffer's own
-    // pointer directly into the return slot and bumps its refcount
+    // AddRef-then-AdjustDelimiters IS `??0Filename@System@@QEAA@AEBVString@1@@Z`
+    // (0x18000c780): retail stores the formatted buffer's own pointer into the
+    // return slot, bumps its refcount and normalises
     // (0x1800acfd0: `*(longlong*)in_RDX = lVar2; *(int*)(lVar2-4) += 1;`).
-    ret->data = nullptr;
-    if (formatted.data != nullptr) {
-        ret->data = formatted.data;
-        ++StringRefCount(formatted.data);
-    }
-    RtSystem::RtSystem_Filename_AdjustDelimiters(ret);
+    new (ret) System::Filename(formatted);
 
-    RtSystem::RtString_ReleaseInline(&formatted);
-    RtSystem::RtString_ReleaseInline(&utf8);
+    // ~formatted and ~utf8 are retail's last two releases; only the WideString,
+    // whose class does not exist yet, is still released by hand.
     RtSystem::RtString_ReleaseInline(&ws);
 }
 

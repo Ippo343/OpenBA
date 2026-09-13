@@ -187,6 +187,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>
+#include <new>          // ENDGAME B.3.1 step 2: placement new into array storage
 
 #include "../../funcs/rt_port.h"
 #include "../../types/engine/MainLoop.h"
@@ -210,10 +211,11 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 // than pulled through a header — the convention external_set.cpp states, since
 // a header per free function is a header per function.
 // ----------------------------------------------------------------------------
-namespace RtSystem {
-Filename* RtSystem_Filename_CtorCopy(Filename* self, const Filename* other);   // 0x1800067d0
-void      RtSystem_Filename_AdjustDelimiters(Filename* self);                  // 0x1800c6970
-}  // namespace RtSystem
+// ENDGAME B.3.1 step 2: the two Filename entry points this file used to
+// forward-declare (`CtorCopy` 0x1800067d0 and `AdjustDelimiters` 0x1800c6970)
+// are members of `System::Filename` now and are reached as such — the copy ctor
+// directly, `AdjustDelimiters` through the transitional
+// `System::FilenamePrivateAccess` (it is PRIVATE in retail too, AEAA).
 
 // ?GetPath@External@Object@@QEBA?AVFilename@System@@XZ           0x180006250
 // A member returning by value: RCX = this, RDX = the hidden return slot.
@@ -273,12 +275,21 @@ namespace {
 //     +0x04  ---       NEVER WRITTEN BY ANYBODY (see kSpec_VideoResource)
 //     +0x08  void*     object   the Object::External*
 //     +0x10  Filename  path     refcounted System::String payload
+//
+// ENDGAME B.3.1 step 2: `path` is the real `System::Filename`. This struct is
+// file-local — it is this port's model of the array element, not a retail class
+// another batch forward-declares — and the array machinery that owns the
+// ELEMENTS still copies and destroys them by hand, byte-wise, through
+// `AssignVideoResource` and `kD_Str_18`. So no ctor or dtor is being skipped by
+// a bulk path: those two functions ARE the element's copy and destroy, spelled
+// out. The only object with automatic storage is `rec` in OnVideoError, and
+// there RAII lands its release exactly where retail's is (0x1800dcaf6).
 // ---------------------------------------------------------------------------
 struct VideoResource {
     int32_t  typeId;
     int32_t  pad_04;
     void*    object;
-    RtSystem::Filename path;
+    System::Filename path;
 };
 static_assert(sizeof(VideoResource) == 0x18, "VideoResource must be 0x18 bytes");
 static_assert(offsetof(VideoResource, object) == 0x08, "object @ +0x08");
@@ -379,12 +390,16 @@ namespace {
 // destination is always either a fresh MemAlloc or a slot past `_size` — and a
 // port that "improved" it into an assignment would double-release on the
 // realloc path.
+// ENDGAME B.3.1 step 2: the CALL at the end is spelled as what it is, a
+// placement copy-construct. `dst + 0x10` is raw array storage — a fresh
+// MemAlloc or a slot past `_size` — so a `new (…) System::Filename(…)` is the
+// exact instruction sequence, and it cannot be misread later as an assignment
+// the way a bare `CtorCopy(dst, src)` could.
 void AssignVideoResource(uint8_t* dst, const uint8_t* src) {
     *reinterpret_cast<uint32_t*>(dst)     = *reinterpret_cast<const uint32_t*>(src);
     *reinterpret_cast<uint64_t*>(dst + 8) = *reinterpret_cast<const uint64_t*>(src + 8);
-    RtSystem::RtSystem_Filename_CtorCopy(
-        reinterpret_cast<RtSystem::Filename*>(dst + 0x10),
-        reinterpret_cast<const RtSystem::Filename*>(src + 0x10));
+    new (dst + 0x10) System::Filename(
+        *reinterpret_cast<const System::Filename*>(src + 0x10));
 }
 
 }  // namespace
@@ -513,24 +528,31 @@ extern "C" void RtEngine_MainLoop_OnVideoError(RtEngine::MainLoop* self) {
             RtObject::RtObject_ExternalFactory_FindNext(factory, externalTypeId, nullptr);
         while (e != nullptr) {
             if (CallGetTypeId(e) == wanted) {
-                RtSystem::Filename fromGetPath = { nullptr };
-                RtObject::RtObject_External_GetPath(e, &fromGetPath);
+                // `RtObject_External_GetPath` is a registered entry point in
+                // another translation unit and its POD signature is a boundary
+                // this batch must not move, so the class local is handed over
+                // as the POD it is byte-identical to. Its release is ~Filename.
+                System::Filename fromGetPath;
+                RtObject::RtObject_External_GetPath(
+                    e, reinterpret_cast<RtSystem::Filename*>(&fromGetPath));
 
                 VideoResource rec;
                 rec.typeId = static_cast<int32_t>(CallGetTypeId(e));
                 rec.object = const_cast<RtObject::External*>(e);
-                // retail zeroes the slot first and then adopts, which for a
-                // freshly zeroed slot is exactly AdoptInline and nothing else.
-                rec.path.data = nullptr;
-                RtSystem::RtString_AdoptInline(reinterpret_cast<RtSystem::String*>(&rec.path),
-                                               fromGetPath.data);
-                RtSystem::RtSystem_Filename_AdjustDelimiters(&rec.path);
-                RtSystem::RtSystem_Filename_AdjustDelimiters(&rec.path);
+                // 0x1800dcac0: retail zeroes the slot, adopts, and normalises —
+                // `operator=` (0x180006770) is release-adopt-normalise, and the
+                // release arm is a no-op on the null the default ctor just put
+                // there, so the two are the same instructions. That accounts for
+                // the FIRST of the two AdjustDelimiters.
+                rec.path = fromGetPath;
+                // 0x1800dcadf: the SECOND one, kept — see the banner. Private in
+                // retail as well, so it comes through the transitional accessor.
+                System::FilenamePrivateAccess::AdjustDelimiters(rec.path);
 
                 RtColl_ArraySetSizeFill_18004f620(arr, arr->_size + 1, &rec);
 
-                RtSystem::RtString_ReleaseInline(reinterpret_cast<RtSystem::String*>(&rec.path));
-                RtSystem::RtString_ReleaseInline(reinterpret_cast<RtSystem::String*>(&fromGetPath));
+                // `rec.path` then `fromGetPath` release here (0x1800dcaf6 and
+                // 0x1800dcb02) — C++'s reverse declaration order.
             }
             e = RtObject::RtObject_ExternalFactory_FindNext(factory, externalTypeId, e);
         }
@@ -704,27 +726,34 @@ extern "C" void RtEngine_MainLoop_OnVideoRestart(RtEngine::MainLoop* self) {
             // AdjustDelimiters. +0x08 is Object::External's own Filename, read
             // off 0x1800dc44b and 0x1800dc47b. Retail skips the whole thing when
             // the two buffers are already the same pointer.
+            //
+            // ENDGAME B.3.1 step 2: this is NOT `*dst = r->path`. Retail runs
+            // AdjustDelimiters UNCONDITIONALLY, outside the pointer test, while
+            // `Filename::operator=` (0x180006770) carries one of its own — so
+            // the operator would normalise twice on the taken branch and the
+            // release/adopt pair stays spelled out, in class terms, through the
+            // transitional private accessors (cookbook, DELIMITERS, last case).
             uint8_t* const obj = static_cast<uint8_t*>(r->object);
-            RtSystem::String* const dst = reinterpret_cast<RtSystem::String*>(obj + 0x08);
-            if (dst->data != r->path.data) {
-                RtSystem::RtString_ReleaseInline(dst);
-                // ReleaseInline leaves `data - 8` in the slot on the FREEING arm
+            System::Filename& dst =
+                *reinterpret_cast<System::Filename*>(obj + 0x08);
+            if (dst._data != r->path._data) {
+                System::StringPrivateAccess::Release(dst.AsString());
+                // Release leaves `data - 8` in the slot on the FREEING arm
                 // (retail's documented asymmetry); retail overwrites it
                 // unconditionally at 0x1800dc47b, so zero it before adopting
                 // rather than relying on the adopt to run.
-                dst->data = nullptr;
-                RtSystem::RtString_AdoptInline(dst, r->path.data);
+                dst._data = nullptr;
+                System::StringPrivateAccess::Adopt(dst.AsString(), r->path._data);
             }
-            RtSystem::RtSystem_Filename_AdjustDelimiters(
-                reinterpret_cast<RtSystem::Filename*>(dst));
+            System::FilenamePrivateAccess::AdjustDelimiters(dst);
         }
     }
 
     // ---- 6: compile the path and load ------------------------------------------
     {
-        using GetCompiledPathFn = RtSystem::Filename* (*)(RtSystem::Filename*,
-                                                          const RtSystem::Filename*);
-        using ExternalLoadFn    = void* (*)(const RtSystem::Filename*, void*);
+        using GetCompiledPathFn = System::Filename* (*)(System::Filename*,
+                                                        const System::Filename*);
+        using ExternalLoadFn    = void* (*)(const System::Filename*, void*);
         GetCompiledPathFn getCompiled = RT_EXPORT_ONCE(
             GetCompiledPathFn,
             "?GetCompiledPath@ExternalFactory@Object@@SA?AVFilename@System@@AEBV34@@Z");
@@ -733,10 +762,10 @@ extern "C" void RtEngine_MainLoop_OnVideoRestart(RtEngine::MainLoop* self) {
 
         for (int i = 0; i < arr->_size; ++i) {
             VideoResource* const r = reinterpret_cast<VideoResource*>(arr->_data) + i;
-            RtSystem::Filename compiled = { nullptr };
-            RtSystem::Filename* const got = getCompiled(&compiled, &r->path);
+            System::Filename compiled;
+            System::Filename* const got = getCompiled(&compiled, &r->path);
             load(got, r->object);
-            RtSystem::RtString_ReleaseInline(reinterpret_cast<RtSystem::String*>(&compiled));
+            // `compiled` releases here — retail's 0x1800dc4fe, now ~Filename.
         }
     }
 

@@ -69,22 +69,13 @@
 #include "../system/string.h"
 #include "../system/widestring.h"
 
-// Declared here the way runtime/src/io/filesystem_setupdirs_win.cpp declares
-// it: `?Format@String@System@@SA?AV12@PEBDZZ` (0x1800c9730) is variadic, so it
-// is not in string.h's fixed-signature list.
-namespace RtSystem {
-String* RtSystem_String_Format(String* ret, const char* fmt, ...);   // 0x1800c9730
-}
+// ENDGAME B.3.1 step 2: `?Format@String@System@@SA?AV12@PEBDZZ` (0x1800c9730)
+// is a static member of the real class now, so the local variadic declaration
+// this file used to carry for the `RtSystem_String_Format` shim is gone.
 
 using RtSystem::String;
-using RtSystem::Filename;
 using RtSystem::WideString;
-using RtSystem::StringLength;
-using RtSystem::StringRefCount;
-using RtSystem::RtString_ReleaseInline;
-using RtSystem::RtSystem_String_Set;
 using RtSystem::RtSystem_WideString_CtorFromString;
-using RtSystem::RtSystem_String_Format;
 
 // The platform seam — runtime/src/engine/engine_platform_win.cpp keeps
 // <windows.h> out of this file (PLAN.md §4.1 decision 1). Retail's call is
@@ -93,14 +84,22 @@ bool RtEnginePlatformWidePathExists(const wchar_t* path);
 
 namespace {
 
+// ENDGAME B.3.1 step 2: these file-local typedefs are spelled in terms of the
+// real classes. They are not a boundary — nothing outside this file sees them —
+// and `System::Filename` / `System::String` are the same eight bytes as the
+// PODs they used to name (the static_asserts in Filename.h pin that), so every
+// one of these calls keeps its exact shape: pointers in, hidden return slot in.
 typedef const char* (*GetResourceFilenameFn)(void*);
-typedef const void* (*FindOrLoadFn)(void* factory, const Filename* name);
+typedef const void* (*FindOrLoadFn)(void* factory, const System::Filename* name);
 typedef bool        (*IsDerivedFromFn)(const void* base, uint32_t typeId);
-typedef Filename*   (*GetPathFilenameFn)(const Filename* self, Filename* ret, bool);
-typedef Filename*   (*GetCompiledPathFn)(Filename* ret, const Filename* src);
-typedef bool        (*ExistsInPackfileFn)(const void* fs, const Filename* name);
-typedef String*     (*GetCommandLineStringFn)(const void*, String*, const String*);
-typedef void        (*AdjustDelimitersFn)(Filename*);
+typedef System::Filename* (*GetPathFilenameFn)(const System::Filename* self,
+                                               System::Filename* ret, bool);
+typedef System::Filename* (*GetCompiledPathFn)(System::Filename* ret,
+                                               const System::Filename* src);
+typedef bool        (*ExistsInPackfileFn)(const void* fs,
+                                          const System::Filename* name);
+typedef System::String* (*GetCommandLineStringFn)(const void*, System::String*,
+                                                  const System::String*);
 
 // ---- the exported DATA this body reads, all through the port-aware door ----
 void* ExternalFactorySingleton() {
@@ -128,42 +127,39 @@ uint32_t ExternalListTypeId() {
     return s ? *s : 0u;
 }
 
-void AdjustDelimiters(Filename* f) {
-    RT_EXPORT_ONCE(AdjustDelimitersFn,
-        "?AdjustDelimiters@Filename@System@@AEAAXXZ")(f);
-}
-
-// The idiom retail inlines at every one of these sites: take a second owning
-// reference to another String's buffer. Written out rather than delegated
-// because that is what the five occurrences in this function do
-// (0x1800dd815, 0x1800dd95a, 0x1800dda58, 0x1800ddc4a and the loop copy).
-void AddRefInto(String* dst, const String* src) {
-    dst->data = nullptr;
-    if (src->data) {
-        StringRefCount(src->data) += 1;
-        dst->data = src->data;
-    }
-}
+// ENDGAME B.3.1 step 2. The two helpers that used to live here — `AddRefInto`
+// (retail's inlined Adopt: null the destination, bump the refcount, take the
+// pointer) and an `AdjustDelimiters` name-door call — occurred only ever as a
+// PAIR, at 0x1800dd815, 0x1800dda58 and 0x1800ddc4a. That pair IS the body of
+// `??0Filename@System@@QEAA@AEBVString@1@@Z` (0x18000c780), so those sites are
+// now `System::Filename f(<the String>)` and both helpers are gone. The fifth
+// occurrence (0x1800dd95a, the GetPathFilename result copied into `dir`) has NO
+// AdjustDelimiters after it and stays a plain String copy — retail's String
+// copy ctor 0x180006cb0, spelled as `dir = ret.AsString()`.
 
 // 0x1800dd978-0x1800dd9fa. "Is this compiled resource reachable at all?" —
 // packfile first, loose file second, and the two FileSystem bytes at +0x18 and
 // +0x19 gate them independently.
-bool CompiledResourceExists(const Filename* compiled) {
+bool CompiledResourceExists(const System::Filename& compiled) {
     uint8_t* fs = FileSystemSingleton();
     if (fs == nullptr) return false;
 
     if (fs[0x18] != 0) {
         if (RT_EXPORT_ONCE(ExistsInPackfileFn,
                 "?ExistsInPackfile@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z")(
-                    fs, compiled))
+                    fs, &compiled))
             return true;
     }
     if (fs[0x19] == 0) return false;
 
+    // `System::WideString` is NOT one of B.3.1's types, so its POD ctor/dtor
+    // pair stays, and the Filename->String argument keeps the pointer cast
+    // retail performs here itself (0x1800dd9b0 passes `this` straight in).
     WideString w{nullptr};
-    RtSystem_WideString_CtorFromString(&w, reinterpret_cast<const String*>(compiled));
+    RtSystem_WideString_CtorFromString(
+        &w, reinterpret_cast<const String*>(&compiled));
     const bool exists = RtEnginePlatformWidePathExists(w.data);
-    RtString_ReleaseInline(reinterpret_cast<String*>(&w));
+    RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(&w));
     return exists;
 }
 
@@ -173,10 +169,10 @@ bool CompiledResourceExists(const Filename* compiled) {
 // written: it is a virtual-free call today, but a later build could make it
 // observable, and "simplifying" it away is exactly the class of edit that
 // turns a faithful port into a different function.
-const void* FindAndCheck(const Filename* name, bool keep) {
+const void* FindAndCheck(const System::Filename& name, bool keep) {
     const void* ext = RT_EXPORT_ONCE(FindOrLoadFn,
         "?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z")(
-            ExternalFactorySingleton(), name);
+            ExternalFactorySingleton(), &name);
     if (ext == nullptr) return nullptr;
     const bool derived = RT_EXPORT_ONCE(IsDerivedFromFn,
         "?IsDerivedFrom@Base@Object@@QEBA_NI@Z")(ext, ExternalListTypeId());
@@ -205,19 +201,14 @@ extern "C" void RtEngine_UpdateLoop_LoadResources(RtEngine::UpdateLoop* self) {
     void** vt = *reinterpret_cast<void***>(self);
     const char* root = reinterpret_cast<GetResourceFilenameFn>(vt[10])(self);
     if (root != nullptr) {
-        String spec{nullptr};
-        RtSystem_String_Format(&spec, "%sResources.rsc", root);
+        System::String spec = System::String::Format("%sResources.rsc", root);
+        System::Filename name(spec);       // 0x18000c780: Adopt + AdjustDelimiters
 
-        String name{nullptr};
-        AddRefInto(&name, &spec);
-        AdjustDelimiters(reinterpret_cast<Filename*>(&name));
-
-        const void* list = FindAndCheck(reinterpret_cast<const Filename*>(&name), true);
+        const void* list = FindAndCheck(name, true);
         self->_resourceList = const_cast<void*>(list);
         if (list) ++g_ownList;
-
-        RtString_ReleaseInline(&name);
-        RtString_ReleaseInline(&spec);
+        // `name` then `spec` release here — retail's 0x1800dd8a4 / 0x1800dd8b6,
+        // in that order, which is C++'s reverse declaration order.
     }
 
     // ---- 0x1800dd8c8: every ENABLED modification --------------------------
@@ -232,74 +223,64 @@ extern "C" void RtEngine_UpdateLoop_LoadResources(RtEngine::UpdateLoop* self) {
             if (mod[0x50] == 0) continue;         // Mod::enabled
             ++g_modsSeen;
 
-            // Filename::GetPathFilename(&mod->filename, &ret, /*keepSlash*/true)
-            String dir{nullptr};
+            // Filename::GetPathFilename(&mod->filename, &ret, /*keepSlash*/true).
+            // `mod + 0x58` is a Filename inside the unconverted Mod record, so
+            // that byte offset keeps its cast.
+            System::String dir;
             {
-                Filename ret{nullptr};
+                System::Filename ret;
                 RT_EXPORT_ONCE(GetPathFilenameFn,
                     "?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z")(
-                        reinterpret_cast<const Filename*>(mod + 0x58), &ret, true);
-                AddRefInto(&dir, reinterpret_cast<String*>(&ret));
-                RtString_ReleaseInline(reinterpret_cast<String*>(&ret));
+                        reinterpret_cast<const System::Filename*>(mod + 0x58),
+                        &ret, true);
+                dir = ret.AsString();   // 0x1800dd95a: AddRef, no delimiter pass
             }
 
-            String spec{nullptr};
-            RtSystem_String_Format(&spec, "%sResources.rsc:resource", dir.data);
+            System::String spec =
+                System::String::Format("%sResources.rsc:resource", dir._data);
 
             bool exists;
             {
-                String probe{nullptr};
-                AddRefInto(&probe, &spec);
-                AdjustDelimiters(reinterpret_cast<Filename*>(&probe));
-
-                Filename compiled{nullptr};
+                System::Filename probe(spec);
+                System::Filename compiled;
                 RT_EXPORT_ONCE(GetCompiledPathFn,
                     "?GetCompiledPath@ExternalFactory@Object@@SA?AVFilename@System@@AEBV34@@Z")(
-                        &compiled, reinterpret_cast<const Filename*>(&probe));
+                        &compiled, &probe);
 
-                exists = CompiledResourceExists(&compiled);
-
-                RtString_ReleaseInline(reinterpret_cast<String*>(&compiled));
-                RtString_ReleaseInline(&probe);
+                exists = CompiledResourceExists(compiled);
+                // `compiled` then `probe` release — retail's own order.
             }
 
             if (exists) {
                 ++g_modsFound;
-                String name{nullptr};
-                AddRefInto(&name, &spec);
-                AdjustDelimiters(reinterpret_cast<Filename*>(&name));
+                System::Filename name(spec);
                 // Result DISCARDED by retail — see FindAndCheck's comment.
-                FindAndCheck(reinterpret_cast<const Filename*>(&name), false);
-                RtString_ReleaseInline(&name);
+                FindAndCheck(name, false);
             }
-
-            RtString_ReleaseInline(&spec);
-            RtString_ReleaseInline(&dir);
+            // `spec` then `dir` release at the bottom of the iteration.
         }
     }
 
     // ---- 0x1800ddb16: the `-ref <path>` command-line override --------------
     // THE READ OF ?_singleton@Configuration@System@@ THIS WHOLE FILE IS ABOUT.
-    String key{nullptr};
-    RtSystem_String_Set(&key, "ref");
-
-    String value{nullptr};
-    RT_EXPORT_ONCE(GetCommandLineStringFn,
-        "?GetCommandLineString@Configuration@System@@QEBA?AVString@2@AEBV32@@Z")(
-            ConfigurationSingleton(), &value, &key);
-    RtString_ReleaseInline(&key);
+    System::String value;
+    {
+        // `key` is scoped so that it still releases exactly where retail
+        // releases it (0x1800ddc10), before the length test below.
+        System::String key("ref");      // 0x18000b630: zero, then Set
+        RT_EXPORT_ONCE(GetCommandLineStringFn,
+            "?GetCommandLineString@Configuration@System@@QEBA?AVString@2@AEBV32@@Z")(
+                ConfigurationSingleton(), &value, &key);
+    }
 
     // 0x1800ddc44: `CMP dword ptr [RAX-0x8],0` — the LENGTH word, not the
     // pointer. An empty-but-allocated String must not load anything.
-    if (value.data != nullptr && StringLength(value.data) != 0) {
+    // `GetLength` (0x1800063c0) IS that test, null case included.
+    if (value.GetLength() != 0) {
         ++g_refUsed;
-        String name{nullptr};
-        AddRefInto(&name, &value);
-        AdjustDelimiters(reinterpret_cast<Filename*>(&name));
-        FindAndCheck(reinterpret_cast<const Filename*>(&name), false);
-        RtString_ReleaseInline(&name);
+        System::Filename name(value);
+        FindAndCheck(name, false);
     }
-    RtString_ReleaseInline(&value);
 }
 
 extern "C" void RtEngineLoadResourcesSummary() {

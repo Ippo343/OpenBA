@@ -146,27 +146,28 @@
 
 #include <cstdio>
 #include <cstring>
+#include <new>        // placement new into freshly allocated Filename storage
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Modification.h"
 #include "../../types/system/Filename.h"
 #include "../system/string.h"
+#include "../system/pod_bridge.h"
 
-// Wave 2 lane A's two Filename entry points. Declared here rather than pulled
-// from a header for the same reason filesystem_find_win.cpp:374 declares them:
-// filename.cpp has no public header, and adding one is a cross-lane edit this
-// lane has no business making mid-wave.
-namespace RtSystem {
-Filename* RtSystem_Filename_CtorCopy(Filename* self, const Filename* other);  // 0x1800067d0
-void      RtSystem_Filename_AdjustDelimiters(Filename* self);                 // 0x1800c6970
-}
+// ENDGAME B.3.1 step 2: the Filename copy-ctor/AdjustDelimiters entry points
+// this file used to forward-declare here (0x1800067d0 / 0x1800c6970) are gone
+// from this translation unit. Every use was one of Filename.h's documented
+// idioms (a copy ctor, a Filename<-Filename assign-then-normalise) and is now
+// spelled as the class itself through the pod_bridge.h `Sys()` bridge --
+// `Mod::file` and `ModSetNode::key` are `RtSystem::Filename` MEMBERS of
+// not-yet-converted structs (B31_RULES.md), so they are reached through the
+// bridge rather than changing Modification.h's field types.
 
 namespace RtIO {
 
 using RtSystem::Filename;
 using RtSystem::String;
-using RtSystem::RtSystem_Filename_CtorCopy;
-using RtSystem::RtSystem_Filename_AdjustDelimiters;
+using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
 
 // ---------------------------------------------------------------------------
 // The allocator boundary. See the banner: the composed statics, by address,
@@ -347,10 +348,11 @@ void* RtColl_ArrayFilenameAssign_1800091f0(void* dstv, const void* srcv) {
         Filename* d = reinterpret_cast<Filename*>(
             static_cast<uint8_t*>(dst->data) + static_cast<size_t>(i) * 8);
         if (d == nullptr) continue;
-        // CALL 0x1800067d0 — Filename::Filename(Filename const&), lane A's port.
-        RtSystem_Filename_CtorCopy(
-            d, reinterpret_cast<const Filename*>(
-                   static_cast<const uint8_t*>(src->data) + static_cast<size_t>(i) * 8));
+        // CALL 0x1800067d0 — Filename::Filename(Filename const&). `d` is inside
+        // the buffer ArrayAssignGrow just (re)allocated: raw, uninitialised
+        // bytes, so placement-construct into it.
+        new (&Sys(*d)) System::Filename(Sys(*reinterpret_cast<const Filename*>(
+            static_cast<const uint8_t*>(src->data) + static_cast<size_t>(i) * 8)));
     }
     return dst;
 }
@@ -363,7 +365,9 @@ static ModSetNode* SetNodeNew(void* /*ignoredSet*/, const Filename* key,
                               ModSetNode* parent) {
     ModSetNode* n = static_cast<ModSetNode*>(ModMemAlloc(0x28, 8));
     if (n == nullptr) return nullptr;
-    RtSystem_Filename_CtorCopy(&n->key, key);   // CALL 0x1800067d0
+    // CALL 0x1800067d0 — Filename copy ctor, into the freshly allocated node's
+    // raw `key` bytes.
+    new (&Sys(n->key)) System::Filename(Sys(*key));
     n->parent = parent;
     n->left = nullptr;
     n->right = nullptr;
@@ -415,15 +419,9 @@ void RtColl_SetDestroySubtree_180010470(void* set, void* nodev) {
     if (n == nullptr) return;
     RtColl_SetDestroySubtree_180010470(set, n->left);
     RtColl_SetDestroySubtree_180010470(set, n->right);
-    char* d = n->key.data;
-    if (d != nullptr) {
-        if (--RefCount(d) == 0) {
-            n->key.data = d - 8;
-            ModMemFree(n->key.data);
-        } else {
-            n->key.data = nullptr;
-        }
-    }
+    // The key's release, then the node — retail's Filename dtor on the same
+    // bytes as above (identical refcount code; see RtIo_Mod_Dtor_180011460).
+    Sys(n->key).~Filename();
     RtColl_SetNodeFree_180009c30(set, n);
 }
 
@@ -470,7 +468,9 @@ void* RtIo_Mod_CopyCtor_1800101e0(void* dstv, const void* srcv) {
     dst->enabled = src->enabled;
 
     // CALL 0x1800067d0 — Filename copy ctor (zeroes, adopts, AdjustDelimiters).
-    RtSystem_Filename_CtorCopy(&dst->file, &src->file);
+    // `dst->file` is raw, uninitialised bytes here (part of the Mod the caller
+    // just zeroed member-by-member), so the value is placement-constructed.
+    new (&Sys(dst->file)) System::Filename(Sys(src->file));
 
     dst->set.root = nullptr;
     dst->set.count = 0;
@@ -514,9 +514,10 @@ void* RtIo_Mod_Assign_180026ef0(void* dstv, const void* srcv) {
 
     // The Filename at +0x58 gets the plain shared assign and THEN
     // AdjustDelimiters (0x18002704a CALL 0x1800c6970) — not the copy ctor,
-    // because the destination already owns a string.
-    AssignShared(&dst->file.data, src->file.data);
-    RtSystem_Filename_AdjustDelimiters(&dst->file);
+    // because the destination already owns a string. That PAIR is
+    // `Filename::operator=(const Filename&)`, 0x180006770 (Filename.h
+    // DELIMITERS note): self-guard on the buffer, release, adopt, normalise.
+    Sys(dst->file) = Sys(src->file);
 
     if (&src->set != &dst->set) {
         if (dst->set.root != nullptr) {
@@ -544,15 +545,10 @@ void RtIo_Mod_Dtor_180011460(void* selfv) {
     self->set.root = nullptr;
     self->set.count = 0;
 
-    char* d = self->file.data;                          // +0x58
-    if (d != nullptr) {
-        if (--RefCount(d) == 0) {
-            self->file.data = d - 8;
-            ModMemFree(self->file.data);
-        } else {
-            self->file.data = nullptr;
-        }
-    }
+    // +0x58 — retail's Filename dtor (0x180006980), which is String::Release()
+    // on the same bytes (filename.cpp's ~Filename); byte-identical to the
+    // refcount code this replaced.
+    Sys(self->file).~Filename();
 
     RtColl_ArrayU8Dtor_1800112a0(&self->bytes);         // +0x40
     RtColl_ArrayI32Dtor_1800111a0(&self->ints);         // +0x30
@@ -719,7 +715,12 @@ void RtIo_Modification_SaveList(void* selfv) {
 
     using SetBoolFn = void (*)(void*, const char*, const char*, bool);
     using SetIntFn  = void (*)(void*, const char*, const char*, int);
-    using GetPathFilenameFn = Filename* (*)(const Filename*, Filename*, bool);
+    // File-local typedef for a call OUT through a resolve door (not a
+    // registered entry point this file owns), so it names the class that
+    // occupies the same eight bytes rather than the POD (B31_RULES.md /
+    // filesystem_setupdirs_win.cpp's exemplar treatment of local Fn typedefs).
+    using GetPathFilenameFn = System::Filename* (*)(const System::Filename*,
+                                                     System::Filename*, bool);
     using PersistenceSlot = void**;
 
     void** pslot = RT_DATA_SLOT(PersistenceSlot,
@@ -730,24 +731,24 @@ void RtIo_Modification_SaveList(void* selfv) {
         Mod* m = self->mods + i;
         m->order = i;
 
-        Filename tmp;
-        tmp.data = nullptr;
-        RT_EXPORT_ONCE(GetPathFilenameFn,
-            "?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z")(&m->file, &tmp, true);
+        // The hidden return slot of GetPathFilename. `tmp` holds null here, so
+        // the callee constructing into the slot overwrites nothing (the same
+        // idiom as ApplyPathOverride's `value` in filesystem_setupdirs_win.cpp).
+        // `m->file` is a `RtSystem::Filename` MEMBER of the not-yet-converted
+        // `Mod`, so it is reached through the transitional bridge.
+        char* ref;
+        {
+            System::Filename tmp;
+            RT_EXPORT_ONCE(GetPathFilenameFn,
+                "?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z")(
+                    &Sys(m->file), &tmp, true);
 
-        // 0x1800b0676..0x1800b06be: take a REFERENCE to the returned buffer,
-        // then release the temporary. `ref` outlives `tmp` deliberately.
-        char* ref = tmp.data;
-        if (ref != nullptr) ++RefCount(ref);
-        if (tmp.data != nullptr) {
-            if (--RefCount(tmp.data) == 0) {
-                char* block = tmp.data - 8;
-                tmp.data = block;
-                ModMemFree(block);
-            } else {
-                tmp.data = nullptr;
-            }
-        }
+            // 0x1800b0676..0x1800b06be: take a REFERENCE to the returned
+            // buffer, then release the temporary. `ref` outlives the scope
+            // deliberately; the inner block's close is retail's release.
+            ref = tmp._data;
+            if (ref != nullptr) ++RefCount(ref);
+        }  // ~tmp releases here, exactly where retail's release sat
 
         RT_EXPORT_ONCE(SetBoolFn, "?Set@Persistence@IO@@QEAAXPEBD0_N@Z")(
             p, "ModEnabled_", ref, m->enabled != 0);

@@ -24,12 +24,14 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <utility>    // std::move -- the pointer steal out of a POD out-param
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Persistence.h"
 #include "../system/string.h"
+#include "../system/pod_bridge.h"
 
 using RtSystem::String;
-using RtSystem::StringRefCount;
+using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
 using RtIo::Persistence;
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
@@ -83,23 +85,28 @@ bool RtIo_Persistence_BeginGetSaveGameInfo(void* self, const void* nameRef, int 
     auto* p = static_cast<Persistence*>(self);
     if (p->flags & 1u) return false;
 
-    String fn;
-    fn.data = nullptr;
-    RtIo_Persistence_GetSaveFilename(self, &fn, nameRef);
+    // GetSaveFilename is a registered entry point and keeps its retail
+    // (self, hidden-return-slot, ...) signature, so the value lands in a POD
+    // and is then stolen into the class -- a pure pointer steal, `fnPod` left
+    // null.
+    String fnPod{nullptr};
+    RtIo_Persistence_GetSaveFilename(self, &fnPod, nameRef);
+    System::String fn(std::move(Sys(fnPod)));
 
     ClearBlockDescs()(&p->blockDescData);
     ClearBlockPtrs()(&p->blockPtrData);
 
     p->command = 3;
 
-    // The guarded String assignment at 0x1800b78be..0x1800b7903: retail skips
-    // the whole release/adopt when the two buffers are already the same
-    // pointer, which is not just an optimisation — releasing first would drop
-    // the last reference to the buffer it is about to re-adopt.
-    if (p->pendingFilename.data != fn.data) {
-        RtSystem::RtString_ReleaseInline(&p->pendingFilename);
-        p->pendingFilename.data = fn.data;
-        if (p->pendingFilename.data) ++StringRefCount(p->pendingFilename.data);
+    // The guarded String assignment at 0x1800b78be..0x1800b7903 IS
+    // `String::operator=` (retail 0x1800c9810): retail skips the whole
+    // release/adopt when the two buffers are already the same pointer, which
+    // is not just an optimisation — releasing first would drop the last
+    // reference to the buffer it is about to re-adopt. `pendingFilename` is a
+    // `RtSystem::String` member of the not-yet-converted `Persistence`,
+    // reached through the one transitional bridge.
+    if (p->pendingFilename.data != fn._data) {
+        Sys(p->pendingFilename) = fn;
     }
 
     p->status     = 0;
@@ -108,7 +115,7 @@ bool RtIo_Persistence_BeginGetSaveGameInfo(void* self, const void* nameRef, int 
     ResetEvent(p->doneEvent);
     SetEvent(p->workEvent);
 
-    RtSystem::RtString_ReleaseInline(&fn);
+    // ~fn is retail's release.
     return true;
 }
 

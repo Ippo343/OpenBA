@@ -101,7 +101,9 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/save/SaveLoad.h"
 #include "../../types/io/Stream.h"
+#include <new>                  // placement new into the retail hidden return slot
 #include "../system/string.h"   // RtSystem::String (Wave 2, lane String)
+#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 #include "saveload_internal.h"
 
 using RtSave::SaveLoad;
@@ -483,8 +485,11 @@ SaveInfo* RtSave_SaveLoad_GetSaveInfo(const SaveLoad* self, int index) {
 // argument that does nothing.
 // ============================================================================
 String* RtSave_SaveLoad_GetAutoSaveName(const SaveLoad* self, String* ret) {
-    ret->data = nullptr;
-    RtSystem::RtSystem_String_Set(ret, "Auto");
+    // ENDGAME B.3.1 step 2: retail's `*ret = 0` IS the default ctor
+    // (0x180006760) and `ret` is the hidden return slot — raw bytes — so it is
+    // placement-constructed rather than assigned, then Set (0x1800c95d0) runs.
+    new (RtSystem::Sys(ret)) System::String();
+    RtSystem::Sys(ret)->Set("Auto");
     return ret;
 }
 
@@ -555,7 +560,8 @@ const char** RtSave_SaveLoad_GenerateSaveName(const SaveLoad* self, const char**
         if (self->_savesSize < 1) break;
         bool collision = false;
         for (int i = 0; i < self->_savesSize; ++i) {
-            if (RtSystem::RtString_StrCompare(self->_savesData[i].name, *ret) == 0) {
+            // ENDGAME B.3.1 step 2: the static, spelled as itself (0x1800c98a0).
+            if (System::String::StrCompare(self->_savesData[i].name, *ret) == 0) {
                 collision = true;
                 break;
             }
@@ -720,43 +726,67 @@ int RtSave_SaveLoad_CheckMod(const SaveLoad* self, int saveIndex, int modIndex) 
         static_cast<int64_t>(saveIndex) * static_cast<int64_t>(sizeof(SaveInfo)));
     const ModInfo* mod = info->modsData + modIndex;
 
-    // full = GetDataDirectory() + mod->path,  then AdjustDelimiters(full)
-    String dataDir{};
-    RT_EXPORT_ONCE(GetDataDirectoryFn,
-                     "?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ")(
-        FileSystemSingleton(), &dataDir);
-    String joined{};
-    // RT_EXPORT_ONCE: System::String::operator+ and Filename::AdjustDelimiters are
-    // both PORTED (string.cpp:931, filename.cpp:446); raw skipped both ports.
-    RT_EXPORT_ONCE(ConcatFn, "??HSystem@@YA?AVString@0@AEBV10@0@Z")(
-        &joined, &dataDir, reinterpret_cast<const String*>(&mod->path));
-
-    // Retail adopts the concatenation's buffer into a fresh slot (with an
-    // AddRef) and adjusts THAT, leaving `joined` itself untouched, so the two
-    // Strings are released separately below.
-    String work{};
-    if (joined.data != nullptr) {
-        work.data = joined.data;
-        *reinterpret_cast<int*>(work.data - 4) += 1;
-    }
-    RT_EXPORT_ONCE(AdjustDelimsFn, "?AdjustDelimiters@Filename@System@@AEAAXXZ")(&work);
-
     // Linear scan of IO::Modification: count at +0x10, array base at +0x8,
     // stride 0x80, the entry's path String at +0x58. Length first, then
     // _stricmp — a null String on either side counts as length 0.
+    // `found`, `count` and `base` are DECLARED here only because `base` outlives
+    // the string scope below; they are still READ where retail reads them,
+    // after the three Strings exist.
     int found = -1;
-    const int32_t count = *reinterpret_cast<const int32_t*>(mods + 0x10);
-    uint8_t* const base = *reinterpret_cast<uint8_t* const*>(mods + 8);
+    int32_t  count = 0;
+    uint8_t* base  = nullptr;
+
+    // full = GetDataDirectory() + mod->path,  then AdjustDelimiters(full)
+    //
+    // The explicit scope below ends exactly where retail's three releases are,
+    // so the destructors fire there and not at the end of the function.
+    //
+    // ENDGAME B.3.1 step 2. RETAIL'S RELEASE ORDER HERE IS work, dataDir,
+    // joined (0x1800c25xx) — NOT UpdateLoad's work, joined, dataDir — so the
+    // declarations are ordered so that reverse-destruction reproduces it
+    // exactly: joined first, dataDir second, work last.
+    //
+    // `joined` is therefore default-constructed and then MOVE-assigned from
+    // operator+'s prvalue. The move is a pure pointer steal (String.h), so the
+    // refcount trace is identical to retail's construct-into-the-return-slot:
+    // the buffer is born at 1 and stays at 1. A COPY assignment here would add
+    // an AddRef/Release pair that retail never spends.
+    {
+    System::String   joined;
+    System::Filename dataDir;
+    RT_EXPORT_ONCE(GetDataDirectoryFn,
+                     "?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ")(
+        FileSystemSingleton(),
+        // TRANSITIONAL CAST, the class->POD direction: the door's typedef is
+        // the C entry point's ABI shape and IO::FileSystem is not converted
+        // yet. Same eight bytes; the callee placement-constructs into it.
+        reinterpret_cast<String*>(&dataDir));
+
+    // The `??HSystem@@YA?AVString@0@AEBV10@0@Z` door IS System::operator+
+    // (0x1800c9440). `mod->path` is a raw `const char*` member of the
+    // unconverted `ModInfo` that retail reads AS a String, so it comes through
+    // a transitional cast (B31_RULES, "members of not-yet-converted structs").
+    joined = dataDir.AsString()
+             + reinterpret_cast<const System::String&>(mod->path);
+
+    // Retail adopts the concatenation's buffer into a fresh slot (with an
+    // AddRef) and adjusts THAT, leaving `joined` itself untouched, so the two
+    // Strings are released separately. Adopt-into-a-nulled-slot followed by
+    // AdjustDelimiters IS ??0Filename@System@@QEAA@AEBVString@1@@Z
+    // (0x18000c780), so this one line spends both.
+    System::Filename work(joined);
+
+    count = *reinterpret_cast<const int32_t*>(mods + 0x10);
+    base  = *reinterpret_cast<uint8_t* const*>(mods + 8);
     for (int i = 0; i < count; ++i) {
         const char* entry = *reinterpret_cast<const char* const*>(base + static_cast<int64_t>(i) * 0x80 + 0x58);
-        const int lenEntry = entry     ? *reinterpret_cast<const int*>(entry - 8)     : 0;
-        const int lenWork  = work.data ? *reinterpret_cast<const int*>(work.data - 8) : 0;
-        if (lenEntry == lenWork && _stricmp(entry, work.data) == 0) { found = i; break; }
+        const int lenEntry = entry ? *reinterpret_cast<const int*>(entry - 8) : 0;
+        // GetLength (0x1800063c0) IS the null-guarded header read this line
+        // used to spell by hand.
+        const int lenWork  = work.GetLength();
+        if (lenEntry == lenWork && _stricmp(entry, work._data) == 0) { found = i; break; }
     }
-
-    RtSystem::RtString_ReleaseInline(&work);
-    RtSystem::RtString_ReleaseInline(&dataDir);
-    RtSystem::RtString_ReleaseInline(&joined);
+    }   // <- work, dataDir, joined destructors: retail's three releases
 
     int ours;
     if (found < 0) {

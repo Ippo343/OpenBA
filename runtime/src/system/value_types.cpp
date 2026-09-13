@@ -20,9 +20,15 @@
 // null-terminated C string), never its private refcount/length header.
 //
 // Those calls go through RT_EXPORT_ONCE. Set / Format / operator+= / Release
-// are all PORTED. The local `StrSlot` type below is deliberately an opaque
-// 8-byte pass-through (not a port of System::String) used only to give these
-// calls a typed hidden-return-slot argument.
+// are all PORTED.
+//
+// ENDGAME B.3.1 step 2 REPLACES THE PARAGRAPH ABOVE. Runtime-x64.dll is gone,
+// `System::String` is a real class over the same eight bytes, and the
+// file-local opaque `StrSlot` — whose whole purpose was to avoid modelling a
+// type that belonged to another binary — is deleted. The four bodies below
+// hold real `System::String` locals with RAII, and the Set / Format /
+// operator+= / Release name doors are the class's own members. The retail
+// addresses on each call stay: they are the provenance.
 // ============================================================================
 
 #include <cstdio>
@@ -42,6 +48,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <new>          // placement new into the retail hidden return slot
 #include "../../types/system/Value.h"
 #include "../../types/system/String.h"
 #include "../../funcs/rt_port.h"
@@ -259,9 +266,8 @@ void RtSystem_Color_Serialize(Color* self, void* serializer) {
 // the DLL's own String routines rather than modeling System::String.
 // ============================================================
 
-namespace {
-struct StrSlot { void* p; };  // opaque 8-byte pass-through, NOT a String port
-}
+// ENDGAME B.3.1 step 2: `struct StrSlot { void* p; };` is gone — the four
+// bodies below hold `System::String` itself.
 
 // ?AsString@DateTime@System@@QEBA?AVString@2@XZ  retail 0x1800c54d0
 // retail: Format(ret, "%s %s", DateAsString(this), TimeAsString(this)), then
@@ -272,31 +278,28 @@ struct StrSlot { void* p; };  // opaque 8-byte pass-through, NOT a String port
 // RT_EXPORT_ONCE. `?Release@String@System@@AEAAXXZ`, DateAsString and
 // TimeAsString are all ported and registered below, so these lines reach our
 // own bodies through the registry.
-StrSlot* RtSystem_DateTime_AsString(const void* self, StrSlot* ret) {
-    using SubStringFn = StrSlot*(*)(const void*, StrSlot*);
-    StrSlot dateStr{};
-    RT_EXPORT_ONCE(SubStringFn, "?DateAsString@DateTime@System@@QEBA?AVString@2@XZ")(self, &dateStr);
-    StrSlot timeStr{};
-    RT_EXPORT_ONCE(SubStringFn, "?TimeAsString@DateTime@System@@QEBA?AVString@2@XZ")(self, &timeStr);
+System::String* RtSystem_DateTime_AsString(const void* self, System::String* ret) {
+    using StringRetFn = System::String*(*)(const void*, System::String*);
 
-    // String::Format is ported (string.cpp).
-    using FormatFn = StrSlot*(*)(StrSlot*, const char*, const char*, const char*);
-    RT_EXPORT_ONCE(FormatFn, "?Format@String@System@@SA?AV12@PEBDZZ")(
-        ret, "%s %s", static_cast<const char*>(dateStr.p), static_cast<const char*>(timeStr.p));
+    // ENDGAME B.3.1 step 2. THE DECLARATION ORDER IS DELIBERATELY THE REVERSE
+    // OF THE FILL ORDER: retail releases dateStr FIRST and timeStr second
+    // (0x1800c5546 / 0x1800c5555), and reverse-order destruction of these two
+    // reproduces that. They are separate one-reference allocations, so both
+    // are freed here and the ORDER of the two MemFree calls is visible to the
+    // allocator's free list — which is why it is matched rather than assumed
+    // not to matter.
+    System::String timeStr;
+    System::String dateStr;
+    RT_EXPORT_ONCE(StringRetFn, "?DateAsString@DateTime@System@@QEBA?AVString@2@XZ")(self, &dateStr);
+    RT_EXPORT_ONCE(StringRetFn, "?TimeAsString@DateTime@System@@QEBA?AVString@2@XZ")(self, &timeStr);
 
-    using ReleaseFn = void(*)(StrSlot*);
-    // RT_EXPORT_ONCE, for the same reason as GetVersionString below: String::Release
-    // is PORTED (Wave 9 lane B3) and this is a live-path release of a temporary --
-    // the WORK, not an oracle readback -- so it must reach our body.
-    //
-    // tools/port_bypass_audit.py could NOT see this one. Storing the pointer in a
-    // local and calling it on the next line reads to the checker as
-    // OK-RESOLVE-ONLY; only the resolve-and-call-in-one-expression site in
-    // GetVersionString was reported. Two of the three bypasses this file had were
-    // therefore invisible to the gate that caught the third.
-    ReleaseFn release = RT_EXPORT_ONCE(ReleaseFn, "?Release@String@System@@AEAAXXZ");
-    release(&dateStr);
-    release(&timeStr);
+    // ?Format@String@System@@SA?AV12@PEBDZZ (0x1800c9730), spelled as itself.
+    // `ret` is the hidden return slot — raw bytes — so the result is
+    // placement-constructed into it; C++17 elides straight into the slot, so
+    // there is no extra AddRef/Release pair retail did not spend.
+    new (ret) System::String(System::String::Format("%s %s", dateStr._data, timeStr._data));
+
+    // The two `?Release@String@System@@AEAAXXZ` calls are the destructors now.
     return ret;
 }
 
@@ -349,7 +352,8 @@ StrSlot* RtSystem_DateTime_AsString(const void* self, StrSlot* ret) {
 // bit-for-bit the sequence `RtSystem_WideString_Dtor` (widestring.cpp, Wave 9
 // lane FS) already implements, including its asymmetry, so this calls that
 // rather than open-coding a third copy of the idiom.
-static StrSlot* RtSystem_DateTime_FormatPart(const void* self, StrSlot* ret, bool timePart) {
+static System::String* RtSystem_DateTime_FormatPart(const void* self, System::String* ret,
+                                                    bool timePart) {
     // DELIBERATELY UNINITIALISED, and this is the one thing the sweep below
     // CAUGHT rather than confirmed. Retail's prologue reserves 0x250 bytes and
     // writes NOTHING into these three slots before the API calls
@@ -388,16 +392,19 @@ static StrSlot* RtSystem_DateTime_FormatPart(const void* self, StrSlot* ret, boo
     // whatever is there first (0x1800c570b: MOV qword [RSP+0x260],0).
     RtSystem::WideString ws{};
     RtSystem::RtSystem_WideString_Set(&ws, buf);
+    // TRANSITIONAL CAST, the class->POD direction: `WideString::AsUTF8` is a
+    // registered C entry point whose hidden return slot is the POD. Same eight
+    // bytes, and it placement-constructs into this raw slot.
     RtSystem::RtSystem_WideString_AsUTF8(&ws, reinterpret_cast<RtSystem::String*>(ret));
     RtSystem::RtSystem_WideString_Dtor(&ws);
     return ret;   // MOV RAX,RBX
 }
 
-StrSlot* RtSystem_DateTime_DateAsString(const void* self, StrSlot* ret) {
+System::String* RtSystem_DateTime_DateAsString(const void* self, System::String* ret) {
     return RtSystem_DateTime_FormatPart(self, ret, /*timePart=*/false);
 }
 
-StrSlot* RtSystem_DateTime_TimeAsString(const void* self, StrSlot* ret) {
+System::String* RtSystem_DateTime_TimeAsString(const void* self, System::String* ret) {
     return RtSystem_DateTime_FormatPart(self, ret, /*timePart=*/true);
 }
 
@@ -406,28 +413,16 @@ StrSlot* RtSystem_DateTime_TimeAsString(const void* self, StrSlot* ret) {
 // zero-padded>" from the DLL's own compiled-in date string (e.g.
 // "Sep 10 2017" -> "17Se10"), read via String::Set/Release so the DLL's own
 // allocation is what we read characters out of, not a layout we assume.
-StrSlot* RtSystem_Configuration_CurrentBuildId(StrSlot* ret) {
+System::String* RtSystem_Configuration_CurrentBuildId(System::String* ret) {
     static const char* const kMonths[12] = {
         "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
     };
 
-    using SetFn = void(*)(StrSlot*, const char*);
-    SetFn set = RT_EXPORT_ONCE(SetFn, "?Set@String@System@@QEAAXPEBD@Z");   // ported
-    using ReleaseFn = void(*)(StrSlot*);
-    // RT_EXPORT_ONCE, for the same reason as GetVersionString below: String::Release
-    // is PORTED (Wave 9 lane B3) and this is a live-path release of a temporary --
-    // the WORK, not an oracle readback -- so it must reach our body.
-    //
-    // tools/port_bypass_audit.py could NOT see this one. Storing the pointer in a
-    // local and calling it on the next line reads to the checker as
-    // OK-RESOLVE-ONLY; only the resolve-and-call-in-one-expression site in
-    // GetVersionString was reported. Two of the three bypasses this file had were
-    // therefore invisible to the gate that caught the third.
-    ReleaseFn release = RT_EXPORT_ONCE(ReleaseFn, "?Release@String@System@@AEAAXXZ");
-
-    StrSlot dateStr{};
-    set(&dateStr, "Sep 10 2017");  // 0x180155c50 -- the DLL's own __DATE__-style literal
-    const char* d = static_cast<const char*>(dateStr.p);  // "Sep 10 2017"
+    // ENDGAME B.3.1 step 2: the Set (0x1800c95d0) and Release (0x1800c9870)
+    // name doors are the class's own member and destructor now.
+    System::String dateStr;
+    dateStr.Set("Sep 10 2017");  // 0x180155c50 -- the DLL's own __DATE__-style literal
+    const char* d = dateStr._data;  // "Sep 10 2017"
 
     char scratch[7] = "000000";
     scratch[0] = d[9];   // last two digits of the year ("17")
@@ -445,13 +440,18 @@ StrSlot* RtSystem_Configuration_CurrentBuildId(StrSlot* ret) {
     if (d[4] >= '0' && d[4] <= '9') scratch[4] = d[4];
     if (d[5] >= '0' && d[5] <= '9') scratch[5] = d[5];
 
-    set(ret, scratch);
-    release(&dateStr);
+    // NOTE, TRANSCRIBED NOT TIDIED: retail calls Set on `ret` WITHOUT zeroing
+    // the hidden return slot first, so this is `Set` on the raw slot and not a
+    // placement-construct. Set's own release runs on whatever the caller left
+    // there. Left exactly as retail spells it — the caller is the one that
+    // guarantees the slot; changing it here would be a behaviour change.
+    ret->Set(scratch);
+    // `release(&dateStr)` is dateStr's destructor now.
     return ret;
 }
 
 // ?CurrentVersion@Configuration@System@@SA?AVString@2@XZ  retail 0x1800c4f40
-StrSlot* RtSystem_Configuration_CurrentVersion(StrSlot* ret);  // fwd, defined below GetVersionString
+System::String* RtSystem_Configuration_CurrentVersion(System::String* ret);  // fwd, defined below GetVersionString
 
 // ?GetVersionString@Configuration@System@@SA?AVString@2@I_N@Z  retail 0x1800c4f90
 // version is packed major<<24 | minor<<16 | patch<<8 | suffix. suffix in
@@ -460,10 +460,12 @@ StrSlot* RtSystem_Configuration_CurrentVersion(StrSlot* ret);  // fwd, defined b
 // shipped 0xff) appends nothing. Text taken from the DLL's own .rdata
 // literals at 0x180155c14..0x180155c40, transcribed to source for
 // readability -- content verified byte-for-byte against inspect_memory.
-StrSlot* RtSystem_Configuration_GetVersionString(StrSlot* ret, uint32_t version, bool detailed) {
-    using FormatFn = StrSlot*(*)(StrSlot*, const char*, uint32_t, uint32_t, uint32_t);
-    RT_EXPORT_ONCE(FormatFn, "?Format@String@System@@SA?AV12@PEBDZZ")(
-        ret, "%i.%i.%i", version >> 24, (version >> 16) & 0xffu, (version >> 8) & 0xffu);
+System::String* RtSystem_Configuration_GetVersionString(System::String* ret, uint32_t version,
+                                                        bool detailed) {
+    // ENDGAME B.3.1 step 2: ?Format@String@System@@SA?AV12@PEBDZZ (0x1800c9730)
+    // spelled as itself, placement-constructed into the raw hidden return slot.
+    new (ret) System::String(System::String::Format(
+        "%i.%i.%i", version >> 24, (version >> 16) & 0xffu, (version >> 8) & 0xffu));
 
     const char* text = nullptr;
     switch (version & 0xffu) {
@@ -474,17 +476,15 @@ StrSlot* RtSystem_Configuration_GetVersionString(StrSlot* ret, uint32_t version,
         default: return ret;
     }
 
-    using OpAppendFn = StrSlot*(*)(StrSlot*, StrSlot*, const char*);
-    using ReleaseFn  = void(*)(StrSlot*);
-    StrSlot tmp{};
-    RT_EXPORT_ONCE(OpAppendFn, "??YString@System@@QEAA?AV01@PEBD@Z")(ret, &tmp, text);   // ported
-    // String::Release is PORTED (string.cpp).
-    using ReleaseFn = void (*)(StrSlot*);
-    RT_EXPORT_ONCE(ReleaseFn, "?Release@String@System@@AEAAXXZ")(&tmp);
+    // ??YString@System@@QEAA?AV01@PEBD@Z (0x1800c9120) returns the new value BY
+    // VALUE and the caller discards the copy; that discarded temporary IS
+    // retail's `tmp`, and its destructor IS the 0x1800c9870 release below it.
+    // Both lines collapse into this one (cookbook APPEND).
+    *ret += text;
     return ret;
 }
 
-StrSlot* RtSystem_Configuration_CurrentVersion(StrSlot* ret) {
+System::String* RtSystem_Configuration_CurrentVersion(System::String* ret) {
     return RtSystem_Configuration_GetVersionString(ret, 0x010007ffu, false);
 }
 

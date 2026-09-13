@@ -97,10 +97,12 @@
 #include <cstddef>
 #include <cstring>
 #include <cstdio>
+#include <new>          // placement new into the retail hidden return slot
 
 #include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
 #include "string.h"
+#include "pod_bridge.h"
 #include "widestring.h"
 
 namespace RtSystem {
@@ -186,6 +188,11 @@ int Utf16EncodeOne(int32_t codepoint, uint8_t* dst) {
 }
 
 // The release idiom, over the SAME header String uses. Cast, do not re-derive.
+// ENDGAME B.3.1 step 2 leaves this cast standing: `System::WideString` is a
+// THIRD POD over these eight bytes and is NOT one of the types step 1 made a
+// class, so this is a bridged not-yet-converted case (B31_RULES, "members of
+// not-yet-converted structs keep their POD type"). It goes when WideString
+// becomes a class of its own.
 inline void WideReleaseInline(WideString* self) {
     RtString_ReleaseInline(reinterpret_cast<String*>(self));
 }
@@ -346,8 +353,11 @@ String* RtSystem_WideString_AsUTF8(const WideString* self, String* ret) {
         out += m;
     }
 
-    ret->data = nullptr;
-    RtSystem_String_Set(ret, reinterpret_cast<const char*>(buf));
+    // ENDGAME B.3.1 step 2: retail's `*ret = 0` is the default ctor
+    // (0x180006760) and `ret` is the hidden return slot — raw bytes — so the
+    // String is placement-constructed into it before Set (0x1800c95d0) runs.
+    new (Sys(ret)) System::String();
+    Sys(ret)->Set(reinterpret_cast<const char*>(buf));
     if (buf != nullptr) RtMemFree(buf);
 
     // `self` is const and nothing in the body touches it, so the shipped body
@@ -370,8 +380,14 @@ WideString* RtSystem_WideString_CtorFromString(WideString* self, const String* s
 
     self->data = nullptr;
 
-    const uint8_t* p   = reinterpret_cast<const uint8_t*>(src->data);
-    const uint8_t* end = p + static_cast<size_t>(src->data ? StringLength(src->data) : 0);
+    // ENDGAME B.3.1 step 2: `src` is the POD parameter of a registered entry
+    // point, so it reaches the class through the one bridge (pod_bridge.h).
+    // `GetLength()` (0x1800063c0) IS the null-guarded stored-length read this
+    // line used to spell by hand.
+    const System::String& s = Sys(*src);
+
+    const uint8_t* p   = reinterpret_cast<const uint8_t*>(s._data);
+    const uint8_t* end = p + static_cast<size_t>(s.GetLength());
 
     int totalBytes = 0;
     for (const uint8_t* q = p; q < end;) {
@@ -387,8 +403,8 @@ WideString* RtSystem_WideString_CtorFromString(WideString* self, const String* s
     RtSystem_WideString_SetLength(self, chars);
 
     // Retail RE-READS `src->data` here rather than reusing `p`; kept.
-    const uint8_t* r    = reinterpret_cast<const uint8_t*>(src->data);
-    const uint8_t* rend = r + static_cast<size_t>(src->data ? StringLength(src->data) : 0);
+    const uint8_t* r    = reinterpret_cast<const uint8_t*>(s._data);
+    const uint8_t* rend = r + static_cast<size_t>(s.GetLength());
     uint8_t* const base = reinterpret_cast<uint8_t*>(self->data);
     uint8_t*       out  = base;
     int            written = 0;

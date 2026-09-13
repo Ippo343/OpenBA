@@ -67,12 +67,15 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <new>        // placement new into the retail hidden return slot
+#include <utility>    // std::move -- the pointer steal out of a POD out-param
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Persistence.h"
 #include "../system/string.h"
+#include "../system/pod_bridge.h"
 
 using RtSystem::String;
-using RtSystem::StringRefCount;
+using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
 using RtIo::Persistence;
 using RtIo::SaveGameInfo;
 using RtIo::SaveBlock;
@@ -83,8 +86,10 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 namespace {
 
 // ---- unexported DLL internals, by address ----------------------------------
-using EnqueueDeleteFn = void (*)(void* worker, const String* filename);
-using EnqueueLoadFn   = void (*)(void* worker, const String* filename,
+// File-local typedefs for calls OUT through the resolve door (not entry-point
+// signatures), so they now name the class occupying the same eight bytes.
+using EnqueueDeleteFn = void (*)(void* worker, const System::String* filename);
+using EnqueueLoadFn   = void (*)(void* worker, const System::String* filename,
                                  int blockCount, const SaveBlock* blocks);
 using WorkerDtorFn    = void (*)(void* worker);
 using MapClearFn      = void (*)(void* self);
@@ -118,7 +123,6 @@ MapClearFn MapClear() {             // 0x18000f7d0 — the settings-map dtor
 // port-registry-aware door is the right one: the raw DLL door here would walk
 // past our own ports into the DLL (rt_port.h's ??DQuaternion note).
 using RtPersistFormatFn           = void* (*)(void* ret, const char* fmt, ...);
-using RtPersistAdjustDelimitersFn = void  (*)(void* self);
 
 // Retail's own format string, read out of .rdata at 0x180155840.
 const char kRtPersistSaveFilenameFormat[] = "%sSave\\%s.sav";
@@ -156,17 +160,18 @@ void* RtIo_Persistence_GetSaveInfo(const void* self, void* retval, int index) {
     auto* p   = static_cast<const Persistence*>(self);
     auto* ret = static_cast<SaveGameInfo*>(retval);
 
+    // `ret` is the hidden return slot -- raw, uninitialised bytes -- so
+    // `ret->name` (a `RtSystem::String` field of `SaveGameInfo`, not yet
+    // converted) is placement-constructed through the transitional bridge.
+    // `String(const String&)` (retail 0x180006cb0) is exactly "zero, then
+    // AddRef if non-null", which is what the C body wrote out by hand.
     if (p->flags & 1u) {
-        ret->sortKey   = 0;
-        ret->name.data = nullptr;
+        ret->sortKey = 0;
+        new (&Sys(ret->name)) System::String();
     } else {
         const SaveGameInfo& e = p->saves[index];
-        ret->sortKey   = e.sortKey;
-        ret->name.data = nullptr;               // retail zeroes it first, then AddRefs
-        if (e.name.data) {
-            ret->name.data = e.name.data;
-            ++StringRefCount(ret->name.data);
-        }
+        ret->sortKey = e.sortKey;
+        new (&Sys(ret->name)) System::String(Sys(e.name));
     }
 
     return retval;
@@ -182,23 +187,25 @@ void* RtIo_Persistence_GetSaveInfo(const void* self, void* retval, int index) {
 void* RtIo_Persistence_GetSaveFilename(const void* self, void* retval, const void* nameRef) {
 
     auto* p    = static_cast<const Persistence*>(self);
-    auto* ret  = static_cast<String*>(retval);      // Filename IS a String (Filename.h)
     auto* name = static_cast<const String*>(nameRef);
 
-    String tmp;
-    tmp.data = nullptr;
+    // Format is reached by NAME through the port-registry-aware door (already
+    // ported -- see the file banner), so it still fills a raw hidden-return-
+    // slot. The value lands in a POD and is then stolen into the class.
+    String tmpPod{nullptr};
     RT_EXPORT_ONCE(RtPersistFormatFn, "?Format@String@System@@SA?AV12@PEBDZZ")(
-        &tmp, kRtPersistSaveFilenameFormat, p->savePath.data, name->data);
+        &tmpPod, kRtPersistSaveFilenameFormat, p->savePath.data, name->data);
+    System::String tmp(std::move(Sys(tmpPod)));
 
-    ret->data = nullptr;
-    if (tmp.data) {
-        ret->data = tmp.data;
-        ++StringRefCount(ret->data);
-    }
-    RT_EXPORT_ONCE(RtPersistAdjustDelimitersFn,
-                   "?AdjustDelimiters@Filename@System@@AEAAXXZ")(ret);
-    RtSystem::RtString_ReleaseInline(&tmp);
+    // `retval` is the hidden return slot -- raw, uninitialised bytes. The
+    // manual "zero, AddRef-adopt tmp's buffer, then AdjustDelimiters" IS
+    // `Filename(const String&)` (retail 0x18000c780) -- see B31_RULES
+    // DELIMITERS: an Adopt onto a just-nulled destination followed by
+    // AdjustDelimiters is exactly that ctor. Replaces the separate
+    // AdjustDelimiters export call this file used to make by name.
+    new (static_cast<System::Filename*>(retval)) System::Filename(tmp);
 
+    // ~tmp is retail's release.
     return retval;
 }
 
@@ -210,11 +217,15 @@ bool RtIo_Persistence_BeginDelete(void* self, const void* nameRef) {
     auto* p = static_cast<Persistence*>(self);
     if (p->flags & 1u) return false;
 
-    String fn;
-    fn.data = nullptr;
-    RtIo_Persistence_GetSaveFilename(self, &fn, nameRef);
+    // GetSaveFilename is a registered entry point and keeps its retail
+    // (self, hidden-return-slot, ...) signature, so the value lands in a POD
+    // and is then stolen into the class -- a pure pointer steal, `fnPod`
+    // left null.
+    String fnPod{nullptr};
+    RtIo_Persistence_GetSaveFilename(self, &fnPod, nameRef);
+    System::String fn(std::move(Sys(fnPod)));
     EnqueueDelete()(&p->workerVtable, &fn);
-    RtSystem::RtString_ReleaseInline(&fn);
+    // ~fn is retail's release.
     return true;
 }
 
@@ -228,12 +239,13 @@ bool RtIo_Persistence_BeginLoad(void* self, const void* nameRef,
     auto* p = static_cast<Persistence*>(self);
     if (p->flags & 1u) return false;
 
-    String fn;
-    fn.data = nullptr;
-    RtIo_Persistence_GetSaveFilename(self, &fn, nameRef);
+    // Same shape as BeginDelete above.
+    String fnPod{nullptr};
+    RtIo_Persistence_GetSaveFilename(self, &fnPod, nameRef);
+    System::String fn(std::move(Sys(fnPod)));
     EnqueueLoad()(&p->workerVtable, &fn, blockCount,
                   static_cast<const SaveBlock*>(blocks));
-    RtSystem::RtString_ReleaseInline(&fn);
+    // ~fn is retail's release.
     return true;
 }
 
@@ -256,7 +268,11 @@ bool RtIo_Persistence_BeginLoad(void* self, const void* nameRef,
 void RtIo_Persistence_dtor(void* self) {
 
     auto* p = static_cast<Persistence*>(self);
-    RtSystem::RtString_ReleaseInline(&p->savePath);
+    // `savePath` is a `RtSystem::String` member of the not-yet-converted
+    // `Persistence`; the object is being torn down by hand (Persistence is
+    // still a plain struct, so there is no outer RAII to run this for us), so
+    // retail's release is spelled as the destructor itself through the bridge.
+    Sys(p->savePath).~String();
     WorkerDtor()(&p->workerVtable);
     MapClear()(self);
 }

@@ -92,19 +92,20 @@
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
 #include "../system/string.h"
+#include "../system/pod_bridge.h"
+
+#include <new>        // placement new into the retail hidden return slot
+#include <utility>    // std::move -- the pointer steal out of a POD out-param
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
-// Lane String's ports, forward-declared rather than pulled in from a header,
-// because that lane publishes none and this lane does not edit another lane's
-// files. Signatures copied from their definitions. Called DIRECTLY, not through
-// a door: they are already ported, so a door would only be a way to reach the
-// shipped copy by accident.
-namespace RtSystem {
-void      RtSystem_Filename_AdjustDelimiters(Filename* self);
-Filename* RtSystem_Filename_Assign(Filename* self, const Filename* rhs);
-}  // namespace RtSystem
+// ENDGAME B.3.1 step 2: the two lane-String entry points this file
+// forward-declared here — `RtSystem_Filename_AdjustDelimiters` (0x1800c6970)
+// and `RtSystem_Filename_Assign` (0x180006770) — are gone from this
+// translation unit. The second is `Filename::operator=`, and every call to the
+// first was the tail of a mutating Filename entry point, which the class
+// spells as itself with AdjustDelimiters private inside it.
 
 // Rung 4 of Wave 9 lane PKG2, already ported and registered.
 extern "C" RtIO::FileInfo* RtIo_FileInfo_Assign(RtIO::FileInfo*, const RtIO::FileInfo*);
@@ -113,9 +114,8 @@ namespace RtIO {
 
 using RtSystem::String;
 using RtSystem::Filename;
-using RtSystem::RtString_ReleaseInline;
-using RtSystem::RtSystem_Filename_AdjustDelimiters;
-using RtSystem::RtSystem_Filename_Assign;
+using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
+using RtSystem::SysFile;  //   "
 
 namespace {
 
@@ -133,9 +133,12 @@ namespace {
 // idiom on it is the same (refcount at -4, block at -8). Retail inlines that
 // idiom at all four sites below rather than calling ~WideString.
 struct WideStr { wchar_t* data; };
-typedef WideStr* (*WideCtorFn)(WideStr* ret, const String* s);
+// The door's typedef names the CLASS: it is a file-local typedef for a call
+// OUT, not an entry-point signature, and the callee's POD parameter is the same
+// eight bytes (ENDGAME B.3.1 step 2).
+typedef WideStr* (*WideCtorFn)(WideStr* ret, const System::String* s);
 
-WideStr* WideFromString(WideStr* ret, const String* s) {
+WideStr* WideFromString(WideStr* ret, const System::String* s) {
     return RT_EXPORT_ONCE(WideCtorFn,
         "??0WideString@System@@QEAA@AEBVString@1@@Z")(ret, s);
 }
@@ -232,37 +235,29 @@ bool RtIo_FileSystem_CreatePath(const FileSystem* self, const Filename* path) {
     ++g_fcc.createPath;
     (void)self;   // detail 4 — retail reads no field of `this`
 
-    const String* src = reinterpret_cast<const String*>(path);
-    const int32_t len = src->data ? RtSystem::StringLength(src->data) : 0;  // 1800ae459
+    // Retail passes the Filename straight into String's members, which is what
+    // AsString() spells (Filename.h).
+    const System::String& src = Sys(*path).AsString();
+    const int32_t len = src.GetLength();                    // 1800ae459
 
     int32_t created = 0;
     for (int32_t i = 0; i < len; ++i) {                     // 1800ae467/62e
-        const char c = src->data[i];                        // 1800ae473
+        const char c = src._data[i];                        // 1800ae473
         if (c != '\\' && c != '/') continue;                // 1800ae477/47d
 
-        String sub{};                                       // 1800ae489..94
-        sub.data = nullptr;
-        RT_EXPORT_ONCE(SubStringFn, "?SubString@String@System@@QEBA?AV12@HH@Z")(
-            src, &sub, 0, i);
-
-        // Detail 3: adopt into a SECOND slot, normalise that, release the first.
-        String dir{};                                       // 1800ae49a
-        dir.data = nullptr;
-        if (sub.data) {                                     // 1800ae4a5
-            dir.data = sub.data;                            // 1800ae4aa
-            ++RtSystem::StringRefCount(dir.data);           // 1800ae4b2
-        }
-        RtSystem_Filename_AdjustDelimiters(
-            reinterpret_cast<Filename*>(&dir));             // 1800ae4bd
-        RtString_ReleaseInline(&sub);                       // 1800ae4c3..52f
+        // Detail 3, in class terms: SubString (0x1800c9230) builds a temporary,
+        // Filename(const String&) (0x18000c780) adopts it into a SECOND slot and
+        // normalises that, and the temporary is released at the end of the full
+        // expression — retail's 0x1800ae4c3, in the same place.
+        System::Filename dir(src.SubString(0, i));          // 1800ae489..4bd
 
         WideStr w{};                                        // 1800ae53f
         w.data = nullptr;
-        WideFromString(&w, &dir);
+        WideFromString(&w, &dir.AsString());
         ::CreateDirectoryW(w.data, nullptr);                // 1800ae54a — result DISCARDED
         ++created; ++g_fcc.createPathDirs;
         WideRelease(&w);                                    // 1800ae551..5bd
-        RtString_ReleaseInline(&dir);                       // 1800ae5bd..629
+        // ~dir is retail's release at 0x1800ae5bd.
     }
 
     return true;                                            // 1800ae637: MOV AL,1
@@ -338,30 +333,27 @@ bool RtIo_FileSystem_PlatformCreateFile(FileSystem* self, FileInfo* info,
         RT_EXPORT_ONCE(WideSetFn, "?Set@WideString@System@@QEAAXPEB_W@Z")(
             &w, tempFile);                                   // 1800adf0f
 
-        String utf8{};  utf8.data = nullptr;                 // 1800adf15
+        // AsUTF8's hidden return slot is still POD-shaped (System::WideString
+        // is not a B.3.1 class), so the value lands in a POD and the move ctor
+        // steals it: `utf8Pod` is left null, so ~utf8 is the one release.
+        String utf8Pod{};  utf8Pod.data = nullptr;           // 1800adf15
         using AsUtf8Fn = String* (*)(const WideStr*, String*);
         RT_EXPORT_ONCE(AsUtf8Fn, "?AsUTF8@WideString@System@@QEBA?AVString@2@XZ")(
-            &w, &utf8);                                      // 1800adf21
+            &w, &utf8Pod);                                   // 1800adf21
+        System::String utf8(std::move(Sys(utf8Pod)));
 
-        String norm{};  norm.data = nullptr;                 // 1800adf27
-        if (utf8.data) {                                     // 1800adf31
-            norm.data = utf8.data;                           // 1800adf36
-            ++RtSystem::StringRefCount(norm.data);           // 1800adf3d
-        }
-        RtSystem_Filename_AdjustDelimiters(
-            reinterpret_cast<Filename*>(&norm));             // 1800adf47
-        RtSystem_Filename_Assign(
-            reinterpret_cast<Filename*>(&info->_name0),
-            reinterpret_cast<const Filename*>(&norm));       // 1800adf58
+        // adopt-then-AdjustDelimiters == Filename(const String&), 0x18000c780.
+        System::Filename norm(utf8);                         // 1800adf27..47
+        // Filename::operator=(const Filename&), 0x180006770. `_name0` is a
+        // `RtSystem::String` member of the not-yet-converted FileInfo.
+        SysFile(info->_name0) = norm;                        // 1800adf58
 
-        RtString_ReleaseInline(&norm);                       // 1800adf5e..93
-        RtString_ReleaseInline(&utf8);                       // 1800adf93..c0
+        // ~norm (0x1800adf5e) and ~utf8 (0x1800adf93) are the destructors now.
         WideRelease(&w);                                     // 1800adfc0..ea
     }
 
     // the CALLER's path -> _name1
-    RtSystem_Filename_Assign(
-        reinterpret_cast<Filename*>(&info->_name1), path);   // 1800adfea/f1
+    SysFile(info->_name1) = Sys(*path);                      // 1800adfea/f1
 
     ++g_fcc.createOk;
     return true;                                             // 1800adff6
@@ -392,8 +384,11 @@ FileInfo* RtIo_FileSystem_CreateFileW(FileSystem* self, FileInfo* ret,
     ret->size        = 0;           // 1800acc72 (qword +0x08, covers cursor)
     ret->cursor      = 0;
     ret->baseOffset  = 0;           // 1800acc76
-    ret->_name0.data = nullptr;     // 1800acc82
-    ret->_name1.data = nullptr;     // 1800acc8e
+    // `ret` is the hidden return slot: raw bytes, so these are two default
+    // ctors (??0Filename@System@@QEAA@XZ, 0x180006220), not stores through
+    // live objects.
+    new (&ret->_name0) System::Filename();   // 1800acc82
+    new (&ret->_name1) System::Filename();   // 1800acc8e
     ret->winHandle   = -1;          // 1800acc91
     // +0x04 deliberately untouched, exactly as in ??0FileStream's prologue.
 
@@ -443,7 +438,7 @@ void RtIo_FileSystem_PlatformCloseFile(FileSystem* self, FileInfo* info) {
     // 3. delete the destination
     {
         WideStr w{};  w.data = nullptr;
-        WideFromString(&w, &info->_name1);                   // 1800ae07b
+        WideFromString(&w, &Sys(info->_name1));              // 1800ae07b
         ::DeleteFileW(w.data);                               // 1800ae084 — discarded
         WideRelease(&w);                                     // 1800ae08d..b9
     }
@@ -453,27 +448,18 @@ void RtIo_FileSystem_PlatformCloseFile(FileSystem* self, FileInfo* info) {
     //    over _name0), then calls MoveFileW(source, destination).
     {
         WideStr dst{};  dst.data = nullptr;
-        WideFromString(&dst, &info->_name1);                 // 1800ae0c1
+        WideFromString(&dst, &Sys(info->_name1));            // 1800ae0c1
         WideStr src{};  src.data = nullptr;
-        WideFromString(&src, &info->_name0);                 // 1800ae0d1
+        WideFromString(&src, &Sys(info->_name0));            // 1800ae0d1
         ::MoveFileW(src.data, dst.data);                     // 1800ae0dd — discarded
         WideRelease(&src);                                   // 1800ae0e4..111  (src first)
         WideRelease(&dst);                                   // 1800ae111..13e
     }
 
     // 5. clear both, through Filename::operator= from a null temporary
-    {
-        Filename empty{};                                    // 1800ae13e
-        reinterpret_cast<String*>(&empty)->data = nullptr;
-        RtSystem_Filename_Assign(
-            reinterpret_cast<Filename*>(&info->_name0), &empty);  // 1800ae14b
-    }
-    {
-        Filename empty{};                                    // 1800ae151
-        reinterpret_cast<String*>(&empty)->data = nullptr;
-        RtSystem_Filename_Assign(
-            reinterpret_cast<Filename*>(&info->_name1), &empty);  // 1800ae15e
-    }
+    //    (0x180006770); the temporary's own destructor is a no-op on null.
+    SysFile(info->_name0) = System::Filename();              // 1800ae13e/14b
+    SysFile(info->_name1) = System::Filename();              // 1800ae151/15e
 }
 
 // ============================================================================
@@ -504,14 +490,17 @@ void RtIo_FileSystem_CloseFile(FileSystem* self, FileInfo* info) {
     fresh.size        = 0;                           // 1800accec (qword)
     fresh.cursor      = 0;
     fresh.baseOffset  = 0;                           // 1800accf0
-    fresh._name0.data = nullptr;                     // 1800accfb
-    fresh._name1.data = nullptr;                     // 1800acd07
+    // Two empty Filenames constructed into the raw stack slots (0x180006220);
+    // FileInfo is not a converted class, so they are built and destroyed by
+    // hand — one release each, in retail's order.
+    new (&fresh._name0) System::Filename();          // 1800accfb
+    new (&fresh._name1) System::Filename();          // 1800acd07
     fresh.winHandle   = -1;                          // 1800acd0b
 
     RtIo_FileInfo_Assign(info, &fresh);              // 1800acd1a
 
-    RtString_ReleaseInline(&fresh._name1);           // 1800acd20  +0x28 first
-    RtString_ReleaseInline(&fresh._name0);           // 1800acd50  +0x20
+    SysFile(fresh._name1).~Filename();               // 1800acd20  +0x28 first
+    SysFile(fresh._name0).~Filename();               // 1800acd50  +0x20
 
     // ---- NOT PART OF THE PORT ------------------------------------------
     // A one-shot trigger for file_stream_slots_probe.cpp, which needs a LIVE
@@ -571,9 +560,12 @@ void RtIo_FileSystem_Dtor(FileSystem* self) {
     PodArrayDtor(reinterpret_cast<PodArray*>(&self->packfiles));  // 1800ac71a
 
     // Step 5
-    RtString_ReleaseInline(&self->packDirectory);     // 1800ac720  +0x10
-    RtString_ReleaseInline(&self->dataDirectory);     // 1800ac74a  +0x08
-    RtString_ReleaseInline(&self->sourceDirectory);   // 1800ac775  +0x00
+    // The three path fields are `RtSystem::String` members of the not-yet-
+    // converted IO::FileSystem, so ~String is invoked on them explicitly; it is
+    // the same inlined release retail emits at each of the three addresses.
+    Sys(self->packDirectory).~String();               // 1800ac720  +0x10
+    Sys(self->dataDirectory).~String();               // 1800ac74a  +0x08
+    Sys(self->sourceDirectory).~String();             // 1800ac775  +0x00
 }
 
 // Read by file_stream_cutover_probe.cpp, which prints attendance beside the

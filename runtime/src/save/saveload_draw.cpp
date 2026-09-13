@@ -330,7 +330,8 @@ void ArrayBindingSetSize(ArrayHeader* a, uint32_t newSize, const MaterialBinding
 using OpNewFn      = void* (*)(uint64_t);
 using VoidThisFn   = void  (*)(void*);
 using RbCreateFn   = bool  (*)(void*, const void*, const void*);
-using StringSetFn  = void  (*)(const char**, const char*);
+// ENDGAME B.3.1 step 2: the String::Set door typedef is gone with its one call
+// site — it is `diffuse.Set("diffuse")` now.
 using SheetSetFn   = void  (*)(void*, int32_t, int32_t, const char**, const char**, bool);
 using AddSpriteInfoFn = void (*)(void*, const char**, const char**, int32_t, int32_t, int32_t, int32_t);
 using CameraCtorFn = void  (*)(void*, const Frustum*, const Transform3*, bool);  // return ignored, see above
@@ -563,15 +564,19 @@ void DrawBody(SaveLoad* self, Context* ctx, void* material) {
     *reinterpret_cast<void**>(static_cast<uint8_t*>(mat) + 0x28) = material;
 
     {
-        const char* diffuse = nullptr;
-        RT_EXPORT_ONCE(StringSetFn, "?Set@String@System@@QEAAXPEBD@Z")(&diffuse, "diffuse");
+        // ENDGAME B.3.1 step 2: a real `System::String` local. The zero-init is
+        // the default ctor (0x180006760), `Set` (0x1800c95d0) is the member,
+        // and the trailing `ReleaseStringSlot(&diffuse)` is the destructor —
+        // which still runs AFTER `binding.name`'s release, retail's order.
+        System::String diffuse;
+        diffuse.Set("diffuse");
 
         MaterialBinding binding;
         binding.name  = nullptr;
         binding.value = nullptr;
-        if (diffuse != nullptr) {
-            binding.name = diffuse;
-            *reinterpret_cast<int*>(const_cast<char*>(diffuse) - 4) += 1;
+        if (diffuse._data != nullptr) {
+            binding.name = diffuse._data;
+            *reinterpret_cast<int*>(diffuse._data - 4) += 1;
         }
         binding.value = frameCopy;
 
@@ -579,7 +584,6 @@ void DrawBody(SaveLoad* self, Context* ctx, void* material) {
         ArrayBindingSetSize(params, static_cast<uint32_t>(params->size) + 1, &binding);
 
         ReleaseStringSlot(&binding.name);
-        ReleaseStringSlot(&diffuse);
     }
     RT_EXPORT_ONCE(VoidThisFn, "?BuildParameters@MaterialInstance@Graphics@@QEAAXXZ")(mat);
 

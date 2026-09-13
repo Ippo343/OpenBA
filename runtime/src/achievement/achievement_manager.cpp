@@ -48,19 +48,20 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <new>          // ENDGAME B.3.1 step 2: placement new into the ret slots
 
 #include "../../funcs/rt_port.h"
 #include "../../types/achievement/AchievementManager.h"
 #include "../../types/io/FileSystem.h"
-#include "../system/string.h"   // RtString_ReleaseInline (Wave 2, lane String)
+#include "../../types/object/External.h"   // Object::ExternalPtr<T>
+#include "../../types/object/Internal.h"   // Object::InternalPtr<T>
+#include "../system/pod_bridge.h"          // the one transitional POD<->class cast
 
 using RtAchievement::Achievement;
 using RtAchievement::AchievementInstance;
 using RtAchievement::AchievementManager;
 using RtAchievement::GoalInstanceView;
 using RtAchievement::GoalListView;
-using RtSystem::String;
-using RtSystem::StringRefCount;
 
 // ----------------------------------------------------------------------------
 // ResolveAddr / ResolveExport, forward-declared rather than pulled in from
@@ -378,7 +379,11 @@ void* RtAch_AchievementManager_GetAchievement(const AchievementManager* self,
 
     void* obj = self->achievements->_resources[index];
     void* ours = IsDerivedFrom()(obj, AchievementTypeId()) ? obj : nullptr;
-    *static_cast<void**>(retval) = ours;
+    // ENDGAME B.3.1 step 2: the store spelled as the class it is. `ExternalPtr`
+    // is one bare pointer and is asserted trivially copyable and trivially
+    // destructible (runtime/types/object/External.h), so this placement
+    // construct emits the same single qword store retail does.
+    new (retval) Object::ExternalPtr<Achievement>(static_cast<Achievement*>(ours));
 
     return retval;
 }
@@ -397,7 +402,11 @@ void* RtAch_AchievementManager_GetAchievementInstance(const AchievementManager* 
                                                       void* retval, int index) {
 
     AchievementInstance* ours = self->instances._data[index];
-    *static_cast<AchievementInstance**>(retval) = ours;
+    // ENDGAME B.3.1 step 2: `InternalPtr<T>` is one bare pointer, trivially
+    // copyable and trivially destructible by assertion
+    // (runtime/types/object/Internal.h) — no refcount, no handle validation —
+    // so this placement construct is retail's one qword move.
+    new (retval) Object::InternalPtr<AchievementInstance>(ours);
 
     return retval;
 }
@@ -464,31 +473,33 @@ bool RtAch_AchievementInstance_HasFailed(const AchievementInstance* self) {
 // RCX=this, RDX=retval. All three are the identical three-instruction body on
 // a different field:
 //     *retval = 0; if (field) { *retval = field; ++field[-4]; }
-// i.e. an ADDREF.
+// i.e. an ADDREF — which is `??0String@System@@QEAA@AEBV01@@Z` (0x180006cb0),
+// the copy constructor, and nothing else. `retval` is the hidden return slot,
+// raw uninitialised bytes, so it is placement-constructed rather than assigned
+// (an assignment would run operator= over garbage and release a wild pointer).
+// The three fields stay `RtSystem::String`: `Achievement::Achievement` is not a
+// converted class, so its members keep their POD type and come through the one
+// bridge (B31_RULES, "Members of not-yet-converted structs").
 // ============================================================================
 namespace {
-void* AchievementStringGetter(const Achievement* self, void* retval, char* field) {
+void* AchievementStringGetter(const Achievement* self, void* retval,
+                              const RtSystem::String& field) {
     (void)self;
-    String* ret = static_cast<String*>(retval);
-    ret->data = nullptr;
-    if (field) {
-        ret->data = field;
-        ++StringRefCount(field);
-    }
+    new (retval) System::String(RtSystem::Sys(field));
     return retval;
 }
 }  // namespace
 
 void* RtAch_Achievement_GetTitle(const Achievement* self, void* retval) {
-    return AchievementStringGetter(self, retval, self->title.data);
+    return AchievementStringGetter(self, retval, self->title);
 }
 
 void* RtAch_Achievement_GetDescription(const Achievement* self, void* retval) {
-    return AchievementStringGetter(self, retval, self->description.data);
+    return AchievementStringGetter(self, retval, self->description);
 }
 
 void* RtAch_Achievement_GetSpriteName(const Achievement* self, void* retval) {
-    return AchievementStringGetter(self, retval, self->spriteName.data);
+    return AchievementStringGetter(self, retval, self->spriteName);
 }
 
 // ############################################################################
@@ -885,9 +896,13 @@ void RtAch_Achievement_Dtor(void* selfRaw) {
 
     self->base._vftable = VtableAchievement();
     ArrayFreeGoalPtrs()(&self->goals);
-    RtSystem::RtString_ReleaseInline(&self->spriteName);
-    RtSystem::RtString_ReleaseInline(&self->description);
-    RtSystem::RtString_ReleaseInline(&self->title);
+    // ENDGAME B.3.1 step 2: the release idiom IS `~String` (0x180006c80), with
+    // retail's asymmetry inside the class where the banner above wants it. The
+    // three fields are POD members of the unconverted `Achievement`, so the
+    // destructor is spelled explicitly, through the one bridge.
+    RtSystem::Sys(self->spriteName).~String();
+    RtSystem::Sys(self->description).~String();
+    RtSystem::Sys(self->title).~String();
     ExternalDtor()(self);
 
 }

@@ -57,6 +57,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <new>          // ENDGAME B.3.1 step 2: placement new into the object body
 
 #include "../../funcs/rt_port.h"
 // ResolveAddr, declared locally rather than via standalone/resolve.h -- that header
@@ -103,8 +104,12 @@ static_assert(offsetof(Face, quads)   == 0x18, "+0x18");
 
 struct CollisionMesh {
     External                    base;       // +0x00
-    void*                       _name1;     // +0x20  System::String
-    void*                       _name2;     // +0x28  System::String
+    // ENDGAME B.3.1 step 2: the comment became the type. This struct is this
+    // port's file-local model of the object and nothing bulk-copies it — it is
+    // built by `ConstructBody` and torn down by the destructor below, both in
+    // this file — so the two fields carry the real class.
+    System::String              _name1;     // +0x20
+    System::String              _name2;     // +0x28
     Collection::Array<Vec2>     _ptsA;      // +0x30
     Collection::Array<Vec2>     _ptsB;      // +0x40
     Collection::Array<Face>     _faces;     // +0x50
@@ -157,8 +162,11 @@ void ConstructBody(CollisionMesh* self) {
     self->base._refs._size     = 0;
     self->base._refs._capacity = 0;
     *vp = CollisionMeshVTable();
-    self->_name1 = nullptr;
-    self->_name2 = nullptr;
+    // Retail writes one null qword per field; the default constructor
+    // (0x180006760) is that one store, placement-constructed because the
+    // object body is raw memory at this point.
+    new (&self->_name1) System::String();
+    new (&self->_name2) System::String();
     self->_ptsA._data = nullptr;     self->_ptsA._size = 0;     self->_ptsA._capacity = 0;
     self->_ptsB._data = nullptr;     self->_ptsB._size = 0;     self->_ptsB._capacity = 0;
     self->_faces._data = nullptr;    self->_faces._size = 0;    self->_faces._capacity = 0;
@@ -335,8 +343,9 @@ extern "C" void RtCollision2D_CollisionMesh_Dtor(void* selfv) {
     FaceArrayDtor(&self->_faces);
     PlainArrayDtor(&self->_ptsB, 0x180065bf0ull);
     PlainArrayDtor(&self->_ptsA, 0x180065bf0ull);
-    RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(&self->_name2));
-    RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(&self->_name1));
+    // The release idiom IS `~String` (0x180006c80), asymmetry included.
+    self->_name2.~String();
+    self->_name1.~String();
     using ExtDtorFn = void (*)(void*);
     RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(self);
 }
@@ -354,10 +363,11 @@ extern "C" bool RtCollision2D_CollisionMesh_Serialize(void* selfv, void* streamv
     ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 0);
     ser.readerWriter = rw;
 
-    using StrSerFn = void (*)(void* str, Serializer* ser);
-    auto strSer = RT_EXPORT_ONCE(StrSerFn, "?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z");
-    strSer(&self->_name1, &ser);
-    strSer(&self->_name2, &ser);
+    // ENDGAME B.3.1 step 2: `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z`
+    // (0x1800c9930) is a member now, so the name door is gone. The registry row
+    // at that name registers the shim, and the shim is one line over this member.
+    self->_name1.Serialize(&ser);
+    self->_name2.Serialize(&ser);
 
     using ScalarIntFn    = void (*)(ReaderWriter*, int32_t*, const char*);
     using ArrayFloatFn   = void (*)(ReaderWriter*, int32_t, void*, const char*);

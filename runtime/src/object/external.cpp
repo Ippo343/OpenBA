@@ -63,37 +63,18 @@
 
 #include <cstdio>
 #include <cstring>
+#include <new>          // placement new into the retail hidden return slots
 
 #include "../../types/object/External.h"
 #include "../../funcs/rt_port.h"
 #include "../system/string.h"
+#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 
 namespace RtObject {
 
 using RtSystem::String;
-using RtSystem::StringLength;
 using RtSystem::StringRefCount;
-using RtSystem::RtString_AdoptInline;
-using RtSystem::RtString_ReleaseInline;
-using RtSystem::RtSystem_String_Set;
-using RtSystem::RtSystem_String_Concat;
-using RtSystem::RtSystem_String_ConcatCStr;
-
-}  // namespace RtObject
-
-// Ported in Wave 2 (runtime/src/system/filename.cpp); declared here rather than
-// pulled from a header because that lane's file exposes none of its own.
-namespace RtSystem {
-void      RtSystem_Filename_AdjustDelimiters(Filename* self);
-Filename* RtSystem_Filename_CtorCopy(Filename* self, const Filename* other);
-Filename* RtSystem_Filename_GetPathIdentifer(const Filename* self, Filename* ret);
-}  // namespace RtSystem
-
-namespace RtObject {
-
-using RtSystem::RtSystem_Filename_AdjustDelimiters;
-using RtSystem::RtSystem_Filename_CtorCopy;
-using RtSystem::RtSystem_Filename_GetPathIdentifer;
+using RtSystem::Sys;
 
 // ============================================================
 // Local helpers
@@ -272,7 +253,10 @@ void RtObject_External_Dtor(External* self) {
     self->_refs._size     = 0;
     self->_refs._capacity = 0;
 
-    RtString_ReleaseInline(reinterpret_cast<String*>(&self->_path));
+    // ENDGAME B.3.1 step 2: retail's inlined release IS `~Filename`
+    // (0x180006980). `_path` is a POD member of the not-yet-converted
+    // `Object::External`, so it is destroyed by hand, through the bridge.
+    Sys(self->_path).~Filename();
 
     self->_vftable = VtableBase();
 }
@@ -292,7 +276,12 @@ void RtObject_External_Dtor(External* self) {
 // takes one extra reference, which the scratch release below gives back.
 Filename* RtObject_External_GetPath(const External* self, Filename* ret) {
 
-    RtSystem_Filename_CtorCopy(ret, &self->_path);
+    // ENDGAME B.3.1 step 2: retail's copy ctor (0x1800067d0), spelled as itself.
+    // `ret` is the hidden return slot — raw, uninitialised bytes — so the object
+    // is placement-constructed into it, which is what retail's CALL does.
+    // `_path` is a `RtSystem::Filename` member of the not-yet-converted
+    // `Object::External`, so it comes through the one transitional bridge.
+    new (ret) System::Filename(Sys(self->_path));
 
     return ret;
 }
@@ -344,42 +333,36 @@ const External* RtObject_ExternalFactory_Find(const ExternalFactory* self,
 
     const External* ours = nullptr;
 
-    Filename key{nullptr};
-    RtString_AdoptInline(reinterpret_cast<String*>(&key), path->data);
-    RtSystem_Filename_AdjustDelimiters(&key);
-    RtSystem_Filename_AdjustDelimiters(&key);
+    // ENDGAME B.3.1 step 2. Adopt-then-adjust-twice IS the Filename copy ctor
+    // (0x1800067d0), whose ported body normalises twice for exactly this reason,
+    // so both of the header's "twice on the working copy" calls are still spent
+    // — including the in-place rewrite of the CALLER's shared buffer that note 2
+    // says callers depend on, since the copy shares the buffer either way.
+    System::Filename key(Sys(*path));
 
-    Filename ident{nullptr};
-    RtSystem_Filename_GetPathIdentifer(path, &ident);
-    if (ident.data == nullptr || StringLength(ident.data) == 0) {
-        String cat{nullptr};
-        RtSystem_String_ConcatCStr(&cat, reinterpret_cast<const String*>(&key), ":resource");
-        // The inlined String::operator=, WITHOUT the trailing AdjustDelimiters
-        // that Filename::operator= carries — retail calls it separately, once.
-        if (key.data != cat.data) {
-            RtString_ReleaseInline(reinterpret_cast<String*>(&key));
-            key.data = cat.data;
-            if (key.data != nullptr)
-                ++StringRefCount(key.data);
-        }
-        RtSystem_Filename_AdjustDelimiters(&key);
-        RtString_ReleaseInline(&cat);
+    System::Filename ident = Sys(*path).GetPathIdentifer();
+    // `GetLength` (0x1800063c0) is retail's own null-or-empty test.
+    if (ident.GetLength() == 0) {
+        // Retail's inlined String::operator= plus the separate, single
+        // AdjustDelimiters is byte-for-byte what `Filename::operator=(const
+        // String&)` (0x180026d40) does: release, adopt, normalise ONCE. `cat`'s
+        // release is its destructor.
+        System::String cat = key.AsString() + ":resource";
+        key = cat;
     }
 
-    Filename probe{nullptr};
-    RtString_AdoptInline(reinterpret_cast<String*>(&probe), key.data);
-    RtSystem_Filename_AdjustDelimiters(&probe);
-    RtSystem_Filename_AdjustDelimiters(&probe);
-
-    ResourceSet::Node* node = ResourceSetFind(&self->_resources, probe.data);
-    RtString_ReleaseInline(reinterpret_cast<String*>(&probe));
+    // The second copy, same ctor, so its two AdjustDelimiters are still spent.
+    ResourceSet::Node* node;
+    {
+        System::Filename probe(key);
+        node = ResourceSetFind(&self->_resources, probe._data);
+    }   // probe's release, still ahead of the node read, as retail has it
 
     if (node != nullptr)
         ours = node->element.external;
 
-    RtString_ReleaseInline(reinterpret_cast<String*>(&ident));
-    RtString_ReleaseInline(reinterpret_cast<String*>(&key));
-
+    // ident then key release in their destructors — reverse declaration order
+    // is retail's teardown order.
     return ours;
 }
 
@@ -405,15 +388,18 @@ const External* RtObject_ExternalFactory_Find(const ExternalFactory* self,
 uint32_t RtObject_ExternalFactory_GetReferenceId(const ExternalFactory* self,
                                                  const External* external) {
 
-    Filename got{nullptr};
-    RtObject_External_GetPath(external, &got);
-    Filename key{nullptr};
-    RtSystem_Filename_CtorCopy(&key, &got);
+    ResourceSet::Node* node;
+    {
+        // `got` is GetPath's hidden return slot: it is declared null and then
+        // CONSTRUCTED INTO by the call, so it must not be constructed twice.
+        // The class->POD cast is the registered entry point's signature, which
+        // B31_RULES keeps until the whole family converts.
+        System::Filename got;
+        RtObject_External_GetPath(external, reinterpret_cast<Filename*>(&got));
+        System::Filename key(got);   // the second copy; transcribed, see above
 
-    ResourceSet::Node* node = ResourceSetFind(&self->_resources, key.data);
-
-    RtString_ReleaseInline(reinterpret_cast<String*>(&key));
-    RtString_ReleaseInline(reinterpret_cast<String*>(&got));
+        node = ResourceSetFind(&self->_resources, key._data);
+    }   // key then got release — retail's order, still ahead of the node read
 
     uint32_t ours = node->element.referenceId;   // unguarded, exactly as retail
 
@@ -441,16 +427,18 @@ Filename* RtObject_ExternalFactory_GetPathForReferenceId(const ExternalFactory* 
         else                         break;
     }
 
+    // `ret` is the hidden return slot in both arms — raw bytes, so placement.
     if (n != nullptr) {
-        Filename tmp{nullptr};
-        RtString_AdoptInline(reinterpret_cast<String*>(&tmp), n->element.path.data);
-        RtSystem_Filename_AdjustDelimiters(&tmp);
-        RtSystem_Filename_AdjustDelimiters(&tmp);
-        RtSystem_Filename_CtorCopy(ret, &tmp);
-        RtString_ReleaseInline(reinterpret_cast<String*>(&tmp));
+        // Adopt-then-adjust-twice is the copy ctor; `path` is a POD member of
+        // the not-yet-converted node element, hence the bridge.
+        System::Filename tmp(Sys(n->element.path));
+        new (ret) System::Filename(tmp);
     } else {
-        Filename empty{nullptr};
-        RtSystem_Filename_CtorCopy(ret, &empty);
+        // Retail really does copy-construct from a null temporary rather than
+        // leave the slot untouched; the named local is what keeps that CALL,
+        // since C++17 would elide a copy from an unnamed one.
+        System::Filename empty;
+        new (ret) System::Filename(empty);
     }
 
     return ret;
@@ -509,15 +497,16 @@ const External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self,
         if (self->_resources._root != nullptr)
             cursor = ResourceSetLeftmost(self->_resources._root);
     } else {
-        Filename got{nullptr};
-        RtObject_External_GetPath(prev, &got);
-        Filename key{nullptr};
-        RtSystem_Filename_CtorCopy(&key, &got);
+        ResourceSet::Node* found;
+        {
+            // As GetReferenceId above: `got` is GetPath's hidden return slot,
+            // `key` is retail's second copy, and both release before the read.
+            System::Filename got;
+            RtObject_External_GetPath(prev, reinterpret_cast<Filename*>(&got));
+            System::Filename key(got);
 
-        ResourceSet::Node* found = ResourceSetFind(&self->_resources, key.data);
-
-        RtString_ReleaseInline(reinterpret_cast<String*>(&key));
-        RtString_ReleaseInline(reinterpret_cast<String*>(&got));
+            found = ResourceSetFind(&self->_resources, key._data);
+        }
 
         if (found != nullptr)
             cursor = ResourceSetSuccessor(found);
@@ -597,57 +586,56 @@ ExternalPtr<External>* RtObject_ExternalList_Find(const ExternalList* self,
                                                   const Filename* path,
                                                   void* /*type — unused by retail*/) {
 
-    Filename ident{nullptr};
-    RtSystem_Filename_GetPathIdentifer(path, &ident);
-    const bool noIdentifier = (ident.data == nullptr || StringLength(ident.data) == 0);
-    RtString_ReleaseInline(reinterpret_cast<String*>(&ident));
+    bool noIdentifier;
+    {
+        System::Filename ident = Sys(*path).GetPathIdentifer();
+        noIdentifier = (ident.GetLength() == 0);
+    }   // retail releases `ident` here, before the key is built
 
-    char* key = nullptr;
+    // `key` was a raw `char*` holding ONE reference that retail takes by hand
+    // and gives back at the tail. That hand-rolled reference IS a String, and
+    // the tail's `--refcount / MemFree` is its destructor.
+    System::String key;
     if (noIdentifier) {
-        Filename suffix{nullptr};
-        RtSystem_String_Set(reinterpret_cast<String*>(&suffix), ":resource");
-        RtSystem_Filename_AdjustDelimiters(&suffix);
-
-        String cat{nullptr};
-        RtSystem_String_Concat(&cat, reinterpret_cast<const String*>(path),
-                               reinterpret_cast<const String*>(&suffix));
-        if (cat.data != nullptr) { ++StringRefCount(cat.data); key = cat.data; }
-
-        RtString_ReleaseInline(&cat);
-        RtString_ReleaseInline(reinterpret_cast<String*>(&suffix));
+        // Set + AdjustDelimiters on the same object is the `const char*` ctor
+        // (0x180026cf0). Retail builds a whole Filename for the literal so that
+        // the concatenation goes through the String&/String& operator+
+        // (0x1800c9440) rather than the char* overload — see note 1.
+        System::Filename suffix(":resource");
+        // The concatenated buffer is born with refcount 1, which is precisely
+        // the one reference retail's `++StringRefCount(cat.data)` /
+        // `Release(cat)` pair leaves behind.
+        key = Sys(*path).AsString() + suffix.AsString();
     } else {
-        if (path->data != nullptr) { ++StringRefCount(path->data); key = path->data; }
+        key = Sys(*path).AsString();
     }
 
     ret->ptr = nullptr;
     for (int i = 0; i < self->_count; ++i) {
-        Filename got{nullptr};
-        RtObject_External_GetPath(self->_resources[i], &got);
-
-        const int keyLen = key       ? StringLength(key)      : 0;
-        const int gotLen = got.data  ? StringLength(got.data) : 0;
-
         bool equal;
-        if (keyLen != gotLen) {
-            equal = false;
-        } else if (key == nullptr || StringLength(key) == 0) {
-            equal = true;                       // two empty paths match
-        } else if (got.data == nullptr) {
-            equal = false;                      // retail's `iVar8 = 1` arm
-        } else {
-            equal = (std::strcmp(key, got.data) == 0);
-        }
+        {
+            System::Filename got;   // GetPath's hidden return slot; see above
+            RtObject_External_GetPath(self->_resources[i],
+                                      reinterpret_cast<Filename*>(&got));
 
-        RtString_ReleaseInline(reinterpret_cast<String*>(&got));
+            const int keyLen = key.GetLength();
+            const int gotLen = got.GetLength();
+
+            if (keyLen != gotLen) {
+                equal = false;
+            } else if (keyLen == 0) {
+                equal = true;                       // two empty paths match
+            } else if (got._data == nullptr) {
+                equal = false;                      // retail's `iVar8 = 1` arm
+            } else {
+                equal = (std::strcmp(key._data, got._data) == 0);
+            }
+        }   // `got` releases here, as retail does, before the hit is recorded
 
         if (equal) { ret->ptr = self->_resources[i]; break; }
     }
 
-    if (key != nullptr) {
-        if (--StringRefCount(key) == 0)
-            RtSystem::RtMemFree(key - 8);
-    }
-
+    // key's reference goes back in ~String.
     return ret;
 }
 

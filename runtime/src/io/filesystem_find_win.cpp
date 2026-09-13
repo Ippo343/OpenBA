@@ -362,31 +362,28 @@
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
 #include "../system/string.h"
+#include "../system/pod_bridge.h"
 #include "../system/widestring.h"
 #include "../collection/array_internal.h"
 
-// Wave 2 lane A / Wave 9 lane FS entry points reused here. Declared rather than
-// pulled in from a header because neither lane publishes one for these two, and
-// this lane does not edit another lane's files to add it. Both signatures are
-// copied from their definitions (filename.cpp:81 and :177).
-namespace RtSystem {
-Filename* RtSystem_Filename_CtorCopy(Filename* self, const Filename* other);
-void      RtSystem_Filename_AdjustDelimiters(Filename* self);
-}  // namespace RtSystem
+#include <new>        // placement new into a raw Array<Filename> element
+#include <utility>    // std::move -- the pointer steal out of a POD out-param
+
+// ENDGAME B.3.1 step 2: the two Wave-2 / lane-FS entry points this file
+// forward-declared here — `RtSystem_Filename_CtorCopy` (0x1800067d0) and
+// `RtSystem_Filename_AdjustDelimiters` (0x1800c6970) — are gone from this
+// translation unit. The first is the class's copy ctor; every call to the
+// second was the tail of a mutating Filename entry point (the `const char*`
+// ctor 0x180026cf0, or the `const String&` ctor 0x18000c780), which the class
+// spells as itself with AdjustDelimiters private inside it.
 
 namespace RtIO {
 
 using RtSystem::String;
 using RtSystem::Filename;
 using RtSystem::WideString;
-using RtSystem::RtString_AdoptInline;
 using RtSystem::RtString_ReleaseInline;
-using RtSystem::RtString_GetLength;
-using RtSystem::RtSystem_String_Set;
-using RtSystem::RtSystem_String_Concat;
-using RtSystem::RtSystem_String_ConcatCStr;
-using RtSystem::RtSystem_Filename_CtorCopy;
-using RtSystem::RtSystem_Filename_AdjustDelimiters;
+using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
 using RtSystem::RtSystem_WideString_Set;
 using RtSystem::RtSystem_WideString_AsUTF8;
 using RtSystem::RtSystem_WideString_CtorFromString;
@@ -405,8 +402,13 @@ static_assert(sizeof(FilenameArray) == 0x10, "Collection::Array is 16 bytes");
 static_assert(offsetof(FilenameArray, count)    == 0x08, "0x180026880: MOV EBP,[RCX+0x8]");
 static_assert(offsetof(FilenameArray, capacity) == 0x0c, "0x180026880: CMP ESI,[RCX+0xc]");
 
-static String*       AsString(Filename* f)       { return reinterpret_cast<String*>(f); }
+// The one remaining POD reinterpretation this file needs: System::WideString is
+// not a B.3.1 class, so its ctor still takes the POD `RtSystem::String*` and the
+// class values here have to be handed over as those same eight bytes.
 static const String* AsString(const Filename* f) { return reinterpret_cast<const String*>(f); }
+static const String* AsPodString(const System::String& s) {
+    return reinterpret_cast<const String*>(&s);
+}
 
 // ---- Raw ABI typedefs for the originals ------------------------------------
 typedef bool (*fn_ExistsOne_t)(const void* fs, const Filename* path);
@@ -443,28 +445,26 @@ static int StriCmpAscii(const char* a, const char* b) {
 // ============================================================================
 
 // 0x180026913: `CALL 0x1800067d0` = Filename::Filename(Filename const&).
+// The destination is a raw array element, so the copy ctor is placement-
+// constructed into it — which is exactly what retail's CALL does.
 static void AssignFilename(uint8_t* d, const uint8_t* s) {
-    RtSystem_Filename_CtorCopy(reinterpret_cast<Filename*>(d),
-                               reinterpret_cast<const Filename*>(s));
+    new (d) System::Filename(*reinterpret_cast<const System::Filename*>(s));
 }
 
 // 0x180009af0. RCX is spilled at 0x180009af9 and never read again, which is why
 // lane Q's ElemDestroy signature carries an ignored first argument at all.
 void DestroyFilenameArray(void* /*ignoredThis*/, uint8_t* base, int count) {
     if (count <= 0) return;                        // TEST R8D,R8D ; JLE ret
-    char** slot = reinterpret_cast<char**>(base);
+    System::Filename* slot = reinterpret_cast<System::Filename*>(base);
     for (int i = 0; i < count; ++i, ++slot) {
-        char* const str = *slot;
-        if (str == nullptr) continue;              // TEST RAX,RAX ; JZ next
-        if (--*reinterpret_cast<int32_t*>(str - 4) != 0) {
-            *slot = nullptr;                       // MOV [RBX],R14 (R14 == 0)
-            continue;
-        }
-        char* const block = str - 8;               // ADD qword ptr [RBX],-0x8
-        *slot = block;
-        // The JZ at 0x180009b3f takes its flags from that ADD, so the guard is
-        // on the BLOCK BASE. RtMemFree carries the same null test inside.
-        if (block != nullptr) RtSystem::RtMemFree(block);
+        // ENDGAME B.3.1 step 2: ~Filename (0x180006980) IS this loop body, step
+        // for step — the `TEST RAX,RAX ; JZ next` null test, the decrement of
+        // the refcount at data-4, the `MOV [RBX],R14` sharing branch and the
+        // `ADD qword ptr [RBX],-0x8` + MemFree freeing branch, with retail's
+        // release asymmetry (String.h) intact. The JZ at 0x180009b3f takes its
+        // flags from that ADD, so the free guard is on the BLOCK BASE, and
+        // RtMemFree carries the same null test inside.
+        slot->~Filename();
     }
 }
 
@@ -491,7 +491,7 @@ void RtColl_ArraySetSizeFill_180026880(void* a, int n, const void* fill) {
                         static_cast<const uint8_t*>(fill), &kSpec_Filename);
 }
 
-static void AppendFilename(FilenameArray* out, const Filename* value) {
+static void AppendFilename(FilenameArray* out, const System::Filename* value) {
     // 0x1800ad900: `MOV EDX,[RDI+8] ; INC EDX` — newSize is size+1, read fresh
     // from the header each iteration.
     RtColl_ArraySetSizeFill_180026880(out, out->count + 1, value);
@@ -510,19 +510,20 @@ bool RtIo_FileSystem_ExistsInPackfile(const void* fsVoid, const Filename* path) 
     // `data-8` when data is non-null and are 0 otherwise, and the test is
     // `JLE`: proceed only when the path is STRICTLY longer.
     const char* pathData = path->data;
-    const int pathLen = pathData ? RtString_GetLength(AsString(path)) : 0;
+    const int pathLen = pathData ? Sys(*path).GetLength() : 0;
     const int dataDirLen = fs->dataDirectory.data
-                         ? RtString_GetLength(&fs->dataDirectory) : 0;
+                         ? Sys(fs->dataDirectory).GetLength() : 0;
 
     if (dataDirLen < pathLen) {
         // 0x1800ab1d9: strip BY LENGTH ALONE — retail does no prefix compare
         // and trusts the caller passed a path under dataDirectory. String::Set
         // is what copies; the pointer arithmetic aliases the caller's buffer.
-        String relPath{nullptr};
-        RtSystem_String_Set(&relPath, pathData + dataDirLen);
-        RtSystem_Filename_AdjustDelimiters(reinterpret_cast<Filename*>(&relPath));
+        // Set-then-AdjustDelimiters IS the Filename const char* ctor,
+        // ??0Filename@System@@QEAA@PEBD@Z (0x180026cf0); its destructor is
+        // retail's release at the bottom of this block.
+        System::Filename relPath(pathData + dataDirLen);
 
-        const char* str1 = relPath.data;
+        const char* str1 = relPath._data;
         PackfileIndexNode* node = fs->packfileIndexRoot;
         PackfileIndexNode* found = nullptr;
         while (node) {
@@ -549,7 +550,7 @@ bool RtIo_FileSystem_ExistsInPackfile(const void* fsVoid, const Filename* path) 
         }
 
         ours = (found != nullptr);   // 0x1800ab281: TEST RBX,RBX ; SETNZ AL
-        RtString_ReleaseInline(&relPath);
+        // ~relPath is retail's release at 0x1800ab28e.
     }
 
     return ours;
@@ -578,28 +579,30 @@ bool RtIo_FileSystem_PlatformExists(const void* fsVoid, const Filename* path) {
 // needs to substitute the OUT ARRAY and this body must stay re-entrant (it
 // recurses into itself).
 // ============================================================================
-static void FindFilesImpl(const void* fs, const String* dir, const String* pattern,
+// ENDGAME B.3.1 step 2: this helper is file-local and recursive, so its two
+// String parameters are the classes. The REGISTERED entry point below keeps its
+// retail POD signature and bridges into this one.
+static void FindFilesImpl(const void* fs, const System::String* dir,
+                          const System::String* pattern,
                           bool recursive, FilenameArray* out) {
     // --- 0x1800ad7d3-0x1800ad7f2: the alias whose only purpose is its side
     //     effect on the caller's buffer. NOT DEAD — see §5.
-    Filename dirAlias{nullptr};
-    RtString_AdoptInline(AsString(&dirAlias), dir->data);
-    RtSystem_Filename_AdjustDelimiters(&dirAlias);
+    //     Adopt-then-AdjustDelimiters IS ??0Filename@System@@QEAA@AEBVString@1@@Z
+    //     (0x18000c780), and that side effect is inside the ctor now.
+    System::Filename dirAlias(*dir);
 
     WIN32_FIND_DATAW fd;
 
     // --- 0x1800ad7f3-0x1800ad81a: FindFirstFileW(dir + pattern) -------------
     HANDLE h;
     {
-        String search{nullptr};
-        RtSystem_String_Concat(&search, dir, pattern);
+        System::String search = *dir + *pattern;   // 0x1800c9440
         WideString w{nullptr};
-        RtSystem_WideString_CtorFromString(&w, &search);
+        RtSystem_WideString_CtorFromString(&w, AsPodString(search));
         h = ::FindFirstFileW(w.data, &fd);
         // Retail's release order: the WideString first (0x1800ad823), then the
-        // concatenation (0x1800ad850).
+        // concatenation (~search, 0x1800ad850).
         RtString_ReleaseInline(reinterpret_cast<String*>(&w));
-        RtString_ReleaseInline(&search);
     }
 
     // --- 0x1800ad888-0x1800ad9f1: the FILE loop -----------------------------
@@ -611,22 +614,21 @@ static void FindFilesImpl(const void* fs, const String* dir, const String* patte
 
             WideString nameW{nullptr};
             RtSystem_WideString_Set(&nameW, fd.cFileName);
-            String utf8{nullptr};
-            RtSystem_WideString_AsUTF8(&nameW, &utf8);
-            String full{nullptr};
-            RtSystem_String_Concat(&full, dir, &utf8);
+            // AsUTF8's hidden return slot is still POD-shaped; the move ctor
+            // steals the pointer, leaving `utf8Pod` null, so there is exactly
+            // one release and it is ~utf8.
+            String utf8Pod{nullptr};
+            RtSystem_WideString_AsUTF8(&nameW, &utf8Pod);
+            System::String utf8(std::move(Sys(utf8Pod)));
 
-            Filename entry{nullptr};
-            RtString_AdoptInline(AsString(&entry), full.data);
-            RtSystem_Filename_AdjustDelimiters(&entry);
+            System::String full = *dir + utf8;          // 0x1800c9440
+            System::Filename entry(full);               // 0x18000c780
 
             AppendFilename(out, &entry);
 
             // Retail's order: entry (0x1800ad915), full (0x1800ad94e),
-            // utf8 (0x1800ad97f), nameW (0x1800ad9b0).
-            RtString_ReleaseInline(AsString(&entry));
-            RtString_ReleaseInline(&full);
-            RtString_ReleaseInline(&utf8);
+            // utf8 (0x1800ad97f), nameW (0x1800ad9b0) — the first three are
+            // the destructors, in reverse declaration order, which is that.
             RtString_ReleaseInline(reinterpret_cast<String*>(&nameW));
         } while (::FindNextFileW(h, &fd));
         ::FindClose(h);
@@ -636,13 +638,12 @@ static void FindFilesImpl(const void* fs, const String* dir, const String* patte
     if (recursive) {
         HANDLE h2;
         {
-            String star{nullptr};
-            RtSystem_String_ConcatCStr(&star, dir, "*");   // literal 0x1801557e0
+            System::String star = *dir + "*";   // 0x1800c92d0, literal 0x1801557e0
             WideString w2{nullptr};
-            RtSystem_WideString_CtorFromString(&w2, &star);
+            RtSystem_WideString_CtorFromString(&w2, AsPodString(star));
             h2 = ::FindFirstFileW(w2.data, &fd);
             RtString_ReleaseInline(reinterpret_cast<String*>(&w2));
-            RtString_ReleaseInline(&star);
+            // ~star is retail's second release here.
         }
 
         if (h2 != INVALID_HANDLE_VALUE) {
@@ -654,35 +655,36 @@ static void FindFilesImpl(const void* fs, const String* dir, const String* patte
 
                 WideString nameW{nullptr};
                 RtSystem_WideString_Set(&nameW, fd.cFileName);
-                String utf8{nullptr};
-                RtSystem_WideString_AsUTF8(&nameW, &utf8);
-                String sub{nullptr};
-                RtSystem_String_Concat(&sub, dir, &utf8);
-                String subDir{nullptr};
-                RtSystem_String_ConcatCStr(&subDir, &sub, "\\");  // literal 0x1801557e4
+                String utf8Pod{nullptr};
+                RtSystem_WideString_AsUTF8(&nameW, &utf8Pod);
+                System::String utf8(std::move(Sys(utf8Pod)));
+
+                System::String sub    = *dir + utf8;      // 0x1800c9440
+                System::String subDir = sub + "\\";       // 0x1800c92d0, 0x1801557e4
 
                 // 0x1800adb2c: the pattern and the out array are passed
                 // THROUGH unchanged; only the directory changes.
                 FindFilesImpl(fs, &subDir, pattern, recursive, out);
 
-                RtString_ReleaseInline(&subDir);
-                RtString_ReleaseInline(&sub);
-                RtString_ReleaseInline(&utf8);
+                // subDir, sub and utf8 are released by their destructors, in
+                // retail's order (reverse of declaration).
                 RtString_ReleaseInline(reinterpret_cast<String*>(&nameW));
             } while (::FindNextFileW(h2, &fd));
             ::FindClose(h2);
         }
     }
 
-    // --- 0x1800adc13 --------------------------------------------------------
-    RtString_ReleaseInline(AsString(&dirAlias));
+    // --- 0x1800adc13: ~dirAlias --------------------------------------------
 }
 
 void RtIo_FileSystem_FindFiles(const void* fs, const String* dir, const String* pattern,
                                bool recursive, FilenameArray* out) {
 
     const int32_t before = out->count;
-    FindFilesImpl(fs, dir, pattern, recursive, out);
+    (void)before;
+    // The registered signature is retail's, so the two POD parameters come
+    // through the one transitional bridge (pod_bridge.h).
+    FindFilesImpl(fs, Sys(dir), Sys(pattern), recursive, out);
 
 }
 

@@ -42,14 +42,16 @@
 #include <cstdio>
 #include <cstring>
 
+#include <new>          // ENDGAME B.3.1 step 2: placement new into the ret slot
+
 #include "../../funcs/rt_port.h"
 #include "../../types/achievement/Goal.h"
-#include "../system/string.h"   // RtString_ReleaseInline (Wave 2, lane String)
+#include "../system/pod_bridge.h"   // the one transitional POD<->class cast
 
 using RtAchievement::Goal;
 using RtAchievement::GoalInstance;
 using RtAchievement::GoalList;
-using RtSystem::StringRefCount;
+using RtSystem::StringRefCount;   // still read by the Goal::~Goal oracle snapshot
 
 // ----------------------------------------------------------------------------
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
@@ -223,12 +225,13 @@ void RtAch_Goal_Dtor(Goal* self) {
 
     *reinterpret_cast<void**>(self) = GoalVtable();
 
-    // The String release idiom, byte-identical to Wave 2's
-    // RtString_ReleaseInline (runtime/src/system/string.cpp:98) — including
-    // retail's asymmetry, which looks like a bug and is not ours to fix: on the
-    // FREEING branch the field is left pointing at `data - 8`, on the SHARING
-    // branch it is nulled.
-    RtSystem::RtString_ReleaseInline(&self->_text);
+    // The String release idiom IS `~String` (0x180006c80) — including retail's
+    // asymmetry, which looks like a bug and is not ours to fix: on the FREEING
+    // branch the field is left pointing at `data - 8`, on the SHARING branch it
+    // is nulled. That behaviour now lives inside the class. `_text` is a POD
+    // member of the unconverted `Achievement::Goal`, so the destructor is
+    // spelled explicitly, through the one bridge.
+    RtSystem::Sys(self->_text).~String();
 
 
     // Retail TAIL-JUMPS here (`JMP 0x1800bc950`), so ~External finishes the job
@@ -349,13 +352,12 @@ void* RtAch_Goal_GetInstanceType(const Goal* self, void* retval) {
 // ============================================================================
 void* RtAch_Goal_GetText(const Goal* self, void* retval) {
 
-    RtSystem::String* out = static_cast<RtSystem::String*>(retval);
-    out->data = nullptr;
-    char* const src = self->_text.data;
-    if (src != nullptr) {
-        out->data = src;
-        ++StringRefCount(src);
-    }
+    // ENDGAME B.3.1 step 2: `*retval = 0; if (src) { *retval = src; ++src[-4]; }`
+    // is `??0String@System@@QEAA@AEBV01@@Z` (0x180006cb0), the copy constructor.
+    // `retval` is the hidden return slot — raw, uninitialised bytes — so it is
+    // placement-constructed, never assigned. `_text` stays POD: `Goal` is not a
+    // converted class, so it comes through the one bridge.
+    new (retval) System::String(RtSystem::Sys(self->_text));
 
     return retval;
 }

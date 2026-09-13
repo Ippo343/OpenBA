@@ -124,17 +124,17 @@
 #include "../../types/io/FileStream.h"
 #include "../../types/system/Filename.h"
 #include "../system/string.h"
+#include "../system/pod_bridge.h"
 
 using RtIo::Persistence;
 using RtIo::SaveBlock;
+using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
 
 // ---- cross-TU doors onto already-ported bodies, BY NAME NOT ADDRESS --------
-// Every one of these five is an exported symbol this tree has already ported
-// (file_stream.cpp, filesystem_createfile_win.cpp, filename.cpp); declared
-// locally rather than by dragging in each file's own header, the same
-// technique modification_refresh.cpp and filesystem_find_win.cpp already use
-// for `RtSystem_Filename_AdjustDelimiters`.
-namespace RtSystem { void RtSystem_Filename_AdjustDelimiters(RtSystem::Filename* self); }
+// Declared locally rather than by dragging in each file's own header, the
+// same technique modification_refresh.cpp and filesystem_find_win.cpp use.
+// This one's signature is the retail POD shape and is not this file's to
+// change.
 extern "C" bool RtIo_FileStream_Create(RtIo::FileStream* self, const RtSystem::Filename* path);
 namespace RtIO {
     void  RtIo_FileSystem_CloseFile(RtIO::FileSystem* self, RtIO::FileInfo* info);
@@ -306,33 +306,20 @@ ArraySetSizeFn SetSizeBlockDescs() {
 // `filename->data` is a legal input and the whole chain degenerates to
 // assigning null — which is why there is no guard here. This is a faithful
 // deref of a field retail derefs unconditionally.
+// ENDGAME B.3.1 step 2: the guarded field assign below IS `String::operator=`
+// (retail 0x1800c9810) byte for byte -- guard on the buffer pointer, Release(),
+// adopt, AddRef if non-null -- and the trailing manual release of `tmp` IS
+// `String::Release()` (retail's inline, string.cpp). Both of the "two details
+// that are not cosmetic" the banner calls out (the transient `block` value,
+// the else-arm null store) live INSIDE those two bodies already, so calling
+// them reproduces the exact instruction sequence rather than losing it.
+// `pendingFilename` is a `RtSystem::String` member of the not-yet-converted
+// `Persistence`, reached through the transitional bridge.
 void AssignPendingFilename(Persistence* p, const String* filename) {
-    String tmp;
-    tmp.data = nullptr;
-    RtSystem::RtSystem_String_Set(&tmp, filename->data);
-
-    char* cur = p->pendingFilename.data;
-    char* src = tmp.data;
-    if (cur != src) {
-        if (cur != nullptr) {
-            if (--RtSystem::StringRefCount(cur) == 0) {
-                p->pendingFilename.data = cur - 8;
-                MemFree(p->pendingFilename.data);
-            } else {
-                p->pendingFilename.data = nullptr;
-            }
-        }
-        p->pendingFilename.data = src;
-        if (src != nullptr) ++RtSystem::StringRefCount(src);
-    }
-    if (src != nullptr) {
-        if (--RtSystem::StringRefCount(src) == 0) {
-            tmp.data = src - 8;
-            MemFree(tmp.data);
-        } else {
-            tmp.data = nullptr;
-        }
-    }
+    System::String tmp;
+    tmp.Set(filename->data);
+    Sys(p->pendingFilename) = tmp;
+    // ~tmp is retail's release.
 }
 
 // The two event calls every enqueue body ends with, in retail's order:
@@ -590,24 +577,22 @@ extern "C" void RtIo_PersistenceWorker_Dtor(void* worker) {
     ClearBlockPtrs()(&p->blockPtrData);     // 0x180024aa0, worker+0x60
     ClearBlockDescs()(&p->blockDescData);   // 0x18002a930, worker+0x50
 
-    // The inline String release on worker+0x30 == pendingFilename. Same two
-    // non-cosmetic details as AssignPendingFilename's release arm: the field is
-    // mutated to `block` before the free, and the else arm nulls it.
-    char* s = p->pendingFilename.data;
+    // The inline String release on worker+0x30 == pendingFilename IS
+    // `String::Release()` (retail's inline, string.cpp) -- the transient
+    // `block` value and the else-arm null store both live inside that body.
+    // `expectFilename` is read BEFORE the release runs (Release() itself
+    // decides fresh whether it frees), so it is computed by peeking at the
+    // refcount rather than duplicating Release()'s own arithmetic.
     char* expectFilename = nullptr;   // what retail LEAVES in the field, below
-    if (s != nullptr) {
-        if (--RtSystem::StringRefCount(s) == 0) {
-            p->pendingFilename.data = s - 8;
-            MemFree(p->pendingFilename.data);
-            // NOT nulled afterwards: the field keeps pointing at the freed
-            // block. Asserting `== nullptr` here would assert a store retail
-            // does not make (reference_oracle_must_not_compare_unwritten_bytes.md
-            // in the mirror direction -- a predicate on a value nobody writes).
-            expectFilename = s - 8;
-        } else {
-            p->pendingFilename.data = nullptr;
-        }
+    if (p->pendingFilename.data != nullptr &&
+        RtSystem::StringRefCount(p->pendingFilename.data) == 1) {
+        // NOT nulled afterwards: the field keeps pointing at the freed
+        // block. Asserting `== nullptr` here would assert a store retail
+        // does not make (reference_oracle_must_not_compare_unwritten_bytes.md
+        // in the mirror direction -- a predicate on a value nobody writes).
+        expectFilename = p->pendingFilename.data - 8;
     }
+    Sys(p->pendingFilename).~String();
 
     // *worker = 0x180155f20 (the base System::Thread vtable)
     static void* kBaseThreadVtable =
@@ -670,22 +655,24 @@ extern "C" void RtIo_PersistenceWorker_SaveJob(void* worker) {
 
     Persistence* p = FromWorker(worker);
 
-    RtSystem::Filename f;
-    f.data = nullptr;
-    RtSystem::RtSystem_String_Set(reinterpret_cast<String*>(&f), p->pendingFilename.data);
-    RtSystem::RtSystem_Filename_AdjustDelimiters(&f);
-
     BinaryFileStream bfs;
     RtIo_BinaryFileStream_Ctor(&bfs);
-    const bool created = RtIo_FileStream_Create(&bfs.base, &f);
 
-    // Release the local Filename copy (the refcounted-String release idiom
-    // used throughout this file).
-    if (f.data) {
-        if (--RtSystem::StringRefCount(f.data) == 0) {
-            MemFree(f.data - 8);
-        }
-        f.data = nullptr;
+    bool created;
+    {
+        // Set(...) then AdjustDelimiters on the same object IS
+        // `Filename(const char*)` (retail 0x180026cf0) -- see B31_RULES
+        // DELIMITERS. `Set` COPIES the bytes (it does not adopt
+        // `pendingFilename`'s buffer), exactly as this ctor does.
+        System::Filename f(p->pendingFilename.data);
+
+        // RtIo_FileStream_Create is a registered entry point owned by another
+        // file and keeps its retail (self, const Filename* POD) signature;
+        // the two types are the same eight bytes (Filename.h).
+        created = RtIo_FileStream_Create(&bfs.base,
+                                         reinterpret_cast<const RtSystem::Filename*>(&f));
+
+        // ~f is retail's release of the local Filename copy.
     }
 
     bool wroteAll = false;

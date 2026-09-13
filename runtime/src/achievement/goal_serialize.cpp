@@ -101,6 +101,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/achievement/Goal.h"
 #include "../../types/io/Serializer.h"
+#include "../system/pod_bridge.h"   // the one transitional POD<->class cast
 
 using RtAchievement::Goal;
 using RtAchievement::GoalInstance;
@@ -136,16 +137,11 @@ PtrSerializeFn ExternalPtrSerialize_GoalInstance() {
     return f;
 }
 
-// ?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z — retail 0x1800c9930,
-// PORTED by Wave 2 (runtime/src/system/string.cpp:830, registered by address at
-// :958). Asked for BY ADDRESS deliberately, because that is the registry the
-// Wave 2 port registered into; by name it would miss.
-using StringSerializeFn = void (*)(void*, Serializer*);
-StringSerializeFn StringSerialize() {
-    static StringSerializeFn f =
-        reinterpret_cast<StringSerializeFn>(ResolveAddr(Module::Runtime, 0x1800c9930));
-    return f;
-}
+// ENDGAME B.3.1 step 2: `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z`
+// (0x1800c9930) is a member of `System::String` now, so the by-address door
+// that used to stand here is gone and the one call site calls it directly. The
+// registry row at that address registers the shim, and the shim is one line
+// over this member, so it is the same body either way.
 
 // The shared prologue of both bodies, transcribed once.
 //
@@ -217,7 +213,9 @@ bool RtAch_Goal_Serialize(Goal* self, Stream* stream) {
     ReaderWriter* rw = MakeCodec(stream, &ser);
 
     ExternalPtrSerialize_Goal()(&self->_stringTable, &ser);   // Goal+0x20
-    StringSerialize()(&self->_text, &ser);                    // Goal+0x28
+    // `_text` is a POD member of the unconverted `Achievement::Goal`, so it
+    // reaches its own member through the one bridge.
+    RtSystem::Sys(self->_text).Serialize(&ser);               // Goal+0x28
 
     DestroyCodec(rw);
     return true;

@@ -37,13 +37,10 @@
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
 #include "string.h"
+#include "pod_bridge.h"
 #include "setupdir_helpers.h"
 
 namespace RtSystem {
-
-// Wave 2 lane A's AdjustDelimiters, declared locally rather than by editing
-// that lane's headers (same argument filesystem_win.cpp made in Wave 4).
-void RtSystem_Filename_AdjustDelimiters(Filename* self);
 
 namespace {
 
@@ -65,8 +62,11 @@ bool SameText(const char* a, const char* b) {
 // This is now a one-line shim keeping the name, the signature and the two
 // registry rows below alive; it dies in step 2 with its last caller.
 Filename* RtSystem_Filename_GetPathDirectory(const Filename* self, Filename* ret) {
-    new (reinterpret_cast<System::Filename*>(ret))
-        System::Filename(reinterpret_cast<const System::Filename*>(self)->GetPathDirectory());
+    // ENDGAME B.3.1 step 2: the POD<->class casts now go through the one
+    // transitional bridge (pod_bridge.h). `ret` is the hidden return slot —
+    // raw bytes — so the result is placement-constructed into it, which is
+    // what retail's CALL at the 0x1800c6880 return path does.
+    new (Sys(ret)) System::Filename(Sys(self)->GetPathDirectory());
     return ret;
 }
 
@@ -85,9 +85,13 @@ Filename* RtSystem_Filename_GetPathDirectory(const Filename* self, Filename* ret
 String* RtSystem_Configuration_GetPlatformName(void* self, String* ret, int platform) {
     (void)self;   // retail never reads it
 
-    ret->data = nullptr;
+    // ENDGAME B.3.1 step 2: retail's `*ret = 0` IS the default ctor
+    // (??0String@System@@QEAA@XZ, 0x180006760, one qword store), and `ret` is
+    // the hidden return slot, so it is placement-constructed rather than
+    // assigned. The conditional Set is retail's own 0x1800c95d0 call.
+    System::String* out = new (Sys(ret)) System::String();
     if (platform == 0)
-        RtSystem_String_Set(ret, "Win");
+        out->Set("Win");
 
     return ret;
 }
@@ -107,9 +111,10 @@ String* RtSystem_Configuration_GetPlatformName(void* self, String* ret, int plat
 String* RtSystem_Configuration_GetBuildName(void* self, String* ret, int build) {
     (void)self;   // retail never reads it
 
-    ret->data = nullptr;
-    if (build == 0)      RtSystem_String_Set(ret, "Data");
-    else if (build == 1) RtSystem_String_Set(ret, "Eval");
+    // ENDGAME B.3.1 step 2, exactly as GetPlatformName above.
+    System::String* out = new (Sys(ret)) System::String();
+    if (build == 0)      out->Set("Data");
+    else if (build == 1) out->Set("Eval");
 
     return ret;
 }

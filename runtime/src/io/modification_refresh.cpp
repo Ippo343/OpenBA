@@ -177,15 +177,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <new>          // placement new -- see the AVL node key ctor below
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Modification.h"
 #include "../../types/system/Filename.h"
-
-namespace RtSystem {
-Filename* RtSystem_Filename_CtorCopy(Filename* self, const Filename* other);   // 0x1800067d0
-void      RtSystem_Filename_AdjustDelimiters(Filename* self);                  // 0x1800c6970
-}  // namespace RtSystem
+#include "../system/pod_bridge.h"
 
 // Byte-identical to standalone/resolve.h; see modification.cpp's note on why
 // resolve.h is not included directly (windows.h drags in `Rectangle`/`near`).
@@ -195,8 +192,16 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 namespace RtIO {
 
 using RtSystem::Filename;
-using RtSystem::RtSystem_Filename_CtorCopy;
-using RtSystem::RtSystem_Filename_AdjustDelimiters;
+using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
+// ENDGAME B.3.1 step 2: the two Filename entry points this file used to
+// forward-declare here (CtorCopy 0x1800067d0, AdjustDelimiters 0x1800c6970)
+// are gone from this translation unit -- every use was one of Filename.h's
+// documented idioms and is now spelled as the class itself (see the sites
+// below). `m->file`, `pattern`, `packDir`, and the loop's Filename temporaries
+// are promoted to `System::Filename`; `found`'s array elements and `Mod::file`
+// stay `RtSystem::Filename` POD because they are members of not-yet-converted
+// structs / externally-populated raw arrays (B31_RULES.md), reached through
+// the `Sys()` bridge.
 
 // ---------------------------------------------------------------------------
 // Borrowed from modification.cpp (same lane, same kill switch). Declared rather
@@ -523,19 +528,28 @@ extern "C" int RtCrt_ParseInt10_18007f034(const char* s) {
 // wrapper form pushed TWO more sites into it. A door the census cannot see is
 // worse than a verbose one.
 
+// ENDGAME B.3.1 step 2: these are file-local typedefs for calls OUT through a
+// resolve door, not entry-point signatures, so the ones that carry a Filename
+// now name the class occupying the same eight bytes (filesystem_setupdirs_
+// win.cpp's exemplar treatment of local Fn typedefs). The callee keeps the
+// retail POD shape; the `reinterpret_cast<...Fn>` at each resolve site is the
+// one that was always there. `FnArrayFilenameFill`'s Filename stays the POD:
+// it is called with `&mods[j].file`, a `Mod` member that stays POD (see the
+// banner).
 using FnStringSet        = void*    (*)(void*, const char*);            // 0x1800c95d0
 using FnStringFormat     = void*    (*)(void*, const char*, ...);       // 0x1800c9730
-using FnGetPackDirectory = Filename*(*)(const void*, Filename*);        // 0x180007c10
+using FnGetPackDirectory = System::Filename*(*)(const void*, System::Filename*);  // 0x180007c10
 using FnFindFiles        = void     (*)(const void*, const void*, const void*,
                                         bool, void*);                   // 0x1800ad7a0
 using FnPkgCtor          = void*    (*)(void*);                         // 0x1800b4440
 using FnPkgDtor          = void*    (*)(void*);                         // 0x1800b4540 (declined)
 using FnReadPackfile     = bool     (*)(void*, const Filename*);        // 0x1800b46b0
 using FnPkgGetString     = void*    (*)(const void*, void*);            // 0x1800253xx
-using FnPkgGetFileName   = Filename*(*)(const void*, Filename*, int);   // 0x180025450
+using FnPkgGetFileName   = System::Filename*(*)(const void*, System::Filename*, int);  // 0x180025450
 using FnCloseFile        = void     (*)(void*, void*);                  // 0x1800accc0 (declined)
 using FnMapFind          = void*    (*)(void*, const void*);            // 0x18002ace0
-using FnGetPathFilename  = Filename*(*)(const Filename*, Filename*, bool);  // 0x1800c6740
+using FnGetPathFilename  = System::Filename*(*)(const System::Filename*,
+                                                System::Filename*, bool);  // 0x1800c6740
 using FnStrICmp          = int      (*)(const char*, const char*);      // 0x18007eefc
 using FnArrayFilenameFill= void     (*)(void*, int, const Filename*);   // 0x180026880
 using FnModSort          = void     (*)(void*, int, void*);             // 0x180028760 (PORTED, BATCH 8b)
@@ -744,23 +758,30 @@ extern "C" void RtIo_Modification_RefreshList(void* selfv) {
     // 0x1800af65f..0x1800af669 — three zeroed slots. The pack-directory Filename
     // at [RBP+0x200] is NOT among them: GetPackDirectory constructs it.
     ModArray found = { nullptr, 0, 0 };
-    Filename pattern; pattern.data = nullptr;
+    {
+        // `pattern` is a String::Set call (0x1800c95d0) landed on a Filename-
+        // typed slot -- same eight bytes, and fnFindFiles wants both as
+        // Filenames regardless. Default-constructed (null), so the resolve
+        // door overwrites nothing (the ApplyPathOverride idiom,
+        // filesystem_setupdirs_win.cpp). Scoped in a block so both release at
+        // exactly retail's point (0x1800af6b4 / 0x1800af6ef), not at the end
+        // of this (934-instruction) function.
+        System::Filename pattern;
 
-    if (fnStringSet == nullptr) fnStringSet = reinterpret_cast<decltype(fnStringSet)>(
-        ResolveAddr(Module::Runtime, 0x1800c95d0));
-    fnStringSet(&pattern, "*.pkm");                              // 0x1801557f0
+        if (fnStringSet == nullptr) fnStringSet = reinterpret_cast<decltype(fnStringSet)>(
+            ResolveAddr(Module::Runtime, 0x1800c95d0));
+        fnStringSet(&pattern, "*.pkm");                          // 0x1801557f0
 
-    Filename packDir;
-    if (fnGetPackDirectory == nullptr) fnGetPackDirectory = reinterpret_cast<decltype(fnGetPackDirectory)>(
-        ResolveAddr(Module::Runtime, 0x180007c10));
-    fnGetPackDirectory(fs, &packDir);
+        System::Filename packDir;
+        if (fnGetPackDirectory == nullptr) fnGetPackDirectory = reinterpret_cast<decltype(fnGetPackDirectory)>(
+            ResolveAddr(Module::Runtime, 0x180007c10));
+        fnGetPackDirectory(fs, &packDir);
 
-    if (fnFindFiles == nullptr) fnFindFiles = reinterpret_cast<decltype(fnFindFiles)>(
-        ResolveAddr(Module::Runtime, 0x1800ad7a0));
-    fnFindFiles(fs, &packDir, &pattern, false, &found);
-
-    ReleaseInto(&packDir.data);                                  // 0x1800af6b4
-    ReleaseInto(&pattern.data);                                  // 0x1800af6ef
+        if (fnFindFiles == nullptr) fnFindFiles = reinterpret_cast<decltype(fnFindFiles)>(
+            ResolveAddr(Module::Runtime, 0x1800ad7a0));
+        fnFindFiles(fs, &packDir, &pattern, false, &found);
+    }  // ~packDir then ~pattern (reverse declaration order) release here --
+       // retail released packDir then pattern too (0x1800af6b4, 0x1800af6ef).
 
     if (fnPkgCtor == nullptr) fnPkgCtor = reinterpret_cast<decltype(fnPkgCtor)>(
         ResolveAddr(Module::Runtime, 0x1800b4440));
@@ -814,9 +835,15 @@ extern "C" void RtIo_Modification_RefreshList(void* selfv) {
         m->set.root = nullptr; m->set.count = 0;
         m->files.data = nullptr; m->files.size = 0; m->files.capacity = 0;
 
-        // 0x1800af7df — m.file = found[i], by reference, then normalised.
-        AssignShared(&m->file.data, foundData[i].data);
-        RtSystem_Filename_AdjustDelimiters(&m->file);
+        // 0x1800af7df — m.file = found[i], by reference, then normalised. A
+        // single AdjustDelimiters after a shared-assign on an object that
+        // starts null is `Filename::operator=(const Filename&)`, 0x180006770
+        // (Filename.h's DELIMITERS note; `m->file` was just zeroed above, and
+        // the exemplar treats a freshly-zeroed member the same way --
+        // filesystem_setupdirs_win.cpp's `sourceDirectory`/`dataDirectory`).
+        // Both sides are `RtSystem::Filename` (Mod member / found[] element,
+        // neither yet converted), reached through the bridge.
+        Sys(m->file) = Sys(foundData[i]);
 
         // 0x1800af830..0x1800af8e6 — the inlined PackageFile constructor. See
         // the banner for the store-by-store equivalence that lets this call the
@@ -845,22 +872,23 @@ extern "C" void RtIo_Modification_RefreshList(void* selfv) {
         // caller must release; the member takes a REFERENCE to the same block,
         // which is why the temporary's release comes after the member assign.
         {
-            Filename tmp; tmp.data = nullptr;
-            char** got = static_cast<char**>(fnGetName(pkg, &tmp));
-            AssignShared(&m->name, *got);
-            ReleaseInto(&tmp.data);
-        }
+            // FnPkgGetString's slot is `void*`, so `tmp` need not change type
+            // for the call; it is promoted to the class purely for its own
+            // RAII release. GetName's hidden return slot: `tmp` holds null
+            // (default ctor), and it returns the same pointer it was handed.
+            System::Filename tmp;
+            fnGetName(pkg, &tmp);
+            AssignShared(&m->name, tmp._data);
+        }  // ~tmp releases here, retail's release after the assign
         {
-            Filename tmp; tmp.data = nullptr;
-            char** got = static_cast<char**>(fnGetAuthor(pkg, &tmp));
-            AssignShared(&m->author, *got);
-            ReleaseInto(&tmp.data);
-        }
+            System::Filename tmp;
+            fnGetAuthor(pkg, &tmp);
+            AssignShared(&m->author, tmp._data);
+        }  // ~tmp releases here
         {
-            Filename tmp; tmp.data = nullptr;
-            char** got = static_cast<char**>(fnGetDescription(pkg, &tmp));
-            AssignShared(&m->description, *got);
-            ReleaseInto(&tmp.data);
+            System::Filename tmp;
+            fnGetDescription(pkg, &tmp);
+            AssignShared(&m->description, tmp._data);
         }
 
         // 0x1800afaba — the four ints that come straight off the header.
@@ -901,8 +929,11 @@ extern "C" void RtIo_Modification_RefreshList(void* selfv) {
         // -------------------------------------------------------------------
         const int32_t entryCount = *reinterpret_cast<const int32_t*>(pkg + 0xb8);
         for (int32_t e = 0; e < entryCount; ++e) {
-            Filename key; key.data = nullptr;
-            Filename* const k = fnGetFileName(pkg, &key, e);     // 0x180025450
+            // GetFileName's hidden return slot: `key` holds null (default
+            // ctor), and it returns the same pointer it was handed, so the
+            // rest of this iteration reads `key._data` directly.
+            System::Filename key;
+            fnGetFileName(pkg, &key, e);                          // 0x180025450
 
             AvlNode** const root = reinterpret_cast<AvlNode**>(&m->set.root);
             if (*root == nullptr) {
@@ -912,8 +943,10 @@ extern "C" void RtIo_Modification_RefreshList(void* selfv) {
                 // disagree in a DIFFERENT way from retail's.
                 AvlNode* n = static_cast<AvlNode*>(ModMemAlloc(0x28, 8));
                 if (n != nullptr) {
-                    RtSystem_Filename_CtorCopy(
-                        reinterpret_cast<Filename*>(n), k);      // 0x1800067d0
+                    // CALL 0x1800067d0 — Filename copy ctor, into the freshly
+                    // allocated node's raw `key` bytes (AvlNode is a view of
+                    // ModSetNode; its first field IS the Filename).
+                    new (reinterpret_cast<System::Filename*>(n)) System::Filename(key);
                     n->parent = nullptr;
                     n->left = nullptr;
                     n->right = nullptr;
@@ -927,15 +960,14 @@ extern "C" void RtIo_Modification_RefreshList(void* selfv) {
                 for (;;) {
                     // --- left arm, 0x1800afd50 ---
                     bool goLeft;
-                    if (cur->key == nullptr)      goLeft = false;   // JZ right arm
-                    else if (k->data == nullptr)  goLeft = true;    // JZ go-left
-                    else goLeft = (fnStrICmp(k->data, cur->key) < 0);   // SETS
+                    if (cur->key == nullptr)        goLeft = false;   // JZ right arm
+                    else if (key._data == nullptr)  goLeft = true;    // JZ go-left
+                    else goLeft = (fnStrICmp(key._data, cur->key) < 0);   // SETS
                     if (goLeft) {
                         if (cur->left == nullptr) {
                             AvlNode* n = static_cast<AvlNode*>(ModMemAlloc(0x28, 8));
                             if (n != nullptr) {
-                                RtSystem_Filename_CtorCopy(
-                                    reinterpret_cast<Filename*>(n), k);
+                                new (reinterpret_cast<System::Filename*>(n)) System::Filename(key);
                                 n->parent = cur;
                                 n->left = nullptr; n->right = nullptr;
                                 n->balance = 0; n->height = 0;
@@ -949,14 +981,13 @@ extern "C" void RtIo_Modification_RefreshList(void* selfv) {
                         break;
                     }
                     // --- right arm, 0x1800afd81 ---
-                    if (k->data == nullptr) break;               // no insert
+                    if (key._data == nullptr) break;             // no insert
                     if (cur->key != nullptr &&
-                        !(fnStrICmp(cur->key, k->data) < 0)) break;   // no insert
+                        !(fnStrICmp(cur->key, key._data) < 0)) break;   // no insert
                     if (cur->right == nullptr) {
                         AvlNode* n = static_cast<AvlNode*>(ModMemAlloc(0x28, 8));
                         if (n != nullptr) {
-                            RtSystem_Filename_CtorCopy(
-                                reinterpret_cast<Filename*>(n), k);
+                            new (reinterpret_cast<System::Filename*>(n)) System::Filename(key);
                             n->parent = cur;
                             n->left = nullptr; n->right = nullptr;
                             n->balance = 0; n->height = 0;
@@ -977,18 +1008,24 @@ extern "C" void RtIo_Modification_RefreshList(void* selfv) {
                     m->set.count += 1;
                 }
             }
-            ReleaseInto(&key.data);                              // 0x1800afeb5
+            // ~key releases here, retail's 0x1800afeb5 release -- the last
+            // statement of the loop body, exactly where retail's release sat.
         }
 
         fnCloseFile(fs, pkg + 0xC0);                             // 0x1800aff2a
 
         // 0x1800aff3d — the registry key stem: the mod's path with its directory
-        // stripped, kept alive across the temporary's release.
-        Filename pathTmp; pathTmp.data = nullptr;
-        Filename* const got = fnGetPathFilename(&m->file, &pathTmp, true);
-        char* nameRef = got->data;
-        if (nameRef != nullptr) ++RefCount(nameRef);             // take the ref FIRST
-        ReleaseInto(&pathTmp.data);                              // then drop the temp
+        // stripped, kept alive across the temporary's release. `nameRef`
+        // outlives the scope deliberately, same idiom as SaveList's `ref`
+        // (modification.cpp): take the extra reference, then let the block's
+        // close run retail's release of the temporary.
+        char* nameRef;
+        {
+            System::Filename pathTmp;
+            fnGetPathFilename(&Sys(m->file), &pathTmp, true);
+            nameRef = pathTmp._data;
+            if (nameRef != nullptr) ++RefCount(nameRef);         // take the ref FIRST
+        }  // ~pathTmp releases here, retail's 0x1800aff.. release ("then drop the temp")
 
         // 0x1800affc9 — "ModEnabled_<stem>". The comparison against "true"
         // (0x180155870) is a byte-for-byte inlined strcmp in retail
@@ -997,7 +1034,10 @@ extern "C" void RtIo_Modification_RefreshList(void* selfv) {
         // value takes retail's `EDX = -1` arm and a missing entry leaves the
         // flag at the 0 the record was born with.
         {
-            Filename keyStr; keyStr.data = nullptr;
+            // fnStringFormat's slot is `void*`, landed on a Filename-typed
+            // local as `pattern` above was; `keyStr` is promoted to the class
+            // for its own RAII release only.
+            System::Filename keyStr;
             fnStringFormat(&keyStr, "%s%s", "ModEnabled_", nameRef);
             void* node = fnMapFind(pers, &keyStr);               // 0x18002ace0
             if (node != nullptr) {
@@ -1006,12 +1046,11 @@ extern "C" void RtIo_Modification_RefreshList(void* selfv) {
                 const int cmp = (v == nullptr) ? -1 : std::strcmp(v, "true");
                 m->enabled = static_cast<uint8_t>(cmp == 0);
             }
-            ReleaseInto(&keyStr.data);
-        }
+        }  // ~keyStr releases here
         // 0x1800b0085 — "ModIndex_<stem>", parsed base 10. A missing entry
         // leaves `order` at 0.
         {
-            Filename keyStr; keyStr.data = nullptr;
+            System::Filename keyStr;
             fnStringFormat(&keyStr, "%s%s", "ModIndex_", nameRef);
             void* node = fnMapFind(pers, &keyStr);
             if (node != nullptr) {
@@ -1019,8 +1058,7 @@ extern "C" void RtIo_Modification_RefreshList(void* selfv) {
                     static_cast<const uint8_t*>(node) + 8);
                 m->order = RtCrt_ParseInt10_18007f034(v);        // 0x18007f034
             }
-            ReleaseInto(&keyStr.data);
-        }
+        }  // ~keyStr releases here
 
         // 0x1800b00f9 — append. The only writer of the array in the whole body.
         RtColl_ArrayModSetSizeFill_180028610(arr, arr->size + 1, m);

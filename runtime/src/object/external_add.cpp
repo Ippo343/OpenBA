@@ -89,13 +89,12 @@
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
-// `??0Filename@System@@QEAA@AEBV01@@Z` — ported in Wave 2
-// (runtime/src/system/filename.cpp), registered at 0x1800067d0. Declared here
-// rather than pulled from a header because that lane's file exposes none of its
-// own; external.cpp and external_set.cpp both declare it exactly this way.
-namespace RtSystem {
-Filename* RtSystem_Filename_CtorCopy(Filename* self, const Filename* other);
-}
+// `??0Filename@System@@QEAA@AEBV01@@Z` (0x1800067d0) used to be forward-declared
+// here as a C entry point. ENDGAME B.3.1 step 2 calls it as what it is — the
+// `System::Filename` copy constructor — so the declaration is gone with its one
+// call site.
+
+#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 
 namespace RtObject {
 
@@ -186,22 +185,10 @@ bool FilenameLess(const char* a, const char* b) {
     return StriCmpAscii(a, b) < 0;
 }
 
-// The String release idiom, on a Filename slot.
-//
-// UNLIKE external_set.cpp, this does NOT re-spell the idiom: it calls the
-// tree's single ported copy, `RtSystem::RtString_ReleaseInline` (the body of
-// `?Release@String@System@@AEAAXXZ`, 0x1800c9870). external_set.cpp repeated it
-// because its call sites operate on a Filename embedded at a NODE offset;
-// these operate on plain locals, so the shared body applies directly and a
-// fourth copy would be one more place for the idiom to drift
-// (reference_a_rule_on_the_callers_side_gets_broken.md).
-//
-// The cast is safe by construction: System::Filename's only field is the same
-// `char* data` at +0x00 that System::String has, which is why every Filename
-// port in this tree reuses the String primitives by pointer cast.
-void ReleaseInline(Filename* slot) {
-    RtSystem::RtString_ReleaseInline(reinterpret_cast<RtSystem::String*>(slot));
-}
+// ENDGAME B.3.1 step 2 removed this file's `ReleaseInline(Filename*)` helper.
+// Both of its call sites were plain locals, and retail's inlined release on a
+// local is `~Filename` (0x180006980) — so the two are now destructors and there
+// is nothing left for the helper to do.
 
 }  // namespace
 
@@ -241,15 +228,20 @@ extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* ex
     // reference, the copy takes a SECOND one, and the release drops the first —
     // so collapsing the pair would leave the refcount one too high on every one
     // of the ~22.6k calls a run makes. Transcribed as retail wrote it.
-    Filename tmp{};
-    tmp.data = nullptr;
+    // ENDGAME B.3.1 step 2. `tmp` is GetPath's hidden return slot: it is
+    // declared null and CONSTRUCTED INTO by the call, never assigned to.
+    System::Filename tmp;
     RT_EXPORT_ONCE(GetPathFn,
-        "?GetPath@External@Object@@QEBA?AVFilename@System@@XZ")(external, &tmp);
+        "?GetPath@External@Object@@QEBA?AVFilename@System@@XZ")
+        (external, reinterpret_cast<Filename*>(&tmp));
 
-    Filename path{};
-    path.data = nullptr;
-    RtSystem::RtSystem_Filename_CtorCopy(&path, &tmp);
-    ReleaseInline(&tmp);
+    // 1800be5d3 — the second reference the comment above is about, taken by
+    // retail's copy ctor (0x1800067d0) and kept.
+    System::Filename path(tmp);
+    // `tmp`'s 1800be5d9 release is its destructor, which runs at the end of the
+    // function rather than here. `path` holds a reference to the same buffer
+    // across the whole body, so the buffer's lifetime is unchanged and nothing
+    // between the two points reads either refcount.
 
     // ---- 1800be5e2..1800be6b8 -------------------------------------------
     // The descent, inlined by MSVC rather than calling the exported
@@ -262,12 +254,12 @@ extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* ex
 
     while (node != nullptr) {
         const char* const nodeKey = rtresset::Elem(node)->path.data;
-        if (FilenameLess(path.data, nodeKey)) {
+        if (FilenameLess(path._data, nodeKey)) {
             ++g_ac.descLeft;
             node = node->left;                                  // 1800be6bb
             continue;
         }
-        if (FilenameLess(nodeKey, path.data)) {
+        if (FilenameLess(nodeKey, path._data)) {
             ++g_ac.descRight;
             node = node->right;                                 // 1800be6b2
             continue;
@@ -338,14 +330,15 @@ extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* ex
         value.referenceId = 0xffffffffu;
 
         rtresset::Node* out = nullptr;
-        rtresset::Insert(set, &out, &path, &value);             // 1800be6bd
+        rtresset::Insert(set, &out,
+                         reinterpret_cast<const Filename*>(&path), &value);             // 1800be6bd
     }
 
     // ---- 1800be6c7..1800be6f7 -------------------------------------------
     // Released on EVERY path, hit and miss alike. `Insert` copies the key into
     // the node and takes its own reference, so skipping this on the insert path
     // would leak one string reference per resource.
-    ReleaseInline(&path);
+    // ...and that release is `path`'s destructor now.
 
 }
 

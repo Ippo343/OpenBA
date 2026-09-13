@@ -198,7 +198,8 @@ using CmsCtorFn   = CompressedMemoryStream* (*)(CompressedMemoryStream*);
 using CmsVoidFn   = void (*)(CompressedMemoryStream*);
 using CmsBoolFn   = bool (*)(CompressedMemoryStream*);
 using MsOpenFn    = bool (*)(MemoryStream*, int);
-using StrSerialFn = void (*)(const char** self, Serializer* s);
+// ENDGAME B.3.1 step 2: the String::Serialize door typedef is gone with its
+// three call sites — all three are `System::String::Serialize` now.
 using SetSizeFn   = void (*)(ModArray* arr, int n);
 
 // IO::Encoding vtable +0x18 / +0x20: (this, Serializer*, int version)
@@ -319,8 +320,12 @@ extern "C" void RtSave_SaveLoad_LoadMetaData(SaveLoad* self,
     *version = VSlot<RwGetVersionFn>(rw, rw_vtbl::kGetVersion)(rw);
 
     // ---- 0x1800c1c09 : out-param 1 = the description String ----------------
-    RT_EXPORT_ONCE(StrSerialFn, "?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z")(
-        description, &ser);
+    // ENDGAME B.3.1 step 2: `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z`
+    // (0x1800c9930) is the class's own member now. The out-param is modelled as
+    // the String's single field (`const char**`) because that is the shape the
+    // registered entry point's callers spell, so it comes through a
+    // transitional cast (B31_RULES, "not-yet-converted").
+    reinterpret_cast<System::String&>(*description).Serialize(&ser);
 
     // ---- 0x1800c1c1c / 0x1800c1c34 : out-params 3 and 4 --------------------
     // Both through the SIGNED scalar slot (+0xa0) with a null field name.
@@ -358,10 +363,10 @@ extern "C" void RtSave_SaveLoad_LoadMetaData(SaveLoad* self,
         // 0x1800c1ced: the base pointer is read ONCE. See note 3.
         ModInfo* e = mods->_data;
         for (int i = 0; i < count; ++i, ++e) {
-            RT_EXPORT_ONCE(StrSerialFn, "?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z")(
-                &e->name, &ser);
-            RT_EXPORT_ONCE(StrSerialFn, "?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z")(
-                &e->path, &ser);
+            // Raw `const char*` members of the unconverted `ModInfo` that
+            // retail serialises AS Strings; transitional cast, as above.
+            reinterpret_cast<System::String&>(e->name).Serialize(&ser);
+            reinterpret_cast<System::String&>(e->path).Serialize(&ser);
             // +0x98, the UNSIGNED slot, for all three. See note 4.
             VSlot<RwScalarUIntFn>(rw, rw_vtbl::kScalarUInt)(
                 rw, reinterpret_cast<uint32_t*>(&e->versionMajor), nullptr);

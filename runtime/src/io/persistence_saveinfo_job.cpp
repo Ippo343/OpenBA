@@ -114,15 +114,17 @@
 #include "../../types/io/FileSystem.h"
 #include "../../types/io/Persistence.h"
 #include "../../types/system/Filename.h"
+#include "../system/pod_bridge.h"
 
 using RtIo::BinaryFileStream;
 using RtIo::Persistence;
 using RtSystem::Filename;
+using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
 
 // ---- cross-TU doors onto already-ported bodies, BY NAME NOT ADDRESS --------
 // Declared locally rather than by pulling in each owner's header, the same
-// technique persistence_worker_win.cpp uses for the identical set.
-namespace RtSystem { void RtSystem_Filename_AdjustDelimiters(Filename* self); }
+// technique persistence_worker_win.cpp uses for the identical set. This one's
+// signature is the retail POD shape and is not this file's to change.
 extern "C" bool RtIo_FileStream_Open(RtIo::FileStream* self, const Filename* path);
 extern "C" BinaryFileStream* RtIo_BinaryFileStream_Ctor(BinaryFileStream* self);
 extern "C" void              RtIo_BinaryFileStream_Dtor(BinaryFileStream* self);
@@ -188,22 +190,6 @@ const uint32_t* CrcTable() {
     return table;
 }
 
-// Retail's inlined String release (0x1800b66b2). The freeing branch leaves the
-// slot holding `data - 8`; only the still-referenced branch nulls it.
-void ReleaseInline(char** slot) {
-    char* p = *slot;
-    if (!p) return;
-    if (--reinterpret_cast<int32_t*>(p)[-1] == 0) {
-        *slot = p - 8;
-        using Fn = void (*)(void*);
-        static Fn fn = nullptr;
-        if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
-        fn(p - 8);
-    } else {
-        *slot = nullptr;
-    }
-}
-
 }  // namespace
 
 // ============================================================================
@@ -227,18 +213,27 @@ extern "C" void RtIo_PersistenceWorker_GetSaveInfo(void* worker) {
     RtIo_BinaryFileStream_Ctor(&bfs);                        // inlined 0x1800b6600
 
     // ---- 1. open pendingFilename ------------------------------------------
-    // A raw refcount SHARE of the worker's String, not String::Set
-    // (0x1800b666f: `MOV RAX,[RCX+0x30] / TEST / INC dword [RAX-4]`).
-    Filename f;
-    f.data = nullptr;
-    if (p->pendingFilename.data != nullptr) {
-        f.data = p->pendingFilename.data;
-        ++reinterpret_cast<int32_t*>(f.data)[-1];
-    }
-    RtSystem::RtSystem_Filename_AdjustDelimiters(&f);        // 0x1800b6689
+    // A raw refcount SHARE of the worker's String (0x1800b666f: `MOV
+    // RAX,[RCX+0x30] / TEST / INC dword [RAX-4]`) followed by AdjustDelimiters
+    // (0x1800b6689) IS `Filename(const String&)` (retail 0x18000c780): adopt
+    // the buffer (AddRef, no copy), then normalise -- see B31_RULES
+    // DELIMITERS. `pendingFilename` is a `RtSystem::String` member of the
+    // not-yet-converted `Persistence`, reached through the transitional
+    // bridge. Scoped to a block so its release lands at the same point
+    // retail's manual one did (0x1800b66a6), not at function exit.
+    bool opened;
+    {
+        System::Filename f(Sys(p->pendingFilename));
 
-    const bool opened = RtIo_FileStream_Open(&bfs.base, &f); // 0x1800b669b
-    ReleaseInline(&f.data);                                  // 0x1800b66a6
+        // RtIo_FileStream_Open is a registered entry point owned by another
+        // file and keeps its retail (self, const Filename* POD) signature;
+        // the two types are the same eight bytes (Filename.h), so the cast is
+        // the boundary the pod_bridge itself would spell in the other
+        // direction if it needed to.
+        opened = RtIo_FileStream_Open(&bfs.base, reinterpret_cast<const Filename*>(&f));
+
+        // ~f is retail's release at 0x1800b66a6.
+    }
 
     if (!opened) {
         p->status = 2;                                       // 0x1800b66e0

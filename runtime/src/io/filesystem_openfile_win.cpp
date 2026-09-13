@@ -142,27 +142,26 @@
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
 #include "../../src/system/string.h"
+#include "../../src/system/pod_bridge.h"
+
+#include <new>        // placement new into a raw FileInfo Filename slot
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
-// Lane String's port, forward-declared rather than pulled in from a header,
-// because that lane publishes none and this lane does not edit another lane's
-// files to add one. Signature copied verbatim from its definition
-// (runtime/src/system/filename.cpp:177) and from the identical declaration in
-// filesystem_find_win.cpp, which is the file the linker will check it against.
-// Called DIRECTLY rather than through a door: it is already ported, so a door
-// here would only be a way to reach the shipped copy by accident.
-namespace RtSystem {
-void RtSystem_Filename_AdjustDelimiters(Filename* self);
-}  // namespace RtSystem
+// ENDGAME B.3.1 step 2: this file no longer forward-declares lane String's
+// `RtSystem_Filename_AdjustDelimiters` (0x1800c6970). Every call it made was
+// the tail of a mutating Filename entry point — the `const char*` ctor
+// (0x180026cf0) or `operator=(const String&)` (0x180026d40) — and the class
+// spells those as themselves, with AdjustDelimiters private inside them.
 
 namespace RtIO {
 
 using RtSystem::String;
 using RtSystem::Filename;
 using RtSystem::RtString_ReleaseInline;
-using RtSystem::RtSystem_Filename_AdjustDelimiters;
+using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
+using RtSystem::SysFile;  //   "
 
 namespace {
 
@@ -173,9 +172,10 @@ typedef FileInfo* (*GetFileInfoFn)(const PackageFileView*, FileInfo*);
 typedef FileInfo* (*FileInfoCopyFn)(FileInfo*, const FileInfo*);
 typedef FileInfo* (*FileInfoAssignFn)(FileInfo*, const FileInfo*);
 typedef void      (*CloseFileFn)(FileSystem*, FileInfo*);
-typedef Filename* (*FilenameCopyCtorFn)(Filename*, const Filename*);
-typedef void      (*StringSetFn)(String*, const char*);
-typedef void      (*AdjustDelimitersFn)(Filename*);
+// ENDGAME B.3.1 step 2: the three doors that used to reach String::Set,
+// Filename::AdjustDelimiters and the Filename copy ctor BY NAME are gone. They
+// are members of a class this translation unit now holds, so calling them by
+// name would only have been a way to reach the shipped copy by accident.
 typedef void*     (*WideStringCtorFn)(void*, const String*);
 typedef int       (*StrICmpFn)(const char*, const char*);
 
@@ -220,12 +220,12 @@ extern "C" FileInfo* RtIo_FileInfo_CopyCtor(FileInfo* dst, const FileInfo* src) 
     dst->cursor     = src->cursor;       // 18000c13e
     dst->baseOffset = src->baseOffset;   // 18000c144
     dst->winHandle  = src->winHandle;    // 18000c14a  (+0x14 is NOT copied)
-    RT_EXPORT_ONCE(FilenameCopyCtorFn, "??0Filename@System@@QEAA@AEBV01@@Z")(
-        reinterpret_cast<Filename*>(&dst->_name0),
-        reinterpret_cast<const Filename*>(&src->_name0));   // 18000c15a
-    RT_EXPORT_ONCE(FilenameCopyCtorFn, "??0Filename@System@@QEAA@AEBV01@@Z")(
-        reinterpret_cast<Filename*>(&dst->_name1),
-        reinterpret_cast<const Filename*>(&src->_name1));   // 18000c168
+    // `dst` is a raw FileInfo: these two slots are uninitialised bytes, so the
+    // copy ctor (??0Filename@System@@QEAA@AEBV01@@Z, 0x1800067d0) is placement-
+    // constructed into them, which is what retail's two CALLs do. The members
+    // are `RtSystem::String` on the not-yet-converted FileInfo, hence SysFile.
+    new (&dst->_name0) System::Filename(SysFile(src->_name0));   // 18000c15a
+    new (&dst->_name1) System::Filename(SysFile(src->_name1));   // 18000c168
 
     // No replay oracle: the Filename copy ctors AddRef, so running the shipped
     // body a second time would leave two extra references on every call. The
@@ -270,25 +270,15 @@ extern "C" FileInfo* RtIo_FileInfo_Assign(FileInfo* dst, const FileInfo* src) {
     dst->baseOffset = src->baseOffset;   // 18000c22e
     dst->winHandle  = src->winHandle;    // 18000c235  (+0x14 is NOT copied)
 
-    // --- _name0 --------------------------------------------------- 18000c239
-    if (dst->_name0.data != src->_name0.data) {          // 18000c23d/241
-        RtString_ReleaseInline(&dst->_name0);            // 18000c243..c267
-        dst->_name0.data = src->_name0.data;             // 18000c269/26d
-        if (dst->_name0.data)                            // 18000c271
-            ++RtSystem::StringRefCount(dst->_name0.data);// 18000c276
-    }
-    RtSystem_Filename_AdjustDelimiters(
-        reinterpret_cast<Filename*>(&dst->_name0));      // 18000c279/27d
+    // ENDGAME B.3.1 step 2: all three details above ARE
+    // `??4Filename@System@@QEAAAEAV01@AEBVString@1@@Z` (0x180026d40), which is
+    // why the two blocks collapse to one operator= each. Read the class body
+    // (runtime/src/system/filename.cpp) against the three numbered notes: the
+    // guard is on the BUFFER and skips both halves; the store is unconditional
+    // and only the increment is guarded; AdjustDelimiters is outside the `if`.
 
-    // --- _name1 --------------------------------------------------- 18000c282
-    if (dst->_name1.data != src->_name1.data) {          // 18000c286/28a
-        RtString_ReleaseInline(&dst->_name1);            // 18000c28c..c2b0
-        dst->_name1.data = src->_name1.data;             // 18000c2b2/2b6
-        if (dst->_name1.data)                            // 18000c2ba
-            ++RtSystem::StringRefCount(dst->_name1.data);// 18000c2bf
-    }
-    RtSystem_Filename_AdjustDelimiters(
-        reinterpret_cast<Filename*>(&dst->_name1));      // 18000c2c2/2c6
+    SysFile(dst->_name0) = Sys(src->_name0);             // 18000c239..c27d
+    SysFile(dst->_name1) = Sys(src->_name1);             // 18000c282..c2c6
 
     // No replay oracle, for the same reason as the copy ctor: the adopt half
     // AddRefs, so running the shipped body a second time on the same pair would
@@ -327,15 +317,20 @@ extern "C" bool RtIo_FileSystem_PlatformOpenFile(FileSystem* self, FileInfo* fi,
     blank.size       = 0;
     blank.cursor     = 0;
     blank.baseOffset = 0;
-    blank._name0.data = nullptr;
-    blank._name1.data = nullptr;
+    // Two empty Filenames constructed into the raw stack slots, retail's
+    // ??0Filename@System@@QEAA@XZ (0x180006220) — a zero store, and no dtor has
+    // run over them yet.
+    new (&blank._name0) System::Filename();
+    new (&blank._name1) System::Filename();
     blank.winHandle  = -1;
     blank._unk04     = 0;                // retail leaves this whatever the stack
     blank._pad14     = 0;                // held; see §4 — zeroed here only so the
                                          // value we copy out is defined.
     RtIo_FileInfo_Assign(fi, &blank);    // 1800add3f
-    RtString_ReleaseInline(&blank._name1);  // 1800add45 — reverse order
-    RtString_ReleaseInline(&blank._name0);  // 1800add75
+    // ~blank, reverse order. FileInfo is not a converted class, so its two
+    // Filename members are destroyed by hand — one release each, as retail.
+    SysFile(blank._name1).~Filename();   // 1800add45
+    SysFile(blank._name0).~Filename();   // 1800add75
 
     // WideString ws(*name); CreateFileW(ws, ...). The ctor is lane FS's port.
     struct { void* data; } ws = { nullptr };                 // 1800add98
@@ -410,8 +405,8 @@ extern "C" bool RtIo_FileSystem_ReadFile(FileSystem* self, FileInfo* fi,
     }
 
     // ~pack — the two Filenames released in REVERSE order, +0x28 then +0x20.
-    RtString_ReleaseInline(&pack._name1);                    // 1800acea1
-    RtString_ReleaseInline(&pack._name0);                    // 1800aceda
+    SysFile(pack._name1).~Filename();                        // 1800acea1
+    SysFile(pack._name0).~Filename();                        // 1800aceda
 
     return ok;                                               // 1800acf07
 }
@@ -430,8 +425,11 @@ extern "C" FileInfo* RtIo_FileSystem_OpenFile(FileSystem* self, FileInfo* ret,
     lf.size       = 0;
     lf.cursor     = 0;
     lf.baseOffset = 0;
-    lf._name0.data = nullptr;
-    lf._name1.data = nullptr;
+    // Two empty Filenames constructed into raw stack slots (0x180006220), so
+    // that the FileInfo::operator= PlatformOpenFile runs over them below has a
+    // live object to release. Their destructors are at the bottom.
+    new (&lf._name0) System::Filename();
+    new (&lf._name1) System::Filename();
     lf.winHandle  = -1;
     lf._pad14     = 0;
     // +0x04 is DELIBERATELY left as-is: retail never writes it and copies it out
@@ -444,33 +442,31 @@ extern "C" FileInfo* RtIo_FileSystem_OpenFile(FileSystem* self, FileInfo* ret,
     if (nameLen > dirLen) {                                  // 1800ac904  JLE skips
         // Strip the data-directory prefix; the packfile index is keyed on the
         // remainder, which is what LoadPackages inserted.
-        String key;
-        key.data = nullptr;                                  // 1800ac91a
-        RT_EXPORT_ONCE(StringSetFn, "?Set@String@System@@QEAAXPEBD@Z")(
-            &key, name->data + dirLen);                      // 1800ac928
-        RT_EXPORT_ONCE(AdjustDelimitersFn,
-            "?AdjustDelimiters@Filename@System@@AEAAXXZ")(
-                reinterpret_cast<Filename*>(&key));          // 1800ac932
-
         // The BST walk. Same tree and same comparator as lane PKG's IndexFind,
         // and the same null asymmetries: a null on EITHER side stops the descent
         // rather than comparing.
         PackfileIndexNode* node = self->packfileIndexRoot;   // 1800ac938
-        while (node != nullptr) {                            // 1800ac98c
-            const char* const nk = node->key;                // 1800ac945
-            if (nk != nullptr && key.data != nullptr &&
-                PathStrICmp(key.data, nk) < 0) {             // 1800ac955  JNS skips
-                node = node->left;                           // 1800ac962  +0x18
-                continue;
+        {
+            // Set-then-AdjustDelimiters IS the Filename const char* ctor,
+            // ??0Filename@System@@QEAA@PEBD@Z (0x180026cf0); the inner scope is
+            // retail's release point at 0x1800ac991, before the node is used.
+            System::Filename key(name->data + dirLen);       // 1800ac91a..932
+
+            while (node != nullptr) {                        // 1800ac98c
+                const char* const nk = node->key;            // 1800ac945
+                if (nk != nullptr && key._data != nullptr &&
+                    PathStrICmp(key._data, nk) < 0) {        // 1800ac955  JNS skips
+                    node = node->left;                       // 1800ac962  +0x18
+                    continue;
+                }
+                if (key._data != nullptr && nk != nullptr &&
+                    PathStrICmp(nk, key._data) < 0) {        // 1800ac978
+                    node = node->right;                      // 1800ac985  +0x20
+                    continue;
+                }
+                break;                                       // found
             }
-            if (key.data != nullptr && nk != nullptr &&
-                PathStrICmp(nk, key.data) < 0) {             // 1800ac978
-                node = node->right;                          // 1800ac985  +0x20
-                continue;
-            }
-            break;                                           // found
-        }
-        RtString_ReleaseInline(&key);                        // 1800ac991
+        }                                                    // ~key  1800ac991
 
         if (node != nullptr && self->existsInPackfileGate != 0) {   // 1800ac9bf
             lf.handle = static_cast<int32_t>(
@@ -491,16 +487,18 @@ extern "C" FileInfo* RtIo_FileSystem_OpenFile(FileSystem* self, FileInfo* ret,
             ret->size       = 0;
             ret->cursor     = 0;
             ret->baseOffset = 0;
-            ret->_name0.data = nullptr;
-            ret->_name1.data = nullptr;
+            // `ret` is the hidden return slot: raw bytes, so these are two
+            // default ctors (0x180006220), not stores through live objects.
+            new (&ret->_name0) System::Filename();
+            new (&ret->_name1) System::Filename();
             ret->winHandle  = -1;                            // 1800aca4c
         } else if (!RtIo_FileSystem_PlatformOpenFile(self, &lf, name)) {  // 1800acace
             ret->handle     = -1;                            // 1800acadb
             ret->size       = 0;
             ret->cursor     = 0;
             ret->baseOffset = 0;
-            ret->_name0.data = nullptr;
-            ret->_name1.data = nullptr;
+            new (&ret->_name0) System::Filename();           // as above
+            new (&ret->_name1) System::Filename();
             ret->winHandle  = -1;                            // 1800acaff
         } else {
             lf.handle = -2;                                  // 1800acb77
@@ -515,17 +513,16 @@ extern "C" FileInfo* RtIo_FileSystem_OpenFile(FileSystem* self, FileInfo* ret,
         ret->cursor     = lf.cursor;
         ret->baseOffset = lf.baseOffset;
         ret->winHandle  = lf.winHandle;                      // 1800acba2
-        RT_EXPORT_ONCE(FilenameCopyCtorFn, "??0Filename@System@@QEAA@AEBV01@@Z")(
-            reinterpret_cast<Filename*>(&ret->_name0),
-            reinterpret_cast<const Filename*>(&lf._name0));  // 1800acbae
-        RT_EXPORT_ONCE(FilenameCopyCtorFn, "??0Filename@System@@QEAA@AEBV01@@Z")(
-            reinterpret_cast<Filename*>(&ret->_name1),
-            reinterpret_cast<const Filename*>(&lf._name1));  // 1800acbbc
+        // The copy ctor (0x1800067d0) into the raw return slot, as retail's two
+        // CALLs. It AddRefs, which is why ~lf below is still exactly one
+        // release per name and not a drop to zero.
+        new (&ret->_name0) System::Filename(SysFile(lf._name0));  // 1800acbae
+        new (&ret->_name1) System::Filename(SysFile(lf._name1));  // 1800acbbc
     }
 
     // ~lf, reverse order.
-    RtString_ReleaseInline(&lf._name1);                      // 1800acbc9
-    RtString_ReleaseInline(&lf._name0);                      // 1800acbfa
+    SysFile(lf._name1).~Filename();                          // 1800acbc9
+    SysFile(lf._name0).~Filename();                          // 1800acbfa
 
     return ret;                                              // 1800acc2b
 }

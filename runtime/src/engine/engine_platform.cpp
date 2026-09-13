@@ -99,10 +99,11 @@ long long RtEnginePlatformShowLauncherDialog();
 bool RtEnginePlatformLauncherFlagNoMods();
 bool RtEnginePlatformLauncherFlagReset();
 
-using RtSystem::String;
-using RtSystem::RtString_ReleaseInline;
-using RtSystem::RtSystem_String_Set;
 using RtEngine::Engine;
+// ENDGAME B.3.1 step 2: `System::String` is the real class and the two shims
+// this file used (`RtSystem_String_Set` 0x1800c95d0 and the release idiom) are
+// its `Set` and its destructor.
+using System::String;
 
 namespace {
 
@@ -154,15 +155,14 @@ Engine** EngineSingletonSlot() {
 // answer, which is why this is spelled out rather than guessed.
 bool CommandLineHasValue(void* cfg, const char* keyText) {
     if (cfg == nullptr) return false;
-    String key{nullptr};
-    RtSystem_String_Set(&key, keyText);
-    String value{nullptr};
+    String key(keyText);       // 0x18000b630: zero, then Set
+    String value;
     RT_EXPORT_ONCE(GetCommandLineStringFn,
         "?GetCommandLineString@Configuration@System@@QEBA?AVString@2@AEBV32@@Z")(
             cfg, &value, &key);
-    const bool present = value.data != nullptr;   // retail: CMP [RAX],RDI
-    RtString_ReleaseInline(&value);
-    RtString_ReleaseInline(&key);
+    const bool present = value._data != nullptr;   // retail: CMP [RAX],RDI
+    // `value` then `key` release here — retail's order, which is C++'s reverse
+    // declaration order.
     return present;
 }
 
@@ -172,12 +172,11 @@ bool CommandLineHasValue(void* cfg, const char* keyText) {
 // registration of 0x18002ace0 is what this reaches today and at cutover.
 bool CommandLineHasKey(void* cfg, const char* keyText) {
     if (cfg == nullptr) return false;
-    String key{nullptr};
-    RtSystem_String_Set(&key, keyText);
+    String key(keyText);       // 0x18000b630: zero, then Set
     void* map = static_cast<uint8_t*>(cfg) + 0x10;
     const bool found = reinterpret_cast<MapFindFn>(
         ResolveAddr(Module::Runtime, 0x18002ace0))(map, &key) != nullptr;
-    RtString_ReleaseInline(&key);
+    // `key` releases here — retail's 0x1800a1934, now ~String.
     return found;
 }
 

@@ -44,6 +44,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <new>          // ENDGAME B.3.1 step 2: placement new into the object body
 
 #include "../../funcs/rt_port.h"
 // ResolveAddr, declared locally rather than via standalone/resolve.h -- that header
@@ -67,6 +68,13 @@ using rt::io::Serializer;
 using rt::io::Stream;
 
 struct Point {
+    // ENDGAME B.3.1 step 2 LEAVES THIS AS A RAW POINTER, deliberately.
+    // `Collection::Array<Point>` moves its elements with a bulk byte copy
+    // (`PointArraySetSize`, by address), so a member with a real copy
+    // constructor or destructor would be SILENTLY BYPASSED by every resize —
+    // the hazard the banners in runtime/types/object/External.h and Internal.h
+    // spell out. `ReleasePointsRange` below is this field's destructor, written
+    // by hand exactly because the array will not run one.
     void*   name;      // +0x00  System::String (refcounted)
     float   pos[3];    // +0x08
     float   radius;    // +0x14
@@ -75,8 +83,12 @@ static_assert(sizeof(Point) == 0x18, "Pathfinding::PointList::Point is 0x18 byte
 
 struct PointList {
     External                    base;      // +0x00
-    void*                       _name1;    // +0x20  System::String
-    void*                       _name2;    // +0x28  System::String
+    // ENDGAME B.3.1 step 2: the comment became the type. Unlike `Point` above,
+    // `PointList` itself is never bulk-copied — it is built by `ConstructBody`
+    // and torn down by the destructor, both in this file — so these two carry
+    // the real class.
+    System::String              _name1;    // +0x20
+    System::String              _name2;    // +0x28
     Collection::Array<Point>    _pointsA;  // +0x30
     Collection::Array<Point>    _pointsB;  // +0x40
 };
@@ -122,8 +134,11 @@ void ConstructBody(PointList* self) {
     self->base._refs._size     = 0;
     self->base._refs._capacity = 0;
     *vp = PointListVTable();
-    self->_name1 = nullptr;
-    self->_name2 = nullptr;
+    // Retail writes one null qword per field; the default constructor
+    // (0x180006760) is that one store, placement-constructed because the
+    // object body is raw memory at this point.
+    new (&self->_name1) System::String();
+    new (&self->_name2) System::String();
     self->_pointsA._data = nullptr; self->_pointsA._size = 0; self->_pointsA._capacity = 0;
     self->_pointsB._data = nullptr; self->_pointsB._size = 0; self->_pointsB._capacity = 0;
 }
@@ -136,7 +151,10 @@ void ConstructBody(PointList* self) {
 // both reach it by rel32, and at cutover that rel32 will not exist.
 void ReleasePointsRange(Point* data, int count) {
     for (int i = 0; i < count; ++i) {
-        RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(&data[i].name));
+        // The release idiom IS `~String` (0x180006c80). `Point::name` keeps its
+        // raw-pointer type (see the struct), so the destructor is spelled out
+        // over the same eight bytes.
+        reinterpret_cast<System::String*>(&data[i].name)->~String();
     }
 }
 extern "C" void RtPathfinding_PointArray_ReleaseRange(void* ignoredThis, void* data, int count) {
@@ -253,8 +271,8 @@ extern "C" void RtPathfinding_PointList_Dtor(void* selfv) {
     // 0x180071600 (batch D2, 2026-09-12).
     PointArrayDtor(&self->_pointsB);
     PointArrayDtor(&self->_pointsA);
-    RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(&self->_name2));
-    RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(&self->_name1));
+    self->_name2.~String();
+    self->_name1.~String();
     using ExtDtorFn = void (*)(void*);
     RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(self);
 }
@@ -272,10 +290,11 @@ extern "C" bool RtPathfinding_PointList_Serialize(void* selfv, void* streamv) {
     ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 0);
     ser.readerWriter = rw;
 
-    using StrSerFn = void (*)(void* str, Serializer* ser);
-    auto strSer = RT_EXPORT_ONCE(StrSerFn, "?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z");
-    strSer(&self->_name1, &ser);
-    strSer(&self->_name2, &ser);
+    // ENDGAME B.3.1 step 2: `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z`
+    // (0x1800c9930) is a member now, so the name door is gone. The registry row
+    // at that name registers the shim, and the shim is one line over this member.
+    self->_name1.Serialize(&ser);
+    self->_name2.Serialize(&ser);
 
     using ScalarIntFn   = void (*)(ReaderWriter*, int32_t*, const char*);
     using ScalarFloatFn = void (*)(ReaderWriter*, float*, const char*);
@@ -290,7 +309,9 @@ extern "C" bool RtPathfinding_PointList_Serialize(void* selfv, void* streamv) {
         if (stream->direction == 0) PointArraySetSize(arr, n);
         for (int32_t i = 0; i < n; ++i) {
             Point* p = &arr->_data[i];
-            strSer(&p->name, &ser);
+            // `Point::name` keeps its raw-pointer type (see the struct), so the
+            // member call is spelled over the same eight bytes.
+            reinterpret_cast<System::String*>(&p->name)->Serialize(&ser);
             arrayFloat(rw, 3, p->pos, nullptr);
             scalarFloat(rw, &p->radius, nullptr);
         }

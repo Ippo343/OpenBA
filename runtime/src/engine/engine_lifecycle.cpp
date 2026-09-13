@@ -249,8 +249,9 @@ typedef bool     (*BoolVoidFn)();
 typedef void*    (*MemAllocFn)(uint64_t, int);
 typedef void     (*MemFreeFn)(void*);
 typedef bool     (*AllocStartupFn)(void*, uint64_t, uint64_t);
-typedef void     (*StringSetFn)(RtSystem::String*, const char*);
-typedef void     (*SetCommandLineFn)(void*, const RtSystem::String*);
+// ENDGAME B.3.1 step 2: `StringSetFn` is gone — `Set` (0x1800c95d0) and the
+// zeroing before it are the `const char*` constructor, 0x18000b630.
+typedef void     (*SetCommandLineFn)(void*, const System::String*);
 typedef void     (*ErrorSetTextFn)(const char*, bool);
 typedef bool     (*PlatformConfigureFn)(void*, bool, void*);
 
@@ -503,15 +504,14 @@ extern "C" unsigned RtEngine_Engine_Startup(Engine* self, const char* cmdLine,
     // --- 0x1800db967: Configuration::SetCommandLine(String(cmdLine)) --------
     // A temporary System::String, which is one pointer. Retail zeroes it,
     // calls String::Set, passes it by reference and then inlines ~String
-    // (0x180006c80). We call the exported dtor, which is that body.
+    // (0x180006c80). ENDGAME B.3.1 step 2: the zero-then-Set pair IS the
+    // `const char*` constructor (0x18000b630) and the inlined release IS the
+    // destructor, so the whole block is one declaration and its scope.
     {
-        RtSystem::String tmp;
-        tmp.data = nullptr;
-        RT_EXPORT_ONCE(StringSetFn, "?Set@String@System@@QEAAXPEBD@Z")(&tmp, cmdLine);
+        System::String tmp(cmdLine);
         RT_EXPORT_ONCE(SetCommandLineFn,
             "?SetCommandLine@Configuration@System@@QEAAXAEBVString@2@@Z")(
                 self->_configuration, &tmp);
-        RT_EXPORT_ONCE(VoidThisFn, "??1String@System@@QEAA@XZ")(&tmp);
     }
 
     // --- 0x1800db9aa .. 0x1800db9d9: System::Timer::Startup, inlined --------

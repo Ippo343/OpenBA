@@ -94,8 +94,10 @@
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
+#include <new>          // ENDGAME B.3.1 step 2: placement new into a POD member
 
 #include "../../funcs/rt_port.h"
+#include "../system/pod_bridge.h"          // the one transitional POD<->class cast
 #include "../../types/engine/UpdateLoop.h"
 #include "../../types/engine/MainLoop.h"   // lane B; for MainLoop::_currentLoop
 #include "../../types/object/External.h"
@@ -158,8 +160,10 @@ const char* const kDialogLoaderCtor  = "??0DialogLoaderLoopT@Engine@@QEAA@AEBVSt
 //    taking a pointer at an address you also register hands back your own
 //    prologue (reference_resolveaddr_consults_port_registry_first.md).
 
-using MemFreeFn        = void (*)(void*);
-using AdjustDelimFn    = void (*)(void*);                       // Filename&
+// ENDGAME B.3.1 step 2: `MemFreeFn` and `AdjustDelimFn` are gone with the two
+// String idioms they served — the allocator call lived inside the release
+// sequence (now ~String, 0x180006c80) and the delimiter pass lived inside the
+// Adopt-then-normalise pair (now the Filename ctor 0x18000c780).
 using FindOrLoadFn     = void* (*)(void*, const void*);         // (factory, const Filename&)
 using IsDerivedFromFn  = bool (*)(const void*, uint32_t);
 using ExtFactoryCleanFn = void (*)(void*);
@@ -173,18 +177,6 @@ using ArraySetSizeFillFn = void (*)(void*, int, const void*);
 using SecondsToTicksFn = int64_t (*)(float);
 using TicksToSecondsFn = float (*)(int64_t);
 
-MemFreeFn MemFree() {
-    static MemFreeFn fn = reinterpret_cast<MemFreeFn>(
-        ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
-    return fn;
-}
-AdjustDelimFn AdjustDelimiters() {
-    // PRIVATE (AEAA, not QEAA) — the QEAA spelling is not an export at all
-    // (runtime/types/system/Filename.h records that trap).
-    static AdjustDelimFn fn = reinterpret_cast<AdjustDelimFn>(
-        ResolveExport("?AdjustDelimiters@Filename@System@@AEAAXXZ"));
-    return fn;
-}
 FindOrLoadFn FindOrLoad() {
     static FindOrLoadFn fn = reinterpret_cast<FindOrLoadFn>(ResolveExport(
         "?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z"));
@@ -338,31 +330,23 @@ void* VTableDialogLoaderLoopT() {
 // The two inlined idioms this family repeats
 // ============================================================================
 
-// System::String's release sequence, inlined at ~200 sites in the DLL and
-// reproduced here EXACTLY, asymmetry included: on the freeing branch the object
-// is left holding `data - 8`, a dangling pointer, not null
-// (runtime/types/system/String.h — "reproduce it; do not tidy it").
-void StringRelease(RtSystem::String* s) {
-    char* data = s->data;
-    if (!data) return;
-    if (--RtSystem::StringRefCount(data) == 0) {
-        s->data = data - 8;
-        MemFree()(s->data);
-    } else {
-        s->data = nullptr;
-    }
-}
-
-// The copy-with-acquire the three ctors and both Load bodies open with:
-//     dst = 0; if (src.data) { dst = src.data; ++src.data[-4]; }
-void StringAcquire(RtSystem::String* dst, const RtSystem::String* src) {
-    dst->data = nullptr;
-    char* data = src->data;
-    if (data) {
-        dst->data = data;
-        ++RtSystem::StringRefCount(data);
-    }
-}
+// ENDGAME B.3.1 step 2: the two hand-written idioms that used to live here are
+// members of the real class now, and every one of their call sites below says
+// so directly.
+//
+//   `StringRelease` was `~String` (0x180006c80), asymmetry and all — the
+//   freeing branch leaves the object holding `data - 8`. That behaviour did not
+//   move, it is inside the class (runtime/types/system/String.h).
+//
+//   `StringAcquire` (`dst = 0; if (src) { dst = src; ++src[-4]; }`) was the
+//   copy constructor, 0x180006cb0.
+//
+// `_dialogFilename` is a member of `Engine::DialogLoopT` /
+// `Engine::DialogLoaderLoopT`, neither of which is converted, so it keeps its
+// POD type (B31_RULES, "Members of not-yet-converted structs") and its
+// lifetime stays explicit at the two ends retail spells it: a placement
+// copy-construct in the constructor and an explicit `~String` in the
+// destructor. Both go through the one bridge, `RtSystem::Sys`.
 
 // ============================================================================
 // The two Time conversions this family inlines
@@ -459,7 +443,7 @@ void LoaderLoopCtorBody(LoaderLoop* self, void* nextLoop, const ::Time* delay) {
 void DialogLoopTCtorBody(DialogLoopT* self, const RtSystem::String* filename) {
     UpdateLoopCtorBody(&self->_base);
     self->_base._vtable   = VTableDialogLoopT();
-    StringAcquire(&self->_dialogFilename, filename);
+    new (&self->_dialogFilename) System::String(RtSystem::Sys(*filename));
     self->_dialogExternal = nullptr;
     self->_dialogInstance = nullptr;
     UserInterfaceCtor()(&self->_ui);
@@ -471,7 +455,7 @@ void DialogLoaderLoopTCtorBody(DialogLoaderLoopT* self, const RtSystem::String* 
                                void* nextLoop, const ::Time* delay) {
     LoaderLoopCtorBody(&self->_base, nextLoop, delay);
     self->_base._base._vtable = VTableDialogLoaderLoopT();
-    StringAcquire(&self->_dialogFilename, filename);
+    new (&self->_dialogFilename) System::String(RtSystem::Sys(*filename));
     self->_dialogExternal = nullptr;
     self->_dialogInstance = nullptr;
     UserInterfaceCtor()(&self->_ui);
@@ -625,13 +609,13 @@ extern "C" void RtEngine_LoaderLoop_Dtor(LoaderLoop* self) {
 // ---- ??1DialogLoopT@Engine@@UEAA@XZ  0x1800db340 ord 576 --------------------
 // Adds, over the base: destroy the embedded UI::UserInterface at +0x40 (its
 // own exported dtor, already ported — runtime/src/ui/userinterface.cpp), then
-// release `_dialogFilename` (+0x28) with the standard String release idiom
-// (StringRelease, above) BEFORE the base teardown restamps the vtable to
-// UpdateLoop's and runs the ExternalFactory/ListCleanup pair.
+// release `_dialogFilename` (+0x28) with `~String` (0x180006c80) BEFORE the
+// base teardown restamps the vtable to UpdateLoop's and runs the
+// ExternalFactory/ListCleanup pair.
 extern "C" void RtEngine_DialogLoopT_Dtor(DialogLoopT* self) {
     self->_base._vtable = VTableDialogLoopT();
     UserInterfaceDtor()(&self->_ui);
-    StringRelease(&self->_dialogFilename);
+    RtSystem::Sys(self->_dialogFilename).~String();
     UpdateLoopBaseTeardown(&self->_base);
 }
 
@@ -644,7 +628,7 @@ extern "C" void RtEngine_DialogLoopT_Dtor(DialogLoopT* self) {
 extern "C" void RtEngine_DialogLoaderLoopT_Dtor(DialogLoaderLoopT* self) {
     self->_base._base._vtable = VTableDialogLoaderLoopT();
     UserInterfaceDtor()(&self->_ui);
-    StringRelease(&self->_dialogFilename);
+    RtSystem::Sys(self->_dialogFilename).~String();
     self->_base._base._vtable = VTableLoaderLoop();
     UpdateLoopBaseTeardown(&self->_base._base);
 }
@@ -745,10 +729,11 @@ extern "C" DialogLoopT* RtEngine_DialogLoopT_Ctor(DialogLoopT* self,
 extern "C" void RtEngine_DialogLoopT_Load(DialogLoopT* self) {
 
     // The local is a System::Filename, layout-identical to String; retail
-    // copies the String field into it and normalises the delimiters in place.
-    RtSystem::String tmp;
-    StringAcquire(&tmp, &self->_dialogFilename);
-    AdjustDelimiters()(&tmp);
+    // copies the String field into it and normalises the delimiters in place —
+    // which is the whole body of `??0Filename@System@@QEAA@AEBVString@1@@Z`
+    // (0x18000c780), so the Adopt/AdjustDelimiters pair IS this construction,
+    // and RAII is the release retail does at the bottom.
+    System::Filename tmp(RtSystem::Sys(self->_dialogFilename));
 
     void* external = FindOrLoad()(Factory(), &tmp);
     void* result = nullptr;
@@ -758,9 +743,6 @@ extern "C" void RtEngine_DialogLoopT_Load(DialogLoopT* self) {
         if (IsDerivedFrom()(external, DialogTypeId())) result = external;
     }
     self->_dialogExternal = result;
-
-    StringRelease(&tmp);
-
 }
 
 // ---- ?Startup@DialogLoopT@Engine@@UEAAXXZ  0x1800db2f0 ord 4093 -------------
@@ -834,9 +816,9 @@ extern "C" DialogLoaderLoopT* RtEngine_DialogLoaderLoopT_Ctor(
 // bodies and a shared helper would hide a divergence between them.
 extern "C" void RtEngine_DialogLoaderLoopT_Load(DialogLoaderLoopT* self) {
 
-    RtSystem::String tmp;
-    StringAcquire(&tmp, &self->_dialogFilename);
-    AdjustDelimiters()(&tmp);
+    // As DialogLoopT::Load above: the Adopt/AdjustDelimiters pair is the
+    // Filename ctor 0x18000c780 and the release at the bottom is ~Filename.
+    System::Filename tmp(RtSystem::Sys(self->_dialogFilename));
 
     void* external = FindOrLoad()(Factory(), &tmp);
     void* result = nullptr;
@@ -844,9 +826,6 @@ extern "C" void RtEngine_DialogLoaderLoopT_Load(DialogLoaderLoopT* self) {
         if (IsDerivedFrom()(external, DialogTypeId())) result = external;
     }
     self->_dialogExternal = result;
-
-    StringRelease(&tmp);
-
 }
 
 // ---- ?Startup@DialogLoaderLoopT@Engine@@UEAAXXZ  0x1800db000 ord 4092 -------

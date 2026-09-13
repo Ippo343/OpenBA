@@ -151,6 +151,7 @@
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
 #include "../system/string.h"
+#include "../system/pod_bridge.h"
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -172,6 +173,8 @@ using RtSystem::String;
 using RtSystem::Filename;
 using RtSystem::RtString_ReleaseInline;
 using RtSystem::StringRefCount;
+using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
+using RtSystem::SysFile;  //   "
 
 // The stream layouts live in `RtIo` (lower-case o) while FileInfo/FileSystem
 // live in `RtIO`. Both spellings are long-standing in this tree — FileSystem.h
@@ -227,7 +230,8 @@ void EncodingDelete(void* p) {
 // TextFileStream's two object strings are declared `char*` in FileStream.h (a
 // System::String is exactly that one pointer).
 void ReleaseStrSlot(char** slot) {
-    RtString_ReleaseInline(reinterpret_cast<String*>(slot));
+    // ~String (0x180006c80), including retail's release asymmetry (String.h).
+    reinterpret_cast<System::String*>(slot)->~String();
 }
 
 // ---------------------------------------------------------------------------
@@ -407,8 +411,8 @@ void NoteSlotDispatch(const void* vptr) {
 // ============================================================================
 extern "C" void RtIo_FileInfo_Dtor(FileInfo* self) {
     ++g_fsc.fileInfoDtor;
-    RtString_ReleaseInline(&self->_name1);   // 18000c19f  +0x28 FIRST
-    RtString_ReleaseInline(&self->_name0);   // 18000c1ce  +0x20
+    SysFile(self->_name1).~Filename();       // 18000c19f  +0x28 FIRST
+    SysFile(self->_name0).~Filename();       // 18000c1ce  +0x20
 }
 
 // ============================================================================
@@ -818,19 +822,14 @@ extern "C" bool RtIo_FileStream_Create(FileStream* self, const Filename* path) {
     RtIo_FileSystem_CreatePath(Fs(), path);                     // 1800aa919
 
     // ---- 1800aa91e..1800aa958: this->filename = *path -------------------
-    char* const incoming = reinterpret_cast<const String*>(path)->data;
-    if (self->filename != incoming) {                           // 1800aa924
-        if (self->filename) {                                   // 1800aa929
-            if (--StringRefCount(self->filename) == 0) {        // 1800aa92e/931
-                self->filename -= 8;                            // 1800aa936
-                RtSystem::RtMemFree(self->filename);            // 1800aa93f
-            } else {
-                self->filename = nullptr;                       // 1800aa946
-            }
-        }
-        self->filename = incoming;                              // 1800aa94d
-        if (incoming) ++StringRefCount(incoming);               // 1800aa956
-    }
+    // ENDGAME B.3.1 step 2: this whole block IS `System::String::operator=`
+    // (0x1800c9810) — the buffer-pointer guard that skips BOTH halves, the
+    // release with its asymmetry, the unconditional store and the guarded
+    // increment. `FileStream::filename` is declared `char*` in FileStream.h,
+    // which is exactly the one pointer a String is, so it is reached as one.
+    // NOTE there is NO AdjustDelimiters here: retail's Create does not
+    // normalise, so this is String's operator=, not Filename's.
+    reinterpret_cast<System::String&>(self->filename) = Sys(*path).AsString();
 
     self->base.direction = 1;                                   // 1800aa959
 
@@ -840,8 +839,8 @@ extern "C" bool RtIo_FileStream_Create(FileStream* self, const Filename* path) {
     FileInfo tmp;
     RtIo_FileSystem_CreateFileW(Fs(), &tmp, path);              // 1800aa96f
     RtIo_FileInfo_Assign(&self->file, &tmp);                    // 1800aa97c
-    RtString_ReleaseInline(&tmp._name1);                        // 1800aa982  +0x28 first
-    RtString_ReleaseInline(&tmp._name0);                        // 1800aa9b9  +0x20
+    SysFile(tmp._name1).~Filename();                            // 1800aa982  +0x28 first
+    SysFile(tmp._name0).~Filename();                            // 1800aa9b9  +0x20
 
     const bool ok = (self->file.handle != -1);                  // 1800aa9f0
     if (ok) ++g_fsc.createTrue;
@@ -1139,27 +1138,18 @@ extern "C" bool RtIo_FileStream_Open(FileStream* self, const Filename* path) {
     NoteSlotDispatch(self->base.vptr);
 
     // ---- 1800aac92..1800aaccc: this->filename = *path -------------------
-    char* const incoming = reinterpret_cast<const RtSystem::String*>(path)->data;
-    if (self->filename != incoming) {                     // 1800aac98
-        if (self->filename) {                             // 1800aac9d
-            if (--StringRefCount(self->filename) == 0) {  // 1800aaca2/a5
-                self->filename -= 8;                      // 1800aacaa
-                RtSystem::RtMemFree(self->filename);      // 1800aacb3
-            } else {
-                self->filename = nullptr;                 // 1800aacba
-            }
-        }
-        self->filename = incoming;                        // 1800aacc1
-        if (incoming) ++StringRefCount(incoming);         // 1800aacca
-    }
+    // `System::String::operator=` (0x1800c9810), as in Create above and for
+    // the same reasons — the short-circuit that jumps past BOTH halves is the
+    // class's, and Open does not normalise either.
+    reinterpret_cast<System::String&>(self->filename) = Sys(*path).AsString();
 
     self->base.direction = 0;                             // 1800aaccd — READING
 
     FileInfo tmp;                                          // not zero-initialised
     RtIo_FileSystem_OpenFile(Fs(), &tmp, path);           // 1800aacdf
     RtIo_FileInfo_Assign(&self->file, &tmp);              // 1800aacec
-    RtString_ReleaseInline(&tmp._name1);                  // 1800aacf2  +0x28 first
-    RtString_ReleaseInline(&tmp._name0);                  // 1800aad29  +0x20
+    SysFile(tmp._name1).~Filename();                      // 1800aacf2  +0x28 first
+    SysFile(tmp._name0).~Filename();                      // 1800aad29  +0x20
 
     const bool ok = (self->file.handle != -1);            // 1800aad60
     if (ok) ++g_fss.openTrue;

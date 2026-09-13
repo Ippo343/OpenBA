@@ -108,6 +108,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <new>        // placement new into a hidden-return-slot / a raw struct field
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/FileSystem.h"
@@ -115,11 +116,11 @@
 #include "../../types/system/Filename.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"
+#include "../system/pod_bridge.h"
 
 using RtIo::Persistence;
 using RtIo::SaveGameInfo;
-using RtSystem::String;
-using RtSystem::Filename;
+using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
 
 // Declared locally rather than including standalone/resolve.h, which drags in
 // <windows.h>. Byte-identical to persistence_worker_win.cpp's copy.
@@ -129,23 +130,32 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 namespace {
 
 // `Collection::Array<System::Filename>` as FindFiles fills it — the same three
-// fields every Array in this engine has.
+// fields every Array in this engine has. `data` is `System::Filename` now
+// (same eight bytes as the old `Filename*`): every element this file owns
+// individually, so each one becomes a real destructor call instead of the
+// manual release.
 struct FilenameArray {
-    Filename* data;      // +0x00
-    int32_t   size;      // +0x08
-    int32_t   capacity;  // +0x0c
+    System::Filename* data;      // +0x00
+    int32_t            size;      // +0x08
+    int32_t            capacity;  // +0x0c
 };
 static_assert(offsetof(FilenameArray, size)     == 0x08, "Array::_size @ +0x08");
 static_assert(offsetof(FilenameArray, capacity) == 0x0c, "Array::_capacity @ +0x0c");
 
-typedef void      (*StringSetFn)(String*, const char*);                 // 0x1800c95d0
-typedef Filename* (*GetSaveDirectoryFn)(const void*, Filename*);        // 0x1800acfd0
-typedef String*   (*ConcatCStrFn)(String*, const String*, const char*); // 0x1800c92d0
-typedef void      (*FindFilesFn)(const void*, const String*, const String*,
+// These are file-local typedefs for calls OUT through the resolve door (not
+// entry-point signatures), so they now name the classes occupying the same
+// eight bytes. The resolve mechanism itself (RtResolveCached / ResolveAddr) is
+// untouched — this file's whole design is standing on its own against named
+// doors, and that stays exactly as it was.
+typedef void      (*StringSetFn)(System::String*, const char*);                 // 0x1800c95d0
+typedef System::Filename* (*GetSaveDirectoryFn)(const void*, System::Filename*);// 0x1800acfd0
+typedef System::String*   (*ConcatCStrFn)(System::String*, const System::String*,
+                                          const char*);                          // 0x1800c92d0
+typedef void      (*FindFilesFn)(const void*, const System::String*, const System::String*,
                                  bool, void*);                          // 0x1800ad7a0
-typedef Filename* (*GetPathFilenameFn)(const Filename*, Filename*, bool);
-                                                                        // 0x1800c6740
-typedef uint64_t* (*GetFileTimeStampFn)(const void*, uint64_t*, const Filename*);
+typedef System::Filename* (*GetPathFilenameFn)(const System::Filename*,
+                                               System::Filename*, bool); // 0x1800c6740
+typedef uint64_t* (*GetFileTimeStampFn)(const void*, uint64_t*, const System::Filename*);
                                                                         // 0x1800ae270
 typedef void      (*ArraySetSizeZeroFn)(void*);                         // 0x18002aae0
 typedef void      (*ArraySetSizeFillFn)(void*, int, const void*);       // 0x18002ae20
@@ -164,21 +174,6 @@ void MemFree(void* p) {   // the null test is INSIDE 0x1800c7ad0
     static void* cache = nullptr;
     reinterpret_cast<MemFreeFn>(RtResolveCached(
         "?MemFree@MemoryAllocator@System@@SAXPEAX@Z", &cache))(p);
-}
-
-// Retail's inlined String release. NOTE THE ASYMMETRY, which is reproduced at
-// every one of this body's five sites: the FREEING branch leaves the slot
-// holding `data - 8` (0x1800b64f5 `ADD qword ptr [RBX],-0x8`) and only the
-// still-referenced branch nulls it.
-void ReleaseInline(char** slot) {
-    char* p = *slot;
-    if (!p) return;
-    if (--reinterpret_cast<int32_t*>(p)[-1] == 0) {
-        *slot = p - 8;
-        MemFree(p - 8);
-    } else {
-        *slot = nullptr;
-    }
 }
 
 // 0x180155850 and 0x180155858 — see the banner for why the neighbouring
@@ -213,65 +208,81 @@ extern "C" void RtIo_PersistenceWorker_GetSaveList(void* worker) {
     FilenameArray found = { nullptr, 0, 0 };                    // [RBP-0x30]
 
     // ---- 2. FindFiles(saveDir + "\Save\", "*.sav", recursive=false) -------
-    String pattern{nullptr};                                    // [RBP+0x48]
+    // Scoped to a block, declared in this order, so the block's automatic
+    // teardown lands at the same point retail's manual release did
+    // (0x1800b631b..0x1800b636c) and runs in retail's own order (dir, then
+    // saveDir, then pattern — reverse of declaration).
     {
-        static void* setCache = nullptr;
-        reinterpret_cast<StringSetFn>(RtResolveCached(
-            "?Set@String@System@@QEAAXPEBD@Z", &setCache))(&pattern, kSavePattern);
-    }
+        System::String pattern;                                     // [RBP+0x48]
+        {
+            static void* setCache = nullptr;
+            reinterpret_cast<StringSetFn>(RtResolveCached(
+                "?Set@String@System@@QEAAXPEBD@Z", &setCache))(&pattern, kSavePattern);
+        }
 
-    Filename saveDir{nullptr};                                  // [RBP+0x58]
-    {
-        static void* gsdCache = nullptr;
-        reinterpret_cast<GetSaveDirectoryFn>(RtResolveCached(
-            "?GetSaveDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ",
-            &gsdCache))(fs, &saveDir);                          // 0x1800b62e5
-    }
+        System::Filename saveDir;                                   // [RBP+0x58]
+        {
+            static void* gsdCache = nullptr;
+            reinterpret_cast<GetSaveDirectoryFn>(RtResolveCached(
+                "?GetSaveDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ",
+                &gsdCache))(fs, &saveDir);                          // 0x1800b62e5
+        }
 
-    String dir{nullptr};                                        // [RBP+0x50]
-    {
-        static void* catCache = nullptr;
-        reinterpret_cast<ConcatCStrFn>(RtResolveCached(
-            "??HSystem@@YA?AVString@0@AEBV10@PEBD@Z", &catCache))(
-                &dir, reinterpret_cast<const String*>(&saveDir), kSaveSubDir);
-    }
+        System::String dir;                                         // [RBP+0x50]
+        {
+            static void* catCache = nullptr;
+            // ??HSystem@@YA?AVString@0@AEBV10@PEBD@Z, 0x1800c92d0. AsString()
+            // is the conversion retail performs by pointer cast (Filename.h).
+            reinterpret_cast<ConcatCStrFn>(RtResolveCached(
+                "??HSystem@@YA?AVString@0@AEBV10@PEBD@Z", &catCache))(
+                    &dir, &saveDir.AsString(), kSaveSubDir);
+        }
 
-    {
-        static void* ffCache = nullptr;
-        reinterpret_cast<FindFilesFn>(RtResolveCached(
-            "?FindFiles@FileSystem@IO@@QEBAXAEBVString@System@@0_NAEAV?$Array@"
-            "VFilename@System@@@Collection@@@Z", &ffCache))(
-                fs, &dir, &pattern, false, &found);              // 0x1800b6315
-    }
+        {
+            static void* ffCache = nullptr;
+            reinterpret_cast<FindFilesFn>(RtResolveCached(
+                "?FindFiles@FileSystem@IO@@QEBAXAEBVString@System@@0_NAEAV?$Array@"
+                "VFilename@System@@@Collection@@@Z", &ffCache))(
+                    fs, &dir, &pattern, false, &found);              // 0x1800b6315
+        }
 
-    // Retail's teardown order: dir, then saveDir, then pattern.
-    ReleaseInline(&dir.data);                                   // 0x1800b631b
-    ReleaseInline(&saveDir.data);                               // 0x1800b6343
-    ReleaseInline(&pattern.data);                               // 0x1800b636c
+        // ~dir, ~saveDir, ~pattern are retail's release sequence at
+        // 0x1800b631b/0x1800b6343/0x1800b636c, now the three destructors
+        // below, firing in exactly that order at the close of this block.
+    }
 
     // ---- 3. one SaveGameInfo per hit --------------------------------------
     for (int32_t i = 0; i < found.size; ++i) {                  // 0x1800b6397
         SaveGameInfo entry;
-        entry.sortKey   = 0;                                    // 0x1800b63a0
-        entry.name.data = nullptr;                              // 0x1800b63a8
+        entry.sortKey = 0;                                      // 0x1800b63a0
+        // `entry.name` (a `RtSystem::String` field) is placement-constructed
+        // below rather than zeroed here -- the copy ctor's own "adopt if
+        // non-null, else leave null" already produces 0x1800b63a8's effect
+        // for both outcomes.
 
-        // `Filename::GetPathFilename(true)` returns a Filename BY VALUE, so
-        // the slot is hidden in RDX — retail reuses `pattern`'s dead stack
-        // cell for it (`LEA RDX,[RBP+0x48]`).
-        Filename baseName{nullptr};
-        Filename* got;
         {
-            static void* gpfCache = nullptr;
-            got = reinterpret_cast<GetPathFilenameFn>(RtResolveCached(
-                "?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z", &gpfCache))(
-                    &found.data[i], &baseName, true);           // 0x1800b63c5
+            // `Filename::GetPathFilename(true)` returns a Filename BY VALUE,
+            // so the slot is hidden in RDX — retail reuses `pattern`'s dead
+            // stack cell for it (`LEA RDX,[RBP+0x48]`). Filled directly: the
+            // callee treats the pointer as raw memory, the same as any other
+            // hidden-return-slot target.
+            System::Filename baseName;
+            System::Filename* got;
+            {
+                static void* gpfCache = nullptr;
+                got = reinterpret_cast<GetPathFilenameFn>(RtResolveCached(
+                    "?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z", &gpfCache))(
+                        &found.data[i], &baseName, true);           // 0x1800b63c5
+            }
+            // UNGUARDED deref of the returned pointer, as retail writes it.
+            // `String(const String&)` (retail 0x180006cb0) is exactly "adopt
+            // the buffer, AddRef if non-null" -- what the C body wrote out by
+            // hand at 0x1800b63ce. `entry.name` is a `RtSystem::String`
+            // field of the (not yet converted) `SaveGameInfo`, reached
+            // through the transitional bridge.
+            new (&Sys(entry.name)) System::String(got->AsString());
+            // ~baseName is retail's release at 0x1800b63da.
         }
-        // UNGUARDED deref of the returned pointer, as retail writes it.
-        if (got->data) {                                        // 0x1800b63ce
-            entry.name.data = got->data;
-            ++reinterpret_cast<int32_t*>(got->data)[-1];
-        }
-        ReleaseInline(&baseName.data);                          // 0x1800b63da
 
         // THE FULL FOUND PATH, not the base name — see the banner.
         {
@@ -290,15 +301,21 @@ extern "C" void RtIo_PersistenceWorker_GetSaveList(void* worker) {
             fn(&p->saves, p->saveCount + 1, &entry);            // 0x1800b645f
         }
 
-        ReleaseInline(&entry.name.data);                        // 0x1800b6465
+        // `entry` is a plain local (`SaveGameInfo` is not yet converted), so
+        // there is no outer RAII to run this for us; retail's release at
+        // 0x1800b6465 is spelled as the destructor itself through the bridge.
+        Sys(entry.name).~String();
     }
 
     // ---- 4. publish ---------------------------------------------------------
     p->status = 1;                                              // 0x1800b64c8
 
     // ---- 5. tear the FindFiles array down ----------------------------------
+    // `found.data` is a raw buffer of `System::Filename` from an external
+    // allocator (not a container with its own RAII), so each element's
+    // release is still an explicit call -- now the destructor itself.
     for (int64_t i = 0; i < static_cast<int64_t>(found.size); ++i)
-        ReleaseInline(&found.data[i].data);                     // 0x1800b64e4
+        found.data[i].~Filename();                              // 0x1800b64e4
     if (found.data) MemFree(found.data);                        // 0x1800b6541
 }
 

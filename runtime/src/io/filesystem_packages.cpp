@@ -304,6 +304,10 @@
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
 #include "../../src/system/string.h"
+#include "../../src/system/pod_bridge.h"
+
+#include <new>        // placement new into the retail hidden return slot
+#include <utility>    // std::move -- the pointer steal out of a POD out-param
 
 // ResolveAddr, forward-declared at FILE scope rather than pulled in from
 // standalone/resolve.h — that header drags in <windows.h>, whose <wingdi.h>
@@ -326,8 +330,8 @@ using RtSystem::String;
 using RtSystem::Filename;
 using RtSystem::RtMemAlloc;
 using RtSystem::RtMemFree;
-using RtSystem::RtString_ReleaseInline;
-using RtSystem::RtSystem_String_Set;
+using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
+using RtSystem::SysFile;  //   "
 
 namespace {
 
@@ -498,8 +502,11 @@ PackfileIndexNode* IndexFind(PackfileIndexNode* node, const char* key) {
 // 0x180007c2e. The oracle is a regression net, not the evidence.
 extern "C" Filename* RtIo_FileSystem_GetPackDirectory(const FileSystem* self, Filename* ret) {
 
-    RT_EXPORT_ONCE(FilenameCopyCtorFn, "??0Filename@System@@QEAA@AEBV01@@Z")(
-        ret, reinterpret_cast<const Filename*>(&self->packDirectory));
+    // `ret` is the hidden return slot — raw bytes — so the copy ctor
+    // (0x1800067d0) is placement-constructed into it. `packDirectory` is a
+    // `RtSystem::String` member of the not-yet-converted IO::FileSystem, read
+    // as a Filename exactly as retail's `LEA RDX,[RCX+0x10]` does.
+    new (ret) System::Filename(SysFile(self->packDirectory));
 
     return ret;
 }
@@ -525,9 +532,9 @@ extern "C" Filename* RtIo_FileSystem_GetPackDirectory(const FileSystem* self, Fi
 extern "C" Filename* RtIo_PackageFile_GetFileName(const PackageFileView* self,
                                                   Filename* ret, int index) {
 
-    const Filename* entry = reinterpret_cast<const Filename*>(
+    const System::Filename* entry = reinterpret_cast<const System::Filename*>(
         static_cast<const uint8_t*>(self->entries) + static_cast<int64_t>(index) * 16);
-    RT_EXPORT_ONCE(FilenameCopyCtorFn, "??0Filename@System@@QEAA@AEBV01@@Z")(ret, entry);
+    new (ret) System::Filename(*entry);   // the copy ctor, 0x1800067d0
 
     return ret;
 }
@@ -622,8 +629,9 @@ extern "C" void RtIo_FileSystem_ClosePackages(FileSystem* self) {
 
         // The root's key String, released with retail's inlined idiom — the
         // freeing branch leaves the slot holding `data - 8`, not null. That
-        // asymmetry is retail's and RtString_ReleaseInline reproduces it.
-        RtString_ReleaseInline(reinterpret_cast<String*>(const_cast<char**>(&root->key)));
+        // asymmetry is retail's and ~String reproduces it (String.h).
+        reinterpret_cast<System::String*>(
+            const_cast<char**>(&root->key))->~String();
         RtMemFree(root);
     }
     // Zeroed unconditionally, even when root was already null.
@@ -653,30 +661,31 @@ extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
     found.count     = 0;         // MOV qword ptr [RBP-0x18],0
     found._capacity = 0;
 
-    String pattern;
-    pattern.data = nullptr;      // MOV qword ptr [RBP+0x48],0
-    RtSystem_String_Set(&pattern, "*.pkg");   // literal read at 0x1801556f0
+    // The two path values live only until FindFiles returns; the inner scope is
+    // retail's release point, and the destructors run in retail's order —
+    // packDir (+0x50) first, then pattern (+0x48).
+    {
+        System::String pattern("*.pkg");   // literal read at 0x1801556f0
 
-    Filename packDir;
-    packDir.data = nullptr;
-    RT_EXPORT_ONCE(GetPackDirectoryFn,
-        "?GetPackDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ")(self, &packDir);
+        // GetPackDirectory's hidden return slot keeps its retail POD signature
+        // (it is a registered entry point), so the value lands in a POD and the
+        // move ctor steals it, leaving `packDirPod` null: one release.
+        Filename packDirPod;
+        packDirPod.data = nullptr;
+        RT_EXPORT_ONCE(GetPackDirectoryFn,
+            "?GetPackDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ")(self, &packDirPod);
+        System::Filename packDir(std::move(Sys(packDirPod)));
 
-    // FindFiles(dir, pattern, recursive=false, out). Retail passes the value
-    // GetPackDirectory RETURNED (RAX) as RDX, which is the same pointer as
-    // &packDir — the hidden return slot is handed straight on. Fifth argument
-    // goes on the stack at [RSP+0x20].
-    //
-    // UNPORTED (§4). THIS IS THE PREDICTED ATTEMPT-12 FAULT (§8).
-    typedef void (*FindFilesFn)(const FileSystem*, const Filename*, const String*,
-                                bool, FoundArray*);
-    RT_EXPORT_ONCE(FindFilesFn,
-        "?FindFiles@FileSystem@IO@@QEBAXAEBVString@System@@0_NAEAV?$Array@VFilename@System@@@Collection@@@Z")(
-            self, &packDir, &pattern, false, &found);
-
-    // Released in retail's order: packDir (+0x50) first, then pattern (+0x48).
-    RtString_ReleaseInline(reinterpret_cast<String*>(&packDir));
-    RtString_ReleaseInline(&pattern);
+        // FindFiles(dir, pattern, recursive=false, out). Retail passes the value
+        // GetPackDirectory RETURNED (RAX) as RDX, which is the same pointer as
+        // &packDir — the hidden return slot is handed straight on. Fifth argument
+        // goes on the stack at [RSP+0x20].
+        typedef void (*FindFilesFn)(const FileSystem*, const System::Filename*,
+                                    const System::String*, bool, FoundArray*);
+        RT_EXPORT_ONCE(FindFilesFn,
+            "?FindFiles@FileSystem@IO@@QEBAXAEBVString@System@@0_NAEAV?$Array@VFilename@System@@@Collection@@@Z")(
+                self, &packDir, &pattern, false, &found);
+    }
 
     // ---- LOOP 1: one PackageFile per discovered *.pkg ---------------------
     // Retail allocates 0xF0 bytes aligned 8 under the allocator lock, runs the
@@ -774,11 +783,14 @@ extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
             // (the Filename copy ctor) zeroes the slot first, so `key` is
             // deliberately not pre-initialised — matching retail, which passes
             // an untouched [RBP+0x50].
-            Filename key;
+            Filename keyPod;
             RT_EXPORT_ONCE(GetFileNameFn,
-                "?GetFileName@PackageFile@IO@@QEBA?AVFilename@System@@H@Z")(owner, &key, fi);
+                "?GetFileName@PackageFile@IO@@QEBA?AVFilename@System@@H@Z")(owner, &keyPod, fi);
+            // The move ctor steals the pointer, leaving `keyPod` null, so the
+            // one release is ~key at the bottom of the iteration.
+            System::Filename key(std::move(Sys(keyPod)));
 
-            PackfileIndexNode* node = IndexFind(self->packfileIndexRoot, key.data);
+            PackfileIndexNode* node = IndexFind(self->packfileIndexRoot, key._data);
             if (node != nullptr) {
                 // The incumbent's OWN +0xAC decides, not the newcomer's: retail
                 // indexes packfiles[] with the FOUND NODE's packIndex
@@ -799,7 +811,7 @@ extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
                 // RCX is `this+0x40`, the {root,count} tree object; RDX is a
                 // scratch out-slot retail never reads afterwards.
                 using BstInsertFn = void* (*)(void*, PackfileIndexNode**,
-                                              const Filename*, const uint64_t*);
+                                              const System::Filename*, const uint64_t*);
                 static BstInsertFn insertFn =
                     reinterpret_cast<BstInsertFn>(ResolveAddr(Module::Runtime, 0x180025a80));
                 const uint64_t value = (static_cast<uint64_t>(static_cast<uint32_t>(fi)) << 32) |
@@ -809,7 +821,7 @@ extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
                 ++inserted;
             }
 
-            RtString_ReleaseInline(reinterpret_cast<String*>(&key));
+            // ~key is retail's release at the bottom of the iteration.
         }
     }
 
@@ -821,7 +833,7 @@ extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
     // null test inside.
     const int32_t foundCount = found.count;   // the shadow below runs after the zeroing
     for (int64_t i = 0; i < static_cast<int64_t>(found.count); ++i)
-        RtString_ReleaseInline(reinterpret_cast<String*>(&found.data[i]));
+        Sys(found.data[i]).~Filename();
     RtMemFree(found.data);
     found.data  = nullptr;
     found.count = 0;

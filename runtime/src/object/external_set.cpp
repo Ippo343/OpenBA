@@ -71,9 +71,12 @@
 #include <cstdlib>
 #include <cstring>
 
+#include <new>          // placement new into raw node/array element bytes
+
 #include "external_set.h"
 #include "../../funcs/rt_port.h"
 #include "../system/string.h"
+#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 
 // Declared locally rather than including standalone/resolve.h, which drags in
 // <windows.h> (PLAN §4.1 decision 1). Byte-identical to set_avl.cpp's and
@@ -81,12 +84,9 @@
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
-// Ported in Wave 2 (runtime/src/system/filename.cpp), registered at
-// 0x1800067d0. Declared here rather than pulled from a header because that
-// lane's file exposes none of its own — external.cpp does the same.
-namespace RtSystem {
-Filename* RtSystem_Filename_CtorCopy(Filename* self, const Filename* other);
-}
+// `??0Filename@System@@QEAA@AEBV01@@Z` (0x1800067d0) used to be forward-declared
+// here as a C entry point. ENDGAME B.3.1 step 2 calls it as what it is — the
+// `System::Filename` copy constructor — so the declaration is gone.
 
 namespace rtresset {
 
@@ -154,16 +154,13 @@ static void SetNodeFree(void* ignored, void* node) {
 // visible. `runtime/src/system/string.h` has the same body as
 // RtString_ReleaseInline; it is repeated here only because these call sites
 // operate on a `Filename` embedded at a node offset, not on a `String` local.
-static void ReleaseInline(Filename* slot) {
-    char* p = slot->data;
-    if (p == nullptr) return;
-    int32_t* rc = reinterpret_cast<int32_t*>(p) - 1;
-    if (--(*rc) == 0) {
-        slot->data = p - 8;
-        MemFree(slot->data);
-    } else {
-        slot->data = nullptr;
-    }
+// ENDGAME B.3.1 step 2: this hand-respelled release is `~Filename`
+// (0x180006980) — the "else store a NULL into the slot" half included, since
+// System::String's destructor carries retail's asymmetry verbatim (String.h).
+// The four call sites now spell it as the destructor it is; the local copy of
+// the idiom is gone, and with it the fourth place it could drift.
+static void ReleaseInline(RtSystem::Filename* slot) {
+    RtSystem::Sys(*slot).~Filename();
 }
 
 // ---------------------------------------------------------------------------
@@ -395,7 +392,7 @@ void Retrace(Set* set, Node** slot) {
 // ---------------------------------------------------------------------------
 Node* PairCtor(Node* node, const ResourceEntry* src, Node* parent) {
     ResourceEntry* e = Elem(node);
-    RtSystem::RtSystem_Filename_CtorCopy(&e->path, &src->path);
+    new (&e->path) System::Filename(RtSystem::Sys(src->path));
     e->external    = src->external;
     e->usageMask   = src->usageMask;
     e->referenceId = src->referenceId;
@@ -510,8 +507,9 @@ Node** InsertCore(Set* set, Node** out, const ResourceEntry* pair) {
 // ---------------------------------------------------------------------------
 Node** Insert(Set* set, Node** out, const Filename* key, const EntryValue* value) {
     ResourceEntry tmp;
-    tmp.path.data = nullptr;
-    RtSystem::RtSystem_Filename_CtorCopy(&tmp.path, key);
+    // The copy ctor member-initialises `_data` to null before it adopts, so
+    // retail's explicit pre-null is inside it now.
+    new (&tmp.path) System::Filename(RtSystem::Sys(*key));
     tmp.external    = value->external;
     tmp.usageMask   = value->usageMask;
     tmp.referenceId = value->referenceId;
@@ -725,7 +723,7 @@ void ArrayResize(FilenameArray* self, int newSize, const Filename* fill) {
         Filename* dst = self->data + i;
         if (dst == nullptr) continue;                 // 0x18002e07b, from ADD's ZF
         const Filename* src = (i < oldSize) ? (oldData + i) : fill;
-        RtSystem::RtSystem_Filename_CtorCopy(dst, src);
+        new (dst) System::Filename(RtSystem::Sys(*src));
     }
 
     if (oldData != self->data) {

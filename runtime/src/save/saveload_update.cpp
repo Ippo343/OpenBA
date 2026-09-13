@@ -773,34 +773,49 @@ void UpdateLoadBody(SaveLoad* self, RtSink& out) {
             // ModInfo+0x08 (the package PATH), never ModInfo+0x00 (the display
             // name). Retail re-reads _selectedIndex and _savesData here rather
             // than reusing what it computed above; transcribed.
-            String dataDir{};
-            RT_EXPORT_ONCE(RtSaveDetail::GetDataDirectoryFn,
-                "?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ")(
-                    RtSaveDetail::FileSystemSingleton(), &dataDir);
-
-            SaveInfo* row = SaveInfoAt(self, out, self->_selectedIndex);
-            const RtSave::ModInfo* mi = row->modsData + m;
-
-            String joined{};
-            RT_EXPORT_ONCE(RtSaveDetail::ConcatFn, "??HSystem@@YA?AVString@0@AEBV10@0@Z")(
-                &joined, &dataDir, reinterpret_cast<const String*>(&mi->path));
-
-            // Retail adopts the concatenation's buffer into a FRESH slot (with
-            // an AddRef) and adjusts THAT, leaving `joined` untouched — which
-            // is why three separate Strings are released below and not two.
-            String work{};
-            if (joined.data != nullptr) {
-                work.data = joined.data;
-                *reinterpret_cast<int*>(work.data - 4) += 1;
-            }
-            RT_EXPORT_ONCE(RtSaveDetail::AdjustDelimsFn,
-                "?AdjustDelimiters@Filename@System@@AEAAXXZ")(&work);
-
-            // Linear scan of IO::Modification: length first (read from the
-            // String allocation header at data[-8], with a null String counting
-            // as length 0 rather than faulting), then _stricmp.
+            // ENDGAME B.3.1 step 2. The three locals are RAII objects now, and
+            // the explicit inner scope ends exactly where retail's three
+            // releases are (0x1800c281c / 0x1800c2845 / 0x1800c286e) — so the
+            // destructors run in retail's order (work, joined, dataDir, the
+            // reverse of the declarations) and BEFORE the bubble-down below,
+            // not at the end of the iteration. NOTE this is NOT CheckMod's
+            // order, which releases work, dataDir, joined; both are transcribed
+            // as written rather than regularised.
             int32_t found = -1;
             {
+                System::Filename dataDir;
+                RT_EXPORT_ONCE(RtSaveDetail::GetDataDirectoryFn,
+                    "?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ")(
+                        RtSaveDetail::FileSystemSingleton(),
+                        // TRANSITIONAL CAST, the class->POD direction: the door's
+                        // typedef is the C entry point's ABI shape and IO::FileSystem
+                        // is not converted yet. Same eight bytes; the callee
+                        // placement-constructs into this hidden return slot.
+                        reinterpret_cast<String*>(&dataDir));
+
+                SaveInfo* row = SaveInfoAt(self, out, self->_selectedIndex);
+                const RtSave::ModInfo* mi = row->modsData + m;
+
+                // The `??HSystem@@YA?AVString@0@AEBV10@0@Z` door IS
+                // System::operator+ (0x1800c9440). `mi->path` is a raw
+                // `const char*` member of the unconverted `ModInfo` that retail
+                // reads AS a String, so it comes through a transitional cast
+                // (B31_RULES, "members of not-yet-converted structs").
+                System::String joined =
+                    dataDir.AsString()
+                    + reinterpret_cast<const System::String&>(mi->path);
+
+                // Retail adopts the concatenation's buffer into a FRESH slot
+                // (with an AddRef) and adjusts THAT, leaving `joined` untouched
+                // — which is why three separate Strings are released and not
+                // two. Adopt-into-a-nulled-slot followed by AdjustDelimiters IS
+                // ??0Filename@System@@QEAA@AEBVString@1@@Z (0x18000c780), so
+                // this one line still spends both.
+                System::Filename work(joined);
+
+                // Linear scan of IO::Modification: length first (read from the
+                // String allocation header at data[-8], with a null String
+                // counting as length 0 rather than faulting), then _stricmp.
                 // Same re-read pair as the clear loop above (0x1800c27d0 /
                 // 0x1800c280f).
                 for (int32_t j = 0; j < mods->count; ++j) {
@@ -808,23 +823,13 @@ void UpdateLoadBody(SaveLoad* self, RtSink& out) {
                         static_cast<uint8_t*>(out.ReadPtr(&mods->mods))
                         + static_cast<int64_t>(j) * 0x80)->file.data;
                     const int lenEntry = entryName ? *reinterpret_cast<const int*>(entryName - 8) : 0;
-                    const int lenWork  = work.data ? *reinterpret_cast<const int*>(work.data - 8) : 0;
-                    if (lenEntry == lenWork && _stricmp(entryName, work.data) == 0) {
+                    const int lenWork  = work.GetLength();
+                    if (lenEntry == lenWork && _stricmp(entryName, work._data) == 0) {
                         found = j;
                         break;
                     }
                 }
             }
-
-            // Release order is work, joined, dataDir (0x1800c281c / 0x1800c2845 /
-            // 0x1800c286e). NOTE this is NOT CheckMod's order, which releases
-            // work, dataDir, joined. Both are transcribed as written rather than
-            // regularised; the refcounts are independent, so the difference is
-            // invisible — right up until someone "unifies" them and gets one
-            // of the two wrong.
-            RtSystem::RtString_ReleaseInline(&work);
-            RtSystem::RtString_ReleaseInline(&joined);
-            RtSystem::RtString_ReleaseInline(&dataDir);
 
             if (found < 0) continue;
 

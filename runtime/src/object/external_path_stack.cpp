@@ -60,6 +60,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <new>          // placement new into the retail raw element slots
 
 #include "external_path.h"
 #include "external_path_stack.h"
@@ -68,50 +69,19 @@
 #include "../../types/system/String.h"
 #include "../system/string.h"
 #include "../system/setupdir_helpers.h"
+#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 #include "../collection/array_internal.h"
-
-namespace RtSystem {
-// Declared locally, house style — filename.cpp exposes no header of its own.
-// Identical spellings to runtime/src/object/external_path_win.cpp:88-95; the
-// linker checks the two against each other.
-void      RtSystem_Filename_AdjustDelimiters(Filename* self);              // 0x1800c6970
-Filename* RtSystem_Filename_GetPathFilename(const Filename* self, Filename* ret,
-                                            bool stripExtension);          // 0x1800c6740
-Filename* RtSystem_Filename_CtorCopy(Filename* self, const Filename* other);
-                                                                           // 0x1800067d0
-}  // namespace RtSystem
 
 namespace RtObject {
 
 using RtSystem::Filename;
-using RtSystem::String;
-using RtSystem::RtString_AdoptInline;
-using RtSystem::RtString_ReleaseInline;
-using RtSystem::RtSystem_String_Concat;
-using RtSystem::RtSystem_String_ConcatCStr;
-using RtSystem::RtSystem_Filename_AdjustDelimiters;
-using RtSystem::RtSystem_Filename_GetPathFilename;
-using RtSystem::RtSystem_Filename_GetPathDirectory;
-using RtSystem::RtSystem_Filename_CtorCopy;
+using RtSystem::Sys;
 
 namespace {
-
-inline String*       AsStr(Filename* f)       { return reinterpret_cast<String*>(f); }
-inline const String* AsStr(const Filename* f) { return reinterpret_cast<const String*>(f); }
 
 // 0x180155814. A named constant so the negative control below can swap it for
 // a token the oracle must reject.
 const char* const kDot = ".";
-
-// The release/adopt pair retail inlines at every `Filename x = y` site, with
-// retail's own `!=` self-assign guard. Same body as external_path_win.cpp's;
-// duplicated rather than shared because that file is another lane's and its
-// copy is `static` inside an anonymous namespace.
-inline void ReleaseThenAdopt(Filename* dst, char* src) {
-    if (dst->data == src) return;
-    RtString_ReleaseInline(AsStr(dst));
-    RtString_AdoptInline(AsStr(dst), src);
-}
 
 }  // namespace
 
@@ -147,45 +117,47 @@ PathStackCounters g_psc = {};
 void RtObject_ExternalFactory_PushPath(ExternalFactory* self, const Filename* path) {
     ++g_psc.pushCalls;
 
-    Filename ext{nullptr};                                       // [RBP-0x30]
-    RtSystem_Filename_GetPathExtension(path, &ext);
-    Filename fname{nullptr};                                     // [RBP-0x38]
-    RtSystem_Filename_GetPathFilename(path, &fname, true);
+    // ENDGAME B.3.1 step 2. `path` is the C entry point's POD parameter, so it
+    // reaches the class through the one transitional bridge.
+    const System::Filename& in = Sys(*path);
 
-    String t1{nullptr}, t2{nullptr};                             // -0x40 / +0x38
-    RtSystem_String_ConcatCStr(&t1, AsStr(&fname), kDot);
-    RtSystem_String_Concat(&t2, &t1, AsStr(&ext));
+    System::Filename ext   = in.GetPathExtension();              // [RBP-0x30]
+    System::Filename fname = in.GetPathFilename(true);           // [RBP-0x38]
 
-    Filename file{nullptr};                                      // [RBP+0x20]
-    RtString_AdoptInline(AsStr(&file), t2.data);                 // 0x1800bd14a
-    RtSystem_Filename_AdjustDelimiters(&file);                   // 0x1800bd15d
+    System::String t1 = fname.AsString() + kDot;                 // [RBP-0x40]
+    System::String t2 = t1 + ext.AsString();                     // [RBP+0x38]
 
-    Filename dir{nullptr};                                       // [RBP+0x30]
-    RtSystem_Filename_GetPathDirectory(path, &dir);
+    // 0x1800bd14a-0x1800bd15d: adopt t2's buffer, then normalise ONCE. That is
+    // `Filename::Filename(const String&)`, 0x18000c780.
+    System::Filename file(t2);                                   // [RBP+0x20]
+
+    System::Filename dir = in.GetPathDirectory();                // [RBP+0x30]
 
     // The 0x10-byte local at [RBP-0x18]: two ADJACENT stack slots, which is
     // the WRITE-side pin for the PathStackEntry field order that
-    // runtime/types/object/External.h records.
+    // runtime/types/object/External.h records. `PathStackEntry` is a
+    // not-yet-converted struct, so its two members keep the POD type
+    // (B31_RULES) and both halves are constructed and destroyed BY HAND, in
+    // retail's own order — that is what retail's own code does here too.
     PathStackEntry entry;
-    RtSystem_Filename_CtorCopy(&entry.directory, &dir);          // 0x1800bd177
-    entry.filename.data = nullptr;                               // 0x1800bd185 (RBX == 0)
-    ReleaseThenAdopt(&entry.filename, file.data);                // 0x1800bd189-0x1800bd1c8
-    RtSystem_Filename_AdjustDelimiters(&entry.filename);         // 0x1800bd1cf
-    RtSystem_Filename_AdjustDelimiters(&entry.filename);         // 0x1800bd1d4  (yes, twice)
+    // 0x1800bd177 — the copy ctor into a raw stack slot.
+    new (&entry.directory) System::Filename(dir);
+    // 0x1800bd185-0x1800bd1d4 — null the slot, release-then-adopt, then
+    // AdjustDelimiters TWICE (see the banner: it really is twice). Null-init
+    // plus that sequence IS the copy ctor 0x1800067d0, whose ported body
+    // normalises twice for exactly this reason.
+    new (&entry.filename) System::Filename(file);
 
     RtObject_PathStackSetSize_18002e220(&self->_pathStack,
                                         self->_pathStack._size + 1, &entry);
     g_psc.depthAfterPush = self->_pathStack._size;
 
-    // Retail's release order, reversed construction order.
-    RtString_ReleaseInline(AsStr(&entry.filename));
-    RtString_ReleaseInline(AsStr(&entry.directory));
-    RtString_ReleaseInline(AsStr(&dir));
-    RtString_ReleaseInline(AsStr(&file));
-    RtString_ReleaseInline(&t2);
-    RtString_ReleaseInline(&t1);
-    RtString_ReleaseInline(AsStr(&fname));
-    RtString_ReleaseInline(AsStr(&ext));
+    // Retail's release order is reversed construction order. The two hand-built
+    // halves of `entry` go first, explicitly, because nothing owns them; the
+    // six locals after them — dir, file, t2, t1, fname, ext — are destructors
+    // running in reverse declaration order, which is the same sequence.
+    Sys(entry.filename).~Filename();
+    Sys(entry.directory).~Filename();
 
     // NO LIVE SHADOW. PushPath is a destructive mutator on one shared stack:
     // running theirs after ours would push the same entry TWICE and leave the
@@ -219,10 +191,13 @@ void RtObject_ExternalFactory_PushPath(ExternalFactory* self, const Filename* pa
 void RtObject_ExternalFactory_PopPath(ExternalFactory* self) {
     ++g_psc.popCalls;
 
+    // `out` is the raw 0x10-byte slot RemoveLast copy-CONSTRUCTS into, and the
+    // two halves are POD members of a not-yet-converted struct, so the pair of
+    // releases is spelled as the two destructors it is (~Filename, 0x180006980).
     PathStackEntry out;                                          // [RSP+0x28]
     RtObject_PathStackRemoveLast_18002ccb0(&self->_pathStack, &out);
-    RtString_ReleaseInline(AsStr(&out.filename));                // 0x1800bd066
-    RtString_ReleaseInline(AsStr(&out.directory));
+    Sys(out.filename).~Filename();                               // 0x1800bd066
+    Sys(out.directory).~Filename();
     g_psc.depthAfterPop = self->_pathStack._size;
 
     // No live shadow, same reason as PushPath.
@@ -265,8 +240,11 @@ extern "C" void RtObject_PathStackDestroyRange_18002e8d0(void* ignoredThis,
     for (int i = 0; i < count; ++i) {
         uint8_t* e = base + static_cast<int64_t>(i) * 0x10;
         ++RtObject::g_psc.elemsDestroyed;
-        RtSystem::RtString_ReleaseInline(reinterpret_cast<RtSystem::String*>(e + 8));   // filename
-        RtSystem::RtString_ReleaseInline(reinterpret_cast<RtSystem::String*>(e));       // directory
+        // ENDGAME B.3.1 step 2: retail's inlined release IS ~Filename
+        // (0x180006980). The element is raw container bytes, which is why the
+        // two halves are addressed by offset rather than through a struct.
+        reinterpret_cast<System::Filename*>(e + 8)->~Filename();   // filename
+        reinterpret_cast<System::Filename*>(e)->~Filename();       // directory
     }
 }
 
@@ -277,10 +255,8 @@ namespace rtcoll {
 // release-then-adopt: the destination is raw MemAlloc memory on the realloc arm
 // and freshly-vacated-by-destroy memory nowhere. It must NOT release `dst`.
 static void AssignPathStackEntry(uint8_t* dst, const uint8_t* src) {
-    RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(dst),
-                               reinterpret_cast<const RtSystem::Filename*>(src));
-    RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(dst + 8),
-                               reinterpret_cast<const RtSystem::Filename*>(src + 8));
+    new (dst)     System::Filename(*reinterpret_cast<const System::Filename*>(src));
+    new (dst + 8) System::Filename(*reinterpret_cast<const System::Filename*>(src + 8));
 }
 
 // stride 0x10, align 8 — the `SHL RDX,0x4` and the `MOV EDX,0x8` at
@@ -366,8 +342,8 @@ extern "C" void RtObject_PathStackRemoveAt_18002de30(void* arrVoid, int index) {
         int32_t i = index;
         do {
             uint8_t* e = a->_data + static_cast<int64_t>(i) * 0x10;
-            RtSystem::RtString_ReleaseInline(reinterpret_cast<RtSystem::String*>(e + 8));
-            RtSystem::RtString_ReleaseInline(reinterpret_cast<RtSystem::String*>(e));
+            reinterpret_cast<System::Filename*>(e + 8)->~Filename();
+            reinterpret_cast<System::Filename*>(e)->~Filename();
 
             const int32_t next = i + 1;
             if (next < a->_size) {
@@ -377,10 +353,10 @@ extern "C" void RtObject_PathStackRemoveAt_18002de30(void* arrVoid, int index) {
                 if (dst != nullptr) {
                     const uint8_t* src = a->_data + static_cast<int64_t>(next) * 0x10;
                     ++RtObject::g_psc.elemsShifted;
-                    RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(dst),
-                                               reinterpret_cast<const RtSystem::Filename*>(src));
-                    RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(dst + 8),
-                                               reinterpret_cast<const RtSystem::Filename*>(src + 8));
+                    new (dst)     System::Filename(
+                        *reinterpret_cast<const System::Filename*>(src));
+                    new (dst + 8) System::Filename(
+                        *reinterpret_cast<const System::Filename*>(src + 8));
                 }
             }
             i = next;
@@ -405,10 +381,8 @@ extern "C" void* RtObject_PathStackRemoveLast_18002ccb0(void* arrVoid, void* out
 
     const int32_t idx = a->_size - 1;
     const uint8_t* e = a->_data + static_cast<int64_t>(idx) * 0x10;
-    RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(out),
-                               reinterpret_cast<const RtSystem::Filename*>(e));
-    RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(out + 8),
-                               reinterpret_cast<const RtSystem::Filename*>(e + 8));
+    new (out)     System::Filename(*reinterpret_cast<const System::Filename*>(e));
+    new (out + 8) System::Filename(*reinterpret_cast<const System::Filename*>(e + 8));
     RtObject_PathStackRemoveAt_18002de30(a, idx);
     return out;
 }

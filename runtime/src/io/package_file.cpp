@@ -281,17 +281,18 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
+#include <new>          // placement new into the retail hidden return slot
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/FileSystem.h"
 #include "../../types/system/String.h"
 #include "../../src/system/string.h"
+#include "../../src/system/pod_bridge.h"
 
 namespace RtIO {
 
 using RtSystem::String;
-using RtSystem::StringRefCount;
-using RtSystem::RtString_ReleaseInline;
+using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
 
 namespace {
 
@@ -392,24 +393,17 @@ typedef String*  (*StrGetterFn)(const void*, String*);
 typedef uint32_t (*U32VoidFn)();
 typedef int32_t  (*I32ThisFilenameFn)(void*, const void*);
 
-// The one shared piece of the three String getters: retail nulls the return
-// slot, loads the field, and AddRefs only if it is non-null. The FREEING branch
-// does not exist here — a getter never releases.
+// ENDGAME B.3.1 step 2: the shared "null the slot, AddRef if non-null" body the
+// three String getters used to hand-roll is exactly `System::String`'s copy
+// ctor (0x180006cb0, `Adopt` in string.cpp) -- null-then-AddRef, no freeing
+// branch, which is a getter's whole contract. The three call sites below now
+// construct that ctor into their hidden return slot directly.
 //
 //   180025327  MOV qword ptr [RDX],RAX     ; RAX = 0, the return slot
 //   18002532a  MOV RAX,qword ptr [RCX+off]
 //   18002532e  TEST RAX,RAX / JZ
 //   180025333  MOV qword ptr [RDX],RAX
 //   180025336  INC dword ptr [RAX + -0x4]  ; the refcount, block+4
-String* StringFieldGetter(String* ret, const String* field) {
-    ret->data = nullptr;
-    char* const s = field->data;
-    if (s != nullptr) {
-        ret->data = s;
-        ++StringRefCount(s);
-    }
-    return ret;
-}
 
 }  // namespace
 
@@ -572,20 +566,23 @@ extern "C" void* RtIo_PackageFile_Reconstruct(void* self) {
 }
 
 // ============================================================================
-// The three String getters. Shape and oracle in the helpers above.
+// The three String getters. `self->name/author/description` are RtSystem::String
+// MEMBERS of the not-yet-converted PackageFileView, reached through the one
+// transitional bridge (pod_bridge.h); `ret` is the raw hidden return slot, so
+// the copy ctor is constructed into it -- see the note above.
 // ============================================================================
 extern "C" String* RtIo_PackageFile_GetName(const PackageFileView* self, String* ret) {
-    StringFieldGetter(ret, &self->name);          // +0x40
+    new (ret) System::String(Sys(self->name));          // +0x40
     return ret;
 }
 
 extern "C" String* RtIo_PackageFile_GetAuthor(const PackageFileView* self, String* ret) {
-    StringFieldGetter(ret, &self->author);        // +0x48
+    new (ret) System::String(Sys(self->author));         // +0x48
     return ret;
 }
 
 extern "C" String* RtIo_PackageFile_GetDescription(const PackageFileView* self, String* ret) {
-    StringFieldGetter(ret, &self->description);   // +0x50
+    new (ret) System::String(Sys(self->description));    // +0x50
     return ret;
 }
 

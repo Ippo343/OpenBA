@@ -82,6 +82,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/achievement/AchievementManager.h"
 #include "../../types/io/Serializer.h"
+#include "../system/pod_bridge.h"   // the one transitional POD<->class cast
 
 using RtAchievement::Achievement;
 using RtAchievement::AchievementManager;
@@ -180,15 +181,11 @@ ArraySerializeFn SerializeInstancePtrs() {
     return f;
 }
 
-// ?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z — retail 0x1800c9930,
-// ported by Wave 2 and registered BY ADDRESS (string.cpp:958), so the address
-// is what finds it. By name it would miss.
-using StringSerializeFn = void (*)(void*, Serializer*);
-StringSerializeFn StringSerialize() {
-    static StringSerializeFn f = nullptr;
-    if (!f) f = reinterpret_cast<StringSerializeFn>(ResolveAddr(Module::Runtime, 0x1800c9930));
-    return f;
-}
+// ENDGAME B.3.1 step 2: `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z`
+// (0x1800c9930) is a member of `System::String` now, so the by-address door
+// that used to stand here is gone and the three call sites call it directly.
+// The registry row at that address registers the shim, and the shim is one line
+// over this member, so it is the same body either way.
 
 }  // namespace
 
@@ -234,11 +231,14 @@ bool RtAch_Achievement_Serialize(Achievement* self, Stream* stream) {
     Serializer ser;
     ReaderWriter* rw = MakeCodec(stream, &ser);
 
+    // The three String fields are POD members of the unconverted
+    // `Achievement::Achievement`, so they reach their own member through the
+    // one bridge. The field ORDER is retail's, not declaration order.
     ExternalPtrSerialize_StringTable()(&self->stringTable, &ser);   // +0x20
-    StringSerialize()(&self->title, &ser);                          // +0x28
-    StringSerialize()(&self->description, &ser);                    // +0x30
+    RtSystem::Sys(self->title).Serialize(&ser);                     // +0x28
+    RtSystem::Sys(self->description).Serialize(&ser);               // +0x30
     ExternalPtrSerialize_SpriteSheet()(&self->spriteSheet, &ser);   // +0x38
-    StringSerialize()(&self->spriteName, &ser);                     // +0x40
+    RtSystem::Sys(self->spriteName).Serialize(&ser);                // +0x40
 
     int count = self->goals._size;                                  // +0x50
     using IntFn = void (*)(ReaderWriter*, int*, const char*);

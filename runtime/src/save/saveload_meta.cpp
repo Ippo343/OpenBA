@@ -131,6 +131,7 @@
 #include <cstring>
 
 #include "saveload_internal.h"
+#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Stream.h"
 #include "../../types/io/Serializer.h"
@@ -325,8 +326,8 @@ using CtorFn        = void* (*)(void* self);
 using SetWindowsFn  = void  (*)(void* self, int count);
 using CommitFn      = void  (*)(void* self);
 using ReleaseFn     = void  (*)(void* self);
-using StrSerialFn   = void  (*)(String* self, rt::io::Serializer* ser);
-using StrSetFn      = void  (*)(String* self, const char* src);
+// ENDGAME B.3.1 step 2: the String::Serialize and String::Set door typedefs
+// are gone with their call sites — both are class members now.
 using StoreFn       = void  (*)(void* savedState, RtIo::MemoryStream* stream);
 
 // The IO::Encoding factory slots. THREE arguments — the version stays live in
@@ -424,11 +425,11 @@ static void RtSave_SaveLoad_SaveMetaData_Body(SaveLoad* self, void* pixels,
                            ReadVtableSlot(rw, rt::io::rw_vtbl::kScalarUInt));
     auto writeBytes  = reinterpret_cast<RwBytesFn>(
                            ReadVtableSlot(rw, rt::io::rw_vtbl::kSerializeBytes));
-    auto strSerialize = RT_EXPORT_ONCE(StrSerialFn,
-                            "?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z");
-
     // ---- the record -------------------------------------------------------
-    strSerialize(name, &ser);
+    // ENDGAME B.3.1 step 2: `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z`
+    // (0x1800c9930) is the class's own member now. `name` is the registered
+    // entry point's POD parameter, so it comes through the one bridge.
+    RtSystem::Sys(name)->Serialize(&ser);
 
     // Retail serialises the ARGUMENT HOME SLOTS: it spills R8D/R9D at entry
     // (0x1800c1493/0x1800c1497) and hands their addresses to the scalar slot,
@@ -458,7 +459,8 @@ static void RtSave_SaveLoad_SaveMetaData_Body(SaveLoad* self, void* pixels,
     arr.size     = 0;
     arr.capacity = 0;
 
-    auto strSet = RT_EXPORT_ONCE(StrSetFn, "?Set@String@System@@QEAAXPEBD@Z");
+    // ENDGAME B.3.1 step 2: the `?Set@String@System@@QEAAXPEBD@Z` door is gone
+    // with its one call site — it is `work.Set(...)` below.
     auto getDataDir = RT_EXPORT_ONCE(RtSaveDetail::GetDataDirectoryFn,
         "?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ");
 
@@ -479,24 +481,32 @@ static void RtSave_SaveLoad_SaveMetaData_Body(SaveLoad* self, void* pixels,
         }
 
         // The path, with the data-directory prefix stripped. See the banner.
-        RtSystem::Filename dataDir;
-        dataDir.data = nullptr;
-        getDataDir(RtSaveDetail::FileSystemSingleton(),
-                   reinterpret_cast<String*>(&dataDir));
+        //
+        // ENDGAME B.3.1 step 2: the two locals are RAII objects and the
+        // explicit scope ends exactly where retail's two releases are, so the
+        // destructors fire there — work then dataDir, retail's own order, the
+        // reverse of the declarations — and not at the end of the iteration.
+        {
+            System::Filename dataDir;
+            getDataDir(RtSaveDetail::FileSystemSingleton(),
+                       // TRANSITIONAL CAST, the class->POD direction: the
+                       // door's typedef is the C entry point's ABI shape and
+                       // IO::FileSystem is not converted yet.
+                       reinterpret_cast<String*>(&dataDir));
 
-        const int32_t dirLen =
-            (dataDir.data != nullptr) ? RtSystem::StringLength(dataDir.data) : 0;
+            // GetLength (0x1800063c0) IS the null-guarded stored-length read.
+            const int32_t dirLen = dataDir.GetLength();
 
-        String work;
-        work.data = nullptr;
-        strSet(&work, entry->file.data + static_cast<int64_t>(dirLen));
+            // `?Set@String@System@@QEAAXPEBD@Z` (0x1800c95d0) as itself; the
+            // default ctor is retail's `work.data = nullptr`.
+            System::String work;
+            work.Set(entry->file.data + static_cast<int64_t>(dirLen));
 
-        if (work.data != nullptr) {
-            tmp.path = work.data;
-            RtSystem::StringRefCount(work.data) += 1;
+            if (work._data != nullptr) {
+                tmp.path = work._data;
+                RtSystem::StringRefCount(work._data) += 1;
+            }
         }
-        ReleaseStringSlot(const_cast<const char**>(&work.data));
-        ReleaseStringSlot(const_cast<const char**>(&dataDir.data));
 
         tmp.versionMajor = entry->i2c;   // -> CheckMod status 4
         tmp.gameVersion  = entry->i18;   // -> CheckMod status 2 (< 0x1000400)
@@ -525,8 +535,11 @@ static void RtSave_SaveLoad_SaveMetaData_Body(SaveLoad* self, void* pixels,
 
     for (int32_t i = 0; i < count; ++i) {
         ModInfo* e = arr.data + i;
-        strSerialize(reinterpret_cast<String*>(&e->name), &ser);
-        strSerialize(reinterpret_cast<String*>(&e->path), &ser);
+        // `name` and `path` are raw `const char*` members of the unconverted
+        // `ModInfo` that retail serialises AS Strings, so they come through a
+        // transitional cast (B31_RULES, "members of not-yet-converted structs").
+        reinterpret_cast<System::String&>(e->name).Serialize(&ser);
+        reinterpret_cast<System::String&>(e->path).Serialize(&ser);
         scalarUInt(rw, &e->versionMajor, nullptr);
         scalarUInt(rw, &e->gameVersion,  nullptr);
         scalarUInt(rw, &e->versionMinor, nullptr);

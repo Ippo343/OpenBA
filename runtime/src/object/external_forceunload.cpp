@@ -103,44 +103,14 @@
 #include "../../types/object/External.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"
-
-namespace RtSystem {
-void      RtSystem_Filename_AdjustDelimiters(Filename* self);               // 0x1800c6970
-Filename* RtSystem_Filename_GetPathIdentifer(const Filename* self, Filename* ret);
-                                                                            // 0x1800c6610
-}  // namespace RtSystem
+#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 
 namespace RtObject {
 
 using RtSystem::Filename;
-using RtSystem::String;
-using RtSystem::RtString_AdoptInline;
-using RtSystem::RtString_ReleaseInline;
-using RtSystem::RtSystem_String_ConcatCStr;
-using RtSystem::RtSystem_Filename_AdjustDelimiters;
-using RtSystem::RtSystem_Filename_GetPathIdentifer;
+using RtSystem::Sys;
 
 namespace {
-
-inline String*       AsStr(Filename* f)       { return reinterpret_cast<String*>(f); }
-
-// `str-8` is the buffer LENGTH and `str-4` the refcount; that header belongs to
-// System::String, not to the allocator.
-inline int32_t BufLength(const char* d) {
-    return reinterpret_cast<const int32_t*>(d)[-2];
-}
-
-// Retail's inlined `Filename::operator=`: the `!=` guard is its own, and
-// skipping the whole block on a self-assign is what keeps the refcount from
-// reaching zero mid-assignment. Byte-identical to external_find.cpp's copy;
-// spelled again here rather than exported, because the two files transcribe it
-// from two different listings and a shared helper would hide a divergence
-// between them.
-inline void ReleaseThenAdopt(Filename* dst, char* src) {
-    if (dst->data == src) return;
-    RtString_ReleaseInline(AsStr(dst));
-    RtString_AdoptInline(AsStr(dst), src);
-}
 
 // 0x180155ae0 — see the banner for why this is NOT the "resource" at
 // 0x180155af0.
@@ -154,42 +124,48 @@ const char* const kResourceSuffix = ":resource";
 // ============================================================================
 void RtObject_ExternalFactory_ForceUnload(ExternalFactory* self, const Filename* path) {
     // ---- 0x1800beedc-0x1800bef29: `Filename key = path`, then adjust again --
-    Filename key{nullptr};                               // [RBP+0x28]
-    ReleaseThenAdopt(&key, path->data);
-    RtSystem_Filename_AdjustDelimiters(&key);            // 0x1800bef20 (op='s own)
-    RtSystem_Filename_AdjustDelimiters(&key);            // 0x1800bef25 (retail's extra)
+    // ENDGAME B.3.1 step 2. Null-init + operator= + the redundant second
+    // AdjustDelimiters IS the copy constructor (0x1800067d0), whose ported body
+    // normalises exactly twice for that reason: 0x1800bef20 and 0x1800bef25 are
+    // both still spent. `path` is the registered entry point's POD parameter and
+    // comes through the one transitional bridge.
+    System::Filename key(Sys(*path));                    // [RBP+0x28]
 
     // ---- 0x1800bef2f: the identifier comes from `path`, NOT from `key` ------
-    Filename ident{nullptr};                             // [RBP+0x38]
-    RtSystem_Filename_GetPathIdentifer(path, &ident);
+    System::Filename ident = Sys(*path).GetPathIdentifer();   // [RBP+0x38]
 
     // ---- 0x1800bef3c-0x1800befd2: no identifier -> append ":resource" -------
-    if (ident.data == nullptr || BufLength(ident.data) == 0) {
-        String tmp{nullptr};                             // [RBP+0x30]
-        RtSystem_String_ConcatCStr(&tmp, AsStr(&key), kResourceSuffix);
-        ReleaseThenAdopt(&key, tmp.data);                // 0x1800bef66
-        RtSystem_Filename_AdjustDelimiters(&key);        // 0x1800befa7
-        RtString_ReleaseInline(&tmp);                    // 0x1800befad
+    // `GetLength` (0x1800063c0) returns 0 for a null buffer, so it is retail's
+    // own null-or-empty test, not a widened one.
+    if (ident.GetLength() == 0) {
+        // 0x1800bef66 + 0x1800befa7 is `Filename::operator=(const String&)`
+        // (0x180026d40) — ONE normalise. `tmp`'s 0x1800befad release is its dtor.
+        System::String tmp = key.AsString() + kResourceSuffix;   // [RBP+0x30]
+        key = tmp;
     }
 
     // ---- 0x1800befd6-0x1800bf031: `Filename probe = key`, adjusted twice ----
-    Filename probe{nullptr};                             // [RBP+0x30], reused
-    ReleaseThenAdopt(&probe, key.data);
-    RtSystem_Filename_AdjustDelimiters(&probe);          // 0x1800bf028
-    RtSystem_Filename_AdjustDelimiters(&probe);          // 0x1800bf031
-
-    // ---- 0x1800bf037: descend `this->_resources` (this + 0x10) -------------
-    rtresset::Node* const node = rtresset::Find(
-        reinterpret_cast<const rtresset::Set*>(&self->_resources), &probe);
-
-    // ---- 0x1800bf04f: probe goes first; see the banner ---------------------
-    RtString_ReleaseInline(AsStr(&probe));
+    // The scope is deliberate and is the banner's "*** probe IS RELEASED BEFORE
+    // THAT STORE ***": retail's 0x1800bf04f release sits between the `Find` and
+    // the `usageMask = 0`, and closing the block here is how RAII keeps that
+    // order rather than sliding the release to the end of the function.
+    rtresset::Node* node = nullptr;
+    {
+        System::Filename probe(key);                     // [RBP+0x30], reused
+                                                         // 0x1800bf028 / 0x1800bf031
+        // ---- 0x1800bf037: descend `this->_resources` (this + 0x10) ---------
+        // TRANSITIONAL CAST, the class->POD direction: `rtresset::Find` is an
+        // unconverted C body (external_set.cpp) whose key parameter is the POD.
+        node = rtresset::Find(
+            reinterpret_cast<const rtresset::Set*>(&self->_resources),
+            reinterpret_cast<const Filename*>(&probe));
+    }   // 0x1800bf04f — probe's release, still ahead of the store
 
     // ---- 0x1800bf078: the whole point of the function ----------------------
     if (node != nullptr) rtresset::Elem(node)->usageMask = 0;
 
-    RtString_ReleaseInline(AsStr(&ident));               // 0x1800bf080
-    RtString_ReleaseInline(AsStr(&key));                 // 0x1800bf0a9
+    // ident (0x1800bf080) and key (0x1800bf0a9) release in their destructors,
+    // in that order — reverse declaration order is retail's teardown order.
 }
 
 }  // namespace RtObject

@@ -96,17 +96,12 @@
 
 using RtInput::Binding;
 using RtInput::BindingNode;
-using RtSystem::String;
 
-namespace RtSystem {
-// `?Format@String@System@@SA?AV12@PEBDZZ`, Wave 2's port
-// (runtime/src/system/string.cpp:613). Declared here rather than added to
-// runtime/src/system/string.h because that header is shared with other lanes
-// running in parallel; the declaration must stay byte-identical to the
-// definition, and the linker checks it. Called DIRECTLY, not through a
-// resolver: a direct call is what keeps this body off the DLL at cutover.
-String* RtSystem_String_Format(String* ret, const char* fmt, ...);
-}  // namespace RtSystem
+// ENDGAME B.3.1 step 2: `?Format@String@System@@SA?AV12@PEBDZZ` (0x1800c9730)
+// is a static member of `System::String` now, declared in
+// runtime/types/system/String.h, so the local variadic declaration this file
+// carried for the shim is gone. It is still a DIRECT call, which is what keeps
+// the body off the DLL at cutover.
 
 namespace {
 
@@ -258,21 +253,18 @@ void RtInput_KeyMap_Load(void* selfPtr) {
             int32_t value = -2;
 
             if (b->exclusive != 0) {
-                String name{};
-                RtSystem::RtSystem_String_Format(&name, "%s%s",
-                                                 b->description, kSlotSuffix[slot]);
-                String key{};
-                RtSystem::RtSystem_String_Format(&key, "%s%s", "Input", name.data);
+                System::String name = System::String::Format(
+                    "%s%s", b->description, kSlotSuffix[slot]);
+                System::String key = System::String::Format(
+                    "%s%s", "Input", name._data);
 
-                const char* stored = FindSettingValue(persistence, key.data);
+                const char* stored = FindSettingValue(persistence, key._data);
                 if (stored != nullptr)
                     value = static_cast<int32_t>(std::strtol(stored, nullptr, 10));
 
                 // Retail releases `key` first, then `name` — both with the
-                // inlined refcount-dec / lock / Free sequence that
-                // RtString_ReleaseInline reproduces.
-                RtSystem::RtString_ReleaseInline(&key);
-                RtSystem::RtString_ReleaseInline(&name);
+                // inlined refcount-dec / lock / Free sequence that is `~String`
+                // (0x180006c80). C++'s reverse declaration order is that order.
             }
 
             if (value >= 0) {

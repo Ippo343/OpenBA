@@ -49,6 +49,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <new>          // placement new into the retail hidden return slots
 
 #include "external_path.h"
 
@@ -56,6 +57,7 @@
 #include "../../types/io/FileSystem.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"
+#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 #include "../system/setupdir_helpers.h"
 #include "../system/widestring.h"
 #include "../../../standalone/res_load_lock.h"
@@ -76,25 +78,19 @@
 // ---------------------------------------------------------------------------
 
 
-namespace RtSystem {
-// Declared locally, house style (see runtime/src/io/filesystem_setupdirs_win.cpp
-// lines 138-158): filename.cpp exposes no header of its own.
-void      RtSystem_Filename_AdjustDelimiters(Filename* self);              // 0x1800c6970
-// `emptyIfNoExt` is NOT "strip the extension" -- the backward scan for '.' strips
-// it unconditionally. The flag is read in exactly one place: when NO '.' is found
-// at index >= 1, a TRUE flag yields the EMPTY filename rather than the whole leaf.
-// So on an extension-less path GetPathFilename(true) returns nothing at all, which
-// is why the `filenameFromStack` fallback below exists. Full derivation and the
-// ported body: runtime/src/system/filename.cpp:282-288.
-// Retail's own parameter reads as `stripExt`; do NOT copy that name here -- it is
-// what sent Wave 11 lane OBJEXT to re-derive this from the disassembly.
-Filename* RtSystem_Filename_GetPathFilename(const Filename* self, Filename* ret,
-                                            bool emptyIfNoExt);            // 0x1800c6740
-Filename* RtSystem_Filename_GetPathIdentifer(const Filename* self, Filename* ret);
-                                                                           // 0x1800c6610
-Filename* RtSystem_Filename_CtorCopy(Filename* self, const Filename* other);
-                                                                           // 0x1800067d0
-}  // namespace RtSystem
+// ENDGAME B.3.1 step 2: `AdjustDelimiters` (0x1800c6970), `GetPathFilename`
+// (0x1800c6740), `GetPathIdentifer` (0x1800c6610) and the copy ctor
+// (0x1800067d0) used to be forward-declared here as C entry points. They are
+// `System::Filename` members now, so the block is gone — with one fact from it
+// that is still worth having:
+//
+// `GetPathFilename`'s parameter is NOT "strip the extension". The backward scan
+// for '.' strips it unconditionally; the flag is read in exactly one place, and
+// a TRUE flag makes a path with NO '.' at index >= 1 yield the EMPTY filename
+// rather than the whole leaf. So `GetPathFilename(true)` on an extension-less
+// path returns nothing at all, which is why the `filenameFromStack` fallback
+// below exists. Retail's own parameter reads as `stripExt`; that name is what
+// sent Wave 11 lane OBJEXT to re-derive this from the disassembly.
 
 namespace RtIO {
 // runtime/src/io/filesystem.cpp:185. Takes the FileSystem as void* there.
@@ -107,43 +103,25 @@ namespace RtObject {
 using RtSystem::Filename;
 using RtSystem::String;
 using RtSystem::WideString;
-using RtSystem::RtString_AdoptInline;
+using RtSystem::Sys;
 using RtSystem::RtString_ReleaseInline;
-using RtSystem::RtSystem_String_Set;
-using RtSystem::RtSystem_String_SubString;
-using RtSystem::RtSystem_String_Concat;
-using RtSystem::RtSystem_String_ConcatCStr;
-using RtSystem::RtSystem_Filename_AdjustDelimiters;
-using RtSystem::RtSystem_Filename_GetPathFilename;
-using RtSystem::RtSystem_Filename_GetPathIdentifer;
-using RtSystem::RtSystem_Filename_GetPathDirectory;
 using RtSystem::RtSystem_WideString_CtorFromString;
 
 PathCounters g_pc = {};
 
 namespace {
 
-// `String* ` and `Filename*` are layout-identical (runtime/types/system/
-// Filename.h); retail casts between them by pointer at every site and so does
-// every other file in this port.
-inline String*       AsStr(Filename* f)             { return reinterpret_cast<String*>(f); }
-inline const String* AsStr(const Filename* f)       { return reinterpret_cast<const String*>(f); }
-
-// The int32 character count at data-8 (runtime/types/system/String.h).
-inline int32_t BufLength(const char* d) {
-    return reinterpret_cast<const int32_t*>(d)[-2];
-}
-
-// The release/adopt pair retail inlines at every `Filename x = y` site:
-//     if (x.data != y.data) { release(x); x.data = y.data; if (x.data) ++rc; }
-// Written out rather than folded into one helper call at each site because the
-// `!=` guard is retail's own and skipping the whole block on a self-assign is
-// observable (it is what keeps the refcount from hitting zero mid-assign).
-inline void ReleaseThenAdopt(Filename* dst, char* src) {
-    if (dst->data == src) return;
-    RtString_ReleaseInline(AsStr(dst));
-    RtString_AdoptInline(AsStr(dst), src);
-}
+// ENDGAME B.3.1 step 2 removed this file's `AsStr`, `BufLength` and
+// `ReleaseThenAdopt` helpers.
+//
+// `ReleaseThenAdopt` was retail's inlined `Filename x = y` — and it is
+// `String::operator=` (0x1800c9810) exactly, `!=` self-assign guard included,
+// which is why the sites that adopt WITHOUT a following AdjustDelimiters now
+// say `x.AsString() = y` and the ones that adopt WITH one say `x = y` (the
+// Filename overload, 0x180026d40, which adds the normalise). Which of the two
+// each site is was read off the listing, not assumed; the addresses are on the
+// lines. `BufLength` was `String::GetLength` (0x1800063c0), whose null arm
+// returns 0 and is therefore the same two branches retail tests.
 
 typedef bool (*ExistsInPackfileFn)(const RtIO::FileSystem*, const Filename*);
 
@@ -216,17 +194,22 @@ const char* kResource   = "resource";
 Filename* RtSystem_Filename_GetPathExtension(const Filename* self, Filename* ret) {
     ++g_pc.extCalls;
 
-    const char* const d = self->data;
+    // ENDGAME B.3.1 step 2. `self` and `ret` are the registered entry point's
+    // POD parameters, so they come through the one transitional bridge; `ret`
+    // is the hidden return slot, i.e. RAW BYTES, and every arm below therefore
+    // CONSTRUCTS into it rather than assigning.
+    const System::Filename& s = Sys(*self);
+    const char* const d = s._data;
 
     // 0x1800c6514: `MOV RDX,[RCX] ; TEST RDX,RDX ; JNZ`
     if (d == nullptr) {
-        ret->data = nullptr;
+        new (ret) System::Filename();
         ++g_pc.extNullNoData;
         return ret;
     }
 
     // 0x1800c652c: `MOV R9D,[RDX-8] ; DEC R9D`
-    int32_t end = BufLength(d) - 1;
+    int32_t end = s.GetLength() - 1;
 
     // 0x1800c6536-0x1800c654b: scan back for ':' from `end`. `c` and the index
     // move together, so `c` is the index of the ':' or -1 if there is none.
@@ -251,7 +234,7 @@ Filename* RtSystem_Filename_GetPathExtension(const Filename* self, Filename* ret
 
     // 0x1800c656e: `TEST ECX,ECX ; JNS`
     if (c < 0) {
-        ret->data = nullptr;
+        new (ret) System::Filename();
         ++g_pc.extNoDot;
         return ret;
     }
@@ -259,20 +242,19 @@ Filename* RtSystem_Filename_GetPathExtension(const Filename* self, Filename* ret
     // 0x1800c657f: `LEA R8D,[RCX+1] ; CMP R8D,R9D ; JLE`
     const int32_t start = c + 1;
     if (start > end) {
-        ret->data = nullptr;
+        new (ret) System::Filename();
         ++g_pc.extEmptyAfterDot;
         return ret;
     }
 
     // 0x1800c6595: SubString(self, &tmp, start, end) — inclusive at both ends,
     // which is what runtime/src/system/string.cpp:500 implements.
-    String tmp{nullptr};
-    RtSystem_String_SubString(AsStr(self), &tmp, start, end);
+    System::String tmp = s.AsString().SubString(start, end);
 
-    ret->data = nullptr;                        // 0x1800c65a3
-    RtString_AdoptInline(AsStr(ret), tmp.data); // 0x1800c65a6
-    RtSystem_Filename_AdjustDelimiters(ret);    // 0x1800c65b4
-    RtString_ReleaseInline(&tmp);               // 0x1800c65c5
+    // 0x1800c65a3 null-init, 0x1800c65a6 adopt, 0x1800c65b4 normalise: that
+    // three-step IS `Filename::Filename(const String&)`, 0x18000c780. `tmp`'s
+    // 0x1800c65c5 release is its destructor.
+    new (ret) System::Filename(tmp);
     ++g_pc.extOk;
 
     return ret;
@@ -300,25 +282,30 @@ Filename* RtObject_ExternalFactory_GetPathStackFilename(const ExternalFactory* s
                                                         Filename* ret) {
     // 0x1800bcf7c: `CMP dword ptr [RCX + 0x38],EAX` with EAX = 0
     if (self->_pathStack._size == 0) {
-        ret->data = nullptr;                    // 0x1800bcf81
+        new (ret) System::Filename();           // 0x1800bcf81
         ++g_pc.stackEmpty;
         return ret;
     }
     ++g_pc.stackNonEmpty;
     const PathStackEntry& top = self->_pathStack._data[self->_pathStack._size - 1];
-    return RtSystem::RtSystem_Filename_CtorCopy(ret, &top.filename);
+    // Retail's copy ctor (0x1800067d0) into the hidden return slot. `filename`
+    // is a POD member of the not-yet-converted `PathStackEntry`, so it comes
+    // through the bridge.
+    new (ret) System::Filename(Sys(top.filename));
+    return ret;
 }
 
 Filename* RtObject_ExternalFactory_GetPathStackDirectory(const ExternalFactory* self,
                                                          Filename* ret) {
     if (self->_pathStack._size == 0) {
-        ret->data = nullptr;
+        new (ret) System::Filename();
         ++g_pc.stackEmpty;
         return ret;
     }
     ++g_pc.stackNonEmpty;
     const PathStackEntry& top = self->_pathStack._data[self->_pathStack._size - 1];
-    return RtSystem::RtSystem_Filename_CtorCopy(ret, &top.directory);
+    new (ret) System::Filename(Sys(top.directory));
+    return ret;
 }
 
 // ============================================================================
@@ -369,35 +356,40 @@ Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* sel
     ResLoadGuard resGuard;   // see THE RESOURCE-LOAD LOCK at the top
     ++g_pc.expandCalls;
 
+    // ENDGAME B.3.1 step 2. `path` and `ret` are the registered entry point's
+    // POD parameters; `ret` is the hidden return slot, so every write to it
+    // below CONSTRUCTS rather than assigns.
+    const System::Filename& in = Sys(*path);
+
     // ---- 0x1800bd3a3: `if (path->data == null || length == 0) return null` --
-    if (path->data == nullptr || BufLength(path->data) == 0) {
-        ret->data = nullptr;                          // 0x1800bde7b
+    // `GetLength` (0x1800063c0) returns 0 for a null buffer, so it is retail's
+    // own pair of tests and not a widened one.
+    if (in.GetLength() == 0) {
+        new (ret) System::Filename();                 // 0x1800bde7b
         ++g_pc.expandEmptyPath;
         return ret;
     }
 
     // ---- 0x1800bd3b9-0x1800bd3ea: the four splits ---------------------------
     // Retail hands these four uninitialised stack slots; every callee writes
-    // `*ret` before it reads it. They are zeroed here so that a future callee
-    // change cannot turn a missed write into a wild release.
-    Filename ext{nullptr};    // [RBP-0x29]
-    Filename ident{nullptr};  // [RBP-0x41]
-    Filename fname{nullptr};  // [RBP+0x77]
-    Filename dir{nullptr};    // [RBP+0x07]
-    RtSystem_Filename_GetPathExtension(path, &ext);
-    RtSystem_Filename_GetPathIdentifer(path, &ident);
-    RtSystem_Filename_GetPathFilename(path, &fname, true);
-    RtSystem_Filename_GetPathDirectory(path, &dir);
+    // `*ret` before it reads it. As class values each is simply the return of
+    // the member that produced it, and the four destructors at the tail are
+    // retail's four releases at 0x1800bde1c..0x1800bde76 in the same order.
+    System::Filename ext   = in.GetPathExtension();   // [RBP-0x29]
+    System::Filename ident = in.GetPathIdentifer();   // [RBP-0x41]
+    System::Filename fname = in.GetPathFilename(true);// [RBP+0x77]
+    System::Filename dir   = in.GetPathDirectory();   // [RBP+0x07]
 
     // ---- 0x1800bd3f0-0x1800bd497: an empty identifier defaults to "resource"
-    if (ident.data == nullptr || BufLength(ident.data) == 0) {
+    if (ident.GetLength() == 0) {
         ++g_pc.identDefaulted;
-        Filename tmp{nullptr};                                   // [RBP-0x61]
-        RtSystem_String_Set(AsStr(&tmp), kResource);
-        RtSystem_Filename_AdjustDelimiters(&tmp);                // 0x1800bd418
-        ReleaseThenAdopt(&ident, tmp.data);                      // 0x1800bd422
-        RtSystem_Filename_AdjustDelimiters(&ident);              // 0x1800bd468
-        RtString_ReleaseInline(AsStr(&tmp));                     // 0x1800bd46e
+        // Set + AdjustDelimiters (0x1800bd418) on the same object is the
+        // `const char*` ctor, 0x180026cf0.
+        System::Filename tmp(kResource);                         // [RBP-0x61]
+        // Release-then-adopt (0x1800bd422) followed by AdjustDelimiters
+        // (0x1800bd468) is `Filename::operator=`, 0x180006770 — ONE normalise.
+        ident = tmp;
+        // tmp's 0x1800bd46e release is its destructor.
     } else {
         ++g_pc.identPresent;
     }
@@ -406,26 +398,26 @@ Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* sel
     // BOTH halves are replaced: the filename AND the extension. A resource
     // reference that is only an identifier therefore inherits the extension of
     // the file being parsed, not the one it was written next to.
-    if (fname.data == nullptr || BufLength(fname.data) == 0) {
+    if (fname.GetLength() == 0) {
         ++g_pc.filenameFromStack;
-        Filename stackFile{nullptr};                             // [RBP-0x59]
-        RtObject_ExternalFactory_GetPathStackFilename(self, &stackFile);
+        // The reader's hidden return slot again: constructed into, not assigned.
+        System::Filename stackFile;                              // [RBP-0x59]
+        RtObject_ExternalFactory_GetPathStackFilename(
+            self, reinterpret_cast<Filename*>(&stackFile));
 
-        Filename tmp{nullptr};                                   // [RBP-0x61]
-        RtSystem_Filename_GetPathFilename(&stackFile, &tmp, true);
-        ReleaseThenAdopt(&fname, tmp.data);                      // 0x1800bd4ca
-        RtSystem_Filename_AdjustDelimiters(&fname);              // 0x1800bd507
-        RtString_ReleaseInline(AsStr(&tmp));                     // 0x1800bd511
+        System::Filename tmp = stackFile.GetPathFilename(true);  // [RBP-0x61]
+        // 0x1800bd4ca + 0x1800bd507 is `Filename::operator=`, one normalise.
+        fname = tmp;
 
-        // 0x1800bd53a hands GetPathExtension the slot it just released. Retail
-        // does exactly this and it is safe because the callee writes `*ret`
-        // before reading it; transcribed rather than re-zeroed so the shape
-        // stays the shape.
-        RtSystem_Filename_GetPathExtension(&stackFile, &tmp);
-        ReleaseThenAdopt(&ext, tmp.data);                        // 0x1800bd54a
-        RtSystem_Filename_AdjustDelimiters(&ext);                // 0x1800bd587
-        RtString_ReleaseInline(AsStr(&tmp));                     // 0x1800bd591
-        RtString_ReleaseInline(AsStr(&stackFile));               // 0x1800bd5ba
+        // 0x1800bd511 releases `tmp` and 0x1800bd53a then hands GetPathExtension
+        // THE SAME SLOT. Move-assignment is that pair: it releases the old
+        // buffer and takes the fresh one whole, with no refcount edit and no
+        // extra normalise (the callee already normalised).
+        tmp = stackFile.GetPathExtension();
+        ext = tmp;                                               // 0x1800bd54a
+                                                                 // + 0x1800bd587
+        // tmp (0x1800bd591) then stackFile (0x1800bd5ba) release at the end of
+        // this block, in retail's order.
     } else {
         ++g_pc.filenamePresent;
     }
@@ -433,35 +425,32 @@ Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* sel
     // ---- 0x1800bd5e3: R14 = IO::FileSystem::_singleton ---------------------
     const RtIO::FileSystem* const fs = FileSystemSingleton();
 
-    Filename stackDir{nullptr};                                  // [RBP+0x0f]
-    RtObject_ExternalFactory_GetPathStackDirectory(self, &stackDir);
+    System::Filename stackDir;                                   // [RBP+0x0f]
+    RtObject_ExternalFactory_GetPathStackDirectory(
+        self, reinterpret_cast<Filename*>(&stackDir));
 
     // ---- 0x1800bd5f7-0x1800bd68d: candidate =
     //      <dataDir><stackDir><dir><fname>_<ident>.crs
-    Filename candidate{nullptr};                                 // [RBP-0x01]
+    System::Filename candidate;                                  // [RBP-0x01]
     {
-        Filename dataDir{nullptr};                               // [RBP-0x39]
-        RtIO::RtIo_FileSystem_GetDataDirectory(fs, &dataDir);
+        System::Filename dataDir;                                // [RBP-0x39]
+        RtIO::RtIo_FileSystem_GetDataDirectory(
+            fs, reinterpret_cast<Filename*>(&dataDir));
 
-        String t1{nullptr}, t2{nullptr}, t3{nullptr};            // -0x19/-0x11/-0x09
-        String t4{nullptr}, t5{nullptr}, t6{nullptr};            // -0x21/-0x61/-0x59
-        RtSystem_String_Concat(&t1, AsStr(&dataDir), AsStr(&stackDir));
-        RtSystem_String_Concat(&t2, &t1, AsStr(&dir));
-        RtSystem_String_Concat(&t3, &t2, AsStr(&fname));
-        RtSystem_String_ConcatCStr(&t4, &t3, kUnderscore);
-        RtSystem_String_Concat(&t5, &t4, AsStr(&ident));
-        RtSystem_String_ConcatCStr(&t6, &t5, kCrs);
+        System::String t1 = dataDir.AsString() + stackDir.AsString();  // -0x19
+        System::String t2 = t1 + dir.AsString();                       // -0x11
+        System::String t3 = t2 + fname.AsString();                     // -0x09
+        System::String t4 = t3 + kUnderscore;                          // -0x21
+        System::String t5 = t4 + ident.AsString();                     // -0x61
+        System::String t6 = t5 + kCrs;                                 // -0x59
 
-        RtString_AdoptInline(AsStr(&candidate), t6.data);        // 0x1800bd670
-        RtSystem_Filename_AdjustDelimiters(&candidate);          // 0x1800bd683
+        // 0x1800bd670 adopt + 0x1800bd683 normalise, onto an object that is
+        // already null: `Filename::operator=(const String&)`, 0x180026d40.
+        candidate = t6;
 
-        RtString_ReleaseInline(&t6);                             // 0x1800bd68d
-        RtString_ReleaseInline(&t5);
-        RtString_ReleaseInline(&t4);
-        RtString_ReleaseInline(&t3);
-        RtString_ReleaseInline(&t2);
-        RtString_ReleaseInline(&t1);
-        RtString_ReleaseInline(AsStr(&dataDir));                 // 0x1800bd783
+        // 0x1800bd68d..0x1800bd783 releases t6..t1 then dataDir. Declaration
+        // order here is dataDir, t1..t6, so the destructors run in exactly that
+        // sequence.
     }
 
     // ---- 0x1800bd7ac-0x1800bdab5: does it exist? ---------------------------
@@ -469,14 +458,18 @@ Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* sel
     bool decided = false;
 
     // MSVC's inlined FileSystem::Exists(candidate), gate and all.
-    if (fs->existsInPackfileGate != 0 && ExistsInPackfile(fs, &candidate)) {
+    if (fs->existsInPackfileGate != 0 &&
+        ExistsInPackfile(fs, reinterpret_cast<const Filename*>(&candidate))) {
         found = true; decided = true;                            // 0x1800bd7c8
         ++g_pc.hitPackfile;
     }
     if (!decided && fs->platformExistsGate != 0) {
         ++g_pc.attrProbeEntered;
+        // `System::WideString` has no class yet, so this one stays as C: the
+        // ctor takes the POD String and the release is the POD release.
         WideString ws{nullptr};                                  // [RBP-0x39]
-        RtSystem_WideString_CtorFromString(&ws, AsStr(&candidate));
+        RtSystem_WideString_CtorFromString(
+            &ws, reinterpret_cast<const String*>(&candidate));
         // `CMP EAX,-1 ; SETNZ` — INVALID_FILE_ATTRIBUTES, not a HRESULT.
         const bool ok = (::GetFileAttributesW(ws.data) != INVALID_FILE_ATTRIBUTES);
         RtString_ReleaseInline(reinterpret_cast<String*>(&ws));  // 0x1800bd7f3
@@ -487,92 +480,75 @@ Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* sel
     }
     if (!decided) {
         // 0x1800bd825: the SAME string, built again, probed UNGATED. See note 1.
-        Filename candidate2{nullptr};                            // [RBP-0x59]
-        Filename dataDir2{nullptr};                              // [RBP-0x49]
-        RtIO::RtIo_FileSystem_GetDataDirectory(fs, &dataDir2);
+        System::Filename dataDir2;                               // [RBP-0x49]
+        RtIO::RtIo_FileSystem_GetDataDirectory(
+            fs, reinterpret_cast<Filename*>(&dataDir2));
 
-        String u1{nullptr}, u2{nullptr}, u3{nullptr};            // -0x51/-0x31/-0x21
-        String u4{nullptr}, u5{nullptr}, u6{nullptr};            // -0x09/-0x11/-0x19
-        RtSystem_String_Concat(&u1, AsStr(&dataDir2), AsStr(&stackDir));
-        RtSystem_String_Concat(&u2, &u1, AsStr(&dir));
-        RtSystem_String_Concat(&u3, &u2, AsStr(&fname));
-        RtSystem_String_ConcatCStr(&u4, &u3, kUnderscore);
-        RtSystem_String_Concat(&u5, &u4, AsStr(&ident));
-        RtSystem_String_ConcatCStr(&u6, &u5, kCrs);
+        System::String u1 = dataDir2.AsString() + stackDir.AsString();  // -0x51
+        System::String u2 = u1 + dir.AsString();                        // -0x31
+        System::String u3 = u2 + fname.AsString();                      // -0x21
+        System::String u4 = u3 + kUnderscore;                           // -0x09
+        System::String u5 = u4 + ident.AsString();                      // -0x11
+        System::String u6 = u5 + kCrs;                                  // -0x19
 
-        RtString_AdoptInline(AsStr(&candidate2), u6.data);       // 0x1800bd8cf
-        RtSystem_Filename_AdjustDelimiters(&candidate2);         // 0x1800bd8e2
+        // DECLARED LAST ON PURPOSE, even though retail's slot is [RBP-0x59] and
+        // sits before the others: 0x1800bd90c releases candidate2 FIRST and
+        // then u6..u1 and dataDir2, so declaring it here is what makes reverse
+        // declaration order reproduce retail's unwind order exactly. (Retail
+        // writes that unwind as an EDI bitmask of which locals had been
+        // constructed when the probe ran; scoping is the same set, same order.)
+        System::Filename candidate2;                             // [RBP-0x59]
+        // 0x1800bd8cf adopt + 0x1800bd8e2 normalise, onto a null object.
+        candidate2 = u6;
 
-        found = ExistsInPackfile(fs, &candidate2);               // 0x1800bd8fb
+        found = ExistsInPackfile(                                // 0x1800bd8fb
+            fs, reinterpret_cast<const Filename*>(&candidate2));
         if (found) ++g_pc.hitPackfileRetry; else ++g_pc.notFound;
-
-        // 0x1800bd90c-0x1800bdab5: retail unwinds these through an EDI bitmask
-        // recording which of them had been constructed by the time the probe
-        // ran. Scoping them here is the same set in the same order.
-        RtString_ReleaseInline(AsStr(&candidate2));
-        RtString_ReleaseInline(&u6);
-        RtString_ReleaseInline(&u5);
-        RtString_ReleaseInline(&u4);
-        RtString_ReleaseInline(&u3);
-        RtString_ReleaseInline(&u2);
-        RtString_ReleaseInline(&u1);
-        RtString_ReleaseInline(AsStr(&dataDir2));
     }
 
     // ---- 0x1800bdab5-0x1800bdc8c: the answer -------------------------------
-    Filename result{nullptr};   // RBX / [RBP-0x61]
+    // THE THREE ADOPTS BELOW HAVE NO FOLLOWING AdjustDelimiters, so none of
+    // them is `Filename::operator=` (0x180006770 / 0x180026d40) — those add a
+    // normalise retail does not make here, and the one normalise this value
+    // gets is the ctor at the very bottom. They are `String::operator=`
+    // (0x1800c9810), which is release-then-adopt with retail's own `!=` guard
+    // and nothing else, reached through `AsString()`.
+    System::Filename result;    // RBX / [RBP-0x61]
     if (found) {
         // 0x1800bdabe: <stackDir><dir><fname>.<ext>
-        String a{nullptr}, b{nullptr}, c{nullptr}, d{nullptr};
-        RtSystem_String_Concat(&a, AsStr(&stackDir),
-                                   AsStr(&dir));
-        RtSystem_String_Concat(&b, &a, AsStr(&fname));
-        RtSystem_String_ConcatCStr(&c, &b, kDot);
-        RtSystem_String_Concat(&d, &c, AsStr(&ext));
-        RtString_AdoptInline(AsStr(&result), d.data);            // 0x1800bdb06
-        RtString_ReleaseInline(&d);
-        RtString_ReleaseInline(&c);
-        RtString_ReleaseInline(&b);
-        RtString_ReleaseInline(&a);
+        System::String a = stackDir.AsString() + dir.AsString();
+        System::String b = a + fname.AsString();
+        System::String c = b + kDot;
+        System::String d = c + ext.AsString();
+        result.AsString() = d;                                   // 0x1800bdb06
     } else {
         // 0x1800bdbc8: <dir><fname>.<ext> — the stack directory is DROPPED.
-        String a{nullptr}, b{nullptr}, c{nullptr};
-        RtSystem_String_Concat(&a, AsStr(&dir), AsStr(&fname));
-        RtSystem_String_ConcatCStr(&b, &a, kDot);
-        RtSystem_String_Concat(&c, &b, AsStr(&ext));
-        RtString_AdoptInline(AsStr(&result), c.data);            // 0x1800bdbff
-        RtString_ReleaseInline(&c);
-        RtString_ReleaseInline(&b);
-        RtString_ReleaseInline(&a);
+        System::String a = dir.AsString() + fname.AsString();
+        System::String b = a + kDot;
+        System::String c = b + ext.AsString();
+        result.AsString() = c;                                   // 0x1800bdbff
     }
 
     // ---- 0x1800bdc8c-0x1800bdd43: `if (appendIdentifier) result += ":" + ident`
     if (appendIdentifier) {
         ++g_pc.appendedIdentifier;
-        String x{nullptr}, y{nullptr};                           // -0x51 / -0x49
-        RtSystem_String_ConcatCStr(&x, AsStr(&result), kColon);
-        RtSystem_String_Concat(&y, &x, AsStr(&ident));
-        ReleaseThenAdopt(&result, y.data);                       // 0x1800bdcbd
-        RtString_ReleaseInline(&y);
-        RtString_ReleaseInline(&x);
+        System::String x = result.AsString() + kColon;            // -0x51
+        System::String y = x + ident.AsString();                  // -0x49
+        result.AsString() = y;                                    // 0x1800bdcbd
     } else {
         ++g_pc.noIdentifierTail;
     }
 
     // ---- 0x1800bdd43-0x1800bdd59: publish, normalise ------------------------
-    ret->data = nullptr;                                         // 0x1800bdd43
-    RtString_AdoptInline(AsStr(ret), result.data);               // 0x1800bdd4b
-    RtSystem_Filename_AdjustDelimiters(ret);                     // 0x1800bdd51
+    // Null-init (0x1800bdd43), adopt (0x1800bdd4b), normalise (0x1800bdd51),
+    // into the raw hidden return slot: `Filename::Filename(const String&)`,
+    // 0x18000c780. This is the ONE normalise the returned value gets.
+    new (ret) System::Filename(result.AsString());
 
     // ---- 0x1800bdd60-0x1800bde76: the tail releases, retail's order ---------
-    RtString_ReleaseInline(AsStr(&result));
-    RtString_ReleaseInline(AsStr(&candidate));
-    RtString_ReleaseInline(AsStr(&stackDir));
-    RtString_ReleaseInline(AsStr(&dir));
-    RtString_ReleaseInline(AsStr(&fname));
-    RtString_ReleaseInline(AsStr(&ident));
-    RtString_ReleaseInline(AsStr(&ext));
-
+    // result, candidate, stackDir, dir, fname, ident, ext — which is reverse
+    // declaration order, so the seven destructors run in exactly that sequence
+    // and nothing is released by hand.
     return ret;
 }
 

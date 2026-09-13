@@ -89,17 +89,16 @@
 #include "../../types/io/Serializer.h"
 #include "../../types/object/External.h"
 #include "../system/string.h"
+#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
-namespace RtSystem {
-// 0x1800c9930 — ?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z, ported in
-// runtime/src/system/string.cpp. Takes the Serializer, not the Stream.
-void RtSystem_String_Serialize(String* self, void* serializer);
-// 0x1800c6970 — ?AdjustDelimiters@Filename@System@@, ported in filename.cpp.
-void RtSystem_Filename_AdjustDelimiters(Filename* self);
-}
+// ENDGAME B.3.1 step 2: `String::Serialize` (0x1800c9930, which takes the
+// Serializer and not the Stream) and `Filename::AdjustDelimiters` (0x1800c6970)
+// used to be forward-declared here as C entry points. They are members now —
+// the first called as `s.Serialize(&ser)`, the second folded into the two
+// Filename constructors that already end in it — so both declarations are gone.
 
 namespace RtObject {
 // 0x180006250 — ?GetPath@External@Object@@QEBA?AVFilename@System@@XZ, ported in
@@ -158,21 +157,14 @@ int StrICmp(const char* a, const char* b) {
     return fn ? fn(a, b) : 0;
 }
 
-// The refcount release idiom retail inlines at six sites in this body.
-inline void ReleaseInline(Filename* f) {
-    RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(f));
-}
-
-// `dst = src` with an AddRef, the `TEST RBX,RBX / MOV / INC [RBX-4]` retail
-// inlines at 1800bcc31, 1800bcc94, 1800bce41 and 1800bce4d. `dst` must already
-// be null.
-inline void AdoptRef(Filename* dst, char* src) {
-    dst->data = nullptr;
-    if (src) {
-        dst->data = src;
-        ++reinterpret_cast<int32_t*>(src)[-1];
-    }
-}
+// ENDGAME B.3.1 step 2 removed this file's `ReleaseInline` and `AdoptRef`
+// helpers. The six inlined releases are `~Filename` (0x180006980); three of the
+// four AddRef'd aliases were an Adopt IMMEDIATELY FOLLOWED BY AdjustDelimiters,
+// which is `Filename::Filename(const String&)` (0x18000c780) exactly. The
+// fourth, at 1800bce41 on the write path, has NO following normalise and so is
+// NOT the ctor and NOT operator=; it is spelled out at its call site with
+// `System::StringPrivateAccess::Adopt` and a comment saying which address omits
+// the normalise (the cookbook's DELIMITERS rule).
 
 // ---------------------------------------------------------------------------
 // EFFECTIVENESS COUNTERS. Branches taken INSIDE the body under test, not
@@ -246,8 +238,9 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
         // ====================================================================
         ++g_c.load;
 
-        Filename scratch;                        // [RBP-0x40], and RBX caches it
-        scratch.data = nullptr;                  // 1800bcbe8
+        // Its 1800bcdc8 release is the destructor at the end of this block.
+        System::Filename scratch;                // [RBP-0x40], and RBX caches it
+                                                 // 1800bcbe8
 
         for (int32_t i = 0; i < count; ++i) {    // 1800bcbef JLE / 1800bcdbf JL
             uint32_t id = 0;                     // [RBP+0x48]
@@ -257,21 +250,25 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
             // 1800bcc2c — reads the path into `scratch`, replacing whatever it
             // held. `RBX` is reloaded from the slot AFTER this call, which is
             // why the port re-reads `scratch.data` here and not before.
-            RtSystem::RtSystem_String_Serialize(
-                reinterpret_cast<String*>(&scratch), &ser);
-            char* raw = scratch.data;            // 1800bcc35
-            ++g_c.entries;
+            scratch.AsString().Serialize(&ser);
+            ++g_c.entries;                       // 1800bcc35 reloads the slot
 
             // Temporary A: an AddRef'd alias, delimiter-normalised, handed to
-            // the Set insert as the VALUE. 1800bcc31 .. 1800bcc49.
-            Filename keyPath;
-            AdoptRef(&keyPath, raw);
-            RtSystem::RtSystem_Filename_AdjustDelimiters(&keyPath);
+            // the Set insert as the VALUE. 1800bcc31 .. 1800bcc49 — an Adopt of
+            // the buffer plus ONE AdjustDelimiters IS
+            // `Filename::Filename(const String&)`, 0x18000c780. (The normalise
+            // rewrites the SHARED buffer in place, so `scratch`'s characters
+            // change too; that is retail's, and the ctor keeps it.)
+            {
+                System::Filename keyPath(scratch.AsString());
 
-            uint32_t key = id;                   // 1800bcc4f [RBP+0x50]
-            rtrefset::Node* outSlot = nullptr;   // [RBP-0x20]
-            rtrefset::Insert(refs, &outSlot, &key, &keyPath);   // 1800bcc65
-            ReleaseInline(&keyPath);             // 1800bcc6b
+                uint32_t key = id;               // 1800bcc4f [RBP+0x50]
+                rtrefset::Node* outSlot = nullptr;   // [RBP-0x20]
+                // TRANSITIONAL CAST, the class->POD direction: `rtrefset::Insert`
+                // is an unconverted C body whose value parameter is the POD.
+                rtrefset::Insert(refs, &outSlot, &key,
+                                 reinterpret_cast<const Filename*>(&keyPath));
+            }                                    // 1800bcc6b — keyPath's release
 
             // Temporary B: a SECOND AddRef'd alias, normalised again, then
             // copy-assigned into a third slot which is normalised TWICE more.
@@ -281,19 +278,16 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
             // other. It is idempotent, and it is transcribed rather than
             // folded because "obviously redundant" is how a port stops being a
             // port.
-            Filename tmpB;
-            AdoptRef(&tmpB, raw);
-            RtSystem::RtSystem_Filename_AdjustDelimiters(&tmpB);
+            rtresset::Node* found;
+            {
+            System::Filename tmpB(scratch.AsString());   // as keyPath above
 
-            Filename lookup;
-            lookup.data = nullptr;               // 1800bccae
-            if (lookup.data != tmpB.data) {      // 1800bccbd — always true here
-                if (lookup.data) ReleaseInline(&lookup);
-                lookup.data = tmpB.data;         // 1800bcce8
-                if (lookup.data) ++reinterpret_cast<int32_t*>(lookup.data)[-1];
-            }
-            RtSystem::RtSystem_Filename_AdjustDelimiters(&lookup);   // 1800bccf4
-            RtSystem::RtSystem_Filename_AdjustDelimiters(&lookup);   // 1800bccfd
+            // 1800bccae null-init, 1800bccbd release-then-adopt with retail's
+            // own `!=` guard, then AdjustDelimiters at 1800bccf4 AND 1800bccfd:
+            // that whole sequence IS the copy ctor (0x1800067d0), whose ported
+            // body normalises twice for exactly this reason. Both calls are
+            // still spent.
+            System::Filename lookup(tmpB);
 
             // ---- the INLINED find over `_resources` ------------------------
             // 1800bcd07 .. 1800bcd5d. This is the same descent
@@ -305,11 +299,10 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
             //   node key null  -> fall through to the second test, then RIGHT
             //   search key null with a non-null node key -> LEFT
             //   both null      -> FOUND
-            rtresset::Node* found =
-                reinterpret_cast<rtresset::Set*>(
+            found = reinterpret_cast<rtresset::Set*>(
                     reinterpret_cast<uint8_t*>(self) + 0x10)->root;
             while (found) {
-                char* searchKey = lookup.data;
+                char* searchKey = lookup._data;
                 char* nodeKey   = rtresset::Elem(found)->path.data;
                 if (nodeKey) {
                     if (!searchKey) {
@@ -333,8 +326,8 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
                 found = found->right;            // 1800bcd54, +0x28
             }
 
-            ReleaseInline(&lookup);              // 1800bcd60
-            ReleaseInline(&tmpB);                // 1800bcd89
+            }   // 1800bcd60 lookup's release, then 1800bcd89 tmpB's — reverse
+                // declaration order is retail's order
 
             if (found) {                         // 1800bcdb2
                 ++g_c.resFound;
@@ -343,8 +336,7 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
                 ++g_c.resMissed;
             }
         }
-
-        ReleaseInline(&scratch);                 // 1800bcdc8
+        // 1800bcdc8 — scratch's release, its destructor at the end of this block
     } else {
         // ====================================================================
         // WRITE PATH — 1800bcdf4 .. 1800bcf11
@@ -369,19 +361,30 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
                 // 1800bce37: NO NULL CHECK on `element.external`. Faithful —
                 // retail relies on the pointer always being there, and a guard
                 // would skip the emission rather than restore the behaviour.
-                Filename ret;
-                RtObject_External_GetPath(
-                    rtresset::Elem(n)->external, &ret);      // 1800bce3b
-                Filename path;
-                AdoptRef(&path, ret.data);                   // 1800bce41
-                ReleaseInline(&ret);                         // 1800bce54
-                ++g_c.entries;
+                {
+                    System::Filename path;
+                    {
+                        // GetPath's hidden return slot: constructed into, so
+                        // the null local must not be constructed twice.
+                        System::Filename ret;
+                        RtObject_External_GetPath(
+                            rtresset::Elem(n)->external,
+                            reinterpret_cast<Filename*>(&ret));  // 1800bce3b
 
-                reinterpret_cast<RwScalarFn>(
-                    VSlot(rw, rt::io::rw_vtbl::kScalarUInt))(rw, &id, nullptr);
-                RtSystem::RtSystem_String_Serialize(
-                    reinterpret_cast<String*>(&path), &ser); // 1800bce99
-                ReleaseInline(&path);                        // 1800bce9f
+                        // 1800bce41 IS AN ADOPT WITH NO FOLLOWING
+                        // AdjustDelimiters, so it is neither the String ctor
+                        // (0x18000c780) nor operator= (0x180026d40) — both of
+                        // those normalise. Spelled out rather than silently
+                        // upgraded to one that adds a pass retail does not make.
+                        System::StringPrivateAccess::Adopt(path.AsString(),
+                                                           ret._data);
+                    }                                        // 1800bce54
+                    ++g_c.entries;
+
+                    reinterpret_cast<RwScalarFn>(
+                        VSlot(rw, rt::io::rw_vtbl::kScalarUInt))(rw, &id, nullptr);
+                    path.AsString().Serialize(&ser);         // 1800bce99
+                }                                            // 1800bce9f
 
                 // ---- in-order successor, 1800bcec0 .. 1800bcf02 ------------
                 if (n->right) {

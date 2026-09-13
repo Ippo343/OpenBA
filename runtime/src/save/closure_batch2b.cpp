@@ -12,8 +12,10 @@
 // ============================================================================
 
 #include <cstdint>
+#include <new>          // placement new into the raw destination bytes
 
 #include "../../funcs/rt_port.h"
+#include "../../types/system/String.h"
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -44,12 +46,14 @@ void GuardedFree(void* p) {
 
 // `System::String`'s adopt-a-reference idiom, inlined by retail at both sites:
 // zero the slot, then take the pointer and bump the refcount at `str-4`.
-inline void AdoptString(void** dst, void* const* src) {
-    *dst = nullptr;
-    if (void* s = *src) {
-        *dst = s;
-        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(s) - 4));
-    }
+//
+// ENDGAME B.3.1 step 2: that idiom IS ??0String@System@@QEAA@AEBV01@@Z
+// (0x180006cb0) — zero, adopt, AddRef, in that order — so the copy constructor
+// is spelled as itself here. `dst` is raw destination bytes inside a struct
+// with no header of its own (see the banner), so it is placement-constructed;
+// the two offsets stay raw because the field MEANINGS are still unknown.
+inline void AdoptString(void* dst, const void* src) {
+    new (dst) System::String(*static_cast<const System::String*>(src));
 }
 
 }  // namespace
@@ -89,15 +93,13 @@ extern "C" void* RtSave_MetaData_CopyCtor(void* self, const void* src) {
 
     *reinterpret_cast<uint64_t*>(d + 0x00) = *reinterpret_cast<const uint64_t*>(s + 0x00);
     *reinterpret_cast<uint64_t*>(d + 0x08) = *reinterpret_cast<const uint64_t*>(s + 0x08);
-    AdoptString(reinterpret_cast<void**>(d + 0x10),
-                reinterpret_cast<void* const*>(s + 0x10));
+    AdoptString(d + 0x10, s + 0x10);
     *reinterpret_cast<uint64_t*>(d + 0x18) = *reinterpret_cast<const uint64_t*>(s + 0x18);
     *reinterpret_cast<uint32_t*>(d + 0x20) = *reinterpret_cast<const uint32_t*>(s + 0x20);
     *reinterpret_cast<uint32_t*>(d + 0x24) = *reinterpret_cast<const uint32_t*>(s + 0x24);
     *reinterpret_cast<uint64_t*>(d + 0x28) = *reinterpret_cast<const uint64_t*>(s + 0x28);
     *reinterpret_cast<uint64_t*>(d + 0x30) = *reinterpret_cast<const uint64_t*>(s + 0x30);
-    AdoptString(reinterpret_cast<void**>(d + 0x38),
-                reinterpret_cast<void* const*>(s + 0x38));
+    AdoptString(d + 0x38, s + 0x38);
     *reinterpret_cast<uint32_t*>(d + 0x40) = *reinterpret_cast<const uint32_t*>(s + 0x40);
     *reinterpret_cast<uint32_t*>(d + 0x44) = *reinterpret_cast<const uint32_t*>(s + 0x44);
     *reinterpret_cast<uint64_t*>(d + 0x48) = 0;

@@ -132,18 +132,13 @@
 
 using RtInput::Binding;
 using RtInput::BindingNode;
-using RtSystem::String;
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
-namespace RtSystem {
-// `?Format@String@System@@SA?AV12@PEBDZZ`, Wave 2's port. Declared here the way
-// keymap_load.cpp declares it (that file's banner explains why it is not added
-// to string.h while other lanes are editing that header); the linker checks the
-// two declarations agree.
-String* RtSystem_String_Format(String* ret, const char* fmt, ...);
-}  // namespace RtSystem
+// ENDGAME B.3.1 step 2: `?Format@String@System@@SA?AV12@PEBDZZ` (0x1800c9730)
+// is a static member of `System::String` now, so the local variadic declaration
+// this file carried for the shim is gone — as in keymap_load.cpp.
 
 // IO::Persistence::Set(section, key, int) — our Wave 4 port, registered at
 // 0x1800b80c0. Called DIRECTLY: a resolver call would be a door, and this one
@@ -258,11 +253,10 @@ void RtInput_KeyMap_Save(void* selfPtr) {
                 value = static_cast<int32_t>(b->inputId[slot]) |
                         (static_cast<int32_t>(device) << 8);
 
-            String key{};
-            RtSystem::RtSystem_String_Format(&key, "%s%s",
-                                             b->description, kSlotSuffix[slot]);
-            EmitSetting(persistence, key.data, value);
-            RtSystem::RtString_ReleaseInline(&key);
+            System::String key = System::String::Format(
+                "%s%s", b->description, kSlotSuffix[slot]);
+            EmitSetting(persistence, key._data, value);
+            // `key` releases here — retail's 0x1800a75f2, now ~String.
             ++written;
         }
     }

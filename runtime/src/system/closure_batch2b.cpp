@@ -177,7 +177,10 @@ extern "C" void RtSystem_MemoryAllocator_LinkPrevBlock(uint64_t* self,
 // second body would be the duplication this family keeps paying for.
 // ---------------------------------------------------------------------------
 extern "C" int RtSystem_String_GetLength(const void* self) {
-    return RtSystem::RtString_GetLength(static_cast<const RtSystem::String*>(self));
+    // ENDGAME B.3.1 step 2: the member itself (0x1800063c0). `self` is the
+    // registered entry point's opaque `this`, so the class is reached over the
+    // same eight bytes the POD spelled.
+    return static_cast<const System::String*>(self)->GetLength();
 }
 
 // Declared by the six sibling files of this batch.

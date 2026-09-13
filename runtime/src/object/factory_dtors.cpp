@@ -102,6 +102,7 @@
 #include "../../types/object/Internal.h"
 #include "../../types/object/External.h"
 #include "../system/string.h"
+#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
 // for the reason array.cpp:127 gives: resolve.h drags in <windows.h>, whose
@@ -115,8 +116,7 @@ namespace RtObjFactoryDtor {
 using RtObject::TypeNode;
 using RtObject::ExternalFactory;
 using RtObject::PathStackEntry;
-using RtSystem::String;
-using RtSystem::RtString_ReleaseInline;
+using RtSystem::Sys;
 
 // ---------------------------------------------------------------------------
 // Local views. These are deliberately NOT added to the shared type headers:
@@ -327,9 +327,13 @@ void PathStackDestroyRange(void* /*ignoredThis*/, PathStackEntry* p, int n) {
     if (n <= 0)
         return;
     for (int i = 0; i < n; ++i, ++p) {
-        RtString_ReleaseInline(reinterpret_cast<String*>(
-            reinterpret_cast<uint8_t*>(p) + 0x08));
-        RtString_ReleaseInline(reinterpret_cast<String*>(p));
+        // ENDGAME B.3.1 step 2: retail's inlined release IS `~Filename`
+        // (0x180006980), asymmetry included. `PathStackEntry` is a
+        // not-yet-converted struct, so its two halves keep the POD type and
+        // come through the one transitional bridge. +0x08 (filename) goes
+        // BEFORE +0x00 (directory), which is retail's order.
+        RtSystem::Sys(p->filename).~Filename();
+        RtSystem::Sys(p->directory).~Filename();
     }
 }
 
@@ -382,7 +386,9 @@ void ReferenceSubtreeFree(void* set, void* node) {
     uint8_t* n = static_cast<uint8_t*>(node);
     ReferenceSubtreeFree(set, *reinterpret_cast<void**>(n + 0x18));
     ReferenceSubtreeFree(set, *reinterpret_cast<void**>(n + 0x20));
-    RtString_ReleaseInline(reinterpret_cast<String*>(n + 0x08));
+    // ~Filename (0x180006980) over `ReferenceEntry::path`, addressed by offset
+    // because the node is raw container bytes here.
+    reinterpret_cast<System::Filename*>(n + 0x08)->~Filename();
     SetNodeFree_180009c30(set, node);
 }
 
@@ -411,7 +417,8 @@ void ResourceSubtreeFree(void* set, void* node) {
     uint8_t* n = static_cast<uint8_t*>(node);
     ResourceSubtreeFree(set, *reinterpret_cast<void**>(n + 0x20));
     ResourceSubtreeFree(set, *reinterpret_cast<void**>(n + 0x28));
-    RtString_ReleaseInline(reinterpret_cast<String*>(n));
+    // ~Filename over `ResourceEntry::path`, the key at +0x00.
+    reinterpret_cast<System::Filename*>(n)->~Filename();
     SetNodeFree_180009c30(set, node);
 }
 

@@ -76,19 +76,21 @@
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>
+#include <utility>    // std::move -- the pointer steal out of a POD out-param
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Persistence.h"
 #include "../../types/system/String.h"
+#include "../system/pod_bridge.h"
 
 using RtIo::Persistence;
 using RtSystem::String;
+using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
 
 namespace {
 
 typedef void    (*VoidThisFn)(void*);
 typedef String* (*GetSaveDirFn)(void* self, String* ret);
-typedef void    (*StringDtorFn)(String*);
 
 // ?_singleton@FileSystem@IO@@0PEAV12@EA, ord 4811, retail 0x1801fc6a8.
 // Written by `??0FileSystem@IO@@QEAA@XZ`, which Wave 9 lane X ported; read here
@@ -106,8 +108,11 @@ extern "C" bool RtIo_Persistence_Startup(Persistence* self) {
 
     RT_EXPORT_ONCE(VoidThisFn, "?ReadSettings@Persistence@IO@@QEAAXXZ")(self);
 
-    String tmp;
-    tmp.data = nullptr;
+    // GetSaveDirectory is reached by NAME through RT_EXPORT_ONCE (lane FS's
+    // class, unported at the time this row closed) and still fills a raw
+    // hidden-return-slot, so the value lands in a POD and is then stolen into
+    // the class -- a pure pointer steal, no AddRef, `tmpPod` left null.
+    String tmpPod{nullptr};
 
     // Retail dereferences FileSystem::_singleton without a check (0x1800b7f01
     // is a bare `MOV RCX,[0x1801fc6a8]`). The DEREFERENCE stays unguarded. What
@@ -116,27 +121,17 @@ extern "C" bool RtIo_Persistence_Startup(Persistence* self) {
     // guard over retail's logic.
     if (void** fsSlot = FileSystemSingletonSlot()) {
         RT_EXPORT_ONCE(GetSaveDirFn,
-            "?GetSaveDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ")(*fsSlot, &tmp);
+            "?GetSaveDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ")(*fsSlot, &tmpPod);
     }
+    System::String tmp(std::move(Sys(tmpPod)));
 
-    // String::operator=, inlined at 0x1800b7f10. The leading equality test is
-    // retail's self-assignment guard -- see the banner.
-    if (self->savePath.data != tmp.data) {
-        if (char* old = self->savePath.data) {
-            if (--RtSystem::StringRefCount(old) == 0) {
-                self->savePath.data = old - 8;
-                RT_EXPORT_ONCE(VoidThisFn,
-                    "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(self->savePath.data);
-            } else {
-                self->savePath.data = nullptr;
-            }
-        }
-        self->savePath.data = tmp.data;
-        if (tmp.data) ++RtSystem::StringRefCount(tmp.data);
-    }
+    // String::operator=, retail 0x1800c9810, inlined at 0x1800b7f10 -- the
+    // exact self-assignment guard on the BUFFER (the banner above). `savePath`
+    // is a `RtSystem::String` member of the not-yet-converted `Persistence`,
+    // reached through the one transitional bridge.
+    Sys(self->savePath) = tmp;
 
-    RT_EXPORT_ONCE(StringDtorFn, "??1String@System@@QEAA@XZ")(&tmp);
-
+    // ~tmp is retail's release at 0x1800b7f5d.
 
     return true;
 }

@@ -42,11 +42,12 @@
 #include "../../types/io/FileStream.h"
 #include "../../types/io/FileSystem.h"
 #include "../system/string.h"
+#include "../system/pod_bridge.h"
 
 using RtIo::Persistence;
 using RtIo::FileStream;
 using RtIO::FileInfo;
-using RtSystem::String;
+using RtSystem::SysFile;   // the transitional POD->class bridge (pod_bridge.h)
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -61,31 +62,15 @@ void MemFreeAt(void* p) {
     fn(p);
 }
 
-// ---- System::String / WideString, the inlined idioms ------------------------
+// ---- System::WideString, the inlined idiom -----------------------------------
 //
-// Retail inlines all of these; they are written out rather than routed through
-// a ~String call because the ASYMMETRY is observable: the freeing branch leaves
-// the slot holding `str-8` and the surviving branch nulls it. Same shape
-// runtime/src/collection/array_destroy.cpp's Body B documents.
-inline void AdoptString(String* dst, const String* src) {
-    dst->data = nullptr;
-    if (char* s = src->data) {
-        dst->data = s;
-        ++*(reinterpret_cast<int32_t*>(s) - 1);
-    }
-}
-inline void ReleaseString(String* s) {
-    if (!s->data) return;
-    int32_t* rc = reinterpret_cast<int32_t*>(s->data) - 1;
-    --*rc;
-    if (*rc == 0) {
-        s->data -= 8;
-        MemFreeAt(s->data);
-    } else {
-        s->data = nullptr;
-    }
-}
-
+// Retail inlines this; it is written out rather than routed through a ~String
+// call because the ASYMMETRY is observable: the freeing branch leaves the slot
+// holding `str-8` and the surviving branch nulls it. Same shape
+// runtime/src/collection/array_destroy.cpp's Body B documents. WideString is
+// not a B.3.1 class, so this stays hand-written C (ENDGAME B.3.1 step 2: the
+// String/Filename equivalents, `AdoptString`/`ReleaseString`, are gone -- both
+// call sites below are now `System::Filename`, whose ctor/dtor are that pair).
 struct WideStr { wchar_t* data; };
 
 // `??0WideString@System@@QEAA@AEBVString@1@@Z` RETURNS BY VALUE: RCX is the
@@ -94,7 +79,7 @@ struct WideStr { wchar_t* data; };
 // (reference_hidden_retslot_wild_write.md) — the same warning
 // runtime/src/io/filesystem_createfile_win.cpp:129 carries, and the same
 // typedef.
-using WideCtorFn = WideStr* (*)(WideStr* ret, const String* s);
+using WideCtorFn = WideStr* (*)(WideStr* ret, const System::String* s);
 inline void WideRelease(WideStr* w) {
     if (!w->data) return;
     int32_t* rc = reinterpret_cast<int32_t*>(w->data) - 1;
@@ -109,7 +94,7 @@ inline void WideRelease(WideStr* w) {
 
 // ---- the exported engine functions both bodies call -------------------------
 using VoidThisFn    = void (*)(void*);
-using OpenFn        = bool (*)(void*, const String*);
+using OpenFn        = bool (*)(void*, const System::Filename*);
 using ReadFileFn    = bool (*)(void*, FileInfo*, int, void*);
 using CloseFileFn   = void (*)(void*, FileInfo*);
 using CtorFn        = void* (*)(void*);
@@ -140,17 +125,20 @@ extern "C" void RtIo_PersistenceWorker_Delete(void* worker) {
     Persistence* p = reinterpret_cast<Persistence*>(
         reinterpret_cast<char*>(worker) - 0x10);
 
-    String f;
-    AdoptString(&f, &p->pendingFilename);
-    RT_EXPORT_ONCE(VoidThisFn, "?AdjustDelimiters@Filename@System@@AEAAXXZ")(&f);
+    // ENDGAME B.3.1 step 2: Adopt+AdjustDelimiters on a freshly-nulled dst is
+    // Filename(const String&), retail 0x18000c780. `pendingFilename` is a
+    // RtSystem::String MEMBER of the not-yet-converted Persistence, so it is
+    // read through the one transitional bridge (pod_bridge.h).
+    System::Filename f(SysFile(p->pendingFilename));
 
     WideStr w;
-    RT_EXPORT_ONCE(WideCtorFn, "??0WideString@System@@QEAA@AEBVString@1@@Z")(&w, &f);
+    RT_EXPORT_ONCE(WideCtorFn, "??0WideString@System@@QEAA@AEBVString@1@@Z")(
+        &w, &f.AsString());
 
     const BOOL ok = DeleteFileW(w.data);
 
     WideRelease(&w);
-    ReleaseString(&f);
+    // ~f is retail's release of the adopted Filename.
 
     p->status = static_cast<int32_t>((ok != 1) + 1);
 }
@@ -221,14 +209,13 @@ extern "C" void RtIo_PersistenceWorker_Load(void* worker) {
     FileStream* st = reinterpret_cast<FileStream*>(storage);
     RT_EXPORT_ONCE(CtorFn, "??0FileStream@IO@@QEAA@XZ")(st);
 
-    String f;
-    AdoptString(&f, &p->pendingFilename);
-    RT_EXPORT_ONCE(VoidThisFn, "?AdjustDelimiters@Filename@System@@AEAAXXZ")(&f);
+    // Filename(const String&), 0x18000c780, as the DELETE job above.
+    System::Filename f(SysFile(p->pendingFilename));
 
     const bool opened = RT_EXPORT_ONCE(OpenFn,
         "?Open@FileStream@IO@@UEAA_NAEBVFilename@System@@@Z")(st, &f);
 
-    ReleaseString(&f);
+    // ~f is retail's release, right after Open returns.
 
     if (opened) {
         bool failed = false;

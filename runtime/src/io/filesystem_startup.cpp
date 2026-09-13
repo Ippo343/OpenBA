@@ -70,13 +70,11 @@ enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 using RtIO::FileSystem;
-using RtSystem::String;
 
 namespace {
 
 typedef void  (*VoidThisFn)(void*);
-typedef void  (*StringSetFn)(String*, const char*);
-typedef void* (*MapFindFn)(void* map, const String* wanted);
+typedef void* (*MapFindFn)(void* map, const System::String* wanted);
 
 // `?_singleton@Configuration@System@@0PEAV12@EA`, ord 4803, retail 0x1801fc6f8.
 // Written by `??0Configuration@System@@QEAA@XZ`, which lane ENG ported in
@@ -102,9 +100,12 @@ extern "C" bool RtIo_FileSystem_Startup(FileSystem* self) {
 
     self->existsInPackfileGate = 1;
 
-    String tmp;
-    tmp.data = nullptr;
-    RT_EXPORT_ONCE(StringSetFn, "?Set@String@System@@QEAAXPEBD@Z")(&tmp, "onlypkg");
+    // ENDGAME B.3.1 step 2: retail's `String::Set(&tmp, "onlypkg")`
+    // (0x1800abc79, the literal at 0x1801556e8) followed by the dtor at
+    // 0x1800abca7 is exactly the `const char*` ctor and RAII destruction --
+    // the two RT_EXPORT_ONCE calls that used to spell ctor/dtor by name are
+    // gone; `tmp`'s destructor is the retail dtor now.
+    System::String tmp("onlypkg");
 
     // Retail: `MOV RCX,[0x1801fc6f8]; ADD RCX,0x10` -- the map lives at
     // Configuration + 0x10, and retail dereferences the singleton without a
@@ -127,8 +128,6 @@ extern "C" bool RtIo_FileSystem_Startup(FileSystem* self) {
         found = reinterpret_cast<MapFindFn>(
                     ResolveAddr(Module::Runtime, 0x18002ace0))(map, &tmp) != nullptr;
     }
-
-    RT_EXPORT_ONCE(VoidThisFn, "??1String@System@@QEAA@XZ")(&tmp);
 
     if (found) self->platformExistsGate = 0;
 

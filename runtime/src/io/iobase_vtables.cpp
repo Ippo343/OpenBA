@@ -244,12 +244,14 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <new>          // placement new into the retail hidden return slot
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Stream.h"
 #include "../../types/io/FileStream.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/io/Modification.h"
+#include "../../types/system/String.h"
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module module, uintptr_t ghidraAddr);
@@ -344,7 +346,12 @@ inline void ArrayModDtor(void* arrayField) {
 // read — see header §1 for the nine instructions this replaces.
 extern "C" void* RtIo_Stream_GetSource(const void* self, void** ret) {
     (void)self;
-    *ret = nullptr;          // a default-constructed System::String
+    // ENDGAME B.3.1 step 2: the signature stays void** -- it is a registered
+    // entry point another file (compressed_stream_write_probe.cpp) declares
+    // and calls -- but `ret` is the same raw, uninitialised hidden return
+    // slot either way, so the default ctor is constructed into it rather than
+    // hand-written as a null-qword store.
+    new (ret) System::String();
     return ret;
 }
 
