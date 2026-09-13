@@ -340,7 +340,7 @@ DWORD WINAPI WatchdogThread(LPVOID) {
                 "frame for %us (budget %us, frame=%ld). Writing standalone_hang.log "
                 "(all-thread stacks).%s\n",
                 phase, uptimeSec, staleSec, budget, (long)frame,
-                Opt().unattendedBoot ? " Unattended run: terminating with exit code 3."
+                Opt().unattendedBoot ? " Unattended run: terminating with exit code 4."
                                      : " Attended run: NOT terminating.");
             std::fflush(stderr);
 
@@ -349,7 +349,7 @@ DWORD WINAPI WatchdogThread(LPVOID) {
             // Self-terminate ONLY when nobody is watching. An attended run may
             // legitimately be sitting in a dialog with a human in front of it.
             if (Opt().unattendedBoot) {
-                TerminateProcess(GetCurrentProcess(), 3);
+                TerminateProcess(GetCurrentProcess(), 4);
             }
         }
 

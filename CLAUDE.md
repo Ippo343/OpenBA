@@ -348,8 +348,8 @@ for 20 s (`RUNNING`) or 45 s (`QUITTING`, i.e. after `Run` returned — teardown
 frames) the watchdog publishes `STATE=HUNG`, logs one `[BootState] HUNG` line to stderr,
 and writes **`standalone_hang.log`** — every thread's stack, main thread marked. On an
 **unattended** run (the `HarnessGuardUnattendedBoot` test) it then terminates itself with
-**exit code 3**; attended runs are only reported, never killed. So **a run that ends with
-exit 3 and a `standalone_hang.log` froze; exit 3 with a `standalone_crash.log` crashed** —
+**exit code 4** (distinct from the crash handler's 3); attended runs are only reported, never killed. So **a run that ends with
+exit 4 and a `standalone_hang.log` froze; exit 3 with a `standalone_crash.log` crashed** —
 read the hang log first in the former case. A modal in-game `UI::ShowDialog` pumps its own
 loop and therefore reads as HUNG on an unattended run: that is intended, and its pump will
 be on the main thread's stack in the log (`BANISHED_MODAL_ANSWER` is the answer to it).

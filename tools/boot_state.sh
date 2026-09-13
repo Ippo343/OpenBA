@@ -33,7 +33,7 @@
 #                     loop has not completed a frame for longer than this phase's
 #                     budget. Read standalone_hang.log -- it has every thread's stack,
 #                     with the main thread marked. An unattended run kills itself
-#                     (exit 3) moments after publishing this, so seeing HUNG at all
+#                     (exit 4) moments after publishing this, so seeing HUNG at all
 #                     usually means an ATTENDED run, where a human may simply be
 #                     sitting in a dialog.
 #
@@ -211,7 +211,7 @@ probe_once() {
                         echo "HUNG  the main loop has not completed a frame for ${stale:-?}s."
                         echo "      phase: $detail   [frame=${frame:-?} stale=${stale:-?}s/${hb}s; hang budgets $HUNG_SRC]"
                         echo "      Read standalone_hang.log -- all-thread stacks, main thread marked."
-                        echo "      An UNATTENDED run self-terminates with exit code 3 right after"
+                        echo "      An UNATTENDED run self-terminates with exit code 4 right after"
                         echo "      publishing this; seeing it persist means an attended run."
                         return 5 ;;
         BLOCKED_DIALOG) echo "BLOCKED_DIALOG  a modal dialog is open and boot cannot proceed."
