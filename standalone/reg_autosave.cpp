@@ -39,13 +39,6 @@ static uint32_t g_tid_Scenario = 0;         // storage for 0x1401c5b08
 extern "C" void FillTypeIdGlobals_autosave() {
     g_tid_AutoSaveDialog = ::Object::GetTypeIdByName("AutoSaveDialog");
     g_tid_Scenario       = ::Object::GetTypeIdByName("Scenario");
-    if (std::getenv("BANISHED_AUTOSAVE_TRACE")) {
-        fprintf(stderr, "[AutoSave] typeid slot c4d08 reg=%p val=%u\n",
-                (void*)ResolveAddr(Module::Exe, 0x1401c4d08), g_tid_AutoSaveDialog);
-        fprintf(stderr, "[Scenario] typeid slot c5b08 reg=%p val=%u\n",
-                (void*)ResolveAddr(Module::Exe, 0x1401c5b08), g_tid_Scenario);
-        fflush(stderr);
-    }
 }
 
 void RegisterAutoSaveTypeIds() {

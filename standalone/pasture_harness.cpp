@@ -11,6 +11,7 @@
 // address only resolves when reg_pasture_live.cpp registered it).
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "options.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -25,7 +26,7 @@
 static void PastureTendHarness_Tick(int frameNum) {
     static int s_interval = -2;               // -2 = env unread, -1 = disabled
     if (s_interval == -2) {
-        const char* e = std::getenv("BANISHED_PASTURE_TEND");
+        const char* e = Opt().pastureTend;
         if (!e || !e[0] || e[0] == '0') s_interval = -1;
         else {
             int v = std::atoi(e);
@@ -74,7 +75,7 @@ static void PastureTendHarness_Tick(int frameNum) {
 static void PastureProduceHarness_Tick(int frameNum) {
     static int s_interval = -2;
     if (s_interval == -2) {
-        const char* e = std::getenv("BANISHED_PASTURE_PRODUCE");
+        const char* e = Opt().pastureProduce;
         if (!e || !e[0] || e[0] == '0') s_interval = -1;
         else {
             int v = std::atoi(e);
@@ -106,7 +107,7 @@ extern "C" void PastureFillHarness_Tick(int frameNum) {
     PastureProduceHarness_Tick(frameNum);
     static int s_fillFrame = -2;              // -2 = env unread, -1 = disabled
     if (s_fillFrame == -2) {
-        const char* e = std::getenv("BANISHED_PASTURE_FILL");
+        const char* e = Opt().pastureFill;
         if (!e || !e[0] || e[0] == '0') s_fillFrame = -1;
         else {
             int v = std::atoi(e);

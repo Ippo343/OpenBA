@@ -2,6 +2,7 @@
 
 #include "boot_window.h"
 #include "stall_debug.h"
+#include "options.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -28,9 +29,7 @@ bool   g_shown     = false;
 double g_armedAtMs = 0.0;
 
 bool DeferralEnabled() {
-    const char* e = getenv("BANISHED_DEFER_WINDOW_SHOW");
-    if (!e || !e[0]) return true;                       // default ON
-    return strcmp(e, "0") != 0 && strcmp(e, "false") != 0;
+    return Opt().deferWindowShow;
 }
 
 } // namespace

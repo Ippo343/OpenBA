@@ -3,6 +3,7 @@
 #include "perf_terrain.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "options.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -14,27 +15,6 @@ Flags g_flags = {};
 uint8_t* g_rootOnlyPtr = nullptr;
 
 namespace {
-
-#ifndef BANISHED_PERF_EXPERIMENTAL
-#define BANISHED_PERF_EXPERIMENTAL 0
-#endif
-
-// env parse: unset -> def; "0"/"false"/"off" -> 0; anything else -> 1.
-int EnvBool(const char* name, int def) {
-    const char* e = std::getenv(name);
-    if (!e || !*e) return def;
-    if (e[0] == '0' || e[0] == 'f' || e[0] == 'F' || e[0] == 'n' || e[0] == 'N') return 0;
-    if (e[0] == 'o' && (e[1] == 'f' || e[1] == 'F')) return 0;
-    return 1;
-}
-int EnvInt(const char* name, int def) {
-    const char* e = std::getenv(name);
-    return (e && *e) ? std::atoi(e) : def;
-}
-float EnvFloat(const char* name, float def) {
-    const char* e = std::getenv(name);
-    return (e && *e) ? static_cast<float>(std::atof(e)) : def;
-}
 
 struct Config {
     bool  master;
@@ -56,22 +36,22 @@ struct Config {
 const Config& Cfg() {
     static Config c = [] {
         Config k;
-        const int def = BANISHED_PERF_EXPERIMENTAL ? 1 : 0;
-        k.master          = EnvBool("BANISHED_PERF_EXPERIMENTAL", def) != 0;
-        k.animCull        = k.master && EnvBool("BANISHED_PERF_ANIM_CULL", 1) != 0;
-        k.geomXfLastOnly  = k.master && EnvBool("BANISHED_PERF_GEOMXF_LASTONLY", 1) != 0;
-        k.iconLastOnly    = k.master && EnvBool("BANISHED_PERF_ICON_LASTONLY", 1) != 0;
-        k.ambientThrottle = k.master ? EnvInt("BANISHED_PERF_AMBIENT_THROTTLE", 8) : 0;
-        k.treeSnapshot    = k.master && EnvBool("BANISHED_PERF_TREE_SNAPSHOT", 1) != 0;
-        k.particleCull    = k.master && EnvBool("BANISHED_PERF_PARTICLE_CULL", 1) != 0;
-        k.pickCull        = k.master && EnvBool("BANISHED_PERF_PICK_CULL", 1) != 0;
-        k.geomCull        = k.animCull && EnvBool("BANISHED_PERF_GEOM_CULL", 1) != 0;
-        k.iconCull        = k.animCull && EnvBool("BANISHED_PERF_ICON_CULL", 1) != 0;
-        k.animBatchCulled = k.animCull && EnvBool("BANISHED_PERF_ANIM_BATCH_CULLED", 1) != 0;
-        k.animBatchAll    = k.master && EnvBool("BANISHED_PERF_ANIM_BATCH_ALL", 1) != 0;
-        k.terrainSidecar  = k.master && EnvBool("BANISHED_PERF_TERRAIN_SIDECAR", 1) != 0;
-        k.cullMargin      = EnvFloat("BANISHED_PERF_ANIM_CULL_MARGIN", 6.0f);
-        k.trace           = EnvBool("BANISHED_PERF_TRACE", 0) != 0;
+        const int def = Opt().perfBuildDefault;
+        k.master          = Opt().perfExperimental;
+        k.animCull        = Opt().perfAnimCull;
+        k.geomXfLastOnly  = Opt().perfGeomXfLastOnly;
+        k.iconLastOnly    = Opt().perfIconLastOnly;
+        k.ambientThrottle = Opt().perfAmbientThrottle;
+        k.treeSnapshot    = Opt().perfTreeSnapshot;
+        k.particleCull    = Opt().perfParticleCull;
+        k.pickCull        = Opt().perfPickCull;
+        k.geomCull        = Opt().perfGeomCull;
+        k.iconCull        = Opt().perfIconCull;
+        k.animBatchCulled = Opt().perfAnimBatchCulled;
+        k.animBatchAll    = Opt().perfAnimBatchAll;
+        k.terrainSidecar  = Opt().perfTerrainSidecar;
+        k.cullMargin      = Opt().perfCullMargin;
+        k.trace           = Opt().perfTrace;
         g_flags.master = k.master; g_flags.animCull = k.animCull;
         g_flags.geomXfLastOnly = k.geomXfLastOnly; g_flags.iconLastOnly = k.iconLastOnly;
         g_flags.treeSnapshot = k.treeSnapshot; g_flags.particleCull = k.particleCull;

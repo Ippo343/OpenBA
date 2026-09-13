@@ -26,6 +26,7 @@
 // Everything here is fprintf(stderr)-based so it survives the release log strip.
 #include "stress_harness.h"
 #include "resolve.h"
+#include "options.h"
 #include "engine_funcs.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName / GetTypeNameById
 #include <cstdint>
@@ -63,43 +64,25 @@ int   s_foodMult  = 0;       // 0 = derive from citizens
 int   s_staff     = 1;
 char  s_csvPath[MAX_PATH] = "standalone_stress.csv";
 
-bool EnvTrue(const char* n) {
-    const char* v = std::getenv(n);
-    return v && v[0] && std::strcmp(v, "0") != 0 && std::strcmp(v, "false") != 0;
-}
-int EnvInt(const char* n, int dflt) {
-    const char* v = std::getenv(n);
-    return (v && v[0]) ? std::atoi(v) : dflt;
-}
-void SetIfUnset(const char* n, const char* v) {
-    const char* cur = std::getenv(n);
-    if (cur && cur[0]) return;
-    _putenv_s(n, v);
-}
-
+// EnvTrue/EnvInt/SetIfUnset and the stress-town default block used to live here;
+// they moved to standalone/options.cpp (OptionsInit / ApplyStressDefaults) as
+// part of ENDGAME C.3. This just copies the already-resolved fields.
 void Resolve() {
     if (s_enabled >= 0) return;
-    s_enabled  = EnvTrue("BANISHED_STRESS") ? 1 : 0;
+    s_enabled  = Opt().stress ? 1 : 0;
     if (!s_enabled) return;
-    s_citizens = EnvInt("BANISHED_STRESS_CITIZENS", s_citizens);
-    s_sets     = EnvInt("BANISHED_STRESS_SETS", s_sets);
-    s_frames   = EnvInt("BANISHED_STRESS_FRAMES", s_frames);
-    s_interval = EnvInt("BANISHED_STRESS_INTERVAL", s_interval);
-    s_speed    = EnvInt("BANISHED_STRESS_SPEED", s_speed);
-    s_foodMult = EnvInt("BANISHED_STRESS_FOOD_MULT", 0);
-    s_staff    = EnvInt("BANISHED_STRESS_STAFF", 1);
-    g_compProfOn = EnvInt("BANISHED_STRESS_COMPPROF", 1);   // 0 off, 1 bucket Updates, 2 + per-frame slot-8 ticks
-    if (g_compProfOn < 0) g_compProfOn = 0;
-    if (g_compProfOn > 2) g_compProfOn = 2;
-    if (const char* p = std::getenv("BANISHED_STRESS_CSV")) if (p[0]) {
-        std::strncpy(s_csvPath, p, sizeof(s_csvPath) - 1);
+    s_citizens   = Opt().stressCitizens;
+    s_sets       = Opt().stressSets;
+    s_frames     = Opt().stressFrames;
+    s_interval   = Opt().stressInterval;
+    s_speed      = Opt().stressSpeed;
+    s_foodMult   = Opt().stressFoodMult;
+    s_staff      = Opt().stressStaff;
+    g_compProfOn = Opt().stressCompProf;   // 0 off, 1 bucket Updates, 2 + per-frame slot-8 ticks
+    if (Opt().stressCsv) {
+        std::strncpy(s_csvPath, Opt().stressCsv, sizeof(s_csvPath) - 1);
         s_csvPath[sizeof(s_csvPath) - 1] = 0;
     }
-    if (s_citizens < 0) s_citizens = 0;
-    if (s_sets < 0) s_sets = 0;
-    if (s_interval < 60) s_interval = 60;
-    if (s_speed < 1) s_speed = 1;
-    if (s_foodMult <= 0) s_foodMult = s_citizens > 10 ? s_citizens / 10 : 1;
 }
 
 // ── timing ───────────────────────────────────────────────────────────────────
@@ -221,7 +204,7 @@ uintptr_t s_curHome = 0;
 bool s_homeWatch = false;
 double TscMs(long long tsc);
 void HomeWatchInit() {
-    s_homeWatch = EnvInt("BANISHED_STRESS_HOMEWATCH", 0) != 0;
+    s_homeWatch = Opt().stressHomeWatch;
     TscMs(0);   // stamp the TSC/QPC calibration origin
 }
 int      s_homeLossLogged = 0;
@@ -412,8 +395,8 @@ void OpenCsv() {
                  st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, __DATE__, __TIME__);
     std::fprintf(s_csv, "# citizens=%d sets=%d speed=%d frames=%d interval=%d seed=%s map=%s opt=%s\n",
                  s_citizens, s_sets, s_speed, s_frames, s_interval,
-                 std::getenv("BANISHED_SEED") ? std::getenv("BANISHED_SEED") : "?",
-                 std::getenv("BANISHED_MAP_SIZE") ? std::getenv("BANISHED_MAP_SIZE") : "?",
+                 Opt().seed ? Opt().seed : "?",
+                 Opt().mapSize ? Opt().mapSize : "?",
 #ifdef __OPTIMIZE__
                  "on"
 #else
@@ -491,41 +474,11 @@ extern "C" void StressHarness_Init() {
     HomeWatchInit();
     Resolve();
     if (!s_enabled) return;
-    char buf[64];
-    SetIfUnset("BANISHED_AUTOSTART", "1");
-    SetIfUnset("BANISHED_MAP_SIZE", "medium");
-    // 31337: the town sits on a 27k-cell connected flat area (seed 12345: 11k, cut up by
-    // low mountains and rivers, too small for 333 door-reachable footprints — 2026-09-04).
-    SetIfUnset("BANISHED_SEED", "31337");
-    SetIfUnset("BANISHED_DIFFICULTY", "easy");
-    SetIfUnset("BANISHED_CLIMATE", "fair");
-    SetIfUnset("BANISHED_FPS_CAP", "off");
-    std::snprintf(buf, sizeof(buf), "%d", s_speed);    SetIfUnset("BANISHED_FORCE_SPEED", buf);
-    std::snprintf(buf, sizeof(buf), "%d", s_interval); SetIfUnset("BANISHED_SIMPROF", buf);
-    if (s_frames > 0) {
-        std::snprintf(buf, sizeof(buf), "%d", s_frames);
-        SetIfUnset("BANISHED_PAUSEMENU", buf);
-        SetIfUnset("BANISHED_PAUSEMENU_QUIT", "60");
-        SetIfUnset("BANISHED_PAUSEMENU_BUTTON", "6");       // Quit Game -> clean exit
-    }
-    SetIfUnset("BANISHED_CAMERA_PIN", "town,90");
-    // The buildings starttown.cpp can only site through their own dedicated blocks
-    // (water adjacency, drag areas, animal-density siting). One of each.
-    SetIfUnset("BANISHED_BUILD_DEMO_FISHINGDOCK", "1");
-    SetIfUnset("BANISHED_BUILD_DEMO_TRADINGPOST", "1");
-    SetIfUnset("BANISHED_BUILD_DEMO_CROPFIELD", "1");
-    SetIfUnset("BANISHED_BUILD_DEMO_ORCHARD", "1");
-    SetIfUnset("BANISHED_BUILD_DEMO_PASTURE", "1");
-    SetIfUnset("BANISHED_PASTURE_AUTOTYPE", "1");
-    SetIfUnset("BANISHED_BUILD_DEMO_HUNTERLODGE", "1");
-    SetIfUnset("BANISHED_BUILD_DEMO_GATHERERHUT", "1");
-    // A field with no crop and an orchard with no tree type never open for workers
-    // (accepting stays 0, so the seat cascade skips them). In retail the player picks
-    // those in the panel; these two harnesses make the same choice for EVERY field and
-    // orchard in the world a few frames in (cropfield_force_start.cpp mode 2 also posts
-    // the plant command so the field does not wait for the seasonal window).
-    SetIfUnset("BANISHED_CROPFIELD_FORCE_START", "2");
-    SetIfUnset("BANISHED_ORCHARD_FORCE_START", "1");
+    // The stress-town default block (AUTOSTART/MAP_SIZE/SEED/DIFFICULTY/CLIMATE/
+    // FPS_CAP/FORCE_SPEED/SIMPROF/PAUSEMENU*/CAMERA_PIN/BUILD_DEMO_*/
+    // CROPFIELD_FORCE_START/ORCHARD_FORCE_START — "set only what the caller left
+    // unset") now runs in standalone/options.cpp's ApplyStressDefaults(), called
+    // from OptionsInit() before anything else reads the environment.
     std::fprintf(stderr, "[Stress] ENABLED citizens=%d sets=%d speed=%d frames=%d interval=%d "
                          "foodMult=%d staff=%d compprof=%d csv=%s\n",
                  s_citizens, s_sets, s_speed, s_frames, s_interval, s_foodMult, s_staff,

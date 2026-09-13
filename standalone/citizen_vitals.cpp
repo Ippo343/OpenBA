@@ -14,6 +14,7 @@
 // count +0xA8) and four floats per citizen; it never writes.
 
 #include "citizen_vitals.h"
+#include "options.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -22,12 +23,7 @@
 namespace {
 
 bool Enabled() {
-    static int on = -1;
-    if (on < 0) {
-        const char* e = std::getenv("BANISHED_VITALS");
-        on = (e && e[0] == '0') ? 0 : 1;          // default ON, "0" disables
-    }
-    return on == 1;
+    return Opt().citizenVitals;          // default ON, "0" disables
 }
 
 bool Readable(const void* p) {

@@ -46,6 +46,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "options.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
@@ -57,7 +58,7 @@
 static int OverstockPct() {          // -1 = disabled
     static int v = -2;
     if (v == -2) {
-        const char* e = getenv("BANISHED_MARKET_OVERSTOCK");
+        const char* e = Opt().marketOverstock;
         if (!e || !*e || e[0] == '0') { v = -1; }
         else { int n = atoi(e); v = (n > 100) ? n : 260; }
     }
@@ -65,13 +66,13 @@ static int OverstockPct() {          // -1 = disabled
 }
 static int OverstockFrame() {
     static int v = -1;
-    if (v < 0) { const char* e = getenv("BANISHED_MARKET_OVERSTOCK_FRAME");
+    if (v < 0) { const char* e = Opt().marketOverstockFrame;
                  v = (e && *e) ? atoi(e) : 2400; if (v < 1) v = 1; }
     return v;
 }
 static int OverstockPeriod() {
     static int v = -1;
-    if (v < 0) { const char* e = getenv("BANISHED_MARKET_OVERSTOCK_PERIOD");
+    if (v < 0) { const char* e = Opt().marketOverstockPeriod;
                  v = (e && *e) ? atoi(e) : 0; if (v < 0) v = 0; }
     return v;
 }

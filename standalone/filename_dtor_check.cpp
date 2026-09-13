@@ -23,6 +23,7 @@
 // channel in standalone (stdout/standalone_debug.log is lost on hard-kill).
 
 #include "engine_funcs.h"
+#include "options.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
@@ -101,8 +102,7 @@ void* CheckingFilenameAssign(void* dst, const void* src) {
 } // namespace
 
 extern "C" void InstallFilenameDtorCheck() {
-    const char* e = getenv("BANISHED_FNDTOR_CHECK");
-    if (!e || !e[0] || e[0] == '0') return;
+    if (!Opt().fnDtorCheck) return;
     if (!fn_Filename_Dtor) {
         fprintf(stderr, "[FNDtorCheck] fn_Filename_Dtor null — not installed\n");
         fflush(stderr);
