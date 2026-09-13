@@ -574,8 +574,8 @@ namespace uistub_HelpUI {
                fn_Sprite_Default_Ctor && fn_ComboElement_AddItem &&
                fn_ComboElement_SetCurrentItem && fn_ComboElement_GetItemData &&
                fn_UIString_Ctor_Index && fn_DocumentTextElement_SetText_UIString &&
-               fn_ContainerElement_SetOffsets && fn_String_Ctor_CStr &&
-               fn_String_Dtor && fn_MemAlloc && g_pMemAllocSingleton;
+               fn_ContainerElement_SetOffsets &&
+               fn_MemAlloc && g_pMemAllocSingleton;
     }
     // Report the OUTCOME of the readiness test, once, naming what is missing.
     bool CheckOnce() {

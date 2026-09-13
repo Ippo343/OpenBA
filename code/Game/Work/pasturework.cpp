@@ -20,6 +20,7 @@
 
 #include "Work/pasturework_funcs.h"
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -41,7 +42,6 @@ typedef int   (*PW_CalcMaxWorkers_t)(uintptr_t matDesc);
 typedef void* (*PW_FindComp_Storage_t)(uintptr_t entity, void* outIBP);
 typedef int   (*PW_StorageQueryCount_t)(void* storageComp);
 typedef int   (*PW_Random_RandTol_t)(void* rng, int range);
-typedef float*(*PW_Vector3_Ctor_t)(float* self, float x, float y, float z);
 typedef float*(*PW_GetTerrainPos_t)(int* mapGrid, float* outPos, float* gridPos,
                                     char param4, uint32_t* outNormal);
 typedef void  (*PW_CitizenAI_RegisterWork_t)(void* citizenAISub, void* entityIBP, void* citizenIBP);
@@ -107,7 +107,6 @@ static PW_CalcMaxWorkers_t              s_fn_CalcMaxWorkers = nullptr;
 static PW_FindComp_Storage_t            s_fn_FindComp_Storage = nullptr;
 static PW_StorageQueryCount_t           s_fn_StorageQueryCount = nullptr;
 static PW_Random_RandTol_t              s_fn_Random_RandTol = nullptr;
-static PW_Vector3_Ctor_t               s_fn_Vector3_Ctor = nullptr;
 static PW_GetTerrainPos_t              s_fn_GetTerrainPos = nullptr;
 static PW_CitizenAI_RegisterWork_t     s_fn_CitizenAI_RegisterWork = nullptr;
 static PW_CitizenAI_LongTermPlan_t     s_fn_CitizenAI_LongTermPlan = nullptr;
@@ -259,9 +258,6 @@ bool PastureWork_ResolveFuncs() {
     uintptr_t iatRandTol = ResolveAddr(Module::Exe, 0x1401512f0);
     if (iatRandTol)
         s_fn_Random_RandTol = *reinterpret_cast<PW_Random_RandTol_t*>(iatRandTol);
-    uintptr_t iatVec3Ctor = ResolveAddr(Module::Exe, 0x140152a30);
-    if (iatVec3Ctor)
-        s_fn_Vector3_Ctor = *reinterpret_cast<PW_Vector3_Ctor_t*>(iatVec3Ctor);
 
     // Serializer ctor/dtor from dispatch slots
     uintptr_t iatSerCtorSlot = ResolveAddr(Module::Exe, 0x140152ad8);
@@ -307,7 +303,7 @@ bool PastureWork_ResolveFuncs() {
               s_fn_FindComp_MeshInstance && s_fn_MeshInstance_SetVisible &&
               s_fn_CalcMaxWorkers && s_fn_FindComp_Storage &&
               s_fn_StorageQueryCount && s_fn_Random_RandTol &&
-              s_fn_Vector3_Ctor && s_fn_GetTerrainPos &&
+              s_fn_GetTerrainPos &&
               s_fn_CitizenAI_RegisterWork && s_fn_CitizenAI_LongTermPlan &&
               s_fn_FindComp_Pasture && s_fn_GetAreaComponent &&
               s_fn_Map_CalcDistance && s_fn_Map_FindNearestPassable &&
@@ -340,7 +336,6 @@ bool PastureWork_ResolveFuncs() {
         if (!s_fn_FindComp_Storage) printf("  MISSING: FindComp_Storage\n");
         if (!s_fn_StorageQueryCount) printf("  MISSING: StorageQueryCount\n");
         if (!s_fn_Random_RandTol) printf("  MISSING: Random_RandTol\n");
-        if (!s_fn_Vector3_Ctor) printf("  MISSING: Vector3_Ctor\n");
         if (!s_fn_GetTerrainPos) printf("  MISSING: GetTerrainPos\n");
         if (!s_fn_CitizenAI_RegisterWork) printf("  MISSING: CitizenAI_RegisterWork\n");
         if (!s_fn_CitizenAI_LongTermPlan) printf("  MISSING: CitizenAI_LongTermPlan\n");
@@ -555,13 +550,12 @@ int PastureWork_Slot4_Impl(PastureWork* self, void* entityIBP, uint64_t param3, 
 
                             // Compute world position from cell index
                             float halfOff = (float)(*piVar4 >> 1) - *s_fHalfCellOffset;
-                            float local_80[3];
-                            s_fn_Vector3_Ctor(local_80,
+                            Math::Vector3 local_80(
                                 (float)((int)uVar11 % *piVar4) - halfOff,
                                 (float)((int)uVar11 / *piVar4) - halfOff,
                                 0.0f);
                             float local_70[4];  // Vector3 + padding
-                            s_fn_GetTerrainPos(piVar4, local_70, local_80, '\0', nullptr);
+                            s_fn_GetTerrainPos(piVar4, local_70, &local_80.x, '\0', nullptr);
 
                             // Build RemoveAnimal action
                             uintptr_t local_90 = *(uintptr_t*)citizenIBP;
@@ -688,22 +682,22 @@ int PastureWork_Slot4_Impl(PastureWork* self, void* entityIBP, uint64_t param3, 
 
             if ((char)canPath != '\0') {
                 float halfOff = (float)(*piVar4 >> 1) - *s_fHalfCellOffset;
-                float local_80[3];
-                s_fn_Vector3_Ctor(local_80,
+                Math::Vector3 local_80(
                     (float)((int)local_res20 % *piVar4) - halfOff,
                     (float)((int)local_res20 / *piVar4) - halfOff,
                     0.0f);
                 float local_a0_pos[4];  // position buffer
-                s_fn_GetTerrainPos(piVar4, local_a0_pos, local_80, '\0', nullptr);
+                s_fn_GetTerrainPos(piVar4, local_a0_pos, &local_80.x, '\0', nullptr);
 
                 halfOff = (float)(*piVar4 >> 1) - *s_fHalfCellOffset;
-                float local_70_pos[4];  // position buffer
-                s_fn_Vector3_Ctor(local_70_pos,
+                Math::Vector3 local_70_pos(
                     (float)(nearCell % *piVar4) - halfOff,
                     (float)(nearCell / *piVar4) - halfOff,
                     0.0f);
-                float local_50[2];  // dest position
-                s_fn_GetTerrainPos(piVar4, local_50, local_70_pos, '\0', nullptr);
+                // Retail 0x1400F2370: this local is a Vector3 (12 bytes) that GetTerrainPos
+                // fills; the port had it as float[2], 4 bytes short -- a stack overwrite.
+                Math::Vector3 local_50;  // dest position
+                s_fn_GetTerrainPos(piVar4, &local_50.x, &local_70_pos.x, '\0', nullptr);
 
                 // Create grazing work action (FUN_1400bb0a0)
                 local_res20 = *plVar17;
@@ -713,7 +707,7 @@ int PastureWork_Slot4_Impl(PastureWork* self, void* entityIBP, uint64_t param3, 
                     (int)selfQ[4],          // priority
                     &local_res20,           // work entity IBP
                     0,                      // param4
-                    local_50,               // dest position
+                    &local_50.x,            // dest position
                     local_a0_pos,           // source position
                     dVar7,                  // type ID (DWORD_1401c7ba0)
                     0,                      // param8

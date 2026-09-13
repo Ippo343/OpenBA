@@ -12,6 +12,7 @@
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -215,13 +216,11 @@ static void DestroyComponent_Destroy_Impl(void* destroyComp)
 
 // Helper: Find element by name in dialog, return InternalPtr value (8 bytes)
 static uint64_t FindElemByName(void* dialogElem, const char* name) {
-    uint8_t nameBuf[8];
-    fn_String_Ctor_CStr(nameBuf, name);
+    System::String nameStr(name);
 
     uint64_t result = 0;
-    fn_FindElement(dialogElem, &result, nameBuf);
+    fn_FindElement(dialogElem, &result, &nameStr);
 
-    fn_String_Dtor(nameBuf);
     return result;
 }
 
@@ -384,10 +383,8 @@ void DestroyUI_Slot7(DestroyUI* self) {
             *(float*)((uintptr_t)progressRemove + 0x128) = fillRatio;
 
             // Format and set percentage text
-            uint8_t strBuf[8];
-            fn_String_Format(strBuf, "%i", (uint64_t)(uint32_t)(int)fillPercent);
-            fn_ProgressElement_SetProgressTextParameter(progressRemove, 0, strBuf);
-            fn_String_Dtor(strBuf);
+            System::String strObj = System::String::Format("%i", (uint64_t)(uint32_t)(int)fillPercent);
+            fn_ProgressElement_SetProgressTextParameter(progressRemove, 0, &strObj);
         }
 
         // --- Update destruction progress bar ---
@@ -405,10 +402,8 @@ void DestroyUI_Slot7(DestroyUI* self) {
 
         *(float*)((uintptr_t)progressDestruct + 0x128) = destroyRatio;
 
-        uint8_t strBuf2[8];
-        fn_String_Format(strBuf2, "%i", (uint64_t)(uint32_t)(int)destroyPercent);
-        fn_ProgressElement_SetProgressTextParameter(progressDestruct, 0, strBuf2);
-        fn_String_Dtor(strBuf2);
+        System::String strObj2 = System::String::Format("%i", (uint64_t)(uint32_t)(int)destroyPercent);
+        fn_ProgressElement_SetProgressTextParameter(progressDestruct, 0, &strObj2);
 
         // --- Show/hide progress bars based on destruction state ---
         bool isDestroying = (destroyRatio != 0.0f);

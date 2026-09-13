@@ -23,6 +23,7 @@
 //
 
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cmath>
@@ -33,14 +34,12 @@
 typedef void*    (*fn_ClearPathQueue_t)(uintptr_t entity, void* retIBP);          // 0x140003f60
 typedef int      (*fn_MapPathCost_t)(int* mapGrid, uint32_t cellA, int cellB, uint8_t cache); // 0x14009f810
 typedef uint64_t (*fn_ValidateCell_t)(int* mapGrid, uint32_t pathType, uint32_t srcCell, int dstCell); // 0x1400a00f0
-// Math::Transform::operator*(Vector3 const&) const -> Vector3 (member value-return ABI):
-//   RCX=transform, RDX=retVec3, R8=inVec3.  Dispatch slot [0x140151470].
-typedef void     (*fn_TransformMul_t)(void* transform, float* outVec3, const float* inVec3);
+// Math::Transform::operator*(Vector3 const&) const -> Vector3: dispatch slot [0x140151470]
+// in retail, a direct Math::Transform member call since B.3.1 step 2.
 
 static fn_ClearPathQueue_t  s_fn_ClearPathQueue = nullptr;   // 0x140003f60
 static fn_MapPathCost_t     s_fn_MapPathCost    = nullptr;   // 0x14009f810
 static fn_ValidateCell_t    s_fn_ValidateCell   = nullptr;   // 0x1400a00f0
-static fn_TransformMul_t    s_fn_TransformMul   = nullptr;   // [0x140151470]
 
 static bool s_walkInit = false;
 static void EnsureWalk() {
@@ -48,8 +47,6 @@ static void EnsureWalk() {
     s_fn_ClearPathQueue = reinterpret_cast<fn_ClearPathQueue_t>(ResolveAddr(Module::Exe, 0x140003f60));
     s_fn_MapPathCost    = reinterpret_cast<fn_MapPathCost_t>(ResolveAddr(Module::Exe, 0x14009f810));
     s_fn_ValidateCell   = reinterpret_cast<fn_ValidateCell_t>(ResolveAddr(Module::Exe, 0x1400a00f0));
-    uintptr_t slot = ResolveAddr(Module::Exe, 0x140151470);
-    if (slot) s_fn_TransformMul = *reinterpret_cast<fn_TransformMul_t*>(slot);
     s_walkInit = true;
 }
 
@@ -91,16 +88,13 @@ bool WorkImpl_WalkablePos_122be0(uintptr_t param_1, uintptr_t param_2,
     for (int i = 0; i < recCount; i++) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&pathObj);
         // Transform = 7 floats at obj+0x148 (quat 4 + translate 3).
-        float xform[7];
-        for (int k = 0; k < 7; k++)
-            xform[k] = *reinterpret_cast<float*>(pathObj + 0x148 + k * 4);
-        const float* inVec = reinterpret_cast<const float*>(recBase + static_cast<int64_t>(i) * 0x18);
-        float pos[3] = {0.0f, 0.0f, 0.0f};
-        if (s_fn_TransformMul) s_fn_TransformMul(xform, pos, inVec);
+        const Math::Transform& xform = *reinterpret_cast<const Math::Transform*>(pathObj + 0x148);   // B.3.1 bridge
+        const Math::Vector3& inVec = *reinterpret_cast<const Math::Vector3*>(recBase + static_cast<int64_t>(i) * 0x18);   // B.3.1 bridge
+        Math::Vector3 pos = xform * inVec;
 
         int w2 = *mapGrid;
-        int col = WalkClampCell(static_cast<int>(pos[0] + static_cast<float>(w2 >> 1)), w2);
-        int row = WalkClampCell(static_cast<int>(pos[1] + static_cast<float>(w2 >> 1)), w2);
+        int col = WalkClampCell(static_cast<int>(pos.x + static_cast<float>(w2 >> 1)), w2);
+        int row = WalkClampCell(static_cast<int>(pos.y + static_cast<float>(w2 >> 1)), w2);
         uint32_t destCell = static_cast<uint32_t>(w2 * row + col);
 
         uint64_t reach = s_fn_ValidateCell ? s_fn_ValidateCell(mapGrid, 0xe1f, srcCell, static_cast<int>(destCell)) : 0;
@@ -114,9 +108,9 @@ bool WorkImpl_WalkablePos_122be0(uintptr_t param_1, uintptr_t param_2,
             }
             if (dist < *param_5) {
                 *param_5 = dist;
-                param_4[0] = pos[0];
-                param_4[1] = pos[1];
-                param_4[2] = pos[2];
+                param_4[0] = pos.x;
+                param_4[1] = pos.y;
+                param_4[2] = pos.z;
             }
         }
     }

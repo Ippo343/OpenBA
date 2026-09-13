@@ -14,8 +14,10 @@
 #include "Work/tradework_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -405,7 +407,7 @@ void TradeComponent_DtorNameArray(void* /*unused*/, int64_t arrayBase, int count
         p[0] = 0;
         p[1] = 0;
         // String::~String on (p - 2) == element start (+0x00).
-        if (fn_String_Dtor) fn_String_Dtor((void*)(p - 2));
+        reinterpret_cast<System::String*>(p - 2)->~String();   // B.3.1 bridge
         p += 4;   // advance 0x20 bytes (4 * 8)
     }
 }
@@ -443,7 +445,8 @@ void TradeComponent_ResizeNames(int64_t* field, int count) {
         if (i < oldCount) {
             int8_t* srcElem = oldBuf + i * 0x20;
             if (dstElem) {
-                if (fn_String_Ctor_Copy) fn_String_Ctor_Copy(dstElem, srcElem);   // String at +0x00
+                ::new (static_cast<void*>(dstElem)) System::String(
+                    *reinterpret_cast<const System::String*>(srcElem));   // B.3.1 bridge: String at +0x00
                 *(int*)(dstElem + 8) = *(int*)(srcElem + 8);                       // int at +0x08
                 *(int64_t*)(dstElem + 0x10) = 0;
                 *(int64_t*)(dstElem + 0x18) = 0;

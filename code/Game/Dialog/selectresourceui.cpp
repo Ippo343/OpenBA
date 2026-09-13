@@ -9,6 +9,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
 
@@ -126,8 +127,8 @@ static int SelectResourceUI_IterateResources(void* self, void* combo, int* selec
                                             *(uint64_t*)((uintptr_t)subObj + 0x30),
                                             (void*)((uintptr_t)subObj + 0x38));
                             // Convert to System::String
-                            uint8_t sysStrBuf[8];
-                            fn_UIString_ToSystemString(uiStrBuf, sysStrBuf);
+                            System::String sysStr;
+                            fn_UIString_ToSystemString(uiStrBuf, &sysStr);
 
                             // Create Sprite from SelectDescription icon
                             uint8_t spriteBuf[16];
@@ -136,9 +137,8 @@ static int SelectResourceUI_IterateResources(void* self, void* combo, int* selec
                                           (void*)((uintptr_t)subObj + 0x28));
 
                             // Add item to combo with index as userData
-                            fn_ComboElement_AddItem(combo, spriteBuf, sysStrBuf,
+                            fn_ComboElement_AddItem(combo, spriteBuf, &sysStr,
                                                     (void*)(intptr_t)comboIdx);
-                            fn_String_Dtor(sysStrBuf);
 
                             // Check if this is the currently selected resource
                             if (resType == currentResource) {
@@ -214,13 +214,11 @@ void SelectResourceUI_Slot4(void* self) {
     uintptr_t s = (uintptr_t)self;
 
     // Find "selectResource" combo element via DialogInstance at +0x18
-    uint8_t nameBuf[8];
-    fn_String_Ctor_CStr(nameBuf, "selectResource");
+    System::String nameBuf("selectResource");
 
     void* dialogInstance = *(void**)(s + 0x18);
     uint64_t findResult = 0;
-    fn_DialogInstance_FindElement(dialogInstance, &findResult, nameBuf);
-    fn_String_Dtor(nameBuf);
+    fn_DialogInstance_FindElement(dialogInstance, &findResult, &nameBuf);
 
     // Store combo element at +0x30 (IsDerivedFrom check skipped -- null check only)
     void* rawElem = (void*)findResult;

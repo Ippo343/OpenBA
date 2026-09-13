@@ -16,6 +16,8 @@
 #include "Component/particlecomponent_funcs.h"
 #include "scene_watch.h"
 #include "engine_funcs.h"
+#include "system/String.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include "perf_experimental.h"
 #include <cstdint>
@@ -361,16 +363,6 @@ static_assert(sizeof(PCGeoEntry) == 0x18, "PCGeoEntry stride");
 typedef void* (*fn_GetNodeToWorld_t)(void* meshInstance, void* retTransform, int nodeIndex);
 static fn_GetNodeToWorld_t s_fn_GetNodeToWorld = nullptr;
 
-// Math::Transform::operator* — member: RCX=this, RDX=retbuf, R8=&rhs
-// (dispatch slot 0x140151430).
-typedef void* (*fn_TransformMul_t)(const void* self, void* retTransform, const void* rhs);
-static fn_TransformMul_t s_fn_TransformMul = nullptr;
-
-// System::String::operator==(const String&) — RCX=&lhs field, RDX=&rhs field
-// (dispatch slot 0x140151438).
-typedef bool (*fn_StringEqStr_t)(const void* lhs, const void* rhs);
-static fn_StringEqStr_t s_fn_StringEqStr = nullptr;
-
 // Graphics::GraphicsMesh::GetNodeIndexFromName(mesh, nameChars) — slot 0x140152970.
 typedef int (*fn_GetNodeIdxFromName_t)(void* mesh, const char* name);
 static fn_GetNodeIdxFromName_t s_fn_GetNodeIdxFromName = nullptr;
@@ -483,13 +475,17 @@ extern "C" void ParticleComponent_Place(ParticleComponent* self, int index) {
         int n = *(int32_t*)((uintptr_t)attach + 0x38);
         uint8_t* arr = *(uint8_t**)((uintptr_t)attach + 0x30);
         for (int j = 0; j < n && arr; j++) {
-            if (s_fn_StringEqStr && s_fn_StringEqStr(arr + (size_t)j * 0x18, elem + 8)) {
-                float zero = 0.0f, ypo[7], prod[7];
-                if (fn_Transform_FromYawPitchOffset && s_fn_TransformMul) {
-                    fn_Transform_FromYawPitchOffset(ypo, &zero, &zero, arr + (size_t)j * 0x18 + 8);
-                    s_fn_TransformMul(ypo, prod, tf);
-                    pos[0] = prod[4]; pos[1] = prod[5]; pos[2] = prod[6];
-                }
+            // System::String::operator==(const String&) — slot 0x140151438.
+            if (*reinterpret_cast<const System::String*>(arr + (size_t)j * 0x18) ==
+                *reinterpret_cast<const System::String*>(elem + 8)) {   // B.3.1 bridge
+                const float zero = 0.0f;
+                const Math::Transform ypo = Math::Transform::FromYawPitchOffset(
+                    zero, zero,
+                    *reinterpret_cast<const Math::Vector3*>(arr + (size_t)j * 0x18 + 8));   // B.3.1 bridge
+                // Math::Transform::operator*(const Transform&) — slot 0x140151430.
+                const Math::Transform prod =
+                    ypo * *reinterpret_cast<const Math::Transform*>(tf);   // B.3.1 bridge
+                pos[0] = prod.translation.x; pos[1] = prod.translation.y; pos[2] = prod.translation.z;
                 followIdx = j;
                 break;
             }
@@ -722,13 +718,16 @@ extern "C" void ParticleComponent_UpdateTick(ParticleComponent* self, void* time
                 void* attach = *(void**)((uintptr_t)desc + 0x20);
                 if (attach) {
                     uint8_t* arr = *(uint8_t**)((uintptr_t)attach + 0x30);
-                    if (arr && fn_Transform_FromYawPitchOffset && s_fn_TransformMul) {
-                        float modelTf[7];
-                        memcpy(modelTf, (uint8_t*)model + 0x148, 7 * sizeof(float));
-                        float zero = 0.0f, ypo[7];
-                        fn_Transform_FromYawPitchOffset(ypo, &zero, &zero,
-                                                        arr + (size_t)ge->nodeIdx * 0x18 + 8);
-                        s_fn_TransformMul(ypo, tf, modelTf);
+                    if (arr) {
+                        // Transform copy-ctor (seven dwords) from the ModelComponent's +0x148.
+                        const Math::Transform modelTf =
+                            *reinterpret_cast<const Math::Transform*>((uint8_t*)model + 0x148);   // B.3.1 bridge
+                        const float zero = 0.0f;
+                        const Math::Transform ypo = Math::Transform::FromYawPitchOffset(
+                            zero, zero,
+                            *reinterpret_cast<const Math::Vector3*>(arr + (size_t)ge->nodeIdx * 0x18 + 8));   // B.3.1 bridge
+                        // Math::Transform::operator*(const Transform&) — slot 0x140151430.
+                        *reinterpret_cast<Math::Transform*>(tf) = ypo * modelTf;   // B.3.1 bridge
                         have = true;
                     }
                 } else if (s_fn_GetNodeToWorld) {
@@ -887,10 +886,6 @@ void ParticleComponent_InitFuncs() {
             ResolveExport("?GetNodeIndexFromName@GraphicsMesh@Graphics@@QEBAHPEBD@Z"));
     s_fn_GetNodeToWorld = reinterpret_cast<fn_GetNodeToWorld_t>(
         ResolveExport("?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AVTransform@Math@@H@Z"));
-    s_fn_TransformMul = reinterpret_cast<fn_TransformMul_t>(
-        ResolveExport("??DTransform@Math@@QEBA?AV01@AEBV01@@Z"));
-    s_fn_StringEqStr = reinterpret_cast<fn_StringEqStr_t>(
-        ResolveExport("??8String@System@@QEBA_NAEBV01@@Z"));
     s_fn_FindComp_Model = reinterpret_cast<fn_PCFindComponent_t>(
         ResolveAddr(Module::Exe, 0x140003f60));   // FindComponent(ModelComponent)
     s_fn_FindComp_Map = reinterpret_cast<fn_PCFindComponent_t>(

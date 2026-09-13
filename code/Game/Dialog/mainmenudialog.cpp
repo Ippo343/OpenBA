@@ -14,6 +14,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Dialog/dialog_exe_helpers.h"
+#include "system/String.h"
+#include "system/Filename.h"
 #include <cstdint>
 #include <cstdio>
 #include <windows.h>  // PostQuitMessage fallback in standalone Quit handler
@@ -22,12 +24,10 @@
 // Helper: find element by name, returns raw element pointer
 // ============================================================
 static void* FindElement(void* dialog, const char* name) {
-    uint8_t nameStr[8];
-    fn_String_Ctor_CStr(nameStr, name);
+    System::String nameStr(name);
     uint8_t retBuf[16];
-    fn_DialogInstance_FindElement(dialog, retBuf, nameStr);
+    fn_DialogInstance_FindElement(dialog, retBuf, &nameStr);
     void* elem = *(void**)retBuf;
-    fn_String_Dtor(nameStr);
     return elem;
 }
 
@@ -59,9 +59,8 @@ enum MainMenuButtonId {
 static uint32_t* g_dialogTypeIdSlot = nullptr;
 
 static void* LoadDialogResource(const char* rscPath) {
-    uint8_t filenameBuf[16];
-    fn_Filename_CtorCStr(filenameBuf, rscPath);
-    void* resource = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filenameBuf);
+    System::Filename filenameBuf(rscPath);
+    void* resource = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filenameBuf);
     printf("[LoadDialogResource] '%s' -> FindOrLoad=%p\n", rscPath, resource);
     void* extRes = nullptr;
     if (resource) {
@@ -91,7 +90,6 @@ static void* LoadDialogResource(const char* rscPath) {
             extRes = resource;
         }
     }
-    fn_Filename_Dtor(filenameBuf);
     return extRes;
 }
 
@@ -233,10 +231,8 @@ void MainMenuDialog_ReturnToMenu(MainMenuDialog* self) {
     void* menuLoop = nullptr;
     void* menuMem = fn_MemAlloc(g_pMemAllocSingleton, 0xC00, 8);
     if (menuMem) {
-        uint8_t menuStr[8];
-        fn_String_Ctor_CStr(menuStr, "Dialog/MainMenu.rsc");
-        menuLoop = MenuDialogLoopT_Ctor(menuMem, menuStr);
-        fn_String_Dtor(menuStr);
+        System::String menuStr("Dialog/MainMenu.rsc");
+        menuLoop = MenuDialogLoopT_Ctor(menuMem, &menuStr);
     }
 
     // Step 2: Create GameLoadDialogLoopT (0xB60 bytes) wrapping the menu loop
@@ -245,9 +241,8 @@ void MainMenuDialog_ReturnToMenu(MainMenuDialog* self) {
     if (dlMem) {
         uint8_t delayTime[8];
         fn_Time_Ctor_Float(delayTime, 1.0f);
-        uint8_t loadingStr[8];
-        fn_String_Ctor_CStr(loadingStr, "Dialog/Loading.rsc");
-        fn_DialogLoaderLoopT_Ctor(dlMem, loadingStr, menuLoop, delayTime);
+        System::String loadingStr("Dialog/Loading.rsc");
+        fn_DialogLoaderLoopT_Ctor(dlMem, &loadingStr, menuLoop, delayTime);
         *(void**)dlMem = (void*)g_GameLoadDialogLoopT_Vtable;
         *(uint32_t*)((uintptr_t)dlMem + 0x188) = 0xFF000000;
         *(uint32_t*)((uintptr_t)dlMem + 0x18C) = 0xFF000000;
@@ -255,7 +250,6 @@ void MainMenuDialog_ReturnToMenu(MainMenuDialog* self) {
         fn_Random_Default_Ctor((void*)((uintptr_t)dlMem + 0x194));
         *(uint64_t*)((uintptr_t)dlMem + 0xB58) = 0;
         *(uint8_t*)((uintptr_t)dlMem + 0x40) = 0;
-        fn_String_Dtor(loadingStr);
         dlLoop = dlMem;
     }
 
@@ -448,9 +442,8 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
         printf("[BuildId] selfDialog or UI null, skipping\n");
         return false;
     }
-    if (!fn_String_Ctor_CStr || !fn_Filename_AdjustDelimiters ||
-        !fn_ExternalFactory_FindOrLoad || !fn_IsDerivedFrom ||
-        !fn_String_Dtor || !fn_MemAlloc || !fn_InternalBasePtr_Ctor ||
+    if (!fn_ExternalFactory_FindOrLoad || !fn_IsDerivedFrom ||
+        !fn_MemAlloc || !fn_InternalBasePtr_Ctor ||
         !fn_DialogInstance_Ctor || !fn_UI_AddDialog ||
         !fn_DialogInstance_FindElement || !fn_InternalBasePtr_CheckPtr ||
         !fn_TextElement_SetParameter || !fn_Configuration_CurrentVersion ||
@@ -465,16 +458,15 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
     }
 
     // --- Load Dialog/BuildId.rsc as External resource ---
-    uint8_t filenameStr[16] = {};
-    fn_String_Ctor_CStr(filenameStr, "Dialog/BuildId.rsc");
-    fn_Filename_AdjustDelimiters(filenameStr);
+    // The Filename ctor already normalises delimiters (B.3.1 rule): no
+    // separate AdjustDelimiters call is needed here.
+    System::Filename filenameStr("Dialog/BuildId.rsc");
     void* resource = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton,
-                                                    filenameStr);
+                                                    &filenameStr);
     void* dialogResource = nullptr;
     if (resource && fn_IsDerivedFrom(resource, *g_pExternalTypeId)) {
         dialogResource = resource;
     }
-    fn_String_Dtor(filenameStr);
     if (!dialogResource) {
         printf("[BuildId] Dialog/BuildId.rsc not found / wrong type, skipping\n");
         return false;
@@ -508,16 +500,14 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
     fn_UI_AddDialog(userInterfacePtr, childInternalPtr);
 
     // --- Find textBuildNotice inside the child dialog ---
-    uint8_t nameStr[16] = {};
-    fn_String_Ctor_CStr(nameStr, "textBuildNotice");
+    System::String nameStr("textBuildNotice");
 
     fn_InternalBasePtr_CheckPtr(childInternalPtr);
     void* childDI = *(void**)childInternalPtr;
     uint8_t retBuf[16] = {};
-    fn_DialogInstance_FindElement(childDI, retBuf, nameStr);
+    fn_DialogInstance_FindElement(childDI, retBuf, &nameStr);
     fn_InternalBasePtr_CheckPtr(retBuf);
     void* textElem = *(void**)retBuf;
-    fn_String_Dtor(nameStr);
 
     printf("[BuildId] childDI=%p textElem=%p\n", childDI, textElem);
 
@@ -536,17 +526,21 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
 
     // --- Set parameter 0 = CurrentVersion, 1 = CurrentBuildId ---
     // Both Configuration:: helpers return UI::String via hidden return ptr ABI.
+    // versionStr/buildIdStr are UI::String (16 bytes), which embeds a
+    // System::String at offset 0 — the two fn_String_Dtor calls below only
+    // ever released that embedded field, so they become an explicit dtor call
+    // through the bridge cast rather than a real System::String local.
     uint8_t versionStr[16] = {};
     fn_Configuration_CurrentVersion(versionStr);
     fn_InternalBasePtr_CheckPtr(textElemPtr);
     fn_TextElement_SetParameter(*(void**)textElemPtr, 0, versionStr);
-    fn_String_Dtor(versionStr);
+    reinterpret_cast<System::String*>(versionStr)->~String();  // B.3.1 bridge
 
     uint8_t buildIdStr[16] = {};
     fn_Configuration_CurrentBuildId(buildIdStr);
     fn_InternalBasePtr_CheckPtr(textElemPtr);
     fn_TextElement_SetParameter(*(void**)textElemPtr, 1, buildIdStr);
-    fn_String_Dtor(buildIdStr);
+    reinterpret_cast<System::String*>(buildIdStr)->~String();  // B.3.1 bridge
 
     printf("[BuildId] child dialog attached, version + build id set\n");
     return true;
@@ -868,7 +862,7 @@ void StandaloneStub_RuntimeThunk(void* self, ...) {
 // (cosmetic version overlay). What's left is just enough to make the OnCommand
 // dispatch work when the user clicks a button.
 void StandaloneStub_Slot4_Setup(void* self) {
-    if (!fn_String_Ctor_CStr || !fn_String_Dtor || !fn_DialogInstance_FindElement ||
+    if (!fn_DialogInstance_FindElement ||
         !fn_InternalBasePtr_CheckPtr || !fn_Element_SetElementId) {
         printf("[MainMenuDialog::Setup] missing engine fns, skipping element ID assign\n");
         return;
@@ -876,13 +870,11 @@ void StandaloneStub_Slot4_Setup(void* self) {
     printf("[MainMenuDialog::Setup] self=%p assigning button element IDs\n", self);
 
     auto findAndAssign = [self](const char* name, int id) {
-        uint8_t nameStr[8] = {};
-        fn_String_Ctor_CStr(nameStr, name);
+        System::String nameStr(name);
         // FindElement uses non-trivial return ABI: RCX=self, RDX=retbuf, R8=name
         uint8_t retBuf[16] = {};
-        fn_DialogInstance_FindElement(self, retBuf, nameStr);
+        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
         void* elem = *reinterpret_cast<void**>(retBuf);
-        fn_String_Dtor(nameStr);
         if (elem) {
             // CheckPtr resolves any lazy/weak pointer inside the IBP, then
             // SetElementId writes the int into the element.

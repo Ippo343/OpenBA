@@ -24,6 +24,8 @@
 #include "Dialog/ui_panels.h"
 #include "Dialog/citizen_icon_helpers.h"
 #include "engine_funcs.h"
+#include "system/String.h"
+#include "system/Filename.h"
 #include <cstdint>
 #if defined(_DEBUG)
 #include <cstdio>
@@ -145,11 +147,9 @@ static void* WorldGrid_FindEntity_Impl(void* worldGrid, void* retval, int tileIn
 // Helper: Find element by name in dialog instance, return InternalPtr value
 // ============================================================
 static uint64_t FindDialogElem(void* dialogInst, const char* name) {
-    uint8_t nameStr[8];
-    fn_String_Ctor_CStr(nameStr, name);
+    System::String nameStr(name);
     uint64_t result = 0;
-    fn_DialogInstance_FindElement(dialogInst, &result, nameStr);
-    fn_String_Dtor(nameStr);
+    fn_DialogInstance_FindElement(dialogInst, &result, &nameStr);
     // A missing element yields a non-null sentinel / unresolved value here rather than
     // 0 (seen as 0xffffffff00000000), which defeats the `if (elem)` guards downstream
     // and faults inside the engine. Normalise anything that isn't a real pointer to 0.
@@ -158,11 +158,9 @@ static uint64_t FindDialogElem(void* dialogInst, const char* name) {
 
 // Helper: Find element by name in element tree, return InternalPtr value
 static uint64_t FindElemInTree(void* elem, const char* name) {
-    uint8_t nameStr[8];
-    fn_String_Ctor_CStr(nameStr, name);
+    System::String nameStr(name);
     uint64_t result = 0;
-    fn_FindElement(elem, &result, nameStr);
-    fn_String_Dtor(nameStr);
+    fn_FindElement(elem, &result, &nameStr);
     // Normalise a missing/unresolved element to 0 (see FindDialogElem).
     return CitUI_OkPtr(result) ? result : 0;
 }
@@ -636,9 +634,8 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
         fn_FindComponent_Citizen((void*)entityRef, &citizenAIRef);
 
         // Load Dialog/Follow.rsc resource
-        uint8_t filename[8];
-        fn_Filename_CtorCStr(filename, "Dialog/Follow.rsc");
-        void* extResource = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filename);
+        System::Filename filename("Dialog/Follow.rsc");
+        void* extResource = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filename);
 
         // Type-check the resource
         void* checkedRes = nullptr;
@@ -646,7 +643,6 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
             bool isExternal = fn_IsDerivedFrom(extResource, *g_pExternalTypeId);
             if (isExternal) checkedRes = extResource;
         }
-        fn_Filename_Dtor(filename);
 
         // Allocate and construct FollowDialog (0xD8 bytes)
         void* followDialog = fn_MemAlloc(g_pMemAllocSingleton, 0xD8, 8);

@@ -33,6 +33,7 @@
 #include "Component/component_factory_base.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "system/String.h"
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
@@ -286,11 +287,9 @@ void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender,
     // 5. random name -> self+0x28 (faithful: temp String, operator=, ~String)
     char nameBuf[0x100] = {0};
     if (rng) GenerateCitizenName(rng, gender == 0, nameBuf, static_cast<int>(sizeof(nameBuf)));
-    if (fn_String_Ctor_CStr && fn_String_Assign && fn_String_Dtor) {
-        void* tmpStr = nullptr;
-        fn_String_Ctor_CStr(&tmpStr, nameBuf);
-        fn_String_Assign(reinterpret_cast<void*>(p + 0x28), &tmpStr);
-        fn_String_Dtor(&tmpStr);
+    {
+        System::String tmpStr(nameBuf);
+        *reinterpret_cast<System::String*>(p + 0x28) = tmpStr;   // B.3.1 bridge
     }
 
     // 6. appearance variant 0..7 — faithful (Rand()+Rand())&7 (two draws; (a%8+b%8)&7==(a+b)&7)

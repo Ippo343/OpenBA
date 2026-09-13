@@ -26,6 +26,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "math/Math.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (standalone type-id fallback)
 #include <cstdint>
 #include <cstdio>
@@ -551,11 +552,10 @@ void ActRm_PositionEntity_9760(int64_t param_1, int cellIndex, float rotation) {
     // writes (this is the inert rendering layer; the economy accounting in the caller is unaffected).
     if (objB) {
         float yaw = rotation, pitch = 0.0f;
-        uint32_t xform[8] = {0};  // FromYawPitchOffset out (7 dwords copied)
-        if (fn_Transform_FromYawPitchOffset)
-            fn_Transform_FromYawPitchOffset(xform, &yaw, &pitch, worldPos);
-        uint32_t* dstT = reinterpret_cast<uint32_t*>(objB + 0x148);
-        for (int i = 0; i < 7; i++) dstT[i] = xform[i];   // +0x148..+0x160
+        // FromYawPitchOffset out (7 dwords copied to +0x148..+0x160)
+        Math::Transform xform = Math::Transform::FromYawPitchOffset(
+            yaw, pitch, *reinterpret_cast<const Math::Vector3*>(worldPos));           // B.3.1 bridge
+        *reinterpret_cast<Math::Transform*>(objB + 0x148) = xform;                    // B.3.1 bridge
         *reinterpret_cast<float*>(objB + 0x168) = rotation;
         if (fn_Geometry_SetTransform)
             fn_Geometry_SetTransform(objB + 0x28, objB + 0x148);

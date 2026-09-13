@@ -10,6 +10,7 @@
 
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstring>
 
@@ -66,12 +67,10 @@ void FollowDialog_Slot4(FollowDialog* self) {
 
     // Find "buttonClose" and set element ID 100
     {
-        uint8_t nameStr[8];
-        fn_String_Ctor_CStr(nameStr, "buttonClose");
+        System::String nameStr("buttonClose");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, nameStr);
+        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
         void* elem = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
 
         if (elem) {
             fn_Element_SetElementId(elem, 100);
@@ -80,12 +79,10 @@ void FollowDialog_Slot4(FollowDialog* self) {
 
     // Find "textFollow" → store at +0xC8, set parameter 0 to entity name
     {
-        uint8_t nameStr[8];
-        fn_String_Ctor_CStr(nameStr, "textFollow");
+        System::String nameStr("textFollow");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, nameStr);
+        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
         void* elem = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
 
         *(void**)(s + 0xC8) = elem;
 
@@ -98,12 +95,10 @@ void FollowDialog_Slot4(FollowDialog* self) {
 
     // Find "textAction" → store at +0xD0
     {
-        uint8_t nameStr[8];
-        fn_String_Ctor_CStr(nameStr, "textAction");
+        System::String nameStr("textAction");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, nameStr);
+        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
         void* elem = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
 
         *(void**)(s + 0xD0) = elem;
     }
@@ -166,13 +161,10 @@ void FollowDialog_Slot6(FollowDialog* self, void* /*p2*/, void* /*p3*/, void* /*
         if (FD_OkPtr(profEntry) && FD_OkPtr(*(uint64_t*)(profEntry + 0x20)) && textFollow) {
             uint8_t uiStr[16];
             fn_UIString_Ctor(uiStr, *(uint64_t*)(profEntry + 0x20), (void*)(profEntry + 0x30));
-            uint8_t sysStr[8];
-            fn_UIString_ToSystemString(uiStr, sysStr);
+            System::String sysStr;
+            fn_UIString_ToSystemString(uiStr, &sysStr);
 
-            fn_TextElement_SetParameter(textFollow, 1, sysStr);
-
-            // Cleanup System::String
-            fn_String_Dtor(sysStr);
+            fn_TextElement_SetParameter(textFollow, 1, &sysStr);
         }
     }
 

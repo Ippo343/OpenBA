@@ -18,6 +18,7 @@
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "math/Math.h"
 #include <cstdint>
 
 // ---------------------------------------------------------------------------
@@ -96,21 +97,15 @@ static void Frustum_ComputeLayout(void* self, int x, int y, int w, int h) {
 // ===========================================================================
 typedef void* (*Frustum_fnGetFrustum_t)(void* camera, void* retFrustum);
 typedef void  (*Frustum_fnGetCorners_t)(void* frustum, void* out8Vec3);
-typedef void* (*Frustum_fnNormalize_t)(const void* self, void* retVec3);
-typedef void* (*Frustum_fnRotate_t)(const void* transform, void* retVec3, const void* vec);
-typedef void  (*Frustum_fnDot_t)(const void* self, void* retScalar, const void* other);
 
 static Frustum_fnGetFrustum_t s_getFrustum = nullptr;
 static Frustum_fnGetCorners_t s_getCorners = nullptr;
-static Frustum_fnNormalize_t  s_normalize  = nullptr;
-static Frustum_fnRotate_t     s_rotate     = nullptr;
-static Frustum_fnDot_t        s_dot        = nullptr;
 static bool s_frustumMathReady = false;
 
 // These are plain Runtime engine exports; resolve them by name directly. (The
-// exe reaches them through .rdata dispatch slots 0x1401518a8/a0, 0x140151860,
-// 0x1401512c0, 0x140151298 — but only the last two are registered in standalone,
-// so a slot lookup on the others just logs a harmless "NOT IMPLEMENTED".)
+// exe reaches them through .rdata dispatch slots 0x1401518a8/a0, 0x140151860.
+// Vector3::Normalize / Transform3::Rotate / Vector3::Dot — slots 0x1401512c0,
+// 0x140151298 — are now direct Math:: class calls.)
 static void EnsureFrustumMathFns() {
     if (s_frustumMathReady) return;
     s_frustumMathReady = true;
@@ -118,18 +113,12 @@ static void EnsureFrustumMathFns() {
         ResolveExport("?GetFrustum@Camera@Graphics@@QEBA?AVFrustum@Volume@@XZ"));
     s_getCorners = reinterpret_cast<Frustum_fnGetCorners_t>(
         ResolveExport("?GetCorners@Frustum@Volume@@QEBAXQEAVVector3@Math@@@Z"));
-    s_normalize = reinterpret_cast<Frustum_fnNormalize_t>(
-        ResolveExport("?Normalize@Vector3@Math@@QEBA?AV12@XZ"));
-    s_rotate = reinterpret_cast<Frustum_fnRotate_t>(
-        ResolveExport("?Rotate@Transform3@Math@@QEBA?AVVector3@2@AEBV32@@Z"));
-    s_dot = reinterpret_cast<Frustum_fnDot_t>(
-        ResolveExport("?Dot@Vector3@Math@@QEBA?AVScalar@2@AEBV12@@Z"));
 }
 
 extern "C" void FrustumOutline_ProjectCorners(float* out) {
     if (!out) return;
     EnsureFrustumMathFns();
-    if (!s_getFrustum || !s_getCorners || !s_normalize || !s_rotate || !s_dot) return;
+    if (!s_getFrustum || !s_getCorners) return;
     void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     if (!gw) return;
     uint8_t* cam = *reinterpret_cast<uint8_t**>(reinterpret_cast<uintptr_t>(gw) + 0xe0);
@@ -138,44 +127,36 @@ extern "C" void FrustumOutline_ProjectCorners(float* out) {
     // Camera Transform3 (rotation + translation, 0x30 bytes) at cam+0x98;
     // translation Vector3 at cam+0xbc. Copy the transform so Rotate reads a
     // stable object.
-    uint8_t xform[0x30];
-    for (int i = 0; i < 0x30; ++i) xform[i] = cam[0x98 + i];
-    const float trans[3] = { *reinterpret_cast<float*>(cam + 0xbc),
-                             *reinterpret_cast<float*>(cam + 0xc0),
-                             *reinterpret_cast<float*>(cam + 0xc4) };
+    const Math::Transform3 xform = *reinterpret_cast<const Math::Transform3*>(cam + 0x98);   // B.3.1 bridge
+    const Math::Vector3 trans(*reinterpret_cast<float*>(cam + 0xbc),
+                              *reinterpret_cast<float*>(cam + 0xc0),
+                              *reinterpret_cast<float*>(cam + 0xc4));
 
     // 8 view-frustum corners (camera object at cam+0x34), in camera space.
     uint8_t frustum[0x80];
     void* fr = s_getFrustum(cam + 0x34, frustum);
-    float corners[8 * 3] = {0};
+    Math::Vector3 corners[8];
     s_getCorners(fr, corners);
 
     // Far corners 4..7 -> normalized -> rotated into world-space ray directions.
-    float dir[4 * 3];
+    Math::Vector3 dir[4];
     for (int i = 4; i < 8; ++i) {
-        float nrm[4] = {0};
-        s_normalize(&corners[i * 3], nrm);
-        float rot[4] = {0};
-        s_rotate(xform, rot, nrm);
-        dir[(i - 4) * 3 + 0] = rot[0];
-        dir[(i - 4) * 3 + 1] = rot[1];
-        dir[(i - 4) * 3 + 2] = rot[2];
+        Math::Vector3 nrm = corners[i].Normalize();
+        Math::Vector3 rot = xform.Rotate(nrm);
+        dir[i - 4] = rot;
     }
 
     // Ground plane z=0: t = -trans.z / dir.z ; point = trans + t*dir.
     // (The exe scales t by DAT_14017214c == 1.0f.)
-    const float up[3] = { 0.0f, 0.0f, 1.0f };
-    float sbuf[4] = {0};
-    s_dot(up, sbuf, trans);
-    const float negTransZ = -sbuf[0];
+    const Math::Vector3 up(0.0f, 0.0f, 1.0f);
+    const float negTransZ = -up.Dot(trans).v;
     for (int i = 0; i < 4; ++i) {
-        float dz[4] = {0};
-        s_dot(up, dz, &dir[i * 3]);
-        if (dz[0] == 0.0f) continue;
-        float t = (1.0f / dz[0]) * negTransZ;
-        out[i * 3 + 0] = trans[0] + t * dir[i * 3 + 0];
-        out[i * 3 + 1] = trans[1] + t * dir[i * 3 + 1];
-        out[i * 3 + 2] = trans[2] + t * dir[i * 3 + 2];
+        const float dz = up.Dot(dir[i]).v;
+        if (dz == 0.0f) continue;
+        float t = (1.0f / dz) * negTransZ;
+        out[i * 3 + 0] = trans.x + t * dir[i].x;
+        out[i * 3 + 1] = trans.y + t * dir[i].y;
+        out[i * 3 + 2] = trans.z + t * dir[i].z;
     }
 }
 

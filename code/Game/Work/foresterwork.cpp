@@ -14,6 +14,7 @@
 #include "Work/foresterwork_funcs.h"
 #include "options.h"
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -83,7 +84,6 @@ typedef void  (*FW_CitizenAI_LongTermPlan_t)(void* citizenEntity);
 typedef void* (*FW_FindComp_Storage_t)(uintptr_t entity, void* outIBP);
 typedef int   (*FW_StorageQueryCount_t)(void* storageComp);
 typedef int   (*FW_Random_RandTol_t)(void* rng, int range);
-typedef float*(*FW_Vector3_Ctor_t)(float* self, float x, float y, float z);
 
 static FW_AutoPickup_CheckAssignments_t s_fn_AutoPickup_CheckAssignments = nullptr;
 static FW_FindComp_MatDesc_t            s_fn_FindComp_MatDesc = nullptr;
@@ -110,7 +110,6 @@ static FW_CitizenAI_LongTermPlan_t     s_fn_CitizenAI_LongTermPlan = nullptr;
 static FW_FindComp_Storage_t           s_fn_FindComp_Storage = nullptr;
 static FW_StorageQueryCount_t          s_fn_StorageQueryCount = nullptr;
 static FW_Random_RandTol_t             s_fn_Random_RandTol = nullptr;
-static FW_Vector3_Ctor_t              s_fn_Vector3_Ctor = nullptr;
 static FW_Work_Serialize_t            s_fn_Work_Serialize = nullptr;
 static FW_Serializer_Ctor_t           s_fn_Serializer_Ctor = nullptr;
 static FW_Serializer_Dtor_t           s_fn_Serializer_Dtor = nullptr;
@@ -278,9 +277,6 @@ bool ForesterWork_ResolveFuncs() {
         uintptr_t iatRandTol = ResolveAddr(Module::Exe, 0x1401512f0);
         if (iatRandTol) s_fn_Random_RandTol = *reinterpret_cast<FW_Random_RandTol_t*>(iatRandTol);
     }
-    uintptr_t iatVec3Ctor = ResolveAddr(Module::Exe, 0x140152a30);
-    if (iatVec3Ctor)
-        s_fn_Vector3_Ctor = *reinterpret_cast<FW_Vector3_Ctor_t*>(iatVec3Ctor);
 
     // Type ID pointers
     s_typeId_WorkplaceComponent = reinterpret_cast<uint32_t*>(
@@ -329,7 +325,7 @@ bool ForesterWork_ResolveFuncs() {
               s_fn_PlayAnimation_Ctor && s_fn_PerformWork_Ctor3 &&
               s_fn_CitizenAI_RegisterWork && s_fn_CitizenAI_LongTermPlan &&
               s_fn_FindComp_Storage && s_fn_StorageQueryCount &&
-              s_fn_Random_RandTol && s_fn_Vector3_Ctor &&
+              s_fn_Random_RandTol &&
               s_fn_Work_Serialize && s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
               s_fn_SerializeInt && s_fn_BST_Serialize &&
               s_fn_ValidateEntity && s_fn_MemAlloc && s_fn_MemFreeFunc &&
@@ -382,7 +378,6 @@ bool ForesterWork_ResolveFuncs() {
         if (!s_fn_FindComp_Storage) printf("  MISSING: s_fn_FindComp_Storage\n");
         if (!s_fn_StorageQueryCount) printf("  MISSING: s_fn_StorageQueryCount\n");
         if (!s_fn_Random_RandTol) printf("  MISSING: s_fn_Random_RandTol\n");
-        if (!s_fn_Vector3_Ctor) printf("  MISSING: s_fn_Vector3_Ctor\n");
         if (!s_fn_Work_Serialize) printf("  MISSING: s_fn_Work_Serialize\n");
         if (!s_fn_Serializer_Ctor) printf("  MISSING: s_fn_Serializer_Ctor\n");
         if (!s_fn_Serializer_Dtor) printf("  MISSING: s_fn_Serializer_Dtor\n");
@@ -783,15 +778,14 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
 
                                 // Calculate world position for target cell
                                 float halfOffset = (float)(*mapGrid >> 1) - *s_fHalfCellOffset;
-                                float targetPos[3];
-                                s_fn_Vector3_Ctor(targetPos,
+                                Math::Vector3 targetPos(
                                     (float)(testCell % *mapGrid) - halfOffset,
                                     (float)(testCell / *mapGrid) - halfOffset,
                                     0.0f);
 
                                 // Get terrain height at position
                                 float pathPos[3];
-                                s_fn_GetTerrainPos(mapGrid, pathPos, targetPos, 0, nullptr);
+                                s_fn_GetTerrainPos(mapGrid, pathPos, &targetPos.x, 0, nullptr);
 
                                 // Get material description ref for plant action
                                 uintptr_t matDescRef = *(uintptr_t*)((uintptr_t)radiusComp + 0x20);
@@ -883,15 +877,14 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
 
                             // Calculate world position for nearest cell
                             float halfOffset2 = (float)(*mapGrid >> 1) - *s_fHalfCellOffset;
-                            float cutPos[3];
-                            s_fn_Vector3_Ctor(cutPos,
+                            Math::Vector3 cutPos(
                                 (float)(nearestCell % *mapGrid) - halfOffset2,
                                 (float)(nearestCell / *mapGrid) - halfOffset2,
                                 0.0f);
 
                             // Get terrain height
                             float cutPathPos[3];
-                            s_fn_GetTerrainPos(mapGrid, cutPathPos, cutPos, 0, nullptr);
+                            s_fn_GetTerrainPos(mapGrid, cutPathPos, &cutPos.x, 0, nullptr);
 
                             // ── PHASE 5 PRODUCE VERIFICATION (env BANISHED_FORCE_HARVEST, default OFF) ──
                             // The organic delivery of a citizen to the tree is gated on the pathfinder

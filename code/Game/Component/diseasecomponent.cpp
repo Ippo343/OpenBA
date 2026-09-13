@@ -79,11 +79,13 @@
 #include "Component/diseasecomponent_funcs.h"
 #include "options.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <new>
 
 namespace {
 
@@ -515,7 +517,7 @@ extern "C" void DiseaseComp_Infect(DiseaseComponent* self) {
     // ---- Event-log post: type 0xC severity 3, colour 0xFFFF6060, icon 2, no popup.
     // A third entry-append variant next to AddEvent/AddCitizenEvent: three format
     // args ({0} season {1} year {2} crop name) and hardcoded icon/popup.
-    uint8_t cropName[8] = {0};
+    System::String cropName;
     bool haveName = false;
     {
         uint64_t entityDesc = self->entity
@@ -526,38 +528,34 @@ extern "C" void DiseaseComp_Infect(DiseaseComponent* self) {
             uint8_t uiStr[16] = {0};
             fn_UIString_Ctor(uiStr, *reinterpret_cast<uint64_t*>(found + 0x30),
                              reinterpret_cast<const void*>(found + 0x40));
-            fn_UIString_ToSystemString(uiStr, cropName);
+            fn_UIString_ToSystemString(uiStr, &cropName);
             haveName = true;
         }
     }
 
     void* eventLog = gw ? *reinterpret_cast<void**>((uintptr_t)gw + 0x138) : nullptr;
-    if (eventLog && gw && fn_String_Ctor_Copy && fn_String_Dtor) {
-        uint8_t yearStr[8] = {0}, seasonStr[8] = {0};
-        uint8_t templateStr[8] = {0}, formatted[8] = {0};
-        EventLog_YearString_Reg(gw, yearStr);
-        EventLog_SeasonString_Reg(gw, eventLog, seasonStr);
+    if (eventLog && gw) {
+        System::String yearStr, seasonStr;
+        System::String templateStr;
+        EventLog_YearString_Reg(gw, &yearStr);
+        EventLog_SeasonString_Reg(gw, eventLog, &seasonStr);
 
         void* eventsTable = *reinterpret_cast<void**>(eventLog);
         if (eventsTable && fn_StringTable_GetText)
-            fn_StringTable_GetText(eventsTable, templateStr, 0xC);
-        else if (fn_String_Ctor_CStr)
-            fn_String_Ctor_CStr(templateStr, "Crop infestation");
+            fn_StringTable_GetText(eventsTable, &templateStr, 0xC);
+        else
+            templateStr.Set("Crop infestation");
 
-        if (fn_String_FormatIndexed) {
-            fn_String_FormatIndexed(formatted, *(const char**)templateStr,
-                                    *(const char**)seasonStr, *(const char**)yearStr,
-                                    haveName ? *(const char**)cropName : "");
-        } else {
-            fn_String_Ctor_Copy(formatted, templateStr);
-        }
+        System::String formatted = System::String::FormatIndexed(templateStr._data,
+                                    seasonStr._data, yearStr._data,
+                                    haveName ? cropName._data : "");
 
         void* entityIBP = &self->entity;
         int tileIdx = EventLog_TileIndex_Reg(nullptr, entityIBP);
 
         uint8_t entry[0x28] = {0};
         *(uint32_t*)(entry + 0x00) = 0xFFFF6060u;   // severity-3 red
-        fn_String_Ctor_Copy(entry + 0x08, formatted);
+        ::new (static_cast<void*>(entry + 0x08)) System::String(formatted);   // B.3.1 bridge
         *(int32_t*)(entry + 0x10) = 0xC;            // eventType: crop infestation
         *(int32_t*)(entry + 0x14) = 3;              // severity
         *(int32_t*)(entry + 0x18) = tileIdx;
@@ -567,11 +565,7 @@ extern "C" void DiseaseComp_Infect(DiseaseComponent* self) {
         int count = *reinterpret_cast<int32_t*>((uintptr_t)eventLog + 0x20);
         EventLog_ArrayGrow_Reg((void*)((uintptr_t)eventLog + 0x18), count + 1, entry);
 
-        fn_String_Dtor(entry + 0x08);
-        fn_String_Dtor(formatted);
-        fn_String_Dtor(templateStr);
-        fn_String_Dtor(seasonStr);
-        fn_String_Dtor(yearStr);
+        reinterpret_cast<System::String*>(entry + 0x08)->~String();   // B.3.1 bridge
     }
 
     // Drop to 1x speed if the "pause on important events" setting is on.
@@ -579,7 +573,6 @@ extern "C" void DiseaseComp_Infect(DiseaseComponent* self) {
         void* speedObj = *reinterpret_cast<void**>((uintptr_t)gw + 0x120);
         if (speedObj) *reinterpret_cast<int32_t*>((uintptr_t)speedObj + 0x34) = 1;
     }
-    if (haveName && fn_String_Dtor) fn_String_Dtor(cropName);
 
     // ---- Start every emitter on the entity's ParticleComponent (the swarm VFX).
     CheckPtr(&self->entity);

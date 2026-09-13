@@ -27,6 +27,7 @@
 // Decompiled from Application-x64.exe (READ-ONLY recon).
 
 #include "engine_funcs.h"
+#include "system/String.h"
 #include "resolve.h"
 #include <cstdint>
 
@@ -51,14 +52,14 @@ static void MapDescription_Init(void* self) {
 void MapDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor ||
-        !g_fn_String_Serialize || !g_fn_Serialize_Bool || !fn_System_Color_Serialize) {
+        !g_fn_Serialize_Bool || !fn_System_Color_Serialize) {
         return;
     }
     uint8_t serializer[24];
     g_fn_Serializer_Ctor(serializer, stream, 0);
     // enum @ +0x20 via the serializer's encoding vtable +0x98 dispatch
     SerializerEncodingVCall(serializer, 0x98, s + 0x20);
-    g_fn_String_Serialize(s + 0x28, serializer);             // String  +0x28
+    reinterpret_cast<System::String*>(s + 0x28)->Serialize(serializer);             // B.3.1 bridge: String  +0x28
     g_fn_Serialize_Bool(serializer, s + 0x30, nullptr);      // bool    +0x30
     g_fn_Serialize_Bool(serializer, s + 0x31, nullptr);      // bool    +0x31
     g_fn_Serialize_Bool(serializer, s + 0x32, nullptr);      // bool    +0x32
@@ -73,7 +74,7 @@ void* MapDescription_Dtor(void* self, uint32_t flags) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     uintptr_t vt = ResolveAddr(Module::Exe, kMapDescriptionVtable);
     if (vt) *(void**)self = (void*)vt;
-    if (fn_String_Dtor) fn_String_Dtor(s + 0x28);   // String +0x28
+    reinterpret_cast<System::String*>(s + 0x28)->~String();   // B.3.1 bridge: String +0x28
     if (fn_External_Dtor) fn_External_Dtor(self);
     if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
     return self;

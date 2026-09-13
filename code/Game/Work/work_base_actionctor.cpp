@@ -19,6 +19,7 @@
 //
 
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
 
@@ -78,8 +79,7 @@ typedef void* (*WA_fn_MemAllocStatic2_t)(uint64_t size, uint32_t align);
 typedef void* (*WA_fn_ObjectInternal_Ctor_t)(void* self);
 // 0x140152b00 — System::Time::Time(retval, float seconds) (used in PlayAnimation/grazing/plant ctors).
 typedef void* (*WA_fn_Time_Ctor_t)(void* retval, float seconds);
-// 0x140152a30 — Math::Vector3::Vector3(self, x, y, z).
-typedef void* (*WA_fn_Vector3_Ctor_t)(void* self, float x, float y, float z);
+// 0x140152a30 — Math::Vector3::Vector3(self, x, y, z): now the class ctor (B.3.1 step 2).
 // 0x1401512c0 — Math::Vector3::Normalize(self) -> Vector3*.
 // ?Normalize@Vector3@Math@@QEBA?AV12@XZ — returns a NEW Vector3 BY VALUE, so the
 // Microsoft x64 ABI passes a hidden return-slot pointer in RDX (>=12 bytes).
@@ -87,9 +87,9 @@ typedef void* (*WA_fn_Vector3_Ctor_t)(void* self, float x, float y, float z);
 // happened to hold — at the grazing-ctor call site that was an IBP slot, and the
 // task-list append then walked ±0.7071f float bits as an action pointer (the
 // organic herder's first-claim crash).
-typedef void* (*WA_fn_Vector3_Normalize_t)(void* self, void* outVec3);
 // 0x1401512d8 — Math::Vector3::Heading(self) -> float (XMM0).
-typedef float (*WA_fn_Vector3_Heading_t)(void* self);
+// B.3.1 step 2: Normalize and Heading are direct Math::Vector3 member calls now;
+// the typedefs (and the hidden-RDX shape they encoded) are gone with the DLL.
 
 static WA_fn_Entity_impl_29a0_t              s_fn_Entity_29a0          = nullptr;
 static WA_fn_TaskListCleanup_t               s_fn_TaskListCleanup      = nullptr;
@@ -111,9 +111,6 @@ static WA_fn_StorageQueryCount_t             s_fn_StorageQueryCount    = nullptr
 static WA_fn_MemAllocStatic2_t      s_fn_MemAllocStatic = nullptr;
 static WA_fn_ObjectInternal_Ctor_t  s_fn_ObjInternalCtor = nullptr;
 static WA_fn_Time_Ctor_t            s_fn_TimeCtor        = nullptr;
-static WA_fn_Vector3_Ctor_t         s_fn_Vec3Ctor        = nullptr;
-static WA_fn_Vector3_Normalize_t    s_fn_Vec3Normalize   = nullptr;
-static WA_fn_Vector3_Heading_t      s_fn_Vec3Heading     = nullptr;
 
 // Inline-object vtables + globals (exe .rdata).
 static void* s_vtable_Action        = nullptr;  // 0x14015faa0
@@ -159,9 +156,6 @@ static void ResolveAll() {
     // the engine_funcs Object::Internal::Internal helper (same IAT target).
     if (!s_fn_ObjInternalCtor) s_fn_ObjInternalCtor = reinterpret_cast<WA_fn_ObjectInternal_Ctor_t>(fn_ObjectInternal_Ctor);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b00)) s_fn_TimeCtor        = *reinterpret_cast<WA_fn_Time_Ctor_t*>(s);
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152a30)) s_fn_Vec3Ctor        = *reinterpret_cast<WA_fn_Vector3_Ctor_t*>(s);
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x1401512c0)) s_fn_Vec3Normalize   = *reinterpret_cast<WA_fn_Vector3_Normalize_t*>(s);
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x1401512d8)) s_fn_Vec3Heading     = *reinterpret_cast<WA_fn_Vector3_Heading_t*>(s);
 
     s_vtable_Action        = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x14015faa0));
     s_vtable_PerformWork   = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x14015fea0));
@@ -785,14 +779,10 @@ void WorkAct_GrazingWorkCtor_bb0a0(void* citizenIBP, uint32_t priority, void* wo
     // --- heading: Vector3(srcPos-targetPos) → Normalize → Heading (XMM0 → used by Ctor7) ---
     // Disasm: dst=[param_6=srcPos], src=[param_5=targetPos]; v = srcPos - targetPos.
     float heading = 0.0f;
-    if (s_fn_Vec3Ctor && targetPos && srcPos) {
-        float v3[3];
-        s_fn_Vec3Ctor(v3, srcPos[0] - targetPos[0], srcPos[1] - targetPos[1], srcPos[2] - targetPos[2]);
-        if (s_fn_Vec3Normalize) {
-            float nv[3] = {0, 0, 0};
-            void* n = s_fn_Vec3Normalize(v3, nv);
-            if (s_fn_Vec3Heading && n) heading = s_fn_Vec3Heading(n);
-        }
+    if (targetPos && srcPos) {
+        Math::Vector3 v3(srcPos[0] - targetPos[0], srcPos[1] - targetPos[1], srcPos[2] - targetPos[2]);
+        Math::Vector3 nv = v3.Normalize();   // was the hidden RDX return slot
+        heading = nv.Heading();
     }
 
     // --- ShowTool (~Hoe = -2) ---

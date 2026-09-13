@@ -24,6 +24,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstring>
 
@@ -65,13 +66,11 @@ void PushPtr(uint64_t* base, uint64_t value) {
 // Find a named child element under `parent` and cast it via IsDerivedFrom(typeId).
 // Returns the raw element ptr (or null). Mirrors the exe's FindElement+cast idiom.
 void* FindCastElem(void* parent, const char* name, uint32_t typeId) {
-    uint8_t strBuf[8];
-    fn_String_Ctor_CStr(strBuf, name);
+    System::String strBuf(name);
     uint64_t foundBuf[2] = {0, 0};
-    fn_FindElement(parent, foundBuf, strBuf);
+    fn_FindElement(parent, foundBuf, &strBuf);
     CheckPtr(foundBuf);
     void* elem = *(void**)foundBuf;
-    fn_String_Dtor(strBuf);
     if (elem && fn_IsDerivedFrom(elem, typeId)) return elem;
     return nullptr;
 }
@@ -370,14 +369,13 @@ bool SysStrLess(void* a, void* b) {
 // UIString(desc+0x28 stringTable, desc+0x30 nameKey) -> System::String -> less.
 bool InvNameLess(const InvEntry* a, const InvEntry* b) {
     if (!a->desc || !b->desc) return a->desc && !b->desc ? true : false;
-    uint8_t uiA[16], uiB[16], sysA[8] = {0}, sysB[8] = {0};
+    uint8_t uiA[16], uiB[16];
+    System::String sysA, sysB;
     fn_UIString_Ctor(uiA, *(uint64_t*)(a->desc + 0x28), (void*)(a->desc + 0x30));
-    fn_UIString_ToSystemString(uiA, sysA);
+    fn_UIString_ToSystemString(uiA, &sysA);
     fn_UIString_Ctor(uiB, *(uint64_t*)(b->desc + 0x28), (void*)(b->desc + 0x30));
-    fn_UIString_ToSystemString(uiB, sysB);
-    bool less = SysStrLess(sysA, sysB);
-    fn_String_Dtor(sysB);
-    fn_String_Dtor(sysA);
+    fn_UIString_ToSystemString(uiB, &sysB);
+    bool less = SysStrLess(&sysA, &sysB);
     return less;
 }
 

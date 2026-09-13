@@ -15,6 +15,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 
 // ============================================================
@@ -33,11 +34,10 @@ void EventLogUI_Slot5(EventLogUI* self) {
     // --- Find navigation buttons ---
     // "buttonPrevious" -> +0x38
     {
-        uint8_t nameStr[8], retBuf[16];
-        fn_String_Ctor_CStr(nameStr, "buttonPrevious");
-        fn_FindElement(dialogElem, retBuf, nameStr);
+        System::String nameStr("buttonPrevious");
+        uint8_t retBuf[16];
+        fn_FindElement(dialogElem, retBuf, &nameStr);
         void* elem = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
         uint8_t bpBuf[8];
         fn_InternalBasePtr_Ctor(bpBuf, elem);
         *(uint64_t*)(s + 0x38) = *(uint64_t*)bpBuf;
@@ -45,11 +45,10 @@ void EventLogUI_Slot5(EventLogUI* self) {
 
     // "buttonNext" -> +0x40
     {
-        uint8_t nameStr[8], retBuf[16];
-        fn_String_Ctor_CStr(nameStr, "buttonNext");
-        fn_FindElement(dialogElem, retBuf, nameStr);
+        System::String nameStr("buttonNext");
+        uint8_t retBuf[16];
+        fn_FindElement(dialogElem, retBuf, &nameStr);
         void* elem = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
         uint8_t bpBuf[8];
         fn_InternalBasePtr_Ctor(bpBuf, elem);
         *(uint64_t*)(s + 0x40) = *(uint64_t*)bpBuf;
@@ -57,11 +56,10 @@ void EventLogUI_Slot5(EventLogUI* self) {
 
     // "buttonBottom" -> +0x30
     {
-        uint8_t nameStr[8], retBuf[16];
-        fn_String_Ctor_CStr(nameStr, "buttonBottom");
-        fn_FindElement(dialogElem, retBuf, nameStr);
+        System::String nameStr("buttonBottom");
+        uint8_t retBuf[16];
+        fn_FindElement(dialogElem, retBuf, &nameStr);
         void* elem = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
         uint8_t bpBuf[8];
         fn_InternalBasePtr_Ctor(bpBuf, elem);
         *(uint64_t*)(s + 0x30) = *(uint64_t*)bpBuf;
@@ -75,11 +73,10 @@ void EventLogUI_Slot5(EventLogUI* self) {
     // --- Find "display" container element ---
     void* displayElem;
     {
-        uint8_t nameStr[8], retBuf[16];
-        fn_String_Ctor_CStr(nameStr, "display");
-        fn_FindElement(dialogElem, retBuf, nameStr);
+        System::String nameStr("display");
+        uint8_t retBuf[16];
+        fn_FindElement(dialogElem, retBuf, &nameStr);
         void* elem = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
         uint8_t bpBuf[8];
         fn_InternalBasePtr_Ctor(bpBuf, elem);
         displayElem = *(void**)bpBuf;
@@ -117,11 +114,10 @@ void EventLogUI_Slot5(EventLogUI* self) {
     // --- Find "notifybuttons" container in dialog instance ---
     void* notifyContainer;
     {
-        uint8_t nameStr[8], retBuf[16];
-        fn_String_Ctor_CStr(nameStr, "notifybuttons");
-        fn_DialogInstance_FindElement(dialogInst, retBuf, nameStr);
+        System::String nameStr("notifybuttons");
+        uint8_t retBuf[16];
+        fn_DialogInstance_FindElement(dialogInst, retBuf, &nameStr);
         notifyContainer = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
     }
 
     // Iterate notification button children, store in dynamic array at +0x70, set IDs
@@ -204,10 +200,8 @@ void EventLogUI_Slot7(EventLogUI* self) {
             int enabled;
             if (eventIdx < 0) {
                 // No event for this row — blank the text.
-                uint8_t emptyStr[8];
-                fn_String_Ctor_CStr(emptyStr, "");
-                fn_TextElement_SetParameter(textElem, 0, emptyStr);
-                fn_String_Dtor(emptyStr);
+                System::String emptyStr("");
+                fn_TextElement_SetParameter(textElem, 0, &emptyStr);
                 enabled = 0;
             } else {
                 uintptr_t eventEntry = eventArray + (uintptr_t)eventIdx * 0x28;

@@ -23,6 +23,7 @@
 #include "engine_funcs.h"
 #include "perf_terrain.h"
 #include "resolve.h"
+#include "math/Math.h"
 #include <cstdint>
 
 typedef unsigned int  uint;
@@ -194,8 +195,8 @@ void Pf_RefreshRegionHeight_9e0e0(uint* param_1, int param_2, int param_3, int p
     // contiguous stack slots; separate named C++ locals are not guaranteed adjacent
     // at -O0). gw = GridToWorld out {98,94,90}; co = coarse Vector3 {88,84,80}.
     float gw[3];   // gw[0]=local_98, gw[1]=local_94, gw[2]=local_90
-    float co[3];   // co[0]=local_88, co[1]=local_84, co[2]=local_80
-    float local_78[80];  // Ghidra `Vector3 local_78 [80]` — preserve size (only [0] used)
+    Math::Vector3 co;   // co.x=local_88, co.y=local_84, co.z=local_80
+    Math::Vector3 local_78;  // Ghidra `Vector3 local_78 [80]` — only [0] was ever used (B.3.1: one Vector3)
 
     fVar4 = s_pDAT_172230 ? *s_pDAT_172230 : 0.0f;
     fVar3 = s_pDAT_172114 ? *s_pDAT_172114 : 0.0f;
@@ -207,21 +208,19 @@ void Pf_RefreshRegionHeight_9e0e0(uint* param_1, int param_2, int param_3, int p
                 uVar1 = *param_1;
                 iVar5 = uVar1 * param_3 + iVar6;
                 fVar7 = static_cast<float>(static_cast<int>(uVar1) >> 1) - fVar3;
-                if (fn_Vector3_Ctor)
-                    fn_Vector3_Ctor(local_78,
+                local_78 = Math::Vector3(
                                     static_cast<float>(iVar5 % static_cast<int>(uVar1)) - fVar7,
                                     static_cast<float>(iVar5 / static_cast<int>(uVar1)) - fVar7, 0.0f);
                 if (s_fn_GridToWorld)
-                    s_fn_GridToWorld(reinterpret_cast<int*>(param_1), gw, local_78, '\0', nullptr);
+                    s_fn_GridToWorld(reinterpret_cast<int*>(param_1), gw, reinterpret_cast<float*>(&local_78), '\0', nullptr);   // B.3.1 bridge
                 *reinterpret_cast<uint32_t*>(&gw[2]) = 0;  // original: local_90 = 0 (4-byte zero into the z slot)
                 fVar7 = static_cast<float>(*reinterpret_cast<int*>(lVar2 + 0xc0) >> 1);
-                if (fn_Vector3_Ctor)
-                    fn_Vector3_Ctor(co, gw[0] + fVar7, gw[1] + fVar7, 0.0f);
+                co = Math::Vector3(gw[0] + fVar7, gw[1] + fVar7, 0.0f);
                 *reinterpret_cast<short*>(*reinterpret_cast<int64_t*>(lVar2 + 0xd8) +
-                    ((static_cast<int64_t>(*reinterpret_cast<int*>(lVar2 + 0xd0)) * static_cast<int64_t>(static_cast<int>(co[1])) +
-                      static_cast<int64_t>(static_cast<int>(co[0]))) * 2)) = static_cast<short>(static_cast<int>(fVar4 * 0.0f));
+                    ((static_cast<int64_t>(*reinterpret_cast<int*>(lVar2 + 0xd0)) * static_cast<int64_t>(static_cast<int>(co.y)) +
+                      static_cast<int64_t>(static_cast<int>(co.x))) * 2)) = static_cast<short>(static_cast<int>(fVar4 * 0.0f));
                 if (s_fn_RegionDirty)
-                    s_fn_RegionDirty(lVar2, static_cast<int>(co[0]), static_cast<int>(co[1]));
+                    s_fn_RegionDirty(lVar2, static_cast<int>(co.x), static_cast<int>(co.y));
                 iVar6 = iVar6 + 1;
             } while (iVar6 <= param_4);
         }

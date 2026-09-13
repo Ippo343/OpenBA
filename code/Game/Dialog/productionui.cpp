@@ -11,6 +11,7 @@
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
 #include "Object/factory_registration.h"   // Object::ResolveTypeIdByNameLazy
+#include "system/String.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -141,26 +142,22 @@ void ProductionUI_Slot4(ProductionUI* self) {
     void* dialogElem = *(void**)(s + 0x20);
 
     // Find "production" element (with fallbacks)
-    uint8_t nameBuf[8];
     uint64_t result = 0;
 
-    fn_String_Ctor_CStr(nameBuf, "production");
-    fn_FindElement(dialogElem, &result, nameBuf);
-    fn_String_Dtor(nameBuf);
+    { System::String nameStr("production");
+      fn_FindElement(dialogElem, &result, &nameStr); }
 
     if (result == 0) {
-        fn_String_Ctor_CStr(nameBuf, "production3");
+        System::String nameStr("production3");
         uint64_t retBuf = 0;
-        fn_FindElement(dialogElem, &retBuf, nameBuf);
+        fn_FindElement(dialogElem, &retBuf, &nameStr);
         result = retBuf;
-        fn_String_Dtor(nameBuf);
 
         if (result == 0) {
-            fn_String_Ctor_CStr(nameBuf, "production4");
+            System::String nameStr2("production4");
             uint64_t retBuf2 = 0;
-            fn_FindElement(dialogElem, &retBuf2, nameBuf);
+            fn_FindElement(dialogElem, &retBuf2, &nameStr2);
             result = retBuf2;
-            fn_String_Dtor(nameBuf);
         }
     }
 
@@ -182,10 +179,9 @@ void ProductionUI_Slot4(ProductionUI* self) {
         fn_Element_Child((void*)consumedContainer, &childElem, idx);
 
         // Find "labelStorage" sub-element
-        fn_String_Ctor_CStr(nameBuf, "labelStorage");
         uint64_t labelResult = 0;
-        fn_FindElement((void*)childElem, &labelResult, nameBuf);
-        fn_String_Dtor(nameBuf);
+        { System::String nameStr("labelStorage");
+          fn_FindElement((void*)childElem, &labelResult, &nameStr); }
 
         // Retail casts the hit through IsDerivedFrom(LabelElement) and stores NULL
         // when it isn't one (0x140075da0 uses g_TypeId_LabelElement_exref @0x140151668).
@@ -193,10 +189,9 @@ void ProductionUI_Slot4(ProductionUI* self) {
         fn_InternalBasePtr_Ctor(&labelBP, CastLabel((void*)labelResult));
 
         // Find "numberCount" sub-element
-        fn_String_Ctor_CStr(nameBuf, "numberCount");
         uint64_t numberResult = 0;
-        fn_FindElement((void*)childElem, &numberResult, nameBuf);
-        fn_String_Dtor(nameBuf);
+        { System::String nameStr("numberCount");
+          fn_FindElement((void*)childElem, &numberResult, &nameStr); }
 
         // Retail casts through IsDerivedFrom(NumberElement) (exref 0x1401516c8,
         // engine_funcs label "SpinnerElement" — the id is UI::NumberElement's).
@@ -217,18 +212,16 @@ void ProductionUI_Slot4(ProductionUI* self) {
         uint64_t childElem = 0;
         fn_Element_Child((void*)producedContainer, &childElem, idx);
 
-        fn_String_Ctor_CStr(nameBuf, "labelStorage");
         uint64_t labelResult = 0;
-        fn_FindElement((void*)childElem, &labelResult, nameBuf);
-        fn_String_Dtor(nameBuf);
+        { System::String nameStr("labelStorage");
+          fn_FindElement((void*)childElem, &labelResult, &nameStr); }
 
         uint64_t labelBP = 0;
         fn_InternalBasePtr_Ctor(&labelBP, CastLabel((void*)labelResult));
 
-        fn_String_Ctor_CStr(nameBuf, "numberCount");
         uint64_t numberResult = 0;
-        fn_FindElement((void*)childElem, &numberResult, nameBuf);
-        fn_String_Dtor(nameBuf);
+        { System::String nameStr("numberCount");
+          fn_FindElement((void*)childElem, &numberResult, &nameStr); }
 
         uint64_t numberBP = 0;
         fn_InternalBasePtr_Ctor(&numberBP, CastNumber((void*)numberResult));

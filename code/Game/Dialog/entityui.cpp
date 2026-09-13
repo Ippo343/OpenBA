@@ -7,6 +7,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -324,23 +325,21 @@ void EntityUI_Slot4(EntityUI* self) {
 
     // Find "buttonCenter" element and set ID 101 (0x65)
     {
-        uint8_t nameStr[8], retBuf[16];
-        fn_String_Ctor_CStr(nameStr, "buttonCenter");
+        System::String nameStr("buttonCenter");
+        uint8_t retBuf[16];
         void* dialogInst = *(void**)(s + 0x18);
-        fn_DialogInstance_FindElement(dialogInst, retBuf, nameStr);
+        fn_DialogInstance_FindElement(dialogInst, retBuf, &nameStr);
         void* elem = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
         fn_Element_SetElementId(elem, 0x65);
     }
 
     // Find "checkPin" element → store at +0x38, set ID 100
     {
-        uint8_t nameStr[8], retBuf[16];
-        fn_String_Ctor_CStr(nameStr, "checkPin");
+        System::String nameStr("checkPin");
+        uint8_t retBuf[16];
         void* dialogInst = *(void**)(s + 0x18);
-        fn_DialogInstance_FindElement(dialogInst, retBuf, nameStr);
+        fn_DialogInstance_FindElement(dialogInst, retBuf, &nameStr);
         *(void**)(s + 0x38) = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
         fn_Element_SetElementId(*(void**)(s + 0x38), 100);
     }
 
@@ -371,12 +370,11 @@ void EntityUI_Slot4(EntityUI* self) {
 
     // Find "pages" element → store at +0x40
     {
-        uint8_t nameStr[8], retBuf[16];
-        fn_String_Ctor_CStr(nameStr, "pages");
+        System::String nameStr("pages");
+        uint8_t retBuf[16];
         void* dialogInst = *(void**)(s + 0x18);
-        fn_DialogInstance_FindElement(dialogInst, retBuf, nameStr);
+        fn_DialogInstance_FindElement(dialogInst, retBuf, &nameStr);
         *(void**)(s + 0x40) = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
     }
 }
 
