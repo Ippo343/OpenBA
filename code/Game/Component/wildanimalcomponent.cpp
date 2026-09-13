@@ -196,7 +196,7 @@ void WildAnimalComponent_OnRemove(WildAnimalComponent* self) {
 
     if (self->data28 == 0) ++g_war_noHerd;
     ++g_war_calls;
-    const bool trace = (g_war_calls % 10) == 1 || getenv("BANISHED_HERD_TRACE");
+    const bool trace = (g_war_calls % 10) == 1;
     const uintptr_t herdDbg = static_cast<uintptr_t>(self->data28);
     const int before = herdDbg ? *reinterpret_cast<int*>(herdDbg + 0x40) : -1;
 
@@ -279,11 +279,6 @@ static void WildAnimalComponent_InstallLive() {
     // herd back-ref at +0x28 reset to null on load.
     WildAnimalComponent_LiveVtable[3] =
         reinterpret_cast<void*>(&WildAnimalComponent_SerializeVSlot);
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_HERD") &&
-        !::ComponentFactory::LiveEnabled("BANISHED_LIVE_POPULATION") &&
-        !::ComponentFactory::LiveEnabled("BANISHED_LIVE_ANIMAL_UPDATE") &&
-        !::ComponentFactory::LiveEnabled("BANISHED_LIVE_ANIMALS"))
-        return;
     WildAnimalComponent_LiveVtable[7] =
         reinterpret_cast<void*>(&WildAnimalComponent_OnRemoveVSlot);
 }

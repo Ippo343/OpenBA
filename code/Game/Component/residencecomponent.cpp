@@ -621,7 +621,6 @@ static void ResidenceComponent_FinishLiveVtable(void* mem) {
     // HasSufficientResources (reads rows+8 == address 0x8). Save/load wave 2026-08-28.
     ResidenceComponent_LiveVtable[3] =
         reinterpret_cast<void*>(&ResidenceComponent_ShutdownVSlot);
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_RESIDENCE")) return;
     ResidenceComponent_LiveVtable[4] =
         reinterpret_cast<void*>(&ResidenceComponent_SerializeVSlot);
     ResidenceComponent_LiveVtable[7] =

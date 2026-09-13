@@ -110,11 +110,6 @@ void QuarryDeformResolve() {
     RF::Get(0x140172274, s_cornerNeg);  RF::Get(0x140172280, s_rayDown);
 }
 
-bool QuarryTraceOn() {
-    static int s = -1;
-    if (s < 0) { const char* e = std::getenv("BANISHED_QUARRY_TRACE"); s = (e && *e && *e != '0') ? 1 : 0; }
-    return s != 0;
-}
 
 // Every way the carve can silently do nothing gets named once. A deformation that
 // never happens leaves no trace otherwise, and every failure mode here is "a pointer
@@ -273,29 +268,6 @@ extern "C" void QuarryComponent_ApplyDepth(void* selfV, float depth) {
         TerraformComponent_RegionRecalc(reinterpret_cast<void*>(terrainGrid), mapX, mapY);
     }
 
-    if (QuarryTraceOn()) {
-        std::fprintf(stderr, "[Quarry] ApplyDepth self=%p depth=%.3f mesh=%p verts=%d\n",
-                     selfV, depth, mesh, vertCount);
-        // Coordinate ground truth: grid dim (+0xC0), stride (+0xD0), and where the
-        // first/last vertex actually landed in heightmap cells.
-        if (vertCount > 0) {
-            void* arr0 = s_fn_MeshVertices(mesh, 0);
-            const uint8_t* d0 = arr0 ? *reinterpret_cast<const uint8_t**>(arr0) : nullptr;
-            if (d0) {
-                const int diagIdx[2] = {0, vertCount - 1};
-                for (int i : diagIdx) {
-                    float w[3] = {0, 0, 0};
-                    s_fn_TransformMul(xform, w, d0 + static_cast<size_t>(i) * 0xC);
-                    std::fprintf(stderr,
-                        "[Quarry]   diag v%d world=(%.2f,%.2f,%.2f) -> map=(%d,%d) dim(+0xC0)=%d stride=%d half=%.1f\n",
-                        i, w[0], w[1], w[2],
-                        static_cast<int>(w[0] + s_bias + half), static_cast<int>(w[1] + s_bias + half),
-                        *reinterpret_cast<int*>(terrainGrid + 0xC0), stride, half);
-                }
-            }
-        }
-        std::fflush(stderr);
-    }
 }
 
 // ============================================================
@@ -316,11 +288,6 @@ extern "C" void QuarryComponent_Slot12(void* selfV, int msgId) {
     QuarryComponent_ApplyDepth(selfV, initialDepth);
     QuarryDecalResume(decal);
 
-    if (QuarryTraceOn()) {
-        std::fprintf(stderr, "[Quarry] Slot12 msg=4 BUILT self=%p initialDepth=%.3f\n",
-                     selfV, initialDepth);
-        std::fflush(stderr);
-    }
 }
 
 // ============================================================
@@ -456,10 +423,4 @@ extern "C" void QuarryComponent_Slot15(void* selfV) {
         }
     }
 
-    if (QuarryTraceOn()) {
-        std::fprintf(stderr, "[Quarry] Slot15 self=%p produced=%d/%d t=%.3f depth=%.3f "
-                     "rect=(%d,%d %dx%d) converted=%d\n",
-                     selfV, produced, maxProd, t, depth, baseX, baseY, rectW, rectH, converted);
-        std::fflush(stderr);
-    }
 }

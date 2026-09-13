@@ -556,11 +556,6 @@ static void StatusIcon_OnRemovedFromWorld_VSlot(void* self) {
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     void* scene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60);
     int32_t sceneId = *(int32_t*)(c + 0x100);
-    if (getenv("BANISHED_DESTROY_TRACE")) {
-        fprintf(stderr, "[StatusIcon] removed-from-world comp=%p sceneId=%d\n",
-                self, sceneId);
-        fflush(stderr);
-    }
     // [STANDALONE GUARD D4] a component that never ran StartupInit still has the inert
     // zero-fill, so sceneId 0 means "never registered" rather than scene object 0 —
     // RemoveObject on it spins forever (in-world freeze). Repair the sentinel instead.
@@ -603,22 +598,17 @@ void StatusIconComponent_CtorScalars(void* mem) {
     EnsureGeometryVtable();
     uintptr_t s = (uintptr_t)mem;
 
-    static bool drawMode = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_STATUSICON_DRAW");
-    if (drawMode) {
-        EnsureDrawHelpers();
-        if (s_fn_Geometry_BaseCtor) {
-            s_fn_Geometry_BaseCtor((void*)(s + 0x28));
-            void** baseV = *(void***)(s + 0x28);
-            StatusIconGeometry_BuildVtable(baseV);
-        }
-        *(void**)(s + 0x28) = StatusIconGeometry_VtableBuilt()
-                                  ? StatusIconGeometry_Vtable()
-                                  : g_StatusIconGeometryVtable;
-        void** vt = *(void***)s;
-        if (vt) vt[8] = reinterpret_cast<void*>(&StatusIcon_OnRemove_VSlot);
-    } else {
-        *(void**)(s + 0x28) = g_StatusIconGeometryVtable;
+    EnsureDrawHelpers();
+    if (s_fn_Geometry_BaseCtor) {
+        s_fn_Geometry_BaseCtor((void*)(s + 0x28));
+        void** baseV = *(void***)(s + 0x28);
+        StatusIconGeometry_BuildVtable(baseV);
     }
+    *(void**)(s + 0x28) = StatusIconGeometry_VtableBuilt()
+                              ? StatusIconGeometry_Vtable()
+                              : g_StatusIconGeometryVtable;
+    void** vt = *(void***)s;
+    if (vt) vt[8] = reinterpret_cast<void*>(&StatusIcon_OnRemove_VSlot);
     *(uint32_t*)(s + 0x100) = 0xFFFFFFFFu;   // sceneObjId = -1 (NOT scene-registered)
 
     void** vtAll = *(void***)s;
@@ -628,13 +618,12 @@ void StatusIconComponent_CtorScalars(void* mem) {
 // StatusIconComponent_StartupInit — the STARTUP half: the description-driven geometry
 // sprite setup the inert factory skips. Routed to the component's Startup slot
 // (vtable +0x20 / index 4) so it runs during ComponentEntity::StartupComponents, exactly
-// where the original dispatches the real Serialize. Env-gated on BANISHED_LIVE_STATUSICON.
+// where the original dispatches the real Serialize.
 // ⚠ A LOAD never dispatches this slot — anything that must hold for a stream-restored
 // component belongs in StatusIconComponent_CtorScalars above, not here.
 void StatusIconComponent_StartupInit(StatusIconComponent* self) {
     EnsureHelpers();
     EnsureGeometryVtable();
-    uintptr_t s = (uintptr_t)self;
 
     // The ctor half (embedded geometry + vtable, sceneObjId = -1, and the two shared
     // component-vtable routings) now runs at CONSTRUCTION -- see
@@ -650,22 +639,6 @@ void StatusIconComponent_StartupInit(StatusIconComponent* self) {
     // CitizenComponent Update for citizen health icons) — no per-frame occupancy poll.
     StatusIconComponent_Serialize(self);
 
-    // Diagnostic: settle whether the sprite-sheet RESOURCE is present in standalone
-    // (the gating unknown for Phase B rendering). desc+0x20 = SpriteSheet,
-    // spriteSheet+0x30 = MaterialInstance.
-    static bool trace = [](){ const char* e = getenv("BANISHED_STATUSICON_TRACE");
-                              return e && e[0] && e[0] != '0'; }();
-    if (trace) {
-        void* desc = GetStatusIconDescription(s);
-        void* sheet = desc ? *(void**)((uintptr_t)desc + 0x20) : nullptr;
-        void* mat   = sheet ? *(void**)((uintptr_t)sheet + 0x30) : nullptr;
-        int   cnt   = (sheet && s_fn_SpriteSheet_GetSpriteCount)
-                          ? s_fn_SpriteSheet_GetSpriteCount(sheet) : -1;
-        printf("[StatusIcon::Startup] self=%p desc=%p sheet=%p material=%p spriteCount=%d "
-               "geomBits(+0xc4)=%d\n",
-               (void*)self, desc, sheet, mat, cnt, *(int*)(s + 0x28 + 0xC4));
-        fflush(stdout);
-    }
 }
 
 
@@ -919,15 +892,6 @@ void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
             uint32_t id = s_fn_Scene_AddObject(scene, (void*)(c + 0x28));
             *(int32_t*)(c + 0x100) = (int32_t)id;
             SceneWatch_Note(id, (void*)(c + 0x28), "StatusIconComponent::Show");
-        } else if (*(int32_t*)(c + 0x100) < 0 && getenv("BANISHED_ICON_TRACE")) {
-            static int budget = 6;
-            if (budget-- > 0) {
-                fprintf(stderr, "[IconTrace] SHOW-SKIPPED comp=%p bit=%d inited=%d vis=%d "
-                        "sceneId=%d AddObject=%p scene=%p settings=%p\n",
-                        (void*)selfC, bit, (int)inited, (int)vis,
-                        *(int32_t*)(c + 0x100), (void*)s_fn_Scene_AddObject, scene, settings);
-                fflush(stderr);
-            }
         }
         if (s_fn_Time_Ctor) {
             uint8_t timeObj[8];
@@ -976,7 +940,6 @@ static void StatusIconComponent_ShutdownVSlot(void* self, void* stream) {
 static void StatusIconComponent_FinishLiveVtable() {
     StatusIconComponent_LiveVtable[3] =
         reinterpret_cast<void*>(&StatusIconComponent_ShutdownVSlot);
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_STATUSICON"))
         StatusIconComponent_LiveVtable[4] =
             reinterpret_cast<void*>(&StatusIconComponent_StartupVSlot);
 }

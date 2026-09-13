@@ -78,14 +78,6 @@ static void EnsureFns() {
     s_resolved = true;
 }
 
-static bool HeatTraceOn() {
-    static int on = -1;
-    if (on < 0) {
-        const char* e = std::getenv("BANISHED_HEAT_TRACE");
-        on = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return on == 1;
-}
 
 // Signature matches the Trans38 dispatcher tail-call: (component, sm, Time* dt).
 extern "C" char ResidenceComponent_HeatTick(void* selfV, void* /*sm*/, void* dtP) {
@@ -132,17 +124,6 @@ extern "C" char ResidenceComponent_HeatTick(void* selfV, void* /*sm*/, void* dtP
     uintptr_t desc = reinterpret_cast<uintptr_t>(descObj);
     float heatThreshold = *reinterpret_cast<float*>(desc + 0x28);
 
-    if (HeatTraceOn()) {
-        static int n = 0;
-        if (n < 8) { ++n;
-            fprintf(stderr, "[HeatTick] house=%p temp=%.2f thresh=%.2f burnDur=%.2f "
-                    "heatLeft=%lld slots=%d\n", selfV, worldTemp, heatThreshold,
-                    *reinterpret_cast<float*>(desc + 0x2c),
-                    (long long)*reinterpret_cast<int64_t*>(self + 0x48),
-                    *reinterpret_cast<int*>(self + 0x58));
-            fflush(stderr);
-        }
-    }
 
     if (worldTemp >= heatThreshold) return 1;
     if (*reinterpret_cast<int64_t*>(self + 0x48) >= 0) return 1;
@@ -213,13 +194,6 @@ extern "C" char ResidenceComponent_HeatTick(void* selfV, void* /*sm*/, void* dtP
             // uncapped so long soak runs show the full consumption sawtooth.
             // (PERF 2026-09-05: gated -- 800 houses in winter made this unbuffered stderr
             // line 1.7% of the EntityList phase in the perf build.)
-            if (HeatTraceOn()) {
-                fprintf(stderr, "[HeatTick] house=%p BURN 1 fuel (temp=%.2f < %.2f) "
-                        "slotLeft=%d refill=%.2fs\n", selfV, worldTemp, heatThreshold,
-                        *reinterpret_cast<int*>(slot + 8),
-                        *reinterpret_cast<float*>(desc + 0x2c));
-                fflush(stderr);
-            }
             burned = true;
             break;
         }

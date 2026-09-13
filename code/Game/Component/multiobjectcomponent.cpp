@@ -285,7 +285,6 @@ static void MultiObjectComponent_InstallLive() {
     // silently reset on load.
     MultiObjectComponent_LiveVtable[3] =
         reinterpret_cast<void*>(&MultiObjectComponent_ShutdownVSlot);
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_MULTIOBJECT")) return;
     MultiObjectComponent_LiveVtable[12] = reinterpret_cast<void*>(&MultiObjectComponent_Slot12);
 }
 

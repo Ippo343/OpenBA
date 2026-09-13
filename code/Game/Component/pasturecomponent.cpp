@@ -501,9 +501,6 @@ static uint32_t PastureComponent_LiveGetTypeId(void*) {
 }
 static void* PastureComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
 
-static bool PastureComponent_LiveOn() {
-    return ::ComponentFactory::LiveEnabled("BANISHED_LIVE_PASTURE");
-}
 static void  PastureComponent_OnAddedVSlot(void* s) {
     PastureComponent_Draw(reinterpret_cast<PastureComponent*>(s));
 }
@@ -642,7 +639,6 @@ static void* PastureComponent_CreateState(void* self) {
 
 // Re-run for every instance: InitInertTyped re-stubs the shared vtable each time.
 static void PastureComponent_InstallLive(void* mem) {
-    if (!PastureComponent_LiveOn()) return;
     PastureComponent_LiveVtable[12] = reinterpret_cast<void*>(&PastureComponent_Slot12VSlot);
     PastureComponent_LiveVtable[1]  = reinterpret_cast<void*>(&PastureComponent_GetTypeInfoVSlot);
     // Slot 3 = Shutdown/Serialize. The body has been ported in this file since

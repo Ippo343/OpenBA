@@ -191,25 +191,6 @@ void TombstoneComponent_Update(TombstoneComponent* self, int64_t* pDeltaTime) {
     int64_t* pTimer = (int64_t*)&self->field28;
     *pTimer -= *pDeltaTime;
 
-    // Phase-1 bring-up verification trace (env BANISHED_TOMB_TRACE, default off →
-    // byte-unchanged): follows ONE component and prints its +0x28 countdown timer
-    // decreasing per tick. Confirms the live recipe end-to-end — Update entered via
-    // vtable +0x48, Startup populated +0x28, and the value advances monotonically.
-    {
-        static int s_st = -1, s_n = 0;
-        static void* s_lock = nullptr;
-        if (s_st < 0) {
-            const char* e = std::getenv("BANISHED_TOMB_TRACE");
-            s_st = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-        }
-        if (s_st == 1 && s_lock == nullptr) s_lock = self;
-        if (s_st == 1 && self == s_lock && s_n < 20) {
-            fprintf(stderr, "[TombTrace] self=%p timer(+28)=%lld dt=%lld unk18=%p\n",
-                    (void*)self, (long long)*pTimer, (long long)*pDeltaTime,
-                    (void*)self->_unk18);
-            fflush(stderr); s_n++;
-        }
-    }
 
     if (*pTimer < 1) {
         void* entityPtr = self->owner;

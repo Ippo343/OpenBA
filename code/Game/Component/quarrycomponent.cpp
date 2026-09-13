@@ -100,7 +100,6 @@ static void QuarryComponent_InstallLive() {
     // body's bytes and desyncs the stream for EVERY object after it.
     // See reference_vtable_slot3_serialize_never_installed.
     QuarryComponent_LiveVtable[3]  = reinterpret_cast<void*>(&QuarryComponent_ShutdownVSlot);
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_QUARRY")) return;
     QuarryComponent_LiveVtable[12] = reinterpret_cast<void*>(&QuarryComponent_Slot12);
     QuarryComponent_LiveVtable[15] = reinterpret_cast<void*>(&QuarryComponent_Slot15);
 }

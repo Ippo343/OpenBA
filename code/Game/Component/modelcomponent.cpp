@@ -391,30 +391,6 @@ void ModelComponent_Serialize(ModelComponent* self) {
         }
     }
 
-    // BANISHED_MODEL_TRACE=1 — per-invocation Startup trace. Reports whether the
-    // dispatch happened at all and, crucially, whether SetMesh left the embedded
-    // MeshInstance with a NODE ARRAY (+0x28+0xf0). A null node array there is the
-    // exact state EdgeMeshInstance::Draw faults on (tool_base_render.cpp guard).
-    // The budget is the numeric value of BANISHED_MODEL_TRACE (default 96). A world
-    // holds ~16k models, so the process-wide default cannot reach a SECOND world --
-    // pass a large value when diffing world 1 against world 2.
-    static int s_mcTrace = -1;
-    static int s_mcBudget = 96;
-    if (s_mcTrace < 0) {
-        const char* e = std::getenv("BANISHED_MODEL_TRACE");
-        s_mcTrace = (e && e[0] && e[0] != '0') ? 1 : 0;
-        if (s_mcTrace) { int v = atoi(e); if (v > 1) s_mcBudget = v; }
-    }
-    static int s_serLog = 0;
-    if (s_mcTrace && s_serLog < s_mcBudget) {
-        ++s_serLog;
-        fprintf(stderr, "[ModelTrace] Startup self=%p desc=%p variantIdx=%d "
-                "modelVariant=%d groups@+0x20=%p groupCount@+0x28=%u mesh=%p nodes@+0xf0=%p\n",
-                (void*)self, desc, (int)*(int16_t*)(s + 0x164), (int)modelVariant,
-                *(void**)(d + 0x20), *(uint32_t*)(d + 0x28), meshResource,
-                *(void**)(s + 0x28 + 0xf0));
-        fflush(stderr);
-    }
 }
 
 // ============================================================
@@ -459,29 +435,6 @@ void ModelComponent_Draw(ModelComponent* self) {
                 uint32_t id = s_fn_Scene_AddObject(scene, (void*)(s + 0x28));
                 *(uint32_t*)(s + 0x16c) = id;
                 SceneWatch_Note(id, (void*)(s + 0x28), "ModelComponent::Draw");
-                // [diag] BANISHED_DRAIN_AUDIT — a scene registration made on an entity
-                // that is ALREADY marked-for-removal (0x400) is a node the mark-time
-                // +0x38 teardown can never take back out: the entity is freed at the
-                // next drain with this id still live in Graphics::Scene. Counted here
-                // because the mark bit itself is not durable (NotifyEntityChanged
-                // 0x1400c3470 zeroes entity+0x40), so this arm sees only the re-adds
-                // that happen while the bit still stands — a floor, not the total.
-                {
-                    static int s_auditOn = -1;
-                    if (s_auditOn < 0) { const char* e = getenv("BANISHED_DRAIN_AUDIT");
-                                         s_auditOn = (e && e[0] && e[0] != '0') ? 1 : 0; }
-                    if (s_auditOn == 1) {
-                        void* owner = *(void**)(s + 0x10);
-                        if (owner && ((*(uint32_t*)((uintptr_t)owner + 0x40) >> 10) & 1)) {
-                            static int s_n = 0;
-                            if (++s_n <= 20) {
-                                fprintf(stderr, "[drainAudit] Scene::AddObject on MARKED "
-                                        "entity=%p comp=%p id=%u\n", owner, (void*)self, id);
-                                fflush(stderr);
-                            }
-                        }
-                    }
-                }
 #if defined(_DEBUG)
                 static int s_drawLog = 0;
                 if (s_drawLog < 10) {
