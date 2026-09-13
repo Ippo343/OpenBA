@@ -3745,6 +3745,432 @@ void RtColl_ArraySetSize_18003d430(void* a) {
                 &g_j3_18003d430);
 }
 
+
+// ============================================================================
+// CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12)
+// ============================================================================
+//
+// The `Collection::Array<T>` half of the 48 unnamed helper bodies at or above
+// 0x1800571b0 that today's ports reach BY ADDRESS. Four families, all of them
+// this file's existing jobs:
+//
+//   J1  seven more copies of the parameterless `~Array` body
+//   J3  thirteen more `SetSize` instantiations (two-, three- and one-argument)
+//   J2  the ~Array-with-element-destroy pairs -> array_destroy.cpp
+//   J4  six more `operator=`                  -> array_destroy.cpp
+//
+// The owners, recovered from `get_function_callers` in retail Ghidra:
+//   0x180061a80..0x180062320  Graphics::Particle        (Serialize 0x180103f00)
+//   0x180065bf0..0x180066fa0  Collision2D::CollisionMesh(Serialize 0x180108cd0)
+//   0x1800734a0..0x180074360  Picking::PickingMesh      (SubMesh members)
+//   0x180076a40..0x1800774d0  UI::Font                  (Serialize 0x1801176d0,
+//                                                        ComputeStringLayout)
+//   0x18007a350..0x18007ac20  Picking::PickingMesh      (Serialize 0x180122960)
+//   0x1800571b0               Video::VertexProgram      (Serialize 0x1800f6240)
+//
+// *** TWO EXISTING FILES CARRIED PRIVATE COPIES OF FOUR OF THESE BODIES. ***
+// runtime/src/collision2d/collisionmesh.cpp and runtime/src/picking/
+// pickingmesh.cpp each had a `GenericArraySetSize` template plus hand-written
+// Face / SubMesh resizes, written before this family was parameterised. They
+// were NOT byte-faithful -- `GenericArraySetSize` zero-fills the new tail for
+// EVERY element type, and three of the instantiations it stood in for
+// (0x18007a790, 0x18007a900, 0x1800774d0) have no `else` arm at all, while
+// pickingmesh.cpp's `SubMeshArraySetSize` skipped retail's per-element destroy
+// on BOTH the shrink and the realloc arm and did a shallow struct copy where
+// retail deep-copies (String refcount + four inner `operator=`). Those copies
+// are DELETED in this same commit and both files now call these bodies by
+// address; there is one body per address, which is the rule this batch was
+// told to keep.
+//
+// ---------------------------------------------------------------------------
+// J1 -- the seven new `~Array` addresses
+// ---------------------------------------------------------------------------
+// MEASURED, not eyeballed (reference_position_only_diffs_hide_one_body.md): all
+// seven were read with `read_memory` over their full 115 bytes and compared
+// against the canonical 0x180033960. Outside the FIVE relocatable operands --
+// the disp32 of `MOV RBX,[rip]` (+36), of `CALL [rip]` (+58), of
+// `MOV RCX,[rip]` (+68), the `CALL rel32` (+75) and the second `CALL [rip]`
+// (+84) -- every one of the 115 bytes is equal, and all five resolve in ALL
+// SEVEN to the same absolutes the J1 banner pins:
+//     0x1801fc718, 0x18014b390, 0x1801fc718, 0x1800c6c00, 0x18014b388
+// So the "no parameters at all, not even a stride" conclusion covers them
+// unchanged and one body still serves them all.
+#define J1_ENTRY(ADDR)                                                        \
+    Site g_j1_##ADDR = { { "Collection::Array::~Array @0x" #ADDR, 0, 0, false, false }, \
+                         0x##ADDR };                                          \
+    void* RtColl_ArrayDtor_##ADDR(void* a) {                                  \
+        ArrayDtorSited(static_cast<ArrayHdr*>(a), &g_j1_##ADDR);              \
+        return nullptr;                                                       \
+    }
+
+J1_ENTRY(180065bf0)   // Collision2D: CollisionMesh::_ptsA (+0x30) AND _ptsB (+0x40)
+J1_ENTRY(180065e80)   // Collision2D: CollisionMesh::_surfaces (+0x60)
+J1_ENTRY(180066cd0)   // Collision2D: Face::quads             (+0x18)
+J1_ENTRY(180066fa0)   // Collision2D: Face::triples           (+0x08)
+J1_ENTRY(180073e60)   // Picking:     SubMesh::_triangles     (+0x60)
+J1_ENTRY(180074250)   // Picking:     SubMesh::_vertices      (+0x40)
+J1_ENTRY(180074360)   // Picking:     SubMesh::_uvs           (+0x70)
+
+#undef J1_ENTRY
+
+// ---------------------------------------------------------------------------
+// The new element operations
+// ---------------------------------------------------------------------------
+
+// 0x1800774d0 (UI::Font's uint16 array). `MOV AX,[..]; MOV [..],AX`.
+void AssignD2_2(uint8_t* d, const uint8_t* s) {
+    *reinterpret_cast<uint16_t*>(d) = *reinterpret_cast<const uint16_t*>(s);
+}
+
+// 0x180066e80 / 0x180066de0 (Collision2D::Face::triples, stride SIX -- the
+// element is three uint16). The copy is a DWORD at +0x00 and a WORD at +0x04,
+// which is how MSVC moves six bytes; it is written with those two widths and
+// not as a memcpy because a hardware write watchpoint sees the difference.
+void AssignD2_6(uint8_t* d, const uint8_t* s) {
+    *reinterpret_cast<uint32_t*>(d + 0) = *reinterpret_cast<const uint32_t*>(s + 0);
+    *reinterpret_cast<uint16_t*>(d + 4) = *reinterpret_cast<const uint16_t*>(s + 4);
+}
+// 0x180066e80's `else` arm, in RETAIL'S OWN ORDER: the DWORD at +0x02 is
+// stored FIRST and the WORD at +0x00 second (`MOV [RCX+2],0` then
+// `MOV [RCX],0`). The two overlap at +0x02..+0x03; the final state is the same
+// either way, but the order is what the allocator and a watchpoint see.
+void InitZeroD2_6(uint8_t* d) {
+    *reinterpret_cast<uint32_t*>(d + 2) = 0;
+    *reinterpret_cast<uint16_t*>(d + 0) = 0;
+}
+
+// 0x18007a790 / 0x180073dc0 (Picking::SubMesh::_triangles, stride 0xc): a QWORD
+// at +0x00 and a DWORD at +0x08. NOT `Assign12` (three dwords) -- same twelve
+// bytes, different store widths, and the two rows are kept apart for that
+// reason alone.
+void AssignD2_12q(uint8_t* d, const uint8_t* s) {
+    *reinterpret_cast<uint64_t*>(d + 0) = *reinterpret_cast<const uint64_t*>(s + 0);
+    *reinterpret_cast<uint32_t*>(d + 8) = *reinterpret_cast<const uint32_t*>(s + 8);
+}
+// 0x18007a4d0's `else` arm: one zero QWORD at +0x00 and one zero DWORD at
+// +0x08, so the whole 0xc stride is written.
+void InitZeroD2_12q(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0) = 0;
+    *reinterpret_cast<uint32_t*>(d + 8) = 0;
+}
+
+// 0x180061bb0 (the live-particle slot array INSIDE a Graphics::Particle pool
+// record -- the record ctor 0x180103bf0 sizes it from the Particle's +0x28;
+// runtime/types/graphics/Particle.h has the full record layout). The copy arm
+// is TWO qwords at +0x00/+0x08, TWELVE dwords at +0x10..+0x3f, then THREE
+// qwords at +0x40/+0x48/+0x50 -- 0x58 bytes with no hole, so this is a pure
+// byte copy and `byteCopy` is true. The widths are transcribed rather than
+// folded into a memcpy for the reason AssignD2_6 gives.
+void AssignD2_58(uint8_t* d, const uint8_t* s) {
+    reinterpret_cast<uint64_t*>(d)[0] = reinterpret_cast<const uint64_t*>(s)[0];
+    reinterpret_cast<uint64_t*>(d)[1] = reinterpret_cast<const uint64_t*>(s)[1];
+    for (int k = 4; k < 16; ++k)
+        reinterpret_cast<uint32_t*>(d)[k] = reinterpret_cast<const uint32_t*>(s)[k];
+    reinterpret_cast<uint64_t*>(d)[8]  = reinterpret_cast<const uint64_t*>(s)[8];
+    reinterpret_cast<uint64_t*>(d)[9]  = reinterpret_cast<const uint64_t*>(s)[9];
+    reinterpret_cast<uint64_t*>(d)[10] = reinterpret_cast<const uint64_t*>(s)[10];
+}
+// 0x180061bb0's `else` arm: ELEVEN zero qwords, +0x00..+0x57, no hole.
+void InitZeroD2_58(uint8_t* d) {
+    for (int k = 0; k < 11; ++k) reinterpret_cast<uint64_t*>(d)[k] = 0;
+}
+
+// ---- the two NON-TRIVIAL elements -----------------------------------------
+//
+// Both element types own inner `Collection::Array<T>`, so their assign is a
+// CALL to a real copy constructor and their destroy a CALL to a range helper.
+// The callees are ported in the same commit (the copy ctors below, the range
+// helpers in array_destroy.cpp) and are reached BY ADDRESS -- registry-first,
+// so the day either is re-registered elsewhere this file follows without an
+// edit, exactly like kSpec_PkgEntry's DestroyPkgEntryRange.
+
+// Declared, not duplicated: these six `Array<T>::operator=` bodies live in
+// array_destroy.cpp (they are ArrayAssignCore instantiations). A second copy of
+// any of them here is exactly the drift the shared core exists to prevent.
+void* RtColl_ArrayAssign_180066de0(void* self, const void* src);   // Face::triples
+void* RtColl_ArrayAssign_180066b30(void* self, const void* src);   // Face::quads
+void* RtColl_ArrayAssign_1800741b0(void* self, const void* src);   // SubMesh::_vertices/_normals
+void* RtColl_ArrayAssign_180073dc0(void* self, const void* src);   // SubMesh::_triangles
+void* RtColl_ArrayAssign_1800742d0(void* self, const void* src);   // SubMesh::_uvs
+// The two range destroys, likewise in array_destroy.cpp.
+void RtColl_DestroyInner_1800664c0(void* ignoredThis, void* base, int count);
+void RtColl_DestroySubMesh_180073ee0(void* ignoredThis, void* base, int count);
+
+// 0x180065b70 -- `Collision2D::CollisionMesh::Face::Face(const Face&)`, the
+// element copy constructor 0x180066350's grow arm CALLs. Read out of its own
+// body, in retail's order:
+//     MOV EAX,[RDX]      ; MOV [RCX],EAX            field0, a DWORD at +0x00
+//     the two qwords of the inner Array header at +0x08 zeroed
+//     CALL 0x180066de0   ; Array<Triple3>::operator= at +0x08
+//     the two qwords of the inner Array header at +0x18 zeroed
+//     CALL 0x180066b30   ; Array<Quad4>::operator=   at +0x18
+//     MOV RAX,RCX
+// +0x04..+0x07 (the padding after field0) is NEVER WRITTEN by this arm, which
+// is the assign window below. The pre-zeroing is load-bearing and not tidying:
+// each `operator=` opens by destroying the DESTINATION, so a non-zero header
+// there would be freed as a live buffer.
+void* AssignFace28Impl(uint8_t* d, const uint8_t* s) {
+    *reinterpret_cast<uint32_t*>(d + 0x00) = *reinterpret_cast<const uint32_t*>(s + 0x00);
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
+    RtColl_ArrayAssign_180066de0(d + 0x08, s + 0x08);
+    *reinterpret_cast<uint64_t*>(d + 0x18) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x20) = 0;
+    RtColl_ArrayAssign_180066b30(d + 0x18, s + 0x18);
+    return d;
+}
+void AssignFace28(uint8_t* d, const uint8_t* s) { AssignFace28Impl(d, s); }
+// 0x180066350's `else` (init) arm: FOUR zero qwords at +0x08, +0x10, +0x18 and
+// +0x20 -- and NOTHING at +0x00..+0x07. A fresh Face's `field0` and its padding
+// are left holding whatever the allocation contained, which is why the init
+// window below is +0x00..+0x08 and not empty.
+void InitFace28(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x18) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x20) = 0;
+}
+void DestroyFace28Range(void* ignoredThis, uint8_t* base, int count) {
+    RtColl_DestroyInner_1800664c0(ignoredThis, base, count);
+}
+
+// 0x1800734a0 -- `Picking::SubMesh::SubMesh(const SubMesh&)`, the element copy
+// constructor 0x18007aa40's grow arm CALLs. Read out of its own body:
+//     +0x00  System::String  zero-then-adopt-then-INC [str-4]
+//     +0x08..+0x3f  fourteen plain DWORD moves (_parent, the transform, the AABB)
+//     +0x40  inner Array header zeroed, then CALL 0x1800741b0  (_vertices)
+//     +0x50  inner Array header zeroed, then CALL 0x1800741b0  (_normals)
+//     +0x60  inner Array header zeroed, then CALL 0x180073dc0  (_triangles)
+//     +0x70  inner Array header zeroed, then CALL 0x1800742d0  (_uvs)
+// Every one of the 0x80 bytes is written, so there is no assign window.
+void* AssignSubMesh80Impl(uint8_t* d, const uint8_t* s) {
+    // the String at +0x00: null the slot, adopt, bump the shared refcount
+    *reinterpret_cast<void**>(d) = nullptr;
+    if (void* p = *reinterpret_cast<void* const*>(s)) {
+        *reinterpret_cast<void**>(d) = p;
+        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(p) - 4));
+    }
+    for (int k = 2; k < 16; ++k)
+        reinterpret_cast<uint32_t*>(d)[k] = reinterpret_cast<const uint32_t*>(s)[k];
+    *reinterpret_cast<uint64_t*>(d + 0x40) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x48) = 0;
+    RtColl_ArrayAssign_1800741b0(d + 0x40, s + 0x40);
+    *reinterpret_cast<uint64_t*>(d + 0x50) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x58) = 0;
+    RtColl_ArrayAssign_1800741b0(d + 0x50, s + 0x50);
+    *reinterpret_cast<uint64_t*>(d + 0x60) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x68) = 0;
+    RtColl_ArrayAssign_180073dc0(d + 0x60, s + 0x60);
+    *reinterpret_cast<uint64_t*>(d + 0x70) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x78) = 0;
+    RtColl_ArrayAssign_1800742d0(d + 0x70, s + 0x70);
+    return d;
+}
+void AssignSubMesh80(uint8_t* d, const uint8_t* s) { AssignSubMesh80Impl(d, s); }
+// 0x18007aa40's `else` arm, the literal default-constructed SubMesh: name null,
+// parent -1, identity rotation (1.0f at +0x18), an INVERTED AABB (+1e8 min,
+// -1e8 max -- 0x4cbebc20 / 0xccbebc20) and four empty inner Arrays. All 0x80
+// bytes are written; there is no init window.
+void InitSubMesh80(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
+    *reinterpret_cast<uint32_t*>(d + 0x08) = 0xffffffffu;
+    *reinterpret_cast<uint64_t*>(d + 0x0c) = 0;
+    *reinterpret_cast<uint32_t*>(d + 0x14) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x18) = 0x3f800000ull;
+    *reinterpret_cast<uint64_t*>(d + 0x20) = 0;
+    *reinterpret_cast<uint32_t*>(d + 0x28) = 0x4cbebc20u;
+    *reinterpret_cast<uint32_t*>(d + 0x2c) = 0x4cbebc20u;
+    *reinterpret_cast<uint32_t*>(d + 0x30) = 0x4cbebc20u;
+    *reinterpret_cast<uint32_t*>(d + 0x34) = 0xccbebc20u;
+    *reinterpret_cast<uint32_t*>(d + 0x38) = 0xccbebc20u;
+    *reinterpret_cast<uint32_t*>(d + 0x3c) = 0xccbebc20u;
+    for (int k = 8; k < 16; ++k) reinterpret_cast<uint64_t*>(d)[k] = 0;
+}
+void DestroySubMesh80Range(void* ignoredThis, uint8_t* base, int count) {
+    RtColl_DestroySubMesh_180073ee0(ignoredThis, base, count);
+}
+
+// ---------------------------------------------------------------------------
+// The specs. Every field is read out of ITS OWN body -- never from a sibling
+// with the same stride (this batch has four distinct stride-8 rows whose only
+// difference is the `MOV EDX,<align>` immediate, and three distinct stride-0xc
+// rows).
+// ---------------------------------------------------------------------------
+
+// 0x180062110  Graphics::Particle::Serialize's record-pointer array.
+//   SHL RCX,0x3 / MOV EDX,0x8 -> stride 8, align 8
+//   a plain qword move, no zero-first store -> Assign8
+//   NO else arm: the new tail is left UNINITIALISED.
+// That is kSpec_Fill8 exactly, so it is REUSED rather than duplicated.
+
+// 0x1800660f0  Collision2D::CollisionMesh::_ptsA (Vec2, two floats).
+//   SHL RCX,0x3 / MOV EDX,0x4 -> stride 8, ALIGN 4
+//   else arm writes one zero qword -> InitZero8.
+// NOT kSpec_U64Zero (align 8) and NOT kSpec_Fill8 (no init arm).
+const ArraySpec kSpecD2_Blk8A4Z = {               // 0x1800660f0
+    "Array<Vec2>(align 4, zero tail)", 8, 4, &Assign8, &InitZero8, nullptr,
+    true, 0, 0, 0, 0, 0, 0 };
+
+// 0x1800666e0  CollisionMesh::_ptsB AND ::_surfaces (retail shares one body).
+//   SHL RCX,0x3 / MOV EDX,0x8 -> stride 8, align 8; else arm one zero qword.
+// Parameter-identical to kSpec_U64Zero; given its own row because the name is
+// what the diff summary prints and "Array<Time>" on this array would be the
+// kind of label that gets believed (the reason kSpec_Ptr8Zero exists too).
+const ArraySpec kSpecD2_Blk8A8Z = {               // 0x1800666e0
+    "Array<Vec2/ExternalPtr>(zero tail)", 8, 8, &Assign8, &InitZero8, nullptr,
+    true, 0, 0, 0, 0, 0, 0 };
+
+// 0x180066bc0  CollisionMesh::Face::quads (four uint16 = 8 bytes).
+//   SHL RCX,0x3 / MOV EDX,0x2 -> stride 8, ALIGN 2; else arm one zero qword.
+const ArraySpec kSpecD2_Blk8A2Z = {               // 0x180066bc0
+    "Array<Quad4>(align 2, zero tail)", 8, 2, &Assign8, &InitZero8, nullptr,
+    true, 0, 0, 0, 0, 0, 0 };
+
+// 0x180066e80  CollisionMesh::Face::triples (three uint16 = SIX bytes).
+//   `IMUL RCX,RCX,0x6` / MOV EDX,0x2 -> stride 6, align 2.
+// The first row in this file with an ODD-sized element that is not 1.
+const ArraySpec kSpecD2_Edge6A2Z = {              // 0x180066e80
+    "Array<Triple3>", 6, 2, &AssignD2_6, &InitZeroD2_6, nullptr,
+    true, 0, 0, 0, 0, 0, 0 };
+
+// 0x180066350  CollisionMesh::_faces. NON-TRIVIAL: element copy ctor
+// 0x180065b70, shrink/realloc destroy 0x1800664c0.
+const ArraySpec kSpecD2_Face28 = {                // 0x180066350
+    "Array<Collision2D::Face>", 0x28, 8,
+    &AssignFace28, &InitFace28, &DestroyFace28Range, false,
+    /*assign unwritten*/ 0x04, 0x08,   // the pad after field0
+    /*init   unwritten*/ 0x00, 0x08,   // field0 AND its pad
+    /*seed zero       */ 0x08, 0x28 }; // both inner Array headers are destroyed
+
+// 0x1800774d0  UI::Font::Serialize's uint16 scratch array.
+//   `ADD RCX,RCX` (stride 2) / MOV EDX,0x2 -> stride 2, align 2; no else arm.
+const ArraySpec kSpecD2_U16A2 = {                 // 0x1800774d0
+    "Array<uint16>", 2, 2, &AssignD2_2, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
+
+// 0x180077330 / 0x180076d10 / 0x180076a40  UI::Font's 16-byte glyph records
+// (Serialize's glyph table, ComputeLineLayout's append, ComputeStringLayout's
+// clear). One element type, three arities:
+//   SHL RCX,0x4 / MOV EDX,0x4 -> stride 0x10, ALIGN 4
+//   four dword moves per element, no else arm.
+// NOT kSpec_Fill16 (align 8) and NOT kSpec_Fill16A4 (which is the same two
+// numbers but was read out of a different body -- kept separate because the
+// name is what a divergence report prints).
+const ArraySpec kSpecD2_Glyph10A4 = {             // 0x180077330, 0x180076d10,
+    "Array<UI::Font::Glyph16>", 0x10, 4,          // 0x180076a40
+    &Assign16, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
+
+// 0x18007a4d0  Picking::SubMesh::_vertices AND ::_normals (Vector3).
+//   `LEA RCX,[RAX+RAX*2]; SHL RCX,0x2` (stride 0xc) / MOV EDX,0x4
+//   assign = THREE dword moves; else arm = one zero qword + one zero dword.
+const ArraySpec kSpecD2_Vec12A4Z = {              // 0x18007a4d0
+    "Array<Vector3>", 0xc, 4, &Assign12, &InitZeroD2_12q, nullptr,
+    true, 0, 0, 0, 0, 0, 0 };
+
+// 0x18007a790  Picking::SubMesh::_triangles (two uint16 triples = 0xc bytes).
+//   stride 0xc / MOV EDX,0x2 -> ALIGN 2
+//   assign = one QWORD + one DWORD (not three dwords -- see AssignD2_12q)
+//   NO else arm: the new tail is left UNINITIALISED.
+const ArraySpec kSpecD2_Tri12A2 = {               // 0x18007a790
+    "Array<Picking::Triangle>", 0xc, 2, &AssignD2_12q, nullptr, nullptr,
+    true, 0, 0, 0, 0, 0, 0 };
+
+// 0x18007a900  Picking::SubMesh::_uvs (two uint16).
+//   SHL RCX,0x2 / MOV EDX,0x2 -> stride 4, ALIGN 2; no else arm.
+// NOT kSpec_Fill4, whose align is 4.
+const ArraySpec kSpecD2_U32A2 = {                 // 0x18007a900
+    "Array<Picking::UV16>", 4, 2, &Assign4, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
+
+// 0x18007aa40  Picking::PickingMesh::_nodes. NON-TRIVIAL: element copy ctor
+// 0x1800734a0, shrink/realloc destroy 0x180073ee0 (four inner Arrays AND a
+// String per element).
+const ArraySpec kSpecD2_SubMesh80 = {             // 0x18007aa40
+    "Array<Picking::SubMesh>", 0x80, 8,
+    &AssignSubMesh80, &InitSubMesh80, &DestroySubMesh80Range, false,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0x40, 0x80 }; // the four inner Array headers
+
+// 0x180061bb0  the pool record's live-particle slot array (record+0x18),
+// sized by the record ctor 0x180103bf0 from Particle+0x28.
+//   `IMUL RCX,RCX,0x58` / MOV EDX,0x8 -> stride 0x58, align 8.
+const ArraySpec kSpecD2_Emit58 = {                // 0x180061bb0
+    "Array<Graphics::ParticleSlot58>", 0x58, 8,
+    &AssignD2_58, &InitZeroD2_58, nullptr, true, 0, 0, 0, 0, 0, 0 };
+
+// ---- the entry points ------------------------------------------------------
+#define J3_ENTRY2(ADDR, SPEC)                                                 \
+    Site g_j3_##ADDR = { { "Collection::Array::SetSize @0x" #ADDR, 0, 0, false, false }, \
+                         0x##ADDR };                                          \
+    void RtColl_ArraySetSize_##ADDR(void* a, int n) {                         \
+        SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &SPEC, &g_j3_##ADDR); \
+    }
+
+J3_ENTRY2(180062110, kSpec_Fill8)          // Graphics:    Particle record ptrs
+J3_ENTRY2(180061bb0, kSpecD2_Emit58)       // Graphics:    Particle pool-record slots
+J3_ENTRY2(1800660f0, kSpecD2_Blk8A4Z)      // Collision2D: CollisionMesh::_ptsA
+J3_ENTRY2(1800666e0, kSpecD2_Blk8A8Z)      // Collision2D: _ptsB and _surfaces
+J3_ENTRY2(180066bc0, kSpecD2_Blk8A2Z)      // Collision2D: Face::quads
+J3_ENTRY2(180066e80, kSpecD2_Edge6A2Z)     // Collision2D: Face::triples
+J3_ENTRY2(180066350, kSpecD2_Face28)       // Collision2D: _faces   [NON-TRIVIAL]
+J3_ENTRY2(1800774d0, kSpecD2_U16A2)        // UI:          Font's uint16 scratch
+J3_ENTRY2(180077330, kSpecD2_Glyph10A4)    // UI:          Font's glyph table
+J3_ENTRY2(18007a4d0, kSpecD2_Vec12A4Z)     // Picking:     SubMesh::_vertices/_normals
+J3_ENTRY2(18007a790, kSpecD2_Tri12A2)      // Picking:     SubMesh::_triangles
+J3_ENTRY2(18007a900, kSpecD2_U32A2)        // Picking:     SubMesh::_uvs
+J3_ENTRY2(18007aa40, kSpecD2_SubMesh80)    // Picking:     _nodes   [NON-TRIVIAL]
+
+#undef J3_ENTRY2
+
+// 0x180076d10 -- the THREE-argument form of the glyph array: UI::Font::
+// ComputeLineLayout appends one record by passing `size + 1` and a pointer to
+// it. Same spec as 0x180077330; different arity, so a separate entry point,
+// because registering it behind the two-argument signature would read a
+// register the caller never set.
+Site g_j3_180076d10 = { { "Collection::Array::SetSize @0x180076d10", 0, 0, false, false },
+                        0x180076d10 };
+void RtColl_ArraySetSizeFill_180076d10(void* a, int n, const void* fill) {
+    SetSizeCore(static_cast<ArrayHdr*>(a), n,
+                static_cast<const uint8_t*>(fill), &kSpecD2_Glyph10A4, &g_j3_180076d10);
+}
+
+// 0x180076a40 -- the SAME glyph array with the new size folded to the constant
+// 0, the one-argument shape 0x1800783d0 and 0x18002aae0 already have.
+//
+// IT IS NOT A MEMBER OF THE J1 `~Array` FAMILY, and reading it as one would be
+// a live defect rather than a mislabel. `~Array` frees unconditionally; this
+// body's grow test is `CMP dword [RCX+0xc],0 / JGE skip` and capacity is never
+// negative, so the MemAlloc and the whole copy loop are unreachable with a new
+// size of 0, the epilogue's `CMP <old>,[RCX]` is always equal, and the MemFree
+// never runs. The observable effect is `_size = 0` with the buffer and the
+// capacity KEPT -- which is exactly what UI::Font::ComputeStringLayout wants of
+// its per-line scratch: it clears it once per line and would thrash the heap if
+// this freed. SetSizeCore is still the implementation rather than a written-out
+// `_size = 0`, so that if this reading is ever wrong the two disagree under the
+// oracle instead of agreeing by construction.
+Site g_j3_180076a40 = { { "Collection::Array<Glyph16>::SetSize(0) @0x180076a40",
+                          0, 0, false, false }, 0x180076a40 };
+void RtColl_ArraySetSize_180076a40(void* a) {
+    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpecD2_Glyph10A4,
+                &g_j3_180076a40);
+}
+
+// ---- the two element COPY CONSTRUCTORS, at their own addresses -------------
+// AssignFace28Impl / AssignSubMesh80Impl above ARE 0x180065b70 and 0x1800734a0,
+// so they get entry points with retail's signature (RCX = dst, RDX = src,
+// return RAX = dst) rather than a second body. Registering them matters at
+// cutover: retail's SetSize reaches each by rel32, and our SetSize reaches
+// them through the ArraySpec, but a THIRD caller resolving the address (or the
+// mint) would otherwise find nothing.
+void* RtColl_ElemCopyCtor_180065b70(void* dst, const void* src) {
+    return AssignFace28Impl(static_cast<uint8_t*>(dst),
+                            static_cast<const uint8_t*>(src));
+}
+void* RtColl_ElemCopyCtor_1800734a0(void* dst, const void* src) {
+    return AssignSubMesh80Impl(static_cast<uint8_t*>(dst),
+                               static_cast<const uint8_t*>(src));
+}
+
+
 }  // namespace rtcoll
 
 // ============================================================================
@@ -4146,6 +4572,40 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x18003d1c0, (void*)&RtColl_ArraySetSize_18003d1c0);
     RegisterRuntimeAddr(0x18003d430, (void*)&RtColl_ArraySetSize_18003d430);
 
+
+    // ---- CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12) --------------
+    // The Collection::Array half of the 48 unnamed helper bodies at or above
+    // 0x1800571b0 that our ports reach by address. Spelled as LITERALS so
+    // tools/runtime_census.py can see them.
+    // J1 -- seven more copies of the parameterless ~Array body.
+    RegisterRuntimeAddr(0x180065bf0, (void*)&RtColl_ArrayDtor_180065bf0);
+    RegisterRuntimeAddr(0x180065e80, (void*)&RtColl_ArrayDtor_180065e80);
+    RegisterRuntimeAddr(0x180066cd0, (void*)&RtColl_ArrayDtor_180066cd0);
+    RegisterRuntimeAddr(0x180066fa0, (void*)&RtColl_ArrayDtor_180066fa0);
+    RegisterRuntimeAddr(0x180073e60, (void*)&RtColl_ArrayDtor_180073e60);
+    RegisterRuntimeAddr(0x180074250, (void*)&RtColl_ArrayDtor_180074250);
+    RegisterRuntimeAddr(0x180074360, (void*)&RtColl_ArrayDtor_180074360);
+    // J3, two-argument.
+    RegisterRuntimeAddr(0x180062110, (void*)&RtColl_ArraySetSize_180062110);
+    RegisterRuntimeAddr(0x180061bb0, (void*)&RtColl_ArraySetSize_180061bb0);
+    RegisterRuntimeAddr(0x1800660f0, (void*)&RtColl_ArraySetSize_1800660f0);
+    RegisterRuntimeAddr(0x1800666e0, (void*)&RtColl_ArraySetSize_1800666e0);
+    RegisterRuntimeAddr(0x180066bc0, (void*)&RtColl_ArraySetSize_180066bc0);
+    RegisterRuntimeAddr(0x180066e80, (void*)&RtColl_ArraySetSize_180066e80);
+    RegisterRuntimeAddr(0x180066350, (void*)&RtColl_ArraySetSize_180066350);
+    RegisterRuntimeAddr(0x1800774d0, (void*)&RtColl_ArraySetSize_1800774d0);
+    RegisterRuntimeAddr(0x180077330, (void*)&RtColl_ArraySetSize_180077330);
+    RegisterRuntimeAddr(0x18007a4d0, (void*)&RtColl_ArraySetSize_18007a4d0);
+    RegisterRuntimeAddr(0x18007a790, (void*)&RtColl_ArraySetSize_18007a790);
+    RegisterRuntimeAddr(0x18007a900, (void*)&RtColl_ArraySetSize_18007a900);
+    RegisterRuntimeAddr(0x18007aa40, (void*)&RtColl_ArraySetSize_18007aa40);
+    // J3, three-argument (UI::Font::ComputeLineLayout appends one glyph).
+    RegisterRuntimeAddr(0x180076d10, (void*)&RtColl_ArraySetSizeFill_180076d10);
+    // The two element copy constructors the non-trivial specs above call.
+    RegisterRuntimeAddr(0x180065b70, (void*)&RtColl_ElemCopyCtor_180065b70);
+    RegisterRuntimeAddr(0x1800734a0, (void*)&RtColl_ElemCopyCtor_1800734a0);
+    // J3, constant-folded one-argument.
+    RegisterRuntimeAddr(0x180076a40, (void*)&RtColl_ArraySetSize_180076a40);
 
     rtcoll::g_probePending = RtCollectionProbeArmed();
 }

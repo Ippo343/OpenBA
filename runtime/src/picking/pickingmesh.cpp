@@ -140,80 +140,143 @@ void ConstructBody(PickingMesh* self) {
     self->_nodes._capacity = 0;
 }
 
-// ---- generic byte-copy array SetSize: zero-fill tail, no per-element dtor. ----
-template <typename T>
-void GenericArraySetSize(Collection::Array<T>* a, int32_t newSize, int align) {
-    int32_t oldSize = a->_size;
-    if (newSize == oldSize) return;
-    T* oldData = a->_data;
-    a->_size = newSize;
-    if (a->_capacity < newSize) {
-        a->_capacity = newSize;
-        if (newSize == oldSize + 1 && oldSize != 0) a->_capacity = newSize * 3;
-        a->_data = static_cast<T*>(MemAlloc(static_cast<uint64_t>(a->_capacity) * sizeof(T), align));
-    }
-    int32_t copyFrom = (oldData == a->_data) ? oldSize : 0;
-    for (int32_t i = copyFrom; i < newSize; ++i) {
-        if (i < oldSize) a->_data[i] = oldData[i];
-        else a->_data[i] = T{};
-    }
-    if (oldData != a->_data) {
-        if (oldData != nullptr) MemFree(oldData);
+// ---- the Collection::Array<T> instantiations, by ADDRESS -------------------
+//
+// CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12). This file used to carry
+// a private `GenericArraySetSize` template plus a hand-written
+// `SubMeshArraySetSize`, written before the Array family was parameterised.
+// THEY WERE NOT BYTE-FAITHFUL, and the divergences were not cosmetic:
+//
+//   * `GenericArraySetSize` zero-filled the new tail for EVERY element type.
+//     Retail's 0x18007a4d0 (_vertices/_normals) does zero it; 0x18007a790
+//     (_triangles) and 0x18007a900 (_uvs) have NO `else` arm at all and leave
+//     the new tail holding whatever the allocation contained. A template
+//     cannot carry "which arm exists" per instantiation.
+//   * `SubMeshArraySetSize` did a SHALLOW struct copy on the grow arm where
+//     retail CALLs the copy ctor 0x1800734a0 -- which adopts the element's
+//     System::String with a refcount bump and runs `operator=` on all four
+//     inner Arrays, allocating fresh buffers.
+//   * It then skipped retail's per-element destroy on BOTH arms. The comment
+//     it carried -- "retail's shrink-tail path here does not free the
+//     truncated SubMeshes' nested arrays (FUN_18007aa40 has no such call on
+//     the reused-buffer arm)" -- IS WRONG, and is corrected here at its source
+//     per PLAN.md section 6 step 8: 0x18007aa40 CALLs 0x180073ee0 on the
+//     shrink tail AND on the whole old buffer before freeing it. Together with
+//     the shallow copy that made the old body a double-owner on grow and a
+//     leak on shrink.
+//
+// Those copies are gone. Each body is ported ONCE, in
+// runtime/src/collection/array{,_destroy}.cpp with the rest of its family, and
+// reached here by address -- registry-first, so these call OUR bodies from the
+// moment RtCollectionPortInit runs, and at cutover they are all that exists.
+template <typename Fn>
+static Fn RtAddrFn(uintptr_t a) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, a)); }
+
+using ArraySetSizeFn = void (*)(void*, int32_t);
+
+// 0x18007a4d0  Array<Vector3>::SetSize   (_vertices AND _normals: retail shares
+//              one body, stride 0xc, align 4, tail zeroed)
+void VecArraySetSize(Collection::Array<Vector3>* a, int32_t n) {
+    static ArraySetSizeFn fn = nullptr;
+    if (!fn) fn = RtAddrFn<ArraySetSizeFn>(0x18007a4d0ull);
+    fn(a, n);
+}
+// 0x18007a790  Array<Triangle>::SetSize  (stride 0xc, align 2, tail UNTOUCHED)
+void TriArraySetSize(Collection::Array<Triangle>* a, int32_t n) {
+    static ArraySetSizeFn fn = nullptr;
+    if (!fn) fn = RtAddrFn<ArraySetSizeFn>(0x18007a790ull);
+    fn(a, n);
+}
+// 0x18007a900  Array<UV16>::SetSize      (stride 4, align 2, tail UNTOUCHED)
+void UvArraySetSize(Collection::Array<UV16>* a, int32_t n) {
+    static ArraySetSizeFn fn = nullptr;
+    if (!fn) fn = RtAddrFn<ArraySetSizeFn>(0x18007a900ull);
+    fn(a, n);
+}
+
+// 0x18007aa40  Array<SubMesh>::SetSize. NON-TRIVIAL: element copy ctor
+// 0x1800734a0, per-element destroy 0x180073ee0 on the shrink tail and on the
+// abandoned buffer. See the banner above for what the old private copy got
+// wrong.
+void SubMeshArraySetSize(Collection::Array<SubMesh>* a, int32_t n) {
+    static ArraySetSizeFn fn = nullptr;
+    if (!fn) fn = RtAddrFn<ArraySetSizeFn>(0x18007aa40ull);
+    fn(a, n);
+}
+
+// ---- the two Serialize halves retail keeps out of line --------------------
+//
+// 0x18007a350(Array<Triangle>*, Serializer*) -- the triangle sub-walk. Retail
+// reads the count out of the array header (`[RCX+8]`), serializes it with
+// kScalarInt, grows the array when reading, and only then walks TWO
+// kArrayUShort(n=3) per element, at +0x00 and +0x06. Its argument order is
+// (RCX = the Array, RDX = the Serializer) -- the OPPOSITE of 0x18007ac20's.
+void SerializeTrianglesBody(Collection::Array<Triangle>* arr, Serializer* ser) {
+    using ScalarIntFn   = void (*)(ReaderWriter*, int32_t*, const char*);
+    using ArrayUShortFn = void (*)(ReaderWriter*, int32_t, void*, const char*);
+    ReaderWriter* rw = ser->readerWriter;
+    int32_t count = arr->_size;
+    reinterpret_cast<ScalarIntFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8])(rw, &count, nullptr);
+    if (ser->stream->direction == 0) TriArraySetSize(arr, count);
+    auto arrayUShort = reinterpret_cast<ArrayUShortFn>(
+        rw->vtable[rt::io::rw_vtbl::kArrayUShort / 8]);
+    for (int32_t i = 0; i < count; ++i) {
+        arrayUShort(rw, 3, &arr->_data[i].i0, nullptr);
+        arrayUShort(rw, 3, &arr->_data[i].j0, nullptr);
     }
 }
-// FUN_18007a4d0 (_vertices/_normals, stride 0xc align4), FUN_18007a790
-// (_triangles, stride 0xc align2), FUN_18007a900 (_uvs, stride 4 align2) --
-// all four are plain zero-fill-tail grows, no per-element dtor (POD floats/shorts).
-void VecArraySetSize(Collection::Array<Vector3>* a, int32_t n)  { GenericArraySetSize(a, n, 4); }
-void TriArraySetSize(Collection::Array<Triangle>* a, int32_t n) { GenericArraySetSize(a, n, 2); }
-void UvArraySetSize(Collection::Array<UV16>* a, int32_t n)      { GenericArraySetSize(a, n, 2); }
 
-// FUN_18007aa40 -- Collection::Array<SubMesh>::SetSize. Element assign is a
-// deep byte copy (FUN_1800734a0, not further decomposed: SubMesh has no owned
-// pointers of its own beyond the four Array headers already copied field-by-
-// field here); fresh tail is EXACTLY retail's literal SubMesh default (identity
-// transform, inverted/empty AABB) -- see the constants below.
-void SubMeshArraySetSize(Collection::Array<SubMesh>* a, int32_t newSize) {
-    int32_t oldSize = a->_size;
-    if (newSize == oldSize) return;
-    SubMesh* oldData = a->_data;
-    a->_size = newSize;
-    if (a->_capacity < newSize) {
-        a->_capacity = newSize;
-        if (newSize == oldSize + 1 && oldSize != 0) a->_capacity = newSize * 3;
-        a->_data = static_cast<SubMesh*>(MemAlloc(static_cast<uint64_t>(a->_capacity) * sizeof(SubMesh), 8));
+// 0x18007ac20(Serializer*, int count, SubMesh* base) -- the per-SubMesh walk.
+// Read from the raw disassembly rather than the pseudo-C, which drops the
+// third argument on most of these indirect calls.
+void SerializeSubMeshesBody(Serializer* ser, int32_t count, SubMesh* base) {
+    if (count <= 0) return;
+    using StrSerFn      = void (*)(void* str, Serializer* ser);
+    using ScalarIntFn   = void (*)(ReaderWriter*, int32_t*, const char*);
+    using ArrayFloatFn  = void (*)(ReaderWriter*, int32_t, void*, const char*);
+    using ArrayUShortFn = void (*)(ReaderWriter*, int32_t, void*, const char*);
+    ReaderWriter* rw = ser->readerWriter;
+    auto strSer = RT_EXPORT_ONCE(StrSerFn, "?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z");
+    auto scalarInt   = reinterpret_cast<ScalarIntFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8]);
+    auto arrayFloat  = reinterpret_cast<ArrayFloatFn>(rw->vtable[rt::io::rw_vtbl::kArrayFloat / 8]);
+    auto arrayUShort = reinterpret_cast<ArrayUShortFn>(rw->vtable[rt::io::rw_vtbl::kArrayUShort / 8]);
+    const bool reading = (ser->stream->direction == 0);
+
+    for (int32_t i = 0; i < count; ++i) {
+        SubMesh* s = &base[i];
+        strSer(&s->_name, ser);
+        scalarInt(rw, &s->_parent, nullptr);
+        arrayFloat(rw, 4, &s->_local.rotation, nullptr);
+        arrayFloat(rw, 3, &s->_local.translation, nullptr);
+        arrayFloat(rw, 3, &s->_aabb.min, nullptr);
+        arrayFloat(rw, 3, &s->_aabb.max, nullptr);
+
+        int32_t vCount = s->_vertices._size;
+        scalarInt(rw, &vCount, nullptr);
+        if (reading) VecArraySetSize(&s->_vertices, vCount);
+        for (int32_t v = 0; v < vCount; ++v) arrayFloat(rw, 3, &s->_vertices._data[v], nullptr);
+
+        int32_t nCount = s->_normals._size;
+        scalarInt(rw, &nCount, nullptr);
+        if (reading) VecArraySetSize(&s->_normals, nCount);
+        for (int32_t v = 0; v < nCount; ++v) arrayFloat(rw, 3, &s->_normals._data[v], nullptr);
+
+        SerializeTrianglesBody(&s->_triangles, ser);
+
+        int32_t uvCount = s->_uvs._size;
+        scalarInt(rw, &uvCount, nullptr);
+        if (reading) UvArraySetSize(&s->_uvs, uvCount);
+        for (int32_t v = 0; v < uvCount; ++v) arrayUShort(rw, 2, &s->_uvs._data[v], nullptr);
     }
-    int32_t copyFrom = (oldData == a->_data) ? oldSize : 0;
-    for (int32_t i = copyFrom; i < newSize; ++i) {
-        SubMesh* dst = &a->_data[i];
-        if (i < oldSize) {
-            *dst = oldData[i];   // deep-ish: the four Array headers alias the OLD
-                                  // buffers here; FreeSubMeshRange below on the old
-                                  // buffer only runs when data is NOT reused (see
-                                  // the branch below), matching retail's own
-                                  // aliased-then-abandon shape for this element.
-        } else {
-            dst->_name = nullptr;
-            dst->_parent = -1;
-            std::memset(&dst->_local, 0, sizeof(dst->_local));
-            dst->_local.rotation.w = 1.0f;   // identity quaternion
-            const float kBig = 1.0e8f;       // 0x4cbebc20 / 0xccbebc20, retail's literal
-            dst->_aabb.min = { kBig, kBig, kBig };
-            dst->_aabb.max = { -kBig, -kBig, -kBig };
-            dst->_vertices  = { nullptr, 0, 0 };
-            dst->_normals   = { nullptr, 0, 0 };
-            dst->_triangles = { nullptr, 0, 0 };
-            dst->_uvs       = { nullptr, 0, 0 };
-        }
-    }
-    if (oldData == a->_data) {
-        // Retail's shrink-tail path here does not free the truncated SubMeshes'
-        // nested arrays (FUN_18007aa40 has no such call on the reused-buffer arm);
-        // transcribed as read, byte-faithful to retail even though it reads like
-        // a leak on shrink.
-    } else {
-        if (oldData != nullptr) MemFree(oldData);
-    }
+}
+
+// 0x180073720  ~Array<SubMesh>: the element destroy 0x180073ee0, then the
+// plain `~Array`. Retail's ~PickingMesh CALLs exactly this at 0x1801228c4.
+void SubMeshArrayDtor(Collection::Array<SubMesh>* a) {
+    using Fn = void* (*)(void*);
+    static Fn fn = nullptr;
+    if (!fn) fn = RtAddrFn<Fn>(0x180073720ull);
+    fn(a);
 }
 
 }  // namespace
@@ -241,20 +304,13 @@ extern "C" void RtPicking_PickingMesh_Destruct(void* selfv) { CallSlot0(selfv, 0
 extern "C" void RtPicking_PickingMesh_Dtor(void* selfv) {
     PickingMesh* self = static_cast<PickingMesh*>(selfv);
     *reinterpret_cast<void**>(self) = PickingMeshVTable();
-    // FUN_180073720/FUN_180073ee0: free each SubMesh's four nested array
-    // buffers, then the SubMesh array buffer itself.
-    for (int32_t i = 0; i < self->_nodes._size; ++i) {
-        SubMesh* s = &self->_nodes._data[i];
-        if (s->_uvs._data)       MemFree(s->_uvs._data);
-        if (s->_triangles._data) MemFree(s->_triangles._data);
-        if (s->_normals._data)   MemFree(s->_normals._data);
-        if (s->_vertices._data)  MemFree(s->_vertices._data);
-        RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(&s->_name));
-    }
-    if (self->_nodes._data) MemFree(self->_nodes._data);
-    self->_nodes._data = nullptr;
-    self->_nodes._size = 0;
-    self->_nodes._capacity = 0;
+    // Retail CALLs 0x180073720 here (at 0x1801228c4): the element destroy
+    // 0x180073ee0 over every SubMesh -- four inner buffers DESCENDING from
+    // +0x70 and then the String at +0x00 -- followed by the plain `~Array`.
+    // This used to be written out inline, with the four frees in the wrong
+    // order relative to retail and no header clear per element; it now goes
+    // through the ported bodies (batch D2, 2026-09-12).
+    SubMeshArrayDtor(&self->_nodes);
     RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(&self->_name2));
     RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(&self->_name1));
     using ExtDtorFn = void (*)(void*);
@@ -281,14 +337,8 @@ extern "C" bool RtPicking_PickingMesh_Serialize(void* selfv, void* streamv) {
 
     using ScalarBoolFn   = void (*)(ReaderWriter*, bool*, const char*);
     using ScalarIntFn    = void (*)(ReaderWriter*, int32_t*, const char*);
-    using ScalarUShortFn = void (*)(ReaderWriter*, uint16_t*, const char*);
-    using ArrayFloatFn   = void (*)(ReaderWriter*, int32_t, void*, const char*);
-    using ArrayUShortFn  = void (*)(ReaderWriter*, int32_t, void*, const char*);
     auto scalarBool   = reinterpret_cast<ScalarBoolFn>(rw->vtable[rt::io::rw_vtbl::kScalarBool / 8]);
     auto scalarInt    = reinterpret_cast<ScalarIntFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8]);
-    auto scalarUShort = reinterpret_cast<ScalarUShortFn>(rw->vtable[rt::io::rw_vtbl::kScalarUShort / 8]);
-    auto arrayFloat   = reinterpret_cast<ArrayFloatFn>(rw->vtable[rt::io::rw_vtbl::kArrayFloat / 8]);
-    auto arrayUShort  = reinterpret_cast<ArrayUShortFn>(rw->vtable[rt::io::rw_vtbl::kArrayUShort / 8]);
     const bool reading = (stream->direction == 0);
 
     scalarBool(rw, &self->_flag, nullptr);
@@ -297,44 +347,28 @@ extern "C" bool RtPicking_PickingMesh_Serialize(void* selfv, void* streamv) {
     scalarInt(rw, &nodeCount, nullptr);
     if (reading) SubMeshArraySetSize(&self->_nodes, nodeCount);
 
-    for (int32_t i = 0; i < nodeCount; ++i) {
-        SubMesh* s = &self->_nodes._data[i];
-        strSer(&s->_name, &ser);
-        scalarInt(rw, &s->_parent, nullptr);
-        arrayFloat(rw, 4, &s->_local.rotation, nullptr);
-        arrayFloat(rw, 3, &s->_local.translation, nullptr);
-        arrayFloat(rw, 3, &s->_aabb.min, nullptr);
-        arrayFloat(rw, 3, &s->_aabb.max, nullptr);
-
-        int32_t vCount = s->_vertices._size;
-        scalarInt(rw, &vCount, nullptr);
-        if (reading) VecArraySetSize(&s->_vertices, vCount);
-        for (int32_t v = 0; v < vCount; ++v) arrayFloat(rw, 3, &s->_vertices._data[v], nullptr);
-
-        int32_t nCount = s->_normals._size;
-        scalarInt(rw, &nCount, nullptr);
-        if (reading) VecArraySetSize(&s->_normals, nCount);
-        for (int32_t v = 0; v < nCount; ++v) arrayFloat(rw, 3, &s->_normals._data[v], nullptr);
-
-        int32_t tCount = s->_triangles._size;
-        scalarInt(rw, &tCount, nullptr);
-        if (reading) TriArraySetSize(&s->_triangles, tCount);
-        for (int32_t t = 0; t < tCount; ++t) {
-            arrayUShort(rw, 3, &s->_triangles._data[t].i0, nullptr);
-            arrayUShort(rw, 3, &s->_triangles._data[t].j0, nullptr);
-        }
-
-        int32_t uvCount = s->_uvs._size;
-        scalarInt(rw, &uvCount, nullptr);
-        if (reading) UvArraySetSize(&s->_uvs, uvCount);
-        for (int32_t v = 0; v < uvCount; ++v) arrayUShort(rw, 2, &s->_uvs._data[v], nullptr);
-    }
+    // Retail CALLs 0x18007ac20 here rather than inlining the walk; so does
+    // this, through the ported body, so the registered function is the one
+    // that runs (batch D2, 2026-09-12).
+    SerializeSubMeshesBody(&ser, nodeCount, self->_nodes._data);
 
     if (rw != nullptr) {
         using DeleteFn = void (*)(ReaderWriter*, int);
         reinterpret_cast<DeleteFn>(rw->vtable[0])(rw, 1);
     }
     return true;
+}
+
+// ---- CUTOVER CLOSURE BATCH D2: the two registered Serialize halves --------
+// Retail's own signatures, so these can stand at their addresses for any
+// caller. Note the argument ORDER differs between them: 0x18007a350 takes the
+// Array first, 0x18007ac20 the Serializer.
+extern "C" void RtPicking_PickingMesh_SerializeTriangles(void* arr, void* ser) {
+    SerializeTrianglesBody(static_cast<Collection::Array<Triangle>*>(arr),
+                           static_cast<Serializer*>(ser));
+}
+extern "C" void RtPicking_PickingMesh_SerializeSubMeshes(void* ser, int32_t count, void* base) {
+    SerializeSubMeshesBody(static_cast<Serializer*>(ser), count, static_cast<SubMesh*>(base));
 }
 
 int RtPickingPickingMeshRegister() {
@@ -358,5 +392,12 @@ int RtPickingPickingMeshRegister() {
     RegisterRuntimeAddr  (0x1801228a0ull,                                (void*)&RtPicking_PickingMesh_Dtor);
     RegisterRuntimeExport("?Serialize@PickingMesh@Picking@@UEAA_NAEAVStream@IO@@@Z", (void*)&RtPicking_PickingMesh_Serialize); ++n;
     RegisterRuntimeAddr  (0x180122960ull,                                                  (void*)&RtPicking_PickingMesh_Serialize);
+    // ---- CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12) --------------
+    // The two out-of-line halves of Serialize. Unexported in both builds, so
+    // RegisterRuntimeAddr only. Their Array callees (0x18007a4d0, 0x18007a790,
+    // 0x18007a900, 0x18007aa40, 0x180073720, 0x180073ee0) are registered by
+    // runtime/src/collection/array{,_destroy}.cpp in the same commit.
+    RegisterRuntimeAddr  (0x18007a350ull, (void*)&RtPicking_PickingMesh_SerializeTriangles);
+    RegisterRuntimeAddr  (0x18007ac20ull, (void*)&RtPicking_PickingMesh_SerializeSubMeshes);
     return n;
 }

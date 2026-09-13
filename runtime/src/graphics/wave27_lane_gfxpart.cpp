@@ -677,6 +677,10 @@ extern "C" void RtGraphics_ParticleInstance_AddDrawItems(
 // reset). Written below with that exact shape rather than as `!= 0.0f`, which a
 // compiler is free to reassociate.
 // ============================================================================
+// Defined with the rest of batch D2 at the bottom of this file; declared here
+// because this is its first use.
+extern "C" void* RtGraphics_ParticlePool_OperatorNew();
+
 extern "C" void RtGraphics_ParticleInstance_SetParticle(void* selfv, void* particlev) {
     RT_DIFF_BEGIN("Graphics::ParticleInstance::SetParticle[ATTENDANCE]");
     ++g_piSetParticle;
@@ -738,7 +742,7 @@ extern "C" void RtGraphics_ParticleInstance_SetParticle(void* selfv, void* parti
         // at lane E's allocator at cutover, exactly as array.cpp's banner says.
         // CONSEQUENCE: a null allocation is retail's own tolerated case — it
         // stores nullptr and the caller copes — so it is NOT an error here.
-        void* m = rtcoll::MemAlloc(0x40, 8);
+        void* m = RtGraphics_ParticlePool_OperatorNew();
         if (m) {
             using RecordCtorFn = void* (*)(void*, void*);
             // ADDRESS DOOR — SYMBOL: the pool-record ctor at 0x180103bf0,
@@ -1161,6 +1165,73 @@ extern "C" void* RtGraphics_Emitter_DeleteDtor(void* p) {
 // ============================================================================
 // Registration
 // ============================================================================
+// ============================================================================
+// CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12)
+// ============================================================================
+// The two unnamed Graphics::Particle bodies this file has been reaching by
+// address since Wave 27. Both are now ported and registered, so the address
+// doors above land on our code and at cutover they still exist.
+
+// 0x180061a80 -- the per-TU `operator new(0x40)` for a pool record. The whole
+// body is `EnterCriticalSection(_singleton + 0x640);
+// MemoryAllocator::Allocate(_singleton, 0x40, 8); LeaveCriticalSection`, i.e.
+// ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z (0x1800c7a50) with the size and
+// the alignment folded in. It takes NO arguments and returns the block; a null
+// return is retail's own tolerated case (the caller checks), so there is no
+// guard here.
+extern "C" void* RtGraphics_ParticlePool_OperatorNew() {
+    return rtcoll::MemAlloc(0x40, 8);
+}
+
+// 0x180103bf0 -- the pool record's constructor. RCX = the 0x40-byte block,
+// RDX = the owning Graphics::Particle. Store list read from the disassembly and
+// already tabulated above `ParticleBoundsRecord` in
+// runtime/types/graphics/Particle.h:
+//     +0x00..+0x08  three floats  0x4cbebc20 (+1e8f)   Volume::Box::min seed
+//     +0x0c..+0x14  three floats  0xccbebc20 (-1e8f)   Volume::Box::max seed
+//     +0x18         qword 0        the live-particle Array's _data
+//     +0x20         qword 0        that Array's _size (+0x24 its capacity)
+//     +0x28         dword 0        the live particle count
+//     +0x2c         dword -1       the per-frame tag
+//     +0x30         qword 0
+//     +0x38         qword 0
+// then `SetSize(this + 0x18, particle[+0x28])` through 0x180061bb0.
+// The bit patterns are written as raw u32 rather than float literals so the
+// transcription is the shipped immediate and not whatever the compiler rounds
+// to; +1e8f/-1e8f is what they decode to.
+extern "C" void* RtGraphics_ParticlePoolRecord_Ctor(void* recv, void* particlev) {
+    uint32_t* r = static_cast<uint32_t*>(recv);
+    r[0] = 0x4cbebc20u;  r[1] = 0x4cbebc20u;  r[2] = 0x4cbebc20u;
+    r[3] = 0xccbebc20u;  r[4] = 0xccbebc20u;  r[5] = 0xccbebc20u;
+    uint8_t* b = static_cast<uint8_t*>(recv);
+    *reinterpret_cast<uint64_t*>(b + 0x18) = 0;
+    *reinterpret_cast<uint64_t*>(b + 0x20) = 0;
+    *reinterpret_cast<int32_t*> (b + 0x28) = 0;
+    *reinterpret_cast<int32_t*> (b + 0x2c) = -1;
+    *reinterpret_cast<uint64_t*>(b + 0x30) = 0;
+    *reinterpret_cast<uint64_t*>(b + 0x38) = 0;
+
+    // ADDRESS DOOR -- SYMBOL: 0x180061bb0, `Collection::Array<T>::SetSize` for
+    // the record's 0x58-byte live-particle slot. Ported and registered by
+    // runtime/src/collection/array.cpp in this same commit, so registry-first
+    // makes this our body; it is still reached by address because that is how
+    // retail reaches it and because array.cpp owns the family.
+    using ArraySetSizeFn = void (*)(void*, int32_t);
+    ArraySetSizeFn setSize = RtAddr<ArraySetSizeFn>(0x180061bb0ull);
+    if (setSize) {
+        setSize(b + 0x18, *reinterpret_cast<const int32_t*>(
+                              static_cast<const uint8_t*>(particlev) + 0x28));
+    } else {
+        // Retail has no such branch. Ours can only be taken if the registry AND
+        // the DLL both lack the address, which at cutover means a missing port
+        // rather than a runtime condition -- say so instead of silently
+        // shipping an unsized sub-array.
+        std::fprintf(stderr, "[GFXPART27] pool-record ctor: 0x180061bb0 unresolved "
+                             "-- the record's live-particle array is UNSIZED\n");
+    }
+    return recv;
+}
+
 int RtGraphicsWave27GfxpartRegister() {
     int count = 0;
 
@@ -1192,7 +1263,14 @@ int RtGraphicsWave27GfxpartRegister() {
         "Graphics@@@Object@@@Z",
         (void*)&RtGraphics_ParticleSystemInstance_SetParticle); ++count;
 
-    return count;   // 6 exports + 3 batch-D1 addresses
+    // ---- CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12) -------------
+    // Unexported in both builds, so RegisterRuntimeAddr only (these do not
+    // move `count`, which is the EXPORT count this lane's attendance line
+    // prints).
+    RegisterRuntimeAddr(0x180061a80, (void*)&RtGraphics_ParticlePool_OperatorNew);
+    RegisterRuntimeAddr(0x180103bf0, (void*)&RtGraphics_ParticlePoolRecord_Ctor);
+
+    return count;   // 6 exports + 3 batch-D1 addresses + 2 batch-D2
 }
 
 // The attendance line names THIS lane, so a run log carries a line only this

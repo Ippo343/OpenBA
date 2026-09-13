@@ -165,90 +165,139 @@ void ConstructBody(CollisionMesh* self) {
     self->_surfaces._data = nullptr; self->_surfaces._size = 0; self->_surfaces._capacity = 0;
 }
 
-// ---- generic byte-copy array SetSize: zero-fill tail, no per-element dtor. ----
-// FUN_1800660f0 (_ptsA, align 4), FUN_1800666e0 (_ptsB and _surfaces, align 8).
+// ---- the Collection::Array<T> instantiations, by ADDRESS -------------------
+//
+// CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12). This file used to carry
+// a private `GenericArraySetSize` template plus hand-written Clone/Free/Face
+// resize helpers, written before the Array family was parameterised. THEY WERE
+// NOT BYTE-FAITHFUL, and the divergences were not cosmetic:
+//
+//   * `GenericArraySetSize` zero-filled the new tail for every element type.
+//     Retail's `_ptsA`/`_ptsB` grows DO zero it, but through a single qword
+//     store, and the `Face::quads`/`Face::triples` grows have their own arms;
+//     a template cannot carry "which arm exists" per instantiation.
+//   * `CloneTriples` / `CloneQuads` allocated `n` elements and set capacity to
+//     `n` unconditionally. Retail's `operator=` reuses the existing buffer when
+//     `_capacity >= _size`, and applies the `* 3` treble rule when it grows.
+//   * The align immediates were guessed from the element type rather than read
+//     out of each body's own `MOV EDX,<align>`: retail passes 4 for `_ptsA`,
+//     8 for `_ptsB`/`_surfaces` and 2 for BOTH of Face's inner arrays.
+//
+// Those copies are gone. Each of the seven bodies is now ported ONCE, in
+// runtime/src/collection/array{,_destroy}.cpp with the rest of its family, and
+// reached here by address -- registry-first, so these call OUR bodies from the
+// moment RtCollectionPortInit runs, and at cutover they are all that exists.
+template <typename Fn>
+static Fn RtAddrFn(uintptr_t a) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, a)); }
+
+using ArraySetSizeFn = void (*)(void*, int32_t);
+using ArrayAssignFn  = void* (*)(void*, const void*);
+using RangeDestroyFn = void (*)(void*, void*, int);
+
+// 0x1800660f0  Array<Vec2>::SetSize   (_ptsA,   stride 8, align 4, zero tail)
+void PtsASetSize(Collection::Array<Vec2>* a, int32_t n) {
+    static ArraySetSizeFn fn = nullptr;
+    if (!fn) fn = RtAddrFn<ArraySetSizeFn>(0x1800660f0ull);
+    fn(a, n);
+}
+// 0x1800666e0  Array<Vec2>::SetSize   (_ptsB AND _surfaces: retail shares one
+//              body for both, stride 8, align 8, zero tail)
 template <typename T>
-void GenericArraySetSize(Collection::Array<T>* a, int32_t newSize, int align) {
-    int32_t oldSize = a->_size;
-    if (newSize == oldSize) return;
-    T* oldData = a->_data;
-    a->_size = newSize;
-    if (a->_capacity < newSize) {
-        a->_capacity = newSize;
-        if (newSize == oldSize + 1 && oldSize != 0) a->_capacity = newSize * 3;
-        a->_data = static_cast<T*>(MemAlloc(static_cast<uint64_t>(a->_capacity) * sizeof(T), align));
-    }
-    int32_t copyFrom = (oldData == a->_data) ? oldSize : 0;
-    for (int32_t i = copyFrom; i < newSize; ++i) {
-        if (i < oldSize) a->_data[i] = oldData[i];
-        else a->_data[i] = T{};
-    }
-    if (oldData != a->_data) {
-        if (oldData != nullptr) MemFree(oldData);
-    }
+void PtsBSetSize(Collection::Array<T>* a, int32_t n) {
+    static ArraySetSizeFn fn = nullptr;
+    if (!fn) fn = RtAddrFn<ArraySetSizeFn>(0x1800666e0ull);
+    fn(a, n);
 }
-
-// ---- Face's two nested POD arrays: plain zero-fill-tail grows. ----
-// FUN_180066e80 (_triples, stride 6), FUN_180066bc0 (_quads, stride 8).
-void TripleArraySetSize(Collection::Array<Triple3>* a, int32_t n) { GenericArraySetSize(a, n, 2); }
-void QuadArraySetSize(Collection::Array<Quad4>* a, int32_t n)     { GenericArraySetSize(a, n, 2); }
-
-// FUN_180066de0 / FUN_180066b30 — deep-clone a Face's nested array into a fresh buffer.
-void CloneTriples(Collection::Array<Triple3>* dst, const Collection::Array<Triple3>* src) {
-    dst->_data = nullptr; dst->_size = 0; dst->_capacity = 0;
-    int32_t n = src->_size;
-    if (n <= 0) return;
-    dst->_size = n; dst->_capacity = n;
-    dst->_data = static_cast<Triple3*>(MemAlloc(static_cast<uint64_t>(n) * sizeof(Triple3), 2));
-    for (int32_t i = 0; i < n; ++i) dst->_data[i] = src->_data[i];
+// 0x180066bc0  Array<Quad4>::SetSize   (Face::quads,   stride 8, align 2)
+void QuadArraySetSize(Collection::Array<Quad4>* a, int32_t n) {
+    static ArraySetSizeFn fn = nullptr;
+    if (!fn) fn = RtAddrFn<ArraySetSizeFn>(0x180066bc0ull);
+    fn(a, n);
 }
-void CloneQuads(Collection::Array<Quad4>* dst, const Collection::Array<Quad4>* src) {
-    dst->_data = nullptr; dst->_size = 0; dst->_capacity = 0;
-    int32_t n = src->_size;
-    if (n <= 0) return;
-    dst->_size = n; dst->_capacity = n;
-    dst->_data = static_cast<Quad4*>(MemAlloc(static_cast<uint64_t>(n) * sizeof(Quad4), 2));
-    for (int32_t i = 0; i < n; ++i) dst->_data[i] = src->_data[i];
+// 0x180066e80  Array<Triple3>::SetSize (Face::triples, stride 6, align 2)
+void TripleArraySetSize(Collection::Array<Triple3>* a, int32_t n) {
+    static ArraySetSizeFn fn = nullptr;
+    if (!fn) fn = RtAddrFn<ArraySetSizeFn>(0x180066e80ull);
+    fn(a, n);
 }
-// FUN_1800664c0 — release a Face's two nested buffers over [data, data+count).
+// 0x180066350  Array<Face>::SetSize    (element copy ctor 0x180065b70, shrink /
+//              realloc destroy 0x1800664c0)
+void FaceArraySetSize(Collection::Array<Face>* a, int32_t n) {
+    static ArraySetSizeFn fn = nullptr;
+    if (!fn) fn = RtAddrFn<ArraySetSizeFn>(0x180066350ull);
+    fn(a, n);
+}
+// 0x1800664c0  the Face range destroy (frees quads THEN triples per element)
 void FreeFacesRange(Face* data, int32_t count) {
+    static RangeDestroyFn fn = nullptr;
+    if (!fn) fn = RtAddrFn<RangeDestroyFn>(0x1800664c0ull);
+    fn(nullptr, data, count);      // retail spills RCX and never reads it
+}
+// 0x180065d40  ~Array<Face>: the range destroy above, then the plain ~Array.
+void FaceArrayDtor(Collection::Array<Face>* a) {
+    using Fn = void* (*)(void*);
+    static Fn fn = nullptr;
+    if (!fn) fn = RtAddrFn<Fn>(0x180065d40ull);
+    fn(a);
+}
+// The four parameterless `~Array` bodies ~CollisionMesh tail-calls.
+void PlainArrayDtor(void* a, uintptr_t addr) {
+    using Fn = void* (*)(void*);
+    reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, addr))(a);
+}
+
+// ---- the two Serialize helpers --------------------------------------------
+//
+// Retail splits CollisionMesh::Serialize's face walk into two out-of-line
+// functions. They are ported with retail's own signatures (the Serializer is
+// RCX in both) so they can be registered at their addresses, and Serialize
+// calls them exactly where retail CALLs them.
+//
+// 0x180066d50(Serializer* ser, int count, Quad4* base) -- FOUR kScalarUShort
+// per element at +0x00, +0x02, +0x04, +0x06, stride 8. Read from the raw
+// disassembly, not the pseudo-C: Ghidra drops the third argument on three of
+// the four calls here (the known indirect-call pitfall).
+void SerializeQuadsBody(Serializer* ser, int32_t count, Quad4* base) {
+    if (count <= 0) return;
+    using ScalarUShortFn = void (*)(ReaderWriter*, uint16_t*, const char*);
+    ReaderWriter* rw = ser->readerWriter;
+    auto scalarUShort = reinterpret_cast<ScalarUShortFn>(
+        rw->vtable[rt::io::rw_vtbl::kScalarUShort / 8]);
     for (int32_t i = 0; i < count; ++i) {
-        if (data[i].quads._data)    MemFree(data[i].quads._data);
-        data[i].quads._data = nullptr; data[i].quads._size = 0; data[i].quads._capacity = 0;
-        if (data[i].triples._data)  MemFree(data[i].triples._data);
-        data[i].triples._data = nullptr; data[i].triples._size = 0; data[i].triples._capacity = 0;
+        scalarUShort(rw, &base[i].a, nullptr);
+        scalarUShort(rw, &base[i].b, nullptr);
+        scalarUShort(rw, &base[i].c, nullptr);
+        scalarUShort(rw, &base[i].d, nullptr);
     }
 }
-// FUN_180066350 — Collection::Array<Face>::SetSize.
-void FaceArraySetSize(Collection::Array<Face>* a, int32_t newSize) {
-    int32_t oldSize = a->_size;
-    if (newSize == oldSize) return;
-    Face* oldData = a->_data;
-    a->_size = newSize;
-    if (a->_capacity < newSize) {
-        a->_capacity = newSize;
-        if (newSize == oldSize + 1 && oldSize != 0) a->_capacity = newSize * 3;
-        a->_data = static_cast<Face*>(MemAlloc(static_cast<uint64_t>(a->_capacity) * sizeof(Face), 8));
-    }
-    int32_t copyFrom = (oldData == a->_data) ? oldSize : 0;
-    for (int32_t i = copyFrom; i < newSize; ++i) {
-        Face* dst = &a->_data[i];
-        if (i < oldSize) {
-            dst->field0 = oldData[i].field0;
-            dst->_pad04 = 0;
-            CloneTriples(&dst->triples, &oldData[i].triples);
-            CloneQuads(&dst->quads, &oldData[i].quads);
-        } else {
-            dst->field0 = 0; dst->_pad04 = 0;
-            dst->triples = { nullptr, 0, 0 };
-            dst->quads   = { nullptr, 0, 0 };
-        }
-    }
-    if (oldData == a->_data) {
-        if (newSize < oldSize) FreeFacesRange(oldData + newSize, oldSize - newSize);
-    } else {
-        FreeFacesRange(oldData, oldSize);
-        if (oldData != nullptr) MemFree(oldData);
+
+// 0x1800665c0(Serializer* ser, int count, Face* base) -- the per-face walk.
+// Order, from the disassembly: field0, THEN quads (count, grow when reading,
+// then 0x180066d50), THEN triples (count, grow when reading, then one
+// kArrayUShort(n=3) per element). The `if (reading)` test retail writes is
+// `*(int*)(ser->stream + 8) == 0`, i.e. Stream::direction.
+void SerializeFacesBody(Serializer* ser, int32_t count, Face* base) {
+    if (count <= 0) return;
+    using ScalarIntFn   = void (*)(ReaderWriter*, int32_t*, const char*);
+    using ArrayUShortFn = void (*)(ReaderWriter*, int32_t, void*, const char*);
+    ReaderWriter* rw = ser->readerWriter;
+    auto scalarInt   = reinterpret_cast<ScalarIntFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8]);
+    auto arrayUShort = reinterpret_cast<ArrayUShortFn>(rw->vtable[rt::io::rw_vtbl::kArrayUShort / 8]);
+    const bool reading = (ser->stream->direction == 0);
+    for (int32_t i = 0; i < count; ++i) {
+        Face* f = &base[i];
+        scalarInt(rw, &f->field0, nullptr);
+
+        int32_t quadCount = f->quads._size;
+        scalarInt(rw, &quadCount, nullptr);
+        if (reading) QuadArraySetSize(&f->quads, quadCount);
+        SerializeQuadsBody(ser, quadCount, f->quads._data);
+
+        int32_t tripleCount = f->triples._size;
+        scalarInt(rw, &tripleCount, nullptr);
+        if (reading) TripleArraySetSize(&f->triples, tripleCount);
+        for (int32_t t = 0; t < tripleCount; ++t)
+            arrayUShort(rw, 3, &f->triples._data[t], nullptr);
     }
 }
 
@@ -276,18 +325,16 @@ extern "C" void RtCollision2D_CollisionMesh_Destruct(void* selfv) { CallSlot0(se
 // ??1CollisionMesh@Collision2D@@UEAA@XZ (0x180065400)
 extern "C" void RtCollision2D_CollisionMesh_Dtor(void* selfv) {
     CollisionMesh* self = static_cast<CollisionMesh*>(selfv);
-    // _surfaces (ExternalPtr<Surface>, bare pointers -- just free the buffer).
-    if (self->_surfaces._data) MemFree(self->_surfaces._data);
-    self->_surfaces = { nullptr, 0, 0 };
-    // _faces -- release each element's nested arrays, then the buffer.
-    FreeFacesRange(self->_faces._data, self->_faces._size);
-    if (self->_faces._data) MemFree(self->_faces._data);
-    self->_faces = { nullptr, 0, 0 };
-    // _ptsB / _ptsA -- plain buffers, no per-element dtor.
-    if (self->_ptsB._data) MemFree(self->_ptsB._data);
-    self->_ptsB = { nullptr, 0, 0 };
-    if (self->_ptsA._data) MemFree(self->_ptsA._data);
-    self->_ptsA = { nullptr, 0, 0 };
+    // The four `~Array` calls retail makes, through the ported bodies rather
+    // than inlined. The pairing is read from retail's own CALLs at 0x18006541a
+    // / 0x180065424 / 0x18006542e / 0x180065438, NOT guessed from the member
+    // order: _surfaces (+0x60) goes through 0x180065e80, _faces (+0x50)
+    // through the element-destroy pair 0x180065d40, and BOTH _ptsB (+0x40) and
+    // _ptsA (+0x30) through the single body 0x180065bf0.
+    PlainArrayDtor(&self->_surfaces, 0x180065e80ull);
+    FaceArrayDtor(&self->_faces);
+    PlainArrayDtor(&self->_ptsB, 0x180065bf0ull);
+    PlainArrayDtor(&self->_ptsA, 0x180065bf0ull);
     RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(&self->_name2));
     RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(&self->_name1));
     using ExtDtorFn = void (*)(void*);
@@ -313,57 +360,36 @@ extern "C" bool RtCollision2D_CollisionMesh_Serialize(void* selfv, void* streamv
     strSer(&self->_name2, &ser);
 
     using ScalarIntFn    = void (*)(ReaderWriter*, int32_t*, const char*);
-    using ScalarUShortFn = void (*)(ReaderWriter*, uint16_t*, const char*);
     using ArrayFloatFn   = void (*)(ReaderWriter*, int32_t, void*, const char*);
-    using ArrayUShortFn  = void (*)(ReaderWriter*, int32_t, void*, const char*);
     auto scalarInt    = reinterpret_cast<ScalarIntFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8]);
-    auto scalarUShort = reinterpret_cast<ScalarUShortFn>(rw->vtable[rt::io::rw_vtbl::kScalarUShort / 8]);
     auto arrayFloat   = reinterpret_cast<ArrayFloatFn>(rw->vtable[rt::io::rw_vtbl::kArrayFloat / 8]);
-    auto arrayUShort  = reinterpret_cast<ArrayUShortFn>(rw->vtable[rt::io::rw_vtbl::kArrayUShort / 8]);
     const bool reading = (stream->direction == 0);
 
     // _ptsA
     int32_t nA = self->_ptsA._size;
     scalarInt(rw, &nA, nullptr);
-    if (reading) GenericArraySetSize(&self->_ptsA, nA, 4);
+    if (reading) PtsASetSize(&self->_ptsA, nA);
     for (int32_t i = 0; i < nA; ++i) arrayFloat(rw, 2, &self->_ptsA._data[i], nullptr);
 
     // _ptsB
     int32_t nB = self->_ptsB._size;
     scalarInt(rw, &nB, nullptr);
-    if (reading) GenericArraySetSize(&self->_ptsB, nB, 8);
+    if (reading) PtsBSetSize(&self->_ptsB, nB);
     for (int32_t i = 0; i < nB; ++i) arrayFloat(rw, 2, &self->_ptsB._data[i], nullptr);
 
     // _faces
     int32_t nF = self->_faces._size;
     scalarInt(rw, &nF, nullptr);
     if (reading) FaceArraySetSize(&self->_faces, nF);
-    for (int32_t i = 0; i < nF; ++i) {
-        Face* f = &self->_faces._data[i];
-        scalarInt(rw, &f->field0, nullptr);
-
-        int32_t quadCount = f->quads._size;
-        scalarInt(rw, &quadCount, nullptr);
-        if (reading) QuadArraySetSize(&f->quads, quadCount);
-        for (int32_t q = 0; q < quadCount; ++q) {
-            scalarUShort(rw, &f->quads._data[q].a, nullptr);
-            scalarUShort(rw, &f->quads._data[q].b, nullptr);
-            scalarUShort(rw, &f->quads._data[q].c, nullptr);
-            scalarUShort(rw, &f->quads._data[q].d, nullptr);
-        }
-
-        int32_t tripleCount = f->triples._size;
-        scalarInt(rw, &tripleCount, nullptr);
-        if (reading) TripleArraySetSize(&f->triples, tripleCount);
-        for (int32_t t = 0; t < tripleCount; ++t) {
-            arrayUShort(rw, 3, &f->triples._data[t], nullptr);
-        }
-    }
+    // Retail CALLs 0x1800665c0 here rather than inlining the walk; so does
+    // this, through the ported body, so the registered function is the one
+    // that runs (batch D2, 2026-09-12).
+    SerializeFacesBody(&ser, nF, self->_faces._data);
 
     // _surfaces (ExternalPtr<Collision2D::Surface>)
     int32_t nS = self->_surfaces._size;
     scalarInt(rw, &nS, nullptr);
-    if (reading) GenericArraySetSize(&self->_surfaces, nS, 8);
+    if (reading) PtsBSetSize(&self->_surfaces, nS);
     const void* surfaceTypeInfo = SurfaceTypeInfo();
     for (int32_t i = 0; i < nS; ++i) {
         RtObject_ExternalPtr_Serialize(
@@ -375,6 +401,16 @@ extern "C" bool RtCollision2D_CollisionMesh_Serialize(void* selfv, void* streamv
         reinterpret_cast<DeleteFn>(rw->vtable[0])(rw, 1);
     }
     return true;
+}
+
+// ---- CUTOVER CLOSURE BATCH D2: the two registered Serialize halves --------
+// Retail's signatures exactly (RCX = the Serializer, R8 = the element base),
+// so these can stand at 0x1800665c0 / 0x180066d50 for any caller.
+extern "C" void RtCollision2D_CollisionMesh_SerializeFaces(void* ser, int32_t count, void* base) {
+    SerializeFacesBody(static_cast<Serializer*>(ser), count, static_cast<Face*>(base));
+}
+extern "C" void RtCollision2D_CollisionMesh_SerializeQuads(void* ser, int32_t count, void* base) {
+    SerializeQuadsBody(static_cast<Serializer*>(ser), count, static_cast<Quad4*>(base));
 }
 
 int RtCollision2DCollisionMeshRegister() {
@@ -398,5 +434,11 @@ int RtCollision2DCollisionMeshRegister() {
     RegisterRuntimeAddr  (0x180065400ull,                                      (void*)&RtCollision2D_CollisionMesh_Dtor);
     RegisterRuntimeExport("?Serialize@CollisionMesh@Collision2D@@UEAA_NAEAVStream@IO@@@Z", (void*)&RtCollision2D_CollisionMesh_Serialize); ++n;
     RegisterRuntimeAddr  (0x180108cd0ull,                                                       (void*)&RtCollision2D_CollisionMesh_Serialize);
+    // ---- CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12) --------------
+    // The two out-of-line halves of Serialize. Unexported in both builds, so
+    // RegisterRuntimeAddr only. Their Array callees are registered by
+    // runtime/src/collection/array{,_destroy}.cpp in the same commit.
+    RegisterRuntimeAddr  (0x1800665c0ull, (void*)&RtCollision2D_CollisionMesh_SerializeFaces);
+    RegisterRuntimeAddr  (0x180066d50ull, (void*)&RtCollision2D_CollisionMesh_SerializeQuads);
     return n;
 }

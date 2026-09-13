@@ -1311,6 +1311,147 @@ void RtSystem_StrCompareProbe() {
 // ============================================================
 // Registration
 // ============================================================
+namespace RtSystem {
+
+// ============================================================
+// CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12)
+// Four more System::String members, all exported and all previously reached
+// only by address from runtime/src/ui/editelement.cpp.
+// ============================================================
+
+// ??HSystem@@YA?AVString@0@AEBV10@D@Z   retail 0x1800c88b0
+// The free `operator+(const String&, char)`. Namespace scope, so the hidden
+// return slot is the FIRST argument (RCX=ret, RDX=lhs, R8B=c).
+//
+// The empty-lhs arm is NOT "return a copy of the char": retail builds a
+// two-byte buffer ON THE STACK holding {c, 0} (one 16-bit store, `MOV
+// [RSP+0x30],AX` with AH already zero) and runs it through String::Set, so the
+// result goes through the normal allocate-and-copy path. Transcribed that way
+// rather than folded, because Set is where the length header is written.
+String* RtSystem_String_ConcatChar(String* ret, const String* lhs, char c) {
+    const int len = RtString_GetLength(lhs);
+    if (lhs->data == nullptr || len == 0) {
+        char buf[2];
+        buf[0] = c;
+        buf[1] = '\0';
+        ret->data = nullptr;
+        RtSystem_String_Set(ret, buf);
+        return ret;
+    }
+
+    String tmp{nullptr};
+    RtString_SetLength(&tmp, len + 1);
+    std::memcpy(tmp.data, lhs->data, static_cast<size_t>(len));
+    tmp.data[len] = c;
+    tmp.data[len + 1] = '\0';
+
+    // Retail's tail, written out rather than expressed as Adopt + Release:
+    // it bumps the refcount and then drops it again (the transfer is a copy
+    // ctor MSVC inlined into a self-cancelling pair) and, unlike the standard
+    // release idiom, it does NOT null `tmp.data` on the surviving branch. The
+    // local dies immediately either way; the pair is reproduced because a
+    // watchpoint on the refcount word sees it.
+    ret->data = nullptr;
+    if (tmp.data != nullptr) {
+        ret->data = tmp.data;
+        int32_t* rc = reinterpret_cast<int32_t*>(tmp.data - 4);
+        ++*rc;
+        --*rc;
+        if (*rc == 0) RtMemFree(tmp.data - 8);
+    }
+    return ret;
+}
+
+// ??YString@System@@QEAA?AV01@D@Z   retail 0x1800c89e0
+// MEMBER operator+=(char): RCX=this, RDX=hidden return slot, R8B=c. Same shape
+// as the two AppendAssign overloads above -- concat into a temporary, Set
+// `this` from it, release the temporary, then return a COPY of the new value.
+String* RtSystem_String_AppendAssignChar(String* self, String* ret, char c) {
+    String tmp{nullptr};
+    RtSystem_String_ConcatChar(&tmp, self, c);
+    RtSystem_String_Set(self, tmp.data);
+    RtString_ReleaseInline(&tmp);
+
+    ret->data = nullptr;
+    RtString_AdoptInline(ret, self->data);
+    return ret;
+}
+
+// ?InsertAt@String@System@@QEAA?AV12@HAEBV12@@Z   retail 0x1800c8510
+// RCX=this, RDX=hidden return slot, R8D=index, R9=the String to insert.
+//
+// Three arms, read from the listing at 0x1800c8547..0x1800c85e9 (Ghidra's
+// pseudo-C drops the third argument of every operator+ call here):
+//   index == 0    -> ret = s + this            (CALL 0x1800c9440, RDX=R9, R8=RCX)
+//   index == len  -> ret = this + s            (RDX=RSI, R8=R9)
+//   otherwise     -> tail = this.SubString(index, len - 1)
+//                    head = this.SubString(0, index - 1)
+//                    tmp  = head + s
+//                    ret  = tmp + tail
+//                    release tmp, head, tail -- in THAT order
+// `len` is re-read from the header on each arm exactly as retail does, and it
+// is 0 when `data` is null. Nothing is clamped: SubString's inclusive-end
+// convention means an index past the end walks past the terminator, which is
+// retail's behaviour and stays.
+String* RtSystem_String_InsertAt(String* self, String* ret, int index, const String* s) {
+    if (index == 0) {
+        RtSystem_String_Concat(ret, s, self);
+        return ret;
+    }
+    if (index == RtString_GetLength(self)) {
+        RtSystem_String_Concat(ret, self, s);
+        return ret;
+    }
+    String tail{nullptr};
+    String head{nullptr};
+    String tmp{nullptr};
+    RtSystem_String_SubString(self, &tail, index, RtString_GetLength(self) - 1);
+    RtSystem_String_SubString(self, &head, 0, index - 1);
+    RtSystem_String_Concat(&tmp, &head, s);
+    RtSystem_String_Concat(ret, &tmp, &tail);
+    RtString_ReleaseInline(&tmp);
+    RtString_ReleaseInline(&head);
+    RtString_ReleaseInline(&tail);
+    return ret;
+}
+
+// ?RemoveAt@String@System@@QEBA?AV12@H@Z   retail 0x1800c86b0
+// RCX=this, RDX=hidden return slot, R8D=index. Three arms, from the listing at
+// 0x1800c86dc..0x1800c8784:
+//   index == 0    -> ret = this.SubString(1, len - 1)
+//   index == len  -> ret = this.SubString(0, len - 2)   *** note: len, not
+//                    len - 1. Removing "at" the length is out of range, and
+//                    retail answers it by dropping the LAST character. Kept. ***
+//   otherwise     -> head = this.SubString(0, index - 1)
+//                    tail = this.SubString(index + 1, len - 1)
+//                    ret  = head + tail
+//                    release tail, then head
+String* RtSystem_String_RemoveAt(const String* self, String* ret, int index) {
+    if (index == 0) {
+        RtSystem_String_SubString(self, ret, 1, RtString_GetLength(self) - 1);
+        return ret;
+    }
+    if (index == RtString_GetLength(self)) {
+        RtSystem_String_SubString(self, ret, 0, RtString_GetLength(self) - 2);
+        return ret;
+    }
+    String head{nullptr};
+    String tail{nullptr};
+    RtSystem_String_SubString(self, &head, 0, index - 1);
+    RtSystem_String_SubString(self, &tail, index + 1, RtString_GetLength(self) - 1);
+    RtSystem_String_Concat(ret, &head, &tail);
+    RtString_ReleaseInline(&tail);
+    RtString_ReleaseInline(&head);
+    return ret;
+}
+
+}  // namespace RtSystem
+
+using RtSystem::RtSystem_String_InsertAt;
+using RtSystem::RtSystem_String_RemoveAt;
+using RtSystem::RtSystem_String_ConcatChar;
+using RtSystem::RtSystem_String_AppendAssignChar;
+
 int RtSystemStringRegister() {
     using namespace RtSystem;
     int n = 0;
@@ -1394,6 +1535,23 @@ int RtSystemStringRegister() {
     RegisterRuntimeAddr(0x1800c9440, (void*)&RtSystem_String_Concat);
     RegisterRuntimeAddr(0x1800c92d0, (void*)&RtSystem_String_ConcatCStr);
     RegisterRuntimeAddr(0x1800c8220, (void*)&RtString_SetLength);   // BATCH 8
+
+    // ---- CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12) -------------
+    // Four more members, by NAME and by ADDRESS for the reason the block above
+    // gives. Their live consumers are runtime/src/ui/editelement.cpp, which
+    // reaches all four by address today.
+    RegisterRuntimeExport("?InsertAt@String@System@@QEAA?AV12@HAEBV12@@Z",
+                          (void*)&RtSystem_String_InsertAt); ++n;
+    RegisterRuntimeExport("?RemoveAt@String@System@@QEBA?AV12@H@Z",
+                          (void*)&RtSystem_String_RemoveAt); ++n;
+    RegisterRuntimeExport("??HSystem@@YA?AVString@0@AEBV10@D@Z",
+                          (void*)&RtSystem_String_ConcatChar); ++n;
+    RegisterRuntimeExport("??YString@System@@QEAA?AV01@D@Z",
+                          (void*)&RtSystem_String_AppendAssignChar); ++n;
+    RegisterRuntimeAddr(0x1800c8510, (void*)&RtSystem_String_InsertAt);
+    RegisterRuntimeAddr(0x1800c86b0, (void*)&RtSystem_String_RemoveAt);
+    RegisterRuntimeAddr(0x1800c88b0, (void*)&RtSystem_String_ConcatChar);
+    RegisterRuntimeAddr(0x1800c89e0, (void*)&RtSystem_String_AppendAssignChar);
 
     printf("[RtPort]   System::String: %d exports registered\n", n);
     return n;
