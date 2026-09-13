@@ -104,6 +104,12 @@ Four tiers. Tier 1 is the same dead code as A.3/A.4 and is done in the same pass
 
 Acceptance: no `getenv` outside standalone/options.cpp; the flag list in options.h is the
 whole inventory and CLAUDE.md's harness section points at it.
+`[done 2026-09-13: C.2/C.3/C.4 closed on main 5fdd5715. getenv only in options.cpp; LiveEnabled,
+kDefaultOnFlags and BANISHED_LIVE_COMPONENTS gone; 96 default-on gates + the 12 dormant features
+graduated (proved by sa-run + two resave-gate PASSes with all 12 forced on), ~360 flags deleted,
+~21k lines removed. Verified on 5fdd5715: sa-run + pause-menu quit, AUTOQUIT, Load Game, sa-stress
+(+4.1% vs baseline, box busy), resave gate PASS. The inventory that drove it is
+docs/runtime_port/endgame_c/FLAGS.md (historical).]`
 
 ## B. Real classes
 
