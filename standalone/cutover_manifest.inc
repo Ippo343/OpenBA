@@ -15,8 +15,8 @@ CUTOVER_ROW("?_singleton@AchievementManager@Achievement@@0PEAV12@EA", CUTOVER_RE
 CUTOVER_ROW("?_singleton@Application@1@0PEAV11@EA", CUTOVER_REQUIRED, true, 0x1801fc678ull, "Application", 12)
 // Audio  HARMFUL (DLL-present) / REQUIRED (cutover) / DLL-PRESENT  doors=4  -- verdict is DLL-PRESENT only and 4 by-name door(s) would resolve NULL at cutover
 CUTOVER_ROW("?_singleton@Configuration@Audio@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe758ull, "Audio", 4)
-// Audio  HARMFUL (DLL-present) / REQUIRED (cutover) / DLL-PRESENT  doors=3  -- verdict is DLL-PRESENT only and 3 by-name door(s) would resolve NULL at cutover
-CUTOVER_ROW("?_singleton@Device@Audio@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe760ull, "Audio", 3)
+// Audio  HARMFUL (DLL-present) / REQUIRED (cutover) / DLL-PRESENT  doors=4  -- verdict is DLL-PRESENT only and 4 by-name door(s) would resolve NULL at cutover
+CUTOVER_ROW("?_singleton@Device@Audio@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe760ull, "Audio", 4)
 // Engine  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=1  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_loader@LoaderLoop@Engine@@1VLoader@2@A", CUTOVER_REQUIRED, true, 0x1801fe7b8ull, "Engine", 1)
 // Engine  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=3  -- tag states the verdict inverts at cutover
@@ -29,28 +29,28 @@ CUTOVER_ROW("?_frameIndex@ParticleInstance@Graphics@@1HA", CUTOVER_REQUIRED, tru
 CUTOVER_ROW("?_rng@Particle@Graphics@@1VRandom@System@@A", CUTOVER_REQUIRED, true, 0x1801fe7f0ull, "Graphics", 4)
 // Graphics  HARMFUL / DLL-PRESENT  doors=4  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA", CUTOVER_REQUIRED, true, 0x1801fc70bull, "Graphics", 4)
-// Graphics  HARMFUL / DLL-PRESENT  doors=5  -- tag states the verdict inverts at cutover
-CUTOVER_ROW("?_singleton@AnimationManager@Graphics@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe7b0ull, "Graphics", 5)
+// Graphics  HARMFUL / DLL-PRESENT  doors=6  -- tag states the verdict inverts at cutover
+CUTOVER_ROW("?_singleton@AnimationManager@Graphics@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe7b0ull, "Graphics", 6)
 // IO  NO-OP / PERMANENT  doors=4  -- NO-OP is permanent, but 4 by-name door(s) resolve NULL with no DLL loaded
 CUTOVER_ROW("??_7ReaderWriter@IO@@6B@", CUTOVER_REQUIRED, true, 0x1801553b0ull, "IO", 4)
 // IO  NO-OP / DLL-PRESENT  doors=10  -- verdict is DLL-PRESENT only and 10 by-name door(s) would resolve NULL at cutover
 CUTOVER_ROW("??_7Stream@IO@@6B@", CUTOVER_REQUIRED, true, 0x1801549a0ull, "IO", 10)
-// IO  HARMFUL / DLL-PRESENT  doors=31  -- tag states the verdict inverts at cutover
-CUTOVER_ROW("?_singleton@FileSystem@IO@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc6a8ull, "IO", 31)
+// IO  HARMFUL / DLL-PRESENT  doors=33  -- tag states the verdict inverts at cutover
+CUTOVER_ROW("?_singleton@FileSystem@IO@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc6a8ull, "IO", 33)
 // IO  HARMFUL / DLL-PRESENT  doors=6  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_singleton@Modification@IO@@2PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc6b0ull, "IO", 6)
 // IO  HARMFUL / DLL-PRESENT  doors=13  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_singleton@Persistence@IO@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc6b8ull, "IO", 13)
-// Input  HARMFUL (DLL-present) / REQUIRED (cutover) / DLL-PRESENT  doors=10  -- verdict is DLL-PRESENT only and 10 by-name door(s) would resolve NULL at cutover
-CUTOVER_ROW("?_singleton@Configuration@Input@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe768ull, "Input", 10)
-// Input  HARMFUL (DLL-present) / REQUIRED (cutover) / DLL-PRESENT  doors=8  -- verdict is DLL-PRESENT only and 8 by-name door(s) would resolve NULL at cutover
-CUTOVER_ROW("?_singleton@Device@Input@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe770ull, "Input", 8)
-// Object  NO-OP / DLL-PRESENT  doors=34  -- verdict is DLL-PRESENT only and 34 by-name door(s) would resolve NULL at cutover
-CUTOVER_ROW("??_7Base@Object@@6B@", CUTOVER_REQUIRED, true, 0x180154788ull, "Object", 34)
-// Object  NO-OP / DLL-PRESENT  doors=7  -- verdict is DLL-PRESENT only and 7 by-name door(s) would resolve NULL at cutover
-CUTOVER_ROW("??_7CompiledExternal@Object@@6B@", CUTOVER_REQUIRED, true, 0x180154a30ull, "Object", 7)
-// Object  NO-OP / DLL-PRESENT  doors=33  -- verdict is DLL-PRESENT only and 33 by-name door(s) would resolve NULL at cutover
-CUTOVER_ROW("??_7External@Object@@6B@", CUTOVER_REQUIRED, true, 0x1801547a0ull, "Object", 33)
+// Input  HARMFUL (DLL-present) / REQUIRED (cutover) / DLL-PRESENT  doors=11  -- verdict is DLL-PRESENT only and 11 by-name door(s) would resolve NULL at cutover
+CUTOVER_ROW("?_singleton@Configuration@Input@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe768ull, "Input", 11)
+// Input  HARMFUL (DLL-present) / REQUIRED (cutover) / DLL-PRESENT  doors=11  -- verdict is DLL-PRESENT only and 11 by-name door(s) would resolve NULL at cutover
+CUTOVER_ROW("?_singleton@Device@Input@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe770ull, "Input", 11)
+// Object  NO-OP / DLL-PRESENT  doors=61  -- verdict is DLL-PRESENT only and 61 by-name door(s) would resolve NULL at cutover
+CUTOVER_ROW("??_7Base@Object@@6B@", CUTOVER_REQUIRED, true, 0x180154788ull, "Object", 61)
+// Object  NO-OP / DLL-PRESENT  doors=8  -- verdict is DLL-PRESENT only and 8 by-name door(s) would resolve NULL at cutover
+CUTOVER_ROW("??_7CompiledExternal@Object@@6B@", CUTOVER_REQUIRED, true, 0x180154a30ull, "Object", 8)
+// Object  NO-OP / DLL-PRESENT  doors=59  -- verdict is DLL-PRESENT only and 59 by-name door(s) would resolve NULL at cutover
+CUTOVER_ROW("??_7External@Object@@6B@", CUTOVER_REQUIRED, true, 0x1801547a0ull, "Object", 59)
 // Object  NO-OP / DLL-PRESENT  doors=3  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("??_7Internal@Object@@6B@", CUTOVER_REQUIRED, true, 0x180154720ull, "Object", 3)
 // Object  HARMFUL / DLL-PRESENT  doors=1  -- tag states the verdict inverts at cutover
@@ -71,8 +71,8 @@ CUTOVER_ROW("?_disableHandler@Debug@System@@0_NA", CUTOVER_REQUIRED, true, 0x180
 CUTOVER_ROW("?_errorString@Error@System@@0PADA", CUTOVER_REQUIRED, true, 0x1801fc720ull, "System", 1)
 // System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=2  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_hideDisplay@Error@System@@0_NA", CUTOVER_REQUIRED, true, 0x1801fc709ull, "System", 2)
-// System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=15  -- tag states the verdict inverts at cutover
-CUTOVER_ROW("?_secondsPerTick@Timer@System@@0NA", CUTOVER_REQUIRED, true, 0x1801fe728ull, "System", 15)
+// System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=20  -- tag states the verdict inverts at cutover
+CUTOVER_ROW("?_secondsPerTick@Timer@System@@0NA", CUTOVER_REQUIRED, true, 0x1801fe728ull, "System", 20)
 // System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=4  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_singleton@Configuration@System@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc6f8ull, "System", 4)
 // System  HARMFUL / DLL-PRESENT  doors=9  -- tag states the verdict inverts at cutover
@@ -123,8 +123,8 @@ CUTOVER_ROW("?_firstBuffer@VertexBuffer@Video@@0PEAV12@EA", CUTOVER_REQUIRED, tr
 CUTOVER_ROW("?_firstRenderBuffer@RenderBuffer@Video@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe790ull, "Video", 4)
 // Video  HARMFUL / DLL-PRESENT  doors=3  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_firstSurface@ImageBuffer@Video@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe780ull, "Video", 3)
-// Video  HARMFUL / DLL-PRESENT  doors=15  -- tag states the verdict inverts at cutover
-CUTOVER_ROW("?_singleton@Configuration@Video@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe7a0ull, "Video", 15)
-// Video  HARMFUL / DLL-PRESENT  doors=29  -- tag states the verdict inverts at cutover
-CUTOVER_ROW("?_singleton@Device@Video@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe7a8ull, "Video", 29)
+// Video  HARMFUL / DLL-PRESENT  doors=17  -- tag states the verdict inverts at cutover
+CUTOVER_ROW("?_singleton@Configuration@Video@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe7a0ull, "Video", 17)
+// Video  HARMFUL / DLL-PRESENT  doors=36  -- tag states the verdict inverts at cutover
+CUTOVER_ROW("?_singleton@Device@Video@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe7a8ull, "Video", 36)
 
