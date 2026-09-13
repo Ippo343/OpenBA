@@ -70,7 +70,7 @@ constexpr uintptr_t kVideoDevice_ActiveDeviceData = 0x100;
 constexpr uintptr_t kRt_VideoDeviceSingleton = 0x1801fe7a8;
 
 // Ghidra address of the VideoDX11 IAT slot the original reads it through.
-// Used only as a cross-check (see Dx11VerifyDeviceSingleton below).
+// Retained as documentation of the shipped import; nothing reads it now.
 constexpr uintptr_t kDx11Iat_VideoDeviceSingleton = 0x1800134b8;
 
 inline void** Dx11VideoDeviceSingletonSlot() {
@@ -361,12 +361,10 @@ inline void Dx11MemFree(void* p) {
 // back the address of the *live* vtable is what keeps a partially-ported class
 // consistent: the seam patches slots inside that same array.
 inline void* Dx11VtableAddress(Vt v) {
-    // Was ResolveAddr(Module::VideoDX11, VtGhidraAddr(v)) — i.e. always the
-    // shipped .rdata array. Dx11LiveVtable() returns our exe-owned array in
-    // Standalone mode and the shipped one in AB mode, which is the whole of
-    // what distinguishes the two. Do not reintroduce the direct ResolveAddr:
-    // in Standalone mode the DLL is not mapped and it would yield a vptr into
-    // nothing.
+    // Was the shipped .rdata array at VtGhidraAddr(v). Dx11LiveVtable()
+    // returns our exe-owned array. Do not reintroduce the direct resolve:
+    // VideoDX11-x64.dll is never mapped (ENDGAME.md A.1) and it would yield a
+    // vptr into nothing.
     return Dx11LiveVtable(v);
 }
 

@@ -248,7 +248,7 @@ const Imports* GetImports() {
         for (const Entry& e : table)
             *e.dst = Dx11ResolveRuntimeImport(e.mangled, e.iat);
 
-        // OUR port of 0x180004340, not ResolveAddr(Module::VideoDX11, ...).
+        // OUR port of 0x180004340, not the shipped body at that address.
         // This used to be the shipped address, on the reasoning that L6 owned
         // the function and both callers would converge once L6 landed. They
         // did not: L6's WM_ACTIVATE handler calls its own port, while this one

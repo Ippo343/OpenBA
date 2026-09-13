@@ -1,7 +1,9 @@
 // Standalone address resolution for Banished reimplementation.
-// In standalone mode, WE are the exe — so Module::Exe addresses resolve
-// via a registry of our reimplemented functions. Module::Runtime and
-// Module::VideoDX11 still use ASLR delta (they're loaded DLLs).
+// WE are the exe, and since ENDGAME.md A.1 we are the runtime too: neither
+// Runtime-x64.dll nor VideoDX11-x64.dll is ever mapped into the process.
+// Module::Exe addresses resolve via a registry of our reimplemented functions;
+// Module::Runtime addresses resolve via the port registry. The ASLR-delta path
+// survives only as the "module not mapped" early-out, which is now always taken.
 
 
 #include "resolve.h"
@@ -30,10 +32,10 @@
 ModuleInfo g_modules[static_cast<int>(Module::COUNT)] = {
     // Exe: WE are the exe — delta is meaningless, handle is us
     { nullptr,              0x140000000ULL, 0, 0, nullptr },
-    // Runtime-x64.dll — still an external DLL
+    // Runtime-x64.dll — never loaded (ENDGAME.md A.1). The row exists so
+    // Module::Runtime keeps a preferred base for the registry lookups; the
+    // handle stays null for the life of the process.
     { "Runtime-x64.dll",    0x180000000ULL, 0, 0, nullptr },
-    // VideoDX11-x64.dll — still an external DLL
-    { "VideoDX11-x64.dll",  0x180000000ULL, 0, 0, nullptr },
 };
 
 // ============================================================
@@ -671,14 +673,15 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr) {
         return 0;
     }
 
-    // Runtime/VideoDX11 — standard ASLR delta.
+    // Runtime — the historical ASLR-delta path.
     //
     // Return 0 when the module is not mapped. Without this the delta is 0 and
     // the function hands back `ghidra_addr` unchanged — 0x1800187c8 and the
     // like — which is not null, looks like a perfectly good pointer, and points
     // at nothing. That is strictly worse than null for every caller, all of
-    // which either null-check or crash immediately. It became reachable when
-    // VideoDX11-x64.dll stopped being loaded in Standalone mode.
+    // which either null-check or crash immediately. Since ENDGAME.md A.1 the
+    // handle is ALWAYS null, so every Module::Runtime address that the port
+    // registry above does not answer returns 0.
     //
     // Guard on the handle, not the delta: a module CAN legitimately load at its
     // preferred base and have delta == 0.
@@ -714,68 +717,34 @@ bool ResolveInit() {
     // Delta is meaningless for standalone exe, but set for completeness
     g_modules[0].delta = 0;
 
-    // Runtime-x64.dll: required (we still depend on it)
-    g_modules[1].handle = GetModuleHandleA(g_modules[1].name);
-    if (!g_modules[1].handle) {
-        // Try LoadLibrary — in standalone mode we load it ourselves
-        g_modules[1].handle = LoadLibraryA(g_modules[1].name);
-    }
-    if (!g_modules[1].handle) {
-        // WAVE 9 LANE G, the CONTROLLED CUTOVER BOOT.
-        //
-        // Normally a missing Runtime-x64.dll is fatal and main.cpp exits here.
-        // That is correct for every ordinary run -- but it makes the ONE
-        // experiment we cannot otherwise perform useless: with the DLL moved
-        // aside the process would die BEFORE RuntimePortInit, before the mint
-        // registers anything, and before a single ported body runs.  The
-        // attempt would learn nothing and read as "cutover fails", which is not
-        // a finding (lane C2, WAVE9_CUTOVER_BOOT_RUNBOOK.md).
-        //
-        // BANISHED_RT_NO_DLL=1 lets boot CONTINUE with a null Runtime handle so
-        // the process gets far enough to say WHERE it dies.  That answers the
-        // one question static analysis cannot: the ORDER in which the missing
-        // pieces are actually reached.  Everything downstream already copes
-        // with a null handle by design -- DllExport/DllAddr return null,
-        // ResolveExportRawImpl returns null, and the mint shadow prints a
-        // DLL=ABSENT banner.
-        //
-        // It is OFF by default and changes nothing when unset: an ordinary run
-        // still takes the fatal exit above.
-        const char* noDll = getenv("BANISHED_RT_NO_DLL");
-        if (!noDll || noDll[0] == '0' || noDll[0] == 'f' || noDll[0] == 'F') return false;
-        fprintf(stderr,
-                "[Standalone] BANISHED_RT_NO_DLL=1 -- continuing with Runtime-x64.dll "
-                "ABSENT.  This is the controlled cutover boot; a crash is the EXPECTED "
-                "outcome and its location is the result.  See "
-                "docs/runtime_port/WAVE9_CUTOVER_BOOT_RUNBOOK.md\n");
-        g_modules[1].runtimeBase = 0;
-        g_modules[1].delta = 0;
-        // A cutover boot has exactly one meaning: our mint owns every exported
-        // data symbol and our allocator owns the heap, because nothing else
-        // exists.  Those two are separate variables only for DLL-present
-        // experiments, so imply them here rather than making every cutover run
-        // reconstruct a four-variable arm (Wave 28 wasted three runs on that).
-        // Explicit =0 still wins, for the rare experiment that wants it.
-        if (!getenv("BANISHED_RT_MINT"))  _putenv_s("BANISHED_RT_MINT",  "1");
-        if (!getenv("BANISHED_RT_ALLOC")) _putenv_s("BANISHED_RT_ALLOC", "1");
-    } else {
-    g_modules[1].runtimeBase = reinterpret_cast<uintptr_t>(g_modules[1].handle);
-    g_modules[1].delta = static_cast<intptr_t>(g_modules[1].runtimeBase)
-                       - static_cast<intptr_t>(g_modules[1].preferredBase);
-    }
+    // Runtime-x64.dll is NEVER loaded (docs/runtime_port/ENDGAME.md A.1). Our
+    // ports, the mint and our allocator are the runtime; a null handle is the
+    // only correct state, and every DllExport/DllAddr/raw door returns null.
+    g_modules[1].handle      = nullptr;
+    g_modules[1].runtimeBase = 0;
+    g_modules[1].delta       = 0;
 
-    // VideoDX11-x64.dll: never loaded. Our own vtables and our ports of the
-    // two exports replace it entirely, and InstallVideoInterfacePrefill stops
-    // Runtime LoadLibrary'ing it too. GetModuleHandle rather than LoadLibrary,
-    // so that if something else in the process has pulled it in, ResolveAddr
-    // still reports a truthful base instead of a zero delta — a wrong non-null
-    // pointer into nothing is exactly the trap that cost a session before.
-    g_modules[2].handle = GetModuleHandleA(g_modules[2].name);
-    if (g_modules[2].handle) {
-        g_modules[2].runtimeBase = reinterpret_cast<uintptr_t>(g_modules[2].handle);
-        g_modules[2].delta = static_cast<intptr_t>(g_modules[2].runtimeBase)
-                           - static_cast<intptr_t>(g_modules[2].preferredBase);
+    // Nothing in the process may map it, either: a mapped copy would give the
+    // raw doors a live base again and half the tree would silently go back to
+    // calling retail.
+    if (GetModuleHandleA("Runtime-x64.dll")) {
+        fprintf(stderr, "[Standalone] FATAL: Runtime-x64.dll is mapped in the "
+                        "process -- the exe must never load it (ENDGAME A.1)\n");
+        fflush(stderr);
+        return false;
     }
+    fprintf(stderr, "[Standalone] Runtime-x64.dll: never loaded (ENDGAME A.1)\n");
+    fflush(stderr);
+
+    // The mint owns every exported data symbol and our allocator owns the heap,
+    // because nothing else exists; a cutover boot has no other meaning. The
+    // readers still key on these variables (standalone/rt_data_mint.cpp,
+    // runtime/src/system/rt_system_port.cpp, runtime/src/object/internal.cpp),
+    // so setting them unconditionally here is the minimal correct step until
+    // ENDGAME A.3/A.4/C delete the readers. An explicit =0 no longer wins.
+    _putenv_s("BANISHED_RT_MINT",   "1");
+    _putenv_s("BANISHED_RT_ALLOC",  "1");
+    _putenv_s("BANISHED_RT_NO_DLL", "1");
 
 #ifdef _DEBUG
     for (int i = 0; i < static_cast<int>(Module::COUNT); i++) {

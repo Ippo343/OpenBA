@@ -13,7 +13,7 @@ Reference decompilation status: [../decomp/videodx11.md](../decomp/videodx11.md)
 dx11/
   README.md      — this file: scope, seam, workflow, status board
   types/         — binary-compatible structs for the 12 *Data classes + D3D11 COM shapes
-  funcs/         — resolved VideoDX11 function pointers (dx11_funcs.h/.cpp)
+  funcs/         — the renderer seam (dx11_seam.h/.cpp)
   src/           — clean C++ reimplementations
 ```
 
@@ -80,7 +80,7 @@ This is strictly better than the delegate:
 - **One object, the real one.** Our slot receives the genuine `DeviceData` with
   the genuine fields, so every slot shares state by construction.
 - **No ordering constraint.** Install any time before `Engine::Startup`; we do it
-  in `standalone/main.cpp` right after `Dx11FuncsInit()`.
+  in `standalone/main.cpp`, Init() step 4b.
 - **Works for all twelve classes** without touching any factory.
 - **One slot = one unit of work**, exactly like an entry in
   `standalone/address_registry.cpp`.
@@ -224,7 +224,7 @@ turned out to be live:
    shipped body — which then called the shipped `CreateColorBuffer`
    (`0x1800052b0`) beneath it. Closed by binding L5 to `Dx11_DeviceData_Resize`,
    the one function in the port with external linkage.
-3. **`Dx11FuncsInit`'s sanity check** *called* the shipped `GetDeviceName` to
+3. **The retired `Dx11FuncsInit`'s sanity check** *called* the shipped `GetDeviceName` to
    prove the ASLR delta. Closed by reading the `.rdata` literal it would have
    returned (`0x1800185c0`) and comparing it to `"DirectX 11"` — same proof,
    nothing executed.
@@ -796,7 +796,7 @@ Same as the project-wide loop in `../CLAUDE.md`, with the DX11 specifics:
    Sizes are already pinned by the `MemAlloc` in each factory.
 3. **Resolve deps** — Runtime-side calls go in `engine/funcs/engine_funcs.h`
    (existing convention, already has `Video::Device::Lock/Unlock` etc.);
-   VideoDX11-internal calls go in `dx11/funcs/dx11_funcs.h`.
+   VideoDX11-internal calls have no home any more: the shipped DLL is never loaded.
 4. **Write clean C++** in `dx11/src/`.
 5. **Wire the slot** with `DX11_REGISTER_SLOT` in the lane's own `.cpp`. Note
    there is no longer an opt-in flag to hide it behind: a registered slot is

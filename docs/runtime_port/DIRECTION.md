@@ -48,8 +48,9 @@ instruments. Wave 29's headline findings are all about instruments, not the game
 2. **No new instruments.** No new `tools/*.py` screens, audits, censuses, controls of
    controls. If a question needs a tool, the answer is almost always the closure or `grep`.
 3. **No new `BANISHED_RT_*` flags.** A port registers unconditionally. The only runtime-port
-   variables that remain meaningful: `BANISHED_RT_DIFF` (oracle), `BANISHED_RT_NO_DLL`
-   (cutover, now implies `RT_MINT` + `RT_ALLOC`), `BANISHED_RT_STRICT` (residue census).
+   variable that remains meaningful: `BANISHED_RT_DIFF` (oracle). `BANISHED_RT_NO_DLL` is no
+   longer meaningful — since ENDGAME A.1 (2026-09-13) the exe never loads Runtime-x64.dll and
+   `RT_MINT`/`RT_ALLOC` are unconditional. `BANISHED_RT_STRICT` (residue census) also remains.
    Existing per-port and per-probe flags are dead weight: remove them as the files are touched,
    never add to them.
 4. **No status in `CLAUDE.md`.** Status lives in `STATUS.md` (one screen). `CLAUDE.md`

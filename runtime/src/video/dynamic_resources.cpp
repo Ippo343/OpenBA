@@ -21,9 +21,9 @@
 // `ResolveExport` misses the port registry for an unported name and falls
 // through to `ResolveExportRawImpl`, which has no module handle and returns
 // null — so ONE unported Runtime export in that table disables EVERY
-// `ContextData` slot, and each of them then forwards to `Orig<>()`, which is
-// `ResolveAddr(Module::VideoDX11, …)` — and VideoDX11-x64.dll is never loaded
-// in this project. That is an EXEC-of-0 on the first draw, not on device loss.
+// `ContextData` slot, and there is no shipped body to fall back to:
+// VideoDX11-x64.dll is never loaded. That is a dead renderer on the first
+// draw, not on device loss.
 //
 // So these four `Video::Device` members are per-frame infrastructure. Their
 // Wave 6 hold-back reason ("running ours and theirs both releases twice and

@@ -3,9 +3,8 @@
 #
 # Loads <save>.sav unattended (BANISHED_AUTOLOAD), triggers the retail autosave
 # path at a fixed frame (BANISHED_SAVE_TEST), quits through the pause menu, and
-# byte-compares the input save against the written Auto.sav. The DLL is moved
-# aside for the run (DLL-absent is the only build from here on) and restored on
-# every exit path.
+# byte-compares the input save against the written Auto.sav. Since ENDGAME A.1
+# the exe never loads Runtime-x64.dll, so there is no DLL to move aside any more.
 #
 # usage: tools/resave_gate/resave_gate.sh <save-name-without-.sav> [outdir] [seconds]
 #   GATE_MODE=roundtrip (default): BANISHED_SAVE_TEST=roundtrip -- the in-process
@@ -25,20 +24,10 @@ SECS="${3:-400}"
 EXE="standalone/build/reimpl-x64.exe"
 mkdir -p "$OUT"
 
-restore() {
-  if [ -f "$G/Runtime-x64.dll.absent" ]; then
-    mv -f "$G/Runtime-x64.dll.absent" "$G/Runtime-x64.dll"
-    echo "[gate] Runtime-x64.dll restored"
-  fi
-}
-trap restore EXIT INT TERM
-
 [ -f "$S/$NAME.sav" ] || { echo "[gate] no such save: $S/$NAME.sav"; exit 2; }
 cp -f "$EXE" "$G/reimpl-x64.exe" || { echo "[gate] exe busy, is a game running?"; exit 2; }
 rm -f "$G/standalone_debug.log" "$G/standalone_error.log" "$G/standalone_crash.log" "$G/standalone_boot_state.txt"
 rm -f "$S/Auto.sav"
-mv -f "$G/Runtime-x64.dll" "$G/Runtime-x64.dll.absent"
-[ -f "$G/Runtime-x64.dll" ] && { echo "[gate] DLL still present, abort"; exit 2; }
 
 cd "$G"
 if [ "$MODE" = roundtrip ]; then
@@ -47,8 +36,7 @@ else
   SAVE_TEST="${GATE_SAVE_FRAME:-600}"; QUIT_FRAME="${GATE_QUIT_FRAME:-2400}"
 fi
 rm -f standalone_roundtrip_loaded.bin standalone_roundtrip_resaved.bin
-env BANISHED_RT_NO_DLL=1 BANISHED_RT_ALLOC=1 BANISHED_RT_MINT=1 \
-    BANISHED_MENU_SCENE="${GATE_MENU_SCENE:-0}" \
+env BANISHED_MENU_SCENE="${GATE_MENU_SCENE:-0}" \
     BANISHED_AUTOLOAD="$NAME" BANISHED_SAVE_TEST="$SAVE_TEST" \
     BANISHED_PAUSEMENU="$QUIT_FRAME" BANISHED_PAUSEMENU_QUIT=120 \
     ./reimpl-x64.exe &

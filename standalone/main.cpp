@@ -1,6 +1,7 @@
 // Standalone entry point for Banished reimplementation.
-// Replaces Application-x64.exe — loads Runtime-x64.dll + VideoDX11-x64.dll
-// and runs the game loop using our reimplemented code.
+// Replaces Application-x64.exe. Since ENDGAME.md A.1 it also replaces the
+// engine: neither Runtime-x64.dll nor VideoDX11-x64.dll is ever loaded, and
+// the game loop runs entirely on our reimplemented code.
 //
 // Build with: make standalone
 // Deploy to: C:/GOG Games/Banished/Application-x64.exe (rename original first!)
@@ -14,7 +15,6 @@
 #include "rt_predict.h"
 #include "engine_funcs.h"
 #include "runtime_funcs.h"
-#include "dx11_funcs.h"
 #include "dx11_seam.h"
 #include "video_interface.h"
 #include "address_registry.h"
@@ -563,72 +563,6 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
         }
     }
 
-    // Specialized handler: IsDerivedFrom-NULL-this crash. RIP at Runtime+0xC039A
-    // is the very first vtable read with RCX=NULL (factory returned NULL).
-    // RDX at that point holds the EXPECTED typeId (the External base check).
-    //
-    // SCOPE NARROWED BY WAVE 3, NOT RETIRED. PLAN.md §2.2 hazard C says to
-    // "retire with Wave 3"; that is wrong. Wave 3 lane A ports
-    // Object::Base::IsDerivedFrom, and registration redirects OUR call sites
-    // only — no detour is installed — so the DLL's own internal callers still
-    // execute Runtime+0xC0390 and this handler still fires for them. What
-    // changed is that a null `this` coming from OUR code now faults inside
-    // reimpl-x64.exe instead, where this branch cannot see it: symbolize that
-    // one with nm against the exe. Retire this block at cutover, when nothing
-    // calls the DLL copy any more.
-    uintptr_t runtimeBase = reinterpret_cast<uintptr_t>(GetModuleHandleA("Runtime-x64.dll"));
-    if (runtimeBase && ctx->Rcx == 0 && ctx->Rip >= runtimeBase + 0xC0390 && ctx->Rip <= runtimeBase + 0xC03A0) {
-        uint32_t expectedTypeId = (uint32_t)ctx->Rdx;
-        CrashLogf("IsDerivedFrom NULL-this: factory returned NULL.\n");
-        CrashLogf("  Expected base typeId in RDX = 0x%08X\n", expectedTypeId);
-        uintptr_t headAddr = ResolveAddr(Module::Runtime, 0x1801fc6e0);
-        ProbeBaseTypeInfo* head = headAddr ? *reinterpret_cast<ProbeBaseTypeInfo**>(headAddr) : nullptr;
-        for (ProbeBaseTypeInfo* p = head; p; p = p->next) {
-            if (p->typeId == expectedTypeId) {
-                CrashLogf("  Expected base = %s (parent=%s, factory=%p)\n",
-                          p->name ? p->name : "?", p->parent ? p->parent : "?", p->factoryFn);
-                break;
-            }
-        }
-    }
-
-    // Specialized handler: External::Load tree-walk crash. The instruction at
-    // Runtime+0xBC73E is `MOV RAX, [RCX+0x10]` with RCX=NULL because the
-    // typeId in [RBP+0x48] wasn't found in Factory::_singleton's tree.
-    //
-    // SAME SCOPE AS THE BLOCK ABOVE (PLAN.md §2.2 hazard C), spelled out here
-    // too because Wave 9 lane F found the note only on the other one and lane G
-    // has to retire BOTH. Retire at cutover: `runtimeBase` is
-    // GetModuleHandleA("Runtime-x64.dll"), which returns null once the DLL is
-    // gone, so this block cannot fire and the `+ 0xBC73E` offset has no base to
-    // be added to. Until then it is live for the DLL's OWN internal callers,
-    // which our registrations do not redirect.
-    if (runtimeBase && ctx->Rip == runtimeBase + 0xBC73E) {
-        uint32_t* typeIdSlot = reinterpret_cast<uint32_t*>(ctx->Rbp + 0x48);
-        if (!IsBadReadPtr(typeIdSlot, sizeof(uint32_t))) {
-            uint32_t typeId = *typeIdSlot;
-            CrashLogf("External::Load: missed typeId=0x%08X at [RBP+0x48]=%p\n",
-                      typeId, (void*)typeIdSlot);
-
-            uintptr_t headAddr = ResolveAddr(Module::Runtime, 0x1801fc6e0);
-            ProbeBaseTypeInfo* head = headAddr ? *reinterpret_cast<ProbeBaseTypeInfo**>(headAddr) : nullptr;
-            bool matched = false;
-            for (ProbeBaseTypeInfo* p = head; p; p = p->next) {
-                if (p->typeId == typeId) {
-                    CrashLogf("  -> matches REGISTERED type: %s (parent=%s)\n",
-                              p->name ? p->name : "?", p->parent ? p->parent : "?");
-                    matched = true;
-                    break;
-                }
-            }
-            if (!matched) {
-                CrashLogf("  -> typeId is NOT in _firstTypeInfo (missing exe-side registration)\n");
-            }
-        } else {
-            CrashLogf("External::Load: [RBP+0x48]=%p is unreadable\n", (void*)typeIdSlot);
-        }
-    }
-
     // Check registry stats
     RegistryStats stats = GetRegistryStats();
     CrashLogf("Registry: %zu registered, %zu stubs hit\n",
@@ -724,192 +658,6 @@ static void TerminateHandler() {
     CrashLogf("=== END terminate ===\n");
     FlushLogsToDisk();
     ExitProcess(5);
-}
-
-// ============================================================
-// MessageBoxW IAT hook for Runtime-x64.dll. MSVC's _purecall handler in
-// Runtime DLL's statically-linked CRT pops MessageBoxW("R6025: pure virtual
-// function call") and BLOCKS until the user clicks OK before abort() runs.
-// Looks like a freeze: log activity stops, no crash log written, and our
-// own __cxa_pure_virtual / std::set_terminate handlers don't fire because
-// the pure-virtual call lives inside the Runtime CRT, not ours.
-//
-// _set_purecall_handler can't help because it only affects the calling
-// CRT. We patch Runtime's IAT entry for user32!MessageBoxW so every call
-// from Runtime DLL routes through our wrapper. If the popup looks like
-// a pure-virtual notice, log + ExitProcess. Otherwise pass through.
-// ============================================================
-typedef int (WINAPI *MessageBoxW_t)(HWND, LPCWSTR, LPCWSTR, UINT);
-static MessageBoxW_t g_realMessageBoxW = nullptr;
-
-static int WINAPI HookedMessageBoxW(HWND hWnd, LPCWSTR text, LPCWSTR caption, UINT type) {
-    char textBuf[1024]    = {0};
-    char captionBuf[256]  = {0};
-    if (text)    WideCharToMultiByte(CP_UTF8, 0, text,    -1, textBuf,    sizeof(textBuf),    nullptr, nullptr);
-    if (caption) WideCharToMultiByte(CP_UTF8, 0, caption, -1, captionBuf, sizeof(captionBuf), nullptr, nullptr);
-
-    // R6025 = MSVC pure-virtual; "pure virtual" covers other CRT variants.
-    bool isPureCall =
-        strstr(textBuf,    "pure virtual") != nullptr ||
-        strstr(textBuf,    "R6025")        != nullptr ||
-        strstr(captionBuf, "R6025")        != nullptr;
-
-    if (isPureCall) {
-        if (g_crashLog == INVALID_HANDLE_VALUE) OpenCrashLog();
-        CrashLogRaw("\n=== STANDALONE PURE-VIRTUAL (MessageBoxW intercepted) ===\n");
-        CrashLogf("Caption: %s\n", captionBuf[0] ? captionBuf : "(none)");
-        CrashLogf("Text:    %s\n", textBuf[0]    ? textBuf    : "(none)");
-
-        // Stack trace from inside the hook — caller chain leads back to
-        // Runtime's _purecall stub and from there to the bad vtable call.
-        CONTEXT ctx;
-        RtlCaptureContext(&ctx);
-        PrintStackTrace(&ctx);
-
-        CrashLogf("=== END (intercepted) ===\n");
-        FlushLogsToDisk();
-        ExitProcess(6);
-    }
-
-    // Legit popup (launcher dialogs, etc.) — pass through.
-    return g_realMessageBoxW
-        ? g_realMessageBoxW(hWnd, text, caption, type)
-        : MessageBoxW(hWnd, text, caption, type);
-}
-
-// Walk Runtime-x64.dll's import descriptors, find user32!MessageBoxW, and
-// swap the IAT slot to point at HookedMessageBoxW. Returns true on success.
-// The hook stays installed for the process lifetime — no restore needed.
-static bool HookRuntimeMessageBoxW() {
-    HMODULE runtime = GetModuleHandleA("Runtime-x64.dll");
-    if (!runtime) return false;
-
-    auto base = reinterpret_cast<uint8_t*>(runtime);
-    auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
-    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return false;
-    auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
-    if (nt->Signature != IMAGE_NT_SIGNATURE) return false;
-
-    auto& importDir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
-    if (!importDir.VirtualAddress || !importDir.Size) return false;
-
-    auto* desc = reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR*>(base + importDir.VirtualAddress);
-    for (; desc->Name; ++desc) {
-        const char* dllName = reinterpret_cast<const char*>(base + desc->Name);
-        if (_stricmp(dllName, "user32.dll") != 0) continue;
-
-        // OriginalFirstThunk holds the name table; FirstThunk is the IAT
-        // (loader fills it with the actual function addresses). If the DLL
-        // was bound, OriginalFirstThunk may still be valid for name lookup.
-        DWORD nameTableRVA = desc->OriginalFirstThunk
-                           ? desc->OriginalFirstThunk
-                           : desc->FirstThunk;
-        auto* nameThunk = reinterpret_cast<IMAGE_THUNK_DATA*>(base + nameTableRVA);
-        auto* iatThunk  = reinterpret_cast<IMAGE_THUNK_DATA*>(base + desc->FirstThunk);
-
-        for (; nameThunk->u1.AddressOfData; ++nameThunk, ++iatThunk) {
-            if (nameThunk->u1.Ordinal & IMAGE_ORDINAL_FLAG64) continue;
-            auto* imp = reinterpret_cast<IMAGE_IMPORT_BY_NAME*>(
-                base + nameThunk->u1.AddressOfData);
-            if (strcmp(imp->Name, "MessageBoxW") != 0) continue;
-
-            DWORD oldProtect = 0;
-            if (!VirtualProtect(&iatThunk->u1.Function, sizeof(uintptr_t),
-                                PAGE_READWRITE, &oldProtect)) {
-                return false;
-            }
-            g_realMessageBoxW = reinterpret_cast<MessageBoxW_t>(iatThunk->u1.Function);
-            iatThunk->u1.Function = reinterpret_cast<uintptr_t>(&HookedMessageBoxW);
-            VirtualProtect(&iatThunk->u1.Function, sizeof(uintptr_t),
-                           oldProtect, &oldProtect);
-            return true;
-        }
-    }
-    return false;
-}
-
-// ============================================================
-// Window-collapse diagnostic: interpose Runtime's user32 imports for
-// SetWindowPos / ShowWindow and report any call that would shrink the engine
-// window to (or near) the minimized metrics. If the collapse originates in the
-// engine we get the calling thread and a backtrace; if nothing is logged the
-// call came from outside Runtime (the OS, DWM, or another module).
-// ============================================================
-static void PrintBacktraceToLog(const char* tag);   // defined below
-
-typedef BOOL (WINAPI *SetWindowPos_t)(HWND, HWND, int, int, int, int, UINT);
-typedef BOOL (WINAPI *ShowWindow_t)(HWND, int);
-static SetWindowPos_t g_realSetWindowPos = nullptr;
-static ShowWindow_t   g_realShowWindow   = nullptr;
-
-static BOOL WINAPI HookedSetWindowPos(HWND hWnd, HWND after, int X, int Y,
-                                      int cx, int cy, UINT flags) {
-    if (!(flags & SWP_NOSIZE) && (cx < 400 || cy < 200)) {
-        printf("[WinTrace] SetWindowPos(hwnd=%p, %d,%d %dx%d, flags=0x%X) tid=%lu"
-               "   <-- COLLAPSING THE WINDOW\n",
-               (void*)hWnd, X, Y, cx, cy, flags, GetCurrentThreadId());
-        PrintBacktraceToLog("WinTrace");
-    }
-    return g_realSetWindowPos(hWnd, after, X, Y, cx, cy, flags);
-}
-
-static BOOL WINAPI HookedShowWindow(HWND hWnd, int nCmdShow) {
-    printf("[WinTrace] ShowWindow(hwnd=%p, nCmdShow=%d) tid=%lu\n",
-           (void*)hWnd, nCmdShow, GetCurrentThreadId());
-    if (nCmdShow == SW_MINIMIZE || nCmdShow == SW_SHOWMINIMIZED ||
-        nCmdShow == SW_SHOWMINNOACTIVE || nCmdShow == SW_HIDE)
-        PrintBacktraceToLog("WinTrace");
-    return g_realShowWindow(hWnd, nCmdShow);
-}
-
-// Swap one named user32 import in Runtime-x64.dll's IAT. Returns the original.
-static void* HookRuntimeUser32Import(const char* fnName, void* replacement) {
-    HMODULE runtime = GetModuleHandleA("Runtime-x64.dll");
-    if (!runtime) return nullptr;
-    auto base = reinterpret_cast<uint8_t*>(runtime);
-    auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
-    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return nullptr;
-    auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
-    if (nt->Signature != IMAGE_NT_SIGNATURE) return nullptr;
-    auto& importDir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
-    if (!importDir.VirtualAddress || !importDir.Size) return nullptr;
-
-    auto* desc = reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR*>(base + importDir.VirtualAddress);
-    for (; desc->Name; ++desc) {
-        const char* dllName = reinterpret_cast<const char*>(base + desc->Name);
-        if (_stricmp(dllName, "user32.dll") != 0) continue;
-        DWORD nameTableRVA = desc->OriginalFirstThunk ? desc->OriginalFirstThunk
-                                                      : desc->FirstThunk;
-        auto* nameThunk = reinterpret_cast<IMAGE_THUNK_DATA*>(base + nameTableRVA);
-        auto* iatThunk  = reinterpret_cast<IMAGE_THUNK_DATA*>(base + desc->FirstThunk);
-        for (; nameThunk->u1.AddressOfData; ++nameThunk, ++iatThunk) {
-            if (nameThunk->u1.Ordinal & IMAGE_ORDINAL_FLAG64) continue;
-            auto* imp = reinterpret_cast<IMAGE_IMPORT_BY_NAME*>(
-                base + nameThunk->u1.AddressOfData);
-            if (strcmp(imp->Name, fnName) != 0) continue;
-            DWORD oldProtect = 0;
-            if (!VirtualProtect(&iatThunk->u1.Function, sizeof(uintptr_t),
-                                PAGE_READWRITE, &oldProtect))
-                return nullptr;
-            void* orig = reinterpret_cast<void*>(iatThunk->u1.Function);
-            iatThunk->u1.Function = reinterpret_cast<uintptr_t>(replacement);
-            VirtualProtect(&iatThunk->u1.Function, sizeof(uintptr_t),
-                           oldProtect, &oldProtect);
-            printf("[WinTrace] hooked Runtime!user32!%s (real=%p)\n", fnName, orig);
-            return orig;
-        }
-    }
-    printf("[WinTrace] Runtime does not import user32!%s\n", fnName);
-    return nullptr;
-}
-
-static void InstallWindowTrace() {
-    g_realSetWindowPos = reinterpret_cast<SetWindowPos_t>(
-        HookRuntimeUser32Import("SetWindowPos", (void*)&HookedSetWindowPos));
-    g_realShowWindow = reinterpret_cast<ShowWindow_t>(
-        HookRuntimeUser32Import("ShowWindow", (void*)&HookedShowWindow));
-    if (!g_realSetWindowPos) g_realSetWindowPos = &SetWindowPos;
-    if (!g_realShowWindow)   g_realShowWindow   = &ShowWindow;
 }
 
 // ============================================================
@@ -1489,43 +1237,22 @@ static LRESULT CALLBACK CallWndProcHook(int code, WPARAM wParam, LPARAM lParam) 
 // openWindowOnActiveMonitor set, snapping the newly created window into a zone
 // on another monitor. Adding reimpl-x64.exe to fancyzones_excluded_apps takes
 // the collapse from 240 occurrences to 0 with no code change. Nothing in this
-// exe or in Runtime ever asked for that size.
+// exe ever asked for that size.
 //
 // Two readings that wasted time here, recorded so they are not repeated:
-//   * 136x39 is SM_CXMIN x SM_CYMIN — the OS *minimum tracking size*, i.e. the
+//   * 136x39 is SM_CXMIN x SM_CYMIN -- the OS *minimum tracking size*, i.e. the
 //     clamp on a degenerate request. It is NOT SM_CXMINIMIZED x SM_CYMINIMIZED
 //     (160x28). WM_SIZE carries type=0 (SIZE_RESTORED) and IsIconic() is 0, so
 //     the window is never minimized at any point.
 //   * SWP_ASYNCWINDOWPOS is passed by the CALLER, not added by the OS. It is
-//     the tell for a cross-process caller — which is exactly why the interposers
-//     below stay silent for the initiating call, and why the request is posted
-//     and only lands once the main thread resumes pumping after the sync loader
-//     wait (which makes the loader thread look responsible).
+//     the tell for a cross-process caller.
 //
-// So silence from these interposers does not mean "outside Runtime" — it means
-// outside the PROCESS. The cheap discriminator is in dx11/src/devicedata.cpp:
-// if DeviceData_Resize already sees a degenerate client rect on entry, the
-// caller is external and no in-process hook will ever catch it.
+// The in-process user32 IAT interposers that chased this lived here; they hooked
+// Runtime-x64.dll's imports and died with the DLL (ENDGAME.md A.1). They could
+// never have seen the culprit anyway. The cheap discriminator is in
+// dx11/src/devicedata.cpp: if DeviceData_Resize already sees a degenerate client
+// rect on entry, the caller is external.
 // ============================================================
-static void PrintBacktraceToLog(const char* tag) {
-    void* frames[24] = {0};
-    const USHORT n = CaptureStackBackTrace(1, 24, frames, nullptr);
-    for (USHORT i = 0; i < n; ++i) {
-        HMODULE mod = nullptr;
-        if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                               (LPCSTR)frames[i], &mod) && mod) {
-            char path[MAX_PATH] = {0};
-            GetModuleFileNameA(mod, path, MAX_PATH);
-            const char* nm = strrchr(path, '\\');
-            printf("[%s]   #%-2u %-22s + 0x%llX\n", tag, i, nm ? nm + 1 : path,
-                   (unsigned long long)((uintptr_t)frames[i] - (uintptr_t)mod));
-        } else {
-            printf("[%s]   #%-2u ???  @ %p\n", tag, i, frames[i]);
-        }
-    }
-    fflush(stdout);
-}
 
 static void InstallWndMsgHook() {
     g_msgHook = SetWindowsHookExW(WH_CALLWNDPROC, CallWndProcHook,
@@ -1648,32 +1375,16 @@ static bool Init() {
     RtDiffSetReadableProbe(&HarnessMemoryIsReadable);
     StallDebug::Mark("registry probe + harness guard");
 
-    // 2. Resolve Runtime-x64.dll and VideoDX11-x64.dll (ASLR)
-    printf("[Standalone] Resolving DLLs...\n");
+    // 2. Address resolution. No engine DLL is loaded (ENDGAME.md A.1).
+    printf("[Standalone] Resolving addresses (no engine DLLs are loaded)...\n");
     StallDebug::Mark("(pre ResolveInit)");
     if (!ResolveInit()) {
-        fprintf(stderr, "[Standalone] FATAL: Could not load Runtime-x64.dll\n");
-        fprintf(stderr, "[Standalone] Make sure Runtime-x64.dll is in the same directory.\n");
+        fprintf(stderr, "[Standalone] FATAL: ResolveInit failed -- Runtime-x64.dll is "
+                        "mapped in this process and must not be (ENDGAME A.1).\n");
         return false;
     }
 
-    StallDebug::Mark("ResolveInit (LoadLibrary Runtime+DX11)");
-
-    // 2a. IAT-hook MessageBoxW in Runtime-x64.dll so MSVC _purecall popups
-    //     get logged + ExitProcess instead of blocking the game on a modal.
-    //     Must run AFTER ResolveInit (Runtime needs to be loaded), but
-    //     BEFORE any code that could trigger a pure-virtual call.
-    if (HookRuntimeMessageBoxW()) {
-        printf("[Standalone] Hooked Runtime-x64.dll!user32!MessageBoxW (real=%p)\n",
-               (void*)g_realMessageBoxW);
-    } else {
-        printf("[Standalone] WARN: failed to hook Runtime!MessageBoxW; pure-virtual popups will block\n");
-    }
-
-    StallDebug::Mark("HookRuntimeMessageBoxW");
-
-    // 2b. Window-geometry trace — see InstallWindowTrace.
-    InstallWindowTrace();
+    StallDebug::Mark("ResolveInit");
 
     // 2b-i. Allocator ownership, in the ONE order that is safe.
     //
@@ -1792,20 +1503,15 @@ static bool Init() {
     RuntimeFuncsInit();
     StallDebug::Mark("EngineFuncsInit + RuntimeFuncsInit");
 
-    // 4b. Resolve the shipped VideoDX11-x64.dll entry points, then install the
-    //     renderer seam: verify all 84 vtable slots against the map in
-    //     dx11/README.md and patch in whichever reimplementations are enabled.
+    // 4b. Install the renderer seam: verify all 84 vtable slots against the
+    //     map in dx11/README.md and patch in our reimplementations.
     //
-    //     Must run here — after ResolveInit has LoadLibrary'd VideoDX11-x64.dll
-    //     (so the vtables exist) and before Engine::Startup (so no *Data object
-    //     has been created yet). There is no window inside Engine::Startup:
-    //     Video::Device::InitializeInterfaces and CreateVideoInterface both run
-    //     within that one call, which is why the seam is the vtables rather
-    //     than the Device+0xd0/+0xd8 function pointers.
-    //
-    //     Both are non-fatal: if either fails the game runs entirely on the
-    //     original plugin, unmodified.
-    Dx11FuncsInit();
+    //     VideoDX11-x64.dll is never loaded, so the seam's vtables are our own
+    //     exe-owned arrays. This must run before Engine::Startup, so no *Data
+    //     object has been created yet. There is no window inside
+    //     Engine::Startup: Video::Device::InitializeInterfaces and
+    //     CreateVideoInterface both run within that one call, which is why the
+    //     seam is the vtables rather than the Device+0xd0/+0xd8 pointers.
     VideoDX11::Dx11SeamInstall();
 
     //     Our twelve vtables live in this exe and VideoDX11-x64.dll is never
@@ -1815,7 +1521,7 @@ static bool Init() {
     //     Video::Device::InitializeInterfaces, which skips any slot that is
     //     already populated.
     InstallVideoInterfacePrefill();
-    StallDebug::Mark("Dx11FuncsInit + seam + prefill");
+    StallDebug::Mark("dx11 seam + prefill");
 
     // 4a. Optional heap-overflow detector (BANISHED_REDZONE env var). Wraps
     //     fn_MemAlloc/fn_MemFreeStatic with tail-canary redzones so an OOB
@@ -1967,8 +1673,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
 
     if (!Init()) {
         MessageBoxA(nullptr,
-            "Failed to initialize. Check standalone_debug.log for details.\n"
-            "Make sure Runtime-x64.dll and VideoDX11-x64.dll are in this directory.",
+            "Failed to initialize. Check standalone_debug.log for details.",
             "Banished Standalone - Init Failed", MB_OK | MB_ICONERROR);
         return 1;
     }

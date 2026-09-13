@@ -19,6 +19,7 @@ is the only phase that needs design decisions rather than deletion.
 - **The default build still loads the DLL.** DLL-absent is opt-in: `BANISHED_RT_NO_DLL=1`,
   set by `make cutover`. `ResolveInit` (standalone/resolve_standalone.cpp) returns false
   without the DLL unless that variable is set, and then implies `RT_MINT` + `RT_ALLOC`.
+  (done 2026-09-13, A.1/A.2)
 - Source: code/ 726 files / 49.6k lines, engine/ 154 / 21.9k, runtime/ 530 / 245k,
   standalone/ 280 / 53k, dx11/ 17 / 8.5k.
 - DLL-present-only machinery: the diff oracle (`BANISHED_RT_DIFF`, 44 files directly, ~1,640
@@ -51,8 +52,10 @@ Mostly deletion. The coupling is centralised; the cost is losing the oracle.
    `Runtime-x64.dll`; the no-DLL branch becomes the only one; `RT_MINT` and `RT_ALLOC` are
    unconditional. `VideoDX11-x64.dll` is already never loaded; delete its module-table row.
    `make cutover` becomes `make sa-run`: the DLL move-aside in tools/cutover_run.sh goes.
+   `[done 2026-09-13]`
 2. **Tag first.** `git tag dll-present-last` on the commit before step 1, so the oracle can be
    checked out for a comparison run. This is the only copy of that instrument that survives.
+   `[done 2026-09-13]`
 3. **Delete the raw door.** `RtOriginal`, `RT_ORIGINAL_ONCE`, `ResolveExportRaw*`,
    `ResolveOrdinal`: every call returns null without a DLL, so every branch that only runs on
    a non-null result is dead. Delete the branch, not just the call; where a body reads

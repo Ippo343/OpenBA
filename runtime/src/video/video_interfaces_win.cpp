@@ -276,9 +276,25 @@ extern "C" void RtVideo_Device_InitializeInterfaces(Device* self) {
 
     int skipped = 0, loaded = 0, rejected = 0;
 
+    // ---- THE ONE PLACE THIS BODY DIFFERS FROM RETAIL (ENDGAME.md A.1) ------
+    // Retail LoadLibraryW's each plugin here and GetProcAddress's its two
+    // exports. We must not: EVERY shipped video plugin (VideoDX9-x64.dll and
+    // VideoDX11-x64.dll both) statically imports Runtime-x64.dll, so loading
+    // one maps the DLL the exe is required never to map -- and the retail
+    // Runtime that arrives that way has none of the engine state our ports and
+    // our mint own, so its very first heap call faults. Measured 2026-09-13:
+    // with the DLL still present on disk this loop loaded VideoDX9-x64.dll,
+    // whose CreateDeviceData called Runtime+0xC7A8A and died in ntdll's heap.
+    // The old cutover gate never saw it because it moved the DLL aside, which
+    // made the LoadLibraryW fail for the wrong reason.
+    //
+    // So the loop resolves the name (GetDLLForInterface is still the body the
+    // probe below exercises) and then loads NOTHING. Slot 1 is already ours
+    // from the pre-fill above and is skipped; slot 0 gets the placeholder
+    // below; slot 2 (VideoGL) has no shipped DLL at all.
     for (int i = 0; i < kSlotCount; ++i) {            // 0x1800f7afd / 0x1800f7b03
-        InterfaceSlot* const s = SlotAt(self, i);
-        if (s->module != nullptr) {                   // 0x1800f7a14
+        InterfaceSlot* const slot = SlotAt(self, i);
+        if (slot->module != nullptr) {                // 0x1800f7a14
             ++skipped;
             continue;
         }
@@ -288,43 +304,20 @@ extern "C" void RtVideo_Device_InitializeInterfaces(Device* self) {
         String name{nullptr};
         RtVideo_Device_GetDLLForInterface(self, &name, i);   // 0x1800f7a34
 
-        WideString wide{nullptr};
-        RtSystem::RtSystem_WideString_CtorFromString(&wide, &name);  // 0x1800f7a44
-
-        s->module = LoadLibraryW(wide.data);          // 0x1800f7a4d, RCX = *wide
-        RtSystem::RtSystem_WideString_Dtor(&wide);    // 0x1800f7a56..0x1800f7a83
-
-        if (s->module != nullptr) {                   // 0x1800f7a86
-            s->createDeviceData = reinterpret_cast<void*>(GetProcAddress(
-                static_cast<HMODULE>(s->module), kProcCreateDeviceData));   // 0x1800f7a92
-            void* gotName = reinterpret_cast<void*>(GetProcAddress(
-                static_cast<HMODULE>(s->module), kProcGetDeviceName));      // 0x1800f7aa6
-            s->getDeviceName = gotName;
-            if (s->createDeviceData == nullptr || gotName == nullptr) {     // 0x1800f7ab0
-                FreeLibrary(static_cast<HMODULE>(s->module));               // 0x1800f7abf
-                s->module           = nullptr;
-                s->getDeviceName    = nullptr;
-                s->createDeviceData = nullptr;
-                ++rejected;
-            } else {
-                ++loaded;
-            }
-        }
-
+        // 0x1800f7a44..0x1800f7ac9 was the WideString conversion, the
+        // LoadLibraryW, the two GetProcAddress calls and the FreeLibrary
+        // rejection path. All deleted: see the banner above. `loaded` and
+        // `rejected` therefore stay 0, which is the truth about what happened.
         RtSystem::RtString_ReleaseInline(&name);      // 0x1800f7ad0..0x1800f7afd
     }
 
-    // ---- CUTOVER-ONLY, and the one place this body differs from retail -----
-    // VideoDX9-x64.dll imports Runtime-x64.dll; with the DLL absent the
-    // LoadLibraryW above fails and slot 0 stays empty, which leaves the
-    // GraphicsInterface array one entry short of the slot count that the
+    // ---- CUTOVER-ONLY -----------------------------------------------------
+    // Slot 0 is now always empty (nothing loads VideoDX9-x64.dll), which leaves
+    // the GraphicsInterface array one entry short of the slot count that the
     // configuration's interface index and the Options dialog's
     // GetInterface(cfgIndex) assume. Fill slot 0 with the zero-adapter
     // placeholder (dx11/src/devicedata.cpp explains the invariant).
-    // RT_RAW_OK: the raw door is the "is the DLL mapped" test itself, not a
-    // dependency.
-    if (SlotAt(self, 0)->module == nullptr &&
-        ResolveExportRaw("?InitializeInterfaces@Device@Video@@QEAAXXZ") == nullptr) {
+    if (SlotAt(self, 0)->module == nullptr) {
         extern void VideoInterfaceFillDx9Placeholder(void* device);
         VideoInterfaceFillDx9Placeholder(self);
     }

@@ -32,8 +32,8 @@
 //
 // A MODEL IS NOT A MEASUREMENT. This probe records, per site, every dispatch
 // and classifies the `info` pointer as MINTED (inside our
-// `kTypeInfoStorage[104]`), DLL (inside Runtime-x64.dll's image) or OTHER (our
-// own image — the 312 exe types registered by
+// `kTypeInfoStorage[104]`) or OTHER (our own image — the 312 exe types
+// registered by
 // code/Game/Object/factory_registration.cpp). `minted=0` across a real run,
 // with the two controls below green, is the answer.
 //
@@ -59,8 +59,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include <windows.h>
-
 #include "factory_dispatch_probe.h"
 #include "rt_data_mint.h"   // RtMintIsMintedTypeInfo / RtMintTypeInfoStorageProbe
 #include "resolve.h"        // ResolveExportRaw
@@ -72,15 +70,14 @@ struct Site {
     const char* name;
     uint64_t    dispatches;
     uint64_t    minted;     // info is one of OUR minted BaseTypeInfo nodes
-    uint64_t    dll;        // info is inside Runtime-x64.dll's image
     uint64_t    other;      // info is elsewhere (our image: the 312 exe types)
     uint64_t    null;       // info was null (retail's own unguarded shape)
 };
 
 Site g_site[RT_FACTORY_DISPATCH_SITE_COUNT] = {
-    { "Object::External::Load",                0, 0, 0, 0, 0 },
-    { "Object::Factory::CreateObject",         0, 0, 0, 0, 0 },
-    { "UI::DialogInstance::AddControllerTab",  0, 0, 0, 0, 0 },
+    { "Object::External::Load",                0, 0, 0, 0 },
+    { "Object::Factory::CreateObject",         0, 0, 0, 0 },
+    { "UI::DialogInstance::AddControllerTab",  0, 0, 0, 0 },
 };
 
 // ---- the names dispatched through, so the report can say WHICH types are
@@ -95,28 +92,6 @@ struct NameCount { const char* name; uint64_t n; };
 NameCount g_names[512];
 int       g_nameCount   = 0;
 uint64_t  g_namesDropped = 0;
-
-// Runtime-x64.dll's loaded image range, resolved once. Used only to classify a
-// pointer for the report, never to decide anything.
-bool     g_dllResolved = false;
-uintptr_t g_dllLo = 0, g_dllHi = 0;
-
-void ResolveDllRange() {
-    if (g_dllResolved) return;
-    g_dllResolved = true;
-    HMODULE h = GetModuleHandleA("Runtime-x64.dll");
-    if (!h) return;
-    // The image size comes out of the module's own PE headers rather than
-    // GetModuleInformation, which would drag psapi into the link for one
-    // number that is already mapped in front of us.
-    const unsigned char* base = (const unsigned char*)h;
-    const IMAGE_DOS_HEADER* dos = (const IMAGE_DOS_HEADER*)base;
-    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return;
-    const IMAGE_NT_HEADERS64* nt = (const IMAGE_NT_HEADERS64*)(base + dos->e_lfanew);
-    if (nt->Signature != IMAGE_NT_SIGNATURE) return;
-    g_dllLo = (uintptr_t)base;
-    g_dllHi = g_dllLo + nt->OptionalHeader.SizeOfImage;
-}
 
 // ---- CAP-IMMUNE counters for the two rows this lane was handed ------------
 // A bounded name table can drop the very name the lane is asking about, and a
@@ -155,13 +130,12 @@ extern "C" void RtFactoryDispatchObserve(int site, const void* info) {
     Site& s = g_site[site];
     ++s.dispatches;
     if (!info) { ++s.null; return; }
-    ResolveDllRange();
     if (RtMintIsMintedTypeInfo(info)) {
         ++s.minted;
     } else {
-        const uintptr_t p = (uintptr_t)info;
-        if (g_dllLo && p >= g_dllLo && p < g_dllHi) ++s.dll;
-        else                                        ++s.other;
+        // Runtime-x64.dll is never mapped (ENDGAME.md A.1), so anything that
+        // is not one of our minted nodes is in our own image.
+        ++s.other;
         // `name` is at +0x08. Read only for the classification report; a null
         // or wild pointer here would be a finding in itself, so it is guarded
         // rather than dereferenced blindly (this is OUR instrument, not a
@@ -183,10 +157,10 @@ extern "C" void RtFactoryDispatchReport() {
             printf("[FactoryDispatch] %-38s dispatches=0  -- SITE DID NOT RUN on "
                    "this route; its minted=0 is NOT evidence\n", s.name);
         } else {
-            printf("[FactoryDispatch] %-38s dispatches=%llu  minted=%llu  dll=%llu  "
+            printf("[FactoryDispatch] %-38s dispatches=%llu  minted=%llu  "
                    "other=%llu  null=%llu\n", s.name,
                    (unsigned long long)s.dispatches, (unsigned long long)s.minted,
-                   (unsigned long long)s.dll, (unsigned long long)s.other,
+                   (unsigned long long)s.other,
                    (unsigned long long)s.null);
         }
     }

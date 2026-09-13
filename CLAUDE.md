@@ -10,15 +10,16 @@ binary-compatible type header and a reimplementation.
 The end goal is a readable C++ codebase that mirrors the game's logic and can be compiled into a replacement exe, similar to projects like OpenRCT2, re3 (GTA III), and devilution (Diablo).
 
 **Current state**: the project builds a standalone replacement exe (`reimpl-x64.exe`)
-that links against the original Runtime-x64.dll and runs our reimplemented game logic
-from `code/Game/`. VideoDX11-x64.dll is already fully replaced by `dx11/` (never loaded).
+that never loads Runtime-x64.dll or VideoDX11-x64.dll and runs our reimplemented game logic
+from `code/Game/`, resolving engine functions through the address registry and the data
+mint instead. VideoDX11-x64.dll is already fully replaced by `dx11/`.
 The old proxy-DLL/hooking mode has been removed. Remaining exe functions not yet
 reimplemented are stubbed or registered individually via the address registry (see below).
 
 **Current phase: port Runtime-x64.dll so the exe stops loading it.**
 - **How work is chosen and measured:** [docs/runtime_port/DIRECTION.md](docs/runtime_port/DIRECTION.md).
   The worklist is `docs/runtime_port/closure/WORKLIST.md` (regenerate with `tools/cutover_closure/`);
-  the gate is `make cutover`.
+  the gate is `make sa-run` (`make cutover` is kept as an alias).
 - **Where things stand:** [docs/runtime_port/STATUS.md](docs/runtime_port/STATUS.md). **Do not put
   status, counts or "current wall" text in this file.**
 - **Facts and the per-function recipe:** [docs/runtime_port/PLAN.md](docs/runtime_port/PLAN.md) §2, §3, §6.
@@ -257,7 +258,8 @@ reproducible, and screenshots remain useful for *looking at*, not for *diffing*.
 - Compiles `code/Game/` + `engine/funcs/` + `runtime/` + `standalone/` into `reimpl-x64.exe`
 - NO hooks, NO reimpl wrappers, NO proxy DLL — the original Application-x64.exe is not involved
 - `ResolveAddr(Module::Exe, addr)` queries an address registry of our reimplemented functions
-- Still loads Runtime-x64.dll + VideoDX11-x64.dll (engine DLLs, ASLR handled normally)
+- Never loads Runtime-x64.dll or VideoDX11-x64.dll; everything resolves through the
+  address registry and the data mint instead
 
 **Key files:**
 - `standalone/resolve.h` — ResolveAddr/ResolveExport/ResolveOrdinal declarations

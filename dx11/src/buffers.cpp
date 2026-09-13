@@ -177,10 +177,9 @@ bool EnsureDeps() {
     g_deps.SerializeBytes = Exp<void (*)(void*, int, void*, const char*)>(
         "?SerializeBytes@Serializer@IO@@QEAAXHPEAXPEBD@Z");
 
-    // The LIVE vtables, not ResolveAddr(Module::VideoDX11, 0x1800188xx). In
-    // Standalone mode these are our exe-owned arrays and the shipped DLL is
-    // never mapped, so resolving the .rdata addresses directly would store a
-    // vptr into nothing.
+    // The LIVE vtables, not the shipped .rdata arrays at 0x1800188xx. These
+    // are our exe-owned arrays and VideoDX11-x64.dll is never mapped, so
+    // resolving those addresses directly would store a vptr into nothing.
     g_deps.vtVertexBufferData   = Dx11LiveVtable(Vt::VertexBufferData);
     g_deps.vtIndexBufferData    = Dx11LiveVtable(Vt::IndexBufferData);
     g_deps.vtConstantBufferData = Dx11LiveVtable(Vt::ConstantBufferData);

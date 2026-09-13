@@ -421,11 +421,8 @@ gfxmat24-probe:
 gfxmat24-sweep: gfxmat24-probe
 	sh tools/gfxmat24_probe/sweep.sh
 
-# Cutover boot gate: deploy the debug exe, move Runtime-x64.dll aside, boot
-# with BANISHED_RT_NO_DLL=1 (which implies RT_MINT and RT_ALLOC), record where
-# it dies, restore the DLL. Output in docs/runtime_port/cutover/latest/.
-# CUTOVER_SECS bounds the run. See docs/runtime_port/DIRECTION.md.
-CUTOVER_SECS ?= 120
+# `cutover` is now an alias for the ordinary route: since ENDGAME A.1 the exe
+# never loads Runtime-x64.dll, so there is nothing left to cut over to. Kept
+# under this name only because people already know it; see `sa-run`.
 .PHONY: cutover
-cutover: standalone-debug
-	tools/cutover_run.sh docs/runtime_port/cutover/latest $(CUTOVER_SECS) $(SA_TARGET)
+cutover: sa-run

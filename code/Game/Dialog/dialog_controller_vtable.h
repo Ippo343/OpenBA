@@ -56,7 +56,7 @@
 // WHY REGISTER-THEN-APPLY, RATHER THAN FILLING AT STATIC INIT
 // ---------------------------------------------------------------------------
 // The tables are built by static initialisers, which run BEFORE main — and
-// before ResolveInit() has LoadLibrary'd Runtime-x64.dll and before
+// before ResolveInit() has run and before
 // RuntimePortInit() has registered the ported bodies. Resolving there would
 // hand back null and fill the tables with nulls. So Register() only RECORDS the
 // table at static-init time, and Apply() does the resolution and the fill from

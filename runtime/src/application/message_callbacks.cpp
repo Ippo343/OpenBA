@@ -15,10 +15,10 @@
 //
 // They pay twice. Both are also rows in `dx11/src/devicedata.cpp`'s import
 // table (0x180013290 / 0x180013298), and that table is ALL-OR-NOTHING: one
-// unresolved entry sets `g_imOk` false and every `DeviceData` slot then
-// forwards to `Orig<>()`, i.e. `ResolveAddr(Module::VideoDX11, …)`, and
-// VideoDX11-x64.dll is never loaded in this project. So these two names being
-// unported was two of the seventeen things keeping that table dark.
+// unresolved entry sets `g_imOk` false and every `DeviceData` slot then bails,
+// because there is no shipped body to fall back to — VideoDX11-x64.dll is never
+// loaded. So these two names being unported was two of the seventeen things
+// keeping that table dark.
 //
 // | Export | Retail | Ord |
 // |---|---|---|

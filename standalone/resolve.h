@@ -3,7 +3,8 @@
 // Translates Ghidra addresses to runtime addresses for any loaded module.
 //
 // Exe addresses are resolved via an address registry of reimplemented
-// functions; Runtime-x64.dll and VideoDX11-x64.dll use the normal ASLR delta.
+// functions; Module::Runtime addresses go through the port registry. Neither
+// Runtime-x64.dll nor VideoDX11-x64.dll is ever loaded (ENDGAME.md A.1).
 
 #include <windows.h>
 #include <cstdint>
@@ -11,9 +12,8 @@
 // Supported game modules
 enum class Module : int {
     Exe       = 0,  // Application-x64.exe  (preferred base 0x140000000)
-    Runtime   = 1,  // Runtime-x64.dll      (preferred base 0x180000000)
-    VideoDX11 = 2,  // VideoDX11-x64.dll    (preferred base 0x180000000)
-    COUNT     = 3
+    Runtime   = 1,  // Runtime-x64.dll      (preferred base 0x180000000, never mapped)
+    COUNT     = 2
 };
 
 // Per-module info (populated by ResolveInit)
@@ -25,8 +25,8 @@ struct ModuleInfo {
     HMODULE     handle;         // module handle
 };
 
-// Initialize address resolution for all loaded modules.
-// Returns true if Runtime-x64.dll is resolved (the exe is us).
+// Initialize address resolution. Returns false only if Runtime-x64.dll turns
+// out to be mapped in the process, which must never happen (ENDGAME.md A.1).
 bool ResolveInit();
 
 // Translate a Ghidra address to a runtime address.
@@ -164,9 +164,9 @@ void DumpRuntimeRegistry();
 extern "C" void RtRowAttendanceReport();
 
 // ---- Cutover residue census (BANISHED_RT_STRICT=1) ------------------------
-// PLAN.md wave 9 removes `LoadLibrary("Runtime-x64.dll")` entirely. The gate on
-// that is not "how many functions are ported" but "does anything still ASK the
-// DLL for something at runtime". `tools/runtime_census.py` answers the first
+// ENDGAME.md A.1 removed `LoadLibrary("Runtime-x64.dll")` entirely; the DLL is
+// never mapped. The remaining question is not "how many functions are ported"
+// but "does anything still ASK the DLL for something at runtime". `tools/runtime_census.py` answers the first
 // question from source; only the process can answer the second, because the
 // source list is a superset -- it counts every resolve site in the tree,
 // including ones no reachable path ever executes.

@@ -186,9 +186,9 @@ void InstallVideoInterfacePrefill() {
         // *** THE SECOND SENTENCE OF THIS MESSAGE USED TO BE WRONG AT CUTOVER,
         // *** WHICH IS THE ONE PLACE IT IS GUARANTEED TO BE PRINTED.
         //
-        // Wave 9 lane ENGIO measured it. With Runtime-x64.dll ABSENT the detour
-        // fails because there is no 0x1800F79F0 to patch -- expected, and the
-        // message is right to appear. But the consequence it names cannot
+        // Wave 9 lane ENGIO measured it. Runtime-x64.dll is never mapped
+        // (ENDGAME.md A.1), so the detour always fails: there is no 0x1800F79F0
+        // to patch. The message is right to appear. But the consequence it names cannot
         // happen: "Runtime will LoadLibrary VideoDX11-x64.dll" needs a Runtime,
         // and there isn't one. Nothing loads VideoDX11 and nothing falls back
         // to VideoDX9 either.

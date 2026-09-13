@@ -127,7 +127,7 @@ DeviceData* Dx11_CreateDeviceData(void* device) {
 // Nothing compares the address — Runtime copies the result into a System::String
 // — so the bytes are the whole of the contract.
 //
-// Dx11FuncsInit still cross-checks against 0x1800185c0 when the DLL happens to
+// The retired Dx11FuncsInit used to cross-check against 0x1800185c0 when the DLL happened to
 // be loaded, which is where a divergence would show up.
 // ============================================================
 const char* Dx11_GetDeviceName() {

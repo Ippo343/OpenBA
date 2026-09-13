@@ -743,8 +743,8 @@ static DWORD WINAPI ModProbe_ThreadMain(LPVOID) {
 }
 
 // Started from RegisterModsBatch() (standalone/reg_mods.cpp), which runs at
-// AddressRegistryInit -- i.e. after ResolveInit has LoadLibrary'd Runtime-x64.dll
-// (so ResolveAddr(Module::Runtime, ...) is valid) and long before Engine::Startup,
+// AddressRegistryInit -- i.e. after ResolveInit has run (so
+// ResolveAddr(Module::Runtime, ...) is valid) and long before Engine::Startup,
 // which is exactly what the thread waits for. No-op unless BANISHED_MOD_PROBE is set.
 extern "C" void ModProbe_StartWatcher() {
     if (!ModProbeEnabled()) return;

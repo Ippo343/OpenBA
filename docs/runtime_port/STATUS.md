@@ -21,8 +21,17 @@ built them wrong, and callbacks stored in data.
 ## Endgame (2026-09-13)
 
 The plan for what follows the gate is `ENDGAME.md`: A remove the DLL, C remove the flags,
-B fold the C bodies into real classes, in that order. The default build STILL loads the
-DLL; DLL-absent is `make cutover` / `BANISHED_RT_NO_DLL=1` until A.1 flips it.
+B fold the C bodies into real classes, in that order. **2026-09-13: A.1 and A.2 are done.**
+Tag `dll-present-last` (commit `86d28a73`) is the last commit where the exe still loaded
+Runtime-x64.dll; the exe never loads it now. `make sa-run` is the DLL-absent route and
+`make cutover` is kept as an alias for it.
+- The flip exposed one bug the old gate could never see: `Video::Device::InitializeInterfaces`
+  still `LoadLibraryW`'d the video plugins, and VideoDX9-x64.dll statically imports
+  Runtime-x64.dll, so the DLL was mapped behind `ResolveInit`'s back and its first heap call
+  faulted. The move-aside had made that LoadLibrary fail for the wrong reason. The loop now
+  loads nothing (`runtime/src/video/video_interfaces_win.cpp`); `ResolveInit` fails fast if the
+  DLL is ever found mapped. Verified 2026-09-13 with the DLL on disk: sa-run + pause-menu
+  quit exit 0, `BANISHED_AUTOQUIT`, and the resave gate PASS.
 
 - **Serializer gate exists and passes**: `tools/resave_gate/resave_gate.sh Gate` (README
   there). Load a save DLL-absent, serialize the restored world again before the first tick,
@@ -37,10 +46,12 @@ DLL; DLL-absent is `make cutover` / `BANISHED_RT_NO_DLL=1` until A.1 flips it.
 
 ## Cutover gate
 
-`make cutover` (deploys the debug exe, moves the DLL aside, boots with `BANISHED_RT_NO_DLL=1`,
-which implies `RT_MINT` + `RT_ALLOC`, dumps the live registry, restores the DLL; output in
-`docs/runtime_port/cutover/latest/`). Run it under `tools/game_dir_lock.sh`. Symbolize frames
-with `addr2line -f -C -e standalone/build/reimpl-x64.exe 0x14xxxxxxx`.
+`make sa-run` (`make cutover` is the same thing under its legacy name): deploys the debug
+exe and boots it — the DLL is never loaded, so there is nothing left to move aside. Run it
+under `tools/game_dir_lock.sh`. Symbolize frames with
+`addr2line -f -C -e standalone/build/reimpl-x64.exe 0x14xxxxxxx`. The history below (walls,
+"DLL-absent" language) predates A.1 and describes the old DLL-present/DLL-absent procedure,
+recoverable at the `dll-present-last` tag.
 
 Walls passed 2026-09-12: the Video shader family → the UI Description/Element family (53
 classes) → `Font::Serialize`'s two by-address callees → (evening walk, one session, serial)

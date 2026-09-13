@@ -46,7 +46,7 @@
 // is why Runtime is stopped from loading the DLL at all rather than being left
 // to load it and have it ignored — see standalone/video_interface.cpp.
 //
-// Install point: standalone/main.cpp, right after Dx11FuncsInit(), which is
+// Install point: standalone/main.cpp, in Init() step 4b, which is
 // before Engine::Startup and therefore before any *Data object exists.
 
 #include <cstdint>
@@ -84,9 +84,9 @@ uintptr_t   VtGhidraAddr(Vt v);
 // re-seats `this` on it before running the Runtime base destructor, and every
 // factory stores it into the object it just allocated.
 //
-// Null before Dx11SeamInstall(). There is deliberately no fallback to
-// ResolveAddr(Module::VideoDX11, ...): the DLL is not mapped, so a caller that
-// reached past this function would silently produce a vptr into nothing.
+// Null before Dx11SeamInstall(). There is deliberately no fallback to the
+// shipped .rdata array: VideoDX11-x64.dll is never mapped (ENDGAME.md A.1), so
+// a caller that reached past this function would produce a vptr into nothing.
 void** Dx11LiveVtable(Vt v);
 
 // Always returns null — there is no shipped code in the process to fall back to.

@@ -337,15 +337,9 @@ void* ResolveGfxImport(uintptr_t iatGhidra, const wchar_t* dll, const char* name
             return fn;
     }
 
-    // Fallback: VideoDX11's IAT, when it happens to be mapped (AB mode).
-    uintptr_t slot = ResolveAddr(Module::VideoDX11, iatGhidra);
-    if (slot) {
-        if (void* fn = *reinterpret_cast<void**>(slot)) {
-            fprintf(stderr, "[Dx11] %ls!%s came from the VideoDX11 IAT, not the "
-                            "system DLL\n", dll, name);
-            return fn;
-        }
-    }
+    // There is no second source: the old fallback read VideoDX11-x64.dll's own
+    // IAT slot, and that DLL is never mapped (ENDGAME.md A.1).
+    (void)iatGhidra;
 
     fprintf(stderr, "[Dx11] FAILED to resolve %ls!%s — the renderer cannot start\n",
             dll, name);
@@ -844,10 +838,8 @@ void TraceContainingOutput(IDXGISwapChain* sc) {
 //
 // Not a vtable slot: a plain function called from the WM_ACTIVATE handler
 // (twice, one call per transition direction) and directly by
-// ContextData::BeginCommands when Device+0x9c is set. L5 already reaches it
-// through ResolveAddr(Module::VideoDX11, 0x180004340); once this lane's slots
-// are enabled BOTH callers still converge on the same behaviour because this
-// body is a transcription of that one.
+// ContextData::BeginCommands when Device+0x9c is set. Both callers run this
+// body, which is a transcription of the shipped one.
 //
 // Sequence, with the early-out first:
 //
@@ -883,11 +875,9 @@ void TraceContainingOutput(IDXGISwapChain* sc) {
 // ============================================================
 int DeviceData_Resize(DeviceData* self) {
     const Imports* im = GetImports();
-    if (!im) {
-        typedef int (*Fn)(DeviceData*);
-        Fn orig = reinterpret_cast<Fn>(ResolveAddr(Module::VideoDX11, 0x180004340));
-        return orig ? orig(self) : 0;
-    }
+    // No fallback to the shipped 0x180004340: VideoDX11-x64.dll is never mapped
+    // (ENDGAME.md A.1). An unresolved import table is a real failure.
+    if (!im) return 0;
 
     void* dev = DeviceOf(self);
     ++g_resizeTraceCalls;
