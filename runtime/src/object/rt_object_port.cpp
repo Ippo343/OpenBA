@@ -213,5 +213,16 @@ void RtObjectPortInit() {
     n += RtObjectExtCompilersRegister();
     n += RtObjectExternalListRegister();
 
+    // ---- BATCH A_operator_delete (2026-09-12), unconditional ---------------
+    // class_operator_delete.cpp — the 28 remaining `??3<Class>@<Ns>@@SAXPEAX@Z`
+    // class operator deletes across Collision2D/Graphics/Achievement/Audio/
+    // Object/Video/Picking/Pathfinding. One shared body (rtcoll::MemFree,
+    // verified byte-identical to the UI batch's reference row modulo RIP
+    // displacements — see the file banner). Hooked here rather than split
+    // across eight namespace port files because Collision2D and Pathfinding
+    // have no rt_*_port.cpp of their own.
+    extern int RtClassOperatorDeleteRegister();
+    n += RtClassOperatorDeleteRegister();
+
     printf("[RtPort] Object: %d exports registered\n", n);
 }
