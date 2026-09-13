@@ -314,6 +314,21 @@ extern "C" void RtVideo_Device_InitializeInterfaces(Device* self) {
         RtSystem::RtString_ReleaseInline(&name);      // 0x1800f7ad0..0x1800f7afd
     }
 
+    // ---- CUTOVER-ONLY, and the one place this body differs from retail -----
+    // VideoDX9-x64.dll imports Runtime-x64.dll; with the DLL absent the
+    // LoadLibraryW above fails and slot 0 stays empty, which leaves the
+    // GraphicsInterface array one entry short of the slot count that the
+    // configuration's interface index and the Options dialog's
+    // GetInterface(cfgIndex) assume. Fill slot 0 with the zero-adapter
+    // placeholder (dx11/src/devicedata.cpp explains the invariant).
+    // RT_RAW_OK: the raw door is the "is the DLL mapped" test itself, not a
+    // dependency.
+    if (SlotAt(self, 0)->module == nullptr &&
+        ResolveExportRaw("?InitializeInterfaces@Device@Video@@QEAAXXZ") == nullptr) {
+        extern void VideoInterfaceFillDx9Placeholder(void* device);
+        VideoInterfaceFillDx9Placeholder(self);
+    }
+
     if (rt_diff_on__) {
         // The postcondition a bad port would break, and the ONE thing this body
         // exists to guarantee: slot 1 carries OUR two functions and a non-null

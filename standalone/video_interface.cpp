@@ -52,6 +52,9 @@ namespace VideoDX11 {
 struct DeviceData;
 DeviceData* Dx11_CreateDeviceData(void* device);
 const char* Dx11_GetDeviceName();
+// dx11/src/devicedata.cpp -- the cutover-only DX9 placeholder (see there).
+void*       Dx9Placeholder_CreateDeviceData(void* device);
+const char* Dx9Placeholder_GetDeviceName();
 }  // namespace VideoDX11
 
 namespace {
@@ -120,6 +123,21 @@ void FillDx11Slot(void* device);
 // the ported body -- that is what turns the pre-fill from a DLL-present hack
 // into the real thing.
 void VideoInterfaceFillDx11Slot(void* device) { FillDx11Slot(device); }
+
+// Cutover only: slot 0 (DX9) with the placeholder plugin, so the Device's
+// interface array keeps one entry per slot exactly as it does on a retail
+// machine. Called by the ported InitializeInterfaces after its LoadLibraryW of
+// VideoDX9-x64.dll failed, and only with the Runtime DLL absent.
+void VideoInterfaceFillDx9Placeholder(void* device) {
+    uint8_t* slot = static_cast<uint8_t*>(device) + kSlot0;   // slot 0 = DX9
+    *reinterpret_cast<HMODULE*>(slot + kOffModule)  = SentinelModule();
+    *reinterpret_cast<void**>  (slot + kOffGetName) =
+        reinterpret_cast<void*>(&VideoDX11::Dx9Placeholder_GetDeviceName);
+    *reinterpret_cast<void**>  (slot + kOffCreate)  =
+        reinterpret_cast<void*>(&VideoDX11::Dx9Placeholder_CreateDeviceData);
+    printf("[VideoInterface] DX9 slot filled with the cutover PLACEHOLDER on Device %p "
+           "(VideoDX9-x64.dll cannot load without Runtime-x64.dll)\n", device);
+}
 
 namespace {
 

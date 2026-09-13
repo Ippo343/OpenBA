@@ -1895,6 +1895,68 @@ bool DeviceData_EnumerateInterfaces(DeviceData* self) {
 }
 
 // ============================================================
+// The DX9 PLACEHOLDER slot -- cutover only
+//
+// VideoDX9-x64.dll imports Runtime-x64.dll, so with the Runtime DLL absent it
+// cannot load and slot 0 stays empty. Retail then appends nothing for it and
+// the Device's GraphicsInterface array holds ONE entry (ours, DX11) while the
+// configuration's interface index -- a SLOT index, 1 -- stays 1: the Options
+// dialog's PopulateResolutionCombo (retail 0x140073ec0) does
+// GetInterface(cfgIndex) with no bounds check and reads past the array. Retail
+// never meets this because both plugin DLLs always load and each appends one
+// entry, so array index == slot index. This placeholder keeps that invariant:
+// it appends a "DirectX 9" interface with ZERO adapters. (A retail machine
+// whose DX9 plugin finds no adapters would NOT get one -- the plugin, like
+// ours above, skips the append on zero adapters -- so retail carries the same
+// latent bug; it is only the missing plugin that makes it fire every time.)
+// Selecting it in Options is then the same retail-shaped fault a real
+// zero-adapter interface gives; the fallback loop in Device::PlatformStartup
+// steps past it because Create() returns false. Filled only by
+// VideoInterfaceFillDx9Placeholder (standalone/video_interface.cpp), which the
+// ported InitializeInterfaces calls only when the DLL is absent.
+// ============================================================
+namespace {
+struct Dx9Placeholder { void* vptr; void* device; };
+
+void Dx9P_DeletingDtor(Dx9Placeholder* self, int flag) {   // vtable +0x00
+    if (flag & 1) delete self;
+}
+bool Dx9P_EnumerateInterfaces(Dx9Placeholder* self) {       // vtable +0x08
+    const Imports* im = GetImports();
+    if (!im) return false;
+    GraphicsInterface gi;
+    im->GfxIfaceCtor(&gi);
+    {
+        StringStorage name;
+        im->StringCtorCStr(&name, "DirectX 9");
+        im->StringAssign(&gi, &name);
+        im->StringDtor(&name);
+    }
+    void* dev = self->device;
+    void* arrayBase = static_cast<uint8_t*>(dev) + Dev::kInterfaces;
+    GfxInterfaceArraySetLength(arrayBase,
+                               Field<int32_t>(dev, Dev::kInterfaceCount) + 1,
+                               &gi, im);
+    im->GfxIfaceDtor(&gi);
+    return true;
+}
+bool Dx9P_Create(Dx9Placeholder*)  { return false; }        // vtable +0x10
+void Dx9P_Destroy(Dx9Placeholder*) {}                       // vtable +0x18
+
+void* g_dx9PlaceholderVtable[4] = {
+    reinterpret_cast<void*>(&Dx9P_DeletingDtor),
+    reinterpret_cast<void*>(&Dx9P_EnumerateInterfaces),
+    reinterpret_cast<void*>(&Dx9P_Create),
+    reinterpret_cast<void*>(&Dx9P_Destroy),
+};
+}  // namespace
+
+void*       Dx9P_CreateImpl(void* device) {
+    return new Dx9Placeholder{ g_dx9PlaceholderVtable, device };
+}
+const char* Dx9P_NameImpl() { return "DirectX 9"; }
+
+// ============================================================
 // Slots 9..19 — the eleven resource factories
 //
 // Every one is the same five steps:
@@ -2147,3 +2209,10 @@ DX11_REGISTER_SLOT(DeviceData, 18, &::VideoDX11::Factory_VideoProgramData,
                    "DeviceData::CreateVideoProgramData");
 DX11_REGISTER_SLOT(DeviceData, 19, &::VideoDX11::Factory_RenderBufferData,
                    "DeviceData::CreateRenderBufferData");
+
+// The two placeholder entry points, with EXTERNAL linkage (the bodies above sit
+// in this file's unnamed namespace, as every DX11 body does).
+namespace VideoDX11 {
+void*       Dx9Placeholder_CreateDeviceData(void* device) { return Dx9P_CreateImpl(device); }
+const char* Dx9Placeholder_GetDeviceName()                { return Dx9P_NameImpl(); }
+}  // namespace VideoDX11

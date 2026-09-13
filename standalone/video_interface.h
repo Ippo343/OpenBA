@@ -21,3 +21,6 @@ bool VideoInterfacePrefilled();
 // Video::Device::InitializeInterfaces (0x1800F79F0) must call it. Until then it
 // is unused and InstallVideoInterfacePrefill is the live path.
 void VideoInterfaceFillDx11Slot(void* device);
+
+// Cutover only: the DX9 placeholder in slot 0 (see video_interface.cpp).
+void VideoInterfaceFillDx9Placeholder(void* device);

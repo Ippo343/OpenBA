@@ -101,7 +101,12 @@ extern "C" void RtUi_NumberElement_CacheText(void* self) {
 }
 
 // ??0NumberElement@UI@@QEAA@XZ   0x180118c70
-extern "C" void RtUi_NumberElement_Ctor(void* self) {
+// RETURNS `this`, as every MSVC constructor does in RAX: NumberDescription::
+// CreateInstance (0x180118f81) keeps RAX as the element and hands it to
+// ElementDescription::CreateInstance, which reads its +0x10. Declared void, this
+// port left RAX holding CacheText's leftovers (0) and Options crashed DLL-absent
+// building its sliders (2026-09-12).
+extern "C" void* RtUi_NumberElement_Ctor(void* self) {
     ElementCtor(self);
     PTR(self, 0x00) = Vtable();
     PTR(self, kFont) = nullptr;
@@ -111,6 +116,7 @@ extern "C" void RtUi_NumberElement_Ctor(void* self) {
     F32(self, kFloatValue) = 0.0f;
     U8(self, kShowSign)    = 0;
     RtUi_NumberElement_CacheText(self);
+    return self;
 }
 
 // ??1NumberElement@UI@@UEAA@XZ   0x180118ce0
