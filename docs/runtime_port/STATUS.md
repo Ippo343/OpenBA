@@ -40,11 +40,28 @@ AchievementInstance, Base, Stream, ParticleInstance) → one `RT_ORIGINAL_ONCE` 
 (`video/buffers.cpp` MemFree) → **`make cutover` with `BANISHED_PAUSEMENU=600
 BANISHED_PAUSEMENU_QUIT=120` exits 0 with an empty crash log and the DLL absent.**
 
-**The gate's "done" condition is met: boot to the world, quit cleanly, DLL absent.** What is
-NOT yet established: whether the DLL-absent frame is drawn (the user reports a black window
-during the run; the command-stream oracle `tools/trace_oracle/` is the instrument, a pixel is
-not), and how many of the 651 `RT_ORIGINAL_ONCE`/`RtOriginal<>` sites sit on live (non-oracle)
-paths — the gate found one; a static triage would find the rest before a route does.
+**The gate's "done" condition is met: boot to the world, quit cleanly, DLL absent.** Then the
+render walk (same evening): the user saw a black window. RenderDoc on a DLL-absent frame 150
+showed 6 draws (DLL-present: 453); `Renderer::AddDrawItem` dropped every item on its
+"VideoProgram+0x20 null" arm because every `MeshLayout\*.rsc` load failed External::Load's
+version check (`[ExtLoad] badVer=65`, 0 DLL-present): `VertexLayout::GetFileVersion` returned
+1, retail returns 3. Fixed; the DLL-absent frame is now 460 actions like DLL-present, and the
+menu, title and terrain draw. **Still wrong DLL-absent, from the two captures side by side**
+(`tools/trace_oracle/capture_arm.sh` with the DLL moved aside; images were in the session
+scratchpad, regenerate rather than look for them):
+- no building or tree meshes in the menu background town (terrain only) — the MeshInstance /
+  GraphicsMesh draw path or its buffers, first place to look is what those 453 draws bind;
+- text draws only the FIRST glyph of every label ("n" for New, "l" for Load); the Font glyph
+  Array helper was this morning's by-address wall, and `Font::Serialize` is suspect;
+- a large translucent grey rectangle covers the right half of the screen (a dialog panel or
+  tooltip with a wrong size).
+Method that worked twice tonight and should be the default for render walks: capture under
+RenderDoc DLL-absent, look at the frame overview and one draw's state, then put a
+count-limited `fprintf` on the silent-drop arms of the body the numbers point at, one gate
+run, remove the trace. Also audited: the 19 `GetFileVersion` ports written as a constant all
+match the DLL bytes now; ports that return through a variable were not covered.
+What is NOT yet triaged: how many of the 651 `RT_ORIGINAL_ONCE`/`RtOriginal<>` sites sit on
+live (non-oracle) paths — the gate found one (`video/buffers.cpp` MemFree).
 
 ## DLL-present build
 
