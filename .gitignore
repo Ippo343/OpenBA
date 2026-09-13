@@ -65,3 +65,7 @@ tools/libm_probe/full_sweep.txt
 lane_*_logs/
 tools/endsprites_probe/sweep.exe
 tools/gfxmat24_probe/probe.exe
+
+# resave gate: 21 MB raw images and per-run logs stay local; the golden md5 is committed
+docs/runtime_port/resave_gate/**/*.bin
+docs/runtime_port/resave_gate/run*/

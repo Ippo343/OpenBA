@@ -18,6 +18,23 @@ reachable both by mangled name and by retail address. From here the closure cann
 what the gate finds next is state, not code — objects handed to our bodies by a route that
 built them wrong, and callbacks stored in data.
 
+## Endgame (2026-09-13)
+
+The plan for what follows the gate is `ENDGAME.md`: A remove the DLL, C remove the flags,
+B fold the C bodies into real classes, in that order. The default build STILL loads the
+DLL; DLL-absent is `make cutover` / `BANISHED_RT_NO_DLL=1` until A.1 flips it.
+
+- **Serializer gate exists and passes**: `tools/resave_gate/resave_gate.sh Gate` (README
+  there). Load a save DLL-absent, serialize the restored world again before the first tick,
+  compare the raw bytes against a golden. Golden cut against `Gate.sav`
+  md5 `68f99e06e6cdce6c17a8fb06e867b2c8`; two pinned runs byte-identical.
+- Its first run found the last DLL-absent SAVE blocker: `CompressedStream::SetWindow`'s
+  write-side grow path was still delegated to the DLL (the cutover gate never saved).
+  Ported; the DLL-absent autosave now completes.
+- Seen once each, pre-existing, not fixed: a loader race crash in `ExternalFactory::Add`
+  (AVL rotate on a null node, `[GUL::Load] redundant dispatch` just before) and a hang in
+  teardown after the pause-menu Quit returned.
+
 ## Cutover gate
 
 `make cutover` (deploys the debug exe, moves the DLL aside, boots with `BANISHED_RT_NO_DLL=1`,

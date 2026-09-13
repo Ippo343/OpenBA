@@ -77,34 +77,17 @@
 //       eviction, then decode from `blockData` (+0x50) instead of the source.
 //       ~30 instructions. **PORTED** — it is cheap and it is what a
 //       CompressedMemoryStream that has been written and re-read takes.
-//   direction != 0 and blockIndex >= headerSize: ~200 instructions that GROW
-//       the header and block arrays to extend the stream. **NOT PORTED.**
+//   direction != 0 and blockIndex >= headerSize: GROW the header and block
+//       arrays until they cover blockIndex, then claim a window for it.
+//       **PORTED 2026-09-13** (0x1800a9ba0..0x1800a9e3a). It is two inlined
+//       `Collection::Array<T>::SetSize(size+1)` growth loops (8-byte elements,
+//       zero-filled, capacity policy `n` then `n*3`) followed by the same
+//       eviction as the other miss arms. Every save takes it on the first write
+//       into each new block; until it was ported the DLL-absent save died here
+//       (the load/resave gate, run 1).
 //
-// The grow path is declined for a stated reason rather than skipped: it is two
-// inlined `Collection::Array` growth loops that allocate under the allocator
-// lock and append empty blocks, i.e. it is stream WRITING, and nothing on the
-// package read path reaches it. It is guarded and delegated to the shipped body
-// through `RT_ORIGINAL_ONCE`, counted, and announced once — a partial port that
-// silently did nothing there would corrupt a save.
-//
-// **THIS IS A CUTOVER BLOCKER AND IT IS NAMED AS ONE.** With the DLL gone that
-// delegation is a null call. Whoever finishes this class must port the grow path
-// or prove it unreachable; `[CSRead] GROW path delegated` in the log is the
-// tell that a run took it.
-//
-// **AND THERE IS A SECOND ONE, which porting this rung CREATED rather than
-// found.** `GetAvailableWindow` flushes a dirty window before evicting it —
-// `if (w[best].start >= 0 && direction == 1) CompressWindow(...)` — and
-// `?CompressWindow@CompressedStream@IO@@AEAAXH@Z` (0x1800a9810) is unported.
-// Before this lane, nothing in our tree reached that name at all; now
-// `tools/unsatisfied_export_scan.py` lists it as a LIVE door, because it is one:
-// it is not inside any diff guard, and every save that evicts a dirty window
-// takes it. That is `reference_porting_can_grow_the_cutover_surface.md` again,
-// and it is recorded here rather than left for the next census to discover.
-//
-// So the write side of this class now owes THREE things at cutover: the grow
-// path, `CompressWindow`, and whatever those two pull in. The read path — the
-// row this lane was asked for — owes nothing.
+// `CompressWindow` (0x1800a9810), which `GetAvailableWindow` calls to flush a
+// dirty window before evicting it, lives in compressed_stream_write.cpp.
 //
 // ---------------------------------------------------------------------------
 // 5. THE ORACLE — LOCKSTEP, AND STATE NOT JUST BYTES
@@ -170,6 +153,42 @@ inline Header* Headers(CompressedStream* s) {
     return static_cast<Header*>(s->headerData);
 }
 
+typedef void* (*MemAllocFn)(uint64_t, int32_t);
+typedef void  (*MemFreeFn)(void*);
+
+// `Collection::Array<T>::SetSize(size + 1)` as MSVC inlined it twice into
+// SetWindow's grow path (headers at 1800a9bb0, blocks at 1800a9cb1): 8-byte
+// elements, new slots zero-filled, capacity `n` on the first growth and `n*3`
+// after. Retail's lock / Allocate(_singleton, cap*8, align) / unlock triple is
+// the exported MemAlloc (compressed_stream_write.cpp says why they are the same
+// function). The element copy loop only runs over a FRESH allocation; when the
+// capacity already covers `n` it starts at `old` and just zeroes the new slot.
+inline void GrowByOne(void*& data, int32_t& size, int32_t& cap,
+                      size_t elem, int32_t align) {
+    const int32_t old = size;
+    const int32_t n   = old + 1;
+    void* const oldData = data;
+    size = n;
+    if (cap < n) {                                      // 1800a9bd4 / 1800a9cd5
+        cap = (old != 0) ? n * 3 : n;
+        data = RT_EXPORT_ONCE(MemAllocFn,
+            "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(
+                static_cast<uint64_t>(cap) * elem, align);
+    }
+    if (data != nullptr) {
+        const int32_t first = (oldData == data) ? old : 0;
+        uint8_t* const dst       = static_cast<uint8_t*>(data);
+        const uint8_t* const src = static_cast<const uint8_t*>(oldData);
+        for (int32_t i = first; i < n; ++i) {
+            if (i < old) std::memcpy(dst + i * elem, src + i * elem, elem);
+            else         std::memset(dst + i * elem, 0, elem);
+        }
+    }
+    if (oldData != data && oldData != nullptr)
+        RT_EXPORT_ONCE(MemFreeFn,
+            "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(oldData);
+}
+
 // The source stream's vtable, used by DecompressFromSource. Slot indices rather
 // than byte offsets so the arithmetic is visible: retail calls `[RAX+0x18]` and
 // `[RAX+0x20]`, i.e. slots 3 and 4.
@@ -195,7 +214,7 @@ struct SetWindowBranchCounts {
     int64_t scanHit    = 0;   // another LOADED window covers pos (the LRU re-use path)
     int64_t readMiss   = 0;   // direction == 0: evict + DecompressFromSource
     int64_t inMemory   = 0;   // direction != 0, block resident: evict + decode blockData
-    int64_t growDelegated = 0;   // direction != 0, block beyond the end: NOT PORTED (§4)
+    int64_t grow       = 0;   // direction != 0, block beyond the end: extend the arrays
 };
 static SetWindowBranchCounts g_swBranch;
 
@@ -356,21 +375,33 @@ extern "C" bool RtIo_CompressedStream_SetWindow(CompressedStream* self, int32_t 
 
     const int32_t blk = pos >> 15;                      // 1800a9b8d
     if (blk >= self->headerSize) {                      // 1800a9b94  JL -> in-memory
-        // THE DECLINED GROW PATH (§4). Delegated to the shipped body rather
-        // than approximated, counted rather than silent, and announced once so a
-        // run that takes it says so. At cutover this is a null call — it is a
-        // NAMED CUTOVER BLOCKER, not an oversight.
-        //
-        // Re-entering the shipped body re-does the `position` store above, which
-        // is idempotent (same value), and nothing else has been written on this
-        // path yet.
-        if (++g_swBranch.growDelegated == 1)
-            printf("[CSRead] GROW path delegated to the DLL (blk=%d >= headerSize=%d)"
-                        " -- NOT PORTED, a cutover blocker; see compressed_stream_read.cpp\n",
-                        blk, self->headerSize);
+        // ---- GROW (direction != 0, block beyond the end) ---- 1800a9ba0..1800a9e3a
+        // Append one header and one block slot per iteration until the arrays
+        // cover `blk`, claiming a window each time. Two quirks kept on purpose:
+        //  * every claimed window gets the SAME start (`blk << 15`, held in a
+        //    stack slot for the whole loop), not its own block's start; only the
+        //    last iteration's window matters, and it is the one that ends at
+        //    `position`. Sequential writes take exactly one iteration.
+        //  * the retail `if (n != old)` around each SetSize is `old+1 != old`,
+        //    always true, and is not reproduced.
+        ++g_swBranch.grow;
+        const int32_t blockStart = blk << 15;           // 1800a9ba7  local_res10
+        do {
+            GrowByOne(self->headerData, self->headerSize, self->headerCap,
+                      sizeof(Header), 4);               // 1800a9bb0..1800a9cae
+            GrowByOne(self->blockData, self->blockSize, self->blockCap,
+                      sizeof(void*), 8);                // 1800a9cb1..1800a9dc7
+            const int32_t aw = RtIo_CompressedStream_GetAvailableWindow(self);  // 1800a9dc7
+            self->activeWindow = aw;                    // 1800a9dcc
+            Window* const w = &Windows(self)[aw];
+            w->start = blockStart;                      // 1800a9dd3
+            if (blk == self->headerSize - 1)            // 1800a9ddd
+                w->end = self->position;                // 1800a9df0
+            else
+                w->end = w->start + kWin;               // 1800a9e0d
+        } while (self->headerSize < blk + 1);           // 1800a9e19
         RT_DIFF_WORK(true);
-        return RT_ORIGINAL_ONCE(SetWindowFn,
-            "?SetWindow@CompressedStream@IO@@AEAA_NH@Z")(self, pos);
+        return true;                                    // 1800a9ebb
     }
 
     // ---- in-memory block (direction != 0, block already present) ---------
@@ -433,7 +464,7 @@ extern "C" bool RtIo_CompressedStream_Read(CompressedStream* self, int32_t n, vo
     return true;                                        // 1800aa808
 }
 
-int64_t RtIo_CompressedStreamGrowDelegations() { return g_swBranch.growDelegated; }
+int64_t RtIo_CompressedStreamGrowDelegations() { return g_swBranch.grow; }
 
 }  // namespace RtIo
 
@@ -466,8 +497,6 @@ int RtIoCompressedStreamReadRegister() {
     printf("[RtPort]   IO::CompressedStream read path (lane PKG2): %d exports registered\n", n);
 
     // DELIBERATELY ABSENT — §4 and the plan doc.
-    //   the direction!=0 GROW path inside SetWindow  (~200 instrs, DELEGATED,
-    //       counted, announced; A NAMED CUTOVER BLOCKER)
     //   ?Open@CompressedStream@IO@@        0x1800aa560   needs SetWindowCount
     //       (0x1800aa020) and Array<Header>::SetSize (0x180024d70). Not on the
     //       hot path — once per stream — and this lane uses the DLL's to build

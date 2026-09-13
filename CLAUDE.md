@@ -24,6 +24,9 @@ reimplemented are stubbed or registered individually via the address registry (s
 - **Facts and the per-function recipe:** [docs/runtime_port/PLAN.md](docs/runtime_port/PLAN.md) §2, §3, §6.
 - No waves, lanes, new instruments or new `BANISHED_RT_*` flags (DIRECTION.md §2). A port
   registers unconditionally.
+- **What follows the gate** (DLL removal, flag cleanup, real C++ classes, in that order):
+  [docs/runtime_port/ENDGAME.md](docs/runtime_port/ENDGAME.md). The serializer regression
+  check for all of it is `tools/resave_gate/resave_gate.sh Gate` (README alongside).
 
 ## Target Binaries
 

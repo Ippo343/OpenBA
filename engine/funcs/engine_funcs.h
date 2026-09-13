@@ -3632,6 +3632,12 @@ inline void* GetLoadingSoundString(void* retStr) {
     uint8_t rng[2520];  // System::Random is large (~2512 bytes)
     fn_Random_Default_Ctor(rng);
     uint32_t variant = fn_Random_Rand(rng, 12);
+    // BANISHED_MENU_SCENE pins every random front-end pick, this one included:
+    // the loading image it selects stays resident and is numbered into the
+    // save's reference table, so an unpinned pick shifts every reference id
+    // after "Dialog\Loading.rsc:gameLoadN" (tools/resave_gate/).
+    if (const char* pin = std::getenv("BANISHED_MENU_SCENE"))
+        variant = static_cast<unsigned>(std::atoi(pin)) % 12u;
     fn_String_Format(retStr, "Dialog/Loading.rsc:gameLoad%i", variant);
     return retStr;
 }

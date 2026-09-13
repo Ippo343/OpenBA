@@ -1280,6 +1280,92 @@ extern "C" void GameUpdateLoop_SaveRestore(void* self, char save,
 }
 
 // ============================================================
+// Load/resave roundtrip check — the serializer gate (2026-09-13)
+// ============================================================
+// BANISHED_SAVE_TEST=roundtrip. Called from the LOAD-FROM-SAVE branch of
+// GameUpdateLoop::Load right after SaveRestore(load) and before the loaded
+// SavedState is freed, i.e. before a single sim tick. It serializes the world
+// again into a fresh SavedState, decompresses BOTH images through the same
+// CompressedMemoryStream path the load uses, and compares the raw serialized
+// bytes. Compression, the metadata block (thumbnail, timestamp) and sim drift
+// are all out of the picture: a difference here is a Serialize body that does
+// not round-trip its own state. Both raw images are written next to the logs
+// so a difference can be diffed offline.
+typedef bool     (*fn_CS_Read_t)(void* cs, int n, void* dst);
+typedef uint32_t (*fn_CS_GetSize_t)(void* cs);
+
+static bool RoundtripDecompress(void* savedState, uint8_t** outData, uint32_t* outSize) {
+    static fn_CS_Read_t    s_read = nullptr;
+    static fn_CS_GetSize_t s_size = nullptr;
+    if (!s_read) {
+        s_read = reinterpret_cast<fn_CS_Read_t>(
+            ResolveExport("?Read@CompressedStream@IO@@UEAA_NHPEAX@Z"));
+        s_size = reinterpret_cast<fn_CS_GetSize_t>(
+            ResolveExport("?GetSize@CompressedStream@IO@@UEBAIXZ"));
+    }
+    if (!s_read || !s_size) return false;
+    alignas(16) uint8_t cms[0x100];
+    s_fn_CMS_Ctor(cms);
+    s_fn_SavedState_Retrieve(savedState, s_fn_CMS_GetMemStream(cms));
+    if (!s_fn_CMS_Open(cms)) { s_fn_CMS_Dtor(cms); return false; }
+    const uint32_t size = s_size(cms);
+    uint8_t* data = static_cast<uint8_t*>(std::malloc(size ? size : 1));
+    const bool ok = size == 0 || s_read(cms, static_cast<int>(size), data);
+    s_fn_CMS_Close(cms);
+    s_fn_CMS_Dtor(cms);
+    *outData = data; *outSize = size;
+    return ok;
+}
+
+static void RoundtripDump(const char* name, const uint8_t* data, uint32_t size) {
+    FILE* f = std::fopen(name, "wb");
+    if (!f) return;
+    std::fwrite(data, 1, size, f);
+    std::fclose(f);
+}
+
+extern "C" void GameUpdateLoop_SaveRoundtripCheck(void* self, void* loadedState) {
+    const char* e = std::getenv("BANISHED_SAVE_TEST");
+    if (!e || _stricmp(e, "roundtrip") != 0) return;
+    EnsureResolved();
+
+    struct SS { uint32_t id; uint32_t size; void* data; };
+    const SS* loaded = static_cast<const SS*>(loadedState);
+    SS fresh = { loaded->id, 0, nullptr };
+    int out = 0;
+    fprintf(stderr, "[Roundtrip] SaveRestore(save) into a fresh SavedState (loaded image %u bytes)\n",
+            loaded->size);
+    fflush(stderr);
+    GameUpdateLoop_SaveRestore(self, 1, &fresh, &out);
+
+    uint8_t* a = nullptr; uint32_t an = 0;
+    uint8_t* b = nullptr; uint32_t bn = 0;
+    const bool okA = RoundtripDecompress(loadedState, &a, &an);
+    const bool okB = RoundtripDecompress(&fresh, &b, &bn);
+    if (!okA || !okB) {
+        fprintf(stderr, "[Roundtrip] RESULT=ERROR decompress loaded=%d resaved=%d\n", okA, okB);
+        fflush(stderr);
+        return;
+    }
+    RoundtripDump("standalone_roundtrip_loaded.bin",  a, an);
+    RoundtripDump("standalone_roundtrip_resaved.bin", b, bn);
+
+    const uint32_t n = an < bn ? an : bn;
+    uint32_t first = n; uint32_t diffs = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        if (a[i] != b[i]) { if (first == n) first = i; diffs++; }
+    }
+    const bool equal = (an == bn) && diffs == 0;
+    fprintf(stderr, "[Roundtrip] RESULT=%s raw loaded=%u resaved=%u compressed loaded=%u resaved=%u"
+                    " firstDiff=%u diffBytes=%u tail=%u\n",
+            equal ? "PASS" : "DIFF", an, bn, loaded->size, fresh.size,
+            first, diffs, an > bn ? an - bn : bn - an);
+    fflush(stderr);
+    std::free(a); std::free(b);
+    if (fresh.data && fn_MemFreeStatic) fn_MemFreeStatic(fresh.data);
+}
+
+// ============================================================
 // Registration (called from standalone/address_registry.cpp)
 // ============================================================
 void RegisterGulSerialize() {

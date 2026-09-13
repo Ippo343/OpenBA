@@ -81,6 +81,7 @@ today; that is the whole point of computing the closure.
 `Runtime-x64.dll` absent. Then the DLL-present machinery (oracle, RtOriginal, detours, mint
 shadow, ~300 flags) is deleted, and the C-style `RtNs_Class_Method(self, …)` bodies can be
 folded into real classes for readability, which is the project's stated end state.
+The design and step list for that is `ENDGAME.md` (2026-09-13).
 
 ## 4. Where the old material went
 

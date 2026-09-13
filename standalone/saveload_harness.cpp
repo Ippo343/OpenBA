@@ -30,7 +30,8 @@ int TriggerFrame() {
     if (s == -2) {
         const char* e = std::getenv("BANISHED_SAVE_TEST");
         if (!e || !e[0] || (e[0] == '0' && !e[1]) ||
-            _stricmp(e, "false") == 0) {
+            _stricmp(e, "false") == 0 ||
+            _stricmp(e, "roundtrip") == 0) {   // the in-process gate, not a frame trigger
             s = -1;                       // off
         } else {
             int v = std::atoi(e);

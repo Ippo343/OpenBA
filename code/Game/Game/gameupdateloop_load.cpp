@@ -104,6 +104,7 @@ static fn_SavedState_Dtor_t s_fn_SavedState_Dtor = nullptr;         // ??1SavedS
 // (SaveRestore); the LOAD-FROM-SAVE branch below calls it directly.
 extern "C" void GameUpdateLoop_SaveRestore(void* self, char save,
                                            void* savedState, int* outParam);
+extern "C" void GameUpdateLoop_SaveRoundtripCheck(void* self, void* loadedState);
 
 // code/Game/Game/eventlog_achievement.cpp — the achievement award TOAST (exe
 // 0x140096960). Installed on the AchievementManager at step 30 below.
@@ -1594,6 +1595,9 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
         CharManager_Seed();
         int loadOut = 0;
         GameUpdateLoop_SaveRestore(loopVoid, 0, savedState, &loadOut);
+        // BANISHED_SAVE_TEST=roundtrip: serialize the just-restored world again
+        // and compare the raw bytes (gameupdateloop_serialize.cpp). No-op otherwise.
+        GameUpdateLoop_SaveRoundtripCheck(loopVoid, savedState);
         if (s_fn_SavedState_Dtor) s_fn_SavedState_Dtor(savedState);
         if (fn_MemFreeStatic) fn_MemFreeStatic(savedState);
         *(void**)(p + 0x58) = nullptr;
