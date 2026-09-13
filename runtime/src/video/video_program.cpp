@@ -150,7 +150,11 @@ struct Touched {
 };
 
 Touched Capture(const RtVideo::Context* ctx) {
-    Touched t;
+    // Value-initialised: `dirty` is 32 bits and `vertexLayout` is pointer-
+    // aligned, so bytes +0x4..+0x7 are PADDING. RT_DIFF_BYTES compares the
+    // whole struct, and uninitialised padding reported 47,280 "divergences"
+    // in 68,377 calls (2026-09-12) that were stack garbage, not the port.
+    Touched t{};
     t.dirty         = ctx->_dirty;
     t.vertexLayout  = ctx->_vertexLayout;
     t.renderState   = ctx->_renderState;

@@ -384,6 +384,7 @@ struct CallLog {
 
 Arena*   g_tee        = nullptr;   // our body's vertex tee
 CallLog* g_log        = nullptr;   // our body's Begin/EndVertices log
+uint32_t g_dirtyAtEnd = 0;         // live dirty mask sampled before our EndVertices
 int      g_defect     = 0;         // BANISHED_RT_FLUSH_DEFECT, negative controls
 bool     g_defectRead = false;
 
@@ -664,6 +665,10 @@ void FlushBody(SpriteContext* self, float halfPixel, int defect,
         void*  cd2   = Field<void*>(self->_context, kCtxContextData);
         void** cdvt2 = *reinterpret_cast<void***>(cd2);
         const int32_t prim = isLine ? 2 : 0;
+        // The oracle's fair comparison point for the dirty mask: the live
+        // backend's EndVertices DRAWS and consumes the bits, the scratch
+        // context's fake one never does, so sample before the call.
+        if (g_tee) g_dirtyAtEnd = Field<uint32_t>(self->_context, kCtxDirtyMask);
         reinterpret_cast<EndVerticesFn>(
             *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(cdvt2) + kCdEndVertices))(
                 cd2, prim);
@@ -1206,6 +1211,7 @@ void RtUi_SpriteContext_Flush(void* selfRaw) {
 
     // ---- ours, for real ----------------------------------------------------
     int records = 0, lines = 0, rotated = 0, mapFail = 0;
+    g_dirtyAtEnd = 0;
     if (wantOracle) { g_tee = &ours; g_log = &oursLog; }
     FlushBody(self, halfPixel, defect, &records, &lines, &rotated, &mapFail);
     g_tee = nullptr;
@@ -1280,9 +1286,19 @@ void RtUi_SpriteContext_Flush(void* selfRaw) {
     } else if (std::memcmp(&Field<int32_t>(self->_context, kCtxScissor),
                            &Field<int32_t>(ctxCopy, kCtxScissor), 16) != 0) {
         equal = false; why = "context SCISSOR differs";
-    } else if (Field<uint32_t>(self->_context, kCtxDirtyMask) !=
-               Field<uint32_t>(ctxCopy, kCtxDirtyMask)) {
-        equal = false; why = "context DIRTY MASK differs";
+    } else if (g_dirtyAtEnd != Field<uint32_t>(ctxCopy, kCtxDirtyMask)) {
+        // `g_dirtyAtEnd`, not the live mask NOW: the live EndVertices drew and
+        // cleared the bits (ours read 0 against theirs 0x109a2 on 61,994 of
+        // 68,377 calls, 2026-09-12); the fake backend never draws.
+        // Name the two masks and the pre-call one: a verdict that only says
+        // "differs" cannot say which body set which bit.
+        static char maskWhy[112];
+        std::snprintf(maskWhy, sizeof(maskWhy),
+                      "context DIRTY MASK differs (before=%08x ours=%08x theirs=%08x)",
+                      (unsigned)ctxDirtyBefore,
+                      (unsigned)g_dirtyAtEnd,
+                      (unsigned)Field<uint32_t>(ctxCopy, kCtxDirtyMask));
+        equal = false; why = maskWhy;
     } else if (self->_draws._size != scratch._draws._size) {
         equal = false; why = "_draws._size differs";
     } else if (self->_currentSheet != scratch._currentSheet) {
