@@ -28,6 +28,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "address_registry.h"
+#include "options.h"         // Opt().teardownHeapCheck
+#include "redzone_alloc.h"   // RedzoneAlloc_FindCorruptBlockNative
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -240,6 +242,23 @@ extern "C" void EntityList_Shutdown_c3d30(void* selfV) {
 
     *(self + 0xE0) = 1;
 
+    // BANISHED_TEARDOWN_HEAPCHECK brackets the mark loop. The stress town's
+    // teardown crash (docs/runtime_port/TEARDOWN_WILD_WRITE.md) is ONE stray
+    // 4-byte store into an allocator boundary tag, laid down inside a single
+    // MarkForRemoval cascade and only tripped over hundreds of entities later,
+    // in the sweep. A hardware watchpoint cannot be armed on a victim whose
+    // address is unknown until after it has been written, so the boundary tags
+    // are scanned after every step instead: the first step whose scan comes back
+    // dirty IS the step that wrote. This is the instrument that pinned the writer
+    // to mark step 13; it costs nothing when the flag is off.
+    const bool bracket = Opt().teardownHeapCheck;
+    bool bracketFired = false;
+    if (bracket) {
+        std::fprintf(stderr, "[TeardownBracket] ARMED; heap at entry is %s\n",
+                     RedzoneAlloc_FindCorruptBlockNative() ? "ALREADY CORRUPT" : "clean");
+        std::fflush(stderr);
+    }
+
     // Mark every entity not already flagged deleted (entity+0x40 bit 10).
     for (int32_t i = 0; i < I32(self, 0x10); ++i) {
         void* slot = B(P(self, 0x08)) + (size_t)i * 8;
@@ -248,6 +267,19 @@ extern "C" void EntityList_Shutdown_c3d30(void* selfV) {
         if ((*reinterpret_cast<uint32_t*>(B(entity) + 0x40) >> 10 & 1) == 0) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
             if (s_markRemoval) s_markRemoval(P(slot, 0x00));
+        }
+        if (bracket && !bracketFired) {
+            if (void* bad = RedzoneAlloc_FindCorruptBlockNative()) {
+                bracketFired = true;
+                std::fprintf(stderr,
+                    "[TeardownBracket] *** HEAP WENT CORRUPT *** mark step=%d "
+                    "corruptBlock=%p tag=0x%016llx | the step that just ran is the "
+                    "writer: entity=%p entityVtable=0x%016llx\n",
+                    (int)i, bad, (unsigned long long)*reinterpret_cast<uint64_t*>(bad),
+                    entity,
+                    (unsigned long long)(entity ? *reinterpret_cast<uint64_t*>(entity) : 0));
+                std::fflush(stderr);
+            }
         }
     }
 

@@ -17,12 +17,14 @@ experiment. Nothing here is fixed yet.
 
 ### 1.1 The heap is clean when teardown starts and corrupt inside ONE markRemoval
 
-`EntityList::Shutdown` (`code/Game/Game/gameupdateloop_teardown.cpp`) already had
-a bracket instrument (`BANISHED_TEARDOWN_BRACKET`, Wave 9 lane N Finding 3). It was
+`EntityList::Shutdown` (`code/Game/Game/gameupdateloop_teardown.cpp`) had a bracket
+instrument from Wave 9 lane N Finding 3 (ENDGAME C removed it with the rest of the
+`BANISHED_*` reads; it is restored in this commit behind the EXISTING
+`Opt().teardownHeapCheck` / `BANISHED_TEARDOWN_HEAPCHECK` flag — no new flag). It was
 unusable at step granularity because the boundary-tag walk called `IsBadReadPtr`
 once per block (~2 s per walk on the 800-citizen town). That walk is now
 region-cached with `VirtualQuery` (this commit, `standalone/redzone_alloc.cpp`),
-which makes `BANISHED_TEARDOWN_BRACKET=1` — a walk after EVERY entity — affordable.
+which makes a walk after EVERY entity affordable.
 
 With that, two independent runs agree:
 
@@ -151,14 +153,18 @@ Both are 32-bit stores of a small int at a 4-mod-8 offset, both inside the inter
 
 ```
 tools/game_dir_lock.sh acquire <tag> 600
-BANISHED_TEARDOWN_BRACKET=1 mingw32-make sa-stress-debug      # or sa-stress for the perf exe
+BANISHED_TEARDOWN_HEAPCHECK=1 mingw32-make sa-stress-debug    # or sa-stress for the perf exe
 tools/game_dir_lock.sh release <tag>
 ```
 
 Then read, in order: `standalone_crash.log`, then `[TeardownBracket]` lines in
 `standalone_error.log` (the run is also archived under `perf/results/<stamp>_run/`).
-`BANISHED_TEARDOWN_BRACKET=1` costs about 25 % of the run's wall time now that the
-walk is region-cached; `=1000` is free.
+The bracket costs roughly 25 % of the run's wall time now that the walk is
+region-cached, and nothing at all when the flag is off.
+
+(The measurements below were taken with the pre-merge instrument, whose flag was
+spelled `BANISHED_TEARDOWN_BRACKET=<every-N-steps>`; the restored one always checks
+every step. Nothing else about the recipe changed.)
 
 **Rate (measured 2026-09-13, 800 citizens / 3 sets / speed 10):**
 
@@ -217,5 +223,6 @@ Do NOT add more heap walks into the cascade; they hide the bug (§2). Instead:
 `VirtualQuery` per memory region instead of one `IsBadReadPtr` per block. This is
 unconditional and costs nothing at runtime (both are only called from the redzone
 watchdog and the teardown bracket, which are already gated), and it is what makes
-`BANISHED_TEARDOWN_BRACKET=1` usable. No new flags; the temporary per-sub-call
-probes were removed.
+the per-step bracket usable, and the bracket itself is back in
+`EntityList_Shutdown_c3d30` behind the existing `Opt().teardownHeapCheck`. No new
+flags; the temporary per-sub-call probes were removed.
