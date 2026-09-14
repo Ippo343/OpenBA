@@ -46,8 +46,20 @@
 //
 // Registered by standalone/reg_keystone_a_gamedtor.cpp.
 
+// ENDGAME B.3.2 step 2 (COLL-GAME sweep): every `MemFree(data); data = 0; one
+// qword over size+capacity = 0` triple below was a hand-inlined
+// `Collection::Array<T>::~Array` for a trivially-destructible T
+// (`rtcoll::ArrayDtorImpl`, byte for byte) and is now `->~Array()` on the
+// header, spelled `rtcoll::ArrayHdr` because none of these element types is
+// pinned in this file. In 1dac0 / 1e3a0 only the two `~Array`s are converted
+// (the inner header at element+0x08 / +0x10 and the outer block); the
+// per-element walk stays as written because the outer element's grow arms are
+// not pinned, so no `ArraySpec` row can honestly be written for it yet. Slab
+// chains, free lists, node chains, the cell BST and the `MemFree` with no
+// header stores (a6720's [thread+0x158]) are not arrays and are untouched.
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "collection/Collection.h"
 #include <cstdint>
 
 namespace {
@@ -104,6 +116,11 @@ static void EnsureFns() {
 }
 
 inline void MemFree(void* p) { if (fn_MemFreeStatic) fn_MemFreeStatic(p); }
+
+// B.3.2 bridge: the owning structs are still untyped bytes.
+inline rtcoll::ArrayHdr& Arr(int64_t base, int64_t off) {
+    return *reinterpret_cast<rtcoll::ArrayHdr*>(base + off);
+}
 
 } // namespace
 
@@ -165,9 +182,7 @@ extern "C" void GameDtor_TreeArrayDtor_1a450(int64_t param_1) {
     }
     *treeSlot = nullptr;                                        // [+0x28] = 0
     *reinterpret_cast<int*>(param_1 + 0x30) = 0;                // [+0x30] = 0
-    MemFree(*reinterpret_cast<void**>(param_1 + 0x18));         // free array @[+0x18]
-    *reinterpret_cast<int64_t*>(param_1 + 0x18) = 0;            // [+0x18] = 0
-    *reinterpret_cast<int64_t*>(param_1 + 0x20) = 0;            // [+0x20] = 0
+    Arr(param_1, 0x18).~Array();   // free array @[+0x18]; [+0x18] = 0; [+0x20] = 0
 }
 
 // ============================================================================
@@ -225,16 +240,12 @@ extern "C" void GameDtor_FreeArray18_1dac0(int64_t* param_1) {
     if (count > 0) {
         uint64_t* cur = reinterpret_cast<uint64_t*>(base + 0x08); // RBX = base + 8
         do {
-            MemFree(reinterpret_cast<void*>(cur[0]));          // free [RBX]
-            cur[0] = 0;                                         // [RBX]   = 0
-            cur[1] = 0;                                         // [RBX+8] = 0
+            Arr(reinterpret_cast<int64_t>(cur), 0).~Array();   // free [RBX]; [RBX] = [RBX+8] = 0
             cur = reinterpret_cast<uint64_t*>(reinterpret_cast<int64_t>(cur) + 0x18); // RBX += 0x18
             --count;
         } while (count != 0);
     }
-    MemFree(reinterpret_cast<void*>(param_1[0]));              // free base
-    param_1[0] = 0;
-    param_1[1] = 0;
+    Arr(reinterpret_cast<int64_t>(param_1), 0).~Array();        // free base; zero header
 }
 
 // ============================================================================
@@ -251,16 +262,12 @@ extern "C" void GameDtor_FreeArray20_1e3a0(int64_t* param_1) {
     if (count > 0) {
         uint64_t* cur = reinterpret_cast<uint64_t*>(base + 0x10); // RBX = base + 0x10
         do {
-            MemFree(reinterpret_cast<void*>(cur[0]));          // free [RBX]
-            cur[0] = 0;                                         // [RBX]   = 0
-            cur[1] = 0;                                         // [RBX+8] = 0
+            Arr(reinterpret_cast<int64_t>(cur), 0).~Array();   // free [RBX]; [RBX] = [RBX+8] = 0
             cur = reinterpret_cast<uint64_t*>(reinterpret_cast<int64_t>(cur) + 0x20); // RBX += 0x20
             --count;
         } while (count != 0);
     }
-    MemFree(reinterpret_cast<void*>(param_1[0]));              // free base
-    param_1[0] = 0;
-    param_1[1] = 0;
+    Arr(reinterpret_cast<int64_t>(param_1), 0).~Array();        // free base; zero header
 }
 
 // ============================================================================
@@ -283,21 +290,10 @@ extern "C" void GameDtor_SubObjDtor_a8570(int64_t param_1) {
     EnsureFns();
     GameDtor_FreeListDtor_1a5f0(reinterpret_cast<uint64_t*>(param_1 + 0xc8));
 
-    MemFree(*reinterpret_cast<void**>(param_1 + 0xb8));
-    *reinterpret_cast<int64_t*>(param_1 + 0xb8) = 0;
-    *reinterpret_cast<int64_t*>(param_1 + 0xc0) = 0;
-
-    MemFree(*reinterpret_cast<void**>(param_1 + 0xa8));
-    *reinterpret_cast<int64_t*>(param_1 + 0xa8) = 0;
-    *reinterpret_cast<int64_t*>(param_1 + 0xb0) = 0;
-
-    MemFree(*reinterpret_cast<void**>(param_1 + 0x98));
-    *reinterpret_cast<int64_t*>(param_1 + 0x98) = 0;
-    *reinterpret_cast<int64_t*>(param_1 + 0xa0) = 0;
-
-    MemFree(*reinterpret_cast<void**>(param_1 + 0x88));
-    *reinterpret_cast<int64_t*>(param_1 + 0x88) = 0;
-    *reinterpret_cast<int64_t*>(param_1 + 0x90) = 0;
+    Arr(param_1, 0xb8).~Array();   // MemFree [+0xb8]; [+0xb8]=[+0xc0]=0
+    Arr(param_1, 0xa8).~Array();   // MemFree [+0xa8]; [+0xa8]=[+0xb0]=0
+    Arr(param_1, 0x98).~Array();   // MemFree [+0x98]; [+0x98]=[+0xa0]=0
+    Arr(param_1, 0x88).~Array();   // MemFree [+0x88]; [+0x88]=[+0x90]=0
 
     GameDtor_FreeArray20_1e3a0(reinterpret_cast<int64_t*>(param_1 + 0x78));
 
@@ -305,15 +301,12 @@ extern "C" void GameDtor_SubObjDtor_a8570(int64_t param_1) {
         s_fn_FreeArr30(0, static_cast<uintptr_t>(*reinterpret_cast<int64_t*>(param_1 + 0x68)),
                        *reinterpret_cast<int*>(param_1 + 0x70));
 
-    MemFree(*reinterpret_cast<void**>(param_1 + 0x68));
-    *reinterpret_cast<int64_t*>(param_1 + 0x68) = 0;
-    *reinterpret_cast<int64_t*>(param_1 + 0x70) = 0;
+    // The element step (1e490, stride 0x30) ran above; this is the outer header.
+    Arr(param_1, 0x68).~Array();   // MemFree [+0x68]; [+0x68]=[+0x70]=0
 
     GameDtor_CellBstClear_1ced0(reinterpret_cast<int64_t*>(param_1 + 0x18));
 
-    MemFree(*reinterpret_cast<void**>(param_1 + 0x08));
-    *reinterpret_cast<int64_t*>(param_1 + 0x08) = 0;
-    *reinterpret_cast<int64_t*>(param_1 + 0x10) = 0;
+    Arr(param_1, 0x08).~Array();   // MemFree [+0x08]; [+0x08]=[+0x10]=0
 }
 
 // ============================================================================
@@ -352,9 +345,7 @@ extern "C" void GameDtor_ThreadDtor_a6720(int64_t thread) {
 
     GameDtor_CellBstClear_1ced0(reinterpret_cast<int64_t*>(rbx + 0x18)); // ced0(thread + 0x90)
 
-    MemFree(*reinterpret_cast<void**>(rbx + 0x08));           // MemFree [thread + 0x80]
-    *reinterpret_cast<int64_t*>(rbx + 0x08) = 0;              // [thread + 0x80] = 0
-    *reinterpret_cast<int64_t*>(rbx + 0x10) = 0;              // [thread + 0x88] = 0
+    Arr(rbx, 0x08).~Array();   // MemFree [thread + 0x80]; [thread + 0x80] = [thread + 0x88] = 0
 
     // Walk the cmd-node chain at +0x60 (RSI = thread + 0x60); next link @node+0x18.
     int64_t rsi = thread + 0x60;
@@ -471,9 +462,7 @@ extern "C" void Game_Dtor_9ed60(int64_t param_1) {
 
     GameDtor_FreeListDtor_1a5f0(reinterpret_cast<uint64_t*>(param_1 + 0xa8));
 
-    MemFree(*reinterpret_cast<void**>(param_1 + 0x80));         // free [+0x80]
-    *reinterpret_cast<int64_t*>(param_1 + 0x80) = 0;
-    *reinterpret_cast<int64_t*>(param_1 + 0x88) = 0;
+    Arr(param_1, 0x80).~Array();   // free [+0x80]; [+0x80]=[+0x88]=0
 
     if (s_fn_SceneDtor) s_fn_SceneDtor(reinterpret_cast<void*>(param_1 + 0x08)); // tail-call
 }

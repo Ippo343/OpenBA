@@ -55,6 +55,7 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
+#include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -172,35 +173,25 @@ static inline float rfloat(void* rng) {
 // {float x,float y,float z} record). Callers always pass newCount = count+1 and
 // src = the element to push, so the net effect is push_back(src). The original's
 // 4-wide unrolled copy is purely a perf optimization of this element-wise fill.
+//
+// ENDGAME B.3.2 step 2: now the 3-argument `Collection::Array<WgVec3Rec>::SetSize`
+// (src is the fill). Trait-derived row, and it IS trait-equivalent: the element
+// is three floats, `assign` a 12-byte copy (byteCopy == is_trivially_copyable),
+// no destroy, and the 2-argument form's `init` is never reached by a fill call.
+// Compared arm for arm against rtcoll::SetSizeCore: exact-equal early return,
+// `_size` first, treble-on-single-append-from-non-empty, cap*0xC at align 4,
+// prefix copied only when the block moved, fill for every index at or past the
+// old count, old block freed only when it moved. The only dropped line was the
+// `if (!data) return` out-of-memory bail.
 // ============================================================
+struct WgVec3Rec { float x, y, z; };
+static_assert(sizeof(WgVec3Rec) == 0x0c && alignof(WgVec3Rec) == 4, "0xC-stride record");
+using WgVec3Array = Collection::Array<WgVec3Rec>;
+
 static void AppendVec3(void* hdr, int newCount, const float* src /*x,y,z*/) {
-    uint8_t* h = (uint8_t*)hdr;
-    void* oldData  = *(void**)(h + 0x00);
-    int   oldCount = *(int*)(h + 0x08);
-    int   cap      = *(int*)(h + 0x0c);
-    if (newCount == oldCount) return;
-
-    *(int*)(h + 0x08) = newCount;
-    void* data = oldData;
-    if (cap < newCount) {
-        int newCap = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) newCap = newCount * 3;
-        *(int*)(h + 0x0c) = newCap;
-        data = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 0x0c, 4) : nullptr;
-        *(void**)(h + 0x00) = data;
-    }
-    if (!data) return;
-
-    int start = (data == oldData) ? oldCount : 0;
-    uint8_t* dst = (uint8_t*)data;
-    uint8_t* old = (uint8_t*)oldData;
-    for (int i = start; i < newCount; ++i) {
-        const float* s = src;
-        if (data != oldData && i < oldCount) s = (const float*)(old + (size_t)i * 0x0c);
-        float* d = (float*)(dst + (size_t)i * 0x0c);
-        d[0] = s[0]; d[1] = s[1]; d[2] = s[2];
-    }
-    if (oldData && data != oldData && fn_MemFreeStatic) fn_MemFreeStatic(oldData);
+    // B.3.2 bridge: hf+0x38 / hf+0x48 are still raw {data,count,cap} triples.
+    reinterpret_cast<WgVec3Array*>(hdr)->SetSize(newCount,
+                                                *reinterpret_cast<const WgVec3Rec*>(src));
 }
 
 // ============================================================
@@ -235,77 +226,78 @@ static void CopyVec1c(void* dstHdr, void* srcHdr) {
 // each a {data,count,cap}+pad inner vector), resizing to newCount = count+1 and
 // deep-copying srcVec into the new tail slot via CopyVec1c.
 // (Only the push_back-one fast path is exercised by cc850.)
+//
+// ENDGAME B.3.2 step 2: now `Collection::Array<>::SetSizeFill` over the
+// `kSpec_RgPathVec` row (this file's twin of worldgen_f390_coastline.cpp's
+// kSpec_WgPathVec, kept separate so its `assign` keeps driving this file's
+// CopyVec1c). Compared arm for arm against rtcoll::SetSizeCore and the retail
+// body 0x140024460 (re-decompiled 2026-09-13): exact-equal early return, `_size`
+// first, treble rule, cap*16 at align 8, per element zero-the-header then deep
+// copy (prefix only when the block moved, otherwise the fill), old inner buffers
+// freed then the old block when it moved. ONE arm this transcription LACKED and
+// retail HAS: destroy of the truncated tail on an in-place shrink (free the
+// inner buffer, zero the header). Unreachable from this file: the only caller
+// (TryPlacePath, below) passes newCount = count + 1, so the array never shrinks
+// here. The row carries retail's arm.
 // ============================================================
-static void DeepAppendAoA(void* hdr, int newCount, void* srcVec) {
-    uint8_t* h = (uint8_t*)hdr;
-    int oldCount = *(int*)(h + 0x08);
-    if (newCount == oldCount) return;
-    void* oldData = *(void**)(h + 0x00);
-    int cap = *(int*)(h + 0x0c);
-    *(int*)(h + 0x08) = newCount;
-    void* data = oldData;
-    if (cap < newCount) {
-        int newCap = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) newCap = newCount * 3;
-        *(int*)(h + 0x0c) = newCap;
-        data = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap << 4, 8) : nullptr;
-        *(void**)(h + 0x00) = data;
-    }
-    if (!data) return;
-
-    int start = (data == oldData) ? oldCount : 0;
-    uint8_t* dst = (uint8_t*)data;
-    uint8_t* old = (uint8_t*)oldData;
-    for (int i = start; i < newCount; ++i) {
-        void* slot = dst + (size_t)i * 0x10;
-        void* srcSlot = srcVec;
-        if (data != oldData && i < oldCount) srcSlot = old + (size_t)i * 0x10;
+static void AssignRgPathVec(uint8_t* d, const uint8_t* s) {
+    *(void**)d = nullptr;
+    *(uint64_t*)(d + 8) = 0;
+    CopyVec1c(d, const_cast<uint8_t*>(s));
+}
+static void InitRgPathVec(uint8_t* d) {              // Collection::Array's ctor; no site here reaches it
+    *(uint64_t*)(d + 0) = 0;
+    *(uint64_t*)(d + 8) = 0;
+}
+static void DestroyRgPathVec(void* /*ignoredThis*/, uint8_t* base, int count) {
+    for (int i = 0; i < count; ++i) {
+        uint8_t* slot = base + (size_t)i * 0x10;
+        rtcoll::MemFree(*(void**)slot);               // null-guarded inside
         *(void**)slot = nullptr;
-        *(uint64_t*)((uint8_t*)slot + 8) = 0;
-        CopyVec1c(slot, srcSlot);
+        *(uint64_t*)(slot + 8) = 0;
     }
-    if (data != oldData && oldData && fn_MemFreeStatic) {
-        uint8_t* o = (uint8_t*)oldData;
-        for (int i = 0; i < oldCount; ++i) {
-            void* inner = *(void**)(o + (size_t)i * 0x10);
-            if (inner) fn_MemFreeStatic(inner);
-        }
-        fn_MemFreeStatic(oldData);
-    }
+}
+static const rtcoll::ArraySpec kSpec_RgPathVec = {  // exe 0x140024460
+    "Array<Array<PathPoint>>", 0x10, 8,
+    &AssignRgPathVec, &InitRgPathVec, &DestroyRgPathVec, /*byteCopy*/false,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+using RgPathVecArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                         Collection::ExplicitSpec<&kSpec_RgPathVec>>;
+
+static void DeepAppendAoA(void* hdr, int newCount, void* srcVec) {
+    // B.3.2 bridge: hf+0x18 is still a raw {data,count,cap} triple.
+    reinterpret_cast<RgPathVecArray*>(hdr)->SetSizeFill(newCount, srcVec);
 }
 
 // ============================================================
 // FUN_140023b70  @0x140023b70  —  ResizeVec1c: resize a 0x1C-stride
 // {data,count,cap} vector to `newCount` (grow ×3 on count+1), copying retained
 // elements and zeroing the new tail. cc850 calls this then overwrites the tail.
+//
+// ENDGAME B.3.2 step 2: now `Collection::Array<>::SetSize` over the
+// `kSpec_WgPathPointZeroInit` row defined in worldgen_f390_coastline.cpp.
+// Compared arm for arm against rtcoll::SetSizeCore and the retail body
+// 0x140023b70 (re-decompiled 2026-09-13): every structural arm matched.
+//
+// The new-tail arm is THIS SITE'S, not retail's and not the coastline twin's.
+// One retail body has two transcriptions in this tree: this one zeroes all 0x1C
+// bytes of a new record, coastline's zeroes none, and retail's own arm is a
+// single QWORD store. Both of ours are believed unobservable — `pts` is a fresh
+// local here, so every record is new, and the loop right after the resize writes
+// [8,0x1C) of every record before anything reads them — but this refactor's
+// contract is no behaviour change in a deterministic world build, so each site
+// keeps its own arm and the reconciliation onto retail's is left as a separate,
+// separately-verified change. The two rows sit side by side in coastline.cpp.
 // ============================================================
+extern const rtcoll::ArraySpec kSpec_WgPathPointZeroInit;  // worldgen_f390_coastline.cpp, exe 0x140023b70
+using WgPathPointArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                           Collection::ExplicitSpec<&kSpec_WgPathPointZeroInit>>;
+
 static void ResizeVec1c(void* hdr, int newCount) {
-    uint8_t* h = (uint8_t*)hdr;
-    int oldCount = *(int*)(h + 0x08);
-    if (newCount == oldCount) return;
-    void* oldData = *(void**)(h + 0x00);
-    int cap = *(int*)(h + 0x0c);
-    *(int*)(h + 0x08) = newCount;
-    void* data = oldData;
-    if (cap < newCount) {
-        int newCap = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) newCap = newCount * 3;
-        *(int*)(h + 0x0c) = newCap;
-        data = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 0x1c, 4) : nullptr;
-        *(void**)(h + 0x00) = data;
-    }
-    if (!data) return;
-    int start = (data == oldData) ? oldCount : 0;
-    uint8_t* dst = (uint8_t*)data;
-    uint8_t* old = (uint8_t*)oldData;
-    for (int i = start; i < newCount; ++i) {
-        uint8_t* d = dst + (size_t)i * 0x1c;
-        if (data != oldData && i < oldCount)
-            __builtin_memcpy(d, old + (size_t)i * 0x1c, 0x1c);
-        else
-            __builtin_memset(d, 0, 0x1c);
-    }
-    if (oldData && data != oldData && fn_MemFreeStatic) fn_MemFreeStatic(oldData);
+    // B.3.2 bridge: the caller's header is still a raw {data,count,cap} triple.
+    reinterpret_cast<WgPathPointArray*>(hdr)->SetSize(newCount);
 }
 
 // ============================================================
@@ -394,11 +386,14 @@ static int TryPlacePath(int32_t* param_1, int param_2 /*nptCount*/, float param_
                         uint32_t param_7, uint32_t param_8, float param_9 /*branchSel*/) {
     void* rng = (uint8_t*)param_1 + HF_RANDOM;
 
-    struct Vec1c { void* data; int count; int cap; int _p; } pts = {nullptr, 0, 0, 0};
+    // ENDGAME B.3.2 step 2: a real Collection::Array with RAII; the manual free
+    // at the single exit below is the destructor now (the early `return 0` on
+    // a null buffer had nothing to free either way).
+    WgPathPointArray pts;
     ResizeVec1c(&pts, param_2);
-    if (!pts.data) return 0;
+    if (!pts._data) return 0;
 
-    uint8_t* pd = (uint8_t*)pts.data;
+    uint8_t* pd = (uint8_t*)pts._data;
     // seed band params into bytes [8..0x1c) of every element
     for (int i = 0; i < param_2; ++i) {
         uint8_t* e = pd + (size_t)i * 0x1c;
@@ -414,7 +409,7 @@ static int TryPlacePath(int32_t* param_1, int param_2 /*nptCount*/, float param_
 
     if ((int)param_9 < 0) {
         // ---- CLOSED RING ----
-        int last = pts.count - 1;
+        int last = pts._size - 1;
         float* p0 = (float*)pd;
         p0[0] = 0.0f; p0[1] = param_3 * kNegHalf;     // first: {0, scale*-0.5}
 
@@ -430,14 +425,14 @@ static int TryPlacePath(int32_t* param_1, int param_2 /*nptCount*/, float param_
         // midpoint jitter: pts[count/2] = (RandFloatTol*scale*0.125, RandFloatTol*scale*0.125)
         float jy = rftol(rng) * param_3 * kEighth;
         float jx = rftol(rng) * param_3 * kEighth;
-        float* pm = (float*)(pd + (size_t)(pts.count >> 1) * 0x1c);
+        float* pm = (float*)(pd + (size_t)(pts._size >> 1) * 0x1c);
         pm[0] = jx; pm[1] = jy;
 
         subAmp2 = param_3 * kQuarter;                 // fVar22
         subAmp  = param_3 * kHalf;                    // fVar24
-        SubdivideSeg(param_1, (int32_t**)&pts, 0, pts.count >> 1, subAmp, subAmp2);
-        lo = pts.count >> 1;
-        hi = pts.count - 1;
+        SubdivideSeg(param_1, (int32_t**)&pts, 0, pts._size >> 1, subAmp, subAmp2);
+        lo = pts._size >> 1;
+        hi = pts._size - 1;
     } else {
         // ---- BRANCH off existing path[branchSel] ----
         void* aoa = *(void**)((uint8_t*)param_1 + HF_PATHLIST);   // hf+0x18 data
@@ -449,7 +444,7 @@ static int TryPlacePath(int32_t* param_1, int param_2 /*nptCount*/, float param_
         *(uint64_t*)pd = *(uint64_t*)(selData + (size_t)startIdx * 0x1c);  // first pt = selected pt {x,y}
 
         float jitter = rftol(rng) * param_3 * kHalf;  // fVar17
-        int last = pts.count - 1;
+        int last = pts._size - 1;
         float* pl = (float*)(pd + (size_t)last * 0x1c);
         uint32_t r = fn_Random_Rand ? fn_Random_Rand(rng, 4) : 0;
         float half = param_3 * kHalf;                 // fVar24 = scale*0.5
@@ -462,15 +457,15 @@ static int TryPlacePath(int32_t* param_1, int param_2 /*nptCount*/, float param_
         subAmp2 = param_3 * kQuarter;
         subAmp  = param_3 * kHalf;
         lo = 0;
-        hi = pts.count - 1;
+        hi = pts._size - 1;
     }
     SubdivideSeg(param_1, (int32_t**)&pts, lo, hi, subAmp, subAmp2);
 
     // ---- VALIDATION ----
     // Then: self-intersection + cross-path intersection; reject if both
     // intersection parameters are strictly in (0,1).
-    int n = pts.count;
-    uint8_t* P = (uint8_t*)pts.data;
+    int n = pts._size;
+    uint8_t* P = (uint8_t*)pts._data;
     bool reject = false;
 
     // Nearest-neighbour adjacency pre-pass (retail FUN_1400cc850 first loop, the
@@ -561,7 +556,6 @@ static int TryPlacePath(int32_t* param_1, int param_2 /*nptCount*/, float param_
                       *(int*)((uint8_t*)param_1 + HF_PATHCOUNT) + 1, &pts);
         result = 1;
     }
-    if (pts.data && fn_MemFreeStatic) fn_MemFreeStatic(pts.data);
     return result;
 }
 

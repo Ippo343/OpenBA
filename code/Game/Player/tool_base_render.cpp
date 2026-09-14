@@ -29,6 +29,9 @@
 // count==old+1 -> capacity*3 doubling rule). This deliberately avoids restating
 // the decompiler's CONCAT44-packed count/capacity locals as ad-hoc pointer math,
 // which was the transposition hazard that got the whole chain DEFERRED before.
+// ENDGAME B.3.2 step 2: GrowTo is gone — that helper was a hand-written copy of
+// rtcoll::SetSizeCore, and the four locals are now real Collection::Array objects
+// (see the spec rows below the exe-helper table).
 //
 // Runtime methods go through engine_funcs fn_* pointers (resolved by mangled
 // name from Runtime-x64.dll — see engine/funcs/engine_funcs.cpp): EdgeMesh
@@ -65,6 +68,7 @@
 #include "math/Math.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
+#include "collection/Collection.h"
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
@@ -118,43 +122,46 @@ void EnsureFuncs() {
 
 inline void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 
-// A growable array with the exact field layout the exe passes by pointer to the
-// grow helpers: { void* base @+0, int count @+8, int cap @+0xC }.
-struct GrowArr {
-    void* base;
-    int   count;
-    int   cap;
-    int   _pad;
-    GrowArr() : base(nullptr), count(0), cap(0), _pad(0) {}
-};
+// The four growable locals of the outline builder: { data @+0, size @+8, cap @+0xC }.
+//
+// ENDGAME B.3.2 step 2: these WERE a `GrowArr` header plus `GrowTo`, a 1:1
+// transcription of TradeWork_impl_sub_74a0 (0x1400074a0) generalized over element
+// stride — i.e. a hand-written copy of rtcoll::SetSizeCore. Compared arm for arm
+// before the swap: exact-equal early return; `count` stored before the capacity
+// test; `newCount == oldCount+1 && oldCount != 0 ? newCount*3 : newCount`; one
+// allocation of cap*stride through the static MemoryAllocator (fn_MemAllocStatic ==
+// ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z, the same body rtcoll::MemAlloc
+// is); copy the prefix only when the block moved; the new tail memcpy'd from the
+// fill; free the old block only when it moved. Every caller appends exactly one
+// element with a fill, so each local is now a real Collection::Array:
+//   * the two index lists are the trait-derived Array<int16_t> (stride 2, align 2,
+//     byteCopy, init == nullptr, destroy == nullptr) — the same row GrowTo used;
+//   * the two vertex lists keep hand-derived rows because this site allocates
+//     BOTH strides with ALIGN 2 (`fn_MemAllocStatic(cap * stride, 2)`), which is
+//     kept exactly as the transcription had it, not re-derived from retail.
+//     byteCopy == true (the arm was a memcpy of the whole stride), init == nullptr
+//     (a fill is always supplied), destroy == nullptr (trivial elements).
+void AssignBytes8 (uint8_t* d, const uint8_t* s) { std::memcpy(d, s, 8); }
+void AssignBytes16(uint8_t* d, const uint8_t* s) { std::memcpy(d, s, 0x10); }
 
-// GrowTo — 1:1 transcription of TradeWork_impl_sub_74a0 (0x1400074a0), generalized
-// over element stride. Appends up to `newCount` elements; new slots [oldCount,
-// newCount) are filled from `newElem` (stride bytes), existing slots copied on
-// realloc. Capacity rule: when newCount == oldCount+1 and oldCount != 0, grow to
-// newCount*3 (amortized). Uses the static MemoryAllocator (fn_MemAllocStatic /
-// fn_MemFreeStatic), exactly like the original.
-void GrowTo(GrowArr* a, int newCount, const void* newElem, int stride) {
-    int oldCount = a->count;
-    if (newCount == oldCount) return;
-    void* old = a->base;
-    a->count = newCount;
-    if (a->cap < newCount) {
-        a->cap = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) a->cap = newCount * 3;
-        a->base = fn_MemAllocStatic ? fn_MemAllocStatic((int64_t)a->cap * stride, 2) : nullptr;
-    }
-    int start = (old == a->base) ? oldCount : 0;
-    for (int i = start; i < newCount; i++) {
-        char* dst = static_cast<char*>(a->base) + (int64_t)i * stride;
-        if (!dst) continue;
-        const void* src = (i < oldCount)
-            ? static_cast<const void*>(static_cast<char*>(old) + (int64_t)i * stride)
-            : newElem;
-        std::memcpy(dst, src, stride);
-    }
-    if (old != a->base && fn_MemFreeStatic) fn_MemFreeStatic(old);
-}
+const rtcoll::ArraySpec kSpec_TriVertex8 = {    // exe 0x1400074a0 idiom, stride 8
+    "Array<EdgeMesh::TriangleVertex (align 2)>", 8, 2,
+    &AssignBytes8, nullptr, nullptr, true,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+const rtcoll::ArraySpec kSpec_EdgeVertex16 = {  // exe 0x1400074a0 idiom, stride 0x10
+    "Array<EdgeMesh::EdgeVertex (align 2)>", 0x10, 2,
+    &AssignBytes16, nullptr, nullptr, true,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+
+using IdxArray     = Collection::Array<int16_t>;
+using TriVtxArray  = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                       Collection::ExplicitSpec<&kSpec_TriVertex8>>;
+using EdgeVtxArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                       Collection::ExplicitSpec<&kSpec_EdgeVertex16>>;
 
 // ===========================================================================
 // thunk_helper_d250_sub_7080 (0x140007080)
@@ -267,36 +274,36 @@ void SampleTile(int64_t hf, int col, int row, float* out) {
 //   EdgeVertex (the two endpoints extruded +/-0x200) to `evtx`, then 6 triangle
 //   indices {0,1,2,0,2,3} (base-offset by the pre-append vertex count) to `idx`.
 // ===========================================================================
-void EdgeSegment(const float* v0, const float* v1, GrowArr* idx, GrowArr* evtx) {
+void EdgeSegment(const float* v0, const float* v1, IdxArray* idx, EdgeVtxArray* evtx) {
     if (!fn_EdgeMesh_TriangleVertex_Ctor || !fn_EdgeMesh_EdgeVertex_Ctor) return;
-    int16_t baseIdx = (int16_t)evtx->count;   // sVar2 = (short)param_5[1]
+    int16_t baseIdx = (int16_t)evtx->_size;   // sVar2 = (short)param_5[1]
 
     uint8_t tvA[8], tvB[8], ev[16];
     // edge 1: EdgeVertex(tv(v0), tv(v1), +0x200)
     fn_EdgeMesh_TriangleVertex_Ctor(tvA, v1);
     fn_EdgeMesh_TriangleVertex_Ctor(tvB, v0);
     fn_EdgeMesh_EdgeVertex_Ctor(ev, tvB, tvA, 0x200);
-    GrowTo(evtx, evtx->count + 1, ev, 0x10);
+    evtx->SetSizeFill(evtx->_size + 1, ev);
     // edge 2: same, -0x200
     fn_EdgeMesh_TriangleVertex_Ctor(tvA, v1);
     fn_EdgeMesh_TriangleVertex_Ctor(tvB, v0);
     fn_EdgeMesh_EdgeVertex_Ctor(ev, tvB, tvA, -0x200);
-    GrowTo(evtx, evtx->count + 1, ev, 0x10);
+    evtx->SetSizeFill(evtx->_size + 1, ev);
     // edge 3: swapped endpoints, +0x200
     fn_EdgeMesh_TriangleVertex_Ctor(tvA, v0);
     fn_EdgeMesh_TriangleVertex_Ctor(tvB, v1);
     fn_EdgeMesh_EdgeVertex_Ctor(ev, tvB, tvA, 0x200);
-    GrowTo(evtx, evtx->count + 1, ev, 0x10);
+    evtx->SetSizeFill(evtx->_size + 1, ev);
     // edge 4: swapped, -0x200
     fn_EdgeMesh_TriangleVertex_Ctor(tvA, v0);
     fn_EdgeMesh_TriangleVertex_Ctor(tvB, v1);
     fn_EdgeMesh_EdgeVertex_Ctor(ev, tvB, tvA, -0x200);
-    GrowTo(evtx, evtx->count + 1, ev, 0x10);
+    evtx->SetSizeFill(evtx->_size + 1, ev);
 
     static const int16_t offs[6] = {0, 1, 2, 0, 2, 3};
     for (int k = 0; k < 6; k++) {
         int16_t v = (int16_t)(baseIdx + offs[k]);
-        GrowTo(idx, idx->count + 1, &v, 2);
+        idx->SetSize(idx->_size + 1, v);
     }
 }
 
@@ -349,8 +356,8 @@ void Impl_b930(int64_t self) {
     *reinterpret_cast<float*>(self + 0x114) = oy;
     *reinterpret_cast<uint32_t*>(self + 0x118) = 0;
 
-    GrowArr edgeIdx;   // local_208 / local_200  (short indices)
-    GrowArr edgeVtx;   // local_218 / local_210  (16-byte EdgeVertex)
+    IdxArray     edgeIdx;   // local_208 / local_200  (short indices)
+    EdgeVtxArray edgeVtx;   // local_218 / local_210  (16-byte EdgeVertex)
 
     auto cellToRel = [&](int idx, float* rel) {
         float cell[3], world[3];
@@ -383,8 +390,8 @@ void Impl_b930(int64_t self) {
 
     // Fill section — per-tile top-face triangles from the heightfield.
     int64_t hf = *reinterpret_cast<int64_t*>(gw + 0x110);
-    GrowArr fillIdx;   // local_1f0 / local_1e8 (short indices)
-    GrowArr fillVtx;   // local_268 / local_260 (8-byte TriangleVertex)
+    IdxArray    fillIdx;   // local_1f0 / local_1e8 (short indices)
+    TriVtxArray fillVtx;   // local_268 / local_260 (8-byte TriangleVertex)
     uint8_t box[24];
     if (fn_Box_Ctor) fn_Box_Ctor(box);
 
@@ -397,15 +404,15 @@ void Impl_b930(int64_t self) {
             const float* pf = &scratch[1];      // pfVar23 = local_c4
             for (int corner = 0; corner < 6; corner++) {
                 // 1. append index = current vertex count (before this vertex)
-                int16_t idxVal = (int16_t)fillVtx.count;
-                GrowTo(&fillIdx, fillIdx.count + 1, &idxVal, 2);
+                int16_t idxVal = (int16_t)fillVtx._size;
+                fillIdx.SetSize(fillIdx._size + 1, idxVal);
                 // 2. build corner Vector3 + TriangleVertex (8 bytes)
                 float cv[3];
                 *reinterpret_cast<Math::Vector3*>(cv) = Math::Vector3(pf[-1] - ox, pf[0] - oy, pf[1] - 0.0f);
                 uint8_t tvtx[8];
                 if (fn_EdgeMesh_TriangleVertex_Ctor) fn_EdgeMesh_TriangleVertex_Ctor(tvtx, cv);
                 // 3. append the TriangleVertex
-                GrowTo(&fillVtx, fillVtx.count + 1, tvtx, 8);
+                fillVtx.SetSizeFill(fillVtx._size + 1, tvtx);
                 // 4. extend bounding box by the corner
                 if (fn_Box_Extend && fn_Box_Assign) {
                     uint8_t tmp[24];
@@ -432,8 +439,8 @@ void Impl_b930(int64_t self) {
     *reinterpret_cast<void**>(self + 0xf8) = mesh;
 
     // Two GraphicsMesh::TriangleList descriptors { pad, vtxCount@+4, pad, idxCount@+0xc, pad, pad }.
-    uint32_t triList0[6] = {0, (uint32_t)fillVtx.count, 0, (uint32_t)fillIdx.count, 0, 0};
-    uint32_t triList1[6] = {0, (uint32_t)edgeVtx.count, 0, (uint32_t)edgeIdx.count, 0, 0};
+    uint32_t triList0[6] = {0, (uint32_t)fillVtx._size, 0, (uint32_t)fillIdx._size, 0, 0};
+    uint32_t triList1[6] = {0, (uint32_t)edgeVtx._size, 0, (uint32_t)edgeIdx._size, 0, 0};
 
     if (mesh && fn_EdgeMesh_Set) {
         fn_EdgeMesh_Set(
@@ -441,10 +448,10 @@ void Impl_b930(int64_t self) {
             1, triList0,
             1, triList1,
             // fill stream: short indices + 8-byte TriangleVertex, stride 8
-            fillIdx.count, fillIdx.base, fillVtx.count, fillVtx.base, 8,
+            fillIdx._size, fillIdx._data, fillVtx._size, fillVtx._data, 8,
             0, nullptr, 0, nullptr, 0,
             // edge stream: short indices + 16-byte EdgeVertex, stride 0x10
-            edgeIdx.count, edgeIdx.base, edgeVtx.count, edgeVtx.base, 0x10,
+            edgeIdx._size, edgeIdx._data, edgeVtx._size, edgeVtx._data, 0x10,
             0, nullptr, 0, nullptr, 0,
             box);
     }
@@ -459,12 +466,10 @@ void Impl_b930(int64_t self) {
         fn_EdgeMesh_SetMaterials(*reinterpret_cast<void**>(self + 0xf8), m0, m1, m0, m1);
     }
 
-    if (fn_MemFreeStatic) {
-        fn_MemFreeStatic(fillIdx.base);
-        fn_MemFreeStatic(fillVtx.base);
-        fn_MemFreeStatic(edgeIdx.base);
-        fn_MemFreeStatic(edgeVtx.base);
-    }
+    // fillIdx / fillVtx / edgeIdx / edgeVtx are released by ~Array at scope exit —
+    // exactly one destruction per path: the function's only early return precedes
+    // their declarations, and EdgeMesh::Set copies the streams (the buffers were
+    // freed right here before the conversion, so ownership never left this frame).
 }
 
 // ===========================================================================

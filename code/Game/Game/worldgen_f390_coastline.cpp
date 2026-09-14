@@ -34,6 +34,7 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
+#include "collection/Collection.h"
 #include <cstdint>
 #include <cmath>
 #include <cstdio>
@@ -160,38 +161,64 @@ static inline float fnegate(float v) {
 // records (each 0x1C bytes = x/y + the 6 attribute dwords... 0x1C/4 = 7 dwords)
 // forward, frees the old buffer. We simplify the decompiler's manually-unrolled
 // 4-at-a-time copy into a straight per-record loop — byte-identical result.
+//
+// ENDGAME B.3.2 step 2: the hand-written grow below is now one
+// `Collection::Array<>::SetSize` over the `kSpec_WgPathPoint` row. Compared arm
+// for arm against rtcoll::SetSizeCore and against the retail body (0x140023b70,
+// re-decompiled 2026-09-13): exact-equal early return, `_size` stored before the
+// capacity test, treble-on-single-append-from-non-empty, cap*0x1C at align 4,
+// copy the preserved prefix only when the block moved, free the old block only
+// then, no destroy.
+//
+// THE NEW-TAIL ARM IS SITE-EXACT, NOT SHARED. One retail body (0x140023b70) has
+// two transcriptions in this tree and they disagree about the new tail: THIS one
+// leaves the record untouched, and the twin in worldgen_f390_ranges.cpp
+// (ResizeVec1c) zeroes all 0x1C bytes. Retail's own arm is a single QWORD store
+// of 0 (x,y zeroed, [8,0x1C) untouched), so neither transcription matches it.
+// Both are believed unobservable — each caller writes [8,0x1C) of every record
+// immediately after the resize and every x,y before any read — but "believed
+// unobservable" is not a licence to change world generation inside a refactor
+// whose contract is no behaviour change (B32_RULES / B31_RULES step 2). So each
+// site keeps ITS OWN arm, in its own row: `kSpec_WgPathPointNoInit` here,
+// `kSpec_WgPathPointZeroInit` (memset 0x1C) for ranges. Collapsing the two onto
+// retail's single-QWORD arm is a separate, separately-verified change.
 // ============================================================
+// The rows this stage instantiates. EXTERNAL linkage on purpose:
+// worldgen_f390_ranges.cpp (ResizeVec1c, its local `pts`) and worldgen.cpp
+// (wg_FreePatchList, the hf+0x18 teardown) name them through an `extern`
+// declaration — same element type, and for the PathVec row the same instance.
+static void AssignWgPathPoint(uint8_t* d, const uint8_t* s) {
+    __builtin_memcpy(d, s, PATHPT_STRIDE);          // 7 dwords, the whole stride
+}
+// This site's arm: NOTHING. `init == nullptr` is how an ArraySpec spells "the
+// new tail keeps whatever the allocation contained", which is exactly what the
+// hand-written loop here did (it only ran for i < oldCount).
+extern const rtcoll::ArraySpec kSpec_WgPathPointNoInit;
+const rtcoll::ArraySpec kSpec_WgPathPointNoInit = {  // exe 0x140023b70, coastline arm
+    "Array<PathPoint> (tail untouched)", PATHPT_STRIDE, 4,
+    &AssignWgPathPoint, nullptr, nullptr, /*byteCopy*/true,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, PATHPT_STRIDE,
+    /*seed zero       */ 0, 0 };
+// worldgen_f390_ranges.cpp's arm: zero the whole 0x1C record. Defined here so
+// the two arms of one retail body sit side by side and the difference is
+// visible rather than split across two files.
+static void InitWgPathPointZero(uint8_t* d) {
+    __builtin_memset(d, 0, PATHPT_STRIDE);
+}
+extern const rtcoll::ArraySpec kSpec_WgPathPointZeroInit;
+const rtcoll::ArraySpec kSpec_WgPathPointZeroInit = {  // exe 0x140023b70, ranges arm
+    "Array<PathPoint> (tail zeroed)", PATHPT_STRIDE, 4,
+    &AssignWgPathPoint, &InitWgPathPointZero, nullptr, /*byteCopy*/true,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+using WgPathPointArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                           Collection::ExplicitSpec<&kSpec_WgPathPointNoInit>>;
+
 static void coastline_Resize_Stride1C_23b70(void* hdr, int newCount) {
-    uint8_t* h = (uint8_t*)hdr;
-    int oldCount = *(int*)(h + 0x08);
-    if (newCount == oldCount) return;
-
-    void* oldData = *(void**)(h + 0x00);
-    *(int*)(h + 0x08) = newCount;
-
-    int cap = *(int*)(h + 0x0c);
-    if (cap < newCount) {
-        cap = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) cap = newCount * 3; // amortized grow
-        *(int*)(h + 0x0c) = cap;
-        void* nb = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)cap * PATHPT_STRIDE, 4);
-        *(void**)(h + 0x00) = nb;
-    }
-
-    void* newData = *(void**)(h + 0x00);
-    // If the buffer was reallocated, copy the surviving prefix of records.
-    if (oldData != newData) {
-        int keep = (oldCount < newCount) ? oldCount : newCount;
-        uint8_t* src = (uint8_t*)oldData;
-        uint8_t* dst = (uint8_t*)newData;
-        for (int i = 0; i < keep; ++i) {
-            __builtin_memcpy(dst + (size_t)i * PATHPT_STRIDE,
-                             src + (size_t)i * PATHPT_STRIDE, PATHPT_STRIDE);
-        }
-        // Records beyond the old prefix are left uninitialized here; cc850
-        // explicitly fills [0,count) immediately after resizing, so this matches.
-        if (oldData) fn_MemFreeStatic(oldData);
-    }
+    // B.3.2 bridge: the caller's header is still a raw {data,count,cap} triple.
+    reinterpret_cast<WgPathPointArray*>(hdr)->SetSize(newCount);
 }
 
 // ============================================================
@@ -235,57 +262,50 @@ static void* coastline_DeepCopyPath_24ac0(void* dst, void* src) {
 //   srcVec = candidate path header (&local_e0 in cc850)
 // On grow (cap*16, align 8) it deep-copies the surviving headers via 24ac0; the
 // new tail slot is zero-initialized then 24ac0-filled from srcVec.
+//
+// ENDGAME B.3.2 step 2: the body is now `Collection::Array<>::SetSizeFill` (the
+// 3-argument form: srcVec is the fill) over the `kSpec_WgPathVec` row. Compared
+// arm for arm against rtcoll::SetSizeCore and the retail body (0x140024460,
+// re-decompiled 2026-09-13): exact-equal early return, `_size` first, treble
+// rule, cap*16 at align 8; per element `assign` = zero the header then
+// 24ac0-deep-copy (prefix from the old block only when it moved, otherwise the
+// fill); `destroy` = free the inner buffer and zero the header, applied to the
+// truncated tail in place or to every old element before the old block is
+// freed. Every arm matched, nothing changed. The row's `init` (the 2-argument
+// form's new-tail arm) is not exercised by any site in this tree; it is the
+// three zero stores of Collection::Array's constructor.
 // ============================================================
-static void coastline_AppendPath_24460(void* outer, int newLen, void* srcVec) {
-    uint8_t* o = (uint8_t*)outer;
-    int oldLen = *(int*)(o + 0x08);
-    if (newLen == oldLen) return;
-
-    void* oldData = *(void**)(o + 0x00);
-    *(int*)(o + 0x08) = newLen;
-
-    int cap = *(int*)(o + 0x0c);
-    if (cap < newLen) {
-        cap = newLen;
-        if (newLen == oldLen + 1 && oldLen != 0) cap = newLen * 3;
-        *(int*)(o + 0x0c) = cap;
-        void* nb = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)cap * 16, 8);
-        *(void**)(o + 0x00) = nb;
-    }
-
-    void* newData = *(void**)(o + 0x00);
-    int startIdx = (oldData == newData) ? oldLen : 0;
-
-    uint8_t* dstBase = (uint8_t*)newData;
-    uint8_t* oldBase = (uint8_t*)oldData;
-    for (int i = startIdx; i < newLen; ++i) {
-        uint8_t* slot = dstBase + (size_t)i * 16;
-        // existing-surviving headers copy from old buffer; tail copies srcVec
-        void* srcHdr = srcVec;
-        if (i < oldLen) srcHdr = oldBase + (size_t)i * 16;
-        *(void**)(slot + 0x00) = nullptr;   // zero the {data,count} of the dst header
+static void AssignWgPathVec(uint8_t* d, const uint8_t* s) {
+    *(void**)(d + 0x00) = nullptr;                  // zero the dst header first
+    *(int64_t*)(d + 0x08) = 0;
+    coastline_DeepCopyPath_24ac0(d, const_cast<uint8_t*>(s));
+}
+static void InitWgPathVec(uint8_t* d) {
+    *(uint64_t*)(d + 0x00) = 0;
+    *(uint64_t*)(d + 0x08) = 0;
+}
+static void DestroyWgPathVec(void* /*ignoredThis*/, uint8_t* base, int count) {
+    for (int i = 0; i < count; ++i) {
+        uint8_t* slot = base + (size_t)i * 16;
+        rtcoll::MemFree(*(void**)(slot + 0x00));    // null-guarded inside
+        *(void**)(slot + 0x00) = nullptr;
         *(int64_t*)(slot + 0x08) = 0;
-        coastline_DeepCopyPath_24ac0(slot, srcHdr);
     }
+}
+extern const rtcoll::ArraySpec kSpec_WgPathVec;
+const rtcoll::ArraySpec kSpec_WgPathVec = {         // exe 0x140024460 (grow), 0x1400175d0 (dtor)
+    "Array<Array<PathPoint>>", 0x10, 8,
+    &AssignWgPathVec, &InitWgPathVec, &DestroyWgPathVec, /*byteCopy*/false,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+using WgPathVecArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                         Collection::ExplicitSpec<&kSpec_WgPathVec>>;
 
-    if (oldData == newData) {
-        // Truncation case (newLen < oldLen): free trimmed tail headers' inner data.
-        if (newLen < oldLen) {
-            for (int i = newLen; i < oldLen; ++i) {
-                uint8_t* slot = oldBase + (size_t)i * 16;
-                if (*(void**)(slot + 0x00)) fn_MemFreeStatic(*(void**)(slot + 0x00));
-                *(void**)(slot + 0x00) = nullptr;
-                *(int64_t*)(slot + 0x08) = 0;
-            }
-        }
-    } else if (oldData) {
-        // Reallocated: free every old inner buffer, then the old outer array.
-        for (int i = 0; i < oldLen; ++i) {
-            uint8_t* slot = oldBase + (size_t)i * 16;
-            if (*(void**)(slot + 0x00)) fn_MemFreeStatic(*(void**)(slot + 0x00));
-        }
-        fn_MemFreeStatic(oldData);
-    }
+static void coastline_AppendPath_24460(void* outer, int newLen, void* srcVec) {
+    // B.3.2 bridge: hf+0x18 is still a raw {data,count,cap} triple in the
+    // heightfield scratch struct.
+    reinterpret_cast<WgPathVecArray*>(outer)->SetSizeFill(newLen, srcVec);
 }
 
 // ============================================================
@@ -412,14 +432,17 @@ static int coastline_TryPlacePath_cc850(void* self, int nPts, float span,
     uint8_t* hf = (uint8_t*)self;
     void* rng = hf + HF_RANDOM;
 
-    // candidate path header {void* data; int count; int cap}
-    struct { void* data; int count; int cap; } cand = { nullptr, 0, 0 };
+    // candidate path header {void* data; int count; int cap}.
+    // ENDGAME B.3.2 step 2: a real Collection::Array with RAII. Exactly one
+    // destruction per path: the three reject-path frees and the success-path
+    // free that used to sit at each `return` are the destructor now.
+    WgPathPointArray cand;
 
     coastline_Resize_Stride1C_23b70(&cand, nPts);
 
     // Fill attributes for all nPts records (disasm store order: a6,a5,a8,a7,a4).
     {
-        uint8_t* e = (uint8_t*)cand.data;
+        uint8_t* e = (uint8_t*)cand._data;
         for (int i = 0; i < nPts; ++i) {
             float* r = (float*)(e + (size_t)i * PATHPT_STRIDE);
             r[2] = a4; // +0x08
@@ -433,7 +456,7 @@ static int coastline_TryPlacePath_cc850(void* self, int nPts, float span,
     int midIdx;
     if ((int)branchSel < 0) {
         // ---- closed coastline ring branch (cd090's path) ----
-        uint8_t* base = (uint8_t*)cand.data;
+        uint8_t* base = (uint8_t*)cand._data;
         float* p0 = (float*)(base + 0);
 
         // point[0]: original packs (uint)(span*-0.5) << 0x20 -> low dword 0,
@@ -441,7 +464,7 @@ static int coastline_TryPlacePath_cc850(void* self, int nPts, float span,
         p0[0] = 0.0f;
         p0[1] = span * kNegHalf;
 
-        int lastIdx = cand.count - 1;
+        int lastIdx = cand._size - 1;
         float* pLast = (float*)(base + (size_t)lastIdx * PATHPT_STRIDE);
 
         uint32_t which = s_Rand1 ? s_Rand1(rng, 3) : 0;
@@ -465,7 +488,7 @@ static int coastline_TryPlacePath_cc850(void* self, int nPts, float span,
 
         // midpoint: random jitter, both lanes RandFloatTol * span * 0.125.
         // disasm: CONCAT44(jx, jy) -> low dword=jy (x lane), high dword=jx (y lane).
-        midIdx = cand.count >> 1;
+        midIdx = cand._size >> 1;
         float jx = (s_RandFloatTol ? s_RandFloatTol(rng) : 0.0f) * span * kJitter_0_125;
         float jy = (s_RandFloatTol ? s_RandFloatTol(rng) : 0.0f) * span * kJitter_0_125;
         float* pMid = (float*)(base + (size_t)midIdx * PATHPT_STRIDE);
@@ -474,7 +497,7 @@ static int coastline_TryPlacePath_cc850(void* self, int nPts, float span,
 
         float amp  = span * kQuarter;   // fVar22 = span*0.25
         float limA = span * kHalf;      // fVar24 = span*0.5
-        coastline_Subdivide_cc510(self, &cand.data, 0, midIdx, limA, amp);
+        coastline_Subdivide_cc510(self, reinterpret_cast<void**>(&cand._data), 0, midIdx, limA, amp);
     } else {
         // ---- branch-off-existing-path branch (NOT used by cd090; ccf60 uses it) ----
         uint8_t* outerData = *(uint8_t**)(hf + HF_PATCHLIST);
@@ -483,11 +506,11 @@ static int coastline_TryPlacePath_cc850(void* self, int nPts, float span,
         int q = (srcCount + ((srcCount >> 31) & 3)) >> 2;
         int pick = s_Rand2 ? s_Rand2(rng, q, q * 3) : q;
         uint8_t* srcVec = *(uint8_t**)(outerData + (size_t)bi * 16);
-        __builtin_memcpy((uint8_t*)cand.data, srcVec + (size_t)pick * PATHPT_STRIDE, 8); // point[0] = src[pick].xy
+        __builtin_memcpy((uint8_t*)cand._data, srcVec + (size_t)pick * PATHPT_STRIDE, 8); // point[0] = src[pick].xy
 
         float rf = (s_RandFloatTol ? s_RandFloatTol(rng) : 0.0f) * span * kHalf;
-        int lastIdx = cand.count - 1;
-        float* pLast = (float*)((uint8_t*)cand.data + (size_t)lastIdx * PATHPT_STRIDE);
+        int lastIdx = cand._size - 1;
+        float* pLast = (float*)((uint8_t*)cand._data + (size_t)lastIdx * PATHPT_STRIDE);
         uint32_t which = s_Rand1 ? s_Rand1(rng, 4) : 0;
         // Retail CONCAT44 packing (verified 0x1400cc850, param_9>=0 block):
         //  which0: (x=rf,        y=span*0.5)   which1: (x=span*0.5,  y=rf)
@@ -508,10 +531,10 @@ static int coastline_TryPlacePath_cc850(void* self, int nPts, float span,
     {
         float amp  = span * kQuarter;
         float limA = span * kHalf;
-        coastline_Subdivide_cc510(self, &cand.data, midIdx, cand.count - 1, limA, amp);
+        coastline_Subdivide_cc510(self, reinterpret_cast<void**>(&cand._data), midIdx, cand._size - 1, limA, amp);
     }
 
-    int count = cand.count;
+    int count = cand._size;
 
     // ---- nearest-neighbour adjacency validation pass (self-consistency) ----
     // Walk along the polyline; for each point find the nearest OTHER point via
@@ -522,7 +545,7 @@ static int coastline_TryPlacePath_cc850(void* self, int nPts, float span,
     {
         int prevPick = -1;
         int row = 0;
-        uint8_t* data = (uint8_t*)cand.data;
+        uint8_t* data = (uint8_t*)cand._data;
         bool rejected = false;
         for (int li = 0; li < count && !rejected; ++li) {
             int bestIdx = -2;
@@ -543,7 +566,6 @@ static int coastline_TryPlacePath_cc850(void* self, int nPts, float span,
             prevPick++;
         }
         if (rejected) {
-            if (cand.data) fn_MemFreeStatic(cand.data);
             return 0;
         }
     }
@@ -551,7 +573,7 @@ static int coastline_TryPlacePath_cc850(void* self, int nPts, float span,
     // ---- self-intersection: segment vs non-adjacent segment in the SAME path ----
     {
         int lim = count - 1;
-        uint8_t* data = (uint8_t*)cand.data;
+        uint8_t* data = (uint8_t*)cand._data;
         for (int i = 0; i < lim; ++i) {
             float* s0 = (float*)(data + (size_t)i * PATHPT_STRIDE);
             float* s1 = (float*)(data + (size_t)(i + 1) * PATHPT_STRIDE);
@@ -577,7 +599,6 @@ static int coastline_TryPlacePath_cc850(void* self, int nPts, float span,
                     float u = (cx * ey - cy * ex) / denom;
                     float v = (dx * ey - dy * ex) / denom;
                     if (u > 0.0f && u < kOne && v > 0.0f && v < kOne) {
-                        if (cand.data) fn_MemFreeStatic(cand.data);
                         return 0;
                     }
                 }
@@ -604,7 +625,6 @@ static int coastline_TryPlacePath_cc850(void* self, int nPts, float span,
                             float u = (cx * ey - cy * ex) / denom;
                             float v = (dx * ey - dy * ex) / denom;
                             if (u > 0.0f && u < kOne && v > 0.0f && v < kOne) {
-                                if (cand.data) fn_MemFreeStatic(cand.data);
                                 return 0;
                             }
                         }
@@ -617,7 +637,6 @@ static int coastline_TryPlacePath_cc850(void* self, int nPts, float span,
     // ---- success: deep-append the candidate into patchList (hf+0x18) ----
     coastline_AppendPath_24460(hf + HF_PATCHLIST, *(int*)(hf + HF_DETAILCNTA) + 1, &cand);
 
-    if (cand.data) fn_MemFreeStatic(cand.data);
     return 1;
 }
 

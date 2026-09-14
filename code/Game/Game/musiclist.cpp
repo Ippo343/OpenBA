@@ -34,12 +34,48 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
 
 static constexpr uintptr_t kVtableAddr = 0x14015ee40;
 static constexpr int       kSize       = 0x30;
 static constexpr size_t    kEntryStride = 0x18;
+
+// ============================================================
+// ENDGAME B.3.2 step 2 — the track-entry Array row
+// ============================================================
+// Retail's resize FUN_14001c3c0 (re-decompiled 2026-09-13) is `rtcoll::SetSizeCore`
+// in its two-argument form over the 0x18-byte track entry:
+//   assign = three qword copies (a pure byte copy of the whole stride);
+//   init   = qword 0 @+0x00, dword 0 @+0x08, qword 0x3f800000 @+0x0c (i.e. float
+//            1.0f @+0x0c AND int 0 @+0x10), dword 11 @+0x14 — every byte written;
+//   destroy = none: the realloc path frees the old block without an element
+//            step and there is no truncation step (the +0x00 ExternalPtr is a
+//            bare pointer here, not refcounted).
+// Used by the destructor below. The resize fallback further down is NOT
+// converted to it yet — see its banner.
+namespace {
+void AssignMusicTrackEntry(uint8_t* d, const uint8_t* s) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = *reinterpret_cast<const uint64_t*>(s + 0x00);
+    *reinterpret_cast<uint64_t*>(d + 0x08) = *reinterpret_cast<const uint64_t*>(s + 0x08);
+    *reinterpret_cast<uint64_t*>(d + 0x10) = *reinterpret_cast<const uint64_t*>(s + 0x10);
+}
+void InitMusicTrackEntry(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;              // ExternalPtr
+    *reinterpret_cast<uint32_t*>(d + 0x08) = 0;              // float 0.0f
+    *reinterpret_cast<uint64_t*>(d + 0x0c) = 0x3f800000ull;  // float 1.0f, int 0
+    *reinterpret_cast<uint32_t*>(d + 0x14) = 11;
+}
+const rtcoll::ArraySpec kSpec_MusicTrackEntry = {       // exe 0x14001c3c0 (resize),
+    "Array<MusicList::Track>", 0x18, 8,                 //     0x14001c360 (~Array)
+    &AssignMusicTrackEntry, &InitMusicTrackEntry, nullptr, true,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+using MusicTrackArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                          Collection::ExplicitSpec<&kSpec_MusicTrackEntry>>;
+}  // namespace
 
 // Exe-internal array resize helper for the 0x18-byte track entries.
 //   The exe-internal addr is not registered → ResolveAddr returns 0, so we
@@ -54,6 +90,18 @@ static constexpr uintptr_t kResizeEntries = 0x14001c3c0;
 //   String@+0x00 = null, float@+0x08 = 0, float@+0x0c = 1.0f, int@+0x14 = 11.
 // (int@+0x10 is left zero — the exe inits the {+0x08=0,+0x0c=1.0f,+0x14=11}
 //  triple plus the null String; +0x10 falls out as zero from the alloc clear.)
+//
+// ENDGAME B.3.2 step 2: NOT converted to MusicTrackArray::SetSize, on purpose.
+// The algorithm after the two guards below matches SetSizeCore arm for arm
+// (compared against the re-decompiled 0x14001c3c0: early-out, size-before-cap,
+// treble on single append, byte-copy prefix on a move, full-element init on the
+// tail, free old on a move). What does not match is the site's two front
+// guards, which have an observable effect retail does not have: a negative
+// newCount prints once and leaves the array unchanged (retail stores the
+// negative size and returns), and a missing allocator returns instead of
+// faulting. BRIEF.md lists "an extra guard with observable effect" as a STOP.
+// The swap is one line once those guards are ruled on:
+//   reinterpret_cast<MusicTrackArray*>(arrayHeader)->SetSize(newCount);
 static void MusicList_ResizeEntries_Fallback(void* arrayHeader, int newCount) {
     if (!arrayHeader) return;
     if (newCount < 0) {
@@ -199,13 +247,15 @@ extern "C" void MusicList_Serialize(void* self, void* stream) {
 // ============================================================
 // MusicList::Dtor (vtable +0x00, exe 0x14001c360) — free array, base dtor
 // ============================================================
+// ENDGAME B.3.2 step 2: the array free is `MusicTrackArray::~Array`
+// (re-decompiled 2026-09-13: MemFree(+0x20); +0x20 = 0; one qword over +0x28 —
+// ArrayDtorImpl exactly; the row above has no destroy step, matching retail's
+// absence of an element loop).
 extern "C" void* MusicList_Dtor(void* self, uint32_t flags) {
     if (!self) return self;
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     *(void**)self = (void*)ResolveAddr(Module::Exe, kVtableAddr);
-    if (fn_MemFreeStatic) fn_MemFreeStatic(*(void**)(s + 0x20));   // free entries.data
-    *(uint64_t*)(s + 0x20) = 0;
-    *(uint64_t*)(s + 0x28) = 0;
+    reinterpret_cast<MusicTrackArray*>(s + 0x20)->~Array();   // B.3.2 bridge: entries header
     if (fn_External_Dtor) fn_External_Dtor(self);                  // base dtor
     if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
     return self;

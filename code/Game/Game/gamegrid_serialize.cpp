@@ -52,6 +52,7 @@
 #include "engine_funcs.h"
 #include "perf_terrain.h"
 #include "resolve.h"
+#include "collection/Collection.h"
 #include <cstdint>
 
 // ============================================================
@@ -120,61 +121,66 @@ static void EnsureRegionSystemBuild() {
 //   +0x00 base ptr (int64), +0x08 count (int32), +0x0c capacity (int32).
 // Grow-only allocation: capacity only ever increases, x3 on a "+1" grow step
 // (a classic amortized-growth heuristic), verbatim from the disassembly.
+//
+// ENDGAME B.3.2 step 2: the body WAS a hand-written copy of
+// `rtcoll::SetSizeCore` (runtime/src/collection/array.cpp) and is now one
+// `Collection::Array<>::SetSize` over the row below. Compared arm for arm:
+// exact-equal early return, `_size` stored before the capacity test,
+// treble-on-single-append-from-non-empty, copy the preserved prefix only when
+// the block moved, init the new tail, no element destroy, free the old block
+// on a realloc (both go through the null-tolerant 0x1800c7ad0). The one
+// difference: the allocation now goes through the LOCKING static `MemAlloc`
+// (0x1800c7a50) rather than `fn_MemAllocStatic` — the same export, reached
+// through rtcoll's own resolver.
 // ============================================================
+namespace {
+
+// One map cell, stride 0x30, align 8. Both arms write +0x00..+0x24 and
+// +0x26..+0x2d: byte +0x25 and bytes +0x2e..+0x2f are touched by NEITHER
+// (the `assign unwritten` pair below names the trailing hole; +0x25 is the
+// second, non-contiguous one). Partial copy, so byteCopy=false; trivially
+// destructible.
+void AssignMapCell(uint8_t* dst, const uint8_t* src) {
+    *reinterpret_cast<uint64_t*>(dst + 0x00) = *reinterpret_cast<const uint64_t*>(src + 0x00);
+    *reinterpret_cast<uint64_t*>(dst + 0x08) = *reinterpret_cast<const uint64_t*>(src + 0x08);
+    *reinterpret_cast<uint64_t*>(dst + 0x10) = *reinterpret_cast<const uint64_t*>(src + 0x10);
+    *reinterpret_cast<uint32_t*>(dst + 0x18) = *reinterpret_cast<const uint32_t*>(src + 0x18);
+    *reinterpret_cast<uint64_t*>(dst + 0x1c) = *reinterpret_cast<const uint64_t*>(src + 0x1c);
+    dst[0x24] = src[0x24];
+    *reinterpret_cast<uint16_t*>(dst + 0x26) = *reinterpret_cast<const uint16_t*>(src + 0x26);
+    dst[0x28] = src[0x28];
+    dst[0x29] = src[0x29];
+    dst[0x2a] = src[0x2a];
+    dst[0x2b] = src[0x2b];
+    dst[0x2c] = src[0x2c];
+    dst[0x2d] = src[0x2d];
+}
+// Brand-new element: zero the refs/raw block, sentinel the flag bytes.
+void InitMapCell(uint8_t* dst) {
+    *reinterpret_cast<uint64_t*>(dst + 0x00) = 0;
+    *reinterpret_cast<uint64_t*>(dst + 0x08) = 0;
+    *reinterpret_cast<uint64_t*>(dst + 0x10) = 0;
+    *reinterpret_cast<uint32_t*>(dst + 0x18) = 0xffffffffu;
+    *reinterpret_cast<uint64_t*>(dst + 0x1c) = 0;
+    dst[0x24] = 0;
+    *reinterpret_cast<uint32_t*>(dst + 0x26) = 0;         // zeroes +0x26..+0x29
+    *reinterpret_cast<uint32_t*>(dst + 0x2a) = 0x000000ffu; // +0x2a=0xff, +0x2b..+0x2d=0
+}
+const rtcoll::ArraySpec kSpec_MapCell = {                  // exe 0x14001aa90
+    "Array<MapCell>", 0x30, 8,
+    &AssignMapCell, &InitMapCell, nullptr, false,
+    /*assign unwritten*/ 0x2e, 0x30,   // plus the single byte +0x25
+    /*init   unwritten*/ 0x2e, 0x30,   // plus the single byte +0x25
+    /*seed zero       */ 0,    0 };
+using MapCellArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                       Collection::ExplicitSpec<&kSpec_MapCell>>;
+
+}  // namespace
+
 void GameGrid_ResizeCellArray_aa90(int64_t* header, int32_t newCount) {
-    uint8_t* headerBytes = reinterpret_cast<uint8_t*>(header);
-    int32_t oldCount = *reinterpret_cast<int32_t*>(headerBytes + 0x08);
-    if (newCount == oldCount) return;
-
-    uint8_t* oldBase = *reinterpret_cast<uint8_t**>(headerBytes + 0x00);
-    *reinterpret_cast<int32_t*>(headerBytes + 0x08) = newCount;
-
-    int32_t* capacityField = reinterpret_cast<int32_t*>(headerBytes + 0x0c);
-    if (*capacityField < newCount) {
-        *capacityField = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) {
-            *capacityField = newCount * 3;
-        }
-        void* newBuf = fn_MemAllocStatic(static_cast<uint64_t>(*capacityField) * 0x30, 8);
-        *reinterpret_cast<void**>(headerBytes + 0x00) = newBuf;
-    }
-
-    uint8_t* newBase = *reinterpret_cast<uint8_t**>(headerBytes + 0x00);
-    int32_t copyStart = (oldBase == newBase) ? oldCount : 0;
-
-    for (int32_t i = copyStart; i < newCount; ++i) {
-        uint8_t* dst = newBase + static_cast<int64_t>(i) * 0x30;
-        if (i < oldCount) {
-            uint8_t* src = oldBase + static_cast<int64_t>(i) * 0x30;
-            *reinterpret_cast<uint64_t*>(dst + 0x00) = *reinterpret_cast<uint64_t*>(src + 0x00);
-            *reinterpret_cast<uint64_t*>(dst + 0x08) = *reinterpret_cast<uint64_t*>(src + 0x08);
-            *reinterpret_cast<uint64_t*>(dst + 0x10) = *reinterpret_cast<uint64_t*>(src + 0x10);
-            *reinterpret_cast<uint32_t*>(dst + 0x18) = *reinterpret_cast<uint32_t*>(src + 0x18);
-            *reinterpret_cast<uint64_t*>(dst + 0x1c) = *reinterpret_cast<uint64_t*>(src + 0x1c);
-            dst[0x24] = src[0x24];
-            *reinterpret_cast<uint16_t*>(dst + 0x26) = *reinterpret_cast<uint16_t*>(src + 0x26);
-            dst[0x28] = src[0x28];
-            dst[0x29] = src[0x29];
-            dst[0x2a] = src[0x2a];
-            dst[0x2b] = src[0x2b];
-            dst[0x2c] = src[0x2c];
-            dst[0x2d] = src[0x2d];
-        } else {
-            // Brand-new element: zero the refs/raw block, sentinel the flag bytes.
-            *reinterpret_cast<uint64_t*>(dst + 0x00) = 0;
-            *reinterpret_cast<uint64_t*>(dst + 0x08) = 0;
-            *reinterpret_cast<uint64_t*>(dst + 0x10) = 0;
-            *reinterpret_cast<uint32_t*>(dst + 0x18) = 0xffffffffu;
-            *reinterpret_cast<uint64_t*>(dst + 0x1c) = 0;
-            dst[0x24] = 0;
-            *reinterpret_cast<uint32_t*>(dst + 0x26) = 0;         // zeroes +0x26..+0x29
-            *reinterpret_cast<uint32_t*>(dst + 0x2a) = 0x000000ffu; // +0x2a=0xff, +0x2b..+0x2d=0
-        }
-    }
-
-    if (oldBase != newBase) {
-        fn_MemFreeStatic(oldBase);
-    }
+    // B.3.2 bridge: Game+0x80 is still a raw 0x10-byte header in an
+    // unconverted exe struct.
+    reinterpret_cast<MapCellArray*>(header)->SetSize(newCount);
 }
 
 // ============================================================

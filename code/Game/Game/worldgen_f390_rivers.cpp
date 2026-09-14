@@ -52,6 +52,7 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
+#include "collection/Collection.h"
 #include <cstdint>
 #include <cstring>
 #include <cmath>
@@ -120,32 +121,25 @@ extern "C" void TradeComponent_helper_f9e0(void* dst, void* src);  // deep-copy 
 // capacity is exceeded. Faithful transcription (grow-by-3x idiom). newCount is the
 // NEW count (count+1); rec points to the 0xC source record.
 // HEIGHT EFFECT: none (pure data). Shared by cd150/ccf60/cd460.
+//
+// ENDGAME B.3.2 step 2: now the 3-argument `Collection::Array<WgVec3Rec>::SetSize`
+// (rec is the fill) — the same trait-derived instantiation worldgen_f390_ranges.cpp
+// uses for its AppendVec3 twin of this retail body. Trait-equivalent: three
+// floats, 12-byte `assign` (byteCopy == is_trivially_copyable), no destroy, and
+// the 2-argument form's `init` is never reached by a fill call. Compared arm
+// for arm against rtcoll::SetSizeCore: exact-equal early return, `_size` first,
+// treble-on-single-append-from-non-empty, cap*0xC at align 4, prefix copied
+// only when the block moved, fill at or past the old count, old block freed
+// only when it moved. Every arm matched.
 // ============================================================
+struct WgVec3Rec { float x, y, z; };
+static_assert(sizeof(WgVec3Rec) == 0x0c && alignof(WgVec3Rec) == 4, "0xC-stride record");
+using WgVec3Array = Collection::Array<WgVec3Rec>;
+
 static void wg_VecPush0xC(void* hdr, int newCount, const void* rec) {
-    uint8_t* h = (uint8_t*)hdr;
-    int oldCount = *(int*)(h + 0x08);
-    if (newCount == oldCount) return;
-    void* oldData = *(void**)(h + 0x00);
-    *(int*)(h + 0x08) = newCount;
-    int cap = *(int*)(h + 0x0c);
-    if (cap < newCount) {
-        cap = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) cap = newCount * 3;   // amortized growth
-        *(int*)(h + 0x0c) = cap;
-        void* nd = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)cap * 0xC, 4);
-        *(void**)(h + 0x00) = nd;
-    }
-    void* newData = *(void**)(h + 0x00);
-    int copyFrom = (oldData == newData) ? oldCount : 0;   // in-place vs reallocated
-    uint8_t* dst = (uint8_t*)newData + (size_t)copyFrom * 0xC;
-    for (int i = copyFrom; i < newCount; ++i) {
-        const uint8_t* src = (i < oldCount) ? ((const uint8_t*)oldData + (size_t)i * 0xC)
-                                            : (const uint8_t*)rec;
-        *(uint64_t*)dst = *(const uint64_t*)src;            // x,y
-        *(uint32_t*)(dst + 8) = *(const uint32_t*)(src + 8);// w
-        dst += 0xC;
-    }
-    if (oldData != newData && oldData) fn_MemFreeStatic(oldData);
+    // B.3.2 bridge: hf+0x28 (listB) is still a raw {data,count,cap} triple.
+    reinterpret_cast<WgVec3Array*>(hdr)->SetSize(newCount,
+                                                *static_cast<const WgVec3Rec*>(rec));
 }
 
 // ============================================================
@@ -294,7 +288,9 @@ extern "C" void wg_f390_rivers(void* hfp) {
     int center = (sizeRow[0] >> 1) - 2;       // iVar32
 
     // --- scratch point list local_d0 {void* data,int count,int cap,int _} ---
-    uint8_t scratch[0x10]; std::memset(scratch, 0, sizeof scratch);
+    // ENDGAME B.3.2 step 2: a real Collection::Array with RAII; the manual
+    // free in the teardown block below is the destructor now (single exit).
+    WgVec3Array scratch;
     int scratchCount = 0;
 
     // PASS 1: edge-set 1 (count1 @ +0x10, min1 @ +0x14, max1 @ +0x18).
@@ -308,8 +304,8 @@ extern "C" void wg_f390_rivers(void* hfp) {
         float off   = (float)center - (float)(int)fE;
         // retail CONCAT44(off*draw1, off*draw2): x=low=off*draw2, y=high=off*draw1.
         float rec[3] = { off * draw2, off * draw1, fE };   // {x, y, radius=edgeParam}
-        wg_VecPush0xC(scratch, scratchCount + 1, rec);
-        scratchCount = *(int*)(scratch + 0x08);
+        wg_VecPush0xC(&scratch, scratchCount + 1, rec);
+        scratchCount = scratch._size;
     }
 
     // PASS 2: edge-set 2 (count2 @ +0x04, min2 @ +0x08, max2 @ +0x0c).
@@ -327,7 +323,7 @@ extern "C" void wg_f390_rivers(void* hfp) {
         // reject if too close to any existing scratch point:
         //   for each pt s: d = new - s; len = sqrt(Dot(d,d)); if len+fE < s.radius -> reject
         bool reject = false;
-        const uint8_t* sd = *(const uint8_t**)(scratch + 0x00);
+        const uint8_t* sd = (const uint8_t*)scratch._data;
         for (int j = 0; j < scratchCount; ++j) {
             const float* sp = (const float*)(sd + (size_t)j * 0xC);
             // {dx, dy} = retail local_res18/1c; retail calls Dot(&d, &d) for |d|^2.
@@ -391,7 +387,7 @@ extern "C" void wg_f390_rivers(void* hfp) {
     wg_VecOfVecResize(buckets, 0);
     if (*(void**)(buckets + 0x00)) fn_MemFreeStatic(*(void**)(buckets + 0x00));
     if (labels) fn_MemFreeStatic(labels);
-    if (*(void**)(scratch + 0x00)) fn_MemFreeStatic(*(void**)(scratch + 0x00));
+    // (scratch: freed by its destructor at scope exit, right here in retail's order)
 }
 
 // ============================================================
