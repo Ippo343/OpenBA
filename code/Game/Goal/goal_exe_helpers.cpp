@@ -10,6 +10,7 @@
 #include "resolve.h"
 #include "system/String.h"
 #include "system/Filename.h"
+#include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -123,59 +124,69 @@ void StatGoal_ResolveExternalPtr(void* externalRef) {
 //   +0x00 System::String (resource name)   +0x08 int32 cached generation
 //   +0x10 void* cached External*
 //
+// ENDGAME B.3.2 step 2: the body below WAS a hand-written copy of
+// `rtcoll::SetSizeCore`. It is now one `Collection::Array<>::SetSize` driven by
+// this instantiation's element ops, spelled as an `ArraySpec` row exactly like
+// the 27 rows runtime/src/collection/array.cpp already carries. Compared arm for
+// arm against SetSizeCore before the swap: exact-equal early return, `_size`
+// stored before the capacity test, treble-on-single-append-from-non-empty,
+// copy-construct the preserved prefix only when the block moved, init the new
+// tail, destroy the truncated tail in place / the whole old buffer on a realloc,
+// then free. Two differences, both deliberate:
+//   * the allocation now goes through `?MemAlloc@MemoryAllocator@System@@`
+//     (0x1800c7a50, the LOCKING static) instead of the unlocked instance
+//     `Allocate` (0x1800c6e60) this body reached through `fn_MemAlloc`. Same
+//     allocator and same heap (runtime/src/system/allocator.cpp:676), plus the
+//     critical section retail's own Collection code takes.
+//   * the old body returned early when the allocation came back null;
+//     SetSizeCore instead skips a null element address per iteration. Both are
+//     out-of-memory-only arms and neither is reachable while MemAlloc works.
+namespace {
+
+// The element: {System::String name @+0x00, int32 generation @+0x08,
+//               External* cached @+0x10}, stride 0x18, align 8.
+// +0x0c..+0x0f is written by NEITHER arm, which — together with the -1
+// generation seed — is why this row cannot be derived from a C++ type's traits.
+void AssignGoalRefEntry(uint8_t* d, const uint8_t* s) {
+    // B.3.2 bridge: the entry is still untyped bytes in the BuildingGoal struct.
+    new (d) System::String(*reinterpret_cast<const System::String*>(s));     // +0x00
+    *reinterpret_cast<uint32_t*>(d + 0x08) = *reinterpret_cast<const uint32_t*>(s + 0x08);
+    *reinterpret_cast<uint64_t*>(d + 0x10) = *reinterpret_cast<const uint64_t*>(s + 0x10);
+}
+
 // ⚠ The tail SEED VALUES are load-bearing: a newly added entry gets generation
 // **-1**, not 0. Zero is a legitimate ExternalFactory generation, so a 0 seed
 // would make the lazy resolver take its "cache still valid" early-out while the
 // pointer is still null — the entry would silently never resolve. Faithful to
 // retail, which stores 0xffffffff explicitly.
+void InitGoalRefEntry(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
+    *reinterpret_cast<uint32_t*>(d + 0x08) = 0xFFFFFFFFu;   // generation -1
+    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
+}
+
+void DestroyGoalRefEntry(void* /*ignoredThis*/, uint8_t* base, int count) {
+    for (int i = 0; i < count; ++i)
+        reinterpret_cast<System::String*>(base + static_cast<int64_t>(i) * 0x18)->~String();
+}
+
+const rtcoll::ArraySpec kSpec_GoalRefEntry = {          // exe 0x14001b340
+    "Array<{String,int32,External*}>", 0x18, 8,
+    &AssignGoalRefEntry, &InitGoalRefEntry, &DestroyGoalRefEntry, false,
+    /*assign unwritten*/ 0x0c, 0x10,
+    /*init   unwritten*/ 0x0c, 0x10,
+    /*seed zero       */ 0,    0 };
+
+using GoalRefArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                       Collection::ExplicitSpec<&kSpec_GoalRefEntry>>;
+
+}  // namespace
+
 void Goal_RefArray_Resize(void* arr, uint32_t newCount) {
     if (!arr) return;
-    uintptr_t* base = reinterpret_cast<uintptr_t*>(arr);
-    uint8_t*   hdr  = reinterpret_cast<uint8_t*>(arr);
-    uint32_t oldCount = *reinterpret_cast<uint32_t*>(hdr + 8);
-    if (newCount == oldCount) return;
-
-    uintptr_t oldData = *base;
-    *reinterpret_cast<uint32_t*>(hdr + 8) = newCount;
-    int32_t* capPtr = reinterpret_cast<int32_t*>(hdr + 0xC);
-    if (*capPtr < static_cast<int32_t>(newCount)) {
-        *capPtr = static_cast<int32_t>(newCount);
-        if (newCount == oldCount + 1 && oldCount != 0)
-            *capPtr = static_cast<int32_t>(newCount) * 3;
-        *base = reinterpret_cast<uintptr_t>(
-            fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(*capPtr) * 0x18, 8));
-    }
-    uintptr_t newData = *base;
-    if (!newData) return;
-
-    // On an in-place grow retail skips the preserved entries entirely and only
-    // initialises the tail; when the block moved it copy-constructs all of them.
-    uint32_t startIdx = (oldData == newData) ? oldCount : 0;
-    for (uint32_t i = startIdx; i < newCount; i++) {
-        uint8_t* dst = reinterpret_cast<uint8_t*>(newData) + static_cast<uintptr_t>(i) * 0x18;
-        if (i < oldCount) {
-            uint8_t* src = reinterpret_cast<uint8_t*>(oldData) + static_cast<uintptr_t>(i) * 0x18;
-            // B.3.1 bridge: the ExternalPtr triple is still untyped bytes.
-            new (dst) System::String(reinterpret_cast<const System::String&>(*src));  // +0x00
-            *reinterpret_cast<uint32_t*>(dst + 0x08) = *reinterpret_cast<uint32_t*>(src + 0x08);
-            *reinterpret_cast<uint64_t*>(dst + 0x10) = *reinterpret_cast<uint64_t*>(src + 0x10);
-        } else {
-            *reinterpret_cast<uint64_t*>(dst + 0x00) = 0;
-            *reinterpret_cast<uint32_t*>(dst + 0x08) = 0xFFFFFFFFu;  // generation -1
-            *reinterpret_cast<uint64_t*>(dst + 0x10) = 0;
-        }
-    }
-
-    if (oldData == newData) {
-        for (uint32_t i = newCount; i < oldCount; i++)   // in-place shrink
-            reinterpret_cast<System::String*>(reinterpret_cast<uint8_t*>(oldData) +
-                                              static_cast<uintptr_t>(i) * 0x18)->~String();
-    } else if (oldData) {
-        for (uint32_t i = 0; i < oldCount; i++)
-            reinterpret_cast<System::String*>(reinterpret_cast<uint8_t*>(oldData) +
-                                              static_cast<uintptr_t>(i) * 0x18)->~String();
-        fn_MemFreeStatic(reinterpret_cast<void*>(oldData));
-    }
+    // B.3.2 bridge: BuildingGoal+0x38 is still a raw 0x10-byte array header in
+    // an unconverted exe struct; the cast goes when BuildingGoal becomes a class.
+    reinterpret_cast<GoalRefArray*>(arr)->SetSize(static_cast<int>(newCount));
 }
 
 // ============================================================

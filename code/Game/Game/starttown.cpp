@@ -22,6 +22,7 @@
 #include "math/Math.h"
 #include "system/Filename.h"
 #include "system/String.h"
+#include "collection/Collection.h"
 #include "options.h"
 #include "perf_terrain.h"
 #include "resolve.h"
@@ -581,6 +582,19 @@ extern "C" int StartTown_SpawnStartingHerd(void* startConfig, const float* centr
 // standalone cannot ResolveAddr an unported exe address.
 // Not static: the trade checkout (code/Game/Dialog/tradeui_checkout.cpp, the
 // FUN_140081420 named above) is the other caller that grows this list.
+//
+// ENDGAME B.3.2 step 2: the inlined grow-and-append is now the 3-argument
+// `Collection::Array<void*>::SetSize` (desc is the fill), trait-derived and
+// trait-equivalent (pointer element: 8-byte copy, no destroy, the 2-argument
+// init is never reached by a fill call). Compared arm for arm against
+// rtcoll::SetSizeCore and the retail body 0x140091a20 (re-decompiled
+// 2026-09-13): the capacity rule reads `count != 0 ? newCount*3 : newCount`,
+// which IS the reference's `newSize == oldSize+1 && oldSize != 0` because this
+// site only ever appends ONE element (newCount = count + 1, so the first half
+// of the conjunction is always true); the exact-equal early return is vacuous
+// for the same reason; `_size` first, cap<<3 at align 8, prefix copied only
+// when the block moved, fill at index count, old block freed only when it
+// moved. Every arm matched.
 void TownMgr_AddAvailableAgri(uint8_t* townMgr, void* desc) {
     if (!townMgr || !desc || !fn_MemAlloc || !g_pMemAllocSingleton) return;
     void**  arr   = *(void***)(townMgr + 0x120);
@@ -589,23 +603,8 @@ void TownMgr_AddAvailableAgri(uint8_t* townMgr, void* desc) {
     for (int i = 0; i < count; ++i)
         if (arr && arr[i] == desc) return;
 
-    int newCount = count + 1;
-    void** oldArr = arr;
-    *(int32_t*)(townMgr + 0x128) = newCount;
-    if (*(int32_t*)(townMgr + 0x12c) < newCount) {
-        int newCap = newCount;
-        if (count != 0) newCap = newCount * 3;
-        *(int32_t*)(townMgr + 0x12c) = newCap;
-        void* nb = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap << 3, 8);
-        *(void***)(townMgr + 0x120) = reinterpret_cast<void**>(nb);
-    }
-    void** dst = *(void***)(townMgr + 0x120);
-    int copyStart = (oldArr == dst) ? count : 0;
-    for (int i = copyStart; i < newCount; ++i) {
-        if (i < count) dst[i] = oldArr[i];
-        else           dst[i] = desc;
-    }
-    if (oldArr != dst && oldArr && fn_MemFreeStatic) fn_MemFreeStatic(oldArr);
+    // B.3.2 bridge: TownManager+0x120 is still a raw {data,count,cap} triple.
+    reinterpret_cast<Collection::Array<void*>*>(townMgr + 0x120)->SetSize(count + 1, desc);
 }
 
 // Seed one agri pool: pick `count` random entries from the `size`-entry pool and

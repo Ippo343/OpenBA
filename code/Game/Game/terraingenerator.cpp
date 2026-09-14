@@ -37,6 +37,7 @@
 #include "system/Filename.h"
 #include "resolve.h"
 #include "system/String.h"
+#include "collection/Collection.h"
 #include <cstdint>
 #include <cstring>
 
@@ -68,39 +69,39 @@ static void (*s_fn_TerrainDataSerialize)(void* serializer, uint32_t count, void*
 
 // FUN_1400206b0 -- stride-0x44 dynamic-array resize. New rows get the engine
 // default SizeRow template (row[0]=256, etc.).
-static void Reimpl_TerrainDataResize(void* arrayField, int newCount) {
-    if (!arrayField || !fn_MemAlloc || !g_pMemAllocSingleton) return;
-    uint8_t* hdr = reinterpret_cast<uint8_t*>(arrayField);
-    int oldCount = *reinterpret_cast<int*>(hdr + 8);
-    if (newCount == oldCount) return;
-    void* oldPtr = *reinterpret_cast<void**>(hdr + 0);
-    *reinterpret_cast<int*>(hdr + 8) = newCount;
-    if (*reinterpret_cast<int*>(hdr + 0xc) < newCount) {
-        *reinterpret_cast<int*>(hdr + 0xc) = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0)
-            *reinterpret_cast<int*>(hdr + 0xc) = newCount * 3;
-        int cap = *reinterpret_cast<int*>(hdr + 0xc);
-        *reinterpret_cast<void**>(hdr + 0) =
-            fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(cap) * 0x44, 4);
-    }
-    int start = (oldPtr == *reinterpret_cast<void**>(hdr + 0)) ? oldCount : 0;
-    uint8_t* dstBase = *reinterpret_cast<uint8_t**>(hdr + 0);
-    uint8_t* srcBase = reinterpret_cast<uint8_t*>(oldPtr);
+//
+// ENDGAME B.3.2 step 2: the body is now `Collection::Array<>::SetSize` over the
+// `kSpec_TerrainSizeRow` row. Compared arm for arm against rtcoll::SetSizeCore
+// and the retail body 0x1400206b0 (re-decompiled 2026-09-13): exact-equal early
+// return, `_size` first, treble-on-single-append-from-non-empty, cap*0x44 at
+// align 4, null element address skipped, 17-dword copy of the prefix only when
+// the block moved, default-row init for the tail, old block freed only when it
+// moved, no destroy. Every arm matched, nothing changed.
+namespace {
+void AssignTerrainSizeRow(uint8_t* d, const uint8_t* s) {
+    std::memcpy(d, s, 0x44);                         // 17 dwords, the whole stride
+}
+void InitTerrainSizeRow(uint8_t* d) {
     static const int32_t kDefaultRow[17] = {
         0x100, 0x32, 10, 0x14, 0, 10, 0x14, 3, 1, 1000000, 0,
         1, 10, 0x14, 0x23, 6, 0xc
     };
-    for (long long i = start; i < newCount; ++i) {
-        int32_t* d = reinterpret_cast<int32_t*>(dstBase + i * 0x44);
-        if (!d) continue;
-        if (i < oldCount) {
-            const int32_t* s = reinterpret_cast<const int32_t*>(srcBase + i * 0x44);
-            for (int k = 0; k < 17; ++k) d[k] = s[k];
-        } else {
-            for (int k = 0; k < 17; ++k) d[k] = kDefaultRow[k];
-        }
-    }
-    if (oldPtr != *reinterpret_cast<void**>(hdr + 0) && oldPtr) fn_MemFreeStatic(oldPtr);
+    std::memcpy(d, kDefaultRow, 0x44);
+}
+const rtcoll::ArraySpec kSpec_TerrainSizeRow = {     // exe 0x1400206b0
+    "Array<SizeRow>", 0x44, 4,
+    &AssignTerrainSizeRow, &InitTerrainSizeRow, nullptr, /*byteCopy*/true,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+using TerrainSizeRowArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                              Collection::ExplicitSpec<&kSpec_TerrainSizeRow>>;
+}  // namespace
+
+static void Reimpl_TerrainDataResize(void* arrayField, int newCount) {
+    if (!arrayField) return;
+    // B.3.2 bridge: TerrainGenerator+0x80 is still a pair of void* fields.
+    reinterpret_cast<TerrainSizeRowArray*>(arrayField)->SetSize(newCount);
 }
 
 // FUN_140020870 -- serialize `count` rows of 17 ints each. NOTE row[9] is
@@ -186,13 +187,12 @@ static void SerializeFilenameString(void* self_offset, void* serializer) {
 // at +0x68, +0x50, +0x38, +0x28, then calls External::~External.
 void* TerrainGenerator_Dtor(TerrainGenerator* self, uint32_t flags) {
     EnsureInit();
-    // Free terrain data array at +0x80
-    void* arrayPtr = self->_field80;
-    if (arrayPtr) {
-        fn_MemFreeStatic(arrayPtr);
-    }
-    self->_field80 = nullptr;
-    self->_field88 = nullptr;
+    // Free terrain data array at +0x80.
+    // ENDGAME B.3.2 step 2: this is `~Array` for the +0x80 SizeRow array —
+    // MemFree the block, then zero data and the count/capacity qword, which is
+    // exactly the three stores the hand-written version made (trivial element,
+    // so no destroy step). B.3.2 bridge: +0x80/+0x88 are still two void* fields.
+    reinterpret_cast<TerrainSizeRowArray*>(&self->_field80)->~Array();
 
     // Destroy strings in reverse order: +0x68, +0x50, +0x38, +0x28
     reinterpret_cast<System::String*>(reinterpret_cast<uint8_t*>(self) + 0x68)->~String();

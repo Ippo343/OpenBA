@@ -26,6 +26,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "system/String.h"
+#include "collection/Collection.h"
 #include <new>
 #include <cstdint>
 #include <cstdio>
@@ -38,45 +39,76 @@
 // System::String at each entry +0x08. Faithful port: triple-capacity heuristic on
 // a single-element grow, copy preserved entries (String copy-ctor), append the new
 // entry, then destruct/free the old buffer's Strings.
+//
+// ENDGAME B.3.2 step 2: the body below WAS a hand-written copy of
+// `rtcoll::SetSizeCore` in its three-argument (fill) form. It is now one
+// `Collection::Array<>::SetSizeFill` driven by this instantiation's element ops,
+// spelled as an `ArraySpec` row. Compared arm for arm against retail 0x140019b70
+// (re-decompiled 2026-09-13) and against SetSizeCore before the swap:
+//   * exact-equal early return; `_size` stored before the capacity test;
+//   * capacity = newSize, trebled when newSize == oldSize+1 && oldSize != 0;
+//   * MemAlloc(capacity * 0x28, align 8);
+//   * loop from 0 (moved) or oldSize (in place) to newSize, skipping a null
+//     computed element address; i < oldSize copies old[i], else copies `fill`
+//     (retail's else arm is UNCONDITIONALLY the fill — there is no init arm);
+//   * moved: ~String on every old element, then MemFree(old) — retail calls
+//     MemFree without an `if (old)` (the null test is inside 0x1800c7ad0); the
+//     previous port's `else if (oldData)` was equivalent, not extra;
+//   * in place and shrinking: ~String on the truncated tail.
+// Two deliberate differences, both out-of-memory-only: the allocation goes
+// through the LOCKING static `?MemAlloc@MemoryAllocator@System@@` instead of
+// the unlocked instance `Allocate` this body reached through `fn_MemAlloc`
+// (same heap), and a null `fill` no longer faults (retail would; SetSizeCore
+// falls through to the empty init arm). Every caller in the tree passes a
+// non-null entry (AddEventCore below, eventlog_achievement.cpp,
+// Component/diseasecomponent.cpp).
+namespace {
+
+// The element: {uint32 color @+0x00, System::String text @+0x08,
+//               int32 eventType @+0x10, severity @+0x14, tileIdx @+0x18,
+//               iconIndex @+0x1c, popup @+0x20}, stride 0x28, align 8.
+// +0x04..+0x07 is padding retail's assign never writes. This is a fill-only
+// instantiation (init == nullptr): retail 0x140019b70 has no default arm.
+void AssignEventEntry(uint8_t* d, const uint8_t* s) {
+    // B.3.2 bridge: the 0x28-byte event entry is still untyped bytes.
+    *reinterpret_cast<uint32_t*>(d + 0x00) = *reinterpret_cast<const uint32_t*>(s + 0x00);
+    new (d + 0x08) System::String(*reinterpret_cast<const System::String*>(s + 0x08));
+    *reinterpret_cast<uint32_t*>(d + 0x10) = *reinterpret_cast<const uint32_t*>(s + 0x10);
+    *reinterpret_cast<uint32_t*>(d + 0x14) = *reinterpret_cast<const uint32_t*>(s + 0x14);
+    *reinterpret_cast<uint32_t*>(d + 0x18) = *reinterpret_cast<const uint32_t*>(s + 0x18);
+    *reinterpret_cast<uint32_t*>(d + 0x1c) = *reinterpret_cast<const uint32_t*>(s + 0x1c);
+    *reinterpret_cast<uint32_t*>(d + 0x20) = *reinterpret_cast<const uint32_t*>(s + 0x20);
+}
+
+void DestroyEventEntry(void* /*ignoredThis*/, uint8_t* base, int count) {
+    for (int i = 0; i < count; ++i)
+        reinterpret_cast<System::String*>(base + static_cast<int64_t>(i) * 0x28 + 0x08)->~String();
+}
+
+const rtcoll::ArraySpec kSpec_EventEntry = {            // exe 0x140019b70 (grow),
+    "Array<EventLog::Entry>", 0x28, 8,                  //     0x14000a8a0 (~Array)
+    &AssignEventEntry, nullptr, &DestroyEventEntry, false,
+    /*assign unwritten*/ 0x04, 0x08,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0,    0 };
+
+using EventArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                     Collection::ExplicitSpec<&kSpec_EventEntry>>;
+
+}  // namespace
+
 static void EventArray_Grow(void* arrBase, int newCount, const void* newEntry) {
-    uintptr_t* base = (uintptr_t*)arrBase;
-    int oldCount = *(int*)((uintptr_t)base + 8);
-    if (newCount == oldCount) return;
+    // B.3.2 bridge: the event-log manager (GameUpdateLoop+0x138 -> +0x18) is
+    // still a raw 0x10-byte array header in an unconverted exe struct.
+    reinterpret_cast<EventArray*>(arrBase)->SetSizeFill(newCount, newEntry);
+}
 
-    uintptr_t oldData = *base;
-    *(int*)((uintptr_t)base + 8) = newCount;
-    int* capPtr = (int*)((uintptr_t)base + 0xC);
-    if (*capPtr < newCount) {
-        *capPtr = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) *capPtr = newCount * 3;
-        *base = (uintptr_t)fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)*capPtr * 0x28, 8);
-    }
-    uintptr_t newData = *base;
-
-    int startIdx = (oldData == newData) ? oldCount : 0;
-    for (int i = startIdx; i < newCount; i++) {
-        uintptr_t dst = newData + (uintptr_t)i * 0x28;
-        const void* src = (i < oldCount) ? (const void*)(oldData + (uintptr_t)i * 0x28) : newEntry;
-        *(uint32_t*)dst = *(const uint32_t*)src;                        // +0x00 color
-        // B.3.1 bridge: the 0x28-byte event entry is still untyped bytes.
-        new ((void*)(dst + 0x08)) System::String(
-            *reinterpret_cast<const System::String*>((uintptr_t)src + 0x08));  // +0x08 String
-        *(uint32_t*)(dst + 0x10) = *(const uint32_t*)((uintptr_t)src + 0x10);
-        *(uint32_t*)(dst + 0x14) = *(const uint32_t*)((uintptr_t)src + 0x14);
-        *(uint32_t*)(dst + 0x18) = *(const uint32_t*)((uintptr_t)src + 0x18);
-        *(uint32_t*)(dst + 0x1c) = *(const uint32_t*)((uintptr_t)src + 0x1c);
-        *(uint32_t*)(dst + 0x20) = *(const uint32_t*)((uintptr_t)src + 0x20);
-    }
-
-    if (oldData == newData) {
-        // In-place shrink: dtor excess Strings (not hit on append, kept for fidelity)
-        for (int i = newCount; i < oldCount; i++)
-            reinterpret_cast<System::String*>(oldData + (uintptr_t)i * 0x28 + 0x08)->~String();
-    } else if (oldData) {
-        for (int i = 0; i < oldCount; i++)
-            reinterpret_cast<System::String*>(oldData + (uintptr_t)i * 0x28 + 0x08)->~String();
-        fn_MemFreeStatic((void*)oldData);
-    }
+// The matching destructor, FUN_14000a8a0 (retail's EventNotifier cleanup): ~String
+// on each live entry's +0x08, MemFree the buffer, zero the header. Exported for
+// game_leaf_helpers.cpp's Game_EventNotifierCleanup so the element row lives in
+// exactly one place.
+extern "C" void EventLog_EventArray_Destroy(void* arrBase) {
+    reinterpret_cast<EventArray*>(arrBase)->~Array();   // B.3.2 bridge, as above
 }
 
 // ============================================================

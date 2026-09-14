@@ -15,6 +15,7 @@
 #include "Tool.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -216,43 +217,23 @@ struct TileRenderEntry {
 static_assert(sizeof(TileRenderEntry) == 0x14, "TileRenderEntry size mismatch");
 
 // Dynamic array holding TileRenderEntry items (matches Ghidra pattern)
-struct TileArray {
-    TileRenderEntry* data;
-    int count;
-    int capacity;
-};
+// ENDGAME B.3.2 step 2: now the real `Collection::Array<TileRenderEntry>` (trait-
+// derived row: stride 0x14, align 4, byteCopy, init == nullptr, destroy == nullptr).
+// The hand-written PushTileEntry grow below was compared arm for arm with
+// rtcoll::SetSizeCore: `newCount == count` early return == the reference's
+// exact-equal return (only reachable at INT_MAX for a +1 append); one append only,
+// so `(count == 0) ? n : n*3` is the reference capacity rule; MemAlloc(cap * 0x14,
+// align 4); prefix copied into the fresh block (== only when the block moved); the
+// fill stored at [count]; old block freed when it moved; in-place path stores at
+// [count]. Out-of-memory-only difference: this body dereferenced a null block,
+// SetSizeCore skips the null element address.
+using TileArray = Collection::Array<TileRenderEntry>;
 
 // ============================================================
 // Helper: push a TileRenderEntry into a dynamic array
 // ============================================================
 static void PushTileEntry(TileArray* arr, const TileRenderEntry* entry) {
-    int newCount = arr->count + 1;
-    if (newCount == arr->count) return; // overflow guard (mirrors original)
-
-    if (newCount > arr->capacity) {
-        int newCap = (arr->count == 0) ? newCount : newCount * 3;
-        TileRenderEntry* newBuf = (TileRenderEntry*)fn_MemAlloc(
-            g_pMemAllocSingleton, (uint64_t)newCap * sizeof(TileRenderEntry), 4);
-
-        // Copy existing entries
-        for (int i = 0; i < arr->count; i++) {
-            newBuf[i] = arr->data[i];
-        }
-        // Copy new entry at end
-        newBuf[arr->count] = *entry;
-
-        // Free old buffer if different
-        if (arr->data != newBuf) {
-            fn_MemFreeStatic(arr->data);
-        }
-
-        arr->data = newBuf;
-        arr->count = newCount;
-        arr->capacity = newCap;
-    } else {
-        arr->data[arr->count] = *entry;
-        arr->count = newCount;
-    }
+    arr->SetSize(arr->_size + 1, *entry);
 }
 
 // ============================================================
@@ -333,7 +314,7 @@ void RemovalTool_Draw(RemovalTool* self, void* context, char param3) {
         int endRow   = constrainEnd / gridSize;
 
         // Build entity tile array
-        TileArray entityTiles = {nullptr, 0, 0};
+        TileArray entityTiles;
 
         for (int row = startRow; row <= endRow; row++) {
             for (int col = startCol; col <= endCol; col++) {
@@ -348,14 +329,13 @@ void RemovalTool_Draw(RemovalTool* self, void* context, char param3) {
         }
 
         // Render: entity tiles in R8, empty array in R9
-        TileArray emptyTiles = {nullptr, 0, 0};
+        TileArray emptyTiles;
         if (fn_TileRender) {
             fn_TileRender(nullptr, context, &entityTiles, &emptyTiles);
         }
 
-        // Cleanup
-        fn_MemFreeStatic(emptyTiles.data);
-        fn_MemFreeStatic(entityTiles.data);
+        // entityTiles / emptyTiles are released by ~Array at scope exit (no early
+        // return inside this block).
     }
 
     // ---- Phase 2: Drag selection rectangle ----
@@ -399,7 +379,7 @@ void RemovalTool_Draw(RemovalTool* self, void* context, char param3) {
         }
 
         // Build selection tile array with per-tile removability check
-        TileArray selTiles = {nullptr, 0, 0};
+        TileArray selTiles;
         mapGrid = *(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
 
         uintptr_t removalDesc = (uintptr_t)self->removalDesc;
@@ -523,13 +503,13 @@ void RemovalTool_Draw(RemovalTool* self, void* context, char param3) {
         }
 
         // Render: selection tiles in R8, empty array in R9
-        TileArray emptyTiles2 = {nullptr, 0, 0};
+        TileArray emptyTiles2;
         if (fn_TileRender) {
             fn_TileRender(nullptr, context, &selTiles, &emptyTiles2);
         }
 
-        fn_MemFreeStatic(emptyTiles2.data);
-        fn_MemFreeStatic(selTiles.data);
+        // selTiles / emptyTiles2 are released by ~Array at scope exit (the block's
+        // only early return, `startCell < 0`, precedes their declarations).
     }
 }
 

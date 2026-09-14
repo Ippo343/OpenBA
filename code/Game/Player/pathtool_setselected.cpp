@@ -32,6 +32,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "collection/Collection.h"
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
@@ -236,41 +237,51 @@ static void* InorderNext(void* n) {
     return p;
 }
 
+// The three output lists of PathTool::SetSelected, at self+0x30 / +0x40 / +0x50
+// (each {data, size, cap}).
+//
+// ENDGAME B.3.2 step 2: IntArrayPush / U64ArrayPush / PathSel_RoutePush_6ba0 WERE
+// hand-written copies of rtcoll::SetSizeCore and the three "reset" lines in
+// SetSelected were inlined Collection::Array<T>::~Array bodies. Compared arm for arm
+// before the swap: the two pushes always had newCount == oldCount + 1, so their
+// `oldCount != 0 ? n*3 : n` is the reference capacity rule (and their missing
+// exact-equal return is unreachable, n+1 != n); size stored before the capacity
+// test; copy the prefix only when the block moved; the new slot takes the fill;
+// free the old block when it moved. 6ba0 is the general form and matches the
+// reference line for line, fill included. Rows:
+//   * +0x40 point list: trait-derived Array<int32_t> (stride 4, align 4, byteCopy);
+//   * +0x50 segment list: hand-derived — this site allocates 8-byte elements with
+//     ALIGN 4 (`fn_MemAlloc(..., cap << 3, 4)`), kept as written;
+//   * +0x30 route list: hand-derived, stride 0x200c, align 4, memcpy assign.
+// All three: byteCopy == true, init == nullptr (a fill is always supplied),
+// destroy == nullptr (trivial elements).
+void AssignU64(uint8_t* d, const uint8_t* s) {
+    *reinterpret_cast<uint64_t*>(d) = *reinterpret_cast<const uint64_t*>(s);
+}
+void AssignRouteEntry(uint8_t* d, const uint8_t* s) { std::memcpy(d, s, 0x200c); }
+
+const rtcoll::ArraySpec kSpec_PathSegU64 = {
+    "Array<uint64 segment (align 4)>", 8, 4,
+    &AssignU64, nullptr, nullptr, true,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+const rtcoll::ArraySpec kSpec_PathRouteEntry = {   // exe 0x140026ba0
+    "Array<PathTool route entry 0x200c>", 0x200c, 4,
+    &AssignRouteEntry, nullptr, nullptr, true,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+
+using PointArray = Collection::Array<int32_t>;
+using SegArray   = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                     Collection::ExplicitSpec<&kSpec_PathSegU64>>;
+using RouteArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                     Collection::ExplicitSpec<&kSpec_PathRouteEntry>>;
+
 // Dynamic-array push (exe grow pattern: cap = newCount*3 on the first non-empty grow).
-static void IntArrayPush(void** pData, int* pCount, int* pCap, int val) {
-    int oldCount = *pCount;
-    int newCount = oldCount + 1;
-    void* oldData = *pData;
-    *pCount = newCount;
-    if (*pCap < newCount) {
-        *pCap = newCount;
-        if (oldCount != 0) *pCap = newCount * 3;
-        *pData = fn_MemAlloc(g_pMemAllocSingleton, (int64_t)(*pCap) << 2, 4);
-    }
-    int start = (oldData == *pData) ? oldCount : 0;
-    int* dst = (int*)*pData;
-    int* src = (int*)oldData;
-    for (int i = start; i < newCount; i++)
-        if (dst) dst[i] = (i < oldCount) ? src[i] : val;
-    if (oldData != *pData && oldData) fn_MemFreeStatic(oldData);
-}
-static void U64ArrayPush(void** pData, int* pCount, int* pCap, uint64_t val) {
-    int oldCount = *pCount;
-    int newCount = oldCount + 1;
-    void* oldData = *pData;
-    *pCount = newCount;
-    if (*pCap < newCount) {
-        *pCap = newCount;
-        if (oldCount != 0) *pCap = newCount * 3;
-        *pData = fn_MemAlloc(g_pMemAllocSingleton, (int64_t)(*pCap) << 3, 4);
-    }
-    int start = (oldData == *pData) ? oldCount : 0;
-    uint64_t* dst = (uint64_t*)*pData;
-    uint64_t* src = (uint64_t*)oldData;
-    for (int i = start; i < newCount; i++)
-        if (dst) dst[i] = (i < oldCount) ? src[i] : val;
-    if (oldData != *pData && oldData) fn_MemFreeStatic(oldData);
-}
+static void IntArrayPush(PointArray* a, int val)     { a->SetSize(a->_size + 1, val); }
+static void U64ArrayPush(SegArray* a, uint64_t val)  { a->SetSizeFill(a->_size + 1, &val); }
 
 }  // namespace
 
@@ -343,27 +354,8 @@ static int PathSel_WorkplaceCell_e5d0(int64_t /*param_1*/, void* param_2) {
 // ============================================================
 static void PathSel_RoutePush_6ba0(int64_t* param_1, int param_2, uint64_t* param_3) {
     EnsureFns();
-    int oldCount = (int)param_1[1];
-    if (param_2 == oldCount) return;
-    void* oldData = (void*)*param_1;
-    *(int*)((uintptr_t)param_1 + 8) = param_2;
-    if (*(int*)((uintptr_t)param_1 + 0xc) < param_2) {
-        *(int*)((uintptr_t)param_1 + 0xc) = param_2;
-        if (param_2 == oldCount + 1 && oldCount != 0)
-            *(int*)((uintptr_t)param_1 + 0xc) = param_2 * 3;
-        void* nb = fn_MemAlloc(g_pMemAllocSingleton,
-                               (int64_t)(*(int*)((uintptr_t)param_1 + 0xc)) * 0x200c, 4);
-        *param_1 = (int64_t)nb;
-    }
-    int start = (oldData == (void*)*param_1) ? oldCount : 0;
-    for (int i = start; i < param_2; i++) {
-        uint8_t* dst = (uint8_t*)*param_1 + (size_t)i * 0x200c;
-        if (!dst) continue;
-        const uint8_t* src = (i < oldCount) ? ((uint8_t*)oldData + (size_t)i * 0x200c)
-                                            : (const uint8_t*)param_3;
-        std::memcpy(dst, src, 0x200c);
-    }
-    if (oldData != (void*)*param_1 && oldData) fn_MemFreeStatic(oldData);
+    // B.3.2 bridge: the +0x30 route header is still raw bytes in the PathTool struct.
+    reinterpret_cast<RouteArray*>(param_1)->SetSizeFill(param_2, param_3);
 }
 
 // ============================================================
@@ -479,10 +471,13 @@ static void PathSel_BuildRoutes_d770(int64_t param_1) {
     fn_FindComponent_Citizen(*(void**)(param_1 + 0x28), &local_2098);
 
     int64_t* routeArr = (int64_t*)(param_1 + 0x30);   // plVar24: route array header
-    // Reset the three output arrays.
-    fn_MemFreeStatic((void*)*routeArr);        *routeArr = 0; *(int64_t*)(param_1 + 0x38) = 0;
-    fn_MemFreeStatic(*(void**)(param_1 + 0x40)); *(int64_t*)(param_1 + 0x40) = 0; *(int64_t*)(param_1 + 0x48) = 0;
-    fn_MemFreeStatic(*(void**)(param_1 + 0x50)); *(int64_t*)(param_1 + 0x50) = 0; *(int64_t*)(param_1 + 0x58) = 0;
+    // Reset the three output arrays: each WAS "MemFree the buffer, zero _data, zero
+    // the _size/_capacity qword" — the Collection::Array<T>::~Array body for a
+    // trivially destructible T — now the dtor itself, in place.
+    // B.3.2 bridge ×3: the headers live in the unconverted PathTool struct.
+    reinterpret_cast<RouteArray*>(param_1 + 0x30)->~Array();
+    reinterpret_cast<PointArray*>(param_1 + 0x40)->~Array();
+    reinterpret_cast<SegArray*>(param_1 + 0x50)->~Array();
 
     uint8_t entryBuf[0x200c];   // scratch route entry pushed via 6ba0 (garbage tail OK; count=0)
 
@@ -640,12 +635,10 @@ static void PathSel_BuildRoutes_d770(int64_t param_1) {
 
     // --- Flatten trees (in-order) into +0x40 (points) and +0x50 (segments). ---
     for (void* n = InorderFirst(pointTree); n; n = InorderNext(n)) {
-        IntArrayPush((void**)(param_1 + 0x40), (int*)(param_1 + 0x48), (int*)(param_1 + 0x4c),
-                     *(int*)n);
+        IntArrayPush(reinterpret_cast<PointArray*>(param_1 + 0x40), *(int*)n);   // B.3.2 bridge
     }
     for (void* n = InorderFirst(segTree); n; n = InorderNext(n)) {
-        U64ArrayPush((void**)(param_1 + 0x50), (int*)(param_1 + 0x58), (int*)(param_1 + 0x5c),
-                     *(uint64_t*)n);
+        U64ArrayPush(reinterpret_cast<SegArray*>(param_1 + 0x50), *(uint64_t*)n);  // B.3.2 bridge
     }
 
 

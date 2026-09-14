@@ -25,11 +25,22 @@
 //   0x140014c30  tree-node free, kids +0x10/+0x18   (work_base_reimpl.cpp)
 //   0x140014b00  tree-node free, kids +0x20/+0x28   (tool_base_highlight.cpp)
 
+// ENDGAME B.3.2 step 2 (COLL-GAME sweep): every `MemFree(data); data = 0; one
+// qword over size+capacity = 0` triple below was a hand-inlined
+// `Collection::Array<T>::~Array` for a trivially-destructible T
+// (`rtcoll::ArrayDtorImpl`, byte for byte). Each is now `->~Array()` on the
+// header, spelled `rtcoll::ArrayHdr` (= Array<uint8_t>) where the element type
+// is not pinned in this file and `Array<void*>` where it is a pointer list.
+// `ArrayOfArrays_Clear_175d0` is `Array<ArrayHdr>::~Array`: the trait-derived
+// row destroys each inner header (ascending, as retail's loop does) and then
+// frees the outer block. Trees ({root,count} pairs, 4-byte count store),
+// node chains and IBP payloads are NOT arrays and are untouched.
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "address_registry.h"
 #include "options.h"         // Opt().teardownHeapCheck
 #include "redzone_alloc.h"   // RedzoneAlloc_FindCorruptBlockNative
+#include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -70,6 +81,10 @@ inline int64_t&  I64(void* base, int off) { return *reinterpret_cast<int64_t*>(B
 
 inline void MemFree(void* p) { if (p && fn_MemFreeStatic) fn_MemFreeStatic(p); }
 
+// B.3.2 bridge: the owning structs are still untyped bytes.
+inline rtcoll::ArrayHdr&          Arr   (void* base, int off) { return *reinterpret_cast<rtcoll::ArrayHdr*>(B(base) + off); }
+inline Collection::Array<void*>&  PtrArr(void* base, int off) { return *reinterpret_cast<Collection::Array<void*>*>(B(base) + off); }
+
 // MSVC's __ehvec_dtor_iter: destroy `count` elements of `size` bytes in REVERSE
 // order. Retail reaches these through the CRT helper at 0x14003ad30; the
 // iteration is the whole content, so it is inlined here rather than ported.
@@ -85,9 +100,7 @@ void VectorDtorIter(void* first, int size, int count, Dtor dtor) {
 // ============================================================
 extern "C" void Array8_Clear_1740(void* hdrV) {
     EnsureResolved();
-    MemFree(P(hdrV, 0x00));
-    P(hdrV, 0x00) = nullptr;
-    I64(hdrV, 0x08) = 0;   // count + capacity in one 8-byte store, as retail does
+    Arr(hdrV, 0x00).~Array();   // retail: MemFree; data = 0; count + capacity in one 8-byte store
 }
 
 // ============================================================
@@ -97,9 +110,7 @@ extern "C" void TreeNodeFree_174e0(void* hdrV, void* nodeV) {
     if (!nodeV) return;
     TreeNodeFree_174e0(hdrV, P(nodeV, 0x20));
     TreeNodeFree_174e0(hdrV, P(nodeV, 0x28));
-    MemFree(P(nodeV, 0x08));
-    P(nodeV, 0x08) = nullptr;
-    I64(nodeV, 0x10) = 0;
+    Arr(nodeV, 0x08).~Array();
     MemFree(nodeV);
 }
 
@@ -112,9 +123,7 @@ extern "C" void Tree_Clear_173d0(void* hdrV) {
     if (root) {
         TreeNodeFree_174e0(hdrV, P(root, 0x20));
         TreeNodeFree_174e0(hdrV, P(root, 0x28));
-        MemFree(P(root, 0x08));
-        P(root, 0x08) = nullptr;
-        I64(root, 0x10) = 0;
+        Arr(root, 0x08).~Array();
         MemFree(root);
     }
     P(hdrV, 0x00) = nullptr;
@@ -126,16 +135,10 @@ extern "C" void Tree_Clear_173d0(void* hdrV) {
 // ============================================================
 extern "C" void ArrayOfArrays_Clear_175d0(void* hdrV) {
     EnsureResolved();
-    uint8_t* elem = reinterpret_cast<uint8_t*>(P(hdrV, 0x00));
-    int32_t count = I32(hdrV, 0x08);
-    for (int32_t i = 0; i < count; ++i, elem += 0x10) {
-        MemFree(P(elem, 0x00));
-        P(elem, 0x00) = nullptr;
-        I64(elem, 0x08) = 0;
-    }
-    MemFree(P(hdrV, 0x00));
-    P(hdrV, 0x00) = nullptr;
-    I64(hdrV, 0x08) = 0;
+    // Array<ArrayHdr>::~Array — the trait-derived row's destroy is ~ArrayHdr on
+    // each of `count` 0x10-byte elements in ascending order (retail's loop),
+    // then ArrayDtorImpl on the outer header.
+    reinterpret_cast<Collection::Array<rtcoll::ArrayHdr>*>(hdrV)->~Array();   // B.3.2 bridge
 }
 
 // ============================================================
@@ -152,9 +155,7 @@ extern "C" void ArrayPlusTree_Clear_171b0(void* selfV) {
     }
     P(treeHdr, 0x00) = nullptr;
     I32(treeHdr, 0x08) = 0;
-    MemFree(P(selfV, 0x00));
-    P(selfV, 0x00) = nullptr;
-    I64(selfV, 0x08) = 0;
+    Arr(selfV, 0x00).~Array();
 }
 
 // ============================================================
@@ -291,9 +292,7 @@ extern "C" void EntityList_Shutdown_c3d30(void* selfV) {
         void* ibp = *reinterpret_cast<void**>(B(P(self, 0xD0)) + (size_t)i * 8);
         if (s_removeEntity) s_removeEntity(selfV, &ibp);
     }
-    MemFree(P(self, 0xD0));
-    P(self, 0xD0) = nullptr;
-    I64(self, 0xD8) = 0;
+    PtrArr(self, 0xD0).~Array();
 
     // Whatever is still in the master array goes now. RemoveEntity shrinks the
     // array, so retail re-reads the count every pass and always takes slot 0.
@@ -315,9 +314,9 @@ extern "C" void EntityList_Dtor_c3e60(void* selfV) {
 
     EntityList_Shutdown_c3d30(selfV);
 
-    MemFree(P(self, 0xD0));  P(self, 0xD0) = nullptr;  I64(self, 0xD8) = 0;  // removal list
-    MemFree(P(self, 0x98));  P(self, 0x98) = nullptr;  I64(self, 0xA0) = 0;  // staging post-update
-    MemFree(P(self, 0x88));  P(self, 0x88) = nullptr;  I64(self, 0x90) = 0;  // staging update
+    PtrArr(self, 0xD0).~Array();   // removal list
+    PtrArr(self, 0x98).~Array();   // staging post-update
+    PtrArr(self, 0x88).~Array();   // staging update
 
     // post-update tree (+0x78) then update tree (+0x68): nodes with kids +0x10/+0x18
     for (int off : {0x78, 0x68}) {
@@ -335,7 +334,7 @@ extern "C" void EntityList_Dtor_c3e60(void* selfV) {
     // 5 round-robin update buckets at +0x18, 0x10 bytes each
     VectorDtorIter(self + 0x18, 0x10, 5, [](void* e) { Array8_Clear_1740(e); });
 
-    MemFree(P(self, 0x08));  P(self, 0x08) = nullptr;  I64(self, 0x10) = 0;  // master array
+    PtrArr(self, 0x08).~Array();   // master array
 }
 
 // ============================================================
@@ -353,24 +352,23 @@ extern "C" void CitizenList_Dtor_907b0(void* selfV) {
         MemFree(self[0x37]);
     }
 
-    MemFree(self[0x30]); self[0x30] = nullptr; self[0x31] = nullptr;
-    MemFree(self[0x2e]); self[0x2e] = nullptr; self[0x2f] = nullptr;
+    // Qword index i is the header at byte offset i*8; the element types are not
+    // pinned here (citizenlist_serialize.cpp owns them), so ArrayHdr throughout.
+    Arr(self, 0x30 * 8).~Array();
+    Arr(self, 0x2e * 8).~Array();
 
     Tree_Clear_173d0(self + 0x2c);
     ArrayOfArrays_Clear_175d0(self + 0x2a);
     ArrayOfArrays_Clear_175d0(self + 0x28);
 
-    MemFree(self[0x26]); self[0x26] = nullptr; self[0x27] = nullptr;
-    MemFree(self[0x24]); self[0x24] = nullptr; self[0x25] = nullptr;
-    MemFree(self[0x22]); self[0x22] = nullptr; self[0x23] = nullptr;
+    Arr(self, 0x26 * 8).~Array();
+    Arr(self, 0x24 * 8).~Array();
+    Arr(self, 0x22 * 8).~Array();
 
     Tree_Clear_173d0(self + 0x20);
 
-    for (int idx = 0x1e; idx >= 0; idx -= 2) {
-        MemFree(self[idx]);
-        self[idx] = nullptr;
-        self[idx + 1] = nullptr;
-    }
+    for (int idx = 0x1e; idx >= 0; idx -= 2)
+        Arr(self, idx * 8).~Array();
 }
 
 // ============================================================
@@ -391,7 +389,7 @@ extern "C" void EntityUI_Dtor_1024d0(void* selfV) {
         if (fn_InternalBasePtr_DeletePtr) fn_InternalBasePtr_DeletePtr(self + 0x28);
     }
 
-    MemFree(P(self, 0x70));  P(self, 0x70) = nullptr;  I64(self, 0x78) = 0;
+    Arr(self, 0x70).~Array();
 
     // Two trees with kids at +0x20/+0x28 (+0x60 then +0x50).
     for (int off : {0x60, 0x50}) {

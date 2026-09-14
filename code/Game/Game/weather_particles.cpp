@@ -24,6 +24,7 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
+#include "collection/Collection.h"
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
@@ -75,7 +76,30 @@ static const uintptr_t kWeatherGeometryVtable = 0x140160240;
 // Weather config calls this once on a fresh geometry (count 0 -> particleCount),
 // so the grow/copy machinery collapses to: alloc, zero, set count. array header
 // = { void* data(+0), int count(+8), int cap(+0xc) } at geo+0xe0.
+//
+// ENDGAME B.3.2 step 2: NOT converted. Retail 0x140025090 (re-decompiled
+// 2026-09-13) is a plain rtcoll::SetSizeCore whose new-tail arm zeroes the
+// 0x24-byte element (four qword stores + one dword) and whose prefix arm copies
+// nine dwords. The body below instead memsets [0, newCount) of the buffer
+// AFTER the grow — on an in-place grow or shrink from a non-zero count that
+// also wipes the surviving prefix, which the reference never touches. Only
+// the row (kSpec_WeatherParticle, below) is retail's; it is used by the
+// geometry destructor. Reconciling this body with retail is a separate,
+// deliberate change.
 // ============================================================
+namespace {
+void AssignWeatherParticle(uint8_t* d, const uint8_t* s) { std::memcpy(d, s, 0x24); }
+void InitWeatherParticle(uint8_t* d)                     { std::memset(d, 0, 0x24); }
+const rtcoll::ArraySpec kSpec_WeatherParticle = {    // exe 0x140025090
+    "Array<WeatherParticle>", 0x24, 4,
+    &AssignWeatherParticle, &InitWeatherParticle, nullptr, /*byteCopy*/true,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+using WeatherParticleArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                               Collection::ExplicitSpec<&kSpec_WeatherParticle>>;
+}  // namespace
+
 static void WeatherParticle_ArrayAlloc(void* header, int newCount) {
     uint8_t* h = reinterpret_cast<uint8_t*>(header);
     int oldCount = *reinterpret_cast<int*>(h + 8);
@@ -129,12 +153,16 @@ extern "C" void* WeatherParticle_GeoDtor(void* self, uint32_t flags) {
     static void* s_vtable = nullptr;
     if (!s_vtable) s_vtable = reinterpret_cast<void*>(ResolveAddr(Module::Exe, kWeatherGeometryVtable));
     *reinterpret_cast<void**>(g) = s_vtable;
+    // ENDGAME B.3.2 step 2: the particle array at +0xe0 is torn down by
+    // `~Array` (MemFree the block, zero data and the count/capacity qword —
+    // the same three stores this body made by hand; trivial element, no
+    // destroy). The +0xd0 index buffer is not an Array (its +0xd8 is a bare
+    // count) and keeps its hand-written free. B.3.2 bridge: +0xe0 is still
+    // raw bytes in the untyped geometry.
+    reinterpret_cast<WeatherParticleArray*>(g + 0xe0)->~Array();
     if (fn_MemFreeStatic) {
-        if (*reinterpret_cast<void**>(g + 0xe0)) fn_MemFreeStatic(*reinterpret_cast<void**>(g + 0xe0));
         if (*reinterpret_cast<void**>(g + 0xd0)) fn_MemFreeStatic(*reinterpret_cast<void**>(g + 0xd0));
     }
-    *reinterpret_cast<uint64_t*>(g + 0xe0) = 0;
-    *reinterpret_cast<uint64_t*>(g + 0xe8) = 0;
     *reinterpret_cast<uint64_t*>(g + 0xd0) = 0;
     *reinterpret_cast<uint64_t*>(g + 0xd8) = 0;
     if (s_fnGeoBaseDtor) s_fnGeoBaseDtor(self);      // Graphics::Geometry::~Geometry
@@ -372,33 +400,31 @@ extern "C" bool  GeomDraw_Clean(void* self);
 // {Weather* descriptor, ExternalPtr audioTemplate} elements) used by
 // EnvironmentDescription::Serialize to size the weather-descriptor array on
 // load. Header {ptr(+0), count(+8), cap(+0xc)}. Copies existing, zero-fills new.
+//
+// ENDGAME B.3.2 step 2: now `Collection::Array<>::SetSize` over the
+// `kSpec_WeatherEntry` row. Compared arm for arm against rtcoll::SetSizeCore
+// and the retail body 0x1400198a0 (re-decompiled 2026-09-13): exact-equal early
+// return, `_size` first, treble-on-single-append-from-non-empty, cap<<4 at
+// align 8, two-qword copy of the prefix only when the block moved, two-qword
+// zero init for the tail, old block freed only when it moved, no destroy.
+// Every arm matched; only the `if (dst)` out-of-memory guard is gone.
 // ============================================================
+namespace {
+void AssignWeatherEntry(uint8_t* d, const uint8_t* s) { std::memcpy(d, s, 0x10); }
+void InitWeatherEntry(uint8_t* d)                     { std::memset(d, 0, 0x10); }
+const rtcoll::ArraySpec kSpec_WeatherEntry = {       // exe 0x1400198a0
+    "Array<{Weather*,ExternalPtr}>", 0x10, 8,
+    &AssignWeatherEntry, &InitWeatherEntry, nullptr, /*byteCopy*/true,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+using WeatherEntryArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                            Collection::ExplicitSpec<&kSpec_WeatherEntry>>;
+}  // namespace
+
 extern "C" void Reimpl_WeatherArray_Resize(void* hdr, int newCount) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(hdr);
-    int oldCount = *reinterpret_cast<int*>(p + 8);
-    if (newCount == oldCount) return;
-    void* oldPtr = *reinterpret_cast<void**>(p + 0);
-    *reinterpret_cast<int*>(p + 8) = newCount;
-    if (*reinterpret_cast<int*>(p + 0xc) < newCount) {
-        int cap = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) cap = newCount * 3;
-        *reinterpret_cast<int*>(p + 0xc) = cap;
-        *reinterpret_cast<void**>(p + 0) = (fn_MemAlloc && g_pMemAllocSingleton)
-            ? fn_MemAlloc(g_pMemAllocSingleton, (size_t)cap << 4, 8) : nullptr;
-    }
-    int start = (oldPtr == *reinterpret_cast<void**>(p + 0)) ? oldCount : 0;
-    uint8_t* dst = *reinterpret_cast<uint8_t**>(p + 0);
-    uint8_t* src = reinterpret_cast<uint8_t*>(oldPtr);
-    if (dst) {
-        for (int i = start; i < newCount; ++i) {
-            uint64_t* d = reinterpret_cast<uint64_t*>(dst + (size_t)i * 0x10);
-            if (i < oldCount) {
-                d[0] = *reinterpret_cast<uint64_t*>(src + (size_t)i * 0x10);
-                d[1] = *reinterpret_cast<uint64_t*>(src + (size_t)i * 0x10 + 8);
-            } else { d[0] = 0; d[1] = 0; }
-        }
-    }
-    if (oldPtr && oldPtr != dst && fn_MemFreeStatic) fn_MemFreeStatic(oldPtr);
+    // B.3.2 bridge: EnvironmentDescription's weather array is still a raw triple.
+    reinterpret_cast<WeatherEntryArray*>(hdr)->SetSize(newCount);
 }
 
 // ============================================================
