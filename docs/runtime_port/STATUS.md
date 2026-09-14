@@ -23,9 +23,9 @@ built them wrong, and callbacks stored in data.
 - **B.3.2 OPEN — session handoff (2026-09-14, main e4ac8967):** `Collection::Array<T>`,
   `Set<T>` and `LinkedList<T>` are real templates (runtime/types/collection/Collection.h)
   wrapping the ported cores; all 339 registry rows kept as shims; `make unit` 154 tests.
-  Step 2 (callers): Game/Player/Tutorial/Goal MERGED (e4ac8967, gate PASS). Dialog,
+  Step 2 (callers): Game/Player/Tutorial/Goal MERGED (e4ac8967) and Dialog MERGED (0926164e), both gate PASS.
   Component/Action/Work/Entity and runtime+standalone+dx11 were in flight on worktree
-  branches `worktree-agent-a07a3ff8deedd51a1`, `worktree-agent-af701169855ab5b77`,
+  branches `worktree-agent-af701169855ab5b77`,
   `worktree-agent-a06f7bd4303740385` when the session stopped — **merge each only after
   build + `make unit` + sa-run + resave gate on the merge** (check `git diff --stat` against
   the batch's file set first). Rules: `endgame_b/B32_RULES.md`.
