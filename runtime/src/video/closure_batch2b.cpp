@@ -9,6 +9,7 @@
 #include <cstdint>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/collection/Collection.h"  // ENDGAME B.3.2 step 2: real Array<uint8_t>
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -43,14 +44,14 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 namespace {
 using EncodeFieldFn = void (*)(void* encoding, void* field, int flags);
 using EncodeBytesFn = void (*)(void* encoding, int size, void* data, int flags);
-
-void ArrayU8SetSize(void* array, int n) {
-    using Fn = void (*)(void*, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180029630));
-    fn(array, n);
-}
 }  // namespace
+
+// ENDGAME B.3.2 step 2 — `ArrayU8SetSize` (0x180029630) is GONE: each element
+// `e` walked below IS a `Collection::Array<uint8_t>` header (the stride-0x10
+// `{data,size,capacity}` triple the banner above names), and `kSpec_Bool`
+// (0x180029630's row, array.cpp) is `SpecFor<uint8_t>()` field for field —
+// trait-derived, so a direct `.SetSize()` on the reinterpreted element is that
+// exact body.
 
 extern "C" void RtVideo_ShaderProgram_SerializeBlobArray(void* ctx, int count,
                                                           void* data) {
@@ -69,7 +70,8 @@ extern "C" void RtVideo_ShaderProgram_SerializeBlobArray(void* ctx, int count,
         {
             void* first = *reinterpret_cast<void**>(ctx);      // MOV RAX,[RDI]
             if (*reinterpret_cast<const int32_t*>(static_cast<uint8_t*>(first) + 8) == 0)
-                ArrayU8SetSize(e, tmp);                        // CALL 0x180029630
+                // retail 0x180029630 — kSpec_Bool == SpecFor<uint8_t>().
+                reinterpret_cast<Collection::Array<uint8_t>*>(e)->SetSize(tmp);
         }
         {
             void* enc = *reinterpret_cast<void**>(static_cast<uint8_t*>(ctx) + 8);
