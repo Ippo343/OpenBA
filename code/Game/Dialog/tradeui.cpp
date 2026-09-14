@@ -32,6 +32,7 @@
 //   +0x140: sortCombo element
 
 #include "Dialog/ui_panels.h"
+#include "Dialog/dialog_array_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "system/String.h"
@@ -180,39 +181,13 @@ static void* TradeUI_FindTypedElement(void* dialogElem, const char* name, uint32
     return result;
 }
 
-// Helper: push entry into a dynamic array with given stride
-// arrayPtr/countPtr/capacityPtr point into the TradeUI struct fields
-static void TradeUI_DynArrayPush(uintptr_t s, int ptrOff, int countOff, int capOff,
-                                  void* entryData, int stride) {
-    int oldCount = *(int*)(s + countOff);
-    int newCount = oldCount + 1;
-    void* oldBuf = *(void**)(s + ptrOff);
-    *(int*)(s + countOff) = newCount;
-
-    if (*(int*)(s + capOff) < newCount) {
-        int newCap = newCount;
-        if (oldCount != 0) newCap = newCount * 3;
-        *(int*)(s + capOff) = newCap;
-        void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * stride, 8);
-        *(void**)(s + ptrOff) = newBuf;
-    }
-
-    void* curBuf = *(void**)(s + ptrOff);
-    int copyStart = (oldBuf == curBuf) ? oldCount : 0;
-    for (int k = copyStart; k < newCount; k++) {
-        uint8_t* dst = (uint8_t*)curBuf + k * stride;
-        uint8_t* src = (uint8_t*)entryData;
-        if (k < oldCount) {
-            src = (uint8_t*)oldBuf + k * stride;
-        }
-        for (int b = 0; b < stride; b++) {
-            dst[b] = src[b];
-        }
-    }
-    if (oldBuf != curBuf) {
-        fn_MemFreeStatic(oldBuf);
-    }
-}
+// B.3.2 bridge: every TradeUI_DynArrayPush(s, ptrOff, countOff, capOff, entry, stride)
+// call site below was a hand-transcribed copy of retail's inlined
+// Collection::Array<T>::SetSize(count+1, fill) (see dialog_array_bridge.h). Converted
+// in place to DlgArray<stride>(s, ptrOff).SetSize(...) — the runtime stride parameter
+// this helper took becomes the compile-time N of the blob element, so the helper is
+// deleted (zero remaining callers, confirmed by grep across code/, standalone/,
+// engine/, runtime/).
 
 // Helper: clone template into all table cells
 // templateObj must be read from first child's +0xB8 BEFORE calling SetSize,
@@ -429,10 +404,13 @@ void TradeUI_RefreshSellTable(TradeUI* self)
 
             if (!found) continue;
 
-            // Build 0x20-byte sell data entry and push to array at +0x30
-            // Entry: {resEntity(8), valueDesc(8), resTypeComp(8), pad(8)}
-            uint64_t entry[4] = {resEntity, (uint64_t)valueDesc, (uint64_t)resTypeComp, 0};
-            TradeUI_DynArrayPush(s, 0x30, 0x38, 0x3C, entry, 0x20);
+            // Build 0x20-byte sell data entry and push to array at +0x30.
+            // B.3.2 bridge: TradeUI+0x30 is Collection::Array<{resEntity, valueDesc,
+            // resTypeComp, pad}> (stride 0x20, count +0x38, capacity +0x3C).
+            auto& sellRows = DlgArray<0x20>(s, 0x30);
+            sellRows.SetSize(sellRows.GetSize() + 1,
+                              DlgElem<0x20>{{resEntity, (uint64_t)valueDesc,
+                                             (uint64_t)resTypeComp, 0}});
         }
     }
 
@@ -725,9 +703,12 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
             // Find ValueDescription in order entry's description
             void* valDesc = FindDescComponent((void*)orderEntry, *g_TypeInfo_ValueDescription);
 
-            // Build 0x18-byte buy data entry
-            uint64_t buyEntry[3] = {orderEntry, (uint64_t)valDesc, 0};
-            TradeUI_DynArrayPush(s, 0x40, 0x48, 0x4C, buyEntry, 0x18);
+            // Build 0x18-byte buy data entry and push to array at +0x40.
+            // B.3.2 bridge: TradeUI+0x40 is Collection::Array<{orderEntry, valDesc,
+            // pad}> (stride 0x18, count +0x48, capacity +0x4C).
+            auto& buyRows = DlgArray<0x18>(s, 0x40);
+            buyRows.SetSize(buyRows.GetSize() + 1,
+                             DlgElem<0x18>{{orderEntry, (uint64_t)valDesc, 0}});
         }
     }
 
@@ -1179,9 +1160,14 @@ void TradeUI_Serialize(TradeUI* self) {
         if (*(void**)r0) fn_SpinnerElement_SetElementId(*(void**)r0, baseId + 1000);
         TradeUI_ReportSpinnerTag("purchase", row, *(void**)r0, baseId + 1000);
 
-        // Build 0x20-byte entry: {label, number, button, spinner}
-        uint64_t entry[4] = {(uint64_t)label, (uint64_t)number, (uint64_t)button, (uint64_t)spinner};
-        TradeUI_DynArrayPush(s, 0x90, 0x98, 0x9C, entry, 0x20);
+        // Build 0x20-byte entry {label, number, button, spinner} and push to the
+        // order-entries array at +0x90.
+        // B.3.2 bridge: TradeUI+0x90 is Collection::Array<{label, number, button,
+        // spinner}> (stride 0x20, count +0x98, capacity +0x9C).
+        auto& orderRows = DlgArray<0x20>(s, 0x90);
+        orderRows.SetSize(orderRows.GetSize() + 1,
+                           DlgElem<0x20>{{(uint64_t)label, (uint64_t)number,
+                                          (uint64_t)button, (uint64_t)spinner}});
 
         baseId++;
     }
@@ -1279,9 +1265,13 @@ void TradeUI_Serialize(TradeUI* self) {
         TradeUI_ReportSpinnerTag("storage", i, *(void**)c0, i + 2000);
 
 
-        // Build 0x18-byte entry: {e0, e1, e2}
-        uint64_t entry[3] = {(uint64_t)e0, (uint64_t)e1, (uint64_t)e2};
-        TradeUI_DynArrayPush(s, 0x80, 0x88, 0x8C, entry, 0x18);
+        // Build 0x18-byte entry {e0, e1, e2} and push to the storage-entries array
+        // at +0x80.
+        // B.3.2 bridge: TradeUI+0x80 is Collection::Array<{e0, e1, e2}> (stride
+        // 0x18, count +0x88, capacity +0x8C).
+        auto& storageRows = DlgArray<0x18>(s, 0x80);
+        storageRows.SetSize(storageRows.GetSize() + 1,
+                             DlgElem<0x18>{{(uint64_t)e0, (uint64_t)e1, (uint64_t)e2}});
     }
 
     // --- Phase 4b: Setup tableSell ---
@@ -1341,11 +1331,15 @@ void TradeUI_Serialize(TradeUI* self) {
         fn_SpinnerElement_SetElementId(*(void**)c, i + 3000);
         TradeUI_ReportSpinnerTag("sell", i, *(void**)c, i + 3000);
 
-        // Build 0x20-byte entry: {child1, child0, child2, child3}
+        // Build 0x20-byte entry {child1, child0, child2, child3} and push to the
+        // sell-entries array at +0x60.
         // +0=LabelElement, +8=SpinnerElement, +10=SpinnerElement, +18=SliderElement
-        uint64_t entry[4] = {(uint64_t)labelElem, (uint64_t)spinElem,
-                              (uint64_t)numElem, (uint64_t)sliderElem};
-        TradeUI_DynArrayPush(s, 0x60, 0x68, 0x6C, entry, 0x20);
+        // B.3.2 bridge: TradeUI+0x60 is Collection::Array<{labelElem, spinElem,
+        // numElem, sliderElem}> (stride 0x20, count +0x68, capacity +0x6C).
+        auto& sellEntryRows = DlgArray<0x20>(s, 0x60);
+        sellEntryRows.SetSize(sellEntryRows.GetSize() + 1,
+                               DlgElem<0x20>{{(uint64_t)labelElem, (uint64_t)spinElem,
+                                              (uint64_t)numElem, (uint64_t)sliderElem}});
     }
 
     // --- Phase 4c: Setup tableBuy ---
@@ -1406,11 +1400,15 @@ void TradeUI_Serialize(TradeUI* self) {
         fn_SpinnerElement_SetElementId(*(void**)c, i + 4000);
         TradeUI_ReportSpinnerTag("buy", i, *(void**)c, i + 4000);
 
-        // Build 0x20-byte entry: {child1, child2, child3, child0}
+        // Build 0x20-byte entry {child1, child2, child3, child0} and push to the
+        // buy-entries array at +0x70.
         // +0=LabelElement, +8=SpinnerElement, +10=SliderElement, +18=SpinnerElement
-        uint64_t entry[4] = {(uint64_t)labelElem, (uint64_t)numElem,
-                              (uint64_t)sliderElem, (uint64_t)spinElem};
-        TradeUI_DynArrayPush(s, 0x70, 0x78, 0x7C, entry, 0x20);
+        // B.3.2 bridge: TradeUI+0x70 is Collection::Array<{labelElem, numElem,
+        // sliderElem, spinElem}> (stride 0x20, count +0x78, capacity +0x7C).
+        auto& buyEntryRows = DlgArray<0x20>(s, 0x70);
+        buyEntryRows.SetSize(buyEntryRows.GetSize() + 1,
+                              DlgElem<0x20>{{(uint64_t)labelElem, (uint64_t)numElem,
+                                             (uint64_t)sliderElem, (uint64_t)spinElem}});
     }
 
     // --- Phase 4d: Setup tableOrder ---
@@ -1446,9 +1444,13 @@ void TradeUI_Serialize(TradeUI* self) {
         fn_InternalBasePtr_CheckPtr(ibp);
         fn_Element_SetElementId(*(void**)ibp, i + 0x1F40);
 
-        // Push 8-byte entry (just the element pointer) into purchase array
-        uint64_t entry[1] = {*(uint64_t*)ibp};
-        TradeUI_DynArrayPush(s, 0xA0, 0xA8, 0xAC, entry, 0x08);
+        // Push 8-byte entry (just the element pointer) into the purchase array
+        // at +0xA0.
+        // B.3.2 bridge: TradeUI+0xA0 is Collection::Array<{elem}> (stride 0x08,
+        // count +0xA8, capacity +0xAC).
+        auto& purchaseRows = DlgArray<0x08>(s, 0xA0);
+        purchaseRows.SetSize(purchaseRows.GetSize() + 1,
+                              DlgElem<0x08>{{*(uint64_t*)ibp}});
     }
 
     // --- Phase 5: Call refresh functions ---
@@ -2687,9 +2689,14 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
         void* resourceComp = FindDescSubObject((void*)entity, g_TypeId_RawMaterialDescription);
         void* valueComp = FindDescSubObject((void*)entity, g_TypeInfo_ValueDescription);
 
-        // Push 0x18-byte entry: {entity, resourceComp, valueComp}
-        uint64_t entry[3] = {entity, (uint64_t)resourceComp, (uint64_t)valueComp};
-        TradeUI_DynArrayPush(s, 0x50, 0x58, 0x5C, entry, 0x18);
+        // Push 0x18-byte entry {entity, resourceComp, valueComp} into the display
+        // array at +0x50.
+        // B.3.2 bridge: TradeUI+0x50 is Collection::Array<{entity, resourceComp,
+        // valueComp}> (stride 0x18, count +0x58, capacity +0x5C).
+        auto& displayRows = DlgArray<0x18>(s, 0x50);
+        displayRows.SetSize(displayRows.GetSize() + 1,
+                             DlgElem<0x18>{{entity, (uint64_t)resourceComp,
+                                            (uint64_t)valueComp}});
     }
 
     // Get owning entity -> TradeComponent + StorageComponent

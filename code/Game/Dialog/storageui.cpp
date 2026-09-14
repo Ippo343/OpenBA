@@ -13,6 +13,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_panels.h"
+#include "Dialog/dialog_array_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
@@ -142,46 +143,13 @@ void StorageUI_Serialize(StorageUI* self) {
         fn_InternalBasePtr_CheckPtr(childBuf);
         uint64_t rawChild = *(uint64_t*)childBuf;
 
-        // Build 0x18-byte entry: {labelStorage, numberCount, rawChild}
-        uint64_t entry[3];
-        entry[0] = labelStorage;
-        entry[1] = numberCount;
-        entry[2] = rawChild;
-
-        // Push into dynamic array at +0x30
-        int oldCount = *(int*)(s + 0x38);
-        int newCount = oldCount + 1;
-        void* oldBuf = *(void**)(s + 0x30);
-        *(int*)(s + 0x38) = newCount;
-
-        if (*(int*)(s + 0x3C) < newCount) {
-            int newCap = newCount;
-            if (oldCount != 0) {
-                newCap = newCount * 3;
-            }
-            *(int*)(s + 0x3C) = newCap;
-            void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 0x18, 8);
-            *(void**)(s + 0x30) = newBuf;
-        }
-
-        // Copy existing entries and append new one
-        void* curBuf = *(void**)(s + 0x30);
-        int copyStart = (oldBuf == curBuf) ? oldCount : 0;
-        for (int k = copyStart; k < newCount; k++) {
-            uint64_t* dst = (uint64_t*)((uintptr_t)curBuf + k * 0x18);
-            if (dst) {
-                uint64_t* src = entry;
-                if (k < oldCount) {
-                    src = (uint64_t*)((uintptr_t)oldBuf + k * 0x18);
-                }
-                dst[0] = src[0];
-                dst[1] = src[1];
-                dst[2] = src[2];
-            }
-        }
-        if (oldBuf != curBuf) {
-            fn_MemFreeStatic(oldBuf);
-        }
+        // Build 0x18-byte entry {labelStorage, numberCount, rawChild} and push to
+        // the row array at +0x30.
+        // B.3.2 bridge: StorageUI+0x30 is Collection::Array<{labelStorage,
+        // numberCount, rawChild}> (stride 0x18, count +0x38, capacity +0x3C).
+        auto& rows = DlgArray<0x18>(s, 0x30);
+        rows.SetSize(rows.GetSize() + 1,
+                     DlgElem<0x18>{{labelStorage, numberCount, rawChild}});
     }
 
     // Call Startup via vtable +0x38
@@ -265,7 +233,16 @@ void StorageUI_Startup(StorageUI* self) {
                 item[1] = (uint64_t)resType;
                 item[2] = (uint64_t)count;
 
-                // Push into temp array
+                // Push into temp array.
+                // B.3.2 SKIPPED: this array's header is not a contiguous struct
+                // field (unlike +0x30 above) but four independent locals
+                // (sortedItems/currentItems/itemCount/itemCapacity), and its
+                // lifetime is threaded through fn_MemFreeStatic(currentItems) far
+                // below (StorageUI_Startup's tail) plus a read/sort call in
+                // between. Wrapping it in Collection::Array<T> would need a
+                // restructure (a local ArrayHdr-shaped object whose destructor
+                // would race the existing explicit free) rather than a targeted
+                // per-site edit, so it is left as the hand-rolled growth.
                 int newCount = itemCount + 1;
                 if (newCount != itemCount) {
                     if (itemCapacity < newCount) {

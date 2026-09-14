@@ -18,6 +18,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_panels.h"
+#include "Dialog/dialog_array_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
@@ -25,49 +26,6 @@
 // ============================================================
 // File-local helpers
 // ============================================================
-
-// HelpUI_ArrayResize_Impl (FUN_140011d50) — generic 8-byte-element array resize.
-// Resizes dynamic array at arrayBase (layout: [data* 8][count int32][capacity int32])
-// to newCount entries. Copies existing entries if buffer changed, frees old buffer.
-// Original: 0x140011d50.
-static void HelpUI_ArrayResize_Impl(void* arrayBase, int newCount) {
-    uintptr_t* dataPtr  = (uintptr_t*)arrayBase;
-    int* countPtr       = (int*)((uintptr_t)arrayBase + 8);
-    int* capacityPtr    = (int*)((uintptr_t)arrayBase + 0xc);
-    int oldCount        = *countPtr;
-
-    if (newCount == oldCount) return;
-
-    void* oldData = (void*)*dataPtr;
-    *countPtr = newCount;
-
-    if (*capacityPtr < newCount) {
-        *capacityPtr = newCount;
-        if (oldCount != 0 && newCount == oldCount + 1) {
-            *capacityPtr = newCount * 3;
-        }
-        void* newData = fn_MemAlloc(g_pMemAllocSingleton, (int64_t)*capacityPtr * 8, 4);
-        *dataPtr = (uintptr_t)newData;
-    }
-
-    // Copy existing entries that fit
-    int startCopy = 0;
-    if (oldData == (void*)*dataPtr) {
-        startCopy = oldCount;
-    }
-    for (int i = startCopy; i < newCount; i++) {
-        uint64_t* dst = (uint64_t*)(*dataPtr + (uintptr_t)i * 8);
-        if (dst != nullptr) {
-            if (i < oldCount) {
-                *dst = *(uint64_t*)((uintptr_t)oldData + (uintptr_t)i * 8);
-            }
-        }
-    }
-
-    if (oldData != (void*)*dataPtr) {
-        fn_MemFreeStatic(oldData);
-    }
-}
 
 // Get the help topics ExternalList from the game world singleton
 // (retail: `*(ExternalList**)(g_pGameWorldSingleton + 0xa0)`, verified against the
@@ -131,49 +89,27 @@ static void HelpUI_LoadPage(HelpUI* self) {
     // Store current page resource index
     *(int*)(s + 0x60) = pageResIndex;
 
-    // Resize (truncate) history array to (historyIndex + 1) entries — removes forward history
+    // History array at +0x68: Collection::Array<{int32 pageIndex, float scrollY}>
+    // (stride 8, count +0x70, capacity +0x74) inside a struct §B.2 has not
+    // converted, so it is reached at its offset. B.3.2 bridge for both the
+    // truncate (was HelpUI_ArrayResize_Impl, FUN_140011d50) and the append below.
+    //
+    // The element is DlgI32Pair and NOT DlgElem<8>, for the two reasons its
+    // declaration in dialog_array_bridge.h spells out: retail's helper passed 4
+    // — not 8 — as MemAlloc's alignment argument for this array, and it left a
+    // GROWN tail uninitialised, which only a trivially default-constructible
+    // element reproduces.
+    auto& hist = DlgArrayI32Pair(s, 0x68);
+
+    // Truncate history to (historyIndex + 1) entries — removes forward history.
     int historyIndex = *(int*)(s + 0x64);
-    HelpUI_ArrayResize_Impl((void*)(s + 0x68), historyIndex + 1);
+    hist.SetSize(historyIndex + 1);
 
-    // Push new history entry: {pageResIndex, scrollY=0.0f} at the new end
-    int count = *(int*)(s + 0x70);
-    int newCount = count + 1;
-    int capacity = *(int*)(s + 0x74);
-    void* histArray = *(void**)(s + 0x68);
-
-    if (newCount != count) {
-        *(int*)(s + 0x70) = newCount;
-        if (capacity < newCount) {
-            int newCapacity = newCount;
-            if (count != 0 && newCount == count + 1) {
-                newCapacity = newCount * 3;
-            }
-            *(int*)(s + 0x74) = newCapacity;
-            void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (int64_t)newCapacity * 8, 4);
-            *(void**)(s + 0x68) = newBuf;
-
-            // Copy existing entries if buffer changed
-            if (histArray != newBuf) {
-                for (int i = 0; i < count; i++) {
-                    *(uint64_t*)((uintptr_t)newBuf + i * 8) =
-                        *(uint64_t*)((uintptr_t)histArray + i * 8);
-                }
-            }
-        }
-
-        // Initialize new entry with {pageResIndex, 0.0f}
-        void* curBuf = *(void**)(s + 0x68);
-        int32_t initEntry[2] = { pageResIndex, 0 };  // scrollY = 0.0f
-        *(uint64_t*)((uintptr_t)curBuf + (int64_t)count * 8) = *(uint64_t*)initEntry;
-
-        // Free old buffer if it changed
-        if (histArray != *(void**)(s + 0x68)) {
-            fn_MemFreeStatic(histArray);
-        }
-    }
+    // Push new history entry: {pageResIndex, scrollY=0.0f} at the new end.
+    hist.SetSize(hist.GetSize() + 1, DlgI32Pair{pageResIndex, 0});  // scrollY = 0.0f
 
     // Set history index to last entry
-    *(int*)(s + 0x64) = *(int*)(s + 0x70) - 1;
+    *(int*)(s + 0x64) = hist.GetSize() - 1;
 }
 
 // ============================================================

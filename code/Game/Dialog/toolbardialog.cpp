@@ -28,6 +28,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_dialogs.h"
+#include "Dialog/dialog_array_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -955,6 +956,16 @@ extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys) {
 // ============================================================
 // Helper: push_back for engine dynamic arrays (ptr, count at +0, capacity at +4)
 // Mimics the inlined vector growth pattern seen throughout the exe.
+//
+// B.3.2: the ToolbarDialog+0xC0/+0xD0 struct-field call sites below were
+// converted to the DlgArray<8>/DlgArrayI32 bridge (dialog_array_bridge.h) in
+// place. This helper is KEPT because it still has one caller each
+// (itemList/itemListCount/itemListCap and shortcutIds/shortcutCount/shortcutCap)
+// that cannot go through the bridge: those are three independent locals, not a
+// contiguous Collection::Array<T> header, AND shortcutIds/shortcutCount are
+// later mutated directly (element-shift + count-- on consumption, see the
+// "Wire up radio button behavior" section) which Array<T> has no public API
+// for (only SetSize/Clear change _size).
 // ============================================================
 static void DynArray8_Push(void** pData, int32_t* pCount, int32_t* pCapacity, uint64_t value) {
     int32_t oldCount = *pCount;
@@ -1212,21 +1223,19 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
         cloneFn(templateElem, cloneBuf, dialog);
         void* newElement = *(void**)cloneBuf;
 
-        // Push to buttonElements array (+0xC0/+0xC8/+0xCC)
-        DynArray8_Push(
-            (void**)(s + 0xC0),
-            (int32_t*)(s + 0xC8),
-            (int32_t*)(s + 0xCC),
-            (uint64_t)newElement
-        );
+        // Push to buttonElements array at +0xC0.
+        // B.3.2 bridge: ToolbarDialog+0xC0 is Collection::Array<{Element*}>
+        // (stride 0x08, count +0xC8, capacity +0xCC).
+        auto& buttonRows = DlgArray<0x08>(s, 0xC0);
+        buttonRows.SetSize(buttonRows.GetSize() + 1,
+                            DlgElem<0x08>{{(uint64_t)newElement}});
 
-        // Push to toolbarItems array (+0xD0/+0xD8/+0xDC)
-        DynArray8_Push(
-            (void**)(s + 0xD0),
-            (int32_t*)(s + 0xD8),
-            (int32_t*)(s + 0xDC),
-            (uint64_t)item
-        );
+        // Push to toolbarItems array at +0xD0.
+        // B.3.2 bridge: ToolbarDialog+0xD0 is Collection::Array<{ToolbarItem*}>
+        // (stride 0x08, count +0xD8, capacity +0xDC).
+        auto& toolbarItemRows = DlgArray<0x08>(s, 0xD0);
+        toolbarItemRows.SetSize(toolbarItemRows.GetSize() + 1,
+                                 DlgElem<0x08>{{(uint64_t)item}});
 
         // Add element as child of table at current buttonIndex
         fn_InternalBasePtr_CheckPtr((void*)&tableElement);
@@ -1405,21 +1414,18 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
     // --- Step 9: Populate speed values array {1, 2, 5, 10, 20, 50} ---
     *(int32_t*)(s + 0xF4) = 0; // currentSpeedIndex = 0
 
-    DynArray4_Push(
-        (void**)(s + 0xF8), (int32_t*)(s + 0x100), (int32_t*)(s + 0x104), 1);
-    DynArray4_Push(
-        (void**)(s + 0xF8), (int32_t*)(s + 0x100), (int32_t*)(s + 0x104), 2);
-    DynArray4_Push(
-        (void**)(s + 0xF8), (int32_t*)(s + 0x100), (int32_t*)(s + 0x104), 5);
-    DynArray4_Push(
-        (void**)(s + 0xF8), (int32_t*)(s + 0x100), (int32_t*)(s + 0x104), 10);
+    // B.3.2 bridge: ToolbarDialog+0xF8 is Collection::Array<DlgI32> (stride 4,
+    // count +0x100, capacity +0x104).
+    auto& speedRows = DlgArrayI32(s, 0xF8);
+    speedRows.SetSize(speedRows.GetSize() + 1, DlgI32{1});
+    speedRows.SetSize(speedRows.GetSize() + 1, DlgI32{2});
+    speedRows.SetSize(speedRows.GetSize() + 1, DlgI32{5});
+    speedRows.SetSize(speedRows.GetSize() + 1, DlgI32{10});
     // [NON-RETAIL] retail stops at 10x. 20x and 50x extend the sequence so the perf
     // harness (BANISHED_STRESS_SPEED) and the in-game speed-up button can push the
     // sim harder than retail allows; the speed cascade below is table-driven.
-    DynArray4_Push(
-        (void**)(s + 0xF8), (int32_t*)(s + 0x100), (int32_t*)(s + 0x104), 20);
-    DynArray4_Push(
-        (void**)(s + 0xF8), (int32_t*)(s + 0x100), (int32_t*)(s + 0x104), 50);
+    speedRows.SetSize(speedRows.GetSize() + 1, DlgI32{20});
+    speedRows.SetSize(speedRows.GetSize() + 1, DlgI32{50});
 
     // --- Step 10: Find current game speed in speed array ---
     int32_t speedIndex = 0;

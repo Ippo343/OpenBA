@@ -25,6 +25,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "system/String.h"
+#include "Dialog/dialog_array_bridge.h"
 #include <cstdint>
 #include <cstring>
 
@@ -40,27 +41,13 @@ inline void IbpCtor(void* slot, void* obj) { if (fn_InternalBasePtr_Ctor) fn_Int
 
 // ---------------------------------------------------------------------------
 // Growable ptr-array push, 8-byte elements (shared shape of the exe's inline
-// pushes): base[0]=buf, base[8]=count(int), base[0xc]=cap(int).
+// pushes): base[0]=buf, base[8]=count(int), base[0xc]=cap(int) — exactly
+// Collection::Array<uint64_t>'s {data,size,capacity} layout, so `base` is
+// reached through the B.3.2 bridge rather than by hand.
 // ---------------------------------------------------------------------------
 void PushPtr(uint64_t* base, uint64_t value) {
-    uint32_t count = *(uint32_t*)((uintptr_t)base + 8);
-    uint32_t newCount = count + 1;
-    void* oldBuf = (void*)base[0];
-    *(uint32_t*)((uintptr_t)base + 8) = newCount;
-    if (*(int*)((uintptr_t)base + 0xc) < (int)newCount) {
-        uint32_t newCap = newCount;
-        if (count != 0) newCap = newCount * 3;
-        *(uint32_t*)((uintptr_t)base + 0xc) = newCap;
-        base[0] = (uint64_t)fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap << 3, 8);
-    }
-    int copyStart = (oldBuf == (void*)base[0]) ? (int)count : 0;
-    for (int i = copyStart; i < (int)newCount; i++) {
-        uint64_t* dst = (uint64_t*)(base[0] + (uintptr_t)i * 8);
-        if (!dst) continue;
-        *dst = 0;
-        *dst = (i < (int)count) ? *(uint64_t*)((uintptr_t)oldBuf + (uintptr_t)i * 8) : value;
-    }
-    if (oldBuf != (void*)base[0]) fn_MemFreeStatic(oldBuf);
+    auto& arr = DlgArray<8>((void*)base, 0);
+    arr.SetSize(arr.GetSize() + 1, DlgElem<8>{{value}});
 }
 
 // Find a named child element under `parent` and cast it via IsDerivedFrom(typeId).
@@ -207,29 +194,14 @@ extern "C" void TownHall_ProfArrayPush(void* arrayBase, int newCount, void* entr
 
 // ===========================================================================
 // 0x1400159b0 — production-limits array push (0x28-byte rows, plain copy).
+// B.3.2 bridge: this is literally retail's Collection::Array<T>::SetSize(n,
+// fill) (stride 0x28, plain byte-copy rows, no per-element destroy) — every
+// newly-added row [oldCount, newCount) is filled from the same `entry`, not
+// just the tail, which is exactly rtcoll::SetSizeCore's fill loop.
 // ===========================================================================
 extern "C" void TownHall_ProdArrayPush(void* arrayBase, int newCount, void* entry) {
-    uint64_t* base = (uint64_t*)arrayBase;
-    int oldCount = *(int*)((uintptr_t)base + 8);
-    if (newCount == oldCount) return;
-    void* oldBuf = (void*)base[0];
-    *(int*)((uintptr_t)base + 8) = newCount;
-    if (*(int*)((uintptr_t)base + 0xc) < newCount) {
-        int newCap = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) newCap = newCount * 3;
-        *(int*)((uintptr_t)base + 0xc) = newCap;
-        base[0] = (uint64_t)fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 0x28, 8);
-    }
-    int copyStart = (oldBuf == (void*)base[0]) ? oldCount : 0;
-    for (int i = copyStart; i < newCount; i++) {
-        uint64_t* dst = (uint64_t*)(base[0] + (uintptr_t)i * 0x28);
-        if (!dst) continue;
-        const uint64_t* src = (i < oldCount)
-            ? (const uint64_t*)((uintptr_t)oldBuf + (uintptr_t)i * 0x28)
-            : (const uint64_t*)entry;
-        for (int q = 0; q < 5; q++) { dst[q] = 0; dst[q] = src[q]; }
-    }
-    if (oldBuf != (void*)base[0]) fn_MemFreeStatic(oldBuf);
+    auto& arr = DlgArray<0x28>(arrayBase, 0);
+    arr.SetSize(newCount, *reinterpret_cast<const DlgElem<0x28>*>(entry));
 }
 
 // ===========================================================================

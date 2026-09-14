@@ -17,6 +17,7 @@
 //   +0x78: conflict count (int)
 
 #include "Dialog/ui_dialogs.h"
+#include "Dialog/dialog_array_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -34,33 +35,17 @@
 //
 // Original: FUN_14006e290.
 //
+// B.3.2 bridge: the array is Collection::Array<uint8_t> (stride 1, align 1 —
+// retail's fn_MemAlloc align argument was 1, matching alignof(uint8_t)); reached
+// via the real template directly rather than through DlgArray/DlgArrayI32 since
+// neither of those bridge helpers covers a 1-byte stride.
 static void ModDetails_StringArrayPush_Impl(void* arrayBasePtr, System::String&& str) {
-    uintptr_t* base = (uintptr_t*)arrayBasePtr;
     uintptr_t strData = (uintptr_t)str._data;
     int strLen = str.GetLength();
+    auto& arr = *reinterpret_cast<Collection::Array<uint8_t>*>(arrayBasePtr);
     for (int i = 0; i < strLen; i++) {
         char ch = *(char*)(strData + i);
-        // Byte-array push of one element
-        void* oldData = (void*)*base;
-        int* countPtr    = (int*)((uintptr_t)base + 8);
-        int* capacityPtr = (int*)((uintptr_t)base + 0xC);
-        int oldCount = *countPtr;
-        int newCount = oldCount + 1;
-        *countPtr = newCount;
-        if (*capacityPtr < newCount) {
-            int newCap = newCount;
-            if (newCount == oldCount + 1 && oldCount != 0)
-                newCap = newCount * 3;
-            *capacityPtr = newCap;
-            void* newData = fn_MemAlloc(g_pMemAllocSingleton, (uintptr_t)newCap, 1);
-            if (oldData && oldData != newData) {
-                for (int j = 0; j < oldCount; j++)
-                    ((char*)newData)[j] = ((char*)oldData)[j];
-                fn_MemFreeStatic(oldData);
-            }
-            *base = (uintptr_t)newData;
-        }
-        ((char*)*base)[oldCount] = ch;
+        arr.SetSize(arr.GetSize() + 1, (uint8_t)ch);
     }
     // `str` is bound by rvalue reference to a caller-owned temporary; the
     // caller's own scope (see call sites) releases it once this returns.
@@ -315,26 +300,11 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
         ModDetails_StringArrayPush_Impl(resArray, std::move(ftr));
     }
 
-    // Null-terminate the byte buffer (original code does this inline after last push)
+    // Null-terminate the byte buffer (original code does this inline after last
+    // push). Same Collection::Array<uint8_t> as ModDetails_StringArrayPush_Impl.
     {
-        int count = *(int*)(resArray + 8);
-        int capacity = *(int*)(resArray + 12);
-        int newCount = count + 1;
-        char* oldPtr = (char*)*(void**)resArray;
-        *(int*)(resArray + 8) = newCount;
-        if (capacity < newCount) {
-            int newCap = (count != 0) ? newCount * 3 : newCount;
-            *(int*)(resArray + 12) = newCap;
-            char* newBuf = (char*)fn_MemAlloc(g_pMemAllocSingleton, newCap, 1);
-            *(void**)resArray = newBuf;
-            if (oldPtr && newBuf != oldPtr) {
-                for (int i = 0; i < count; i++)
-                    newBuf[i] = oldPtr[i];
-                fn_MemFreeStatic(oldPtr);
-            }
-            oldPtr = newBuf;
-        }
-        oldPtr[count] = '\0';
+        auto& arr = *reinterpret_cast<Collection::Array<uint8_t>*>(resArray);
+        arr.SetSize(arr.GetSize() + 1, (uint8_t)'\0');
     }
 
     // Build String from null-terminated buffer, set on textResourceList

@@ -17,6 +17,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Filename.h"
+#include "Dialog/dialog_array_bridge.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -643,44 +644,12 @@ void TownHallUI_InitInventory(TownHallUI* self) {
         uint64_t numIBP = 0;
         fn_InternalBasePtr_Ctor(&numIBP, numElem);
 
-        // Push 0x10-byte entry (label, number) into inventory table array at +0x118
-        // Manual dynamic array growth (matching decompiled pattern)
-        uint32_t count = *(uint32_t*)(s + 0x120);
-        uint32_t newCount = count + 1;
-        if (newCount != count) {
-            void* oldBuf = *(void**)(s + 0x118);
-            *(uint32_t*)(s + 0x120) = newCount;
-            if (*(int*)(s + 0x124) < (int)newCount) {
-                uint32_t newCap = newCount;
-                if (count != 0) newCap = newCount * 3;
-                *(uint32_t*)(s + 0x124) = newCap;
-                void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 16, 8);
-                *(void**)(s + 0x118) = newBuf;
-            }
-            // Copy old entries and append new
-            int copyStart = 0;
-            if (oldBuf == *(void**)(s + 0x118)) {
-                copyStart = (int)count;
-            }
-            for (int j = copyStart; j < (int)newCount; j++) {
-                uint64_t* dst = (uint64_t*)(*(uintptr_t*)(s + 0x118) + (uintptr_t)j * 16);
-                if (dst) {
-                    if (j < (int)count) {
-                        // Copy from old buffer
-                        uint64_t* src = (uint64_t*)((uintptr_t)oldBuf + (uintptr_t)j * 16);
-                        dst[0] = src[0];
-                        dst[1] = src[1];
-                    } else {
-                        // New entry
-                        dst[0] = labelIBP;
-                        dst[1] = numIBP;
-                    }
-                }
-            }
-            if (oldBuf != *(void**)(s + 0x118)) {
-                fn_MemFreeStatic(oldBuf);
-            }
-        }
+        // Push {labelIBP, numIBP} into the inventory table array at +0x118.
+        // B.3.2 bridge: TownHallUI+0x118 is Collection::Array<{InternalBasePtr,
+        // InternalBasePtr}> (stride 0x10, count +0x120, capacity +0x124) inside a
+        // struct §B.2 has not converted, so it is reached at its offset.
+        auto& invRows = DlgArray<0x10>(s, 0x118);
+        invRows.SetSize(invRows.GetSize() + 1, DlgElem<0x10>{{labelIBP, numIBP}});
     }
 
     // Load inventoryType string table
@@ -889,38 +858,12 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
         uint64_t labelIBP = 0;
         fn_InternalBasePtr_Ctor(&labelIBP, labelElem);
 
-        // Push into dynamic array at +0x1C8 (8-byte entries)
-        uint32_t count = *(uint32_t*)(s + 0x1D0);
-        uint32_t newCount = count + 1;
-        if (newCount != count) {
-            void* oldBuf = *(void**)(s + 0x1C8);
-            *(uint32_t*)(s + 0x1D0) = newCount;
-            if (*(int*)(s + 0x1D4) < (int)newCount) {
-                uint32_t newCap = newCount;
-                if (count != 0) newCap = newCount * 3;
-                *(uint32_t*)(s + 0x1D4) = newCap;
-                void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 8, 8);
-                *(void**)(s + 0x1C8) = newBuf;
-            }
-            int copyStart = 0;
-            if (oldBuf == *(void**)(s + 0x1C8)) {
-                copyStart = (int)count;
-            }
-            for (int j = copyStart; j < (int)newCount; j++) {
-                uint64_t* dst = (uint64_t*)(*(uintptr_t*)(s + 0x1C8) + (uintptr_t)j * 8);
-                if (dst) {
-                    if (j < (int)count) {
-                        uint64_t* src = (uint64_t*)((uintptr_t)oldBuf + (uintptr_t)j * 8);
-                        *dst = *src;
-                    } else {
-                        *dst = labelIBP;
-                    }
-                }
-            }
-            if (oldBuf != *(void**)(s + 0x1C8)) {
-                fn_MemFreeStatic(oldBuf);
-            }
-        }
+        // Push labelIBP into the label array at +0x1C8.
+        // B.3.2 bridge: TownHallUI+0x1C8 is Collection::Array<InternalBasePtr>
+        // (stride 8, count +0x1D0, capacity +0x1D4) inside a struct §B.2 has not
+        // converted, so it is reached at its offset.
+        auto& labelRows = DlgArray<8>(s, 0x1C8);
+        labelRows.SetSize(labelRows.GetSize() + 1, DlgElem<8>{{labelIBP}});
     }
 }
 
@@ -1861,36 +1804,13 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
             uintptr_t entityPtr = *(uintptr_t*)(*(uintptr_t*)((uintptr_t)bstNode + 0x08) +
                                                 (uintptr_t)slot * 8);
 
-            // Push entity into profession entry's entity array
-            uintptr_t profEntry = *(uintptr_t*)(s + 0x40);
-            int curCount = *(int*)(profEntry + 0x38 + profEntryOff);
-            int newCount = curCount + 1;
-            if (newCount != curCount) {
-                void* oldArr = *(void**)(profEntry + 0x30 + profEntryOff);
-                *(int*)(profEntry + 0x38 + profEntryOff) = newCount;
-                if (*(int*)(profEntry + 0x3c + profEntryOff) < newCount) {
-                    int newCap = newCount;
-                    if (newCount == curCount + 1 && curCount != 0)
-                        newCap = newCount * 3;
-                    *(int*)(profEntry + 0x3c + profEntryOff) = newCap;
-                    void* newArr = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap << 3, 8);
-                    *(void**)(profEntry + 0x30 + profEntryOff) = newArr;
-                }
-                int copyStart = 0;
-                if (oldArr == *(void**)(profEntry + 0x30 + profEntryOff))
-                    copyStart = curCount;
-                void* dstArr = *(void**)(profEntry + 0x30 + profEntryOff);
-                for (int i = copyStart; i < newCount; i++) {
-                    uint64_t* dst = (uint64_t*)((uintptr_t)dstArr + (uintptr_t)i * 8);
-                    *dst = 0;
-                    if (i < curCount)
-                        *dst = *(uint64_t*)((uintptr_t)oldArr + (uintptr_t)i * 8);
-                    else
-                        *dst = entityPtr;
-                }
-                if (oldArr != *(void**)(profEntry + 0x30 + profEntryOff))
-                    fn_MemFreeStatic(oldArr);
-            }
+            // Push entityPtr into this profession entry's entity array at +0x30.
+            // B.3.2 bridge: (profListBase+0x40)[p]+0x30 is Collection::Array<uint64_t>
+            // (stride 8, count +0x38, capacity +0x3C) inside a struct §B.2 has not
+            // converted, so it is reached at its offset off the per-profession entry.
+            uintptr_t profEntry = *(uintptr_t*)(s + 0x40) + (uintptr_t)profEntryOff;
+            auto& profEntities = DlgArray<8>(profEntry, 0x30);
+            profEntities.SetSize(profEntities.GetSize() + 1, DlgElem<8>{{entityPtr}});
 
             // Check entity for WorkplaceComponent -> active flag + worker count
             fn_InternalBasePtr_CheckPtr((void*)&entityPtr);
@@ -2046,9 +1966,12 @@ void TownHallUI_UpdateAll(TownHallUI* self) {
 
     // Phase 2: Collect all entities from 4 entity lists
     // Each list is at gameData[i*2] = array ptr, gameData[i*2+1] = count
-    void* entityBuf = nullptr;
-    int entityCount = 0;
-    int entityCap = 0;
+    //
+    // B.3.2 bridge: this is a local Collection::Array<uint64_t> (retail's
+    // hand-inlined SetSize on a stack-local {data,size,capacity} triple, not a
+    // struct field), so it is a real instance of the template rather than a
+    // DlgArray view over someone else's bytes.
+    Collection::Array<uint64_t> entityArr;
 
     for (int listIdx = 0; listIdx < 4; listIdx++) {
         uintptr_t arrayPtr = gdPtr[listIdx * 2];
@@ -2056,35 +1979,13 @@ void TownHallUI_UpdateAll(TownHallUI* self) {
 
         for (int j = 0; j < listCount; j++) {
             uint64_t entityPtr = *(uint64_t*)(arrayPtr + (uintptr_t)j * 8);
-            int newCount = entityCount + 1;
-            if (newCount != entityCount) {
-                if (entityCap < newCount) {
-                    int newCap = newCount;
-                    if (entityCount != 0) newCap = newCount * 3;
-                    entityCap = newCap;
-                    void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap << 3, 8);
-                    int copyStart = 0;
-                    if (entityBuf == newBuf) copyStart = entityCount;
-                    for (int k = copyStart; k < newCount; k++) {
-                        uint64_t* dst = (uint64_t*)((uintptr_t)newBuf + (uintptr_t)k * 8);
-                        *dst = 0;
-                        if (k < entityCount)
-                            *dst = *(uint64_t*)((uintptr_t)entityBuf + (uintptr_t)k * 8);
-                        else
-                            *dst = entityPtr;
-                    }
-                    if (entityBuf != newBuf) fn_MemFreeStatic(entityBuf);
-                    entityBuf = newBuf;
-                } else {
-                    *(uint64_t*)((uintptr_t)entityBuf + (uintptr_t)entityCount * 8) = entityPtr;
-                }
-                entityCount = newCount;
-            }
+            entityArr.SetSize(entityArr.GetSize() + 1, entityPtr);
         }
     }
 
     // Phase 3: For each collected entity, find components and update BST counters
-    uint64_t* entities = (uint64_t*)entityBuf;
+    uint64_t* entities = entityArr.GetData();
+    int entityCount = entityArr.GetSize();
     for (int i = 0; i < entityCount; i++) {
         uint64_t entityPtr = entities[i];
 
@@ -2135,7 +2036,8 @@ void TownHallUI_UpdateAll(TownHallUI* self) {
         }
     }
 
-    fn_MemFreeStatic(entityBuf);
+    // entityArr frees its own buffer (rtcoll::MemFree, the same door
+    // fn_MemFreeStatic resolves) when it goes out of scope here.
 }
 
 // ============================================================

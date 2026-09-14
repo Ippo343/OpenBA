@@ -14,6 +14,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_panels.h"
+#include "Dialog/dialog_array_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
@@ -140,26 +141,12 @@ void EventLogUI_Slot5(EventLogUI* self) {
         *(uint64_t*)((uintptr_t)btnElem + 0xd8) =
             *(uint64_t*)((uintptr_t)eventLogSingleton + 0x10 + i * sizeof(uintptr_t));
 
-        // Push button ptr to notification array at +0x70
-        // The +0x70 field is a dynamic array: +0x70=data, +0x78=count, +0x7C=capacity
-        uint32_t count = *(uint32_t*)(s + 0x78);
-        uint32_t newCount = count + 1;
-        *(uint32_t*)(s + 0x78) = newCount;
-        if (*(int*)(s + 0x7c) < (int)newCount) {
-            *(uint32_t*)(s + 0x7c) = (count != 0) ? newCount * 3 : newCount;
-            void* oldData = *(void**)(s + 0x70);
-            void* newData = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)*(int*)(s + 0x7c) * 8, 8);
-            *(void**)(s + 0x70) = newData;
-            // Copy existing entries if buffer changed
-            if (oldData != newData) {
-                for (uint32_t j = 0; j < count; j++) {
-                    ((uint64_t*)newData)[j] = ((uint64_t*)oldData)[j];
-                }
-                fn_MemFreeStatic(oldData);
-            }
-        }
-        // Store the new button ptr
-        ((uint64_t*)*(void**)(s + 0x70))[count] = (uint64_t)btnElem;
+        // Push button ptr to notification array at +0x70.
+        // B.3.2 bridge: EventLogUI+0x70 is Collection::Array<{InternalBasePtr}>
+        // (stride 8, count +0x78, capacity +0x7C) inside a struct §B.2 has not
+        // converted, so it is reached at its offset.
+        auto& notifyBtns = DlgArray<8>(s, 0x70);
+        notifyBtns.SetSize(notifyBtns.GetSize() + 1, DlgElem<8>{{(uint64_t)btnElem}});
     }
 }
 
