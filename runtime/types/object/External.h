@@ -205,10 +205,14 @@ static_assert(offsetof(ReferenceEntry, path) == 0x08, "ReferenceEntry::path @ +0
 // offsets are a function of sizeof(T), so these two trees have DIFFERENT node
 // layouts and MSVC emits a separate find/insert/rebalance for each. One ported
 // Set body cannot serve both.
-using ResourceSet  = Collection::Set<ResourceEntry,  Collection::DefaultAllocator,
-                                     Filename, Collection::AVLCompare>;
-using ReferenceSet = Collection::Set<ReferenceEntry, Collection::DefaultAllocator,
-                                     uint32_t, Collection::AVLCompare>;
+// (ENDGAME B.3.2 step 1: `Collection::Set` is now a class and its parameter
+// order is <T, Compare, Allocator, Key> — Compare second, because that is the
+// one a caller varies. Retail's mangled name spells it <T, Allocator, Key,
+// Compare>; the four parameters and their meanings are unchanged.)
+using ResourceSet  = Collection::Set<ResourceEntry,  Collection::AVLCompare,
+                                     Collection::DefaultAllocator, Filename>;
+using ReferenceSet = Collection::Set<ReferenceEntry, Collection::AVLCompare,
+                                     Collection::DefaultAllocator, uint32_t>;
 static_assert(sizeof(ResourceSet::Node)  == 0x38, "ResourceEntry node is 0x38");
 static_assert(offsetof(ResourceSet::Node, parent) == 0x18, "resource node parent @ +0x18");
 static_assert(offsetof(ResourceSet::Node, left)   == 0x20, "resource node left @ +0x20");

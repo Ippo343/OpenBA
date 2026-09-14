@@ -97,6 +97,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "../../types/collection/Collection.h"
 #include "../../funcs/rt_port.h"
 #include "set_avl.h"
 
@@ -220,69 +221,46 @@ Node* AllocNode(void* /*ignoredSet*/, const PathId* pair, Node* parent) {
 // Returns `outSlot`; `*outSlot` is the FRESH node on an insert, the EXISTING
 // node on an equal hit, and the new root on an empty tree.
 // ---------------------------------------------------------------------------
+namespace {
+// The policy `Collection::detail::InsertCorePattern` runs on for this tree
+// (ENDGAME B.3.2 step 1). The descent is the one shared pattern in
+// runtime/types/collection/Collection.h — the same body 0x180030380,
+// 0x18002a170, 0x180025c70 and 0x1800275e0 are four copies of — and every arm
+// of it is unchanged. What is here is what made THIS instantiation different:
+// the case-SENSITIVE comparator, the null-arm asymmetry, its own node
+// allocator, and the retrace reached at its own address.
+struct PathIdPolicy : Collection::detail::NoCounters {
+    using Node    = rtsetavl::Node;
+    using SetT    = rtsetavl::Set;
+    using Element = PathId;
+
+    static Node*&   Root(SetT* s)  { return s->root; }
+    static int32_t& Count(SetT* s) { return s->count; }
+    static const char* NodeKey(const Node* n) {
+        return *reinterpret_cast<const char* const*>(n);
+    }
+    static const char* SearchKey(const Element* p) { return p->key; }  // retail re-reads
+    static bool IsNull(const char* k) { return k == nullptr; }
+    // *** CASE-SENSITIVE `strcmp`, NOT `_stricmp`. *** This is the one field
+    // that separates this family from the packfile family it otherwise
+    // resembles, and getting it wrong silently changes which entries collide
+    // (see the file banner).
+    static bool Less(const char* a, const char* b) { return StrCmpSigned(a, b) < 0; }
+
+    static Node* Alloc(SetT* set, const Element* p, Node* parent) {
+        return AllocNode(set, p, parent);
+    }
+    static Node* Alloc(decltype(nullptr), const Element* p, Node* parent) {
+        return AllocNode(nullptr, p, parent);
+    }
+    // 0x1800279f0's own registration is the door, so the address is what runs
+    // and the site's `calls=` counts it.
+    static void Retrace(SetT* set, Node** slot) { RetraceByAddr(set, slot); }
+};
+}  // namespace
+
 Node** InsertCore(Set* set, Node** outSlot, const PathId* pair) {
-    Node* node = set->root;
-    if (node == nullptr) {                                  // 0x1800275f0
-        Node* n = AllocNode(set, pair, nullptr);
-        set->count += 1;
-        set->root = n;
-        *outSlot  = n;
-        return outSlot;
-    }
-
-    Node* fresh = nullptr;
-
-    for (;;) {
-        const char* nodeKey   = *reinterpret_cast<const char* const*>(node);
-        const char* searchKey = pair->key;
-
-        // ---- the LEFT test, 0x180027624..0x18002766d -----------------------
-        bool goLeft = false;
-        if (nodeKey != nullptr) {
-            if (searchKey == nullptr)                 goLeft = true;  // 0x180027632
-            else if (StrCmpSigned(searchKey, nodeKey) < 0) goLeft = true;
-        }
-        if (goLeft) {
-            Node* l = node->left;                               // +0x18
-            if (l == nullptr) {
-                fresh = AllocNode(nullptr, pair, node);          // 0x1800276ea
-                node->left = fresh;
-                break;
-            }
-            node = l;
-            continue;
-        }
-
-        // ---- the RIGHT test, 0x180027682..0x1800276cc ----------------------
-        searchKey = pair->key;                                  // retail re-reads
-        bool goRight = false;
-        if (searchKey != nullptr) {
-            if (nodeKey == nullptr)                   goRight = true; // 0x180027691
-            else if (StrCmpSigned(nodeKey, searchKey) < 0) goRight = true;
-        }
-        if (!goRight) {                                         // 0x18002772b
-            *outSlot = node;
-            return outSlot;
-        }
-        Node* r = node->right;                                  // +0x20
-        if (r == nullptr) {
-            fresh = AllocNode(nullptr, pair, node);              // 0x180027720
-            node->right = fresh;
-            break;
-        }
-        node = r;
-    }
-
-    // *** THE RETRACE TAKES A SLOT, NOT A NODE. *** Retail hands it
-    // `LEA RDX,[RSP+0x58]`, the stack cell the descent has been updating, and
-    // re-reads it after every rotation — a rotation can move a different node
-    // into the position being examined. Passing the node by value would be a
-    // different algorithm that happens to agree on balanced inputs.
-    Node* slot = node;
-    RetraceByAddr(set, &slot);                                  // 0x1800276fe
-    set->count += 1;
-    *outSlot = fresh;
-    return outSlot;
+    return Collection::detail::InsertCorePattern<PathIdPolicy>(set, outSlot, pair);
 }
 
 // ---------------------------------------------------------------------------

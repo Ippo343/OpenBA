@@ -34,3 +34,23 @@ UNIT_TREE_SRCS +=
 # back to malloc under BANISHED_UNIT_TEST (same seam as string.cpp's), and its
 # by-address doors go through tests/unit/rt_port_stub.cpp's ResolveAddr.
 UNIT_TREE_SRCS += runtime/src/collection/array.cpp runtime/src/collection/array_destroy.cpp
+# ENDGAME B.3.2 Set core (tests/unit/set_test.cpp): header-only on the host.
+# `Collection::Set<T, Compare, Allocator, Key>` lives in
+# runtime/types/collection/Collection.h. Its out-of-line half — the two
+# allocator doors, retail's inlined strcmp and one forwarder per ported AVL
+# core — is runtime/src/collection/set_core.cpp, which stands on the address
+# registry and the allocator singleton; under BANISHED_UNIT_TEST the header
+# compiles the generic core instead (the same bodies over a node type), and the
+# test drives it with a counting allocator policy. The ported cores are
+# verified by the real run, not here. No tree sources to link.
+UNIT_TREE_SRCS +=
+# ENDGAME B.3.2 LIST core (tests/unit/list_test.cpp): Collection::LinkedList<T>
+# and the two ported introsorts. linkedlist.cpp holds the node-allocation seam
+# the header template calls through (and, under -DBANISHED_UNIT_TEST, the
+# counting test allocator behind it — B31_RULES class rule 6); introsort.cpp
+# holds rtsort::SortByKey70 (0x1800264a0). The shared MSVC sort skeleton is
+# header-only (runtime/src/collection/introsort_msvc.h). Both files reach
+# ResolveAddr, stubbed in tests/unit/rt_port_stub.cpp.
+UNIT_TREE_SRCS += \
+  runtime/src/collection/linkedlist.cpp \
+  runtime/src/collection/introsort.cpp

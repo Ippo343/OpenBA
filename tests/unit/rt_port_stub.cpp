@@ -31,19 +31,21 @@ void RegisterRuntimeAddr(uintptr_t /*ghidra_addr*/, void* /*our_fn*/) {}
 void* ResolveExport(const char* /*mangled_name*/) { return nullptr; }
 
 // ---------------------------------------------------------------------------
-// ResolveAddr — the by-address door, stubbed the same way (ENDGAME B.3.2)
+// ResolveAddr — the BY-ADDRESS half of the same seam
 // ---------------------------------------------------------------------------
-// Runtime sources that reach a sibling body BY ADDRESS (runtime/src/collection
-// and the Object/Video files around it) declare this locally rather than
-// including standalone/resolve.h, for the reason that header's users all give:
-// it drags in <windows.h>. The declaration below must stay byte-identical to
-// theirs; the linker checks the two.
+// Every runtime/src file that reaches a sibling body by address — the whole of
+// runtime/src/collection, and the Object/Video files around it — declares this
+// locally rather than including standalone/resolve.h (which drags in
+// <windows.h>). This definition must stay byte-identical to theirs and to
+// resolve.h's; the linker checks all of them against each other.
 //
-// It answers NULL by default, so every resolve-or-fall-back site takes its
-// direct-call fallback. A test that needs one specific address answered
-// installs `g_unitResolveAddr` for the duration — tests/unit/array_test.cpp
-// does that for `kSpec_PkgEntry`'s two element operations, which are the only
-// way to reach 0x1800298f0's shrink arm at all.
+// SHARED, like the three above: any batch that links a runtime/src file needing
+// ResolveAddr wants THIS definition, not a second one. It answers 0 by default,
+// so every resolve-or-fall-back site takes its fallback — the ported body under
+// test. A test that needs one specific address answered installs
+// `g_unitResolveAddr` for its duration and clears it again;
+// tests/unit/array_test.cpp does that for `kSpec_PkgEntry`'s two element
+// operations, which are the only way to reach 0x1800298f0's shrink arm at all.
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 
 uintptr_t (*g_unitResolveAddr)(int module, uintptr_t ghidraAddr) = nullptr;

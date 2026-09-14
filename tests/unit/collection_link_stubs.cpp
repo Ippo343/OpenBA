@@ -16,15 +16,17 @@
 // commit** — two definitions of one registrar is a link error, and the fix is
 // always "keep the real one".
 //
+// linkedlist.cpp and introsort.cpp are LINKED (the LIST batch added them to
+// sources.mk), so their two registrars are NOT stubbed here — the real ones
+// win. The rest of the Set family is still stub-only.
+//
 // The registrars return the number of names registered; zero is the honest
 // answer for a build in which nothing was registered at all (the registry
 // itself is inert here — see rt_port_stub.cpp).
 // ============================================================================
 
-int RtCollLinkedListRegister()            { return 0; }  // linkedlist.cpp
 int RtCollectionSetAvlRegister()          { return 0; }  // set_avl.cpp
 int RtCollectionSetAvlPathIdRegister()    { return 0; }  // set_avl_pathid.cpp
 int RtCollectionSetClearRegister()        { return 0; }  // set_clear.cpp
 int RtCollectionAvlTreesRegister()        { return 0; }  // avl_trees.cpp
-int RtCollectionSortRegister()            { return 0; }  // introsort.cpp
 int RtCrtStrICmpRegister()                { return 0; }  // runtime/src/crt (via introsort)
