@@ -20,13 +20,51 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
-- **B.3.1 OPEN (2026-09-13 evening, main 6a3f8921):** phase B started. Rule sheet
-  `endgame_b/B31_RULES.md`; host tests `make unit` (tests/unit/). Step 1 (cores, in
-  flight): `System::String`/`Filename` and the `Math` value types as real classes under
-  retail names, old PODs kept behind shims. Step 2 (callers, by directory) follows on a
-  green gate. Smart pointers: design read first (`endgame_b/SMARTPTR_INVENTORY.md`).
-  Progress metric is the per-directory `reinterpret_cast` count (ENDGAME §B.4), start
-  values in B31_RULES.md.
+- **B.3.1 CLOSED (2026-09-13 night):** `System::String`, `System::Filename` and the nine
+  `Math` value types are real classes under retail's names (`runtime/types/system/*.h`,
+  `runtime/types/math/Math.h`); three cores, five caller batches by directory, one closing
+  pass. The C seam between callers and these types is gone: every `fn_String_*`,
+  `fn_Filename_*`, `fn_Vector*`, `fn_Quaternion*`, `fn_Transform*`, `fn_Matrix*` pointer in
+  `engine/funcs/engine_funcs.{h,cpp}` is deleted, `engine/types/SystemString.h` is deleted,
+  and 36 zero-consumer `RtMath_*`/`RtSystem_*` shims went with their 44 registry rows.
+  `standalone/filename_dtor_check.cpp` and `BANISHED_FNDTOR_CHECK` are gone with the
+  `fn_Filename_Dtor` pointer they interposed (options.h is still the whole flag inventory).
+  The 21 smallest Math members are now `inline` in Math.h (bodies moved verbatim).
+  `make unit`: 154 tests, 0 failures. Routes, all exit 0, no crash/hang log: autostart +
+  pause-menu quit, the Mods route, the tutorial route, the Load Game dialog.
+  `tools/dispatch_slot_map.py --check`: 0 mismatches. `make sa-stress` reads sim ms/iter
+  **+5.5% against the 2026-09-05 baseline**, of which +4.4% is already there with the
+  inlining reverted — the inlining itself is inside the run-to-run spread.
+  `reinterpret_cast` (ENDGAME §B.4 metric), start -> now:
+
+  | | code | engine | runtime | standalone | dx11 |
+  |---|---|---|---|---|---|
+  | start (main 1d97579c) | 23,657 | 962 | 6,826 | 3,066 | 145 |
+  | now | 23,784 | 906 | 6,788 | 3,055 | 148 |
+
+  It moved barely at all, and `code/` went UP, because the conversions traded one cast
+  shape for another: a `fn_String_Set(field, s)` call became
+  `reinterpret_cast<System::String*>(field)->Set(s)`. Those are the B.3.1 bridge casts
+  (`// B.3.1 bridge`), one per use of a POD member of a struct that is not a class yet;
+  each disappears with that struct's own §B.2 conversion, not before.
+
+  **Left, and why** — all of it belongs to a later §B.2 class conversion, not to B.3.1:
+  - Bodies still in C shape over these types: `IO::FileSystem::ReadPackfile`,
+    `WriteSettingsBody`, the RtSink-routed `runtime/src/save/saveload_update.cpp`, and
+    `UI::WideString` (never converted; it is its own type, not System::String).
+  - `RtSystem::String` / `RtSystem::Filename` PODs and `runtime/src/system/pod_bridge.h`
+    stay while any struct still declares one as a MEMBER: `IO::FileSystem` (5 fields),
+    `IO::PackageFile` (5), `IO::Persistence` (5), `Achievement::Achievement` (3),
+    `Achievement::Goal` (1), `Engine::UpdateLoop`'s two loop subclasses (2),
+    `IO::Registry` (1), `IO::Modification` (2, `Filename`), plus
+    `runtime/types/object/External.h`'s `using RtSystem::Filename`.
+  - Shims still reached by name or address from an unconverted caller stay: String's
+    Set/Dtor/Assign/SubString/Format/Serialize/InsertAt/RemoveAt/operator+/StrCompare,
+    Filename's ctor/dtor/assign/compare family, and the Vector/Quaternion/Transform
+    members the graphics bodies call.
+  - The global aliases (`Scalar`, `Quaternion`, `Matrix`, `Transform`, `Transform2`,
+    `Transform3` in Math.h; `Vector2/3/4` in engine/types/common.h) all still have
+    hundreds of users and stay. `RtMath::` is already gone.
 
 - **CLOSED (2026-09-13):** the stress-town teardown crash/hang was `FishingWork::OnCancel`
   ported with three parameters where retail forwards a fourth (the packed slot word) by

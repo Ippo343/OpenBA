@@ -6,6 +6,8 @@ and §B.2 before starting. The gate is §B.1.8.
 
 ## Measured start (main 1d97579c)
 
+*Start values only. The END values, the closing pass's deletions and what is left per struct are in `docs/runtime_port/STATUS.md` (Endgame, "B.3.1 CLOSED").*
+
 | vocabulary | code | engine | runtime | standalone | dx11 |
 |---|---|---|---|---|---|
 | `RtSystem_String_*` direct calls | 0 | 0 | 252 | 68 | 0 |
