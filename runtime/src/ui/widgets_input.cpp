@@ -251,11 +251,6 @@ inline CacheTextFn NumberElementCacheText() { return &RtUi_NumberElement_CacheTe
 // for why leaving it unregistered was measured and rejected. Deleting the DOOR
 // is what closes the cutover hole, and that is done either way.
 
-
-bool StringNotEqualImpl(const void* lhs, const void* rhs);
-using StringNotEqualFn = bool (*)(const void*, const void*);
-inline StringNotEqualFn StringNotEqual() { return &StringNotEqualImpl; }
-
 // The TRUE size of a UI::NumberElement, and it is NOT `sizeof(NumberElement)`.
 //
 // `runtime/types/ui/NumberElement.h` says in its own text that the object is
@@ -467,7 +462,6 @@ void NumberEditElement_SetValue(NumberEditElement* self, int value) {
     // the number worth reading. Same shape and same honesty as
     // Application::SleepThread in runtime/src/application/application_win.cpp.
 }
-
 
 // ============================================================================
 // WAVE 9 LANE UIW2 — dependencies for ComboElement::SetCurrentItem/UpdateText
@@ -928,8 +922,10 @@ void RtUi_NumberElement_SetValueFloat(NumberElement* self, float value) {
 void RtUi_EditElement_SetText(EditElement* self, const void* newText) {
 
     if (self->_flagE0 == 0) {
-        void* thisStr = &self->_text;
-        bool notEqual = StringNotEqual()(thisStr, newText);
+        // ??9String@System@@QEBA_NAEBV01@@Z  retail 0x18003ffe0 — the body is
+        // System::String::operator== negated, so this is the class operator.
+        bool notEqual = *reinterpret_cast<const System::String*>(&self->_text) !=
+                        *reinterpret_cast<const System::String*>(newText);
         if (notEqual) {
             MarkNeedsSizeCalcUpToRoot(&self->base);
         }
@@ -1106,11 +1102,9 @@ void RtUi_ProgressElement_SetMaximumValue(ProgressElement* self, float value) {
 // ---- ?SetCurrentValue@ProgressElement@UI@@QEAAXM@Z  0x180077ed0 -----------
 void RtUi_ProgressElement_SetCurrentValue(ProgressElement* self, float value) {
 
-
     self->_currentValue = value;
 
 }
-
 
 // ============================================================================
 // WAVE 9 LANE UIW2 — SliderElement::SetParameter,
@@ -1429,55 +1423,6 @@ void RtUi_ComboElement_SetCurrentItem(ComboElement* self, int32_t index) {
 // translation unit.
 namespace {
 
-// ---- ??9String@System@@QEBA_NAEBV01@@Z  0x18003ffe0 -----------------------
-//
-// `System::String::operator!=`. Retail inlines `operator==` and negates it, and
-// the listing shows that shape twice over (`SETZ AL / TEST AL,AL / SETZ AL`):
-//
-//     lenA = a ? a[-2] : 0                       0x18003ffe6-0x18003fff5
-//     lenB = b ? b[-2] : 0                       0x18003fff7-0x180040005
-//     if (lenA != lenB)      equal = false       0x18004000b JZ / 0x18004000d
-//     else if (!a || lenA==0) equal = true       0x18004001a, 0x18004001f
-//     else equal = StrCompare(a, b) == 0         0x180040024
-//     return !equal
-//
-// Note the asymmetry, which is retail's and is preserved: the "both empty"
-// shortcut tests only `a`. It is reachable only when the two LENGTHS already
-// agree, so a null `b` there necessarily has length 0 too and the answer is the
-// same — but the instruction that would have tested `b` does not exist, and a
-// port that adds it is not this function.
-//
-// ZERO DOORS. `RtString_StrCompare` (runtime/src/system/string.h) is our own
-// ported body, called directly as C++ — no ResolveAddr, no ResolveExport, and
-// therefore nothing left to resolve at cutover. That is what closes the hole:
-// the door is DELETED, not moved.
-//
-// AND IT HAS A REAL DIFFERENTIAL ORACLE — the only one in this lane. The
-// function is PURE: it reads two Strings, allocates nothing, mutates nothing.
-// So the shipped body can simply be called on the same two arguments and the
-// two booleans compared. Everything else this lane touched ends in a refcount
-// swap and could not be diffed at all (WAVE9_LANE_UIW2.md §4); this one can,
-// so it is.
-bool StringNotEqualImpl(const void* lhsRaw, const void* rhsRaw) {
-
-    // ENDGAME B.3.1 step 2: the length-compare-then-StrCompare body IS
-    // `System::String::operator==` (runtime/src/system/string.cpp, retail
-    // 0x1800063d0) negated, expression for expression — so this is now the
-    // one-line shim the two registry rows at the bottom of this file bind.
-    // Those rows belong in string.cpp with the class; the closing pass moves
-    // them, because moving a registration and converting a caller in the same
-    // commit is how two lanes end up with a duplicate binding.
-    const bool ours =
-        *static_cast<const System::String*>(lhsRaw) !=
-        *static_cast<const System::String*>(rhsRaw);
-
-    // DID-WORK here means "reached the byte compare", i.e. both operands were
-    // non-empty and the same length. Every other path is decided by the lengths
-    // alone, and a run where that counter stays 0 has exercised none of
-    // StrCompare — which is the half that can be wrong.
-    return ours;
-}
-
 // ---- ?CacheText@NumberElement@UI@@AEAAXXZ  0x1801189f0 --------------------
 //
 // NumberElement's OWN CacheText — a DIFFERENT function from
@@ -1610,7 +1555,6 @@ int RtUiWidgetsInRegister() {
     RegisterRuntimeExport(kProgressSetCurrent,  (void*)&RtUi_ProgressElement_SetCurrentValue); ++count;
     RegisterRuntimeAddr(0x180077ed0, (void*)&RtUi_ProgressElement_SetCurrentValue);
 
-
     // WAVE 9 LANE UIW2 — the last three of Wave 7 lane D's nine hold-backs that
     // this file could close, plus the private helper one of them needs.
     //
@@ -1660,9 +1604,6 @@ int RtUiWidgetsInRegister() {
     // string.cpp and delete these two lines rather than adding a second
     // binding — a duplicate registration is last-binding-wins and silently
     // makes one of the two dead code.
-    RegisterRuntimeExport("??9String@System@@QEBA_NAEBV01@@Z",
-                          (void*)&StringNotEqualImpl);
-    RegisterRuntimeAddr(0x18003ffe0, (void*)&StringNotEqualImpl);
 
     return count;
 }

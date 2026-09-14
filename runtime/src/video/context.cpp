@@ -240,18 +240,6 @@ inline bool MatrixNotEqual(const MatrixRaw* a, const MatrixRaw* b) {
 } // namespace
 
 // ============================================================================
-// ??9Matrix@Math@@QEBA_NAEBV01@@Z  (Math::Matrix::operator!=)  retail
-// 0x18001d850, ordinal 1286  —  BATCH 8
-// ============================================================================
-// ENDGAME B.3.1 step 2: a one-line shim onto `Math::Matrix::operator!=`, kept
-// for the two registry rows at the bottom of this file (by name AND by
-// address, so a by-address caller reaches the port and not a walk past it).
-// ============================================================================
-bool RtMath_Matrix_NotEqual(const MatrixRaw* self, const MatrixRaw* other) {
-    return MatrixNotEqual(self, other);
-}
-
-// ============================================================================
 // The ports
 // ============================================================================
 // Every body is byte-faithful to the retail decompilation. Where retail writes
@@ -821,8 +809,6 @@ int RtVideoContextRegister() {
     }
 
     // BATCH 8: Math::Matrix::operator!=, a non-virtual leaf with no slot to verify.
-    RegisterRuntimeExport("??9Matrix@Math@@QEBA_NAEBV01@@Z", (void*)&RtMath_Matrix_NotEqual); ++count;
-    RegisterRuntimeAddr(0x18001d850, (void*)&RtMath_Matrix_NotEqual);
 
     // BATCH 8: SetBones — a plain public export, no vtable slot to verify.
     RegisterRuntimeExport("?SetBones@Context@Video@@QEAAXHPEBVMatrix@Math@@@Z", (void*)&RtVideo_Context_SetBones); ++count;

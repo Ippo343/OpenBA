@@ -196,25 +196,14 @@ Math::Matrix Math::Matrix::Inverse() const {
     return out;
 }
 
-// ---------------------------------------------------------------------------
-// TRANSITIONAL SHIM — ENDGAME B.3.1 step 1. One line onto the member above; it
-// and the registry rows below die in step 2 with their last caller.
-// ---------------------------------------------------------------------------
-Matrix* RtMath_Matrix_Inverse(const Matrix* self, Matrix* ret) {
-    *ret = self->Inverse();
-    return ret;
-}
-
 // ============================================================================
 // Registration. Called from RtMathPortInit().
 // ============================================================================
 int RtMathWave9LaneGfxrRegister() {
     int count = 0;
-    RegisterRuntimeExport("?Inverse@Matrix@Math@@QEBA?AV12@XZ", (void*)&RtMath_Matrix_Inverse); ++count;
     // Retail's own entry point, so a by-ADDRESS door cannot walk past the port
     // into the DLL (reference_bypassed_port_needs_a_source_checker.md). There
     // is no such door in the tree today; this is the cheap half of stopping one
     // from being written.
-    RegisterRuntimeAddr(0x1800bb310, (void*)&RtMath_Matrix_Inverse);
     return count;
 }

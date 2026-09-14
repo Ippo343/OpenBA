@@ -595,54 +595,6 @@ extern "C" bool RtGraphics_ReflectionImageBuffer_Serialize(void* self, Stream* s
 }
 
 // ============================================================================
-// 0x180022680  ??DTransform3@Math@@QEBA?AV01@AEBV01@@Z
-//              Math::Transform3 Math::Transform3::operator*(const Transform3&) const
-// ============================================================================
-// A NON-SLOT HELPER, ported here because `ReflectionImageBuffer::Render` below
-// cannot run without it and the closure says nothing in the tree has it.
-//
-// HIDDEN RETURN SLOT. `Transform3` is a 0x30 (twelve-float) class returned BY
-// VALUE from a NON-STATIC member, so the Microsoft x64 convention is
-// RCX = this, **RDX = the return slot**, R8 = the argument — and retail's last
-// instruction is `MOV RAX,RDX`, returning that slot. Declaring this without the
-// hidden slot is reference_hidden_retslot_wild_write.md's defect exactly, so
-// the signature below spells all three pointers.
-//
-// WHAT IT COMPUTES, derived instruction by instruction from 0x1800226bd ..
-// 0x18002295d rather than assumed from the name. A Transform3 is four ROWS of
-// three floats: rows 0..2 are a 3x3 basis, row 3 is the translation.
-//
-//     out.row[i] = a.row[i][0]*b.row[0] + a.row[i][1]*b.row[1]
-//                                       + a.row[i][2]*b.row[2]     (i = 0,1,2)
-//     out.row[3] = same, PLUS b.row[3]
-//
-// *** THE ADD ORDER IS LOAD-BEARING AND IS RETAIL'S. *** Every one of the
-// twelve outputs accumulates strictly left to right — `(x0*b0 + x1*b3) + x2*b6`
-// and, for the translation row, `((t0*b0 + t1*b3) + t2*b6) + b9`. Float
-// addition is not associative, so a different grouping is a different number.
-// The build uses no `-march` beyond the x86-64 baseline, so GCC cannot emit an
-// FMA here and cannot contract a product into an add; the C below is therefore
-// bit-exact against the shipped MULSS/ADDSS sequence.
-//
-// Retail's register scheduling interleaves all four rows and is NOT reproduced:
-// the schedule is what the compiler chose, the arithmetic is what the function
-// means, and no observer can tell the two apart.
-// ============================================================================
-// ENDGAME B.3.1 step 2: the body MOVED onto `Math::Transform3::operator*`
-// (declared in runtime/types/math/Math.h, defined in
-// runtime/src/math/transform.cpp), and the derivation above moved with it.
-// What is left here is the one-line shim the registry row at the bottom of
-// this file still binds; it dies when that row does.
-extern "C" void* RtMath_Transform3_Multiply(const void* self, void* ret, const void* rhs);
-
-extern "C" void* RtMath_Transform3_Multiply(const void* self, void* ret, const void* rhs) {
-    *static_cast<Math::Transform3*>(ret) =
-        *static_cast<const Math::Transform3*>(self) *
-        *static_cast<const Math::Transform3*>(rhs);
-    return ret;                                    // MOV RAX,RDX
-}
-
-// ============================================================================
 // slot 11 — ?Render@ReflectionImageBuffer@Graphics@@UEBAXAEAVRenderer@2@
 //                   AEBVScene@2@AEBVCamera@2@H@Z      retail 0x1800a6b80
 // ============================================================================
@@ -938,10 +890,6 @@ int RtGraphicsImageBufferDerivedRegister() {
                           (void*)&RtGraphics_ReflectionImageBuffer_Render); ++n;
     RegisterRuntimeAddr(0x1800a6b80ull, (void*)&RtGraphics_ReflectionImageBuffer_Render);
 
-    // ---- the one non-slot helper -------------------------------------------
-    RegisterRuntimeExport("??DTransform3@Math@@QEBA?AV01@AEBV01@@Z",
-                          (void*)&RtMath_Transform3_Multiply); ++n;
-    RegisterRuntimeAddr(0x180022680ull, (void*)&RtMath_Transform3_Multiply);
 
     return n;
 }

@@ -1204,19 +1204,6 @@ int RtString_StrCompare(const char* a, const char* b) {
 }
 int RtString_GetLength(const String* self) { return AsSys(self)->GetLength(); }
 
-// ---- lifecycle -------------------------------------------------------------
-String* RtSystem_String_Ctor(String* self) {
-    new (AsSys(self)) System::String();
-    return self;
-}
-String* RtSystem_String_CtorCStr(String* self, const char* src) {
-    new (AsSys(self)) System::String(src);
-    return self;
-}
-String* RtSystem_String_CtorCopy(String* self, const String* other) {
-    new (AsSys(self)) System::String(*AsSys(other));
-    return self;
-}
 void RtSystem_String_Dtor(String* self) { AsSys(self)->~String(); }
 
 String* RtSystem_String_Assign(String* self, const String* rhs) {
@@ -1225,17 +1212,6 @@ String* RtSystem_String_Assign(String* self, const String* rhs) {
 }
 void RtSystem_String_Set(String* self, const char* src) { AsSys(self)->Set(src); }
 
-// ---- comparison ------------------------------------------------------------
-bool RtSystem_String_Equals(const String* self, const String* other) {
-    return *AsSys(self) == *AsSys(other);
-}
-bool RtSystem_String_EqualsCStr(const String* self, const char* other) {
-    return *AsSys(self) == other;
-}
-bool RtSystem_String_Less(const String* self, const String* other) {
-    return *AsSys(self) < *AsSys(other);
-}
-
 // ---- concatenation and append ---------------------------------------------
 String* RtSystem_String_Concat(String* ret, const String* lhs, const String* rhs) {
     new (AsSys(ret)) System::String(*AsSys(lhs) + *AsSys(rhs));
@@ -1243,10 +1219,6 @@ String* RtSystem_String_Concat(String* ret, const String* lhs, const String* rhs
 }
 String* RtSystem_String_ConcatCStr(String* ret, const String* lhs, const char* rhs) {
     new (AsSys(ret)) System::String(*AsSys(lhs) + rhs);
-    return ret;
-}
-String* RtSystem_String_ConcatChar(String* ret, const String* lhs, char c) {
-    new (AsSys(ret)) System::String(*AsSys(lhs) + c);
     return ret;
 }
 String* RtSystem_String_AppendAssign(String* self, String* ret, const String* rhs) {
@@ -1276,36 +1248,12 @@ String* RtSystem_String_RemoveAt(const String* self, String* ret, int index) {
     return ret;
 }
 
-// ---- statics ---------------------------------------------------------------
-float RtSystem_String_ToFloat(const char* s)   { return System::String::ToFloat(s); }
-int   RtSystem_String_ToInteger(const char* s) { return System::String::ToInteger(s); }
-int   RtSystem_String_FormatParamCount(const char* fmt) {
-    return System::String::FormatParamCount(fmt);
-}
-String* RtSystem_String_FormatParamList(String* ret, const String* fmt, const String* params) {
-    new (AsSys(ret)) System::String(
-        System::String::FormatParamList(*AsSys(fmt),
-                                        reinterpret_cast<const System::String*>(params)));
-    return ret;
-}
 String* RtSystem_String_Format(String* ret, const char* fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     new (AsSys(ret)) System::String(System::String::FormatV(fmt, ap));
     va_end(ap);
     return ret;
-}
-String* RtSystem_String_FormatIndexed(String* ret, const char* fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-    new (AsSys(ret)) System::String(System::String::FormatIndexedV(fmt, ap));
-    va_end(ap);
-    return ret;
-}
-
-// ?Release@String@System@@AEAAXXZ — the private primitive, exported anyway.
-void RtSystem_String_Release(String* self) {
-    System::StringPrivateAccess::Release(*AsSys(self));
 }
 
 // ?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z
@@ -1317,7 +1265,6 @@ void RtSystem_String_Serialize(String* self, void* serializerRaw) {
 
 using RtSystem::RtSystem_String_InsertAt;
 using RtSystem::RtSystem_String_RemoveAt;
-using RtSystem::RtSystem_String_ConcatChar;
 using RtSystem::RtSystem_String_AppendAssignChar;
 
 #ifndef BANISHED_UNIT_TEST
@@ -1325,14 +1272,8 @@ int RtSystemStringRegister() {
     using namespace RtSystem;
     int n = 0;
 
-    RegisterRuntimeExport("??0String@System@@QEAA@XZ",              (void*)&RtSystem_String_Ctor); ++n;
-    RegisterRuntimeExport("??0String@System@@QEAA@PEBD@Z",          (void*)&RtSystem_String_CtorCStr); ++n;
-    RegisterRuntimeExport("??0String@System@@QEAA@AEBV01@@Z",       (void*)&RtSystem_String_CtorCopy); ++n;
     RegisterRuntimeExport("??1String@System@@QEAA@XZ",              (void*)&RtSystem_String_Dtor); ++n;
     RegisterRuntimeExport("??4String@System@@QEAAAEAV01@AEBV01@@Z", (void*)&RtSystem_String_Assign); ++n;
-    RegisterRuntimeExport("??8String@System@@QEBA_NAEBV01@@Z",      (void*)&RtSystem_String_Equals); ++n;
-    RegisterRuntimeExport("??8String@System@@QEBA_NPEBD@Z",         (void*)&RtSystem_String_EqualsCStr); ++n;
-    RegisterRuntimeExport("??MString@System@@QEBA_NAEBV01@@Z",      (void*)&RtSystem_String_Less); ++n;
     RegisterRuntimeExport("??YString@System@@QEAA?AV01@AEBV01@@Z",  (void*)&RtSystem_String_AppendAssign); ++n;
     RegisterRuntimeExport("??YString@System@@QEAA?AV01@PEBD@Z",     (void*)&RtSystem_String_AppendAssignCStr); ++n;
     RegisterRuntimeExport("?Set@String@System@@QEAAXPEBD@Z",        (void*)&RtSystem_String_Set); ++n;
@@ -1344,7 +1285,6 @@ int RtSystemStringRegister() {
     // instead (`?SetLength@String@System@@AEAAXH@Z`, retail 0x1800c8220).
     RegisterRuntimeExport("?SetLength@String@System@@AEAAXH@Z",     (void*)&RtString_SetLength); ++n;
     RegisterRuntimeExport("?SubString@String@System@@QEBA?AV12@HH@Z", (void*)&RtSystem_String_SubString); ++n;
-    RegisterRuntimeExport("?ToFloat@String@System@@SAMPEBD@Z",      (void*)&RtSystem_String_ToFloat); ++n;
     // WAVE 22 LANE SYSBODY. The body has existed since Wave 2 (above) and was
     // never registered, which is why runtime_census.py has been printing it as
     // an unported System BODY for twenty waves -- a port that is never
@@ -1359,15 +1299,7 @@ int RtSystemStringRegister() {
     // below and they are the route, not a synthetic one.
     RegisterRuntimeExport("?StrCompare@String@System@@SAHPEBD0@Z",  (void*)&RtString_StrCompare); ++n;
     // Wave 9 lane B3 -- the four raw-door rows.
-    RegisterRuntimeExport("?ToInteger@String@System@@SAHPEBD@Z",    (void*)&RtSystem_String_ToInteger); ++n;
-    RegisterRuntimeExport("?Release@String@System@@AEAAXXZ",        (void*)&RtSystem_String_Release); ++n;
-    RegisterRuntimeExport("?FormatParamCount@String@System@@SAHPEBD@Z",
-                          (void*)&RtSystem_String_FormatParamCount); ++n;
-    RegisterRuntimeExport("?FormatParamList@String@System@@SA?AV12@AEBV12@PEBV12@@Z",
-                          (void*)&RtSystem_String_FormatParamList); ++n;
     RegisterRuntimeExport("?Format@String@System@@SA?AV12@PEBDZZ",  (void*)&RtSystem_String_Format); ++n;
-    RegisterRuntimeExport("?FormatIndexed@String@System@@SA?AV12@PEBDZZ",
-                          (void*)&RtSystem_String_FormatIndexed); ++n;
     RegisterRuntimeExport("?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z",
                           (void*)&RtSystem_String_Serialize); ++n;
     // The two free operator+ overloads. They live in namespace System, not in
@@ -1385,21 +1317,13 @@ int RtSystemStringRegister() {
     // Registering only the names would leave any site whose name lookup failed
     // silently on the DLL — which is not hypothetical: see the two dead
     // Filename manglings in filename.cpp's registration block.
-    RegisterRuntimeAddr(0x180006760, (void*)&RtSystem_String_Ctor);
-    RegisterRuntimeAddr(0x18000b630, (void*)&RtSystem_String_CtorCStr);
-    RegisterRuntimeAddr(0x180006cb0, (void*)&RtSystem_String_CtorCopy);
     RegisterRuntimeAddr(0x180006c80, (void*)&RtSystem_String_Dtor);
     RegisterRuntimeAddr(0x1800c9810, (void*)&RtSystem_String_Assign);
-    RegisterRuntimeAddr(0x1800063d0, (void*)&RtSystem_String_Equals);
-    RegisterRuntimeAddr(0x180053c00, (void*)&RtSystem_String_EqualsCStr);
-    RegisterRuntimeAddr(0x180029360, (void*)&RtSystem_String_Less);
     RegisterRuntimeAddr(0x1800c8a90, (void*)&RtSystem_String_AppendAssign);
     RegisterRuntimeAddr(0x1800c9120, (void*)&RtSystem_String_AppendAssignCStr);
     RegisterRuntimeAddr(0x1800c95d0, (void*)&RtSystem_String_Set);
     RegisterRuntimeAddr(0x1800c9230, (void*)&RtSystem_String_SubString);
-    RegisterRuntimeAddr(0x1800c8070, (void*)&RtSystem_String_ToFloat);
     RegisterRuntimeAddr(0x1800c9730, (void*)&RtSystem_String_Format);
-    RegisterRuntimeAddr(0x1800c8b40, (void*)&RtSystem_String_FormatIndexed);
     RegisterRuntimeAddr(0x1800c9930, (void*)&RtSystem_String_Serialize);
     RegisterRuntimeAddr(0x1800c9440, (void*)&RtSystem_String_Concat);
     RegisterRuntimeAddr(0x1800c92d0, (void*)&RtSystem_String_ConcatCStr);
@@ -1413,13 +1337,10 @@ int RtSystemStringRegister() {
                           (void*)&RtSystem_String_InsertAt); ++n;
     RegisterRuntimeExport("?RemoveAt@String@System@@QEBA?AV12@H@Z",
                           (void*)&RtSystem_String_RemoveAt); ++n;
-    RegisterRuntimeExport("??HSystem@@YA?AVString@0@AEBV10@D@Z",
-                          (void*)&RtSystem_String_ConcatChar); ++n;
     RegisterRuntimeExport("??YString@System@@QEAA?AV01@D@Z",
                           (void*)&RtSystem_String_AppendAssignChar); ++n;
     RegisterRuntimeAddr(0x1800c8510, (void*)&RtSystem_String_InsertAt);
     RegisterRuntimeAddr(0x1800c86b0, (void*)&RtSystem_String_RemoveAt);
-    RegisterRuntimeAddr(0x1800c88b0, (void*)&RtSystem_String_ConcatChar);
     RegisterRuntimeAddr(0x1800c89e0, (void*)&RtSystem_String_AppendAssignChar);
 
     printf("[RtPort]   System::String: %d exports registered\n", n);

@@ -173,51 +173,6 @@ void DrawItemArrayResize(Collection::Array<RendererDrawItem>* self,
 }  // namespace
 
 // ============================================================================
-// Math::Transform Math::Transform::Lerp(const Transform&, const Scalar&) const
-// ?Lerp@Transform@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z   retail 0x18001d690
-//                                                          ordinal 3193
-//
-// Member, struct return: RCX = this (the FROM transform), RDX = hidden return
-// slot, R8 = the TO transform, R9 = &t.
-//
-// TRANSLATION, from 0x18001d696..0x18001d6fa, term for term:
-//
-//   x:  XMM2 = to.x - this->x ; XMM1 = t ; XMM1 = XMM1 * XMM2 ;
-//       XMM8 = this->x        ; XMM8 = XMM8 + XMM1
-//   y:  XMM4 = to.y - this->y ; XMM4 = XMM4 * t ;
-//       XMM7 = this->y        ; XMM7 = XMM7 + XMM4
-//   z:  XMM3 = to.z - this->z ; XMM3 = XMM3 * t ;
-//       XMM6 = this->z        ; XMM6 = XMM6 + XMM3
-//
-// i.e. `a + t*(b - a)` for all three, NOT `a*(1-t) + b*t`. Those two are not
-// the same float. The x lane multiplies `t * (b-a)` and the y/z lanes multiply
-// `(b-a) * t`; IEEE multiplication is commutative to the bit, so the mirrored
-// operand order is preserved below only for readers diffing against the
-// listing, and changes nothing.
-//
-// ROTATION: `CALL 0x18001d500` at 0x18001d6fe with RCX unchanged (= this, and
-// Transform::rotation is at +0x00, so `this` doubles as `&this->rotation`),
-// RDX = a stack scratch at RSP+0x20, R8 = the TO transform, R9 = &t. That is
-// Quaternion::Lerp(this->rotation, scratch, to.rotation, t) — lane P's port.
-// The four dwords of the scratch are then copied to ret+0x00..0x0f.
-//
-// ALIASING: every input reaches a register (or the stack scratch) before the
-// first store into `ret`, so retail tolerates `ret == this` or `ret == to`.
-// This port keeps that property: the three translation floats are computed into
-// locals and the quaternion into a local before anything is written.
-// ============================================================================
-// ENDGAME B.3.1 step 2: the body MOVED onto `Math::Transform::Lerp` (declared
-// in runtime/types/math/Math.h, defined in runtime/src/math/transform.cpp).
-// What is left is the one-line shim the registry rows at the bottom of this
-// file still bind; the aliasing hazard the old hidden-return-slot signature
-// carried is gone with the by-value return.
-Transform* RtMath_Transform_Lerp(const Transform* self, Transform* ret,
-                                 const Transform* other, const Scalar* t) {
-    *ret = self->Lerp(*other, *t);
-    return ret;   // retail returns the hidden slot in RAX
-}
-
-// ============================================================================
 // Math::Transform
 // Graphics::InterpolatedState<Math::Transform>::Lerp(const Scalar&) const
 // ?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@AEBVScalar@4@@Z
@@ -421,7 +376,6 @@ void RtGraphics_Renderer_AddDrawItem(Renderer* self,
     if (sub30 == nullptr) {  return; }
     if (*reinterpret_cast<const int32_t*>(sub30 + 0x48) <= 0) {  return; }
 
-
     // NOT value-initialised, deliberately: retail's record is a raw stack frame
     // and +0x24 / +0x34 are never stored to before the helper copies all seven
     // qwords out of it. Zeroing them here would be a "tidier" port that no
@@ -455,7 +409,6 @@ void RtGraphics_Renderer_AddDrawItem(Renderer* self,
     const int32_t oldSize = list->_size;
     DrawItemArrayResize(list, oldSize + 1, &rec);
 
-
     // The render-to-texture pre-pass. `hasRenderedTexture` is +0x25, the byte
     // BuildParameters sets when any bound texture's +0x2c == 5.
     if (material->hasRenderedTexture != 0) {
@@ -475,10 +428,6 @@ void RtGraphics_Renderer_AddDrawItem(Renderer* self,
 // ============================================================================
 int RtGraphicsWave9GfxRegister() {
     int n = 0;
-
-    RegisterRuntimeExport("?Lerp@Transform@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z",
-                          (void*)&RtMath_Transform_Lerp); ++n;
-    RegisterRuntimeAddr(0x18001d690, (void*)&RtMath_Transform_Lerp);
 
     RegisterRuntimeExport(
         "?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@AEBVScalar@4@@Z",

@@ -184,21 +184,7 @@ Math::Transform3 Math::Transform3::FromLookAt(const Vector3& position, const Vec
     return out;
 }
 
-// ---------------------------------------------------------------------------
-// TRANSITIONAL SHIM — ENDGAME B.3.1 step 1. One line onto the member above;
-// it and the registry rows below die in step 2 with their last caller.
-// ---------------------------------------------------------------------------
-extern "C" Transform3* RtMath_Transform3_FromLookAt(Transform3* ret,
-                                                    const Vector3* position,
-                                                    const Vector3* target) {
-    *ret = Math::Transform3::FromLookAt(*position, *target);
-    return ret;
-}
-
 int RtMathFromLookAtRegister() {
     int n = 0;
-    RegisterRuntimeExport("?FromLookAt@Transform3@Math@@SA?AV12@AEBVVector3@2@0@Z",
-                          (void*)&RtMath_Transform3_FromLookAt); ++n;
-    RegisterRuntimeAddr(0x180064750ull, (void*)&RtMath_Transform3_FromLookAt);
     return n;
 }

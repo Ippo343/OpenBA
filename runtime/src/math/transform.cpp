@@ -904,9 +904,6 @@ Transform Transform::operator*(const Transform& other) const {
 // call sites become member calls (B31_RULES, "step 2 — the callers").
 // ============================================================================
 
-Quaternion* RtMath_Quaternion_Ctor4(Quaternion* self, float x, float y, float z, float w) {
-    *self = Quaternion(x, y, z, w); return self;
-}
 Transform* RtMath_Transform_CtorDefault(Transform* self) { *self = Transform(); return self; }
 Transform* RtMath_Transform_CtorCopy(Transform* self, const Transform* other) {
     std::memcpy(self, other, sizeof(Transform)); return self;
@@ -920,46 +917,25 @@ Transform3* RtMath_Transform3_CtorCopy(Transform3* self, const Transform3* other
 Transform2* RtMath_Transform2_Ctor(Transform2* self, const Scalar* angleDeg, const Vector2* offset) {
     *self = Transform2(*angleDeg, *offset); return self;
 }
-Matrix* RtMath_Matrix_MulMatrix(const Matrix* self, Matrix* ret, const Matrix* other) {
-    *ret = *self * *other; return ret;
-}
-Vector4* RtMath_Matrix_MulVector4(const Matrix* self, Vector4* ret, const Vector4* v) {
-    *ret = *self * *v; return ret;
-}
 Transform2* RtMath_Transform2_MulTransform2(const Transform2* self, Transform2* ret, const Transform2* other) {
     *ret = *self * *other; return ret;
 }
 Vector2* RtMath_Transform2_MulVector2(const Transform2* self, Vector2* ret, const Vector2* v) {
     *ret = *self * *v; return ret;
 }
-Vector3* RtMath_Transform3_MulVector3(const Transform3* self, Vector3* ret, const Vector3* v) {
-    *ret = *self * *v; return ret;
-}
 Matrix* RtMath_Transform_AsMatrix(const Transform* self, Matrix* ret) { *ret = self->AsMatrix(); return ret; }
-Matrix* RtMath_Transform3_AsMatrix(const Transform3* self, Matrix* ret) { *ret = self->AsMatrix(); return ret; }
-Transform* RtMath_Transform_Inverse(const Transform* self, Transform* ret) { *ret = self->Inverse(); return ret; }
-Transform3* RtMath_Transform3_Inverse(const Transform3* self, Transform3* ret) { *ret = self->Inverse(); return ret; }
 Quaternion* RtMath_Quaternion_MulQuaternion(const Quaternion* self, Quaternion* ret, const Quaternion* other) {
     *ret = *self * *other; return ret;
 }
 Vector3* RtMath_Quaternion_Rotate(const Quaternion* self, Vector3* ret, const Vector3* v) {
     *ret = self->Rotate(*v); return ret;
 }
-Vector3* RtMath_Transform3_Rotate(const Transform3* self, Vector3* ret, const Vector3* v) {
-    *ret = self->Rotate(*v); return ret;
-}
 Matrix* RtMath_Matrix_CtorColumns(Matrix* self, const Vector4* c0, const Vector4* c1,
                                   const Vector4* c2, const Vector4* c3) {
     *self = Matrix(*c0, *c1, *c2, *c3); return self;   // retail leaves `this` in RAX
 }
-Matrix* RtMath_Matrix_Identity(Matrix* ret) { *ret = Matrix::Identity(); return ret; }
-Transform* RtMath_Transform_Identity(Transform* ret) { *ret = Transform::Identity(); return ret; }
-Transform3* RtMath_Transform3_Identity(Transform3* ret) { *ret = Transform3::Identity(); return ret; }
 Transform2* RtMath_Transform2_FromYawOffset(Transform2* ret, const Scalar* yawDeg, const Vector2* offset) {
     *ret = Transform2::FromYawOffset(*yawDeg, *offset); return ret;
-}
-Quaternion* RtMath_Quaternion_FromYawPitch(Quaternion* ret, const Scalar* yawDeg, const Scalar* pitchDeg) {
-    *ret = Quaternion::FromYawPitch(*yawDeg, *pitchDeg); return ret;
 }
 Transform* RtMath_Transform_FromYawPitchOffset(Transform* ret, const Scalar* yawDeg, const Scalar* pitchDeg,
                                                const Vector3* offset) {
@@ -971,17 +947,11 @@ Quaternion* RtMath_Quaternion_CtorBasis(Quaternion* self, const Vector3* right, 
 Transform* RtMath_Transform_FromDirection(Transform* ret, const Vector3* direction, const Vector3* offset) {
     *ret = Transform::FromDirection(*direction, *offset); return ret;
 }
-Transform* RtMath_Transform_FromLookAt(Transform* ret, const Vector3* from, const Vector3* to) {
-    *ret = Transform::FromLookAt(*from, *to); return ret;
-}
 void RtMath_Transform_Serialize(Transform* self, void* serializer /* io::Serializer* */) {
     self->Serialize(serializer);
 }
 Vector3* RtMath_Transform_MulVector3(const Transform* self, Vector3* ret, const Vector3* v) {
     *ret = *self * *v; return ret;
-}
-Transform* RtMath_Transform_MulTransform(const Transform* self, Transform* ret, const Transform* other) {
-    *ret = *self * *other; return ret;
 }
 
 // ============================================================================
@@ -991,38 +961,24 @@ void RtMathTransformRegister() {
     int count = 0;
 
     RegisterRuntimeExport("??DTransform@Math@@QEBA?AVVector3@1@AEBV21@@Z", (void*)&RtMath_Transform_MulVector3); ++count;
-    RegisterRuntimeExport("??DTransform@Math@@QEBA?AV01@AEBV01@@Z", (void*)&RtMath_Transform_MulTransform); ++count;
 
-    RegisterRuntimeExport("??0Quaternion@Math@@QEAA@MMMM@Z", (void*)&RtMath_Quaternion_Ctor4); ++count;
     RegisterRuntimeExport("??0Transform@Math@@QEAA@XZ", (void*)&RtMath_Transform_CtorDefault); ++count;
     RegisterRuntimeExport("??0Transform@Math@@QEAA@AEBV01@@Z", (void*)&RtMath_Transform_CtorCopy); ++count;
     RegisterRuntimeExport("??4Transform@Math@@QEAAAEAV01@AEBV01@@Z", (void*)&RtMath_Transform_Assign); ++count;
     RegisterRuntimeExport("??0Transform3@Math@@QEAA@AEBV01@@Z", (void*)&RtMath_Transform3_CtorCopy); ++count;
     RegisterRuntimeExport("??0Transform2@Math@@QEAA@AEBVScalar@1@AEBVVector2@1@@Z", (void*)&RtMath_Transform2_Ctor); ++count;
-    RegisterRuntimeExport("??DMatrix@Math@@QEBA?AV01@AEBV01@@Z", (void*)&RtMath_Matrix_MulMatrix); ++count;
-    RegisterRuntimeExport("??DMatrix@Math@@QEBA?AVVector4@1@AEBV21@@Z", (void*)&RtMath_Matrix_MulVector4); ++count;
     RegisterRuntimeExport("??DTransform2@Math@@QEBA?AV01@AEBV01@@Z", (void*)&RtMath_Transform2_MulTransform2); ++count;
     RegisterRuntimeExport("??DTransform2@Math@@QEBA?AVVector2@1@AEBV21@@Z", (void*)&RtMath_Transform2_MulVector2); ++count;
-    RegisterRuntimeExport("??DTransform3@Math@@QEBA?AVVector3@1@AEBV21@@Z", (void*)&RtMath_Transform3_MulVector3); ++count;
     RegisterRuntimeExport("?AsMatrix@Transform@Math@@QEBA?AVMatrix@2@XZ", (void*)&RtMath_Transform_AsMatrix); ++count;
-    RegisterRuntimeExport("?AsMatrix@Transform3@Math@@QEBA?AVMatrix@2@XZ", (void*)&RtMath_Transform3_AsMatrix); ++count;
-    RegisterRuntimeExport("?FromLookAt@Transform@Math@@SA?AV12@AEBVVector3@2@0@Z", (void*)&RtMath_Transform_FromLookAt); ++count;
     RegisterRuntimeExport("?FromYawOffset@Transform2@Math@@SA?AV12@AEBVScalar@2@AEBVVector2@2@@Z", (void*)&RtMath_Transform2_FromYawOffset); ++count;
-    RegisterRuntimeExport("?FromYawPitch@Quaternion@Math@@SA?AV12@AEBVScalar@2@0@Z", (void*)&RtMath_Quaternion_FromYawPitch); ++count;
     RegisterRuntimeExport("?FromYawPitchOffset@Transform@Math@@SA?AV12@AEBVScalar@2@0AEBVVector3@2@@Z", (void*)&RtMath_Transform_FromYawPitchOffset); ++count;
-    RegisterRuntimeExport("?Identity@Matrix@Math@@SA?AV12@XZ", (void*)&RtMath_Matrix_Identity); ++count;
     RegisterRuntimeExport("??0Matrix@Math@@QEAA@AEBVVector4@1@000@Z", (void*)&RtMath_Matrix_CtorColumns); ++count;
     // Second door onto the SAME body. weather_particle_draw.cpp now asks by
     // name, but the address stays registered so that any future by-address
     // caller reaches the port instead of walking past it into the DLL --
     // the defect tools/port_bypass_audit.py exists to catch.
     RegisterRuntimeAddr(0x18001e540, (void*)&RtMath_Matrix_CtorColumns);
-    RegisterRuntimeExport("?Identity@Transform@Math@@SA?AV12@XZ", (void*)&RtMath_Transform_Identity); ++count;
-    RegisterRuntimeExport("?Identity@Transform3@Math@@SA?AV12@XZ", (void*)&RtMath_Transform3_Identity); ++count;
-    RegisterRuntimeExport("?Inverse@Transform@Math@@QEBA?AV12@XZ", (void*)&RtMath_Transform_Inverse); ++count;
-    RegisterRuntimeExport("?Inverse@Transform3@Math@@QEBA?AV12@XZ", (void*)&RtMath_Transform3_Inverse); ++count;
     RegisterRuntimeExport("?Rotate@Quaternion@Math@@QEBA?AVVector3@2@AEBV32@@Z", (void*)&RtMath_Quaternion_Rotate); ++count;
-    RegisterRuntimeExport("?Rotate@Transform3@Math@@QEBA?AVVector3@2@AEBV32@@Z", (void*)&RtMath_Transform3_Rotate); ++count;
     RegisterRuntimeExport("?Serialize@Transform@Math@@QEAAXAEAVSerializer@IO@@@Z", (void*)&RtMath_Transform_Serialize); ++count;
 
     // Bonus: dependencies of the above that are genuine Math:: exports in

@@ -169,20 +169,6 @@ extern "C" void RtSystem_MemoryAllocator_LinkPrevBlock(uint64_t* self,
     *self = ((packed ^ hdr) & 0xe0000000000ull) ^ hdr;
 }
 
-// ---------------------------------------------------------------------------
-// 0x1800063c0 — ?GetLength@String@System@@QEBAHXZ. The BODY has been ported
-// since Wave 2 (runtime/src/system/string.cpp:196, `RtString_GetLength`) and
-// was never registered under either door, so every caller still went to the
-// DLL and the closure still counted it as unported. Registration only — a
-// second body would be the duplication this family keeps paying for.
-// ---------------------------------------------------------------------------
-extern "C" int RtSystem_String_GetLength(const void* self) {
-    // ENDGAME B.3.1 step 2: the member itself (0x1800063c0). `self` is the
-    // registered entry point's opaque `this`, so the class is reached over the
-    // same eight bytes the POD spelled.
-    return static_cast<const System::String*>(self)->GetLength();
-}
-
 // Declared by the six sibling files of this batch.
 int RtClosure2bGraphicsRegister();
 int RtClosure2bVideoRegister();
@@ -215,10 +201,6 @@ void RtClosureBatch2bPortInit() {
 
     RegisterRuntimeAddr(0x180011640, (void*)&RtSystem_OperatorNew_180011640);   ++n;
     RegisterRuntimeAddr(0x180034d60, (void*)&RtSystem_MemoryAllocator_LinkPrevBlock); ++n;
-
-    RegisterRuntimeExport("?GetLength@String@System@@QEBAHXZ",
-                          (void*)&RtSystem_String_GetLength); ++n;
-    RegisterRuntimeAddr(0x1800063c0, (void*)&RtSystem_String_GetLength);
 
     const int g = RtClosure2bGraphicsRegister();
     const int v = RtClosure2bVideoRegister();

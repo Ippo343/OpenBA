@@ -479,10 +479,6 @@ Filename* RtSystem_Filename_Ctor(Filename* self) {
     new (AsSys(self)) System::Filename();
     return self;
 }
-Filename* RtSystem_Filename_CtorCStr(Filename* self, const char* src) {
-    new (AsSys(self)) System::Filename(src);
-    return self;
-}
 Filename* RtSystem_Filename_CtorString(Filename* self, const String* src) {
     new (AsSys(self)) System::Filename(*reinterpret_cast<const System::String*>(src));
     return self;
@@ -511,10 +507,6 @@ Filename* RtSystem_Filename_GetPathFilename(const Filename* self, Filename* ret,
     new (AsSys(ret)) System::Filename(AsSys(self)->GetPathFilename(stripExt));
     return ret;
 }
-Filename* RtSystem_Filename_GetPathIdentifer(const Filename* self, Filename* ret) {
-    new (AsSys(ret)) System::Filename(AsSys(self)->GetPathIdentifer());
-    return ret;
-}
 
 }  // namespace RtSystem
 
@@ -527,7 +519,6 @@ int RtSystemFilenameRegister() {
     int n = 0;
 
     RegisterRuntimeExport("??0Filename@System@@QEAA@XZ",   (void*)&RtSystem_Filename_Ctor); ++n;
-    RegisterRuntimeExport("??0Filename@System@@QEAA@PEBD@Z", (void*)&RtSystem_Filename_CtorCStr); ++n;
     RegisterRuntimeExport("??0Filename@System@@QEAA@AEBVString@1@@Z",
                           (void*)&RtSystem_Filename_CtorString); ++n;
     RegisterRuntimeExport("??0Filename@System@@QEAA@AEBV01@@Z",
@@ -543,8 +534,6 @@ int RtSystemFilenameRegister() {
                           (void*)&RtSystem_Filename_AdjustDelimiters); ++n;
     RegisterRuntimeExport("?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z",
                           (void*)&RtSystem_Filename_GetPathFilename); ++n;
-    RegisterRuntimeExport("?GetPathIdentifer@Filename@System@@QEBA?AV12@XZ",
-                          (void*)&RtSystem_Filename_GetPathIdentifer); ++n;
 
     // The SAME functions by Ghidra address — and here it is not belt-and-braces
     // but REQUIRED. Two of the exe's Filename resolves use mangled names that
@@ -561,7 +550,6 @@ int RtSystemFilenameRegister() {
     // of fn_Filename_AdjustDelimiters — and ProfessionUI's GetPathIdentifer —
     // on the DLL while the census reported them ported.
     RegisterRuntimeAddr(0x180006220, (void*)&RtSystem_Filename_Ctor);
-    RegisterRuntimeAddr(0x180026cf0, (void*)&RtSystem_Filename_CtorCStr);
     RegisterRuntimeAddr(0x18000c780, (void*)&RtSystem_Filename_CtorString);
     RegisterRuntimeAddr(0x1800067d0, (void*)&RtSystem_Filename_CtorCopy);
     RegisterRuntimeAddr(0x180006980, (void*)&RtSystem_Filename_Dtor);
@@ -570,7 +558,6 @@ int RtSystemFilenameRegister() {
     RegisterRuntimeAddr(0x180026cb0, (void*)&RtSystem_Filename_Less);
     RegisterRuntimeAddr(0x1800c6970, (void*)&RtSystem_Filename_AdjustDelimiters);
     RegisterRuntimeAddr(0x1800c6740, (void*)&RtSystem_Filename_GetPathFilename);
-    RegisterRuntimeAddr(0x1800c6610, (void*)&RtSystem_Filename_GetPathIdentifer);
 
     // CONSEQUENCE FOR standalone/filename_runtime_hook.cpp (PLAN.md §2.2
     // hazard A): that diagnostic resolves 0x1800067d0 / 0x180006980 /
