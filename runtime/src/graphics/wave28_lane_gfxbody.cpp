@@ -79,8 +79,8 @@ using RtGraphics::MaterialInstance;
 using RtGraphics::MaterialTexture;
 using RtGraphics::Renderer;
 using RtGraphics::RendererDrawGroup;
+using RtGraphics::RendererDrawItem;
 using RtSystem::String;
-using rtcoll::ArrayHdr;
 
 // ---------------------------------------------------------------------------
 // Attendance. Counts the DOOR and, separately, the BRANCH that does the work:
@@ -507,21 +507,21 @@ extern "C" void RtGraphics_Animation_ApplyEvents(const void* self, const void* t
 //     ??4Camera@Graphics@@QEAAAEAV01@AEBV01@@Z ord 1060) — read from the export
 //     directory, per the GFXR lesson — so neither is an address door.
 //
-// THE APPEND PATH'S ARRAY GROW IS THE ONE THING THIS BODY CANNOT DO ITSELF.
+// THE APPEND PATH'S ARRAY GROW WAS THE ONE THING THIS BODY COULD NOT DO ITSELF.
 // 0x1800638e0 is `Collection::Array<RendererDrawGroup>::SetSize(int, const T*)`,
 // 404 bytes, NOT EXPORTED (checked with pefile, not inferred from a comment —
 // AEAA means private, not unexported). It is a plain `SetSizeCore`
 // instantiation of stride 0x1f0 / align 8 whose element assign (0x18001be60)
 // and element destroy (the eh-vector iterator at 0x18007ec98 over `+0x1c0`) are
-// THEMSELVES unexported. Expressing it as an ArraySpec would therefore open
-// THREE address doors instead of one, so this lane opens ONE and calls
-// 0x1800638e0 at its retail address. See the residual table in the lane doc.
+// THEMSELVES unexported. array.cpp's Wave 27 `kSpec_DrawGroup1f0` row already
+// opened all three doors (array_internal.h), so ENDGAME B.3.2 step 2 bridges
+// the call below through that row on the real `Collection::Array<
+// RendererDrawGroup>` member instead of resolving 0x1800638e0 by address here.
 // ----------------------------------------------------------------------------
 namespace {
 
 using CameraCopyCtorFn = Camera* (*)(Camera* dst, const Camera* src);   // ??0Camera@
 using CameraAssignFn   = Camera* (*)(Camera* dst, const Camera* src);   // ??4Camera@
-using GroupSetSizeFn   = void (*)(ArrayHdr* self, int32_t n, const void* fill);
 
 // The eh-vector ctor at 0x1800801e8 runs 0x180062950 over three 0x10-byte
 // elements, and 0x180062950 is five instructions:
@@ -542,8 +542,18 @@ inline void DrawItemArraysDestroy(uint8_t* base) {
     // The CRT iterator destroys BACKWARD (element count-1 first). Preserved:
     // the frees reach the allocator in that order and the allocator is shared
     // state.
+    //
+    // ENDGAME B.3.2 step 2 (callers) — `base` is `temp + 0x1c0`, exactly where
+    // `RendererDrawGroup::items[3]` (Camera.h) sits, and `RendererDrawItem` is
+    // trivially destructible (Camera.h — a plain POD), so
+    // `Collection::Array<RendererDrawItem>::~Array` is the trait-derived body
+    // and is bit-for-bit `rtcoll::ArrayDtorImpl` on each element (spec->destroy
+    // is null either way). Calling the member destructor on the reinterpreted
+    // slots names the container rather than the free function underneath it.
+    using ItemArray = Collection::Array<RendererDrawItem>;
+    ItemArray* const items = reinterpret_cast<ItemArray*>(base);
     for (int i = 2; i >= 0; --i)
-        rtcoll::ArrayDtorImpl(reinterpret_cast<ArrayHdr*>(base + i * 0x10));
+        items[i].~Array();
 }
 
 }  // namespace
@@ -560,10 +570,10 @@ extern "C" int32_t RtGraphics_Renderer_BeginDrawGroup(void* self, const void* re
     const int32_t idx  = r->field_38;                  // MOVSXD RCX,[RCX+0x38]
     r->currentDrawGroup = idx;                         // MOV [RDI+0x34],ECX
 
-    if (r->drawGroups._size != idx) {
+    if (r->drawGroups.GetSize() != idx) {
         // ---- REUSE -------------------------------------------------------
         r->field_38 = idx + 1;                         // LEA EAX,[RCX+1]
-        uint8_t* const g = reinterpret_cast<uint8_t*>(r->drawGroups._data) +
+        uint8_t* const g = reinterpret_cast<uint8_t*>(r->drawGroups.GetData()) +
                            static_cast<int64_t>(idx) * 0x1f0;
         *reinterpret_cast<const void**>(g) = renderBuffer;
         RT_EXPORT_ONCE(CameraAssignFn, "??4Camera@Graphics@@QEAAAEAV01@AEBV01@@Z")(
@@ -590,14 +600,18 @@ extern "C" int32_t RtGraphics_Renderer_BeginDrawGroup(void* self, const void* re
     //   SYMBOL:      0x1800638e0 — Collection::Array<RendererDrawGroup>::SetSize.
     //                CONFIRMED ABSENT from the export directory with pefile, not
     //                inferred from a comment (AEAA means private, not unexported).
-    //   CONDITION:   taken only the FIRST time a given draw-group index is used;
-    //                every later frame reuses the slot through the other path.
-    //   CONSEQUENCE AT CUTOVER: with the DLL gone this resolves to nothing and
-    //                the very first frame's draw group is never appended. Not a
-    //                silent artefact — nothing renders. See the lane doc's
-    //                residual R1, addressed to the Wave 29 Graphics lane.
-    reinterpret_cast<GroupSetSizeFn>(ResolveAddr(Module::Runtime, 0x1800638e0))(
-        reinterpret_cast<ArrayHdr*>(&r->drawGroups), r->drawGroups._size + 1, temp);
+    //
+    // ENDGAME B.3.2 step 2 (callers) — the ResolveAddr-by-address call above is
+    // GONE. `r->drawGroups` is a real `Collection::Array<RendererDrawGroup>`
+    // member (runtime/types/graphics/Camera.h), but its DECLARED spec is the
+    // trait-derived default, which is NOT what retail's 0x1800638e0 does (see
+    // array_internal.h's `kSpec_DrawGroup1f0` banner: the element assign is a
+    // deep nested-array copy the trait derivation cannot reproduce). Bridged
+    // through the hand-derived row at the call site instead of trusting the
+    // field's own (wrong) spec — array.cpp's `RtColl_ArraySetSizeFill_...` row
+    // for this address stays registered, unchanged, for `code/`.
+    rtcoll::AsArray<&rtcoll::kSpec_DrawGroup1f0>(&r->drawGroups)
+        ->SetSizeFill(r->drawGroups.GetSize() + 1, temp);
 
     DrawItemArraysDestroy(temp + 0x1c0);
     ++r->field_38;                                     // INC [RDI+0x38] — NOT the size

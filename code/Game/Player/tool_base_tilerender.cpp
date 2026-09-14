@@ -37,6 +37,7 @@
 #include "math/Math.h"
 #include "system/Filename.h"
 #include "resolve.h"
+#include "collection/Collection.h"
 #include <cstdint>
 #include <cmath>
 #include <cstring>
@@ -331,6 +332,26 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
 // Then hands the record array to 08c0 and frees it.
 // 1:1 port of the Ghidra decompile (0x140101380); the rotation index switch (0x5a/0xb4/
 // 0x10e via param_16) and the growth loop (×3 realloc) are reproduced exactly.
+// The 5-int record BuildRecords_1380 appends: {col, row, variant, ARGB, angle}.
+// ENDGAME B.3.2 step 2: the growing record list below WAS a hand-written copy of
+// rtcoll::SetSizeCore over three raw locals; it is now a trait-derived
+// Collection::Array<TileRecord5> (stride 0x14, align 4, byteCopy, init == nullptr,
+// destroy == nullptr). Compared arm for arm: one append only (newCount == count + 1),
+// so `(count != 0) ? n*3 : n` is the reference capacity rule; MemAlloc(cap * 0x14,
+// align 4); prefix copied into the fresh block (== only when the block moved); old
+// block freed when it moved; the new record stored at [count]. Out-of-memory-only
+// difference: this body left `count` unchanged when the block came back null (so
+// 08c0 never saw count > 0 with a null base); SetSizeCore stores the new size and
+// skips the null element address. Unreachable while MemAlloc works.
+struct TileRecord5 {
+    int32_t  col;
+    int32_t  row;
+    int32_t  variant;
+    uint32_t color;
+    int32_t  angle;
+};
+static_assert(sizeof(TileRecord5) == 0x14, "TileRecord5 must be the 0x14-byte 08c0 record");
+
 extern "C" void PlayerTileRender_BuildRecords_1380(
         uint64_t param_1, void* ctx, int param_3, int param_4, uint32_t param_5, int param_6,
         uint32_t param_7, int64_t* param_8, int64_t* param_9, float param_10, float param_11,
@@ -342,10 +363,10 @@ extern "C" void PlayerTileRender_BuildRecords_1380(
 
     int* grid = *reinterpret_cast<int**>(GameWorld() + 0xf8);   // local_b8
 
-    // Growing record array (0x14-byte / 5-int records), owned+freed here.
-    int32_t* arr = nullptr;      // pvVar6 / local_c8
-    int32_t  count = 0;          // element count (low32 of local_c0)
-    int32_t  cap = 0;            // pvVar11 (capacity)
+    // Growing record array (0x14-byte / 5-int records), owned here and released by
+    // ~Array at scope exit (the function has no early return past this point).
+    Collection::Array<TileRecord5> records;   // pvVar6 / local_c8 = _data,
+                                              // low32(local_c0) = _size, pvVar11 = _capacity
 
     int rowEnd = param_6;        // last row (param_4..param_6 inclusive)
     int colEnd = (int)param_5;   // last col (param_3..param_5)
@@ -406,36 +427,19 @@ extern "C" void PlayerTileRender_BuildRecords_1380(
                 if (isRoad) variant = ((-1 < param_17) ? 1 : 0) + 1;
 
                 // --- append the 5-int record (grow ×3 like the original) ---
-                int32_t newCount = count + 1;
-                if (newCount > cap) {
-                    int32_t newCap = (count != 0) ? newCount * 3 : newCount;
-                    int32_t* nb = reinterpret_cast<int32_t*>(
-                        fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 0x14, 4) : nullptr);
-                    if (nb && arr) {
-                        for (int i = 0; i < count; i++) {
-                            nb[i*5+0]=arr[i*5+0]; nb[i*5+1]=arr[i*5+1]; nb[i*5+2]=arr[i*5+2];
-                            nb[i*5+3]=arr[i*5+3]; nb[i*5+4]=arr[i*5+4];
-                        }
-                    }
-                    if (arr && arr != nb) fn_MemFreeStatic(arr);
-                    arr = nb;
-                    cap = newCap;
-                }
-                // Only advance count if the record actually got stored — otherwise we'd
-                // hand 08c0 a null base with count>0 (null-record deref crash).
-                if (arr) {
-                    int32_t* rec = arr + (int64_t)count * 5;
-                    rec[0] = dcol; rec[1] = drow; rec[2] = variant;
-                    std::memcpy(&rec[3], &color, 4); rec[4] = angleSum;
-                    count = newCount;
-                }
+                TileRecord5 rec;
+                rec.col = dcol; rec.row = drow; rec.variant = variant;
+                rec.color = color; rec.angle = angleSum;
+                records.SetSize(records._size + 1, rec);
             }
         }
     }
 
     // Hand the records to 08c0 (param_4 = empty), then free.
     int64_t empty[2] = {0, 0};
-    int64_t p3[2]; p3[0] = reinterpret_cast<int64_t>(arr); p3[1] = count;
+    // p3 keeps the pre-conversion shape {data, count} — the high dword that retail's
+    // CONCAT44 local carried is still 0 here, exactly as before.
+    int64_t p3[2]; p3[0] = reinterpret_cast<int64_t>(records._data); p3[1] = records._size;
     PlayerTileRender_DrawOverlay_08c0(param_5, ctx, p3, empty);
-    if (arr) fn_MemFreeStatic(arr);
+    // `records` is released by ~Array at scope exit.
 }

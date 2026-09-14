@@ -347,6 +347,17 @@ extern "C" void RtGraphics_AnimationManager_Dtor(AnimationManager* self) {
     AnimationManager** slot = RtAnimMgrSingletonSlot();
     if (slot) *slot = nullptr;
 
+    // ENDGAME B.3.2 step 2 (callers) — NOT converted. 0x18005bf60 is the same
+    // retail address `runtime/src/collection/array_destroy.cpp` registers as
+    // `RtColl_ArrayDtorElem_18005bf60` (a one-argument `~Array<T>` whose
+    // element holds two nested Arrays), but THIS call site does not touch any
+    // Collection container at all: `self` (the whole AnimationManager) is
+    // passed as if it were an `LPCRITICAL_SECTION`, per the banner above. There
+    // is no `Collection::Array`/`LinkedList`/`Set` member here to name — the
+    // shared address is coincidental reuse of one small function, not two
+    // views of the same container — so this stays the by-address call onto
+    // the SAME ported body (registry-first, so it already reaches
+    // `RtColl_ArrayDtorElem_18005bf60`, not the DLL's).
     using Fn = void (*)(void*);
     static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18005bf60));
     fn(self);

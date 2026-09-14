@@ -40,6 +40,7 @@
 #include "engine_funcs.h"
 #include "system/Filename.h"
 #include "resolve.h"
+#include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -550,22 +551,25 @@ static void* wg_ResolveMaterial_fd10(void* triple) {
 // FreePatchListVector (FUN_1400175d0) + scalar list teardown.
 // First-light lists are empty (no feature stages), so these are effectively
 // no-ops, but they stay faithful for when the feature stages come online.
+//
+// ENDGAME B.3.2 step 2: wg_FreePatchList is `Collection::Array<>::~Array` over
+// the `kSpec_WgPathVec` row that worldgen_f390_coastline.cpp defines for this
+// same hf+0x18 array (its append is retail 0x140024460). Compared against the
+// retail body 0x1400175d0 (re-decompiled 2026-09-13): per element MemFree the
+// inner buffer and zero its header, then MemFree the outer block and zero
+// data/count/capacity — which is exactly "destroy every element, then
+// ArrayDtorImpl". The old transcription skipped zeroing the inner headers of a
+// block it was about to free; unobservable. wg_FreeScalarList is NOT converted:
+// it leaves +0x0c (capacity) untouched where ~Array zeroes it, and its retail
+// body is not pinned.
 // ============================================================
+extern const rtcoll::ArraySpec kSpec_WgPathVec;   // worldgen_f390_coastline.cpp
+using WgPathVecArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                         Collection::ExplicitSpec<&kSpec_WgPathVec>>;
+
 static void wg_FreePatchList(void* hdr) {
-    uint8_t* h = (uint8_t*)hdr;
-    void* data = *(void**)(h + 0x00);
-    int   count = *(int32_t*)(h + 0x08);
-    if (data && fn_MemFreeStatic) {
-        uint8_t* e = (uint8_t*)data;
-        for (int i = 0; i < count; ++i) {
-            void* inner = *(void**)(e + (size_t)i * 0x10);   // each elem = {void* recs, int count}
-            if (inner) fn_MemFreeStatic(inner);
-        }
-        fn_MemFreeStatic(data);
-    }
-    *(void**)(h + 0x00) = nullptr;
-    *(int32_t*)(h + 0x08) = 0;
-    *(int32_t*)(h + 0x0c) = 0;
+    // B.3.2 bridge: hf+0x18 is still a raw {data,count,cap} triple.
+    reinterpret_cast<WgPathVecArray*>(hdr)->~Array();
 }
 
 static void wg_FreeScalarList(void* hdr) {

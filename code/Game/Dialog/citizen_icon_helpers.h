@@ -6,6 +6,7 @@
 //   CitizenUI_UpdateIconDisplay — FUN_14006aed0
 //   CitizenUI_BuildIconArray   — FUN_14006abf0
 
+#include "Dialog/dialog_array_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
@@ -100,33 +101,15 @@ inline void CitizenUI_BuildIconArray_Impl(uintptr_t param1, uintptr_t groupElemI
             uint8_t ibpBuf[8];
             fn_InternalBasePtr_Ctor(ibpBuf, wholeElem);
 
-            // Push to whole array (dynamic array at param1+0)
-            uint32_t oldCount = *(uint32_t*)(param1 + 8);
-            uint32_t newCount = oldCount + 1;
-            void*    oldPtr   = *(void**)(param1);
-            *(uint32_t*)(param1 + 8) = newCount;
-
-            int oldCap = *(int*)(param1 + 12);
-            if (oldCap < (int)newCount) {
-                int newCap = (oldCount != 0) ? (int)newCount * 3 : (int)newCount;
-                *(int*)(param1 + 12) = newCap;
-                void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 8, 8);
-                *(void**)(param1) = newBuf;
-            }
-
-            void* curPtr = *(void**)(param1);
-            int copyStart = (oldPtr == curPtr) ? (int)oldCount : 0;
-            for (int k = copyStart; k < (int)newCount; k++) {
-                uint64_t* dst = (uint64_t*)((uintptr_t)curPtr + k * 8);
-                if (dst) {
-                    *dst = 0;
-                    if (k < (int)oldCount)
-                        *dst = *(uint64_t*)((uintptr_t)oldPtr + k * 8);
-                    else
-                        *dst = *(uint64_t*)ibpBuf;
-                }
-            }
-            if (oldPtr != curPtr) fn_MemFreeStatic(oldPtr);
+            // Push to whole array (dynamic array at param1+0).
+            // B.3.2 bridge: param1+0 is Collection::Array<{InternalBasePtr}>
+            // (stride 8, count +8, capacity +0xC) inside a struct §B.2 has not
+            // converted, so it is reached at its offset. The old copy loop wrote
+            // `*dst = 0;` then unconditionally overwrote the same qword — a
+            // transcription artifact with no net effect; only the second write
+            // (the copied-old-entry or the new IBP) mattered.
+            auto& wholeArr = DlgArray<8>(param1, 0);
+            wholeArr.SetSize(wholeArr.GetSize() + 1, DlgElem<8>{{*(uint64_t*)ibpBuf}});
         }
 
         // --- Half icon element ---
@@ -149,34 +132,14 @@ inline void CitizenUI_BuildIconArray_Impl(uintptr_t param1, uintptr_t groupElemI
             uint8_t ibpBuf[8];
             fn_InternalBasePtr_Ctor(ibpBuf, halfElem);
 
-            // Push to half array (at param1+0x10)
+            // Push to half array (at param1+0x10).
+            // B.3.2 bridge: param1+0x10 is Collection::Array<{InternalBasePtr}>
+            // (stride 8, count +0x18, capacity +0x1C) inside a struct §B.2 has not
+            // converted, so it is reached at its offset. Same transcription-artifact
+            // double-write as the whole array above; only the second write mattered.
             uintptr_t halfBase = param1 + 0x10;
-            uint32_t oldCount = *(uint32_t*)(halfBase + 8);
-            uint32_t newCount = oldCount + 1;
-            void*    oldPtr   = *(void**)(halfBase);
-            *(uint32_t*)(halfBase + 8) = newCount;
-
-            int oldCap = *(int*)(halfBase + 12);
-            if (oldCap < (int)newCount) {
-                int newCap = (oldCount != 0) ? (int)newCount * 3 : (int)newCount;
-                *(int*)(halfBase + 12) = newCap;
-                void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 8, 8);
-                *(void**)(halfBase) = newBuf;
-            }
-
-            void* curPtr = *(void**)(halfBase);
-            int copyStart = (oldPtr == curPtr) ? (int)oldCount : 0;
-            for (int k = copyStart; k < (int)newCount; k++) {
-                uint64_t* dst = (uint64_t*)((uintptr_t)curPtr + k * 8);
-                if (dst) {
-                    *dst = 0;
-                    if (k < (int)oldCount)
-                        *dst = *(uint64_t*)((uintptr_t)oldPtr + k * 8);
-                    else
-                        *dst = *(uint64_t*)ibpBuf;
-                }
-            }
-            if (oldPtr != curPtr) fn_MemFreeStatic(oldPtr);
+            auto& halfArr = DlgArray<8>(halfBase, 0);
+            halfArr.SetSize(halfArr.GetSize() + 1, DlgElem<8>{{*(uint64_t*)ibpBuf}});
         }
 
         // Re-check group element (may have been reallocated)

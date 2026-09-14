@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <cstddef>
 
+#include "collection/Collection.h"   // Collection::Array<T> (runtime/types)
 #include "VideoDX11Data.h"
 #include "dx11_seam.h"   // Vt / VtGhidraAddr, used by Dx11VtableAddress
 #include "resolve.h"
@@ -121,15 +122,21 @@ bool Dx11VerifyDeviceSingleton();
 // +0x0C is inferred to be the capacity from the universal {data,count,capacity}
 // shape used elsewhere in Runtime (e.g. DeviceData+0x60/+0x68/+0x6c). Nothing
 // in this lane reads it.
-struct RtArray {
-    void*   data;      // +0x00
-    int32_t length;    // +0x08
-    int32_t capacity;  // +0x0C  (inferred, never read here)
-};
-static_assert(sizeof(RtArray) == 0x10, "Collection::Array<T> header size");
-static_assert(offsetof(RtArray, data)     == 0x00, "RtArray::data");
-static_assert(offsetof(RtArray, length)   == 0x08, "RtArray::length");
-static_assert(offsetof(RtArray, capacity) == 0x0C, "RtArray::capacity");
+//
+// ENDGAME B.3.2 step 2 — this WAS a private `RtArray` POD spelling the same
+// three fields. It is now the real `Collection::Array<T>`
+// (runtime/types/collection/Collection.h), which is where that layout has been
+// pinned since Wave 2 and which the three static_asserts below still check
+// field for field. The two shader-program readers are pure READ views over
+// memory Runtime owns: nothing here constructs, resizes or destroys one, so the
+// class's SetSize/~Array (and therefore the allocator) are never reached from
+// dx11/.
+using RtByteCodeBlob = Collection::Array<uint8_t>;
+using RtByteCodeList = Collection::Array<RtByteCodeBlob>;
+static_assert(sizeof(RtByteCodeBlob) == 0x10, "Collection::Array<T> header size");
+static_assert(offsetof(RtByteCodeBlob, _data)     == 0x00, "Array::_data @ +0x00");
+static_assert(offsetof(RtByteCodeBlob, _size)     == 0x08, "Array::_size @ +0x08");
+static_assert(offsetof(RtByteCodeBlob, _capacity) == 0x0C, "Array::_capacity @ +0x0C");
 
 // ============================================================
 // Video::ShaderProgram — the owner of VertexProgramData / PixelProgramData
@@ -152,13 +159,13 @@ static_assert(offsetof(RtArray, capacity) == 0x0C, "RtArray::capacity");
 // one compiled byte-code blob per shader permutation, at most 4 of which the
 // DX11 backend ever creates.
 struct ShaderProgramOwner {
-    uint8_t opaque00[0x40];  // +0x00  parameters, constants, textures, ...
-    RtArray byteCode;        // +0x40  Array<Array<uint8>>, one blob per permutation
+    uint8_t        opaque00[0x40];  // +0x00  parameters, constants, textures, ...
+    RtByteCodeList byteCode;        // +0x40  Array<Array<uint8>>, one blob per permutation
 };
 static_assert(offsetof(ShaderProgramOwner, byteCode) == 0x40,
               "Video::ShaderProgram byte-code array @ +0x40 (0x1800041a0)");
 // The count the loop compares against is byteCode.length at +0x48.
-static_assert(offsetof(ShaderProgramOwner, byteCode) + offsetof(RtArray, length) == 0x48,
+static_assert(offsetof(ShaderProgramOwner, byteCode) + offsetof(RtByteCodeBlob, _size) == 0x48,
               "Video::ShaderProgram permutation count @ +0x48 (0x1800041a0)");
 
 // The DX11 backend creates at most this many shader permutations, regardless of
@@ -187,19 +194,22 @@ static_assert(sizeof(PixelProgramData::variants) / sizeof(void*) == kShaderVaria
 //     MOV  RAX, qword ptr [R9 + 0x20]   ; element array base (stride 0x20)
 //     MOV  R9,  qword ptr [R9 + 0x38]   ; input-signature byte code
 //     MOVSXD RDX, dword ptr [R9 + 0x40] ; input-signature length
+// ENDGAME B.3.2 step 2 — both members are the real `Collection::Array<T>`, with
+// the element type spelled out instead of a `void*` the reader had to cast.
+struct VertexLayoutElement;
 struct VertexLayoutOwner {
-    uint8_t opaque00[0x20];  // +0x00
-    RtArray elements;        // +0x20  Array<Element>, stride 0x20
-    uint8_t opaque30[0x08];  // +0x30
-    RtArray signature;       // +0x38  Array<uint8> — the vertex-shader input signature
+    uint8_t opaque00[0x20];                        // +0x00
+    Collection::Array<VertexLayoutElement> elements;   // +0x20  stride 0x20
+    uint8_t opaque30[0x08];                        // +0x30
+    Collection::Array<uint8_t> signature;          // +0x38  the vertex-shader input signature
 };
 static_assert(offsetof(VertexLayoutOwner, elements) == 0x20,
               "Video::VertexLayout element array @ +0x20 (0x180003ff0)");
-static_assert(offsetof(VertexLayoutOwner, elements) + offsetof(RtArray, length) == 0x28,
+static_assert(offsetof(VertexLayoutOwner, elements) + offsetof(RtByteCodeBlob, _size) == 0x28,
               "Video::VertexLayout element count @ +0x28 (0x180003ff0)");
 static_assert(offsetof(VertexLayoutOwner, signature) == 0x38,
               "Video::VertexLayout input signature @ +0x38 (0x180003ff0)");
-static_assert(offsetof(VertexLayoutOwner, signature) + offsetof(RtArray, length) == 0x40,
+static_assert(offsetof(VertexLayoutOwner, signature) + offsetof(RtByteCodeBlob, _size) == 0x40,
               "Video::VertexLayout input-signature length @ +0x40 (0x180003ff0)");
 
 // Video::VertexLayout::Element — 0x20 bytes.

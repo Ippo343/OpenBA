@@ -26,6 +26,7 @@
 #include "Tool.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -320,43 +321,19 @@ static_assert(sizeof(TileRecord) == 0x14, "TileRecord size mismatch");
 // ============================================================
 // Dynamic tile array: mirrors engine's grow pattern
 // ============================================================
-struct TileArray {
-    TileRecord* data;
-    int32_t count;
-    int32_t capacity;
-
-    TileArray() : data(nullptr), count(0), capacity(0) {}
-
-    void push(const TileRecord& rec) {
-        int newCount = count + 1;
-        if (newCount > capacity) {
-            int newCap = (count == 0) ? newCount : newCount * 3;
-            TileRecord* newData = (TileRecord*)fn_MemAlloc(
-                g_pMemAllocSingleton, (uint64_t)newCap * sizeof(TileRecord), 4);
-            if (newData && data && count > 0) {
-                memcpy(newData, data, (size_t)count * sizeof(TileRecord));
-            }
-            if (data) {
-                fn_MemFreeStatic(data);
-            }
-            data = newData;
-            capacity = newCap;
-        }
-        if (data) {
-            data[count] = rec;
-        }
-        count = newCount;
-    }
-
-    void free() {
-        if (data) {
-            fn_MemFreeStatic(data);
-            data = nullptr;
-        }
-        count = 0;
-        capacity = 0;
-    }
-};
+// ENDGAME B.3.2 step 2: this WAS a struct with a hand-written `push` (a copy of
+// rtcoll::SetSizeCore specialised to one append) and a `free` (a copy of
+// Collection::Array<T>::~Array). It is now the real template, trait-derived row:
+// stride 0x14, align 4, byteCopy, init == nullptr, destroy == nullptr. Compared arm
+// for arm before the swap: push always had newCount == count + 1, so its
+// `(count == 0) ? n : n*3` rule is the reference rule; MemAlloc(cap * 0x14, align 4);
+// prefix memcpy'd only into a freshly allocated block (== "only when the block
+// moved"); the old block freed on that same path; the new slot takes the fill;
+// `count = newCount` stored after the allocation here vs before it in SetSizeCore,
+// which nothing observes. `free` was MemFree + zero data/count/capacity == ~Array.
+// Out-of-memory-only difference: push skipped the store when the block came back
+// null; SetSizeCore skips the null element address per iteration. Same outcome.
+using TileArray = Collection::Array<TileRecord>;
 
 // ============================================================
 // DragPlacementTool::Draw (vtable +0x40, Slot8)
@@ -415,7 +392,7 @@ void DragPlacementTool_Draw_Impl(DragPlacementTool* self, void* context, char pa
                 rec.flags = 0;                // no special flags
                 rec.color = 0xffffff00;       // yellow
                 rec.extra = 0;
-                existArr.push(rec);
+                existArr.SetSize(existArr._size + 1, rec);
             }
         }
 
@@ -426,7 +403,7 @@ void DragPlacementTool_Draw_Impl(DragPlacementTool* self, void* context, char pa
         // arr1 = 0x14-byte tile records, arr2 = 0x20-byte road-style records
         // For placement tools, arr2 is always empty.
         fn_TileRender(nullptr, context, (void*)&existArr, (void*)&empty);
-        existArr.free();
+        // existArr / empty are released by ~Array at scope exit (no early return in scope).
     }
 
     // --- Section 2: Current drag area overlay ---
@@ -533,7 +510,7 @@ void DragPlacementTool_Draw_Impl(DragPlacementTool* self, void* context, char pa
                         rec.flags = hasExisting ? 2u : 0u;
                         rec.color = color;
                         rec.extra = 0;
-                        dragArr.push(rec);
+                        dragArr.SetSize(dragArr._size + 1, rec);
 
                         colIdx++;
                     } while ((int)colIdx <= (int)maxCol);
@@ -545,7 +522,7 @@ void DragPlacementTool_Draw_Impl(DragPlacementTool* self, void* context, char pa
         // Render drag area tiles
         TileArray empty;
         fn_TileRender(nullptr, context, (void*)&dragArr, (void*)&empty);
-        dragArr.free();
+        // dragArr / empty are released by ~Array at scope exit (no early return in scope).
     }
 }
 

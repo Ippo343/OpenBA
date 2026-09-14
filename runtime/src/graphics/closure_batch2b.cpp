@@ -37,6 +37,14 @@ void* GeometryVtable() {
 // `Array<Geometry*>::operator=` — retail 0x18001b1a0, the CALL at 0x180015b8b.
 // By address, registry-first: batch 2 ported it in
 // runtime/src/collection/array_destroy.cpp, so this lands on our body.
+//
+// ENDGAME B.3.2 step 2 (callers) — NOT converted to `dst->_attached =
+// src->_attached`. `Geometry::_attached` is a real `Collection::Array<
+// Geometry*>`, but the class's `operator=` is presently `=default` (a
+// SHALLOW bitwise copy — Collection.h's Array banner: the deep
+// `ArrayAssignCore` this address runs becomes `operator=` only once the last
+// bitwise copier converts). Rewriting this call as a member assignment would
+// silently swap the deep, allocator-owning assign for a shallow one.
 void ArrayGeometryPtrAssign(void* dst, const void* src) {
     using Fn = void* (*)(void*, const void*);
     static Fn fn = nullptr;
@@ -57,6 +65,16 @@ void CameraCopyCtor(void* dst, const void* src) {
 // The per-element copy constructor the eh_vector iterator is handed at
 // 0x18001bece: `Collection::Array<T>::Array(const Array&)`, retail 0x18001c620
 // (`dst[0]=0; dst[1]=0; operator=(dst, src)` — 0x18001cd30).
+//
+// ENDGAME B.3.2 step 2 (callers) — NOT converted. Same reason as
+// `ArrayGeometryPtrAssign` above: `Collection::Array<T>`'s copy CONSTRUCTOR is
+// also `=default` (shallow) today, so there is no member spelling yet that
+// reproduces this deep zero-then-assign. `T` here is `RendererDrawItem`
+// (Camera.h, 0x38 bytes — array_destroy.cpp's "Array<blob0x38>" names the
+// element WIDTH, not an anonymous type: this is
+// `Collection::Array<RendererDrawItem>::Array(const Array&)`, the copy ctor
+// of `RendererDrawGroup::items[i]`), a real, named C++ type — the missing
+// piece is only the class's copy constructor, not the element type.
 void InnerArrayCopyCtor(void* dst, const void* src) {
     using Fn = void* (*)(void*, const void*);
     static Fn fn = nullptr;

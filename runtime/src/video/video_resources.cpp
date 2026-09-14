@@ -470,6 +470,19 @@ void Video_Configuration_Dtor(void* self) {
 // FreeLibrary, no clear. Device.h's banner warns that the +0x40 array and the
 // +0xB0 array are easy to conflate; the dtor settles it, it destroys the first
 // and ignores the second.
+// NOT CONVERTED (ENDGAME B.3.2 step 2): the three `rtcoll::ArrayDtorImpl` calls
+// below (@+0x40, @+0x30/free-only, @+0x20) have no real `Collection::Array<T>`
+// member to call `.~Array()` on. `Device` (runtime/types/video/Device.h)
+// deliberately splits each array into three independently named scalar fields
+// — e.g. `modeData`/`modeCount`/`modeCapacity` — rather than one
+// `Collection::Array<DisplayMode>` object, and dozens of OTHER call sites in
+// this file and elsewhere in video/ already address them by those individual
+// names. Folding them into one real Array member is a struct-layout change
+// with tree-wide fallout, not a caller conversion, and risks colliding with
+// whichever batch owns the rest of video/'s Device usage. `HdrAt()` (this
+// file) already does the correct thing for a split layout: it builds a
+// temporary `ArrayHdr` view over the three adjacent words for exactly this
+// call, which is what a member call would do internally anyway.
 void Video_Device_Dtor(Device* self) {
     // ---- 1 & 2: the DeviceData companion -----------------------------------
     void* dd = self->deviceData;

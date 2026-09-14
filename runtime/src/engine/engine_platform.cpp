@@ -206,6 +206,15 @@ void ResetConfigurations(Engine* self) {
     // (0x18000f7d0 -> 0x18000f890 / 0x18000fa90 / 0x180009c30). By address, so
     // a later collection lane that ports it is picked up automatically; at
     // cutover this is part of the Half B residual named in the banner.
+    //
+    // NOT CONVERTED (ENDGAME B.3.2 step 2): 0x18000f7d0 is `rtsetclear::Clear`,
+    // a `Collection::Set<Pair<String,String>>::Clear` door. Calling it as a
+    // member needs `Persistence::settingsMapRoot` (runtime/types/io/
+    // Persistence.h, currently a raw `void* settingsMapRoot` + a separate
+    // `settingsMapCount`) to be a real `Collection::Set<Pair<String,String>,
+    // DefaultAllocator, Pair<String,String>, AVLCompare>` member — that header
+    // is outside this batch's file list (runtime/types/io, not runtime/src/
+    // engine), so this stays a by-address call.
     void** pslot = PersistenceSingletonSlot();
     if (pslot && *pslot) {
         if (uintptr_t clear = ResolveAddr(Module::Runtime, 0x18000f7d0))

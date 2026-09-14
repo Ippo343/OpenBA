@@ -72,6 +72,13 @@ struct PtrArray {
 // which is how retail inlines it at both append sites. Identical growth rule to
 // AddPurchaseOrder in tradeui_leaves.cpp: capacity = newCount, then newCount * 3
 // when the array was non-empty; MemAlloc(cap * 8, 8) via the STATIC two-arg form.
+//
+// B.3.2 NOT CONVERTED to Collection::Array<T>::SetSize, same reason as
+// AddPurchaseOrder's append in tradeui_leaves.cpp: the `if (!grown)` arm below
+// restores count and cap and returns, and SetSize has no failure path — it
+// commits the new size before allocating, exactly as retail does. That guard is
+// standalone-only (retail never checks) and dropping it to fit the template
+// would trade a bail-out for a wild write.
 void AppendPtr(PtrArray* a, void* value) {
     if (!a) return;
     const int32_t oldCount = a->count;

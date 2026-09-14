@@ -151,6 +151,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Modification.h"
 #include "../../types/system/Filename.h"
+#include "../../types/collection/Collection.h"   // ENDGAME B.3.2 step 2 — see below
 #include "../system/string.h"
 #include "../system/pod_bridge.h"
 
@@ -342,7 +343,9 @@ void* RtColl_ArrayFilenameAssign_1800091f0(void* dstv, const void* srcv) {
     ModArray* dst = static_cast<ModArray*>(dstv);
     const ModArray* src = static_cast<const ModArray*>(srcv);
     if (dst == src) return dst;
-    RtColl_ArrayFilenameDtor_1800098d0(dst);    // CALL 0x1800098d0
+    // ENDGAME B.3.2 step 2 — retail 0x1800098d0; see the identical conversion's
+    // rationale on Mod::~Mod's +0x70 site below (trait-derived, no explicit spec).
+    reinterpret_cast<Collection::Array<System::Filename>&>(*dst).~Array();
     ArrayAssignGrow(dst, src, 8, 8);
     for (int32_t i = 0; i < dst->size; ++i) {
         Filename* d = reinterpret_cast<Filename*>(
@@ -539,7 +542,15 @@ void* RtIo_Mod_Assign_180026ef0(void* dstv, const void* srcv) {
 void RtIo_Mod_Dtor_180011460(void* selfv) {
     Mod* self = static_cast<Mod*>(selfv);
 
-    RtColl_ArrayFilenameDtor_1800098d0(&self->files);   // +0x70
+    // ENDGAME B.3.2 step 2 — +0x70 retail 0x1800098d0. `System::Filename` is a
+    // real class (B.3.1), so `SpecFor<System::Filename>()` builds EXACTLY the
+    // row this shim hand-derives: assign is a placement copy-construct
+    // (filesystem_find_win.cpp's `AssignFilename`) and destroy is a per-element
+    // `~Filename()` loop (`DestroyFilenameArray`) — the same two bodies, so the
+    // trait-derived `Collection::Array<System::Filename>` needs no explicit
+    // spec. `files` stays the `ModArray` POD (Mod is not yet a class), so this
+    // is the transitional bridge, not a field re-type.
+    reinterpret_cast<Collection::Array<System::Filename>&>(self->files).~Array();
 
     RtColl_SetDestroySubtree_180010470(&self->set, self->set.root);   // +0x60
     self->set.root = nullptr;
@@ -550,8 +561,13 @@ void RtIo_Mod_Dtor_180011460(void* selfv) {
     // refcount code this replaced.
     Sys(self->file).~Filename();
 
-    RtColl_ArrayU8Dtor_1800112a0(&self->bytes);         // +0x40
-    RtColl_ArrayI32Dtor_1800111a0(&self->ints);         // +0x30
+    // ENDGAME B.3.2 step 2 — +0x40/+0x30, retail 0x1800112a0 / 0x180011110.
+    // `uint8_t`/`int32_t` are trivially destructible, so `SpecFor<T>()` sets
+    // `destroy = nullptr` and the class's dtor is exactly `ArrayFreeBuffer`
+    // (`MemFree(_data)` then zero the three fields) through the same
+    // `rtcoll::MemFree` door (0x1800c7ad0) — no explicit spec needed.
+    reinterpret_cast<Collection::Array<uint8_t>&>(self->bytes).~Array();   // +0x40
+    reinterpret_cast<Collection::Array<int32_t>&>(self->ints).~Array();   // +0x30
 
     char** shared[3] = { &self->description, &self->author, &self->name };
     for (int i = 0; i < 3; ++i) {

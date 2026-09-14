@@ -106,6 +106,7 @@
 // render context (Clear, the shader-time constants, the viewport, _frameIndex),
 // so the layout has to be the asserted one rather than raw byte offsets.
 #include "../../types/video/Context.h"
+#include "../collection/array_internal.h"  // ENDGAME B.3.2 step 2: kSpec_Fill8Z bridge
 
 // ----------------------------------------------------------------------------
 // ResolveAddr / ResolveExport, forward-declared rather than pulled in from
@@ -227,6 +228,13 @@ UiUpdateFn UserInterfaceUpdate() {
 // 0x180010ab0 — the tail call of ~UpdateLoop, on (this + 0x10). Already known
 // to our tree as fn_ListCleanup (engine/funcs/engine_funcs.h:277), resolved
 // there from this same address.
+// NOT CONVERTED (ENDGAME B.3.2 step 2): 0x180010ab0 is a J2 entry
+// (array_destroy.cpp), `ReleaseStringsCounted(..., kD_Str_08)` then
+// `ArrayDtorImpl` — a per-element String RELEASE, not a trivial destroy.
+// `UpdateLoop::_internalListA` (runtime/types/engine/UpdateLoop.h) is typed
+// only as `void* _internalListA` — there is no `Collection::Array<T>` member
+// here to call `.~Array()` on, and inventing the element type is struct work
+// this "callers" step does not cover.
 ListCleanupFn ListCleanup() {
     static ListCleanupFn fn = reinterpret_cast<ListCleanupFn>(
         ResolveAddr(Module::Runtime, 0x180010ab0));
@@ -250,11 +258,15 @@ ModArrayCopyFn ModArrayCopy() {
 // WAVE 9 LANE Q: both addresses are now registered ports
 // (runtime/src/collection/array.cpp), so this reaches our SetSize. They stay
 // separate registrations for exactly the reason above.
-ArraySetSizeFillFn ArraySetSizeFill() {
-    static ArraySetSizeFillFn fn = reinterpret_cast<ArraySetSizeFillFn>(
-        ResolveAddr(Module::Runtime, 0x18007a0d0));
-    return fn;
-}
+//
+// ENDGAME B.3.2 step 2 — the forwarder above is GONE at both call sites below:
+// `UserInterface::_addDialogs` is already `Collection::Array<DialogInstancePtr>`
+// (runtime/types/ui/UserInterface.h). 0x18007a0d0 is `kSpec_Fill8Z`
+// (`Assign8Z`, a zero-then-copy double write — see achievement_manager.cpp's
+// banner on the same assign body for why that keeps a row from being
+// trait-equivalent even for a trivial pointer element), so it stays a
+// hand-derived `rtcoll::AsArray<&kSpec_Fill8Z>` bridge. The row stays
+// registered in array.cpp for runtime/src/ui/element.cpp's own instantiation.
 
 // ---- exported DATA symbols --------------------------------------------------
 template <typename T>
@@ -775,7 +787,9 @@ extern "C" void RtEngine_DialogLoopT_Startup(DialogLoopT* self) {
     // _ui._addDialogs.SetSize(size + 1, ret) — the append. Update drains that
     // array back-to-front into the live dialog list next frame
     // (runtime/types/ui/UserInterface.h).
-    ArraySetSizeFill()(&self->_ui._addDialogs, self->_ui._addDialogs._size + 1, &ret);
+    // retail 0x18007a0d0 — kSpec_Fill8Z; see the banner above.
+    rtcoll::AsArray<&rtcoll::kSpec_Fill8Z>(&self->_ui._addDialogs)
+        ->SetSizeFill(self->_ui._addDialogs.GetSize() + 1, &ret);
 
 }
 
@@ -851,7 +865,9 @@ extern "C" void RtEngine_DialogLoaderLoopT_Startup(DialogLoaderLoopT* self) {
     void** dialogVtable = *reinterpret_cast<void***>(dialog);
     reinterpret_cast<Slot4Fn>(dialogVtable[4])(dialog);
 
-    ArraySetSizeFill()(&self->_ui._addDialogs, self->_ui._addDialogs._size + 1, &ret);
+    // retail 0x18007a0d0 — kSpec_Fill8Z; see the banner above.
+    rtcoll::AsArray<&rtcoll::kSpec_Fill8Z>(&self->_ui._addDialogs)
+        ->SetSizeFill(self->_ui._addDialogs.GetSize() + 1, &ret);
 
 
     // The DLL's own static Loader instance, by NAME. Resolved, never minted:

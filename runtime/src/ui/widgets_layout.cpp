@@ -37,6 +37,7 @@
 #include "../../types/ui/TabElement.h"
 #include "../../types/ui/PageElement.h"
 #include "../../types/ui/GraphElement.h"
+#include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_I32 etc.
 
 // ----------------------------------------------------------------------------
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
@@ -117,29 +118,30 @@ void RtMemFree(void* p) {
     RT_EXPORT_ONCE(Fn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
 }
 
-// Collection::Array<int32_t>::SetSize -- retail 0x18002fea0. Not exported (a
-// header-only template instantiation, per runtime/types/collection/
-// Collection.h); resolved by address like scene.cpp's RtArrayU32SetSize.
-// WAVE 9 LANE Q: 0x18002fea0 and 0x1800764c0 below are both registered ports
-// now, so these reach our SetSize. Note 0x18002fea0 is one of the TWO
-// instantiations that leave the new tail UNINITIALISED (its `else` arm is
-// empty) -- the port keeps that, and an oracle must not compare it.
-void RtArrayInt32SetSize(void* arrayHeader, int32_t n) {
-    using Fn = void (*)(void*, int32_t);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18002fea0));
-    fn(arrayHeader, n);
+// ENDGAME B.3.2 step 2 — the `RtArrayInt32SetSize`/`RtArrayCellsSetSize`
+// forwarders that used to sit here are GONE. `TableElement`'s row/col-size
+// and cell arrays are reached by raw offset (`B(self, k…)`) rather than a
+// typed field, so both bridge through their row with `rtcoll::AsArray`:
+//
+//   0x18002fea0  kSpec_I32      TRAIT-EQUIVALENT for int32_t (tail left
+//                UNINITIALISED, matching `SpecFor<int32_t>()`'s empty `init`)
+//   0x1800764c0  kSpec_PtrZero  NOT trait-equivalent: its `InitZero8` ZEROES
+//                each new tail slot, which a trait-derived `Array<Element*>`
+//                (a pointer is trivially default-constructible, so the trait
+//                leaves the tail UNINITIALISED) would not do.
+inline void RtArrayInt32SetSize(void* arrayHeader, int32_t n) {
+    rtcoll::AsArray<&rtcoll::kSpec_I32>(arrayHeader)->SetSize(n);
+}
+inline void RtArrayCellsSetSize(void* arrayHeader, int32_t n) {
+    rtcoll::AsArray<&rtcoll::kSpec_PtrZero>(arrayHeader)->SetSize(n);
 }
 
-// Collection::Array<InternalPtr<Element>>::SetSize -- retail 0x1800764c0
-// (8-byte-element instantiation, same growth policy, not exported).
-void RtArrayCellsSetSize(void* arrayHeader, int32_t n) {
-    using Fn = void (*)(void*, int32_t);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800764c0));
-    fn(arrayHeader, n);
-}
-
-// Destroy-elements-and-free-buffer helper GraphElement::RemoveGraphs tail-
-// calls -- retail 0x1800416d0, not exported.
+// ENDGAME B.3.2 step 2 — left as a free-function call, deliberately.
+// 0x1800416d0 is array_destroy.cpp's J2_ENTRY driving `FreeInnerArraysCounted`
+// off a `DestroySpec` (`kD_InnerArr_18`), a different type/dispatch from the
+// `rtcoll::ArraySpec` a `Collection::Array<T>::~Array()` would call, and no
+// `kSpec_*` row exists for it — per the batch rule, a "DtorElem" helper may
+// not be convertible at all.
 void RtGraphArrayClear(void* arrayHeader) {
     using Fn = void (*)(void*);
     static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800416d0));
@@ -692,11 +694,13 @@ void GraphElement_AddGraphPoint(void* self, int32_t graph, int32_t value) {
     uint8_t* seriesData = *reinterpret_cast<uint8_t**>(B(self, GRE::kGraphsData));
     // record = data + graph*0x18; the point Array header sits at record + 8.
     uint8_t* pointArray = seriesData + static_cast<int64_t>(graph) * 0x18 + 8;
-    const int32_t newSize = *reinterpret_cast<int32_t*>(pointArray + 8) + 1;
 
-    using Fn = void (*)(void*, int32_t, const int32_t*);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180023830));
-    if (fn) fn(pointArray, newSize, &value);
+    // ENDGAME B.3.2 step 2 — the 0x180023830 forwarder is GONE. `kSpec_Fill4`
+    // is trait-equivalent for `int32_t` (same reasoning as
+    // runtime/src/graphics/scene.cpp's `_freeIds`), so the bridge is a plain
+    // `Array<int32_t>` view of the nested header.
+    auto* points = reinterpret_cast<Collection::Array<int32_t>*>(pointArray);
+    points->SetSize(points->GetSize() + 1, value);
 
 }
 
@@ -766,16 +770,17 @@ void GraphElement_AddGraph(void* self, uint32_t colour) {
     *reinterpret_cast<uint64_t*>(tmp + 0x08) = 0;
     *reinterpret_cast<uint64_t*>(tmp + 0x10) = 0;
 
-    using SetSizeFn = void (*)(void*, int32_t, const void*);
-    static SetSizeFn setSize = nullptr;                   // cache a hit, retry a miss
-    if (!setSize)
-        setSize = reinterpret_cast<SetSizeFn>(ResolveAddr(Module::Runtime, 0x1800417d0));
-    setSize(graphs, *reinterpret_cast<int32_t*>(B(self, GRE::kGraphsCount)) + 1, tmp);
+    // ENDGAME B.3.2 step 2 — both forwarders are GONE. `_graphs` is reached by
+    // raw offset (GraphElement.h's `Array<GraphSeries>`, NON-TRIVIAL
+    // `kSpec_GraphSeries`), so it bridges through the hand-derived row; the
+    // local `tmp+8` nested `Array<int32_t>` is a real stack object, so its
+    // teardown is a plain `.~Array()` (0x18001c750 is a J1, trait-equivalent
+    // for `int32_t`) — one destruction on this path, matching retail's single
+    // call.
+    rtcoll::AsArray<&rtcoll::kSpec_GraphSeries>(graphs)
+        ->SetSizeFill(*reinterpret_cast<int32_t*>(B(self, GRE::kGraphsCount)) + 1, tmp);
 
-    using DtorFn = void* (*)(void*);
-    static DtorFn dtor = nullptr;
-    if (!dtor) dtor = reinterpret_cast<DtorFn>(ResolveAddr(Module::Runtime, 0x18001c750));
-    dtor(tmp + 8);
+    reinterpret_cast<Collection::Array<int32_t>*>(tmp + 8)->~Array();
 
     uint8_t* data = *reinterpret_cast<uint8_t**>(graphs);
     *reinterpret_cast<uint32_t*>(data + old * 0x18) = colour;

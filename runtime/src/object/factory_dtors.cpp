@@ -153,6 +153,16 @@ struct PathStackArray {
 // (reference_the_macro_expands_to_the_prescribed_fix).
 // ---------------------------------------------------------------------------
 
+// NOT CONVERTED (ENDGAME B.3.2 step 2): 0x1800093e0 is `rtavl::PtrArrayDtor`,
+// a trivial J1-equivalent `Array<T*>::~Array` (avl_trees.cpp's own banner on
+// this address). Its two callers below operate on `TypeNode::value.children`
+// (`TypeRecord::{children, childCount, childCapacity}`,
+// runtime/types/object/TypeInfo.h) — three independently named scalar fields,
+// not a real `Collection::Array<TypeRecord*>` member, the same split-layout
+// situation `video/video_resources.cpp`'s `Device` hits. `TypeRecord` is used
+// by name (`->children`, `->childCount`) throughout type_system.cpp, so
+// folding the three fields into one Array member is struct-layout work with
+// wide fallout, not a caller conversion — stays a by-address call.
 static void PtrArrayDtor_1800093e0(void* arrayHdr) {
     using Fn = void* (*)(void*);
     static Fn fn = nullptr;
@@ -169,19 +179,11 @@ static void SetNodeFree_180009c30(void* ignoredThis, void* node) {
     fn(ignoredThis, node);
 }
 
-static void ArrayDtor_18001c750(void* arrayHdr) {
-    using Fn = void* (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001c750));
-    fn(arrayHdr);
-}
-
-static void ArrayDtor_18002fb70(void* arrayHdr) {
-    using Fn = void* (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18002fb70));
-    fn(arrayHdr);
-}
+// ENDGAME B.3.2 step 2 — `ArrayDtor_18001c750` and `ArrayDtor_18002fb70`
+// (0x18001c750, 0x18002fb70) are GONE: their one caller, RtObject_
+// InternalFactory_Dtor below, now calls `.~Array()` directly on the two real
+// `Collection::Array<T>` members. Both rows stay registered in array.cpp for
+// the rest of the tree.
 
 // ============================================================================
 // 0x180008250 — the recursive half of ~Factory's tree teardown.
@@ -290,9 +292,17 @@ void RtObject_Factory_Dtor(void* self) {
 // four external operands: 0x1801fc718, 0x18014b390, 0x1800c6c00, 0x18014b388.
 // ============================================================================
 void RtObject_InternalFactory_Dtor(void* self) {
-    uint8_t* p = static_cast<uint8_t*>(self);
-    ArrayDtor_18001c750(p + 0x10);   // _persistIds
-    ArrayDtor_18002fb70(p + 0x00);   // _objects
+    // ENDGAME B.3.2 step 2 — both calls are now direct member destructors:
+    // `InternalFactory::persistIds` (Array<int32_t>) and `::objects`
+    // (Array<Internal*>) are already real `Collection::Array<T>` members
+    // (runtime/types/object/Internal.h), and both 0x18001c750 and 0x18002fb70
+    // are J1 bodies (trivial destroy), which a trivially destructible
+    // `int32_t`/`Internal*` element's trait-derived `~Array()` IS byte for
+    // byte. Reverse declaration order is kept: persistIds (+0x10) before
+    // objects (+0x00), matching the banner above.
+    auto* factory = static_cast<::RtObject::InternalFactory*>(self);
+    factory->persistIds.~Array();   // retail 0x18001c750
+    factory->objects.~Array();      // retail 0x18002fb70
 }
 
 // ============================================================================

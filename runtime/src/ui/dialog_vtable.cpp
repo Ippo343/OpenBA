@@ -202,6 +202,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/Dialog.h"
+#include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_ExtStr10at08 etc.
 
 // Forward-declared rather than pulled in from standalone/resolve.h, for the
 // reason rt_port.h gives: that header drags in <windows.h> and runtime/src/
@@ -550,27 +551,28 @@ SerMemberFn ElementDescPtrSerialize() { static SerMemberFn f = ByAddr(0x180038f9
 SerMemberFn SpriteSheetPtrSerialize() { static SerMemberFn f = ByAddr(0x180004590); return f; }
 SerMemberFn ConfigPtrSerialize()      { static SerMemberFn f = ByAddr(0x1800756d0); return f; }
 
-// Array<T>::SetSize(array, newCount) — TWO arguments, not three. Lane Q's
-// correction on the SetSize family (eight instantiations taking two arguments
-// behind a three-argument typedef) was checked here per address: all four read
-// RCX and EDX and nothing else.
-using ArraySetSizeFn = void (*)(void*, uint32_t);
-ArraySetSizeFn SetSizeNamedTemplates() {   // stride 0x10
-    static ArraySetSizeFn f = reinterpret_cast<ArraySetSizeFn>(
-        ResolveAddr(Module::Runtime, 0x180075d20)); return f;
-}
-ArraySetSizeFn SetSizeTemplates() {        // stride 0x08
-    static ArraySetSizeFn f = reinterpret_cast<ArraySetSizeFn>(
-        ResolveAddr(Module::Runtime, 0x1800492d0)); return f;
-}
-ArraySetSizeFn SetSizeConfigs() {          // stride 0x20
-    static ArraySetSizeFn f = reinterpret_cast<ArraySetSizeFn>(
-        ResolveAddr(Module::Runtime, 0x180075b20)); return f;
-}
-ArraySetSizeFn SetSizeReferences() {       // stride 0x08
-    static ArraySetSizeFn f = reinterpret_cast<ArraySetSizeFn>(
-        ResolveAddr(Module::Runtime, 0x18002f070)); return f;
-}
+// ENDGAME B.3.2 step 2 — the four by-address SetSize forwarders that used to
+// sit here are GONE. All four target fields are the {pointer, count,
+// capacity} triples `Dialog.h` already lays out contiguously (and asserts) at
+// the SAME offsets `Collection::Array<T>` would use — the header just spells
+// them as three named members instead of one `Array<T>` member, the same
+// situation `dialog_ctor_dtor.cpp`'s dtor conversion bridges. None of the four
+// rows is trait-equivalent, so each call site below bridges through its own
+// hand-derived row with `rtcoll::AsArray<&SPEC>`:
+//
+//   0x180075d20  kSpec_ExtStr10at08  {0x10,8,assign,init,destroy,byteCopy=false}
+//                NON-TRIVIAL — Array<DialogNamedTemplate>
+//   0x1800492d0  kSpec_U64Zero       {8,8,Assign8,InitZero8,null,true} — the
+//                INIT is non-null (new tail slots are ZEROED), which a
+//                trait-derived `Array<void*>` would NOT do (a pointer is
+//                trivially default-constructible, so the trait leaves the
+//                tail UNINITIALISED) — Array<ExternalPtr<ElementDescription>>
+//   0x180075b20  kSpec_CfgEntry20    {0x20,8,assign,init,destroy,byteCopy=false}
+//                NON-TRIVIAL — Array<DialogControllerConfigEntry>
+//   0x18002f070  kSpec_U64Zero       same reasoning as 0x1800492d0 —
+//                Array<ExternalPtr<Object::External>>
+//
+// Every one of the four is the TWO-argument `SetSize(int)` member (no fill).
 
 // (serializer, count, entries)
 using EntriesSerializeFn = void (*)(Serializer*, uint32_t, void*);
@@ -647,7 +649,9 @@ extern "C" bool RtUiDialog_Serialize(RtUI::Dialog* self, rt::io::Stream* stream)
     {
         int32_t count = *i32(0x60);        // a STACK COPY, per 0x18011315e
         RecInt(rw, &count);
-        if (reading) SetSizeNamedTemplates()(base + 0x58, static_cast<uint32_t>(count));
+        if (reading)
+            rtcoll::AsArray<&rtcoll::kSpec_ExtStr10at08>(base + 0x58)
+                ->SetSize(count);          // retail 0x180075d20
         // RE-READ after SetSize: it reallocates.
         uint8_t* e = *reinterpret_cast<uint8_t**>(base + 0x58);
         for (int32_t i = 0; i < count; ++i, e += 0x10) {
@@ -660,7 +664,9 @@ extern "C" bool RtUiDialog_Serialize(RtUI::Dialog* self, rt::io::Stream* stream)
     {
         int32_t count = *i32(0x70);
         RecInt(rw, &count);
-        if (reading) SetSizeTemplates()(base + 0x68, static_cast<uint32_t>(count));
+        if (reading)
+            rtcoll::AsArray<&rtcoll::kSpec_U64Zero>(base + 0x68)
+                ->SetSize(count);          // retail 0x1800492d0
         TemplatesWalker()(&ser, static_cast<uint32_t>(count),
                           *reinterpret_cast<void**>(base + 0x68));
     }
@@ -669,7 +675,9 @@ extern "C" bool RtUiDialog_Serialize(RtUI::Dialog* self, rt::io::Stream* stream)
     {
         int32_t count = *i32(0x50);
         RecInt(rw, &count);
-        if (reading) SetSizeConfigs()(base + 0x48, static_cast<uint32_t>(count));
+        if (reading)
+            rtcoll::AsArray<&rtcoll::kSpec_CfgEntry20>(base + 0x48)
+                ->SetSize(count);          // retail 0x180075b20
         uint8_t* e = *reinterpret_cast<uint8_t**>(base + 0x48);
         for (int32_t i = 0; i < count; ++i, e += 0x20) {
             RecUInt(rw, reinterpret_cast<uint32_t*>(e));    // entry+0x00 _typeId
@@ -683,7 +691,9 @@ extern "C" bool RtUiDialog_Serialize(RtUI::Dialog* self, rt::io::Stream* stream)
     {
         int32_t count = *i32(0x80);
         RecInt(rw, &count);
-        if (reading) SetSizeReferences()(base + 0x78, static_cast<uint32_t>(count));
+        if (reading)
+            rtcoll::AsArray<&rtcoll::kSpec_U64Zero>(base + 0x78)
+                ->SetSize(count);          // retail 0x18002f070
         ReferencesWalker()(&ser, static_cast<uint32_t>(count),
                            *reinterpret_cast<void**>(base + 0x78));
     }

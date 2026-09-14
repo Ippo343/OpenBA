@@ -215,6 +215,17 @@ extern "C" void RtUi_SpriteSheet_Dtor(void* self) {
     release(p + 0x40);   // m_groupName
     release(p + 0x38);   // m_textureName
 
+    // ENDGAME B.3.2 step 2 — left as a free-function call, deliberately. This
+    // is array_destroy.cpp's J2_ENTRY(180004f50, ReleaseStringsCounted,
+    // kD_Str2_38) — an already-ported, but NOT `rtcoll::ArraySpec`-shaped,
+    // destroy: it drives `ReleaseStringsCounted` off a `DestroySpec`
+    // (`kD_Str2_38`), a different type and dispatch from the
+    // `rtcoll::ArraySpec::destroy` that `Collection::Array<T>::~Array()`'s
+    // template body calls. There is no `kSpec_*` row for this address the
+    // class could take as an `ExplicitSpec`, so per the batch rule that a
+    // "DtorElem" helper may not be convertible at all, `m_sprites`
+    // (SpriteSheet.h +0x20, `Collection::Array<SpriteInfo>`) stays reached
+    // through the seam rather than forced onto `.~Array()`.
     using ArrayDtorFn = void* (*)(void*);
     static ArrayDtorFn arrayDtor = nullptr;
     if (!arrayDtor) arrayDtor = reinterpret_cast<ArrayDtorFn>(

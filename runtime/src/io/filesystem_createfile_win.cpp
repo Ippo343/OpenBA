@@ -185,6 +185,28 @@ typedef void (*ArrayFilenameDtorFn)(void*);
 
 // The unexported AVL subtree free at 0x180008340 — ALREADY PORTED and
 // registered by runtime/src/collection/avl_trees.cpp:1252.
+//
+// ENDGAME B.3.2 step 2 (2026-09-13) — NOT CONVERTED to `Collection::Set<T>`,
+// deliberately. `FileSystem::packfileIndexRoot`/`packfileIndexCount` (+0x40/
+// +0x48) ARE a `Collection::Set<T>` header in every way that matters here, and
+// 0x180008340 IS `Set<T>::DestroySubtree` (avl_trees.cpp names it: "the
+// recursive subtree free"). What blocks the conversion:
+//   1. the element (`PackfileIndexNode`'s {key, packIndex, fileIndex}) is
+//      released ASYMMETRICALLY — only the `key` slot (a raw `const char*`, not
+//      a `System::String`) is `Release()`d, the packed {packIndex,fileIndex}
+//      qword is not. `Set<T>::DestroySubtree` calls `n->element.~T()`, a real
+//      C++ destructor over the WHOLE element; expressing "release only one
+//      raw-pointer field" would need a hand-written element type with a
+//      matching destructor, which is new class design, not a call-site swap.
+//   2. `packfileIndexRoot`/`Count` are two loose fields, not a typed member —
+//      other files reach the same tree by raw node pointer (`node[3]`/
+//      `node[4]` walks in filesystem.cpp, filesystem_find_win.cpp,
+//      filesystem_openfile_win.cpp, filesystem_packages.cpp), none of which
+//      are in this batch, so retyping the header field is out of scope.
+// The member that would be needed: `Collection::Set<PackfileIndexElem>` where
+// `PackfileIndexElem`'s destructor implements the key-only String release
+// (`StringReleaseInline`), once that type exists and the other four files'
+// raw walks are converted alongside it.
 typedef void (*SubtreeFreeFn)(void* tree, void* node);
 
 }  // namespace

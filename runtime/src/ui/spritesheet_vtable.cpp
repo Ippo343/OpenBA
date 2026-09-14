@@ -87,6 +87,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/SpriteSheet.h"
+#include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_Sprite38Z
 
 // Forward-declared rather than pulled in from standalone/resolve.h, for the
 // reason rt_port.h gives: that header drags in <windows.h> and runtime/src/
@@ -371,14 +372,13 @@ SerMemberFn StringSerialize() {
     static SerMemberFn f = ByAddr(0x1800c9930);
     return f;
 }
-// Array<SpriteInfo>::SetSize(array, newCount) — two arguments, not a member of
-// the SerMemberFn family, so it gets its own type.
-using ArraySetSizeFn = void (*)(void*, uint32_t);
-ArraySetSizeFn ArraySetSize() {
-    static ArraySetSizeFn f = reinterpret_cast<ArraySetSizeFn>(
-        ResolveAddr(Module::Runtime, 0x180078950));
-    return f;
-}
+// ENDGAME B.3.2 step 2 — the 0x180078950 forwarder that used to sit here is
+// GONE. `m_sprites` + `m_spriteCount` + `m_spriteCapacity` (SpriteSheet.h,
+// +0x20/+0x28/+0x2C) are the {data,size,capacity} triple
+// `Collection::Array<SpriteInfo>` would use, contiguous and asserted at those
+// offsets (same situation sprite.cpp's `AddSpriteInfo` bridges), and
+// `kSpec_Sprite38Z` is NON-TRIVIAL, so the call site below bridges through the
+// hand-derived row.
 // (serializer, count, entries)
 using EntriesSerializeFn = void (*)(Serializer*, uint32_t, void*);
 EntriesSerializeFn EntriesSerialize() {
@@ -569,7 +569,8 @@ extern "C" bool RtUi_SpriteSheet_Serialize(SpriteSheet* self, Stream* stream) {
     RecInt(rw, &count);
 
     if (ser.stream->direction == rt::io::kDirectionReading)
-        ArraySetSize()(&self->m_sprites, static_cast<uint32_t>(count));
+        rtcoll::AsArray<&rtcoll::kSpec_Sprite38Z>(&self->m_sprites)
+            ->SetSize(static_cast<int>(count));            // retail 0x180078950
 
     // Re-read AFTER SetSize: it reallocates.
     EntriesSerialize()(&ser, static_cast<uint32_t>(count), self->m_sprites);

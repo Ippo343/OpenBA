@@ -114,6 +114,7 @@
 #include "../../types/io/FileSystem.h"
 #include "../../types/io/Persistence.h"
 #include "../../types/system/Filename.h"
+#include "../../types/collection/Collection.h"   // ENDGAME B.3.2 step 2
 #include "../system/pod_bridge.h"
 
 using RtIo::BinaryFileStream;
@@ -162,7 +163,18 @@ struct BlockDescArray {
 };
 static_assert(offsetof(BlockDescArray, size) == 0x08, "Array::_size @ +0x08");
 
-typedef void     (*ArraySetSizeFn)(void*, int);                     // 0x18002a810
+// ENDGAME B.3.2 step 2 — 0x18002a810 (kSpec_Blk12, array.cpp) is
+// TRAIT-EQUIVALENT for `BlockDesc`: stride 0xc == sizeof(BlockDesc), align 4
+// == alignof(BlockDesc), assign is a pure 3-dword byte copy, init is null
+// (retail's tail is left uninitialised, matching a trivially
+// default-constructible T), destroy is null (BlockDesc is trivially
+// destructible). So the trait-derived `Collection::Array<BlockDesc>` IS
+// 0x18002a810 with no hand-derived spec needed; `BlockDescArray` above (kept
+// for its offset asserts) is the same three fields Persistence.h already
+// models loosely as `blockDescData`/`blockDescCount`, so this is a
+// reinterpret_cast bridge at the use site rather than a re-typed member of
+// `Persistence` (shared with persistence_startup.cpp / closure_batch2b_win.cpp
+// / engine/singleton_ctors.cpp, outside this batch).
 typedef uint32_t (*CrcComputeFn)(const void*, int, uint32_t);       // 0x1800c5490
 
 RtIO::FileSystem* Fs() {
@@ -276,10 +288,10 @@ extern "C" void RtIo_PersistenceWorker_GetSaveInfo(void* worker) {
                 BlockDescArray* const descs =
                     reinterpret_cast<BlockDescArray*>(&p->blockDescData);
                 {
-                    static ArraySetSizeFn fn = nullptr;
-                    if (!fn) fn = reinterpret_cast<ArraySetSizeFn>(
-                        ResolveAddr(Module::Runtime, 0x18002a810));
-                    fn(descs, static_cast<uint16_t>(p->fileHeader >> 16));  // 0x1800b678c
+                    // retail 0x18002a810 — trait-derived Array<BlockDesc>::SetSize
+                    // (see the kSpec_Blk12 note above the struct).
+                    reinterpret_cast<Collection::Array<BlockDesc>*>(&p->blockDescData)
+                        ->SetSize(static_cast<uint16_t>(p->fileHeader >> 16));  // 0x1800b678c
                 }
 
                 const int32_t n = descs->size;                // 0x1800b6791

@@ -640,6 +640,24 @@ void FactoryStartupRun(FactorySet* self) {
     // the port up with no edit. A NULL IS NOT CACHED (rt_resolve_cache.cpp's
     // contract): freezing one here would mean a Set port registered later
     // could never be reached, and nothing would say which symbol was missing.
+    //
+    // NOT CONVERTED to `Collection::Set<...>::Insert` (ENDGAME B.3.2 step 2),
+    // though this is the one Set-shaped site in this batch that looks
+    // PLAUSIBLE rather than clearly out of reach: `FactorySet` above is
+    // exactly `detail::SetHdr<TypeNode>`'s {root, count, pad} layout, `TypeNode`
+    // is 0x50 bytes — an 0x30-byte element, the width `runtime/src/collection/
+    // avl_trees.cpp` already has a ported core for (Collection.h's Set
+    // banner table) — and the key is a plain `uint32_t` compared numerically,
+    // which `AVLCompare`'s generic `a < b` fallback (`detail::CompareTraits
+    // <AVLCompare, K>`) already covers with no new Compare policy. But
+    // `FactorySet` is this file's own PROBE-ONLY view struct (its comment
+    // above: "the probe below allocates one, hence this declaration"), not the
+    // live `Object::Factory`'s type in `runtime/types/object` — retyping the
+    // ENGINE'S OWN factory singleton to a real `Collection::Set<TypeRecord,
+    // AVLCompare, DefaultAllocator, uint32_t>` is Object::Factory struct work
+    // (a different file, a different owner) this "callers" step should not do
+    // unverified, so this stays a by-address call. Whoever owns
+    // `Object::Factory`'s type header should read this paragraph first.
     typedef TypeNode** (*SetInsertFn)(FactorySet*, TypeNode**,
                                       const uint32_t*, const TypeRecord*);
     static SetInsertFn setInsert = nullptr;

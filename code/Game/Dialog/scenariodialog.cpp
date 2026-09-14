@@ -7,6 +7,7 @@
 
 #include "Dialog/ui_dialogs.h"
 #include "Dialog/dialog_exe_helpers.h"
+#include "Dialog/dialog_array_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "Object/factory_registration.h"
@@ -14,50 +15,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-
-// ============================================================
-// File-local helper: ScenarioDialog_ArrayPush_Impl (FUN_140013b60)
-// ============================================================
-// Resizes dynamic array to newCount entries (stride 0x38 bytes, no String fields).
-// Entry layout: 7 × uint64 (plain-copy, no String ctor needed).
-// arrayBase layout: [data* 8][count int32][capacity int32]
-// Original: 0x140013b60.
-static void ScenarioDialog_ArrayPush_Impl(void* arrayBase, int newCount, void* entry7) {
-    uintptr_t* dataPtr  = (uintptr_t*)arrayBase;
-    int* countPtr       = (int*)((uintptr_t)arrayBase + 8);
-    int* capacityPtr    = (int*)((uintptr_t)arrayBase + 0xc);
-    int oldCount        = *countPtr;
-
-    if (newCount == oldCount) return;
-
-    void* oldData = (void*)*dataPtr;
-    *countPtr = newCount;
-
-    if (*capacityPtr < newCount) {
-        *capacityPtr = newCount;
-        if (oldCount != 0 && newCount == oldCount + 1) {
-            *capacityPtr = newCount * 3;
-        }
-        void* newData = fn_MemAlloc(g_pMemAllocSingleton, (int64_t)*capacityPtr * 0x38, 8);
-        *dataPtr = (uintptr_t)newData;
-    }
-
-    int startCopy = (oldData == (void*)*dataPtr) ? oldCount : 0;
-    for (int i = startCopy; i < newCount; i++) {
-        uint64_t* dst = (uint64_t*)(*dataPtr + (uintptr_t)i * 0x38);
-        if (dst != nullptr) {
-            uint64_t* src = (i < oldCount)
-                ? (uint64_t*)((uintptr_t)oldData + (uintptr_t)i * 0x38)
-                : (uint64_t*)entry7;
-            dst[0] = src[0]; dst[1] = src[1]; dst[2] = src[2]; dst[3] = src[3];
-            dst[4] = src[4]; dst[5] = src[5]; dst[6] = src[6];
-        }
-    }
-
-    if (oldData != (void*)*dataPtr && oldData != nullptr) {
-        fn_MemFreeStatic(oldData);
-    }
-}
 
 // ============================================================
 // ScenarioDialog::Slot4 (vtable +0x20) — Setup
@@ -281,8 +238,17 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
         }
 
         // --- Push entry to dynamic array at self+0xD8 ---
-        int newCount = *(int*)(s + 0xE0) + 1;
-        ScenarioDialog_ArrayPush_Impl((void*)(s + 0xD8), newCount, entry);
+        // B.3.2 bridge: ScenarioDialog+0xD8 is Collection::Array<{7 x uint64
+        // fields}> (stride 0x38, count +0xE0, capacity +0xE4) inside a struct
+        // §B.2 has not converted, so it is reached at its offset. Was
+        // FUN_140013b60's own inlined SetSize (ScenarioDialog_ArrayPush_Impl).
+        {
+            uint64_t* entryQW = (uint64_t*)entry;
+            auto& rows = DlgArray<0x38>(s, 0xD8);
+            rows.SetSize(rows.GetSize() + 1,
+                         DlgElem<0x38>{{entryQW[0], entryQW[1], entryQW[2], entryQW[3],
+                                        entryQW[4], entryQW[5], entryQW[6]}});
+        }
 
         printf("[ScenarioDialog::Slot4] Added entry[%d] for scenario[%d]\n", entryIndex, i);
         // Identity dump: which scenario record backs each list row, and which .sav
@@ -576,7 +542,7 @@ void* GetScenarioVtable();
 // ScenarioDialog_ScalarDtor (0x140013af0): unlike the Achievement/Goal base-thunk
 // dtors, this one frees the +0xD8 scenario entry array before tearing down the
 // DialogInstance base (entries are plain-copy 7xu64, no per-entry String dtor —
-// see ScenarioDialog_ArrayPush_Impl above).
+// see the Collection::Array<{7 x uint64}> push above, B.3.2 bridge).
 void* SD_Dtor(void* self, uint32_t flags) {
     if (!self) return self;
     *reinterpret_cast<void**>(self) = GetScenarioVtable();

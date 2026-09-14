@@ -303,6 +303,7 @@
 #include "../../types/io/FileSystem.h"
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
+#include "../../types/collection/Collection.h"
 #include "../../src/system/string.h"
 #include "../../src/system/pod_bridge.h"
 
@@ -573,6 +574,45 @@ extern "C" Filename* RtIo_PackageFile_GetFileName(const PackageFileView* self,
 // ORACLE: none, and it is not close. It frees everything it touches; running it
 // twice is a double free, and there is no scratch stand-in because the objects
 // it destroys are the process's real packages.
+namespace {
+// ENDGAME B.3.2 step 2 — the element `Collection::Set<T>` needs to reach
+// `packfileIndexRoot`/`packfileIndexCount` (FileSystem.h +0x40/+0x48) as a
+// real `Collection::Set<...>::Node` tree: {System::Filename key; uint64_t
+// value;}, 0x10 bytes, matching `PackfileIndexNode`'s leading 16 bytes
+// (`key`@0x00, `packIndex`@0x08, `fileIndex`@0x0C read together as one packed
+// qword — see FilenameSetInsert's "the value is copied RAW" note in
+// avl_trees.cpp). `System::Filename` is layout-identical to the raw
+// `const char*` `PackfileIndexNode::key` declares (Filename.h: "Filename IS a
+// String, layout-identically: one pointer"), so `PackfileIndexPair`'s implicit
+// destructor releasing `key` runs exactly retail's `StringReleaseInline` on
+// that same field, and `Collection::Set<PackfileIndexPair>::Node` is
+// byte-for-byte `PackfileIndexNode` (both static_assert below).
+//
+// Only `DestroySubtree` (site 625) is taken from this instantiation — it is
+// `static` and needs no `Set` object, just a `Node*` — because `Insert`
+// (site 816, `FilenameSetInsert`) is NOT expressible on it without changing
+// behaviour: see that call site's comment for why.
+struct PackfileIndexPair {
+    System::Filename key;
+    uint64_t         value;
+};
+static_assert(sizeof(PackfileIndexPair) == 0x10,
+              "packed {Filename key, u64 value} element, matching FilenameSetInsert");
+using PackfileIndexSet = Collection::Set<PackfileIndexPair>;
+static_assert(sizeof(PackfileIndexSet::Node) == sizeof(PackfileIndexNode),
+              "Collection::Set<PackfileIndexPair>::Node must mirror PackfileIndexNode");
+static_assert(offsetof(PackfileIndexSet::Node, parent) == offsetof(PackfileIndexNode, parent),
+              "Node::parent must line up with PackfileIndexNode::parent");
+static_assert(offsetof(PackfileIndexSet::Node, left) == offsetof(PackfileIndexNode, left),
+              "Node::left must line up with PackfileIndexNode::left");
+static_assert(offsetof(PackfileIndexSet::Node, right) == offsetof(PackfileIndexNode, right),
+              "Node::right must line up with PackfileIndexNode::right");
+static_assert(offsetof(PackfileIndexSet::Node, balance) == offsetof(PackfileIndexNode, balance),
+              "Node::balance must line up with PackfileIndexNode::balance");
+static_assert(offsetof(PackfileIndexSet::Node, height) == offsetof(PackfileIndexNode, height),
+              "Node::height must line up with PackfileIndexNode::height");
+}  // namespace
+
 extern "C" void RtIo_FileSystem_ClosePackages(FileSystem* self) {
     const int32_t hadPackfiles = self->packfileCount;
     const bool    hadIndex     = self->packfileIndexRoot != nullptr;
@@ -614,25 +654,23 @@ extern "C" void RtIo_FileSystem_ClosePackages(FileSystem* self) {
 
     PackfileIndexNode* const root = self->packfileIndexRoot;
     if (root != nullptr) {
-        // FUN_180008340(&tree, node) — the recursive subtree free,
-        // unexported and PORTED 2026-09-08
-        // (runtime/src/collection/avl_trees.cpp); reached through the same
-        // port-aware door, unchanged. Retail passes `this+0x40`, the tree object, as its
-        // first argument and the child as its second, and calls it once per
-        // child of the root; the root itself is unwound inline below.
-        using TreeFreeFn = void (*)(void*, PackfileIndexNode*);
-        static TreeFreeFn treeFree =
-            reinterpret_cast<TreeFreeFn>(ResolveAddr(Module::Runtime, 0x180008340));
-        void* tree = &self->packfileIndexRoot;
-        treeFree(tree, root->left);
-        treeFree(tree, root->right);
-
-        // The root's key String, released with retail's inlined idiom — the
-        // freeing branch leaves the slot holding `data - 8`, not null. That
-        // asymmetry is retail's and ~String reproduces it (String.h).
-        reinterpret_cast<System::String*>(
-            const_cast<char**>(&root->key))->~String();
-        RtMemFree(root);
+        // ENDGAME B.3.2 step 2 — FUN_180008340, the recursive subtree free, IS
+        // `Collection::Set<PackfileIndexPair>::DestroySubtree` (Collection.h):
+        // both children freed post-order first, then the node's own element
+        // destructor (releases the key Filename with retail's asymmetric
+        // idiom — the freeing branch leaves the slot holding `data - 8`, not
+        // null; `~Filename` reproduces it, String.h), then the node itself
+        // freed through the same allocator door `detail::SetNodeFree` reaches
+        // (0x180009c30). A single `DestroySubtree(root)` frees the identical
+        // set of nodes in the identical order retail's split call
+        // (free(left), free(right), then unwind the root by hand) produced:
+        // the whole left subtree post-order, then the whole right subtree
+        // post-order, then the root — DestroySubtree just does both halves
+        // under one call instead of the caller doing the root's half by hand.
+        // The 0x180008340 row itself is UNCHANGED and stays registered in
+        // avl_trees.cpp: `code/` still reaches it by address.
+        PackfileIndexSet::DestroySubtree(
+            reinterpret_cast<PackfileIndexSet::Node*>(root));
     }
     // Zeroed unconditionally, even when root was already null.
     self->packfileIndexCount = 0;
@@ -810,6 +848,28 @@ extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
                 // through the same port-aware door, unchanged.
                 // RCX is `this+0x40`, the {root,count} tree object; RDX is a
                 // scratch out-slot retail never reads afterwards.
+                //
+                // ENDGAME B.3.2 step 2 — DELIBERATELY NOT CONVERTED to
+                // `Collection::Set<PackfileIndexPair>::Insert(const T&)`.
+                // Retail's `FilenameSetInsert` (avl_trees.cpp) copy-constructs
+                // the key ONCE, straight into a stack temporary alongside the
+                // raw value qword, hands the temporary's ADDRESS to the
+                // descent, and releases that ONE temporary afterwards — one
+                // Filename copy ctor, one release. `Set<T>::Insert(const T&)`
+                // would need a `PackfileIndexPair` ARGUMENT built by the
+                // caller (a second temporary, its own Filename copy ctor) and
+                // then copy-constructs AGAIN into the node from *that*
+                // argument — two copies and two releases where retail has one,
+                // an extra AddRef/Release pair on the Filename refcount the
+                // resave gate can observe (COLLECTION_INVENTORY.md hazard 2 /
+                // B32_RULES). What the class would need to express this site
+                // without the extra round trip is an insert overload that
+                // builds the element in place from a borrowed key/value pair
+                // (e.g. `Insert(const Key&, const Value&)` constructing
+                // directly into the temp the descent reads, the way
+                // `FilenameSetInsert` does) — not present on `Collection::Set`
+                // today, and not added here (no new members on Collection.h
+                // per B32_RULES). Left calling the shipped body by address.
                 using BstInsertFn = void* (*)(void*, PackfileIndexNode**,
                                               const System::Filename*, const uint64_t*);
                 static BstInsertFn insertFn =

@@ -83,6 +83,7 @@
 #include "../../types/achievement/AchievementManager.h"
 #include "../../types/io/Serializer.h"
 #include "../system/pod_bridge.h"   // the one transitional POD<->class cast
+#include "../collection/array_internal.h"  // ENDGAME B.3.2 step 2: kSpec_U64Zero / kSpec_PtrZero bridges
 
 using RtAchievement::Achievement;
 using RtAchievement::AchievementManager;
@@ -156,19 +157,15 @@ PtrSerializeFn ExternalPtrSerialize_SpriteSheet() {
     if (!f) f = reinterpret_cast<PtrSerializeFn>(ResolveAddr(Module::Runtime, 0x180004590));
     return f;
 }
-// Collection::Array<ExternalPtr<Goal>>::SetSize — read side only.
-ArraySetSizeFn ArraySetSizeGoalPtrs() {
-    static ArraySetSizeFn f = nullptr;
-    if (!f) f = reinterpret_cast<ArraySetSizeFn>(ResolveAddr(Module::Runtime, 0x180005110));
-    return f;
-}
-// Collection::Array<InternalPtr<AchievementInstance>>::SetSize — read side only.
-// PORTED by Wave 9 lane Q; this resolves to our body, not the DLL's.
-ArraySetSizeFn ArraySetSizeInternalPtrs() {
-    static ArraySetSizeFn f = nullptr;
-    if (!f) f = reinterpret_cast<ArraySetSizeFn>(ResolveAddr(Module::Runtime, 0x180008d60));
-    return f;
-}
+// ENDGAME B.3.2 step 2 — ArraySetSizeGoalPtrs (0x180005110, kSpec_U64Zero) and
+// ArraySetSizeInternalPtrs (0x180008d60, kSpec_PtrZero) are GONE: `Achievement
+// ::goals` and `AchievementManager::instances` are already real
+// `Collection::Array<T>` members (runtime/types/achievement/
+// AchievementManager.h), and neither spec is trait-equivalent for its element
+// type — see achievement_manager.cpp's banner on these same two rows for why
+// (Assign8/InitZero8 vs. an uninitialised trait tail, and Assign8Z's
+// double-write). Both call sites now go through `rtcoll::AsArray<&kSpec_X>`
+// bridges. The two rows stay registered in array.cpp.
 // The two N-element serializers. Signature (Serializer*, int count, T* data).
 ArraySerializeFn SerializeGoalPtrs() {
     static ArraySerializeFn f = nullptr;
@@ -245,7 +242,7 @@ bool RtAch_Achievement_Serialize(Achievement* self, Stream* stream) {
     reinterpret_cast<IntFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8])(rw, &count, nullptr);
 
     if (stream->direction == rt::io::kDirectionReading) {
-        ArraySetSizeGoalPtrs()(&self->goals, count);
+        rtcoll::AsArray<&rtcoll::kSpec_U64Zero>(&self->goals)->SetSize(count);
     }
     SerializeGoalPtrs()(&ser, count, self->goals._data);            // +0x48
 
@@ -297,7 +294,7 @@ void RtAch_AchievementManager_Persist(AchievementManager* self, Stream* stream) 
     reinterpret_cast<IntFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8])(rw, &count, nullptr);
 
     if (stream->direction == rt::io::kDirectionReading) {
-        ArraySetSizeInternalPtrs()(&self->instances, count);
+        rtcoll::AsArray<&rtcoll::kSpec_PtrZero>(&self->instances)->SetSize(count);
     }
     SerializeInstancePtrs()(&ser, count, self->instances._data);
 

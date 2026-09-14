@@ -163,6 +163,14 @@ extern "C" void RtUiStringTable_Dtor(void* selfv) {
     // callee releases both refcounted strings of every entry, frees the block
     // under the allocator lock, and zeroes _data/_size/_capacity; it is ported
     // (array_destroy.cpp J2 0x180004a90) and reached registry-first.
+    //
+    // ENDGAME B.3.2 step 2 — left as a free-function call, deliberately. This
+    // J2 entry drives `ReleaseStringsCounted` off a `DestroySpec`
+    // (`kD_Str2_10`), a different type/dispatch from the `rtcoll::ArraySpec`
+    // `Collection::Array<T>::~Array()` calls, and no `kSpec_*` row exists for
+    // it — per the batch rule, a "DtorElem" helper may not be convertible at
+    // all, so `self->data` (a real `Collection::Array<StringTableTextEntry>`
+    // by layout) stays reached through the seam rather than `.~Array()`.
     static VoidPtrFn arrayDtor = nullptr;
     if (!arrayDtor)
         arrayDtor = reinterpret_cast<VoidPtrFn>(ResolveAddr(Module::Runtime, 0x180004a90));

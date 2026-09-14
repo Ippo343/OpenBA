@@ -171,9 +171,9 @@ static void VertexLayoutData_PlatformCreate(VertexLayoutData* self) {
     const VertexLayoutOwner* owner =
         static_cast<const VertexLayoutOwner*>(self->vertexLayout);
 
-    if (owner->signature.length == 0) return;
+    if (owner->signature.GetSize() == 0) return;
 
-    int count = owner->elements.length;
+    int count = owner->elements.GetSize();
     if (count > kMaxInputElements) {
         fprintf(stderr,
                 "[Dx11] VertexLayoutData::PlatformCreate: %d elements exceeds "
@@ -187,7 +187,7 @@ static void VertexLayoutData_PlatformCreate(VertexLayoutData* self) {
     D3D11_INPUT_ELEMENT_DESC descs[kMaxInputElements];
 
     const VertexLayoutElement* elems =
-        static_cast<const VertexLayoutElement*>(owner->elements.data);
+        owner->elements.GetData();   // B.3.2: was a cast off a void*
 
     for (int i = 0; i < count; ++i) {
         // No range check on `format` — the original indexes its 9-entry table
@@ -204,12 +204,12 @@ static void VertexLayoutData_PlatformCreate(VertexLayoutData* self) {
 
     Dx11Device()->CreateInputLayout(
         descs,
-        // `count` == owner->elements.length in every reachable case; it differs
+        // `count` == owner->elements.GetSize() in every reachable case; it differs
         // only on the clamped path above, where passing the unclamped value
         // would hand D3D11 descriptors we never wrote.
         static_cast<UINT>(count),
-        owner->signature.data,
-        static_cast<SIZE_T>(owner->signature.length),
+        owner->signature.GetData(),
+        static_cast<SIZE_T>(owner->signature.GetSize()),
         reinterpret_cast<ID3D11InputLayout**>(&self->inputLayout));
 }
 

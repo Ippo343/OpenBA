@@ -31,6 +31,7 @@
 #include "system/String.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
+#include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -264,81 +265,81 @@ extern "C" void Reimpl_Transform_SerializeWrapper(void* transform, void* stream)
 // stale bytes (a freed-block pointer) → free-list corruption when a later
 // serialize treated the stale pointer as live. See the unconditional-zero
 // branch below.
+//
+// ENDGAME B.3.2 step 2: `GenericArrayResize` (the runtime-stride body the
+// block above describes) and the two hand-unrolled bodies after it
+// (FUN_140001bb0, FUN_14000c520) WERE copies of `rtcoll::SetSizeCore`
+// (runtime/src/collection/array.cpp). Each retail address is now one
+// `Collection::Array<>::SetSize` over its own `ArraySpec` row: the zero-init
+// the paragraph above insists on is the row's `init`, and SetSizeCore runs it
+// for every slot >= oldCount on both the in-place and the realloc path — the
+// same rule. Compared arm for arm before the swap: exact-equal early return,
+// `_size` stored before the capacity test, treble-on-single-append-from-
+// non-empty, byte-copy the preserved prefix only when the block moved, init
+// the new tail, no destroy, free the old block on a realloc (null-tolerant
+// 0x1800c7ad0, so the `oldData != nullptr` test is folded in). Two
+// deliberate differences: the allocation now goes through the LOCKING static
+// `MemAlloc` (0x1800c7a50) instead of the unlocked instance `Allocate` these
+// bodies reached through `fn_MemAlloc` (same allocator, same heap); and the
+// "fn_MemAlloc unavailable" scaffold guard + printf is gone — fn_MemAlloc is
+// resolved before any serializer runs, so that arm was dead. The `!arrayHeader`
+// early-out stays on each entry point exactly as before.
 namespace {
 
-void GenericArrayResize(void* arrayHeader, int newCount,
-                        size_t stride, int alignment) {
-    if (!arrayHeader) return;
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) {
-        static bool s_warned = false;
-        if (!s_warned) {
-            printf("[Array::Resize] MemAlloc unavailable — leaving array unchanged "
-                   "(header=%p newCount=%d stride=%zu)\n",
-                   arrayHeader, newCount, stride);
-            fflush(stdout);
-            s_warned = true;
-        }
-        return;
-    }
+// Whole-stride byte copy and whole-stride zero, for the plain-data rows.
+template <uint32_t N> void ByteAssign(uint8_t* d, const uint8_t* s) { std::memcpy(d, s, N); }
+template <uint32_t N> void ZeroInit(uint8_t* d)                     { std::memset(d, 0, N); }
 
-    auto* hdr = reinterpret_cast<uint8_t*>(arrayHeader);
-    void** dataSlot = reinterpret_cast<void**>(hdr + 0x00);
-    int32_t* countSlot = reinterpret_cast<int32_t*>(hdr + 0x08);
-    int32_t* capSlot = reinterpret_cast<int32_t*>(hdr + 0x0C);
+// FUN_14001baf0 — stride 0x20, align 4, byte copy, zero tail. (Not the
+// citizenlist ProfessionResourceEntry row: that one seeds 100 at +0x08.)
+const rtcoll::ArraySpec kSpec_Pod20A4 = {                // exe 0x14001baf0
+    "Array<32B pod, align 4>", 0x20, 4,
+    &ByteAssign<0x20>, &ZeroInit<0x20>, nullptr, true,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+using Pod20A4Array = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                       Collection::ExplicitSpec<&kSpec_Pod20A4>>;
 
-    int oldCount = *countSlot;
-    if (newCount == oldCount) return;
+// FUN_14001bf10 — stride 0x14, align 4, byte copy, zero tail.
+const rtcoll::ArraySpec kSpec_Pod14A4 = {                // exe 0x14001bf10
+    "Array<20B pod, align 4>", 0x14, 4,
+    &ByteAssign<0x14>, &ZeroInit<0x14>, nullptr, true,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+using Pod14A4Array = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                       Collection::ExplicitSpec<&kSpec_Pod14A4>>;
 
-    void* oldData = *dataSlot;
-    *countSlot = newCount;
+// FUN_140001bb0 — stride 8, align 8: raw pointer slots, zeroed on every new
+// slot (the heap-corruption note above Reimpl_Array_Resize_Stride08 says why
+// that zero is load-bearing).
+const rtcoll::ArraySpec kSpec_Ptr8Zero = {               // exe 0x140001bb0
+    "Array<void*> (zero tail)", 8, 8,
+    &ByteAssign<8>, &ZeroInit<8>, nullptr, true,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+using Ptr8ZeroArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                        Collection::ExplicitSpec<&kSpec_Ptr8Zero>>;
 
-    if (*capSlot < newCount) {
-        *capSlot = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) {
-            *capSlot = newCount * 3;
-        }
-        size_t bytes = static_cast<size_t>(*capSlot) * stride;
-        void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, bytes, alignment);
-        *dataSlot = newBuf;
-    }
-
-    int copyStart = (oldData == *dataSlot) ? oldCount : 0;
-    auto* dst = reinterpret_cast<uint8_t*>(*dataSlot);
-
-    for (int slot = copyStart; slot < newCount; ++slot) {
-        size_t off = static_cast<size_t>(slot) * stride;
-        uint8_t* dstElem = dst + off;
-        if (!dstElem) continue;
-        if (slot < oldCount) {
-            const uint8_t* srcElem = reinterpret_cast<const uint8_t*>(oldData) + off;
-            // memcpy by stride
-            for (size_t i = 0; i < stride; ++i) {
-                dstElem[i] = srcElem[i];
-            }
-        } else {
-            // Zero EVERY new slot (slot >= oldCount) on BOTH the realloc and
-            // the in-place-grow path — matching the original exe resize
-            // functions (e.g. FUN_140001bb0), which zero unconditionally.
-            // The engine's boundary-tag allocator (Runtime 0x1800c6e60) hands
-            // out DIRTY memory, and on an in-place grow the new slots are NOT
-            // freshly allocated — they hold STALE bytes from whatever last
-            // lived in that capacity. For the Struct60B element arrays
-            // (stride 0x20 / 0x14) each slot embeds sub-array headers
-            // {data*, count, cap}; a stale data pointer there is treated as a
-            // live buffer by the subsequent Struct60B_Serialize resize and
-            // gets freed/realloced → free-list corruption (same UAF class as
-            // the stride-8 fix, one level deeper). Zeroing is faithful and
-            // harmless for plain data arrays (they get fully overwritten).
-            for (size_t i = 0; i < stride; ++i) {
-                dstElem[i] = 0;
-            }
-        }
-    }
-
-    if (oldData != *dataSlot && oldData != nullptr) {
-        if (fn_MemFreeStatic) fn_MemFreeStatic(oldData);
-    }
+// FUN_14000c520 — SpawnDescription entry {ExternalPtr @0, float minSpawnAge
+// @8, float maxSpawnAge @0xc}, stride 0x10, align 8. Whole-stride copy; the
+// tail seed is {0, 0.0f, 10.0f} — see the banner above
+// Reimpl_Array_Resize_Stride10_Spawn for why 10.0f is load-bearing.
+void InitSpawnEntry(uint8_t* e) {
+    *reinterpret_cast<uint64_t*>(e + 0x00) = 0;      // ExternalPtr
+    *reinterpret_cast<float*>(e + 0x08)    = 0.0f;   // minSpawnAge
+    *reinterpret_cast<float*>(e + 0x0c)    = 10.0f;  // maxSpawnAge (0x41200000)
 }
+const rtcoll::ArraySpec kSpec_SpawnEntry = {             // exe 0x14000c520
+    "Array<SpawnEntry>", 0x10, 8,
+    &ByteAssign<0x10>, &InitSpawnEntry, nullptr, true,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+using SpawnEntryArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                          Collection::ExplicitSpec<&kSpec_SpawnEntry>>;
 
 } // namespace
 
@@ -346,7 +347,9 @@ void GenericArrayResize(void* arrayHeader, int newCount,
 // Helpers #3-#5 — Array resize variants
 // ============================================================
 extern "C" void Reimpl_Array_Resize_Stride20(void* arrayHeader, int newCount) {
-    GenericArrayResize(arrayHeader, newCount, 0x20, 4);
+    if (!arrayHeader) return;
+    // B.3.2 bridge: the Geometry/Struct60B headers this serves are still raw bytes.
+    reinterpret_cast<Pod20A4Array*>(arrayHeader)->SetSize(newCount);
 }
 
 // NOTE (heap-corruption fix): the stride-0x08 array holds raw 8-byte POINTERS
@@ -364,65 +367,19 @@ extern "C" void Reimpl_Array_Resize_Stride20(void* arrayHeader, int newCount) {
 // free-list link → the deterministic +0x100000000 bit-32 flip → wild allocator
 // write → menu heap crash.
 //
-// The shared GenericArrayResize only zeroes new slots on the realloc path
-// (`else if oldData != *dataSlot`), leaving in-place-grow new slots dirty — the
-// divergence from the original. We therefore implement stride-8 with its own
-// faithful body that zeroes new slots unconditionally.
+// (Historical: the shared GenericArrayResize once zeroed new slots only on
+// the realloc path, which is why stride-8 got its own body. Both now run
+// SetSizeCore, whose `init` arm is unconditional for every slot >= oldCount.)
 extern "C" void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount) {
     if (!arrayHeader) return;
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) {
-        static bool s_warned = false;
-        if (!s_warned) {
-            printf("[Array::Resize<8>] MemAlloc unavailable — leaving array unchanged "
-                   "(header=%p newCount=%d)\n", arrayHeader, newCount);
-            fflush(stdout);
-            s_warned = true;
-        }
-        return;
-    }
-
-    auto* hdr = reinterpret_cast<uint8_t*>(arrayHeader);
-    void** dataSlot = reinterpret_cast<void**>(hdr + 0x00);
-    int32_t* countSlot = reinterpret_cast<int32_t*>(hdr + 0x08);
-    int32_t* capSlot = reinterpret_cast<int32_t*>(hdr + 0x0C);
-
-    int oldCount = *countSlot;
-    if (newCount == oldCount) return;
-
-    void* oldData = *dataSlot;
-    *countSlot = newCount;
-
-    if (*capSlot < newCount) {
-        *capSlot = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) {
-            *capSlot = newCount * 3;
-        }
-        size_t bytes = static_cast<size_t>(*capSlot) * 0x08;
-        *dataSlot = fn_MemAlloc(g_pMemAllocSingleton, bytes, 8);
-    }
-
-    int copyStart = (oldData == *dataSlot) ? oldCount : 0;
-    auto* dst = reinterpret_cast<uint64_t*>(*dataSlot);
-    if (dst) {
-        for (int slot = copyStart; slot < newCount; ++slot) {
-            if (slot < oldCount) {
-                // Copy live pointer from old buffer.
-                dst[slot] = reinterpret_cast<const uint64_t*>(oldData)[slot];
-            } else {
-                // Zero new slot (matches FUN_140001bb0 — prevents stale-pointer
-                // use-after-free; the allocator does NOT zero-fill).
-                dst[slot] = 0;
-            }
-        }
-    }
-
-    if (oldData != *dataSlot && oldData != nullptr) {
-        if (fn_MemFreeStatic) fn_MemFreeStatic(oldData);
-    }
+    // B.3.2 bridge: Geometry+0x210 and friends are still raw headers.
+    reinterpret_cast<Ptr8ZeroArray*>(arrayHeader)->SetSize(newCount);
 }
 
 extern "C" void Reimpl_Array_Resize_Stride14(void* arrayHeader, int newCount) {
-    GenericArrayResize(arrayHeader, newCount, 0x14, 4);
+    if (!arrayHeader) return;
+    // B.3.2 bridge: the Struct60B +0x08 sub-array header is still raw bytes.
+    reinterpret_cast<Pod14A4Array*>(arrayHeader)->SetSize(newCount);
 }
 
 // ============================================================
@@ -446,57 +403,8 @@ extern "C" void Reimpl_Array_Resize_Stride14(void* arrayHeader, int newCount) {
 // address_registry.cpp alongside the other resize variants.
 extern "C" void Reimpl_Array_Resize_Stride10_Spawn(void* arrayHeader, int newCount) {
     if (!arrayHeader) return;
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) {
-        static bool s_warned = false;
-        if (!s_warned) {
-            printf("[Array::Resize<0x10,spawn>] MemAlloc unavailable — leaving array "
-                   "unchanged (header=%p newCount=%d)\n", arrayHeader, newCount);
-            fflush(stdout);
-            s_warned = true;
-        }
-        return;
-    }
-
-    auto* hdr = reinterpret_cast<uint8_t*>(arrayHeader);
-    void** dataSlot   = reinterpret_cast<void**>(hdr + 0x00);
-    int32_t* countSlot = reinterpret_cast<int32_t*>(hdr + 0x08);
-    int32_t* capSlot   = reinterpret_cast<int32_t*>(hdr + 0x0C);
-
-    const int oldCount = *countSlot;
-    if (newCount == oldCount) return;
-
-    void* oldData = *dataSlot;
-    *countSlot = newCount;
-
-    if (*capSlot < newCount) {
-        *capSlot = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) {
-            *capSlot = newCount * 3;   // amortised growth, as the original
-        }
-        const size_t bytes = static_cast<size_t>(*capSlot) << 4;
-        *dataSlot = fn_MemAlloc(g_pMemAllocSingleton, bytes, 8);
-    }
-
-    const int copyStart = (oldData == *dataSlot) ? oldCount : 0;
-    auto* dst = reinterpret_cast<uint8_t*>(*dataSlot);
-    if (dst) {
-        for (int slot = copyStart; slot < newCount; ++slot) {
-            uint8_t* e = dst + static_cast<size_t>(slot) * 0x10;
-            if (slot < oldCount) {
-                const uint8_t* src = reinterpret_cast<const uint8_t*>(oldData)
-                                   + static_cast<size_t>(slot) * 0x10;
-                std::memcpy(e, src, 0x10);
-            } else {
-                *reinterpret_cast<uint64_t*>(e + 0x00) = 0;      // ExternalPtr
-                *reinterpret_cast<float*>(e + 0x08)    = 0.0f;   // minSpawnAge
-                *reinterpret_cast<float*>(e + 0x0c)    = 10.0f;  // maxSpawnAge (0x41200000)
-            }
-        }
-    }
-
-    if (oldData != *dataSlot && oldData != nullptr) {
-        if (fn_MemFreeStatic) fn_MemFreeStatic(oldData);
-    }
+    // B.3.2 bridge: SpawnDescription+0x20 is still a raw header.
+    reinterpret_cast<SpawnEntryArray*>(arrayHeader)->SetSize(newCount);
 }
 
 // ============================================================

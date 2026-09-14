@@ -328,6 +328,10 @@ void ThreadDtor(void* self) {
 // 0x18000c4a0 — the +0x30 `Collection::Array<T>::~Array`. PORTED (Wave 25 lane
 // INTERNAL42, array.cpp's J1 family); reached by address so the registry gets
 // first refusal and now answers with our body. See the banner.
+// NOT CONVERTED (ENDGAME B.3.2 step 2): the same +0x30 field
+// audio_stream_play_win.cpp's GrowStreamBuffers grows — no `runtime/types`
+// struct exists for Audio::Stream, so `p` is a raw byte offset with no typed
+// `Collection::Array<T>` field to call `.~Array()` on.
 void ReleaseField30Buffer(void* p) {
     using Fn = void (*)(void*);
     static Fn fn = nullptr;

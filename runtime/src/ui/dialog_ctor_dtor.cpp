@@ -174,6 +174,7 @@
 #include <initializer_list>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/collection/Collection.h" // ENDGAME B.3.2 step 2 — Array<void*> bridge
 #include "../../types/ui/Dialog.h"
 
 // ---- ResolveExport / ResolveAddr -------------------------------------------
@@ -344,10 +345,33 @@ void* DialogDtorBody(void* self) {
     //     0x180039360 and 0x180039280 as this port's owed residue. That is a
     //     row ENTERING, and it is progress: it was always there and nothing
     //     could see it.
-    ArrayDtorAt(ResolveAddr(Module::Runtime, 0x180009460), p + 0x78);  // 180112e64  PORTED (array.cpp J1)
-    ArrayDtorAt(ResolveAddr(Module::Runtime, 0x180039440), p + 0x68);  // 180112e6e  PORTED (array.cpp J1)
-    ArrayDtorAt(ResolveAddr(Module::Runtime, 0x180039360), p + 0x58);  // 180112e78  NOT PORTED -> DLL
-    ArrayDtorAt(ResolveAddr(Module::Runtime, 0x180039280), p + 0x48);  // 180112e82  NOT PORTED -> DLL
+    // ENDGAME B.3.2 step 2 — the first two (+0x78 `_references`, +0x68
+    // `_templates`) are `array.cpp`'s J1 `~Array` (destroy == null, i.e.
+    // trait-equivalent for a trivially destructible element): `_references`/
+    // `_templates` are `void**` + count + capacity, laid out contiguously
+    // exactly like `Collection::Array<void*>` (data/size/capacity), so the
+    // conversion bridges at the use site with a `reinterpret_cast` rather than
+    // retyping `Dialog` (that would need every construction/copy path of
+    // `Dialog` proven safe first, which is outside this file's scope — the
+    // brief's "bridge at the USE site" option).
+    reinterpret_cast<Collection::Array<void*>*>(p + 0x78)->~Array();  // retail 0x180009460
+    reinterpret_cast<Collection::Array<void*>*>(p + 0x68)->~Array();  // retail 0x180039440
+
+    // The last two (+0x58 `_namedTemplates`, +0x48 `_controllerConfigs`) are
+    // NOT this shape. They are `array_destroy.cpp`'s J2 entries (registered as
+    // `RtColl_ArrayDtorElem_180039360` / `_180039280`, i.e. now ported, so the
+    // "NOT PORTED -> DLL" half of this comment is stale) — they destroy each
+    // element's embedded `System::String` via a `DestroySpec`/`CORE` pair
+    // (`ReleaseStringsCounted`) that is a DIFFERENT mechanism from
+    // `rtcoll::ArraySpec::destroy` (a different function signature, driven by
+    // array_destroy.cpp's own dispatch, not `Collection::Array<T>::~Array()`'s
+    // `Spec()->destroy`). There is no `kSpec_*` row for either address that
+    // the class template could take as an `ExplicitSpec`, so — per the batch
+    // rule that a `DtorElem` helper may not be convertible at all — these two
+    // stay free-function calls through the seam rather than being forced onto
+    // a container member.
+    ArrayDtorAt(ResolveAddr(Module::Runtime, 0x180039360), p + 0x58);  // 180112e78
+    ArrayDtorAt(ResolveAddr(Module::Runtime, 0x180039280), p + 0x48);  // 180112e82
 
     // ---- the System::String release at +0x28, ASYMMETRY AND ALL ------------
     char* s = F<char*>(p, 0x28);                            // 180112e88

@@ -181,6 +181,7 @@ namespace {
 using RtGraphics::Renderer;
 using RtGraphics::RendererDrawable;
 using RtGraphics::RendererDrawGroup;
+using RtGraphics::RendererSceneEntry;
 using RtGraphics::Scene;
 // `Transform` is at GLOBAL scope in runtime/types/math/Math.h -- the header is
 // named for the Math NAMESPACE of the DLL, but declares its structs unwrapped.
@@ -257,26 +258,14 @@ inline double SecondsPerTick() {
 // Callees.
 // ---------------------------------------------------------------------------
 
-// Array<uint32>::SetSize(this, n, &fill) — 0x180023830. PORTED and registered
-// by array.cpp, and ResolveAddr checks the port registry FIRST
-// (reference_resolveaddr_consults_port_registry_first.md), so this reaches our
-// body, not the DLL's.
-using ArraySetSizeFillFn = void (*)(void* self, int n, const void* fill);
-
-inline void ArraySetSizeFill4(void* self, int n, const void* fill) {
-    static void* fn = nullptr;
-    if (!fn) fn = (void*)ResolveAddr(Module::Runtime, 0x180023830);
-    reinterpret_cast<ArraySetSizeFillFn>(fn)(self, n, fill);
-}
-
-// Array<{void*,int32,int32}>::SetSize(this, n, &fill) — 0x180063a80.
-// Registered by this lane as a kSpec_Fill16 instantiation; see the callee table
-// in the banner for the 79/79 position-independent identity proof.
-inline void ArraySetSizeFill16(void* self, int n, const void* fill) {
-    static void* fn = nullptr;
-    if (!fn) fn = (void*)ResolveAddr(Module::Runtime, 0x180063a80);
-    reinterpret_cast<ArraySetSizeFillFn>(fn)(self, n, fill);
-}
+// ENDGAME B.3.2 step 2 (callers) — the `ArraySetSizeFill4` (0x180023830) and
+// `ArraySetSizeFill16` (0x180063a80) ResolveAddr forwarders that used to sit
+// here are GONE. Their one caller, `RtGraphics_Renderer_AddLight` below, now
+// calls `.SetSize(n, fill)` directly on `RendererSceneEntry::drawableIds` and
+// `Renderer::drawables` — both real `Collection::Array<T>` members
+// (runtime/types/graphics/Camera.h) whose element types (`int32_t`,
+// `RendererDrawable`) make kSpec_Fill4/kSpec_Fill16 trait-equivalent. Both
+// rows stay registered in array.cpp: `code/` still reaches them by address.
 
 // The per-pass draw-item sort — 0x180062d60. UNEXPORTED and UNPORTED.
 // std::sort(first, last) over stride-0x38 elements, ~0x2306 bytes with a
@@ -344,9 +333,7 @@ void RtGraphics_Scene_AddGlobalDrawItems(const Scene* self, Renderer* renderer) 
     ++g_addGlobal;
 
     const int32_t groupIndex = renderer->currentDrawGroup;
-    const RendererDrawGroup* groups =
-        static_cast<const RendererDrawGroup*>(
-            static_cast<const void*>(renderer->drawGroups._data));
+    const RendererDrawGroup* groups = renderer->drawGroups.GetData();
     const uint8_t* groupBytes =
         reinterpret_cast<const uint8_t*>(groups) +
         static_cast<int64_t>(groupIndex) * 0x1f0;
@@ -356,11 +343,19 @@ void RtGraphics_Scene_AddGlobalDrawItems(const Scene* self, Renderer* renderer) 
     // `[rdi+0x48]` INSIDE the loop (0x180102378), once per surviving node.
     // Hoisting it would be a different program if the virtual call can mutate
     // it, so it is re-read here too.
-    const void* node = static_cast<const void*>(self->_globals._head);
-    while (node != nullptr) {
+    //
+    // ENDGAME B.3.2 step 2 (callers) — `self->_globals` is a real
+    // `Collection::LinkedList<Geometry*>` member (Scene.h): the manual
+    // `node+0x00` (element) / `node+0x10` (next) walk becomes the Iterator,
+    // whose dereference IS the bare node's element (Collection.h's Iterator
+    // banner) and whose `operator++` IS the same `node = node->next` this loop
+    // did by hand. `obj`'s `+0x30`/`+0x28` fields and its vtable slot 3 stay
+    // raw byte reads: this lane found no writer to name either field
+    // (see the banner above), so there is nothing on `Geometry` to call.
+    using GlobalIter = Collection::LinkedList<RtGraphics::Geometry*>::Iterator;
+    for (GlobalIter it = self->_globals.GetFirst(); it; ++it) {
         ++g_addGlobalVisited;
-        const uint8_t* obj =
-            *reinterpret_cast<const uint8_t* const*>(node);           // node+0x00
+        const uint8_t* obj = reinterpret_cast<const uint8_t*>(*it);
 
         const uint32_t objMask = *reinterpret_cast<const uint32_t*>(obj + 0x30);
         if ((objMask & passMask) != 0) {
@@ -377,8 +372,6 @@ void RtGraphics_Scene_AddGlobalDrawItems(const Scene* self, Renderer* renderer) 
                 ++g_addGlobalEmitted;
             }
         }
-        node = *reinterpret_cast<const void* const*>(
-            reinterpret_cast<const uint8_t*>(node) + 0x10);           // node+0x10
     }
 }
 
@@ -441,15 +434,18 @@ void RtGraphics_Renderer_AddLight(Renderer* self, const void* light) {
     ++g_addLight;
 
     // The index this light will occupy — read BEFORE the append.
-    int32_t lightIndex = self->drawables._size;
+    int32_t lightIndex = self->drawables.GetSize();
 
-    uint8_t* scenes = reinterpret_cast<uint8_t*>(self->scenes._data);
-    uint8_t* entry = scenes + static_cast<int64_t>(self->currentScene) * 0x110;
-    void* drawableIds = entry + 0x100;        // RendererSceneEntry::drawableIds
+    // ENDGAME B.3.2 step 2 (callers) — `entry` is a `RendererSceneEntry*` and
+    // `drawableIds` is its real `Collection::Array<int32_t>` member
+    // (runtime/types/graphics/Camera.h); 0x180023830 (kSpec_Fill4) is
+    // trait-equivalent for int32_t (both trivially copyable/destructible), so
+    // this becomes a member call rather than a by-address SetSize.
+    uint8_t* scenes = reinterpret_cast<uint8_t*>(self->scenes.GetData());
+    RendererSceneEntry* entry = reinterpret_cast<RendererSceneEntry*>(
+        scenes + static_cast<int64_t>(self->currentScene) * 0x110);
 
-    const int32_t idCount = *reinterpret_cast<const int32_t*>(
-        static_cast<const uint8_t*>(drawableIds) + 0x8);
-    ArraySetSizeFill4(drawableIds, idCount + 1, &lightIndex);
+    entry->drawableIds.SetSize(entry->drawableIds.GetSize() + 1, lightIndex);
 
     // TWELVE of sixteen bytes written on purpose — see the banner. Deliberately
     // NOT value-initialised: `_pad0c` must stay whatever the frame held, which
@@ -458,7 +454,9 @@ void RtGraphics_Renderer_AddLight(Renderer* self, const void* light) {
     rec.object = const_cast<void*>(light);
     rec.value = self->field_38;
 
-    ArraySetSizeFill16(&self->drawables, self->drawables._size + 1, &rec);
+    // retail 0x180063a80, kSpec_Fill16 — trait-equivalent: RendererDrawable is
+    // a plain POD (Camera.h).
+    self->drawables.SetSize(self->drawables.GetSize() + 1, rec);
 }
 
 // ============================================================================
@@ -516,13 +514,16 @@ void RtGraphics_Renderer_EndDrawGroup(Renderer* self, int group) {
     uint64_t scratch = 0;   // retail passes its own unread RDX home slot
     for (int64_t i = 0; i < 3; ++i) {
         const int64_t idx = self->currentDrawGroup;          // re-read, per retail
-        const int64_t off = ((idx * 0x1f) + 0x1c + i) << 4;
-        uint8_t* p = reinterpret_cast<uint8_t*>(self->drawGroups._data) + off;
+        // The `((idx*0x1f)+0x1c+i)<<4` byte arithmetic lands on
+        // `&drawGroups[idx].items[i]` (Camera.h: items @ +0x1c0, stride 0x10 =
+        // sizeof(Array<RendererDrawItem>), group stride 0x1f0 = 0x1f*0x10) —
+        // named directly rather than recomputed from raw offsets.
+        Collection::Array<RtGraphics::RendererDrawItem>& list = self->drawGroups[idx].items[i];
 
-        const int32_t n = *reinterpret_cast<const int32_t*>(p + 0x8);
+        const int32_t n = list.GetSize();
         if (n > 0) {
             if (n > 1) {                                     // both tests, per retail
-                void* data = *reinterpret_cast<void**>(p);
+                void* data = list.GetData();
                 DrawItemSort(data, n, &scratch);
                 ++g_endDrawSorted;
             }

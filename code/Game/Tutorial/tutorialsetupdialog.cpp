@@ -32,6 +32,7 @@
 #include "system/Filename.h"
 #include "system/String.h"
 #include "resolve.h"
+#include "collection/Collection.h"
 #include <cstdint>
 
 // ============================================================
@@ -104,35 +105,17 @@ void* TutorialSetupDialog_ScalarDtor(void* self, uint32_t flags) {
     // Step 3: destroy inline String at +0x40
     reinterpret_cast<System::String*>(s + 0x40)->~String();
 
-    // Step 4-5: destroy 2nd string vector (ptr at +0x30, count at +0x38)
-    {
-        uint32_t count = *(uint32_t*)(s + 0x38);
-        void* buf      = *(void**)(s + 0x30);
-        if (buf && count > 0) {
-            uint8_t* p = (uint8_t*)buf;
-            for (uint32_t i = 0; i < count; ++i, p += 8) {
-                reinterpret_cast<System::String*>(p)->~String();
-            }
-        }
-        fn_MemFreeStatic(buf);
-        *(uint64_t*)(s + 0x30) = 0;
-        *(uint64_t*)(s + 0x38) = 0;
-    }
-
-    // Step 6-7: destroy 1st string vector (ptr at +0x20, count at +0x28)
-    {
-        uint32_t count = *(uint32_t*)(s + 0x28);
-        void* buf      = *(void**)(s + 0x20);
-        if (buf && count > 0) {
-            uint8_t* p = (uint8_t*)buf;
-            for (uint32_t i = 0; i < count; ++i, p += 8) {
-                reinterpret_cast<System::String*>(p)->~String();
-            }
-        }
-        fn_MemFreeStatic(buf);
-        *(uint64_t*)(s + 0x20) = 0;
-        *(uint64_t*)(s + 0x28) = 0;
-    }
+    // Step 4-7: destroy the 2nd (+0x30) then the 1st (+0x20) String vector.
+    // ENDGAME B.3.2 step 2: each WAS an inlined Collection::Array<System::String>::
+    // ~Array — ~String on every live element (8-byte stride), MemFree the buffer
+    // (null-guarded), zero _data, zero the _size/_capacity qword. The trait-derived
+    // Array<System::String> row (destroy == ~String per element, byteCopy false) is
+    // that body: `if (destroy && _size > 0) destroy(...)` then ArrayDtorImpl. The old
+    // code additionally skipped the element loop when the buffer was null with a
+    // positive count, a state no consistent header can be in.
+    // B.3.2 bridge ×2: TutorialSetupDialog is still an untyped exe struct.
+    reinterpret_cast<Collection::Array<System::String>*>(s + 0x30)->~Array();
+    reinterpret_cast<Collection::Array<System::String>*>(s + 0x20)->~Array();
 
     // Step 8: restore TutorialSetup base vtable
     static void* s_baseVtable = nullptr;

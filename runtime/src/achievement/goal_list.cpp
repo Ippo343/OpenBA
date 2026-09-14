@@ -177,6 +177,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/achievement/Goal.h"
 #include "../../types/object/Internal.h"
+#include "../collection/array_internal.h"  // ENDGAME B.3.2 step 2: kSpec_PtrZero bridge (also declares rtcoll::MemFree)
 
 using RtAchievement::GoalList;
 namespace GoalInstanceVtbl = RtAchievement::GoalInstanceVtbl;
@@ -185,15 +186,14 @@ namespace GoalVtbl = RtAchievement::GoalVtbl;
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
-// runtime/src/collection/array.cpp, Wave 9 lane Q. DECLARED rather than
-// #included: array_internal.h states in its own banner that exactly two files
-// include it, and it is another lane's header. This is a link-time reuse of one
-// function, not a shared-header dependency.
+// runtime/src/collection/array.cpp, Wave 9 lane Q — `rtcoll::MemFree`, now
+// reached through the array_internal.h include above (ENDGAME B.3.2 step 2
+// needs that header here anyway, for the `kSpec_PtrZero` bridge below), rather
+// than a hand-written forward declaration.
 //
 // It is `if (p) { Enter(alloc+0x640); Free(alloc, p); Leave; }` — the null test
 // is inside 0x1800c7ad0 — which is instruction for instruction the teardown
 // inlined at 0x18009f209..0x18009f239 here.
-namespace rtcoll { void MemFree(void* p); }
 
 extern "C" void RtAch_GoalList_Initialize(void*, void*);
 
@@ -239,33 +239,30 @@ IsDerivedFromFn BaseIsDerivedFrom() {
         RtResolveCached("?IsDerivedFrom@Base@Object@@QEBA_NI@Z", &f));
 }
 
-// ---- ADDRESS DOOR -----------------------------------------------------------
+// ---- ENDGAME B.3.2 step 2 -----------------------------------------------
 // SYMBOL:      Collection::Array<Object::InternalPtr<Achievement::GoalInstance>>
-//              ::SetSize, Runtime 0x180009d70. An unexported template
-//              instantiation — there is no mangled name to ask for, so this is a
-//              genuine address door, not the "unexported" mislabel §4 #4 warns
-//              about. It is a DIFFERENT instantiation from the 0x180008d60 that
-//              achievement_serialize.cpp uses (Array<InternalPtr<
-//              AchievementInstance>>, which IS ported — Wave 9 lane Q), and
-//              from the generic Array<8> bodies in runtime/src/collection: a
-//              grep of runtime/src/collection for 0x180009d70 returns NOTHING,
-//              so nothing in this tree registers it.
+//              ::SetSize, Runtime 0x180009d70. STALE PARAGRAPH BELOW, KEPT FOR
+//              THE RECORD: this claimed "nothing in this tree registers it" —
+//              that stopped being true once array.cpp's J3_ENTRY2 table (Wave 9
+//              lane Q) grew a `kSpec_PtrZero` row for it; the row is registered
+//              (array.cpp:4220) and this is the SAME spec achievement_vtable.cpp's
+//              copy of this door uses. It is still a DIFFERENT instantiation
+//              from the 0x180008d60 that achievement_serialize.cpp uses
+//              (Array<InternalPtr<AchievementInstance>>) only in ELEMENT TYPE,
+//              not in spec row — both are `kSpec_PtrZero`.
+//              [original paragraph:] "An unexported template instantiation —
+//              there is no mangled name to ask for, so this is a genuine
+//              address door... a grep of runtime/src/collection for 0x180009d70
+//              returns NOTHING, so nothing in this tree registers it."
 // CONDITION:   reached on EVERY call of GoalList::Initialize — unconditionally,
 //              not just on the read path as in achievement_vtable.cpp's copy of
 //              this same door.
-// CONSEQUENCE: at cutover this address resolves to nothing and this body calls
-//              null on the first goal list it builds, which is every
-//              achievement and every tutorial goal set. ADDRESSEE: whoever runs
-//              the cutover attempt that first loads a game with achievements
-//              mounted must port it (it is an `Array<8>` SetSize — the shape
-//              array.cpp already has eleven instantiations of) or accept a dead
-//              GoalList::Initialize. Named identically at
-//              achievement_vtable.cpp's ArraySetSizeGoalInstancePtrs().
-SetSizeFn ArraySetSizeGoalInstancePtrs() {
-    static SetSizeFn f = nullptr;
-    if (!f) f = reinterpret_cast<SetSizeFn>(ResolveAddr(Module::Runtime, 0x180009d70));
-    return f;
-}
+// CONSEQUENCE: NOW REACHED THROUGH A BRIDGE, NOT BY ADDRESS — see the call
+//              site below. `Assign8Z`'s zero-then-copy double write keeps this
+//              row from being trait-equivalent even though the element
+//              (`RtObject::InternalBasePtr`, a plain pointer) is trivial, so it
+//              is `rtcoll::AsArray<&rtcoll::kSpec_PtrZero>(&self->_goals)`, not
+//              a plain `self->_goals.SetSize(...)`.
 
 }  // namespace
 
@@ -285,13 +282,14 @@ extern "C" void RtAch_GoalList_Initialize(void* selfRaw, void* srcRaw) {
     // buffer is read as `void**` exactly as retail's `MOV RCX,[R15+RAX]` does.
     Collection::Array<void*>* src = static_cast<Collection::Array<void*>*>(srcRaw);
 
-    ArraySetSizeGoalInstancePtrs()(self, src->_size);
+    // retail 0x180009d70 — kSpec_PtrZero; see the banner above.
+    rtcoll::AsArray<&rtcoll::kSpec_PtrZero>(&self->_goals)->SetSize(src->GetSize());
 
     // `CMP R12D,[RBP+8]` is re-read at the bottom of every pass, and both
     // `this->_data` and `src->_data` are RELOADED inside the loop — Startup()
     // may reallocate either. Kept.
-    for (int i = 0; i < self->_goals._size; ++i) {
-        void* goal = src->_data[i];
+    for (int i = 0; i < self->_goals.GetSize(); ++i) {
+        void* goal = src->GetData()[i];
 
         // Object::Type GetInstanceType() — a 4-byte class returned BY VALUE,
         // so it takes a hidden return slot in RDX and hands the slot back in
@@ -310,12 +308,12 @@ extern "C" void RtAch_GoalList_Initialize(void* selfRaw, void* srcRaw) {
         // two instructions later. Faithful.
         if (!BaseIsDerivedFrom()(inst, GoalInstanceTypeId())) inst = nullptr;
 
-        self->_goals._data[i].ptr = static_cast<RtObject::Internal*>(inst);
+        self->_goals[i].ptr = static_cast<RtObject::Internal*>(inst);
 
         // Retail RELOADS both arrays here rather than reusing the registers it
         // already has (0x18009f1d7..0x18009f1e2). Reproduced.
-        void* stored = self->_goals._data[i].ptr;
-        void* goalAgain = src->_data[i];
+        void* stored = self->_goals[i].ptr;
+        void* goalAgain = src->GetData()[i];
 
         // GoalInstance::_goal @ +0x18 (runtime/types/achievement/Goal.h).
         // UNGUARDED — see the banner's deref (2).

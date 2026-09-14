@@ -42,6 +42,7 @@
 #include "BridgeTool.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -86,32 +87,24 @@ struct TileRenderEntry {
 };
 static_assert(sizeof(TileRenderEntry) == 0x14, "TileRenderEntry size mismatch");
 
-struct TileArray {
-    TileRenderEntry* data;
-    int count;
-    int capacity;
-};
+// ENDGAME B.3.2 step 2: the tile list is a real `Collection::Array<TileRenderEntry>`
+// (trait-derived row: stride 0x14, align 4, byteCopy, init == nullptr, destroy ==
+// nullptr) and the hand-written grow that used to sit here is one `SetSize(n, fill)`.
+// Compared arm for arm with rtcoll::SetSizeCore before the swap: PushTileEntry only
+// ever appends ONE element (newCount == count + 1 by construction), so its
+// `(count == 0) ? n : n*3` capacity rule is exactly the reference's
+// `newSize == oldSize+1 && oldSize != 0 ? n*3 : n`; MemAlloc(cap * 0x14, align 4);
+// the preserved prefix copied only when the block moved (the grow path here always
+// allocates a fresh block); the new slot takes the fill; the old block freed when it
+// moved; the in-place path stores at [count]. One out-of-memory-only difference: the
+// old body returned early when MemAlloc came back null (count untouched), while
+// SetSizeCore stores the new size and skips the null element address instead.
+using TileArray = Collection::Array<TileRenderEntry>;
 
 // 1:1 with the inlined grow in retail: capacity goes to count*3 once past the first
 // element, allocation is MemAlloc(cap * 0x14, 4).
 void PushTileEntry(TileArray* arr, const TileRenderEntry* entry) {
-    const int newCount = arr->count + 1;
-    if (newCount > arr->capacity) {
-        const int newCap = (arr->count == 0) ? newCount : newCount * 3;
-        TileRenderEntry* newBuf = reinterpret_cast<TileRenderEntry*>(
-            fn_MemAlloc(g_pMemAllocSingleton,
-                        static_cast<uint64_t>(newCap) * sizeof(TileRenderEntry), 4));
-        if (!newBuf) return;
-        for (int i = 0; i < arr->count; i++) newBuf[i] = arr->data[i];
-        newBuf[arr->count] = *entry;
-        if (arr->data != newBuf) fn_MemFreeStatic(arr->data);
-        arr->data = newBuf;
-        arr->count = newCount;
-        arr->capacity = newCap;
-    } else {
-        arr->data[arr->count] = *entry;
-        arr->count = newCount;
-    }
+    arr->SetSize(arr->_size + 1, *entry);
 }
 
 constexpr uint32_t kRed   = 0xffff0000u;
@@ -194,7 +187,7 @@ extern "C" void BridgeTool_Draw_Impl(void* selfPtr, void* context, char skip) {
     // retail's. ValidatePath's port already guards the same way (`if (idx < 0)`).
     const int cellCount = width * width;
 
-    TileArray tiles = {nullptr, 0, 0};
+    TileArray tiles;
 
     // ---- 3. Body cells + clearance ring ------------------------------------
     for (int row = minRow; row <= maxRow; row++) {
@@ -266,7 +259,7 @@ extern "C" void BridgeTool_Draw_Impl(void* selfPtr, void* context, char skip) {
 
     // ---- 4. Submit -----------------------------------------------------------
     // Retail passes an (uninitialised) RCX and a second, always-empty tile array in R9.
-    TileArray empty = {nullptr, 0, 0};
+    TileArray empty;
     if (fn_TileRender) fn_TileRender(nullptr, context, &tiles, &empty);
 
     // Report the first hover frame and the first real DRAG frame separately — a hover
@@ -274,20 +267,20 @@ extern "C" void BridgeTool_Draw_Impl(void* selfPtr, void* context, char skip) {
     {
         static bool s_loggedHover = false, s_loggedDrag = false;
         bool* slot = isDrag ? &s_loggedDrag : &s_loggedHover;
-        if (!*slot && tiles.count > 0) {
+        if (!*slot && tiles._size > 0) {
             *slot = true;
             int green = 0;
-            for (int i = 0; i < tiles.count; i++)
-                if (tiles.data[i].color == kGreen) green++;
+            for (int i = 0; i < tiles._size; i++)
+                if (tiles._data[i].color == kGreen) green++;
             fprintf(stderr, "[Bridge] Draw(%s): start=%d end=%d rect=(%d,%d)..(%d,%d) "
                     "valid=%d radius=%d tiles=%d green=%d red=%d render=%p\n",
                     isDrag ? "drag" : "hover", startCell, endCell, minCol, minRow,
-                    maxCol, maxRow, (int)pathValid, radius, tiles.count, green,
-                    tiles.count - green, (void*)fn_TileRender);
+                    maxCol, maxRow, (int)pathValid, radius, tiles._size, green,
+                    tiles._size - green, (void*)fn_TileRender);
             fflush(stderr);
         }
     }
 
-    fn_MemFreeStatic(empty.data);
-    fn_MemFreeStatic(tiles.data);
+    // `tiles` and `empty` are released by ~Array at scope exit — exactly one
+    // destruction per path (no return between their declarations and here).
 }

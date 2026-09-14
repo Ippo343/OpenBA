@@ -603,10 +603,27 @@ extern "C" void RtEngine_MainLoop_Dtor(MainLoop* self) {
     }
     self->_context = nullptr;
 
-    reinterpret_cast<VoidThisFn>(
-        ResolveAddr(Module::Runtime, 0x180033a40))(&self->_postUpdate);
-    reinterpret_cast<VoidThisFn>(
-        ResolveAddr(Module::Runtime, 0x180033960))(&self->_postDraw);
+    // retail 0x180033a40 / 0x180033960 — both J1 bodies (array.cpp's J1_ENTRY
+    // table), i.e. trivial-destroy `Array<uint8_t>::~Array`. `MainLoopCallback`
+    // (runtime/types/engine/MainLoop.h) is a trivially destructible two-pointer
+    // POD, so the trait-derived `~Array()` on `_postUpdate`/`_postDraw` IS that
+    // exact body.
+    self->_postUpdate.~Array();
+    self->_postDraw.~Array();
+    // NOT CONVERTED (0x180033880): this is a J2 entry (array_destroy.cpp),
+    // `ReleaseStringsCounted(..., kD_Str_18)` then `ArrayDtorImpl` — a
+    // per-element String RELEASE, not a trivial destroy. `VideoResourceEntry`
+    // (MainLoop.h) types its String field as a raw `char* _name` rather than a
+    // real refcounted String class, so `is_trivially_destructible
+    // <VideoResourceEntry>` is TRUE in this header and the trait-derived
+    // `Array<VideoResourceEntry>::~Array()` would SKIP the release entirely —
+    // silently leaking every resource name string on video-context teardown.
+    // Bridging this correctly needs an `ArraySpec` whose `destroy` calls
+    // `ReleaseStringsCounted` with `kD_Str_18` (a `DestroySpec`, a different
+    // struct from `ArraySpec`, defined in array_destroy.cpp) — that is new
+    // Collection-side plumbing this batch does not own (runtime/src/collection
+    // is out of scope here), so this stays a by-address call rather than a
+    // forced (and wrong) `.~Array()`.
     reinterpret_cast<VoidThisFn>(
         ResolveAddr(Module::Runtime, 0x180033880))(&self->_videoResources);
 

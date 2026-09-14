@@ -249,32 +249,11 @@ GetAlignedStaticFn GetAlignedStatic() {
     return fn;
 }
 
-// Collection::Array<Element*>::SetSize(int, const T&). Header-only template:
-// NO export exists, so this is the one place this file uses
-// ResolveAddr(Module::Runtime, …).
-//
-// *** WAVE 9 LANE Q, 2026-09-07: 0x180076900 IS NOW REGISTERED. ***
-// This comment used to say "safe here -- and only here -- because nothing
-// registers 0x180076900, so the port registry (consulted first) does not
-// intercept it". It DOES intercept it now: lane Q registers this address in
-// runtime/src/collection/array.cpp, so this call reaches our SetSize. That is
-// the intended cutover behaviour, and the body is verified against the shipped
-// one by runtime/src/collection/array_probe.cpp -- but the old sentence was
-// load-bearing for a reader, so it is corrected here rather than deleted.
-//
-// This is the instantiation for 8-BYTE elements, and it is the exact address
-// AddChild itself calls; a different Array<T> gets a different copy of the
-// template, so this address must not be reused for anything else. Read out of
-// the shipped body at 0x180076900:
-//   grow to `newSize`, tripling the capacity when the growth is +1 from a
-//   non-empty array, MemAlloc(capacity*8, 8), copy the old elements, fill the
-//   new tail from *fillValue, MemFree the old buffer under the allocator's CS.
-using ArraySetSizeFillFn = void (*)(void*, int, const void*);
-ArraySetSizeFillFn ArraySetSizeFill() {
-    static ArraySetSizeFillFn fn = reinterpret_cast<ArraySetSizeFillFn>(
-        ResolveAddr(Module::Runtime, 0x180076900));
-    return fn;
-}
+// ENDGAME B.3.2 step 2 — the 0x180076900 forwarder that used to sit here is
+// GONE. `Element::_children` is a real `Collection::Array<Element*>` member
+// (Element.h, +0xa0), and 0x180076900 is `kSpec_Fill8Z`, trait-equivalent for
+// `Element*` (dialog_create.cpp's banner has the full spec comparison), so
+// `AddChild` below calls `.SetSizeFill()` on the member directly.
 
 // The exported data symbol the ctor stamps. Resolved by NAME, so our objects
 // and the DLL's carry the identical vtable pointer.
@@ -442,12 +421,14 @@ void* RtUi_Element_Ctor(Element* self) {
 // says which one broke (reference_shadow_predicate_must_name_its_failing_term.md).
 void RtUi_Element_AddChild(Element* self, void** child) {
 
-    const int  oldSize = self->_children._size;
+    const int  oldSize = self->_children.GetSize();
     Element* const c   = reinterpret_cast<Element*>(*child);
 
     if (c) c->_parent = self;
-    ArraySetSizeFillFn grow = ArraySetSizeFill();
-    if (grow) grow(&self->_children, self->_children._size + 1, child);
+    // retail 0x180076900 — kSpec_Fill8Z, trait-equivalent for `Element*` (see
+    // dialog_create.cpp's banner): `self->_children` is the trait-derived
+    // `Array<Element*>` instantiation already.
+    self->_children.SetSizeFill(self->_children.GetSize() + 1, child);
     NeedsSizeCalcWalk(self);
 
 }
@@ -458,14 +439,14 @@ void RtUi_Element_AddChild(Element* self, void** child) {
 // negative index reads before the buffer, exactly as retail does.
 void* RtUi_Element_Child(Element* self, void** ret, int index) {
 
-    *ret = self->_children._data[static_cast<intptr_t>(index)];
+    *ret = self->_children.GetData()[static_cast<intptr_t>(index)];
 
     return ret;
 }
 
 // ---- ?ChildCount@  0x180035530 ---------------------------------------------
 int RtUi_Element_ChildCount(const Element* self) {
-    const int ours = self->_children._size;
+    const int ours = self->_children.GetSize();
     return ours;
 }
 
@@ -520,8 +501,8 @@ void* FindElementImpl(Element* self, void** ret, const char* const* name) {
             if (equal) { *ret = self; return ret; }
         }
     }
-    for (int i = 0; i < self->_children._size; ++i) {
-        Element* c = self->_children._data[i];
+    for (int i = 0; i < self->_children.GetSize(); ++i) {
+        Element* c = self->_children.GetData()[i];
         if (!c) continue;
         void* found = nullptr;
         FindElementImpl(c, &found, name);
@@ -545,8 +526,8 @@ namespace {
 void* FindElementTypeImpl(Element* self, void** ret, uint32_t typeId) {
     using TypeFn = uint32_t (*)(const Element*);
     if (VSlot<TypeFn>(self, kSlotType)(self) == typeId) { *ret = self; return ret; }
-    for (int i = 0; i < self->_children._size; ++i) {
-        Element* c = self->_children._data[i];
+    for (int i = 0; i < self->_children.GetSize(); ++i) {
+        Element* c = self->_children.GetData()[i];
         if (!c) continue;
         void* found = nullptr;
         FindElementTypeImpl(c, &found, typeId);
@@ -1004,17 +985,17 @@ void RtUi_ContainerElement_SetOffsets(Element* self, int x, int y) {
 
     IsDerivedFromFn isA = IsDerivedFrom();
 
-    Element* child0 = self->_children._data[0];
+    Element* child0 = self->_children.GetData()[0];
     Element* clip = (isA && isA(child0, ClipRegionTypeId())) ? child0 : nullptr;
     uint8_t* clipBytes = reinterpret_cast<uint8_t*>(clip);
     *reinterpret_cast<int32_t*>(clipBytes + 0xd0) = x;
     *reinterpret_cast<int32_t*>(clipBytes + 0xd4) = y;
 
-    Element* child1 = self->_children._data[1];
+    Element* child1 = self->_children.GetData()[1];
     Element* vscroll = nullptr;
     if (child1 && isA && isA(child1, ScrollTypeId())) vscroll = child1;
 
-    Element* child2 = self->_children._data[2];
+    Element* child2 = self->_children.GetData()[2];
     Element* hscroll = nullptr;
     if (child2 && isA && isA(child2, ScrollTypeId())) hscroll = child2;
 
@@ -1176,13 +1157,11 @@ void RtUi_Element_Dtor(Element* self) {
         self->_border = nullptr;
     }
 
-    // ~Array<Element*> on this+0xa0, by ADDRESS so it lands on lane Q's J1 body
-    // (the twelfth address, registered by this lane).
-    {
-        using Fn = void* (*)(void*);
-        static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180037240));
-        if (fn) fn(&self->_children);
-    }
+    // ENDGAME B.3.2 step 2 — the 0x180037240 forwarder is GONE. `_children` is
+    // the real `Collection::Array<Element*>` member, and 0x180037240 is a J1
+    // `~Array` (destroy == null): trait-equivalent, since `Element*` is
+    // trivially destructible. `.~Array()` IS that instantiation.
+    self->_children.~Array();
 
     // The two System::String releases, in retail's order (+0x58 then +0x10) and
     // with retail's asymmetry: on the FREEING branch the field is left holding
@@ -1265,8 +1244,8 @@ void AdjustUpperLeftCore(Element* self, int32_t dx, int32_t dy) {
         self->_layoutRight  += dx;
         self->_layoutTop    += dy;
         self->_layoutBottom += dy;
-        for (int32_t i = 0; i < self->_children._size; ++i) {
-            Element* child = self->_children._data[i];
+        for (int32_t i = 0; i < self->_children.GetSize(); ++i) {
+            Element* child = self->_children.GetData()[i];
             if (child) AdjustUpperLeftCore(child, dx, dy);
         }
         self = static_cast<Element*>(self->_border);

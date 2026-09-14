@@ -76,6 +76,7 @@
 #include "../../../engine/types/common.h"   // Vector3
 #include "../../types/io/Serializer.h"        // Stream / Serializer / rw_vtbl (Wave 4)
 #include "../system/timer.h"                  // Wave 9 lane W: TimerSecondsPerTick
+#include "../collection/array_internal.h"     // ENDGAME B.3.2 step 2: kSpec_EffectSlot bridge
 
 // ----------------------------------------------------------------------------
 // ResolveAddr / Module, forward-declared rather than pulled in from
@@ -666,12 +667,16 @@ bool RtAudio_Configuration_Startup(void* selfPtr) {
 // be replayed into two INDEPENDENT recording sinks and their emission sequences
 // compared. That is what the emission oracle does, and it is why this port
 // is not held back for "no oracle".
-using AudioArrayResizeFn = void (*)(void* array, int32_t newCount);
+// ENDGAME B.3.2 step 2 — the 0x180051390 by-address forwarder (`arrayResize`)
+// is GONE: `scene->effects` is already `Collection::Array<EffectSlot>`
+// (runtime/types/audio/Audio.h), and 0x180051390 IS that instantiation's
+// SetSize — `kSpec_EffectSlot` (runtime/src/collection/array.cpp), NON-TRIVIAL
+// (a real per-element copy-assign and destroy-range, not a byte trait), so it
+// stays a hand-derived `rtcoll::AsArray<&kSpec_EffectSlot>` bridge rather than
+// a plain `.SetSize(n)`. The row stays registered in array.cpp.
 using AudioBulkSerFn     = void (*)(void* serializer, int32_t count, void* data);
 
 void RtAudio_Scene_Serialize(void* self, void* serializer) {
-    static auto arrayResize = reinterpret_cast<AudioArrayResizeFn>(
-        ResolveAddr(Module::Runtime, 0x180051390));
     static auto bulkSerialize = reinterpret_cast<AudioBulkSerFn>(
         ResolveAddr(Module::Runtime, 0x180052640));
 
@@ -695,17 +700,18 @@ void RtAudio_Scene_Serialize(void* self, void* serializer) {
     void** rwVtable = *reinterpret_cast<void***>(rw);
 
     // kScalarInt (+0xa0) -- (int& value, const char* name)
-    int32_t count = scene->effects._size;
+    int32_t count = scene->effects.GetSize();
     using ScalarIntFn = void (*)(void*, int32_t*, const char*);
     reinterpret_cast<ScalarIntFn>(rwVtable[rt::io::rw_vtbl::kScalarInt / 8])(
         rw, &count, nullptr);
 
     // Reading only: grow the array to the count just read. Retail's JNZ at
     // 0x1800e00c0 skips this when writing, so saving never reallocates.
+    // retail 0x180051390 — kSpec_EffectSlot; see the banner above.
     if (local.stream->direction == rt::io::kDirectionReading)
-        arrayResize(&scene->effects, count);
+        rtcoll::AsArray<&rtcoll::kSpec_EffectSlot>(&scene->effects)->SetSize(count);
 
-    bulkSerialize(&local, count, scene->effects._data);
+    bulkSerialize(&local, count, scene->effects.GetData());
 
     // kArrayBool (+0x20) -- (int n, bool* data, const char* name), n == 5.
     using ArrayBoolFn = void (*)(void*, int32_t, void*, const char*);
@@ -975,14 +981,23 @@ void RtAudio_Scene_Pause(void* selfPtr, int32_t soundType, bool paused) {
 // live calls, all of them the claim being wrong. Retail's spelling is kept
 // here because it is retail's, not because it differs.
 // ============================================================================
+// NOT CONVERTED (0x180050d30, `rtsort::Array16Assign`): `Collection::Array<T>
+// ::operator=` is still the compiler-generated SHALLOW copy (Collection.h's
+// Array banner) — retail's DEEP operator= only becomes this class's own once
+// the last bitwise copier elsewhere is gone. `slot->positions = tmp.positions`
+// would be the wrong (shallow) copy today, so the assign stays a by-address
+// call into the real body.
+//
+// 0x180051d80 (the dtor) IS converted below: it is a J1 body (array.cpp's
+// J1_ENTRY table), i.e. trivial-destroy `Array<uint8_t>::~Array`, and
+// `EffectSlot::positions` is `Collection::Array<EmitterInstance>`
+// (runtime/types/audio/Audio.h) with `EmitterInstance` a trivially destructible
+// POD, so the trait-derived `~Array()` on the stack temporary IS that body.
 using AudioArrayAssignFn = void (*)(void* dst, const void* src);
-using AudioArrayDtorFn   = void (*)(void* arr);
 
 void RtAudio_Scene_StopEffect3D(void* selfPtr, uint32_t id) {
     static auto arrayAssign = reinterpret_cast<AudioArrayAssignFn>(
         ResolveAddr(Module::Runtime, 0x180050d30));
-    static auto arrayDtor = reinterpret_cast<AudioArrayDtorFn>(
-        ResolveAddr(Module::Runtime, 0x180051d80));
 
     auto* self = static_cast<Scene*>(selfPtr);
     uint32_t idx = (id >> 1) & 0xfff;
@@ -1018,7 +1033,14 @@ void RtAudio_Scene_StopEffect3D(void* selfPtr, uint32_t id) {
     slot->idTag          = 0;
     slot->baseVolume     = 1.0f;
     arrayAssign(&slot->positions, &tmp.positions);
-    arrayDtor(&tmp.positions);
+    // retail 0x180051d80 (`tmp`'s ~Array() tail call) is GONE, not converted to
+    // an explicit `.~Array()` call: `tmp` is a local EffectSlot, and now that
+    // `Collection::Array<EmitterInstance>` carries a real destructor,
+    // EffectSlot's IMPLICIT destructor already calls `tmp.positions.~Array()`
+    // when `tmp` goes out of scope at the end of this function — calling it
+    // here too would be a double ~Array() on the same buffer (a double free,
+    // harmless only because `tmp.positions` is always empty, but still wrong).
+    // One destruction per path, per the locals rule.
 
     // SHADOW: the DLL's read-only GetEmitterCount on the id we just retired
     // must report 0 -- the slot is default and its idTag no longer validates.

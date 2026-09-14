@@ -47,6 +47,7 @@
 #include "options.h"
 #include "resolve.h"
 #include "system/String.h"
+#include "collection/Collection.h"
 #include <new>
 #include "address_registry.h"
 #include "Object/factory_registration.h"
@@ -240,48 +241,79 @@ inline bool IsSaving(void* stream) {
 // generic resize family); shrink String-dtors the tail; realloc copies via
 // String copy-ctor and dtors+frees the old block. New elements init to
 // { -1, null-String, 0, 0, -1, -1, -1 }.
+//
+// ENDGAME B.3.2 step 2: this body and CamViewArray_Resize_e000 below WERE
+// hand-written copies of `rtcoll::SetSizeCore` (runtime/src/collection/
+// array.cpp); each is now one `Collection::Array<>::SetSize` over its own
+// `ArraySpec` row. Compared arm for arm: exact-equal early return, `_size`
+// stored before the capacity test, treble-on-single-append-from-non-empty,
+// copy-construct the preserved prefix only when the block moved, init the new
+// tail, destroy the truncated tail in place / the whole old buffer on a
+// realloc, then free. The old realloc arm was gated on `oldData != null`;
+// SetSizeCore runs destroy over `oldSize` elements (zero when the buffer was
+// never allocated) and hands the null to the null-tolerant 0x1800c7ad0 —
+// same effect. The one deliberate difference: the allocation now goes
+// through the LOCKING static `MemAlloc` (0x1800c7a50) instead of the unlocked
+// instance `Allocate` reached through `fn_MemAlloc` — same allocator, same
+// heap, plus the critical section retail's own Collection code takes.
+namespace {
+
+// Event entry {uint id @0, String text @8, int a,b,c,d,e @0x10..0x23},
+// stride 0x28, align 8. Copy-construct writes +0x00..+0x03 and +0x08..+0x23;
+// init writes the same bytes. +0x04..+0x07 (String alignment pad) and
+// +0x24..+0x27 are touched by NEITHER arm — the `unwritten` pair names the
+// trailing hole; +0x04..+0x07 is the second, non-contiguous one. The String
+// copy makes byteCopy=false and the String dtor is the destroy.
+void AssignEventEntry(uint8_t* dst, const uint8_t* src) {
+    *reinterpret_cast<uint32_t*>(dst) = *reinterpret_cast<const uint32_t*>(src);
+    // B.3.1 bridge: the event entry is still untyped bytes.
+    new (dst + 0x8) System::String(*reinterpret_cast<const System::String*>(src + 0x8));
+    memcpy(dst + 0x10, src + 0x10, 5 * 4);
+}
+// ⚠ Seed values are load-bearing: id=-1, c=d=e=-1, a=b=0.
+void InitEventEntry(uint8_t* dst) {
+    *reinterpret_cast<uint32_t*>(dst) = 0xffffffff;
+    *reinterpret_cast<uint64_t*>(dst + 0x8) = 0;                 // null String
+    *reinterpret_cast<uint64_t*>(dst + 0x10) = 0;                // a=b=0
+    *reinterpret_cast<uint64_t*>(dst + 0x18) = 0xffffffffffffffff; // c=d=-1
+    *reinterpret_cast<uint32_t*>(dst + 0x20) = 0xffffffff;       // e=-1
+}
+void DestroyEventEntry(void* /*ignoredThis*/, uint8_t* base, int count) {
+    for (int i = 0; i < count; i++)
+        reinterpret_cast<System::String*>(base + static_cast<size_t>(i) * 0x28 + 0x8)->~String();
+}
+const rtcoll::ArraySpec kSpec_EventEntry = {             // exe 0x1400199a0
+    "Array<EventLogEntry>", 0x28, 8,
+    &AssignEventEntry, &InitEventEntry, &DestroyEventEntry, false,
+    /*assign unwritten*/ 0x24, 0x28,   // plus +0x04..+0x07
+    /*init   unwritten*/ 0x24, 0x28,   // plus +0x04..+0x07
+    /*seed zero       */ 0,    0 };
+using EventEntryArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                          Collection::ExplicitSpec<&kSpec_EventEntry>>;
+
+// Camera view {Vector3 pos, float a, float b, float c, bool used}, stride
+// 0x1c, align 4. Copy writes +0x00..+0x18 and leaves +0x19..+0x1b (retail's
+// 4x-unrolled dword loop plus the bool); init memsets the whole stride.
+// Partial copy, so byteCopy=false; trivially destructible.
+void AssignCamView(uint8_t* dst, const uint8_t* src) {
+    memcpy(dst, src, 0x18);
+    dst[0x18] = src[0x18];
+}
+void InitCamView(uint8_t* dst) { memset(dst, 0, 0x1c); }
+const rtcoll::ArraySpec kSpec_CamView = {                // exe 0x14002e000
+    "Array<CameraView>", 0x1c, 4,
+    &AssignCamView, &InitCamView, nullptr, false,
+    /*assign unwritten*/ 0x19, 0x1c,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0,    0 };
+using CamViewArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                       Collection::ExplicitSpec<&kSpec_CamView>>;
+
+}  // namespace
+
 extern "C" void EventLog_Resize_199a0(void* hdrVoid, int newCount) {
-    uintptr_t hdr = (uintptr_t)hdrVoid;
-    int oldCount = *(int*)(hdr + 0x8);
-    if (newCount == oldCount) return;
-
-    uint8_t* oldData = *(uint8_t**)hdr;
-    *(int*)(hdr + 0x8) = newCount;
-    if (*(int*)(hdr + 0xc) < newCount) {
-        int cap = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) cap = newCount * 3;
-        *(int*)(hdr + 0xc) = cap;
-        *(void**)hdr = fn_MemAlloc(g_pMemAllocSingleton, (int64_t)cap * 0x28, 8);
-    }
-    uint8_t* newData = *(uint8_t**)hdr;
-
-    int copyFrom = (oldData == newData) ? oldCount : 0;
-    for (int i = copyFrom; i < newCount; i++) {
-        uint8_t* dst = newData + (size_t)i * 0x28;
-        if (i < oldCount) {
-            uint8_t* src = oldData + (size_t)i * 0x28;
-            *(uint32_t*)dst = *(uint32_t*)src;
-            // B.3.1 bridge: the event entry is still untyped bytes.
-            new (dst + 0x8) System::String(*reinterpret_cast<const System::String*>(src + 0x8));
-            memcpy(dst + 0x10, src + 0x10, 5 * 4);
-        } else {
-            *(uint32_t*)dst = 0xffffffff;
-            *(uint64_t*)(dst + 0x8) = 0;                 // null String
-            *(uint64_t*)(dst + 0x10) = 0;                // a=b=0
-            *(uint64_t*)(dst + 0x18) = 0xffffffffffffffff; // c=d=-1
-            *(uint32_t*)(dst + 0x20) = 0xffffffff;       // e=-1
-        }
-    }
-
-    if (oldData == newData) {
-        // shrink in place: dtor the removed tail Strings
-        for (int i = newCount; i < oldCount; i++)
-            reinterpret_cast<System::String*>(oldData + (size_t)i * 0x28 + 0x8)->~String();
-    } else if (oldData) {
-        for (int i = 0; i < oldCount; i++)
-            reinterpret_cast<System::String*>(oldData + (size_t)i * 0x28 + 0x8)->~String();
-        fn_MemFreeStatic(oldData);
-    }
+    // B.3.2 bridge: the event notifier's +0x18 header is still raw bytes.
+    reinterpret_cast<EventEntryArray*>(hdrVoid)->SetSize(newCount);
 }
 
 // ============================================================
@@ -375,32 +407,10 @@ extern "C" void WeatherSim_Serialize_93c90(void* selfVoid, void* stream) {
 // hdr = { void* data; int count; int cap }. Element: { Vector3 pos; float a;
 // float b; float c; bool used } (0x1c bytes). Retail body is a 4x-unrolled
 // copy loop — ported as a plain loop with identical semantics.
+// ENDGAME B.3.2 step 2: see the kSpec_CamView row above EventLog_Resize_199a0.
 extern "C" void CamViewArray_Resize_e000(void* hdrVoid, int newCount) {
-    uintptr_t hdr = (uintptr_t)hdrVoid;
-    int oldCount = *(int*)(hdr + 0x8);
-    if (newCount == oldCount) return;
-
-    uint8_t* oldData = *(uint8_t**)hdr;
-    *(int*)(hdr + 0x8) = newCount;
-    if (*(int*)(hdr + 0xc) < newCount) {
-        int cap = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) cap = newCount * 3;
-        *(int*)(hdr + 0xc) = cap;
-        *(void**)hdr = fn_MemAlloc(g_pMemAllocSingleton, (int64_t)cap * 0x1c, 4);
-    }
-    uint8_t* newData = *(uint8_t**)hdr;
-
-    int copyFrom = (oldData == newData) ? oldCount : 0;
-    for (int i = copyFrom; i < newCount; i++) {
-        uint8_t* dst = newData + (size_t)i * 0x1c;
-        if (i < oldCount) {
-            memcpy(dst, oldData + (size_t)i * 0x1c, 0x18);
-            dst[0x18] = oldData[(size_t)i * 0x1c + 0x18];
-        } else {
-            memset(dst, 0, 0x1c);
-        }
-    }
-    if (oldData != newData && oldData) fn_MemFreeStatic(oldData);
+    // B.3.2 bridge: EntityUI+0x70 is still a raw header.
+    reinterpret_cast<CamViewArray*>(hdrVoid)->SetSize(newCount);
 }
 
 // ============================================================

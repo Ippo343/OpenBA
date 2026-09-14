@@ -490,9 +490,14 @@ extern "C" void RtEngine_MainLoop_OnVideoError(RtEngine::MainLoop* self) {
     //
     // It IS still a reordering, and it would stop being safe the day one of
     // these globals became something a MemAlloc could touch.
-    // ENDGAME B.3.2: Collection::Array is a real class; its default ctor is
-    // the same three zero stores this brace-init was.
-    rtcoll::ArrayHdr types;
+    // ENDGAME B.3.2 step 1: Collection::Array is a real class; its default
+    // ctor is the same three zero stores this brace-init was.
+    // ENDGAME B.3.2 step 2: retyped from the untyped `rtcoll::ArrayHdr` to the
+    // real `Collection::Array<uint32_t>` — `kSpec_I32` {4,4,Assign4,init=null,
+    // destroy=null,byteCopy} IS `SpecFor<uint32_t>()` field for field, so the
+    // trait-derived instantiation is that exact spec, and `types` is a purely
+    // local scratch array with no other consumer to keep in sync.
+    Collection::Array<uint32_t> types;
     const uint32_t ids[10] = {
         TypeIdImageBuffer(),
         TypeIdVertexProgram(),
@@ -506,17 +511,26 @@ extern "C" void RtEngine_MainLoop_OnVideoError(RtEngine::MainLoop* self) {
         TypeIdFrameCopyImageBuffer(),
     };
     for (int i = 0; i < 10; ++i) {
-        rtcoll::SetSizeCore(&types, types._size + 1,
-                            reinterpret_cast<const uint8_t*>(&ids[i]),
-                            &rtcoll::kSpec_I32);
+        types.SetSize(types.GetSize() + 1, ids[i]);
     }
 
     // ---- 2. clear _videoResources --------------------------------------------
+    // NOT CONVERTED (0x180033880): a J2 entry (array_destroy.cpp),
+    // `ReleaseStringsCounted(..., kD_Str_18)` then `ArrayDtorImpl` — a
+    // per-element String RELEASE. `VideoResourceEntry` (runtime/types/engine/
+    // MainLoop.h) types its String field as a raw `char* _name`, so it is
+    // trivially destructible in THIS header and the trait-derived
+    // `Array<VideoResourceEntry>::~Array()` would wrongly skip the release —
+    // see engine.cpp's identical banner on this same address/field. Stays a
+    // by-address call.
     reinterpret_cast<void (*)(void*)>(
         ResolveAddr(Module::Runtime, 0x180033880))(&self->_videoResources);
 
-    rtcoll::ArrayHdr* const arr =
-        reinterpret_cast<rtcoll::ArrayHdr*>(&self->_videoResources);
+    // ENDGAME B.3.2 step 2 — `arr` is now the real `_videoResources` member
+    // seen through its own hand-derived spec, `kSpec_VideoResource`
+    // (NON-TRIVIAL: a real element assign and a destroy-range, not a byte
+    // trait), rather than a raw `rtcoll::ArrayHdr*` alias.
+    auto* const arr = rtcoll::AsArray<&rtcoll::kSpec_VideoResource>(&self->_videoResources);
 
     // ---- 3. collect the live resources of those ten classes ------------------
     const RtObject::ExternalFactory* const factory =
@@ -524,7 +538,7 @@ extern "C" void RtEngine_MainLoop_OnVideoError(RtEngine::MainLoop* self) {
     const uint32_t externalTypeId = TypeIdExternal();
 
     for (int i = 0; i < 10; ++i) {
-        const uint32_t wanted = *(reinterpret_cast<const uint32_t*>(types._data) + i);
+        const uint32_t wanted = types[i];
 
         const RtObject::External* e =
             RtObject::RtObject_ExternalFactory_FindNext(factory, externalTypeId, nullptr);
@@ -551,7 +565,8 @@ extern "C" void RtEngine_MainLoop_OnVideoError(RtEngine::MainLoop* self) {
                 // retail as well, so it comes through the transitional accessor.
                 System::FilenamePrivateAccess::AdjustDelimiters(rec.path);
 
-                RtColl_ArraySetSizeFill_18004f620(arr, arr->_size + 1, &rec);
+                // retail 0x18004f620 — kSpec_VideoResource; see the banner above.
+                arr->SetSizeFill(arr->GetSize() + 1, &rec);
 
                 // `rec.path` then `fromGetPath` release here (0x1800dcaf6 and
                 // 0x1800dcb02) — C++'s reverse declaration order.
@@ -622,13 +637,21 @@ extern "C" void RtEngine_MainLoop_OnVideoError(RtEngine::MainLoop* self) {
     self->_context = nullptr;
 
     // ---- 8. free the id array ---------------------------------------------------
-    rtcoll::ArrayDtorImpl(&types);
+    // ENDGAME B.3.2 step 2 — the manual `rtcoll::ArrayDtorImpl(&types)` call is
+    // GONE, not replaced by an explicit `types.~Array()`: `types` is now a real
+    // `Collection::Array<uint32_t>` local, and nothing after this point uses it,
+    // so its IMPLICIT destructor already runs exactly here, at the closing
+    // brace below — the one-destruction-per-path rule with the single path
+    // being "fall off the end of the function". Calling `.~Array()` here too
+    // would be a genuine double free (`types` holds ten live elements at this
+    // point, unlike the always-empty stack temp in audio.cpp's equivalent
+    // case), so nothing is added here beyond the retyping above.
 
     // ---- oracle -----------------------------------------------------------------
     // Three post-conditions, none of them produced by the arithmetic above:
     // `_context` is nulled here but the DESTRUCTION is the DLL's ~Context and
-    // the free is the allocator's; `types` is emptied by lane Q's
-    // ArrayDtorImpl; and `_videoResources` must be left self-consistent by
+    // the free is the allocator's; `types` is emptied by its own destructor at
+    // scope exit; and `_videoResources` must be left self-consistent by
     // SetSizeCore. The last term is the one with teeth — `_size <= _capacity`
     // with a non-null `_data` whenever `_size > 0` is a property SetSizeCore
     // could violate and this body cannot fake, because it never writes those

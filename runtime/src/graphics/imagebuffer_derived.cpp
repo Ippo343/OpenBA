@@ -49,6 +49,7 @@
 #include "../../types/graphics/FrameCopyImageBuffer.h"
 #include "../../types/graphics/GeneratedImageBuffer.h"
 #include "../../types/io/Serializer.h"
+#include "../collection/array_internal.h"
 
 using rt::io::Encoding;
 using rt::io::ReaderWriter;
@@ -688,12 +689,12 @@ void GroupArraySetSize(void* arrayHdr, int n, const void* fill) {
     if (!f) f = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800637b0));
     f(arrayHdr, n, fill);
 }
-void ArrayDtor(void* arrayHdr) {
-    using Fn = void* (*)(void*);
-    static Fn f = nullptr;
-    if (!f) f = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001c750));
-    f(arrayHdr);
-}
+// ENDGAME B.3.2 step 2 (callers) — `ArrayDtor`'s ResolveAddr forwarder is
+// GONE. 0x18001c750 is array.cpp's `J1_ENTRY`, `ArrayDtorSited(a) { a->
+// ~Array(); }` on a plain `ArrayHdr* = Collection::Array<uint8_t>*` (the
+// DEFAULT trait-derived spec, not an ExplicitSpec row) — so the call site
+// below now destroys the local group record's own trailing Array header
+// exactly the same way, in place.
 
 // `?_singleton@Configuration@Video@@0PEAV12@EA` — 0x1801fe7a0. A pointer TO the
 // Configuration, so the read is a double indirection, which is what
@@ -764,7 +765,8 @@ extern "C" void RtGraphics_ReflectionImageBuffer_Render(void* self, void* render
                               static_cast<const uint8_t*>(renderer) + 8);
     GroupArraySetSize(renderer, count + 1, group);
 
-    ArrayDtor(group + 0x100);                       // the temporary's own Array
+    // retail 0x18001c750 — the temporary's own Array<uint8_t> header, freed.
+    reinterpret_cast<rtcoll::ArrayHdr*>(group + 0x100)->~Array();
     p->_generation = generation;                    // MOV [RDI+0x68],ESI
 }
 

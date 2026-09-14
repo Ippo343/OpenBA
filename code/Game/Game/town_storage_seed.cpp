@@ -71,6 +71,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
+#include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -326,9 +327,18 @@ extern "C" void TownStorage_SpawnResources_91660(void* townMgrV, uint32_t mask, 
     if (!townMgr) return;
 
     // ---- Phase A: filter the raw-material template list (+0x110/+0x118) ----
-    int64_t* matched = nullptr;   // local_48
-    int matchedCount = 0;         // local_40 low dword
-    int matchedCap = 0;           // local_40 high dword
+    // ENDGAME B.3.2 step 2: retail's local_48/local_40 {data,count,cap} triple is
+    // a real `Collection::Array<int64_t>` with RAII (trait-derived, trait-
+    // equivalent: 8-byte copy, no destroy, the 2-argument init never reached by
+    // a fill call). Exactly one destruction per path: the function has a single
+    // exit after phase B, where the manual free used to be. The grow-append
+    // below was compared arm for arm against rtcoll::SetSizeCore: the capacity
+    // rule `matchedCount != 0 ? newCount*3 : newCount` IS the reference's rule
+    // because newCount = matchedCount + 1 always; the exact-equal early return
+    // is vacuous for the same reason; prefix copied only when the block moved,
+    // fill at the old count, old block freed only when it moved. Only the
+    // `if (!matched) break` out-of-memory bail is gone.
+    Collection::Array<int64_t> matched;
 
     int tmplCount = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(townMgr) + 0x118);
     int64_t tmplArr = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(townMgr) + 0x110);
@@ -341,23 +351,9 @@ extern "C" void TownStorage_SpawnResources_91660(void* townMgrV, uint32_t mask, 
             continue;
         // Faithful grow-append (8-byte entries; cap = n+1, tripled when growing
         // a non-empty array; copy survivors; free the old buffer).
-        int newCount = matchedCount + 1;
-        int64_t* oldBuf = matched;
-        if (matchedCap < newCount) {
-            matchedCap = newCount;
-            if (matchedCount != 0) matchedCap = newCount * 3;
-            matched = reinterpret_cast<int64_t*>(
-                fn_MemAlloc(g_pMemAllocSingleton,
-                            static_cast<uint64_t>(matchedCap) << 3, 8));
-        }
-        int start = (oldBuf == matched) ? matchedCount : 0;
-        for (int i = start; i < newCount; i++) {
-            if (!matched) break;
-            matched[i] = (i < matchedCount) ? oldBuf[i] : tmpl;
-        }
-        if (oldBuf != matched && oldBuf) fn_MemFreeStatic(oldBuf);
-        matchedCount = newCount;
+        matched.SetSize(matched.GetSize() + 1, tmpl);
     }
+    const int matchedCount = matched.GetSize();
 
     // ---- Phase B: round-robin the matched templates over townMgr+0x00 ----
     int placed = 0;
@@ -389,7 +385,7 @@ extern "C" void TownStorage_SpawnResources_91660(void* townMgrV, uint32_t mask, 
             if (!progress || placed >= count) break;
         }
     }
-    if (matched) fn_MemFreeStatic(matched);
+    // (matched: freed by its destructor here, where the manual free was)
 }
 
 // ============================================================

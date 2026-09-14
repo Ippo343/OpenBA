@@ -27,6 +27,7 @@
 #include <utility>    // std::move -- the pointer steal out of a POD out-param
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Persistence.h"
+#include "../../types/collection/Collection.h"   // ENDGAME B.3.2 step 2
 #include "../system/string.h"
 #include "../system/pod_bridge.h"
 
@@ -48,22 +49,25 @@ extern "C" __declspec(dllimport) int __stdcall SetEvent(void* handle);
 
 namespace {
 
-// Two unexported Collection internals, called by address. 0x18002a930 clears
-// the stride-0xc block-descriptor array at +0x60; 0x180024aa0 clears the
-// pointer array at +0x70. Both are shared DLL code (the same 0x180024aa0 is
-// reached from the BeginLoad enqueue helper at 0x1800b7508), not
-// Persistence-specific, so this lane does not own them.
-using ArrayClearFn = void (*)(void* array);
+// ENDGAME B.3.2 step 2 (2026-09-13) — both are `Collection::Array<T>::~Array()`
+// (array.cpp's J1 family, RegisterRuntimeAddr'd as RtColl_ArrayDtor_*), NOT a
+// Clear (the old local name was misleading: they free the buffer, they do not
+// keep it). Both element types are trivially destructible, so the
+// trait-derived instantiation IS the registered body with no hand-derived
+// spec: `BlockDesc12` mirrors persistence_saveinfo_job.cpp's `BlockDesc`
+// (three dwords, stride 0xc, matching the block-descriptor array at
+// Persistence+0x60) and `void*` is `blockPtrData` at +0x70. Both fields are
+// still loose (data ptr, count, pad) rather than typed `Collection::Array<T>`
+// members of `Persistence` (shared with files outside this batch), so these
+// are reinterpret_cast bridges at the use site.
+struct BlockDesc12 { uint32_t id, offset, size; };
+static_assert(sizeof(BlockDesc12) == 0xC, "matches kSpec_Blk12's stride");
 
-ArrayClearFn ClearBlockDescs() {
-    static auto fn = reinterpret_cast<ArrayClearFn>(
-        ResolveAddr(Module::Runtime, 0x18002a930));
-    return fn;
+void ClearBlockDescs(Persistence* p) {
+    reinterpret_cast<Collection::Array<BlockDesc12>*>(&p->blockDescData)->~Array();  // 0x18002a930
 }
-ArrayClearFn ClearBlockPtrs() {
-    static auto fn = reinterpret_cast<ArrayClearFn>(
-        ResolveAddr(Module::Runtime, 0x180024aa0));
-    return fn;
+void ClearBlockPtrs(Persistence* p) {
+    reinterpret_cast<Collection::Array<void*>*>(&p->blockPtrData)->~Array();         // 0x180024aa0
 }
 
 }  // namespace
@@ -93,8 +97,8 @@ bool RtIo_Persistence_BeginGetSaveGameInfo(void* self, const void* nameRef, int 
     RtIo_Persistence_GetSaveFilename(self, &fnPod, nameRef);
     System::String fn(std::move(Sys(fnPod)));
 
-    ClearBlockDescs()(&p->blockDescData);
-    ClearBlockPtrs()(&p->blockPtrData);
+    ClearBlockDescs(p);
+    ClearBlockPtrs(p);
 
     p->command = 3;
 

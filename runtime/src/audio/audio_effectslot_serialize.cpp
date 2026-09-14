@@ -82,6 +82,13 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/audio/Audio.h"
 #include "../../types/io/Serializer.h"
+#include "../collection/array_internal.h"  // ENDGAME B.3.2 step 2: AsArray bridge
+
+// `kSpec_EmitterInstance` (0x180052330, BATCH 8b) is defined in
+// runtime/src/collection/array.cpp but was never added to array_internal.h's
+// `extern` list (unlike its siblings) — declared locally rather than editing
+// that shared header, which this batch does not own.
+namespace rtcoll { extern const ArraySpec kSpec_EmitterInstance; }
 
 using RtAudio::EffectSlot;
 using RtAudio::EmitterInstance;
@@ -100,8 +107,6 @@ extern "C" void RtObject_ExternalPtrSerialize_SoundEffect(void** self,
                                                           rt::io::Serializer* ser);
 
 namespace {
-
-using ArraySetSizeFn = void (*)(void* array, int32_t newCount);
 
 // A ReaderWriter slot call, `(rw, <args>)`. Retail loads the vtable fresh from
 // `ser->readerWriter` on EVERY field (`MOV RCX,[RDI+8] / MOV RAX,[RCX]`), so
@@ -127,9 +132,9 @@ extern "C" void RtAudio_Scene_SerializeEmitterInstances(void* arrv, void* serv) 
     auto* arr = static_cast<Collection::Array<EmitterInstance>*>(arrv);
     auto* ser = static_cast<rt::io::Serializer*>(serv);
 
-    // The count lives in a STACK SLOT for the whole body; `arr->_size` is read
-    // once, into it, and never again (0x180051e0a).
-    int32_t count = arr->_size;
+    // The count lives in a STACK SLOT for the whole body; `arr->GetSize()` is
+    // read once, into it, and never again (0x180051e0a).
+    int32_t count = arr->GetSize();
 
     {   // kScalarInt (+0xa0)
         rt::io::ReaderWriter* rw = ser->readerWriter;
@@ -138,15 +143,17 @@ extern "C" void RtAudio_Scene_SerializeEmitterInstances(void* arrv, void* serv) 
     }
 
     // READING ONLY (0x180051e2f `CMP dword [stream+8],0 / JNE`).
+    // ENDGAME B.3.2 step 2 — the 0x180052330 by-address forwarder is GONE:
+    // `kSpec_EmitterInstance` zero-fills the whole 16-byte stride
+    // (`InitZero10`), which a trivially-constructible `EmitterInstance`'s trait
+    // row would leave UNINITIALISED, so it stays a hand-derived bridge rather
+    // than a plain `arr->SetSize(count)`.
     if (ser->stream->direction == rt::io::kDirectionReading) {
-        static ArraySetSizeFn setSize = nullptr;
-        if (!setSize) setSize = reinterpret_cast<ArraySetSizeFn>(
-            ResolveAddr(Module::Runtime, 0x180052330));
-        setSize(arr, count);                                   // 0x180051e3c
+        rtcoll::AsArray<&rtcoll::kSpec_EmitterInstance>(arr)->SetSize(count);  // 0x180051e3c
     }
 
     // `_data` is re-loaded HERE, after the resize may have reallocated.
-    EmitterInstance* e = static_cast<EmitterInstance*>(arr->_data);  // 0x180051e45
+    EmitterInstance* e = arr->GetData();  // 0x180051e45
 
     for (int32_t i = 0; i < count; ++i, ++e) {                 // 0x180051e53
         rt::io::ReaderWriter* rw = ser->readerWriter;

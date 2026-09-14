@@ -46,8 +46,10 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/collection/Collection.h" // ENDGAME B.3.2 step 2 — Array<T> bridge
 #include "../../types/ui/Sprite.h"
 #include "../../types/ui/SpriteCapture.h"
+#include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_CaptureEntry
 
 // ----------------------------------------------------------------------------
 // Module / ResolveAddr, forward-declared rather than pulled in from
@@ -75,29 +77,27 @@ using UI::SpriteCapture;
 // None caches a null — rt_port.h's contract: a miss during early boot must not
 // freeze the answer for the process.
 
-// Collection::Array<UI::Sprite>::SetSize(int, const Sprite&). Stride 0x10.
-// PORTED AND REGISTERED already, in runtime/src/collection/array.cpp as
-// `J3_ENTRY3(18004bfc0, kSpec_Fill16)` — reached through ResolveAddr so the
-// registration keeps living with the collection family, exactly as
-// spritecontext.cpp reaches 0x180078520.
-typedef void (*SetSizeSpriteFn)(void* array, int newSize, const void* fill);
-inline SetSizeSpriteFn TheSetSizeSprite() {
-    static SetSizeSpriteFn f = nullptr;
-    if (!f) f = reinterpret_cast<SetSizeSpriteFn>(ResolveAddr(Module::Runtime, 0x18004bfc0));
-    return f;
-}
-
-// Collection::Array<CaptureEntry>::SetSize(int, const CaptureEntry&).
-// Stride 0x28, from `LEA RCX,[RAX+RAX*4]; SHL RCX,3` at 0x18004be38.
-// NOT PORTED — this lane's one remaining address door. Same body shape as the
-// fourteen already in array.cpp; adding a spec for it belongs to that family's
-// lane, not this one.
-typedef void (*SetSizeEntryFn)(void* array, int newSize, const void* fill);
-inline SetSizeEntryFn TheSetSizeEntry() {
-    static SetSizeEntryFn f = nullptr;
-    if (!f) f = reinterpret_cast<SetSizeEntryFn>(ResolveAddr(Module::Runtime, 0x18004bde0));
-    return f;
-}
+// ENDGAME B.3.2 step 2 — the two by-address SetSize forwarders that used to
+// sit here are GONE.
+//
+// `CaptureArray` (SpriteCapture.h) is a stand-in for `Collection::Array<T>`'s
+// {data,size,capacity} header — declared separately so this header stays
+// standalone, per its own banner — so both call sites below bridge with a
+// `reinterpret_cast` rather than retyping `SpriteCapture` (out of this file's
+// scope: that would need `SpriteCapture`'s own construction/copy paths proven
+// safe first).
+//
+//   0x18004bfc0  kSpec_Fill16  {0x10,8,Assign16(plain 16-byte copy),init=null,
+//                destroy=null,byteCopy} == SpecFor<Sprite>(): `Sprite` is a
+//                trivially copyable/destructible 0x10-byte POD, so the
+//                trait-derived `Array<Sprite>` IS this row.
+//   0x18004bde0  kSpec_CaptureEntry  NON-TRIVIAL: the assign leaves
+//                `pad04` [0x04,0x08) unwritten and the destroy releases
+//                `name`'s String refcount — stays the hand-derived
+//                `ExplicitSpec`.
+//
+// (0x18004bde0 is registered by array.cpp now — the "NOT PORTED" half of the
+// old comment here is stale.)
 
 // System::String::Set(char const*) — 0x1800c95d0, PORTED in
 // runtime/src/system/string.cpp and registered there BY ADDRESS, so this door
@@ -201,8 +201,10 @@ extern "C" void RtUi_SpriteCapture_AddScissor(void* selfRaw, int x, int y,
     // [RBP-0x38] plus a dword -1 at [RBP-0x30], twelve bytes, exactly
     // kSpriteWrittenBytes.
 
-    TheSetSizeSprite()(&self->_sprites, self->_sprites.size + 1, &fill);
-    TheSetSizeEntry() (&self->_entries, self->_entries.size + 1, &e);
+    reinterpret_cast<Collection::Array<Sprite>&>(self->_sprites)
+        .SetSizeFill(self->_sprites.size + 1, &fill);            // 0x18004bfc0
+    rtcoll::AsArray<&rtcoll::kSpec_CaptureEntry>(&self->_entries)
+        ->SetSizeFill(self->_entries.size + 1, &e);               // 0x18004bde0
 
     // Releases the LOCAL's reference. The stored element has its own: the
     // entry array's element copier COPY-CONSTRUCTS the String
@@ -337,8 +339,10 @@ extern "C" void RtUi_SpriteCapture_AddSprite(void* selfRaw, const void* spriteRa
     e.x2 = x2; e.y2 = y2;                 // 0x1800d8e4b
 
     // ---- (c) append ---------------------------------------------------------
-    TheSetSizeSprite()(&self->_sprites, self->_sprites.size + 1, sprite);
-    TheSetSizeEntry() (&self->_entries, self->_entries.size + 1, &e);
+    reinterpret_cast<Collection::Array<Sprite>&>(self->_sprites)
+        .SetSizeFill(self->_sprites.size + 1, sprite);             // 0x18004bfc0
+    rtcoll::AsArray<&rtcoll::kSpec_CaptureEntry>(&self->_entries)
+        ->SetSizeFill(self->_entries.size + 1, &e);                 // 0x18004bde0
 
     ReleaseString(e.name);                // same net-zero release as AddScissor
 }
@@ -404,8 +408,9 @@ extern "C" void RtUi_SpriteCapture_AddSprite(void* selfRaw, const void* spriteRa
 extern "C" void RtUi_SpriteCapture_EndAddingSprites(void* selfRaw) {
 
     auto* self = static_cast<SpriteCapture*>(selfRaw);
-    const int32_t count = self->_entries.size;
-    auto* entries = static_cast<CaptureEntry*>(self->_entries.data);
+    auto& entriesArr = reinterpret_cast<Collection::Array<CaptureEntry>&>(self->_entries);
+    const int32_t count = entriesArr.GetSize();
+    auto* entries = entriesArr.GetData();
 
     // The work verdict is "pass 1 actually saw a non-scissor entry". A capture
     // with zero entries, or one holding nothing but scissors, runs the whole

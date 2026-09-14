@@ -109,6 +109,14 @@ WorkerDtorFn WorkerDtor() {         // 0x1800b7740 — the embedded worker's dto
         ResolveAddr(Module::Runtime, 0x1800b7740));
     return fn;
 }
+// ENDGAME B.3.2 step 2 (2026-09-13) — NOT CONVERTED to `Collection::Set<T>`,
+// deliberately, for the same reason persistence_registry_win.cpp's MapClear
+// is not (see that file's note): 0x18000f7d0 IS `Set<SettingsMapNode>::Clear()`
+// and `Persistence` IS that Set's {root,count,pad} header, but `Clear()`'s
+// `n->element.~T()` needs `SettingsMapNode`'s two fields to be the real
+// `System::String` class to release their refcounts; they are still the old
+// `RtSystem::String` POD, shared with files outside this batch
+// (persistence_startup.cpp / closure_batch2b_win.cpp / engine/singleton_ctors.cpp).
 MapClearFn MapClear() {             // 0x18000f7d0 — the settings-map dtor
     static auto fn = reinterpret_cast<MapClearFn>(
         ResolveAddr(Module::Runtime, 0x18000f7d0));

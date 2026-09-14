@@ -117,6 +117,7 @@
 #include "../../types/system/String.h"
 #include "../system/string.h"
 #include "../system/pod_bridge.h"
+#include "../collection/array_internal.h"   // ENDGAME B.3.2 step 2 -- kSpec_SaveGameInfo, AsArray
 
 using RtIo::Persistence;
 using RtIo::SaveGameInfo;
@@ -157,8 +158,6 @@ typedef System::Filename* (*GetPathFilenameFn)(const System::Filename*,
                                                System::Filename*, bool); // 0x1800c6740
 typedef uint64_t* (*GetFileTimeStampFn)(const void*, uint64_t*, const System::Filename*);
                                                                         // 0x1800ae270
-typedef void      (*ArraySetSizeZeroFn)(void*);                         // 0x18002aae0
-typedef void      (*ArraySetSizeFillFn)(void*, int, const void*);       // 0x18002ae20
 typedef void      (*MemFreeFn)(void*);                                  // 0x1800c7ad0
 
 // `IO::FileSystem::_singleton` — an exported DATA symbol, so the NAME door is
@@ -193,15 +192,13 @@ extern "C" void RtIo_PersistenceWorker_GetSaveList(void* worker) {
         reinterpret_cast<Persistence*>(reinterpret_cast<char*>(worker) - 0x10);
 
     // ---- 1. clear the previous list (buffer kept) --------------------------
-    // BY ADDRESS, not as a direct call: 0x18002aae0 is registered by
-    // array.cpp in this same commit, so the registry is the door and the
-    // address's own `calls=` counts this site.
-    {
-        static ArraySetSizeZeroFn fn = nullptr;
-        if (!fn) fn = reinterpret_cast<ArraySetSizeZeroFn>(
-            ResolveAddr(Module::Runtime, 0x18002aae0));
-        fn(&p->saves);                                          // 0x1800b62b3
-    }
+    // ENDGAME B.3.2 step 2 — 0x18002aae0 is the SAME `Array<SaveGameInfo>` as
+    // 0x18002ae20 below with the new size folded to 0 (array.cpp's
+    // kSpec_SaveGameInfo banner); NOT trait-expressible (see array_internal.h),
+    // so this is the hand-derived row, bridged through `AsArray` rather than a
+    // re-typed `Persistence::saves` member (shared with files outside this
+    // batch — see persistence_saveinfo_job.cpp's note on the same struct).
+    rtcoll::AsArray<&rtcoll::kSpec_SaveGameInfo>(&p->saves)->SetSize(0);  // 0x1800b62b3
 
     void* const fs = FileSystemSingleton();                     // 0x1800b62b8
 
@@ -294,12 +291,11 @@ extern "C" void RtIo_PersistenceWorker_GetSaveList(void* worker) {
             entry.sortKey = *r;                                 // 0x1800b644a
         }
 
-        {
-            static ArraySetSizeFillFn fn = nullptr;
-            if (!fn) fn = reinterpret_cast<ArraySetSizeFillFn>(
-                ResolveAddr(Module::Runtime, 0x18002ae20));
-            fn(&p->saves, p->saveCount + 1, &entry);            // 0x1800b645f
-        }
+        // retail 0x18002ae20 — Array<SaveGameInfo>::SetSize(n, &fill), the
+        // append idiom. Hand-derived row (kSpec_SaveGameInfo), bridged the
+        // same way as step 1's clear above.
+        rtcoll::AsArray<&rtcoll::kSpec_SaveGameInfo>(&p->saves)
+            ->SetSizeFill(p->saveCount + 1, &entry);            // 0x1800b645f
 
         // `entry` is a plain local (`SaveGameInfo` is not yet converted), so
         // there is no outer RAII to run this for us; retail's release at

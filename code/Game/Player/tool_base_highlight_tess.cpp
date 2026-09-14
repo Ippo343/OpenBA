@@ -26,6 +26,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -120,33 +121,32 @@ void EnsureOps() {
     s_opInit = true;
 }
 
+// The two growable lists inside a highlight slot:
+//   +0x08 {data, size, cap}  vertex records, 0x14 bytes each (the pool -> buffer
+//                            copy at the end of TessellateSlot moves them 8+8+4);
+//   +0x18 {data, size, cap}  uint16 triangle indices.
+// ENDGAME B.3.2 step 2: AppendIndex WAS a verbatim copy of rtcoll::SetSizeCore for
+// the +0x18 list (exact-equal early return; size stored before the capacity test;
+// `oldCount != 0 ? n*3 : n` with newCount == oldCount + 1 by construction, i.e. the
+// reference rule; MemAlloc(cap * 2, align 2) through the static slot 0x140152b60 —
+// the same locking static rtcoll::MemAlloc is; copy the prefix only when the block
+// moved; the new slot takes the fill; the COMPUTED element address null-tested;
+// free the old block when it moved). The trait-derived Array<uint16_t> row
+// (stride 2, align 2, byteCopy, init == nullptr, destroy == nullptr) is that
+// exactly. The vertex list is only ever destroyed here (its grow is 0x14001ee40,
+// outside this file); its element is a trivially destructible 0x14-byte record
+// whose fields are not modelled, so the dtor is MemFree + zero regardless.
+struct TessVertex14 { uint8_t bytes[0x14]; };
+static_assert(sizeof(TessVertex14) == 0x14, "highlight slot vertex record is 0x14 bytes");
+using TessVertexArray = Collection::Array<TessVertex14>;
+using TessIndexArray  = Collection::Array<uint16_t>;
+
 // AppendIndex — inlined "append one short index to the growable index buffer at
 // slot+0x18/+0x20/+0x24" block (orig emits it verbatim per triangle vertex).
 inline void AppendIndex(int64_t lVar16, uint16_t idx) {
-    int  iVar13 = *reinterpret_cast<int*>(lVar16 + 0x20);   // old count
-    int  iVar25 = iVar13 + 1;                               // new count
-    if (iVar25 == iVar13) return;
-    void* pvVar7 = *reinterpret_cast<void**>(lVar16 + 0x18); // old base
-    *reinterpret_cast<int*>(lVar16 + 0x20) = iVar25;
-    if (*reinterpret_cast<int*>(lVar16 + 0x24) < iVar25) {
-        *reinterpret_cast<int*>(lVar16 + 0x24) = iVar25;
-        if (iVar13 != 0) *reinterpret_cast<int*>(lVar16 + 0x24) = iVar25 * 3;
-        void* pvVar6 = MemAlloc((int64_t)*reinterpret_cast<int*>(lVar16 + 0x24) * 2, 2);
-        *reinterpret_cast<void**>(lVar16 + 0x18) = pvVar6;
-    }
-    int iVar11 = 0;
-    if (pvVar7 == *reinterpret_cast<void**>(lVar16 + 0x18)) iVar11 = iVar13;
-    for (int64_t lv = iVar11; lv < iVar25; ++lv) {
-        uint16_t* puVar19 =
-            reinterpret_cast<uint16_t*>(*reinterpret_cast<int64_t*>(lVar16 + 0x18) + lv * 2);
-        if (puVar19 != nullptr) {
-            uint16_t uVar27 = (lv < iVar13)
-                ? *reinterpret_cast<uint16_t*>((int64_t)pvVar7 + lv * 2)
-                : idx;
-            *puVar19 = uVar27;
-        }
-    }
-    if (pvVar7 != *reinterpret_cast<void**>(lVar16 + 0x18)) MemFree(pvVar7);
+    // B.3.2 bridge: the slot is still an untyped exe struct.
+    TessIndexArray* a = reinterpret_cast<TessIndexArray*>(lVar16 + 0x18);
+    a->SetSize(a->_size + 1, idx);
 }
 
 // EmitVertex — resolve ONE corner descriptor to a vertex index (find/insert/append),
@@ -329,13 +329,15 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
     local_228   = (uint64_t)plVar30;
 
     // free + reset the slot's vertex and index buffers.
-    MemFree(reinterpret_cast<void*>(*plVar30));
-    *plVar30 = 0;
-    *reinterpret_cast<int64_t*>(lVar16 + 0x10) = 0;
+    // ENDGAME B.3.2 step 2: both WERE inlined Collection::Array<T>::~Array bodies
+    // for a trivially destructible T (MemFree the buffer — null-guarded in both —
+    // then zero _data and the _size/_capacity qword). Now the dtor itself, in place.
+    // B.3.2 bridge ×2: the headers live in the untyped slot struct. ppvVar9 keeps the
+    // pre-free index pointer because the fnE180 call below still feeds its upper
+    // bytes through a register-passthrough byte argument (unchanged from before).
     void** ppvVar9 = *reinterpret_cast<void***>(lVar16 + 0x18);
-    MemFree(ppvVar9);
-    *reinterpret_cast<int64_t*>(lVar16 + 0x18) = 0;
-    *reinterpret_cast<int64_t*>(lVar16 + 0x20) = 0;
+    reinterpret_cast<TessVertexArray*>(lVar16 + 0x08)->~Array();
+    reinterpret_cast<TessIndexArray*>(lVar16 + 0x18)->~Array();
 
     int64_t outNode;
 

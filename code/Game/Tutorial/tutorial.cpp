@@ -15,6 +15,7 @@
 #include "Tutorial/tutorial_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "collection/Collection.h"
 #include <cstdint>
 
 // ============================================================
@@ -89,15 +90,14 @@ void* Tutorial_Dtor(void* self, uint32_t flags) {
     uintptr_t vtable = ResolveAddr(Module::Exe, TutorialAddr::Vtable);
     *(uintptr_t*)s = vtable;
 
-    // Free steps array
-    void* stepsArray = *(void**)(s + 0x28);
-    if (fn_MemFreeStatic && stepsArray) {
-        fn_MemFreeStatic(stepsArray);
-    }
-
-    // Zero steps pointer and count
-    *(uint64_t*)(s + 0x28) = 0;
-    *(uint64_t*)(s + 0x30) = 0;
+    // Free the steps array (+0x28 data, +0x30 size, +0x34 capacity).
+    // ENDGAME B.3.2 step 2: this WAS an inlined Collection::Array<T>::~Array —
+    // MemFree the buffer (null-guarded on both sides), zero _data, zero the
+    // _size/_capacity qword. Retail destroys no element here (the 8-byte
+    // ExternalPtr<TutorialStep> entries have no destroy arm), so the trait-derived
+    // Array<void*> row (destroy == nullptr) is that body exactly.
+    // B.3.2 bridge: Tutorial is still an untyped exe struct.
+    reinterpret_cast<Collection::Array<void*>*>(s + 0x28)->~Array();
 
     // Call External::~External
     if (fn_External_Dtor) {

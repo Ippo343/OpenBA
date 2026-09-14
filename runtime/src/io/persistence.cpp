@@ -49,6 +49,24 @@ namespace {
 // See runtime/types/io/Persistence.h for why these are called by address
 // rather than reimplemented: they are Collection::Set internals shared across
 // the whole DLL, not something this lane owns.
+//
+// ENDGAME B.3.2 step 2 (2026-09-13) — NOT CONVERTED to `Collection::Set<T>`,
+// deliberately. `Persistence` (+0x00 root / +0x08 count / +0x0C pad) IS a real
+// `Collection::Set<SettingsMapNode>` header, and `Insert(const T&)` would
+// express Map_Insert's shape exactly (new node vs. existing-node-untouched,
+// matching Persistence::Set's own comment below). What blocks it: the class's
+// `AllocNode` copy-constructs the element in place, so the node's String
+// fields would need to be the REAL `System::String` (proper AddRef on
+// insert) — but `SettingsMapNode` is declared with the old `RtSystem::String`
+// POD on purpose (Persistence.h: "a PREFIX view only... this lane never
+// walks, inserts, or rebalances a node by hand"), and that field type is
+// shared with persistence_startup.cpp / closure_batch2b_win.cpp /
+// engine/singleton_ctors.cpp, none of which are in this batch. Retyping
+// `SettingsMapNode` here to unblock one Insert call would change what those
+// files see. The member that would be needed is
+// `Collection::Set<SettingsMapNode, AVLCompare, DefaultAllocator,
+// System::String>::Insert(element)` (Key = the leading String, not the
+// 16-byte pair) once `SettingsMapNode`'s two fields are `System::String`.
 using MapFindFn   = void* (*)(void* self, void* key);
 using MapInsertFn = void* (*)(void* map, void* outNode, void* key, void* value);
 

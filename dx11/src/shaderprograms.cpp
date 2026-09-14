@@ -130,12 +130,15 @@ static bool VertexProgramData_PlatformCreate(VertexProgramData* self) {
     for (int i = 0; i < kShaderVariantCount; ++i) {
         const ShaderProgramOwner* owner =
             static_cast<const ShaderProgramOwner*>(self->vertexProgram);
-        if (i >= owner->byteCode.length) continue;
+        if (i >= owner->byteCode.GetSize()) continue;
 
-        const RtArray* blobs = static_cast<const RtArray*>(owner->byteCode.data);
+        // ENDGAME B.3.2 step 2 — `byteCode` is the real
+        // `Collection::Array<Collection::Array<uint8_t>>`; the element read that
+        // needed a cast off a `void*` is now `operator[]`.
+        const RtByteCodeBlob* blobs = owner->byteCode.GetData();
         HRESULT hr = device->CreateVertexShader(
-            blobs[i].data,
-            static_cast<SIZE_T>(blobs[i].length),
+            blobs[i].GetData(),
+            static_cast<SIZE_T>(blobs[i].GetSize()),
             nullptr,
             reinterpret_cast<ID3D11VertexShader**>(&self->variants[i]));
         if (hr != 0) return false;
@@ -203,12 +206,15 @@ static bool PixelProgramData_PlatformCreate(PixelProgramData* self) {
     for (int i = 0; i < kShaderVariantCount; ++i) {
         const ShaderProgramOwner* owner =
             static_cast<const ShaderProgramOwner*>(self->pixelProgram);
-        if (i >= owner->byteCode.length) continue;
+        if (i >= owner->byteCode.GetSize()) continue;
 
-        const RtArray* blobs = static_cast<const RtArray*>(owner->byteCode.data);
+        // ENDGAME B.3.2 step 2 — `byteCode` is the real
+        // `Collection::Array<Collection::Array<uint8_t>>`; the element read that
+        // needed a cast off a `void*` is now `operator[]`.
+        const RtByteCodeBlob* blobs = owner->byteCode.GetData();
         HRESULT hr = device->CreatePixelShader(
-            blobs[i].data,
-            static_cast<SIZE_T>(blobs[i].length),
+            blobs[i].GetData(),
+            static_cast<SIZE_T>(blobs[i].GetSize()),
             nullptr,
             reinterpret_cast<ID3D11PixelShader**>(&self->variants[i]));
         if (hr != 0) return false;
