@@ -40,9 +40,10 @@ static fn_External_Ctor_t s_fn_External_Ctor = nullptr;
 typedef void (*fn_External_BaseDtor_t)(void* self);
 static fn_External_BaseDtor_t s_fn_External_BaseDtor = nullptr;
 
-// Transform init helper -- 0x140098800
-typedef void (*fn_Transform_Init_t)(void* transform);
-static fn_Transform_Init_t s_fn_Transform_Init = nullptr;
+// MenuScene embedded-Transform init helper -- exe 0x140098800 (NOT a
+// Math::Transform method; the name used to read like one)
+typedef void (*fn_MenuSceneTransformInit_t)(void* transform);
+static fn_MenuSceneTransformInit_t s_fn_MenuSceneTransformInit = nullptr;
 
 // Tree/map cleanup helper -- 0x14001b860
 typedef void (*fn_TreeCleanup_t)(void* treeBase);
@@ -81,7 +82,7 @@ static void EnsureResolved() {
     // Standalone: we don't have FUN_140098800 in our exe registry. Use our
     // local reimplementation instead — it composes the same Runtime DLL
     // primitives the original does (Transform ctor + Frustum + Camera).
-    s_fn_Transform_Init = &MenuScene_TransformInit_Standalone;
+    s_fn_MenuSceneTransformInit = &MenuScene_TransformInit_Standalone;
 
     s_fn_TreeCleanup = reinterpret_cast<fn_TreeCleanup_t>(
         ResolveAddr(Module::Exe, 0x14001b860));
@@ -126,8 +127,8 @@ void MenuScene_Init(MenuScene* self) {
     self->_field80 = nullptr;   // +0x80: ExternalPtr (Weather)
 
     // Initialize embedded Transform at +0x88
-    if (s_fn_Transform_Init) {
-        s_fn_Transform_Init(&self->transform);
+    if (s_fn_MenuSceneTransformInit) {
+        s_fn_MenuSceneTransformInit(&self->transform);
     }
 
     // Atmosphere/lighting defaults (same as Weather initial values)
