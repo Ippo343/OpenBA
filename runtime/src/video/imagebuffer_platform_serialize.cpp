@@ -124,6 +124,13 @@
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
+// `kSpec_InnerArrayU8` (0x180053f00) is defined in
+// runtime/src/collection/array.cpp but, like `kSpec_EmitterInstance`
+// (runtime/src/audio/audio_effectslot_serialize.cpp), was never added to
+// array_internal.h's `extern` list — declared locally rather than editing
+// that shared header, which this batch does not own.
+namespace rtcoll { extern const ArraySpec kSpec_InnerArrayU8; }
+
 namespace {
 
 // IO::Serializer is { Stream* +0x00, ReaderWriter* +0x08 } — Serializer.h.
@@ -164,18 +171,26 @@ int32_t StreamDirection(void* stream) {
     return *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(stream) + kStreamDirection);
 }
 
-// 0x180053f00 — Array<Array<uint8>>::SetSize. Registry-first; unported today.
-SetSizeFn OuterSetSize() {
-    static SetSizeFn fn = reinterpret_cast<SetSizeFn>(
-        ResolveAddr(Module::Runtime, 0x180053f00));
-    return fn;
-}
-// 0x180029630 — Array<uint8>::SetSize. Registry-first; ALREADY OURS (lane Q).
-SetSizeFn InnerSetSize() {
-    static SetSizeFn fn = reinterpret_cast<SetSizeFn>(
-        ResolveAddr(Module::Runtime, 0x180029630));
-    return fn;
-}
+// ENDGAME B.3.2 step 2 — both forwarders above (`OuterSetSize`, `InnerSetSize`)
+// are GONE. STALE COMMENT KEPT FOR THE RECORD: "0x180053f00 ... unported
+// today" stopped being true once array.cpp's `kSpec_InnerArrayU8` row was
+// registered (array.cpp:4028) — it is a registered port, not a DLL call.
+//
+//   0x180053f00  kSpec_InnerArrayU8 {0x10,8,AssignInnerArrayU8,
+//                InitInnerArrayU8,DestroyInnerArrayU8Range,byteCopy=false}
+//                NON-TRIVIAL (the assign zeroes-then-conditionally-calls a
+//                real deep `Array<uint8>::operator=`), so `levels` (still a
+//                plain `rtcoll::ArrayHdr`/`Array<uint8_t>` locally — its
+//                nominal element type is a byte cursor, not the semantic
+//                `Array<Array<uint8>>`) reaches it through a hand-derived
+//                `rtcoll::AsArray<&kSpec_InnerArrayU8>` bridge, not `.SetSize`.
+//   0x180029630  kSpec_Bool == `SpecFor<uint8_t>()` field for field (see
+//                achievement_manager.cpp's `completed` for the same row),
+//                trait-derived. Each per-level element `e` in
+//                `SerializeLevelBlobs` IS ALREADY a real
+//                `Collection::Array<uint8_t>*` (retail's Array<uint8>
+//                instantiation), so `e->SetSize(size)` is that exact body —
+//                no bridge needed.
 
 // ---- 0x180054080 — serialize N per-level byte blobs ------------------------
 //
@@ -190,20 +205,21 @@ void SerializeLevelBlobs(SerializerRaw* ser, int32_t count, rtcoll::ArrayHdr* el
     const int64_t n = count;                      // MOVSXD
     for (int64_t i = 0; i < n; ++i) {
         rtcoll::ArrayHdr* e = elems + i;          // ADD RBX,0x10
-        int32_t size = e->_size;                  // MOV EAX,[RBX+8]
+        int32_t size = e->GetSize();               // MOV EAX,[RBX+8]
 
         void* rw = ser->readerWriter;
         void** rwVt = *reinterpret_cast<void***>(rw);
         reinterpret_cast<ScalarIntFn>(rwVt[kRwScalarInt / 8])(rw, &size, nullptr);
 
         // Retail RE-READS ser->stream here rather than caching it.
+        // retail 0x180029630 — kSpec_Bool == SpecFor<uint8_t>(); trait-derived.
         if (StreamDirection(ser->stream) == 0)    // READING
-            InnerSetSize()(e, size);              // CALL 0x180029630
+            e->SetSize(size);
 
         rw = ser->readerWriter;
         rwVt = *reinterpret_cast<void***>(rw);
         reinterpret_cast<ArrayUCharFn>(rwVt[kRwArrayUChar / 8])(
-            rw, size, e->_data, nullptr);
+            rw, size, e->GetData(), nullptr);
     }
 }
 
@@ -280,19 +296,20 @@ extern "C" void Video_ImageBuffer_PlatformSerialize(::ImageBuffer* self, void* s
     // 0x1800f3185 reads the count out of the array it has just zeroed, so on
     // the WRITE path the value serialised here is 0. Transcribed, not
     // "corrected" to the level count: this is what the shipped body emits.
-    int32_t count = levels._size;
+    int32_t count = levels.GetSize();
 
     void* rw = ser->readerWriter;
     void** rwVt = *reinterpret_cast<void***>(rw);
     reinterpret_cast<ScalarIntFn>(rwVt[kRwScalarInt / 8])(rw, &count, nullptr);
 
     // 0x1800f31a8 RE-READS ser->stream rather than reusing the pointer it
-    // loaded at entry. Reproduced.
+    // loaded at entry. Reproduced. retail 0x180053f00 — kSpec_InnerArrayU8;
+    // see the banner above.
     if (StreamDirection(ser->stream) == 0)           // READING
-        OuterSetSize()(&levels, count);
+        rtcoll::AsArray<&rtcoll::kSpec_InnerArrayU8>(&levels)->SetSize(count);
 
     SerializeLevelBlobs(ser, count,
-                        reinterpret_cast<rtcoll::ArrayHdr*>(levels._data));
+                        reinterpret_cast<rtcoll::ArrayHdr*>(levels.GetData()));
 
     // 0x1800f31e2: the field reads for Create happen HERE, after the
     // serialization, and `kind` is RELOADED. Both are faithful.
@@ -303,10 +320,19 @@ extern "C" void Video_ImageBuffer_PlatformSerialize(::ImageBuffer* self, void* s
     // element loop frees each level's byte buffer and clears its header, and
     // only then is the outer buffer released. Writing this as "free the block"
     // would leak one buffer per mip level, every load.
-    const int32_t levelCount = levels._size;
-    rtcoll::FreeInnerArraysCore(reinterpret_cast<uint8_t*>(levels._data),
+    const int32_t levelCount = levels.GetSize();
+    rtcoll::FreeInnerArraysCore(reinterpret_cast<uint8_t*>(levels.GetData()),
                                 levelCount, &kV_LevelBlob);
-    rtcoll::ArrayDtorImpl(&levels);
+    // ENDGAME B.3.2 step 2 — the explicit `rtcoll::ArrayDtorImpl(&levels)` call
+    // is GONE, not replaced by an explicit `levels.~Array()`: the per-element
+    // inner buffers are already freed by `FreeInnerArraysCore` immediately
+    // above, so all that is left to release is the OUTER buffer — exactly what
+    // `levels`'s own IMPLICIT destructor does at the closing brace below, using
+    // `levels`'s DEFAULT (trivial, `SpecFor<uint8_t>()`) spec, whose
+    // `destroy` is null. Calling a spec-aware `~Array()` here (with
+    // `kSpec_InnerArrayU8`) would re-run the inner-buffer free a second time —
+    // a double free `FreeInnerArraysCore` already discharged.
+
 
 }
 

@@ -102,6 +102,7 @@
 #include "../../types/io/Stream.h"
 #include "../../types/io/FileStream.h"
 #include "../../types/io/FileSystem.h"
+#include "../collection/array_internal.h"  // ENDGAME B.3.2 step 2: kSpec_ExtArrayElem bridge
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -166,11 +167,14 @@ using DeleteFn      = void* (*)(void* self, int flags);
 // the old DLL-era switch (and the old DLL-era switch for the second). With
 // either gate off at cutover this call site is an EXEC-of-0 again, at the same
 // instruction, and the crash will look identical to attempt 29's.
+// ENDGAME B.3.2 step 2 — `External::_refs` (runtime/types/object/External.h)
+// is already `Collection::Array<ExternalArrayElement>`, and `kSpec_ExtArrayElem`
+// is NON-TRIVIAL (a Filename-copy-ctor assign and a two-argument range destroy,
+// not a byte trait), so the one call site below is a hand-derived
+// `rtcoll::AsArray<&kSpec_ExtArrayElem>` bridge rather than a plain
+// `.SetSize(n)`. The 0x18002c6a0 row stays registered in array.cpp.
 void ArraySetSize(void* arr, int32_t n) {
-    using Fn = void* (*)(void*, int32_t);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18002c6a0));
-    fn(arr, n);
+    rtcoll::AsArray<&rtcoll::kSpec_ExtArrayElem>(arr)->SetSize(n);
 }
 
 // The three `Collection::Array<T>` destructors ~CompressedStream's caller runs

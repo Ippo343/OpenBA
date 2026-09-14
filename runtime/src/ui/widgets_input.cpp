@@ -111,6 +111,7 @@
 #include "../../types/ui/NumberEditElement.h"
 #include "../../types/ui/NumberElement.h"
 #include "../../types/ui/EditElement.h"
+#include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_StringRef etc.
 #include "../../types/ui/RadioElement.h"
 #include "../../types/ui/ProgressElement.h"
 // WAVE 9 LANE UIW2. SliderElement/ProgressElement/ComboElement all write
@@ -316,50 +317,43 @@ MemFreeFn MemFreeStatic() {
 // arrive with the Collection port's init, and a caller that ran earlier would
 // otherwise freeze a null in for the life of the process.
 // ----------------------------------------------------------------------------
-using ArraySetSizeFillFn = void (*)(void*, int, const void*);
-using ArrayCleanupFn     = void (*)(void*);
-
-// ComboElement::_strings — Array<System::String>::SetSize(n, &fill)
-ArraySetSizeFillFn ArraySetSizeFill_180034860() {
-    static ArraySetSizeFillFn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<ArraySetSizeFillFn>(ResolveAddr(Module::Runtime, 0x180034860));
-    return fn;
-}
-// ComboElement::_sprites — Array<UI::Sprite>::SetSize(n, &fill), stride 0x10
-ArraySetSizeFillFn ArraySetSizeFill_18004bfc0() {
-    static ArraySetSizeFillFn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<ArraySetSizeFillFn>(ResolveAddr(Module::Runtime, 0x18004bfc0));
-    return fn;
-}
-// ComboElement::_userData — Array<void*>::SetSize(n, &fill)
-ArraySetSizeFillFn ArraySetSizeFill_180024fe0() {
-    static ArraySetSizeFillFn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<ArraySetSizeFillFn>(ResolveAddr(Module::Runtime, 0x180024fe0));
-    return fn;
-}
-// RadioElement::_checkBoxes — Array<InternalPtr<Element>>::SetSize(n, &fill)
-ArraySetSizeFillFn ArraySetSizeFill_180048fe0() {
-    static ArraySetSizeFillFn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<ArraySetSizeFillFn>(ResolveAddr(Module::Runtime, 0x180048fe0));
-    return fn;
-}
-// ComboElement::_strings — the String-array cleanup (destroy every element,
-// free the buffer, zero the header). NOT `~Array`: the elements are refcounted.
+// ENDGAME B.3.2 step 2 — every forwarder that used to sit here is GONE.
+// `ComboElement::_strings/_sprites/_userData` and `RadioElement::_checkBoxes`
+// are real `Collection::Array<...>` members (ComboElement.h / RadioElement.h),
+// but the first two of ComboElement's three are declared `Array<void*>` as a
+// PLACEHOLDER element type ("element = System::String" / "= UI::Sprite" in
+// the header's own comment) — the true per-element operations (a String
+// refcount bump, a 0x10-byte Sprite stride) are NOT what `SpecFor<void*>()`
+// would derive, so those two stay bridged through their hand-derived row
+// rather than called as the field's own trait-derived member functions:
+//
+//   0x180034860  kSpec_StringRef  NON-TRIVIAL (assign copy-constructs a
+//                String, destroy releases it) — ComboElement::_strings
+//   0x18004bfc0  kSpec_Fill16     TRIVIAL, but stride 0x10 vs. the field's
+//                own `void*` stride of 8 — the field type is simply the
+//                wrong shape to call directly — ComboElement::_sprites
+//
+// `_userData` and `_checkBoxes` ARE trait-equivalent for their field's actual
+// (and correctly declared, for `_checkBoxes`) element type, so those two call
+// their own `SetSizeFill`/`~Array` directly:
+//
+//   0x180024fe0  kSpec_Fill8   == SpecFor<void*>()      — ComboElement::_userData
+//   0x180048fe0  kSpec_Fill8Z  == SpecFor<Element*>()   — RadioElement::_checkBoxes
+//
+// The two `~Array` (J1) cleanups, 0x180037310/0x180024aa0, are spec-agnostic
+// (a J1 body only frees the buffer and zeroes the header; `destroy` is null
+// either way), so `.~Array()` on the field's own type is exactly those rows
+// too, stride mismatch or not.
+//
+// 0x180010ab0 (the String cleanup for `_strings`) is DIFFERENT: it is
+// array_destroy.cpp's J2_ENTRY driving `ReleaseStringsCounted` off a
+// `DestroySpec` (`kD_Str_08`), not an `rtcoll::ArraySpec`, so there is no
+// `kSpec_*` row the class template could take — per the batch rule, this
+// "DtorElem" helper stays a free-function call through the seam.
+using ArrayCleanupFn = void (*)(void*);
 ArrayCleanupFn ArrayCleanup_180010ab0() {
     static ArrayCleanupFn fn = nullptr;
     if (!fn) fn = reinterpret_cast<ArrayCleanupFn>(ResolveAddr(Module::Runtime, 0x180010ab0));
-    return fn;
-}
-// ComboElement::_sprites — ~Array (J1)
-ArrayCleanupFn ArrayCleanup_180037310() {
-    static ArrayCleanupFn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<ArrayCleanupFn>(ResolveAddr(Module::Runtime, 0x180037310));
-    return fn;
-}
-// ComboElement::_userData — ~Array (J1)
-ArrayCleanupFn ArrayCleanup_180024aa0() {
-    static ArrayCleanupFn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<ArrayCleanupFn>(ResolveAddr(Module::Runtime, 0x180024aa0));
     return fn;
 }
 
@@ -739,9 +733,11 @@ int RtUi_ComboElement_AddItem(ComboElement* self, const void* sprite,
 
     const int32_t before = self->_strings._size;
 
-    ArraySetSizeFill_180034860()(&self->_strings,  self->_strings._size  + 1, str);
-    ArraySetSizeFill_18004bfc0()(&self->_sprites,  self->_sprites._size  + 1, sprite);
-    ArraySetSizeFill_180024fe0()(&self->_userData, self->_userData._size + 1, &userData);
+    rtcoll::AsArray<&rtcoll::kSpec_StringRef>(&self->_strings)
+        ->SetSizeFill(self->_strings._size + 1, str);              // 0x180034860
+    rtcoll::AsArray<&rtcoll::kSpec_Fill16>(&self->_sprites)
+        ->SetSizeFill(self->_sprites._size + 1, sprite);            // 0x18004bfc0
+    self->_userData.SetSizeFill(self->_userData._size + 1, &userData); // 0x180024fe0
 
     const int ours = self->_strings._size - 1;
 
@@ -775,9 +771,9 @@ int RtUi_ComboElement_AddItem(ComboElement* self, const void* sprite,
 // guarantees, which is weaker than a diff and labelled as one.
 void RtUi_ComboElement_RemoveAllItems(ComboElement* self) {
 
-    ArrayCleanup_180010ab0()(&self->_strings);
-    ArrayCleanup_180037310()(&self->_sprites);
-    ArrayCleanup_180024aa0()(&self->_userData);
+    ArrayCleanup_180010ab0()(&self->_strings);   // 0x180010ab0 — J2, not convertible; see the banner
+    self->_sprites.~Array();                     // retail 0x180037310 (J1)
+    self->_userData.~Array();                    // retail 0x180024aa0 (J1)
     self->_currentItem = -1;
 
 }
@@ -1057,13 +1053,20 @@ void RtUi_RadioElement_FindCheckBoxesPrivate(RadioElement* self, void** p) {
     if (typeId == actual) {
         void* e2 = *p;                                  // retail re-reads
         void* found = IsDerivedFrom()(e2, CheckBoxTypeId()) ? e2 : nullptr;
-        ArraySetSizeFill_180048fe0()(&self->_checkBoxes,
-                                          self->_checkBoxes._size + 1, &found);
+        // retail 0x180048fe0 — `kSpec_Fill8Z`, and NOT trait-equivalent: its
+        // `Assign8Z` stores a ZERO into the slot and THEN the value (the
+        // smart-pointer element's inlined `operator=`), two writes where a
+        // trait-derived placement copy is one. array.cpp reproduces that
+        // deliberately — "a hardware write watchpoint or a concurrent reader
+        // would see the difference" — so the hand-derived row is what this
+        // append must reach, not `_checkBoxes`'s own trait-derived SetSizeFill.
+        rtcoll::AsArray<&rtcoll::kSpec_Fill8Z>(&self->_checkBoxes)
+            ->SetSizeFill(self->_checkBoxes._size + 1, &found);
         appended = true;
     }
 
-    for (int32_t i = 0; i < reinterpret_cast<Element*>(*p)->_children._size; ++i) {
-        Element* child = reinterpret_cast<Element*>(*p)->_children._data[i];
+    for (int32_t i = 0; i < reinterpret_cast<Element*>(*p)->_children.GetSize(); ++i) {
+        Element* child = reinterpret_cast<Element*>(*p)->_children.GetData()[i];
         if (child == nullptr) continue;
         void* tmp = nullptr;                            // retail zeroes it first
         tmp = child;

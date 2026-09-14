@@ -92,6 +92,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/picking/Scene.h"
+#include "../collection/array_internal.h"   // ENDGAME B.3.2 step 2: kSpec_I32Neg1, AsArray
 
 using RtPicking::Scene;
 using RtPicking::Entry;
@@ -175,11 +176,9 @@ const float kBigNeg    = -1.0e8f;
 // Array<int>::SetSize(10000), filling new slots with -1. Retail 0x18007b960;
 // the Scene ctor's only callee besides the field stores. Reads/writes the
 // {data,size,capacity} triple in place, so it takes &scene->_cellHeads.
-void RtCellHeadsInit(void* cellHeadsArray) {
-    using Fn = void (*)(void*);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18007b960));
-    fn(cellHeadsArray);
-}
+// ENDGAME B.3.2 step 2 (callers) — GONE. `Scene::_cellHeads` is a real
+// `Collection::Array<int32_t>` and its one call site names the hand-derived
+// `kSpec_I32Neg1` row directly (the -1 tail fill is not trait-expressible).
 
 // Array<T>::~Array for a trivially-destructible T: Free(_data) under the
 // allocator lock, then zero {_data, _size, _capacity}. Retail has one COMDAT
@@ -194,53 +193,43 @@ void RtCellHeadsInit(void* cellHeadsArray) {
 // J2 element-destroying variant, which is still the DLL's. The other three ARE
 // a re-derivation, verified against the shipped bodies by the synthetic-subject
 // replay in runtime/src/collection/array_probe.cpp.
-void RtFreeArrayInt(void* a) {          // scene+0x08, Array<int>
-    using Fn = void (*)(void*);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800737f0));
-    fn(a);
-}
-void RtFreeArrayCell(void* a) {         // scene+0x18, Array<Cell>
-    using Fn = void (*)(void*);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800739e0));
-    fn(a);
-}
-void RtFreeArrayLink(void* a) {         // scene+0x30, Array<Link>
-    using Fn = void (*)(void*);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180073bb0));
-    fn(a);
-}
-void RtFreeArrayEntry(void* a) {        // scene+0x48, Array<Entry> — this one
-    using Fn = void (*)(void*);         // first destroys each Entry's inner
-    static Fn fn = reinterpret_cast<Fn>(   // Array<Transform> (FUN_180074100)
-        ResolveAddr(Module::Runtime, 0x180073c90));
-    fn(a);
-}
+// ENDGAME B.3.2 step 2 (callers) — all four forwarders are GONE; the Scene
+// destructor calls `~Array()` on the four members themselves. The first three
+// are J1 bodies (`ArrayDtorSited`, which reads only `spec->destroy`) over
+// trivially destructible elements, so the trait-derived instantiation IS each
+// of them. 0x180073c90 is the J2 variant whose element-destroy step frees each
+// `Entry`'s inner `Collection::Array<::Transform>` — and `Entry` carries that
+// as a real member (Scene.h), so `~Entry()` already does exactly that, in the
+// same order, before the outer buffer is freed. All four rows stay registered.
 
 // AddMesh's scratch Array<Transform>. Retail frees that buffer with a bare
 // `MemoryAllocator::Free(_singleton, buf)` between an Enter/LeaveCriticalSection
-// pair, which cannot be written here without <windows.h>. Retail 0x1800739e0 is
-// the same Free under the same lock, followed by a clear of the triple — and
-// the triple being cleared is a dying local, so the effect is identical. It is
-// the Array<Cell> instantiation by origin, but every Array<T>::~Array for a
-// trivially-destructible T is byte-identical, and Math::Transform is one.
-// (Wave 9 lane Q re-read all eleven and confirms "byte-identical" in the strong
-// form: identical instructions AND identical resolved operands. This call now
-// lands in lane Q's port -- see the note on RtFreeArrayInt above.)
-void RtFreeScratchTransforms(void* a) {
-    using Fn = void (*)(void*);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800739e0));
-    fn(a);
-}
-
-// Array<Transform>::SetSize(n). Retail 0x180059140. Element stride 0x1c, and
-// the default element it fills new slots with is the identity transform
-// (0,0,0, 1.0f, 0,0,0) — visible as the `0x3f800000` store at +0x0c in that
-// body. AddMesh uses it for its scratch buffer.
-void RtTransformArraySetSize(void* a, int n) {
-    using Fn = void (*)(void*, int);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180059140));
-    fn(a, n);
-}
+// pair. Retail 0x1800739e0 is the same Free under the same lock, followed by a
+// clear of the triple — and every Array<T>::~Array for a trivially-destructible
+// T is byte-identical (Wave 9 lane Q re-read all eleven and confirms
+// "byte-identical" in the strong form: identical instructions AND identical
+// resolved operands), and Math::Transform IS trivially destructible (it has a
+// user-provided default CONSTRUCTOR — Math.h's `constexpr Transform()` — but no
+// user destructor, so `is_trivially_destructible` is unaffected).
+//
+// ENDGAME B.3.2 step 2 (callers) — the `RtFreeScratchTransforms` /
+// `RtTransformArraySetSize` forwarders that used to sit here are GONE.
+// `AddDesc::_transforms` (Scene.h) is a real `Collection::Array<::Transform>`,
+// so the dtor is TRAIT-EQUIVALENT (see above) and becomes `.~Array()` directly.
+//
+// The SetSize call stays bridged through the hand-derived `kSpec_Transform`
+// row rather than trusting the field's own (default, trait-derived) spec.
+// NOTE FOR REVIEW: Collection.h's Array banner lists kSpec_Transform's
+// identity-tail init among the rows a trait CANNOT express, but
+// `Math::Transform` now has a real, non-trivial default constructor
+// (`constexpr Transform() : rotation(), translation() {}`, added by ENDGAME
+// B.3.1 after that banner was written) whose result — `Quaternion()` is
+// `{0,0,0,1.0f}` (Math.h) and `Vector3()` is `{0,0,0}` — is bit-identical to
+// `InitIdentityTransform` (array.cpp). `SpecFor<Transform>()` would therefore
+// pick up `TInit<Transform>` (non-null, since the ctor is user-provided) and
+// may in fact already BE this exact row. Bridging here is still CORRECT
+// either way and does not depend on that claim; it is left as a finding for
+// whoever next touches kSpec_Transform's banner, not resolved in this batch.
 
 // The grid insert: allocate an Entry from the free list (or grow the array),
 // deep-copy the descriptor into it, compute its cell rectangle from the mesh's
@@ -413,9 +402,9 @@ long long RtFirstIntDiff(const int32_t* x, const int32_t* y, int n) {
 }
 
 // Scene+0x48 accessors, spelled once so a wrong stride cannot be written twice.
-inline Entry* EntryAt(Scene* s, int32_t idx) { return &s->_entries._data[idx]; }
-inline int32_t LinkEntry(Scene* s, int32_t link) { return s->_links._data[link]._entry; }
-inline int32_t LinkNext(Scene* s, int32_t link)  { return s->_links._data[link]._next; }
+inline Entry* EntryAt(Scene* s, int32_t idx) { return &s->_entries[idx]; }
+inline int32_t LinkEntry(Scene* s, int32_t link) { return s->_links[link]._entry; }
+inline int32_t LinkNext(Scene* s, int32_t link)  { return s->_links[link]._next; }
 
 }  // namespace
 
@@ -459,7 +448,11 @@ extern "C" Scene* RtPicking_Scene_Ctor(Scene* self) {
 
     self->_queryStamp = 0;
 
-    RtCellHeadsInit(&self->_cellHeads);
+    // ENDGAME B.3.2 step 2 (callers) — retail 0x18007b960, `kSpec_I32Neg1`.
+    // NOT trait-equivalent (a fill of -1 is one of the twelve rows
+    // Collection.h's Array banner names as inexpressible from traits), so
+    // `_cellHeads` is bridged through the hand-derived row.
+    rtcoll::AsArray<&rtcoll::kSpec_I32Neg1>(&self->_cellHeads)->SetSize(10000);
 
     // ---- ORACLE: full, against a private scratch Scene -----------------
     // The ctor mutates only the object it is handed, so the original can be
@@ -489,10 +482,18 @@ extern "C" Scene* RtPicking_Scene_Ctor(Scene* self) {
 // ============================================================================
 extern "C" void RtPicking_Scene_Dtor(Scene* self) {
 
-    RtFreeArrayEntry(&self->_entries);   // +0x48
-    RtFreeArrayLink(&self->_links);      // +0x30
-    RtFreeArrayCell(&self->_cells);      // +0x18
-    RtFreeArrayInt(&self->_cellHeads);   // +0x08
+    // ENDGAME B.3.2 step 2 (callers) — all four TRAIT-EQUIVALENT once the
+    // element type is the real one: `Entry` (Scene.h) carries a real
+    // `Collection::Array<::Transform> _transforms` member, so `Entry`'s own
+    // (implicit) destructor already destroys it — SpecFor<Entry>() calling
+    // that destructor per element IS the 0x180073c90 J2 body's "destroy each
+    // Entry's inner Array<Transform> first" behaviour. `Cell`, `Link` and
+    // `int32_t` are plain POD, trivially destructible, matching the other
+    // three J1 bodies exactly.
+    self->_entries.~Array();   // +0x48  retail 0x180073c90
+    self->_links.~Array();     // +0x30  retail 0x180073bb0
+    self->_cells.~Array();     // +0x18  retail 0x1800739e0
+    self->_cellHeads.~Array(); // +0x08  retail 0x1800737f0
 
 }
 
@@ -507,7 +508,7 @@ extern "C" void RtPicking_Scene_Dtor(Scene* self) {
 // ORACLE: full. Pure read, so both run and the pointers are compared.
 // ============================================================================
 extern "C" void* RtPicking_Scene_GetUserData(const Scene* self, uint32_t id) {
-    void* ours = self->_entries._data[id]._userData;
+    void* ours = self->_entries[id]._userData;
     return ours;
 }
 
@@ -555,7 +556,7 @@ extern "C" void RtPicking_Scene_SetMeshUserData(Scene* self, uint32_t id, void* 
                                                 int userValue, int userValue2,
                                                 HitCallback callback) {
 
-    Entry* e = &self->_entries._data[id];
+    Entry* e = &self->_entries[id];
     e->_userData   = userData;
     e->_userValue  = userValue;
     e->_userValue2 = userValue2;
@@ -581,7 +582,7 @@ extern "C" void RtPicking_Scene_SetMeshUserData(Scene* self, uint32_t id, void* 
 extern "C" void RtPicking_Scene_SetTransform(Scene* self, uint32_t id,
                                              const ::Transform* xform) {
 
-    uint32_t* dst = reinterpret_cast<uint32_t*>(self->_entries._data[id]._transforms._data);
+    uint32_t* dst = reinterpret_cast<uint32_t*>(self->_entries[id]._transforms.GetData());
     const uint32_t* src = reinterpret_cast<const uint32_t*>(xform);
     dst[0] = src[0]; dst[1] = src[1]; dst[2] = src[2]; dst[3] = src[3];
     dst[4] = src[4]; dst[5] = src[5]; dst[6] = src[6];
@@ -632,8 +633,12 @@ extern "C" uint32_t RtPicking_Scene_AddMesh(Scene* self, void* mesh,
     desc._mesh       = mesh;
     desc._userData   = userData;
 
-    RtTransformArraySetSize(&desc._transforms, pm->_nodeCount);
-    ::Transform* dst = desc._transforms._data;
+    // retail 0x180059140 — `kSpec_Transform`, NOT trait-equivalent (see the
+    // banner above `RtGridAdd`): the tail init writes retail's identity
+    // transform, which `Transform`'s own default ctor does not produce.
+    rtcoll::AsArray<&rtcoll::kSpec_Transform>(&desc._transforms)
+        ->SetSize(pm->_nodeCount);
+    ::Transform* dst = desc._transforms.GetData();
 
     // Node 0 is the root: the caller's transform, copied dword for dword.
     {
@@ -648,8 +653,8 @@ extern "C" uint32_t RtPicking_Scene_AddMesh(Scene* self, void* mesh,
     // inlined quaternion-rotate of the local offset by the parent rotation,
     // added to the parent's translation. Retail's association order is kept
     // verbatim — this is float arithmetic under a bit-exact oracle.
-    if (desc._transforms._size > 1) {
-        for (int i = 1; i < desc._transforms._size; ++i) {
+    if (desc._transforms.GetSize() > 1) {
+        for (int i = 1; i < desc._transforms.GetSize(); ++i) {
             const SubMesh* node = &pm->_nodes[i];
             const ::Transform* parent = &dst[node->_parent];
 
@@ -683,7 +688,7 @@ extern "C" uint32_t RtPicking_Scene_AddMesh(Scene* self, void* mesh,
 
     // ---- ORACLE, before the scratch is released -------------------------
 
-    RtFreeScratchTransforms(&desc._transforms);   // see the helper's comment
+    desc._transforms.~Array();   // retail 0x1800739e0 (J1); see the banner above
     return id;
 }
 
@@ -725,7 +730,7 @@ extern "C" void RtPicking_Scene_RemoveMesh(Scene* self, uint32_t id) {
 
 
 
-    Entry* e = &self->_entries._data[id];
+    Entry* e = &self->_entries[id];
     const uint16_t w = e->_cellW;
     const uint16_t h = e->_cellH;
     RtGridUnthread(self, &e->_cellX, w, h, (int32_t)id);
@@ -822,7 +827,7 @@ extern "C" int RtPicking_Scene_Intersect(const Scene* cself, const Vector3* star
         Entry* entry = EntryAt(self, LinkEntry(self, curLink));
 
         int32_t sub = 0;
-        if (entry->_transforms._size > 0) {
+        if (entry->_transforms.GetSize() > 0) {
             do {
                 // Re-read the entry through the link each iteration, as retail
                 // does (it reloads links[curLink]._entry at the top of every
@@ -830,7 +835,7 @@ extern "C" int RtPicking_Scene_Intersect(const Scene* cself, const Vector3* star
                 Entry* e = EntryAt(self, LinkEntry(self, curLink));
                 const RtPicking::PickingMesh* pm =
                     reinterpret_cast<const RtPicking::PickingMesh*>(e->_mesh);
-                const ::Transform* world = &e->_transforms._data[sub];
+                const ::Transform* world = &e->_transforms[sub];
 
                 ::Transform invX;
                 TransformInverse(world, &invX);
@@ -879,9 +884,9 @@ extern "C" int RtPicking_Scene_Intersect(const Scene* cself, const Vector3* star
                 const float localDz = ((d20 * niqx + iqw * d17) - d19 * niqy) + d23 * niqz;
 
                 const SubMesh* node = &pm->_nodes[sub];
-                const Vector3*  verts = node->_vertices._data;
-                const Triangle* tris  = node->_triangles._data;
-                const int32_t triCount = node->_triangles._size;
+                const Vector3*  verts = node->_vertices.GetData();
+                const Triangle* tris  = node->_triangles.GetData();
+                const int32_t triCount = node->_triangles.GetSize();
 
                 for (int32_t t = 0; t < triCount; ++t) {
                     const uint32_t i0 = tris[t].i0;

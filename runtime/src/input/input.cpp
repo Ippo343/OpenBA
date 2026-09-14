@@ -146,6 +146,19 @@ uint8_t* DeviceArrayBase(uint8_t* deviceSingleton, int32_t device, int32_t devic
 // `&this->_root` as their first argument (0x1800a7d20: `LEA RBX,[RCX+8]`
 // feeds RCX at both call sites), not `this`, so there is no ABI ambiguity to
 // resolve (contrast RegisterInput, held back for exactly that reason below).
+// NOT CONVERTED (ENDGAME B.3.2 step 2), every Set-shaped call in this file
+// (DestroySubtree here, AllocNode/Retrace in RegisterInput below): `KeyMap`
+// (runtime/types/input/KeyMap.h) types its tree as separate `void* _root` /
+// `int32_t _count` fields rather than a real `Collection::Set<Binding,...>`
+// member — the same split-field pattern `Collection::Array<T>` sites hit
+// elsewhere in this batch. Converting these needs more than a member
+// retype, though: `Binding`'s key is an unsigned BYTE id compared with a
+// plain unsigned less-than, not `Collection::AVLCompare`'s string compare, so
+// it would also need a new `Compare` policy (a `KeyTraits`/`CompareTraits`
+// specialization, Collection.h's `detail` namespace) before
+// `Collection::Set<Binding, ByteIdCompare>::Insert`/`Remove`/`Clear` could
+// stand in for these three address doors. That is Collection-side policy
+// work this batch does not own.
 using SetDestroySubtreeFn = void (*)(void* setPtr, BindingNode* node);
 using SetFreeNodeFn       = void (*)(void* setPtr, BindingNode* node);
 

@@ -532,6 +532,10 @@ extern "C" void* RtUi_DialogInstance_CtorFromElement(void* self, void* ui,
     d->_parent     = nullptr;                      // +0x28  written 0 then...
     d->_parent     = *parentPtr;                   // +0x28  ...the real value
     d->_dataSource = dataSource;                   // +0x30
+    // ENDGAME B.3.2 step 2 — these three stay raw field writes, deliberately:
+    // `Collection::LinkedList<T>` has NO user-provided default constructor on
+    // purpose (Collection.h's banner), so there is no member call this could
+    // become; it is the ctor's own explicit zeroing, exactly like retail's.
     d->_children._head  = nullptr;                 // +0x38
     d->_children._tail  = nullptr;                 // +0x40
     d->_children._count = 0;                       // +0x48   (+0x4c left alone)
@@ -564,6 +568,18 @@ extern "C" void* RtUi_DialogInstance_CtorFromElement(void* self, void* ui,
     // tie-break (`?GetFirstDialog@UserInterface@UI@@`, 0x180031150, reads the
     // FIRST element from the list's +0x00) and warns that reading a ctor alone
     // gets this backwards.
+    //
+    // ENDGAME B.3.2 step 2 — NOT converted, deliberately. `Collection.h`'s
+    // `LinkedList<T>::Add()` appends at the TAIL (its own banner: "append at
+    // the TAIL... `_head` is the BACKMOST... `_tail` the FRONTMOST"); this body
+    // inserts at the HEAD, which is the opposite end and not a member the
+    // class has today. A hypothetical `AddFront()` — NewNode, then link at
+    // `_head` with the old head's `prev` pointed back at the new node, mirror
+    // image of `Add()` — would be the conversion, but retail ships exactly one
+    // `LinkedList<T=8>` instantiation and this is its only head-insert site,
+    // so there is no second caller to justify adding a class member for it
+    // yet. Left as the raw field manipulation, including the guard-free
+    // linking through a possibly-null `node` on OOM (retail's own asymmetry).
     if (DialogInstance* const parent = static_cast<DialogInstance*>(d->_parent)) {
         // 0x1801147af: `LEA EDX,[RBP+0x18] / LEA R8D,[RBP+0x8]` with RBP == 0,
         // wrapped in Enter/Allocate/Leave — i.e. exactly ?MemAlloc@…(0x18, 8).

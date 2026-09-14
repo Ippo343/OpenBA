@@ -298,6 +298,14 @@ extern "C" void RtSystem_Configuration_SetCommandLine(void* self, const String* 
                     // return address symbolises to this source line. Named here so
                     // that crash is readable. See §2: unreachable on an empty
                     // command line, which is every automated run in this project.
+                    //
+                    // NOT CONVERTED (ENDGAME B.3.2 step 2): 0x18002a090 is
+                    // `rtavl::StringMapInsert`, a
+                    // `Collection::Set<Pair<String,String>>::Insert` door.
+                    // `map` here is a raw `void*` (`self + 0x10`) — there is no
+                    // `System::Configuration` type header in runtime/types
+                    // declaring a real `Collection::Set<...>` member to call
+                    // `.Insert()` on, so this stays a by-address call.
                     void* node = nullptr;
                     reinterpret_cast<MapInsertFn>(
                         ResolveAddr(Module::Runtime, 0x18002a090))(
@@ -655,6 +663,14 @@ extern "C" void RtSystem_Configuration_Dtor(void* self) {
 
     typedef void (*CleanupFn)(void*);
 
+    // NOT CONVERTED (ENDGAME B.3.2 step 2), both calls below: `self` is a raw
+    // `void*` — there is no `System::Configuration` type header in
+    // runtime/types declaring real `Collection::Set<Pair<String,String>>` /
+    // `Collection::Array<T>` members at +0x10 / +0x00 to call `.Clear()` or
+    // `.~Array()` on, so both stay by-address calls (they already reach OUR
+    // ported bodies, per the banner above — `ResolveAddr` consults the port
+    // registry first).
+    //
     // 0x1800c518f -- the string->string map at +0x10.
     if (CleanupFn setClear = reinterpret_cast<CleanupFn>(
             ResolveAddr(Module::Runtime, 0x18000f7d0)))

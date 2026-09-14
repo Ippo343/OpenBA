@@ -122,6 +122,7 @@ extern const ArraySpec kSpec_Tri18A4;        // 0x1800136f0  Array<EdgeMesh::Tri
 extern const ArraySpec kSpec_MetaEntry20;    // 0x180034010, 0x180033080  NON-TRIVIAL
 extern const ArraySpec kSpec_MetaData58;     // 0x1800332d0  NON-TRIVIAL
 extern const ArraySpec kSpec_EmitterInstance;// 0x180052330  zeroed 10-byte prefix init
+extern const ArraySpec kSpec_InnerArrayU8;   // 0x180053f00  Array<Array<uint8_t>>  NON-TRIVIAL
 
 // ENDGAME B.3.2 step 2 (callers, runtime/src/ui/*) — same reasoning: these
 // rows were file-local to array.cpp until a converted UI call site needed to
