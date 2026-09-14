@@ -405,7 +405,7 @@ int HarvestOrchard_Slot4_Impl(HarvestOrchard* self, void* entityIBP, uint64_t /*
 
     // Step 4: Iterate orchard cells
     int fieldCellCount = (int)selfQ[0xc]; // _field60 as cell count
-    float cellFloat = 0.0f;
+    [[maybe_unused]] float cellFloat = 0.0f;
 
     if (fieldCellCount > 0) {
         for (int i = 0; i < fieldCellCount; i++) {

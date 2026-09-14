@@ -147,9 +147,8 @@ void ImmigrationComponent_Shutdown(ImmigrationComponent* self, void* stream) {
     // count straight off the stream. Same trap as interactcomponent.cpp and
     // reference_serializer_plus8_is_encoding_not_loading_flag.
     if (*(int32_t*)(*(uintptr_t*)serializer2 + 8) == 0) {
-        if (s_fn_DynArray_Resize) {
-            s_fn_DynArray_Resize((void*)&self->field58, arrayCount);
-        }
+        // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
+        GameColl::AsArray<GameColl::Ptr8>((void*)&self->field58).SetSize(arrayCount);
     }
 
     // Serialize each InternalBasePtr element in the array
@@ -212,8 +211,8 @@ void ImmigrationComp_DynArrayResize(int64_t* param_1, int newCount) {
 void ImmigrationComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[ImmigrationComponent] Funcs resolved: Serialize=%p DynResize=%p IBPSerialize=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_DynArray_Resize,
+    printf("[ImmigrationComponent] Funcs resolved: Serialize=%p IBPSerialize=%p\n",
+           (void*)s_fn_Component_Serialize,
            (void*)fn_InternalBasePtr_Serialize);
 #endif
 }

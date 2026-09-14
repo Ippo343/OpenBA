@@ -952,6 +952,8 @@ void FishingWork_Serialize_Impl(FishingWork* self, void* stream) {
 // Returns: 0 (via cleared upper bytes)
 // ============================================================
 int FishingWork_Slot6_Impl(FishingWork* self, void* param2, void* param3, uint32_t param4) {
+    (void)param2;
+    (void)param3;
     uintptr_t selfAddr = (uintptr_t)self;
 
     // Clear citizen IBP slot: citizenRefs[param4 & 0xf] = nullptr IBP

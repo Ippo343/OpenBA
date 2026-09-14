@@ -12,6 +12,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/interactcomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -55,8 +56,8 @@ typedef void (*fn_IBP_Ctor_t)(void* retbuf, void* rawPtr);
 static fn_IBP_Ctor_t s_fn_IBP_Ctor = nullptr;
 
 // FUN_1400032e0 -- dynamic array resize for IBP arrays
-typedef void (*fn_IBPArray_Resize_t)(void* arrayPtr, int newCount);
-static fn_IBPArray_Resize_t s_fn_IBPArray_Resize = nullptr;
+// 0x1400032e0 was Collection::Array<void*>::SetSize(n) monomorphised into
+// the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
 
 // FUN_140004740 -- FindComponent (MultiObject)
 typedef void (*fn_FindMultiObjComp_t)(uintptr_t entity, void* retBuf);
@@ -99,9 +100,6 @@ static void EnsureHelpers() {
 
     s_fn_IBP_Ctor = reinterpret_cast<fn_IBP_Ctor_t>(
         reinterpret_cast<uintptr_t>(fn_InternalBasePtr_Ctor));
-
-    s_fn_IBPArray_Resize = reinterpret_cast<fn_IBPArray_Resize_t>(
-        ResolveAddr(Module::Exe, 0x1400032e0));
 
     s_fn_FindMultiObjComp = reinterpret_cast<fn_FindMultiObjComp_t>(
         ResolveAddr(Module::Exe, 0x140004740));
@@ -166,11 +164,9 @@ void InteractComponent_Shutdown(InteractComponent* self, void* stream) {
     // on a real load, so the array at +0x28 stayed NULL while `count` came back
     // non-zero from the stream, and the element loop dereferenced null.
     if (SerializerIsLoading(serializer)) {
-        // Resize array for loading
-        if (s_fn_IBPArray_Resize) {
-            s_fn_IBPArray_Resize(
-                reinterpret_cast<uint8_t*>(self) + 0x28, count);
-        }
+        // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
+        GameColl::AsArray<GameColl::Ptr8>(
+            reinterpret_cast<uint8_t*>(self) + 0x28).SetSize(count);
     }
 
     // Serialize each InternalBasePtr element and validate

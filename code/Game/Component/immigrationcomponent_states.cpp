@@ -59,6 +59,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"
 #include "Component/controller_state_table.h"
 #include <cstdint>
@@ -83,7 +84,8 @@ typedef void* (*fn_ResolvePos_t)(void* comp, float* out3, int kind, int idx, flo
 typedef int   (*fn_ChildSum_t)(int64_t comp, int kind);
 typedef void* (*fn_CopyCtor_t)(void* mem, void* desc);
 typedef void  (*fn_RegisterEntity_t)(void* entityList, void* entityIBP, int category);
-typedef void  (*fn_DynArray8_t)(void* arr, int newCount, void* fill);
+// 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
+// into the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
 typedef void  (*fn_ZoneRefresh_t)(int* grid, void* p2, void* p3, int p4);
 typedef void  (*fn_SetTransformYaw_t)(uintptr_t model, const void* pos, float yaw);
 typedef void  (*fn_SetVariant_t)(int64_t* model, uint16_t variant, int16_t sub);
@@ -95,7 +97,6 @@ fn_ResolvePos_t      s_ResolvePos    = nullptr;  // 0x140122e20  Entity_impl_2e2
 fn_ChildSum_t        s_ChildSum      = nullptr;  // 0x140123070
 fn_CopyCtor_t        s_CopyCtor      = nullptr;  // 0x1400c3720  ComponentEntity_CopyCtor
 fn_RegisterEntity_t  s_RegisterEnt   = nullptr;  // 0x1400c48a0  EntityList_RegisterEntity
-fn_DynArray8_t       s_DynArray8     = nullptr;  // 0x140003110  DynArray8_ResizeFill
 fn_ZoneRefresh_t     s_ZoneRefresh   = nullptr;  // 0x14009c480
 fn_SetTransformYaw_t s_SetYaw        = nullptr;  // 0x140003870
 fn_SetVariant_t      s_SetVariant    = nullptr;  // 0x1401253d0
@@ -109,7 +110,6 @@ void Resolve() {
     s_ChildSum     = reinterpret_cast<fn_ChildSum_t>(ResolveAddr(Module::Exe, 0x140123070));
     s_CopyCtor     = reinterpret_cast<fn_CopyCtor_t>(ResolveAddr(Module::Exe, 0x1400c3720));
     s_RegisterEnt  = reinterpret_cast<fn_RegisterEntity_t>(ResolveAddr(Module::Exe, 0x1400c48a0));
-    s_DynArray8    = reinterpret_cast<fn_DynArray8_t>(ResolveAddr(Module::Exe, 0x140003110));
     s_ZoneRefresh  = reinterpret_cast<fn_ZoneRefresh_t>(ResolveAddr(Module::Exe, 0x14009c480));
     s_SetYaw       = reinterpret_cast<fn_SetTransformYaw_t>(ResolveAddr(Module::Exe, 0x140003870));
     s_SetVariant   = reinterpret_cast<fn_SetVariant_t>(ResolveAddr(Module::Exe, 0x1401253d0));
@@ -440,7 +440,9 @@ extern "C" void Immigration_Spawn(void* compV) {
         // DynArray8 push; the registered resize does the same growth policy.
         int count = *reinterpret_cast<int*>(comp + 0x60);
         uint64_t pushIBP = entIBP;
-        if (s_DynArray8) s_DynArray8(reinterpret_cast<void*>(comp + 0x58), count + 1, &pushIBP);
+        // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+        GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(comp + 0x58))
+            .SetSizeFill(count + 1, &pushIBP);
     }
     *reinterpret_cast<uint32_t*>(comp + 0x50) = 0;
 }

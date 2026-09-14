@@ -328,8 +328,9 @@ static void* BST_Find(void* root, int key) {
 // different fixes, so each is counted separately. Two of them (atCapacity, workerCap)
 // return before the cell loop is even reached.
 static long long g_ha_calls = 0, g_ha_auto = 0, g_ha_cap = 0, g_ha_wcap = 0,
-                 g_ha_nomark = 0, g_ha_inbst = 0, g_ha_noent = 0, g_ha_nopass = 0,
-                 g_ha_nopath = 0, g_ha_ok = 0;
+                 g_ha_nomark = 0, g_ha_inbst = 0, g_ha_noent = 0;
+[[maybe_unused]] static long long g_ha_nopass = 0;
+[[maybe_unused]] static long long g_ha_nopath = 0, g_ha_ok = 0;
 
 int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3*/, uint64_t /*param4*/) {
     // Harvest-assignment census. State 11 posts this work; whether a citizen ever
@@ -381,7 +382,7 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
     // only question left is whether the raw material reaches STORAGE. Printing the stock
     // here answers it directly instead of by inference: a rising number IS the deposit.
     {
-        const int cur = *(int*)(resEntry);
+        [[maybe_unused]] const int cur = *(int*)(resEntry);
     }
 
     // Set mesh visibility (group 2) based on capacity
