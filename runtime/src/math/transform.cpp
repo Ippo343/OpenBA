@@ -67,12 +67,6 @@ namespace Math {
 // Math::Quaternion::Quaternion(float,float,float,float)   -- ctor, this=RCX
 // retail 0x18001e260  ??0Quaternion@Math@@QEAA@MMMM@Z
 // ============================================================================
-Quaternion::Quaternion(float x_, float y_, float z_, float w_) {
-    this->x = x_;
-    this->y = y_;
-    this->w = w_;   // retail writes w (this+0xc) before z (this+8); independent
-    this->z = z_;   // field stores, order is inconsequential here.
-}
 
 // ============================================================================
 // Math::Transform::Transform()  -- default ctor, this=RCX
@@ -442,30 +436,11 @@ Matrix Matrix::Identity() {
 // Math::Transform::Identity()  -- static, struct return: RCX=hidden ret
 // retail 0x18001fab0  ?Identity@Transform@Math@@SA?AV12@XZ
 // ============================================================================
-Transform Transform::Identity() {
-    Transform ret;
-    ret.rotation.x = 0.0f;
-    ret.rotation.y = 0.0f;
-    ret.rotation.z = 0.0f;
-    ret.rotation.w = RtMathConst::kOne;
-    ret.translation.x = 0.0f;
-    ret.translation.y = 0.0f;
-    ret.translation.z = 0.0f;
-    return ret;
-}
 
 // ============================================================================
 // Math::Transform3::Identity()  -- static, struct return: RCX=hidden ret
 // retail 0x1800347f0  ?Identity@Transform3@Math@@SA?AV12@XZ
 // ============================================================================
-Transform3 Transform3::Identity() {
-    Transform3 ret;
-    ret.axisX = {RtMathConst::kOne, 0.0f, 0.0f};
-    ret.axisY = {0.0f, RtMathConst::kOne, 0.0f};
-    ret.axisZ = {0.0f, 0.0f, RtMathConst::kOne};
-    ret.translation = {0.0f, 0.0f, 0.0f};
-    return ret;
-}
 
 // ============================================================================
 // Math::Matrix::operator!=(const Matrix&) const

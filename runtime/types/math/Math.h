@@ -66,6 +66,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <cmath>
 
 namespace RtMathConst {
 // Float constants the DLL keeps in .rdata and that the ports must reproduce
@@ -341,6 +342,168 @@ static_assert(sizeof(Transform3) == 0x30, "Math::Transform3 must be 0x30 bytes")
 static_assert(offsetof(Transform3, axisY) == 0x0c, "Transform3::axisY @ +0x0c");
 static_assert(offsetof(Transform3, axisZ) == 0x18, "Transform3::axisZ @ +0x18");
 static_assert(offsetof(Transform3, translation) == 0x24, "Transform3::translation @ +0x24");
+
+
+// ============================================================================
+// Inline definitions (ENDGAME B.3.1 closing pass, performance)
+// ============================================================================
+//
+// Two caller batches replaced hand-inlined copies of the Vector3 ctor / splat /
+// Dot in the pathfinding and citizen-AI hot paths with out-of-line class calls.
+// These are the members small enough that a call frame costs more than the
+// arithmetic, so they live here instead of in runtime/src/math/*.cpp. The
+// BODIES ARE THE ONES THAT WERE THERE, moved verbatim — same statements, same
+// operand order, same retail address on each — so this is a linkage change and
+// nothing else. Anything that calls out (RtLibm::Sqrt/Sin/Cos/Atan2, the
+// Serialize vtable hop, the Normalize/Inverse/AsMatrix/Lerp families) stays
+// out of line.
+
+inline Scalar Scalar::Abs() const {
+    Scalar ret;
+    ret.v = std::fabs(this->v);
+    return ret;
+}
+
+inline Scalar Scalar::Lerp(const Scalar& to, const Scalar& t) {
+    Scalar ret;
+    ret.v = this->v + (to.v - this->v) * t.v;
+    return ret;
+}
+
+inline Scalar Scalar::Max(const Scalar& other) const {
+    Scalar ret;
+    ret.v = (other.v < this->v) ? this->v : other.v;
+    return ret;
+}
+
+inline Vector2::Vector2(const Scalar& x_, const Scalar& y_) {
+    this->x = x_.v;
+    this->y = y_.v;
+}
+
+inline void Vector2::operator*=(const Vector2& rhs) {
+    this->x *= rhs.x;
+    this->y *= rhs.y;
+}
+
+inline Scalar Vector2::Dot(const Vector2& rhs) const {
+    Scalar ret;
+    ret.v = this->x * rhs.x + this->y * rhs.y;
+    return ret;
+}
+
+inline Vector2 Vector2::Max(const Vector2& rhs) const {
+    Vector2 ret;
+    ret.x = (this->x <= rhs.x) ? rhs.x : this->x;
+    ret.y = (this->y <= rhs.y) ? rhs.y : this->y;
+    return ret;
+}
+
+inline Vector2 Vector2::Min(const Vector2& rhs) const {
+    Vector2 ret;
+    ret.x = (rhs.x <= this->x) ? rhs.x : this->x;
+    ret.y = (rhs.y <= this->y) ? rhs.y : this->y;
+    return ret;
+}
+
+inline Scalar Vector2::LengthSquared() const {
+    Scalar ret;
+    ret.v = this->x * this->x + this->y * this->y;
+    return ret;
+}
+
+inline Vector3::Vector3(const Scalar& x_, const Scalar& y_, const Scalar& z_) {
+    this->x = x_.v;
+    this->y = y_.v;
+    this->z = z_.v;
+}
+
+inline Vector3::Vector3(const Scalar& s) {
+    this->x = s.v;
+    this->y = s.v;
+    this->z = s.v;
+}
+
+inline Vector3 Vector3::Cross(const Vector3& rhs) const {
+    Vector3 ret;
+    float x_ = this->y * rhs.z - this->z * rhs.y;
+    float y_ = rhs.x * this->z - this->x * rhs.z;
+    float z_ = this->x * rhs.y - rhs.x * this->y;
+    ret.x = x_;
+    ret.y = y_;
+    ret.z = z_;
+    return ret;
+}
+
+inline Scalar Vector3::Dot(const Vector3& rhs) const {
+    Scalar ret;
+    ret.v = rhs.y * this->y + rhs.x * this->x + rhs.z * this->z;
+    return ret;
+}
+
+inline Vector3 Vector3::Lerp(const Vector3& to, const Scalar& t) const {
+    Vector3 ret;
+    float tt = t.v;
+    ret.x = this->x + tt * (to.x - this->x);
+    ret.y = this->y + (to.y - this->y) * tt;
+    ret.z = this->z + (to.z - this->z) * tt;
+    return ret;
+}
+
+inline Vector3 Vector3::Min(const Vector3& rhs) const {
+    Vector3 ret;
+    ret.x = (rhs.x <= this->x) ? rhs.x : this->x;
+    ret.y = (rhs.y <= this->y) ? rhs.y : this->y;
+    ret.z = (rhs.z <= this->z) ? rhs.z : this->z;
+    return ret;
+}
+
+inline bool Vector3::operator==(const Vector3& rhs) const {
+    bool ours = this->x == rhs.x && this->y == rhs.y && this->z == rhs.z;
+    return ours;
+}
+
+inline Vector4::Vector4(const Scalar& s) {
+    this->x = s.v;
+    this->y = s.v;
+    this->z = s.v;
+    this->w = s.v;
+}
+
+inline Vector4::Vector4(const Vector3& xyz, const Scalar& w_) {
+    this->x = xyz.x;
+    this->y = xyz.y;
+    this->z = xyz.z;
+    this->w = w_.v;
+}
+
+inline Quaternion::Quaternion(float x_, float y_, float z_, float w_) {
+    this->x = x_;
+    this->y = y_;
+    this->w = w_;   // retail writes w (this+0xc) before z (this+8); independent
+    this->z = z_;   // field stores, order is inconsequential here.
+}
+
+inline Transform Transform::Identity() {
+    Transform ret;
+    ret.rotation.x = 0.0f;
+    ret.rotation.y = 0.0f;
+    ret.rotation.z = 0.0f;
+    ret.rotation.w = RtMathConst::kOne;
+    ret.translation.x = 0.0f;
+    ret.translation.y = 0.0f;
+    ret.translation.z = 0.0f;
+    return ret;
+}
+
+inline Transform3 Transform3::Identity() {
+    Transform3 ret;
+    ret.axisX = {RtMathConst::kOne, 0.0f, 0.0f};
+    ret.axisY = {0.0f, RtMathConst::kOne, 0.0f};
+    ret.axisZ = {0.0f, 0.0f, RtMathConst::kOne};
+    ret.translation = {0.0f, 0.0f, 0.0f};
+    return ret;
+}
 
 }  // namespace Math
 

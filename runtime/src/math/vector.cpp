@@ -47,26 +47,11 @@ namespace Math {
 // ============================================================
 
 // ?Abs@Scalar@Math@@QEBA?AV12@XZ  retail 0x1800646b0
-Scalar Scalar::Abs() const {
-    Scalar ret;
-    ret.v = std::fabs(this->v);
-    return ret;
-}
 
 // ?Lerp@Scalar@Math@@QEAA?AV12@AEBV12@0@Z  retail 0x1800218c0
 // Non-const (QEAA) but reads only `this`; t is the 3rd arg (R9).
-Scalar Scalar::Lerp(const Scalar& to, const Scalar& t) {
-    Scalar ret;
-    ret.v = this->v + (to.v - this->v) * t.v;
-    return ret;
-}
 
 // ?Max@Scalar@Math@@QEBA?AV12@AEBV12@@Z  retail 0x18005ff60
-Scalar Scalar::Max(const Scalar& other) const {
-    Scalar ret;
-    ret.v = (other.v < this->v) ? this->v : other.v;
-    return ret;
-}
 
 // ============================================================
 // Math::Vector2
@@ -77,41 +62,16 @@ Scalar Scalar::Max(const Scalar& other) const {
 // (B31_RULES rule 5: read retail's, and it is not a no-op).
 
 // ??0Vector2@Math@@QEAA@AEBVScalar@1@0@Z  retail 0x180070db0
-Vector2::Vector2(const Scalar& x_, const Scalar& y_) {
-    this->x = x_.v;
-    this->y = y_.v;
-}
 
 // ??XVector2@Math@@QEAAXAEBV01@@Z  retail 0x18005ffd0  (operator*=, void return, mutates self
 // in place — not diffed here since diffing would require running the original on live state
 // twice; the formula is a two-multiply and trivially verified by inspection).
-void Vector2::operator*=(const Vector2& rhs) {
-    this->x *= rhs.x;
-    this->y *= rhs.y;
-}
 
 // ?Dot@Vector2@Math@@QEBA?AVScalar@2@AEBV12@@Z  retail 0x18006c840
-Scalar Vector2::Dot(const Vector2& rhs) const {
-    Scalar ret;
-    ret.v = this->x * rhs.x + this->y * rhs.y;
-    return ret;
-}
 
 // ?Max@Vector2@Math@@QEBA?AV12@AEBV12@@Z  retail 0x180060330
-Vector2 Vector2::Max(const Vector2& rhs) const {
-    Vector2 ret;
-    ret.x = (this->x <= rhs.x) ? rhs.x : this->x;
-    ret.y = (this->y <= rhs.y) ? rhs.y : this->y;
-    return ret;
-}
 
 // ?Min@Vector2@Math@@QEBA?AV12@AEBV12@@Z  retail 0x1800602e0
-Vector2 Vector2::Min(const Vector2& rhs) const {
-    Vector2 ret;
-    ret.x = (rhs.x <= this->x) ? rhs.x : this->x;
-    ret.y = (rhs.y <= this->y) ? rhs.y : this->y;
-    return ret;
-}
 
 // ?Length@Vector2@Math@@QEBA?AVScalar@2@XZ  retail 0x18006c880
 Scalar Vector2::Length() const {
@@ -121,11 +81,6 @@ Scalar Vector2::Length() const {
 }
 
 // ?LengthSquared@Vector2@Math@@QEBA?AVScalar@2@XZ  retail 0x18006c860
-Scalar Vector2::LengthSquared() const {
-    Scalar ret;
-    ret.v = this->x * this->x + this->y * this->y;
-    return ret;
-}
 
 // ?Normalize@Vector2@Math@@QEBA?AV12@XZ  retail 0x18006c600  (by value; self unchanged)
 Vector2 Vector2::Normalize() const {
@@ -182,37 +137,12 @@ void Vector2::Serialize(void* serializer) {
 // that body is the constexpr (float,float,float) ctor in Math.h.
 
 // ??0Vector3@Math@@QEAA@AEBVScalar@1@00@Z  retail 0x180015120
-Vector3::Vector3(const Scalar& x_, const Scalar& y_, const Scalar& z_) {
-    this->x = x_.v;
-    this->y = y_.v;
-    this->z = z_.v;
-}
 
 // ??0Vector3@Math@@QEAA@AEBVScalar@1@@Z  retail 0x180015360  (splat one Scalar to x/y/z)
-Vector3::Vector3(const Scalar& s) {
-    this->x = s.v;
-    this->y = s.v;
-    this->z = s.v;
-}
 
 // ?Cross@Vector3@Math@@QEBA?AV12@AEBV12@@Z  retail 0x180021b10
-Vector3 Vector3::Cross(const Vector3& rhs) const {
-    Vector3 ret;
-    float x_ = this->y * rhs.z - this->z * rhs.y;
-    float y_ = rhs.x * this->z - this->x * rhs.z;
-    float z_ = this->x * rhs.y - rhs.x * this->y;
-    ret.x = x_;
-    ret.y = y_;
-    ret.z = z_;
-    return ret;
-}
 
 // ?Dot@Vector3@Math@@QEBA?AVScalar@2@AEBV12@@Z  retail 0x18001dff0
-Scalar Vector3::Dot(const Vector3& rhs) const {
-    Scalar ret;
-    ret.v = rhs.y * this->y + rhs.x * this->x + rhs.z * this->z;
-    return ret;
-}
 
 // ?FromYawPitch@Vector3@Math@@SA?AV12@AEBVScalar@2@0@Z  retail 0x1800220b0 (static)
 // x = -cos(pitch_rad) * sin(yaw_rad); y = cos(pitch_rad) * cos(yaw_rad); z = sin(pitch_rad)
@@ -246,23 +176,8 @@ Scalar Vector3::Length() const {
 }
 
 // ?Lerp@Vector3@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z  retail 0x18001d450
-Vector3 Vector3::Lerp(const Vector3& to, const Scalar& t) const {
-    Vector3 ret;
-    float tt = t.v;
-    ret.x = this->x + tt * (to.x - this->x);
-    ret.y = this->y + (to.y - this->y) * tt;
-    ret.z = this->z + (to.z - this->z) * tt;
-    return ret;
-}
 
 // ?Min@Vector3@Math@@QEBA?AV12@AEBV12@@Z  retail 0x180015280
-Vector3 Vector3::Min(const Vector3& rhs) const {
-    Vector3 ret;
-    ret.x = (rhs.x <= this->x) ? rhs.x : this->x;
-    ret.y = (rhs.y <= this->y) ? rhs.y : this->y;
-    ret.z = (rhs.z <= this->z) ? rhs.z : this->z;
-    return ret;
-}
 
 // ?Normalize@Vector3@Math@@QEBA?AV12@AEAVScalar@2@@Z  retail 0x180021a20
 // Takes an explicit Scalar& out-param for the pre-normalize magnitude.
@@ -294,10 +209,6 @@ Vector3 Vector3::Normalize() const {
 }
 
 // ??8Vector3@Math@@QEBA_NAEBV01@@Z  retail 0x1800150a0  (operator==, bool in AL, no hidden slot)
-bool Vector3::operator==(const Vector3& rhs) const {
-    bool ours = this->x == rhs.x && this->y == rhs.y && this->z == rhs.z;
-    return ours;
-}
 
 // ?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800150e0 — see the Vector2
 // Serialize comment above; NOT diffable, same vtable-slot pattern, count = 3.
@@ -314,20 +225,8 @@ void Vector3::Serialize(void* serializer) {
 // ============================================================
 
 // ??0Vector4@Math@@QEAA@AEBVScalar@1@@Z  retail 0x18001d750  (splat one Scalar to x/y/z/w)
-Vector4::Vector4(const Scalar& s) {
-    this->x = s.v;
-    this->y = s.v;
-    this->z = s.v;
-    this->w = s.v;
-}
 
 // ??0Vector4@Math@@QEAA@AEBVVector3@1@AEBVScalar@1@@Z  retail 0x18001e070
-Vector4::Vector4(const Vector3& xyz, const Scalar& w_) {
-    this->x = xyz.x;
-    this->y = xyz.y;
-    this->z = xyz.z;
-    this->w = w_.v;
-}
 
 // ?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x18001d360 — see the Vector2
 // Serialize comment above; NOT diffable, same vtable-slot pattern, count = 4.
