@@ -20,15 +20,20 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
-- **B.3.2 OPEN — session handoff (2026-09-14, main e4ac8967):** `Collection::Array<T>`,
+- **B.3.2 step 2 DONE, closing pass pending (2026-09-14, main 78ac5d23):** `Collection::Array<T>`,
   `Set<T>` and `LinkedList<T>` are real templates (runtime/types/collection/Collection.h)
   wrapping the ported cores; all 339 registry rows kept as shims; `make unit` 154 tests.
-  Step 2 (callers): Game/Player/Tutorial/Goal MERGED (e4ac8967) and Dialog MERGED (0926164e), both gate PASS.
-  Component/Action/Work/Entity and runtime+standalone+dx11 were in flight on worktree
-  branches `worktree-agent-af701169855ab5b77`,
-  `worktree-agent-a06f7bd4303740385` when the session stopped — **merge each only after
-  build + `make unit` + sa-run + resave gate on the merge** (check `git diff --stat` against
-  the batch's file set first). Rules: `endgame_b/B32_RULES.md`.
+  Step 2 (callers) ALL MERGED on main 78ac5d23, each gate PASS: Game/Player/Tutorial/Goal
+  (e4ac8967), Dialog (0926164e), runtime+standalone+dx11 (21b522b7), Component/Action/Work/
+  Entity (0270911b). No worktree branch is left unmerged. The session stopped here at the
+  user's request: **the next session starts with the B.3.2 closing pass** (list below),
+  then B.3.3 (`Object::Base`/`TypeInfo`/`Factory` + reflection macro, single owner).
+  Rules: `endgame_b/B32_RULES.md`; B31_RULES.md's closing pass is the template.
+  Not converted, by design (documented in-file): `EntityList`'s update/post-update trees
+  (an unbalanced BST standing in for retail's AVL, entangled with the tree guards — its
+  own change), exe helpers with non-zero or partial tail init or per-element deep copy,
+  the OOM-rollback appends in tradeui, `Set<Filename>` width-8 inserts, the packfile
+  introsort, `Configuration`/`Persistence` settings maps (no type header / POD String node).
   **Finding that reshaped step 2:** code/Game never reaches runtime/src/collection; its
   Array sites are the EXE-side MSVC monomorphisations of `Array<T>::SetSize` (0x1400021d0,
   0x1400032e0, 0x140003110, …) transcribed per file, and those convert onto the same template
