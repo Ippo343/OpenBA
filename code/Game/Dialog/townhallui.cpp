@@ -1455,9 +1455,13 @@ void TownHallUI_UpdateProduction(TownHallUI* self) {
         int      _pad;
     };
 
-    ProdEntry* entries = nullptr;
-    int entryCount = 0;
-    int entryCap = 0;
+    // B.3.2 bridge: this is a local Collection::Array<ProdEntry> — retail's
+    // hand-inlined SetSize over a stack-local {data,size,capacity} triple, not a
+    // struct field — so it becomes a real instance of the template. ProdEntry is
+    // 0x18 bytes at align 8, exactly the stride/alignment the MemAlloc call it
+    // replaces passed, and every appended element is fully written (including
+    // `_pad = 0`), so the spec's init arm is never reached.
+    Collection::Array<ProdEntry> entryArr;
 
     void* bstRoot = *(void**)(s + 0x138);
     if (bstRoot) {
@@ -1474,42 +1478,18 @@ void TownHallUI_UpdateProduction(TownHallUI* self) {
             int counterVal = *(int*)(n + counterOffset);
 
             // Push entry into dynamic array
-            int newCount = entryCount + 1;
-            if (newCount != entryCount) {
-                if (entryCap < newCount) {
-                    entryCap = newCount;
-                    if (entryCount != 0) entryCap = newCount * 3;
-                    ProdEntry* newBuf = (ProdEntry*)fn_MemAlloc(g_pMemAllocSingleton,
-                        (uint64_t)entryCap * (uint64_t)sizeof(ProdEntry), 8);
-                    int copyStart = 0;
-                    if (entries == newBuf) copyStart = entryCount;
-                    for (int i = copyStart; i < newCount; i++) {
-                        ProdEntry* dst = &newBuf[i];
-                        if (i < entryCount) {
-                            *dst = entries[i];
-                        } else {
-                            dst->entityPtr = entityPtr;
-                            dst->resourceTypeComp = resourceComp;
-                            dst->value = counterVal;
-                            dst->_pad = 0;
-                        }
-                    }
-                    if (entries != newBuf) fn_MemFreeStatic(entries);
-                    entries = newBuf;
-                } else {
-                    entries[entryCount].entityPtr = entityPtr;
-                    entries[entryCount].resourceTypeComp = resourceComp;
-                    entries[entryCount].value = counterVal;
-                    entries[entryCount]._pad = 0;
-                }
-                entryCount = newCount;
-            }
+            entryArr.SetSize(entryArr.GetSize() + 1,
+                             ProdEntry{entityPtr, resourceComp, counterVal, 0});
 
             node = InvBST_Next(node);
         }
     }
 
-    // Sort entries
+    // Sort entries. The sort is retail's own in-place body over the array's
+    // buffer (COLLECTION_INVENTORY §4: introsort stays a free function, it does
+    // not become an Array<T> member), so it is handed GetData()/GetSize().
+    ProdEntry* entries    = entryArr.GetData();
+    const int  entryCount = entryArr.GetSize();
     if (sortComboIdx == 0) {
         if (entryCount > 1)
             fn_InventorySort_Asc(entries, entryCount, &sortComboIdx, nullptr);
@@ -1601,7 +1581,8 @@ void TownHallUI_UpdateProduction(TownHallUI* self) {
         }
     }
 
-    fn_MemFreeStatic(entries);
+    // entryArr frees its own buffer (rtcoll::MemFree, the same 0x1800c7ad0 that
+    // fn_MemFreeStatic resolves) when it goes out of scope here.
 }
 
 // ============================================================

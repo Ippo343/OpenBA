@@ -48,28 +48,39 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "system/String.h"
+#include "Dialog/dialog_array_bridge.h"
 #include <cstdint>
 #include <new>
 
-namespace {
-// The one observable effect, shared by all three entry points.
-inline void DynArrayClear(int64_t* header) {
+// ── B.3.2: the three clears are Collection::Array<T>::Clear() ────────────────
+// `Clear()` is `SetSize(0)`, and rtcoll::SetSizeCore at newSize == 0 does
+// exactly what the banner above says the retail bodies do and no more: the
+// `newSize == oldSize` early return covers the `count != 0` test, nothing is
+// reallocated (0 is never > capacity), the copy/fill loop does not run, and the
+// blob element's spec has `destroy == nullptr` so no element is torn down. The
+// buffer and the capacity are retained. The strides, which mattered only to the
+// dead grow path, are now the element widths — kept per entry point so the type
+// says which array each one is.
+
+// 0x140016050 — clear the sell-entry array (stride 0x20).
+extern "C" void TradeUI_DynArrayClear_16050(int64_t* header) {
     if (!header) return;                     // retail derefs unconditionally; callers
                                              // always pass &self->field, so this guard
                                              // is standalone-only belt-and-braces.
-    int32_t* count = reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(header) + 0x08);
-    if (*count != 0) *count = 0;
+    DlgArray<0x20>(reinterpret_cast<uintptr_t>(header), 0).Clear();
 }
-} // namespace
-
-// 0x140016050 — clear the sell-entry array (stride 0x20).
-extern "C" void TradeUI_DynArrayClear_16050(int64_t* header) { DynArrayClear(header); }
 
 // 0x140016130 — clear the buy-entry array (stride 0x18).
-extern "C" void TradeUI_DynArrayClear_16130(int64_t* header) { DynArrayClear(header); }
+extern "C" void TradeUI_DynArrayClear_16130(int64_t* header) {
+    if (!header) return;                     // see 16050
+    DlgArray<0x18>(reinterpret_cast<uintptr_t>(header), 0).Clear();
+}
 
 // 0x140016200 — clear the storage/order-entry array (stride 0x18).
-extern "C" void TradeUI_DynArrayClear_16200(int64_t* header) { DynArrayClear(header); }
+extern "C" void TradeUI_DynArrayClear_16200(int64_t* header) {
+    if (!header) return;                     // see 16050
+    DlgArray<0x18>(reinterpret_cast<uintptr_t>(header), 0).Clear();
+}
 
 // ── 0x140015fd0 — fn_Building_GetOrderName ───────────────────────────────────
 // Returns (by hidden out-param, MSVC by-value String convention) the name String of
@@ -191,6 +202,13 @@ extern "C" void TradeUI_AddPurchaseOrder_59490(int64_t tradeState,
     }
 
     // Append.
+    // B.3.2 NOT CONVERTED to Collection::Array<T>::SetSize: the `if (!grown)`
+    // arm below restores count and cap and returns, and `SetSize` has no
+    // failure path to hang that on — rtcoll::SetSizeCore commits the new size
+    // before it allocates, exactly as retail does. The guard is standalone-only
+    // (retail never checks) and deleting it to fit the template would be a
+    // behaviour change in the direction of a wild write, so this growth stays
+    // hand-rolled until the guard can go.
     const int32_t oldCount = *count;
     const int32_t oldCap   = *cap;
     const int32_t newCount = oldCount + 1;

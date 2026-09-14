@@ -107,6 +107,14 @@ static void* EventNotifyDialog_CreatePopup(EventNotifyDialog* self, int eventInd
 //
 // Original: FUN_140011750.
 //
+// B.3.2 NOT CONVERTED to Collection::Array<T>::SetSize: the 0x30-byte element
+// carries a System::String at +0x20, so this instantiation has a real
+// copy-construct AND a real destroy step (the shrink arm runs the String dtor).
+// The trait-derived blob spec the Dialog bridge uses is byteCopy with
+// destroy == nullptr and would leak the String on every shrink. This needs a
+// hand-derived ArraySpec of its own, or the owning struct becoming a real class
+// (§B.2); until then the transcription stays.
+//
 static void EventNotifyDialog_ArrayPush_Impl(void* arrayBasePtr, int newCount, void* newEntry) {
     uintptr_t* base = (uintptr_t*)arrayBasePtr;
     uintptr_t  oldData     = *base;

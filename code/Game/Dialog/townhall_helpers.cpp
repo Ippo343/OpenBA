@@ -151,6 +151,15 @@ static void ProfRow_Copy(uint64_t* dst, const uint64_t* src) {
     }
 }
 
+// B.3.2 NOT CONVERTED to Collection::Array<T>::SetSize. This row is byteCopy in
+// the copy direction (ProfRow_Copy deep-copies the +0x30 entity list) but ALSO
+// has a per-element DESTROY step: both the shrink arm and the realloc arm free
+// every removed/old row's entity list before the buffer goes. Collection.h's
+// banner names that combination explicitly as one C++ traits cannot produce —
+// `is_trivially_copyable` implies a trivial destructor — so it needs a
+// hand-derived ArraySpec (kSpec_PkgEntry / kSpec_StringExt are the Runtime-side
+// examples) rather than the trait-derived blob. It stays hand-rolled until this
+// array gets its own spec or its owning struct becomes a real class (§B.2).
 extern "C" void TownHall_ProfArrayPush(void* arrayBase, int newCount, void* entry) {
     uint64_t* base = (uint64_t*)arrayBase;
     int oldCount = *(int*)((uintptr_t)base + 8);
