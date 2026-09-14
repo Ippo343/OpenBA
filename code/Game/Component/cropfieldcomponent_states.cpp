@@ -61,6 +61,7 @@
 // argument and the update body in the 5th.
 
 #include "Component/controller_state_table.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -137,8 +138,13 @@ namespace {
 
 constexpr int kSlotStride = 0x20;
 
+// 0x1400335b0 (CropFieldComponent_ResizeEntityList) is NOT converted: ENDGAME
+// B.3.2 step 2 read the body (cropfieldcomponent.cpp) and its new-tail write is
+// a PARTIAL zero — offsets +8 and +16 of the 0x20-byte element are zeroed but
+// +0, +4 and +24 are left whatever MemAlloc returned. That is not expressible
+// as a single SpecFor<T> init function for a plain element type, so this stays
+// a resolved pointer (see report).
 typedef void (*fn_ArrayResize_t)(void* vec, int count);        // 0x1400335b0 slots
-typedef void (*fn_ByteArrayResize_t)(void* vec, int count);    // 0x14000a590
 typedef void (*fn_SlotRefresh_t)(uintptr_t comp);              // 0x14011aa20
 typedef void (*fn_FindComp_t2)(uintptr_t entity, uintptr_t* out);
 typedef void (*fn_PostWork_t)(uintptr_t workComp, uint32_t code, char flag, void* workIBP);
@@ -149,7 +155,6 @@ typedef void* (*fn_WorkCtor25_t)(void* self, void* pEntityIBP);
 typedef uint32_t (*fn_Rand_t)(void* rng, uint32_t bound);
 
 fn_ArrayResize_t     s_slotResize   = nullptr;
-fn_ByteArrayResize_t s_byteResize   = nullptr;
 fn_SlotRefresh_t     s_slotRefresh  = nullptr;
 fn_FindComp_t2       s_findMap      = nullptr;   // 0x140004680
 fn_FindComp_t2       s_findWork     = nullptr;   // 0x140003050
@@ -167,7 +172,6 @@ bool                 s_res2         = false;
 void CF_Resolve2() {
     if (s_res2) return;
     s_slotResize   = reinterpret_cast<fn_ArrayResize_t>(ResolveAddr(Module::Exe, 0x1400335b0));
-    s_byteResize   = reinterpret_cast<fn_ByteArrayResize_t>(ResolveAddr(Module::Exe, 0x14000a590));
     s_slotRefresh  = reinterpret_cast<fn_SlotRefresh_t>(ResolveAddr(Module::Exe, 0x14011aa20));
     s_findMap      = reinterpret_cast<fn_FindComp_t2>(ResolveAddr(Module::Exe, 0x140004680));
     s_findWork     = reinterpret_cast<fn_FindComp_t2>(ResolveAddr(Module::Exe, 0x140003050));
@@ -247,14 +251,15 @@ void* CF_MakeAreaWork(uintptr_t comp, int size, uintptr_t vtableAddr,
     }
     if (hasDescField) *reinterpret_cast<uint64_t*>(w + 0x68) = descListField;
 
-    if (perSlotArray && s_findCropComp && s_byteResize) {
+    if (perSlotArray && s_findCropComp) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(w + 0x10));
         uintptr_t cropIbp = 0;
         s_findCropComp(*reinterpret_cast<uintptr_t*>(w + 0x10), &cropIbp);
         if (cropIbp) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&cropIbp);
-            s_byteResize(reinterpret_cast<void*>(w + 0x58),
-                         *reinterpret_cast<int32_t*>(cropIbp + 0x60));
+            // B.3.2 bridge: exe 0x14000a590 IS Collection::Array<uint8>::SetSize(n).
+            GameColl::AsArray<GameColl::U8>(reinterpret_cast<void*>(w + 0x58))
+                .SetSize(*reinterpret_cast<int32_t*>(cropIbp + 0x60));
             const int n = *reinterpret_cast<int32_t*>(w + 0x60);
             uint8_t* arr = *reinterpret_cast<uint8_t**>(w + 0x58);
             if (arr) for (int i = 0; i < n; ++i) arr[i] = 1;

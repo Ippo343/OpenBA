@@ -48,22 +48,19 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 
 extern void Component_SerializeReimpl(void* self, void* stream);
 
-// FUN_1400032e0 — resize an 8-byte-element (InternalBasePtr) array in place
-// given a {ptr, count} header pair. Already ported/used as s_Resize8 in
-// animalwave_serialize.cpp; call the raw exe address directly here (it is a
-// pure mechanical resize with no per-caller state).
-typedef void (*fn_ResizeIBP8_t)(void* arrPair, int count);
+// FUN_1400032e0 was Collection::Array<void*>::SetSize(n) monomorphised into
+// the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
 
 // charmanager.cpp — already a real C++ function (not a resolved pointer).
 extern "C" int64_t CharMgr_sub_83f0(float* mgrF, int64_t* ibp);
 
 namespace {
 
-fn_ResizeIBP8_t s_ResizeIBP8 = nullptr;
 const uint32_t* s_tidModelComponent = nullptr;      // 0x1401c7a50
 const uint32_t* s_tidPickingComponent = nullptr;    // g_BaseTypeInfo_PickingComponent slot
 const uint32_t* s_tidAction = nullptr;               // TypeInfo_Action slot
@@ -72,7 +69,6 @@ bool s_resolved = false;
 
 void Resolve() {
     if (s_resolved) return;
-    s_ResizeIBP8 = reinterpret_cast<fn_ResizeIBP8_t>(ResolveAddr(Module::Exe, 0x1400032e0));
     s_tidModelComponent = reinterpret_cast<const uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7a50));
     // Verified against disassembly (the MOV EDX,[addr] immediately preceding each
@@ -125,7 +121,8 @@ extern "C" void CharacterComponent_Serialize(void* self, void* stream) {
 
     int count = *reinterpret_cast<int*>(At(self, 0x50));
     if (g_fn_Serialize_Int) g_fn_Serialize_Int(ser, &count, nullptr);
-    if (Loading(stream) && s_ResizeIBP8) s_ResizeIBP8(At(self, 0x48), count);
+    // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
+    if (Loading(stream)) GameColl::AsArray<GameColl::Ptr8>(At(self, 0x48)).SetSize(count);
 
     uint8_t* member = *reinterpret_cast<uint8_t**>(At(self, 0x48));
     for (int i = 0; i < count && member; ++i, member += 8)

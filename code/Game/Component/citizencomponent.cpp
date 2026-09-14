@@ -13,6 +13,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/citizencomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "options.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -1415,7 +1416,8 @@ typedef void*  (*fn_Entity_FindBuilding2e10_t)(int64_t entity, void* outIBP);   
 typedef void   (*fn_DetachWorkplace7e0_t)(int64_t buildingComp, void* citizenIBP);  // 0x14012f7e0
 typedef void   (*fn_AttachWorkplacea20_t)(int64_t buildingComp, void* citizenIBP);  // 0x14012fa20
 typedef int    (*fn_PathCost8830_t)(int* mapInfo, uint32_t fromRegion, uint32_t toRegion); // 0x140008830
-typedef void   (*fn_GrowArray3110_t)(int64_t* arrayBase, int newCount, void* elem);  // 0x140003110
+// 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
+// into the exe (ENDGAME B.3.2 step 2) — converted at its call sites below.
 typedef void*  (*fn_Entity_FindPos_ed0_t)(int64_t entity, void* outIBP);        // 0x140002ed0
 
 static fn_CalcWorkerSlots_t      s_fn_CalcWorkerSlots = nullptr;
@@ -1444,7 +1446,6 @@ static fn_Entity_FindBuilding2e10_t s_fn_Entity_FindBuilding2e10 = nullptr;
 static fn_DetachWorkplace7e0_t   s_fn_DetachWorkplace7e0 = nullptr;
 static fn_AttachWorkplacea20_t   s_fn_AttachWorkplacea20 = nullptr;
 static fn_PathCost8830_t         s_fn_PathCost8830 = nullptr;
-static fn_GrowArray3110_t        s_fn_GrowArray3110 = nullptr;
 static fn_Entity_FindPos_ed0_t   s_fn_Entity_FindPos_ed0 = nullptr;
 static uint32_t*                 s_TypeId_AttendanceDesc3f78 = nullptr; // DWORD_1401c3f78 = AttendanceDescription (factory_registrations.csv:9), NOT Residence (sub_40f0)
 // .rdata float/double constants used by ConsumeFood / ConsumeFuel.
@@ -1500,7 +1501,6 @@ static void EnsureCallees() {
     s_fn_DetachWorkplace7e0  = reinterpret_cast<fn_DetachWorkplace7e0_t>(ResolveAddr(Module::Exe, 0x14012f7e0));
     s_fn_AttachWorkplacea20  = reinterpret_cast<fn_AttachWorkplacea20_t>(ResolveAddr(Module::Exe, 0x14012fa20));
     s_fn_PathCost8830        = reinterpret_cast<fn_PathCost8830_t>(ResolveAddr(Module::Exe, 0x140008830));
-    s_fn_GrowArray3110       = reinterpret_cast<fn_GrowArray3110_t>(ResolveAddr(Module::Exe, 0x140003110));
     s_fn_Entity_FindPos_ed0  = reinterpret_cast<fn_Entity_FindPos_ed0_t>(ResolveAddr(Module::Exe, 0x140002ed0));
     s_TypeId_AttendanceDesc3f78 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c3f78)); // AttendanceDescription; registered+filled in reg_economy_typeids.cpp
     // Time::Time(float) from its .rdata dispatch slot (used by FUN_14012c3f0).
@@ -2982,9 +2982,9 @@ char CitizenComp_FindCareBuilding(CitizenComponent* param_1) {
         int64_t wp = found;
         int64_t selfIBP = keyIBP;
         if (CitizenComp_sub_40f0(found, &selfIBP)) {
-            if (s_fn_GrowArray3110)
-                s_fn_GrowArray3110(reinterpret_cast<int64_t*>(wp + 0x28),
-                                   *reinterpret_cast<int*>(wp + 0x30) + 1, &keyIBP);
+            // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+            GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(wp + 0x28))
+                .SetSizeFill(*reinterpret_cast<int*>(wp + 0x30) + 1, &keyIBP);
             *reinterpret_cast<int64_t*>(p + 0x228) = found;
             // [Plague] outcome: linked. Only reached for a sick citizen (the two call
             // sites both gate on +0x68 != 0), so this is inherently low volume.
@@ -3041,9 +3041,9 @@ void CitizenComp_FindStorage(CitizenComponent* param_1) {
         int64_t wp = found;
         int64_t selfIBP = keyIBP;
         if (CitizenComp_sub_40f0(found, &selfIBP)) {
-            if (s_fn_GrowArray3110)
-                s_fn_GrowArray3110(reinterpret_cast<int64_t*>(wp + 0x28),
-                                   *reinterpret_cast<int*>(wp + 0x30) + 1, &keyIBP);
+            // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+            GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(wp + 0x28))
+                .SetSizeFill(*reinterpret_cast<int*>(wp + 0x30) + 1, &keyIBP);
             *reinterpret_cast<int64_t*>(p + 0x230) = found;
         }
     }
@@ -3087,9 +3087,9 @@ char CitizenComp_TryEnrolInSchool(CitizenComponent* param_1, int64_t* param_2) {
         int64_t wp = found;
         int64_t selfIBP = keyIBP;
         if (CitizenComp_sub_40f0(found, &selfIBP)) {
-            if (s_fn_GrowArray3110)
-                s_fn_GrowArray3110(reinterpret_cast<int64_t*>(wp + 0x28),
-                                   *reinterpret_cast<int*>(wp + 0x30) + 1, &keyIBP);
+            // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+            GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(wp + 0x28))
+                .SetSizeFill(*reinterpret_cast<int*>(wp + 0x30) + 1, &keyIBP);
             *reinterpret_cast<int64_t*>(p + 0x208) = found;
             p[0x220] = 1;
             return 1;

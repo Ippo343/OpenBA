@@ -41,6 +41,7 @@
 // than by a dormant one.
 
 #include "Component/tornadocomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "options.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -92,7 +93,6 @@ typedef void* (*fn_SerializerCtor_t)(void* self, void* stream, int version);
 typedef void  (*fn_SerializerDtor_t)(void* self);
 typedef void  (*fn_SerializeInt_t)(void* self, int* value, const char* name);
 typedef void  (*fn_TimeSerialize_t)(void* time, void* serializer);
-typedef void  (*fn_ResizeVec3Array_t)(void* arrayPtr, uint32_t newCount);
 
 // Entity component finders. All take (entity, InternalBasePtr* out) and write the
 // component pointer (or null) into *out.
@@ -100,7 +100,6 @@ typedef void* (*fn_Finder_t)(void* entity, void* outIbp);
 
 typedef void  (*fn_ParticleReverse_t)(void* particleComp, int index);          // 0x140053720
 typedef void  (*fn_AudioMoveEmitters_t)(void* audioComp, void* newPos);        // 0x140042960
-typedef void  (*fn_Vec3ArrayGrow_t)(void* arrayBase, int newCount, const void* fill); // 0x14000cf40
 typedef float*(*fn_TerrainClamp_t)(void* map, float* out, const float* in, char flag, void* extra); // 0x14009f3e0
 typedef void  (*fn_MarkForRemoval_t)(void* entity);                            // 0x1400c2ea0
 typedef void  (*fn_EntityListDestroy_t)(void* entityList, void* ibp);          // 0x1400c49d0
@@ -110,7 +109,6 @@ typedef bool  (*fn_FireBurning_t)(void* fireComp);                             /
 typedef bool  (*fn_FireIgnite_t)(void* fireComp, void* time);                  // 0x14011e7b0
 typedef void  (*fn_FireIgniteFinish_t)(void* fireComp);                        // 0x14011ea10
 typedef void  (*fn_CitizenLifeEvent_t)(void* citizenComp, int event, const char* p); // 0x140116dd0
-typedef void  (*fn_ExeArrayResizeFill8_t)(void* arrayBase, int newCount, void* fill); // 0x140003110
 typedef bool  (*fn_MeshIsAnimating_t)(void* meshInstance);                     // slot 0x1401514b0
 typedef void* (*fn_Map_RadiusQuery_t)(float* map, void** out, float* pos, float* radius,
                                       int typeId, void* outArr);               // 0x140092990
@@ -124,7 +122,6 @@ struct Helpers {
     fn_SerializerDtor_t       serializerDtor       = nullptr;
     fn_SerializeInt_t         serializeInt         = nullptr;
     fn_TimeSerialize_t        timeSerialize        = nullptr;
-    fn_ResizeVec3Array_t      resizeVec3Array      = nullptr;
 
     fn_Finder_t               findParticle         = nullptr;  // 0x140005200
     fn_Finder_t               findAudio            = nullptr;  // 0x140002280
@@ -138,7 +135,6 @@ struct Helpers {
 
     fn_ParticleReverse_t      particleReverse      = nullptr;
     fn_AudioMoveEmitters_t    audioMoveEmitters    = nullptr;
-    fn_Vec3ArrayGrow_t        vec3ArrayGrow        = nullptr;
     fn_TerrainClamp_t         terrainClamp         = nullptr;
     fn_MarkForRemoval_t       markForRemoval       = nullptr;
     fn_ClearPathQueue_t       clearPathQueue       = nullptr;
@@ -147,7 +143,6 @@ struct Helpers {
     fn_FireIgnite_t           fireIgnite           = nullptr;
     fn_FireIgniteFinish_t     fireIgniteFinish     = nullptr;
     fn_CitizenLifeEvent_t     citizenLifeEvent     = nullptr;
-    fn_ExeArrayResizeFill8_t  arrayResizeFill8     = nullptr;
     fn_MeshIsAnimating_t      meshIsAnimating      = nullptr;
     fn_Map_RadiusQuery_t      radiusQuery          = nullptr;
 
@@ -219,8 +214,6 @@ void TornadoComponent_InitFuncs() {
 
     g_h.componentSerialize = reinterpret_cast<fn_ComponentSerialize_t>(
         ResolveAddr(Module::Exe, 0x1401189b0));
-    g_h.resizeVec3Array = reinterpret_cast<fn_ResizeVec3Array_t>(
-        ResolveAddr(Module::Exe, 0x14000d030));
 
     g_h.serializerCtor = ResolveSlotPtr<fn_SerializerCtor_t>(0x140152ad8);
     g_h.serializerDtor = ResolveSlotPtr<fn_SerializerDtor_t>(0x140152ad0);
@@ -239,13 +232,11 @@ void TornadoComponent_InitFuncs() {
 
     g_h.particleReverse   = reinterpret_cast<fn_ParticleReverse_t>(ResolveAddr(Module::Exe, 0x140053720));
     g_h.audioMoveEmitters = reinterpret_cast<fn_AudioMoveEmitters_t>(ResolveAddr(Module::Exe, 0x140042960));
-    g_h.vec3ArrayGrow     = reinterpret_cast<fn_Vec3ArrayGrow_t>(ResolveAddr(Module::Exe, 0x14000cf40));
     g_h.terrainClamp      = reinterpret_cast<fn_TerrainClamp_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
     g_h.markForRemoval    = reinterpret_cast<fn_MarkForRemoval_t>(ResolveAddr(Module::Exe, 0x1400c2ea0));
     g_h.clearPathQueue    = reinterpret_cast<fn_ClearPathQueue_t>(ResolveAddr(Module::Exe, 0x140003f60));
     g_h.growthKnockdown   = reinterpret_cast<fn_GrowthKnockdown_t>(ResolveAddr(Module::Exe, 0x140126780));
     g_h.citizenLifeEvent  = reinterpret_cast<fn_CitizenLifeEvent_t>(ResolveAddr(Module::Exe, 0x140116dd0));
-    g_h.arrayResizeFill8  = reinterpret_cast<fn_ExeArrayResizeFill8_t>(ResolveAddr(Module::Exe, 0x140003110));
     g_h.radiusQuery       = reinterpret_cast<fn_Map_RadiusQuery_t>(ResolveAddr(Module::Exe, 0x140092990));
 
     // The FIRE lane owns these three (0x14011e690 / 0x14011e7b0 / 0x14011ea10).
@@ -273,8 +264,8 @@ void TornadoComponent_InitFuncs() {
         arm("building", g_h.findBuild && g_h.findFire && g_h.findFireOwner &&
                         g_h.fireIgnite && g_h.fireIgniteFinish,
             "findBuild(d6c0)/findFire(5840)/findFireOwner(5780)/ignite(e7b0)/finish(ea10)");
-        arm("animal",   g_h.findAnimal && g_h.markForRemoval && g_h.arrayResizeFill8,
-            "findAnimal(5500)/markForRemoval/arrayResizeFill8");
+        arm("animal",   g_h.findAnimal && g_h.markForRemoval,
+            "findAnimal(5500)/markForRemoval");
         arm("citizen",  g_h.findCitizen && g_h.citizenLifeEvent,
             "findCitizen(9790)/citizenLifeEvent(116dd0)");
         arm("audio",    g_h.findAudio && g_h.audioMoveEmitters,
@@ -315,8 +306,9 @@ void TornadoComponent_Shutdown(TornadoComponent* self, void* stream) {
     if (g_h.serializeInt) g_h.serializeInt(serializer, &pathCount, nullptr);
 
     // stream+8 == 0 means "loading": grow the array before reading the waypoints.
-    if (*reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(stream) + 8) == 0 && g_h.resizeVec3Array)
-        g_h.resizeVec3Array(reinterpret_cast<void*>(s + 0x40), static_cast<uint32_t>(pathCount));
+    // B.3.2 bridge: FUN_14000d030 is Collection::Array<Vector3>::SetSize(n)
+    if (*reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(stream) + 8) == 0)
+        GameColl::AsArray<GameColl::Vec3>(reinterpret_cast<void*>(s + 0x40)).SetSize(pathCount);
 
     uint8_t* pVec = *reinterpret_cast<uint8_t**>(s + 0x40);
     if (pathCount > 0 && pVec) {
@@ -556,9 +548,9 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, void* entityIbp,
                 if (g_h.markForRemoval)
                     g_h.markForRemoval(reinterpret_cast<void*>(static_cast<uintptr_t>(ibp)));
                 uintptr_t mgr = reinterpret_cast<uintptr_t>(entityMgr);
-                if (g_h.arrayResizeFill8)
-                    g_h.arrayResizeFill8(reinterpret_cast<void*>(mgr + 0xd0),
-                                         *reinterpret_cast<int*>(mgr + 0xd8) + 1, &ibp);
+                // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
+                GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(mgr + 0xd0))
+                    .SetSizeFill(*reinterpret_cast<int*>(mgr + 0xd8) + 1, &ibp);
                 if (hitAnimal) ++*hitAnimal;
             }
         }
@@ -804,9 +796,9 @@ void TornadoComponent_Serialize(TornadoComponent* self) {
             *reinterpret_cast<float*>(s + 0x38) = p[2];
             *reinterpret_cast<int32_t*>(s + 0x50) = 0;
         }
-        if (g_h.vec3ArrayGrow)
-            g_h.vec3ArrayGrow(reinterpret_cast<void*>(s + 0x40),
-                              *reinterpret_cast<int*>(s + 0x48) + 1, p);
+        // B.3.2 bridge: FUN_14000cf40 is Collection::Array<Vector3>::SetSize(n, fill)
+        GameColl::AsArray<GameColl::Vec3>(reinterpret_cast<void*>(s + 0x40))
+            .SetSizeFill(*reinterpret_cast<int*>(s + 0x48) + 1, p);
     }
 
     // --- post the warning to the event log, and pause if the setting says so ---
@@ -899,9 +891,9 @@ void TornadoComponent_OnRemove(TornadoComponent* self, void* time) {
                 CheckPtr(&entity);
                 if (g_h.markForRemoval)
                     g_h.markForRemoval(reinterpret_cast<void*>(static_cast<uintptr_t>(entity)));
-                if (g_h.arrayResizeFill8)
-                    g_h.arrayResizeFill8(reinterpret_cast<void*>(entityMgr + 0xd0),
-                                         *reinterpret_cast<int*>(entityMgr + 0xd8) + 1, &entity);
+                // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
+                GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(entityMgr + 0xd0))
+                    .SetSizeFill(*reinterpret_cast<int*>(entityMgr + 0xd8) + 1, &entity);
                 TORNADO_TRACE("expired: particle finished, entity queued for destruction "
                               "(pathIndex=%d of %d)\n",
                               *reinterpret_cast<int32_t*>(s + 0x50),

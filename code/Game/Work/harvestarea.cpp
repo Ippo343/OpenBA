@@ -29,6 +29,7 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -121,8 +122,10 @@ typedef void (*HA_Serializer_SerializeBoolArray_t)(void* ser, int count, void* b
 static HA_Serializer_SerializeBoolArray_t s_fn_Serializer_SerializeBoolArray = nullptr;
 
 // Resize byte array (FUN_14000a590)
-typedef void (*HA_ResizeByteArray_t)(void* arrayField, int newCount);
-static HA_ResizeByteArray_t s_fn_ResizeByteArray = nullptr;
+// 0x14000a590 (Array<uint8>::SetSize) is the exe-side Collection::Array<T>
+// monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
+// GameColl::AsArray<GameColl::U8> member call, so its resolved-pointer stand-in
+// is gone.
 
 // BST recursive free (FUN_14000e320)
 typedef void (*HA_BST_RecursiveFree_t)(void* treeRoot, void* node);
@@ -195,8 +198,6 @@ bool HarvestArea_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x140002e10));
     s_fn_Work_Serialize = reinterpret_cast<HA_Work_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1400f7400));
-    s_fn_ResizeByteArray = reinterpret_cast<HA_ResizeByteArray_t>(
-        ResolveAddr(Module::Exe, 0x14000a590));
     s_fn_BST_RecursiveFree = reinterpret_cast<HA_BST_RecursiveFree_t>(
         ResolveAddr(Module::Exe, 0x14000e320));
     // Object::Internal::~Internal via dispatch slot (JMP [0x140152770] in dtor)
@@ -250,7 +251,7 @@ bool HarvestArea_ResolveFuncs() {
               s_fn_BST_Insert && s_fn_BST_Remove && s_fn_BST_Serialize &&
               s_fn_ValidateTask && s_fn_TaskCancel && s_fn_FindPosComp &&
               s_fn_Work_Serialize && s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
-              s_fn_ResizeByteArray && s_fn_BST_RecursiveFree &&
+              s_fn_BST_RecursiveFree &&
               fn_InternalBasePtr_CheckPtr && fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom && g_pGameWorldSingleton &&
               s_typeId_CropDesc && s_fHalfCellOffset &&
@@ -281,7 +282,6 @@ bool HarvestArea_ResolveFuncs() {
         if (!s_fn_Work_Serialize) printf("  MISSING: Work_Serialize\n");
         if (!s_fn_Serializer_Ctor) printf("  MISSING: Serializer_Ctor\n");
         if (!s_fn_Serializer_Dtor) printf("  MISSING: Serializer_Dtor\n");
-        if (!s_fn_ResizeByteArray) printf("  MISSING: ResizeByteArray\n");
         if (!s_fn_BST_RecursiveFree) printf("  MISSING: BST_RecursiveFree\n");
     }
 #endif
@@ -930,9 +930,10 @@ void HarvestArea_Serialize_Impl(HarvestArea* self, void* stream) {
     int cellCountBuf[2] = { cellCount, 0 };
     s_fn_Serializer_SerializeInt(serializerBuf2, cellCountBuf, nullptr);
 
-    // If reading (serializer mode == 0), resize validity array
+    // If reading (serializer mode == 0), resize validity array.
+    // B.3.2 bridge: FUN_14000a590 == Collection::Array<uint8>::SetSize.
     if (*(int*)(*(uintptr_t*)serializerBuf2 + 8) == 0) {
-        s_fn_ResizeByteArray((void*)(selfAddr + 0x58), cellCountBuf[0]);
+        GameColl::AsArray<GameColl::U8>((void*)(selfAddr + 0x58)).SetSize(cellCountBuf[0]);
     }
 
     // Serialize validity array (byte array)

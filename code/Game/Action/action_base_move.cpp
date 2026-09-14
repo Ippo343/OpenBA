@@ -18,6 +18,7 @@
 #include "system/String.h"
 #include "system/Filename.h"
 #include "math/Math.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cmath>
 #include <cstdio>
@@ -525,15 +526,7 @@ void ActMv_SetTerrainCosts_e550(void* mapGrid, void* pathfinder, int profile, vo
 //   Returns the number of cells actually copied (min(count, maxNodes)).
 //   param_2 (int*) is reset: [0]=-1, [1]=0.
 // Caller signature: int fn(void* pathfinder, void* slotIdPtr, void* pathArray, int maxNodes)
-typedef void (*fn_ResetSlot_21d0_t)(void* slotIBP, int zero);
-static fn_ResetSlot_21d0_t s_fn_ResetSlot_21d0 = nullptr;
-static bool s_copyResolved = false;
-
 int ActMv_CopyPathFromFinder_a6d50(void* pathfinder, void* slotIdPtr, void* pathArray, int maxNodes) {
-    if (!s_copyResolved) {
-        s_fn_ResetSlot_21d0 = reinterpret_cast<fn_ResetSlot_21d0_t>(ResolveAddr(Module::Exe, 0x1400021d0));
-        s_copyResolved = true;
-    }
     uintptr_t self = reinterpret_cast<uintptr_t>(pathfinder);
     int* slotId = reinterpret_cast<int*>(slotIdPtr);
     uintptr_t base = *reinterpret_cast<uintptr_t*>(self + 0x160);
@@ -551,7 +544,8 @@ int ActMv_CopyPathFromFinder_a6d50(void* pathfinder, void* slotIdPtr, void* path
 
     *reinterpret_cast<int*>(base + 4 + off) = 0;
     *reinterpret_cast<uint8_t*>(base + off) = 0;
-    if (s_fn_ResetSlot_21d0) s_fn_ResetSlot_21d0(reinterpret_cast<void*>(base + 8 + off), 0);
+    // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize.
+    GameColl::AsArray<GameColl::I32>(reinterpret_cast<void*>(base + 8 + off)).SetSize(0);
 
     slotId[0] = -1;
     slotId[1] = 0;

@@ -11,6 +11,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/boatcomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
@@ -44,9 +45,11 @@ static fn_IBP_Serialize_t s_fn_IBP_Serialize = nullptr;
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
 
-// FUN_14000d030 -- resize Vector3 array
-typedef void (*fn_ResizeVec3Array_t)(void* arrayField, int newCount);
-static fn_ResizeVec3Array_t s_fn_ResizeVec3Array = nullptr;
+// FUN_14000d030 -- resize Vector3 array. ENDGAME B.3.2 step 2: this IS
+// Collection::Array<Vector3>::SetSize, implemented below as
+// BoatComponent_ResizeVec3Array (kept, and still registered by
+// reg_component_nature.cpp for other callers) — this file's own call site
+// now goes straight through the GameColl bridge instead of resolving itself.
 
 // Type IDs
 static uint32_t* s_TypeId_ComponentEntity = nullptr; // TypeInfo_ComponentEntity
@@ -153,8 +156,8 @@ void BoatComponent_Shutdown(BoatComponent* self, void* stream) {
     // If loading, resize array
     uintptr_t serializerObj = *(uintptr_t*)serializer;
     if (*(int*)(serializerObj + 8) == 0) {
-        if (s_fn_ResizeVec3Array)
-            s_fn_ResizeVec3Array((void*)(selfAddr + 0x60), (int)localCount);
+        // B.3.2 bridge: exe 0x14000d030 IS Collection::Array<Vector3>::SetSize(n).
+        GameColl::AsArray<GameColl::Vec3>((void*)(selfAddr + 0x60)).SetSize((int)localCount);
     }
 
     // Serialize each Vector3 in the array (12 bytes each)
@@ -249,9 +252,6 @@ void BoatComponent_InitFuncs() {
 
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    s_fn_ResizeVec3Array = reinterpret_cast<fn_ResizeVec3Array_t>(
-        ResolveAddr(Module::Exe, 0x14000d030));
 
     // Type IDs
     s_TypeId_ComponentEntity = reinterpret_cast<uint32_t*>(

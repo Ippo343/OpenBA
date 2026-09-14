@@ -10,6 +10,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/livestockcomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -128,12 +129,6 @@ void LivestockComponent_InitFuncs() {
 void LivestockComponent_OnAdd(LivestockComponent* self) {
     if (!self || self->data28 != 0) return;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    typedef void (*fn_ResizeFill_t)(void* arrayField, int newCount, void* valueIBP);
-    static fn_ResizeFill_t s_append = nullptr;
-    static bool s_res = false;
-    if (!s_res) { s_res = true;
-        s_append = reinterpret_cast<fn_ResizeFill_t>(ResolveAddr(Module::Exe, 0x140003110)); }
-    if (!s_append) return;
 
     uintptr_t gs = *reinterpret_cast<uintptr_t*>(
         reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
@@ -141,7 +136,9 @@ void LivestockComponent_OnAdd(LivestockComponent* self) {
     uint64_t ibp = 0;
     if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&ibp, self);
     else ibp = reinterpret_cast<uint64_t>(self);
-    s_append(reinterpret_cast<void*>(gs + 0x80), *reinterpret_cast<int*>(gs + 0x88) + 1, &ibp);
+    // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
+    GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(gs + 0x80))
+        .SetSizeFill(*reinterpret_cast<int*>(gs + 0x88) + 1, &ibp);
     std::fprintf(stderr, "[Pasture] livestock %p joined the free-roaming pool (now %d)\n",
                  (void*)self, *reinterpret_cast<int*>(gs + 0x88));
     std::fflush(stderr);

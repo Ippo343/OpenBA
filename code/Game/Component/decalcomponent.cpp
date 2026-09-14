@@ -13,6 +13,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/decalcomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -59,14 +60,16 @@ static fn_DecalDraw_t s_fn_OriginalDraw = nullptr;
 typedef void (*fn_TerrainDecalRemove_t)(void* terrainDecalSys, int decalId);
 static fn_TerrainDecalRemove_t s_fn_TerrainDecalRemove = nullptr;
 
-// Sub-callees of the terrain-decal-slot release (FUN_1400b0d00):
-//   FUN_14001ee40 — resize the per-slot 0x14-byte-element list (stride 0x14, align 2)
-//   FUN_14001c890 — resize the per-slot 2-byte-element list (stride 2, align 2)
-// Both are already registered exe leaves; we resolve and forward to them.
-typedef void (*fn_ResizeStride14_t)(void* arrayField, int newCount);
-static fn_ResizeStride14_t s_fn_ResizeStride14 = nullptr;
-typedef void (*fn_ResizeStride2_t)(void* arrayField, int newCount);
-static fn_ResizeStride2_t s_fn_ResizeStride2 = nullptr;
+// Sub-callees of the terrain-decal-slot release (FUN_1400b0d00) were
+// Collection::Array<T>::SetSize monomorphised into the exe (ENDGAME B.3.2
+// step 2): FUN_14001ee40 stride 0x14 align 2 (elsewhere in code/Game/, its
+// body — Pf_VectorResize14_ee40 in action_pf_pools.cpp — has NO zero-tail
+// write at all, but both call sites HERE pass newCount==0, so the tail loop
+// never executes and no init policy is ever exercised: any correctly
+// sized/aligned trivial element type gives byte-identical behaviour at
+// count==0). FUN_14001c890 is the already-catalogued U16 SetSize (stride 2,
+// align 2, zero tail — also never exercised at count==0). Both are converted
+// below; the two typedefs and resolves are gone.
 
 static bool s_initialized = false;
 
@@ -84,10 +87,11 @@ void DecalComponent_TerrainDecalRemove(void* terrainDecalSys, int decalId) {
     if (*(int*)(slot + 0x28) == decalId) {
         *(uint32_t*)(slot + 0x28) = 0xffffffff;
         *(uint64_t*)(base + (uintptr_t)decalId * 0x60) = 0;
-        if (s_fn_ResizeStride14)
-            s_fn_ResizeStride14((void*)(slot + 8), 0);
-        if (s_fn_ResizeStride2)
-            s_fn_ResizeStride2((void*)(slot + 0x18), 0);
+        // B.3.2 bridge: exe 0x14001ee40 / 0x14001c890 ARE
+        // Collection::Array<T>::SetSize(0) — see the note above the (removed)
+        // typedefs for why the init-policy mismatch never fires at count 0.
+        GameColl::AsArray<GameColl::Bytes<0x14, 2>>((void*)(slot + 8)).SetSize(0);
+        GameColl::AsArray<GameColl::U16>((void*)(slot + 0x18)).SetSize(0);
     }
 }
 
@@ -428,12 +432,6 @@ void DecalComponent_InitFuncs() {
 
     s_fn_TerrainDecalRemove = reinterpret_cast<fn_TerrainDecalRemove_t>(
         ResolveAddr(Module::Exe, 0x1400b0d00));
-
-    // Sub-callees for our DecalComponent_TerrainDecalRemove reimpl (registered leaves).
-    s_fn_ResizeStride14 = reinterpret_cast<fn_ResizeStride14_t>(
-        ResolveAddr(Module::Exe, 0x14001ee40));
-    s_fn_ResizeStride2 = reinterpret_cast<fn_ResizeStride2_t>(
-        ResolveAddr(Module::Exe, 0x14001c890));
 
     s_initialized = true;
 

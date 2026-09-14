@@ -36,6 +36,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include "Component/controller_state_table.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -55,14 +56,12 @@ typedef void  (*fn_ActStackPush_t)(int64_t* stack, void* ibp);
 typedef void* (*fn_MoveToCtor_t)(void* self, void* ibp, uint32_t pathType, int p4,
                                  float* dest, int p6, int p7, float speed);
 typedef void  (*fn_MarkRemoval_t)(void* entity);
-typedef void  (*fn_DynArray8_t)(void* arr, int newCount, void* fill);
 
 fn_FindComp_t        s_FindSM      = nullptr;   // 0x140003ea0 StateMachineComponent
 fn_TaskListCleanup_t s_Cleanup     = nullptr;   // 0x1400c5400
 fn_ActStackPush_t    s_Push        = nullptr;   // 0x1400c54e0
 fn_MoveToCtor_t      s_MoveToCtor  = nullptr;   // 0x1400c9170
 fn_MarkRemoval_t     s_MarkRemoval = nullptr;   // 0x1400c2ea0 ComponentEntity::MarkForRemoval
-fn_DynArray8_t       s_DynArray8   = nullptr;   // 0x140003110
 bool s_resolved = false;
 
 void Resolve() {
@@ -72,7 +71,6 @@ void Resolve() {
     s_Push        = reinterpret_cast<fn_ActStackPush_t>(ResolveAddr(Module::Exe, 0x1400c54e0));
     s_MoveToCtor  = reinterpret_cast<fn_MoveToCtor_t>(ResolveAddr(Module::Exe, 0x1400c9170));
     s_MarkRemoval = reinterpret_cast<fn_MarkRemoval_t>(ResolveAddr(Module::Exe, 0x1400c2ea0));
-    s_DynArray8   = reinterpret_cast<fn_DynArray8_t>(ResolveAddr(Module::Exe, 0x140003110));
     s_resolved = true;
 }
 
@@ -132,7 +130,9 @@ extern "C" void Nomad_Remove(void* entityList, void* entityIBP) {
     CheckPtr(ibp);
     if (s_MarkRemoval) s_MarkRemoval(reinterpret_cast<void*>(*ibp));
     uint8_t* el = reinterpret_cast<uint8_t*>(entityList);
-    if (s_DynArray8) s_DynArray8(el + 0xd0, *reinterpret_cast<int*>(el + 0xd8) + 1, ibp);
+    // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
+    GameColl::AsArray<GameColl::Ptr8>(el + 0xd0)
+        .SetSizeFill(*reinterpret_cast<int*>(el + 0xd8) + 1, ibp);
 }
 
 // ============================================================

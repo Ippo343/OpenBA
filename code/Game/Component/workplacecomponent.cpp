@@ -11,6 +11,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/workplacecomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -53,9 +54,6 @@ static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
 typedef void (*fn_IBP_Serialize_t)(void* self, void* serializer);
 static fn_IBP_Serialize_t s_fn_IBP_Serialize = nullptr;
 
-// FUN_1400032e0 — resize InternalBasePtr array
-typedef void (*fn_ResizeIBPArray_t)(void* arrayPtr, int newSize);
-static fn_ResizeIBPArray_t s_fn_ResizeIBPArray = nullptr;
 
 // FUN_140018020 — serialize InternalBasePtr field (version >= 1 path)
 typedef void (*fn_SerializeIBP_t)(void* fieldPtr, void* serializer);
@@ -104,9 +102,6 @@ static void EnsureHelpers() {
     if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
 
     s_fn_IBP_Serialize = fn_InternalBasePtr_Serialize;
-
-    s_fn_ResizeIBPArray = reinterpret_cast<fn_ResizeIBPArray_t>(
-        ResolveAddr(Module::Exe, 0x1400032e0));
 
     s_fn_SerializeIBP = reinterpret_cast<fn_SerializeIBP_t>(
         ResolveAddr(Module::Exe, 0x140018020));
@@ -179,7 +174,6 @@ static void* WPC_FindJobHostComponent(int64_t host, uint32_t* pTypeId) {
 //   FUN_140005780 (IBP accessor)               + FUN_14011e710 (bool getter)
 //   FUN_140003110 (worker-list append)         + FUN_1400c3470 (entity flag notify)
 typedef void  (*fn_WPC_RemoveFromList_t)(int64_t* listField, void* ibp);   // 0x140002cc0
-typedef void  (*fn_WPC_AppendToList_t)(int64_t* listField, int newCount, void* ibp); // 0x140003110
 typedef void  (*fn_WPC_ModelKick_t)(int64_t entity, int mode);             // 0x1400c2b70
 typedef void* (*fn_WPC_FindMesh_t)(int64_t entity, void* outIbp);          // 0x140002f90
 typedef void  (*fn_WPC_MeshFlag_t)(int64_t* mesh, int mode, char flag);    // 0x14012c3f0
@@ -187,7 +181,6 @@ typedef void* (*fn_WPC_Accessor5780_t)(int64_t entity, void* outIbp);      // 0x
 typedef char  (*fn_WPC_Getter_e710_t)(int64_t obj);                        // 0x14011e710
 typedef void  (*fn_WPC_FlagNotify_t)(void* entity);                        // 0x1400c3470
 static fn_WPC_RemoveFromList_t s_fn_WPC_RemoveFromList = nullptr;
-static fn_WPC_AppendToList_t   s_fn_WPC_AppendToList = nullptr;
 static fn_WPC_ModelKick_t      s_fn_WPC_ModelKick = nullptr;
 static fn_WPC_FindMesh_t       s_fn_WPC_FindMesh = nullptr;
 static fn_WPC_MeshFlag_t       s_fn_WPC_MeshFlag = nullptr;
@@ -211,7 +204,6 @@ static void EnsureWpcBodyHelpers() {
     s_fn_WPC_FindWorkAssigned   = reinterpret_cast<fn_WPC_FindWork_t>(ResolveAddr(Module::Exe, 0x140110470));
     s_fn_WPC_AssignHousing  = reinterpret_cast<fn_WPC_AssignHousing_t>(ResolveAddr(Module::Exe, 0x140111ee0));
     s_fn_WPC_RemoveFromList = reinterpret_cast<fn_WPC_RemoveFromList_t>(ResolveAddr(Module::Exe, 0x140002cc0));
-    s_fn_WPC_AppendToList   = reinterpret_cast<fn_WPC_AppendToList_t>(ResolveAddr(Module::Exe, 0x140003110));
     s_fn_WPC_ModelKick      = reinterpret_cast<fn_WPC_ModelKick_t>(ResolveAddr(Module::Exe, 0x1400c2b70));
     s_fn_WPC_FindMesh       = reinterpret_cast<fn_WPC_FindMesh_t>(ResolveAddr(Module::Exe, 0x140002f90));
     s_fn_WPC_MeshFlag       = reinterpret_cast<fn_WPC_MeshFlag_t>(ResolveAddr(Module::Exe, 0x14012c3f0));
@@ -396,8 +388,9 @@ void WorkplaceComponent_Attach(int64_t comp, void* workerIbp) {
         if (s_fn_WPC_MeshFlag && mesh) s_fn_WPC_MeshFlag(mesh, 4, '\0');
     }
 
-    if (s_fn_WPC_AppendToList)
-        s_fn_WPC_AppendToList((int64_t*)(comp + 0x58), *(int*)(comp + 0x60) + 1, workerIbp);
+    // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
+    GameColl::AsArray<GameColl::Ptr8>((void*)(comp + 0x58))
+        .SetSizeFill(*(int*)(comp + 0x60) + 1, workerIbp);
 }
 
 // ============================================================
@@ -945,10 +938,9 @@ void WorkPlaceComponent_Shutdown(WorkPlaceComponent* self, void* stream) {
     // to index its id map out of bounds -> ACCESS_VIOLATION on load.
     const uintptr_t serStream = *(uintptr_t*)serializer;
     const bool loadingLeg = serStream && (*(int*)(serStream + 8) == 0);
+    // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
     if (loadingLeg) {
-        if (s_fn_ResizeIBPArray) {
-            s_fn_ResizeIBPArray((void*)((uintptr_t)self + 0x58), countBuf);
-        }
+        GameColl::AsArray<GameColl::Ptr8>((void*)((uintptr_t)self + 0x58)).SetSize(countBuf);
     }
 
     // Serialize each worker InternalBasePtr and validate type
@@ -1077,9 +1069,9 @@ void WorkPlaceComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
     printf("[WorkPlaceComponent] Funcs resolved: Component_Serialize=%p Serializer_Ctor=%p "
-           "ResizeIBPArray=%p AddToList=%p OnCreateFallback=%p\n",
+           "AddToList=%p OnCreateFallback=%p\n",
            (void*)s_fn_Component_Serialize, (void*)s_fn_Serializer_Ctor,
-           (void*)s_fn_ResizeIBPArray, (void*)s_fn_RemoveFromList,
+           (void*)s_fn_RemoveFromList,
            (void*)s_fn_OnCreateFallback);
 #endif
 }

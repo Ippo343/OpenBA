@@ -20,6 +20,7 @@
 #include "FishingWork.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include "redzone_alloc.h"   // RedzoneAlloc_PrintBacktrace (wild-write diagnostic)
 #include "Object/factory_registration.h"   // GetTypeIdByName (drop-spot occupancy dump)
 #include <cstdio>
@@ -71,11 +72,10 @@ static uint64_t (*s_fn_TryAssignToSpot)(uintptr_t assignMgr, void* citizenIBP, i
 // Work::Serialize base (0x1400f7400)
 static void (*s_fn_Work_Serialize)(void* self, void* stream) = nullptr;
 
-// FUN_1400032e0 — IBP array resize (ptr at +0x48, count/cap at +0x50/+0x54)
-static void (*s_fn_IBPArray_Resize)(void* arrayField, int newCount) = nullptr;
-
-// FUN_1400021d0 — int32 array resize (ptr at +0x58, count/cap at +0x60/+0x64)
-static void (*s_fn_IntArray_Resize)(void* arrayField, int newCount) = nullptr;
+// 0x1400032e0 (Array<Ptr8>::SetSize) and 0x1400021d0 (Array<int32>::SetSize) are
+// exe-side Collection::Array<T> monomorphisations -- ENDGAME B.3.2 step 2 converted
+// their two call sites below to GameColl::AsArray<T> member calls, so their
+// resolved-pointer stand-ins are gone.
 
 // Object::InternalBasePtr::Serialize (dispatch slot 0x140152aa0)
 static void (*s_fn_IBP_Serialize)(void* ibp, void* serializer) = nullptr;
@@ -138,14 +138,6 @@ bool FishingWork_ResolveFuncs() {
     s_fn_Work_Serialize = reinterpret_cast<void(*)(void*, void*)>(
         ResolveAddr(Module::Exe, 0x1400f7400));
 
-    // FUN_1400032e0 — IBP array resize
-    s_fn_IBPArray_Resize = reinterpret_cast<void(*)(void*, int)>(
-        ResolveAddr(Module::Exe, 0x1400032e0));
-
-    // FUN_1400021d0 — int array resize
-    s_fn_IntArray_Resize = reinterpret_cast<void(*)(void*, int)>(
-        ResolveAddr(Module::Exe, 0x1400021d0));
-
     // InternalBasePtr::Serialize via dispatch slot 0x140152aa0
     {
         uintptr_t slot = ResolveAddr(Module::Exe, 0x140152aa0);
@@ -178,7 +170,7 @@ bool FishingWork_ResolveFuncs() {
               s_fn_Entity_GetSpotPosition && s_fn_MeshInstance_SetVisibility &&
               s_fn_FishingAction_Ctor && s_fn_PlayAnimation_Action_Ctor &&
               s_fn_TryAssignToSpot &&
-              s_fn_Work_Serialize && s_fn_IBPArray_Resize && s_fn_IntArray_Resize &&
+              s_fn_Work_Serialize &&
               s_fn_IBP_Serialize && s_fn_Serialize_IntArray &&
               s_fn_FindComp_PositionEntity && s_fn_CancelPendingActions &&
               s_typeId_1401c7660 && s_typeId_1401c7698 &&
@@ -202,9 +194,8 @@ bool FishingWork_ResolveFuncs() {
            (void*)s_typeId_1401c7660, (void*)s_typeId_1401c7698,
            (void*)s_typeId_1401c4870, (void*)s_typeId_1401c7e78, (void*)s_typeId_1401c8070,
            (void*)s_typeId_1401c7158);
-    printf("[FishingWork]   WorkSer=%p IBPResize=%p IntResize=%p IBPSer=%p IntArrSer=%p\n",
-           (void*)s_fn_Work_Serialize, (void*)s_fn_IBPArray_Resize,
-           (void*)s_fn_IntArray_Resize, (void*)s_fn_IBP_Serialize,
+    printf("[FishingWork]   WorkSer=%p IBPSer=%p IntArrSer=%p\n",
+           (void*)s_fn_Work_Serialize, (void*)s_fn_IBP_Serialize,
            (void*)s_fn_Serialize_IntArray);
     printf("[FishingWork]   FindPosEnt=%p CancelPending=%p\n",
            (void*)s_fn_FindComp_PositionEntity, (void*)s_fn_CancelPendingActions);
@@ -899,8 +890,10 @@ void FishingWork_Serialize_Impl(FishingWork* self, void* stream) {
     // If loading (serializer mode == 0 at *(int*)(serializer[0] + 8)):
     // resize the IBP array at +0x48 to the deserialized count
     uintptr_t serPtr = *(uintptr_t*)serializer;
+    // B.3.2 bridge: FUN_1400032e0 == Collection::Array<Ptr8>::SetSize
+    // (ImmigrationComp_DynArrayResize in immigrationcomponent.cpp).
     if (*(int*)(serPtr + 8) == 0) {
-        s_fn_IBPArray_Resize((void*)(selfAddr + 0x48), citizenCount);
+        GameColl::AsArray<GameColl::Ptr8>((void*)(selfAddr + 0x48)).SetSize(citizenCount);
     }
 
     // 4. Loop over each citizen IBP, serialize and validate
@@ -931,8 +924,9 @@ void FishingWork_Serialize_Impl(FishingWork* self, void* stream) {
 
     // If loading, resize the int array at +0x58
     serPtr = *(uintptr_t*)serializer;
+    // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize.
     if (*(int*)(serPtr + 8) == 0) {
-        s_fn_IntArray_Resize((void*)(selfAddr + 0x58), spotCount);
+        GameColl::AsArray<GameColl::I32>((void*)(selfAddr + 0x58)).SetSize(spotCount);
     }
 
     // 6. Serialize the spotStates int array

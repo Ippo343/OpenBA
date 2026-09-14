@@ -39,6 +39,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -123,10 +124,8 @@ void CreatePlacedDescription_Serialize(void* self, void* stream) {
     // the element loop was skipped, the stream desynced, and the process crashed.
     // Resizing only when the array cannot already hold `count` keeps an already-parsed
     // array — values intact — which is the whole point of the fix above.
-    typedef void (*fn_ArrayResize4_t)(void* vec, int newCount);
-    static fn_ArrayResize4_t s_resize4 = nullptr;
-    if (!s_resize4)
-        s_resize4 = reinterpret_cast<fn_ArrayResize4_t>(ResolveAddr(Module::Exe, 0x1400021d0));
+    // 0x1400021d0 was Collection::Array<int32>::SetSize monomorphised into the
+    // exe (ENDGAME B.3.2 step 2) — converted at its call site below.
 
     uint8_t* arr = *(uint8_t**)(s + 0x30);
     if (count > 0 && !arr) {
@@ -144,7 +143,8 @@ void CreatePlacedDescription_Serialize(void* self, void* stream) {
         // stream. Zeroing an ALREADY-PARSED one is the bug this fix removes.
         if (arr) for (int i = 0; i < count; ++i) *(int32_t*)(arr + i * 4) = 0;
     } else if (count > 0 && *(int32_t*)(s + 0x3c) < count) {
-        if (s_resize4) s_resize4(s + 0x30, count);
+        // B.3.2 bridge: exe 0x1400021d0 IS Collection::Array<int32>::SetSize(n).
+        GameColl::AsArray<GameColl::I32>((void*)(s + 0x30)).SetSize(count);
         arr = *(uint8_t**)(s + 0x30);
     }
     uint8_t* e = arr;

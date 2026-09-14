@@ -70,6 +70,7 @@
 
 #include "Component/controller_state_table.h"
 #include "Component/component_factory_base.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -100,7 +101,8 @@ typedef float    (*fn_V3Heading_t)(const void* v);
 typedef void     (*fn_TimeCtor_t)(void* outTime, float seconds);
 typedef void     (*fn_SMTick_t)(void* sm, void* time, char useAlt, char run);
 typedef void     (*fn_MarkRemoval_t)(int64_t entity);
-typedef void*    (*fn_ArrResize_t)(void* arr, int newCount, void* fill);
+// 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
+// into the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
 // Static value-return: RCX=retbuf, RDX=&yaw, R8=&pitch, R9=&offset (0x1400455db).
 typedef void*    (*fn_XformFromYPO_t)(void* out, const float* yaw, const float* pitch,
                                       const void* offset);
@@ -121,7 +123,6 @@ fn_V3Heading_t      s_V3Heading      = nullptr;   // slot 0x1401512d8
 fn_TimeCtor_t       s_TimeCtor       = nullptr;   // slot 0x140152b00
 fn_SMTick_t         s_SMTick         = nullptr;   // 0x1400a9660
 fn_MarkRemoval_t    s_MarkRemoval    = nullptr;   // 0x1400c2ea0
-fn_ArrResize_t      s_ArrResize      = nullptr;   // 0x140003110
 fn_XformFromYPO_t   s_XformFromYPO   = nullptr;   // slot 0x140151288
 fn_XformAssign_t    s_XformAssign    = nullptr;   // slot 0x140151280
 fn_GeomSetXform_t   s_GeomSetXform   = nullptr;   // slot 0x1401512e0
@@ -162,7 +163,6 @@ void Resolve() {
     s_FindSMC        = reinterpret_cast<fn_Find_t>(ResolveAddr(Module::Exe, 0x140003ea0));
     s_SMTick         = reinterpret_cast<fn_SMTick_t>(ResolveAddr(Module::Exe, 0x1400a9660));
     s_MarkRemoval    = reinterpret_cast<fn_MarkRemoval_t>(ResolveAddr(Module::Exe, 0x1400c2ea0));
-    s_ArrResize      = reinterpret_cast<fn_ArrResize_t>(ResolveAddr(Module::Exe, 0x140003110));
 
     s_CheckPtr       = reinterpret_cast<fn_CheckPtr_t>(Slot(0x140152ab0));
     s_V3Ctor3f       = reinterpret_cast<fn_V3Ctor3f_t>(Slot(0x140152a30));
@@ -299,9 +299,11 @@ void DeleteBoatEntity(uintptr_t boat) {
     if ((*reinterpret_cast<uint32_t*>(entIBP + 0x40) >> 10) & 1) return;   // already going
     if (s_CheckPtr) s_CheckPtr(&entIBP);
     if (s_MarkRemoval) s_MarkRemoval(entIBP);
-    if (s_ArrResize) {
+    {
+        // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
         void* arr = reinterpret_cast<void*>(entityList + 0xd0);
-        s_ArrResize(arr, *reinterpret_cast<int32_t*>(entityList + 0xd8) + 1, &entIBP);
+        const int32_t newCount = *reinterpret_cast<int32_t*>(entityList + 0xd8) + 1;
+        GameColl::AsArray<GameColl::Ptr8>(arr).SetSizeFill(newCount, &entIBP);
     }
 }
 

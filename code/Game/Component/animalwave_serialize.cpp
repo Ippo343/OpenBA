@@ -33,6 +33,7 @@
 //     validation rather than null every ref: on the only path that matters
 //     (load), skipping matches retail-with-valid-data behaviour.
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include "Game/serialize_externals.h"          // ExternalPtrSerializeGeneric
 #include "Component/populationcomponent_funcs.h" // PopulationComponent_ResizeCells
 #include <cstdint>
@@ -51,7 +52,9 @@ typedef int  (*fn_SerGetVersion_t)(void* ser);
 typedef void (*fn_TimeSerialize_t)(void* time, void* ser);
 typedef void (*fn_IBPSerialize_t)(void* ibp, void* ser);
 typedef bool (*fn_IsDerived_t)(void* obj, uint32_t typeId);
-typedef void (*fn_ResizeIBP8_t)(void* arrPair, int count);
+// 0x1400032e0 was Collection::Array<void*>::SetSize(n) monomorphised into the
+// exe (ENDGAME B.3.2 step 2, ImmigrationComp_DynArrayResize body: stride 8,
+// align 8, zero tail) — the resolved pointer is gone, see the call sites below.
 
 fn_ComponentSerialize_t s_Base       = nullptr;  // 0x1401189b0
 fn_SerCtor_t            s_Ctor       = nullptr;  // slot 0x140152ad8
@@ -64,7 +67,6 @@ fn_SerGetVersion_t      s_GetVersion = nullptr;  // slot 0x140152a48
 fn_TimeSerialize_t      s_TimeSer    = nullptr;  // slot 0x140152aa8
 fn_IBPSerialize_t       s_IBPSer     = nullptr;  // slot 0x140152aa0
 fn_IsDerived_t          s_IsDerived  = nullptr;  // slot 0x140152a98
-fn_ResizeIBP8_t         s_Resize8    = nullptr;  // 0x1400032e0
 
 // type-id storage (null when the owning reg wave is off; see header note)
 const uint32_t* s_tidWildAnimal = nullptr;  // 0x1401c8000  herd members
@@ -101,9 +103,6 @@ void Resolve() {
     if (slot) s_IBPSer = *reinterpret_cast<fn_IBPSerialize_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_IsDerived = *reinterpret_cast<fn_IsDerived_t*>(slot);
-
-    s_Resize8 = reinterpret_cast<fn_ResizeIBP8_t>(
-        ResolveAddr(Module::Exe, 0x1400032e0));
 
     s_tidWildAnimal = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c8000));
     s_tidPopulation = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4790));
@@ -151,7 +150,8 @@ extern "C" void HerdComponent_Serialize(void* self, void* stream) {
 
     int count = *reinterpret_cast<int*>(At(self, 0x40));
     s_Int(ser, &count, nullptr);
-    if (Loading(ser) && s_Resize8) s_Resize8(At(self, 0x38), count);
+    // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
+    if (Loading(ser)) GameColl::AsArray<GameColl::Ptr8>(At(self, 0x38)).SetSize(count);
 
     uint8_t* member = *reinterpret_cast<uint8_t**>(At(self, 0x38));
     for (int i = 0; i < count && member; ++i, member += 8)
@@ -260,7 +260,8 @@ extern "C" void PopulationComponent_Serialize_Real(void* self, void* stream) {
 
     int herds = *reinterpret_cast<int*>(At(self, 0x58));
     s_Int(ser, &herds, nullptr);
-    if (Loading(ser) && s_Resize8) s_Resize8(At(self, 0x50), herds);
+    // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
+    if (Loading(ser)) GameColl::AsArray<GameColl::Ptr8>(At(self, 0x50)).SetSize(herds);
     uint8_t* herd = *reinterpret_cast<uint8_t**>(At(self, 0x50));
     for (int i = 0; i < herds && herd; ++i, herd += 8)
         SerializeValidatedIBP(herd, ser, s_tidEntity);

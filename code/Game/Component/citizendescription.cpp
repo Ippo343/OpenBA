@@ -31,6 +31,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 
 namespace {
@@ -40,7 +41,9 @@ constexpr uint32_t  kFileVersion   = 17;
 
 // exe-internal helpers (REPORTED for engine_funcs.h; resolved via ResolveAddr).
 typedef void (*fn_ExternalRefSerialize_t)(void* refField, void* serializer);            // FUN_140018020
-typedef void (*fn_RefArrayResize_t)(void* arrayHeader, int newCount);                   // FUN_140001bb0
+// FUN_140001bb0 was Collection::Array<void*>::SetSize(n) monomorphised into
+// the exe (ENDGAME B.3.2 step 2: stride 8, align 8, zero tail) — converted at
+// its call site below.
 typedef void (*fn_RefArraySerialize_t)(void* serializer, int count, void* base, void* p4); // FUN_14001bcc0
 // IO::Serializer::Serialize(float[]) dispatch slot 0x140151ea8.
 typedef void (*fn_SerFloatArray_t)(void* serializer, int count, float* base, const char* name);
@@ -137,9 +140,8 @@ void CitizenDescription_Serialize(void* self, void* stream) {
         void* serObj = *reinterpret_cast<void**>(serializer);  // local_20[0]
         bool loading = serObj && (*reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(serObj) + 8) == 0);
         if (loading) {
-            fn_RefArrayResize_t rz =
-                reinterpret_cast<fn_RefArrayResize_t>(ResolveAddr(Module::Exe, 0x140001bb0));
-            if (rz) rz(s + 0x138, count);
+            // B.3.2 bridge: exe 0x140001bb0 IS Collection::Array<void*>::SetSize(n).
+            GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(s + 0x138)).SetSize(count);
         }
         fn_RefArraySerialize_t sa =
             reinterpret_cast<fn_RefArraySerialize_t>(ResolveAddr(Module::Exe, 0x14001bcc0));

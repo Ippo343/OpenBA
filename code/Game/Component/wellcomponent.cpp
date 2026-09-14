@@ -18,6 +18,7 @@
 //
 
 #include "Component/wellcomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
@@ -50,8 +51,6 @@ static bool s_initialized = false;
 
 // FUN_140003110 — dynamic 8-byte-element array set-count + insert (ported in
 // action_base_hunt.cpp, registered). Used here for the IBP-array append.
-typedef void (*fn_DynArraySetCount_t)(void* arr, int newCount, void* valuePtr);
-static fn_DynArraySetCount_t s_fn_DynArraySetCount = nullptr;
 
 // System::MemoryAllocator::MemAlloc/MemFree, the STATIC (size, align) pair behind
 // dispatch slots 0x140152b60 / 0x140152b68.
@@ -240,8 +239,6 @@ void WellComponent_InitFuncs() {
     s_pWorldManager = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x1401c3dd8));
 
-    s_fn_DynArraySetCount = reinterpret_cast<fn_DynArraySetCount_t>(
-        ResolveAddr(Module::Exe, 0x140003110));
     s_fn_MemAllocStatic = reinterpret_cast<fn_MemAllocStatic_t>(
         ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
     s_fn_MemFreeStatic = reinterpret_cast<fn_MemFreeStatic_t>(
@@ -349,13 +346,9 @@ void WellComp_RegisterEntity_91cb0(int64_t townMgr, void* ibp) {
     }
     if (index < 0) {
         index = *reinterpret_cast<int*>(townMgr + 0xe8);      // append at the current end
-        if (!s_fn_DynArraySetCount) {
-            fprintf(stderr, "[Well] register ABORTED: FUN_140003110 unresolved, the "
-                            "water-source array cannot grow\n");
-            fflush(stderr);
-            return;
-        }
-        s_fn_DynArraySetCount(reinterpret_cast<void*>(townMgr + 0xe0), index + 1, ibp);
+        // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
+        GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(townMgr + 0xe0))
+            .SetSizeFill(index + 1, ibp);
     }
 
     int64_t held = *reinterpret_cast<int64_t*>(ibp);

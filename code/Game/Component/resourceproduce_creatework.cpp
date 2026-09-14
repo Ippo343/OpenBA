@@ -21,6 +21,7 @@
 // HerbalistComponent's slot 18. The real HerbalistWork ctor is elsewhere. Same
 // class of misnomer as "HerbalistComponent_Slot13" (which is really the shared base's).
 
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -59,14 +60,10 @@ typedef void* (*fn_WorkCtor25_t)(void* self, void* pEntityIBP);   // 0x1400f72e0
 // component. Kept faithful to retail's choice rather than "corrected".)
 typedef void  (*fn_FindComp_t)(uintptr_t entity, uintptr_t* out);
 typedef int   (*fn_ChildSum_t)(uintptr_t posComp, int kind);      // 0x140123070
-typedef void  (*fn_ArrayGrow_t)(void* vec, int count);            // 0x1400032e0
-typedef void  (*fn_ArrayResize04_t)(void* vec, int count);        // 0x1400021d0
 
 fn_WorkCtor25_t    s_workCtor25 = nullptr;
 fn_FindComp_t      s_findPos    = nullptr;
 fn_ChildSum_t      s_childSum   = nullptr;
-fn_ArrayGrow_t     s_arrayGrow  = nullptr;
-fn_ArrayResize04_t s_arrayRes04 = nullptr;
 // 0x140003ea0 Entity_FindComponent_StateMachine — only ForesterComponent's slot 18
 // needs it (to read the live state id before re-arming the two work flags).
 fn_FindComp_t      s_findSM     = nullptr;
@@ -77,8 +74,6 @@ void Resolve() {
     s_workCtor25 = reinterpret_cast<fn_WorkCtor25_t>(ResolveAddr(Module::Exe, 0x1400f72e0));
     s_findPos    = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140002ed0));
     s_childSum   = reinterpret_cast<fn_ChildSum_t>(ResolveAddr(Module::Exe, 0x140123070));
-    s_arrayGrow  = reinterpret_cast<fn_ArrayGrow_t>(ResolveAddr(Module::Exe, 0x1400032e0));
-    s_arrayRes04 = reinterpret_cast<fn_ArrayResize04_t>(ResolveAddr(Module::Exe, 0x1400021d0));
     s_findSM     = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140003ea0));
     s_resolved = true;
 }
@@ -123,7 +118,7 @@ extern "C" uintptr_t* FishingComponent_CreateWork(void* self, uintptr_t* out) {
     *reinterpret_cast<uint64_t*>(w + 0x60) = 0;
     *reinterpret_cast<uint32_t*>(w + 0x68) = 0;
 
-    if (s_findPos && s_childSum && s_arrayGrow && s_arrayRes04) {
+    if (s_findPos && s_childSum) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entity);
         uintptr_t posIbp = 0;
         s_findPos(entity, &posIbp);
@@ -136,8 +131,9 @@ extern "C" uintptr_t* FishingComponent_CreateWork(void* self, uintptr_t* out) {
             const uintptr_t pos = posIbp;
             const int n0 = s_childSum(pos, 0);
             const int n2 = s_childSum(pos, 2);
-            s_arrayGrow(reinterpret_cast<void*>(w + 0x48), n0);
-            s_arrayRes04(reinterpret_cast<void*>(w + 0x58), n2);
+            // B.3.2 bridge: 0x1400032e0 is Array<void*>::SetSize, 0x1400021d0 is Array<int32>::SetSize
+            GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(w + 0x48)).SetSize(n0);
+            GameColl::AsArray<GameColl::I32>(reinterpret_cast<void*>(w + 0x58)).SetSize(n2);
             // Zero the kind-2 slot array the ctor allocates (retail's trailing loop).
             const int cnt = *reinterpret_cast<int32_t*>(w + 0x60);
             uint32_t* slots = *reinterpret_cast<uint32_t**>(w + 0x58);
@@ -345,7 +341,7 @@ extern "C" void* ConsumeProduceAction_Ctor(void* mem, uintptr_t* entityIbp,
     *reinterpret_cast<uint64_t*>(w + 0x68) = 0;
     *reinterpret_cast<uint64_t*>(w + 0x70) = 0;
 
-    if (s_findPos && s_childSum && s_arrayGrow && s_arrayRes04) {
+    if (s_findPos && s_childSum) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(entityIbp);
         uintptr_t posIbp = 0;
         s_findPos(*entityIbp, &posIbp);
@@ -357,8 +353,9 @@ extern "C" void* ConsumeProduceAction_Ctor(void* mem, uintptr_t* entityIbp,
             // fishing port hit).
             const int n0 = s_childSum(posIbp, 0);
             const int n2 = s_childSum(posIbp, 2);
-            s_arrayGrow(reinterpret_cast<void*>(w + 0x58), n0);
-            s_arrayRes04(reinterpret_cast<void*>(w + 0x68), n2);
+            // B.3.2 bridge: 0x1400032e0 is Array<void*>::SetSize, 0x1400021d0 is Array<int32>::SetSize
+            GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(w + 0x58)).SetSize(n0);
+            GameColl::AsArray<GameColl::I32>(reinterpret_cast<void*>(w + 0x68)).SetSize(n2);
             const int cnt = *reinterpret_cast<int32_t*>(w + 0x70);
             uint32_t* slots = *reinterpret_cast<uint32_t**>(w + 0x68);
             if (slots) for (int i = 0; i < cnt; ++i) slots[i] = 0;

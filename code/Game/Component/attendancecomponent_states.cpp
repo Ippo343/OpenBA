@@ -31,6 +31,7 @@
 // component back-pointer to +0x50 (= node + 0x18).
 
 #include "Component/controller_state_table.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -47,7 +48,9 @@ extern "C" void** AttendanceCtrl_NodeVtable() { return AttendanceDispatch::Vtabl
 extern void AttendanceComponent_ProcessQueue(void* self);
 
 // ── Resolved engine helpers ───────────────────────────────────────────────────────
-// 0x140003110 DynArray8_ResizeFill(array, newCount, fillValue) — the town-list append.
+// 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised into
+// the exe (ENDGAME B.3.2 step 2) — the town-list append, converted at its call
+// site below to GameColl::AsArray<GameColl::Ptr8>(...).SetSizeFill(n, &fill).
 // 0x1400f72e0 Work_Ctor25(work, ownerEntityIBP)                — base Work ctor.
 // 0x140003050 FindComponent_Work(entity, outIBP)               — the citizen work ledger.
 // 0x140002e10 FindComponent_WorkPlace(entity, outIBP)          — WorkPlaceComponent.
@@ -55,14 +58,12 @@ extern void AttendanceComponent_ProcessQueue(void* self);
 // 0x14012fc00 WorkPlace SetAccepting(wpc, accepting).
 // 0x140002f90 Entity_FindComponent_MeshInstance(entity, outIBP).
 // 0x14012c3f0 MeshInstance set-state-flag(mesh, flagIdx, value).
-typedef void  (*fn_ResizeFill_t)(void* array, int newCount, void* fillValue);
 typedef void* (*fn_WorkCtor25_t)(void* self, void* pEntityIBP);
 typedef void  (*fn_FindComp_t)(uintptr_t entity, uintptr_t* outIBP);
 typedef void  (*fn_PostWork_t)(uintptr_t workComp, uint32_t code, char flag, void* workIBP);
 typedef void  (*fn_SetAccepting_t)(uintptr_t wpc, char accepting);
 typedef void  (*fn_MeshSetFlag_t)(void* mesh, uint8_t flagIdx, char value);
 
-static fn_ResizeFill_t   s_resizeFill   = nullptr;
 static fn_WorkCtor25_t   s_workCtor25   = nullptr;
 static fn_FindComp_t     s_findWork     = nullptr;
 static fn_FindComp_t     s_findWpc      = nullptr;
@@ -78,7 +79,6 @@ bool LocationWork_ResolveFuncs();   // code/Game/Work/locationwork.cpp
 
 static void AC_Resolve() {
     if (s_resolved) return;
-    s_resizeFill   = reinterpret_cast<fn_ResizeFill_t>(ResolveAddr(Module::Exe, 0x140003110));
     s_workCtor25   = reinterpret_cast<fn_WorkCtor25_t>(ResolveAddr(Module::Exe, 0x1400f72e0));
     s_findWork     = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140003050));
     s_findWpc      = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140002e10));
@@ -190,11 +190,13 @@ static char Attendance_State2Enter(void* selfP, void* /*sm*/) {
 
     // 1. register in the town attendance list
     const uintptr_t town = AC_TownObject();
-    if (town && s_resizeFill) {
+    if (town) {
         uintptr_t selfIbp = 0;
         if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&selfIbp, selfP);
-        s_resizeFill(reinterpret_cast<void*>(town + 0x60),
-                     *reinterpret_cast<int32_t*>(town + 0x68) + 1, &selfIbp);
+        // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+        const int32_t newCount = *reinterpret_cast<int32_t*>(town + 0x68) + 1;
+        GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(town + 0x60))
+            .SetSizeFill(newCount, &selfIbp);
     }
 
     // 2. mint the LocationWork

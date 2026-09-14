@@ -25,6 +25,7 @@
 #include "plantorchard_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -33,12 +34,14 @@ namespace {
 typedef void* (*fn_Work_Ctor25_t)(void* self, void* entityIBP);       // 0x1400f72e0
 typedef void* (*fn_FindOrchard_t)(int64_t entity, void* outIBP);      // 0x140005440
 typedef void  (*fn_ValidateRefs_t)(int64_t orchardComp);              // 0x140051830
-typedef void  (*fn_ResizeBytes_t)(void* arrayTriple, int newCount);   // 0x14000a590
+// 0x14000a590 (Array<uint8>::SetSize) is the exe-side Collection::Array<T>
+// monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
+// GameColl::AsArray<GameColl::U8> member call, so its resolved-pointer stand-in
+// is gone.
 
 fn_Work_Ctor25_t  s_WorkCtor25   = nullptr;
 fn_FindOrchard_t  s_FindOrchard  = nullptr;
 fn_ValidateRefs_t s_ValidateRefs = nullptr;
-fn_ResizeBytes_t  s_ResizeBytes  = nullptr;
 uintptr_t         s_vtable       = 0;
 bool              s_resolved     = false;
 
@@ -47,18 +50,16 @@ void Resolve() {
     s_WorkCtor25   = reinterpret_cast<fn_Work_Ctor25_t>(ResolveAddr(Module::Exe, 0x1400f72e0));
     s_FindOrchard  = reinterpret_cast<fn_FindOrchard_t>(ResolveAddr(Module::Exe, 0x140005440));
     s_ValidateRefs = reinterpret_cast<fn_ValidateRefs_t>(ResolveAddr(Module::Exe, 0x140051830));
-    s_ResizeBytes  = reinterpret_cast<fn_ResizeBytes_t>(ResolveAddr(Module::Exe, 0x14000a590));
     s_vtable       = ResolveAddr(Module::Exe, PlantOrchardAddr::Vtable);
-    s_resolved = s_WorkCtor25 && s_FindOrchard && s_ValidateRefs && s_ResizeBytes && s_vtable;
+    s_resolved = s_WorkCtor25 && s_FindOrchard && s_ValidateRefs && s_vtable;
     if (!s_resolved) {
         static bool reported = false;
         if (!reported) {
             reported = true;
-            std::fprintf(stderr, "[PlantOrchardCtor] UNRESOLVED:%s%s%s%s%s\n",
+            std::fprintf(stderr, "[PlantOrchardCtor] UNRESOLVED:%s%s%s%s\n",
                 s_WorkCtor25   ? "" : " Work_Ctor25",
                 s_FindOrchard  ? "" : " FindComponent_Orchard",
                 s_ValidateRefs ? "" : " OrchardComponent_ValidateRefs",
-                s_ResizeBytes  ? "" : " ResizeByteArray",
                 s_vtable       ? "" : " vtable_PlantOrchard");
             std::fflush(stderr);
         }
@@ -121,8 +122,9 @@ extern "C" void* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, void* 
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&orchardIBP);
 
     // Size the per-slot validity array from the orchard's CURRENT slot count.
+    // B.3.2 bridge: FUN_14000a590 == Collection::Array<uint8>::SetSize.
     const int slotCount = *reinterpret_cast<int32_t*>(orchardIBP + 0x58);
-    if (s_ResizeBytes) s_ResizeBytes(reinterpret_cast<void*>(s + 0x58), slotCount);
+    GameColl::AsArray<GameColl::U8>(reinterpret_cast<void*>(s + 0x58)).SetSize(slotCount);
 
     // Zero each byte. Retail re-reads orchardComp->+0x58 and re-runs CheckPtr on every
     // iteration; the re-read is preserved because ValidateRefs/CheckPtr can in principle

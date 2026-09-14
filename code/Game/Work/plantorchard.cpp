@@ -20,6 +20,7 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -102,8 +103,10 @@ static POW_Serializer_SerializeBoolArray_t s_fn_Serializer_SerializeBoolArray = 
 typedef void (*POW_ExternalRef_Serialize_t)(void* refPtr, void* serializer);
 static POW_ExternalRef_Serialize_t s_fn_ExternalRef_Serialize = nullptr;
 
-typedef void (*POW_ResizeByteArray_t)(void* arrayField, int newCount);
-static POW_ResizeByteArray_t s_fn_ResizeByteArray = nullptr;
+// 0x14000a590 (Array<uint8>::SetSize) is the exe-side Collection::Array<T>
+// monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
+// GameColl::AsArray<GameColl::U8> member call, so its resolved-pointer stand-in
+// is gone.
 
 typedef void* (*POW_MemAlloc_t)(int64_t size, int align);
 static POW_MemAlloc_t s_fn_MemAlloc = nullptr;
@@ -164,8 +167,6 @@ bool PlantOrchard_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x140002e10));
     s_fn_Work_Serialize = reinterpret_cast<POW_Work_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1400f7400));
-    s_fn_ResizeByteArray = reinterpret_cast<POW_ResizeByteArray_t>(
-        ResolveAddr(Module::Exe, 0x14000a590));
     s_fn_ExternalRef_Serialize = reinterpret_cast<POW_ExternalRef_Serialize_t>(
         ResolveAddr(Module::Exe, 0x140002340));
     s_fn_OrchardRefresh = reinterpret_cast<POW_OrchardRefresh_t>(
@@ -208,7 +209,7 @@ bool PlantOrchard_ResolveFuncs() {
               s_fn_ValidateTask && s_fn_TaskCancel &&
               s_fn_FindSubEntity && s_fn_Work_Serialize &&
               s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
-              s_fn_Serializer_SerializeInt && s_fn_ResizeByteArray &&
+              s_fn_Serializer_SerializeInt &&
               s_fn_ExternalRef_Serialize && s_fn_OrchardRefresh &&
               fn_InternalBasePtr_CheckPtr && fn_MemFreeStatic &&
               g_pGameWorldSingleton && s_fHalfCellOffset &&
@@ -237,7 +238,6 @@ bool PlantOrchard_ResolveFuncs() {
         if (!s_fn_Serializer_Ctor) printf("  MISSING: Serializer_Ctor\n");
         if (!s_fn_Serializer_Dtor) printf("  MISSING: Serializer_Dtor\n");
         if (!s_fn_Serializer_SerializeInt) printf("  MISSING: Serializer_SerializeInt\n");
-        if (!s_fn_ResizeByteArray) printf("  MISSING: ResizeByteArray\n");
         if (!s_fn_ExternalRef_Serialize) printf("  MISSING: ExternalRef_Serialize\n");
         if (!s_fn_OrchardRefresh) printf("  MISSING: OrchardRefresh\n");
         // The seven conditions below were in the `ok` expression but not in this list, so a
@@ -710,8 +710,9 @@ void PlantOrchard_Serialize_Impl(PlantOrchard* self, void* stream) {
     int cellCountBuf[2] = { *(int*)(selfAddr + 0x60), 0 };
     s_fn_Serializer_SerializeInt(serializerBuf, cellCountBuf, nullptr);
 
+    // B.3.2 bridge: FUN_14000a590 == Collection::Array<uint8>::SetSize.
     if (*(int*)(*(uintptr_t*)serializerBuf + 8) == 0) {
-        s_fn_ResizeByteArray((void*)(selfAddr + 0x58), cellCountBuf[0]);
+        GameColl::AsArray<GameColl::U8>((void*)(selfAddr + 0x58)).SetSize(cellCountBuf[0]);
     }
 
     s_fn_Serializer_SerializeBoolArray(serializerBuf, cellCountBuf[0],

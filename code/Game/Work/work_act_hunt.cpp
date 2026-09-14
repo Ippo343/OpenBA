@@ -39,9 +39,9 @@
 typedef void (*WAH_fn_TaskListCleanup_t)(void* list);
 // FUN_1400c54e0 (TaskListAppend) — grow-and-append an action IBP to the task list.
 typedef void (*WAH_fn_TaskListAppend_t)(void* list, void* actionIBP);
-// FUN_1400032e0 (array grow) — grow the action-pointer array to newCap entries.
-//   disasm: RCX=list, EDX=newCap; e.g. 0x1400bdf94 CALL 0x1400032e0.
-typedef void (*WAH_fn_ArrayGrow_t)(void* list, int newCap);
+// 0x1400032e0 (array grow, e.g. disasm 0x1400bdf94 CALL 0x1400032e0) was resolved
+// here but never called anywhere in this file -- dead resolved-pointer machinery,
+// removed rather than converted (B.3.2 step 2).
 
 // Entity_FindComponent_Family (0x1400012d0) — member-style: RCX=entityInner,
 // RDX=retIBP, returns retIBP (RAX). Wraps the family/move component for MoveTo.
@@ -79,7 +79,6 @@ typedef void* (*WAH_fn_TimeCtor_t)(void* retval, float seconds);
 
 static WAH_fn_TaskListCleanup_t      s_wah_TaskListCleanup = nullptr;
 static WAH_fn_TaskListAppend_t       s_wah_TaskListAppend  = nullptr;
-static WAH_fn_ArrayGrow_t            s_wah_ArrayGrow       = nullptr;
 static WAH_fn_FindComponentFamily_t  s_wah_FindCompFamily  = nullptr;
 static WAH_fn_SendCompMsg_t          s_wah_SendCompMsg     = nullptr;
 static WAH_fn_CompleteTask_t         s_wah_CompleteTask    = nullptr;
@@ -109,7 +108,6 @@ static void ResolveAll() {
 
     s_wah_TaskListCleanup = reinterpret_cast<WAH_fn_TaskListCleanup_t>(ResolveAddr(Module::Exe, 0x1400c5400));
     s_wah_TaskListAppend  = reinterpret_cast<WAH_fn_TaskListAppend_t>(ResolveAddr(Module::Exe, 0x1400c54e0));
-    s_wah_ArrayGrow       = reinterpret_cast<WAH_fn_ArrayGrow_t>(ResolveAddr(Module::Exe, 0x1400032e0));
     s_wah_FindCompFamily  = reinterpret_cast<WAH_fn_FindComponentFamily_t>(ResolveAddr(Module::Exe, 0x1400012d0));
     s_wah_SendCompMsg     = reinterpret_cast<WAH_fn_SendCompMsg_t>(ResolveAddr(Module::Exe, 0x1400cb1d0));
     s_wah_CompleteTask    = reinterpret_cast<WAH_fn_CompleteTask_t>(ResolveAddr(Module::Exe, 0x1400c5da0));

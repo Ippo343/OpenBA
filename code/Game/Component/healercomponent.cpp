@@ -11,6 +11,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/healercomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -39,9 +40,8 @@ static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
 typedef void (*fn_ArrayEraseBasePtr_t)(void* arrayBase, void* internalBasePtr);
 static fn_ArrayEraseBasePtr_t s_fn_ArrayEraseBasePtr = nullptr;
 
-// FUN_140003110 -- ArrayPush(base, newCount, elemPtr): grow to newCount and store.
-typedef void (*fn_ArrayPush_t)(void* arrayBase, int newCount, void* elementPtr);
-static fn_ArrayPush_t s_fn_ArrayPush = nullptr;
+// FUN_140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
+// into the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
 
 // Global: DAT_1401c3dd8 -- pointer to game world/population manager
 static void** s_pWorldManager = nullptr;
@@ -58,9 +58,6 @@ static void EnsureHelpers() {
 
     s_fn_ArrayEraseBasePtr = reinterpret_cast<fn_ArrayEraseBasePtr_t>(
         ResolveAddr(Module::Exe, 0x140002cc0));
-
-    s_fn_ArrayPush = reinterpret_cast<fn_ArrayPush_t>(
-        ResolveAddr(Module::Exe, 0x140003110));
 
     s_pWorldManager = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x1401c3dd8));
@@ -142,9 +139,9 @@ void HealerComponent_OnRemove(HealerComponent* self) {
 void HealerComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[HealerComponent] Funcs resolved: Serialize=%p Erase=%p Push=%p WorldMgr=%p\n",
+    printf("[HealerComponent] Funcs resolved: Serialize=%p Erase=%p WorldMgr=%p\n",
            (void*)s_fn_Component_Serialize, (void*)s_fn_ArrayEraseBasePtr,
-           (void*)s_fn_ArrayPush, (void*)s_pWorldManager);
+           (void*)s_pWorldManager);
 #endif
 }
 
@@ -162,7 +159,7 @@ void HealerComponent_InitFuncs() {
 // stayed empty for the life of the save and the sick had nowhere to be sent.
 extern "C" char HealerComponent_EnterBuilt(void* comp, void* /*sm*/) {
     HealerComponent_InitFuncs();
-    if (!fn_InternalBasePtr_Ctor || !s_fn_ArrayPush ||
+    if (!fn_InternalBasePtr_Ctor ||
         !s_pWorldManager || !*s_pWorldManager) return 0;
 
     uint8_t ibp[24] = {};
@@ -173,7 +170,9 @@ extern "C" char HealerComponent_EnterBuilt(void* comp, void* /*sm*/) {
     if (!townMgr) return 0;
 
     const int count = *reinterpret_cast<int*>(townMgr + 0x78);
-    s_fn_ArrayPush(reinterpret_cast<void*>(townMgr + 0x70), count + 1, ibp);
+    // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+    GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(townMgr + 0x70))
+        .SetSizeFill(count + 1, ibp);
 
     {
         static int n = 0;

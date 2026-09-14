@@ -67,6 +67,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -77,10 +78,10 @@
 // Resolved helpers (once)
 // ============================================================
 typedef void (*fn_MarkForRemoval_t)(int64_t internal);                  // 0x1400c2ea0
-typedef void (*fn_DynArrInsert_t)(int64_t* arr, int count, void* ibp);  // 0x140003110
+// 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
+// into the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
 
 static fn_MarkForRemoval_t s_MarkForRemoval = nullptr;
-static fn_DynArrInsert_t   s_DynArrInsert   = nullptr;
 static bool s_resolved = false;
 
 static void EnsureResolved() {
@@ -88,8 +89,6 @@ static void EnsureResolved() {
     s_resolved = true;
     s_MarkForRemoval = reinterpret_cast<fn_MarkForRemoval_t>(
         ResolveAddr(Module::Exe, 0x1400c2ea0));
-    s_DynArrInsert = reinterpret_cast<fn_DynArrInsert_t>(
-        ResolveAddr(Module::Exe, 0x140003110));
 }
 
 // ============================================================
@@ -130,9 +129,9 @@ extern "C" char ClearResource_State2Enter(void* data, void* /*sm*/) {
 
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entity);
     if (s_MarkForRemoval) s_MarkForRemoval(entity);
-    if (s_DynArrInsert)
-        s_DynArrInsert(reinterpret_cast<int64_t*>(entityList + 0xd0),
-                       *reinterpret_cast<int*>(entityList + 0xd8) + 1, &entity);
+    // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+    GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(entityList + 0xd0))
+        .SetSizeFill(*reinterpret_cast<int*>(entityList + 0xd8) + 1, &entity);
 
     return 1;
 }

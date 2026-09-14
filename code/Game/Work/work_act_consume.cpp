@@ -21,6 +21,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 
 // ============================================================
@@ -31,8 +32,10 @@
 typedef void  (*WCP_fn_TaskListCleanup_t)(void* list);
 // FUN_1400c54e0 (TaskListAppend) — append an action IBP to the task list.
 typedef void  (*WCP_fn_TaskListAppend_t)(void* list, void* actionIBP);
-// FUN_1400032e0 — task-list array grow (capacity arg).
-typedef void  (*WCP_fn_ArrayGrow_t)(void* list, int newCapacity);
+// 0x1400032e0 (task-list array grow) is the exe-side Collection::Array<Ptr8>::
+// SetSize monomorphisation -- ENDGAME B.3.2 step 2 converted its two call sites
+// below to GameColl::AsArray<GameColl::Ptr8> member calls, so its resolved-pointer
+// stand-in is gone.
 
 // FUN_1400cb1d0 SendComponentMessage_Action_CopyCtor
 //   disasm: RCX=self, RDX=&entityInner, R8=&msgId(u32*), R9D=p4, [RSP+0x20]=&innerIbp, [RSP+0x28]=p6
@@ -86,7 +89,6 @@ typedef bool  (*WCP_fn_IsDerivedFrom_t)(void* obj, uint32_t typeId);
 // ============================================================
 static WCP_fn_TaskListCleanup_t       s_wcp_TaskListCleanup   = nullptr;
 static WCP_fn_TaskListAppend_t        s_wcp_TaskListAppend    = nullptr;
-static WCP_fn_ArrayGrow_t             s_wcp_ArrayGrow         = nullptr;
 static WCP_fn_SendCompMsg_t           s_wcp_SendCompMsg       = nullptr;
 static WCP_fn_CompleteTask_t          s_wcp_CompleteTask      = nullptr;
 static WCP_fn_ShowTool_t              s_wcp_ShowTool          = nullptr;
@@ -119,7 +121,6 @@ static void WCP_ResolveAll() {
 
     s_wcp_TaskListCleanup   = reinterpret_cast<WCP_fn_TaskListCleanup_t>(ResolveAddr(Module::Exe, 0x1400c5400));
     s_wcp_TaskListAppend    = reinterpret_cast<WCP_fn_TaskListAppend_t>(ResolveAddr(Module::Exe, 0x1400c54e0));
-    s_wcp_ArrayGrow         = reinterpret_cast<WCP_fn_ArrayGrow_t>(ResolveAddr(Module::Exe, 0x1400032e0));
     s_wcp_SendCompMsg       = reinterpret_cast<WCP_fn_SendCompMsg_t>(ResolveAddr(Module::Exe, 0x1400cb1d0));
     s_wcp_CompleteTask      = reinterpret_cast<WCP_fn_CompleteTask_t>(ResolveAddr(Module::Exe, 0x1400c5da0));
     s_wcp_ShowTool          = reinterpret_cast<WCP_fn_ShowTool_t>(ResolveAddr(Module::Exe, 0x140042890));
@@ -192,15 +193,19 @@ static void* WCP_FindComponentDerived(uintptr_t listBase) {
 //   list  = aiComp+0x48 ({ +0x00 array base, +0x08 capacity, +0x18 count }).
 //   ibpVal = the InternalBasePtr value to store at array[count].
 static void WCP_AppendInline(uintptr_t list, uintptr_t ibpVal) {
+    // B.3.2 bridge: FUN_1400032e0 == Collection::Array<Ptr8>::SetSize
+    // (ImmigrationComp_DynArrayResize in immigrationcomponent.cpp). It only touches
+    // bytes [0x00,0x10) at `list` -- the array header embedded at the front of this
+    // struct -- so this call is unaffected by whatever this struct keeps at +0x18.
     int cap = *reinterpret_cast<int*>(list + 0x8);        // [RSI+0x8]
     if (cap == 0) {
         cap = 0x10;
-        if (s_wcp_ArrayGrow) s_wcp_ArrayGrow(reinterpret_cast<void*>(list), cap);
+        GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(list)).SetSize(cap);
     } else {
         int n = *reinterpret_cast<int*>(list + 0x18) + 1; // [RSI+0x18]+1
         if (n == cap) {
             cap *= 2;
-            if (s_wcp_ArrayGrow) s_wcp_ArrayGrow(reinterpret_cast<void*>(list), cap);
+            GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(list)).SetSize(cap);
         }
     }
 

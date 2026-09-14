@@ -25,6 +25,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -50,16 +51,17 @@ typedef void* (*BCS1_FindComp2_t)(uintptr_t entity, void* retIBP);
 typedef void  (*BCS1_ModelReset_t)(uintptr_t modelComp);
 // BuildComponent_helper_7550 == 0x140017550 == BuildComponent_FindInQueue(arrayBase, ibp)
 typedef int   (*BCS1_FindInQueue_t)(void* arrayBase, void* ibp);
-// FUN_140003110 array-add(arrayField, newCount, ibp)
-typedef void  (*BCS1_ArrayAdd_t)(void* arrayField, int newCount, void* ibp);
+// FUN_140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised into
+// the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
 // FUN_140003050 WorkBase_FindComponent_3050(entity, retIBP) -> WorkComponent (0x1401c8070)
 typedef void* (*BCS1_FindWorkComp_t)(uintptr_t entity, void* retIBP);
 // CitizenAI_impl_ec60(workComp, code, flag, workIBP) — reservation-ledger post (deferred)
 typedef void  (*BCS1_PostWork_t)(uintptr_t workComp, uint32_t code, char flag, void* workIBP);
 // Entity_FindComponent_Storage @ 0x140006270 (entity, retIBP) -> site StorageComponent
 typedef void* (*BCS1_FindStorage_t)(uintptr_t entity, void* retIBP);
-// FUN_14000f090 StorageComponent_DynArrayResize(slotArrayField, count)
-typedef void  (*BCS1_StorageResize_t)(void* slotArrayField, int count);
+// FUN_14000f090 StorageComponent_DynArrayResize(slotArrayField, count) was
+// Collection::Array<Bytes<0x10,8>>::SetSize monomorphised into the exe
+// (ENDGAME B.3.2 step 2: stride 0x10, align 8, zero tail) — converted below.
 
 static uint32_t BCS1_TypeId(const char* name, uintptr_t rdataGlobal) {
     (void)rdataGlobal;
@@ -214,11 +216,9 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
     // resolve helpers once
     static BCS1_FindComp_t     s_find4740 = nullptr;
     static BCS1_FindInQueue_t  s_findInQueue = nullptr;
-    static BCS1_ArrayAdd_t     s_arrayAdd = nullptr;
     static BCS1_FindWorkComp_t s_find3050 = nullptr;
     static BCS1_PostWork_t     s_postEc60 = nullptr;
     static BCS1_FindStorage_t  s_findStorage = nullptr;
-    static BCS1_StorageResize_t s_storageResize = nullptr;
     // FUN_140002e10 FindComponent_WorkPlace(entity, retIBP) -> WorkPlaceComponent (0x1401c80e0).
     // Same finder GRM Execute uses to gate the gather on the site's "accepting" flag (+0x50).
     static BCS1_FindComp_t     s_findWpc2e10 = nullptr;
@@ -231,11 +231,9 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
         // in this file's own state machine — call those directly instead of resolving
         // the raw exe addresses (which would stay permanently null).
         s_findInQueue = reinterpret_cast<BCS1_FindInQueue_t>(ResolveAddr(Module::Exe, 0x140017550));
-        s_arrayAdd    = reinterpret_cast<BCS1_ArrayAdd_t>(ResolveAddr(Module::Exe, 0x140003110));
         s_find3050    = reinterpret_cast<BCS1_FindWorkComp_t>(ResolveAddr(Module::Exe, 0x140003050));
         s_postEc60    = reinterpret_cast<BCS1_PostWork_t>(ResolveAddr(Module::Exe, 0x14012ec60));
         s_findStorage = reinterpret_cast<BCS1_FindStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
-        s_storageResize = reinterpret_cast<BCS1_StorageResize_t>(ResolveAddr(Module::Exe, 0x14000f090));
         s_findWpc2e10 = reinterpret_cast<BCS1_FindComp_t>(ResolveAddr(Module::Exe, 0x140002e10));
         s_res = true;
     }
@@ -287,9 +285,11 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
     if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&siteIbp, buildComp);
     if (townMgr && s_findInQueue) {
         int idx = s_findInQueue(reinterpret_cast<void*>(townMgr + 0xd0), &siteIbp);
-        if (idx < 0 && s_arrayAdd) {
+        if (idx < 0) {
+            // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
             int newCount = *reinterpret_cast<int*>(townMgr + 0xd8) + 1;
-            s_arrayAdd(reinterpret_cast<void*>(townMgr + 0xd0), newCount, &siteIbp);
+            GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(townMgr + 0xd0))
+                .SetSizeFill(newCount, &siteIbp);
         }
     }
 
@@ -338,9 +338,11 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
         uintptr_t storageIbp = 0;
         if (s_findStorage) s_findStorage(*reinterpret_cast<uintptr_t*>(self + 0x10), &storageIbp);
 
-        if (storageIbp != 0 && s_storageResize) {
+        if (storageIbp != 0) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&storageIbp);
-            s_storageResize(reinterpret_cast<void*>(storageIbp + 0x28), 0);
+            // B.3.2 bridge: exe 0x14000f090 IS Collection::Array<Bytes<0x10,8>>::SetSize(n).
+            GameColl::AsArray<GameColl::Bytes<0x10, 8>>(
+                reinterpret_cast<void*>(storageIbp + 0x28)).SetSize(0);
 
             uint32_t acceptMask = 0;
             int totalQty = 0;

@@ -14,6 +14,7 @@
 //
 
 #include "Component/zonecomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -52,8 +53,6 @@ typedef void** (*fn_TreeInsert_t)(void* treeRoot, void* outNode, void* key, void
 static fn_TreeInsert_t s_fn_TreeInsert = nullptr;
 
 // FUN_140003110 — append an entity ref to a tree node's child list.
-typedef void (*fn_NodeListAppend_t)(void* listPtr, int newCount, void* entityPtr);
-static fn_NodeListAppend_t s_fn_NodeListAppend = nullptr;
 
 // ZoneComponent_sub_d360 (0x14009d360) — rasterize zone tiles into the world grid.
 typedef void (*fn_ZoneRaster_t)(int* world, void* entityRef, int x, int y,
@@ -165,8 +164,10 @@ void ZoneComponent_ZoneMapAdd(void* zoneMapV, void* entityPtrV) {
         if (fn_MemFreeStatic) fn_MemFreeStatic(nullptr);
     }
 
-    if (s_fn_NodeListAppend && found)
-        s_fn_NodeListAppend(found + 1, static_cast<int>(found[2]) + 1, entityPtr);
+    // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
+    if (found)
+        GameColl::AsArray<GameColl::Ptr8>((void*)(found + 1))
+            .SetSizeFill(static_cast<int>(found[2]) + 1, entityPtr);
 }
 
 // ============================================================
@@ -323,8 +324,6 @@ static void EnsureZoneHelpers() {
         ResolveAddr(Module::Exe, 0x140004680));
     s_fn_TreeInsert = reinterpret_cast<fn_TreeInsert_t>(
         ResolveAddr(Module::Exe, 0x140017230));
-    s_fn_NodeListAppend = reinterpret_cast<fn_NodeListAppend_t>(
-        ResolveAddr(Module::Exe, 0x140003110));
     s_fn_ZoneRaster = reinterpret_cast<fn_ZoneRaster_t>(
         ResolveAddr(Module::Exe, 0x14009d360));
     s_fn_NodeFinalize = reinterpret_cast<fn_NodeFinalize_t>(

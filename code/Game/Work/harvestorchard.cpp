@@ -23,6 +23,7 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -75,7 +76,10 @@ typedef void  (*HO_Serializer_Ctor_t)(void* self, void* stream, int version);
 typedef void  (*HO_Serializer_Dtor_t)(void* self);
 typedef void  (*HO_Serializer_SerializeInt_t)(void* ser, int* buf, const char* name);
 typedef void  (*HO_Serializer_SerializeBoolArray_t)(void* ser, int count, void* buf, const char* name);
-typedef void  (*HO_ResizeByteArray_t)(void* arrayField, int newCount);
+// 0x14000a590 (Array<uint8>::SetSize) is the exe-side Collection::Array<T>
+// monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
+// GameColl::AsArray<GameColl::U8> member call, so its resolved-pointer stand-in
+// is gone.
 typedef void  (*HO_BST_RecursiveFree_t)(void* treeRoot, void* node);
 typedef void  (*HO_ObjectInternal_Dtor_t)(void* self);
 typedef void* (*HO_MemAlloc_t)(int64_t size, int align);
@@ -103,7 +107,6 @@ static HO_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
 static HO_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
 static HO_Serializer_SerializeInt_t s_fn_Serializer_SerializeInt = nullptr;
 static HO_Serializer_SerializeBoolArray_t s_fn_Serializer_SerializeBoolArray = nullptr;
-static HO_ResizeByteArray_t s_fn_ResizeByteArray = nullptr;
 static HO_BST_RecursiveFree_t s_fn_BST_RecursiveFree = nullptr;
 static HO_ObjectInternal_Dtor_t s_fn_ObjectInternal_Dtor = nullptr;
 static HO_MemAlloc_t s_fn_MemAlloc = nullptr;
@@ -171,8 +174,6 @@ bool HarvestOrchard_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x140002e10));
     s_fn_Work_Serialize = reinterpret_cast<HO_Work_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1400f7400));
-    s_fn_ResizeByteArray = reinterpret_cast<HO_ResizeByteArray_t>(
-        ResolveAddr(Module::Exe, 0x14000a590));
     s_fn_BST_RecursiveFree = reinterpret_cast<HO_BST_RecursiveFree_t>(
         ResolveAddr(Module::Exe, 0x14000e320));
     // Level-1 caller-bug fix: 0x14014e3a4 is MID-FUNCTION (inside Tool_StaticInit
@@ -238,7 +239,7 @@ bool HarvestOrchard_ResolveFuncs() {
               s_fn_BST_Insert && s_fn_BST_Remove && s_fn_BST_Serialize &&
               s_fn_ValidateTask && s_fn_TaskCancel && s_fn_FindPosComp &&
               s_fn_Work_Serialize && s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
-              s_fn_ResizeByteArray && s_fn_BST_RecursiveFree &&
+              s_fn_BST_RecursiveFree &&
               fn_InternalBasePtr_CheckPtr && fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom && g_pGameWorldSingleton &&
               s_typeId_OrchardDesc && s_typeId_DescComp && s_fHalfCellOffset &&
@@ -275,7 +276,6 @@ bool HarvestOrchard_ResolveFuncs() {
         HO_MISS(s_fn_Work_Serialize, "Work_Serialize");
         HO_MISS(s_fn_Serializer_Ctor, "Serializer_Ctor (slot 0x140152ad8)");
         HO_MISS(s_fn_Serializer_Dtor, "Serializer_Dtor (slot 0x140152ad0)");
-        HO_MISS(s_fn_ResizeByteArray, "ResizeByteArray");
         HO_MISS(s_fn_BST_RecursiveFree, "BST_RecursiveFree");
         HO_MISS(fn_InternalBasePtr_CheckPtr, "fn_InternalBasePtr_CheckPtr");
         HO_MISS(fn_InternalBasePtr_Ctor, "fn_InternalBasePtr_Ctor");
@@ -848,8 +848,9 @@ void HarvestOrchard_Serialize_Impl(HarvestOrchard* self, void* stream) {
     int cellCountBuf[2] = { cellCount, 0 };
     s_fn_Serializer_SerializeInt(serializerBuf2, cellCountBuf, nullptr);
 
+    // B.3.2 bridge: FUN_14000a590 == Collection::Array<uint8>::SetSize.
     if (*(int*)(*(uintptr_t*)serializerBuf2 + 8) == 0) {
-        s_fn_ResizeByteArray((void*)(selfAddr + 0x58), cellCountBuf[0]);
+        GameColl::AsArray<GameColl::U8>((void*)(selfAddr + 0x58)).SetSize(cellCountBuf[0]);
     }
 
     s_fn_Serializer_SerializeBoolArray(serializerBuf2, cellCountBuf[0],

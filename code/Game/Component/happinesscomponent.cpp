@@ -13,6 +13,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/happinesscomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -55,11 +56,10 @@ static fn_ArrayEraseByValue_t s_fn_ArrayEraseByValue = nullptr;
 typedef void (*fn_SetEntityIndex_t)(void* self, int16_t index);
 static fn_SetEntityIndex_t s_fn_SetEntityIndex = nullptr;
 
-// FUN_140003110 -- ArrayPush(base, newCount, elemPtr): grow to newCount and store.
+// FUN_140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
+// into the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
 // (0x140002cc0 above, despite its legacy name, is the ERASE -- see the 1:1 port in
 // cemeterycomponent.cpp. The two are the register/unregister pair for townMgr+0x50.)
-typedef void (*fn_ArrayPush_t)(void* arrayBase, int newCount, void* elementPtr);
-static fn_ArrayPush_t s_fn_ArrayPush = nullptr;
 
 // 0x140002e10 AttendanceComponent_GetJobHostComponent(entity, outIBP) -- the owner's
 // workplace, used by the "needs staff" arm of IsActive.
@@ -114,8 +114,6 @@ static void EnsureHelpers() {
     if (slot) s_fn_Serializer_SerializeBool = reinterpret_cast<fn_Serializer_SerializeBool_t>(
         *reinterpret_cast<uintptr_t*>(slot));
 
-    s_fn_ArrayPush = reinterpret_cast<fn_ArrayPush_t>(
-        ResolveAddr(Module::Exe, 0x140003110));
     s_fn_GetJobHost = reinterpret_cast<fn_GetJobHost_t>(
         ResolveAddr(Module::Exe, 0x140002e10));
     s_fn_FindStorage = reinterpret_cast<fn_FindStorage_t>(
@@ -468,12 +466,14 @@ extern "C" void HappinessComponent_Register(void* selfV) {
     uint8_t basePtr[24] = {};
     if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(basePtr, self);
 
-    if (s_fn_ArrayPush && s_pGameWorld && *s_pGameWorld) {
+    if (s_pGameWorld && *s_pGameWorld) {
         const uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
             reinterpret_cast<uintptr_t>(*s_pGameWorld) + 0xF0);
         if (townMgr) {
             const int count = *reinterpret_cast<int*>(townMgr + 0x58);
-            s_fn_ArrayPush(reinterpret_cast<void*>(townMgr + 0x50), count + 1, basePtr);
+            // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+            GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(townMgr + 0x50))
+                .SetSizeFill(count + 1, basePtr);
 
             static int n = 0;
             if (n < 8) { ++n;

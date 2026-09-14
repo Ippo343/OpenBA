@@ -22,6 +22,7 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -110,8 +111,10 @@ typedef void (*PAW_ExternalRef_Serialize_t)(void* refPtr, void* serializer);
 static PAW_ExternalRef_Serialize_t s_fn_ExternalRef_Serialize = nullptr;  // 0x140002340
 
 // Resize byte array (FUN_14000a590)
-typedef void (*PAW_ResizeByteArray_t)(void* arrayField, int newCount);
-static PAW_ResizeByteArray_t s_fn_ResizeByteArray = nullptr;  // 0x14000a590
+// 0x14000a590 (Array<uint8>::SetSize) is the exe-side Collection::Array<T>
+// monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
+// GameColl::AsArray<GameColl::U8> member call, so its resolved-pointer stand-in
+// is gone.
 
 // MemAlloc / MemFree
 typedef void* (*PAW_MemAlloc_t)(int64_t size, int align);
@@ -176,8 +179,6 @@ bool PlantArea_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x140002e10));
     s_fn_Work_Serialize = reinterpret_cast<PAW_Work_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1400f7400));
-    s_fn_ResizeByteArray = reinterpret_cast<PAW_ResizeByteArray_t>(
-        ResolveAddr(Module::Exe, 0x14000a590));
     s_fn_ExternalRef_Serialize = reinterpret_cast<PAW_ExternalRef_Serialize_t>(
         ResolveAddr(Module::Exe, 0x140002340));
     s_fn_CropDescComplete = reinterpret_cast<PAW_CropDescComplete_t>(
@@ -227,7 +228,7 @@ bool PlantArea_ResolveFuncs() {
               s_fn_TaskCancel && s_fn_FindSubEntity &&
               s_fn_Work_Serialize && s_fn_Serializer_Ctor &&
               s_fn_Serializer_Dtor && s_fn_Serializer_SerializeInt &&
-              s_fn_ResizeByteArray && s_fn_ExternalRef_Serialize &&
+              s_fn_ExternalRef_Serialize &&
               s_fn_CropDescComplete &&
               fn_InternalBasePtr_CheckPtr && fn_MemFreeStatic &&
               g_pGameWorldSingleton && s_fHalfCellOffset &&
@@ -257,7 +258,6 @@ bool PlantArea_ResolveFuncs() {
         if (!s_fn_Serializer_Ctor) printf("  MISSING: Serializer_Ctor\n");
         if (!s_fn_Serializer_Dtor) printf("  MISSING: Serializer_Dtor\n");
         if (!s_fn_Serializer_SerializeInt) printf("  MISSING: Serializer_SerializeInt\n");
-        if (!s_fn_ResizeByteArray) printf("  MISSING: ResizeByteArray\n");
         if (!s_fn_ExternalRef_Serialize) printf("  MISSING: ExternalRef_Serialize\n");
         if (!s_fn_CropDescComplete) printf("  MISSING: CropDescComplete\n");
     }
@@ -861,9 +861,10 @@ void PlantArea_Serialize_Impl(PlantArea* self, void* stream) {
     int cellCountBuf[2] = { *(int*)(selfAddr + 0x60), 0 };
     s_fn_Serializer_SerializeInt(serializerBuf, cellCountBuf, nullptr);
 
-    // If reading (serializer mode == 0), resize validity array
+    // If reading (serializer mode == 0), resize validity array.
+    // B.3.2 bridge: FUN_14000a590 == Collection::Array<uint8>::SetSize.
     if (*(int*)(*(uintptr_t*)serializerBuf + 8) == 0) {
-        s_fn_ResizeByteArray((void*)(selfAddr + 0x58), cellCountBuf[0]);
+        GameColl::AsArray<GameColl::U8>((void*)(selfAddr + 0x58)).SetSize(cellCountBuf[0]);
     }
 
     // Serialize validity array (byte array)

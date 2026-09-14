@@ -10,6 +10,7 @@
 //
 
 #include "Component/terraformcomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
@@ -31,10 +32,6 @@ static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
 
 typedef void (*fn_SerializeInt_t)(void* self, int* value, const char* name);
 static fn_SerializeInt_t s_fn_SerializeInt = nullptr;
-
-// FUN_14000d030 — resize Vector3 array
-typedef void (*fn_ResizeVec3Array_t)(void* arrayPtr, uint32_t newCount);
-static fn_ResizeVec3Array_t s_fn_ResizeVec3Array = nullptr;
 
 // Terrain helpers for the OnRemove restore + the completion passes
 // CitizenAI_impl_b150 (0x1400ab150) — terrain region-dirty recalc around (x,y).
@@ -84,8 +81,10 @@ void TerraformComponent_Shutdown(TerraformComponent* self, void* stream) {
         s_fn_SerializeInt(serializer, (int*)&localCount, nullptr);
 
     // If loading, resize the Vector3 array
-    if (*(int*)((uintptr_t)stream + 8) == 0 && s_fn_ResizeVec3Array) {
-        s_fn_ResizeVec3Array((void*)(selfAddr + 0x28), localCount);
+    // B.3.2 bridge: FUN_14000d030 is Collection::Array<Vector3>::SetSize(n)
+    if (*(int*)((uintptr_t)stream + 8) == 0) {
+        GameColl::AsArray<GameColl::Vec3>((void*)(selfAddr + 0x28))
+            .SetSize(static_cast<int>(localCount));
     }
 
     // Serialize each Vector3 (12 bytes each)
@@ -197,8 +196,6 @@ void TerraformComponent_InitFuncs() {
 
     s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1401189b0));
-    s_fn_ResizeVec3Array = reinterpret_cast<fn_ResizeVec3Array_t>(
-        ResolveAddr(Module::Exe, 0x14000d030));
     s_fn_TerrainRecalc = reinterpret_cast<fn_TerrainRecalc_t>(
         ResolveAddr(Module::Exe, 0x1400ab150));
     s_fn_RegionDirty = reinterpret_cast<fn_RegionDirty_t>(

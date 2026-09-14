@@ -33,6 +33,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -57,13 +58,15 @@ static uintptr_t s_vt_CreateRaw = 0;
 static uintptr_t s_vt_MoveTo  = 0;
 static uintptr_t s_vt_SendMsg = 0;
 // --- Registered exe sub-callees, called via ResolveAddr. ---
-typedef void (*fn_arrayGrow_t)(void* self, int newCap);              // 0x1400032e0
+// 0x1400032e0 (Array<Ptr8>::SetSize) is the exe-side Collection::Array<T>
+// monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
+// GameColl::AsArray<GameColl::Ptr8> member call, so its resolved-pointer stand-in
+// is gone.
 typedef void (*fn_notify_t)(void* self);                            // 0x1400c3470
 typedef void* (*fn_findFamily_t)(uintptr_t entity, void* retIBP);   // 0x1400012d0
 typedef void (*fn_taskCleanup_t)(void* listAt48);                   // 0x1400c5400
 typedef void* (*fn_findStorage_t)(uintptr_t entity, void* retIBP);  // 0x140006270
 typedef void (*fn_storageSub_t)(uintptr_t storage, int64_t resType, int count); // 0x14012d150
-static fn_arrayGrow_t   s_fn_arrayGrow   = nullptr;
 static fn_notify_t      s_fn_notify      = nullptr;
 static fn_findFamily_t  s_fn_findFamily  = nullptr;
 static fn_taskCleanup_t s_fn_taskCleanup = nullptr;
@@ -87,7 +90,6 @@ static void EnsureInit() {
     s_vt_CreateRaw = ResolveAddr(Module::Exe, 0x14015fd10);
     s_vt_MoveTo   = ResolveAddr(Module::Exe, 0x14015fe40);
     s_vt_SendMsg  = ResolveAddr(Module::Exe, 0x1401600c0);
-    s_fn_arrayGrow   = reinterpret_cast<fn_arrayGrow_t>(ResolveAddr(Module::Exe, 0x1400032e0));
     s_fn_notify      = reinterpret_cast<fn_notify_t>(ResolveAddr(Module::Exe, 0x1400c3470));
     s_fn_findFamily  = reinterpret_cast<fn_findFamily_t>(ResolveAddr(Module::Exe, 0x1400012d0));
     s_fn_taskCleanup = reinterpret_cast<fn_taskCleanup_t>(ResolveAddr(Module::Exe, 0x1400c5400));
@@ -138,7 +140,12 @@ void Pf_ActStackPush_54e0(int64_t* param_1, void* param_2_) {
         if (static_cast<int>(param_1[3]) + 1 != iVar1) goto LAB_550e;
         iVar1 = iVar1 * 2;
     }
-    if (s_fn_arrayGrow) s_fn_arrayGrow(param_1, iVar1);
+    // B.3.2 bridge: FUN_1400032e0 == Collection::Array<Ptr8>::SetSize (stride 8,
+    // zero tail; ImmigrationComp_DynArrayResize in immigrationcomponent.cpp). It only
+    // touches bytes [0x00,0x10) at the pointer it is given -- the array header
+    // embedded at the front of this action-stack struct -- so this call is
+    // unaffected by whatever the surrounding struct keeps at param_1[3] (+0x18).
+    GameColl::AsArray<GameColl::Ptr8>(param_1).SetSize(iVar1);
 LAB_550e:
     if (-1 < static_cast<int>(param_1[3])) {
         uint64_t local_res8 = *reinterpret_cast<uint64_t*>(

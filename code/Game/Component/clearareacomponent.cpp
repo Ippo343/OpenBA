@@ -11,6 +11,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/clearareacomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -110,24 +111,22 @@ void ClearAreaComponent_InitFuncs() {
 //   tile stride 0x30 bytes; entity ptr slot at +0x08.  gw+0xe8 -> EntityList.
 
 typedef void (*fn_MarkForRemoval_t)(void* entity);
-typedef void (*fn_ArrayPush_t)(void* arr, int newCount, void* valuePtr);
 static fn_MarkForRemoval_t s_fn_MarkForRemoval = nullptr;
-static fn_ArrayPush_t      s_fn_ArrayPush = nullptr;
 static bool                s_sweepResolved = false;
 
+// 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
+// into the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
 static void ClearArea_ResolveSweepFuncs() {
     if (s_sweepResolved) return;
     s_fn_MarkForRemoval = reinterpret_cast<fn_MarkForRemoval_t>(
         ResolveAddr(Module::Exe, 0x1400c2ea0));
-    s_fn_ArrayPush = reinterpret_cast<fn_ArrayPush_t>(
-        ResolveAddr(Module::Exe, 0x140003110));
     s_sweepResolved = true;
 }
 
 // Returns the number of footprint entities newly marked for removal.
 int ClearAreaComponent_FootprintSweep(ClearAreaComponent* self) {
     ClearArea_ResolveSweepFuncs();
-    if (!self || !s_fn_MarkForRemoval || !s_fn_ArrayPush || !fn_InternalBasePtr_CheckPtr) {
+    if (!self || !s_fn_MarkForRemoval || !fn_InternalBasePtr_CheckPtr) {
         return 0;
     }
 
@@ -184,7 +183,8 @@ int ClearAreaComponent_FootprintSweep(ClearAreaComponent* self) {
             s_fn_MarkForRemoval(local);
             uintptr_t rl = reinterpret_cast<uintptr_t>(entityList) + 0xD0;
             int cnt = *reinterpret_cast<int*>(rl + 0x8);
-            s_fn_ArrayPush(reinterpret_cast<void*>(rl), cnt + 1, &local);
+            // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+            GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(rl)).SetSizeFill(cnt + 1, &local);
             ++marked;
         }
     }

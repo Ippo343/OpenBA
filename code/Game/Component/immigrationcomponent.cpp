@@ -24,6 +24,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/immigrationcomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -60,9 +61,9 @@ static fn_Time_Serialize_t s_fn_Time_Serialize = nullptr;
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* self, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_d = nullptr;
 
-// FUN_1400032e0 -- dynamic array resize
-typedef void (*fn_DynArray_Resize_t)(void* arrayPtr, int newCount);
-static fn_DynArray_Resize_t s_fn_DynArray_Resize = nullptr;
+// FUN_1400032e0 -- dynamic array resize; this file DEFINES its body as
+// ImmigrationComp_DynArrayResize below (kept, still registered for other
+// callers) — this file's own call site goes straight through the bridge.
 
 // Type ID for ComponentEntity (DAT_1401c5d70)
 static uint32_t* s_pTypeId_ComponentEntity = nullptr;
@@ -76,8 +77,6 @@ static void EnsureHelpers() {
 
     s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1401189b0));
-    s_fn_DynArray_Resize = reinterpret_cast<fn_DynArray_Resize_t>(
-        ResolveAddr(Module::Exe, 0x1400032e0));
     s_pTypeId_ComponentEntity = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c5d70));
 
@@ -194,41 +193,17 @@ void ImmigrationComponent_Shutdown(ImmigrationComponent* self, void* stream) {
 
 // ============================================================
 // Reimpl of FUN_1400032e0 (Component reg wave "people") — shared DynArray<ptr> resize.
-// Grows a {ptr, count, cap} array (param[0]=buffer, param[1] low32=count,
-// param[1] high32 / +0xc=capacity) to `newCount` 8-byte slots, copying existing
-// elements and zeroing new ones (3x growth policy). Used by several controller
-// components' Shutdown serialize paths. Non-static for registration.
+// ENDGAME B.3.2 step 2: this IS Collection::Array<void*>::SetSize(n) — the old
+// hand-written body's copy path did `*slot = 0;` immediately before assigning
+// the copied 8-byte value into the same slot; that default-construct-then-
+// assign is exactly what SetSizeCore's byte-copy `assign` does for a
+// zero-default element and is unobservable (the write is overwritten before
+// anything reads it), so the bridge call below is byte-for-byte identical.
+// Non-static: still registered by reg_component_people.cpp for other callers,
+// so this function is KEPT (not deleted/unregistered) — only its body changed.
 // ============================================================
 void ImmigrationComp_DynArrayResize(int64_t* param_1, int newCount) {
-    int oldCount = static_cast<int>(param_1[1]);
-    if (newCount == oldCount) return;
-
-    void* oldBuf = reinterpret_cast<void*>(*param_1);
-    *reinterpret_cast<int*>(&param_1[1]) = newCount;
-    if (*reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(param_1) + 0xc) < newCount) {
-        *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(param_1) + 0xc) = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) {
-            *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(param_1) + 0xc) = newCount * 3;
-        }
-        void* nb = fn_MemAlloc(g_pMemAllocSingleton,
-                               (uint64_t)*reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(param_1) + 0xc) << 3, 8);
-        *param_1 = reinterpret_cast<int64_t>(nb);
-    }
-    int start = (oldBuf == reinterpret_cast<void*>(*param_1)) ? oldCount : 0;
-    for (int64_t i = start; i < newCount; i++) {
-        int64_t* slot = reinterpret_cast<int64_t*>(*param_1 + i * 8);
-        if (i < oldCount) {
-            if (slot) {
-                *slot = 0;
-                *slot = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(oldBuf) + i * 8);
-            }
-        } else if (slot) {
-            *slot = 0;
-        }
-    }
-    if (oldBuf != reinterpret_cast<void*>(*param_1)) {
-        if (oldBuf) fn_MemFreeStatic(oldBuf);
-    }
+    GameColl::AsArray<GameColl::Ptr8>(param_1).SetSize(newCount);
 }
 
 // ============================================================

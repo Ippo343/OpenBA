@@ -64,6 +64,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include <cstdint>
 #include <cstdio>
@@ -83,7 +84,9 @@ static bool Milestone() { return s_milestones++ < 60; }
 // ============================================================
 typedef void* (*fn_FindIBP_t)(uintptr_t entity, void* retIBP);
 typedef void  (*fn_ModelNotify_t)(void* ownerEntity, int mode);        // 0x1400c2b70
-typedef void  (*fn_StorageResize_t)(void* slotArrayField, int n);      // 0x14000f090
+// 0x14000f090 was Collection::Array<Bytes<0x10,8>>::SetSize monomorphised
+// into the exe (ENDGAME B.3.2 step 2: stride 0x10, align 8, zero tail) —
+// converted at its call site below.
 typedef void  (*fn_PickRebuild_t)(void* pickingComp);                  // 0x140128f50
 typedef void  (*fn_SetMesh_t)(void* meshInstance, void* mesh);         // slot 0x140151498
 typedef void* (*fn_GetMaterialList_t)(void* graphicsMesh, int setIdx); // slot 0x140152288
@@ -94,7 +97,6 @@ static fn_FindIBP_t         s_findModel     = nullptr;  // 0x140003f60 (ModelCom
 static fn_FindIBP_t         s_findStorage   = nullptr;  // 0x140006270 (StorageComponent)
 static fn_FindIBP_t         s_findPicking   = nullptr;  // 0x140026a30 (PickingComponent)
 static fn_ModelNotify_t     s_modelNotify   = nullptr;
-static fn_StorageResize_t   s_storageResize = nullptr;
 static fn_PickRebuild_t     s_pickRebuild   = nullptr;
 static fn_SetMesh_t         s_setMesh       = nullptr;
 static fn_GetMaterialList_t s_getMatList    = nullptr;
@@ -117,7 +119,6 @@ static void EnsureResolved() {
     s_findStorage   = reinterpret_cast<fn_FindIBP_t>(ResolveAddr(Module::Exe, 0x140006270));
     s_findPicking   = reinterpret_cast<fn_FindIBP_t>(ResolveAddr(Module::Exe, 0x140026a30));
     s_modelNotify   = reinterpret_cast<fn_ModelNotify_t>(ResolveAddr(Module::Exe, 0x1400c2b70));
-    s_storageResize = reinterpret_cast<fn_StorageResize_t>(ResolveAddr(Module::Exe, 0x14000f090));
     s_pickRebuild   = reinterpret_cast<fn_PickRebuild_t>(ResolveAddr(Module::Exe, 0x140128f50));
     s_setMesh       = reinterpret_cast<fn_SetMesh_t>(ReadSlot(0x140151498));
     s_getMatList    = reinterpret_cast<fn_GetMaterialList_t>(ReadSlot(0x140152288));
@@ -517,8 +518,11 @@ extern "C" char Destroy_State6Enter_d4d0(void* data, void* /*sm*/) {
                 reinterpret_cast<void*>(townMgr), &entityCopy);
         }
         void* storage = FindOn(entitySlot, s_findStorage);
-        if (storage && s_storageResize)
-            s_storageResize(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(storage) + 0x28), 0);
+        if (storage) {
+            // B.3.2 bridge: exe 0x14000f090 IS Collection::Array<Bytes<0x10,8>>::SetSize(n).
+            GameColl::AsArray<GameColl::Bytes<0x10, 8>>(
+                reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(storage) + 0x28)).SetSize(0);
+        }
         if (Milestone()) {
             std::fprintf(stderr, "[Collapse] state-6 enter comp=%p — storage emptied, "
                                  "citizen actions cancelled\n", data);

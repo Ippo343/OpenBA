@@ -31,6 +31,7 @@
 // yet (GameUpdateLoop::SaveRestore is a no-op stub), so this is unreachable
 // today; it brings the class to parity with the rest of the save/load wave.
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 
 namespace {
@@ -40,14 +41,12 @@ typedef void (*fn_SerCtor_t)(void* ser, void* stream, int version);
 typedef void (*fn_SerDtor_t)(void* ser);
 typedef void (*fn_SerInt_t)(void* ser, void* field, const char* name);
 typedef void (*fn_SerByteArray_t)(void* ser, int count, void* data, const char* name);
-typedef void (*fn_ResizeByteArray_t)(void* arrPair, int count);
 
 fn_ComponentSerialize_t s_Base     = nullptr;  // 0x1401189b0
 fn_SerCtor_t            s_Ctor     = nullptr;  // slot 0x140152ad8
 fn_SerDtor_t            s_Dtor     = nullptr;  // slot 0x140152ad0
 fn_SerInt_t             s_Int      = nullptr;  // slot 0x140152ac8
 fn_SerByteArray_t       s_ByteArr  = nullptr;  // slot 0x140152400
-fn_ResizeByteArray_t    s_Resize1  = nullptr;  // 0x14000a590 (verified function entry)
 
 bool s_resolved = false;
 
@@ -68,9 +67,6 @@ void Resolve() {
     if (slot) s_Int = *reinterpret_cast<fn_SerInt_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152400);
     if (slot) s_ByteArr = *reinterpret_cast<fn_SerByteArray_t*>(slot);
-
-    s_Resize1 = reinterpret_cast<fn_ResizeByteArray_t>(
-        ResolveAddr(Module::Exe, 0x14000a590));
 
     s_resolved = true;
 }
@@ -100,7 +96,8 @@ extern "C" void UIComponent_Serialize(void* self, void* stream) {
 
     int count = *reinterpret_cast<int*>(At(self, 0x30));
     s_Int(ser, &count, nullptr);
-    if (Loading(ser) && s_Resize1) s_Resize1(At(self, 0x28), count);
+    // B.3.2 bridge: FUN_14000a590 is Collection::Array<uint8_t>::SetSize(n)
+    if (Loading(ser)) GameColl::AsArray<GameColl::U8>(At(self, 0x28)).SetSize(count);
 
     if (s_ByteArr) {
         uint8_t* ptr = *reinterpret_cast<uint8_t**>(At(self, 0x28));

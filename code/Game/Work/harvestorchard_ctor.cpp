@@ -25,6 +25,7 @@
 #include "harvestorchard_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -32,11 +33,13 @@ namespace {
 
 typedef void* (*fn_Work_Ctor25_t)(void* self, void* entityIBP);       // 0x1400f72e0
 typedef void* (*fn_FindOrchard_t)(int64_t entity, void* outIBP);      // 0x140005440
-typedef void  (*fn_ResizeBytes_t)(void* arrayTriple, int newCount);   // 0x14000a590
+// 0x14000a590 (Array<uint8>::SetSize) is the exe-side Collection::Array<T>
+// monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
+// GameColl::AsArray<GameColl::U8> member call, so its resolved-pointer stand-in
+// is gone.
 
 fn_Work_Ctor25_t s_WorkCtor25  = nullptr;
 fn_FindOrchard_t s_FindOrchard = nullptr;
-fn_ResizeBytes_t s_ResizeBytes = nullptr;
 uintptr_t        s_vtableHarvest    = 0;   // 0x140161520
 uintptr_t        s_vtableAutoPickup = 0;   // 0x140161380
 bool             s_resolved    = false;
@@ -45,18 +48,16 @@ void Resolve() {
     if (s_resolved) return;
     s_WorkCtor25       = reinterpret_cast<fn_Work_Ctor25_t>(ResolveAddr(Module::Exe, 0x1400f72e0));
     s_FindOrchard      = reinterpret_cast<fn_FindOrchard_t>(ResolveAddr(Module::Exe, 0x140005440));
-    s_ResizeBytes      = reinterpret_cast<fn_ResizeBytes_t>(ResolveAddr(Module::Exe, 0x14000a590));
     s_vtableHarvest    = ResolveAddr(Module::Exe, 0x140161520);
     s_vtableAutoPickup = ResolveAddr(Module::Exe, 0x140161380);
-    s_resolved = s_WorkCtor25 && s_FindOrchard && s_ResizeBytes && s_vtableHarvest;
+    s_resolved = s_WorkCtor25 && s_FindOrchard && s_vtableHarvest;
     if (!s_resolved) {
         static bool reported = false;
         if (!reported) {
             reported = true;
-            std::fprintf(stderr, "[HarvestOrchardCtor] UNRESOLVED:%s%s%s%s\n",
+            std::fprintf(stderr, "[HarvestOrchardCtor] UNRESOLVED:%s%s%s\n",
                 s_WorkCtor25    ? "" : " Work_Ctor25",
                 s_FindOrchard   ? "" : " FindComponent_Orchard",
-                s_ResizeBytes   ? "" : " ResizeByteArray",
                 s_vtableHarvest ? "" : " vtable_HarvestOrchard (0x140161520)");
             std::fflush(stderr);
         }
@@ -100,9 +101,9 @@ extern "C" void* HarvestOrchard_CtorFromEntity(void* mem, void** entityIBP) {
                                       // orchard, so this can only fire if our caller is
                                       // wrong. Same guard plantorchard_ctor.cpp carries.
 
-    if (s_ResizeBytes)
-        s_ResizeBytes(reinterpret_cast<void*>(s + 0x58),
-                      *reinterpret_cast<int32_t*>(orchardIBP + 0x58));
+    // B.3.2 bridge: FUN_14000a590 == Collection::Array<uint8>::SetSize.
+    GameColl::AsArray<GameColl::U8>(reinterpret_cast<void*>(s + 0x58))
+        .SetSize(*reinterpret_cast<int32_t*>(orchardIBP + 0x58));
 
     // One byte per orchard slot: 1 = there is a tree here to pick, 0 = hole. Retail
     // re-runs CheckPtr on the orchard IBP every iteration and loops on the WORK item's

@@ -70,6 +70,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (type-id fallback)
 #include <cstdint>
 #include <cstdio>
@@ -88,7 +89,8 @@ typedef void  (*fn_PostWork_t)(int64_t workComp, uint32_t code, char flag, void*
 typedef void  (*fn_ReleaseWorkers_t)(int64_t wp);               // 0x14012f670 (reg_destroy_workers.cpp)
 typedef void  (*fn_TradeNotify_t)(int64_t tradeMgr, void* entityIBP);  // 0x140103480
 typedef void  (*fn_MarkForRemoval_t)(int64_t entity);           // 0x1400c2ea0
-typedef void  (*fn_DynArrInsert_t)(int64_t* arr, int count, void* ibp); // 0x140003110
+// 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
+// into the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
 typedef void* (*fn_CopyCtor_t)(void* mem, void* templ);         // 0x1400c3720
 typedef void  (*fn_RegEntity_t)(void* entityList, void* entityIBP, int category); // 0x1400c48a0
 // WARNING: THE THIRD ARG IS A FLOAT. 0x140003870 reads it from XMM2 (`movaps xmm6,xmm2`
@@ -118,7 +120,6 @@ static fn_PostWork_t        s_ec60      = nullptr;
 static fn_ReleaseWorkers_t  s_f670      = nullptr;  // WorkPlaceComponent_LeaveBuilderProfession
 static fn_TradeNotify_t     s_trade3480 = nullptr;
 static fn_MarkForRemoval_t  s_markRemoval = nullptr;
-static fn_DynArrInsert_t    s_dynInsert = nullptr;
 static fn_CopyCtor_t        s_copyCtor  = nullptr;
 static fn_RegEntity_t       s_regEntity = nullptr;
 static fn_SetTransform_t    s_setTransform = nullptr;
@@ -146,7 +147,6 @@ static void EnsureResolved() {
     s_f670      = reinterpret_cast<fn_ReleaseWorkers_t>(ResolveAddr(Module::Exe, 0x14012f670));
     s_trade3480 = reinterpret_cast<fn_TradeNotify_t>(ResolveAddr(Module::Exe, 0x140103480));
     s_markRemoval = reinterpret_cast<fn_MarkForRemoval_t>(ResolveAddr(Module::Exe, 0x1400c2ea0));
-    s_dynInsert = reinterpret_cast<fn_DynArrInsert_t>(ResolveAddr(Module::Exe, 0x140003110));
     s_copyCtor  = reinterpret_cast<fn_CopyCtor_t>(ResolveAddr(Module::Exe, 0x1400c3720));
     s_regEntity = reinterpret_cast<fn_RegEntity_t>(ResolveAddr(Module::Exe, 0x1400c48a0));
     s_setTransform = reinterpret_cast<fn_SetTransform_t>(ResolveAddr(Module::Exe, 0x140003870));
@@ -516,9 +516,9 @@ static void Destroy_MarkAndPushRemoval(int64_t entity) {
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entity);
     if (((*reinterpret_cast<uint32_t*>(entity + 0x40) >> 10) & 1) != 0) return;
     if (s_markRemoval) s_markRemoval(entity);
-    if (s_dynInsert)
-        s_dynInsert(reinterpret_cast<int64_t*>(entityList + 0xd0),
-                    *reinterpret_cast<int*>(entityList + 0xd8) + 1, &entity);
+    // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+    GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(entityList + 0xd0))
+        .SetSizeFill(*reinterpret_cast<int*>(entityList + 0xd8) + 1, &entity);
 }
 
 // d6c0 yard material math: delivered (+0x48), required = desc(+0x18)->+0x30 *

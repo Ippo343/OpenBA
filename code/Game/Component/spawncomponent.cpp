@@ -12,6 +12,7 @@
 
 #include "Component/spawncomponent_funcs.h"
 #include "Component/component_factory_base.h"   // ComponentFactory::the live gate
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -38,10 +39,9 @@ static uint32_t* s_pSpawnResourceTypeId = nullptr;   // DAT_1401c4918 = SpawnDes
 static uint32_t* s_pSpawnTemplateTypeId = nullptr;    // DAT_1401c77e8 = GrowthDescription
 
 // FUN_140001bb0 — dynamic Time-array resize (stride 8). Sizes the per-entry timer
-// array at self+0x28 in the OnCreate/Startup body-init. Already registered in
-// standalone (address_registry.cpp -> Reimpl_Array_Resize_Stride08); we just resolve it.
-typedef void (*fn_ArrayResize8_t)(void* arrayDesc, int newCount);
-static fn_ArrayResize8_t s_fn_ArrayResize8 = nullptr;
+// array at self+0x28 in the OnCreate/Startup body-init. ENDGAME B.3.2 step 2:
+// converted to GameColl::AsArray<GameColl::Ptr8>(h).SetSize(n) (same stride/align/
+// zero-tail as Collection::Array<void*>::SetSize).
 
 // ---- stream-serialize helpers (vtable slot [3], see SpawnComponent_Serialize) ----
 typedef void (*fn_ComponentSerialize_t)(void* self, void* stream);
@@ -306,8 +306,6 @@ void SpawnComponent_InitFuncs() {
         ResolveAddr(Module::Exe, 0x1401c4918));
     s_pSpawnTemplateTypeId = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c77e8));
-    s_fn_ArrayResize8 = reinterpret_cast<fn_ArrayResize8_t>(
-        ResolveAddr(Module::Exe, 0x140001bb0));
 
     s_fn_ComponentSerialize = reinterpret_cast<fn_ComponentSerialize_t>(
         ResolveAddr(Module::Exe, 0x1401189b0));
@@ -352,8 +350,7 @@ void SpawnComponent_Startup(SpawnComponent* self) {
     if (entryCount <= 0) return;
 
     // Resize the timer array (descriptor at comp+0x28). Zero-initialised entries.
-    if (s_fn_ArrayResize8)
-        s_fn_ArrayResize8(reinterpret_cast<void*>(comp + 0x28), entryCount);
+    GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(comp + 0x28)).SetSize(entryCount);
 }
 
 // ============================================================
@@ -367,7 +364,7 @@ void SpawnComponent_Startup(SpawnComponent* self) {
 //   +0x28  Time[count]     per-entry accumulation timers, stride 8 (see
 //                           SpawnComponent_Startup / SpawnComponent_Update),
 //                           load-side resized via the same stride-8 resizer
-//                           (0x140001bb0, already resolved as s_fn_ArrayResize8)
+//                           (0x140001bb0, GameColl::AsArray<GameColl::Ptr8>::SetSize)
 //                           used by Startup's body-init.
 //   On load only, retail then reconciles the restored count against the LIVE
 //   SpawnDescription's entry count (desc+0x28, desc validated by
@@ -391,8 +388,8 @@ extern "C" void SpawnComponent_Serialize(void* self, void* stream) {
 
     int count = *reinterpret_cast<int*>(comp + 0x30);
     s_fn_SerInt(ser, &count, nullptr);
-    if (Loading(ser) && s_fn_ArrayResize8)
-        s_fn_ArrayResize8(comp + 0x28, count);  // also writes comp+0x30 = count
+    if (Loading(ser))
+        GameColl::AsArray<GameColl::Ptr8>(comp + 0x28).SetSize(count);  // also writes comp+0x30 = count
 
     uint8_t* timer = *reinterpret_cast<uint8_t**>(comp + 0x28);
     int n = *reinterpret_cast<int*>(comp + 0x30);
@@ -408,8 +405,8 @@ extern "C" void SpawnComponent_Serialize(void* self, void* stream) {
         int descCount = validated
             ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(validated) + 0x28)
             : 0;
-        if (*reinterpret_cast<int*>(comp + 0x30) != descCount && s_fn_ArrayResize8)
-            s_fn_ArrayResize8(comp + 0x28, descCount);
+        if (*reinterpret_cast<int*>(comp + 0x30) != descCount)
+            GameColl::AsArray<GameColl::Ptr8>(comp + 0x28).SetSize(descCount);
     }
 
     if (s_fn_SerDtor) s_fn_SerDtor(ser);

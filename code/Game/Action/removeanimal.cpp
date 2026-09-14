@@ -23,6 +23,7 @@
 #include "RemoveAnimal.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
@@ -41,9 +42,10 @@ static void (*s_fn_IBP_Serialize)(void* basePtr, void* serializer) = nullptr;
 // FUN_1400c2ea0 -- marks entity for removal (sets bit 10 of flags at +0x40)
 static void (*s_fn_MarkEntityRemoval)(void* entity) = nullptr;
 
-// FUN_140003110 -- array push (grows array and appends element)
-// Params: arrayBase, newCount, elementPtr
-static void (*s_fn_ArrayPush)(void* arrayBase, int newCount, void* elementPtr) = nullptr;
+// FUN_140003110 (array push) is the exe-side Collection::Array<Ptr8>::
+// SetSize(n,fill) monomorphisation -- ENDGAME B.3.2 step 2 converted its one
+// call site below to a GameColl::AsArray<GameColl::Ptr8> member call, so its
+// resolved-pointer stand-in is gone.
 
 // FUN_140005500 -- get model component from entity
 // Params: entity, outIBP (InternalBasePtr*)
@@ -84,9 +86,6 @@ bool RemoveAnimal_ResolveFuncs() {
     // FUN_1400c2ea0 -- mark entity removal
     s_fn_MarkEntityRemoval = (void(*)(void*))ResolveAddr(Module::Exe, 0x1400c2ea0);
 
-    // FUN_140003110 -- array push
-    s_fn_ArrayPush = (void(*)(void*, int, void*))ResolveAddr(Module::Exe, 0x140003110);
-
     // FUN_140005500 -- get model component
     s_fn_GetModelComp = (void(*)(void*, void*))ResolveAddr(Module::Exe, 0x140005500);
 
@@ -106,7 +105,7 @@ bool RemoveAnimal_ResolveFuncs() {
     s_vtable_Action = ResolveAddr(Module::Exe, 0x14015faa0);
 
     bool ok = s_fn_ObjectInternal_Dtor && s_fn_IBP_Serialize &&
-              s_fn_MarkEntityRemoval && s_fn_ArrayPush &&
+              s_fn_MarkEntityRemoval &&
               s_fn_GetModelComp && s_fn_NotifyEntityChanged &&
               s_typeId_ComponentEntity && s_typeInfo_RemoveAnimal &&
               s_dat_VectorDtorReturn &&
@@ -117,9 +116,9 @@ bool RemoveAnimal_ResolveFuncs() {
               g_fn_Serialize_Bool && g_pGameWorldSingleton;
 
 #ifdef _DEBUG
-    printf("[RemoveAnimal] ResolveFuncs: ObjDtor=%p IBPSer=%p MarkRemove=%p ArrayPush=%p\n",
+    printf("[RemoveAnimal] ResolveFuncs: ObjDtor=%p IBPSer=%p MarkRemove=%p\n",
            (void*)s_fn_ObjectInternal_Dtor, (void*)s_fn_IBP_Serialize,
-           (void*)s_fn_MarkEntityRemoval, (void*)s_fn_ArrayPush);
+           (void*)s_fn_MarkEntityRemoval);
     printf("[RemoveAnimal]   GetModel=%p Notify=%p typeIdCE=%p typeInfoRA=%p\n",
            (void*)s_fn_GetModelComp, (void*)s_fn_NotifyEntityChanged,
            (void*)s_typeId_ComponentEntity, (void*)s_typeInfo_RemoveAnimal);
@@ -246,9 +245,12 @@ int RemoveAnimal_AbstractImpl_Impl(RemoveAnimal* self, void* actionStack) {
             // Mark entity for removal
             s_fn_MarkEntityRemoval(localRef);
 
-            // Push to cleanup array
+            // Push to cleanup array.
+            // B.3.2 bridge: FUN_140003110 == Collection::Array<Ptr8>::SetSize(n,fill)
+            // (3-arg form; ActHunt_DynArraySetCount_3110 in action_base_hunt.cpp).
             int count = *(int*)((uint8_t*)cleanupMgr + 0xd8);
-            s_fn_ArrayPush((uint8_t*)cleanupMgr + 0xd0, count + 1, &localRef);
+            GameColl::AsArray<GameColl::Ptr8>((uint8_t*)cleanupMgr + 0xd0)
+                .SetSize(count + 1, *reinterpret_cast<const GameColl::Ptr8*>(&localRef));
         }
     }
     return 0;

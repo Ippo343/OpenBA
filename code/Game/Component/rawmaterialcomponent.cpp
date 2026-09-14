@@ -13,6 +13,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/rawmaterialcomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -58,8 +59,6 @@ typedef void (*fn_MarkForCollection_t)(void* entity);
 static fn_MarkForCollection_t s_fn_MarkForCollection = nullptr;
 
 // FUN_140003110 — add entity to world pending list
-typedef void (*fn_AddToPending_t)(void* listPtr, int newCount, void* entityPtr);
-static fn_AddToPending_t s_fn_AddToPending = nullptr;
 
 // System::Time::Time(out, float) — construct Time from float
 typedef void* (*fn_Time_FromFloat_t)(void* outTime, float seconds);
@@ -140,9 +139,6 @@ static void EnsureHelpers() {
 
     s_fn_MarkForCollection = reinterpret_cast<fn_MarkForCollection_t>(
         ResolveAddr(Module::Exe, 0x1400c2ea0));
-
-    s_fn_AddToPending = reinterpret_cast<fn_AddToPending_t>(
-        ResolveAddr(Module::Exe, 0x140003110));
 
     slot = ResolveAddr(Module::Exe, 0x140152b00);
     if (slot) s_fn_Time_FromFloat = *reinterpret_cast<fn_Time_FromFloat_t*>(slot);
@@ -401,10 +397,11 @@ void RawMaterialComponent_Update(RawMaterialComponent* self, int64_t* pDeltaTime
                 }
 
                 // Add to world pending list
-                if (s_fn_AddToPending) {
+                // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
+                {
                     int currentCount = *(int*)(worldMgr + 0xd8);
-                    s_fn_AddToPending((void*)(worldMgr + 0xd0), currentCount + 1,
-                                     (void*)((uintptr_t)self + 0x10));
+                    GameColl::AsArray<GameColl::Ptr8>((void*)(worldMgr + 0xd0))
+                        .SetSizeFill(currentCount + 1, (void*)((uintptr_t)self + 0x10));
                 }
             }
         }

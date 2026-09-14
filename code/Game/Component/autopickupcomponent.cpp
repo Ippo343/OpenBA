@@ -11,6 +11,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/autopickupcomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -40,9 +41,9 @@ static fn_Serialize_Int_t s_fn_Serialize_Int = nullptr;
 typedef void (*fn_Serialize_IntArray_t)(void* serializer, int count, int* array, const char* name);
 static fn_Serialize_IntArray_t s_fn_Serialize_IntArray = nullptr;
 
-// FUN_1400021d0(array_ptr_field, new_count) -- resize int array
-typedef void (*fn_ResizeIntArray_t)(void* arrayField, int newCount);
-static fn_ResizeIntArray_t s_fn_ResizeIntArray = nullptr;
+// The +0x30 int array. ENDGAME B.3.2 step 2: FUN_1400021d0 IS
+// `Collection::Array<int32>::SetSize`, MSVC-monomorphised into the exe, so the
+// resolved pointer is gone and the member call takes its place.
 
 // IsDerivedFrom dispatch slot
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
@@ -88,8 +89,9 @@ void AutoPickupComponent_Shutdown(AutoPickupComponent* self, void* stream) {
     // If loading (stream mode == 0), resize array at +0x30
     uintptr_t serializerObj = *(uintptr_t*)serializer;
     if (*(int*)(serializerObj + 8) == 0) {
-        if (s_fn_ResizeIntArray)
-            s_fn_ResizeIntArray((void*)(selfAddr + 0x30), localCount);
+        // B.3.2 bridge: +0x30 is the { int32* data; int32 size; int32 capacity }
+        // header; AutoPickupComponent is not a real class yet (§B.2).
+        GameColl::AsArray<GameColl::I32>((void*)(selfAddr + 0x30)).SetSize(localCount);
     }
 
     // Bulk-serialize int array
@@ -153,18 +155,14 @@ void AutoPickupComponent_InitFuncs() {
     slot = ResolveAddr(Module::Exe, 0x140151278);
     if (slot) s_fn_Serialize_IntArray = *reinterpret_cast<fn_Serialize_IntArray_t*>(slot);
 
-    s_fn_ResizeIntArray = reinterpret_cast<fn_ResizeIntArray_t>(
-        ResolveAddr(Module::Exe, 0x1400021d0));
-
     s_TypeId_AutoPickupDesc = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c3fe8));
 
     s_initialized = true;
 
 #ifdef _DEBUG
-    printf("[AutoPickupComponent] Funcs resolved: CompSerialize=%p Resize=%p TypeId=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_ResizeIntArray,
-           (void*)s_TypeId_AutoPickupDesc);
+    printf("[AutoPickupComponent] Funcs resolved: CompSerialize=%p TypeId=%p\n",
+           (void*)s_fn_Component_Serialize, (void*)s_TypeId_AutoPickupDesc);
 #endif
 }
 

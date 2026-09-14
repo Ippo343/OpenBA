@@ -13,6 +13,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/storagecomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
@@ -41,10 +42,6 @@ static fn_Serialize_Int_t s_fn_Serialize_Int = nullptr;
 // IO::Serializer::GetVersion — dispatch slot 0x140152a48
 typedef int (*fn_Serializer_GetVersion_t)(void* self);
 static fn_Serializer_GetVersion_t s_fn_Serializer_GetVersion = nullptr;
-
-// FUN_14000f090 — resize dynamic array (0x10-byte entries)
-typedef void (*fn_DynArrayResize_t)(void* arrayBase, int newCount);
-static fn_DynArrayResize_t s_fn_DynArrayResize = nullptr;
 
 // FUN_140002340 — serialize External reference (item type ptr)
 typedef void (*fn_SerializeExternalRef_t)(void* refPtr, void* serializer);
@@ -88,9 +85,6 @@ static void EnsureHelpers() {
 
     slot = ResolveAddr(Module::Exe, 0x140152a48);
     if (slot) s_fn_Serializer_GetVersion = *reinterpret_cast<fn_Serializer_GetVersion_t*>(slot);
-
-    s_fn_DynArrayResize = reinterpret_cast<fn_DynArrayResize_t>(
-        ResolveAddr(Module::Exe, 0x14000f090));
 
     s_fn_SerializeExternalRef = reinterpret_cast<fn_SerializeExternalRef_t>(
         ResolveAddr(Module::Exe, 0x140002340));
@@ -188,9 +182,9 @@ void StorageComponent_Shutdown(StorageComponent* self, void* stream) {
     // If loading (encoding direction == 0), resize the slot array
     int encodingDir = *(int*)(*(uintptr_t*)serializer + 8);
     if (encodingDir == 0) {
-        if (s_fn_DynArrayResize) {
-            s_fn_DynArrayResize((void*)(selfAddr + 0x28), serSlotCount);
-        }
+        // B.3.2 bridge: FUN_14000f090 is Collection::Array<Bytes<0x10,8>>::SetSize(n)
+        GameColl::AsArray<GameColl::Bytes<0x10, 8>>((void*)(selfAddr + 0x28))
+            .SetSize(serSlotCount);
     }
 
     // Iterate storage slots (each 0x10 bytes: [ptr(8), int(4), int(4)])
@@ -317,9 +311,8 @@ void StorageComponent_Draw(StorageComponent* self) {
     uint32_t defaultType = *(uint32_t*)(descAddr + 0x28);
 
     // Resize slot array to 0 (clear existing)
-    if (s_fn_DynArrayResize) {
-        s_fn_DynArrayResize((void*)(selfAddr + 0x28), 0);
-    }
+    // B.3.2 bridge: FUN_14000f090 is Collection::Array<Bytes<0x10,8>>::SetSize(n)
+    GameColl::AsArray<GameColl::Bytes<0x10, 8>>((void*)(selfAddr + 0x28)).SetSize(0);
 
     // Set computed values
     *(int*)(selfAddr + 0x38) = maxPerSlot * tileArea;
@@ -488,9 +481,9 @@ void StorageComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
     printf("[StorageComponent] Funcs resolved: Component_Serialize=%p Serializer_Ctor=%p "
-           "DynArrayResize=%p StorageAddSlot=%p TypeId_StorageDesc=%p\n",
+           "StorageAddSlot=%p TypeId_StorageDesc=%p\n",
            (void*)s_fn_Component_Serialize, (void*)s_fn_Serializer_Ctor,
-           (void*)s_fn_DynArrayResize, (void*)s_fn_StorageAddSlot,
+           (void*)s_fn_StorageAddSlot,
            (void*)s_TypeId_StorageDescription);
 #endif
 }

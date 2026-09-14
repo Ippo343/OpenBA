@@ -54,6 +54,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>    // [FLOODDIAG] diagnostic reporting
 #include <cstdlib>
@@ -75,7 +76,10 @@ typedef void  (*fn_AvlRebalance_t)(int64_t* avlHdr, int64_t* node);         // 0
 typedef int   (*fn_MoveHeuristic_t)(uintptr_t ctx, int cell, int dir);      // 0x1400a6030 (reg)
 typedef int   (*fn_NeighbourTile_t)(uintptr_t ctx, int cell, int dir);      // 0x1400a5ec0 (reg)
 typedef float (*fn_Sqrtf_t)(float x);                                       // 0x140132010 (reg)
-typedef void  (*fn_ArrayResize04_t)(int64_t* vec, int count);              // 0x1400021d0 (reg)
+// 0x1400021d0 (int-array SetSize) is the exe-side Collection::Array<int32>
+// monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
+// GameColl::AsArray<GameColl::I32> member call, so its resolved-pointer stand-in
+// is gone.
 typedef void* (*fn_FloodNodeAlloc_t)(uintptr_t avlHdr, uint32_t* key);      // 0x14001a9b0 (reg)
 typedef void  (*fn_TradeSlotResize_t)(int64_t* vec, int count, uint8_t* tmp); // 0x14001d940 (reg)
 
@@ -85,7 +89,6 @@ static fn_AvlRebalance_t    s_fn_AvlRebalance = nullptr;
 static fn_MoveHeuristic_t   s_fn_MoveHeur     = nullptr;
 static fn_NeighbourTile_t   s_fn_Neighbour    = nullptr;
 static fn_Sqrtf_t           s_fn_Sqrtf        = nullptr;
-static fn_ArrayResize04_t   s_fn_ArrResize04  = nullptr;
 static fn_FloodNodeAlloc_t  s_fn_FloodAlloc   = nullptr;
 static fn_TradeSlotResize_t s_fn_TradeResize  = nullptr;
 
@@ -113,7 +116,6 @@ static void EnsureFns() {
     s_fn_MoveHeur     = reinterpret_cast<fn_MoveHeuristic_t>(ResolveAddr(Module::Exe, 0x1400a6030));
     s_fn_Neighbour    = reinterpret_cast<fn_NeighbourTile_t>(ResolveAddr(Module::Exe, 0x1400a5ec0));
     s_fn_Sqrtf        = reinterpret_cast<fn_Sqrtf_t>(ResolveAddr(Module::Exe, 0x140132010));
-    s_fn_ArrResize04  = reinterpret_cast<fn_ArrayResize04_t>(ResolveAddr(Module::Exe, 0x1400021d0));
     s_fn_FloodAlloc   = reinterpret_cast<fn_FloodNodeAlloc_t>(ResolveAddr(Module::Exe, 0x14001a9b0));
     s_fn_TradeResize  = reinterpret_cast<fn_TradeSlotResize_t>(ResolveAddr(Module::Exe, 0x14001d940));
 
@@ -790,9 +792,11 @@ void Pf_WorkerApplyCmd_a6430(int64_t param_1, uint32_t* param_2, void* param_3, 
         // mutually exclusive. Extra hold time is negligible (the expensive A* already ran
         // outside the lock) and widening a lock can only remove races, never add them.
         if (s_fn_CSLock) s_fn_CSLock(reinterpret_cast<void*>(param_1 + 0x30));
-        if (s_fn_ArrResize04)
-            s_fn_ArrResize04(reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x160) +
-                                 (static_cast<uint64_t>(static_cast<uint>(param_2[3])) * 3 + 1) * 8), iVar2);
+        // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize.
+        GameColl::AsArray<GameColl::I32>(reinterpret_cast<void*>(
+                *reinterpret_cast<int64_t*>(param_1 + 0x160) +
+                (static_cast<uint64_t>(static_cast<uint>(param_2[3])) * 3 + 1) * 8))
+            .SetSize(iVar2);
         lVar4 = 0;
         if (0 < static_cast<int64_t>(iVar2)) {
             do {

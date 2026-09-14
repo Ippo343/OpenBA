@@ -26,6 +26,7 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include <cstdint>
 #include <cstdio>
@@ -43,8 +44,8 @@ namespace {
 typedef int   (*fn_Anchor7fb0_t)(void* entityIBPptr, float* out);
 // 0x140008830 — WorkBase distance metric between two cells (game = *(gw+0xf8)).
 typedef int   (*fn_CalcDist8830_t)(int* game, uint32_t cellA, uint32_t cellB);
-// 0x140003110 — growable 8-byte-element array: set-count + append *elemIBP.
-typedef void  (*fn_ArrayAdd3110_t)(int64_t* arrayStruct, int newCount, void* elemIBP);
+// 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
+// into the exe (ENDGAME B.3.2 step 2) — converted at its call sites below.
 // 0x1401163d0 — CitizenComponent::AssignWorkplace(self, workplaceIBP, slotIndex).
 //   Passing &nullIBP,-1 detaches the citizen from any workplace worker list and clears
 //   citizen+0x238 (workplace) / +0x240 (slot) — the "become an unassigned laborer" clear.
@@ -52,7 +53,6 @@ typedef void  (*fn_AssignWorkplace_t)(void* self, void* workplaceIBP, int slotIn
 
 fn_Anchor7fb0_t      s_anchor7fb0      = nullptr;
 fn_CalcDist8830_t    s_calcDist8830    = nullptr;
-fn_ArrayAdd3110_t    s_arrayAdd3110    = nullptr;
 fn_AssignWorkplace_t s_assignWorkplace = nullptr;
 uint32_t          s_tidResidence = 0;   // ResidenceComponent (c7cf0) — self-resolved
 bool              s_init         = false;
@@ -61,7 +61,6 @@ void EnsureFns() {
     if (s_init) return;
     s_anchor7fb0   = reinterpret_cast<fn_Anchor7fb0_t>(ResolveAddr(Module::Exe, 0x140087fb0));
     s_calcDist8830 = reinterpret_cast<fn_CalcDist8830_t>(ResolveAddr(Module::Exe, 0x140008830));
-    s_arrayAdd3110 = reinterpret_cast<fn_ArrayAdd3110_t>(ResolveAddr(Module::Exe, 0x140003110));
     s_assignWorkplace = reinterpret_cast<fn_AssignWorkplace_t>(ResolveAddr(Module::Exe, 0x1401163d0));
     if (s_tidResidence == 0) s_tidResidence = ::Object::GetTypeIdByName("ResidenceComponent");
     s_init = true;
@@ -404,13 +403,14 @@ void* Strat_c5f0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey)
 // ============================================================================
 extern "C" void CitizenComponent_OnAdd(void* citizenComp) {
     EnsureFns();
-    if (!citizenComp || !g_pGameWorldSingleton || !*g_pGameWorldSingleton || !s_arrayAdd3110) return;
+    if (!citizenComp || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     int64_t townMgr = TownMgr();
     if (townMgr == 0) return;
     int64_t ref[2] = { 0, 0 };
     Ctor(ref, citizenComp);
-    s_arrayAdd3110(reinterpret_cast<int64_t*>(townMgr + 0xa0),
-                   *reinterpret_cast<int*>(townMgr + 0xa8) + 1, ref);
+    // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+    GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(townMgr + 0xa0))
+        .SetSizeFill(*reinterpret_cast<int*>(townMgr + 0xa8) + 1, ref);
 }
 
 // ============================================================================
@@ -439,7 +439,6 @@ extern "C" void TownRegistry_RegisterResidence(int64_t houseEntityIBP) {
     if (!houseEntityIBP)              fail = "houseEntityIBP == 0";
     else if (!g_pGameWorldSingleton)  fail = "g_pGameWorldSingleton pointer is null";
     else if (!*g_pGameWorldSingleton) fail = "*g_pGameWorldSingleton == 0 (no GameWorld yet)";
-    else if (!s_arrayAdd3110)         fail = "s_arrayAdd3110 unresolved (exe 0x140003110)";
     else {
         townMgr = TownMgr();
         if (townMgr == 0)             fail = "townMgr (gameWorld+0xf0) == 0";
@@ -447,7 +446,9 @@ extern "C" void TownRegistry_RegisterResidence(int64_t houseEntityIBP) {
 
     if (!fail) {
         before = *reinterpret_cast<int*>(townMgr + 0x28);
-        s_arrayAdd3110(reinterpret_cast<int64_t*>(townMgr + 0x20), before + 1, &houseEntityIBP);
+        // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+        GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(townMgr + 0x20))
+            .SetSizeFill(before + 1, &houseEntityIBP);
         after = *reinterpret_cast<int*>(townMgr + 0x28);
         // The append is the only thing that advances the count. If it did not move, the
         // array primitive is not writing the count field we (and retail) read at +0x28 —

@@ -12,6 +12,7 @@
 
 #include "Component/populationcomponent_funcs.h"
 #include "Component/herdcomponent_funcs.h"   // HerdComponent_Populate
+#include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"     // Object::GetTypeIdByName
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -47,11 +48,10 @@ typedef void (*fn_RegisterEntity_t)(void* list, void* entityIbp, int categoryId)
 static fn_RegisterEntity_t s_fn_RegisterEntity = nullptr;
 
 // Town-registry helpers used by the OnAdd/OnRemove pair below.
-// DynArray8_ResizeFill(arrayField, newCount, valueIbp) — 0x140003110 (append when
-// called with count+1); DynArray8_EraseByValue(arrayField, valueIbp) — 0x140002cc0.
-typedef void (*fn_ArrResizeFill_t)(int64_t* arrayField, int newCount, void* valueIbp);
+// DynArray8_ResizeFill(arrayField, newCount, valueIbp) — 0x140003110, converted
+// to GameColl::AsArray<GameColl::Ptr8>(h).SetSizeFill(n, fill) (ENDGAME B.3.2
+// step 2); DynArray8_EraseByValue(arrayField, valueIbp) — 0x140002cc0.
 typedef void (*fn_ArrErase_t)(int64_t* arrayField, void* valueIbp);
-static fn_ArrResizeFill_t s_fn_ArrResizeFill = nullptr;
 static fn_ArrErase_t      s_fn_ArrErase      = nullptr;
 
 // Component find-loop over a freshly-instantiated entity (IBP array at +0x30,
@@ -517,12 +517,13 @@ void PopulationComponent_OnAdd(void* selfV) {
     if (!selfV || !s_pGameWorld || !*s_pGameWorld) return;
     uint8_t* townMgr = *reinterpret_cast<uint8_t**>(
         reinterpret_cast<uint8_t*>(*s_pGameWorld) + 0xf0);
-    if (!townMgr || !s_fn_ArrResizeFill) return;
+    if (!townMgr) return;
 
     uint64_t selfRef = 0;
     if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&selfRef, selfV);
-    s_fn_ArrResizeFill(reinterpret_cast<int64_t*>(townMgr + 0xc0),
-                       *reinterpret_cast<int*>(townMgr + 0xc8) + 1, &selfRef);
+    // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
+    GameColl::AsArray<GameColl::Ptr8>(townMgr + 0xc0)
+        .SetSizeFill(*reinterpret_cast<int*>(townMgr + 0xc8) + 1, &selfRef);
 
 }
 
@@ -564,8 +565,6 @@ void PopulationComponent_InitFuncs() {
     if (randSlot) s_fn_Rand = *reinterpret_cast<fn_Rand_t*>(randSlot);
     s_fn_RegisterEntity = reinterpret_cast<fn_RegisterEntity_t>(
         ResolveAddr(Module::Exe, 0x1400c48a0));
-    s_fn_ArrResizeFill = reinterpret_cast<fn_ArrResizeFill_t>(
-        ResolveAddr(Module::Exe, 0x140003110));
     s_fn_ArrErase = reinterpret_cast<fn_ArrErase_t>(
         ResolveAddr(Module::Exe, 0x140002cc0));
 

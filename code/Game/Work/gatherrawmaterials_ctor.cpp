@@ -28,6 +28,7 @@
 #include "BuildActions.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 
 #include "Object/factory_registration.h"
@@ -38,8 +39,10 @@ typedef void* (*GRMC_WorkCtor25_t)(void* self, void* ibp);              // 0x140
 typedef void  (*GRMC_FindCompUnk_t)(uintptr_t entity, void* retIBP);    // 0x14000d6c0
 // FindComponent that returns the site StorageComponent (type 0x1401c7e78).
 typedef void* (*GRMC_FindCompStorage_t)(uintptr_t entity, void* retIBP); // 0x140006270
-// Int-array resize: field = {ptr@0x00, count@0x08, capacity@0x0c}; sets ptr + count.
-typedef void  (*GRMC_ResizeIntArray_t)(void* arrayField, int count);   // 0x1400021d0
+// 0x1400021d0 (int-array SetSize) is the exe-side Collection::Array<int32>
+// monomorphisation -- ENDGAME B.3.2 step 2 converted its two call sites below to
+// GameColl::AsArray<GameColl::I32> member calls, so its resolved-pointer stand-in
+// is gone.
 
 // "BuildDescription" type-id (DWORD_1401c7040). Name verified via the .rdata
 // writer BuildDescription_Register (0x14014e5f5). GetTypeIdByName in standalone
@@ -107,12 +110,9 @@ extern "C" void* GatherRawMaterials_Ctor_Impl(void* mem, void* buildEntityIBP) {
     // FLAG: original reads desc+0x28 unconditionally (assumes desc valid). We guard
     // desc==null -> matCount 0 so the arrays stay empty rather than deref null.
     int matCount = desc ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x28) : 0;
-    GRMC_ResizeIntArray_t resize =
-        reinterpret_cast<GRMC_ResizeIntArray_t>(ResolveAddr(Module::Exe, 0x1400021d0));
-    if (resize) {
-        resize(reinterpret_cast<void*>(self + 0x48), matCount);   // sets +0x48 ptr, +0x50 count
-        resize(reinterpret_cast<void*>(self + 0x58), matCount);   // sets +0x58 ptr, +0x60 count
-    }
+    // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize.
+    GameColl::AsArray<GameColl::I32>(reinterpret_cast<void*>(self + 0x48)).SetSize(matCount);
+    GameColl::AsArray<GameColl::I32>(reinterpret_cast<void*>(self + 0x58)).SetSize(matCount);
 
     // --- Seed field_48[i] = amount already present in site storage, field_58[i] = 0 ---
     int count50 = *reinterpret_cast<int*>(self + 0x50);   // == matCount after resize

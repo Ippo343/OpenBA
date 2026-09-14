@@ -12,6 +12,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/pasturecomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -47,10 +48,6 @@ static fn_IBP_Serialize_t s_fn_IBP_Serialize = nullptr;
 typedef void (*fn_SerializeIBPArray_t)(void* arrayPtr, void* serializer);
 static fn_SerializeIBPArray_t s_fn_SerializeIBPArray = nullptr;
 
-// FUN_1400032e0 — resize InternalBasePtr array
-typedef void (*fn_ResizeIBPArray_t)(void* arrayPtr, int newSize);
-static fn_ResizeIBPArray_t s_fn_ResizeIBPArray = nullptr;
-
 // FUN_140128570 — compute pasture capacity
 typedef uint64_t (*fn_ComputePastureCapacity_t)(uintptr_t self);
 static fn_ComputePastureCapacity_t s_fn_ComputePastureCapacity = nullptr;
@@ -60,9 +57,9 @@ typedef void (*fn_EraseByValue_t)(void* listPtr, void* entityRef);
 static fn_EraseByValue_t s_fn_EraseByValue = nullptr;
 
 // FUN_140003110 — DynArray8_ResizeFill(arrayField, newCount, valueIBP); called with
-// count+1 it appends. NOT an "insert at position".
-typedef void (*fn_ResizeFill_t)(void* listPtr, int newCount, void* entityRef);
-static fn_ResizeFill_t s_fn_ResizeFill = nullptr;
+// count+1 it appends. NOT an "insert at position". ENDGAME B.3.2 step 2: resolved
+// but never actually called in this file (only ever printed for debug) — no call
+// site to convert.
 
 // PastureComponent_helper_5ed0 — process entity ref for pasture
 typedef void (*fn_PastureHelper5ed0_t)(void* entityRef);
@@ -104,17 +101,11 @@ static void EnsureHelpers() {
     s_fn_SerializeIBPArray = reinterpret_cast<fn_SerializeIBPArray_t>(
         ResolveAddr(Module::Exe, 0x140002340));
 
-    s_fn_ResizeIBPArray = reinterpret_cast<fn_ResizeIBPArray_t>(
-        ResolveAddr(Module::Exe, 0x1400032e0));
-
     s_fn_ComputePastureCapacity = reinterpret_cast<fn_ComputePastureCapacity_t>(
         ResolveAddr(Module::Exe, 0x140128570));
 
     s_fn_EraseByValue = reinterpret_cast<fn_EraseByValue_t>(
         ResolveAddr(Module::Exe, 0x140002cc0));
-
-    s_fn_ResizeFill = reinterpret_cast<fn_ResizeFill_t>(
-        ResolveAddr(Module::Exe, 0x140003110));
 
     s_fn_PastureHelper5ed0 = reinterpret_cast<fn_PastureHelper5ed0_t>(
         ResolveAddr(Module::Exe, 0x140105ed0));
@@ -385,10 +376,9 @@ void PastureComponent_Shutdown(PastureComponent* self, void* stream) {
     // — not from serializer+8 (that's the version int, 0 here, which made the
     // old check pass on save too; benign only because resize-to-same-count is
     // a no-op).
+    // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
     if (*(int*)(*(uintptr_t*)serializer + 8) == 0) {
-        if (s_fn_ResizeIBPArray) {
-            s_fn_ResizeIBPArray((void*)&self->field30, countBuf);
-        }
+        GameColl::AsArray<GameColl::Ptr8>((void*)&self->field30).SetSize(countBuf);
     }
 
     // Serialize each entity InternalBasePtr and validate type
@@ -466,9 +456,9 @@ void PastureComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
     printf("[PastureComponent] Funcs resolved: Component_Serialize=%p ComputeCapacity=%p "
-           "AddToList=%p InsertInList=%p PastureHelper=%p ReassignEntityRef=%p\n",
+           "AddToList=%p PastureHelper=%p ReassignEntityRef=%p\n",
            (void*)s_fn_Component_Serialize, (void*)s_fn_ComputePastureCapacity,
-           (void*)s_fn_EraseByValue, (void*)s_fn_ResizeFill,
+           (void*)s_fn_EraseByValue,
            (void*)s_fn_PastureHelper5ed0, (void*)s_fn_ReassignEntityRef);
 #endif
 }

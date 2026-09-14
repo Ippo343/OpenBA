@@ -37,6 +37,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include "math/Math.h"
 #include <cstdint>
 #include <cstdio>
@@ -48,7 +49,8 @@ typedef void*    (*fn_ResolvePos_2e20_t)(void* comp, float* outVec3, int, int, f
 typedef int      (*fn_PathDist_f810_t)(int* map, uint32_t src, uint32_t dst, char); // 0x14009f810
 typedef uint64_t (*fn_ValidateCell_a00f0_t)(int* map, uint32_t kind, uint32_t src, int dst); // 0x1400a00f0
 typedef void     (*fn_MarkRemoval_c2ea0_t)(void* entity);                           // 0x1400c2ea0
-typedef void     (*fn_ArrayPush_3110_t)(void* arrayHdr, int newCount, void* elem);  // 0x140003110
+// 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
+// into the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
 typedef void     (*fn_FineCellDirty_a8c90_t)(int64_t self, int x, int y);           // 0x1400a8c90
 typedef void     (*fn_PfEnqueue_a6fe0_t)(int64_t thread, uint32_t cell, void* cmd, void* world); // 0x1400a6fe0
 typedef void*    (*fn_FindResData_4680_t)(uintptr_t entity, void* outIBP);          // 0x140004680
@@ -63,7 +65,6 @@ static fn_ResolvePos_2e20_t     s_resolvePos     = nullptr;
 static fn_PathDist_f810_t       s_pathDist       = nullptr;
 static fn_ValidateCell_a00f0_t  s_validateCell   = nullptr;
 static fn_MarkRemoval_c2ea0_t   s_markRemoval    = nullptr;
-static fn_ArrayPush_3110_t      s_arrayPush      = nullptr;
 static fn_FineCellDirty_a8c90_t s_fineCellDirty  = nullptr;
 static fn_PfEnqueue_a6fe0_t     s_pfEnqueue      = nullptr;
 static fn_FindResData_4680_t    s_findResData    = nullptr;
@@ -87,7 +88,6 @@ static void EnsureResolved() {
     s_pathDist      = reinterpret_cast<fn_PathDist_f810_t>(ResolveAddr(Module::Exe, 0x14009f810));
     s_validateCell  = reinterpret_cast<fn_ValidateCell_a00f0_t>(ResolveAddr(Module::Exe, 0x1400a00f0));
     s_markRemoval   = reinterpret_cast<fn_MarkRemoval_c2ea0_t>(ResolveAddr(Module::Exe, 0x1400c2ea0));
-    s_arrayPush     = reinterpret_cast<fn_ArrayPush_3110_t>(ResolveAddr(Module::Exe, 0x140003110));
     s_fineCellDirty = reinterpret_cast<fn_FineCellDirty_a8c90_t>(ResolveAddr(Module::Exe, 0x1400a8c90));
     s_pfEnqueue     = reinterpret_cast<fn_PfEnqueue_a6fe0_t>(ResolveAddr(Module::Exe, 0x1400a6fe0));
     s_findResData   = reinterpret_cast<fn_FindResData_4680_t>(ResolveAddr(Module::Exe, 0x140004680));
@@ -475,8 +475,9 @@ extern "C" uint64_t CitizenComponent_HandleLifeEvent(void* selfV, int eventType,
         if ((*reinterpret_cast<uint32_t*>(entIBP + 0x40) >> 10 & 1) == 0) {
             ChkPtr(&entIBP);
             if (s_markRemoval) s_markRemoval(reinterpret_cast<void*>(entIBP));
-            if (s_arrayPush)
-                s_arrayPush(loop + 0xd0, *reinterpret_cast<int*>(loop + 0xd8) + 1, &entIBP);
+            // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+            GameColl::AsArray<GameColl::Ptr8>(loop + 0xd0)
+                .SetSizeFill(*reinterpret_cast<int*>(loop + 0xd8) + 1, &entIBP);
         }
     }
     return 1;

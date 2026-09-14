@@ -52,6 +52,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/animalcomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "math/Math.h"
@@ -103,7 +104,10 @@ inline float MoveSpeed()  { return s_pfMoveSpeed  ? *s_pfMoveSpeed  : -1.0f; }
 typedef void* (*fn_FindCharacter_t)(int64_t entity, void* outIBP);          // 0x1400012d0
 typedef void* (*fn_FindModel_t)(int64_t entity, void* outIBP);              // 0x140003f60
 typedef void  (*fn_MarkForRemoval_t)(void* entity);                         // 0x1400c2ea0
-typedef void  (*fn_ArrayPush_t)(void* arrayBase, int newCount, void* elem); // 0x140003110
+// 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised into
+// the exe (ENDGAME B.3.2 step 2); ActHunt_DynArraySetCount_3110 confirmed the
+// 3-arg fill form matches SetSizeCore exactly, so the call site below now goes
+// through GameColl::AsArray<GameColl::Ptr8>(...).SetSizeFill(n, &entity).
 typedef void  (*fn_ModifyFlags_t)(void* comp, uint32_t orMask,
                                   uint32_t andNotMask);                     // 0x140118950
 typedef void  (*fn_SetBounds_t)(void* self, short* x, short* y,
@@ -119,7 +123,6 @@ typedef void* (*fn_MoveToCtor_t)(void* mem, void* moverIBP, uint32_t pathType,
 fn_FindCharacter_t     s_fnFindCharacter  = nullptr;
 fn_FindModel_t         s_fnFindModel      = nullptr;
 fn_MarkForRemoval_t    s_fnMarkForRemoval = nullptr;
-fn_ArrayPush_t         s_fnArrayPush      = nullptr;
 fn_ModifyFlags_t       s_fnModifyFlags    = nullptr;
 fn_SetBounds_t         s_fnSetBounds      = nullptr;
 fn_SetAnimation_t      s_fnSetAnimation   = nullptr;
@@ -151,7 +154,6 @@ void EnsureHelpers() {
     s_fnFindCharacter  = reinterpret_cast<fn_FindCharacter_t >(ResolveAddr(Module::Exe, 0x1400012d0));
     s_fnFindModel      = reinterpret_cast<fn_FindModel_t     >(ResolveAddr(Module::Exe, 0x140003f60));
     s_fnMarkForRemoval = reinterpret_cast<fn_MarkForRemoval_t>(ResolveAddr(Module::Exe, 0x1400c2ea0));
-    s_fnArrayPush      = reinterpret_cast<fn_ArrayPush_t     >(ResolveAddr(Module::Exe, 0x140003110));
     s_fnModifyFlags    = reinterpret_cast<fn_ModifyFlags_t   >(ResolveAddr(Module::Exe, 0x140118950));
     s_fnSetBounds      = reinterpret_cast<fn_SetBounds_t     >(ResolveAddr(Module::Exe, 0x140105e20));
     s_fnSetAnimation   = reinterpret_cast<fn_SetAnimation_t  >(ResolveAddr(Module::Exe, 0x1401250f0));
@@ -489,10 +491,12 @@ void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {
 
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entity);
         if (s_fnMarkForRemoval) s_fnMarkForRemoval(reinterpret_cast<void*>(entity));
-        if (s_fnArrayPush && corpseOwner) {
-            s_fnArrayPush(reinterpret_cast<void*>(corpseOwner + 0xd0),
-                          At<int>(static_cast<uintptr_t>(corpseOwner), 0xd8) + 1,
-                          &entity);
+        if (corpseOwner) {
+            // B.3.2 bridge: exe 0x140003110 (ActHunt_DynArraySetCount_3110) IS
+            // Collection::Array<void*>::SetSize(n, fill).
+            const int newCount = At<int>(static_cast<uintptr_t>(corpseOwner), 0xd8) + 1;
+            GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(corpseOwner + 0xd0))
+                .SetSizeFill(newCount, &entity);
         }
         // Running total, not a capped sample: at kTraceCap=24 this read as
         // "24 deaths" against a 47-animal drain and hid the fact that old age

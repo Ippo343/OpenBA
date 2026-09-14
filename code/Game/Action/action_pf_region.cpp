@@ -50,6 +50,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "hw_watch.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -57,7 +58,10 @@
 namespace {
 
 // ---- exe sub-callee fn-ptrs (resolved once, all registered in earlier batches) ----
-typedef void     (*fn_ArrResize4_t)(int64_t* arr, int newCount);            // 0x1400021d0
+// 0x1400021d0 (int-array SetSize) is the exe-side Collection::Array<int32>
+// monomorphisation -- ENDGAME B.3.2 step 2 converted its call sites below to
+// GameColl::AsArray<GameColl::I32> member calls, so its resolved-pointer stand-in
+// is gone.
 typedef void     (*fn_VecResize30_t)(int64_t* vec, uint32_t newCount, uint32_t* fill); // 0x14001e210
 typedef void*    (*fn_WorklistAlloc_t)(uintptr_t pool, uint64_t* val);      // 0x14001df40
 typedef void     (*fn_ArrResize18_t)(int64_t* arr, int newCount);           // 0x14001d830
@@ -66,7 +70,6 @@ typedef uint64_t*(*fn_BstInsertB_t)(int64_t* root, uint64_t* a, uint32_t* b);// 
 typedef float    (*fn_Sqrtf_t)(float x);                                    // 0x140132010
 typedef int      (*fn_BuildPath_dc00_t)(int* self, int a, uint32_t b, uint64_t c, int64_t outArr); // 0x14001dc00
 
-static fn_ArrResize4_t    s_ArrResize4   = nullptr;
 static fn_VecResize30_t   s_VecResize30  = nullptr;
 static fn_WorklistAlloc_t s_WorklistAlloc= nullptr;
 static fn_ArrResize18_t   s_ArrResize18  = nullptr;
@@ -78,7 +81,6 @@ static bool s_init = false;
 
 static void EnsureFns() {
     if (s_init) return;
-    s_ArrResize4    = reinterpret_cast<fn_ArrResize4_t>(ResolveAddr(Module::Exe, 0x1400021d0));
     s_VecResize30   = reinterpret_cast<fn_VecResize30_t>(ResolveAddr(Module::Exe, 0x14001e210));
     s_WorklistAlloc = reinterpret_cast<fn_WorklistAlloc_t>(ResolveAddr(Module::Exe, 0x14001df40));
     s_ArrResize18   = reinterpret_cast<fn_ArrResize18_t>(ResolveAddr(Module::Exe, 0x14001d830));
@@ -109,8 +111,8 @@ void Pf_RegionNodeFree_8200(int64_t param_1, int param_2) {
     EnsureFns();
     int64_t lVar7 = (int64_t)param_2 * 0x30;
     *(uint32_t*)(*(int64_t*)(param_1 + 0x68) + 8 + lVar7) = 0xffffffff;
-    s_ArrResize4((int64_t*)(*(int64_t*)(param_1 + 0x68) + 0x10 + lVar7), 0);
-    s_ArrResize4((int64_t*)(*(int64_t*)(param_1 + 0x68) + 0x20 + lVar7), 0);
+    GameColl::AsArray<GameColl::I32>((void*)(*(int64_t*)(param_1 + 0x68) + 0x10 + lVar7)).SetSize(0);  // B.3.2 bridge: 0x1400021d0
+    GameColl::AsArray<GameColl::I32>((void*)(*(int64_t*)(param_1 + 0x68) + 0x20 + lVar7)).SetSize(0);  // B.3.2 bridge: 0x1400021d0
     *(uint32_t*)(lVar7 + *(int64_t*)(param_1 + 0x68)) = 0xffffffff;
     *(uint32_t*)(*(int64_t*)(param_1 + 0x68) + 4 + lVar7) = 0xffffffff;
     int iVar2 = *(int*)(param_1 + 0xb0);
@@ -173,7 +175,7 @@ int Pf_RegionFreeId_8350(int64_t param_1) {
         MemFree(t.local_30);
     } else {
         uVar2 = *(uint32_t*)(*(int64_t*)(param_1 + 0xa8) + -4 + (int64_t)iVar1 * 4);
-        s_ArrResize4((int64_t*)(param_1 + 0xa8), iVar1 + -1);
+        GameColl::AsArray<GameColl::I32>((void*)(param_1 + 0xa8)).SetSize(iVar1 + -1);  // B.3.2 bridge: 0x1400021d0
     }
     return (int)uVar2;
 }
@@ -240,7 +242,7 @@ void Pf_RegionRebuildAdjacency_7480(int64_t param_1, int param_2) {
         do {
             int64_t lVar11 = (int64_t)*(int*)(*(int64_t*)(lVar4 + 0x10) + local_res18) * 0x30 +
                              *(int64_t*)(param_1 + 0x68);
-            s_ArrResize4((int64_t*)(lVar11 + 0x10), 0);
+            GameColl::AsArray<GameColl::I32>((void*)(lVar11 + 0x10)).SetSize(0);  // B.3.2 bridge: 0x1400021d0
             int iVar12 = 0;
             if (0 < *(int*)(lVar11 + 0x28)) {
                 int64_t lVar10 = 0;
@@ -741,7 +743,7 @@ void Pf_RebuildRegionChunk_80a0(int64_t param_1, uint32_t param_2) {
             lVar7 = lVar7 + 4;
         } while (iVar10 < *(int*)(lVar8 + 0x18));
     }
-    s_ArrResize4((int64_t*)(lVar8 + 0x10), 0);
+    GameColl::AsArray<GameColl::I32>((void*)(lVar8 + 0x10)).SetSize(0);  // B.3.2 bridge: 0x1400021d0
     iVar10 = Pf_SeedFloodFills_7f20(param_1, param_2);
     int iVar14 = 0;
     uint32_t uVar12 = param_2;
@@ -825,8 +827,8 @@ void Pf_FlushDirtyChunks_8a90(int64_t param_1) {
                 uVar3 = (uint64_t)uVar2;
             } while ((int)uVar2 < *(int*)(param_1 + 0xa0));
         }
-        s_ArrResize4((int64_t*)(param_1 + 0x88), 0);
-        s_ArrResize4((int64_t*)(param_1 + 0x98), 0);
+        GameColl::AsArray<GameColl::I32>((void*)(param_1 + 0x88)).SetSize(0);  // B.3.2 bridge: 0x1400021d0
+        GameColl::AsArray<GameColl::I32>((void*)(param_1 + 0x98)).SetSize(0);  // B.3.2 bridge: 0x1400021d0
         s_ArrResize18((int64_t*)(param_1 + 8), *(int*)(param_1 + 0x70));
     }
 }

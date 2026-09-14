@@ -11,6 +11,7 @@
 //
 
 #include "Component/tombstonecomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -55,8 +56,6 @@ typedef void (*fn_MarkForRemoval_t)(void* entity);
 static fn_MarkForRemoval_t s_fn_MarkForRemoval = nullptr;
 
 // FUN_140003110 — dynamic array push
-typedef void (*fn_ArrayPush_t)(void* arrayBase, int newCount, void* elementPtr);
-static fn_ArrayPush_t s_fn_ArrayPush = nullptr;
 
 // Global: seconds per tick multiplier (DAT_140172234)
 static float* s_pSecondsPerTickMul = nullptr;
@@ -210,10 +209,11 @@ void TombstoneComponent_Update(TombstoneComponent* self, int64_t* pDeltaTime) {
                     s_fn_MarkForRemoval(entityPtr);
 
                 // Add to removal queue
-                if (s_fn_ArrayPush && gameWorld) {
+                // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
+                if (gameWorld) {
                     int count = *(int*)((uintptr_t)gameWorld + 0xD8);
-                    s_fn_ArrayPush((void*)((uintptr_t)gameWorld + 0xD0), count + 1,
-                                   (void*)((uintptr_t)self + 0x10));
+                    GameColl::AsArray<GameColl::Ptr8>((void*)((uintptr_t)gameWorld + 0xD0))
+                        .SetSizeFill(count + 1, (void*)((uintptr_t)self + 0x10));
                 }
             }
         }
@@ -230,8 +230,6 @@ void TombstoneComponent_InitFuncs() {
         ResolveAddr(Module::Exe, 0x1401189b0));
     s_fn_MarkForRemoval = reinterpret_cast<fn_MarkForRemoval_t>(
         ResolveAddr(Module::Exe, 0x1400c2ea0));
-    s_fn_ArrayPush = reinterpret_cast<fn_ArrayPush_t>(
-        ResolveAddr(Module::Exe, 0x140003110));
     s_pGameState = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x1401c3dd8));
     s_pTombstoneTypeId = reinterpret_cast<uint32_t*>(

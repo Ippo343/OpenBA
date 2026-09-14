@@ -20,6 +20,7 @@
 #include "BuildActions.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include "redzone_alloc.h"   // RedzoneAlloc_PrintBacktrace (wild-write diagnostic)
 #include <cstdio>
 #include <cstdint>
@@ -54,11 +55,10 @@ static void (*s_fn_Type_Serialize)(void* type, void* serializer) = nullptr;
 // via IAT at 0x140151278
 static void (*s_fn_Serializer_SerializeIntBulk)(void* ser, int count, void* buf, const char* name) = nullptr;
 
-// FUN_1400032e0 -- resize IBP array (8-byte elements)
-static void (*s_fn_ResizeIBPArray)(void* arrayField, int newCount) = nullptr;
-
-// FUN_1400021d0 -- resize int array (4-byte elements)
-static void (*s_fn_ResizeIntArray)(void* arrayField, int newCount) = nullptr;
+// 0x1400032e0 (Array<Ptr8>::SetSize) and 0x1400021d0 (Array<int32>::SetSize) are
+// exe-side Collection::Array<T> monomorphisations -- ENDGAME B.3.2 step 2 converted
+// their two call sites below to GameColl::AsArray<T> member calls, so their
+// resolved-pointer stand-ins are gone.
 
 // FUN_1400f7100 -- Work::ValidateTask helper
 static uint8_t (*s_fn_Work_ValidateTask)(void* self, void* param2, void* ibp, void** outTask) = nullptr;
@@ -141,12 +141,6 @@ bool ConsumeProduce_ResolveFuncs() {
     uintptr_t iatBulkSer = ResolveAddr(Module::Exe, 0x140151278);
     if (iatBulkSer) s_fn_Serializer_SerializeIntBulk = *reinterpret_cast<void(**)(void*, int, void*, const char*)>(iatBulkSer);
 
-    // Array resize helpers
-    s_fn_ResizeIBPArray = reinterpret_cast<void(*)(void*, int)>(
-        ResolveAddr(Module::Exe, 0x1400032e0));
-    s_fn_ResizeIntArray = reinterpret_cast<void(*)(void*, int)>(
-        ResolveAddr(Module::Exe, 0x1400021d0));
-
     // Work::ValidateTask (FUN_1400f7100)
     s_fn_Work_ValidateTask = reinterpret_cast<uint8_t(*)(void*, void*, void*, void**)>(
         ResolveAddr(Module::Exe, 0x1400f7100));
@@ -187,7 +181,6 @@ bool ConsumeProduce_ResolveFuncs() {
               s_fn_Work_Serialize && s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
               s_fn_IBP_Serialize && s_fn_Type_Serialize &&
               s_fn_Serializer_SerializeIntBulk &&
-              s_fn_ResizeIBPArray && s_fn_ResizeIntArray &&
               s_fn_Work_ValidateTask && s_fn_TaskListCleanup &&
               s_fn_FindPositionComponent &&
               s_typeId_1401c7158 &&
@@ -220,8 +213,7 @@ bool ConsumeProduce_ResolveFuncs() {
            (void*)s_fn_Serializer_Ctor, (void*)s_fn_Serializer_Dtor,
            (void*)s_fn_IBP_Serialize, (void*)s_fn_Type_Serialize,
            (void*)s_fn_Serializer_SerializeIntBulk);
-    printf("[ConsumeProduce]   ResizeIBP=%p ResizeInt=%p ValidateTask=%p TaskClean=%p\n",
-           (void*)s_fn_ResizeIBPArray, (void*)s_fn_ResizeIntArray,
+    printf("[ConsumeProduce]   ValidateTask=%p TaskClean=%p\n",
            (void*)s_fn_Work_ValidateTask, (void*)s_fn_TaskListCleanup);
     printf("[ConsumeProduce]   FindPos=%p typeId=%p vtWork=%p vtCP=%p\n",
            (void*)s_fn_FindPositionComponent, (void*)s_typeId_1401c7158,
@@ -336,9 +328,11 @@ void ConsumeProduce_Serialize_Impl(ConsumeProduceAction* self, void* stream) {
     int ibpCount = self->field_60;
     g_fn_Serialize_Int(serializerBuf, &ibpCount, nullptr);
 
-    // If loading, resize the IBP array to match deserialized count
+    // If loading, resize the IBP array to match deserialized count.
+    // B.3.2 bridge: FUN_1400032e0 == Collection::Array<Ptr8>::SetSize
+    // (ImmigrationComp_DynArrayResize in immigrationcomponent.cpp).
     if (isLoading) {
-        s_fn_ResizeIBPArray((void*)&self->field_58, ibpCount);
+        GameColl::AsArray<GameColl::Ptr8>((void*)&self->field_58).SetSize(ibpCount);
     }
 
     // Serialize each InternalBasePtr in the array
@@ -381,9 +375,10 @@ void ConsumeProduce_Serialize_Impl(ConsumeProduceAction* self, void* stream) {
     int intCount = self->field_70;
     g_fn_Serialize_Int(serializerBuf, &intCount, nullptr);
 
-    // If loading, resize the int array
+    // If loading, resize the int array.
+    // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize.
     if (isLoading) {
-        s_fn_ResizeIntArray((void*)&self->field_68, intCount);
+        GameColl::AsArray<GameColl::I32>((void*)&self->field_68).SetSize(intCount);
     }
 
     // Bulk-serialize the int array

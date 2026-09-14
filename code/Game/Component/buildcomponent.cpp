@@ -17,6 +17,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/buildcomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -278,12 +279,12 @@ int BuildComponent_FindInQueue(void* arrayBase, void* entityPtr) {
 // Faithful port of the Ghidra decompilation. All exe-internal helpers are resolved
 // guarded; if any is unavailable the corresponding step is skipped.
 typedef void* (*fn_BC_FindComp_t)(int64_t entity, void* retbuf);   // returns retbuf
-typedef void (*fn_BC_AddToList_t)(void* arrayField, int newCount, void* ibp);
 typedef void (*fn_BC_Entity8f50_t)(int64_t* ptr);
 static fn_BC_FindComp_t  s_fn_BC_FindMulti = nullptr;   // 0x140003f60 (FindComponent ModelComponent)
 static fn_BC_FindComp_t  s_fn_BC_Find26a30 = nullptr;   // 0x140026a30 (FindComponent StorageComponent)
 static fn_BC_FindComp_t  s_fn_BC_FindWork  = nullptr;   // 0x140004740 (Workplace)
-static fn_BC_AddToList_t s_fn_BC_AddToList = nullptr;   // 0x140003110
+// 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
+// into the exe (ENDGAME B.3.2 step 2) — converted at its call sites below.
 static fn_BC_Entity8f50_t s_fn_BC_Entity8f50 = nullptr; // 0x140128f50
 // Type-id VALUES. The .rdata globals are never seeded (ResolveAddr(Exe,.rdata)==NULL)
 // so we fall back to
@@ -312,7 +313,6 @@ static void EnsureDrawHelpers() {
     s_fn_BC_FindMulti = reinterpret_cast<fn_BC_FindComp_t>(ResolveAddr(Module::Exe, 0x140003f60));
     s_fn_BC_Find26a30 = reinterpret_cast<fn_BC_FindComp_t>(ResolveAddr(Module::Exe, 0x140026a30));
     s_fn_BC_FindWork  = reinterpret_cast<fn_BC_FindComp_t>(ResolveAddr(Module::Exe, 0x140004740));
-    s_fn_BC_AddToList = reinterpret_cast<fn_BC_AddToList_t>(ResolveAddr(Module::Exe, 0x140003110));
     s_fn_BC_Entity8f50 = reinterpret_cast<fn_BC_Entity8f50_t>(ResolveAddr(Module::Exe, 0x140128f50));
     s_tid_ModelDesc = BC_ResolveTid(0x1401c7a88, "ModelDescription");
     s_tid_ModelComp = BC_ResolveTid(0x1401c7a50, "ModelComponent");
@@ -392,11 +392,12 @@ void BuildComponent_DrawReimpl(void* selfP) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 2);
             int64_t b1 = 0;
             if (s_fn_BC_FindMulti) s_fn_BC_FindMulti(self[2], &b1);
-            if (s_fn_BC_AddToList) s_fn_BC_AddToList(self + 0xb, (int)self[0xc] + 1, &b1);
+            // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+            GameColl::AsArray<GameColl::Ptr8>(self + 0xb).SetSizeFill((int)self[0xc] + 1, &b1);
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 2);
             int64_t b2 = 0;
             if (s_fn_BC_Find26a30) s_fn_BC_Find26a30(self[2], &b2);
-            if (s_fn_BC_AddToList) s_fn_BC_AddToList(self + 0xd, (int)self[0xe] + 1, &b2);
+            GameColl::AsArray<GameColl::Ptr8>(self + 0xd).SetSizeFill((int)self[0xe] + 1, &b2);
         }
     }
 
@@ -417,7 +418,7 @@ void BuildComponent_DrawReimpl(void* selfP) {
             void* buildComp = BC_FindComponentByType(host, s_tid_ModelComp);
             int64_t ib1 = 0;
             if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&ib1, buildComp);
-            if (s_fn_BC_AddToList) s_fn_BC_AddToList(self + 0xb, (int)self[0xc] + 1, &ib1);
+            GameColl::AsArray<GameColl::Ptr8>(self + 0xb).SetSizeFill((int)self[0xc] + 1, &ib1);
 
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workBuf);
             int64_t host2 = *(int64_t*)((int64_t)j * 8 + *(int64_t*)(workBuf + 0x48));
@@ -425,7 +426,7 @@ void BuildComponent_DrawReimpl(void* selfP) {
             void* storeComp = BC_FindComponentByType(host2, s_tid_Picking);
             int64_t ib2 = 0;
             if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&ib2, storeComp);
-            if (s_fn_BC_AddToList) s_fn_BC_AddToList(self + 0xd, (int)self[0xe] + 1, &ib2);
+            GameColl::AsArray<GameColl::Ptr8>(self + 0xd).SetSizeFill((int)self[0xe] + 1, &ib2);
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workBuf);
         }
     }

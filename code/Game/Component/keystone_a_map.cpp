@@ -33,6 +33,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"   // GetTypeIdByName (dc20 eviction audit)
 
 #include <cstdint>
@@ -72,7 +73,6 @@ typedef void     (*fn_a4d30_t)(void* p1, uint32_t p2, int x0, int y0,   // 0x140
                                int x1, int y1);
 typedef void     (*fn_c3470_t)(void* internal);                         // 0x1400c3470
 typedef void     (*fn_c2ea0_t)(int64_t internal);                       // 0x1400c2ea0
-typedef void     (*fn_003110_t)(int64_t* tree, int key, void* ibp);     // 0x140003110
 typedef float*   (*fn_f3e0_t)(int* map, float* outVec, float* inXY,     // 0x14009f3e0
                               char flag, uint32_t* outMat);
 
@@ -80,7 +80,6 @@ static fn_9f2f0_t  s_9f2f0  = nullptr;
 static fn_a4d30_t  s_a4d30  = nullptr;
 static fn_c3470_t  s_c3470  = nullptr;
 static fn_c2ea0_t  s_c2ea0  = nullptr;
-static fn_003110_t s_003110 = nullptr;
 static fn_f3e0_t   s_f3e0   = nullptr;
 static bool        s_init   = false;
 
@@ -90,7 +89,6 @@ static void EnsureInit() {
     s_a4d30  = reinterpret_cast<fn_a4d30_t >(ResolveAddr(Module::Exe, 0x1400a4d30));
     s_c3470  = reinterpret_cast<fn_c3470_t >(ResolveAddr(Module::Exe, 0x1400c3470));
     s_c2ea0  = reinterpret_cast<fn_c2ea0_t >(ResolveAddr(Module::Exe, 0x1400c2ea0));
-    s_003110 = reinterpret_cast<fn_003110_t>(ResolveAddr(Module::Exe, 0x140003110));
     s_f3e0   = reinterpret_cast<fn_f3e0_t  >(ResolveAddr(Module::Exe, 0x14009f3e0));
     s_init = true;
 }
@@ -218,10 +216,11 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
                                     if (fn_InternalBasePtr_CheckPtr)
                                         fn_InternalBasePtr_CheckPtr(&local_68);
                                     if (s_c2ea0) s_c2ea0(local_68);
-                                    if (s_003110)
-                                        s_003110(reinterpret_cast<int64_t*>(lVar3 + 0xd0),
-                                                 *reinterpret_cast<int*>(lVar3 + 0xd8) + 1,
-                                                 &local_68);
+                                    // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
+                                    GameColl::AsArray<GameColl::Ptr8>(
+                                        reinterpret_cast<void*>(lVar3 + 0xd0))
+                                        .SetSizeFill(*reinterpret_cast<int*>(lVar3 + 0xd8) + 1,
+                                                     &local_68);
                                 }
                             }
                         }

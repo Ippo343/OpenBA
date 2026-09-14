@@ -24,6 +24,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/herdcomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -152,8 +153,8 @@ static fn_MarkEntityDirty_t s_fn_MarkEntityDirty = nullptr;
 typedef void (*fn_AnimalUpdateBehavior_t)(void* animalComp);              // 0x140107320
 static fn_AnimalUpdateBehavior_t s_fn_AnimalUpdateBehavior = nullptr;
 // DynArray<InternalBasePtr> ops used by OnAdd/OnRemove.
-typedef void (*fn_DynArray8_ResizeFill_t)(int64_t* arr, int newCount, void* ibp); // 0x140003110
-static fn_DynArray8_ResizeFill_t s_fn_DynArray8_ResizeFill = nullptr;
+// 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
+// into the exe (ENDGAME B.3.2 step 2) — converted at its call sites below.
 typedef void (*fn_DynArray8_EraseByValue_t)(int64_t* arr, void* ibp);            // 0x140002cc0
 static fn_DynArray8_EraseByValue_t s_fn_DynArray8_EraseByValue = nullptr;
 
@@ -198,8 +199,6 @@ static void EnsureHerdExtras() {
         ResolveAddr(Module::Exe, 0x1400c3470));
     s_fn_AnimalUpdateBehavior = reinterpret_cast<fn_AnimalUpdateBehavior_t>(
         ResolveAddr(Module::Exe, 0x140107320));
-    s_fn_DynArray8_ResizeFill = reinterpret_cast<fn_DynArray8_ResizeFill_t>(
-        ResolveAddr(Module::Exe, 0x140003110));
     s_fn_DynArray8_EraseByValue = reinterpret_cast<fn_DynArray8_EraseByValue_t>(
         ResolveAddr(Module::Exe, 0x140002cc0));
     s_herdExtraInit = true;
@@ -553,17 +552,16 @@ void HerdComponent_AdjustSize(void* herdComp, int targetSize) {
 // ============================================================
 // Their full exe FUN_ closure is registered (FUN_140003110, FUN_140002cc0,
 // FUN_140005500), so both are now closure-safe to port.
-typedef void (*fn_Herd_AddToList_t)(int64_t* listField, int newCount, void* ibp); // 0x140003110
+// 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
+// into the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
 typedef void (*fn_Herd_RemoveFromList_t)(int64_t* listField, void* ibp);          // 0x140002cc0
 typedef void* (*fn_Herd_FindMember_t)(int64_t entity, void* outIbp);              // 0x140005500
-static fn_Herd_AddToList_t      s_fn_Herd_AddToList = nullptr;
 static fn_Herd_RemoveFromList_t s_fn_Herd_RemoveFromList = nullptr;
 static fn_Herd_FindMember_t     s_fn_Herd_FindMember = nullptr;
 static bool s_herdClusterInit = false;
 static void EnsureHerdCluster() {
     if (s_herdClusterInit) return;
     EnsureHelpers();
-    s_fn_Herd_AddToList      = reinterpret_cast<fn_Herd_AddToList_t>(ResolveAddr(Module::Exe, 0x140003110));
     s_fn_Herd_RemoveFromList = reinterpret_cast<fn_Herd_RemoveFromList_t>(ResolveAddr(Module::Exe, 0x140002cc0));
     s_fn_Herd_FindMember     = reinterpret_cast<fn_Herd_FindMember_t>(ResolveAddr(Module::Exe, 0x140005500));
     s_herdClusterInit = true;
@@ -578,8 +576,9 @@ void HerdComponent_Helper1ad0(int64_t herdComp, void* animalIbp) {
     EnsureHerdCluster();
     uint8_t* self = reinterpret_cast<uint8_t*>(herdComp);
 
-    if (s_fn_Herd_AddToList)
-        s_fn_Herd_AddToList((int64_t*)(self + 0x38), *(int*)(self + 0x40) + 1, animalIbp);
+    // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+    GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(self + 0x38))
+        .SetSizeFill(*(int*)(self + 0x40) + 1, animalIbp);
 
     void* cfgObj = *(void**)(self + 0x18);
     void* cfg = (fn_IsDerivedFrom && s_pHerdTypeId &&
@@ -816,12 +815,13 @@ void HerdComponent_OnAdd(void* selfV) {
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
     uint8_t* townMgr = *(uint8_t**)(gw + 0xf0);
-    if (!townMgr || !s_fn_DynArray8_ResizeFill) return;
+    if (!townMgr) return;
 
     uint64_t selfRef = 0;
     if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&selfRef, selfV);
-    s_fn_DynArray8_ResizeFill(reinterpret_cast<int64_t*>(townMgr + 0xb0),
-                              *(int*)(townMgr + 0xb8) + 1, &selfRef);
+    // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+    GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(townMgr + 0xb0))
+        .SetSizeFill(*(int*)(townMgr + 0xb8) + 1, &selfRef);
 }
 
 // ============================================================

@@ -33,7 +33,6 @@
 //   0x1400c54e0 action-stack push (action_pf_ctors) — bbea0/c7620 inline this; call helper
 //   0x1400c5400 TaskListCleanup (work_base)
 //   0x140107260 set-flag/refresh/Update == RemoveAnimal_helper_7260 (action_pf_ctors)
-//   0x1400032e0 array-grow (component_people)
 // Engine helpers (engine_funcs.h): fn_InternalBasePtr_Ctor, fn_InternalBasePtr_CheckPtr,
 //   fn_InternalBasePtr_DeletePtr, fn_MemAlloc/fn_MemFreeStatic, fn_Time_Ctor_Float.
 // Runtime exports: System::Random::RandTol, System::MemoryAllocator::MemAlloc.
@@ -86,7 +85,8 @@ typedef void* (*fn_sendMsgCtor_t)(void* self, uint64_t* p2, uint32_t* p3, uint32
 typedef void (*fn_push54e0_t)(int64_t* stack, void* srcEntry);        // 0x1400c54e0
 typedef void (*fn_taskCleanup_t)(void* listAt48);                     // 0x1400c5400
 typedef void (*fn_remHelper7260_t)(int64_t* self);                    // 0x140107260
-typedef void (*fn_grow032e0_t)(void* self, int newCap);              // 0x1400032e0
+// 0x1400032e0 (array-grow) was resolved here but never called anywhere in this file
+// -- dead resolved-pointer machinery, removed rather than converted (B.3.2 step 2).
 
 static fn_bd40_t            s_fn_bd40 = nullptr;
 static fn_entityCopyCtor_t  s_fn_entityCopyCtor = nullptr;
@@ -109,7 +109,6 @@ static fn_sendMsgCtor_t     s_fn_sendMsgCtor = nullptr;
 static fn_push54e0_t        s_fn_push = nullptr;
 static fn_taskCleanup_t     s_fn_taskCleanup = nullptr;
 static fn_remHelper7260_t   s_fn_remHelper7260 = nullptr;
-static fn_grow032e0_t       s_fn_grow = nullptr;
 
 static bool s_init = false;
 static void EnsureInit() {
@@ -144,7 +143,6 @@ static void EnsureInit() {
     s_fn_push           = reinterpret_cast<fn_push54e0_t>(ResolveAddr(Module::Exe, 0x1400c54e0));
     s_fn_taskCleanup    = reinterpret_cast<fn_taskCleanup_t>(ResolveAddr(Module::Exe, 0x1400c5400));
     s_fn_remHelper7260  = reinterpret_cast<fn_remHelper7260_t>(ResolveAddr(Module::Exe, 0x140107260));
-    s_fn_grow           = reinterpret_cast<fn_grow032e0_t>(ResolveAddr(Module::Exe, 0x1400032e0));
     s_init = true;
 }
 

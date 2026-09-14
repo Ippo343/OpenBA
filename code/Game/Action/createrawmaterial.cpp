@@ -23,6 +23,7 @@
 #include "CreateRawMaterial.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
@@ -62,9 +63,6 @@ static void* (*s_fn_GetChildEntities)(int64_t entity, void* retbuf) = nullptr;
 // FUN_140003050 -- find component on entity (ResourceDescription?)
 // Member ABI: RCX=entity, RDX=retbuf
 static void* (*s_fn_FindComponent_RD)(int64_t entity, void* retbuf) = nullptr;
-
-// FUN_140044810 -- set up growth/maturity component
-static void (*s_fn_SetupGrowthComp)(int64_t comp, uint32_t value) = nullptr;
 
 // System::Random::RandTol via IAT at 0x1401512f0
 static int (*s_fn_Random_RandTol)(void* random, int range) = nullptr;
@@ -125,8 +123,11 @@ bool CreateRawMaterial_ResolveFuncs() {
     s_fn_FindComponent_RD = reinterpret_cast<void*(*)(int64_t, void*)>(
         ResolveAddr(Module::Exe, 0x140003050));
 
-    s_fn_SetupGrowthComp = reinterpret_cast<void(*)(int64_t, uint32_t)>(
-        ResolveAddr(Module::Exe, 0x140044810));
+    // FUN_140044810 (set up growth/maturity component) is the exe-side
+    // Collection::Array<int32>::SetSize(n,fill) monomorphisation --
+    // ENDGAME B.3.2 step 2 converted its call site below to a
+    // GameColl::AsArray<GameColl::I32> member call, so its resolved-pointer
+    // stand-in is gone.
 
     // System::Random::RandTol via IAT at 0x1401512f0
     uintptr_t iatRandTol = ResolveAddr(Module::Exe, 0x1401512f0);
@@ -155,7 +156,7 @@ bool CreateRawMaterial_ResolveFuncs() {
               s_fn_FindPlacementCell && s_fn_PositionEntity &&
               s_fn_RegisterRawMaterial && s_fn_RegisterEntity &&
               s_fn_GetChildEntities && s_fn_FindComponent_RD &&
-              s_fn_SetupGrowthComp && s_fn_Random_RandTol &&
+              s_fn_Random_RandTol &&
               s_fn_Serialize_Float && s_fn_Serialize_UInt &&
               s_typeId_1401c7158 && s_typeId_ComponentEntity &&
               s_typeId_RawMatDesc && s_typeId_1401c7c80 && s_typeId_1401c8118 &&
@@ -175,8 +176,8 @@ bool CreateRawMaterial_ResolveFuncs() {
     printf("[CreateRawMaterial]   PosEnt=%p RegRM=%p RegEnt=%p GetChild=%p\n",
            (void*)s_fn_PositionEntity, (void*)s_fn_RegisterRawMaterial,
            (void*)s_fn_RegisterEntity, (void*)s_fn_GetChildEntities);
-    printf("[CreateRawMaterial]   FindRD=%p SetupGrowth=%p RandTol=%p SerFloat=%p SerUInt=%p\n",
-           (void*)s_fn_FindComponent_RD, (void*)s_fn_SetupGrowthComp,
+    printf("[CreateRawMaterial]   FindRD=%p RandTol=%p SerFloat=%p SerUInt=%p\n",
+           (void*)s_fn_FindComponent_RD,
            (void*)s_fn_Random_RandTol, (void*)s_fn_Serialize_Float, (void*)s_fn_Serialize_UInt);
     if (!ok) printf("[CreateRawMaterial] ERROR: some function pointers not resolved!\n");
 #endif
@@ -532,7 +533,15 @@ int CreateRawMaterial_AbstractImpl_Impl(CreateRawMaterial* self, void* actionSta
                     uint32_t rdValue = *(uint32_t*)(*(uintptr_t*)&rdCompIBP + 0x28);
 
                     fn_InternalBasePtr_CheckPtr(&childIBP);
-                    s_fn_SetupGrowthComp(childIBP, rdValue);
+                    // B.3.2 bridge: FUN_140044810 == Collection::Array<int32>::
+                    // SetSize(n, fill) (3-arg form; ActRm_DynArrayPush4_44810 in
+                    // action_base_rawmat.cpp), gated on the byte flag at +0x28 and
+                    // appending rdValue as the new tail element.
+                    if (*reinterpret_cast<char*>(childIBP + 0x28) != 0) {
+                        int newCount = *reinterpret_cast<int*>(childIBP + 0x38) + 1;
+                        GameColl::AsArray<GameColl::I32>(reinterpret_cast<void*>(childIBP + 0x30))
+                            .SetSize(newCount, GameColl::I32{ static_cast<int32_t>(rdValue) });
+                    }
                 }
             }
         }

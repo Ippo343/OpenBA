@@ -14,6 +14,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/attendancecomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeNameById (pre-fault report)
@@ -155,12 +156,12 @@ typedef void  (*fn_Component_Serialize_t)(void* self, void* stream);
 typedef void* (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
 typedef void  (*fn_Serializer_Dtor_t)(void* self);
 typedef void  (*fn_Serializer_SerializeInt_t)(void* self, void* field, const char* name);
-typedef void  (*fn_AC_ArrayGrow_t)(void* array, int count);
+// 0x1400032e0 was Collection::Array<void*>::SetSize(n) monomorphised into the
+// exe (ENDGAME B.3.2 step 2) — converted at its call site below.
 static fn_Component_Serialize_t     s_fn_Component_Serialize     = nullptr;
 static fn_Serializer_Ctor_t         s_fn_Serializer_Ctor         = nullptr;
 static fn_Serializer_Dtor_t         s_fn_Serializer_Dtor         = nullptr;
 static fn_Serializer_SerializeInt_t s_fn_Serializer_SerializeInt = nullptr;
-static fn_AC_ArrayGrow_t            s_fn_AC_ArrayGrow            = nullptr;
 static uint32_t*                    s_pTId_CitizenComponent      = nullptr;  // 0x1401c7158
 
 static bool s_acHelpersResolved = false;
@@ -168,8 +169,6 @@ static void EnsureAcHelpers() {
     if (s_acHelpersResolved) return;
     s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1401189b0));
-    s_fn_AC_ArrayGrow = reinterpret_cast<fn_AC_ArrayGrow_t>(
-        ResolveAddr(Module::Exe, 0x1400032e0));
     s_pTId_CitizenComponent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7158));
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152ad8))
@@ -493,8 +492,10 @@ extern "C" void AttendanceComponent_SerializeSlot(void* selfP, void* stream) {
     // Same defect as WorkPlaceComponent (21b3b33); see
     // reference_serializer_plus8_is_encoding_not_loading_flag.
     const uintptr_t acStream = *reinterpret_cast<uintptr_t*>(ser);
-    if (acStream && *reinterpret_cast<int32_t*>(acStream + 8) == 0 && s_fn_AC_ArrayGrow)
-        s_fn_AC_ArrayGrow(reinterpret_cast<void*>(self + 0x28), count);
+    if (acStream && *reinterpret_cast<int32_t*>(acStream + 8) == 0) {
+        // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
+        GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(self + 0x28)).SetSize(count);
+    }
 
     int64_t* q = *reinterpret_cast<int64_t**>(self + 0x28);
     for (int32_t i = 0; i < count && q; ++i, ++q) {

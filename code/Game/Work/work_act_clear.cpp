@@ -30,6 +30,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 
 // ============================================================
@@ -45,8 +46,10 @@ typedef float (*s_wac_Entity29a0_t)(float* worldPos, void* entityInnerSlot);
 typedef void  (*s_wac_TaskCleanup_t)(void* list);
 // FUN_1400c54e0 (TaskListAppend): append an action IBP to the task list.
 typedef void  (*s_wac_TaskAppend_t)(void* list, void* actionIBP);
-// FUN_1400032e0 (TaskListGrow): grow the task list backing store to N.
-typedef void  (*s_wac_TaskGrow_t)(void* list, int newCap);
+// 0x1400032e0 (TaskListGrow) is the exe-side Collection::Array<Ptr8>::SetSize
+// monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
+// GameColl::AsArray<GameColl::Ptr8> member call, so its resolved-pointer stand-in
+// is gone.
 // FUN_1400c3470 (WorkDetach): conditional work-target detach (tail).
 typedef void  (*s_wac_WorkDetach_t)(void* target);
 // Entity_FindComponent_Family (0x1400012d0): member-style RCX=entityInner, RDX=retIBP → RAX.
@@ -80,7 +83,6 @@ typedef void  (*s_wac_MemFree_t)(void* ptr);                     // 0x140152b68
 static s_wac_Entity29a0_t      s_wac_Entity29a0     = nullptr;
 static s_wac_TaskCleanup_t     s_wac_TaskCleanup    = nullptr;
 static s_wac_TaskAppend_t      s_wac_TaskAppend     = nullptr;
-static s_wac_TaskGrow_t        s_wac_TaskGrow       = nullptr;
 static s_wac_WorkDetach_t      s_wac_WorkDetach     = nullptr;
 static s_wac_FindCompFamily_t  s_wac_FindCompFamily = nullptr;
 static s_wac_SendCompMsg_t     s_wac_SendCompMsg    = nullptr;
@@ -114,7 +116,6 @@ static void s_wac_ResolveAll() {
     s_wac_Entity29a0     = reinterpret_cast<s_wac_Entity29a0_t>(ResolveAddr(Module::Exe, 0x1400c29a0));
     s_wac_TaskCleanup    = reinterpret_cast<s_wac_TaskCleanup_t>(ResolveAddr(Module::Exe, 0x1400c5400));
     s_wac_TaskAppend     = reinterpret_cast<s_wac_TaskAppend_t>(ResolveAddr(Module::Exe, 0x1400c54e0));
-    s_wac_TaskGrow       = reinterpret_cast<s_wac_TaskGrow_t>(ResolveAddr(Module::Exe, 0x1400032e0));
     s_wac_WorkDetach     = reinterpret_cast<s_wac_WorkDetach_t>(ResolveAddr(Module::Exe, 0x1400c3470));
     s_wac_FindCompFamily = reinterpret_cast<s_wac_FindCompFamily_t>(ResolveAddr(Module::Exe, 0x1400012d0));
     s_wac_SendCompMsg    = reinterpret_cast<s_wac_SendCompMsg_t>(ResolveAddr(Module::Exe, 0x1400cb1d0));
@@ -187,7 +188,10 @@ static void WAC_AppendInline(uintptr_t aiComp, void** plVar15, uintptr_t actionI
         }
         if (pvVar11 != *reinterpret_cast<void**>(plVar15) && s_wac_MemFree) s_wac_MemFree(pvVar11);
     } else if (*reinterpret_cast<int*>(aiComp + 0x60) + 1 == iVar16) {
-        if (s_wac_TaskGrow) s_wac_TaskGrow(plVar15, iVar16 * 2);
+        // B.3.2 bridge: FUN_1400032e0 == Collection::Array<Ptr8>::SetSize
+        // (ImmigrationComp_DynArrayResize in immigrationcomponent.cpp). plVar15
+        // IS the array header (aiComp+0x48: data@0, count@+8==+0x50, cap@+0xc==+0x54).
+        GameColl::AsArray<GameColl::Ptr8>(plVar15).SetSize(iVar16 * 2);
     }
 
     // Drain any pending nodes from the current index slot (cancel/detach chain).

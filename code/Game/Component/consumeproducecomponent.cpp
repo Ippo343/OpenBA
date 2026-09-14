@@ -9,6 +9,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/consumeproducecomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -37,9 +38,16 @@ static fn_Serialize_Int_t s_fn_Serialize_Int = nullptr;
 typedef int (*fn_Serializer_GetVersion_t)(void* self);
 static fn_Serializer_GetVersion_t s_fn_Serializer_GetVersion = nullptr;
 
-// FUN_140023a00 — resize float array (takes address of float* and new count)
-typedef void (*fn_ResizeFloatArray_t)(float** arrayPtr, int newSize);
-static fn_ResizeFloatArray_t s_fn_ResizeFloatArray = nullptr;
+// FUN_140023a00 IS Collection::Array<float>::SetSize (ENDGAME B.3.2 step 2), but
+// with a derived row that DEVIATES from the header's zero-tail assumption: the
+// ported body (ConsumeProduceComponent_ResizeArray below) has NO else-arm write
+// for the new tail at all — it leaves the grown slots holding whatever MemAlloc
+// returned. That is exactly SpecFor<float>'s behaviour for a trivially
+// default-constructible T (init == nullptr), so the call sites below go through
+// GameColl::AsArray<float> (a bare scalar, not GameColl::F32 which would zero).
+// Both resolved-pointer names below pointed at this same address and are gone;
+// the function is KEPT (still registered by reg_component_economy.cpp for
+// other callers) and this file's own two call sites now call it directly.
 
 // IO::Serializer::Serialize(float array) — dispatch slot at 0x140151ea8
 typedef void (*fn_Serialize_FloatArray_t)(void* self, int count, float* array, const char* name);
@@ -48,11 +56,6 @@ static fn_Serialize_FloatArray_t s_fn_Serialize_FloatArray = nullptr;
 // fn_InternalBasePtr_CheckPtr — dispatch slot at entity owner
 typedef void (*fn_CheckPtr_t)(void* self);
 static fn_CheckPtr_t s_fn_CheckPtr = nullptr;
-
-// ConsumeProduceComponent_sub_3a00 — resize consume rate array at +0x58
-// Takes (void* arrayFieldPtr, int newCount)
-typedef void (*fn_ResizeConsumeArray_t)(void* arrayFieldPtr, int newCount);
-static fn_ResizeConsumeArray_t s_fn_ResizeConsumeArray = nullptr;
 
 // DWORD_1401c7388 — ConsumeProduceDescription type ID
 static uint32_t* s_TypeId_ConsumeProduceDescription = nullptr;
@@ -82,18 +85,12 @@ static void EnsureHelpers() {
     slot = ResolveAddr(Module::Exe, 0x140152a48);
     if (slot) s_fn_Serializer_GetVersion = *reinterpret_cast<fn_Serializer_GetVersion_t*>(slot);
 
-    s_fn_ResizeFloatArray = reinterpret_cast<fn_ResizeFloatArray_t>(
-        ResolveAddr(Module::Exe, 0x140023a00));
-
     slot = ResolveAddr(Module::Exe, 0x140151ea8);
     if (slot) s_fn_Serialize_FloatArray = *reinterpret_cast<fn_Serialize_FloatArray_t*>(slot);
 
     // CheckPtr dispatch slot at 0x140152ab0
     slot = ResolveAddr(Module::Exe, 0x140152ab0);
     if (slot) s_fn_CheckPtr = *reinterpret_cast<fn_CheckPtr_t*>(slot);
-
-    s_fn_ResizeConsumeArray = reinterpret_cast<fn_ResizeConsumeArray_t>(
-        ResolveAddr(Module::Exe, 0x140023a00));
 
     // ConsumeProduceDescription type ID at 0x1401c7388
     s_TypeId_ConsumeProduceDescription = reinterpret_cast<uint32_t*>(
@@ -147,9 +144,9 @@ void ConsumeProduceComponent_Shutdown(ConsumeProduceComponent* self, void* strea
 
     // On load (direction == 0): resize array if needed
     if (*(int*)(pSerData[0] + 8) == 0) {
-        if (s_fn_ResizeFloatArray) {
-            s_fn_ResizeFloatArray(&self->consumeRates, localCount);
-        }
+        // B.3.2 bridge: exe 0x140023a00 IS Collection::Array<float>::SetSize(n)
+        // (bare float — see the derived-row note above the typedefs).
+        GameColl::AsArray<float>(&self->consumeRates).SetSize(localCount);
     }
 
     // Serialize float array using local count and rates pointer
@@ -259,9 +256,8 @@ void ConsumeProduceComponent_Serialize(ConsumeProduceComponent* self) {
 
     // Resize consume array from description count at +0x30
     int descCount = *(int*)((uintptr_t)desc + 0x30);
-    if (s_fn_ResizeConsumeArray) {
-        s_fn_ResizeConsumeArray((void*)((uintptr_t)self + 0x58), descCount);
-    }
+    // B.3.2 bridge: exe 0x140023a00 IS Collection::Array<float>::SetSize(n).
+    GameColl::AsArray<float>((void*)((uintptr_t)self + 0x58)).SetSize(descCount);
 
     // Copy resource ID from description at +0x4c
     self->consumeResourceId = *(int*)((uintptr_t)desc + 0x4c);
@@ -354,13 +350,12 @@ void ConsumeProduceComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
     printf("[ConsumeProduceComponent] Funcs resolved: ParentShutdown=%p "
-           "Ctor=%p Dtor=%p SerInt=%p GetVer=%p ResizeFloat=%p SerFloat=%p "
-           "CheckPtr=%p ResizeConsume=%p TypeId=%p IsDerived=%p\n",
+           "Ctor=%p Dtor=%p SerInt=%p GetVer=%p SerFloat=%p "
+           "CheckPtr=%p TypeId=%p IsDerived=%p\n",
            (void*)s_fn_ParentShutdown, (void*)s_fn_Serializer_Ctor,
            (void*)s_fn_Serializer_Dtor, (void*)s_fn_Serialize_Int,
-           (void*)s_fn_Serializer_GetVersion, (void*)s_fn_ResizeFloatArray,
+           (void*)s_fn_Serializer_GetVersion,
            (void*)s_fn_Serialize_FloatArray, (void*)s_fn_CheckPtr,
-           (void*)s_fn_ResizeConsumeArray,
            (void*)s_TypeId_ConsumeProduceDescription,
            (void*)s_fn_IsDerivedFrom_dispatch);
 #endif

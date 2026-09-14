@@ -12,6 +12,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/residencecomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -259,9 +260,6 @@ void ResidenceComponent_OnCreate(ResidenceComponent* self) {
 // ResidenceComponent_CopyInnerArray and registered for 0x140007960.
 typedef void (*fn_Resident_MoveElem_t)(void* dst, void* src);
 static fn_Resident_MoveElem_t s_fn_Resident_MoveElem = nullptr;
-// FUN_1400032e0(entry, innerCount) — resize inner IBP array on load (0x1400032e0)
-typedef void (*fn_Resident_ResizeInner_t)(void* entry, int innerCount);
-static fn_Resident_ResizeInner_t s_fn_Resident_ResizeInner = nullptr;
 // Object::InternalBasePtr::Serialize(this, serializer)
 typedef void (*fn_IBP_Serialize_t)(void* self, void* serializer);
 static fn_IBP_Serialize_t s_fn_IBP_Serialize = nullptr;
@@ -280,8 +278,6 @@ static void EnsureResidentHelpers() {
     if (s_residentHelpersResolved) return;
     s_fn_Resident_MoveElem = reinterpret_cast<fn_Resident_MoveElem_t>(
         ResolveAddr(Module::Exe, 0x140007960));
-    s_fn_Resident_ResizeInner = reinterpret_cast<fn_Resident_ResizeInner_t>(
-        ResolveAddr(Module::Exe, 0x1400032e0));
     s_fn_IBP_Serialize = reinterpret_cast<fn_IBP_Serialize_t>(
         ResolveExport("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z"));
     s_TypeId_Resident = reinterpret_cast<uint32_t*>(
@@ -412,8 +408,9 @@ void ResidenceComponent_SerializeResidentArray(void* serializer, int count, void
         int innerCount = (int)entry[1];
         if (s_fn_Serialize_Int) s_fn_Serialize_Int(serializer, &innerCount, nullptr);
         // On load (serializer internal +8 == 0): resize the inner array
+        // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
         if (*(int*)(*(int64_t*)serializer + 8) == 0) {
-            if (s_fn_Resident_ResizeInner) s_fn_Resident_ResizeInner(entry, innerCount);
+            GameColl::AsArray<GameColl::Ptr8>((void*)entry).SetSize(innerCount);
         }
         uintptr_t inner = (uintptr_t)entry[0];
         for (int i = 0; i < innerCount; i++) {

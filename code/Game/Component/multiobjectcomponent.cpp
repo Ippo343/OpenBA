@@ -10,6 +10,7 @@
 //
 
 #include "Component/multiobjectcomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -39,10 +40,6 @@ static fn_IBP_Serialize_t s_fn_IBP_Serialize = nullptr;
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_d = nullptr;
 
-// FUN_1400032e0 — resize IBP array
-typedef void (*fn_ResizeIBPArray_t)(void* arrayPtr, int newCount);
-static fn_ResizeIBPArray_t s_fn_ResizeIBPArray = nullptr;
-
 // CheckPtr
 typedef void (*fn_CheckPtr_t)(void* ptr);
 static fn_CheckPtr_t s_fn_CheckPtr = nullptr;
@@ -50,10 +47,6 @@ static fn_CheckPtr_t s_fn_CheckPtr = nullptr;
 // FUN_1400c2ea0 — mark entity for removal
 typedef void (*fn_MarkForRemoval_t)(void* entity);
 static fn_MarkForRemoval_t s_fn_MarkForRemoval = nullptr;
-
-// FUN_140003110 — dynamic array push
-typedef void (*fn_ArrayPush_t)(void* arrayBase, int newCount, void* elementPtr);
-static fn_ArrayPush_t s_fn_ArrayPush = nullptr;
 
 static void** s_pGameState = nullptr;
 static uint32_t* s_pComponentEntityTypeId = nullptr;  // TypeInfo_ComponentEntity
@@ -87,8 +80,10 @@ void MultiObjectComponent_Shutdown(MultiObjectComponent* self, void* stream) {
         s_fn_Serializer_SerializeInt(serializer2, &localCount, nullptr);
 
     // If loading (stream+8 == 0), resize array
-    if (*(int*)((uintptr_t)stream + 8) == 0 && s_fn_ResizeIBPArray) {
-        s_fn_ResizeIBPArray((void*)((uintptr_t)self + 0x48), localCount);
+    // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
+    if (*(int*)((uintptr_t)stream + 8) == 0) {
+        GameColl::AsArray<GameColl::Ptr8>((void*)((uintptr_t)self + 0x48))
+            .SetSize(localCount);
     }
 
     // Serialize each InternalBasePtr in the array
@@ -164,13 +159,11 @@ void MultiObjectComponent_OnCreate(MultiObjectComponent* self) {
                 if (s_fn_CheckPtr) s_fn_CheckPtr(&array[i]);
                 if (s_fn_MarkForRemoval) s_fn_MarkForRemoval(entityPtr);
 
-                if (s_fn_ArrayPush && gameWorld) {
+                if (gameWorld) {
                     int removalCount = *(int*)((uintptr_t)gameWorld + 0xD8);
-                    s_fn_ArrayPush(
-                        (void*)((uintptr_t)gameWorld + 0xD0),
-                        removalCount + 1,
-                        &array[i]
-                    );
+                    // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
+                    GameColl::AsArray<GameColl::Ptr8>((void*)((uintptr_t)gameWorld + 0xD0))
+                        .SetSizeFill(removalCount + 1, &array[i]);
                 }
             }
         }
@@ -187,10 +180,6 @@ void MultiObjectComponent_InitFuncs() {
         ResolveAddr(Module::Exe, 0x1401189b0));
     s_fn_MarkForRemoval = reinterpret_cast<fn_MarkForRemoval_t>(
         ResolveAddr(Module::Exe, 0x1400c2ea0));
-    s_fn_ArrayPush = reinterpret_cast<fn_ArrayPush_t>(
-        ResolveAddr(Module::Exe, 0x140003110));
-    s_fn_ResizeIBPArray = reinterpret_cast<fn_ResizeIBPArray_t>(
-        ResolveAddr(Module::Exe, 0x1400032e0));
     s_pGameState = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x1401c3dd8));
 

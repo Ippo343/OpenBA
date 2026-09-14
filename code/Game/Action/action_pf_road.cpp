@@ -35,8 +35,26 @@
 #include <cstdio>
 #include <cstdlib>
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (M-D scoped finder fallback)
+#include "Component/coll_bridge.h"
 
 namespace {
+
+// B.3.2 bridge: FUN_14001ee40 / FUN_14001f8d0 are Collection::Array<T>::SetSize /
+// SetSize(n,fill) monomorphised over a 0x14-byte, align-2 element. Neither body's
+// new-tail arm touches the tail (ee40 has literally no else branch; f8d0's else
+// branch is the 3-arg fill copy), so the element must be TRIVIALLY default
+// constructible -- rtcoll::SpecFor<T> then emits init=nullptr, matching retail's
+// uninitialised new slot exactly (a zeroing element, like GameColl::Bytes<N,A>,
+// would be a DIFFERENT array). alignas(2) reproduces the 0x14001ee40/f8d0
+// MemAlloc(.., 2) alignment.
+struct alignas(2) PfRawElem14 { uint8_t b[0x14]; };
+static_assert(sizeof(PfRawElem14) == 0x14, "PfRawElem14 stride");
+static_assert(alignof(PfRawElem14) == 2, "PfRawElem14 align");
+static_assert(std::is_trivially_copyable<PfRawElem14>::value, "PfRawElem14 byteCopy");
+static_assert(std::is_trivially_destructible<PfRawElem14>::value, "PfRawElem14 destroy-free");
+static_assert(std::is_trivially_default_constructible<PfRawElem14>::value,
+              "PfRawElem14 must stay uninitialised on the new-tail arm (SpecFor: "
+              "init = !is_trivially_default_constructible)");
 
 // ------------------------------------------------------------
 // Lazily-resolved exe sub-helpers + .rdata constants (resolved once).
@@ -47,12 +65,12 @@ typedef void  (*fn_RoadQuad_t)(int64_t self, int x, int y, int64_t outQuad, int 
 typedef void* (*fn_RoadNormal_t)(int64_t self, void* outVec3, int x, int y);                     // ae270
 typedef int   (*fn_RoadCornerBlend_t)(uint64_t a1, char c2, char c3, char c4, char c5,
                                       char c6, char c7, char c8, char c9);                        // ae180
-typedef void  (*fn_GrowShortDup_t)(int64_t* arr, int newCount, void* src);                       // 1f8d0
 typedef void  (*fn_GrowElemDup_t)(int64_t* arr, int newCount, void* src);                        // fa80
 typedef void  (*fn_GrowElem_t)(int64_t* arr, uint32_t newCount);                                 // f250
-typedef void  (*fn_GrowIntDup_t)(int64_t* arr, int newCount);                                    // 021d0
-typedef void  (*fn_GrowShort_t)(int64_t* arr, int newCount);                                     // c890
-typedef void  (*fn_GrowElem14_t)(int64_t* arr, int newCount);                                    // ee40
+// 021d0 (int-array SetSize), c890 (uint16 SetSize) and 1f8d0/ee40 (0x14-byte-element
+// SetSize/SetSizeFill) are the exe-side Collection::Array<T> monomorphisations --
+// ENDGAME B.3.2 step 2 converted their call sites below to GameColl::AsArray<T>
+// member calls, so the resolved-pointer stand-ins for them are gone.
 
 typedef uint64_t (*fn_CellRayTri_t)(uint64_t a1, float* p2, void* p3, float* p4, float* p5,
                                     float* p6, float* p7, float* p8, uint32_t* p9);               // aa810
@@ -79,12 +97,8 @@ typedef uint32_t (*fn_RandomRand_t)(void* rng, uint32_t range);                 
 
 static fn_RoadNormal_t        s_fn_RoadNormal      = nullptr;  // ae270
 static fn_RoadCornerBlend_t   s_fn_RoadCornerBlend = nullptr;  // ae180
-static fn_GrowShortDup_t      s_fn_GrowShortDup    = nullptr;  // 1f8d0
 static fn_GrowElemDup_t       s_fn_GrowElemDup     = nullptr;  // fa80
 static fn_GrowElem_t          s_fn_GrowElem        = nullptr;  // f250
-static fn_GrowIntDup_t        s_fn_GrowIntDup      = nullptr;  // 021d0
-static fn_GrowShort_t         s_fn_GrowShort       = nullptr;  // c890
-static fn_GrowElem14_t        s_fn_GrowElem14      = nullptr;  // ee40
 static fn_CellRayTri_t        s_fn_CellRayTri      = nullptr;  // aa810
 static fn_AvlInsert_t         s_fn_AvlInsert       = nullptr;  // 1a4f0
 static fn_MarkFineDirty_t     s_fn_MarkFineDirty   = nullptr;  // a8420
@@ -115,12 +129,8 @@ static void EnsureInit() {
     if (s_init) return;
     s_fn_RoadNormal      = reinterpret_cast<fn_RoadNormal_t>(ResolveAddr(Module::Exe, 0x1400ae270));
     s_fn_RoadCornerBlend = reinterpret_cast<fn_RoadCornerBlend_t>(ResolveAddr(Module::Exe, 0x1400ae180));
-    s_fn_GrowShortDup    = reinterpret_cast<fn_GrowShortDup_t>(ResolveAddr(Module::Exe, 0x14001f8d0));
     s_fn_GrowElemDup     = reinterpret_cast<fn_GrowElemDup_t>(ResolveAddr(Module::Exe, 0x14001fa80));
     s_fn_GrowElem        = reinterpret_cast<fn_GrowElem_t>(ResolveAddr(Module::Exe, 0x14001f250));
-    s_fn_GrowIntDup      = reinterpret_cast<fn_GrowIntDup_t>(ResolveAddr(Module::Exe, 0x1400021d0));
-    s_fn_GrowShort       = reinterpret_cast<fn_GrowShort_t>(ResolveAddr(Module::Exe, 0x14001c890));
-    s_fn_GrowElem14      = reinterpret_cast<fn_GrowElem14_t>(ResolveAddr(Module::Exe, 0x14001ee40));
     s_fn_CellRayTri      = reinterpret_cast<fn_CellRayTri_t>(ResolveAddr(Module::Exe, 0x1400aa810));
     s_fn_AvlInsert       = reinterpret_cast<fn_AvlInsert_t>(ResolveAddr(Module::Exe, 0x14001a4f0));
     s_fn_MarkFineDirty   = reinterpret_cast<fn_MarkFineDirty_t>(ResolveAddr(Module::Exe, 0x1400a8420));
@@ -925,8 +935,9 @@ void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2) {
 
     // Phase 1: counter array length sync (+0x228 vs +0x218) then zero every counter.
     if (*reinterpret_cast<int*>(param_1 + 0x228) != *reinterpret_cast<int*>(param_1 + 0x218)) {
-        if (s_fn_GrowIntDup) s_fn_GrowIntDup(reinterpret_cast<int64_t*>(param_1 + 0x220),
-                                             *reinterpret_cast<int*>(param_1 + 0x218));
+        // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize.
+        GameColl::AsArray<GameColl::I32>(reinterpret_cast<void*>(param_1 + 0x220))
+            .SetSize(*reinterpret_cast<int*>(param_1 + 0x218));
     }
     {
         int cnt = *reinterpret_cast<int*>(param_1 + 0x228);
@@ -959,8 +970,11 @@ void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2) {
                     for (int b = 0; b < batchCount; b++) {
                         *reinterpret_cast<int64_t*>(recBase + 0x00) =
                             *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x210) + lVar13);
-                        if (s_fn_GrowShort)  s_fn_GrowShort(reinterpret_cast<int64_t*>(recBase + 0x08), 0);   // c890 (buffer B)
-                        if (s_fn_GrowElem14) s_fn_GrowElem14(reinterpret_cast<int64_t*>(recBase + 0x18), 0);  // ee40 (buffer A)
+                        // B.3.2 bridge: FUN_14001c890 == Array<uint16>::SetSize (buffer B);
+                        // FUN_14001ee40 == Array<PfRawElem14>::SetSize (buffer A). Both shrink
+                        // to 0 here, so neither body's new-tail arm is ever exercised.
+                        GameColl::AsArray<GameColl::U16>(reinterpret_cast<void*>(recBase + 0x08)).SetSize(0);
+                        GameColl::AsArray<PfRawElem14>(reinterpret_cast<void*>(recBase + 0x18)).SetSize(0);
                         // Culling AABB in tile coords, read by the TerrainGenerator cull pass
                         // (0x1400ae490 -> Volume::Frustum::Contains). +0x28 is the record's
                         // slot-handle sentinel (f250 seeds -1) and must NOT be written here —
@@ -1066,7 +1080,11 @@ void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2) {
                                             *reinterpret_cast<short*>(srcV + 0x08) = cX;   // AO-u slot
                                             *reinterpret_cast<short*>(srcV + 0x0a) = cY;   // AO-v slot
                                             int curCount = *reinterpret_cast<int*>(recBase + 0x10);  // (int)plVar15[1]
-                                            if (s_fn_GrowShortDup) s_fn_GrowShortDup(bufB, curCount + 1, srcV);
+                                            // B.3.2 bridge: FUN_14001f8d0 == Array<PfRawElem14>::
+                                            // SetSize(n, fill) (3-arg form) -- appends srcV as the
+                                            // new tail element.
+                                            GameColl::AsArray<PfRawElem14>(bufB)
+                                                .SetSize(curCount + 1, *reinterpret_cast<const PfRawElem14*>(srcV));
                                         }
                                     }
                                 }

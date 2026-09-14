@@ -11,6 +11,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/tradecomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "Work/tradework_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -28,8 +29,6 @@ typedef void (*fn_RegisterEntity_t)(void* listPtr, void* entityPtr);
 static fn_RegisterEntity_t s_fn_RegisterEntity = nullptr;
 
 // FUN_140003110 — add entity to world pending list
-typedef void (*fn_AddToPending_t)(void* listPtr, int newCount, void* entityPtr);
-static fn_AddToPending_t s_fn_AddToPending = nullptr;
 
 // FUN_14005c220 — trade component setup (called after adding to pending list)
 typedef void (*fn_TradeSetup_t)(void* self);
@@ -42,9 +41,6 @@ static void EnsureHelpers() {
 
     s_fn_RegisterEntity = reinterpret_cast<fn_RegisterEntity_t>(
         ResolveAddr(Module::Exe, 0x140002cc0));
-
-    s_fn_AddToPending = reinterpret_cast<fn_AddToPending_t>(
-        ResolveAddr(Module::Exe, 0x140003110));
 
     s_fn_TradeSetup = reinterpret_cast<fn_TradeSetup_t>(
         ResolveAddr(Module::Exe, 0x14005c220));
@@ -76,7 +72,7 @@ static void EnsureHelpers() {
 void TradeComponent_Draw(TradeComponent* self) {
     EnsureHelpers();
 
-    if (!s_fn_AddToPending || !s_fn_TradeSetup ||
+    if (!s_fn_TradeSetup ||
         !g_pGameWorldSingleton || !*g_pGameWorldSingleton)
         return;
 
@@ -86,8 +82,10 @@ void TradeComponent_Draw(TradeComponent* self) {
     uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xf0);
 
     // Add to trade pending list at worldMgr+0x30
+    // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
     int currentCount = *(int*)(worldMgr + 0x38);
-    s_fn_AddToPending((void*)(worldMgr + 0x30), currentCount + 1, &entityPtr);
+    GameColl::AsArray<GameColl::Ptr8>((void*)(worldMgr + 0x30))
+        .SetSizeFill(currentCount + 1, &entityPtr);
 
     // Call trade setup
     s_fn_TradeSetup(self);
@@ -527,9 +525,9 @@ void TradeComponent_ResizeItems(int64_t* field, int count) {
 void TradeComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[TradeComponent] Funcs resolved: RegisterEntity=%p AddToPending=%p "
+    printf("[TradeComponent] Funcs resolved: RegisterEntity=%p "
            "TradeSetup=%p\n",
-           (void*)s_fn_RegisterEntity, (void*)s_fn_AddToPending,
+           (void*)s_fn_RegisterEntity,
            (void*)s_fn_TradeSetup);
 #endif
 }

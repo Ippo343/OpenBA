@@ -12,6 +12,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/cemeterycomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "perf_terrain.h"
 #include "resolve.h"
@@ -38,9 +39,8 @@ static fn_Serialize_Int_t s_fn_Serialize_Int = nullptr;
 typedef void (*fn_Serialize_IntArray_t)(void* serializer, int count, int* array, const char* name);
 static fn_Serialize_IntArray_t s_fn_Serialize_IntArray = nullptr;
 
-// FUN_1400021d0 -- resize int array
-typedef void (*fn_ResizeIntArray_t)(void* arrayField, int newCount);
-static fn_ResizeIntArray_t s_fn_ResizeIntArray = nullptr;
+// FUN_1400021d0 was Collection::Array<int32>::SetSize monomorphised into the
+// exe (ENDGAME B.3.2 step 2) — converted at its call site below.
 
 // FUN_140002cc0 -- add InternalBasePtr to linked list
 typedef void (*fn_ListAdd_t)(void* listBase, void* ptrValue);
@@ -56,9 +56,8 @@ static fn_FindMapComp_t s_fn_FindMapComp = nullptr;
 typedef void  (*fn_FindMultiComp_t)(uintptr_t entity, void* outIBP);
 static fn_FindMultiComp_t s_fn_FindMultiComp = nullptr;
 
-// FUN_140003110 -- ArrayPush(base, newCount, elemPtr): grow to newCount and store.
-typedef void (*fn_ArrayPush_t)(void* arrayBase, int newCount, void* elementPtr);
-static fn_ArrayPush_t s_fn_ArrayPush = nullptr;
+// FUN_140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
+// into the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
 
 // 0x1400a6fe0 PfEnqueueCmd2(pfQueue, cellIdx, cmd) / 0x1400a8c90 FineCellDirty.
 typedef void (*fn_PfEnqueueCmd2_t)(void* queue, int cellIdx, int cmd);
@@ -116,8 +115,8 @@ void CemeteryComponent_Shutdown(CemeteryComponent* self, void* stream) {
     // If reading, resize array
     uintptr_t serializerObj = *(uintptr_t*)serializer2;
     if (*(int*)(serializerObj + 8) == 0) {
-        if (s_fn_ResizeIntArray)
-            s_fn_ResizeIntArray((void*)(selfAddr + 0x48), localCount);
+        // B.3.2 bridge: exe 0x1400021d0 IS Collection::Array<int32>::SetSize(n).
+        GameColl::AsArray<GameColl::I32>((void*)(selfAddr + 0x48)).SetSize(localCount);
     }
 
     // Bulk-serialize all int elements
@@ -346,9 +345,6 @@ void CemeteryComponent_InitFuncs() {
     slot = ResolveAddr(Module::Exe, 0x140151278);
     if (slot) s_fn_Serialize_IntArray = *reinterpret_cast<fn_Serialize_IntArray_t*>(slot);
 
-    s_fn_ResizeIntArray = reinterpret_cast<fn_ResizeIntArray_t>(
-        ResolveAddr(Module::Exe, 0x1400021d0));
-
     s_fn_ListAdd = reinterpret_cast<fn_ListAdd_t>(
         ResolveAddr(Module::Exe, 0x140002cc0));
 
@@ -356,8 +352,6 @@ void CemeteryComponent_InitFuncs() {
         ResolveAddr(Module::Exe, 0x140004680));
     s_fn_FindMultiComp = reinterpret_cast<fn_FindMultiComp_t>(
         ResolveAddr(Module::Exe, 0x140004740));
-    s_fn_ArrayPush = reinterpret_cast<fn_ArrayPush_t>(
-        ResolveAddr(Module::Exe, 0x140003110));
     s_fn_PfEnqueueCmd2 = reinterpret_cast<fn_PfEnqueueCmd2_t>(
         ResolveAddr(Module::Exe, 0x1400a6fe0));
     s_fn_FineCellDirty = reinterpret_cast<fn_FineCellDirty_t>(
@@ -378,9 +372,9 @@ void CemeteryComponent_InitFuncs() {
     s_initialized = true;
 
 #ifdef _DEBUG
-    printf("[CemeteryComponent] Funcs resolved: CompSerialize=%p Erase=%p FindMap=%p FindMulti=%p Push=%p\n",
+    printf("[CemeteryComponent] Funcs resolved: CompSerialize=%p Erase=%p FindMap=%p FindMulti=%p\n",
            (void*)s_fn_Component_Serialize, (void*)s_fn_ListAdd, (void*)s_fn_FindMapComp,
-           (void*)s_fn_FindMultiComp, (void*)s_fn_ArrayPush);
+           (void*)s_fn_FindMultiComp);
 #endif
 }
 
@@ -402,7 +396,7 @@ void CemeteryComponent_InitFuncs() {
 extern "C" char CemeteryComponent_EnterBuilt(void* compV, void* /*sm*/) {
     CemeteryComponent* self = reinterpret_cast<CemeteryComponent*>(compV);
     CemeteryComponent_InitFuncs();
-    if (!fn_InternalBasePtr_Ctor || !s_fn_ArrayPush || !s_g_pGameState || !*s_g_pGameState)
+    if (!fn_InternalBasePtr_Ctor || !s_g_pGameState || !*s_g_pGameState)
         return 0;
 
     const uintptr_t gw = reinterpret_cast<uintptr_t>(*s_g_pGameState);
@@ -412,7 +406,9 @@ extern "C" char CemeteryComponent_EnterBuilt(void* compV, void* /*sm*/) {
     uint8_t ibp[24] = {};
     fn_InternalBasePtr_Ctor(ibp, self);
     const int count = *reinterpret_cast<int*>(townMgr + 0x48);
-    s_fn_ArrayPush(reinterpret_cast<void*>(townMgr + 0x40), count + 1, ibp);
+    // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+    GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(townMgr + 0x40))
+        .SetSizeFill(count + 1, ibp);
 
     const uintptr_t world = *reinterpret_cast<uintptr_t*>(gw + 0xF8);
     if (!world) return 0;

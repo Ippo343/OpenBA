@@ -14,6 +14,7 @@
 //
 
 #include "Component/particlecomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "scene_watch.h"
 #include "engine_funcs.h"
 #include "system/String.h"
@@ -48,8 +49,6 @@ typedef void (*fn_SerializeBoolArray_t)(void* self, int count, bool* array, cons
 static fn_SerializeBoolArray_t s_fn_SerializeBoolArray = nullptr;
 
 // FUN_14000a590 — resize bool array
-typedef void (*fn_ResizeBoolArray_t)(void* arrayPtr, int newCount);
-static fn_ResizeBoolArray_t s_fn_ResizeBoolArray = nullptr;
 
 // IsDerivedFrom
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
@@ -149,8 +148,9 @@ void ParticleComponent_Shutdown(ParticleComponent* self, void* stream) {
         s_fn_SerializeInt(serializer, &localCount, nullptr);
 
     // If loading, resize bool array
-    if (*(int*)((uintptr_t)stream + 8) == 0 && s_fn_ResizeBoolArray) {
-        s_fn_ResizeBoolArray((void*)(selfAddr + 0x28), localCount);
+    // B.3.2 bridge: FUN_14000a590 is Collection::Array<uint8_t>::SetSize(n)
+    if (*(int*)((uintptr_t)stream + 8) == 0) {
+        GameColl::AsArray<GameColl::U8>((void*)(selfAddr + 0x28)).SetSize(localCount);
     }
 
     // Serialize bool array
@@ -650,7 +650,8 @@ extern "C" void ParticleComponent_Setup(ParticleComponent* self) {
     }
     int n = *(int32_t*)((uintptr_t)desc + 0x30);
     PC_GeoArrayResize((void*)(s + 0x38), n);
-    if (s_fn_ResizeBoolArray) s_fn_ResizeBoolArray((void*)(s + 0x28), n);
+    // B.3.2 bridge: FUN_14000a590 is Collection::Array<uint8_t>::SetSize(n)
+    GameColl::AsArray<GameColl::U8>((void*)(s + 0x28)).SetSize(n);
 
     uint8_t* emArr = *(uint8_t**)((uintptr_t)desc + 0x28);
     PCGeoEntry* geoArr = *(PCGeoEntry**)(s + 0x38);
@@ -816,8 +817,6 @@ void ParticleComponent_InitFuncs() {
         ResolveAddr(Module::Exe, 0x140052990));
     s_fn_EntityFlagUpdate = reinterpret_cast<fn_EntityFlagUpdate_t>(
         ResolveAddr(Module::Exe, 0x1400c3470));
-    s_fn_ResizeBoolArray = reinterpret_cast<fn_ResizeBoolArray_t>(
-        ResolveAddr(Module::Exe, 0x14000a590));
     s_fn_EmitterStartup = reinterpret_cast<fn_EmitterStartup_t>(
         ResolveAddr(Module::Exe, 0x140053660));
 

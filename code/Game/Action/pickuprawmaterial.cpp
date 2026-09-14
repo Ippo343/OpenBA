@@ -28,6 +28,7 @@
 #include "PickupRawMaterial.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include <cstdio>
 #include <cstdint>
 
@@ -51,10 +52,11 @@ static s_fn_Storage_AddItem_t s_fn_Storage_AddItem = nullptr;
 typedef void (*s_fn_EntityFlagSet_t)(void* entity);
 static s_fn_EntityFlagSet_t s_fn_EntityFlagSet = nullptr;
 
-// FUN_140003110 -- DynArrayPush 8-byte elements (used to add entity to game world list)
-// Params: (arrayBase, newCount, elementPtr)
-typedef void (*s_fn_DynArrayPush8_t)(void* arrayBase, int newCount, void* elementPtr);
-static s_fn_DynArrayPush8_t s_fn_DynArrayPush8 = nullptr;
+// FUN_140003110 (DynArrayPush 8-byte elements, used to add the entity to the game
+// world list) is the exe-side Collection::Array<Ptr8>::SetSize(n,fill) mono-
+// morphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
+// GameColl::AsArray<GameColl::Ptr8> member call, so its resolved-pointer stand-in
+// is gone.
 
 // DAT_1401c7158 -- type ID for IsDerivedFrom check on +0x20
 static uint32_t* s_typeId_1401c7158 = nullptr;
@@ -76,14 +78,11 @@ bool PickupRawMaterial_ResolveFuncs() {
     s_fn_EntityFlagSet = reinterpret_cast<s_fn_EntityFlagSet_t>(
         ResolveAddr(Module::Exe, 0x1400c2ea0));
 
-    s_fn_DynArrayPush8 = reinterpret_cast<s_fn_DynArrayPush8_t>(
-        ResolveAddr(Module::Exe, 0x140003110));
-
     s_typeId_1401c7158 = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7158));
 
     bool ok = s_fn_FindComponent_7c80 && s_fn_Storage_AddItem &&
-              s_fn_EntityFlagSet && s_fn_DynArrayPush8 &&
+              s_fn_EntityFlagSet &&
               s_typeId_1401c7158 && g_TypeId_ComponentEntity &&
               g_pGameWorldSingleton &&
               fn_InternalBasePtr_CheckPtr && fn_IsDerivedFrom &&
@@ -91,9 +90,9 @@ bool PickupRawMaterial_ResolveFuncs() {
               g_fn_Serializer_Ctor && g_fn_Serializer_Dtor && g_fn_Serialize_Bool;
 
 #ifdef _DEBUG
-    printf("[PickupRawMaterial] ResolveFuncs: FC7c80=%p AddItem=%p FlagSet=%p Push8=%p\n",
+    printf("[PickupRawMaterial] ResolveFuncs: FC7c80=%p AddItem=%p FlagSet=%p\n",
            (void*)s_fn_FindComponent_7c80, (void*)s_fn_Storage_AddItem,
-           (void*)s_fn_EntityFlagSet, (void*)s_fn_DynArrayPush8);
+           (void*)s_fn_EntityFlagSet);
     if (!ok) printf("[PickupRawMaterial] ERROR: some function pointers not resolved!\n");
 #endif
 
@@ -205,9 +204,13 @@ int PickupRawMaterial_AbstractImpl_Impl(PickupRawMaterial* self, void* actionSta
             fn_InternalBasePtr_CheckPtr(&localEntity);
             s_fn_EntityFlagSet((void*)localEntity);
 
-            // Push entity ref to world list at worldList + 0xd0
+            // Push entity ref to world list at worldList + 0xd0.
+            // B.3.2 bridge: FUN_140003110 == Collection::Array<Ptr8>::SetSize(n,fill)
+            // (3-arg form; ActHunt_DynArraySetCount_3110 in action_base_hunt.cpp).
             int currentCount = *(int*)(worldList + 0xd8);
-            s_fn_DynArrayPush8((void*)(worldList + 0xd0), currentCount + 1, &localEntity);
+            GameColl::AsArray<GameColl::Ptr8>((void*)(worldList + 0xd0))
+                .SetSize(currentCount + 1,
+                         *reinterpret_cast<const GameColl::Ptr8*>(&localEntity));
         }
     }
 

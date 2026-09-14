@@ -32,6 +32,7 @@
 #include "options.h"
 #include "resolve.h"
 #include "Component/controller_state_table.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -84,7 +85,9 @@ typedef void* (*BC8_Find_t)(uintptr_t entity, void* retIBP);
 typedef void  (*BC8_Stop_t)(uintptr_t workComp);            // FUN_14012eb50
 typedef void  (*BC8_ModelRefresh_t)(uintptr_t modelComp, int mode); // 0x1400c2b70
 typedef void  (*BC8_Entity8f50_t)(void* ibpOrComp);         // 0x140128f50
-typedef void  (*BC8_StorageClear_t)(void* slotArrayField, int n); // 0x14000f090
+// 0x14000f090 was Collection::Array<Bytes<0x10,8>>::SetSize monomorphised into
+// the exe (ENDGAME B.3.2 step 2: stride 0x10, align 8, zero tail) — converted
+// at its call site below.
 typedef int   (*BC8_ResIdx_t)(void* slotArrayBase, void* matType); // 0x140088f90
 typedef int   (*BC8_FindInQueue_t)(void* arrayBase, void* ibp);    // 0x140017550
 typedef void  (*BC8_MeshFinalize_t)(void* meshInst, int a, char b); // 0x14012c3f0
@@ -97,7 +100,6 @@ static BC8_Entity8f50_t    s_entity8f50  = nullptr;  // Entity_impl_8f50 0x14012
 static BC8_Find_t          s_findStorage = nullptr;  // Entity_FindComponent_Storage 0x140006270
 static BC8_Find_t          s_findMeshInst= nullptr;  // Entity_FindComponent_MeshInstance 0x140002f90
 static BC8_MeshFinalize_t  s_meshFinalize= nullptr;  // FUN_14012c3f0
-static BC8_StorageClear_t  s_storageClear= nullptr;  // FUN_14000f090
 static BC8_ResIdx_t        s_resIdx      = nullptr;  // FUN_140088f90
 static BC8_FindInQueue_t   s_findInQueue = nullptr;  // BuildComponent_helper_7550
 static BC8_PostWork_t      s_postEc60    = nullptr;  // CitizenAI_impl_ec60 (scheduler post)
@@ -112,7 +114,6 @@ static void BC8_Resolve() {
     s_findStorage  = reinterpret_cast<BC8_Find_t>(ResolveAddr(Module::Exe, 0x140006270));
     s_findMeshInst = reinterpret_cast<BC8_Find_t>(ResolveAddr(Module::Exe, 0x140002f90));
     s_meshFinalize = reinterpret_cast<BC8_MeshFinalize_t>(ResolveAddr(Module::Exe, 0x14012c3f0));
-    s_storageClear = reinterpret_cast<BC8_StorageClear_t>(ResolveAddr(Module::Exe, 0x14000f090));
     s_resIdx       = reinterpret_cast<BC8_ResIdx_t>(ResolveAddr(Module::Exe, 0x140088f90));
     s_findInQueue  = reinterpret_cast<BC8_FindInQueue_t>(ResolveAddr(Module::Exe, 0x140017550));
     s_bc8_res = true;
@@ -622,7 +623,9 @@ static void BuildComponent_State8Finalize(uintptr_t bc) {
     }
     int perItem   = *reinterpret_cast<int32_t*>((uint8_t*)desc + 0x24);
     int acceptTyp = *reinterpret_cast<int32_t*>((uint8_t*)desc + 0x28);
-    if (s_storageClear) s_storageClear(reinterpret_cast<void*>(storage + 0x28), 0);
+    // B.3.2 bridge: exe 0x14000f090 IS Collection::Array<Bytes<0x10,8>>::SetSize(n).
+    GameColl::AsArray<GameColl::Bytes<0x10, 8>>(
+        reinterpret_cast<void*>(storage + 0x28)).SetSize(0);
     *reinterpret_cast<int32_t*>(storage + 0x3c) = acceptTyp;
     *reinterpret_cast<int32_t*>(storage + 0x38) = perItem * mult;
 }

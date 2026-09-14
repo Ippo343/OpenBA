@@ -21,6 +21,7 @@
 #include "BuildActions.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
@@ -52,9 +53,10 @@ static GRM_SerializeInt_t s_fn_SerializeInt = nullptr;
 typedef void (*GRM_SerializeIntBulk_t)(void* self, int count, void* ptr, const char* name);
 static GRM_SerializeIntBulk_t s_fn_SerializeIntBulk = nullptr;
 
-// Resize int array: FUN_1400021d0(arrayPtrField, newCount)
-typedef void (*GRM_ResizeIntArray_t)(void* arrayPtrField, int newCount);
-static GRM_ResizeIntArray_t s_fn_ResizeIntArray = nullptr;
+// 0x1400021d0 (int-array SetSize) is the exe-side Collection::Array<int32>
+// monomorphisation -- ENDGAME B.3.2 step 2 converted its two call sites below to
+// GameColl::AsArray<GameColl::I32> member calls, so its resolved-pointer stand-in
+// is gone.
 
 // CitizenAI tree set serialize: CitizenAI_impl_96b0(treePtr, serializer)
 typedef void (*GRM_TreeSerialize_t)(void* treePtr, void* serializer);
@@ -178,8 +180,6 @@ bool GatherRawMaterials_ResolveFuncs() {
     // Direct exe function addresses
     s_fn_Work_Serialize = reinterpret_cast<GRM_WorkSerialize_t>(
         ResolveAddr(Module::Exe, 0x1400f7400));
-    s_fn_ResizeIntArray = reinterpret_cast<GRM_ResizeIntArray_t>(
-        ResolveAddr(Module::Exe, 0x1400021d0));
     s_fn_TreeSerialize = reinterpret_cast<GRM_TreeSerialize_t>(
         // Level-1 caller-bug fix: 0x140025630 is MID-FUNCTION (inside TradeUI_impl_55a0
         // 0x1400255a0). The real simple-BST serialize is 0x1400296b0 — confirmed by
@@ -300,7 +300,7 @@ bool GatherRawMaterials_ResolveFuncs() {
 
     bool ok = s_fn_Work_Serialize && s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
               s_fn_SerializeInt && s_fn_SerializeIntBulk &&
-              s_fn_ResizeIntArray && s_fn_TreeSerialize &&
+              s_fn_TreeSerialize &&
               s_fn_TreeRemoveByKey && s_fn_TreeRemoveNode &&
               s_fn_StateMachineRelease && s_fn_CanStartWork &&
               s_fn_FindComp_Position && s_fn_FindComp_Unk &&
@@ -324,7 +324,6 @@ bool GatherRawMaterials_ResolveFuncs() {
         if (!s_fn_Serializer_Dtor) printf("  MISSING: s_fn_Serializer_Dtor\n");
         if (!s_fn_SerializeInt) printf("  MISSING: s_fn_SerializeInt\n");
         if (!s_fn_SerializeIntBulk) printf("  MISSING: s_fn_SerializeIntBulk\n");
-        if (!s_fn_ResizeIntArray) printf("  MISSING: s_fn_ResizeIntArray\n");
         if (!s_fn_TreeSerialize) printf("  MISSING: s_fn_TreeSerialize\n");
         if (!s_fn_TreeRemoveByKey) printf("  MISSING: s_fn_TreeRemoveByKey\n");
         if (!s_fn_TreeRemoveNode) printf("  MISSING: s_fn_TreeRemoveNode\n");
@@ -431,7 +430,8 @@ void GatherRawMaterials_Serialize_Impl(GatherRawMaterials* self, void* stream) {
     s_fn_SerializeInt(serializerBuf, &count50, nullptr);
 
     if (isLoading) {
-        s_fn_ResizeIntArray((void*)(selfAddr + 0x48), count50);
+        // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize.
+        GameColl::AsArray<GameColl::I32>((void*)(selfAddr + 0x48)).SetSize(count50);
         self->field_50 = count50;
     }
 
@@ -443,7 +443,8 @@ void GatherRawMaterials_Serialize_Impl(GatherRawMaterials* self, void* stream) {
     s_fn_SerializeInt(serializerBuf, &count60, nullptr);
 
     if (isLoading) {
-        s_fn_ResizeIntArray((void*)(selfAddr + 0x58), count60);
+        // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize.
+        GameColl::AsArray<GameColl::I32>((void*)(selfAddr + 0x58)).SetSize(count60);
         self->field_60 = count60;
     }
 
@@ -1164,7 +1165,7 @@ extern "C" int GatherRawMaterials_ForceDrive(void* self, void* citizenIBP) {
 // ForesterWork_ExecuteReady). Serialize never runs during standalone gameplay.
 extern "C" bool GatherRawMaterials_DepsReady() {
     GatherRawMaterials_ResolveFuncs();   // populate all resolvable fns
-    return s_fn_ResizeIntArray && s_fn_TreeRemoveByKey && s_fn_TreeRemoveNode &&
+    return s_fn_TreeRemoveByKey && s_fn_TreeRemoveNode &&
            s_fn_StateMachineRelease && s_fn_CanStartWork &&
            s_fn_FindComp_Position && s_fn_FindComp_Unk && s_fn_FindComp_WpExt &&
            s_fn_FindStorageForResource && s_fn_FindComp_Storage &&
