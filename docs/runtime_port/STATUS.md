@@ -20,6 +20,11 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
+- **B.3.2 OPEN (2026-09-14 early, main 1094b5aa):** `Collection::Array<T>`, `Set<T>` and
+  `LinkedList<T>` are real templates (runtime/types/collection/Collection.h) wrapping the
+  ported cores; all 339 registry rows kept as shims; `make unit` 154 tests. Step 2 (callers,
+  four directory batches) in flight; closing pass follows. Rules: `endgame_b/B32_RULES.md`.
+
 - **B.3.1 CLOSED (2026-09-13 night):** `System::String`, `System::Filename` and the nine
   `Math` value types are real classes under retail's names (`runtime/types/system/*.h`,
   `runtime/types/math/Math.h`); three cores, five caller batches by directory, one closing
