@@ -28,6 +28,7 @@
 #include "system/String.h"
 #include "resolve.h"
 #include "Component/component_factory_base.h"  // ComponentFactory::the live gate
+#include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -329,57 +330,72 @@ static void LoadEnsureInit() {
 // fn_ExeArrayResize (engine_funcs.h) — reused, not redefined here.
 // ============================================================
 
+// ENDGAME B.3.2 step 2: the five resize bodies in this block (0x1400191f0,
+// 0x14002e000, 0x140017640, 0x1400177c0, 0x14000f090) WERE hand-written copies
+// of `rtcoll::SetSizeCore` (runtime/src/collection/array.cpp). Each is now one
+// `Collection::Array<>::SetSize` driven by an `ArraySpec` row spelling out the
+// site's element ops. Compared arm for arm before the swap: exact-equal early
+// return, `_size` stored before the capacity test,
+// treble-on-single-append-from-non-empty, copy the preserved prefix only when
+// the block moved, init the new tail (or leave it — 0x1400191f0), destroy the
+// truncated tail in place / the whole old buffer on a realloc, then free. The
+// one deliberate difference: the allocation now goes through the LOCKING
+// static `MemAlloc` (0x1800c7a50) instead of the unlocked instance `Allocate`
+// these bodies reached through `fn_MemAlloc` — same allocator, same heap, plus
+// the critical section retail's own Collection code takes. The 0x14000f9e0
+// deep copy is an `operator=` (rtcoll::ArrayAssignCore), not a grow, and is
+// kept as the element-assign of the 0x140017640 row.
+namespace {
+
+// 0x1400191f0 element: one 8-byte pointer, align 8. Copy = 8-byte copy; the
+// new tail is left UNINITIALISED (retail's empty else arm) — init is null on
+// purpose; trivially destructible.
+void AssignPtr8(uint8_t* d, const uint8_t* s) {
+    *reinterpret_cast<uint64_t*>(d) = *reinterpret_cast<const uint64_t*>(s);
+}
+const rtcoll::ArraySpec kSpec_Ptr8NoInit = {             // exe 0x1400191f0
+    "Array<void*> (no tail init)", 8, 8,
+    &AssignPtr8, nullptr, nullptr, true,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+using Ptr8NoInitArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                          Collection::ExplicitSpec<&kSpec_Ptr8NoInit>>;
+
+// 0x14002e000 element: camera view {Vector3 pos, float a, float b, float c,
+// bool used}, stride 0x1c, align 4. Copy writes +0x00..+0x18 (the 4x-unrolled
+// dword loop plus the bool) and leaves +0x19..+0x1b; init writes the same
+// bytes with zero. Partial copy, so byteCopy=false; trivially destructible.
+void AssignCamView(uint8_t* d, const uint8_t* s) {
+    for (int b = 0; b < 0x18; b += 4) *reinterpret_cast<uint32_t*>(d + b) = *reinterpret_cast<const uint32_t*>(s + b);
+    d[0x18] = s[0x18];
+}
+void InitCamView(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0; *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x10) = 0; d[0x18] = 0;
+}
+const rtcoll::ArraySpec kSpec_CamViewLoad = {            // exe 0x14002e000
+    "Array<CameraView>", 0x1c, 4,
+    &AssignCamView, &InitCamView, nullptr, false,
+    /*assign unwritten*/ 0x19, 0x1c,
+    /*init   unwritten*/ 0x19, 0x1c,
+    /*seed zero       */ 0,    0 };
+using CamViewLoadArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                           Collection::ExplicitSpec<&kSpec_CamViewLoad>>;
+
+}  // namespace
+
 // FUN_1400191f0 — stride-8 pointer-array resize; copies existing, does NOT zero new slots.
 static void* Reimpl_FUN_1400191f0(void* hdr, int n) {
-    uint8_t* p = (uint8_t*)hdr;
-    int32_t oldCount = *(int32_t*)(p + 0x08);
-    if (n == oldCount) return hdr;
-    void* oldPtr = *(void**)(p + 0x00);
-    *(int32_t*)(p + 0x08) = n;
-    if (*(int32_t*)(p + 0x0C) < n) {
-        *(int32_t*)(p + 0x0C) = n;
-        if (n == oldCount + 1 && oldCount != 0) *(int32_t*)(p + 0x0C) = n * 3;
-        int32_t cap = *(int32_t*)(p + 0x0C);
-        *(void**)(p + 0x00) = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)cap << 3, 8);
-    }
-    int start = 0;
-    if (oldPtr == *(void**)(p + 0x00)) start = oldCount;
-    void** dst = *(void***)(p + 0x00);
-    void** src = (void**)oldPtr;
-    for (long long i = start; i < n; ++i) if (i < oldCount) dst[i] = src[i];
-    if (oldPtr != *(void**)(p + 0x00) && oldPtr) fn_MemFreeStatic(oldPtr);
+    // B.3.2 bridge: the +0x50 header is still raw bytes in an unconverted struct.
+    reinterpret_cast<Ptr8NoInitArray*>(hdr)->SetSize(n);
     return hdr;
 }
 
 // FUN_14002e000 — stride-0x1c (28-byte) struct-array resize; copies existing, zero-fills new.
 static void* Reimpl_FUN_14002e000(void* hdr, int n) {
-    uint8_t* p = (uint8_t*)hdr;
-    int32_t oldCount = *(int32_t*)(p + 0x08);
-    if (n == oldCount) return hdr;
-    void* oldPtr = *(void**)(p + 0x00);
-    *(int32_t*)(p + 0x08) = n;
-    if (*(int32_t*)(p + 0x0C) < n) {
-        *(int32_t*)(p + 0x0C) = n;
-        if (n == oldCount + 1 && oldCount != 0) *(int32_t*)(p + 0x0C) = n * 3;
-        int32_t cap = *(int32_t*)(p + 0x0C);
-        *(void**)(p + 0x00) = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)cap * 0x1c, 4);
-    }
-    int start = 0;
-    if (oldPtr == *(void**)(p + 0x00)) start = oldCount;
-    uint8_t* dstBase = *(uint8_t**)(p + 0x00);
-    uint8_t* srcBase = (uint8_t*)oldPtr;
-    for (long long i = start; i < n; ++i) {
-        uint8_t* d = dstBase + i * 0x1c;
-        if (i < oldCount) {
-            uint8_t* s = srcBase + i * 0x1c;
-            for (int b = 0; b < 0x18; b += 4) *(uint32_t*)(d + b) = *(uint32_t*)(s + b);
-            *(uint8_t*)(d + 0x18) = *(uint8_t*)(s + 0x18);
-        } else {
-            *(uint64_t*)(d + 0x00) = 0; *(uint64_t*)(d + 0x08) = 0;
-            *(uint64_t*)(d + 0x10) = 0; *(uint8_t*)(d + 0x18) = 0;
-        }
-    }
-    if (oldPtr != *(void**)(p + 0x00) && oldPtr) fn_MemFreeStatic(oldPtr);
+    // B.3.2 bridge: EntityUI+0x70 is still a raw header.
+    reinterpret_cast<CamViewLoadArray*>(hdr)->SetSize(n);
     return hdr;
 }
 
@@ -407,113 +423,102 @@ static void* Reimpl_TradeComponent_helper_f9e0(void* dstElem, void* srcElem) {
     return dstElem;
 }
 
+namespace {
+
+// 0x140017640 element: one inner {int32* data, int32 count, int32 cap}
+// header, stride 0x10, align 8. Copy-construct = zero the header then the
+// 0x14000f9e0 deep copy (an operator= over a zeroed lhs); init = zero the
+// header; destroy = free the inner buffer and zero the header — this body
+// zeroed on BOTH the truncation and the realloc arm, so the row is exact.
+void AssignIntAssocOuterL(uint8_t* d, const uint8_t* s) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+    Reimpl_TradeComponent_helper_f9e0(d, const_cast<uint8_t*>(s));
+}
+void InitIntAssocOuterL(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+}
+void DestroyIntAssocOuterL(void* /*ignoredThis*/, uint8_t* base, int count) {
+    for (int i = 0; i < count; ++i) {
+        uint8_t* e = base + static_cast<int64_t>(i) * 0x10;
+        fn_MemFreeStatic(*reinterpret_cast<void**>(e + 0x00));
+        *reinterpret_cast<uint64_t*>(e + 0x00) = 0;
+        *reinterpret_cast<uint64_t*>(e + 0x08) = 0;
+    }
+}
+const rtcoll::ArraySpec kSpec_IntAssocOuterL = {         // exe 0x140017640
+    "Array<Array<int32>>", 0x10, 8,
+    &AssignIntAssocOuterL, &InitIntAssocOuterL, &DestroyIntAssocOuterL, false,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+using IntAssocOuterLArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                              Collection::ExplicitSpec<&kSpec_IntAssocOuterL>>;
+
+// 0x1400177c0 element: ProfessionResourceEntry, stride 0x20, align 8. Copy =
+// four qwords (the whole stride); init = {0, 100, 0, 0} written as u64@0,
+// u64@8, u32@0x10, u64@0x18 so +0x14..+0x17 is left untouched; trivially
+// destructible.
+void AssignProfResEntryL(uint8_t* d, const uint8_t* s) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = *reinterpret_cast<const uint64_t*>(s + 0x00);
+    *reinterpret_cast<uint64_t*>(d + 0x08) = *reinterpret_cast<const uint64_t*>(s + 0x08);
+    *reinterpret_cast<uint64_t*>(d + 0x10) = *reinterpret_cast<const uint64_t*>(s + 0x10);
+    *reinterpret_cast<uint64_t*>(d + 0x18) = *reinterpret_cast<const uint64_t*>(s + 0x18);
+}
+void InitProfResEntryL(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 100;   // +0x08 default = 100
+    *reinterpret_cast<uint32_t*>(d + 0x10) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x18) = 0;
+}
+const rtcoll::ArraySpec kSpec_ProfResEntryL = {          // exe 0x1400177c0
+    "Array<ProfessionResourceEntry>", 0x20, 8,
+    &AssignProfResEntryL, &InitProfResEntryL, nullptr, true,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0x14, 0x18,
+    /*seed zero       */ 0,    0 };
+using ProfResEntryLArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                             Collection::ExplicitSpec<&kSpec_ProfResEntryL>>;
+
+// 0x14000f090 element: two qwords, stride 0x10, align 8. Copy = whole
+// stride; init = zero; trivially destructible.
+void AssignPod16(uint8_t* d, const uint8_t* s) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = *reinterpret_cast<const uint64_t*>(s + 0x00);
+    *reinterpret_cast<uint64_t*>(d + 0x08) = *reinterpret_cast<const uint64_t*>(s + 0x08);
+}
+void InitPod16(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0; *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+}
+const rtcoll::ArraySpec kSpec_Pod16 = {                  // exe 0x14000f090
+    "Array<{u64,u64}>", 0x10, 8,
+    &AssignPod16, &InitPod16, nullptr, true,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+using Pod16Array = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                     Collection::ExplicitSpec<&kSpec_Pod16>>;
+
+}  // namespace
+
 // FUN_140017640 (TradeComponent_impl_f760_sub_7640) — stride-0x10 array of inner-array headers.
 static void* Reimpl_FUN_140017640(void* hdr, int n) {
-    uint8_t* p = (uint8_t*)hdr;
-    int32_t oldCount = *(int32_t*)(p + 0x08);
-    if (n == oldCount) return hdr;
-    uint8_t* oldPtr = *(uint8_t**)(p + 0x00);
-    *(int32_t*)(p + 0x08) = n;
-    if (*(int32_t*)(p + 0x0C) < n) {
-        *(int32_t*)(p + 0x0C) = n;
-        if (n == oldCount + 1 && oldCount != 0) *(int32_t*)(p + 0x0C) = n * 3;
-        int32_t cap = *(int32_t*)(p + 0x0C);
-        *(void**)(p + 0x00) = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)cap << 4, 8);
-    }
-    int start = 0;
-    if (oldPtr == *(uint8_t**)(p + 0x00)) start = oldCount;
-    uint8_t* dstBase = *(uint8_t**)(p + 0x00);
-    for (long long i = start; i < n; ++i) {
-        uint8_t* dstElem = dstBase + i * 0x10;
-        *(uint64_t*)(dstElem + 0x00) = 0;
-        *(uint64_t*)(dstElem + 0x08) = 0;
-        if (i < oldCount) Reimpl_TradeComponent_helper_f9e0(dstElem, oldPtr + i * 0x10);
-    }
-    if (oldPtr == *(uint8_t**)(p + 0x00)) {
-        if (n < oldCount) {
-            uint8_t* e = oldPtr + (long long)n * 0x10;
-            for (long long k = oldCount - n; k > 0; --k) {
-                fn_MemFreeStatic(*(void**)(e + 0x00));
-                *(uint64_t*)(e + 0x00) = 0; *(uint64_t*)(e + 0x08) = 0; e += 0x10;
-            }
-        }
-    } else {
-        if (oldCount > 0) {
-            uint8_t* e = oldPtr;
-            for (long long k = oldCount; k > 0; --k) {
-                fn_MemFreeStatic(*(void**)(e + 0x00));
-                *(uint64_t*)(e + 0x00) = 0; *(uint64_t*)(e + 0x08) = 0; e += 0x10;
-            }
-        }
-        if (oldPtr) fn_MemFreeStatic(oldPtr);
-    }
+    // B.3.2 bridge: CitizenBehavior+0x150 / TownManager+0x140 are still raw headers.
+    reinterpret_cast<IntAssocOuterLArray*>(hdr)->SetSize(n);
     return hdr;
 }
 
 // TradeComponent_impl_f760_sub_77c0 @ 0x1400177c0 — stride-0x20 resize; new slots {0,100,0,0}.
 static void* Reimpl_TradeComponent_sub_77c0(void* hdr, int n) {
-    uint8_t* p = (uint8_t*)hdr;
-    int32_t oldCount = *(int32_t*)(p + 0x08);
-    if (n == oldCount) return hdr;
-    void* oldPtr = *(void**)(p + 0x00);
-    *(int32_t*)(p + 0x08) = n;
-    if (*(int32_t*)(p + 0x0C) < n) {
-        *(int32_t*)(p + 0x0C) = n;
-        if (n == oldCount + 1 && oldCount != 0) *(int32_t*)(p + 0x0C) = n * 3;
-        int32_t cap = *(int32_t*)(p + 0x0C);
-        *(void**)(p + 0x00) = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)cap << 5, 8);
-    }
-    int start = 0;
-    if (oldPtr == *(void**)(p + 0x00)) start = oldCount;
-    uint8_t* dstBase = *(uint8_t**)(p + 0x00);
-    uint8_t* srcBase = (uint8_t*)oldPtr;
-    for (long long i = start; i < n; ++i) {
-        uint8_t* d = dstBase + i * 0x20;
-        if (i < oldCount) {
-            uint8_t* s = srcBase + i * 0x20;
-            *(uint64_t*)(d + 0x00) = *(uint64_t*)(s + 0x00);
-            *(uint64_t*)(d + 0x08) = *(uint64_t*)(s + 0x08);
-            *(uint64_t*)(d + 0x10) = *(uint64_t*)(s + 0x10);
-            *(uint64_t*)(d + 0x18) = *(uint64_t*)(s + 0x18);
-        } else {
-            *(uint64_t*)(d + 0x00) = 0;
-            *(uint64_t*)(d + 0x08) = 100;   // +0x08 default = 100
-            *(uint32_t*)(d + 0x10) = 0;
-            *(uint64_t*)(d + 0x18) = 0;
-        }
-    }
-    if (oldPtr != *(void**)(p + 0x00) && oldPtr) fn_MemFreeStatic(oldPtr);
+    // B.3.2 bridge: CitizenBehavior+0x170 is still a raw header.
+    reinterpret_cast<ProfResEntryLArray*>(hdr)->SetSize(n);
     return hdr;
 }
 
 // FUN_14000f090 — stride-0x10 POD resize; copies 2x u64, zero-fills new.
 static void* Reimpl_FUN_14000f090(void* hdr, int n) {
-    uint8_t* p = (uint8_t*)hdr;
-    int32_t oldCount = *(int32_t*)(p + 0x08);
-    if (n == oldCount) return hdr;
-    void* oldPtr = *(void**)(p + 0x00);
-    *(int32_t*)(p + 0x08) = n;
-    if (*(int32_t*)(p + 0x0C) < n) {
-        *(int32_t*)(p + 0x0C) = n;
-        if (n == oldCount + 1 && oldCount != 0) *(int32_t*)(p + 0x0C) = n * 3;
-        int32_t cap = *(int32_t*)(p + 0x0C);
-        *(void**)(p + 0x00) = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)cap << 4, 8);
-    }
-    int start = 0;
-    if (oldPtr == *(void**)(p + 0x00)) start = oldCount;
-    uint8_t* dstBase = *(uint8_t**)(p + 0x00);
-    uint8_t* srcBase = (uint8_t*)oldPtr;
-    for (long long i = start; i < n; ++i) {
-        uint8_t* d = dstBase + i * 0x10;
-        if (i < oldCount) {
-            uint8_t* s = srcBase + i * 0x10;
-            *(uint64_t*)(d + 0x00) = *(uint64_t*)(s + 0x00);
-            *(uint64_t*)(d + 0x08) = *(uint64_t*)(s + 0x08);
-        } else {
-            *(uint64_t*)(d + 0x00) = 0; *(uint64_t*)(d + 0x08) = 0;
-        }
-    }
-    if (oldPtr != *(void**)(p + 0x00) && oldPtr) fn_MemFreeStatic(oldPtr);
+    // B.3.2 bridge: CitizenBehavior+0x180 is still a raw header.
+    reinterpret_cast<Pod16Array*>(hdr)->SetSize(n);
     return hdr;
 }
 

@@ -24,6 +24,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
+#include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -388,40 +389,23 @@ struct TileRenderEntry {
 static_assert(sizeof(TileRenderEntry) == 0x14, "TileRenderEntry size mismatch");
 
 // Dynamic array holding TileRenderEntry items
-struct TileArray {
-    TileRenderEntry* data;
-    int count;
-    int capacity;
-};
+// ENDGAME B.3.2 step 2: now the real `Collection::Array<TileRenderEntry>` (trait-
+// derived row: stride 0x14, align 4, byteCopy, init == nullptr, destroy == nullptr).
+// The hand-written PushTileEntry grow below was compared arm for arm with
+// rtcoll::SetSizeCore: `newCount == count` early return == the reference's
+// exact-equal return (only reachable at INT_MAX for a +1 append); one append only,
+// so `(count == 0) ? n : n*3` is the reference capacity rule; MemAlloc(cap * 0x14,
+// align 4); prefix copied into the fresh block (== only when the block moved); the
+// fill stored at [count]; old block freed when it moved; in-place path stores at
+// [count]. Out-of-memory-only difference: this body dereferenced a null block,
+// SetSizeCore skips the null element address.
+using TileArray = Collection::Array<TileRenderEntry>;
 
 // ============================================================
 // Helper: push a TileRenderEntry into a dynamic array
 // ============================================================
 static void PushTileEntry(TileArray* arr, const TileRenderEntry* entry) {
-    int newCount = arr->count + 1;
-    if (newCount == arr->count) return; // overflow guard
-
-    if (newCount > arr->capacity) {
-        int newCap = (arr->count == 0) ? newCount : newCount * 3;
-        TileRenderEntry* newBuf = (TileRenderEntry*)fn_MemAlloc(
-            g_pMemAllocSingleton, (uint64_t)newCap * sizeof(TileRenderEntry), 4);
-
-        for (int i = 0; i < arr->count; i++) {
-            newBuf[i] = arr->data[i];
-        }
-        newBuf[arr->count] = *entry;
-
-        if (arr->data != newBuf) {
-            fn_MemFreeStatic(arr->data);
-        }
-
-        arr->data = newBuf;
-        arr->count = newCount;
-        arr->capacity = newCap;
-    } else {
-        arr->data[arr->count] = *entry;
-        arr->count = newCount;
-    }
+    arr->SetSize(arr->_size + 1, *entry);
 }
 
 // ============================================================
@@ -477,7 +461,7 @@ void RoadTool_Draw(RoadTool* self, void* context, char param3) {
         }
 
         // Build tile array from path results
-        TileArray pathTiles = {nullptr, 0, 0};
+        TileArray pathTiles;
         for (int i = 0; i < pathLen; i++) {
             TileRenderEntry entry;
             entry.col   = (uint32_t)(pathBuf[i] % *mapGrid);
@@ -489,13 +473,13 @@ void RoadTool_Draw(RoadTool* self, void* context, char param3) {
         }
 
         // Render: path tiles in R8, empty array in R9
-        TileArray emptyTiles = {nullptr, 0, 0};
+        TileArray emptyTiles;
         if (fn_TileRender) {
             fn_TileRender(nullptr, context, &pathTiles, &emptyTiles);
         }
 
-        fn_MemFreeStatic(emptyTiles.data);
-        fn_MemFreeStatic(pathTiles.data);
+        // pathTiles / emptyTiles are released by ~Array at scope exit (no early
+        // return inside this block).
     }
 
     // ---- Phase 2: Drag selection with pathfinding ----
@@ -558,7 +542,7 @@ void RoadTool_Draw(RoadTool* self, void* context, char param3) {
 
         if (pathLen > 0) {
             // Build tile array with per-tile color coding
-            TileArray pathTiles = {nullptr, 0, 0};
+            TileArray pathTiles;
 
             for (int i = 0; i < pathLen; i++) {
                 int cellIdx = pathBuf[i];
@@ -584,13 +568,13 @@ void RoadTool_Draw(RoadTool* self, void* context, char param3) {
             }
 
             // Render: path tiles in R8, empty array in R9
-            TileArray emptyTiles = {nullptr, 0, 0};
+            TileArray emptyTiles;
             if (fn_TileRender) {
                 fn_TileRender(nullptr, context, &pathTiles, &emptyTiles);
             }
 
-            fn_MemFreeStatic(emptyTiles.data);
-            fn_MemFreeStatic(pathTiles.data);
+            // pathTiles / emptyTiles are released by ~Array at scope exit (the
+            // enclosing block's only early return, `startCell < 0`, precedes them).
         }
     }
 }

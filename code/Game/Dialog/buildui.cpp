@@ -14,6 +14,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_panels.h"
+#include "Dialog/dialog_array_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
@@ -208,42 +209,12 @@ void BuildUI_Slot4(BuildUI* self) {
         uint64_t labelStorage = BuildUI_FindElemAsBasePtr(rowElem, "labelStorage");
         uint64_t rowTextTotal = BuildUI_FindElemAsBasePtr(rowElem, "textTotal");
 
-        // Push {labelStorage, textTotal} pair into dynamic array at +0x30
-        // Dynamic array growth: count at +0x38, capacity at +0x3C
-        int oldCount = *(int*)(s + 0x38);
-        int newCount = oldCount + 1;
-        void* oldBuf = *(void**)(s + 0x30);
-        *(int*)(s + 0x38) = newCount;
-
-        if (*(int*)(s + 0x3C) < newCount) {
-            int newCap = newCount;
-            if (oldCount != 0) {
-                newCap = newCount * 3;
-            }
-            *(int*)(s + 0x3C) = newCap;
-            void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 0x10, 8);
-            *(void**)(s + 0x30) = newBuf;
-        }
-
-        // Copy existing entries if buffer changed, then fill new entry
-        void* curBuf = *(void**)(s + 0x30);
-        int copyStart = (oldBuf == curBuf) ? oldCount : 0;
-        for (int k = copyStart; k < newCount; k++) {
-            uint64_t* dst = (uint64_t*)((uintptr_t)curBuf + k * 0x10);
-            if (k < oldCount) {
-                // Copy from old buffer
-                uint64_t* src = (uint64_t*)((uintptr_t)oldBuf + k * 0x10);
-                dst[0] = src[0];
-                dst[1] = src[1];
-            } else {
-                // New entry: fill with our label + text
-                dst[0] = labelStorage;
-                dst[1] = rowTextTotal;
-            }
-        }
-        if (oldBuf != curBuf) {
-            fn_MemFreeStatic(oldBuf);
-        }
+        // Push {labelStorage, textTotal} pair into the row array at +0x30.
+        // B.3.2 bridge: BuildUI+0x30 is Collection::Array<{InternalBasePtr,
+        // InternalBasePtr}> (stride 0x10, count +0x38, capacity +0x3C) inside a
+        // struct §B.2 has not converted, so it is reached at its offset.
+        auto& rows = DlgArray<0x10>(s, 0x30);
+        rows.SetSize(rows.GetSize() + 1, DlgElem<0x10>{{labelStorage, rowTextTotal}});
 
         // Populate row content based on resource index
         uintptr_t resBase = resourceComp ? *(uintptr_t*)((uintptr_t)resourceComp + 0x20) : 0;

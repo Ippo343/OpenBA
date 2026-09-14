@@ -22,6 +22,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "system/String.h"
+#include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -125,23 +126,16 @@ static void TutorialStep_DtorBody(void* self) {
     // Set vtable
     *reinterpret_cast<uintptr_t*>(s) = vtable;
 
-    // Free goals array at +0x60, zero +0x60 and +0x68
-    void* goalsData = *reinterpret_cast<void**>(s + 0x60);
-    if (goalsData && fn_MemFreeStatic) fn_MemFreeStatic(goalsData);
-    *reinterpret_cast<uint64_t*>(s + 0x60) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x68) = 0;
-
-    // Free setups array at +0x50, zero +0x50 and +0x58
-    void* setupsData = *reinterpret_cast<void**>(s + 0x50);
-    if (setupsData && fn_MemFreeStatic) fn_MemFreeStatic(setupsData);
-    *reinterpret_cast<uint64_t*>(s + 0x50) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x58) = 0;
-
-    // Free images array at +0x40, zero +0x40 and +0x48
-    void* imagesData = *reinterpret_cast<void**>(s + 0x40);
-    if (imagesData && fn_MemFreeStatic) fn_MemFreeStatic(imagesData);
-    *reinterpret_cast<uint64_t*>(s + 0x40) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x48) = 0;
+    // Free the goals (+0x60), setups (+0x50) and images (+0x40) arrays, in retail's
+    // order. ENDGAME B.3.2 step 2: each WAS an inlined Collection::Array<T>::~Array
+    // — MemFree the buffer (null-guarded on both sides), zero _data, zero the
+    // _size/_capacity qword. Retail destroys no element in any of the three (8-byte
+    // ExternalPtr<T> entries, no destroy arm), so the trait-derived Array<void*>
+    // row (destroy == nullptr) is that body exactly.
+    // B.3.2 bridge ×3: TutorialStep is still an untyped exe struct.
+    reinterpret_cast<Collection::Array<void*>*>(s + 0x60)->~Array();
+    reinterpret_cast<Collection::Array<void*>*>(s + 0x50)->~Array();
+    reinterpret_cast<Collection::Array<void*>*>(s + 0x40)->~Array();
 
     // Destroy String at +0x38 (descStr)
     reinterpret_cast<System::String*>(s + 0x38)->~String();

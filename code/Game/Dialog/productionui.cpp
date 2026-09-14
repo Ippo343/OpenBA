@@ -12,6 +12,7 @@
 #include "engine_funcs.h"
 #include "Object/factory_registration.h"   // Object::ResolveTypeIdByNameLazy
 #include "system/String.h"
+#include "Dialog/dialog_array_bridge.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -32,55 +33,16 @@
 //   +0x08: InternalBasePtr to "numberCount" element
 // ============================================================
 
-// Helper: dynamically grow and append a 0x10-byte entry to one of the arrays.
-// arrayPtr = &self->array[N].data, arrayCnt = &self->array[N].count, arrayCap = &self->array[N].capacity
+// Helper: dynamically grow and append a 0x10-byte {labelPtr, numberPtr} entry
+// to one of the arrays.
+// B.3.2 bridge: self+arrayOffset is Collection::Array<{InternalBasePtr,
+// InternalBasePtr}> (stride 0x10, count +0x08, capacity +0x0C off
+// arrayOffset) inside a struct §B.2 has not converted, so it is reached at
+// its offset.
 static void PushElementPair(uintptr_t self, int arrayOffset,
                             uint64_t labelPtr, uint64_t numberPtr) {
-    uintptr_t dataField = self + arrayOffset;           // +0x30 or +0x40
-    uintptr_t cntField  = self + arrayOffset + 0x08;    // +0x38 or +0x48
-    uintptr_t capField  = self + arrayOffset + 0x0C;    // +0x3C or +0x4C
-
-    uint32_t count = *(uint32_t*)cntField;
-    uint32_t newCount = count + 1;
-    if (newCount == count) return;  // overflow guard
-
-    void* oldData = *(void**)dataField;
-    *(uint32_t*)cntField = newCount;
-
-    if ((int32_t)*(uint32_t*)capField < (int32_t)newCount) {
-        uint32_t newCap = newCount;
-        if (count != 0) {
-            newCap = newCount * 3;
-        }
-        *(uint32_t*)capField = newCap;
-        void* newData = fn_MemAlloc(g_pMemAllocSingleton, (int64_t)(int32_t)newCap * 0x10, 8);
-        *(void**)dataField = newData;
-    }
-
-    // Copy existing entries if buffer changed
-    uint32_t copyStart = 0;
-    if (oldData == *(void**)dataField) {
-        copyStart = count;
-    }
-    for (uint32_t i = copyStart; i < newCount; i++) {
-        uint64_t* dst = (uint64_t*)(*(uintptr_t*)dataField + (uintptr_t)i * 0x10);
-        if (dst) {
-            if ((int32_t)i < (int32_t)count) {
-                // Copy from old buffer
-                uint64_t* src = (uint64_t*)((uintptr_t)oldData + (uintptr_t)i * 0x10);
-                dst[0] = src[0];
-                dst[1] = src[1];
-            } else {
-                // New entry
-                dst[0] = labelPtr;
-                dst[1] = numberPtr;
-            }
-        }
-    }
-
-    if (oldData != *(void**)dataField) {
-        fn_MemFreeStatic(oldData);
-    }
+    auto& arr = DlgArray<0x10>(self, arrayOffset);
+    arr.SetSize(arr.GetSize() + 1, DlgElem<0x10>{{labelPtr, numberPtr}});
 }
 
 // ---- element type ids for retail's two casts --------------------------------

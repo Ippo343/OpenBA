@@ -15,10 +15,12 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "system/String.h"
+#include "collection/Collection.h"
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
+#include <new>
 
 // ============================================================
 // Locally resolved function pointers (not in shared engine_funcs.h)
@@ -241,69 +243,123 @@ bool MG_IsLoading(void* serializer) {
 // InitialFamily), FUN_14001b340 (stride 0x18, ExternalRef) and FUN_14001b4e0
 // (stride 0x30, InitialStructure). Header is {void* data@0; int count@8; int cap@0xc}.
 //
-// `initElem` default-constructs ONE new element; it is called only for indices at
-// or past the old count. Elements that already exist are carried over byte-wise
-// (a move: the destination takes over the source's String buffer, so the old array
-// is freed without destroying its strings — retail copy-constructs and then runs
-// ~String on the source, which has the same net effect).
-void MG_Resize(void* header, int newCount, int stride, void (*initElem)(uint8_t*)) {
-    uint8_t* h = reinterpret_cast<uint8_t*>(header);
-    const int oldCount = *(int32_t*)(h + 8);
-    if (newCount == oldCount) return;          // the load-bearing early-out
-    uint8_t* oldBuf = *(uint8_t**)h;
-    *(int32_t*)(h + 8) = newCount;
-    uint8_t* buf = oldBuf;
-    if (*(int32_t*)(h + 0xc) < newCount) {
-        int cap = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) cap = newCount * 3;  // growth rule
-        *(int32_t*)(h + 0xc) = cap;
-        buf = (fn_MemAlloc && g_pMemAllocSingleton)
-              ? reinterpret_cast<uint8_t*>(
-                    fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)cap * (uint32_t)stride, 8))
-              : nullptr;
-        *(void**)h = buf;
-    }
-    if (!buf) return;
-    const int firstNew = (buf == oldBuf) ? oldCount : 0;
-    for (int i = firstNew; i < newCount; ++i) {
-        uint8_t* d = buf + (size_t)i * (uint32_t)stride;
-        if (i < oldCount && oldBuf) std::memcpy(d, oldBuf + (size_t)i * (uint32_t)stride, stride);
-        else                        initElem(d);
-    }
-    if (buf != oldBuf && oldBuf && fn_MemFreeStatic) fn_MemFreeStatic(oldBuf);
+// The MG_Init* functions below default-construct ONE new element; retail calls
+// them only for indices at or past the old count.
+//
+// ENDGAME B.3.2 step 2: the one generic stride-parameterised grow that used to
+// sit here (`MG_Resize`) is now three `Collection::Array<>::SetSize` calls, one
+// per retail body, each driven by its own `ArraySpec` row. Every row's ops were
+// re-derived from the retail bodies (decompiled 2026-09-13), not from the old
+// generic copy, and three things changed as a result — all of them the old
+// copy's approximations, none of them reachable on the load leg (a freshly
+// constructed or Cleanup'd MapGenerator, count 0 -> n):
+//   * alignment: the stride-8 body (0x14001b270) allocates at align 4, not 8.
+//   * the two String-bearing rows copy-CONSTRUCT the preserved prefix and
+//     destroy the old elements afterwards (retail's order) instead of moving
+//     the bytes; the refcount goes +1 then -1, so the end state is identical.
+//   * those rows destroy a truncated tail in place; the old copy leaked it.
+// The structural arms (exact-equal early return, `_size` first, treble rule,
+// copy prefix only when the block moved, init the tail, free only the moved
+// block) matched arm for arm. The stride-0x18 row is the same row
+// goal_exe_helpers.cpp carries as kSpec_GoalRefEntry for the same retail body
+// (0x14001b340); it is repeated here because that one is file-local.
+// stride 8 — InitialFamily {bool _educated@0, int _maxChildCount@4}, exe 0x14001b270.
+// Retail's assign is one qword; its init writes byte 0 and dword 4, leaving
+// [1,4) untouched.
+void AssignMGFamily(uint8_t* d, const uint8_t* s) {
+    *reinterpret_cast<uint64_t*>(d) = *reinterpret_cast<const uint64_t*>(s);
 }
-
-// Element default-constructors (the `else` arms of the three resize helpers).
-void MG_InitFamily(uint8_t* e) {           // stride 8: bool _educated@0, int _maxChildCount@4
+void MG_InitFamily(uint8_t* e) {
     *e = 0;
     *(int32_t*)(e + 4) = 0;
 }
-void MG_InitRef(uint8_t* e) {              // stride 0x18: String@0, gen@8, resolved@0x10
+const rtcoll::ArraySpec kSpec_MGFamily = {           // exe 0x14001b270
+    "Array<InitialFamily>", 8, 4,
+    &AssignMGFamily, &MG_InitFamily, nullptr, /*byteCopy*/true,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 1, 4,
+    /*seed zero       */ 0, 0 };
+using MGFamilyArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                        Collection::ExplicitSpec<&kSpec_MGFamily>>;
+
+// stride 0x18 — ExternalRef {String@0, gen@8, resolved@0x10}, exe 0x14001b340.
+// Neither arm writes [0x0c,0x10); the tail seed of -1 is load-bearing (see
+// goal_exe_helpers.cpp).
+void AssignMGRef(uint8_t* d, const uint8_t* s) {
+    new (d) System::String(*reinterpret_cast<const System::String*>(s));     // +0x00
+    *reinterpret_cast<uint32_t*>(d + 0x08) = *reinterpret_cast<const uint32_t*>(s + 0x08);
+    *reinterpret_cast<uint64_t*>(d + 0x10) = *reinterpret_cast<const uint64_t*>(s + 0x10);
+}
+void MG_InitRef(uint8_t* e) {
     *(uint64_t*)e          = 0;
     *(int32_t*)(e + 8)     = -1;
     *(uint64_t*)(e + 0x10) = 0;
 }
-void MG_InitStructure(uint8_t* e) {        // stride 0x30: ExternalRef + placement ints
+void DestroyMGRef(void* /*ignoredThis*/, uint8_t* base, int count) {
+    for (int i = 0; i < count; ++i)
+        reinterpret_cast<System::String*>(base + static_cast<int64_t>(i) * 0x18)->~String();
+}
+const rtcoll::ArraySpec kSpec_MGRef = {              // exe 0x14001b340
+    "Array<ExternalRef>", 0x18, 8,
+    &AssignMGRef, &MG_InitRef, &DestroyMGRef, /*byteCopy*/false,
+    /*assign unwritten*/ 0x0c, 0x10,
+    /*init   unwritten*/ 0x0c, 0x10,
+    /*seed zero       */ 0, 0 };
+using MGRefArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                     Collection::ExplicitSpec<&kSpec_MGRef>>;
+
+// stride 0x30 — InitialStructure {ExternalRef@0, int _offsetX@0x18, _offsetY@0x1c,
+// _width@0x20, _height@0x24, _rotation@0x28}, exe 0x14001b4e0. Retail's assign
+// copies +0x08 (dword), +0x10 (qword), +0x18..+0x28 (five dwords) after the String
+// copy-ctor; its init leaves [0x0c,0x10) and [0x2c,0x30) untouched, as does assign.
+void AssignMGStructure(uint8_t* d, const uint8_t* s) {
+    AssignMGRef(d, s);
+    for (int off = 0x18; off <= 0x28; off += 4)
+        *reinterpret_cast<uint32_t*>(d + off) = *reinterpret_cast<const uint32_t*>(s + off);
+}
+void MG_InitStructure(uint8_t* e) {
     MG_InitRef(e);
     *(uint64_t*)(e + 0x18) = 0;                        // _offsetX, _offsetY
     *(uint64_t*)(e + 0x20) = 0xFFFFFFFFFFFFFFFFULL;    // _width = _height = -1
     *(int32_t*)(e + 0x28)  = 0;                        // _rotation
 }
+void DestroyMGStructure(void* /*ignoredThis*/, uint8_t* base, int count) {
+    for (int i = 0; i < count; ++i)
+        reinterpret_cast<System::String*>(base + static_cast<int64_t>(i) * 0x30)->~String();
+}
+const rtcoll::ArraySpec kSpec_MGStructure = {        // exe 0x14001b4e0
+    "Array<InitialStructure>", 0x30, 8,
+    &AssignMGStructure, &MG_InitStructure, &DestroyMGStructure, /*byteCopy*/false,
+    /*assign unwritten*/ 0x0c, 0x10,      // (and [0x2c,0x30); one range per row)
+    /*init   unwritten*/ 0x0c, 0x10,
+    /*seed zero       */ 0, 0 };
+using MGStructureArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                           Collection::ExplicitSpec<&kSpec_MGStructure>>;
+
+// Dispatch on the stride the caller names; the three are the three retail bodies.
+void MG_Resize(void* header, int newCount, int stride) {
+    // B.3.2 bridge: the MapGenerator pools are still raw DynArrayHeader fields.
+    switch (stride) {
+    case 8:    reinterpret_cast<MGFamilyArray*>(header)->SetSize(newCount);    break;
+    case 0x18: reinterpret_cast<MGRefArray*>(header)->SetSize(newCount);       break;
+    case 0x30: reinterpret_cast<MGStructureArray*>(header)->SetSize(newCount); break;
+    default:   break;   // no such pool exists; the three callers below are the only ones
+    }
+}
 
 // Serialize a count the way retail does: through a LOCAL seeded from the struct,
 // resizing only on the load leg. Returns the count to iterate.
-int MG_SerializeCount(void* serializer, void* header, void* countField,
-                      int stride, void (*initElem)(uint8_t*)) {
+int MG_SerializeCount(void* serializer, void* header, void* countField, int stride) {
     int n = *(int32_t*)countField;
     if (g_fn_Serialize_Int) g_fn_Serialize_Int(serializer, &n, nullptr);
-    if (MG_IsLoading(serializer)) MG_Resize(header, n, stride, initElem);
+    if (MG_IsLoading(serializer)) MG_Resize(header, n, stride);
     return n;
 }
 
 // A pool of ExternalRef entries (stride 0x18). header/countField are the array
 // header and its count int in the struct.
 void MG_ReadRefPool(void* serializer, void* header, void* countField) {
-    const int n = MG_SerializeCount(serializer, header, countField, 0x18, &MG_InitRef);
+    const int n = MG_SerializeCount(serializer, header, countField, 0x18);
     uint8_t* e = *(uint8_t**)header;
     if (!e) return;
     for (int i = 0; i < n; ++i, e += 0x18) {
@@ -334,7 +390,7 @@ void MapGenerator_Serialize(MapGenerator* self, void* stream) {
 
     // --- _citizens: InitialFamily[] (stride 8: bool _educated@0, int _maxChildCount@4) ---
     {
-        const int n = MG_SerializeCount(serializer, s + 0x60, s + 0x68, 8, &MG_InitFamily);
+        const int n = MG_SerializeCount(serializer, s + 0x60, s + 0x68, 8);
         uint8_t* e = *(uint8_t**)(s + 0x60);
         for (int i = 0; e && i < n; ++i, e += 8) {
             g_fn_Serialize_Bool(serializer, e, nullptr);        // _educated
@@ -348,7 +404,7 @@ void MapGenerator_Serialize(MapGenerator* self, void* stream) {
     // --- _structures: InitialStructure[] (stride 0x30: String@0, gen@8, ptr@0x10,
     //     int _offsetX@0x18, _offsetY@0x1c, _width@0x20, _height@0x24, _rotation@0x28) ---
     {
-        const int n = MG_SerializeCount(serializer, s + 0x80, s + 0x88, 0x30, &MG_InitStructure);
+        const int n = MG_SerializeCount(serializer, s + 0x80, s + 0x88, 0x30);
         uint8_t* e = *(uint8_t**)(s + 0x80);
         for (int i = 0; e && i < n; ++i, e += 0x30) {   // FUN_14001b6c0, in place
             reinterpret_cast<System::String*>(e)->Serialize(serializer);            // _structure ref name

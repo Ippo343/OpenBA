@@ -23,6 +23,7 @@
 #include "math/Math.h"
 #include "system/Filename.h"
 #include "system/String.h"
+#include "collection/Collection.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -212,33 +213,29 @@ static void MenuScene_CopyTransform(void* destTransform, const void* srcTransfor
 // Growth rule: needed = count+1; if cap < needed, set cap = needed*3 (or
 // needed*1 when count was 0); MemAlloc(cap*stride, alignFromStride); copy
 // old elements; MemFree old buffer if reallocated.
-// stride must be 4 (id array) or 8 (ptr array).
-static void* AppendToDynArray(void* self, uintptr_t arrOff, size_t stride) {
-    void*    oldData  = Field<void*>(self, arrOff + 0x0);
-    int32_t  oldCount = Field<int32_t>(self, arrOff + 0x8);
-    int32_t  oldCap   = Field<int32_t>(self, arrOff + 0xC);
-    int32_t  newCount = oldCount + 1;
-
-    Field<int32_t>(self, arrOff + 0x8) = newCount;
-
-    if (oldCap < newCount) {
-        int32_t newCap = newCount;
-        if (oldCount != 0) newCap = newCount * 3;
-        Field<int32_t>(self, arrOff + 0xC) = newCap;
-        size_t bytes = static_cast<size_t>(newCap) * stride;
-        size_t align = stride;  // 4 or 8
-        void* newData = fn_MemAlloc(g_pMemAllocSingleton, bytes, align);
-        if (oldData && newData) {
-            std::memcpy(newData, oldData, static_cast<size_t>(oldCount) * stride);
-        }
-        Field<void*>(self, arrOff + 0x0) = newData;
-        if (oldData && newData != oldData && fn_MemFreeStatic) {
-            fn_MemFreeStatic(oldData);
-        }
-    }
-    // Return pointer to the new (uninitialized) slot.
-    void* data = Field<void*>(self, arrOff + 0x0);
-    return reinterpret_cast<uint8_t*>(data) + static_cast<size_t>(oldCount) * stride;
+//
+// ENDGAME B.3.2 step 2: the body WAS a hand-written copy of `rtcoll::SetSizeCore`
+// specialised to a single append. Retail MenuDLT::Load (0x14009a930, re-decompiled
+// 2026-09-13) inlines the THREE-argument form six times — once per array per
+// loop — with the new element as the fill: `n = count+1; if (n != count) {...}`
+// (the exact-equal early-out, always taken), `_size = n`, `if (cap < n) { cap =
+// n; if (count != 0) cap = n*3; MemAlloc(cap << 3 | << 2, 8 | 4) }`, copy the
+// prefix on a move else start at count, `dst[i] = i < count ? old[i] : elem`,
+// skip a null computed address, `if (old != data) MemFree(old)`. The capacity
+// spelling `(count != 0) ? n*3 : n` equals the reference `n == old+1 && old != 0
+// ? n*3 : n` BECAUSE n is count+1 by construction at every one of the six call
+// sites — there is no other caller. So each site is `Array<T>::SetSize(n, elem)`
+// on a trait-derived row (void* / uint32_t: byteCopy, no init, no destroy,
+// align 8 / 4 — the two alignments retail passes). The previous port's
+// "return the slot, caller stores it" split and its `oldData && newData` memcpy
+// guard produced the same bytes; the fill form is retail's actual shape.
+template <typename T>
+static void AppendToDynArray(void* self, uintptr_t arrOff, const T& value) {
+    // B.3.2 bridge: MenuDLT+0xbd0/+0xbe0/+0xbf0 are raw headers in the DialogLoopT
+    // subclass, which is still untyped bytes.
+    auto* arr = reinterpret_cast<Collection::Array<T>*>(
+        reinterpret_cast<uint8_t*>(self) + arrOff);
+    arr->SetSize(arr->GetSize() + 1, value);
 }
 
 // ============================================================
@@ -283,9 +280,7 @@ static int32_t MenuDialogLoopT_PhaseB_ProcessElement(
     fn_Graphics_MeshInstance_Ctor(inst);
 
     // 2. Append to MenuDLT+0xbe0 (shared instance list).
-    void** slotPtr = reinterpret_cast<void**>(
-        AppendToDynArray(self, MenuDLTOff::allInstArr_be0, sizeof(void*)));
-    if (slotPtr) *slotPtr = inst;
+    AppendToDynArray<void*>(self, MenuDLTOff::allInstArr_be0, inst);
 
     // 3. Per-element setup — mirror MenuScene_helper_3b60.
     int16_t meshIdx = *reinterpret_cast<const int16_t*>(elem + 0x1c);
@@ -294,10 +289,8 @@ static int32_t MenuDialogLoopT_PhaseB_ProcessElement(
     // Defensive bound check on meshIdx — keeps id arrays in sync if a future
     // serializer regression ever produces an out-of-range index.
     if (meshIdx < 0 || meshIdx >= meshArrCount) {
-        unsigned int id0 = fn_Graphics_Scene_AddObject(scene, inst);
-        uint32_t* idSlot0 = reinterpret_cast<uint32_t*>(
-            AppendToDynArray(self, MenuDLTOff::sceneIdArr_bf0, sizeof(uint32_t)));
-        if (idSlot0) *idSlot0 = id0;
+        uint32_t id0 = fn_Graphics_Scene_AddObject(scene, inst);
+        AppendToDynArray<uint32_t>(self, MenuDLTOff::sceneIdArr_bf0, id0);
         *outSkippedBadIdx = true;
         return 0;
     }
@@ -340,12 +333,24 @@ static int32_t MenuDialogLoopT_PhaseB_ProcessElement(
         meshExtPtr) {
         void* matList = fn_Graphics_GraphicsMesh_GetMaterialList(meshExtPtr, matIdx);
         if (matList) {
-            int32_t matCount = Field<int32_t>(matList, 0x08);
-            void**  matData  = Field<void**>(matList, 0x00);
-            for (int32_t m = 0; m < matCount && matData; ++m) {
-                fn_Graphics_MeshInstance_SetMaterialInstance(inst, m, matData[m]);
+            // ENDGAME B.3.2 step 2: `?GetMaterialList@GraphicsMesh@Graphics@@`
+            // returns `const Collection::Array<Object::ExternalPtr<
+            // Graphics::MaterialInstance>>&` (the mangled name in
+            // engine_funcs.cpp spells it out), and this walk read it by raw
+            // offset. `ExternalPtr<T>` is 8 bytes and trivially copyable
+            // (COLLECTION_INVENTORY.md §5.1 requires it to stay so), which
+            // makes `Array<void*>` layout-equivalent. This is a READ-ONLY walk
+            // — no SetSize, no destructor — so the spec policy is never
+            // consulted and the trait-derived row is correct.
+            // B.3.2 bridge: the cast goes when the returned type is spelled out.
+            const Collection::Array<void*>& mats =
+                *reinterpret_cast<const Collection::Array<void*>*>(matList);
+            // The `mats.GetData()` term is the old `&& matData`, kept because
+            // nothing here proves GetSize() is 0 whenever _data is null.
+            for (int32_t m = 0; m < mats.GetSize() && mats.GetData(); ++m) {
+                fn_Graphics_MeshInstance_SetMaterialInstance(inst, m, mats[m]);
             }
-            matSlots = matCount;
+            matSlots = mats.GetSize();
         }
     }
 
@@ -359,10 +364,8 @@ static int32_t MenuDialogLoopT_PhaseB_ProcessElement(
     }
 
     // 4. Scene::AddObject + append id.
-    unsigned int id = fn_Graphics_Scene_AddObject(scene, inst);
-    uint32_t* idSlot = reinterpret_cast<uint32_t*>(
-        AppendToDynArray(self, MenuDLTOff::sceneIdArr_bf0, sizeof(uint32_t)));
-    if (idSlot) *idSlot = id;
+    uint32_t id = fn_Graphics_Scene_AddObject(scene, inst);
+    AppendToDynArray<uint32_t>(self, MenuDLTOff::sceneIdArr_bf0, id);
 
     return matSlots;
 }
@@ -534,9 +537,7 @@ void MenuDialogLoopT_LoadParticles_PhaseC(void* self, void* menuScene, void* sce
         fn_Graphics_ParticleSystemInstance_Ctor(inst);
 
         // 2. Append to all-instance array (+0xbe0).
-        void** allSlot = reinterpret_cast<void**>(
-            AppendToDynArray(self, MenuDLTOff::allInstArr_be0, sizeof(void*)));
-        if (allSlot) *allSlot = inst;
+        AppendToDynArray<void*>(self, MenuDLTOff::allInstArr_be0, inst);
 
         // 3. helper_3ca0 inline:
         //    Element layout: elem+0x00 = Vector3 offset, elem+0x0c = yaw,
@@ -575,15 +576,11 @@ void MenuDialogLoopT_LoadParticles_PhaseC(void* self, void* menuScene, void* sce
         }
 
         // 4. Append to particle-only array (+0xbd0) — drives per-frame Update.
-        void** partSlot = reinterpret_cast<void**>(
-            AppendToDynArray(self, MenuDLTOff::partInstArr_bd0, sizeof(void*)));
-        if (partSlot) *partSlot = inst;
+        AppendToDynArray<void*>(self, MenuDLTOff::partInstArr_bd0, inst);
 
         // 5. Scene::AddObject + append id.
-        unsigned int id = fn_Graphics_Scene_AddObject(scene, inst);
-        uint32_t* idSlot = reinterpret_cast<uint32_t*>(
-            AppendToDynArray(self, MenuDLTOff::sceneIdArr_bf0, sizeof(uint32_t)));
-        if (idSlot) *idSlot = id;
+        uint32_t id = fn_Graphics_Scene_AddObject(scene, inst);
+        AppendToDynArray<uint32_t>(self, MenuDLTOff::sceneIdArr_bf0, id);
         ++added;
     }
 

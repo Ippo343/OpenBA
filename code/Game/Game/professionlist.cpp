@@ -13,6 +13,7 @@
 #include "Game/professionlist_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -96,13 +97,16 @@ void ProfessionList_Init(ProfessionList* self) {
 // Original: 0x14001e760
 // Frees the dynamic array at +0x20, zeros +0x20 and +0x28,
 // then calls External::~External. Conditionally frees self.
+//
+// ENDGAME B.3.2 step 2: the array free is `Collection::Array<void*>::~Array`
+// (re-decompiled 2026-09-13: MemFree(+0x20); +0x20 = 0; one qword over +0x28 —
+// ArrayDtorImpl exactly; Profession* is trivially destructible so there is no
+// element step). Trait-derived row: byteCopy, no init, no destroy, align 8 —
+// the same row Startup's append below uses.
 void* ProfessionList_Dtor(ProfessionList* self, uint32_t flags) {
-    // Free the dynamic array
-    if (self->arrayData) {
-        fn_MemFreeStatic(self->arrayData);
-    }
-    self->arrayData = nullptr;
-    self->arraySize = 0;
+    // B.3.2 bridge: ProfessionList (engine/types) still spells the header as
+    // `arrayData` + a 64-bit `arraySize` covering count and capacity.
+    reinterpret_cast<Collection::Array<void*>*>(&self->arrayData)->~Array();
 
     // Call External::~External for base cleanup
     if (fn_External_Dtor) {
@@ -189,13 +193,29 @@ int ProfessionList_Serialize(ProfessionList* self, void* stream) {
 // via fn_ProfessionList_Startup — registered for standalone below). Without it the
 // array stays empty (count 0) and every profession-array consumer (TownHallUI
 // General/Professions tabs, ProfessionUI) sees zero professions and shows blank.
+//
+// ENDGAME B.3.2 step 2: the push WAS a hand-written copy of `rtcoll::SetSizeCore`
+// in its three-argument form. Retail 0x1400a90a0 (re-decompiled 2026-09-13)
+// inlines it with the found Profession* as the fill: `n = count+1; if (n !=
+// count) {...}` (the exact-equal early-out, always taken), `_size = n`, `if (cap
+// < n) { cap = n; if (count != 0) cap = n*3; MemAlloc(cap << 3, 8) }`, copy the
+// prefix on a move else start at count, `dst[i] = i < count ? old[i] : it`, skip
+// a null computed address, `if (old != data) MemFree(old)`. The capacity
+// spelling `(count != 0) ? n*3 : n` equals the reference `n == old+1 && old != 0
+// ? n*3 : n` BECAUSE n is count+1 by construction — this loop is the only
+// writer. So it is `Array<void*>::SetSize(count+1, it)` on the trait-derived row
+// (byteCopy, no init, no destroy, align 8). The previous port's
+// `if (!buf) { count restore; continue; }` was an out-of-memory-only guard
+// retail does not have (SetSizeCore skips a null element address instead).
 namespace Object { uint32_t GetTypeIdByName(const char* name); }  // fwd (full header below)
 extern "C" void ProfessionList_Startup_Impl(void* profList) {
     uintptr_t pl = (uintptr_t)profList;
     if (!pl || !fn_ExternalFactory_FindNext || !fn_IsDerivedFrom ||
-        !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton ||
-        !fn_MemAlloc || !g_pMemAllocSingleton)
+        !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton)
         return;
+
+    // B.3.2 bridge: ProfessionList+0x20 is still a raw header in the exe struct.
+    auto* profArray = reinterpret_cast<Collection::Array<void*>*>(pl + 0x20);
 
     // Profession type id: raw .rdata dword when the exe is mapped, else live type tree.
     uint32_t profTid = 0;
@@ -213,23 +233,7 @@ extern "C" void ProfessionList_Startup_Impl(void* profList) {
         if (*(uint8_t*)((uintptr_t)it + 0x4e) == 0) continue;  // not player-selectable
 
         // Growable push into +0x20 (buf) / +0x28 (count) / +0x2c (cap).
-        int count = *(int*)(pl + 0x28);
-        void* oldBuf = *(void**)(pl + 0x20);
-        *(int*)(pl + 0x28) = count + 1;
-        if (*(int*)(pl + 0x2c) < count + 1) {
-            int newCap = (count != 0) ? (count + 1) * 3 : count + 1;
-            *(int*)(pl + 0x2c) = newCap;
-            *(void**)(pl + 0x20) = fn_MemAlloc(g_pMemAllocSingleton,
-                                               (uint64_t)newCap << 3, 8);
-        }
-        void** buf = *(void***)(pl + 0x20);
-        if (!buf) { *(int*)(pl + 0x28) = count; continue; }
-        if (buf != oldBuf) {
-            for (int i = 0; i < count; i++)
-                buf[i] = ((void**)oldBuf)[i];
-            fn_MemFreeStatic(oldBuf);
-        }
-        buf[count] = it;
+        profArray->SetSize(profArray->GetSize() + 1, it);
     }
 
     // Sort ascending by sort priority (Profession+0x48) — FUN_14001e7c0 semantics.

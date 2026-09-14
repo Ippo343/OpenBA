@@ -18,6 +18,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_dialogs.h"
+#include "Dialog/dialog_array_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -105,6 +106,14 @@ static void* EventNotifyDialog_CreatePopup(EventNotifyDialog* self, int eventInd
 //     for a grow, or dtor excess elements for a shrink).
 //
 // Original: FUN_140011750.
+//
+// B.3.2 NOT CONVERTED to Collection::Array<T>::SetSize: the 0x30-byte element
+// carries a System::String at +0x20, so this instantiation has a real
+// copy-construct AND a real destroy step (the shrink arm runs the String dtor).
+// The trait-derived blob spec the Dialog bridge uses is byteCopy with
+// destroy == nullptr and would leak the String on every shrink. This needs a
+// hand-derived ArraySpec of its own, or the owning struct becoming a real class
+// (§B.2); until then the transcription stays.
 //
 static void EventNotifyDialog_ArrayPush_Impl(void* arrayBasePtr, int newCount, void* newEntry) {
     uintptr_t* base = (uintptr_t*)arrayBasePtr;
@@ -314,46 +323,18 @@ void EventNotifyDialog_Slot4(EventNotifyDialog* self) {
         // Set button element ID to 1500 + i (0x5DC + i)
         fn_Element_SetElementId((void*)entry[2], i + 0x5DC);
 
-        // Push entry into dynamic array at +0xC8 (0x18-byte stride, no Strings)
+        // Push entry into dynamic array at +0xC8 (0x18-byte stride, no Strings).
         // This is an INLINE push — NOT EventNotifyDialog_ArrayPush_Impl which is
-        // for the 0x30-stride +0xD8 array with String at +0x20.
+        // for the 0x30-stride +0xD8 array with String at +0x20 (that one is left
+        // as a hand-rolled loop: it destroys a String on shrink and copy-constructs
+        // one on grow, which DlgElem's byte-blob semantics cannot reproduce).
+        // B.3.2 bridge: EventNotifyDialog+0xC8 is Collection::Array<{entry[0],
+        // entry[1], entry[2]}> (stride 0x18, count +0xD0, capacity +0xD4) inside a
+        // struct §B.2 has not converted, so it is reached at its offset.
         {
-            uintptr_t* base = (uintptr_t*)(s + 0xC8);
-            void* oldData = (void*)*base;
-            int* countPtr = (int*)(s + 0xD0);
-            int* capPtr   = (int*)(s + 0xD4);
-            int oldCount = *countPtr;
-            int newCnt = oldCount + 1;
-
-            *countPtr = newCnt;
-
-            if (*capPtr < newCnt) {
-                *capPtr = newCnt;
-                if (oldCount != 0) {
-                    *capPtr = newCnt * 3;
-                }
-                void* alloc = fn_MemAlloc(g_pMemAllocSingleton, (uintptr_t)*capPtr * 0x18, 8);
-                *base = (uintptr_t)alloc;
-            }
-
-            void* newData = (void*)*base;
-
-            int startIdx = (oldData == newData) ? oldCount : 0;
-            if (startIdx < newCnt) {
-                for (int j = startIdx; j < newCnt; j++) {
-                    uint64_t* dst = (uint64_t*)((uintptr_t)newData + (uintptr_t)j * 0x18);
-                    uint64_t* src = (j < oldCount)
-                        ? (uint64_t*)((uintptr_t)oldData + (uintptr_t)j * 0x18)
-                        : entry;
-                    dst[0] = src[0];
-                    dst[1] = src[1];
-                    dst[2] = src[2];
-                }
-            }
-
-            if (oldData != newData) {
-                fn_MemFreeStatic(oldData);
-            }
+            auto& rows = DlgArray<0x18>(s, 0xC8);
+            rows.SetSize(rows.GetSize() + 1,
+                         DlgElem<0x18>{{entry[0], entry[1], entry[2]}});
         }
     }
 

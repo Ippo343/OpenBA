@@ -36,6 +36,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Filename.h"
+#include "Dialog/dialog_array_bridge.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -237,44 +238,12 @@ static void BSTRebalance_Impl(uintptr_t* treeRootPtr, uintptr_t* startNodePtr) {
 // ============================================================
 // Dynamic array push helpers (8-byte element arrays)
 // ============================================================
+// B.3.2 bridge: `self+ptrOffset` is Collection::Array<uint64_t> (stride 8,
+// count +0x08, capacity +0x0C off ptrOffset) inside a struct §B.2 has not
+// converted, so it is reached at its offset.
 static void PushToArray8(uintptr_t self, int ptrOffset, uint64_t value) {
-    uintptr_t dataField = self + ptrOffset;
-    uintptr_t cntField  = self + ptrOffset + 0x08;
-    uintptr_t capField  = self + ptrOffset + 0x0C;
-
-    uint32_t count = *(uint32_t*)cntField;
-    uint32_t newCount = count + 1;
-    if (newCount == count) return;
-
-    void* oldData = *(void**)dataField;
-    *(uint32_t*)cntField = newCount;
-
-    if ((int32_t)*(uint32_t*)capField < (int32_t)newCount) {
-        uint32_t newCap = newCount;
-        if (count != 0) newCap = newCount * 3;
-        *(uint32_t*)capField = newCap;
-        void* newData = fn_MemAlloc(g_pMemAllocSingleton, (int64_t)(int32_t)newCap * 8, 8);
-        *(void**)dataField = newData;
-    }
-
-    uint32_t copyStart = 0;
-    if (oldData == *(void**)dataField) {
-        copyStart = count;
-    }
-    for (uint32_t i = copyStart; i < newCount; i++) {
-        uint64_t* dst = (uint64_t*)(*(uintptr_t*)dataField + (uintptr_t)i * 8);
-        if (dst) {
-            if ((int32_t)i < (int32_t)count) {
-                uint64_t* src = (uint64_t*)((uintptr_t)oldData + (uintptr_t)i * 8);
-                *dst = *src;
-            } else {
-                *dst = value;
-            }
-        }
-    }
-    if (oldData != *(void**)dataField) {
-        fn_MemFreeStatic(oldData);
-    }
+    auto& arr = DlgArray<8>(self, ptrOffset);
+    arr.SetSize(arr.GetSize() + 1, DlgElem<8>{{value}});
 }
 
 // ============================================================

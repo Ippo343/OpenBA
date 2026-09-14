@@ -20,55 +20,136 @@
 #include "engine_funcs.h"
 #include "system/Filename.h"
 #include "system/String.h"
+#include "collection/Collection.h"
 #include "resolve.h"
 #include <cstdint>
 #include <initializer_list>
+#include <new>
 
 // ------------------------------------------------------------------
 // String-array destructors. Each is `{ void* data; int count; int cap; }`
 // header (data @+0, count @+8) holding `count` elements at the given stride,
 // with a System::String embedded at `strOffset` within each element. The
 // original frees the data block unconditionally even when count<=0.
+//
+// ENDGAME B.3.2 step 2: these three WERE one hand-written copy of
+// `Collection::Array<T>::~Array` (destroy each element, then
+// `rtcoll::ArrayDtorImpl`). Re-decompiled 0x14001b030 / 0x14001b0a0 /
+// 0x14000a8a0 on 2026-09-13 and compared with `~Array` + ArrayDtorImpl:
+//   * `if (0 < count) { ~String(elem + strOffset) for each }` — retail tests
+//     ONLY the count, exactly `if (destroy && _size > 0)`. The previous port's
+//     extra `&& base` was a guard retail does not have; it is gone.
+//   * `MemFree(data)` unconditionally (null test inside 0x1800c7ad0), then
+//     `data = 0` and ONE qword store over size+capacity — ArrayDtorImpl's
+//     three stores, byte for byte.
+// The element rows are the ones the matching grow bodies use:
+//   0x18: FUN_14001b340, {String @0, int32 generation @8, External* @0x10},
+//         assign = String copy-ctor + dword + qword (+0x0c..+0x10 unwritten),
+//         init = {0, -1, 0}. The SAME row exists as kSpec_GoalRefEntry in
+//         code/Game/Goal/goal_exe_helpers.cpp (file-local there); the two
+//         collapse into one when ExternalPtr becomes a real class.
+//   0x30: FUN_14001b4e0, the 0x18 triple followed by int32 _offsetX @0x18,
+//         _offsetY @0x1c, _width @0x20, _height @0x24, _rotation @0x28;
+//         assign copies each field (+0x0c..+0x10 and +0x2c..+0x30 unwritten),
+//         init = {0, -1, 0, 0, 0, -1, -1, 0} (mapgenerator.cpp MG_InitStructure).
+//   0x28: the event-log entry; its row lives in eventlog.cpp next to the grow
+//         (0x140019b70) and is reached through EventLog_EventArray_Destroy.
 // ------------------------------------------------------------------
-static inline void DestroyStringArray(void* arrayHeader, uint64_t stride, uint64_t strOffset) {
-    uint64_t* hdr = reinterpret_cast<uint64_t*>(arrayHeader);
-    uint8_t* base = reinterpret_cast<uint8_t*>(hdr[0]);
-    int count = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(hdr) + 8);
-    if (count > 0 && base) {
-        uint8_t* p = base;
-        for (int i = 0; i < count; ++i) {
-            reinterpret_cast<System::String*>(p + strOffset)->~String();
-            p += stride;
-        }
-    }
-    if (base && fn_MemFreeStatic) fn_MemFreeStatic(base);
-    hdr[0] = 0;
-    hdr[1] = 0;
+namespace {
+
+void AssignRefTriple18(uint8_t* d, const uint8_t* s) {
+    // B.3.2 bridge: the entry is still untyped bytes in MapGenerator/BuildingGoal.
+    new (d) System::String(*reinterpret_cast<const System::String*>(s));       // +0x00
+    *reinterpret_cast<uint32_t*>(d + 0x08) = *reinterpret_cast<const uint32_t*>(s + 0x08);
+    *reinterpret_cast<uint64_t*>(d + 0x10) = *reinterpret_cast<const uint64_t*>(s + 0x10);
 }
+// Generation seed is -1, not 0: 0 is a live ExternalFactory generation and
+// would make the lazy resolver take its "cache valid" early-out on a null.
+void InitRefTriple18(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
+    *reinterpret_cast<uint32_t*>(d + 0x08) = 0xFFFFFFFFu;
+    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
+}
+void DestroyRefTriple18(void* /*ignoredThis*/, uint8_t* base, int count) {
+    for (int i = 0; i < count; ++i)
+        reinterpret_cast<System::String*>(base + static_cast<int64_t>(i) * 0x18)->~String();
+}
+const rtcoll::ArraySpec kSpec_RefTriple18 = {           // exe 0x14001b340 / 0x14001b030
+    "Array<{String,int32,External*}>", 0x18, 8,
+    &AssignRefTriple18, &InitRefTriple18, &DestroyRefTriple18, false,
+    /*assign unwritten*/ 0x0c, 0x10,
+    /*init   unwritten*/ 0x0c, 0x10,
+    /*seed zero       */ 0,    0 };
+using RefTriple18Array = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                           Collection::ExplicitSpec<&kSpec_RefTriple18>>;
+
+void AssignInitialStructure30(uint8_t* d, const uint8_t* s) {
+    // B.3.2 bridge: MapGenerator's InitialStructure is still untyped bytes.
+    new (d) System::String(*reinterpret_cast<const System::String*>(s));       // +0x00
+    *reinterpret_cast<uint32_t*>(d + 0x08) = *reinterpret_cast<const uint32_t*>(s + 0x08);
+    *reinterpret_cast<uint64_t*>(d + 0x10) = *reinterpret_cast<const uint64_t*>(s + 0x10);
+    *reinterpret_cast<uint32_t*>(d + 0x18) = *reinterpret_cast<const uint32_t*>(s + 0x18);
+    *reinterpret_cast<uint32_t*>(d + 0x1c) = *reinterpret_cast<const uint32_t*>(s + 0x1c);
+    *reinterpret_cast<uint32_t*>(d + 0x20) = *reinterpret_cast<const uint32_t*>(s + 0x20);
+    *reinterpret_cast<uint32_t*>(d + 0x24) = *reinterpret_cast<const uint32_t*>(s + 0x24);
+    *reinterpret_cast<uint32_t*>(d + 0x28) = *reinterpret_cast<const uint32_t*>(s + 0x28);
+}
+void InitInitialStructure30(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
+    *reinterpret_cast<uint32_t*>(d + 0x08) = 0xFFFFFFFFu;               // generation -1
+    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x18) = 0;                         // _offsetX/_offsetY
+    *reinterpret_cast<uint64_t*>(d + 0x20) = 0xFFFFFFFFFFFFFFFFull;     // _width/_height -1
+    *reinterpret_cast<uint32_t*>(d + 0x28) = 0;                         // _rotation
+}
+void DestroyInitialStructure30(void* /*ignoredThis*/, uint8_t* base, int count) {
+    for (int i = 0; i < count; ++i)
+        reinterpret_cast<System::String*>(base + static_cast<int64_t>(i) * 0x30)->~String();
+}
+const rtcoll::ArraySpec kSpec_InitialStructure30 = {    // exe 0x14001b4e0 / 0x14001b0a0
+    "Array<MapGenerator::InitialStructure>", 0x30, 8,
+    &AssignInitialStructure30, &InitInitialStructure30, &DestroyInitialStructure30, false,
+    /*assign unwritten*/ 0x0c, 0x10,   // and +0x2c..+0x30 (one range field only)
+    /*init   unwritten*/ 0x0c, 0x10,   // same
+    /*seed zero       */ 0,    0 };
+using InitialStructure30Array = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                                  Collection::ExplicitSpec<&kSpec_InitialStructure30>>;
+
+}  // namespace
+
+extern "C" void EventLog_EventArray_Destroy(void* arrBase);   // eventlog.cpp
 
 // FUN_14001b030 (mapgenerator.cpp) — String at element+0, stride 0x18.
-void Game_DestroyStringArray18(void* arrayHeader) { DestroyStringArray(arrayHeader, 0x18, 0); }
+void Game_DestroyStringArray18(void* arrayHeader) {
+    reinterpret_cast<RefTriple18Array*>(arrayHeader)->~Array();          // B.3.2 bridge
+}
 
 // FUN_14001b0a0 (mapgenerator.cpp) — String at element+0, stride 0x30.
-void Game_DestroyStringArray30(void* arrayHeader) { DestroyStringArray(arrayHeader, 0x30, 0); }
+void Game_DestroyStringArray30(void* arrayHeader) {
+    reinterpret_cast<InitialStructure30Array*>(arrayHeader)->~Array();   // B.3.2 bridge
+}
 
 // FUN_14000a8a0 (gameupdateloop.cpp, EventNotifier_Cleanup) — String at element+8,
 // stride 0x28.
-void Game_EventNotifierCleanup(void* arrayHeader) { DestroyStringArray(arrayHeader, 0x28, 8); }
+void Game_EventNotifierCleanup(void* arrayHeader) { EventLog_EventArray_Destroy(arrayHeader); }
 
 // ------------------------------------------------------------------
 // FUN_140018220 (gameupdateloop.cpp, MusicPlayer_Dtor) — frees 5 buffers at
 // +0x50,+0x40,+0x30,+0x20,+0x10 (high to low) and zeroes each {ptr,len} pair.
+//
+// ENDGAME B.3.2 step 2: each of the five is `Collection::Array<T>::~Array` for a
+// trivially-destructible T (re-decompiled 2026-09-13: MemFree(data); data = 0;
+// one qword over size+capacity = 0 — ArrayDtorImpl exactly, no element step).
+// The element types are not pinned in the tree, and `~Array` of a trivial
+// element never reads the stride, so the header alias `rtcoll::ArrayHdr`
+// (= Array<uint8_t>, the same form runtime/src/collection/array.cpp's
+// ArrayDtorSited uses) is the honest spelling until MusicPlayer is a class.
 // ------------------------------------------------------------------
 void Game_MusicPlayerDtor(void* self) {
     uint8_t* b = reinterpret_cast<uint8_t*>(self);
     static const uint64_t kOffsets[5] = { 0x50, 0x40, 0x30, 0x20, 0x10 };
-    for (uint64_t off : kOffsets) {
-        void** slot = reinterpret_cast<void**>(b + off);
-        if (fn_MemFreeStatic) fn_MemFreeStatic(slot[0]);
-        slot[0] = nullptr;
-        *reinterpret_cast<void**>(b + off + 8) = nullptr;
-    }
+    for (uint64_t off : kOffsets)
+        reinterpret_cast<rtcoll::ArrayHdr*>(b + off)->~Array();   // B.3.2 bridge
 }
 
 // ------------------------------------------------------------------
@@ -89,14 +170,11 @@ void Game_ImageCaptureDtor(void* self) {
         if (!vtbl || !vtbl[0]) continue;
         reinterpret_cast<void(*)(void*, int)>(vtbl[0])(obj, 1);
     }
-    if (fn_MemFreeStatic) {
-        fn_MemFreeStatic(*reinterpret_cast<void**>(b + 0x28));
-        *reinterpret_cast<void**>(b + 0x28) = nullptr;
-        *reinterpret_cast<void**>(b + 0x30) = nullptr;
-        fn_MemFreeStatic(*reinterpret_cast<void**>(b + 0x18));
-        *reinterpret_cast<void**>(b + 0x18) = nullptr;
-        *reinterpret_cast<void**>(b + 0x20) = nullptr;
-    }
+    // ENDGAME B.3.2 step 2: two trivial-element `~Array`s (headers at +0x28 and
+    // +0x18, in that order — re-decompiled 2026-09-13: MemFree, data = 0, one
+    // qword over size+capacity), element types not pinned; see MusicPlayerDtor.
+    reinterpret_cast<rtcoll::ArrayHdr*>(b + 0x28)->~Array();   // B.3.2 bridge
+    reinterpret_cast<rtcoll::ArrayHdr*>(b + 0x18)->~Array();   // B.3.2 bridge
 }
 
 // ------------------------------------------------------------------
@@ -119,9 +197,10 @@ void Game_MenuSceneArrayDtor(void* self) {
     }
     p[2] = 0;
     *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(p) + 0x18) = 0;
-    if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(p[0]));
-    p[0] = 0;
-    p[1] = 0;
+    // ENDGAME B.3.2 step 2: the backing array at +0 is a trivial-element
+    // `~Array` (re-decompiled 2026-09-13: MemFree(*p); p[0] = 0; p[1] = 0).
+    // The tree at +0x10 above is a {root, count} pair, not an Array; untouched.
+    reinterpret_cast<rtcoll::ArrayHdr*>(p)->~Array();   // B.3.2 bridge
 }
 
 // ------------------------------------------------------------------
@@ -150,14 +229,14 @@ void Game_WeatherDtor(void* self) {
             }
         }
     }
-    if (fn_MemFreeStatic) {
-        fn_MemFreeStatic(*reinterpret_cast<void**>(b + 0x60));
-        *reinterpret_cast<void**>(b + 0x60) = nullptr;
-        *reinterpret_cast<void**>(b + 0x68) = nullptr;
-        fn_MemFreeStatic(*reinterpret_cast<void**>(b + 0x50));
-        *reinterpret_cast<void**>(b + 0x50) = nullptr;
-        *reinterpret_cast<void**>(b + 0x58) = nullptr;
-    }
+    // ENDGAME B.3.2 step 2: the loop above is Weather's own per-element work
+    // (retail 0x140093eb0 runs it inline, before the array frees); the two
+    // frees that follow are trivial-element `~Array`s at +0x60 then +0x50
+    // (re-decompiled 2026-09-13: MemFree, data = 0, one qword over
+    // size+capacity). +0x50 holds Geometry* — `Array<void*>`, trait-derived:
+    // byteCopy, no init, no destroy, align 8. +0x60's element is not pinned.
+    reinterpret_cast<rtcoll::ArrayHdr*>(b + 0x60)->~Array();          // B.3.2 bridge
+    reinterpret_cast<Collection::Array<void*>*>(b + 0x50)->~Array();  // B.3.2 bridge
 }
 
 // ------------------------------------------------------------------

@@ -32,6 +32,7 @@
 //   +0x158 buttonDelete (InternalBasePtr)
 
 #include "Dialog/ui_dialogs.h"
+#include "Dialog/dialog_array_bridge.h"
 #include "options.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -94,50 +95,6 @@ static void Element_SetColor(void* elem, uint32_t color) {
 // +0x28 imageCorrupt   (InternalBasePtr: Element)
 // +0x30 materialInst   (MaterialInstance* — owned, destroyed on cleanup)
 // +0x38 spriteSheet    (SpriteSheet* — owned, destroyed on cleanup)
-
-// ============================================================
-// Dynamic array resize for 0x40-byte save entries
-// ============================================================
-// Equivalent to FUN_1400211e0: resizes the entry array at (self+0x110),
-// copying existing entries and initializing new ones from a template.
-static void SaveEntryArray_Resize(void* arrayBase, int newCount, void* templateEntry) {
-    uintptr_t a = (uintptr_t)arrayBase;
-    void*& data = *(void**)a;
-    int& count = *(int*)(a + 8);
-    int& capacity = *(int*)(a + 12);
-
-    int oldCount = count;
-    if (newCount == oldCount) return;
-
-    void* oldData = data;
-    count = newCount;
-
-    if (capacity < newCount) {
-        capacity = newCount;
-        // Growth heuristic: if growing by exactly 1, triple capacity
-        if (newCount == oldCount + 1 && oldCount != 0) {
-            capacity = newCount * 3;
-        }
-        void* newData = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)capacity * 0x40, 8);
-        data = newData;
-    }
-
-    // Copy/initialize entries
-    int copyStart = (oldData == data) ? oldCount : 0;
-    for (int i = copyStart; i < newCount; i++) {
-        uint8_t* dst = (uint8_t*)data + (uintptr_t)i * 0x40;
-        uint8_t* src = (i < oldCount) ? ((uint8_t*)oldData + (uintptr_t)i * 0x40)
-                                      : (uint8_t*)templateEntry;
-        // Copy 0x40 bytes (8 uint64_t fields)
-        for (int j = 0; j < 8; j++) {
-            ((uint64_t*)dst)[j] = ((uint64_t*)src)[j];
-        }
-    }
-
-    if (oldData != data) {
-        fn_MemFreeStatic(oldData);
-    }
-}
 
 // ============================================================
 // PopulateFileList (0x1400b6ce0): Build/refresh the save file list UI
@@ -392,9 +349,17 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
                                          (void*)((uintptr_t)saveInfo + 0x10));
         }
 
-        // Push entry into array
-        SaveEntryArray_Resize((void*)(s + 0x110),
-                               *(int*)(s + 0x118) + 1, entry);
+        // Push entry into array at +0x110.
+        // B.3.2 bridge: SaveLoadDialog+0x110 is Collection::Array<{8 x uint64
+        // fields}> (stride 0x40, count +0x118, capacity +0x11C) inside a struct
+        // §B.2 has not converted, so it is reached at its offset. Was
+        // FUN_1400211e0's own inlined SetSize (SaveEntryArray_Resize); the
+        // MaterialInstance/SpriteSheet fields it carries are raw pointer bytes
+        // here, destroyed separately in Phase 1 above, not by this growth.
+        auto& rows = DlgArray<0x40>(s, 0x110);
+        rows.SetSize(rows.GetSize() + 1,
+                     DlgElem<0x40>{{entry[0], entry[1], entry[2], entry[3],
+                                    entry[4], entry[5], entry[6], entry[7]}});
     }
 
     // --- Phase 4: Fill remaining empty rows ---

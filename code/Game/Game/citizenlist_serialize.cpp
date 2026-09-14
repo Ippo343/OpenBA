@@ -102,6 +102,7 @@
 #include <cstdio>
 #include "resolve.h"
 #include "address_registry.h"
+#include "collection/Collection.h"
 #include <cstdint>
 #include <cstring>
 
@@ -230,53 +231,104 @@ void DeepCopyInner04Array(void* dstElem, void* srcElem) {
 }
 
 // ------------------------------------------------------------
+// ENDGAME B.3.2 step 2: the three resize bodies below WERE hand-written
+// copies of `rtcoll::SetSizeCore` (runtime/src/collection/array.cpp). Each is
+// now one `Collection::Array<>::SetSize` driven by an `ArraySpec` row that
+// spells out the site's element ops. Compared arm for arm before the swap:
+// exact-equal early return, `_size` stored before the capacity test,
+// treble-on-single-append-from-non-empty, copy the preserved prefix only when
+// the block moved, init the new tail, destroy the truncated tail in place /
+// the whole old buffer on a realloc, then free. Two deliberate differences,
+// identical to the ones code/Game/Goal/goal_exe_helpers.cpp documents: the
+// allocation goes through the LOCKING static `MemAlloc` (0x1800c7a50) instead
+// of the unlocked instance `Allocate` this file reached through `fn_MemAlloc`
+// (same allocator, same heap), and the "fn_MemAlloc unavailable" scaffold
+// guards are gone (fn_MemAlloc is resolved before any serializer runs).
+// ------------------------------------------------------------
+namespace {
+
+// FUN_140017640 element: one inner {int32* data, int32 count, int32 cap}
+// header, stride 0x10, align 8. Copy-construct = zero the header then the
+// 0x14000f9e0 deep copy (an operator= over a zeroed lhs); init = zero the
+// header; destroy = free the inner buffer and zero the header. The old body
+// zeroed the header only on the in-place truncation arm and not on the
+// realloc arm; there the header lives in the old block that is freed on the
+// very next line, so the two extra stores are unobservable. (The second port
+// of the same address, gameupdateloop_load.cpp, zeroes on both arms — this
+// row reproduces that one exactly.)
+void AssignIntAssocOuter(uint8_t* d, const uint8_t* s) {
+    *reinterpret_cast<uint64_t*>(d + 0) = 0;
+    *reinterpret_cast<uint64_t*>(d + 8) = 0;
+    DeepCopyInner04Array(d, const_cast<uint8_t*>(s));
+}
+void InitIntAssocOuter(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0) = 0;
+    *reinterpret_cast<uint64_t*>(d + 8) = 0;
+}
+void DestroyIntAssocOuter(void* /*ignoredThis*/, uint8_t* base, int count) {
+    for (int i = 0; i < count; ++i) {
+        uint8_t* e = base + static_cast<int64_t>(i) * 0x10;
+        if (fn_MemFreeStatic) fn_MemFreeStatic(*reinterpret_cast<void**>(e + 0));
+        *reinterpret_cast<uint64_t*>(e + 0) = 0;
+        *reinterpret_cast<uint64_t*>(e + 8) = 0;
+    }
+}
+const rtcoll::ArraySpec kSpec_IntAssocOuter = {          // exe 0x140017640
+    "Array<Array<int32>>", 0x10, 8,
+    &AssignIntAssocOuter, &InitIntAssocOuter, &DestroyIntAssocOuter, false,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+using IntAssocOuterArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                             Collection::ExplicitSpec<&kSpec_IntAssocOuter>>;
+
+// FUN_1400177c0 element: ProfessionResourceEntry, stride 0x20, align 8.
+// Copy = whole-stride byte copy; init = {0, 100, 0, 0} written as
+// u64@0, u64@8, u32@0x10, u64@0x18, so +0x14..+0x17 is left untouched;
+// trivially destructible.
+void AssignProfResEntry(uint8_t* d, const uint8_t* s) { std::memcpy(d, s, 0x20); }
+void InitProfResEntry(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 100;
+    *reinterpret_cast<uint32_t*>(d + 0x10) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x18) = 0;
+}
+const rtcoll::ArraySpec kSpec_ProfResEntry = {           // exe 0x1400177c0
+    "Array<ProfessionResourceEntry>", 0x20, 8,
+    &AssignProfResEntry, &InitProfResEntry, nullptr, true,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0x14, 0x18,
+    /*seed zero       */ 0,    0 };
+using ProfResEntryArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                            Collection::ExplicitSpec<&kSpec_ProfResEntry>>;
+
+// FUN_140017f60 element: two int32, stride 8, align 4. Copy = 8-byte copy,
+// init = zero, trivially destructible.
+void AssignIntPair(uint8_t* d, const uint8_t* s) {
+    *reinterpret_cast<uint64_t*>(d) = *reinterpret_cast<const uint64_t*>(s);
+}
+void InitIntPair(uint8_t* d) { *reinterpret_cast<uint64_t*>(d) = 0; }
+const rtcoll::ArraySpec kSpec_IntPair = {                // exe 0x140017f60
+    "Array<{int32,int32}>", 8, 4,
+    &AssignIntPair, &InitIntPair, nullptr, true,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+using IntPairArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                       Collection::ExplicitSpec<&kSpec_IntPair>>;
+
+}  // namespace
+
+// ------------------------------------------------------------
 // FUN_140017640 ("StatsArray::Init") — stride-0x10 outer array resize
 // {ptr,count/cap}[N]; each element itself a stride-4 int array header,
 // deep-copied via DeepCopyInner04Array on grow, freed on shrink.
 // Same address engine_funcs.h's fn_StatsArray_Init resolves.
 // ------------------------------------------------------------
 void ResizeStride0x10(void* hdr, int n) {
-    uint8_t* p = static_cast<uint8_t*>(hdr);
-    int32_t oldCount = *reinterpret_cast<int32_t*>(p + 8);
-    if (n == oldCount) return;
-    uint8_t* oldPtr = *reinterpret_cast<uint8_t**>(p + 0);
-    *reinterpret_cast<int32_t*>(p + 8) = n;
-    if (*reinterpret_cast<int32_t*>(p + 0xC) < n) {
-        *reinterpret_cast<int32_t*>(p + 0xC) = n;
-        if (n == oldCount + 1 && oldCount != 0) *reinterpret_cast<int32_t*>(p + 0xC) = n * 3;
-        int32_t cap = *reinterpret_cast<int32_t*>(p + 0xC);
-        if (fn_MemAlloc && g_pMemAllocSingleton)
-            *reinterpret_cast<void**>(p + 0) =
-                fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(cap) << 4, 8);
-    }
-    int start = (oldPtr == *reinterpret_cast<uint8_t**>(p + 0)) ? oldCount : 0;
-    uint8_t* dstBase = *reinterpret_cast<uint8_t**>(p + 0);
-    for (int64_t i = start; i < n; ++i) {
-        uint8_t* dstElem = dstBase + i * 0x10;
-        *reinterpret_cast<uint64_t*>(dstElem + 0) = 0;
-        *reinterpret_cast<uint64_t*>(dstElem + 8) = 0;
-        if (i < oldCount) DeepCopyInner04Array(dstElem, oldPtr + i * 0x10);
-    }
-    if (oldPtr == *reinterpret_cast<uint8_t**>(p + 0)) {
-        if (n < oldCount) {
-            uint8_t* e = oldPtr + static_cast<int64_t>(n) * 0x10;
-            for (int64_t k = oldCount - n; k > 0; --k) {
-                if (fn_MemFreeStatic) fn_MemFreeStatic(*reinterpret_cast<void**>(e + 0));
-                *reinterpret_cast<uint64_t*>(e + 0) = 0;
-                *reinterpret_cast<uint64_t*>(e + 8) = 0;
-                e += 0x10;
-            }
-        }
-    } else {
-        if (oldCount > 0) {
-            uint8_t* e = oldPtr;
-            for (int64_t k = oldCount; k > 0; --k) {
-                if (fn_MemFreeStatic) fn_MemFreeStatic(*reinterpret_cast<void**>(e + 0));
-                e += 0x10;
-            }
-        }
-        if (oldPtr && fn_MemFreeStatic) fn_MemFreeStatic(oldPtr);
-    }
+    // B.3.2 bridge: CitizenBehavior+0x140/+0x150 are still raw 0x10-byte
+    // headers in an unconverted exe struct.
+    reinterpret_cast<IntAssocOuterArray*>(hdr)->SetSize(n);
 }
 
 // ------------------------------------------------------------
@@ -285,36 +337,8 @@ void ResizeStride0x10(void* hdr, int n) {
 // Same address engine_funcs.h's fn_ProfResArray_Init resolves.
 // ------------------------------------------------------------
 void ResizeStride0x20(void* hdr, int n) {
-    uint8_t* p = static_cast<uint8_t*>(hdr);
-    int32_t oldCount = *reinterpret_cast<int32_t*>(p + 8);
-    if (n == oldCount) return;
-    void* oldPtr = *reinterpret_cast<void**>(p + 0);
-    *reinterpret_cast<int32_t*>(p + 8) = n;
-    if (*reinterpret_cast<int32_t*>(p + 0xC) < n) {
-        *reinterpret_cast<int32_t*>(p + 0xC) = n;
-        if (n == oldCount + 1 && oldCount != 0) *reinterpret_cast<int32_t*>(p + 0xC) = n * 3;
-        int32_t cap = *reinterpret_cast<int32_t*>(p + 0xC);
-        if (fn_MemAlloc && g_pMemAllocSingleton)
-            *reinterpret_cast<void**>(p + 0) =
-                fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(cap) << 5, 8);
-    }
-    int start = (oldPtr == *reinterpret_cast<void**>(p + 0)) ? oldCount : 0;
-    uint8_t* dstBase = *reinterpret_cast<uint8_t**>(p + 0);
-    uint8_t* srcBase = static_cast<uint8_t*>(oldPtr);
-    for (int64_t i = start; i < n; ++i) {
-        uint8_t* d = dstBase + i * 0x20;
-        if (i < oldCount) {
-            uint8_t* s = srcBase + i * 0x20;
-            std::memcpy(d, s, 0x20);
-        } else {
-            *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
-            *reinterpret_cast<uint64_t*>(d + 0x08) = 100;
-            *reinterpret_cast<uint32_t*>(d + 0x10) = 0;
-            *reinterpret_cast<uint64_t*>(d + 0x18) = 0;
-        }
-    }
-    if (oldPtr != *reinterpret_cast<void**>(p + 0) && oldPtr && fn_MemFreeStatic)
-        fn_MemFreeStatic(oldPtr);
+    // B.3.2 bridge: CitizenBehavior+0x170 is still a raw header.
+    reinterpret_cast<ProfResEntryArray*>(hdr)->SetSize(n);
 }
 
 // ------------------------------------------------------------
@@ -322,31 +346,8 @@ void ResizeStride0x20(void* hdr, int n) {
 // classic "exactly one past capacity" pattern, zero-fills new entries.
 // ------------------------------------------------------------
 void ResizeStride08Pair(void* hdr, int newCount) {
-    uint8_t* p = static_cast<uint8_t*>(hdr);
-    int32_t oldCount = *reinterpret_cast<int32_t*>(p + 8);
-    if (newCount == oldCount) return;
-    void* oldPtr = *reinterpret_cast<void**>(p + 0);
-    *reinterpret_cast<int32_t*>(p + 8) = newCount;
-    if (*reinterpret_cast<int32_t*>(p + 0xC) < newCount) {
-        *reinterpret_cast<int32_t*>(p + 0xC) = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) *reinterpret_cast<int32_t*>(p + 0xC) = newCount * 3;
-        int32_t cap = *reinterpret_cast<int32_t*>(p + 0xC);
-        if (fn_MemAlloc && g_pMemAllocSingleton)
-            *reinterpret_cast<void**>(p + 0) =
-                fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(cap) << 3, 4);
-    }
-    int start = (oldPtr == *reinterpret_cast<void**>(p + 0)) ? oldCount : 0;
-    uint64_t* dstBase = *reinterpret_cast<uint64_t**>(p + 0);
-    for (int64_t i = start; i < newCount; ++i) {
-        uint64_t* dst = dstBase + i;
-        if (i < oldCount) {
-            if (dst) *dst = static_cast<uint64_t*>(oldPtr)[i];
-        } else {
-            if (dst) *dst = 0;
-        }
-    }
-    if (oldPtr != *reinterpret_cast<void**>(p + 0) && oldPtr && fn_MemFreeStatic)
-        fn_MemFreeStatic(oldPtr);
+    // B.3.2 bridge: CitizenBehavior+0x130 is still a raw header.
+    reinterpret_cast<IntPairArray*>(hdr)->SetSize(newCount);
 }
 
 // ------------------------------------------------------------

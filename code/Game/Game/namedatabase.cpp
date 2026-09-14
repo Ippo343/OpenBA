@@ -27,6 +27,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -180,13 +181,14 @@ extern "C" void* NameDatabase_Dtor(void* self, uint32_t flags) {
     if (!self) return self;
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     *(void**)self = (void*)ResolveAddr(Module::Exe, kVtableAddr);
-    if (fn_MemFreeStatic) {
-        for (int off = 0x50; off >= 0x20; off -= 0x10) {
-            fn_MemFreeStatic(*(void**)(s + off));
-            *(uint64_t*)(s + off)       = 0;   // data + count
-            *(uint64_t*)(s + off + 8)   = 0;   // (count high) + cap
-        }
-    }
+    // ENDGAME B.3.2 step 2: four trivial-element `Collection::Array::~Array`s,
+    // back to front (+0x50 int32, +0x40 byte, +0x30, +0x20). Each was
+    // MemFree(data); data = 0; one qword over size+capacity = 0 —
+    // `rtcoll::ArrayDtorImpl` exactly, with no element step. The int32 and
+    // byte arrays are trait-derived rows; the two at +0x20/+0x30 are not pinned
+    // to an element type here, so the header alias is used for all four.
+    for (int off = 0x50; off >= 0x20; off -= 0x10)
+        reinterpret_cast<rtcoll::ArrayHdr*>(s + off)->~Array();   // B.3.2 bridge
     if (fn_External_Dtor) fn_External_Dtor(self);            // base dtor
     if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
     return self;

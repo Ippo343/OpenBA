@@ -20,10 +20,29 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
-- **B.3.2 OPEN (2026-09-14 early, main 1094b5aa):** `Collection::Array<T>`, `Set<T>` and
-  `LinkedList<T>` are real templates (runtime/types/collection/Collection.h) wrapping the
-  ported cores; all 339 registry rows kept as shims; `make unit` 154 tests. Step 2 (callers,
-  four directory batches) in flight; closing pass follows. Rules: `endgame_b/B32_RULES.md`.
+- **B.3.2 OPEN — session handoff (2026-09-14, main e4ac8967):** `Collection::Array<T>`,
+  `Set<T>` and `LinkedList<T>` are real templates (runtime/types/collection/Collection.h)
+  wrapping the ported cores; all 339 registry rows kept as shims; `make unit` 154 tests.
+  Step 2 (callers): Game/Player/Tutorial/Goal MERGED (e4ac8967) and Dialog MERGED (0926164e), both gate PASS.
+  Component/Action/Work/Entity and runtime+standalone+dx11 were in flight on worktree
+  branches `worktree-agent-af701169855ab5b77`,
+  `worktree-agent-a06f7bd4303740385` when the session stopped — **merge each only after
+  build + `make unit` + sa-run + resave gate on the merge** (check `git diff --stat` against
+  the batch's file set first). Rules: `endgame_b/B32_RULES.md`.
+  **Finding that reshaped step 2:** code/Game never reaches runtime/src/collection; its
+  Array sites are the EXE-side MSVC monomorphisations of `Array<T>::SetSize` (0x1400021d0,
+  0x1400032e0, 0x140003110, …) transcribed per file, and those convert onto the same template
+  with `ExplicitSpec` rows (every exe helper zeroes its new tail; `SpecFor<T>` does not).
+  **B.3.2 closing-pass list:** unify `code/Game/Component/coll_bridge.h` (GameColl types) and
+  `code/Game/Dialog/dialog_array_bridge.h` (DlgElem<N>), then collapse ExplicitSpec rows onto
+  trait-derived `Array<T>` where equivalent; route the template's allocation through the same
+  allocator door as the tree (it bypasses the `BANISHED_REDZONE` shim today); add the width-8
+  `AvlOps` specialisation (Set<Filename> in modification_*.cpp); wire the deep
+  `Array::operator=` (`ArrayAssignCore`); an in-place-construct `Set::Insert`; decide
+  `fn_ExeArrayResize/2/3/Push` in engine_funcs.cpp (they zero to capacity and carry a bail —
+  read the retail exe bodies); the `fn_UI_GetFirstDialog` LinkedList walks in Tutorial; then
+  delete `fn_*Array*/Set*` pointers, shims and rows at zero callers and regenerate the .inc
+  files; STATUS + B.4 counts.
 
 - **B.3.1 CLOSED (2026-09-13 night):** `System::String`, `System::Filename` and the nine
   `Math` value types are real classes under retail's names (`runtime/types/system/*.h`,

@@ -8,6 +8,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_dialogs.h"
+#include "Dialog/dialog_array_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
@@ -135,52 +136,17 @@ void AchievementDialog_Slot4(AchievementDialog* self) {
                          &descText);
         fn_TextElement_SetText(textDesc, descStrBuf);
 
-        // Push 4-pointer entry (stride 0x20) to dynamic array at +0xC0
-        // Entry: {imageIcon, imageStar, textTitle, textDesc}
-        uint32_t count = *(uint32_t*)(s + 0xC8);
-        uint32_t newCount = count + 1;
-        if (newCount != count) {
-            void* oldData = *(void**)(s + 0xC0);
-            *(uint32_t*)(s + 0xC8) = newCount;
-
-            if ((int32_t)*(uint32_t*)(s + 0xCC) < (int32_t)newCount) {
-                uint32_t newCap = newCount;
-                if (count != 0) newCap = newCount * 3;
-                *(uint32_t*)(s + 0xCC) = newCap;
-                void* newData = fn_MemAlloc(g_pMemAllocSingleton,
-                    (int64_t)(int32_t)newCap * 0x20, 8);
-                *(void**)(s + 0xC0) = newData;
-            }
-
-            uint32_t copyStart = 0;
-            if (oldData == *(void**)(s + 0xC0)) {
-                copyStart = count;
-            }
-
-            for (uint32_t j = copyStart; j < newCount; j++) {
-                uint64_t* dst = (uint64_t*)(*(uintptr_t*)(s + 0xC0) + (uintptr_t)j * 0x20);
-                if (dst) {
-                    if ((int32_t)j < (int32_t)count) {
-                        // Copy from old data
-                        uint64_t* src = (uint64_t*)((uintptr_t)oldData + (uintptr_t)j * 0x20);
-                        dst[0] = src[0];
-                        dst[1] = src[1];
-                        dst[2] = src[2];
-                        dst[3] = src[3];
-                    } else {
-                        // New entry: {imageIcon, imageStar, textTitle, textDesc}
-                        dst[0] = (uint64_t)imageIcon;
-                        dst[1] = (uint64_t)imageStar;
-                        dst[2] = (uint64_t)textTitle;
-                        dst[3] = (uint64_t)textDesc;
-                    }
-                }
-            }
-
-            if (oldData != *(void**)(s + 0xC0)) {
-                fn_MemFreeStatic(oldData);
-            }
-        }
+        // Push 4-pointer entry (stride 0x20) to dynamic array at +0xC0.
+        // B.3.2 bridge: <AchievementDialog>+0xC0 is Collection::Array<{imageIcon,
+        // imageStar, textTitle, textDesc}> (stride 0x20, count +0xC8, capacity +0xCC)
+        // inside a struct §B.2 has not converted, so it is reached at its offset.
+        // The old hand-rolled copy guarded with `if (newCount != count)` — that is
+        // retail's `if (newSize == oldSize) return;` early return, which
+        // rtcoll::SetSizeCore already performs, so it is not carried forward.
+        auto& entries = DlgArray<0x20>(s, 0xC0);
+        entries.SetSize(entries.GetSize() + 1,
+                         DlgElem<0x20>{{(uint64_t)imageIcon, (uint64_t)imageStar,
+                                        (uint64_t)textTitle, (uint64_t)textDesc}});
     }
 
     // Find "textComplete" element, store at +0xB8
