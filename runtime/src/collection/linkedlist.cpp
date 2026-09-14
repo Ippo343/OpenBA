@@ -1,7 +1,12 @@
 // ============================================================================
 // runtime/src/collection/linkedlist.cpp — Wave 9 lane UIC
-//   Collection::LinkedList<T=8 bytes, DefaultAllocator> — the three unexported
+//   Collection::LinkedList<T=8 bytes, DefaultAllocator> — the unexported
 //   out-of-line helpers UI::UserInterface::BringDialogToFront calls.
+//
+//   ENDGAME B.3.2 step 1: the bodies themselves now live on the class template
+//   in runtime/types/collection/Collection.h; what is left here is the
+//   allocator seam and the four one-line address doors. See "WHERE THE BODIES
+//   WENT" below the original write-up.
 // ============================================================================
 //
 // The container layout is NOT recovered here — it was already recovered, twice,
@@ -99,10 +104,37 @@
 // PORTABILITY: no <windows.h>, per PLAN.md §4.1 decision 1.
 // ============================================================================
 
+// ---------------------------------------------------------------------------
+// ENDGAME B.3.2 STEP 1 (LIST core) — WHERE THE BODIES WENT
+// ---------------------------------------------------------------------------
+// The four bodies above are now MEMBERS of
+// `Collection::LinkedList<T, Allocator>` in
+// runtime/types/collection/Collection.h, each carrying the transcription notes
+// that used to sit here next to it. Retail has exactly ONE instantiation of
+// that template (T = an 8-byte pointer), and at T = 8 the generic bodies
+// compile to the same stores this file used to make by hand — the only change
+// is that `0x18`, `+0x8` and `+0x10` are now `sizeof(Node)` and field names.
+//
+// What is left in this file is the two things the header cannot hold:
+//
+//   1. `Collection::detail::ListNodeAlloc/ListNodeFree` — the allocator seam,
+//      which needs `ResolveAddr` and therefore must stay out of a types header
+//      (PLAN.md §4.1 decision 1).
+//   2. The four `extern "C"` entry points, now ONE LINE EACH, and their
+//      `RegisterRuntimeAddr` rows. Every row that was here is still here:
+//      callers reach the class through them until B.3.2 step 2 converts the
+//      call sites.
+// ---------------------------------------------------------------------------
+
 #include <cstddef>
 #include <cstdint>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/collection/Collection.h"
+
+#ifdef BANISHED_UNIT_TEST
+#include <cstdlib>
+#endif
 
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
 // — same reasoning array.cpp gives (resolve.h drags in <windows.h>, whose
@@ -111,29 +143,20 @@
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
-namespace {
+// The one retail instantiation. Named here so the shims below and the layout
+// asserts read against the same type the header defines.
+using List8 = Collection::LinkedList<void*>;
+using Node8 = List8::Node;
+static_assert(sizeof(Node8) == 0x18, "LinkedList::Node(T=8) is 0x18 bytes");
+static_assert(offsetof(Node8, prev) == 0x08, "Node::prev @ +0x08");
+static_assert(offsetof(Node8, next) == 0x10, "Node::next @ +0x10");
+static_assert(sizeof(List8) == 0x18, "Collection::LinkedList is 0x18 bytes");
+static_assert(offsetof(List8, _head)  == 0x00, "LinkedList::_head @ +0x00");
+static_assert(offsetof(List8, _tail)  == 0x08, "LinkedList::_tail @ +0x08");
+static_assert(offsetof(List8, _count) == 0x10, "LinkedList::_count @ +0x10");
 
-// The 8-byte-element instantiation, which is the only one these three bodies
-// serve (the element is an Object::InternalPtr, one pointer). Mirrors
-// Collection.h's LinkedList<T=8> exactly; asserted rather than assumed.
-struct LlNode {
-    void*   element;   // +0x00
-    LlNode* prev;      // +0x08
-    LlNode* next;      // +0x10
-};
-struct LlList {
-    LlNode* head;      // +0x00
-    LlNode* tail;      // +0x08
-    int32_t count;     // +0x10
-    int32_t pad14;     // +0x14  never read or written by any of the three
-};
-static_assert(sizeof(LlNode) == 0x18, "LinkedList::Node(T=8) is 0x18 bytes");
-static_assert(offsetof(LlNode, prev) == 0x08, "Node::prev @ +0x08");
-static_assert(offsetof(LlNode, next) == 0x10, "Node::next @ +0x10");
-static_assert(sizeof(LlList) == 0x18, "Collection::LinkedList is 0x18 bytes");
-static_assert(offsetof(LlList, head)  == 0x00, "LinkedList::_head @ +0x00");
-static_assert(offsetof(LlList, tail)  == 0x08, "LinkedList::_tail @ +0x08");
-static_assert(offsetof(LlList, count) == 0x10, "LinkedList::_count @ +0x10");
+#ifndef BANISHED_UNIT_TEST
+namespace {
 
 // The allocator boundary. RETRIES A NULL rather than caching one, which is the
 // RtResolveCached contract and is load-bearing rather than defensive: at
@@ -156,12 +179,83 @@ void MemFreeLocked(void* p) {
 }
 
 }  // namespace
+#endif  // !BANISHED_UNIT_TEST
+
+// ============================================================================
+// Collection::detail — the node allocation seam the header declares
+// ============================================================================
+//
+// In the SHIPPING build these are exactly the two calls the bodies above
+// argued for: `MemAlloc(sizeof(Node), 8)` and `MemFree(node)`, i.e. the ONE
+// ported allocator entry point rather than a private copy of the lock
+// protocol. Reaching the heap any other way from here would re-open the wall
+// attempt 13 closed (see this file's header block).
+//
+// In the HOST UNIT TEST build (`make unit`, -DBANISHED_UNIT_TEST) there is no
+// address registry and no MemoryAllocator singleton to resolve, so
+// `ResolveAddr` answers 0 and the shipping path would allocate nothing at all —
+// every list would silently stay empty and every assertion in list_test.cpp
+// would be vacuous. B31_RULES class rule 6 allows a test-only allocator for
+// exactly this; this is it, and it is the ONLY behavioural difference between
+// the two builds in this file.
+//
+// The test allocator carries a 16-byte header with a state word, so that
+// freeing a block twice is DETECTED rather than tolerated: that is what makes
+// "Clear frees every node exactly once" a real assertion instead of a count
+// that a double free and a leak would cancel out of.
+// ============================================================================
+namespace Collection {
+namespace detail {
+
+#ifdef BANISHED_UNIT_TEST
+uint64_t g_listNodeAllocs      = 0;   // read by tests/unit/list_test.cpp
+uint64_t g_listNodeFrees       = 0;
+uint64_t g_listNodeDoubleFrees = 0;
+
+namespace {
+constexpr uint64_t kLive = 0x4c495645ull;   // 'LIVE'
+constexpr uint64_t kDead = 0x44454144ull;   // 'DEAD'
+}  // namespace
+
+void* ListNodeAlloc(uint64_t bytes, int align) {
+    (void)align;                     // malloc is already 16-aligned on x64
+    uint8_t* base = static_cast<uint8_t*>(std::malloc(static_cast<size_t>(bytes) + 16));
+    if (!base) { return nullptr; }
+    *reinterpret_cast<uint64_t*>(base) = kLive;
+    ++g_listNodeAllocs;
+    return base + 16;
+}
+
+void ListNodeFree(void* p) {
+    if (!p) { return; }              // retail's own `TEST RDX,RDX / JZ ret`
+    uint8_t*  base  = static_cast<uint8_t*>(p) - 16;
+    uint64_t& state = *reinterpret_cast<uint64_t*>(base);
+    if (state != kLive) { ++g_listNodeDoubleFrees; return; }
+    state = kDead;
+    ++g_listNodeFrees;
+    std::free(base);
+}
+#else
+void* ListNodeAlloc(uint64_t bytes, int align) {
+    return MemAllocLocked(bytes, align);
+}
+
+void ListNodeFree(void* p) {
+    MemFreeLocked(p);
+}
+#endif
+
+}  // namespace detail
+}  // namespace Collection
+
+// ============================================================================
+// The four entry points — one line each onto the class
+// ============================================================================
+// The transcription notes for each moved to the member it became; the retail
+// address stays on both sides so a crash log naming either one leads to the
+// other.
 
 // ---- 0x180009c30 — the allocator-lock Free wrapper -------------------------
-//
-//     TEST RDX,RDX / JZ ret        ; the null test is on the SECOND argument
-//     ... Enter / Free(_singleton, RDX) / Leave ...
-//
 // The first argument is homed at [RSP+0x8] and never read again. Retail passes
 // the container there at every call site (`this`), so the parameter is kept and
 // named honestly rather than deleted — deleting it would silently change the
@@ -169,139 +263,31 @@ void MemFreeLocked(void* p) {
 // (runtime/src/graphics/scene.cpp:238 and runtime/src/input/input.cpp:131 both
 // declare it that way).
 //
-// The `TEST RDX,RDX` guard is retail's own and is reproduced by MemFree's
-// identical first instruction (`TEST RCX,RCX; JZ ret` at 0x1800c7ad0) — this is
-// not a null check added to paper over a crash.
+// It goes to the seam and NOT to `List8::FreeNode` even though that member is
+// the same one line: retail's callers pass a `Set*`, an unrelated container, or
+// (avl_trees.cpp:1170) outright junk in that slot, so spelling this as a member
+// call would invent a `this` that no caller promises.
 extern "C" void RtColl_FreeLocked_180009c30(void* /*ignoredThis*/, void* p) {
-    MemFreeLocked(p);
+    Collection::detail::ListNodeFree(p);
 }
 
 // ---- 0x180032750 — LinkedList node allocate + initialise -------------------
-//
-//     MOV RSI,RDX                  ; RDX = &value.  RCX IS NEVER READ.
-//     ... Enter ; node = Allocate(_singleton, 0x18, 8) ; Leave ...
-//     TEST RDI,RDI / JZ -> return 0
-//     XOR ECX,ECX
-//     MOV [RDI],RCX                ; node->element = 0   <- DEAD, and kept
-//     MOV RAX,[RSI] / MOV [RDI],RAX; node->element = *value
-//     MOV [RDI+0x8],RCX            ; node->prev = 0
-//     MOV [RDI+0x10],RCX           ; node->next = 0
-//     MOV RAX,RDI
-//
-// THE FIRST ARGUMENT IS NEVER READ. That is settled by reading the callee, not
-// by inferring it from the one call site
-// (reference_read_the_callee_before_holding_back_on_an_arg.md): the whole body
-// touches RCX only as the destination of `XOR ECX,ECX`, which destroys it
-// before any use. It matters because BringDialogToFront calls this WITHOUT
-// setting RCX at all — RCX arrives holding whatever the preceding
-// `CALL 0x18007a010` left there. A port that read a first parameter here would
-// be reading garbage and would look correct for as long as that garbage
-// happened to be harmless.
-//
-// The dead `node->element = 0` before the real store is reproduced. Retail
-// emits both; dropping the first is the kind of tidy-up that introduces a
-// difference nobody then looks for.
+// THE FIRST ARGUMENT IS NEVER READ (the whole body touches RCX only as the
+// destination of `XOR ECX,ECX`), which is why `NewNode` is a static member.
 extern "C" void* RtColl_LinkedListNewNode_180032750(void* /*neverRead*/,
                                                     void* const* value) {
-
-    LlNode* node = static_cast<LlNode*>(MemAllocLocked(0x18, 8));
-    if (!node) { return nullptr; }
-
-    node->element = nullptr;     // retail's dead store, kept — see above
-    node->element = *value;
-    node->prev    = nullptr;
-    node->next    = nullptr;
-
-    return node;
+    return List8::NewNode(*value);
 }
 
 // ---- 0x18007a010 — LinkedList::Remove(list, &value) ------------------------
-//
-// Find the node whose ELEMENT equals *value, unlink it, zero its links,
-// decrement the count, and tail-jump into 0x180009c30 to free it.
-//
-// Three details that a tidier rewrite would get wrong:
-//
-//  * THE HEAD TEST COMPARES AGAINST THE ORIGINAL HEAD, held in R8 from before
-//    the search (`MOV R8,[RCX]` at 0x18007a010, `CMP RDX,R8` at 0x18007a031),
-//    not against a re-read of `list->head`. Nothing in this body can change the
-//    head in between, so the two agree — but writing `if (n == list->head)`
-//    would make that an assumption instead of a transcription.
-//  * THE SEARCH IS BY VALUE, not by node. `*value` is loaded ONCE, before the
-//    walk (0x18007a01e), and compared against each node's element.
-//  * A MISS IS SILENT. If the head is null, or the walk runs off the end, the
-//    body simply returns: no free, no count change. BringDialogToFront relies
-//    on that — it calls Remove unconditionally on a dialog that may not be in
-//    the list yet.
-//
-// The unlink itself matches, branch for branch, the one Collection.h already
-// pins from UI::UserInterface::CleanRemovedDialogs (0x18011f790). That is
-// independent corroboration of the field offsets, not the evidence for them.
 extern "C" void RtColl_LinkedListRemove_18007a010(void* listPtr,
                                                   void* const* value) {
-
-    LlList* list = static_cast<LlList*>(listPtr);
-    LlNode* head = list->head;
-    if (!head) { return; }
-
-    void*   want = *value;
-    LlNode* n    = head;
-    while (n->element != want) {
-        n = n->next;
-        if (!n) { return; }
-    }
-
-    if (n == head)       list->head = n->next;   // the ORIGINAL head — see above
-    if (n == list->tail) list->tail = n->prev;
-    if (LlNode* prev = n->prev) prev->next = n->next;
-    if (LlNode* next = n->next) next->prev = n->prev;
-    n->prev = nullptr;
-    n->next = nullptr;
-    --list->count;
-
-
-    // Retail's tail JMP 0x180009c30, with RCX still holding the list. Called
-    // directly rather than through ResolveAddr: this IS the body registered at
-    // that address a few lines below, so the seam would resolve straight back
-    // here at the cost of a lookup.
-    RtColl_FreeLocked_180009c30(list, n);
+    static_cast<List8*>(listPtr)->Remove(*value);
 }
 
 // ---- 0x1800325f0 — LinkedList::Clear(list) ---------------------------------
-//
-// WAVE 9 LANE UID. The fourth member of this family, and the one
-// `??1DialogInstance@UI@@` (0x180114d40) calls on its `_children` list at
-// 0x180114e5e. Retail, in full:
-//
-//     MOV R14,RCX / MOV RSI,[RCX]        ; n = list->head
-//     TEST RSI,RSI / JZ done
-//   loop:
-//     MOV RDI,[RSI+0x10]                 ; next = n->next  -- READ BEFORE THE FREE
-//     ... Enter ; Free(_singleton, RSI) ; Leave ...
-//     MOV RSI,RDI / TEST RDI,RDI / JNZ loop
-//   done:
-//     XOR EAX,EAX
-//     MOV [R14+0x8],RAX                  ; tail  = 0
-//     MOV [R14],RAX                      ; head  = 0
-//     MOV dword [R14+0x10],EAX           ; count = 0
-//
-// Three things a tidier rewrite would get wrong, all of them load-bearing:
-//
-//  * `next` IS READ BEFORE THE NODE IS FREED. Reading it after would be a
-//    use-after-free that works for exactly as long as the allocator does not
-//    reuse the block.
-//  * IT FREES NODES, NOT ELEMENTS. The element at node+0x00 is an
-//    `Object::InternalBasePtr`; no refcount and no destructor is touched here.
-//    Adding one would be a second release of a handle somebody else still owns
-//    — and for `_children` specifically the elements are child dialogs that
-//    `UI::UserInterface` owns, not the parent.
-//  * THE THREE STORES ARE UNCONDITIONAL — they happen on an already-empty list
-//    too — `count` is a DWORD store, and `_pad14` at +0x14 is NOT written.
-//
-// The inline lock+Free is the same instruction sequence as 0x1800c7ad0, by the
-// argument this file's header block already makes for 0x180009c30 and
-// 0x180032750, so it goes through the one ported allocator entry point rather
-// than a private third copy of the lock protocol.
+// WAVE 9 LANE UID. The member `??1DialogInstance@UI@@` (0x180114d40) calls on
+// its `_children` list at 0x180114e5e.
 //
 // ORACLE: none, and none is possible — the same reason `Remove` has none. A
 // replay walks a chain whose every node has already been freed and frees each
@@ -313,26 +299,16 @@ extern "C" void RtColl_LinkedListRemove_18007a010(void* listPtr,
 //     `next` offset it walks and the three fields it zeroes — and all four are
 //     literal displacements in the shipped instruction stream, so all four are
 //     compared against the DLL while the DLL is still there.
+//   * `LinkedListClearFreesEveryNodeOnce` in tests/unit/list_test.cpp, which
+//     runs the member against the counting test allocator above.
 extern "C" void RtColl_LinkedListClear_1800325f0(void* listPtr) {
-
-    LlList* list = static_cast<LlList*>(listPtr);
-    LlNode* n    = list->head;
-
-    while (n) {
-        LlNode* next = n->next;   // read BEFORE the free — see above
-        MemFreeLocked(n);
-        n = next;
-    }
-
-    list->tail  = nullptr;
-    list->head  = nullptr;
-    list->count = 0;
+    static_cast<List8*>(listPtr)->Clear();
 }
 
 // ============================================================================
 // Registration — BY ADDRESS ONLY
 // ============================================================================
-// None of the three is in the shipped export directory, so there is no mangled
+// None of these is in the shipped export directory, so there is no mangled
 // name to register under and nothing for tools/export_name_audit.py to verify.
 // The addresses are spelled as hex literals in the RegisterRuntimeAddr calls
 // because tools/runtime_census.py counts the literal in the call and cannot see
@@ -345,9 +321,9 @@ int RtCollLinkedListRegister() {
     // last binding won, and which body survived depended on init order -- lane
     // VID2 found it. runtime/src/system/allocator.cpp is now the single owner and
     // registers it UNCONDITIONALLY from RtSystemPortInit, so this file's callers
-    // still reach a correct body. RtColl_FreeLocked_180009c30 is kept because
-    // MergeSortSplice below calls it DIRECTLY (line ~282), which is why removing
-    // the registration changes nothing here.
+    // still reach a correct body. RtColl_FreeLocked_180009c30 is kept because it
+    // is the named spelling of `LinkedList::FreeNode` that scene.cpp and
+    // input.cpp reach through a 2-argument typedef.
     RegisterRuntimeAddr(0x180032750, (void*)&RtColl_LinkedListNewNode_180032750); ++n;
     RegisterRuntimeAddr(0x18007a010, (void*)&RtColl_LinkedListRemove_18007a010);  ++n;
     // WAVE 9 LANE UID — Clear. Unexported, so ADDRESS ONLY like the two above;

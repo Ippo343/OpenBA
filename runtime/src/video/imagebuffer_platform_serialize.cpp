@@ -272,7 +272,10 @@ extern "C" void Video_ImageBuffer_PlatformSerialize(::ImageBuffer* self, void* s
     }
 
     // ---- the per-level pixel blobs ----------------------------------------
-    rtcoll::ArrayHdr levels = { nullptr, 0, 0 };
+    // ENDGAME B.3.2: Array is a real class; the default ctor is these same
+    // three zero stores, and the explicit teardown below leaves the header
+    // zeroed, so the scope-exit ~Array is MemFree(nullptr).
+    rtcoll::ArrayHdr levels;
 
     // 0x1800f3185 reads the count out of the array it has just zeroed, so on
     // the WRITE path the value serialised here is 0. Transcribed, not

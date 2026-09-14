@@ -295,7 +295,9 @@ bool Video_ImageBuffer_SaveImageToFile(const System::Filename* path,
         *cursor += static_cast<int32_t>(RtVideoWriteFileRaw(handle, infoHeader, 0x28));
 
         // ---- 4. the pixels, bottom-up, 32bpp -> 24bpp ----------------------
-        rtcoll::ArrayHdr rowBuf = { nullptr, 0, 0 };
+        // ENDGAME B.3.2: default ctor == retail's three zero stores; the
+        // explicit free below zeroes the header, so ~Array adds nothing.
+        rtcoll::ArrayHdr rowBuf;
         ArraySetSizeByte(&rowBuf, rowBytes, 0);
 
         // The padding bytes at the end of each row are written ONCE, by the

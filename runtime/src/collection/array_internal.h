@@ -19,58 +19,50 @@
 
 namespace rtcoll {
 
-using ArrayHdr = Collection::Array<uint8_t>;
+// ENDGAME B.3.2 step 1 — `ArrayHdr`, `ArraySpec`, the Elem* typedefs and the
+// four core declarations MOVED to runtime/types/collection/Collection.h, where
+// `Collection::Array<T>`'s inline bodies can name them. Nothing about them
+// changed; this header still owns the `kSpec_*` rows below and the commentary
+// on what each spec was read out of, and the per-field commentary that used to
+// sit on `ArraySpec` stays HERE, next to those rows:
+//
+//   * a written-extent constant belongs to a WRITER, not to a type
+//     (reference_never_written_needs_by_whom.md) — `assign` and `init` are two
+//     code paths with two different written extents, so there are two windows
+//     and the oracle has to know which arm produced the element it is looking
+//     at. Each pair is a half-open byte range WITHIN one element that the arm
+//     does NOT write; equal (both 0) means the arm covers the whole stride.
+//     Comparing an unwritten byte fails 100% of cases and reads like a
+//     catastrophic port defect
+//     (reference_oracle_must_not_compare_unwritten_bytes.md).
+//   * `seedZeroLo/Hi` is the range the PROBE must leave ZERO because the
+//     element operations DEREFERENCE it (a String pointer whose refcount at
+//     `str-4` gets bumped). Everything outside it is seeded with a varying
+//     non-zero pattern — all-zero elements are the one seed under which an
+//     unwritten-bytes bug is invisible.
 
-using ElemAssign  = void (*)(uint8_t* dst, const uint8_t* src);
-using ElemInit    = void (*)(uint8_t* dst);
-using ElemDestroy = void (*)(void* ignoredThis, uint8_t* base, int count);
+// ---------------------------------------------------------------------------
+// ENDGAME B.3.2 step 1 — the instantiation a registered address maps onto
+// ---------------------------------------------------------------------------
+// A hand-derived `kSpec_*` row is not expressible from an element type's traits
+// (Collection.h's Array banner lists the twelve kinds that are not), so every
+// registered `SetSize`/`~Array` shim names its own row and gets the
+// instantiation that carries it:
+//
+//     Collection::Array<uint8_t, DefaultAllocator, ExplicitSpec<&kSpec_X>>
+//
+// The element type is `uint8_t` for the same reason `ArrayHdr`'s is: the shim
+// is handed a `void*` and the stride lives in the spec, not in the C++ type.
+// A converted caller in step 2 uses `Collection::Array<RealElement>` instead
+// and gets `rtcoll::SpecFor<RealElement>()`.
+template <const ArraySpec* SPEC>
+using ArrayWithSpec = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                        Collection::ExplicitSpec<SPEC>>;
 
-struct ArraySpec {
-    const char* name;
-    uint32_t    stride;
-    int         align;
-    ElemAssign  assign;    // never null
-    ElemInit    init;      // null => retail leaves the new tail untouched
-    ElemDestroy destroy;   // null => trivially destructible T
-    bool        byteCopy;  // true when `assign` is a pure byte copy
-
-    // ---- Written extents, PER ARM ------------------------------------------
-    // A written-extent constant belongs to a WRITER, not to a type
-    // (reference_never_written_needs_by_whom.md -- Wave 7 got this wrong in
-    // BOTH directions inside one hour). `assign` and `init` are two different
-    // code paths with two different written extents, and an element in
-    // [oldSize, newSize) takes `assign` when the caller passed a `fill` and
-    // `init` when it did not. So there are two windows, and the oracle has to
-    // know which arm produced the element it is looking at.
-    //
-    // Each pair is a half-open byte range WITHIN one element that the arm does
-    // NOT write. Equal (both 0) means the arm covers the whole stride.
-    // Comparing an unwritten byte fails 100% of cases and reads like a
-    // catastrophic port defect (reference_oracle_must_not_compare_unwritten_
-    // bytes.md, four such gaps in Wave 6).
-    uint32_t    assignUnwrittenLo, assignUnwrittenHi;
-    uint32_t    initUnwrittenLo,   initUnwrittenHi;
-
-    // ---- Probe seeding ------------------------------------------------------
-    // Half-open byte range within one element that the PROBE must leave ZERO,
-    // because the element operations DEREFERENCE it (a String pointer whose
-    // refcount at `str-4` gets bumped, or a sub-object handed to another
-    // helper). Everything outside this range is seeded with a varying non-zero
-    // pattern -- which is the whole point: all-zero elements are the one seed
-    // under which an unwritten-bytes bug is invisible, because both sides read
-    // zero there and agree by accident.
-    uint32_t    seedZeroLo, seedZeroHi;
-};
-
-// The allocator boundary (by address; see array.cpp's banner and the lane E
-// dependency stated there).
-void* MemAlloc(uint64_t bytes, int align);
-void  MemFree(void* p);
-
-// The two ported bodies.
-void* ArrayDtorImpl(ArrayHdr* a);
-void  SetSizeCore(ArrayHdr* a, int newSize, const uint8_t* fill,
-                  const ArraySpec* spec);
+template <const ArraySpec* SPEC>
+inline ArrayWithSpec<SPEC>* AsArray(void* a) {
+    return reinterpret_cast<ArrayWithSpec<SPEC>*>(a);
+}
 
 // The per-address specs, in the order of the parameterization table in
 // docs/runtime_port/WAVE9_LANE_Q.md.

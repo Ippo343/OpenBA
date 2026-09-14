@@ -29,3 +29,29 @@
 void RegisterRuntimeExport(const char* /*mangled_name*/, void* /*our_fn*/) {}
 void RegisterRuntimeAddr(uintptr_t /*ghidra_addr*/, void* /*our_fn*/) {}
 void* ResolveExport(const char* /*mangled_name*/) { return nullptr; }
+
+// ---------------------------------------------------------------------------
+// ResolveAddr — the BY-ADDRESS half of the same seam
+// ---------------------------------------------------------------------------
+// Every runtime/src file that reaches a sibling body by address — the whole of
+// runtime/src/collection, and the Object/Video files around it — declares this
+// locally rather than including standalone/resolve.h (which drags in
+// <windows.h>). This definition must stay byte-identical to theirs and to
+// resolve.h's; the linker checks all of them against each other.
+//
+// SHARED, like the three above: any batch that links a runtime/src file needing
+// ResolveAddr wants THIS definition, not a second one. It answers 0 by default,
+// so every resolve-or-fall-back site takes its fallback — the ported body under
+// test. A test that needs one specific address answered installs
+// `g_unitResolveAddr` for its duration and clears it again;
+// tests/unit/array_test.cpp does that for `kSpec_PkgEntry`'s two element
+// operations, which are the only way to reach 0x1800298f0's shrink arm at all.
+enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
+
+uintptr_t (*g_unitResolveAddr)(int module, uintptr_t ghidraAddr) = nullptr;
+
+uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr) {
+    if (g_unitResolveAddr)
+        return g_unitResolveAddr(static_cast<int>(mod), ghidra_addr);
+    return 0;
+}

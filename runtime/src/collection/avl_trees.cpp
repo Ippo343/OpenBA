@@ -124,6 +124,7 @@
 #include <cstdint>
 #include <cstdio>
 
+#include "../../types/collection/Collection.h"
 #include "../../funcs/rt_port.h"
 #include "../../types/object/TypeInfo.h"
 #include "avl_trees.h"
@@ -643,63 +644,55 @@ TypeNode* TypeNodeAlloc(void* /*ignored*/, const void* pair, TypeNode* parent) {
 // `localSlot` is the node the new child was hung from — the PARENT, not the new
 // node — and it is what the retrace walks up from.
 // ---------------------------------------------------------------------------
-TypeNode** TypeInsertCore(RtObject::Factory* set, TypeNode** outSlot,
-                          const void* pair) {
+namespace {
+// The policy `Collection::detail::InsertCorePattern` runs on for this tree.
+// Everything that made 0x180030380 different from the other three insert cores
+// lives here; the descent itself is now the one shared pattern
+// (runtime/types/collection/Collection.h, ENDGAME B.3.2 step 1) and no arm of
+// it changed — the counters below are still incremented from inside the body
+// under test, exactly where they were.
+struct TypePolicy : Collection::detail::NoCounters {
+    using Node    = TypeNode;
+    using SetT    = RtObject::Factory;
+    using Element = uint8_t;              // the 0x30 stack pair, keyed at +0x00
+
     // 0x180030380's `set` is really {TypeNode* root; int32 count;}. Factory is
     // declared as 8 bytes in TypeInfo.h — CORRECT AS A VIEW, wrong as storage —
     // so the count is reached by offset here rather than by field.
-    int32_t* const count =
-        reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(set) + 8);
-
-    TypeNode* node = set->root;
-    if (node == nullptr) {
-        ++g_pc.rootInsert;
-        TypeNode* n = TypeNodeAlloc(set, pair, nullptr);
-        *count += 1;
-        set->root = n;
-        *outSlot  = n;
-        return outSlot;
+    static Node*&   Root(SetT* s)  { return s->root; }
+    static int32_t& Count(SetT* s) {
+        return *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(s) + 8);
     }
-
-    TypeNode* localSlot = node;     // [RSP+0x30], the retrace's slot
-    TypeNode* fresh     = nullptr;
-
-    for (;;) {
-        // Retail RE-READS both keys every iteration (0x1800303ca reloads
-        // `[R8]`, 0x1800303d7 reloads `[RDI]`); neither is hoisted.
-        const uint32_t k  = *reinterpret_cast<const uint32_t*>(pair);
-        const uint32_t nk = node->key;
-
-        if (k < nk) {                                   // JC — UNSIGNED
-            ++g_pc.descLeft;
-            TypeNode* l = node->left;
-            if (l == nullptr) {
-                fresh = TypeNodeAlloc(nullptr, pair, node);
-                node->left = fresh;
-                break;
-            }
-            node = l; localSlot = l; continue;
-        }
-        if (nk >= k) {                                  // JNC — equal
-            ++g_pc.equalHit;
-            *outSlot = node;
-            return outSlot;
-        }
-        ++g_pc.descRight;
-        TypeNode* r = node->right;
-        if (r == nullptr) {
-            fresh = TypeNodeAlloc(nullptr, pair, node);
-            node->right = fresh;
-            break;
-        }
-        node = r; localSlot = r; continue;
+    static uint32_t NodeKey(const Node* n)      { return n->key; }
+    static uint32_t SearchKey(const Element* p) {
+        return *reinterpret_cast<const uint32_t*>(p);
     }
+    // A u32 key has no null state, so both null arms fold away at compile time.
+    static bool IsNull(uint32_t) { return false; }
+    // *** UNSIGNED (`CMP ECX,EAX / JC`). *** The keys are TypeNameCRCs and half
+    // of them exceed 0x7FFFFFFF; a signed compare would put those on the wrong
+    // side of the tree and every lookup for a high-CRC type would miss.
+    static bool Less(uint32_t a, uint32_t b) { return a < b; }
 
-    localSlot = node;               // retail's [RSP+0x30] already holds `node`
-    Retrace50(set, &localSlot);
-    *count += 1;
-    *outSlot = fresh;
-    return outSlot;
+    static Node* Alloc(SetT* set, const Element* p, Node* parent) {
+        return TypeNodeAlloc(set, p, parent);
+    }
+    static Node* Alloc(decltype(nullptr), const Element* p, Node* parent) {
+        return TypeNodeAlloc(nullptr, p, parent);
+    }
+    static void Retrace(SetT* set, Node** slot) { Retrace50(set, slot); }
+
+    static void OnRootInsert() { ++g_pc.rootInsert; }
+    static void OnDescLeft()   { ++g_pc.descLeft; }
+    static void OnDescRight()  { ++g_pc.descRight; }
+    static void OnEqual()      { ++g_pc.equalHit; }
+};
+}  // namespace
+
+TypeNode** TypeInsertCore(RtObject::Factory* set, TypeNode** outSlot,
+                          const void* pair) {
+    return Collection::detail::InsertCorePattern<TypePolicy>(
+        set, outSlot, static_cast<const uint8_t*>(pair));
 }
 
 // ---------------------------------------------------------------------------
@@ -873,79 +866,56 @@ Node* StringNodeAlloc(void* /*ignored*/, const void* pair, Node* parent) {
 // ---------------------------------------------------------------------------
 // 0x18002a170 — the string-map insert core.
 // ---------------------------------------------------------------------------
-Node** StringInsertCore(Set* set, Node** outSlot, const void* pairRaw) {
-    const StringPair* pair = static_cast<const StringPair*>(pairRaw);
+namespace {
+// The policy for the string map. Same shared descent as group A's; what
+// differs — and what is therefore here — is the comparator (retail's inlined
+// SIGNED strcmp, NOT `_stricmp`), the null-key asymmetry a pointer key has,
+// the node allocator, and the retrace reached through its own address door.
+struct StringPolicy : Collection::detail::NoCounters {
+    using Node    = rtsetavl::Node;
+    using SetT    = rtsetavl::Set;
+    using Element = StringPair;
 
-    Node* node = set->root;
-    if (node == nullptr) {
-        ++g_pc.rootInsert;
-        Node* n = StringNodeAlloc(set, pair, nullptr);
-        set->count += 1;
-        set->root = n;
-        *outSlot  = n;
-        return outSlot;
+    static Node*&   Root(SetT* s)  { return s->root; }
+    static int32_t& Count(SetT* s) { return s->count; }
+    // Retail re-reads the node's key (`MOV R8,[RDI]`, 0x18002a1b4) and the
+    // search key (0x18002a1bc, and AGAIN at 0x18002a212) every iteration; the
+    // shared pattern calls these at exactly those points.
+    static char* NodeKey(const Node* n) {
+        return *reinterpret_cast<char* const*>(n);
     }
+    static char* SearchKey(const Element* p) { return p->key; }
+    static bool  IsNull(char* k) { return k == nullptr; }
+    static bool  Less(char* a, char* b) { return StrCmpSigned(a, b) < 0; }
 
-    Node* localSlot = node;
-    Node* fresh     = nullptr;
-
-    for (;;) {
-        // Retail re-reads BOTH the node's key (`MOV R8,[RDI]`, 0x18002a1b4)
-        // and the search key (`MOV R9,[R11]`, 0x18002a1bc AND again at
-        // 0x18002a212) every iteration.
-        char* nodeKey   = *reinterpret_cast<char* const*>(node);
-        char* searchKey = pair->key;
-
-        bool goLeft = false;
-        if (nodeKey != nullptr) {
-            if (searchKey == nullptr)                 { goLeft = true; ++g_pc.nullSearchKey; }
-            else if (StrCmpSigned(searchKey, nodeKey) < 0) goLeft = true;
-        } else {
-            ++g_pc.nullNodeKey;
-        }
-        if (goLeft) {
-            ++g_pc.descLeft;
-            Node* l = node->left;
-            if (l == nullptr) {
-                fresh = StringNodeAlloc(nullptr, pair, node);
-                node->left = fresh;
-                break;
-            }
-            node = l; localSlot = l; continue;
-        }
-
-        searchKey = pair->key;                        // 0x18002a212 re-read
-        bool goRight = false;
-        if (searchKey != nullptr) {
-            if (nodeKey == nullptr)                   goRight = true;
-            else if (StrCmpSigned(nodeKey, searchKey) < 0) goRight = true;
-        }
-        if (!goRight) {                               // EQUAL — a lookup
-            ++g_pc.equalHit;
-            *outSlot = node;
-            return outSlot;
-        }
-        ++g_pc.descRight;
-        Node* r = node->right;
-        if (r == nullptr) {
-            fresh = StringNodeAlloc(nullptr, pair, node);
-            node->right = fresh;
-            break;
-        }
-        node = r; localSlot = r; continue;
+    static Node* Alloc(SetT* set, const Element* p, Node* parent) {
+        return StringNodeAlloc(set, p, parent);
     }
-
-    localSlot = node;
-    // Through the port-aware address door so the registration below is what
+    static Node* Alloc(decltype(nullptr), const Element* p, Node* parent) {
+        return StringNodeAlloc(nullptr, p, parent);
+    }
+    // Through the port-aware address door, so the registration below is what
     // actually runs and the edge is countable.
-    using RetraceFn = void (*)(void*, void*);
-    static RetraceFn retrace = nullptr;
-    if (!retrace)
-        retrace = reinterpret_cast<RetraceFn>(ResolveAddr(Module::Runtime, 0x18002a310));
-    retrace(set, &localSlot);
-    set->count += 1;
-    *outSlot = fresh;
-    return outSlot;
+    static void Retrace(SetT* set, Node** slot) {
+        using RetraceFn = void (*)(void*, void*);
+        static RetraceFn retrace = nullptr;          // cache a hit, retry a miss
+        if (!retrace)
+            retrace = reinterpret_cast<RetraceFn>(ResolveAddr(Module::Runtime, 0x18002a310));
+        retrace(set, slot);
+    }
+
+    static void OnRootInsert()    { ++g_pc.rootInsert; }
+    static void OnDescLeft()      { ++g_pc.descLeft; }
+    static void OnDescRight()     { ++g_pc.descRight; }
+    static void OnEqual()         { ++g_pc.equalHit; }
+    static void OnNullSearchKey() { ++g_pc.nullSearchKey; }
+    static void OnNullNodeKey()   { ++g_pc.nullNodeKey; }
+};
+}  // namespace
+
+Node** StringInsertCore(Set* set, Node** outSlot, const void* pairRaw) {
+    return Collection::detail::InsertCorePattern<StringPolicy>(
+        set, outSlot, static_cast<const StringPair*>(pairRaw));
 }
 
 // ---------------------------------------------------------------------------
@@ -1049,74 +1019,53 @@ Node* FilenameNodeAlloc(void* /*ignored*/, const void* pair, Node* parent) {
 // ---------------------------------------------------------------------------
 // 0x180025c70 — the packfile-index insert core.
 // ---------------------------------------------------------------------------
+namespace {
+// The policy for the packfile path index. IDENTICAL to the string map's except
+// for the comparator — `_stricmp` (0x18007eefc), not group B's signed strcmp;
+// the two disagree on any byte >= 0x80 and a package path can contain one
+// (filesystem_openfile_win.cpp:185) — the node allocator, and the retrace door.
+struct FilenamePolicy : Collection::detail::NoCounters {
+    using Node    = rtsetavl::Node;
+    using SetT    = rtsetavl::Set;
+    using Element = uint8_t;              // {Filename key @+0x00, u64 @+0x08}
+
+    static Node*&   Root(SetT* s)  { return s->root; }
+    static int32_t& Count(SetT* s) { return s->count; }
+    static const char* NodeKey(const Node* n) {
+        return *reinterpret_cast<const char* const*>(n);
+    }
+    static const char* SearchKey(const Element* p) {
+        return *reinterpret_cast<const char* const*>(p);   // 0x180025ce1 re-read
+    }
+    static bool IsNull(const char* k) { return k == nullptr; }
+    static bool Less(const char* a, const char* b) { return PathStrICmp(a, b) < 0; }
+
+    static Node* Alloc(SetT* set, const Element* p, Node* parent) {
+        return FilenameNodeAlloc(set, p, parent);
+    }
+    static Node* Alloc(decltype(nullptr), const Element* p, Node* parent) {
+        return FilenameNodeAlloc(nullptr, p, parent);
+    }
+    static void Retrace(SetT* set, Node** slot) {
+        using RetraceFn = void (*)(void*, void*);
+        static RetraceFn retrace = nullptr;
+        if (!retrace)
+            retrace = reinterpret_cast<RetraceFn>(ResolveAddr(Module::Runtime, 0x180025e10));
+        retrace(set, slot);
+    }
+
+    static void OnRootInsert()    { ++g_pc.rootInsert; }
+    static void OnDescLeft()      { ++g_pc.descLeft; }
+    static void OnDescRight()     { ++g_pc.descRight; }
+    static void OnEqual()         { ++g_pc.equalHit; }
+    static void OnNullSearchKey() { ++g_pc.nullSearchKey; }
+    static void OnNullNodeKey()   { ++g_pc.nullNodeKey; }
+};
+}  // namespace
+
 Node** FilenameInsertCore(Set* set, Node** outSlot, const void* pairRaw) {
-    const uint8_t* pair = static_cast<const uint8_t*>(pairRaw);
-
-    Node* node = set->root;
-    if (node == nullptr) {
-        ++g_pc.rootInsert;
-        Node* n = FilenameNodeAlloc(set, pair, nullptr);
-        set->count += 1;
-        set->root = n;
-        *outSlot  = n;
-        return outSlot;
-    }
-
-    Node* localSlot = node;
-    Node* fresh     = nullptr;
-
-    for (;;) {
-        const char* nodeKey   = *reinterpret_cast<const char* const*>(node);
-        const char* searchKey = *reinterpret_cast<const char* const*>(pair);
-
-        bool goLeft = false;
-        if (nodeKey != nullptr) {
-            if (searchKey == nullptr)                 { goLeft = true; ++g_pc.nullSearchKey; }
-            else if (PathStrICmp(searchKey, nodeKey) < 0) goLeft = true;
-        } else {
-            ++g_pc.nullNodeKey;
-        }
-        if (goLeft) {
-            ++g_pc.descLeft;
-            Node* l = node->left;
-            if (l == nullptr) {
-                fresh = FilenameNodeAlloc(nullptr, pair, node);
-                node->left = fresh;
-                break;
-            }
-            node = l; localSlot = l; continue;
-        }
-
-        searchKey = *reinterpret_cast<const char* const*>(pair);   // 0x180025ce1
-        bool goRight = false;
-        if (searchKey != nullptr) {
-            if (nodeKey == nullptr)                   goRight = true;
-            else if (PathStrICmp(nodeKey, searchKey) < 0) goRight = true;
-        }
-        if (!goRight) {
-            ++g_pc.equalHit;
-            *outSlot = node;
-            return outSlot;
-        }
-        ++g_pc.descRight;
-        Node* r = node->right;
-        if (r == nullptr) {
-            fresh = FilenameNodeAlloc(nullptr, pair, node);
-            node->right = fresh;
-            break;
-        }
-        node = r; localSlot = r; continue;
-    }
-
-    localSlot = node;
-    using RetraceFn = void (*)(void*, void*);
-    static RetraceFn retrace = nullptr;
-    if (!retrace)
-        retrace = reinterpret_cast<RetraceFn>(ResolveAddr(Module::Runtime, 0x180025e10));
-    retrace(set, &localSlot);
-    set->count += 1;
-    *outSlot = fresh;
-    return outSlot;
+    return Collection::detail::InsertCorePattern<FilenamePolicy>(
+        set, outSlot, static_cast<const uint8_t*>(pairRaw));
 }
 
 // ---------------------------------------------------------------------------

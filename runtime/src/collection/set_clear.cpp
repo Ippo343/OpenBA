@@ -90,6 +90,7 @@
 #include <cstdint>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/collection/Collection.h"
 #include "set_avl.h"
 #include "array_destroy_internal.h"
 
@@ -106,19 +107,20 @@ using rtsetavl::Set;
 // taken inside the function, not proxies observed from outside it. Every proxy
 // available here is either structurally pinned (the settings map's real shape is
 // whatever the registry happens to hold) or swamped by the common path. These
-// four say which arms actually ran:
+// two say which arms actually ran:
 //
-//   g_subtreeEnter  recursive entries with a non-null node
-//   g_subtreeNull   recursive entries that returned on the first instruction
 //   g_strFreed      string releases whose refcount reached 0  (the freeing arm)
 //   g_strShared     string releases whose refcount did not    (the NULLing arm)
 //
-// Four unconditional increments on a path that is already calling the
+// Two unconditional increments on a path that is already calling the
 // allocator; they are not gated on the probe because a counter that only exists
 // while the probe is armed cannot report on the REAL calls, and the real calls
 // are what the census asks about.
-long g_subtreeEnter = 0;
-long g_subtreeNull  = 0;
+//
+// The subtree-walk pair (`g_subtreeEnter` / `g_subtreeNull`) went with ENDGAME
+// B.3.2 step 1: the walk itself is now `Collection::Set<PairStrStr>`'s and the
+// two bodies below are shims onto it, so there was no longer an arm inside the
+// body under test for them to count — and the probe that read them is gone.
 long g_strFreed     = 0;
 long g_strShared    = 0;
 
@@ -150,15 +152,42 @@ void DestroyElement(void* node) {
 }
 
 // ---------------------------------------------------------------------------
+// The ELEMENT of this Set, with retail's destructor on it (ENDGAME B.3.2
+// step 1). `~Pair<System::String, System::String>` IS 0x18000fa90, so the
+// destructor body is the ported `DestroyElement` above rather than a second
+// copy of it — the two cannot drift apart.
+//
+// Trivially copyable and NOT default-constructible on purpose: this type
+// exists so `Collection::Set<PairStrStr>` knows how to destroy a node, which
+// is the only half of the instantiation this file owns. The insert half is
+// avl_trees.cpp's group B (0x18002a090 / 0x18002a170), which builds the
+// element with retail's own refcounting placement constructor.
+// ---------------------------------------------------------------------------
+struct PairStrStr {
+    char* key;      // +0x00
+    char* value;    // +0x08
+    ~PairStrStr() { DestroyElement(this); }
+};
+static_assert(sizeof(PairStrStr) == 0x10, "the element of a 0x30-byte node");
+
+// The instantiation. `align8(sizeof(PairStrStr)) + 0x20 == 0x30` is the node
+// 0x18000f970 allocates, and the width picks the ported AVL core in
+// set_avl.cpp — the same bodies this file's neighbours already drive.
+using PairSet = Collection::Set<PairStrStr>;
+static_assert(sizeof(PairSet)       == 0x10, "Set is {root, count}");
+static_assert(sizeof(PairSet::Node) == 0x30, "0x18000f970 allocates 0x30");
+
+// ---------------------------------------------------------------------------
 // retail 0x18000f890 — the recursive post-order destroy.
 // ---------------------------------------------------------------------------
-void DestroySubtree(void* ignored, Node* n) {
-    if (!n) { ++g_subtreeNull; return; }  // TEST RDX,RDX / JZ, first instruction
-    ++g_subtreeEnter;
-    DestroySubtree(ignored, n->left);     // [n+0x18]
-    DestroySubtree(ignored, n->right);    // [n+0x20]
-    DestroyElement(n);
-    rtsetavl::SetNodeFree(ignored, n);    // 0x180009c30, first arg ignored
+void DestroySubtree(void* /*ignored — retail passes junk here*/, Node* n) {
+    // ONE LINE ONTO THE INSTANTIATION (ENDGAME B.3.2 step 1). The template's
+    // static `DestroySubtree` is this body: null test first, then left, then
+    // right, then the element destructor (which IS `DestroyElement` above, via
+    // `~PairStrStr`), then the node free through 0x180009c30 — both children
+    // loaded BEFORE the free, because the allocator writes a boundary tag into
+    // the block it takes back.
+    PairSet::DestroySubtree(reinterpret_cast<PairSet::Node*>(n));
 }
 
 // ---------------------------------------------------------------------------
@@ -171,21 +200,12 @@ void DestroySubtree(void* ignored, Node* n) {
 // stale.
 // ---------------------------------------------------------------------------
 void Clear(Set* set) {
-    // Self-scheduling, the shape lane PICK's grid probe uses and the shape lane
-    // PKG2's null+0x640 crash forced: a probe that ALLOCATES cannot run from a
-    // *PortInit, because that runs before the allocator publishes its
-    // singleton. The first real Clear is provably past that point — the caller
-    // is IO::Persistence::ReadSettings, inside Engine::Startup.
-
-    Node* n = set->root;
-    if (n) {
-        DestroySubtree(set, n->left);
-        DestroySubtree(set, n->right);
-        DestroyElement(n);
-        rtsetavl::SetNodeFree(set, n);
-    }
-    set->root  = nullptr;
-    set->count = 0;
+    // ONE LINE ONTO THE INSTANTIATION (ENDGAME B.3.2 step 1). The template's
+    // `Clear` is retail's 0x18000f7d0 arm for arm: both of the root's subtrees
+    // post-order, then the root's element, then the root's node, then the two
+    // zero stores — which retail performs even when the tree was already empty
+    // (it branches to a second copy of them rather than skipping).
+    reinterpret_cast<PairSet*>(set)->Clear();
 }
 
 }  // namespace rtsetclear

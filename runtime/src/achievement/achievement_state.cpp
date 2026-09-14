@@ -386,7 +386,13 @@ void* RtAch_Achievement_CreateInstance(const Achievement* self, void** retval) {
     *retval = inst;
     inst->achievement = const_cast<Achievement*>(self);   // faithful: not guarded
 
-    Collection::Array<void*> temp{nullptr, 0, 0};
+    // ENDGAME B.3.2: Collection::Array is a real class now, so this is its
+    // default constructor — retail's same three zero stores. Its destructor
+    // runs at scope exit, which is what retail does too: the callee below takes
+    // the Array BY VALUE and its inlined by-value-parameter teardown
+    // (goal_list.cpp) already freed the buffer and zeroed the header, so the
+    // scope-exit ~Array is MemFree(nullptr), a no-op.
+    Collection::Array<void*> temp;
 
     using ArrayAssignFn = void* (*)(void*, const void*);
     static ArrayAssignFn arrayAssign = nullptr;
