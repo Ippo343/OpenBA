@@ -618,10 +618,10 @@ extern "C" void RtUi_UserInterface_AddDialog(UserInterface* self, void** dlgPtr)
     void** vtbl = *reinterpret_cast<void***>(dlg);
     reinterpret_cast<void (*)(void*)>(vtbl[4])(dlg);          // OnOpened
 
-    using PushFn = void (*)(void*, int, const void*);
-    static PushFn push = reinterpret_cast<PushFn>(
-        ResolveAddr(Module::Runtime, 0x18007a0d0));
-    push(&self->_addDialogs, self->_addDialogs._size + 1, dlgPtr);
+    // retail 0x18007a0d0 — kSpec_Fill8Z, trait-equivalent for
+    // `DialogInstancePtr` (a pointer): `_addDialogs` is that trait-derived
+    // `Array<DialogInstancePtr>` instantiation already.
+    self->_addDialogs.SetSizeFill(self->_addDialogs._size + 1, dlgPtr);
 
    // no early-out: every call does the whole body
 }
@@ -870,43 +870,24 @@ extern "C" void RtUi_UserInterface_EnableCursor(UserInterface* self, bool enable
 extern "C" void RtUi_UserInterface_BringDialogToFront(UserInterface* self,
                                                       void** dlgPtr) {
 
-    // The list header is UserInterface+0x00; treat it as the three raw fields
-    // rather than pulling Collection.h's template in for one use.
-    uint8_t* list = reinterpret_cast<uint8_t*>(self);
-    void**   tail = reinterpret_cast<void**>(list + 0x08);
-
+    // ENDGAME B.3.2 step 2 — `self->_dialogs` is the real
+    // `Collection::LinkedList<DialogInstancePtr>` member (UserInterface.h,
+    // +0x000), the ONE retail instantiation of the class. The unguarded tail
+    // read below is retail's own (CLAUDE.md: a faithful crash on an empty
+    // list is not ours to fix) — `GetLast()` returns a null-node `Iterator`
+    // exactly like the raw `_tail` this used to read, so dereferencing it
+    // still faults the same way on an empty list.
     void* dlg = *dlgPtr;
-    if (**reinterpret_cast<void***>(tail) == dlg) {   // unguarded, see above
+    if (*self->_dialogs.GetLast() == dlg) {
         return;
     }
 
-    using RemoveFn  = void  (*)(void*, void* const*);
-    using NewNodeFn = void* (*)(void*, void* const*);
-    static RemoveFn  remove  = nullptr;
-    static NewNodeFn newNode = nullptr;
-    if (!remove)  remove  = reinterpret_cast<RemoveFn>(
-        ResolveAddr(Module::Runtime, 0x18007a010));
-    if (!newNode) newNode = reinterpret_cast<NewNodeFn>(
-        ResolveAddr(Module::Runtime, 0x180032750));
-
-    remove(list, dlgPtr);
-    uint8_t* node = static_cast<uint8_t*>(newNode(nullptr, dlgPtr));
-
-    // `tail` is RE-READ here (0x180120469): Remove may have just emptied the
-    // list. Reading the cached value instead is the one mistake this body
-    // invites.
-    uint8_t* t = *reinterpret_cast<uint8_t**>(list + 0x08);
-    if (t) {
-        *reinterpret_cast<void**>(t + 0x10) = node;                    // tail->next
-        *reinterpret_cast<void**>(node + 0x08) =
-            *reinterpret_cast<void**>(list + 0x08);                    // node->prev
-        ++*reinterpret_cast<int32_t*>(list + 0x10);
-        *reinterpret_cast<void**>(list + 0x08) = node;
-    } else {
-        ++*reinterpret_cast<int32_t*>(list + 0x10);
-        *reinterpret_cast<void**>(list + 0x00) = node;
-        *reinterpret_cast<void**>(list + 0x08) = node;
-    }
+    // retail 0x18007a010 (Remove) then 0x180032750 (NewNode) + the inlined
+    // tail-append — that whole sequence, re-reading `_tail` after Remove, IS
+    // `LinkedList<T>::Add`'s own body (Collection.h), so the conversion is
+    // Remove-then-Add rather than a re-derivation of the append.
+    self->_dialogs.Remove(dlg);
+    self->_dialogs.Add(dlg);
 
 }
 
@@ -998,15 +979,9 @@ inline void UiMemFree(void* p) {
     RT_EXPORT_ONCE(UiVoidPtrFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
 }
 
-// 0x1800325f0 — `Collection::LinkedList<T=8>::Clear`. UNEXPORTED, so the
-// address door is the only one; port-aware, exactly as
-// runtime/src/ui/dialog.cpp's copy is.
-inline void UiListClear(void* list) {
-    static UiVoidPtrFn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<UiVoidPtrFn>(
-        ResolveAddr(Module::Runtime, 0x1800325f0));
-    if (fn) fn(list);
-}
+// ENDGAME B.3.2 step 2 — the 0x1800325f0 forwarder (`UiListClear`) that used
+// to sit here is GONE; its one caller now calls `self->_dialogs.Clear()`
+// directly (see `UiDtorBody`'s phase 4).
 
 // Slot 0 of any Object::Base-derived vtable is the scalar deleting destructor;
 // retail calls it with EDX = 1 ("destruct AND free").
@@ -1119,7 +1094,11 @@ void UiDtorBody(UserInterface* self) {
     *reinterpret_cast<uint64_t*>(p + 0x20) = 0;
 
     // ---- phase 4: the tail JMP -------------------------------------------
-    UiListClear(p);
+    // retail 0x1800325f0 — `self->_dialogs` is the real
+    // `Collection::LinkedList<DialogInstancePtr>` member; `.Clear()` IS that
+    // body (Collection.h's banner: it frees every node, then zeroes
+    // head/tail/count).
+    self->_dialogs.Clear();
 }
 
 // ============================================================================

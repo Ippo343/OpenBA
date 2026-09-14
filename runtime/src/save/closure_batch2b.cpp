@@ -20,18 +20,30 @@
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
-namespace {
-
 // `Array<Save::MetaDataEntry>::operator=` — retail 0x180033f30, the tail CALL at
 // 0x180033048. Ported in this same commit
-// (runtime/src/collection/array_destroy.cpp, J4_ENTRY(180033f30)); reached by
-// ADDRESS because ResolveAddr is registry-first and the address is what
-// tools/addr_door_audit.py can see.
+// (runtime/src/collection/array_destroy.cpp, J4_ENTRY(180033f30)).
+//
+// ENDGAME B.3.2 step 2: NOT spelled as `Array<T>::operator=` on the class.
+// `Collection::Array<T,...>::operator=` is still `= default` (shallow) —
+// Collection.h's banner says the deep assign "becomes this class's operator=
+// in step 2, when the last bitwise copier is gone", and it has not gone (this
+// site's own destination is the same `Array<Save::MetaDataEntry>` header at
+// d+0x48, still bare bytes with no class type here — see the banner above).
+// So this calls the already-ported free function directly, by name, instead
+// of by address: `RtColl_ArrayAssign_180033f30` is J4_ENTRY's forwarder onto
+// `ArrayAssignCore` (array_destroy.cpp), given external linkage by sitting in
+// `namespace rtcoll` there. Forward-declared here (at file scope, NOT inside
+// the anonymous namespace below — that would give it internal linkage and
+// this file's own copy would never bind to array_destroy.cpp's definition)
+// rather than resolved through `ResolveAddr`, so the call reaches our own
+// code unconditionally, with no address door and no DLL involved either way.
+namespace rtcoll { void* RtColl_ArrayAssign_180033f30(void* self, const void* src); }
+
+namespace {
+
 void MetaEntryArrayAssign(void* dst, const void* src) {
-    using Fn = void* (*)(void*, const void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180033f30));
-    fn(dst, src);
+    rtcoll::RtColl_ArrayAssign_180033f30(dst, src);
 }
 
 // The unexported `operator delete` COMDAT copy 0x180006a10 — the one

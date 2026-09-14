@@ -264,6 +264,20 @@ using WideStringHandle = String;
 // reasoning rt_port.h gives for RT_DATA_SLOT. (Contrast the guard in
 // persistence_startup.cpp: that one is over a DATA SLOT whose absence is a real
 // standalone-vs-retail difference, not over a call whose absence is a defect.)
+//
+// ENDGAME B.3.2 step 2 (2026-09-13) — NOT CONVERTED to `Collection::Set<T>`
+// members, deliberately, and for the SAME reason persistence.cpp's
+// CallMapFind/CallMapInsert are not: `Persistence` (+0x00/+0x08/+0x0C) IS a
+// real `Collection::Set<SettingsMapNode>` header and 0x18000f7d0 IS
+// `Set<T>::Clear()` (set_clear.cpp's own banner names it), but `Clear()`
+// destroys each element with `n->element.~T()` and `SettingsMapNode`'s two
+// fields are the old `RtSystem::String` POD (trivially destructible) rather
+// than the real `System::String` class — so a generic `Clear()` would leak
+// both refcounts instead of releasing them. Retyping `SettingsMapNode` to fix
+// that is shared with persistence_startup.cpp / closure_batch2b_win.cpp /
+// engine/singleton_ctors.cpp, outside this batch. The members that would be
+// needed: `Collection::Set<SettingsMapNode, AVLCompare, DefaultAllocator,
+// System::String>::Clear()` here and `::Insert(element)` for MapInsert below.
 void MapClear(void* self) {
     static MapClearFn fn = reinterpret_cast<MapClearFn>(
         ResolveAddr(Module::Runtime, 0x18000f7d0));

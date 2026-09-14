@@ -491,10 +491,23 @@ void RtColl_ArraySetSizeFill_180026880(void* a, int n, const void* fill) {
                         static_cast<const uint8_t*>(fill), &kSpec_Filename);
 }
 
+// ENDGAME B.3.2 step 2 — the internal caller now names the container it acts
+// on. `kSpec_Filename`'s `init` field is null (this instantiation is always
+// called with a fill, so no default-construct arm ever runs); every other
+// field already agrees with `rtcoll::SpecFor<System::Filename>()` — `assign` IS
+// the placement copy-construct, `destroy` IS the per-element `~Filename()`
+// loop, `byteCopy` is false, because a copy-constructing type cannot be one.
+// But it does NOT match SpecFor<Filename>() exactly (SpecFor would derive a
+// non-null `init`, since Filename's default ctor is user-provided), so this
+// stays the hand-derived row (kSpec_Filename), reached through
+// `rtcoll::AsArray<&kSpec_Filename>` rather than through
+// `Collection::Array<System::Filename>`'s trait-derived spec — never silently
+// substituted for it (`out` is `FilenameArray*`, layout-identical to the
+// 16-byte Array header `AsArray` reinterprets).
 static void AppendFilename(FilenameArray* out, const System::Filename* value) {
     // 0x1800ad900: `MOV EDX,[RDI+8] ; INC EDX` — newSize is size+1, read fresh
     // from the header each iteration.
-    RtColl_ArraySetSizeFill_180026880(out, out->count + 1, value);
+    rtcoll::AsArray<&kSpec_Filename>(out)->SetSizeFill(out->count + 1, value);
 }
 
 // ============================================================================

@@ -126,52 +126,27 @@ namespace rtgfxgrid {
 namespace {
 
 // ---------------------------------------------------------------------------
-// The two `Collection::Array` instantiations these bodies call.
-//
-// BOTH SPELL THEIR ADDRESS AS A LITERAL inside ResolveAddr, and must keep doing
-// so: tools/runtime_census.py scans for that literal at the call site, and
-// hiding an edge behind a one-line helper is the mirror image of
-// reference_census_cannot_see_nonliteral_registrations.md.
-//
-// Both CACHE A HIT AND RETRY A MISS. That is the RtResolveCached contract and
-// it is load-bearing rather than defensive here: `ResolveAddr` consults the
-// port registry first, and lane Q's registrations are installed by a different
-// wave init than this one, so a `static Fn fn = ResolveAddr(...)` evaluated
-// before that init would freeze the DLL's body — or, at cutover, a null — in
-// for the life of the process.
+// ENDGAME B.3.2 step 2 (callers) — the two `ArraySetSizeI32`/`ArraySetSizeNode`
+// ResolveAddr forwarders that used to sit here are GONE. `Scene::_levelOffsets`,
+// `_cellHeads`, `_cellCounts`, `_freeIds` (all `Collection::Array<int32_t>` /
+// `<uint32_t>`) and `_nodes` (`Collection::Array<SceneNode>`) are already real
+// class members (runtime/types/graphics/Scene.h), and both rows are
+// TRAIT-EQUIVALENT once the element type is the real one:
+//   0x18002fea0  kSpec_I32     — int32_t is trivially constructible/destructible,
+//                                so SpecFor<int32_t>() leaves the new tail
+//                                UNINITIALISED exactly like this row.
+//   0x18005fb00  kSpec_Node18  — SceneNode (Scene.h) is a plain POD, so
+//                                SpecFor<SceneNode>() is the same {3-qword
+//                                assign, no init, no destroy} shape.
+// GridInit and GridAdd below now call `.SetSize(...)` on the members directly.
+// Both rows stay registered in array.cpp: `code/` still reaches them by address.
 // ---------------------------------------------------------------------------
 
-// 0x18002fea0 — Array<int32>::SetSize(n). Lane Q, `kSpec_I32`.
-void ArraySetSizeI32(void* arr, int n) {
-    using Fn = void (*)(void*, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18002fea0));
-    fn(arr, n);
-}
-
-// 0x18005fb00 — Array<Scene::Node>::SetSize(n, &fill). Lane Q's family,
-// `kSpec_Node18`, added by this lane in runtime/src/collection/array.cpp.
-void ArraySetSizeNode(void* arr, int n, const void* fill) {
-    using Fn = void (*)(void*, int, const void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18005fb00));
-    fn(arr, n, fill);
-}
-
-// 0x1800c7ad0 — ?MemFree@MemoryAllocator@System@@SAXPEAX@Z. FreeGlobals
-// open-codes `Enter(_singleton+0x640); Free(_singleton, p); Leave` and
-// 0x1800c7ad0 IS exactly those three steps, so calling the ported static keeps
-// this file free of <windows.h> AND keeps the heap reachable through the ONE
-// entry point RegisterAllocatorAddresses() arms — reaching it any other way
-// from here would re-open the wall attempt 13 closed. The argument is
-// linkedlist.cpp's, verified there instruction by instruction against
-// 0x180009c30, which is the same open-coding.
-void MemFreeLocked(void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
-    if (fn) fn(p);
-}
+// ENDGAME B.3.2 step 2 (callers) — the `MemFreeLocked` forwarder that used to
+// sit here (0x1800c7ad0, ?MemFree@MemoryAllocator@System@@SAXPEAX@Z) is GONE:
+// its only caller, `FreeGlobals`, now bridges onto `Collection::LinkedList<T>::
+// Clear()` below, which reaches the identical door through
+// `Collection::detail::ListNodeFree` (linkedlist.cpp).
 
 // ---------------------------------------------------------------------------
 // The float constants, LIFTED AS RAW BITS and not retyped from a decimal
@@ -228,7 +203,7 @@ Scene* GridInit(Scene* self, float cellSize) {
     self->_halfCellX = half;                       // 18005e512, one qword
     self->_halfCellY = half;
 
-    ArraySetSizeI32(&self->_levelOffsets, 8);      // 18005e51e
+    self->_levelOffsets.SetSize(8);                // 18005e51e  retail 0x18002fea0, kSpec_I32 (trait-equivalent for int32_t)
 
     self->_levelOffsets._data[0] = 0x0000;         // 18005e523
     self->_levelOffsets._data[1] = 0x0001;         // 18005e52a
@@ -239,14 +214,14 @@ Scene* GridInit(Scene* self, float cellSize) {
     self->_levelOffsets._data[6] = 0x0555;         // 18005e561
     self->_levelOffsets._data[7] = 0x1555;         // 18005e56c
 
-    ArraySetSizeI32(&self->_cellHeads,  0x5555);   // 18005e580
-    ArraySetSizeI32(&self->_cellCounts, 0x5555);   // 18005e58e
+    self->_cellHeads.SetSize(0x5555);              // 18005e580  retail 0x18002fea0
+    self->_cellCounts.SetSize(0x5555);             // 18005e58e  retail 0x18002fea0
 
     for (long off = 0; off < 0x15554; off += 4) {  // 18005e5a0..5be
         *reinterpret_cast<int32_t*>(
-            reinterpret_cast<uint8_t*>(self->_cellHeads._data) + off) = -1;
+            reinterpret_cast<uint8_t*>(self->_cellHeads.GetData()) + off) = -1;
         *reinterpret_cast<int32_t*>(
-            reinterpret_cast<uint8_t*>(self->_cellCounts._data) + off) = 0;
+            reinterpret_cast<uint8_t*>(self->_cellCounts.GetData()) + off) = 0;
     }
 
                             // no early-out arm exists
@@ -286,15 +261,15 @@ Scene* GridInit(Scene* self, float cellSize) {
 // ============================================================================
 uint32_t GridAdd(Scene* self, Geometry* const* geo) {
 
-    const int32_t freeCount = self->_freeIds._size;      // 18005e5f2  MOVSXD
+    const int32_t freeCount = self->_freeIds.GetSize();  // 18005e5f2  MOVSXD
     int32_t id;
 
     if (freeCount > 0) {
         // ---- reuse arm ----------------------------------------------- 5fd
-        id = static_cast<int32_t>(self->_freeIds._data[freeCount - 1]);  // 605
-        ArraySetSizeI32(&self->_freeIds, freeCount - 1);                 // 60c
+        id = static_cast<int32_t>(self->_freeIds[freeCount - 1]);        // 605
+        self->_freeIds.SetSize(freeCount - 1);                           // 60c  retail 0x18002fea0
 
-        SceneNode* const nodes = self->_nodes._data;                     // 627
+        SceneNode* const nodes = self->_nodes.GetData();                 // 627
         nodes[id]._object = *geo;                                        // 62b
         nodes[id]._next   = 0;                                           // 634, one
         nodes[id]._prev   = 0;                                           //      qword
@@ -302,7 +277,7 @@ uint32_t GridAdd(Scene* self, Geometry* const* geo) {
         /* nodes[id]._pad14 deliberately untouched — see the banner */   //      dword
     } else {
         // ---- append arm ---------------------------------------------- 645
-        id = self->_nodes._size;                                         // 645
+        id = self->_nodes.GetSize();                                     // 645
         SceneNode tmp;                                                   // [RSP+0x20]
         tmp._object = *geo;                                              // 660
         tmp._next   = 0;                                                 // 657, one
@@ -310,7 +285,10 @@ uint32_t GridAdd(Scene* self, Geometry* const* geo) {
         tmp._cell   = -1;                                                // 665
         /* tmp._pad14 left UNINITIALISED on purpose: retail's [RSP+0x34]  */
         /* is never written and is copied into the array as-is.           */
-        ArraySetSizeNode(&self->_nodes, self->_nodes._size + 1, &tmp);   // 66d
+        // retail 0x18005fb00, kSpec_Node18 — trait-equivalent: SceneNode is a
+        // plain POD (Scene.h), so SpecFor<SceneNode>() has the same {assign =
+        // 3-qword copy, init = null (no else arm), destroy = null} shape.
+        self->_nodes.SetSize(self->_nodes.GetSize() + 1, tmp);           // 66d
     }
 
     GridReindex(self, id);                                               // 677
@@ -572,20 +550,22 @@ void GridReindex(Scene* self, int32_t id) {
 // distinguish "freed every node" from "freed the first node and then cleared
 // the header", so the probe adds a check that the freed blocks come back from
 // the allocator — and the negative control says whether that check can fail.
+//
+// ENDGAME B.3.2 step 2 (callers) — this body IS `Collection::LinkedList<T>::
+// Clear()` (runtime/types/collection/Collection.h): walk head->next reading
+// `next` BEFORE the free, then tail/head/count, in this exact store order.
+// `Scene::~Scene` (scene.cpp) now calls `_globals.Clear()` directly rather
+// than reaching this address; this body stays registered for `code/`, but is
+// reduced to a one-line bridge onto the real class rather than a hand
+// transcription, since the free door matches: `MemFreeLocked` above and
+// `Collection::detail::ListNodeFree` (linkedlist.cpp) both resolve the same
+// 0x1800c7ad0. `GlobalList`/`GlobalNode` (scene_grid.h) are byte-identical to
+// `LinkedList<void*>`/its `Node` (both statically asserted to 0x18 bytes), and
+// Clear() never reads the node's `element` field, so the element type of the
+// bridge does not matter.
 // ============================================================================
 void FreeGlobals(GlobalList* list) {
-
-    int freed = 0;
-    for (GlobalNode* n = list->head; n != nullptr; ) {            // 18005f211/214
-        GlobalNode* const next = n->next;                        // 18005f220
-        MemFreeLocked(n);                                        // 18005f24b
-        n = next;                                                // 18005f25a
-        ++freed;
-    }
-    list->tail  = nullptr;                                       // 18005f264
-    list->head  = nullptr;                                       // 18005f268
-    list->count = 0;                                             // 18005f26b
-
+    reinterpret_cast<Collection::LinkedList<void*>*>(list)->Clear();
 }
 
 // ============================================================================

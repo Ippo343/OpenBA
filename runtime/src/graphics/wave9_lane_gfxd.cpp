@@ -153,6 +153,18 @@ using rtcoll::ArraySpec;
 
 // Collection::Array<int32>::operator= — retail 0x18001cdf0, lane Q's
 // RtColl_I32ArrayAssign_18001cdf0. The tail call of SceneEntry's copy-assign.
+//
+// ENDGAME B.3.2 step 2 (callers) — NOT converted to a member call.
+// `RendererSceneEntry::drawableIds` (Camera.h) is a real `Collection::
+// Array<int32_t>`, but the class's `operator=` is presently `=default` (a
+// SHALLOW bitwise copy — Collection.h's Array banner: the deep
+// `ArrayAssignCore` arrives as `operator=` only once the last bitwise copier
+// converts). Rewriting the call below as `dst->drawableIds =
+// src->drawableIds;` would silently swap this deep, allocator-owning assign
+// for a shallow one — sharing `_data` between the two records and double-
+// freeing it. Left as the by-address call onto the SAME ported body
+// (registry-first, so this already reaches our `RtColl_I32ArrayAssign_
+// 18001cdf0`, not the DLL's).
 void RtArrayAssignI32(void* dst, const void* src) {
     using Fn = void (*)(void*, const void*);
     static Fn fn = nullptr;
@@ -160,14 +172,11 @@ void RtArrayAssignI32(void* dst, const void* src) {
     fn(dst, src);
 }
 
-// Collection::Array<int32>::~Array — retail 0x18001c750, lane Q's
-// RtColl_ArrayDtor_18001c750. AddScene's last act, on its stack record.
-void RtArrayDtorI32(void* arrayTriple) {
-    using Fn = void* (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001c750));
-    fn(arrayTriple);
-}
+// ENDGAME B.3.2 step 2 (callers) — the `RtArrayDtorI32` forwarder that used to
+// sit here (0x18001c750) is GONE: it is array.cpp's J1 body, spec-independent
+// (`ArrayDtorSited(a) { a->~Array(); }` on the plain trait-derived
+// `ArrayHdr = Collection::Array<uint8_t>`), so `AddScene`'s call below now
+// destroys its stack record's trailing Array header directly.
 
 // ============================================================================
 // Graphics::Camera — the two constructors, both EXPORTS.
@@ -382,17 +391,23 @@ const ArraySpec kSpec_Drawable = {            // 0x180062c40
 // them.
 // ============================================================================
 
+// ENDGAME B.3.2 step 2 (callers) — these four entry points now call `.SetSize`/
+// `.SetSizeFill` on the `Collection::Array<uint8_t, …, ExplicitSpec<&SPEC>>`
+// bridge instead of naming `rtcoll::SetSizeCore` directly, so the class is the
+// one place the (newSize, fill, spec) argument order is spelled. Neither row
+// is trait-equivalent (kSpec_SceneEntry has a non-null init and byteCopy=false;
+// kSpec_Drawable/kSpec_DrawItem carry partial-write holes), so the bridge
+// stays `AsArray<&kSpec_X>`, not a typed `Collection::Array<RealElement>`.
 extern "C" void RtGfxd_SceneArraySetSize0(void* a) {
-    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_SceneEntry);
+    rtcoll::AsArray<&kSpec_SceneEntry>(a)->SetSize(0);
 }
 
 extern "C" void RtGfxd_DrawableArraySetSize0(void* a) {
-    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_Drawable);
+    rtcoll::AsArray<&kSpec_Drawable>(a)->SetSize(0);
 }
 
 extern "C" void RtGfxd_SceneArraySetSizeFill(void* a, int n, const void* fill) {
-    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n,
-                        static_cast<const uint8_t*>(fill), &kSpec_SceneEntry);
+    rtcoll::AsArray<&kSpec_SceneEntry>(a)->SetSizeFill(n, fill);
 }
 
 extern "C" void RtGfxd_SceneEntryDestroyRange(void* ignoredThis, uint8_t* base, int count) {
@@ -407,8 +422,7 @@ extern "C" void RtGfxd_SceneEntryDestroyRange(void* ignoredThis, uint8_t* base, 
 extern "C" void RtGfxd_DrawGroupClearPasses(void* group) {
     uint8_t* const g = static_cast<uint8_t*>(group);
     for (int i = 0; i < 3; ++i)
-        rtcoll::SetSizeCore(reinterpret_cast<ArrayHdr*>(g + 0x1c0 + i * 0x10), 0,
-                            nullptr, &kSpec_DrawItem);
+        rtcoll::AsArray<&kSpec_DrawItem>(g + 0x1c0 + i * 0x10)->SetSize(0);
     std::memset(g, 0, 8);
 }
 
@@ -502,7 +516,8 @@ extern "C" void RtGraphics_Renderer_AddScene(Renderer* self,
     uint8_t* const p = reinterpret_cast<uint8_t*>(self);
     RtGfxd_SceneArraySetSizeFill(p + 0x00,
                                  *reinterpret_cast<const int32_t*>(p + 0x08) + 1, rec);
-    RtArrayDtorI32(rec + 0x100);
+    // retail 0x18001c750 — the stack record's own Array<int32> header, freed.
+    reinterpret_cast<rtcoll::ArrayHdr*>(rec + 0x100)->~Array();
 }
 
 }  // namespace rtgfxd

@@ -115,6 +115,7 @@
 #include "../../types/ui/SpriteContext.h"
 #include "../../types/math/Math.h"
 #include "../../types/video/Context.h"
+#include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_SpriteIndexZ etc.
 
 // ----------------------------------------------------------------------------
 // Module / ResolveAddr, forward-declared rather than pulled in from
@@ -171,13 +172,6 @@ typedef void (*CaptureAddSpriteFn)(void* capture, const void* sprite,
                                    int x1, int y1, int x2, int y2,
                                    float rotation, uint32_t color);
 
-// Collection::Array<UI::SpriteDraw>, ported in runtime/src/collection/array.cpp
-// and registered there. Reached by address here so that this file has ONE
-// resolution rule for every internal it calls, and so that the registration
-// stays owned by the collection family rather than being duplicated.
-typedef void (*ArrayAppendFn)(void* array, int newSize, const void* fill);
-typedef void (*ArrayClearFn)(void* array);
-
 // ---- the five resolvers ----------------------------------------------------
 // Each one spells its address as a LITERAL inside `ResolveAddr(Module::Runtime,
 // …)`, once, and that spelling is not a style choice — it is what keeps these
@@ -214,21 +208,10 @@ inline CaptureAddSpriteFn TheCaptureAddSprite() {
     if (!f) f = reinterpret_cast<CaptureAddSpriteFn>(ResolveAddr(Module::Runtime, 0x1800d8b20));
     return f;
 }
-// Array<UI::SpriteDraw> — both PORTED and registered, in
-// runtime/src/collection/array.cpp. They are still reached through
-// `ResolveAddr` rather than by a direct C++ call so that this file has ONE
-// resolution rule for every internal it calls, and so the registration keeps
-// living with the collection family.
-inline ArrayAppendFn TheArrayAppend() {
-    static ArrayAppendFn f = nullptr;
-    if (!f) f = reinterpret_cast<ArrayAppendFn>(ResolveAddr(Module::Runtime, 0x180078520));
-    return f;
-}
-inline ArrayClearFn TheArrayClear() {
-    static ArrayClearFn f = nullptr;
-    if (!f) f = reinterpret_cast<ArrayClearFn>(ResolveAddr(Module::Runtime, 0x1800783d0));
-    return f;
-}
+// ENDGAME B.3.2 step 2 — the `TheArrayAppend`/`TheArrayClear` forwarders that
+// used to sit here (0x180078520 / 0x1800783d0) are GONE: `_draws`/`_deferred`
+// are real `Collection::Array<SpriteDraw>` members and both call sites below
+// bridge through `kSpec_SpriteDraw` directly.
 
 inline void Flush(SpriteContext* self) { TheFlush()(self); }
 
@@ -279,16 +262,13 @@ void RtUi_SpriteContext_Begin(UI::SpriteContext* self, float scale,
         uint8_t* cap = static_cast<uint8_t*>(spriteCapture);
         *reinterpret_cast<uint64_t*>(cap + 0x50) = 0;
 
-        using ArraySetSize1Fn = void (*)(void*, int32_t);
-        static ArraySetSize1Fn clearSprites = nullptr;
-        if (!clearSprites) clearSprites = reinterpret_cast<ArraySetSize1Fn>(
-            ResolveAddr(Module::Runtime, 0x1800370c0));
-        clearSprites(cap + 0x40, 0);
-
-        static ArraySetSize1Fn clearEntries = nullptr;
-        if (!clearEntries) clearEntries = reinterpret_cast<ArraySetSize1Fn>(
-            ResolveAddr(Module::Runtime, 0x18004ba90));
-        clearEntries(cap + 0x30, 0);
+        // ENDGAME B.3.2 step 2 — both forwarders are GONE. `spriteCapture` is
+        // untyped here (only Sprite.h is included, not SpriteCapture.h), and
+        // both rows are NON-TRIVIAL (kSpec_SpriteIndexZ's tail-init sets each
+        // new Sprite's index to -1; kSpec_CaptureEntryZ's destroy releases a
+        // String), so the bridge stays byte-offset rather than retyping.
+        rtcoll::AsArray<&rtcoll::kSpec_SpriteIndexZ>(cap + 0x40)->SetSize(0);   // 0x1800370c0
+        rtcoll::AsArray<&rtcoll::kSpec_CaptureEntryZ>(cap + 0x30)->SetSize(0); // 0x18004ba90
     }
 
     self->_currentSheet = nullptr;
@@ -356,7 +336,12 @@ void RtUi_SpriteContext_AddSpriteDraw(void* selfRaw, const void* drawRaw) {
     }
 
     if (append) {
-        TheArrayAppend()(&self->_draws, self->_draws._size + 1, d);
+        // retail 0x180078520 — kSpec_SpriteDraw, NON-TRIVIAL (a partial-write
+        // assign), so `_draws` (a real `Collection::Array<SpriteDraw>` member)
+        // is bridged through the hand-derived row rather than its own
+        // trait-derived member functions.
+        rtcoll::AsArray<&rtcoll::kSpec_SpriteDraw>(&self->_draws)
+            ->SetSizeFill(self->_draws._size + 1, d);
         return;
     }
 
@@ -405,8 +390,8 @@ void RtUi_SpriteContext_FlushDeferred(void* selfRaw) {
         return;
     }
 
-    for (int i = 0; i < self->_deferred._size; ++i) {
-        SpriteDraw* rec   = &self->_deferred._data[i];
+    for (int i = 0; i < self->_deferred.GetSize(); ++i) {
+        SpriteDraw* rec   = &self->_deferred.GetData()[i];
         void*       sheet = rec->sheet;
         if (self->_currentSheet != sheet) {
             if (self->_currentSheet != nullptr) Flush(self);
@@ -416,7 +401,9 @@ void RtUi_SpriteContext_FlushDeferred(void* selfRaw) {
     }
 
     Flush(self);
-    TheArrayClear()(&self->_deferred);
+    // retail 0x1800783d0 — kSpec_SpriteDraw's SetSize(0) form; same
+    // NON-TRIVIAL row as the append above, bridged the same way.
+    rtcoll::AsArray<&rtcoll::kSpec_SpriteDraw>(&self->_deferred)->SetSize(0);
 }
 
 // ---- 0x18011cbe0  ?AddLine@SpriteContext@UI@@QEAAXAEBVSprite@2@HHHHI@Z -----

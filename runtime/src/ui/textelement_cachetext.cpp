@@ -77,6 +77,7 @@
 #include "../../types/system/String.h"
 #include "../../funcs/rt_sink.h"
 #include "../../types/ui/TextElement.h"
+#include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_StringRefZ
 
 // ----------------------------------------------------------------------------
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
@@ -138,18 +139,14 @@ inline MemFreeFn MemFree() {
     return RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
 }
 
-// Collection::Array<System::String>::SetSize(int) — retail 0x180029a80, PORTED
-// in this commit (runtime/src/collection/array.cpp, kSpec_StringRefZ). Not
-// exported (a header-only template instantiation), so it is reached by address,
-// the same idiom widgets_layout.cpp uses for 0x1800764c0 — and through
-// ResolveAddr, which consults the PORT REGISTRY FIRST
-// (reference_resolveaddr_consults_port_registry_first.md), so this reaches our
-// body and not the DLL's.
+// ENDGAME B.3.2 step 2 — the 0x180029a80 forwarder that used to sit here is
+// GONE. `TextElement`'s parameter array (TE::kParamArrayData, an
+// `Array<System::String>`) is reached by raw offset rather than a typed
+// field, and `kSpec_StringRefZ` is NON-TRIVIAL (the tail is ZEROED, and the
+// destroy releases each String), so the call bridges through the hand-derived
+// row.
 inline void ArrayStringSetSize(void* arrayHdr, int32_t n) {
-    using Fn = void (*)(void*, int32_t);
-    static Fn fn = nullptr;                 // cache a hit, retry a miss
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180029a80));
-    fn(arrayHdr, n);
+    rtcoll::AsArray<&rtcoll::kSpec_StringRefZ>(arrayHdr)->SetSize(n);
 }
 
 // ============================================================================

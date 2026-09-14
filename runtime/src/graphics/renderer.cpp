@@ -70,6 +70,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/Camera.h"
 #include "../../types/graphics/Material.h"
+#include "../collection/array_internal.h"
 
 using RtGraphics::Camera;
 using RtGraphics::MaterialInstance;
@@ -179,34 +180,32 @@ void RtMemFree(void* p) {
 // Win32 and therefore cannot appear in this file at all (PLAN §4.1 decision 1).
 // That is a second, independent reason to leave them where they are.
 
-// Array<T>::~Array for a trivially destructible T: Free(_data) under the
-// allocator lock, then zero the {_data, _size, _capacity} triple. Retail
-// 0x18001c9e0 — the Renderer dtor's first callee, on `_drawables`.
-// WAVE 9 LANE Q: registered, so this reaches our ~Array. The two dtors below
-// (0x18001c8c0, 0x18001c7e0) are lane D's J2b/J2 and are still the DLL's.
-void RtArrayDtorTrivial(void* arrayTriple) {
-    using Fn = void (*)(void*);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001c9e0));
-    fn(arrayTriple);
-}
-
-// Array<DrawGroup>::~Array. Retail 0x18001c8c0: for each of `_size` elements it
-// runs an EH vector destructor over `element + 0x1c0`, count 3, stride 0x10 —
-// the group's three per-pass item arrays — then frees the buffer and zeroes the
-// triple. The stride 0x1f0 in its loop is what pins sizeof(DrawGroup).
-void RtArrayDtorDrawGroups(void* arrayTriple) {
-    using Fn = void (*)(void*);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001c8c0));
-    fn(arrayTriple);
-}
-
-// Array<SceneEntry>::~Array. Retail 0x18001c7e0: element-destroy helper over the
-// whole buffer (0x18001ce90), then free, then zero the triple.
-void RtArrayDtorSceneEntries(void* arrayTriple) {
-    using Fn = void (*)(void*);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001c7e0));
-    fn(arrayTriple);
-}
+// ENDGAME B.3.2 step 2 (callers) — the three forwarders that used to sit here
+// (0x18001c9e0 on `drawables`, 0x18001c8c0 `DtorEhVec` on `drawGroups`, 0x18001c7e0
+// `DtorElem` on `scenes`) are GONE. `Renderer::drawables/drawGroups/scenes` are
+// already real `Collection::Array<T>` members (runtime/types/graphics/Camera.h),
+// and all three rows are TRAIT-EQUIVALENT once the element type is the real
+// struct, not a hand-derived spec:
+//
+//   0x18001c9e0  Array<RendererDrawable>::~Array — RendererDrawable is a plain
+//                POD (Camera.h), trivially destructible: SpecFor<RendererDrawable>()
+//                has destroy == nullptr, so this is the J1 body exactly.
+//   0x18001c8c0  Array<RendererDrawGroup>::~Array — RendererDrawGroup carries
+//                `Collection::Array<RendererDrawItem> items[3]` as a REAL member
+//                (Camera.h), so RendererDrawGroup's own (implicit) destructor
+//                already destroys items[2], items[1], items[0] in that order —
+//                array-of-class-type members are destroyed in DESCENDING index
+//                order, which is exactly the "walks backward" eh_vector
+//                destructor iteration closure_batch2b.cpp's copy-ctor comment
+//                contrasts itself against. SpecFor<RendererDrawGroup>() therefore
+//                calls that same destructor per outer element — trait-derived,
+//                not hand-derived.
+//   0x18001c7e0  Array<RendererSceneEntry>::~Array — RendererSceneEntry carries
+//                `Collection::Array<int32_t> drawableIds` as a real member, same
+//                argument: its own destructor already frees that inner array.
+//
+// The three registered rows stay in array.cpp / array_destroy.cpp: `code/` still
+// reaches them by address.
 
 // WAVE 9 LANE Q: 0x180061480 is registered (kSpec_StringExt), one of the three
 // NON-TRIVIAL element types in that lane -- the `INC dword ptr [*element - 4]`
@@ -219,10 +218,22 @@ void RtArrayDtorSceneEntries(void* arrayTriple) {
 // `fillValue` — bumping the String refcount at `*element - 4` — releases the old
 // buffer's elements, and frees it. The 0x10 element stride in its loop is what
 // pins sizeof(MaterialTexture).
-void RtArraySetSizeTexturePairs(void* arrayTriple, uint32_t newSize, const MaterialTexture* fill) {
-    using Fn = void (*)(void*, uint32_t, const MaterialTexture*);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180061480));
-    fn(arrayTriple, newSize, fill);
+//
+// ENDGAME B.3.2 step 2 (callers) — the ResolveAddr forwarder that used to sit
+// here is GONE, but this row is NOT trait-equivalent (kSpec_StringExt is one of
+// the twelve hand-derived-only rows Collection.h's Array banner lists: a
+// byteCopy assign that ALSO carries a destroy, which C++ traits cannot express).
+// `MaterialInstance::textures` in runtime/types/graphics/Material.h is declared
+// `Collection::Array<MaterialTexture>` with the DEFAULT (trait-derived) spec —
+// that field's own SetSize/SetSizeFill would therefore run the WRONG body (a
+// bitwise copy with no refcount bump). Retyping the field to
+// `ExplicitSpec<&kSpec_StringExt>` is the correct long-term fix but touches a
+// shared runtime/types header this batch does not own; bridging at the call
+// site instead, exactly as B32_RULES prescribes for a hand-derived row.
+void RtArraySetSizeTexturePairs(MaterialInstance* self, uint32_t newSize,
+                                const MaterialTexture* fill) {
+    rtcoll::AsArray<&rtcoll::kSpec_StringExt>(&self->textures)
+        ->SetSizeFill(static_cast<int>(newSize), fill);
 }
 
 // ============================================================================
@@ -427,9 +438,9 @@ extern "C" void RtGraphics_Renderer_Dtor(Renderer* self) {
     // the group and scene destructors walk their elements' own arrays, and doing
     // them in declaration order would not reproduce the allocator's free
     // sequence, which is observable through the boundary tags.
-    RtArrayDtorTrivial(&self->drawables);
-    RtArrayDtorDrawGroups(&self->drawGroups);
-    RtArrayDtorSceneEntries(&self->scenes);
+    self->drawables.~Array();    // retail 0x18001c9e0
+    self->drawGroups.~Array();   // retail 0x18001c8c0
+    self->scenes.~Array();       // retail 0x18001c7e0
 
     const bool cleared = self->scenes._data == nullptr && self->scenes._size == 0 &&
                          self->scenes._capacity == 0 &&
@@ -444,7 +455,7 @@ extern "C" void RtGraphics_Renderer_Dtor(Renderer* self) {
 // bounds check in retail, and none added here (CLAUDE.md — a guard retail lacks
 // does not restore the behaviour, it skips it).
 extern "C" const Camera* RtGraphics_Renderer_GetCullCamera(Renderer* self) {
-    const Camera* ours = &self->drawGroups._data[self->currentDrawGroup].cullCamera;
+    const Camera* ours = &self->drawGroups[self->currentDrawGroup].cullCamera;
 
     return ours;
 }
@@ -452,7 +463,7 @@ extern "C" const Camera* RtGraphics_Renderer_GetCullCamera(Renderer* self) {
 // ?GetShader@Renderer@Graphics@@QEBAHXZ — retail 0x180018010.
 // `_drawGroups[_currentDrawGroup].shader`.
 extern "C" int RtGraphics_Renderer_GetShader(const Renderer* self) {
-    const int ours = self->drawGroups._data[self->currentDrawGroup].shader;
+    const int ours = self->drawGroups[self->currentDrawGroup].shader;
 
     return ours;
 }
@@ -564,7 +575,7 @@ extern "C" void RtGraphics_MaterialInstance_SetMaterial(MaterialInstance* self, 
 // and the new tail element holds the two values we were handed.
 extern "C" void RtGraphics_MaterialInstance_AddTexture(MaterialInstance* self,
                                                        const void* name, void* image) {
-    const int32_t sizeBefore = self->textures._size;
+    const int32_t sizeBefore = self->textures.GetSize();
 
     MaterialTexture local;
     local.name = nullptr;
@@ -575,8 +586,8 @@ extern "C" void RtGraphics_MaterialInstance_AddTexture(MaterialInstance* self,
     }
     local.image = image;
 
-    RtArraySetSizeTexturePairs(&self->textures,
-                               static_cast<uint32_t>(self->textures._size + 1), &local);
+    RtArraySetSizeTexturePairs(self,
+                               static_cast<uint32_t>(self->textures.GetSize() + 1), &local);
 
     if (local.name) {
         int32_t* refCount = reinterpret_cast<int32_t*>(local.name - 4);

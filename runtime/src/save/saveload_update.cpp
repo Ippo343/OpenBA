@@ -50,6 +50,8 @@
 #include "saveload_internal.h"
 #include "../../types/io/Persistence.h"
 #include "../../types/io/Modification.h"   // UpdateLoad reorders the mod list
+#include "../../types/collection/Collection.h"
+#include "../collection/array_internal.h"   // rtcoll::AsArray, ArraySpec -- B.3.2 step 2
 #include "../system/string.h"              // RtString_ReleaseInline
 #include "resolve.h"   // ResolveAddr / Module -- the port-aware address door
 
@@ -73,6 +75,19 @@ using RtSaveDetail::ZeroTime;
 // would be a normalisation, not a transcription.
 void RtVideoDeviceLock(void** deviceSingleton);
 void RtVideoDeviceUnlock(void** deviceSingleton);
+
+// ENDGAME B.3.2 step 2 — two Collection names with external linkage, declared
+// at FILE SCOPE (not inside the anonymous namespace below, which would give a
+// re-declaration internal linkage and sever it from the real definition):
+//   kSpec_MetaData58              runtime/src/collection/array.cpp
+//   RtColl_ArrayDtorElem_18002ac40  runtime/src/collection/array_destroy.cpp
+// Both sit in `namespace rtcoll { ... }` there (non-static, non-anonymous),
+// and are not declared `extern`/forward-declared in any header this batch may
+// edit, so they are declared here instead. See the banners on `kSpec_MetaData58`
+// and on `RtColl_ArrayDtorElem_18002ac40`'s call site below for why each is
+// used the way it is.
+namespace rtcoll { extern const ArraySpec kSpec_MetaData58; }
+namespace rtcoll { void* RtColl_ArrayDtorElem_18002ac40(void* self); }
 
 namespace {
 
@@ -1264,14 +1279,36 @@ using ArrayDtorFn = void (*)(void* array);
 using SaveInfoDtorFn = void (*)(SaveInfo* row);
 
 // 0x1800332d0 — Collection::Array<SaveInfo>::SetSize(newSize, const T& fill).
-// NOT ported. Decompiled to confirm the signature rather than inferred from the
-// call site: it compares `newSize` against `_size` (+0x08), grows `_capacity`
+// It compares `newSize` against `_size` (+0x08), grows `_capacity`
 // (+0x0c) — with the "grew by exactly one from non-empty" case jumping straight
 // to 3x, which is why a list of N saves does not realloc N times — reallocates
 // at stride 0x58, copy-assigns each element with FUN_180032f70, and destroys
 // the tail with the same ~SaveInfo above. UpdateList only ever calls it with
 // `_size + 1`, i.e. as push_back.
-using ArraySetSizeFn = void (*)(void* array, int newSize, const SaveInfo* fill);
+//
+// ENDGAME B.3.2 step 2: this IS `kSpec_MetaData58` (runtime/src/collection/
+// array.cpp, "Array<Save::MetaData>", stride 0x58, align 8) — the assign that
+// calls FUN_180032f70 and the destroy that calls ~SaveInfo above, named by the
+// same address, are that row's `assign`/`destroy`. It is a HAND-DERIVED row
+// (assign is a call to a real copy ctor, destroy is a call to a real dtor,
+// `byteCopy == false`): `SaveInfo` (runtime/types/save/SaveLoad.h) stores its
+// two Strings and its `ModInfo*` sub-array as raw pointers, so the
+// trait-derived `SpecFor<SaveInfo>()` would read `is_trivially_copyable` true
+// and silently drop retail's refcounting and nested-array release — exactly
+// the trap B32_RULES.md says never to fall into. `kSpec_MetaData58` has
+// external linkage (namespace rtcoll, array.cpp) but is not declared `extern`
+// in array_internal.h; declared locally rather than editing that header.
+//
+// `self->_savesData`/`_savesSize`/`_savesCapacity` (SaveLoad.h +0x50/+0x58/
+// +0x5c) are still three raw fields, not a `Collection::Array<SaveInfo>`
+// member — SaveLoad.h is not one of this batch's files, so the member call
+// below reaches them through the transitional
+// `reinterpret_cast<Collection::Array<SaveInfo>&>(...)` bridge (ENDGAME
+// §B.3.2's rule for a not-yet-retyped POD field), which is safe here because
+// the three fields sit at consecutive offsets 0/8/0xc exactly matching
+// `Collection::Array<T>`'s own {_data,_size,_capacity} layout (both pinned by
+// `static_assert` already). (Declared at file scope above the anonymous
+// namespace — see the note there.)
 
 // 0x1800c3de0 — SaveInfo::SetThumbnail(row, pixels, w, h). NOT ported, and NOT
 // a small function: it allocates a Video::ImageBuffer, publishes it at row+0x18,
@@ -1283,9 +1320,22 @@ using ArraySetSizeFn = void (*)(void* array, int newSize, const SaveInfo* fill);
 using SetThumbnailFn = void (*)(SaveInfo* row, void* pixels, int w, int h);
 
 // 0x18002ac40 — destroys the Array at Persistence+0x80 and zeroes {data,size}.
-// NOT ported. Called only from state 0, immediately before the worker is
-// signalled: it drops the cached save list so the worker thread refills it.
-using ClearArrayFn = void (*)(void* array);
+// Called only from state 0, immediately before the worker is signalled: it
+// drops the cached save list so the worker thread refills it.
+//
+// ENDGAME B.3.2 step 2: this is `RtColl_ArrayDtorElem_18002ac40`
+// (runtime/src/collection/array_destroy.cpp), a J2 `~Array` — per-element
+// String release (`ReleaseStringsCounted` against `kD_Str_10at08`, "IO:
+// Persistence::SaveGameInfo {DateTime, String*@+8}") then the J1 buffer free.
+// NOT converted to a `Collection::Array<T>::~Array()` member call: the element
+// type has no name or header anywhere in this tree (Persistence+0x80 is bare
+// bytes, `IO::Persistence` is not a batch-2b file), and `kD_Str_10at08`
+// (array_destroy.cpp) is a `constexpr` at namespace scope, i.e. INTERNAL
+// linkage — it cannot be named from this translation unit at all, with or
+// without editing a header this batch does not own. Reached by declaring and
+// calling the already-ported free function directly, by name, instead of by
+// address; still not a member call, and this is why. (Declared at file scope
+// above the anonymous namespace — see the note there.)
 
 // 0x18007f050 — the DLL's own statically linked CRT `qsort`. Called by address
 // rather than through <cstdlib>'s: for a comparator that is not a total order
@@ -1330,19 +1380,14 @@ SaveInfoDtorFn SaveInfoDtor() {
         reinterpret_cast<SaveInfoDtorFn>(ResolveAddr(Module::Runtime, 0x1800c3f40));
     return f;
 }
-ArraySetSizeFn ArraySaveInfoSetSize() {
-    static ArraySetSizeFn f =
-        reinterpret_cast<ArraySetSizeFn>(ResolveAddr(Module::Runtime, 0x1800332d0));
-    return f;
-}
+// ENDGAME B.3.2 step 2: `ArraySaveInfoSetSize()`/`PersistenceClearSaveList()`
+// (the 0x1800332d0 / 0x18002ac40 address doors) are gone — their two call
+// sites below reach `rtcoll::AsArray<&rtcoll::kSpec_MetaData58>(...)` and
+// `rtcoll::RtColl_ArrayDtorElem_18002ac40(...)` directly. See the banners on
+// `kSpec_MetaData58` and `RtColl_ArrayDtorElem_18002ac40` above.
 SetThumbnailFn SaveInfoSetThumbnail() {
     static SetThumbnailFn f =
         reinterpret_cast<SetThumbnailFn>(ResolveAddr(Module::Runtime, 0x1800c3de0));
-    return f;
-}
-ClearArrayFn PersistenceClearSaveList() {
-    static ClearArrayFn f =
-        reinterpret_cast<ClearArrayFn>(ResolveAddr(Module::Runtime, 0x18002ac40));
     return f;
 }
 QsortFn RetailQsort() {
@@ -1603,12 +1648,10 @@ void UpdateListBody(SaveLoad* self, RtSink& out) {
         }
 
         if ((persistence[0x18] & 1) == 0) {
-            ClearArrayFn clear = PersistenceClearSaveList();
-            if (out.Call("IO::Persistence save-list ~Array [0x18002ac40]",
-                         (const void*)clear,
-                         reinterpret_cast<int64_t>(persistence + 0x80))) {
-                clear(persistence + 0x80);
-            }
+            // retail 0x18002ac40 — see the banner on
+            // `rtcoll::RtColl_ArrayDtorElem_18002ac40` above for why this is a
+            // direct call by name rather than a member call.
+            rtcoll::RtColl_ArrayDtorElem_18002ac40(persistence + 0x80);
             // The worker handshake, in retail's order: request code first, then
             // the result word, then the two events.
             //
@@ -1652,7 +1695,6 @@ void UpdateListBody(SaveLoad* self, RtSink& out) {
 
     // ---- state 1 -----------------------------------------------------------
     if (progress == 1) {
-        ArraySetSizeFn setSize   = ArraySaveInfoSetSize();
         SaveInfoDtorFn rowDtor   = SaveInfoDtor();
 
         // The "new save" slot, pushed FIRST so it lands at index 0 — which is
@@ -1660,13 +1702,10 @@ void UpdateListBody(SaveLoad* self, RtSink& out) {
         if (self->_selectedIndex == -2) {
             SaveInfo blank;                       // deliberately uninitialised
             InitSaveInfoTemplate(&blank, -1);
-            if (out.Call("Collection::Array<SaveInfo>::SetSize [0x1800332d0] (blank row)",
-                         (const void*)setSize,
-                         reinterpret_cast<int64_t>(&self->_savesData),
-                         self->_savesSize + 1,
-                         reinterpret_cast<int64_t>(&blank))) {
-                setSize(&self->_savesData, self->_savesSize + 1, &blank);
-            }
+            // retail 0x1800332d0 — see the banner on `kSpec_MetaData58` above
+            // for the hand-derived-row reasoning and the `_savesData` bridge.
+            rtcoll::AsArray<&rtcoll::kSpec_MetaData58>(&self->_savesData)
+                ->SetSizeFill(self->_savesSize + 1, &blank);
             // Not suppressed: see the banner. Its footprint is this stack local.
             rowDtor(&blank);
         }
@@ -1741,13 +1780,10 @@ void UpdateListBody(SaveLoad* self, RtSink& out) {
                 }
 
                 if (!skip) {
-                    if (out.Call("Collection::Array<SaveInfo>::SetSize [0x1800332d0]",
-                                 (const void*)setSize,
-                                 reinterpret_cast<int64_t>(&self->_savesData),
-                                 self->_savesSize + 1,
-                                 reinterpret_cast<int64_t>(&row))) {
-                        setSize(&self->_savesData, self->_savesSize + 1, &row);
-                    }
+                    // retail 0x1800332d0 — see the banner on `kSpec_MetaData58`
+                    // above.
+                    rtcoll::AsArray<&rtcoll::kSpec_MetaData58>(&self->_savesData)
+                        ->SetSizeFill(self->_savesSize + 1, &row);
                 }
                 rowDtor(&row);
 

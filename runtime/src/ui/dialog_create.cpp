@@ -125,6 +125,7 @@
 #include "../../types/collection/Collection.h"
 #include "../../types/ui/Dialog.h"
 #include "../../types/ui/DialogInstance.h"
+#include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_Fill8Z
 
 // ---- ResolveExport / ResolveAddr -------------------------------------------
 // Forward-declared rather than pulled in from standalone/resolve.h, for the
@@ -204,32 +205,24 @@ template <class T> inline const T& F(const void* p, size_t off) {
 // which is what retail's own direct near-CALL into the same DLL amounted to.
 // ============================================================================
 
-// Collection::Array<DialogTimer(0x18)>::SetSize(int newSize, const T* fill)
-// 0x180076250. Registered as the SAME BODY as 0x18005fb00 (kSpec_Node18).
-void ArraySetSize18(void* arrayHdr, int32_t newSize, const void* fill) {
-    using Fn = void (*)(void*, int32_t, const void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180076250));
-    fn(arrayHdr, newSize, fill);
-}
-
-// Collection::Array<T*>::SetSize(int newSize, const T* const* fill)
-// 0x180076370. Registered as the SAME BODY as 0x180076900 (kSpec_Fill8Z).
-void ArraySetSize8_76370(void* arrayHdr, int32_t newSize, const void* fill) {
-    using Fn = void (*)(void*, int32_t, const void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180076370));
-    fn(arrayHdr, newSize, fill);
-}
-
-// The SAME shape at 0x180076900 — already registered by array.cpp under
-// kSpec_Fill8Z. The 6-arg AddController calls THIS address, not 0x180076370.
-void ArraySetSize8_76900(void* arrayHdr, int32_t newSize, const void* fill) {
-    using Fn = void (*)(void*, int32_t, const void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180076900));
-    fn(arrayHdr, newSize, fill);
-}
+// ENDGAME B.3.2 step 2 — the three forwarders that used to sit here are GONE.
+// All three fields are real `Collection::Array<T>` members now
+// (DialogInstance.h `_timers`/`_controllers`, Element.h `_children`), and all
+// three rows are TRAIT-EQUIVALENT for the field's element type:
+//
+//   0x180076250  kSpec_Node18  {0x18,8,Assign18(full byte copy),init=null,
+//                destroy=null,byteCopy} == SpecFor<DialogTimer>() field for
+//                field: DialogTimer is a trivially copyable/constructible/
+//                destructible 0x18-byte POD, so the trait-derived
+//                `Array<DialogTimer>::SetSize` IS that instantiation.
+//   0x180076370  kSpec_Fill8Z  {8,8,Assign8Z(zero-then-copy; net effect is a
+//                full 8-byte write, same bytes a placement copy-construct of
+//                a pointer produces),init=null,destroy=null,byteCopy} ==
+//                SpecFor<DialogController*>().
+//   0x180076900  kSpec_Fill8Z, same reasoning, == SpecFor<Element*>() for
+//                `Element::_children`.
+//
+// No `ExplicitSpec` bridge needed at any of the three call sites below.
 
 // ??0Internal@Object@@QEAA@XZ   0x1800bfd10   (an EXPORT — checked)
 void* InternalCtor(void* self) {
@@ -397,7 +390,7 @@ void RtUiDialogInstance_StartTimer(void* self, int32_t id, int64_t time) {
     tmp._remaining = time;
     tmp._period    = time;
     tmp._id        = id;
-    ArraySetSize18(&d->_timers, d->_timers._size + 1, &tmp);
+    d->_timers.SetSize(d->_timers.GetSize() + 1, tmp);   // retail 0x180076250
 }
 
 // ============================================================================
@@ -477,8 +470,9 @@ void RtUiDialogInstance_AddControllerTab(void* self, uint32_t typeId, void* data
     // The fill is the ADDRESS OF A STACK SLOT holding the pointer, not the
     // pointer — `LEA R8,[RSP+0x40]` where [RSP+0x40] was stored at 0x180113438.
     DialogInstance* const d = static_cast<DialogInstance*>(self);
-    void* slot = c;
-    ArraySetSize8_76370(&d->_controllers, d->_controllers._size + 1, &slot);
+    // retail 0x180076370 — SetSize(size+1, &fill); see the file banner for why
+    // this is the trait-derived Array<DialogController*> instantiation.
+    d->_controllers.SetSize(d->_controllers.GetSize() + 1, c);
 }
 
 // ============================================================================
@@ -598,9 +592,17 @@ void RtUiDialogInstance_AddController6(void* self, uint32_t typeId, void* dataSo
 
         // 0x180113603: unguarded on `target`. The fill is the ADDRESS of the
         // slot holding the pointer (0x1801135f2 stored it there first).
-        ArraySetSize8_76900(B(target, EL::kChildrenData),
-                            *reinterpret_cast<int32_t*>(B(target, EL::kChildrenSize)) + 1,
-                            &newEl);
+        //
+        // ENDGAME B.3.2 step 2 — `target->_children` (Element.h, +0xa0) is a
+        // real `Collection::Array<Element*>` member, and 0x180076900 is
+        // `kSpec_Fill8Z`, trait-equivalent for `Element*` (see the file
+        // banner). This file deliberately does not include Element.h (the
+        // comment above the `EL` namespace), so the conversion bridges at the
+        // use site with the same byte offset rather than retyping `target`.
+        rtcoll::AsArray<&rtcoll::kSpec_Fill8Z>(B(target, EL::kChildrenData))
+            ->SetSizeFill(
+                *reinterpret_cast<int32_t*>(B(target, EL::kChildrenSize)) + 1,
+                &newEl);
 
         // 0x180113620: a DO-WHILE — the flag is set on `target` itself before
         // the null test, so a null target faults here rather than skipping.

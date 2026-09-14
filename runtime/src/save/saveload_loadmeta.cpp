@@ -166,9 +166,18 @@
 #include "../../types/io/Stream.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/collection/Collection.h"
+#include "../collection/array_internal.h"   // rtcoll::AsArray, ArraySpec — B.3.2 step 2
 #include "../system/string.h"
 #include "saveload_internal.h"
 #include "resolve.h"   // ResolveAddr / Module — the port-aware address door
+
+// ENDGAME B.3.2 step 2 — `kSpec_MetaEntry20` (runtime/src/collection/array.cpp)
+// has external linkage (namespace rtcoll there, non-static) but is declared
+// `extern` in no header this batch may edit, so it is declared here, at FILE
+// SCOPE and not inside the anonymous namespace below (which would give a
+// re-declaration internal linkage and sever it from the real definition). See
+// the banner on its call site for why this row and not the trait-derived one.
+namespace rtcoll { extern const ArraySpec kSpec_MetaEntry20; }
 
 namespace {
 
@@ -188,6 +197,18 @@ namespace rw_vtbl = rt::io::rw_vtbl;
 
 using ModArray = Collection::Array<ModInfo>;
 
+// ENDGAME B.3.2 step 2: `0x180034010` names `kSpec_MetaEntry20`, the
+// HAND-DERIVED row Collection.h's Array banner calls out by this exact
+// address: String-adopting assign, String-zeroing init, String-releasing
+// destroy, `byteCopy == false`. It is NOT what `ModArray`'s own
+// (trait-derived) `SetSize` would run: `ModInfo` (runtime/types/save/
+// SaveLoad.h) stores its two Strings as raw `const char* name/path`, not a
+// real `System::String` member, so `is_trivially_copyable<ModInfo>` reads
+// true and the trait-derived spec would silently drop retail's refcount
+// bump/release. Reached through the hand-derived row instead, per
+// B32_RULES.md — never substitute the trait default for a row this shape.
+// (`kSpec_MetaEntry20` itself is declared at file scope above — see there.)
+
 // ---- callee shapes ---------------------------------------------------------
 //
 // EVERY ONE of these was counted off the disassembly, not off Ghidra's C, and
@@ -200,7 +221,9 @@ using CmsBoolFn   = bool (*)(CompressedMemoryStream*);
 using MsOpenFn    = bool (*)(MemoryStream*, int);
 // ENDGAME B.3.1 step 2: the String::Serialize door typedef is gone with its
 // three call sites — all three are `System::String::Serialize` now.
-using SetSizeFn   = void (*)(ModArray* arr, int n);
+// ENDGAME B.3.2 step 2: the `SetSizeFn` door typedef is gone with its one call
+// site — see `rtcoll::AsArray<&rtcoll::kSpec_MetaEntry20>(mods)->SetSize(...)`
+// below.
 
 // IO::Encoding vtable +0x18 / +0x20: (this, Serializer*, int version)
 // -> ReaderWriter*. Arity 3 is pinned in runtime/types/io/Serializer.h off
@@ -358,7 +381,11 @@ extern "C" void RtSave_SaveLoad_LoadMetaData(SaveLoad* self,
         // SERIALIZER holds, dereferenced, then its direction. This is the
         // dereference Ghidra's C drops; see the header.
         if (ser.stream->direction == 0)
-            reinterpret_cast<SetSizeFn>(ResolveAddr(Module::Runtime, 0x180034010))(mods, count);
+            // retail 0x180034010 — Array<Save::MetaDataEntry>::SetSize(n), the
+            // hand-derived kSpec_MetaEntry20 row (see the banner above `mods`
+            // is a real `Collection::Array<ModInfo>*`, but its own trait-derived
+            // SetSize is the wrong instantiation for this address).
+            rtcoll::AsArray<&rtcoll::kSpec_MetaEntry20>(mods)->SetSize(count);
 
         // 0x1800c1ced: the base pointer is read ONCE. See note 3.
         ModInfo* e = mods->_data;

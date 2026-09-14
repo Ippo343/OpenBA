@@ -155,6 +155,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/ui/SpriteContext.h"
 #include "../../types/video/Context.h"
+#include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_SpriteDraw
 
 // Same forward declarations, same spelling, as spritecontext.cpp — the linker
 // checks them. See that file's header for why resolve.h is not included.
@@ -260,18 +261,11 @@ typedef void (*MaterialSetupFn)(void* material, void* context, int shader);
 const char* const kMaterialSetup =
     "?Setup@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z";
 
-// `Collection::Array<UI::SpriteDraw>::SetSize(0)` 0x1800783d0, ported and
-// registered in runtime/src/collection/array.cpp. Reached through the same
-// literal `ResolveAddr(Module::Runtime, 0x1800783d0)` spelling spritecontext.cpp
-// uses, on purpose: `tools/addr_door_audit.py` matches a LITERAL and nothing
-// else (reference_literal_grep_blind_to_variables.md), and two spellings of one
-// door must still read as one door.
-typedef void (*ArrayClearFn)(void* array);
-inline ArrayClearFn TheArrayClear() {
-    static ArrayClearFn f = nullptr;
-    if (!f) f = reinterpret_cast<ArrayClearFn>(ResolveAddr(Module::Runtime, 0x1800783d0));
-    return f;
-}
+// ENDGAME B.3.2 step 2 — the 0x1800783d0 forwarder that used to sit here is
+// GONE. `self->_draws` is a real `Collection::Array<SpriteDraw>` member, and
+// 0x1800783d0 is `kSpec_SpriteDraw`'s `SetSize(0)` form (NON-TRIVIAL — the
+// same row spritecontext.cpp's AddSpriteDraw/FlushDeferred bridge through),
+// so both call sites below call it directly.
 
 // ---------------------------------------------------------------------------
 // Field access on the two objects this file does not own a header for.
@@ -352,7 +346,7 @@ inline void Emit(SpriteContext* self, const FlushVertex& v) {
 void FlushBody(SpriteContext* self, float halfPixel,
                int* outRecords, int* outLines, int* outRotated, int* outMapFail) {
     if (self->_currentSheet == nullptr) {
-        TheArrayClear()(&self->_draws);
+        rtcoll::AsArray<&rtcoll::kSpec_SpriteDraw>(&self->_draws)->SetSize(0);  // 0x1800783d0
         self->_currentSheet = nullptr;
         return;
     }
@@ -525,7 +519,7 @@ void FlushBody(SpriteContext* self, float halfPixel,
     }
 
     // --- 0x18011c674..0x18011c685 ------------------------------------------
-    TheArrayClear()(&self->_draws);
+    rtcoll::AsArray<&rtcoll::kSpec_SpriteDraw>(&self->_draws)->SetSize(0);  // 0x1800783d0
     self->_currentSheet = nullptr;
 }
 

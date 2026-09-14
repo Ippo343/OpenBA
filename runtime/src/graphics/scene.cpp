@@ -213,37 +213,23 @@ void* RtGeometryVtable() {
     return vt;
 }
 
-// Registered by Wave 9 lane Q (runtime/src/collection/array.cpp): this and the
-// stride-4 sibling below now reach our SetSize, not the DLL's.
+// ENDGAME B.3.2 step 2 (callers) — the three Array forwarders that used to sit
+// here (0x18001f990 SetSize(n,&fill), 0x180023830 the stride-4 sibling, and
+// 0x18001bf50 ~Array<Geometry*>) are GONE. Their call sites now name the
+// container they act on, which is already a real `Collection::Array<T>` member
+// in runtime/types/graphics/{Geometry,Scene}.h:
 //
-// Array<Geometry*>::SetSize(n, &fill) — retail 0x18001f990, the stride-8
-// instantiation. Grows to n, copy-filling new slots from *fill, reallocating
-// through MemoryAllocator::MemAlloc under the allocator lock and freeing the
-// old buffer. Geometry::Attach uses it as the append idiom (SetSize(size+1)).
-void RtArrayPtrSetSize(void* arr, int n, Geometry* const* fill) {
-    using Fn = void (*)(void*, int, Geometry* const*);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001f990));
-    fn(arr, n, fill);
-}
-
-// Array<uint32>::SetSize(n, &fill) — retail 0x180023830, the stride-4
-// instantiation. Same body, 4-byte elements. Scene::RemoveObject appends the
-// freed node id with it.
-void RtArrayU32SetSize(void* arr, int n, const uint32_t* fill) {
-    using Fn = void (*)(void*, int, const uint32_t*);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180023830));
-    fn(arr, n, fill);
-}
-
-// Registered by Wave 9 lane Q, so this reaches our ~Array; see RtFreeArrayI32.
+//   0x18001f990  kSpec_Fill8  {8, 8, Assign8, init=null, destroy=null, byteCopy}
+//                == `SpecFor<Geometry*>()` field for field, so `_attached`'s
+//                trait-derived `Array<Geometry*>` IS that instantiation.
+//   0x180023830  kSpec_Fill4  {4, 4, Assign4, init=null, destroy=null, byteCopy}
+//                == `SpecFor<uint32_t>()`, so `_freeIds`'s `Array<uint32_t>` is.
+//   0x18001bf50  a J1 `~Array` = `ArrayDtorSited` = `Array<uint8_t>::~Array`,
+//                which for a trivially destructible element is exactly
+//                `Array<Geometry*>::~Array` (spec->destroy is null in both).
 //
-// Array<Geometry*>::~Array — retail 0x18001bf50. Free(_data) under the
-// allocator lock, then zero {_data, _size, _capacity}. ~Geometry's tail call.
-void RtFreeArrayPtr(void* arr) {
-    using Fn = void (*)(void*);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001bf50));
-    fn(arr);
-}
+// The three registered rows themselves stay in array.cpp: `code/` still reaches
+// all three by address.
 
 // MemoryAllocator::MemAlloc(size, align) — retail 0x1800c7a50, ordinal 3227.
 // EnterCriticalSection(_singleton+0x640); Allocate(_singleton, size, align);
@@ -258,15 +244,10 @@ void RtFreeArrayPtr(void* arr) {
 // would make this lane's list nodes come from whichever allocator that switch
 // happened to select; going by address always reaches the DLL's, which is where
 // the DLL's own free path (FUN_180009c30, below) will return them.
-void* RtMemAlloc(uint64_t size, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    // Retry a miss rather than caching it: at cutover this address is supplied
-    // by the allocator's arming path, so a caller that ran earlier would freeze
-    // a null here forever. See runtime/src/collection/array.cpp MemAlloc.
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    return fn(size, align);
-}
+// ENDGAME B.3.2 step 2 — GONE. Its one caller was AddGlobalObject's inlined
+// node allocation, which is now `LinkedList<Geometry*>::Add`; the class reaches
+// the same 0x1800c7a50 through `Collection::detail::ListNodeAlloc`
+// (runtime/src/collection/linkedlist.cpp), with the same retry-a-miss rule.
 
 // ---------------------------------------------------------------------------
 // WAVE 9 LANE GFX2, 2026-09-08 — THE SEVEN BY-ADDRESS DOORS IN THIS FILE, AND
@@ -324,12 +305,9 @@ void* RtMemAlloc(uint64_t size, int align) {
 // establishes instruction by instruction that it IS `MemFree` with an ignored
 // leading argument. This forwarder therefore no longer reaches the DLL, and the
 // row is closed for cutover. ONE registration, there: do not add a second here.
-void RtFreeLocked(void* ignoredThis, void* p) {
-    using Fn = void (*)(void*, void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180009c30));
-    fn(ignoredThis, p);
-}
+// ENDGAME B.3.2 step 2 — GONE. Its one caller was RemoveGlobalObject, which is
+// now `LinkedList<Geometry*>::Remove`; the class's `FreeNode` is that same
+// 0x180009c30 door through `Collection::detail::ListNodeFree`.
 
 // Volume::Box transform — retail 0x18001f470, the only callee of
 // Geometry::Clean's bounds branch. Converts the Transform to a Transform3, then
@@ -448,14 +426,11 @@ void RtSceneGridReindex(Scene* self, int32_t id) {
     fn(self, id);
 }
 
-// The global-list teardown — retail 0x18005f1f0. Walks head->next freeing each
-// node under the allocator lock, then clears {head, tail, count}.
-void RtSceneFreeGlobals(void* list) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18005f1f0));
-    fn(list);
-}
+// ENDGAME B.3.2 step 2 — the global-list teardown forwarder (0x18005f1f0) is
+// gone: `Scene::~Scene` calls `_globals.Clear()`, and that member IS the body
+// scene_grid.cpp's `FreeGlobals` transcribes — walk head->next reading `next`
+// BEFORE the free, then tail, head, count in retail's store order. The
+// 0x18005f1f0 row stays registered in scene_grid.cpp for `code/`.
 
 // Array<int32>::~Array — retail 0x18001c750. The Scene destructor's four middle
 // calls ALL target this one address (disassembly of 0x1801026c0: four
@@ -473,16 +448,12 @@ void RtSceneFreeGlobals(void* list) {
 // and not a re-derivation of it" -- was true until lane Q landed and is not any
 // more. The re-derivation is verified against the shipped bodies by the
 // synthetic-subject replay in runtime/src/collection/array_probe.cpp.
-void RtFreeArrayI32(void* arr) {
-    using Fn = void (*)(void*);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001c750));
-    fn(arr);
-}
-void RtFreeArrayNode(void* arr) {
-    using Fn = void (*)(void*);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18005fc20));
-    fn(arr);
-}
+// ENDGAME B.3.2 step 2 — both forwarders are gone; the five call sites in
+// `Scene::~Scene` are `Array<T>::~Array` on the five members themselves. Both
+// addresses are a J1 body, i.e. `ArrayDtorSited` = `Array<uint8_t>::~Array`,
+// whose only spec field is `destroy` — null for `int32_t`, `uint32_t` and
+// `SceneNode` alike, so the trait-derived instantiations are those bodies. The
+// two rows stay registered in array.cpp for the rest of the tree.
 
 // ============================================================================
 // Virtual dispatch helpers.
@@ -612,26 +583,26 @@ inline bool TransformDiffers(const Transform* a, const Transform* b) {
 void DetachBody(Geometry* self, Geometry* child) {
     int idx = 0;
     long long walked = 0;
-    if (self->_attached._size <= 0) return;
+    if (self->_attached.GetSize() <= 0) return;
 
-    Geometry** p = self->_attached._data;
+    Geometry** p = self->_attached.GetData();
     while (*p != child) {
         ++walked;
         ++idx;
         ++p;
-        if (self->_attached._size <= walked) return;   // not attached to this parent
+        if (self->_attached.GetSize() <= walked) return;   // not attached to this parent
     }
 
-    if (idx < self->_attached._size) {
+    if (idx < self->_attached.GetSize()) {
         long long off = static_cast<long long>(idx);
         do {
             ++idx;
-            if (idx < self->_attached._size) {
-                Geometry** slot = self->_attached._data + off;
+            if (idx < self->_attached.GetSize()) {
+                Geometry** slot = self->_attached.GetData() + off;
                 if (slot != nullptr) *slot = slot[1];
             }
             ++off;
-        } while (idx < self->_attached._size);
+        } while (idx < self->_attached.GetSize());
     }
     self->_attached._size -= 1;
     child->_attachParent = nullptr;
@@ -725,9 +696,9 @@ extern "C" Geometry* RtGraphics_Geometry_Ctor(Geometry* self) {
 extern "C" void RtGraphics_Geometry_Dtor(Geometry* self) {
 
     self->_vtable = RtGeometryVtable();
-    while (self->_attached._size > 0)
-        DetachBody(self, self->_attached._data[0]);
-    RtFreeArrayPtr(&self->_attached);
+    while (self->_attached.GetSize() > 0)
+        DetachBody(self, self->_attached[0]);
+    self->_attached.~Array();          // retail 0x18001bf50, ~Geometry's tail call
 
 }
 
@@ -749,10 +720,10 @@ extern "C" void RtGraphics_Geometry_Dtor(Geometry* self) {
 // ============================================================================
 extern "C" void RtGraphics_Geometry_Detach(Geometry* self, Geometry* child) {
 
-    const int32_t sizeBefore = self->_attached._size;
+    const int32_t sizeBefore = self->_attached.GetSize();
     bool wasPresent = false;
     for (int32_t i = 0; i < sizeBefore; ++i)
-        if (self->_attached._data[i] == child) { wasPresent = true; break; }
+        if (self->_attached[i] == child) { wasPresent = true; break; }
 
     DetachBody(self, child);
 
@@ -777,7 +748,7 @@ extern "C" void RtGraphics_Geometry_SetTransform(Geometry* self, const Transform
         self->_prevTransform = self->_transform;
         self->_transform     = *xf;
         self->_dirtyFlags   |= 3u;
-        tailCall = self->_attached._size > 0;
+        tailCall = self->_attached.GetSize() > 0;
     }
 
     if (tailCall)
@@ -805,13 +776,14 @@ extern "C" void RtGraphics_Geometry_SetTransform(Geometry* self, const Transform
 // ============================================================================
 extern "C" void RtGraphics_Geometry_Attach(Geometry* self, Geometry* child, int node) {
 
-    const int32_t sizeBefore = self->_attached._size;
+    const int32_t sizeBefore = self->_attached.GetSize();
 
     if (child->_attachParent != nullptr)
         RtGraphics_Geometry_Detach(child->_attachParent, child);
 
     Geometry* local = child;
-    RtArrayPtrSetSize(&self->_attached, self->_attached._size + 1, &local);
+    // retail 0x18001f990 — SetSize(size + 1, &fill), the append idiom.
+    self->_attached.SetSize(self->_attached.GetSize() + 1, local);
     child->_attachParent = self;
     child->_attachNode   = node;
 
@@ -843,9 +815,9 @@ extern "C" void RtGraphics_Geometry_Attach(Geometry* self, Geometry* child, int 
 extern "C" void RtGraphics_Geometry_UpdateAttached(Geometry* self) {
 
     int i = 0;
-    if (self->_attached._size > 0) {
+    if (self->_attached.GetSize() > 0) {
         do {
-            Geometry** data = self->_attached._data;
+            Geometry** data = self->_attached.GetData();
             Geometry*  child = data[i];
 
             Transform sub;
@@ -855,13 +827,13 @@ extern "C" void RtGraphics_Geometry_UpdateAttached(Geometry* self) {
                 child->_prevTransform = child->_transform;
                 child->_transform     = *p;
                 child->_dirtyFlags   |= 3u;
-                if (child->_attached._size > 0)
+                if (child->_attached.GetSize() > 0)
                     VUpdateAttached(child);
             }
             // Retail re-reads the array pointer here rather than reusing `data`.
-            VUpdateAttached(self->_attached._data[i]);
+            VUpdateAttached(self->_attached[i]);
             ++i;
-        } while (i < self->_attached._size);
+        } while (i < self->_attached.GetSize());
     }
 
 }
@@ -1125,12 +1097,12 @@ extern "C" Scene* RtGraphics_Scene_Ctor(Scene* self) {
 // ============================================================================
 extern "C" void RtGraphics_Scene_Dtor(Scene* self) {
 
-    RtSceneFreeGlobals(&self->_globals);   // +0x60
-    RtFreeArrayI32(&self->_cellCounts);    // +0x50
-    RtFreeArrayI32(&self->_levelOffsets);  // +0x40
-    RtFreeArrayI32(&self->_cellHeads);     // +0x30
-    RtFreeArrayI32(&self->_freeIds);       // +0x20
-    RtFreeArrayNode(&self->_nodes);        // +0x10
+    self->_globals.Clear();          // +0x60  retail 0x18005f1f0
+    self->_cellCounts.~Array();      // +0x50  retail 0x18001c750
+    self->_levelOffsets.~Array();    // +0x40  retail 0x18001c750
+    self->_cellHeads.~Array();       // +0x30  retail 0x18001c750
+    self->_freeIds.~Array();         // +0x20  retail 0x18001c750
+    self->_nodes.~Array();           // +0x10  retail 0x18005fc20
 
 }
 
@@ -1184,7 +1156,7 @@ extern "C" SceneObjectId RtGraphics_Scene_AddObject(Scene* self, Geometry* geo) 
 // ============================================================================
 extern "C" void RtGraphics_Scene_RemoveObject(Scene* self, SceneObjectId id) {
 
-    SceneNode* node = &self->_nodes._data[static_cast<int32_t>(id)];
+    SceneNode* node = &self->_nodes[static_cast<int32_t>(id)];
     const SceneObjectId local = id;
 
     RtSceneGridUnthread(self, static_cast<int32_t>(id));
@@ -1194,8 +1166,9 @@ extern "C" void RtGraphics_Scene_RemoveObject(Scene* self, SceneObjectId id) {
     node->_prev   = 0;
     node->_cell   = -1;
 
-    const int32_t freeBefore = self->_freeIds._size;
-    RtArrayU32SetSize(&self->_freeIds, self->_freeIds._size + 1, &local);
+    const int32_t freeBefore = self->_freeIds.GetSize();
+    // retail 0x180023830 — SetSize(size + 1, &fill), the stride-4 append.
+    self->_freeIds.SetSize(self->_freeIds.GetSize() + 1, local);
 
 }
 
@@ -1224,26 +1197,16 @@ extern "C" void RtGraphics_Scene_RemoveObject(Scene* self, SceneObjectId id) {
 // ============================================================================
 extern "C" void RtGraphics_Scene_AddGlobalObject(Scene* self, Geometry* geo) {
 
-    typedef Collection::LinkedList<Geometry*>::Node Node;
-    const int32_t countBefore = self->_globals._count;
+    const int32_t countBefore = self->_globals.GetCount();
 
-    void* raw = RtMemAlloc(0x18, 8);
-    Node* node = nullptr;
-    if (raw != nullptr) {
-        node = static_cast<Node*>(raw);
-        node->element = geo;
-        node->prev    = nullptr;
-        node->next    = nullptr;
-    }
-
-    if (self->_globals._tail == nullptr) {
-        self->_globals._head = node;
-    } else {
-        self->_globals._tail->next = node;
-        node->prev = self->_globals._tail;
-    }
-    self->_globals._tail = node;
-    self->_globals._count += 1;
+    // ENDGAME B.3.2 step 2 — the inlined node-allocate + tail-append IS
+    // `LinkedList<Geometry*>::Add`: `NewNode` (retail 0x180032750) allocates
+    // sizeof(Node)=0x18 at alignment 8 and returns null on failure, and `Add`
+    // then takes the same two arms and writes through a null node on the
+    // non-empty one — retail's asymmetry, kept (see the FAITHFULLY UNGUARDED
+    // paragraph above). The only textual difference from what stood here is
+    // `NewNode`'s dead `element = T()` store, which is retail's own.
+    self->_globals.Add(geo);
 
 }
 
@@ -1261,29 +1224,16 @@ extern "C" void RtGraphics_Scene_AddGlobalObject(Scene* self, Geometry* geo) {
 // ============================================================================
 extern "C" void RtGraphics_Scene_RemoveGlobalObject(Scene* self, Geometry* geo) {
 
-    typedef Collection::LinkedList<Geometry*>::Node Node;
-    const int32_t countBefore = self->_globals._count;
-    bool removed = false;
+    const int32_t countBefore = self->_globals.GetCount();
 
-    Node* head = self->_globals._head;
-    Node* n    = head;
-    if (n != nullptr) {
-        do {
-            if (n->element == geo) {
-                if (n == head)                 self->_globals._head = n->next;
-                if (n == self->_globals._tail) self->_globals._tail = n->prev;
-                if (n->prev != nullptr)        n->prev->next = n->next;
-                if (n->next != nullptr)        n->next->prev = n->prev;
-                n->prev = nullptr;
-                n->next = nullptr;
-                self->_globals._count -= 1;
-                RtFreeLocked(self, n);
-                removed = true;
-                break;
-            }
-            n = n->next;
-        } while (n != nullptr);
-    }
+    // ENDGAME B.3.2 step 2 — this search-unlink-free IS
+    // `LinkedList<Geometry*>::Remove`, retail 0x18007a010: the head test against
+    // the head captured BEFORE the walk, the four unlink arms in retail's order,
+    // the two link stores zeroed, the count decrement, and the tail call into
+    // 0x180009c30 (the allocator-lock Free whose first argument is ignored —
+    // which is why passing `self` here was harmless and why nothing is passed
+    // now). A miss is still silent.
+    self->_globals.Remove(geo);
 
 }
 
@@ -1310,28 +1260,30 @@ extern "C" void RtGraphics_Scene_RemoveGlobalObject(Scene* self, Geometry* geo) 
 // sites and by the scene watch, not here.
 // ============================================================================
 extern "C" void RtGraphics_Scene_Clean(Scene* self) {
-    typedef Collection::LinkedList<Geometry*>::Node Node;
+    using List = Collection::LinkedList<Geometry*>;
 
-    int32_t count = self->_nodes._size;
+    int32_t count = self->_nodes.GetSize();
     int32_t i = 0;
     if (count > 0) {
-        while (i < count && self->_nodes._data[i]._cell < 0) ++i;
+        while (i < count && self->_nodes[i]._cell < 0) ++i;
     }
     if (i < count) {
         do {
-            Geometry* geo = self->_nodes._data[i]._object;
+            Geometry* geo = self->_nodes[i]._object;
             if (geo->_dirtyFlags != 0 && VClean(geo))
                 RtSceneGridReindex(self, i);
 
-            count = self->_nodes._size;
+            count = self->_nodes.GetSize();
             ++i;
             if (count <= i) break;
-            while (i < count && self->_nodes._data[i]._cell < 0) ++i;
+            while (i < count && self->_nodes[i]._cell < 0) ++i;
         } while (i < count);
     }
 
-    for (Node* n = self->_globals._head; n != nullptr; n = n->next) {
-        Geometry* geo = n->element;
+    // ENDGAME B.3.2 step 2 — retail's `for (n = head; n; n = n->next)` over the
+    // global list, spelled through the iterator, which IS the bare node pointer.
+    for (List::Iterator it = self->_globals.GetFirst(); it != self->_globals.GetEnd(); ++it) {
+        Geometry* geo = *it;
         if (geo->_dirtyFlags != 0)
             VClean(geo);
     }

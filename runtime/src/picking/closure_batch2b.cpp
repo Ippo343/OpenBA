@@ -29,22 +29,12 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/picking/Scene.h"
+#include "../collection/array_internal.h"
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
-
-// 0x18007b960 — `Array<int32>::SetSize(10000)` filling every new slot with -1,
-// both constants folded into the body. Already ported and registered in
-// runtime/src/collection/array.cpp (`kSpec_I32Neg1`, the one-argument form);
-// reached by address so this lands on our body.
-void CellHeadsInit(void* cellHeadsArray) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18007b960));
-    fn(cellHeadsArray);
-}
 
 // `DAT_18016169c` — the numerator of the reciprocal. 1.0f, the same constant
 // scene.cpp's `kOne` names.
@@ -103,7 +93,15 @@ extern "C" RtPicking::Scene* RtPicking_Scene_InitGrid(RtPicking::Scene* self,
 
     self->_queryStamp = 0;
 
-    CellHeadsInit(&self->_cellHeads);
+    // ENDGAME B.3.2 step 2 (callers) — retail 0x18007b960, `Array<int32>::
+    // SetSize(10000)` with every new slot filled -1 (both constants folded
+    // into the body). NOT trait-equivalent (Collection.h's Array banner names
+    // this exact row as one of the twelve a trait cannot express: a fill of
+    // -1 is not what `SpecFor<int32_t>()` would leave the new tail holding),
+    // so `_cellHeads` (a real `Collection::Array<int32_t>` member,
+    // runtime/types/picking/Scene.h) is bridged through the hand-derived row
+    // rather than trusted to its own (default) spec.
+    rtcoll::AsArray<&rtcoll::kSpec_I32Neg1>(&self->_cellHeads)->SetSize(10000);
     return self;   // MOV RAX,<this>
 }
 

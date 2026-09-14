@@ -44,6 +44,11 @@
 //     is the kickoff's worked specimen — "not exported" is not "no door" — in
 //     its dependency form.
 //
+//     ENDGAME B.3.2 step 2 (callers, 2026-09-13): both 0x1800269a0 and
+//     0x180010ab0 are now `Collection::Array<T>::~Array()` member calls at
+//     their call sites in §2's body, not `ResolveAddr` forwarders — see the
+//     comments there for the instantiation each one names.
+//
 // (b) ORACLE — `WAVE23_LANE_IOPORT.md §2.4`, carried forward by Wave 24 lane
 //     SMALLBODY as "the strongest-held of the nine, and correctly scoped":
 //     *"it has no oracle... a fabricated subject is a fake rather than a
@@ -194,6 +199,7 @@
 #include "../../types/system/String.h"
 #include "../../types/io/FileSystem.h"
 #include "../system/string.h"
+#include "../collection/array_internal.h"   // ENDGAME B.3.2 step 2 -- kSpec_PkgEntry, AsArray
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -230,14 +236,13 @@ inline void StampVtable(void* self) {
 //
 // ---------------------------------------------------------------------------
 void* PackageFileDtorBody(void* self) {
-    // All seven callees BY ADDRESS, exactly as retail's rel32 calls reach them.
-    // ResolveAddr consults the port registry FIRST, so the six that are ported
-    // land on our bodies and 0x1800269a0 falls through to the DLL (§1a).
+    // ENDGAME B.3.2 step 2 — the two Array forwarders that used to sit here
+    // (0x1800269a0 ~Array<Entry>, 0x180010ab0 ~Array<String>, both resolved by
+    // address) are GONE; their call sites now name the container directly. The
+    // other four callees are unrelated members and stay address doors.
     static auto dtorFileInfo  = reinterpret_cast<MemberDtorFn>(ResolveAddr(Module::Runtime, 0x18000c180));
-    static auto dtorArrayB0   = reinterpret_cast<MemberDtorFn>(ResolveAddr(Module::Runtime, 0x1800269a0));
     static auto dtorArrayU8   = reinterpret_cast<MemberDtorFn>(ResolveAddr(Module::Runtime, 0x1800112a0));
     static auto dtorArrayI32  = reinterpret_cast<MemberDtorFn>(ResolveAddr(Module::Runtime, 0x1800111a0));
-    static auto dtorArrayElem = reinterpret_cast<MemberDtorFn>(ResolveAddr(Module::Runtime, 0x180010ab0));
     static auto dtorExternal  = reinterpret_cast<MemberDtorFn>(ResolveAddr(Module::Runtime, 0x1800bc950));
 
     uint8_t* p = Bytes(self);
@@ -245,7 +250,19 @@ void* PackageFileDtorBody(void* self) {
     StampVtable(self);                  // 0x1800b455b
 
     dtorFileInfo (p + 0xC0);                // 0x1800b456c
-    dtorArrayB0  (p + 0xB0);                // 0x1800b4579
+
+    // retail 0x1800269a0 — `~Array<IO::PackageFile::Entry>` at +0xB0.
+    // array_destroy.cpp's kD_Str_10 / array.cpp's kSpec_PkgEntry: stride 0x10,
+    // an assign that calls Filename::AdjustDelimiters and a destroy that
+    // releases the embedded String — neither is trait-expressible (Collection.h's
+    // Array banner), so this stays the hand-derived spec, reached with
+    // `AsArray`. PackageFileView does not name +0xB0 as a typed member (other
+    // files — package_file.cpp, filesystem_packages.cpp, package_file_read_win.cpp
+    // — reach neighbouring fields of the same struct and are outside this
+    // batch), so this is a reinterpret bridge at the use site, not a re-typed
+    // field.
+    rtcoll::AsArray<&rtcoll::kSpec_PkgEntry>(p + 0xB0)->~Array();
+
     dtorArrayU8  (p + 0x98);                // 0x1800b4586
     dtorArrayI32 (p + 0x80);                // 0x1800b4593
 
@@ -255,8 +272,17 @@ void* PackageFileDtorBody(void* self) {
         RtSystem::RtString_ReleaseInline(s);
     }
 
-    dtorArrayElem(p + 0x30);                // 0x1800b465c
-    dtorArrayElem(p + 0x20);                // 0x1800b4666
+    // retail 0x180010ab0 — `~Array<System::String>` at +0x30 and +0x20 (stride
+    // 8, array_destroy.cpp's kD_Str_08). Its destroy IS `System::String::~String`
+    // per element (Release(), the same idiom the five-slot loop above calls
+    // inline) and its assign IS String's copy ctor (AddRef): an ordinary
+    // non-trivial C++ type, not a hand-derived row, so the trait-derived
+    // `Collection::Array<System::String>` (`rtcoll::SpecFor<System::String>()`)
+    // is the right instantiation. The field is still unnamed in PackageFileView
+    // (+0x20/+0x30 sit inside `_unknown08`, touched by files outside this
+    // batch), so this is a reinterpret_cast bridge, not a re-typed member.
+    reinterpret_cast<Collection::Array<System::String>*>(p + 0x30)->~Array();  // B.3.2 bridge
+    reinterpret_cast<Collection::Array<System::String>*>(p + 0x20)->~Array();  // B.3.2 bridge
 
     // 0x1800b4679 — TAIL JUMP. Its return value is ours (§2 iv).
     return dtorExternal(self);

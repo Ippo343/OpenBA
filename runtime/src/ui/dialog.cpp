@@ -206,6 +206,7 @@
 #include "../../types/ui/DialogInstance.h"
 #include "../../types/ui/ElementDescription.h"
 #include "../../types/ui/StringTable.h"   // WAVE 10 LANE UIF — the twin's table
+#include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_Event30
 // ⚠ WAVE 9 LANE Z — `runtime/types/object/TypeInfo.h` IS NOT INCLUDABLE HERE,
 // and the reason is a real defect in another lane's header rather than anything
 // about this file. `runtime/types/object/External.h` opens `namespace RtObject
@@ -422,14 +423,10 @@ inline void MemFreeStatic(void* p) {
     RT_EXPORT_ONCE(VoidPtrFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
 }
 
-// 0x1800325f0 — Collection::LinkedList<T=8>::Clear. UNEXPORTED, so the only
-// door is the address one; port-aware, exactly as that file's other two
-// bodies are.
-inline void ListClear(void* list) {
-    static VoidPtrFn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<VoidPtrFn>(ResolveAddr(Module::Runtime, 0x1800325f0));
-    if (fn) fn(list);
-}
+// ENDGAME B.3.2 step 2 — the 0x1800325f0 forwarder that used to sit here is
+// GONE. `self->_children` (DialogInstance.h) is a real
+// `Collection::LinkedList<InternalBasePtr>` member now, so its one caller
+// below calls `.Clear()` on the container directly.
 
 // ??1Internal@Object@@UEAA@XZ — the tail retail inlines. Reached by NAME
 // through the port registry, which is precisely what RtUiDialogController_Dtor
@@ -971,6 +968,14 @@ void RtUiDialogInstance_Update(DialogInstance* self, const void* time,
         uint64_t _unused20_28[2];
     };
     static_assert(sizeof(EventRecord) == 0x30, "UI::UserInterface::Event stride");
+    // ENDGAME B.3.2 step 2 — `UserInterface::_events` (+0x48) is a real
+    // `Collection::Array<Event>` member, but that field is declared with the
+    // DEFAULT (trait-derived) spec, which is NOT this row: 0x180033690's own
+    // assign (array.cpp's `kSpec_Event30`) leaves bytes [0x24,0x28) of every
+    // element UNWRITTEN, which a trait-derived byte-copy would instead
+    // overwrite with `rec`'s (zeroed) bytes there. Bridging at the use site
+    // with the hand-derived row, rather than through `_events`'s own
+    // trait-derived member functions, is what keeps that difference faithful.
     auto PushEvent = [&](int32_t type, int32_t data, uint64_t payload) {
         EventRecord rec{};
         rec.dialog = self;
@@ -978,22 +983,17 @@ void RtUiDialogInstance_Update(DialogInstance* self, const void* time,
         rec.data = data;
         rec.payload = payload;
         uint8_t* eventsHdr = static_cast<uint8_t*>(ui) + 0x48;  // UserInterface::_events
-        const int32_t newSize = *reinterpret_cast<int32_t*>(eventsHdr + 8) + 1;
-        using Fn = void (*)(void*, int32_t, const void*);
-        static Fn fn = nullptr;
-        if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180033690));
-        fn(eventsHdr, newSize, &rec);
+        auto* events = rtcoll::AsArray<&rtcoll::kSpec_Event30>(eventsHdr);
+        events->SetSizeFill(events->GetSize() + 1, &rec);       // retail 0x180033690
     };
 
     bool anyChildBit1 = false;
-    for (RtObject::InternalBasePtr* n = reinterpret_cast<RtObject::InternalBasePtr*>(self->_children._head);
-         n; ) {
-        // LinkedList<T>::Node is {T element; Node* prev; Node* next}, T=8 bytes,
-        // so `next` sits at +0x10 from the node's start.
-        uint8_t* node = reinterpret_cast<uint8_t*>(n);
-        DialogInstance* child = reinterpret_cast<DialogInstance*>(n->ptr);
+    // ENDGAME B.3.2 step 2 — `self->_children` is a real
+    // `Collection::LinkedList<InternalBasePtr>` member; walk it with the
+    // class's own Iterator instead of a raw `_head`/`+0x10` pointer chase.
+    for (auto it = self->_children.GetFirst(); it; ++it) {
+        DialogInstance* child = reinterpret_cast<DialogInstance*>(it->ptr);
         anyChildBit1 = anyChildBit1 || ((child->_flags >> 1) & 1) != 0;
-        n = *reinterpret_cast<RtObject::InternalBasePtr**>(node + 0x10);
     }
 
     if (!anyChildBit1) {
@@ -1107,12 +1107,10 @@ void RtUiDialogInstance_Update(DialogInstance* self, const void* time,
         }
     }
 
-    for (RtObject::InternalBasePtr* n = reinterpret_cast<RtObject::InternalBasePtr*>(self->_children._head);
-         n; ) {
-        uint8_t* node = reinterpret_cast<uint8_t*>(n);
-        DialogInstance* child = reinterpret_cast<DialogInstance*>(n->ptr);
+    // ENDGAME B.3.2 step 2 — same conversion as the walk above.
+    for (auto it = self->_children.GetFirst(); it; ++it) {
+        DialogInstance* child = reinterpret_cast<DialogInstance*>(it->ptr);
         RtUiDialogInstance_Update(child, time, ui, updateState);
-        n = *reinterpret_cast<RtObject::InternalBasePtr**>(node + 0x10);
     }
 }
 
@@ -1308,7 +1306,7 @@ void RtUiDialogInstance_Dtor(DialogInstance* self) {
     self->_timers._data = nullptr;
     self->_timers._size = 0;           // _capacity deliberately untouched
 
-    ListClear(&self->_children);
+    self->_children.Clear();           // retail 0x1800325f0
 
     // Retail inlines Object::Internal::~Internal here; the instruction-for-
     // instruction comparison is in the block above. Reached through the seam so

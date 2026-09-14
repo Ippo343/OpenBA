@@ -65,6 +65,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../collection/array_internal.h"
 
 // Same local declaration mesh.cpp, array.cpp and deleting_dtor.cpp carry, and
 // for the same reason: standalone/resolve.h drags in <windows.h>, which
@@ -232,7 +233,6 @@ constexpr size_t kVideoBufferSerialize = 0x30;
 // ---------------------------------------------------------------------------
 using ExtPtrSerializeFn = void (*)(void* extPtrSlot, SerializeCtx* ctx);
 using TriListArrayFn    = void (*)(SerializeCtx* ctx, int count, void* data);
-using ArrayResizeFn     = void (*)(void* array, int newSize);
 
 // THE ADDRESS LITERAL IS SPELLED AT THE ResolveAddr CALL, ONE ACCESSOR PER
 // HELPER, RATHER THAN PASSED INTO A SHARED `RtAddrOnce(va)` TEMPLATE. That is
@@ -259,11 +259,15 @@ TriListArrayFn RtSerializeTriangleListArray() {
         ResolveAddr(Module::Runtime, 0x180014850));
     return f;
 }
-ArrayResizeFn RtTriangleListArrayResize() {
-    static ArrayResizeFn f = reinterpret_cast<ArrayResizeFn>(
-        ResolveAddr(Module::Runtime, 0x1800136f0));
-    return f;
-}
+// ENDGAME B.3.2 step 2 (callers) — the 0x1800136f0 ArrayResizeFn forwarder
+// that used to sit here is GONE: `self` here is a raw `void*` with no
+// EdgeMesh type header in runtime/types/ (the whole of this Serialize slot
+// walks it by byte offset), so there is no C++ element type to spell
+// `Collection::Array<T>` with. array.cpp's `kSpec_Tri18A4` row IS
+// trait-equivalent (a pure 0x18-byte copy, no init, no destroy) but names no
+// real type either — it is still the correct hand-derived row to bridge
+// through at the two call sites (`rtcoll::AsArray<&kSpec_Tri18A4>(...)`),
+// per B32_RULES: bridge at the use site when there is no struct to re-type.
 
 }  // namespace
 
@@ -393,7 +397,6 @@ extern "C" bool RtGraphics_EdgeMesh_Serialize(void* selfv, void* stream) {
     ExtPtrSerializeFn extBase     = RtSerializeExternalPtrBase();
     ExtPtrSerializeFn extMat      = RtSerializeExternalPtrMaterial();
     TriListArrayFn    triArray    = RtSerializeTriangleListArray();
-    ArrayResizeFn     arrayResize = RtTriangleListArrayResize();
 
     extBase(self + 0x20, &ctx);
     extMat (self + 0x28, &ctx);
@@ -413,14 +416,16 @@ extern "C" bool RtGraphics_EdgeMesh_Serialize(void* selfv, void* stream) {
         int32_t n = *reinterpret_cast<const int32_t*>(self + 0x150);
         encDword(ctx.encoding, &n, 0);
         if (*reinterpret_cast<const int32_t*>(st + kStreamModeOffset) == 0)
-            arrayResize(self + 0x148, n);
+            // retail 0x1800136f0 — Array<EdgeMesh::Triangle>::SetSize(n).
+            rtcoll::AsArray<&rtcoll::kSpec_Tri18A4>(self + 0x148)->SetSize(n);
         triArray(&ctx, n, *reinterpret_cast<void**>(self + 0x148));
     }
     {   // step 6 — the edge lists, +0x158 data / +0x160 size
         int32_t n = *reinterpret_cast<const int32_t*>(self + 0x160);
         encDword(ctx.encoding, &n, 0);
         if (*reinterpret_cast<const int32_t*>(st + kStreamModeOffset) == 0)
-            arrayResize(self + 0x158, n);
+            // Same door, same spec: the edge-list array shares 0x1800136f0.
+            rtcoll::AsArray<&rtcoll::kSpec_Tri18A4>(self + 0x158)->SetSize(n);
         triArray(&ctx, n, *reinterpret_cast<void**>(self + 0x158));
     }
 

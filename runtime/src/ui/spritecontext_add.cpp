@@ -138,6 +138,7 @@
 #include "../../types/ui/Sprite.h"
 #include "../../types/ui/SpriteContext.h"
 #include "../../types/ui/SpriteSheet.h"
+#include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_SpriteDraw
 
 // Same forward declarations, same spelling, as spritecontext.cpp and
 // spritecontext_flush.cpp — the linker checks them against standalone/resolve.h.
@@ -168,7 +169,6 @@ const char* const kAddFont =
 // ---- the internals this file reaches ---------------------------------------
 typedef void (*FlushFn)(void* self);
 typedef void (*AddSpriteDrawFn)(void* self, const void* draw);
-typedef void (*ArrayAppendFn)(void* array, int32_t newSize, const void* fill);
 // ComputeStringLayout (0x180116fd0). Read by address through the registry-first
 // resolver. This line used to say "NOT PORTED — this file's one opened door";
 // that was true when it was written and stopped being true in the same batch:
@@ -195,11 +195,6 @@ inline FlushFn TheFlush() {
 inline AddSpriteDrawFn TheAddSpriteDraw() {
     static AddSpriteDrawFn f = nullptr;
     if (!f) f = reinterpret_cast<AddSpriteDrawFn>(ResolveAddr(Module::Runtime, 0x18011c890));
-    return f;
-}
-inline ArrayAppendFn TheArrayAppend() {
-    static ArrayAppendFn f = nullptr;
-    if (!f) f = reinterpret_cast<ArrayAppendFn>(ResolveAddr(Module::Runtime, 0x180078520));
     return f;
 }
 inline ComputeStringLayoutFn TheComputeStringLayout() {
@@ -455,7 +450,10 @@ void RtUi_SpriteContext_AddFont(void* selfRaw, void* fontRaw, const void* text,
         rec.color       = color;
         rec.isLine      = 0;
 
-        TheArrayAppend()(&self->_deferred, self->_deferred._size + 1, &rec);
+        // retail 0x180078520 — kSpec_SpriteDraw, NON-TRIVIAL (partial-write
+        // assign), same row spritecontext.cpp's AddSpriteDraw bridges through.
+        rtcoll::AsArray<&rtcoll::kSpec_SpriteDraw>(&self->_deferred)
+            ->SetSizeFill(self->_deferred._size + 1, &rec);
     }
 }
 

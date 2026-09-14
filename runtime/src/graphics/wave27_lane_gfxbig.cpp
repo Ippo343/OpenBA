@@ -197,7 +197,12 @@ unsigned long long g_animStateExpired = 0;   // RARE ARM: layers removed
 void Array8Assign(ArrayHdr* dst, const ArrayHdr* src) {
     if (dst == src) return;                       // CMP RCX,RDX / JZ
 
-    rtcoll::ArrayDtorImpl(dst);                   // CALL 0x180005800
+    // ENDGAME B.3.2 step 2 (callers) — `dst` is always `&set->textures` or
+    // `&set->constants` (PassAssign, below), both real
+    // `Collection::Array<MaterialBinding>` members (Material.h). MaterialBinding
+    // is a plain POD, so `Array<MaterialBinding>::~Array` is trait-derived and
+    // bit-for-bit `rtcoll::ArrayDtorImpl` (spec->destroy is null either way).
+    reinterpret_cast<Collection::Array<MaterialBinding>*>(dst)->~Array();  // CALL 0x180005800
 
     const int32_t n       = src->_size;           // MOV ECX,[RDI+8]
     const int32_t oldSize = dst->_size;           // MOV EDX,[RBX+8]  (0 by now)
@@ -255,9 +260,13 @@ void PassInit(uint8_t* dst) {
 void PassDestroy(void* /*ignoredThis*/, uint8_t* base, int count) {
     if (count <= 0) return;                       // TEST R8D,R8D / JLE ret
     for (int i = 0; i < count; ++i) {
-        uint8_t* const e = base + static_cast<int64_t>(i) * 0x20;
-        rtcoll::ArrayDtorImpl(reinterpret_cast<ArrayHdr*>(e + 0x10));
-        rtcoll::ArrayDtorImpl(reinterpret_cast<ArrayHdr*>(e));
+        // `e` is one `MaterialParameterSet` (Material.h): `constants` @ +0x10,
+        // `textures` @ +0x00 — trait-equivalent for the same MaterialBinding
+        // reason Array8Assign's dtor call gives.
+        MaterialParameterSet* const set =
+            reinterpret_cast<MaterialParameterSet*>(base + static_cast<int64_t>(i) * 0x20);
+        set->constants.~Array();
+        set->textures.~Array();
     }
 }
 
@@ -286,8 +295,16 @@ const ArraySpec kSpec_Binding8 = {                // INLINED into BuildParameter
     /*byteCopy=*/true, 0, 0, 0, 0, 0, 0 };
 
 // Retail 0x180060d30, 420 bytes, NOT EXPORTED. Registered BY ADDRESS below.
+//
+// ENDGAME B.3.2 step 2 (callers) — bridged through `AsArray<&kSpec_MatPass>`
+// rather than naming `rtcoll::SetSizeCore` directly. NOT trait-equivalent:
+// `MaterialInstance::parameters` is a real `Collection::Array<
+// MaterialParameterSet>` (Material.h), but MaterialParameterSet has no
+// user-defined copy constructor, so a trait derivation would placement-copy
+// it via the implicit (shallow, `=default`) copy of its two inner Arrays —
+// not the zero-then-deep-assign `PassAssign` performs.
 extern "C" void RtCollection_Array_MaterialParameterSet_SetSize(void* a, int n) {
-    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_MatPass);
+    rtcoll::AsArray<&kSpec_MatPass>(a)->SetSize(n);
 }
 
 // ============================================================================
@@ -371,7 +388,7 @@ extern "C" void RtGraphics_MaterialInstance_BuildParameters(void* self) {
 
     // CMP [R15+0x38],R8D / JLE — the bound is `_parameters._size`, and it is
     // RE-READ at the bottom of the loop (0x1801038fe), not hoisted.
-    for (int32_t pass = 0; pass < m->parameters._size; ++pass) {
+    for (int32_t pass = 0; pass < m->parameters.GetSize(); ++pass) {
         uint8_t* const desc0 = *reinterpret_cast<uint8_t**>(PassObject(m, pass) + kPassDesc);
 
         // ---- textures -----------------------------------------------------
@@ -420,11 +437,12 @@ extern "C" void RtGraphics_MaterialInstance_BuildParameters(void* self) {
 
             // `_parameters._data` is RE-READ here (MOV RSI,[RBP] at 0x180103563)
             // rather than kept from the top of the pass loop.
-            MaterialParameterSet* const set = m->parameters._data + pass;
-            rtcoll::SetSizeCore(reinterpret_cast<ArrayHdr*>(&set->textures),
-                                set->textures._size + 1,
-                                reinterpret_cast<const uint8_t*>(&v),
-                                &kSpec_Binding8);
+            MaterialParameterSet* const set = &m->parameters[pass];
+            // retail 0x1801035c4, kSpec_Binding8 — trait-equivalent:
+            // MaterialBinding (Material.h) is a plain POD, so
+            // SpecFor<MaterialBinding>() is the same {8-byte copy, no init,
+            // no destroy, align 4} shape.
+            set->textures.SetSize(set->textures.GetSize() + 1, v);
             ++g_buildParamBinds;
         }
 
@@ -451,11 +469,10 @@ extern "C" void RtGraphics_MaterialInstance_BuildParameters(void* self) {
             v.shaderSlot =
                 *reinterpret_cast<const int32_t*>(recs2 + static_cast<int64_t>(i) * 0x10 + 8);
 
-            MaterialParameterSet* const set = m->parameters._data + pass;
-            rtcoll::SetSizeCore(reinterpret_cast<ArrayHdr*>(&set->constants),
-                                set->constants._size + 1,
-                                reinterpret_cast<const uint8_t*>(&v),
-                                &kSpec_Binding8);
+            MaterialParameterSet* const set = &m->parameters[pass];
+            // retail 0x1801037ec, kSpec_Binding8 — trait-equivalent, same as
+            // the textures arm above.
+            set->constants.SetSize(set->constants.GetSize() + 1, v);
             ++g_buildParamBinds;
         }
     }

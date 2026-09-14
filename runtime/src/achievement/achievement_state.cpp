@@ -394,6 +394,13 @@ void* RtAch_Achievement_CreateInstance(const Achievement* self, void** retval) {
     // scope-exit ~Array is MemFree(nullptr), a no-op.
     Collection::Array<void*> temp;
 
+    // NOT CONVERTED (ENDGAME B.3.2 step 2): `Collection::Array<T>::operator=`
+    // is still the compiler-generated SHALLOW copy (Collection.h's Array
+    // banner) — retail's DEEP operator= (0x18001cdf0 / `rtcoll::
+    // ArrayAssignCore`) only becomes this class's `operator=` once the last
+    // bitwise copier elsewhere is gone. `temp = self->goals` would be the
+    // wrong (shallow) copy today, so this stays a by-address call into the
+    // real 0x180003970 body.
     using ArrayAssignFn = void* (*)(void*, const void*);
     static ArrayAssignFn arrayAssign = nullptr;
     if (!arrayAssign)

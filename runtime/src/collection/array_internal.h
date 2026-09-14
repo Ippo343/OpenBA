@@ -112,4 +112,45 @@ extern const ArraySpec kSpec_VideoResource;  // 0x18004f620   NON-TRIVIAL
 extern const ArraySpec kSpec_ExtArrayElem;   // 0x18002c6a0   NON-TRIVIAL
 extern const ArraySpec kSpec_StringPair10;    // 0x180078c90   NON-TRIVIAL
 
+// ENDGAME B.3.2 step 2 (callers) — declared here (defined in array.cpp) so a
+// converted caller can bridge through it with `rtcoll::AsArray<&SPEC>(...)`,
+// same as the rows above. A `const` at namespace scope has INTERNAL linkage in
+// C++ unless it is declared `extern` somewhere, so these declarations are what
+// make the four definitions in array.cpp reachable from another translation
+// unit at all — they change nothing about the rows themselves.
+extern const ArraySpec kSpec_Tri18A4;        // 0x1800136f0  Array<EdgeMesh::Triangle>, tail UNINITIALISED
+extern const ArraySpec kSpec_MetaEntry20;    // 0x180034010, 0x180033080  NON-TRIVIAL
+extern const ArraySpec kSpec_MetaData58;     // 0x1800332d0  NON-TRIVIAL
+extern const ArraySpec kSpec_EmitterInstance;// 0x180052330  zeroed 10-byte prefix init
+
+// ENDGAME B.3.2 step 2 (callers, runtime/src/ui/*) — same reasoning: these
+// rows were file-local to array.cpp until a converted UI call site needed to
+// bridge through them.
+extern const ArraySpec kSpec_Event30;      // 0x180033690   UI::UserInterface::Event, PARTIAL assign
+extern const ArraySpec kSpec_SpriteIndexZ; // 0x1800370c0   UI::Sprite, tail ZEROED
+extern const ArraySpec kSpec_CaptureEntry;  // 0x18004bde0  UI::SpriteCapture::Entry (3-arg, with fill) NON-TRIVIAL
+extern const ArraySpec kSpec_CaptureEntryZ; // 0x18004ba90  UI::SpriteCapture::Entry (2-arg, default tail) NON-TRIVIAL
+extern const ArraySpec kSpec_ExtStr10at08; // 0x180075d20   UI::DialogNamedTemplate NON-TRIVIAL
+extern const ArraySpec kSpec_CfgEntry20;   // 0x180075b20   UI::DialogControllerConfigEntry NON-TRIVIAL
+extern const ArraySpec kSpec_Sprite38Z;    // 0x180078950   UI::SpriteSheet::SpriteInfo (2-arg) NON-TRIVIAL
+extern const ArraySpec kSpec_SpriteDraw;   // 0x180078520, 0x1800783d0   UI::SpriteDraw NON-TRIVIAL (partial assign)
+
+// ENDGAME B.3.2 step 2 (callers, runtime/src/io/persistence_savelist_job.cpp)
+// — same reasoning: NOT trait-expressible (byteCopy=false, a String-adopt
+// assign, and NO init arm — a trait derivation over {uint64, System::String}
+// would synthesize a non-null init from String's user-provided default ctor,
+// which retail's 3-arg-only SetSize never has), so the hand-derived row stays
+// and is bridged through with `AsArray<&kSpec_SaveGameInfo>`.
+extern const ArraySpec kSpec_SaveGameInfo; // 0x18002ae20, 0x18002aae0  IO::Persistence::SaveGameInfo NON-TRIVIAL
+
+// ENDGAME B.3.2 step 2 (callers, runtime/src/graphics/wave28_lane_gfxbody.cpp)
+// — NOT trait-expressible even though `Renderer::drawGroups` is now a real
+// `Collection::Array<RendererDrawGroup>` member: retail's element assign
+// (0x18001be60) deep-copies the three nested `Array<RendererDrawItem>` via
+// their own hand-derived copy path, but RendererDrawGroup has no user-defined
+// copy constructor, so the trait-derived placement-copy would fall back to
+// each inner Array's `=default` SHALLOW copy assign instead — a real behaviour
+// difference. Bridged through with `AsArray<&kSpec_DrawGroup1f0>`.
+extern const ArraySpec kSpec_DrawGroup1f0; // 0x1800638e0  Graphics::Renderer::drawGroups NON-TRIVIAL
+
 }  // namespace rtcoll

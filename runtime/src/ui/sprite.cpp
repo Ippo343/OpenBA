@@ -74,6 +74,7 @@
 #include "../../types/ui/String.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"   // RtString_StrCompare, for GetIndexFromName
+#include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_Sprite38
 
 // ----------------------------------------------------------------------------
 // Module / ResolveAddr / ResolveExport, forward-declared rather than pulled in
@@ -362,9 +363,16 @@ void RtUi_SpriteSheet_AddSpriteInfo(void* selfRaw, const void* nameStrPtr, const
     // types in that lane. It still calls retail's per-element copy-assign at
     // 0x180004220 by address, so the ONE refcount bump the note above relies on
     // is unchanged -- but the container algebra around it is ours now, and it
-    using GrowFn = void (*)(void* arrayDesc, int newCount, void* newElem);
-    static GrowFn grow = reinterpret_cast<GrowFn>(ResolveAddr(Module::Runtime, 0x180004e30));
-    grow(&self->m_sprites, oldCount + 1, &newEntry);
+    // ENDGAME B.3.2 step 2 — the by-address forwarder is GONE. `m_sprites` +
+    // `m_spriteCount` + `m_spriteCapacity` (SpriteSheet.h, +0x20/+0x28/+0x2C)
+    // are the {data,size,capacity} triple `Collection::Array<SpriteInfo>`
+    // would use, laid out contiguously and asserted at those offsets, so the
+    // conversion bridges at the use site rather than retyping `SpriteSheet`.
+    // `kSpec_Sprite38` (0x180004e30) is NON-TRIVIAL — a String refcount bump
+    // in its element assign — so it stays the hand-derived `ExplicitSpec`, not
+    // a trait-derived `Array<SpriteInfo>`.
+    rtcoll::AsArray<&rtcoll::kSpec_Sprite38>(&self->m_sprites)
+        ->SetSizeFill(oldCount + 1, &newEntry);
 
 }
 

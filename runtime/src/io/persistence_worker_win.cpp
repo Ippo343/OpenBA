@@ -125,6 +125,7 @@
 #include "../../types/system/Filename.h"
 #include "../system/string.h"
 #include "../system/pod_bridge.h"
+#include "../collection/array_internal.h"   // ENDGAME B.3.2 step 2 -- kSpec_SaveGameInfo, AsArray
 
 using RtIo::Persistence;
 using RtIo::SaveBlock;
@@ -223,54 +224,34 @@ void MemFree(void* p) {
     if (fn) fn(p);
 }
 
-// ---- Collection::Array<T> instantiations, by address ------------------------
-// See the banner: these are spec-table entries against cores this tree owns,
-// not bodies, and they are NOT this lane's rows.
-using ArrayClearFn   = void (*)(void* array);
-using ArraySetSizeFn = void (*)(void* array, int newSize);
-
-// EVERY door below spells its address as a LITERAL inside the ResolveAddr call,
-// and that is not style. tools/runtime_census.py finds address doors by
-// grepping for the literal `ResolveAddr(Module::Runtime, 0x...)`; a door whose
-// address arrives through a VARIABLE is invisible to it and never appears in
-// `called` at all (reference_literal_grep_blind_to_variables.md). The first
-// draft of this file routed all five through one `ArrayClear(uintptr_t)`
-// helper, and the census reported the cutover surface as UNCHANGED — i.e. the
-// instrument agreed with what was convenient. Written out five times so the
-// census can see what this file actually depends on.
-
-// 0x180024aa0 — Array<void*>::~Array. ALREADY OURS (array.cpp:1665 registers
-// RtColl_ArrayDtor_180024aa0), reached through ResolveAddr, which consults the
-// port registry FIRST (reference_resolveaddr_consults_port_registry_first.md).
-ArrayClearFn ClearBlockPtrs() {
-    static ArrayClearFn f = reinterpret_cast<ArrayClearFn>(
-        ResolveAddr(Module::Runtime, 0x180024aa0));
-    return f;
-}
-// 0x18002a930 — ~Array on the blockDesc array. Census row, UNPORTED.
-ArrayClearFn ClearBlockDescs() {
-    static ArrayClearFn f = reinterpret_cast<ArrayClearFn>(
-        ResolveAddr(Module::Runtime, 0x18002a930));
-    return f;
-}
-// 0x18002ac40 — ~Array on Persistence+0x80, the save list. Census row, UNPORTED.
-ArrayClearFn ClearSaveList() {
-    static ArrayClearFn f = reinterpret_cast<ArrayClearFn>(
-        ResolveAddr(Module::Runtime, 0x18002ac40));
-    return f;
-}
-// 0x18002a9d0 — Array<void*>::SetSize(n). NEW address door (see banner).
-ArraySetSizeFn SetSizeBlockPtrs() {
-    static ArraySetSizeFn f = reinterpret_cast<ArraySetSizeFn>(
-        ResolveAddr(Module::Runtime, 0x18002a9d0));
-    return f;
-}
-// 0x18002a810 — Array<{id,offset,size}>::SetSize(n), stride 0xc. NEW door.
-ArraySetSizeFn SetSizeBlockDescs() {
-    static ArraySetSizeFn f = reinterpret_cast<ArraySetSizeFn>(
-        ResolveAddr(Module::Runtime, 0x18002a810));
-    return f;
-}
+// ---- Collection::Array<T> instantiations --------------------------------
+// ENDGAME B.3.2 step 2 (2026-09-13) — the five by-address forwarders that
+// used to sit here are GONE; each call site below now names the container
+// directly. What each address was, and the instantiation it names:
+//
+//   0x180024aa0  Array<void*>::~Array           trait-derived, `Array<void*>`
+//   0x18002a930  Array<BlockDesc12>::~Array     trait-derived (kSpec_Blk12 is
+//                                               trait-equivalent — see
+//                                               persistence_saveinfo_job.cpp)
+//   0x18002ac40  Array<SaveGameInfo>::~Array    SAME element/spec as
+//                                               0x18002ae20/0x18002aae0
+//                                               (array_destroy.cpp's J2_ENTRY
+//                                               table: both call the identical
+//                                               0x18002afc0 String-release
+//                                               helper) — kSpec_SaveGameInfo,
+//                                               NOT trait-expressible, so this
+//                                               is the hand-derived row
+//   0x18002a9d0  Array<void*>::SetSize(n)       trait-derived (kSpec_Fill8 is
+//                                               trait-equivalent for `void*`)
+//   0x18002a810  Array<BlockDesc12>::SetSize(n) trait-derived (kSpec_Blk12)
+//
+// `blockDescData`/`blockDescCount`, `blockPtrData`/`blockPtrCount` and
+// `saves`/`saveCount` are still loose fields of `Persistence` (not typed
+// `Collection::Array<T>` members — shared with persistence_startup.cpp /
+// closure_batch2b_win.cpp / engine/singleton_ctors.cpp, outside this batch),
+// so every use below is a reinterpret_cast bridge at the call site.
+struct BlockDesc12 { uint32_t id, offset, size; };
+static_assert(sizeof(BlockDesc12) == 0xC, "matches kSpec_Blk12's stride");
 
 // ---- the String field assignment the three enqueue bodies share -------------
 //
@@ -395,8 +376,9 @@ extern "C" void RtIo_PersistenceWorker_EnqueueLoad(void* worker, const String* f
     p->command = 1;
     p->status  = 0;
 
-    ClearBlockPtrs()(&p->blockPtrData);                        // 0x180024aa0
-    SetSizeBlockPtrs()(&p->blockPtrData, p->blockDescCount);   // 0x18002a9d0
+    reinterpret_cast<Collection::Array<void*>*>(&p->blockPtrData)->~Array();  // 0x180024aa0
+    reinterpret_cast<Collection::Array<void*>*>(&p->blockPtrData)
+        ->SetSize(p->blockDescCount);   // 0x18002a9d0
 
     void** slots = static_cast<void**>(p->blockPtrData);
     for (int i = 0; i < p->blockPtrCount; ++i) slots[i] = nullptr;
@@ -482,8 +464,8 @@ extern "C" void RtIo_PersistenceWorker_EnqueueSave(void* worker, const String* f
     p->status  = 0;
     p->command = 0;
 
-    ClearBlockDescs()(&p->blockDescData);   // 0x18002a930
-    ClearBlockPtrs()(&p->blockPtrData);     // 0x180024aa0
+    reinterpret_cast<Collection::Array<BlockDesc12>*>(&p->blockDescData)->~Array();  // 0x18002a930
+    reinterpret_cast<Collection::Array<void*>*>(&p->blockPtrData)->~Array();         // 0x180024aa0
 
     // The 12-byte header at Persistence+0x54..0x5f — BATCH 8 named these three
     // fields (`fileHeader`/`magic`/`crc`, Persistence.h) from the SAVE job and
@@ -496,8 +478,10 @@ extern "C" void RtIo_PersistenceWorker_EnqueueSave(void* worker, const String* f
     *reinterpret_cast<uint64_t*>(&p->magic) =
         static_cast<uint64_t>(static_cast<int64_t>(-0x7f7f7f80));
 
-    SetSizeBlockDescs()(&p->blockDescData, blockCount);   // 0x18002a810
-    SetSizeBlockPtrs()(&p->blockPtrData,  blockCount);    // 0x18002a9d0
+    reinterpret_cast<Collection::Array<BlockDesc12>*>(&p->blockDescData)
+        ->SetSize(blockCount);   // 0x18002a810
+    reinterpret_cast<Collection::Array<void*>*>(&p->blockPtrData)
+        ->SetSize(blockCount);   // 0x18002a9d0
 
     // LEA EAX,[RBP+0x1] / LEA R8D,[RAX+RAX*2] / SHL R8D,0x2  ==  12 * (n + 1).
     // Computed BEFORE the `TEST EBP,EBP / JLE` guard, so it is evaluated even
@@ -573,9 +557,13 @@ extern "C" void RtIo_PersistenceWorker_Dtor(void* worker) {
         reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180155860));
     p->workerVtable = kDerivedVtable;
 
-    ClearSaveList()(&p->saves);             // 0x18002ac40, worker+0x70
-    ClearBlockPtrs()(&p->blockPtrData);     // 0x180024aa0, worker+0x60
-    ClearBlockDescs()(&p->blockDescData);   // 0x18002a930, worker+0x50
+    // retail 0x18002ac40 — the SAME Array<SaveGameInfo> as
+    // 0x18002ae20/0x18002aae0 (array_destroy.cpp's J2_ENTRY table); NOT
+    // trait-expressible (array_internal.h's kSpec_SaveGameInfo note), so this
+    // is the hand-derived row.
+    rtcoll::AsArray<&rtcoll::kSpec_SaveGameInfo>(&p->saves)->~Array();   // worker+0x70
+    reinterpret_cast<Collection::Array<void*>*>(&p->blockPtrData)->~Array();         // 0x180024aa0, worker+0x60
+    reinterpret_cast<Collection::Array<BlockDesc12>*>(&p->blockDescData)->~Array();  // 0x18002a930, worker+0x50
 
     // The inline String release on worker+0x30 == pendingFilename IS
     // `String::Release()` (retail's inline, string.cpp) -- the transient

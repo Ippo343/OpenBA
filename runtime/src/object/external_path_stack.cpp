@@ -285,19 +285,21 @@ const ArraySpec kSpec_PathStack = {                // 0x18002e220
 // ============================================================================
 extern "C" void RtObject_PathStackSetSize_18002e220(void* a, int n, const void* fill) {
     ++RtObject::g_psc.setSizeCalls;
-    rtcoll::SetSizeCore(static_cast<rtcoll::ArrayHdr*>(a), n,
-                        // NO ctl==4 BRANCH HERE. There used to be one, passing
-                        // `nullptr` as the fill, and retiring it is what this
-                        // line records. Control 4's meaning was changed to
-                        // "grow by two" in the probe and in two comment blocks
-                        // and NOT here, so the control had two live
-                        // implementations and ran both: it grew by two AND left
-                        // the tail uninitialised, which is the very corruption
-                        // the rewrite was for. It took the run down in
-                        // ucrtbase reading a garbage `char*`.
-                        // See WAVE11_LANE_OBJEXT.md §10.
-                        static_cast<const uint8_t*>(fill),
-                        &rtcoll::kSpec_PathStack);
+    // NO ctl==4 BRANCH HERE. There used to be one, passing
+    // `nullptr` as the fill, and retiring it is what this
+    // line records. Control 4's meaning was changed to
+    // "grow by two" in the probe and in two comment blocks
+    // and NOT here, so the control had two live
+    // implementations and ran both: it grew by two AND left
+    // the tail uninitialised, which is the very corruption
+    // the rewrite was for. It took the run down in
+    // ucrtbase reading a garbage `char*`.
+    // See WAVE11_LANE_OBJEXT.md §10.
+    // ENDGAME B.3.2 step 2 — the raw `rtcoll::SetSizeCore` call is now the
+    // `Collection::Array<uint8_t, …, ExplicitSpec<&kSpec_PathStack>>` member
+    // it is byte-identical to; `a` is a `void*` handed in by every caller
+    // (there is no typed `PathStackEntry` array member to bridge from instead).
+    rtcoll::AsArray<&rtcoll::kSpec_PathStack>(a)->SetSizeFill(n, fill);
 }
 
 // ============================================================================

@@ -56,6 +56,7 @@
 #include "../../types/object/External.h"   // Object::ExternalPtr<T>
 #include "../../types/object/Internal.h"   // Object::InternalPtr<T>
 #include "../system/pod_bridge.h"          // the one transitional POD<->class cast
+#include "../collection/array_internal.h"  // ENDGAME B.3.2 step 2: kSpec_U64Zero / kSpec_PtrZero bridges
 
 using RtAchievement::Achievement;
 using RtAchievement::AchievementInstance;
@@ -98,46 +99,35 @@ namespace {
 // ============================================================================
 
 // ---- Collection::Array<T>::SetSize, three instantiations -------------------
-// One body per element width, because the engine's Array is a template and
-// MSVC emits a separate instantiation per T (PLAN.md §4.3 risk 1's trap). All
-// three allocate through System::MemoryAllocator::_singleton, which is the
-// same one heap our exe uses, so calling the DLL's copy is not a heap split.
+// ENDGAME B.3.2 step 2 (callers) — the three by-address forwarders that used
+// to sit here (ArraySetSizeBool/Time/InternalPtr) are GONE. `completed`,
+// `updateTimes` and `instances` (runtime/types/achievement/AchievementManager.h)
+// are already real `Collection::Array<T>` members; their SetSize call sites
+// name the instantiation directly:
 //
-// *** WAVE 9 LANE Q, 2026-09-07: ALL THREE ARE NOW REGISTERED PORTS ***
-// (runtime/src/collection/array.cpp), so these calls no longer reach the DLL's
-// copies. The heap is unchanged -- lane Q's SetSize allocates through the same
-// exported MemAlloc/MemFree, by address -- so the "not a heap split" argument
-// still holds; only "calling the DLL's copy" is out of date. Lane Q re-read all
-// three bodies and confirms the bool/8-byte asymmetry noted below; the port
-// keeps it, and its oracle does not compare the tail 0x180008b90 never writes.
+//   0x180008b90  kSpec_Bool     {1,1,Assign1, init=null,      destroy=null, byteCopy}
+//                == `SpecFor<uint8_t>()` field for field (bool does NOT
+//                initialise elements past the old size — retail's else arm is
+//                empty), so `completed`'s trait-derived `Array<uint8_t>` IS
+//                that instantiation. Converted to a plain `.SetSize(n)`.
+//   0x180008ff0  kSpec_U64Zero  {8,8,Assign8, init=InitZero8, destroy=null, byteCopy}
+//                — the assign arm matches trait (`Assign8` is the same single
+//                qword store `TAssign<Time>` would do), but retail ZERO-FILLS
+//                the new tail while a trivially-constructible `::Time`'s trait
+//                row leaves it UNINITIALISED. NOT trait-equivalent: kept as a
+//                hand-derived `rtcoll::AsArray<&kSpec_U64Zero>` bridge over
+//                `updateTimes`.
+//   0x180008d60  kSpec_PtrZero  {8,8,Assign8Z, init=InitZero8, destroy=null, byteCopy}
+//                — `Assign8Z` stores a ZERO into the slot and THEN the value
+//                (the smart-pointer element's inlined operator=): TWO writes
+//                where trait's placement-copy is ONE, observable to a hardware
+//                watchpoint (array.cpp's own comment on this row). NOT
+//                trait-equivalent even though `AchievementInstance*` is a
+//                trivial pointer: kept as a hand-derived bridge over
+//                `instances`.
 //
-//   0x180008b90  Array<bool>::SetSize     — 1-byte elements, MemAlloc(n, 1)
-//   0x180008ff0  Array<Time>::SetSize     — 8-byte, MemAlloc(n*8, 8), zero-fills new tail
-//   0x180008d60  Array<InternalPtr>::SetSize — 8-byte, same, with the InternalPtr
-//                                             clear-then-copy on the moved tail
-//
-// A NOTE FOR WHOEVER PORTS Collection::Array ITSELF: 0x180008b90 (the bool
-// one) does NOT initialise elements past the old size, while its two 8-byte
-// siblings do. That asymmetry is real in the shipped bytes, not a decompiler
-// artefact, and AchievementManager::SetAchievements relies on nothing about
-// it because ReadAchievements immediately writes every slot.
-using ArraySetSizeFn = void (*)(void* array, int newSize);
-
-ArraySetSizeFn ArraySetSizeBool() {
-    static ArraySetSizeFn fn = reinterpret_cast<ArraySetSizeFn>(
-        ResolveAddr(Module::Runtime, 0x180008b90));
-    return fn;
-}
-ArraySetSizeFn ArraySetSizeTime() {
-    static ArraySetSizeFn fn = reinterpret_cast<ArraySetSizeFn>(
-        ResolveAddr(Module::Runtime, 0x180008ff0));
-    return fn;
-}
-ArraySetSizeFn ArraySetSizeInternalPtr() {
-    static ArraySetSizeFn fn = reinterpret_cast<ArraySetSizeFn>(
-        ResolveAddr(Module::Runtime, 0x180008d60));
-    return fn;
-}
+// The three registered rows themselves stay in array.cpp: `code/` and other
+// batches still reach them by address.
 
 // ---- Object::Internal::Internal(this) — retail 0x1800bfd10 ------------------
 // Enters the object into the InternalFactory handle table. Registry-resolved,
@@ -236,16 +226,14 @@ ExternalDtorFn ExternalDtor() {
 }
 
 // ---- Collection::Array<ExternalPtr<Goal>>::~Array - retail 0x180004890 -----
-// Registered by Wave 9 lane Q; this reaches our ~Array, not the DLL's.
-// Not exported. Frees the buffer under the allocator lock, then zeroes the
-// {_data} qword and the {_size,_capacity} qword - so capacity is cleared too,
-// unlike the exe-side SubArrayDeepCopy case PLAN.md 1.2 item 15 records.
-using ArrayFreeFn = void (*)(void* array);
-ArrayFreeFn ArrayFreeGoalPtrs() {
-    static ArrayFreeFn fn = reinterpret_cast<ArrayFreeFn>(
-        ResolveAddr(Module::Runtime, 0x180004890));
-    return fn;
-}
+// ENDGAME B.3.2 step 2 — the by-address forwarder is GONE. 0x180004890 is a J1
+// `~Array` body (array.cpp's J1_ENTRY table), i.e. `ArrayDtorSited` =
+// `Array<uint8_t>::~Array`, which reads ONLY `spec->destroy` — null for the
+// trivially destructible `void*` `Achievement::goals` is declared as, so the
+// trait-derived `Array<void*>::~Array()` IS that exact body. Frees the buffer
+// under the allocator lock, then zeroes {_data} and {_size,_capacity} — that is
+// `rtcoll::ArrayDtorImpl`, unchanged. The row stays registered in array.cpp for
+// the rest of the tree.
 
 // ---- The three vtables Achievement's constructor stamps, in order ----------
 // All three are EXPORTED data symbols, so the port stamps the DLL's own
@@ -656,8 +644,11 @@ void RtAch_AchievementManager_SetEventHandler(AchievementManager* self, void (*h
 void RtAch_AchievementManager_SetAchievements(AchievementManager* self, void* list) {
 
     self->achievements = static_cast<RtObject::ExternalList*>(list);
-    ArraySetSizeTime()(&self->updateTimes, self->achievements->_count);
-    ArraySetSizeBool()(&self->completed, self->achievements->_count);
+    // retail 0x180008ff0 — kSpec_U64Zero, tail-zeroed; not trait-equivalent.
+    rtcoll::AsArray<&rtcoll::kSpec_U64Zero>(&self->updateTimes)
+        ->SetSize(self->achievements->_count);
+    // retail 0x180008b90 — kSpec_Bool == SpecFor<uint8_t>(), trait-derived.
+    self->completed.SetSize(self->achievements->_count);
     ReadAchievements()(self);
 
 }
@@ -686,7 +677,9 @@ void RtAch_AchievementManager_SetAchievements(AchievementManager* self, void* li
 // ============================================================================
 void RtAch_AchievementManager_Reset(AchievementManager* self) {
 
-    ArraySetSizeInternalPtr()(&self->instances, self->achievements->_count);
+    // retail 0x180008d60 — kSpec_PtrZero (Assign8Z double-write); not trait-equivalent.
+    rtcoll::AsArray<&rtcoll::kSpec_PtrZero>(&self->instances)
+        ->SetSize(self->achievements->_count);
 
     const uint32_t achievementTypeId = AchievementTypeId();
     for (int i = 0; i < self->instances._size; ++i) {
@@ -901,7 +894,7 @@ void RtAch_Achievement_Dtor(void* selfRaw) {
     Achievement* self = static_cast<Achievement*>(selfRaw);
 
     self->base._vftable = VtableAchievement();
-    ArrayFreeGoalPtrs()(&self->goals);
+    self->goals.~Array();          // retail 0x180004890, J1 body, trait-derived destroy
     // ENDGAME B.3.1 step 2: the release idiom IS `~String` (0x180006c80), with
     // retail's asymmetry inside the class where the banner above wants it. The
     // three fields are POD members of the unconverted `Achievement`, so the

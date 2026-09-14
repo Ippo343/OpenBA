@@ -130,6 +130,13 @@ template <typename T> inline T& Field(void* p, int off) {
 // 0x18000c300 -- Collection::Array<T>::SetSize(4) for the Stream's 4-slot
 // streaming buffer table (element stride 0x8ba0). Out of THIS batch's scope;
 // reached by ADDRESS so the port registry gets first refusal. See the banner.
+// NOT CONVERTED (ENDGAME B.3.2 step 2): `kSpec_Blob8ba0` (array.cpp) itself
+// says "the sole caller is Engine::Play and nothing there names [the element
+// type]" — there is no `runtime/types` struct for Audio::Stream at all, so
+// `headerPtr` (`&self[0x30]`) is a raw byte offset with no typed
+// `Collection::Array<T>` field to call `.SetSize()` on. Converting this site
+// would mean inventing a Stream type header, which is member/struct work, not
+// a caller conversion.
 void GrowStreamBuffers(void* headerPtr) {
     using Fn = void (*)(void*);
     static Fn fn = nullptr;

@@ -165,6 +165,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/achievement/AchievementManager.h"
 #include "../../types/io/Serializer.h"
+#include "../collection/array_internal.h"  // ENDGAME B.3.2 step 2: kSpec_PtrZero bridge
 
 using RtAchievement::AchievementInstance;
 using rt::io::Encoding;
@@ -243,25 +244,26 @@ PtrSerializeFn ExternalPtrSerialize_Achievement() {
     return f;
 }
 
-// ---- ADDRESS DOOR -----------------------------------------------------------
+// ---- ENDGAME B.3.2 step 2 -----------------------------------------------
 // SYMBOL:      Collection::Array<Object::InternalPtr<Achievement::GoalInstance>>
-//              ::SetSize, Runtime 0x180009d70. Unexported template
-//              instantiation. It is a DIFFERENT instantiation from the
+//              ::SetSize, Runtime 0x180009d70 — the by-address forwarder that
+//              stood here is GONE. It is a DIFFERENT instantiation from the
 //              0x180008d60 that achievement_serialize.cpp uses (that one is
-//              Array<InternalPtr<AchievementInstance>>, and it IS ported —
-//              Wave 9 lane Q). Identified by its two callers: this Persist and
-//              `?Initialize@GoalList@Achievement@@` (0x18009f10d), both of
-//              which hand it a GoalList.
-// CONDITION:   READ DIRECTION ONLY here (`stream->direction == reading`). On a
-//              save it is never reached.
-// CONSEQUENCE: unported, so at cutover every LOAD of a game with achievements
-//              calls null. Named here and in goal_list.cpp, which reaches it
-//              unconditionally.
-ArraySetSizeFn ArraySetSizeGoalInstancePtrs() {
-    static ArraySetSizeFn f = nullptr;
-    if (!f) f = reinterpret_cast<ArraySetSizeFn>(ResolveAddr(Module::Runtime, 0x180009d70));
-    return f;
-}
+//              Array<InternalPtr<AchievementInstance>>), but it is the SAME
+//              spec row, `kSpec_PtrZero` (array.cpp), which array.cpp's own
+//              J3_ENTRY2 table confirms: {8,8,Assign8Z,InitZero8,null,byteCopy}.
+//              Assign8Z's zero-then-copy double write is not what a trivial
+//              pointer's trait-derived assign would do, so it is NOT
+//              trait-equivalent even though `GoalInstanceView*` is a plain
+//              pointer — kept as a hand-derived `rtcoll::AsArray<&kSpec_PtrZero>`
+//              bridge over `self->goalList.goals`, the real member
+//              (GoalList's only field, at +0x00 — the old code passed
+//              `&self->goalList` itself, which is bit-identical). The
+//              0x180009d70 row stays registered in array.cpp; it is now
+//              REACHED THROUGH THIS BRIDGE, not called by address, so the
+//              "unported, calls null" consequence this banner used to record
+//              no longer applies here (goal_list.cpp still reaches the same
+//              row unconditionally, also via a bridge — see there).
 
 // ---- ADDRESS DOOR -----------------------------------------------------------
 // SYMBOL:      the N-element serializer for
@@ -372,15 +374,16 @@ extern "C" void RtAch_AchievementInstance_Persist(AchievementInstance* self, Str
     Serializer inner;
     ReaderWriter* rwInner = MakeCodecVersioned(stream, &inner, 0);
 
-    int count = self->goalList.goals._size;                          // +0x18
+    int count = self->goalList.goals.GetSize();                      // +0x18
     using IntFn = void (*)(ReaderWriter*, int*, const char*);
     reinterpret_cast<IntFn>(rwInner->vtable[rt::io::rw_vtbl::kScalarInt / 8])(
         rwInner, &count, nullptr);
 
     if (stream->direction == rt::io::kDirectionReading) {
-        ArraySetSizeGoalInstancePtrs()(&self->goalList, count);
+        // retail 0x180009d70 — kSpec_PtrZero; see the banner above.
+        rtcoll::AsArray<&rtcoll::kSpec_PtrZero>(&self->goalList.goals)->SetSize(count);
     }
-    SerializeGoalInstancePtrs()(&inner, count, self->goalList.goals._data);
+    SerializeGoalInstancePtrs()(&inner, count, self->goalList.goals.GetData());
 
     DestroyCodec(rwInner);
     DestroyCodec(rwOuter);

@@ -401,7 +401,7 @@ extern "C" bool RtAudio_Scene_Update(void* selfv, int64_t deltaTicks, int64_t no
                              (void*)getVol, (void*)stopFx, (void*)stop3D, (void*)playFx);
         }
 
-        uint8_t* effects = reinterpret_cast<uint8_t*>(self->effects._data);
+        uint8_t* effects = reinterpret_cast<uint8_t*>(self->effects.GetData());
         if (effects && getVol && stopFx && stop3D && playFx) {
             for (size_t off = 0; off < 0x40000u; off += 0x40) {   // 1800df812
                 uint8_t* slot = effects + off;
@@ -441,7 +441,7 @@ extern "C" bool RtAudio_Scene_Update(void* selfv, int64_t deltaTicks, int64_t no
                 if (handle != 0) {                                // 1800df7ad
                     const uint32_t gen = handle >> 9;             // 1800df7b3
                     const uint32_t idx = (handle >> 1) & 0xffu;   // 1800df7b6 / MOVZX AL
-                    uint8_t* chans = reinterpret_cast<uint8_t*>(self->channels._data);
+                    uint8_t* chans = reinterpret_cast<uint8_t*>(self->channels.GetData());
                     uint8_t* ch = chans + static_cast<size_t>(idx) * 0x70;
                     if (gen == (static_cast<uint32_t>(I32(ch, 0x68)) >> 9)) {   // 1800df7cb
                         std::memcpy(ch + 0x18, &vol, 4);          // 1800df7cf  volume = vol
@@ -504,6 +504,14 @@ extern "C" bool RtAudio_Scene_Update(void* selfv, int64_t deltaTicks, int64_t no
                 "?PlayPlatform@Device@Audio@@AEAA_NHV?$ExternalPtr@VSoundBuffer@Audio@@@Object@@AEBVTime@System@@MMM@Z"));
             // 0x180050d30 Array<T16>::operator= -- unexported, ported and
             // already registered by address (array.cpp lane Q J10).
+            // NOT CONVERTED (ENDGAME B.3.2 step 2): `Collection::Array<T>
+            // ::operator=` is still the compiler-generated SHALLOW copy
+            // (Collection.h's Array banner); retail's DEEP operator= only
+            // becomes this class's own once the last bitwise copier elsewhere
+            // is gone. The call site below also walks the target as a raw
+            // `uint8_t*` offset into `self->effects` rather than through a
+            // typed `EffectSlot::positions` field, so there is no typed member
+            // to call `=` on even once it is real. Stays a by-address call.
             arrayAssign = reinterpret_cast<ArrayAssignFn>(
                 ResolveAddr(Module::Runtime, 0x180050d30));
             if (!playPlat || !arrayAssign)
@@ -513,7 +521,7 @@ extern "C" bool RtAudio_Scene_Update(void* selfv, int64_t deltaTicks, int64_t no
         }
 
         const double spt = SecondsPerTick();
-        uint8_t* chans = reinterpret_cast<uint8_t*>(self->channels._data);
+        uint8_t* chans = reinterpret_cast<uint8_t*>(self->channels.GetData());
         if (!chans || !playPlat || !arrayAssign) return true;
 
         for (size_t coff = 0; coff < 0x7000u; coff += 0x70) {     // 1800dfd9f
@@ -669,7 +677,7 @@ extern "C" bool RtAudio_Scene_Update(void* selfv, int64_t deltaTicks, int64_t no
                 // channel's handleTag and clear it. NOTE, and it is retail's:
                 // the scan compares Channel::handleTag (+0x68) against
                 // EffectSlot::channelHandle (+0x20), NOT against idTag.
-                uint8_t* effects = reinterpret_cast<uint8_t*>(self->effects._data);
+                uint8_t* effects = reinterpret_cast<uint8_t*>(self->effects.GetData());
                 const int32_t tag = I32(ch, 0x68);
                 if (effects) {
                     for (int64_t k = 0; k < 0x1000; ++k) {                // 1800dfc8d

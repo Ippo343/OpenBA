@@ -123,6 +123,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/ui/StringTable.h"
+#include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_StringPair10
 
 // ResolveAddr lives in standalone/resolve.h, which drags in <windows.h> and so
 // must not be included from runtime/src (rt_port.h explains why). Declared here
@@ -719,8 +720,13 @@ extern "C" bool RtUiStringTable_Serialize(void* selfV, void* streamV) {
     // 18011d9a4 reloads [RSP+0x28] and 18011d9a9 tests [RAX+0x8] again.
     if (*reinterpret_cast<const int32_t*>(stream + 0x8) == 0) {      // 18011d9a9
         ++g_serRead;
-        reinterpret_cast<ArraySetSizeFn>(ResolveAddr(Module::Runtime, 0x180078c90))(
-            &self->data, count);                             // 18011d9b7
+        // ENDGAME B.3.2 step 2 — `self->data`/`size`/`capacity` are the
+        // {data,size,capacity} triple `Collection::Array<StringTableTextEntry>`
+        // would use, contiguous and asserted at StringTable.h's offsets, and
+        // `kSpec_StringPair10` is NON-TRIVIAL, so the call bridges through it
+        // rather than retyping `UiStringTable`.
+        rtcoll::AsArray<&rtcoll::kSpec_StringPair10>(&self->data)
+            ->SetSize(count);                                 // 18011d9b7, retail 0x180078c90
     }
 
     uint8_t* e = reinterpret_cast<uint8_t*>(self->data);     // 18011d9bc

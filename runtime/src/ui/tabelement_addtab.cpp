@@ -112,6 +112,7 @@
 #include "../../funcs/rt_sink.h"
 #include "../../types/ui/Element.h"
 #include "../../types/ui/TabElement.h"
+#include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_Fill8Z
 
 // ----------------------------------------------------------------------------
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
@@ -153,16 +154,14 @@ inline DialogDtorFn DialogDtor() {
     return RT_EXPORT_ONCE(DialogDtorFn, "??1Dialog@UI@@UEAA@XZ");
 }
 
-// Collection::Array<InternalPtr<Element>>::SetSize(n, const T& fill) — retail
-// 0x180076900, PORTED and registered (array.cpp, kSpec_Fill8Z). Not exported (a
-// header-only template instantiation), so it is reached by address through
-// ResolveAddr, which consults the PORT REGISTRY FIRST
-// (reference_resolveaddr_consults_port_registry_first.md).
+// ENDGAME B.3.2 step 2 — the 0x180076900 forwarder that used to sit here is
+// GONE. `TabElement`'s `_children` (Element.h, +0xa0) is the real
+// `Collection::Array<Element*>` member dialog_create.cpp's banner already
+// covers, and this file does not have a typed `self` to reach it through, so
+// the two call sites below bridge with the same `kSpec_Fill8Z` row at the raw
+// `TAE::kChildrenData` offset.
 inline void ArrayCellsSetSizeFill(void* arrayHdr, int32_t n, const void* fill) {
-    using Fn = void (*)(void*, int32_t, const void*);
-    static Fn fn = nullptr;                 // cache a hit, retry a miss
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180076900));
-    fn(arrayHdr, n, fill);
+    rtcoll::AsArray<&rtcoll::kSpec_Fill8Z>(arrayHdr)->SetSizeFill(n, fill);
 }
 
 // ?UpdateContainers@TabElement@UI@@AEAAXXZ — PORTED in this same wave
