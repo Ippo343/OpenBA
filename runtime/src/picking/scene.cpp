@@ -981,7 +981,7 @@ extern "C" int RtPicking_Scene_Intersect(const Scene* cself, const Vector3* star
                     }
                 }
                 ++sub;
-            } while (sub < EntryAt(self, LinkEntry(self, curLink))->_transforms._size);
+            } while (sub < EntryAt(self, LinkEntry(self, curLink))->_transforms.GetSize());
         }
 
         // Walk the rest of this cell's link chain, skipping entries already
