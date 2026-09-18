@@ -96,11 +96,13 @@ built them wrong, and callbacks stored in data.
     (counts above). A row reached by address is a live door; deleting it is an
     EXEC-of-0 at runtime, not a link error — so the wrapper call forms have to be in
     the sweep's vocabulary before any row is deleted.
-  - `Set<Filename>` insert and the deep `Array::operator=` have **unit coverage only**:
-    there is no `.pkm` on this box, so `RefreshList`'s insert never runs, and no
-    production caller copy-assigns an Array. Both are exercised by `tests/unit/`
-    (`set_test.cpp`'s width-8 block drives `AvlGeneric` on the host, not the ported
-    bodies — the real run verifies those).
+  - The deep `Array::operator=` has **unit coverage only**: no production caller
+    copy-assigns an Array. `Set<Filename>` insert (width-8 `AvlOps`) was in the same
+    position at the close because `WinData/` holds no `.pkm`; it has since run live —
+    2026-09-18, main f215e93f, both mods moved in from `WinData/_mods_off/`, the Mods
+    route to Quit: exit 0, empty crash log, no hang log, the mods-Ok reload completed.
+    The mods are back in `_mods_off/`. (`set_test.cpp`'s width-8 block drives
+    `AvlGeneric` on the host, not the ported bodies — the real run verifies those.)
   - 36 collection `fn_*` pointers and `fn_Array_Resize_Stride02/08/14/16B/20`,
     `fn_BST_*`, `fn_DynArray_Clear_*` and friends stay: each still has at least one
     caller in `code/Game`, and each disappears with its caller's own conversion.
