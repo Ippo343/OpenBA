@@ -56,6 +56,17 @@ golden and run twice. The `.bin` files are git-ignored; the golden's md5 is comm
   passed. So the count field can include one resource the row loop does not write, and
   which resource is resident is not fully deterministic even with the picks pinned. A
   one-byte diff at +0x18 is this; re-run before reading it as a serializer change.
+- The same race, one step further (2026-09-18, after B.3.3 step 6A turned ~158 resolved
+  pointer calls on the load path into direct/inline calls): the borderline resource is
+  counted AND its row is written. Signature: `count` 5689 (never higher), image +40/+41
+  bytes, exactly ONE extra path string versus the golden — `CropField.rsc:resource` —
+  and ~14 MB of "differing bytes" that are only the id shift behind it. Measured 2 DIFF in
+  10 runs on that exe against 0 in 9 on the commit before it; six consecutive PASS later on
+  the same exe. No semantic cause exists in that batch (members return raw pointers, call
+  counts match one-for-one, no flag or argument changed). Read a failure with the count and
+  the extra row: count <= 5689 and a single extra/missing row is THIS; a count of 5690+, or
+  several rows, is a real change. Re-run twice before reading it either way. The race
+  itself is the `ExternalFactory::Add` loader investigation, not a gate defect.
 - Intermittent, not fixed, both pre-existing: (1) one run in ~12 crashed in
   `ExternalFactory::Add`'s AVL rotate during the loader, with a `[GUL::Load] redundant
   dispatch` line just before it (two loader dispatchers racing; see the guard comment in

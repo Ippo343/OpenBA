@@ -172,7 +172,27 @@ built them wrong, and callbacks stored in data.
   id/name pairs, `[RtResolve] 0 misses`, no `[RtMint] TRAP`, resave PASS with the persist
   pair live (`clearRuns=2 resetRuns=2`), dispatch 0. `make sa-stress`: clean quit, sim
   0.21 ms/iteration (+9–10% printed; External-only read +7%). **Recorded, not chased** —
-  perf is revisited after B closes (B33_RULES §10). Next: step 6, the caller batches.
+  perf is revisited after B closes (B33_RULES §10).
+  Step 6 RE-SCOPED (B33_RULES §9.6): none of the 545 literal `GetTypeIdByName` sites names
+  a class that is real yet (287 game/engine names), so that sweep moves into each class's
+  own conversion (B.3 steps 5–8); the 124 `CallSlot0` sites wait for their classes; 159
+  serializer-pointer sites wait for `IO::Serializer`. What B.3.3 does convert: batch A
+  External callers, B Internal callers, C Factory callers, D the 4,700 no-op `CheckPtr`
+  calls.
+  Batch 6A done (merge of `5d6a6eeb`): 158 of 380 real call sites of `fn_ExternalFactory_*`
+  / `fn_External_GetPath` / `fn_ExternalList_GetResourceCount` / `fn_External_SaveText` are
+  member calls on the real classes (53 files, 141 `// B.3.3 bridge` casts, every guard on
+  a no-longer-called pointer kept for the closing pass). NOT converted, by design:
+  `fn_External_External` (113) and `fn_External_Dtor` (107) — `Object::External` is
+  abstract and a real ctor/dtor chain would stamp GCC's vtable where live objects wear the
+  minted one; they convert with their receivers' classes. `fn_ExternalList_Find` (4):
+  `External.h` spells its second parameter `uint32_t`, retail's is `Object::Type` by value.
+  Two `GetResourceCount` calls inside fprintf argument lists stay (perf build strips them).
+  Gate: debug + perf build, unit 206/0, three routes exit 0, HelpTopics 66 / DiseaseList 12
+  identical to the pre-merge boot, dispatch 0, stress clean quit (0.21 ms/iter, recorded).
+  Resave gate: 8 PASS / 2 DIFF in 10 runs (0/9 DIFF on the commit before) — the known
+  loader-race flake one step further, one extra `CropField.rsc:resource` row at count 5689;
+  documented in `tools/resave_gate/README.md`, no semantic cause in the batch. Next: 6B/6C.
 
 - **B.3.1 CLOSED (2026-09-13 night):** `System::String`, `System::Filename` and the nine
   `Math` value types are real classes under retail's names (`runtime/types/system/*.h`,
