@@ -25,6 +25,7 @@
 #include "math/Math.h"
 #include "resolve.h"
 #include "collection/Collection.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
@@ -83,21 +84,20 @@ static const uintptr_t kWeatherGeometryVtable = 0x140160240;
 // nine dwords. The body below instead memsets [0, newCount) of the buffer
 // AFTER the grow — on an in-place grow or shrink from a non-zero count that
 // also wipes the surviving prefix, which the reference never touches. Only
-// the row (kSpec_WeatherParticle, below) is retail's; it is used by the
+// the element row (`WeatherParticleElem`, below) is retail's; it is used by the
 // geometry destructor. Reconciling this body with retail is a separate,
 // deliberate change.
 // ============================================================
 namespace {
-void AssignWeatherParticle(uint8_t* d, const uint8_t* s) { std::memcpy(d, s, 0x24); }
-void InitWeatherParticle(uint8_t* d)                     { std::memset(d, 0, 0x24); }
-const rtcoll::ArraySpec kSpec_WeatherParticle = {    // exe 0x140025090
-    "Array<WeatherParticle>", 0x24, 4,
-    &AssignWeatherParticle, &InitWeatherParticle, nullptr, /*byteCopy*/true,
-    /*assign unwritten*/ 0, 0,
-    /*init   unwritten*/ 0, 0,
-    /*seed zero       */ 0, 0 };
-using WeatherParticleArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                               Collection::ExplicitSpec<&kSpec_WeatherParticle>>;
+// ENDGAME B.3.2 closing pass: the row said only what a type's traits say — a
+// whole-stride byte copy, a whole-stride zero tail, no destroy, no
+// deliberately-untouched extent — so it is the trait-derived
+// `Collection::Array<T>` over the 0x24-byte zeroing blob. `SpecFor<T>()`
+// re-derives the identical row; exe 0x140025090 stays here as the provenance.
+using WeatherParticleElem = GameColl::Bytes<0x24, 4>;   // exe 0x140025090
+static_assert(sizeof(WeatherParticleElem)  == 0x24, "WeatherParticleElem stride");
+static_assert(alignof(WeatherParticleElem) == 4,    "WeatherParticleElem align");
+using WeatherParticleArray = Collection::Array<WeatherParticleElem>;
 }  // namespace
 
 static void WeatherParticle_ArrayAlloc(void* header, int newCount) {
@@ -410,16 +410,13 @@ extern "C" bool  GeomDraw_Clean(void* self);
 // Every arm matched; only the `if (dst)` out-of-memory guard is gone.
 // ============================================================
 namespace {
-void AssignWeatherEntry(uint8_t* d, const uint8_t* s) { std::memcpy(d, s, 0x10); }
-void InitWeatherEntry(uint8_t* d)                     { std::memset(d, 0, 0x10); }
-const rtcoll::ArraySpec kSpec_WeatherEntry = {       // exe 0x1400198a0
-    "Array<{Weather*,ExternalPtr}>", 0x10, 8,
-    &AssignWeatherEntry, &InitWeatherEntry, nullptr, /*byteCopy*/true,
-    /*assign unwritten*/ 0, 0,
-    /*init   unwritten*/ 0, 0,
-    /*seed zero       */ 0, 0 };
-using WeatherEntryArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                            Collection::ExplicitSpec<&kSpec_WeatherEntry>>;
+// ENDGAME B.3.2 closing pass: as for the particle row above, the hand-derived
+// row said exactly what `SpecFor<Bytes<0x10,8>>()` derives — whole-stride byte
+// copy, whole-stride zero tail, no destroy, no untouched extent.
+using WeatherEntryElem = GameColl::Bytes<0x10, 8>;   // exe 0x1400198a0
+static_assert(sizeof(WeatherEntryElem)  == 0x10, "WeatherEntryElem stride");
+static_assert(alignof(WeatherEntryElem) == 8,    "WeatherEntryElem align");
+using WeatherEntryArray = Collection::Array<WeatherEntryElem>;
 }  // namespace
 
 extern "C" void Reimpl_WeatherArray_Resize(void* hdr, int newCount) {

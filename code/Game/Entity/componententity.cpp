@@ -15,6 +15,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Entity/componententity_funcs.h"
+#include "Component/coll_bridge.h"
 #include "options.h"
 #include <windows.h>
 #include "engine_funcs.h"
@@ -231,9 +232,10 @@ void ComponentEntity_RefreshEntityFlags(ComponentEntity* self) {
             if (fn_InternalBasePtr_Ctor) {
                 fn_InternalBasePtr_Ctor((void*)&ibp, self);
             }
-            if (fn_ExeArrayResizeFill) {
-                fn_ExeArrayResizeFill((void*)(entityListPtr + 0x88), updateCount, (void*)&ibp);
-            }
+            // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003110,
+            // stride 8 align 8. Element is the 8-byte entity InternalBasePtr.
+            GameColl::ArrayAt<GameColl::Ptr8>(entityListPtr, 0x88).SetSize(
+                updateCount, *reinterpret_cast<const GameColl::Ptr8*>(&ibp));
         }
 
         // If draw bit (bit 4) changed, register in draw bucket
@@ -244,9 +246,10 @@ void ComponentEntity_RefreshEntityFlags(ComponentEntity* self) {
             if (fn_InternalBasePtr_Ctor) {
                 fn_InternalBasePtr_Ctor((void*)&ibp, self);
             }
-            if (fn_ExeArrayResizeFill) {
-                fn_ExeArrayResizeFill((void*)(entityListPtr + 0x98), drawCount, (void*)&ibp);
-            }
+            // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003110,
+            // stride 8 align 8. Element is the 8-byte entity InternalBasePtr.
+            GameColl::ArrayAt<GameColl::Ptr8>(entityListPtr, 0x98).SetSize(
+                drawCount, *reinterpret_cast<const GameColl::Ptr8*>(&ibp));
         }
     }
 }
@@ -308,7 +311,9 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
 
     // On load: resize component array to match serialized count
     if (encodingMode == 0) {
-        fn_ExeArrayResize((void*)(s + 0x30), (int)compCount);
+        // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
+        // new tail zeroed. Element is the 8-byte component InternalBasePtr (byte-copy).
+        GameColl::ArrayAt<GameColl::Ptr8>(s, 0x30).SetSize((int)compCount);
         // Save/load wave diagnostics: a garbage count (stream misalignment) or
         // a failed resize (data still null with count>0) crashes the IBP loop
         // below — log the state on the way in so the crash log has context.
@@ -565,7 +570,9 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
 
                 // Resize component array to make room
                 int oldCount = self->componentCount;
-                fn_ExeArrayResize((void*)(s + 0x30), oldCount + 1);
+                // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8
+                // align 8, new tail zeroed. Element is the component InternalBasePtr.
+                GameColl::ArrayAt<GameColl::Ptr8>(s, 0x30).SetSize(oldCount + 1);
 
                 // Shift existing components right to make room at insertPos
                 uintptr_t compArr = (uintptr_t)self->components;
@@ -709,7 +716,7 @@ ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void
 
     // The entity block comes from MemAlloc(0x48), which does NOT zero memory. The
     // original CopyCtor zeroes the full component-array header (data/count/cap);
-    // leaving +0x3c (capacity) as heap garbage makes fn_ExeArrayResize below see a
+    // leaving +0x3c (capacity) as heap garbage makes the SetSize below see a
     // bogus oldCap >= newCount and skip the allocation, leaving components==null
     // and crashing the insert. (Latent until the description +0x40 fix made
     // validCount > 0.)
@@ -719,7 +726,7 @@ ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void
 
     // Sanity guard: a corrupted/unexpected description (component-count field read
     // as garbage) would size the component array to an absurd value and segfault in
-    // fn_ExeArrayResize. Bail loudly with the desc pointer so the bad template is
+    // the SetSize below. Bail loudly with the desc pointer so the bad template is
     // identifiable. (Seen intermittently during resource scatter — likely heap
     // corruption upstream or an unexpected desc layout.)
     if (descCompCount < 0 || descCompCount > 256) {
@@ -745,8 +752,10 @@ ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void
     }
 
 
-    // Allocate component array
-    fn_ExeArrayResize((void*)(s + 0x30), validCount);
+    // Allocate component array.
+    // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
+    // new tail zeroed. Element is the 8-byte component InternalBasePtr (byte-copy).
+    GameColl::ArrayAt<GameColl::Ptr8>(s, 0x30).SetSize(validCount);
 
     // Second pass: create components
     int insertIdx = 0;
@@ -822,7 +831,7 @@ ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void
         }
     }
 
-    // Correct the array count: fn_ExeArrayResize sized it to validCount, but in
+    // Correct the array count: the SetSize above sized it to validCount, but in
     // standalone some components may have been skipped (missing factory), so the
     // real populated count is insertIdx. Leaving it at validCount would let the
     // readers walk past the last valid slot into uninitialised memory.
@@ -855,13 +864,19 @@ static void ComponentEntity_RegisterUpdateDraw(ComponentEntity* self, uint32_t o
         int updateCount = *(int*)(el + 0x90) + 1;
         uintptr_t ibp = 0;
         if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor((void*)&ibp, self);
-        if (fn_ExeArrayResizeFill) fn_ExeArrayResizeFill((void*)(el + 0x88), updateCount, (void*)&ibp);
+        // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003110,
+        // stride 8 align 8. Element is the 8-byte entity InternalBasePtr.
+        GameColl::ArrayAt<GameColl::Ptr8>(el, 0x88).SetSize(
+            updateCount, *reinterpret_cast<const GameColl::Ptr8*>(&ibp));
     }
     if ((changed & 0x10) != 0) {
         int drawCount = *(int*)(el + 0xa0) + 1;
         uintptr_t ibp = 0;
         if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor((void*)&ibp, self);
-        if (fn_ExeArrayResizeFill) fn_ExeArrayResizeFill((void*)(el + 0x98), drawCount, (void*)&ibp);
+        // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003110,
+        // stride 8 align 8. Element is the 8-byte entity InternalBasePtr.
+        GameColl::ArrayAt<GameColl::Ptr8>(el, 0x98).SetSize(
+            drawCount, *reinterpret_cast<const GameColl::Ptr8*>(&ibp));
     }
 }
 
@@ -927,8 +942,10 @@ void EntityList_RegisterEntity_Impl(void* entityListV, void* entityIBP, int cate
     ComponentEntity_RegisterUpdateDraw((ComponentEntity*)ent, 0);
 
     // Append to the main entity array (count -> id+1).
-    if (fn_ExeArrayResizeFill)
-        fn_ExeArrayResizeFill((void*)(el + 0x08), id + 1, entityIBP);
+    // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003110,
+    // stride 8 align 8. Element is the 8-byte entity InternalBasePtr.
+    GameColl::ArrayAt<GameColl::Ptr8>(el, 0x08).SetSize(
+        id + 1, *reinterpret_cast<const GameColl::Ptr8*>(entityIBP));
 
     ent = entity();
     *(int8_t*)(ent + 0x1F) = (int8_t)category;          // category byte (handle high byte)
@@ -944,8 +961,10 @@ void EntityList_RegisterEntity_Impl(void* entityListV, void* entityIBP, int cate
         *pf ^= (*pf ^ bucketIdx) & 0xFFFFFF;            // low-24 = bucket index
         uint8_t* bucket = el + (uintptr_t)category * 0x10 + 0x18;
         int bcount = *(int32_t*)(bucket + 8);
-        if (fn_ExeArrayResizeFill)
-            fn_ExeArrayResizeFill((void*)bucket, bcount + 1, entityIBP);
+        // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003110,
+        // stride 8 align 8. Element is the 8-byte entity InternalBasePtr.
+        GameColl::AsArray<GameColl::Ptr8>(bucket).SetSize(
+            bcount + 1, *reinterpret_cast<const GameColl::Ptr8*>(entityIBP));
     }
 
     ent = entity();

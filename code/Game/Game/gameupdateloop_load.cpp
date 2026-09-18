@@ -29,6 +29,7 @@
 #include "resolve.h"
 #include "Component/component_factory_base.h"  // ComponentFactory::the live gate
 #include "collection/Collection.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -326,8 +327,8 @@ static void LoadEnsureInit() {
 // ============================================================
 // Array-resize leaf helpers (verified, m5-load-ctor-drafts)
 // Header layout: +0x00 ptr, +0x08 int count, +0x0C int capacity.
-// NB: the stride-8 ZERO-FILL variant (FUN_1400032e0) already exists as
-// fn_ExeArrayResize (engine_funcs.h) — reused, not redefined here.
+// NB: the stride-8 ZERO-FILL variant (FUN_1400032e0) is reached as
+// Collection::Array<GameColl::Ptr8>::SetSize — not redefined here.
 // ============================================================
 
 // ENDGAME B.3.2 step 2: the five resize bodies in this block (0x1400191f0,
@@ -670,7 +671,9 @@ static void* Reimpl_FUN_140093e30(void* weatherObj, void* envRes, void* climateG
     if (envRes) {
         int count = *(int32_t*)((uint8_t*)envRes + 0x30);
         Reimpl_FUN_1400191f0((void*)(p + 0x50), count);
-        fn_ExeArrayResize((void*)(p + 0x60), count);   // FUN_1400032e0 (stride8 zero-fill)
+        // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
+        // new tail zeroed. Element is an 8-byte object handle (byte-copy, zeroing).
+        GameColl::ArrayAt<GameColl::Ptr8>(p, 0x60).SetSize(count);
         int n0 = *(int32_t*)(p + 0x58);
         void** arr0 = *(void***)(p + 0x50);
         for (int i = 0; i < n0; ++i) arr0[i] = nullptr;

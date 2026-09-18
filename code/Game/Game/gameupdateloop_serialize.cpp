@@ -48,6 +48,7 @@
 #include "resolve.h"
 #include "system/String.h"
 #include "collection/Collection.h"
+#include "Component/coll_bridge.h"
 #include <new>
 #include "address_registry.h"
 #include "Object/factory_registration.h"
@@ -706,7 +707,7 @@ extern "C" void EntityList_PostLoad_c4730(void* elVoid, void* stream) {
 // Called by EntityList::Serialize (fn_BucketTreeSerialize, was unresolved —
 // the null was the first save-run crash). Five bucket arrays (hdr stride 0x10:
 // {IBP* data; int count/cap}): serialize count, resize on load
-// (fn_ExeArrayResize = 0x1400032e0), then per-element InternalBasePtr
+// (Collection::Array<Ptr8>::SetSize = 0x1400032e0), then per-element InternalBasePtr
 // serialize with a ComponentEntity IsDerivedFrom filter.
 extern "C" void BucketTree_Serialize_21ba0(void* serializer, void* /*unused*/,
                                            void* bucketsPtr) {
@@ -718,7 +719,9 @@ extern "C" void BucketTree_Serialize_21ba0(void* serializer, void* /*unused*/,
         int count = *(int*)(hdr + 0x8);
         g_fn_Serialize_Int(serializer, &count, nullptr);
         if (*(int*)((uintptr_t)*(void**)serializer + 8) == 0) {
-            fn_ExeArrayResize((void*)hdr, count);
+            // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8
+            // align 8, new tail zeroed. Element is the 8-byte InternalBasePtr slot.
+            GameColl::AsArray<GameColl::Ptr8>(hdr).SetSize(count);
         }
         uint8_t* slot = *(uint8_t**)hdr;
         for (int i = 0; i < count; i++, slot += 8) {

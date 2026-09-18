@@ -8,6 +8,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_panels.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
@@ -70,9 +71,10 @@ void StatusIconUI_Serialize(StatusIconUI* self) {
     // Get child count
     int childCount = fn_Element_ChildCount(iconsElem);
 
-    // Resize the array at self+0x30 to hold childCount entries
-    // FUN_1400032e0(arrayBase, newCount) — sets up the array
-    fn_ExeArrayResize((void*)((uintptr_t)self + 0x30), childCount);
+    // Resize the array at self+0x30 to hold childCount entries.
+    // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
+    // new tail zeroed. Element is the 8-byte InternalPtr<Element> copied in below.
+    GameColl::ArrayAt<GameColl::Ptr8>(self, 0x30).SetSize(childCount);
 
     // Copy each child's InternalPtr (8 bytes) into the array
     int storedCount = *(int*)((uintptr_t)self + 0x38);

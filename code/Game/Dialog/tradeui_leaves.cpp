@@ -48,7 +48,7 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "system/String.h"
-#include "Dialog/dialog_array_bridge.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <new>
 
@@ -67,19 +67,19 @@ extern "C" void TradeUI_DynArrayClear_16050(int64_t* header) {
     if (!header) return;                     // retail derefs unconditionally; callers
                                              // always pass &self->field, so this guard
                                              // is standalone-only belt-and-braces.
-    DlgArray<0x20>(reinterpret_cast<uintptr_t>(header), 0).Clear();
+    GameColl::ArrayAt<GameColl::Bytes<0x20, 8>>(reinterpret_cast<uintptr_t>(header), 0).Clear();
 }
 
 // 0x140016130 — clear the buy-entry array (stride 0x18).
 extern "C" void TradeUI_DynArrayClear_16130(int64_t* header) {
     if (!header) return;                     // see 16050
-    DlgArray<0x18>(reinterpret_cast<uintptr_t>(header), 0).Clear();
+    GameColl::ArrayAt<GameColl::Bytes<0x18, 8>>(reinterpret_cast<uintptr_t>(header), 0).Clear();
 }
 
 // 0x140016200 — clear the storage/order-entry array (stride 0x18).
 extern "C" void TradeUI_DynArrayClear_16200(int64_t* header) {
     if (!header) return;                     // see 16050
-    DlgArray<0x18>(reinterpret_cast<uintptr_t>(header), 0).Clear();
+    GameColl::ArrayAt<GameColl::Bytes<0x18, 8>>(reinterpret_cast<uintptr_t>(header), 0).Clear();
 }
 
 // ── 0x140015fd0 — fn_Building_GetOrderName ───────────────────────────────────

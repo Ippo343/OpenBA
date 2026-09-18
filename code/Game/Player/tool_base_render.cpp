@@ -136,32 +136,31 @@ inline void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBase
 // element with a fill, so each local is now a real Collection::Array:
 //   * the two index lists are the trait-derived Array<int16_t> (stride 2, align 2,
 //     byteCopy, init == nullptr, destroy == nullptr) — the same row GrowTo used;
-//   * the two vertex lists keep hand-derived rows because this site allocates
-//     BOTH strides with ALIGN 2 (`fn_MemAllocStatic(cap * stride, 2)`), which is
-//     kept exactly as the transcription had it, not re-derived from retail.
-//     byteCopy == true (the arm was a memcpy of the whole stride), init == nullptr
-//     (a fill is always supplied), destroy == nullptr (trivial elements).
-void AssignBytes8 (uint8_t* d, const uint8_t* s) { std::memcpy(d, s, 8); }
-void AssignBytes16(uint8_t* d, const uint8_t* s) { std::memcpy(d, s, 0x10); }
-
-const rtcoll::ArraySpec kSpec_TriVertex8 = {    // exe 0x1400074a0 idiom, stride 8
-    "Array<EdgeMesh::TriangleVertex (align 2)>", 8, 2,
-    &AssignBytes8, nullptr, nullptr, true,
-    /*assign unwritten*/ 0, 0,
-    /*init   unwritten*/ 0, 0,
-    /*seed zero       */ 0, 0 };
-const rtcoll::ArraySpec kSpec_EdgeVertex16 = {  // exe 0x1400074a0 idiom, stride 0x10
-    "Array<EdgeMesh::EdgeVertex (align 2)>", 0x10, 2,
-    &AssignBytes16, nullptr, nullptr, true,
-    /*assign unwritten*/ 0, 0,
-    /*init   unwritten*/ 0, 0,
-    /*seed zero       */ 0, 0 };
+//   * the two vertex lists are trait-derived over blobs at ALIGN 2, because this
+//     site allocates BOTH strides with ALIGN 2 (`fn_MemAllocStatic(cap * stride,
+//     2)`), which is kept exactly as the transcription had it, not re-derived
+//     from retail. byteCopy == true (the arm was a memcpy of the whole stride),
+//     init == nullptr (a fill is always supplied), destroy == nullptr (trivial
+//     elements).
+// ENDGAME B.3.2 closing pass: both vertex rows said only what a C++ type's
+// traits say — whole-stride byte copy, `init == nullptr` (retail's empty else
+// arm; every caller supplies a fill so the arm is never reached anyway),
+// `destroy == nullptr`, no deliberately-untouched extent — so each is now the
+// trait-derived `Collection::Array<T>` over a blob of the row's stride at the
+// row's align. The blobs carry NO initialiser on purpose: that is what makes
+// `SpecFor<T>()` derive `init == nullptr` rather than a zeroing `TInit`.
+// `alignas(2)` is the transcription's own allocation alignment
+// (`fn_MemAllocStatic(cap * stride, 2)`), kept exactly as it was.
+struct alignas(2) TriVertex8  { uint8_t b[8];    };   // exe 0x1400074a0 idiom, stride 8
+struct alignas(2) EdgeVertex16 { uint8_t b[0x10]; };  // exe 0x1400074a0 idiom, stride 0x10
+static_assert(sizeof(TriVertex8)   == 8,    "TriVertex8 stride");
+static_assert(alignof(TriVertex8)  == 2,    "TriVertex8 align");
+static_assert(sizeof(EdgeVertex16)  == 0x10, "EdgeVertex16 stride");
+static_assert(alignof(EdgeVertex16) == 2,    "EdgeVertex16 align");
 
 using IdxArray     = Collection::Array<int16_t>;
-using TriVtxArray  = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                       Collection::ExplicitSpec<&kSpec_TriVertex8>>;
-using EdgeVtxArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                       Collection::ExplicitSpec<&kSpec_EdgeVertex16>>;
+using TriVtxArray  = Collection::Array<TriVertex8>;
+using EdgeVtxArray = Collection::Array<EdgeVertex16>;
 
 // ===========================================================================
 // thunk_helper_d250_sub_7080 (0x140007080)

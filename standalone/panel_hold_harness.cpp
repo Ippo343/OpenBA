@@ -43,6 +43,7 @@
 #include "Object/factory_registration.h"
 #include "Player/edittool_funcs.h"
 #include "options.h"
+#include "ui/UserInterface.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -84,17 +85,17 @@ void PanelHoldClick(int frameNum) {
     // argument is the controller TYPE id). The held panel is the only open dialog that
     // carries one.
     void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
-    void* uiSingleton = gw ? *reinterpret_cast<void**>(static_cast<uint8_t*>(gw) + 0x98) : nullptr;
-    if (!uiSingleton || !fn_UI_GetFirstDialog) return;
-    uintptr_t nodeBuf[4] = {};
-    fn_UI_GetFirstDialog(uiSingleton, nodeBuf);
+    UI::UserInterface* uiSingleton =
+        gw ? *reinterpret_cast<UI::UserInterface**>(static_cast<uint8_t*>(gw) + 0x98) : nullptr;
+    if (!uiSingleton) return;
     void* ctrl = nullptr;
     int dialogs = 0;
     static bool s_listed = false;
-    for (uintptr_t node = nodeBuf[0]; node != 0 && !ctrl;
-         node = *reinterpret_cast<uintptr_t*>(node + 0x10)) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(node));
-        void* dlgInst = *reinterpret_cast<void**>(node);
+    // `_dialogs.GetFirst()` IS retail's GetFirstDialog (0x180031150 = `*retval =
+    // this->_dialogs._head`); the iterator is the bare node pointer.
+    for (auto it = uiSingleton->_dialogs.GetFirst(); it && !ctrl; ++it) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(it.node);
+        void* dlgInst = it.node->element;
         if (!dlgInst) continue;
         ++dialogs;
         if (!s_listed) {

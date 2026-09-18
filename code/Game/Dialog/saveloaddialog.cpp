@@ -32,7 +32,7 @@
 //   +0x158 buttonDelete (InternalBasePtr)
 
 #include "Dialog/ui_dialogs.h"
-#include "Dialog/dialog_array_bridge.h"
+#include "Component/coll_bridge.h"
 #include "options.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -356,10 +356,10 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
         // FUN_1400211e0's own inlined SetSize (SaveEntryArray_Resize); the
         // MaterialInstance/SpriteSheet fields it carries are raw pointer bytes
         // here, destroyed separately in Phase 1 above, not by this growth.
-        auto& rows = DlgArray<0x40>(s, 0x110);
+        auto& rows = GameColl::ArrayAt<GameColl::Bytes<0x40, 8>>(s, 0x110);
         rows.SetSize(rows.GetSize() + 1,
-                     DlgElem<0x40>{{entry[0], entry[1], entry[2], entry[3],
-                                    entry[4], entry[5], entry[6], entry[7]}});
+                     GameColl::Bytes<0x40, 8>(entry[0], entry[1], entry[2], entry[3],
+                                    entry[4], entry[5], entry[6], entry[7]));
     }
 
     // --- Phase 4: Fill remaining empty rows ---

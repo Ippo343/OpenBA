@@ -28,7 +28,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_dialogs.h"
-#include "Dialog/dialog_array_bridge.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -754,8 +754,11 @@ extern "C" void ToolbarUtility_HarnessOpen(void* gameSubsys, uint64_t param) {
 // since AddDialog doesn't reach the setup through the standalone ToolUI child-dialog
 // vtable. slotIndex defaults to 4 for the existing map callers.
 extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName, int slotIndex) {
-    if (!fn_DialogInstance_GetController || !fn_UI_GetFirstDialog) {
-        printf("[HarnessDrive] GetController/GetFirstDialog null\n"); return;
+    // (This harness never walks the dialog LIST — it enumerates the _addDialogs
+    // array at UI+0x28 below — so the old `!fn_UI_GetFirstDialog` half of this
+    // guard tested a pointer the body does not use, and is gone.)
+    if (!fn_DialogInstance_GetController) {
+        printf("[HarnessDrive] GetController null\n"); return;
     }
     void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     if (!gameWorld) { printf("[HarnessDrive] gameWorld null\n"); return; }
@@ -958,7 +961,7 @@ extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys) {
 // Mimics the inlined vector growth pattern seen throughout the exe.
 //
 // B.3.2: the ToolbarDialog+0xC0/+0xD0 struct-field call sites below were
-// converted to the DlgArray<8>/DlgArrayI32 bridge (dialog_array_bridge.h) in
+// converted to the GameColl::ArrayAt bridge (Component/coll_bridge.h) in
 // place. This helper is KEPT because it still has one caller each
 // (itemList/itemListCount/itemListCap and shortcutIds/shortcutCount/shortcutCap)
 // that cannot go through the bridge: those are three independent locals, not a
@@ -1226,16 +1229,16 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
         // Push to buttonElements array at +0xC0.
         // B.3.2 bridge: ToolbarDialog+0xC0 is Collection::Array<{Element*}>
         // (stride 0x08, count +0xC8, capacity +0xCC).
-        auto& buttonRows = DlgArray<0x08>(s, 0xC0);
+        auto& buttonRows = GameColl::ArrayAt<GameColl::Bytes<0x08, 8>>(s, 0xC0);
         buttonRows.SetSize(buttonRows.GetSize() + 1,
-                            DlgElem<0x08>{{(uint64_t)newElement}});
+                            GameColl::Bytes<0x08, 8>((uint64_t)newElement));
 
         // Push to toolbarItems array at +0xD0.
         // B.3.2 bridge: ToolbarDialog+0xD0 is Collection::Array<{ToolbarItem*}>
         // (stride 0x08, count +0xD8, capacity +0xDC).
-        auto& toolbarItemRows = DlgArray<0x08>(s, 0xD0);
+        auto& toolbarItemRows = GameColl::ArrayAt<GameColl::Bytes<0x08, 8>>(s, 0xD0);
         toolbarItemRows.SetSize(toolbarItemRows.GetSize() + 1,
-                                 DlgElem<0x08>{{(uint64_t)item}});
+                                 GameColl::Bytes<0x08, 8>((uint64_t)item));
 
         // Add element as child of table at current buttonIndex
         fn_InternalBasePtr_CheckPtr((void*)&tableElement);
@@ -1414,18 +1417,18 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
     // --- Step 9: Populate speed values array {1, 2, 5, 10, 20, 50} ---
     *(int32_t*)(s + 0xF4) = 0; // currentSpeedIndex = 0
 
-    // B.3.2 bridge: ToolbarDialog+0xF8 is Collection::Array<DlgI32> (stride 4,
-    // count +0x100, capacity +0x104).
-    auto& speedRows = DlgArrayI32(s, 0xF8);
-    speedRows.SetSize(speedRows.GetSize() + 1, DlgI32{1});
-    speedRows.SetSize(speedRows.GetSize() + 1, DlgI32{2});
-    speedRows.SetSize(speedRows.GetSize() + 1, DlgI32{5});
-    speedRows.SetSize(speedRows.GetSize() + 1, DlgI32{10});
+    // B.3.2 bridge: ToolbarDialog+0xF8 is Collection::Array<GameColl::I32>
+    // (stride 4, count +0x100, capacity +0x104).
+    auto& speedRows = GameColl::ArrayAt<GameColl::I32>(s, 0xF8);
+    speedRows.SetSize(speedRows.GetSize() + 1, GameColl::I32{1});
+    speedRows.SetSize(speedRows.GetSize() + 1, GameColl::I32{2});
+    speedRows.SetSize(speedRows.GetSize() + 1, GameColl::I32{5});
+    speedRows.SetSize(speedRows.GetSize() + 1, GameColl::I32{10});
     // [NON-RETAIL] retail stops at 10x. 20x and 50x extend the sequence so the perf
     // harness (BANISHED_STRESS_SPEED) and the in-game speed-up button can push the
     // sim harder than retail allows; the speed cascade below is table-driven.
-    speedRows.SetSize(speedRows.GetSize() + 1, DlgI32{20});
-    speedRows.SetSize(speedRows.GetSize() + 1, DlgI32{50});
+    speedRows.SetSize(speedRows.GetSize() + 1, GameColl::I32{20});
+    speedRows.SetSize(speedRows.GetSize() + 1, GameColl::I32{50});
 
     // --- Step 10: Find current game speed in speed array ---
     int32_t speedIndex = 0;

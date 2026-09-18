@@ -56,6 +56,7 @@
 #include "math/Math.h"
 #include "resolve.h"
 #include "collection/Collection.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -257,6 +258,9 @@ static void DestroyRgPathVec(void* /*ignoredThis*/, uint8_t* base, int count) {
         *(uint64_t*)(slot + 8) = 0;
     }
 }
+// stays explicit: `assign` deep-copies the inner vector (CopyVec1c) and
+// `destroy` frees its buffer — byteCopy=false plus a destroy, which no C++
+// element type can express.
 static const rtcoll::ArraySpec kSpec_RgPathVec = {  // exe 0x140024460
     "Array<Array<PathPoint>>", 0x10, 8,
     &AssignRgPathVec, &InitRgPathVec, &DestroyRgPathVec, /*byteCopy*/false,
@@ -276,8 +280,12 @@ static void DeepAppendAoA(void* hdr, int newCount, void* srcVec) {
 // {data,count,cap} vector to `newCount` (grow ×3 on count+1), copying retained
 // elements and zeroing the new tail. cc850 calls this then overwrites the tail.
 //
-// ENDGAME B.3.2 step 2: now `Collection::Array<>::SetSize` over the
-// `kSpec_WgPathPointZeroInit` row defined in worldgen_f390_coastline.cpp.
+// ENDGAME B.3.2 step 2: now `Collection::Array<>::SetSize` over this site's own
+// zeroing 0x1C-byte element (the closing pass collapsed what was a hand-derived
+// `kSpec_WgPathPointZeroInit` row in worldgen_f390_coastline.cpp onto the
+// trait-derived form — the row was a whole-stride byte copy, a whole-stride zero
+// tail, no destroy and no deliberately-untouched extent, which is precisely what
+// `rtcoll::SpecFor<GameColl::Bytes<0x1C,4>>()` derives).
 // Compared arm for arm against rtcoll::SetSizeCore and the retail body
 // 0x140023b70 (re-decompiled 2026-09-13): every structural arm matched.
 //
@@ -289,11 +297,14 @@ static void DeepAppendAoA(void* hdr, int newCount, void* srcVec) {
 // [8,0x1C) of every record before anything reads them — but this refactor's
 // contract is no behaviour change in a deterministic world build, so each site
 // keeps its own arm and the reconciliation onto retail's is left as a separate,
-// separately-verified change. The two rows sit side by side in coastline.cpp.
+// separately-verified change. Coastline's arm is `kSpec_WgPathPointNoInit`,
+// which stays explicit because "leave the whole stride as found" is a probe
+// contract; this one is an element type.
 // ============================================================
-extern const rtcoll::ArraySpec kSpec_WgPathPointZeroInit;  // worldgen_f390_coastline.cpp, exe 0x140023b70
-using WgPathPointArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                           Collection::ExplicitSpec<&kSpec_WgPathPointZeroInit>>;
+using WgPathPointElem = GameColl::Bytes<0x1c, 4>;   // exe 0x140023b70, ranges arm
+static_assert(sizeof(WgPathPointElem)  == 0x1c, "WgPathPointElem stride");
+static_assert(alignof(WgPathPointElem) == 4,    "WgPathPointElem align");
+using WgPathPointArray = Collection::Array<WgPathPointElem>;
 
 static void ResizeVec1c(void* hdr, int newCount) {
     // B.3.2 bridge: the caller's header is still a raw {data,count,cap} triple.

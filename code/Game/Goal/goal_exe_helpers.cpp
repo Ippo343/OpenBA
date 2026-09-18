@@ -170,6 +170,9 @@ void DestroyGoalRefEntry(void* /*ignoredThis*/, uint8_t* base, int count) {
         reinterpret_cast<System::String*>(base + static_cast<int64_t>(i) * 0x18)->~String();
 }
 
+// stays explicit: a String copy-ctor `assign` (byteCopy=false) with a real
+// `destroy`, the load-bearing -1 generation seed in `init`, and an unwritten
+// extent at [0x0c,0x10).
 const rtcoll::ArraySpec kSpec_GoalRefEntry = {          // exe 0x14001b340
     "Array<{String,int32,External*}>", 0x18, 8,
     &AssignGoalRefEntry, &InitGoalRefEntry, &DestroyGoalRefEntry, false,

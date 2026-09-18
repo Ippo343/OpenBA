@@ -13,7 +13,7 @@
 // Serialize (vtable +0x28, 0x140119ac0 CreateRemovalDescription_Slot5), stream order:
 //   bool  @ +0x20
 //   int count (local copy of +0x30)
-//   [if loading: resize array @+0x28 to count via FUN_140001bb0 / fn_ExeArrayResize3]
+//   [if loading: resize array @+0x28 to count via FUN_140001bb0 = Array<ptr>::SetSize]
 //   ExternalRefArray(count) @ *(+0x28)  (FUN_1400049c0 / fn_ExternalRefArray_Serialize)
 //   ExternalPtr @ +0x38  (FUN_140002340 / fn_ExternalPtr_BuildSerialize)
 //   bool  @ +0x40   bool @ +0x41   bool @ +0x42   bool @ +0x43
@@ -21,7 +21,7 @@
 // Dtor (vtable +0x00, 0x140032ca0): MemFree(array @+0x28) + External::~External + free.
 //
 // NOTE: count is serialized into a local; the on-disk count then drives array resize +
-// the per-element load. fn_ExeArrayResize3 is a pure-C++ reimpl (works in standalone).
+// the per-element load. The resize is `Collection::Array<Ptr8>::SetSize` (B.3.2).
 // fn_ExternalRefArray_Serialize -> exe FUN_1400049c0, null in standalone until 0x1400049c0
 // is registered (REPORTED). param4 is a dead init -> nullptr safe.
 //
@@ -30,6 +30,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 
 static const uintptr_t kCreateRemovalDescriptionVtable = 0x140162d80;
@@ -65,7 +66,9 @@ void CreateRemovalDescription_Serialize(void* self, void* stream) {
     // On load (stream mode == 0): resize the heap ExternalPtr array at +0x28.
     void* serField0 = *(void**)serializer;
     if (serField0 && *(int*)((uintptr_t)serField0 + 8) == 0) {
-        fn_ExeArrayResize3(s + 0x28, count);
+        // B.3.2: Collection::Array<T>::SetSize — retail 0x140001bb0, stride 8 align 8, new tail zeroed.
+        // Element is the 8-byte ExternalPtr slot the ExternalRefArray serializer walks below.
+        GameColl::ArrayAt<GameColl::Ptr8>(s, 0x28).SetSize(count);
     }
 
     fn_ExternalRefArray_Serialize(serializer, count, *(void**)(s + 0x28), nullptr); // ExtPtr[count]

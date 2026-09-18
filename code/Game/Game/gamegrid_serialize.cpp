@@ -166,6 +166,9 @@ void InitMapCell(uint8_t* dst) {
     *reinterpret_cast<uint32_t*>(dst + 0x26) = 0;         // zeroes +0x26..+0x29
     *reinterpret_cast<uint32_t*>(dst + 0x2a) = 0x000000ffu; // +0x2a=0xff, +0x2b..+0x2d=0
 }
+// stays explicit: `init` is a patterned fill (0xffffffff at +0x18, 0xff at
+// +0x2a), `assign` is partial (byteCopy=false), and both arms carry unwritten
+// extents — a probe contract, not a trait.
 const rtcoll::ArraySpec kSpec_MapCell = {                  // exe 0x14001aa90
     "Array<MapCell>", 0x30, 8,
     &AssignMapCell, &InitMapCell, nullptr, false,

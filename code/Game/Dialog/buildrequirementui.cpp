@@ -17,6 +17,7 @@
 // Decompiled from Application-x64.exe at 0x14005E7C0.
 
 #include "Dialog/ui_panels.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
@@ -308,11 +309,13 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
             fn_InternalBasePtr_CheckPtr(ibpBuf);
             fn_Element_SetFlagsOnOff(wrappedElem, 1, 0);
 
-            // Push into dynamic array at +0x40 (8-byte InternalBasePtr elements)
-            // NOTE: fn_ExeArrayPush copies 4 bytes per element — wrong for 8-byte ptrs.
-            // Use fn_ExeArrayResize (8-byte realloc) + manual element write instead.
+            // Push into dynamic array at +0x40 (8-byte InternalBasePtr elements).
+            // The stride-4 push helper cannot be used here — the element is an
+            // 8-byte handle — so this grows the array and writes the slot itself.
+            // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
+            // new tail zeroed. Element is the 8-byte InternalBasePtr handle (byte-copy).
             uint32_t newCount = *(uint32_t*)(s + 0x48) + 1;
-            fn_ExeArrayResize((void*)(s + 0x40), (int)newCount);
+            GameColl::ArrayAt<GameColl::Ptr8>(s, 0x40).SetSize((int)newCount);
             uint64_t* slot = (uint64_t*)(*(uintptr_t*)(s + 0x40) + (uintptr_t)(newCount - 1) * 8);
             *slot = *(uint64_t*)ibpBuf;
 
@@ -355,14 +358,18 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
             // Push requirement count data into array at +0x50
             // Entry+0x08 contains the requirement count (uint32)
             void* countPtr = (void*)(entry + 0x08);
-            // fn_ExeArrayPush takes arrayBase = {data, count@+0x08, cap@+0x0c} and writes
+            // SetSize takes arrayBase = {data, count@+0x08, cap@+0x0c} and writes
             // the new count itself. Incrementing +0x58 again here DOUBLE-COUNTED every
             // requirement: a two-material building ended with reqCount(+0x58)=4 against
             // labelCount(+0x48)=3, and UpdateToolUI_e700 — which iterates +0x58 and indexes
             // the +0x40 label array — then ran off the end (retail would have faulted; we
             // logged "[e700] WARN: null label element"). Retail's own inline expansion
             // stores the count once.
-            fn_ExeArrayPush((void*)(s + 0x50), *(int*)(s + 0x58) + 1, (void*)countPtr);
+            // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003600,
+            // stride 4 align 4, no init arm (every new slot takes the fill).
+            GameColl::ArrayAt<GameColl::I32NoInit>(s, 0x50).SetSize(
+                *(int*)(s + 0x58) + 1,
+                *reinterpret_cast<const GameColl::I32NoInit*>(countPtr));
 
             // Get the sub-entity from this entry (pointer at entry+0x00)
             uintptr_t subEntity = *(uintptr_t*)entry;

@@ -8,7 +8,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_dialogs.h"
-#include "Dialog/dialog_array_bridge.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
@@ -143,10 +143,10 @@ void AchievementDialog_Slot4(AchievementDialog* self) {
         // The old hand-rolled copy guarded with `if (newCount != count)` — that is
         // retail's `if (newSize == oldSize) return;` early return, which
         // rtcoll::SetSizeCore already performs, so it is not carried forward.
-        auto& entries = DlgArray<0x20>(s, 0xC0);
+        auto& entries = GameColl::ArrayAt<GameColl::Bytes<0x20, 8>>(s, 0xC0);
         entries.SetSize(entries.GetSize() + 1,
-                         DlgElem<0x20>{{(uint64_t)imageIcon, (uint64_t)imageStar,
-                                        (uint64_t)textTitle, (uint64_t)textDesc}});
+                         GameColl::Bytes<0x20, 8>((uint64_t)imageIcon, (uint64_t)imageStar,
+                                        (uint64_t)textTitle, (uint64_t)textDesc));
     }
 
     // Find "textComplete" element, store at +0xB8

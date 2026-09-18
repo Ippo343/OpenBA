@@ -13,6 +13,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "math/Math.h"
+#include "ui/UserInterface.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -352,9 +353,6 @@ void NomadComp_RebuildController_b60(int64_t param_1, int64_t param_2) {
 typedef char  (*fn_ctrl_active_t)(void* ctrl, int64_t* entityRef);   // vtable+0x50
 typedef void  (*fn_FUN_140102b60_t)(int64_t self, int v);  // 0x140102b60
 typedef void  (*fn_TradeWork_c690_t)(int64_t* listBase, void* ibp); // 0x14002c690
-// slot 0x140151ca0 — by-value struct return: hidden retbuf pointer in RDX (see the call
-// site). The second parameter is NOT optional; omitting it corrupts memory.
-typedef void* (*fn_GetFirstDialog_t)(void* ui, void* retbuf);
 // slot 0x140151768 -- member, non-trivial return AND a THIRD argument Ghidra hides.
 // Retail 0x140103480 at 0x140103517: `MOV R8D,[0x1401c4f00]` (EntityUI) immediately
 // before `CALL [0x140151768]`. The mangled name confirms it: ...@Object@@I@Z -- the
@@ -368,7 +366,6 @@ typedef void  (*fn_IBP_CtorFrom_t)(void* dst, void* src);  // slot 0x140152a90
 
 static fn_FUN_140102b60_t   s_fn_FUN_140102b60 = nullptr;
 static fn_TradeWork_c690_t  s_fn_TradeWork_c690 = nullptr;
-static fn_GetFirstDialog_t  s_fn_GetFirstDialog = nullptr;
 static fn_GetController_t    s_fn_GetController = nullptr;
 static fn_CloseDialog_slot_t s_fn_CloseDialog_slot = nullptr;
 static fn_IBP_CtorFrom_t     s_fn_IBP_CtorFrom = nullptr;
@@ -388,8 +385,6 @@ static void Ensure3480() {
     // entity), which confirms the type. Resolve by value with a by-name fallback.
     s_TypeId_EntityUI = ResolveExeTypeId(0x1401c4f00, "EntityUI", &s_TypeId_EntityUI_cache);
     uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140151ca0);
-    if (slot) s_fn_GetFirstDialog = *reinterpret_cast<fn_GetFirstDialog_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140151768);
     if (slot) s_fn_GetController = *reinterpret_cast<fn_GetController_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140151550);
@@ -405,12 +400,13 @@ static void Ensure3480() {
     // `if (!s_fn_GetFirstDialog) return;` below killed the whole walk -- meaning a
     // prior wave's registration of 0x140151768 for exactly this path (see
     // standalone/reg_unreg_lane2.cpp) never actually revived it; it stayed gated
-    // behind the slot in front of it.
+    // behind the slot in front of it. That slot, its typedef and its fallback are
+    // gone as of B.3.2: the walk is now a plain iteration of
+    // UI::UserInterface::_dialogs, which IS what 0x140151ca0 read (its whole body
+    // is `*retbuf = this->_dialogs._head`), so nothing can gate it shut again.
     //
     // Every one of these resolves to the same Runtime export the slot names, so a
     // fallback cannot change WHICH function runs -- only whether one runs at all.
-    if (!s_fn_GetFirstDialog && fn_UI_GetFirstDialog)
-        s_fn_GetFirstDialog = reinterpret_cast<fn_GetFirstDialog_t>(fn_UI_GetFirstDialog);
     if (!s_fn_GetController && fn_DialogInstance_GetController)
         s_fn_GetController = reinterpret_cast<fn_GetController_t>(fn_DialogInstance_GetController);
     if (!s_fn_CloseDialog_slot && fn_UI_CloseDialog)
@@ -455,28 +451,26 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
     if (s_fn_TradeWork_c690)
         s_fn_TradeWork_c690(reinterpret_cast<int64_t*>(self + 0x60), &entity);
 
-    void* ui = *reinterpret_cast<void**>(
+    UI::UserInterface* ui = *reinterpret_cast<UI::UserInterface**>(
         reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0x98);
-    if (!s_fn_GetFirstDialog) return;
-    // GetFirstDialog returns a struct BY VALUE, so the ABI passes a hidden return-buffer
-    // pointer in RDX and the callee WRITES through it. Runtime-x64.dll 0x180031150:
+    // HISTORY, kept because it cost two bugs. Retail reaches this list through
+    // GetFirstDialog, which returns a struct BY VALUE, so the ABI passes a hidden
+    // return-buffer pointer in RDX and the callee WRITES through it. Runtime-x64.dll
+    // 0x180031150:
     //   ?GetFirstDialog@UserInterface@UI@@QEAA?AUIterator@?$LinkedList@...@@XZ
     //   void *__thiscall GetFirstDialog(UserInterface *this, void *retval)
     //   { *(undefined8 *)retval = *(undefined8 *)this; return retval; }
-    // The old one-arg typedef left RDX stale and that store wrote 8 bytes through whatever
-    // the previous call had left there — a memory-corrupting WRITE, worse than the READ
-    // fault fixed above. It also took the RAX return (which is `retval`, i.e. the buffer's
-    // ADDRESS) as the iterator, one dereference too few. Both are fixed here: pass a real
-    // buffer, then read the head-node pointer out of it, matching retail's use of the RDX
-    // home slot (`local_res10`) as the iterator it then walks via [2].
-    // LIVE as of 2026-09-04: slot 0x140151ca0 is still unregistered, but Ensure3480
-    // now falls back to fn_UI_GetFirstDialog by name, so the guard above no longer
-    // returns first and this walk actually runs. The GetController call below was
-    // fixed to pass its type-id filter in the same change — that had to land FIRST,
-    // because reviving the walk with a two-argument typedef would have called
-    // GetController with a stale R8 as the filter.
-    int64_t iter = 0;
-    s_fn_GetFirstDialog(ui, &iter);
+    // An early one-arg typedef here left RDX stale and that store wrote 8 bytes through
+    // whatever the previous call had left there — a memory-corrupting WRITE, worse than
+    // the READ fault fixed above. It also took the RAX return (which is `retval`, i.e.
+    // the buffer's ADDRESS) as the iterator, one dereference too few.
+    // LIVE as of 2026-09-04 via a by-name fallback to fn_UI_GetFirstDialog; since
+    // B.3.2 the walk is the member iteration below instead, which is the same read
+    // (`_dialogs._head`) with no slot, no typedef and no hidden return buffer to get
+    // wrong. The GetController call below was fixed to pass its type-id filter in the
+    // 2026-09-04 change — that had to land FIRST, because reviving the walk with a
+    // two-argument typedef would have called GetController with a stale R8 as the
+    // filter.
     // Bounded proof-of-life: this walk was dead for the whole life of the project, so
     // "it runs at all" is the thing to confirm first. Reports the dialog count it sees
     // and whether it closed one.
@@ -488,19 +482,17 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
     static int s_walks = 0;
     const bool traceWalk = (++s_walks <= 8);
     int visited = 0, closed = 0;
-    int64_t* dlg = reinterpret_cast<int64_t*>(iter);
-    while (dlg != nullptr) {
-        int64_t* cur = dlg;
+    for (auto it = ui->_dialogs.GetFirst(); it; ++it) {
         ++visited;
-        if (*dlg != 0) {
-            fn_InternalBasePtr_CheckPtr(dlg);
+        if (it.node->element != nullptr) {
+            fn_InternalBasePtr_CheckPtr(it.node);
             void* ctrlBuf[2] = {nullptr, nullptr};
             // R8 = EntityUI (retail `MOV R8D,[0x1401c4f00]` at 0x140103517). The
             // IsDerivedFrom(EntityUI) narrow just below is retail's own second check,
             // NOT a substitute for this filter -- without it the call returns nothing
             // and the narrow never gets anything to reject.
             if (s_fn_GetController)
-                s_fn_GetController(reinterpret_cast<void*>(*cur), ctrlBuf, s_TypeId_EntityUI);
+                s_fn_GetController(it.node->element, ctrlBuf, s_TypeId_EntityUI);
             void* found = nullptr;
             if (ctrlBuf[0] != nullptr) {
                 fn_InternalBasePtr_CheckPtr(ctrlBuf);
@@ -514,7 +506,7 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
                 int64_t bound = *reinterpret_cast<int64_t*>(ibp + 0x30);
                 fn_InternalBasePtr_CheckPtr(param_2);
                 if (bound == *reinterpret_cast<int64_t*>(param_2)) {
-                    void* dlgPtr = reinterpret_cast<void*>(*dlg);
+                    void* dlgPtr = it.node->element;
                     if (s_fn_CloseDialog_slot) s_fn_CloseDialog_slot(ui, &dlgPtr);
                     closed = 1;
                     if (traceWalk) {
@@ -526,7 +518,6 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
                 }
             }
         }
-        dlg = reinterpret_cast<int64_t*>(dlg[2]);
     }
     if (traceWalk) {
         fprintf(stderr, "[NomadDlgWalk] #%d visited=%d closed=%d (no open panel bound to "

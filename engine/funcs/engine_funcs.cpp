@@ -1166,8 +1166,30 @@ void Entity_FindComponentByExeTypeId(void* entity, void* retval, uint32_t* typeI
 //
 // Memory: fn_MemAlloc(g_pMemAllocSingleton, size, alignment) / fn_MemFreeStatic(ptr)
 
+// ---------------------------------------------------------------------------
+// ZERO CALLERS as of the B.3.2 closing pass — the callers are now
+// Collection::Array<...>::SetSize. Delete with the final pass.
+// ---------------------------------------------------------------------------
+// The four bodies below are NOT a reference implementation of retail. Retail's
+// 0x1400032e0 / 0x140001bb0 / 0x1400021d0 / 0x140003600 are MSVC
+// monomorphisations of Collection::Array<T>::SetSize; `rtcoll::SetSizeCore`
+// (runtime/src/collection/array.cpp) is that algorithm, and these C copies
+// diverge from it in FOUR ways, each read out of the shipped bytes:
+//
+//   1. they zero to CAPACITY, not to newSize;
+//   2. fn_ExeArrayResize / _3 zero the TRUNCATED TAIL on shrink, which retail
+//      never touches (capacity never shrinks and the dropped elements are left
+//      as they were);
+//   3. they have no EXACT-EQUAL EARLY RETURN (`if (newSize == oldSize) return;`
+//      is retail's first branch);
+//   4. fn_ExeArrayPush fills only index newCount-1; retail fills every slot in
+//      [oldSize, newSize).
+//
+// fn_ExeArrayResize additionally carries an "ABSURD newCount" bail + stderr
+// print that is a harness guard, not retail.
+//
 // fn_ExeArrayResize: 8-byte elements. Copies existing, zeroes new entries.
-// Original: FUN_1400032e0 (6 uses)
+// Original: FUN_1400032e0 (retail: stride 8, align 8, new tail zeroed)
 void fn_ExeArrayResize(void* arrayBase, int newCount) {
     uint8_t* base   = (uint8_t*)arrayBase;
     void**   pData  = (void**)base;
@@ -1211,8 +1233,11 @@ void fn_ExeArrayResize(void* arrayBase, int newCount) {
     *pCount = newCount;
 }
 
+// ZERO CALLERS as of the B.3.2 closing pass — the callers are now
+// Collection::Array<...>::SetSize. Delete with the final pass. (Diverges from
+// retail; see the four-point list above fn_ExeArrayResize.)
 // fn_ExeArrayResize2: 4-byte elements. Copies existing only (no zero-init for new).
-// Original: FUN_1400021d0 (2 uses)
+// Original: FUN_1400021d0 (retail: stride 4, align 4, grown tail left as-found)
 void fn_ExeArrayResize2(void* arrayBase, int newCount) {
     uint8_t* base   = (uint8_t*)arrayBase;
     void**   pData  = (void**)base;
@@ -1237,8 +1262,12 @@ void fn_ExeArrayResize2(void* arrayBase, int newCount) {
     *pCount = newCount;
 }
 
+// ZERO CALLERS as of the B.3.2 closing pass — the callers are now
+// Collection::Array<...>::SetSize. Delete with the final pass. (Diverges from
+// retail; see the four-point list above fn_ExeArrayResize.)
 // fn_ExeArrayResize3: 8-byte elements. Copies existing, zeroes new entries.
-// Original: FUN_140001bb0 (1 use)
+// Original: FUN_140001bb0 — byte-identical to 0x1400032e0 in retail
+// (stride 8, align 8, new tail zeroed).
 void fn_ExeArrayResize3(void* arrayBase, int newCount) {
     uint8_t* base   = (uint8_t*)arrayBase;
     void**   pData  = (void**)base;
@@ -1272,8 +1301,12 @@ void fn_ExeArrayResize3(void* arrayBase, int newCount) {
     *pCount = newCount;
 }
 
+// ZERO CALLERS as of the B.3.2 closing pass — the callers are now
+// Collection::Array<...>::SetSize. Delete with the final pass. (Diverges from
+// retail; see the four-point list above fn_ExeArrayResize — in particular
+// retail fills EVERY slot in [oldSize, newSize), not just newCount-1.)
 // fn_ExeArrayPush: 4-byte elements. Resizes to newCount, fills new slot with *elementPtr.
-// Original: FUN_140003600 (3 uses)
+// Original: FUN_140003600 (retail: stride 4, align 4, no init arm — fill only)
 void fn_ExeArrayPush(void* arrayBase, int newCount, void* elementPtr) {
     uint8_t* base   = (uint8_t*)arrayBase;
     void**   pData  = (void**)base;
@@ -1340,13 +1373,48 @@ void fn_ModDialog_ArrayPush58_CppImpl(void* arrayHeader, int newCount, void* ele
     }
 }
 
+// ---------------------------------------------------------------------------
+// ZERO CALLERS as of the B.3.2 closing pass — every caller (the six in
+// code/Game/Entity/componententity.cpp) is now
+// Collection::Array<GameColl::Ptr8>::SetSize(n, fill). Delete with the final
+// pass, together with the `fn_ExeArrayResizeFill` pointer and its init
+// assignment. There were no callers outside componententity.cpp.
+// ---------------------------------------------------------------------------
 // ExeArrayResizeFill_CppImpl: 8-byte elements. Grows/shrinks an array; on growth,
 // new entries are filled with *fillValue (existing entries are copied on realloc).
-// Faithful reimpl of FUN_140003110 (assigned to fn_ExeArrayResizeFill at init).
-// Pure C++ so it works in standalone (the exe is not mapped, so ResolveAddr on
-// 0x140003110 returns NULL there) — mirrors the fn_ExeArrayResize
-// family. WAS THE START-TOWN SPAWN BUG: left NULL in standalone, so EntityList::
-// RegisterEntity silently skipped the master-array append (entity count stayed 0).
+// Reimpl of FUN_140003110 (assigned to fn_ExeArrayResizeFill at init) — the
+// three-argument Collection::Array<T>::SetSize(n, fill) monomorphisation,
+// stride 8, align 8. Retail's body, read out of Application-x64.exe:
+//
+//     if (newSize == oldSize) return;
+//     old = data; size = newSize;
+//     if (newSize > capacity) {
+//         capacity = newSize;
+//         if (newSize == oldSize + 1 && oldSize != 0) capacity = newSize * 3;
+//         data = MemAlloc(capacity * 8, 8);
+//     }
+//     for (i = (old == data ? oldSize : 0); i < newSize; ++i) {
+//         slot = data + i*8; if (!slot) continue;
+//         *slot = 0;                                  // dead store, then:
+//         *slot = (i < oldSize) ? old[i] : *fillPtr;
+//     }
+//     if (old != data) MemFree(old);
+//
+// UNLIKE the fn_ExeArrayResize/2/3/Push four above, this body IS structurally
+// that algorithm: it has the exact-equal early return, it grows only under
+// `*pCap < newCount` (which is retail's own `newSize > capacity` — checked, not
+// a divergence), it reproduces the `old == data ? oldSize : 0` copy start, and
+// it frees only when the buffer moved. Two cosmetic omissions with no
+// observable effect: retail's per-slot `if (!slot) continue;` and its dead
+// `*slot = 0` store. ONE REAL DIVERGENCE: `fill = fillValue ? *fillValue : 0`
+// adds a null guard where retail dereferences fillPtr unconditionally, so a
+// null fill silently zeroes here and would fault in retail. Nothing in the
+// tree ever passed null.
+//
+// Pure C++ so it worked in standalone (the exe is not mapped, so ResolveAddr on
+// 0x140003110 returns NULL there). WAS THE START-TOWN SPAWN BUG: left NULL in
+// standalone, so EntityList::RegisterEntity silently skipped the master-array
+// append (entity count stayed 0).
 static void ExeArrayResizeFill_CppImpl(void* arrayBase, int newCount, void* fillValue) {
     uint8_t* base   = (uint8_t*)arrayBase;
     void**   pData  = (void**)base;

@@ -88,6 +88,8 @@ void InitTerrainSizeRow(uint8_t* d) {
     };
     std::memcpy(d, kDefaultRow, 0x44);
 }
+// stays explicit: `init` copies the 17-dword default SizeRow template, a
+// patterned fill no element type's value-initialisation can produce.
 const rtcoll::ArraySpec kSpec_TerrainSizeRow = {     // exe 0x1400206b0
     "Array<SizeRow>", 0x44, 4,
     &AssignTerrainSizeRow, &InitTerrainSizeRow, nullptr, /*byteCopy*/true,

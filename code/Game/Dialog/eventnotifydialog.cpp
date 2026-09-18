@@ -18,7 +18,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_dialogs.h"
-#include "Dialog/dialog_array_bridge.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -327,14 +327,14 @@ void EventNotifyDialog_Slot4(EventNotifyDialog* self) {
         // This is an INLINE push — NOT EventNotifyDialog_ArrayPush_Impl which is
         // for the 0x30-stride +0xD8 array with String at +0x20 (that one is left
         // as a hand-rolled loop: it destroys a String on shrink and copy-constructs
-        // one on grow, which DlgElem's byte-blob semantics cannot reproduce).
+        // one on grow, which GameColl::Bytes's byte-blob semantics cannot reproduce).
         // B.3.2 bridge: EventNotifyDialog+0xC8 is Collection::Array<{entry[0],
         // entry[1], entry[2]}> (stride 0x18, count +0xD0, capacity +0xD4) inside a
         // struct §B.2 has not converted, so it is reached at its offset.
         {
-            auto& rows = DlgArray<0x18>(s, 0xC8);
+            auto& rows = GameColl::ArrayAt<GameColl::Bytes<0x18, 8>>(s, 0xC8);
             rows.SetSize(rows.GetSize() + 1,
-                         DlgElem<0x18>{{entry[0], entry[1], entry[2]}});
+                         GameColl::Bytes<0x18, 8>(entry[0], entry[1], entry[2]));
         }
     }
 

@@ -36,7 +36,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Filename.h"
-#include "Dialog/dialog_array_bridge.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -242,8 +242,8 @@ static void BSTRebalance_Impl(uintptr_t* treeRootPtr, uintptr_t* startNodePtr) {
 // count +0x08, capacity +0x0C off ptrOffset) inside a struct §B.2 has not
 // converted, so it is reached at its offset.
 static void PushToArray8(uintptr_t self, int ptrOffset, uint64_t value) {
-    auto& arr = DlgArray<8>(self, ptrOffset);
-    arr.SetSize(arr.GetSize() + 1, DlgElem<8>{{value}});
+    auto& arr = GameColl::ArrayAt<GameColl::Bytes<8, 8>>(self, ptrOffset);
+    arr.SetSize(arr.GetSize() + 1, GameColl::Bytes<8, 8>(value));
 }
 
 // ============================================================
@@ -528,8 +528,10 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
         idBase++;
     }
 
-    // Resize counts array to profCount
-    fn_ExeArrayResize2((void*)(s + 0x30), profCount);
+    // Resize counts array to profCount.
+    // B.3.2: Collection::Array<T>::SetSize — retail 0x1400021d0, stride 4 align 4,
+    // grown tail left as the allocation found it (no init arm). Slot8 zeroes it below.
+    GameColl::ArrayAt<GameColl::I32NoInit>(s, 0x30).SetSize(profCount);
 
     // Call Slot8 (vtable +0x40) with Time(0.0)
     uint8_t timeBuf[8];

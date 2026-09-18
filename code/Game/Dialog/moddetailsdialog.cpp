@@ -17,7 +17,7 @@
 //   +0x78: conflict count (int)
 
 #include "Dialog/ui_dialogs.h"
-#include "Dialog/dialog_array_bridge.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -37,7 +37,7 @@
 //
 // B.3.2 bridge: the array is Collection::Array<uint8_t> (stride 1, align 1 —
 // retail's fn_MemAlloc align argument was 1, matching alignof(uint8_t)); reached
-// via the real template directly rather than through DlgArray/DlgArrayI32 since
+// via the real template directly rather than through GameColl::ArrayAt since
 // neither of those bridge helpers covers a 1-byte stride.
 static void ModDetails_StringArrayPush_Impl(void* arrayBasePtr, System::String&& str) {
     uintptr_t strData = (uintptr_t)str._data;

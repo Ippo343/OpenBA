@@ -13,7 +13,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_panels.h"
-#include "Dialog/dialog_array_bridge.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
@@ -147,9 +147,9 @@ void StorageUI_Serialize(StorageUI* self) {
         // the row array at +0x30.
         // B.3.2 bridge: StorageUI+0x30 is Collection::Array<{labelStorage,
         // numberCount, rawChild}> (stride 0x18, count +0x38, capacity +0x3C).
-        auto& rows = DlgArray<0x18>(s, 0x30);
+        auto& rows = GameColl::ArrayAt<GameColl::Bytes<0x18, 8>>(s, 0x30);
         rows.SetSize(rows.GetSize() + 1,
-                     DlgElem<0x18>{{labelStorage, numberCount, rawChild}});
+                     GameColl::Bytes<0x18, 8>(labelStorage, numberCount, rawChild));
     }
 
     // Call Startup via vtable +0x38

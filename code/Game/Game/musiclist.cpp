@@ -67,6 +67,8 @@ void InitMusicTrackEntry(uint8_t* d) {
     *reinterpret_cast<uint64_t*>(d + 0x0c) = 0x3f800000ull;  // float 1.0f, int 0
     *reinterpret_cast<uint32_t*>(d + 0x14) = 11;
 }
+// stays explicit: `init` is a patterned fill (1.0f at +0x0c, 11 at +0x14), not
+// the zero or as-found tail any element type's `T()` would write.
 const rtcoll::ArraySpec kSpec_MusicTrackEntry = {       // exe 0x14001c3c0 (resize),
     "Array<MusicList::Track>", 0x18, 8,                 //     0x14001c360 (~Array)
     &AssignMusicTrackEntry, &InitMusicTrackEntry, nullptr, true,

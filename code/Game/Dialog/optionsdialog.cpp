@@ -13,6 +13,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Filename.h"
+#include "ui/UserInterface.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -902,23 +903,23 @@ static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
     gs[7] = *(int32_t*)((uintptr_t)*(void**)&self->tabOptions + 0xF8);
 
     // Iterate all open dialogs and update autosave timer on each
-    void* userInterface = *(void**)((uintptr_t)self + 0x10);
-    fprintf(stderr, "[AutoSave] Options ApplySettings: newIntervalIdx=%d getFirst=%p isA=%p isDerived=%p restartFn=%p tidSlot=%p\n",
-            gs[1], (void*)fn_UI_GetFirstDialog, (void*)fn_IsA, (void*)fn_IsDerivedFrom,
+    UI::UserInterface* userInterface = *(UI::UserInterface**)((uintptr_t)self + 0x10);
+    fprintf(stderr, "[AutoSave] Options ApplySettings: newIntervalIdx=%d isA=%p isDerived=%p restartFn=%p tidSlot=%p\n",
+            gs[1], (void*)fn_IsA, (void*)fn_IsDerivedFrom,
             (void*)fn_UpdateAutoSaveTimer, (void*)g_TypeId_AutoSaveDialogType);
     fflush(stderr);
-    if (fn_UI_GetFirstDialog && fn_IsA && fn_IsDerivedFrom && fn_UpdateAutoSaveTimer &&
+    if (fn_IsA && fn_IsDerivedFrom && fn_UpdateAutoSaveTimer &&
         g_TypeId_AutoSaveDialogType) {
         uint32_t typeId = *g_TypeId_AutoSaveDialogType;
-        void* iter = nullptr;
-        fn_UI_GetFirstDialog(userInterface, &iter);
-        while (iter != nullptr) {
-            // iter is an InternalBasePtr node: deref +0x0 for object, +0x10 for next
-            fn_InternalBasePtr_CheckPtr(iter);
-            void* dialog = *(void**)iter;
+        // `_dialogs.GetFirst()` IS retail's GetFirstDialog (0x180031150, whose
+        // whole body is `*retval = this->_dialogs._head`); the iterator is the
+        // bare node pointer, so `it.node` is what retail hands to CheckPtr.
+        for (auto it = userInterface->_dialogs.GetFirst(); it; ++it) {
+            fn_InternalBasePtr_CheckPtr(it.node);
+            void* dialog = it.node->element;
             if (fn_IsA(dialog, typeId)) {
-                fn_InternalBasePtr_CheckPtr(iter);
-                void* obj = *(void**)iter;
+                fn_InternalBasePtr_CheckPtr(it.node);
+                void* obj = it.node->element;
                 bool isDerived = fn_IsDerivedFrom(obj, typeId);
                 void* target = isDerived ? obj : nullptr;
                 fprintf(stderr, "[AutoSave]   MATCH obj=%p derived=%d -> restart %s\n",
@@ -926,7 +927,6 @@ static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
                 fflush(stderr);
                 if (target) fn_UpdateAutoSaveTimer(target);
             }
-            iter = *(void**)((uintptr_t)iter + 0x10);
         }
     }
 

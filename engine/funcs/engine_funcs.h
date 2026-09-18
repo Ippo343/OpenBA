@@ -913,21 +913,35 @@ inline void fn_FindComponent_CitizenAI(void* entity, void* retval) {
 // Array header layout: [0]=ptr(void*), [1..low32]=count(int), [0xc..low32]=capacity(int)
 // ============================================================
 
+// ---------------------------------------------------------------------------
+// ZERO CALLERS as of the B.3.2 closing pass — the callers are now
+// Collection::Array<...>::SetSize. Delete with the final pass.
+// ---------------------------------------------------------------------------
+// The four below are NOT a reference implementation of retail. Each retail
+// address is an MSVC monomorphisation of Collection::Array<T>::SetSize, and
+// the C bodies in engine_funcs.cpp diverge from it in four ways, spelled out
+// in the block comment above fn_ExeArrayResize there: they zero to CAPACITY
+// rather than newSize; _Resize/_Resize3 zero the truncated tail on shrink,
+// which retail never touches; none has retail's exact-equal early return; and
+// _Push fills only index newCount-1 where retail fills all of
+// [oldSize, newSize). fn_ExeArrayResize also carries a harness-only "ABSURD
+// newCount" bail. Read rtcoll::SetSizeCore, not these, for the algorithm.
+
 // ExeArrayResize: 8-byte elements. Zeroes new entries, copies existing.
 // Capacity grows 3x when adding one beyond current capacity.
-// Original: FUN_1400032e0 (6 uses)
+// Original: FUN_1400032e0 (retail: stride 8, align 8, new tail zeroed)
 void fn_ExeArrayResize(void* arrayBase, int newCount);
 
 // ExeArrayResize2: 4-byte elements. Copies existing only (no zero-init for new).
-// Original: FUN_1400021d0 (2 uses)
+// Original: FUN_1400021d0 (retail: stride 4, align 4, grown tail left as-found)
 void fn_ExeArrayResize2(void* arrayBase, int newCount);
 
 // ExeArrayResize3: 8-byte elements. Copies existing, zeroes new entries.
-// Original: FUN_140001bb0 (1 use)
+// Original: FUN_140001bb0 (retail: byte-identical to 0x1400032e0)
 void fn_ExeArrayResize3(void* arrayBase, int newCount);
 
 // ExeArrayPush: 4-byte elements. Resizes to newCount, fills new slot with *elementPtr.
-// Original: FUN_140003600 (3 uses)
+// Original: FUN_140003600 (retail: stride 4, align 4, fills every new slot)
 void fn_ExeArrayPush(void* arrayBase, int newCount, void* elementPtr);
 
 // StorageComponent::QueryCount(storageComp) -> int
@@ -5338,9 +5352,17 @@ extern fn_FindUIElementByPath_t fn_FindUIElementByPath;
 // Stored at exe .rdata 0x1401c72a8, filled at runtime by Component_Register.
 extern uint32_t* g_TypeId_ComponentBase;
 
+// ZERO CALLERS as of the B.3.2 closing pass — the six call sites (all in
+// code/Game/Entity/componententity.cpp; none anywhere else) are now
+// Collection::Array<GameColl::Ptr8>::SetSize(n, fill). Delete with the final
+// pass, along with ExeArrayResizeFill_CppImpl and the init assignment.
+//
 // ExeArrayResizeFill: 8-byte elements. Resizes array, copies existing entries,
 // fills new entries with *fillValue (unlike fn_ExeArrayResize which zeroes them).
-// Original: FUN_140003110 (used by ComponentEntity RefreshEntityFlags)
+// Original: FUN_140003110 — the three-argument Array<T>::SetSize(n, fill),
+// stride 8, align 8. Retail's body and this reimpl's one real divergence (a
+// null-fillValue guard retail does not have) are quoted above the C body in
+// engine_funcs.cpp.
 // Params: (arrayBase, newCount, fillValue) where arrayBase = {ptr, count, capacity}
 typedef void (*fn_ExeArrayResizeFill_t)(void* arrayBase, int newCount, void* fillValue);
 extern fn_ExeArrayResizeFill_t fn_ExeArrayResizeFill;

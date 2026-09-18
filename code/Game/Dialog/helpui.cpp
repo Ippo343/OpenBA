@@ -18,7 +18,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_panels.h"
-#include "Dialog/dialog_array_bridge.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
@@ -94,19 +94,19 @@ static void HelpUI_LoadPage(HelpUI* self) {
     // converted, so it is reached at its offset. B.3.2 bridge for both the
     // truncate (was HelpUI_ArrayResize_Impl, FUN_140011d50) and the append below.
     //
-    // The element is DlgI32Pair and NOT DlgElem<8>, for the two reasons its
-    // declaration in dialog_array_bridge.h spells out: retail's helper passed 4
-    // — not 8 — as MemAlloc's alignment argument for this array, and it left a
-    // GROWN tail uninitialised, which only a trivially default-constructible
-    // element reproduces.
-    auto& hist = DlgArrayI32Pair(s, 0x68);
+    // The element is GameColl::I32Pair and NOT GameColl::Bytes<8, 8>, for the two
+    // reasons its declaration in Component/coll_bridge.h spells out: retail's
+    // helper passed 4 — not 8 — as MemAlloc's alignment argument for this array,
+    // and it left a GROWN tail uninitialised, which only a trivially
+    // default-constructible element reproduces.
+    auto& hist = GameColl::ArrayAt<GameColl::I32Pair>(s, 0x68);
 
     // Truncate history to (historyIndex + 1) entries — removes forward history.
     int historyIndex = *(int*)(s + 0x64);
     hist.SetSize(historyIndex + 1);
 
     // Push new history entry: {pageResIndex, scrollY=0.0f} at the new end.
-    hist.SetSize(hist.GetSize() + 1, DlgI32Pair{pageResIndex, 0});  // scrollY = 0.0f
+    hist.SetSize(hist.GetSize() + 1, GameColl::I32Pair{pageResIndex, 0});  // scrollY = 0.0f
 
     // Set history index to last entry
     *(int*)(s + 0x64) = hist.GetSize() - 1;
