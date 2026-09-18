@@ -130,7 +130,17 @@ built them wrong, and callbacks stored in data.
   and the exe-side staging list folds away, `Factory` (0x10 bytes, 0x50-byte nodes) moves
   onto `Collection::Set` inside step 3 — and `tests/unit/object_vtable_abi_test.cpp`
   (7 tests; unit now 174/0) proving a GCC class without a virtual dtor is slot-for-slot a
-  retail vtable, with the second vptr at +0x28 for two bases. Next: step 3.
+  retail vtable, with the second vptr at +0x28 for two bases.
+  Step 3 done (merge of `13bcc143`): `Object::BaseTypeInfo` and `Object::Factory` are real
+  classes (`Factory` = 0x10 bytes on `Collection::Set` over the 0x50-byte node, wrapping the
+  ported rtavl core), `DECLARE_TYPE`/`DEFINE_TYPE` exist, `_firstTypeInfo` is a plain static
+  that both mint doors publish (the generated row's bytes are inert until the closing pass
+  regenerates). All seven `RtObject_*` shims and the exe-side staging list STAY: the 305
+  `REGISTER_TYPE` sites name PODs, so the list folds only as those classes convert.
+  Gate: debug + perf build, unit 185/0, a live boot with the type table byte-for-byte the
+  same as the pre-merge boot (312 registered, 416/416 ids, same ten id/name pairs),
+  autostart + pause-menu quit, tutorial, Load Game dialog exit 0, resave PASS, dispatch 0,
+  `make sa-stress` -0.2% (`perf/results/*_b33step3`). Next: step 4, `Object::Base`.
 
 - **B.3.1 CLOSED (2026-09-13 night):** `System::String`, `System::Filename` and the nine
   `Math` value types are real classes under retail's names (`runtime/types/system/*.h`,
