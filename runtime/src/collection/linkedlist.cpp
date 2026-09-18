@@ -164,17 +164,19 @@ namespace {
 // the allocator's own arming path, so a caller that ran before that point would
 // otherwise freeze a null in for the life of the process
 // (WAVE9.md, "Attempt 14", the second defect the crash was hiding).
+// ENDGAME B.3.2 closing pass: the resolution moved into `rtcoll::DoorAlloc` /
+// `DoorFree` (runtime/src/collection/alloc_door.cpp), which asks the exe
+// dispatch slots 0x140152b60 / 0x140152b68 first and falls back to these two
+// addresses. Same allocator, same lock; the difference is that the door is the
+// one `BANISHED_REDZONE` rewrites, so a list node is no longer invisible to it.
+// The `fn ? … : nullptr` shape below is this seam's own and is kept.
 void* MemAllocLocked(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
+    const rtcoll::DoorAllocFn_t fn = rtcoll::DoorAlloc();
     return fn ? fn(bytes, align) : nullptr;
 }
 
 void MemFreeLocked(void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
+    const rtcoll::DoorFreeFn_t fn = rtcoll::DoorFree();
     if (fn) fn(p);
 }
 

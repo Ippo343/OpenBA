@@ -163,21 +163,22 @@ ProbeCounters g_pc = {};
 // allocator's own arming path, and any caller that ran before that point would
 // otherwise freeze a null for the life of the process.
 // ---------------------------------------------------------------------------
+// ENDGAME B.3.2 closing pass: the resolution itself moved to
+// `rtcoll::DoorAlloc`/`DoorFree` (runtime/src/collection/alloc_door.cpp) so that
+// the four collection seams reach the allocator through the exe dispatch slots
+// 0x140152b60 / 0x140152b68 — the same door the rest of the tree uses and the
+// one `BANISHED_REDZONE` rewrites — with these two addresses as the fallback.
+// Same allocator, same lock, same order; "a heap cannot be half ours" now
+// covers the instrument too.
 static void* MemAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    return fn(bytes, align);
+    return rtcoll::DoorAlloc()(bytes, align);
 }
 
 // `if (p) { Enter; Free(_singleton,p); Leave; }` — the null test is INSIDE
 // 0x1800c7ad0, which is why the callers below hand it a possibly-null pointer
 // exactly as retail does.
 static void MemFree(void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
-    fn(p);
+    rtcoll::DoorFree()(p);
 }
 
 // ---------------------------------------------------------------------------

@@ -34,6 +34,13 @@ UNIT_TREE_SRCS +=
 # back to malloc under BANISHED_UNIT_TEST (same seam as string.cpp's), and its
 # by-address doors go through tests/unit/rt_port_stub.cpp's ResolveAddr.
 UNIT_TREE_SRCS += runtime/src/collection/array.cpp runtime/src/collection/array_destroy.cpp
+# ENDGAME B.3.2 closing pass: the ONE allocator door the containers and the
+# ported collection cores share (tests/unit/alloc_door_test.cpp). It contains no
+# allocator — it answers with the function to call, reading the exe dispatch
+# slot through `ResolveAddr`, which rt_port_stub.cpp's `g_unitResolveAddr` hook
+# lets the test drive. Nothing else in the suite reaches it: under
+# BANISHED_UNIT_TEST array.cpp and linkedlist.cpp take their malloc seams.
+UNIT_TREE_SRCS += runtime/src/collection/alloc_door.cpp
 # ENDGAME B.3.2 Set core (tests/unit/set_test.cpp): header-only on the host.
 # `Collection::Set<T, Compare, Allocator, Key>` lives in
 # runtime/types/collection/Collection.h. Its out-of-line half — the two

@@ -368,3 +368,142 @@ UNIT_TEST(array_pkgentry_shrink_arm_destroys_the_tail_in_place) {
     g_pkgDestroyLog = nullptr;
     g_unitResolveAddr = nullptr;
 }
+
+// ============================================================================
+// ENDGAME B.3.2 closing pass, item 3 — the DEEP `Array<T>::operator=`
+// ============================================================================
+//
+// `operator=` is now retail's 0x18001cdf0 family, i.e. `rtcoll::ArrayAssignCore`
+// (array_destroy.cpp) with `Array<T>::ClearCallback` as the clear. The shape,
+// read out of 0x180014c70 and confirmed at 0x180005770 and 0x180033f30:
+//
+//     if (this == &src) return this;
+//     clear(this);                       // element destroy, then the buffer free
+//     _size = src._size;
+//     if (_size > _capacity) { grow; MemAlloc(cap * stride, align); }
+//     for (i = 0; i < _size; ++i) assign(data + i*stride, src.data + i*stride);
+//     return this;                       // and NO free after the copy
+//
+// The cases below are the three trait shapes B32_RULES names, plus the
+// self-assign early-out and the "the clear already freed it" property that the
+// missing tail free is really about.
+
+UNIT_TEST(array_assign_deep_copies_a_trivial_element) {
+    Collection::Array<int32_t> src;
+    src.SetSize(3);
+    src[0] = 7; src[1] = 8; src[2] = 9;
+
+    Collection::Array<int32_t> dst;
+    dst.SetSize(1);
+    dst[0] = 100;
+    const int32_t* dstBuffer = dst.GetData();
+
+    dst = src;
+
+    CHECK_EQ(dst.GetSize(), 3);
+    CHECK_EQ(dst[0], 7);
+    CHECK_EQ(dst[1], 8);
+    CHECK_EQ(dst[2], 9);
+    // The clear freed dst's one-element buffer and zeroed the capacity, so the
+    // copy allocated a NEW one — this is a deep copy, not a header steal.
+    CHECK(dst.GetData() != src.GetData());
+    CHECK(dst.GetData() != dstBuffer);
+    CHECK_EQ(dst.GetCapacity(), 3);    // exactly n: 3 != 0 + 1, so no treble
+
+    // The source is untouched — it is a COPY, never a move.
+    CHECK_EQ(src.GetSize(), 3);
+    CHECK_EQ(src[0], 7);
+}
+
+UNIT_TEST(array_self_assign_returns_without_clearing) {
+    Collection::Array<int32_t> a;
+    a.SetSize(2);
+    a[0] = 4; a[1] = 5;
+    const int32_t* buffer = a.GetData();
+
+    a.Assign(a);                       // `CMP RCX,RDX / JZ` — the early-out
+
+    CHECK(a.GetData() == buffer);      // not freed and not reallocated
+    CHECK_EQ(a.GetSize(), 2);
+    CHECK_EQ(a[0], 4);
+    CHECK_EQ(a[1], 5);
+}
+
+UNIT_TEST(array_assign_copy_ctor_element_bumps_the_refcount) {
+    Collection::Array<System::Filename> src;
+    src.SetSize(1);
+    src[0] = System::Filename("data/models/house.rsc");
+    const char* block = src[0]._data;
+    CHECK_EQ(RtSystem::StringRefCount(block), 1);
+
+    Collection::Array<System::Filename> dst;
+    dst.SetSize(1);
+    dst[0] = System::Filename("data/models/barn.rsc");
+    CHECK_EQ(RtSystem::StringRefCount(dst[0]._data), 1);
+
+    dst = src;
+
+    // The clear ran `~Filename` over dst's live element — its block is gone —
+    // and the per-element assign is `Filename`'s COPY CONSTRUCTOR, so the two
+    // arrays now share one block at refcount 2.
+    CHECK_EQ(dst.GetSize(), 1);
+    CHECK(dst[0]._data == block);
+    CHECK_EQ(RtSystem::StringRefCount(block), 2);
+    CHECK_STREQ(dst[0]._data, "data\\models\\house.rsc");
+}
+
+UNIT_TEST(array_assign_is_clear_then_copy_never_a_move) {
+    std::vector<Event> log;
+
+    Collection::Array<Counted> src;
+    src.SetSize(2);
+    src[0].value = 10;
+    src[1].value = 11;
+
+    Collection::Array<Counted> dst;
+    dst.SetSize(1);
+    dst[0].value = 99;
+
+    g_log = &log;
+    dst = src;
+    g_log = nullptr;
+
+    // Retail's order: the CLEAR destroys dst's live element and frees its
+    // buffer FIRST, then the two survivors are COPY-constructed out of src.
+    // A move-assign would show no copy ctor at all and would empty `src`.
+    CHECK_EQ(static_cast<int>(log.size()), 3);
+    if (log.size() == 3) {
+        CHECK(log[0].kind == Event::kDtor);      CHECK_EQ(log[0].value, 99);
+        CHECK(log[1].kind == Event::kCopyCtor);  CHECK_EQ(log[1].value, 10);
+        CHECK(log[2].kind == Event::kCopyCtor);  CHECK_EQ(log[2].value, 11);
+    }
+    CHECK_EQ(dst.GetSize(), 2);
+    CHECK_EQ(dst[0].value, 10);
+    CHECK_EQ(dst[1].value, 11);
+    CHECK_EQ(src.GetSize(), 2);        // the source still owns its elements
+    CHECK_EQ(src[0].value, 10);
+
+    // The two buffers are independent afterwards — which is what "NO free after
+    // the copy" has to mean: the clear freed dst's old buffer exactly once, and
+    // dst's new one is not src's.
+    CHECK(dst.GetData() != src.GetData());
+    log.clear();
+    dst.Clear();
+    src.Clear();
+}
+
+UNIT_TEST(array_assign_from_empty_leaves_an_empty_array) {
+    Collection::Array<int32_t> src;    // never sized: null buffer
+    Collection::Array<int32_t> dst;
+    dst.SetSize(4);
+    CHECK(dst.GetData() != nullptr);
+
+    dst = src;
+
+    // The clear freed the buffer and zeroed all three fields; the copy loop
+    // runs zero times and allocates nothing, because `_size > _capacity` is
+    // `0 > 0`.
+    CHECK_EQ(dst.GetSize(), 0);
+    CHECK_EQ(dst.GetCapacity(), 0);
+    CHECK(dst.GetData() == nullptr);
+}

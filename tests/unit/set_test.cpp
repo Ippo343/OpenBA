@@ -488,3 +488,301 @@ UNIT_TEST(set_pointer_key_null_orders_first) {
     }
     CHECK_EQ(CountingAllocator::live, 0);
 }
+
+// ============================================================================
+// ENDGAME B.3.2 closing pass, item 2 — ELEMENT WIDTH 8, the `Set<Filename>`
+// shape
+// ============================================================================
+//
+// `AvlOps<Node, 0x8>` is new: the template used to carry 0x10, 0x18 and 0x30
+// and fell through to `AvlGeneric` for 8, so the one width-8 tree in the DLL —
+// the `Set<System::Filename>` path set every `IO::Modification::Mod` carries —
+// could not be spelled as a `Collection::Set` at all. Its ported core is
+// runtime/src/io/modification_refresh.cpp's 0x1800274c0 / 0x180027e20 /
+// 0x180027f50 and the three forwarders live beside it.
+//
+// ON THE HOST THIS TEST DRIVES `AvlGeneric`, not those three bodies: the
+// specialisation is behind `#if !defined(BANISHED_UNIT_TEST)` like the other
+// three widths, for the reason this file's header block gives (the ported
+// bodies stand on the address registry). What it therefore verifies is the
+// SHAPE the width-8 tree needs — node 0x28, a key with a null state, a
+// case-insensitive comparator, the duplicate rule and erase — and the real run
+// verifies the bodies. The two halves together are what B32_RULES asks for.
+//
+// The element IS the key and it is ONE POINTER, which is what makes this width
+// 8 (`System::Filename` is `{ char* _data; }`). `FilenameLike` is that, with the
+// case-insensitive compare `IO::Modification`'s tree uses — NOT the signed
+// `strcmp` the pathid tree at width 0x10 uses, which is the one field
+// set_avl_pathid.cpp's banner says separates the two families.
+namespace {
+
+struct FilenameLike { char* data; };
+
+int AsciiStrICmp(const char* a, const char* b) {
+    for (;; ++a, ++b) {
+        const int ca = (*a >= 'A' && *a <= 'Z') ? *a + 32 : *a;
+        const int cb = (*b >= 'A' && *b <= 'Z') ? *b + 32 : *b;
+        if (ca != cb) return ca < cb ? -1 : 1;
+        if (ca == 0) return 0;
+    }
+}
+
+struct FilenameICompare {
+    static bool Less(const FilenameLike& a, const FilenameLike& b) {
+        return AsciiStrICmp(a.data, b.data) < 0;
+    }
+};
+
+using PathSet = Collection::Set<FilenameLike, FilenameICompare, CountingAllocator>;
+
+}  // namespace
+
+namespace Collection {
+namespace detail {
+// The null arm, exactly as modification_refresh.cpp specialises it for the real
+// `System::Filename`.
+template <> struct KeyTraits<FilenameLike> {
+    static bool IsNull(const FilenameLike& k) { return k.data == nullptr; }
+};
+}  // namespace detail
+}  // namespace Collection
+
+UNIT_TEST(set_width8_node_is_0x28_and_the_element_is_the_key) {
+    CHECK_EQ(sizeof(PathSet), static_cast<size_t>(0x10));
+    CHECK_EQ(sizeof(PathSet::Node), static_cast<size_t>(0x28));
+    CHECK_EQ(offsetof(PathSet::Node, parent),  static_cast<size_t>(0x08));
+    CHECK_EQ(offsetof(PathSet::Node, left),    static_cast<size_t>(0x10));
+    CHECK_EQ(offsetof(PathSet::Node, right),   static_cast<size_t>(0x18));
+    CHECK_EQ(offsetof(PathSet::Node, balance), static_cast<size_t>(0x20));
+    CHECK_EQ(offsetof(PathSet::Node, height),  static_cast<size_t>(0x22));
+}
+
+UNIT_TEST(set_width8_insert_find_erase_and_duplicates) {
+    CountingAllocator::Reset();
+    {
+        PathSet s;
+        char a[] = "Data/Models/House.rsc";
+        char b[] = "data/models/barn.rsc";
+        char c[] = "data/Terrain/grass.rsc";
+        char aDifferentCase[] = "DATA/MODELS/HOUSE.RSC";
+
+        CHECK(s.Insert(FilenameLike{b}) != nullptr);
+        CHECK(s.Insert(FilenameLike{a}) != nullptr);
+        CHECK(s.Insert(FilenameLike{c}) != nullptr);
+        CHECK_EQ(s.GetCount(), 3);
+        CHECK_EQ(CountingAllocator::allocs, 3);
+
+        // Case-INSENSITIVE: a differently-cased path is the SAME key, so the
+        // insert is a lookup that returns the existing node and does not count.
+        PathSet::Node* existing = s.Insert(FilenameLike{a});
+        CHECK(s.Insert(FilenameLike{aDifferentCase}) == existing);
+        CHECK_EQ(s.GetCount(), 3);
+        CHECK_EQ(CountingAllocator::allocs, 3);       // nothing was allocated
+
+        CHECK(s.Find(FilenameLike{aDifferentCase}) == existing);
+        char absent[] = "data/models/mill.rsc";
+        CHECK(s.Find(FilenameLike{absent}) == nullptr);
+
+        // A null key: the left arm descends left on it, the right arm reports
+        // EQUAL — so the FIRST null inserts and every later one is a lookup.
+        PathSet::Node* nullNode = s.Insert(FilenameLike{nullptr});
+        CHECK(nullNode != nullptr);
+        CHECK_EQ(s.GetCount(), 4);
+        CHECK(s.Insert(FilenameLike{nullptr}) == nullNode);
+        CHECK_EQ(s.GetCount(), 4);
+
+        // ... and it orders first.
+        CHECK(s.Begin().GetNode() == nullNode);
+
+        // Erase. `AvlOps<Node, 0x8>` has no ported erase — retail never emitted
+        // one at this width (`Mod::~Mod` tears the whole tree down post-order),
+        // so this is the generic body, which is the same algorithm.
+        s.Remove(existing);
+        CHECK_EQ(s.GetCount(), 3);
+        CHECK(s.Find(FilenameLike{a}) == nullptr);
+        CHECK(s.Find(FilenameLike{b}) != nullptr);
+        CHECK(s.Find(FilenameLike{c}) != nullptr);
+        CHECK_EQ(CountingAllocator::live, 3);
+    }
+    CHECK_EQ(CountingAllocator::live, 0);             // ~Set cleared the rest
+}
+
+UNIT_TEST(set_width8_stays_balanced_and_linked) {
+    CountingAllocator::Reset();
+    {
+        PathSet s;
+        // Unique, zero-padded names, so lexicographic order IS numeric order
+        // and the walker's key can be the number parsed back out.
+        std::vector<std::vector<char>> names(400);
+        for (int i = 0; i < 400; ++i) {
+            char buf[32];
+            std::snprintf(buf, sizeof(buf), "Path/%04d.rsc", i);
+            names[i].assign(buf, buf + std::strlen(buf) + 1);
+        }
+        uint64_t state = 0x9e3779b97f4a7c15ull;
+        for (int i = 399; i > 0; --i)                  // deterministic shuffle
+            std::swap(names[i], names[NextRandom(state) % (i + 1)]);
+        for (auto& n : names) s.Insert(FilenameLike{n.data()});
+        CHECK_EQ(s.GetCount(), 400);
+
+        WalkResult r = Walk(s, [](const FilenameLike& e) {
+            return static_cast<uint64_t>(std::strtoul(e.data + 5, nullptr, 10));
+        });
+        CHECK_EQ(r.nodes, s.GetCount());
+        CHECK(r.ordered && r.linked && r.heights && r.balanced);
+
+        // And the order is the COMPARATOR's, checked directly: an in-order walk
+        // is strictly increasing under `_stricmp`.
+        const char* prev = nullptr;
+        for (PathSet::Iterator it = s.Begin(); it != s.End(); ++it) {
+            const char* cur = (*it).data;
+            if (prev) CHECK(AsciiStrICmp(prev, cur) < 0);
+            prev = cur;
+        }
+    }
+    CHECK_EQ(CountingAllocator::live, 0);
+}
+
+// ============================================================================
+// ENDGAME B.3.2 closing pass, item 4 — `InsertInPlace` / `Emplace`
+// ============================================================================
+//
+// The element is CONSTRUCTED IN THE NODE instead of copy-constructed from a `T`
+// the caller built first. Same descent, same retrace, same duplicate rule.
+// Collection.h's banner says when that is observably identical to `Insert` and
+// when it is not; these tests assert the mechanism.
+namespace {
+
+struct LifeEvent { enum Kind { kCtor, kCopy, kDtor } kind; int value; };
+std::vector<LifeEvent>* g_life = nullptr;
+
+// The KEY is the leading sub-object and it is TRIVIAL — retail's rule, and the
+// one that makes an emplace worth having: the descent needs a key before
+// anything is allocated, so a key that costs a construction of its own would
+// hand the temporary straight back.
+struct TKey {
+    int k;
+    bool operator<(const TKey& o) const { return k < o.k; }
+};
+
+struct Tracked {
+    TKey key;          // +0x00 — the leading sub-object
+    int  payload;
+    Tracked(int k, int p) : key{k}, payload(p) {
+        if (g_life) g_life->push_back({LifeEvent::kCtor, k});
+    }
+    Tracked(const Tracked& o) : key(o.key), payload(o.payload) {
+        if (g_life) g_life->push_back({LifeEvent::kCopy, o.key.k});
+    }
+    Tracked& operator=(const Tracked&) = default;
+    ~Tracked() { if (g_life) g_life->push_back({LifeEvent::kDtor, key.k}); }
+};
+
+using TrackedSet =
+    Collection::Set<Tracked, Collection::AVLCompare, CountingAllocator, TKey>;
+
+}  // namespace
+
+UNIT_TEST(set_emplace_constructs_once_in_the_node) {
+    CountingAllocator::Reset();
+    std::vector<LifeEvent> log;
+    {
+        TrackedSet s;
+
+        // The `Insert` path, for the contrast: the caller builds a `T`, the
+        // node copy-constructs from it, and the caller's temporary dies.
+        g_life = &log;
+        {
+            Tracked tmp(1, 100);
+            s.Insert(tmp);
+        }
+        g_life = nullptr;
+        CHECK_EQ(static_cast<int>(log.size()), 3);
+        if (log.size() == 3) {
+            CHECK(log[0].kind == LifeEvent::kCtor);
+            CHECK(log[1].kind == LifeEvent::kCopy);
+            CHECK(log[2].kind == LifeEvent::kDtor);
+        }
+
+        // The `Emplace` path: ONE construction, in the node. No copy, and no
+        // temporary to destroy.
+        log.clear();
+        g_life = &log;
+        TrackedSet::Node* n = s.Emplace(TKey{2}, 2, 200);
+        g_life = nullptr;
+        CHECK(n != nullptr);
+        CHECK_EQ(static_cast<int>(log.size()), 1);
+        if (log.size() == 1) {
+            CHECK(log[0].kind == LifeEvent::kCtor);
+            CHECK_EQ(log[0].value, 2);
+        }
+        CHECK_EQ(n->element.key.k, 2);
+        CHECK_EQ(n->element.payload, 200);
+        CHECK_EQ(s.GetCount(), 2);
+
+        log.clear();
+    }
+    CHECK_EQ(CountingAllocator::live, 0);
+    g_life = nullptr;
+}
+
+UNIT_TEST(set_emplace_on_a_duplicate_key_constructs_nothing) {
+    CountingAllocator::Reset();
+    std::vector<LifeEvent> log;
+    {
+        TrackedSet s;
+        TrackedSet::Node* first = s.Emplace(TKey{7}, 7, 700);
+        CHECK_EQ(s.GetCount(), 1);
+        const int allocsAfterFirst = CountingAllocator::allocs;
+
+        // The descent finds the key and returns the EXISTING node before it
+        // ever reaches the allocation — so `T(args…)` never runs, the count
+        // does not move, and the stored payload is the FIRST one.
+        g_life = &log;
+        TrackedSet::Node* again = s.Emplace(TKey{7}, 7, 999);
+        g_life = nullptr;
+        CHECK(again == first);
+        CHECK_EQ(s.GetCount(), 1);
+        CHECK_EQ(CountingAllocator::allocs, allocsAfterFirst);
+        CHECK_EQ(static_cast<int>(log.size()), 0);
+        CHECK_EQ(first->element.payload, 700);
+    }
+    CHECK_EQ(CountingAllocator::live, 0);
+    g_life = nullptr;
+}
+
+UNIT_TEST(set_emplace_builds_the_same_tree_as_insert) {
+    CountingAllocator::Reset();
+    {
+        // Two trees, the same keys in the same order, one filled by `Insert`
+        // and one by `Emplace`. The shapes must be identical: `InsertInPlace`
+        // differs from `Insert` only in what runs in the node, never in the
+        // descent or the retrace.
+        TestSet<E8> byInsert;
+        Collection::Set<E8, Collection::AVLCompare, CountingAllocator> byEmplace;
+
+        uint64_t state = 0x243f6a8885a308d3ull;
+        std::vector<uint64_t> keys;
+        for (int i = 0; i < 500; ++i) keys.push_back(NextRandom(state) % 900u);
+
+        for (uint64_t k : keys) {
+            byInsert.Insert(E8{k});
+            byEmplace.Emplace(E8{k}, E8{k});
+        }
+        CHECK_EQ(byInsert.GetCount(), byEmplace.GetCount());
+
+        auto a = byInsert.Begin();
+        auto b = byEmplace.Begin();
+        int walked = 0;
+        while (a != byInsert.End() && b != byEmplace.End()) {
+            CHECK_EQ((*a).k, (*b).k);
+            CHECK_EQ(a.GetNode()->height,  b.GetNode()->height);
+            CHECK_EQ(a.GetNode()->balance, b.GetNode()->balance);
+            ++a; ++b; ++walked;
+        }
+        CHECK_EQ(walked, byInsert.GetCount());
+        CHECK(a == byInsert.End());
+        CHECK(b == byEmplace.End());
+    }
+    CHECK_EQ(CountingAllocator::live, 0);
+}

@@ -143,6 +143,16 @@ void MemFree(void* p) {
 // therefore observably identical to retail's element-wise copy for every T
 // actually used here.
 // ----------------------------------------------------------------------------
+// The three zero stores every retail `Array<T>` header starts life with, and
+// the ones its owner writes back after freeing the buffer by hand. Spelled out
+// rather than `*arr = {}` — see the two call sites.
+template <class T>
+void ZeroHeader(Collection::Array<T>* arr) {
+    arr->_data     = nullptr;
+    arr->_size     = 0;
+    arr->_capacity = 0;
+}
+
 template <class T>
 void ArraySetSize(Collection::Array<T>* arr, int32_t n, const T& fillValue) {
     int32_t oldSize = arr->_size;
@@ -156,10 +166,21 @@ void ArraySetSize(Collection::Array<T>* arr, int32_t n, const T& fillValue) {
         arr->_data = static_cast<T*>(MemAlloc(sizeof(T) * (uint64_t)arr->_capacity, (int)alignof(T)));
         grew = true;
     }
+    // ENDGAME B.3.2 closing pass: both copies are spelled as byte copies through
+    // a `void*` destination. They already WERE byte copies — the banner above
+    // says so, and `EffectSlot`'s implicit `operator=` was a memberwise copy of
+    // PODs plus `Array`'s then-shallow one — but `Collection::Array<T>::operator=`
+    // is now retail's DEEP assign, so leaving `arr->_data[i] = fillValue` as an
+    // assignment would run `ArrayAssignCore` over `EffectSlot::positions` in a
+    // buffer that MemAlloc just handed back uninitialised, i.e. free a garbage
+    // pointer. Byte-identical to what this helper did before, and the `void*`
+    // cast is also what silences -Wclass-memaccess on the line above.
     if (grew && oldSize > 0)
-        std::memcpy(arr->_data, oldData, sizeof(T) * (size_t)oldSize);
+        std::memcpy(static_cast<void*>(arr->_data), static_cast<const void*>(oldData),
+                    sizeof(T) * (size_t)oldSize);
     for (int32_t i = oldSize; i < n; ++i)
-        arr->_data[i] = fillValue;
+        std::memcpy(static_cast<void*>(&arr->_data[i]), static_cast<const void*>(&fillValue),
+                    sizeof(T));
     if (grew && oldData)
         MemFree(oldData);
 }
@@ -186,8 +207,12 @@ void* RtAudio_Scene_Ctor(void* selfPtr) {
     auto* self = static_cast<Scene*>(selfPtr);
     self->time = 0;
     self->playGeneration = 1;
-    self->channels = {};
-    self->effects = {};
+    // ENDGAME B.3.2 closing pass: retail's three zero stores, written out.
+    // `= {}` used to mean exactly this because `Collection::Array<T>::operator=`
+    // was the shallow memberwise one; it is now retail's DEEP assign, which
+    // would CLEAR the destination first — and `self` is raw memory here.
+    ZeroHeader(&self->channels);
+    ZeroHeader(&self->effects);
 
     EffectSlot defaultSlot{};
     defaultSlot.baseVolume = 1.0f;
@@ -213,11 +238,13 @@ void RtAudio_Scene_Dtor(void* selfPtr) {
         if (self->effects._data[i].positions._data)
             MemFree(self->effects._data[i].positions._data);
     }
+    // The buffers are freed by hand just above, so the headers are zeroed by
+    // hand too — a deep `operator=` here would free them a SECOND time.
     if (self->effects._data) MemFree(self->effects._data);
-    self->effects = {};
+    ZeroHeader(&self->effects);
 
     if (self->channels._data) MemFree(self->channels._data);
-    self->channels = {};
+    ZeroHeader(&self->channels);
 }
 
 // ============================================================================
