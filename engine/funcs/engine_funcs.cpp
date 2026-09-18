@@ -1135,7 +1135,8 @@ void Entity_FindComponentByExeTypeId(void* entity, void* retval, uint32_t* typeI
     }
 
     // Store result via InternalBasePtr::InternalBasePtr(retval, found)
-    fn_InternalBasePtr_Ctor(retval, found);
+    new (retval) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
 }
 
 // ============================================================

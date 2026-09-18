@@ -9,10 +9,18 @@
 #include <windows.h>
 #include "options.h"
 #include <cstdint>
+#include <new>
 #include "math/Math.h"
 #include "system/String.h"
 #include "system/Filename.h"
 #include "ui/UserInterface.h"   // UI::UserInterface::_dialogs (LinkedList walk below)
+// ENDGAME B.3.3 step 7: the inline bodies below are the last callers of
+// fn_ExternalFactory_Find / _FindNext, fn_Factory_GetTypeIdFromName and
+// fn_InternalBasePtr_Ctor. They call the real classes now. GLOBAL SCOPE, and
+// never inside an #if — B33_RULES' namespace hazard.
+#include "object/External.h"    // ::Object::ExternalFactory
+#include "object/Internal.h"    // ::Object::InternalBasePtr
+#include "object/TypeInfo.h"    // ::Object::Factory
 
 // ============================================================
 // Timer globals (in Runtime-x64.dll .data section)
@@ -1751,7 +1759,9 @@ inline void ResolveExternalByName_Impl(void* nameString) {
     // Convert String to Filename, look up in factory.
     // ??0Filename@System@@QEAA@AEBVString@1@@Z  retail 0x1800c6360
     System::Filename filename(*reinterpret_cast<const System::String*>(s));
-    void* found = fn_ExternalFactory_Find(factory, &filename);
+    void* found = const_cast<void*>(static_cast<const void*>(
+        reinterpret_cast<const ::Object::ExternalFactory*>(factory)   // B.3.3 bridge
+            ->Find(filename)));
 
     // Validate the found object is the expected type (Description base).
     // In standalone the exe-side type-id storage (g_TypeId_ComponentDescription_FC ->
@@ -4293,7 +4303,9 @@ inline void* FindDialogByName_Impl(void* retval, void* nameStr) {
         return retval;
     }
 
-    uint32_t dialogTypeId = fn_Factory_GetTypeIdFromName(factoryObj, part1, true);
+    uint32_t dialogTypeId =
+        reinterpret_cast<const ::Object::Factory*>(factoryObj)   // B.3.3 bridge
+            ->GetTypeIdFromName(part1, true);
     if (dialogTypeId == 0) {
         *(uintptr_t*)ret = 0;
         return retval;
@@ -4301,7 +4313,9 @@ inline void* FindDialogByName_Impl(void* retval, void* nameStr) {
 
     uint32_t controllerTypeId = 0;
     if (partCount == 2 && part2[0] != 0) {
-        controllerTypeId = fn_Factory_GetTypeIdFromName(factoryObj, part2, true);
+        controllerTypeId =
+            reinterpret_cast<const ::Object::Factory*>(factoryObj)   // B.3.3 bridge
+                ->GetTypeIdFromName(part2, true);
     }
 
     // Get UI singleton
@@ -4380,7 +4394,10 @@ inline void Game_TriggerDisasterByType_Impl(int disasterType) {
     void* entityList = *(void**)((uintptr_t)gameWorld + 0xf0);
 
     // Iterate all ComponentDescription-type externals
-    void* ext = fn_ExternalFactory_FindNext(factory, *g_TypeId_ComponentDescription_FC, nullptr);
+    const ::Object::ExternalFactory* efactory =
+        reinterpret_cast<const ::Object::ExternalFactory*>(factory);   // B.3.3 bridge
+    void* ext = const_cast<void*>(static_cast<const void*>(
+        efactory->FindNext(*g_TypeId_ComponentDescription_FC, nullptr)));
     while (ext != nullptr) {
         uintptr_t e = (uintptr_t)ext;
         if (fn_IsDerivedFrom(ext, *g_TypeId_ComponentDescription_FC)) {
@@ -4422,7 +4439,9 @@ inline void Game_TriggerDisasterByType_Impl(int disasterType) {
                 }
             }
         }
-        ext = fn_ExternalFactory_FindNext(factory, *g_TypeId_ComponentDescription_FC, ext);
+        ext = const_cast<void*>(static_cast<const void*>(
+            efactory->FindNext(*g_TypeId_ComponentDescription_FC,
+                               reinterpret_cast<const ::Object::External*>(ext))));
     }
 }
 
@@ -4597,9 +4616,10 @@ inline void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag
 
                 phase2_found:
                     {
-                        // Wrap found storage component in an InternalBasePtr via fn_InternalBasePtr_Ctor
+                        // Wrap found storage component in an InternalBasePtr
                         int64_t storageIBP = 0;
-                        fn_InternalBasePtr_Ctor(&storageIBP, storageComp);
+                        new (&storageIBP) ::Object::InternalBasePtr(
+                            reinterpret_cast<RtObject::Internal*>(storageComp));   // B.3.3 bridge
 
                         // Try to add one item via round-robin
                         if (spawned < count) {
@@ -4714,7 +4734,8 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
         }
 
         uint64_t ctrlRef = 0;
-        fn_InternalBasePtr_Ctor(&ctrlRef, panelController);
+        new (&ctrlRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(panelController));   // B.3.3 bridge
 
         if (ctrlRef != 0) {
             uintptr_t ctrl = (uintptr_t)ctrlRef;
@@ -4847,7 +4868,8 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
     }
 
     uint64_t editToolRef = 0;
-    fn_InternalBasePtr_Ctor(&editToolRef, editTool);
+    new (&editToolRef) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(editTool));   // B.3.3 bridge
 
     if (editToolRef == 0 && g_TypeId_EditTool) {
         // Switch to EditTool mode
@@ -4862,7 +4884,8 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
             }
         }
         editToolRef = 0;
-        fn_InternalBasePtr_Ctor(&editToolRef, editTool);
+        new (&editToolRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(editTool));   // B.3.3 bridge
     }
 
     // Select the entity in the EditTool
