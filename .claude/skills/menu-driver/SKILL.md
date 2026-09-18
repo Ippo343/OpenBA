@@ -1,0 +1,53 @@
+---
+name: menu-driver
+description: Drive reimpl-x64.exe menus unattended - how BANISHED_AUTOSTART works and how to click front-end, Mods, ModDetails and pause-menu buttons with BANISHED_AUTOMENU_BUTTON / BANISHED_AUTOMENU_CLICKS / BANISHED_PAUSEMENU_* / BANISHED_MODAL_ANSWER. Use when a test needs a menu route other than plain "new game", or when autostart itself misbehaves.
+---
+
+# Unattended menu driving
+
+Every flag here is declared, with its reader, in `standalone/options.h`. Whether a given
+route currently works is recorded in `docs/runtime_port/STATUS.md`.
+
+## Autostart (what `make sa-run` does)
+`BANISHED_AUTOSTART` (any value except `0`/`false`) auto-drives menu → New Game → Start.
+A numeric value > 1 overrides the menu settle-frame count (default 60). A direct launch of
+`reimpl-x64.exe` leaves it unset and stops at the menu, as does `make sa-run-menu`.
+
+- **Mechanism**: `standalone/autostart.cpp` ticks a state machine from
+  `MenuDLT::Stub_Update`. It injects the two reimplemented button-click events through the
+  dialog vtable slot-8 handlers (`MainMenuDialog::OnCommand` id=0 "buttonNew", then
+  `NewGameDialog::OnEvent` data=2 "buttonOk") — no input simulation. The Stage-C
+  transition in `MenuDLT::Update` then advances to the queued GameUpdateLoop chain exactly
+  like a manual click.
+- **Trace**: grep `standalone_error.log` for `[AutoStart]` (each step logs). Not
+  `standalone_debug.log`: a grep there returns 0 on a healthy run, the same signature as a
+  run that never built a world.
+- A 600-frame (~10 s) timeout aborts the Start injection if `NewGameDialog::buttonOk`
+  (+0xF0) never populates, rather than crashing on half-built combos.
+
+## Front-end buttons
+`BANISHED_AUTOMENU_BUTTON=<id>` clicks one main-menu button and stops there:
+Quit=6, Mods=7, Achievements=8, Goals=10.
+
+`BANISHED_AUTOMENU_CLICKS=<tok>,<tok>,...` then delivers follow-up clicks, one settle
+interval apart:
+
+| Token | Target |
+|---|---|
+| `<id>` | the last-opened ModDialog |
+| `d<id>` | ModDetailsDialog |
+| `m<id>` | the MainMenuDialog again |
+
+## Pause menu (in game)
+`BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120 BANISHED_PAUSEMENU_BUTTON=7
+BANISHED_PAUSEMENU_CLICKS=...` — same tokens plus `w` (wait) and `p` (dump the
+mod/package state). The feed survives the world reload that a mods Ok triggers.
+
+## Modal dialogs
+A modal `UI::ShowDialog` pumps its own loop that no driver can reach (and reads as HUNG to
+the watchdog on an unattended run). `BANISHED_MODAL_ANSWER=<n>` answers it with `n`.
+
+## Example: the Mods menu
+```
+BANISHED_AUTOMENU_BUTTON=7 BANISHED_AUTOMENU_CLICKS=1001,5001,d0,4001,101,m6 BANISHED_MODAL_ANSWER=1
+```
