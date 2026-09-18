@@ -90,8 +90,12 @@ void AutoPickupComponent_Shutdown(AutoPickupComponent* self, void* stream) {
     uintptr_t serializerObj = *(uintptr_t*)serializer;
     if (*(int*)(serializerObj + 8) == 0) {
         // B.3.2 bridge: +0x30 is the { int32* data; int32 size; int32 capacity }
-        // header; AutoPickupComponent is not a real class yet (§B.2).
-        GameColl::AsArray<GameColl::I32>((void*)(selfAddr + 0x30)).SetSize(localCount);
+        // header; AutoPickupComponent is not a real class yet (§B.2). I32NoInit — exe
+        // 0x1400021d0 (called here at 140044a40) copies only the old prefix and leaves a
+        // grown tail as-found. Safe: this arm runs only when loading, and the bulk int
+        // read immediately below (140044a55) writes all localCount elements from the
+        // stream before any of them is read.
+        GameColl::AsArray<GameColl::I32NoInit>((void*)(selfAddr + 0x30)).SetSize(localCount);
     }
 
     // Bulk-serialize int array

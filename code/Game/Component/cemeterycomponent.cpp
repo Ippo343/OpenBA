@@ -115,8 +115,11 @@ void CemeteryComponent_Shutdown(CemeteryComponent* self, void* stream) {
     // If reading, resize array
     uintptr_t serializerObj = *(uintptr_t*)serializer2;
     if (*(int*)(serializerObj + 8) == 0) {
-        // B.3.2 bridge: exe 0x1400021d0 IS Collection::Array<int32>::SetSize(n).
-        GameColl::AsArray<GameColl::I32>((void*)(selfAddr + 0x48)).SetSize(localCount);
+        // B.3.2 bridge: exe 0x1400021d0 IS Collection::Array<int32>::SetSize(n), called
+        // here at 14004763a. I32NoInit — a grown tail is left as the allocation found
+        // it, like retail. Safe: this arm runs only when reading, and the bulk int
+        // deserialize below writes all localCount tile indices before any is read.
+        GameColl::AsArray<GameColl::I32NoInit>((void*)(selfAddr + 0x48)).SetSize(localCount);
     }
 
     // Bulk-serialize all int elements

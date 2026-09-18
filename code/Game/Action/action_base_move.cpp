@@ -544,8 +544,10 @@ int ActMv_CopyPathFromFinder_a6d50(void* pathfinder, void* slotIdPtr, void* path
 
     *reinterpret_cast<int*>(base + 4 + off) = 0;
     *reinterpret_cast<uint8_t*>(base + off) = 0;
-    // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize.
-    GameColl::AsArray<GameColl::I32>(reinterpret_cast<void*>(base + 8 + off)).SetSize(0);
+    // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize. I32NoInit — a
+    // grown tail is left as the allocation found it, like retail's helper (1400a6df3).
+    // SetSize(0) never grows, so the two element types agree at this site.
+    GameColl::AsArray<GameColl::I32NoInit>(reinterpret_cast<void*>(base + 8 + off)).SetSize(0);
 
     slotId[0] = -1;
     slotId[1] = 0;

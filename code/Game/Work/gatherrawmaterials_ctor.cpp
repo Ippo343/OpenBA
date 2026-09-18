@@ -41,7 +41,7 @@ typedef void  (*GRMC_FindCompUnk_t)(uintptr_t entity, void* retIBP);    // 0x140
 typedef void* (*GRMC_FindCompStorage_t)(uintptr_t entity, void* retIBP); // 0x140006270
 // 0x1400021d0 (int-array SetSize) is the exe-side Collection::Array<int32>
 // monomorphisation -- ENDGAME B.3.2 step 2 converted its two call sites below to
-// GameColl::AsArray<GameColl::I32> member calls, so its resolved-pointer stand-in
+// GameColl::AsArray<GameColl::I32NoInit> member calls, so its resolved-pointer stand-in
 // is gone.
 
 // "BuildDescription" type-id (DWORD_1401c7040). Name verified via the .rdata
@@ -110,9 +110,13 @@ extern "C" void* GatherRawMaterials_Ctor_Impl(void* mem, void* buildEntityIBP) {
     // FLAG: original reads desc+0x28 unconditionally (assumes desc valid). We guard
     // desc==null -> matCount 0 so the arrays stay empty rather than deref null.
     int matCount = desc ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x28) : 0;
-    // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize.
-    GameColl::AsArray<GameColl::I32>(reinterpret_cast<void*>(self + 0x48)).SetSize(matCount);
-    GameColl::AsArray<GameColl::I32>(reinterpret_cast<void*>(self + 0x58)).SetSize(matCount);
+    // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize (retail
+    // GatherRawMaterials_Ctor calls it at 1400ec7e0 and 1400ec7ed). I32NoInit — a grown
+    // tail is left as the allocation found it, like retail. Safe: the seeding loop right
+    // below (retail 1400ec800..1400ec87f) writes BOTH arrays at every index i < +0x50
+    // before either is read.
+    GameColl::AsArray<GameColl::I32NoInit>(reinterpret_cast<void*>(self + 0x48)).SetSize(matCount);
+    GameColl::AsArray<GameColl::I32NoInit>(reinterpret_cast<void*>(self + 0x58)).SetSize(matCount);
 
     // --- Seed field_48[i] = amount already present in site storage, field_58[i] = 0 ---
     int count50 = *reinterpret_cast<int*>(self + 0x50);   // == matCount after resize

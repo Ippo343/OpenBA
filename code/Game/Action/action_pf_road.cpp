@@ -935,8 +935,11 @@ void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2) {
 
     // Phase 1: counter array length sync (+0x228 vs +0x218) then zero every counter.
     if (*reinterpret_cast<int*>(param_1 + 0x228) != *reinterpret_cast<int*>(param_1 + 0x218)) {
-        // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize.
-        GameColl::AsArray<GameColl::I32>(reinterpret_cast<void*>(param_1 + 0x220))
+        // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize. I32NoInit —
+        // the grown tail is left as the allocation found it, exactly as retail's helper
+        // does at 1400af3df. Safe: the counter-zeroing loop right below (retail
+        // 1400af400) writes all +0x228 elements before anything reads one.
+        GameColl::AsArray<GameColl::I32NoInit>(reinterpret_cast<void*>(param_1 + 0x220))
             .SetSize(*reinterpret_cast<int*>(param_1 + 0x218));
     }
     {

@@ -376,9 +376,12 @@ void ConsumeProduce_Serialize_Impl(ConsumeProduceAction* self, void* stream) {
     g_fn_Serialize_Int(serializerBuf, &intCount, nullptr);
 
     // If loading, resize the int array.
-    // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize.
+    // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize (retail
+    // ConsumeProduceAction_Shutdown calls it at 1400e90ff). I32NoInit — a grown tail is
+    // left as the allocation found it, like retail. Safe: the resize runs only when
+    // loading and the bulk int read below writes all intCount elements from the stream.
     if (isLoading) {
-        GameColl::AsArray<GameColl::I32>((void*)&self->field_68).SetSize(intCount);
+        GameColl::AsArray<GameColl::I32NoInit>((void*)&self->field_68).SetSize(intCount);
     }
 
     // Bulk-serialize the int array

@@ -143,8 +143,12 @@ void CreatePlacedDescription_Serialize(void* self, void* stream) {
         // stream. Zeroing an ALREADY-PARSED one is the bug this fix removes.
         if (arr) for (int i = 0; i < count; ++i) *(int32_t*)(arr + i * 4) = 0;
     } else if (count > 0 && *(int32_t*)(s + 0x3c) < count) {
-        // B.3.2 bridge: exe 0x1400021d0 IS Collection::Array<int32>::SetSize(n).
-        GameColl::AsArray<GameColl::I32>((void*)(s + 0x30)).SetSize(count);
+        // B.3.2 bridge: exe 0x1400021d0 IS Collection::Array<int32>::SetSize(n), called
+        // here at 14011993d. I32NoInit — the grown tail is left as the allocation found
+        // it, like retail. Safe: this branch is only taken when the buffer cannot
+        // already hold `count`, i.e. the array has not been parsed yet, and the element
+        // loop right below reads all `count` slots from the stream into it.
+        GameColl::AsArray<GameColl::I32NoInit>((void*)(s + 0x30)).SetSize(count);
         arr = *(uint8_t**)(s + 0x30);
     }
     uint8_t* e = arr;

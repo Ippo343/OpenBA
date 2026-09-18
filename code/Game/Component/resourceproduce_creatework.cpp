@@ -132,8 +132,11 @@ extern "C" uintptr_t* FishingComponent_CreateWork(void* self, uintptr_t* out) {
             const int n0 = s_childSum(pos, 0);
             const int n2 = s_childSum(pos, 2);
             // B.3.2 bridge: 0x1400032e0 is Array<void*>::SetSize, 0x1400021d0 is Array<int32>::SetSize
+            // (retail FishingWork_Ctor calls them at 1400eab83 / 1400eab8e). I32NoInit:
+            // 0x1400021d0 leaves a grown tail as-found. Safe — the zero loop right below
+            // (retail 1400eaba0) writes all +0x60 slots before any is read.
             GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(w + 0x48)).SetSize(n0);
-            GameColl::AsArray<GameColl::I32>(reinterpret_cast<void*>(w + 0x58)).SetSize(n2);
+            GameColl::AsArray<GameColl::I32NoInit>(reinterpret_cast<void*>(w + 0x58)).SetSize(n2);
             // Zero the kind-2 slot array the ctor allocates (retail's trailing loop).
             const int cnt = *reinterpret_cast<int32_t*>(w + 0x60);
             uint32_t* slots = *reinterpret_cast<uint32_t**>(w + 0x58);
@@ -354,8 +357,11 @@ extern "C" void* ConsumeProduceAction_Ctor(void* mem, uintptr_t* entityIbp,
             const int n0 = s_childSum(posIbp, 0);
             const int n2 = s_childSum(posIbp, 2);
             // B.3.2 bridge: 0x1400032e0 is Array<void*>::SetSize, 0x1400021d0 is Array<int32>::SetSize
+            // (retail ConsumeProduceAction_Ctor calls them at 1400e92d8 / 1400e92e3).
+            // I32NoInit: 0x1400021d0 leaves a grown tail as-found. Safe — the zero loop
+            // right below (retail 1400e9300) writes all +0x70 slots before any is read.
             GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(w + 0x58)).SetSize(n0);
-            GameColl::AsArray<GameColl::I32>(reinterpret_cast<void*>(w + 0x68)).SetSize(n2);
+            GameColl::AsArray<GameColl::I32NoInit>(reinterpret_cast<void*>(w + 0x68)).SetSize(n2);
             const int cnt = *reinterpret_cast<int32_t*>(w + 0x70);
             uint32_t* slots = *reinterpret_cast<uint32_t**>(w + 0x68);
             if (slots) for (int i = 0; i < cnt; ++i) slots[i] = 0;
