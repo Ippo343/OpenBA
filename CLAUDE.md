@@ -66,8 +66,8 @@ tools/resave_gate/resave_gate.sh Gate   # serializer regression check (README al
   and some slots are null on purpose — read the consumers before registering one.
 - **Never run `find /`** or any unscoped filesystem search; it has contaminated perf A/Bs.
   Use Grep/Glob scoped to the worktree. Memory lives at
-  `~/.claude/projects/C--code-GIT-untitled-rev-eng-project/memory/` (index `MEMORY.md`,
-  topic indexes `INDEX_gameplay.md`, `INDEX_lessons.md`) and `~/.claude/memory/`.
+  `~/.claude/projects/C--code-GIT-untitled-rev-eng-project/memory/` (index `MEMORY.md`;
+  history in `archive/`, open only when a task needs it) and `~/.claude/memory/`.
 - MSYS2 packages are stale: don't `pacman -S`.
 
 ## Subagents

@@ -11,8 +11,10 @@
 ## VS Code debugging
 - Configurations live in `.vscode/launch.json`: "Launch Standalone (debug, autostart new
   game)" sets `BANISHED_AUTOSTART`; "Launch Standalone (debug)" stops at the menu
-- `vscode-debugger` MCP: breakpoints, stepping, variables, stack traces
-- `vscode` MCP `start_debug_session` launches a config
+- Launch AND inspect with the `vscode-debugger` MCP (`start_config`, `mcpManaged: true`):
+  a session started through the `vscode` MCP's `start_debug_session` is invisible to it
+- `vscode` MCP is for general editor operations (terminal, tasks, open files)
+- Run `mingw32-make sa-deploy` first: the preLaunchTask may not run through MCP
 - `workspaceFolder` must use a lowercase drive letter (`c:\...`)
 
 ## Ghidra
