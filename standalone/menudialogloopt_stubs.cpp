@@ -53,6 +53,7 @@ void DlgCtrlRoute_Arm();                  // standalone/dlgctrl_route.cpp
 #include <cstdio>
 #include <cstdint>
 #include "system/Filename.h"   // -Iruntime/types
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstring>
 
 namespace {
@@ -86,6 +87,8 @@ static void EnsureCursorsLoaded() {
 
     void* keyMap = *g_pKeyMapSingleton;
     void* factory = *g_pExternalFactorySingleton;
+    ::Object::ExternalFactory* efactory =
+        reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
 
     // Skip if Arrow already loaded (this fn may be called multiple times).
     if (*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(keyMap) + 0x28)) {
@@ -94,7 +97,7 @@ static void EnsureCursorsLoaded() {
 
     auto loadAndStore = [&](uintptr_t offset, const char* name) {
         const System::Filename fn(name);
-        void* ext = fn_ExternalFactory_FindOrLoad(factory, &fn);
+        void* ext = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fn)));
         *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(keyMap) + offset) = ext;
         printf("[CursorLoad] %-32s -> %p (KeyMap+0x%02llx)\n",
                name, ext, (unsigned long long)offset);
@@ -141,6 +144,8 @@ static void EnsureUISoundsLoaded() {
 
     void* keyMap = *g_pKeyMapSingleton;
     void* factory = *g_pExternalFactorySingleton;
+    ::Object::ExternalFactory* efactory =
+        reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
     uintptr_t kmBase = reinterpret_cast<uintptr_t>(keyMap);
 
     // Skip if AlertEffect (first sound slot) already loaded.
@@ -150,7 +155,7 @@ static void EnsureUISoundsLoaded() {
 
     auto loadAndStore = [&](uintptr_t offset, const char* name) {
         const System::Filename fn(name);
-        void* ext = fn_ExternalFactory_FindOrLoad(factory, &fn);
+        void* ext = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fn)));
         *reinterpret_cast<void**>(kmBase + offset) = ext;
         printf("[UISoundLoad] %-34s -> %p (KeyMap+0x%02llx)\n",
                name, ext, (unsigned long long)offset);
@@ -194,6 +199,8 @@ extern "C" void StandaloneEnsureSpriteSheetLoaded() {
 
     void* keyMap = *g_pKeyMapSingleton;
     void* factory = *g_pExternalFactorySingleton;
+    ::Object::ExternalFactory* efactory =
+        reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
     uintptr_t kmBase = reinterpret_cast<uintptr_t>(keyMap);
 
     // Skip if SpriteSheet already loaded.
@@ -201,7 +208,7 @@ extern "C" void StandaloneEnsureSpriteSheetLoaded() {
 
     // Step 1: load Dialog/SpriteSheet.rsc into KeyMap+0xa0.
     const System::Filename sheetPath("Dialog/SpriteSheet.rsc");
-    void* spriteSheet = fn_ExternalFactory_FindOrLoad(factory, &sheetPath);
+    void* spriteSheet = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(sheetPath)));
     *reinterpret_cast<void**>(kmBase + 0xa0) = spriteSheet;
     printf("[SpriteSheetLoad] Dialog/SpriteSheet.rsc -> %p (KeyMap+0xa0)\n",
            spriteSheet);

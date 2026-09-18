@@ -60,6 +60,9 @@ namespace RtObject {
 External* RtObject_External_Ctor(External* self);
 void      RtObject_External_Dtor(External* self);
 Filename* RtObject_External_GetPath(const External* self, Filename* ret);
+// external_savetext_win.cpp:246 — `extern "C"`, so the linker name is unqualified.
+extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
+                                           const Filename* name);
 bool      RtObject_ExternalFactory_IsReferenceModeEnabled(const ExternalFactory* self);
 void      RtObject_ExternalFactory_EnableReferenceMode(ExternalFactory* self, bool enable);
 const External* RtObject_ExternalFactory_Find(const ExternalFactory* self, const Filename* path);
@@ -128,6 +131,20 @@ inline System::Filename ByHiddenSlot(Fn call) {
 }
 
 }  // namespace
+
+// ============================================================================
+// Object::External — the one member whose body reaches the registry
+// ============================================================================
+
+// ?SaveText@External@Object@@QEAA_NAEBVFilename@System@@0@Z  retail 0x1800bb9d0
+//
+// A spelling over the UNCHANGED body in external_savetext_win.cpp, which drives
+// the object's own vtable slot +0x28 (`Serialize`) with an IO::TextFileStream
+// and keeps its effectiveness counters. Declared on the class by B.3.3 step 6A
+// because a caller batch needed it; nothing about the body moved.
+bool External::SaveText(const System::Filename& path, const System::Filename& name) {
+    return RtObject::RtObject_External_SaveText(Pod(this), PodF(path), PodF(name));
+}
 
 // ============================================================================
 // Object::ExternalFactory

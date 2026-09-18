@@ -11,6 +11,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "Object/factory_registration.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -83,7 +84,8 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
     }
 
     // --- Get scenario count and iterate ---
-    int scenarioCount = fn_ExternalList_GetResourceCount(scenarioList);
+    int scenarioCount = reinterpret_cast<const ::Object::ExternalList*>(scenarioList)  // B.3.3 bridge
+                             ->GetResourceCount();
     int entryIndex = 0;  // counts matched scenarios (for button IDs and array)
     printf("[ScenarioDialog::Slot4] scenarioCount=%d, mgmtObj=%p, scenarioList=%p\n",
            scenarioCount, mgmtObj, scenarioList);

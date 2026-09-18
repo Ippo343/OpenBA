@@ -21,6 +21,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include "Game/serialize_externals.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A — Object::External / ExternalFactory
 #include <cstdint>
 #include <cstdio>
 
@@ -53,6 +54,15 @@ void ExternalPtrSerializeGeneric(void** refField, void* serializer,
     }
 
     void* factory = *g_pExternalFactorySingleton;
+    // ENDGAME B.3.3 step 6A: the resolved-pointer calls below are now member
+    // calls on the real `Object::ExternalFactory` / `Object::External`. The
+    // singleton is still read through the EXISTING `g_pExternalFactorySingleton`
+    // door (not `ExternalFactory::Get()`), so the guard above still gates the
+    // same cell and nothing about WHICH body runs changes: the class members
+    // forward to the same registered `RtObject_ExternalFactory_*` entry points
+    // these pointers resolve to.
+    ::Object::ExternalFactory* efactory =
+        reinterpret_cast<::Object::ExternalFactory*>(factory);   // B.3.3 bridge
 
     uint32_t typeId = 0;
     bool typeIdResolved = false;
@@ -93,23 +103,30 @@ void ExternalPtrSerializeGeneric(void** refField, void* serializer,
     if (encState == 3) {
         // Path-export (read-only) mode.
         if (!*refField) return;
-        System::Filename pathBuf;
-        void* path = fn_External_GetPath(*refField, &pathBuf);
-        void* found = fn_ExternalFactory_FindOrLoad(factory, path);
+        // `GetPath` returns by value through a hidden return slot and the callee
+        // CONSTRUCTS into it; copy-initialising the local is the same store
+        // (reference_hidden_retslot_wild_write.md).
+        System::Filename pathBuf =
+            reinterpret_cast<const ::Object::External*>(*refField)->GetPath();  // B.3.3 bridge
+        const void* found = efactory->FindOrLoad(pathBuf);
         if (found && typeIdResolved) {
-            ::Object::IsDerivedFromOrTrust(found, typeId);
+            ::Object::IsDerivedFromOrTrust(const_cast<void*>(found), typeId);
         }
         return;
     }
 
     System::Filename fnameBuf;
 
-    bool refMode = fn_ExternalFactory_IsReferenceModeEnabled(factory);
+    bool refMode = efactory->IsReferenceModeEnabled();
 
     if (refMode) {
         uint32_t refId = 0xFFFFFFFFu;
         if (*refField) {
-            refId = fn_ExternalFactory_GetReferenceId(factory, *refField);
+            // *** RETAIL DEREFERENCES THE FOUND NODE WITHOUT A NULL CHECK *** —
+            // an External the factory never Add()ed faults reading +0x14, in
+            // retail and here. No guard is added (CLAUDE.md hard rule).
+            refId = efactory->GetReferenceId(
+                reinterpret_cast<const ::Object::External*>(*refField));   // B.3.3 bridge
         }
 
         int serializerInner = *reinterpret_cast<int*>(
@@ -120,8 +137,7 @@ void ExternalPtrSerializeGeneric(void** refField, void* serializer,
             fn_Serializer_Serialize_Uint(serializer, &refId, nullptr);
             if (refId != 0xFFFFFFFFu) {
                 if (serializerInner == 0) {
-                    System::Filename tmpFn;
-                    fn_ExternalFactory_GetPathForReferenceId(factory, &tmpFn, refId);
+                    System::Filename tmpFn = efactory->GetPathForReferenceId(refId);
                     fnameBuf = tmpFn;
                 }
                 needsLoad = true;
@@ -134,7 +150,8 @@ void ExternalPtrSerializeGeneric(void** refField, void* serializer,
             int innerCheck = *reinterpret_cast<int*>(
                 reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(serializer)) + 8);
             if (innerCheck == 0) {
-                void* loaded = fn_ExternalFactory_FindOrLoad(factory, &fnameBuf);
+                void* loaded = const_cast<::Object::External*>(
+                    efactory->FindOrLoad(fnameBuf));                        // B.3.3 bridge
                 void* result = nullptr;
                 if (loaded && (!typeIdResolved || ::Object::IsDerivedFromOrTrust(loaded, typeId))) {
                     result = loaded;
@@ -147,8 +164,8 @@ void ExternalPtrSerializeGeneric(void** refField, void* serializer,
         g_fn_Serialize_Bool(serializer, &hasRef, nullptr);
         if (hasRef) {
             if (*refField) {
-                System::Filename pathBuf;
-                fn_External_GetPath(*refField, &pathBuf);
+                System::Filename pathBuf =
+                    reinterpret_cast<const ::Object::External*>(*refField)->GetPath();  // B.3.3 bridge
                 fnameBuf = pathBuf;
             }
             fnameBuf.AsString().Serialize(serializer);
@@ -156,7 +173,8 @@ void ExternalPtrSerializeGeneric(void** refField, void* serializer,
             int innerCheck = *reinterpret_cast<int*>(
                 reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(serializer)) + 8);
             if (innerCheck == 0) {
-                void* loaded = fn_ExternalFactory_FindOrLoad(factory, &fnameBuf);
+                void* loaded = const_cast<::Object::External*>(
+                    efactory->FindOrLoad(fnameBuf));                        // B.3.3 bridge
                 void* result = nullptr;
                 if (loaded && (!typeIdResolved || ::Object::IsDerivedFromOrTrust(loaded, typeId))) {
                     result = loaded;

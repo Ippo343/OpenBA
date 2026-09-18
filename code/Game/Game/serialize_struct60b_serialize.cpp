@@ -35,6 +35,7 @@
 #include "system/String.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -364,6 +365,11 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
     }
 
     void* factory = *g_pExternalFactorySingleton;
+    // ENDGAME B.3.3 step 6A: member calls on the real Object::ExternalFactory.
+    // The singleton is still read through the EXISTING door, so the guards
+    // above still gate the same cell and the same registered body still runs.
+    ::Object::ExternalFactory* efactory =
+        reinterpret_cast<::Object::ExternalFactory*>(factory);   // B.3.3 bridge
 
     // Resolve typeId from the MaterialInstance BaseTypeInfo* slot. Null/zero
     // means the type isn't yet registered — skip IsDerivedFrom validation.
@@ -409,11 +415,14 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
         if (encState == 3) {
             // Path-export (read-only) mode: walk existing pointers only.
             if (!*slot) continue;
-            System::Filename pathBuf;
-            void* path = fn_External_GetPath(*slot, &pathBuf);
-            void* found = fn_ExternalFactory_FindOrLoad(factory, path);
+            // `GetPath` returns by value through a hidden return slot and the
+            // callee CONSTRUCTS into it; copy-initialising the local is the
+            // same store.
+            System::Filename pathBuf =
+                reinterpret_cast<const ::Object::External*>(*slot)->GetPath();  // B.3.3 bridge
+            const void* found = efactory->FindOrLoad(pathBuf);
             if (found && typeIdResolved) {
-                ::Object::IsDerivedFromOrTrust(found, typeId);
+                ::Object::IsDerivedFromOrTrust(const_cast<void*>(found), typeId);
             }
             continue;
         }
@@ -421,12 +430,13 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
         // Load/save mode.
         System::Filename fnameBuf;
 
-        bool refMode = fn_ExternalFactory_IsReferenceModeEnabled(factory);
+        bool refMode = efactory->IsReferenceModeEnabled();
 
         if (refMode) {
             uint32_t refId = 0xFFFFFFFFu;
             if (*slot) {
-                refId = fn_ExternalFactory_GetReferenceId(factory, *slot);
+                refId = efactory->GetReferenceId(
+                    reinterpret_cast<const ::Object::External*>(*slot));   // B.3.3 bridge
             }
 
             int serializerInner = *reinterpret_cast<int*>(
@@ -437,8 +447,7 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
                 fn_Serializer_Serialize_Uint(serializer, &refId, nullptr);
                 if (refId != 0xFFFFFFFFu) {
                     if (serializerInner == 0) {
-                        System::Filename tmpFn;
-                        fn_ExternalFactory_GetPathForReferenceId(factory, &tmpFn, refId);
+                        System::Filename tmpFn = efactory->GetPathForReferenceId(refId);
                         fnameBuf = tmpFn;
                     }
                     needsPathSerialize = true;
@@ -451,7 +460,8 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
                 int innerCheck = *reinterpret_cast<int*>(
                     reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(serializer)) + 8);
                 if (innerCheck == 0) {
-                    void* loaded = fn_ExternalFactory_FindOrLoad(factory, &fnameBuf);
+                    void* loaded = const_cast<::Object::External*>(
+                        efactory->FindOrLoad(fnameBuf));                        // B.3.3 bridge
                     void* result = nullptr;
                     if (loaded && (!typeIdResolved || ::Object::IsDerivedFromOrTrust(loaded, typeId))) {
                         result = loaded;
@@ -464,8 +474,8 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
             g_fn_Serialize_Bool(serializer, &hasRef, nullptr);
             if (hasRef) {
                 if (*slot) {
-                    System::Filename pathBuf;
-                    fn_External_GetPath(*slot, &pathBuf);
+                    System::Filename pathBuf =
+                        reinterpret_cast<const ::Object::External*>(*slot)->GetPath();  // B.3.3 bridge
                     fnameBuf = pathBuf;
                 }
                 fnameBuf.AsString().Serialize(serializer);
@@ -473,7 +483,8 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
                 int innerCheck = *reinterpret_cast<int*>(
                     reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(serializer)) + 8);
                 if (innerCheck == 0) {
-                    void* loaded = fn_ExternalFactory_FindOrLoad(factory, &fnameBuf);
+                    void* loaded = const_cast<::Object::External*>(
+                        efactory->FindOrLoad(fnameBuf));                        // B.3.3 bridge
                     void* result = nullptr;
                     if (loaded && (!typeIdResolved || ::Object::IsDerivedFromOrTrust(loaded, typeId))) {
                         result = loaded;

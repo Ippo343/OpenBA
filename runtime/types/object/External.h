@@ -610,6 +610,19 @@ public:
     // ?GetPath@External@Object@@QEBA?AVFilename@System@@XZ  retail 0x180006250
     System::Filename GetPath() const;
 
+    // ?SaveText@External@Object@@QEAA_NAEBVFilename@System@@0@Z
+    //   retail 0x1800bb9d0, ordinal 364. ENDGAME B.3.3 step 6A: added because
+    //   the caller batch found a call site for it and the member was missing;
+    //   the body is unchanged and stays in external_savetext_win.cpp, so this
+    //   is a one-line spelling over `RtObject_External_SaveText` exactly like
+    //   every other member in external_class_doors.cpp.
+    //
+    //   THE SECOND PARAMETER IS A `Filename`, NOT A `String`: the mangled name
+    //   spells `AEBVFilename@System@@` and then `0`, the backreference to the
+    //   SAME type, so both arguments are `System::Filename const&`. Returns
+    //   `_N` (bool) in AL — no hidden return slot.
+    bool SaveText(const System::Filename& path, const System::Filename& name);
+
     // The static companion retail's reflection block emits. NOT `DECLARE_TYPE`
     // — see the banner on ExternalTypeInfoRecord() below.
     static uint32_t TypeId();

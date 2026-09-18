@@ -39,6 +39,7 @@
 #include "ui/Dialogs.h"
 #include "system/String.h"
 #include "system/Filename.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -235,8 +236,9 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
 
             // Load UIMaterialNoBlend material
             System::Filename matFilename("Material/UI/UIMaterialNoBlend.rsc");
-            void* matExternal = fn_ExternalFactory_FindOrLoad(
-                *g_pExternalFactorySingleton, &matFilename);
+            void* matExternal = const_cast<::Object::External*>(
+                reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)  // B.3.3 bridge
+                    ->FindOrLoad(matFilename));
 
             void* matResource = nullptr;
             if (matExternal) {
@@ -906,7 +908,9 @@ static int SaveLoad_ShowConfirmDialog(void* self, const char* rscPath) {
 
     // Load the .rsc External resource
     System::Filename filename(rscPath);
-    void* externalRes = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filename);
+    void* externalRes = const_cast<::Object::External*>(
+        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+            ->FindOrLoad(filename));
 
     // IsDerivedFrom check — ensure it's a valid External (matches original _typeInfo_exref)
     void* checkedRes = nullptr;
@@ -1086,7 +1090,9 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
 
         // Load the warning dialog External resource
         System::Filename warnFilename(warnPath);
-        void* warnExt = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &warnFilename);
+        void* warnExt = const_cast<::Object::External*>(
+            reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+                ->FindOrLoad(warnFilename));
 
         void* checkedWarn = nullptr;
         if (warnExt) {

@@ -21,6 +21,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Filename.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <utility>
 
@@ -331,7 +332,9 @@ static void ModDetailsDialog_OpenDialog_Impl(void* self, const char* rscPath) {
     // Load dialog resource
     System::Filename filenameBuf(rscPath);
     void* extFactory = *(void**)g_pExternalFactorySingleton;
-    void* ext = fn_ExternalFactory_FindOrLoad(extFactory, &filenameBuf);
+    void* ext = const_cast<::Object::External*>(
+        reinterpret_cast<::Object::ExternalFactory*>(extFactory)   // B.3.3 bridge
+            ->FindOrLoad(filenameBuf));
     // IsDerivedFrom check for Dialog type — the resource IS a Dialog if it loads
     // from a .rsc file, so we pass it directly (matches original behavior where
     // the check always succeeds for valid resources).

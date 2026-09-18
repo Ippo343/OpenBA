@@ -25,6 +25,7 @@
 #include "Work/marketwork_funcs.h"
 #include "engine_funcs.h"
 #include "system/Filename.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -848,8 +849,9 @@ static void MW_ReportTreeMiss(const char* site, int entityIdx, uintptr_t entityI
                               uintptr_t resType, void* rawMat, uintptr_t town) {
     char path[160] = "?";
     if (fn_External_GetPath && resType) {
-        System::Filename fnPath;   // the hidden return slot GetPath constructs into
-        fn_External_GetPath(reinterpret_cast<void*>(resType), &fnPath);
+        // the hidden return slot GetPath constructs into
+        System::Filename fnPath =
+            reinterpret_cast<const ::Object::External*>(resType)->GetPath();  // B.3.3 bridge
         const char* s = fnPath._data;
         if (s) {
             size_t i = 0;

@@ -74,6 +74,10 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context, void* worldGe
 #include "citizen_vitals.h"
 #include "mouse_inject.h"                 // BANISHED_MOUSE_INJECT hover/drag route (standalone/)
 #include "rt_port.h"                        // RT_DATA_SLOT (never caches a null resolve)
+#include "object/External.h"   // ENDGAME B.3.3 step 6A — must precede the
+                                // `namespace Object { ... }` forward decl below
+                                // (NAMESPACE HAZARD: spell ::Object::X everywhere
+                                // in this file, even at global scope)
 
 // Runtime type-id lookup (body in code/Game/Object/factory_registration.cpp) —
 // used as a standalone fallback for the Dialog type-id when the exe data slot
@@ -2205,7 +2209,10 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
             fn_ExternalList_Find(self->m_resourceList, &foundBase, &filename, &typeInfo);
         if (foundBase == nullptr && fn_ExternalFactory_FindOrLoad &&
             g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
-            foundBase = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filename);
+            // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
+            foundBase = const_cast<::Object::External*>(
+                reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)
+                    ->FindOrLoad(filename));                                 // B.3.3 bridge
         }
 
         void* dialogRes = nullptr;
@@ -2264,7 +2271,10 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
             fn_ExternalList_Find(self->m_resourceList, &foundBase, &filename, &typeInfo);
         if (foundBase == nullptr && fn_ExternalFactory_FindOrLoad &&
             g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
-            foundBase = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filename);
+            // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
+            foundBase = const_cast<::Object::External*>(
+                reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)
+                    ->FindOrLoad(filename));                                 // B.3.3 bridge
         }
         void* dialogRes = nullptr;
         if (foundBase != nullptr && g_pDialogTypeId && fn_IsDerivedFrom(foundBase, *g_pDialogTypeId))
@@ -2312,7 +2322,10 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
             fn_ExternalList_Find(self->m_resourceList, &foundBase, &filename, &typeInfo);
         if (foundBase == nullptr && fn_ExternalFactory_FindOrLoad &&
             g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
-            foundBase = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filename);
+            // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
+            foundBase = const_cast<::Object::External*>(
+                reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)
+                    ->FindOrLoad(filename));                                 // B.3.3 bridge
         }
         void* dialogRes = nullptr;
         if (foundBase != nullptr && g_pDialogTypeId && fn_IsDerivedFrom(foundBase, *g_pDialogTypeId))

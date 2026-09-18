@@ -16,6 +16,7 @@
 #include "Dialog/dialog_exe_helpers.h"
 #include "system/String.h"
 #include "system/Filename.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <cstdio>
 #include <windows.h>  // PostQuitMessage fallback in standalone Quit handler
@@ -60,7 +61,9 @@ static uint32_t* g_dialogTypeIdSlot = nullptr;
 
 static void* LoadDialogResource(const char* rscPath) {
     System::Filename filenameBuf(rscPath);
-    void* resource = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filenameBuf);
+    void* resource = const_cast<::Object::External*>(
+        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+            ->FindOrLoad(filenameBuf));
     printf("[LoadDialogResource] '%s' -> FindOrLoad=%p\n", rscPath, resource);
     void* extRes = nullptr;
     if (resource) {
@@ -461,8 +464,9 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
     // The Filename ctor already normalises delimiters (B.3.1 rule): no
     // separate AdjustDelimiters call is needed here.
     System::Filename filenameStr("Dialog/BuildId.rsc");
-    void* resource = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton,
-                                                    &filenameStr);
+    void* resource = const_cast<::Object::External*>(
+        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+            ->FindOrLoad(filenameStr));
     void* dialogResource = nullptr;
     if (resource && fn_IsDerivedFrom(resource, *g_pExternalTypeId)) {
         dialogResource = resource;

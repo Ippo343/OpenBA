@@ -17,6 +17,7 @@
 #include "engine_funcs.h"
 #include "system/Filename.h"
 #include "system/String.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdio>
 
 namespace Game {
@@ -195,8 +196,10 @@ void LoadInputNameTables() {
         // Retail builds a String and then runs Filename::AdjustDelimiters on it;
         // Filename(const char*) is exactly Set + AdjustDelimiters.
         System::Filename fnameBuf(path);
-        void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton,
-                                                   &fnameBuf);
+        // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
+        void* ext = const_cast<::Object::External*>(
+            reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)
+                ->FindOrLoad(fnameBuf));                                    // B.3.3 bridge
         if (!ext) {
             printf("[InputBindings]   '%s' -> NOT FOUND\n", path);
             return nullptr;

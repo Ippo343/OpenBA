@@ -21,6 +21,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Filename.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 
 // Thumbnail vtable stamps — see code/Game/Dialog/thumb_vtables.cpp.
@@ -79,7 +80,9 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
     // AdjustDelimiters call retail made on the raw buffer is redundant here.
     System::Filename filename("Material/UI/UIMaterialNoBlend.rsc");
 
-    void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filename);
+    void* ext = const_cast<::Object::External*>(
+        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+            ->FindOrLoad(filename));
     void* material = nullptr;
     if (ext) {
         if (g_TypeId_Material && fn_IsDerivedFrom(ext, *g_TypeId_Material)) {

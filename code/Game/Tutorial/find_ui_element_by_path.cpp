@@ -36,6 +36,7 @@
 #include "address_registry.h"
 #include "system/String.h"
 #include "system/Filename.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "ui/UserInterface.h"
 #include <cstdint>
 #include <cstdio>
@@ -93,8 +94,8 @@ bool ResourceNameMismatch(void* dialog, const System::String& wantName) {
     void* description = *reinterpret_cast<void**>(entityIBP + 0x28);
     if (!description) return false;
 
-    System::Filename fullPath;
-    fn_External_GetPath(description, &fullPath);
+    System::Filename fullPath =
+        reinterpret_cast<const ::Object::External*>(description)->GetPath();  // B.3.3 bridge
     System::Filename leafName = fullPath.GetPathFilename(true);
     System::String   nameStr(leafName.AsString());
 

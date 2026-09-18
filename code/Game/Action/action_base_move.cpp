@@ -17,6 +17,7 @@
 #include "Object/factory_registration.h"
 #include "system/String.h"
 #include "system/Filename.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "math/Math.h"
 #include "Component/coll_bridge.h"
 #include <cstdint>
@@ -150,10 +151,12 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
         // Read-only text path: drop the External; re-resolve by its current path.
         if (*pSlot == 0) return;
         System::Filename fnStorage;  // Filename retbuf (local_res18 in the original)
-        void* path = nullptr;
-        if (fn_External_GetPath) path = fn_External_GetPath(reinterpret_cast<void*>(*pSlot), &fnStorage);
+        if (fn_External_GetPath)
+            fnStorage = reinterpret_cast<const ::Object::External*>(*pSlot)->GetPath();  // B.3.3 bridge
         if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton && fn_ExternalFactory_FindOrLoad) {
-            void* found = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, path);
+            ::Object::ExternalFactory* efactory =
+                reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton);  // B.3.3 bridge
+            void* found = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fnStorage)));
             if (found && fn_IsDerivedFrom) fn_IsDerivedFrom(found, typeId);
         }
         return;   // ~Filename releases fnStorage (was the manual fn_Filename_Dtor)
@@ -164,8 +167,10 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
 
     void* factory = (g_pExternalFactorySingleton && *g_pExternalFactorySingleton)
                         ? *g_pExternalFactorySingleton : nullptr;
+    ::Object::ExternalFactory* efactory =
+        reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
     bool refMode = (factory && fn_ExternalFactory_IsReferenceModeEnabled)
-                       ? fn_ExternalFactory_IsReferenceModeEnabled(factory) : false;
+                       ? efactory->IsReferenceModeEnabled() : false;
 
     uint32_t refId = 0xffffffff;
     bool didFind = false;  // whether we fall through to the FindOrLoad write-back block
@@ -174,7 +179,8 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
         if (*pSlot == 0) {
             refId = 0xffffffff;
         } else if (factory && fn_ExternalFactory_GetReferenceId) {
-            refId = fn_ExternalFactory_GetReferenceId(factory, reinterpret_cast<void*>(*pSlot));
+            refId = efactory->GetReferenceId(
+                reinterpret_cast<const ::Object::External*>(*pSlot));  // B.3.3 bridge
         }
         // Stream-dirty flag = *(serializer+0)->[+8]. (RAX=[RBX]; [RAX+8])
         int streamFlag = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(serializer) + 8);
@@ -187,8 +193,7 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
             if ((int)refId != -1) {
                 streamFlag = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(serializer) + 8);
                 if (streamFlag == 0 && factory && fn_ExternalFactory_GetPathForReferenceId) {
-                    System::Filename pathBuf;
-                    fn_ExternalFactory_GetPathForReferenceId(factory, &pathBuf, refId);
+                    System::Filename pathBuf = efactory->GetPathForReferenceId(refId);
                     fnLocal = pathBuf;
                 }   // ~Filename releases pathBuf
                 didFind = true;
@@ -200,8 +205,8 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
         if (s_fn_SerBool_a58) s_fn_SerBool_a58(serializer, &present, nullptr);
         if (present != 0) {
             if (*pSlot != 0 && fn_External_GetPath) {
-                System::Filename pathBuf;
-                fn_External_GetPath(reinterpret_cast<void*>(*pSlot), &pathBuf);
+                System::Filename pathBuf =
+                    reinterpret_cast<const ::Object::External*>(*pSlot)->GetPath();  // B.3.3 bridge
                 fnLocal = pathBuf;
             }   // ~Filename releases pathBuf
             // Retail serializes the Filename through String::Serialize (the two
@@ -216,7 +221,7 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
         if (streamFlag == 0) {
             void* found = nullptr;
             if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton && fn_ExternalFactory_FindOrLoad)
-                found = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fnLocal);
+                found = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fnLocal)));
             uintptr_t result = 0;
             if (found && fn_IsDerivedFrom && fn_IsDerivedFrom(found, typeId))
                 result = reinterpret_cast<uintptr_t>(found);

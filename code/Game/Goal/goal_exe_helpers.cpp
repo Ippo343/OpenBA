@@ -10,6 +10,7 @@
 #include "resolve.h"
 #include "system/String.h"
 #include "system/Filename.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
@@ -37,6 +38,8 @@ void StatGoal_ResolveExternalPtr(void* externalRef) {
     uintptr_t s = reinterpret_cast<uintptr_t>(externalRef);
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) return;
     void* factory = *g_pExternalFactorySingleton;
+    ::Object::ExternalFactory* efactory =
+        reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
 
     int32_t refGen     = *reinterpret_cast<int32_t*>(s + 0x08);
     int32_t factoryGen = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(factory) + 0x08);
@@ -45,7 +48,9 @@ void StatGoal_ResolveExternalPtr(void* externalRef) {
     // +0x00 of the ExternalPtr is the name String (B.3.1 bridge: the containing
     // ExternalPtr struct is still untyped bytes).
     System::Filename filename(reinterpret_cast<const System::String&>(*reinterpret_cast<char*>(s)));
-    void* found = fn_ExternalFactory_Find ? fn_ExternalFactory_Find(factory, &filename) : nullptr;
+    void* found = fn_ExternalFactory_Find
+                      ? const_cast<void*>(static_cast<const void*>(efactory->Find(filename)))
+                      : nullptr;
 
     // STANDALONE DEVIATION, deliberate — identical to the one documented at
     // length in TutRestrict_ResolveRefOrLoad (tutorialsetuprestrictplayer.cpp)
@@ -82,7 +87,7 @@ void StatGoal_ResolveExternalPtr(void* externalRef) {
 
             System::String   normStr(normalized);
             System::Filename normFile(normStr);
-            found = fn_ExternalFactory_FindOrLoad(factory, &normFile);
+            found = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(normFile)));
             loaded = true;
         }
     }

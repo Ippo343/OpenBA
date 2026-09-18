@@ -18,6 +18,7 @@
 #include "system/String.h"
 #include "system/Filename.h"
 #include "Component/coll_bridge.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -136,12 +137,16 @@ void TownHallUI_InitGraph(TownHallUI* self) {
     // Load string tables
     {
         System::Filename filenameBuf("Dialog/StringTable.rsc:graphYears");
-        void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filenameBuf);
+        void* ext = const_cast<::Object::External*>(
+            reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+                ->FindOrLoad(filenameBuf));
         self->graphYearsTable = (ext && fn_IsDerivedFrom(ext, *g_TypeId_StringTable)) ? (uint64_t)ext : 0;
     }
     {
         System::Filename filenameBuf("Dialog/StringTable.rsc:graphTypes");
-        void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filenameBuf);
+        void* ext = const_cast<::Object::External*>(
+            reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+                ->FindOrLoad(filenameBuf));
         self->graphTypesTable = (ext && fn_IsDerivedFrom(ext, *g_TypeId_StringTable)) ? (uint64_t)ext : 0;
     }
 
@@ -526,7 +531,9 @@ void TownHallUI_InitProduction(TownHallUI* self) {
 
     // Load graphYears string table and populate combo
     System::Filename fnameBuf("Dialog/StringTable.rsc:graphYears");
-    void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fnameBuf);
+    void* ext = const_cast<::Object::External*>(
+        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+            ->FindOrLoad(fnameBuf));
     uint64_t yearsTable = 0;
     if (ext && fn_IsDerivedFrom(ext, *g_TypeId_StringTable)) {
         yearsTable = (uint64_t)ext;
@@ -573,10 +580,12 @@ void TownHallUI_InitInventory(TownHallUI* self) {
     int resourceCount = 0;
     void* factory = *g_pExternalFactorySingleton;
     uint32_t resTypeId = *(uint32_t*)g_TypeId_RawMaterialDescription;
-    void* extIter = fn_ExternalFactory_FindNext(factory, resTypeId, nullptr);
+    const ::Object::ExternalFactory* efactory =
+        reinterpret_cast<const ::Object::ExternalFactory*>(factory);   // B.3.3 bridge
+    const ::Object::External* extIter = efactory->FindNext(resTypeId, nullptr);
     while (extIter) {
         resourceCount++;
-        extIter = fn_ExternalFactory_FindNext(factory, resTypeId, extIter);
+        extIter = efactory->FindNext(resTypeId, extIter);
     }
 
     // Get column count and template row clone vtable
@@ -654,7 +663,9 @@ void TownHallUI_InitInventory(TownHallUI* self) {
 
     // Load inventoryType string table
     System::Filename fnameBuf("Dialog/StringTable.rsc:inventoryType");
-    void* extST = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fnameBuf);
+    void* extST = const_cast<::Object::External*>(
+        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+            ->FindOrLoad(fnameBuf));
     uint64_t invTypeTable = 0;
     if (extST && fn_IsDerivedFrom(extST, *g_TypeId_StringTable)) {
         invTypeTable = (uint64_t)extST;
@@ -712,7 +723,10 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
     uint32_t buildTypeId = *g_TypeId_ComponentDescription_FC;
     uint32_t selectDescId = *g_TypeId_SelectDescription;
 
-    void* buildDesc = fn_ExternalFactory_FindNext(factory, buildTypeId, nullptr);
+    const ::Object::ExternalFactory* efactoryAgri =
+        reinterpret_cast<const ::Object::ExternalFactory*>(factory);   // B.3.3 bridge
+    void* buildDesc = const_cast<::Object::External*>(
+        efactoryAgri->FindNext(buildTypeId, nullptr));                 // B.3.3 bridge
     while (buildDesc) {
         // Cast to ComponentDescription (IsDerivedFrom check)
         void* buildComp = nullptr;
@@ -805,7 +819,9 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
             }
         }
 
-        buildDesc = fn_ExternalFactory_FindNext(factory, buildTypeId, buildDesc);
+        buildDesc = const_cast<::Object::External*>(
+            efactoryAgri->FindNext(buildTypeId,
+                                   reinterpret_cast<const ::Object::External*>(buildDesc)));  // B.3.3 bridge
     }
 
     // Now set up the table with agriculture BST count

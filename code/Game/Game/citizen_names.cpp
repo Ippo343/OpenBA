@@ -31,6 +31,7 @@
 #include "engine_funcs.h"
 #include "system/Filename.h"
 #include "system/String.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <new>
 #include <cstdint>
 #include <cstring>
@@ -195,7 +196,12 @@ static uintptr_t LoadNameDb(const char* path) {
         return 0;
 
     System::Filename fname(path);
-    void* obj = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fname);
+    // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
+    // The singleton is still read through the EXISTING door, so the guard
+    // above still gates the same cell and the same registered body still runs.
+    void* obj = const_cast<::Object::External*>(
+        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)
+            ->FindOrLoad(fname));                                          // B.3.3 bridge
     return (uintptr_t)obj;
 }
 

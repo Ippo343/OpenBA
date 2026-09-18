@@ -36,6 +36,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Filename.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
@@ -424,7 +425,9 @@ void ModDialog_Slot4(ModDialog* self) {
         {
             System::Filename filenameBuf("Material/UI/UIMaterial.rsc");
             void* extFactory = *(void**)g_pExternalFactorySingleton;
-            void* ext = fn_ExternalFactory_FindOrLoad(extFactory, &filenameBuf);
+            void* ext = const_cast<::Object::External*>(
+                reinterpret_cast<::Object::ExternalFactory*>(extFactory)   // B.3.3 bridge
+                    ->FindOrLoad(filenameBuf));
             void* material = nullptr;
             if (ext) {
                 bool derived = fn_IsDerivedFrom(ext, g_TypeId_Material ? *g_TypeId_Material : 0);
@@ -491,7 +494,9 @@ void ModDialog_Slot4(ModDialog* self) {
     {
         System::Filename filenameBuf("Dialog/Mod.rsc:browser");
         void* extFactory = *(void**)g_pExternalFactorySingleton;
-        void* ext = fn_ExternalFactory_FindOrLoad(extFactory, &filenameBuf);
+        void* ext = const_cast<::Object::External*>(
+            reinterpret_cast<::Object::ExternalFactory*>(extFactory)   // B.3.3 bridge
+                ->FindOrLoad(filenameBuf));
 
         // Pass browser external directly; original has IsDerivedFrom check but the
         // _typeInfo_exref is context-dependent (Ghidra merges refs) and the browser
@@ -584,7 +589,9 @@ static void ModDialog_ShowDetails_Impl(ModDialog* self, int index) {
     // Load dialog resource
     System::Filename filenameBuf("Dialog/ModDetails.rsc");
     void* extFactory = *(void**)g_pExternalFactorySingleton;
-    void* ext = fn_ExternalFactory_FindOrLoad(extFactory, &filenameBuf);
+    void* ext = const_cast<::Object::External*>(
+        reinterpret_cast<::Object::ExternalFactory*>(extFactory)   // B.3.3 bridge
+            ->FindOrLoad(filenameBuf));
     // IsDerivedFrom check — resource is always valid Dialog if load succeeds
     void* dialog = ext;
 
@@ -652,7 +659,9 @@ static void ModDialog_Apply_Impl(ModDialog* self) {
         System::Filename filenameBuf(gameWorld == nullptr ? "Dialog/Reload.rsc:menu"
                                                             : "Dialog/Reload.rsc:game");
         void* extFactory = *(void**)g_pExternalFactorySingleton;
-        void* ext = fn_ExternalFactory_FindOrLoad(extFactory, &filenameBuf);
+        void* ext = const_cast<::Object::External*>(
+            reinterpret_cast<::Object::ExternalFactory*>(extFactory)   // B.3.3 bridge
+                ->FindOrLoad(filenameBuf));
         void* dialog = ext;  // IsDerivedFrom check always passes for valid .rsc
 
         // Create ReloadDialog (0xC0 bytes)

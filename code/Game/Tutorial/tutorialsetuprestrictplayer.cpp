@@ -23,6 +23,7 @@
 #include "engine_funcs.h"
 #include "system/Filename.h"
 #include "system/String.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -104,7 +105,9 @@ static void TutRestrict_ResolveRefOrLoad(void* ref) {
     {
         System::String   normStr(normalized);
         System::Filename normFile(normStr);
-        found = fn_ExternalFactory_FindOrLoad(factory, &normFile);
+        ::Object::ExternalFactory* efactory =
+            reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
+        found = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(normFile)));
     }
 
     void* result = nullptr;

@@ -26,6 +26,7 @@
 #include "system/String.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "Game/serialize_externals.h"
 #include <cstdint>
 #include <cstdlib>
@@ -95,7 +96,9 @@ extern "C" void TutBase_ResolveToolbarRef(void* stringField) {
 
     // +0x00 of the ref triple is the name String (B.3.1 bridge: still raw bytes).
     System::Filename filename(*reinterpret_cast<const System::String*>(s));
-    void* found = fn_ExternalFactory_Find(factory, &filename);
+    ::Object::ExternalFactory* efactory =
+        reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
+    void* found = const_cast<void*>(static_cast<const void*>(efactory->Find(filename)));
 
     // STANDALONE DEVIATION, deliberate — retail uses Find() alone and would crash
     // on the null below, so this is not papering over a faithful fault: it is the
@@ -131,7 +134,7 @@ extern "C" void TutBase_ResolveToolbarRef(void* stringField) {
 
             System::String   normStr(normalized);
             System::Filename normFile(normStr);
-            found = fn_ExternalFactory_FindOrLoad(factory, &normFile);
+            found = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(normFile)));
         }
     }
 

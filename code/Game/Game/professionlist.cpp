@@ -14,6 +14,9 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "collection/Collection.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A — must precede the
+                                // `namespace Object { ... }` forward decl below
+                                // (NAMESPACE HAZARD: spell ::Object::X everywhere)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -227,8 +230,14 @@ extern "C" void ProfessionList_Startup_Impl(void* profList) {
     if (!profTid) return;
 
     void* factory = *g_pExternalFactorySingleton;
-    for (void* it = fn_ExternalFactory_FindNext(factory, profTid, nullptr); it;
-         it = fn_ExternalFactory_FindNext(factory, profTid, it)) {
+    // ENDGAME B.3.3 step 6A: member calls on the real Object::ExternalFactory.
+    // The singleton is still read through the EXISTING door, so the guard
+    // above still gates the same cell and the same registered body still runs.
+    const ::Object::ExternalFactory* efactory =
+        reinterpret_cast<const ::Object::ExternalFactory*>(factory);   // B.3.3 bridge
+    const ::Object::External* found = efactory->FindNext(profTid, nullptr);
+    for (; found; found = efactory->FindNext(profTid, found)) {
+        void* it = const_cast<::Object::External*>(found);   // B.3.3 bridge
         if (!fn_IsDerivedFrom(it, profTid)) continue;
         if (*(uint8_t*)((uintptr_t)it + 0x4e) == 0) continue;  // not player-selectable
 

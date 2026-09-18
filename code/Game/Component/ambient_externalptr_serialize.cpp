@@ -24,6 +24,7 @@
 
 #include "engine_funcs.h"
 #include "system/Filename.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "resolve.h"
 #include <cstdint>
 
@@ -51,14 +52,16 @@ extern "C" void AmbientExternalPtrSerialize_Reimpl(void* fieldPtr, void* seriali
 
     void* factory = (g_pExternalFactorySingleton && *g_pExternalFactorySingleton)
         ? *g_pExternalFactorySingleton : nullptr;
+    ::Object::ExternalFactory* efactory =
+        reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
 
     // Encoding mode 3 — re-resolve from the existing pointer's path (no stream I/O).
     if (EncodingType(serializer) == 3) {
         if (*field == nullptr) return;
         if (fn_External_GetPath && fn_ExternalFactory_FindOrLoad && factory) {
-            System::Filename path;
-            fn_External_GetPath(*field, &path);
-            fn_ExternalFactory_FindOrLoad(factory, &path);   // touch/refcount (result unused)
+            System::Filename path =
+                reinterpret_cast<const ::Object::External*>(*field)->GetPath();  // B.3.3 bridge
+            (void)efactory->FindOrLoad(path);   // touch/refcount (result unused)
         }
         return;
     }
@@ -69,20 +72,21 @@ extern "C" void AmbientExternalPtrSerialize_Reimpl(void* fieldPtr, void* seriali
     System::Filename pathBuf;
 
     bool refMode = fn_ExternalFactory_IsReferenceModeEnabled && factory &&
-                   fn_ExternalFactory_IsReferenceModeEnabled(factory);
+                   efactory->IsReferenceModeEnabled();
 
     bool doLoad = false;
 
     if (refMode) {
         uint32_t refId = 0xffffffffu;
         if (*field != nullptr && fn_ExternalFactory_GetReferenceId)
-            refId = fn_ExternalFactory_GetReferenceId(factory, *field);
+            refId = efactory->GetReferenceId(
+                reinterpret_cast<const ::Object::External*>(*field));  // B.3.3 bridge
         // Serialize the reference id (matches the exe's guarded Serialize(uint)).
         if (fn_Serializer_Serialize_Uint)
             fn_Serializer_Serialize_Uint(serializer, &refId, nullptr);
         if ((int)refId != -1) {
             if (loading && fn_ExternalFactory_GetPathForReferenceId) {
-                fn_ExternalFactory_GetPathForReferenceId(factory, &pathBuf, refId);
+                pathBuf = efactory->GetPathForReferenceId(refId);
             }
             doLoad = true;
         }
@@ -93,7 +97,7 @@ extern "C" void AmbientExternalPtrSerialize_Reimpl(void* fieldPtr, void* seriali
             g_fn_Serialize_Bool(serializer, &present, nullptr);
         if (present) {
             if (*field != nullptr && fn_External_GetPath)
-                fn_External_GetPath(*field, &pathBuf);       // save: fill path from object
+                pathBuf = reinterpret_cast<const ::Object::External*>(*field)->GetPath();  // B.3.3 bridge — save: fill path from object
             pathBuf.AsString().Serialize(serializer);        // read/write the path string
             doLoad = true;
         }
@@ -102,7 +106,7 @@ extern "C" void AmbientExternalPtrSerialize_Reimpl(void* fieldPtr, void* seriali
     if (doLoad && loading) {
         void* loaded = nullptr;
         if (fn_ExternalFactory_FindOrLoad && factory)
-            loaded = fn_ExternalFactory_FindOrLoad(factory, &pathBuf);
+            loaded = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(pathBuf)));
         // RELAXED type check (see file header): keep the loaded External.
         *field = loaded;
     }
