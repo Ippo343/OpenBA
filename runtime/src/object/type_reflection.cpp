@@ -83,6 +83,73 @@ void  TypeChildFree(void* p)                    { TypeTreeFree(p); }
 #endif
 
 // ============================================================================
+// Object::Base — ENDGAME B.3.3 step 4
+// ============================================================================
+//
+// ??_GBase@Object@@UEAAPEAXI@Z   retail 0x1800065b0   (vtable slot 0)
+//
+// Transcribed from the disassembly. Retail's two arms:
+//
+//   TEST DL,0x2   -> the ARRAY arm (0x1800065c4): reads the element count at
+//                    `this - 8`, calls the EH vector destructor helper
+//                    (0x18007ec98) with elemSize 8 and ~Base, and returns
+//                    `this - 8`. `Object::Destroy` never takes it (it passes
+//                    flags 1) and nothing in retail ever new[]s a Base, so it
+//                    is transcribed as the faithful UNREACHABLE it is rather
+//                    than reimplemented against an array cookie our allocator
+//                    does not write. Taking it would be a bug upstream, and it
+//                    faults loudly at `this - 8` exactly as retail would.
+//   else          -> 0x180006601: `LEA RAX,[0x180154788]; MOV [RCX],RAX` (the
+//                    ~Base body: restamp Base's vptr), then
+//                    `TEST DL,0x1 / CALL 0x180006a10` (free), then RAX = this.
+//
+// The vptr restamp is what a real destructor chain does for us — GCC emits the
+// store on entry to `~Base()`. It is left as a plain `this->~Base()` rather
+// than a hand-written store because a hand-written store would name the MINTED
+// table address, and a converted object carries the COMPILER's table.
+//
+// 0x180006a10 is `MemFree` verbatim: `if (p) { Enter(lock); Free(p); Leave; }`,
+// instruction for instruction `?MemFree@MemoryAllocator@System@@SAXPEAX@Z`
+// (0x1800c7ad0) — proved for all 88 class-scoped operator deletes in
+// runtime/src/object/class_operator_delete.cpp's banner. So the free arm goes
+// through this file's existing allocator seam rather than pinning a 89th copy
+// of the same body.
+//
+// NOTHING IN PRODUCTION REACHES THIS YET: no class in the tree derives from
+// `Object::Base` at step 4. Every live object still carries the MINTED
+// `??_7Base@Object@@6B@` (0x180154788, 83 files stamp it) whose slot 0 is
+// `RtDelDtor_Base` from the RT_DELDTOR table. The two are slot-compatible —
+// tests/unit/object_vtable_abi_test.cpp proves it in both directions — which is
+// what lets them coexist until each class converts.
+// ============================================================================
+Base* Base::DeletingDtor(unsigned flags) {
+    this->~Base();                       // 0x180006601, the vptr restamp
+    if (flags & 1) TypeTreeFree(this);   // 0x18000660e / CALL 0x180006a10
+    return this;                         // RAX = RBX at 0x180006615
+}
+
+// ?Type@Base@Object@@UEBAIXZ   retail 0x1800c0380 — `XOR EAX,EAX; RET`.
+//
+// An unregistered type answers 0, which is the SAME value
+// `Factory::GetTypeIdFromName` returns for a name that is not in the tree.
+// That collision is retail's and is relied on: `WriteComponentTypeId` treats 0
+// as "no component".
+uint32_t Base::Type() const { return 0u; }
+
+// ?IsDerivedFrom@Base@Object@@QEBA_NI@Z   retail 0x1800c0390
+//
+// ORDER MATTERS AND IS PRESERVED: retail loads `_singleton` into RDI BEFORE
+// making the virtual call (0x1800c039a-0x1800c03a6). Harmless today, kept
+// because it is what the disassembly says. The unguarded find inside
+// `Factory::IsDerivedFrom` is retail's too — a missing registration faults
+// rather than answering false.
+bool Base::IsDerivedFrom(uint32_t typeId) const {
+    const Factory* factory = Factory::Get();
+    const uint32_t ownId   = Type();
+    return factory->IsDerivedFrom(ownId, typeId);
+}
+
+// ============================================================================
 // TypeNameCRC — the type-id hash, as ONE function
 // ============================================================================
 //
