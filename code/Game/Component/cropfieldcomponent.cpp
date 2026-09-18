@@ -183,16 +183,12 @@ void CropFieldComponent_ValidateEntityRefs(uintptr_t self) {
         void* obj = *(void**)(*(uintptr_t*)(map + 0x80) + 8 + (int64_t)id * 0x30);
         bool keep = false;
         if (obj != nullptr) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&obj);
             if (s_fn_Base_IsA && s_pTypeId_ComponentEntity &&
                 s_fn_Base_IsA(obj, *s_pTypeId_ComponentEntity)) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&obj);
                 uint8_t outIBP[8] = {0};
                 if (s_fn_FindComp_BS_local)
                     s_fn_FindComp_BS_local((int64_t)obj, outIBP);
                 if (*(void**)outIBP != nullptr) {
-                    if (fn_InternalBasePtr_CheckPtr)
-                        fn_InternalBasePtr_CheckPtr((void*)(entry + 0x8));
                     if (obj == *(void**)(entry + 0x8)) keep = true;
                 }
             }
@@ -466,12 +462,10 @@ extern "C" void CropFieldComponent_OnMessageVSlot(void* selfV, int msgId,
 
     if (msgId == 0) {
         uintptr_t nrIbp = 0;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)&entity);
         if (s_fn_FindComp_BS_local) s_fn_FindComp_BS_local((int64_t)entity, &nrIbp);
         *reinterpret_cast<int32_t*>(slot + 0x04)   = 1;          // growing
         *reinterpret_cast<uintptr_t*>(slot + 0x08) = entity;
         *reinterpret_cast<uintptr_t*>(slot + 0x10) = nrIbp;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot + 0x10);
         if (nrIbp)
             *reinterpret_cast<char*>(nrIbp + 0x2d) = static_cast<char>(slot[0x18]);
         return;
@@ -490,10 +484,8 @@ extern "C" void CropFieldComponent_OnMessageVSlot(void* selfV, int msgId,
         }
         if (!s_findGrowth || !s_f300 || !fn_Time_Ctor_Float) return;
         uintptr_t growth = 0;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)&entity);
         s_findGrowth((int64_t)entity, &growth);
         if (!growth) return;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&growth);
 
         void* desc = *reinterpret_cast<void**>(self + 0x18);
         const uint32_t tidCropDesc =
@@ -539,11 +531,9 @@ extern "C" uint8_t CropFieldComponent_CanCommandVSlot(void* selfV, int cmdId) {
         s_r = true;
     }
     if (!s_findSM) return 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
     uintptr_t smc = 0;
     s_findSM(*reinterpret_cast<uintptr_t*>(self + 0x10), &smc);
     if (!smc) return 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&smc);
 
     int8_t cur = *reinterpret_cast<int8_t*>(smc + 0x52);
     if (cur < 0) cur = *reinterpret_cast<int8_t*>(smc + 0x50);
@@ -587,21 +577,17 @@ extern "C" void CropFieldComponent_CommandVSlot(void* selfV, int cmdId) {
         char* master = reinterpret_cast<char*>(self + 0x48);
         *master = (*master == 0) ? 1 : 0;
         if (!s_findWpc || !s_setAccepting) return;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
         uintptr_t wpc = 0;
         s_findWpc(*reinterpret_cast<uintptr_t*>(self + 0x10), &wpc);
         if (!wpc) return;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpc);
         s_setAccepting(wpc, *master);
         return;
     }
 
     if (!s_findSM) return;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
     uintptr_t smc = 0;
     s_findSM(*reinterpret_cast<uintptr_t*>(self + 0x10), &smc);
     if (!smc) return;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&smc);
 
     const uintptr_t sm = smc + 0x48;
     void* node = *reinterpret_cast<void**>(sm);

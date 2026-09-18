@@ -142,7 +142,6 @@ static void EnsureFns() {
     s_init = true;
 }
 
-static inline void  CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 static inline uint32_t GetTypeId(void* obj) {
     // A null component slot yields no type-id match. The exe's slots are never null;
     // in standalone a partially-built entity can leave one null (crash READ of 0x0 on
@@ -273,15 +272,12 @@ int Pf_FindBestAdjacentCell_d5d0(int64_t param_1, uint32_t param_2, float* param
     //   worldVec[0..2] = local_58/local_54/local_50 (GridToWorld out)
     float posVec[3] = {0, 0, 0};
     float worldVec[3] = {0, 0, 0};
-    CheckPtr(self);
     fn_Entity_FindComponent_Position(*self, &local_70);
     int iVar15;
     if (local_70 == 0) {
-        CheckPtr(self);
         // FindComp writes an 8-byte IBP into the start of posVec (matches the original stack
         // aliasing: the IBP slot overlaps local_68/local_64).
         void* self_00 = s_FindComp_4680(*self, posVec);
-        CheckPtr(self_00);
         int64_t lVar10 = *(int64_t*)self_00;
         uint64_t uVar9 = 0xffffffff;
         int iVar5 = *(short*)(lVar10 + 0x2a) + -1;
@@ -346,12 +342,10 @@ LAB_14012d8ce:;
         iVar15 = -1;
     } else {
         int iVar6 = 0x7fffffff;
-        CheckPtr(&local_70);
         int iVar4 = s_ChildSum(local_70, 0);
         iVar15 = 0;
         if (0 < iVar4) {
             do {
-                CheckPtr(&local_70);
                 s_EntityResolvePos(local_70, posVec, 0, iVar15, (float*)0x0);
                 int iVar13 = *piVar3;
                 int iVar4b = (int)(posVec[0] + (float)(iVar13 >> 1));
@@ -381,7 +375,6 @@ LAB_14012d8ce:;
                 }
 LAB_14012d744:
                 iVar15 = iVar15 + 1;
-                CheckPtr(&local_70);
                 iVar4 = s_ChildSum(local_70, 0);
             } while (iVar15 < iVar4);
         }
@@ -490,9 +483,7 @@ LAB_14008d65b:;
             do {
                 local_68 = uVar16;
                 int64_t local_c8 = *plVar12;
-                CheckPtr(param_8);
                 if (local_c8 != *(int64_t*)param_8) {
-                    CheckPtr(&local_c8);
                     // --- find comp DAT_1401c7ee8 -> local_c0 ---
                     int64_t local_c0;
                     {
@@ -503,12 +494,10 @@ LAB_14008d65b:;
                         if (0 < *(int*)(local_c8 + 0x38)) {
                             do {
                                 uint64_t* puVar1 = (uint64_t*)(*(int64_t*)(lVar22 + 0x30) + lVar23 * 8);
-                                CheckPtr(puVar1);
                                 uint32_t iVar11 = *s_pTid_c7ee8;
                                 uint32_t iVar9 = GetTypeId((void*)*puVar1);
                                 if (iVar9 == iVar11) {
                                     puVar1 = (uint64_t*)(*(int64_t*)(lVar22 + 0x30) + lVar23 * 8);
-                                    CheckPtr(puVar1);
                                     void* pvVar3 = (void*)*puVar1;
                                     pvVar13 = fn_IsDerivedFrom(pvVar3, *s_pTid_c7ee8) ? pvVar3 : (void*)0x0;
                                     goto FOUND_c0;
@@ -522,7 +511,6 @@ FOUND_c0:
                         new (&local_c0) ::Object::InternalBasePtr(
                             reinterpret_cast<RtObject::Internal*>(pvVar13));   // B.3.3 bridge
                     }
-                    CheckPtr(&local_c8);
                     // --- find comp DAT_1401c4560 -> local_70 ---
                     int64_t local_70v;
                     {
@@ -533,12 +521,10 @@ FOUND_c0:
                         if (0 < *(int*)(local_c8 + 0x38)) {
                             do {
                                 uint64_t* puVar1 = (uint64_t*)(*(int64_t*)(lVar22 + 0x30) + lVar23 * 8);
-                                CheckPtr(puVar1);
                                 uint32_t iVar11 = *s_pTid_c4560;
                                 uint32_t iVar9 = GetTypeId((void*)*puVar1);
                                 if (iVar9 == iVar11) {
                                     puVar1 = (uint64_t*)(*(int64_t*)(lVar22 + 0x30) + lVar23 * 8);
-                                    CheckPtr(puVar1);
                                     void* pvVar3 = (void*)*puVar1;
                                     pvVar13 = fn_IsDerivedFrom(pvVar3, *s_pTid_c4560) ? pvVar3 : (void*)0x0;
                                     goto FOUND_70;
@@ -552,7 +538,6 @@ FOUND_70:
                         new (&local_70v) ::Object::InternalBasePtr(
                             reinterpret_cast<RtObject::Internal*>(pvVar13));   // B.3.3 bridge
                     }
-                    CheckPtr(&local_c8);
                     // --- find comp DWORD_1401c7e78 (StorageComponent) -> local_a8 ---
                     int64_t local_a8;
                     {
@@ -563,12 +548,10 @@ FOUND_70:
                         if (0 < *(int*)(local_c8 + 0x38)) {
                             do {
                                 uint64_t* puVar1 = (uint64_t*)(*(int64_t*)(lVar22 + 0x30) + lVar23 * 8);
-                                CheckPtr(puVar1);
                                 uint32_t dVar5 = *s_pTid_c7e78;
                                 uint32_t dVar8 = GetTypeId((void*)*puVar1);
                                 if (dVar8 == dVar5) {
                                     puVar1 = (uint64_t*)(*(int64_t*)(lVar22 + 0x30) + lVar23 * 8);
-                                    CheckPtr(puVar1);
                                     void* pvVar3 = (void*)*puVar1;
                                     pvVar13 = fn_IsDerivedFrom(pvVar3, *s_pTid_c7e78) ? pvVar3 : (void*)0x0;
                                     goto FOUND_a8;
@@ -583,7 +566,6 @@ FOUND_a8:
                             reinterpret_cast<RtObject::Internal*>(pvVar13));   // B.3.3 bridge
                     }
                     if (local_c0 != 0) {
-                        CheckPtr(&local_c0);
                         int64_t lVar22 = local_c0;
                         void* pvVar3 = *(void**)(local_c0 + 0x18);
                         // Guard: the exe derefs this description unconditionally, but in
@@ -592,7 +574,6 @@ FOUND_a8:
                         void* pvVar13 = (pvVar3 && fn_IsDerivedFrom(pvVar3, *s_pTid_c7f20)) ? pvVar3 : (void*)0x0;
                         uint32_t uVar10 = pvVar13 ? *(uint32_t*)((int64_t)pvVar13 + 0x20) : 0;
                         if (uVar10 == 0) {
-                            CheckPtr((void*)(lVar22 + 0x10));
                             lVar22 = *(int64_t*)(lVar22 + 0x10);
                             int iVar17b = 0;
                             int64_t lVar23 = 0;
@@ -600,12 +581,10 @@ FOUND_a8:
                             if (0 < *(int*)(lVar22 + 0x38)) {
                                 do {
                                     uint64_t* puVar1 = (uint64_t*)(*(int64_t*)(lVar22 + 0x30) + lVar23 * 8);
-                                    CheckPtr(puVar1);
                                     uint32_t dVar5 = *s_pTid_c7e78;
                                     uint32_t dVar8 = GetTypeId((void*)*puVar1);
                                     if (dVar8 == dVar5) {
                                         puVar1 = (uint64_t*)(*(int64_t*)(lVar22 + 0x30) + lVar23 * 8);
-                                        CheckPtr(puVar1);
                                         void* pvVar3b = (void*)*puVar1;
                                         pvVar13b = fn_IsDerivedFrom(pvVar3b, *s_pTid_c7e78) ? pvVar3b : (void*)0x0;
                                         goto FOUND_78;
@@ -619,7 +598,6 @@ FOUND_78:
                             int64_t local_78;
                             new (&local_78) ::Object::InternalBasePtr(
                                 reinterpret_cast<RtObject::Internal*>(pvVar13b));   // B.3.3 bridge
-                            CheckPtr(&local_78);
                             uVar10 = *(uint32_t*)(local_78 + 0x3c);
                         }
                         // Guard: pvVar19 (the drop-source RawMaterialDescription on param_4)
@@ -628,7 +606,6 @@ FOUND_78:
                         uint32_t srcMask = pvVar19 ? *(uint32_t*)((int64_t)pvVar19 + 0x5c) : 0;
                         if ((srcMask & uVar10) == 0) goto LAB_14008db2a;
                     }
-                    CheckPtr(&local_a8);
                     bool accepted = false;
                     if (param_6 == '\0') {
                         int iVar17c = 0;
@@ -678,10 +655,8 @@ AFTER_HEADROOM:
                             float dropVec[3] = {0, 0, 0};
                             int iVar11;
                             if (local_c0 == 0) {
-                                CheckPtr(&local_70v);
                                 iVar11 = s_PickReachable(local_70v, param_3, dropVec);
                             } else {
-                                CheckPtr(&local_c0);
                                 iVar11 = Pf_FindBestAdjacentCell_d5d0(local_c0, param_3,
                                                                      dropVec, uVar20);
                             }

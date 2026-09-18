@@ -37,12 +37,10 @@ static void* FindComponentByTypeId(uintptr_t entity, void* retIBP, const uint32_
         uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
         for (int i = 0; i < n; i++) {
             void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
             void* comp = *slot;
             // GetTypeId is component vtable slot +0x10.
             uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
             if (t == *pTypeId) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
                 void* c = *slot;
                 found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *pTypeId)) ? c : nullptr;
                 break;

@@ -291,12 +291,10 @@ void StorageComponent_Draw(StorageComponent* self) {
     int tileArea = 1;
     if (*(uint8_t*)(descAddr + 0x20) != 0) {
         // Find MapComponent on entity, get tile dimensions
-        if (fn_InternalBasePtr_CheckPtr && s_fn_FindComponent_Map) {
-            fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
+        if (s_fn_FindComponent_Map) {
             uintptr_t entity = *(uintptr_t*)(selfAddr + 0x10);
             uintptr_t mapCompBuf[2];
             s_fn_FindComponent_Map(entity, (void*)mapCompBuf);
-            fn_InternalBasePtr_CheckPtr((void*)mapCompBuf);
             uintptr_t mapComp = mapCompBuf[0];
             if (mapComp) {
                 int16_t w = *(int16_t*)(mapComp + 0x2c);

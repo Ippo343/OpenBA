@@ -1018,9 +1018,6 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
     for (int64_t idx = 0; idx < firstCount; idx++) {
         // Read entity InternalBasePtr from array
         int64_t entityIBP = *reinterpret_cast<int64_t*>(q[0] + idx * 8);
-        if (fn_InternalBasePtr_CheckPtr) {
-            fn_InternalBasePtr_CheckPtr(&entityIBP);
-        }
 
         // Find StorageComponent on this entity
         void* storageComp = findComponent(static_cast<uintptr_t>(entityIBP),
@@ -1034,9 +1031,6 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
         }
 
         // Read item count from storage: *(int*)(storage + 0x30)
-        if (fn_InternalBasePtr_CheckPtr) {
-            fn_InternalBasePtr_CheckPtr(&storageIBP);
-        }
         int32_t itemCount = *reinterpret_cast<int32_t*>(storageIBP + 0x30);
         if (itemCount <= 0) continue;
 
@@ -1046,9 +1040,6 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
         // Iterate storage items: array at *(ptr*)(storage + 0x28), stride 0x10
         // Each item: [0x00] = item entity ptr, [0x08] = quantity (int cast from longlong)
         for (int32_t j = 0; j < itemCount; j++) {
-            if (fn_InternalBasePtr_CheckPtr) {
-                fn_InternalBasePtr_CheckPtr(&storageIBP);
-            }
             int64_t* itemEntry = reinterpret_cast<int64_t*>(
                 *reinterpret_cast<int64_t*>(storageIBP + 0x28) + j * 0x10);
 
@@ -1107,15 +1098,9 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
 
         // Update notification worker counts from storage+0x38 (capacity/worker count)
         if (hadDeadResources && notifySummary) {
-            if (fn_InternalBasePtr_CheckPtr) {
-                fn_InternalBasePtr_CheckPtr(&storageIBP);
-            }
             notifySummary[5] += *reinterpret_cast<int32_t*>(storageIBP + 0x38);
         }
         if (hadNormalResources && notifySummary) {
-            if (fn_InternalBasePtr_CheckPtr) {
-                fn_InternalBasePtr_CheckPtr(&storageIBP);
-            }
             notifySummary[1] += *reinterpret_cast<int32_t*>(storageIBP + 0x38);
         }
     }
@@ -1126,9 +1111,6 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
     for (int64_t idx = 0; idx < secondCount; idx++) {
         // Read entity InternalBasePtr from array
         int64_t entityIBP = *reinterpret_cast<int64_t*>(q[2] + idx * 8);
-        if (fn_InternalBasePtr_CheckPtr) {
-            fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(&entityIBP));
-        }
 
         // Find StorageComponent on this entity
         uintptr_t entityAddr = static_cast<uintptr_t>(entityIBP);
@@ -1142,17 +1124,11 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
         }
 
         // Read item count from storage: *(int*)(storage + 0x30)
-        if (fn_InternalBasePtr_CheckPtr) {
-            fn_InternalBasePtr_CheckPtr(&storageIBP);
-        }
         int32_t itemCount = *reinterpret_cast<int32_t*>(storageIBP + 0x30);
         if (itemCount <= 0) continue;
 
         // Iterate storage items
         for (int32_t j = 0; j < itemCount; j++) {
-            if (fn_InternalBasePtr_CheckPtr) {
-                fn_InternalBasePtr_CheckPtr(&storageIBP);
-            }
             int64_t* itemEntry = reinterpret_cast<int64_t*>(
                 *reinterpret_cast<int64_t*>(storageIBP + 0x28) + j * 0x10);
 
@@ -1345,9 +1321,6 @@ void CitizenBehavior_CollectStats(CitizenBehaviorRaw* self) {
 
     for (int i = 0; i < citizenCount; i++) {
         uint64_t citizenIBP = citizenArray[i];
-        if (fn_InternalBasePtr_CheckPtr) {
-            fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(&citizenIBP));
-        }
         uintptr_t c = static_cast<uintptr_t>(citizenIBP);
 
         // SA-guard: skip an entry that is not a readable citizen. Retail's array holds
@@ -1386,9 +1359,6 @@ void CitizenBehavior_CollectStats(CitizenBehaviorRaw* self) {
 
         // Classify: child (age < adult AND alive), dead, or adult
         if (age < adultAge || deathTime != 0) {
-            if (fn_InternalBasePtr_CheckPtr) {
-                fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(&citizenIBP));
-            }
             if (deathTime == 0) {
                 children++;
             } else {
@@ -1399,30 +1369,18 @@ void CitizenBehavior_CollectStats(CitizenBehaviorRaw* self) {
         }
 
         // Accumulate happiness (+0x50) and health (+0x80)
-        if (fn_InternalBasePtr_CheckPtr) {
-            fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(&citizenIBP));
-        }
         c = static_cast<uintptr_t>(citizenIBP);
         happinessSum += *reinterpret_cast<float*>(c + 0x50);
 
-        if (fn_InternalBasePtr_CheckPtr) {
-            fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(&citizenIBP));
-        }
         c = static_cast<uintptr_t>(citizenIBP);
         healthSum += *reinterpret_cast<float*>(c + 0x80);
 
         // Check educated: education level >= threshold AND adult AND alive
-        if (fn_InternalBasePtr_CheckPtr) {
-            fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(&citizenIBP));
-        }
         c = static_cast<uintptr_t>(citizenIBP);
         descPtr = *reinterpret_cast<uintptr_t*>(c + 0x288);
         int educThreshold = *reinterpret_cast<int*>(descPtr + 0x118);
         int educLevel = *reinterpret_cast<int*>(c + 0x210);
         if (educLevel >= educThreshold) {
-            if (fn_InternalBasePtr_CheckPtr) {
-                fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(&citizenIBP));
-            }
             c = static_cast<uintptr_t>(citizenIBP);
             descPtr = *reinterpret_cast<uintptr_t*>(c + 0x288);
             float citizenAge = *reinterpret_cast<float*>(c + 0x3C);
@@ -1433,9 +1391,6 @@ void CitizenBehavior_CollectStats(CitizenBehaviorRaw* self) {
         }
 
         // Check working: has job flag at +0x1E4
-        if (fn_InternalBasePtr_CheckPtr) {
-            fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(&citizenIBP));
-        }
         c = static_cast<uintptr_t>(citizenIBP);
         if (*reinterpret_cast<int*>(c + 0x1E4) != 0) {
             working++;
@@ -1456,9 +1411,6 @@ void CitizenBehavior_CollectStats(CitizenBehaviorRaw* self) {
         // citizen IBP value). A second deref would read the citizen's vtable
         // and +0x18 lands in .text (IsDerivedFrom faults on a code address).
         uint64_t firstIBP = *reinterpret_cast<uint64_t*>(self->allCitizensPtr());
-        if (fn_InternalBasePtr_CheckPtr) {
-            fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(&firstIBP));
-        }
         void* descBase = *reinterpret_cast<void**>(static_cast<uintptr_t>(firstIBP) + 0x18);
         void* citizenDesc = nullptr;
         if (fn_IsDerivedFrom && g_TypeId_CitizenDescription) {
@@ -1477,9 +1429,6 @@ void CitizenBehavior_CollectStats(CitizenBehaviorRaw* self) {
         // Re-read first citizen for maxHappiness from CitizenDescription+0x70
         // (same single-deref as above).
         firstIBP = *reinterpret_cast<uint64_t*>(self->allCitizensPtr());
-        if (fn_InternalBasePtr_CheckPtr) {
-            fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(&firstIBP));
-        }
         descBase = *reinterpret_cast<void**>(static_cast<uintptr_t>(firstIBP) + 0x18);
         citizenDesc = nullptr;
         if (fn_IsDerivedFrom && g_TypeId_CitizenDescription) {
@@ -1643,7 +1592,6 @@ void* CitizenBehavior_FindIdle(CitizenBehaviorRaw* self, void* retval,
     for (int i = 0; i < citizenCount; /* i incremented below */) {
         // Load citizen IBP
         void* citizenIBP = citizenArray[i];
-        fn_InternalBasePtr_CheckPtr(&citizenIBP);
         uintptr_t citizen = (uintptr_t)citizenIBP;
 
         // Check age >= adult threshold
@@ -1655,12 +1603,10 @@ void* CitizenBehavior_FindIdle(CitizenBehaviorRaw* self, void* retval,
         if (*(int64_t*)(citizen + 0x208) != 0) { i++; continue; }
 
         // Check profession matches target profId (NOT idle — we want workers of this type)
-        fn_InternalBasePtr_CheckPtr(&citizenIBP);
         citizen = (uintptr_t)citizenIBP;
         if (*(int64_t*)(citizen + 0x1F0) != (int64_t)profId) { i++; continue; }
 
         // Check citizen has a valid workplace (+0x238)
-        fn_InternalBasePtr_CheckPtr(&citizenIBP);
         citizen = (uintptr_t)citizenIBP;
         uintptr_t workplace = *(uintptr_t*)(citizen + 0x238);
         if (workplace == 0) { i++; continue; }
@@ -1675,29 +1621,24 @@ void* CitizenBehavior_FindIdle(CitizenBehaviorRaw* self, void* retval,
         }
 
         // Find the storage/residence component on the workplace entity
-        fn_InternalBasePtr_CheckPtr((void*)&workplace);
         void* storageIBP = nullptr;
         fn_FindComponent_Storage((void*)workplace, &storageIBP);
 
         // Iterate rooms in the ResidenceComponent (+0x50 = room array, +0x58 = room count)
-        fn_InternalBasePtr_CheckPtr(&storageIBP);
         uintptr_t storage = (uintptr_t)storageIBP;
         int roomCount = *(int*)(storage + 0x58);
 
         for (int roomIdx = 0; roomIdx < roomCount; roomIdx++) {
             // Occupant count at roomEntry+0x08
-            fn_InternalBasePtr_CheckPtr(&storageIBP);
             storage = (uintptr_t)storageIBP;
             int occupantCount = *(int*)(*(uintptr_t*)(storage + 0x50) + (uintptr_t)roomIdx * 0x10 + 8);
 
             for (int occIdx = 0; occIdx < occupantCount; occIdx++) {
                 // Get occupant IBP from room's occupant array
-                fn_InternalBasePtr_CheckPtr(&storageIBP);
                 storage = (uintptr_t)storageIBP;
                 uintptr_t roomEntry = *(uintptr_t*)(storage + 0x50) + (uintptr_t)roomIdx * 0x10;
                 void* occupantIBP = *(void**)(*(uintptr_t*)roomEntry + (uintptr_t)occIdx * 8);
 
-                fn_InternalBasePtr_CheckPtr(&occupantIBP);
                 uintptr_t occupant = (uintptr_t)occupantIBP;
 
                 // Check occupant is adult, alive, and idle profession
@@ -1707,7 +1648,6 @@ void* CitizenBehavior_FindIdle(CitizenBehaviorRaw* self, void* retval,
 
                 if (*(int64_t*)(occupant + 0x208) != 0) goto next_occupant;
 
-                fn_InternalBasePtr_CheckPtr(&occupantIBP);
                 occupant = (uintptr_t)occupantIBP;
                 if (*(int64_t*)(occupant + 0x1F0) != idleProfId) goto next_occupant;
 
@@ -1716,13 +1656,11 @@ void* CitizenBehavior_FindIdle(CitizenBehaviorRaw* self, void* retval,
                     // Path A: profSlot is null — return first idle match immediately
                     void* profSlotRaw = *(void**)profSlot;  // null
 
-                    fn_InternalBasePtr_CheckPtr(&occupantIBP);
                     occupant = (uintptr_t)occupantIBP;
 
                     // Only reassign if profession or housing differs
                     if (*(int64_t*)(occupant + 0x1F0) != (int64_t)profId ||
-                        (fn_InternalBasePtr_CheckPtr((void*)&profSlotRaw),
-                         *(void**)(occupant + 0x248) != profSlotRaw)) {
+                        (*(void**)(occupant + 0x248) != profSlotRaw)) {
                         void* housingArg = profSlotRaw;
                         fn_CitizenComponent_AssignHousing(occupantIBP, &housingArg);
                         *(int64_t*)(occupant + 0x1F0) = (int64_t)profId;
@@ -1739,13 +1677,11 @@ void* CitizenBehavior_FindIdle(CitizenBehaviorRaw* self, void* retval,
                 goto next_room_done;  // break out of both occupant and room loops
 
             next_occupant:
-                fn_InternalBasePtr_CheckPtr(&storageIBP);
                 storage = (uintptr_t)storageIBP;
                 continue;
             }
 
             // Continue to next room
-            fn_InternalBasePtr_CheckPtr(&storageIBP);
             storage = (uintptr_t)storageIBP;
             continue;
 
@@ -1764,7 +1700,6 @@ void* CitizenBehavior_FindIdle(CitizenBehaviorRaw* self, void* retval,
     if (bestBuilding != 0) {
         // Find ResidenceComponent on the best building entity by iterating components
         // and checking type ID via vtable[+0x10] (GetTypeId) + IsDerivedFrom
-        fn_InternalBasePtr_CheckPtr((void*)&bestBuilding);
         uintptr_t building = (uintptr_t)(void*)bestBuilding;
 
         // building+0x30 = component array (IBP[]), building+0x38 = component count
@@ -1774,7 +1709,6 @@ void* CitizenBehavior_FindIdle(CitizenBehaviorRaw* self, void* retval,
         for (int ci = 0; ci < compCount; ci++) {
             void** compArray = *(void***)(building + 0x30);
             void* compIBP = compArray[ci];
-            fn_InternalBasePtr_CheckPtr(&compIBP);
 
             // Call vtable[+0x10] (GetTypeId) on the component
             uintptr_t comp = (uintptr_t)compIBP;
@@ -1787,7 +1721,6 @@ void* CitizenBehavior_FindIdle(CitizenBehaviorRaw* self, void* retval,
                 // Confirm with IsDerivedFrom
                 compArray = *(void***)(building + 0x30);
                 compIBP = compArray[ci];
-                fn_InternalBasePtr_CheckPtr(&compIBP);
                 if (fn_IsDerivedFrom(compIBP, *g_TypeId_ResidenceComponent)) {
                     residenceComp = compIBP;
                 }
@@ -1803,24 +1736,20 @@ void* CitizenBehavior_FindIdle(CitizenBehaviorRaw* self, void* retval,
             reinterpret_cast<RtObject::Internal*>(residenceComp));   // B.3.3 bridge
 
         // Iterate occupants of bestRoomIdx to find the idle citizen
-        fn_InternalBasePtr_CheckPtr(&residenceIBP);
         uintptr_t residence = (uintptr_t)residenceIBP;
         int64_t roomOffset = (int64_t)bestRoomIdx * 0x10;
         int occCount = *(int*)(*(uintptr_t*)(residence + 0x50) + roomOffset + 8);
 
         for (int occIdx = 0; occIdx < occCount; occIdx++) {
-            fn_InternalBasePtr_CheckPtr(&residenceIBP);
             residence = (uintptr_t)residenceIBP;
             uintptr_t roomEntry = *(uintptr_t*)(residence + 0x50) + roomOffset;
             void* occupantIBP = *(void**)(*(uintptr_t*)roomEntry + (uintptr_t)occIdx * 8);
 
-            fn_InternalBasePtr_CheckPtr(&occupantIBP);
             uintptr_t occupant = (uintptr_t)occupantIBP;
 
             // Check idle profession, adult, alive
             if (*(int64_t*)(occupant + 0x1F0) != idleProfId) continue;
 
-            fn_InternalBasePtr_CheckPtr(&occupantIBP);
             occupant = (uintptr_t)occupantIBP;
             float adultAge2 = *(float*)(*(uintptr_t*)(occupant + 0x288) + 0x44);
             float age2 = *(float*)(occupant + 0x3c);
@@ -1831,12 +1760,10 @@ void* CitizenBehavior_FindIdle(CitizenBehaviorRaw* self, void* retval,
             // Found the idle citizen — assign housing and profession
             void* profSlotRaw = *(void**)profSlot;
 
-            fn_InternalBasePtr_CheckPtr(&occupantIBP);
             occupant = (uintptr_t)occupantIBP;
 
             if (*(int64_t*)(occupant + 0x1F0) != (int64_t)profId ||
-                (fn_InternalBasePtr_CheckPtr((void*)&profSlotRaw),
-                 *(uintptr_t*)(occupant + 0x248) != (uintptr_t)profSlotRaw)) {
+                (*(uintptr_t*)(occupant + 0x248) != (uintptr_t)profSlotRaw)) {
                 void* housingArg = profSlotRaw;
                 fn_CitizenComponent_AssignHousing(occupantIBP, &housingArg);
                 *(int64_t*)(occupant + 0x1F0) = (int64_t)profId;
@@ -1900,7 +1827,6 @@ void* CitizenBehavior_FindWorking(CitizenBehaviorRaw* self, void* retval,
     for (int i = 0; i < citizenCount; i++) {
         // Load citizen IBP from the array
         void* citizenIBP = citizenArray[i];
-        fn_InternalBasePtr_CheckPtr(&citizenIBP);
         uintptr_t citizen = (uintptr_t)citizenIBP;
 
         // Check age >= adult threshold:
@@ -1916,13 +1842,11 @@ void* CitizenBehavior_FindWorking(CitizenBehaviorRaw* self, void* retval,
             continue;  // Dead
 
         // Check profession matches "idle" profession
-        fn_InternalBasePtr_CheckPtr(&citizenIBP);
-        citizen = (uintptr_t)citizenIBP;  // Re-read after CheckPtr
+        citizen = (uintptr_t)citizenIBP;
         if (*(int64_t*)(citizen + 0x1F0) != idleProfId)
             continue;  // Not idle profession
 
         // Check citizen has a valid workplace (+0x238 is workplace IBP)
-        fn_InternalBasePtr_CheckPtr(&citizenIBP);
         citizen = (uintptr_t)citizenIBP;
         int64_t workplace = *(int64_t*)(citizen + 0x238);
         if (workplace == 0)
@@ -1945,13 +1869,11 @@ void* CitizenBehavior_FindWorking(CitizenBehaviorRaw* self, void* retval,
         // Re-read profSlot entity (local_res18 in Ghidra = *(void**)profSlot)
         void* profSlotRaw = *(void**)profSlot;
 
-        fn_InternalBasePtr_CheckPtr(&bestCitizen);
         uintptr_t citizen = (uintptr_t)bestCitizen;
 
         // Only reassign if profession or housing differs
         if (*(int64_t*)(citizen + 0x1F0) != (int64_t)profId ||
-            (fn_InternalBasePtr_CheckPtr((void*)&profSlotRaw),
-             *(void**)(citizen + 0x248) != profSlotRaw)) {
+            (*(void**)(citizen + 0x248) != profSlotRaw)) {
             // Assign housing: pass IBP to profSlotRaw
             void* housingArg = profSlotRaw;
             fn_CitizenComponent_AssignHousing(bestCitizen, &housingArg);
@@ -2010,7 +1932,6 @@ void* CitizenBehavior_FindStudent(CitizenBehaviorRaw* self, void* retval,
     for (int si = 0; si < schoolCount; si++) {
         // Load school IBP from the schools array
         uintptr_t schoolIBP = schoolArray[si];
-        fn_InternalBasePtr_CheckPtr(&schoolIBP);
         uintptr_t school = schoolIBP;
 
         // Find ResidenceComponent on this school entity
@@ -2021,7 +1942,6 @@ void* CitizenBehavior_FindStudent(CitizenBehaviorRaw* self, void* retval,
         for (int ci = 0; ci < compCount; ci++) {
             void** compArray = *(void***)(school + 0x30);
             void* compIBP = compArray[ci];
-            fn_InternalBasePtr_CheckPtr(&compIBP);
 
             // Call vtable[+0x10] (GetTypeId) on the component
             uintptr_t comp = (uintptr_t)compIBP;
@@ -2034,7 +1954,6 @@ void* CitizenBehavior_FindStudent(CitizenBehaviorRaw* self, void* retval,
                 // Re-read and confirm with IsDerivedFrom
                 compArray = *(void***)(school + 0x30);
                 compIBP = compArray[ci];
-                fn_InternalBasePtr_CheckPtr(&compIBP);
                 if (fn_IsDerivedFrom(compIBP, *g_TypeId_ResidenceComponent)) {
                     residenceComp = compIBP;
                 }
@@ -2050,7 +1969,6 @@ void* CitizenBehavior_FindStudent(CitizenBehaviorRaw* self, void* retval,
             reinterpret_cast<RtObject::Internal*>(residenceComp));   // B.3.3 bridge
 
         // Iterate rooms in the ResidenceComponent (+0x50 = room array, +0x58 = room count)
-        fn_InternalBasePtr_CheckPtr(&residenceIBP);
         int roomCount = *(int*)((uintptr_t)residenceIBP + 0x58);
 
         for (int roomIdx = 0; roomIdx < roomCount; roomIdx++) {
@@ -2058,19 +1976,16 @@ void* CitizenBehavior_FindStudent(CitizenBehaviorRaw* self, void* retval,
             int idleCount = 0;
             int occupantCount = 0;
 
-            fn_InternalBasePtr_CheckPtr(&residenceIBP);
             uintptr_t residence = (uintptr_t)residenceIBP;
             uintptr_t roomBase = *(uintptr_t*)(residence + 0x50);
             occupantCount = *(int*)(roomBase + (uintptr_t)roomIdx * 0x10 + 8);
 
             for (int occIdx = 0; occIdx < occupantCount; occIdx++) {
-                fn_InternalBasePtr_CheckPtr(&residenceIBP);
                 residence = (uintptr_t)residenceIBP;
                 roomBase = *(uintptr_t*)(residence + 0x50);
                 uintptr_t roomEntry = roomBase + (uintptr_t)roomIdx * 0x10;
                 void* occupantIBP = *(void**)(*(uintptr_t*)roomEntry + (uintptr_t)occIdx * 8);
 
-                fn_InternalBasePtr_CheckPtr(&occupantIBP);
                 uintptr_t occupant = (uintptr_t)occupantIBP;
 
                 // Check age >= adult threshold
@@ -2082,13 +1997,11 @@ void* CitizenBehavior_FindStudent(CitizenBehaviorRaw* self, void* retval,
                 if (*(int64_t*)(occupant + 0x208) != 0) goto next_occ_phase1;
 
                 // Check idle profession
-                fn_InternalBasePtr_CheckPtr(&occupantIBP);
                 if (*(int64_t*)((uintptr_t)occupantIBP + 0x1F0) == idleProfId) {
                     idleCount++;
                 }
 
             next_occ_phase1:
-                fn_InternalBasePtr_CheckPtr(&residenceIBP);
                 continue;
             }
 
@@ -2099,13 +2012,11 @@ void* CitizenBehavior_FindStudent(CitizenBehaviorRaw* self, void* retval,
                 bestRoomIdx = roomIdx;
             }
 
-            fn_InternalBasePtr_CheckPtr(&residenceIBP);
         }
     }
 
     // Phase 2: If we found a school with students, find the first eligible one
     if (bestSchool != 0) {
-        fn_InternalBasePtr_CheckPtr(&bestSchool);
         uintptr_t school = bestSchool;
 
         // Find ResidenceComponent again on the best school
@@ -2115,7 +2026,6 @@ void* CitizenBehavior_FindStudent(CitizenBehaviorRaw* self, void* retval,
         for (int ci = 0; ci < compCount; ci++) {
             void** compArray = *(void***)(school + 0x30);
             void* compIBP = compArray[ci];
-            fn_InternalBasePtr_CheckPtr(&compIBP);
 
             uintptr_t comp = (uintptr_t)compIBP;
             uintptr_t vtable = *(uintptr_t*)comp;
@@ -2126,7 +2036,6 @@ void* CitizenBehavior_FindStudent(CitizenBehaviorRaw* self, void* retval,
             if (typeId == *g_TypeId_ResidenceComponent) {
                 compArray = *(void***)(school + 0x30);
                 compIBP = compArray[ci];
-                fn_InternalBasePtr_CheckPtr(&compIBP);
                 if (fn_IsDerivedFrom(compIBP, *g_TypeId_ResidenceComponent)) {
                     residenceComp = compIBP;
                 }
@@ -2141,18 +2050,15 @@ void* CitizenBehavior_FindStudent(CitizenBehaviorRaw* self, void* retval,
             reinterpret_cast<RtObject::Internal*>(residenceComp));   // B.3.3 bridge
 
         // Iterate occupants of bestRoomIdx to find the first eligible student
-        fn_InternalBasePtr_CheckPtr(&residenceIBP);
         uintptr_t residence = (uintptr_t)residenceIBP;
         int64_t roomOffset = (int64_t)bestRoomIdx * 0x10;
         int occCount = *(int*)(*(uintptr_t*)(residence + 0x50) + roomOffset + 8);
 
         for (int occIdx = 0; occIdx < occCount; occIdx++) {
-            fn_InternalBasePtr_CheckPtr(&residenceIBP);
             residence = (uintptr_t)residenceIBP;
             uintptr_t roomEntry = *(uintptr_t*)(residence + 0x50) + roomOffset;
             void* occupantIBP = *(void**)(*(uintptr_t*)roomEntry + (uintptr_t)occIdx * 8);
 
-            fn_InternalBasePtr_CheckPtr(&occupantIBP);
             uintptr_t occupant = (uintptr_t)occupantIBP;
 
             // Check age >= adult, alive, idle profession
@@ -2162,20 +2068,17 @@ void* CitizenBehavior_FindStudent(CitizenBehaviorRaw* self, void* retval,
 
             if (*(int64_t*)(occupant + 0x208) != 0) continue;
 
-            fn_InternalBasePtr_CheckPtr(&occupantIBP);
             occupant = (uintptr_t)occupantIBP;
             if (*(int64_t*)(occupant + 0x1F0) != idleProfId) continue;
 
             // Found eligible student — assign housing and profession
             void* profSlotRaw = *(void**)profSlot;
 
-            fn_InternalBasePtr_CheckPtr(&occupantIBP);
             occupant = (uintptr_t)occupantIBP;
 
             // Only reassign if profession or housing differs
             if (*(int64_t*)(occupant + 0x1F0) != (int64_t)profId ||
-                (fn_InternalBasePtr_CheckPtr((void*)&profSlotRaw),
-                 *(uintptr_t*)(occupant + 0x248) != (uintptr_t)profSlotRaw)) {
+                (*(uintptr_t*)(occupant + 0x248) != (uintptr_t)profSlotRaw)) {
                 void* housingArg = profSlotRaw;
                 fn_CitizenComponent_AssignHousing(occupantIBP, &housingArg);
                 *(int64_t*)(occupant + 0x1F0) = (int64_t)profId;

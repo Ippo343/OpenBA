@@ -36,10 +36,6 @@ static fn_SerializeFloat_t s_fn_SerializeFloat = nullptr;
 typedef void (*fn_SerializeBool_t)(void* self, bool* value, const char* name);
 static fn_SerializeBool_t s_fn_SerializeBool = nullptr;
 
-// CheckPtr
-typedef void (*fn_CheckPtr_t)(void* ptr);
-static fn_CheckPtr_t s_fn_CheckPtr = nullptr;
-
 // Entity_ClearPathQueue(entity, outIBP)
 typedef void (*fn_ClearPathQueue_t)(void* entity, void* outIBP);
 static fn_ClearPathQueue_t s_fn_ClearPathQueue = nullptr;
@@ -98,8 +94,6 @@ void NaturalResourceComponent_OnRemove(NaturalResourceComponent* self) {
     uintptr_t selfAddr = (uintptr_t)self;
 
     // CheckPtr on owner IBP
-    if (s_fn_CheckPtr)
-        s_fn_CheckPtr((void*)(selfAddr + 0x10));
 
     // Clear path queue — get model component from entity
     uintptr_t modelIBP = 0;
@@ -107,8 +101,6 @@ void NaturalResourceComponent_OnRemove(NaturalResourceComponent* self) {
         s_fn_ClearPathQueue(*(void**)(selfAddr + 0x10), &modelIBP);
 
     // CheckPtr on model IBP
-    if (s_fn_CheckPtr)
-        s_fn_CheckPtr(&modelIBP);
 
     // Check if mesh is animating
     if (s_fn_IsAnimating) {
@@ -123,8 +115,6 @@ void NaturalResourceComponent_OnRemove(NaturalResourceComponent* self) {
 
     // If flags changed in low 16 bits and entity exists, update
     if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && *(uintptr_t*)(selfAddr + 0x10) != 0) {
-        if (s_fn_CheckPtr)
-            s_fn_CheckPtr((void*)(selfAddr + 0x10));
         if (s_fn_EntityFlagUpdate)
             s_fn_EntityFlagUpdate(*(void**)(selfAddr + 0x10));
     }
@@ -166,7 +156,6 @@ void NaturalResourceComponent_FindComponentByType(void* entity, void* outIBP) {
 
     for (int i = 0; i < count; ++i) {
         void** slot = reinterpret_cast<void**>(arrBase + (uintptr_t)i * 8);
-        if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
 
         void* comp = *slot;
         // virtual GetTypeId at vtable+0x10
@@ -181,7 +170,6 @@ void NaturalResourceComponent_FindComponentByType(void* entity, void* outIBP) {
         if (compId == wantId) {
             // re-read the matching slot (matches original's second CheckPtr)
             void** matchSlot = reinterpret_cast<void**>(arrBase + (uintptr_t)i * 8);
-            if (s_fn_CheckPtr) s_fn_CheckPtr(matchSlot);
             void* candidate = *matchSlot;
             if (candidate && fn_IsDerivedFrom &&
                 fn_IsDerivedFrom(candidate, wantId)) {
@@ -213,9 +201,6 @@ void NaturalResourceComponent_InitFuncs() {
     if (slot) s_fn_SerializeFloat = *reinterpret_cast<fn_SerializeFloat_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152a58);
     if (slot) s_fn_SerializeBool = *reinterpret_cast<fn_SerializeBool_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152ab0);
-    if (slot) s_fn_CheckPtr = *reinterpret_cast<fn_CheckPtr_t*>(slot);
-
     s_fn_ClearPathQueue = reinterpret_cast<fn_ClearPathQueue_t>(
         ResolveAddr(Module::Exe, 0x140005200));  // Entity_ClearPathQueue used in decomp
     s_fn_IsAnimating = reinterpret_cast<fn_IsAnimating_t>(

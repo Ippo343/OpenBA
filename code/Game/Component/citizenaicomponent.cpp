@@ -153,10 +153,8 @@ void CitizenAIComponent_Update(CitizenAIComponent* self, int64_t* pDeltaTime) {
     // Navigate: self->data38 (IBP to citizen) -> citizen+0x10 (IBP to entity) -> components
     void* storageComp = nullptr;
 
-    fn_InternalBasePtr_CheckPtr(comp + 0x38);
     int64_t citizenRef = *reinterpret_cast<int64_t*>(comp + 0x38);
 
-    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(citizenRef + 0x10));
     int64_t citizenEntity = *reinterpret_cast<int64_t*>(citizenRef + 0x10);
 
     int componentCount = *reinterpret_cast<int*>(citizenEntity + 0x38);
@@ -166,7 +164,6 @@ void CitizenAIComponent_Update(CitizenAIComponent* self, int64_t* pDeltaTime) {
     int64_t byteOff = 0;
     for (; idx < componentCount; idx++, byteOff += 8) {
         void* ibpAddr = reinterpret_cast<void*>(componentArray + byteOff);
-        fn_InternalBasePtr_CheckPtr(ibpAddr);
 
         int64_t compRef = *reinterpret_cast<int64_t*>(ibpAddr);
         uint32_t dVar3 = *s_pStorageTypeId;
@@ -180,7 +177,6 @@ void CitizenAIComponent_Update(CitizenAIComponent* self, int64_t* pDeltaTime) {
         if (typeId == dVar3) {
             // Re-read by index with CheckPtr (matches original)
             void* ibpAddr2 = reinterpret_cast<void*>(componentArray + (int64_t)idx * 8);
-            fn_InternalBasePtr_CheckPtr(ibpAddr2);
             void* resolved = reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(ibpAddr2));
 
             bool derived = fn_IsDerivedFrom(resolved, *s_pStorageTypeId);
@@ -214,7 +210,6 @@ void CitizenAIComponent_Update(CitizenAIComponent* self, int64_t* pDeltaTime) {
     }
 
     // --- Phase 5: Hunger check ---
-    fn_InternalBasePtr_CheckPtr(comp + 0x38);
     int64_t citizenData = *reinterpret_cast<int64_t*>(comp + 0x38);
     if (!citizenData) return;  // citizen entity gone, bail out
     float health = *reinterpret_cast<float*>(citizenData + 0x44);
@@ -226,7 +221,6 @@ void CitizenAIComponent_Update(CitizenAIComponent* self, int64_t* pDeltaTime) {
         *reinterpret_cast<int64_t*>(comp + 0xB0) > 0) {
         // Not hungry enough to transition, or in special state
         if (hungerFlag != 0) {
-            fn_InternalBasePtr_CheckPtr(comp + 0x38);
             citizenData = *reinterpret_cast<int64_t*>(comp + 0x38);
             health = *reinterpret_cast<float*>(citizenData + 0x44);
             pHungerThresh = reinterpret_cast<float*>(
@@ -238,25 +232,19 @@ void CitizenAIComponent_Update(CitizenAIComponent* self, int64_t* pDeltaTime) {
         }
     } else {
         // Hungry — check if has workplace with resources, release if so
-        fn_InternalBasePtr_CheckPtr(comp + 0x38);
         if (*reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(comp + 0x38) + 0x238) != 0) {
-            fn_InternalBasePtr_CheckPtr(comp + 0x38);
             int64_t wpEntity = *reinterpret_cast<int64_t*>(
                 *reinterpret_cast<int64_t*>(comp + 0x38) + 0x238);
 
-            fn_InternalBasePtr_CheckPtr(&wpEntity);
             int64_t findResult[2] = {};
             void* pResult = s_fn_FindComponentStorage(wpEntity, findResult);
 
-            fn_InternalBasePtr_CheckPtr(pResult);
             int64_t wpStorage = *reinterpret_cast<int64_t*>(pResult);
             int resourceCount = s_fn_GetResourceCount(wpStorage);
 
             if (resourceCount > 0) {
-                fn_InternalBasePtr_CheckPtr(comp + 0x38);
                 int64_t wpRef = *reinterpret_cast<int64_t*>(
                     *reinterpret_cast<int64_t*>(comp + 0x38) + 0x238);
-                fn_InternalBasePtr_CheckPtr(comp + 0x38);
                 s_fn_ReleaseWorkplace(
                     *reinterpret_cast<int64_t*>(comp + 0x38),
                     &wpRef);
@@ -264,7 +252,6 @@ void CitizenAIComponent_Update(CitizenAIComponent* self, int64_t* pDeltaTime) {
         }
 
         // Re-check health after potentially releasing workplace
-        fn_InternalBasePtr_CheckPtr(comp + 0x38);
         citizenData = *reinterpret_cast<int64_t*>(comp + 0x38);
         health = *reinterpret_cast<float*>(citizenData + 0x44);
         pHungerThresh = reinterpret_cast<float*>(
@@ -277,7 +264,6 @@ void CitizenAIComponent_Update(CitizenAIComponent* self, int64_t* pDeltaTime) {
     }
 
     // --- Phase 6: Thirst check ---
-    fn_InternalBasePtr_CheckPtr(comp + 0x38);
     citizenData = *reinterpret_cast<int64_t*>(comp + 0x38);
     float hydration = *reinterpret_cast<float*>(citizenData + 0x48);
     float* pThirstThresh = reinterpret_cast<float*>(
@@ -294,7 +280,6 @@ void CitizenAIComponent_Update(CitizenAIComponent* self, int64_t* pDeltaTime) {
         *reinterpret_cast<int64_t*>(comp + 0xB8) > 0) {
         // Not thirsty enough or in special state
         if (thirstFlag != 0) {
-            fn_InternalBasePtr_CheckPtr(comp + 0x38);
             citizenData = *reinterpret_cast<int64_t*>(comp + 0x38);
             hydration = *reinterpret_cast<float*>(citizenData + 0x48);
             pThirstThresh = reinterpret_cast<float*>(
@@ -312,7 +297,6 @@ void CitizenAIComponent_Update(CitizenAIComponent* self, int64_t* pDeltaTime) {
 
     // --- Phase 7: Housing check ---
     if (comp[0x30] == 0 && comp[0x31] == 0) {
-        fn_InternalBasePtr_CheckPtr(comp + 0x38);
         citizenData = *reinterpret_cast<int64_t*>(comp + 0x38);
         char canFindHouse = s_fn_CanFindHousing(citizenData);
         if (canFindHouse != 0 && *reinterpret_cast<int*>(comp + 0x28) != 2) {
@@ -321,9 +305,7 @@ void CitizenAIComponent_Update(CitizenAIComponent* self, int64_t* pDeltaTime) {
     }
 
     // --- Phase 8: Check health status for education/age ---
-    fn_InternalBasePtr_CheckPtr(comp + 0x38);
     citizenData = *reinterpret_cast<int64_t*>(comp + 0x38);
-    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(citizenData + 0x278));
     int64_t healthComp = *reinterpret_cast<int64_t*>(citizenData + 0x278);
     if (*reinterpret_cast<int*>(healthComp + 0x60) + 1 > 0) {
         // Citizen is alive (health > -1), skip education/age checks
@@ -421,12 +403,10 @@ static constexpr float kScaleElder = 0.66f;  // child / small render
 static void CitizenComp_SetupAgeMesh(void* citizenP, float scale) {
     uint8_t* citizen = reinterpret_cast<uint8_t*>(citizenP);
     int idx = *reinterpret_cast<int*>(citizen + 0x34);
-    fn_InternalBasePtr_CheckPtr(citizen + 0x278);
     int64_t meshIBP = *reinterpret_cast<int64_t*>(citizen + 0x278);
     if (meshIBP == 0) return;                                  // no CharacterComponent
     int64_t mesh = *reinterpret_cast<int64_t*>(meshIBP + 0x68);
     if (mesh == 0) return;                                     // ModelComponent not live yet
-    fn_InternalBasePtr_CheckPtr(&mesh);
     *reinterpret_cast<float*>(mesh + 0x134) = scale;
     *reinterpret_cast<float*>(mesh + 0x138) = scale;
     *reinterpret_cast<float*>(mesh + 0x13c) = scale;
@@ -468,14 +448,12 @@ void* CitizenComp_Entity_FindComponent_Storage(int64_t entity, void* outIBP) {
     int64_t arr = *reinterpret_cast<int64_t*>(e + 0x30);
     for (int i = 0; i < count; i++) {
         void** ibp = reinterpret_cast<void**>(arr + (int64_t)i * 8);
-        fn_InternalBasePtr_CheckPtr(ibp);
         int64_t comp = *reinterpret_cast<int64_t*>(ibp);
         int64_t vt = *reinterpret_cast<int64_t*>(comp);
         typedef uint32_t (*getType_t)(void*);
         uint32_t tid = (*reinterpret_cast<getType_t*>(vt + 0x10))(reinterpret_cast<void*>(comp));
         if (tid == *s_TypeId_ResidenceComponent) {
             void** ibp2 = reinterpret_cast<void**>(arr + (int64_t)i * 8);
-            fn_InternalBasePtr_CheckPtr(ibp2);
             void* resolved = *ibp2;
             if (fn_IsDerivedFrom(resolved, *s_TypeId_ResidenceComponent)) {
                 found = resolved;
@@ -539,18 +517,15 @@ int CitizenComp_Storage_GetResourceCount(int64_t self) {
     EnsureCallees();
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     int64_t outIBP = 0;
-    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x10));
     if (s_fn_FindStorage6270)
         s_fn_FindStorage6270(*reinterpret_cast<int64_t*>(s + 0x10), &outIBP);
     int total = 0;
-    fn_InternalBasePtr_CheckPtr(&outIBP);
     if (outIBP == 0) return 0;   // guard: entity without a StorageComponent
     int rowCount = *reinterpret_cast<int*>(outIBP + 0x30);
     if (0 < rowCount) {
         int64_t off = 0;
         int row = 0;
         do {
-            fn_InternalBasePtr_CheckPtr(&outIBP);
             int64_t arr = *reinterpret_cast<int64_t*>(outIBP + 0x28);
             int64_t inv = *reinterpret_cast<int64_t*>(arr + off);
             void* mat = nullptr;
@@ -571,7 +546,6 @@ int CitizenComp_Storage_GetResourceCount(int64_t self) {
             }
             row++;
             off += 0x10;
-            fn_InternalBasePtr_CheckPtr(&outIBP);
         } while (row < *reinterpret_cast<int*>(outIBP + 0x30));
     }
     return total;
@@ -598,9 +572,7 @@ void CitizenComp_CitizenAIComponent_TransitionState(int64_t selfV, char param) {
         if (0 < n) {
             do {
                 if (s_fn_ValidateEnterState) s_fn_ValidateEnterState(self, *p);
-                fn_InternalBasePtr_CheckPtr(self + 0x38);
                 int64_t cz = *reinterpret_cast<int64_t*>(self + 0x38);
-                fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(cz + 0x278));
                 if (0 < *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(cz + 0x278) + 0x60) + 1) {
                     *reinterpret_cast<int*>(self + 0x28) = arr[(int64_t)idx * 3];
                     break;
@@ -622,12 +594,9 @@ void CitizenComp_CitizenAIComponent_CheckEducation(int64_t selfV) {
     EnsureCallees();
     uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
     void* dataPtr = self + 0x38;
-    fn_InternalBasePtr_CheckPtr(dataPtr);
     int64_t res10 = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(dataPtr) + 0x10);
-    fn_InternalBasePtr_CheckPtr(&res10);
     int64_t res8 = 0;
     CitizenComp_Entity_FindComponent_Storage(res10, &res8);
-    fn_InternalBasePtr_CheckPtr(dataPtr);
     // [STANDALONE BRING-UP GUARDS] +0x1f0 = profession-list (assigned at gameplay,
     // not in Startup) and res8 = the residence storage IBP (null if the citizen has
     // no home yet). Both are null for a freshly-spawned standalone citizen; the
@@ -635,17 +604,12 @@ void CitizenComp_CitizenAIComponent_CheckEducation(int64_t selfV) {
     int64_t profList = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(dataPtr) + 0x1f0);
     if (profList == 0 || res8 == 0) return;
     int cap = *reinterpret_cast<int*>(profList + 0x50);
-    fn_InternalBasePtr_CheckPtr(&res8);
     if (*reinterpret_cast<int*>(res8 + 0x38) != cap) {
-        fn_InternalBasePtr_CheckPtr(dataPtr);
         int64_t d = *reinterpret_cast<int64_t*>(dataPtr);
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(d + 0x10));
         int64_t res10b = 0;
         CitizenComp_Entity_FindComponent_Storage(*reinterpret_cast<int64_t*>(d + 0x10), &res10b);
-        fn_InternalBasePtr_CheckPtr(&res10b);
         int cnt = CitizenComp_StorageComponent_QueryCount(res10b);
         if (cnt < cap) {
-            fn_InternalBasePtr_CheckPtr(&res8);
             *reinterpret_cast<int*>(res8 + 0x38) = cap;
         }
     }
@@ -658,22 +622,17 @@ void CitizenComp_CitizenAIComponent_CheckAge(int64_t selfV) {
     EnsureCallees();
     uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
     void* dataPtr = self + 0x38;
-    fn_InternalBasePtr_CheckPtr(dataPtr);
     int64_t d = *reinterpret_cast<int64_t*>(dataPtr);
     float ageThresh = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(d + 0x288) + 0x44);
     float age = *reinterpret_cast<float*>(d + 0x3c);
     if (ageThresh <= age && *reinterpret_cast<int64_t*>(d + 0x208) == 0) {
-        fn_InternalBasePtr_CheckPtr(dataPtr);
         if (s_fn_SetupYoung) s_fn_SetupYoung(*reinterpret_cast<void**>(dataPtr));
         return;
     }
-    fn_InternalBasePtr_CheckPtr(dataPtr);
     if (*reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(dataPtr) + 0x208) != 0) {
-        fn_InternalBasePtr_CheckPtr(dataPtr);
         if (s_fn_SetupAdult) s_fn_SetupAdult(*reinterpret_cast<void**>(dataPtr));
         return;
     }
-    fn_InternalBasePtr_CheckPtr(dataPtr);
     if (s_fn_SetupElder) s_fn_SetupElder(*reinterpret_cast<void**>(dataPtr));
 }
 
@@ -747,7 +706,6 @@ static void* CitizenAI_FindSiblingCitizen(void* ownerEntity) {
     int64_t arr = *reinterpret_cast<int64_t*>(e + 0x30);
     for (int i = 0; i < count; i++) {
         void** ibp = reinterpret_cast<void**>(arr + (int64_t)i * 8);
-        fn_InternalBasePtr_CheckPtr(ibp);
         void* comp = *ibp;
         if (!comp) continue;
         uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
@@ -775,7 +733,6 @@ static void CitizenAIComponent_BodyInit(CitizenAIComponent* self) {
     *reinterpret_cast<uint16_t*>(base + 0x30) = 0;
 
     // Startup (0x14010f920): find sibling CitizenComponent -> +0x38.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(base + 0x10);
     void* owner = *reinterpret_cast<void**>(base + 0x10);
     void* citizen = owner ? CitizenAI_FindSiblingCitizen(owner) : nullptr;
     *reinterpret_cast<void**>(base + 0x38) = citizen;
@@ -812,7 +769,6 @@ static void CitizenAIComponent_UpdateAdapter(CitizenAIComponent* self, int64_t* 
     if (*reinterpret_cast<void**>(base + 0x38) == nullptr)
         CitizenAIComponent_BodyInit(self);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(base + 0x38);
     void* citizen = *reinterpret_cast<void**>(base + 0x38);
     void* czEntity = nullptr;
     void* czDesc = nullptr;

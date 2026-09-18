@@ -45,7 +45,6 @@ inline void CitizenUI_UpdateIconDisplay_Impl(uintptr_t iconArrayBase, float curr
         // Whole icon: show if iVar2 < fillLevel
         {
             uintptr_t ibpAddr = (uintptr_t)wholeArr + offset;
-            fn_InternalBasePtr_CheckPtr((void*)ibpAddr);
             void* elem = *(void**)ibpAddr;
             fn_Element_SetFlagsOnOff(elem,
                 (iVar2 >= fillLevel) ? 1 : 0,
@@ -55,7 +54,6 @@ inline void CitizenUI_UpdateIconDisplay_Impl(uintptr_t iconArrayBase, float curr
         // Half icon: show only if iVar2 == fillLevel
         {
             uintptr_t ibpAddr = (uintptr_t)halfArr + offset;
-            fn_InternalBasePtr_CheckPtr((void*)ibpAddr);
             void* elem = *(void**)ibpAddr;
             fn_Element_SetFlagsOnOff(elem,
                 (iVar2 != fillLevel) ? 1 : 0,
@@ -77,7 +75,6 @@ inline void CitizenUI_UpdateIconDisplay_Impl(uintptr_t iconArrayBase, float curr
 // groupElemIBP: InternalBasePtr to the parent group element
 inline void CitizenUI_BuildIconArray_Impl(uintptr_t param1, uintptr_t groupElemIBP)
 {
-    fn_InternalBasePtr_CheckPtr((void*)groupElemIBP);
     void* groupElem = *(void**)groupElemIBP;
     if (!groupElem) return;
     int childCount = fn_Element_ChildCount(groupElem);
@@ -90,13 +87,11 @@ inline void CitizenUI_BuildIconArray_Impl(uintptr_t param1, uintptr_t groupElemI
 
             uint8_t childBuf[16];
             fn_Element_Child(groupElem, childBuf, childIdx);
-            fn_InternalBasePtr_CheckPtr((void*)childBuf);
             void* childElem = *(void**)childBuf;
 
             uint8_t foundBuf[16] = {};
             fn_FindElement(childElem, foundBuf, &nameStr);
 
-            fn_InternalBasePtr_CheckPtr((void*)foundBuf);
             void* wholeElem = *(void**)foundBuf;
 
             uint8_t ibpBuf[8];
@@ -118,17 +113,14 @@ inline void CitizenUI_BuildIconArray_Impl(uintptr_t param1, uintptr_t groupElemI
         {
             System::String nameStr("half");
 
-            fn_InternalBasePtr_CheckPtr((void*)groupElemIBP);
             void* groupElem2 = *(void**)groupElemIBP;
             uint8_t childBuf[16];
             fn_Element_Child(groupElem2, childBuf, childIdx);
-            fn_InternalBasePtr_CheckPtr((void*)childBuf);
             void* childElem = *(void**)childBuf;
 
             uint8_t foundBuf[16] = {};
             fn_FindElement(childElem, foundBuf, &nameStr);
 
-            fn_InternalBasePtr_CheckPtr((void*)foundBuf);
             void* halfElem = *(void**)foundBuf;
 
             uint8_t ibpBuf[8];
@@ -145,7 +137,6 @@ inline void CitizenUI_BuildIconArray_Impl(uintptr_t param1, uintptr_t groupElemI
         }
 
         // Re-check group element (may have been reallocated)
-        fn_InternalBasePtr_CheckPtr((void*)groupElemIBP);
         groupElem = *(void**)groupElemIBP;
         childCount = fn_Element_ChildCount(groupElem);
     }

@@ -130,15 +130,12 @@ static void EnsureInit() {
     s_init = true;
 }
 
-static inline void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton); }
 static inline int* MapGrid() { return *reinterpret_cast<int**>(GW() + 0xf8); }
 
 // citizen ModelComponent transform (+0x68 of CharacterComponent at citizen+0x278).
 static int64_t CitizenModel(int64_t citizen) {
-    CheckPtr(reinterpret_cast<void*>(citizen + 0x278));
     int64_t ch = *reinterpret_cast<int64_t*>(citizen + 0x278);
-    CheckPtr(reinterpret_cast<void*>(ch + 0x68));
     return *reinterpret_cast<int64_t*>(ch + 0x68);
 }
 
@@ -154,7 +151,6 @@ static uint32_t ModelCell(int64_t model, int* mapGrid) {
 
 // success epilogue: set the action-state flags on the CitizenComponent (*self) and return 1.
 static uint64_t Pushed(int64_t* self) {
-    CheckPtr(self);
     int64_t cz = *self;
     *reinterpret_cast<int32_t*>(cz + 0x30) = static_cast<int32_t>(0xffffffff);
     *reinterpret_cast<uint32_t*>(cz + 0x54) |= 4;
@@ -170,7 +166,6 @@ static uint64_t Pushed(int64_t* self) {
 extern "C" uint64_t CitizenAI_State_ElderTransition(int64_t param_1) {
     EnsureInit();
     int64_t* self = reinterpret_cast<int64_t*>(param_1 + 0x38);
-    CheckPtr(self);
     int64_t citizen = *self;
     float age = *reinterpret_cast<float*>(citizen + 0x48);
     int64_t desc = *reinterpret_cast<int64_t*>(citizen + 0x288);
@@ -191,23 +186,16 @@ extern "C" uint64_t CitizenAI_State_ElderTransition(int64_t param_1) {
     }
 
     if (!doPush) {
-        CheckPtr(self);
         if (*reinterpret_cast<int64_t*>(*self + 0x238) != 0) {
-            CheckPtr(self);
             citizen = *self;
             if (*reinterpret_cast<int64_t*>(citizen + 0x238) != 0) {
-                CheckPtr(reinterpret_cast<void*>(citizen + 0x238));
                 int64_t storBuf[2] = {0, 0};
                 if (s_findStor) s_findStor(*reinterpret_cast<int64_t*>(citizen + 0x238), storBuf);
-                CheckPtr(storBuf);
                 bool ok = (storBuf[0] && s_2ac30) ? s_2ac30(storBuf[0]) : false;
                 if (ok) {
-                    CheckPtr(self);
                     int64_t wp = *reinterpret_cast<int64_t*>(*self + 0x238);
-                    CheckPtr(&wp);
                     int64_t posBuf[2] = {0, 0};
                     void* pp = s_findPos ? s_findPos(wp, posBuf) : nullptr;
-                    CheckPtr(pp);
                     if (pp && s_2e20) s_2e20(*reinterpret_cast<int64_t*>(pp), dest, 0, 0, nullptr);
                     holderEntity = *reinterpret_cast<int64_t*>(*self + 0x238);
                     doPush = true;
@@ -237,7 +225,6 @@ extern "C" uint64_t CitizenAI_State_ElderTransition(int64_t param_1) {
 extern "C" uint64_t CitizenAI_State_AdultTransition(int64_t param_1) {
     EnsureInit();
     int64_t* self = reinterpret_cast<int64_t*>(param_1 + 0x38);
-    CheckPtr(self);
     int64_t citizen = *self;
     float age = *reinterpret_cast<float*>(citizen + 0x44);
     int64_t desc = *reinterpret_cast<int64_t*>(citizen + 0x288);
@@ -253,11 +240,9 @@ extern "C" uint64_t CitizenAI_State_AdultTransition(int64_t param_1) {
     bool retryWorkPath = !isAdult;  // age <= thresh -> LAB_14010d03c
 
     if (isAdult) {
-        CheckPtr(self);
         if (*reinterpret_cast<int64_t*>(citizen + 0x238) != 0) {
             int64_t storBuf[2] = {0, 0};
             void* p13 = s_findStor ? s_findStor(*reinterpret_cast<int64_t*>(citizen + 0x238), storBuf) : nullptr;
-            CheckPtr(p13);
             int cnt = (p13 && s_getCount) ? s_getCount(*reinterpret_cast<int64_t*>(p13)) : 0;
             if (cnt > 0) {
                 found = *reinterpret_cast<int64_t*>(citizen + 0x238);  // workplace
@@ -285,29 +270,19 @@ extern "C" uint64_t CitizenAI_State_AdultTransition(int64_t param_1) {
     if (retryWorkPath) {
         // LAB_14010d03c: prefer an existing valid workplace with resources
         bool handled = false;
-        CheckPtr(self);
         if (*reinterpret_cast<int64_t*>(*self + 0x238) != 0) {
-            CheckPtr(self);
             int64_t wpv = *reinterpret_cast<int64_t*>(*self + 0x238);
-            CheckPtr(self);
             char ok = s_checkWork ? s_checkWork(reinterpret_cast<void*>(*self), &wpv) : 0;
             if (ok != 0) {
-                CheckPtr(self);
                 int64_t wp = *reinterpret_cast<int64_t*>(*self + 0x238);
-                CheckPtr(&wp);
                 int64_t storBuf[2] = {0, 0};
                 void* p13 = s_findStor ? s_findStor(wp, storBuf) : nullptr;
-                CheckPtr(p13);
                 int cnt = (p13 && s_getCount) ? s_getCount(*reinterpret_cast<int64_t*>(p13)) : 0;
                 if (cnt > 0) {
-                    CheckPtr(self);
                     int64_t wp2 = *reinterpret_cast<int64_t*>(*self + 0x238);
-                    CheckPtr(&wp2);
                     int64_t posBuf[2] = {0, 0};
                     void* pp = s_findPos ? s_findPos(wp2, posBuf) : nullptr;
-                    CheckPtr(pp);
                     if (pp && s_2e20) s_2e20(*reinterpret_cast<int64_t*>(pp), dest, 0, 0, nullptr);
-                    CheckPtr(self);
                     holderCitizen = *self;
                     flag = 1;
                     holderEntity = *reinterpret_cast<int64_t*>(holderCitizen + 0x238);
@@ -321,7 +296,6 @@ extern "C" uint64_t CitizenAI_State_AdultTransition(int64_t param_1) {
             dest[0] = dest[1] = dest[2] = 0.0f;
             int64_t* listpair = *reinterpret_cast<int64_t**>(GW() + 0xf0);
             int* mg = MapGrid();
-            CheckPtr(self);
             int64_t wp = *reinterpret_cast<int64_t*>(*self + 0x238);
             uint32_t bGoal;
             if (wp == 0) bGoal = 0xffffffff;
@@ -344,17 +318,14 @@ extern "C" uint64_t CitizenAI_State_AdultTransition(int64_t param_1) {
 
     if (!ctorDirect) {
         // common tail: validate found entity's Storage with ResidenceCheck_2ac30
-        CheckPtr(&found);
         int64_t sbuf20[2] = {0, 0};
         void* p13 = s_findStor ? s_findStor(found, sbuf20) : nullptr;
         int64_t storComp = p13 ? *reinterpret_cast<int64_t*>(p13) : 0;
         if (storComp == 0) {
             flag = 0;
         } else {
-            CheckPtr(&found);
             int64_t sbuf68[2] = {0, 0};
             void* p13b = s_findStor ? s_findStor(found, sbuf68) : nullptr;
-            CheckPtr(p13b);
             int64_t storComp2 = p13b ? *reinterpret_cast<int64_t*>(p13b) : 0;
             flag = (storComp2 && s_2ac30 && s_2ac30(storComp2)) ? 1 : 0;
         }
@@ -382,22 +353,17 @@ extern "C" uint64_t CitizenAI_State_AdultTransition(int64_t param_1) {
 extern "C" uint64_t CitizenAI_State_Work(int64_t param_1) {
     EnsureInit();
     int64_t* self = reinterpret_cast<int64_t*>(param_1 + 0x38);
-    CheckPtr(self);
     int64_t active = *reinterpret_cast<int64_t*>(*self + 0x228);
 
     if (active == 0) {
         uint64_t valid = s_db20 ? s_db20(param_1) : 0;
         if (static_cast<char>(valid) != '\0') {
             // NavigateTo the workplace
-            CheckPtr(self);
             int64_t wp = *reinterpret_cast<int64_t*>(*self + 0x238);
-            CheckPtr(&wp);
             int64_t posBuf[2] = {0, 0};
             void* pp = s_findPos ? s_findPos(wp, posBuf) : nullptr;
-            CheckPtr(pp);
             uint32_t navDest[4] = {0, 0, 0, 0};
             if (pp && s_2e20) s_2e20(*reinterpret_cast<int64_t*>(pp), navDest, 0, 0, nullptr);
-            CheckPtr(self);
             int64_t holderCitizen = *self;
             int64_t holderEntity = *reinterpret_cast<int64_t*>(holderCitizen + 0x238);
             if (s_navTo) s_navTo(&holderCitizen, &holderEntity, navDest, 0);
@@ -407,9 +373,7 @@ extern "C" uint64_t CitizenAI_State_Work(int64_t param_1) {
     }
 
     // active != 0: a work target is set -> search for a walkable adjacent position
-    CheckPtr(&active);
     int64_t target = *reinterpret_cast<int64_t*>(active + 0x10);
-    CheckPtr(&target);
     int64_t posCompBuf[2] = {0, 0};
     if (s_findPos) s_findPos(target, posCompBuf);
 
@@ -422,7 +386,6 @@ extern "C" uint64_t CitizenAI_State_Work(int64_t param_1) {
     pos[2] = *reinterpret_cast<float*>(model + 0x160);
     pos[3] = 0.0f;
 
-    CheckPtr(posCompBuf);
     int64_t posComp = posCompBuf[0];
     void* sub = posComp ? *reinterpret_cast<void**>(posComp + 0x18) : nullptr;
     int bestCost = 0x7fffffff;
@@ -434,7 +397,6 @@ extern "C" uint64_t CitizenAI_State_Work(int64_t param_1) {
         int64_t byteOff = 0;
         while (i < count) {
             int64_t* childSlot = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(posComp + 0x28) + byteOff);
-            CheckPtr(childSlot);
             uint8_t got = s_122b00 ? s_122b00(*childSlot, 0, pos, walkOut, &bestCost) : 0;
             any = static_cast<uint8_t>(any | got);
             byteOff += 8;
@@ -444,19 +406,13 @@ extern "C" uint64_t CitizenAI_State_Work(int64_t param_1) {
 
     if (any == 0) {
         // no walkable pos: release the attendance link, then NavigateTo the workplace
-        CheckPtr(self);
         if (s_59b0) s_59b0(*self);
-        CheckPtr(self);
         if (*reinterpret_cast<int64_t*>(*self + 0x238) != 0) {
-            CheckPtr(self);
             int64_t wp = *reinterpret_cast<int64_t*>(*self + 0x238);
-            CheckPtr(&wp);
             int64_t posBuf[2] = {0, 0};
             void* pp = s_findPos ? s_findPos(wp, posBuf) : nullptr;
-            CheckPtr(pp);
             uint32_t navDest[4] = {0, 0, 0, 0};
             if (pp && s_2e20) s_2e20(*reinterpret_cast<int64_t*>(pp), navDest, 0, 0, nullptr);
-            CheckPtr(self);
             int64_t holderCitizen = *self;
             int64_t holderEntity = *reinterpret_cast<int64_t*>(holderCitizen + 0x238);
             if (s_navTo) s_navTo(&holderCitizen, &holderEntity, navDest, 0);
@@ -465,7 +421,6 @@ extern "C" uint64_t CitizenAI_State_Work(int64_t param_1) {
     }
 
     // WalkTowards the found walkable position (or workplace-less fallback)
-    CheckPtr(self);
     void* cdesc = *reinterpret_cast<void**>(*self + 0x18);
     void* citDesc = (cdesc && fn_IsDerivedFrom && fn_IsDerivedFrom(cdesc, s_tid_CitizenDescription)) ? cdesc : nullptr;
     int64_t holderCitizen = *self;
@@ -474,7 +429,6 @@ extern "C" uint64_t CitizenAI_State_Work(int64_t param_1) {
     float walkTime = citDesc ? *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(citDesc) + 0x124) : 0.0f;
     if (s_walk) s_walk(&holderCitizen, 0xffffffff, reinterpret_cast<uint32_t*>(walkOut), 5, walkTime, 1);
 
-    CheckPtr(self);
     int64_t cz = *self;
     *reinterpret_cast<uint32_t*>(cz + 0x54) |= 4;
     *reinterpret_cast<int32_t*>(cz + 0x30) = static_cast<int32_t>(0xffffffff);

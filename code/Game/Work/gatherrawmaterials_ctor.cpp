@@ -84,14 +84,12 @@ extern "C" void* GatherRawMaterials_Ctor_Impl(void* mem, void* buildEntityIBP) {
     *reinterpret_cast<uint32_t*>(self + 0x70) = 0;   // BST count
 
     // --- Locate BuildComponent (-> BuildDescription at +0x18) on the build entity ---
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(buildEntityIBP);
     uintptr_t buildCompIBP = 0;
     GRMC_FindCompUnk_t findComp =
         reinterpret_cast<GRMC_FindCompUnk_t>(ResolveAddr(Module::Exe, 0x14000d6c0));
     if (findComp && buildEntityIBP)
         findComp(*reinterpret_cast<uintptr_t*>(buildEntityIBP), &buildCompIBP);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&buildCompIBP);
     void* descObj = buildCompIBP ? *reinterpret_cast<void**>(buildCompIBP + 0x18) : nullptr;
     uint32_t descTid = GRMC_BuildDescTypeId();
     void* desc = nullptr;
@@ -99,7 +97,6 @@ extern "C" void* GatherRawMaterials_Ctor_Impl(void* mem, void* buildEntityIBP) {
         desc = descObj;
 
     // --- Locate the site StorageComponent ---
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(buildEntityIBP);
     uintptr_t storage = 0;
     GRMC_FindCompStorage_t findStorage =
         reinterpret_cast<GRMC_FindCompStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
@@ -129,7 +126,6 @@ extern "C" void* GatherRawMaterials_Ctor_Impl(void* mem, void* buildEntityIBP) {
         // delivered = matching site-storage slot (total - reserved), else 0.
         int delivered = 0;
         if (storage) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&storage);
             int slotCount = *reinterpret_cast<int*>(storage + 0x30);
             uintptr_t* slots = *reinterpret_cast<uintptr_t**>(storage + 0x28);
             if (slots) {

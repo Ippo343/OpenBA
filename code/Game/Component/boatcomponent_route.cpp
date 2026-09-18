@@ -165,8 +165,6 @@ extern "C" bool BoatRoute_FindAttachPoint(void* compV, const void* nameStr,
         for (int i = 0; i < childCount; ++i) {
             const uintptr_t childSlot = *reinterpret_cast<uintptr_t*>(comp + 0x28) +
                                         static_cast<uintptr_t>(i) * 8;
-            if (fn_InternalBasePtr_CheckPtr)
-                fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(childSlot));
             void* child = *reinterpret_cast<void**>(childSlot);
             if (BoatRoute_FindAttachPoint(child, nameStr, outPos, outYaw)) return true;
         }
@@ -174,8 +172,6 @@ extern "C" bool BoatRoute_FindAttachPoint(void* compV, const void* nameStr,
     }
 
     // Found the name. Its position is relative to the owning entity's ModelComponent.
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     const uintptr_t entity = *reinterpret_cast<uintptr_t*>(comp + 0x10);
     const uint32_t wantedTid = s_pTid_ModelComponent ? *s_pTid_ModelComponent : 0;
     void* model = nullptr;
@@ -183,7 +179,6 @@ extern "C" bool BoatRoute_FindAttachPoint(void* compV, const void* nameStr,
     for (int i = 0; i < compCount; ++i) {
         const uintptr_t slot = *reinterpret_cast<uintptr_t*>(entity + 0x30) +
                                static_cast<uintptr_t>(i) * 8;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(slot));
         const uintptr_t obj = *reinterpret_cast<uintptr_t*>(slot);
         if (!obj) continue;
         typedef uint32_t (*GetTypeId_t)(void*);
@@ -199,7 +194,6 @@ extern "C" bool BoatRoute_FindAttachPoint(void* compV, const void* nameStr,
     uint64_t modelIBP[2] = {0, 0};
     if (fn_InternalBasePtr_Ctor) new (modelIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(model));   // B.3.3 bridge
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(modelIBP);
     const uintptr_t m = static_cast<uintptr_t>(modelIBP[0]);
     if (!m) return false;   // no ModelComponent: retail would fault on m+0x148
 
@@ -250,7 +244,6 @@ extern "C" void* BoatRoute_FindBoatComponent(int64_t entity, void* outIBP) {
     for (int i = 0; i < n; ++i) {
         const uintptr_t slot = *reinterpret_cast<uintptr_t*>(entity + 0x30) +
                                static_cast<uintptr_t>(i) * 8;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(slot));
         const uintptr_t obj = *reinterpret_cast<uintptr_t*>(slot);
         if (!obj) continue;
         typedef uint32_t (*GetTypeId_t)(void*);
@@ -407,12 +400,9 @@ extern "C" void BoatComponent_SetDestination(int64_t compI, int64_t* destEntityI
     // merchant back. Retail finds a component on the boat's own entity and dispatches
     // its +0x48 owner through vtable slot 2, passing the byte at +0x51.
     if (dest == 0) {
-        if (fn_InternalBasePtr_CheckPtr)
-            fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
         uint64_t outIBP[2] = {0, 0};
         void* found = s_Find3ea0 ? s_Find3ea0(*reinterpret_cast<int64_t*>(comp + 0x10), outIBP)
                                  : nullptr;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(found);
         if (!found) return;
         const uintptr_t state = *reinterpret_cast<uintptr_t*>(found);
         if (!state) return;
@@ -428,11 +418,8 @@ extern "C" void BoatComponent_SetDestination(int64_t compI, int64_t* destEntityI
     }
 
     // ── Where the boat is going: the destination's "boat" attach point ───────────
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x28));
     uint64_t interactIBP[2] = {0, 0};
     if (s_FindInteract) s_FindInteract(*reinterpret_cast<int64_t*>(comp + 0x28), interactIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(interactIBP);
 
     System::String boatName("boat");
     float* const destPos = reinterpret_cast<float*>(comp + 0x40);   // Vector3

@@ -36,10 +36,6 @@
 // Resolved helpers
 // ============================================================
 
-// Object::InternalBasePtr::CheckPtr
-typedef void (*fn_CheckPtr_t)(void* ptrField);
-static fn_CheckPtr_t s_fn_CheckPtr = nullptr;
-
 // System::Random::RandFloat(Random*) @ Runtime 0x1800c7d40
 typedef float (*fn_RandFloat_t)(void* random);
 static fn_RandFloat_t s_fn_RandFloat = nullptr;
@@ -77,8 +73,6 @@ static bool s_helpersResolved = false;
 static void EnsureHelpers() {
     if (s_helpersResolved) return;
 
-    s_fn_CheckPtr = reinterpret_cast<fn_CheckPtr_t>(
-        ResolveAddr(Module::Runtime, 0x1800c0290));
     // BY NAME (retail 0x1800c7d40): RandFloat is a Wave 2 port
     // (runtime/src/system/value_types.cpp:405) and ResolveAddr consults the
     // ADDRESS registry only, so asking by address went around it into the DLL.
@@ -213,11 +207,9 @@ static void* HerdFindComponent(int64_t entity, uint32_t* pTypeId) {
     uintptr_t list = *(uintptr_t*)(entity + 0x30);
     for (int i = 0; i < n; i++) {
         void** slot = (void**)(list + (int64_t)i * 8);
-        if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
         void* comp = *slot;
         uint32_t t = (*(uint32_t(**)(void*))(*(uintptr_t*)comp + 0x10))(comp);
         if (t == *pTypeId) {
-            if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
             void* c = *slot;
             return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *pTypeId)) ? c : nullptr;
         }
@@ -246,12 +238,9 @@ char HerdComponent_Helper6b10(int64_t param_1) {
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 1;
     int* piMapDim = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
 
-    if (s_fn_CheckPtr) s_fn_CheckPtr((void*)(param_1 + 0x10));
     uint64_t ibp = 0;
     if (s_fn_FindFamily) s_fn_FindFamily(*(int64_t*)(param_1 + 0x10), &ibp);
-    if (s_fn_CheckPtr) s_fn_CheckPtr(&ibp);
     int64_t comp = *(int64_t*)&ibp;
-    if (s_fn_CheckPtr) s_fn_CheckPtr((void*)(comp + 0x68));
     int64_t pos = *(int64_t*)(comp + 0x68);
 
     int mapDim = *piMapDim;
@@ -329,9 +318,7 @@ void HerdComponent_Helper7400(int64_t animalComp, void* pos, float yaw, char pos
     if (!s_fn_FindModelComp || !s_fn_ModelSetTransform) return;
 
     uint64_t modelIbp = 0;
-    if (s_fn_CheckPtr) s_fn_CheckPtr((void*)(animalComp + 0x10));
     s_fn_FindModelComp(*(int64_t*)(animalComp + 0x10), &modelIbp);
-    if (s_fn_CheckPtr) s_fn_CheckPtr(&modelIbp);
     int64_t model = *(int64_t*)&modelIbp;
     if (!model) return;
 
@@ -341,9 +328,7 @@ void HerdComponent_Helper7400(int64_t animalComp, void* pos, float yaw, char pos
     if (pose != 0) {
         // Re-resolve the model exactly as retail does (a second find call).
         modelIbp = 0;
-        if (s_fn_CheckPtr) s_fn_CheckPtr((void*)(animalComp + 0x10));
         s_fn_FindModelComp(*(int64_t*)(animalComp + 0x10), &modelIbp);
-        if (s_fn_CheckPtr) s_fn_CheckPtr(&modelIbp);
         model = *(int64_t*)&modelIbp;
 
         void* descObj = *(void**)(model + 0x18);
@@ -357,9 +342,7 @@ void HerdComponent_Helper7400(int64_t animalComp, void* pos, float yaw, char pos
 
         if (meshCount > 1) {
             modelIbp = 0;
-            if (s_fn_CheckPtr) s_fn_CheckPtr((void*)(animalComp + 0x10));
             s_fn_FindModelComp(*(int64_t*)(animalComp + 0x10), &modelIbp);
-            if (s_fn_CheckPtr) s_fn_CheckPtr(&modelIbp);
             model = *(int64_t*)&modelIbp;
 
             if (*(int16_t*)(model + 0x166) != 1) {
@@ -389,7 +372,6 @@ void HerdComponent_Helper7400(int64_t animalComp, void* pos, float yaw, char pos
                 auto attach = *reinterpret_cast<void (**)(void*)>(vt + 0x30);
                 if (attach) attach((void*)model);
             }
-            if (s_fn_CheckPtr) s_fn_CheckPtr((void*)(model + 0x10));
             if (s_fn_ModelHelper2b70) s_fn_ModelHelper2b70(*(int64_t*)(model + 0x10), 0);
         }
     }
@@ -401,7 +383,6 @@ void HerdComponent_Helper7400(int64_t animalComp, void* pos, float yaw, char pos
     uint32_t newFlags = oldFlags | 0x400000u;
     *(uint32_t*)(animalComp + 0x20) = newFlags;
     if (((newFlags ^ oldFlags) & 0xffff) != 0 && *(int64_t*)(animalComp + 0x10) != 0) {
-        if (s_fn_CheckPtr) s_fn_CheckPtr((void*)(animalComp + 0x10));
         if (s_fn_MarkEntityDirty) s_fn_MarkEntityDirty(*(void**)(animalComp + 0x10));
     }
 
@@ -421,15 +402,12 @@ char HerdComponent_CheckMigrationDone(int64_t herdComp) {
     int count = *(int*)(self + 0x40);
     for (int64_t i = 0; i < count; i++) {
         uintptr_t arr = *(uintptr_t*)(self + 0x38);
-        if (s_fn_CheckPtr) s_fn_CheckPtr((void*)(arr + i * 8));
         int64_t entity = *(int64_t*)(*(int64_t*)(arr + i * 8) + 0x10);
-        if (s_fn_CheckPtr) s_fn_CheckPtr(&entity);
 
         void* member = HerdFindComponent(entity, s_pTypeId_1c6f98);
         uint64_t memberRef = 0;
         if (fn_InternalBasePtr_Ctor) new (&memberRef) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(member));   // B.3.3 bridge
-        if (s_fn_CheckPtr) s_fn_CheckPtr(&memberRef);
         char done = s_fn_Herd_helper6b10 ? s_fn_Herd_helper6b10((int64_t)memberRef) : 1;
         if (done == 0) return 0;
     }
@@ -472,7 +450,6 @@ void HerdComponent_AdjustSize(void* herdComp, int targetSize) {
         uint64_t entRef = 0;
         if (fn_InternalBasePtr_Ctor) new (&entRef) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(ent));   // B.3.3 bridge
-        if (s_fn_CheckPtr) s_fn_CheckPtr(&entRef);
         int64_t entObj = (int64_t)entRef;
 
         // Retail looks up three components in this order and uses two of them:
@@ -526,7 +503,6 @@ void HerdComponent_AdjustSize(void* herdComp, int targetSize) {
                 *(float*)(worldPos + 4) + *(float*)(offVec + 4),
                 *(float*)(worldPos + 8) + *(float*)(offVec + 8));
 
-        if (s_fn_CheckPtr) s_fn_CheckPtr(&animalRef);
         float rz = s_fn_RandFloatTol ? s_fn_RandFloatTol(rng) : 0.0f;
         HerdComponent_Helper7400((int64_t)animalRef, spawnVec, rz * spread, altFlag);
         altFlag = (altFlag == 0) ? 1 : 0;
@@ -536,7 +512,6 @@ void HerdComponent_AdjustSize(void* herdComp, int targetSize) {
         uint64_t selfRef = 0;
         if (fn_InternalBasePtr_Ctor) new (&selfRef) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-        if (s_fn_CheckPtr) s_fn_CheckPtr(&wildRef);
         if (s_fn_Herd_imple510) s_fn_Herd_imple510((void*)wildRef, &selfRef);
 
         if (s_fn_RegisterEntity) {
@@ -603,12 +578,9 @@ void HerdComponent_Helper1ad0(int64_t herdComp, void* animalIbp) {
     if (mapDim - 1 <= bx + spread) bw = (mapDim - bx) - 2;
     if (mapDim - 1 <= by + bw)     bh = (mapDim - by) - 2;
 
-    if (s_fn_CheckPtr) s_fn_CheckPtr(animalIbp);
     uint64_t entity = *(uint64_t*)(*(int64_t*)animalIbp + 0x10);
-    if (s_fn_CheckPtr) s_fn_CheckPtr(&entity);
     uint64_t memberIbp = 0;
     if (s_fn_Herd_FindMember) s_fn_Herd_FindMember((int64_t)entity, &memberIbp);
-    if (s_fn_CheckPtr) s_fn_CheckPtr(&memberIbp);
     int64_t member = *(int64_t*)&memberIbp;
     *(int16_t*)(member + 0x38) = (int16_t)bx;
     *(int16_t*)(member + 0x3a) = (int16_t)by;
@@ -625,14 +597,12 @@ void HerdComponent_Impl_e510(void* memberComp, void* newHerdIbp) {
     EnsureHerdCluster();
     uint8_t* self = reinterpret_cast<uint8_t*>(memberComp);
 
-    if (s_fn_CheckPtr) s_fn_CheckPtr(newHerdIbp);
     if (*(int64_t*)(self + 0x28) == *(int64_t*)newHerdIbp) return;
 
     if (*(int64_t*)(self + 0x28) != 0) {
         uint64_t selfRef = 0;
         if (fn_InternalBasePtr_Ctor) new (&selfRef) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-        if (s_fn_CheckPtr) s_fn_CheckPtr(self + 0x28);
         if (s_fn_Herd_RemoveFromList)
             s_fn_Herd_RemoveFromList((int64_t*)(*(int64_t*)(self + 0x28) + 0x38), &selfRef);
     }
@@ -643,7 +613,6 @@ void HerdComponent_Impl_e510(void* memberComp, void* newHerdIbp) {
         uint64_t selfRef = 0;
         if (fn_InternalBasePtr_Ctor) new (&selfRef) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-        if (s_fn_CheckPtr) s_fn_CheckPtr(self + 0x28);
         HerdComponent_Helper1ad0(*(int64_t*)(self + 0x28), &selfRef);
     }
 }
@@ -732,7 +701,6 @@ void HerdComponent_Populate(int64_t herdComp, int count) {
         uint64_t entRef = 0;
         if (fn_InternalBasePtr_Ctor) new (&entRef) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(ent));   // B.3.3 bridge
-        if (s_fn_CheckPtr) s_fn_CheckPtr(&entRef);
         int64_t entObj = (int64_t)entRef;
         if (!entObj) continue;
 
@@ -773,13 +741,11 @@ void HerdComponent_Populate(int64_t herdComp, int count) {
                 *(float*)(worldPos + 4) + *(float*)(offVec + 4),
                 *(float*)(worldPos + 8) + *(float*)(offVec + 8));
 
-        if (s_fn_CheckPtr) s_fn_CheckPtr(&animalRef);
         float yaw = s_fn_RandFloatTol ? s_fn_RandFloatTol(rng) : 0.0f;
         HerdComponent_Helper7400((int64_t)animalRef, spawnVec, yaw * yawScale, altPose);
         altPose = (altPose == 0) ? 1 : 0;
 
         // Randomize the animal's starting appetite from AnimalDescription+0x28.
-        if (s_fn_CheckPtr) s_fn_CheckPtr(&animalRef);
         if (animalRef) {
             void* aDescObj = *(void**)((uintptr_t)animalRef + 0x18);
             void* animalDesc = (fn_IsDerivedFrom && s_pTypeId_1c6fd0 &&
@@ -795,7 +761,6 @@ void HerdComponent_Populate(int64_t herdComp, int count) {
         uint64_t herdRef = 0;
         if (fn_InternalBasePtr_Ctor) new (&herdRef) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-        if (s_fn_CheckPtr) s_fn_CheckPtr(&wildRef);
         if (s_fn_Herd_imple510) s_fn_Herd_imple510((void*)wildRef, &herdRef);
 
         if (s_fn_RegisterEntity) {
@@ -856,9 +821,7 @@ void HerdComponent_OnRemove(void* selfV) {
 
         void** slot = reinterpret_cast<void**>(
             *(uintptr_t*)(self + 0x38) + (int64_t)(*(int*)(self + 0x40) - 1) * 8);
-        if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
         uint8_t* member = reinterpret_cast<uint8_t*>(*slot);
-        if (s_fn_CheckPtr) s_fn_CheckPtr(&nullRef);
         if (!member) break;
 
         if (*(int64_t*)(member + 0x28) == (int64_t)nullRef) break;  // no progress possible
@@ -867,7 +830,6 @@ void HerdComponent_OnRemove(void* selfV) {
             uint64_t memberRef = 0;
             if (fn_InternalBasePtr_Ctor) new (&memberRef) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(member));   // B.3.3 bridge
-            if (s_fn_CheckPtr) s_fn_CheckPtr(member + 0x28);
             if (s_fn_DynArray8_EraseByValue)
                 s_fn_DynArray8_EraseByValue(
                     reinterpret_cast<int64_t*>(*(int64_t*)(member + 0x28) + 0x38), &memberRef);
@@ -877,7 +839,6 @@ void HerdComponent_OnRemove(void* selfV) {
             uint64_t memberRef = 0;
             if (fn_InternalBasePtr_Ctor) new (&memberRef) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(member));   // B.3.3 bridge
-            if (s_fn_CheckPtr) s_fn_CheckPtr(member + 0x28);
             HerdComponent_Helper1ad0(*(int64_t*)(member + 0x28), &memberRef);
         }
     }
@@ -909,7 +870,6 @@ void HerdComponent_Startup(void* selfV) {
 // Returns true if the tile's terrain type value is nonzero
 // ============================================================
 static bool IsTileValid(HerdComponent* self) {
-    s_fn_CheckPtr(reinterpret_cast<uint8_t*>(self) + 0x28);
     int64_t entityRef = static_cast<int64_t>(self->data28);
     if (entityRef == 0) return false;
 
@@ -1009,7 +969,6 @@ void HerdComponent_Update(HerdComponent* self, int64_t* deltaTime) {
         *spawnTimer -= intervalTicks;
 
         // Check food availability
-        s_fn_CheckPtr(reinterpret_cast<uint8_t*>(self) + 0x28);
         float foodScore = s_fn_CheckFood(
             static_cast<int64_t>(self->data28),
             *reinterpret_cast<int32_t*>(&self->data30));

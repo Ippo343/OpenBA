@@ -117,7 +117,6 @@ void EnsureResolved() {
     s_listErase       = reinterpret_cast<fn_ListErase_t>(ResolveAddr(Module::Exe, 0x140002cc0));
 }
 
-inline void Ck(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 inline void Ctor(void* dst, void* obj) { if (fn_InternalBasePtr_Ctor) new (dst) ::Object::InternalBasePtr(
     reinterpret_cast<RtObject::Internal*>(obj)); }   // B.3.3 bridge
 
@@ -191,7 +190,6 @@ extern "C" void CitizenComponent_OnRemove(void* selfV) {
     if (*reinterpret_cast<int64_t*>(p + 0x258) != 0) {
         int64_t selfIBP = 0;
         Ctor(&selfIBP, selfV);
-        Ck(p + 0x258);
         if (s_leaveRoster) s_leaveRoster(*reinterpret_cast<int64_t*>(p + 0x258), &selfIBP);
     }
 
@@ -204,7 +202,6 @@ extern "C" void CitizenComponent_OnRemove(void* selfV) {
         int iterations = 0;
         int64_t member = *ringHead;
         while (member != 0) {
-            Ck(ringHead);
             float memberAge = *reinterpret_cast<float*>(member + 0x3c);
             // DEVIATION (uninitialized-body guard): retail derefs the CitizenDescription
             // at +0x288 unguarded. Ours can still be null before BodyInit; with no
@@ -215,26 +212,22 @@ extern "C" void CitizenComponent_OnRemove(void* selfV) {
                 memberAge <= *reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(desc) + 0x44);
 
             if (underAge) {
-                Ck(ringHead);
                 if (s_handleLifeEvent)
                     s_handleLifeEvent(reinterpret_cast<void*>(*ringHead), 4, nullptr);
             } else {
                 int64_t memberIBP = member;
                 int64_t nullIBP = 0;
                 Ctor(&nullIBP, nullptr);
-                Ck(&memberIBP);
                 if (s_linkFamily) s_linkFamily(memberIBP, &nullIBP);   // detach from our ring
 
                 int64_t nullWp = 0;
                 Ctor(&nullWp, nullptr);
-                Ck(&memberIBP);
                 if (s_assignWorkplace)
                     s_assignWorkplace(reinterpret_cast<void*>(memberIBP), &nullWp, -1);
 
                 // Retail inlines FUN_140115a50's body (reroll = 0) here verbatim:
                 // detach the member from its partner's list, clear the partner's
                 // status-icon flag 2, null the +0x208 slot.
-                Ck(&memberIBP);
                 if (s_releasePartner)
                     s_releasePartner(reinterpret_cast<void*>(memberIBP), '\0');
             }
@@ -250,7 +243,6 @@ extern "C" void CitizenComponent_OnRemove(void* selfV) {
         int64_t member = *ringHead;
         while (member != 0) {
             int64_t spouseIBP = *spouseSlot;
-            Ck(ringHead);
             if (s_linkFamily) s_linkFamily(*ringHead, &spouseIBP);
             int64_t next = *ringHead;
             if (!RingProgress("re-home", member, next, iterations)) break;
@@ -262,7 +254,6 @@ extern "C" void CitizenComponent_OnRemove(void* selfV) {
     if (*spouseSlot != 0) {
         int64_t nullBack = 0;
         Ctor(&nullBack, nullptr);
-        Ck(spouseSlot);
         *reinterpret_cast<int64_t*>(*spouseSlot + 0x250) = nullBack;
         int64_t nullOwn = 0;
         Ctor(&nullOwn, nullptr);
@@ -302,7 +293,6 @@ extern "C" void CitizenComponent_OnRemove(void* selfV) {
                 target = selfV; eventType = 0x10; name = nullptr;   // nobody to take the job
             } else {
                 name = *reinterpret_cast<const char**>(p + 0x28);   // the deceased's name
-                Ck(&replacement);
                 target = reinterpret_cast<void*>(replacement);
                 eventType = 0xf;                                    // replacement found
             }

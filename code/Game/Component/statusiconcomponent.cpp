@@ -349,9 +349,6 @@ void StatusIconComponent_OnUpdate2(StatusIconComponent* self) {
                 if (((newFlags ^ oldFlags) & 0xFFFF) != 0) {
                     void* ownerEntity = *(void**)(s + 0x10);
                     if (ownerEntity != nullptr) {
-                        if (fn_InternalBasePtr_CheckPtr) {
-                            fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
-                        }
                         if (s_fn_EntityNotify) {
                             s_fn_EntityNotify(*(void**)(s + 0x10));
                         }
@@ -678,7 +675,6 @@ static void* StatusIcon_FindCompByName(uintptr_t entity, const char* typeName) {
 
     for (int i = 0; i < count; i++) {
         void** ibp = (void**)(arr + (int64_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);
         void* comp = *ibp;
         if (!comp) continue;
         // [STANDALONE GUARD D2] the entry must look like a heap pointer before it is
@@ -768,7 +764,6 @@ void StatusIconComponent_OnRemove_Standalone(StatusIconComponent* self) {
     pos[1] = 0.0f;
     pos[2] = desc ? *(float*)((uintptr_t)desc + 0x2c) : 0.0f;   // base height offset
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(c + 0x10));
     uintptr_t entity = *(uintptr_t*)(c + 0x10);
 
     // Resolve Model + MultiObject by NAME (the exe finders key off unfilled .rdata globals
@@ -796,7 +791,6 @@ void StatusIconComponent_OnRemove_Standalone(StatusIconComponent* self) {
         });
         return;
     }
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(c + 0x10));
     multiIBP[0] = StatusIcon_FindCompByName(entity, "MultiObjectComponent");
 
     if (multiIBP[0] == nullptr && modelIBP[0] != nullptr) {
@@ -856,7 +850,6 @@ void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
 
     // Culled-entity guard: if the owner entity is culled (entity+0x40 bit 10) the original
     // skips the SET path (only clears are honoured while culled).
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(c + 0x10));
     uintptr_t entity = *(uintptr_t*)(c + 0x10);
     if (entity && ((*(uint32_t*)(entity + 0x40) >> 10) & 1) != 0 && setFlag) return;
 
@@ -904,7 +897,6 @@ void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
     }
     *(uint32_t*)(c + 0x20) = new20;
     if (((new20 ^ old20) & 0xffff) != 0 && *(uintptr_t*)(c + 0x10) != 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(c + 0x10));
         if (s_fn_EntityNotify) s_fn_EntityNotify(*(void**)(c + 0x10));
     }
 }

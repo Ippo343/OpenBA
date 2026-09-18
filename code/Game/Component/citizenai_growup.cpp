@@ -159,7 +159,6 @@ static void EnsureInit() {
     s_init = true;
 }
 
-static inline void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton); }
 static inline int* MapGrid() { return *reinterpret_cast<int**>(GW() + 0xf8); }
 static inline int64_t* ListPair() { return *reinterpret_cast<int64_t**>(GW() + 0xf0); }
@@ -211,7 +210,6 @@ static void* ScanForType(int64_t node, uint32_t typeId,
     if (base == 0) return nullptr;
     for (int i = 0; i < count; ++i) {
         int64_t* slot = reinterpret_cast<int64_t*>(base + static_cast<int64_t>(i) * 8);
-        CheckPtr(slot);                       // retail: CheckPtr(puVar1) before the deref
         int64_t obj = *slot;
         if (obj == 0) continue;
         int64_t vt = *reinterpret_cast<int64_t*>(obj);
@@ -266,16 +264,13 @@ extern "C" void* CitizenAI_Entity_impl_f230(int64_t param_1, void* param_2, uint
     int64_t arr = *reinterpret_cast<int64_t*>(param_1 + 0x70);
     for (int idx = 0; idx < n; ++idx) {
         int64_t* slot = reinterpret_cast<int64_t*>(arr + static_cast<int64_t>(idx) * 8);
-        CheckPtr(slot);
         int64_t entity = *reinterpret_cast<int64_t*>(*slot + 0x10);   // *plVar11 + 0x10
-        CheckPtr(&entity);
         // scan entity's components for a WorkPlaceComponent (node+0x38 count, +0x30 array)
         int64_t compArrCount = *reinterpret_cast<int*>(entity + 0x38);
         int64_t compArr = *reinterpret_cast<int64_t*>(entity + 0x30);
         void* wp = nullptr;
         for (int64_t j = 0; j < compArrCount; ++j) {
             int64_t* cslot = reinterpret_cast<int64_t*>(compArr + j * 8);
-            CheckPtr(cslot);
             int64_t obj = *cslot;
             int64_t vt = *reinterpret_cast<int64_t*>(obj);
             uint32_t tid = reinterpret_cast<uint32_t(*)(int64_t)>(*reinterpret_cast<void**>(vt + 0x10))(obj);
@@ -288,13 +283,10 @@ extern "C" void* CitizenAI_Entity_impl_f230(int64_t param_1, void* param_2, uint
         int64_t wpIBP = 0;  // local_98
         if (fn_InternalBasePtr_Ctor) new (&wpIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(wp));   // B.3.3 bridge
-        CheckPtr(&wpIBP);
         // wp+0x60 != 0 → this workplace accepts a worker
         if (wpIBP != 0 && *reinterpret_cast<int*>(wpIBP + 0x60) != 0) {
-            CheckPtr(&entity);
             int64_t posBuf[2] = {0, 0};
             if (s_findPos) s_findPos(entity, posBuf);
-            CheckPtr(posBuf);
             float wpos[4] = {0, 0, 0, 0};
             if (posBuf[0] && s_2e20) s_2e20(posBuf[0], wpos, 0, 0, nullptr);
             int dim = *mapGrid;
@@ -307,7 +299,6 @@ extern "C" void* CitizenAI_Entity_impl_f230(int64_t param_1, void* param_2, uint
             if (static_cast<char>(reachable) != '\0') {
                 int cost = s_8830 ? s_8830(mapGrid, param_3, cell) : 0x7fffffff;
                 if (cost < bestCost) {
-                    CheckPtr(slot);
                     bestX = wpos[0]; bestY = wpos[1]; bestZ = wpos[2];
                     bestEntity = *reinterpret_cast<int64_t*>(*slot + 0x10);
                     bestCost = cost;
@@ -333,7 +324,6 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
     int* mapGrid = MapGrid();
 
     // citizen storage component (local_res20)
-    CheckPtr(reinterpret_cast<void*>(param_1 + 0x10));
     int64_t storBuf[2] = {0, 0};
     if (s_findStor) s_findStor(*reinterpret_cast<int64_t*>(param_1 + 0x10), storBuf);
     int64_t citStorNode = storBuf[0];
@@ -345,18 +335,14 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
 
     // citizen home cell (model pos) — uVar15 / local_res18
     int64_t cch = *reinterpret_cast<int64_t*>(param_1 + 0x278);
-    CheckPtr(reinterpret_cast<void*>(param_1 + 0x278));
-    CheckPtr(reinterpret_cast<void*>(cch + 0x68));
     int64_t model = *reinterpret_cast<int64_t*>(cch + 0x68);
     uint32_t homeCell = ModelCell(model, mapGrid);
 
     // iterate the citizen-storage occupant rows (citStorNode+0x30 count, +0x28 row array,
     // each row is 0x10 bytes: [+0] entity-ptr, [+8] occupancy count).
-    CheckPtr(&citStorNode);
     int rowCount = (citStorNode != 0) ? *reinterpret_cast<int*>(citStorNode + 0x30) : 0;
     bool committed = false;        // matched cd80 → break to commit
     for (int row = 0; row < rowCount; ++row) {
-        CheckPtr(&citStorNode);
         int64_t rowArr = *reinterpret_cast<int64_t*>(citStorNode + 0x28);
         int64_t rowBase = rowArr + static_cast<int64_t>(row) * 0x10;
         int occ = *reinterpret_cast<int*>(rowBase + 8);
@@ -371,14 +357,12 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
             // CheckPtr BEFORE the read — retail is `CheckPtr(pfVar21); lVar4 = *pfVar21;`.
             // Reading first and refreshing after uses the pre-refresh pointer, which is
             // the stale value CheckPtr exists to replace.
-            CheckPtr(reinterpret_cast<void*>(arrA + static_cast<int64_t>(k) * 2));
             int64_t entry = *reinterpret_cast<int64_t*>(arrA + static_cast<int64_t>(k) * 2);
             // find that entry's StorageComponent
             void* sc = ScanForType(entry, s_tid_StorageComponent);
             int64_t scIBP = 0;
             if (fn_InternalBasePtr_Ctor) new (&scIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(sc));   // B.3.3 bridge
-            CheckPtr(&scIBP);
             int64_t descComp = *reinterpret_cast<int64_t*>(rowBase);   // row entity (RawMaterialDescription)
             int amount = *reinterpret_cast<int*>(rowBase + 8);
             uint32_t hit = (scIBP && s_cd80) ? s_cd80(scIBP, descComp, amount) : 0;
@@ -483,7 +467,6 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
 
         int64_t timeStamp = 0;
         if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&timeStamp, 0.0f);
-        CheckPtr(reinterpret_cast<void*>(param_1 + 0x278));
         int64_t ch = *reinterpret_cast<int64_t*>(param_1 + 0x278);
         if (-1 < *reinterpret_cast<int*>(ch + 0x48 + 0x18)) {
             if (s_executor) s_executor(reinterpret_cast<int64_t*>(ch + 0x48), &timeStamp);
@@ -509,31 +492,23 @@ extern "C" uint64_t CitizenAI_State_GrowUp(int64_t param_1) {
     float destA[4] = {0, 0, 0, 0};   // local_a0
     float destB[4] = {0, 0, 0, 0};   // local_90
 
-    int64_t* self = reinterpret_cast<int64_t*>(param_1 + 0x38);
-    CheckPtr(self);
     int64_t citizen = *reinterpret_cast<int64_t*>(param_1 + 0x38);
     // citizen+0x278 = CharacterComponent; +0x68 = ModelComponent; +0x160 = walk-time src (local_70)
-    CheckPtr(reinterpret_cast<void*>(citizen + 0x278));
     int64_t ch = *reinterpret_cast<int64_t*>(citizen + 0x278);
-    CheckPtr(reinterpret_cast<void*>(ch + 0x68));
     int64_t model = *reinterpret_cast<int64_t*>(ch + 0x68);
     // model+0x160 (local_70) is read by the original but only the *(desc+0x78)*scale path is
     // used for the cooldown below; the raw value is not consumed. home cell from model pos:
     uint32_t homeCell = ModelCell(model, mapGrid);
 
     // citizen home StorageComponent → QueryCount (food on hand?)
-    CheckPtr(reinterpret_cast<void*>(param_1 + 0x38));
     int64_t citizen2 = *reinterpret_cast<int64_t*>(param_1 + 0x38);
-    CheckPtr(reinterpret_cast<void*>(citizen2 + 0x10));
     int64_t storBuf[2] = {0, 0};
     if (s_findStor) s_findStor(*reinterpret_cast<int64_t*>(citizen2 + 0x10), storBuf);
-    CheckPtr(storBuf);
     int count = (storBuf[0] && s_queryCount) ? s_queryCount(storBuf[0]) : 0;
 
     if (count >= 1) {
         // Citizen's own storage is non-empty (QueryCount >= 1) → defer to LongTermPlan
         // (housing/marriage/work life-planning) and queue next state 4. (decompile `else`).
-        CheckPtr(reinterpret_cast<void*>(param_1 + 0x38));
         CitizenAI_State_LongTermPlan(*reinterpret_cast<int64_t*>(param_1 + 0x38));
         *reinterpret_cast<int32_t*>(param_1 + 0x2c) = 4;
         return (static_cast<uint64_t>(citizen) & 0xffffffffffffff00ULL) | 1;
@@ -545,7 +520,6 @@ extern "C" uint64_t CitizenAI_State_GrowUp(int64_t param_1) {
     if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&cd, s_walkScale);
     *reinterpret_cast<int64_t*>(param_1 + 0x60) = cd;
 
-    CheckPtr(reinterpret_cast<void*>(param_1 + 0x38));
     int64_t resEntity = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x38) + 0x238); // citizen+0x238
     uint32_t bGoal;
     if (resEntity == 0) {
@@ -564,10 +538,8 @@ extern "C" uint64_t CitizenAI_State_GrowUp(int64_t param_1) {
 
     // found a source entity. find its StorageComponent (local_b8).
     int64_t target = found;
-    CheckPtr(&target);
     int64_t tStorBuf[2] = {0, 0};
     if (s_findStor) s_findStor(target, tStorBuf);
-    CheckPtr(tStorBuf);
     int64_t tStorNode = tStorBuf[0];
     if (tStorNode == 0) {
         return static_cast<uint64_t>(citizen) & 0xffffffffffffff00ULL;
@@ -635,7 +607,6 @@ extern "C" uint64_t CitizenAI_State_GrowUp(int64_t param_1) {
                     if (s_ctor11) s_ctor11(&holderCitizen, resCountObj, &srcIBP, destA, &dstIBP, destB);
 
                     // success epilogue: flag triplet on cz = *(param_1+0x38) = citizen.
-                    CheckPtr(reinterpret_cast<void*>(param_1 + 0x38));
                     int64_t cz = *reinterpret_cast<int64_t*>(param_1 + 0x38);
                     *reinterpret_cast<uint32_t*>(cz + 0x54) |= 4;
                     *reinterpret_cast<int32_t*>(cz + 0x30) = static_cast<int32_t>(0xffffffff);
@@ -643,7 +614,6 @@ extern "C" uint64_t CitizenAI_State_GrowUp(int64_t param_1) {
 
                     // walk-time-scaled cooldown: desc = *(cz+0x18), require CitizenDescription
                     // (DWORD_1401c7190); wt = desc+0x78 * DAT_1401721fc. Stamp → param_1+0x60.
-                    CheckPtr(reinterpret_cast<void*>(param_1 + 0x38));
                     int64_t cdesc = *reinterpret_cast<int64_t*>(cz + 0x18);
                     float wt = 0.0f;
                     if (cdesc && fn_IsDerivedFrom && fn_IsDerivedFrom(reinterpret_cast<void*>(cdesc), s_tid_CitizenDescription)) {

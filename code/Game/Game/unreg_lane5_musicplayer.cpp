@@ -204,7 +204,6 @@ extern "C" void MusicPlayer_Update(void* musicPlayer) {
         if (count > 0 && arr) {
             for (int i = 0; i < count; ++i) {
                 uint64_t ibp = static_cast<uint64_t>(arr[i]);
-                fn_InternalBasePtr_CheckPtr(&ibp);
                 uint8_t* c = reinterpret_cast<uint8_t*>(ibp);
                 moodA += *reinterpret_cast<float*>(c + 0x50);
                 moodB += *reinterpret_cast<float*>(c + 0x80);
@@ -212,7 +211,6 @@ extern "C" void MusicPlayer_Update(void* musicPlayer) {
             // Retail re-reads count and citizen[0] twice (once per normaliser);
             // both reads are identical, so hoist the description lookup.
             uint64_t ibp0 = static_cast<uint64_t>(arr[0]);
-            fn_InternalBasePtr_CheckPtr(&ibp0);
             void* desc = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(ibp0) + 0x18);
             uint32_t tid = CitizenDescriptionTypeId();
             if (!(fn_IsDerivedFrom && tid && fn_IsDerivedFrom(desc, tid))) desc = nullptr;

@@ -210,7 +210,6 @@ bool Registry(uintptr_t arrOff, uintptr_t cntOff, void*** outArr, int* outCount)
 // Resolve one registry slot the way every retail caller does.
 void* RegistrySlot(void** arr, int idx) {
     void* p = arr[idx];
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&p);
     return p;
 }
 
@@ -256,7 +255,6 @@ void* ComponentByName(void* entity, const char* typeName) {
 
     for (int i = 0; i < count; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* comp = *slot;
         if (!comp) continue;
         typedef uint32_t (*gt_t)(void*);
@@ -639,7 +637,6 @@ void ForceInfest(int frameNum, int want) {
         // comp+0x10 = owner entity IBP.
         void** ownerSlot = reinterpret_cast<void**>(
                                static_cast<uint8_t*>(comp) + 0x10);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ownerSlot);
         void* owner = *ownerSlot;
         if (!owner) { ++ownerless; continue; }
         if (!ComponentByName(owner, "CropFieldComponent")) { ++notCropField; continue; }

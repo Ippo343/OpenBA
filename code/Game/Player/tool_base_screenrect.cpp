@@ -367,7 +367,6 @@ extern "C" uint8_t PlayerScreenRect_Entity_0380(uintptr_t /*param_1*/, void* par
         *reinterpret_cast<Math::Vector3*>(&corners[i * 3]) = Math::Vector3();
 
     // CheckPtr(param_2) ; ClearPathQueue(*param_2, &entityIBP) -> local_res8 (entity ptr)
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2);
     uintptr_t entity = 0;   // local_res8
     {
         // Entity_ClearPathQueue (0x140003f60) : member-return ABI RCX=this, RDX=&retIBP.
@@ -384,23 +383,17 @@ extern "C" uint8_t PlayerScreenRect_Entity_0380(uintptr_t /*param_1*/, void* par
     if (entity == 0) {
         useBox = false;
     } else {
-        if (fn_InternalBasePtr_CheckPtr)
-            fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(&entity));
         // *(short*)(entity + 0x166) < 0  -> no placed description -> fallback
         useBox = (*reinterpret_cast<int16_t*>(entity + 0x166) >= 0);
     }
 
     if (useBox) {
         // CheckPtr(&entity) ; copy Transform (7 floats @ +0x148..+0x160).
-        if (fn_InternalBasePtr_CheckPtr)
-            fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(&entity));
         float transform[7];  // local_c4..local_ac (Math::Transform)
         for (int i = 0; i < 7; i++)
             transform[i] = *reinterpret_cast<float*>(entity + 0x148 + i * 4);
 
         // CheckPtr(&entity) ; copy Box (6 floats @ +0x5c..+0x70).
-        if (fn_InternalBasePtr_CheckPtr)
-            fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(&entity));
         float box[6];   // local_dc..local_c8 (Volume::Box: min.xyz, max.xyz)
         for (int i = 0; i < 6; i++)
             box[i] = *reinterpret_cast<float*>(entity + 0x5c + i * 4);
@@ -433,7 +426,6 @@ extern "C" uint8_t PlayerScreenRect_Entity_0380(uintptr_t /*param_1*/, void* par
         cornerCount = 8;
     } else {
         // Fallback: CheckPtr(param_2) ; self2 = FUN_140004680(*param_2, &local_res10)
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2);
         uint8_t local_res10[8] = {0};
         void* self2 = nullptr;   // returned IBP
         {
@@ -442,7 +434,6 @@ extern "C" uint8_t PlayerScreenRect_Entity_0380(uintptr_t /*param_1*/, void* par
             if (fn) self2 = fn(*reinterpret_cast<uintptr_t*>(param_2),
                                reinterpret_cast<void*>(local_res10));
         }
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self2);
         uintptr_t obj = self2 ? *reinterpret_cast<uintptr_t*>(self2) : 0;
         if (obj) {
             int16_t f28 = *reinterpret_cast<int16_t*>(obj + 0x28);  // startCol

@@ -26,13 +26,6 @@ void LoaderDialog_Slot4(LoaderDialog* self) {
 void LoaderDialog_Slot6(LoaderDialog* self) {
     uintptr_t s = (uintptr_t)self;
 
-    // Mirrors original 0x1400b2d00 — CheckPtr the InternalPtr<ImageElement>
-    // at +0xB8 before reading. Per CLAUDE.md, skipping this can give stale
-    // or zero values when the pointer is a weak/lazy reference.
-    if (*(void**)(s + 0xB8) != nullptr && fn_InternalBasePtr_CheckPtr) {
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0xB8));
-    }
-
     void* imageElem = *(void**)(s + 0xB8);
     if (imageElem) {
         float angle = *(float*)(s + 0xC0);

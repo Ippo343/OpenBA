@@ -161,7 +161,6 @@ void FireForceStart(void* entityUI, int frameNum) {
     int found = 0, switched = 0, typed = 0;
     for (int i = 0; i < n; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* ent = *slot;
         if (!ent) continue;
 
@@ -170,7 +169,6 @@ void FireForceStart(void* entityUI, int frameNum) {
         void* orchComp = nullptr;
         for (int c = 0; c < cN && cA; ++c) {
             void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs);
             void* comp = *cs;
             if (!comp) continue;
             void** vt = *reinterpret_cast<void***>(comp);

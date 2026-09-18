@@ -71,7 +71,6 @@ extern "C" void OrchardCutHarness_Tick(int frameNum) {
     int found = 0, clicked = 0;
     for (int i = 0; i < n; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* ent = *slot;
         if (!ent) continue;
         const int cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
@@ -79,7 +78,6 @@ extern "C" void OrchardCutHarness_Tick(int frameNum) {
         void* comp = nullptr;
         for (int c = 0; c < cN && cA; ++c) {
             void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs);
             void* cc = *cs;
             if (!cc) continue;
             void** vt = *reinterpret_cast<void***>(cc);

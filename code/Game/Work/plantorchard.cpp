@@ -211,7 +211,7 @@ bool PlantOrchard_ResolveFuncs() {
               s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
               s_fn_Serializer_SerializeInt &&
               s_fn_ExternalRef_Serialize && s_fn_OrchardRefresh &&
-              fn_InternalBasePtr_CheckPtr && fn_MemFreeStatic &&
+              fn_MemFreeStatic &&
               g_pGameWorldSingleton && s_fHalfCellOffset &&
               s_typeConst && s_vtable_PlantOrchard && s_vtable_Work;
 
@@ -243,7 +243,6 @@ bool PlantOrchard_ResolveFuncs() {
         // The seven conditions below were in the `ok` expression but not in this list, so a
         // failure caused by any of them printed "FAILED" with no reason at all — which is
         // exactly what a 2026-08-10 orchard run hit. Report every term you test.
-        if (!fn_InternalBasePtr_CheckPtr) printf("  MISSING: InternalBasePtr_CheckPtr\n");
         if (!fn_MemFreeStatic) printf("  MISSING: MemFreeStatic\n");
         if (!g_pGameWorldSingleton) printf("  MISSING: g_pGameWorldSingleton\n");
         if (!s_fHalfCellOffset) printf("  MISSING: fHalfCellOffset (0x140172114)\n");
@@ -293,21 +292,17 @@ int PlantOrchard_Slot4_Impl(PlantOrchard* self, void* entityIBP, uint64_t /*para
     uintptr_t* selfQ = (uintptr_t*)self;
 
     // Step 1: Find components
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t matDescIBP = 0;
     s_fn_FindComp_MatDesc(*(uintptr_t*)(selfAddr + 0x10), &matDescIBP);
 
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t orchardDescIBP = 0;
     s_fn_FindComp_OrchardDesc(*(uintptr_t*)(selfAddr + 0x10), &orchardDescIBP);
 
     // Step 2: Refresh orchard slot state
-    fn_InternalBasePtr_CheckPtr(&orchardDescIBP);
     s_fn_OrchardRefresh(orchardDescIBP);
 
     // Step 3: Check max workers
     int treeCount = (int)selfQ[10];  // self->field_50
-    fn_InternalBasePtr_CheckPtr(&matDescIBP);
     if (*(int*)(matDescIBP + 0x30) == 0) {
         int maxWorkers = s_fn_CalcMaxWorkers(matDescIBP);
         *(int*)(matDescIBP + 0x30) = maxWorkers;
@@ -319,11 +314,8 @@ int PlantOrchard_Slot4_Impl(PlantOrchard* self, void* entityIBP, uint64_t /*para
     // Step 4: Get map and citizen position
     int* mapGrid = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
 
-    fn_InternalBasePtr_CheckPtr(entityIBP);
     uintptr_t citizenEntity = *(uintptr_t*)entityIBP;
-    fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
     uintptr_t aiComp = *(uintptr_t*)(citizenEntity + 0x278);
-    fn_InternalBasePtr_CheckPtr((void*)(aiComp + 0x68));
     uintptr_t posComp = *(uintptr_t*)(aiComp + 0x68);
 
     int mapSz = *mapGrid;
@@ -356,14 +348,12 @@ int PlantOrchard_Slot4_Impl(PlantOrchard* self, void* entityIBP, uint64_t /*para
 
             // Check orchard slot data: slot at OrchardDesc+0x50 with 0x28 stride
             // If slot's entity field (+8) is non-zero, it's already occupied
-            fn_InternalBasePtr_CheckPtr(&orchardDescIBP);
             uintptr_t orchardSlotData = *(uintptr_t*)(orchardDescIBP + 0x50);
             if (*(uintptr_t*)(orchardSlotData + slotOffset + 8) != 0) {
                 continue;
             }
 
             // Get grid cell index from orchard description slot data
-            fn_InternalBasePtr_CheckPtr(&orchardDescIBP);
             uintptr_t orchardSlotData2 = *(uintptr_t*)(orchardDescIBP + 0x50);
             int srcCellIdx = *(int*)(orchardSlotData2 + slotOffset);
 
@@ -392,7 +382,6 @@ int PlantOrchard_Slot4_Impl(PlantOrchard* self, void* entityIBP, uint64_t /*para
             s_fn_GetTerrainPos(mapGrid, pathPos, &targetPos.x, 0, nullptr);
 
             // Get citizen entity
-            fn_InternalBasePtr_CheckPtr(entityIBP);
             uintptr_t citizenBuf = *(uintptr_t*)entityIBP;
 
             // Call FUN_1400be6e0 orchard planting action ctor
@@ -412,7 +401,6 @@ int PlantOrchard_Slot4_Impl(PlantOrchard* self, void* entityIBP, uint64_t /*para
 
             // Assign work
             int priority = (int)selfQ[4];
-            fn_InternalBasePtr_CheckPtr(entityIBP);
             uintptr_t citizenEnt = *(uintptr_t*)entityIBP;
 
             uintptr_t vtable = *(uintptr_t*)self;
@@ -537,9 +525,7 @@ void PlantOrchard_Cleanup_Impl(PlantOrchard* self) {
             node = *(uintptr_t*)(node + 0x18);
         }
 
-        fn_InternalBasePtr_CheckPtr((void*)(rightmost + 8));
         uintptr_t citizenEntity = *(uintptr_t*)(rightmost + 8);
-        fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
         s_fn_TaskCancel((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
 
         count = *(int*)(selfAddr + 0x50);
@@ -672,13 +658,11 @@ cleanup:
 void* PlantOrchard_GetTarget_Impl(PlantOrchard* self, void* outPtr) {
     uintptr_t selfAddr = (uintptr_t)self;
 
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t entity = *(uintptr_t*)(selfAddr + 0x10);
 
     uintptr_t subIBP[2] = {0};
     void* result = s_fn_FindSubEntity(entity, subIBP);
 
-    fn_InternalBasePtr_CheckPtr(result);
     *(uintptr_t*)outPtr = *(uintptr_t*)(*(uintptr_t*)result + 0x48);
 
     return outPtr;

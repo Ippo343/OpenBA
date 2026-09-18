@@ -357,11 +357,9 @@ unsigned long long ToolTile_ValidateCreate_fd650(
     void* local_48 = mem; // doubles as the out-IBP scratch (matches the exe stack reuse)
     if (fn_InternalBasePtr_Ctor) new (&local_res8) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(ptr));   // B.3.3 bridge
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
 
     // Resolve the placed-entity sub-component (004680) and write the footprint rect.
     void* pIVar8 = s_fn_004680 ? s_fn_004680(local_res8, &local_48) : nullptr;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pIVar8);
     lVar3 = *reinterpret_cast<long long*>(pIVar8);
     *reinterpret_cast<short*>(lVar3 + 0x28) = static_cast<short>(param_2);
     *reinterpret_cast<short*>(lVar3 + 0x2a) = static_cast<short>(param_3);
@@ -374,19 +372,15 @@ unsigned long long ToolTile_ValidateCreate_fd650(
     }
 
     // Resolve the model/geometry sub-component (ClearPathQueue == 003f60) and set its transform.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
     pIVar8 = s_fn_clearPathQ ? reinterpret_cast<void*>(s_fn_clearPathQ(local_res8, &local_48)) : nullptr;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pIVar8);
     long long modelComp = pIVar8 ? *reinterpret_cast<long long*>(pIVar8) : 0;
     // 003f60's c7a50 type-id is NULL in standalone → null component. Scoped fallback.
     if (modelComp == 0) modelComp = reinterpret_cast<long long>(ToolTile_FindModelComponentScoped(local_res8));
     if (modelComp != 0) ToolTile_SetTransformFromYaw_3870(modelComp, param_6, param_7);
 
     // Resolve again (different out-IBP) and fix up the model component.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
     unsigned char local_38[16];
     pIVar8 = s_fn_clearPathQ ? reinterpret_cast<void*>(s_fn_clearPathQ(local_res8, local_38)) : nullptr;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pIVar8);
     long long* plVar4 = pIVar8 ? *reinterpret_cast<long long**>(pIVar8) : nullptr;
     // Same c7a50-NULL fallback as the transform site above.
     if (plVar4 == nullptr) plVar4 = reinterpret_cast<long long*>(ToolTile_FindModelComponentScoped(local_res8));
@@ -408,7 +402,6 @@ unsigned long long ToolTile_ValidateCreate_fd650(
         // default = -1). Without the pipeline, force the finished mesh so the placed building
         // renders (the original "no completion flow -> model-less forever" guard).
         ToolTile_SetPlacedModel(reinterpret_cast<long long>(plVar4), true);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(plVar4 + 2);
         if (s_fn_c2b70) s_fn_c2b70(plVar4[2], 0);
     }
 
@@ -429,7 +422,6 @@ unsigned long long ToolTile_ValidateCreate_fd650(
     // fd650 above; ours is re-stamped by BuildComponent's OnAdded Stage 3). So the mesh
     // route cannot select a foundation in retail either — the MAP-CELL route below is what
     // does, which is why it is the load-bearing half.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
     PickingComponent_RegisterMeshForEntity(reinterpret_cast<void*>(local_res8));
 
     // Cell-precise picking + navigation blocking: write the placed building's footprint

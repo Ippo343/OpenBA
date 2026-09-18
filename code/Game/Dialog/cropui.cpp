@@ -157,7 +157,6 @@ void CropUI_PopulateCombo(CropUI* self) {
 
     // Get the selectResource combo element
     void* comboIBP = (void*)(s + 0x30);
-    fn_InternalBasePtr_CheckPtr(comboIBP);
     void* combo = *(void**)comboIBP;
 
     // Clear existing items
@@ -169,7 +168,6 @@ void CropUI_PopulateCombo(CropUI* self) {
 
     // Set current selection if we found a match
     if (selectedIdx >= 0) {
-        fn_InternalBasePtr_CheckPtr(comboIBP);
         fn_ComboElement_SetCurrentItem(*(void**)comboIBP, selectedIdx);
     }
 }

@@ -20,9 +20,6 @@
 // (NOT in engine_funcs.h -- PlayAnimation-specific helpers)
 // ============================================================
 
-// Object::InternalBasePtr::CheckPtr -- via IAT at 0x140152ab0
-static void (*s_fn_CheckPtr)(void* ibp) = nullptr;
-
 // Object::InternalBasePtr::Serialize -- via export
 static void (*s_fn_IBP_Serialize)(void* ibp, void* serializer) = nullptr;
 
@@ -49,10 +46,6 @@ static bool s_playanimation_funcs_resolved = false;
 bool PlayAnimation_ResolveFuncs() {
     if (s_playanimation_funcs_resolved) return true;
 
-    // CheckPtr via IAT at [0x140152ab0]
-    uintptr_t iatEntry = ResolveAddr(Module::Exe, 0x140152ab0);
-    if (iatEntry) s_fn_CheckPtr = *reinterpret_cast<void(**)(void*)>(iatEntry);
-
     // 0x1401c5d70 = ComponentEntity (retail PlayAnimation serialize reads TypeInfo_ComponentEntity
     // there). Was mistranscribed as 0x1401c4218 — that slot is FireDescription's BaseTypeInfo.
     s_TypeInfo_ComponentEntity = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c5d70);
@@ -66,7 +59,7 @@ bool PlayAnimation_ResolveFuncs() {
     s_fn_IBP_Serialize = reinterpret_cast<void(*)(void*, void*)>(
         ResolveExport("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z"));
 
-    bool ok = s_fn_CheckPtr && s_TypeInfo_ComponentEntity && s_AnimFloat &&
+    bool ok = s_TypeInfo_ComponentEntity && s_AnimFloat &&
               s_fn_FindFamily && s_fn_SetAnimation && s_fn_Time_Serialize &&
               s_fn_IBP_Serialize &&
               g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
@@ -74,8 +67,8 @@ bool PlayAnimation_ResolveFuncs() {
               fn_IsDerivedFrom;
 
 #ifdef _DEBUG
-    printf("[PlayAnimation] ResolveFuncs: CheckPtr=%p FindFamily=%p SetAnim=%p AnimFloat=%p\n",
-           (void*)s_fn_CheckPtr, (void*)s_fn_FindFamily,
+    printf("[PlayAnimation] ResolveFuncs: FindFamily=%p SetAnim=%p AnimFloat=%p\n",
+           (void*)s_fn_FindFamily,
            (void*)s_fn_SetAnimation, (void*)s_AnimFloat);
     printf("[PlayAnimation]   TimeSer=%p IBPSer=%p TypeInfo=%p\n",
            (void*)s_fn_Time_Serialize, (void*)s_fn_IBP_Serialize,
@@ -177,7 +170,6 @@ int PlayAnimation_AbstractImpl_Impl(void* self, void* actionStack) {
     uint8_t* s = (uint8_t*)self;
     void* localIBP;
 
-    s_fn_CheckPtr(s + 0x20);
     if (*(void**)(s + 0x20) == nullptr) {
         return 0;
     }
@@ -186,7 +178,6 @@ int PlayAnimation_AbstractImpl_Impl(void* self, void* actionStack) {
         return 0;   // stale/unregistered target — abort like retail's invalidated-null path
     }
     s_fn_FindFamily(target, &localIBP);
-    s_fn_CheckPtr(&localIBP);
     if (localIBP == nullptr) {
         return 0;
     }
@@ -226,7 +217,6 @@ int PlayAnimation_CheckEntity_Impl(void* /*self*/) {
 bool PlayAnimation_GetTarget_Impl(void* self, void* param) {
     PlayAnimation_ResolveFuncs();
     uint8_t* s = (uint8_t*)self;
-    s_fn_CheckPtr(param);
     return *(void**)(s + 0x20) == *(void**)param;
 }
 

@@ -206,10 +206,8 @@ uint64_t PastureComponent_ComputeCapacity(uintptr_t self) {
     EnsurePastureExtras();
     if (*(int64_t*)(self + 0x28) == 0) return 0;
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(self + 0x10));
     uint8_t outIBP[8] = {0};
     if (s_fn_FindMapComp) s_fn_FindMapComp(*(int64_t*)(self + 0x10), outIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(outIBP);
 
     int64_t animalRef = *(int64_t*)(self + 0x28);
     void* mapComp = *(void**)outIBP;
@@ -251,16 +249,12 @@ void PastureComponent_Helper5ed0(void* entityRef) {
     uint32_t newFlags = oldFlags | 0x400000;
     *(uint32_t*)(p + 0x20) = newFlags;
     if (((newFlags ^ oldFlags) & 0xffff) != 0 && *(int64_t*)(p + 0x10) != 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p + 0x10);
         if (s_fn_FlagNotify) s_fn_FlagNotify(*(void**)(p + 0x10));
     }
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p + 0x10);
     uint8_t famIBP[8] = {0};
     if (s_fn_FindCompFamily) s_fn_FindCompFamily(*(int64_t*)(p + 0x10), famIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(famIBP);
     uintptr_t fam = *(uintptr_t*)famIBP;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(fam + 0x68));
     uintptr_t model = *(uintptr_t*)(fam + 0x68);
 
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
@@ -297,29 +291,23 @@ void PastureComponent_ReassignEntityRef(uintptr_t entityPtr) {
     EnsurePastureExtras();
     if (*(int64_t*)(entityPtr + 0x28) == 0) return;
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(entityPtr + 0x28));
     int64_t link = *(int64_t*)(*(int64_t*)(entityPtr + 0x28) + 0x10);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&link);
     uint8_t mapIBP[8] = {0};
     if (s_fn_FindMapComp) s_fn_FindMapComp(link, mapIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(mapIBP);
     uintptr_t mapComp = *(uintptr_t*)mapIBP;
     uint16_t r0 = *(uint16_t*)(mapComp + 0x28);
     uint16_t r1 = *(uint16_t*)(mapComp + 0x2a);
     uint16_t r2 = *(uint16_t*)(mapComp + 0x2c);
     uint16_t r3 = *(uint16_t*)(mapComp + 0x2e);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(entityPtr + 0x10));
     uint8_t modelIBP[8] = {0};
     if (s_fn_FindAnimalComp) s_fn_FindAnimalComp(*(int64_t*)(entityPtr + 0x10), modelIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(modelIBP);
     uintptr_t model = *(uintptr_t*)modelIBP;
 
     uint32_t oldFlags = *(uint32_t*)(model + 0x20);
     uint32_t newFlags = oldFlags & 0xffbfffff;
     *(uint32_t*)(model + 0x20) = newFlags;
     if (((newFlags ^ oldFlags) & 0xffff) != 0 && *(int64_t*)(model + 0x10) != 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(model + 0x10));
         if (s_fn_FlagNotify) s_fn_FlagNotify(*(void**)(model + 0x10));
     }
     *(uint16_t*)(model + 0x38) = r0;
@@ -551,7 +539,6 @@ extern "C" void PastureComponent_Slot12VSlot(void* selfV, int msgId) {
     }
     if (!s_findPos || !s_childCount || !s_spotPos) return;
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
     int64_t posIbp = 0;
     s_findPos(*reinterpret_cast<int64_t*>(self + 0x10), &posIbp);
     if (!posIbp) return;

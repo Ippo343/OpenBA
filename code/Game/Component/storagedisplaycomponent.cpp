@@ -221,9 +221,6 @@ void StorageDisplayComponent_Draw(StorageDisplayComponent* self) {
 #endif
 
     // CheckPtr on entity ref
-    if (fn_InternalBasePtr_CheckPtr) {
-        fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
-    }
 
     // Find MapComponent on entity
     uintptr_t entity = *(uintptr_t*)(selfAddr + 0x10);
@@ -232,9 +229,6 @@ void StorageDisplayComponent_Draw(StorageDisplayComponent* self) {
         s_fn_FindComponent_Map(entity, (void*)mapCompBuf);
     }
 
-    if (fn_InternalBasePtr_CheckPtr) {
-        fn_InternalBasePtr_CheckPtr((void*)mapCompBuf);
-    }
 
     uintptr_t mapComp = mapCompBuf[0];
     if (!mapComp) return;
@@ -245,9 +239,6 @@ void StorageDisplayComponent_Draw(StorageDisplayComponent* self) {
     int colCount = width;
 
     // CheckPtr again for height
-    if (fn_InternalBasePtr_CheckPtr) {
-        fn_InternalBasePtr_CheckPtr((void*)mapCompBuf);
-    }
 
     int height = (int)*(int16_t*)(mapComp + 0x2e);
 
@@ -389,9 +380,6 @@ void StorageDisplayComponent_Update(StorageDisplayComponent* self) {
     uintptr_t selfAddr = (uintptr_t)self;
 
     // CheckPtr on entity ref
-    if (fn_InternalBasePtr_CheckPtr) {
-        fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
-    }
 
     uintptr_t entity = *(uintptr_t*)(selfAddr + 0x10);
 
@@ -402,9 +390,6 @@ void StorageDisplayComponent_Update(StorageDisplayComponent* self) {
     }
 
     // CheckPtr on entity again
-    if (fn_InternalBasePtr_CheckPtr) {
-        fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
-    }
 
     // FindComponent(StorageComponent) via FUN_140003050
     uintptr_t storageBuf[2] = {0, 0};
@@ -417,18 +402,12 @@ void StorageDisplayComponent_Update(StorageDisplayComponent* self) {
     uintptr_t storageComp = 0;
 
     // CheckPtr on storage ref
-    if (fn_InternalBasePtr_CheckPtr) {
-        fn_InternalBasePtr_CheckPtr((void*)storageBuf);
-    }
 
     storageComp = storageBuf[0];
     if (!storageComp) goto fill_remaining;
 
     slotCount = *(int*)(storageComp + 0x30);
 
-    if (fn_InternalBasePtr_CheckPtr) {
-        fn_InternalBasePtr_CheckPtr((void*)storageBuf);
-    }
 
     {
         float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
@@ -438,9 +417,6 @@ void StorageDisplayComponent_Update(StorageDisplayComponent* self) {
 
         if (slotCount > 0 && totalWeight > 0) {
             for (int slotIdx = 0; slotIdx < slotCount; slotIdx++) {
-                if (fn_InternalBasePtr_CheckPtr) {
-                    fn_InternalBasePtr_CheckPtr((void*)storageBuf);
-                }
 
                 uintptr_t slotArray = *(uintptr_t*)(storageComp + 0x28);
                 uintptr_t slotEntry = slotArray + (uintptr_t)slotIdx * 0x10;

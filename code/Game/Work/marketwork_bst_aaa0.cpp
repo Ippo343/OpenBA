@@ -81,7 +81,6 @@
 // Runtime primitives (reached through .rdata dispatch slots, exactly as retail does)
 // ---------------------------------------------------------------------------
 //   [0x140152b68] System::MemoryAllocator::MemFree  (static 1-arg)
-//   [0x140152ab0] Object::InternalBasePtr::CheckPtr
 // Read the SLOTS rather than the engine_funcs globals: standalone/redzone_alloc.cpp
 // rewires the slots but leaves fn_MemFreeStatic alone, so going through the globals here
 // would pair the insert cluster's shimmed alloc with an unshimmed free.
@@ -95,11 +94,9 @@
 namespace {
 
 typedef void (*MBstE_MemFree_t)(void* p);                       // slot 0x140152b68
-typedef void (*MBstE_CheckPtr_t)(void* ibp);                    // slot 0x140152ab0
 typedef void (*MBstE_Retrace_t)(int64_t* tree, int64_t* pNode); // 0x140025920
 
 MBstE_MemFree_t  s_memFree  = nullptr;
-MBstE_CheckPtr_t s_checkPtr = nullptr;
 MBstE_Retrace_t  s_retrace  = nullptr;
 bool             s_resolved = false;
 
@@ -110,8 +107,6 @@ void ResolveOnce() {
     s_resolved = true;
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b68))
         s_memFree = *reinterpret_cast<MBstE_MemFree_t*>(s);
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152ab0))
-        s_checkPtr = *reinterpret_cast<MBstE_CheckPtr_t*>(s);
     s_retrace = reinterpret_cast<MBstE_Retrace_t>(ResolveAddr(Module::Exe, 0x140025920));
 }
 
@@ -310,11 +305,9 @@ extern "C" void MarketBst_aaa0(int64_t* tree, void* keyIBP) {
     if (node == 0) return;
 
     do {
-        s_checkPtr(reinterpret_cast<void*>(node));
         if (*static_cast<uint64_t*>(keyIBP) < NodeKey(node)) {
             node = NodeLeft(node);
         } else {
-            s_checkPtr(keyIBP);
             if (NodeKey(node) >= *static_cast<uint64_t*>(keyIBP)) {
                 MarketBst_ac40(tree, reinterpret_cast<void*>(node));   // ab07
                 return;

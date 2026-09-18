@@ -37,7 +37,6 @@ extern void CitizenComp_AssignHousing(CitizenComponent* self, int64_t* buildingI
 
 namespace {
 
-inline void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 inline void IbpCtor(void* slot, void* obj) { if (fn_InternalBasePtr_Ctor) new (slot) ::Object::InternalBasePtr(
     reinterpret_cast<RtObject::Internal*>(obj)); }   // B.3.3 bridge
 
@@ -58,7 +57,6 @@ void* FindCastElem(void* parent, const char* name, uint32_t typeId) {
     System::String strBuf(name);
     uint64_t foundBuf[2] = {0, 0};
     fn_FindElement(parent, foundBuf, &strBuf);
-    CheckPtr(foundBuf);
     void* elem = *(void**)foundBuf;
     if (elem && fn_IsDerivedFrom(elem, typeId)) return elem;
     return nullptr;
@@ -74,14 +72,11 @@ void* FindCastElem(void* parent, const char* name, uint32_t typeId) {
 // ===========================================================================
 extern "C" void TownHall_GroupRatingInit(void* rating, void* groupIBPPtr) {
     uint64_t* r = (uint64_t*)rating;
-    CheckPtr(groupIBPPtr);
     int childCount = fn_Element_ChildCount(*(void**)groupIBPPtr);
     for (int i = 0; i < childCount; i++) {
         // child(i) -> FindElement("whole") -> cast ImageElement -> push
-        CheckPtr(groupIBPPtr);
         uint64_t childBuf[2] = {0, 0};
         fn_Element_Child(*(void**)groupIBPPtr, childBuf, i);
-        CheckPtr(childBuf);
         void* whole = FindCastElem(*(void**)childBuf, "whole",
                                    g_TypeId_ImageElement ? *g_TypeId_ImageElement : 0);
         uint64_t wholeIBP = 0;
@@ -89,17 +84,14 @@ extern "C" void TownHall_GroupRatingInit(void* rating, void* groupIBPPtr) {
         PushPtr(r, wholeIBP);
 
         // child(i) -> FindElement("half") -> cast ImageElement -> push
-        CheckPtr(groupIBPPtr);
         uint64_t childBuf2[2] = {0, 0};
         fn_Element_Child(*(void**)groupIBPPtr, childBuf2, i);
-        CheckPtr(childBuf2);
         void* half = FindCastElem(*(void**)childBuf2, "half",
                                   g_TypeId_ImageElement ? *g_TypeId_ImageElement : 0);
         uint64_t halfIBP = 0;
         IbpCtor(&halfIBP, half);
         PushPtr(r + 2, halfIBP);
 
-        CheckPtr(groupIBPPtr);
         childCount = fn_Element_ChildCount(*(void**)groupIBPPtr);  // faithful re-read
     }
 }
@@ -116,11 +108,9 @@ extern "C" void TownHall_GroupRatingUpdate(void* rating, float value, float maxV
     int odd = 1;
     for (int i = 0; i < wholeCount; i++, odd += 2) {
         uint64_t* wholeSlot = (uint64_t*)(r[0] + (uintptr_t)i * 8);
-        CheckPtr(wholeSlot);
         fn_Element_SetFlagsOnOff(*(void**)wholeSlot,
                                  (odd >= halfSteps) ? 1u : 0u, (odd < halfSteps) ? 1u : 0u);
         uint64_t* halfSlot = (uint64_t*)(r[2] + (uintptr_t)i * 8);
-        CheckPtr(halfSlot);
         fn_Element_SetFlagsOnOff(*(void**)halfSlot,
                                  (odd != halfSteps) ? 1u : 0u, (odd == halfSteps) ? 1u : 0u);
     }
@@ -413,12 +403,10 @@ void* FindWorkPlaceComp(uintptr_t entity) {
     int cnt = *(int*)(entity + 0x38);
     for (int i = 0; i < cnt; i++) {
         void* slot = (void*)(arr + (uintptr_t)i * 8);
-        CheckPtr(slot);
         void* comp = *(void**)slot;
         if (!comp) continue;
         uint32_t id = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
         if (id == tid) {
-            CheckPtr(slot);
             void* c = *(void**)slot;
             return fn_IsDerivedFrom(c, tid) ? c : nullptr;
         }
@@ -431,9 +419,8 @@ void* FindWorkPlaceComp(uintptr_t entity) {
 void DemoteToLaborer(uintptr_t citizen, uintptr_t laborerKey) {
     int64_t nullIBP = 0;
     IbpCtor(&nullIBP, nullptr);
-    CheckPtr(&citizen);
     if (*(uintptr_t*)(citizen + 0x1f0) == laborerKey &&
-        (CheckPtr(&nullIBP), *(int64_t*)(citizen + 0x248) == nullIBP)) {
+        (*(int64_t*)(citizen + 0x248) == nullIBP)) {
         return;
     }
     int64_t local = nullIBP;
@@ -455,11 +442,10 @@ extern "C" void TownHall_RemoveWorker(void* citizenList, uint64_t professionId) 
     int cnt = *(int*)(townMgr + 0xa8);
     for (int i = 0; i < cnt; i++) {
         uintptr_t cz = *(uintptr_t*)(*(uintptr_t*)(townMgr + 0xa0) + (uintptr_t)i * 8);
-        CheckPtr(&cz);
         if (*(float*)(*(uintptr_t*)(cz + 0x288) + 0x44) <= *(float*)(cz + 0x3c) &&
             *(uintptr_t*)(cz + 0x208) == 0 &&
-            (CheckPtr(&cz), *(uint64_t*)(cz + 0x1f0) == professionId) &&
-            (CheckPtr(&cz), *(uintptr_t*)(cz + 0x248) == 0)) {
+            (*(uint64_t*)(cz + 0x1f0) == professionId) &&
+            (*(uintptr_t*)(cz + 0x248) == 0)) {
             DemoteToLaborer(cz, laborer);
             return;
         }
@@ -481,18 +467,15 @@ extern "C" void TownHall_RemoveWorker(void* citizenList, uint64_t professionId) 
         int bestWorkers = 0;
         for (int i = 0; i < wpCount; i++) {
             uintptr_t ent = *(uintptr_t*)(*(uintptr_t*)(found + 8) + (uintptr_t)i * 8);
-            CheckPtr(&ent);
             void* comp = FindWorkPlaceComp(ent);
             if (!comp) continue;
             int workers = *(int*)((uintptr_t)comp + 0x60);
             if (bestWorkers < workers) { bestEntity = ent; bestWorkers = workers; }
         }
         if (bestEntity) {
-            CheckPtr(&bestEntity);
             void* comp = FindWorkPlaceComp(bestEntity);
             if (comp && *(uintptr_t*)((uintptr_t)comp + 0x58) != 0) {
                 uintptr_t worker = **(uintptr_t**)((uintptr_t)comp + 0x58);
-                CheckPtr(&worker);
                 if (worker) { DemoteToLaborer(worker, laborer); return; }
             }
         }
@@ -502,10 +485,9 @@ extern "C" void TownHall_RemoveWorker(void* citizenList, uint64_t professionId) 
     cnt = *(int*)(townMgr + 0xa8);
     for (int i = 0; i < cnt; i++) {
         uintptr_t cz = *(uintptr_t*)(*(uintptr_t*)(townMgr + 0xa0) + (uintptr_t)i * 8);
-        CheckPtr(&cz);
         if (*(float*)(*(uintptr_t*)(cz + 0x288) + 0x44) <= *(float*)(cz + 0x3c) &&
             *(uintptr_t*)(cz + 0x208) == 0 &&
-            (CheckPtr(&cz), *(uint64_t*)(cz + 0x1f0) == professionId)) {
+            (*(uint64_t*)(cz + 0x1f0) == professionId)) {
             DemoteToLaborer(cz, laborer);
             return;
         }

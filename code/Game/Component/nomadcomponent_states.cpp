@@ -79,7 +79,6 @@ uint32_t TidCharacter() { static uint32_t t = 0; if (!t) t = ::Object::ResolveTy
 
 
 inline uint8_t* GW() { return (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) : nullptr; }
-inline void CheckPtr(void* ibp) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp); }
 inline void MakeIBP(void* dst, void* obj) { if (fn_InternalBasePtr_Ctor) new (dst) ::Object::InternalBasePtr(
     reinterpret_cast<RtObject::Internal*>(obj)); else *reinterpret_cast<void**>(dst) = obj; }   // B.3.3 bridge
 
@@ -92,12 +91,10 @@ uintptr_t FindCharacter(void* entity) {
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(e + 0x30);
     for (int i = 0; i < n; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        CheckPtr(slot);
         void* c = *slot;
         if (!c) continue;
         void** vt = *reinterpret_cast<void***>(c);
         if (reinterpret_cast<uint32_t(*)(void*)>(vt[2])(c) != tid) continue;
-        CheckPtr(slot);
         c = *slot;
         return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) ? reinterpret_cast<uintptr_t>(c) : 0;
     }
@@ -106,10 +103,8 @@ uintptr_t FindCharacter(void* entity) {
 
 // `*(int*)(chr+0x60) + 1 < 1` — the action stack is empty.
 bool Idle(uintptr_t nomad, uintptr_t* chrOut) {
-    CheckPtr(reinterpret_cast<void*>(nomad + 0x10));
     uintptr_t chr = FindCharacter(*reinterpret_cast<void**>(nomad + 0x10));
     uint64_t ibp = 0; MakeIBP(&ibp, reinterpret_cast<void*>(chr));
-    CheckPtr(&ibp);
     chr = static_cast<uintptr_t>(ibp);
     if (chrOut) *chrOut = chr;
     if (!chr) return false;
@@ -126,10 +121,8 @@ extern "C" void Nomad_Remove(void* entityList, void* entityIBP) {
     Resolve();
     uint64_t* ibp = reinterpret_cast<uint64_t*>(entityIBP);
     if (*ibp == 0) return;
-    CheckPtr(ibp);
     uintptr_t e = static_cast<uintptr_t>(*ibp);
     if ((*reinterpret_cast<uint32_t*>(e + 0x40) >> 10) & 1) return;
-    CheckPtr(ibp);
     if (s_MarkRemoval) s_MarkRemoval(reinterpret_cast<void*>(*ibp));
     uint8_t* el = reinterpret_cast<uint8_t*>(entityList);
     // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
@@ -144,10 +137,8 @@ extern "C" void Nomad_Remove(void* entityList, void* entityIBP) {
 extern "C" void Nomad_MoveTo(void* nomadV, float* dest) {
     Resolve();
     uintptr_t nomad = reinterpret_cast<uintptr_t>(nomadV);
-    CheckPtr(reinterpret_cast<void*>(nomad + 0x10));
     uintptr_t chr = FindCharacter(*reinterpret_cast<void**>(nomad + 0x10));
     uint64_t chrIBP = 0; MakeIBP(&chrIBP, reinterpret_cast<void*>(chr));
-    CheckPtr(&chrIBP);
     chr = static_cast<uintptr_t>(chrIBP);
     if (!chr || !s_MoveToCtor || !fn_MemAlloc) return;
     if (s_Cleanup) s_Cleanup(reinterpret_cast<void*>(chr + 0x48));
@@ -182,10 +173,8 @@ extern "C" char Nomad_State0_Tick(void* data, void* sm, void* /*time*/) {
         if (gw) Nomad_Remove(*reinterpret_cast<void**>(gw + 0xe8), &ibp);
         return 1;
     }
-    CheckPtr(reinterpret_cast<void*>(nomad + 0x28));
     uint64_t smcIBP = 0;
     if (s_FindSM) s_FindSM(static_cast<uintptr_t>(*reinterpret_cast<uint64_t*>(nomad + 0x28)), &smcIBP);
-    CheckPtr(&smcIBP);
     uintptr_t smc = static_cast<uintptr_t>(smcIBP);
     if (smc) {
         void* node = *reinterpret_cast<void**>(smc + 0x48);

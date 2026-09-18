@@ -201,7 +201,7 @@ bool LocationWork_ResolveFuncs() {
               s_fn_FindWalkablePos && s_fn_FindWalkablePosSub &&
               s_fn_WalkTowards_Ctor && s_fn_ValidateEntity &&
               s_fn_CancelAllWork && s_fn_FindSubEntity &&
-              fn_InternalBasePtr_CheckPtr && fn_InternalBasePtr_Ctor &&
+              fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom && s_typeId_RadiusDesc && s_fUVScale &&
               s_vtable_LocationWork && s_vtable_Work;
 
@@ -275,7 +275,6 @@ void LocationWork_Serialize_Impl(LocationWork* self, void* stream) {
 // 7. Store citizen ref at +0x48
 // ============================================================
 int LocationWork_Slot4_Impl(LocationWork* self, void* citizenIBP, uint64_t /*param3*/, uint64_t /*param4*/) {
-    uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t* selfQ = (uintptr_t*)self;
 
     // Step 1: Already has target?
@@ -284,33 +283,25 @@ int LocationWork_Slot4_Impl(LocationWork* self, void* citizenIBP, uint64_t /*par
     }
 
     // Step 2: Check citizen's storage — if carrying items, replan
-    fn_InternalBasePtr_CheckPtr(citizenIBP);
     uintptr_t citizenEntity = *(uintptr_t*)citizenIBP;
 
-    fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x10));
     uintptr_t storageIBP = 0;
     s_fn_FindComp_Storage(*(uintptr_t*)(citizenEntity + 0x10), &storageIBP);
 
-    fn_InternalBasePtr_CheckPtr(&storageIBP);
     int itemCount = s_fn_StorageQueryCount((void*)storageIBP);
     if (itemCount > 0) {
-        fn_InternalBasePtr_CheckPtr(citizenIBP);
         s_fn_CitizenAI_LongTermPlan(*(void**)citizenIBP);
     }
 
     // Step 3: Find position component on workplace entity (self+0x10)
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t posCompIBP = 0;
     s_fn_FindComp_Position(selfQ[2], &posCompIBP);  // self->_field10
 
     // Step 4: Get citizen's current position
-    fn_InternalBasePtr_CheckPtr(citizenIBP);
     uintptr_t citEnt = *(uintptr_t*)citizenIBP;
 
-    fn_InternalBasePtr_CheckPtr((void*)(citEnt + 0x278));
     uintptr_t aiComp = *(uintptr_t*)(citEnt + 0x278);
 
-    fn_InternalBasePtr_CheckPtr((void*)(aiComp + 0x68));
     uintptr_t posObj = *(uintptr_t*)(aiComp + 0x68);
 
     float srcX = *(float*)(posObj + 0x158);
@@ -319,7 +310,6 @@ int LocationWork_Slot4_Impl(LocationWork* self, void* citizenIBP, uint64_t /*par
 
     // Step 5: Find walkable positions
     // Get description from position component, check if RadiusDescription
-    fn_InternalBasePtr_CheckPtr(&posCompIBP);
     void* descObj = *(void**)(posCompIBP + 0x18);
     int bestDist = 0x7fffffff;
 
@@ -343,7 +333,6 @@ int LocationWork_Slot4_Impl(LocationWork* self, void* citizenIBP, uint64_t /*par
         uintptr_t subArray = *(uintptr_t*)(posCompIBP + 0x28);
         for (int i = 0; i < subCount; i++) {
             uintptr_t* subPtr = (uintptr_t*)(subArray + (uintptr_t)i * 8);
-            fn_InternalBasePtr_CheckPtr(subPtr);
             uint8_t subFound = s_fn_FindWalkablePosSub(
                 *subPtr, 0, srcPosArr, bestPos, &bestDist);
             found = found | subFound;
@@ -371,7 +360,6 @@ int LocationWork_Slot4_Impl(LocationWork* self, void* citizenIBP, uint64_t /*par
     int priority = (int)selfQ[4];
 
     // Get work entity via vtable slot +0x50 (Slot10)
-    fn_InternalBasePtr_CheckPtr(citizenIBP);
     uintptr_t citEntPost = *(uintptr_t*)citizenIBP;
 
     uintptr_t vtable = *(uintptr_t*)self;
@@ -435,11 +423,9 @@ int LocationWork_Slot8_Impl(LocationWork* self) {
     }
 
     // CheckPtr on the target entity at +0x48
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x48));
     uintptr_t targetEntity = *(uintptr_t*)(selfAddr + 0x48);
 
     // Navigate to citizen AI component (+0x278) then cancel work (+0x48)
-    fn_InternalBasePtr_CheckPtr((void*)(targetEntity + 0x278));
     s_fn_CancelAllWork((void*)(*(uintptr_t*)(targetEntity + 0x278) + 0x48));
     return 0;
 }
@@ -483,7 +469,6 @@ void* LocationWork_Slot10_Impl(LocationWork* self, void* outPtr) {
     uintptr_t selfAddr = (uintptr_t)self;
 
     // CheckPtr on self+0x10
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
 
     // Find sub-entity via FUN_140002e10
@@ -491,7 +476,6 @@ void* LocationWork_Slot10_Impl(LocationWork* self, void* outPtr) {
     void* result = s_fn_FindSubEntity(entityRef, subIBP);
 
     // CheckPtr on the result
-    fn_InternalBasePtr_CheckPtr(result);
 
     // Read +0x48 from the resolved entity and store in output
     uintptr_t resolvedEntity = *(uintptr_t*)result;

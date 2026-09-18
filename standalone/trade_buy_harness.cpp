@@ -85,7 +85,6 @@ void* FindCompOnEntity(void* ent, uint32_t tid) {
     const uintptr_t a = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
     for (int i = 0; i < n && a; ++i) {
         void** cs = reinterpret_cast<void**>(a + static_cast<uintptr_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs);
         void* c = *cs;
         if (!c) continue;
         void** vt = *reinterpret_cast<void***>(c);
@@ -131,7 +130,6 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
     void* postEnt = nullptr;
     for (int i = 0; i < n && !postEnt; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* ent = *slot;
         if (ent && FindCompOnEntity(ent, tidTrade)) postEnt = ent;
     }

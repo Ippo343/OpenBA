@@ -108,7 +108,6 @@ int DialogListIndex(void* ui, void* dlg, int* outCount) {
     *outCount = count;
     for (int i = 0; data && i < count && i < 64; ++i) {
         uintptr_t ip = data[i];
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ip);
         if (reinterpret_cast<void*>(ip) == dlg) return i;
     }
     return -1;

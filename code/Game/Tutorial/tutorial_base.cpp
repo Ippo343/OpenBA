@@ -230,13 +230,11 @@ extern "C" int WorkComponent_CalcMaxWorkers(uintptr_t workComp) {
     int divisor = *reinterpret_cast<int*>(desc + 0x30);
     if (divisor == 0) return baseCap;   // avoid float div-by-zero UB.
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(workComp + 0x10));
     uint8_t ibp[32] = {};
     typedef void* (*FindComp_t)(uintptr_t entity, void* retIBP);
     FindComp_t findComp = reinterpret_cast<FindComp_t>(ResolveAddr(Module::Exe, 0x140004680));
     if (!findComp) return baseCap;
     findComp(*reinterpret_cast<uintptr_t*>(workComp + 0x10), ibp);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);
     uintptr_t footprint = *reinterpret_cast<uintptr_t*>(ibp);
     if (!footprint) return baseCap;
 
@@ -259,14 +257,12 @@ extern "C" int WorkComponent_CalcMaxWorkers(uintptr_t workComp) {
 // WorkComponent via FUN_140003050 and returns its cached capacity (+0x30),
 // computing it lazily through WorkComponent_CalcMaxWorkers if still 0.
 extern "C" int WorkPlaceComponent_GetMaxWorkers(uintptr_t workplaceComp) {
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(workplaceComp + 0x10));
 
     uint8_t ibp[32] = {};
     typedef void* (*FindComp_t)(uintptr_t entity, void* retIBP);
     FindComp_t findComp = reinterpret_cast<FindComp_t>(ResolveAddr(Module::Exe, 0x140003050));
     if (!findComp) return 0;
     void* self = findComp(*reinterpret_cast<uintptr_t*>(workplaceComp + 0x10), ibp);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
 
     uintptr_t comp = *reinterpret_cast<uintptr_t*>(self);
     if (!comp) return 0;

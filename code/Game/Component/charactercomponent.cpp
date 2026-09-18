@@ -94,15 +94,12 @@ void CharacterComponent_Update(CharacterComponent* self, int64_t deltaTime) {
 void Character_UpdateAnimation_Reimpl(void* arrayBase, void* ptrRef, int64_t deltaTime) {
     int64_t node = *reinterpret_cast<int64_t*>(ptrRef);
     while (node != 0) {
-        fn_InternalBasePtr_CheckPtr(ptrRef);
         if (*reinterpret_cast<char*>(*reinterpret_cast<int64_t*>(ptrRef) + 0x18) != '\0') {
-            fn_InternalBasePtr_CheckPtr(ptrRef);
             int64_t* obj = *reinterpret_cast<int64_t**>(ptrRef);
             int64_t vt = *obj;
             typedef void (*slot30_t)(int64_t*, void*, int64_t);
             (*reinterpret_cast<slot30_t*>(vt + 0x30))(obj, arrayBase, deltaTime);
         }
-        fn_InternalBasePtr_CheckPtr(ptrRef);
         node = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(ptrRef) + 0x10);
         *reinterpret_cast<int64_t*>(ptrRef) = node;
     }
@@ -148,7 +145,6 @@ static void* CharComp_FindSiblingByName(int64_t ownerEntity, const char* typeNam
     int64_t arr = *reinterpret_cast<int64_t*>(e + 0x30);
     for (int i = 0; i < count; i++) {
         void** ibp = reinterpret_cast<void**>(arr + (int64_t)i * 8);
-        fn_InternalBasePtr_CheckPtr(ibp);
         void* comp = *ibp;
         if (!comp) continue;
         uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
@@ -179,7 +175,6 @@ static void CharacterComponent_BodyInit(CharacterComponent* self) {
     *reinterpret_cast<int32_t*>(p + 0x60) = -1;
 
     // Startup (0x140109a30): find sibling components + adopt the description.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p + 0x10);
     int64_t owner = *reinterpret_cast<int64_t*>(p + 0x10);
     if (!owner) return;
 

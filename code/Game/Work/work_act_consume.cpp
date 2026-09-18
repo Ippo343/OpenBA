@@ -155,7 +155,6 @@ static inline void* WCP_Alloc(uint64_t size) {
     if (fn_MemAlloc && g_pMemAllocSingleton) return fn_MemAlloc(g_pMemAllocSingleton, size, 8);
     return nullptr;
 }
-static inline void WCP_CheckPtr(void* p)            { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 static inline void WCP_IbpCtor(void* ibp, void* o)  { if (fn_InternalBasePtr_Ctor) new (ibp) ::Object::InternalBasePtr(
     reinterpret_cast<RtObject::Internal*>(o)); }   // B.3.3 bridge
 static inline void WCP_Append(void* list, void* ibp){ if (s_wcp_TaskListAppend) s_wcp_TaskListAppend(list, ibp); }
@@ -217,15 +216,12 @@ static void WCP_AppendInline(uintptr_t list, uintptr_t ibpVal) {
         uintptr_t base = *reinterpret_cast<uintptr_t*>(list);  // [RSI]
         uintptr_t node = *reinterpret_cast<uintptr_t*>(base + static_cast<uintptr_t>(count) * 8);
         while (node != 0) {
-            WCP_CheckPtr(reinterpret_cast<void*>(&node));
             if (*reinterpret_cast<uint8_t*>(node + 0x18) != 0) {
-                WCP_CheckPtr(reinterpret_cast<void*>(&node));
                 *reinterpret_cast<uint8_t*>(node + 0x18) = 0;
                 uintptr_t vt = *reinterpret_cast<uintptr_t*>(node);
                 typedef void (*Detach_t)(uintptr_t, void*);
                 (*reinterpret_cast<Detach_t*>(vt + 0x38))(node, reinterpret_cast<void*>(list));
             }
-            WCP_CheckPtr(reinterpret_cast<void*>(&node));
             node = *reinterpret_cast<uintptr_t*>(node + 0x10);
         }
     }
@@ -262,9 +258,7 @@ void WorkAct_ConsumeProduceCtor_bef70(void* param_1, uint32_t param_2, void* par
     WCP_ResolveAll();
 
     // list base = (*(citizen)+0x278) + 0x48  (0x1400befaf..0x1400befd1)
-    WCP_CheckPtr(param_1);
     uintptr_t ci = *reinterpret_cast<uintptr_t*>(param_1);
-    WCP_CheckPtr(reinterpret_cast<void*>(ci + 0x278));
     uintptr_t aiComp = *reinterpret_cast<uintptr_t*>(ci + 0x278);
     uintptr_t list = aiComp + 0x48;          // RSI / plVar15
     if (s_wcp_TaskListCleanup) s_wcp_TaskListCleanup(reinterpret_cast<void*>(list));
@@ -278,7 +272,6 @@ void WorkAct_ConsumeProduceCtor_bef70(void* param_1, uint32_t param_2, void* par
         uintptr_t innerIbp = 0;
         WCP_IbpCtor(&innerIbp, nullptr);
         uint32_t msgId = s_wcp_pMsgId_c70e8 ? *s_wcp_pMsgId_c70e8 : 0;  // DWORD_1401c70e8
-        WCP_CheckPtr(param_1);
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(param_1) + 0x10);
         if (s_wcp_SendCompMsg) sm1 = s_wcp_SendCompMsg(obj, &entityInner, &msgId, 0, &innerIbp, 0);
     }
@@ -307,13 +300,10 @@ void WorkAct_ConsumeProduceCtor_bef70(void* param_1, uint32_t param_2, void* par
 
     if (cVar4 != 0) {
         // --- CreateRawMaterial action gated on the storage slot (0x1400bf0e0..) ---
-        WCP_CheckPtr(param_1);
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(param_1) + 0x10);  // *(*param_1+0x10)
-        WCP_CheckPtr(&entityInner);
         uintptr_t storRet = 0;
         void* storIbp = nullptr;
         if (s_wcp_FindCompStorage) storIbp = s_wcp_FindCompStorage(static_cast<int64_t>(entityInner), &storRet);
-        WCP_CheckPtr(storIbp);
         uint32_t uVar1 = *reinterpret_cast<uint32_t*>(*reinterpret_cast<uintptr_t*>(storIbp) + 0x38);  // *(*pIVar11+0x38) -> EDI
 
         obj = WCP_Alloc(0x58);                // LEA ECX,[RDX+0x50] => 0x58
@@ -321,7 +311,6 @@ void WorkAct_ConsumeProduceCtor_bef70(void* param_1, uint32_t param_2, void* par
         if (obj) {
             uintptr_t local60 = 0;
             WCP_IbpCtor(&local60, nullptr);   // ctor(&local_60, 0)  (p10)
-            WCP_CheckPtr(param_1);
             uint64_t local70 = *reinterpret_cast<uintptr_t*>(param_1);                 // *param_1  -> p4
             uint64_t local68 = *reinterpret_cast<uintptr_t*>(local70 + 0x248);         // *(*param_1+0x248) -> p5
             float xmm2 = s_wcp_pf_17214c ? *s_wcp_pf_17214c : 1.0f;                    // [0x14017214c]==1.0f (g_fUVScale)
@@ -364,7 +353,6 @@ void WorkAct_ConsumeProduceCtor_bef70(void* param_1, uint32_t param_2, void* par
     WCP_Append(reinterpret_cast<void*>(list), &ibpSt1);
 
     // --- 1st component search over *(*param_3+0x28); derive toolType (0x1400bf293..) ---
-    WCP_CheckPtr(param_3);
     uintptr_t listBase1 = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(param_3) + 0x28);  // *(*param_3+0x28)
     void* foundComp1 = WCP_FindComponentDerived(listBase1);
     // toolType = *(foundComp+0x50); if null component, reads *(0+0x50) — but original uses
@@ -396,10 +384,8 @@ void WorkAct_ConsumeProduceCtor_bef70(void* param_1, uint32_t param_2, void* par
         void* foundComp2 = WCP_FindComponentDerived(static_cast<uintptr_t>(param_6));
 
         // state machine + weighted random recipe index.
-        WCP_CheckPtr(param_3);
         uintptr_t smRet = 0;
         if (s_wcp_FindStateMachine) s_wcp_FindStateMachine(*reinterpret_cast<uintptr_t*>(param_3), &smRet);  // *param_3
-        WCP_CheckPtr(&smRet);
         uint64_t widx = s_wcp_WeightedRandIdx ? s_wcp_WeightedRandIdx(static_cast<int64_t>(smRet)) : 0;
         int64_t idx = static_cast<int64_t>(static_cast<int>(widx));
         int64_t r13 = idx + idx * 4;        // LEA R13,[RDX+RDX*4] => idx*5
@@ -425,7 +411,6 @@ void WorkAct_ConsumeProduceCtor_bef70(void* param_1, uint32_t param_2, void* par
             if (count > 0) {
                 uintptr_t subArr = *reinterpret_cast<uintptr_t*>(recBase + static_cast<uintptr_t>(r13) * 8);  // *(recBase + idx*0x28)
                 for (int j = 0; j < count; ++j) {
-                    WCP_CheckPtr(reinterpret_cast<void*>(&consumeIbp));
                     int64_t resType = *reinterpret_cast<int64_t*>(subArr + static_cast<uintptr_t>(j) * 0x10);      // [subArr + j*0x10]
                     int cnt = *reinterpret_cast<int*>(subArr + static_cast<uintptr_t>(j) * 0x10 + 8);             // [subArr + j*0x10 + 8]
                     if (s_wcp_ConsumeListAppend)
@@ -458,9 +443,7 @@ void WorkAct_ConsumeProduceCtor_bef70(void* param_1, uint32_t param_2, void* par
                 default:                                        pathType = 1; break;  // case 0 -> Slow
             }
         }
-        WCP_CheckPtr(param_1);
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(param_1) + 0x10);  // *(*param_1+0x10)
-        WCP_CheckPtr(&entityInner);
         uintptr_t famRet = 0;
         void* familyIbp = nullptr;
         if (s_wcp_FindCompFamily) familyIbp = s_wcp_FindCompFamily(static_cast<int64_t>(entityInner), &famRet);

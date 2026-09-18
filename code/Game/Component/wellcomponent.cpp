@@ -193,17 +193,13 @@ void WellComp_UnregisterEntity_91ba0(int64_t manager, void* param2) {
     int idx = 0;
     do {
         int64_t arr = *reinterpret_cast<int64_t*>(manager + 0xe0);
-        fn_InternalBasePtr_CheckPtr(param2);
         if (*reinterpret_cast<int64_t*>(arr + off) == *reinterpret_cast<int64_t*>(param2)) {
             if (idx < 0) return;
             int64_t* slot = reinterpret_cast<int64_t*>(
                 *reinterpret_cast<int64_t*>(manager + 0xe0) + (int64_t)idx * 8);
-            fn_InternalBasePtr_CheckPtr(slot);
             int64_t entry = *reinterpret_cast<int64_t*>(*slot + 0x10);
-            fn_InternalBasePtr_CheckPtr(&entry);
             int64_t resData = 0;
             if (s_fn_FindMapResData) s_fn_FindMapResData(entry, &resData);
-            fn_InternalBasePtr_CheckPtr(&resData);
             int rx = (int)*reinterpret_cast<int16_t*>(resData + 0x28);
             int ry = (int)*reinterpret_cast<int16_t*>(resData + 0x2a);
             WellComp_RemoveCellEntry_889e0(manager, rx, ry, -1 - idx);
@@ -353,9 +349,7 @@ void WellComp_RegisterEntity_91cb0(int64_t townMgr, void* ibp) {
     }
 
     int64_t held = *reinterpret_cast<int64_t*>(ibp);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&held);
     int64_t entity = *reinterpret_cast<int64_t*>(held + 0x10);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entity);
 
     const uint32_t tidMap = WellMapComponentTypeId();
     void* mapComp = nullptr;
@@ -363,7 +357,6 @@ void WellComp_RegisterEntity_91cb0(int64_t townMgr, void* ibp) {
     const int64_t comps = *reinterpret_cast<int64_t*>(entity + 0x30);
     for (int i = 0; i < compCount; ++i) {
         void* slot = reinterpret_cast<void*>(comps + static_cast<int64_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* comp = *reinterpret_cast<void**>(slot);
         if (!comp) continue;
         void** vt = *reinterpret_cast<void***>(comp);
@@ -377,7 +370,6 @@ void WellComp_RegisterEntity_91cb0(int64_t townMgr, void* ibp) {
     int64_t pos = 0;
     if (fn_InternalBasePtr_Ctor) new (&pos) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(mapComp));   // B.3.3 bridge
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&pos);
     if (pos == 0) {
         // Retail derefs this unguarded -- it relies on every registered water source
         // owning a MapComponent. Ours can legitimately reach here while the component

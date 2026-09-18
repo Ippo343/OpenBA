@@ -37,7 +37,6 @@ static void* StorageUI_FindChildElem(void* parentElem, const char* name) {
     uint8_t retBuf[16];
     System::String nameStr(name);
     fn_FindElement(parentElem, retBuf, &nameStr);
-    fn_InternalBasePtr_CheckPtr(retBuf);  // resolve IBP before deref
     void* result = *(void**)retBuf;
     return result;
 }
@@ -134,7 +133,6 @@ void StorageUI_Serialize(StorageUI* self) {
     for (int i = 0; i < totalCells; i++) {
         // Get child row element — CheckPtr before deref (matches original)
         fn_Element_Child((void*)tableElem, childBuf, i);
-        fn_InternalBasePtr_CheckPtr(childBuf);
         void* rowElem = *(void**)childBuf;
 
         // Find "labelStorage" element
@@ -145,7 +143,6 @@ void StorageUI_Serialize(StorageUI* self) {
 
         // Get raw child element ptr
         fn_Element_Child((void*)tableElem, childBuf, i);
-        fn_InternalBasePtr_CheckPtr(childBuf);
         uint64_t rawChild = *(uint64_t*)childBuf;
 
         // Build 0x18-byte entry {labelStorage, numberCount, rawChild} and push to
@@ -189,7 +186,6 @@ void StorageUI_Startup(StorageUI* self) {
     // Original calls FUN_140006270 which searches by StorageComponent type ID.
     uint64_t storageComp = 0;
     fn_FindComponent_Storage((void*)entityPtr, &storageComp);
-    fn_InternalBasePtr_CheckPtr(&storageComp);
 
 #ifdef _DEBUG
 #endif
@@ -312,7 +308,6 @@ void StorageUI_Startup(StorageUI* self) {
             uint8_t spriteBuf[16];
             fn_Sprite_Ctor(spriteBuf, *(uint64_t*)(resType + 0x20),
                            (void*)(resType + 0x30));
-            fn_InternalBasePtr_CheckPtr((void*)rowBase);
             void* labelElem = *(void**)rowBase;
             fn_LabelElement_SetSprite(labelElem, spriteBuf);
 
@@ -320,19 +315,15 @@ void StorageUI_Startup(StorageUI* self) {
             uint8_t uiStrBuf[16];
             fn_UIString_Ctor(uiStrBuf, *(uint64_t*)(resType + 0x28),
                              (void*)(resType + 0x30));
-            fn_InternalBasePtr_CheckPtr((void*)rowBase);
             labelElem = *(void**)rowBase;
             fn_TextElement_SetText(labelElem, uiStrBuf);
 
             // Set count
-            fn_InternalBasePtr_CheckPtr((void*)(rowBase + 8));
             void* numberElem = *(void**)(rowBase + 8);
             fn_NumberElement_SetValueInt(numberElem, count);
 
             // Show both elements (flags: hide=0, show=1)
-            fn_InternalBasePtr_CheckPtr((void*)rowBase);
             fn_Element_SetFlagsOnOff(*(void**)rowBase, 0, 1);
-            fn_InternalBasePtr_CheckPtr((void*)(rowBase + 8));
             fn_Element_SetFlagsOnOff(*(void**)(rowBase + 8), 0, 1);
 
             rowIdx++;
@@ -348,9 +339,7 @@ void StorageUI_Startup(StorageUI* self) {
             uintptr_t rowBase = *(uintptr_t*)(s + 0x30) + hideOffset;
 
             // Hide both elements (flags: hide=1, show=0) — CheckPtr before deref
-            fn_InternalBasePtr_CheckPtr((void*)rowBase);
             fn_Element_SetFlagsOnOff(*(void**)rowBase, 1, 0);
-            fn_InternalBasePtr_CheckPtr((void*)(rowBase + 8));
             fn_Element_SetFlagsOnOff(*(void**)(rowBase + 8), 1, 0);
 
             hideOffset += 0x18;

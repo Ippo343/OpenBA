@@ -292,10 +292,13 @@ void TutorialGoalCount_Cleanup(void* self) {
 //  10: Occupied building count by type
 //
 // param2: unused (game world passed implicitly via g_pGameWorldSingleton)
-// param3: InternalBasePtr* — used in case 9 (CheckPtr called on it)
+// param3: InternalBasePtr* — retail's case 9 CheckPtr'd it and read nothing else
+// from it, so with CheckPtr deleted (B.3.3 step 6D) nothing here reads it. The
+// PARAMETER stays: this is retail's signature and the caller still passes it.
 //
 // Uses int return type (bug class 7 — upper EAX bits matter).
 int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
+    (void)param3;
     EnsureHelpers();
 
     uintptr_t s = (uintptr_t)self;
@@ -336,9 +339,6 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
             uintptr_t citizenIBP = *(uintptr_t*)(citizenArray + (uintptr_t)i * 8);
             // Store in local for CheckPtr
             uintptr_t localCitizen = citizenIBP;
-            if (fn_InternalBasePtr_CheckPtr) {
-                fn_InternalBasePtr_CheckPtr(&localCitizen);
-            }
             uintptr_t citizen = localCitizen;
             if (!citizen) continue;
 
@@ -353,9 +353,6 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
             if (*(uintptr_t*)(citizen + 0x208) != 0) continue;
 
             // Get assigned profession type: citizen+0x1F0
-            if (fn_InternalBasePtr_CheckPtr) {
-                fn_InternalBasePtr_CheckPtr(&localCitizen);
-            }
             uintptr_t profType = *(uintptr_t*)(localCitizen + 0x1f0);
 
             // Resolve target profession type and compare
@@ -461,24 +458,15 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
             // node[1] = array of entity IBPs, indexed by i
             uintptr_t entityIBP = *(uintptr_t*)(node[1] + (uintptr_t)i * 8);
             uintptr_t localEntity = entityIBP;
-            if (fn_InternalBasePtr_CheckPtr) {
-                fn_InternalBasePtr_CheckPtr(&localEntity);
-            }
 
             // Find WorkPlaceComponent (FUN_140002e10, type 0x1401c80e0)
             uintptr_t workplaceIBP = 0;
             fn_FindComponent_WorkPlace((void*)localEntity, &workplaceIBP);
-            if (fn_InternalBasePtr_CheckPtr) {
-                fn_InternalBasePtr_CheckPtr(&workplaceIBP);
-            }
 
             // Check if workplace is active (byte at +0x50 != 0)
             uintptr_t workplace = workplaceIBP;
             if (workplace && *(uint8_t*)(workplace + 0x50) != 0) {
                 // Get work capacity (available job slots)
-                if (fn_InternalBasePtr_CheckPtr) {
-                    fn_InternalBasePtr_CheckPtr(&workplaceIBP);
-                }
                 if (s_fn_GetWorkCapacity) {
                     total += s_fn_GetWorkCapacity(workplaceIBP);
                 }
@@ -505,9 +493,6 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
             // Get entity IBP
             uintptr_t entityIBP = *(uintptr_t*)(entityArray + (uintptr_t)i * 8);
             uintptr_t localEntity = entityIBP;
-            if (fn_InternalBasePtr_CheckPtr) {
-                fn_InternalBasePtr_CheckPtr(&localEntity);
-            }
 
             // Find BuildingComponent
             uintptr_t buildingIBP = 0;
@@ -517,9 +502,6 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
             uintptr_t typePtr = ResolveTypePtr(s, s_TypeId_BuildingDesc);
 
             // CheckPtr and get building component
-            if (fn_InternalBasePtr_CheckPtr) {
-                fn_InternalBasePtr_CheckPtr(&buildingIBP);
-            }
             uintptr_t building = buildingIBP;
             if (!building) continue;
 
@@ -556,16 +538,10 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
             // Get entity IBP
             uintptr_t entityIBP = *(uintptr_t*)(entityArray + (uintptr_t)i * 8);
             uintptr_t localEntity = entityIBP;
-            if (fn_InternalBasePtr_CheckPtr) {
-                fn_InternalBasePtr_CheckPtr(&localEntity);
-            }
 
             // Find StorageComponent
             uintptr_t storageIBP = 0;
             fn_FindComponent_Storage((void*)localEntity, &storageIBP);
-            if (fn_InternalBasePtr_CheckPtr) {
-                fn_InternalBasePtr_CheckPtr(&storageIBP);
-            }
             uintptr_t storage = storageIBP;
             if (!storage) continue;
 
@@ -573,17 +549,11 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
             // Each item is 16 bytes (stride 2 qwords), count value at offset -8 from item+16
             int itemCount = *(int*)(storage + 0x30);
             for (int j = 0; j < itemCount; j++) {
-                if (fn_InternalBasePtr_CheckPtr) {
-                    fn_InternalBasePtr_CheckPtr(&storageIBP);
-                }
                 storage = storageIBP;
                 uintptr_t itemArray = *(uintptr_t*)(storage + 0x28);
                 // Items at stride 16 bytes (2 qwords): count at itemArray + j*16 + 8
                 int itemStored = *(int*)(itemArray + (uintptr_t)j * 16 + 8);
                 total += itemStored;
-                if (fn_InternalBasePtr_CheckPtr) {
-                    fn_InternalBasePtr_CheckPtr(&storageIBP);
-                }
             }
 
             // Re-read worldData for next iteration
@@ -599,11 +569,6 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
     // Finds a UI element by the elementName path (+0x48),
     // casts it to SpinnerElement, reads its value if not active.
     case 9: {
-        // CheckPtr on param3
-        if (fn_InternalBasePtr_CheckPtr && param3) {
-            fn_InternalBasePtr_CheckPtr(param3);
-        }
-
         // Find UI element by path
         if (!fn_FindUIElementByPath) break;
         uintptr_t foundIBP[2] = {0, 0};  // InternalBasePtr buffer
@@ -619,9 +584,6 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
         if (!sliderIBP) { break; }
 
         // Create IBP and check if active
-        if (fn_InternalBasePtr_CheckPtr) {
-            fn_InternalBasePtr_CheckPtr(&sliderIBP);
-        }
         if (fn_SpinnerElement_IsActive && fn_SpinnerElement_IsActive((void*)sliderIBP)) {
             // Retail refuses to read a spinner mid-edit. If this never clears, the
             // goal stalls forever with the right number visible on screen.
@@ -629,9 +591,6 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
         }
 
         // Read current value
-        if (fn_InternalBasePtr_CheckPtr) {
-            fn_InternalBasePtr_CheckPtr(&sliderIBP);
-        }
         if (fn_SpinnerElement_GetValue) {
             count = fn_SpinnerElement_GetValue((void*)sliderIBP);
         }
@@ -672,14 +631,8 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
             }
 
             // CheckPtr and find BuildStateComponent
-            if (fn_InternalBasePtr_CheckPtr) {
-                fn_InternalBasePtr_CheckPtr(&entityIBP);
-            }
             uintptr_t buildStateIBP = 0;
             fn_FindComponent_BuildState((void*)entityIBP, &buildStateIBP);
-            if (fn_InternalBasePtr_CheckPtr) {
-                fn_InternalBasePtr_CheckPtr(&buildStateIBP);
-            }
             uintptr_t buildState = buildStateIBP;
             if (!buildState) continue;
 

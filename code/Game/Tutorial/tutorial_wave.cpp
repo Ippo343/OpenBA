@@ -224,7 +224,6 @@ extern "C" void TutWave_SetElementFlagsRecursive(void* self, void* elemIBP, char
     if (!elemIBP) return;
     if (!fn_Element_SetFlagsOnOff || !fn_Element_ChildCount || !fn_Element_Child) return;
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(elemIBP);
     void* elem = *reinterpret_cast<void**>(elemIBP);
     if (!elem) return;
 
@@ -233,20 +232,16 @@ extern "C" void TutWave_SetElementFlagsRecursive(void* self, void* elemIBP, char
     fn_Element_SetFlagsOnOff(elem, hideFlags, showFlags);
 
     int i = 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(elemIBP);
     int n = fn_Element_ChildCount(*reinterpret_cast<void**>(elemIBP));
     while (i < n) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(elemIBP);
         uint64_t probe = 0;
         fn_Element_Child(*reinterpret_cast<void**>(elemIBP), &probe, i);
         if (probe != 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(elemIBP);
             uint64_t child = 0;
             fn_Element_Child(*reinterpret_cast<void**>(elemIBP), &child, i);
             TutWave_SetElementFlagsRecursive(self, &child, show);
         }
         ++i;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(elemIBP);
         n = fn_Element_ChildCount(*reinterpret_cast<void**>(elemIBP));
     }
 }
@@ -268,14 +263,12 @@ extern "C" void TutWave_SetAllDialogFlags(void* self, char show) {
     // pointer, so `it.node` is what retail hands to CheckPtr.
     int dialogs = 0;
     for (auto it = ui->_dialogs.GetFirst(); it; ++it) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(it.node);
         uint64_t rootIBP = 0;
         fn_DialogInstance_GetRoot(it.node->element, &rootIBP);
         if (rootIBP) {
             // Retail applies the flags to the root itself and then walks the
             // children — the root pass is inlined here, the children go through
             // the shared recursive helper (same code, same order).
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&rootIBP);
             uint32_t hideFlags = show ? 0u : 0x1000000u;
             uint32_t showFlags = show ? 0x1000000u : 0u;
             fn_Element_SetFlagsOnOff(reinterpret_cast<void*>(rootIBP), hideFlags, showFlags);
@@ -330,7 +323,6 @@ extern "C" void* TutWave_FindHighlightDialog(void* self, void* outIBP) {
 
     // Same list, same order as retail's GetFirstDialog walk (see above).
     for (auto it = ui->_dialogs.GetFirst(); it; ++it) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(it.node);
         if (fn_IsA(it.node->element, tid)) {
             *reinterpret_cast<uint64_t*>(outIBP) =
                 reinterpret_cast<uint64_t>(it.node->element);
@@ -549,7 +541,6 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
         }
     }
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x20));
     uintptr_t ui = *reinterpret_cast<uintptr_t*>(s + 0x20);
     if (!ui) return;   // no TutorialUI controller attached yet
 
@@ -566,13 +557,11 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
             uint8_t retbuf[32] = {};
             void* r = fn_UIString_Ctor(retbuf, stringTable, reinterpret_cast<const void*>(t.srcString));
             UIStr tmp = *reinterpret_cast<UIStr*>(r ? r : retbuf);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(t.uiField));
             void* elem = *reinterpret_cast<void**>(t.uiField);
             if (!elem) continue;
             fn_TextElement_SetText(elem, &tmp);
         }
         for (const auto& t : texts) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(t.uiField));
             void* elem = *reinterpret_cast<void**>(t.uiField);
             if (!elem) continue;
             UIStr cur;
@@ -586,7 +575,6 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
     // 4. clear + re-grow the image table
     void* table = nullptr;
     {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(ui + 0x48));
         table = *reinterpret_cast<void**>(ui + 0x48);
         if (table && fn_Element_ChildCount && fn_Element_RemoveChildren && fn_Element_AddChild &&
             fn_InternalBasePtr_Ctor) {
@@ -605,7 +593,6 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
         int n = *reinterpret_cast<int32_t*>(step + 0x48);
         uintptr_t data = *reinterpret_cast<uintptr_t*>(step + 0x40);
         if (n > 0 && data && table && fn_TableElement_SetChild3) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(ui + 0x18));
             uintptr_t dlgIBP = *reinterpret_cast<uintptr_t*>(ui + 0x18);
             void* dialog = dlgIBP ? *reinterpret_cast<void**>(dlgIBP + 0x18) : nullptr;
             for (int i = 0; i < n; ++i) {
@@ -682,7 +669,6 @@ extern "C" void TutWave_StepExecute(void* self, void* param2, void* param3, uint
         void* controller = nullptr;
         void* ctrlRaw = nullptr;   // whatever GetController handed back, before narrowing
         if (fn_DialogInstance_GetController) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x18));
             uint64_t ctrl = 0;
             // Third arg is a TYPE FILTER, not padding: retail is
             //   MOV R8D,[0x1401c67f0]   ; TutorialUI type id

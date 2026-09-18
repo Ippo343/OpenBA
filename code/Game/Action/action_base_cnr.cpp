@@ -169,11 +169,9 @@ void* FindComponentByTypeId(uintptr_t entity, void* retIBP, const uint32_t* pTyp
         uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
         for (int i = 0; i < n; i++) {
             void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
             void* comp = *slot;
             uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
             if (t == *pTypeId) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
                 void* c = *slot;
                 found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *pTypeId)) ? c : nullptr;
                 break;
@@ -248,7 +246,6 @@ void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress) {
     EnsureResolved();
     uintptr_t s = static_cast<uintptr_t>(self);
     float growth = progress * *reinterpret_cast<float*>(s + 0x4c);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x28));
     float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
     *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(s + 0x28) + 0x28) = growth;
     float clamped = (uvScale < growth) ? uvScale : growth;
@@ -256,7 +253,6 @@ void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress) {
 
     if (*reinterpret_cast<int8_t*>(*reinterpret_cast<int64_t*>(s + 0x38) + 100) == 0) {
         float g = (growth <= uvScale) ? growth : uvScale;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x30));
         int64_t target = *reinterpret_cast<int64_t*>(s + 0x30);
         float scalar = g;
         uint8_t vec4[64];
@@ -275,7 +271,6 @@ void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress) {
         if ((0.0f <= scaled) && (lo = scaled, uvScale < scaled)) lo = uvScale;
         float hi = growth;
         if (uvScale < growth) hi = uvScale;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x30));
         int64_t target = *reinterpret_cast<int64_t*>(s + 0x30);
         *reinterpret_cast<float*>(target + 0x134) = lo;
         *reinterpret_cast<float*>(target + 0x138) = lo;
@@ -298,7 +293,6 @@ void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress) {
     uint32_t flagsNew = flagsOld & 0xffffffef;
     *reinterpret_cast<uint32_t*>(s + 0x20) = flagsNew;
     if ((((flagsNew ^ flagsOld) & 0xffff) != 0) && (*reinterpret_cast<int64_t*>(s + 0x10) != 0)) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x10));
         if (s_fn_NotifyChanged) s_fn_NotifyChanged(*reinterpret_cast<void**>(s + 0x10));
     }
 }
@@ -364,7 +358,6 @@ void ActCNR_NR_SetVariant_1253d0(int64_t* comp, uint16_t variant, int16_t subVar
         // vtable +0x30 — show/activate model (RCX = comp)
         (*reinterpret_cast<void(**)(int64_t*)>(*comp + 0x30))(comp);
     }
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(c + 0x10));
     if (s_fn_ModelComp_2b70) s_fn_ModelComp_2b70(*reinterpret_cast<void**>(c + 0x10), 0);
 }
 
@@ -391,16 +384,13 @@ void ActCNR_SetAnimIndex_126440(int64_t self, uint32_t animIdx) {
         }
     } else {
         int64_t modelIBP = 0;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x10));
         if (s_fn_FindComp_3f60) s_fn_FindComp_3f60(*reinterpret_cast<uintptr_t*>(s + 0x10), &modelIBP);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&modelIBP);
         float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
         if (s_fn_50f0) s_fn_50f0(modelIBP, animIdx, 0.0f, 0.0f, uvScale);
         uint32_t flagsOld = *reinterpret_cast<uint32_t*>(s + 0x20);
         uint32_t flagsNew = flagsOld | 4;
         *reinterpret_cast<uint32_t*>(s + 0x20) = flagsNew;
         if ((((flagsNew ^ flagsOld) & 0xffff) != 0) && (*reinterpret_cast<int64_t*>(s + 0x10) != 0)) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x10));
             if (s_fn_NotifyChanged) s_fn_NotifyChanged(*reinterpret_cast<void**>(s + 0x10));
         }
     }
@@ -443,17 +433,13 @@ uint64_t ActCNR_SetupModelAtCell_126540(int64_t self, int cellIndex) {
 
     int64_t posIBP = 0;
     int64_t modelIBP = 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x10));
     if (s_fn_FindComp_4680) s_fn_FindComp_4680(*reinterpret_cast<uintptr_t*>(s + 0x10), &posIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x10));
     if (s_fn_FindComp_3f60) s_fn_FindComp_3f60(*reinterpret_cast<uintptr_t*>(s + 0x10), &modelIBP);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&posIBP);
     *reinterpret_cast<int16_t*>(posIBP + 0x28) = static_cast<int16_t>(cellIndex % gridW);
     *reinterpret_cast<int16_t*>(posIBP + 0x2a) = static_cast<int16_t>(cellIndex / gridW);
     *reinterpret_cast<uint64_t*>(posIBP + 0x2c) = 0x10001;
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&modelIBP);
     // Math::Transform::FromYawPitchOffset(out, &yaw, &pitch(=0), &offset(worldX,worldY,worldZ))
     float pitch = 0.0f;
     Math::Vector3 offset(worldY, worldX, worldZ);  // FromYawPitchOffset offset = {local_98, local_94, local_90}
@@ -490,9 +476,7 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
 
     // Detach model from the build queue when not already queued (bit 10 of +0x40).
     if (parent != 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&parent);
         if (((*reinterpret_cast<uint32_t*>(parent + 0x40) >> 10) & 1) == 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&parent);
             if (s_fn_c2ea0) s_fn_c2ea0(parent);
             if (s_fn_003110)
                 s_fn_003110(reinterpret_cast<int64_t*>(entityList + 0xd0),
@@ -534,9 +518,7 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
 
     // Compute the cell index from the model's grid position.
     int64_t posIBP = 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x10));
     if (s_fn_FindComp_4680) s_fn_FindComp_4680(*reinterpret_cast<uintptr_t*>(s + 0x10), &posIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&posIBP);
     int cell = static_cast<int>(*reinterpret_cast<int16_t*>(posIBP + 0x2a)) *
                    **reinterpret_cast<int**>(gameWorld + 0xf8) +
                static_cast<int>(*reinterpret_cast<int16_t*>(posIBP + 0x28));
@@ -558,7 +540,6 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
     if (s_fn_8d50) s_fn_8d50(*reinterpret_cast<int64_t*>(gameWorld + 0x118), &surfIBP, cell);
     uint32_t surfMatId = 0xffffffff;
     if (surfIBP != 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&surfIBP);
         surfMatId = *reinterpret_cast<uint32_t*>(surfIBP + 0x24);
     }
 
@@ -572,10 +553,8 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
         reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
 
     int64_t rawMatIBP = 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&newIBP);
     if (s_fn_0223c0) s_fn_0223c0(newIBP, &rawMatIBP);
     void* rng = *reinterpret_cast<void**>(gameWorld + 0xd8);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&rawMatIBP);
     int rt = s_fn_RandTol ? s_fn_RandTol(rng, 2) : 0;
     // DAT_140172204 = 90.0f (rotation scale). It resolves NULL in standalone (raw .rdata
     // constant) — use the real value, not 0 (see reference_standalone_rdata_null_fallback).
@@ -583,23 +562,19 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
     if (s_fn_9760 && rawMatIBP != 0) s_fn_9760(rawMatIBP, cell, static_cast<float>(rt) * amtScale);
 
     if (*reinterpret_cast<int64_t*>(citizenIBP) != 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(citizenIBP);
         int64_t cit28 = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(citizenIBP) + 0x28);
         // Original: FUN_140022480(*(citizen+0x28), &local_res8) where local_res8 = cell.
         if (s_fn_022480) s_fn_022480(cit28, &cellSlot);
     }
 
     if (rawMatIBP != 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&rawMatIBP);
         *reinterpret_cast<int*>(rawMatIBP + 0x28) = amount;
         *reinterpret_cast<int64_t*>(rawMatIBP + 0x30) = 0;
     }
 
     if (surfIBP != 0) {
         int64_t nrIBP = 0;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&newIBP);
         void* p = s_fn_FindComp_3050 ? s_fn_FindComp_3050(newIBP, &nrIBP) : nullptr;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p);
         if (p) *reinterpret_cast<uint32_t*>(*reinterpret_cast<int64_t*>(p) + 0x2c) = surfMatId;
     }
 
@@ -636,7 +611,6 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
     if (newIBP != 0) {
         uintptr_t mapIBP = 0;
         if (s_fn_FindComp_4680) s_fn_FindComp_4680(newIBP, &mapIBP);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&mapIBP);
         uint8_t* mc = reinterpret_cast<uint8_t*>(mapIBP);
         uintptr_t mapGrid = *reinterpret_cast<uintptr_t*>(gameWorld + 0xf8);
         uint8_t* cells = mapGrid ? *reinterpret_cast<uint8_t**>(mapGrid + 0x80) : nullptr;
@@ -650,16 +624,12 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
     }
 
     if ((harvestFlag != 0) && (*reinterpret_cast<int64_t*>(citizenIBP) != 0)) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(citizenIBP);
         int64_t out = 0;
         if (s_fn_022520) s_fn_022520(*reinterpret_cast<int64_t*>(citizenIBP), &out);
         if (out != 0) {
             int64_t nrIBP2 = 0;
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&newIBP);
             void* p = s_fn_FindComp_3050 ? s_fn_FindComp_3050(newIBP, &nrIBP2) : nullptr;
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p);
             uint32_t v = p ? *reinterpret_cast<uint32_t*>(*reinterpret_cast<int64_t*>(p) + 0x28) : 0;
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&out);
             if (s_fn_044810) s_fn_044810(out, v);
         }
     }

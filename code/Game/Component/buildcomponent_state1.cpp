@@ -112,8 +112,6 @@ extern "C" { void* g_pConstructionDemoEntity = nullptr; }
 // variant (+0x166) at the final sub-mesh of a multi-stage group; a genuine foundation
 // sits at variant 0. Foundation / single-mesh buildings -> false (i.e. "build me").
 static bool BCS1_IsModelComplete(uintptr_t buildComp) {
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(buildComp + 0x10));
     uintptr_t entity = *reinterpret_cast<uintptr_t*>(buildComp + 0x10);
     if (!entity) return false;
     uint32_t tidModel = ::Object::GetTypeIdByName("ModelComponent");
@@ -124,7 +122,6 @@ static bool BCS1_IsModelComplete(uintptr_t buildComp) {
     void* model = nullptr;
     for (int i = 0; i < count; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* comp = *slot;
         if (!comp) continue;
         typedef uint32_t (*GT_t)(void*);
@@ -254,11 +251,9 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
     *reinterpret_cast<uint32_t*>(self + 0x4c) = 1;
 
     // multiplier from workplace component (+0x58)
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
     uintptr_t wpIbp = 0;
     if (s_find4740) s_find4740(*reinterpret_cast<uintptr_t*>(self + 0x10), &wpIbp);
     if (wpIbp != 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpIbp);
         // Retail: bc+0x4c = WorkplaceComponent+0x58 (the build-effort multiplier). In the
         // standalone exe the WorkPlaceComponent lifecycle is inert so +0x58 stays 0, which
         // would clobber the default 1 set just above and make the state-8 build target
@@ -270,11 +265,9 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
     }
 
     // reset the site ClearAreaComponent build variant (a170 -> 8270)
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
     uintptr_t mcIbp = 0;
     fn_FindComponent_SM(reinterpret_cast<void*>(*reinterpret_cast<uintptr_t*>(self + 0x10)), &mcIbp);
     if (mcIbp != 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&mcIbp);
         ClearArea_Finalize8270(reinterpret_cast<void*>(mcIbp));
     }
 
@@ -317,7 +310,6 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
             reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
 
         // find the WorkComponent (0x1401c8070) the work posts under
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
         uintptr_t workCompIbp = 0;
         if (s_find3050) s_find3050(*reinterpret_cast<uintptr_t*>(self + 0x10), &workCompIbp);
 
@@ -327,7 +319,6 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
         // (the town->site haul). Exe: CitizenAI_impl_ec60(*pWorkCompIBP, 0x2001, 1, &workIBP).
         // Needs the live-citizen action stack + pathfinder.
         if (s_postEc60 && workCompIbp != 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIbp);
             s_postEc60(workCompIbp, 0x2001, 1, &workIbp);
         }
 
@@ -337,12 +328,10 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
         void* buildDesc = (descObj && fn_IsDerivedFrom && buildDescTid &&
                            fn_IsDerivedFrom(descObj, buildDescTid)) ? descObj : nullptr;
 
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
         uintptr_t storageIbp = 0;
         if (s_findStorage) s_findStorage(*reinterpret_cast<uintptr_t*>(self + 0x10), &storageIbp);
 
         if (storageIbp != 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&storageIbp);
             // B.3.2 bridge: exe 0x14000f090 IS Collection::Array<Bytes<0x10,8>>::SetSize(n).
             GameColl::AsArray<GameColl::Bytes<0x10, 8>>(
                 reinterpret_cast<void*>(storageIbp + 0x28)).SetSize(0);
@@ -368,9 +357,7 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
                 }
             }
 
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&storageIbp);
             *reinterpret_cast<uint32_t*>(storageIbp + 0x3c) = acceptMask;
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&storageIbp);
             *reinterpret_cast<int*>(storageIbp + 0x38) = totalQty;
 
         }
@@ -451,11 +438,9 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
     // WorkPlaceComponent_SetAccepting also drives a status-icon warning; only the
     // gate-relevant +0x50 is reproduced here — the visual is deferred to the live WPC.)
     if (s_findWpc2e10) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
         uintptr_t wpcIbp = 0;
         s_findWpc2e10(*reinterpret_cast<uintptr_t*>(self + 0x10), &wpcIbp);
         if (wpcIbp != 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpcIbp);
             void* wpc = *reinterpret_cast<void**>(&wpcIbp);
             if (wpc) {
                 *reinterpret_cast<char*>(reinterpret_cast<uintptr_t>(wpc) + 0x50) = 1;

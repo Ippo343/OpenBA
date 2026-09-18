@@ -156,19 +156,16 @@ static void* AsType(void* obj, uint32_t typeId) {
     return fn_IsDerivedFrom(obj, typeId) ? obj : nullptr;
 }
 
-static void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 
 // Find a component through one of the member-return finders. `entitySlot` is the
 // owning component's IBP field (comp+0x10); returns the component or null.
 static void* FindOn(void* entitySlot, fn_FindIBP_t finder) {
     if (!finder || !entitySlot) return nullptr;
-    CheckPtr(entitySlot);
     uintptr_t entity = *reinterpret_cast<uintptr_t*>(entitySlot);
     if (!entity) return nullptr;
     void* out = nullptr;
     finder(entity, &out);
     if (!out) return nullptr;
-    CheckPtr(&out);
     return out;
 }
 
@@ -190,12 +187,10 @@ extern "C" void* Destroy_FindDecalComponent_b630(uintptr_t entity, void* retIBP)
         uintptr_t base = *reinterpret_cast<uintptr_t*>(entity + 0x30);
         for (int i = 0; i < n; ++i) {
             void** ibp = reinterpret_cast<void**>(base + static_cast<uintptr_t>(i) * 8);
-            CheckPtr(ibp);
             void* obj = *ibp;
             if (!obj) continue;
             uint32_t t = (*reinterpret_cast<uint32_t (**)(void*)>(*reinterpret_cast<uintptr_t*>(obj) + 0x10))(obj);
             if (t == typeId) {
-                CheckPtr(ibp);
                 void* o = *ibp;
                 if (fn_IsDerivedFrom && fn_IsDerivedFrom(o, typeId)) found = o;
                 break;
@@ -249,7 +244,6 @@ extern "C" void ActionStack_AbortForEntity_c52c0(void* stack, void** pEntityIbp)
     for (int i = 0; i < count && !hit; ++i) {
         void* act = items[i];
         if (!act) continue;
-        CheckPtr(&items[i]);
         act = items[i];
         if (!act) continue;
         void* fn = slotOf(act, 9);                 // +0x48 ReferencesEntity
@@ -263,7 +257,6 @@ extern "C" void ActionStack_AbortForEntity_c52c0(void* stack, void** pEntityIbp)
         void* cur = items[i];
         if (!cur) continue;
         for (void* p = cur; p != nullptr; ) {
-            CheckPtr(&p);
             void* fn = slotOf(p, 8);               // +0x40 Abort
             if (!fn) { warnSlot(8); break; }
             reinterpret_cast<void (*)(void*)>(fn)(p);
@@ -309,10 +302,8 @@ extern "C" void TownMgr_AbortCitizenActionsFor_89e30(void* townMgr, void** pEnti
     for (int i = 0; i < n; ++i) {
         void** slot = reinterpret_cast<void**>(base + static_cast<uintptr_t>(i) * 8);
         void* entityCopy = *pEntityIbp;
-        CheckPtr(slot);
         uintptr_t citizen = reinterpret_cast<uintptr_t>(*slot);
         if (!citizen) continue;
-        CheckPtr(reinterpret_cast<void*>(citizen + 0x278));
         uintptr_t ai = *reinterpret_cast<uintptr_t*>(citizen + 0x278);
         if (!ai) continue;
         ActionStack_AbortForEntity_c52c0(reinterpret_cast<void*>(ai + 0x48), &entityCopy);
@@ -456,7 +447,6 @@ extern "C" void Destroy_RubbleStep_d5d0(void* destroyComp) {
     }
 
     // Tell the owner entity its model changed (the MultiObjectComponent child forwarder).
-    CheckPtr(reinterpret_cast<void*>(mc + 0x10));
     void* modelOwner = *reinterpret_cast<void**>(mc + 0x10);
     if (modelOwner && s_modelNotify) s_modelNotify(modelOwner, 0);
 
@@ -482,11 +472,9 @@ extern "C" void Destroy_RubbleStep_d5d0(void* destroyComp) {
     // Scorch decal: swap the DecalComponent's state, and if a decal is currently
     // placed (+0x2c decalId >= 0) release and re-place it so the new state shows.
     void* decalIbp = nullptr;
-    CheckPtr(entitySlot);
     uintptr_t entity = *reinterpret_cast<uintptr_t*>(entitySlot);
     if (entity) Destroy_FindDecalComponent_b630(entity, &decalIbp);
     if (decalIbp) {
-        CheckPtr(&decalIbp);
         uintptr_t dc = reinterpret_cast<uintptr_t>(decalIbp);
         if (rubbleDecalState != *reinterpret_cast<int*>(dc + 0x28)) {
             *reinterpret_cast<int*>(dc + 0x28) = rubbleDecalState;
@@ -516,7 +504,6 @@ extern "C" char Destroy_State6Enter_d4d0(void* data, void* /*sm*/) {
         if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
             uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
                 reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
-            CheckPtr(entitySlot);
             void* entityCopy = *reinterpret_cast<void**>(entitySlot);
             if (townMgr) TownMgr_AbortCitizenActionsFor_89e30(
                 reinterpret_cast<void*>(townMgr), &entityCopy);

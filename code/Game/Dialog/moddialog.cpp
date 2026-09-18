@@ -152,13 +152,10 @@ static void ModDialog_RefreshDisplay_Impl(ModDialog* self) {
 conflict_done:
 
         // Set text parameters: name, author, description
-        fn_InternalBasePtr_CheckPtr((void*)(entry + 0x00));
         fn_TextElement_SetParameter(*(void**)(entry + 0x00), 0, (void*)m);  // mod->m_name
 
-        fn_InternalBasePtr_CheckPtr((void*)(entry + 0x08));
         fn_TextElement_SetParameter(*(void**)(entry + 0x08), 0, (void*)(m + 0x08));  // mod->m_author
 
-        fn_InternalBasePtr_CheckPtr((void*)(entry + 0x18));
         fn_TextElement_SetParameter(*(void**)(entry + 0x18), 0, (void*)(m + 0x10));  // mod->m_description
 
         // Format version string: "versionMinor (versionString)"
@@ -172,12 +169,10 @@ conflict_done:
 
             System::String formatted = System::String::Format("%i (%s)", (uint64_t)versionMinor, buildStr._data);
 
-            fn_InternalBasePtr_CheckPtr((void*)(entry + 0x10));
             fn_TextElement_SetParameter(*(void**)(entry + 0x10), 0, &formatted);
         }
 
         // Set enabled checkbox state: entry+0x28 = checkLoaded, element +0xD8 = enabled byte
-        fn_InternalBasePtr_CheckPtr((void*)(entry + 0x28));
         *(uint8_t*)(*(uintptr_t*)(entry + 0x28) + 0xD8) = enabled;
 
         // Update vtChild element with color (vtable[10] = offset +0x50)
@@ -191,7 +186,6 @@ conflict_done:
         } else {
             rowColor = 0x10ffffff;
         }
-        fn_InternalBasePtr_CheckPtr((void*)(entry + 0x30));
         {
             void* elem = *(void**)(entry + 0x30);
             void** vtable = *(void***)elem;
@@ -200,7 +194,6 @@ conflict_done:
         }
 
         // Show/hide conflict icon (entry+0x20 = imageConflict)
-        fn_InternalBasePtr_CheckPtr((void*)(entry + 0x20));
         fn_Element_SetFlagsOnOff(*(void**)(entry + 0x20),
                                   hasConflict ? 0 : 1,    // set bit 0 (hidden) when no conflict
                                   hasConflict ? 1 : 0);   // clear bit 0 (visible) when conflict
@@ -239,10 +232,8 @@ void ModDialog_Slot4(ModDialog* self) {
         System::String retbuf("buttonCancel");
         uint8_t elemBuf[8];
         fn_DialogInstance_FindElement(self, elemBuf, &retbuf);
-        fn_InternalBasePtr_CheckPtr(elemBuf);
         void* elem = *(void**)elemBuf;
         fn_Element_SetElementId(elem, 100);
-        fn_InternalBasePtr_CheckPtr(elemBuf);
         *(uint32_t*)(*(uintptr_t*)elemBuf + 0xC0) = 8;
     }
 
@@ -252,7 +243,6 @@ void ModDialog_Slot4(ModDialog* self) {
         System::String retbuf("buttonOk");
         uint8_t elemBuf[8];
         fn_DialogInstance_FindElement(self, elemBuf, &retbuf);
-        fn_InternalBasePtr_CheckPtr(elemBuf);
         void* elem = *(void**)elemBuf;
         fn_Element_SetElementId(elem, 0x65);
         *(uint64_t*)buttonOkBuf = *(uint64_t*)elemBuf;
@@ -264,7 +254,6 @@ void ModDialog_Slot4(ModDialog* self) {
         System::String retbuf("tableMods");
         uint8_t elemBuf[8];
         fn_DialogInstance_FindElement(self, elemBuf, &retbuf);
-        fn_InternalBasePtr_CheckPtr(elemBuf);
         void* elem = *(void**)elemBuf;
         // Store InternalPtr at +0xC8
         new ((void*)(s + 0xC8)) ::Object::InternalBasePtr(
@@ -289,7 +278,6 @@ void ModDialog_Slot4(ModDialog* self) {
         void* clonedElem = *(void**)cloneBuf;
 
         // Add cloned element to tableMods
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0xC8));
         void* tableElem = *(void**)(s + 0xC8);
 
         fn_Element_AddChild(tableElem, &clonedElem);
@@ -326,10 +314,8 @@ void ModDialog_Slot4(ModDialog* self) {
 
         for (auto& e : findList) {
             System::String strBuf(e.name);
-            fn_InternalBasePtr_CheckPtr(cloneBuf);
             uint8_t retBuf[8];
             fn_FindElement(clonedElem, retBuf, &strBuf);
-            fn_InternalBasePtr_CheckPtr(retBuf);
             void* found = *(void**)retBuf;
             new (e.buf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
         }
@@ -337,43 +323,33 @@ void ModDialog_Slot4(ModDialog* self) {
         // Get vtable[0x58] child (Child(0)) of cloned element
         uint8_t vtChildBuf[8] = {};
         {
-            fn_InternalBasePtr_CheckPtr(cloneBuf);
             void** vt = *(void***)clonedElem;
             // vtable[0x58/8] = vtable[11] = Element::Child(int)
             typedef void* (*fn_Child_t)(void* self, void* retbuf, int index);
             uint8_t childRetBuf[8];
             ((fn_Child_t)vt[11])(clonedElem, childRetBuf, 0);
-            fn_InternalBasePtr_CheckPtr(childRetBuf);
             void* child = *(void**)childRetBuf;
             new (vtChildBuf) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(child));   // B.3.3 bridge
         }
 
         // Assign element IDs
-        fn_InternalBasePtr_CheckPtr(checkLoadedBuf);
         fn_Element_SetElementId(*(void**)checkLoadedBuf, i + 1000);
-        fn_InternalBasePtr_CheckPtr(buttonTopBuf);
         fn_Element_SetElementId(*(void**)buttonTopBuf, i + 4000);
-        fn_InternalBasePtr_CheckPtr(buttonDownBuf);
         fn_Element_SetElementId(*(void**)buttonDownBuf, i + 3000);
-        fn_InternalBasePtr_CheckPtr(buttonUpBuf);
         fn_Element_SetElementId(*(void**)buttonUpBuf, i + 2000);
-        fn_InternalBasePtr_CheckPtr(buttonDetailsBuf);
         fn_Element_SetElementId(*(void**)buttonDetailsBuf, i + 5000);
 
         // Hide Up+Top for first mod (vtable[8] = Element::Hide virtual, arg=0 matches original)
         if (i == 0) {
-            fn_InternalBasePtr_CheckPtr(buttonUpBuf);
             void** upVt = *(void***)*(void**)buttonUpBuf;
             typedef void (*fn_VHide_t)(void*, int);
             ((fn_VHide_t)upVt[8])(*(void**)buttonUpBuf, 0);
-            fn_InternalBasePtr_CheckPtr(buttonTopBuf);
             void** topVt = *(void***)*(void**)buttonTopBuf;
             ((fn_VHide_t)topVt[8])(*(void**)buttonTopBuf, 0);
         }
         // Hide Down for last mod
         if (i == modCount - 1) {
-            fn_InternalBasePtr_CheckPtr(buttonDownBuf);
             void** downVt = *(void***)*(void**)buttonDownBuf;
             typedef void (*fn_VHide_t)(void*, int);
             ((fn_VHide_t)downVt[8])(*(void**)buttonDownBuf, 0);
@@ -517,7 +493,6 @@ void ModDialog_Slot4(ModDialog* self) {
         System::String strBuf("buttonBrowse");
         uint8_t elemBuf[8];
         fn_DialogInstance_FindElement(self, elemBuf, &strBuf);
-        fn_InternalBasePtr_CheckPtr(elemBuf);
         void* elem = *(void**)elemBuf;
         fn_Element_Hide(elem, true);
     }
@@ -527,7 +502,6 @@ void ModDialog_Slot4(ModDialog* self) {
         System::String strBuf("groupProgress");
         uint8_t elemBuf[8];
         fn_DialogInstance_FindElement(self, elemBuf, &strBuf);
-        fn_InternalBasePtr_CheckPtr(elemBuf);
         void* elem = *(void**)elemBuf;
         fn_Element_Hide(elem, true);
     }
@@ -553,7 +527,6 @@ static void ModDialog_ToggleMod_Impl(ModDialog* self, int index) {
     void* modSingleton = *(void**)g_ppModificationSingleton;
 
     uintptr_t entry = *(uintptr_t*)(s + 0xB8) + (uintptr_t)(int64_t)index * 0x58;
-    fn_InternalBasePtr_CheckPtr((void*)(entry + 0x28));
     uintptr_t checkElem = *(uintptr_t*)(entry + 0x28);
     fn_Modification_Enable(modSingleton, index, *(uint8_t*)(checkElem + 0xD8) != 0);
 
@@ -705,7 +678,6 @@ static void ModDialog_Apply_Impl(ModDialog* self) {
 
             if (gameWorld == nullptr) {
                 // Menu context: simple reload via +0xD0 controller
-                fn_InternalBasePtr_CheckPtr((void*)(s + 0xD0));
                 fn_MainMenu_Reload(*(void**)(s + 0xD0));
             } else {
                 // Game context: allocate SavedState (0x10 bytes), construct it
@@ -732,7 +704,6 @@ static void ModDialog_Apply_Impl(ModDialog* self) {
                 new (&nullRef2) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
                 // Trigger game reload with saved state
-                fn_InternalBasePtr_CheckPtr((void*)(s + 0xD0));
                 fn_Game_ReloadWithSave(*(void**)(s + 0xD0), statePtr, (void*)(uintptr_t)-1, &nullRef2);
             }
         } else {

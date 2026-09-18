@@ -470,8 +470,6 @@ void RemovalTool_Draw(RemovalTool* self, void* context, char param3) {
                         // Check removeBuildings flag (+0x43) and parent entity destruction
                         if (removalDesc && *(char*)(removalDesc + 0x43) != '\0' && entity != nullptr) {
                             void* entityForCheck = entity;
-                            if (fn_InternalBasePtr_CheckPtr)
-                                fn_InternalBasePtr_CheckPtr(&entityForCheck);
 
                             // Get parent entity
                             uintptr_t parentIBP = 0;
@@ -479,8 +477,6 @@ void RemovalTool_Draw(RemovalTool* self, void* context, char param3) {
                                 s_fn_GetParentEntity((uintptr_t)entityForCheck, &parentIBP);
                             }
                             if (parentIBP != 0) {
-                                if (fn_InternalBasePtr_CheckPtr)
-                                    fn_InternalBasePtr_CheckPtr(&parentIBP);
                                 if (s_fn_IsMarkedForDestruction) {
                                     canRemove = s_fn_IsMarkedForDestruction(parentIBP);
                                 }

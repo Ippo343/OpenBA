@@ -118,7 +118,6 @@ static void* FrustumOutlineDescription_CreateElement(void* self, void** param_2)
         reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
     if (fn_ElementDescription_CreateInstance)
         fn_ElementDescription_CreateInstance(self, ibp);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);
     void* e = *reinterpret_cast<void**>(ibp);
 
     if (e) {

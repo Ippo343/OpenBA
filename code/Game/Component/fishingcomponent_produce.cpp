@@ -54,7 +54,6 @@ void Resolve() {
 int RadiusOf(uintptr_t comp) {
     Resolve();
     if (!s_tidRadiusDesc || !*s_tidRadiusDesc) return -1;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     const uintptr_t entity = *reinterpret_cast<uintptr_t*>(comp + 0x10);
     if (!entity) return -1;
     const uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x28);
@@ -77,13 +76,11 @@ int RadiusOf(uintptr_t comp) {
 bool TileCentre(uintptr_t comp, int* cx, int* cy) {
     Resolve();
     if (!s_findMap) return false;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     const uintptr_t entity = *reinterpret_cast<uintptr_t*>(comp + 0x10);
     if (!entity) return false;
     uintptr_t mcIbp = 0;
     s_findMap(entity, &mcIbp);
     if (!mcIbp) return false;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&mcIbp);
     // mcIbp already IS the MapComponent: the finder writes the component into the
     // out-param and returns that out-param's address, so retail's `*self_00` and this
     // local are the same value — no second dereference.

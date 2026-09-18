@@ -50,7 +50,6 @@ static int CemeteryGetBurialCount_Impl(void* cemeteryComp) {
         uintptr_t entityIPtr = *(uintptr_t*)(entitySlot + 8 + (uintptr_t)graveIdx * 0x30);
         if (entityIPtr == 0) continue;
 
-        fn_InternalBasePtr_CheckPtr((void*)&entityIPtr);
         uintptr_t entity = entityIPtr;
         if (!entity) continue;
 
@@ -62,7 +61,6 @@ static int CemeteryGetBurialCount_Impl(void* cemeteryComp) {
         bool found = false;
         for (int c = 0; c < compCount; c++) {
             uintptr_t compIPtr = compArray[c];
-            fn_InternalBasePtr_CheckPtr((void*)&compIPtr);
             void* comp = (void*)compIPtr;
             if (!comp) continue;
 

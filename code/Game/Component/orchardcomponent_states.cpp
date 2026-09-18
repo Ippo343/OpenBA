@@ -217,10 +217,8 @@ extern "C" char Orchard_State2Enter(void* selfV, void* /*sm*/) {
     Resolve();
     if (!selfV || !s_FindWorkPlace_2e10 || !s_SetWorkplaceActive) return 0;
     uintptr_t s = reinterpret_cast<uintptr_t>(selfV);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
     uintptr_t wpIBP = 0;
     s_FindWorkPlace_2e10(*reinterpret_cast<uintptr_t*>(s + 0x10), &wpIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpIBP);
     s_SetWorkplaceActive(wpIBP, 0);
     return 0;
 }
@@ -278,21 +276,17 @@ extern "C" char Orchard_State9Enter(void* selfV, void* /*sm*/) {
 
     // 1. workplace ← master switch
     O9_STEP(1, "find workplace + SetWorkplaceActive");
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
     uintptr_t wpIBP = 0;
     if (s_FindWorkPlace_2e10)
         s_FindWorkPlace_2e10(*reinterpret_cast<uintptr_t*>(s + 0x10), &wpIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpIBP);
     if (s_SetWorkplaceActive)
         s_SetWorkplaceActive(wpIBP, *reinterpret_cast<char*>(s + 0x48));
 
     // 2. footprint rect
     O9_STEP(2, "find position component (footprint rect)");
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
     uintptr_t posIBP = 0;
     if (s_FindPosition_4680)
         s_FindPosition_4680(*reinterpret_cast<uintptr_t*>(s + 0x10), &posIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&posIBP);
     if (!posIBP) return 1;            // SA: retail derefs unguarded; without a position
                                       // component there is no footprint to lay out at all.
     const int rectX = *reinterpret_cast<int16_t*>(posIBP + 0x28);
@@ -352,7 +346,6 @@ extern "C" char Orchard_State9Enter(void* selfV, void* /*sm*/) {
 
     // 6. seed the natural-resource layer over the footprint
     O9_STEP(4, "CreateNaturalResource");
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&posIBP);
     if (s_CreateNaturalResource) s_CreateNaturalResource(posIBP);
 
     // 7. build the PlantOrchard work item carrying the chosen tree type
@@ -374,10 +367,8 @@ extern "C" char Orchard_State9Enter(void* selfV, void* /*sm*/) {
     // 8. post it. Retail hand-rolls the component scan for type id DWORD_1401c8070 here
     // instead of calling the shared finder; 0x140003050 performs the identical scan
     // (same type id, same IsDerivedFrom confirmation), so we call it.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
     uintptr_t targetIBP = 0;
     if (s_Find_3050) s_Find_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &targetIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&targetIBP);
     O9_STEP(6, "post work to the work component");
     {
         static bool once = false;
@@ -422,10 +413,8 @@ extern "C" char Orchard_State9PerFrame(void* selfV, void* sm, void* /*time*/) {
     }
     if (planted != count) return 1;
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
     uintptr_t wpIBP = 0;
     if (s_Find_3050) s_Find_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &wpIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpIBP);
     // Retail recycles one stack slot for the finder out-param and then for `want`.
     // We use separate locals: identical behaviour, and it avoids the recycled-IBP trap
     // where a finder's return value is held across other code.
@@ -488,7 +477,6 @@ int OrchardHoleCount(uintptr_t s) {
 void OrchardPostTendArea(uintptr_t s) {
     // Retail runs a finder into a throwaway out-param here before allocating and never
     // reads the result — kept for shape, since it also runs the CheckPtr side effects.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
     uintptr_t unusedIBP = 0;
     if (s_Find_3050) s_Find_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &unusedIBP);
 
@@ -505,20 +493,16 @@ void OrchardPostTendArea(uintptr_t s) {
         reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
     else workIBP = reinterpret_cast<uintptr_t>(work);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
     uintptr_t targetIBP = 0;
     if (s_Find_3050) s_Find_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &targetIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&targetIBP);
     if (s_PostWork) s_PostWork(targetIBP, 1, 0, &workIBP);
 }
 
 // Is the work component currently holding a work slot for us? (0x14012ead0)
 bool OrchardHasWork(uintptr_t s) {
     if (!s_HasWorkSlot) return false;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
     uintptr_t wcIBP = 0;
     if (s_Find_3050) s_Find_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &wcIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wcIBP);
     return s_HasWorkSlot(wcIBP) != 0;
 }
 
@@ -660,10 +644,8 @@ extern "C" char Orchard_State10Update(void* selfV, void* /*sm*/, void* /*time*/)
     if (!selfV) return 1;
     uintptr_t s = reinterpret_cast<uintptr_t>(selfV);
     if (OrchardHasWork(s)) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
         uintptr_t wcIBP = 0;
         if (s_Find_3050) s_Find_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &wcIBP);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wcIBP);
         if (s_DeactivateWorkplace) s_DeactivateWorkplace(wcIBP);
     }
     return 1;
@@ -711,10 +693,8 @@ extern "C" char Orchard_State10PerFrame(void* selfV, void* sm, void* /*time*/) {
         }
     }
     if (hasWork && !inSeason) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
         uintptr_t wcIBP = 0;
         if (s_Find_3050) s_Find_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &wcIBP);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wcIBP);
         if (s_DeactivateWorkplace) s_DeactivateWorkplace(wcIBP);
     } else if (!hasWork && inSeason) {
         OrchardPostTendArea(s);
@@ -737,7 +717,6 @@ extern "C" char Orchard_State12Enter(void* selfV, void* /*sm*/) {
     if (!selfV) return 1;
     uintptr_t s = reinterpret_cast<uintptr_t>(selfV);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
     uintptr_t unusedIBP = 0;
     if (s_Find_3050) s_Find_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &unusedIBP);
 
@@ -755,10 +734,8 @@ extern "C" char Orchard_State12Enter(void* selfV, void* /*sm*/) {
         reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
     else workIBP = reinterpret_cast<uintptr_t>(work);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
     uintptr_t targetIBP = 0;
     if (s_Find_3050) s_Find_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &targetIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&targetIBP);
     {   // state 12 is only reachable when ValidateRefs found a hole, so "we got here at
         // all" is the interesting fact; the hole count says how much replanting is due.
         static int s_n = 0;
@@ -829,18 +806,14 @@ extern "C" char Orchard_State11Enter(void* selfV, void* /*sm*/) {
         reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
     else workIBP = reinterpret_cast<uintptr_t>(work);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
     uintptr_t targetIBP = 0;
     if (s_Find_3050) s_Find_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &targetIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&targetIBP);
     if (s_PostWork) s_PostWork(targetIBP, 1, 0, &workIBP);
 
     // Footprint stamp. Retail passes *(gw+0xf8) — the map grid — and the rect as four
     // int16s off the position component.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
     uintptr_t posIBP = 0;
     if (s_FindPosition_4680) s_FindPosition_4680(*reinterpret_cast<uintptr_t*>(s + 0x10), &posIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&posIBP);
     void* grid = nullptr;
     if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
         grid = *reinterpret_cast<void**>(
@@ -903,10 +876,8 @@ extern "C" char Orchard_State11PerFrame(void* selfV, void* sm, void* /*time*/) {
     // Retail inlines the WorkComponent scan here rather than calling 0x140003050; the scan
     // is identical (same type id DWORD_1401c8070, same IsDerivedFrom confirmation), so we
     // call the shared finder. Note the release is unconditional — no HasWorkSlot test.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
     uintptr_t wcIBP = 0;
     if (s_Find_3050) s_Find_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &wcIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wcIBP);
     if (s_DeactivateWorkplace) s_DeactivateWorkplace(wcIBP);
     OrchardRequestState(sm, 10);
     return 1;
@@ -982,16 +953,12 @@ extern "C" char Orchard_State20Enter(void* selfV, void* /*sm*/) {
     if (!selfV) return 1;
     uintptr_t s = reinterpret_cast<uintptr_t>(selfV);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
     uintptr_t wcIBP = 0;
     if (s_Find_3050) s_Find_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &wcIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wcIBP);
     if (s_HasWorkSlot && s_HasWorkSlot(wcIBP)) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wcIBP);
         if (s_DeactivateWorkplace) s_DeactivateWorkplace(wcIBP);
     }
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
     uintptr_t entity = *reinterpret_cast<uintptr_t*>(s + 0x10);
     void* caDesc = FindClearAreaDescription(entity);
 
@@ -1027,7 +994,6 @@ extern "C" char Orchard_State20Enter(void* selfV, void* /*sm*/) {
     if (fn_InternalBasePtr_Ctor) new (&workIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
     else workIBP = reinterpret_cast<uintptr_t>(work);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wcIBP);
     if (s_PostWork) s_PostWork(wcIBP, 0x401, 0, &workIBP);
     return 1;
 }
@@ -1040,10 +1006,8 @@ extern "C" char Orchard_State20Update(void* selfV, void* /*sm*/, void* /*time*/)
     Resolve();
     if (!selfV) return 1;
     uintptr_t s = reinterpret_cast<uintptr_t>(selfV);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
     uintptr_t wcIBP = 0;
     if (s_Find_3050) s_Find_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &wcIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wcIBP);
     if (s_DeactivateWorkplace) s_DeactivateWorkplace(wcIBP);
     return 1;
 }
@@ -1060,10 +1024,8 @@ extern "C" char Orchard_State20PerFrame(void* selfV, void* sm, void* /*time*/) {
     if (!selfV) return 1;
     uintptr_t s = reinterpret_cast<uintptr_t>(selfV);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
     uintptr_t caIBP = 0;
     fn_FindComponent_SM(*reinterpret_cast<void**>(s + 0x10), &caIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&caIBP);
 
     // SA: retail derefs the finder result unguarded (caComp+0x18 is the description). A
     // null here is NOT benign — ClearAreaCtrl_IsDone answers `true` for a null component,

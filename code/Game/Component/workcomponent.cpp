@@ -302,19 +302,15 @@ void WorkComponent_RegisterWorkSlot(void* selfP) {
         if (fn_InternalBasePtr_Ctor) new (valueIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     }
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(valueIbp);
     *(uint32_t*)(self + 0x2c) = *(uint32_t*)(valueIbp[0] + 0x24);
 
     if (s_fn_CitizenAI_8e30)
         s_fn_CitizenAI_8e30(*(void**)((uintptr_t)*g_pGameWorldSingleton + 0x118), key);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(self + 0x10));
     int64_t compIbp[1] = {0};
     if (s_fn_WC_FindComp) s_fn_WC_FindComp(*(uintptr_t*)(self + 0x10), compIbp);
     if (compIbp[0] != 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(compIbp);
         if (s_fn_WC_SetMeshFlag) s_fn_WC_SetMeshFlag((void*)compIbp[0], 2, '\0');
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(compIbp);
         if (s_fn_WC_SetMeshFlag) s_fn_WC_SetMeshFlag((void*)compIbp[0], 3, '\0');
     }
 }

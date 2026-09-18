@@ -61,9 +61,6 @@ void EnsureMem() {
 }
 
 // CheckPtr convenience (engine_funcs export; resolves at runtime).
-inline void CheckPtr(void* ibp) {
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);
-}
 
 // AVL node field accessors (offsets verified against decompile/disasm).
 inline uint64_t& NodeKey(int64_t n)    { return *reinterpret_cast<uint64_t*>(n + 0x00); }
@@ -330,11 +327,9 @@ extern "C" void PlayerTrade_BSTInsert_102e30(int64_t param_1, void* keyIBP,
 
     // First pass: search; if an existing node matches the key, update in place.
     while (cur != 0) {
-        CheckPtr(reinterpret_cast<void*>(cur));
         if (key < NodeKey(cur)) {
             cur = NodeRight(cur);
         } else {
-            CheckPtr(keyIBP);
             if (key <= NodeKey(cur)) {
                 // exact match -> update flag + payloads, no structural change.
                 *reinterpret_cast<uint8_t*>(cur + 0x10) = 1;
@@ -378,9 +373,7 @@ extern "C" void PlayerTrade_BSTInsert_102e30(int64_t param_1, void* keyIBP,
             // Inner loop: descend right while node.key <= newKey (and check exact dup).
             for (;;) {
                 parent = walk;
-                CheckPtr(reinterpret_cast<void*>(parent));
                 if (NodeKey(parent) > newKey) break;  // go left branch below
-                CheckPtr(&newKey);
                 if (newKey <= NodeKey(parent)) {
                     return;  // duplicate appeared mid-walk; nothing to do
                 }
@@ -446,11 +439,9 @@ extern "C" void PlayerTrade_BSTFindRemove_2c690(int64_t* root, void* keyIBP) {
     if (self == 0) return;
     uint64_t key = *reinterpret_cast<uint64_t*>(keyIBP);
     do {
-        CheckPtr(reinterpret_cast<void*>(self));
         if (key < NodeKey(self)) {
             self = NodeRight(self);
         } else {
-            CheckPtr(keyIBP);
             if (key <= NodeKey(self)) {
                 PlayerTrade_BSTRemove_25740(root, reinterpret_cast<void*>(self));
                 return;
@@ -481,7 +472,6 @@ extern "C" void PlayerTrade_EntityUI_66b0(int64_t param_1) {
     }
     uint32_t ctrlTypeId = s_pCtrlTypeId ? *s_pCtrlTypeId : 0;
 
-    CheckPtr(reinterpret_cast<void*>(param_1 + 0x18));
 
     void* controllerRaw = nullptr;   // local_res8
     if (fn_DialogInstance_GetController) {
@@ -491,7 +481,6 @@ extern "C" void PlayerTrade_EntityUI_66b0(int64_t param_1) {
 
     void* ctrlPtr = nullptr;
     if (controllerRaw != nullptr) {
-        CheckPtr(&controllerRaw);
         if (fn_IsDerivedFrom && fn_IsDerivedFrom(controllerRaw, ctrlTypeId)) {
             ctrlPtr = controllerRaw;
         }
@@ -502,25 +491,20 @@ extern "C" void PlayerTrade_EntityUI_66b0(int64_t param_1) {
         reinterpret_cast<RtObject::Internal*>(ctrlPtr));   // B.3.3 bridge
 
     // Copy the edit/track flag (+0xd8) into the controller (+0x40).
-    CheckPtr(reinterpret_cast<void*>(param_1 + 0x38));
     char flag = *reinterpret_cast<char*>(*reinterpret_cast<int64_t*>(param_1 + 0x38) + 0xd8);
-    CheckPtr(&controllerIBP);
     *reinterpret_cast<char*>(controllerIBP + 0x40) = flag;
     if (flag == 0 && *reinterpret_cast<char*>(controllerIBP + 0x41) != 0) {
         *reinterpret_cast<char*>(controllerIBP + 0x41) = 0;
     }
 
     // Add (flag set) or remove (flag clear) this entity in the world tracking BST.
-    CheckPtr(reinterpret_cast<void*>(param_1 + 0x38));
     void* worldBase = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
         ? *g_pGameWorldSingleton : nullptr;
     if (!worldBase) return;
     int64_t treeObj = *reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(worldBase) + 0x120);
 
     if (*reinterpret_cast<char*>(*reinterpret_cast<int64_t*>(param_1 + 0x38) + 0xd8) != 0) {
-        CheckPtr(reinterpret_cast<void*>(param_1 + 0x18));
         uint32_t payloadB = *reinterpret_cast<uint32_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x18) + 0x8c);
-        CheckPtr(reinterpret_cast<void*>(param_1 + 0x18));
         uint32_t payloadA = *reinterpret_cast<uint32_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x18) + 0x88);
         void* keyIBP = *reinterpret_cast<void**>(param_1 + 0x30);  // local_res8 = entity key
         PlayerTrade_BSTInsert_102e30(treeObj, &keyIBP, payloadA, payloadB);
@@ -535,7 +519,6 @@ extern "C" void PlayerTrade_EntityUI_66b0(int64_t param_1) {
 // sub-object then run the EntityUI helper. 1:1 port of EditTool_helper_6800.
 // ============================================================
 extern "C" void PlayerTrade_EditTool_66800(int64_t param_1) {
-    CheckPtr(reinterpret_cast<void*>(param_1 + 0x38));
     *reinterpret_cast<uint8_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x38) + 0xd8) = 1;
     PlayerTrade_EntityUI_66b0(param_1);
 }

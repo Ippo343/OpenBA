@@ -270,7 +270,7 @@ bool HerbalistWork_ResolveFuncs() {
               s_fn_ValidateEntity && s_fn_BSTRemove &&
               s_fn_BSTFindRemove && s_fn_CancelAllWork &&
               s_fn_FindSubEntity && s_fn_TreeNodeCleanup &&
-              fn_InternalBasePtr_CheckPtr && fn_InternalBasePtr_Ctor &&
+              fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom && g_pGameWorldSingleton &&
               s_typeId_WorkplaceComponent && s_typeId_RadiusComponent &&
               s_typeId_MaterialComponent &&
@@ -328,14 +328,12 @@ static void* FindComponentInList(uintptr_t entity, uint32_t typeId) {
     uintptr_t arr = *(uintptr_t*)(entity + 0x30);
     for (int i = 0; i < count; i++) {
         uintptr_t* ibpPtr = (uintptr_t*)(arr + (uintptr_t)i * 8);
-        fn_InternalBasePtr_CheckPtr(ibpPtr);
         uintptr_t obj = *ibpPtr;
         uintptr_t vtable = *(uintptr_t*)obj;
         typedef uint32_t (*GetTypeId_t)();
         auto getTypeId = *(GetTypeId_t*)(vtable + 0x10);
         if (getTypeId() == typeId) {
             ibpPtr = (uintptr_t*)(arr + (uintptr_t)i * 8);
-            fn_InternalBasePtr_CheckPtr(ibpPtr);
             void* comp = (void*)*ibpPtr;
             if (fn_IsDerivedFrom(comp, typeId)) {
                 return comp;
@@ -374,7 +372,6 @@ static void* FindSubComponentInList(uintptr_t subObj, uint32_t typeId) {
 // Helper: Assign work and register with AI
 // ============================================================
 static void AssignWorkToEntity(HerbalistWork* self, void* citizenIBP, int priority) {
-    fn_InternalBasePtr_CheckPtr(citizenIBP);
     uintptr_t citizen = *(uintptr_t*)citizenIBP;
 
     // Call vtable slot +0x50 (GetWorkEntity) on self
@@ -446,12 +443,10 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
 
     // Get material description from workplace entity (self+0x10)
     uintptr_t* plVar14 = (uintptr_t*)(selfAddr + 0x10);
-    fn_InternalBasePtr_CheckPtr(plVar14);
     uintptr_t matDescIBP = 0;
     s_fn_FindComp_MatDesc(*plVar14, &matDescIBP);
 
     // Find WorkplaceComponent on workplace entity
-    fn_InternalBasePtr_CheckPtr(plVar14);
     uintptr_t entity = *plVar14;
     void* workplaceComp = FindComponentInList(entity, *s_typeId_WorkplaceComponent);
 
@@ -461,7 +456,6 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
         reinterpret_cast<RtObject::Internal*>(workplaceComp));   // B.3.3 bridge
 
     // Get RadiusComponent from workplace description (+0x18)
-    fn_InternalBasePtr_CheckPtr(&workplaceIBP);
     void* workplaceDesc = *(void**)(workplaceIBP + 0x18);
     void* radiusComp = nullptr;
     if (fn_IsDerivedFrom(workplaceDesc, *s_typeId_RadiusComponent)) {
@@ -469,7 +463,6 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
     }
 
     // Find MaterialComponent on workplace's sub-object (+0x28)
-    fn_InternalBasePtr_CheckPtr(plVar14);
     uintptr_t entitySub = *(uintptr_t*)(*plVar14 + 0x28);
     void* materialComp = FindSubComponentInList(entitySub, *s_typeId_MaterialComponent);
 
@@ -484,15 +477,12 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
     bool atCapacity = *(int*)(resEntry + 8) <= *(int*)(resEntry);
 
     // Set mesh visibility based on capacity (visGroup 2)
-    fn_InternalBasePtr_CheckPtr(plVar14);
     uintptr_t meshIBP[2] = {0};
     s_fn_FindComp_MeshInstance(*plVar14, meshIBP);
-    fn_InternalBasePtr_CheckPtr(meshIBP);
     s_fn_MeshInstance_SetVisible((void*)(*(uintptr_t*)meshIBP), 2, atCapacity ? 1 : 0);
 
     // Get herb count (self->_field50 via qword index 10)
     int herbCount = (int)selfQ[10]; // self->_field50
-    fn_InternalBasePtr_CheckPtr(&matDescIBP);
 
     // If material description count is 0, calculate it
     if (*(int*)(matDescIBP + 0x30) == 0) {
@@ -523,12 +513,9 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
     int cellCol = workplaceCell % mapSize;
 
     // Get citizen's current position
-    fn_InternalBasePtr_CheckPtr(citizenIBP);
     uintptr_t citizenEntity = *(uintptr_t*)citizenIBP;
 
-    fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
     uintptr_t aiComp = *(uintptr_t*)(citizenEntity + 0x278);
-    fn_InternalBasePtr_CheckPtr((void*)(aiComp + 0x68));
     uintptr_t posComp = *(uintptr_t*)(aiComp + 0x68);
 
     int mapSz = *mapGrid;
@@ -595,7 +582,6 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
             // -------------------------------------------------------
             // Found a resource entity — check if it's a valid herb
             // -------------------------------------------------------
-            fn_InternalBasePtr_CheckPtr(&resourceEntity);
             uintptr_t natResCompIBP[2] = {0};
             s_fn_FindComp_NatRes(resourceEntity, natResCompIBP);
 
@@ -604,7 +590,6 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
             }
 
             // Check NatRes component against the description list
-            fn_InternalBasePtr_CheckPtr(&resourceEntity);
             uintptr_t natResCompIBP2[2] = {0};
             s_fn_FindComp_NatRes(resourceEntity, natResCompIBP2);
 
@@ -614,14 +599,12 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
 
             for (int herbIdx = 0; herbIdx < herbTypeCount; herbIdx++) {
                 // Check growth >= threshold
-                fn_InternalBasePtr_CheckPtr(natResCompIBP2);
                 float growth = *(float*)(*(uintptr_t*)natResCompIBP2 + 0x28);
                 if (growth < fGrowthVal) {
                     continue;
                 }
 
                 // Check resource description matches this herb type
-                fn_InternalBasePtr_CheckPtr(&resourceEntity);
                 uintptr_t resDescRef = *(uintptr_t*)(resourceEntity + 0x28);
                 uintptr_t herbTypeRef = *(uintptr_t*)(herbTypeList + (uintptr_t)herbIdx * 8);
                 if (resDescRef != herbTypeRef) {
@@ -629,7 +612,6 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
                 }
 
                 // Check not flagged for removal (bit 20 of +0x20)
-                fn_InternalBasePtr_CheckPtr(natResCompIBP2);
                 uint32_t flags20 = *(uint32_t*)(*(uintptr_t*)natResCompIBP2 + 0x20);
                 if ((flags20 >> 20) & 1) {
                     continue;
@@ -661,7 +643,6 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
                 float pathPos[3];
                 s_fn_GetTerrainPos(mapGrid, pathPos, &cutPos.x, 0, nullptr);
 
-                fn_InternalBasePtr_CheckPtr(natResCompIBP2);
                 uintptr_t targetRef = *(uintptr_t*)natResCompIBP2;
                 uintptr_t harvestEntityRef = *(uintptr_t*)citizenIBP;
                 uintptr_t harvestBuf[2] = { harvestEntityRef, 0 };
@@ -688,21 +669,17 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
 
     if (failCount > maxAttempts) {
         // Too many failures — check if citizen's storage has items, then replan
-        fn_InternalBasePtr_CheckPtr(citizenIBP);
         uintptr_t citizenEnt = *(uintptr_t*)citizenIBP;
 
-        fn_InternalBasePtr_CheckPtr((void*)(citizenEnt + 0x10));
         uintptr_t storageIBP[2] = {0};
         s_fn_FindComp_Storage(*(uintptr_t*)(citizenEnt + 0x10), storageIBP);
 
-        fn_InternalBasePtr_CheckPtr(storageIBP);
         int storageCount = s_fn_StorageQueryCount((void*)*(uintptr_t*)storageIBP);
         if (storageCount < 1) {
             return 0;
         }
 
         // Citizen has items in storage — replan long term
-        fn_InternalBasePtr_CheckPtr(citizenIBP);
         s_fn_CitizenAI_LongTermPlan(*(void**)citizenIBP);
     }
     else {
@@ -713,7 +690,6 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
 
         // Assign work (idle animation) and register with AI
         int priority = (int)selfQ[4];
-        fn_InternalBasePtr_CheckPtr(citizenIBP);
         uintptr_t citizenEnt2 = *(uintptr_t*)citizenIBP;
 
         // Call vtable slot +0x50 (GetWorkEntity)
@@ -785,11 +761,9 @@ int HerbalistWork_Slot8_Impl(HerbalistWork* self) {
         }
 
         // Cancel the work item: get citizen entity from node key
-        fn_InternalBasePtr_CheckPtr(rightmost);
         uintptr_t citizenEntity = *(uintptr_t*)rightmost;
 
         // Navigate to citizen AI subsystem and cancel
-        fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
         s_fn_CancelAllWork((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
 
         count = *(int*)(selfAddr + 0x50);
@@ -896,11 +870,9 @@ bool HerbalistWork_Slot9_Impl(HerbalistWork* self, void* param2) {
             // Find and remove the node with this key from BST
             void* searchNode = *bstRootPtr;
             while (searchNode != nullptr) {
-                fn_InternalBasePtr_CheckPtr(searchNode);
                 if (removeArr[i] < *(uintptr_t*)searchNode) {
                     searchNode = *(void**)((uintptr_t)searchNode + 0x10);
                 } else {
-                    fn_InternalBasePtr_CheckPtr(&removeArr[i]);
                     if (removeArr[i] <= *(uintptr_t*)searchNode) {
                         s_fn_BSTRemove(bstRootPtr, searchNode);
                         break;
@@ -924,7 +896,6 @@ void* HerbalistWork_Slot10_Impl(HerbalistWork* self, void* outPtr) {
     uintptr_t selfAddr = (uintptr_t)self;
 
     // CheckPtr on self+0x10
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
 
     // Find sub-entity via FUN_140002e10
@@ -932,7 +903,6 @@ void* HerbalistWork_Slot10_Impl(HerbalistWork* self, void* outPtr) {
     void* result = s_fn_FindSubEntity(entityRef, subIBP);
 
     // CheckPtr on the result
-    fn_InternalBasePtr_CheckPtr(result);
 
     // Read +0x48 from the resolved entity and store in output
     uintptr_t resolvedEntity = *(uintptr_t*)result;

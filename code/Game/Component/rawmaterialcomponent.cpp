@@ -47,10 +47,6 @@ static fn_Time_Serialize_t s_fn_Time_Serialize = nullptr;
 typedef void (*fn_SerializeField30_t)(void* fieldPtr, void* serializer);
 static fn_SerializeField30_t s_fn_SerializeField30 = nullptr;
 
-// Object::InternalBasePtr::CheckPtr via dispatch slot 0x140152ab0
-typedef void (*fn_CheckPtr_t)(void* ptr);
-static fn_CheckPtr_t s_fn_CheckPtr = nullptr;
-
 // FUN_140091e60 — register raw material with world manager
 typedef void (*fn_RegisterRawMaterial_t)(void* worldMgr, void* entityChain);
 static fn_RegisterRawMaterial_t s_fn_RegisterRawMaterial = nullptr;
@@ -131,9 +127,6 @@ static void EnsureHelpers() {
 
     s_fn_SerializeField30 = reinterpret_cast<fn_SerializeField30_t>(
         ResolveAddr(Module::Exe, 0x140018020));
-
-    slot = ResolveAddr(Module::Exe, 0x140152ab0);
-    if (slot) s_fn_CheckPtr = *reinterpret_cast<fn_CheckPtr_t*>(slot);
 
     s_fn_RegisterRawMaterial = reinterpret_cast<fn_RegisterRawMaterial_t>(
         ResolveAddr(Module::Exe, 0x140091e60));
@@ -241,9 +234,6 @@ void RawMaterialComponent_Serialize(RawMaterialComponent* self) {
     }
 
     // CheckPtr on owner at +0x10
-    if (s_fn_CheckPtr) {
-        s_fn_CheckPtr((void*)((uintptr_t)self + 0x10));
-    }
 
     // Get entity chain from owner+0x28, register with world manager
     if (s_pGameState && *s_pGameState && s_fn_RegisterRawMaterial) {
@@ -281,9 +271,6 @@ void RawMaterialComponent_Draw(RawMaterialComponent* self) {
     uintptr_t selfAddr = (uintptr_t)self;
 
     // CheckPtr on entity ref
-    if (s_fn_CheckPtr) {
-        s_fn_CheckPtr((void*)(selfAddr + 0x10));
-    }
 
     uintptr_t entity = *(uintptr_t*)(selfAddr + 0x10);
 
@@ -345,9 +332,6 @@ void RawMaterialComponent_Draw(RawMaterialComponent* self) {
     }
 
     // CheckPtr on the WorkComponent ref
-    if (fn_InternalBasePtr_CheckPtr) {
-        fn_InternalBasePtr_CheckPtr((void*)matDescBuf);
-    }
 
     // POST the Pickup work to the citizen work-scheduler — a laborer then claims it and
     // hauls this pile away. This is the pile-pickup trigger.
@@ -383,16 +367,10 @@ void RawMaterialComponent_Update(RawMaterialComponent* self, int64_t* pDeltaTime
         uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xe8);
 
         if (entity != nullptr) {
-            if (s_fn_CheckPtr) {
-                s_fn_CheckPtr((void*)((uintptr_t)self + 0x10));
-            }
 
             // Check bit 10 of entity flags at +0x40
             uint32_t entityFlags = *(uint32_t*)((uintptr_t)entity + 0x40);
             if (((entityFlags >> 10) & 1) == 0) {
-                if (s_fn_CheckPtr) {
-                    s_fn_CheckPtr((void*)((uintptr_t)self + 0x10));
-                }
 
                 if (s_fn_MarkForCollection) {
                     s_fn_MarkForCollection(entity);
@@ -494,10 +472,10 @@ void RawMaterialComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
     printf("[RawMaterialComponent] Funcs resolved: Component_Serialize=%p "
-           "Time_Serialize=%p CheckPtr=%p RegisterRawMaterial=%p "
+           "Time_Serialize=%p RegisterRawMaterial=%p "
            "GetPickupCategory=%p MemAlloc=%p PostWork=%p\n",
            (void*)s_fn_Component_Serialize, (void*)s_fn_Time_Serialize,
-           (void*)s_fn_CheckPtr, (void*)s_fn_RegisterRawMaterial,
+           (void*)s_fn_RegisterRawMaterial,
            (void*)s_fn_GetPickupCategory, (void*)fn_MemAlloc,
            (void*)s_fn_PostWork);
 #endif

@@ -69,16 +69,13 @@ uint64_t WorkGrid_TryAssignWorkplace_f8620(uintptr_t mgr, void* citizenRef, int 
     if (node == nullptr) return 0;
 
     uintptr_t* self = reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(node) + 0x08);   // IBP
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
     uint32_t mgrGen = *reinterpret_cast<uint32_t*>(mgr + 8);
     if (*reinterpret_cast<uint32_t*>(*self + 0x2c) == mgrGen)
         return static_cast<uint64_t>(mgrGen & 0xffffff00u);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
     uintptr_t obj = *self;
     (*reinterpret_cast<void(**)(void*)>(*reinterpret_cast<uintptr_t*>(obj) + 0x48))(reinterpret_cast<void*>(obj));  // notify
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
     uintptr_t citizenCopy = *reinterpret_cast<uintptr_t*>(citizenRef);
     obj = *self;
     uint64_t uVar2 = (*reinterpret_cast<uint64_t(**)(void*, void*, void*)>(*reinterpret_cast<uintptr_t*>(obj) + 0x20))(
@@ -89,10 +86,8 @@ uint64_t WorkGrid_TryAssignWorkplace_f8620(uintptr_t mgr, void* citizenRef, int 
 
     if (static_cast<int>(uVar2) == 1) {
         if (flag != '\0') {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
             obj = *self;
             (*reinterpret_cast<void(**)(void*)>(*reinterpret_cast<uintptr_t*>(obj) + 0x48))(reinterpret_cast<void*>(obj));  // notify
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
             citizenCopy = *reinterpret_cast<uintptr_t*>(citizenRef);
             obj = *self;
             uint64_t assignR = (*reinterpret_cast<uint64_t(**)(void*, void*, void*)>(*reinterpret_cast<uintptr_t*>(obj) + 0x28))(
@@ -100,7 +95,6 @@ uint64_t WorkGrid_TryAssignWorkplace_f8620(uintptr_t mgr, void* citizenRef, int 
             if (static_cast<char>(assignR) != '\0')
                 return (assignR & 0xffffffffffffff00ull) | 1;
         }
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
         uVar2 = mgrGen;
         *reinterpret_cast<uint32_t*>(*self + 0x2c) = mgrGen;
     }
@@ -125,21 +119,17 @@ int WorkGrid_AutoPickup_e3db0(uintptr_t self, void* citizenRef) {
         s_fn_FindAutoPickup = reinterpret_cast<fn_FindAutoPickup_t>(ResolveAddr(Module::Exe, 0x140022520));
         s_findAutoPickupInit = true;
     }
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
     uintptr_t apComp = 0;
     if (s_fn_FindAutoPickup) s_fn_FindAutoPickup(*reinterpret_cast<uintptr_t*>(self + 0x10), &apComp);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&apComp);
     if (apComp == 0 || *reinterpret_cast<char*>(apComp + 0x28) == '\0') return 0;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
     uintptr_t mgr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x118);
 
     int i = 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&apComp);
     if (*reinterpret_cast<int*>(apComp + 0x38) <= 0) return 0;
 
     intptr_t off = 0;   // i * 4
     do {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&apComp);
         int* node = *reinterpret_cast<int**>(mgr + 0x30);
         int cellId = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(apComp + 0x30) + off);
         bool keepElement = false;
@@ -159,7 +149,6 @@ int WorkGrid_AutoPickup_e3db0(uintptr_t self, void* citizenRef) {
         }
         if (!keepElement) {
             // not found in BST -> compact arr[i] out of the list
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&apComp);
             int count = *reinterpret_cast<int*>(apComp + 0x38);
             intptr_t shiftOff = off;
             int j = i;
@@ -177,7 +166,6 @@ int WorkGrid_AutoPickup_e3db0(uintptr_t self, void* citizenRef) {
         }
         i += 1;
         off += 4;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&apComp);
     } while (i < *reinterpret_cast<int*>(apComp + 0x38));
 
     return 0;

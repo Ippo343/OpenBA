@@ -115,7 +115,7 @@ bool DropOffRawMaterial_ResolveFuncs() {
               s_typeId_1401c7158 && g_TypeId_ComponentEntity &&
               s_vtable_DropOffRawMaterial && s_vtable_Action &&
               s_typeInfo_DropOffRawMaterial &&
-              fn_InternalBasePtr_CheckPtr && fn_IsDerivedFrom &&
+              fn_IsDerivedFrom &&
               fn_MemFreeStatic && fn_ExternalPtr_BuildSerialize &&
               g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
               g_fn_Serialize_Bool && g_fn_Serialize_Int;
@@ -238,7 +238,6 @@ int DropOffRawMaterial_AbstractImpl_Impl(DropOffRawMaterial* self, void* actionS
     }
 
     // Find StorageComponent on source entity at +0x38
-    fn_InternalBasePtr_CheckPtr(s + 0x38);
     uintptr_t storageIBP = 0;
     fn_FindComponent_Storage(*(void**)(s + 0x38), &storageIBP);
 
@@ -254,10 +253,8 @@ int DropOffRawMaterial_AbstractImpl_Impl(DropOffRawMaterial* self, void* actionS
 
     // Resource type not specified: enumerate all items in the source entity's
     // parent's storage component, then transfer each.
-    fn_InternalBasePtr_CheckPtr(s + 0x30);
     uintptr_t targetEntity = *(uintptr_t*)(s + 0x30);
     uintptr_t parentEntity = *(uintptr_t*)(targetEntity + 0x10);
-    fn_InternalBasePtr_CheckPtr(&parentEntity);
 
     uintptr_t parentStorageIBP = 0;
     fn_FindComponent_Storage((void*)parentEntity, &parentStorageIBP);
@@ -267,13 +264,11 @@ int DropOffRawMaterial_AbstractImpl_Impl(DropOffRawMaterial* self, void* actionS
     uint32_t itemCount = 0;
     uint32_t itemCapacity = 0;
 
-    fn_InternalBasePtr_CheckPtr(&parentStorageIBP);
     int numItems = *(int*)(parentStorageIBP + 0x30);
 
     int srcIdx = 0;
     if (numItems > 0) {
         do {
-            fn_InternalBasePtr_CheckPtr(&parentStorageIBP);
             uintptr_t inventoryArray = *(uintptr_t*)(parentStorageIBP + 0x28);
 
             uint32_t newCount = itemCount + 1;
@@ -326,7 +321,6 @@ int DropOffRawMaterial_AbstractImpl_Impl(DropOffRawMaterial* self, void* actionS
             }
 
             srcIdx++;
-            fn_InternalBasePtr_CheckPtr(&parentStorageIBP);
         } while (srcIdx < *(int*)(parentStorageIBP + 0x30));
     }
 
@@ -373,17 +367,14 @@ bool DropOffRawMaterial_GetTarget_Impl(DropOffRawMaterial* self, void* param) {
     DropOffRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = (uint8_t*)self;
 
-    fn_InternalBasePtr_CheckPtr(s + 0x38);
     void* sourceEntity = *(void**)(s + 0x38);
 
     if (*(void**)param == sourceEntity) {
         return true;
     }
 
-    fn_InternalBasePtr_CheckPtr(s + 0x30);
     uintptr_t targetStorage = *(uintptr_t*)(s + 0x30);
     uintptr_t parentEntity = *(uintptr_t*)(targetStorage + 0x10);
-    fn_InternalBasePtr_CheckPtr(param);
     return parentEntity == *(uintptr_t*)param;
 }
 

@@ -95,19 +95,15 @@ extern "C" char ResidenceComponent_HeatTick(void* selfV, void* /*sm*/, void* dtP
     // 3. Status-icon upkeep: while the house HAS food, clear icon bit 6
     //    (no-food); while it HAS firewood, clear bit 7 (no-firewood / cold).
     //    Faithful to the decompile: FUN_14012c3f0(*finder2f90(owner), bit, 0).
-    if (s_fnFindIcon && s_fnIconToggle && fn_InternalBasePtr_CheckPtr) {
+    if (s_fnFindIcon && s_fnIconToggle) {
         if (s_fnEdibleCount && s_fnEdibleCount(static_cast<int64_t>(self)) > 0) {
-            fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
             int64_t iconIBP = 0;
             s_fnFindIcon(*reinterpret_cast<int64_t*>(self + 0x10), &iconIBP);
-            fn_InternalBasePtr_CheckPtr(&iconIBP);
             if (iconIBP) s_fnIconToggle(reinterpret_cast<void*>(iconIBP), 6, 0);
         }
         if (s_fnFuelCount && s_fnFuelCount(static_cast<int64_t>(self)) > 0) {
-            fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
             int64_t iconIBP = 0;
             s_fnFindIcon(*reinterpret_cast<int64_t*>(self + 0x10), &iconIBP);
-            fn_InternalBasePtr_CheckPtr(&iconIBP);
             if (iconIBP) s_fnIconToggle(reinterpret_cast<void*>(iconIBP), 7, 0);
         }
     }
@@ -130,11 +126,9 @@ extern "C" char ResidenceComponent_HeatTick(void* selfV, void* /*sm*/, void* dtP
     if (*reinterpret_cast<int*>(self + 0x58) <= 0) return 1;
 
     // Find the house StorageComponent.
-    if (!s_fnFindStorage || !fn_InternalBasePtr_CheckPtr) return 1;
-    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
+    if (!s_fnFindStorage) return 1;
     int64_t storeIBP = 0;
     s_fnFindStorage(*reinterpret_cast<int64_t*>(self + 0x10), &storeIBP);
-    fn_InternalBasePtr_CheckPtr(&storeIBP);
     uintptr_t store = static_cast<uintptr_t>(storeIBP);
     if (!store) return 1;
 

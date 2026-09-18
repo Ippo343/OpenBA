@@ -98,10 +98,9 @@ float ArrowBob(uintptr_t self) {
 // ---------------------------------------------------------------------------
 void TutorialHighlightDialog_UpdateElement(TutorialHighlightDialog* self) {
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    if (!fn_InternalBasePtr_CheckPtr || !fn_Element_SetPadding) return;
+    if (!fn_Element_SetPadding) return;
 
     void* targetIBP = reinterpret_cast<void*>(s + 0xE0);
-    fn_InternalBasePtr_CheckPtr(targetIBP);
     uintptr_t elem = *reinterpret_cast<uintptr_t*>(targetIBP);
     if (!elem) return;
 
@@ -111,7 +110,6 @@ void TutorialHighlightDialog_UpdateElement(TutorialHighlightDialog* self) {
     int width  = *reinterpret_cast<int32_t*>(elem + 0x70) - left;
     int height = *reinterpret_cast<int32_t*>(elem + 0x74) - top;
 
-    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0xC8));
     void* glow = *reinterpret_cast<void**>(s + 0xC8);
     if (glow && fn_ImageElement_SetWidthHeight)
         fn_ImageElement_SetWidthHeight(glow, width + 0x1A, height + 0x1A);
@@ -138,7 +136,6 @@ void TutorialHighlightDialog_UpdateElement(TutorialHighlightDialog* self) {
     uintptr_t ui = *reinterpret_cast<uintptr_t*>(s + 0x10);
     if (ui) scale = *reinterpret_cast<float*>(ui + 0xDC);
 
-    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0xC0));
     void* glowGroup = *reinterpret_cast<void**>(s + 0xC0);
     if (glowGroup) {
         fn_Element_SetPadding(glowGroup,
@@ -151,7 +148,6 @@ void TutorialHighlightDialog_UpdateElement(TutorialHighlightDialog* self) {
 
     // Arrow: corner + sign pair chosen by the rotation.
     void* arrowIBP = reinterpret_cast<void*>(s + 0xD0);
-    fn_InternalBasePtr_CheckPtr(arrowIBP);
     void* arrow = *reinterpret_cast<void**>(arrowIBP);
     if (!arrow || !fn_ImageElement_GetSprite || !fn_Sprite_Width) return;
 
@@ -333,9 +329,8 @@ void TutHLDiag(uintptr_t self, uint64_t entity, bool ok, const float* rect) {
 void TutorialHighlightDialog_UpdateWorld(TutorialHighlightDialog* self) {
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     EnsureHighlightFuncs();
-    if (!fn_InternalBasePtr_CheckPtr || !fn_Element_SetFlagsOnOff) return;
+    if (!fn_Element_SetFlagsOnOff) return;
 
-    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0xC0));
     if (void* glowGroup = *reinterpret_cast<void**>(s + 0xC0))
         fn_Element_SetFlagsOnOff(glowGroup, 1, 0);   // hide
 
@@ -359,7 +354,6 @@ void TutorialHighlightDialog_UpdateWorld(TutorialHighlightDialog* self) {
     TutHLDiag(s, entityIBP, ok, reinterpret_cast<const float*>(rect));
 
     void* arrowIBP = reinterpret_cast<void*>(s + 0xD0);
-    fn_InternalBasePtr_CheckPtr(arrowIBP);
     void* arrow = *reinterpret_cast<void**>(arrowIBP);
     if (!ok) {
         if (arrow) fn_Element_SetFlagsOnOff(arrow, 1, 0);   // hide

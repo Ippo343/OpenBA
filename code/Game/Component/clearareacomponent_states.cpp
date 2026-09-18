@@ -158,7 +158,6 @@ static bool EntityHasNatResComp(void* entity) {
     if (!arr) return false;
     for (int i = 0; i < count; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* comp = *slot;
         if (!comp) continue;
         void** vt = *reinterpret_cast<void***>(comp);
@@ -181,7 +180,6 @@ static bool Grid_NoTargetResource(int* grid, int x1, int y1, int w, int h, uint6
             uintptr_t t = tiles + static_cast<uintptr_t>(cell) * 0x30;
             void* occ = *reinterpret_cast<void**>(t + 8);
             if (!occ) continue;
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(t + 8));
             occ = *reinterpret_cast<void**>(t + 8);
             if (!EntityHasNatResComp(occ)) continue;
             if (filter == 0 || *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(occ) + 0x28) == filter)
@@ -212,10 +210,8 @@ static bool ClearArea_IsDone(void* comp) {
         descRef = *reinterpret_cast<uint64_t*>(d + 0x20);
     }
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(c + 0x10));
     uint64_t buildComp = 0;
     fn_FindComponent_Build(*reinterpret_cast<void**>(c + 0x10), &buildComp);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&buildComp);
     if (!buildComp) return false;
     uintptr_t bc = static_cast<uintptr_t>(buildComp);
     int x1 = *reinterpret_cast<int16_t*>(bc + 0x28);
@@ -229,7 +225,6 @@ static bool ClearArea_IsDone(void* comp) {
     bool groundOK = (flag1 == 0) || Grid_GroundClear(grid, x1, y1, w, h);
     if (!groundOK) return false;
     // Owner entity — skipped by the AllEmpty scan; see the note on Grid_AllEmpty.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(c + 0x10));
     void* selfEntity = *reinterpret_cast<void**>(c + 0x10);
     const bool allEmptyBranch = (flag0 == 0 || flag2 != 0);
     const bool done = allEmptyBranch ? Grid_AllEmpty(grid, x1, y1, w, h, selfEntity)
@@ -245,10 +240,8 @@ static bool ClearArea_IsDone(void* comp) {
 static int ClearArea_CountRemaining(void* comp) {
     if (!comp || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
     uintptr_t c = reinterpret_cast<uintptr_t>(comp);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(c + 0x10));
     uint64_t buildComp = 0;
     fn_FindComponent_Build(*reinterpret_cast<void**>(c + 0x10), &buildComp);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&buildComp);
     if (!buildComp) return 0;
     uintptr_t bc = static_cast<uintptr_t>(buildComp);
     int x1 = *reinterpret_cast<int16_t*>(bc + 0x28);
@@ -264,7 +257,6 @@ static int ClearArea_CountRemaining(void* comp) {
         for (int col = 0; col < w; ++col) {
             int cell = (y1 + row) * width + (x1 + col);
             void* occ = *reinterpret_cast<void**>(tiles + static_cast<uintptr_t>(cell) * 0x30 + 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(c + 0x10));
             void* se = *reinterpret_cast<void**>(c + 0x10);
             if (occ != se && occ != nullptr) ++n;
         }
@@ -289,8 +281,6 @@ static uint32_t ClearArea_ScanKindFlags(void* comp, int* grid, int x1, int y1, i
             int cell = (y1 + row) * width + (x1 + col);
             void* occ = *reinterpret_cast<void**>(tiles + static_cast<uintptr_t>(cell) * 0x30 + 8);
             if (!occ) continue;
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(
-                tiles + static_cast<uintptr_t>(cell) * 0x30 + 8));
             occ = *reinterpret_cast<void**>(tiles + static_cast<uintptr_t>(cell) * 0x30 + 8);
             // entity+0x28 = its description; iterate sub-descriptions for NaturalResourceDescription.
             uintptr_t desc = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(occ) + 0x28);
@@ -361,11 +351,9 @@ static void* ClearArea_BuildWork(void* work, void* ownerEnt, uint64_t descRef,
     *reinterpret_cast<int32_t*>(w + 0x40) = 0;
     if (ownerEnt) {
         // +0x28 = center cell index from the owner's build footprint.
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(w + 0x10));
         uint64_t bc = 0;
         fn_FindComponent_Build(*reinterpret_cast<void**>(w + 0x10), &bc);
         if (bc) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&bc);
             uintptr_t b = static_cast<uintptr_t>(bc);
             int* grid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
             if (grid) {
@@ -377,7 +365,6 @@ static void* ClearArea_BuildWork(void* work, void* ownerEnt, uint64_t descRef,
         // +0x18 = the owner's WorkComponent.
         uint64_t wcIBP = 0;
         void* ownerLocal = ownerEnt;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ownerLocal);
         if (s_FindWorkComp) s_FindWorkComp(ownerLocal, &wcIBP);
         *reinterpret_cast<uint64_t*>(w + 0x18) = wcIBP;
     }
@@ -435,18 +422,15 @@ extern "C" char ClearArea_State0Enter(void* data, void* sm) {
     }
 
     // (3) dispatch the harvest work-action to the citizen work-scheduler.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(c + 0x10));
     uint64_t workCompIBP = 0;
     if (s_FindWorkComp) s_FindWorkComp(*reinterpret_cast<void**>(c + 0x10), &workCompIBP);
 
     uint64_t buildComp = 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(c + 0x10));
     fn_FindComponent_Build(*reinterpret_cast<void**>(c + 0x10), &buildComp);
 
     int* grid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(gw) + 0xf8);
     uint32_t kind = 1;
     if (buildComp && grid) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&buildComp);
         uintptr_t b = static_cast<uintptr_t>(buildComp);
         int x1 = *reinterpret_cast<int16_t*>(b + 0x28);
         int y1 = *reinterpret_cast<int16_t*>(b + 0x2a);
@@ -469,7 +453,6 @@ extern "C" char ClearArea_State0Enter(void* data, void* sm) {
     uint64_t workIBP = 0;
     if (fn_InternalBasePtr_Ctor) new (&workIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIBP);
     s_WorkSchedPost(static_cast<uintptr_t>(workCompIBP), kind, static_cast<char>(f3), &workIBP);
 
     return 1;
@@ -513,10 +496,8 @@ extern "C" char ClearArea_State0Update(void* data, void* /*sm*/) {
     if (!s_HasSlot)  s_HasSlot  = reinterpret_cast<fn_HasSlot_t>(ResolveAddr(Module::Exe, 0x14012ead0));
     if (!s_StopSlot) s_StopSlot = reinterpret_cast<fn_StopSlot_t>(ResolveAddr(Module::Exe, 0x14012eb50));
     uintptr_t c = reinterpret_cast<uintptr_t>(data);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(c + 0x10));
     uint64_t wcIBP = 0;
     if (s_FindWorkComp) s_FindWorkComp(*reinterpret_cast<void**>(c + 0x10), &wcIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wcIBP);
     if (wcIBP && s_HasSlot && s_HasSlot(static_cast<uintptr_t>(wcIBP))) {
         if (s_StopSlot) s_StopSlot(static_cast<uintptr_t>(wcIBP));
     }
@@ -537,7 +518,6 @@ static void ClearArea_BroadcastEvent(void* ownerEntity, uint32_t ev) {
     if (!arr) return;
     for (int i = 0; i < count; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* comp = *slot;
         if (!comp) continue;
         void** vt = *reinterpret_cast<void***>(comp);
@@ -568,10 +548,8 @@ void ClearArea_Finalize8270(void* comp) {
     // desc+0x2c set: terrain regrow over the footprint, then broadcast event 5.
     if (!s_e0e0_res) { s_e0e0 = reinterpret_cast<fn_e0e0_t>(ResolveAddr(Module::Exe, 0x14009e0e0)); s_e0e0_res = true; }
     if (s_e0e0 && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(c + 0x10));
         uint64_t bc = 0;
         fn_FindComponent_Build(*reinterpret_cast<void**>(c + 0x10), &bc);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&bc);
         if (bc) {
             void* map = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
             uintptr_t b = static_cast<uintptr_t>(bc);
@@ -582,7 +560,6 @@ void ClearArea_Finalize8270(void* comp) {
             s_e0e0(map, x1, y1, x2, y2);
         }
     }
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(c + 0x10));
     ClearArea_BroadcastEvent(*reinterpret_cast<void**>(c + 0x10), 5);
 }
 
@@ -607,7 +584,6 @@ extern "C" char ClearArea_State2Enter(void* data, void* /*sm*/) {
     ResolveStates();
     if (!data) return 1;
     uintptr_t c = reinterpret_cast<uintptr_t>(data);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(c + 0x10));
     ClearArea_BroadcastEvent(*reinterpret_cast<void**>(c + 0x10), 1);
     return 1;
 }

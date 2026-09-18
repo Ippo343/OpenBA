@@ -164,7 +164,7 @@ bool HuntAnimal_ResolveFuncs() {
               s_dat_VectorDtorReturn && s_typeInfo_HuntAnimal &&
               s_vtable_HuntAnimal && s_vtable_Action &&
               s_searchRadius && s_halfOffset &&
-              fn_InternalBasePtr_CheckPtr && fn_InternalBasePtr_DeletePtr &&
+              fn_InternalBasePtr_DeletePtr &&
               fn_InternalBasePtr_Ctor && fn_IsDerivedFrom &&
               fn_MemFreeStatic &&
               g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
@@ -321,7 +321,6 @@ void HuntAnimal_Enter_Impl(HuntAnimal* self) {
     }
 
     // Check if the animal at +0x20 is ready to be hunted
-    fn_InternalBasePtr_CheckPtr(s + 0x20);
     void* animalEntity = *(void**)(s + 0x20);
     if (!s_fn_IsAnimalReady(animalEntity)) {
         return;
@@ -339,13 +338,10 @@ void HuntAnimal_Enter_Impl(HuntAnimal* self) {
 
     // Get herd entity's CharacterComponent position
     // Follow chain: herdEntity(+0x28) -> +0x278 -> +0x68 -> position at +0x158
-    fn_InternalBasePtr_CheckPtr(s + 0x28);
     void* herdEntity = *(void**)(s + 0x28);
 
-    fn_InternalBasePtr_CheckPtr((uint8_t*)herdEntity + 0x278);
     void* charComp = *(void**)((uint8_t*)herdEntity + 0x278);
 
-    fn_InternalBasePtr_CheckPtr((uint8_t*)charComp + 0x68);
     void* posHolder = *(void**)((uint8_t*)charComp + 0x68);
 
     // Read position (3 floats at +0x158, +0x15c, +0x160)
@@ -367,16 +363,13 @@ void HuntAnimal_Enter_Impl(HuntAnimal* self) {
     }
 
     // Get the found entity from query result
-    fn_InternalBasePtr_CheckPtr(&queryResult);
     void* foundEntityParent = *(void**)((uint8_t*)queryResult + 0x10);
 
     // Check if the found entity's model component has bit 20 set (in use)
     void* tempIBP = nullptr;
     tempIBP = foundEntityParent;
-    fn_InternalBasePtr_CheckPtr(&tempIBP);
     void* modelCompIBP1[2] = {nullptr, nullptr};
     s_fn_GetModelComp(tempIBP, modelCompIBP1);
-    fn_InternalBasePtr_CheckPtr(modelCompIBP1);
     uint32_t modelFlags = *(uint32_t*)((uint8_t*)(modelCompIBP1[0]) + 0x20);
 
     if ((modelFlags >> 20) & 1) {
@@ -385,10 +378,8 @@ void HuntAnimal_Enter_Impl(HuntAnimal* self) {
     }
 
     // Get model component from the found entity (second call for later use)
-    fn_InternalBasePtr_CheckPtr(&queryResult);
     foundEntityParent = *(void**)((uint8_t*)queryResult + 0x10);
     tempIBP = foundEntityParent;
-    fn_InternalBasePtr_CheckPtr(&tempIBP);
     void* modelCompIBP2[2] = {nullptr, nullptr};
     s_fn_GetModelComp(tempIBP, modelCompIBP2);
 
@@ -396,20 +387,15 @@ void HuntAnimal_Enter_Impl(HuntAnimal* self) {
     int* mapPtr = *(int**)(gameWorld + 0xf8);
 
     // Get found entity's position for grid cell calculation
-    fn_InternalBasePtr_CheckPtr(&queryResult);
     void* foundEntity2 = queryResult;
-    fn_InternalBasePtr_CheckPtr((uint8_t*)foundEntity2 + 0x68);
     void* foundPosHolder = *(void**)((uint8_t*)foundEntity2 + 0x68);
 
     float foundPosX = *(float*)((uint8_t*)foundPosHolder + 0x158);
     float foundPosY = *(float*)((uint8_t*)foundPosHolder + 0x15c);
 
     // Get herd position again for the herd's grid cell
-    fn_InternalBasePtr_CheckPtr(s + 0x28);
     herdEntity = *(void**)(s + 0x28);
-    fn_InternalBasePtr_CheckPtr((uint8_t*)herdEntity + 0x278);
     charComp = *(void**)((uint8_t*)herdEntity + 0x278);
-    fn_InternalBasePtr_CheckPtr((uint8_t*)charComp + 0x68);
     posHolder = *(void**)((uint8_t*)charComp + 0x68);
 
     int mapSize = *mapPtr;
@@ -454,7 +440,6 @@ void HuntAnimal_Enter_Impl(HuntAnimal* self) {
     // Path is valid -- proceed with corpse spawning
 
     // Get description from the found entity's model component
-    fn_InternalBasePtr_CheckPtr(modelCompIBP2);
     void* descObj = *(void**)((uint8_t*)(modelCompIBP2[0]) + 0x18);
     bool isModelDesc = fn_IsDerivedFrom(descObj, *s_typeId_ModelDesc);
     void* modelDesc = isModelDesc ? descObj : nullptr;
@@ -485,25 +470,20 @@ void HuntAnimal_Enter_Impl(HuntAnimal* self) {
     s_fn_SpawnCorpse(herdIBP_local, -1, worldPos, fromCell, corpseIBP_local, modelDesc, 0);
 
     // Find HerdComponent from the found entity and start migration
-    fn_InternalBasePtr_CheckPtr(&queryResult);
     foundEntityParent = *(void**)((uint8_t*)queryResult + 0x10);
     tempIBP = foundEntityParent;
-    fn_InternalBasePtr_CheckPtr(&tempIBP);
 
     void* herdCompIBP[2] = {nullptr, nullptr};
     s_fn_FindHerdComp(tempIBP, herdCompIBP);
 
-    fn_InternalBasePtr_CheckPtr(herdCompIBP);
 
     // Read herd component IBP at +0x28 from the resolved object
     // herdCompIBP[0] IS the resolved object pointer after CheckPtr (no extra deref)
     void* migrationTarget = *(void**)((uintptr_t)herdCompIBP[0] + 0x28);
 
-    fn_InternalBasePtr_CheckPtr(&migrationTarget);
     s_fn_StartMigration(migrationTarget);
 
     // Clear the animal entity's time at +0x50 and set hunt started flag
-    fn_InternalBasePtr_CheckPtr(s + 0x20);
     animalEntity = *(void**)(s + 0x20);
     *(uint64_t*)((uint8_t*)animalEntity + 0x50) = 0;
 
@@ -520,21 +500,17 @@ bool HuntAnimal_GetTarget_Impl(HuntAnimal* self, void* param) {
     uint8_t* s = (uint8_t*)self;
 
     // Check herd entity's parent at +0x28 -> +0x10
-    fn_InternalBasePtr_CheckPtr(s + 0x28);
     void* herdEntity = *(void**)(s + 0x28);
     void* herdParent = *(void**)((uint8_t*)herdEntity + 0x10);
 
-    fn_InternalBasePtr_CheckPtr(param);
     if (herdParent == *(void**)param) {
         return true;
     }
 
     // Check animal entity's parent at +0x20 -> +0x10
-    fn_InternalBasePtr_CheckPtr(s + 0x20);
     void* animalEntity = *(void**)(s + 0x20);
     void* animalParent = *(void**)((uint8_t*)animalEntity + 0x10);
 
-    fn_InternalBasePtr_CheckPtr(param);
     if (animalParent == *(void**)param) {
         return true;
     }

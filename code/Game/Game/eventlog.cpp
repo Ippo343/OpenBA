@@ -180,13 +180,11 @@ static int EventLog_TileIndex(void* entityIBP) {
     static fn_FindCompMember_t s_findMap = nullptr;
     if (!s_findMap)
         s_findMap = reinterpret_cast<fn_FindCompMember_t>(ResolveAddr(Module::Exe, 0x140004680));
-    if (!s_findMap || !fn_InternalBasePtr_CheckPtr) return -1;
+    if (!s_findMap) return -1;
 
-    fn_InternalBasePtr_CheckPtr(entityIBP);
     int64_t mapIBP = 0;
     s_findMap(*(int64_t*)entityIBP, &mapIBP);
     if (mapIBP == 0) return -1;
-    fn_InternalBasePtr_CheckPtr(&mapIBP);
 
     const uint8_t* mc = (const uint8_t*)mapIBP;
     int x = *(const int16_t*)(mc + 0x28), y = *(const int16_t*)(mc + 0x2a);

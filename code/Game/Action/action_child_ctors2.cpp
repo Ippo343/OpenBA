@@ -10,7 +10,7 @@
 //   0x1400c63b0  ConsumeRawMaterial_Action_CopyCtor    (field-copy ctor + 64b0)
 //
 // Closure (all registered): vtables 0x14015fb70/0x14015fde0/0x14015fd80/0x14015fc20
-// (action reimpls), Object::Internal::Internal (fn_ObjectInternal_Ctor), CheckPtr,
+// (action reimpls), Object::Internal::Internal (fn_ObjectInternal_Ctor),
 // Entity_FindComponent_Storage 0x140006270 (reg_work_base), and the static
 // MemAlloc/MemFree engine helpers.
 //
@@ -134,11 +134,9 @@ void* ActChild_DropOffRawCopyCtor_c7cd0(void* self, uint64_t* p2, uint64_t* p3,
 void Entity_ConsumeListAppend_64b0(int64_t self, int64_t resType, int count) {
     EnsureInit();
     int64_t storageIbp = 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x20));
     if (s_fn_findStorage) s_fn_findStorage(*reinterpret_cast<int64_t*>(self + 0x20), &storageIbp);
 
     if (*reinterpret_cast<char*>(self + 0x38) != '\0') {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&storageIbp);
         int invCount = *reinterpret_cast<int*>(storageIbp + 0x30);
         if (0 < invCount) {
             int64_t* arr = *reinterpret_cast<int64_t**>(storageIbp + 0x28);
@@ -236,9 +234,7 @@ void* ActChild_ConsumeRawCopyCtor_c63b0(void* self, uint64_t* p2, int64_t p3,
 void ActChild_TransferToCarrier_ca230(int64_t self, int64_t resType, int count) {
     EnsureInit();
     int64_t storageIbp = 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x28));
     if (s_fn_findStorage) s_fn_findStorage(*reinterpret_cast<int64_t*>(self + 0x28), &storageIbp);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&storageIbp);
 
     // bump storage inventory reserved(+0xc) for the matching resType
     int invCount = *reinterpret_cast<int*>(storageIbp + 0x30);
@@ -340,7 +336,6 @@ void* ActChild_PickupStoredCopyCtor_ca520(void* self, uint64_t* param_2, uint64_
     *reinterpret_cast<uint64_t*>(s + 0x38) = 0;
     s[0x40]                                = param_6;
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(s + 0x28);
     int64_t storageIbp = 0;
     if (s_fn_findStorage) s_fn_findStorage(*reinterpret_cast<int64_t*>(s + 0x28), &storageIbp);
 
@@ -372,7 +367,6 @@ void* ActChild_PickupStoredCopyCtor_ca520(void* self, uint64_t* param_2, uint64_
 
     int requested = param_5;
     if (requested <= 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(s + 0x20);
         int total = s_fn_calc116540 ? s_fn_calc116540(*reinterpret_cast<int64_t*>(s + 0x20)) : 0;
         // perUnitSize = *(int*)(rawMatDesc+0x48); guard the null-find (original assumes found).
         int perUnit = rawMatDesc ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rawMatDesc) + 0x48) : 0;
@@ -380,7 +374,6 @@ void* ActChild_PickupStoredCopyCtor_ca520(void* self, uint64_t* param_2, uint64_
     }
 
     // storage availability for resType param_4 = count(+8) - reserved(+0xc); clamp requested down to it
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&storageIbp);
     int avail = 0;
     {
         int invCount = *reinterpret_cast<int*>(storageIbp + 0x30);
@@ -401,7 +394,6 @@ void* ActChild_PickupStoredCopyCtor_ca520(void* self, uint64_t* param_2, uint64_
     }
     if (avail < requested) {
         // re-scan to set requested = avail (count - reserved)
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&storageIbp);
         requested = 0;
         int invCount = *reinterpret_cast<int*>(storageIbp + 0x30);
         if (0 < invCount) {
@@ -459,12 +451,10 @@ void* Entity_FindConsumeProduce_b6f0(int64_t param_1, void* param_2) {
         int64_t byteOff = 0;
         while (true) {
             int64_t* slot = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x30) + byteOff);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
             void* child = reinterpret_cast<void*>(*slot);
             uint32_t tid = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<int64_t*>(child) + 0x10))(child);
             if (tid == wantTid) {
                 int64_t* mslot = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x30) + (int64_t)idx * 8);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(mslot);
                 void* match = reinterpret_cast<void*>(*mslot);
                 if (s_pTid_StateMachine && fn_IsDerivedFrom && fn_IsDerivedFrom(match, *s_pTid_StateMachine))
                     found = match;

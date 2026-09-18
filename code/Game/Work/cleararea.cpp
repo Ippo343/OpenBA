@@ -370,11 +370,9 @@ int ClearArea_Cleanup(ClearArea* self) {
 
         // prev is the leftmost node
         // Get entity from node (+0x08 = InternalBasePtr)
-        fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)prev + 8));
         uintptr_t entity = *(uintptr_t*)((uintptr_t)prev + 8);
 
         // Get state machine component: entity->field_278
-        fn_InternalBasePtr_CheckPtr((void*)(entity + 0x278));
         uintptr_t smComp = *(uintptr_t*)(entity + 0x278);
 
         // Remove pending action from state machine action list (+0x48)
@@ -395,11 +393,9 @@ int ClearArea_Cleanup(ClearArea* self) {
         }
 
         // Get entity from node (+0x08)
-        fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)prev + 8));
         uintptr_t entity = *(uintptr_t*)((uintptr_t)prev + 8);
 
         // Get state machine component and remove pending action
-        fn_InternalBasePtr_CheckPtr((void*)(entity + 0x278));
         uintptr_t smComp = *(uintptr_t*)(entity + 0x278);
         s_fn_RemovePendingAction((void*)(smComp + 0x48));
     }
@@ -598,7 +594,6 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
 
     // --- Check if work entity is valid ---
     // CheckPtr on self->field_18 (work entity IBP at +0x18, which is param_1[3] in decompilation)
-    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x18));
     void* workEntity = self->field_18;
 
     // Get total slot count for the entity
@@ -614,7 +609,6 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
     }
 
     // --- Check citizen entity has active build state ---
-    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x10));
     void* citizenEntity = self->field_10;
 
     // One-shot: dump the owner entity (field_10) component type-ids so we know what
@@ -627,9 +621,7 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
     if (buildStateIBP != 0) {
         // Re-find and check if component is active (byte at +0x50)
         uint64_t buildStateIBP2 = 0;
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x10));
         fn_FindComponent_WorkPlace(self->field_10, &buildStateIBP2);
-        fn_InternalBasePtr_CheckPtr(&buildStateIBP2);
         void* bsComp = reinterpret_cast<void*>(buildStateIBP2);
         if (*(char*)((uintptr_t)bsComp + 0x50) == 0) {
             return 1;  // component not active
@@ -668,10 +660,8 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
     char includeEmptyTiles = self->field_71;  // +0x71 = clearGround flag
 
     // Find BuildComponent on citizen entity
-    fn_InternalBasePtr_CheckPtr(&citizenIBP);
     uint64_t buildCompIBP = 0;
     fn_FindComponent_Build(reinterpret_cast<void*>(citizenIBP), &buildCompIBP);
-    fn_InternalBasePtr_CheckPtr(&buildCompIBP);
     void* buildComp = reinterpret_cast<void*>(buildCompIBP);
 
     // Read area bounds from build component (short values at +0x28, +0x2a, +0x2c, +0x2e)
@@ -692,14 +682,11 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
     // --- Compute reference tile index for distance sorting ---
     {
         // CheckPtr on actionStack
-        fn_InternalBasePtr_CheckPtr(actionStack);
         void* citizen = *(void**)actionStack;
 
         // Get CharacterComponent (+0x278) -> PositionComponent (+0x68)
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>((uintptr_t)citizen + 0x278));
         void* charComp = *(void**)((uintptr_t)citizen + 0x278);
 
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>((uintptr_t)charComp + 0x68));
         void* posComp = *(void**)((uintptr_t)charComp + 0x68);
 
         // Read position (floats at +0x158, +0x15c, +0x160)
@@ -742,12 +729,10 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
                 void* bstNode = self->field_48;
                 bool alreadyTracked = false;
                 while (bstNode != nullptr) {
-                    fn_InternalBasePtr_CheckPtr(bstNode);
                     uint64_t nodeKey = *(uint64_t*)bstNode;
                     if (treeEntity < nodeKey) {
                         bstNode = *(void**)((uintptr_t)bstNode + 0x18);  // left child
                     } else {
-                        fn_InternalBasePtr_CheckPtr(&treeEntity);
                         if (treeEntity <= nodeKey) {
                             alreadyTracked = true;
                             break;  // found match
@@ -761,7 +746,6 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
 
                 // Check filter: if field_68 is set, tree's +0x28 must match
                 if (self->field_68 != nullptr) {
-                    fn_InternalBasePtr_CheckPtr(&treeEntity);
                     void* treeEntityObj = reinterpret_cast<void*>(treeEntity);
                     int64_t treeType = *(int64_t*)((uintptr_t)treeEntityObj + 0x28);
                     if (treeType != reinterpret_cast<int64_t>(self->field_68)) {
@@ -770,7 +754,6 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
                 }
 
                 // Find NaturalResource component on tree entity
-                fn_InternalBasePtr_CheckPtr(&treeEntity);
                 uint64_t natResIBP = 0;
                 fn_FindComponent_NatRes(reinterpret_cast<void*>(treeEntity), &natResIBP);
 
@@ -802,7 +785,6 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
 
                 // Check if natRes component has "removable" flag (bit 20 of +0x20)
                 if (natResIBP != 0) {
-                    fn_InternalBasePtr_CheckPtr(&natResIBP);
                     void* natResObj = reinterpret_cast<void*>(natResIBP);
                     uint32_t flags = *(uint32_t*)((uintptr_t)natResObj + 0x20);
                     if ((flags >> 20) & 1) {
@@ -831,7 +813,6 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
 
                 // Post-work setup on citizen
                 int workId = self->field_20;
-                fn_InternalBasePtr_CheckPtr(actionStack);
                 void* citizenObj = *(void**)actionStack;
 
                 // Call vtable[10] (+0x50) on self — Work::GetTarget(self, &workIBP)
@@ -937,7 +918,6 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
 
                 // Post-work setup on citizen
                 int workIdSaved = self->field_20;
-                fn_InternalBasePtr_CheckPtr(actionStack);
                 void* citizenObj = *(void**)actionStack;
 
                 // Call vtable[10] (+0x50) — Work::GetTarget
@@ -979,7 +959,6 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
                 TileInfo* tile = &tiles[i];
 
                 // CheckPtr on entity for this tile
-                fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(&tile->entityPtr));
                 void* tileEntity = reinterpret_cast<void*>(tile->entityPtr);
 
                 // Search entity's component array for NaturalResourceDescription type
@@ -991,7 +970,6 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
                 void* natResComp = nullptr;
                 for (int j = 0; j < compCount; j++) {
                     void** compIBP = reinterpret_cast<void**>(compArray + (uintptr_t)j * 8);
-                    fn_InternalBasePtr_CheckPtr(compIBP);
                     void* comp = *compIBP;
 
                     // GetTypeId via vtable[2] (+0x10)
@@ -1003,7 +981,6 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
                         // Verify with IsDerivedFrom
                         void** compIBP2 = reinterpret_cast<void**>(
                             *(uintptr_t*)(te + 0x30) + (uintptr_t)j * 8);
-                        fn_InternalBasePtr_CheckPtr(compIBP2);
                         void* comp2 = *compIBP2;
                         if (fn_IsDerivedFrom(comp2, *g_TypeId_NaturalResourceDesc)) {
                             natResComp = comp2;
@@ -1020,7 +997,6 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
                 if (natResIBP == 0) continue;
 
                 // Now find StorageLocationComponent on same entity
-                fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(&tile->entityPtr));
                 tileEntity = reinterpret_cast<void*>(tile->entityPtr);
                 te = (uintptr_t)tileEntity;
                 compCount = *(int*)(te + 0x38);
@@ -1029,7 +1005,6 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
                 void* storageLocComp = nullptr;
                 for (int j = 0; j < compCount; j++) {
                     void** compIBP = reinterpret_cast<void**>(compArray + (uintptr_t)j * 8);
-                    fn_InternalBasePtr_CheckPtr(compIBP);
                     void* comp = *compIBP;
 
                     typedef uint32_t (*GetTypeId_t)(void*);
@@ -1039,7 +1014,6 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
                     if (typeId == *g_TypeId_WorkComponent) {
                         void** compIBP2 = reinterpret_cast<void**>(
                             *(uintptr_t*)(te + 0x30) + (uintptr_t)j * 8);
-                        fn_InternalBasePtr_CheckPtr(compIBP2);
                         void* comp2 = *compIBP2;
                         if (fn_IsDerivedFrom(comp2, *g_TypeId_WorkComponent)) {
                             storageLocComp = comp2;
@@ -1053,7 +1027,6 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
                     reinterpret_cast<RtObject::Internal*>(storageLocComp));   // B.3.3 bridge
 
                 // Get resource type ID from storage location component
-                fn_InternalBasePtr_CheckPtr(&storageIBP);
                 int resourceTypeId = *(int*)(storageIBP + 0x28);
 
                 // Get gather system from game singleton
@@ -1262,12 +1235,10 @@ int ClearArea_Validate(ClearArea* self, void* citizenIBP) {
         for (uint32_t i = 0; i < removeCount; i++) {
             void* bstNode = self->field_48;
             while (bstNode != nullptr) {
-                fn_InternalBasePtr_CheckPtr(bstNode);
                 uintptr_t nodeKey = *(uintptr_t*)bstNode;
                 if (removeArr[i] < nodeKey) {
                     bstNode = *(void**)((uintptr_t)bstNode + 0x18); // left
                 } else {
-                    fn_InternalBasePtr_CheckPtr(&removeArr[i]);
                     if (removeArr[i] <= nodeKey) {
                         // Found — remove it
                         s_fn_BST_RemoveNode_CA(&self->field_48, bstNode);

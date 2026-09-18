@@ -525,7 +525,6 @@ extern "C" void IbpTree_Serialize_e470(void* treeVoid, void* serializer) {
             bool duplicate = false;
             uintptr_t newNode = 0;
             while (!inserted) {
-                fn_InternalBasePtr_CheckPtr(&cur);   // retail CheckPtrs the node slot
                 void* curKey = *(void**)cur;
                 if (key < curKey) {
                     uintptr_t l = *(uintptr_t*)(cur + 0x20);
@@ -666,22 +665,18 @@ extern "C" void EntityList_PostLoad_c4730(void* elVoid, void* stream) {
     int count = *(int*)(el + 0x10);
     for (int i = 0; i < count; i++) {
         void** entSlot = (void**)(*(uintptr_t*)(el + 0x8) + (size_t)i * 8);
-        fn_InternalBasePtr_CheckPtr(entSlot);
         uintptr_t ent = (uintptr_t)*entSlot;
 
         int compCount = *(int*)(ent + 0x38);
         for (int j = 0; j < compCount; j++) {
             void** compSlot = (void**)(*(uintptr_t*)(ent + 0x30) + (size_t)j * 8);
-            fn_InternalBasePtr_CheckPtr(compSlot);
             uintptr_t comp = (uintptr_t)*compSlot;
             typedef void (*fn_postload_t)(void* self);
             (*(fn_postload_t*)(*(uintptr_t*)comp + 0x58))((void*)comp);
         }
 
-        fn_InternalBasePtr_CheckPtr(entSlot);
         *(void**)((uintptr_t)*entSlot + 0x10) = elVoid;
 
-        fn_InternalBasePtr_CheckPtr(entSlot);
         uintptr_t e = (uintptr_t)*entSlot;
         if (*(uintptr_t*)(e + 0x10) != 0) {
             uintptr_t owner = *(uintptr_t*)(e + 0x10);

@@ -186,7 +186,6 @@ struct Options {
     const char* achIgnoreMods        = nullptr;// BANISHED_ACH_IGNORE_MODS — gameupdateloop.cpp achievements
     const char* factoryEnum          = nullptr;// BANISHED_FACTORY_ENUM — factory_registrations_bulk.cpp
     const char* fastTrig             = nullptr;// BANISHED_FAST_TRIG — code/Game/Component/character_trig.cpp
-    const char* checkPtrNop          = nullptr;// BANISHED_CHECKPTR_NOP — engine/funcs/engine_funcs.cpp
     const char* treeGuards           = nullptr;// BANISHED_TREE_GUARDS — code/Game/Entity/entitylist.cpp
     const char* treePrefetch         = nullptr;// BANISHED_TREE_PREFETCH — code/Game/Entity/entitylist.cpp
     int         unregCensusFrames    = 0;      //   BANISHED_UNREG_CENSUS=<n> dump frame (gameupdateloop.cpp)

@@ -103,7 +103,6 @@ void Resolve() {
     s_pPhaseScale   = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
 }
 
-inline void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 
 inline uint64_t MakeIBP(void* obj) {
     uint64_t r = 0;
@@ -137,10 +136,8 @@ extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl,
     const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
 
     // ── the post's footprint corners ─────────────────────────────────────────────
-    CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     uint64_t fpIBP[2] = {0, 0};
     if (s_FindFootprint) s_FindFootprint(*reinterpret_cast<int64_t*>(comp + 0x10), fpIBP);
-    CheckPtr(fpIBP);
 
     // Corner 0 and corner 1 of the footprint. Three floats each: 0x140122e20 writes a
     // full Vector3 through its out-param, and a 2-float array here would let it scribble
@@ -149,7 +146,6 @@ extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl,
     float b[3] = {0.0f, 0.0f, 0.0f};
     if (s_GetPoint) {
         s_GetPoint(*reinterpret_cast<void**>(fpIBP), a, 2, 0, nullptr);
-        CheckPtr(fpIBP);
         s_GetPoint(*reinterpret_cast<void**>(fpIBP), b, 2, 1, nullptr);
     }
 
@@ -210,7 +206,6 @@ extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl,
         void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
         void* ent = mem ? s_EntityCopy(mem, reinterpret_cast<int64_t>(tmpl)) : nullptr;
         uint64_t entIBP = MakeIBP(ent);
-        CheckPtr(&entIBP);
         if (!entIBP) continue;
 
         // Inline AnimalComponent scan. Retail compares GetTypeId (vtable +0x10) against
@@ -224,7 +219,6 @@ extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl,
             const uintptr_t list = *reinterpret_cast<uintptr_t*>(e + 0x30);
             for (int c = 0; c < n && list; ++c) {
                 void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(c) * 8);
-                CheckPtr(slot);
                 void* cc = *slot;
                 if (!cc) continue;
                 const uint32_t tid = (*reinterpret_cast<uint32_t (**)(void*)>(
@@ -247,7 +241,6 @@ extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl,
             a[2] + (b[2] - a[2]) * 0.0f,     // XORPS XMM9,XMM9 — always corner-0's Z
         };
 
-        CheckPtr(&animalIBP);
         const float yaw = (fn_Random_RandFloatTol ? fn_Random_RandFloatTol(rng) : 0.0f)
                           * yawSpread;
         if (animalIBP && s_HerdPlace)
@@ -255,7 +248,6 @@ extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl,
                         const_cast<float*>(pos), yaw, female);
         female = !female;   // alternate AFTER placing, as retail does
 
-        CheckPtr(&animalIBP);
         if (animalIBP) {
             const uintptr_t an = static_cast<uintptr_t>(animalIBP);
 
@@ -266,7 +258,6 @@ extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl,
             *reinterpret_cast<uint32_t*>(an + 0x20) = after;
             if (static_cast<uint16_t>(before) != static_cast<uint16_t>(after) &&
                 *reinterpret_cast<int64_t*>(an + 0x10) != 0) {
-                CheckPtr(reinterpret_cast<void*>(an + 0x10));
                 if (s_ModelRefresh) s_ModelRefresh(*reinterpret_cast<void**>(an + 0x10));
             }
 
@@ -276,9 +267,7 @@ extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl,
             *reinterpret_cast<int16_t*>(an + 0x3c) = static_cast<int16_t>(rectW);
             *reinterpret_cast<int16_t*>(an + 0x3e) = static_cast<int16_t>(rectH);
 
-            CheckPtr(&animalIBP);
             const float span = *reinterpret_cast<float*>(an + 0x48);
-            CheckPtr(&animalIBP);
             *reinterpret_cast<float*>(an + 0x44) =
                 (fn_Random_RandFloat ? fn_Random_RandFloat(rng) : 0.0f) * span * phaseScale;
             if (s_AnimalBehav) s_AnimalBehav(reinterpret_cast<void*>(an));

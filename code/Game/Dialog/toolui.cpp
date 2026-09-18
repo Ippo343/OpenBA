@@ -120,7 +120,6 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
         uintptr_t entry = entries + (uintptr_t)i * 0x28;
 
         // Look up the named element in the dialog
-        fn_InternalBasePtr_CheckPtr(dialogInstPtr);
         void* dialogInst = *(void**)dialogInstPtr;
 
         void* foundElement = nullptr;
@@ -132,7 +131,6 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
         if (foundElement == nullptr) {
             // No matching element found — use 6-arg AddController (non-tab path)
             uint32_t typeId = *(uint32_t*)entry;
-            fn_InternalBasePtr_CheckPtr(dialogInstPtr);
             dialogInst = *(void**)dialogInstPtr;
             fn_DialogInstance_AddController6(
                 dialogInst,
@@ -145,13 +143,11 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
         }
 
         // Check if the found element is a TabElement
-        fn_InternalBasePtr_CheckPtr(&foundElement);
         bool isTabElement = fn_IsA(foundElement, *g_TypeId_TabElement);
 
         if (!isTabElement) {
             // Not a tab — use 6-arg AddController (non-tab path)
             uint32_t typeId = *(uint32_t*)entry;
-            fn_InternalBasePtr_CheckPtr(dialogInstPtr);
             dialogInst = *(void**)dialogInstPtr;
             fn_DialogInstance_AddController6(
                 dialogInst,
@@ -165,7 +161,6 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
 
         // Element is a TabElement — cast via IsDerivedFrom and use tab path
         ++g_uidescTab;
-        fn_InternalBasePtr_CheckPtr(&foundElement);
         bool derived = fn_IsDerivedFrom(foundElement, *g_TypeId_TabElement);
         void* tabElement = derived ? foundElement : nullptr;
 
@@ -175,7 +170,6 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
 
         // Create a new tab page: AddTab(tabElement, retval, tabDesc, elementDesc)
         // Non-trivial return ABI: this=RCX, retval=RDX, tabDesc=R8, elementDesc=R9
-        fn_InternalBasePtr_CheckPtr(&tabPtr);
         void* tabPage = nullptr;
         fn_TabElement_AddTab(
             tabPtr,              // this (TabElement)
@@ -185,7 +179,6 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
 
         // Use 5-arg AddController with the tab page element
         uint32_t typeId = *(uint32_t*)entry;
-        fn_InternalBasePtr_CheckPtr(dialogInstPtr);
         dialogInst = *(void**)dialogInstPtr;
         fn_DialogInstance_AddControllerTab(
             dialogInst,
@@ -244,7 +237,6 @@ void ToolUI_Slot4(ToolUI* self) {
     {
         uint8_t retBuf[16];
         System::String nameStr("labelTitle");
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         void* dialogInst = *(void**)(s + 0x18);
         fn_DialogInstance_FindElement(dialogInst, retBuf, &nameStr);
         *(void**)(s + 0x38) = *(void**)retBuf;
@@ -271,7 +263,6 @@ void ToolUI_Slot4(ToolUI* self) {
                     fn_UIString_Ctor(uiStrBuf, *(uint64_t*)((uintptr_t)entry + 0x30),
                                      (void*)((uintptr_t)entry + 0x38));
                     // Set text on labelTitle element
-                    fn_InternalBasePtr_CheckPtr((void*)(s + 0x38));
                     fn_TextElement_SetText(*(void**)(s + 0x38), uiStrBuf);
                 }
                 break;
@@ -283,13 +274,11 @@ void ToolUI_Slot4(ToolUI* self) {
     {
         uint8_t retBuf[16];
         System::String nameStr("buttonClose");
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         void* dialogInst = *(void**)(s + 0x18);
         fn_DialogInstance_FindElement(dialogInst, retBuf, &nameStr);
         void* closeBtn = *(void**)retBuf;
 
         if (closeBtn != nullptr) {
-            fn_InternalBasePtr_CheckPtr(&closeBtn);
             fn_Element_SetElementId(closeBtn, 1);
         }
     }
@@ -299,7 +288,6 @@ void ToolUI_Slot4(ToolUI* self) {
         void* borderTitle = nullptr;
         uint8_t retBuf[16];
         System::String nameStr("borderTitle");
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         void* dialogInst = *(void**)(s + 0x18);
         fn_DialogInstance_FindElement(dialogInst, retBuf, &nameStr);
         borderTitle = *(void**)retBuf;
@@ -307,9 +295,7 @@ void ToolUI_Slot4(ToolUI* self) {
         if (borderTitle == nullptr) {
             *(uint8_t*)(s + 0x40) = 0;
         } else {
-            fn_InternalBasePtr_CheckPtr(&borderTitle);
             fn_Element_SetElementId(borderTitle, 0);
-            fn_InternalBasePtr_CheckPtr(&borderTitle);
             fn_Element_SetFlagsOnOff(borderTitle, 0x10000, 0);
             *(uint16_t*)(s + 0x40) = 1;
         }
@@ -362,7 +348,6 @@ static bool ToolUI_DialogHasEntityUI(uintptr_t s) {
     static uint32_t s_tidEntityUI = 0;
     if (!s_tidEntityUI) s_tidEntityUI = ::Object::ResolveTypeIdByNameLazy("EntityUI");
     if (!s_tidEntityUI || !fn_DialogInstance_GetController) return false;
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
     uintptr_t di = *(uintptr_t*)(s + 0x18);
     if (di < 0x10000 || di > 0x00007FFFFFFFFFFFULL) return false;
     uint64_t ctrlBuf = 0;
@@ -416,13 +401,11 @@ void ToolUI_Slot8(ToolUI* self) {
         void* keyMap = ***(void****)g_pKeyMapObjectExref;
 
         // Get mouse X, scaled by dialog scale factor
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         void* dialogElem = *(void**)((*(uintptr_t*)(s + 0x18)) + 0x10);
         short axisX = fn_KeyMap_GetValue(keyMap, 0, 0);
         float scaleX = *(float*)((uintptr_t)dialogElem + 0xDC);
 
         // Get mouse Y
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         dialogElem = *(void**)((*(uintptr_t*)(s + 0x18)) + 0x10);
         short axisY = fn_KeyMap_GetValue(keyMap, 0, 1);
         float scaleY = *(float*)((uintptr_t)dialogElem + 0xDC);
@@ -442,9 +425,7 @@ void ToolUI_Slot8(ToolUI* self) {
 
             // FUN_14007b940 inline: set dragging flag, calc offsets
             *(uint8_t*)(s + 0x41) = 1;
-            fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
             *(int*)(s + 0x44) = *(int*)(s + 0x50) - *(int*)(*(uintptr_t*)(s + 0x18) + 0x88);
-            fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
             *(int*)(s + 0x48) = *(int*)(s + 0x54) - *(int*)(*(uintptr_t*)(s + 0x18) + 0x8C);
         }
 
@@ -459,14 +440,12 @@ void ToolUI_Slot8(ToolUI* self) {
     if (*(char*)(s + 0x41) != 0 && *(char*)(s + 0x40) != 0) {
         void* keyMap = ***(void****)g_pKeyMapObjectExref;
 
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         if (!*(uintptr_t*)(s + 0x18)) { /* dialog instance null, skip drag */ }
         else {
         void* dialogElem = *(void**)((*(uintptr_t*)(s + 0x18)) + 0x10);
         short axisX = fn_KeyMap_GetValue(keyMap, 0, 0);
         float scaleX = *(float*)((uintptr_t)dialogElem + 0xDC);
 
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         dialogElem = *(void**)((*(uintptr_t*)(s + 0x18)) + 0x10);
         short axisY = fn_KeyMap_GetValue(keyMap, 0, 1);
         float scaleY = *(float*)((uintptr_t)dialogElem + 0xDC);
@@ -477,7 +456,6 @@ void ToolUI_Slot8(ToolUI* self) {
         if (newY < 0) newY = 0;
 
         // Move dialog
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         fn_DialogInstance_SetUpperLeft(*(void**)(s + 0x18), newX, newY, false);
 
         // Update entity tracking BST with new position
@@ -556,9 +534,7 @@ void ToolUI_Slot9(ToolUI* self, void* /*param2*/, int msg, int id,
                 // Already pinned — start drag immediately
                 // FUN_14007b940 inline
                 *(uint8_t*)(s + 0x41) = 1;
-                fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
                 *(int*)(s + 0x44) = mouseX - *(int*)(*(uintptr_t*)(s + 0x18) + 0x88);
-                fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
                 *(int*)(s + 0x48) = mouseY - *(int*)(*(uintptr_t*)(s + 0x18) + 0x8C);
                 return;
             }
@@ -579,7 +555,6 @@ void ToolUI_Slot9(ToolUI* self, void* /*param2*/, int msg, int id,
     } else if (msg > 7 && msg < 0x0B) {
         // Focus events (8, 9, 10) — bring dialog to front
         uint64_t dialogRef = *(uint64_t*)(s + 0x18);
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         void* userInterface = *(void**)((*(uintptr_t*)(s + 0x18)) + 0x10);
         fn_UI_BringDialogToFront(userInterface, (void*)&dialogRef);
         return;
@@ -651,12 +626,10 @@ void ToolUI_Slot9(ToolUI* self, void* /*param2*/, int msg, int id,
         if (!fn_UI_CloseDialog || !g_pGameWorldSingleton || !*g_pGameWorldSingleton)
             return;
         {
-            fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
             uintptr_t di = *(uintptr_t*)(s + 0x18);
             if (di < 0x10000 || di > 0x00007FFFFFFFFFFFULL) return;
         }
         uint64_t dialogRef = *(uint64_t*)(s + 0x18);
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         void* userInterface = *(void**)((*(uintptr_t*)(s + 0x18)) + 0x10);
         fn_UI_CloseDialog(userInterface, (void*)&dialogRef);
 

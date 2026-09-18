@@ -1182,11 +1182,18 @@ static void RegisterDispatchSlots() {
 
     // Phase 3 Keystone D Brick 4b-exec — MoveTo / PlayAnimation ACTION-METHOD dispatch slots.
     // In the original exe these .rdata IAT slots are pre-filled by the loader; moveto.cpp /
-    // playanimation.cpp rely on that. In standalone they must be registered or MoveTo_ResolveFuncs
-    // leaves s_fn_* null and the action vtable methods (precheck/execute, run by the move-tick
-    // executor c4c50) call through null. Names = the exe's own import strings at each slot RVA.
-    RegisterDispatchSlot(0x140152ab0,   // Object::InternalBasePtr::CheckPtr(this) const [protected, IEBA]
-        (uintptr_t)ResolveExport("?CheckPtr@InternalBasePtr@Object@@IEBAXXZ"));
+    // playanimation.cpp rely on that. In standalone they must be registered or their
+    // ResolveFuncs leave s_fn_* null and the action vtable methods (precheck/execute, run by
+    // the move-tick executor c4c50) call through null. Names = the exe's own import strings
+    // at each slot RVA.
+    // 0x140152ab0 (Object::InternalBasePtr::CheckPtr, IEBA) WAS registered here and is GONE
+    // as of ENDGAME B.3.3 step 6D: CheckPtr is a bare `RET 0` in every shipped build, all
+    // 4,570 call sites are deleted, and the sweep found no reader of this slot left — by
+    // address (`ResolveAddr(Module::Exe, 0x140152ab0)`) or by name
+    // (`ResolveExport("?CheckPtr@InternalBasePtr@Object@@IEBAXXZ")`). The RUNTIME-side port
+    // and its `RegisterRuntimeExport` stay (runtime/src/object/internal.cpp): the mangled
+    // name is still the ABI door for the real class's empty member. Do not re-add this row
+    // without a caller.
     // MarketWork slot 4 stage 5 builds each FindPath argument with ctor-then-Copy. Both
     // slots were unregistered, so they resolved to 0 and calling them would have been an
     // EXEC-of-0 on exactly the path we are trying to exercise; marketwork.cpp carries a

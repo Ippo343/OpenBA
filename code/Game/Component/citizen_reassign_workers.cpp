@@ -89,9 +89,6 @@ extern bool g_wpcRosterOnly;
 
 namespace {
 
-inline void CheckPtr(void* ibpSlot) {
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibpSlot);
-}
 
 // ---- consumer leaf pointers resolved lazily -----------------------------------
 typedef void (*fn_AssignWorkplace_t)(void* citizen, void* targetIBP, int flag);  // 0x1401163d0
@@ -127,7 +124,6 @@ void* FindComponentDerived(void* entity, uint32_t typeId) {
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(e + 0x30);
     for (int i = 0; i < count; ++i) {
         void* comp = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        CheckPtr(&comp);
         if (!comp) continue;
         void** vt = *reinterpret_cast<void***>(comp);
         typedef uint32_t (*GetTid_t)(void*);
@@ -165,15 +161,12 @@ extern "C" uint64_t Entity_ReassignCost_6c60(int64_t /*param_1*/, void** param_2
     if (!pathData || !reg) return 0;
 
     // --- target cell from param_3's owner-entity position ---
-    CheckPtr(param_3);
     void* ownerEntity = *reinterpret_cast<void**>(
         *reinterpret_cast<uintptr_t*>(param_3) + 0x10);
-    CheckPtr(&ownerEntity);
     int64_t posIBP[1] = {0};
     void* posComp = fn_Entity_FindComponent_Position
         ? fn_Entity_FindComponent_Position(reinterpret_cast<uintptr_t>(ownerEntity), posIBP)
         : nullptr;
-    CheckPtr(posComp);
     float pos[4] = {0.0f, 0.0f, 0.0f, 0.0f};   // pos[0]=x (local_48), pos[1]=y (local_44)
     if (fn_Entity_GetPosition && posComp)
         fn_Entity_GetPosition(*reinterpret_cast<void**>(posComp), pos, 0, 0, nullptr);
@@ -189,7 +182,6 @@ extern "C" uint64_t Entity_ReassignCost_6c60(int64_t /*param_1*/, void** param_2
     uint32_t targetCell = static_cast<uint32_t>(width * cellY + cellX);
 
     // --- sum path cost of each qualifying occupant of param_2 to targetCell ---
-    CheckPtr(param_2);
     uint32_t total = 0;
     int i = 0;
     for (;;) {
@@ -198,7 +190,6 @@ extern "C" uint64_t Entity_ReassignCost_6c60(int64_t /*param_1*/, void** param_2
         if (!(i < *reinterpret_cast<int*>(occList + 8))) break;
         uintptr_t data = *reinterpret_cast<uintptr_t*>(occList);
         uint8_t*  worker = *reinterpret_cast<uint8_t**>(data + static_cast<uintptr_t>(i) * 8);
-        CheckPtr(&worker);
 
         void* healthComp = *reinterpret_cast<void**>(worker + 0x288);
         bool healthy = healthComp &&
@@ -244,7 +235,6 @@ extern "C" void PathGraph_ReassignWorkers(void* ctxV) {
     // ---------- Phase 1: bucket every capacity<2 residence ----------
     for (int r = 0; r < resCount; ++r) {
         void* resEntity = *reinterpret_cast<void**>(resArray + static_cast<uintptr_t>(r) * 8);
-        CheckPtr(&resEntity);
         void* resComp = FindComponentDerived(resEntity, s_tidResidence);
         if (!resComp) continue;                       // retail assumes present; guard for safety
 
@@ -297,17 +287,14 @@ extern "C" void PathGraph_ReassignWorkers(void* ctxV) {
                 uintptr_t data   = *reinterpret_cast<uintptr_t*>(occList);
                 void* worker     = *reinterpret_cast<void**>(data + static_cast<uintptr_t>(j) * 8);
                 void* targetOwner = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(bestDest) + 0x10);
-                CheckPtr(&worker);
                 s_assignWorkplace(worker, &targetOwner, 0);
                 ++j;
             }
 
             // --- migrate stored goods: srcRes owner storage -> bestDest owner storage ---
             void* srcOwner  = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(srcRes) + 0x10);
-            CheckPtr(&srcOwner);
             void* srcStorage = FindComponentDerived(srcOwner, s_tidStorage);
             void* dstOwner  = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(bestDest) + 0x10);
-            CheckPtr(&dstOwner);
             void* dstStorage = FindComponentDerived(dstOwner, s_tidStorage);
 
             if (srcStorage && dstStorage) {

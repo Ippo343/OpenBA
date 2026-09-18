@@ -127,10 +127,8 @@ void* BuildStructure_CtorFull(BuildStructure* self, void* entityIBP, uint8_t alt
 
     // Allocate the build-position byte array from the site's PositionComponent count.
     if (entityIBP) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(entityIBP);
         uintptr_t posCompIBP = 0;
         fn_Entity_FindComponent_Position(*reinterpret_cast<uintptr_t*>(entityIBP), &posCompIBP);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&posCompIBP);
         int count = fn_PositionComponent_Count ? fn_PositionComponent_Count(posCompIBP, 1) : 0;
         // FUN_14000a590(&field_50, count): resizes the {data,count,cap} array in place,
         // writing field_58 = count. New bytes are uninitialised, so zero-fill below.
@@ -227,10 +225,8 @@ int BuildStructure_Cleanup(BuildStructure* self) {
             }
         }
 
-        fn_InternalBasePtr_CheckPtr(node2);
         uintptr_t entityPtr = *(uintptr_t*)node2;
 
-        fn_InternalBasePtr_CheckPtr((void*)(entityPtr + 0x278));
         uintptr_t smComp = *(uintptr_t*)(entityPtr + 0x278);
 
         fn_StateMachine_ReleaseTasks((void*)(smComp + 0x48));
@@ -325,7 +321,6 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
     uintptr_t s = (uintptr_t)self;
 
     // --- Phase 1: Validate building is enabled ---
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
     uintptr_t entity = *(uintptr_t*)(s + 0x10);
 
     // Find PositionComponent on the building entity
@@ -333,7 +328,6 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
     fn_Entity_FindComponent_Position(entity, &posCompIBP);
 
     // Find the build-management component (type DWORD_1401c7008)
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
     entity = *(uintptr_t*)(s + 0x10);
     uintptr_t buildMgmtIBP = 0;
     fn_Entity_FindComponent_Build(entity, &buildMgmtIBP);
@@ -341,12 +335,9 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
     // Traverse: buildMgmt -> +0x10 child -> find the WorkPlaceComponent (DWORD_1401c80e0).
     // (Was documented as "build description"; corrected 2026-08-09 — the +0x50 read below
     // is the workplace accepting flag, not a description field. Behaviour unchanged.)
-    fn_InternalBasePtr_CheckPtr(&buildMgmtIBP);
     uintptr_t buildMgmt = buildMgmtIBP;
-    fn_InternalBasePtr_CheckPtr((void*)(buildMgmt + 0x10));
     uintptr_t buildDescIBP = 0;
     fn_Entity_FindComponent_WorkPlace(*(uintptr_t*)(buildMgmt + 0x10), &buildDescIBP);
-    fn_InternalBasePtr_CheckPtr(&buildDescIBP);
 
     // Check if building is enabled (byte at +0x50 of description)
     if (*(uint8_t*)(buildDescIBP + 0x50) == 0) {
@@ -354,25 +345,19 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
     }
 
     // --- Phase 2: Check if we have positions left to build ---
-    fn_InternalBasePtr_CheckPtr(&posCompIBP);
     int totalPositions = fn_PositionComponent_Count(posCompIBP, 1);
     if (self->field_68 >= totalPositions) {
         return 1;
     }
 
     // --- Phase 3: Check builder count vs max, verify citizen authorization ---
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
     uintptr_t bcIBP = 0;
     fn_Entity_FindComponent_WorkPlace(*(uintptr_t*)(s + 0x10), &bcIBP);
-    fn_InternalBasePtr_CheckPtr(&bcIBP);
     int currentBuilders = *(int32_t*)(bcIBP + 0x60);
 
-    fn_InternalBasePtr_CheckPtr(&bcIBP);
     uintptr_t bc2 = bcIBP;
-    fn_InternalBasePtr_CheckPtr((void*)(bc2 + 0x10));
     uintptr_t matDescIBP = 0;
     fn_Entity_FindComponent_MatDesc(*(uintptr_t*)(bc2 + 0x10), &matDescIBP);
-    fn_InternalBasePtr_CheckPtr(&matDescIBP);
     uintptr_t matDesc = matDescIBP;
 
     // Calculate max builders if not yet done
@@ -383,7 +368,6 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
     // If at max builders, verify this citizen is on the builder list
     if (currentBuilders == *(int32_t*)(matDesc + 0x30)) {
         bool found = false;
-        fn_InternalBasePtr_CheckPtr(&bcIBP);
         if (*(int32_t*)(bcIBP + 0x60) < 1) {
             return 1;
         }
@@ -391,18 +375,15 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
         int i = 0;
         uintptr_t byteOff = 0;
         do {
-            fn_InternalBasePtr_CheckPtr(&bcIBP);
             uintptr_t bcVal = bcIBP;
             uintptr_t builderId = *(uintptr_t*)(byteOff + *(uintptr_t*)(bcVal + 0x58));
 
-            fn_InternalBasePtr_CheckPtr(citizenPtr);
             if (builderId == *(uintptr_t*)citizenPtr) {
                 found = true;
             }
             byteOff += 8;
             i++;
 
-            fn_InternalBasePtr_CheckPtr(&bcIBP);
         } while (i < *(int32_t*)(bcIBP + 0x60));
 
         if (!found) {
@@ -423,12 +404,9 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
     // --- Phase 5: Get map grid and building center cell ---
     int* mapGrid = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
 
-    fn_InternalBasePtr_CheckPtr(citizenPtr);
     uintptr_t citizenEntity = *(uintptr_t*)citizenPtr;
 
-    fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
     uintptr_t comp278 = *(uintptr_t*)(citizenEntity + 0x278);
-    fn_InternalBasePtr_CheckPtr((void*)(comp278 + 0x68));
     uintptr_t posData = *(uintptr_t*)(comp278 + 0x68);
 
     (void)*(float*)(posData + 0x160);  // centerY: available for future use
@@ -461,7 +439,6 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
         }
 
         // Get world position for this build point
-        fn_InternalBasePtr_CheckPtr(&posCompIBP);
         float candidatePos[3];
         fn_Entity_GetPositionForIndex(
             posCompIBP, candidatePos, 1, chosenIndex, nullptr);
@@ -475,7 +452,6 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
             uintptr_t gridData = *(uintptr_t*)(mapGrid + 0x20);
             if (CheckCellConnectivity(gridData, buildingCell, candidateCell)) {
                 // Found accessible point -- get exact position
-                fn_InternalBasePtr_CheckPtr(&posCompIBP);
                 float bestPos[3];
                 fn_Entity_GetPositionForIndex(
                     posCompIBP, bestPos, 1, chosenIndex, nullptr);
@@ -495,7 +471,6 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
                 for (int posIdx = 0; posIdx < total; posIdx++) {
                     if (posIdx == chosenIndex) continue;
 
-                    fn_InternalBasePtr_CheckPtr(&posCompIBP);
                     float testPos[3];
                     fn_Entity_GetPositionForIndex(
                         posCompIBP, testPos, 1, posIdx, nullptr);
@@ -611,7 +586,6 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
 
                     // Update building entity state
                     int priority = self->field_20;
-                    fn_InternalBasePtr_CheckPtr(citizenPtr);
                     uintptr_t bldgEntity = *(uintptr_t*)citizenPtr;
 
                     // Get target via vtable slot 10 (GetTarget, +0x50)
@@ -696,15 +670,12 @@ static bool CheckCitizenHasTask(BuildStructure* self, void* citizenIBP, uintptr_
     // Check IBP is valid
     if (*(uintptr_t*)citizenIBP == 0) return false;
 
-    fn_InternalBasePtr_CheckPtr(citizenIBP);
     bool isEntity = fn_IsA((void*)*(uintptr_t*)citizenIBP, *g_TypeId_ComponentEntity);
     if (!isEntity) return false;
 
-    fn_InternalBasePtr_CheckPtr(citizenIBP);
     uintptr_t entity = *(uintptr_t*)citizenIBP;
 
     // Get state machine component at entity+0x278
-    fn_InternalBasePtr_CheckPtr((void*)(entity + 0x278));
     uintptr_t smComp = *(uintptr_t*)(entity + 0x278);
 
     // Iterate action stack: smComp+0x48 = array ptr, smComp+0x60 = count
@@ -714,7 +685,6 @@ static bool CheckCitizenHasTask(BuildStructure* self, void* citizenIBP, uintptr_
     uintptr_t actionArray = *(uintptr_t*)(smComp + 0x48);
     for (int i = 0; i < actionCount; i++) {
         uintptr_t actionIBP = *(uintptr_t*)(actionArray + i * 8);
-        fn_InternalBasePtr_CheckPtr(&actionIBP);
 
         // Check if this action is a CompleteTask
         bool isCompleteTask = fn_IsDerivedFrom((void*)actionIBP, taskTypeId);
@@ -727,7 +697,6 @@ static bool CheckCitizenHasTask(BuildStructure* self, void* citizenIBP, uintptr_
         uintptr_t taskPtr = *(uintptr_t*)taskBuf;
 
         if (taskPtr != 0) {
-            fn_InternalBasePtr_CheckPtr(taskBuf);
             taskPtr = *(uintptr_t*)taskBuf;
             // Check if task's priority (+0x30) matches work's priority (+0x20)
             if (*(int*)(taskPtr + 0x30) == self->field_20) {
@@ -815,7 +784,6 @@ int BuildStructure_Validate(BuildStructure* self, void* /*citizenIBP*/) {
                 }
             } else {
                 // Citizen has matching task — record the slot index from task+0x34
-                fn_InternalBasePtr_CheckPtr(&taskResult);
                 int slotIdx = *(int*)(taskResult + 0x34);
 
                 int newSlotCount = slotCount + 1;
@@ -875,11 +843,9 @@ int BuildStructure_Validate(BuildStructure* self, void* /*citizenIBP*/) {
                 uintptr_t bstRoot = *treeRootPtr;
                 uintptr_t* searchNode = (uintptr_t*)bstRoot;
                 while (searchNode != nullptr) {
-                    fn_InternalBasePtr_CheckPtr(searchNode);
                     if (rList[i] < *searchNode) {
                         searchNode = (uintptr_t*)searchNode[2];  // left at +0x10
                     } else {
-                        fn_InternalBasePtr_CheckPtr(&rList[i]);
                         if (rList[i] <= *searchNode) {
                             // Found — remove from BST
                             fn_TreeRemoveByKey(treeRootPtr, searchNode);
@@ -1007,7 +973,7 @@ extern "C" int BuildStructure_ForceDrive(void* self, void* citizenIBP) {
 extern "C" bool BuildStructure_DepsReady() {
     EnsureHelpers();
     EnsureVtables();
-    return fn_InternalBasePtr_CheckPtr && fn_InternalBasePtr_Ctor &&
+    return fn_InternalBasePtr_Ctor &&
            fn_Entity_FindComponent_Position && fn_Entity_FindComponent_Build &&
            fn_Entity_FindComponent_WorkPlace && fn_Entity_FindComponent_MatDesc &&
            fn_PositionComponent_Count && fn_CalcMaxBuilders && fn_DynArray_Resize &&

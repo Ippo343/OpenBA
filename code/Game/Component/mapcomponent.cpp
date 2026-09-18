@@ -387,7 +387,6 @@ extern "C" void MapComponent_ApplyOccupancy_41b0(void* mapCompV) {
         static bool s_init = false;
         if (!s_init) { s_init = true;
             s_c3470 = reinterpret_cast<void(*)(void*)>(ResolveAddr(Module::Exe, 0x1400c3470)); }
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(mc + 0x10));
         if (s_c3470) s_c3470(*(void**)(mc + 0x10));
     }
 }

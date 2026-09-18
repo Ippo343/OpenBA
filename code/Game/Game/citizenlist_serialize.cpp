@@ -831,15 +831,12 @@ extern "C" void CitizenList_PostLoad_8f580(void* self) {
         int slot = -1;
         for (; idx < entCount; ++idx, --slot) {
             uint64_t entIBP = entArr[idx];
-            fn_InternalBasePtr_CheckPtr(&entIBP);
             uint64_t comp = *reinterpret_cast<uint64_t*>(entIBP + 0x10);
-            fn_InternalBasePtr_CheckPtr(&comp);
 
             void* chosen = nullptr;
             int32_t compCount = *reinterpret_cast<int32_t*>(comp + 0x38);
             for (int32_t j = 0; j < compCount; ++j) {
                 void** slotPtr = reinterpret_cast<void**>(*reinterpret_cast<uint64_t*>(comp + 0x30) + static_cast<int64_t>(j) * 8);
-                fn_InternalBasePtr_CheckPtr(slotPtr);
                 void* cand = *slotPtr;
                 if (!cand) continue;
                 void** vt = *reinterpret_cast<void***>(cand);
@@ -847,7 +844,6 @@ extern "C" void CitizenList_PostLoad_8f580(void* self) {
                 uint32_t tid = reinterpret_cast<fn_GetTypeId_t>(vt[2])(cand);
                 if (tid == DWORD_1401c79e0_TypeId()) {
                     slotPtr = reinterpret_cast<void**>(*reinterpret_cast<uint64_t*>(comp + 0x30) + static_cast<int64_t>(j) * 8);
-                    fn_InternalBasePtr_CheckPtr(slotPtr);
                     void* obj = *slotPtr;
                     if (obj && fn_IsDerivedFrom(obj, DWORD_1401c79e0_TypeId())) chosen = obj;
                     break;
@@ -857,7 +853,6 @@ extern "C" void CitizenList_PostLoad_8f580(void* self) {
             uint8_t chosenIBP[8] = {0};
             new (chosenIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(chosen));   // B.3.3 bridge
-            fn_InternalBasePtr_CheckPtr(chosenIBP);
             uint64_t chosenVal = *reinterpret_cast<uint64_t*>(chosenIBP);
             int16_t cx = chosenVal ? *reinterpret_cast<int16_t*>(chosenVal + 0x28) : 0;
             int16_t cy = chosenVal ? *reinterpret_cast<int16_t*>(chosenVal + 0x2a) : 0;

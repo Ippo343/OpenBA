@@ -38,11 +38,9 @@ static void* HuntFindComponentByTypeId(uintptr_t entity, void* retIBP, const uin
         uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
         for (int i = 0; i < n; i++) {
             void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
             void* comp = *slot;
             uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
             if (t == *pTypeId) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
                 void* c = *slot;
                 found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *pTypeId)) ? c : nullptr;
                 break;
@@ -171,12 +169,10 @@ void ActHunt_MarkEntityRemoval_c2ea0(void* self) {
             uintptr_t base = *reinterpret_cast<uintptr_t*>(s + 0x30);
             for (int64_t i = 0; i < count; i++) {
                 void* node = *reinterpret_cast<void**>(base + i * 8);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&node);
                 // component flags at node+0x20 (uint), bit 1 (>>1 & 1)
                 uint32_t cflags = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(node) + 0x20);
                 bool visits = ((cflags >> 1) & 1) != 0;
                 if (visits) {
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&node);
                     (*reinterpret_cast<void(**)(void*)>(*reinterpret_cast<uintptr_t*>(node) + 0x38))(node);
                 }
             }
@@ -206,7 +202,6 @@ void ActHunt_NotifyEntityChanged_c3470(void* self) {
         uintptr_t base = *reinterpret_cast<uintptr_t*>(s + 0x30);
         for (int64_t i = 0; i < count; i++) {
             void** slot = reinterpret_cast<void**>(base + i * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
             void* comp = *slot;
             uint16_t cflags = *reinterpret_cast<uint16_t*>(reinterpret_cast<uintptr_t>(comp) + 0x20);
             *reinterpret_cast<uint32_t*>(s + 0x40) |= static_cast<uint32_t>(cflags);

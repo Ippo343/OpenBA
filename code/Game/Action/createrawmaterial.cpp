@@ -162,7 +162,7 @@ bool CreateRawMaterial_ResolveFuncs() {
               s_typeId_1401c7158 && s_typeId_ComponentEntity &&
               s_typeId_RawMatDesc && s_typeId_1401c7c80 && s_typeId_1401c8118 &&
               fn_ObjectInternal_Dtor && fn_InternalBasePtr_DeletePtr &&
-              fn_MemFreeStatic && fn_InternalBasePtr_CheckPtr &&
+              fn_MemFreeStatic &&
               fn_InternalBasePtr_Ctor && fn_IsDerivedFrom &&
               fn_InternalBasePtr_Serialize &&
               g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
@@ -224,7 +224,6 @@ static void* FindComponentOnEntity(int64_t entity, uint32_t typeId) {
 
     for (int i = 0; i < count; i++) {
         void* compIBP = (void*)(compArray + (int64_t)i * 8);
-        fn_InternalBasePtr_CheckPtr(compIBP);
         void* comp = *(void**)compIBP;
 
         // Get type ID via vtable slot +0x10
@@ -232,7 +231,6 @@ static void* FindComponentOnEntity(int64_t entity, uint32_t typeId) {
         typedef uint32_t (*GetType_t)();
         uint32_t compTypeId = ((GetType_t)(*(void**)(vtable + 0x10)))();
         if (compTypeId == typeId) {
-            fn_InternalBasePtr_CheckPtr(compIBP);
             comp = *(void**)compIBP;
             if (fn_IsDerivedFrom(comp, typeId)) {
                 return comp;
@@ -361,7 +359,6 @@ int CreateRawMaterial_AbstractImpl_Impl(CreateRawMaterial* self, void* actionSta
     void* rawMatDesc = FindRawMaterialDesc((void*)descEntity);
 
     // Check building maturity to determine yield
-    fn_InternalBasePtr_CheckPtr(s + 0x28);
     uintptr_t building = *(uintptr_t*)(s + 0x28);
 
     int yield;
@@ -472,7 +469,6 @@ int CreateRawMaterial_AbstractImpl_Impl(CreateRawMaterial* self, void* actionSta
                 reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
 
             // Find component on new entity (DAT_1401c7c80 type)
-            fn_InternalBasePtr_CheckPtr(&entityIBP);
             void* comp = FindComponentOnEntity(entityIBP, *s_typeId_1401c7c80);
 
             // Wrap component in IBP
@@ -481,13 +477,11 @@ int CreateRawMaterial_AbstractImpl_Impl(CreateRawMaterial* self, void* actionSta
 
             // Position entity at cell with random rotation
             void* randomPtr = *(void**)(gameWorld + 0xd8);
-            fn_InternalBasePtr_CheckPtr(&compIBP);
             int randVal = s_fn_Random_RandTol(randomPtr, 2);
             s_fn_PositionEntity(compIBP, cellIndex, (float)randVal * ROTATION_SCALE);
 
             // Handle secondary entity (+0x30) if present
             if (*(int64_t*)(s + 0x30) != 0) {
-                fn_InternalBasePtr_CheckPtr(s + 0x30);
                 uintptr_t secondaryEntity = *(uintptr_t*)(s + 0x30);
                 uintptr_t secDesc = *(uintptr_t*)(secondaryEntity + 0x28);
 
@@ -506,7 +500,6 @@ int CreateRawMaterial_AbstractImpl_Impl(CreateRawMaterial* self, void* actionSta
             }
 
             // Set quantity on new entity component
-            fn_InternalBasePtr_CheckPtr(&compIBP);
             *(int32_t*)(compIBP + 0x28) = batchSize;
             *(int64_t*)(compIBP + 0x30) = 0;
 
@@ -524,17 +517,13 @@ int CreateRawMaterial_AbstractImpl_Impl(CreateRawMaterial* self, void* actionSta
 
             // Handle place-near behavior: link to secondary entity
             if (*(char*)(s + 0x51) != '\0' && *(int64_t*)(s + 0x30) != 0) {
-                fn_InternalBasePtr_CheckPtr(s + 0x30);
                 int64_t childIBP = 0;
                 s_fn_GetChildEntities(*(int64_t*)(s + 0x30), &childIBP);
                 if (childIBP != 0) {
-                    fn_InternalBasePtr_CheckPtr(&entityIBP);
                     void* rdCompIBP = nullptr;
                     s_fn_FindComponent_RD(entityIBP, &rdCompIBP);
-                    fn_InternalBasePtr_CheckPtr(&rdCompIBP);
                     uint32_t rdValue = *(uint32_t*)(*(uintptr_t*)&rdCompIBP + 0x28);
 
-                    fn_InternalBasePtr_CheckPtr(&childIBP);
                     // B.3.2 bridge: FUN_140044810 == Collection::Array<int32>::
                     // SetSize(n, fill) (3-arg form; ActRm_DynArrayPush4_44810 in
                     // action_base_rawmat.cpp), gated on the byte flag at +0x28 and
@@ -563,26 +552,22 @@ int CreateRawMaterial_GetTarget_Impl(CreateRawMaterial* self, void* param) {
     uint8_t* s = (uint8_t*)self;
 
     // Check +0x28 -> building entity -> +0x10 (the actual target entity)
-    fn_InternalBasePtr_CheckPtr(s + 0x28);
     uintptr_t building = *(uintptr_t*)(s + 0x28);
     uintptr_t targetEntity = *(uintptr_t*)(building + 0x10);
 
     // Use a local IBP to CheckPtr the target
     uintptr_t targetIBP = targetEntity;
-    fn_InternalBasePtr_CheckPtr(&targetIBP);
 
     if (*(uintptr_t*)param == targetIBP) {
         return 1;
     }
 
     // Check +0x30 (secondary entity)
-    fn_InternalBasePtr_CheckPtr(param);
     if (*(int64_t*)(s + 0x30) == *(int64_t*)param) {
         return 1;
     }
 
     // Check +0x38 (tertiary entity)
-    fn_InternalBasePtr_CheckPtr(param);
     if (*(int64_t*)(s + 0x38) == *(int64_t*)param) {
         return 1;
     }

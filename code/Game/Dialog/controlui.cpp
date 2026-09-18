@@ -200,7 +200,6 @@ void ControlUI_Slot9(ControlUI* self, uint64_t* param2, int param3, int param4) 
 
     if (param3 == 0x12 && param4 == 50000) {
         // CheckPtr on stored element before comparison
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x30));
         // Verify: *param2 must match stored element pointer at +0x30
         if (*param2 == *(uint64_t*)(s + 0x30)) {
             // Get datasource component
@@ -213,7 +212,6 @@ void ControlUI_Slot9(ControlUI* self, uint64_t* param2, int param3, int param4) 
             if (!component) return;   // SA guard: no config => no command to send
 
             // CheckPtr on sub-component before vtable call
-            fn_InternalBasePtr_CheckPtr((void*)(s + 0x38));
             // Call vtable[14] (offset 0x70) on sub-component to toggle state
             void* subCompPtr = (void*)*(uint64_t*)(s + 0x38);
             if (!subCompPtr) return;  // SA guard: entity lacks the target component

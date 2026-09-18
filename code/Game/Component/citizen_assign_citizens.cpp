@@ -174,14 +174,10 @@ int ComputeCost(int32_t* pathData, int fromCell, int toCell) {
     return cost;
 }
 
-inline void CheckPtr(void* ibp) {
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);
-}
 
 // Read a citizen out of the townMgr citizen array, resolving the lazy IBP.
 inline void* CitizenAt(uintptr_t citArray, int i) {
     void* c = *reinterpret_cast<void**>(citArray + static_cast<int64_t>(i) * 8);
-    CheckPtr(&c);
     return c;
 }
 
@@ -201,11 +197,9 @@ inline bool IsIdleHealthy(void* citizenV) {
 inline void* FindWorkplaceComp(void* entityRaw) {
     if (!entityRaw || !s_findWorkplace) return nullptr;
     void* raw = entityRaw;
-    CheckPtr(&raw);
     int64_t outIBP[2] = {0, 0};
     s_findWorkplace(reinterpret_cast<int64_t>(raw), outIBP);
     void* comp = reinterpret_cast<void*>(outIBP[0]);
-    CheckPtr(&comp);
     return comp;
 }
 
@@ -361,7 +355,6 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
         WorkplaceList wl = LookupWorkplaces(mapRoot, key);
         for (int j = 0; j < wl.count; ++j) {
             void* entity = *reinterpret_cast<void**>(wl.list + static_cast<int64_t>(j) * 8);
-            CheckPtr(&entity);
             void* wpComp = FindWorkplaceComp(entity);
             if (!wpComp) continue;
             // +0x60 = LIVE WORKER COUNT (capacity is WorkComponent+0x30, never read

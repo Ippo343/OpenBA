@@ -150,12 +150,10 @@ static void* WPC_FindJobHostComponent(int64_t host, uint32_t* pTypeId) {
     int64_t arr = *(int64_t*)(host + 0x30);
     for (int i = 0; i < count; i++) {
         int64_t* slot = (int64_t*)(arr + (int64_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* comp = (void*)*slot;
         typedef uint32_t (*GetTypeId_t)(void*);
         uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
         if (tid == *pTypeId) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
             void* c = (void*)*slot;
             if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *pTypeId)) return c;
             return nullptr;
@@ -243,28 +241,21 @@ void WorkplaceComponent_Detach(int64_t comp, void* workerIbp) {
     if (g_wpcRosterOnly) return;
     if (*(int*)(comp + 0x60) != 0) return;
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
     if (s_fn_WPC_ModelKick) s_fn_WPC_ModelKick(*(int64_t*)(comp + 0x10), 3);
 
     // Partial-world guard (see WorkplaceComponent_Attach): skip the status-icon visual
     // toggles when the standalone entity lacks the renderable StatusIconComponent (c7e08).
     uint64_t meshIbp = 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
     if (s_fn_WPC_FindMesh) s_fn_WPC_FindMesh(*(int64_t*)(comp + 0x10), &meshIbp);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&meshIbp);
     if (s_fn_WPC_MeshFlag && *(int64_t**)&meshIbp) s_fn_WPC_MeshFlag(*(int64_t**)&meshIbp, 2, '\0');
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
     if (s_fn_WPC_FindMesh) s_fn_WPC_FindMesh(*(int64_t*)(comp + 0x10), &meshIbp);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&meshIbp);
     if (s_fn_WPC_MeshFlag && *(int64_t**)&meshIbp) s_fn_WPC_MeshFlag(*(int64_t**)&meshIbp, 3, '\0');
 
     if (*(char*)(comp + 0x50) == '\0') return;
 
     uint64_t accIbp = 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
     if (s_fn_WPC_Accessor5780) s_fn_WPC_Accessor5780(*(int64_t*)(comp + 0x10), &accIbp);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&accIbp);
     // Partial-world guard: on an inert standalone workplace, Accessor5780 yields a null
     // accessor object; passing it to Getter_e710 dereferences null+0x10 (READ of 0x10),
     // which crashed when a citizen switched workplaces during the per-frame update (that
@@ -286,12 +277,9 @@ void WorkplaceComponent_Detach(int64_t comp, void* workerIbp) {
     if (!desc || jobSlot != *(int64_t*)((uintptr_t)desc + 0x20)) return;
 
     uint64_t meshIbp2 = 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
     if (s_fn_WPC_FindMesh) s_fn_WPC_FindMesh(*(int64_t*)(comp + 0x10), &meshIbp2);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&meshIbp2);
     int64_t* mesh = *(int64_t**)&meshIbp2;
     if (!mesh) return;   // partial-world guard: no StatusIconComponent renderable
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(mesh + 2);
     if ((*(uint32_t*)(mesh[2] + 0x40) >> 10 & 1) != 0) return;
 
     uint32_t* pFlagsE = (uint32_t*)(mesh + 0x1e);
@@ -347,7 +335,6 @@ void WorkplaceComponent_Detach(int64_t comp, void* workerIbp) {
         changed = new4 ^ old4;
     }
     if ((changed & 0xffff) != 0 && mesh[2] != 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(mesh + 2);
         if (s_fn_WPC_FlagNotify) s_fn_WPC_FlagNotify((void*)mesh[2]);
     }
 }
@@ -370,15 +357,12 @@ void WorkplaceComponent_Attach(int64_t comp, void* workerIbp) {
             void* desc = (descObj && fn_IsDerivedFrom && s_TypeId_WorkPlaceDesc &&
                           fn_IsDerivedFrom(descObj, *s_TypeId_WorkPlaceDesc)) ? descObj : nullptr;
             if (desc && jobSlot == *(int64_t*)((uintptr_t)desc + 0x20)) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
                 if (s_fn_WPC_ModelKick) s_fn_WPC_ModelKick(*(int64_t*)(comp + 0x10), 2);
             }
         }
 
         uint64_t meshIbp = 0;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
         if (s_fn_WPC_FindMesh) s_fn_WPC_FindMesh(*(int64_t*)(comp + 0x10), &meshIbp);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&meshIbp);
         // Faithful-equivalent partial-world guard: the original always toggles the building's
         // status-icon mesh (FUN_14012c3f0) because every real building carries the renderable
         // StatusIconComponent (c7e08). A standalone-spawned entity may lack it (inert factory /
@@ -441,7 +425,6 @@ static void WorkPlaceComponent_EvictRoster(int64_t comp) {
         int before = *(int*)(comp + 0x60);
 
         int64_t* roster = *(int64_t**)(comp + 0x58);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(roster);
         int64_t worker = *roster;
 
         // Pick the finder off the worker's profession record (+0x1f0 -> +0x4c).
@@ -455,7 +438,6 @@ static void WorkPlaceComponent_EvictRoster(int64_t comp) {
 
         // Re-read the roster base — the finders above can reallocate it.
         int64_t* rosterNow = *(int64_t**)(comp + 0x58);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(rosterNow);
         s_fn_WPC_AssignHousing((void*)*rosterNow, &newWorkplaceIbp);
 
         if (*(int*)(comp + 0x60) >= before || ++guard > 4096) {
@@ -518,9 +500,7 @@ void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting) {
 
     // Locate the building's StatusIconComponent (the "mesh" the icon toggles hang off).
     uint64_t meshIbp = 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
     if (s_fn_WPC_FindMesh) s_fn_WPC_FindMesh(*(int64_t*)(comp + 0x10), &meshIbp);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&meshIbp);
     int64_t* mesh = *(int64_t**)&meshIbp;
     if (!mesh || !s_fn_WPC_MeshFlag) {
         // Partial-world: no renderable icon. The eviction below is gameplay state, not
@@ -537,9 +517,7 @@ void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting) {
     } else {
         // (a) raise the closed indicator, keyed on the owner's build state.
         uint64_t stateIbp = 0;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
         if (s_fn_WPC_FindBuildState) s_fn_WPC_FindBuildState(*(int64_t*)(comp + 0x10), &stateIbp);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&stateIbp);
         // Partial-world guard: a standalone workplace can lack the BuildComponent. The
         // original derefs it unguarded; with none present treat the building as "normal"
         // (the state the start-town / force-completed buildings are actually in).
@@ -568,9 +546,7 @@ void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting) {
             // Re-find the mesh (mirrors the original's per-call finder) and raise bit 4. The
             // cull-guard + Scene Add + positioning + entity-notify all run inside the toggle.
             meshIbp = 0;
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
             if (s_fn_WPC_FindMesh) s_fn_WPC_FindMesh(*(int64_t*)(comp + 0x10), &meshIbp);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&meshIbp);
             mesh = *(int64_t**)&meshIbp;
             if (mesh) s_fn_WPC_MeshFlag(mesh, 4, '\x01');
         }
@@ -607,7 +583,6 @@ void WorkplaceComponent_ApplyOccupiedVisual(int64_t comp) {
     void* desc = (fn_IsDerivedFrom && s_TypeId_WorkPlaceDesc &&
                   fn_IsDerivedFrom(descObj, *s_TypeId_WorkPlaceDesc)) ? descObj : nullptr;
     if (desc && jobSlot == *(int64_t*)((uintptr_t)desc + 0x20)) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
         if (s_fn_WPC_ModelKick) s_fn_WPC_ModelKick(*(int64_t*)(comp + 0x10), 2);
     }
 
@@ -642,12 +617,10 @@ void WorkPlaceComponent_OnCreateInit(void* selfP) {
         if (fn_InternalBasePtr_Ctor) new (&emptyIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
         int64_t* workerSlot = *(int64_t**)(self + 0x58);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(workerSlot);
         int64_t worker = *workerSlot;
         int64_t* pJobHost = (int64_t*)(worker + 0x248);
 
         if (*pJobHost != 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pJobHost);
             int64_t host = *pJobHost;
             void* comp = WPC_FindJobHostComponent(host, s_pTId_JobHostComp);
             int64_t compIbp = 0;
@@ -656,13 +629,11 @@ void WorkPlaceComponent_OnCreateInit(void* selfP) {
             int64_t workerIbp = 0;
             if (fn_InternalBasePtr_Ctor) new (&workerIbp) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>((void*)worker));   // B.3.3 bridge
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&compIbp);
             if (s_fn_WPC_Detach) s_fn_WPC_Detach(compIbp, &workerIbp);
         }
 
         *pJobHost = emptyIbp;
         if (emptyIbp != 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pJobHost);
             int64_t host = *pJobHost;
             void* comp = WPC_FindJobHostComponent(host, s_pTId_JobHostComp);
             int64_t compIbp = 0;
@@ -671,7 +642,6 @@ void WorkPlaceComponent_OnCreateInit(void* selfP) {
             int64_t workerIbp = 0;
             if (fn_InternalBasePtr_Ctor) new (&workerIbp) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>((void*)worker));   // B.3.3 bridge
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&compIbp);
             if (s_fn_WPC_Attach) s_fn_WPC_Attach(compIbp, &workerIbp);
         }
 
@@ -739,10 +709,8 @@ extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP) {
         s_calcMaxWorkers = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x14012e5c0));
     uintptr_t workComp = 0;
     if (s_find3050) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
         reinterpret_cast<void*(*)(int64_t, void*)>(s_find3050)(
             *reinterpret_cast<int64_t*>(self + 0x10), &workComp);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workComp);
     }
     if (workComp && s_calcMaxWorkers)
         *reinterpret_cast<int32_t*>(workComp + 0x30) =

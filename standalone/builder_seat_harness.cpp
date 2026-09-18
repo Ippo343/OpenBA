@@ -69,7 +69,6 @@ int CountProfession(uint8_t* townMgr, uint64_t key) {
     int hits = 0;
     for (int i = 0; i < n; ++i) {
         void* c = arr[i];
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&c);
         if (!c) continue;
         if (*reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(c) + 0x1f0) == key) ++hits;
     }
@@ -107,7 +106,6 @@ extern "C" void BuilderSeat_Tick(int frameNum) {
         std::fprintf(stderr, "[BuilderSeat] converted citizens (roster %d):", cn);
         for (int i = 0; i < cn; ++i) {
             void* c = carr[i];
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&c);
             if (!c) continue;
             if (*reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(c) + 0x1f0) == builderKey)
                 std::fprintf(stderr, " %p", c);

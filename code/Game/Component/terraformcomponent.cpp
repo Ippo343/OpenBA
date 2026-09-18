@@ -292,7 +292,6 @@ void TerraformComponent_RegionRecalc(void* terrainGridV, int x, int y) {
 #include <cstdlib>
 
 typedef void  (*fn_FindCompOut_t)(void* entity, void* outIbp);
-typedef void  (*fn_CheckPtrSlot_t)(void* ibp);
 typedef void* (*fn_MeshVertices_t)(void* mesh, int lod);
 typedef float* (*fn_TerrainSample_t)(int* tileGrid, float* out, const float* in,
                                      char flag, void* extra);
@@ -302,7 +301,6 @@ typedef bool  (*fn_IsDerivedFromId_t)(void* self, uint32_t typeId);
 
 static fn_FindCompOut_t     s_fn_FindComp_Model  = nullptr;  // 0x140003f60 (ModelComponent)
 static fn_FindCompOut_t     s_fn_FindComp_Map    = nullptr;  // 0x140004680 (MapComponent)
-static fn_CheckPtrSlot_t    s_fn_CheckPtr        = nullptr;  // slot 0x140152ab0
 static fn_MeshVertices_t    s_fn_MeshVertices    = nullptr;  // slot 0x140151478
 static fn_TerrainSample_t   s_fn_TerrainSample   = nullptr;  // 0x14009f3e0
 static fn_TfMemAlloc_t      s_fn_MemAlloc        = nullptr;  // slot 0x140152b60
@@ -321,8 +319,6 @@ static void TerraformDeformResolve() {
     s_pCellStep         = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017214c));
 
     uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152ab0);
-    if (slot) s_fn_CheckPtr = *reinterpret_cast<fn_CheckPtrSlot_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140151478);
     if (slot) s_fn_MeshVertices = *reinterpret_cast<fn_MeshVertices_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152b60);
@@ -336,7 +332,6 @@ static void TerraformDeformResolve() {
 
 // Resolve the component's owning entity (component +0x10 is an InternalBasePtr).
 static void* TerraformOwnerEntity(uintptr_t self) {
-    if (s_fn_CheckPtr) s_fn_CheckPtr(reinterpret_cast<void*>(self + 0x10));
     return *reinterpret_cast<void**>(self + 0x10);
 }
 
@@ -346,7 +341,6 @@ static void* TerraformFindComp(fn_FindCompOut_t finder, void* entity) {
     uintptr_t out[2] = {0, 0};
     finder(entity, out);
     if (!out[0]) return nullptr;
-    if (s_fn_CheckPtr) s_fn_CheckPtr(out);
     return reinterpret_cast<void*>(out[0]);
 }
 

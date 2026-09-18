@@ -65,10 +65,6 @@ static fn_Serializer_SerializeBool_t s_fn_Serializer_SerializeBool = nullptr;
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_d = nullptr;
 
-// InternalBasePtr::CheckPtr -- dispatch at 0x140152ab0
-typedef void (*fn_CheckPtr_t)(void* ptr);
-static fn_CheckPtr_t s_fn_CheckPtr = nullptr;
-
 // FUN_140004680 -- get entity data (owner -> entity data ptr)
 typedef void* (*fn_GetEntityData_t)(void* owner, void* outPtr);
 static fn_GetEntityData_t s_fn_GetEntityData = nullptr;
@@ -122,10 +118,6 @@ static void EnsureHelpers() {
 
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_d = reinterpret_cast<fn_IsDerivedFrom_dispatch_t>(
-        *reinterpret_cast<uintptr_t*>(slot));
-
-    slot = ResolveAddr(Module::Exe, 0x140152ab0);
-    if (slot) s_fn_CheckPtr = reinterpret_cast<fn_CheckPtr_t>(
         *reinterpret_cast<uintptr_t*>(slot));
 
     s_initialized = true;
@@ -214,17 +206,11 @@ void FloorComponent_OnCreate(FloorComponent* self) {
         int* pScene = *(int**)((uintptr_t)*s_pGameState + 0xF8);
 
         // Check owner pointer
-        if (s_fn_CheckPtr) {
-            s_fn_CheckPtr((void*)((uintptr_t)self + 0x10));
-        }
 
         // Get entity data from owner
         uintptr_t entityData = 0;
         if (s_fn_GetEntityData) {
             s_fn_GetEntityData(*(void**)((uintptr_t)self + 0x10), &entityData);
-        }
-        if (s_fn_CheckPtr) {
-            s_fn_CheckPtr(&entityData);
         }
 
         // [SA-GUARD] Same MapComponent-may-be-missing case as f390: without the
@@ -307,7 +293,6 @@ void* FloorComponent_FindResData(void* owner, void* outIBP) {
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(o + 0x30);
     for (int i = 0; i < count; ++i) {
         void** slot = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
-        if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
         void* comp = *slot;
         // Virtual GetTypeId at vtable+0x10.
         uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
@@ -315,7 +300,6 @@ void* FloorComponent_FindResData(void* owner, void* outIBP) {
         fn_GetTypeId_t getId = *reinterpret_cast<fn_GetTypeId_t*>(vt + 0x10);
         uint32_t tid = getId ? getId(comp) : 0;
         if (tid == wantTypeId) {
-            if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
             void* c = *slot;
             if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, wantTypeId)) found = c;
             break;
@@ -362,10 +346,8 @@ void FloorComponent_SubF390(void* selfV) {
     uintptr_t world = reinterpret_cast<uintptr_t>(*s_pGameState);
     int* mapInfo = *reinterpret_cast<int**>(world + 0xF8);
 
-    if (s_fn_CheckPtr) s_fn_CheckPtr(reinterpret_cast<void*>(self + 2));
     int64_t resIBP = 0;
     if (s_fn_GetEntityData) s_fn_GetEntityData(*reinterpret_cast<void**>(self + 2), &resIBP);
-    if (s_fn_CheckPtr) s_fn_CheckPtr(&resIBP);
     // [SA-GUARD] Retail reads the footprint shorts unguarded — its MapComponent is always
     // there. In standalone the find can miss (the type registry can lag), and a null here
     // would stamp cell records at address 0x28.
@@ -377,10 +359,8 @@ void FloorComponent_SubF390(void* selfV) {
     int16_t fw    = *reinterpret_cast<int16_t*>(resIBP + 0x2c);
     int16_t fh    = *reinterpret_cast<int16_t*>(resIBP + 0x2e);
 
-    if (s_fn_CheckPtr) s_fn_CheckPtr(reinterpret_cast<void*>(self + 2));
     int64_t entAcc = 0;
     if (s_fn_EntityAccessor) s_fn_EntityAccessor(*reinterpret_cast<void**>(self + 2), &entAcc);
-    if (s_fn_CheckPtr) s_fn_CheckPtr(&entAcc);
     uintptr_t ent = *reinterpret_cast<uintptr_t*>(&entAcc);
 
     // [SA-SCOPED FALLBACK] The finder's type id is the shared raw .rdata 0x1401c7a50

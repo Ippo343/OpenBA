@@ -553,8 +553,6 @@ extern "C" void TradeComponent_AutoTrade(void* selfV) {
 
     if (s_ExtendStay) s_ExtendStay(selfV);
 
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     uint64_t storageIBP[2] = {0, 0};
     if (s_FindStorage) s_FindStorage(*reinterpret_cast<int64_t*>(comp + 0x10), storageIBP);
 
@@ -563,7 +561,6 @@ extern "C" void TradeComponent_AutoTrade(void* selfV) {
     int64_t treeRoot = 0;      // the purchase tally
     int     treeCount = 0;     // retail keeps it; nothing reads it back
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(storageIBP);
     const uintptr_t storage = static_cast<uintptr_t>(storageIBP[0]);
     int volume = s_QueryCount ? s_QueryCount(reinterpret_cast<void*>(storage)) : 0;
     const int volumeCap = *reinterpret_cast<int32_t*>(storage + 0x38);
@@ -591,7 +588,6 @@ extern "C" void TradeComponent_AutoTrade(void* selfV) {
         // ── 1. what the post can afford: everything unreserved in its storage ──────
         int sellValue = 0;
         {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(storageIBP);
             const int n = *reinterpret_cast<int32_t*>(storage + 0x30);
             for (int j = 0; j < n; ++j) {
                 const uintptr_t e = static_cast<uintptr_t>(*reinterpret_cast<int64_t*>(storage + 0x28)) +
@@ -661,9 +657,7 @@ extern "C" void TradeComponent_AutoTrade(void* selfV) {
         // ── 4. sell to cover `spent` ──────────────────────────────────────────────
         {
             int paid = 0;
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(storageIBP);
             for (int idx = 0; idx < *reinterpret_cast<int32_t*>(storage + 0x30); ++idx) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(storageIBP);
                 const uintptr_t e = static_cast<uintptr_t>(*reinterpret_cast<int64_t*>(storage + 0x28)) +
                                     static_cast<uintptr_t>(idx) * 0x10;
                 const int64_t resource = *reinterpret_cast<int64_t*>(e);
@@ -693,7 +687,6 @@ extern "C" void TradeComponent_AutoTrade(void* selfV) {
 
                     // Take the unit out of storage, by identity. An entry that reaches
                     // zero is erased and the tail shifted down.
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(storageIBP);
                     const int n = *reinterpret_cast<int32_t*>(storage + 0x30);
                     const uintptr_t base = static_cast<uintptr_t>(*reinterpret_cast<int64_t*>(storage + 0x28));
                     for (int j = 0; j < n; ++j) {
@@ -739,7 +732,6 @@ extern "C" void TradeComponent_AutoTrade(void* selfV) {
         const int64_t entity = *reinterpret_cast<int64_t*>(node);
         const int units = *reinterpret_cast<int32_t*>(node + 8);
         if (s_RegisterRawMat) s_RegisterRawMat(reinterpret_cast<void*>(townMgr), entity);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(storageIBP);
         if (s_StorageAdd) s_StorageAdd(reinterpret_cast<void*>(storage), entity, units);
         delivered += units;
         ++deliveredLines;
@@ -806,12 +798,9 @@ extern "C" char TradeCtrl_State13_Update(void* selfV, void* /*sm*/) {
 
     if (*reinterpret_cast<int32_t*>(comp + 0x28) == 2) TradeComponent_AutoTrade(selfV);
 
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x80));
     uint64_t smIBP[2] = {0, 0};
     void* found = s_FindStateMachine
         ? s_FindStateMachine(*reinterpret_cast<int64_t*>(comp + 0x80), smIBP) : nullptr;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(found);
 
     // 0x140003ea0 returns its OUT-PARAM, so `found` is non-null; the component is the
     // value inside it. Retail derefs the chain below unguarded because a merchant boat

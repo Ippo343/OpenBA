@@ -50,16 +50,6 @@ static void* ReadDispatchSlot(uintptr_t slotAddr) {
     return slot ? *reinterpret_cast<void**>(slot) : nullptr;
 }
 
-// Thin guarded wrapper around the engine_funcs InternalBasePtr::CheckPtr pointer
-// (resolved via ?CheckPtr@InternalBasePtr@Object@@IEBAXXZ at startup -- protected
-// AND const; the ...@QEAAXXZ mangling this comment used to name does not exist
-// in the DLL, so it resolved null and only the ResolveAddr fallback carried it.)
-// The body is a bare RET in BOTH retail and the profile build (Wave 3 lane B),
-// so this call validates nothing; engine_funcs.cpp sniffs that and NOPs it out.
-inline void CheckPtr(void* p) {
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p);
-}
-
 } // namespace
 
 // ============================================================
@@ -107,7 +97,6 @@ bool ActCt_TryCompleteTask_8760(void* taskMgr, void* entityRef, int taskIdx,
     if (node == nullptr) return false;
 
     void* ibp = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(node) + 0x8);
-    CheckPtr(ibp);
     void* targetCopy = *reinterpret_cast<void**>(targetRef);
     uintptr_t* owner = *reinterpret_cast<uintptr_t**>(ibp);
     void* entityCopy = *reinterpret_cast<void**>(entityRef);
@@ -127,7 +116,6 @@ void ActCt_TaskReassign_8800(void* taskMgr, void* entityRef, int taskIdx,
     if (node == nullptr) return;
 
     void* ibp = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(node) + 0x8);
-    CheckPtr(ibp);
     void* targetCopy = *reinterpret_cast<void**>(targetRef);
     uintptr_t* owner = *reinterpret_cast<uintptr_t**>(ibp);
     void* entityCopy = *reinterpret_cast<void**>(entityRef);
@@ -246,7 +234,6 @@ void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
     }
 
     // 3. Remove from the param_1+0x10 BST keyed on the task IBP's +0x24 field.
-    CheckPtr(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(task) + 0x8));
     {
         uintptr_t taskObj = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(task) + 0x8);
         int wantKey = *reinterpret_cast<int*>(taskObj + 0x24);
@@ -269,7 +256,6 @@ void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
     }
 
     // 4. owner vtable +0x50 → key ptr; look up in the param_1+0x120 BST and remove entry.
-    CheckPtr(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(task) + 0x8));
     {
         uintptr_t* owner = *reinterpret_cast<uintptr_t**>(reinterpret_cast<uintptr_t>(task) + 0x8);
         uint64_t keyTmp = 0;
@@ -313,12 +299,10 @@ void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
 
     // 5. owner vtable +0x48 then +0x40 (cancel/cleanup); DeletePtr the task IBP; then
     //    remove the task node from the param_1+0x30 BST.
-    CheckPtr(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(task) + 0x8));
     {
         uintptr_t* owner = *reinterpret_cast<uintptr_t**>(reinterpret_cast<uintptr_t>(task) + 0x8);
         (*reinterpret_cast<void(**)(void*)>(*owner + 0x48))(owner);
     }
-    CheckPtr(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(task) + 0x8));
     {
         uintptr_t* owner = *reinterpret_cast<uintptr_t**>(reinterpret_cast<uintptr_t>(task) + 0x8);
         (*reinterpret_cast<void(**)(void*)>(*owner + 0x40))(owner);
@@ -414,9 +398,7 @@ void ActCt_HideTool_1176e0(void* entityV) {
     uintptr_t e = reinterpret_cast<uintptr_t>(entityV);
     if (*reinterpret_cast<int*>(e + 0x1dc) < 0) return;
 
-    CheckPtr(reinterpret_cast<void*>(e + 0x278));
     uintptr_t model = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(e + 0x278) + 0x68);
-    CheckPtr(&model);
     if (s_GeomDetach) s_GeomDetach(reinterpret_cast<void*>(model + 0x28), reinterpret_cast<void*>(e + 0xb8));
 
     if (s_SceneRemove && g_pGameWorldSingleton) {
@@ -452,13 +434,11 @@ void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
     // Reports the value it READ at each step, so a link that is merely null is
     // distinguishable from one holding stream garbage. See
     // [[reference_diagnostics_must_report_outcomes]].
-    CheckPtr(reinterpret_cast<void*>(e + 0x10));
     uintptr_t parent = *reinterpret_cast<uintptr_t*>(e + 0x10);
     if (((*reinterpret_cast<uint32_t*>(parent + 0x40) >> 10) & 1) != 0) return;  // removed flag
 
     if (*reinterpret_cast<int*>(e + 0x1dc) >= 0) ActCt_HideTool_1176e0(entityV);
 
-    CheckPtr(reinterpret_cast<void*>(e + 0x278));
     uintptr_t model = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(e + 0x278) + 0x68);
 
     void* meshPtr = nullptr;
@@ -466,10 +446,8 @@ void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
 
     if (toolId < 0) {
         // find best material from storage on parent entity
-        CheckPtr(reinterpret_cast<void*>(e + 0x10));
         uint64_t storageIBP = 0;
         fn_FindComponent_Storage(*reinterpret_cast<void**>(e + 0x10), &storageIBP);
-        CheckPtr(&storageIBP);
         uintptr_t storage = static_cast<uintptr_t>(storageIBP);
         if (*reinterpret_cast<int*>(storage + 0x30) < 1) return;
 
@@ -478,7 +456,6 @@ void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
         int bestCount = 0;
         int idx = 0;
         do {
-            CheckPtr(&storageIBP);
             storage = static_cast<uintptr_t>(storageIBP);
             uintptr_t inv = *reinterpret_cast<uintptr_t*>(storage + 0x28);
             uintptr_t slot = inv + static_cast<uintptr_t>(idx) * 0x10;
@@ -488,7 +465,6 @@ void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
                 bestCount = c;
             }
             idx++;
-            CheckPtr(&storageIBP);
             storage = static_cast<uintptr_t>(storageIBP);
         } while (idx < *reinterpret_cast<int*>(storage + 0x30));
 
@@ -563,9 +539,7 @@ void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
     *reinterpret_cast<float*>(e + 0x1d0) = vec4.w;
 
     // attach the tool geometry to the model's "tool" node
-    CheckPtr(&model);
     void* graphicsMesh = *reinterpret_cast<void**>(model + 0xe8);
-    CheckPtr(&model);
     int nodeIdx = (s_GetNodeIdx && graphicsMesh) ? s_GetNodeIdx(graphicsMesh, "tool") : -1;
     if (s_GeomAttach) s_GeomAttach(reinterpret_cast<void*>(model + 0x28), reinterpret_cast<void*>(e + 0xb8), nodeIdx);
 

@@ -64,11 +64,9 @@ static void* FindComponentByTypeId(uintptr_t entity, void* retIBP, const uint32_
         int i = 0;
         for (; i < n; i++) {
             void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
             void* comp = *slot;
             uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
             if (t == *pTypeId) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
                 void* c = *slot;
                 found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *pTypeId)) ? c : nullptr;
                 break;
@@ -112,19 +110,15 @@ static void* FindComponent_AreaSelf(uintptr_t entity, void* retIBP) {
 // 3, 4, or 5.  Signature: undefined8 fn(longlong param_1)
 // ============================================================
 uint64_t PlayerPath_Sub_11e710(uintptr_t param_1) {
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(param_1 + 0x10));
     uint64_t resIBP[4] = {0};
     PlayerPath_FindComponent_3ea0(*reinterpret_cast<uintptr_t*>(param_1 + 0x10), resIBP);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(resIBP);
     char cVar1 = *reinterpret_cast<char*>(resIBP[0] + 0x52);
     if (cVar1 < 0) cVar1 = *reinterpret_cast<char*>(resIBP[0] + 0x50);
     if (cVar1 != 3) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(resIBP);
         cVar1 = *reinterpret_cast<char*>(resIBP[0] + 0x52);
         if (cVar1 < 0) cVar1 = *reinterpret_cast<char*>(resIBP[0] + 0x50);
         if (cVar1 != 4) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(resIBP);
             cVar1 = *reinterpret_cast<char*>(resIBP[0] + 0x52);
             if (cVar1 < 0) cVar1 = *reinterpret_cast<char*>(resIBP[0] + 0x50);
             if (cVar1 != 5) return 0;
@@ -182,7 +176,6 @@ bool PlayerPath_CharComp_f5d0(int* param_1, int param_2, int param_3, uint32_t p
         if (owner == 0) {
             ownOk = true;
         } else {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(cell));
             owner = *reinterpret_cast<int64_t*>(cell);
             ownOk = (*reinterpret_cast<int64_t*>(owner + 0x28) == param_10);
         }
@@ -235,28 +228,22 @@ uint64_t PlayerPath_Sub_4670(uintptr_t param_1, void* param_2) {
 
     if ((*reinterpret_cast<uint8_t*>(desc + 0x41) != 0) &&
         (*reinterpret_cast<int64_t*>(param_2) != 0)) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2);
         desc = *reinterpret_cast<uintptr_t*>(param_1 + 0x38);
         uintptr_t entity = *reinterpret_cast<uintptr_t*>(param_2);
         if (*reinterpret_cast<int64_t*>(entity + 0x28) != *reinterpret_cast<int64_t*>(desc + 0x38)) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2);
             uint64_t ibp18[2] = {0};
             PlayerPath_FindComponent_5780(*reinterpret_cast<uintptr_t*>(param_2), ibp18);
 
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2);
             uint64_t ibpRes = 0;
             PlayerPath_FindComponent_3ea0(*reinterpret_cast<uintptr_t*>(param_2), &ibpRes);
 
             if (ibp18[0] != 0) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ibpRes);
                 char cVar1 = *reinterpret_cast<char*>(ibpRes + 0x52);
                 if (cVar1 < 0) cVar1 = *reinterpret_cast<char*>(ibpRes + 0x50);
                 if (cVar1 != 3) {
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ibpRes);
                     cVar1 = *reinterpret_cast<char*>(ibpRes + 0x52);
                     if (cVar1 < 0) cVar1 = *reinterpret_cast<char*>(ibpRes + 0x50);
                     if (cVar1 != 4) {
-                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ibpRes);
                         cVar1 = *reinterpret_cast<char*>(ibpRes + 0x52);
                         if (cVar1 < 0) cVar1 = *reinterpret_cast<char*>(ibpRes + 0x50);
                         if (cVar1 != 5) {
@@ -283,20 +270,16 @@ uint64_t PlayerPath_Sub_4770(uintptr_t param_1, void* param_2) {
 
     if ((*reinterpret_cast<uint8_t*>(desc + 0x42) != 0) &&
         (*reinterpret_cast<int64_t*>(param_2) != 0)) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2);
         desc = *reinterpret_cast<uintptr_t*>(param_1 + 0x38);
         uintptr_t entity = *reinterpret_cast<uintptr_t*>(param_2);
         if (*reinterpret_cast<int64_t*>(entity + 0x28) == *reinterpret_cast<int64_t*>(desc + 0x38)) {
             return 1;  // LAB_1401047aa
         }
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2);
         uint64_t comp[8] = {0};
         PlayerPath_FindComponent_5780(*reinterpret_cast<uintptr_t*>(param_2), comp);
         if (comp[0] != 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2);
             uint64_t comp2[8] = {0};
             PlayerPath_FindComponent_5780(*reinterpret_cast<uintptr_t*>(param_2), comp2);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(comp2);
             uint64_t r = PlayerPath_Sub_11e710(comp2[0]);
             if ((char)r != 0) return 1;  // goto LAB_1401047aa
             ret = reinterpret_cast<void*>(r);
@@ -353,7 +336,6 @@ uint64_t PlayerPath_Sub_48a0(uintptr_t param_1, void* param_2, int param_3, int 
 
     if ((*reinterpret_cast<uint8_t*>(desc + 0x20) != 0) && (matched != nullptr) &&
         (*reinterpret_cast<int64_t*>(param_2) != 0)) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2);
         uint64_t ibp88[4] = {0};
         FindComponent_AreaSelf(*reinterpret_cast<uintptr_t*>(param_2), ibp88);
         if (ibp88[0] != 0) {
@@ -368,7 +350,6 @@ uint64_t PlayerPath_Sub_48a0(uintptr_t param_1, void* param_2, int param_3, int 
                 uintptr_t cur = 0;
                 while (idx < compCount) {
                     int64_t lv = *reinterpret_cast<int64_t*>(cur + *reinterpret_cast<int64_t*>(desc + 0x28));
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2);
                     if (lv == *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_2) + 0x28)) {
                         atWorkBlock = true;  // LAB_140104a0f
                         break;

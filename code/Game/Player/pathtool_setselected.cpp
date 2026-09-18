@@ -92,7 +92,6 @@ static void EnsureFns() {
     s_init = true;
 }
 
-static inline void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 static inline uint32_t GetTypeId(void* obj) {
     if (!obj) return 0;
     return (*(uint32_t(**)(void*))(*(uintptr_t*)obj + 0x10))(obj);
@@ -299,10 +298,8 @@ static void* PathSel_FindHighlight_7080(int64_t param_1, void* param_2) {
     uint32_t want = s_pTid_Highlight ? *s_pTid_Highlight : 0;
     for (int i = 0; i < count; i++) {
         void* comp = (void*)arr[i];
-        CheckPtr(&arr[i]);
         if (GetTypeId(comp) == want && want != 0) {
             void* c = (void*)arr[i];
-            CheckPtr(&arr[i]);
             if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, want)) found = c;
             break;
         }
@@ -319,9 +316,7 @@ static void* PathSel_FindHighlight_7080(int64_t param_1, void* param_2) {
 static int PathSel_WorkplaceCell_e5d0(int64_t /*param_1*/, void* param_2) {
     EnsureFns();
     int* mapGrid = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
-    CheckPtr(param_2);
     int64_t workplace = *(int64_t*)(*(int64_t*)param_2 + 0x238);
-    CheckPtr(&workplace);
     uint64_t posIBP = 0;
     // 🐞 MISNAMED-FINDER TRAP (6th instance). The disasm at 0x1400de629 calls
     // 0x140002ed0 = fn_Entity_FindComponent_Position -> InteractComponent (type
@@ -338,7 +333,6 @@ static int PathSel_WorkplaceCell_e5d0(int64_t /*param_1*/, void* param_2) {
     // the same cell for every workplace, N workers collapsed into N identical
     // src/dst pairs (the "duplicate routes" report).
     fn_Entity_FindComponent_Position((uintptr_t)workplace, &posIBP);
-    CheckPtr(&posIBP);
     float vec[3] = {0, 0, 0};
     if (s_122e20) s_122e20(*(int64_t*)&posIBP, vec, 0, 0, nullptr);
     int w = *mapGrid;
@@ -376,33 +370,25 @@ static void PathSel_ClearHighlight_d250(int64_t param_1) {
     EnsureFind4740();
     void* self = (void*)(param_1 + 0x28);
     if (*(int64_t*)(param_1 + 0x28) == 0) return;
-    CheckPtr(self);
     uint64_t listIBP = 0;
     if (s_4740) s_4740(*(int64_t*)self, &listIBP);
     if (listIBP != 0) {
-        CheckPtr(&listIBP);
         int n = *(int*)(listIBP + 0x50);
         for (int i = 0; i < n; i++) {
-            CheckPtr(&listIBP);
             int64_t ent = *(int64_t*)(*(int64_t*)(listIBP + 0x48) + (int64_t)i * 8);
-            CheckPtr(&ent);
             uint64_t hi = 0;
             PathSel_FindHighlight_7080(ent, &hi);
             if (hi != 0) {
-                CheckPtr(&hi);
                 if (*(char*)(hi + 0x11c) != '\0') {
                     *(char*)(hi + 0x11c) = 0;
                     if (s_c4a0) s_c4a0((int64_t)hi);
                 }
             }
-            CheckPtr(&listIBP);
         }
     }
-    CheckPtr(self);
     uint64_t hi2 = 0;
     PathSel_FindHighlight_7080(*(int64_t*)self, &hi2);
     if (hi2 != 0) {
-        CheckPtr(&hi2);
         if (*(char*)(hi2 + 0x11c) != '\0') {
             *(char*)(hi2 + 0x11c) = 0;
             if (s_c4a0) s_c4a0((int64_t)hi2);
@@ -420,33 +406,25 @@ static void PathSel_SetHighlight_d0f0(int64_t param_1) {
     if (*(int64_t*)(param_1 + 0x28) == 0) return;
     EnsureFind4740();
     void* self = (void*)(param_1 + 0x28);
-    CheckPtr(self);
     uint64_t listIBP = 0;
     if (s_4740) s_4740(*(int64_t*)self, &listIBP);
     if (listIBP != 0) {
-        CheckPtr(&listIBP);
         int n = *(int*)(listIBP + 0x50);
         for (int i = 0; i < n; i++) {
-            CheckPtr(&listIBP);
             int64_t ent = *(int64_t*)(*(int64_t*)(listIBP + 0x48) + (int64_t)i * 8);
-            CheckPtr(&ent);
             uint64_t hi = 0;
             PathSel_FindHighlight_7080(ent, &hi);
             if (hi != 0) {
-                CheckPtr(&hi);
                 if (*(char*)(hi + 0x11c) != '\x01') {
                     *(char*)(hi + 0x11c) = 1;
                     if (s_c4a0) s_c4a0((int64_t)hi);
                 }
             }
-            CheckPtr(&listIBP);
         }
     }
-    CheckPtr(self);
     uint64_t hi2 = 0;
     PathSel_FindHighlight_7080(*(int64_t*)self, &hi2);
     if (hi2 != 0) {
-        CheckPtr(&hi2);
         if (*(char*)(hi2 + 0x11c) != '\x01') {
             *(char*)(hi2 + 0x11c) = 1;
             if (s_c4a0) s_c4a0((int64_t)hi2);
@@ -462,14 +440,11 @@ static void PathSel_SetHighlight_d0f0(int64_t param_1) {
 static void PathSel_BuildRoutes_d770(int64_t param_1) {
     EnsureFns();
 
-    CheckPtr((void*)(param_1 + 0x28));
     uint64_t local_res20 = 0;   // FUN_140002e10 result (workplace-ish component)
     if (s_2e10) s_2e10(*(int64_t*)(param_1 + 0x28), &local_res20);
-    CheckPtr((void*)(param_1 + 0x28));
     uint64_t local_res18 = 0;   // ResidenceComponent (8090) - its +0x50/+0x58 is the
                                 // occupant list: outer groups (0x10 stride) of citizens.
     if (s_8090) s_8090(*(int64_t*)(param_1 + 0x28), &local_res18);
-    CheckPtr((void*)(param_1 + 0x28));
     uint64_t local_2098 = 0;    // CitizenAI component
     fn_FindComponent_Citizen(*(void**)(param_1 + 0x28), &local_2098);
 
@@ -488,13 +463,11 @@ static void PathSel_BuildRoutes_d770(int64_t param_1) {
     // (A) selected entity IS a citizen with both workplace (+0x238) and housing (+0x248).
     bool citizenHandled = false;
     if (local_2098 != 0) {
-        CheckPtr(&local_2098);
         if (*(int64_t*)(local_2098 + 0x238) != 0) {
-            CheckPtr(&local_2098);
             if (*(int64_t*)(local_2098 + 0x248) != 0) {
                 citizenHandled = true;
                 uint64_t housing = 0;
-                { uint64_t tmp = local_2098; CheckPtr(&tmp); housing = *(uint64_t*)(tmp + 0x248); }
+                { uint64_t tmp = local_2098; housing = *(uint64_t*)(tmp + 0x248); }
                 int anchorCell = s_7fb0 ? (int)s_7fb0(&housing, nullptr) : -1;
                 uint64_t selIBP = local_2098;   // retail uses a COPY here (local_2080),
                                                 // not the live CitizenAI IBP slot.
@@ -511,25 +484,20 @@ static void PathSel_BuildRoutes_d770(int64_t param_1) {
     // (B) not a workplace-with-workers → iterate storage occupants; else iterate workers.
     bool useStorage;
     if (local_res20 == 0) { useStorage = true; }
-    else { CheckPtr(&local_res20); useStorage = (*(int64_t*)(local_res20 + 0x48) == 0); }
+    else { useStorage = (*(int64_t*)(local_res20 + 0x48) == 0); }
 
     if (useStorage) {
         if (local_res18 != 0) {
-            CheckPtr(&local_res18);
             int outer = *(int*)(local_res18 + 0x58);
             for (int oi = 0; oi < outer; oi++) {
-                CheckPtr(&local_res18);
                 int64_t innerHdr = *(int64_t*)(local_res18 + 0x50) + (int64_t)oi * 0x10;
                 int inner = *(int*)(innerHdr + 8);
                 for (int ii = 0; ii < inner; ii++) {
-                    CheckPtr(&local_res18);
                     int64_t ent = *(int64_t*)((int64_t)ii * 8 + *(int64_t*)(*(int64_t*)(local_res18 + 0x50) + (int64_t)oi * 0x10));
-                    CheckPtr(&ent);
                     if (*(int64_t*)(ent + 0x238) != 0) {
-                        CheckPtr(&ent);
                         if (*(int64_t*)(ent + 0x248) != 0) {
                             uint64_t housing = 0;
-                            { uint64_t tmp = ent; CheckPtr(&tmp); housing = *(uint64_t*)(tmp + 0x248); }
+                            { uint64_t tmp = ent; housing = *(uint64_t*)(tmp + 0x248); }
                             int anchorCell = s_7fb0 ? (int)s_7fb0(&housing, nullptr) : -1;
                             uint64_t entIBP = ent;
                             int wpCell = PathSel_WorkplaceCell_e5d0(ent, &entIBP);
@@ -539,22 +507,17 @@ static void PathSel_BuildRoutes_d770(int64_t param_1) {
                             PathSel_RoutePush_6ba0(routeArr, *(int*)(param_1 + 0x38) + 1, (uint64_t*)entryBuf);
                         }
                     }
-                    CheckPtr(&local_res18);
                 }
             }
         }
     } else {
-        CheckPtr(&local_res20);
         int workerCount = *(int*)(local_res20 + 0x60);
         for (int wi = 0; wi < workerCount; wi++) {
-            CheckPtr(&local_res20);
             int64_t ent = *(int64_t*)((int64_t)wi * 8 + *(int64_t*)(local_res20 + 0x58));
-            CheckPtr(&ent);
             if (*(int64_t*)(ent + 0x238) != 0) {
-                CheckPtr(&ent);
                 if (*(int64_t*)(ent + 0x248) != 0) {
                     uint64_t housing = 0;
-                    { uint64_t tmp = ent; CheckPtr(&tmp); housing = *(uint64_t*)(tmp + 0x248); }
+                    { uint64_t tmp = ent; housing = *(uint64_t*)(tmp + 0x248); }
                     int anchorCell = s_7fb0 ? (int)s_7fb0(&housing, nullptr) : -1;
                     uint64_t entIBP = ent;
                     int wpCell = PathSel_WorkplaceCell_e5d0(ent, &entIBP);
@@ -564,7 +527,6 @@ static void PathSel_BuildRoutes_d770(int64_t param_1) {
                     PathSel_RoutePush_6ba0(routeArr, *(int*)(param_1 + 0x38) + 1, (uint64_t*)entryBuf);
                 }
             }
-            CheckPtr(&local_res20);
         }
     }
 
@@ -661,7 +623,6 @@ static void PathSel_BuildRoutes_d770(int64_t param_1) {
 // ============================================================
 extern "C" void PathTool_helper_d710(int64_t param_1, uint64_t* param_2) {
     EnsureFns();
-    CheckPtr(param_2);
     if (*(int64_t*)(param_1 + 0x28) != (int64_t)*param_2) {
         PathSel_ClearHighlight_d250(param_1);
         *(uint64_t*)(param_1 + 0x28) = *param_2;

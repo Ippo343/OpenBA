@@ -87,7 +87,6 @@ namespace {
 
 // ── Resolved leaves ──────────────────────────────────────────────────────────────
 typedef void*    (*fn_Find_t)(int64_t entity, void* outIBP);
-typedef void     (*fn_CheckPtr_t)(void* ibp);
 typedef void     (*fn_V3Ctor3f_t)(void* out, float x, float y, float z);
 typedef void     (*fn_V3CtorS_t)(void* out, const float* x, const float* y, const float* z);
 typedef void     (*fn_V3Length_t)(const void* v, float* out);
@@ -112,7 +111,6 @@ typedef void     (*fn_GeomSetXform_t)(void* geom, const void* xform);
 fn_Find_t           s_FindModel      = nullptr;   // 0x140003f60
 fn_Find_t           s_FindCharacter  = nullptr;   // 0x1400012d0
 fn_Find_t           s_FindSMC        = nullptr;   // 0x140003ea0
-fn_CheckPtr_t       s_CheckPtr       = nullptr;   // slot 0x140152ab0
 fn_V3Ctor3f_t       s_V3Ctor3f       = nullptr;   // slot 0x140152a30
 fn_V3CtorS_t        s_V3CtorS        = nullptr;   // slot 0x140151268
 fn_V3Length_t       s_V3Length       = nullptr;   // slot 0x140151290
@@ -164,7 +162,6 @@ void Resolve() {
     s_SMTick         = reinterpret_cast<fn_SMTick_t>(ResolveAddr(Module::Exe, 0x1400a9660));
     s_MarkRemoval    = reinterpret_cast<fn_MarkRemoval_t>(ResolveAddr(Module::Exe, 0x1400c2ea0));
 
-    s_CheckPtr       = reinterpret_cast<fn_CheckPtr_t>(Slot(0x140152ab0));
     s_V3Ctor3f       = reinterpret_cast<fn_V3Ctor3f_t>(Slot(0x140152a30));
     s_V3CtorS        = reinterpret_cast<fn_V3CtorS_t>(Slot(0x140151268));
     s_V3Length       = reinterpret_cast<fn_V3Length_t>(Slot(0x140151290));
@@ -226,7 +223,6 @@ struct Vec3 { float x, y, z; };
 int NextRoutePoint(uintptr_t boat, const Vec3* ref);
 
 inline const Vec3* ModelPos(uintptr_t boat) {
-    if (s_CheckPtr) s_CheckPtr(reinterpret_cast<void*>(boat + 0x30));
     const uintptr_t model = *reinterpret_cast<uintptr_t*>(boat + 0x30);
     if (!model) return nullptr;                     // see the guard note in Steer()
     return reinterpret_cast<const Vec3*>(model + 0x158);
@@ -261,13 +257,11 @@ void RequestTransition(void* smV, int desiredStateId) {
 // earlier in the struct.
 void PostEventToDestination(uintptr_t boat, int eventId) {
     if (!s_FindSMC) return;
-    if (s_CheckPtr) s_CheckPtr(reinterpret_cast<void*>(boat + 0x28));
     const int64_t destEntity = *reinterpret_cast<int64_t*>(boat + 0x28);
     if (!destEntity) return;
 
     uint64_t smcIBP[2] = {0, 0};
     void* out = s_FindSMC(destEntity, smcIBP);
-    if (s_CheckPtr) s_CheckPtr(out);
     const uintptr_t smc = out ? *reinterpret_cast<uintptr_t*>(out) : 0;
     if (!smc) {
         return;
@@ -295,9 +289,7 @@ void DeleteBoatEntity(uintptr_t boat) {
         reinterpret_cast<uintptr_t>(gw) + 0xe8);
     if (!entityList) return;
 
-    if (s_CheckPtr) s_CheckPtr(&entIBP);
     if ((*reinterpret_cast<uint32_t*>(entIBP + 0x40) >> 10) & 1) return;   // already going
-    if (s_CheckPtr) s_CheckPtr(&entIBP);
     if (s_MarkRemoval) s_MarkRemoval(entIBP);
     {
         // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
@@ -358,7 +350,6 @@ char Steer_63d0(uintptr_t boat) {
     float dropLen = 0.0f;
     if (s_V3NormalizeLen) s_V3NormalizeLen(&toWp, &dir, &dropLen);
 
-    if (s_CheckPtr) s_CheckPtr(reinterpret_cast<void*>(boat + 0x38));
     const uintptr_t chr = *reinterpret_cast<uintptr_t*>(boat + 0x38);
     if (!chr) return ok;
     *reinterpret_cast<uint8_t*>(chr + 0x28) = 0;
@@ -423,7 +414,6 @@ extern "C" void BoatCtrl_DriveToward(void* charComp, const float* target,
     if (!chr) return;
     *reinterpret_cast<uint8_t*>(chr + 0x28) = 1;
 
-    if (s_CheckPtr) s_CheckPtr(reinterpret_cast<void*>(chr + 0x68));
     const uintptr_t model = *reinterpret_cast<uintptr_t*>(chr + 0x68);
     if (!model) return;
     const float* mp = reinterpret_cast<const float*>(model + 0x158);
@@ -435,7 +425,6 @@ extern "C" void BoatCtrl_DriveToward(void* charComp, const float* target,
         *reinterpret_cast<float*>(chr + 0x30) = nrm.y;
         *reinterpret_cast<float*>(chr + 0x34) = nrm.z;
     }
-    if (s_CheckPtr) s_CheckPtr(reinterpret_cast<void*>(chr + 0x68));
     const uintptr_t model2 = *reinterpret_cast<uintptr_t*>(chr + 0x68);
     *reinterpret_cast<float*>(chr + 0x3c) = heading;
     *reinterpret_cast<float*>(chr + 0x38) =
@@ -447,7 +436,6 @@ extern void ActMv_SetAnimation_a1f0(void* selfp, uint32_t animId, float p3, floa
 
 namespace {
 void SetAnim(uintptr_t boat, uint32_t animId) {
-    if (s_CheckPtr) s_CheckPtr(reinterpret_cast<void*>(boat + 0x38));
     void* chr = *reinterpret_cast<void**>(boat + 0x38);
     if (!chr) return;
     const float f = s_fSpeedBase ? *s_fSpeedBase : 1.0f;
@@ -466,12 +454,10 @@ extern "C" char BoatCtrl_State0_Enter(void* selfV) {
     const uintptr_t boat = reinterpret_cast<uintptr_t>(selfV);
 
     uint64_t ibp[2] = {0, 0};
-    if (s_CheckPtr) s_CheckPtr(reinterpret_cast<void*>(boat + 0x10));
     if (s_FindModel) {
         void* r = s_FindModel(*reinterpret_cast<int64_t*>(boat + 0x10), ibp);
         *reinterpret_cast<uint64_t*>(boat + 0x30) = *reinterpret_cast<uint64_t*>(r);
     }
-    if (s_CheckPtr) s_CheckPtr(reinterpret_cast<void*>(boat + 0x10));
     if (s_FindCharacter) {
         void* r = s_FindCharacter(*reinterpret_cast<int64_t*>(boat + 0x10), ibp);
         *reinterpret_cast<uint64_t*>(boat + 0x38) = *reinterpret_cast<uint64_t*>(r);
@@ -511,7 +497,6 @@ extern "C" char BoatCtrl_State0_Enter(void* selfV) {
     {
         const Vec3* wp = reinterpret_cast<const Vec3*>(boat + 0x50);
         Vec3 dir = { wp->x - route[0], wp->y - route[1], wp->z - 0.0f };
-        if (s_CheckPtr) s_CheckPtr(reinterpret_cast<void*>(boat + 0x30));
         const uintptr_t model = *reinterpret_cast<uintptr_t*>(boat + 0x30);
         if (model && s_V3Heading && s_XformFromYPO && s_XformAssign && s_GeomSetXform) {
             const float yaw   = s_V3Heading(&dir);
@@ -657,7 +642,6 @@ extern "C" char BoatCtrl_State1_Tick(void* selfV, void* smV, void* /*time*/) {
     if (speed > hi) speed = hi;
     else if (lo > speed) speed = lo;
 
-    if (s_CheckPtr) s_CheckPtr(reinterpret_cast<void*>(boat + 0x38));
     void* chr = *reinterpret_cast<void**>(boat + 0x38);
     if (chr)
         BoatCtrl_DriveToward(chr, reinterpret_cast<const float*>(boat + 0x40),
@@ -681,7 +665,6 @@ extern "C" char BoatCtrl_State2_Enter(void* selfV) {
     const uintptr_t boat = reinterpret_cast<uintptr_t>(selfV);
 
     // 0x140044f8d/f95: XMM2 = 0x14017214c, XMM3 = 0 (XORPS), EDX = 0.
-    if (s_CheckPtr) s_CheckPtr(reinterpret_cast<void*>(boat + 0x38));
     if (void* chr = *reinterpret_cast<void**>(boat + 0x38))
         ActMv_SetAnimation_a1f0(chr, 0, s_fSpeedBase ? *s_fSpeedBase : 1.0f, 0.0f);
 
@@ -713,7 +696,6 @@ extern "C" char BoatCtrl_Event1_Abort(void* /*selfV*/, void* smV) {
 extern "C" char BoatCtrl_State3_Enter(void* selfV) {
     Resolve();
     const uintptr_t boat = reinterpret_cast<uintptr_t>(selfV);
-    if (s_CheckPtr) s_CheckPtr(reinterpret_cast<void*>(boat + 0x38));
     if (void* chr = *reinterpret_cast<void**>(boat + 0x38)) {
         const float f = s_fSpeedBase ? *s_fSpeedBase : 1.0f;
         ActMv_SetAnimation_a1f0(chr, 3, f, f);
@@ -754,7 +736,6 @@ extern "C" char BoatCtrl_State3_Tick(void* selfV, void* smV, void* /*time*/) {
     float dropLen = 0.0f;
     if (s_V3NormalizeLen) s_V3NormalizeLen(&toWp, &dir, &dropLen);
 
-    if (s_CheckPtr) s_CheckPtr(reinterpret_cast<void*>(boat + 0x38));
     if (const uintptr_t chr = *reinterpret_cast<uintptr_t*>(boat + 0x38)) {
         *reinterpret_cast<uint8_t*>(chr + 0x28) = 0;
         Vec3 flat = { dir.x, dir.y, 0.0f };

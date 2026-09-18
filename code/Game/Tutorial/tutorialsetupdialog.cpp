@@ -327,7 +327,6 @@ void TutorialSetupDialog_Slot8(void* self) {
         FindDialogByName_Impl(&instance, strPtr);
         if (instance == 0) continue;
 
-        fn_InternalBasePtr_CheckPtr(&instance);
         void* basePtr = *(void**)(instance + 0x30);
 
         // Original uses IsA first (null/type-safe), then IsDerivedFrom

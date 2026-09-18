@@ -324,12 +324,10 @@ void* ActRm_FindComponent_223c0(uintptr_t entity, void* retIBP) {
     uintptr_t base = *reinterpret_cast<uintptr_t*>(entity + 0x30);
     for (int idx = 0; idx < n; idx++) {
         void** ibp = reinterpret_cast<void**>(base + static_cast<uintptr_t>(idx) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);
         void* obj = *ibp;
         uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(obj) + 0x10))(obj);
         if (t == typeId) {
             void** ibp2 = reinterpret_cast<void**>(base + static_cast<uintptr_t>(idx) * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp2);
             void* o = *ibp2;
             if (fn_IsDerivedFrom && fn_IsDerivedFrom(o, typeId)) found = o;
             break;
@@ -356,12 +354,10 @@ void* ActRm_FindComp_013320(uintptr_t self, void* retIBP) {
     uintptr_t base = *reinterpret_cast<uintptr_t*>(self + 0x30);
     for (int idx = 0; idx < n; idx++) {
         void** ibp = reinterpret_cast<void**>(base + static_cast<uintptr_t>(idx) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);
         void* obj = *ibp;
         uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(obj) + 0x10))(obj);
         if (t == typeId) {
             void** ibp2 = reinterpret_cast<void**>(base + static_cast<uintptr_t>(idx) * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp2);
             void* o = *ibp2;
             if (fn_IsDerivedFrom && fn_IsDerivedFrom(o, typeId)) found = o;
             break;
@@ -480,12 +476,10 @@ void ActRm_RegisterRawMaterial_88ef0(int64_t entityList, void* sourceIBP,
                                      char placeNear, int64_t descEntity, int quantity) {
     int64_t target = entityList;  // lVar3
     if (sourceIBP && *reinterpret_cast<int64_t*>(sourceIBP) != 0 && placeNear != '\0') {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(sourceIBP);
         int64_t srcObj = *reinterpret_cast<int64_t*>(sourceIBP);
         uintptr_t foundIBP[2] = {0, 0};
         ActRm_FindComp_013320(static_cast<uintptr_t>(srcObj), &foundIBP);
         if (foundIBP[0] != 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&foundIBP);
             ActRm_ArrayUpsert_58fd0(static_cast<uintptr_t>(foundIBP[0]), descEntity, quantity);
             target = static_cast<int64_t>(foundIBP[0]);
         }
@@ -518,15 +512,12 @@ void ActRm_PositionEntity_9760(int64_t param_1, int cellIndex, float rotation) {
     int col = cellIndex % mapWidth;   // EDI (remainder)
     int row = cellIndex / mapWidth;   // ESI (quotient)
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
     uintptr_t ibpA[2] = {0, 0};
     if (s_fn_FindComp_4680) s_fn_FindComp_4680(reinterpret_cast<uintptr_t>(*self), &ibpA);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
     uintptr_t ibpB[2] = {0, 0};
     if (s_fn_FindComp_3f60) s_fn_FindComp_3f60(reinterpret_cast<uintptr_t>(*self), &ibpB);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ibpA);
     uint8_t* objA = reinterpret_cast<uint8_t*>(ibpA[0]);
     int rot = static_cast<int>(rotation);   // CVTTSS2SI = truncate toward zero
     if (rot < 0) { do { rot += 0x168; } while (rot < 0); }
@@ -548,7 +539,6 @@ void ActRm_PositionEntity_9760(int64_t param_1, int cellIndex, float rotation) {
     float worldPos[3] = {0, 0, 0};
     if (s_fn_GridToWorld) s_fn_GridToWorld(mapGrid, worldPos, localPos, '\0', nullptr);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ibpB);
     uint8_t* objB = reinterpret_cast<uint8_t*>(ibpB[0]);
     // [standalone] objB = the spawned item entity's Geometry/model component (visual transform).
     // Inert/absent on the freshly cloned raw-material entity in standalone → guard the transform

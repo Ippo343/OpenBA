@@ -411,7 +411,6 @@ extern "C" void ModDialog_CloseAndReload(void* self) {
     void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
 
     if (gameWorld == nullptr) {
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0xD0));
         if (fn_MainMenu_Reload)
             fn_MainMenu_Reload(*reinterpret_cast<void**>(s + 0xD0));
         return;
@@ -435,7 +434,6 @@ extern "C" void ModDialog_CloseAndReload(void* self) {
 
     uint64_t nullIbp = 0;
     new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0xD0));
     if (fn_Game_ReloadWithSave)
         fn_Game_ReloadWithSave(*reinterpret_cast<void**>(s + 0xD0), statePtr,
                                reinterpret_cast<void*>(static_cast<uintptr_t>(-1)),

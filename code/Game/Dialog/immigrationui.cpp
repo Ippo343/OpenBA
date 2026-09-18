@@ -190,20 +190,16 @@ void ImmigrationUI_Slot9(ImmigrationUI* self, void* param2, int msg, int id,
     uint64_t entityBasePtr = 0;
     new (&entityBasePtr) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(checkedEntity));   // B.3.3 bridge
-    fn_InternalBasePtr_CheckPtr(&entityBasePtr);
 
     uint64_t immigComp = 0;
     fn_FindComponent_Immigration((void*)entityBasePtr, &immigComp);
-    fn_InternalBasePtr_CheckPtr(&immigComp);
     if (immigComp == 0) return;   // no component bound (standalone safety)
 
     // Get sub-entity from ImmigrationComponent+0x10
-    fn_InternalBasePtr_CheckPtr((void*)(immigComp + 0x10));
 
     // Find BuildState component on sub-entity at +0x10
     uint64_t buildState = 0;
     fn_FindComponent_BuildState(*(void**)(immigComp + 0x10), &buildState);
-    fn_InternalBasePtr_CheckPtr(&buildState);
 
     // Read the BuildState pointer value
     uintptr_t bsPtr = *(uintptr_t*)&buildState;

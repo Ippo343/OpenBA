@@ -150,7 +150,6 @@ void EntityList_TreeNodeHandler(int64_t entity, void* time) {
     do {
         // Read component IBP and CheckPtr
         void* compIBP = (void*)(*(uintptr_t*)(entity + 0x30) + ci * 8);
-        fn_InternalBasePtr_CheckPtr(compIBP);
         int64_t comp = *(int64_t*)compIBP;
 
         // Component flags at byte offset +0x20 from component base.
@@ -160,7 +159,6 @@ void EntityList_TreeNodeHandler(int64_t entity, void* time) {
 
         if ((compFlags >> 2) & 1) {
             // CheckPtr again before vtable call
-            fn_InternalBasePtr_CheckPtr(compIBP);
             comp = *(int64_t*)compIBP;
 
             // Call component vtable slot +0x40 (slot index 8)
@@ -215,7 +213,6 @@ void EntityList_PostUpdateNodeHandler(int64_t entity) {
     do {
         // Read component IBP and CheckPtr
         void* compIBP = (void*)(*(uintptr_t*)(entity + 0x30) + ci * 8);
-        fn_InternalBasePtr_CheckPtr(compIBP);
         int64_t comp = *(int64_t*)compIBP;
 
         // Component flags at +0x20, bit 4 = "needs post-update"
@@ -223,7 +220,6 @@ void EntityList_PostUpdateNodeHandler(int64_t entity) {
 
         if ((compFlags >> 4) & 1) {
             // CheckPtr again before vtable call
-            fn_InternalBasePtr_CheckPtr(compIBP);
             comp = *(int64_t*)compIBP;
 
             // Call component vtable slot +0x50 (slot index 10)
@@ -281,7 +277,6 @@ void IBPTree_Transplant(TreeHolder* h, EntityTreeNode* node, EntityTreeNode* chi
 extern "C" void* IBPTreeInsert_CppImpl(void* treeRootPtr, void* outBuf, void* ibpPtr) {
     TreeHolder* h = (TreeHolder*)treeRootPtr;
     void** outNode = (void**)outBuf;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibpPtr);
     uint64_t key = *(uint64_t*)ibpPtr;
     if (h->root == nullptr) {
         EntityTreeNode* n = IBPTree_AllocNode(key, nullptr);
@@ -290,7 +285,6 @@ extern "C" void* IBPTreeInsert_CppImpl(void* treeRootPtr, void* outBuf, void* ib
     } else {
         EntityTreeNode* cur = h->root;
         for (;;) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cur);
             if (key < cur->entityIBP) {
                 if (cur->left == nullptr) {
                     EntityTreeNode* n = IBPTree_AllocNode(key, cur);
@@ -671,7 +665,6 @@ void EntityList_Update(EntityList* self, void* time) {
 
         while (node && !g_treeCorrupt) {
             // CheckPtr on the node (it's an IBP)
-            fn_InternalBasePtr_CheckPtr((void*)node);
 
             // Guard the node's entity-IBP key against a freelist link (UAF node).
             int64_t entity = (int64_t)node->entityIBP;
@@ -698,7 +691,6 @@ void EntityList_Update(EntityList* self, void* time) {
 
             // Check entity not deleted (bit 10 of flags at entity+0x40)
             if (!((*(uint32_t*)(entity + 0x40) >> 10) & 1)) {
-                fn_InternalBasePtr_CheckPtr((void*)node);
                 // Call tree node handler (inline for Update, calls vtable +0x40)
                 EntityList_TreeNodeHandler(entity, time);
             }
@@ -738,17 +730,14 @@ void EntityList_Update(EntityList* self, void* time) {
 
                 // Read entity IBP and CheckPtr
                 int64_t entIBP = arrBase[idx];
-                fn_InternalBasePtr_CheckPtr(&entIBP);
                 if (prof) ++g_elProfBucketVisits;
 
                 // Check not deleted (bit 10)
                 if (!((*(uint32_t*)(entIBP + 0x40) >> 10) & 1)) {
-                    fn_InternalBasePtr_CheckPtr(&entIBP);
                     int64_t delta = currentTime - *(int64_t*)(entIBP + 0x20);
 
                     if (delta > 0) {
                         if (prof) ++g_elProfBucketTicked;
-                        fn_InternalBasePtr_CheckPtr(&entIBP);
                         int64_t ent = entIBP;
 
                         // Check entity has "needs bucket update" flag (bit 3)
@@ -762,12 +751,10 @@ void EntityList_Update(EntityList* self, void* time) {
                             for (int64_t ci = 0; ci < compCount; ci++) {
                                 // Read component IBP and CheckPtr
                                 int64_t compIBP = *(int64_t*)(*(int64_t*)(ent + 0x30) + ci * 8);
-                                fn_InternalBasePtr_CheckPtr(&compIBP);
 
                                 // Component flags at byte +0x20, bit 3 = "needs Update tick"
                                 // Verified from disassembly: MOV ECX,[RAX+0x20]; SHR ECX,3
                                 if ((*(uint32_t*)(compIBP + 0x20) >> 3) & 1) {
-                                    fn_InternalBasePtr_CheckPtr(&compIBP);
 
                                     // Call component vtable slot +0x48 (slot index 9 = Update)
                                     void** vtbl = *(void***)(uintptr_t)compIBP;
@@ -797,7 +784,6 @@ void EntityList_Update(EntityList* self, void* time) {
                         }
 
                         // Update entity timestamp
-                        fn_InternalBasePtr_CheckPtr(&entIBP);
                         *(int64_t*)(entIBP + 0x20) = currentTime;
                     }
                 }
@@ -865,13 +851,11 @@ static void EntityList_CloseDialogsForDyingEntities() {
     // (element +0x00, prev +0x08, next +0x10) is exactly LinkedList<T>::Node.
     auto& dialogs = reinterpret_cast<UI::UserInterface*>(ui)->_dialogs;
     for (auto it = dialogs.GetFirst(); it && nClose < 16; ++it) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(it.node);
         void* dialog = *it;                                        // node[0] = DialogInstance*
         if (dialog) {
             uintptr_t ctrlBuf[2] = {};
             fn_DialogInstance_GetController(dialog, ctrlBuf, s_tidEntityUI);
             if (ctrlBuf[0] != 0) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ctrlBuf[0]);
                 void* ctrl = reinterpret_cast<void*>(ctrlBuf[0]);
                 void* ds = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(ctrl) + 0x28);
                 if (ds && ((*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(ds) + 0x40) >> 10) & 1))
@@ -908,7 +892,6 @@ static void EntityList_ClearToolSelectionForDyingEntities() {
     if (!entityUI) return;
     void* toolSlot = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(entityUI) + 0x28);
     if (*reinterpret_cast<void**>(toolSlot) == nullptr) return;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(toolSlot);
     void* tool = *reinterpret_cast<void**>(toolSlot);
     if (!tool) return;
 
@@ -921,7 +904,6 @@ static void EntityList_ClearToolSelectionForDyingEntities() {
     // Selected-entity IBP at EditTool+0x30 (the outline-follow target).
     void* entSlot = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(tool) + 0x30);
     if (*reinterpret_cast<void**>(entSlot) == nullptr) return;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(entSlot);
     uintptr_t ent = *reinterpret_cast<uintptr_t*>(entSlot);
     if (ent < 0x10000 || ent > 0x00007FFFFFFFFFFFULL) return;
     if (((*reinterpret_cast<uint32_t*>(ent + 0x40) >> 10) & 1) == 0) return;
@@ -1048,7 +1030,6 @@ void EntityList_PreUpdate(EntityList* self) {
         int64_t offset = (int64_t)i * 8;
         void* ibpPtr = (void*)((uintptr_t)self->stagingUpdate.data + offset);
 
-        fn_InternalBasePtr_CheckPtr(ibpPtr);
         int64_t entityVal = *(int64_t*)ibpPtr;
 
         uint32_t entityFlags = *(uint32_t*)(entityVal + 0x40);
@@ -1067,13 +1048,11 @@ void EntityList_PreUpdate(EntityList* self) {
             void* ibpSrc = (void*)((uintptr_t)self->stagingUpdate.data + offset);
 
             while (node != nullptr) {
-                fn_InternalBasePtr_CheckPtr(node);
                 uint64_t ibpVal = *(uint64_t*)ibpSrc;
 
                 if (ibpVal < node->entityIBP) {
                     node = node->left;
                 } else {
-                    fn_InternalBasePtr_CheckPtr(ibpSrc);
                     if (ibpVal <= node->entityIBP) {
                         // Found — remove from tree
                         // Validate first: the AVL delete derefs node->parent
@@ -1117,7 +1096,6 @@ void EntityList_PostUpdateStaging(EntityList* self) {
         int64_t offset = (int64_t)i * 8;
         void* ibpPtr = (void*)((uintptr_t)self->stagingPostUpdate.data + offset);
 
-        fn_InternalBasePtr_CheckPtr(ibpPtr);
         int64_t entityVal = *(int64_t*)ibpPtr;
 
         uint32_t entityFlags = *(uint32_t*)(entityVal + 0x40);
@@ -1135,13 +1113,11 @@ void EntityList_PostUpdateStaging(EntityList* self) {
             void* ibpSrc = (void*)((uintptr_t)self->stagingPostUpdate.data + offset);
 
             while (node != nullptr) {
-                fn_InternalBasePtr_CheckPtr(node);
                 uint64_t ibpVal = *(uint64_t*)ibpSrc;
 
                 if (ibpVal < node->entityIBP) {
                     node = node->left;
                 } else {
-                    fn_InternalBasePtr_CheckPtr(ibpSrc);
                     if (ibpVal <= node->entityIBP) {
                         // Found — remove from tree
                         // Same guard as PreUpdate. This is the path that actually
@@ -1187,7 +1163,6 @@ void EntityList_PostUpdate(EntityList* self) {
 
     while (node && !g_treeCorrupt) {
         // CheckPtr on the node
-        fn_InternalBasePtr_CheckPtr((void*)node);
 
         // Guard the node's entity-IBP key: a freed-but-still-linked node has a
         // freelist link written over +0x00, so dereferencing it faults.
@@ -1199,7 +1174,6 @@ void EntityList_PostUpdate(EntityList* self) {
 
         // Check entity not deleted (bit 10 of flags at entity+0x40)
         if (!((*(uint32_t*)(entity + 0x40) >> 10) & 1)) {
-            fn_InternalBasePtr_CheckPtr((void*)node);
             EntityList_PostUpdateNodeHandler(entity);
         }
 
@@ -1224,7 +1198,6 @@ void EntityList_PostUpdate(EntityList* self) {
 //
 // Decompiled from 0x1400c38e0.
 void EntityList_RemoveEntity(EntityList* self, void* entityIBP) {
-    fn_InternalBasePtr_CheckPtr(entityIBP);
     int64_t entity = *(int64_t*)entityIBP;
 
 
@@ -1239,7 +1212,6 @@ void EntityList_RemoveEntity(EntityList* self, void* entityIBP) {
         // Last element index in bucket
         uint32_t lastIdx = *(int32_t*)(bucketBase + 0x08) - 1;
 
-        fn_InternalBasePtr_CheckPtr(entityIBP);
         entity = *(int64_t*)entityIBP;
 
         // Entity's index within bucket (low 24 bits of +0x1C)
@@ -1252,7 +1224,6 @@ void EntityList_RemoveEntity(EntityList* self, void* entityIBP) {
 
             // Update swapped entity's bucket index field
             void* swappedIBP = (void*)(*(int64_t**)bucketBase + entityBucketIdx);
-            fn_InternalBasePtr_CheckPtr(swappedIBP);
             int64_t swappedEntity = *(int64_t*)swappedIBP;
 
             // Update low 24 bits of +0x1C with new index
@@ -1269,7 +1240,6 @@ void EntityList_RemoveEntity(EntityList* self, void* entityIBP) {
     // Step 2: Remove from master array (+0x08)
     int32_t lastMasterIdx = self->masterArray.count - 1;
 
-    fn_InternalBasePtr_CheckPtr(entityIBP);
     entity = *(int64_t*)entityIBP;
     int32_t entityMasterIdx = *(int32_t*)(entity + 0x18);
 
@@ -1280,7 +1250,6 @@ void EntityList_RemoveEntity(EntityList* self, void* entityIBP) {
 
         // Update swapped entity's master array index
         void* swappedIBP = (void*)&masterData[entityMasterIdx];
-        fn_InternalBasePtr_CheckPtr(swappedIBP);
         *(int32_t*)(*(int64_t*)swappedIBP + 0x18) = entityMasterIdx;
     }
 
@@ -1292,11 +1261,9 @@ void EntityList_RemoveEntity(EntityList* self, void* entityIBP) {
     // Step 3: Search and remove from update tree (+0x68)
     EntityTreeNode* updateNode = self->updateTreeRoot;
     while (updateNode != nullptr) {
-        fn_InternalBasePtr_CheckPtr(updateNode);
         if (*(uint64_t*)entityIBP < updateNode->entityIBP) {
             updateNode = updateNode->left;
         } else {
-            fn_InternalBasePtr_CheckPtr(entityIBP);
             if (*(uint64_t*)entityIBP <= updateNode->entityIBP) {
                 break;  // Found
             }
@@ -1307,11 +1274,9 @@ void EntityList_RemoveEntity(EntityList* self, void* entityIBP) {
     // Step 4: Search and remove from post-update tree (+0x78)
     EntityTreeNode* postUpdateNode = self->postUpdateTreeRoot;
     while (postUpdateNode != nullptr) {
-        fn_InternalBasePtr_CheckPtr(postUpdateNode);
         if (*(uint64_t*)entityIBP < postUpdateNode->entityIBP) {
             postUpdateNode = postUpdateNode->left;
         } else {
-            fn_InternalBasePtr_CheckPtr(entityIBP);
             if (*(uint64_t*)entityIBP <= postUpdateNode->entityIBP) {
                 break;  // Found
             }
@@ -1455,17 +1420,14 @@ void EntityList_Serialize(EntityList* self, void* stream) {
             uintptr_t masterData = (uintptr_t)self->masterArray.data;
 
             // Read master array index from entity+0x18
-            fn_InternalBasePtr_CheckPtr((void*)(masterData + ibpOffset));
             int32_t masterIdxField = *(int32_t*)(*(int64_t*)(masterData + ibpOffset) + 0x18);
 
             // Read bucket index (low 24 bits of entity+0x1C)
             masterData = (uintptr_t)self->masterArray.data;
-            fn_InternalBasePtr_CheckPtr((void*)(masterData + ibpOffset));
             uint32_t bucketIdxField = (*(uint32_t*)(*(int64_t*)(masterData + ibpOffset) + 0x1C) << 8) >> 8;
 
             // Read bucket ID from entity+0x1F
             masterData = (uintptr_t)self->masterArray.data;
-            fn_InternalBasePtr_CheckPtr((void*)(masterData + ibpOffset));
             int32_t bucketId = (int32_t)*(int8_t*)(*(int64_t*)(masterData + ibpOffset) + 0x1F);
 
             // Serialize the three metadata fields
@@ -1475,22 +1437,18 @@ void EntityList_Serialize(EntityList* self, void* stream) {
 
             // Serialize entity's timestamp at +0x20 (System::Time)
             masterData = (uintptr_t)self->masterArray.data;
-            fn_InternalBasePtr_CheckPtr((void*)(masterData + ibpOffset));
             g_fn_Time_Serialize((void*)(*(int64_t*)(masterData + ibpOffset) + 0x20), serializer);
 
             // Write back deserialized metadata to entity
             masterData = (uintptr_t)self->masterArray.data;
-            fn_InternalBasePtr_CheckPtr((void*)(masterData + ibpOffset));
             *(int32_t*)(*(int64_t*)(masterData + ibpOffset) + 0x18) = masterIdxField;
 
             masterData = (uintptr_t)self->masterArray.data;
-            fn_InternalBasePtr_CheckPtr((void*)(masterData + ibpOffset));
             int64_t ent = *(int64_t*)(masterData + ibpOffset);
             uint32_t* packedField = (uint32_t*)(ent + 0x1C);
             *packedField = *packedField ^ ((bucketIdxField ^ *(uint32_t*)(ent + 0x1C)) & 0xFFFFFF);
 
             masterData = (uintptr_t)self->masterArray.data;
-            fn_InternalBasePtr_CheckPtr((void*)(masterData + ibpOffset));
             *(int8_t*)(*(int64_t*)(masterData + ibpOffset) + 0x1F) = (int8_t)bucketId;
 
             entityIdx++;

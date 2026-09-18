@@ -124,11 +124,9 @@ static void BC8_Resolve() {
 // before requesting the 1->8 / 8->2 transition.
 static void BC8_StopWorker(uintptr_t bc) {
     if (!s_find3050 || !s_stopWorker) return;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(bc + 0x10));
     uintptr_t retIBP = 0;
     void* self = s_find3050(*reinterpret_cast<uintptr_t*>(bc + 0x10), &retIBP);
     if (!self) return;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
     uintptr_t wc = *reinterpret_cast<uintptr_t*>(self);
     if (wc) s_stopWorker(wc);
 }
@@ -162,14 +160,12 @@ static void* BC8_MeshFramePtr(uintptr_t meshElem, void* modelDesc, int frame) {
 // Re-add a mesh element's draw children (host = meshElem+0x10 ModelComponent; iterate its
 // +0x30 array / +0x38 count, calling each child's vtable slot +0x60).
 static void BC8_ReaddDrawChildren(uintptr_t meshElem) {
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(meshElem + 0x10));
     uintptr_t host = *reinterpret_cast<uintptr_t*>(meshElem + 0x10);
     if (!host) return;
     int hc = *reinterpret_cast<int32_t*>(host + 0x38);
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(host + 0x30);
     for (int k = 0; k < hc; ++k) {
         void* h = *reinterpret_cast<void**>(arr + (int64_t)k * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&h);
         if (!h) continue;
         typedef void (*Slot60_t)(void*, int);
         void* vt = *reinterpret_cast<void**>(h);
@@ -198,7 +194,6 @@ static void BC8_SetMeshFrame(uintptr_t meshElem, int frame) {
 // Deref the i-th mesh element from bc+0x58 (IBP array) with CheckPtr; nullptr on empty.
 static uintptr_t BC8_MeshElem(uintptr_t bc, int i) {
     uintptr_t slot = *reinterpret_cast<uintptr_t*>(bc + 0x58) + (int64_t)i * 8;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(slot));
     return *reinterpret_cast<uintptr_t*>(slot);
 }
 
@@ -298,7 +293,6 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
             if (!me) continue;
             int16_t cur = *reinterpret_cast<int16_t*>(me + 0x166);
             if (cur == 0) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(me + 0x10));
                 if (s_modelRefresh) s_modelRefresh(*reinterpret_cast<uintptr_t*>(me + 0x10), 0);
             } else {
                 BC8_SetMeshFrame(me, 0);
@@ -306,7 +300,6 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
             }
             uintptr_t entSlot = *reinterpret_cast<uintptr_t*>(bc + 0x68) + (int64_t)i * 8;
             if (*reinterpret_cast<uintptr_t*>(entSlot) != 0) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(entSlot));
                 if (s_entity8f50) s_entity8f50(*reinterpret_cast<void**>(entSlot));  // lane D: deref the IBP -- retail takes the PickingComponent, not its slot
             }
         }
@@ -327,7 +320,6 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
             // and returns 1 (never assigns labor) — this is the 2c-B fix.
             void* bsWork = nullptr;
             if (mem) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(bc + 0x10));
                 void* siteEnt = *reinterpret_cast<void**>(bc + 0x10);   // *(BuildComponent+0x10)
                 bsWork = BuildStructure_CreateInPlaceFull(mem, &siteEnt, 0);
             }
@@ -337,11 +329,9 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
                 if (fn_InternalBasePtr_Ctor) new (&bsIBP) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(bsWork));   // B.3.3 bridge
                 // find the site WorkComponent (c8070) the work posts under
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(bc + 0x10));
                 uintptr_t workCompIBP = 0;
                 if (s_find3050) s_find3050(*reinterpret_cast<uintptr_t*>(bc + 0x10), &workCompIBP);
                 if (s_postEc60 && workCompIBP != 0) {
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIBP);
                     s_postEc60(workCompIBP, 0x2001, 1, &bsIBP);
 
                     // Builders are seated by the tick-driven Builder pool
@@ -374,7 +364,6 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
             if (!me) continue;
             int finalFrame = BC8_MeshFrameCount(me, BC8_MeshModelDesc(me)) - 1;
             if (finalFrame == (int)*reinterpret_cast<int16_t*>(me + 0x166)) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(me + 0x10));
                 if (s_modelRefresh) s_modelRefresh(*reinterpret_cast<uintptr_t*>(me + 0x10), 0);
             } else {
                 BC8_SetMeshFrame(me, finalFrame);
@@ -382,7 +371,6 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
             }
             uintptr_t entSlot = *reinterpret_cast<uintptr_t*>(bc + 0x68) + (int64_t)i * 8;
             if (*reinterpret_cast<uintptr_t*>(entSlot) != 0) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(entSlot));
                 if (s_entity8f50) s_entity8f50(*reinterpret_cast<void**>(entSlot));  // lane D: deref the IBP -- retail takes the PickingComponent, not its slot
             }
         }
@@ -456,11 +444,9 @@ extern "C" char BuildComponent_State8Update(void* buildComp, void* sm) {
             int16_t cur = *reinterpret_cast<int16_t*>(me + 0x166);
             if (frame != (int)cur) {
                 BC8_SetMeshFrame(me, frame);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(me + 0x10));
                 if (s_modelRefresh) s_modelRefresh(*reinterpret_cast<uintptr_t*>(me + 0x10), 0);
                 uintptr_t entSlot = *reinterpret_cast<uintptr_t*>(bc + 0x68) + (int64_t)i * 8;
                 if (*reinterpret_cast<uintptr_t*>(entSlot) != 0) {
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(entSlot));
                     if (s_entity8f50) s_entity8f50(*reinterpret_cast<void**>(entSlot));  // lane D: deref the IBP -- retail takes the PickingComponent, not its slot
                 }
             }
@@ -476,7 +462,6 @@ extern "C" char BuildComponent_State8Update(void* buildComp, void* sm) {
             int finalFrame = frameCount - 1;
             int16_t cur = *reinterpret_cast<int16_t*>(me + 0x166);
             if (finalFrame == (int)cur) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(me + 0x10));
                 if (s_modelRefresh) s_modelRefresh(*reinterpret_cast<uintptr_t*>(me + 0x10), 0);
             } else {
                 BC8_SetMeshFrame(me, finalFrame);
@@ -484,7 +469,6 @@ extern "C" char BuildComponent_State8Update(void* buildComp, void* sm) {
             }
             uintptr_t entSlot = *reinterpret_cast<uintptr_t*>(bc + 0x68) + (int64_t)i * 8;
             if (*reinterpret_cast<uintptr_t*>(entSlot) != 0) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(entSlot));
                 if (s_entity8f50) s_entity8f50(*reinterpret_cast<void**>(entSlot));  // lane D: deref the IBP -- retail takes the PickingComponent, not its slot
             }
         }
@@ -505,7 +489,6 @@ extern "C" char BuildComponent_State8OneShot(void* buildComp, void* sm) {
     (void)sm;
     BC8_Resolve();
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(bc + 0x10));
     if (s_modelRefresh) s_modelRefresh(*reinterpret_cast<uintptr_t*>(bc + 0x10), 4);
 
     uintptr_t townMgr = 0;
@@ -526,11 +509,9 @@ extern "C" char BuildComponent_State8OneShot(void* buildComp, void* sm) {
         }
     }
     if (s_findMeshInst) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(bc + 0x10));
         uintptr_t miIBP = 0;
         void* mi = s_findMeshInst(*reinterpret_cast<uintptr_t*>(bc + 0x10), &miIBP);
         if (mi) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(mi);
             uintptr_t inst = *reinterpret_cast<uintptr_t*>(mi);
             if (inst && s_meshFinalize) s_meshFinalize(reinterpret_cast<void*>(inst), 0, 0);
         }
@@ -563,13 +544,11 @@ static void BuildComponent_State8Finalize(uintptr_t bc) {
     // the 8->2 completion and ramps the footprint from _initialAlpha (the translucent
     // under-construction look) to fully opaque. Our DecalComponent is inert, so drive it
     // here. Unconditional and idempotent — it no-ops once the decal is already at 1.0.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(bc + 0x10));
     DecalComponent_MarkOwnerBuilt(*reinterpret_cast<void**>(bc + 0x10));
 
     uintptr_t storageIBP = 0;
     if (s_findStorage) s_findStorage(*reinterpret_cast<uintptr_t*>(bc + 0x10), &storageIBP);
     if (storageIBP == 0) return;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&storageIBP);
     uintptr_t storage = storageIBP;
 
     uintptr_t townMgr = 0;
@@ -604,7 +583,6 @@ static void BuildComponent_State8Finalize(uintptr_t bc) {
     int mult = 1;
     if (*reinterpret_cast<char*>((uint8_t*)desc + 0x20) != 0) {
         // sized output: scan storage entity (storage+0x10) for a MapComponent -> footprint.
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(storage + 0x10));
         uintptr_t ent = *reinterpret_cast<uintptr_t*>(storage + 0x10);
         uint32_t tidMap = BC8_TypeId("MapComponent", 0x1401c79e0);
         void* mapc = nullptr;
@@ -613,7 +591,6 @@ static void BuildComponent_State8Finalize(uintptr_t bc) {
             uintptr_t carr = *reinterpret_cast<uintptr_t*>(ent + 0x30);
             for (int i = 0; i < cc; ++i) {
                 void* c = *reinterpret_cast<void**>(carr + (int64_t)i * 8);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&c);
                 if (!c) continue;
                 typedef uint32_t (*GT_t)(void*);
                 uint32_t t = ((GT_t)(*(uintptr_t*)(*(uintptr_t*)c + 0x10)))(c);

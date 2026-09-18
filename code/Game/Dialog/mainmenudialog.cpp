@@ -454,7 +454,7 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
     if (!fn_ExternalFactory_FindOrLoad || !fn_IsDerivedFrom ||
         !fn_MemAlloc || !fn_InternalBasePtr_Ctor ||
         !fn_DialogInstance_Ctor || !fn_UI_AddDialog ||
-        !fn_DialogInstance_FindElement || !fn_InternalBasePtr_CheckPtr ||
+        !fn_DialogInstance_FindElement ||
         !fn_TextElement_SetParameter || !fn_Configuration_CurrentVersion ||
         !fn_Configuration_CurrentBuildId) {
         printf("[BuildId] missing engine fns, skipping\n");
@@ -513,11 +513,9 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
     // --- Find textBuildNotice inside the child dialog ---
     System::String nameStr("textBuildNotice");
 
-    fn_InternalBasePtr_CheckPtr(childInternalPtr);
     void* childDI = *(void**)childInternalPtr;
     uint8_t retBuf[16] = {};
     fn_DialogInstance_FindElement(childDI, retBuf, &nameStr);
-    fn_InternalBasePtr_CheckPtr(retBuf);
     void* textElem = *(void**)retBuf;
 
     printf("[BuildId] childDI=%p textElem=%p\n", childDI, textElem);
@@ -544,13 +542,11 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
     // through the bridge cast rather than a real System::String local.
     uint8_t versionStr[16] = {};
     fn_Configuration_CurrentVersion(versionStr);
-    fn_InternalBasePtr_CheckPtr(textElemPtr);
     fn_TextElement_SetParameter(*(void**)textElemPtr, 0, versionStr);
     reinterpret_cast<System::String*>(versionStr)->~String();  // B.3.1 bridge
 
     uint8_t buildIdStr[16] = {};
     fn_Configuration_CurrentBuildId(buildIdStr);
-    fn_InternalBasePtr_CheckPtr(textElemPtr);
     fn_TextElement_SetParameter(*(void**)textElemPtr, 1, buildIdStr);
     reinterpret_cast<System::String*>(buildIdStr)->~String();  // B.3.1 bridge
 
@@ -596,58 +592,44 @@ void MainMenuDialog_Slot4(MainMenuDialog* self) {
 
     // --- Assign element IDs (with CheckPtr safety) ---
     if (buttonNew) {
-        fn_InternalBasePtr_CheckPtr(&buttonNew);
         fn_Element_SetElementId(buttonNew, kButton_New);
     }
     if (buttonResume) {
-        fn_InternalBasePtr_CheckPtr(&buttonResume);
         fn_Element_SetElementId(buttonResume, kButton_Resume);
         // Set +0xC0 flag to 8 (command dispatch flag)
-        fn_InternalBasePtr_CheckPtr(&buttonResume);
         *(uint32_t*)((uintptr_t)buttonResume + 0xC0) = 8;
     }
     if (buttonOptions) {
-        fn_InternalBasePtr_CheckPtr(&buttonOptions);
         fn_Element_SetElementId(buttonOptions, kButton_Options);
     }
     if (buttonQuit) {
-        fn_InternalBasePtr_CheckPtr(&buttonQuit);
         fn_Element_SetElementId(buttonQuit, kButton_Quit);
     }
     if (buttonLoad) {
-        fn_InternalBasePtr_CheckPtr(&buttonLoad);
         fn_Element_SetElementId(buttonLoad, kButton_Load);
     }
     if (buttonSave) {
-        fn_InternalBasePtr_CheckPtr(&buttonSave);
         fn_Element_SetElementId(buttonSave, kButton_Save);
     }
     if (buttonMenu) {
-        fn_InternalBasePtr_CheckPtr(&buttonMenu);
         fn_Element_SetElementId(buttonMenu, kButton_Menu);
     }
     if (buttonAchievement) {
-        fn_InternalBasePtr_CheckPtr(&buttonAchievement);
         fn_Element_SetElementId(buttonAchievement, kButton_Achievement);
     }
     if (buttonScenario) {
-        fn_InternalBasePtr_CheckPtr(&buttonScenario);
         fn_Element_SetElementId(buttonScenario, kButton_Scenario);
     }
     if (buttonGoal) {
-        fn_InternalBasePtr_CheckPtr(&buttonGoal);
         fn_Element_SetElementId(buttonGoal, kButton_Goal);
     }
     if (buttonMap) {
-        fn_InternalBasePtr_CheckPtr(&buttonMap);
         fn_Element_SetElementId(buttonMap, kButton_Map);
     }
     if (buttonTutorial) {
-        fn_InternalBasePtr_CheckPtr(&buttonTutorial);
         fn_Element_SetElementId(buttonTutorial, kButton_Tutorial);
     }
     if (buttonMod) {
-        fn_InternalBasePtr_CheckPtr(&buttonMod);
         fn_Element_SetElementId(buttonMod, kButton_Mod);
     }
 
@@ -665,12 +647,10 @@ void MainMenuDialog_Slot4(MainMenuDialog* self) {
         int32_t scenarioIdx = *(int32_t*)((uintptr_t)world + 0x15C);
         if (scenarioIdx < 0) {
             if (buttonGoal) {
-                fn_InternalBasePtr_CheckPtr(&buttonGoal);
                 fn_Element_SetFlagsOnOff(buttonGoal, 1, 0); // hide
             }
         } else {
             if (buttonMap) {
-                fn_InternalBasePtr_CheckPtr(&buttonMap);
                 fn_Element_SetFlagsOnOff(buttonMap, 1, 0); // hide
             }
         }
@@ -679,14 +659,12 @@ void MainMenuDialog_Slot4(MainMenuDialog* self) {
         uint32_t gameFlags = *(uint32_t*)(gameWorld + 0xD0);
         if (gameFlags & (1 << 10)) {
             if (buttonSave) {
-                fn_InternalBasePtr_CheckPtr(&buttonSave);
                 // Call vtable[8] = SetEnabled(false)
                 void** vtable = *(void***)buttonSave;
                 typedef void (*fn_SetEnabled_t)(void*, int);
                 ((fn_SetEnabled_t)vtable[8])(buttonSave, 0);
             }
             if (buttonMod) {
-                fn_InternalBasePtr_CheckPtr(&buttonMod);
                 void** vtable = *(void***)buttonMod;
                 typedef void (*fn_SetEnabled_t)(void*, int);
                 ((fn_SetEnabled_t)vtable[8])(buttonMod, 0);
@@ -875,7 +853,7 @@ void StandaloneStub_RuntimeThunk(void* self, ...) {
 // dispatch work when the user clicks a button.
 void StandaloneStub_Slot4_Setup(void* self) {
     if (!fn_DialogInstance_FindElement ||
-        !fn_InternalBasePtr_CheckPtr || !fn_Element_SetElementId) {
+        !fn_Element_SetElementId) {
         printf("[MainMenuDialog::Setup] missing engine fns, skipping element ID assign\n");
         return;
     }
@@ -890,7 +868,6 @@ void StandaloneStub_Slot4_Setup(void* self) {
         if (elem) {
             // CheckPtr resolves any lazy/weak pointer inside the IBP, then
             // SetElementId writes the int into the element.
-            fn_InternalBasePtr_CheckPtr(&elem);
             fn_Element_SetElementId(elem, id);
             printf("[Setup]   %-20s -> id=%2d (elem=%p)\n", name, id, elem);
         } else {

@@ -109,9 +109,7 @@ static void EnsureInit() {
 // ============================================================
 void CitizenAI_PlayAnimationActionCtor5(void* param_1, float* dest, float animTime) {
     EnsureInit();
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_1);
     int64_t citizen = *reinterpret_cast<int64_t*>(param_1);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(citizen + 0x278));
     int64_t character = *reinterpret_cast<int64_t*>(citizen + 0x278);
     int64_t* stack = reinterpret_cast<int64_t*>(character + 0x48);
 
@@ -125,7 +123,6 @@ void CitizenAI_PlayAnimationActionCtor5(void* param_1, float* dest, float animTi
         int64_t destIBP = 0;
         if (fn_InternalBasePtr_Ctor) new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         uint32_t msgId[2] = { s_pMsgId_c70e8 ? *s_pMsgId_c70e8 : 0u, 0u };
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_1);
         uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
         msgAction = s_fn_sendMsgCopy
                     ? s_fn_sendMsgCopy(mem, &entityIBP, msgId, 0, reinterpret_cast<uint64_t*>(&destIBP), 0)
@@ -148,7 +145,6 @@ void CitizenAI_PlayAnimationActionCtor5(void* param_1, float* dest, float animTi
         if (pmem) {
             int64_t timeStore = 0;
             if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&timeStore, animTime);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_1);
             uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
             if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(pmem);
             uint8_t* a = reinterpret_cast<uint8_t*>(pmem);
@@ -173,9 +169,7 @@ void CitizenAI_PlayAnimationActionCtor5(void* param_1, float* dest, float animTi
     void* mmem = (fn_MemAlloc && g_pMemAllocSingleton)
                  ? fn_MemAlloc(g_pMemAllocSingleton, 0x480, 8) : nullptr;
     if (mmem) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_1);
         int64_t entityVal = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entityVal);
         int64_t familyOut = 0;
         if (s_fn_findFamily) s_fn_findFamily(static_cast<uintptr_t>(entityVal), &familyOut);
         if (familyOut == 0) {
@@ -222,7 +216,6 @@ void CitizenAI_PlayAnimationActionCtor5(void* param_1, float* dest, float animTi
 bool CitizenAI_State_Wander(int64_t param_1) {
     EnsureInit();
     int64_t* self = reinterpret_cast<int64_t*>(param_1 + 0x38);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
 
     int64_t target = *reinterpret_cast<int64_t*>(*self + 0x258);
     if (target == 0) return false;
@@ -231,10 +224,8 @@ bool CitizenAI_State_Wander(int64_t param_1) {
                 ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8)
                 : nullptr;
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&target);
     if (*reinterpret_cast<int64_t*>(target + 0x250) != 0 &&
         fn_Random_Rand && rng && fn_Random_Rand(rng, 1) == 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&target);
         target = *reinterpret_cast<int64_t*>(target + 0x250);
     }
 
@@ -244,11 +235,8 @@ bool CitizenAI_State_Wander(int64_t param_1) {
     if (!grid) return false;
 
     // --- cell coords from `target` model position ---
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&target);
     int64_t tChar = target;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(tChar + 0x278));
     tChar = *reinterpret_cast<int64_t*>(tChar + 0x278);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(tChar + 0x68));
     int64_t tModel = *reinterpret_cast<int64_t*>(tChar + 0x68);
     int mapSize = *grid;
     int half = mapSize >> 1;
@@ -260,11 +248,8 @@ bool CitizenAI_State_Wander(int64_t param_1) {
     if (mapSize <= ty) ty = mapSize - 1;
 
     // --- cell coords from `self` (the citizen) model position ---
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
     int64_t sChar = *self;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(sChar + 0x278));
     sChar = *reinterpret_cast<int64_t*>(sChar + 0x278);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(sChar + 0x68));
     int64_t sModel = *reinterpret_cast<int64_t*>(sChar + 0x68);
     int sx = static_cast<int>(*reinterpret_cast<float*>(sModel + 0x158) + static_cast<float>(half));
     int sy = static_cast<int>(*reinterpret_cast<float*>(sModel + 0x15c) + static_cast<float>(half));

@@ -146,7 +146,6 @@ static void EnsureInit() {
     s_init = true;
 }
 
-static inline void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton); }
 static inline int* MapGrid() { return *reinterpret_cast<int**>(GW() + 0xf8); }
 static inline void* Rng() { return *reinterpret_cast<void**>(GW() + 0xd8); }
@@ -177,10 +176,8 @@ static void* ScanArrAt(int64_t* node, int arrOff, int cntOff, uint32_t wantTid) 
     uint64_t arr = *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(node) + arrOff);
     for (int i = 0; i < count; ++i) {
         int64_t* slot = reinterpret_cast<int64_t*>(arr + static_cast<uint64_t>(i) * 8);
-        CheckPtr(slot);
         if (VGetTypeId(slot) == wantTid) {
             int64_t* slot2 = reinterpret_cast<int64_t*>(arr + static_cast<uint64_t>(i) * 8);
-            CheckPtr(slot2);
             void* obj = *reinterpret_cast<void**>(slot2);
             bool ok = fn_IsDerivedFrom && fn_IsDerivedFrom(obj, wantTid);
             return ok ? obj : nullptr;
@@ -237,10 +234,8 @@ static int64_t* CitizenAI_State_Leisure_sub_fd50(int64_t param_1, int64_t* param
     int64_t byteOff = 0;
     while (idx < count) {
         int64_t* slot = reinterpret_cast<int64_t*>(arrBase + byteOff);
-        CheckPtr(slot);
         if (VGetTypeId(slot) == s_tid_HappinessComponent) {
             int64_t* slot2 = reinterpret_cast<int64_t*>(arrBase + static_cast<int64_t>(idx) * 8);
-            CheckPtr(slot2);
             void* obj = *reinterpret_cast<void**>(slot2);
             if (fn_IsDerivedFrom && fn_IsDerivedFrom(obj, s_tid_HappinessComponent))
                 result = obj;
@@ -290,9 +285,7 @@ static int64_t* CitizenAI_State_Leisure_sub_99d0(int64_t param_1, int64_t* param
         int64_t byteOff = 0;
         do {
             int64_t* slot = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x50) + byteOff);
-            CheckPtr(slot);
             int64_t entObj = *reinterpret_cast<int64_t*>(*slot + 0x10);
-            CheckPtr(&entObj);
 
             // find the entity's InteractComponent (scan Object::Type array @ entObj+0x30)
             void* interact = nullptr;
@@ -300,7 +293,6 @@ static int64_t* CitizenAI_State_Leisure_sub_99d0(int64_t param_1, int64_t* param
             int64_t interactIBP[2] = {0, 0};
             if (fn_InternalBasePtr_Ctor) new (interactIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(interact));   // B.3.3 bridge
-            CheckPtr(interactIBP);
 
             // resolve world pos -> clamped grid cell
             float posVec[4] = {0, 0, 0, 0};
@@ -325,7 +317,6 @@ static int64_t* CitizenAI_State_Leisure_sub_99d0(int64_t param_1, int64_t* param
             if (cost < param_4 * 2 &&
                 s_reach && (static_cast<char>(s_reach(mapGrid, 0xe1f, param_3, destCell)) != '\0')) {
                 int64_t* slot2 = reinterpret_cast<int64_t*>(byteOff + *reinterpret_cast<int64_t*>(param_1 + 0x50));
-                CheckPtr(slot2);
                 int64_t node = *slot2;
                 void* prim = *reinterpret_cast<void**>(node + 0x18);
                 void* narrowed = (fn_IsDerivedFrom && fn_IsDerivedFrom(prim, s_tid_HappinessDescription)) ? prim : nullptr;
@@ -369,7 +360,6 @@ static int64_t* CitizenAI_State_Leisure_sub_99d0(int64_t param_1, int64_t* param
         if (matchCount != 0) {
             uint32_t pick = fn_Random_Rand ? fn_Random_Rand(Rng(), static_cast<uint32_t>(matchCount)) : 0;
             int64_t* chosen = reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(curArr) + static_cast<uint64_t>(pick) * 8);
-            CheckPtr(chosen);
             int64_t node = *chosen;
             *param_2 = 0;
             *param_2 = *reinterpret_cast<int64_t*>(node + 0x10);
@@ -398,18 +388,14 @@ extern "C" uint64_t CitizenAI_State_Leisure(int64_t param_1) {
     void* pRVar6 = Rng();
 
     int64_t* self = reinterpret_cast<int64_t*>(param_1 + 0x38);   // local_90
-    CheckPtr(self);
 
     // pvVar26 = CitizenDescription on the citizen (citizen+0x18, IsDerivedFrom 0x1c7190).
     void* descRaw = *reinterpret_cast<void**>(*self + 0x18);
     void* pvVar26 = (fn_IsDerivedFrom && fn_IsDerivedFrom(descRaw, s_tid_CitizenDescription)) ? descRaw : nullptr;
 
     // citizen ModelComponent transform -> grid cell (uVar37=srcCell).
-    CheckPtr(self);
     uintptr_t citizen = static_cast<uintptr_t>(*self);
-    CheckPtr(reinterpret_cast<void*>(citizen + 0x278));
     int64_t character = *reinterpret_cast<int64_t*>(citizen + 0x278);
-    CheckPtr(reinterpret_cast<void*>(character + 0x68));
     int64_t model = *reinterpret_cast<int64_t*>(character + 0x68);
     int w0 = *piVar5;
     int colC = static_cast<int>(static_cast<float>(w0 >> 1) + *reinterpret_cast<float*>(model + 0x158));
@@ -419,7 +405,6 @@ extern "C" uint64_t CitizenAI_State_Leisure(int64_t param_1) {
     uint32_t uVar37 = static_cast<uint32_t>(w0 * rowC + colC);    // srcCell / local_res10
 
     // homeCell (uVar14) from workplace anchor (+0x238) or -1.
-    CheckPtr(self);
     uint32_t uVar14;
     if (*reinterpret_cast<int64_t*>(*self + 0x238) == 0) {
         uVar14 = 0xffffffff;
@@ -451,22 +436,17 @@ extern "C" uint64_t CitizenAI_State_Leisure(int64_t param_1) {
 
     // ---- validated-target path: target must have a usable Storage + be reachable ----
     {
-        CheckPtr(&local_res20);
         int64_t happyIBP = 0;
         CitizenAI_State_Leisure_sub_fd50(reinterpret_cast<int64_t>(local_res20), &happyIBP);
         if (happyIBP == 0) goto LAB_14010a7e0;
 
-        CheckPtr(&local_res20);
         int64_t happyIBP2 = 0;
         int64_t* pIVar17 = CitizenAI_State_Leisure_sub_fd50(reinterpret_cast<int64_t>(local_res20), &happyIBP2);
-        CheckPtr(pIVar17);
         char cVar12 = CitizenAI_helper_a720(*pIVar17);
         if (cVar12 == '\0') goto LAB_14010a7e0;
 
-        CheckPtr(&local_res20);
         int64_t posIBP = 0;
         int64_t* pp = s_findPos ? reinterpret_cast<int64_t*>(s_findPos(reinterpret_cast<int64_t>(local_res20), &posIBP)) : nullptr;
-        CheckPtr(pp);
         float dpos[4] = {0, 0, 0, 0};
         if (pp && s_2e20) s_2e20(*pp, dpos, 0, 0, nullptr);
         int w = *piVar5;
@@ -526,12 +506,10 @@ LAB_14010a846:
                         else cand = plVar20[1];
                     } else cand = plVar20[0];
                     if (cand != 0) {
-                        CheckPtr(&cand);
                         int64_t mapBuf = 0;     // local_b0
                         if (s_findMap) s_findMap(cand, &mapBuf);
                         if (mapBuf != 0) {
                             int64_t workArg = cand;   // local_b8 = cand
-                            CheckPtr(self);
                             char ok = s_checkWork ? s_checkWork(reinterpret_cast<void*>(*self), &workArg) : 0;
                             if (ok != '\0') {
                                 int64_t outNode = 0;   // &local_a0 (out-node, result unused)
@@ -545,16 +523,12 @@ LAB_14010a846:
             ++boxRow;
         }
         // also consider the citizen's own workplace (+0x238) if valid (manual key-ordered insert).
-        CheckPtr(self);
         uVar37 = static_cast<uint32_t>(w0 * rowC + colC);   // uVar37 = (uint)local_res10 = srcCell
         iVar27 = 6;
         if (*reinterpret_cast<int64_t*>(*self + 0x238) != 0) {
-            CheckPtr(self);
             int64_t key = *reinterpret_cast<int64_t*>(*self + 0x238);   // local_res10
-            CheckPtr(self);
             char ok = s_checkWork ? s_checkWork(reinterpret_cast<void*>(*self), &key) : 0;
             if (ok != '\0') {
-                CheckPtr(self);
                 key = *reinterpret_cast<int64_t*>(*self + 0x238);
                 if (local_d8 == nullptr) {
                     int64_t* nd = reinterpret_cast<int64_t*>(NodeAlloc(0x28));
@@ -566,7 +540,6 @@ LAB_14010a846:
                     int64_t* cur = local_d8; int64_t* ins = cur; bool done = false;
                     do {
                         ins = cur;
-                        CheckPtr(cur);
                         if (static_cast<uint64_t>(cur[0]) <= keyVal) {
                             if (keyVal <= static_cast<uint64_t>(cur[0])) { done = true; break; }  // present
                             cur = reinterpret_cast<int64_t*>(cur[3]);
@@ -646,7 +619,6 @@ LAB_after_target:
 
     // local_res20 != 0: scan node[6]/[7] for HappinessComponent (0x1c42c0) -> IBP local_res18.
     {
-        CheckPtr(&local_res20);
         void* hcomp = ScanArr(local_res20, s_tid_HappinessComponent);
         int64_t local_res18 = 0;
         if (fn_InternalBasePtr_Ctor) new (&local_res18) ::Object::InternalBasePtr(
@@ -654,13 +626,11 @@ LAB_after_target:
         if (local_res18 == 0) {
             happinessMode = false;   // LAB_14010adba
         } else {
-            CheckPtr(&local_res20);
             void* hcomp2 = ScanArr(local_res20, s_tid_HappinessComponent);
             int64_t local_res10n = 0;
             if (fn_InternalBasePtr_Ctor) new (&local_res10n) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(hcomp2));   // B.3.3 bridge
             // LAB_14010ad7a: node[3] = HappinessDescription (0x1c42f8); if +0x20==5 || node[5]==0 -> false.
-            CheckPtr(&local_res10n);
             int64_t* hnode = reinterpret_cast<int64_t*>(local_res10n);
             void* hdRaw = reinterpret_cast<void*>(hnode[3]);
             void* hd = (fn_IsDerivedFrom && fn_IsDerivedFrom(hdRaw, s_tid_HappinessDescription)) ? hdRaw : nullptr;
@@ -674,7 +644,6 @@ LAB_after_target:
         int64_t local_b8 = 0;
         if (fn_InternalBasePtr_Ctor) new (&local_b8) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(mapc));   // B.3.3 bridge
-        CheckPtr(&local_b8);
         int64_t* mnode = reinterpret_cast<int64_t*>(local_b8);
         iVar30          = static_cast<int>(*reinterpret_cast<short*>(reinterpret_cast<uintptr_t>(mnode) + 0x28));
         iVar13          = static_cast<int>(*reinterpret_cast<short*>(reinterpret_cast<uintptr_t>(mnode) + 0x2a));
@@ -800,14 +769,12 @@ LAB_14010ae8a:
             else entIBP = reinterpret_cast<int64_t>(local_res20);
             int64_t local_res18 = entIBP;
 
-            CheckPtr(self);
             int64_t local_a8h = *self;   // holder citizen (PlayAnimation self IBP)
             float fVar39t = s_randFloatTol ? s_randFloatTol(pRVar6) : 0.0f;
             if (s_playAnim) s_playAnim(&local_a8h, &local_res18, reinterpret_cast<uint32_t*>(dest),
                                        fVar39t * kAgeMult + kAnimTimeBase,
                                        static_cast<uint32_t>(static_cast<unsigned char>(cVar12)));
 
-            CheckPtr(self);
             uintptr_t cz = static_cast<uintptr_t>(*self);
             *reinterpret_cast<int32_t*>(cz + 0x30) = static_cast<int32_t>(0xffffffff);
             *reinterpret_cast<uint32_t*>(cz + 0x54) |= 4;

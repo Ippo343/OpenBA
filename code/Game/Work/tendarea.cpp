@@ -235,7 +235,7 @@ bool TendArea_ResolveFuncs() {
               s_fn_PerformWork_Ctor && s_fn_CitizenAI_RegisterWork &&
               s_fn_CitizenAI_LongTermPlan && s_fn_FindComp_Storage &&
               s_fn_StorageQueryCount &&
-              fn_InternalBasePtr_CheckPtr && fn_IsDerivedFrom &&
+              fn_IsDerivedFrom &&
               g_pGameWorldSingleton && s_fHalfCellOffset;
 
     s_tend_funcs_resolved = ok;
@@ -294,13 +294,11 @@ int TendArea_Slot4_Impl(TendArea* self, void* citizenIBP, uint64_t /*param3*/, u
     uintptr_t* selfQ = (uintptr_t*)self;
 
     // Step 1: Check max workers
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t matDescIBP = 0;
     s_fn_FindComp_MatDesc(*(uintptr_t*)(selfAddr + 0x10), &matDescIBP);
 
     int64_t currentWorkers = (int64_t)selfQ[10]; // self->workerCount at +0x50
 
-    fn_InternalBasePtr_CheckPtr(&matDescIBP);
     if (*(int*)(matDescIBP + 0x30) == 0) {
         int maxWorkers = s_fn_CalcMaxWorkers(matDescIBP);
         *(int*)(matDescIBP + 0x30) = maxWorkers;
@@ -316,12 +314,9 @@ int TendArea_Slot4_Impl(TendArea* self, void* citizenIBP, uint64_t /*param3*/, u
     void* rng = *(void**)(gameWorld + 0xd8);
 
     // Step 3: Get citizen position
-    fn_InternalBasePtr_CheckPtr(citizenIBP);
     uintptr_t citizenEntity = *(uintptr_t*)citizenIBP;
 
-    fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
     uintptr_t aiComp = *(uintptr_t*)(citizenEntity + 0x278);
-    fn_InternalBasePtr_CheckPtr((void*)(aiComp + 0x68));
     uintptr_t posComp = *(uintptr_t*)(aiComp + 0x68);
 
     int mapSize = *mapGrid;
@@ -344,26 +339,20 @@ int TendArea_Slot4_Impl(TendArea* self, void* citizenIBP, uint64_t /*param3*/, u
 
     if (self->tendMode == 0) {
         // Crop mode: find CropAreaComponent
-        fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
         s_fn_FindComp_AreaCrop(*(uintptr_t*)(selfAddr + 0x10), &areaCompIBP);
-        fn_InternalBasePtr_CheckPtr(&areaCompIBP);
 
         uint32_t areaSize = *(uint32_t*)(areaCompIBP + 0x60);
         randIdx = s_fn_Random_Rand(rng, areaSize);
-        fn_InternalBasePtr_CheckPtr(&areaCompIBP);
 
         workFlag = 1;
         targetCell = *(int*)((int64_t)(int)randIdx * 0x20 + *(int64_t*)(areaCompIBP + 0x58));
         typeId = *s_typeId_CropAreaComponent;
     } else {
         // Orchard mode: find OrchardAreaComponent
-        fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
         s_fn_FindComp_AreaOrchard(*(uintptr_t*)(selfAddr + 0x10), &areaCompIBP);
-        fn_InternalBasePtr_CheckPtr(&areaCompIBP);
 
         uint32_t areaSize = *(uint32_t*)(areaCompIBP + 0x58);
         randIdx = s_fn_Random_Rand(rng, areaSize);
-        fn_InternalBasePtr_CheckPtr(&areaCompIBP);
 
         workFlag = 2;
         targetCell = *(int*)(*(int64_t*)(areaCompIBP + 0x50) + (int64_t)(int)randIdx * 0x28);
@@ -414,7 +403,6 @@ int TendArea_Slot4_Impl(TendArea* self, void* citizenIBP, uint64_t /*param3*/, u
 
     // Step 8: Assign work and register with AI
     int priority = (int)selfQ[4];
-    fn_InternalBasePtr_CheckPtr(citizenIBP);
     uintptr_t citEnt = *(uintptr_t*)citizenIBP;
 
     // Call vtable Slot10 (GetWorkEntity) to get work entity
@@ -474,10 +462,8 @@ int TendArea_Slot8_Impl(TendArea* self) {
         }
 
         // Cancel the work item
-        fn_InternalBasePtr_CheckPtr(leftmost);
         uintptr_t citizenEntity = *(uintptr_t*)leftmost;
 
-        fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
         s_fn_CancelAllWork((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
     }
     return 0;
@@ -578,11 +564,9 @@ bool TendArea_Slot9_Impl(TendArea* self, void* param2) {
         for (uint32_t i = 0; i < removeCount; i++) {
             void* searchNode = *bstRootPtr;
             while (searchNode != nullptr) {
-                fn_InternalBasePtr_CheckPtr(searchNode);
                 if (removeArr[i] < *(uintptr_t*)searchNode) {
                     searchNode = *(void**)((uintptr_t)searchNode + 0x10);
                 } else {
-                    fn_InternalBasePtr_CheckPtr(&removeArr[i]);
                     if (removeArr[i] <= *(uintptr_t*)searchNode) {
                         s_fn_BSTRemove(bstRootPtr, searchNode);
                         break;
@@ -605,13 +589,11 @@ bool TendArea_Slot9_Impl(TendArea* self, void* param2) {
 void* TendArea_Slot10_Impl(TendArea* self, void* outPtr) {
     uintptr_t selfAddr = (uintptr_t)self;
 
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
 
     uintptr_t subIBP[2] = {0};
     void* result = s_fn_FindSubEntity(entityRef, subIBP);
 
-    fn_InternalBasePtr_CheckPtr(result);
 
     uintptr_t resolvedEntity = *(uintptr_t*)result;
     *(uintptr_t*)outPtr = *(uintptr_t*)(resolvedEntity + 0x48);

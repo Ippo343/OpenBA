@@ -68,12 +68,9 @@ static void EnsureLeafFuncs() {
 // Closure: 0x140003ea0 (reg) + InternalBasePtr CheckPtr (engine). SAFE.
 void WorkLeaf_PlantArea_b390(uintptr_t self) {
     EnsureLeafFuncs();
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
     uintptr_t ent = 0;
     if (s_fn_FindEntity_3ea0)
         s_fn_FindEntity_3ea0(*reinterpret_cast<uintptr_t*>(self + 0x10), &ent);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ent);
 
     char state = *reinterpret_cast<char*>(ent + 0x52);
     if (state < 0) state = *reinterpret_cast<char*>(ent + 0x50);
@@ -104,12 +101,10 @@ void WorkLeaf_BstRemoveByIBP_298a0(void* treeRootSlot, void* keyIBP) {
     uint64_t* node = *reinterpret_cast<uint64_t**>(treeRootSlot);
     if (node == nullptr) return;
     do {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(node);
         uint64_t keyVal = *reinterpret_cast<uint64_t*>(keyIBP);
         if (keyVal < *node) {
             node = reinterpret_cast<uint64_t*>(node[3]);       // left (+0x18)
         } else {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(keyIBP);
             if (*reinterpret_cast<uint64_t*>(keyIBP) <= *node) {
                 if (s_fn_BST_Remove_ca60) s_fn_BST_Remove_ca60(treeRootSlot, node);
                 return;
@@ -180,7 +175,6 @@ void* WorkLeaf_BstInsertByIBP_29920(void* treeRootSlot, void* outNode, void* ins
             // descend-left while key < node key (re-reading key each step via CheckPtr)
             while (true) {
                 newChildSlotOwner = node;
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(node);
                 insKey = *reinterpret_cast<uint64_t*>(insIBP);
                 if (insKey >= *node) break;
                 uint64_t* left = reinterpret_cast<uint64_t*>(node[3]);  // +0x18
@@ -192,7 +186,6 @@ void* WorkLeaf_BstInsertByIBP_29920(void* treeRootSlot, void* outNode, void* ins
                 }
                 node = left;
             }
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(insIBP);
             if (*reinterpret_cast<uint64_t*>(insIBP) <= *node) {
                 // duplicate found — return existing node; early return, NO insert,
                 // NO rebalance, and NO count increment (matches exe early `return`).

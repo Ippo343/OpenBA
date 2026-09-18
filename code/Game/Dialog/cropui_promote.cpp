@@ -61,10 +61,8 @@ void* FindComp(void* self) {
     void* checked = fn_IsDerivedFrom(entity, entTid) ? entity : nullptr;
     uint64_t entIbp = 0;
     new (&entIbp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entIbp);
     uint64_t comp = 0;
     s_findCropComp(static_cast<int64_t>(entIbp), &comp);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&comp);
     return reinterpret_cast<void*>(comp);
 }
 

@@ -129,7 +129,7 @@ namespace { uint32_t PC_ModelTypeId(); }
 // array ptr / +0x38 count; each slot is an IBP). Mirrors ComponentEntity::FindComponent
 // (the mislabeled Entity_ClearPathQueue, 0x140003f60).
 static void* PC_FindModelComponent(void* entity) {
-    if (!entity || !fn_InternalBasePtr_CheckPtr) return nullptr;
+    if (!entity) return nullptr;
     uint32_t tid = PC_ModelTypeId();
     if (tid == 0) return nullptr;
     uint8_t* e = (uint8_t*)entity;
@@ -137,7 +137,6 @@ static void* PC_FindModelComponent(void* entity) {
     uintptr_t arr = *(uintptr_t*)(e + 0x30);
     for (int i = 0; i < count; ++i) {
         void** slot = (void**)(arr + (uintptr_t)i * 8);
-        fn_InternalBasePtr_CheckPtr(slot);
         void* comp = *slot;
         if (!comp) continue;
         uintptr_t vt = *(uintptr_t*)comp;
@@ -157,14 +156,13 @@ void PickingComponent_RegisterMesh(void* pc) {
             "AEBVTransform@Math@@PEAXHHP6AX2HHAEBVVector3@6@33@Z@Z");
         s_addMeshInit = true;
     }
-    if (!s_fn_AddMesh || !fn_InternalBasePtr_CheckPtr) return;
+    if (!s_fn_AddMesh) return;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
 
     uint8_t* p = (uint8_t*)pc;
 
     // --- Startup (0x140128c30): userData(+0x30) = owner(+0x10). Also restore the
     //     unregistered sentinel +0x28 = -1 (SA leaves it a zeroed 0, not -1).
-    fn_InternalBasePtr_CheckPtr((void*)(p + 0x10));
     void* entity = *(void**)(p + 0x10);           // resolved ComponentEntity ptr
     if (!entity) return;
     // Retail SPLITS what this function fuses: Startup seats +0x30 = owner, and OnAdded
@@ -243,7 +241,6 @@ void PickingComponent_RegisterMesh(void* pc) {
             uintptr_t arr = *(uintptr_t*)(e + 0x30);
             for (int i = 0; i < n && arr; ++i) {
                 void** slot = (void**)(arr + (uintptr_t)i * 8);
-                fn_InternalBasePtr_CheckPtr(slot);
                 void* c = *slot; if (!c) continue;
                 typedef uint32_t (*gt_t)(void*);
                 if ((*(gt_t*)(*(uintptr_t*)c + 0x10))(c) == s_tidMapPC) {
@@ -276,7 +273,7 @@ uint32_t PC_ModelTypeId() {
 // Used by callers that hold an entity rather than the component (player placement, etc.).
 static uint32_t s_tidPickComponent = 0;
 void PickingComponent_RegisterMeshForEntity(void* entity) {
-    if (!entity || !fn_InternalBasePtr_CheckPtr) return;
+    if (!entity) return;
     if (s_tidPickComponent == 0 || s_tidPickComponent == 0xFFFFFFFF)
         s_tidPickComponent = ::Object::GetTypeIdByName("PickingComponent");
     if (s_tidPickComponent == 0) return;
@@ -285,7 +282,6 @@ void PickingComponent_RegisterMeshForEntity(void* entity) {
     uintptr_t arr = *(uintptr_t*)(e + 0x30);
     for (int i = 0; i < count; ++i) {
         void** slot = (void**)(arr + (uintptr_t)i * 8);
-        fn_InternalBasePtr_CheckPtr(slot);
         void* comp = *slot;
         if (!comp) continue;
         uintptr_t vt = *(uintptr_t*)comp;

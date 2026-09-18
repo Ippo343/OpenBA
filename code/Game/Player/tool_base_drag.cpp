@@ -224,15 +224,12 @@ void DragPlacementTool_ClearPathEntities_1018d0(void* self, int minCol, int minR
                 cellArr + (static_cast<int64_t>(gridSize) * row + col) * 0x30);
             if (cellEntity != 0) {
                 uint64_t local = cellEntity;
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local);
                 // Cell stores the entity; match against the entity-template at +0x28.
                 if (*reinterpret_cast<int64_t*>(local + 0x28) == entityTemplate) {
                     uint64_t resolved = local;
                     void* entityList = *reinterpret_cast<void**>(gw + 0xe8);
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&resolved);
                     // skip if flag bit 10 (0x400) already set at entity+0x40
                     if ((*reinterpret_cast<uint32_t*>(resolved + 0x40) >> 10 & 1) == 0) {
-                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&resolved);
                         if (s_fn_MarkRemoval) s_fn_MarkRemoval(resolved);
                         if (s_fn_ArrSetCount) {
                             uintptr_t el = reinterpret_cast<uintptr_t>(entityList);

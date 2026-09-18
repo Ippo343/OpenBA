@@ -200,9 +200,6 @@ void* Description(void* self) {
     return fn_IsDerivedFrom(obj, typeId) ? obj : nullptr;
 }
 
-void CheckPtr(void* ibp) {
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);
-}
 
 }  // namespace
 
@@ -438,18 +435,17 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, void* entityIbp,
                                  int* hitAnimal, int* hitCitizen) {
     (void)unusedFirstArg;
 
-    CheckPtr(entityIbp);
     void* entity = *reinterpret_cast<void**>(entityIbp);
 
     int64_t fireComp = 0, buildComp = 0, growthComp = 0, natResComp = 0;
     int64_t citizenComp = 0, animalComp = 0;
 
-    if (g_h.findFire)            { CheckPtr(entityIbp); g_h.findFire(entity, &fireComp); }
-    if (g_h.findBuild)           { CheckPtr(entityIbp); g_h.findBuild(entity, &buildComp); }
-    if (g_h.findGrowth)          { CheckPtr(entityIbp); g_h.findGrowth(entity, &growthComp); }
-    if (g_h.findNaturalResource) { CheckPtr(entityIbp); g_h.findNaturalResource(entity, &natResComp); }
-    if (g_h.findCitizen)         { CheckPtr(entityIbp); g_h.findCitizen(entity, &citizenComp); }
-    if (g_h.findAnimal)           { CheckPtr(entityIbp); g_h.findAnimal(entity, &animalComp); }
+    if (g_h.findFire)            { g_h.findFire(entity, &fireComp); }
+    if (g_h.findBuild)           { g_h.findBuild(entity, &buildComp); }
+    if (g_h.findGrowth)          { g_h.findGrowth(entity, &growthComp); }
+    if (g_h.findNaturalResource) { g_h.findNaturalResource(entity, &natResComp); }
+    if (g_h.findCitizen)         { g_h.findCitizen(entity, &citizenComp); }
+    if (g_h.findAnimal)           { g_h.findAnimal(entity, &animalComp); }
 
     // The first few buildings the funnel touches, and which way the arm went.
     // Unconditional and one-shot: if this never appears, no tornado has swept a
@@ -470,17 +466,14 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, void* entityIbp,
     if (natResComp != 0 && growthComp != 0) {
         // --- tree / crop: stop it walking its growth queue and knock it down ---
         int64_t meshIbp = 0;
-        if (g_h.clearPathQueue) { CheckPtr(entityIbp); g_h.clearPathQueue(entity, &meshIbp); }
-        CheckPtr(&meshIbp);
+        if (g_h.clearPathQueue) { g_h.clearPathQueue(entity, &meshIbp); }
         const bool animating =
             (g_h.meshIsAnimating && meshIbp)
                 ? g_h.meshIsAnimating(reinterpret_cast<void*>(
                       static_cast<uintptr_t>(meshIbp) + 0x28))
                 : false;
         if (!animating) {
-            CheckPtr(&natResComp);
             *reinterpret_cast<int32_t*>(static_cast<uintptr_t>(natResComp) + 0x28) = 0;
-            CheckPtr(&natResComp);
             // 0x140126780 is what actually FELLS the tree: it sets flag bit 0x200000,
             // notifies, and starts fall animation mode 2. Zeroing +0x28 alone only empties
             // the resource. Count the two outcomes apart -- a hitTree that also counted an
@@ -498,8 +491,7 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, void* entityIbp,
     if (buildComp != 0 && fireComp != 0) {
         // --- building: set it alight (the tornado does NOT demolish) ---
         int64_t fireOwner = 0;
-        if (g_h.findFireOwner) { CheckPtr(entityIbp); g_h.findFireOwner(entity, &fireOwner); }
-        CheckPtr(&fireOwner);
+        if (g_h.findFireOwner) { g_h.findFireOwner(entity, &fireOwner); }
         const bool alreadyBurning =
             (g_h.fireBurning && fireOwner)
                 ? g_h.fireBurning(reinterpret_cast<void*>(static_cast<uintptr_t>(fireOwner)))
@@ -511,11 +503,9 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, void* entityIbp,
             }
             int64_t zero = 0;
             if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&zero, 0.0f);
-            CheckPtr(&fireOwner);
             const bool lit =
                 g_h.fireIgnite(reinterpret_cast<void*>(static_cast<uintptr_t>(fireOwner)), &zero);
             if (lit) {
-                CheckPtr(&fireOwner);
                 g_h.fireIgniteFinish(reinterpret_cast<void*>(static_cast<uintptr_t>(fireOwner)));
                 if (hitBuilding) ++*hitBuilding;
             }
@@ -542,10 +532,8 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, void* entityIbp,
         // flagged (bit 10 of entity+0x40), else MarkForRemoval + push onto the
         // pending-destroy array at entityList+0xd0 / count +0xd8.
         if (entityMgr && ibp != 0) {
-            CheckPtr(&ibp);
             const uint32_t f = *reinterpret_cast<uint32_t*>(static_cast<uintptr_t>(ibp) + 0x40);
             if (((f >> 10) & 1) == 0) {
-                CheckPtr(&ibp);
                 if (g_h.markForRemoval)
                     g_h.markForRemoval(reinterpret_cast<void*>(static_cast<uintptr_t>(ibp)));
                 uintptr_t mgr = reinterpret_cast<uintptr_t>(entityMgr);
@@ -560,7 +548,6 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, void* entityIbp,
 
     if (citizenComp != 0) {
         // --- citizen: life event 5 (killed) ---
-        CheckPtr(&citizenComp);
         if (g_h.citizenLifeEvent)
             g_h.citizenLifeEvent(reinterpret_cast<void*>(static_cast<uintptr_t>(citizenComp)),
                                  5, nullptr);
@@ -637,7 +624,6 @@ extern "C" void Tornado_DamageTick_58040(TornadoComponent* self, const int64_t* 
         int64_t cellEntity =
             *reinterpret_cast<int64_t*>(cells + 8 + static_cast<uintptr_t>(iy * N + ix) * 0x30);
         if (cellEntity != 0) {
-            CheckPtr(&cellEntity);
             int64_t probe = 0;
             if (g_h.findNaturalResource)
                 g_h.findNaturalResource(reinterpret_cast<void*>(static_cast<uintptr_t>(cellEntity)),
@@ -680,7 +666,6 @@ extern "C" void Tornado_DamageTick_58040(TornadoComponent* self, const int64_t* 
 
         for (int i = 0; i < found.count; i++) {
             void* slot = reinterpret_cast<void*>(found.data + static_cast<uintptr_t>(i) * 8);
-            CheckPtr(slot);
             int64_t ownerEntity =
                 *reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(slot) + 0x10);
             Tornado_StrikeEntityCounted(reinterpret_cast<int64_t>(slot), &ownerEntity,
@@ -834,7 +819,6 @@ void TornadoComponent_Serialize(TornadoComponent* self) {
     int64_t particleIbp = 0;
     if (g_h.findParticle) {
         void* owner = *reinterpret_cast<void**>(s + 0x10);
-        CheckPtr(reinterpret_cast<void*>(s + 0x10));
         g_h.findParticle(owner, &particleIbp);
     }
 
@@ -867,11 +851,9 @@ void TornadoComponent_OnRemove(TornadoComponent* self, void* time) {
     uintptr_t g = reinterpret_cast<uintptr_t>(gw);
 
     void* owner = *reinterpret_cast<void**>(s + 0x10);
-    CheckPtr(reinterpret_cast<void*>(s + 0x10));
     int64_t particleIbp = 0;
     if (g_h.findParticle) g_h.findParticle(owner, &particleIbp);
     int* map = *reinterpret_cast<int**>(g + 0xf8);
-    CheckPtr(&particleIbp);
 
     // FAITHFUL: retail dereferences the ParticleComponent unguarded — Tornado.rsc
     // always has one, so a null here is an upstream problem, not something to paper
@@ -886,10 +868,8 @@ void TornadoComponent_OnRemove(TornadoComponent* self, void* time) {
         int64_t entity = *reinterpret_cast<int64_t*>(s + 0x10);
         uintptr_t entityMgr = *reinterpret_cast<uintptr_t*>(g + 0xe8);
         if (entity != 0) {
-            CheckPtr(&entity);
             const uint32_t f = *reinterpret_cast<uint32_t*>(static_cast<uintptr_t>(entity) + 0x40);
             if (((f >> 10) & 1) == 0) {
-                CheckPtr(&entity);
                 if (g_h.markForRemoval)
                     g_h.markForRemoval(reinterpret_cast<void*>(static_cast<uintptr_t>(entity)));
                 // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
@@ -920,7 +900,6 @@ void TornadoComponent_OnRemove(TornadoComponent* self, void* time) {
 
     if (!stillOnPath) {
         // Path exhausted: reverse the particle's playback so the funnel winds down.
-        CheckPtr(&particleIbp);
         if (g_h.particleReverse) g_h.particleReverse(reinterpret_cast<void*>(pc), 0);
         TORNADO_TRACE("path exhausted at waypoint %d of %d — funnel winding down\n",
                       idxAfter, *reinterpret_cast<int*>(s + 0x48));
@@ -960,29 +939,23 @@ void TornadoComponent_OnRemove(TornadoComponent* self, void* time) {
         transform.translation.x = *reinterpret_cast<float*>(s + 0x58);
         transform.translation.y = *reinterpret_cast<float*>(s + 0x5c);
         transform.translation.z = *reinterpret_cast<float*>(s + 0x60);
-        CheckPtr(&particleIbp);
         void* geometry = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(pc + 0x38));
         if (g_h.geometrySetTransform) g_h.geometrySetTransform(geometry, &transform);
     }
 
     // --- move the audio emitters and refresh the volume ---
     {
-        CheckPtr(reinterpret_cast<void*>(s + 0x10));
         int64_t audioIbp = 0;
         if (g_h.findAudio) g_h.findAudio(owner, &audioIbp);
-        CheckPtr(&audioIbp);
         if (audioIbp && g_h.audioMoveEmitters)
             g_h.audioMoveEmitters(reinterpret_cast<void*>(static_cast<uintptr_t>(audioIbp)),
                                   reinterpret_cast<void*>(s + 0x58));
 
-        CheckPtr(&particleIbp);
         const float volume =
             *reinterpret_cast<float*>(*reinterpret_cast<uintptr_t*>(pc + 0x38) + 0x7c);
 
-        CheckPtr(reinterpret_cast<void*>(s + 0x10));
         int64_t audioIbp2 = 0;
         if (g_h.findAudio) g_h.findAudio(owner, &audioIbp2);
-        CheckPtr(&audioIbp2);
         if (audioIbp2) {
             uintptr_t a = static_cast<uintptr_t>(audioIbp2);
             uint32_t* emitter = *reinterpret_cast<uint32_t**>(a + 0x38);

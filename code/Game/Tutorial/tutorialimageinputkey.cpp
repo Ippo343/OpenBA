@@ -213,8 +213,6 @@ void* TutorialImageInputKey_Slot9(void* self, void* retIBP, void* dialog) {
         fn_Dialog_CreateElement(dialog, retIBP, *(void**)(p + 0x20));
 
     // 2. CheckPtr on the returned IBP
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(retIBP);
 
     // 3. FindElementType — find TextElement child
     void* element = *(void**)retIBP;
@@ -223,8 +221,6 @@ void* TutorialImageInputKey_Slot9(void* self, void* retIBP, void* dialog) {
         fn_Element_FindElementType(element, foundIBP, *g_TypeId_TextElement);
 
     // 4. CheckPtr on found element
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(foundIBP);
 
     // 5. IsDerivedFrom check — verify it's a TextElement
     void* foundObj = *(void**)foundIBP;
@@ -267,8 +263,6 @@ void* TutorialImageInputKey_Slot9(void* self, void* retIBP, void* dialog) {
     Game::Hotkey_BuildKeyName(uiStr, deviceType, inputIndex);
 
     // 10. Set text on the TextElement
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(&textRef);
     if (fn_TextElement_SetText && textRef)
         fn_TextElement_SetText(textRef, uiStr);
     return retIBP;

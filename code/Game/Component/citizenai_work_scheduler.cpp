@@ -255,10 +255,8 @@ extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32
     }
 
     // --- stamp the work IBP: +0x20 = id, +0x24 = prio ---
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pWorkIBP);
     uint8_t* work = *reinterpret_cast<uint8_t**>(pWorkIBP);
     *reinterpret_cast<int*>(work + 0x20) = id;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pWorkIBP);
     work = *reinterpret_cast<uint8_t**>(pWorkIBP);
     *reinterpret_cast<int*>(work + 0x24) = prio;
 
@@ -407,7 +405,6 @@ extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32
     //     its callers pass wpc+0x48 / *(*(gw+0xb0)+0x38) (Builder) / desc+0x20. Each bucket
     //     node holds its own id-keyed inner tree at +0x08 with a count at +0x10.
     //     If the bucket is absent, cb50 inserts a fresh one. ---
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pWorkIBP);
     uint8_t* wobj = *reinterpret_cast<uint8_t**>(pWorkIBP);
     typedef uint64_t* (*Slot50_t)(void*, void*);
     void* vt = *reinterpret_cast<void**>(wobj);
@@ -427,7 +424,6 @@ extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32
     }
     if (found == nullptr) {
         // cb50 builds+inserts a fresh bucket node whose key = the work's profession.
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pWorkIBP);
         void* wobj2 = *reinterpret_cast<void**>(pWorkIBP);
         void* vt2 = *reinterpret_cast<void**>(wobj2);
         uint64_t keyBuf[2] = {0, 0};
@@ -553,7 +549,6 @@ extern "C" void CitizenAI_WorkScheduler_Post(uintptr_t workComp, uint32_t code, 
         }
     }
     if (payload) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&payload);
         *reinterpret_cast<int*>(workComp + 0x2c) = *reinterpret_cast<int*>(payload + 0x24);
     } else {
         *reinterpret_cast<int*>(workComp + 0x2c) = 0;

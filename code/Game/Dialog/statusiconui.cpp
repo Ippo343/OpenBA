@@ -259,7 +259,6 @@ static void* StatusIconUI_FindStatusIconComp(void* entity) {
     int64_t arr = *(int64_t*)(e + 0x30);
     for (int i = 0; i < count; i++) {
         void** ibp = (void**)(arr + (int64_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);
         void* comp = *ibp;
         if (!comp) continue;
         typedef uint32_t (*GetTypeId_t)(void*);

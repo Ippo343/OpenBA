@@ -95,7 +95,6 @@ void Resolve() {
     s_pHalfCell     = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
 }
 
-inline void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 inline uint64_t MakeIBP(void* obj) {
     uint64_t r = 0;
     if (fn_InternalBasePtr_Ctor) new (&r) ::Object::InternalBasePtr(
@@ -135,7 +134,6 @@ extern "C" void* Pasture_FindLivestockComp(int64_t entity, void* retIBP) {
         uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
         for (int i = 0; i < n && list; ++i) {
             void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
             void* comp = *slot;
             if (!comp) continue;
             uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(
@@ -182,11 +180,9 @@ extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP) {
     void* ent = mem ? s_EntityCopy(mem, tmpl) : nullptr;
     if (!ent) return;
     uint64_t entIBP = MakeIBP(ent);
-    CheckPtr(&entIBP);
 
     uint64_t livestockIBP = 0;
     if (s_FindLivestock) s_FindLivestock(static_cast<int64_t>(entIBP), &livestockIBP);
-    CheckPtr(&entIBP);
     uint64_t animalIBP = 0;
     if (s_FindAnimal) s_FindAnimal(static_cast<int64_t>(entIBP), &animalIBP);
 
@@ -194,10 +190,8 @@ extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP) {
     float posX = 0.0f, posY = 0.0f;
     uint64_t parentFamily = 0;
     if (parentAnimalIBP && *reinterpret_cast<int64_t*>(parentAnimalIBP) != 0) {
-        CheckPtr(parentAnimalIBP);
         int64_t parentOwner = *reinterpret_cast<int64_t*>(
             *reinterpret_cast<int64_t*>(parentAnimalIBP) + 0x10);
-        CheckPtr(&parentOwner);
         if (s_FindFamily) s_FindFamily(parentOwner, &parentFamily);
     }
 
@@ -205,9 +199,7 @@ extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP) {
         // Birth: jitter around the parent's model position.
         float jitterY = fn_Random_RandFloatTol(rng);
         float jitterX = fn_Random_RandFloatTol(rng);
-        CheckPtr(&parentFamily);
         uintptr_t fam = static_cast<uintptr_t>(parentFamily);
-        CheckPtr(reinterpret_cast<void*>(fam + 0x68));
         uintptr_t model = *reinterpret_cast<uintptr_t*>(fam + 0x68);
         if (model) {
             posX = *reinterpret_cast<float*>(model + 0x158) + jitterX;
@@ -215,10 +207,8 @@ extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP) {
         }
     } else if (s_FindMapComp) {
         // Fresh stocking: a random cell inside the pasture's map footprint.
-        CheckPtr(reinterpret_cast<void*>((uintptr_t)pasture + 0x10));
         uint64_t mapIBP = 0;
         s_FindMapComp(*reinterpret_cast<int64_t*>((uintptr_t)pasture + 0x10), &mapIBP);
-        CheckPtr(&mapIBP);
         if (mapIBP) {
             uintptr_t mc = static_cast<uintptr_t>(mapIBP);
             int16_t x0 = *reinterpret_cast<int16_t*>(mc + 0x28);
@@ -253,13 +243,10 @@ extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP) {
         uintptr_t arr = PastureAnimals(pasture);
         if (!arr) break;
         uint64_t* slot = reinterpret_cast<uint64_t*>(arr + (uintptr_t)i * 8);
-        CheckPtr(slot);
         if (!*slot) continue;
         uint64_t ownerIBP = *reinterpret_cast<uint64_t*>(*slot + 0x10);
-        CheckPtr(&ownerIBP);
         uint64_t peerAnimal = 0;
         if (s_FindAnimal) s_FindAnimal(static_cast<int64_t>(ownerIBP), &peerAnimal);
-        CheckPtr(&peerAnimal);
         if (peerAnimal && *reinterpret_cast<char*>(static_cast<uintptr_t>(peerAnimal) + 0x40) == 0)
             ++flagged;
     }
@@ -270,7 +257,6 @@ extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP) {
     }
 
     // ── Place, bind, activate, register ───────────────────────────────────────
-    CheckPtr(&animalIBP);
     if (animalIBP && s_HerdPlace) {
         float yaw = fn_Random_RandFloatTol(rng) * (s_pYawSpread ? *s_pYawSpread : 180.0f);
         float pos2[2] = { posX, posY };
@@ -278,7 +264,6 @@ extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP) {
     }
 
     uint64_t pastureIBP = MakeIBP(pasture);
-    CheckPtr(&livestockIBP);
     if (livestockIBP)
         Pasture_BindAnimal(reinterpret_cast<void*>(livestockIBP), &pastureIBP);
 
@@ -320,11 +305,9 @@ extern "C" int Pasture_FillAllPastures() {
     int spawned = 0;
     for (int i = 0; i < nPastures; ++i) {
         uint64_t pastureIBP = *reinterpret_cast<uint64_t*>(list + (uintptr_t)i * 8);
-        CheckPtr(&pastureIBP);
         void* pasture = reinterpret_cast<void*>(pastureIBP);
         if (!pasture || PastureType(pasture) == nullptr) continue;
         for (int k = 0; k < 5; ++k) {
-            CheckPtr(&pastureIBP);
             const int cap = s_Capacity ? static_cast<int>(s_Capacity((uintptr_t)pasture)) : 0;
             if (PastureCount(pasture) >= cap) break;
             uint64_t nullParent = MakeIBP(nullptr);
@@ -438,7 +421,6 @@ extern "C" int StartTown_SpawnStartingHerd(void* startConfig, const float* centr
         void* ent = mem ? s_EntityCopy(mem, reinterpret_cast<int64_t>(tmpl)) : nullptr;
         if (!ent) continue;
         uint64_t entIBP = MakeIBP(ent);
-        CheckPtr(&entIBP);
         if (!entIBP) continue;
 
         // Inline AnimalComponent scan (retail LAB_1400a0c40 path).
@@ -448,7 +430,6 @@ extern "C" int StartTown_SpawnStartingHerd(void* startConfig, const float* centr
             uintptr_t list = *reinterpret_cast<uintptr_t*>(static_cast<uintptr_t>(entIBP) + 0x30);
             for (int c = 0; c < n && list; ++c) {
                 void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(c) * 8);
-                CheckPtr(slot);
                 void* comp = *slot;
                 if (!comp) continue;
                 uint32_t tid = (*reinterpret_cast<uint32_t (**)(void*)>(
@@ -469,7 +450,6 @@ extern "C" int StartTown_SpawnStartingHerd(void* startConfig, const float* centr
         const float px = centre[0] + offX + tolX * radius;
         const float py = centre[1] + offY + tolY * radius;
 
-        CheckPtr(&animalIBP);
         if (animalIBP && s_HerdPlace) {
             const float yaw = (fn_Random_RandFloatTol ? fn_Random_RandFloatTol(rng) : 0.0f)
                               * yawSpread;
@@ -481,7 +461,6 @@ extern "C" int StartTown_SpawnStartingHerd(void* startConfig, const float* centr
         }
         female = !female;   // alternate AFTER placing, as retail does
 
-        CheckPtr(&animalIBP);
         if (animalIBP) {
             // +0x44 = animation/behaviour phase, randomised so the herd doesn't move in lockstep.
             *reinterpret_cast<float*>(static_cast<uintptr_t>(animalIBP) + 0x44) =

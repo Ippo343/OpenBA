@@ -164,7 +164,6 @@ extern "C" void ModelComponentNotify_Reimpl(void* entity, int param) {
     for (int64_t i = 0; i < count; ++i) {
         // local copy of arr[i] (the child object pointer); CheckPtr resolves it.
         int64_t* obj = reinterpret_cast<int64_t*>(arr[i]);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&obj);
         void** vtbl = reinterpret_cast<void**>(*obj);
         typedef void (*slot60_t)(void* self, int param);
         reinterpret_cast<slot60_t>(vtbl[0x60 / 8])(obj, param);
@@ -460,9 +459,6 @@ void ModelComponent_OnCreate(ModelComponent* self) {
         *(int32_t*)(s + 0x16c) = -1;
 
         // Check owner and notify
-        if (fn_InternalBasePtr_CheckPtr) {
-            fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
-        }
         void* ownerEntity = *(void**)(s + 0x10);
         if (ownerEntity && s_fn_ModelHelper_2b70) {
             s_fn_ModelHelper_2b70(ownerEntity, 0);
@@ -525,9 +521,6 @@ void ModelComponent_OnRemove(ModelComponent* self, void* time) {
             if (((newFlags ^ oldFlags) & 0xFFFF) != 0) {
                 void* ownerEntity = *(void**)(s + 0x10);
                 if (ownerEntity != nullptr) {
-                    if (fn_InternalBasePtr_CheckPtr) {
-                        fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
-                    }
                     if (s_fn_EntityNotify) {
                         s_fn_EntityNotify(*(void**)(s + 0x10));
                     }

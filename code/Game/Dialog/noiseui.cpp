@@ -39,7 +39,6 @@ static uint64_t NoiseUI_FindElemAsBasePtr(void* parentElem, const char* name) {
     fn_FindElement(parentElem, retBuf, &nameStr);
 
     // Check the InternalBasePtr result
-    fn_InternalBasePtr_CheckPtr(retBuf);
     void* raw = *(void**)retBuf;
 
     // Cast to specific type via IsDerivedFrom check
@@ -141,12 +140,10 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
     // --- Find "noiseImage" element and set sprite ---
     System::String elemNameStr("noiseImage");
 
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
     void* dialogElem = *(void**)(s + 0x20);
     uint64_t foundElem = 0;
     fn_FindElement(dialogElem, &foundElem, &elemNameStr);
 
-    fn_InternalBasePtr_CheckPtr((void*)&foundElem);
     void* rawElem = (void*)foundElem;
 
     void* imageElem = nullptr;
@@ -161,7 +158,6 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
     // Create Sprite from SpriteSheet (index 0) and set on element
     uint8_t spriteBuf[16];
     fn_Sprite_Ctor_ByIndex(spriteBuf, *spriteSheetOut, 0);
-    fn_InternalBasePtr_CheckPtr((void*)&imageElemPtr);
     fn_ImageElement_SetSprite((void*)imageElemPtr, spriteBuf);
 }
 
@@ -187,7 +183,6 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
 
 // Helper: read float value from a slider element's text (+0xC8)
 static float NoiseUI_ReadSliderFloat(uintptr_t sliderPtr) {
-    fn_InternalBasePtr_CheckPtr((void*)&sliderPtr);
     uintptr_t elem = *(uintptr_t*)&sliderPtr;
     const char* text = *(const char**)(elem + 0xC8);
     return System::String::ToFloat(text);
@@ -333,12 +328,10 @@ void NoiseUI_Slot4(NoiseUI* self) {
     System::String nameStr("buttonGenerate");
 
     fn_FindElement(dialogElem, retBuf, &nameStr);
-    fn_InternalBasePtr_CheckPtr(retBuf);
     void* raw = *(void**)retBuf;
     new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(raw));   // B.3.3 bridge
 
     // Set element ID on the button
-    fn_InternalBasePtr_CheckPtr(bpBuf);
     void* buttonElem = *(void**)bpBuf;
     fn_Element_SetElementId(buttonElem, 1000);
 }

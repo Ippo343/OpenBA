@@ -141,10 +141,8 @@ static bool Plausible(const void* p) {
 extern "C" void WorkPlaceComponent_SetMaxWorkers(int64_t wpc, int newMax) {
     EnsureResolved();
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(wpc + 0x10));
     int64_t workComp = 0;
     if (s_find3050) s_find3050(*reinterpret_cast<int64_t*>(wpc + 0x10), &workComp);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workComp);
     if (workComp) *reinterpret_cast<int32_t*>(workComp + 0x30) = newMax;
 
     if (newMax >= *reinterpret_cast<int32_t*>(wpc + 0x60)) return;
@@ -173,7 +171,6 @@ extern "C" void WorkPlaceComponent_SetMaxWorkers(int64_t wpc, int newMax) {
         // with count > 0). Bail instead of faulting.
         int64_t* roster = *reinterpret_cast<int64_t**>(wpc + 0x58);
         if (!Plausible(roster)) break;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(roster);
         int64_t citizen = *roster;
         if (!Plausible(reinterpret_cast<void*>(citizen))) break;
 
@@ -193,7 +190,6 @@ extern "C" void WorkPlaceComponent_SetMaxWorkers(int64_t wpc, int newMax) {
         // re-reads *(wpc+0x58) too, right before the AssignHousing call).
         int64_t* rosterNow = *reinterpret_cast<int64_t**>(wpc + 0x58);
         if (!Plausible(rosterNow)) break;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(rosterNow);
         if (!Plausible(reinterpret_cast<void*>(*rosterNow))) break;
 
         s_assignHousing(reinterpret_cast<void*>(*rosterNow), &targetIBP);
@@ -230,10 +226,8 @@ extern "C" void WorkPlaceComponent_EnterBuilderProfession(int64_t wpc) {
     if (s_ee60) s_ee60(reinterpret_cast<void*>(wpc));
 
     // 2. The owner entity's WorkComponent.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(wpc + 0x10));
     int64_t workComp = 0;
     if (s_find3050) s_find3050(*reinterpret_cast<int64_t*>(wpc + 0x10), &workComp);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workComp);
 
     const uintptr_t profReg = *reinterpret_cast<uintptr_t*>(gw + 0xb0);
     const uint64_t builderKey = profReg ? *reinterpret_cast<uint64_t*>(profReg + 0x38) : 0;
@@ -263,19 +257,15 @@ extern "C" void WorkPlaceComponent_EnterBuilderProfession(int64_t wpc) {
     // 6. Worker capacity for the demolition site. No BuildComponent on the owner entity ->
     //    the WorkComponent's own description-derived capacity; with one -> the position
     //    child count (a construction/demolition site is sized by its footprint tiles).
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(wpc + 0x10));
     int64_t buildComp = 0;
     if (s_findD6c0) s_findD6c0(*reinterpret_cast<int64_t*>(wpc + 0x10), &buildComp);
 
     int capacity = 0;
     if (buildComp == 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workComp);
         if (workComp && s_calcMaxWorkers) capacity = s_calcMaxWorkers(workComp);
     } else {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(wpc + 0x10));
         int64_t posComp = 0;
         if (s_find2ed0) s_find2ed0(*reinterpret_cast<int64_t*>(wpc + 0x10), &posComp);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&posComp);
         // [STANDALONE GUARD] Retail derefs the finder's out-IBP unconditionally; a partial
         // entity can lack the component, and 0x140123070 walks node+0x18/+0x30 from it.
         if (posComp && s_childSum) capacity = s_childSum(posComp, 1);

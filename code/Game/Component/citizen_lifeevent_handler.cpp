@@ -102,9 +102,6 @@ static void EnsureResolved() {
     s_tid_CemDesc   = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c40c8));
 }
 
-static inline void ChkPtr(void* p) {
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p);
-}
 
 // Component vtable slot [2] (offset 0x10) = GetTypeId(this).
 static inline uint32_t CompTypeId(void* comp) {
@@ -119,7 +116,6 @@ static void* FindComponentByTypeId(uint8_t* entity, uint32_t tid) {
     int n = *reinterpret_cast<int*>(entity + 0x38);
     void** comps = *reinterpret_cast<void***>(entity + 0x30);
     for (int i = 0; i < n; i++) {
-        ChkPtr(&comps[i]);
         void* c = comps[i];
         if (c && CompTypeId(c) == tid) {
             if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) found = c;
@@ -138,10 +134,8 @@ extern "C" void Citizen_FamilyRingOrFlag_3a70(void* citizenV, uint32_t flags) {
     uint8_t* cur = *head;
     if (!cur) return;
     do {
-        ChkPtr(&cur);
         *reinterpret_cast<uint32_t*>(cur + 0x88) |= flags;
         cur = *reinterpret_cast<uint8_t**>(cur + 0x268);
-        ChkPtr(head);
         // [STANDALONE GUARD] retail rings are always circular; a half-built ring
         // would spin *(0+0x88) here, so bail instead.
         if (!cur) return;
@@ -170,7 +164,6 @@ extern "C" uint32_t Cemetery_PickFreeSlot_6c60(void* cemCompV) {
         uint8_t* occupant = *reinterpret_cast<uint8_t**>(*reinterpret_cast<int64_t*>(map + 0x80)
                                                          + 8 + static_cast<int64_t>(cell) * 0x30);
         if (!occupant) return static_cast<uint32_t>(idx);      // empty cell — free slot
-        ChkPtr(&occupant);
         void* ts = FindComponentByTypeId(occupant, tid);
         int64_t tsIBP = 0;
         if (fn_InternalBasePtr_Ctor) new (&tsIBP) ::Object::InternalBasePtr(
@@ -199,17 +192,14 @@ extern "C" void** Cemetery_FindNearestWithSlot_9740(void* listMgrV, void** out, 
     for (int i = 0; i < count; i++) {
         void** slot = reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(listMgr + 0x40)
                                                + static_cast<int64_t>(i) * 8);
-        ChkPtr(slot);
         uint8_t* comp = reinterpret_cast<uint8_t*>(*slot);
         if (!comp) continue;   // [STANDALONE GUARD]
         uint8_t* entity = *reinterpret_cast<uint8_t**>(comp + 0x10);
-        ChkPtr(&entity);
         // The cemetery's map position = its InteractComponent's resolved position.
         void* ic = FindComponentByTypeId(entity, tidInteract);
         int64_t icIBP = 0;
         if (fn_InternalBasePtr_Ctor) new (&icIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(ic));   // B.3.3 bridge
-        ChkPtr(&icIBP);
         float pos[3] = {0.0f, 0.0f, 0.0f};
         if (s_resolvePos) s_resolvePos(reinterpret_cast<void*>(icIBP), pos, 0, 0, nullptr);
         int size = *map;
@@ -228,7 +218,6 @@ extern "C" void** Cemetery_FindNearestWithSlot_9740(void* listMgrV, void** out, 
         }
         if (dist < best && s_validateCell
             && (s_validateCell(map, 0xe1f, citizenCell, static_cast<int>(cemCell)) & 0xff) != 0) {
-            ChkPtr(slot);
             if (static_cast<int>(Cemetery_PickFreeSlot_6c60(*slot)) >= 0) {
                 *out = *slot;
                 best = dist;
@@ -263,13 +252,11 @@ extern "C" void Entity_PlaceAtCell_7b20(void* tombCompV, int cell, float yawDeg)
     int* map = *reinterpret_cast<int**>(world + 0xf8);
     int size = *map;
     uintptr_t entity = *reinterpret_cast<uintptr_t*>(self + 0x10);
-    ChkPtr(self + 0x10);
     int64_t posIBP = 0;
     if (s_findResData) s_findResData(entity, &posIBP);
     int64_t modelIBP = 0;
     if (s_findModel) s_findModel(entity, &modelIBP);
     if (!posIBP || !modelIBP) return;   // [STANDALONE GUARD] retail derefs unguarded
-    ChkPtr(&posIBP);
     int yaw = static_cast<int>(yawDeg);
     *reinterpret_cast<int16_t*>(posIBP + 0x28) = static_cast<int16_t>(cell % size);
     *reinterpret_cast<int16_t*>(posIBP + 0x2a) = static_cast<int16_t>(cell / size);
@@ -285,7 +272,6 @@ extern "C" void Entity_PlaceAtCell_7b20(void* tombCompV, int cell, float yawDeg)
                       static_cast<float>(cell / size) - half, 0.0f };
     Math::Vector3 terr(0.0f, 0.0f, 0.0f);
     if (s_terrainPos) s_terrainPos(map, &terr.x, inXY, '\0', nullptr);
-    ChkPtr(&modelIBP);
     Math::Scalar pitch(0.0f);
     Math::Scalar yawF(yawDeg);
     Math::Transform xform = Math::Transform::FromYawPitchOffset(yawF, pitch, terr);
@@ -322,11 +308,9 @@ extern "C" void Cemetery_SpawnTombstone_6a90(void* cemCompV, int cell,
                     reinterpret_cast<void*>(2), worldArg);
     *reinterpret_cast<int64_t*>(cellRec + 8 + static_cast<int64_t>(cell) * 0x30) = nullIBP;  // = null
     // Tombstone yaw = the cemetery's own placed rotation (position component +0x30).
-    ChkPtr(cem + 0x10);
     int64_t resIBP = 0;
     void* resIBPp = s_findResData
         ? s_findResData(*reinterpret_cast<uintptr_t*>(cem + 0x10), &resIBP) : nullptr;
-    ChkPtr(resIBPp);
     int rot = (resIBPp && *reinterpret_cast<int64_t*>(resIBPp))
         ? *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(resIBPp) + 0x30) : 0;
     // Tombstone description lives at CemeteryDescription+0x20.
@@ -347,12 +331,10 @@ extern "C" void Cemetery_SpawnTombstone_6a90(void* cemCompV, int cell,
     int64_t entIBP = 0;
     if (fn_InternalBasePtr_Ctor) new (&entIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(built));   // B.3.3 bridge
-    ChkPtr(&entIBP);
     if (!entIBP) return;   // [STANDALONE GUARD] alloc/ctor failed
     int64_t tsIBP = 0;
     ComponentEntity_FindTombstoneComp_4800(reinterpret_cast<void*>(entIBP),
                                            reinterpret_cast<void**>(&tsIBP));
-    ChkPtr(&tsIBP);
     if (tsIBP) Entity_PlaceAtCell_7b20(reinterpret_cast<void*>(tsIBP), cell, static_cast<float>(rot));
     int64_t regIBP = entIBP;
     if (s_registerEnt)
@@ -373,10 +355,8 @@ extern "C" uint64_t CitizenComponent_HandleLifeEvent(void* selfV, int eventType,
     // --- Death position: workplace (+0x238) if employed, else home (+0x278) ---
     float pos[3] = {0.0f, 0.0f, 0.0f};
     if (*reinterpret_cast<int64_t*>(self + 0x238) == 0) {
-        ChkPtr(self + 0x278);
         uint8_t* home = *reinterpret_cast<uint8_t**>(self + 0x278);
         if (home) {   // [STANDALONE GUARD] retail derefs unguarded
-            ChkPtr(home + 0x68);
             uint8_t* homeEnt = *reinterpret_cast<uint8_t**>(home + 0x68);
             if (homeEnt) {
                 pos[0] = *reinterpret_cast<float*>(homeEnt + 0x158);
@@ -385,11 +365,9 @@ extern "C" uint64_t CitizenComponent_HandleLifeEvent(void* selfV, int eventType,
             }
         }
     } else {
-        ChkPtr(self + 0x238);
         int64_t ibp = 0;
         void* p = s_findCompPos
             ? s_findCompPos(*reinterpret_cast<uintptr_t*>(self + 0x238), &ibp) : nullptr;
-        ChkPtr(p);
         if (p && s_resolvePos)
             s_resolvePos(*reinterpret_cast<void**>(p), pos, 0, 0, nullptr);
     }
@@ -433,7 +411,6 @@ extern "C" uint64_t CitizenComponent_HandleLifeEvent(void* selfV, int eventType,
         fflush(stderr);
     } else {
         flags = 0x40u;
-        ChkPtr(&cem);
         const int plotsForTrace =
             *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(cem) + 0x50);
         int slot = static_cast<int>(Cemetery_PickFreeSlot_6c60(cem));
@@ -458,13 +435,10 @@ extern "C" uint64_t CitizenComponent_HandleLifeEvent(void* selfV, int eventType,
 
     // --- OR the flag into partner (+0x258), parent (+0x250) + its ring, own ring ---
     if (*reinterpret_cast<int64_t*>(self + 0x258) != 0) {
-        ChkPtr(self + 0x258);
         *reinterpret_cast<uint32_t*>(*reinterpret_cast<int64_t*>(self + 0x258) + 0x88) |= flags;
     }
     if (*reinterpret_cast<int64_t*>(self + 0x250) != 0) {
-        ChkPtr(self + 0x250);
         *reinterpret_cast<uint32_t*>(*reinterpret_cast<int64_t*>(self + 0x250) + 0x88) |= flags;
-        ChkPtr(self + 0x250);
         Citizen_FamilyRingOrFlag_3a70(*reinterpret_cast<void**>(self + 0x250), flags);
     }
     Citizen_FamilyRingOrFlag_3a70(selfV, flags);
@@ -476,9 +450,7 @@ extern "C" uint64_t CitizenComponent_HandleLifeEvent(void* selfV, int eventType,
     int64_t entIBP = *reinterpret_cast<int64_t*>(self + 0x10);
     uint8_t* loop = *reinterpret_cast<uint8_t**>(world + 0xe8);
     if (entIBP != 0 && loop) {
-        ChkPtr(&entIBP);
         if ((*reinterpret_cast<uint32_t*>(entIBP + 0x40) >> 10 & 1) == 0) {
-            ChkPtr(&entIBP);
             if (s_markRemoval) s_markRemoval(reinterpret_cast<void*>(entIBP));
             // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
             GameColl::AsArray<GameColl::Ptr8>(loop + 0xd0)

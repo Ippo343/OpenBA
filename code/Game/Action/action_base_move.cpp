@@ -76,11 +76,9 @@ void* ActMv_FindComponentFamily_12d0(uintptr_t entity, void* retIBP) {
         uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
         for (int i = 0; i < n; i++) {
             void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
             void* comp = *slot;
             uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
             if (t == wantId) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
                 void* c = *slot;
                 found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, wantId)) ? c : nullptr;
                 break;
@@ -283,9 +281,7 @@ void ActMv_UpdateFacing_c8d20(void* selfp) {
     float halfCell = s_pHalfCell_172114 ? *s_pHalfCell_172114 : 0.5f;
 
     // Resolve the citizen movement sub-object: self+0x28 -> +0x68.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x28));
     uintptr_t citizen = *reinterpret_cast<uintptr_t*>(self + 0x28);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(citizen + 0x68));
     uintptr_t move = *reinterpret_cast<uintptr_t*>(citizen + 0x68);
 
     float curX = *reinterpret_cast<float*>(move + 0x158);
@@ -311,7 +307,6 @@ void ActMv_UpdateFacing_c8d20(void* selfp) {
     Math::Vector2 dir2 = dir2in.Normalize();
 
     // Re-check the IBP, store normalized 3D facing into the movement sub-object.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x28));
     uintptr_t citizen2 = *reinterpret_cast<uintptr_t*>(self + 0x28);
     *reinterpret_cast<uint8_t*>(citizen2 + 0x28) = 0;
 
@@ -347,13 +342,11 @@ void ActMv_SetAnimation_a1f0(void* selfp, uint32_t animId, float p3, float p4) {
     }
     uintptr_t self = reinterpret_cast<uintptr_t>(selfp);
     uintptr_t sub = *reinterpret_cast<uintptr_t*>(self + 0x78);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x68));
     uintptr_t animObj = *reinterpret_cast<uintptr_t*>(self + 0x68);
     if (s_fn_AnimHelper_50f0) {
         // 5th arg (p3) is a float passed on the stack in the original (MOVSS [RSP+0x20]).
         s_fn_AnimHelper_50f0(animObj, animId, 0.0f, *reinterpret_cast<float*>(sub + 0x2c), p3);
     }
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x68));
     uintptr_t animObj2 = *reinterpret_cast<uintptr_t*>(self + 0x68);
     *reinterpret_cast<float*>(self + 0x38) = *reinterpret_cast<float*>(animObj2 + 0x13c) * p4;
 }
@@ -419,7 +412,6 @@ uint8_t ActMv_CitizenBreakCheck_116650(void* entityp) {
     if (valueObj == 0)
         return 0;
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&valueIBP);
     uintptr_t v = reinterpret_cast<uintptr_t>(valueIBP);
 
     // value->vtable[+0x50](value, &out) -> record ptr in 'out'.

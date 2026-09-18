@@ -161,21 +161,12 @@ uint64_t FencedTool_OnKey(FencedTool* self, char key) {
     if (rotLeft) {
         // Access rotationSetting IBP at self+0x50
         void* rotSettingIBP = (void*)((uintptr_t)self + 0x50);
-        if (fn_InternalBasePtr_CheckPtr) {
-            fn_InternalBasePtr_CheckPtr(rotSettingIBP);
-        }
         uintptr_t rotSetting = *(uintptr_t*)rotSettingIBP;
         if (!rotSetting) return 0;   // SA guard: no RotationSetting wired
         *(int*)(rotSetting + 0x10) = *(int*)(rotSetting + 0x10) - 1;
 
-        if (fn_InternalBasePtr_CheckPtr) {
-            fn_InternalBasePtr_CheckPtr(rotSettingIBP);
-        }
         rotSetting = *(uintptr_t*)rotSettingIBP;
         if (*(int*)(rotSetting + 0x10) < 0) {
-            if (fn_InternalBasePtr_CheckPtr) {
-                fn_InternalBasePtr_CheckPtr(rotSettingIBP);
-            }
             rotSetting = *(uintptr_t*)rotSettingIBP;
             *(int*)(rotSetting + 0x10) = 3;
         }
@@ -184,21 +175,12 @@ uint64_t FencedTool_OnKey(FencedTool* self, char key) {
         bool rotRight = fn_KeyMap_Pressed ? fn_KeyMap_Pressed(keyMap, 0, 0x14) : false;
         if (rotRight) {
             void* rotSettingIBP = (void*)((uintptr_t)self + 0x50);
-            if (fn_InternalBasePtr_CheckPtr) {
-                fn_InternalBasePtr_CheckPtr(rotSettingIBP);
-            }
             uintptr_t rotSetting = *(uintptr_t*)rotSettingIBP;
             if (!rotSetting) return 0;   // SA guard: no RotationSetting wired
             *(int*)(rotSetting + 0x10) = *(int*)(rotSetting + 0x10) + 1;
 
-            if (fn_InternalBasePtr_CheckPtr) {
-                fn_InternalBasePtr_CheckPtr(rotSettingIBP);
-            }
             rotSetting = *(uintptr_t*)rotSettingIBP;
             if (*(int*)(rotSetting + 0x10) > 3) {
-                if (fn_InternalBasePtr_CheckPtr) {
-                    fn_InternalBasePtr_CheckPtr(rotSettingIBP);
-                }
                 rotSetting = *(uintptr_t*)rotSettingIBP;
                 *(int*)(rotSetting + 0x10) = 0;
             }
@@ -446,7 +428,6 @@ int FencedTool_CalcCost_Impl(FencedTool* self, int startCell, int endCell,
             uintptr_t cellEntity = *(uintptr_t*)cellPtr;
             if (allowedEntityType != 0) {
                 if (cellEntity != 0) {
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)cellPtr);
                     uintptr_t entityTypeRef = *(uintptr_t*)(*(uintptr_t*)cellPtr + 0x28);
                     if (entityTypeRef != allowedEntityType) { allValid = false; break; }
                 }
@@ -720,8 +701,6 @@ void FencedTool_Draw_Impl(FencedTool* self, void* context, char param3) {
                     uintptr_t cellEntity = *(uintptr_t*)cellPtr;
                     if (allowedEntityType != 0) {
                         if (cellEntity != 0) {
-                            if (fn_InternalBasePtr_CheckPtr)
-                                fn_InternalBasePtr_CheckPtr((void*)cellPtr);
                             uintptr_t entityTypeRef = *(uintptr_t*)(*(uintptr_t*)cellPtr + 0x28);
                             if (entityTypeRef != allowedEntityType) {
                                 valid = false;
@@ -914,9 +893,6 @@ void FencedTool_Startup_Impl(FencedTool* self) {
 
     // 4. Resolve RotationSetting from toolSetting IBP (+0x18)
     //    CheckPtr on the IBP first, then IsDerivedFrom, then construct new IBP at +0x50
-    if (fn_InternalBasePtr_CheckPtr) {
-        fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x18));
-    }
     void* toolSettingVal = *(void**)(selfAddr + 0x18);
     void* rotSetting = nullptr;
     if (s_TypeId_RotationSetting && fn_IsDerivedFrom && toolSettingVal) {

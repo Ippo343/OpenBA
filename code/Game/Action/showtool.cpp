@@ -23,9 +23,6 @@
 // (NOT in engine_funcs.h -- ShowTool-specific helpers)
 // ============================================================
 
-// Object::InternalBasePtr::CheckPtr -- via IAT at 0x140152ab0
-static void (*s_fn_CheckPtr)(void* ibp) = nullptr;
-
 // Object::InternalBasePtr::Serialize -- via export
 static void (*s_fn_IBP_Serialize)(void* ibp, void* serializer) = nullptr;
 
@@ -112,10 +109,6 @@ static bool s_showtool_funcs_resolved = false;
 bool ShowTool_ResolveFuncs() {
     if (s_showtool_funcs_resolved) return true;
 
-    // CheckPtr via IAT at [0x140152ab0]
-    uintptr_t iatEntry = ResolveAddr(Module::Exe, 0x140152ab0);
-    if (iatEntry) s_fn_CheckPtr = *reinterpret_cast<void(**)(void*)>(iatEntry);
-
     s_TypeInfo_ShowToolEntity = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7158);
     // DAT_1401c7158 is the CitizenComponent type-id (verified: CitizenComponent_
     // RegisterType writes it). In standalone that raw exe .rdata slot is null, so
@@ -162,15 +155,15 @@ bool ShowTool_ResolveFuncs() {
     if (!s_slot_GeomAttach)
         s_slot_GeomAttach = reinterpret_cast<fn_GeomAttach_t>(ResolveAddr(Module::Runtime, 0x1800a3fa0));
 
-    bool ok = s_fn_CheckPtr && s_TypeInfo_ShowToolEntity &&
+    bool ok = s_TypeInfo_ShowToolEntity &&
               s_fn_HideTool && s_fn_ShowToolOnEntity && s_fn_IBP_Serialize &&
               g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
               g_fn_Serialize_Bool && g_fn_Serialize_Int &&
               fn_IsDerivedFrom;
 
 #ifdef _DEBUG
-    printf("[ShowTool] ResolveFuncs: CheckPtr=%p HideTool=%p ShowTool=%p TypeInfo=%p\n",
-           (void*)s_fn_CheckPtr, (void*)s_fn_HideTool,
+    printf("[ShowTool] ResolveFuncs: HideTool=%p ShowTool=%p TypeInfo=%p\n",
+           (void*)s_fn_HideTool,
            (void*)s_fn_ShowToolOnEntity, (void*)s_TypeInfo_ShowToolEntity);
     printf("[ShowTool]   IBPSer=%p\n", (void*)s_fn_IBP_Serialize);
     if (!ok) printf("[ShowTool] ERROR: some function pointers not resolved!\n");
@@ -223,7 +216,6 @@ static void ShowTool_ShowCarried(void* entityV) {
 
 
     // Skip if the entity is flagged for destruction (bit 10 of inner+0x40).
-    s_fn_CheckPtr(e + 0x10);
     void* inner = *(void**)(e + 0x10);
     if (!inner) return;
     if (((*(uint32_t*)((uint8_t*)inner + 0x40)) >> 10) & 1) return;
@@ -232,17 +224,14 @@ static void ShowTool_ShowCarried(void* entityV) {
     if (*(int*)(e + 0x1dc) >= 0) s_fn_HideTool(entityV);
 
     // Character mesh holder = StateMachineComponent(+0x278) -> +0x68.
-    s_fn_CheckPtr(e + 0x278);
     void* smComp = *(void**)(e + 0x278);
     if (!smComp) return;
     uintptr_t charMeshHolder = *(uintptr_t*)((uint8_t*)smComp + 0x68);
     if (!charMeshHolder) return;
 
     // --- Storage scan: pick the highest-count item in the citizen's storage. ---
-    s_fn_CheckPtr(e + 0x10);
     uint64_t storageIBP[2] = {0, 0};
     fn_FindComponent_Storage(*(void**)(e + 0x10), storageIBP);
-    s_fn_CheckPtr(storageIBP);
     uintptr_t storageComp = (uintptr_t)storageIBP[0];
     if (!storageComp) return;
     int itemCount = *(int*)(storageComp + 0x30);
@@ -251,7 +240,6 @@ static void ShowTool_ShowCarried(void* entityV) {
     void* bestItem = nullptr;
     int bestCount = 0;
     for (int i = 0; i < itemCount; i++) {
-        s_fn_CheckPtr(storageIBP);
         uintptr_t itemArr = *(uintptr_t*)(storageComp + 0x28);
         int cnt = *(int*)(itemArr + (int64_t)i * 0x10 + 8);
         if (bestCount < cnt) {
@@ -302,9 +290,7 @@ static void ShowTool_ShowCarried(void* entityV) {
     *(float*)(e + 0x1d0) = scaleVec.w;
 
     // Attach the held-item geometry to the character mesh's "tool" node/bone.
-    s_fn_CheckPtr(&charMeshHolder);
     void* graphicsMesh = *(void**)(charMeshHolder + 0xe8);
-    s_fn_CheckPtr(&charMeshHolder);
     int nodeIdx = (s_slot_GetNodeIndex && graphicsMesh)
                 ? s_slot_GetNodeIndex(graphicsMesh, "tool") : -1;
     if (s_slot_GeomAttach) s_slot_GeomAttach((void*)(charMeshHolder + 0x28), e + 0xb8, nodeIdx);
@@ -343,14 +329,12 @@ int ShowTool_AbstractImpl_Impl(void* self, void* actionStack) {
 
 
     if (toolId > 10 && toolId != 0xFFFFFFFE) {
-        s_fn_CheckPtr(s + 0x20);
         void* entity = *(void**)(s + 0x20);
         if (!entity) return 1;  // entity removed, nothing to do
         s_fn_HideTool(entity);
         return 1;
     }
 
-    s_fn_CheckPtr(s + 0x20);
     void* entity = *(void**)(s + 0x20);
     if (!entity) return 1;  // entity removed, nothing to do
 
@@ -384,7 +368,6 @@ int ShowTool_Exit_Impl(void* /*self*/) {
 void ShowTool_CheckEntity_Impl(void* self) {
     if (!ShowTool_ResolveFuncs()) return;   // lazy resolve (exe-ctor-built action)
     uint8_t* s = (uint8_t*)self;
-    s_fn_CheckPtr(s + 0x20);
     void* entity = *(void**)(s + 0x20);
     if (!entity) return;  // entity already gone
     s_fn_HideTool(entity);
@@ -397,11 +380,9 @@ void ShowTool_CheckEntity_Impl(void* self) {
 bool ShowTool_GetTarget_Impl(void* self, void* param) {
     if (!ShowTool_ResolveFuncs()) return false;   // lazy resolve (exe-ctor-built action)
     uint8_t* s = (uint8_t*)self;
-    s_fn_CheckPtr(s + 0x20);
     void* entity = *(void**)(s + 0x20);
     if (!entity) return false;  // entity gone, no match
     void* entityParent = *(void**)(entity + 0x10);
-    s_fn_CheckPtr(param);
     return entityParent == *(void**)param;
 }
 

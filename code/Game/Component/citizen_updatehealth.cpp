@@ -319,7 +319,6 @@ extern "C" char CitizenComp_AnyCitizenSick(void* mgr) {
     uintptr_t arr = *(uintptr_t*)((uintptr_t)mgr + 0xa0);
     for (int i = 0; i < count; i++) {
         void* slot = (void*)(arr + (uintptr_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         uintptr_t citizen = *(uintptr_t*)slot;
         if (*(int64_t*)(citizen + 0x68) != 0) return 1;
     }
@@ -414,14 +413,11 @@ extern "C" void* Map_RadiusQuery_92990(float* map, void** out, float* pos, float
                 bool accept = true;
                 if (typeId != 0) {
                     accept = false;
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&linkIBP);
                     uintptr_t entity = *(uintptr_t*)(linkIBP + 0x10);
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entity);
                     int compCount = *(int*)(entity + 0x38);
                     uintptr_t comps = *(uintptr_t*)(entity + 0x30);
                     for (int c = 0; c < compCount; c++) {
                         void* compSlot = (void*)(comps + (uintptr_t)c * 8);
-                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(compSlot);
                         uintptr_t comp = *(uintptr_t*)compSlot;
                         typedef int (*fn_GetTypeId_t)(void* self);
                         fn_GetTypeId_t getId =
@@ -431,9 +427,7 @@ extern "C" void* Map_RadiusQuery_92990(float* map, void** out, float* pos, float
                 }
 
                 if (accept) {
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&linkIBP);
                     uintptr_t link = linkIBP;
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(link + 0x68));
                     uintptr_t model = *(uintptr_t*)(link + 0x68);
                     Math::Vector3 diff(*(float*)(model + 0x158) - pos[0],
                                        *(float*)(model + 0x15c) - pos[1],
@@ -667,9 +661,7 @@ extern "C" void CitizenComp_SpreadDisease(void* self) {
         typeId = *g_TypeId_CitizenComponent_FC;   // original reads DAT_1401c7158
     if (typeId == 0) return;
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(s + 0x278);
     uintptr_t link = *(uintptr_t*)(s + 0x278);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(link + 0x68));
     uintptr_t model = *(uintptr_t*)(link + 0x68);
     float pos[3] = { *(float*)(model + 0x158), *(float*)(model + 0x15c),
                      *(float*)(model + 0x160) };
@@ -682,18 +674,13 @@ extern "C" void CitizenComp_SpreadDisease(void* self) {
 
     for (int i = 0; i < found.count; i++) {
         void* slot = (void*)(found.data + (uintptr_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         uintptr_t entity = *(uintptr_t*)(*(uintptr_t*)slot + 0x10);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(s + 0x10);
         if (entity == *(uintptr_t*)(s + 0x10)) continue;   // skip self
 
         int64_t entityIBP = (int64_t)entity;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entityIBP);
         int64_t citizenIBP = 0;
         Entity_FindComponentByExeTypeId((void*)entityIBP, &citizenIBP, &typeId);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&citizenIBP);
         if (citizenIBP && *(int64_t*)((uintptr_t)citizenIBP + 0x68) == 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&citizenIBP);
             victim = (void*)citizenIBP;
             if (PlagueTraceOn()) {
                 fprintf(stderr, "[Plague] SPREAD citizen=%p roll=PASSED (%.4f <= %.4f) "

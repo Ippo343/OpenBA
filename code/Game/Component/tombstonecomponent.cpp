@@ -47,10 +47,6 @@ static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_d = nullptr;
 typedef float (*fn_RandFloat_t)(void* random);
 static fn_RandFloat_t s_fn_RandFloat = nullptr;
 
-// InternalBasePtr::CheckPtr
-typedef void (*fn_CheckPtr_t)(void* ptr);
-static fn_CheckPtr_t s_fn_CheckPtr = nullptr;
-
 // FUN_1400c2ea0 — mark entity for removal
 typedef void (*fn_MarkForRemoval_t)(void* entity);
 static fn_MarkForRemoval_t s_fn_MarkForRemoval = nullptr;
@@ -197,14 +193,10 @@ void TombstoneComponent_Update(TombstoneComponent* self, int64_t* pDeltaTime) {
         void* gameWorld = *(void**)((uintptr_t)*s_pGameState + 0xE8);
 
         if (entityPtr != nullptr) {
-            if (s_fn_CheckPtr)
-                s_fn_CheckPtr((void*)((uintptr_t)self + 0x10));
 
             // Check bit 10 of entity flags at +0x40
             uint32_t entityFlags = *(uint32_t*)((uintptr_t)entityPtr + 0x40);
             if (((entityFlags >> 10) & 1) == 0) {
-                if (s_fn_CheckPtr)
-                    s_fn_CheckPtr((void*)((uintptr_t)self + 0x10));
                 if (s_fn_MarkForRemoval)
                     s_fn_MarkForRemoval(entityPtr);
 
@@ -255,9 +247,6 @@ void TombstoneComponent_InitFuncs() {
 
     slot = ResolveAddr(Module::Exe, 0x1401512f8);
     if (slot) s_fn_RandFloat = *reinterpret_cast<fn_RandFloat_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ab0);
-    if (slot) s_fn_CheckPtr = *reinterpret_cast<fn_CheckPtr_t*>(slot);
 
     s_initialized = true;
 }

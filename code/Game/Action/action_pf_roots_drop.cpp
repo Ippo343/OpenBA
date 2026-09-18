@@ -33,7 +33,7 @@
 //   0x1400c54e0 action-stack push (action_pf_ctors) — bbea0/c7620 inline this; call helper
 //   0x1400c5400 TaskListCleanup (work_base)
 //   0x140107260 set-flag/refresh/Update == RemoveAnimal_helper_7260 (action_pf_ctors)
-// Engine helpers (engine_funcs.h): fn_InternalBasePtr_Ctor, fn_InternalBasePtr_CheckPtr,
+// Engine helpers (engine_funcs.h): fn_InternalBasePtr_Ctor,
 //   fn_InternalBasePtr_DeletePtr, fn_MemAlloc/fn_MemFreeStatic, fn_Time_Ctor_Float.
 // Runtime exports: System::Random::RandTol, System::MemoryAllocator::MemAlloc.
 //
@@ -177,11 +177,8 @@ void Pf_SpawnRawMaterialOnCell_78c0(int64_t param_1, int64_t param_2, int param_
 
     int* piVar2 = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(gworld) + 0xf8);
     if (fn_InternalBasePtr_Ctor) new (&local_res20) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(param_1 + 0x30));
     int64_t lVar3 = *reinterpret_cast<int64_t*>(param_1 + 0x30);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(lVar3 + 0x278));
     lVar3 = *reinterpret_cast<int64_t*>(lVar3 + 0x278);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(lVar3 + 0x68));
     lVar3 = *reinterpret_cast<int64_t*>(lVar3 + 0x68);
     local_38 = *reinterpret_cast<uint32_t*>(lVar3 + 0x160);
     int iVar1 = *piVar2;
@@ -200,16 +197,13 @@ void Pf_SpawnRawMaterialOnCell_78c0(int64_t param_1, int64_t param_2, int param_
         }
         if (fn_InternalBasePtr_Ctor) new (&local_48) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(ptr));   // B.3.3 bridge
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_48);
         if (s_fn_223c0) s_fn_223c0(local_48, &local_res20);
         void* random = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gworld) + 0xd8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res20);
         int64_t entAdj = local_res20;
         int randv = (fn_Random_RandTol && random) ? fn_Random_RandTol(random, 2) : 0;
         if (s_fn_pos9760)
             s_fn_pos9760(entAdj, cell,
                          static_cast<float>(randv) * (s_pDAT_172204 ? *s_pDAT_172204 : 0.0f));
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res20);
         *reinterpret_cast<int*>(local_res20 + 0x28) = param_3;
         *reinterpret_cast<uint64_t*>(local_res20 + 0x30) = 0;
         local_40 = reinterpret_cast<void*>(local_48);
@@ -217,11 +211,8 @@ void Pf_SpawnRawMaterialOnCell_78c0(int64_t param_1, int64_t param_2, int param_
             s_fn_regEntity(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gworld) + 0xe8),
                            &local_40, *reinterpret_cast<int*>(param_2 + 0x20));
     }
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(param_1 + 0x30));
     lVar3 = *reinterpret_cast<int64_t*>(param_1 + 0x30);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(lVar3 + 0x10));
     if (s_fn_findStorage) s_fn_findStorage(*reinterpret_cast<int64_t*>(lVar3 + 0x10), &local_res20);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res20);
     if (s_fn_storageSub) s_fn_storageSub(local_res20, param_2, param_3);
     (void)local_38;
 }
@@ -235,20 +226,15 @@ void Pf_SpillAllStorage_7570(int64_t param_1) {
     EnsureInit();
     int64_t local_res8 = 0;
     int64_t local_res10 = 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(param_1 + 0x30));
     local_res10 = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x30) + 0x10);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res10);
     if (s_fn_findStorage) s_fn_findStorage(local_res10, &local_res8);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
     int iVar1 = *reinterpret_cast<int*>(local_res8 + 0x30);
     while (0 < iVar1) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
         int64_t* arr = *reinterpret_cast<int64_t**>(local_res8 + 0x28);
         iVar1 = static_cast<int>(arr[1]);  // first stack's count
         if (0 < iVar1) {
             Pf_SpawnRawMaterialOnCell_78c0(param_1, *arr, iVar1);  // *arr = first stack's resType
         }
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
         iVar1 = *reinterpret_cast<int*>(local_res8 + 0x30);
     }
 }
@@ -264,7 +250,6 @@ void Pf_SpillAllStorage_7570(int64_t param_1) {
 // ============================================================
 uint64_t Pf_DropOffExec_7620(int64_t param_1, int64_t* param_2, void* param_3, uint64_t param_4) {
     EnsureInit();
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(param_1 + 0x30));
     int iVar5 = s_fn_countDelta ? s_fn_countDelta(*reinterpret_cast<int64_t*>(param_1 + 0x30), param_4) : 0;
     int iVar8 = *reinterpret_cast<int*>(param_1 + 0x24);
     int iVar9 = iVar5;
@@ -272,12 +257,9 @@ uint64_t Pf_DropOffExec_7620(int64_t param_1, int64_t* param_2, void* param_3, u
         iVar9 = iVar5;
     }
     if (0 < iVar9) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_3);
         uint32_t uVar6 = s_fn_canAdd ? s_fn_canAdd(*reinterpret_cast<void**>(param_3), reinterpret_cast<void*>(param_4), iVar9) : 0;
         if (static_cast<char>(uVar6) != '\0') {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_3);
             if (s_fn_addItem) s_fn_addItem(*reinterpret_cast<int64_t*>(param_3), param_4, iVar9);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(param_1 + 0x30));
             if (s_fn_dropOff) s_fn_dropOff(*reinterpret_cast<int64_t*>(param_1 + 0x30), param_4, iVar9);
             return 1;
         }
@@ -293,11 +275,8 @@ uint64_t Pf_DropOffExec_7620(int64_t param_1, int64_t* param_2, void* param_3, u
         uint8_t local_60[8] = {0,0,0,0,0,0,0,0};  // InternalBasePtr local_60 (Family find out)
         uint32_t local_58 = 0;
 
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(param_1 + 0x30));
         int64_t lVar4 = *reinterpret_cast<int64_t*>(param_1 + 0x30);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(lVar4 + 0x278));
         lVar4 = *reinterpret_cast<int64_t*>(lVar4 + 0x278);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(lVar4 + 0x68));
         lVar4 = *reinterpret_cast<int64_t*>(lVar4 + 0x68);
         local_58 = *reinterpret_cast<uint32_t*>(lVar4 + 0x160);
         int iVar1 = *piVar2;
@@ -317,9 +296,7 @@ uint64_t Pf_DropOffExec_7620(int64_t param_1, int64_t* param_2, void* param_3, u
         *reinterpret_cast<int64_t*>(param_1 + 0x38) = local_70[0];
         void* self = MemAlloc(0x480, 8);
         if (self != nullptr) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(param_1 + 0x30));
             local_res8 = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x30) + 0x10);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
             void* pIVar7 = s_fn_findFamily ? s_fn_findFamily(local_res8, local_60) : nullptr;
             ptr = s_fn_moveToCtor ? s_fn_moveToCtor(self, pIVar7, /*Slow*/1, 0, local_50, 0xe1f, 0,
                                                     s_pDAT_172280 ? *s_pDAT_172280 : 0.0f) : nullptr;
@@ -353,9 +330,7 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
     int64_t local_res8_v = 0;       // longlong* local_res8 (IBP out / scratch)
     uint8_t local_58[32] = {0};     // Internal* local_58[4] / Time scratch
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_1);
     int64_t lVar3 = *reinterpret_cast<int64_t*>(param_1);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(lVar3 + 0x278));
     lVar3 = *reinterpret_cast<int64_t*>(lVar3 + 0x278);
     int64_t* plVar18 = reinterpret_cast<int64_t*>(lVar3 + 0x48);  // action-stack list
 
@@ -368,7 +343,6 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
         if (pIVar7 != nullptr) {
             if (fn_InternalBasePtr_Ctor) new (&local_res8_v) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             uint32_t msgId = s_pDAT_1c70e8 ? *s_pDAT_1c70e8 : 0;  // param_7 = DWORD_1401c70e8
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_1);
             local_78 = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
             pIVar8 = s_fn_sendMsgCtor ? s_fn_sendMsgCtor(pIVar7, reinterpret_cast<uint64_t*>(&local_78),
                                                          &msgId, 0, reinterpret_cast<uint64_t*>(&local_res8_v), 0)
@@ -386,7 +360,6 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
         void* pIVar9 = nullptr;
         local_68 = pIVar8b;
         if (pIVar8b != nullptr) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_5);
             local_res8_v = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_5) + 0x10);
             local_70 = *reinterpret_cast<uint64_t*>(param_1);
             pIVar9 = s_fn_completeCtor ? s_fn_completeCtor(pIVar8b, param_2,
@@ -399,11 +372,8 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
     }
 
     // --- find Storage on entity (+0x10) for the CreateRawMaterial loop ---
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_1);
     local_res8_v = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8_v);
     void* pStorIBP = s_fn_findStorage ? s_fn_findStorage(local_res8_v, &local_68) : nullptr;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pStorIBP);
     float fVar6 = s_pUVScale_17214c ? *s_pUVScale_17214c : 0.0f;  // g_fUVScale
     // StorageComponent+0x38 is NOT a dead load: retail keeps it in R12D (1400bc048) and
     // passes it as arg7 of EVERY CreateRawMaterial_Action_CopyCtor below (stored to
@@ -431,9 +401,7 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
                 //   arg9 = 1
                 //   arg10 = &local_res8_v  (local_res8_v = (*param_1)+0x248, a 2nd copy)
                 //   arg11 = 0xc
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_1);
                 local_res8_v = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x248);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_1);
                 local_78 = *reinterpret_cast<int64_t*>(param_1);
                 local_70 = *reinterpret_cast<uint64_t*>(local_78 + 0x248);
                 pIVar9 = s_fn_createRawCtor ? s_fn_createRawCtor(
@@ -457,7 +425,6 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
     {
         void* pIVar9 = MemAlloc(0x28, 8);
         if (pIVar9 != nullptr) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_5);
             uint64_t uVar4 = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_5) + 0x10);
             if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(pIVar9);
             uint8_t* s = reinterpret_cast<uint8_t*>(pIVar9);
@@ -496,9 +463,7 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
         void* pIVar13 = MemAlloc(0x480, 8);
         void* pvVar11 = nullptr;
         if (pIVar13 != nullptr) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_1);
             local_res8_v = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8_v);
             void* pIVar15 = s_fn_findFamily ? s_fn_findFamily(local_res8_v, local_58) : nullptr;
             pvVar11 = s_fn_moveToCtor ? s_fn_moveToCtor(pIVar13, pIVar15, /*Slow*/1, 0,
                                                         reinterpret_cast<float*>(param_3), 0xe1f, 0,
@@ -528,7 +493,6 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
     // already flagged for removal. A null guard here would be WRONG — this is the only
     // writer of that flag, so guarding would leave the culled animal unflagged and the
     // pasture would re-select it every tick: a silent livelock instead of a crash.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_5);
     if (s_fn_remHelper7260) s_fn_remHelper7260(*reinterpret_cast<int64_t**>(param_5));
     (void)plVar18; (void)param_3;
 }

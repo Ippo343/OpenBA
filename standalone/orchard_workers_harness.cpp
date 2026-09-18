@@ -119,7 +119,6 @@ void Fire(int frameNum) {
     int found = 0, considered = 0;
     for (int i = 0; i < n; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* ent = *slot;
         if (!ent) continue;
 
@@ -128,7 +127,6 @@ void Fire(int frameNum) {
         void* orchComp = nullptr;
         for (int c = 0; c < cN && cA; ++c) {
             void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs);
             void* comp = *cs;
             if (!comp) continue;
             void** vt = *reinterpret_cast<void***>(comp);
@@ -145,7 +143,6 @@ void Fire(int frameNum) {
 
         uint64_t wpcIBP = 0;
         reinterpret_cast<fn_FindWPC_t>(f2e10)(reinterpret_cast<int64_t>(ent), &wpcIBP);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpcIBP);
         if (!wpcIBP) {
             fprintf(stderr, "[OrchardWorkers] frame=%d: orchard comp=%p has NO "
                             "WorkPlaceComponent — cannot staff\n", frameNum, orchComp);

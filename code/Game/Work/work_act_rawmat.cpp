@@ -65,8 +65,6 @@ typedef void* (*WAR_fn_MemAllocStatic2_t)(uint64_t size, uint32_t align);
 typedef void* (*WAR_fn_IbpCtorSlot_t)(void* self, void* obj);
 // 0x140151ab8 — Object::InternalBasePtr::DeletePtr(self).
 typedef void  (*WAR_fn_IbpDeleteSlot_t)(void* self);
-// 0x140152ab0 — Object::InternalBasePtr::CheckPtr(self).
-typedef void  (*WAR_fn_IbpCheckSlot_t)(void* self);
 // 0x140152b00 — System::Time::Time(retval, float seconds).
 typedef void* (*WAR_fn_Time_Ctor_t)(void* retval, float seconds);
 
@@ -84,7 +82,6 @@ static WAR_fn_MoveTo_t              s_war_MoveTo           = nullptr;
 static WAR_fn_MemAllocStatic2_t     s_war_MemAllocStatic   = nullptr;
 static WAR_fn_IbpCtorSlot_t         s_war_IbpCtorSlot      = nullptr;
 static WAR_fn_IbpDeleteSlot_t       s_war_IbpDeleteSlot    = nullptr;
-static WAR_fn_IbpCheckSlot_t        s_war_IbpCheckSlot     = nullptr;
 static WAR_fn_Time_Ctor_t           s_war_TimeCtor         = nullptr;
 
 // Runtime type-id dwords (CRC values filled after Engine::Startup). Read via pointer
@@ -116,7 +113,6 @@ static void ResolveAll() {
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b60)) s_war_MemAllocStatic = *reinterpret_cast<WAR_fn_MemAllocStatic2_t*>(s);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152a90)) s_war_IbpCtorSlot    = *reinterpret_cast<WAR_fn_IbpCtorSlot_t*>(s);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140151ab8)) s_war_IbpDeleteSlot  = *reinterpret_cast<WAR_fn_IbpDeleteSlot_t*>(s);
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152ab0)) s_war_IbpCheckSlot   = *reinterpret_cast<WAR_fn_IbpCheckSlot_t*>(s);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b00)) s_war_TimeCtor       = *reinterpret_cast<WAR_fn_Time_Ctor_t*>(s);
 
     s_war_pMsgId1_c70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
@@ -136,10 +132,6 @@ static inline void WAR_IbpCtor(void* ibp, void* obj) {
     if (s_war_IbpCtorSlot) s_war_IbpCtorSlot(ibp, obj);
     else if (fn_InternalBasePtr_Ctor) new (ibp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(obj));   // B.3.3 bridge
-}
-static inline void WAR_CheckPtr(void* p) {
-    if (s_war_IbpCheckSlot) s_war_IbpCheckSlot(p);
-    else if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p);
 }
 static inline void WAR_DeletePtr(void* p) {
     if (s_war_IbpDeleteSlot) s_war_IbpDeleteSlot(p);
@@ -175,9 +167,7 @@ void WorkAct_GatherWorkCtor_bb7b0(void* citizenIBP, uint32_t workId, int64_t* wo
     ResolveAll();
 
     // list base = (*(citizen)+0x278) + 0x48 (disasm 0x1400bb7eb..0x1400bb802)
-    WAR_CheckPtr(citizenIBP);
     uintptr_t ci = *reinterpret_cast<uintptr_t*>(citizenIBP);
-    WAR_CheckPtr(reinterpret_cast<void*>(ci + 0x278));
     uintptr_t aiComp = *reinterpret_cast<uintptr_t*>(ci + 0x278);
     void* list = reinterpret_cast<void*>(aiComp + 0x48);
     if (s_war_TaskListCleanup) s_war_TaskListCleanup(list);
@@ -192,7 +182,6 @@ void WorkAct_GatherWorkCtor_bb7b0(void* citizenIBP, uint32_t workId, int64_t* wo
         uintptr_t innerIbp = 0;            // [RBP-0x29]
         WAR_IbpCtor(&innerIbp, nullptr);
         uint32_t msgId = s_war_pMsgId1_c70e8 ? *s_war_pMsgId1_c70e8 : 0; // [0x1401c70e8] -> [RBP+0x47]
-        WAR_CheckPtr(citizenIBP);
         void* entityInner = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10); // [RBP-0x21]
         if (s_war_SendCompMsg) sm = s_war_SendCompMsg(obj, &entityInner, &msgId, 0, &innerIbp, 0);
     }
@@ -230,22 +219,17 @@ void WorkAct_GatherWorkCtor_bb7b0(void* citizenIBP, uint32_t workId, int64_t* wo
     // --- CreateRawMaterial action, gated on param_6 (0x1400bb982..0x1400bba73) ---
     if (flag6 != '\0') {
         // storage = Entity_FindComponent_Storage(citizen entity inner)
-        WAR_CheckPtr(citizenIBP);
         uintptr_t entInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10); // [RBP+0x47]
-        WAR_CheckPtr(&entInner);
         uintptr_t storageRet = 0;        // [RBP-0x9]
         void* storageIBP = nullptr;
         if (s_war_FindCompStorage) storageIBP = s_war_FindCompStorage(static_cast<int64_t>(entInner), &storageRet);
-        WAR_CheckPtr(storageIBP);
         uint32_t p7 = 0;                 // R15D = *(*(storageIBP)+0x38)
         if (storageIBP) p7 = *reinterpret_cast<uint32_t*>(*reinterpret_cast<uintptr_t*>(storageIBP) + 0x38);
 
         obj = WAR_Alloc(0x58, 8);
         void* crm = nullptr;
         if (obj) {
-            WAR_CheckPtr(citizenIBP);
             uintptr_t entField248 = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x248); // [RBP+0x47] (p10 target)
-            WAR_CheckPtr(citizenIBP);
             uintptr_t entObj = *reinterpret_cast<uintptr_t*>(citizenIBP); // RCX -> [RBP-0x21] (p4)
             uintptr_t ent248Slot = *reinterpret_cast<uintptr_t*>(entObj + 0x248);                                   // [RBP-0x19] (p5)
             // p2=param_5 (RDX), p3=param_7 (XMM2 float), p4=&entObj, p5=&ent248Slot, p6=0 (leftover stack),
@@ -278,9 +262,7 @@ void WorkAct_GatherWorkCtor_bb7b0(void* citizenIBP, uint32_t workId, int64_t* wo
     obj = WAR_Alloc(0x480, 8);
     void* mv = nullptr;
     if (obj) {
-        WAR_CheckPtr(citizenIBP);
         uintptr_t entInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10); // [RBP+0x47]
-        WAR_CheckPtr(&entInner);
         void* familyIBP = nullptr;
         uintptr_t famRet = 0;            // [RBP-0x21]
         if (s_war_FindCompFamily) familyIBP = s_war_FindCompFamily(entInner, &famRet);
@@ -312,9 +294,7 @@ void WorkAct_FishWorkCtor_beae0(void* citizenIBP, uint32_t workId, int64_t* work
     ResolveAll();
 
     // list base = (*(citizen)+0x278) + 0x48 (disasm 0x1400beb18..0x1400beb2f)
-    WAR_CheckPtr(citizenIBP);
     uintptr_t ci = *reinterpret_cast<uintptr_t*>(citizenIBP);
-    WAR_CheckPtr(reinterpret_cast<void*>(ci + 0x278));
     uintptr_t aiComp = *reinterpret_cast<uintptr_t*>(ci + 0x278);
     void* list = reinterpret_cast<void*>(aiComp + 0x48);
     if (s_war_TaskListCleanup) s_war_TaskListCleanup(list);
@@ -329,7 +309,6 @@ void WorkAct_FishWorkCtor_beae0(void* citizenIBP, uint32_t workId, int64_t* work
         uintptr_t innerIbp = 0;          // [RBP+0x50]
         WAR_IbpCtor(&innerIbp, nullptr);
         uint32_t msgId = s_war_pMsgId1_c70e8 ? *s_war_pMsgId1_c70e8 : 0;     // [0x1401c70e8] -> [RBP+0x40]
-        WAR_CheckPtr(citizenIBP);
         void* entityInner = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10); // [RBP-0x20]
         if (s_war_SendCompMsg) sm = s_war_SendCompMsg(obj, &entityInner, &msgId, 0, &innerIbp, 0);
     }
@@ -381,13 +360,10 @@ void WorkAct_FishWorkCtor_beae0(void* citizenIBP, uint32_t workId, int64_t* work
     // --- CreateRawMaterial action (always; 0x1400bed01..0x1400beddb) ---
     {
         // storage = Entity_FindComponent_Storage(citizen entity inner)
-        WAR_CheckPtr(citizenIBP);
         uintptr_t entInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10); // [RBP+0x40]
-        WAR_CheckPtr(&entInner);
         uintptr_t storageRet = 0;        // [RBP+0x50]
         void* storageIBP = nullptr;
         if (s_war_FindCompStorage) storageIBP = s_war_FindCompStorage(static_cast<int64_t>(entInner), &storageRet);
-        WAR_CheckPtr(storageIBP);
         uint32_t p7 = 0;                 // R12D = *(*(storageIBP)+0x38)
         if (storageIBP) p7 = *reinterpret_cast<uint32_t*>(*reinterpret_cast<uintptr_t*>(storageIBP) + 0x38);
 
@@ -396,7 +372,6 @@ void WorkAct_FishWorkCtor_beae0(void* citizenIBP, uint32_t workId, int64_t* work
         if (obj) {
             uintptr_t innerIbp = 0;      // [RBP+0x40] (IbpCtor(&,0))
             WAR_IbpCtor(&innerIbp, nullptr);
-            WAR_CheckPtr(citizenIBP);
             uintptr_t entObj = *reinterpret_cast<uintptr_t*>(citizenIBP); // RDX -> [RBP-0x18] (p4); RCX side
             uintptr_t ent248Slot = *reinterpret_cast<uintptr_t*>(entObj + 0x248);                                // [RBP+0x50] (p5)
             // p2=param_6 (RDX), p3=param_7 (XMM2), p4=&ent248Slot([RBP+0x50]) , p5=... — order per disasm:
@@ -435,9 +410,7 @@ void WorkAct_FishWorkCtor_beae0(void* citizenIBP, uint32_t workId, int64_t* work
     obj = WAR_Alloc(0x480, 8);
     void* mv = nullptr;
     if (obj) {
-        WAR_CheckPtr(citizenIBP);
         uintptr_t entInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10); // [RBP+0x40]
-        WAR_CheckPtr(&entInner);
         void* familyIBP = nullptr;
         uintptr_t famRet = 0;            // [RBP-0x18]
         if (s_war_FindCompFamily) familyIBP = s_war_FindCompFamily(entInner, &famRet);

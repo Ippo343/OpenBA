@@ -46,7 +46,6 @@ static void* FindChildElem(void* parentElem, const char* name) {
     System::String nameStr(name);
     uint8_t retBuf[16];
     fn_FindElement(parentElem, retBuf, &nameStr);
-    fn_InternalBasePtr_CheckPtr(retBuf);  // resolve IBP before deref
     void* result = *(void**)retBuf;
     return result;
 }
@@ -111,41 +110,28 @@ void ResidenceUI_Slot4(ResidenceUI* self) {
         int base = i * colCount;
 
         // Col 0: buttonGoto
-        fn_InternalBasePtr_CheckPtr(&tableElem);
         fn_Element_Child(tableElem, childBuf, base + 0);
-        fn_InternalBasePtr_CheckPtr(childBuf);
         entry[5] = FindElemAsBasePtr(*(void**)childBuf, "buttonGoto");
-        fn_InternalBasePtr_CheckPtr(&entry[5]);
         if (entry[5]) fn_Element_SetElementId((void*)entry[5], 300 + i);
 
         // Col 1: textName
-        fn_InternalBasePtr_CheckPtr(&tableElem);
         fn_Element_Child(tableElem, childBuf, base + 1);
-        fn_InternalBasePtr_CheckPtr(childBuf);
         entry[2] = FindElemAsBasePtr(*(void**)childBuf, "textName");
 
         // Col 2: imageMale + imageFemale (container cell)
-        fn_InternalBasePtr_CheckPtr(&tableElem);
         fn_Element_Child(tableElem, childBuf, base + 2);
-        fn_InternalBasePtr_CheckPtr(childBuf);
         void* iconCell = *(void**)childBuf;
         entry[0] = FindElemAsBasePtr(iconCell, "imageMale");
 
-        fn_InternalBasePtr_CheckPtr(&tableElem);
         fn_Element_Child(tableElem, childBuf, base + 2);
-        fn_InternalBasePtr_CheckPtr(childBuf);
         entry[1] = FindElemAsBasePtr(*(void**)childBuf, "imageFemale");
 
         // Col 3: textAge
-        fn_InternalBasePtr_CheckPtr(&tableElem);
         fn_Element_Child(tableElem, childBuf, base + 3);
-        fn_InternalBasePtr_CheckPtr(childBuf);
         entry[3] = FindElemAsBasePtr(*(void**)childBuf, "textAge");
 
         // Col 4: textProfession
-        fn_InternalBasePtr_CheckPtr(&tableElem);
         fn_Element_Child(tableElem, childBuf, base + 4);
-        fn_InternalBasePtr_CheckPtr(childBuf);
         entry[4] = FindElemAsBasePtr(*(void**)childBuf, "textProfession");
 
 #ifdef _DEBUG
@@ -206,7 +192,6 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
     // NOT StorageComponent (0x1401c7e78). Different component with room data at +0x50/+0x58.
     uintptr_t storageComp = 0;
     Entity_FindComponentByExeTypeId((void*)entityPtr, &storageComp, g_TypeId_ResidenceComponent);
-    fn_InternalBasePtr_CheckPtr(&storageComp);
 
 #ifdef _DEBUG
 #endif
@@ -275,12 +260,10 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
                         break;
                     }
                     // Original CheckPtr's the component IBP every iteration
-                    fn_InternalBasePtr_CheckPtr(&storageComp);
 
                     // Get citizen ptr from resident list + CheckPtr
                     uintptr_t residentListPtr = *(uintptr_t*)(*(uintptr_t*)(storageComp + 0x50) + groupOffset);
                     uintptr_t citizen = *(uintptr_t*)(residentListPtr + r * 8);
-                    fn_InternalBasePtr_CheckPtr(&citizen);
 
 #ifdef _DEBUG
 #endif
@@ -289,11 +272,9 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
                     uintptr_t rowBase = *(uintptr_t*)(s + 0x30) + rowIdx * 0x30;
 
                     // Check gender: citizen+0x38 != 0 means male
-                    fn_InternalBasePtr_CheckPtr(&citizen);
                     bool isMale = (*(int*)(citizen + 0x38) != 0);
 
                     // Show/hide gender icons — CheckPtr each element IBP in row array
-                    fn_InternalBasePtr_CheckPtr((void*)(rowBase + 0x08));
                     void* imageFemale = *(void**)(rowBase + 0x08);
                     if (imageFemale) {
                         if (isMale) {
@@ -302,13 +283,10 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
                             fn_Element_SetFlagsOnOff(imageFemale, 0, 1);
                         }
                     }
-                    fn_InternalBasePtr_CheckPtr((void*)rowBase);
                     void* imageMale = *(void**)rowBase;
                     if (imageMale) fn_Element_SetFlagsOnOff(imageMale, (uint32_t)!isMale, (uint32_t)isMale);
 
                     // Set name text: citizen+0x28 is the name String
-                    fn_InternalBasePtr_CheckPtr(&citizen);
-                    fn_InternalBasePtr_CheckPtr((void*)(rowBase + 0x10));
                     void* textName = *(void**)(rowBase + 0x10);
                     // SA safety: the name String buffer (citizen+0x28) may be unset on a
                     // standalone citizen; SetParameter refcounts the source buffer and
@@ -318,10 +296,8 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
                         fn_TextElement_SetParameter(textName, 0, (void*)(citizen + 0x28));
 
                     // Set age text: (int)(age * 5.0f) formatted as "%i"
-                    fn_InternalBasePtr_CheckPtr(&citizen);
                     int ageYears = (int)(*(float*)(citizen + 0x3c) * ageMul);
                     System::String ageStr = System::String::Format("%i", (uint64_t)(uint32_t)ageYears);
-                    fn_InternalBasePtr_CheckPtr((void*)(rowBase + 0x18));
                     void* textAge = *(void**)(rowBase + 0x18);
                     if (textAge) fn_TextElement_SetParameter(textAge, 0, &ageStr);
 
@@ -333,10 +309,8 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
                     // (The prior port had these branches scrambled and read +0x208 as a
                     //  "dead" flag; corrected here.) Every deref is range-guarded so a
                     // standalone citizen with a garbage description cache can't fault.
-                    fn_InternalBasePtr_CheckPtr((void*)(rowBase + 0x20));
                     void* textProfession = *(void**)(rowBase + 0x20);
 
-                    fn_InternalBasePtr_CheckPtr(&citizen);
                     float age = *(float*)(citizen + 0x3c);
                     uintptr_t jobEntity = *(uintptr_t*)(citizen + 0x208);
 
@@ -375,7 +349,6 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
                     if (textProfession && builtProf) fn_TextElement_SetText(textProfession, uiStr);
 
                     // Activate buttonGoto: vtable[8](this)
-                    fn_InternalBasePtr_CheckPtr((void*)(rowBase + 0x28));
                     void* buttonGoto = *(void**)(rowBase + 0x28);
                     if (buttonGoto) {
                         void** vtbl = *(void***)buttonGoto;
@@ -479,12 +452,10 @@ static void ResidenceUI_GoToCitizen(ResidenceUI* self, int citizenIndex) {
         for (int r = 0; r < residentCount; r++) {
             if (flatIdx == citizenIndex) {
                 // Found the target citizen — re-read storageComp after CheckPtr
-                fn_InternalBasePtr_CheckPtr(&storageComp);
                 uintptr_t citizenPtr = *(uintptr_t*)(
                     *(uintptr_t*)(*(uintptr_t*)(storageComp + 0x50) + (uintptr_t)g * 0x10)
                     + (uintptr_t)r * 8);
 
-                fn_InternalBasePtr_CheckPtr(&citizenPtr);
 
                 // Get citizen's InternalBasePtr self-reference at +0x10
                 uint64_t citizenBP = *(uint64_t*)(citizenPtr + 0x10);

@@ -104,7 +104,6 @@ void EnsureInit() {
 
 inline void  Ctor(void* self, void* obj) { if (fn_InternalBasePtr_Ctor) new (self) ::Object::InternalBasePtr(
     reinterpret_cast<RtObject::Internal*>(obj)); }   // B.3.3 bridge
-inline void  CheckPtr(void* p)           { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 inline void* Alloc(uint64_t sz)          { return (fn_MemAlloc && g_pMemAllocSingleton) ? fn_MemAlloc(g_pMemAllocSingleton, sz, 8) : nullptr; }
 
 } // namespace
@@ -114,10 +113,8 @@ extern "C" void BuildStructure_SetupBuildActions(void* citizenIBPptr, uint32_t p
     EnsureInit();
     if (!citizenIBPptr) return;
 
-    CheckPtr(citizenIBPptr);
     uintptr_t citizenEntity = *reinterpret_cast<uintptr_t*>(citizenIBPptr);
     if (!citizenEntity) return;
-    CheckPtr(reinterpret_cast<void*>(citizenEntity + 0x278));
     uintptr_t charComp = *reinterpret_cast<uintptr_t*>(citizenEntity + 0x278);
     if (!charComp) return;
     void* stack = reinterpret_cast<void*>(charComp + 0x48);   // action stack (base +0x48, top +0x60)
@@ -137,7 +134,6 @@ extern "C" void BuildStructure_SetupBuildActions(void* citizenIBPptr, uint32_t p
         if (mem && s_sendmsg) {
             int64_t outIBP = 0; Ctor(&outIBP, nullptr);
             uint32_t msgId = s_msg70e8;
-            CheckPtr(citizenIBPptr);
             int64_t targetEntity = *reinterpret_cast<int64_t*>(citizenEntity + 0x10);  // *(citizenEntity+0x10)
             act = s_sendmsg(mem, &targetEntity, &msgId, 0, &outIBP, 0);
         }
@@ -216,9 +212,7 @@ extern "C" void BuildStructure_SetupBuildActions(void* citizenIBPptr, uint32_t p
         void* mem = Alloc(0x480);
         void* act = nullptr;
         if (mem && s_moveto) {
-            CheckPtr(citizenIBPptr);
             int64_t entInner = *reinterpret_cast<int64_t*>(citizenEntity + 0x10);
-            CheckPtr(&entInner);
             int64_t famIBP = 0;
             void* fam = s_family ? s_family(static_cast<uintptr_t>(entInner), &famIBP) : nullptr;
             act = s_moveto(mem, fam, 2 /*pathType Fast*/, 0, position, 0xe1f, 0, -1.0f /*DAT_140172280*/);

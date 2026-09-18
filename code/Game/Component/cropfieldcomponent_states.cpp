@@ -114,11 +114,9 @@ void CF_Resolve() {
 void CF_PushAccepting(uintptr_t comp) {
     CF_Resolve();
     if (!s_findWpc || !s_setAccepting) return;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     uintptr_t wpcIbp = 0;
     s_findWpc(*reinterpret_cast<uintptr_t*>(comp + 0x10), &wpcIbp);
     if (!wpcIbp) return;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpcIbp);
     // wpcIbp already IS the component — the finder returns its out-param's address, so
     // there is no second dereference here (the trap that crashed the RP family).
     s_setAccepting(wpcIbp, *reinterpret_cast<char*>(comp + 0x48));
@@ -253,11 +251,9 @@ void* CF_MakeAreaWork(uintptr_t comp, int size, uintptr_t vtableAddr,
     if (hasDescField) *reinterpret_cast<uint64_t*>(w + 0x68) = descListField;
 
     if (perSlotArray && s_findCropComp) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(w + 0x10));
         uintptr_t cropIbp = 0;
         s_findCropComp(*reinterpret_cast<uintptr_t*>(w + 0x10), &cropIbp);
         if (cropIbp) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&cropIbp);
             // B.3.2 bridge: exe 0x14000a590 IS Collection::Array<uint8>::SetSize(n).
             GameColl::AsArray<GameColl::U8>(reinterpret_cast<void*>(w + 0x58))
                 .SetSize(*reinterpret_cast<int32_t*>(cropIbp + 0x60));
@@ -279,13 +275,11 @@ void CF_PostWork(uintptr_t comp, void* work) {
     if (fn_InternalBasePtr_Ctor) new (&workIbp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
     else workIbp = reinterpret_cast<uintptr_t>(work);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     uintptr_t workCompIbp = 0;
     s_findWork(*reinterpret_cast<uintptr_t*>(comp + 0x10), &workCompIbp);
     if (!workCompIbp) {
         return;
     }
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIbp);
     s_postWork(workCompIbp, 1, 0, &workIbp);
     g_pCropPlantWork = work;   // watched by the citizen claim-walk probe
 }
@@ -295,11 +289,9 @@ void CF_PostWork(uintptr_t comp, void* work) {
 void CF_ReleaseWorkSlot(uintptr_t comp) {
     CF_Resolve2();
     if (!s_findWork || !s_slotOccupied || !s_slotRelease) return;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     uintptr_t workCompIbp = 0;
     s_findWork(*reinterpret_cast<uintptr_t*>(comp + 0x10), &workCompIbp);
     if (!workCompIbp) return;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIbp);
     if (s_slotOccupied(workCompIbp)) s_slotRelease(workCompIbp);
 }
 
@@ -327,7 +319,6 @@ float CF_Maturity(uintptr_t comp) {
     for (int i = 0; i < total; ++i) {
         uint8_t* s = SlotAt(comp, i);
         if (!s || *reinterpret_cast<int32_t*>(s + 0x04) != 1) continue;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(s + 0x10);
         uintptr_t nr = *reinterpret_cast<uintptr_t*>(s + 0x10);
         if (!nr) continue;
         float g = *reinterpret_cast<float*>(nr + 0x28);
@@ -410,11 +401,9 @@ static char CropField_State9Enter(void* self, void* /*sm*/) {
     const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
     if (!s_findMap || !s_slotResize) return 1;
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     uintptr_t mapIbp = 0;
     s_findMap(*reinterpret_cast<uintptr_t*>(comp + 0x10), &mapIbp);
     if (!mapIbp) return 1;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&mapIbp);
     const int ox = *reinterpret_cast<int16_t*>(mapIbp + 0x28);
     const int oy = *reinterpret_cast<int16_t*>(mapIbp + 0x2a);
     const int w  = *reinterpret_cast<int16_t*>(mapIbp + 0x2c);
@@ -483,7 +472,6 @@ static char CropField_State9Enter(void* self, void* /*sm*/) {
         if (s) s[0x18] = marks[i];
     }
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&mapIbp);
     if (s_mapInit) s_mapInit(mapIbp);
 
     // PlantArea is 0x70 and carries the desc list at +0x68 (vtable 0x140161890).

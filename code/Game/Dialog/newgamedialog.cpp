@@ -138,7 +138,6 @@ static void PopulateGeneratorCombo(void** comboFieldPtr, void* externalList,
             System::String sysStr;
             fn_UIString_ToSystemString(uiStr, &sysStr);
 
-            fn_InternalBasePtr_CheckPtr(comboFieldPtr);
             void* combo = *comboFieldPtr;
 
             // Create empty sprite
@@ -197,7 +196,6 @@ static void GenerateTownName(System::String& retStr, void* random, int maxLen) {
 }
 
 static void GenerateRandomName(void* editNamePtr, void* random) {
-    fn_InternalBasePtr_CheckPtr(editNamePtr);
     void* editElem = *(void**)editNamePtr;
     // EditElement+0xD0 contains max char count
     int maxLen = *(int*)((uintptr_t)editElem + 0xD0);
@@ -224,7 +222,6 @@ static void GenerateRandomName(void* editNamePtr, void* random) {
         fflush(stderr);
     }
 
-    fn_InternalBasePtr_CheckPtr(editNamePtr);
     fn_EditElement_SetText_SysStr(*(void**)editNamePtr, &nameStr);
 }
 
@@ -232,11 +229,9 @@ static void GenerateRandomName(void* editNamePtr, void* random) {
 // Helper: generate random seed
 // ============================================================
 static void GenerateRandomSeed(void* editSeedPtr, void* random) {
-    fn_InternalBasePtr_CheckPtr(editSeedPtr);
     // NumberEditElement+0xFC contains max value
     int maxVal = *(int*)((uintptr_t)*(void**)editSeedPtr + 0xFC);
 
-    fn_InternalBasePtr_CheckPtr(editSeedPtr);
     void* seedElem = *(void**)editSeedPtr;
 
     // BANISHED_SEED pins the world seed instead of randomising it. Needed for
@@ -292,7 +287,6 @@ static void UpdateDescription(NewGameDialog* self) {
     // (covers both Slot4 and the OnEvent combo-change call site).
     if (!self->mapGeneratorList || !g_TypeId_MapGenerator) return;
 
-    fn_InternalBasePtr_CheckPtr(&self->comboCondition);
     void* condCombo = self->comboCondition;
 
     // Get selected map generator resource
@@ -311,7 +305,6 @@ static void UpdateDescription(NewGameDialog* self) {
                       (void*)((uintptr_t)mapGen + 0x30));
 
     // Set on textDescription element
-    fn_InternalBasePtr_CheckPtr(&self->textDescription);
     fn_TextElement_SetText(self->textDescription, uiStr);
 }
 
@@ -375,7 +368,6 @@ static void SelectStartConditionOverride(NewGameDialog* self) {
         if (idx >= 0 && idx < count) target = idx;
     }
     if (target >= 0) {
-        fn_InternalBasePtr_CheckPtr(&self->comboCondition);
         fn_ComboElement_SetCurrentItem(self->comboCondition, target);
         fprintf(stderr, "[NewGameDialog] start condition FORCED to [%d] (want=\"%s\")\n",
                 target, want);
@@ -455,21 +447,16 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
 
     // --- Assign element IDs ---
     // buttonNewName = 0, buttonNewSeed = 1, buttonOk = 2, buttonCancel = 3, comboCondition = 4
-    fn_InternalBasePtr_CheckPtr(&buttonNewName);
     fn_Element_SetElementId(buttonNewName, 0);
 
-    fn_InternalBasePtr_CheckPtr(&buttonNewSeed);
     fn_Element_SetElementId(buttonNewSeed, 1);
 
     // Store buttonOk in struct at +0xF0
     self->buttonOk = buttonOk;
-    fn_InternalBasePtr_CheckPtr(&self->buttonOk);
     fn_Element_SetElementId(self->buttonOk, 2);
 
-    fn_InternalBasePtr_CheckPtr(&buttonCancel);
     fn_Element_SetElementId(buttonCancel, 3);
 
-    fn_InternalBasePtr_CheckPtr(&self->comboCondition);
     fn_Element_SetElementId(self->comboCondition, 4);
 
     // --- Generate random name (guarded: editName must be present) ---
@@ -492,18 +479,14 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
         int idx = *(int*)(cfg + 0x2c);
         void* combo = self->comboCondition;
         if (idx < 0) {
-            fn_InternalBasePtr_CheckPtr(&combo);
             int count = fn_ComboElement_GetItemCount(combo);
             if (idx < count) {
                 // Use the index as-is
-                fn_InternalBasePtr_CheckPtr(&self->comboCondition);
                 fn_ComboElement_SetCurrentItem(self->comboCondition, *(int*)(cfg + 0x2c));
             } else {
-                fn_InternalBasePtr_CheckPtr(&self->comboCondition);
                 fn_ComboElement_SetCurrentItem(self->comboCondition, 0);
             }
         } else {
-            fn_InternalBasePtr_CheckPtr(&self->comboCondition);
             fn_ComboElement_SetCurrentItem(self->comboCondition, *(int*)(cfg + 0x2c));
         }
     }
@@ -513,17 +496,13 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
         int idx = *(int*)(cfg + 0x20);
         void* combo = self->comboTerrain;
         if (idx < 0) {
-            fn_InternalBasePtr_CheckPtr(&combo);
             int count = fn_ComboElement_GetItemCount(combo);
             if (idx < count) {
-                fn_InternalBasePtr_CheckPtr(&self->comboTerrain);
                 fn_ComboElement_SetCurrentItem(self->comboTerrain, *(int*)(cfg + 0x20));
             } else {
-                fn_InternalBasePtr_CheckPtr(&self->comboTerrain);
                 fn_ComboElement_SetCurrentItem(self->comboTerrain, 0);
             }
         } else {
-            fn_InternalBasePtr_CheckPtr(&self->comboTerrain);
             fn_ComboElement_SetCurrentItem(self->comboTerrain, *(int*)(cfg + 0x20));
         }
     }
@@ -533,17 +512,13 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
         int idx = *(int*)(cfg + 0x24);
         void* combo = self->comboTerrainSize;
         if (idx < 0) {
-            fn_InternalBasePtr_CheckPtr(&combo);
             int count = fn_ComboElement_GetItemCount(combo);
             if (idx < count) {
-                fn_InternalBasePtr_CheckPtr(&self->comboTerrainSize);
                 fn_ComboElement_SetCurrentItem(self->comboTerrainSize, *(int*)(cfg + 0x24));
             } else {
-                fn_InternalBasePtr_CheckPtr(&self->comboTerrainSize);
                 fn_ComboElement_SetCurrentItem(self->comboTerrainSize, 0);
             }
         } else {
-            fn_InternalBasePtr_CheckPtr(&self->comboTerrainSize);
             fn_ComboElement_SetCurrentItem(self->comboTerrainSize, *(int*)(cfg + 0x24));
         }
     }
@@ -553,17 +528,13 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
         int idx = *(int*)(cfg + 0x28);
         void* combo = self->comboClimate;
         if (idx < 0) {
-            fn_InternalBasePtr_CheckPtr(&combo);
             int count = fn_ComboElement_GetItemCount(combo);
             if (idx < count) {
-                fn_InternalBasePtr_CheckPtr(&self->comboClimate);
                 fn_ComboElement_SetCurrentItem(self->comboClimate, *(int*)(cfg + 0x28));
             } else {
-                fn_InternalBasePtr_CheckPtr(&self->comboClimate);
                 fn_ComboElement_SetCurrentItem(self->comboClimate, 0);
             }
         } else {
-            fn_InternalBasePtr_CheckPtr(&self->comboClimate);
             fn_ComboElement_SetCurrentItem(self->comboClimate, *(int*)(cfg + 0x28));
         }
     }
@@ -573,16 +544,13 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
         int idx = *(int*)(cfg + 0x30);
         void* combo = self->comboDisaster;
         if (idx < 0) {
-            fn_InternalBasePtr_CheckPtr(&combo);
             int count = fn_ComboElement_GetItemCount(combo);
             if (count <= idx) {
-                fn_InternalBasePtr_CheckPtr(&self->comboDisaster);
                 fn_ComboElement_SetCurrentItem(self->comboDisaster, 0);
             } else {
                 fn_ComboElement_SetCurrentItem(self->comboDisaster, *(int*)(cfg + 0x30));
             }
         } else {
-            fn_InternalBasePtr_CheckPtr(&self->comboDisaster);
             fn_ComboElement_SetCurrentItem(self->comboDisaster, *(int*)(cfg + 0x30));
         }
     }
@@ -650,10 +618,8 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
     // comboTerrainSize at +0xC0, comboDisaster at +0xD8
 
     // Read combo selected items
-    fn_InternalBasePtr_CheckPtr(&self->comboCondition);
     int condIdx = *(int*)((uintptr_t)self->comboCondition + 0x118);
 
-    fn_InternalBasePtr_CheckPtr(&self->comboClimate);
     int climateIdx = *(int*)((uintptr_t)self->comboClimate + 0x118);
 
     // --- Climate override (standalone autostart + testing) ---
@@ -677,11 +643,9 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
         }
     }
 
-    fn_InternalBasePtr_CheckPtr(&self->comboTerrain);
     int terrainIdx = *(int*)((uintptr_t)self->comboTerrain + 0x118);
 
     // Get combo item data pointers from ExternalList arrays
-    fn_InternalBasePtr_CheckPtr(&self->comboCondition);
     void* mapGenItem = fn_ComboElement_GetItemData(self->comboCondition, condIdx);
     void** mapPtrArray = *(void***)((uintptr_t)self->mapGeneratorList + 0x20);
     void* mapGenResource = mapPtrArray[(intptr_t)mapGenItem];
@@ -726,14 +690,12 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
         }
     }
 
-    fn_InternalBasePtr_CheckPtr(&self->comboClimate);
     void* climateItem = fn_ComboElement_GetItemData(self->comboClimate, climateIdx);
     void** climatePtrArray = *(void***)((uintptr_t)self->climateGeneratorList + 0x20);
     void* climateResource = climatePtrArray[(intptr_t)climateItem];
     void* climateGen = nullptr;
     if (ResourceIsType(climateResource, g_TypeId_ClimateGenerator)) climateGen = climateResource;
 
-    fn_InternalBasePtr_CheckPtr(&self->comboTerrain);
     void* terrainItem = fn_ComboElement_GetItemData(self->comboTerrain, terrainIdx);
     void** terrainPtrArray = *(void***)((uintptr_t)self->terrainGeneratorList + 0x20);
     void* terrainResource = terrainPtrArray[(intptr_t)terrainItem];
@@ -741,7 +703,6 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
     if (ResourceIsType(terrainResource, g_TypeId_TerrainGenerator)) terrainGen = terrainResource;
 
     // Get terrain size index
-    fn_InternalBasePtr_CheckPtr(&self->comboTerrainSize);
     uint32_t terrainSize = *(uint32_t*)((uintptr_t)self->comboTerrainSize + 0x118);
 
     // --- Map size override (standalone autostart + testing) ---
@@ -765,11 +726,9 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
     }
 
     // Get seed value
-    fn_InternalBasePtr_CheckPtr(&self->editSeed);
     uint32_t seed = (uint32_t)fn_NumberEditElement_GetValue(self->editSeed);
 
     // Get disaster enabled (0 = disasters on, nonzero = off)
-    fn_InternalBasePtr_CheckPtr(&self->comboDisaster);
     int32_t disasterIdx = *(int32_t*)((uintptr_t)self->comboDisaster + 0x118);
     int disasterOff = (disasterIdx == 0) ? 0 : 1;
 
@@ -797,7 +756,6 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
     }
 
     // Get map name from editName element — String at editName+0xC8
-    fn_InternalBasePtr_CheckPtr(&self->editName);
     void* nameStr = (void*)((uintptr_t)self->editName + 0xC8);
 
     // Save combo selections to game settings
@@ -1007,10 +965,8 @@ int NewGameDialog_Shutdown(NewGameDialog* self) {
 }
 
 void NewGameDialog_Slot6(NewGameDialog* self) {
-    fn_InternalBasePtr_CheckPtr(&self->buttonOk);
     void* okBtn = self->buttonOk;
 
-    fn_InternalBasePtr_CheckPtr(&self->editName);
     void* editElem = self->editName;
 
     // EditElement+0xC8 = text string pointer (System::String)

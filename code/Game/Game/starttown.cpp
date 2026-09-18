@@ -739,13 +739,12 @@ static uint32_t TypeId(const char* name) {
 // slot holds an IBP (CheckPtr resolves it); match on vtable+0x10 (GetTypeId).
 // Returns the resolved component pointer, or nullptr.
 static void* FindComponentOnEntity(void* entity, uint32_t typeId) {
-    if (!entity || typeId == 0 || !fn_InternalBasePtr_CheckPtr) return nullptr;
+    if (!entity || typeId == 0) return nullptr;
     uint8_t* e = (uint8_t*)entity;
     int count = *(int32_t*)(e + ENT_COMP_CNT);
     uintptr_t arr = *(uintptr_t*)(e + ENT_COMP_ARR);
     for (int i = 0; i < count; ++i) {
         void** slot = (void**)(arr + (uintptr_t)i * 8);
-        fn_InternalBasePtr_CheckPtr(slot);
         void* comp = *slot;
         if (!comp) continue;
         uintptr_t vt = *(uintptr_t*)comp;
@@ -814,7 +813,7 @@ static void* FindDescriptionOnTemplate(void* tmpl, uint32_t typeId) {
 // permanently exclude its components — e.g. StorageDisplayComponent::Update — from the
 // native tick, which is exactly the bug this omission fixes.
 static void StartTown_RunOnCreatePass(void* entityV) {
-    if (!entityV || !fn_InternalBasePtr_CheckPtr) return;
+    if (!entityV) return;
 
     static uint32_t s_tidResidence = 0;
     if (s_tidResidence == 0) s_tidResidence = TypeId("ResidenceComponent");
@@ -826,7 +825,6 @@ static void StartTown_RunOnCreatePass(void* entityV) {
         uintptr_t arr = *(uintptr_t*)(ent + ENT_COMP_ARR);
         for (int i = 0; i < count; ++i) {
             void** slot = (void**)(arr + (uintptr_t)i * 8);
-            fn_InternalBasePtr_CheckPtr(slot);
             void* comp = *slot;
             if (!comp) continue;
             if (((*(uint32_t*)((uint8_t*)comp + 0x20)) >> 1 & 1) == 0) continue;  // flag bit 1
@@ -834,7 +832,6 @@ static void StartTown_RunOnCreatePass(void* entityV) {
             typedef uint32_t (*fn_GetTypeId_t)(void*);
             uint32_t tid = (*(fn_GetTypeId_t*)(vt + 0x10))(comp);
             if (tid != s_tidResidence) continue;                 // ONLY ResidenceComponent
-            fn_InternalBasePtr_CheckPtr(slot);
             comp = *slot;
             if (!comp) continue;
             vt = *(uintptr_t*)comp;
@@ -1540,7 +1537,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
     uint8_t* pool   = *(uint8_t**)(startConfig + 0x80);
     if (count <= 0 || !pool) return 0;
     if (!fn_EntityFactory_CreateEntity || !fn_EntityList_RegisterEntity ||
-        !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr || !fn_MemAlloc)
+        !fn_InternalBasePtr_Ctor || !fn_MemAlloc)
         return 0;
 
     const uint32_t tidCreatePlaced  = TypeId("CreatePlacedDescription");
@@ -1624,7 +1621,6 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
 
         // MapComponent grid placement (resolvable now that components carry a real
         // GetTypeId — Foundation E).
-        fn_InternalBasePtr_CheckPtr(&entIBP);
         void* entity = (void*)entIBP;
 
         // ── INSTANT-BUILD bracket (retail ComponentEntity_impl_1fc0). ────────────────
@@ -1655,7 +1651,6 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         if (mapComp) {
             uintptr_t mapIBP = 0;
             new (&mapIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(mapComp));   // B.3.3 bridge
-            fn_InternalBasePtr_CheckPtr(&mapIBP);
             uint8_t* mc = (uint8_t*)mapIBP;
             if (mc) {
                 *(int16_t*)(mc + 0x28) = (int16_t)tileX;
@@ -1691,7 +1686,6 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                 uintptr_t mcIBP = 0;
                 new (&mcIBP) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(modelComp));   // B.3.3 bridge
-                fn_InternalBasePtr_CheckPtr(&mcIBP);
                 uint8_t* mc = (uint8_t*)mcIBP;
                 const int dim = *(int32_t*)game;
                 if (mc && dim > 0) {
@@ -1743,7 +1737,6 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                 uintptr_t mIBP = 0;
                 new (&mIBP) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(modelComp));   // B.3.3 bridge
-                fn_InternalBasePtr_CheckPtr(&mIBP);
                 uint8_t* m = (uint8_t*)mIBP;
                 void* modelDesc = m ? *(void**)(m + 0x18) : nullptr;
                 void* groupArray = modelDesc ? *(void**)((uint8_t*)modelDesc + 0x20) : nullptr;
@@ -1898,7 +1891,6 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         // per entity that still needs the fallback, and silence for the ones the real
         // state machine finished.
         if (StartTown_InstantBuildPath() && !isDemoFoundation) {
-            fn_InternalBasePtr_CheckPtr(&entIBP);
             void* postEnt = (void*)entIBP;
             void* smPost = FindComponentOnEntity(postEnt, TypeId("StateMachineComponent"));
             void* bcPost = FindComponentOnEntity(postEnt, TypeId("BuildComponent"));
@@ -1947,13 +1939,11 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         // ResidenceComponent::OnCreate → registers the house into townMgr+0x20.
         // The entity IBP was re-resolved above (entity = (void*)entIBP); re-resolve
         // once more in case any intervening CheckPtr moved it.
-        fn_InternalBasePtr_CheckPtr(&entIBP);
         StartTown_RunOnCreatePass((void*)entIBP);
 
         // Click-to-select: register this building's footprint in the region-map cell array so
         // EditTool's click-pick (FUN_1400a0280) resolves it under the cursor -> opens its info
         // dialog. (Inert MapComponent never marks it; standalone-only, DLL uses the real dc20.)
-        fn_InternalBasePtr_CheckPtr(&entIBP);
         StartTown_MarkBuildingCells(game, tileX, tileY, fpW, fpH, entIBP, rot);
         StartTown_PickMeshProbe((void*)entIBP);
 
@@ -3830,7 +3820,7 @@ extern "C" bool GenerateCitizenName(void* rng, bool female, char* out, int cap);
 // left behind and logs it instead of calling Draw again, so "the slot ran" is an
 // observed outcome rather than an assumption.
 static void CitizenCarryStorageInit(void* ent) {
-    if (!ent || !fn_InternalBasePtr_CheckPtr) return;
+    if (!ent) return;
 
     static bool s_res = false;
     static void* (*s_find6270)(uintptr_t, void*) = nullptr;
@@ -3848,7 +3838,6 @@ static void CitizenCarryStorageInit(void* ent) {
     uintptr_t stIbp = 0;
     s_find6270(reinterpret_cast<uintptr_t>(ent), &stIbp);
     if (!stIbp) { if (logThis) { ++s_log; fprintf(stderr, "[CarryInit] BAIL no storage (ent=%p)\n", ent); fflush(stderr); } return; }
-    fn_InternalBasePtr_CheckPtr(&stIbp);
     void* stComp = reinterpret_cast<void*>(stIbp);   // FindComponent writes the component ptr into the IBP
 
     int before = *reinterpret_cast<int*>((uintptr_t)stComp + 0x38);
@@ -4550,12 +4539,11 @@ static void* ResMeshFromModelDesc(void* modelDesc, int variantIdx, int modelVari
 static void ApplyResourceModelVariant(void* entity, uint32_t tidModel,
                                       int16_t variantIdx, int16_t modelVariant) {
     EnsureResSetMesh();
-    if (!s_fn_ResSetMesh || !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr) return;
+    if (!s_fn_ResSetMesh || !fn_InternalBasePtr_Ctor) return;
     void* mc = FindComponentOnEntity(entity, tidModel);
     if (!mc) return;
     uintptr_t mcIBP = 0;
     new (&mcIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(mc));   // B.3.3 bridge
-    fn_InternalBasePtr_CheckPtr(&mcIBP);
     uint8_t* m = (uint8_t*)mcIBP;
     if (!m) return;
     void* modelDesc = *(void**)(m + 0x18);
@@ -4854,10 +4842,9 @@ static void StartTown_PlaceResourceCell(void* entity, int cellIdx, void* game, v
     //     stops overlap once OnCreate writes occupancy). Plain data writes — always
     //     safe on the inert MapComponent (size 0x38; fields +0x28..+0x2f). ---
     void* mapComp = FindComponentOnEntity(entity, tidMap);
-    if (mapComp && fn_InternalBasePtr_Ctor && fn_InternalBasePtr_CheckPtr) {
+    if (mapComp && fn_InternalBasePtr_Ctor) {
         uintptr_t mapIBP = 0;
         new (&mapIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(mapComp));   // B.3.3 bridge
-        fn_InternalBasePtr_CheckPtr(&mapIBP);
         uint8_t* mc = (uint8_t*)mapIBP;
         if (mc) {
             *(int16_t*)(mc + 0x28) = (int16_t)tileX;
@@ -4915,10 +4902,9 @@ static void StartTown_PlaceResourceCell(void* entity, int cellIdx, void* game, v
     float yaw = rtol() * ResYawScale();   // RandFloatTol * 180 -> full [-180,180] rotation
 
     void* modelComp = FindComponentOnEntity(entity, tidModel);
-    if (!modelComp || !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr) return;
+    if (!modelComp || !fn_InternalBasePtr_Ctor) return;
     uintptr_t mIBP = 0;
     new (&mIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(modelComp));   // B.3.3 bridge
-    fn_InternalBasePtr_CheckPtr(&mIBP);
     uint8_t* m = (uint8_t*)mIBP;
     if (!m) return;
     float pitch = 0.0f;
@@ -4944,10 +4930,9 @@ void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress);  // action_b
 static void StartTown_GrowthInitResource(void* entity, uint32_t tidGrowth, void* rng) {
     if (!entity) return;
     void* gComp = FindComponentOnEntity(entity, tidGrowth);
-    if (!gComp || !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr) return;
+    if (!gComp || !fn_InternalBasePtr_Ctor) return;
     uintptr_t gIBP = 0;
     new (&gIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(gComp));   // B.3.3 bridge
-    fn_InternalBasePtr_CheckPtr(&gIBP);
     uint8_t* s = (uint8_t*)gIBP;
     if (!s) return;
     // Sibling links populated only when GrowthComponent::Startup ran (LIVE build).

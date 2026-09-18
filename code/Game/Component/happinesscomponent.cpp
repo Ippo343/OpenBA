@@ -71,9 +71,7 @@ static fn_GetJobHost_t s_fn_GetJobHost = nullptr;
 typedef void (*fn_FindStorage_t)(uintptr_t entity, void* outIBP);
 static fn_FindStorage_t s_fn_FindStorage = nullptr;
 
-// InternalBasePtr::CheckPtr (slot 0x140152ab0) / IsDerivedFrom (slot 0x140152a98).
-typedef void (*fn_CheckPtr_t)(void* ibp);
-static fn_CheckPtr_t s_fn_CheckPtr = nullptr;
+// IsDerivedFrom (slot 0x140152a98).
 typedef bool (*fn_IsDerivedFrom_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_t s_fn_IsDerivedFrom = nullptr;
 
@@ -124,8 +122,6 @@ static void EnsureHelpers() {
     s_pTid_RawMatDesc = reinterpret_cast<const uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7cb8));
 
-    slot = ResolveAddr(Module::Exe, 0x140152ab0);
-    if (slot) s_fn_CheckPtr = *reinterpret_cast<fn_CheckPtr_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom = *reinterpret_cast<fn_IsDerivedFrom_t*>(slot);
 
@@ -294,7 +290,6 @@ void FishingComponent_NotifyTile(void* selfP, int16_t param2) {
     void* desc = (fn_IsDerivedFrom && s_fc_pTId_FishingDesc &&
                   fn_IsDerivedFrom(descObj, *s_fc_pTId_FishingDesc)) ? descObj : nullptr;
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(self + 0x10));
     int64_t host = *(int64_t*)(*(int64_t*)(self + 0x10) + 0x28);
 
     // Find the fishing-target component (type 0x1401c4870) on the host
@@ -315,10 +310,8 @@ void FishingComponent_NotifyTile(void* selfP, int16_t param2) {
     }
 
     // Find the MapComponent for tile coords
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(self + 0x10));
     uint8_t mapBuf[8] = {0};
     if (s_fc_FindMap) s_fc_FindMap(*(uintptr_t*)(self + 0x10), mapBuf);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(mapBuf);
     int64_t mapComp = *(int64_t*)mapBuf;
 
     // Map description mode (desc+0x20) to a state id (default 5)
@@ -390,16 +383,13 @@ extern "C" bool HappinessComponent_IsActive(void* selfV) {
 
     if (*reinterpret_cast<uint8_t*>(desc + 0x24) != 0) {
         void* ownerSlot = *reinterpret_cast<void**>(su + 0x10);
-        if (s_fn_CheckPtr) s_fn_CheckPtr(reinterpret_cast<void*>(su + 0x10));
         ownerSlot = *reinterpret_cast<void**>(su + 0x10);
 
         void* wpIbp = nullptr;
         if (s_fn_GetJobHost) s_fn_GetJobHost(reinterpret_cast<uintptr_t>(ownerSlot), &wpIbp);
         if (wpIbp) {
-            if (s_fn_CheckPtr) s_fn_CheckPtr(&wpIbp);
             const uintptr_t wp = reinterpret_cast<uintptr_t>(wpIbp);
             if (*reinterpret_cast<int*>(wp + 0x60) == 0) return false;
-            if (s_fn_CheckPtr) s_fn_CheckPtr(&wpIbp);
             if (*reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(wpIbp) + 0x50) == 0)
                 return false;
         }
@@ -407,7 +397,6 @@ extern "C" bool HappinessComponent_IsActive(void* selfV) {
 
     if (*reinterpret_cast<uint8_t*>(desc + 0x25) == 0) return true;
 
-    if (s_fn_CheckPtr) s_fn_CheckPtr(reinterpret_cast<void*>(su + 0x10));
     void* owner = *reinterpret_cast<void**>(su + 0x10);
 
     void* storeIbp = nullptr;
@@ -416,12 +405,10 @@ extern "C" bool HappinessComponent_IsActive(void* selfV) {
     const uint32_t wantMask = *reinterpret_cast<uint32_t*>(desc + 0x28);
     bool matched = false;
 
-    if (s_fn_CheckPtr) s_fn_CheckPtr(&storeIbp);
     uintptr_t store = reinterpret_cast<uintptr_t>(storeIbp);
     if (!store) return false;
 
     for (int i = 0; i < *reinterpret_cast<int*>(store + 0x30); ++i) {
-        if (s_fn_CheckPtr) s_fn_CheckPtr(&storeIbp);
         store = reinterpret_cast<uintptr_t>(storeIbp);
         const uintptr_t slots = *reinterpret_cast<uintptr_t*>(store + 0x28);
         const uintptr_t good  = *reinterpret_cast<uintptr_t*>(slots + static_cast<uintptr_t>(i) * 0x10);

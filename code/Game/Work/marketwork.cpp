@@ -219,7 +219,6 @@ bool MarketWork_ResolveFuncs() {
               s_fn_CancelAllWork &&
               s_fn_FindSubEntity &&
               s_fn_SimpleBSTCleanup &&
-              fn_InternalBasePtr_CheckPtr &&
               s_vtable_MarketWork && s_vtable_Work;
 
     s_market_funcs_resolved = ok;
@@ -241,7 +240,6 @@ bool MarketWork_ResolveFuncs() {
         if (!s_fn_CancelAllWork) printf("  MISSING: CancelAllWork\n");
         if (!s_fn_FindSubEntity) printf("  MISSING: FindSubEntity\n");
         if (!s_fn_SimpleBSTCleanup) printf("  MISSING: SimpleBSTCleanup\n");
-        if (!fn_InternalBasePtr_CheckPtr) printf("  MISSING: InternalBasePtr_CheckPtr\n");
         if (!s_vtable_MarketWork) printf("  MISSING: vtable_MarketWork\n");
         if (!s_vtable_Work) printf("  MISSING: vtable_Work (0x140161a80)\n");
     }
@@ -309,11 +307,9 @@ int MarketWork_Slot8_Impl(MarketWork* self) {
         }
 
         // Cancel the work item: get citizen entity from node key
-        fn_InternalBasePtr_CheckPtr(leftmost);
         uintptr_t citizenEntity = *(uintptr_t*)leftmost;
 
         // Navigate to citizen AI subsystem and cancel
-        fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
         s_fn_CancelAllWork((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
 
         count = *(int*)(selfAddr + 0x50);
@@ -428,12 +424,10 @@ bool MarketWork_Slot9_Impl(MarketWork* self, void* param2) {
             // Find and remove the node with this key from BST
             void* searchNode = *bstRootPtr;
             while (searchNode != nullptr) {
-                fn_InternalBasePtr_CheckPtr(searchNode);
                 if (removeArr[i] < *(uintptr_t*)searchNode) {
                     // Go left (+0x20 for MarketWork BST)
                     searchNode = *(void**)((uintptr_t)searchNode + 0x20);
                 } else {
-                    fn_InternalBasePtr_CheckPtr(&removeArr[i]);
                     if (removeArr[i] <= *(uintptr_t*)searchNode) {
                         s_fn_MarketBST_EraseByNode(bstRootPtr, searchNode);
                         break;
@@ -461,7 +455,6 @@ void* MarketWork_Slot10_Impl(MarketWork* self, void* outPtr) {
     uintptr_t selfAddr = (uintptr_t)self;
 
     // CheckPtr on self+0x10
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
 
     // Find sub-entity via FUN_140002e10
@@ -469,7 +462,6 @@ void* MarketWork_Slot10_Impl(MarketWork* self, void* outPtr) {
     void* result = s_fn_FindSubEntity(entityRef, subIBP);
 
     // CheckPtr on the result
-    fn_InternalBasePtr_CheckPtr(result);
 
     // Read +0x48 from the resolved entity and store in output
     uintptr_t resolvedEntity = *(uintptr_t*)result;
@@ -754,14 +746,12 @@ static void* MW_FindComponentByTypeId(uintptr_t entity, uint32_t typeId) {
     for (int i = 0; i < count; ++i) {
         void** slot = reinterpret_cast<void**>(
             *reinterpret_cast<uintptr_t*>(entity + 0x30) + static_cast<int64_t>(i) * 8);
-        fn_InternalBasePtr_CheckPtr(slot);
         void* comp = *slot;
         MW_GetTypeId_t getTypeId =
             *reinterpret_cast<MW_GetTypeId_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10);
         if (getTypeId(comp) == typeId) {
             slot = reinterpret_cast<void**>(
                 *reinterpret_cast<uintptr_t*>(entity + 0x30) + static_cast<int64_t>(i) * 8);
-            fn_InternalBasePtr_CheckPtr(slot);
             comp = *slot;
             return fn_IsDerivedFrom(comp, typeId) ? comp : nullptr;
         }
@@ -957,7 +947,6 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
     // computed by CalcMaxWorkers (0x14012e5c0) from the WorkDescription at
     // component+0x18. Full -> 1 = examined but declined.
     const int claimed = *reinterpret_cast<int32_t*>(a + 0x50);
-    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(a + 0x18));
     const uintptr_t workComp = *reinterpret_cast<uintptr_t*>(a + 0x18);
     if (*reinterpret_cast<int32_t*>(workComp + 0x30) == 0) {
         *reinterpret_cast<int32_t*>(workComp + 0x30) = s_fn_CalcMaxWorkers(workComp);
@@ -972,15 +961,11 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
     // If that entity's own StorageComponent holds anything, the citizen must go
     // dump it first: push AI state LongTermPlan and report 2 = CLAIMED, which
     // stops the caller's claim-walk.
-    fn_InternalBasePtr_CheckPtr(citizenHolder);
     const uintptr_t citizen = *reinterpret_cast<uintptr_t*>(citizenHolder);
-    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(citizen + 0x10));
     uintptr_t carriedIBP[2] = {0, 0};
     s_fn_FindStorage(*reinterpret_cast<uintptr_t*>(citizen + 0x10), carriedIBP);
-    fn_InternalBasePtr_CheckPtr(carriedIBP);
     const int carried = s_fn_StorageQueryCount(reinterpret_cast<void*>(carriedIBP[0]));
     if (carried > 0) {
-        fn_InternalBasePtr_CheckPtr(citizenHolder);
         s_fn_LongTermPlan(*reinterpret_cast<uintptr_t*>(citizenHolder));
         return 2;
     }
@@ -1030,19 +1015,16 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
     const uint32_t tidStorageLocationComponent =
         MW_TypeId("StorageLocationComponent", 0x1401c7ee8, s_tid_StorageLocationComponent);
 
-    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(a + 0x10));
     const uintptr_t marketEntity = *reinterpret_cast<uintptr_t*>(a + 0x10);
     void* marketComp = MW_FindComponentByTypeId(marketEntity, tidMarketComponent);
 
     uintptr_t marketCompIBP[2] = {0, 0};
     new (marketCompIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(marketComp));   // B.3.3 bridge
-    fn_InternalBasePtr_CheckPtr(marketCompIBP);
     void* descRaw = *reinterpret_cast<void**>(marketCompIBP[0] + 0x18);
     void* marketDesc = fn_IsDerivedFrom(descRaw, tidMarketDescription) ? descRaw : nullptr;
 
     // --- 0x1400f011c..0x1400f0132: the market's own StorageComponent ------
-    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(a + 0x10));
     uintptr_t marketStorageIBP[2] = {0, 0};
     s_fn_FindStorage(*reinterpret_cast<uintptr_t*>(a + 0x10), marketStorageIBP);
 
@@ -1055,11 +1037,8 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
     // (it is the origin handed to the resource query and to FindPath).
     const uintptr_t terrain =
         *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(*s_pGameWorldSingleton) + 0xf8);
-    fn_InternalBasePtr_CheckPtr(citizenHolder);
     const uintptr_t citizen2 = *reinterpret_cast<uintptr_t*>(citizenHolder);
-    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(citizen2 + 0x278));
     const uintptr_t citizenAI = *reinterpret_cast<uintptr_t*>(citizen2 + 0x278);
-    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(citizenAI + 0x68));
     const uintptr_t pos = *reinterpret_cast<uintptr_t*>(citizenAI + 0x68);
 
     const int dim = *reinterpret_cast<int32_t*>(terrain);
@@ -1074,7 +1053,6 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
     (void)cellIdx;   // consumed by stage 3 (FUN_14008d590) and stage 4 (FUN_14012d5d0)
 
     // --- 0x1400f01c8..0x1400f01da: how much the citizen can still carry ---
-    fn_InternalBasePtr_CheckPtr(citizenHolder);
     const int freeCarry = s_fn_FreeCarryCapacity(*reinterpret_cast<uintptr_t*>(citizenHolder));
     (void)freeCarry; // consumed by stage 3/4
 
@@ -1082,10 +1060,8 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
     // fill = QueryCount(marketStorage) / (float)marketStorage+0x38 (capacity).
     // COMISS/JNC: if fill >= MarketDescription+0x20 the market does not want any
     // more stock at all -> 1 = examined but declined.
-    fn_InternalBasePtr_CheckPtr(marketStorageIBP);
     const float stocked = static_cast<float>(
         s_fn_StorageQueryCount(reinterpret_cast<void*>(marketStorageIBP[0])));
-    fn_InternalBasePtr_CheckPtr(marketStorageIBP);
     const float capacity =
         static_cast<float>(*reinterpret_cast<int32_t*>(marketStorageIBP[0] + 0x38));
     const float fill = stocked / capacity;
@@ -1120,7 +1096,6 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
     // ⚠ Ghidra prints these as pplVar40[0x22] and [0x23] on a longlong** -- those
     // are ELEMENT subscripts, i.e. bytes 0x110 and 0x118. Byte offsets confirmed
     // in the disassembly (MOV RBX,[R13+0x110] / CMP dword [R13+0x118],EDI).
-    fn_InternalBasePtr_CheckPtr(marketStorageIBP);
     const int marketEntryCount = *reinterpret_cast<int32_t*>(marketStorageIBP[0] + 0x30);
     const uintptr_t town =
         *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(*s_pGameWorldSingleton) + 0xf0);
@@ -1211,7 +1186,6 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
     // asymmetry is retail's, and it is what makes a market that already stocks a
     // resource outrank the town's supply of it super-linearly.
     for (int i = 0; i < marketEntryCount; ++i) {
-        fn_InternalBasePtr_CheckPtr(marketStorageIBP);
         const uintptr_t entries = *reinterpret_cast<uintptr_t*>(marketStorageIBP[0] + 0x28);
         const uintptr_t entry   = entries + static_cast<int64_t>(i) * 0x10;
         const uintptr_t resType = *reinterpret_cast<uintptr_t*>(entry + 0x00);
@@ -1299,7 +1273,6 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
         for (int e = 0; e < entityCount; ++e) {
             uintptr_t entityIBP = *reinterpret_cast<uintptr_t*>(
                 *reinterpret_cast<uintptr_t*>(town + 0x00) + static_cast<int64_t>(e) * 8);
-            fn_InternalBasePtr_CheckPtr(&entityIBP);
             void* storage = MW_FindComponentByTypeId(entityIBP, tidStorageComponent);
             uintptr_t storageIBP[2] = {0, 0};
             new (storageIBP) ::Object::InternalBasePtr(
@@ -1307,7 +1280,6 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
 
             entityIBP = *reinterpret_cast<uintptr_t*>(
                 *reinterpret_cast<uintptr_t*>(town + 0x00) + static_cast<int64_t>(e) * 8);
-            fn_InternalBasePtr_CheckPtr(&entityIBP);
             void* consumeProduce =
                 MW_FindComponentByTypeId(entityIBP, tidConsumeProduceComponent);
             uintptr_t cpIBP[2] = {0, 0};
@@ -1316,10 +1288,8 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
 
             if (cpIBP[0] != 0) continue;   // 0x1400f0812: has a consumer -> skip
 
-            fn_InternalBasePtr_CheckPtr(storageIBP);
             const int n = *reinterpret_cast<int32_t*>(storageIBP[0] + 0x30);
             for (int i = 0; i < n; ++i) {
-                fn_InternalBasePtr_CheckPtr(storageIBP);
                 const uintptr_t entries = *reinterpret_cast<uintptr_t*>(storageIBP[0] + 0x28);
                 const uintptr_t entry   = entries + static_cast<int64_t>(i) * 0x10;
                 const uintptr_t resType = *reinterpret_cast<uintptr_t*>(entry + 0x00);
@@ -1394,7 +1364,6 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
         const int keep = static_cast<int32_t>(want * kSurplusKeep * capacity);
 
         for (int i = 0; i < marketEntryCount; ++i) {
-            fn_InternalBasePtr_CheckPtr(marketStorageIBP);
             const uintptr_t entries = *reinterpret_cast<uintptr_t*>(marketStorageIBP[0] + 0x28);
             const uintptr_t entry   = entries + static_cast<int64_t>(i) * 0x10;
             const uintptr_t resType = *reinterpret_cast<uintptr_t*>(entry + 0x00);
@@ -1431,13 +1400,11 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
             // ============ THE CLAIM (retail returns 2 from here) ============
             // 0x1400f0be3: a random interact point on the MARKET, weighted by the
             // InteractComponent's own +0x30 plus each child's recursive sum.
-            fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(a + 0x10));
             const uintptr_t marketEntity2 = *reinterpret_cast<uintptr_t*>(a + 0x10);
             void* interact = MW_FindComponentByTypeId(marketEntity2, tidInteractComponent);
             uintptr_t interactIBP[2] = {0, 0};
             new (interactIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(interact));   // B.3.3 bridge
-            fn_InternalBasePtr_CheckPtr(interactIBP);
             const uintptr_t ic = interactIBP[0];
             void* icDescRaw = *reinterpret_cast<void**>(ic + 0x18);
             void* icDesc = fn_IsDerivedFrom(icDescRaw, tidInteractDescription) ? icDescRaw : nullptr;
@@ -1447,12 +1414,10 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
             for (int k = 0; k < icChildren; ++k) {
                 void** slot = reinterpret_cast<void**>(
                     *reinterpret_cast<uintptr_t*>(ic + 0x28) + static_cast<int64_t>(k) * 8);
-                fn_InternalBasePtr_CheckPtr(slot);
                 weight += s_fn_RecursiveChildSum(reinterpret_cast<int64_t>(*slot), 0);
             }
             void* rng = *reinterpret_cast<void**>(
                 reinterpret_cast<uintptr_t>(*s_pGameWorldSingleton) + 0xd8);
-            fn_InternalBasePtr_CheckPtr(interactIBP);
             const uint32_t roll = s_fn_Rand(rng, weight);
             float marketPos[3] = {0.0f, 0.0f, 0.0f};
             s_fn_EntityResolvePos(reinterpret_cast<void*>(interactIBP[0]), marketPos, 0,
@@ -1472,7 +1437,6 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
 
             // 0x1400f0de1..0x1400f0e2a: stamp the citizen.
             const int pathTypeAfter = *reinterpret_cast<int32_t*>(a + 0x20);
-            fn_InternalBasePtr_CheckPtr(citizenHolder);
             const uintptr_t citizen3 = *reinterpret_cast<uintptr_t*>(citizenHolder);
             MW_GetTargetSlot10_t getTarget = *reinterpret_cast<MW_GetTargetSlot10_t*>(
                 *reinterpret_cast<uintptr_t*>(self) + 0x50);
@@ -1527,13 +1491,11 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
 
         uintptr_t entIBP = *reinterpret_cast<uintptr_t*>(
             townEntities + static_cast<int64_t>(e) * 8);
-        fn_InternalBasePtr_CheckPtr(&entIBP);
         uintptr_t candStorage[2] = {0, 0};
         new (candStorage) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(MW_FindComponentByTypeId(entIBP, tidStorageComponent)));   // B.3.3 bridge
 
         entIBP = *reinterpret_cast<uintptr_t*>(townEntities + static_cast<int64_t>(e) * 8);
-        fn_InternalBasePtr_CheckPtr(&entIBP);
         uintptr_t candMap[2] = {0, 0};
         new (candMap) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(MW_FindComponentByTypeId(entIBP, tidMapComponent)));   // B.3.3 bridge
@@ -1544,7 +1506,6 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
         const int candCell = s_fn_EntityAnchorCell(&anchorIBP, nullptr);
 
         entIBP = *reinterpret_cast<uintptr_t*>(townEntities + static_cast<int64_t>(e) * 8);
-        fn_InternalBasePtr_CheckPtr(&entIBP);
         uintptr_t candCP[2] = {0, 0};
         new (candCP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(MW_FindComponentByTypeId(entIBP, tidConsumeProduceComponent)));   // B.3.3 bridge
@@ -1591,12 +1552,10 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
         // --- 0x1400f1156..0x1400f127f: how much this candidate could supply ---
         // record+0x18 is scratch, zeroed per candidate then filled with the
         // candidate's own stock of each demand resource.
-        fn_InternalBasePtr_CheckPtr(candStorage);
         const int candEntries = *reinterpret_cast<int32_t*>(candStorage[0] + 0x30);
         for (int r = 0; r < records.count; ++r) rec[r].stage4Scratch = 0;
 
         for (int i = 0; i < candEntries; ++i) {
-            fn_InternalBasePtr_CheckPtr(candStorage);
             const uintptr_t centries = *reinterpret_cast<uintptr_t*>(candStorage[0] + 0x28);
             const uintptr_t centry   = centries + static_cast<int64_t>(i) * 0x10;
             void* crm = MW_FindChildByTypeId(*reinterpret_cast<uintptr_t*>(centry + 0x00),
@@ -1652,7 +1611,6 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
         const uintptr_t winner = *reinterpret_cast<uintptr_t*>(
             *reinterpret_cast<uintptr_t*>(town + 0x00) + static_cast<int64_t>(bestIndex) * 8);
         uintptr_t winnerIBP = winner;
-        fn_InternalBasePtr_CheckPtr(&winnerIBP);
         uintptr_t winStorage[2] = {0, 0};
         new (winStorage) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(MW_FindComponentByTypeId(winnerIBP, tidStorageComponent)));   // B.3.3 bridge
@@ -1661,11 +1619,9 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
         // 0x18-byte records: +0x00 resource type, +0x08 rank (the ba70 sort key,
         // SIGNED int32), +0x0c available, +0x10 demand-record index.
         MW_ArrayDesc takeList = {nullptr, 0, 0};
-        fn_InternalBasePtr_CheckPtr(winStorage);
         const int winEntries = *reinterpret_cast<int32_t*>(winStorage[0] + 0x30);
 
         for (int i = 0; i < winEntries; ++i) {
-            fn_InternalBasePtr_CheckPtr(winStorage);
             const uintptr_t wentries = *reinterpret_cast<uintptr_t*>(winStorage[0] + 0x28);
             const uintptr_t wentry   = wentries + static_cast<int64_t>(i) * 0x10;
             const uintptr_t wresType = *reinterpret_cast<uintptr_t*>(wentry + 0x00);
@@ -1735,12 +1691,10 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
         if (takeList.count > 1) s_fn_QsortTake(takeList.data, takeList.count);
 
         // --- 0x1400f16a5..0x1400f18c0: two interact points -------------------
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(a + 0x10));
         const uintptr_t mktEntity = *reinterpret_cast<uintptr_t*>(a + 0x10);
         uintptr_t mktInteract[2] = {0, 0};
         new (mktInteract) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(MW_FindComponentByTypeId(mktEntity, tidInteractComponent)));   // B.3.3 bridge
-        fn_InternalBasePtr_CheckPtr(mktInteract);
         const uintptr_t mic = mktInteract[0];
         void* micDescRaw = *reinterpret_cast<void**>(mic + 0x18);
         void* micDesc = fn_IsDerivedFrom(micDescRaw, tidInteractDescription) ? micDescRaw : nullptr;
@@ -1750,12 +1704,10 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
         for (int k = 0; k < micChildren; ++k) {
             void** slot = reinterpret_cast<void**>(
                 *reinterpret_cast<uintptr_t*>(mic + 0x28) + static_cast<int64_t>(k) * 8);
-            fn_InternalBasePtr_CheckPtr(slot);
             weight += s_fn_RecursiveChildSum(reinterpret_cast<int64_t>(*slot), 0);
         }
         void* rng2 = *reinterpret_cast<void**>(
             reinterpret_cast<uintptr_t>(*s_pGameWorldSingleton) + 0xd8);
-        fn_InternalBasePtr_CheckPtr(mktInteract);
         const uint32_t roll2 = s_fn_Rand(rng2, weight);
         float marketPos2[3] = {0.0f, 0.0f, 0.0f};
         s_fn_EntityResolvePos(reinterpret_cast<void*>(mktInteract[0]), marketPos2, 0,
@@ -1763,11 +1715,9 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
 
         float winnerPos[3] = {0.0f, 0.0f, 0.0f};
         uintptr_t winnerIBP2 = winner;
-        fn_InternalBasePtr_CheckPtr(&winnerIBP2);
         uintptr_t winLoc[2] = {0, 0};
         new (winLoc) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(MW_FindComponentByTypeId(winnerIBP2, tidStorageLocationComponent)));   // B.3.3 bridge
-        fn_InternalBasePtr_CheckPtr(winLoc);
         s_fn_FindBestAdjacentCell(static_cast<int64_t>(winLoc[0]),
                                   static_cast<uint32_t>(cellIdx), winnerPos,
                                   static_cast<int64_t>(roll2));
@@ -1842,7 +1792,6 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
             s_fn_FindPath(pathOut2, pathCitizen, pathType2, pathMarket, marketPos2,
                           pathWinner, winnerPos, 0, -1, 0, 1, '\0', 0, 1);
 
-            fn_InternalBasePtr_CheckPtr(citizenHolder);
             const uintptr_t citizen5 = *reinterpret_cast<uintptr_t*>(citizenHolder);
             MW_GetTargetSlot10_t getTarget2 = *reinterpret_cast<MW_GetTargetSlot10_t*>(
                 *reinterpret_cast<uintptr_t*>(self) + 0x50);
@@ -1857,7 +1806,6 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
 
             for (int k = 0; k < carry.count; ++k) {
                 const uint8_t* ce = carry.data + static_cast<int64_t>(k) * 0x10;
-                fn_InternalBasePtr_CheckPtr(pathOut2);
                 s_fn_TransferToCarrier(static_cast<int64_t>(pathOut2[0]),
                                        *reinterpret_cast<const int64_t*>(ce + 0x00),
                                        *reinterpret_cast<const int32_t*>(ce + 0x08));

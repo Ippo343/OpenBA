@@ -151,11 +151,9 @@ static void* ScanCompList1(int64_t entity, uint32_t tid) {
     int64_t arr = *reinterpret_cast<int64_t*>(entity + 0x30);
     for (int i = 0; i < n; ++i) {
         int64_t* slot = reinterpret_cast<int64_t*>(arr + static_cast<int64_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* comp = reinterpret_cast<void*>(*slot);
         if (comp && CompTypeId(comp) == tid) {
             int64_t* slot2 = reinterpret_cast<int64_t*>(arr + static_cast<int64_t>(i) * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot2);
             void* obj = reinterpret_cast<void*>(*slot2);
             if (obj && fn_IsDerivedFrom && fn_IsDerivedFrom(obj, tid)) return obj;
             return nullptr;
@@ -208,14 +206,11 @@ bool ResidenceCheck_2ac30(int64_t param_1) {
 uint64_t CitizenAI_helper_db20(int64_t param_1) {
     EnsureInit();
     uint64_t* self = reinterpret_cast<uint64_t*>(param_1 + 0x38);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
     if (*reinterpret_cast<int64_t*>(*self + 0x238) == 0) {
         return *self & 0xffffffffffffff00ULL;
     }
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
     uint64_t local_res8[4] = {0, 0, 0, 0};
     local_res8[0] = *reinterpret_cast<uint64_t*>(*self + 0x238);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
     if (!s_fn_checkWork) return *self & 0xffffffffffffff00ULL;
     return s_fn_checkWork(reinterpret_cast<void*>(*self), local_res8);
 }
@@ -277,13 +272,11 @@ int64_t* Entity_impl_ec70(int64_t param_1, int64_t* param_2, uint32_t param_3, f
     int64_t byteOff = 0;
     do {
         int64_t cand = *reinterpret_cast<int64_t*>(byteOff + *reinterpret_cast<int64_t*>(param_1 + 0x20));
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&cand);
 
         void* interact = ScanCompList1(cand, s_tid_InteractComponent);
         int64_t interactIBP = 0;
         if (fn_InternalBasePtr_Ctor) new (&interactIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(interact));   // B.3.3 bridge
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&interactIBP);
 
         float vec[4] = {0, 0, 0, 0};
         if (s_fn_2e20) s_fn_2e20(interactIBP, vec, 0, 0, nullptr);
@@ -294,10 +287,8 @@ int64_t* Entity_impl_ec70(int64_t param_1, int64_t* param_2, uint32_t param_3, f
             uint64_t valid = s_fn_a00f0 ? s_fn_a00f0(mapGrid, 0xe1f, param_3, cell) : 0;
             if (static_cast<char>(valid) != '\0') {
                 int64_t* self_00 = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x20) + byteOff);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self_00);
                 int64_t storIBP[2] = {0, 0};
                 void* storPtr = s_fn_findStor8090 ? s_fn_findStor8090(*self_00, storIBP) : nullptr;
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(storPtr);
                 int64_t storComp = storPtr ? *reinterpret_cast<int64_t*>(storPtr) : 0;
                 bool ok = storComp ? ResidenceCheck_2ac30(storComp) : false;
                 if (ok && (-1 < cost)) {
@@ -378,10 +369,8 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
                 int64_t slot = outSlot;
                 if (outSlot != 0) {
                     float vec[4] = {0, 0, 0, 0};
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&cand);
                     int64_t marketIBP[2] = {0, 0};
                     void* mp = s_fn_78c0 ? s_fn_78c0(cand, marketIBP) : nullptr;
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(mp);
                     int64_t marketComp = mp ? *reinterpret_cast<int64_t*>(mp) : 0;
                     int mcost = (marketComp && s_fn_edb0) ? s_fn_edb0(marketComp, param_3, vec) : -1;
                     if ((-1 < mcost) && (mcost < best)) {
@@ -418,24 +407,20 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
                     void* rawMat = ScanCompList2(slot, s_tid_RawMaterialDesc);
 
                     // StorageLocationComponent on the candidate entity (comp-list1)
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&cand);
                     void* storComp = ScanCompList1(cand, s_tid_StorageLocationComp);
                     int64_t storIBP = 0;
                     if (fn_InternalBasePtr_Ctor) new (&storIBP) ::Object::InternalBasePtr(
                         reinterpret_cast<RtObject::Internal*>(storComp));   // B.3.3 bridge
 
                     if (storIBP != 0) {
-                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&storIBP);
                         int64_t storC = storIBP;
                         // mask from StorageLocationDescription sub-object at storC+0x18, +0x20
                         void* sub = *reinterpret_cast<void**>(storC + 0x18);
                         void* derived = (sub && fn_IsDerivedFrom && fn_IsDerivedFrom(sub, s_tid_StorageLocationDesc)) ? sub : nullptr;
                         uint32_t mask = derived ? *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(derived) + 0x20) : 0;
                         if (mask == 0) {
-                            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(storC + 0x10));
                             float tmp[4] = {0, 0, 0, 0};
                             void* sp = s_fn_findStor6270 ? s_fn_findStor6270(*reinterpret_cast<int64_t*>(storC + 0x10), tmp) : nullptr;
-                            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(sp);
                             int64_t s = sp ? *reinterpret_cast<int64_t*>(sp) : 0;
                             // [M-D SCOPED FALLBACK] the registered 6270 port's typeid is dead
                             // .rdata (0x1401c7e78 unregistered) -> never matches in standalone;
@@ -455,12 +440,10 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
                         if ((radiusFlags & mask) != 0) {
                             float vec[4] = {0, 0, 0, 0};
                             // 2nd StorageLocationComponent scan over the entity (cost source)
-                            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&cand);
                             void* costComp = ScanCompList1(cand, s_tid_StorageLocationComp);
                             int64_t costIBP = 0;
                             if (fn_InternalBasePtr_Ctor) new (&costIBP) ::Object::InternalBasePtr(
                                 reinterpret_cast<RtObject::Internal*>(costComp));   // B.3.3 bridge
-                            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&costIBP);
                             int64_t costSrc = costIBP;
                             int dcost = (costSrc && s_fn_d5d0) ? s_fn_d5d0(costSrc, param_3, vec, 0) : -1;
                             if ((-1 < dcost) && (dcost < best)) {
@@ -486,24 +469,20 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
         int64_t off = 0;
         do {
             int64_t cand = *reinterpret_cast<int64_t*>(off + param_1[4]);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&cand);
 
             // ResidenceComponent on the entity (comp-list1 at cand+0x30 / +0x38)
             void* resComp = ScanCompList1(cand, s_tid_ResidenceComponent);
             int64_t resIBP = 0;
             if (fn_InternalBasePtr_Ctor) new (&resIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(resComp));   // B.3.3 bridge
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&resIBP);
             uint64_t occ = CitizenAI_helper_70b0(resIBP);
 
             if (static_cast<int>(occ) < 1) {
                 // InteractComponent on the entity -> world position
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&cand);
                 void* interact = ScanCompList1(cand, s_tid_InteractComponent);
                 int64_t interactIBP = 0;
                 if (fn_InternalBasePtr_Ctor) new (&interactIBP) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(interact));   // B.3.3 bridge
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&interactIBP);
 
                 float vec[4] = {0, 0, 0, 0};
                 if (s_fn_2e20) s_fn_2e20(interactIBP, vec, 0, 0, nullptr);

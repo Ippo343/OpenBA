@@ -18,7 +18,7 @@
 //
 // Sub-callees (all already registered): 0x140006270 Entity_FindComponent_Storage,
 // 0x14012cd80 StorageComponent_impl_cd80 (CanAdd). Plus engine dispatch slots
-// 0x140152ab0 CheckPtr / 0x140152a90 IBP ctor / 0x140152a98 IsDerivedFrom.
+// 0x140152a90 IBP ctor / 0x140152a98 IsDerivedFrom.
 //
 // Bodies are unconditional so this compiles as-is in the standalone exe.
 
@@ -29,14 +29,12 @@
 
 namespace {
 
-typedef void     (*PG_CheckPtr_t)(void* ibp);
 typedef void*    (*PG_IbpCtor_t)(void* ibp, void* obj);
 typedef bool     (*PG_IsDerivedFrom_t)(void* obj, uint32_t tid);
 typedef void*    (*PG_FindStorage_t)(int64_t entityInner, void* retIBP);      // 0x140006270
 typedef char     (*PG_CanAdd_t)(void* storageComp, int64_t resEntity, int qty); // 0x14012cd80
 typedef uint32_t (*PG_GetTypeId_t)(void* comp);                                // vtable +0x10
 
-PG_CheckPtr_t      s_pg_CheckPtr    = nullptr;
 PG_IbpCtor_t       s_pg_IbpCtor     = nullptr;
 PG_IsDerivedFrom_t s_pg_IsDerived   = nullptr;
 PG_FindStorage_t   s_pg_FindStorage = nullptr;
@@ -51,10 +49,8 @@ bool s_pg_init = false;
 void Ensure_PickupGate() {
     if (s_pg_init) return;
     s_pg_init = true;
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152ab0)) s_pg_CheckPtr  = *reinterpret_cast<PG_CheckPtr_t*>(s);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152a90)) s_pg_IbpCtor   = *reinterpret_cast<PG_IbpCtor_t*>(s);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152a98)) s_pg_IsDerived = *reinterpret_cast<PG_IsDerivedFrom_t*>(s);
-    if (!s_pg_CheckPtr)  s_pg_CheckPtr  = reinterpret_cast<PG_CheckPtr_t>(fn_InternalBasePtr_CheckPtr);
     if (!s_pg_IbpCtor)   s_pg_IbpCtor   = reinterpret_cast<PG_IbpCtor_t>(fn_InternalBasePtr_Ctor);
     if (!s_pg_IsDerived) s_pg_IsDerived = reinterpret_cast<PG_IsDerivedFrom_t>(fn_IsDerivedFrom);
     s_pg_FindStorage = reinterpret_cast<PG_FindStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
@@ -87,13 +83,11 @@ void* PG_FindCompByTid(uintptr_t entity, uint32_t tid) {
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(entity + 0x30);
     for (int i = 0; i < count; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        if (s_pg_CheckPtr) s_pg_CheckPtr(slot);
         void* comp = *slot;
         if (!comp) continue;
         PG_GetTypeId_t getTid =
             *reinterpret_cast<PG_GetTypeId_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10);
         if (!getTid || getTid(comp) != tid) continue;
-        if (s_pg_CheckPtr) s_pg_CheckPtr(slot);
         void* c = *slot;
         return (s_pg_IsDerived && s_pg_IsDerived(c, tid)) ? c : nullptr;
     }
@@ -138,12 +132,10 @@ int PickupGate_AcceptMask_12d560(int64_t self) {
 
     int mask = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x20);
     if (mask == 0) {
-        if (s_pg_CheckPtr) s_pg_CheckPtr(reinterpret_cast<void*>(s + 0x10));
         void* storIBP = nullptr;
         void* ret = s_pg_FindStorage
                         ? s_pg_FindStorage(*reinterpret_cast<int64_t*>(s + 0x10), &storIBP)
                         : nullptr;
-        if (s_pg_CheckPtr) s_pg_CheckPtr(ret);
         mask = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(ret) + 0x3c);
     }
     return mask;
@@ -197,7 +189,6 @@ uint64_t PickupGate_TownWants_8d3c0(int64_t townMgr, int64_t resEntity, int amou
     for (int i = 0; i < count; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
 
-        if (s_pg_CheckPtr) s_pg_CheckPtr(slot);
         uintptr_t ent = *reinterpret_cast<uintptr_t*>(slot);
         if (!ent) continue;
         void* slComp = PG_FindCompByTid(ent, tidSLComp);
@@ -205,16 +196,13 @@ uint64_t PickupGate_TownWants_8d3c0(int64_t townMgr, int64_t resEntity, int amou
         if (s_pg_IbpCtor) s_pg_IbpCtor(&slIbp, slComp);
 
         // The original re-reads the list entry (and re-CheckPtrs) for the second scan.
-        if (s_pg_CheckPtr) s_pg_CheckPtr(slot);
         ent = *reinterpret_cast<uintptr_t*>(slot);
         if (!ent) continue;
         void* stComp = PG_FindCompByTid(ent, tidStor);
         void* stIbp = nullptr;
         if (s_pg_IbpCtor) s_pg_IbpCtor(&stIbp, stComp);
 
-        if (s_pg_CheckPtr) s_pg_CheckPtr(&slIbp);
         if (PickupGate_Accepts_12d990(reinterpret_cast<int64_t>(slIbp), resEntity)) {
-            if (s_pg_CheckPtr) s_pg_CheckPtr(&stIbp);
             if (s_pg_CanAdd && s_pg_CanAdd(stIbp, resEntity, amount)) return 1u;
         }
     }

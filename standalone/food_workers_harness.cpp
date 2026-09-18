@@ -125,7 +125,6 @@ void Fire(int frameNum) {
     int found = 0, considered = 0;
     for (int i = 0; i < n; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* ent = *slot;
         if (!ent) continue;
 
@@ -135,7 +134,6 @@ void Fire(int frameNum) {
         const char* foodName = nullptr;
         for (int c = 0; c < cN && cA && !foodComp; ++c) {
             void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs);
             void* comp = *cs;
             if (!comp) continue;
             void** vt = *reinterpret_cast<void***>(comp);
@@ -165,7 +163,6 @@ void Fire(int frameNum) {
             if (f3050 && (s_dumpN++ % 5) == 0) {
                 uint64_t wIBP = 0;
                 reinterpret_cast<fn_FindWork_t>(f3050)(reinterpret_cast<int64_t>(ent), &wIBP);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wIBP);
                 if (!wIBP) {
                     std::fprintf(stderr, "[JobArrowData] frame=%d: %s ent=%p has NO "
                                  "WorkComponent (0x140003050 found nothing) — the panel's "
@@ -208,7 +205,6 @@ void Fire(int frameNum) {
 
         uint64_t wpcIBP = 0;
         reinterpret_cast<fn_FindWPC_t>(f2e10)(reinterpret_cast<int64_t>(ent), &wpcIBP);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpcIBP);
         if (!wpcIBP) {
             std::fprintf(stderr, "[FoodWorkers] frame=%d: %s comp=%p has NO WorkPlaceComponent "
                          "— cannot staff\n", frameNum, foodName, foodComp);

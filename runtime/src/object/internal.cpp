@@ -307,41 +307,32 @@ void RtObject_InternalBasePtr_Copy(InternalBasePtr* self, const InternalBasePtr*
 // optimised out of retail. `?AssignId@InternalBasePtr@Object@@IEAAXXZ`
 // (0x1800c0280) is the same three bytes.
 //
-// REGISTERED BY DEFAULT since 2026-09-08 (Wave 9 lane Y). This block used to
-// say "NOT REGISTERED BY DEFAULT, and the reason is not squeamishness —
-// registering it would be an active regression", and the argument was:
+// B.3.3 STEP 6D REWROTE THIS BANNER, because the argument it used to carry is now
+// false in both directions and a false justification is worse than either choice.
 //
-//   engine/funcs/engine_funcs.cpp inspects the FIRST BYTE of whatever
-//   `?CheckPtr@…@IEBAXXZ` resolves to, and sets `g_checkPtrIsNop` only when it
-//   is `C3` or `C2 00 00`. That flag makes ~60,000 calls per frame at 800x10
-//   disappear. Register this port and the resolved body becomes a GCC-compiled
-//   function whose first byte is neither — so the flag goes false and the calls
-//   come back. We would have replaced a no-op with a no-op and paid for it.
+// What it used to say: the port must be registered because 2,333 of the 3,475
+// exe-side `fn_InternalBasePtr_CheckPtr(...)` sites had no null guard, so an
+// unregistered symbol would be an EXEC-of-0 at cutover; and there was a long
+// story about `engine_funcs.cpp` sniffing the first byte of the resolved body,
+// the `g_checkPtrIsNop` flag, `BANISHED_CHECKPTR_NOP` and
+// `BANISHED_CHECKPTR_STATIC_NOP`.
 //
-// That was TRUE, and it was a statement about the DETECTOR, not about this
-// function. It is now fixed where it was wrong: the detector asks
-// `RuntimeExportIsRegistered("?CheckPtr@InternalBasePtr@Object@@IEBAXXZ")` and
-// treats our own port as a no-op, which it provably is — the body below is
-// empty and we wrote it. The flag stays true, the ~60k calls stay gone, and
-// registering costs nothing.
+// NONE OF THAT EXISTS ANY MORE. Step 6D deleted all 4,570 exe-side call sites —
+// every one was a call to these three bytes — together with the pointer, the
+// typedef, the macro, the byte sniff, the flag and the perf-build -D. There is no
+// exe-side caller of this symbol left, by name or by address.
 //
-// The perf-build half of the old argument is unchanged and is not a reason
-// against registering: with BANISHED_CHECKPTR_STATIC_NOP the call sites are
-// compiled out entirely, so this body never runs there. Anyone reading a census
-// row for it should read this paragraph — it is a REGISTERED SYMBOL, not an
-// EXERCISED one, and in the perf build it has no callers by construction
+// IT IS STILL REGISTERED, and the reason is now a different one: the SYMBOL is the
+// ABI door for `Object::InternalBasePtr::CheckPtr()`, a real member of the real
+// class in runtime/types/object/Internal.h, which `Shim_CheckPtr` forwards to and
+// which `tests/unit/object_ptr_test.cpp` exercises on both a live and a stale
+// pointer. The class keeps the member because retail has it; the door keeps the
+// registration because the mangled name has to resolve at cutover. It is a
+// REGISTERED SYMBOL, not an EXERCISED one
 // (reference_uncalled_port_is_not_verified.md, acknowledged rather than hidden).
 //
-// WHY IT MUST BE REGISTERED AT ALL, given it does nothing: at cutover the symbol
-// has to exist. It is on the DLL-absent boot's [RtUnresolved] list, and 2,333 of
-// its 3,475 call sites in this tree have no `if (fn_...)` null guard — they go
-// through the engine_funcs.h macro, which with a null resolve and a false flag
-// calls a null pointer. Leaving it unregistered is an EXEC-of-0 at cutover.
-//
-// the old DLL-era switch is retained only as a positive assertion in
-// the log; it no longer gates anything.
 // B.3.1: still empty, and `Object::InternalBasePtr::CheckPtr` it forwards to is
-// empty too. NEVER ADD VALIDATION TO EITHER.
+// empty too. NEVER ADD VALIDATION TO EITHER, AND NEVER ADD A CALLER BACK.
 void RtObject_InternalBasePtr_CheckPtr(const InternalBasePtr* self) {
     ::Object::InternalBasePtr::Shim_CheckPtr(AsClass(self));
 }
@@ -847,27 +838,19 @@ int RtObjectInternalRegister() {
                           (void*)&RtObject_Internal_Persist); ++n;
     RegisterRuntimeAddr(0x1800bfda0, (void*)&RtObject_Internal_Persist);
 
-    // ---- CheckPtr: DEFAULT-ON as of 2026-09-08 (Wave 9 lane Y) --------------
+    // ---- CheckPtr: STILL REGISTERED, for a reason B.3.3 step 6D changed ------
     //
-    // It used to be opt-in behind the old DLL-era switch, for the reason
-    // written on the function: registering it made the exe-side byte sniff in
-    // engine_funcs.cpp see a GCC prologue instead of a RET, flip
-    // `g_checkPtrIsNop` to false, and pay ~60k indirect calls a frame for a
-    // no-op. THAT WAS A FACT ABOUT THE DETECTOR, NOT ABOUT THE PORT, and it is
-    // now fixed at its source: the detector asks
-    // `RuntimeExportIsRegistered("?CheckPtr@...")` first, so our empty body is
-    // recognised and the flag stays TRUE. Registering is therefore behaviour-
-    // and cost-neutral with the DLL present, and in the perf build (
-    // BANISHED_CHECKPTR_STATIC_NOP) the call sites are compiled out regardless.
+    // The old reason — "2,333 of its 3,475 exe-side call sites have no null
+    // guard, so an unregistered symbol is an EXEC-of-0 at cutover" — is gone with
+    // the call sites: step 6D deleted all 4,570 of them, plus the exe-side
+    // pointer, the `g_checkPtrIsNop` byte sniff and the perf build's
+    // `BANISHED_CHECKPTR_STATIC_NOP`. Nothing in the exe reaches this symbol any
+    // more, by name or by address.
     //
-    // The reason to register rather than leave it: at cutover the symbol has to
-    // EXIST. `?CheckPtr@InternalBasePtr@Object@@IEBAXXZ` is on the DLL-absent
-    // boot's [RtUnresolved] list (attempt 04, asked at 7ff71e24209f), and 2,333
-    // of its 3,475 call sites have no null guard — they call through the macro,
-    // which with a null resolve and a false flag calls a null pointer.
-    //
-    // the old DLL-era switch is kept as a positive assertion for anyone
-    // measuring the decision; it no longer gates the registration.
+    // It stays registered because the mangled name is the ABI door for
+    // `Object::InternalBasePtr::CheckPtr()`, a real (empty) member of the real
+    // class, exercised by tests/unit/object_ptr_test.cpp through `Shim_CheckPtr`.
+    // The full argument is on the function above.
     RegisterRuntimeExport("?CheckPtr@InternalBasePtr@Object@@IEBAXXZ",
                           (void*)&RtObject_InternalBasePtr_CheckPtr); ++n;
     RegisterRuntimeAddr(0x1800c0290, (void*)&RtObject_InternalBasePtr_CheckPtr);

@@ -209,9 +209,6 @@ static inline int64_t TimeFromSeconds(float secs) {
     if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t, secs);
     return t;
 }
-static inline void CheckPtr(void* p) {
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p);
-}
 
 bool CDTrace() {
     if (s_trace < 0) {
@@ -268,11 +265,9 @@ extern "C" void* DiseaseComp_GrownIdentity(uint64_t* out, void* entityIBPSlot) {
     int64_t entity = *reinterpret_cast<int64_t*>(entityIBPSlot);
     if (entity == 0) { *out = 0; return out; }
 
-    CheckPtr(entityIBPSlot);
     int64_t pastureIBP = 0;
     if (s_findPasture) s_findPasture(entity, &pastureIBP);
     if (pastureIBP != 0) {
-        CheckPtr(&pastureIBP);
         *out = *reinterpret_cast<uint64_t*>(pastureIBP + 0x28);
         return out;
     }
@@ -280,10 +275,8 @@ extern "C" void* DiseaseComp_GrownIdentity(uint64_t* out, void* entityIBPSlot) {
     void* gw = GameWorld();
     void* map = gw ? *reinterpret_cast<void**>((uintptr_t)gw + 0xF8) : nullptr;
 
-    CheckPtr(entityIBPSlot);
     int64_t mapIBP = 0;
     if (s_findMap) s_findMap(entity, &mapIBP);
-    CheckPtr(&mapIBP);
     const uint8_t* mc = reinterpret_cast<const uint8_t*>(mapIBP);
 
     struct { int64_t data; int32_t count; int32_t cap; } list = {0, 0, 0};
@@ -298,11 +291,9 @@ extern "C" void* DiseaseComp_GrownIdentity(uint64_t* out, void* entityIBPSlot) {
     if (listCount > 0) {
         for (int i = 0; i < listCount; ++i) {
             int64_t* slot = reinterpret_cast<int64_t*>(listData + (int64_t)i * 0x10 + 8);
-            CheckPtr(slot);
             int64_t natResIBP = 0;
             if (s_findNatRes) s_findNatRes(*slot, &natResIBP);
             if (natResIBP != 0) {
-                CheckPtr(slot);
                 *out = *reinterpret_cast<uint64_t*>(*slot + 0x28);
                 if (fn_MemFreeStatic) fn_MemFreeStatic((void*)listData);
                 return out;
@@ -310,7 +301,6 @@ extern "C" void* DiseaseComp_GrownIdentity(uint64_t* out, void* entityIBPSlot) {
         }
     } else {
         // Nothing sprouted: fall back to what the field/orchard is SET to grow.
-        CheckPtr(entityIBPSlot);
         int64_t cropIBP = 0;
         {
             typedef void* (*fnf)(int64_t, void*);
@@ -318,12 +308,10 @@ extern "C" void* DiseaseComp_GrownIdentity(uint64_t* out, void* entityIBPSlot) {
             if (findCrop) findCrop(entity, &cropIBP);
         }
         if (cropIBP != 0) {
-            CheckPtr(&cropIBP);
             *out = *reinterpret_cast<uint64_t*>(cropIBP + 0x50);
             if (fn_MemFreeStatic) fn_MemFreeStatic((void*)listData);
             return out;
         }
-        CheckPtr(entityIBPSlot);
         int64_t orchardIBP = 0;
         {
             typedef void* (*fnf)(int64_t, void*);
@@ -331,7 +319,6 @@ extern "C" void* DiseaseComp_GrownIdentity(uint64_t* out, void* entityIBPSlot) {
             if (findOrchard) findOrchard(entity, &orchardIBP);
         }
         if (orchardIBP != 0) {
-            CheckPtr(&orchardIBP);
             *out = *reinterpret_cast<uint64_t*>(orchardIBP + 0x60);
             if (fn_MemFreeStatic) fn_MemFreeStatic((void*)listData);
             return out;
@@ -384,7 +371,6 @@ extern "C" void* DiseaseComp_FindSibling(int64_t entity, void* outIBP) {
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(entity + 0x30);
     for (int i = 0; i < count; ++i) {
         void** slot = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
-        CheckPtr(slot);
         void* comp = *slot;
         uint32_t id = 0;
         if (comp) {
@@ -395,7 +381,6 @@ extern "C" void* DiseaseComp_FindSibling(int64_t entity, void* outIBP) {
         }
         if (id == want) {
             void** ms = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
-            CheckPtr(ms);
             if (*ms && fn_IsDerivedFrom && fn_IsDerivedFrom(*ms, want)) found = *ms;
             break;
         }
@@ -410,13 +395,10 @@ extern "C" void* DiseaseComp_FindSibling(int64_t entity, void* outIBP) {
 // ============================================================
 extern "C" bool DiseaseComp_CheckCure(DiseaseComponent* self) {
     EnsureInit();
-    void* entitySlot = &self->entity;
 
     if (self->isPasture == 1) {
-        CheckPtr(entitySlot);
         int64_t pastureIBP = 0;
         if (s_findPasture) s_findPasture((int64_t)self->entity, &pastureIBP);
-        CheckPtr(&pastureIBP);
         // Faithful: retail derefs unguarded — isPasture==1 means the finder
         // already located a PastureComponent at Startup.
         if (*reinterpret_cast<int32_t*>(pastureIBP + 0x38) != 0) return false;
@@ -426,10 +408,8 @@ extern "C" bool DiseaseComp_CheckCure(DiseaseComponent* self) {
     void* gw = GameWorld();
     void* map = gw ? *reinterpret_cast<void**>((uintptr_t)gw + 0xF8) : nullptr;
 
-    CheckPtr(entitySlot);
     int64_t mapIBP = 0;
     if (s_findMap) s_findMap((int64_t)self->entity, &mapIBP);
-    CheckPtr(&mapIBP);
     const uint8_t* mc = reinterpret_cast<const uint8_t*>(mapIBP);
 
     struct { int64_t data; int32_t count; int32_t cap; } list = {0, 0, 0};
@@ -442,7 +422,6 @@ extern "C" bool DiseaseComp_CheckCure(DiseaseComponent* self) {
     int living = 0;
     for (int i = 0; i < list.count; ++i) {
         int64_t* slot = reinterpret_cast<int64_t*>(list.data + (int64_t)i * 0x10 + 8);
-        CheckPtr(slot);
         int64_t natResIBP = 0;
         if (s_findNatRes) s_findNatRes(*slot, &natResIBP);
         if (natResIBP != 0) ++living;
@@ -456,10 +435,8 @@ extern "C" bool DiseaseComp_CheckCure(DiseaseComponent* self) {
 // ============================================================
 extern "C" void DiseaseComp_Cure(DiseaseComponent* self) {
     EnsureInit();
-    CheckPtr(&self->entity);
     int64_t particleIBP = 0;
     if (s_findParticle) s_findParticle(self->entity, &particleIBP);
-    CheckPtr(&particleIBP);
     if (particleIBP) ParticleComponent_StopEmitterFade((void*)particleIBP);
 
     bool wasInfested = (self->duration != 0);
@@ -497,10 +474,8 @@ extern "C" void DiseaseComp_Infect(DiseaseComponent* self) {
         return;
     }
 
-    CheckPtr(&self->entity);
     int64_t smcIBP = 0;
     if (s_findSMC) s_findSMC((int64_t)self->entity, &smcIBP);
-    CheckPtr(&smcIBP);
     // State gate: the field must be past stage 1. +0x52 is the override, used
     // unless negative, in which case +0x50 (the live state) is read.
     int8_t stage = *reinterpret_cast<int8_t*>(smcIBP + 0x52);
@@ -577,10 +552,8 @@ extern "C" void DiseaseComp_Infect(DiseaseComponent* self) {
     }
 
     // ---- Start every emitter on the entity's ParticleComponent (the swarm VFX).
-    CheckPtr(&self->entity);
     int64_t particleIBP = 0;
     if (s_findParticle) s_findParticle(self->entity, &particleIBP);
-    CheckPtr(&particleIBP);
     int emitters = 0;
     if (particleIBP) {
         emitters = *reinterpret_cast<int32_t*>(particleIBP + 0x40);
@@ -617,10 +590,8 @@ extern "C" void DiseaseComp_KillOnePlant(DiseaseComponent* self) {
     void* map = gw ? *reinterpret_cast<void**>((uintptr_t)gw + 0xF8) : nullptr;
     void* rng = gw ? *reinterpret_cast<void**>((uintptr_t)gw + 0xD8) : nullptr;
 
-    CheckPtr(&self->entity);
     int64_t mapIBP = 0;
     if (s_findMap) s_findMap((int64_t)self->entity, &mapIBP);
-    CheckPtr(&mapIBP);
     const uint8_t* mc = reinterpret_cast<const uint8_t*>(mapIBP);
 
     struct { int64_t data; int32_t count; int32_t cap; } list = {0, 0, 0};
@@ -637,17 +608,12 @@ extern "C" void DiseaseComp_KillOnePlant(DiseaseComponent* self) {
         uint32_t idx = fn_Random_Rand ? fn_Random_Rand(rng, tileCount) : 0;
         int64_t entity = *reinterpret_cast<int64_t*>(list.data + (int64_t)idx * 0x10 + 8);
         int64_t natResIBP = 0;
-        CheckPtr(&entity);
         if (s_findNatRes) s_findNatRes(entity, &natResIBP);
 
         if (natResIBP != 0) {
-            CheckPtr(&natResIBP);
             if (((*reinterpret_cast<uint32_t*>(natResIBP + 0x20) >> 0x14) & 1) == 0) {
-                CheckPtr(&natResIBP);
                 *reinterpret_cast<uint32_t*>(natResIBP + 0x28) = 0;   // yield -> nothing
-                CheckPtr(&natResIBP);
                 *reinterpret_cast<uint8_t*>(natResIBP + 0x2d) = 0;
-                CheckPtr(&natResIBP);
                 *reinterpret_cast<uint32_t*>(natResIBP + 0x20) |= 0x200000u;  // dead
                 if (s_setAnimIndex) s_setAnimIndex(natResIBP, 2);
                 killed = true;
@@ -675,37 +641,27 @@ extern "C" void DiseaseComp_KillOneAnimal(DiseaseComponent* self) {
     void* rng = gw ? *reinterpret_cast<void**>((uintptr_t)gw + 0xD8) : nullptr;
     void* entityMgr = gw ? *reinterpret_cast<void**>((uintptr_t)gw + 0xE8) : nullptr;
 
-    CheckPtr(&self->entity);
     int64_t pastureIBP = 0;
     if (s_findPasture) s_findPasture((int64_t)self->entity, &pastureIBP);
-    CheckPtr(&pastureIBP);
     if (*reinterpret_cast<int32_t*>(pastureIBP + 0x38) == 0) return;
 
     int attempts = 0;
     bool killed = false;
     do {
-        CheckPtr(&pastureIBP);
         uint32_t herd = *reinterpret_cast<uint32_t*>(pastureIBP + 0x38);
-        CheckPtr(&pastureIBP);
         uint32_t idx = fn_Random_Rand ? fn_Random_Rand(rng, herd) : 0;
         int64_t member = *reinterpret_cast<int64_t*>(
             *reinterpret_cast<int64_t*>(pastureIBP + 0x30) + (int64_t)idx * 8);
-        CheckPtr(&member);
         int64_t entity = *reinterpret_cast<int64_t*>(member + 0x10);
-        CheckPtr(&entity);
 
         // Retail inlines this scan; 0x140005500 is the same scan on the same type id.
         int64_t animalIBP = 0;
         if (s_findAnimal) s_findAnimal(entity, &animalIBP);
-        CheckPtr(&animalIBP);
 
         if (((*reinterpret_cast<uint32_t*>(animalIBP + 0x20) >> 0x14) & 1) == 0) {
-            CheckPtr(&member);
             int64_t victim = *reinterpret_cast<int64_t*>(member + 0x10);
             if (victim == 0) break;
-            CheckPtr(&victim);
             if (((*reinterpret_cast<uint32_t*>(victim + 0x40) >> 10) & 1) != 0) break;
-            CheckPtr(&victim);
             if (s_markRemoval) s_markRemoval((void*)victim);
             if (s_arrResizeFill && entityMgr) {
                 s_arrResizeFill(
@@ -750,10 +706,8 @@ extern "C" void DiseaseComp_InfectionTick(DiseaseComponent* self, int64_t* delta
     void* map = *reinterpret_cast<void**>((uintptr_t)gw + 0xF8);
     void* rng = *reinterpret_cast<void**>((uintptr_t)gw + 0xD8);
 
-    CheckPtr(&self->entity);
     int64_t mapIBP = 0;
     if (s_findMap) s_findMap((int64_t)self->entity, &mapIBP);
-    CheckPtr(&mapIBP);
     const uint8_t* mc = reinterpret_cast<const uint8_t*>(mapIBP);
     int16_t fx = *(const int16_t*)(mc + 0x28), fy = *(const int16_t*)(mc + 0x2a);
     int16_t fw = *(const int16_t*)(mc + 0x2c), fh = *(const int16_t*)(mc + 0x2e);
@@ -828,10 +782,8 @@ extern "C" void DiseaseComp_ActiveDisease(DiseaseComponent* self, int64_t* delta
     for (;;) {
         self->spreadAccum -= spreadPeriod;
 
-        CheckPtr(&self->entity);
         int64_t mapIBP = 0;
         if (s_findMap) s_findMap((int64_t)self->entity, &mapIBP);
-        CheckPtr(&mapIBP);
         const uint8_t* mc = reinterpret_cast<const uint8_t*>(mapIBP);
 
         int width = *mapInts;
@@ -855,10 +807,8 @@ extern "C" void DiseaseComp_ActiveDisease(DiseaseComponent* self, int64_t* delta
         if (cell[0] != 0)      target = cell[0];           // zone raster wins
         else if (cell[1] != 0) target = cell[1];           // else entity raster
 
-        CheckPtr(&self->entity);
         const char* outcome = "empty-cell";
         if (target != (int64_t)self->entity && target != 0) {
-            CheckPtr(&target);
             int64_t sibIBP = 0;
             DiseaseComp_FindSibling(target, &sibIBP);
             if (sibIBP != 0) {
@@ -868,10 +818,8 @@ extern "C" void DiseaseComp_ActiveDisease(DiseaseComponent* self, int64_t* delta
                 int64_t mySlot = (int64_t)self->entity;
                 DiseaseComp_GrownIdentity(&myId, &mySlot);
                 if (theirId == myId) {
-                    CheckPtr(&target);
                     int64_t victimIBP = 0;
                     DiseaseComp_FindSibling(target, &victimIBP);
-                    CheckPtr(&victimIBP);
                     DiseaseComp_Infect(reinterpret_cast<DiseaseComponent*>(victimIBP));
                     outcome = "SPREAD";
                 } else {
@@ -909,7 +857,6 @@ extern "C" void DiseaseComponent_Update(DiseaseComponent* self, int64_t* deltaTi
 // ============================================================
 extern "C" void DiseaseComponent_Startup(DiseaseComponent* self) {
     EnsureInit();
-    CheckPtr(&self->entity);
     int64_t pastureIBP = 0;
     if (s_findPasture) s_findPasture((int64_t)self->entity, &pastureIBP);
     self->isPasture = (pastureIBP != 0) ? 1 : 0;

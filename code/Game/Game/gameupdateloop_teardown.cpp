@@ -264,10 +264,8 @@ extern "C" void EntityList_Shutdown_c3d30(void* selfV) {
     // Mark every entity not already flagged deleted (entity+0x40 bit 10).
     for (int32_t i = 0; i < I32(self, 0x10); ++i) {
         void* slot = B(P(self, 0x08)) + (size_t)i * 8;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* entity = P(slot, 0x00);
         if ((*reinterpret_cast<uint32_t*>(B(entity) + 0x40) >> 10 & 1) == 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
             if (s_markRemoval) s_markRemoval(P(slot, 0x00));
         }
         if (bracket && !bracketFired) {
@@ -381,7 +379,6 @@ extern "C" void EntityUI_Dtor_1024d0(void* selfV) {
 
     // Active tool controller (+0x28): Close() through vtbl+0x28, then drop the IBP.
     if (P(self, 0x28) != nullptr) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 0x28);
         void* tool = P(self, 0x28);
         void* vtbl = P(tool, 0x00);
         typedef void (*fn_Close_t)(void*);

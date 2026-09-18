@@ -106,19 +106,16 @@ int ClearStorage_Execute(ClearStorage* self, void* citizenAI, void* time) {
     void* entityRef = (void*)(workBase + 0x10);  // InternalBasePtr to entity
 
     // Find components on the entity
-    fn_InternalBasePtr_CheckPtr(entityRef);
     void* entity = *(void**)entityRef;
 
     uint64_t positionIBP = 0;
     fn_FindComponent_Position(entity, &positionIBP);
 
     uint64_t unknownCompIBP = 0;
-    fn_InternalBasePtr_CheckPtr(entityRef);
     entity = *(void**)entityRef;
     fn_FindComponent_Unknown7ee8(entity, &unknownCompIBP);
 
     uint64_t storageIBP = 0;
-    fn_InternalBasePtr_CheckPtr(entityRef);
     entity = *(void**)entityRef;
     fn_FindComponent_Storage(entity, &storageIBP);
 
@@ -128,13 +125,10 @@ int ClearStorage_Execute(ClearStorage* self, void* citizenAI, void* time) {
     void* worldArray = *(void**)(gameWorld + 0xf0);
 
     // Get citizen position from citizenAI -> entity -> +0x278 -> +0x68
-    fn_InternalBasePtr_CheckPtr(citizenAI);
     uintptr_t citizenEntity = *(uintptr_t*)citizenAI;
 
-    fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
     uintptr_t comp278 = *(uintptr_t*)(citizenEntity + 0x278);
 
-    fn_InternalBasePtr_CheckPtr((void*)(comp278 + 0x68));
     uintptr_t posData = *(uintptr_t*)(comp278 + 0x68);
 
     int gridSize = *gridDataPtr;
@@ -146,7 +140,6 @@ int ClearStorage_Execute(ClearStorage* self, void* citizenAI, void* time) {
     uint32_t srcCell = WorldToCell(citizenX, citizenZ, gridSize);
 
     // Get storage item count
-    fn_InternalBasePtr_CheckPtr(&storageIBP);
     uintptr_t storageComp = *(uintptr_t*)&storageIBP;
     int itemCount = *(int*)(storageComp + 0x30);
 
@@ -156,7 +149,6 @@ int ClearStorage_Execute(ClearStorage* self, void* citizenAI, void* time) {
 
     // Iterate over storage items
     for (int i = 0; i < itemCount; i++) {
-        fn_InternalBasePtr_CheckPtr(&storageIBP);
         storageComp = *(uintptr_t*)&storageIBP;
         uintptr_t itemArray = *(uintptr_t*)(storageComp + 0x28);
         uintptr_t itemEntry = itemArray + (uintptr_t)i * 0x10;
@@ -192,23 +184,19 @@ int ClearStorage_Execute(ClearStorage* self, void* citizenAI, void* time) {
         }
 
         // Find StorageComponent on citizen's assigned entity (citizenAI -> +0x10)
-        fn_InternalBasePtr_CheckPtr(citizenAI);
         uintptr_t citizenEnt = *(uintptr_t*)citizenAI;
-        fn_InternalBasePtr_CheckPtr((void*)(citizenEnt + 0x10));
         uintptr_t citizenBuilding = *(uintptr_t*)(citizenEnt + 0x10);
 
         void* destStorage = nullptr;
         if (*(int*)(citizenBuilding + 0x38) > 0) {
             for (int64_t k = 0; k < *(int*)(citizenBuilding + 0x38); k++) {
                 void* compIBP = (void*)(*(uintptr_t*)(citizenBuilding + 0x30) + k * 8);
-                fn_InternalBasePtr_CheckPtr(compIBP);
                 void* comp = *(void**)compIBP;
                 typedef uint32_t (*fn_GetTypeId_t)(void*);
                 fn_GetTypeId_t getTypeId = *(fn_GetTypeId_t*)(*(uintptr_t*)comp + 0x10);
                 uint32_t typeId = getTypeId(comp);
                 if (typeId == *g_TypeId_StorageComponent_FC) {
                     compIBP = (void*)(*(uintptr_t*)(citizenBuilding + 0x30) + k * 8);
-                    fn_InternalBasePtr_CheckPtr(compIBP);
                     void* compVal = *(void**)compIBP;
                     if (fn_IsDerivedFrom(compVal, *g_TypeId_StorageComponent_FC)) {
                         destStorage = compVal;
@@ -226,11 +214,9 @@ found_dest_storage:
             reinterpret_cast<RtObject::Internal*>(destStorage));   // B.3.3 bridge
 
         // Check capacity: destStorage capacity - count vs rawMat resourceSize * availCount
-        fn_InternalBasePtr_CheckPtr(&destStorageIBP);
         uintptr_t dsc = *(uintptr_t*)&destStorageIBP;
         int maxCapacity = *(int*)(dsc + 0x38);
 
-        fn_InternalBasePtr_CheckPtr(&destStorageIBP);
         dsc = *(uintptr_t*)&destStorageIBP;
         int currentCount = fn_StorageComponent_QueryCount((void*)dsc);
 
@@ -239,19 +225,15 @@ found_dest_storage:
 
         if (freeSpace < resourceSize * availCount) {
             // Not enough room in dest, check citizen's building storage
-            fn_InternalBasePtr_CheckPtr(citizenAI);
             uintptr_t cEnt = *(uintptr_t*)citizenAI;
-            fn_InternalBasePtr_CheckPtr((void*)(cEnt + 0x10));
             uintptr_t cBuilding = *(uintptr_t*)(cEnt + 0x10);
 
             uint64_t altStorageIBP = 0;
             fn_FindComponent_Storage((void*)cBuilding, &altStorageIBP);
 
-            fn_InternalBasePtr_CheckPtr(&altStorageIBP);
             uintptr_t altSC = *(uintptr_t*)&altStorageIBP;
             int altMax = *(int*)(altSC + 0x38);
 
-            fn_InternalBasePtr_CheckPtr(&altStorageIBP);
             altSC = *(uintptr_t*)&altStorageIBP;
             int altCurrent = fn_StorageComponent_QueryCount((void*)altSC);
 
@@ -260,7 +242,6 @@ found_dest_storage:
 
         if (availCount == 0) {
             // No capacity available, transition to long-term plan
-            fn_InternalBasePtr_CheckPtr(citizenAI);
             fn_CitizenAI_LongTermPlan(*(void**)citizenAI);
             return 2;
         }
@@ -302,7 +283,6 @@ found_dest_storage:
                 return 1;
             }
             dbgBranch = 0;
-            fn_InternalBasePtr_CheckPtr(&positionIBP);
             fn_Entity_GetPosition((void*)*(uintptr_t*)&positionIBP,
                                   &destPos, 0, 0, nullptr);
             destCell = WorldToCell(destPos[0], destPos[1], gridSize);
@@ -311,7 +291,6 @@ found_dest_storage:
             dbgBranch = 1;
             destCell = WorldToCell(searchPos[0], searchPos[1], gridSize);
 
-            fn_InternalBasePtr_CheckPtr(&unknownCompIBP);
             void* unkComp = *(void**)&unknownCompIBP;
             int slotIdx = fn_Storage_FindSlot(unkComp, destCell, (float*)&destPos, workTypeId);
             dbgSlot = slotIdx;
@@ -321,7 +300,6 @@ found_dest_storage:
         }
 
         // Validate the work assignment
-        fn_InternalBasePtr_CheckPtr(citizenAI);
         void* citizenVal = *(void**)citizenAI;
 
         if (!fn_Work_ValidateAssignment(self, citizenAI, destCell, srcCell, time)) {
@@ -341,7 +319,6 @@ found_dest_storage:
                                 (int64_t)itemEntity, availCount, pathFlags, 0, 1, 0, 0);
 
         // Get the Slot10 result (vtable +0x50)
-        fn_InternalBasePtr_CheckPtr(citizenAI);
         uintptr_t citizenPtr = *(uintptr_t*)citizenAI;
 
         typedef void* (*fn_Slot10_t)(void* self, void* entityIBPOut);
@@ -480,12 +457,10 @@ phase2:
             uint64_t key = *(uint64_t*)removeList[i];
 
             while (searchNode != 0) {
-                fn_InternalBasePtr_CheckPtr((void*)searchNode);
                 uint64_t nodeKey = *(uint64_t*)searchNode;
                 if (key < nodeKey) {
                     searchNode = *(uintptr_t*)(searchNode + 0x10);
                 } else {
-                    fn_InternalBasePtr_CheckPtr(removeList + i);
                     if (key <= nodeKey) {
                         // Found it, remove
                         fn_BST_Remove(bstRoot, (void*)searchNode);
@@ -616,11 +591,9 @@ void ClearStorage_CancelAll_Impl(ClearStorage* self) {
         }
 
         // Resolve the citizen entity from the BST node
-        fn_InternalBasePtr_CheckPtr(leftmost);
         uintptr_t citizenEntity = *(uintptr_t*)leftmost;
 
         // Navigate to state machine component (+0x278) and cancel its action list (+0x48)
-        fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
         s_fn_TaskCancel((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
     }
 }

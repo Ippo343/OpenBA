@@ -1646,7 +1646,6 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
             if (scenario && fn_IsDerivedFrom && s_AchievementTypeId)
                 checked = fn_IsDerivedFrom(scenario, *s_AchievementTypeId) ? scenario : nullptr;
 
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(p + 0x150));
             void* inst = *(void**)(p + 0x150);
             fprintf(stderr, "[GUL::Load] step32 achievementId=%d instance=%p scenario=%p "
                             "derived=%p achTid=%u\n",

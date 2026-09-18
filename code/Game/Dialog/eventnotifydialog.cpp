@@ -611,7 +611,6 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
     // Parent dialog is stored as InternalBasePtr at self+0xB8.
     // CheckPtr validates the InternalBasePtr, then dereference to get the DialogInstance*.
     // DialogInstance::GetRoot() is equivalent to reading *(void**)(dlg + 0x50).
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xB8));
     void* parentDlg  = *(void**)(s + 0xB8);
     if (!parentDlg) return;
     void* parentRoot = *(void**)((uintptr_t)parentDlg + 0x50);
@@ -643,7 +642,6 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
 
     // Apply as top padding on self root: floor(smoothedY + 0.5f)
     // DAT_140172114 = 0.5f (rounding)
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x50));
     fn_Element_SetPadding(selfRoot, 0, (int)(smoothedY + 0.5f), 0, 2);
 
     // -------------------------------------------------------
@@ -656,7 +654,6 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
     uintptr_t eventArray  = *(uintptr_t*)(eventLogPtr + 0x18);
     if (!eventArray) return;
 
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xE8));
     void* ribbonElem = *(void**)(s + 0xE8);
     if (ribbonElem) fn_Element_SetFlagsOnOff(ribbonElem, 0, 1);  // clear flag 1 = show
 
@@ -687,12 +684,10 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
         *(uint64_t*)(sprite + 8)  = *(uint64_t*)(activeEntry + 0x18);
 
         // Set icon sprite on image element
-        fn_InternalBasePtr_CheckPtr(&imageElem);
         fn_ImageElement_SetSprite(imageElem, sprite);
 
         // Get child[4] of button element — may be an ImageElement for embedded icon
         uint8_t childBuf[16];
-        fn_InternalBasePtr_CheckPtr(&buttonElem);
         void* child4 = *(void**)fn_Element_Child(buttonElem, childBuf, 4);
 
         // Check if child4 is an ImageElement; if so, copy sprite to it as well
@@ -707,7 +702,6 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
             uint8_t sprite2[16];
             *(uint64_t*)(sprite2 + 0) = *(uint64_t*)(activeEntry + 0x10);
             *(uint64_t*)(sprite2 + 8) = *(uint64_t*)(activeEntry + 0x18);
-            fn_InternalBasePtr_CheckPtr(imgChildPtr);
             // SetSprite on imgChild (only if non-null after CheckPtr)
             void* imgElemResolved = *(void**)imgChildPtr;
             if (imgElemResolved) {
@@ -719,8 +713,6 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
         int popupField = *(int*)(eventArray + (uintptr_t)eventIndex * 0x28 + 0x18);
         bool noPopup   = (popupField < 0);
 
-        fn_InternalBasePtr_CheckPtr(&buttonElem);
-        fn_InternalBasePtr_CheckPtr(&imageElem);
         if (noPopup) {
             // No popup: hide button, show image
             fn_Element_SetFlagsOnOff(buttonElem, 1, 0);  // set flag 1 = hide
@@ -739,13 +731,11 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
         // vtable[11] = vtable offset 0x58 = GetController / GetPressColor sub-object.
         // vtable[10] = vtable offset 0x50 = SetColor(uint32_t).
         {
-            fn_InternalBasePtr_CheckPtr(&buttonElem);
             uintptr_t* btnVtable = *(uintptr_t**)buttonElem;
             typedef void* (*GetController_t)(void* self, void* retBuf);
             GetController_t getCtrl = (GetController_t)(btnVtable[0x58 / 8]);
             uint8_t ctrlBuf[16];
             void* ctrl = getCtrl(buttonElem, ctrlBuf);
-            fn_InternalBasePtr_CheckPtr(ctrl);
             void* ctrlResolved = *(void**)ctrl;
             if (ctrlResolved) {
                 uintptr_t* ctrlVtable = *(uintptr_t**)ctrlResolved;
@@ -757,10 +747,8 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
         // Also set color on each of the 4 children of the button element.
         // Each child's SetColor is at vtable offset 0x50.
         for (int c = 0; c < 4; c++) {
-            fn_InternalBasePtr_CheckPtr(&buttonElem);
             uint8_t kidBuf[16];
             void* kid = *(void**)fn_Element_Child(buttonElem, kidBuf, c);
-            fn_InternalBasePtr_CheckPtr(&kid);
             void* kidResolved = *(void**)&kid;
             if (!kidResolved) continue;
             uintptr_t* kidVtable = *(uintptr_t**)kidResolved;
@@ -770,7 +758,6 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
 
         // Copy event text string to the group element's embedded string at +0x58.
         // activeEntry+0x20 = System::String (display text).
-        fn_InternalBasePtr_CheckPtr(&groupElem);
         {
             void* groupResolved = groupElem;
             // B.3.1 bridge: raw exe-struct SystemString fields, not owned here.
@@ -791,13 +778,11 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
 
         // Reset button controller color to 0xFFFFFFFF (white = no tint)
         {
-            fn_InternalBasePtr_CheckPtr(&buttonElem);
             uintptr_t* btnVtable = *(uintptr_t**)buttonElem;
             typedef void* (*GetController_t)(void* self, void* retBuf);
             GetController_t getCtrl = (GetController_t)(btnVtable[0x58 / 8]);
             uint8_t ctrlBuf[16];
             void* ctrl = getCtrl(buttonElem, ctrlBuf);
-            fn_InternalBasePtr_CheckPtr(ctrl);
             void* ctrlResolved = *(void**)ctrl;
             if (ctrlResolved) {
                 uintptr_t* ctrlVtable = *(uintptr_t**)ctrlResolved;
@@ -808,7 +793,6 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
 
         // Also reset color on button element itself (direct vtable[10] call)
         {
-            fn_InternalBasePtr_CheckPtr(&buttonElem);
             uintptr_t* btnVtable = *(uintptr_t**)buttonElem;
             typedef void (*SetColor_t)(void* self, uint32_t c);
             ((SetColor_t)(btnVtable[0x50 / 8]))(buttonElem, 0xFFFFFFFFu);
@@ -816,7 +800,6 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
 
         // Clear group element's embedded string at +0x58 (assign null = empty string)
         {
-            fn_InternalBasePtr_CheckPtr(&groupElem);
             void* groupResolved = groupElem;
             // B.3.1 bridge: raw exe-struct SystemString field, not owned here.
             System::String& groupStr = *reinterpret_cast<System::String*>((uintptr_t)groupResolved + 0x58);
@@ -825,9 +808,7 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
 
         // Show image element (clear flag 1), hide button element (set flag 1).
         // Empty image slots display nothing (no sprite set); button hidden to prevent clicks.
-        fn_InternalBasePtr_CheckPtr(&imageElem);
         fn_Element_SetFlagsOnOff(imageElem,  0, 1);  // clear flag = show
-        fn_InternalBasePtr_CheckPtr(&buttonElem);
         fn_Element_SetFlagsOnOff(buttonElem, 1, 0);  // set flag = hide
     }
 }

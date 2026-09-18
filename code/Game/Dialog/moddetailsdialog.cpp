@@ -60,7 +60,6 @@ static void* FindElem(void* dialog, const char* name) {
     System::String nameStr(name);
     uint8_t retval[16];
     fn_DialogInstance_FindElement(dialog, retval, &nameStr);
-    fn_InternalBasePtr_CheckPtr(retval);
     return *(void**)retval;
 }
 

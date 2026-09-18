@@ -155,9 +155,6 @@ int TutorialGoalButton_Check(void* self) {
     }
 
     // CheckPtr on the found element
-    if (fn_InternalBasePtr_CheckPtr) {
-        fn_InternalBasePtr_CheckPtr(&elementIBP);
-    }
 
     // Check if element IsDerivedFrom Object::Internal
     uintptr_t element = elementIBP;
@@ -181,9 +178,6 @@ int TutorialGoalButton_Check(void* self) {
 
     // Read flags from element+0x34
     bool invertCheck = *(uint8_t*)(s + 0x28) != 0;
-    if (fn_InternalBasePtr_CheckPtr) {
-        fn_InternalBasePtr_CheckPtr(&wrappedIBP);
-    }
 
     uintptr_t elem = wrappedIBP;
     uint32_t flags = *(uint32_t*)(elem + 0x34);

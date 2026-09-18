@@ -333,7 +333,7 @@ bool ForesterWork_ResolveFuncs() {
               s_fn_BSTRemove && s_fn_BSTFindRemove &&
               s_fn_CancelAllWork && s_fn_FindSubEntity && s_fn_TreeNodeCleanup &&
               s_vtable_ForesterWork &&
-              fn_InternalBasePtr_CheckPtr && fn_InternalBasePtr_Ctor &&
+              fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom && g_pGameWorldSingleton &&
               s_typeId_WorkplaceComponent && s_typeId_RadiusComponent &&
               s_typeId_MaterialComponent && s_typeId_NatResComponent &&
@@ -439,13 +439,11 @@ static void* FindComponentInList(uintptr_t entity, uint32_t typeId) {
     uintptr_t arr = *(uintptr_t*)(entity + 0x30);
     for (int i = 0; i < count; i++) {
         uintptr_t* ibpPtr = (uintptr_t*)(arr + (uintptr_t)i * 8);
-        fn_InternalBasePtr_CheckPtr(ibpPtr);
         uintptr_t obj = *ibpPtr;
         uintptr_t vtable = *(uintptr_t*)obj;
         typedef uint32_t (*GetTypeId_t)();
         auto getTypeId = *(GetTypeId_t*)(vtable + 0x10);
         if (getTypeId() == typeId) {
-            fn_InternalBasePtr_CheckPtr(ibpPtr);
             void* comp = (void*)*ibpPtr;
             if (fn_IsDerivedFrom(comp, typeId)) {
                 return comp;
@@ -486,7 +484,6 @@ static void* FindSubComponentInList(uintptr_t subObj, uint32_t typeId) {
 // Sets entity flags, stores priority, registers work with citizen AI.
 // ============================================================
 static void AssignWorkToEntity(ForesterWork* self, void* citizenIBP, int priority) {
-    fn_InternalBasePtr_CheckPtr(citizenIBP);
     uintptr_t citizen = *(uintptr_t*)citizenIBP;
 
     // Call vtable slot +0x50 (GetWorkEntity) on self
@@ -560,12 +557,10 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
     // -------------------------------------------------------
 
     // Get material description from workplace entity (self+0x10)
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t matDescIBP = 0;
     s_fn_FindComp_MatDesc(selfQ[2], &matDescIBP);
 
     // Find WorkplaceComponent on workplace entity
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t entity = selfQ[2];
     void* workplaceComp = FindComponentInList(entity, *s_typeId_WorkplaceComponent);
 
@@ -575,7 +570,6 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
         reinterpret_cast<RtObject::Internal*>(workplaceComp));   // B.3.3 bridge
 
     // Get RadiusComponent from workplace description (+0x18)
-    fn_InternalBasePtr_CheckPtr(&workplaceIBP);
     void* workplaceDesc = *(void**)(workplaceIBP + 0x18);
     void* radiusComp = nullptr;
     if (fn_IsDerivedFrom(workplaceDesc, *s_typeId_RadiusComponent)) {
@@ -583,7 +577,6 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
     }
 
     // Find MaterialComponent on workplace's sub-object (+0x28)
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t entitySub = *(uintptr_t*)(selfQ[2] + 0x28);
     void* materialComp = FindSubComponentInList(entitySub, *s_typeId_MaterialComponent);
 
@@ -598,15 +591,12 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
     bool atCapacity = *(int*)(resEntry + 8) <= *(int*)(resEntry);
 
     // Set mesh visibility based on capacity (visGroup 2)
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t meshIBP[2] = {0};
     s_fn_FindComp_MeshInstance(selfQ[2], meshIBP);
-    fn_InternalBasePtr_CheckPtr(meshIBP);
     s_fn_MeshInstance_SetVisible((void*)(*(uintptr_t*)meshIBP), 2, atCapacity ? 1 : 0);
 
     // Get tree count (self+0x50 as int from qword at offset 10)
     int treeCount = (int)selfQ[10]; // self->_field50
-    fn_InternalBasePtr_CheckPtr(&matDescIBP);
 
     // If material description count is 0, calculate it
     if (*(int*)(matDescIBP + 0x30) == 0) {
@@ -642,13 +632,10 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
     s_fn_FindComp_NatResDesc(matDescCompRef, &natResDesc);
 
     // Get citizen's current position from citizen entity
-    fn_InternalBasePtr_CheckPtr(citizenIBP);
     uintptr_t citizenEntity = *(uintptr_t*)citizenIBP;
 
     // Navigate: citizen -> +0x278 -> CheckPtr -> deref -> +0x68 -> CheckPtr -> deref
-    fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
     uintptr_t aiComp = *(uintptr_t*)(citizenEntity + 0x278);
-    fn_InternalBasePtr_CheckPtr((void*)(aiComp + 0x68));
     uintptr_t posComp = *(uintptr_t*)(aiComp + 0x68);
 
     int mapSz = *mapGrid;
@@ -750,7 +737,6 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
                 // -------------------------------------------------------
                 // Branch: Check workplace flags for cut vs plant
                 // -------------------------------------------------------
-                fn_InternalBasePtr_CheckPtr(&workplaceIBP);
                 // PORT-BUG FIX: the original (0x1400eaec0) enters PLANT only when the
                 // ForesterComponent's plant-enabled flag (+0x50) is NON-zero and the cell
                 // is empty:  else-branch of `if (cmp[0x50]==0 || resource!=0)` ==
@@ -821,7 +807,6 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
                     // CUT PATH: cell has a resource, check if we can cut it
 
                     // Find NaturalResourceComponent on the resource entity
-                    fn_InternalBasePtr_CheckPtr(&resourceEntity);
                     uintptr_t natResCompIBP[4] = {0};
                     s_fn_FindComp_NatRes(resourceEntity, natResCompIBP);
 
@@ -831,11 +816,9 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
                         uintptr_t resEntry2 = resourceTable + (uintptr_t)matIdx2 * 0x20;
                         if (*(int*)(resEntry2) < *(int*)(resEntry2 + 8)) {
                             // Find NaturalResourceDescription on the resource
-                            fn_InternalBasePtr_CheckPtr(&resourceEntity);
                             uintptr_t natResCompIBP2[4] = {0};
                             s_fn_FindComp_NatRes(resourceEntity, natResCompIBP2);
 
-                            fn_InternalBasePtr_CheckPtr(natResCompIBP2);
                             void* natResDescObj = *(void**)(*(uintptr_t*)natResCompIBP2 + 0x18);
                             void* natResDescFound = nullptr;
                             if (fn_IsDerivedFrom(natResDescObj, *s_typeId_NatResDescription)) {
@@ -855,12 +838,10 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
                             if ((resFlags >> 13) & 1) goto next_attempt;
 
                             // Check growth is sufficient (>= g_fUVScale threshold)
-                            fn_InternalBasePtr_CheckPtr(natResCompIBP2);
                             float growth = *(float*)(*(uintptr_t*)natResCompIBP2 + 0x28);
                             if (growth < fGrowthThreshold) goto next_attempt;
 
                             // Check bit 20 of +0x20 = "flagged for removal"
-                            fn_InternalBasePtr_CheckPtr(natResCompIBP2);
                             uint32_t flags20 = *(uint32_t*)(*(uintptr_t*)natResCompIBP2 + 0x20);
                             if ((flags20 >> 20) & 1) goto next_attempt;
 
@@ -960,21 +941,17 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
 
     if (failCount > maxAttempts) {
         // Too many failures — check if citizen's storage has items, then replan
-        fn_InternalBasePtr_CheckPtr(citizenIBP);
         uintptr_t citizenEnt = *(uintptr_t*)citizenIBP;
 
-        fn_InternalBasePtr_CheckPtr((void*)(citizenEnt + 0x10));
         uintptr_t storageIBP[2] = {0};
         s_fn_FindComp_Storage(*(uintptr_t*)(citizenEnt + 0x10), storageIBP);
 
-        fn_InternalBasePtr_CheckPtr(storageIBP);
         int storageCount = s_fn_StorageQueryCount((void*)*(uintptr_t*)storageIBP);
         if (storageCount < 1) {
             return 0;
         }
 
         // Citizen has items in storage — replan long term
-        fn_InternalBasePtr_CheckPtr(citizenIBP);
         s_fn_CitizenAI_LongTermPlan(*(void**)citizenIBP);
     }
     else {
@@ -985,7 +962,6 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
 
         // Assign work (idle animation) and register with AI
         int priority = (int)selfQ[4];
-        fn_InternalBasePtr_CheckPtr(citizenIBP);
         uintptr_t citizenEnt2 = *(uintptr_t*)citizenIBP;
 
         // Call vtable slot +0x50 (GetWorkEntity)
@@ -1137,11 +1113,9 @@ int ForesterWork_Slot8_Impl(ForesterWork* self) {
         }
 
         // Cancel the work item: get citizen entity from node key
-        fn_InternalBasePtr_CheckPtr(leftmost);
         uintptr_t citizenEntity = *(uintptr_t*)leftmost;
 
         // Navigate to citizen AI subsystem and cancel
-        fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
         s_fn_CancelAllWork((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
 
         count = *(int*)(selfAddr + 0x50);
@@ -1245,12 +1219,10 @@ int ForesterWork_Slot9_Impl(ForesterWork* self, void* param2) {
             void* treeNode = *bstRootPtr;
 
             while (treeNode != nullptr) {
-                fn_InternalBasePtr_CheckPtr(treeNode);
                 uintptr_t nodeKey = *(uintptr_t*)treeNode;
                 if (searchKey < nodeKey) {
                     treeNode = *(void**)((uintptr_t)treeNode + 0x10);
                 } else {
-                    fn_InternalBasePtr_CheckPtr(&removeArr[i]);
                     if (searchKey <= nodeKey) {
                         // Found -- remove this node
                         s_fn_BSTRemove(bstRootPtr, treeNode);
@@ -1276,13 +1248,11 @@ int ForesterWork_Slot9_Impl(ForesterWork* self, void* param2) {
 void* ForesterWork_Slot10_Impl(ForesterWork* self, void* outPtr) {
     uintptr_t selfAddr = (uintptr_t)self;
 
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
 
     uintptr_t subIBP[2] = {0};
     void* result = s_fn_FindSubEntity(entityRef, subIBP);
 
-    fn_InternalBasePtr_CheckPtr(result);
 
     uintptr_t resolvedEntity = *(uintptr_t*)result;
     *(uintptr_t*)outPtr = *(uintptr_t*)(resolvedEntity + 0x48);

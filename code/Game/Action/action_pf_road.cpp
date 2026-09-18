@@ -637,12 +637,10 @@ void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float
             int64_t off = 0;
             do {
                 int64_t* node = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(s + 0x28) + off);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(node);
                 int n = s_fn_PosCount ? s_fn_PosCount(*node, p3) : 0;
                 if (local_68 <= p4 && p4 < n + local_68) {
                     int64_t* node2 = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(s + 0x28) +
                                                                 static_cast<int64_t>(i) * 8);
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(node2);
                     if (s_fn_EntityResolvePos)
                         s_fn_EntityResolvePos(reinterpret_cast<void*>(*node2), retVec3, p3, p4 - local_68, p5);
                     return retVec3;
@@ -656,7 +654,6 @@ void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float
         return retVec3;
     }
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x10));
     uintptr_t ibp = 0;   // local_res8 (object pointer after ClearPathQueue)
     if (s_fn_ClearPathQueue) s_fn_ClearPathQueue(*reinterpret_cast<int64_t*>(s + 0x10), &ibp);
     // [M-D SCOPED FALLBACK] "ClearPathQueue" = the shared ModelComponent finder
@@ -704,7 +701,6 @@ void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float
     static const Math::Vector3 kZero3(0, 0, 0);
 
     if (p5 != nullptr) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ibp);
         // local_50..local_38 = 7 dwords copied from obj+0x148 (a Math::Transform)
         Math::Transform xform = *reinterpret_cast<const Math::Transform*>(ibp + 0x148);   // B.3.1 bridge
         // local_60 (Vector3 out) = quaternion.Rotate(node.dir)
@@ -714,7 +710,6 @@ void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float
         *p5 = h;
     }
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ibp);
     Math::Transform xform2 = *reinterpret_cast<const Math::Transform*>(ibp + 0x148);       // B.3.1 bridge
     *reinterpret_cast<Math::Vector3*>(retVec3) =
         xform2 * (node ? *reinterpret_cast<const Math::Vector3*>(node) : kZero3);          // B.3.1 bridge
@@ -732,15 +727,12 @@ int Pf_PickReachableCell_edb0(int64_t param_1, uint32_t param_2, float* param_3)
     EnsureInit();
     int* mapGrid = *reinterpret_cast<int**>(GameWorld() + 0xf8);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(param_1 + 0x10));
     uintptr_t posIBP = 0;   // local_res8
     if (s_fn_FindCompPos) s_fn_FindCompPos(*reinterpret_cast<int64_t*>(param_1 + 0x10), &posIBP);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&posIBP);
     uint32_t cnt = s_fn_PosCount ? static_cast<uint32_t>(s_fn_PosCount(posIBP, 0)) : 0;
     uint32_t rnd = s_fn_RandomRand ? s_fn_RandomRand(*reinterpret_cast<void**>(GameWorld() + 0xd8), cnt) : 0;
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&posIBP);
     float pos[3] = {0, 0, 0};   // local_28/24/20
     if (s_fn_EntityResolvePos)
         s_fn_EntityResolvePos(reinterpret_cast<void*>(posIBP), pos, 0, static_cast<int>(rnd), nullptr);
@@ -774,7 +766,6 @@ int Pf_EntityAnchorCell_7fb0(void* param_1IBP, float* param_2) {
     int iVar4 = -1;
 
     int64_t rawAnchorEntity = *reinterpret_cast<int64_t*>(param_1IBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_1IBP);
     int64_t resolvedAnchorEntity = *reinterpret_cast<int64_t*>(param_1IBP);
     // DIAGNOSTIC (BUILDCTRL builder-employment crash): retail Entity_impl_7fb0 derefs
     // *param_1 unconditionally, so a null/dead entity here is always a crash — meaning
@@ -800,17 +791,13 @@ int Pf_EntityAnchorCell_7fb0(void* param_1IBP, float* param_2) {
 
     bool handled = false;
     if (posIBP != 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&posIBP);
         int n = s_fn_PosCount ? s_fn_PosCount(posIBP, 0) : 0;
         if (0 < n) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&posIBP);
             int n2 = s_fn_PosCount ? s_fn_PosCount(posIBP, 0) : 0;
             if (1 < n2) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&posIBP);
                 uint32_t n3 = s_fn_PosCount ? static_cast<uint32_t>(s_fn_PosCount(posIBP, 0)) : 0;
                 if (s_fn_RandomRand) s_fn_RandomRand(*reinterpret_cast<void**>(GameWorld() + 0xd8), n3); // result discarded
             }
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&posIBP);
             float pos[3] = {0, 0, 0};   // local_28/24/20
             if (s_fn_EntityResolvePos)
                 s_fn_EntityResolvePos(reinterpret_cast<void*>(posIBP), pos, 0, 0, nullptr);
@@ -825,11 +812,9 @@ int Pf_EntityAnchorCell_7fb0(void* param_1IBP, float* param_2) {
     }
 
     if (!handled) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_1IBP);
         uintptr_t compIBP = 0;   // local_res10
         if (s_fn_FindComp4680) s_fn_FindComp4680(*reinterpret_cast<int64_t*>(param_1IBP), &compIBP);
         if (compIBP != 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&compIBP);
             int w = **reinterpret_cast<int**>(GameWorld() + 0xf8);
             int row = static_cast<int>(*reinterpret_cast<int16_t*>(compIBP + 0x2a));
             int offR = static_cast<int>(*reinterpret_cast<int16_t*>(compIBP + 0x2e)) >> 1;

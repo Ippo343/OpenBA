@@ -92,10 +92,8 @@ extern "C" void* HarvestOrchard_CtorFromEntity(void* mem, void** entityIBP) {
     *reinterpret_cast<uint64_t*>(s + 0x58) = 0;   // byte-array base
     *reinterpret_cast<uint64_t*>(s + 0x60) = 0;   // count (+0x60) + capacity (+0x64)
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
     int64_t orchardIBP = 0;
     if (s_FindOrchard) s_FindOrchard(*reinterpret_cast<int64_t*>(s + 0x10), &orchardIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&orchardIBP);
     if (!orchardIBP) return mem;      // SA: retail derefs unguarded below; a HarvestOrchard
                                       // is only ever built for an entity that has an
                                       // orchard, so this can only fire if our caller is
@@ -110,7 +108,6 @@ extern "C" void* HarvestOrchard_CtorFromEntity(void* mem, void** entityIBP) {
     // own count (+0x60) — the value the resize just produced — not the component's.
     const int n = *reinterpret_cast<int32_t*>(s + 0x60);
     for (int i = 0; i < n; ++i) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&orchardIBP);
         uint8_t* base = *reinterpret_cast<uint8_t**>(s + 0x58);
         if (!base) break;
         uintptr_t slots = *reinterpret_cast<uintptr_t*>(orchardIBP + 0x50);

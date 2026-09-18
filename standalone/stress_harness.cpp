@@ -332,13 +332,11 @@ void StaffPass(void* gw, int worldFrame) {
     int workplaces = 0, notAccepting = 0;
     for (int i = 0; i < n; ++i) {
         void** slot = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* ent = *slot;
         if (!ent) continue;
         if (*reinterpret_cast<uint32_t*>((uint8_t*)ent + 0x40) & 0x400) continue;   // removed
         uint64_t wpc = 0;
         findWPC(reinterpret_cast<int64_t>(ent), &wpc);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpc);
         if (!wpc) continue;
         const uint64_t prof = *reinterpret_cast<uint64_t*>(wpc + 0x48);
         if (!prof) continue;
@@ -348,7 +346,6 @@ void StaffPass(void* gw, int worldFrame) {
         int want = 1;
         uint64_t wc = 0;
         findWork(reinterpret_cast<int64_t>(ent), &wc);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wc);
         if (wc) {
             const uintptr_t wd = *reinterpret_cast<uintptr_t*>(wc + 0x18);   // WorkDescription
             if (wd) {

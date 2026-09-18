@@ -119,7 +119,6 @@ static void EnsureInit() {
     s_init = true;
 }
 
-static inline void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton); }
 
 // A plausible heap node pointer: non-null, not the -1 "invalid IBP" sentinel, and canonical
@@ -232,15 +231,12 @@ void Helper_sub_8000(void* param_1, void* param_2, int64_t* param_3, int64_t* pa
         if (*reinterpret_cast<int64_t*>(param_2) == 0) {
             doInsert = true;
         } else {
-            CheckPtr(reinterpret_cast<void*>(cur + 8));
             int64_t payload = *reinterpret_cast<int64_t*>(cur + 8);
             int64_t k = *reinterpret_cast<int64_t*>(payload + 0x10);
-            CheckPtr(param_2);
             if (k == *reinterpret_cast<int64_t*>(param_2)) doInsert = true;
         }
 
         if (doInsert) {
-            CheckPtr(reinterpret_cast<void*>(cur + 8));
             int64_t payload = *reinterpret_cast<int64_t*>(cur + 8);   // local_28
             int costKey = *reinterpret_cast<int*>(payload + 0x24);    // iVar6 / local_20
             bool inserted = true;   // false on duplicate (JG/JGE 0x81fc -> skip INC + rebalance)
@@ -270,16 +266,13 @@ void Helper_sub_8000(void* param_1, void* param_2, int64_t* param_3, int64_t* pa
                         // self.key <= costKey
                         if (costKey <= *reinterpret_cast<int*>(self + 8)) {
                             // equal key: tiebreak on entity field +0x20
-                            CheckPtr(reinterpret_cast<void*>(payload + 0x20));  // &local_28 deref guard
                             int iv = *reinterpret_cast<int*>(payload + 0x20);
-                            CheckPtr(reinterpret_cast<void*>(self));
                             int sv = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(self) + 0x20);
                             if (iv < sv) { descendLeft = true; }
                         }
                         if (!descendLeft) {
                             if (costKey <= *reinterpret_cast<int*>(self + 8)) {
                                 if (costKey < *reinterpret_cast<int*>(self + 8)) { inserted = false; break; }
-                                CheckPtr(reinterpret_cast<void*>(self));
                                 int sv2 = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(self) + 0x20);
                                 int iv2 = *reinterpret_cast<int*>(payload + 0x20);
                                 if (iv2 <= sv2) { inserted = false; break; }
@@ -363,11 +356,8 @@ void Helper_sub_7c90(void* param_1, void* param_2, void* param_3, int64_t* param
     void* local_res8 = param_1;
 
     // citizen model cell (clamped row*w+col) -> uVar11
-    CheckPtr(param_2);
     int64_t cz = *reinterpret_cast<int64_t*>(param_2);
-    CheckPtr(reinterpret_cast<void*>(cz + 0x278));
     int64_t ch = *reinterpret_cast<int64_t*>(cz + 0x278);
-    CheckPtr(reinterpret_cast<void*>(ch + 0x68));
     int64_t model = *reinterpret_cast<int64_t*>(ch + 0x68);
     int w = *mapGrid;
     int col = static_cast<int>(*reinterpret_cast<float*>(model + 0x158) + static_cast<float>(w >> 1));
@@ -382,14 +372,11 @@ void Helper_sub_7c90(void* param_1, void* param_2, void* param_3, int64_t* param
         if (*reinterpret_cast<int64_t*>(param_3) == 0) {
             doInsert = true;
         } else {
-            CheckPtr(reinterpret_cast<void*>(cur + 8));
             int64_t key = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(cur + 8) + 0x10);
-            CheckPtr(param_3);
             if (key == *reinterpret_cast<int64_t*>(param_3)) doInsert = true;
         }
 
         if (doInsert) {
-            CheckPtr(reinterpret_cast<void*>(cur + 8));
             uint32_t toCell = *reinterpret_cast<uint32_t*>(*reinterpret_cast<int64_t*>(cur + 8) + 0x28);
             int cost = s_f810 ? s_f810(mapGrid, fromCell, toCell, '\x01') : -1;
             if (cost < 0) {
@@ -425,16 +412,13 @@ void Helper_sub_7c90(void* param_1, void* param_2, void* param_3, int64_t* param
                     local_res8 = reinterpret_cast<void*>(self);
                     if (*reinterpret_cast<int*>(self + 8) <= costKey) {
                         if (costKey <= *reinterpret_cast<int*>(self + 8)) {
-                            CheckPtr(reinterpret_cast<void*>(payload + 0x20));
                             int iv = *reinterpret_cast<int*>(payload + 0x20);
-                            CheckPtr(reinterpret_cast<void*>(self));
                             int sv = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(self) + 0x20);
                             if (iv < sv) descendLeft = true;
                         }
                         if (!descendLeft) {
                             if (costKey <= *reinterpret_cast<int*>(self + 8)) {
                                 if (costKey < *reinterpret_cast<int*>(self + 8)) { inserted = false; break; }
-                                CheckPtr(reinterpret_cast<void*>(self));
                                 int sv2 = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(self) + 0x20);
                                 int iv2 = *reinterpret_cast<int*>(payload + 0x20);
                                 if (iv2 <= sv2) { inserted = false; break; }
@@ -515,16 +499,13 @@ uint8_t Helper_sub_7b60(int64_t param_1, void** param_2, int64_t* param_3) {
     while (*reinterpret_cast<int64_t*>(cur + 0x18) != 0) cur = *reinterpret_cast<int64_t*>(cur + 0x18);
 
     while (cur != 0) {
-        CheckPtr(reinterpret_cast<void*>(cur));
         int64_t payload = *reinterpret_cast<int64_t*>(cur);
         if (*reinterpret_cast<int*>(payload + 0x2c) != *reinterpret_cast<int*>(param_1 + 8)) {
-            CheckPtr(reinterpret_cast<void*>(cur));
             payload = *reinterpret_cast<int64_t*>(cur);
             // vtable +0x48 refresh
             void** vt = *reinterpret_cast<void***>(payload);
             typedef void (*fn48_t)(int64_t);
             reinterpret_cast<fn48_t>(vt[0x48 / 8])(payload);
-            CheckPtr(reinterpret_cast<void*>(cur));
             payload = *reinterpret_cast<int64_t*>(cur);
             int64_t citizen = reinterpret_cast<int64_t>(*param_2);  // local_res18[0] = *param_2 (citizen)
             vt = *reinterpret_cast<void***>(payload);
@@ -532,7 +513,6 @@ uint8_t Helper_sub_7b60(int64_t param_1, void** param_2, int64_t* param_3) {
             uint32_t r = reinterpret_cast<fn20_t>(vt[0x20 / 8])(payload, &citizen, param_1 + 0x130);
             if (static_cast<int>(r) == 2) return 1;
             if (static_cast<int>(r) == 1) {
-                CheckPtr(reinterpret_cast<void*>(cur));
                 *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(cur) + 0x2c) = *reinterpret_cast<int*>(param_1 + 8);
             }
         }
@@ -579,7 +559,6 @@ uint8_t Helper_sub_7b60(int64_t param_1, void** param_2, int64_t* param_3) {
 uint64_t Helper_sub_79b0(int64_t param_1, void** param_2, void** param_3, int64_t param_4,
                          char param_5, char param_6) {
     int64_t local_res20 = param_4;
-    CheckPtr(param_2);
     int64_t citizen0 = *reinterpret_cast<int64_t*>(param_2);
     int64_t gate = *reinterpret_cast<int64_t*>(citizen0 + 0x248);   // pIVar5 = *(citizen+0x248)
 
@@ -614,7 +593,6 @@ uint64_t Helper_sub_79b0(int64_t param_1, void** param_2, void** param_3, int64_
     bool tryCommon = true;
 
     if (gate != 0) {
-        CheckPtr(param_2);
         int64_t citizen = *reinterpret_cast<int64_t*>(param_2);
         if (local_res20 == *reinterpret_cast<int64_t*>(citizen + 0x1f0)) {
             // key match: build with the +0x248 gate object as the skip-key holder
@@ -668,7 +646,6 @@ uint64_t Helper_7550(int64_t param_1, void** param_2) {
     Helper_3f010(buf, 0xffffffff, 0x78);
     char allFlag = 0;        // cVar9 / R15B
 
-    CheckPtr(param_2);
     char canHouse = s_canHouse ? s_canHouse(*reinterpret_cast<void**>(param_2)) : 0;
 
     uint32_t n;  // candidate count -> Rand range
@@ -716,7 +693,6 @@ uint64_t Helper_7550(int64_t param_1, void** param_2) {
     // walk from buf[r*8] byte-by-byte until a negative (0xFF) terminator
     unsigned char* pc = buf + static_cast<int>(r) * 8;
     while (static_cast<signed char>(*pc) >= 0) {
-        CheckPtr(param_2);
         int64_t citizen = *reinterpret_cast<int64_t*>(param_2);  // local_res18[0]
         int64_t ownerKey = *reinterpret_cast<int64_t*>(citizen + 0x1f0);
 
@@ -750,7 +726,6 @@ void Helper_7830(int64_t param_1, void** param_2) {
     int64_t homeRoot = *reinterpret_cast<int64_t*>(GW() + 0xb0);
     uint64_t homeKey = *reinterpret_cast<uint64_t*>(homeRoot + 0x30);
 
-    CheckPtr(param_2);
     uint64_t ownerKey = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_2) + 0x1f0);
 
     // (1) probe the param_1+0x120 BST for ownerKey
@@ -813,9 +788,7 @@ void Helper_7830(int64_t param_1, void** param_2) {
 // return expression shared by both handlers:
 //   CONCAT71(citizen>>8, 0 < *(int*)(*(citizen+0x278) + 0x60) + 1)
 static uint64_t HandlerEpilogue(int64_t param_1) {
-    CheckPtr(reinterpret_cast<void*>(param_1 + 0x38));
     int64_t citizen = *reinterpret_cast<int64_t*>(param_1 + 0x38);
-    CheckPtr(reinterpret_cast<void*>(citizen + 0x278));
     int64_t ch = *reinterpret_cast<int64_t*>(citizen + 0x278);
     int truth = (0 < *reinterpret_cast<int*>(ch + 0x60) + 1) ? 1 : 0;
     return (static_cast<uint64_t>(ch) & 0xffffffffffffff00ULL) | static_cast<uint64_t>(truth);

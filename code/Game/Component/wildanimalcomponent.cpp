@@ -56,10 +56,6 @@ static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
 typedef void (*fn_EraseFromComponentList_t)(void* listBase, void* ibpPtr);
 static fn_EraseFromComponentList_t s_fn_EraseFromComponentList = nullptr;
 
-// Object::InternalBasePtr::CheckPtr
-typedef void (*fn_CheckPtr_t)(void* ptrField);
-static fn_CheckPtr_t s_fn_CheckPtr = nullptr;
-
 // Object::InternalBasePtr::Ctor(retbuf, rawPtr) -- creates IBP from raw pointer
 typedef void (*fn_IBP_Ctor_t)(void* retbuf, void* rawPtr);
 static fn_IBP_Ctor_t s_fn_IBP_Ctor = nullptr;
@@ -97,10 +93,6 @@ static void EnsureHelpers() {
     // 2026-08-28), otherwise a silent mis-read that desynced the stream.
     s_fn_IBP_Serialize = reinterpret_cast<fn_IBP_Serialize_t>(
         reinterpret_cast<uintptr_t>(fn_InternalBasePtr_Serialize));
-
-    // CheckPtr -- Runtime
-    s_fn_CheckPtr = reinterpret_cast<fn_CheckPtr_t>(
-        ResolveAddr(Module::Runtime, 0x1800c0290));
 
     // InternalBasePtr::Ctor -- global
     s_fn_IBP_Ctor = reinterpret_cast<fn_IBP_Ctor_t>(
@@ -208,9 +200,6 @@ void WildAnimalComponent_OnRemove(WildAnimalComponent* self) {
         }
 
         // CheckPtr on entity reference
-        if (s_fn_CheckPtr) {
-            s_fn_CheckPtr(reinterpret_cast<uint8_t*>(self) + 0x28);
-        }
 
         // Erase self from the herd entity's component list at entity+0x38
         if (s_fn_EraseFromComponentList) {

@@ -110,9 +110,6 @@ void* EditTool_Dtor_Impl(EditTool* self, uint32_t flags) {
 // Original: 0x1400fd290
 bool EditTool_IsSelectedEntity(EditTool* self, uint64_t* entityRef) {
     // CheckPtr on self->lastEntityRef to resolve lazy/weak pointers
-    if (fn_InternalBasePtr_CheckPtr) {
-        fn_InternalBasePtr_CheckPtr((void*)&self->lastEntityRef);
-    }
 
     // Compare: does *entityRef match self->lastEntityRef?
     return *entityRef == self->lastEntityRef;
@@ -193,10 +190,6 @@ static fn_IsDerived_t s_fn_IsDerived = nullptr;
 typedef void* (*fn_IBPCtor_t)(void* self, void* internal);
 static fn_IBPCtor_t s_fn_IBPCtor = nullptr;
 
-// InternalBasePtr::CheckPtr — IAT dispatch slot [0x140152ab0]
-typedef void (*fn_CheckPtr_t)(void* self);
-static fn_CheckPtr_t s_fn_CheckPtr = nullptr;
-
 // Element::GetPaddedSize — IAT dispatch slot [0x140152750]
 typedef void (*fn_GetPaddedSize_t)(void* element, int* outWidth, int* outHeight);
 static fn_GetPaddedSize_t s_fn_GetPaddedSize = nullptr;
@@ -226,7 +219,6 @@ static void EnsureEditFuncs() {
     };
 
     // IAT slots
-    s_fn_CheckPtr         = (fn_CheckPtr_t)resolveIAT(0x140152ab0);
     s_fn_GetController    = (fn_GetController_t)resolveIAT(0x140151768);
     s_fn_IsDerived        = (fn_IsDerived_t)resolveIAT(0x140152a98);
     s_fn_IBPCtor          = (fn_IBPCtor_t)resolveIAT(0x140152a90);
@@ -256,8 +248,6 @@ static void EnsureEditFuncs() {
     // returns before ever picking). Fall back to the engine_funcs pointers, which ARE
     // resolved by mangled export name from Runtime-x64.dll and work in standalone (the same
     // ones placement/utility use). Only override when the slot came back null.
-    if (!s_fn_CheckPtr && fn_InternalBasePtr_CheckPtr)
-        s_fn_CheckPtr = (fn_CheckPtr_t)fn_InternalBasePtr_CheckPtr;
     if (!s_fn_GetController && fn_DialogInstance_GetController)
         s_fn_GetController = (fn_GetController_t)fn_DialogInstance_GetController;
     if (!s_fn_IsDerived && fn_IsDerivedFrom)
@@ -347,7 +337,6 @@ static bool TryProjectEntityModelPos(uintptr_t entityObj, float* outX, float* ou
     uintptr_t arr = *(uintptr_t*)(entityObj + 0x30);
     for (int i = 0; i < count; i++) {
         uint64_t* slot = (uint64_t*)(arr + (int64_t)i * 8);
-        if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
         void* comp = *(void**)slot;
         if (!comp) continue;
         typedef uint32_t (*GetTid_t)(void*);
@@ -419,7 +408,6 @@ void EditTool_CloseInfoDialog(EditTool* self, uintptr_t dialogPtr) {
         uintptr_t ctrl = 0;
         s_fn_GetController((void*)dialogPtr, &ctrl, *s_pTypeId_ToolUI);
         if (ctrl != 0) {
-            if (s_fn_CheckPtr) s_fn_CheckPtr(&ctrl);
             if (s_fn_IsDerived && s_fn_IsDerived((void*)ctrl, *s_pTypeId_ToolUI)) {
                 if (*(char*)(ctrl + 0x40) != 0) return;   // pinned -> leave it open
             }
@@ -470,7 +458,6 @@ void EditTool_Startup_Impl(EditTool* self) {
     void* entityIBP = (void*)&self->entityRef;  // &self+0x28
 
     // Resolve lazy/weak pointer
-    if (s_fn_CheckPtr) s_fn_CheckPtr(entityIBP);
 
     // If the referenced info dialog was destroyed while this EditTool kept its
     // selection — in standalone the panel's close (ToolUI CloseDialog) does NOT tear
@@ -501,7 +488,6 @@ void EditTool_Startup_Impl(EditTool* self) {
     if (s_fn_GetController && s_pTypeId_ToolUI) {
         s_fn_GetController((void*)dialogPtr, &controllerResult, *s_pTypeId_ToolUI);
         if (controllerResult != 0) {
-            if (s_fn_CheckPtr) s_fn_CheckPtr(&controllerResult);
             void* ctrObj = (void*)controllerResult;
             if (s_fn_IsDerived && s_fn_IsDerived(ctrObj, *s_pTypeId_ToolUI)) {
                 toolUIObj = controllerResult;
@@ -514,7 +500,6 @@ void EditTool_Startup_Impl(EditTool* self) {
     if (s_fn_IBPCtor) s_fn_IBPCtor(&toolUIIBP, (void*)toolUIObj);
 
     // Get PageToggleUI controller from the same dialog
-    if (s_fn_CheckPtr) s_fn_CheckPtr(entityIBP);
     dialogPtr = *(uintptr_t*)entityIBP;
     controllerResult = 0;
     uintptr_t pageToggleObj = 0;
@@ -522,7 +507,6 @@ void EditTool_Startup_Impl(EditTool* self) {
     if (s_fn_GetController && s_pTypeId_PageToggleUI) {
         s_fn_GetController((void*)dialogPtr, &controllerResult, *s_pTypeId_PageToggleUI);
         if (controllerResult != 0) {
-            if (s_fn_CheckPtr) s_fn_CheckPtr(&controllerResult);
             void* ctrObj = (void*)controllerResult;
             if (s_fn_IsDerived && s_fn_IsDerived(ctrObj, *s_pTypeId_PageToggleUI)) {
                 pageToggleObj = controllerResult;
@@ -549,7 +533,6 @@ void EditTool_Startup_Impl(EditTool* self) {
     }
 
     // Check ToolUI controller flag at +0x40
-    if (s_fn_CheckPtr) s_fn_CheckPtr(&toolUIIBP);
     if (*(char*)(toolUIIBP + 0x40) != 0) {
         // Flag is set — skip positioning
         REPO_DIAG("[Repos] BAIL: toolUI+0x40 pinned flag set\n");
@@ -577,7 +560,6 @@ void EditTool_Startup_Impl(EditTool* self) {
     if (s_fn_RectangleCtor) s_fn_RectangleCtor(rectangle);
 
     // Get entity reference from PageToggleUI controller at +0x30
-    if (s_fn_CheckPtr) s_fn_CheckPtr(&pageToggleIBP);
     uintptr_t entityObj = *(uintptr_t*)(pageToggleIBP + 0x30);
 
     // Get entity's screen bounding rectangle
@@ -620,13 +602,11 @@ void EditTool_Startup_Impl(EditTool* self) {
     }
 
     // Get dialog root element and its padded size
-    if (s_fn_CheckPtr) s_fn_CheckPtr(entityIBP);
     dialogPtr = *(uintptr_t*)entityIBP;
     void* rootIBPPtr = nullptr;
     uintptr_t rootRetbuf = 0;  // InternalPtr<Element> return-by-value buffer
     if (s_fn_GetRoot) { s_fn_GetRoot((void*)dialogPtr, &rootRetbuf); rootIBPPtr = &rootRetbuf; }
 
-    if (s_fn_CheckPtr && rootIBPPtr) s_fn_CheckPtr(rootIBPPtr);
 
     int dialogWidth = 0, dialogHeight = 0;
     uintptr_t rootElement = rootIBPPtr ? *(uintptr_t*)rootIBPPtr : 0;
@@ -661,7 +641,6 @@ void EditTool_Startup_Impl(EditTool* self) {
     int posY = (int)vec2.y - dialogHeight;
 
     // Get UI scale factor from dialog's UI instance
-    if (s_fn_CheckPtr) s_fn_CheckPtr(entityIBP);
     dialogPtr = *(uintptr_t*)entityIBP;
     // dialog+0x10 = UI instance, UI+0xdc = scale factor
     float uiScale = *(float*)(*(uintptr_t*)(dialogPtr + 0x10) + 0xdc);
@@ -689,7 +668,6 @@ void EditTool_Startup_Impl(EditTool* self) {
         }
     }
 
-    if (s_fn_CheckPtr) s_fn_CheckPtr(entityIBP);
     dialogPtr = *(uintptr_t*)entityIBP;
     REPO_DIAG("[Repos] SETPOS midX=%.1f rectTop=%.1f dlgW=%d dlgH=%d uiScale=%.3f "
               "-> scaled=(%d,%d) SetUpperLeft=%p\n", midX, rectTop, dialogWidth,
@@ -702,7 +680,6 @@ void EditTool_Startup_Impl(EditTool* self) {
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
     uint32_t worldFlags = *(uint32_t*)(gameWorld + 0xd0);
     if (((worldFlags >> 10) & 1) != 0 && pageToggleIBP != 0) {
-        if (s_fn_CheckPtr) s_fn_CheckPtr(&pageToggleIBP);
         if (s_fn_EditTool_helper_6800) {
             s_fn_EditTool_helper_6800(pageToggleIBP);
         }
@@ -873,7 +850,6 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
     if (foundEntity != 0) {
         // If flag80 is set, verify entity matches expected type
         if (flag80) {
-            if (s_fn_CheckPtr) s_fn_CheckPtr(&foundEntity);
             // CORRECTED 2026-08-01. This used to blame "a mesh registered without
             // Picking::Scene::SetMeshUserData", citing foundEntity=0x4167eb1a from
             // 2026-07-26. That was WRONG and cost a second investigation: the float bit
@@ -903,7 +879,6 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
         }
 
         // Check if entity is different from last selected
-        if (s_fn_CheckPtr) s_fn_CheckPtr(&foundEntity);
         if (self->lastEntityRef != foundEntity) {
             // Call EditTool_SelectEntity (0x1400fd3b0)
             uintptr_t entityParam = foundEntity;

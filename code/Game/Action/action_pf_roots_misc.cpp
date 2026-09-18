@@ -196,7 +196,6 @@ int Pf_FindPlacementCell_bd40(int* param_1, int param_2, char param_3, int64_t* 
                                 int64_t local_d8 = *reinterpret_cast<int64_t*>(grid + lVar10 * 0x30);
                                 bool occOk = (local_d8 == 0);
                                 if (!occOk && *param_4 != 0) {
-                                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_d8);
                                     occOk = (*param_4 == local_d8);
                                 }
                                 if (occOk) {
@@ -417,14 +416,11 @@ int64_t* Pf_SpatialProximityQuery_92260(float* param_1, int64_t* param_2, float*
             do {
                 int64_t entObj = *reinterpret_cast<int64_t*>(
                     *reinterpret_cast<int64_t*>(param_1 + 4) + (int64_t)ent * 0x18);  // local_25e8
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_6);
                 if (entObj != *reinterpret_cast<int64_t*>(param_6)) {
                     bool dropped = false;
                     int64_t entRef = entObj;
                     if (param_5 != 0) {
-                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entObj);
                         int64_t compList = *reinterpret_cast<int64_t*>(entObj + 0x10);  // local_25c8
-                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&compList);
                         int64_t lv = compList;
                         int64_t found = 0;
                         if (0 < *reinterpret_cast<int*>(compList + 0x38)) {
@@ -432,7 +428,6 @@ int64_t* Pf_SpatialProximityQuery_92260(float* param_1, int64_t* param_2, float*
                             int uVar17 = 0;
                             while (true) {
                                 void** self = reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(lv + 0x30) + uVar14 * 8);
-                                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
                                 int iVar12 = (*reinterpret_cast<int(**)(void*)>(*reinterpret_cast<int64_t*>(*self) + 0x10))(*self);
                                 if (iVar12 == param_5) {
                                     found = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(lv + 0x30) + uVar14 * 8);
@@ -451,9 +446,7 @@ int64_t* Pf_SpatialProximityQuery_92260(float* param_1, int64_t* param_2, float*
                         if (found == 0) dropped = true;
                     }
                     if (!dropped) {
-                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entRef);
                         int64_t lVar13 = entRef;
-                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(entRef + 0x68));
                         lVar13 = *reinterpret_cast<int64_t*>(lVar13 + 0x68);
                         Math::Vector3 diff(
                                   *reinterpret_cast<float*>(lVar13 + 0x158) - param_3[0],
@@ -505,7 +498,6 @@ void Pf_HerdStartMigration_122340(void* param_1) {
     EnsureFns();
     uintptr_t self = reinterpret_cast<uintptr_t>(param_1);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x28));
     int iVar4 = s_pick(*reinterpret_cast<void**>(self + 0x28), *reinterpret_cast<int*>(self + 0x30));
     *reinterpret_cast<int*>(self + 0x4c) = iVar4;
 
@@ -513,13 +505,10 @@ void Pf_HerdStartMigration_122340(void* param_1) {
         if (0 < *reinterpret_cast<int*>(self + 0x40)) {
             do {
                 int64_t* selfMember = *reinterpret_cast<int64_t**>(self + 0x38);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(selfMember);
                 int64_t local_res8 = *reinterpret_cast<int64_t*>(*selfMember + 0x10);
                 int64_t lVar2 = *reinterpret_cast<int64_t*>((uintptr_t)*g_pGameWorldSingleton + 0xe8);
                 if (local_res8 != 0) {
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
                     if ((*reinterpret_cast<uint32_t*>(local_res8 + 0x40) >> 10 & 1) == 0) {
-                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
                         s_markrem(reinterpret_cast<void*>(local_res8));
                         s_dynset(reinterpret_cast<void*>(lVar2 + 0xd0),
                                  *reinterpret_cast<int*>(lVar2 + 0xd8) + 1, &local_res8);
@@ -554,9 +543,7 @@ void Pf_HerdStartMigration_122340(void* param_1) {
         uint32_t memberIdx = 0;     // pvVar11 counter
         do {
             int64_t lVar2 = *reinterpret_cast<int64_t*>(self + 0x38);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(lVar2 + pvVar6_off));
             int64_t local_58 = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(lVar2 + pvVar6_off) + 0x10);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_58);
             int64_t lv = local_58;
 
             // Find the movement component (type DAT_1401c6f98) in the member's comp list.
@@ -566,13 +553,11 @@ void Pf_HerdStartMigration_122340(void* param_1) {
                 int idx = 0;
                 while (true) {
                     void** puVar1 = reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(lv + 0x30) + slotOff * 8);
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(puVar1);
                     uint32_t wantId = *s_pTid_c6f98;
                     uint32_t gotId = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<int64_t*>(*puVar1) + 0x10))(*puVar1);
                     if (gotId == wantId) {
                         // LAB_1401225ef: re-read the slot, IsDerivedFrom-confirm.
                         void** p2 = reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(lv + 0x30) + slotOff * 8);
-                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p2);
                         void* comp = *p2;
                         bool d = fn_IsDerivedFrom && fn_IsDerivedFrom(comp, *s_pTid_c6f98);
                         foundComp = d ? comp : nullptr;
@@ -605,7 +590,6 @@ void Pf_HerdStartMigration_122340(void* param_1) {
             int64_t local_50[2];
             if (fn_InternalBasePtr_Ctor) new (local_50) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(foundComp));   // B.3.3 bridge
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(local_50);
             *reinterpret_cast<int16_t*>(local_50[0] + 0x38) = (int16_t)local_res18;
             *reinterpret_cast<int16_t*>(local_50[0] + 0x3a) = (int16_t)local_res20;
             *reinterpret_cast<int16_t*>(local_50[0] + 0x3c) = (int16_t)local_res8_lo;
