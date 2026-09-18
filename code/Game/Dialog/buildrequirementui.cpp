@@ -21,10 +21,10 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #if defined(_DEBUG)
 #include <cstdio>
 #include <cstdlib>
-#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #endif
 
 #ifdef _DEBUG
