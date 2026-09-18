@@ -71,3 +71,20 @@ UNIT_TREE_SRCS += \
 # `AvlOps<Node,0x30>` falls back to the generic core, so set_core.cpp is not
 # needed either.
 UNIT_TREE_SRCS += runtime/src/object/type_reflection.cpp
+# ENDGAME B.3.3 step 5, EXTERNAL (tests/unit/object_external_test.cpp):
+# `Object::External` / `CompiledExternal` and the two header-inline tree finds.
+# external_class.cpp is registry-free by construction — its reflection-record
+# accessors take a test seam under -DBANISHED_UNIT_TEST and its only other
+# dependencies are `Object::TypeTreeAlloc/Free` (type_reflection.cpp, already
+# linked above), `System::Filename` (filename.cpp, likewise) and
+# `RtSystem::RtMemFree` (string.cpp, likewise).
+#
+# `external_class_doors.cpp` is deliberately NOT here and must not be added:
+# every body in it is a door into the port registry, and it is also where
+# `Object::ExternalList`'s vtable is emitted for exactly that reason (GCC emits
+# a vtable in the TU defining the key function, and that vtable references every
+# slot — including the four that reach the registry). Nor are the thirteen
+# existing `external*.cpp` bodies: they stand on `RT_EXPORT_ONCE`,
+# `RT_DATA_SLOT` and `RtResolveCached`, none of which rt_port_stub.cpp provides.
+# Those are verified by the real run, not here.
+UNIT_TREE_SRCS += runtime/src/object/external_class.cpp

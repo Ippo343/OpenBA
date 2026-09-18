@@ -33,6 +33,14 @@
 
 #include "../collection/Collection.h"
 #include "../system/Filename.h"
+// ENDGAME B.3.3 step 5: hoisted from the `#include "TypeInfo.h"` that sits at
+// FILE SCOPE INSIDE `namespace RtObject` further down (the Wave 3 integration
+// block). That placement only ever worked because every real TU reached
+// TypeInfo.h first; a TU that reached External.h first would have landed
+// `Object::Base` in `RtObject::Object::Base` and this file's own `namespace
+// Object` block would then have failed to find it. The lower include is now a
+// `#pragma once` no-op and is left in place with its explanatory banner.
+#include "TypeInfo.h"
 
 namespace RtObject {
 
@@ -505,5 +513,456 @@ static_assert(std::is_trivially_copyable<ExternalPtr<RtObject::External> >::valu
               "(runtime/src/collection/array.cpp:983)");
 static_assert(std::is_trivially_destructible<ExternalPtr<RtObject::External> >::value,
               "the array range-destroy never calls one; a real dtor would be skipped");
+
+// ############################################################################
+// ENDGAME B.3.3 step 5 (EXTERNAL) — the real classes, under retail's names.
+//
+// Everything in `namespace RtObject` above STAYS and stays TRIVIALLY
+// DESTRUCTIBLE where it already was: B31_RULES step 1 keeps the old PODs
+// declared until their last caller converts, and `RtObject::External` in
+// particular is held by ported bodies as `RtObject::External tmp;` with
+// `RtObject_External_Dtor(&tmp)` called BY HAND — giving that POD a destructor
+// would make the compiler run a second one (the `RtSystem::String` double-free
+// lesson, B31_RULES, restated in B33_RULES §7).
+//
+// What follows is the same bytes as real C++, cross-asserted field for field
+// against the PODs so the two descriptions cannot drift.
+//
+// -------------------------------------------------------------------------
+// THE SLOT LISTS ARE MEASURED. `??_7External@Object@@6B@` @ 0x1801547a0, read
+// out of Runtime-x64.dll on 2026-09-18 (8 qwords, then a zero qword before the
+// next object — B33_RULES §1.4 independently bounds it at eight):
+//
+//   [0] +0x00  0x180006640  vector deleting dtor (elem 0x20, ~External
+//                           0x1800bc950) — deleting_dtor.cpp's own row agrees
+//   [1] +0x08  0x1800066c0  `MOV RAX,qword[0x1801f9b40]; RET`
+//                           = ?TypeName@External@Object@@UEBAPEBDXZ
+//   [2] +0x10  0x1800066d0  `MOV EAX,dword[0x1801f9b38]; RET`
+//                           = ?Type@External@Object@@UEBAIXZ
+//   [3] +0x18  0x18007ec28  _purecall -> GetFileVersion
+//   [4] +0x20  0x1800066e0  `MOV EAX,0x1; RET`
+//   [5] +0x28  0x18007ec28  _purecall -> Serialize
+//   [6] +0x30  0x18007ec28  _purecall -> Reconstruct
+//   [7] +0x38  0x18007ec28  _purecall -> Destruct
+//
+// *** SLOT 4 HAS A RETAIL NAME, AND B33_RULES §1.4 IS OUT OF DATE ON IT. ***
+// §1.4 says "name UNKNOWN, keep it as Slot4()". It is
+// `?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z`,
+// and that is not a guess: `Get xrefs to 0x1800066e0` shows an `[EXTERNAL]
+// Entry Point` reference, i.e. the address IS in the DLL's export table, and
+// the DLL-era residue traces resolved that exact mangled string to it
+// (docs/runtime_port/wave9_lanes.txt:263, wave9_residue_*.txt). The tree has
+// carried the name since Wave 9 lane Y — runtime/src/object/external.cpp
+// registers it by name AND at 0x1800066e0, and code/Game/Goal/
+// goal_exe_helpers.cpp:218 resolves it by name. Renaming it `Slot4()` would
+// throw away a measured export name and contradict decision 5 ("names are the
+// original ones"), so the retail name is kept and §1.4 is what needs the
+// correction.
+//
+// SLOTS 6 AND 7 ARE NAMED BY POSITION, NOT BY A BODY. They are `_purecall` in
+// External itself, so the names come from the one derived vtable this file also
+// owns: `??_7ExternalList@Object@@6B@` @ 0x180154800 puts `Reconstruct`
+// (0x180007570) at [6] and `Destruct` (0x180007640) at [7], both exported under
+// those names. A pure slot's name can only ever be read off an override, and
+// this is the override; runtime/src/object/external_list.cpp has carried the
+// same reading since VTABLE BATCH 9.
+//
+// NO VIRTUAL DESTRUCTOR ANYWHERE (decision 2). Slot 0 is
+// `virtual Base* DeletingDtor(unsigned)`; deletion is `Object::Destroy(p)`.
+// `tests/unit/object_vtable_abi_test.cpp` is the regression test, and it is
+// also what licenses these classes to coexist with the MINTED
+// `??_7External@Object@@6B@` that ~80 unconverted files still stamp: an object
+// wearing the minted table and an object wearing GCC's are interchangeable
+// slot for slot. Nothing here retires a `RT_DELDTOR` row (B33_RULES §6.1: the
+// row is what FILLS slot 0 of the minted table).
+// ############################################################################
+
+class ExternalFactory;
+
+// ============================================================
+// Object::External — one loaded resource file. 0x20 bytes.
+// ============================================================
+class External : public Base {
+public:
+    // `?A W4CompileResult@External@Object@@` — returned BY VALUE, but a `W4`
+    // enum is four bytes, so it comes back in EAX with NO hidden return slot
+    // (reference_hidden_retslot_wild_write.md checked, not assumed). The
+    // ENUMERATOR NAMES ARE NOT RECOVERABLE from the binary — only the value 1
+    // that the base's body returns — so this is spelled as the 32-bit integer
+    // it is rather than an enum with invented names.
+    using CompileResult = uint32_t;
+
+    // ??0External@Object@@QEAA@XZ  retail 0x1800bc9c0. Retail stamps Base's
+    // vptr and then External's; a real constructor chain does exactly that for
+    // free, which is why the two stamps are not transcribed here.
+    External();
+
+    // ---- the eight slots, in measured order ----
+    Base*       DeletingDtor(unsigned flags) override;          // [0] 0x180006640
+    const char* TypeName() const override;                      // [1] 0x1800066c0
+    uint32_t    Type() const override;                          // [2] 0x1800066d0
+    virtual int32_t       GetFileVersion() const = 0;           // [3] pure
+    virtual CompileResult Compile(const System::Filename& path);// [4] 0x1800066e0
+    virtual bool          Serialize(void* stream) = 0;          // [5] pure
+    virtual External*     Reconstruct() = 0;                    // [6] pure
+    virtual void          Destruct() = 0;                       // [7] pure
+
+    // ?GetPath@External@Object@@QEBA?AVFilename@System@@XZ  retail 0x180006250
+    System::Filename GetPath() const;
+
+    // The static companion retail's reflection block emits. NOT `DECLARE_TYPE`
+    // — see the banner on ExternalTypeInfoRecord() below.
+    static uint32_t TypeId();
+
+protected:
+    // ??1External@Object@@UEAA@XZ  retail 0x1800bc950. NON-VIRTUAL; reached by
+    // DeletingDtor, and by ~ExternalList / ~CompiledExternal as a base dtor.
+    ~External();
+
+public:
+    // ---- the 0x18 bytes External adds, spelled as RtObject::External spells
+    // them, and the two spellings are NOT interchangeable taste:
+    //
+    //  * `_path` keeps the POD `RtSystem::Filename`, which is trivially
+    //    destructible. `System::Filename` is not, and a member of that type
+    //    would make the compiler release the path a SECOND time after
+    //    ~External's transcribed release — the `RtSystem::String` double-free
+    //    lesson (B31_RULES), one level in. ~External releases it by hand
+    //    through the one `Sys(...)` bridge, exactly as the C body does.
+    //
+    //  * `_refs` keeps `Collection::Array<ExternalArrayElement>`, which DOES
+    //    have a real `~Array`, and that is deliberate: retail's ~External is a
+    //    CALL to FUN_180006b80 -> FUN_180006ac0, i.e. "release each element's
+    //    leading String, then free the buffer and zero the header". The second
+    //    half IS `~Array` for a trivially-destructible element (its
+    //    `spec->destroy` is null, so it runs `ArrayDtorImpl` and nothing
+    //    else). So ~External's body does the FIRST half only and the
+    //    compiler-emitted member destructor does the second — retail's own
+    //    decomposition, with each half run exactly once.
+    RtSystem::Filename                              _path;   // +0x08
+    Collection::Array<RtObject::ExternalArrayElement> _refs;  // +0x10
+};
+static_assert(sizeof(External) == 0x20, "Object::External is 0x20 bytes");
+static_assert(sizeof(External) == sizeof(RtObject::External),
+              "the real class and the POD describe the same bytes");
+static_assert(offsetof(External, _path) == offsetof(RtObject::External, _path), "alias _path");
+static_assert(offsetof(External, _refs) == offsetof(RtObject::External, _refs), "alias _refs");
+static_assert(offsetof(External, _path) == 0x08, "External::_path @ +0x08 (GetPath 0x180006250)");
+static_assert(offsetof(External, _refs) == 0x10, "External::_refs @ +0x10 (~External 0x1800bc950)");
+
+// ============================================================
+// Object::CompiledExternal — adds no bytes; only a vtable and a destructor.
+//
+// `??1CompiledExternal@Object@@UEAA@XZ` (0x1800bb980) is seven instructions:
+// re-stamp `??_7CompiledExternal@Object@@6B@` (0x180154a30), then TAIL-JMP
+// ~External. The re-stamp is not tidying — it is what makes the base dtor
+// dispatch on CompiledExternal's own table — and a real destructor chain
+// reproduces it for free. `deleting_dtor.cpp:297` records the element size as
+// 0x20, i.e. the same as External's: this class adds no data.
+// ============================================================
+class CompiledExternal : public External {
+public:
+    CompiledExternal() = default;
+protected:
+    ~CompiledExternal();     // 0x1800bb980
+};
+static_assert(sizeof(CompiledExternal) == 0x20,
+              "RT_DELDTOR(0x18000b7e0, 0x1800bb980, 0x020, \"Object::CompiledExternal\")");
+
+// ============================================================
+// Object::ExternalList — an External whose payload is an array of External*.
+//
+// `??_7ExternalList@Object@@6B@` @ 0x180154800, NINE slots (read 2026-09-18):
+//   [0] 0x180007800 vdtor (elem 0x30, ~ExternalList 0x1800076c0)
+//   [1] 0x180007370 TypeName        [2] 0x180007350 Type
+//   [3] 0x1800bfa10 GetFileVersion (`MOV EAX,3; RET`)
+//   [4] 0x1800066e0 External::Compile — INHERITED, the same body
+//   [5] 0x1800bfa20 Serialize       [6] 0x180007570 Reconstruct
+//   [7] 0x180007640 Destruct        [8] 0x1800075e0 Construct
+// so `Construct` is ExternalList's OWN new virtual: External's table stops at
+// eight. sizeof is 0x30 (the deleting dtor's `MOV EDX,0x30`).
+// ============================================================
+class ExternalList : public External {
+public:
+    ExternalList();
+
+    Base*           DeletingDtor(unsigned flags) override;   // [0]
+    const char*     TypeName() const override;               // [1] 0x180007370
+    uint32_t        Type() const override;                   // [2] 0x180007350
+    int32_t         GetFileVersion() const override;         // [3] 0x1800bfa10
+    bool            Serialize(void* stream) override;        // [5] 0x1800bfa20
+    External*       Reconstruct() override;                  // [6] 0x180007570
+    void            Destruct() override;                     // [7] 0x180007640
+    virtual External* Construct();                           // [8] 0x1800075e0
+
+    // ?GetResourceCount@ExternalList@Object@@QEBAHXZ   retail 0x180007650
+    int32_t GetResourceCount() const { return _count; }
+
+    // ?Find@ExternalList@Object@@QEBA?AV?$ExternalPtr@VExternal@Object@@@2@AEBVFilename@System@@VType@2@@Z
+    //   retail 0x1800bf700.  *** THE `Type` PARAMETER IS NEVER READ *** — R9 is
+    //   dead in the whole body. Kept because the slot's signature demands it.
+    ExternalPtr<External> Find(const System::Filename& path, uint32_t type) const;
+
+    static uint32_t TypeId();
+
+protected:
+    ~ExternalList();        // 0x1800076c0
+
+public:
+    External** _resources;  // +0x20
+    int32_t    _count;      // +0x28
+    int32_t    _pad2c;      // +0x2c — NOT PINNED; probably Array<T>::_capacity
+};
+static_assert(sizeof(ExternalList) == 0x30,
+              "RT_DELDTOR(0x180007800, 0x1800076c0, 0x030, \"Object::ExternalList\")");
+static_assert(offsetof(ExternalList, _resources) == offsetof(RtObject::ExternalList, _resources), "alias _resources");
+static_assert(offsetof(ExternalList, _count)     == offsetof(RtObject::ExternalList, _count),     "alias _count");
+static_assert(offsetof(ExternalList, _resources) == 0x20, "ExternalList::_resources @ +0x20");
+static_assert(offsetof(ExternalList, _count)     == 0x28, "ExternalList::_count @ +0x28");
+
+// ============================================================
+// The two tree row types and the path-stack entry, under retail's names.
+//
+// They are ALIASES, not re-declarations: `RtObject::ResourceEntry`,
+// `ReferenceEntry` and `PathStackEntry` are already fully pinned above, the
+// three ported Set families (`rtresset`, `rtrefset`, external_set.h) name them
+// directly, and a second declaration of the same fields would be one more
+// thing that can drift. B31_RULES asks for the retail NAME; it does not ask for
+// a copy of the bytes.
+// ============================================================
+using ResourceEntry  = RtObject::ResourceEntry;
+using ReferenceEntry = RtObject::ReferenceEntry;
+using PathStackEntry = RtObject::PathStackEntry;
+using ResourceSet    = RtObject::ResourceSet;
+using ReferenceSet   = RtObject::ReferenceSet;
+
+namespace detail {
+
+// Retail's tree comparisons all go through the CRT's `_stricmp`, in the "C"
+// locale (the DLL never calls setlocale), so plain ASCII case folding. Spelled
+// out here for the reason runtime/src/system/filename.cpp spells it out: a
+// runtime/ header must not depend on a CRT whose locale behaviour differs
+// between toolchains (PLAN.md §4.1).
+inline int StriCmpAscii(const char* a, const char* b) {
+    for (;;) {
+        unsigned char ca = static_cast<unsigned char>(*a++);
+        unsigned char cb = static_cast<unsigned char>(*b++);
+        if (ca >= 'A' && ca <= 'Z') ca = static_cast<unsigned char>(ca + 32);
+        if (cb >= 'A' && cb <= 'Z') cb = static_cast<unsigned char>(cb + 32);
+        if (ca != cb) return static_cast<int>(ca) - static_cast<int>(cb);
+        if (ca == 0)  return 0;
+    }
+}
+
+// Byte-identical to `System::Filename::operator<` (0x180026cb0), which is what
+// every walk site inlines: a null right-hand side orders below everything, a
+// null left-hand side orders below any non-null, otherwise case-insensitive.
+inline bool FilenameLess(const char* a, const char* b) {
+    if (b == nullptr) return false;
+    if (a == nullptr) return true;
+    return StriCmpAscii(a, b) < 0;
+}
+
+// *** TWO NODE LAYOUTS, TWO FINDS — reference_one_bst_find_two_node_layouts.md.
+// The resource tree's element is 0x18 wide so its node tail is parent +0x18 /
+// left +0x20 / right +0x28; the reference tree's element is 0x10 wide so its
+// tail is +0x10 / +0x18 / +0x20. A find written against the wrong layout
+// returns the right answer for a key that happens to be the ROOT and is
+// permanently wrong one level down, which is why the unit test drives at least
+// three keys at two depths through BOTH of these.
+//
+// These are the bodies runtime/src/object/external.cpp has inlined since Wave 3
+// (`ResourceSetFind`, and the integer descent in GetPathForReferenceId), lifted
+// here unchanged so the class and the C shims cannot descend differently. They
+// are header-inline and touch nothing but pointers, so `make unit` can drive
+// them against a hand-built tree with no allocator and no registry.
+//
+// Each find comes in TWO spellings: one over the tree ROOT and one over the
+// `Set` header that forwards to it. That is not convenience — a `Collection::
+// Set` object has a real `~Set` that reaches `Collection::detail::SetNodeFree`
+// in set_core.cpp, which stands on the address registry and cannot link into
+// `make unit`. The root overload is what lets the test drive these bodies at
+// all; the Set overload is what the ported call sites use.
+inline ResourceSet::Node* ResourceFind(ResourceSet::Node* root, const char* key) {
+    ResourceSet::Node* n = root;
+    while (n != nullptr) {
+        if (FilenameLess(key, n->element.path.data))      n = n->left;
+        else if (FilenameLess(n->element.path.data, key)) n = n->right;
+        else                                              return n;
+    }
+    return nullptr;
+}
+inline ResourceSet::Node* ResourceFind(const ResourceSet* set, const char* key) {
+    return ResourceFind(set->_root, key);
+}
+inline ResourceSet::Node* ResourceLeftmost(ResourceSet::Node* n) {
+    while (n->left != nullptr) n = n->left;
+    return n;
+}
+inline ResourceSet::Node* ResourceSuccessor(ResourceSet::Node* n) {
+    if (n->right != nullptr) return ResourceLeftmost(n->right);
+    ResourceSet::Node* p = n->parent;
+    while (p != nullptr && p->right == n) { n = p; p = p->parent; }
+    return p;
+}
+// The reference tree descends on a plain integer compare, not on `_stricmp` —
+// the one Set family in this engine that does (reference_set.h's banner).
+inline ReferenceSet::Node* ReferenceFind(ReferenceSet::Node* root, uint32_t id) {
+    ReferenceSet::Node* n = root;
+    while (n != nullptr) {
+        if (id < n->element.id)      n = n->left;
+        else if (n->element.id < id) n = n->right;
+        else                         return n;
+    }
+    return nullptr;
+}
+inline ReferenceSet::Node* ReferenceFind(const ReferenceSet* set, uint32_t id) {
+    return ReferenceFind(set->_root, id);
+}
+
+}  // namespace detail
+
+// ============================================================
+// Object::ExternalFactory — the global resource table. NOT an Object::Base:
+// `??0ExternalFactory@Object@@QEAA@XZ` (0x1800be7e0) writes no vptr, and the
+// class has no exported `??_7`. So no vtable, no reflection record, no
+// `DECLARE_TYPE`.
+//
+// Layout is `RtObject::ExternalFactory`'s, field for field and asserted against
+// it. The class is DECLARED here and its members are one-line spellings over
+// the already-ported C bodies, which is the whole of what this step changes
+// about them:
+//
+// *** `Add` IS DELIBERATELY A PURE SPELLING CHANGE. *** B33_RULES §0 makes the
+// loader-thread AVL-rotate race on `ExternalFactory::Add` its own
+// investigation: no lock, no retry, no ordering change, no null check, and no
+// silent removal either. `Add` below therefore forwards to the UNCHANGED body
+// in runtime/src/object/external_add.cpp rather than taking it over — the
+// instruction sequence inside the tree mutation is byte-for-byte the one that
+// is under investigation, with one extra (inlinable) call frame in front of it.
+// The same reasoning covers `Clean`, `FindOrLoad`, `SerializeReferenceTable`,
+// `PushPath`/`PopPath` and `ForceUnload`, every one of which mutates the same
+// two trees.
+// ============================================================
+class ExternalFactory {
+public:
+    ExternalFactory();
+
+    // ?_singleton@ExternalFactory@Object@@0PEAV12@EA — retail 0x1801fc6c8, and
+    // note the `0PEAV12@EA` spelling (the obvious `1PEAV12@A` is not an
+    // export). Read through the existing port door at RUNTIME, exactly as
+    // `Object::Factory::Get()` does; B.3.3 step 3 moved ONE data cell
+    // (`_firstTypeInfo`) and only because its writer runs at CRT-init, which
+    // this one does not.
+    static ExternalFactory* Get();
+
+    // ---- the read-only half (ported bodies, runtime/src/object/external.cpp)
+    const External* Find(const System::Filename& path) const;      // 0x1800bdeb0
+    const External* FindNext(uint32_t typeId, const External* prev) const;  // 0x1800be9d0
+    uint32_t         GetReferenceId(const External* external) const;        // 0x1800bf100
+    System::Filename GetPathForReferenceId(uint32_t id) const;              // 0x1800bf1d0
+    bool             IsReferenceModeEnabled() const { return _referenceModeEnabled; }  // 0x1800bf0f0
+    void             EnableReferenceMode(bool enable) { _referenceModeEnabled = enable; }  // 0x1800bcf40
+    void             EnableLoad(bool enable)       { _loadEnabled = enable; }        // 0x1800bcaf0
+    void             EnableSimpleLoad(bool enable) { _simpleLoadEnabled = enable; }  // 0x1800be9c0
+
+    // ---- the path stack (external_path_stack.cpp / external_path_win.cpp)
+    void             PushPath(const System::Filename& path);   // 0x1800bd0e0
+    void             PopPath();                                // 0x1800bd040
+    System::Filename GetPathStackFilename() const;             // 0x1800bcf60
+    System::Filename GetPathStackDirectory() const;            // 0x1800bcfd0
+    // ?ExpandRelativePath@ExternalFactory@Object@@QEBA?AVFilename@System@@AEBV34@_N@Z
+    // — the trailing `_N` is a FOURTH argument after the hidden return slot.
+    System::Filename ExpandRelativePath(const System::Filename& path,
+                                        bool appendIdentifier) const;
+
+    // ---- the mutating half. Spelling only; see the banner on `Add`.
+    void            Add(External* external);                   // 0x1800be570
+    const External* FindOrLoad(const System::Filename& path);  // 0x1800bf320
+    void            Clean();                                   // 0x1800be310
+    void            ForceUnload(const System::Filename& path);
+    // `SerializeReferenceTable` (0x1800bcb60) is deliberately NOT declared —
+    // its real parameter is `IO::Stream&`, which is B.3 step 4's type, and the
+    // ported entry point's second parameter is a file-local struct that cannot
+    // be named from another translation unit. See external_class_doors.cpp.
+
+    // ?GetCompiledPath@ExternalFactory@Object@@SA?AVFilename@System@@AEBV34@@Z
+    //   retail 0x1800bec10 — a STATIC returning by value.
+    static System::Filename GetCompiledPath(const System::Filename& path);
+
+    // ---- the 0x43 bytes, in retail order (ctor 0x1800be7e0 pins every one) --
+    int32_t      _cleanBitIndex;         // +0x00
+    uint32_t     _cleanBitMask;          // +0x04 — the 32 UpdateLoop slots
+    int32_t      _generation;            // +0x08
+    int32_t      _pad0c;                 // +0x0c
+    ResourceSet  _resources;             // +0x10
+    ReferenceSet _references;            // +0x20
+    Collection::Array<PathStackEntry> _pathStack;   // +0x30 data, +0x38 size
+    bool         _referenceModeEnabled;  // +0x40
+    bool         _loadEnabled;           // +0x41
+    bool         _simpleLoadEnabled;     // +0x42
+};
+static_assert(sizeof(ExternalFactory) == sizeof(RtObject::ExternalFactory),
+              "the real class and the POD describe the same bytes");
+static_assert(offsetof(ExternalFactory, _cleanBitIndex) == offsetof(RtObject::ExternalFactory, _cleanBitIndex), "alias _cleanBitIndex");
+static_assert(offsetof(ExternalFactory, _cleanBitMask)  == offsetof(RtObject::ExternalFactory, _cleanBitMask),  "alias _cleanBitMask");
+static_assert(offsetof(ExternalFactory, _generation)    == offsetof(RtObject::ExternalFactory, _generation),    "alias _generation");
+static_assert(offsetof(ExternalFactory, _resources)     == offsetof(RtObject::ExternalFactory, _resources),     "alias _resources");
+static_assert(offsetof(ExternalFactory, _references)    == offsetof(RtObject::ExternalFactory, _references),    "alias _references");
+static_assert(offsetof(ExternalFactory, _pathStack)     == offsetof(RtObject::ExternalFactory, _pathStack),     "alias _pathStack");
+static_assert(offsetof(ExternalFactory, _referenceModeEnabled) == offsetof(RtObject::ExternalFactory, _referenceModeEnabled), "alias _referenceMode");
+static_assert(offsetof(ExternalFactory, _loadEnabled)          == offsetof(RtObject::ExternalFactory, _loadEnabled),          "alias _loadEnabled");
+static_assert(offsetof(ExternalFactory, _simpleLoadEnabled)    == offsetof(RtObject::ExternalFactory, _simpleLoadEnabled),    "alias _simpleLoad");
+static_assert(offsetof(ExternalFactory, _resources)  == 0x10, "_resources @ +0x10");
+static_assert(offsetof(ExternalFactory, _references) == 0x20, "_references @ +0x20");
+static_assert(offsetof(ExternalFactory, _pathStack)  == 0x30, "_pathStack @ +0x30");
+static_assert(offsetof(ExternalFactory, _pathStack)
+              + offsetof(Collection::Array<PathStackEntry>, _size) == 0x38,
+              "path-stack SIZE @ +0x38 (GetPathStack*'s `CMP dword [RCX+0x38],0`)");
+static_assert(offsetof(ExternalFactory, _referenceModeEnabled) == 0x40, "_referenceMode @ +0x40");
+static_assert(offsetof(ExternalFactory, _loadEnabled)          == 0x41, "_loadEnabled @ +0x41");
+static_assert(offsetof(ExternalFactory, _simpleLoadEnabled)    == 0x42, "_simpleLoad @ +0x42");
+
+// ############################################################################
+// WHY THERE IS NO `DECLARE_TYPE(External)` / `DEFINE_TYPE(...)` HERE.
+//
+// `External`, `ExternalList` and `CompiledExternal` DO each have a retail
+// reflection block — `?_typeInfo@External@Object@@0VBaseTypeInfo@2@A` @
+// 0x1801f9b38, `…@ExternalList@…` @ 0x1801f9be0, `…@CompiledExternal@…` @
+// 0x1801f9b00 — so B33_RULES §9 step 5 would have the macro emit them. It
+// CANNOT, in this step, and the reason is a file-set boundary rather than a
+// design one:
+//
+//   * unlike the 305 `REGISTER_TYPE` sites in code/Game/, these three records
+//     are not built by our code at all. They come out of the MINT
+//     (standalone/rt_data_mint*.inc), `standalone/cutover_manifest.inc:65`
+//     carries the CompiledExternal one as `CUTOVER_REQUIRED`, and
+//     `MintStorage()` splices the minted nodes into
+//     `BaseTypeInfo::_firstTypeInfo`;
+//   * roughly twenty live sites read them BY NAME through `RT_DATA_SLOT`
+//     (runtime/src/engine/mainloop_video.cpp:343,
+//     runtime/src/engine/updateloop_loadresources.cpp:126,
+//     runtime/src/io/modification_setupfilesystem.cpp:403,
+//     runtime/src/object/{external_list,external_load,external_ptr_serialize,
+//     object_typeinfo_accessors}.cpp, code/Game/Game/gameupdateloop_load.cpp);
+//   * a `DEFINE_TYPE` would therefore construct a SECOND `BaseTypeInfo` for the
+//     same name and head-insert it into the same chain. `Factory::Startup`
+//     CRCs the name, so both records claim the same typeId and the second
+//     insert hits the equal-key arm — the "split brain" hazard
+//     standalone/rt_data_mint.cpp's own banner names, and exactly the shape
+//     runtime/src/object/external.cpp:659-670 refuses for these two symbols.
+//
+// Retiring the mint rows in favour of the macro means editing
+// standalone/rt_data_mint.cpp and re-running tools/rt_mint_gen.py, both outside
+// this agent's file set, and it is the same move step 3 made for
+// `_firstTypeInfo` (redirect, don't duplicate). Until then the three classes
+// read the ONE existing record through the existing door, which is what the C
+// bodies already do, and `Type()` / `TypeName()` / `TypeId()` answer from it
+// byte for byte. Handing this to step 6/7 rather than guessing at it is the
+// "faithful partial beats a complete-looking conversion" rule.
+// ############################################################################
+const BaseTypeInfo* ExternalTypeInfoRecord();          // ?_typeInfo@External@Object@@
+const BaseTypeInfo* ExternalListTypeInfoRecord();      // ?_typeInfo@ExternalList@Object@@
+const BaseTypeInfo* CompiledExternalTypeInfoRecord();  // ?_typeInfo@CompiledExternal@Object@@
 
 }  // namespace Object
