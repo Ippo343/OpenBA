@@ -20,34 +20,93 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
-- **B.3.2 step 2 DONE, closing pass pending (2026-09-14, main 78ac5d23):** `Collection::Array<T>`,
-  `Set<T>` and `LinkedList<T>` are real templates (runtime/types/collection/Collection.h)
-  wrapping the ported cores; all 339 registry rows kept as shims; `make unit` 154 tests.
-  Step 2 (callers) ALL MERGED on main 78ac5d23, each gate PASS: Game/Player/Tutorial/Goal
-  (e4ac8967), Dialog (0926164e), runtime+standalone+dx11 (21b522b7), Component/Action/Work/
-  Entity (0270911b). No worktree branch is left unmerged. The session stopped here at the
-  user's request: **the next session starts with the B.3.2 closing pass** (list below),
-  then B.3.3 (`Object::Base`/`TypeInfo`/`Factory` + reflection macro, single owner).
-  Rules: `endgame_b/B32_RULES.md`; B31_RULES.md's closing pass is the template.
-  Not converted, by design (documented in-file): `EntityList`'s update/post-update trees
-  (an unbalanced BST standing in for retail's AVL, entangled with the tree guards — its
-  own change), exe helpers with non-zero or partial tail init or per-element deep copy,
-  the OOM-rollback appends in tradeui, `Set<Filename>` width-8 inserts, the packfile
-  introsort, `Configuration`/`Persistence` settings maps (no type header / POD String node).
-  **Finding that reshaped step 2:** code/Game never reaches runtime/src/collection; its
-  Array sites are the EXE-side MSVC monomorphisations of `Array<T>::SetSize` (0x1400021d0,
-  0x1400032e0, 0x140003110, …) transcribed per file, and those convert onto the same template
-  with `ExplicitSpec` rows (every exe helper zeroes its new tail; `SpecFor<T>` does not).
-  **B.3.2 closing-pass list:** unify `code/Game/Component/coll_bridge.h` (GameColl types) and
-  `code/Game/Dialog/dialog_array_bridge.h` (DlgElem<N>), then collapse ExplicitSpec rows onto
-  trait-derived `Array<T>` where equivalent; route the template's allocation through the same
-  allocator door as the tree (it bypasses the `BANISHED_REDZONE` shim today); add the width-8
-  `AvlOps` specialisation (Set<Filename> in modification_*.cpp); wire the deep
-  `Array::operator=` (`ArrayAssignCore`); an in-place-construct `Set::Insert`; decide
-  `fn_ExeArrayResize/2/3/Push` in engine_funcs.cpp (they zero to capacity and carry a bail —
-  read the retail exe bodies); the `fn_UI_GetFirstDialog` LinkedList walks in Tutorial; then
-  delete `fn_*Array*/Set*` pointers, shims and rows at zero callers and regenerate the .inc
-  files; STATUS + B.4 counts.
+- **B.3.2 CLOSED (2026-09-18):** `Collection::Array<T>`, `Set<T, Compare>` and
+  `LinkedList<T>` are real templates under retail's names
+  (`runtime/types/collection/Collection.h`) wrapping the ported cores; three core
+  agents, four caller batches by directory, two closing batches (template side
+  f82ff0c1, game side 89b9cf9b) and this final pass. What the closing pass added to
+  the templates: ONE allocator door for both the tree and the array
+  (`rtcoll::DoorAlloc`/`DoorFree`, `runtime/src/collection/alloc_door.cpp`, so
+  template allocations are visible to `BANISHED_REDZONE`); the width-8 `AvlOps`
+  specialisation the `Set<System::Filename>` path set needs; the deep
+  `Array::operator=` (`rtcoll::ArrayAssignCore`); `Set::InsertInPlace`/`Emplace`;
+  and one game-side bridge header — `code/Game/Component/coll_bridge.h` — with
+  `Dialog/dialog_array_bridge.h` deleted.
+  **Deleted here:** 14 `fn_*Array*`/`fn_*Set*`/LinkedList pointers in
+  `engine/funcs/engine_funcs.{h,cpp}` with zero callers tree-wide, taking 5 typedefs,
+  5 hand-written C bodies (`fn_ExeArrayResize/2/3/Push` and
+  `ExeArrayResizeFill_CppImpl`) and their init + `_DEBUG` printf lines with them;
+  `fn_UI_GetFirstDialog` went with its last consumer, the inline dialog walk in
+  engine_funcs.h, which now runs on `ui->_dialogs.GetFirst()` — the same
+  CheckPtr/GetController order, and that walk IS retail's GetFirstDialog body
+  (`*retval = this->_dialogs._head`). 36 collection pointers remain, every one with a
+  live caller. `runtime/src/io/modification.cpp`'s `RtColl_SetDestroySubtree_180010470`
+  is folded onto `Collection::Set<Filename>::DestroySubtree` (same post-order walk,
+  same element dtor, same free door) and its private `RtColl_SetNodeFree_180009c30`
+  copy went with it; the clone twin `RtColl_SetCloneSubtree_1800104f0` has no template
+  analogue and stays.
+  **Rows:** of the 323 `RegisterRuntimeAddr` rows in `runtime/src/collection/`, **82 are
+  deleted with their shims** (array.cpp 67, array_destroy.cpp 10, array_graphics_anim.cpp 3,
+  array_graphics_mesh.cpp 2 — all trivial per-instantiation `~Array`/`SetSize`/element-destroy
+  bodies) and **241 stay**: 81 reached by NAME, 160 by ADDRESS. The address form is not just
+  `ResolveAddr(Module::Runtime, 0x18…)` — 27 of those 160 go through per-file wrappers
+  (`RtAddr<Fn>(0x…)`, `RtAddrFn`, `ArrayDtor(0x…, p)`, `ArraySetSize(…)`, `SetSizeWithFill`,
+  `PlainArrayDtor`, `ByAddr(0x…)`, one address held in a named `constexpr`), which a sweep
+  that greps only for `ResolveAddr` will miss. A comment or a `printf`/`static_assert` string
+  citing an address is NOT a caller; 79 of the 82 had only that. The 82 were additionally
+  cleared of bare-hex/table references (no `k…Addr[]` entry, no arithmetic) and ZERO
+  collection address appears in `rt_export_addrs.inc` or `rt_data_mint_tables.inc` — so
+  regenerating both with `tools/rt_mint_gen.py --check` produced no change, as expected.
+  Nothing broke: link, unit and all three routes are clean, which is the honest test for a
+  row (a dead row that was live shows up as EXEC-of-0 at runtime, never as a link error).
+  `make unit`: **167 tests, 0 failures**. Debug and perf exes both build clean (the
+  perf build is the one that catches a deleted init printf). Routes, all exit 0, no
+  crash/hang log: autostart + pause-menu quit, the tutorial route, the front-end
+  menu route. `tools/dispatch_slot_map.py --check`: 0 mismatches before and after —
+  no registration changed, and slot 0x140151ca0 (GetFirstDialog) was never registered.
+  An `Array::operator= = delete` probe over the whole merged tree found **four**
+  copy-assignment sites, all of them the deliberate coverage in
+  `tests/unit/array_test.cpp`: no production code copy-assigns an Array, so the
+  operator becoming a DEEP copy in this pass changed nothing live.
+  `reinterpret_cast` (ENDGAME §B.4 metric):
+
+  | | code | engine | runtime | standalone | dx11 |
+  |---|---|---|---|---|---|
+  | B.3.1 close | 23,784 | 906 | 6,788 | 3,055 | 148 |
+  | B.3.2 close | 23,661 | 899 | 6,669 | 3,052 | 148 |
+
+  Same pattern as B.3.1 and for the same reason: a `fn_SomeArrayResize(hdr, n)` call
+  becomes `reinterpret_cast<GameColl::I32*>(field)->SetSize(n)`, so one cast shape is
+  traded for another. The drop is real but small (−242 overall) and comes from the
+  pointers and shims that disappeared outright, not from the conversions. These casts
+  are the B.3.2 bridge casts, one per use of a raw array header inside a struct that
+  is not a class yet; each disappears with that struct's own §B.2 conversion.
+
+  **Left, and why:**
+  - The ~20 sites that cite exe **0x1400021d0** but use the zeroing `GameColl::I32`
+    where the faithful type is `I32NoInit` (documented in `coll_bridge.h`). Flipping
+    them turns a zeroed tail into an as-found one; it is its own step, deliberately
+    not taken here.
+  - Not converted, by design (documented in-file): `EntityList`'s update/post-update
+    trees (an unbalanced BST standing in for retail's AVL, entangled with the tree
+    guards), exe helpers with non-zero or partial tail init or per-element deep copy,
+    the OOM-rollback appends in tradeui, the packfile introsort,
+    `Configuration`/`Persistence` settings maps (no type header / POD String node).
+  - The 241 collection rows kept because they are reached BY ADDRESS or BY NAME
+    (counts above). A row reached by address is a live door; deleting it is an
+    EXEC-of-0 at runtime, not a link error — so the wrapper call forms have to be in
+    the sweep's vocabulary before any row is deleted.
+  - `Set<Filename>` insert and the deep `Array::operator=` have **unit coverage only**:
+    there is no `.pkm` on this box, so `RefreshList`'s insert never runs, and no
+    production caller copy-assigns an Array. Both are exercised by `tests/unit/`
+    (`set_test.cpp`'s width-8 block drives `AvlGeneric` on the host, not the ported
+    bodies — the real run verifies those).
+  - 36 collection `fn_*` pointers and `fn_Array_Resize_Stride02/08/14/16B/20`,
+    `fn_BST_*`, `fn_DynArray_Clear_*` and friends stay: each still has at least one
+    caller in `code/Game`, and each disappears with its caller's own conversion.
+
+  Next: B.3.3 (`Object::Base`/`TypeInfo`/`Factory` + reflection macro, single owner).
+  Rules: `endgame_b/B32_RULES.md`; B31_RULES.md's closing pass was the template.
 
 - **B.3.1 CLOSED (2026-09-13 night):** `System::String`, `System::Filename` and the nine
   `Math` value types are real classes under retail's names (`runtime/types/system/*.h`,

@@ -2345,18 +2345,9 @@ namespace rtcoll {
         return nullptr;                                                       \
     }
 
-J1_ENTRY(180004890)   // Achievement: Array<ExternalPtr<Goal>>
 J1_ENTRY(180013da0)   // Graphics:    Material::_programs, ~Material's call (2026-09-12 cutover closure)
-J1_ENTRY(18001bf50)   // Graphics:    Array<Geometry*>, ~Geometry's tail call
 J1_ENTRY(18001c750)   // Graphics:    Array<int32>, the Scene dtor's four middle calls
-J1_ENTRY(18001c9e0)   // Graphics:    Renderer::_drawables
-J1_ENTRY(180033960)   // Engine:      MainLoop::_postDraw   (+0x80)
-J1_ENTRY(180033a40)   // Engine:      MainLoop::_postUpdate (+0x90)
 J1_ENTRY(180051d80)   // Audio:       Scene's channel array
-J1_ENTRY(18005fc20)   // Graphics:    Scene's Array<Node>
-J1_ENTRY(1800737f0)   // Picking:     Scene+0x08, Array<int>
-J1_ENTRY(1800739e0)   // Picking:     Scene+0x18, Array<Cell>  (also the AddMesh scratch)
-J1_ENTRY(180073bb0)   // Picking:     Scene+0x30, Array<Link>
 // WAVE 9 LANE UIF, 2026-09-08 — THE TWELFTH ADDRESS. Lane D's survey found
 // eleven; there are twelve. 0x180037240 is `UI::Element::_children`'s
 // `~Array<Element*>`, the call at 0x1801161f7 in `??1Element@UI@@UEAA@XZ` on
@@ -2371,7 +2362,6 @@ J1_ENTRY(180073bb0)   // Picking:     Scene+0x30, Array<Link>
 // (0x1801fc718, 0x18014b390, 0x1800c6c00, 0x18014b388). Same instructions,
 // same immediates, same targets, so the "no parameters at all, not even a
 // stride" conclusion covers it unchanged and one body still serves them all.
-J1_ENTRY(180037240)   // UI:          Element::_children (+0xa0), Array<Element*>
 // WAVE 11 LANE OBJLIFE, 2026-09-09 — THE SEVENTEENTH ADDRESS, and the note
 // above predicted it: 0x18002fb70 is `Object::InternalFactory::_objects`'
 // `~Array<Internal*>`, the TAIL JUMP of `??1InternalFactory@Object@@` at
@@ -2387,7 +2377,6 @@ J1_ENTRY(180037240)   // UI:          Element::_children (+0xa0), Array<Element*
 // (0x36) on both sides. The four external operands resolve identically to
 // 0x1801fc718, 0x18014b390, 0x1800c6c00 and 0x18014b388 — the same four the
 // J1 note above pins.
-J1_ENTRY(18002fb70)   // Object:      InternalFactory::_objects, Array<Internal*>
 // WAVE 9 LANE UIW, 2026-09-08 — THE THIRTEENTH AND FOURTEENTH ADDRESSES, both
 // reached by `?RemoveAllItems@ComboElement@UI@@` (0x180075120): its second and
 // third calls, on `_sprites` (+0xf8) and `_userData` (+0x108).
@@ -2473,7 +2462,6 @@ J1_ENTRY(1800248e0)   // IO:          CompressedStream::_windows (+0x30), Array<
 //     reports 63 differing bytes OUTSIDE the displacement fields and unequal
 //     targets. Without it, "IDENTICAL" would have been a screen that passes
 //     everything in this neighbourhood.
-J1_ENTRY(18002a930)   // IO:          Persistence's save-list Array<T>
 // 0x18000c4a0 was recorded by Wave 24 lane SMALLBODY as "a heap-buffer release
 // ... NOT re-implemented here: it is 0x18 bytes of somebody else's object and
 // this lane has no witness for what lives at +0x30". That blocker is
@@ -2486,7 +2474,6 @@ J1_ENTRY(18000c4a0)   // Audio:       Audio::Stream's +0x30 Array<T>
 // Cutover closure batch 2 (2026-09-12): 0x180051ef0 has no element-destroy
 // CALL at all — just the allocator Enter/Free/Leave triple and the two zero
 // stores. Same J1 body, no new spec.
-J1_ENTRY(180051ef0)   // Audio:       EffectSlot-adjacent Array<T>, trivial T
 // ---- CUTOVER CLOSURE BATCH 2b (2026-09-12): nine more J1 addresses ---------
 //
 // Every one was decompiled individually and is the SAME 115-byte body lane Q
@@ -2494,13 +2481,7 @@ J1_ENTRY(180051ef0)   // Audio:       EffectSlot-adjacent Array<T>, trivial T
 // no element-destroy prologue at all. J1 has no parameters (not even a stride),
 // so nine registrations cost nothing but nine lines, and each still owns its
 // own Site so a run can say which address it reached.
-J1_ENTRY(180005800)   // UI:       0x180005770's operator= clears through this
-J1_ENTRY(1800097f0)   // Achievement
-J1_ENTRY(180008e80)   // Achievement
-J1_ENTRY(180009700)   // Achievement
 J1_ENTRY(180014d00)   // Graphics: 0x180014c70's operator= clears through this
-J1_ENTRY(180033bc0)   // Save:     Persistence metadata
-J1_ENTRY(180033de0)   // Save:     Persistence metadata
 J1_ENTRY(180062320)   // Graphics
 // ---- CUTOVER VTABLE BATCH 4 "elem_B", 2026-09-12 --------------------------
 // Two more copies of the parameterless `~Array` body, both surfaced the usual
@@ -2536,15 +2517,11 @@ void* RtColl_I32ArrayAssign_18001cdf0(void* dst, const void* src) {
         AsArray<&SPEC>(a)->SetSize(n);                                       \
     }
 
-J3_ENTRY2(180008b90, kSpec_Bool)        // Achievement: Array<bool>, tail UNINITIALISED
-J3_ENTRY2(180008d60, kSpec_PtrZero)     // Achievement: Array<InternalPtr>
 J3_ENTRY2(1800604e0, kSpec_PtrZero)     // Graphics:    Material::_programs, Array<ExternalPtr<VideoProgram>> (2026-09-12)
 J3_ENTRY2(180056240, kSpec_VertexElement) // Video:      VertexLayout::_elements (2026-09-12)
-J3_ENTRY2(180008ff0, kSpec_U64Zero)     // Achievement: Array<Time>
 J3_ENTRY2(18002fea0, kSpec_I32)         // Object/UI:   Array<int32>, tail UNINITIALISED
 J3_ENTRY2(180059140, kSpec_Transform)   // Picking:     Array<Transform>, 4x unrolled in retail
 J3_ENTRY2(1800764c0, kSpec_PtrZero)     // UI:          Array<InternalPtr<Element>>
-J3_ENTRY2(180051390, kSpec_EffectSlot)  // Audio:       Array<EffectSlot>  [NON-TRIVIAL]
 // WAVE 10 LANE UIORACLE — TextElement::_parameters (+0xc8) [NON-TRIVIAL]
 J3_ENTRY2(180029a80, kSpec_StringRefZ)  // UI:          Array<System::String>, tail ZEROED
 // WAVE 9 LANE PKG2 rung 4b, 2026-09-08 — two more two-argument instantiations,
@@ -2583,8 +2560,6 @@ J3_ENTRY2(180024c10, kSpec_Window)      // IO:          Array<CompressedStream::
 //   0x18002a810  LEA RCX,[RAX+RAX*2] / SHL RCX,0x2 / MOV EDX,0x4, copy is three
 //                dword moves -> stride 0xc, align 4, tail UNINITIALISED. No
 //                existing row has stride 0xc; see kSpec_Blk12 above.
-J3_ENTRY2(18002a9d0, kSpec_Fill8)       // IO:          Persistence blockPtr Array<void*>
-J3_ENTRY2(18002a810, kSpec_Blk12)       // IO:          Persistence block directory
 // ---- WAVE 25 LANE INTERNAL42: the two UI ExternalPtr arrays ----------------
 // Wave 23 recorded 0x18002f070 and 0x1800492d0 as byte-identical (address-
 // normalised hash 4645ec). Unlike the J2 trio in array_destroy.cpp, that
@@ -2609,20 +2584,14 @@ J3_ENTRY2(1800492d0, kSpec_U64Zero)     // UI:          Array<ExternalPtr<Elemen
 // the ELEMENT TYPE does not decide the spec: 0x180008d60's ExternalPtr array
 // really does store a zero first and this one does not, and only the body says
 // which.
-J3_ENTRY2(180005110, kSpec_U64Zero)     // Achievement: Array<ExternalPtr<Goal>>
 
 // WAVE 26 LANE INT33 — see kSpec_Sprite38Z for why this is NOT kSpec_Sprite38
 // even though the two bodies agree on stride, align, assign helper and destroy
 // helper. [NON-TRIVIAL], but registered UNCONDITIONALLY; see the registration.
-J3_ENTRY2(180078950, kSpec_Sprite38Z)   // UI: Array<SpriteSheet::SpriteInfo>
-J3_ENTRY2(180075d20, kSpec_ExtStr10at08) // UI: Array<DialogNamedTemplate>
-J3_ENTRY2(180075b20, kSpec_CfgEntry20)   // UI: Array<DialogControllerConfigEntry>
 // WAVE 27 LANE FRONTIER - the cutover frontier. Two-argument, read from the
 // body (see kSpec_ExtArrayElem): nothing homes or reads R8.
-J3_ENTRY2(18002c6a0, kSpec_ExtArrayElem) // Object: External::_refs, the dependency array
 // WAVE 27 LANE FRONTIER - the array ?Serialize@StringTable@UI@@ resizes on the
 // read path. Two-argument, read from the body (see kSpec_StringPair10).
-J3_ENTRY2(180078c90, kSpec_StringPair10) // UI: StringTable's TextEntry array
 // Cutover closure batch 2 (2026-09-12): Graphics::Material::_parameters,
 // ~MaterialInstance's array's sibling SetSize.
 J3_ENTRY2(1800616c0, kSpec_MaterialParam) // Graphics: Material::_parameters
@@ -2637,11 +2606,9 @@ J3_ENTRY2(180053f00, kSpec_InnerArrayU8) // Video: ShaderProgram::_byteCode     
 J3_ENTRY2(18004ba90, kSpec_CaptureEntryZ) // UI: SpriteCapture::_entries clear
 J3_ENTRY2(1800370c0, kSpec_SpriteIndexZ)  // UI: SpriteCapture::_sprites clear
 // ---- CUTOVER CLOSURE BATCH 2b (2026-09-12) --------------------------------
-J3_ENTRY2(180009d70, kSpec_PtrZero)     // Achievement: Array<InternalPtr>, zero-then-copy
 J3_ENTRY2(18005cc60, kSpec_Ptr8Zero)    // Graphics:    Array<T*>, plain copy, zero tail
 J3_ENTRY2(1800136f0, kSpec_Tri18A4)     // Graphics:    EdgeMesh's TriangleList (align 4)
 J3_ENTRY2(180061880, kSpec_StringExtZ)  // Graphics:    Material's {String*,ExternalPtr}, zero tail
-J3_ENTRY2(180034010, kSpec_MetaEntry20) // Save:        Persistence metadata entries
 // ---- VTABLE BATCH 2 (2026-09-12) -----------------------------------------
 J3_ENTRY2(18004cdf0, kSpec_ExtPtrPair10) // UI: TabDescription's tab array
 J3_ENTRY2(1800799a0, kSpec_TableCell10)  // UI: TableDescription's cell array
@@ -2669,8 +2636,6 @@ J3_ENTRY2(180020e90, kSpec_Rec14)        // Graphics: one pool record's inner ar
         AsArray<&SPEC>(a)->SetSizeFill(n, fill);                             \
     }
 
-J3_ENTRY3(180004e30, kSpec_Sprite38)    // UI:       SpriteSheet's 0x38 element [NON-TRIVIAL]
-J3_ENTRY3(18001f990, kSpec_Fill8)       // Graphics: Array<Geometry*>
 J3_ENTRY3(180023830, kSpec_Fill4)       // Graphics: Array<uint32>
 J3_ENTRY3(180043b40, kSpec_LayoutInfo44) // UI: LayoutElement's per-cell info array (batch 2)
 J3_ENTRY3(18004f790, kSpec_Fill16)      // Engine:   MainLoop::_postDraw push
@@ -2687,7 +2652,6 @@ J3_ENTRY3(18004f8e0, kSpec_Fill16)      // Engine:   MainLoop::_postUpdate push
 // Registering it matters at cutover: unregistered, 0x180063a80 resolves to
 // nothing and AddLight silently fails to append the light.
 J3_ENTRY3(180063a80, kSpec_Fill16)      // Graphics: Renderer::_drawables push (AddLight)
-J3_ENTRY3(180061480, kSpec_StringExt)   // Graphics: Material's {String*,ExternalPtr} [NON-TRIVIAL]
 J3_ENTRY3(180076900, kSpec_Fill8Z)      // UI:       Element::AddChild's child array
 J3_ENTRY3(18007a0d0, kSpec_Fill8Z)      // Engine:   the dialog pending-list push
 // WAVE 9 LANE UIW, 2026-09-08 — five more three-argument instantiations, all
@@ -2706,23 +2670,19 @@ J3_ENTRY3(18007a0d0, kSpec_Fill8Z)      // Engine:   the dialog pending-list pus
 // The other two carry the new specs above.
 J3_ENTRY3(180024fe0, kSpec_Fill8)       // UI:       ComboElement::_userData  (+0x108)
 J3_ENTRY3(18004bfc0, kSpec_Fill16)      // UI:       ComboElement::_sprites   (+0xf8)
-J3_ENTRY3(180048fe0, kSpec_Fill8Z)      // UI:       RadioElement::_checkBoxes(+0xc0)
 J3_ENTRY3(1800298f0, kSpec_PkgEntry)    // IO:       PackageFile's entry array [NON-TRIVIAL]
 J3_ENTRY3(180034860, kSpec_StringRef)   // UI:       ComboElement::_strings   (+0xe8) [NON-TRIVIAL]
-J3_ENTRY3(1800417d0, kSpec_GraphSeries) // UI:       GraphElement::_graphs    (+0xf0) [NON-TRIVIAL]
 // WAVE 9 LANE GFX3 — the Graphics::Scene node array. Registered HERE and not in
 // runtime/src/graphics/scene_grid.cpp on purpose: it is a member of this
 // family, and a private second copy of SetSizeCore in the graphics tree is
 // exactly the drift this parameterisation exists to prevent. Its oracle is the
 // graphics grid probe, whose append arm drives it against the shipped body.
-J3_ENTRY3(18005fb00, kSpec_Node18)      // Graphics: Array<Scene::Node>
 // WAVE 9 LANE UIF — the UI sprite batch. Registered HERE for the same reason
 // lane GFX3 gave for 0x18005fb00: it is a member of this family, and a private
 // second copy of SetSizeCore in the UI tree is the drift this parameterisation
 // exists to prevent. Its only caller is SpriteContext::AddSpriteDraw
 // (0x18011c890, ported in runtime/src/ui/spritecontext.cpp), which appends one
 // element by passing `size + 1` and a pointer to the record.
-J3_ENTRY3(180078520, kSpec_SpriteDraw)  // UI:          Array<SpriteDraw> append
 // WAVE 10 LANE UI3 — the two grow helpers the four allocating DialogInstance
 // bodies tail-call (runtime/src/ui/dialog_create.cpp). Registered HERE, beside
 // the specs they reuse, for exactly the reason lane GFX3 and lane UIF each gave
@@ -2747,21 +2707,11 @@ J3_ENTRY3(180078520, kSpec_SpriteDraw)  // UI:          Array<SpriteDraw> append
 // structurally incapable of saying "different"
 // (reference_diagnostic_field_cannot_express_the_answer.md). The two listings,
 // the script and both runs are in docs/runtime_port/WAVE10_LANE_UI3.md §2.
-J3_ENTRY3(180076250, kSpec_Node18)      // UI:          DialogInstance::_timers append
-J3_ENTRY3(180076370, kSpec_Fill8Z)      // UI:          DialogInstance::_controllers append
-J3_ENTRY3(180051aa0, kSpec_Fill16A4)    // Graphics:    ParticleSystem::AddEmitter's emitter array
 
 // UI leftovers batch — the three-argument CaptureEntry and Event pushes:
 // SpriteContext::Begin's own callees build these with a fill value.
-J3_ENTRY3(18004bde0, kSpec_CaptureEntry) // UI: SpriteCapture::_entries append
 J3_ENTRY3(180033690, kSpec_Event30)      // UI: UserInterface::_events append
 // ---- CUTOVER CLOSURE BATCH 2b (2026-09-12) --------------------------------
-J3_ENTRY3(18002ffa0, kSpec_Fill8)       // Object:   Array<InternalPtr>, plain qword fill
-J3_ENTRY3(180053da0, kSpec_Fill1)       // Video:    Array<uint8>, the shader blob bytes
-J3_ENTRY3(180063680, kSpec_Fill38)      // Graphics: Array<blk56>
-J3_ENTRY3(180033080, kSpec_MetaEntry20) // Save:     Persistence metadata entries (fill form)
-J3_ENTRY3(1800332d0, kSpec_MetaData58)  // Save:     Array<Save::MetaData>
-J3_ENTRY3(1800638e0, kSpec_DrawGroup1f0)// Graphics: Renderer::BeginDrawGroup's group array
 
 
 #undef J3_ENTRY3
@@ -2772,9 +2722,6 @@ J3_ENTRY3(1800638e0, kSpec_DrawGroup1f0)// Graphics: Renderer::BeginDrawGroup's 
 // `MOV [RCX+0xc],0x7530` (the folded 3 * 10000) and `MOV [RDX],0xffffffff`.
 // It takes ONE argument. Registering it behind the two- or three-argument
 // signature would read a register the caller never set.
-void RtColl_ArraySetSize_18007b960(void* a) {
-    AsArray<&kSpec_I32Neg1>(a)->SetSize(10000);
-}
 
 // WAVE 9 LANE UIF — 0x1800783d0 is `Array<UI::SpriteDraw>::SetSize(0)`, the
 // SAME one-argument shape as 0x18007b960 above with the new size folded to the
@@ -2865,9 +2812,6 @@ void ReserveCore(ArrayHdr* a, int newSize, const ArraySpec* spec) {
 
 }
 
-void RtColl_ArrayReserve_18002fd90(void* a, int n) {
-    ReserveCore(static_cast<ArrayHdr*>(a), n, &kSpec_Fill8);
-}
 
 // CUTOVER CLOSURE BATCH 2b — 0x180051020, the THIRD constant-folded one-argument
 // SetSize (after 0x18007b960 and 0x1800783d0). `Audio::Scene`'s 256-channel
@@ -2875,9 +2819,6 @@ void RtColl_ArrayReserve_18002fd90(void* a, int n) {
 // loop bound `CMP R..,0x7000` is 256 * 0x70 written as a byte offset. It takes
 // ONE argument; a two-argument registration would read a register the caller
 // never set.
-void RtColl_ArraySetSize_180051020(void* a) {
-    AsArray<&kSpec_AudioChannel70>(a)->SetSize(0x100);
-}
 
 
 // ============================================================================
@@ -2906,52 +2847,6 @@ void RtColl_ArraySetSize_180051020(void* a) {
 // No ArraySpec: the element operations are inlined constants in this body (a
 // three-float compare and a four-dword move), not a parameter, so a spec row
 // would be a table with one entry and one user.
-void RtColl_ArrayRemove_180050e00(void* self, const float* value) {
-    ArrayHdr* a = static_cast<ArrayHdr*>(self);
-
-    int32_t  size = a->_size;
-    uint64_t off  = 0;
-    int64_t  idx  = 0;
-    int      removed = 0;
-
-    int32_t i = 0;
-    if (size > 0) {
-        do {
-            i = static_cast<int32_t>(idx);
-            const uint8_t* base = a->_data;
-            if (*reinterpret_cast<const float*>(base + off)     == value[0] &&
-                *reinterpret_cast<const float*>(base + off + 4) == value[1] &&
-                *reinterpret_cast<const float*>(base + off + 8) == value[2]) {
-                uint64_t o2 = off;
-                if (i < size) {
-                    uint32_t k;
-                    do {
-                        k = static_cast<uint32_t>(idx) + 1;
-                        idx = k;
-                        if (static_cast<int32_t>(k) < a->_size) {
-                            uint32_t* p = reinterpret_cast<uint32_t*>(a->_data + o2);
-                            if (p != nullptr) {
-                                p[0] = p[4];
-                                p[1] = p[5];
-                                p[2] = p[6];
-                                p[3] = p[7];
-                            }
-                        }
-                        o2 += 0x10;
-                    } while (static_cast<int32_t>(k) < a->_size);
-                }
-                a->_size = a->_size - 1;
-                i   = i - 1;
-                off = off - 0x10;
-                ++removed;
-            }
-            size = a->_size;
-            off += 0x10;
-            idx  = static_cast<uint32_t>(i + 1);
-        } while (i + 1 < size);
-    }
-
-}
 
 // UI leftovers batch — the SAME one-argument `SetSize(0)` shape as
 // 0x1800783d0 above, for two more callers: `UserInterface::CleanRemovedDialogs`
@@ -2974,13 +2869,7 @@ void RtColl_ArrayRemove_180050e00(void* self, const float* value) {
 // SetSizeCore is still the right implementation, for the same reason
 // 0x1800783d0 gives: if the "always dead" reasoning is ever wrong for either
 // spec, the two disagree under the diff oracle instead of silently agreeing.
-void RtColl_ArraySetSize_180079c90(void* a) {
-    AsArray<&kSpec_PtrZero>(a)->SetSize(0);
-}
 
-void RtColl_ArraySetSize_180079df0(void* a) {
-    AsArray<&kSpec_Event30>(a)->SetSize(0);
-}
 
 // ---- BATCH 4 (Graphics render/cull/sun-camera cluster) ---------------------
 // Two more one-argument constant-folded members, both reached from that
@@ -3135,7 +3024,6 @@ const ArraySpec kSpec_ModExternal18 = {          // 0x180028cd0
         AsArray<&SPEC>(a)->SetSizeFill(n, fill);                             \
     }
 
-J3_ENTRY3(18002ae20, kSpec_SaveGameInfo)   // IO: Persistence's save-list append
 J3_ENTRY3(180028cd0, kSpec_ModExternal18)  // IO: SetupFileSystem's reload list
 
 #undef J3_ENTRY3
@@ -3156,9 +3044,6 @@ J3_ENTRY3(180028cd0, kSpec_ModExternal18)  // IO: SetupFileSystem's reload list
 // `_size = 0`: it reproduces the same unreachable branches for the same
 // reasons, so if that reading is ever wrong the two disagree under the oracle
 // instead of agreeing by construction.
-void RtColl_ArraySetSize_18002aae0(void* a) {
-    AsArray<&kSpec_SaveGameInfo>(a)->SetSize(0);
-}
 
 
 // ============================================================================
@@ -3184,9 +3069,6 @@ const ArraySpec kSpec_EmitterInstance = {        // 0x180052330
     "Array<Audio::EmitterInstance>", 0x10, 4, &Assign16, &InitZero10, nullptr,
     true, 0, 0, 0, 0, 0, 0 };
 
-void RtColl_ArraySetSize_180052330(void* a, int n) {
-    AsArray<&kSpec_EmitterInstance>(a)->SetSize(n);
-}
 
 
 // ============================================================================
@@ -3464,7 +3346,6 @@ D1_J1_ENTRY(18003d8c0)   // UI:       DocumentTextElement +0x110 / Description +
 D1_J1_ENTRY(18003da00)   // UI:       DocumentTextElement +0x120 / SpriteCapture::_sheets
 D1_J1_ENTRY(18003db40)   // UI:       DocumentTextElement +0x130 / Description +0xd0
 D1_J1_ENTRY(18003e0c0)   // UI:       DocumentTextElement +0x148
-D1_J1_ENTRY(1800527a0)   // Audio:    SoundEffect's Array<Sample>, 0x180052700's clear
 
 #undef D1_J1_ENTRY
 
@@ -3571,11 +3452,6 @@ void RtColl_ArraySetSize_18003d430(void* a) {
 
 J1_ENTRY(180065bf0)   // Collision2D: CollisionMesh::_ptsA (+0x30) AND _ptsB (+0x40)
 J1_ENTRY(180065e80)   // Collision2D: CollisionMesh::_surfaces (+0x60)
-J1_ENTRY(180066cd0)   // Collision2D: Face::quads             (+0x18)
-J1_ENTRY(180066fa0)   // Collision2D: Face::triples           (+0x08)
-J1_ENTRY(180073e60)   // Picking:     SubMesh::_triangles     (+0x60)
-J1_ENTRY(180074250)   // Picking:     SubMesh::_vertices      (+0x40)
-J1_ENTRY(180074360)   // Picking:     SubMesh::_uvs           (+0x70)
 
 #undef J1_ENTRY
 
@@ -3919,14 +3795,6 @@ void RtColl_ArraySetSize_180076a40(void* a) {
 // cutover: retail's SetSize reaches each by rel32, and our SetSize reaches
 // them through the ArraySpec, but a THIRD caller resolving the address (or the
 // mint) would otherwise find nothing.
-void* RtColl_ElemCopyCtor_180065b70(void* dst, const void* src) {
-    return AssignFace28Impl(static_cast<uint8_t*>(dst),
-                            static_cast<const uint8_t*>(src));
-}
-void* RtColl_ElemCopyCtor_1800734a0(void* dst, const void* src) {
-    return AssignSubMesh80Impl(static_cast<uint8_t*>(dst),
-                               static_cast<const uint8_t*>(src));
-}
 
 
 }  // namespace rtcoll
@@ -3951,26 +3819,47 @@ void* RtColl_ElemCopyCtor_1800734a0(void* dst, const void* src) {
 // engine/funcs/engine_funcs.cpp stop reaching the DLL's Array bodies and reach
 // these. Several of those files carried comments asserting the opposite; they
 // are corrected in the same commit. If this lane is reverted, revert those too.
+// ---------------------------------------------------------------------------
+// ENDGAME B.3.2 CLOSING PASS (2026-09-18) — 67 ENTRY POINTS AND ROWS REMOVED.
+//
+// Each had NO caller in the tree by NAME and NO reference to its retail address
+// in CODE: not a `ResolveAddr(Module::Runtime, 0x18…)`, not a second
+// `RegisterRuntimeAddr`, not one of the wrapper forms (`RtAddr<Fn>(0x…)`,
+// `RtAddrFn`, `ArrayDtor(0x…, p)`, `ArraySetSize(0x…, …)`, `SetSizeWithFill`,
+// `PlainArrayDtor`, `ByAddr(0x…)`), not a bare-hex table entry, and not
+// `standalone/rt_export_addrs.inc` or `rt_data_mint_tables.inc` (ZERO
+// collection addresses appear in either). The only remaining mentions are the
+// provenance comments in this file and its neighbours, which are still true
+// statements about the DLL and are left standing — so if you find a banner
+// below naming an address with no entry, THIS is why. The closure is at zero
+// unported engine functions, so there is no future Runtime caller either.
+//
+// Removed (retail addresses):
+//   J1  ~Array:        180004890 18001bf50 18001c9e0 180033960 180033a40
+//                      18005fc20 1800737f0 1800739e0 180073bb0 180037240
+//                      18002fb70 18002a930 180051ef0 180005800 1800097f0
+//                      180008e80 180009700 180033bc0 180033de0 1800527a0
+//                      180066cd0 180066fa0 180073e60 180074250 180074360
+//   J3  SetSize:       180008b90 180008d60 180008ff0 18007b960 18002a9d0
+//                      180052330 180005110 18002c6a0 180078c90 180078950
+//                      180075d20 180075b20 180079df0 180079c90 180051390
+//                      180009d70 180034010 180051020 18002aae0 18002a810
+//   J3  SetSize(fill): 18001f990 18005fb00 180048fe0 1800417d0 180078520
+//                      180076250 180076370 18004bde0 180051aa0 180004e30
+//                      180061480 18002ffa0 180053da0 180063680 180033080
+//                      1800332d0 1800638e0 18002ae20
+//   other:             18002fd90 (Reserve)  180050e00 (Remove)
+//                      180065b70 1800734a0 (element copy ctors)
+// ---------------------------------------------------------------------------
 void RtCollectionPortInit() {
     using namespace rtcoll;
 
     // ---- J1: Array<T>::~Array, one body, eleven addresses ------------------
-    RegisterRuntimeAddr(0x180004890, (void*)&RtColl_ArrayDtor_180004890);
     RegisterRuntimeAddr(0x180013da0, (void*)&RtColl_ArrayDtor_180013da0);
-    RegisterRuntimeAddr(0x18001bf50, (void*)&RtColl_ArrayDtor_18001bf50);
     RegisterRuntimeAddr(0x18001c750, (void*)&RtColl_ArrayDtor_18001c750);
-    RegisterRuntimeAddr(0x18001c9e0, (void*)&RtColl_ArrayDtor_18001c9e0);
-    RegisterRuntimeAddr(0x180033960, (void*)&RtColl_ArrayDtor_180033960);
-    RegisterRuntimeAddr(0x180033a40, (void*)&RtColl_ArrayDtor_180033a40);
     RegisterRuntimeAddr(0x180051d80, (void*)&RtColl_ArrayDtor_180051d80);
-    RegisterRuntimeAddr(0x18005fc20, (void*)&RtColl_ArrayDtor_18005fc20);
-    RegisterRuntimeAddr(0x1800737f0, (void*)&RtColl_ArrayDtor_1800737f0);
-    RegisterRuntimeAddr(0x1800739e0, (void*)&RtColl_ArrayDtor_1800739e0);
-    RegisterRuntimeAddr(0x180073bb0, (void*)&RtColl_ArrayDtor_180073bb0);
     // Wave 9 lane UIF: the twelfth J1 address, reached by ??1Element@UI@@.
-    RegisterRuntimeAddr(0x180037240, (void*)&RtColl_ArrayDtor_180037240);
     // Wave 11 lane OBJLIFE: the seventeenth, reached by ??1InternalFactory@Object@@.
-    RegisterRuntimeAddr(0x18002fb70, (void*)&RtColl_ArrayDtor_18002fb70);
     // ---- THIRTEENTH THROUGH SIXTEENTH, and the number is STILL a lower bound.
     //
     // Lanes UIC and UIW each found "the thirteenth and fourteenth" J1 address,
@@ -4012,13 +3901,9 @@ void RtCollectionPortInit() {
     // exactly as lane UIC described it. Both are exercised today —
     // 0x18002a930 has three call sites in the tree and 0x18000c4a0 one — but a
     // call site is not attendance, and neither has been watched running.
-    RegisterRuntimeAddr(0x18002a930, (void*)&RtColl_ArrayDtor_18002a930);
     RegisterRuntimeAddr(0x18000c4a0, (void*)&RtColl_ArrayDtor_18000c4a0);
-    RegisterRuntimeAddr(0x180051ef0, (void*)&RtColl_ArrayDtor_180051ef0);
 
     // ---- J3: SetSize, trivially-copyable elements --------------------------
-    RegisterRuntimeAddr(0x180008b90, (void*)&RtColl_ArraySetSize_180008b90);
-    RegisterRuntimeAddr(0x180008d60, (void*)&RtColl_ArraySetSize_180008d60);
     RegisterRuntimeAddr(0x1800604e0, (void*)&RtColl_ArraySetSize_1800604e0);
     RegisterRuntimeAddr(0x180056240, (void*)&RtColl_ArraySetSize_180056240);
     // 2026-09-12 — Video::ShaderProgram's two. Registered UNCONDITIONALLY and
@@ -4028,11 +3913,9 @@ void RtCollectionPortInit() {
     // to zero the moment the DLL is gone.
     RegisterRuntimeAddr(0x180055db0, (void*)&RtColl_ArraySetSize_180055db0);
     RegisterRuntimeAddr(0x180053f00, (void*)&RtColl_ArraySetSize_180053f00);
-    RegisterRuntimeAddr(0x180008ff0, (void*)&RtColl_ArraySetSize_180008ff0);
     RegisterRuntimeAddr(0x18002fea0, (void*)&RtColl_ArraySetSize_18002fea0);
     RegisterRuntimeAddr(0x180059140, (void*)&RtColl_ArraySetSize_180059140);
     RegisterRuntimeAddr(0x1800764c0, (void*)&RtColl_ArraySetSize_1800764c0);
-    RegisterRuntimeAddr(0x18007b960, (void*)&RtColl_ArraySetSize_18007b960);
     // BATCH 4 (Graphics render/cull/sun-camera cluster), two one-argument
     // constant-folded members. 0x18005f980 is a Reserve, not a SetSize — see
     // the banner over RtColl_ArrayReserve_18005f980.
@@ -4043,21 +3926,15 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x180024d70, (void*)&RtColl_ArraySetSize_180024d70);  // PKG2 4b-ii
     RegisterRuntimeAddr(0x180024c10, (void*)&RtColl_ArraySetSize_180024c10);  // PKG2 4b-ii
     // Wave 25 lane INTERNAL42: Wave 24 lane INTERNAL8's two declared doors.
-    RegisterRuntimeAddr(0x18002a9d0, (void*)&RtColl_ArraySetSize_18002a9d0);
-    RegisterRuntimeAddr(0x18002a810, (void*)&RtColl_ArraySetSize_18002a810);
     // BATCH 8b: Audio::Scene::EffectSlot::positions, the read-path resize
     // inside the EffectSlot inner-array serialize (0x180051e00).
-    RegisterRuntimeAddr(0x180052330, (void*)&RtColl_ArraySetSize_180052330);
     RegisterRuntimeAddr(0x18002f070, (void*)&RtColl_ArraySetSize_18002f070);
     RegisterRuntimeAddr(0x1800492d0, (void*)&RtColl_ArraySetSize_1800492d0);
-    RegisterRuntimeAddr(0x180005110, (void*)&RtColl_ArraySetSize_180005110);
     // WAVE 27 LANE FRONTIER - the address cutover attempt 29 died on. Its
     // caller is runtime/src/object/external_load.cpp:157, whose door comment
     // predicted this exact EXEC-of-0 and is updated in the same commit.
-    RegisterRuntimeAddr(0x18002c6a0, (void*)&RtColl_ArraySetSize_18002c6a0);
     // WAVE 27 LANE FRONTIER - the read-path resize inside
     // ?Serialize@StringTable@UI@@ (0x18011d9b7), ported in the same commit.
-    RegisterRuntimeAddr(0x180078c90, (void*)&RtColl_ArraySetSize_180078c90);
     RegisterRuntimeAddr(0x1800616c0, (void*)&RtColl_ArraySetSize_1800616c0);
     // Wave 26 lane INT33 — Array<SpriteSheet::SpriteInfo>::SetSize, the
     // two-argument form. NON-TRIVIAL, and registered HERE rather than behind
@@ -4068,13 +3945,10 @@ void RtCollectionPortInit() {
     // and registered by runtime/src/collection/array_destroy.cpp, so
     // Assign38Call and Destroy38 reach OUR bodies through the registry-first
     // ResolveAddr. Checked in that file rather than assumed from the tier name.
-    RegisterRuntimeAddr(0x180078950, (void*)&RtColl_ArraySetSize_180078950);
     // Wave 26 lane INT33 — Array<DialogNamedTemplate>::SetSize. Same reasoning
     // as the line above: its one per-element helper (0x180039640) is ported and
     // registered by array_destroy.cpp in this commit, so it is not in the tier
     // the non-trivial tier covers.
-    RegisterRuntimeAddr(0x180075d20, (void*)&RtColl_ArraySetSize_180075d20);
-    RegisterRuntimeAddr(0x180075b20, (void*)&RtColl_ArraySetSize_180075b20);
     // VTABLE BATCH 2 (2026-09-12): the three read-path resizes of the
     // UI::*Description second half, plus LayoutElement's info array.
     RegisterRuntimeAddr(0x18004cdf0, (void*)&RtColl_ArraySetSize_18004cdf0);
@@ -4082,7 +3956,6 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x180043d80, (void*)&RtColl_ArraySetSize_180043d80);
     RegisterRuntimeAddr(0x180043b40, (void*)&RtColl_ArraySetSizeFill_180043b40);
     RegisterRuntimeAddr(0x1800298f0, (void*)&RtColl_ArraySetSizeFill_1800298f0);  // PKG2 4c-ii
-    RegisterRuntimeAddr(0x18001f990, (void*)&RtColl_ArraySetSizeFill_18001f990);
     RegisterRuntimeAddr(0x180023830, (void*)&RtColl_ArraySetSizeFill_180023830);
     RegisterRuntimeAddr(0x18004f790, (void*)&RtColl_ArraySetSizeFill_18004f790);
     RegisterRuntimeAddr(0x18004f8e0, (void*)&RtColl_ArraySetSizeFill_18004f8e0);
@@ -4091,11 +3964,9 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x180076900, (void*)&RtColl_ArraySetSizeFill_180076900);
     RegisterRuntimeAddr(0x18007a0d0, (void*)&RtColl_ArraySetSizeFill_18007a0d0);
     // ---- Wave 9 lane GFX3: the Graphics::Scene node array ------------------
-    RegisterRuntimeAddr(0x18005fb00, (void*)&RtColl_ArraySetSizeFill_18005fb00);
     // ---- Wave 9 lane UIW: the five UI instantiations -----------------------
     RegisterRuntimeAddr(0x180024fe0, (void*)&RtColl_ArraySetSizeFill_180024fe0);
     RegisterRuntimeAddr(0x18004bfc0, (void*)&RtColl_ArraySetSizeFill_18004bfc0);
-    RegisterRuntimeAddr(0x180048fe0, (void*)&RtColl_ArraySetSizeFill_180048fe0);
     // The two NON-TRIVIAL ones are registered HERE, unconditionally, and NOT
     // in the non-trivial tier. That tier is called out because its three
     // members call unexported per-element helpers BY ADDRESS INTO THE DLL, so
@@ -4112,26 +3983,18 @@ void RtCollectionPortInit() {
     // caller of which is ?SetParameterCount@TextElement@UI@@ (ported this wave).
     RegisterRuntimeAddr(0x180029a80, (void*)&RtColl_ArraySetSize_180029a80);
     RegisterRuntimeAddr(0x180034860, (void*)&RtColl_ArraySetSizeFill_180034860);
-    RegisterRuntimeAddr(0x1800417d0, (void*)&RtColl_ArraySetSizeFill_1800417d0);
 
     // ---- Wave 9 lane UIW: the one helper that is neither SetSize nor ~Array
     RegisterRuntimeAddr(0x18001cdf0, (void*)&RtColl_I32ArrayAssign_18001cdf0);
     // WAVE 9 LANE UIF — Array<UI::SpriteDraw>: append (3-arg) and clear (0-arg).
-    RegisterRuntimeAddr(0x180078520, (void*)&RtColl_ArraySetSizeFill_180078520);
     RegisterRuntimeAddr(0x1800783d0, (void*)&RtColl_ArraySetSize_1800783d0);
     // WAVE 10 LANE UI3 — the two DialogInstance grow helpers. Both are
     // byte-identical to a body already registered above; the measurement and
     // its negative control are in the J3 table's note.
-    RegisterRuntimeAddr(0x180076250, (void*)&RtColl_ArraySetSizeFill_180076250);
-    RegisterRuntimeAddr(0x180076370, (void*)&RtColl_ArraySetSizeFill_180076370);
     // ---- UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) -------
     RegisterRuntimeAddr(0x18004ba90, (void*)&RtColl_ArraySetSize_18004ba90);
     RegisterRuntimeAddr(0x1800370c0, (void*)&RtColl_ArraySetSize_1800370c0);
-    RegisterRuntimeAddr(0x18004bde0, (void*)&RtColl_ArraySetSizeFill_18004bde0);
     RegisterRuntimeAddr(0x180033690, (void*)&RtColl_ArraySetSizeFill_180033690);
-    RegisterRuntimeAddr(0x180079c90, (void*)&RtColl_ArraySetSize_180079c90);
-    RegisterRuntimeAddr(0x180079df0, (void*)&RtColl_ArraySetSize_180079df0);
-    RegisterRuntimeAddr(0x180051aa0, (void*)&RtColl_ArraySetSizeFill_180051aa0);
     // 0x180011010, 0x180010ab0 and 0x1800419b0 are NOT registered here: all
     // three belong to runtime/src/collection/array_destroy.cpp, which already
     // registered 0x180010ab0 and, in this same commit, registers the other two
@@ -4143,9 +4006,6 @@ void RtCollectionPortInit() {
     // unexported per-element helpers by address (five new lane-D rows) and the
     // only ones with a shrink-path destroy. An integration run that sees a new
     // failure can halve the search space with one env var.
-    RegisterRuntimeAddr(0x180004e30, (void*)&RtColl_ArraySetSizeFill_180004e30);
-    RegisterRuntimeAddr(0x180051390, (void*)&RtColl_ArraySetSize_180051390);
-    RegisterRuntimeAddr(0x180061480, (void*)&RtColl_ArraySetSizeFill_180061480);
 
     // ---- Wave 9 lane UIC: Collection::LinkedList's three helpers -----------
     // In their own file — see runtime/src/collection/linkedlist.cpp. Called
@@ -4205,13 +4065,7 @@ void RtCollectionPortInit() {
     // (reference_census_cannot_see_nonliteral_registrations.md).
     //
     // J1 — nine more copies of the parameterless `~Array` body.
-    RegisterRuntimeAddr(0x180005800, (void*)&RtColl_ArrayDtor_180005800);
-    RegisterRuntimeAddr(0x1800097f0, (void*)&RtColl_ArrayDtor_1800097f0);
-    RegisterRuntimeAddr(0x180008e80, (void*)&RtColl_ArrayDtor_180008e80);
-    RegisterRuntimeAddr(0x180009700, (void*)&RtColl_ArrayDtor_180009700);
     RegisterRuntimeAddr(0x180014d00, (void*)&RtColl_ArrayDtor_180014d00);
-    RegisterRuntimeAddr(0x180033bc0, (void*)&RtColl_ArrayDtor_180033bc0);
-    RegisterRuntimeAddr(0x180033de0, (void*)&RtColl_ArrayDtor_180033de0);
     RegisterRuntimeAddr(0x180062320, (void*)&RtColl_ArrayDtor_180062320);
 
     // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12) --------------------
@@ -4219,28 +4073,17 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x1800490e0, (void*)&RtColl_ArrayDtor_1800490e0);
 
     // J3, two-argument.
-    RegisterRuntimeAddr(0x180009d70, (void*)&RtColl_ArraySetSize_180009d70);
     RegisterRuntimeAddr(0x18005cc60, (void*)&RtColl_ArraySetSize_18005cc60);
     RegisterRuntimeAddr(0x1800136f0, (void*)&RtColl_ArraySetSize_1800136f0);
     RegisterRuntimeAddr(0x180061880, (void*)&RtColl_ArraySetSize_180061880);
-    RegisterRuntimeAddr(0x180034010, (void*)&RtColl_ArraySetSize_180034010);
 
     // J3, three-argument.
-    RegisterRuntimeAddr(0x18002ffa0, (void*)&RtColl_ArraySetSizeFill_18002ffa0);
-    RegisterRuntimeAddr(0x180053da0, (void*)&RtColl_ArraySetSizeFill_180053da0);
-    RegisterRuntimeAddr(0x180063680, (void*)&RtColl_ArraySetSizeFill_180063680);
-    RegisterRuntimeAddr(0x180033080, (void*)&RtColl_ArraySetSizeFill_180033080);
-    RegisterRuntimeAddr(0x1800332d0, (void*)&RtColl_ArraySetSizeFill_1800332d0);
-    RegisterRuntimeAddr(0x1800638e0, (void*)&RtColl_ArraySetSizeFill_1800638e0);
 
     // J3, constant-folded one-argument (the third of its kind).
-    RegisterRuntimeAddr(0x180051020, (void*)&RtColl_ArraySetSize_180051020);
 
     // The new fourth job: Reserve. NOT a SetSize — see ReserveCore's banner.
-    RegisterRuntimeAddr(0x18002fd90, (void*)&RtColl_ArrayReserve_18002fd90);
 
     // The fifth job: Remove(const T&). Also not a SetSize — see its banner.
-    RegisterRuntimeAddr(0x180050e00, (void*)&RtColl_ArrayRemove_180050e00);
 
     // ARM the probe rather than running it. It runs on the first call into any
     // entry point above, because at THIS moment the DLL's MemoryAllocator is
@@ -4251,8 +4094,6 @@ void RtCollectionPortInit() {
     // ported in this commit. Their two element-destroy helpers are registered
     // by array_destroy.cpp in the same commit, so both halves are ours and
     // neither of these three opens a door onto an unported callee.
-    RegisterRuntimeAddr(0x18002ae20, (void*)&RtColl_ArraySetSizeFill_18002ae20);
-    RegisterRuntimeAddr(0x18002aae0, (void*)&RtColl_ArraySetSize_18002aae0);
     RegisterRuntimeAddr(0x180028cd0, (void*)&RtColl_ArraySetSizeFill_180028cd0);
 
     // BATCH 5 — the seventh Collection::Set instantiation, the compiled-path →
@@ -4293,7 +4134,6 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x18003da00, (void*)&RtColl_ArrayDtor_18003da00);
     RegisterRuntimeAddr(0x18003db40, (void*)&RtColl_ArrayDtor_18003db40);
     RegisterRuntimeAddr(0x18003e0c0, (void*)&RtColl_ArrayDtor_18003e0c0);
-    RegisterRuntimeAddr(0x1800527a0, (void*)&RtColl_ArrayDtor_1800527a0);
 
     RegisterRuntimeAddr(0x18003e600, (void*)&RtColl_ArraySetSize_18003e600);
     RegisterRuntimeAddr(0x18003ea50, (void*)&RtColl_ArraySetSize_18003ea50);
@@ -4319,11 +4159,6 @@ void RtCollectionPortInit() {
     // J1 -- seven more copies of the parameterless ~Array body.
     RegisterRuntimeAddr(0x180065bf0, (void*)&RtColl_ArrayDtor_180065bf0);
     RegisterRuntimeAddr(0x180065e80, (void*)&RtColl_ArrayDtor_180065e80);
-    RegisterRuntimeAddr(0x180066cd0, (void*)&RtColl_ArrayDtor_180066cd0);
-    RegisterRuntimeAddr(0x180066fa0, (void*)&RtColl_ArrayDtor_180066fa0);
-    RegisterRuntimeAddr(0x180073e60, (void*)&RtColl_ArrayDtor_180073e60);
-    RegisterRuntimeAddr(0x180074250, (void*)&RtColl_ArrayDtor_180074250);
-    RegisterRuntimeAddr(0x180074360, (void*)&RtColl_ArrayDtor_180074360);
     // J3, two-argument.
     RegisterRuntimeAddr(0x180062110, (void*)&RtColl_ArraySetSize_180062110);
     RegisterRuntimeAddr(0x180061bb0, (void*)&RtColl_ArraySetSize_180061bb0);
@@ -4341,8 +4176,6 @@ void RtCollectionPortInit() {
     // J3, three-argument (UI::Font::ComputeLineLayout appends one glyph).
     RegisterRuntimeAddr(0x180076d10, (void*)&RtColl_ArraySetSizeFill_180076d10);
     // The two element copy constructors the non-trivial specs above call.
-    RegisterRuntimeAddr(0x180065b70, (void*)&RtColl_ElemCopyCtor_180065b70);
-    RegisterRuntimeAddr(0x1800734a0, (void*)&RtColl_ElemCopyCtor_1800734a0);
     // J3, constant-folded one-argument.
     RegisterRuntimeAddr(0x180076a40, (void*)&RtColl_ArraySetSize_180076a40);
 }

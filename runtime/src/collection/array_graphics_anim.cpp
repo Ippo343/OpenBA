@@ -375,15 +375,6 @@ void* Rt_ArrayDtor_18005bbb0(void* a) { Clear_18005bbb0(static_cast<ArrayHdr*>(a
 // ---- the three per-element destroy helpers --------------------------------
 // Retail's arity, including the `this` every one of them spills to the shadow
 // space and never reads (array_destroy.cpp's "ignoredThis" note applies).
-void Rt_DestroyNodes_180014a40(void* t, void* base, int n) {
-    DestroyMeshNodeRange(t, static_cast<uint8_t*>(base), n);
-}
-void Rt_DestroyStates_18005bce0(void* t, void* base, int n) {
-    DestroyAnimStateRange(t, static_cast<uint8_t*>(base), n);
-}
-void Rt_DestroyInstances_18005c550(void* t, void* base, int n) {
-    DestroyInstanceRange(t, static_cast<uint8_t*>(base), n);
-}
 
 // ---- J3: SetSize ----------------------------------------------------------
 void Rt_SetSize_18005aa30(void* a, int n) {   // Array<GraphicsMesh::Node>
@@ -432,6 +423,12 @@ void* Rt_ArrayAssign_18001b810(void* d, const void* s) {   // Array<Interpolated
 // either shipped build, so all seventeen are RegisterRuntimeAddr and none is a
 // RegisterRuntimeExport. (array.cpp's banner establishes that for the family:
 // the profile DLL's 5,182-name export directory has no `Array@Collection` row.)
+// ENDGAME B.3.2 closing pass (2026-09-18): the three per-element destroy
+// wrappers (0x180014a40 nodes, 0x18005bce0 states, 0x18005c550 instances) and
+// their rows were removed at zero callers — nothing in the tree resolves those
+// addresses in any form, and their CORES (DestroyMeshNodeRange /
+// DestroyAnimStateRange / DestroyInstanceRange) are still called from this
+// file's own dtor bodies, so only the retail-arity forwarders went.
 int RtCollectionGraphicsAnimRegister() {
     int n = 0;
     RegisterRuntimeAddr(0x18001c480ull, (void*)&Rt_ArrayDtor_18001c480);          ++n;
@@ -439,9 +436,6 @@ int RtCollectionGraphicsAnimRegister() {
     RegisterRuntimeAddr(0x180014090ull, (void*)&Rt_ArrayDtor_180014090);          ++n;
     RegisterRuntimeAddr(0x18005bbb0ull, (void*)&Rt_ArrayDtor_18005bbb0);          ++n;
 
-    RegisterRuntimeAddr(0x180014a40ull, (void*)&Rt_DestroyNodes_180014a40);       ++n;
-    RegisterRuntimeAddr(0x18005bce0ull, (void*)&Rt_DestroyStates_18005bce0);      ++n;
-    RegisterRuntimeAddr(0x18005c550ull, (void*)&Rt_DestroyInstances_18005c550);   ++n;
 
     RegisterRuntimeAddr(0x18005aa30ull, (void*)&Rt_SetSize_18005aa30);            ++n;
     RegisterRuntimeAddr(0x18005b1e0ull, (void*)&Rt_SetSize_18005b1e0);            ++n;

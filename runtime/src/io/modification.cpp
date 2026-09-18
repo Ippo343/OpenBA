@@ -146,6 +146,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <cstddef>    // offsetof — the Set<Filename> node-layout asserts below
 #include <new>        // placement new into freshly allocated Filename storage
 
 #include "../../funcs/rt_port.h"
@@ -387,11 +388,18 @@ void* RtColl_SetNodeNew_180010570(void* set, const void* key, void* parent) {
                       static_cast<ModSetNode*>(parent));
 }
 
-// 0x180009c30 — Set<Filename> node free. Null-guarded on the NODE, at entry.
-void RtColl_SetNodeFree_180009c30(void* /*ignoredSet*/, void* node) {
-    if (node == nullptr) return;
-    ModMemFree(node);
-}
+// The Set<Filename> instantiation whose node walk this file needs. Only
+// `DestroySubtree` is used from it, and that member touches nothing but `Node`,
+// `T::~T` and the allocator door — never `Compare`, never `KeyTraits`, never
+// `AvlOps` — so the compare policy here is immaterial and does NOT have to be
+// (and deliberately is not) `modification_refresh.cpp`'s `FilenameICompare`:
+// the keyed machinery lives in that file and stays there.
+using ModSetT = Collection::Set<System::Filename>;
+static_assert(sizeof(ModSetT::Node) == sizeof(ModSetNode),
+              "Set<Filename>::Node is ModSetNode's 0x28 bytes");
+static_assert(offsetof(ModSetT::Node, parent) == offsetof(ModSetNode, parent), "parent");
+static_assert(offsetof(ModSetT::Node, left)   == offsetof(ModSetNode, left),   "left");
+static_assert(offsetof(ModSetT::Node, right)  == offsetof(ModSetNode, right),  "right");
 
 // 0x1800104f0 — Set<Filename> clone-subtree. The `MOV word ptr [RAX+0x22]`
 // immediately after the allocation is UNGUARDED in retail: a failed node
@@ -421,15 +429,19 @@ void* RtColl_SetCloneSubtree_1800104f0(void* set, const void* srcv) {
 // 0x180010470 — Set<Filename> destroy-subtree. Post-order, then the key's
 // release, then the node. The null test is at entry, which is why every caller
 // hands it a possibly-null child.
+//
+// ENDGAME B.3.2 closing pass: FOLDED onto `Collection::Set<Filename>::
+// DestroySubtree`, which is the same walk in the same order —
+//   if (!n) return; left; right; element.~T(); Free(n);
+// — and the same free: the template's `Alloc::Free` for `DefaultAllocator` is
+// `SetNodeFree` -> `rtsetavl::SetNodeFree(nullptr, n)` -> `rtcoll::DoorFree()`,
+// which is byte-for-byte where this file's own `ModMemFree` went. The node's
+// `key` is `Node::element` at +0x00 (static_asserted above), so the Filename
+// release is the same dtor on the same bytes. The set argument stays in the
+// signature because retail's 0x180010470 takes it and ignores it.
 void RtColl_SetDestroySubtree_180010470(void* set, void* nodev) {
-    ModSetNode* n = static_cast<ModSetNode*>(nodev);
-    if (n == nullptr) return;
-    RtColl_SetDestroySubtree_180010470(set, n->left);
-    RtColl_SetDestroySubtree_180010470(set, n->right);
-    // The key's release, then the node — retail's Filename dtor on the same
-    // bytes as above (identical refcount code; see RtIo_Mod_Dtor_180011460).
-    Sys(n->key).~Filename();
-    RtColl_SetNodeFree_180009c30(set, n);
+    (void)set;
+    ModSetT::DestroySubtree(static_cast<ModSetT::Node*>(nodev));
 }
 
 // ============================================================================
@@ -847,8 +859,10 @@ int RtIoModificationRegister() {
     // and the registry's last binding won, so two bodies were dead code and
     // which one survived depended on init order. Lane VID2 found it;
     // runtime/src/system/allocator.cpp is the single owner and registers it
-    // unconditionally. RtColl_SetNodeFree_180009c30 is retained for this file's
-    // own direct calls.
+    // unconditionally. This file's own `RtColl_SetNodeFree_180009c30` copy went
+    // with the B.3.2 closing pass: its last caller, the destroy-subtree walk,
+    // is now `Collection::Set<Filename>::DestroySubtree`, whose free is that
+    // same door.
 
     printf("[RtPort]   IO::Modification (lane MOD): %d exports + 14 addresses\n", n);
 

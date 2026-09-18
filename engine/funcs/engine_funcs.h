@@ -12,6 +12,7 @@
 #include "math/Math.h"
 #include "system/String.h"
 #include "system/Filename.h"
+#include "ui/UserInterface.h"   // UI::UserInterface::_dialogs (LinkedList walk below)
 
 // ============================================================
 // Timer globals (in Runtime-x64.dll .data section)
@@ -88,9 +89,10 @@ extern fn_UI_Draw_t fn_UI_Draw;
 typedef void (*fn_UI_CloseDialog_t)(void* self, void* dialogPtr);
 extern fn_UI_CloseDialog_t fn_UI_CloseDialog;
 
-// Generic dynamic array push (FUN_18007a0d0) — used for dialog pending lists
+// Generic dynamic array push (FUN_18007a0d0) — used for dialog pending lists.
+// The generic `fn_DynArrayPush` itself went with the B.3.2 closing pass (zero
+// callers); the typedef stays for the two callback-list pushes below.
 typedef void (*fn_DynArrayPush_t)(void* arrayBase, int newCount, void* elementPtr);
-extern fn_DynArrayPush_t fn_DynArrayPush;
 
 // PostDraw callback array push (FUN_18004f790) — 16-byte element
 extern fn_DynArrayPush_t fn_PostDrawPush;
@@ -913,36 +915,11 @@ inline void fn_FindComponent_CitizenAI(void* entity, void* retval) {
 // Array header layout: [0]=ptr(void*), [1..low32]=count(int), [0xc..low32]=capacity(int)
 // ============================================================
 
-// ---------------------------------------------------------------------------
-// ZERO CALLERS as of the B.3.2 closing pass — the callers are now
-// Collection::Array<...>::SetSize. Delete with the final pass.
-// ---------------------------------------------------------------------------
-// The four below are NOT a reference implementation of retail. Each retail
-// address is an MSVC monomorphisation of Collection::Array<T>::SetSize, and
-// the C bodies in engine_funcs.cpp diverge from it in four ways, spelled out
-// in the block comment above fn_ExeArrayResize there: they zero to CAPACITY
-// rather than newSize; _Resize/_Resize3 zero the truncated tail on shrink,
-// which retail never touches; none has retail's exact-equal early return; and
-// _Push fills only index newCount-1 where retail fills all of
-// [oldSize, newSize). fn_ExeArrayResize also carries a harness-only "ABSURD
-// newCount" bail. Read rtcoll::SetSizeCore, not these, for the algorithm.
-
-// ExeArrayResize: 8-byte elements. Zeroes new entries, copies existing.
-// Capacity grows 3x when adding one beyond current capacity.
-// Original: FUN_1400032e0 (retail: stride 8, align 8, new tail zeroed)
-void fn_ExeArrayResize(void* arrayBase, int newCount);
-
-// ExeArrayResize2: 4-byte elements. Copies existing only (no zero-init for new).
-// Original: FUN_1400021d0 (retail: stride 4, align 4, grown tail left as-found)
-void fn_ExeArrayResize2(void* arrayBase, int newCount);
-
-// ExeArrayResize3: 8-byte elements. Copies existing, zeroes new entries.
-// Original: FUN_140001bb0 (retail: byte-identical to 0x1400032e0)
-void fn_ExeArrayResize3(void* arrayBase, int newCount);
-
-// ExeArrayPush: 4-byte elements. Resizes to newCount, fills new slot with *elementPtr.
-// Original: FUN_140003600 (retail: stride 4, align 4, fills every new slot)
-void fn_ExeArrayPush(void* arrayBase, int newCount, void* elementPtr);
+// The four exe array helpers that used to live here (fn_ExeArrayResize/2/3/Push,
+// the MSVC monomorphisations of Collection::Array<T>::SetSize at 0x1400032e0 /
+// 0x1400021d0 / 0x140001bb0 / 0x140003600) are gone with the B.3.2 closing pass:
+// every caller is now Collection::Array<...>::SetSize. Read rtcoll::SetSizeCore
+// for the algorithm.
 
 // StorageComponent::QueryCount(storageComp) -> int
 // FUN_14012cf10: iterates +0x28 item array (count at +0x30). Each slot is 0x10 bytes:
@@ -2798,10 +2775,6 @@ extern fn_Building_GetOrderName_t fn_Building_GetOrderName;
 typedef void (*fn_Building_GetBuyEntries_t)(void* building, void* dynArray);
 extern fn_Building_GetBuyEntries_t fn_Building_GetBuyEntries;
 
-// DynArray_Clear_0x08 (FUN_140001bb0) — clear 8-byte stride array (for buy entries temp)
-typedef void (*fn_DynArray_Clear_0x08_t)(void* arrayStruct, int newCount);
-extern fn_DynArray_Clear_0x08_t fn_DynArray_Clear_0x08;
-
 // TradeUI::OnTradeButton — executes trade (needs opus — ~160 lines)
 typedef void (*fn_TradeUI_OnTradeButton_t)(void* self, void* p2, void* p3, int64_t p4);
 extern fn_TradeUI_OnTradeButton_t fn_TradeUI_OnTradeButton;   // 0x140081420
@@ -3739,12 +3712,10 @@ extern uint32_t* g_TypeId_ObjectInternal;
 // Stage 3: OptionsDialog Apply/Restore exe helpers
 // ============================================================
 
-// UI::UserInterface::GetFirstDialog(this, retval) — member, non-trivial return
-// Returns LinkedList<InternalPtr<DialogInstance>>::Iterator (8-byte ptr)
-// RCX=this, RDX=retval(Iterator*). Iterator+0x10 = next node.
-// ?GetFirstDialog@UserInterface@UI@@QEAA?AUIterator@...@Collection@@XZ (0x180031150, ordinal 2670)
-typedef void (*fn_UI_GetFirstDialog_t)(void* self, void* retval);
-extern fn_UI_GetFirstDialog_t fn_UI_GetFirstDialog;
+// UI::UserInterface::GetFirstDialog (0x180031150, ordinal 2670) no longer has a
+// pointer here: its last consumer, FindDialogByName_Impl below, walks
+// `ui->_dialogs` directly, which is that function's whole body
+// (`*retval = this->_dialogs._head`).
 
 // UI::UserInterface::SetFullscreenFadeSprite(this, Sprite*) — sets fade sprite (16 bytes)
 // ?SetFullscreenFadeSprite@UserInterface@UI@@QEAAXVSprite@2@@Z (0x18011f560, ordinal 3888)
@@ -4359,25 +4330,26 @@ inline void* FindDialogByName_Impl(void* retval, void* nameStr) {
         *(uintptr_t*)ret = 0;
         return retval;
     }
-    void* uiSingleton = *(void**)((uintptr_t)gameWorld + 0x98);
-    if (!uiSingleton || !fn_UI_GetFirstDialog || !fn_IsA) {
+    UI::UserInterface* ui =
+        *reinterpret_cast<UI::UserInterface**>((uintptr_t)gameWorld + 0x98);
+    if (!ui || !fn_IsA) {
         *(uintptr_t*)ret = 0;
         return retval;
     }
 
-    // Walk dialog linked list
-    // GetFirstDialog writes first node pointer into retval buffer.
-    // Node layout: [0]=InternalBasePtr (DialogInstance*), [0x10]=nextNode*
+    // Walk the dialog list.
+    // `_dialogs.GetFirst()` IS retail's UI::UserInterface::GetFirstDialog
+    // (0x180031150, literally `*retval = this->_dialogs._head`), reached here
+    // through dispatch slot 0x140151ca0; the Iterator is the bare node pointer,
+    // so `it.node` is exactly what retail hands to CheckPtr, and `++it` is
+    // retail's `node = *(node + 0x10)`.
     // Original: LEA RDX,[RBP+0x48]; MOV RCX,RSI; CALL [0x140151ca0]
-    uintptr_t nodeBuf[4] = {};
-    fn_UI_GetFirstDialog(uiSingleton, nodeBuf);
-    uintptr_t node = (uintptr_t)nodeBuf[0];
-
-    while (node != 0) {
+    for (auto it = ui->_dialogs.GetFirst(); it; ++it) {
+        void* node = it.node;
         // CheckPtr on the iterator node (InternalBasePtr) before dereferencing.
         // Original: MOV RCX,RSI; CALL [0x140152ab0] (fn_InternalBasePtr_CheckPtr)
         if (fn_InternalBasePtr_CheckPtr)
-            fn_InternalBasePtr_CheckPtr((void*)node);
+            fn_InternalBasePtr_CheckPtr(node);
 
         // Deref node to get DialogInstance*
         void* dialog = *(void**)node;
@@ -4396,7 +4368,7 @@ inline void* FindDialogByName_Impl(void* retval, void* nameStr) {
                 // GetController takes controllerTypeId as R8 — it does the type matching
                 // internally and returns a matching controller or null.
                 if (fn_InternalBasePtr_CheckPtr)
-                    fn_InternalBasePtr_CheckPtr((void*)node);
+                    fn_InternalBasePtr_CheckPtr(node);
                 if (fn_DialogInstance_GetController) {
                     uintptr_t controllerBuf[2] = {};
                     fn_DialogInstance_GetController(*(void**)node, controllerBuf, controllerTypeId);
@@ -4409,9 +4381,8 @@ inline void* FindDialogByName_Impl(void* retval, void* nameStr) {
                 }
             }
         }
-        // Next node: node + 0x10 -> next pointer
-        // Original: MOV RAX,[RBP+0x48]; MOV RSI,[RAX+0x10]; MOV [RBP+0x48],RSI
-        node = *(uintptr_t*)(node + 0x10);
+        // `++it` is retail's next-node step:
+        // MOV RAX,[RBP+0x48]; MOV RSI,[RAX+0x10]; MOV [RBP+0x48],RSI
     }
 
     // Not found
@@ -4952,8 +4923,6 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
 // Used by OnComplete/OnCancel to remove citizen from assignment tree.
 typedef void (*fn_TreeRemoveByKey_t)(void* treeRootPtr, void* keyIBP);
 extern fn_TreeRemoveByKey_t fn_TreeRemoveByKey;
-// Alias used by ClearStorage
-static inline auto& fn_BST_RemoveByKey = fn_TreeRemoveByKey;
 
 // Recursive tree node free (FUN_140014c30 @ 0x140014c30)
 // Recursively frees a binary tree (children at +0x10 and +0x18).
@@ -5126,6 +5095,7 @@ extern fn_Work_SerializeBase_t fn_Work_SerializeBase;
 typedef void (*fn_BST_SerializeHelper_t)(void* bstRoot, void* serializer);
 extern fn_BST_SerializeHelper_t fn_BST_SerializeHelper;
 
+
 // Entity::FindComponent by type ID — various component lookups on entities.
 
 // FindComponent_Position (0x140002ed0) — type DWORD_1401c7900
@@ -5197,6 +5167,7 @@ extern fn_SetupBuildActions_t fn_SetupBuildActions;
 // Note: same address as fn_CitizenAI_RegisterWork, different typedef
 typedef void* (*fn_BST_Insert_t)(void* bstRoot, void* entityIBP, void* citizenIBP);
 extern fn_BST_Insert_t fn_BST_Insert;
+
 
 // CitizenComponent_CheckWorkplaceValid (0x1401158d0) — checks if workplace is reachable
 // RCX=CitizenComponent*, RDX=&workplaceEntityIBP. Returns bool (char).
@@ -5294,10 +5265,8 @@ extern fn_ExternalPtr_SerializeTutorial_t fn_ExternalPtr_SerializeTutorial;
 // FUN_14001b030 — destroy building type array (dtor strings + free)
 typedef void (*fn_BuildingTypeArray_Dtor_t)(void* arrayField);
 extern fn_BuildingTypeArray_Dtor_t fn_BuildingTypeArray_Dtor;
-
-// FUN_14001b340 — resize building type array
-typedef void (*fn_BuildingTypeArray_Resize_t)(void* arrayField, uint32_t count);
-extern fn_BuildingTypeArray_Resize_t fn_BuildingTypeArray_Resize;
+// (FUN_14001b340, the matching resize, went with the B.3.2 closing pass at zero
+// callers — buildinggoal.cpp sizes the array through Collection::Array<...>.)
 
 // FUN_14001b1d0 — compute string hash for building type entry
 typedef void (*fn_StringHash_t)(void* str);
@@ -5352,20 +5321,10 @@ extern fn_FindUIElementByPath_t fn_FindUIElementByPath;
 // Stored at exe .rdata 0x1401c72a8, filled at runtime by Component_Register.
 extern uint32_t* g_TypeId_ComponentBase;
 
-// ZERO CALLERS as of the B.3.2 closing pass — the six call sites (all in
-// code/Game/Entity/componententity.cpp; none anywhere else) are now
-// Collection::Array<GameColl::Ptr8>::SetSize(n, fill). Delete with the final
-// pass, along with ExeArrayResizeFill_CppImpl and the init assignment.
-//
-// ExeArrayResizeFill: 8-byte elements. Resizes array, copies existing entries,
-// fills new entries with *fillValue (unlike fn_ExeArrayResize which zeroes them).
-// Original: FUN_140003110 — the three-argument Array<T>::SetSize(n, fill),
-// stride 8, align 8. Retail's body and this reimpl's one real divergence (a
-// null-fillValue guard retail does not have) are quoted above the C body in
-// engine_funcs.cpp.
-// Params: (arrayBase, newCount, fillValue) where arrayBase = {ptr, count, capacity}
-typedef void (*fn_ExeArrayResizeFill_t)(void* arrayBase, int newCount, void* fillValue);
-extern fn_ExeArrayResizeFill_t fn_ExeArrayResizeFill;
+// fn_ExeArrayResizeFill (FUN_140003110, the three-argument Array<T>::SetSize(n,
+// fill), stride 8 align 8) went with the B.3.2 closing pass: its six call sites
+// in code/Game/Entity/componententity.cpp are now
+// Collection::Array<GameColl::Ptr8>::SetSize(n, fill).
 
 // ============================================================
 // CitizenBehavior dependencies
@@ -5750,26 +5709,22 @@ extern fn_Struct60B_SubArrayCopy_t fn_Struct60B_SubArrayCopyStride02;  // 0x1400
 // ============================================================
 // M3.5 Path B session 5 — additional Geometry::Serialize resize helpers
 // ============================================================
-// All five share the standard array-resize shape (header = { void* data;
+// Both share the standard array-resize shape (header = { void* data;
 // int32 count; int32 cap }). They differ in element stride and MemAlloc
-// alignment. The array-of-arrays variant additionally calls a deep-clone
-// helper per outer element to copy the inner Vector2 array.
+// alignment.
 //
 //   stride 0x02, align 2 — TradeWork_impl_sub_c890         @ 0x14001c890
 //                          (uint16 array, used for index-buffer + sub-arrays)
-//   stride 0x10, align 4 — TradeWork_impl_b260_sub_efd0    @ 0x14001efd0
-//                          (int4 / Vec4 stride for arrays at +0x1C0/+0x1D0)
-//   stride 0x10, align 8 — TradeWork_impl_sub_f0a0         @ 0x14001f0a0
-//                          (array-of-arrays — deep-clones inner via helper_ff00)
 //   stride 0x10, align 2 — FUN_14001ef10                   @ 0x14001ef10
 //                          (mesh-vertex 16-byte struct copies 2 qwords/elem)
-//   stride 0x04, align 4 — FUN_1400021d0                   @ 0x1400021d0
-//                          (int array — used for +0x220 in Geometry::Serialize)
+//
+// The other three of the original five (0x14001efd0 stride-16 align-4,
+// 0x14001f0a0 array-of-arrays, 0x1400021d0 stride-4 align-4) went with the
+// B.3.2 closing pass at zero callers — those sites are Collection::Array<T>
+// now. 0x1400021d0 still has ~20 citing sites in code/Game, but they call
+// GameColl::I32::SetSize, not a pointer.
 extern fn_Array_Resize_t fn_Array_Resize_Stride02;       // 0x14001c890  M3.5 Path B session 5
-extern fn_Array_Resize_t fn_Array_Resize_Stride16A;      // 0x14001efd0  M3.5 Path B session 5
-extern fn_Array_Resize_t fn_Array_Resize_ArrayOfArrays;  // 0x14001f0a0  M3.5 Path B session 5
 extern fn_Array_Resize_t fn_Array_Resize_Stride16B;      // 0x14001ef10  M3.5 Path B session 5
-extern fn_Array_Resize_t fn_Array_Resize_Stride04;       // 0x1400021d0  M3.5 Path B session 5
 
 // ============================================================
 // Runtime DLL primitives used by the MenuScene serialize helpers
@@ -5857,8 +5812,8 @@ extern fn_Struct60B_Serialize_t fn_Struct60B_Serialize;  // 0x14001ffa0  M3.5 Pa
 //   140020347: MOV EDX, dword ptr [RAX]
 //   14002034c: CALL [0x140152a98] ; IsDerivedFrom).
 // Used by Geometry::Serialize step 13 for the +0x210 array (count +0x218).
-typedef void (*fn_Array_Serialize_External_Typed_t)(void* serializer, int count, void* arrayBase);
-extern fn_Array_Serialize_External_Typed_t fn_Array_Serialize_External_MaterialInstance;  // 0x140020150  M3.5 Path B session 4
+// The fn_Array_Serialize_External_MaterialInstance pointer onto it went with the
+// B.3.2 closing pass (zero callers; geometry_serialize.cpp drives it directly).
 
 // ============================================================
 // M3.5 Path B session 6 — heightmap mesh-build path
