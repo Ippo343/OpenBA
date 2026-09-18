@@ -172,9 +172,11 @@ Rules:
    `IsTypeValid(uint)`, `GetParentType(uint)`, `GetChildType(uint,int)`,
    `GetChildTypeCount(uint)`, `LoadCompilers`, `UnloadCompilers`, private
    `GetTypeFromNameCRC(const char*)`, private static `_singleton`.
-   `Object::GetTypeIdByName` is OURS, not retail's; it stays as a free helper over
-   `Factory::Get()->GetTypeIdFromName(...)` until step 6 replaces its call sites with
-   `X::TypeId()`, then it is deleted.
+   `Object::GetTypeIdByName` is OURS, not retail's. **It stays for the whole of B.3.3 and
+   well past it** — see §9 step 6.1: none of its 545 literal call sites names a class B.3.3
+   converts, so there is nothing for step 6 to sweep. A site becomes `X::TypeId()` in the
+   commit that makes X a real class carrying `DECLARE_TYPE`, which is the per-class recipe
+   (ENDGAME §B.2 step 4), not a caller batch. The helper is deleted when the last site goes.
 5. `Factory::Startup`'s faithful null-parent LEA (`type_system.cpp:719-734`) stays faithful:
    an unregistered parent name still yields `(TypeRecord*)8` and still faults on the next
    read. The printf that names the type before the fault stays; it changes no input. **Do not
@@ -446,12 +448,183 @@ merge cleanly.
    - **INTERNAL** — `runtime/src/object/internal.cpp`, `internal_ptr_array_serialize.cpp`,
      `internalfactory_persist.cpp` + `runtime/types/object/Internal.h`
      (3 `.cpp`, 1,493 lines).
-6. Caller batches by `code/Game/<Module>` directory: 628 `GetTypeIdByName` occurrences
-   (545 with a literal name) → `X::TypeId()`; 195 `DeletePtr` + 124 `CallSlot0` → `Destroy`;
-   the 106 `fn_(Object|Base|External|Internal|Factory)*` typedefs. Sonnet is enough for the
-   `GetTypeIdByName` sweep once the first batch sets the pattern; opus for the delete paths.
-7. One closing agent: pointers, shims and rows at zero callers by name AND address (including
-   `ThreadBaseVtable`, §5); regenerate the `.inc` files; STATUS and the B.4 cast table.
+6. **Caller batches — RE-SCOPED after steps 3-5 landed.** The original plan was "628
+   `GetTypeIdByName` → `X::TypeId()`, 195 `DeletePtr` + 124 `CallSlot0` → `Destroy`, the 106
+   `fn_*` typedefs". Two thirds of that is not doable in B.3.3 and one number was wrong.
+   Measured on main 9221ec36, comments and string literals stripped,
+   `standalone/build*/` and `tests/unit/build/` excluded:
+
+   **6.1 `GetTypeIdByName` — OUT OF B.3.3 ENTIRELY.** 545 literal call sites, **287 distinct
+   names, and ZERO of them names a class that is real today.** Not `Base`, `External`,
+   `Internal`, `ExternalList`, `CompiledExternal`, `Factory`, `ExternalFactory`,
+   `InternalFactory`, `BaseTypeInfo` — none. Every name is a game/engine type that stays a
+   POD until B.3 steps 5-8: `CitizenComponent` 18, `RawMaterialDescription` 13,
+   `ModelComponent` 12, `StorageComponent`/`OrchardComponent`/`CitizenDescription`/
+   `MapComponent` 9 each, and a 287-name tail. By directory: `code/Game/Component` 207,
+   `standalone` 119, `Dialog` 62, `Work` 37, `Action` 36, `Game` 32, `Player` 21,
+   `Tutorial` 21, `Goal` 6, `Entity` 4.
+   **`X::TypeId()` cannot exist for a class that does not exist**, so there is no sweep to
+   run. THE RULE: *a `GetTypeIdByName("X")` site converts to `X::TypeId()` in the commit that
+   makes X a real class with `DECLARE_TYPE` — it is step 4 of the per-class recipe
+   (ENDGAME §B.2), never a caller batch.* `Object::GetTypeIdByName` stays until the last one
+   goes. **Nothing about the helper changes now:** it already caches by pointer with a
+   `strcmp` validation and walks the staging list, which is strictly cheaper than
+   `Factory::Get()->GetTypeIdFromName()` (a CRC plus a tree descent per miss) — rewriting it
+   onto the Factory would be slower, would change the pre-Startup answer from
+   "0 = unregistered" to the same 0 by a different route, and buys nothing while the staging
+   list is still the registration path (§2.1).
+
+   **6.2 The `fn_(Object|Base|External|Internal|Factory)*` family — the real content of
+   step 6.** The "106" in the step-1 inventory was `grep -c` of MATCHING LINES in
+   `engine/funcs/engine_funcs.h` (typedef + extern + initialiser for the same symbol). The
+   symbol count is **30 externs / 29 typedefs**, and they carry **~6,957 call sites**:
+
+   | pointer | sites | receiver | disposition |
+   |---|---|---|---|
+   | `fn_InternalBasePtr_CheckPtr` | 4,700 | — | **DELETE THE CALL.** Retail's body is a bare `RET` in the shipped *and* the profile build (`reference_checkptr_is_a_ret_in_every_build.md`); no build of this engine has ever validated an `InternalBasePtr`. It is already a macro that compiles to `((void)(p))` in the perf build. |
+   | `fn_InternalBasePtr_Ctor` | 1,190 | `Object::InternalBasePtr` (real since B.3.1) | member/ctor call |
+   | `fn_External_Dtor` | 211 | `Object::External` | `~External()` / `Destroy` |
+   | `fn_External_External` | 164 | `Object::External` | ctor |
+   | `fn_ExternalFactory_FindOrLoad` | 115 | `Object::ExternalFactory` | member |
+   | `fn_ExternalPtr_BuildSerialize` | 90 | `Object::ExternalPtr<T>` | **WAIT — `IO::Serializer` is B.3 step 4** |
+   | `fn_InternalBasePtr_DeletePtr` | 84 | `Object::InternalBasePtr` | member (§6.3) |
+   | `fn_InternalBasePtr_Serialize` | 79 | ptr | **WAIT — serializer** |
+   | `fn_ObjectInternal_Ctor` / `_Dtor` | 68 / 42 | `Object::Internal` (real since step 5) | member |
+   | `fn_External_GetPath` | 33 | `Object::External` | member |
+   | `fn_ExternalPtr_Serialize2` | 30 | ptr | **WAIT — serializer** |
+   | `fn_ExternalList_GetResourceCount` | 23 | `Object::ExternalList` | member |
+   | `fn_ExternalFactory_FindNext` | 20 | `ExternalFactory` | member |
+   | `fn_Factory_GetTypeIdFromName` | 17 | `Object::Factory` | member |
+   | `fn_ExternalFactory_IsReferenceModeEnabled` | 14 | `ExternalFactory` | member |
+   | `fn_ExternalPtr_Serialize3` | 13 | ptr | **WAIT — serializer** |
+   | `fn_ExternalFactory_Find` | 10 | `ExternalFactory` | member |
+   | `fn_ExternalFactory_GetReferenceId` / `_GetPathForReferenceId` | 9 / 9 | `ExternalFactory` | member |
+   | `fn_ExternalPtr_Serialize` | 8 | ptr | **WAIT — serializer** |
+   | `fn_ExternalRefArray_Serialize` | 8 | — | **WAIT — serializer** |
+   | `fn_Factory_CreateObject` | 6 | `Object::Factory` | member |
+   | `fn_ExternalPtr_SerializeTutorial` / `_Serialize_GraphicsMesh` | 4 / 4 | ptr | **WAIT — serializer** |
+   | `fn_BaseTypeInfo_Ctor` | 3 | `Object::BaseTypeInfo` | member — but it is `factory_registration.cpp`'s staging path, which stays (§2.1) |
+   | `fn_ExternalPtr_Serialize_Weather` | 2 | ptr | **WAIT — serializer** |
+   | `fn_External_SaveText` | 1 | `Object::External` | member |
+   | `fn_ExternalFactory_Clean`, `fn_ExternalPtr_Serialize_Typed_7140` | 0 / 0 | — | **zero callers — delete in step 7** |
+
+   Convertible now: **~1,900** sites over 17 pointers. Must wait on `IO::Serializer`:
+   **159** sites over 9 pointers — do not touch them, and do not "tidy" a Serialize body
+   (§0). Deletable now: **4,700** no-op sites plus 2 zero-caller pointers.
+   The receiver is a `void*` or a POD at almost every one of these sites, so each converted
+   call carries one `reinterpret_cast` with a `// B.3.3 bridge` comment (§7) — that is a net
+   win here because it **removes** a resolved-pointer indirection, which is the B.4 metric's
+   first row; it is NOT a win for §6.3.
+
+   **6.3 The delete paths — MOSTLY "WAIT FOR THE RECEIVER'S CLASS".** The step-1 inventory's
+   "195 `DeletePtr`" counted comments and the `fn_InternalBasePtr_DeletePtr` token; the honest
+   split is **84** `fn_InternalBasePtr_DeletePtr` call sites (in §6.2 above), **6** bare
+   `DeletePtr`, and **124** `CallSlot0`.
+   `CallSlot0`'s 124 sites are **all in `runtime/src/`** — ui 84, video 15, graphics 8,
+   collision2d 6, audio 5, pathfinding 3, picking 3 — and **zero** in `code/`, `standalone/`
+   or `engine/`. Every one of those receivers is a `UI::`/`Video::`/`Graphics::`/`Audio::`
+   POD with a hand-built vtable. Rewriting `CallSlot0(p, 1)` as
+   `Object::Destroy(reinterpret_cast<Object::Base*>(p))` **adds a cast per site and removes
+   nothing**: `CallSlot0` is already one inline with no resolved pointer behind it. So:
+   **do not schedule the `CallSlot0` sites.** They convert with their own class, in B.3
+   steps 5-8, and `CallSlot0` is deleted when the last one goes.
+   `InternalBasePtr::DeletePtr()` and `InternalFactory::PersistObject`'s raw slot-0 calls stay
+   raw — **but the Internal agent's stated reason does not hold**: slot 0 reached through a
+   minted vtable is the same instruction as `p->DeletingDtor(1)`
+   (`tests/unit/object_vtable_abi_test.cpp` proves both directions), so "it may be handed a
+   minted-vtable object" is not a reason to avoid the member call. The reason that DOES hold
+   is the same as `CallSlot0`'s: the pointee is a `void*` with no class, so the member call
+   needs a bridge cast that buys nothing. Record it that way, and delete the wrong reason
+   wherever it is written down.
+
+   **6.4 Batches.** Disjoint file sets, all by directory. **Run 6.4-A ALONE FIRST** — it sets
+   the pattern every later batch copies, and it is the only one whose per-site rule needs
+   judgement:
+   - **A. EXTERNAL-CALLERS (opus, alone, first).** `fn_External_*` (409) +
+     `fn_ExternalFactory_*` (177) + `fn_ExternalList_*` (23) = **609 sites**, in
+     `code/Game/{Component,Dialog,Game,Tutorial,Action,Player,Goal,Work}` and `standalone/`.
+     Opus because every signature must be checked against the class: two of these
+     (`fn_External_External`, `fn_ExternalFactory_FindOrLoad`) are the shapes where Ghidra
+     historically dropped an argument on a register-passthrough forwarder, and a hidden
+     return slot must be re-verified per typedef (`reference_hidden_retslot_wild_write.md`).
+     Deliverable: the conversion PLUS one worked example per call shape in the commit message,
+     which is what B, C and D then follow.
+   - **B. INTERNAL-CALLERS (sonnet, after A).** `fn_ObjectInternal_Ctor`/`_Dtor` (110) +
+     `fn_InternalBasePtr_Ctor` (1,190) + `fn_InternalBasePtr_DeletePtr` (84) = **1,384 sites**.
+     Mechanical once A has set the pattern; the ctor/dtor pairs are the same two shapes
+     repeated. Split by directory if one agent is too slow: `Component` 461+8, `Dialog` 317+7,
+     `Work` 96+24, `Player` 80+2, `Game` 74+11, `Action` 63+23, `Entity` 36+7, `Goal` 34,
+     `Tutorial` 26+2, `standalone` 3.
+   - **C. FACTORY-CALLERS (sonnet, after A).** `fn_Factory_*` (23) + `fn_BaseTypeInfo_Ctor`
+     (3) = **26 sites**, in `code/Game/{Dialog,Entity,Game,Object,Tutorial}`. Small; can ride
+     with B.
+   - **D. CHECKPTR-DELETE (sonnet, independent of A-C, any time).** Delete the 4,700
+     `fn_InternalBasePtr_CheckPtr(...)` call sites, then the macro, the typedef, the extern,
+     the initialiser, `g_checkPtrIsNop`, `InternalBasePtr_CheckPtr_Inline` and
+     `BANISHED_CHECKPTR_STATIC_NOP`. **THE ONE RULE:** the macro's non-perf form evaluates its
+     argument (`((void)(p))`), so a site whose argument has a SIDE EFFECT must keep the
+     expression — audit every argument that is not a plain `&x`, `x`, a cast or a field read,
+     and list them in the report. Touches every `code/Game/<Module>` and `standalone/`, so it
+     must not overlap A-C in time: **run D after B and C have merged**, or hand it the same
+     file sets in sequence.
+   - **E. serializer callers — NOT SCHEDULED.** The 159 `fn_ExternalPtr_*Serialize*` /
+     `fn_InternalBasePtr_Serialize` / `fn_ExternalRefArray_Serialize` sites move with
+     `IO::Serializer`, which is B.3 step 4. Listed here only so a batch owner does not pick
+     them up by accident.
+
+   **6.5 THE GREP HAZARD every batch owner gets in their prompt.** A file that opens
+   `namespace Object {` and then writes a BARE `External` / `Internal` / `ExternalFactory` /
+   `Base` / `Factory` now binds it to the REAL CLASS, silently, where it used to be a
+   compile error or a different type. 26 files open that namespace; 8 are the new class files
+   themselves, where bare names are intended. **The other 18 currently contain no bare
+   Object-family type token inside the block — the hazard is latent, and the rule is that it
+   stays that way: inside `namespace Object`, always spell the POD `RtObject::X`.** The watch
+   list: `code/Game/Component/{citizenaicomponent,citizencomponent,pickingcomponent}.cpp`,
+   `code/Game/Dialog/{dialog_exe_helpers,toolui}.cpp`,
+   `code/Game/Game/{construction_force_harness,gameupdateloop,professionlist}.cpp`,
+   `code/Game/Object/factory_registration.{h,cpp}`, `code/Game/Player/edittool.cpp`,
+   `code/Game/Work/{gatherrawmaterials,marketwork,work_base_reimpl}.cpp`,
+   `engine/funcs/engine_funcs.cpp`, `runtime/src/object/external_ptr_serialize.cpp`,
+   `runtime/src/object/internal.cpp`,
+   `runtime/src/object/internal_ptr_array_serialize.cpp`.
+
+7. **One closing agent.** Pointers, shims and rows at zero callers by NAME and by ADDRESS,
+   `.inc` files regenerated with their tools, STATUS and the B.4 cast table. The list steps
+   3-5 produced, each with its condition:
+   - **`tools/rt_mint_gen.py` re-run**, to (a) drop the `?_firstTypeInfo@BaseTypeInfo@Object@@`
+     STORAGE row, whose 8 bytes have been inert since step 3 redirected it to
+     `Object::BaseTypeInfo::_firstTypeInfo` (`rt_data_mint.cpp`'s `MintStorageCell`), and
+     (b) redirect the `?_typeInfo@` rows for `Base` (0x1801f9c50), `External` (0x1801f9b38),
+     `ExternalList` (0x1801f9be0), `CompiledExternal` (0x1801f9b00) and `Internal`
+     (0x1801f9c18) at the classes' own `DECLARE_TYPE` records, so those five classes can take
+     `DEFINE_TYPE` instead of a minted record. Never hand-edit the `.inc`.
+   - **`rtavl::TypeSetInsert` + its 0x180030140 registration** — zero callers in
+     `runtime/src/object/` since step 3; delete when nothing resolves that address.
+   - **`?_singleton@Factory@Object@@`** — moves off the mint when `Factory::Shutdown` is
+     ported (below); until then `Factory::Get()` reads it through `RT_DATA_SLOT`.
+   - **`ThreadBaseVtable()`** (`runtime/src/audio/audio_stream_win.cpp:303`) — zero callers
+     already (§5); delete by name and by address 0x180155f20.
+   - **`fn_ExternalFactory_Clean` and `fn_ExternalPtr_Serialize_Typed_7140`** — zero callers
+     today (§6.2); delete with their typedefs, externs and initialisers.
+   - **The `RT_DELDTOR` rows for `Object::Base` (0x1800065b0), `Object::External`
+     (0x180006640), `Object::CompiledExternal` (0x18000b7e0) and `Object::Internal`
+     (0x180006440), `RtObject_Base_Dtor`, and the minted vtables** — **all STAY, and the
+     retirement condition is not a caller count.** Each of the first three is also an
+     `RT_MINT_UNNAMED` vtable slot (`rt_data_mint_tables.inc` `kVSlots12` and the External /
+     CompiledExternal rows), so the row is what fills slot 0 of the minted table (§6.1). They
+     retire only when the LAST class that stamps those tables has converted —
+     `??_7Base@Object@@6B@` alone is `CUTOVER_REQUIRED` with 64 by-name doors, 22
+     `RtFactOp::Vptr` replay rows and 59 non-comment `.cpp` readers. That is the end of the
+     whole hierarchy, past B.3.3.
+   - **`Factory::Shutdown` port** — `??1Factory@Object@@` at 0x1800071a0 → 0x180008110 walks
+     the whole TypeNode tree and destroys each `children` Array (`factory_dtors.cpp`, §6.4).
+     It is what makes `Object::Factory`'s implicit destructor honest, and it is the
+     prerequisite for moving `?_singleton@`. Its own small commit, not the closing sweep's.
+   - **Merge `runtime/types/object/internal_class.h` back into `Internal.h`** — the reason for
+     the split is gone: `External.h:43` now includes `TypeInfo.h` at GLOBAL scope (hoisted by
+     step 5), so the `namespace RtObject`-nested include that used to drag `Object::` into the
+     wrong namespace no longer fires. Delete the now-inert second `#include "TypeInfo.h"` at
+     `External.h:355` in the same commit.
 
 ## 10. The gate for every B.3.3 merge (coordinator only)
 
