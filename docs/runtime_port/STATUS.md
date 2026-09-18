@@ -130,6 +130,8 @@ built them wrong, and callbacks stored in data.
   the ported AVL core. One owner through step 5, four caller batches (6A External, 6B
   Internal, 6C Factory, 6D CheckPtr), one closing pass. History of steps 1–6D is in the
   per-step notes below, unchanged.
+  **Next: B.3 step 4 (IO). The plan for the next session is `endgame_b/NEXT_SESSION.md`;**
+  rules so far: `endgame_b/B33_RULES.md`, `B32_RULES.md`, `B31_RULES.md`.
   **What the closing pass deleted.** Twelve `fn_*` pointers in
   `engine/funcs/engine_funcs.{h,cpp}` with their typedefs, externs, definitions,
   `ResolveExport`/`ResolveAddr` initialisers and `_DEBUG` value prints:
@@ -228,7 +230,25 @@ built them wrong, and callbacks stored in data.
   `runtime/src/io/file_stream.cpp:393`'s `NoteSlotDispatch` vptr counter dies with
   `IO::BinaryFileStream`; `RtObject::SerializerLite` and the retail `Encoding` vtable offsets
   are what every converted `Serialize` body still goes through.
-  **Coordinator gate on the merged main:** (coordinator fills this in)
+  **Coordinator gate on the merged main (2026-09-18):** every B.3.3 merge (steps 3, 4, 5,
+  6A, 6B/C, 6D, closing) was gated by the coordinator: debug + perf build (release too from
+  6B on), `make unit` (206/0 at the close), autostart + pause-menu quit, the tutorial route,
+  the Load Game dialog route — all exit 0, empty crash log, no hang log — a live-boot type
+  table compared against the pre-step-3 boot (312 registered, the same ten id/name pairs;
+  the chain reads 417 since step 5's `DEFINE_TYPE(Internal)`, was 416), HelpTopics 66 /
+  DiseaseList 12 identical, `[RtResolve] 0 misses`, no `[RtMint] TRAP`,
+  `dispatch_slot_map.py --check` 0 (109 rows since 6D), 0 GATE WARN. At the close also the
+  Mods route with both `.pkm` mounted (6 clicks, exit 0; mods back in `_mods_off/`) and the
+  resave gate PASS 3/3. Resave across the step: PASS except the documented loader-race
+  flake (count 5689 + ONE extra row — `CropField.rsc:resource` twice after 6A,
+  `ToolbarRemoval.rsc:resource` once after 6B/C; never after 6D or the close) — see
+  `tools/resave_gate/README.md`. One coordinator fix: a 6B include inside
+  `#if defined(_DEBUG)` that broke only the perf build.
+  `make sa-stress` is a FUNCTIONAL check while B is open (B33_RULES §10): 6000 frames, clean
+  quit at every step close. Printed sim ms/iteration, recorded and NOT chased: step 3
+  0.19 (-0.2%), step 4 0.19 (+0.4/+0.8%), step 5 0.21 (+9–10%), 6A 0.21, 6B/C 0.21,
+  6D 0.20 (+4.6%), close 0.21 (+10.7%, `perf/results/20260918_175719_b33close`). Revisit
+  after B closes; the per-step numbers are the trail to bisect from.
 
 - **B.3.3 step detail** (`Object::Base` / `BaseTypeInfo` / `Factory` + reflection macro,
   single owner). Rules and the order of work: `endgame_b/B33_RULES.md`; measured input:
