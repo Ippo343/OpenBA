@@ -83,10 +83,16 @@ built them wrong, and callbacks stored in data.
   is not a class yet; each disappears with that struct's own §B.2 conversion.
 
   **Left, and why:**
-  - The ~20 sites that cite exe **0x1400021d0** but use the zeroing `GameColl::I32`
-    where the faithful type is `I32NoInit` (documented in `coll_bridge.h`). Flipping
-    them turns a zeroed tail into an as-found one; it is its own step, deliberately
-    not taken here.
+  - ~~The ~20 sites that cite exe **0x1400021d0** but use the zeroing `GameColl::I32`.~~
+    CLOSED 2026-09-18 (merge 36c36cf4): 21 sites in 13 files flipped to `I32NoInit` —
+    9 are `SetSize(0)`/shrinks, 12 grow, and every grow is followed at once by a loop or
+    a bulk stream read that writes the whole tail (per-site proof in each comment; no
+    read-before-write found in retail). Two `SetSize(n, fill)` appends stay on `I32`
+    (`createrawmaterial.cpp`, `toolbardialog.cpp`: neither calls 0x1400021d0/0x140003600).
+    Gate: debug + perf build, unit 167/0, autostart + pause-menu quit, tutorial, Load Game
+    dialog all exit 0, resave gate PASS, dispatch check 0, `make sa-stress` 6000 frames
+    clean quit at sim 0.20 ms/iteration (+5.9% printed; the close run printed +3.1% at the
+    same 0.20 — spread, `perf/results/20260918_131903_i32noinit_clean`).
   - Not converted, by design (documented in-file): `EntityList`'s update/post-update
     trees (an unbalanced BST standing in for retail's AVL, entangled with the tree
     guards), exe helpers with non-zero or partial tail init or per-element deep copy,
@@ -116,9 +122,15 @@ built them wrong, and callbacks stored in data.
   2026-09-05 baseline (B.3.1 closed at +5.5%), so the allocator door's per-call slot
   re-read is not visible.
 
-  Next: B.3.3 (`Object::Base`/`TypeInfo`/`Factory` + reflection macro, single owner).
-  **The plan for the next session is `endgame_b/NEXT_SESSION.md`**; the measured input is
-  `endgame_b/OBJECT_INVENTORY.md`. Rules so far: `endgame_b/B32_RULES.md`, `B31_RULES.md`.
+- **B.3.3 IN PROGRESS** (`Object::Base` / `BaseTypeInfo` / `Factory` + reflection macro,
+  single owner). Rules and the order of work: `endgame_b/B33_RULES.md`; measured input:
+  `endgame_b/OBJECT_INVENTORY.md` (spot-checked and corrected 2026-09-18).
+  Steps 1–2 done (merge of `b33-owner`): the six design answers — Base has exactly three
+  slots (`DeletingDtor`, `TypeName()`, `Type()`), the one record is `Object::BaseTypeInfo`
+  and the exe-side staging list folds away, `Factory` (0x10 bytes, 0x50-byte nodes) moves
+  onto `Collection::Set` inside step 3 — and `tests/unit/object_vtable_abi_test.cpp`
+  (7 tests; unit now 174/0) proving a GCC class without a virtual dtor is slot-for-slot a
+  retail vtable, with the second vptr at +0x28 for two bases. Next: step 3.
 
 - **B.3.1 CLOSED (2026-09-13 night):** `System::String`, `System::Filename` and the nine
   `Math` value types are real classes under retail's names (`runtime/types/system/*.h`,
