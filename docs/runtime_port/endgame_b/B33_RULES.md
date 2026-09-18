@@ -62,8 +62,12 @@ slot 1 (0x1800066c0) is `MOV RAX,qword[0x1801f9b40]; RET` and its slot 2 (0x1800
    they are not re-derived: `[0]` vdtor (elem 0x20, `??1External` @ 0x1800bc950), `[1]`
    `TypeName`, `[2]` `Type`, `[3]` `virtual int GetFileVersion() const` (pure in External;
    `Achievement::Goal`'s override at 0x18009ee10 is `MOV EAX,0x10000; RET`), `[4]`
-   `MOV EAX,1; RET` — **name UNKNOWN, keep it as `Slot4()` with this address in the comment**,
-   `[5]` `Serialize(IO::Stream&) -> bool` (pure; Goal's is 0x18009ee20), `[6]`/`[7]` pure.
+   0x1800066e0 `MOV EAX,1; RET` — **`virtual CompileResult Compile(const System::Filename&)`**
+   (`?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z`; Ghidra names
+   the function, and `external.cpp` registers it by name and address. An earlier revision of
+   this sheet called it nameless — corrected in step 5; there is no `Slot4()`),
+   `[5]` `Serialize(IO::Stream&) -> bool` (pure; Goal's is 0x18009ee20), `[6]`/`[7]` pure in
+   External — `Reconstruct` / `Destruct`, named by position off `ExternalList`'s table.
 
 ## 2. Question 2 — one reflection record. ANSWERED: `Object::BaseTypeInfo`, no staging list
 
