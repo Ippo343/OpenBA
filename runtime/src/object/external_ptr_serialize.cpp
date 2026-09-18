@@ -319,13 +319,13 @@ constexpr uint32_t kNoReferenceId = 0xFFFFFFFFu;
 // the type-info load.
 namespace Object {
 
-void ExternalPtrSerializeBody(External** self, Serializer& serRef,
+void ExternalPtrSerializeBody(RtObject::External** self, Serializer& serRef,
                               const void* typeInfo) {
     Serializer* const ser = &serRef;   // the helpers above take the pointer
 
     // ---- mode 1: encoding type 3 (0x1800042ce) -----------------------------
     if (EncodingType(ser) == 3) {
-        External* cur = *self;
+        RtObject::External* cur = *self;
         if (cur == nullptr) return;
 
         // ENDGAME B.3.1 step 2: `scratch` is GetPath's hidden return slot, so
@@ -333,8 +333,8 @@ void ExternalPtrSerializeBody(External** self, Serializer& serRef,
         // its release is the destructor at the return below.
         System::Filename scratch;               // [rbp+0x38]
         CallGetPath(cur, reinterpret_cast<Filename*>(&scratch));
-        const External* found =
-            CallFindOrLoad(Factory(), reinterpret_cast<const Filename*>(&scratch));
+        const RtObject::External* found =
+            CallFindOrLoad(::Factory(), reinterpret_cast<const Filename*>(&scratch));
         if (found != nullptr) {
             // The answer is genuinely discarded — retail calls it for the side
             // effect of nothing, and keeps the pointer it already had.
@@ -346,7 +346,7 @@ void ExternalPtrSerializeBody(External** self, Serializer& serRef,
     // ---- modes 2 and 3 (0x18000433e) ---------------------------------------
     // `path` is released on every one of the five exits below; all five are now
     // its destructor, including the three early returns.
-    ExternalFactory* factory = Factory();       // r14
+    RtObject::ExternalFactory* factory = ::Factory();       // r14
     System::Filename path;                      // [rbp+0x40]
     Stream* stream = ser->stream;
 
@@ -388,7 +388,7 @@ void ExternalPtrSerializeBody(External** self, Serializer& serRef,
             return;
         }
 
-        External* cur = *self;
+        RtObject::External* cur = *self;
         if (cur != nullptr) {                   // saving: fill `path` from the object
             System::Filename tmp;               // [rbp+0x48], GetPath's retslot
             CallGetPath(cur, reinterpret_cast<Filename*>(&tmp));
@@ -402,16 +402,16 @@ void ExternalPtrSerializeBody(External** self, Serializer& serRef,
     // Saving skips it entirely: retail re-tests the direction here and jumps
     // straight to the release below.
     if (stream->direction == rt::io::kDirectionReading) {
-        const External* loaded =
-            CallFindOrLoad(Factory(), reinterpret_cast<const Filename*>(&path));
-        External* result = nullptr;
+        const RtObject::External* loaded =
+            CallFindOrLoad(::Factory(), reinterpret_cast<const Filename*>(&path));
+        RtObject::External* result = nullptr;
         if (loaded != nullptr &&
             CallIsDerivedFrom(loaded, *static_cast<const uint32_t*>(typeInfo))) {
             // CMOVNE: the loaded object survives only if it IS a T. A resource
             // of the wrong type is dropped, not kept — this is the check the
             // exe-side sibling in code/Game/Component/ambient_externalptr_serialize.cpp
             // deliberately relaxes, and this one must not.
-            result = const_cast<External*>(loaded);
+            result = const_cast<RtObject::External*>(loaded);
         }
         *self = result;                         // 0x180004555
     }
@@ -423,7 +423,7 @@ void ExternalPtrSerializeBody(External** self, Serializer& serRef,
 // of `*self` (0x18005d4a0: every branch is instruction-for-instruction the
 // same, indexed by R14). Clone check 2026-09-13: 8/8 at identical=212 /
 // position-only=20 / REAL=2.
-void ExternalPtrSerializeArrayBody(Serializer& ser, int count, External** elems,
+void ExternalPtrSerializeArrayBody(Serializer& ser, int count, RtObject::External** elems,
                                    const void* typeInfo) {
     for (int i = 0; i < count; ++i)
         ExternalPtrSerializeBody(&elems[i], ser, typeInfo);

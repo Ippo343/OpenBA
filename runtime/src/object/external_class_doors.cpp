@@ -1,0 +1,354 @@
+// ============================================================================
+// runtime/src/object/external_class_doors.cpp — ENDGAME B.3.3 step 5 (EXTERNAL)
+// ============================================================================
+//
+// The half of `Object::ExternalList` and the whole of `Object::ExternalFactory`
+// whose bodies are DOORS into already-ported C functions. Split out of
+// external_class.cpp so that file stays registry-free and linkable into
+// `make unit` (the same split type_reflection.cpp has against type_system.cpp).
+//
+// *** EVERY MEMBER BELOW IS A SPELLING CHANGE AND NOTHING ELSE. ***
+// That is the point, not a shortfall. B33_RULES §0 makes the
+// `ExternalFactory::Add` loader-thread AVL-rotate race its own investigation:
+// the conversion must not add a lock, a retry, an ordering change or a null
+// check anywhere on that path, and must not silently remove the race either —
+// "a real `ExternalFactory` class changes the SPELLING of the tree mutation,
+// never its timing". Taking those bodies over into members would move the
+// instructions being investigated into a different file in the same commit that
+// changes their surface, which is the one thing the rule forbids. So `Add`,
+// `Clean`, `FindOrLoad`, `ForceUnload`, `SerializeReferenceTable`, `PushPath`
+// and `PopPath` forward to the UNCHANGED bodies in external_add.cpp,
+// external_set.cpp, external_compiled.cpp, external_forceunload.cpp,
+// external_reftable.cpp and external_path_stack.cpp. The instruction sequence
+// inside each tree mutation is byte-for-byte the one under investigation, with
+// one extra (inlinable) call frame in front of it.
+//
+// The read-only members forward for a weaker but still real reason: their
+// bodies sit in external.cpp / external_find.cpp / external_path_win.cpp
+// alongside effectiveness counters and diff-oracle scaffolding that belong to
+// those lanes, and moving a body out from under its counters is a second change
+// riding on this one. They move when their lane's scaffolding is retired.
+//
+// NOTHING HERE IS REGISTERED. No `RegisterRuntimeExport`, no
+// `RegisterRuntimeAddr`, no row added or removed. Every existing entry point
+// keeps working and keeps its address.
+//
+// THE CASTS. Each forward hands `this` to an entry point whose signature is the
+// retail ABI shape over the POD (`RtObject::ExternalFactory*`). External.h
+// asserts the class and the POD field for field, so the cast is exact by
+// construction; it is the B31_RULES transitional cast and it is spelled with
+// the mandatory `// B.3.3 bridge` marker so the B.4 metric can tell it from a
+// leftover. It goes when the registered entry points themselves go, which is
+// after step 6's caller batches.
+// ============================================================================
+
+#include <cstddef>
+#include <cstdint>
+#include <new>
+
+#include "../../types/object/External.h"
+#include "../../funcs/rt_port.h"
+#include "../system/string.h"       // RtSystem::RtMemFree (~ExternalList)
+#include "../system/pod_bridge.h"
+#include "external_compiled.h"
+#include "external_path_stack.h"
+
+namespace RtObject {
+// Declared in the files that define them; repeated here rather than pulled in
+// through a header, because several of these have no header of their own (the
+// one-body-one-file rule runtime/src/object/rt_object_port.cpp states).
+External* RtObject_External_Ctor(External* self);
+void      RtObject_External_Dtor(External* self);
+Filename* RtObject_External_GetPath(const External* self, Filename* ret);
+bool      RtObject_ExternalFactory_IsReferenceModeEnabled(const ExternalFactory* self);
+void      RtObject_ExternalFactory_EnableReferenceMode(ExternalFactory* self, bool enable);
+const External* RtObject_ExternalFactory_Find(const ExternalFactory* self, const Filename* path);
+const External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self, uint32_t typeId,
+                                                  const External* prev);
+uint32_t  RtObject_ExternalFactory_GetReferenceId(const ExternalFactory* self, const External* e);
+Filename* RtObject_ExternalFactory_GetPathForReferenceId(const ExternalFactory* self,
+                                                         Filename* ret, uint32_t id);
+void      RtObject_ExternalFactory_Clean(ExternalFactory* self);
+void      RtObject_ExternalFactory_ForceUnload(ExternalFactory* self, const Filename* path);
+Filename* RtObject_ExternalFactory_GetPathStackFilename(const ExternalFactory* self, Filename* ret);
+Filename* RtObject_ExternalFactory_GetPathStackDirectory(const ExternalFactory* self, Filename* ret);
+// ?ExpandRelativePath@ExternalFactory@Object@@QEBA?AVFilename@System@@AEBV34@_N@Z
+// — the `_N` is a FOURTH parameter, `bool appendIdentifier`, which the class
+// declaration carries too. Reading the mangled name rather than the three-arg
+// shape a reader would expect is what caught it.
+Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* self, Filename* ret,
+                                                      const Filename* path, bool appendIdentifier);
+ExternalPtr<External>* RtObject_ExternalList_Find(const ExternalList* self,
+                                                  ExternalPtr<External>* ret,
+                                                  const Filename* path, void* type);
+extern "C" void* RtObject_ExternalList_Construct(void* selfv);
+extern "C" void* RtObject_ExternalList_Reconstruct(void* selfv);
+extern "C" void  RtObject_ExternalList_Destruct(void* selfv);
+extern "C" bool  RtObject_ExternalList_Serialize(void* selfv, void* streamv);
+// external_add.cpp:219 — declared inside `namespace RtObject` but `extern "C"`,
+// so the C++ name lives here and the linker name is unqualified.
+extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* external);
+}  // namespace RtObject
+
+namespace Object {
+namespace {
+
+// B.3.3 bridge — the class and the POD are asserted field for field in
+// External.h; these two spell the cast once instead of at thirty call sites.
+inline RtObject::ExternalFactory* Pod(ExternalFactory* f) {
+    return reinterpret_cast<RtObject::ExternalFactory*>(f);          // B.3.3 bridge
+}
+inline const RtObject::ExternalFactory* Pod(const ExternalFactory* f) {
+    return reinterpret_cast<const RtObject::ExternalFactory*>(f);    // B.3.3 bridge
+}
+inline RtObject::External* Pod(External* e) {
+    return reinterpret_cast<RtObject::External*>(e);                 // B.3.3 bridge
+}
+inline const RtObject::External* Pod(const External* e) {
+    return reinterpret_cast<const RtObject::External*>(e);           // B.3.3 bridge
+}
+inline const RtObject::Filename* PodF(const System::Filename& f) {
+    return reinterpret_cast<const RtObject::Filename*>(&f);          // B.3.3 bridge
+}
+
+// A `System::Filename` returned by value out of an entry point that writes a
+// HIDDEN RETURN SLOT: the slot is raw, uninitialised bytes, so the callee
+// CONSTRUCTS into it and the local must not be constructed twice
+// (reference_hidden_retslot_wild_write.md). `char storage[8]` + placement is
+// what the C bodies already do; the move out is a pure pointer steal.
+template <class Fn>
+inline System::Filename ByHiddenSlot(Fn call) {
+    System::Filename out;                       // born null
+    RtSystem::Filename* slot =
+        reinterpret_cast<RtSystem::Filename*>(&out);                 // B.3.3 bridge
+    // The callee placement-constructs; `out` is null, so nothing is leaked by
+    // overwriting its one pointer field.
+    call(slot);
+    return out;
+}
+
+}  // namespace
+
+// ============================================================================
+// Object::ExternalFactory
+// ============================================================================
+
+// ??0ExternalFactory@Object@@QEAA@XZ   retail 0x1800be7e0 — the field-by-field
+// pin for the whole layout: a zero qword at +0x00, an int32 at +0x08, a qword
+// at +0x10, an int32 at +0x18, a qword at +0x20, an int32 at +0x28, qwords at
+// +0x30 and +0x38, an int16 at +0x40 and a byte at +0x42.
+//
+// It also publishes `_singleton`, which this constructor does NOT: the door
+// below reads the existing cell, and moving a second data cell off the mint is
+// step 7's (B33_RULES §9 step 3 moved exactly one, and only because its writer
+// runs at CRT-init).
+ExternalFactory::ExternalFactory()
+    : _cleanBitIndex(0), _cleanBitMask(0), _generation(0), _pad0c(0),
+      _resources(), _references(), _pathStack(),
+      _referenceModeEnabled(false), _loadEnabled(false), _simpleLoadEnabled(false) {}
+
+// ?_singleton@ExternalFactory@Object@@0PEAV12@EA — retail 0x1801fc6c8.
+// A RUNTIME read through the existing port door, exactly as
+// runtime/src/engine/singleton_ctors.cpp:155 and four other sites do it.
+ExternalFactory* ExternalFactory::Get() {
+    void** slot = RT_DATA_SLOT(void**, "?_singleton@ExternalFactory@Object@@0PEAV12@EA");
+    return slot ? reinterpret_cast<ExternalFactory*>(*slot) : nullptr;
+}
+
+const External* ExternalFactory::Find(const System::Filename& path) const {
+    return reinterpret_cast<const External*>(                        // B.3.3 bridge
+        RtObject::RtObject_ExternalFactory_Find(Pod(this), PodF(path)));
+}
+
+const External* ExternalFactory::FindNext(uint32_t typeId, const External* prev) const {
+    return reinterpret_cast<const External*>(                        // B.3.3 bridge
+        RtObject::RtObject_ExternalFactory_FindNext(Pod(this), typeId, Pod(prev)));
+}
+
+// *** RETAIL DEREFERENCES THE FOUND NODE WITHOUT A NULL CHECK *** and the
+// ported body keeps it that way. An External the factory never Add()ed faults
+// reading +0x14; a guard here would not restore the behaviour, it would skip it
+// (CLAUDE.md's hard rule, and external.cpp:372-381 has the disassembly).
+uint32_t ExternalFactory::GetReferenceId(const External* external) const {
+    return RtObject::RtObject_ExternalFactory_GetReferenceId(Pod(this), Pod(external));
+}
+
+System::Filename ExternalFactory::GetPathForReferenceId(uint32_t id) const {
+    const RtObject::ExternalFactory* self = Pod(this);
+    return ByHiddenSlot([self, id](RtSystem::Filename* slot) {
+        RtObject::RtObject_ExternalFactory_GetPathForReferenceId(self, slot, id);
+    });
+}
+
+System::Filename ExternalFactory::GetPathStackFilename() const {
+    const RtObject::ExternalFactory* self = Pod(this);
+    return ByHiddenSlot([self](RtSystem::Filename* slot) {
+        RtObject::RtObject_ExternalFactory_GetPathStackFilename(self, slot);
+    });
+}
+
+System::Filename ExternalFactory::GetPathStackDirectory() const {
+    const RtObject::ExternalFactory* self = Pod(this);
+    return ByHiddenSlot([self](RtSystem::Filename* slot) {
+        RtObject::RtObject_ExternalFactory_GetPathStackDirectory(self, slot);
+    });
+}
+
+System::Filename ExternalFactory::ExpandRelativePath(const System::Filename& path,
+                                                     bool appendIdentifier) const {
+    const RtObject::ExternalFactory* self = Pod(this);
+    const RtObject::Filename*        p    = PodF(path);
+    return ByHiddenSlot([self, p, appendIdentifier](RtSystem::Filename* slot) {
+        RtObject::RtObject_ExternalFactory_ExpandRelativePath(self, slot, p, appendIdentifier);
+    });
+}
+
+void ExternalFactory::PushPath(const System::Filename& path) {
+    RtObject::RtObject_ExternalFactory_PushPath(Pod(this), PodF(path));
+}
+void ExternalFactory::PopPath() {
+    RtObject::RtObject_ExternalFactory_PopPath(Pod(this));
+}
+
+// THE ADD PATH. See the file banner: spelling only, body untouched, race
+// neither papered over nor removed.
+void ExternalFactory::Add(External* external) {
+    RtObject::RtObject_ExternalFactory_Add(Pod(this), Pod(external));
+}
+
+const External* ExternalFactory::FindOrLoad(const System::Filename& path) {
+    return reinterpret_cast<const External*>(                        // B.3.3 bridge
+        RtObject::RtObject_ExternalFactory_FindOrLoad(Pod(this), PodF(path)));
+}
+
+void ExternalFactory::Clean() {
+    RtObject::RtObject_ExternalFactory_Clean(Pod(this));
+}
+void ExternalFactory::ForceUnload(const System::Filename& path) {
+    RtObject::RtObject_ExternalFactory_ForceUnload(Pod(this), PodF(path));
+}
+// `SerializeReferenceTable` (0x1800bcb60) IS NOT DECLARED ON THE CLASS, and the
+// reason is a type that cannot cross a file boundary rather than a decision
+// about the method: `RtObject_ExternalFactory_SerializeReferenceTable`'s second
+// parameter is external_reftable.cpp's own file-local `Stream` struct, so it
+// cannot be named from here and the entry point cannot be forwarded to without
+// editing that file's signature. Its real parameter is `IO::Stream&`, which is
+// B.3 step 4's type (B33_RULES §0 keeps every Serialize body on
+// `RtObject::SerializerLite` and the RETAIL Encoding offsets until then), so
+// the method lands with the IO conversion and not before. The registered entry
+// point is untouched and every caller of it still works.
+
+// ?GetCompiledPath@ExternalFactory@Object@@SA?AVFilename@System@@AEBV34@@Z
+//   retail 0x1800bec10 — a STATIC returning by value, so RCX is the hidden
+//   return slot and RDX is the path (the arguments do NOT shift the way a
+//   member's do; the C entry point's `(ret, path)` order is that shape).
+System::Filename ExternalFactory::GetCompiledPath(const System::Filename& path) {
+    const RtObject::Filename* p = PodF(path);
+    return ByHiddenSlot([p](RtSystem::Filename* slot) {
+        RtObject::RtObject_ExternalFactory_GetCompiledPath(slot, p);
+    });
+}
+
+// ============================================================================
+// Object::ExternalList — the registry-free half
+// ============================================================================
+
+// ?Construct@ExternalList@Object@@UEAAPEAVExternal@2@XZ's inline half; retail's
+// constructor proper is the same stores. Note that retail stamps Base, then
+// External, then ExternalList — three writes to +0x00 — which the constructor
+// chain reproduces.
+ExternalList::ExternalList() : _resources(nullptr), _count(0), _pad2c(0) {}
+
+// ??1ExternalList@Object@@UEAA@XZ   retail 0x1800076c0
+//
+//   FUN_180009460(this + 0x20);        // Array<ExternalPtr<External>>::~Array
+//   Object::External::~External(this); // tail call in retail
+//
+// The second line is the base destructor, which the chain runs for us. The
+// first is the +0x20 array's teardown: `_resources`/`_count`/`_pad2c` are the
+// three fields of a `Collection::Array<ExternalPtr<External>>` whose element is
+// one bare non-owning pointer, so 0x180009460 is the trivial-element `~Array`
+// — free the buffer, zero the header — with no per-element work at all
+// (Object::ExternalPtr<T> is asserted trivially destructible in External.h, and
+// External.h's own banner records that ownership lives in the factory, never in
+// the pointer). Spelled out rather than reached through the container because
+// the three fields are declared here as plain members: External.h left +0x2c
+// UNPINNED, and declaring an `Array` to get a free would be asserting a
+// capacity field no decompiled body touches.
+ExternalList::~ExternalList() {
+    if (_resources != nullptr)
+        RtSystem::RtMemFree(_resources);
+    _resources = nullptr;
+    _count     = 0;
+    _pad2c     = 0;
+}
+
+// slot 0 — 0x180007800, `MOV EDX,0x30` (elem size 0x30) -> ~ExternalList.
+Base* ExternalList::DeletingDtor(unsigned flags) {
+    this->~ExternalList();
+    if (flags & 1) TypeTreeFree(this);
+    return this;
+}
+
+// slot 1 — ?TypeName@ExternalList@Object@@UEBAPEBDXZ   0x180007370
+const char* ExternalList::TypeName() const { return ExternalListTypeInfoRecord()->name; }
+// slot 2 — ?Type@ExternalList@Object@@UEBAIXZ          0x180007350
+uint32_t ExternalList::Type() const { return ExternalListTypeInfoRecord()->typeId; }
+uint32_t ExternalList::TypeId()     { return ExternalListTypeInfoRecord()->typeId; }
+
+// slot 3 — ?GetFileVersion@ExternalList@Object@@UEBAHXZ  0x1800bfa10
+//          `MOV EAX,3; RET` — a literal of its own, not ElementDescription's.
+int32_t ExternalList::GetFileVersion() const { return 3; }
+
+// ============================================================================
+// Object::ExternalList — the four slots whose bodies reach the registry
+// (the rest of the class is just above: see external_class.cpp's key-function
+//  banner for why every ExternalList body has to sit in ONE file, this one)
+// ============================================================================
+
+// slot 5 — ?Serialize@ExternalList@Object@@UEAA_NAEAVStream@IO@@@Z  0x1800bfa20
+//
+// The body stays in external_list.cpp and stays on `RtObject::SerializerLite`
+// and the RETAIL Encoding vtable byte offsets. B33_RULES §0: `IO::Serializer`
+// is B.3 step 4, after Object, and those offsets DIFFER in the profile build —
+// so this body is never to be cross-checked against the profile disassembly and
+// never to be "modernised" here.
+bool ExternalList::Serialize(void* stream) {
+    return RtObject::RtObject_ExternalList_Serialize(this, stream);
+}
+
+// slot 6 — ?Reconstruct@ExternalList@Object@@UEAAPEAVExternal@2@XZ  0x180007570
+//          `slot0(this, 0)` — destroy without freeing — then the ctor body
+//          again, with NO null test: retail derefs `this` unconditionally to
+//          reach the vtable, so a null faults in retail too.
+External* ExternalList::Reconstruct() {
+    return reinterpret_cast<External*>(                              // B.3.3 bridge
+        RtObject::RtObject_ExternalList_Reconstruct(this));
+}
+
+// slot 7 — ?Destruct@ExternalList@Object@@UEAAXXZ   0x180007640
+void ExternalList::Destruct() { RtObject::RtObject_ExternalList_Destruct(this); }
+
+// slot 8 — ?Construct@ExternalList@Object@@UEAAPEAVExternal@2@XZ   0x1800075e0
+//          ExternalList's OWN new virtual; External's table stops at eight.
+External* ExternalList::Construct() {
+    return reinterpret_cast<External*>(                              // B.3.3 bridge
+        RtObject::RtObject_ExternalList_Construct(this));
+}
+
+// ?Find@ExternalList@Object@@QEBA?AV?$ExternalPtr@VExternal@Object@@@2@AEBVFilename@System@@VType@2@@Z
+//   retail 0x1800bf700.  *** THE `type` PARAMETER IS NEVER READ *** — R9 is
+//   dead in the whole body, so a caller that passes a type expecting it to
+//   filter gets no filtering. The comparison is a LINEAR scan and is
+//   case-SENSITIVE, where `ExternalFactory::Find` over the same kind of path is
+//   case-INSENSITIVE; both are transcribed as found and must not be harmonised.
+ExternalPtr<External> ExternalList::Find(const System::Filename& path, uint32_t type) const {
+    RtObject::ExternalPtr<RtObject::External> raw;
+    raw.ptr = nullptr;
+    RtObject::RtObject_ExternalList_Find(
+        reinterpret_cast<const RtObject::ExternalList*>(this),       // B.3.3 bridge
+        &raw, PodF(path), reinterpret_cast<void*>(static_cast<uintptr_t>(type)));
+    return ExternalPtr<External>(reinterpret_cast<External*>(raw.ptr));  // B.3.3 bridge
+}
+
+}  // namespace Object
