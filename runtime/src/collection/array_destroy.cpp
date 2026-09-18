@@ -498,7 +498,6 @@ A_ENTRY(1800419b0, kD_InnerArr_18)    // UI: GraphElement::_graphs, the nested p
 A_ENTRY(18004ff80, kD_InnerArr_10)    // Video: ShaderProgram::_byteCode inner Array<uint8>
 // Cutover closure batch 2b: Achievement's two-inner-Array element destroy. It
 // has a caller registered in this same commit (0x180004b70's J2_ENTRY below).
-A_ENTRY(180005680, kD_InnerArr2_20)   // Achievement: {Array<T>, Array<T>} element
 
 #undef A_ENTRY
 
@@ -706,10 +705,8 @@ B_ENTRY(1800341e0, kD_Str2_20)        // Save: Persistence metadata entry
 // Body-A neighbours and calls a Body-B helper. Each line names the address it
 // was read from.
 J2_ENTRY(180010ab0, ReleaseStringsCounted,  kD_Str_08)       // CALL 0x180011010  Body B
-J2_ENTRY(18001c7e0, FreeInnerArraysCounted, kD_InnerArr_110) // CALL 0x18001ce90  Body A
 J2_ENTRY(180033880, ReleaseStringsCounted,  kD_Str_18)       // CALL 0x180034440  Body B
 J2_ENTRY(1800416d0, FreeInnerArraysCounted, kD_InnerArr_18)  // CALL 0x1800419b0  Body A
-J2_ENTRY(180073c90, FreeInnerArraysCounted, kD_InnerArr_48)  // CALL 0x180074100  Body A
 J2_ENTRY(18004fa30, ReleaseStringsCounted,  kD_Str_20)       // CALL 0x18004fe20  Body B  ~VertexLayout (2026-09-12)
 
 // ---- VTABLE BATCH 2 (2026-09-12): UI::LayoutDescription's entry array -------
@@ -768,7 +765,6 @@ J2_ENTRY(180039280, ReleaseStringsCounted,  kD_Str_20at18)   // CALL 0x180039580
 // DestroySpec row — which is asserted from 0x1800269a0's own CALL operand and
 // not from a hash, because a hash erases exactly that operand (see the three
 // Wave 25 rows above, where two siblings sharing hash 089ee8 take two specs).
-J2_ENTRY(1800269a0, ReleaseStringsCounted,  kD_Str_10)       // CALL 0x180026b50  Body B
 
 // ---- WAVE 27 LANE FRONTIER: the eleventh J2 address ------------------------
 //
@@ -786,7 +782,6 @@ J2_ENTRY(1800269a0, ReleaseStringsCounted,  kD_Str_10)       // CALL 0x180026b50
 // it is how `Object::External`'s dependency array is torn down and retail's
 // rel32 to 0x180006ac0 will not exist. Registering both halves is the lesson
 // the 0x1800269a0 line above records.
-J2_ENTRY(180006b80, ReleaseStringsCounted,  kD_Str_10)       // CALL 0x180006ac0  Body B
 
 // ---- WAVE 27 LANE FRONTIER: the twelfth J2 address -------------------------
 //
@@ -821,7 +816,6 @@ J2_ENTRY(180004c80, ReleaseStringsCounted,  kD_Str_18at00)   // CALL 0x180005880
 // 0x180051fe0 -- another `~Array` calling 0x180052110 (already ported/
 // registered above as A_ENTRY's Audio::EffectSlot row, kD_InnerArr_40). Read
 // from its own body: `CALL 0x180052110` then the same allocator triple.
-J2_ENTRY(180051fe0, FreeInnerArraysCounted, kD_InnerArr_40)  // CALL 0x180052110  Body A
 // ---- 2026-09-12: the two Video::ShaderProgram ~Array bodies ----------------
 //
 // ~ShaderProgram (0x1800f50b0) destroys three member arrays, through TWO
@@ -911,12 +905,6 @@ void* RtColl_ArrayDtorElem_18005bf60(void* self) {
 // Body A with offs {0x1e0,0x1d0,0x1c0}, stride 0x1f0 — see the banner for the
 // two hops (0x18001b960 is a 5-byte JMP thunk to a twelfth copy of J1) that
 // make it Body A and not a CRT dependency.
-void* RtColl_ArrayDtorEhVec_18001c8c0(void* self) {
-    ArrayHdr* a = static_cast<ArrayHdr*>(self);
-    const int freed = FreeInnerArraysCounted(a->_data, a->_size, &kD_InnerArr3_1f0);
-    void* r = ArrayDtorImpl(a);
-    return r;
-}
 
 // ============================================================================
 // 0x180004220 — the SpriteSheet element's copy-assign
@@ -1105,17 +1093,6 @@ void* RtColl_ArrayAssign_180003970(void* self, const void* src) {
 // not itself on the worklist, so it is reached by ADDRESS — the same door
 // kSpec_PkgEntry's DestroyPkgEntryRange uses, and registry-first, so the day
 // 0x180010f00 is ported this call lands on our body without an edit here.
-void* RtColl_ArrayDtorElem_1800109d0(void* self) {
-    ArrayHdr* a = static_cast<ArrayHdr*>(self);
-    {
-        using Fn = void (*)(void*, void*, int);
-        static Fn fn = nullptr;
-        if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180010f00));
-        fn(a, a->_data, a->_size);       // retail passes RCX=this, ignored inside
-    }
-    void* r = ArrayDtorImpl(a);
-    return r;
-}
 
 // ---- The generic J4 --------------------------------------------------------
 //
@@ -1217,7 +1194,6 @@ const ArraySpec kAsgn_MetaEntry20 = {
     }
 
 J4_ENTRY(180014c70, kAsgn_Ptr8A8,      ArrayClearTrivial)       // clear 0x180014d00
-J4_ENTRY(180005770, kAsgn_Ptr8A4,      ArrayClearTrivial)       // clear 0x180005800
 J4_ENTRY(180033f30, kAsgn_MetaEntry20, ArrayClearMetaEntry20)   // clear 0x1800331f0
 
 #undef J4_ENTRY
@@ -1259,9 +1235,6 @@ void* RtColl_ArrayCopyCtor_18001c620(void* self, const void* src) {
     h->_capacity = 0;                                         //   size + capacity)
     RtColl_ArrayAssign_18001cd30(self, src);                  // 18001c635
     return self;                                              // MOV RAX,RCX
-}
-void RtColl_ArrayDtor_18001c650(void* self) {
-    static_cast<ArrayHdr*>(self)->~Array();   // ENDGAME B.3.2: Array<uint8_t>
 }
 
 // Cutover closure batch 2 (2026-09-12): 0x18001b1a0, `Array<Graphics::
@@ -1685,6 +1658,13 @@ J4_ENTRY(1800571b0, kAsgnD2_VPParam18, ArrayClearVPParam18)   // clear 0x1800566
 // from this commit, lane Q's three non-trivial specs no longer reach the DLL
 // for their destroy step, and array.cpp's row table saying they do is corrected
 // in the same change.
+// ENDGAME B.3.2 closing pass (2026-09-18): ten entry points and their rows were
+// removed at zero callers — 18001c7e0, 1800269a0, 180073c90, 180006b80,
+// 180051fe0, 18001c8c0, 180005680, 1800109d0, 180005770, 18001c650. The test is
+// the one array.cpp's banner spells out (no caller by name, no reference to the
+// address in code in ANY form, absent from both .inc files). Their provenance
+// comments are left standing above; a banner naming an address with no entry is
+// one of these.
 void RtCollectionDestroyPortInit() {
     using namespace rtcoll;
 
@@ -1736,11 +1716,9 @@ void RtCollectionDestroyPortInit() {
     // VTABLE BATCH 2 (2026-09-12): UI::LayoutDescription's entry array.
     RegisterRuntimeAddr(0x180043a00, (void*)&RtColl_ArrayDtorElem_180043a00);
     RegisterRuntimeAddr(0x180044050, (void*)&RtColl_DestroyElem_180044050);
-    RegisterRuntimeAddr(0x18001c7e0, (void*)&RtColl_ArrayDtorElem_18001c7e0);
     RegisterRuntimeAddr(0x180033880, (void*)&RtColl_ArrayDtorElem_180033880);
     RegisterRuntimeAddr(0x1800416d0, (void*)&RtColl_ArrayDtorElem_1800416d0);
     RegisterRuntimeAddr(0x18005bf60, (void*)&RtColl_ArrayDtorElem_18005bf60);
-    RegisterRuntimeAddr(0x180073c90, (void*)&RtColl_ArrayDtorElem_180073c90);
     // Wave 25 lane INTERNAL42 — see the banner above these three for why one
     // opcode hash covers all three bodies and three specs do not.
     RegisterRuntimeAddr(0x18002ac40, (void*)&RtColl_ArrayDtorElem_18002ac40);
@@ -1751,12 +1729,10 @@ void RtCollectionDestroyPortInit() {
     // and the helper now BOTH route through this file; before it, retail's
     // 0x1800269a0 called retail's 0x180026b50 by rel32 and our registration of
     // the helper could never be reached from ~PackageFile.
-    RegisterRuntimeAddr(0x1800269a0, (void*)&RtColl_ArrayDtorElem_1800269a0);
     // Wave 27 lane FRONTIER -- ~Array<Object::ExternalArrayElement>. Same
     // both-halves rule as the line above: its helper 0x180006ac0 is registered
     // in the block higher up, so at cutover this entry point and the helper are
     // both ours.
-    RegisterRuntimeAddr(0x180006b80, (void*)&RtColl_ArrayDtorElem_180006b80);
     // Wave 27 lane FRONTIER -- ~Array<UI::StringTable::TextEntry>, the member
     // ??1StringTable@UI@@ destroys at this+0x20.
     RegisterRuntimeAddr(0x180004a90, (void*)&RtColl_ArrayDtorElem_180004a90);
@@ -1770,7 +1746,6 @@ void RtCollectionDestroyPortInit() {
     // Cutover closure batch 2 -- ~Array<MaterialParam> (~MaterialInstance) and
     // the Audio EffectSlot ~Array; the ~ShaderProgram pair is in the block below.
     RegisterRuntimeAddr(0x180004c80, (void*)&RtColl_ArrayDtorElem_180004c80);
-    RegisterRuntimeAddr(0x180051fe0, (void*)&RtColl_ArrayDtorElem_180051fe0);
     // 2026-09-12 — Video::ShaderProgram, both halves of each pair (the ~Array
     // entry point AND the element-destroy helper it calls), for the reason the
     // 0x1800269a0 note records: at cutover retail's rel32 will not exist.
@@ -1780,7 +1755,6 @@ void RtCollectionDestroyPortInit() {
     RegisterRuntimeAddr(0x18004ff80, (void*)&RtColl_DestroyInner_18004ff80);
 
     // ---- J2b -------------------------------------------------------------
-    RegisterRuntimeAddr(0x18001c8c0, (void*)&RtColl_ArrayDtorEhVec_18001c8c0);
 
     // ---- J4 (the half whose frontier is clean) ----------------------------
     RegisterRuntimeAddr(0x180003970, (void*)&RtColl_ArrayAssign_180003970);
@@ -1801,20 +1775,16 @@ void RtCollectionDestroyPortInit() {
 
     // ---- Cutover closure batch 2b (2026-09-12) ----------------------------
     // Element-destroy helpers (both have a caller registered just below).
-    RegisterRuntimeAddr(0x180005680, (void*)&RtColl_DestroyInner_180005680);
     RegisterRuntimeAddr(0x1800341e0, (void*)&RtColl_DestroyStrings_1800341e0);
     // J2.
     RegisterRuntimeAddr(0x180004b70, (void*)&RtColl_ArrayDtorElem_180004b70);
     RegisterRuntimeAddr(0x180004d60, (void*)&RtColl_ArrayDtorElem_180004d60);
-    RegisterRuntimeAddr(0x1800109d0, (void*)&RtColl_ArrayDtorElem_1800109d0);
     // J4.
     RegisterRuntimeAddr(0x180014c70, (void*)&RtColl_ArrayAssign_180014c70);
-    RegisterRuntimeAddr(0x180005770, (void*)&RtColl_ArrayAssign_180005770);
     RegisterRuntimeAddr(0x180033f30, (void*)&RtColl_ArrayAssign_180033f30);
     // Close-out: the stride-0x38 family (see the kAsgn_Blob38 block).
     RegisterRuntimeAddr(0x18001cd30, (void*)&RtColl_ArrayAssign_18001cd30);
     RegisterRuntimeAddr(0x18001c620, (void*)&RtColl_ArrayCopyCtor_18001c620);
-    RegisterRuntimeAddr(0x18001c650, (void*)&RtColl_ArrayDtor_18001c650);
     // BATCH 5 (2026-09-12): the two element-destroy helpers the IO save-list
     // and mod-reload arrays call. Both callers are ported in array.cpp in the
     // same commit and reach these BY ADDRESS, so registering here is what

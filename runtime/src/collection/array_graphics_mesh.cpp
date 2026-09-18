@@ -332,12 +332,6 @@ void* Rt_ArrayDtor_180014160(void* a) {       // ~Array<Array<T>>
 // Retail's arity for the two element-destroy helpers, including the `this`
 // each spills to the shadow space and never reads (array_destroy.cpp's
 // "ignoredThis" note applies unchanged).
-void Rt_DestroyTriangleLists_180014910(void* t, void* base, int n) {
-    DestroyTriangleListRange(t, static_cast<uint8_t*>(base), n);
-}
-void Rt_DestroyInnerArrays_180014af0(void* t, void* base, int n) {
-    DestroyInnerArrayRange(t, static_cast<uint8_t*>(base), n);
-}
 
 void Rt_SetSize_18005d840(void* a, int n) {   // Array<TriangleList>
     rtcoll::AsArray<&kSpec_TriangleList>(a)->SetSize(n);
@@ -359,12 +353,16 @@ void* Rt_TriangleListCopyCtor_180013c50(void* d, const void* s) { return Triangl
 // 0x1800125a0, which is a DIFFERENT function from the 0x1800fefc0 this array's
 // fill loop calls; registering our body under that name would bind it to the
 // wrong address. Addresses only.
+// ENDGAME B.3.2 closing pass (2026-09-18): the two per-element destroy wrappers
+// (0x180014910 TriangleLists, 0x180014af0 inner Arrays) and their rows were
+// removed at zero callers — nothing resolves those addresses in any form, and
+// their cores (DestroyTriangleListRange / DestroyInnerArrayRange) stay, called
+// from this file's own dtor bodies. So the banner above now reads "six rows"
+// for four; the two it counted are these.
 int RtCollectionGraphicsMeshRegister() {
     int n = 0;
     RegisterRuntimeAddr(0x180013fb0ull, (void*)&Rt_ArrayDtor_180013fb0);            ++n;
     RegisterRuntimeAddr(0x180014160ull, (void*)&Rt_ArrayDtor_180014160);            ++n;
-    RegisterRuntimeAddr(0x180014910ull, (void*)&Rt_DestroyTriangleLists_180014910); ++n;
-    RegisterRuntimeAddr(0x180014af0ull, (void*)&Rt_DestroyInnerArrays_180014af0);   ++n;
     RegisterRuntimeAddr(0x18005d840ull, (void*)&Rt_SetSize_18005d840);              ++n;
     RegisterRuntimeAddr(0x18005cda0ull, (void*)&Rt_SetSize_18005cda0);              ++n;
     RegisterRuntimeAddr(0x1800fefc0ull, (void*)&Rt_TriangleListCtor_1800fefc0);     ++n;

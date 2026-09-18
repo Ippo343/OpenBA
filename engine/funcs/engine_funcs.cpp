@@ -85,9 +85,6 @@ fn_UI_Draw_t fn_UI_Draw = nullptr;
 // UI::UserInterface::CloseDialog
 fn_UI_CloseDialog_t fn_UI_CloseDialog = nullptr;
 
-// Dynamic array push helper
-fn_DynArrayPush_t fn_DynArrayPush = nullptr;
-
 // PostDraw/PostUpdate callback array push helpers
 fn_DynArrayPush_t fn_PostDrawPush = nullptr;
 fn_DynArrayPush_t fn_PostUpdatePush = nullptr;
@@ -743,7 +740,6 @@ fn_DynArray_Clear_0x20_t fn_DynArray_Clear_0x20 = nullptr;
 fn_DynArray_Clear_0x18_t fn_DynArray_Clear_0x18_Buy = nullptr;
 fn_Building_GetOrderName_t fn_Building_GetOrderName = nullptr;
 fn_Building_GetBuyEntries_t fn_Building_GetBuyEntries = nullptr;
-fn_DynArray_Clear_0x08_t fn_DynArray_Clear_0x08 = nullptr;
 fn_TradeUI_OnTradeButton_t fn_TradeUI_OnTradeButton = nullptr;
 uint32_t* g_TypeId_TableElement = nullptr;
 uint32_t* g_TypeId_SpinnerElement = nullptr;
@@ -930,7 +926,6 @@ fn_MainLoop_SetNextLoop_t fn_MainLoop_SetNextLoop = nullptr;
 fn_BaseTypeInfo_Ctor_t fn_BaseTypeInfo_Ctor = nullptr;
 void** g_pMainLoopSingleton = nullptr;
 fn_UI_EnableCursor_t fn_UI_EnableCursor = nullptr;
-fn_UI_GetFirstDialog_t fn_UI_GetFirstDialog = nullptr;
 fn_UI_SetFullscreenFadeSprite_t fn_UI_SetFullscreenFadeSprite = nullptr;
 fn_SaveGameSettings_t fn_SaveGameSettings = nullptr;
 fn_ReadGameSettings_t fn_ReadGameSettings = nullptr;
@@ -1052,7 +1047,6 @@ fn_InternalBasePtr_Serialize_t fn_InternalBasePtr_Serialize = nullptr;
 fn_IsRunning_t fn_IsRunning = nullptr;
 fn_ExternalPtr_SerializeTutorial_t fn_ExternalPtr_SerializeTutorial = nullptr;
 fn_BuildingTypeArray_Dtor_t fn_BuildingTypeArray_Dtor = nullptr;
-fn_BuildingTypeArray_Resize_t fn_BuildingTypeArray_Resize = nullptr;
 fn_FindUIElementByPath_t fn_FindUIElementByPath = nullptr;
 fn_ObjectInternal_Ctor_t fn_ObjectInternal_Ctor = nullptr;
 fn_TutorialTreeInsert_t fn_TutorialTreeInsert = nullptr;
@@ -1063,7 +1057,6 @@ void** g_TutorialInstanceVtable = nullptr;
 
 // ComponentEntity dependencies
 uint32_t* g_TypeId_ComponentBase = nullptr;
-fn_ExeArrayResizeFill_t fn_ExeArrayResizeFill = nullptr;
 
 // CitizenBehavior dependencies
 fn_CitizenBehavior_CountResources_t fn_CitizenBehavior_CountResources = nullptr;
@@ -1166,176 +1159,6 @@ void Entity_FindComponentByExeTypeId(void* entity, void* retval, uint32_t* typeI
 //
 // Memory: fn_MemAlloc(g_pMemAllocSingleton, size, alignment) / fn_MemFreeStatic(ptr)
 
-// ---------------------------------------------------------------------------
-// ZERO CALLERS as of the B.3.2 closing pass — the callers are now
-// Collection::Array<...>::SetSize. Delete with the final pass.
-// ---------------------------------------------------------------------------
-// The four bodies below are NOT a reference implementation of retail. Retail's
-// 0x1400032e0 / 0x140001bb0 / 0x1400021d0 / 0x140003600 are MSVC
-// monomorphisations of Collection::Array<T>::SetSize; `rtcoll::SetSizeCore`
-// (runtime/src/collection/array.cpp) is that algorithm, and these C copies
-// diverge from it in FOUR ways, each read out of the shipped bytes:
-//
-//   1. they zero to CAPACITY, not to newSize;
-//   2. fn_ExeArrayResize / _3 zero the TRUNCATED TAIL on shrink, which retail
-//      never touches (capacity never shrinks and the dropped elements are left
-//      as they were);
-//   3. they have no EXACT-EQUAL EARLY RETURN (`if (newSize == oldSize) return;`
-//      is retail's first branch);
-//   4. fn_ExeArrayPush fills only index newCount-1; retail fills every slot in
-//      [oldSize, newSize).
-//
-// fn_ExeArrayResize additionally carries an "ABSURD newCount" bail + stderr
-// print that is a harness guard, not retail.
-//
-// fn_ExeArrayResize: 8-byte elements. Copies existing, zeroes new entries.
-// Original: FUN_1400032e0 (retail: stride 8, align 8, new tail zeroed)
-void fn_ExeArrayResize(void* arrayBase, int newCount) {
-    uint8_t* base   = (uint8_t*)arrayBase;
-    void**   pData  = (void**)base;
-    int*     pCount = (int*)(base + 0x08);
-    int*     pCap   = (int*)(base + 0x0C);
-
-    int oldCount = *pCount;
-    int oldCap   = *pCap;
-
-    // Sanity guard: an absurd newCount means the caller passed a corrupted count
-    // (e.g. a template desc whose component-count field read as garbage). Bail
-    // loudly instead of MemAlloc'ing a multi-GB block (segfault).
-    if (newCount < 0 || newCount > 0x100000) {
-        fprintf(stderr, "[fn_ExeArrayResize] ABSURD newCount=%d (base=%p oldCount=%d oldCap=%d) — bail\n",
-                newCount, arrayBase, oldCount, oldCap);
-        fflush(stderr);
-        return;
-    }
-
-    if (newCount > oldCap) {
-        int newCap = (newCount == oldCount + 1 && oldCount != 0) ? newCount * 3 : newCount;
-        void* newData = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 8, 8);
-        if (*pData && oldCount > 0) {
-            uint64_t* src = (uint64_t*)*pData;
-            uint64_t* dst = (uint64_t*)newData;
-            for (int i = 0; i < oldCount; i++) dst[i] = src[i];
-        }
-        if (newData) {
-            uint64_t* dst = (uint64_t*)newData;
-            for (int i = oldCount; i < newCap; i++) dst[i] = 0;
-        }
-        fn_MemFreeStatic(*pData);
-        *pData = newData;
-        *pCap  = newCap;
-    } else if (newCount < oldCount) {
-        if (*pData) {
-            uint64_t* dst = (uint64_t*)*pData;
-            for (int i = newCount; i < oldCount; i++) dst[i] = 0;
-        }
-    }
-    *pCount = newCount;
-}
-
-// ZERO CALLERS as of the B.3.2 closing pass — the callers are now
-// Collection::Array<...>::SetSize. Delete with the final pass. (Diverges from
-// retail; see the four-point list above fn_ExeArrayResize.)
-// fn_ExeArrayResize2: 4-byte elements. Copies existing only (no zero-init for new).
-// Original: FUN_1400021d0 (retail: stride 4, align 4, grown tail left as-found)
-void fn_ExeArrayResize2(void* arrayBase, int newCount) {
-    uint8_t* base   = (uint8_t*)arrayBase;
-    void**   pData  = (void**)base;
-    int*     pCount = (int*)(base + 0x08);
-    int*     pCap   = (int*)(base + 0x0C);
-
-    int oldCount = *pCount;
-    int oldCap   = *pCap;
-
-    if (newCount > oldCap) {
-        int newCap = (newCount == oldCount + 1 && oldCount != 0) ? newCount * 3 : newCount;
-        void* newData = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 4, 4);
-        if (*pData && oldCount > 0) {
-            uint32_t* src = (uint32_t*)*pData;
-            uint32_t* dst = (uint32_t*)newData;
-            for (int i = 0; i < oldCount; i++) dst[i] = src[i];
-        }
-        fn_MemFreeStatic(*pData);
-        *pData = newData;
-        *pCap  = newCap;
-    }
-    *pCount = newCount;
-}
-
-// ZERO CALLERS as of the B.3.2 closing pass — the callers are now
-// Collection::Array<...>::SetSize. Delete with the final pass. (Diverges from
-// retail; see the four-point list above fn_ExeArrayResize.)
-// fn_ExeArrayResize3: 8-byte elements. Copies existing, zeroes new entries.
-// Original: FUN_140001bb0 — byte-identical to 0x1400032e0 in retail
-// (stride 8, align 8, new tail zeroed).
-void fn_ExeArrayResize3(void* arrayBase, int newCount) {
-    uint8_t* base   = (uint8_t*)arrayBase;
-    void**   pData  = (void**)base;
-    int*     pCount = (int*)(base + 0x08);
-    int*     pCap   = (int*)(base + 0x0C);
-
-    int oldCount = *pCount;
-    int oldCap   = *pCap;
-
-    if (newCount > oldCap) {
-        int newCap = (newCount == oldCount + 1 && oldCount != 0) ? newCount * 3 : newCount;
-        void* newData = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 8, 8);
-        if (*pData && oldCount > 0) {
-            uint64_t* src = (uint64_t*)*pData;
-            uint64_t* dst = (uint64_t*)newData;
-            for (int i = 0; i < oldCount; i++) dst[i] = src[i];
-        }
-        if (newData) {
-            uint64_t* dst = (uint64_t*)newData;
-            for (int i = oldCount; i < newCap; i++) dst[i] = 0;
-        }
-        fn_MemFreeStatic(*pData);
-        *pData = newData;
-        *pCap  = newCap;
-    } else if (newCount < oldCount) {
-        if (*pData) {
-            uint64_t* dst = (uint64_t*)*pData;
-            for (int i = newCount; i < oldCount; i++) dst[i] = 0;
-        }
-    }
-    *pCount = newCount;
-}
-
-// ZERO CALLERS as of the B.3.2 closing pass — the callers are now
-// Collection::Array<...>::SetSize. Delete with the final pass. (Diverges from
-// retail; see the four-point list above fn_ExeArrayResize — in particular
-// retail fills EVERY slot in [oldSize, newSize), not just newCount-1.)
-// fn_ExeArrayPush: 4-byte elements. Resizes to newCount, fills new slot with *elementPtr.
-// Original: FUN_140003600 (retail: stride 4, align 4, no init arm — fill only)
-void fn_ExeArrayPush(void* arrayBase, int newCount, void* elementPtr) {
-    uint8_t* base   = (uint8_t*)arrayBase;
-    void**   pData  = (void**)base;
-    int*     pCount = (int*)(base + 0x08);
-    int*     pCap   = (int*)(base + 0x0C);
-
-    int oldCount = *pCount;
-    int oldCap   = *pCap;
-
-    if (newCount > oldCap) {
-        int newCap = (newCount == oldCount + 1 && oldCount != 0) ? newCount * 3 : newCount;
-        void* newData = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 4, 4);
-        if (*pData && oldCount > 0) {
-            uint32_t* src = (uint32_t*)*pData;
-            uint32_t* dst = (uint32_t*)newData;
-            for (int i = 0; i < oldCount; i++) dst[i] = src[i];
-        }
-        fn_MemFreeStatic(*pData);
-        *pData = newData;
-        *pCap  = newCap;
-    }
-
-    // Fill new slot (at index newCount-1) from elementPtr
-    if (*pData && newCount > 0 && elementPtr) {
-        ((uint32_t*)*pData)[newCount - 1] = *(uint32_t*)elementPtr;
-    }
-    *pCount = newCount;
-}
-
 // ModDialog thumbnail array push (was ResolveAddr(Module::Exe, 0x140012a60), FUN_140012a60).
 // {ptr,count:i32,cap:i32} header at +0x00/+0x08/+0x0C, 0x58-byte (11 qword) elements.
 // Byte-faithful: grows (3x over-allocation on a plain +1 append), copies surviving old
@@ -1371,80 +1194,6 @@ void fn_ModDialog_ArrayPush58_CppImpl(void* arrayHeader, int newCount, void* ele
     if (oldData != *pData) {
         fn_MemFree(g_pMemAllocSingleton, oldData);
     }
-}
-
-// ---------------------------------------------------------------------------
-// ZERO CALLERS as of the B.3.2 closing pass — every caller (the six in
-// code/Game/Entity/componententity.cpp) is now
-// Collection::Array<GameColl::Ptr8>::SetSize(n, fill). Delete with the final
-// pass, together with the `fn_ExeArrayResizeFill` pointer and its init
-// assignment. There were no callers outside componententity.cpp.
-// ---------------------------------------------------------------------------
-// ExeArrayResizeFill_CppImpl: 8-byte elements. Grows/shrinks an array; on growth,
-// new entries are filled with *fillValue (existing entries are copied on realloc).
-// Reimpl of FUN_140003110 (assigned to fn_ExeArrayResizeFill at init) — the
-// three-argument Collection::Array<T>::SetSize(n, fill) monomorphisation,
-// stride 8, align 8. Retail's body, read out of Application-x64.exe:
-//
-//     if (newSize == oldSize) return;
-//     old = data; size = newSize;
-//     if (newSize > capacity) {
-//         capacity = newSize;
-//         if (newSize == oldSize + 1 && oldSize != 0) capacity = newSize * 3;
-//         data = MemAlloc(capacity * 8, 8);
-//     }
-//     for (i = (old == data ? oldSize : 0); i < newSize; ++i) {
-//         slot = data + i*8; if (!slot) continue;
-//         *slot = 0;                                  // dead store, then:
-//         *slot = (i < oldSize) ? old[i] : *fillPtr;
-//     }
-//     if (old != data) MemFree(old);
-//
-// UNLIKE the fn_ExeArrayResize/2/3/Push four above, this body IS structurally
-// that algorithm: it has the exact-equal early return, it grows only under
-// `*pCap < newCount` (which is retail's own `newSize > capacity` — checked, not
-// a divergence), it reproduces the `old == data ? oldSize : 0` copy start, and
-// it frees only when the buffer moved. Two cosmetic omissions with no
-// observable effect: retail's per-slot `if (!slot) continue;` and its dead
-// `*slot = 0` store. ONE REAL DIVERGENCE: `fill = fillValue ? *fillValue : 0`
-// adds a null guard where retail dereferences fillPtr unconditionally, so a
-// null fill silently zeroes here and would fault in retail. Nothing in the
-// tree ever passed null.
-//
-// Pure C++ so it worked in standalone (the exe is not mapped, so ResolveAddr on
-// 0x140003110 returns NULL there). WAS THE START-TOWN SPAWN BUG: left NULL in
-// standalone, so EntityList::RegisterEntity silently skipped the master-array
-// append (entity count stayed 0).
-static void ExeArrayResizeFill_CppImpl(void* arrayBase, int newCount, void* fillValue) {
-    uint8_t* base   = (uint8_t*)arrayBase;
-    void**   pData  = (void**)base;
-    int*     pCount = (int*)(base + 0x08);
-    int*     pCap   = (int*)(base + 0x0C);
-
-    int oldCount = *pCount;
-    if (newCount == oldCount) return;
-
-    void* oldData = *pData;
-    *pCount = newCount;
-
-    if (*pCap < newCount) {
-        int newCap = (newCount == oldCount + 1 && oldCount != 0) ? newCount * 3 : newCount;
-        *pCap  = newCap;
-        *pData = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 8, 8);
-    }
-
-    // start = oldCount when the buffer was reused (only new tail filled); 0 when it
-    // was reallocated (re-copy existing [0,oldCount) from the old buffer, then fill).
-    int start = (oldData == *pData) ? oldCount : 0;
-    if (start < newCount && *pData) {
-        uint64_t* dst    = (uint64_t*)*pData;
-        uint64_t* oldArr = (uint64_t*)oldData;
-        uint64_t  fill   = fillValue ? *(uint64_t*)fillValue : 0;
-        for (int i = start; i < newCount; i++)
-            dst[i] = (i < oldCount) ? oldArr[i] : fill;
-    }
-
-    if (oldData != *pData) fn_MemFreeStatic(oldData);
 }
 
 // ============================================================
@@ -1499,15 +1248,11 @@ uint32_t** g_ppTypeInfo_MaterialInstance = nullptr;
 
 // M3.5 Path B session 5 — additional Geometry::Serialize resize helpers.
 fn_Array_Resize_t fn_Array_Resize_Stride02       = nullptr;  // 0x14001c890
-fn_Array_Resize_t fn_Array_Resize_Stride16A      = nullptr;  // 0x14001efd0
-fn_Array_Resize_t fn_Array_Resize_ArrayOfArrays  = nullptr;  // 0x14001f0a0
 fn_Array_Resize_t fn_Array_Resize_Stride16B      = nullptr;  // 0x14001ef10
-fn_Array_Resize_t fn_Array_Resize_Stride04       = nullptr;  // 0x1400021d0
 
 // M3.5 Path B session 4 — per-element 0x60B serialize + typed-ExternalPtr
 // array serialize (Geometry::Serialize cascade points 10 + 13).
 fn_Struct60B_Serialize_t                fn_Struct60B_Serialize                       = nullptr;  // 0x14001ffa0
-fn_Array_Serialize_External_Typed_t     fn_Array_Serialize_External_MaterialInstance = nullptr;  // 0x140020150
 
 // M3.5 Path B session 6 — heightmap mesh-build path helpers.
 fn_TradeWork_sub_c1e0_t    fn_TradeWork_sub_c1e0    = nullptr;  // 0x1400ac1e0
@@ -1622,10 +1367,6 @@ bool EngineFuncsInit() {
     // is GONE (Wave 9 lane F): the corrected name below is the only path.
     fn_UI_CloseDialog = reinterpret_cast<fn_UI_CloseDialog_t>(
         ResolveExport("?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z"));
-
-    // Dynamic array push (generic helper at 0x18007a0d0)
-    fn_DynArrayPush = reinterpret_cast<fn_DynArrayPush_t>(
-        ResolveAddr(Module::Runtime, 0x18007a0d0));
 
     // PostDraw/PostUpdate callback array push (16-byte element template instantiations)
     fn_PostDrawPush = reinterpret_cast<fn_DynArrayPush_t>(
@@ -2077,7 +1818,8 @@ bool EngineFuncsInit() {
     // Phase A4: FindComponent type IDs (resolved from exe .rdata)
     // The old exe function pointers (fn_FindComponent_X) are eliminated.
     // All FindComponent variants are now inline C++ in engine_funcs.h.
-    // fn_ExeArrayResize/2/3/Push are now pure C++ -- no exe resolution needed.
+    // The exe array helpers (fn_ExeArrayResize/2/3/Push) are gone entirely --
+    // their callers are Collection::Array<T>::SetSize.
     // ================================================================
     g_TypeId_MapComponent_FC     = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c79e0));
     g_TypeId_StateMachineComponent_FC      = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7d98));
@@ -3304,8 +3046,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140015fd0));
     fn_Building_GetBuyEntries = reinterpret_cast<fn_Building_GetBuyEntries_t>(
         ResolveAddr(Module::Exe, 0x140059670));
-    fn_DynArray_Clear_0x08 = reinterpret_cast<fn_DynArray_Clear_0x08_t>(
-        ResolveAddr(Module::Exe, 0x140001bb0));
     fn_TradeUI_OnTradeButton = reinterpret_cast<fn_TradeUI_OnTradeButton_t>(
         ResolveAddr(Module::Exe, 0x140081420));
     // TableElement type ID — dispatch slot at 0x140151510 contains a POINTER to the type ID
@@ -3696,7 +3436,6 @@ bool EngineFuncsInit() {
     printf("  UI::Update                = %p\n", (void*)fn_UI_Update);
     printf("  UI::Draw                  = %p\n", (void*)fn_UI_Draw);
     printf("  UI::CloseDialog           = %p\n", (void*)fn_UI_CloseDialog);
-    printf("  DynArrayPush              = %p\n", (void*)fn_DynArrayPush);
     printf("  PostDrawPush              = %p\n", (void*)fn_PostDrawPush);
     printf("  PostUpdatePush            = %p\n", (void*)fn_PostUpdatePush);
     printf("  VideoCtx::Ctor            = %p\n", (void*)fn_VideoCtx_Ctor);
@@ -3900,8 +3639,6 @@ bool EngineFuncsInit() {
     // UI::UserInterface
     fn_UI_EnableCursor = reinterpret_cast<fn_UI_EnableCursor_t>(
         ResolveExport("?EnableCursor@UserInterface@UI@@QEAAX_N@Z"));
-    fn_UI_GetFirstDialog = reinterpret_cast<fn_UI_GetFirstDialog_t>(
-        ResolveExport("?GetFirstDialog@UserInterface@UI@@QEAA?AUIterator@?$LinkedList@V?$InternalPtr@VDialogInstance@UI@@@Object@@UDefaultAllocator@Collection@@@Collection@@XZ"));
     fn_UI_SetFullscreenFadeSprite = reinterpret_cast<fn_UI_SetFullscreenFadeSprite_t>(
         ResolveExport("?SetFullscreenFadeSprite@UserInterface@UI@@QEAAXVSprite@2@@Z"));
 
@@ -4232,14 +3969,11 @@ bool EngineFuncsInit() {
     }
 
     // FinishTutorialGoal helper: External serialize for tutorial ref
-    fn_ExternalPtr_SerializeTutorial = reinterpret_cast<fn_ExternalPtr_SerializeTutorial_t>(
-        ResolveAddr(Module::Exe, 0x1400262b0));
-
-    // BuildingGoal helpers
+    // BuildingGoal helper
     fn_BuildingTypeArray_Dtor = reinterpret_cast<fn_BuildingTypeArray_Dtor_t>(
         ResolveAddr(Module::Exe, 0x14001b030));
-    fn_BuildingTypeArray_Resize = reinterpret_cast<fn_BuildingTypeArray_Resize_t>(
-        ResolveAddr(Module::Exe, 0x14001b340));
+    fn_ExternalPtr_SerializeTutorial = reinterpret_cast<fn_ExternalPtr_SerializeTutorial_t>(
+        ResolveAddr(Module::Exe, 0x1400262b0));
 
 #ifdef _DEBUG
     printf("[EngineFuncs] Achievement Goal support resolved\n");
@@ -4298,14 +4032,9 @@ bool EngineFuncsInit() {
     // ================================================================
     g_TypeId_ComponentBase = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c72a8));
-    // Pure C++ reimpl (FUN_140003110) — NOT exe-resolved: in standalone the exe is
-    // not mapped, so ResolveAddr(0x140003110) would return NULL and EntityList::
-    // RegisterEntity would silently skip its array appends.
-    fn_ExeArrayResizeFill = &ExeArrayResizeFill_CppImpl;
 #ifdef _DEBUG
     printf("[EngineFuncs] Phase L: ComponentEntity deps resolved\n");
     printf("  TypeId_ComponentBase  = %p\n", (void*)g_TypeId_ComponentBase);
-    printf("  ExeArrayResizeFill    = %p\n", (void*)fn_ExeArrayResizeFill);
 #endif
 
     // ================================================================
@@ -4456,21 +4185,12 @@ bool EngineFuncsInit() {
     // ============================================================
     fn_Array_Resize_Stride02 = reinterpret_cast<fn_Array_Resize_t>(
         ResolveAddr(Module::Exe, 0x14001c890));
-    fn_Array_Resize_Stride16A = reinterpret_cast<fn_Array_Resize_t>(
-        ResolveAddr(Module::Exe, 0x14001efd0));
-    fn_Array_Resize_ArrayOfArrays = reinterpret_cast<fn_Array_Resize_t>(
-        ResolveAddr(Module::Exe, 0x14001f0a0));
     fn_Array_Resize_Stride16B = reinterpret_cast<fn_Array_Resize_t>(
         ResolveAddr(Module::Exe, 0x14001ef10));
-    fn_Array_Resize_Stride04 = reinterpret_cast<fn_Array_Resize_t>(
-        ResolveAddr(Module::Exe, 0x1400021d0));
 #ifdef _DEBUG
     printf("[EngineFuncs] M3.5 Path B session 5 (geometry resize helpers) resolved\n");
     printf("  Array_Resize_Stride02       = %p\n", (void*)fn_Array_Resize_Stride02);
-    printf("  Array_Resize_Stride16A      = %p\n", (void*)fn_Array_Resize_Stride16A);
-    printf("  Array_Resize_ArrayOfArrays  = %p\n", (void*)fn_Array_Resize_ArrayOfArrays);
     printf("  Array_Resize_Stride16B      = %p\n", (void*)fn_Array_Resize_Stride16B);
-    printf("  Array_Resize_Stride04       = %p\n", (void*)fn_Array_Resize_Stride04);
 #endif
 
     // Runtime DLL primitives — resolve via dispatch slots, fall back to mangled.
@@ -4578,18 +4298,10 @@ bool EngineFuncsInit() {
     // followed by 14 primitive serializes + version-gated extras + sub_f9c0).
     fn_Struct60B_Serialize = reinterpret_cast<fn_Struct60B_Serialize_t>(
         ResolveAddr(Module::Exe, 0x14001ffa0));
-    // FUN_140020150 — typed-ExternalPtr array serialize. typeInfo source is
-    // .rdata slot 0x140151350 (same as FUN_140007140, Graphics::MaterialInstance).
-    // Verified via disassembly: 140020340: MOV RAX,[0x140151350].
-    fn_Array_Serialize_External_MaterialInstance =
-        reinterpret_cast<fn_Array_Serialize_External_Typed_t>(
-            ResolveAddr(Module::Exe, 0x140020150));
 #ifdef _DEBUG
-    printf("[EngineFuncs] M3.5 Path B session 4 (0x60B + typed-array serialize) resolved\n");
+    printf("[EngineFuncs] M3.5 Path B session 4 (0x60B serialize) resolved\n");
     printf("  Struct60B_Serialize             = %p\n",
         (void*)fn_Struct60B_Serialize);
-    printf("  Array_Serialize_Ext_MatInstance = %p\n",
-        (void*)fn_Array_Serialize_External_MaterialInstance);
 #endif
 
     // ============================================================
