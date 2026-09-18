@@ -93,10 +93,13 @@ across translation units cannot break it (the only hazard the staging list ever 
 Rules:
 
 1. `DEFINE_TYPE(Class, Parent, Ext)` defines `Object::BaseTypeInfo Class::_typeInfo(...)` and
-   nothing else. `REGISTER_TYPE` / `REGISTER_TYPE_FULL` become one-line wrappers over
-   `DEFINE_TYPE` while the 305 call sites migrate, then are deleted; `FactoryRegistration`,
-   `BaseTypeInfoStorage`, `InvokeAllRegistrations`, `g_pending` and the call to
-   `InvokeAllRegistrations` in boot die in the commit that empties the list.
+   nothing else. `FactoryRegistration`, `BaseTypeInfoStorage`, `InvokeAllRegistrations`,
+   `g_pending` and the call to `InvokeAllRegistrations` in boot die in the commit that empties
+   the list. **They did NOT die in step 3 and could not** — `DEFINE_TYPE` defines a MEMBER of
+   a real class and all 305 `REGISTER_TYPE` sites still name PODs with hand-built vtables, so
+   `REGISTER_TYPE` cannot be a wrapper over it until those types are converted (step 6/8).
+   The staging path stays working and now calls a shim that placement-constructs the real
+   class; see §9 step 3.
 2. `_firstTypeInfo` becomes a plain `static BaseTypeInfo* BaseTypeInfo::_firstTypeInfo`.
    Today `type_system.cpp:74-80` reaches it through `ResolveExport(...)` into a MINTED data
    cell; that mint row and the `RT_DATA_SLOT` door for it go in the same commit
@@ -134,10 +137,12 @@ type header should read this paragraph first."*
 
 Rules:
 
-1. Moving `Factory` onto `Collection::Set<Pair<uint32_t, TypeRecord>, AVLCompare,
-   DefaultAllocator, uint32_t>` **is B.3.3 scope**, and it lands with `Object::BaseTypeInfo`
-   and the macro (§9 step 3), before `Object::Base` — nothing can register through a
-   half-converted tree.
+1. Moving `Factory` onto `Collection::Set` **is B.3.3 scope**, and it lands with
+   `Object::BaseTypeInfo` and the macro (§9 step 3), before `Object::Base` — nothing can
+   register through a half-converted tree. DONE; the one departure is the allocator policy:
+   `Object::TypeTreeAllocator`, not `Collection::DefaultAllocator`, because
+   `DefaultAllocator` binds to `set_core.cpp`'s doors and a `Factory` built on it could not
+   link into `make unit`. The policy does not affect the node layout.
 2. `Object::Factory` is **0x10 bytes, not 8**. `TypeInfo.h:231-234`'s `struct Factory {
    TypeNode* root; }` is a correct VIEW and unusable as STORAGE:
    `??0Factory@Object@@QEAA@XZ` @ 0x1800c09d0 writes `[RCX]=0` and a dword `[RCX+8]=0`, and
@@ -258,10 +263,27 @@ Rules:
    (`reference_census_cannot_see_nonliteral_registrations.md`; 12 live ports were once
    invisible for exactly this reason). If this step wants a verifier, writing one is cheap and
    belongs in the commit that retires Base's row.
-4. `factory_dtors.cpp` (544 lines) and `deleting_dtor_leaves.cpp` (204 lines) hold rows
-   outside the main table. Their relationship to it was NOT verified by the inventory pass and
-   is not verified here: **establish it before retiring any row that appears in more than one
-   file**, and record the answer in this section.
+4. **ANSWERED at the step-3 open — neither file holds a row, and there is exactly one
+   table.** `grep -c "RT_DELDTOR("` is 135 in `deleting_dtor.cpp` and **0** in both
+   `factory_dtors.cpp` and `deleting_dtor_leaves.cpp`. What they actually are:
+   - `factory_dtors.cpp` (544 lines) is not a dtor-table file at all. It is the three
+     `??1Factory@Object@@` / `??1InternalFactory@Object@@` / `??1ExternalFactory@Object@@`
+     **class** destructors, all `QEAA` (non-virtual), registered by name and address. **Zero**
+     of its addresses is a table row address or a table `dtorVa`. Disjoint mechanism; nothing
+     in it moves when a row retires. It is, however, where `~Factory`'s real teardown lives
+     (0x180008110 walks the whole TypeNode tree and destroys each `children` Array), so it is
+     the file a `Object::Factory::Shutdown` port belongs in — not this step.
+   - `deleting_dtor_leaves.cpp` (204 lines) is the table's **dependency**, not a second table.
+     A `RT_DELDTOR(addr, dtorVa, size, name)` row carries the `??_G` deleting-dtor address AND
+     the scalar `??1` address separately, and `DeletingDtorCore` resolves the latter BY
+     ADDRESS; this file supplies **11 of those 135 `dtorVa` targets**, the six that used to
+     resolve NULL plus five more (0x180058d20, 0x18009e400, 0x1800b9150, 0x1800b9a40,
+     **0x1800c0360**, 0x1800dac70, 0x1800e0880, 0x1800fb620, 0x180103a00, 0x1801041f0, …).
+   - **The one that matters for step 4:** `??1Base@Object@@` at **0x1800c0360** is one of those
+     eleven (`deleting_dtor_leaves.cpp:161-186`, `RtObject_Base_Dtor`, a bare vtable restamp).
+     So the commit that retires Base's row must ALSO decide that body's fate — the real
+     `~Base()` replaces it — and must delete its two registrations in the same commit, or the
+     table's row is gone while a now-unreachable `??1Base` body stays registered by address.
 5. Do not redesign the mechanism. Its shape — address in, `(self, flags)` dispatch — is
    already exactly what decision 2's slot 0 is, so it is reference data that shrinks, not a
    second design to reconcile.
@@ -317,9 +339,53 @@ merge cleanly.
 1. ~~Inventory spot-check + these six answers~~ — done, this document; `OBJECT_INVENTORY.md`
    corrected in place.
 2. ~~The coexistence unit test~~ — done, `tests/unit/object_vtable_abi_test.cpp`.
-3. **`Object::BaseTypeInfo` + `DECLARE_TYPE`/`DEFINE_TYPE` + `Object::Factory` on
-   `Collection::Set`.** Both old records kept as layout-asserted aliases; `X::TypeId()`
-   available; `REGISTER_TYPE` becomes a wrapper. Gate.
+3. ~~**`Object::BaseTypeInfo` + `DECLARE_TYPE`/`DEFINE_TYPE` + `Object::Factory` on
+   `Collection::Set`.**~~ — done. What landed, and the two places it departs from the plan
+   above, both deliberately:
+   - `Object::BaseTypeInfo` and `Object::Factory` are real classes in
+     `runtime/types/object/TypeInfo.h`; the bodies are `runtime/src/object/type_reflection.cpp`,
+     which is registry-free so `make unit` can link it. `RtObject::BaseTypeInfo`,
+     `RtObject::TypeRecord` and `RtObject::TypeNode` stay, cross-asserted field for field
+     against the classes. `type_system.cpp` keeps every ABI shim and every door and now
+     delegates.
+   - `Factory` is `Collection::Set<TypeEntry, AVLCompare, TypeTreeAllocator, uint32_t>` with
+     `TypeEntry` 0x30 bytes, which is what selects the ported `AvlOps<Node,0x30>` core; the
+     node is asserted at 0x50 with `balance`/`height` as two 16-bit fields. The by-address
+     call to 0x180030140 is gone from Startup — the template reaches the same
+     `PortedRetrace48`. `rtavl::TypeSetInsert` keeps its registration; it now has no caller in
+     `runtime/src/object/`.
+   - **`_firstTypeInfo` is a plain static and its mint row was NOT deleted — it was
+     REDIRECTED.** `standalone/rt_data_mint.cpp`'s `MintStorageCell()` routes that one row's
+     storage to `Object::BaseTypeInfo::_firstTypeInfo` at `MintRowAt`, the single point both
+     `RegisterMintedData()` and `RtMintRegisterRow()` (and therefore `cutover_manifest`'s
+     REQUIRED publish) funnel through, so the name door, the address door 0x1801fc6e0 and the
+     class all answer with the same eight bytes. Deleting the generated row instead would mean
+     re-running `tools/rt_mint_gen.py` against the DLL, which no step-3 build can verify;
+     the row's 8 bytes are now inert and the closing pass (step 7) drops it **with the
+     generator**. `MintStorage()` SPLICES the 14 minted nodes in front of whatever CRT-init
+     left in the chain rather than assigning the head — assigning would silently drop
+     `DEFINE_TYPE` statics the day one exists.
+   - **`_singleton@Factory@Object@@` was deliberately NOT moved.** Unlike `_firstTypeInfo` it
+     is only ever read at runtime, never from a static initialiser, so the port door answers
+     it; `Factory::Get()` uses `RT_DATA_SLOT`. Moving a second cell would have doubled this
+     step's unverifiable-without-a-boot surface for no gain. It moves when `Factory::Shutdown`
+     is ported (§6.4).
+   - **The exe-side staging list STAYED.** `REGISTER_TYPE` could not become a one-line
+     `DEFINE_TYPE` wrapper: `DEFINE_TYPE` defines `Class::_typeInfo`, a member of a real C++
+     class, and all 305 `REGISTER_TYPE` sites name types that are still PODs with hand-built
+     vtables. Folding the list needs those types converted, which is step 6/8. So
+     `FactoryRegistration`, `BaseTypeInfoStorage` and `InvokeAllRegistrations` are untouched
+     and still work — they now call a shim that placement-constructs the real class. The fold
+     happens when the last `REGISTER_TYPE` site becomes a `DEFINE_TYPE` one; §2.1 stands as
+     the target, not as step 3's deliverable.
+   - `DECLARE_TYPE` emits `CreateNewObject`, `CreateInPlaceObject`, `TypeId()`, `GetTypeInfo()`,
+     `_TypeName`, `_ParentTypeName` and `_typeInfo`. It does **not** emit the two VIRTUALS
+     (`Type()` slot 2, `TypeName()` slot 1) — there is no base to override until step 4 — nor
+     the three `operator new`/`delete` overloads, which are the allocator's own step. Step 4
+     adds them here.
+   - `-Wno-invalid-offsetof` was **not** needed: neither class is polymorphic, so every
+     `static_assert(offsetof(...))` still compiles clean. §4.6 stands for step 4, which is the
+     first polymorphic type header.
 4. **`Object::Base` as a real class**; `Object::Destroy(p)`; Base's `RT_DELDTOR` row retired;
    the `stress_harness.cpp` `vt[2]` decision (§5) lands here. Gate — **all routes plus the
    resave gate**: every object in the game derives from this.

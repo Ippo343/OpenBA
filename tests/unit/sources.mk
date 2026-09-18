@@ -61,3 +61,13 @@ UNIT_TREE_SRCS +=
 UNIT_TREE_SRCS += \
   runtime/src/collection/linkedlist.cpp \
   runtime/src/collection/introsort.cpp
+# ENDGAME B.3.3 step 3 reflection core (tests/unit/object_typeinfo_test.cpp):
+# `Object::BaseTypeInfo` and `Object::Factory` as real classes on
+# `Collection::Set`. type_reflection.cpp is deliberately registry-free — the ABI
+# shims and the mangled-name/address doors stay in type_system.cpp, which cannot
+# link here (rt_port_stub.cpp does not stub `RtResolveCached`). Its allocator
+# seam (`Object::TypeTreeAlloc`/`TypeChildAlloc`) takes a malloc branch under
+# -DBANISHED_UNIT_TEST, and under that same define `Collection::Set`'s
+# `AvlOps<Node,0x30>` falls back to the generic core, so set_core.cpp is not
+# needed either.
+UNIT_TREE_SRCS += runtime/src/object/type_reflection.cpp
