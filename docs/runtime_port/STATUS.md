@@ -105,8 +105,18 @@ built them wrong, and callbacks stored in data.
     `fn_BST_*`, `fn_DynArray_Clear_*` and friends stay: each still has at least one
     caller in `code/Game`, and each disappears with its caller's own conversion.
 
+  **Coordinator gate on the merged main (2026-09-18):** build, unit 167/0, autostart +
+  pause-menu quit and the Load Game dialog route exit 0 after every one of the three
+  merges; resave gate PASS after each (the last merge read the README's known one-byte
+  `count` flake at +0x18 once — 5689 vs 5688, sizes identical — then PASS twice on the same
+  exe). `make sa-stress` (perf exe, 6000 frames, clean quit,
+  `perf/results/20260918_124928_b32close`): sim **0.20 ms/iteration, +3.1%** against the
+  2026-09-05 baseline (B.3.1 closed at +5.5%), so the allocator door's per-call slot
+  re-read is not visible.
+
   Next: B.3.3 (`Object::Base`/`TypeInfo`/`Factory` + reflection macro, single owner).
-  Rules: `endgame_b/B32_RULES.md`; B31_RULES.md's closing pass was the template.
+  **The plan for the next session is `endgame_b/NEXT_SESSION.md`**; the measured input is
+  `endgame_b/OBJECT_INVENTORY.md`. Rules so far: `endgame_b/B32_RULES.md`, `B31_RULES.md`.
 
 - **B.3.1 CLOSED (2026-09-13 night):** `System::String`, `System::Filename` and the nine
   `Math` value types are real classes under retail's names (`runtime/types/system/*.h`,
