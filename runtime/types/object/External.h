@@ -351,8 +351,12 @@ static_assert(offsetof(ExternalList, _count)     == 0x28, "ExternalList::_count 
 //   kTypeInfoPtr   +0x10        = TypeRecord::info, and its +0x08 is
 //                                 BaseTypeInfo::name — so the pointer this lane
 //                                 declined to name IS a BaseTypeInfo*
+//
+// ENDGAME B.3.3 step 7: the `#include "TypeInfo.h"` that used to sit here — and
+// that fired from INSIDE `namespace RtObject`, which is why internal_class.h was
+// ever a separate header — is deleted. Step 5 hoisted it to line 43 at global
+// scope, so this one had been inert ever since.
 // ============================================================
-#include "TypeInfo.h"
 
 namespace FactoryTypeNodeOffsets {
     // Kept as names so external.cpp's byte-offset arithmetic reads unchanged;

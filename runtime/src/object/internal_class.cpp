@@ -48,7 +48,7 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include "../../types/object/internal_class.h"
+#include "../../types/object/Internal.h"
 
 #if !defined(BANISHED_UNIT_TEST)
 #include "../../funcs/rt_port.h"
