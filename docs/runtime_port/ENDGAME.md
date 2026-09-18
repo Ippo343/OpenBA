@@ -256,7 +256,15 @@ same offsets and dispatch through the same slot indices.
 ### B.4 The casts are the progress metric
 
 Measured 2026-09-13: ~35,700 `reinterpret_cast` sites (code 24.7k, runtime 6.8k,
-standalone 3.1k, engine 1.0k, dx11 0.1k). Neither A nor C touches them; B removes almost
+standalone 3.1k, engine 1.0k, dx11 0.1k).
+Re-measured at the B.3.3 close (2026-09-18, build dirs excluded, `tests/` added as its own
+row): **34,809** — code 23,971, runtime 6,685, standalone 3,054, engine 888, dx11 148,
+tests 63. Down ~900 net, and the net is what matters: B.3.3's caller batches ADDED
+**1,045** `// B.3.3 bridge` casts (one per converted call site whose receiver is still a
+`void*` or a POD) while removing more resolved-pointer indirections than that. Those 1,045
+are transitional by construction — each one dies with its receiver's own conversion, which
+is what the marker exists to make countable.
+Neither A nor C touches them; B removes almost
 all of them as a consequence, one kind per step, and the count per directory is a better
 measure of B's progress than "classes converted":
 

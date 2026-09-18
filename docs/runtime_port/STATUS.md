@@ -122,7 +122,115 @@ built them wrong, and callbacks stored in data.
   2026-09-05 baseline (B.3.1 closed at +5.5%), so the allocator door's per-call slot
   re-read is not visible.
 
-- **B.3.3 IN PROGRESS** (`Object::Base` / `BaseTypeInfo` / `Factory` + reflection macro,
+- **B.3.3 CLOSED (2026-09-18):** `Object::Base`, `Object::BaseTypeInfo`, `Object::Factory`,
+  `Object::External` / `ExternalList` / `CompiledExternal` / `ExternalFactory`,
+  `Object::Internal` / `InternalFactory` are real classes under retail's names, over a real
+  `Base` with the three measured slots and no virtual destructor;
+  `DECLARE_TYPE`/`DEFINE_TYPE` exist; `Factory` is `Collection::Set<TypeEntry,…>` wrapping
+  the ported AVL core. One owner through step 5, four caller batches (6A External, 6B
+  Internal, 6C Factory, 6D CheckPtr), one closing pass. History of steps 1–6D is in the
+  per-step notes below, unchanged.
+  **What the closing pass deleted.** Twelve `fn_*` pointers in
+  `engine/funcs/engine_funcs.{h,cpp}` with their typedefs, externs, definitions,
+  `ResolveExport`/`ResolveAddr` initialisers and `_DEBUG` value prints:
+  `fn_ExternalFactory_{FindOrLoad,Find,FindNext,IsReferenceModeEnabled,GetReferenceId,`
+  `GetPathForReferenceId,Clean}`, `fn_External_{GetPath,SaveText}`,
+  `fn_Factory_{GetTypeIdFromName,CreateObject}`, `fn_ExternalPtr_Serialize_Typed_7140`.
+  Ten of them were freed by converting the last **10** call sites batches 6A–6C did not
+  own, all inline bodies in `engine_funcs.{h,cpp}` (1 `Find`, 2 `FindNext`,
+  2 `GetTypeIdFromName`, 5 `InternalBasePtr_Ctor`); the other two were already at zero.
+  Then **117** guard conjuncts across 36 files plus 9 hand edits (4 `if (P) {…}` blocks
+  unwrapped, 2 `P ? call : nullptr` ternaries collapsed, 3 printf/DLOG `%p` value arguments
+  dropped). Removing a guard is safe here because each pointer resolved unconditionally
+  through a REGISTERED Runtime export — `[RtResolve] 0 misses` on every boot since B.3.1 is
+  the standing proof that each guard was always true — and the call behind it is now our own
+  compiled member, not a resolved pointer. Also gone: `ThreadBaseVtable()`
+  (`audio_stream_win.cpp`, zero callers by name, and 0x180155f20 STAYS — persistence_worker
+  and both generated tables cite it); `rtavl::TypeSetInsert` with its declaration and its
+  `RegisterRuntimeAddr(0x180030140, …)`, swept clean of `ResolveAddr`, of every per-file
+  wrapper form (`RtAddr`, `RtAddrFn`, `ByAddr`, `RT_DATA_SLOT`, `RT_EXPORT_ONCE`,
+  `RtResolveCached`, `RtPortLookupAddr`, named `constexpr`), of `RT_MINT_UNNAMED` slots in
+  `rt_data_mint_tables.inc`, of `rt_export_addrs.inc` and of the exe dispatch slots.
+  `runtime/types/object/internal_class.h` is merged back into `Internal.h` (234 lines, no
+  declaration edited) and `External.h`'s inert second `#include "TypeInfo.h"` — the reason
+  the split ever existed — is deleted in the same commit.
+  **Added:** `Object::Factory::Shutdown()` (retail `?Shutdown@Factory@Object@@QEAAXXZ`,
+  0x1800c0600), ported from the disassembly and registered under both doors.
+  **B33_RULES §9 step 7 was wrong about it** and the correction matters: `Shutdown` is eight
+  instructions that FreeLibrary the compiler-plugin HMODULE at the unexported 0x1801fc6d0
+  (the cell `UnloadCompilers` and `Engine::Shutdown` also release). The type-tree walk is
+  `??1Factory@Object@@` (0x1800071a0 → 0x180008110), ported since Wave 11 as
+  `RtObject_Factory_Dtor`. So `Shutdown` is **not** a prerequisite for moving
+  `?_singleton@Factory@Object@@` off the mint, and that cell is untouched.
+  **Left, and why.**
+  · `fn_ExternalList_GetResourceCount` — two REAL calls remain, both inside fprintf
+  argument lists (`ui_dialog_stub_factories.cpp`, `gameupdateloop_load.cpp`). The perf build
+  strips printf ARGUMENTS, so 6A deliberately did not convert them; the pointer and its five
+  guards stay with them.
+  · `fn_InternalBasePtr_Ctor` / `fn_InternalBasePtr_DeletePtr` — NOT at zero. Ten files
+  cache them in file-static function pointers behind an IAT-slot preference
+  (`s_fn_IBP_Ctor = resolveIAT(0x140152a90)`, then fall back to the global) and call through
+  the cache: `placementtool.cpp`, `edittool.cpp`, `removenaturalresource.cpp`,
+  `performwork.cpp`, `dropoffrawmaterial.cpp`, `work_act_perform.cpp`, `work_act_path.cpp`,
+  `work_act_clear.cpp`, `pickup_gate.cpp` and `work_base_reimpl.cpp`'s helpers. Converting
+  them means deciding the IAT-vs-export preference per site — a caller batch, not a sweep.
+  · `tools/rt_mint_gen.py` was NOT re-run and no `.inc` was regenerated: `--check` reports
+  the committed `rt_data_mint_tables.inc` UP TO DATE (152 vtables, 104 BaseTypeInfo, 48
+  storage). Dropping the `?_firstTypeInfo@BaseTypeInfo@Object@@` row would remove a LIVE
+  door rather than inert bytes — `standalone/main.cpp` reads 0x1801fc6e0 by ADDRESS twice
+  (the boot probe and the factory self-test, i.e. the source of the
+  `[GameMain] Post-Startup _firstTypeInfo` line) and `cutover_manifest.inc:57` carries the
+  name as `CUTOVER_REQUIRED`. Only the row's 8 bytes in `kStorageBytes` are inert;
+  `MintStorageCell()`'s redirect is what makes the name door, the address door and the class
+  static one cell, so it stays.
+  · The five `?_typeInfo@` rows (`Base` 0x1801f9c50, `External` 0x1801f9b38, `ExternalList`
+  0x1801f9be0, `CompiledExternal` 0x1801f9b00, `Internal` 0x1801f9c18) stay minted and the
+  three External classes stay without `DEFINE_TYPE`, for the reason External.h's closing
+  banner states, re-measured here: ~20 live by-name `RT_DATA_SLOT` readers, two
+  `CUTOVER_REQUIRED` rows, two by-address readers, `reg_mint_promoted.cpp`'s promotion rows
+  — and no way to show the post-Startup type ids are unchanged without a boot the closing
+  agent cannot run. `Object::Internal` already carries `DEFINE_TYPE` beside its minted
+  record, which is why the chain reads 417 and not 416; the closing pass adds and removes no
+  chain record, so **417 is still the expected count on a live boot**.
+  · Everything B33_RULES §9 step 7 lists as STAY is untouched: the `RT_DELDTOR` rows for
+  `Base` / `External` / `CompiledExternal` / `Internal`, `RtObject_Base_Dtor`, every minted
+  vtable, `fn_External_External` / `fn_External_Dtor` / `fn_ObjectInternal_Ctor` / `_Dtor`,
+  `fn_ExternalList_Find` (signature disagreement recorded, not fixed: `External.h` spells
+  the 2nd parameter `uint32_t`, retail's is `Object::Type` by value), the serializer
+  pointers, `CallSlot0`, every `GetTypeIdByName` site, the exe-side `FactoryRegistration`
+  staging list, the runtime port of the empty `CheckPtr` member, and the
+  `ExternalFactory::Add` path. The three dispatch-slot rows 0x140151218 / 0x140151220 /
+  0x140151228 stay registered although they now have no exe-side reader — they are the exe's
+  own PE import slots and the Runtime ports behind them are unchanged.
+  · §6.3's wrong reason is deleted where it was written down: `InternalBasePtr::DeletePtr`'s
+  raw slot-0 call stays raw because the pointee is `RtObject::Internal*`, the POD, so the
+  member spelling adds a bridge cast and removes no indirection — NOT because it "may be
+  handed a minted-vtable object", which `object_vtable_abi_test.cpp` disproves.
+  **Casts (B.4 metric), measured here, build dirs excluded:** 34,809 `reinterpret_cast`
+  — code 23,971, runtime 6,685, standalone 3,054, engine 888, dx11 148, tests 63 (2026-09-13
+  baseline ~35,700). B.3.3 added **1,045** `// B.3.3 bridge` markers, each of which dies
+  with its receiver's own conversion.
+  **Closing-pass checks:** `standalone-debug`, `standalone`, `standalone-perf` and `unit`
+  all exit 0; unit **206 tests, 0 failures**; `tools/dispatch_slot_map.py --check` 109 rows,
+  **0 mismatches**; `tools/runtime_census.py` clean (every remaining registration a LITERAL
+  address); `tools/cutover_manifest.py --gate` **OK, 59 rows, 0 GATE WARN**;
+  `tools/rt_mint_gen.py --check` UP TO DATE; zero new warnings on any line changed.
+  The boot lines that carry each risky deletion: `[RtResolve] 0 misses` and the absence of
+  `[RtMint] TRAP` (the guard removals), the type-table dump plus
+  `[GameMain] Post-Startup _firstTypeInfo: 417 entries` (the `TypeSetInsert` retirement —
+  Startup still builds the same tree through `Collection::Set::Insert`), and
+  `[RtPort]   Object::factory dtors:` now reading **4** exports instead of 3
+  (`Factory::Shutdown`).
+  **Next (B.3 step 4, IO):** the 159 `fn_ExternalPtr_*Serialize*` /
+  `fn_InternalBasePtr_Serialize` / `fn_ExternalRefArray_Serialize` sites over 9 pointers,
+  still untouched; `fn_ExternalPtr_Serialize3` is the last reader of exe address
+  0x140007140; `Internal::Clone` and `SerializeReferenceTable` as a member;
+  `runtime/src/io/file_stream.cpp:393`'s `NoteSlotDispatch` vptr counter dies with
+  `IO::BinaryFileStream`; `RtObject::SerializerLite` and the retail `Encoding` vtable offsets
+  are what every converted `Serialize` body still goes through.
+  **Coordinator gate on the merged main:** (coordinator fills this in)
+
+- **B.3.3 step detail** (`Object::Base` / `BaseTypeInfo` / `Factory` + reflection macro,
   single owner). Rules and the order of work: `endgame_b/B33_RULES.md`; measured input:
   `endgame_b/OBJECT_INVENTORY.md` (spot-checked and corrected 2026-09-18).
   Steps 1–2 done (merge of `b33-owner`): the six design answers — Base has exactly three
@@ -227,7 +335,9 @@ built them wrong, and callbacks stored in data.
   empty member STAYS (it is the real class's ABI door; a unit test calls it).
   Gate: debug + release + perf (clean dir) build, unit 206/0, three routes exit 0, type
   table and list counts identical, no `[CheckPtr]` boot line, `[RtResolve] 0 misses`,
-  resave PASS 3/3, stress clean quit (0.20 ms/iter, recorded). Next: step 7, closing pass.
+  resave PASS 3/3, stress clean quit (0.20 ms/iter, recorded).
+  Step 7 done (the closing pass) — see the "B.3.3 CLOSED" block above for what it deleted,
+  what it left and why.
 
 - **B.3.1 CLOSED (2026-09-13 night):** `System::String`, `System::Filename` and the nine
   `Math` value types are real classes under retail's names (`runtime/types/system/*.h`,
