@@ -1,5 +1,10 @@
 # ENDGAME B.3.3 — `Object::Base`/reflection/factory design inventory (read-only, 2026-09-18)
 
+> **SPOT-CHECKED at the B.3.3 step-1 open.** Every number a design decision rests on was
+> re-measured and the wrong ones are corrected in place, marked **[CORRECTED]** with the old
+> value. The open questions in §7 are answered in `B33_RULES.md`, which supersedes this
+> document wherever the two disagree.
+
 Scope: `Object::Base`, `Object::TypeInfo`/`BaseTypeInfo`, `Object::Factory`, `Object::External`/
 `ExternalFactory`, `Object::Internal`, `ExternalPtr<T>`, `InternalBasePtr`/`InternalPtr<T>`.
 No tree file edited. Format matches `SMARTPTR_INVENTORY.md` and `COLLECTION_INVENTORY.md`;
@@ -55,8 +60,10 @@ static-init list, which is a deliberate second representation — see §4).
 
 ## 2. Bodies — `runtime/src/object/*.cpp`
 
-29 files (28 `.cpp` + `rt_factories_object.inc`), **14,030 lines total** including headers;
-**13,233 lines** across the 26 `.cpp` files alone (`wc -l runtime/src/object/*.cpp`). This is
+**[CORRECTED]** 38 entries: **27 `.cpp`** (not 26, and not "28 `.cpp`" — both figures in the
+original text were wrong), 9 `.h`, `rt_factories_object.inc` and `README.md`.
+**13,233 lines** across the 27 `.cpp` files (`wc -l runtime/src/object/*.cpp`) — that total
+was right. This is
 3x `SMARTPTR_INVENTORY`'s implicit scope and is not covered by `COLLECTION_INVENTORY` at all.
 
 | file | lines | role |
@@ -109,16 +116,22 @@ addresses for stamping, not locally-built slot arrays).
 **Slot order of `Object::Base`, as the code documents it today** (`TypeInfo.h:47-61`,
 `Internal.h:59-70`):
 
+**[CORRECTED]** — read directly out of the vtable in Ghidra at the B.3.3 open. Base's vtable
+is at **0x180154788** (`??1Base@Object@@UEAA@XZ` @ 0x1800c0360 is
+`LEA RAX,[0x180154788]; MOV [RCX],RAX; RET`) and has **exactly three slots**, bounded by
+`??_7External@Object@@6B@` starting 0x18 bytes later at 0x1801547a0.
+
 | slot | byte offset | name | retail address | evidence |
 |---|---|---|---|---|
-| 0 | +0x00 | scalar deleting destructor | class-specific (e.g. `0x1800c0360` for Base itself, per `deleting_dtor.cpp:295`) | `DeletingDtorSpec` table row "Object::Base ... probe subject" |
-| 1 | +0x08 | *unnamed* — no reader found in this file set | — | `Internal.h`'s vtable dump lists Internal's slot 1 as `TypeName()`; whether Base's own slot 1 is the same is NOT confirmed by anything this pass re-read |
-| 2 | +0x10 | `GetTypeId() const` | pinned via `Base::IsA` (retail `0x1800491c0`) | `TypeInfo.h:49-54`: "`(**(code**)(*(longlong*)this+0x10))()`... vtable slot 2 is `GetTypeId`" |
-| — | — | (Internal adds a 4th slot at +0x18, `Persist`, empty in both builds) | `0x1800bfda0` | `Internal.h:63-65` — this is `Internal`'s OWN vtable, not proof Base has 4 slots; Internal's vtable is a *different*, longer, exported array (`??_7Internal@Object@@6B@`) than Base's (`??_7Base@Object@@6B@`) |
+| 0 | +0x00 | vector deleting destructor | `0x1800065b0` (→ `??1Base` @ `0x1800c0360`) | its body is `MOV EDX,0x8 / LEA R9,[0x1800c0360]`, i.e. elem size 8; matches `deleting_dtor.cpp:295` and `tools/gen_deleting_dtor.py`'s `Base` row |
+| 1 | +0x08 | `virtual const char* TypeName() const = 0` | `0x18007ec28` = `_purecall` | positive ID, not elimination: External's parallel slot (`0x1800066c0`) is `MOV RAX,qword[…]; RET`, matching `?TypeName@External@Object@@UEBAPEBDXZ`'s `PEBD` return |
+| 2 | +0x10 | `virtual unsigned Type() const` | `0x1800c0380` = `XOR EAX,EAX; RET` | the exported name `?Type@Base@Object@@UEBAIXZ` exists at 0x1801ed14c; External's slot 2 (`0x1800066d0`) is `MOV EAX,dword[…]; RET`, matching `?Type@External@Object@@UEBAIXZ`'s `I` return |
 
-So only 2 of `Object::Base`'s own slots (0 and 2) are independently pinned by a reader in
-this file set; slot 1's name is UNKNOWN here (decision 2's worked example in ENDGAME §B.1.2
-guesses "Slot1()" with a "retail name once known" comment, matching this gap).
+So `Object::Base`'s slot 1 is **NOT unknown** and no `Slot1()` placeholder is needed. Two
+further name corrections that decision 4 depends on: retail calls slot 2 **`Type()`**, not
+`GetTypeId()`, and the static companion **`TypeId()`** is also a retail name
+(`?TypeId@…@@SAIXZ`). `Object::Internal`'s longer, separate vtable
+(`??_7Internal@Object@@6B@`) is unaffected by this.
 
 **Classes deriving from Base via a hand-built/exported-vtable-stamp mechanism, tree-wide**:
 `grep -rl "Base@Object" .` (mangled `??_7...Base@Object@@6B@` occurrences) matches **169
@@ -144,6 +157,15 @@ types (§7) and the direct `Object::Base`/`Internal`/`External` chain are B.3.3'
 
 ## 4. Reflection — how type registration works today
 
+**[CORRECTED naming] There is no `Object::TypeInfo` in retail.** The record's retail class name
+is `Object::BaseTypeInfo` (`??0BaseTypeInfo@Object@@…`, `?StripNamespace@BaseTypeInfo@Object@@…`,
+`?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA`, and 102 `?_typeInfo@X@Ns@@0VBaseTypeInfo@Object@@A`
+statics). ENDGAME decision 4's `Object::TypeInfo` spelling is renamed to `Object::BaseTypeInfo`
+per decision 5; see `B33_RULES.md` §2, which also records that retail's own reflection macro
+is legible in the export table as one contiguous per-class block
+(`_TypeName`, `_ParentTypeName`, `Type`, `TypeId`, `TypeName`, `operator new`×2,
+`operator delete`, `CreateNewObject`, `CreateInPlaceObject`, `_typeInfo`).
+
 **Two parallel registration lists**, confirmed by re-reading both sides:
 
 1. **Runtime-DLL side** (`RtObject::BaseTypeInfo`, `TypeInfo.h:64-129`): a `static` per
@@ -168,11 +190,15 @@ types (§7) and the direct `Object::Base`/`Internal`/`External` chain are B.3.3'
 **`COMPONENT_LIVE_FACTORY*` / `CONTROLLER_LIVE_FACTORY*` macro uses**: 36 + 27 = **63**
 (`component_factory_base.h` defines 6 macro variants, `controller_live_base.h` defines 2).
 
-**`GetTypeIdByName("…")`-style lookups**: **654** (`grep -rn "GetTypeIdByName("` across
-`code/ engine/ runtime/ standalone/ dx11/`, all 654 in `code/` (476) and `standalone/` (216)
-— zero in `engine/`/`runtime/`/`dx11/`). ENDGAME §B.1.4 states 639 (2026-09-13); this is a
-re-measure with the same grep shape, 15 higher — consistent with ongoing REGISTER_TYPE
-growth, not a discrepancy in method.
+**`GetTypeIdByName("…")`-style lookups**: **[CORRECTED] 628**, not 654 — and the original's
+own split did not add up (it said "all 654 in code/ (476) and standalone/ (216)", which is
+692). Re-measured over `*.cpp`/`*.h`/`*.inc` in `code engine runtime standalone dx11` with no
+build directory present in the worktree: **code 476** (unchanged), **standalone 152** (was
+216), engine/runtime/dx11 **0**. Of the 628, **545 carry a string literal**
+(`GetTypeIdByName("`); the other 83 are the function's own declarations, the seven
+`component_factory_base.h` / `controller_live_base.h` macro bodies, `const char*`-forwarding
+wrappers, comments and one printf format string — a caller-conversion batch owns the 545 and
+must read the other 83 rather than sweep them.
 
 **Distinct call shapes found, one example each**:
 - **Direct literal lookup**, no caching: `::Object::GetTypeIdByName("CharacterComponent")`
@@ -200,7 +226,8 @@ under a source-looking path).
 ## 5. Caller vocabulary
 
 - **`fn_*` typedefs in `engine_funcs.h` naming Object/Base/External/Internal/Factory**:
-  **106** matches of `fn_(Object|Base|External|Internal|Factory)` out of **623** total
+  **106** matches of `fn_(Object|Base|External|Internal|Factory)` — **[CONFIRMED]** — out of
+  **623** total
   `typedef ... fn_*` lines in the file — i.e. ~17% of every resolved-function-pointer
   typedef in the engine belongs to this one namespace family.
 - **`@Object@@` mangled-name occurrences** (files, `grep -rc`): code 49, engine 92, runtime
@@ -209,8 +236,11 @@ under a source-looking path).
   `ResolveExport`/`ResolveAddr` string literals (same pattern SMARTPTR_INVENTORY §2 already
   found for `ExternalPtr`/`InternalPtr` specifically).
 - **Slot-0 deleting-dtor call shapes**:
-  - `CallSlot0`: 124 in `runtime/`, 0 elsewhere.
-  - `DeletePtr`: code 167, engine 9, runtime 13, standalone 5 (total 194) — the exe-side 167
+  - `CallSlot0`: 124 in `runtime/`, 0 elsewhere — **[CONFIRMED]**.
+  - `DeletePtr`: code 167, engine 9, runtime 13, standalone 6 (total **195**, [CORRECTED] from
+    194 — the sixth standalone hit is the generated row in `standalone/rt_export_addrs.inc`,
+    which the original's `.cpp`/`.h`-only grep missed and which is a by-ADDRESS caller that a
+    delete pass must account for) — the exe-side 167
     is `Object::InternalBasePtr::DeletePtr()`/`Object::ExternalPtr<T>` equivalents being
     called from game logic, i.e. this is the ALREADY-CONVERTED-class call path, not raw
     vtable dispatch.
@@ -240,7 +270,11 @@ vector-deleting-destructor pattern across the whole Object hierarchy: one 8-byte
 `DelDtorSpec{ addr, dtorVa, elemSize, name }` row per class, built with the macro
 `RT_DELDTOR(ADDR, DTOR, SIZE, NAME)` (`deleting_dtor.cpp:285`). **135 rows**
 (`grep -c "RT_DELDTOR(0x"`), matching the header's own `kSpecCount = 135` constant
-(`deleting_dtor_internal.h:66`) exactly — the file's static_assert guards this count against
+(`deleting_dtor_internal.h:66`) exactly — **[CONFIRMED]**. (Note for anyone planning the
+retirement: there is **no** `tools/rt_deleting_dtor_verify.py`; the only tool is
+`tools/gen_deleting_dtor.py`, a one-shot generator whose committed output has since been
+edited by hand, so its `ROWS` table is stale. The `static_assert` at `deleting_dtor.cpp:1187`
+is the only automatic check.) — the file's static_assert guards this count against
 silent drift, and the header's own banner documents a real merge hazard already paid for
 once (three Wave 27 lanes appending at the same table index, §"MERGE HAZARD" comment,
 `deleting_dtor_internal.h:86-96`).
@@ -277,9 +311,25 @@ class is real — the table is a stand-in vtable-slot-0 array, not a separate me
    already anticipates this ("retail name once known"); B.3.3 will need to name it (or leave
    it `Slot1()`) before the class can compile with retail's full vtable, since GCC requires
    every slot declared even if unused by any ported caller.
-3. **`ControllerComponent`'s +0x28 second vptr, 22 multiple-inheritance types**
-   (`code/Game/Component/controller_live_base.h:6,26,190` — "the 22 building-behaviour
-   components: BuildComponent, ..." with slot 5 at retail +0x28 being `OnState`). ENDGAME's
+3. **[CORRECTED] `ControllerComponent`'s second vptr is at +0x28 only in the COMMON case.**
+   Two errors in the original entry. (a) It cited `controller_live_base.h`'s "slot 5 at retail
+   +0x28 being `OnState`" as evidence: that +0x28 is a byte offset **inside the node's
+   vtable** (slot 5 of 8), not an offset inside the object — the two happen to coincide
+   numerically and mean different things. (b) The real object-offset evidence is
+   `engine/types/ControllerComponent.h:54` and `engine/types/BuildComponent.h:48`
+   (`controllerVtable` at +0x28, immediately after the 0x28-byte `Component`,
+   `engine/types/Component.h:41`) — but **`engine/types/AttendanceComponent.h:48` pins it at
+   +0x38 and `engine/types/NomadComponent.h:55` at +0x58**, with the class's OWN fields at
+   +0x28.. in both, and `NomadComponent.h:9` names `TradeComponent` as a third. Two
+   non-virtual bases are always laid out back to back, so **no `class X : public Component,
+   public ControllerComponent` spelling can produce those layouts**: they are an embedded
+   polymorphic MEMBER placed after some of the derived class's own fields. Both shapes are now
+   covered by `tests/unit/object_vtable_abi_test.cpp`, and B33_RULES §5 states the rule (the
+   per-class offset assert decides which shape a class is; never assume the base-class one).
+   The `CONTROLLER_LIVE_FACTORY_STATES` `NodeOff` argument at each call site is the ground
+   truth: 0x28 for BuildComponent/ClearResource/ConsumeProduce/CropField/Fishing/Herbalist/
+   Hunt/Immigration/Market/Orchard/StorageLocation, 0x38 for AttendanceComponent, 0x58 for
+   NomadComponent. ENDGAME's
    "56 exe types carry a secondary vptr" figure (§0) is broader than just
    `ControllerComponent`; this pass confirms only the `ControllerComponent` family's count
    (22) and its file set (`code/Game/Component/{controller_live_base,
@@ -287,11 +337,17 @@ class is real — the table is a stand-in vtable-slot-0 array, not a separate me
    statemachinecomponent_funcs, storagelocationcomponent_funcs,
    tradecomponent_funcs}.h`, 7 files) — the other ~34 types are UNKNOWN to this pass (not
    re-derived; ENDGAME's number stands unverified here).
-4. **Places that compare vtable pointers for identity**: found at least one — 
-   `runtime/src/audio/audio_stream_win.cpp:303-389`, `ThreadBaseVtable()` compared with
-   `!=` against a live object's stamped vtable pointer to distinguish `System::Thread`-base
-   objects from `Stream`-derived ones during teardown. Not Object-namespace itself, but the
-   SAME pattern (`BaseVtable()`/`ExternalVtable()`/`GoalVtable()` in
+4. **[CORRECTED] Places that compare vtable pointers for identity.** The one site named here
+   is not one: in `runtime/src/audio/audio_stream_win.cpp` `ThreadBaseVtable()` is DEFINED at
+   :303 and referenced only by a comment at :389 — the `!= ThreadBaseVtable()` self-check the
+   comment explains no longer exists in the code, so the helper has **zero callers** and is
+   deletable. The full tree-wide sweep (`runtime/ code/Game/ standalone/ dx11/ engine/`) found
+   **four live identity reads and this one dead helper**; they are enumerated with their
+   decisions in `B33_RULES.md` §5: `code/Game/Game/tornado.cpp:627`,
+   `standalone/pausemenu_harness.cpp:237,:250`, `standalone/stress_harness.cpp:568-575`
+   (vptr as a hash key, plus a hard-coded `vt[2]` read that must become `Type()`), and
+   `runtime/src/io/file_stream.cpp:393`. The
+   SAME stamping pattern (`BaseVtable()`/`ExternalVtable()`/`GoalVtable()` in
    `runtime/src/achievement/goal.cpp:115-127`) is how the Object family's own multi-level
    stamping works today — `goal.cpp:194` writes `*reinterpret_cast<void**>(self) =
    BaseVtable();` before overwriting with the more-derived vtable, i.e. retail's own ctor
@@ -311,11 +367,19 @@ class is real — the table is a stand-in vtable-slot-0 array, not a separate me
    (§1, `External.h:208-211`'s comment marks `Collection::Set` as already templated per
    COLLECTION_INVENTORY's own B.3.2 closure) — `RtObject::Factory` (`TypeInfo.h:231-234`)
    still declares only a raw `TypeNode* root`, not a `Collection::Set<Pair<u32,TypeRecord>>`
-   member, so `Factory::Startup`'s AVL manipulation (`type_system.cpp`) may or may not
-   already be using the real `Collection::Set` API — NOT independently confirmed this pass;
-   worth checking before assuming `Factory` "just" needs a `class` keyword, since if
-   `type_system.cpp` still does raw node pointer-chasing that is itself B.3.3 scope, not
-   already-done B.3.2 scope.
+   member. **[CONFIRMED at the B.3.3 open — it IS still raw pointer-chasing, so it IS B.3.3
+   scope.]** `type_system.cpp` walks by hand at `FindNode` :144-145, `LeftMost` :606,
+   `Successor` :616 and the pass-2 parent descend :712-717, and reaches the insert by ADDRESS
+   (`ResolveAddr(Module::Runtime, 0x180030140)` at :661-666) into `rtavl::TypeSetInsert`
+   (`runtime/src/collection/avl_trees.cpp:708`, registered :1176) — ported, but not
+   `Collection::Set<…>::Insert`. `type_system.cpp:644-660` states this explicitly and hands
+   the decision to whoever owns `Object::Factory`'s type header. Two further facts the
+   conversion needs: **`Object::Factory` is 0x10 bytes, not 8** (`??0Factory@Object@@QEAA@XZ`
+   @ 0x1800c09d0 writes `[RCX]=0` and dword `[RCX+8]=0`, the Set's element count, INC'd at
+   0x1800303ac/0x18003043c), and the Factory tree's node layout is the 0x50-byte one
+   (`parent +0x30, left +0x38, right +0x40`), NOT the 0x30-byte layout the other `avl_trees`
+   families use — see `reference_one_bst_find_two_node_layouts.md` for why a lookup that works
+   on the root proves nothing.
 7. **Two parallel `BaseTypeInfo`-shaped structs** (§4: `RtObject::BaseTypeInfo` and
    `Object::FactoryRegistration::BaseTypeInfoStorage`) must stay byte-identical by
    convention, not by a shared type — nothing statically asserts they describe the same 0x38
@@ -349,12 +413,15 @@ templating or a raw-pointer regression.
 
 **Could fan out by directory once the core three classes have their final shape**, mirroring
 COLLECTION_INVENTORY's "family-serial, caller-parallel" split:
-- `Object::External`/`ExternalFactory`/`ExternalList` + the AVL two-node-layout trees
-  (`external*.cpp`, 11 files, ~5,900 lines) — one agent, since `External` is a direct `Base`
-  subclass and depends on the core three landing first.
-- `Object::Internal`/`InternalFactory`/`InternalPtr<T>` (`internal*.cpp`, 3 files, ~1,500
-  lines) — a second agent, largely independent of External's tree work (different AVL
-  instances, different factory).
+- `Object::External`/`ExternalFactory`/`ExternalList` + the AVL two-node-layout trees —
+  **[CORRECTED] 13 `.cpp`, 6,323 lines** (was "11 files, ~5,900"), plus 5 headers (431 lines).
+  The exact, disjoint file set is listed in `B33_RULES.md` §9 step 5; it includes
+  `ext_compilers.cpp` and `reference_set.{cpp,h}`, which the original's `external*` glob
+  missed. One agent, since `External` is a direct `Base` subclass and depends on the core
+  three landing first.
+- `Object::Internal`/`InternalFactory`/`InternalPtr<T>` (`internal*.cpp`, 3 files,
+  **1,493 lines** — confirmed) — a second agent, largely independent of External's tree work
+  (different AVL instances, different factory).
 - `deleting_dtor.cpp`'s 135-row table retirement (§6) — a THIRD, purely mechanical, ongoing
   task that can run continuously alongside both (each class conversion retires its own row;
   no single agent owns the whole table, the table is just where progress is visible).
