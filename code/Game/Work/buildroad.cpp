@@ -98,7 +98,7 @@ bool BuildRoad_ResolveFuncs() {
               s_fn_Serializer_GetVersion && s_fn_IBP_Serialize &&
               fn_ExternalPtr_BuildSerialize && s_fn_Work_ValidateTask &&
               s_fn_TaskListCleanup && s_typeId_1401c7158 &&
-              fn_InternalBasePtr_Ctor && fn_InternalBasePtr_CheckPtr &&
+              fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom && fn_MemFreeStatic &&
               g_fn_Serialize_Int && g_pGameWorldSingleton;
 
@@ -305,10 +305,8 @@ int BuildRoad_OnCancel_Impl(BuildRoad* self) {
 int BuildRoad_Cleanup_Impl(BuildRoad* self) {
     if (self->field_48 == nullptr) return 0;
 
-    fn_InternalBasePtr_CheckPtr(&self->field_48);
     uintptr_t entity = (uintptr_t)self->field_48;
 
-    fn_InternalBasePtr_CheckPtr((void*)(entity + 0x278));
     uintptr_t smComp = *(uintptr_t*)(entity + 0x278);
 
     // Call task list cleanup: FUN_1400c5400(smComp + 0x48)
@@ -371,11 +369,8 @@ int BuildRoad_GetPriority_Impl(BuildRoad* self) {
 
 // Helper: get position data from entity IBP chain
 static uintptr_t GetPositionData(void* entityIBP) {
-    fn_InternalBasePtr_CheckPtr(entityIBP);
     uintptr_t entity = *(uintptr_t*)entityIBP;
-    fn_InternalBasePtr_CheckPtr((void*)(entity + 0x278));
     uintptr_t comp278 = *(uintptr_t*)(entity + 0x278);
-    fn_InternalBasePtr_CheckPtr((void*)(comp278 + 0x68));
     return *(uintptr_t*)(comp278 + 0x68);
 }
 
@@ -458,15 +453,12 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
 
     if (structEntity != 0) {
         ++g_brExecStructOnCell;
-        fn_InternalBasePtr_CheckPtr((void*)&structEntity);
         uint64_t rawMatComp = 0;
         fn_FindComponent_RawMaterialC(structEntity, &rawMatComp);
 
         if (rawMatComp != 0) {
-            fn_InternalBasePtr_CheckPtr((void*)&structEntity);
             uint64_t workComp = 0;
             fn_FindComponent_WorkC(structEntity, &workComp);
-            fn_InternalBasePtr_CheckPtr((void*)&workComp);
 
             // WorkComponent+0x28 = the scheduler work id for the pile blocking this
             // cell, NOT a worker count; it is what gets handed to the scheduler below.
@@ -489,9 +481,7 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
         }
         ++g_brExecNatResWait;
 
-        fn_InternalBasePtr_CheckPtr((void*)&structEntity);
         fn_FindComponent_NaturalResourceC(structEntity, &natResComp);
-        fn_InternalBasePtr_CheckPtr((void*)&natResComp);
 
         uint32_t bsFlags = *(uint32_t*)(*(uintptr_t*)&natResComp + 0x20);
         if ((bsFlags >> 20) & 1) {
@@ -525,7 +515,6 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
             &citizenRef, self->field_20, &targetRef, terrainPos, 0, 0);
 
         int priority = self->field_20;
-        fn_InternalBasePtr_CheckPtr(entityIBP);
         return FinalizeAction(self, entityIBP, &targetRef, priority);
     }
 
@@ -549,17 +538,13 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
             velocity, &actionRef);
 
         int priority = self->field_20;
-        fn_InternalBasePtr_CheckPtr(entityIBP);
         return FinalizeAction(self, entityIBP, &actionRef, priority);
 
     } else {
-        fn_InternalBasePtr_CheckPtr(entityIBP);
         uint64_t homeEntity = *(uint64_t*)(*(uintptr_t*)entityIBP + 0x10);
-        fn_InternalBasePtr_CheckPtr(&homeEntity);
 
         uint64_t storageComp = 0;
         fn_FindComponent_Storage((void*)(uintptr_t)homeEntity, &storageComp);
-        fn_InternalBasePtr_CheckPtr(&storageComp);
 
         int available = fn_BuildRoad_QueryStorage(storageComp, (int64_t)self->field_50);
 
@@ -582,7 +567,6 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
                 (int64_t)self->field_50, 0, velocity, &actionRef);
 
             int priority = self->field_20;
-            fn_InternalBasePtr_CheckPtr(entityIBP);
             return FinalizeAction(self, entityIBP, &actionRef, priority);
 
         } else {
@@ -612,11 +596,9 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
                 return 1;
             }
 
-            fn_InternalBasePtr_CheckPtr(entityIBP);
             int remainingCapacity = fn_GetRemainingCapacity(*(uintptr_t*)entityIBP);
 
             if (remainingCapacity < *(int32_t*)(foundStorageIBP + 0x48)) {
-                fn_InternalBasePtr_CheckPtr(entityIBP);
                 fn_CitizenAI_LongTermPlan(*(void**)entityIBP);
                 return 2;
             }
@@ -637,7 +619,6 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
                 (int64_t)self->field_50, 1, velocity, &foundStorageIBP);
 
             int priority = self->field_20;
-            fn_InternalBasePtr_CheckPtr(entityIBP);
             return FinalizeAction(self, entityIBP, &foundStorageIBP, priority);
         }
     }

@@ -92,7 +92,7 @@ bool PickupStoredRawMaterial_ResolveFuncs() {
               s_fn_ArrayResize16 &&
               s_typeId_1401c7158 && s_typeId_RawMatDesc && s_typeId_StorageComp &&
               g_TypeId_ComponentEntity &&
-              fn_InternalBasePtr_CheckPtr && fn_InternalBasePtr_Ctor &&
+              fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom && fn_InternalBasePtr_Serialize &&
               fn_ExternalPtr_BuildSerialize &&
               g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
@@ -127,7 +127,6 @@ static void* FindComponentByTypeId(void* entity, uint32_t* typeIdPtr,
 
     for (int i = 0; i < compCount; i++) {
         void** compIBP = (void**)(compArray + (uintptr_t)i * 8);
-        fn_InternalBasePtr_CheckPtr(compIBP);
 
         void* comp = *compIBP;
         // Call vtable+0x10 (GetTypeId)
@@ -135,7 +134,6 @@ static void* FindComponentByTypeId(void* entity, uint32_t* typeIdPtr,
         uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
 
         if (typeId == *typeIdPtr) {
-            fn_InternalBasePtr_CheckPtr(compIBP);
             void* found = *compIBP;
             if (fn_IsDerivedFrom(found, *typeIdPtr)) {
                 return found;
@@ -234,7 +232,6 @@ int PickupStoredRawMaterial_AbstractImpl_Impl(PickupStoredRawMaterial* self, voi
 
 
     // Find storage component on pickup entity (+0x28)
-    fn_InternalBasePtr_CheckPtr(s + 0x28);
     uintptr_t storageIBP = 0;
     fn_FindComponent_Storage(*(void**)(s + 0x28), &storageIBP);
 
@@ -257,9 +254,7 @@ int PickupStoredRawMaterial_AbstractImpl_Impl(PickupStoredRawMaterial* self, voi
 
         if (requestedCount < 1) {
             // Count not specified: compute from storage capacity
-            fn_InternalBasePtr_CheckPtr(s + 0x20);
             void* targetBuilding = *(void**)(s + 0x20);
-            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)targetBuilding + 0x10));
             void* parentEntity = *(void**)((uintptr_t)targetBuilding + 0x10);
 
             // Find StorageComponent on parent entity
@@ -269,9 +264,7 @@ int PickupStoredRawMaterial_AbstractImpl_Impl(PickupStoredRawMaterial* self, voi
             uintptr_t parentStorageIBP = 0;
             new (&parentStorageIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(parentStorage));   // B.3.3 bridge
-            fn_InternalBasePtr_CheckPtr(&parentStorageIBP);
             int maxCapacity = *(int*)(parentStorageIBP + 0x38);
-            fn_InternalBasePtr_CheckPtr(&parentStorageIBP);
             int currentTotal = fn_StorageComponent_QueryCount((void*)parentStorageIBP);
 
             // Compute how many units we can pick up based on remaining capacity
@@ -281,7 +274,6 @@ int PickupStoredRawMaterial_AbstractImpl_Impl(PickupStoredRawMaterial* self, voi
 
         // Look up available quantity of this material in citizen's storage
         uintptr_t matList2 = *(uintptr_t*)(s + 0x30);
-        fn_InternalBasePtr_CheckPtr(&storageIBP);
         int availableCount = 0;
         int slotCount = *(int*)(storageIBP + 0x30);
         if (slotCount > 0) {
@@ -313,7 +305,6 @@ int PickupStoredRawMaterial_AbstractImpl_Impl(PickupStoredRawMaterial* self, voi
 
         // Subtract reserved amount from citizen's storage
         uintptr_t matList3 = *(uintptr_t*)(s + 0x30);
-        fn_InternalBasePtr_CheckPtr(&storageIBP);
         slotCount = *(int*)(storageIBP + 0x30);
         if (slotCount > 0) {
             int64_t* itemArray = *(int64_t**)(storageIBP + 0x28);
@@ -333,15 +324,12 @@ int PickupStoredRawMaterial_AbstractImpl_Impl(PickupStoredRawMaterial* self, voi
 
         // Subtract from citizen's storage via SubtractItem
         uintptr_t matList4 = *(uintptr_t*)(s + 0x30);
-        fn_InternalBasePtr_CheckPtr(&storageIBP);
         s_fn_Storage_SubtractItem((void*)storageIBP, *(int64_t*)(matList4 + (int64_t)matIdx * 0x10), requestedCount);
 
         // Add to target building's parent storage
         uintptr_t matList5 = *(uintptr_t*)(s + 0x30);
-        fn_InternalBasePtr_CheckPtr(s + 0x20);
         void* targetBuilding = *(void**)(s + 0x20);
         int64_t itemType = *(int64_t*)(matList5 + matOffset);
-        fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)targetBuilding + 0x10));
         void* parentEntity = *(void**)((uintptr_t)targetBuilding + 0x10);
 
         // Find StorageComponent on parent entity
@@ -350,7 +338,6 @@ int PickupStoredRawMaterial_AbstractImpl_Impl(PickupStoredRawMaterial* self, voi
         uintptr_t parentStorageIBP2[2];
         new (parentStorageIBP2) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(parentStorage));   // B.3.3 bridge
-        fn_InternalBasePtr_CheckPtr(parentStorageIBP2);
         s_fn_Storage_AddItem((void*)parentStorageIBP2[0], itemType, requestedCount);
 
         matOffset += 0x10;
@@ -370,7 +357,6 @@ void PickupStoredRawMaterial_CheckEntity_Impl(PickupStoredRawMaterial* self) {
     uint8_t* s = (uint8_t*)self;
 
     // Find storage component on pickup entity (+0x28)
-    fn_InternalBasePtr_CheckPtr(s + 0x28);
     uintptr_t storageIBP = 0;
     fn_FindComponent_Storage(*(void**)(s + 0x28), &storageIBP);
 
@@ -380,7 +366,6 @@ void PickupStoredRawMaterial_CheckEntity_Impl(PickupStoredRawMaterial* self) {
     int64_t matOffset = 0;
     for (int i = 0; i < matCount; i++) {
         uintptr_t matList = *(uintptr_t*)(s + 0x30);
-        fn_InternalBasePtr_CheckPtr(&storageIBP);
 
         int slotCount = *(int*)(storageIBP + 0x30);
         if (slotCount > 0) {
@@ -414,17 +399,14 @@ bool PickupStoredRawMaterial_GetTarget_Impl(PickupStoredRawMaterial* self, void*
     uint8_t* s = (uint8_t*)self;
 
     // Check match with pickup entity at +0x28
-    fn_InternalBasePtr_CheckPtr(s + 0x28);
     uintptr_t entityVal = *(uintptr_t*)(s + 0x28);
     if (*(uintptr_t*)param == entityVal) {
         return true;
     }
 
     // Check match with +0x20's parent (+0x10)
-    fn_InternalBasePtr_CheckPtr(s + 0x20);
     uintptr_t building = *(uintptr_t*)(s + 0x20);
     uintptr_t parentEntity = *(uintptr_t*)(building + 0x10);
-    fn_InternalBasePtr_CheckPtr(param);
     return parentEntity == *(uintptr_t*)param;
 }
 

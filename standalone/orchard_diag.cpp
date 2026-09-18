@@ -132,14 +132,12 @@ void DumpTownStorage(int frameNum, uintptr_t arr, int n) {
 
     for (int i = 0; i < n; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* ent = *slot;
         if (!ent) continue;
         const int cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
         uintptr_t cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
         for (int c = 0; c < cN && cA; ++c) {
             void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs);
             void* comp = *cs;
             if (!comp) continue;
             void** vt = *reinterpret_cast<void***>(comp);
@@ -198,7 +196,6 @@ void DumpOrchards(int frameNum) {
     int found = 0;
     for (int i = 0; i < n; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* ent = *slot;
         if (!ent) continue;
 
@@ -207,7 +204,6 @@ void DumpOrchards(int frameNum) {
         void* orchComp = nullptr;
         for (int c = 0; c < cN && cA; ++c) {
             void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs);
             void* comp = *cs;
             if (!comp) continue;
             void** vt = *reinterpret_cast<void***>(comp);
@@ -249,7 +245,6 @@ void DumpOrchards(int frameNum) {
         // (owner = comp+0x10, CheckPtr'd per the project's raw-owner-pointer convention —
         // see e.g. code/Game/Work/cleararea.cpp:635, harvestorchard.cpp:713).
         void* owner = *reinterpret_cast<void**>(comp + 0x10);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&owner);
         void* wpc = nullptr;
         void* smc = nullptr;
         if (owner && (tidWorkPlaceComp || tidStateMachineComp)) {
@@ -257,7 +252,6 @@ void DumpOrchards(int frameNum) {
             uintptr_t wA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(owner) + 0x30);
             for (int c = 0; c < wN && wA; ++c) {
                 void** cs = reinterpret_cast<void**>(wA + static_cast<uintptr_t>(c) * 8);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs);
                 void* wc = *cs;
                 if (!wc) continue;
                 void** vt = *reinterpret_cast<void***>(wc);

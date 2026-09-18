@@ -241,14 +241,11 @@ void OrchardComponent_ValidateRefs(void* selfV) {
             *reinterpret_cast<uintptr_t*>(resMgr + 0x80) + 8 + (uintptr_t)tile * 0x30);
         bool ok = false;
         if (live) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&live);
             if (s_fn_BaseIsA && s_pTypeComponentEntity &&
                 s_fn_BaseIsA(live, *s_pTypeComponentEntity)) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&live);
                 int64_t accBuf = 0;
                 void* acc = s_fn_IBPAccessor52c0 ? s_fn_IBPAccessor52c0((int64_t)live, &accBuf) : nullptr;
                 if (acc && *reinterpret_cast<int64_t*>(acc) != 0) {
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(entry + 8));
                     if (live == *reinterpret_cast<void**>(entry + 8)) ok = true;
                 }
             }
@@ -374,7 +371,6 @@ float OrchardComponent_GetGrowth(void* selfV) {
         void* entity = *reinterpret_cast<void**>(
             tiles + 8 + static_cast<uintptr_t>(tileIdx) * 0x30);
         if (!entity) continue;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entity);
         if (!fn_IsA || !fn_IsA(entity, tidEntity)) continue;
 
         uint64_t natRes = 0;
@@ -382,12 +378,10 @@ float OrchardComponent_GetGrowth(void* selfV) {
         if (!natRes) continue;
 
         void** owned = reinterpret_cast<void**>(slot + 0x08);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(owned);
         if (entity != *owned) continue;
         if (*reinterpret_cast<int32_t*>(slot + 0x04) != 1) continue;
 
         void** growthObj = reinterpret_cast<void**>(slot + 0x18);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(growthObj);
         if (!*growthObj) continue;   // SA: retail derefs unguarded; state 1 implies it
         float g = *reinterpret_cast<float*>(
             reinterpret_cast<uintptr_t>(*growthObj) + 0x30);
@@ -492,10 +486,8 @@ extern "C" void OrchardComponent_OnMessage(void* selfV, int msgId, void* /*srcEn
         int64_t entity = *reinterpret_cast<int64_t*>(
             *reinterpret_cast<uintptr_t*>(mapGrid + 0x80) + 8 +
             static_cast<int64_t>(*reinterpret_cast<int32_t*>(slot)) * 0x30);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entity);
         int64_t natResIBP = 0;
         if (s_fn_IBPAccessor52c0) s_fn_IBPAccessor52c0(entity, &natResIBP);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entity);
         int64_t fruitIBP = 0;
         if (s_fn_FindFruit_a0b0) s_fn_FindFruit_a0b0(entity, &fruitIBP);
 
@@ -532,8 +524,6 @@ extern "C" void OrchardComponent_OnMessage(void* selfV, int msgId, void* /*srcEn
         *reinterpret_cast<uint8_t*>(slot + 0x20) = 1;
         if (*reinterpret_cast<int64_t*>(slot + 0x18) != 0 &&
             *reinterpret_cast<int64_t*>(slot + 0x08) != 0) {
-            if (fn_InternalBasePtr_CheckPtr)
-                fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(slot + 0x18));
             const uintptr_t fruit = *reinterpret_cast<uintptr_t*>(slot + 0x18);
             *reinterpret_cast<uint32_t*>(fruit + 0x30) = 0;
             *reinterpret_cast<uint8_t*>(fruit + 0x34) = 1;
@@ -550,7 +540,6 @@ extern "C" void OrchardComponent_OnMessage(void* selfV, int msgId, void* /*srcEn
             *reinterpret_cast<uintptr_t*>(mapGrid + 0x80) + 8 +
             static_cast<int64_t>(*reinterpret_cast<int32_t*>(slots + idx * 0x28)) * 0x30);
         if (entity == 0) return;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entity);
         int64_t fruitIBP = 0;
         if (s_fn_FindFruit_a0b0) s_fn_FindFruit_a0b0(entity, &fruitIBP);
         if (fruitIBP == 0) return;
@@ -558,7 +547,6 @@ extern "C" void OrchardComponent_OnMessage(void* selfV, int msgId, void* /*srcEn
         void* validated = nullptr;
         if (fn_IsDerivedFrom && s_pTypeOrchardDesc && fn_IsDerivedFrom(desc, *s_pTypeOrchardDesc))
             validated = desc;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&fruitIBP);
         OrchardComponent_BoostFruit_49fc0(reinterpret_cast<int64_t*>(fruitIBP),
             *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(validated) + 0x2c));
         return;
@@ -696,13 +684,10 @@ extern "C" uint8_t OrchardComponent_CanCommand(void* selfV, int cmdId) {
     if (!selfV) return 0;
     const uintptr_t s = reinterpret_cast<uintptr_t>(selfV);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
     uintptr_t smcIBP = 0;
     if (s_FindStateMachine) s_FindStateMachine(*reinterpret_cast<uintptr_t*>(s + 0x10), &smcIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
     uintptr_t wcIBP = 0;
     if (s_FindWork_3050) s_FindWork_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &wcIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&smcIBP);
     if (!smcIBP) return 0;      // SA: retail derefs unguarded; every orchard entity has a
                                 // StateMachineComponent, so this can only fire if the
                                 // component was asked before its entity finished building.
@@ -714,7 +699,6 @@ extern "C" uint8_t OrchardComponent_CanCommand(void* selfV, int cmdId) {
     uint8_t result = 0;
     switch (cmdId) {
     case 0: {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wcIBP);
         const bool busy = s_HasWorkSlot2 && s_HasWorkSlot2(wcIBP) != 0;
         if ((!busy && planted < slotCount) || slotCount == 0) result = hasType ? 1 : 0;
         break;
@@ -757,7 +741,6 @@ extern "C" void OrchardComponent_Command(void* selfV, int cmdId) {
     if (!selfV) return;
     const uintptr_t s = reinterpret_cast<uintptr_t>(selfV);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
     uintptr_t smcIBP = 0;
     if (s_FindStateMachine) s_FindStateMachine(*reinterpret_cast<uintptr_t*>(s + 0x10), &smcIBP);
 
@@ -770,10 +753,8 @@ extern "C" void OrchardComponent_Command(void* selfV, int cmdId) {
         // Toggle the master switch and mirror it onto the workplace. Retail returns here:
         // no event is posted for this command.
         *reinterpret_cast<char*>(s + 0x48) = (*reinterpret_cast<char*>(s + 0x48) == 0) ? 1 : 0;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
         uintptr_t wpIBP = 0;
         if (s_FindWorkPlace2e10) s_FindWorkPlace2e10(*reinterpret_cast<uintptr_t*>(s + 0x10), &wpIBP);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpIBP);
         if (s_SetWpActive2) s_SetWpActive2(wpIBP, *reinterpret_cast<char*>(s + 0x48));
         std::fprintf(stderr, "[OrchardCmd] Command(2) toggle -> enabled=%d\n",
                      (int)*reinterpret_cast<char*>(s + 0x48));
@@ -783,7 +764,6 @@ extern "C" void OrchardComponent_Command(void* selfV, int cmdId) {
     default: return;
     }
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&smcIBP);
     if (!smcIBP) return;
     uintptr_t sm   = smcIBP + 0x48;
     void*     node = *reinterpret_cast<void**>(sm);

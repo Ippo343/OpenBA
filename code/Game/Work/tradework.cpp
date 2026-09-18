@@ -144,7 +144,6 @@ bool TradeWork_ResolveFuncs() {
               s_fn_CancelAllWork && s_fn_ValidateEntity &&
               s_fn_MemAlloc && s_fn_MemFree &&
               s_fn_TreeNodeCleanup && s_fn_FindSubEntity &&
-              fn_InternalBasePtr_CheckPtr &&
               s_vtable_TradeWork && s_vtable_Work;
 
     s_trade_funcs_resolved = ok;
@@ -247,7 +246,6 @@ static void TradeWork_Slot4_Resolve() {
 
 namespace {
 
-inline void TW_Chk(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 inline uint32_t TW_Tid(const uint32_t* p) { return p ? *p : 0; }  // deref .rdata type-id, 0 if unfilled
 
 // 16-byte list entry: {u64 resType, int qty, int pad}. Matches the exe stack record.
@@ -275,11 +273,9 @@ void* TW_ScanEntityComp(int64_t ent, uint32_t tid) {
     int64_t arr = *reinterpret_cast<int64_t*>(ent + 0x30);
     for (int i = 0; i < n; i++) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<int64_t>(i) * 8);
-        TW_Chk(slot);
         void* c = *slot;
         uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<int64_t*>(c) + 0x10))(c);
         if (t == tid) {
-            TW_Chk(slot);
             return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) ? c : nullptr;
         }
     }
@@ -335,7 +331,6 @@ static int TW_CommitAssign(TradeWork* self, void* param2, uint64_t resType, int 
     int64_t selfA = reinterpret_cast<int64_t>(self);
     int taskId = *reinterpret_cast<int*>(selfA + 0x20);            // plVar31[4] low dword
 
-    TW_Chk(param2);
     int64_t citizen = *reinterpret_cast<int64_t*>(param2);
 
     typedef void* (*Slot10_t)(void* self, void* outIBP);
@@ -373,7 +368,6 @@ int TradeWork_Slot4_Impl(TradeWork* self, void* citizenIBP, uint64_t /*param3*/,
 
     // ---- 0. capacity gate ----------------------------------------------------
     int workerCount = static_cast<int>(*reinterpret_cast<int64_t*>(selfA + 0x50));  // param_1[10]
-    TW_Chk(reinterpret_cast<void*>(selfA + 0x18));
     int64_t workComp = *reinterpret_cast<int64_t*>(selfA + 0x18);                    // param_1[3]
     if (*reinterpret_cast<int*>(workComp + 0x30) == 0 && s_s4_CalcCapacity)
         *reinterpret_cast<int*>(workComp + 0x30) = s_s4_CalcCapacity(workComp);
@@ -382,13 +376,10 @@ int TradeWork_Slot4_Impl(TradeWork* self, void* citizenIBP, uint64_t /*param3*/,
 
     // ---- find components -----------------------------------------------------
     int64_t tradeEntIBP = selfA + 0x10;                   // param_1+2 (&trade-post entity IBP)
-    TW_Chk(reinterpret_cast<void*>(tradeEntIBP));
     uint64_t tradeCompIBP[2] = {0};                       // local_58 (TradeComponent)
     if (s_s4_FindTradeComp) s_s4_FindTradeComp(*reinterpret_cast<uintptr_t*>(tradeEntIBP), tradeCompIBP);
-    TW_Chk(reinterpret_cast<void*>(tradeEntIBP));
     uint64_t bldgStorIBP[2] = {0};                        // local_50 (building storage)
     if (s_s4_FindStorageComp) s_s4_FindStorageComp(*reinterpret_cast<uintptr_t*>(tradeEntIBP), bldgStorIBP);
-    TW_Chk(reinterpret_cast<void*>(tradeEntIBP));
     uint64_t posCompIBP[2] = {0};                         // local_e0 (position)
     if (s_s4_FindPositionComp) s_s4_FindPositionComp(*reinterpret_cast<uintptr_t*>(tradeEntIBP), posCompIBP);
 
@@ -398,14 +389,10 @@ int TradeWork_Slot4_Impl(TradeWork* self, void* citizenIBP, uint64_t /*param3*/,
     uint64_t resList  = gw ? *reinterpret_cast<uint64_t*>(gw + 0xf0) : 0;   // pplVar30 / local_70
 
     // ---- 1. citizen already carrying trade goods? ---------------------------
-    TW_Chk(param2);
     int64_t citizenEnt = *reinterpret_cast<int64_t*>(param2);
-    TW_Chk(reinterpret_cast<void*>(citizenEnt + 0x10));
     uint64_t carryStorIBP[2] = {0};                       // local_res20
     if (s_s4_FindStorageComp) s_s4_FindStorageComp(*reinterpret_cast<uintptr_t*>(citizenEnt + 0x10), carryStorIBP);
-    TW_Chk(carryStorIBP);
     if (s_s4_QueryCount && s_s4_QueryCount(reinterpret_cast<void*>(carryStorIBP[0])) > 0) {
-        TW_Chk(param2);
         if (s_s4_LongTermPlan) s_s4_LongTermPlan(reinterpret_cast<void*>(citizenEnt));
         return 2;
     }
@@ -426,7 +413,6 @@ int TradeWork_Slot4_Impl(TradeWork* self, void* citizenIBP, uint64_t /*param3*/,
         // requested count from the TradeComponent demand BST (tradeComp+0x60):
         //   node: +0x00 key, +0x08 value, +0x18 left, +0x20 right
         int requested = 0;
-        TW_Chk(&tradeCompIBP[0]);
         if (tradeComp) {
             uint64_t* node = *reinterpret_cast<uint64_t**>(tradeComp + 0x60);
             while (node) {
@@ -438,7 +424,6 @@ int TradeWork_Slot4_Impl(TradeWork* self, void* citizenIBP, uint64_t /*param3*/,
 
         // storage available in the building storage comp (bldgStor): pairs at +0x28/+0x30.
         int storageAvail = 0;
-        TW_Chk(&bldgStor);
         if (bldgStor && *reinterpret_cast<int*>(bldgStor + 0x30) > 0) {
             int64_t pairs = *reinterpret_cast<int64_t*>(bldgStor + 0x28);
             int pn = *reinterpret_cast<int*>(bldgStor + 0x30);
@@ -487,9 +472,7 @@ int TradeWork_Slot4_Impl(TradeWork* self, void* citizenIBP, uint64_t /*param3*/,
         int qty = arrB[bi].qty;
 
         // clamp qty to the citizen's carry-storage free space:
-        TW_Chk(param2);
         int64_t citizen = *reinterpret_cast<int64_t*>(param2);
-        TW_Chk(reinterpret_cast<void*>(citizen + 0x10));
         int64_t carryEnt = *reinterpret_cast<int64_t*>(citizen + 0x10);
         void* carryStor = TW_ScanEntityComp(carryEnt, storageTid);    // pvVar18
         if (matDesc && *reinterpret_cast<int*>(reinterpret_cast<int64_t>(matDesc) + 0x48) != 0) {
@@ -500,11 +483,9 @@ int TradeWork_Slot4_Impl(TradeWork* self, void* citizenIBP, uint64_t /*param3*/,
         }
 
         // building storage comp -> its item pairs, find resType:
-        TW_Chk(reinterpret_cast<void*>(tradeEntIBP));
         int64_t bldgEnt = *reinterpret_cast<int64_t*>(tradeEntIBP);
         void* bldgStorComp = TW_ScanEntityComp(bldgEnt, storageTid);  // -> local_e8
         int64_t e8 = reinterpret_cast<int64_t>(bldgStorComp);
-        TW_Chk(&e8);
         if (!e8 || *reinterpret_cast<int*>(e8 + 0x30) <= 0) continue;
         int64_t pairs = *reinterpret_cast<int64_t*>(e8 + 0x28);
         int pn = *reinterpret_cast<int*>(e8 + 0x30);
@@ -518,11 +499,8 @@ int TradeWork_Slot4_Impl(TradeWork* self, void* citizenIBP, uint64_t /*param3*/,
         if (avail < qty) qty = avail;
 
         // fetch source cell from the citizen AI sub-object (citizen+0x278 -> +0x68):
-        TW_Chk(param2);
         int64_t c2 = *reinterpret_cast<int64_t*>(param2);
-        TW_Chk(reinterpret_cast<void*>(c2 + 0x278));
         int64_t ai = *reinterpret_cast<int64_t*>(c2 + 0x278);
-        TW_Chk(reinterpret_cast<void*>(ai + 0x68));
         int64_t nav = *reinterpret_cast<int64_t*>(ai + 0x68);
         int mapSize = gw ? **reinterpret_cast<int**>(gw + 0xf8) : 0;
         int cellX = TW_ClampCell(*reinterpret_cast<float*>(nav + 0x158), mapSize);
@@ -539,10 +517,8 @@ int TradeWork_Slot4_Impl(TradeWork* self, void* citizenIBP, uint64_t /*param3*/,
 
         // destination position from the trade post position comp:
         uint64_t destPos[2] = {0};                         // local_a0
-        TW_Chk(&posCompIBP[0]);
         uint32_t range = s_s4_ChildSum ? s_s4_ChildSum(posComp, 0) : 0;
         void* rng = gw ? *reinterpret_cast<void**>(gw + 0xd8) : nullptr;
-        TW_Chk(&posCompIBP[0]);
         uint32_t rnd = (rng && fn_Random_Rand) ? fn_Random_Rand(rng, range) : 0;
         if (s_s4_EntityPos) s_s4_EntityPos(posComp, destPos, 0, rnd, nullptr);
 
@@ -568,11 +544,8 @@ int TradeWork_Slot4_Impl(TradeWork* self, void* citizenIBP, uint64_t /*param3*/,
         int qty = arrA[ai2].qty;                                      // local_res20 low = pSVar33+8
 
         // fetch destination cell from the citizen AI sub-object (citizen+0x278 -> +0x68):
-        TW_Chk(param2);
         int64_t c2 = *reinterpret_cast<int64_t*>(param2);
-        TW_Chk(reinterpret_cast<void*>(c2 + 0x278));
         int64_t ai = *reinterpret_cast<int64_t*>(c2 + 0x278);
-        TW_Chk(reinterpret_cast<void*>(ai + 0x68));
         int64_t nav = *reinterpret_cast<int64_t*>(ai + 0x68);
         int mapSize = gw ? **reinterpret_cast<int**>(gw + 0xf8) : 0;
         int cellX = TW_ClampCell(*reinterpret_cast<float*>(nav + 0x158), mapSize);
@@ -591,7 +564,6 @@ int TradeWork_Slot4_Impl(TradeWork* self, void* citizenIBP, uint64_t /*param3*/,
         // entity layout +0x30 array / +0x38 count) for StorageComponent, then its item pairs.
         void* srcStorComp = TW_ScanEntityComp(srcStorage, storageTid);
         int64_t a8 = reinterpret_cast<int64_t>(srcStorComp);
-        TW_Chk(&a8);
         int qtyMove = qty;
         if (a8 && *reinterpret_cast<int*>(a8 + 0x30) > 0) {
             int64_t pairs = *reinterpret_cast<int64_t*>(a8 + 0x28);
@@ -609,13 +581,10 @@ int TradeWork_Slot4_Impl(TradeWork* self, void* citizenIBP, uint64_t /*param3*/,
         }
 
         // clamp by the destination (citizen building) storage free space for resType:
-        TW_Chk(param2);
         int64_t citizen = *reinterpret_cast<int64_t*>(param2);
-        TW_Chk(reinterpret_cast<void*>(citizen + 0x10));
         int64_t destEnt = *reinterpret_cast<int64_t*>(citizen + 0x10);
         void* destStorComp = TW_ScanEntityComp(destEnt, storageTid);  // local_b8
         int64_t b8 = reinterpret_cast<int64_t>(destStorComp);
-        TW_Chk(&b8);
         if (matDesc && *reinterpret_cast<int*>(reinterpret_cast<int64_t>(matDesc) + 0x48) != 0) {
             int cap  = *reinterpret_cast<int*>(b8 + 0x38);
             int cur  = s_s4_QueryCount ? s_s4_QueryCount(destStorComp) : 0;
@@ -624,12 +593,10 @@ int TradeWork_Slot4_Impl(TradeWork* self, void* citizenIBP, uint64_t /*param3*/,
         }
 
         // gate: can the trade-post building storage accept this resource+qty?
-        TW_Chk(&bldgStor);
         if (!s_s4_CanAccept || s_s4_CanAccept(bldgStor, resType, qtyMove) == 0)
             continue;
 
         // source position from the trade post position comp (+ interact-desc base value):
-        TW_Chk(&posCompIBP[0]);
         int64_t interactDesc = *reinterpret_cast<int64_t*>(posComp + 0x18);
         if (!(fn_IsDerivedFrom && interactTid && fn_IsDerivedFrom(reinterpret_cast<void*>(interactDesc), interactTid)))
             interactDesc = 0;
@@ -639,12 +606,10 @@ int TradeWork_Slot4_Impl(TradeWork* self, void* citizenIBP, uint64_t /*param3*/,
             int cn = *reinterpret_cast<int*>(posComp + 0x30);
             for (int64_t k = 0; k < cn; k++) {
                 int64_t child = *reinterpret_cast<int64_t*>(children + k * 8);
-                TW_Chk(&child);
                 range += s_s4_ChildSum ? s_s4_ChildSum(child, 0) : 0;
             }
         }
         void* rng = gw ? *reinterpret_cast<void**>(gw + 0xd8) : nullptr;
-        TW_Chk(&posCompIBP[0]);
         uint32_t rnd = (rng && fn_Random_Rand) ? fn_Random_Rand(rng, range) : 0;
         uint64_t srcPos2[2] = {0};                         // local_68
         if (s_s4_EntityPos) s_s4_EntityPos(posComp, srcPos2, 0, rnd, nullptr);
@@ -706,10 +671,8 @@ int TradeWork_Slot8_Impl(TradeWork* self) {
         }
 
         // Cancel the work item
-        fn_InternalBasePtr_CheckPtr(leftmost);
         uintptr_t citizenEntity = *(uintptr_t*)leftmost;
 
-        fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
         s_fn_CancelAllWork((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
     }
     return 0;
@@ -812,11 +775,9 @@ bool TradeWork_Slot9_Impl(TradeWork* self, void* param2) {
         for (uint32_t i = 0; i < removeCount; i++) {
             void* searchNode = *bstRootPtr;
             while (searchNode != nullptr) {
-                fn_InternalBasePtr_CheckPtr(searchNode);
                 if (removeArr[i] < *(uintptr_t*)searchNode) {
                     searchNode = *(void**)((uintptr_t)searchNode + 0x20);
                 } else {
-                    fn_InternalBasePtr_CheckPtr(&removeArr[i]);
                     if (removeArr[i] <= *(uintptr_t*)searchNode) {
                         s_fn_BSTRemove(bstRootPtr, searchNode);
                         break;
@@ -854,13 +815,11 @@ void* TradeWork_Slot10_Impl(TradeWork* self, void* outPtr) {
 
     uintptr_t selfAddr = (uintptr_t)self;
 
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
 
     uintptr_t subIBP[2] = {0};
     void* result = s_fn_FindSubEntity(entityRef, subIBP);
 
-    fn_InternalBasePtr_CheckPtr(result);
 
     uintptr_t resolvedEntity = *(uintptr_t*)result;
     *(uintptr_t*)outPtr = *(uintptr_t*)(resolvedEntity + 0x48);

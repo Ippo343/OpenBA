@@ -240,7 +240,7 @@ bool HarvestOrchard_ResolveFuncs() {
               s_fn_ValidateTask && s_fn_TaskCancel && s_fn_FindPosComp &&
               s_fn_Work_Serialize && s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
               s_fn_BST_RecursiveFree &&
-              fn_InternalBasePtr_CheckPtr && fn_InternalBasePtr_Ctor &&
+              fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom && g_pGameWorldSingleton &&
               s_typeId_OrchardDesc && s_typeId_DescComp && s_fHalfCellOffset &&
               s_vtable_HarvestOrchard && s_vtable_AutoPickupWork && s_vtable_Work;
@@ -277,7 +277,6 @@ bool HarvestOrchard_ResolveFuncs() {
         HO_MISS(s_fn_Serializer_Ctor, "Serializer_Ctor (slot 0x140152ad8)");
         HO_MISS(s_fn_Serializer_Dtor, "Serializer_Dtor (slot 0x140152ad0)");
         HO_MISS(s_fn_BST_RecursiveFree, "BST_RecursiveFree");
-        HO_MISS(fn_InternalBasePtr_CheckPtr, "fn_InternalBasePtr_CheckPtr");
         HO_MISS(fn_InternalBasePtr_Ctor, "fn_InternalBasePtr_Ctor");
         HO_MISS(fn_IsDerivedFrom, "fn_IsDerivedFrom");
         HO_MISS(g_pGameWorldSingleton, "g_pGameWorldSingleton");
@@ -341,23 +340,19 @@ int HarvestOrchard_Slot4_Impl(HarvestOrchard* self, void* entityIBP, uint64_t /*
 
     // Step 2: Find components
     uintptr_t* workEntityPtr = (uintptr_t*)(selfAddr + 0x10);
-    fn_InternalBasePtr_CheckPtr(workEntityPtr);
     uintptr_t matDescIBP = 0;
     s_fn_FindComp_MatDesc(*workEntityPtr, &matDescIBP);
 
-    fn_InternalBasePtr_CheckPtr(workEntityPtr);
     uintptr_t orchardDescIBP[2] = {0};
     s_fn_FindComp_OrchardDesc(*workEntityPtr, orchardDescIBP);
 
     // Get OrchardDescription object
-    fn_InternalBasePtr_CheckPtr(orchardDescIBP);
     void* descObj = *(void**)(orchardDescIBP[0] + 0x18);
     bool isDerived = fn_IsDerivedFrom(descObj, *s_typeId_OrchardDesc);
     void* orchardDesc = isDerived ? descObj : nullptr;
 
     // Check tree count vs max workers
     int treeCount = (int)selfQ[10]; // _field50
-    fn_InternalBasePtr_CheckPtr(&matDescIBP);
     if (*(int*)(matDescIBP + 0x30) == 0) {
         int maxWorkers = s_fn_CalcMaxWorkers(matDescIBP);
         *(int*)(matDescIBP + 0x30) = maxWorkers;
@@ -374,10 +369,8 @@ int HarvestOrchard_Slot4_Impl(HarvestOrchard* self, void* entityIBP, uint64_t /*
     uintptr_t resEntry = resourceTable + (uintptr_t)materialIdx * 0x20;
     bool atCapacity = *(int*)(resEntry + 8) <= *(int*)(resEntry);
 
-    fn_InternalBasePtr_CheckPtr(workEntityPtr);
     uintptr_t meshIBP[2] = {0};
     s_fn_FindComp_MeshInstance(*workEntityPtr, meshIBP);
-    fn_InternalBasePtr_CheckPtr(meshIBP);
     s_fn_MeshInstance_SetVisible((void*)(*(uintptr_t*)meshIBP), 2, atCapacity ? 1 : 0);
 
     if (atCapacity) {
@@ -387,11 +380,8 @@ int HarvestOrchard_Slot4_Impl(HarvestOrchard* self, void* entityIBP, uint64_t /*
     // Step 3: Get map and citizen position
     int* mapGrid = *(int**)(gameWorld + 0xf8);
 
-    fn_InternalBasePtr_CheckPtr(citizenIBP);
     uintptr_t citizenEntity = *(uintptr_t*)citizenIBP;
-    fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
     uintptr_t aiComp = *(uintptr_t*)(citizenEntity + 0x278);
-    fn_InternalBasePtr_CheckPtr((void*)(aiComp + 0x68));
     uintptr_t posComp = *(uintptr_t*)(aiComp + 0x68);
 
     int mapSz = *mapGrid;
@@ -425,7 +415,6 @@ int HarvestOrchard_Slot4_Impl(HarvestOrchard* self, void* entityIBP, uint64_t /*
 
             // Look up entity at this cell
             {
-                fn_InternalBasePtr_CheckPtr(orchardDescIBP);
                 uintptr_t orchDescVal = orchardDescIBP[0];
                 uintptr_t gridData = *(uintptr_t*)(mapGrid + 0x20);
                 // Orchard cell data stride is 0x28 (different from HarvestArea's 0x20)
@@ -436,7 +425,6 @@ int HarvestOrchard_Slot4_Impl(HarvestOrchard* self, void* entityIBP, uint64_t /*
                     validityArray[i] = 0;
                 } else {
                     // Check pathfinding
-                    fn_InternalBasePtr_CheckPtr(orchardDescIBP);
                     int srcCellIdx = *(int*)(*(uintptr_t*)(orchardDescIBP[0] + 0x50) + (uintptr_t)i * 0x28);
                     int nearestCell = s_fn_Map_FindNearestPassable(mapGrid, srcCellIdx, citizenGridCell, 0xe0f);
 
@@ -444,7 +432,6 @@ int HarvestOrchard_Slot4_Impl(HarvestOrchard* self, void* entityIBP, uint64_t /*
                         uint64_t canPath = (uint64_t)s_fn_Map_CanPathTo(mapGrid, 0xe1f, citizenGridCell, nearestCell);
                         if ((char)canPath != 0) {
                             // Check NaturalResource component
-                            fn_InternalBasePtr_CheckPtr(&entityAtCell);
                             uintptr_t natResIBP = 0;
                             s_fn_FindComp_NatRes(entityAtCell, &natResIBP);
 
@@ -452,17 +439,14 @@ int HarvestOrchard_Slot4_Impl(HarvestOrchard* self, void* entityIBP, uint64_t /*
                                 validityArray[i] = 0;
                             } else {
                                 // Check flag bit 20 (flagged for removal)
-                                fn_InternalBasePtr_CheckPtr(&natResIBP);
                                 if ((*(uint32_t*)(natResIBP + 0x20) >> 20) & 1) {
                                     goto next_cell;
                                 }
 
                                 // Get description component from entity
-                                fn_InternalBasePtr_CheckPtr(&entityAtCell);
                                 uintptr_t descCompIBP = 0;
                                 s_fn_FindComp_DescComp(entityAtCell, &descCompIBP);
 
-                                fn_InternalBasePtr_CheckPtr(&descCompIBP);
                                 void* descCompObj = *(void**)(descCompIBP + 0x18);
                                 bool isDescDerived = fn_IsDerivedFrom(descCompObj, *s_typeId_DescComp);
                                 void* descComp = isDescDerived ? descCompObj : nullptr;
@@ -494,7 +478,6 @@ int HarvestOrchard_Slot4_Impl(HarvestOrchard* self, void* entityIBP, uint64_t /*
                                 s_fn_GetTerrainPos(mapGrid, pathPos, &targetPos.x, 0, nullptr);
 
                                 // Get entity ref from orchard description
-                                fn_InternalBasePtr_CheckPtr(orchardDescIBP);
                                 uintptr_t entityRef = *(uintptr_t*)(orchardDescIBP[0] + 0x10);
 
                                 // Create orchard harvest action
@@ -548,7 +531,6 @@ int HarvestOrchard_Slot4_Impl(HarvestOrchard* self, void* entityIBP, uint64_t /*
 
                                 // Assign work and register with AI
                                 int priority = (int)selfQ[4];
-                                fn_InternalBasePtr_CheckPtr(citizenIBP);
                                 uintptr_t citizenEnt = *(uintptr_t*)citizenIBP;
 
                                 uintptr_t vtable = *(uintptr_t*)self;
@@ -678,9 +660,7 @@ int HarvestOrchard_Slot8_Impl(HarvestOrchard* self) {
             node = *(uintptr_t*)(node + 0x18);
         }
 
-        fn_InternalBasePtr_CheckPtr((void*)(rightmost + 8));
         uintptr_t citizenEntity = *(uintptr_t*)(rightmost + 8);
-        fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
         s_fn_TaskCancel((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
 
         count = *(int*)(selfAddr + 0x50);
@@ -814,13 +794,11 @@ cleanup:
 void* HarvestOrchard_Slot10_Impl(HarvestOrchard* self, void* outPtr) {
     uintptr_t selfAddr = (uintptr_t)self;
 
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t entity = *(uintptr_t*)(selfAddr + 0x10);
 
     uintptr_t posCompIBP[2] = {0};
     s_fn_FindPosComp(entity, posCompIBP);
 
-    fn_InternalBasePtr_CheckPtr(posCompIBP);
     *(uintptr_t*)outPtr = *(uintptr_t*)(*(uintptr_t*)posCompIBP + 0x48);
 
     return outPtr;

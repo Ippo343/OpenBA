@@ -128,11 +128,9 @@ extern "C" char AttendanceComponent_AllFull(void* selfP) {
 
     for (int i = 0; i < count && base; ++i) {
         uintptr_t entry = *reinterpret_cast<uintptr_t*>(base + static_cast<uintptr_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entry);
         if (!entry) continue;
         if (*reinterpret_cast<uintptr_t*>(entry + 0x18) != myDesc) continue;
 
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entry);
         void* desc = *reinterpret_cast<void**>(entry + 0x18);
         if (s_tidAttendanceDesc && fn_IsDerivedFrom &&
             !fn_IsDerivedFrom(desc, *s_tidAttendanceDesc))
@@ -154,11 +152,8 @@ static char Attendance_State2Frame(void* selfP, void* /*sm*/, void* /*time*/) {
     const uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
     if (!s_findMesh || !s_meshSetFlag) return 0;
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(
-        reinterpret_cast<void*>(self + 0x10));
     uintptr_t meshIbp = 0;
     s_findMesh(*reinterpret_cast<uintptr_t*>(self + 0x10), &meshIbp);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&meshIbp);
 
     const char full = AttendanceComponent_AllFull(selfP);
     // ⚠ Retail reads `*(longlong**)self` where `self` is the finder's RETURN value —
@@ -218,21 +213,15 @@ static char Attendance_State2Enter(void* selfP, void* /*sm*/) {
 
     // 3. post it to the citizen work ledger
     if (s_findWork && s_postWork) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(
-            reinterpret_cast<void*>(self + 0x10));
         uintptr_t workCompIbp = 0;
         s_findWork(*reinterpret_cast<uintptr_t*>(self + 0x10), &workCompIbp);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIbp);
         s_postWork(workCompIbp, 1, '\0', &workIbp);
     }
 
     // 4. open the workplace
     if (s_findWpc && s_setAccepting) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(
-            reinterpret_cast<void*>(self + 0x10));
         uintptr_t wpcIbp = 0;
         s_findWpc(*reinterpret_cast<uintptr_t*>(self + 0x10), &wpcIbp);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpcIbp);
         s_setAccepting(wpcIbp, '\x01');
     }
 
@@ -257,11 +246,8 @@ static char Attendance_State3Enter(void* selfP, void* /*sm*/) {
     AttendanceComponent_ProcessQueue(selfP);
 
     if (s_findWpc && s_setAccepting) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(
-            reinterpret_cast<void*>(self + 0x10));
         uintptr_t wpcIbp = 0;
         s_findWpc(*reinterpret_cast<uintptr_t*>(self + 0x10), &wpcIbp);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpcIbp);
         s_setAccepting(wpcIbp, '\0');
     }
     return 0;

@@ -457,7 +457,6 @@ void ResidenceComponent_ResidenceInit(void* selfP) {
             if (fn_InternalBasePtr_Ctor) new (ibpBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             uintptr_t cur = *(uintptr_t*)(self + 0x50) + (uintptr_t)s * 0x10;
             void* residentSlotPtr = *(void**)cur;
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(residentSlotPtr);
             void* citizen = *(void**)residentSlotPtr;
             if (s_fn_AssignWorkplace) s_fn_AssignWorkplace(citizen, ibpBuf, -1);
             innerCount = *(int*)(*(uintptr_t*)(self + 0x50) + (uintptr_t)s * 0x10 + 8);

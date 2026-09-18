@@ -40,12 +40,10 @@ static uint32_t PastureCalcMaxCount_Impl(uintptr_t pastureComp) {
     if (*(uintptr_t*)(pastureComp + 0x28) == 0) return 0;
 
     // Find BuildComponent on the entity at +0x10
-    fn_InternalBasePtr_CheckPtr((void*)(pastureComp + 0x10));
     uintptr_t entity = *(uintptr_t*)(pastureComp + 0x10);
 
     uint64_t buildCompRet = 0;
     fn_FindComponent_Build((void*)entity, &buildCompRet);
-    fn_InternalBasePtr_CheckPtr((void*)&buildCompRet);
     uintptr_t buildComp = buildCompRet;
 
     int16_t maxOcc = buildComp ? *(int16_t*)(buildComp + 0x2c) : 0;
@@ -53,7 +51,6 @@ static uint32_t PastureCalcMaxCount_Impl(uintptr_t pastureComp) {
 
     // Search animal description entity's components for AnimalDescription
     uintptr_t animalEntity = *(uintptr_t*)(pastureComp + 0x28);
-    fn_InternalBasePtr_CheckPtr((void*)&animalEntity);
 
     int compCount = *(int*)(animalEntity + 0x30);
     uintptr_t* compArray = *(uintptr_t**)(animalEntity + 0x28);
@@ -62,7 +59,6 @@ static uint32_t PastureCalcMaxCount_Impl(uintptr_t pastureComp) {
     void* animalDesc = nullptr;
     for (int i = 0; i < compCount; i++) {
         uintptr_t compIPtr = compArray[i];
-        fn_InternalBasePtr_CheckPtr((void*)&compIPtr);
         void* comp = (void*)compIPtr;
         if (!comp) continue;
         typedef int (*GetTypeId_t)(void*);
@@ -101,18 +97,15 @@ static void PastureUI_UpdateSlider_Impl(void* self) {
     void* entityPtr = isEntity ? entity : nullptr;
     uint64_t entityIPtr = 0;
     new (&entityIPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
-    fn_InternalBasePtr_CheckPtr(&entityIPtr);
     uintptr_t entityVal = entityIPtr;
 
     // Find PastureComponent
     uint64_t pastureRet = 0;
     fn_FindComponent_Pasture((void*)entityVal, &pastureRet);
-    fn_InternalBasePtr_CheckPtr(&pastureRet);
     uintptr_t pastureComp = pastureRet;
     if (!pastureComp) return;
 
     // Get slider element at self+0x38
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x38));
     uintptr_t slider = *(uintptr_t*)(s + 0x38);
     if (!slider) return;
 
@@ -121,15 +114,12 @@ static void PastureUI_UpdateSlider_Impl(void* self) {
 
     // Set slider max = PastureCalcMaxCount
     uint32_t maxCount = PastureCalcMaxCount_Impl(pastureComp);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x38));
     slider = *(uintptr_t*)(s + 0x38);
     *(float*)(slider + 0x11c) = (float)(int)maxCount;
 
     // Set slider current = current animal count at pastureComp+0x40
-    fn_InternalBasePtr_CheckPtr(&pastureRet);
     pastureComp = pastureRet;
     int currentCount = *(int*)(pastureComp + 0x40);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x38));
     slider = *(uintptr_t*)(s + 0x38);
     *(float*)(slider + 0x128) = (float)currentCount;
 }

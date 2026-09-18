@@ -140,7 +140,6 @@ static inline void* WAH_Alloc(uint64_t size, uint32_t align) {
 }
 static inline void  WAH_IbpCtor(void* ibp, void* obj) { if (fn_InternalBasePtr_Ctor) new (ibp) ::Object::InternalBasePtr(
     reinterpret_cast<RtObject::Internal*>(obj)); }   // B.3.3 bridge
-static inline void  WAH_CheckPtr(void* p)             { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 static inline void  WAH_Append(void* list, void* ibp) { if (s_wah_TaskListAppend) s_wah_TaskListAppend(list, ibp); }
 
 // ============================================================
@@ -167,9 +166,7 @@ void WorkAct_HuntWorkCtor_bbbc0(void* citizenIBP, uint32_t workId, int64_t* targ
     ResolveAll();
 
     // --- list base = (*(citizen)+0x278) + 0x48 ---  (disasm 0x1400bbbf3..0x1400bbc17)
-    WAH_CheckPtr(citizenIBP);
     uintptr_t ci = *reinterpret_cast<uintptr_t*>(citizenIBP);
-    WAH_CheckPtr(reinterpret_cast<void*>(ci + 0x278));
     uintptr_t aiComp = *reinterpret_cast<uintptr_t*>(ci + 0x278);
     void* list = reinterpret_cast<void*>(aiComp + 0x48);  // RDI
     if (s_wah_TaskListCleanup) s_wah_TaskListCleanup(list);
@@ -184,7 +181,6 @@ void WorkAct_HuntWorkCtor_bbbc0(void* citizenIBP, uint32_t workId, int64_t* targ
         uintptr_t innerIbp = 0;
         WAH_IbpCtor(&innerIbp, nullptr);
         uint32_t msgId = s_wah_pDword_c70e8 ? *s_wah_pDword_c70e8 : 0;  // [0x1401c70e8]
-        WAH_CheckPtr(citizenIBP);
         void* entityInner = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
         if (s_wah_SendCompMsg) sm = s_wah_SendCompMsg(obj, &entityInner, &msgId, 0, &innerIbp, 0);
     }
@@ -213,9 +209,7 @@ void WorkAct_HuntWorkCtor_bbbc0(void* citizenIBP, uint32_t workId, int64_t* targ
         // disasm 0x1400bbd1a..0x1400bbd91 (alloc 0x480,8)
         obj = WAH_Alloc(0x480, 8);
         if (obj) {
-            WAH_CheckPtr(citizenIBP);
             uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
-            WAH_CheckPtr(&entityInner);
             uintptr_t famRet = 0;
             void* familyIBP = nullptr;
             if (s_wah_FindCompFamily) familyIBP = s_wah_FindCompFamily(entityInner, &famRet);
@@ -255,7 +249,6 @@ void WorkAct_HuntWorkCtor_bbbc0(void* citizenIBP, uint32_t workId, int64_t* targ
     int32_t idx = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(list) + 0x18);   // [RDI+0x18]
     uintptr_t arrBase = *reinterpret_cast<uintptr_t*>(list);                                // [RDI]
     void* slot = reinterpret_cast<void*>(arrBase + static_cast<intptr_t>(idx) * 8);         // RDI = &arr[idx]
-    WAH_CheckPtr(slot);   // disasm 0x1400bbe67 MOV RCX,RDI ; CheckPtr(slot address itself)
     *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(slot) + 0x10) = storedIbp;  // *(*plVar8+0x10)
     (void)ibpB;
 }
@@ -286,9 +279,7 @@ void WorkAct_ShowToolCtor3_bdd20(void* citizenIBP, uint32_t workId, uint32_t* cr
     ResolveAll();
 
     // --- list base = (*(citizen)+0x278) + 0x48 ---  (disasm 0x1400bdd55..0x1400bdd79)
-    WAH_CheckPtr(citizenIBP);
     uintptr_t ci = *reinterpret_cast<uintptr_t*>(citizenIBP);
-    WAH_CheckPtr(reinterpret_cast<void*>(ci + 0x278));
     uintptr_t aiComp = *reinterpret_cast<uintptr_t*>(ci + 0x278);  // lVar2
     void* list = reinterpret_cast<void*>(aiComp + 0x48);           // RSI / plVar14
     if (s_wah_TaskListCleanup) s_wah_TaskListCleanup(list);
@@ -303,7 +294,6 @@ void WorkAct_ShowToolCtor3_bdd20(void* citizenIBP, uint32_t workId, uint32_t* cr
         uintptr_t innerIbp = 0;
         WAH_IbpCtor(&innerIbp, nullptr);
         uint32_t msgId = s_wah_pDword_c70e8 ? *s_wah_pDword_c70e8 : 0;  // [0x1401c70e8]
-        WAH_CheckPtr(citizenIBP);
         void* entityInner = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
         if (s_wah_SendCompMsg) sm = s_wah_SendCompMsg(obj, &entityInner, &msgId, 0, &innerIbp, 0);
     }
@@ -403,9 +393,7 @@ void WorkAct_ShowToolCtor3_bdd20(void* citizenIBP, uint32_t workId, uint32_t* cr
     obj = WAH_Alloc(0x480, 8);
     void* mv = nullptr;
     if (obj) {
-        WAH_CheckPtr(citizenIBP);
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
-        WAH_CheckPtr(&entityInner);
         uintptr_t famRet = 0;
         void* familyIBP = nullptr;
         if (s_wah_FindCompFamily) familyIBP = s_wah_FindCompFamily(entityInner, &famRet);

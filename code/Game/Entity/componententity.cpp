@@ -137,18 +137,12 @@ void ComponentEntity_ShutdownComponents(ComponentEntity* self) {
     for (int i = 0; i < count; i++) {
         uintptr_t ibpAddr = arr + (uintptr_t)i * 8;
 
-        if (fn_InternalBasePtr_CheckPtr) {
-            fn_InternalBasePtr_CheckPtr((void*)ibpAddr);
-        }
 
         uintptr_t compPtr = *(uintptr_t*)ibpAddr;
         // Component+0x20 is uint32 containing capability flags
         uint32_t compFlags = *(uint32_t*)(compPtr + 0x20);
         if (((compFlags >> 8) & 1) != 0) {
             // Re-check after potential lazy resolve
-            if (fn_InternalBasePtr_CheckPtr) {
-                fn_InternalBasePtr_CheckPtr((void*)ibpAddr);
-            }
             compPtr = *(uintptr_t*)ibpAddr;
             // Call vtable+0x28 (Shutdown)
             uintptr_t compVtable = *(uintptr_t*)compPtr;
@@ -174,17 +168,11 @@ void ComponentEntity_StartupComponents(ComponentEntity* self) {
     for (int i = 0; i < count; i++) {
         uintptr_t ibpAddr = arr + (uintptr_t)i * 8;
 
-        if (fn_InternalBasePtr_CheckPtr) {
-            fn_InternalBasePtr_CheckPtr((void*)ibpAddr);
-        }
 
         uintptr_t compPtr = *(uintptr_t*)ibpAddr;
         if (!compPtr) continue;   // defensive: skip null component (standalone factory miss)
         uint32_t compFlags = *(uint32_t*)(compPtr + 0x20);
         if (((compFlags >> 7) & 1) != 0) {
-            if (fn_InternalBasePtr_CheckPtr) {
-                fn_InternalBasePtr_CheckPtr((void*)ibpAddr);
-            }
             compPtr = *(uintptr_t*)ibpAddr;
             // Call vtable+0x20 (Startup)
             uintptr_t compVtable = *(uintptr_t*)compPtr;
@@ -212,9 +200,6 @@ void ComponentEntity_RefreshEntityFlags(ComponentEntity* self) {
         uintptr_t arr = (uintptr_t)self->components;
         for (int i = 0; i < count; i++) {
             uintptr_t ibpAddr = arr + (uintptr_t)i * 8;
-            if (fn_InternalBasePtr_CheckPtr) {
-                fn_InternalBasePtr_CheckPtr((void*)ibpAddr);
-            }
             uintptr_t compPtr = *(uintptr_t*)ibpAddr;
             if (!compPtr) continue;   // defensive: skip null component (standalone factory miss)
             // Component::+0x20 is a uint16 containing capability flags
@@ -507,9 +492,6 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
                 // Check if existing component at insertPos already matches
                 if (insertIdx < self->componentCount) {
                     uintptr_t existIBPAddr = (uintptr_t)self->components + insertPos * 8;
-                    if (fn_InternalBasePtr_CheckPtr) {
-                        fn_InternalBasePtr_CheckPtr((void*)existIBPAddr);
-                    }
                     uintptr_t existComp = *(uintptr_t*)existIBPAddr;
                     // Get existing component's type ID via vtable+0x10
                     uintptr_t existVtable = *(uintptr_t*)existComp;
@@ -559,17 +541,11 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
                 }
 
                 // Set component fields: +0x10 = owner IBP, +0x18 = description template
-                if (fn_InternalBasePtr_CheckPtr) {
-                    fn_InternalBasePtr_CheckPtr((void*)&newIBP);
-                }
                 void* compPtr = (void*)newIBP;
                 *(uintptr_t*)((uintptr_t)compPtr + 0x10) = ownerIBP;
                 *(uintptr_t*)((uintptr_t)compPtr + 0x18) = descTemplate;
 
                 // Call component's vtable+0x20 (Serialize/Startup from description)
-                if (fn_InternalBasePtr_CheckPtr) {
-                    fn_InternalBasePtr_CheckPtr((void*)&newIBP);
-                }
                 compPtr = (void*)newIBP;
                 uintptr_t cVtable = *(uintptr_t*)compPtr;
                 typedef void (*fn_CompInit_t)(void*);
@@ -814,9 +790,6 @@ ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void
             // Resolve the component IBP (the original CopyCtor calls CheckPtr
             // before the field writes) then set owner (+0x10) and description
             // (+0x18).
-            if (fn_InternalBasePtr_CheckPtr) {
-                fn_InternalBasePtr_CheckPtr((void*)&newIBP);
-            }
             void* compPtr = (void*)newIBP;
             if (!compPtr) {
                 // STANDALONE: this component typeId has no working factory (the
@@ -903,12 +876,10 @@ static void ComponentEntity_OnAddedPass(ComponentEntity* self) {
     uintptr_t arr = (uintptr_t)self->components;
     for (int i = 0; i < count; i++) {
         uintptr_t ibpAddr = arr + (uintptr_t)i * 8;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)ibpAddr);
         uintptr_t compPtr = *(uintptr_t*)ibpAddr;
         if (!compPtr) continue;   // defensive: skip null component (standalone factory miss)
         const bool armed = (*(uint8_t*)(compPtr + 0x20) & 1) != 0;
         if (armed) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)ibpAddr);
             compPtr = *(uintptr_t*)ibpAddr;
             uintptr_t vt = *(uintptr_t*)compPtr;
             typedef void (*fn_t)(void*);
@@ -941,7 +912,6 @@ void EntityList_RegisterEntity_Impl(void* entityListV, void* entityIBP, int cate
 
     // Resolve the entity pointer (CheckPtr each time, matching the original).
     auto entity = [&]() -> uint8_t* {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(entityIBP);
         return *(uint8_t**)entityIBP;
     };
 

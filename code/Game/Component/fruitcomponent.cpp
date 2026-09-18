@@ -114,8 +114,6 @@ void FruitComponent_Startup(FruitComponent* self) {
     void* owner = *reinterpret_cast<void**>(comp + 0x10);
     if (!owner) return;   // not yet wired into an entity
 
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(comp + 0x10);
 
     // FUN_1400052c0 returns an InternalBasePtr (out-param); its first qword is the
     // wrapped component pointer, which the original stores into self+0x28.
@@ -202,8 +200,6 @@ void FruitComponent_Update(FruitComponent* self, int64_t* pDeltaTime) {
 
     float growthFactor = 0.0f;
     if (self->fruitFlag == 0) {
-        if (fn_InternalBasePtr_CheckPtr)
-            fn_InternalBasePtr_CheckPtr(comp + 0x28);
         // growth rate lives at (*(self+0x28))->+0x28 (the linked NatResComp).
         float growthRate = *(float*)(*(uintptr_t*)(comp + 0x28) + 0x28);
         if (growthRate >= fUV) {
@@ -221,8 +217,6 @@ void FruitComponent_Update(FruitComponent* self, int64_t* pDeltaTime) {
     }
 
     // effRate = min((*(self+0x28))->+0x28, g_fUVScale)
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(comp + 0x28);
     float effRate = *(float*)(*(uintptr_t*)(comp + 0x28) + 0x28);
     if (effRate >= fUV) effRate = fUV;
 

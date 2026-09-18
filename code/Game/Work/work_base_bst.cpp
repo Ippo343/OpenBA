@@ -146,7 +146,6 @@ void* WorkBST_RegisterWork_1a30(uintptr_t* root, void* outResult, void* keyIBP) 
         for (;;) {
             // descend left while key < node->key
             for (;;) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(cur));
                 if (*reinterpret_cast<uint64_t*>(keyIBP) < *reinterpret_cast<uint64_t*>(cur)) {
                     uintptr_t* leftPtr = reinterpret_cast<uintptr_t*>(cur + 0x10);
                     if (*leftPtr == 0) {
@@ -159,7 +158,6 @@ void* WorkBST_RegisterWork_1a30(uintptr_t* root, void* outResult, void* keyIBP) 
                     break;
                 }
             }
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(keyIBP);
             if (*reinterpret_cast<uint64_t*>(keyIBP) <= *reinterpret_cast<uint64_t*>(cur)) {
                 *pOut = static_cast<uint64_t>(cur);   // key already present
                 return outResult;
@@ -261,11 +259,9 @@ void WorkBST_BSTFindRemove_25520(uintptr_t* root, void* keyIBP) {
     uintptr_t node = *root;
     if (node == 0) return;
     do {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(node));
         if (*reinterpret_cast<uint64_t*>(keyIBP) < *reinterpret_cast<uint64_t*>(node)) {
             node = *reinterpret_cast<uintptr_t*>(node + 0x10);      // left
         } else {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(keyIBP);
             if (*reinterpret_cast<uint64_t*>(keyIBP) <= *reinterpret_cast<uint64_t*>(node)) {
                 WorkBST_BSTRemove_a6e0(root, reinterpret_cast<void*>(node));
                 return;

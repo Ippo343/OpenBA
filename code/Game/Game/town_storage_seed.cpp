@@ -120,9 +120,6 @@ static inline void* TownMgr() {
         reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf0);
 }
 
-static inline void CheckPtr(void* p) {
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p);
-}
 static inline uint32_t GetTypeIdOf(void* obj) {
     typedef uint32_t (*fn_GetTypeId_t)(void*);
     return (*reinterpret_cast<fn_GetTypeId_t*>(*reinterpret_cast<uintptr_t*>(obj) + 0x10))(obj);
@@ -160,7 +157,6 @@ static void* FindStorageOnEntity(int64_t entity) {
     for (int i = 0; i < count; i++) {
         void** slot = reinterpret_cast<void**>(
             *reinterpret_cast<int64_t*>(entity + 0x30) + static_cast<int64_t>(i) * 8);
-        CheckPtr(slot);
         void* comp = *slot;
         if (!comp) continue;
         if (GetTypeIdOf(comp) == tid) {
@@ -241,7 +237,6 @@ extern "C" void TownStorage_BuildCompleteInit_7ff0(void* componentWithEntity) {
     if (!componentWithEntity) return;
     uintptr_t p = reinterpret_cast<uintptr_t>(componentWithEntity);
 
-    CheckPtr(reinterpret_cast<void*>(p + 0x10));
     int64_t entity = *reinterpret_cast<int64_t*>(p + 0x10);
     void* storageComp = FindStorageOnEntity(entity);
     if (!storageComp) {
@@ -284,7 +279,6 @@ extern "C" void TownStorage_BuildCompleteInit_7ff0(void* componentWithEntity) {
     // _areaBasedLimit (+0x20): multiply _volumeLimit by the MapComponent footprint.
     int tileArea = 1;
     if (*reinterpret_cast<uint8_t*>(d + 0x20) != 0) {
-        CheckPtr(reinterpret_cast<void*>(sc + 0x10));
         int64_t ent2 = *reinterpret_cast<int64_t*>(sc + 0x10);
         // Find the MapComponent (typeid 0x1401c79e0) on the entity.
         void* mapComp = nullptr;
@@ -293,7 +287,6 @@ extern "C" void TownStorage_BuildCompleteInit_7ff0(void* componentWithEntity) {
         for (int i = 0; i < compCount; i++) {
             void** slot = reinterpret_cast<void**>(
                 *reinterpret_cast<int64_t*>(ent2 + 0x30) + static_cast<int64_t>(i) * 8);
-            CheckPtr(slot);
             void* comp = *slot;
             if (comp && GetTypeIdOf(comp) == tidMap) {
                 mapComp = (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, tidMap)) ? comp : nullptr;
@@ -304,7 +297,6 @@ extern "C" void TownStorage_BuildCompleteInit_7ff0(void* componentWithEntity) {
         uintptr_t mapIBP = 0;
         if (fn_InternalBasePtr_Ctor) new (&mapIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(mapComp));   // B.3.3 bridge
-        CheckPtr(&mapIBP);
         if (mapIBP) {
             tileArea = static_cast<int>(*reinterpret_cast<int16_t*>(mapIBP + 0x2e)) *
                        static_cast<int>(*reinterpret_cast<int16_t*>(mapIBP + 0x2c));
@@ -367,7 +359,6 @@ extern "C" void TownStorage_SpawnResources_91660(void* townMgrV, uint32_t mask, 
             for (int i = 0; i < locCount; i++) {
                 int64_t entityRef = *reinterpret_cast<int64_t*>(
                     townMgr[0] + static_cast<int64_t>(i) * 8);
-                CheckPtr(&entityRef);
                 void* storage = FindStorageOnEntity(entityRef);
                 // Original wraps the found component in an IBP before use.
                 uintptr_t compIBP = 0;
@@ -375,10 +366,8 @@ extern "C" void TownStorage_SpawnResources_91660(void* townMgrV, uint32_t mask, 
                     reinterpret_cast<RtObject::Internal*>(storage));   // B.3.3 bridge
                 if (placed < count) {
                     int64_t tmpl = matched[placed % matchedCount];
-                    CheckPtr(&compIBP);
                     if (compIBP &&
                         Seed_CanAccept_cd80(static_cast<int64_t>(compIBP), tmpl, 1)) {
-                        CheckPtr(&compIBP);
                         s_fnAddItem(compIBP, tmpl, 1);
                         placed++;
                         progress = true;

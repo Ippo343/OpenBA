@@ -97,7 +97,6 @@ static void* VerifyLodgeForester(void* lodge, bool dump) {
         if (count > 0 && count <= 512 && Readable(reinterpret_cast<void*>(arr), (size_t)count * 8)) {
             for (int i = 0; i < count; ++i) {
                 void** slot = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
                 void* comp = *slot;
                 uint32_t ct = SafeGetTypeId(comp);
                 void* desc = (comp && Readable(comp, 0x20)) ? *reinterpret_cast<void**>((uintptr_t)comp + 0x18) : nullptr;

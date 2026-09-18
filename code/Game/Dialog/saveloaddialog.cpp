@@ -67,7 +67,6 @@ static uint64_t FindChildElem(void* parentElem, const char* name) {
     System::String nameStr(name);
     uint64_t resultPtr = 0;
     fn_FindElement(parentElem, &resultPtr, &nameStr);
-    fn_InternalBasePtr_CheckPtr(&resultPtr);
     void* rawElem = (void*)resultPtr;
     // Wrap in InternalBasePtr
     uint64_t basePtr = 0;
@@ -79,7 +78,6 @@ static uint64_t FindChildElem(void* parentElem, const char* name) {
 // Helper: Virtual call to Element::SetColor(this, color) — vtable[10]
 // ============================================================
 static void Element_SetColor(void* elem, uint32_t color) {
-    fn_InternalBasePtr_CheckPtr(&elem);
     void* rawElem = *(void**)&elem;
     typedef void (*fn_SetColor_t)(void* self, uint32_t color);
     void** vtable = *(void***)rawElem;
@@ -161,7 +159,6 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
     totalSlots = (totalSlots / 3) * 3;
 
     // Set table size: (totalSlots/3 + 1) rows, 3 columns
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x108));
     void* tableElem = *(void**)(s + 0x108);
     fn_TableElement_SetSize(tableElem, totalSlots / 3 + 1, 3);
 
@@ -184,14 +181,12 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
         void* clonedElem = *(void**)cloneBuf;
 
         // Add cloned element to table at index i
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x108));
         fn_TableElement_SetChild2(*(void**)(s + 0x108), &clonedElem, i);
 
         // Initialize entry struct (8 fields, all zero initially)
         uint64_t entry[8] = {};
 
         // Find child elements in the cloned row
-        fn_InternalBasePtr_CheckPtr(&clonedElem);
         entry[0] = FindChildElem((void*)clonedElem, "labelSaveName");   // +0x00: TextElement
         entry[1] = FindChildElem((void*)clonedElem, "labelSaveDate");   // +0x08: TextElement
         entry[2] = FindChildElem((void*)clonedElem, "imageSaveIcon");   // +0x10: ImageElement
@@ -200,11 +195,9 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
         entry[5] = FindChildElem((void*)clonedElem, "selectSave");      // +0x28: Element (toggled by Update for selection)
 
         // Set imageSaveIcon flags: disable mouse-over highlight (0x10000)
-        fn_InternalBasePtr_CheckPtr(&entry[2]);
         fn_Element_SetFlagsOnOff((void*)entry[2], 0x10000, 0);
 
         // Set imageSaveIcon element ID for selection tracking (ID = i + 4)
-        fn_InternalBasePtr_CheckPtr(&entry[2]);
         fn_Element_SetElementId((void*)entry[2], i + 4);
 
         // Check if SaveInfo has a valid Sprite (thumbnail)
@@ -216,11 +209,9 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
             uint8_t sprite[16];
             memcpy(sprite, saveInfo, 16);
 
-            fn_InternalBasePtr_CheckPtr(&entry[2]);
             fn_ImageElement_SetSprite((void*)entry[2], sprite);
 
             // Hide imageCorrupt overlay
-            fn_InternalBasePtr_CheckPtr(&entry[4]);
             fn_Element_SetFlagsOnOff((void*)entry[4], 1, 0);
         } else {
             // --- Build sprite from raw image data ---
@@ -307,7 +298,6 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
             uint8_t spriteBuf[16] = {};
             fn_Sprite_Ctor_ByIndex(spriteBuf, sheetFinal, 0);
 
-            fn_InternalBasePtr_CheckPtr(&entry[2]);
             fn_ImageElement_SetSprite((void*)entry[2], spriteBuf);
 
             entry[7] = (uint64_t)sheetFinal;
@@ -315,11 +305,9 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
             // Check save validity: status at saveInfo+0x44
             if (*(int*)((uintptr_t)saveInfo + 0x44) == 2) {
                 // Valid save: hide imageCorrupt overlay
-                fn_InternalBasePtr_CheckPtr(&entry[4]);
                 fn_Element_SetFlagsOnOff((void*)entry[4], 1, 0);
             } else {
                 // Invalid/corrupt: dim the icon
-                fn_InternalBasePtr_CheckPtr(&entry[2]);
                 typedef void (*fn_SetColor_t)(void* self, uint32_t color);
                 void** vtable = *(void***)(void*)entry[2];
                 ((fn_SetColor_t)vtable[10])((void*)entry[2], 0xff808080);
@@ -332,7 +320,6 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
                 // Valid save: show formatted date string
                 System::String dateStr;
                 fn_DateTime_AsString((void*)((uintptr_t)saveInfo + 0x30), &dateStr);
-                fn_InternalBasePtr_CheckPtr(&entry[1]);
                 fn_TextElement_SetParameter((void*)entry[1], 0, &dateStr);
             } else {
                 // Corrupt save: show "Corrupt" text from string table
@@ -342,12 +329,10 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
                 fn_UIString_Ctor(uiStr, *(uint64_t*)(keyMapObj + 0xD8), &corruptKey);
                 System::String sysStr;
                 fn_UIString_ToSystemString(uiStr, &sysStr);
-                fn_InternalBasePtr_CheckPtr(&entry[1]);
                 fn_TextElement_SetParameter((void*)entry[1], 0, &sysStr);
             }
 
             // Set save name: saveInfo+0x10 is the name String
-            fn_InternalBasePtr_CheckPtr(&entry[0]);
             fn_TextElement_SetParameter((void*)entry[0], 0,
                                          (void*)((uintptr_t)saveInfo + 0x10));
         }
@@ -378,14 +363,12 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
         void* clonedElem = *(void**)cloneBuf;
 
         // Add to table
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x108));
         fn_TableElement_SetChild2(*(void**)(s + 0x108), &clonedElem, i);
 
         // Initialize empty entry struct
         uint64_t entry[8] = {};
 
         // Find child elements (same 7 lookups)
-        fn_InternalBasePtr_CheckPtr(&clonedElem);
         entry[0] = FindChildElem((void*)clonedElem, "labelSaveName");
         entry[1] = FindChildElem((void*)clonedElem, "labelSaveDate");
         entry[2] = FindChildElem((void*)clonedElem, "imageSaveIcon");
@@ -394,13 +377,10 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
         entry[5] = FindChildElem((void*)clonedElem, "selectSave");
 
         // Hide imageCorrupt and selectSave overlays for empty slots
-        fn_InternalBasePtr_CheckPtr(&entry[4]);
         fn_Element_SetFlagsOnOff((void*)entry[4], 1, 0);
-        fn_InternalBasePtr_CheckPtr(&entry[5]);
         fn_Element_SetFlagsOnOff((void*)entry[5], 1, 0);
 
         // Dim border (SetColor via vtable[10] = 0x80ffffff)
-        fn_InternalBasePtr_CheckPtr(&entry[3]);
         {
             typedef void (*fn_SetColor_t)(void* self, uint32_t color);
             void** vtable = *(void***)(void*)entry[3];
@@ -408,7 +388,6 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
         }
 
         // Dim icon (SetColor via vtable[10] = 0x20ffffff)
-        fn_InternalBasePtr_CheckPtr(&entry[2]);
         {
             typedef void (*fn_SetColor_t)(void* self, uint32_t color);
             void** vtable = *(void***)(void*)entry[2];
@@ -1114,12 +1093,10 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
         // FindElementType on the dialog InternalPtr returns a TextElement InternalPtr
         uint64_t warnDlgPtr = 0;
         new (&warnDlgPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(warnDlg));   // B.3.3 bridge
-        fn_InternalBasePtr_CheckPtr(&warnDlgPtr);
 
         // Find TextElement within dialog (uses g_TypeId_TextElement)
         uint64_t textElemPtr = 0;
         fn_DialogInstance_FindElementType((void*)warnDlgPtr, &textElemPtr, *g_TypeId_TextElement);
-        fn_InternalBasePtr_CheckPtr(&textElemPtr);
 
         // Check IsDerivedFrom TextElement
         void* rawElem = *(void**)&textElemPtr;
@@ -1128,11 +1105,9 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
 
         uint64_t textPtr = 0;
         new (&textPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(textElem));   // B.3.3 bridge
-        fn_InternalBasePtr_CheckPtr(&textPtr);
 
         // SetParameter(0) = mod name, SetParameter(1) = mod name (again, as per decompilation)
         fn_TextElement_SetParameter((void*)textPtr, 0, modNameStr);
-        fn_InternalBasePtr_CheckPtr(&textPtr);
         fn_TextElement_SetParameter((void*)textPtr, 1, (void*)((uintptr_t)modNameStr + 8));
 
         // SetParameter(2) = formatted version string "%i (%s)"
@@ -1145,7 +1120,6 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
         System::String verStrBuf;
         fn_Configuration_GetVersionString(&verStrBuf, isBeta, (bool)(isBeta != 0));
         System::String fmtBuf = System::String::Format("%i (%s)", (unsigned)modVer, verStrBuf._data);
-        fn_InternalBasePtr_CheckPtr(&textPtr);
         fn_TextElement_SetParameter((void*)textPtr, 2, &fmtBuf);
 
         // Show the warning dialog and check if user confirmed.

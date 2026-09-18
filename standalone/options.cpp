@@ -293,7 +293,6 @@ void OptionsInit() {
     o.achIgnoreMods          = Raw("BANISHED_ACH_IGNORE_MODS");
     o.factoryEnum            = Raw("BANISHED_FACTORY_ENUM");
     o.fastTrig               = Raw("BANISHED_FAST_TRIG");
-    o.checkPtrNop            = Raw("BANISHED_CHECKPTR_NOP");
     o.treeGuards             = Raw("BANISHED_TREE_GUARDS");
     o.treePrefetch           = Raw("BANISHED_TREE_PREFETCH");
     o.unregCensusFrames      = Int("BANISHED_UNREG_CENSUS", 0);

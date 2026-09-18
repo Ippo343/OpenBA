@@ -26,10 +26,6 @@
 // Resolved helpers
 // ============================================================
 
-// Object::InternalBasePtr::CheckPtr -- dispatch slot at [0x140152ab0]
-typedef void (*fn_CheckPtr_t)(void* internalBasePtrAddr);
-static fn_CheckPtr_t s_fn_CheckPtr = nullptr;
-
 // FUN_140002e10(entityPtr, outBuildingPtr) -- get building component from entity
 typedef void (*fn_GetBuildingComponent_t)(void* entity, void* outPtr);
 static fn_GetBuildingComponent_t s_fn_GetBuildingComponent = nullptr;
@@ -61,10 +57,6 @@ void AttendanceComponent_Update(AttendanceComponent* self) {
     if (queueCount == 0)
         return;
 
-    // CheckPtr on owner smart pointer at +0x10
-    if (s_fn_CheckPtr)
-        s_fn_CheckPtr((void*)(selfAddr + 0x10));
-
     // Get entity pointer
     void* entity = *(void**)(selfAddr + 0x10);
 
@@ -72,10 +64,6 @@ void AttendanceComponent_Update(AttendanceComponent* self) {
     int64_t buildingPtr = 0;
     if (s_fn_GetBuildingComponent)
         s_fn_GetBuildingComponent(entity, &buildingPtr);
-
-    // CheckPtr on returned building pointer
-    if (s_fn_CheckPtr)
-        s_fn_CheckPtr(&buildingPtr);
 
     // DIAGNOSTIC ONLY (the deref below stays faithful): retail relies on every attendance
     // building carrying a WorkPlaceComponent, so a null here means something upstream
@@ -114,7 +102,6 @@ static void AttendanceComponent_ReportMissingWorkplace(AttendanceComponent* self
         fprintf(stderr, "[AttendanceComponent::Update]   entity flags=0x%x components=%d:", flags, n);
         for (int i = 0; comps && i < n && i < 32; ++i) {
             int64_t c = comps[i];
-            if (s_fn_CheckPtr) s_fn_CheckPtr(&c);
             if (!c) { fprintf(stderr, " <null>"); continue; }
             void** vt = *reinterpret_cast<void***>(c);
             const uint32_t tid = (vt && vt[2]) ? reinterpret_cast<uint32_t(*)(void*)>(vt[2])(reinterpret_cast<void*>(c)) : 0;
@@ -204,16 +191,13 @@ void AttendanceComponent_ReleasePartnerSlot(void* workerP, char reroll) {
     int64_t selfIbp = 0;
     if (fn_InternalBasePtr_Ctor) new (&selfIbp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(workerP));   // B.3.3 bridge
-    if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
     int64_t linked = *slot;
     if (s_fn_AC_002cc0) s_fn_AC_002cc0(reinterpret_cast<int64_t*>(linked + 0x28), &selfIbp);
 
-    if (s_fn_CheckPtr) s_fn_CheckPtr(reinterpret_cast<void*>(linked + 0x10));
     int64_t meshIbp = 0;
     void* mesh = s_fn_AC_FindMesh
                      ? s_fn_AC_FindMesh(*reinterpret_cast<int64_t*>(linked + 0x10), &meshIbp)
                      : nullptr;
-    if (s_fn_CheckPtr) s_fn_CheckPtr(mesh);
     if (s_fn_AC_MeshSetFlag && mesh)
         s_fn_AC_MeshSetFlag(*reinterpret_cast<void**>(mesh), 2, '\0');
 
@@ -248,16 +232,13 @@ static void AttendanceComponent_ReleaseLinkSlot(void* workerP, int slotOff) {
     int64_t selfIbp = 0;
     if (fn_InternalBasePtr_Ctor) new (&selfIbp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(workerP));   // B.3.3 bridge
-    if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
     int64_t linked = *slot;
     if (s_fn_AC_002cc0) s_fn_AC_002cc0(reinterpret_cast<int64_t*>(linked + 0x28), &selfIbp);
 
-    if (s_fn_CheckPtr) s_fn_CheckPtr(reinterpret_cast<void*>(linked + 0x10));
     int64_t meshIbp = 0;
     void* mesh = s_fn_AC_FindMesh
                      ? s_fn_AC_FindMesh(*reinterpret_cast<int64_t*>(linked + 0x10), &meshIbp)
                      : nullptr;
-    if (s_fn_CheckPtr) s_fn_CheckPtr(mesh);
     if (s_fn_AC_MeshSetFlag && mesh)
         s_fn_AC_MeshSetFlag(*reinterpret_cast<void**>(mesh), 2, '\0');
 
@@ -286,12 +267,10 @@ void AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr) {
         int64_t arr = *(int64_t*)(host + 0x30);
         for (int i = 0; i < count; i++) {
             int64_t* slot = (int64_t*)(arr + (int64_t)i * 8);
-            if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
             void* comp = (void*)*slot;
             typedef uint32_t (*GetTypeId_t)(void*);
             uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
             if (tid == *s_pTId_JobHost) {
-                if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
                 void* c = (void*)*slot;
                 if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_pTId_JobHost)) found = c;
                 break;
@@ -317,17 +296,13 @@ void AttendanceComponent_ProcessQueue(void* selfP) {
         if (fn_InternalBasePtr_Ctor) new (&queuedIbp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(selfP));   // B.3.3 bridge
         int64_t* slot = *(int64_t**)(self + 0x28);
-        if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
         int64_t worker = *slot;
-        if (s_fn_CheckPtr) s_fn_CheckPtr(&queuedIbp);
         if (*(int64_t*)(worker + 0x208) == queuedIbp) {
             if (s_fn_AC_115a50) s_fn_AC_115a50((void*)worker, '\x01');
         } else {
-            if (s_fn_CheckPtr) s_fn_CheckPtr(&queuedIbp);
             if (*(int64_t*)(worker + 0x228) == queuedIbp) {
                 if (s_fn_AC_59b0) s_fn_AC_59b0((void*)worker);
             } else {
-                if (s_fn_CheckPtr) s_fn_CheckPtr(&queuedIbp);
                 if (*(int64_t*)(worker + 0x230) == queuedIbp) {
                     if (s_fn_AC_1650) s_fn_AC_1650((void*)worker);
                 }
@@ -342,10 +317,6 @@ void AttendanceComponent_ProcessQueue(void* selfP) {
 void AttendanceComponent_InitFuncs() {
     if (s_initialized) return;
 
-    // CheckPtr -- indirect call through dispatch slot at [0x140152ab0]
-    uintptr_t slot = ResolveAddr(Module::Exe, 0x140152ab0);
-    if (slot) s_fn_CheckPtr = *reinterpret_cast<fn_CheckPtr_t*>(slot);
-
     s_fn_GetBuildingComponent = reinterpret_cast<fn_GetBuildingComponent_t>(
         ResolveAddr(Module::Exe, 0x140002e10));
 
@@ -355,8 +326,8 @@ void AttendanceComponent_InitFuncs() {
     s_initialized = true;
 
 #ifdef _DEBUG
-    printf("[AttendanceComponent] Funcs resolved: CheckPtr=%p GetBuilding=%p ProcessQueue=%p\n",
-           (void*)s_fn_CheckPtr, (void*)s_fn_GetBuildingComponent,
+    printf("[AttendanceComponent] Funcs resolved: GetBuilding=%p ProcessQueue=%p\n",
+           (void*)s_fn_GetBuildingComponent,
            (void*)s_fn_ProcessAttendanceQueue);
 #endif
 }
@@ -391,10 +362,8 @@ extern "C" uint8_t AttendanceComponent_CommandMask(void* selfP, int /*cmd*/) {
     AttendanceComponent_InitFuncs();
     const uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
     if (!s_fn_GetBuildingComponent) return 0;
-    if (s_fn_CheckPtr) s_fn_CheckPtr(reinterpret_cast<void*>(self + 0x10));
     int64_t wpcIbp = 0;
     s_fn_GetBuildingComponent(*reinterpret_cast<void**>(self + 0x10), &wpcIbp);
-    if (s_fn_CheckPtr) s_fn_CheckPtr(&wpcIbp);
     return *reinterpret_cast<char*>(wpcIbp + 0x50) ? 3 : 1;
 }
 
@@ -416,14 +385,10 @@ extern "C" void AttendanceComponent_Command(void* selfP, int /*cmd*/) {
     AttendanceComponent_InitFuncs();
     const uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
     if (!s_fn_GetBuildingComponent) return;
-    if (s_fn_CheckPtr) s_fn_CheckPtr(reinterpret_cast<void*>(self + 0x10));
     int64_t wpcIbp = 0;
     s_fn_GetBuildingComponent(*reinterpret_cast<void**>(self + 0x10), &wpcIbp);
-    if (s_fn_CheckPtr) s_fn_CheckPtr(&wpcIbp);
     const char cur = *reinterpret_cast<char*>(wpcIbp + 0x50);
-    if (s_fn_CheckPtr) s_fn_CheckPtr(&wpcIbp);
     WorkPlaceComponent_SetAccepting(wpcIbp, cur == 0);
-    if (s_fn_CheckPtr) s_fn_CheckPtr(&wpcIbp);
     if (*reinterpret_cast<char*>(wpcIbp + 0x50) == 0)
         AttendanceComponent_ProcessQueue(selfP);
 }

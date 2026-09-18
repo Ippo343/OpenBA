@@ -376,7 +376,6 @@ extern "C" void Goals_SavePrepass_8270(void* selfV) {
     uint8_t* root = *reinterpret_cast<uint8_t**>(selfB + 0x30);
     for (uint8_t* node = BstLeftmostB(root); node; node = BstNextB(node)) {
         uint8_t* ibpField = node + 0x08;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibpField);
         void* entity = *reinterpret_cast<void**>(ibpField);
         void* vtbl = *reinterpret_cast<void**>(entity);
         typedef void (*fn_Vtbl48_t)(void*);
@@ -672,7 +671,6 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
             uint8_t* idRoot = *reinterpret_cast<uint8_t**>(self + 0x30);
             for (uint8_t* node = BstLeftmostB(idRoot); node; node = BstNextB(node)) {
                 uint8_t* ibpField = node + 0x08;
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibpField);
                 void* entity = *reinterpret_cast<void**>(ibpField);
                 void* vtbl = *reinterpret_cast<void**>(entity);
 
@@ -682,7 +680,6 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
 
                 int32_t ver = g_fn_Serializer_GetVersion ? g_fn_Serializer_GetVersion(serializerBuf) : 0;
                 if (ver == 2) {
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibpField);
                     int32_t counter = *reinterpret_cast<int32_t*>(self + 0x18);
                     uint32_t hi = *reinterpret_cast<uint32_t*>(*reinterpret_cast<uint8_t**>(ibpField) + 0x20);
                     uint64_t value = static_cast<uint64_t>(static_cast<uint32_t>(counter)) |
@@ -705,7 +702,6 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
             uint8_t* idRoot = *reinterpret_cast<uint8_t**>(self + 0x30);
             for (uint8_t* node = BstLeftmostB(idRoot); node; node = BstNextB(node)) {
                 uint8_t* ibpField = node + 0x08;
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibpField);
                 void* entity = *reinterpret_cast<void**>(ibpField);
                 if (*reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(entity) + 0x10) != 0) {
                     uint64_t value = static_cast<uint32_t>(*reinterpret_cast<int32_t*>(node)); // key only; upper 32 unused by retail
@@ -728,7 +724,6 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
 
             for (int32_t i = 0; i < entityCount; ++i) {
                 void* entity = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(entityArrayBase) + i * 8);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entity);
 
                 void* workComponent = nullptr;
                 int32_t compCount = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(entity) + 0x38);
@@ -736,13 +731,11 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
                     void* compArrayBase = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(entity) + 0x30);
                     for (int32_t c = 0; c < compCount; ++c) {
                         void** slot = reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(compArrayBase) + c * 8);
-                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
                         void* comp = *slot;
                         void* compVtbl = *reinterpret_cast<void**>(comp);
                         typedef uint32_t (*fn_GetTypeId_t)(void*);
                         uint32_t tid = reinterpret_cast<fn_GetTypeId_t>(*reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(compVtbl) + 0x10))(comp);
                         if (g_TypeId_WorkComponent && tid == *g_TypeId_WorkComponent) {
-                            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
                             void* obj = *slot;
                             bool derived = fn_IsDerivedFrom && fn_IsDerivedFrom(obj, *g_TypeId_WorkComponent);
                             workComponent = derived ? obj : nullptr;
@@ -755,7 +748,6 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
                 if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(workComponent));   // B.3.3 bridge
                 if (ibp != nullptr) {
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ibp);
                     int32_t workId = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(ibp) + 0x28);
 
                     uint8_t* slotRoot = *reinterpret_cast<uint8_t**>(gameWorld + 0x118);
@@ -763,7 +755,6 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
                     int32_t* slotNode = LayoutB_Find(reinterpret_cast<int32_t*>(slotRoot), workId);
 
                     if (slotNode != nullptr) {
-                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ibp);
                         int32_t* found = LayoutA_Find(localFoundRoot, workId);
                         if (found != nullptr && s_eraseA) {
                             s_eraseA(&localFoundRoot, found);
@@ -794,7 +785,6 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
                     }
 
                     uint8_t* ibpField = reinterpret_cast<uint8_t*>(idTreeNode) + 0x08; // node+0x08
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibpField);
                     void* entity = *reinterpret_cast<void**>(ibpField);
                     int32_t orderKey = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(entity) + 0x24);
 
@@ -805,7 +795,6 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
                         *reinterpret_cast<int32_t**>(self + 0x10) = workCountRoot2;
                     }
 
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibpField);
                     uint8_t keyOutBuf[0x20];
                     std::memset(keyOutBuf, 0, sizeof(keyOutBuf));
                     void* entityVtbl = *reinterpret_cast<void**>(entity);
@@ -847,7 +836,6 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
             uint8_t* idRoot = *reinterpret_cast<uint8_t**>(self + 0x30);
             for (uint8_t* node = BstLeftmostB(idRoot); node; node = BstNextB(node)) {
                 uint8_t* ibpField = node + 0x08;
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibpField);
                 void* entity = *reinterpret_cast<void**>(ibpField);
                 void* vtbl = *reinterpret_cast<void**>(entity);
                 typedef void (*fn_Vtbl48_t)(void*);

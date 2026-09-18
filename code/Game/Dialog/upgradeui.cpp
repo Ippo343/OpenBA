@@ -35,7 +35,6 @@ void UpgradeUI_Serialize(UpgradeUI* self) {
     void* upgradeDesc = isUpgrade ? desc : nullptr;
 
     // CheckPtr on the InternalBasePtr at +0x20 before reading
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
     void* elem = *(void**)(s + 0x20);
 
     // Check if element is a ButtonElement (exref 0x1401514f8)
@@ -47,18 +46,15 @@ void UpgradeUI_Serialize(UpgradeUI* self) {
         reinterpret_cast<RtObject::Internal*>(checkedElem));   // B.3.3 bridge
 
     // Set button element ID to 33000
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x30));
     void* button = *(void**)(s + 0x30);
     fn_Element_SetElementId(button, 33000);
 
     // Get button's child at index 4 (the ImageElement)
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x30));
     button = *(void**)(s + 0x30);
     uint8_t childBuf[16];
     fn_Element_Child(button, childBuf, 4);
 
     // Check if child is an ImageElement type
-    fn_InternalBasePtr_CheckPtr(childBuf);
     void* childElem = *(void**)childBuf;
     bool isImage = fn_IsDerivedFrom(childElem, *g_TypeId_ImageElement);
     void* checkedImage = isImage ? childElem : nullptr;
@@ -104,13 +100,11 @@ void UpgradeUI_Serialize(UpgradeUI* self) {
     fn_Sprite_Ctor(sprite, *(uint64_t*)(brc + 0x20), (void*)(brc + 0x28));
 
     // Set sprite on the image element
-    fn_InternalBasePtr_CheckPtr(imageIBP);
     void* imageElem = *(void**)imageIBP;
     fn_ImageElement_SetSprite(imageElem, sprite);
 
     // Set button's user data to the target template
     void* subDescBase = *(void**)((uintptr_t)upgradeDesc + 0x20);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x30));
     button = *(void**)(s + 0x30);
     fn_Element_SetUserData(button, subDescBase);
 }
@@ -245,8 +239,7 @@ bool Ready() {
         && g_TypeId_HelpButtonElem && *g_TypeId_HelpButtonElem
         && g_TypeId_ImageElement && *g_TypeId_ImageElement
         && g_TypeId_ToolbarDescription_FC && *g_TypeId_ToolbarDescription_FC
-        && fn_IsDerivedFrom && fn_InternalBasePtr_Ctor
-        && fn_InternalBasePtr_CheckPtr;
+        && fn_IsDerivedFrom && fn_InternalBasePtr_Ctor;
 }
 
 // Serialize is only safe when the bound config is an UpgradeUIConfig with a

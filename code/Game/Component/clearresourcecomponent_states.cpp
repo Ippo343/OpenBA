@@ -119,7 +119,6 @@ extern "C" char ClearResource_State2Enter(void* data, void* /*sm*/) {
     int64_t entityList = *reinterpret_cast<int64_t*>(gameWorld + 0xe8);
     if (entityList == 0) return 1;
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entity);
 
     // Idempotence guard (bit 0x400 at entity+0x40) — see the header note: this is
     // what keeps the sibling `destroy` controller from double-pushing the entity.
@@ -127,7 +126,6 @@ extern "C" char ClearResource_State2Enter(void* data, void* /*sm*/) {
         return 1;
     }
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entity);
     if (s_MarkForRemoval) s_MarkForRemoval(entity);
     // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
     GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(entityList + 0xd0))

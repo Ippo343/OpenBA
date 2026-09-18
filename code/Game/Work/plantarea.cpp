@@ -230,7 +230,7 @@ bool PlantArea_ResolveFuncs() {
               s_fn_Serializer_Dtor && s_fn_Serializer_SerializeInt &&
               s_fn_ExternalRef_Serialize &&
               s_fn_CropDescComplete &&
-              fn_InternalBasePtr_CheckPtr && fn_MemFreeStatic &&
+              fn_MemFreeStatic &&
               g_pGameWorldSingleton && s_fHalfCellOffset &&
               s_typeConst && s_vtable_PlantArea && s_vtable_Work;
 
@@ -305,17 +305,14 @@ int PlantArea_Slot4_Impl(PlantArea* self, void* entityIBP, uint64_t /*param3*/, 
     uintptr_t* selfQ = (uintptr_t*)self;
 
     // Step 1: Find components on workplace entity
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t matDescIBP = 0;
     s_fn_FindComp_MatDesc(*(uintptr_t*)(selfAddr + 0x10), &matDescIBP);
 
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t cropDescIBP = 0;
     s_fn_FindComp_CropDesc(*(uintptr_t*)(selfAddr + 0x10), &cropDescIBP);
 
     // Step 2: Check max workers vs current tree count
     int treeCount = (int)selfQ[10];  // self->field_50
-    fn_InternalBasePtr_CheckPtr(&matDescIBP);
     if (*(int*)(matDescIBP + 0x30) == 0) {
         int maxWorkers = s_fn_CalcMaxWorkers(matDescIBP);
         *(int*)(matDescIBP + 0x30) = maxWorkers;
@@ -331,11 +328,8 @@ int PlantArea_Slot4_Impl(PlantArea* self, void* entityIBP, uint64_t /*param3*/, 
     // Step 3: Get map and citizen position
     int* mapGrid = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
 
-    fn_InternalBasePtr_CheckPtr(entityIBP);
     uintptr_t citizenEntity = *(uintptr_t*)entityIBP;
-    fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
     uintptr_t aiComp = *(uintptr_t*)(citizenEntity + 0x278);
-    fn_InternalBasePtr_CheckPtr((void*)(aiComp + 0x68));
     uintptr_t posComp = *(uintptr_t*)(aiComp + 0x68);
 
     int mapSz = *mapGrid;
@@ -378,7 +372,6 @@ int PlantArea_Slot4_Impl(PlantArea* self, void* entityIBP, uint64_t /*param3*/, 
             }
 
             // Get grid cell index from CropDescription
-            fn_InternalBasePtr_CheckPtr(&cropDescIBP);
             uintptr_t cropDescVal = cropDescIBP;
             int srcCellIdx = *(int*)((uintptr_t)i * 0x20 + *(uintptr_t*)(cropDescVal + 0x58));
 
@@ -398,7 +391,6 @@ int PlantArea_Slot4_Impl(PlantArea* self, void* entityIBP, uint64_t /*param3*/, 
             cellPair[0] = srcCellIdx;
             cellPair[1] = -1;
             if (pairedAvailable) {
-                fn_InternalBasePtr_CheckPtr(&cropDescIBP);
                 uintptr_t cropDescVal2 = cropDescIBP;
                 cellPair[1] = *(int*)((uintptr_t)pairedIdx * 0x20 +
                                       *(uintptr_t*)(cropDescVal2 + 0x58));
@@ -433,7 +425,6 @@ int PlantArea_Slot4_Impl(PlantArea* self, void* entityIBP, uint64_t /*param3*/, 
             s_fn_GetTerrainPos(mapGrid, pathPos, &targetPos.x, 0, nullptr);
 
             // Get citizen entity for action
-            fn_InternalBasePtr_CheckPtr(entityIBP);
             uintptr_t citizenBuf = *(uintptr_t*)entityIBP;
 
             int harvestMode = pairedAvailable ? 2 : 1;
@@ -457,7 +448,6 @@ int PlantArea_Slot4_Impl(PlantArea* self, void* entityIBP, uint64_t /*param3*/, 
 
             // Assign work and register with AI
             int priority = (int)selfQ[4];
-            fn_InternalBasePtr_CheckPtr(entityIBP);
             uintptr_t citizenEnt = *(uintptr_t*)entityIBP;
 
             uintptr_t vtable = *(uintptr_t*)self;
@@ -517,7 +507,6 @@ int PlantArea_Slot4_Impl(PlantArea* self, void* entityIBP, uint64_t /*param3*/, 
 
     // If tree count is 0 and we exhausted all cells, mark crop desc as complete
     if ((int)selfQ[10] == 0) {
-        fn_InternalBasePtr_CheckPtr(&cropDescIBP);
         s_fn_CropDescComplete(cropDescIBP);
     }
 
@@ -677,9 +666,7 @@ void PlantArea_Cleanup_Impl(PlantArea* self) {
         }
 
         // Cancel work via citizen AI
-        fn_InternalBasePtr_CheckPtr((void*)(rightmost + 8));
         uintptr_t citizenEntity = *(uintptr_t*)(rightmost + 8);
-        fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
         s_fn_TaskCancel((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
 
         count = *(int*)(selfAddr + 0x50);
@@ -817,13 +804,11 @@ cleanup:
 void* PlantArea_GetTarget_Impl(PlantArea* self, void* outPtr) {
     uintptr_t selfAddr = (uintptr_t)self;
 
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t entity = *(uintptr_t*)(selfAddr + 0x10);
 
     uintptr_t subIBP[2] = {0};
     void* result = s_fn_FindSubEntity(entity, subIBP);
 
-    fn_InternalBasePtr_CheckPtr(result);
     *(uintptr_t*)outPtr = *(uintptr_t*)(*(uintptr_t*)result + 0x48);
 
     return outPtr;

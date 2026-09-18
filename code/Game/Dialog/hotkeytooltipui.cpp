@@ -88,7 +88,6 @@ void Hotkey_BuildKeyName(void* retval, int device, int keyIndex) {
 static void FillHotKeyText(void* self, const char* elemName, int paramIndex,
                            void* keyMap, int shortcutId) {
     System::String nameStr(elemName);
-    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)self + 0x18));
     void* dlgInst = *(void**)((uintptr_t)self + 0x18);
     uint64_t retval = 0;
     fn_DialogInstance_FindElement(dlgInst, &retval, &nameStr);
@@ -107,14 +106,13 @@ static void FillHotKeyText(void* self, const char* elemName, int paramIndex,
     System::String sysStr;
     fn_UIString_ToSystemString(uiStr, &sysStr);
 
-    fn_InternalBasePtr_CheckPtr(&textElem);
     fn_TextElement_SetParameter(textElem, paramIndex, &sysStr);
 }
 
 // HotKeyToolTipUI::Serialize — Slot4 (+0x20). self = the controller.
 void HotKeyToolTipUI_Slot4(void* self) {
     if (!self) return;
-    if (!fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr || !fn_IsDerivedFrom
+    if (!fn_InternalBasePtr_Ctor || !fn_IsDerivedFrom
         || !fn_UIString_Ctor || !fn_UIString_ToSystemString
         || !fn_DialogInstance_FindElement || !fn_TextElement_SetParameter
         || !fn_KeyMap_GetInputForId || !fn_KeyMap_GetDeviceForId
@@ -129,7 +127,6 @@ void HotKeyToolTipUI_Slot4(void* self) {
     uint64_t elemIbp = 0;
     new (&elemIbp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
     if (!elemIbp) return;
-    fn_InternalBasePtr_CheckPtr(&elemIbp);
 
     int shortcutId = *(int*)((uintptr_t)elemIbp + 0xC0);
     if (shortcutId < 0) return;  // no shortcut assigned -> leave default

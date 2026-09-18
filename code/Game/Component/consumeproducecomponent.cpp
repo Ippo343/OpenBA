@@ -53,10 +53,6 @@ static fn_Serializer_GetVersion_t s_fn_Serializer_GetVersion = nullptr;
 typedef void (*fn_Serialize_FloatArray_t)(void* self, int count, float* array, const char* name);
 static fn_Serialize_FloatArray_t s_fn_Serialize_FloatArray = nullptr;
 
-// fn_InternalBasePtr_CheckPtr — dispatch slot at entity owner
-typedef void (*fn_CheckPtr_t)(void* self);
-static fn_CheckPtr_t s_fn_CheckPtr = nullptr;
-
 // DWORD_1401c7388 — ConsumeProduceDescription type ID
 static uint32_t* s_TypeId_ConsumeProduceDescription = nullptr;
 
@@ -87,10 +83,6 @@ static void EnsureHelpers() {
 
     slot = ResolveAddr(Module::Exe, 0x140151ea8);
     if (slot) s_fn_Serialize_FloatArray = *reinterpret_cast<fn_Serialize_FloatArray_t*>(slot);
-
-    // CheckPtr dispatch slot at 0x140152ab0
-    slot = ResolveAddr(Module::Exe, 0x140152ab0);
-    if (slot) s_fn_CheckPtr = *reinterpret_cast<fn_CheckPtr_t*>(slot);
 
     // ConsumeProduceDescription type ID at 0x1401c7388
     s_TypeId_ConsumeProduceDescription = reinterpret_cast<uint32_t*>(
@@ -200,11 +192,8 @@ void ConsumeProduceComponent_Shutdown(ConsumeProduceComponent* self, void* strea
 void ConsumeProduceComponent_Serialize(ConsumeProduceComponent* self) {
     EnsureHelpers();
 
-    if (!s_fn_CheckPtr || !s_fn_IsDerivedFrom_dispatch || !s_TypeId_ConsumeProduceDescription)
+    if (!s_fn_IsDerivedFrom_dispatch || !s_TypeId_ConsumeProduceDescription)
         return;
-
-    // CheckPtr on the owner InternalBasePtr at +0x10
-    s_fn_CheckPtr((void*)((uintptr_t)self + 0x10));
 
     void* entity = self->owner;
     if (!entity) return;
@@ -351,11 +340,11 @@ void ConsumeProduceComponent_InitFuncs() {
 #ifdef _DEBUG
     printf("[ConsumeProduceComponent] Funcs resolved: ParentShutdown=%p "
            "Ctor=%p Dtor=%p SerInt=%p GetVer=%p SerFloat=%p "
-           "CheckPtr=%p TypeId=%p IsDerived=%p\n",
+           "TypeId=%p IsDerived=%p\n",
            (void*)s_fn_ParentShutdown, (void*)s_fn_Serializer_Ctor,
            (void*)s_fn_Serializer_Dtor, (void*)s_fn_Serialize_Int,
            (void*)s_fn_Serializer_GetVersion,
-           (void*)s_fn_Serialize_FloatArray, (void*)s_fn_CheckPtr,
+           (void*)s_fn_Serialize_FloatArray,
            (void*)s_TypeId_ConsumeProduceDescription,
            (void*)s_fn_IsDerivedFrom_dispatch);
 #endif

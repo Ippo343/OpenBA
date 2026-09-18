@@ -198,8 +198,6 @@ void* ActRm_FindComponent_223c0(uintptr_t entity, void* retIBP);
 
 // Owner-entity value from the component's IBP at +0x10.
 static int64_t OwnerEntity(uintptr_t comp) {
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     return *reinterpret_cast<int64_t*>(comp + 0x10);
 }
 
@@ -207,7 +205,6 @@ static int64_t FindOn(int64_t entity, fn_FindIBP_t finder) {
     if (!entity || !finder) return 0;
     int64_t out = 0;
     finder(entity, &out);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&out);
     return out;
 }
 
@@ -384,7 +381,6 @@ static void Destroy_ScatterContents_c530(int64_t comp, int baseX, int baseY,
         // Partially built: spill the real Storage contents.
         void* storage = nullptr;
         fn_FindComponent_Storage(reinterpret_cast<void*>(entity), &storage);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&storage);
         if (storage) {
             uintptr_t st = reinterpret_cast<uintptr_t>(storage);
             int nStacks = *reinterpret_cast<int*>(st + 0x30);
@@ -464,18 +460,15 @@ static void Destroy_ScatterContents_c530(int64_t comp, int baseX, int baseY,
                         if (fn_InternalBasePtr_Ctor) new (&entIBP) ::Object::InternalBasePtr(
                             reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
                         else entIBP = reinterpret_cast<int64_t>(newEntity);
-                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entIBP);
 
                         // RawMaterialComponent on the new entity → position + amount.
                         int64_t rmIBP = 0;
                         ActRm_FindComponent_223c0(static_cast<uintptr_t>(entIBP), &rmIBP);
-                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&rmIBP);
                         if (rmIBP) {
                             int yaw = (fn_Random_RandTol && random)
                                           ? fn_Random_RandTol(random, 2) : 0;
                             if (s_pos9760)
                                 s_pos9760(rmIBP, cell, static_cast<float>(yaw) * kYawScale);
-                            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&rmIBP);
                             *reinterpret_cast<int*>(rmIBP + 0x28) = per;
                             *reinterpret_cast<int64_t*>(rmIBP + 0x30) = 0;
                         }
@@ -515,7 +508,6 @@ static void Destroy_MarkAndPushRemoval(int64_t entity) {
     uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
     int64_t entityList = *reinterpret_cast<int64_t*>(gw + 0xe8);
     if (!entityList) return;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entity);
     if (((*reinterpret_cast<uint32_t*>(entity + 0x40) >> 10) & 1) != 0) return;
     if (s_markRemoval) s_markRemoval(entity);
     // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).

@@ -247,7 +247,7 @@ bool HuntWork_ResolveFuncs() {
               s_fn_ValidateEntity && s_fn_BSTRemove &&
               s_fn_BSTFindRemove && s_fn_CancelAllWork &&
               s_fn_FindSubEntity && s_fn_TreeNodeCleanup &&
-              fn_InternalBasePtr_CheckPtr && fn_IsDerivedFrom &&
+              fn_IsDerivedFrom &&
               g_pGameWorldSingleton && s_typeId_HerdComponent &&
               s_fHalfCellOffset;
 
@@ -325,17 +325,13 @@ int HuntWork_Slot4_Impl(HuntWork* self, void* entityIBP, uint64_t /*param3*/, ui
     // -------------------------------------------------------
     // Step 2: Check if citizen's storage has items -> replan
     // -------------------------------------------------------
-    fn_InternalBasePtr_CheckPtr(entityIBP);
     uintptr_t citizenEntity = *(uintptr_t*)entityIBP;
 
-    fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x10));
     uintptr_t storageIBP[2] = {0};
     s_fn_FindComp_Storage(*(uintptr_t*)(citizenEntity + 0x10), storageIBP);
 
-    fn_InternalBasePtr_CheckPtr(storageIBP);
     int storageCount = s_fn_StorageQueryCount((void*)*(uintptr_t*)storageIBP);
     if (storageCount >= 1) {
-        fn_InternalBasePtr_CheckPtr(entityIBP);
         s_fn_CitizenAI_LongTermPlan(*(void**)entityIBP);
         return 2;
     }
@@ -343,22 +339,18 @@ int HuntWork_Slot4_Impl(HuntWork* self, void* entityIBP, uint64_t /*param3*/, ui
     // -------------------------------------------------------
     // Step 3: Find material description and herd component
     // -------------------------------------------------------
-    fn_InternalBasePtr_CheckPtr((uintptr_t*)(selfAddr + 0x10));
     uintptr_t matDescIBP = 0;
     s_fn_FindComp_MatDesc(*(uintptr_t*)(selfAddr + 0x10), &matDescIBP);
 
-    fn_InternalBasePtr_CheckPtr((uintptr_t*)(selfAddr + 0x10));
     uintptr_t herdIBP[2] = {0};
     s_fn_FindComp_Hunt(*(uintptr_t*)(selfAddr + 0x10), herdIBP);
 
     // Get the herd object, check if it's derived from HerdComponent
-    fn_InternalBasePtr_CheckPtr(herdIBP);
     void* herdObj = *(void**)(*(uintptr_t*)herdIBP + 0x18);
     bool isHerd = fn_IsDerivedFrom(herdObj, *s_typeId_HerdComponent);
     void* herdComp = isHerd ? herdObj : nullptr;
 
     // Get area component from the workplace entity
-    fn_InternalBasePtr_CheckPtr((uintptr_t*)(selfAddr + 0x10));
     uintptr_t areaIBP[2] = {0};
     s_fn_GetAreaComponent(*(uintptr_t*)(*(uintptr_t*)(selfAddr + 0x10) + 0x28), areaIBP);
 
@@ -375,10 +367,8 @@ int HuntWork_Slot4_Impl(HuntWork* self, void* entityIBP, uint64_t /*param3*/, ui
     // -------------------------------------------------------
     // Step 5: Set mesh visibility based on capacity (visGroup 2)
     // -------------------------------------------------------
-    fn_InternalBasePtr_CheckPtr((uintptr_t*)(selfAddr + 0x10));
     uintptr_t meshIBP[2] = {0};
     s_fn_FindComp_MeshInstance(*(uintptr_t*)(selfAddr + 0x10), meshIBP);
-    fn_InternalBasePtr_CheckPtr(meshIBP);
     s_fn_MeshInstance_SetVisible((void*)(*(uintptr_t*)meshIBP), 2, atCapacity ? 1 : 0);
 
     if (atCapacity) {
@@ -390,7 +380,6 @@ int HuntWork_Slot4_Impl(HuntWork* self, void* entityIBP, uint64_t /*param3*/, ui
     // -------------------------------------------------------
     int huntCount = (int)selfQ[10]; // self->_field50
 
-    fn_InternalBasePtr_CheckPtr(&matDescIBP);
     if (*(int*)(matDescIBP + 0x30) == 0) {
         int maxWorkers = s_fn_CalcMaxWorkers(matDescIBP);
         *(int*)(matDescIBP + 0x30) = maxWorkers;
@@ -435,12 +424,9 @@ int HuntWork_Slot4_Impl(HuntWork* self, void* entityIBP, uint64_t /*param3*/, ui
     uint32_t testCell = (uint32_t)(mapSize * testCellY + testCellX);
 
     // Get citizen's current position for pathfinding
-    fn_InternalBasePtr_CheckPtr(citizenIBP);
     uintptr_t citEnt = *(uintptr_t*)citizenIBP;
 
-    fn_InternalBasePtr_CheckPtr((void*)(citEnt + 0x278));
     uintptr_t aiComp = *(uintptr_t*)(citEnt + 0x278);
-    fn_InternalBasePtr_CheckPtr((void*)(aiComp + 0x68));
     uintptr_t posComp = *(uintptr_t*)(aiComp + 0x68);
 
     int mapSz = *mapGrid;
@@ -456,7 +442,6 @@ int HuntWork_Slot4_Impl(HuntWork* self, void* entityIBP, uint64_t /*param3*/, ui
     int citizenGridCell = mapSz * citizenCellY + citizenCellX;
 
     // Get workplace entity's grid cell for distance check
-    fn_InternalBasePtr_CheckPtr((uintptr_t*)(selfAddr + 0x10));
     uintptr_t entityIBPBuf[2] = { *(uintptr_t*)(selfAddr + 0x10), 0 };
     uint32_t entityGridCell = s_fn_Entity_GetGridCell(entityIBPBuf, nullptr);
 
@@ -508,7 +493,6 @@ int HuntWork_Slot4_Impl(HuntWork* self, void* entityIBP, uint64_t /*param3*/, ui
         float pathPos[3];
         s_fn_GetTerrainPos(mapGrid, pathPos, &huntPos.x, 0, nullptr);
 
-        fn_InternalBasePtr_CheckPtr((uintptr_t*)(selfAddr + 0x10));
         uintptr_t citizenEntRef = *(uintptr_t*)citizenIBP;
 
         uintptr_t huntCompIBP2 = 0;
@@ -526,7 +510,6 @@ int HuntWork_Slot4_Impl(HuntWork* self, void* entityIBP, uint64_t /*param3*/, ui
         // Cell checks failed — create fallback hunt action
         // Position (0,0,0), g_pAgeMultiplier float, char=0 (roaming)
         // -------------------------------------------------------
-        fn_InternalBasePtr_CheckPtr((uintptr_t*)(selfAddr + 0x10));
         uintptr_t citizenEntRef2 = *(uintptr_t*)citizenIBP;
 
         uintptr_t huntCompIBP3 = 0;
@@ -548,7 +531,6 @@ int HuntWork_Slot4_Impl(HuntWork* self, void* entityIBP, uint64_t /*param3*/, ui
     // Both paths: assign work and return 2
     // -------------------------------------------------------
     int priority = (int)selfQ[4];
-    fn_InternalBasePtr_CheckPtr(citizenIBP);
     uintptr_t citizenEnt = *(uintptr_t*)citizenIBP;
 
     uintptr_t vtable = *(uintptr_t*)self;
@@ -612,11 +594,9 @@ int HuntWork_Slot8_Impl(HuntWork* self) {
         }
 
         // Cancel the work item: get citizen entity from node key
-        fn_InternalBasePtr_CheckPtr(leftmost);
         uintptr_t citizenEntity = *(uintptr_t*)leftmost;
 
         // Navigate to citizen AI subsystem and cancel
-        fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
         s_fn_CancelAllWork((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
 
         count = *(int*)(selfAddr + 0x50);
@@ -720,11 +700,9 @@ bool HuntWork_Slot9_Impl(HuntWork* self, void* param2) {
         for (uint32_t i = 0; i < removeCount; i++) {
             void* searchNode = *bstRootPtr;
             while (searchNode != nullptr) {
-                fn_InternalBasePtr_CheckPtr(searchNode);
                 if (removeArr[i] < *(uintptr_t*)searchNode) {
                     searchNode = *(void**)((uintptr_t)searchNode + 0x10);
                 } else {
-                    fn_InternalBasePtr_CheckPtr(&removeArr[i]);
                     if (removeArr[i] <= *(uintptr_t*)searchNode) {
                         s_fn_BSTRemove(bstRootPtr, searchNode);
                         break;
@@ -747,13 +725,11 @@ bool HuntWork_Slot9_Impl(HuntWork* self, void* param2) {
 void* HuntWork_Slot10_Impl(HuntWork* self, void* outPtr) {
     uintptr_t selfAddr = (uintptr_t)self;
 
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
 
     uintptr_t subIBP[2] = {0};
     void* result = s_fn_FindSubEntity(entityRef, subIBP);
 
-    fn_InternalBasePtr_CheckPtr(result);
 
     uintptr_t resolvedEntity = *(uintptr_t*)result;
     *(uintptr_t*)outPtr = *(uintptr_t*)(resolvedEntity + 0x48);

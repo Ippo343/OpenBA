@@ -312,7 +312,7 @@ bool GatherRawMaterials_ResolveFuncs() {
               s_fn_RegisterWork && s_fn_MemAlloc && s_fn_MemFree &&
               s_fn_TreeNodeCleanup &&
               s_vtable_GatherRawMaterials && s_vtable_Work &&
-              fn_InternalBasePtr_CheckPtr && fn_IsDerivedFrom &&
+              fn_IsDerivedFrom &&
               g_pGameWorldSingleton &&
               s_typeId_GatherDesc && s_typeId_RawMatComp && s_typeId_PosDesc;
 
@@ -485,27 +485,21 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
     GatherRawMaterials_ResolveFuncs();
 
     // --- Find PositionComponent on work entity (self+0x10) ---
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t posCompIBP = 0;
     s_fn_FindComp_Position(selfQ[2], &posCompIBP);
 
     // --- Find description component on work entity ---
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t descCompIBP = 0;
     s_fn_FindComp_Unk(selfQ[2], &descCompIBP);
 
     // Get GatherDescription from desc component +0x18
-    fn_InternalBasePtr_CheckPtr(&descCompIBP);
     void* descBase = *(void**)(descCompIBP + 0x18);
     bool isDerived = fn_IsDerivedFrom(descBase, *s_typeId_GatherDesc);
     void* gatherDesc = isDerived ? descBase : nullptr;
 
     // --- Check workplace enable flag via WpExt component ---
-    fn_InternalBasePtr_CheckPtr(&descCompIBP);
     uintptr_t descComp = descCompIBP;
-    fn_InternalBasePtr_CheckPtr((void*)(descComp + 0x10));
     void* wpExtIBP = s_fn_FindComp_WpExt(*(uintptr_t*)(descComp + 0x10), (void*)&param3);
-    fn_InternalBasePtr_CheckPtr(wpExtIBP);
     if (*(char*)(*(uintptr_t*)wpExtIBP + 0x50) == '\0') {
         return 1;  // Workplace disabled
     }
@@ -516,11 +510,8 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
     void* worldEntityList = *(void**)(gameWorld + 0xf0);
 
     // --- Get citizen position for cell calculation ---
-    fn_InternalBasePtr_CheckPtr(entityIBP);
     uintptr_t citizenEntity = *(uintptr_t*)entityIBP;
-    fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
     uintptr_t citizenAIComp = *(uintptr_t*)(citizenEntity + 0x278);
-    fn_InternalBasePtr_CheckPtr((void*)(citizenAIComp + 0x68));
     uintptr_t citizenPosComp = *(uintptr_t*)(citizenAIComp + 0x68);
 
     int mapSize = *mapGrid;
@@ -548,7 +539,6 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
         uintptr_t matDescBase = *(uintptr_t*)(gatherDescAddr + 0x20);
 
         // Calculate target amount: materialCount * multiplier from descComp
-        fn_InternalBasePtr_CheckPtr(&descCompIBP);
         int targetAmount = *(int*)(slotOffset + matDescBase + 8) * *(int*)(descCompIBP + 0x4c);
 
 
@@ -584,38 +574,30 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
                 int remaining = targetAmount - buildCount - assignCount;
 
                 // Check citizen's carrying capacity
-                fn_InternalBasePtr_CheckPtr(entityIBP);
                 uintptr_t citizenEnt = *(uintptr_t*)entityIBP;
-                fn_InternalBasePtr_CheckPtr((void*)(citizenEnt + 0x10));
                 uintptr_t citizenStorageIBP = 0;
                 s_fn_FindComp_Storage(*(uintptr_t*)(citizenEnt + 0x10), &citizenStorageIBP);
 
-                fn_InternalBasePtr_CheckPtr(&citizenStorageIBP);
                 int capacity = *(int*)(citizenStorageIBP + 0x38);
-                fn_InternalBasePtr_CheckPtr(&citizenStorageIBP);
                 int currentStored = s_fn_StorageQueryCount((void*)citizenStorageIBP);
 
 
                 int carryWeight = *(int*)((uintptr_t)rawMatComp + 0x48);
                 if (capacity - currentStored < carryWeight * remaining) {
                     // Not enough carry capacity -- recalculate
-                    fn_InternalBasePtr_CheckPtr(entityIBP);
                     int remCapacity = s_fn_GetRemainingCapacity(*(uintptr_t*)entityIBP);
                     remaining = remCapacity / carryWeight;
                 }
 
                 if (remaining == 0) {
                     // Can't carry anything -- replan
-                    fn_InternalBasePtr_CheckPtr(entityIBP);
                     s_fn_LongTermPlan(*(void**)entityIBP);
                     return 2;
                 }
 
                 // --- Find storage on the found entity and match material slot ---
-                fn_InternalBasePtr_CheckPtr(&foundEntity);
                 uintptr_t storageCompIBP2 = 0;
                 void* retIBP = s_fn_FindComp_Storage((uintptr_t)foundEntity, &storageCompIBP2);
-                fn_InternalBasePtr_CheckPtr(retIBP);
 
                 uintptr_t storageComp = *(uintptr_t*)retIBP;
                 int storageSlotCount = *(int*)(storageComp + 0x30);
@@ -644,7 +626,6 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
                 // --- Calculate target position ---
                 float targetPos[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 
-                fn_InternalBasePtr_CheckPtr(&posCompIBP);
                 void* posDescBase = *(void**)((uintptr_t)posCompIBP + 0x18);
                 int bestDist = 0x7fffffff;
 
@@ -666,7 +647,6 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
                     int childCount = 0;
                     do {
                         uintptr_t* childPtr = (uintptr_t*)(*(uintptr_t*)((uintptr_t)posComp2 + 0x28) + childOffset);
-                        fn_InternalBasePtr_CheckPtr(childPtr);
                         uint8_t childFound = s_fn_CalcChildTargetPos(*childPtr, 1,
                             searchPos, targetPos, &bestDist);
                         childCount++;
@@ -726,7 +706,6 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
 
                 // --- Finalize: set citizen state and register work ---
                 uintptr_t priority = selfQ[4];
-                fn_InternalBasePtr_CheckPtr(entityIBP);
                 uintptr_t citizenFinal = *(uintptr_t*)entityIBP;
 
                 // Call vtable slot +0x50 (GetWorkEntity)
@@ -852,11 +831,9 @@ int GatherRawMaterials_Cleanup_Impl(GatherRawMaterials* self) {
         if (node == 0) return 0;
 
         // Get the citizen entity IBP from this node
-        fn_InternalBasePtr_CheckPtr((void*)node);
         uintptr_t citizenEntity = *(uintptr_t*)node;
 
         // Release citizen's state machine via +0x278 -> +0x48
-        fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
         uintptr_t citizenAI = *(uintptr_t*)(citizenEntity + 0x278);
         s_fn_StateMachineRelease((void*)(citizenAI + 0x48));
     }
@@ -966,12 +943,10 @@ int GatherRawMaterials_Validate_Impl(GatherRawMaterials* self, void* param2) {
             uintptr_t treeNode = *treeRoot;
 
             while (treeNode != 0) {
-                fn_InternalBasePtr_CheckPtr((void*)treeNode);
                 uintptr_t nodeKey = *(uintptr_t*)treeNode;
                 if (searchKey < nodeKey) {
                     treeNode = *(uintptr_t*)(treeNode + 0x10);
                 } else {
-                    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)invArr + i * 8));
                     if (searchKey <= nodeKey) {
                         // Found -- remove this node
                         s_fn_TreeRemoveNode((void*)(selfAddr + 0x68), (void*)treeNode);
@@ -1179,6 +1154,6 @@ extern "C" bool GatherRawMaterials_DepsReady() {
            s_fn_CalcBestTargetPos && s_fn_CalcChildTargetPos && s_fn_ValidateWorkAssign &&
            s_fn_PathfindingFindPath && s_fn_RegisterWork && s_fn_MemAlloc && s_fn_MemFree &&
            s_fn_TreeNodeCleanup && s_vtable_GatherRawMaterials &&
-           fn_InternalBasePtr_CheckPtr && fn_IsDerivedFrom && g_pGameWorldSingleton &&
+           fn_IsDerivedFrom && g_pGameWorldSingleton &&
            s_typeId_GatherDesc && s_typeId_RawMatComp && s_typeId_PosDesc;
 }

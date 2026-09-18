@@ -172,7 +172,6 @@ int FireWork_Slot4_Impl(FireWork* self, void* citizenIBP, void* time) {
     uintptr_t s = (uintptr_t)self;
 
     // CheckPtr on the entity IBP at +0x10
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
 
     // Find PositionComponent on building entity
     uintptr_t posCompIBP = 0;
@@ -193,13 +192,10 @@ int FireWork_Slot4_Impl(FireWork* self, void* citizenIBP, void* time) {
     int* mapGrid = *(int**)(gameWorld + 0xf8);
 
     // Get citizen entity -> StateMachineComponent -> PositionComponent -> world pos
-    fn_InternalBasePtr_CheckPtr(citizenIBP);
     uintptr_t citizenEntity = *(uintptr_t*)citizenIBP;
 
-    fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
     uintptr_t smComp = *(uintptr_t*)(citizenEntity + 0x278);
 
-    fn_InternalBasePtr_CheckPtr((void*)(smComp + 0x68));
     uintptr_t posData = *(uintptr_t*)(smComp + 0x68);
 
     // Original reads posData+0x160 (citizenY) but only uses it for dead-store
@@ -209,7 +205,6 @@ int FireWork_Slot4_Impl(FireWork* self, void* citizenIBP, void* time) {
         *(float*)(posData + 0x158), *(float*)(posData + 0x15c));
 
     // Check if citizen is a CitizenComponent (type check)
-    fn_InternalBasePtr_CheckPtr(citizenIBP);
     void* citizenObj = *(void**)(*(uintptr_t*)citizenIBP + 0x18);
     bool isCitizen = fn_IsDerivedFrom(citizenObj, *s_TypeId_CitizenComponent);
     void* citizenComp = isCitizen ? citizenObj : nullptr;
@@ -250,7 +245,6 @@ int FireWork_Slot4_Impl(FireWork* self, void* citizenIBP, void* time) {
     }
 
     // Check pathfinding accessibility
-    fn_InternalBasePtr_CheckPtr(&posCompIBP);
     void* posComp = *(void**)(posCompIBP + 0x18);
     bool isPositionComp = fn_IsDerivedFrom(posComp, *s_TypeId_PositionComponent);
     void* posCompTyped = isPositionComp ? posComp : nullptr;
@@ -269,7 +263,6 @@ int FireWork_Slot4_Impl(FireWork* self, void* citizenIBP, void* time) {
         uintptr_t childOffset = 0;
         for (int i = 0; i < *(int32_t*)(posCompVal + 0x30); i++) {
             uintptr_t* childIBP = (uintptr_t*)(*(uintptr_t*)(posCompVal + 0x28) + childOffset);
-            fn_InternalBasePtr_CheckPtr(childIBP);
             bool childResult = s_fn_PathCheckRecursive(
                 *childIBP, 0, srcPos, bestPos, &bestDist);
             pathFound = pathFound || childResult;
@@ -306,7 +299,6 @@ int FireWork_Slot4_Impl(FireWork* self, void* citizenIBP, void* time) {
     // local_88 is REASSIGNED from mapGrid to citizen entity ptr here.
     uintptr_t workEntityIBP = *(uintptr_t*)(s + 0x10);
     int priority = *(int32_t*)(s + 0x20);
-    fn_InternalBasePtr_CheckPtr(citizenIBP);
     uintptr_t citizenPtr = *(uintptr_t*)citizenIBP;
     s_fn_SetupFireActions(
         (void*)&citizenPtr,
@@ -314,7 +306,6 @@ int FireWork_Slot4_Impl(FireWork* self, void* citizenIBP, void* time) {
         srcPos, destPos, bestPos, (void*)&workEntityIBP);
 
     // Update citizen entity state
-    fn_InternalBasePtr_CheckPtr(citizenIBP);
     uintptr_t citizenVal = *(uintptr_t*)citizenIBP;
 
     // Get target entity via vtable slot 10 (+0x50)
@@ -465,12 +456,10 @@ int FireWork_Slot9_Impl(FireWork* self, void* citizenIBP) {
             // Find the BST node matching this entity key
             void* bstNode = *bstRoot;
             while (bstNode != nullptr) {
-                fn_InternalBasePtr_CheckPtr(bstNode);
                 uintptr_t nodeKey = *(uintptr_t*)bstNode;
                 if (removeArr[i] < nodeKey) {
                     bstNode = *(void**)((uintptr_t)bstNode + 0x10); // left
                 } else {
-                    fn_InternalBasePtr_CheckPtr(&removeArr[i]);
                     if (removeArr[i] <= nodeKey) {
                         // Found -- remove it
                         s_fn_BSTRemove(bstRoot, bstNode);
@@ -585,11 +574,9 @@ int FireWork_Slot8_Impl(FireWork* self) {
         }
 
         // CheckPtr on the node, read entity
-        fn_InternalBasePtr_CheckPtr(node2);
         uintptr_t entityPtr = *(uintptr_t*)node2;
 
         // Get StateMachineComponent at entity+0x278
-        fn_InternalBasePtr_CheckPtr((void*)(entityPtr + 0x278));
         uintptr_t smComp = *(uintptr_t*)(entityPtr + 0x278);
 
         // Remove pending action from SMC+0x48

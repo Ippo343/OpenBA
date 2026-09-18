@@ -180,7 +180,6 @@ static inline void* WA_Alloc(uint64_t size, uint32_t align) {
 }
 static inline void WA_IbpCtor(void* ibp, void* obj) { if (fn_InternalBasePtr_Ctor) new (ibp) ::Object::InternalBasePtr(
     reinterpret_cast<RtObject::Internal*>(obj)); }   // B.3.3 bridge
-static inline void WA_CheckPtr(void* p)             { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 static inline void WA_Append(void* list, void* ibp) { if (s_fn_TaskListAppend) s_fn_TaskListAppend(list, ibp); }
 
 // Real-value .rdata fallbacks (raw .rdata resolves NULL in standalone — see
@@ -202,12 +201,9 @@ static inline float WA_MoveSpeed() { return s_pf_172280 ? *s_pf_172280 : -1.0f; 
 // original (not cached), so this mirrors that.
 static int WA_CitizenCarryCount(void* citizenIBP) {
     if (!s_fn_FindStorage || !s_fn_StorageQueryCount) return 0;
-    WA_CheckPtr(citizenIBP);
     uintptr_t e = *reinterpret_cast<uintptr_t*>(citizenIBP);
-    WA_CheckPtr(reinterpret_cast<void*>(e + 0x10));
     void* storageIBP = nullptr;
     s_fn_FindStorage(*reinterpret_cast<int64_t*>(e + 0x10), &storageIBP);
-    WA_CheckPtr(&storageIBP);
     return s_fn_StorageQueryCount(storageIBP);
 }
 
@@ -227,13 +223,11 @@ void WorkAct_PerformWorkCtor_c1eb0(void* citizenIBP, uint32_t workId, void* targ
     ResolveAll();
 
     // --- derive the NaturalResource component off the target (param_3) ---
-    WA_CheckPtr(targetIBP);
     void* targetComp = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(targetIBP) + 0x18);
     void* derivedTarget = nullptr;
     if (s_pTid_c7b68 && fn_IsDerivedFrom && fn_IsDerivedFrom(targetComp, *s_pTid_c7b68))
         derivedTarget = targetComp;
 
-    WA_CheckPtr(targetIBP);
     int64_t targetInner = *reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(targetIBP) + 0x10);
 
     // heading = Entity_impl_29a0(worldPos, &{target inner}) (XMM0 float)
@@ -242,9 +236,7 @@ void WorkAct_PerformWorkCtor_c1eb0(void* citizenIBP, uint32_t workId, void* targ
     if (s_fn_Entity_29a0) heading = s_fn_Entity_29a0(worldPos, &headingArg);
 
     // list base = (*(citizen)+0x278) + 0x48
-    WA_CheckPtr(citizenIBP);
     uintptr_t ci = *reinterpret_cast<uintptr_t*>(citizenIBP);
-    WA_CheckPtr(reinterpret_cast<void*>(ci + 0x278));
     uintptr_t aiComp = *reinterpret_cast<uintptr_t*>(ci + 0x278);
     void* list = reinterpret_cast<void*>(aiComp + 0x48);
     if (s_fn_TaskListCleanup) s_fn_TaskListCleanup(list);
@@ -259,7 +251,6 @@ void WorkAct_PerformWorkCtor_c1eb0(void* citizenIBP, uint32_t workId, void* targ
         uintptr_t innerIbp = 0;
         WA_IbpCtor(&innerIbp, nullptr);
         uint32_t msgId = s_pDword_c70e8 ? *s_pDword_c70e8 : 0;
-        WA_CheckPtr(citizenIBP);
         void* entityInner = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
         if (s_fn_SendCompMsg) sm = s_fn_SendCompMsg(obj, &entityInner, &msgId, 0, &innerIbp, 0);
     }
@@ -384,9 +375,7 @@ void WorkAct_PerformWorkCtor_c1eb0(void* citizenIBP, uint32_t workId, void* targ
             case 0xffffffff: pathType = 1; break;                                 // Slow
             default: pwParam = 1; break;                                          // resKind>=8: pathType stays 1
         }
-        WA_CheckPtr(citizenIBP);
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
-        WA_CheckPtr(&entityInner);
         void* familyIBP = nullptr;
         uintptr_t famRet = 0;
         if (s_fn_FindComponentFamily) familyIBP = s_fn_FindComponentFamily(entityInner, &famRet);
@@ -409,14 +398,12 @@ void WorkAct_PerformWorkCtor_c1eb0(void* citizenIBP, uint32_t workId, void* targ
 
     // --- tail: set bit 0x14 (0x100000) on target's +0x20 flags; on newly-set bit
     //     (low 16 changed) detach via FUN_1400c3470 if target+0x10 non-null ---
-    WA_CheckPtr(targetIBP);
     uintptr_t targetObj = *reinterpret_cast<uintptr_t*>(targetIBP);
     uint32_t oldFlags = *reinterpret_cast<uint32_t*>(targetObj + 0x20);
     uint32_t newFlags = oldFlags | 0x100000u;
     *reinterpret_cast<uint32_t*>(targetObj + 0x20) = newFlags;
     if (static_cast<uint16_t>(oldFlags ^ newFlags) != 0 &&
         *reinterpret_cast<uintptr_t*>(targetObj + 0x10) != 0) {
-        WA_CheckPtr(reinterpret_cast<void*>(targetObj + 0x10));
         void* detach = *reinterpret_cast<void**>(targetObj + 0x10);
         if (s_fn_WorkDetach_3470) s_fn_WorkDetach_3470(detach);
     }
@@ -479,9 +466,7 @@ void WorkAct_PerformWorkCtor9_c0ad0(void* citizenIBP, uint32_t workId, void* tar
     ResolveAll();
 
     // list base = (*(citizen)+0x278) + 0x48
-    WA_CheckPtr(citizenIBP);
     uintptr_t ci = *reinterpret_cast<uintptr_t*>(citizenIBP);
-    WA_CheckPtr(reinterpret_cast<void*>(ci + 0x278));
     uintptr_t aiComp = *reinterpret_cast<uintptr_t*>(ci + 0x278);
     void* list = reinterpret_cast<void*>(aiComp + 0x48);
     if (cancelFirst != 0 && s_fn_TaskListCleanup) s_fn_TaskListCleanup(list);
@@ -514,7 +499,6 @@ void WorkAct_PerformWorkCtor9_c0ad0(void* citizenIBP, uint32_t workId, void* tar
         uintptr_t innerIbp = 0;
         WA_IbpCtor(&innerIbp, nullptr);
         uint32_t msgId = s_pDword_c70e8 ? *s_pDword_c70e8 : 0;
-        WA_CheckPtr(citizenIBP);
         void* entityInner = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
         if (s_fn_SendCompMsg) sm = s_fn_SendCompMsg(obj, &entityInner, &msgId, 0, &innerIbp, 0);
     }
@@ -626,9 +610,7 @@ void WorkAct_PerformWorkCtor9_c0ad0(void* citizenIBP, uint32_t workId, void* tar
     void* mv = nullptr;
     if (obj) {
         int carried = WA_CitizenCarryCount(citizenIBP);
-        WA_CheckPtr(citizenIBP);
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
-        WA_CheckPtr(&entityInner);
         int pathType = (carried > 0) ? 4 : 1;
         void* familyIBP = nullptr;
         uintptr_t famRet = 0;
@@ -663,9 +645,7 @@ void WorkAct_PerformWorkCtor9_c0ad0(void* citizenIBP, uint32_t workId, void* tar
 void WorkAct_PlayAnimationCtor_c2490(void* citizenIBP, uint32_t priority, uint32_t citizenIndex) {
     ResolveAll();
 
-    WA_CheckPtr(citizenIBP);
     uintptr_t ci = *reinterpret_cast<uintptr_t*>(citizenIBP);
-    WA_CheckPtr(reinterpret_cast<void*>(ci + 0x278));
     uintptr_t aiComp = *reinterpret_cast<uintptr_t*>(ci + 0x278);
     void* list = reinterpret_cast<void*>(aiComp + 0x48);
     if (s_fn_TaskListCleanup) s_fn_TaskListCleanup(list);
@@ -679,7 +659,6 @@ void WorkAct_PlayAnimationCtor_c2490(void* citizenIBP, uint32_t priority, uint32
         uintptr_t innerIbp = 0;
         WA_IbpCtor(&innerIbp, nullptr);
         uint32_t msgId = s_pDword_c70e8 ? *s_pDword_c70e8 : 0;
-        WA_CheckPtr(citizenIBP);
         void* entityInner = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
         if (s_fn_SendCompMsg) sm = s_fn_SendCompMsg(obj, &entityInner, &msgId, 0, &innerIbp, 0);
     }
@@ -708,7 +687,6 @@ void WorkAct_PlayAnimationCtor_c2490(void* citizenIBP, uint32_t priority, uint32
         // System::Time::Time(&t, DAT_140172100)
         uint64_t timeVal = 0;
         if (s_fn_TimeCtor) s_fn_TimeCtor(&timeVal, s_pf_172100 ? *s_pf_172100 : 0.0f);
-        WA_CheckPtr(citizenIBP);
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
         if (s_fn_ObjInternalCtor) s_fn_ObjInternalCtor(inlineObj);
         uintptr_t o = reinterpret_cast<uintptr_t>(inlineObj);
@@ -744,9 +722,7 @@ void WorkAct_GrazingWorkCtor_bb0a0(void* citizenIBP, uint32_t priority, void* wo
                                    uint32_t typeId, uint32_t flag8, uint32_t cellIdx9) {
     ResolveAll();
 
-    WA_CheckPtr(citizenIBP);
     uintptr_t ci = *reinterpret_cast<uintptr_t*>(citizenIBP);
-    WA_CheckPtr(reinterpret_cast<void*>(ci + 0x278));
     uintptr_t aiComp = *reinterpret_cast<uintptr_t*>(ci + 0x278);
     void* list = reinterpret_cast<void*>(aiComp + 0x48);
     if (s_fn_TaskListCleanup) s_fn_TaskListCleanup(list);
@@ -760,7 +736,6 @@ void WorkAct_GrazingWorkCtor_bb0a0(void* citizenIBP, uint32_t priority, void* wo
         uintptr_t innerIbp = 0;
         WA_IbpCtor(&innerIbp, nullptr);
         uint32_t msgId = s_pDword_c70e8 ? *s_pDword_c70e8 : 0;
-        WA_CheckPtr(citizenIBP);
         void* entityInner = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
         if (s_fn_SendCompMsg) sm = s_fn_SendCompMsg(obj, &entityInner, &msgId, 0, &innerIbp, 0);
     }
@@ -831,9 +806,7 @@ void WorkAct_GrazingWorkCtor_bb0a0(void* citizenIBP, uint32_t priority, void* wo
     obj = WA_Alloc(0x480, 8);
     void* mv = nullptr;
     if (obj) {
-        WA_CheckPtr(citizenIBP);
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
-        WA_CheckPtr(&entityInner);
         void* familyIBP = nullptr;
         uintptr_t famRet = 0;
         if (s_fn_FindComponentFamily) familyIBP = s_fn_FindComponentFamily(entityInner, &famRet);
@@ -874,9 +847,7 @@ void WorkAct_PlantWorkCtor_be6e0(void* citizenIBP, uint32_t priority, void* work
                                  uint64_t /*unused10*/, uint32_t smParam11) {
     ResolveAll();
 
-    WA_CheckPtr(citizenIBP);
     uintptr_t ci = *reinterpret_cast<uintptr_t*>(citizenIBP);
-    WA_CheckPtr(reinterpret_cast<void*>(ci + 0x278));
     uintptr_t aiComp = *reinterpret_cast<uintptr_t*>(ci + 0x278);
     void* list = reinterpret_cast<void*>(aiComp + 0x48);
     if (s_fn_TaskListCleanup) s_fn_TaskListCleanup(list);
@@ -890,7 +861,6 @@ void WorkAct_PlantWorkCtor_be6e0(void* citizenIBP, uint32_t priority, void* work
         uintptr_t innerIbp = 0;
         WA_IbpCtor(&innerIbp, nullptr);
         uint32_t msgId = s_pDword_c70e8 ? *s_pDword_c70e8 : 0;
-        WA_CheckPtr(citizenIBP);
         void* entityInner = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
         if (s_fn_SendCompMsg) sm = s_fn_SendCompMsg(obj, &entityInner, &msgId, 0, &innerIbp, 0);
     }
@@ -965,9 +935,7 @@ void WorkAct_PlantWorkCtor_be6e0(void* citizenIBP, uint32_t priority, void* work
     obj = WA_Alloc(0x480, 8);
     void* mv = nullptr;
     if (obj) {
-        WA_CheckPtr(citizenIBP);
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
-        WA_CheckPtr(&entityInner);
         void* familyIBP = nullptr;
         uintptr_t famRet = 0;
         if (s_fn_FindComponentFamily) familyIBP = s_fn_FindComponentFamily(entityInner, &famRet);

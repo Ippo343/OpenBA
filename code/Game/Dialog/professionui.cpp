@@ -69,7 +69,6 @@
 //
 static int CalcWorkerSlots_Impl(uintptr_t storageLocComp) {
     // Get WorkplaceJobType object from +0x18 (InternalBasePtr)
-    fn_InternalBasePtr_CheckPtr((void*)(storageLocComp + 0x18));
     void* jobType = *(void**)(storageLocComp + 0x18);
     if (!jobType) return 0;
 
@@ -86,12 +85,10 @@ static int CalcWorkerSlots_Impl(uintptr_t storageLocComp) {
     }
 
     // Find BuildComponent on the entity at +0x10
-    fn_InternalBasePtr_CheckPtr((void*)(storageLocComp + 0x10));
     uintptr_t entity = *(uintptr_t*)(storageLocComp + 0x10);
 
     uint64_t buildCompRet = 0;
     fn_FindComponent_Build((void*)entity, &buildCompRet);
-    fn_InternalBasePtr_CheckPtr((void*)&buildCompRet);
     uintptr_t buildComp = buildCompRet;
 
     if (!buildComp) return maxWorkers > 0 ? maxWorkers : 1;
@@ -281,7 +278,6 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
     // Get template factory: first child of table -> element+0xB8
     uint64_t firstChildBuf = 0;
     fn_Element_Child(tableElem, &firstChildBuf, 0);
-    fn_InternalBasePtr_CheckPtr((void*)&firstChildBuf);
     void* firstChild = (void*)firstChildBuf;
     // Factory is at element+0xB8 (NOT vtable+0xB8)
     void** factory = *(void***)((uintptr_t)firstChild + 0xB8);
@@ -297,7 +293,6 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
 
     for (int i = 0; i < profCount; i++) {
         // Template data from dataSource (self+0x18) -> +0x18
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         uintptr_t templateData = *(uintptr_t*)(*(uintptr_t*)(s + 0x18) + 0x18);
 
         // Clone template via factory vtable slot 8: factory->vt[8](factory, retval, templateData)
@@ -331,14 +326,11 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
         // SLOW index instead collapses the intended COLUMN-MAJOR layout (builder below
         // laborer, as retail draws it) into row-major (builder to the right). Match the
         // original exactly: stride = +0xC4, flatIdx = stride*tableCol + tableRow.
-        fn_InternalBasePtr_CheckPtr((void*)&tableResult);
-        fn_InternalBasePtr_CheckPtr((void*)&tableResult);
         int stride = *(int*)((uintptr_t)tableResult + 0xC4);
 
         int flatIdx = stride * tableCol + tableRow;
         uint64_t cellElem = 0;
         fn_Element_Child((void*)tableResult, &cellElem, flatIdx);
-        fn_InternalBasePtr_CheckPtr((void*)&cellElem);
 
         // Get 4 children of cell (indices from disassembly: 0, 1, 3, 4):
         //   child[0] = text/label element (name + sprite)
@@ -347,7 +339,6 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
         //   child[4] = button element (goto)
         uint64_t textLabelBuf = 0;
         fn_Element_Child((void*)cellElem, &textLabelBuf, 0);
-        fn_InternalBasePtr_CheckPtr((void*)&textLabelBuf);
 
         uint64_t spinnerBuf = 0;
         fn_Element_Child((void*)cellElem, &spinnerBuf, 1);
@@ -359,7 +350,6 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
         fn_Element_Child((void*)cellElem, &buttonBuf, 4);
 
         // Set button element ID: idBase + 200
-        fn_InternalBasePtr_CheckPtr((void*)&buttonBuf);
         fn_Element_SetElementId((void*)buttonBuf, idBase + 200);
 
         // Get profession ExternalPtr from array
@@ -372,7 +362,6 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
             System::Filename pathObj =
                 reinterpret_cast<const ::Object::External*>(profDesc)->GetPath();  // B.3.3 bridge
             System::Filename identObj = pathObj.GetPathIdentifer();
-            fn_InternalBasePtr_CheckPtr((void*)&spinnerBuf);
             fn_Element_SetName((void*)spinnerBuf, &identObj);
         }
 
@@ -446,20 +435,17 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
         uint8_t uiStrBuf[16];
         fn_UIString_Ctor(uiStrBuf, *(uint64_t*)((uintptr_t)profDesc + 0x20),
                          (void*)((uintptr_t)profDesc + 0x30));
-        fn_InternalBasePtr_CheckPtr((void*)&textLabelBuf);
         fn_TextElement_SetText((void*)textLabelBuf, uiStrBuf);
 
         uint8_t spriteBuf[16];
         fn_Sprite_Ctor(spriteBuf, *(uint64_t*)((uintptr_t)profDesc + 0x28),
                         (void*)((uintptr_t)profDesc + 0x30));
-        fn_InternalBasePtr_CheckPtr((void*)&textLabelBuf);
         fn_LabelElement_SetSprite((void*)textLabelBuf, spriteBuf);
 
         // Tooltip: UI::String from ExternalPtr + string name at +0x38
         uint8_t tooltipBuf[16];
         fn_UIString_Ctor(tooltipBuf, *(uint64_t*)((uintptr_t)profDesc + 0x20),
                          (void*)((uintptr_t)profDesc + 0x38));
-        fn_InternalBasePtr_CheckPtr((void*)&textLabelBuf);
         fn_Element_SetToolTip((void*)textLabelBuf, tooltipBuf);
 
         // Set user data and element ID on spinner
@@ -467,23 +453,17 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
         // sends the spinner's own element ID as param4 in msg 0x15 notifications.
         // Without SetElementId on the spinner itself, param4 is -1 and Slot9 never
         // dispatches to HandleSpinner.
-        fn_InternalBasePtr_CheckPtr((void*)&spinnerBuf);
         fn_Element_SetUserData((void*)spinnerBuf, (void*)(uintptr_t)idBase);
-        fn_InternalBasePtr_CheckPtr((void*)&spinnerBuf);
         fn_Element_SetElementId((void*)spinnerBuf, idBase);
 
         // Get child[0] of spinner: set its element ID (original does this too)
-        fn_InternalBasePtr_CheckPtr((void*)&spinnerBuf);
         uint64_t spinnerChild0 = 0;
         fn_Element_Child((void*)spinnerBuf, &spinnerChild0, 0);
-        fn_InternalBasePtr_CheckPtr((void*)&spinnerChild0);
         fn_Element_SetElementId((void*)spinnerChild0, idBase);
 
         // Get child[0] again, verify NumberEditElement, wrap in IBP for array push
-        fn_InternalBasePtr_CheckPtr((void*)&spinnerBuf);
         uint64_t numEditBuf = 0;
         fn_Element_Child((void*)spinnerBuf, &numEditBuf, 0);
-        fn_InternalBasePtr_CheckPtr((void*)&numEditBuf);
         void* numEditRaw = (void*)numEditBuf;
         void* numEditChecked = nullptr;
         if (fn_IsDerivedFrom && g_TypeId_NumberEditElement) {
@@ -512,19 +492,15 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
         // laborer's goto button.
         void* noneProfession = *(void**)((uintptr_t)profListPtr + 0x30);
         if (profDesc == noneProfession) {
-            fn_InternalBasePtr_CheckPtr((void*)&numberBuf);
             fn_Element_SetFlagsOnOff((void*)numberBuf, 1, 0);   // child[3] numberAvailable
 
-            fn_InternalBasePtr_CheckPtr((void*)&cellElem);
             uint64_t ofTextChild = 0;
             fn_Element_Child((void*)cellElem, &ofTextChild, 2); // child[2] ofText
-            fn_InternalBasePtr_CheckPtr((void*)&ofTextChild);
             fn_Element_SetFlagsOnOff((void*)ofTextChild, 1, 0);
         }
 
         // Advance table position
         tableCol++;
-        fn_InternalBasePtr_CheckPtr((void*)&tableResult);
         if (tableCol >= *(int*)((uintptr_t)tableResult + 0xC0)) {
             tableRow++;
             tableCol = 0;
@@ -575,7 +551,6 @@ void ProfessionUI_Slot8(ProfessionUI* self) {
 
     for (int i = 0; i < citizenCount; i++) {
         // CheckPtr on citizen IBP (original does this)
-        fn_InternalBasePtr_CheckPtr((void*)(citizenArray + (uintptr_t)i * 8));
         uintptr_t citizen = *(uintptr_t*)(citizenArray + (uintptr_t)i * 8);
 
         // Check if citizen is adult: age (float at +0x3C) >= birthAge (float at desc+0x44)
@@ -588,7 +563,6 @@ void ProfessionUI_Slot8(ProfessionUI* self) {
         if (*(uintptr_t*)(citizen + 0x208) != 0) continue;
 
         // CheckPtr again before reading profession (original does double CheckPtr)
-        fn_InternalBasePtr_CheckPtr((void*)(citizenArray + (uintptr_t)i * 8));
         citizen = *(uintptr_t*)(citizenArray + (uintptr_t)i * 8);
 
         // Look up profession in BST
@@ -617,20 +591,16 @@ void ProfessionUI_Slot8(ProfessionUI* self) {
 
     // Update first spinner (index 0): set value and min/max to same value (locked)
     void** firstSpinnerPtr = (void**)(*(uintptr_t*)(s + 0x40));
-    fn_InternalBasePtr_CheckPtr(firstSpinnerPtr);
     fn_NumberEditElement_SetValue(*firstSpinnerPtr, counts[0]);
     firstSpinnerPtr = (void**)(*(uintptr_t*)(s + 0x40));
-    fn_InternalBasePtr_CheckPtr(firstSpinnerPtr);
     fn_NumberEditElement_SetMinMax(*firstSpinnerPtr, counts[0], counts[0]);
 
     // Update remaining spinners
     int spinnerCount = *(int*)(s + 0x48);
     for (int i = 1; i < spinnerCount; i++) {
         void** spinnerPtr = (void**)(*(uintptr_t*)(s + 0x40) + (uintptr_t)i * 8);
-        fn_InternalBasePtr_CheckPtr(spinnerPtr);
         fn_NumberEditElement_SetValue(*spinnerPtr, counts[i]);
         spinnerPtr = (void**)(*(uintptr_t*)(s + 0x40) + (uintptr_t)i * 8);
-        fn_InternalBasePtr_CheckPtr(spinnerPtr);
         // Min=0, Max=counts[i]+counts[0] (can reassign from "None" profession)
         fn_NumberEditElement_SetMinMax(*spinnerPtr, 0, counts[i] + counts[0]);
     }
@@ -673,7 +643,6 @@ void ProfessionUI_Slot8(ProfessionUI* self) {
 
             // CheckPtr on entity IBP (original does this)
             void** entityIBP = (void**)(freshEntityList + (uintptr_t)e * 8);
-            fn_InternalBasePtr_CheckPtr(entityIBP);
             uintptr_t entityBP = *(uintptr_t*)entityIBP;
             if (!entityBP) continue;
 
@@ -684,7 +653,6 @@ void ProfessionUI_Slot8(ProfessionUI* self) {
 
             for (int c = 0; c < compCount; c++) {
                 void** compIBP = (void**)(compArray + (uintptr_t)c * 8);
-                fn_InternalBasePtr_CheckPtr(compIBP);
                 uintptr_t comp = *(uintptr_t*)compIBP;
                 if (!comp) continue;
                 typedef int (*fn_GetTypeId_t)(void*);
@@ -703,13 +671,11 @@ void ProfessionUI_Slot8(ProfessionUI* self) {
                 uint64_t wpcIBP = 0;
                 new (&wpcIBP) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>((void*)workplaceComp));   // B.3.3 bridge
-                fn_InternalBasePtr_CheckPtr((void*)&wpcIBP);
                 workplaceComp = (uintptr_t)wpcIBP;
 
                 // Check if workplace is enabled (+0x50 != 0)
                 if (workplaceComp && *(uint8_t*)(workplaceComp + 0x50) != 0) {
                     // Find StorageLocationComponent on parent entity via +0x10
-                    fn_InternalBasePtr_CheckPtr((void*)(workplaceComp + 0x10));
                     uintptr_t parentEntity = *(uintptr_t*)(workplaceComp + 0x10);
                     if (!parentEntity) continue;
                     int pCompCount = *(int*)(parentEntity + 0x38);
@@ -718,7 +684,6 @@ void ProfessionUI_Slot8(ProfessionUI* self) {
 
                     for (int c = 0; c < pCompCount; c++) {
                         void** compIBP = (void**)(pCompArray + (uintptr_t)c * 8);
-                        fn_InternalBasePtr_CheckPtr(compIBP);
                         uintptr_t comp = *(uintptr_t*)compIBP;
                         if (!comp) continue;
                         typedef int (*fn_GetTypeId_t)(void*);
@@ -737,7 +702,6 @@ void ProfessionUI_Slot8(ProfessionUI* self) {
                         uint64_t slcIBP = 0;
                         new (&slcIBP) ::Object::InternalBasePtr(
                             reinterpret_cast<RtObject::Internal*>((void*)storageLocComp));   // B.3.3 bridge
-                        fn_InternalBasePtr_CheckPtr((void*)&slcIBP);
                         storageLocComp = (uintptr_t)slcIBP;
 
                         if (storageLocComp) {
@@ -755,7 +719,6 @@ void ProfessionUI_Slot8(ProfessionUI* self) {
 
         // Set number element value (with CheckPtr, matching original)
         void** numElemPtr = (void**)(*(uintptr_t*)(s + 0x50) + (uintptr_t)p * 8);
-        fn_InternalBasePtr_CheckPtr(numElemPtr);
         fn_NumberElement_SetValueInt(*numElemPtr, totalWorkers);
     }
 }
@@ -789,7 +752,6 @@ static void ProfessionUI_HandleSpinner(ProfessionUI* self, int profIndex) {
     // Get spinner element at this index and read desired value
     uintptr_t spinnerArray = *(uintptr_t*)(s + 0x40);
     void* spinnerElem = *(void**)(spinnerArray + idx * 8);
-    fn_InternalBasePtr_CheckPtr(&spinnerElem);
     int desired = fn_NumberEditElement_GetValue(spinnerElem);
 
     // Get current count from counts array
@@ -890,7 +852,6 @@ static void ProfessionUI_HandleButton(ProfessionUI* self, int profIndex) {
     int eligible = 0;
     for (int i = 0; i < citizenCount; i++) {
         uintptr_t citizen = *(uintptr_t*)(citizenArray + (uintptr_t)i * 8);
-        fn_InternalBasePtr_CheckPtr((void*)(citizenArray + (uintptr_t)i * 8));
 
         // Check adult: age >= birthAge (desc+0x44)
         uintptr_t citizenDesc = *(uintptr_t*)(citizen + 0x288);
@@ -919,11 +880,9 @@ static void ProfessionUI_HandleButton(ProfessionUI* self, int profIndex) {
         }
 
         uintptr_t citizen = *(uintptr_t*)(citizenArray + (uintptr_t)*rotIdx * 8);
-        fn_InternalBasePtr_CheckPtr((void*)(citizenArray + (uintptr_t)*rotIdx * 8));
 
         // Check if citizen matches this profession
         if (*(uint64_t*)(citizen + 0x1F0) == profId) {
-            fn_InternalBasePtr_CheckPtr((void*)(citizenArray + (uintptr_t)*rotIdx * 8));
             citizen = *(uintptr_t*)(citizenArray + (uintptr_t)*rotIdx * 8);
 
             // Check adult and alive
@@ -933,7 +892,6 @@ static void ProfessionUI_HandleButton(ProfessionUI* self, int profIndex) {
 
             if (currentAge >= birthAge && *(uintptr_t*)(citizen + 0x208) == 0) {
                 // Found matching citizen -- check if same profession still (re-read after CheckPtr)
-                fn_InternalBasePtr_CheckPtr((void*)(citizenArray + (uintptr_t)*rotIdx * 8));
                 citizen = *(uintptr_t*)(citizenArray + (uintptr_t)*rotIdx * 8);
                 if (*(uint64_t*)(citizen + 0x1F0) != profId) {
                     // Profession changed between checks -- still go to this citizen
@@ -941,7 +899,6 @@ static void ProfessionUI_HandleButton(ProfessionUI* self, int profIndex) {
                 }
 
                 // Get citizen's entity (at +0x10)
-                fn_InternalBasePtr_CheckPtr((void*)(citizenArray + (uintptr_t)*rotIdx * 8));
                 citizen = *(uintptr_t*)(citizenArray + (uintptr_t)*rotIdx * 8);
                 uint64_t entityPtr = *(uint64_t*)(citizen + 0x10);
 
@@ -956,13 +913,11 @@ static void ProfessionUI_HandleButton(ProfessionUI* self, int profIndex) {
         if (scanned >= eligible) {
             // Exhausted all eligible citizens without finding a match in this profession
             // Fall through to go to the current rotation citizen anyway
-            fn_InternalBasePtr_CheckPtr((void*)(citizenArray + (uintptr_t)*rotIdx * 8));
             citizen = *(uintptr_t*)(citizenArray + (uintptr_t)*rotIdx * 8);
             if (*(uint64_t*)(citizen + 0x1F0) != profId) {
                 return;
             }
 
-            fn_InternalBasePtr_CheckPtr((void*)(citizenArray + (uintptr_t)*rotIdx * 8));
             citizen = *(uintptr_t*)(citizenArray + (uintptr_t)*rotIdx * 8);
             uint64_t entityPtr = *(uint64_t*)(citizen + 0x10);
 

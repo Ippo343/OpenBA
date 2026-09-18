@@ -72,10 +72,6 @@ static fn_CemMemAlloc_t s_fn_MemAlloc = nullptr;
 typedef void  (*fn_CemMemFree_t)(void* p);
 static fn_CemMemFree_t s_fn_MemFree = nullptr;
 
-// InternalBasePtr::CheckPtr -- resolves a lazy/weak pointer in place. Slot 0x140152ab0.
-typedef void (*fn_CheckPtr_t)(void* ibp);
-static fn_CheckPtr_t s_fn_CheckPtr = nullptr;
-
 // TombstoneComponent type id (.rdata DAT_1401c4a30, storage + fill in
 // standalone/reg_citizen_lifeevent_handler.cpp).
 static const uint32_t* s_pTid_Tombstone = nullptr;
@@ -202,11 +198,9 @@ void CemeteryComponent_BuildPlotGrid(CemeteryComponent* self) {
     }
 
     const uintptr_t entity = reinterpret_cast<uintptr_t>(self->owner);
-    if (s_fn_CheckPtr) s_fn_CheckPtr(&self->owner);
 
     void* mapIbp = nullptr;
     s_fn_FindMapComp(entity, &mapIbp);
-    if (s_fn_CheckPtr) s_fn_CheckPtr(&mapIbp);
     if (!mapIbp) { CEM_TRACE("BAIL no MapComponent"); return; }
     const uintptr_t map = reinterpret_cast<uintptr_t>(mapIbp);
 
@@ -222,10 +216,8 @@ void CemeteryComponent_BuildPlotGrid(CemeteryComponent* self) {
     const int mapWidth = *reinterpret_cast<int*>(world);
 
     // The gate child: multi->children[0], then that entity's MapComponent.
-    if (s_fn_CheckPtr) s_fn_CheckPtr(&self->owner);
     uint8_t multiIbp[24] = {};
     s_fn_FindMultiComp(entity, multiIbp);
-    if (s_fn_CheckPtr) s_fn_CheckPtr(multiIbp);
     const uintptr_t multi = *reinterpret_cast<uintptr_t*>(multiIbp);
     if (!multi) { CEM_TRACE("BAIL no MultiObjectComponent"); return; }
     const uintptr_t childArr = *reinterpret_cast<uintptr_t*>(multi + 0x48);
@@ -236,12 +228,10 @@ void CemeteryComponent_BuildPlotGrid(CemeteryComponent* self) {
     // step produced a gate 37 tiles outside a 12-wide footprint (door=38), so the two
     // path-in columns were never excluded and every tile became a plot.
     void* gateEnt = *reinterpret_cast<void**>(childArr);
-    if (s_fn_CheckPtr) s_fn_CheckPtr(&gateEnt);
     if (!gateEnt) { CEM_TRACE("BAIL no child[0]"); return; }
 
     void* gateIbp = nullptr;
     s_fn_FindMapComp(reinterpret_cast<uintptr_t>(gateEnt), &gateIbp);
-    if (s_fn_CheckPtr) s_fn_CheckPtr(&gateIbp);
     if (!gateIbp) { CEM_TRACE("BAIL gate has no MapComponent"); return; }
     // NOT `*(uintptr_t*)gateIbp`. Retail's RBX is the ADDRESS of the out buffer, so its
     // `mov rax,[rbx]` yields the component pointer; `gateIbp` here IS that pointer
@@ -313,7 +303,6 @@ extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue) {
     int i = 0;
     while (i < (int)list[1]) {
         int64_t arr = list[0];
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ptrValue);
         if (*(int64_t*)(arr + (int64_t)i * 8) == *(int64_t*)ptrValue) {
             for (int j = i + 1; j < (int)list[1]; ++j) {
                 int64_t* slot = (int64_t*)(list[0] + (int64_t)(j - 1) * 8);
@@ -367,8 +356,6 @@ void CemeteryComponent_InitFuncs() {
     if (slot) s_fn_MemAlloc = *reinterpret_cast<fn_CemMemAlloc_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152b68);
     if (slot) s_fn_MemFree = *reinterpret_cast<fn_CemMemFree_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152ab0);
-    if (slot) s_fn_CheckPtr = *reinterpret_cast<fn_CheckPtr_t*>(slot);
 
     s_g_pGameState = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x1401c3dd8));
@@ -428,7 +415,6 @@ extern "C" char CemeteryComponent_EnterBuilt(void* compV, void* /*sm*/) {
         void* occupant = *reinterpret_cast<void**>(cell + 0x08);
         if (occupant) {
             void* probe = occupant;
-            if (s_fn_CheckPtr) s_fn_CheckPtr(&probe);
             bool hasTombstone = false;
             if (probe && s_pTid_Tombstone) {
                 const uintptr_t ent = reinterpret_cast<uintptr_t>(probe);
@@ -436,7 +422,6 @@ extern "C" char CemeteryComponent_EnterBuilt(void* compV, void* /*sm*/) {
                 const uintptr_t arr = *reinterpret_cast<uintptr_t*>(ent + 0x30);
                 for (int j = 0; j < n; ++j) {
                     void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(j) * 8);
-                    if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
                     void* c = *slot;
                     if (!c) continue;
                     typedef uint32_t (*GetTypeId_t)(void*);

@@ -173,8 +173,6 @@ void SelectResourceUI_PopulateCombo(void* self) {
     uintptr_t s = (uintptr_t)self;
 
     // Get the selectResource combo element
-    void* comboIBP = (void*)(s + 0x30);
-    fn_InternalBasePtr_CheckPtr(comboIBP);
     void* combo = *(void**)(s + 0x30);
 
     // Clear existing items
@@ -186,7 +184,6 @@ void SelectResourceUI_PopulateCombo(void* self) {
 
     // Set current selection if we found a match
     if (selectedIdx >= 0) {
-        fn_InternalBasePtr_CheckPtr(comboIBP);
         fn_ComboElement_SetCurrentItem(*(void**)(s + 0x30), selectedIdx);
     }
 }

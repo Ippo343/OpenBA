@@ -629,7 +629,6 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
         void* entity = isEntity ? entityBase : nullptr;
         uint64_t entityRef = 0;
         new (&entityRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
-        fn_InternalBasePtr_CheckPtr(&entityRef);
 
         // Find CitizenAI component on entity
         uint64_t citizenAIRef = 0;
@@ -654,7 +653,6 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
         if (followDialog) {
             // Construct base DialogInstance(self, userInterface, resource, nullParent, 0, 0, 0)
             uint64_t nullParent = 0;
-            fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
             void* userInterface = *(void**)((uintptr_t)*(void**)(s + 0x18) + 0x10);
             fn_DialogInstance_Ctor(followDialog, userInterface, checkedRes, &nullParent, 0, 0, 0);
 
@@ -689,7 +687,6 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
 
         // Add dialog to UI
         uint64_t dialogRef = dialogIBP;
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         void* ui = *(void**)((uintptr_t)*(void**)(s + 0x18) + 0x10);
         fn_UI_AddDialog(ui, &dialogRef);
     }

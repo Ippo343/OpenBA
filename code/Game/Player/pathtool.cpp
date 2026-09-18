@@ -90,10 +90,6 @@ static fn_PathToolSetSelected_t s_fn_PathToolSetSelected = nullptr;
 // fn_KeyMap_Pressed dispatch slot at 0x140151758
 static void** s_dispatchSlot_KeyMapPressed = nullptr;
 
-// fn_InternalBasePtr_CheckPtr dispatch slot at 0x140152ab0
-typedef void (*fn_CheckPtr_t)(void* self);
-static fn_CheckPtr_t s_fn_CheckPtr = nullptr;
-
 static bool s_funcsResolved = false;
 
 static void ResolvePathToolFuncs() {
@@ -117,11 +113,6 @@ static void ResolvePathToolFuncs() {
         void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152890));
         if (d) s_fn_PickingGetUserData = reinterpret_cast<fn_PickingGetUserData_t>(*d);
     }
-    {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152ab0));
-        if (d) s_fn_CheckPtr = reinterpret_cast<fn_CheckPtr_t>(*d);
-    }
-
     s_dispatchSlot_KeyMapPressed = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x140151758));
 
@@ -268,9 +259,6 @@ uint64_t PathTool_OnKey(PathTool* self, char key) {
 
     // If we found an entity and it differs from current selection, update
     if (entityIBP != 0) {
-        if (s_fn_CheckPtr) {
-            s_fn_CheckPtr(&entityIBP);
-        }
         if ((uint64_t)self->selectedEntity != entityIBP) {
             uint64_t tmpIBP = entityIBP;
             if (s_fn_PathToolSetSelected) {
@@ -474,9 +462,6 @@ bool PathTool_Serialize(PathTool* self, uint64_t* param2) {
     ResolvePathToolFuncs();
 
     // Call CheckPtr on self->selectedEntity to resolve any lazy pointer
-    if (s_fn_CheckPtr) {
-        s_fn_CheckPtr(&self->selectedEntity);
-    }
 
     // Compare the stream value to the selected entity
     return *param2 == self->selectedEntity;

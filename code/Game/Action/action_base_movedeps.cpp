@@ -150,7 +150,6 @@ void ActMvDep_AnimHelper_50f0(uintptr_t self, uint32_t animId, float p3, float p
     uint32_t nw = old | 4u;
     *reinterpret_cast<uint32_t*>(self + 0x20) = nw;
     if (((nw ^ old) & 0xffff) != 0 && *reinterpret_cast<uintptr_t*>(self + 0x10) != 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
         if (s_Notify_c3470) s_Notify_c3470(*reinterpret_cast<void**>(self + 0x10));
     }
 }

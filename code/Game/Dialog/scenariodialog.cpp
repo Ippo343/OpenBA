@@ -373,7 +373,6 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
         uint32_t scenarioResIdx = *(uint32_t*)(entryArray + (uintptr_t)selectedIdx * 0x38 + 0x30);
 
         // Get parent controller (self+0xC0 is InternalBasePtr to parent MainMenuDialog)
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0xC0));
         void* parentCtrl = *(void**)(s + 0xC0);
 
         // Build InternalBasePtr(null) for retval
@@ -466,7 +465,6 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
         // String::~String(local_res10) at the tail of 0x140077cb0. Moved below.
 
         // Get parent controller and load from saved state
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0xC0));
         void* parentCtrl = *(void**)(s + 0xC0);
 
         uint8_t nullIBP[8];

@@ -232,7 +232,6 @@ void MarketBst_b290(int64_t* tree, void* serializer) {
                 for (;;) {
                     // 14002b3a3: CheckPtr on the CURRENT NODE (the node pointer itself,
                     // which doubles as the address of its key field).
-                    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(cur));
                     // 14002b3ac/b3b0: CMP [RBP-0x20],RAX / JC -> unsigned "key < node->key".
                     if (key < NodeKey(cur)) {
                         uintptr_t left = NodeLeft(cur);
@@ -244,7 +243,6 @@ void MarketBst_b290(int64_t* tree, void* serializer) {
                         break;
                     }
                     // 14002b3b2: CheckPtr on the KEY slot this time (&local key), not the node.
-                    fn_InternalBasePtr_CheckPtr(&key);
                     // 14002b3c0/b3c3: JNC when node->key >= key -> duplicate, nothing to do.
                     if (NodeKey(cur) >= key) break;
                     uintptr_t right = NodeRight(cur);

@@ -62,7 +62,6 @@ void* FindComp(void* ent, uint32_t tid) {
     uintptr_t a = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
     for (int i = 0; i < n && a; ++i) {
         void** cs = reinterpret_cast<void**>(a + static_cast<uintptr_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs);
         void* c = *cs;
         if (!c) continue;
         void** vt = *reinterpret_cast<void***>(c);
@@ -86,14 +85,12 @@ void DumpStorage(int frame, uintptr_t arr, int n) {
 
     for (int i = 0; i < n; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* ent = *slot;
         if (!ent) continue;
         const int cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
         uintptr_t cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
         for (int c = 0; c < cN && cA; ++c) {
             void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs);
             void* comp = *cs;
             if (!comp) continue;
             void** vt = *reinterpret_cast<void***>(comp);
@@ -152,7 +149,6 @@ void DumpAll(int frame) {
 
     for (int i = 0; i < n && arr; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* ent = *slot;
         if (!ent) continue;
 

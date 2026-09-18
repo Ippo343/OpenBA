@@ -31,11 +31,9 @@ static void EntityTrackingSet_Remove_Impl(void* bstRoot, void* key)
     uint8_t* node = (uint8_t*)*rootPtr;
 
     while (node != nullptr) {
-        fn_InternalBasePtr_CheckPtr((void*)node);
         uint64_t nodeKey = *(uint64_t*)node;
         uint64_t searchKey = *(uint64_t*)key;
 
-        fn_InternalBasePtr_CheckPtr(key);
         if (searchKey < nodeKey) {
             // Go left: *(node+0x20) = left child
             node = *(uint8_t**)(node + 0x20);
@@ -195,12 +193,10 @@ void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
     // Search BST for existing node with matching key
     uintptr_t node = *rootPtr;
     while (node != 0) {
-        fn_InternalBasePtr_CheckPtr((void*)node);
         uint64_t nodeKey = *(uint64_t*)node;
         if (entityKey < nodeKey) {
             node = *(uintptr_t*)(node + 0x20);  // left
         } else {
-            fn_InternalBasePtr_CheckPtr(entityPtr);
             if (entityKey <= nodeKey) {
                 // Found — update position and active flag
                 if (node != 0) {
@@ -241,11 +237,9 @@ void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
 
         while (true) {
             parent = cur;
-            fn_InternalBasePtr_CheckPtr((void*)cur);
             uint64_t curKey = *(uint64_t*)cur;
 
             if (curKey <= entityKey) {
-                fn_InternalBasePtr_CheckPtr(entityPtr);
                 if (entityKey <= curKey) {
                     // Duplicate key — should not happen, already handled above
                     return;
@@ -411,7 +405,6 @@ void EntityUI_Slot7(EntityUI* self) {
         // entity/citizen content actually render, so it always runs.
 
     // Find components on entity to determine page state
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x30));
     void* entityPtr = *(void**)(s + 0x30);
 
     void* buildStateComp = nullptr;
@@ -442,11 +435,9 @@ void EntityUI_Slot7(EntityUI* self) {
     if (posComp == 0 && destroyComp == 0) {
         if (smComp == 0 || pageIdx != 0) {
             // Get default page from entity's description
-            fn_InternalBasePtr_CheckPtr((void*)(s + 0x30));
             void* entityDesc = *(void**)((uintptr_t)(*(void**)(s + 0x30)) + 0x28);
             void* descResult = nullptr;
             GetDescPage_Impl(entityDesc, &descResult);
-            fn_InternalBasePtr_CheckPtr((void*)(s + 0x40));
             pageIdx = descResult ? *(int*)((uintptr_t)descResult + 0x40) : 2;
         } else {
             pageIdx = 2;
@@ -454,13 +445,11 @@ void EntityUI_Slot7(EntityUI* self) {
     } else {
         // Build/destroy in progress — sequential checks matching original flow
         if (pageIdx >= 3 && pageIdx <= 7) {
-            fn_InternalBasePtr_CheckPtr((void*)(s + 0x40));
             pageIdx = 3;
         } else {
             // Check 2: if posComp exists, verify build is complete
             bool gotoPage2 = false;
             if (posComp != 0) {
-                fn_InternalBasePtr_CheckPtr(&posComp);
                 bool complete = BuildComplete_Impl((void*)posComp);
                 if (!complete) {
                     gotoPage2 = true;
@@ -468,12 +457,10 @@ void EntityUI_Slot7(EntityUI* self) {
             }
             // Check 3: if not redirected to page 2 and pageIdx != 0, get desc page
             if (!gotoPage2 && pageIdx != 0) {
-                fn_InternalBasePtr_CheckPtr((void*)(s + 0x30));
                 void* entityDesc = *(void**)((uintptr_t)(*(void**)(s + 0x30)) + 0x28);
                 void* descResult = nullptr;
                 GetDescPage_Impl(entityDesc, &descResult);
 
-                fn_InternalBasePtr_CheckPtr((void*)(s + 0x40));
                 void* pagesElem = *(void**)(s + 0x40);
                 // Retail (0x140066d80) assigns the ACTIVE page into the same register it
                 // then conditionally overwrites:
@@ -492,9 +479,7 @@ void EntityUI_Slot7(EntityUI* self) {
                 if (activePage != 4) {
                     pageIdx = descResult ? *(int*)((uintptr_t)descResult + 0x40) : 2;
                 }
-                fn_InternalBasePtr_CheckPtr((void*)(s + 0x40));
             } else {
-                fn_InternalBasePtr_CheckPtr((void*)(s + 0x40));
                 pageIdx = 2;
             }
         }
@@ -583,7 +568,6 @@ void EntityUI_Slot8(EntityUI* self) {
     // Get current tool from player controller (IBP at +0x28, needs CheckPtr)
     void* playerController = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x120);
     void* currentTool = *(void**)((uintptr_t)playerController + 0x28);
-    fn_InternalBasePtr_CheckPtr(&currentTool);
 
     // Check if current tool is EditTool
     bool isEditTool = fn_IsDerivedFrom(currentTool, *g_TypeId_EditTool);
@@ -598,7 +582,6 @@ void EntityUI_Slot8(EntityUI* self) {
 
         // Re-read current tool after deselect (with CheckPtr)
         currentTool = *(void**)((uintptr_t)playerController + 0x28);
-        fn_InternalBasePtr_CheckPtr(&currentTool);
         isEditTool = fn_IsDerivedFrom(currentTool, *g_TypeId_EditTool);
         void* newEditTool = isEditTool ? currentTool : nullptr;
 
@@ -610,7 +593,6 @@ void EntityUI_Slot8(EntityUI* self) {
     void* editToolPtr = *(void**)editToolBuf;
     if (editToolPtr) {
         void* entityPtr = *(void**)(s + 0x30);
-        fn_InternalBasePtr_CheckPtr(editToolBuf);
         fn_EditTool_SelectEntity(*(void**)editToolBuf, &entityPtr);
     }
 }
@@ -664,7 +646,6 @@ void EntityUI_Slot9(EntityUI* self, void* param2, int msg, int id) {
             uint64_t multiRef = 0;
             fn_FindComponent_MultiObject(entityPtr, &multiRef);
             if (multiRef == 0) {
-                fn_InternalBasePtr_CheckPtr(&modelRef);
                 uintptr_t model = (uintptr_t)modelRef;
                 focus[0] = *(float*)(model + 0x158);
                 focus[1] = *(float*)(model + 0x15C);

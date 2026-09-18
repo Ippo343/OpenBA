@@ -92,7 +92,7 @@ bool CompleteTask_ResolveFuncs() {
     // completion path in the standalone exe (both are null there), so the task manager
     // was reachable for POST but never for complete/cancel.
     bool execOk = s_fn_TryCompleteTask && s_fn_TaskCleanup && s_fn_TaskReassign &&
-                  s_pGameState && fn_InternalBasePtr_CheckPtr && fn_IsDerivedFrom &&
+                  s_pGameState && fn_IsDerivedFrom &&
                   fn_InternalBasePtr_DeletePtr && fn_ObjectInternal_Dtor && fn_MemFreeStatic;
 
 #ifdef _DEBUG
@@ -204,7 +204,6 @@ int CompleteTask_AbstractImpl_Impl(CompleteTask* self, void* actionStack) {
 
     // Lazy-resolve task index from work entity
     if (self->taskIndex == 0x7FFFFFFF) {
-        fn_InternalBasePtr_CheckPtr(&self->workEntity);
         uint8_t* workEnt = (uint8_t*)self->workEntity;
         self->taskIndex = *(int32_t*)(workEnt + 0x30);
     }
@@ -243,7 +242,6 @@ void CompleteTask_CheckEntity_Impl(CompleteTask* self) {
         !*(void**)((uint8_t*)*s_pGameState + 0x118)) return;   // inert task mgr -> no-op
     // Lazy-resolve task index
     if (self->taskIndex == 0x7FFFFFFF) {
-        fn_InternalBasePtr_CheckPtr(&self->workEntity);
         uint8_t* workEnt = (uint8_t*)self->workEntity;
         self->taskIndex = *(int32_t*)(workEnt + 0x30);
     }
@@ -262,7 +260,6 @@ void CompleteTask_CheckEntity_Impl(CompleteTask* self) {
 // ============================================================
 bool CompleteTask_GetTarget_Impl(CompleteTask* self, void* param) {
     if (!CompleteTask_ResolveFuncs()) return false;   // lazy resolve (exe-ctor-built action)
-    fn_InternalBasePtr_CheckPtr(param);
     void* paramVal = *(void**)param;
 
     // Check direct match with target entity
@@ -271,9 +268,7 @@ bool CompleteTask_GetTarget_Impl(CompleteTask* self, void* param) {
     }
 
     // Check parent entity of work entity
-    fn_InternalBasePtr_CheckPtr(&self->workEntity);
     void* parentEntity = *(void**)((uint8_t*)self->workEntity + 0x10);
-    fn_InternalBasePtr_CheckPtr(param);
     return parentEntity == *(void**)param;
 }
 

@@ -90,17 +90,14 @@ void EnsureFuncs() {
 }
 
 
-inline void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 
 // Find a component on an entity through one of the exe finder leaves; returns
 // the raw component pointer (finders write an IBP through the out param).
 void* FindOn(fn_findComp_t finder, void* entity, void* entityIBPSlot) {
     if (!finder) return nullptr;
     (void)entity;
-    CheckPtr(entityIBPSlot);
     int64_t out = 0;
     finder(*reinterpret_cast<int64_t*>(entityIBPSlot), &out);
-    CheckPtr(&out);
     return reinterpret_cast<void*>(out);
 }
 
@@ -139,7 +136,6 @@ void SeatPickOwner_1290d0(void* pickComp, void** masterIBPSlot) {
     uintptr_t p = reinterpret_cast<uintptr_t>(pickComp);
     *reinterpret_cast<void**>(p + 0x30) = *masterIBPSlot;
     if (*reinterpret_cast<int32_t*>(p + 0x28) < 0) return;
-    CheckPtr(reinterpret_cast<void*>(p + 0x30));
     void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     void* scene = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x70) : nullptr;
     if (s_setUserData && scene)
@@ -188,7 +184,6 @@ void SpawnFencePiece_dbc80(FencedTool* self, int sectionIdx, int x, int y,
     int64_t entIBP = 0;
     if (fn_InternalBasePtr_Ctor) new (&entIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(ent));   // B.3.3 bridge
-    CheckPtr(&entIBP);
     if (!entIBP) return;
 
     void* mapComp = FindOn(s_findMap, ent, &entIBP);
@@ -213,7 +208,6 @@ void SpawnFencePiece_dbc80(FencedTool* self, int sectionIdx, int x, int y,
     }
 
     // Append to the master's MultiObject list (arr at +0x48, count at +0x50).
-    CheckPtr(multiObjIBPSlot);
     uintptr_t multi = *reinterpret_cast<uintptr_t*>(multiObjIBPSlot);
     if (multi && s_append) {
         int64_t val = entIBP;
@@ -382,7 +376,6 @@ extern "C" uint64_t FencedTool_CalcPath_Port(FencedTool* self, int64_t startCell
     int64_t masterIBP = 0;
     if (fn_InternalBasePtr_Ctor) new (&masterIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(master));   // B.3.3 bridge
-    CheckPtr(&masterIBP);
     if (!masterIBP) return 0;
 
     void* masterMap = FindOn(s_findMap, master, &masterIBP);
@@ -390,7 +383,6 @@ extern "C" uint64_t FencedTool_CalcPath_Port(FencedTool* self, int64_t startCell
 
     int64_t multiIBP = 0;
     if (s_findMulti) {
-        CheckPtr(&masterIBP);
         s_findMulti(masterIBP, &multiIBP);
     }
 
@@ -408,7 +400,6 @@ extern "C" uint64_t FencedTool_CalcPath_Port(FencedTool* self, int64_t startCell
     int64_t shelterIBP = 0;
     if (fn_InternalBasePtr_Ctor) new (&shelterIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(shelter));   // B.3.3 bridge
-    CheckPtr(&shelterIBP);
     if (shelterIBP) {
         void* shMap = FindOn(s_findMap, shelter, &shelterIBP);
         StampMapRect(shMap, static_cast<int>(shMinX), static_cast<int>(shMinY),
@@ -422,7 +413,6 @@ extern "C" uint64_t FencedTool_CalcPath_Port(FencedTool* self, int64_t startCell
         void* masterVal = reinterpret_cast<void*>(masterIBP);
         SeatPickOwner_1290d0(shPick, &masterVal);
 
-        CheckPtr(&multiIBP);
         if (multiIBP && s_append) {
             int64_t val = shelterIBP;
             s_append(reinterpret_cast<int64_t*>(multiIBP + 0x48),
@@ -437,7 +427,6 @@ extern "C" uint64_t FencedTool_CalcPath_Port(FencedTool* self, int64_t startCell
     }
 
     // 6. Perimeter cell count on the MultiObjectComponent.
-    CheckPtr(&multiIBP);
     if (multiIBP)
         *reinterpret_cast<int32_t*>(multiIBP + 0x58) = (rectH + rectW) * 2 - 4;
 

@@ -91,9 +91,6 @@ static void EnsureLifecycleFuncs() {
     s_pTid_WorkComp      = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c8070));
 }
 
-static inline void Ck(void* p) {
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p);
-}
 
 // ============================================================
 // CitizenComp_LeaveRoster_2040 (0x140112040)
@@ -107,40 +104,31 @@ void CitizenComp_LeaveRoster_2040(int64_t selfV, void* param2V) {
     int64_t* ibp  = reinterpret_cast<int64_t*>(param2V);   // *ibp == citizen node ptr
     uint64_t empty = 0;
 
-    Ck(ibp);
     if (*reinterpret_cast<int64_t*>(base + 0x260) == *ibp) {
-        Ck(ibp);
         *reinterpret_cast<int64_t*>(base + 0x260) = *reinterpret_cast<int64_t*>(*ibp + 0x268);
     }
     // node.prev.next = node.next
-    Ck(ibp);
     int64_t nextLink = *reinterpret_cast<int64_t*>(*ibp + 0x268);
-    Ck(ibp);
     int64_t node = *ibp;
-    Ck(reinterpret_cast<void*>(node + 0x270));
     *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(node + 0x270) + 0x268) = nextLink;
     // node.next.prev = node.prev
-    Ck(ibp);
     int64_t prevLink = *reinterpret_cast<int64_t*>(*ibp + 0x270);
-    Ck(ibp);
     node = *ibp;
-    Ck(reinterpret_cast<void*>(node + 0x268));
     *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(node + 0x268) + 0x270) = prevLink;
     // node's own links -> empty IBPs
-    new (&empty) ::Object::InternalBasePtr(nullptr); Ck(ibp);   // B.3.3 bridge
+    new (&empty) ::Object::InternalBasePtr(nullptr); 
     *reinterpret_cast<int64_t*>(*ibp + 0x270) = (int64_t)empty;
-    new (&empty) ::Object::InternalBasePtr(nullptr); Ck(ibp);   // B.3.3 bridge
+    new (&empty) ::Object::InternalBasePtr(nullptr); 
     *reinterpret_cast<int64_t*>(*ibp + 0x268) = (int64_t)empty;
     // if this node was the head, clear the head cache
-    Ck(ibp);
     if (*reinterpret_cast<int64_t*>(base + 0x260) == *ibp) {
         new (&empty) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *reinterpret_cast<int64_t*>(base + 0x260) = (int64_t)empty;
     }
     // clear the workplace slot + the current-workplace link (+0x258)
-    new (&empty) ::Object::InternalBasePtr(nullptr); Ck(ibp);   // B.3.3 bridge
+    new (&empty) ::Object::InternalBasePtr(nullptr); 
     if (s_fn_AssignWorkplace) s_fn_AssignWorkplace(reinterpret_cast<void*>(*ibp), &empty, -1);
-    new (&empty) ::Object::InternalBasePtr(nullptr); Ck(ibp);   // B.3.3 bridge
+    new (&empty) ::Object::InternalBasePtr(nullptr); 
     *reinterpret_cast<int64_t*>(*ibp + 0x258) = (int64_t)empty;
 }
 
@@ -161,28 +149,19 @@ void CitizenComp_JoinRoster_68a0(void* selfV, void* param2V) {
         // empty roster -> singleton ring (prev = next = node)
         *reinterpret_cast<int64_t*>(base + 0x260) = *ibp;
         v = *ibp;
-        Ck(ibp);
         *reinterpret_cast<int64_t*>(*ibp + 0x268) = v;
         v = *ibp;
-        Ck(ibp);
         node = *ibp;
     } else {
-        Ck(base + 0x260);
         v = *reinterpret_cast<int64_t*>(head + 0x270);      // head.prev
-        Ck(ibp);
         *reinterpret_cast<int64_t*>(*ibp + 0x270) = v;      // node.prev = head.prev
         v = *reinterpret_cast<int64_t*>(base + 0x260);      // head
-        Ck(ibp);
         *reinterpret_cast<int64_t*>(*ibp + 0x268) = v;      // node.next = head
         v = *ibp;
-        Ck(ibp);
         node = *ibp;
-        Ck(reinterpret_cast<void*>(node + 0x270));
         *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(node + 0x270) + 0x268) = v; // node.prev.next = node
         v = *ibp;
-        Ck(ibp);
         node = *ibp;
-        Ck(reinterpret_cast<void*>(node + 0x268));
         node = *reinterpret_cast<int64_t*>(node + 0x268);   // node.next
     }
     *reinterpret_cast<int64_t*>(node + 0x270) = v;
@@ -190,17 +169,11 @@ void CitizenComp_JoinRoster_68a0(void* selfV, void* param2V) {
     // store self as an IBP at node +0x258, then AssignWorkplace via self's descriptor
     uint64_t selfIBP = 0;
     new (&selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(base));   // B.3.3 bridge
-    Ck(ibp);
     *reinterpret_cast<int64_t*>(*ibp + 0x258) = (int64_t)selfIBP;
-    Ck(ibp);
     int64_t slotHost = *ibp;
-    Ck(reinterpret_cast<void*>(slotHost + 0x258));
     slotHost = *reinterpret_cast<int64_t*>(slotHost + 0x258);   // self (deref stored IBP)
-    Ck(ibp);
     int64_t wpHost = *ibp;
-    Ck(reinterpret_cast<void*>(wpHost + 0x258));
     uint64_t wpIBP = (uint64_t)*reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(wpHost + 0x258) + 0x238);
-    Ck(ibp);
     if (s_fn_AssignWorkplace)
         s_fn_AssignWorkplace(reinterpret_cast<void*>(*ibp), &wpIBP,
                              *reinterpret_cast<int32_t*>(slotHost + 0x240));
@@ -215,7 +188,6 @@ static int ProfessionKeyOfEntity(uint64_t handle) {
     if (!s_fn_FindComp_3050) return 0;
     int64_t outIBP = 0;
     void* ibp = s_fn_FindComp_3050(static_cast<int64_t>(handle), &outIBP);  // returns &outIBP
-    Ck(ibp);
     int64_t comp = ibp ? *reinterpret_cast<int64_t*>(ibp) : 0;
     return comp ? *reinterpret_cast<int32_t*>(comp + 0x28) : 0;
 }
@@ -233,7 +205,6 @@ static int LookupProfessionPriority(int key) {
         else if (key > node[0]) node = *reinterpret_cast<int**>(node + 8);   // right (node+0x20)
         else {
             int64_t value = *reinterpret_cast<int64_t*>(node + 2);           // node+0x8
-            Ck(&value);
             return value ? *reinterpret_cast<int*>(value + 0x24) : 0;
         }
     }
@@ -273,12 +244,9 @@ void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender,
 
     // 1-3. reset path/target, set gender mesh variant, place at spawn transform
     void* modelIBP = nullptr;
-    Ck(p + 0x10);
     if (s_fn_ClearPathQueue) s_fn_ClearPathQueue(*reinterpret_cast<uintptr_t*>(p + 0x10), &modelIBP);
-    Ck(&modelIBP);
     if (s_fn_SetVariant && modelIBP)
         s_fn_SetVariant(reinterpret_cast<int64_t*>(modelIBP), static_cast<uint16_t>(gender == 0), 0);
-    Ck(&modelIBP);
     if (s_fn_SetTransform && modelIBP)
         s_fn_SetTransform(reinterpret_cast<uintptr_t>(modelIBP), pos, 0.0f);
 
@@ -330,7 +298,6 @@ void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender,
     new (&housingIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     bool needAssign = (*reinterpret_cast<int64_t*>(p + 0x1f0) != spawnKey);
     if (!needAssign) {
-        Ck(&housingIBP);
         needAssign = (*reinterpret_cast<int64_t*>(p + 0x248) != static_cast<int64_t>(housingIBP));
     }
     if (needAssign) {
@@ -347,7 +314,6 @@ void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender,
     *reinterpret_cast<float*>(p + 0x40) = rf * spanA + baseA;
 
     // 13. sprite/anim init on the AnimalComponent (+0x278)
-    Ck(p + 0x278);
     if (s_fn_AnimA1f0)
         s_fn_AnimA1f0(*reinterpret_cast<void**>(p + 0x278), 0,
                       g_fUVScale ? *g_fUVScale : 1.0f, 0.0f);

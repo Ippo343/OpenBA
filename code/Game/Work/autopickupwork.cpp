@@ -193,6 +193,7 @@ void AutoPickupWork_Serialize(AutoPickupWork* self, void* stream) {
 // Trivial — always returns 0 (false). This is the base implementation;
 // derived types override with actual work logic.
 int AutoPickupWork_Execute(AutoPickupWork* self) {
+    (void)self;   // the only read was a CheckPtr, deleted in B.3.3 step 6D
     return 0;
 }
 
@@ -205,14 +206,12 @@ void AutoPickupWork_OnRemove(AutoPickupWork* self) {
     EnsureInit();
 
     // CheckPtr on the entity InternalBasePtr at self+0x10
-    fn_InternalBasePtr_CheckPtr((void*)&self->_field10);
 
     // Find AutoPickupComponent on the entity
     uintptr_t componentPtr[4] = {0}; // InternalBasePtr result buffer
     s_fn_FindAutoPickupComponent(self->_field10, componentPtr);
 
     // CheckPtr on the found component
-    fn_InternalBasePtr_CheckPtr(componentPtr);
 
     // Free the item list at component+0x30
     void* component = (void*)componentPtr[0];

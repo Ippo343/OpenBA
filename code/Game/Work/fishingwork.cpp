@@ -177,7 +177,7 @@ bool FishingWork_ResolveFuncs() {
               s_typeId_1401c7660 && s_typeId_1401c7698 &&
               s_typeId_1401c4870 && s_typeId_1401c7e78 && s_typeId_1401c8070 &&
               s_typeId_1401c7158 &&
-              fn_InternalBasePtr_Ctor && fn_InternalBasePtr_CheckPtr &&
+              fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom && fn_MemFreeStatic && fn_MemAlloc &&
               fn_Map_CheckPassable && fn_Work_CanStartWork &&
               fn_CitizenAI_LongTermPlan && fn_Random_RandTol &&
@@ -218,14 +218,12 @@ static void* FindComponentOnEntity(uintptr_t entity, uint32_t typeId) {
 
     for (int i = 0; i < count; i++) {
         uintptr_t* ibpSlot = (uintptr_t*)(arrayPtr + (uintptr_t)i * 8);
-        fn_InternalBasePtr_CheckPtr(ibpSlot);
         uintptr_t comp = *ibpSlot;
         uintptr_t vtable = *(uintptr_t*)comp;
         typedef uint32_t (*GetTypeId_t)();
         uint32_t compTypeId = ((GetTypeId_t)(*(uintptr_t*)(vtable + 0x10)))();
         if (compTypeId == typeId) {
             ibpSlot = (uintptr_t*)(arrayPtr + (uintptr_t)i * 8);
-            fn_InternalBasePtr_CheckPtr(ibpSlot);
             void* result = (void*)*ibpSlot;
             if (fn_IsDerivedFrom(result, typeId)) {
                 return result;
@@ -285,7 +283,6 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
 
     // CheckPtr on building entity IBP (at self+0x10)
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t buildingEntity = *(uintptr_t*)(selfAddr + 0x10);
 
     // Find FishingComponent (DAT_1401c7660) on building entity
@@ -296,7 +293,6 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
     new (&fishingIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(fishingComp));   // B.3.3 bridge
 
     // Get fishing description via IsDerivedFrom check on component+0x18
-    fn_InternalBasePtr_CheckPtr(&fishingIBP);
     void* compBase = *(void**)(fishingIBP + 0x18);
     void* fishingDesc = nullptr;
     if (fn_IsDerivedFrom(compBase, *s_typeId_1401c7698)) {
@@ -312,10 +308,8 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
     bool atCapacity = *(int*)(mapEntries + offset + 8) <= *(int*)(mapEntries + offset);
 
     // Toggle mesh instance visibility based on capacity (visGroup 2)
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t meshIBPBuf = 0;
     s_fn_FindComponent_MeshInstance(*(uintptr_t*)(selfAddr + 0x10), &meshIBPBuf);
-    fn_InternalBasePtr_CheckPtr(&meshIBPBuf);
     s_fn_MeshInstance_SetVisibility(*(void**)&meshIBPBuf, 2, atCapacity ? 1 : 0);
 
     if (atCapacity) {
@@ -323,7 +317,6 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
     }
 
     // Find position component on building entity
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t posIBP = 0;
     s_fn_FindComponent_Position(*(uintptr_t*)(selfAddr + 0x10), &posIBP);
 
@@ -360,7 +353,6 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
         for (int i = 0; i < spotCount; i++) {
             // Get spot position (mode=2)
             float spotPos[3];
-            fn_InternalBasePtr_CheckPtr(&posIBP);
             s_fn_Entity_GetSpotPosition((void*)posIBP, spotPos, 2, i, nullptr);
 
             int half = mapSize >> 1;
@@ -392,15 +384,11 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
             // Get citizen position (mode=0) for pathfinding
             float citizenPos[3];
             float citizenHeading;
-            fn_InternalBasePtr_CheckPtr(&posIBP);
             s_fn_Entity_GetSpotPosition((void*)posIBP, citizenPos, 0, emptySlot, &citizenHeading);
 
             // Get citizen's home position for pathfinding source
-            fn_InternalBasePtr_CheckPtr(citizenIBP);
             uintptr_t citizenEntity = *(uintptr_t*)citizenIBP;
-            fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
             uintptr_t smComp = *(uintptr_t*)(citizenEntity + 0x278);
-            fn_InternalBasePtr_CheckPtr((void*)(smComp + 0x68));
             uintptr_t citizenPosData = *(uintptr_t*)(smComp + 0x68);
 
             int cMapSize = *mapGridPtr;
@@ -413,7 +401,6 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
 
             // Get spot cell
             float spotPos[3];
-            fn_InternalBasePtr_CheckPtr(&posIBP);
             s_fn_Entity_GetSpotPosition((void*)posIBP, spotPos, 0, emptySlot, &citizenHeading);
 
             int spHalf = cMapSize >> 1;
@@ -434,7 +421,6 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
 
             // Find RadiusComponent on building's description sub-object (+0x28)
             // Sub-objects use +0x28/+0x30 layout, NOT entity +0x30/+0x38
-            fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
             uintptr_t entityForRadius = *(uintptr_t*)(*(uintptr_t*)(selfAddr + 0x10) + 0x28);
             void* radiusComp = FindComponentOnSubObject(entityForRadius, *s_typeId_1401c4870);
 
@@ -490,7 +476,6 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
                 }
 
                 // Valid spot found — create fishing action
-                fn_InternalBasePtr_CheckPtr(&fishingIBP);
 
                 // Build action parameters
                 uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
@@ -509,7 +494,6 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
 
                 // Finalize: push action, set citizen slot
                 int priority = (int)selfQ[4];  // +0x20
-                fn_InternalBasePtr_CheckPtr(citizenIBP);
                 uintptr_t ce = *(uintptr_t*)citizenIBP;
 
                 uintptr_t vt = *(uintptr_t*)self;
@@ -538,7 +522,6 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
                 s_fn_PlayAnimation_Action_Ctor(&citizenRef2, (int)selfQ[4], emptySlot);
 
                 int priority = (int)selfQ[4];
-                fn_InternalBasePtr_CheckPtr(citizenIBP);
                 uintptr_t ce = *(uintptr_t*)citizenIBP;
 
                 uintptr_t vt = *(uintptr_t*)self;
@@ -561,9 +544,7 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
             }
 
             // Retries exhausted — check if storage has items, go to long-term plan
-            fn_InternalBasePtr_CheckPtr(citizenIBP);
             uintptr_t citizenEnt = *(uintptr_t*)citizenIBP;
-            fn_InternalBasePtr_CheckPtr((void*)(citizenEnt + 0x10));
             uintptr_t homeEntity = *(uintptr_t*)(citizenEnt + 0x10);
 
             // Find StorageComponent on home entity
@@ -572,14 +553,12 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
             new (&storageIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(storageComp));   // B.3.3 bridge
 
-            fn_InternalBasePtr_CheckPtr(&storageIBP);
             int storageCount = fn_StorageComponent_QueryCount((void*)storageIBP);
             if (storageCount < 1) {
                 return 1;
             }
 
             // Has storage items — replan citizen
-            fn_InternalBasePtr_CheckPtr(citizenIBP);
             fn_CitizenAI_LongTermPlan(*(void**)citizenIBP);
             return 2;
         }
@@ -590,7 +569,6 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
     if (spotCount > 0) {
         for (int i = 0; i < spotCount; i++) {
             float spotPos[3];
-            fn_InternalBasePtr_CheckPtr(&posIBP);
             s_fn_Entity_GetSpotPosition((void*)posIBP, spotPos, 2, i, nullptr);
 
             int half = *mapGridPtr >> 1;
@@ -642,7 +620,6 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
             }
 
             // Check for WorkplaceComponent (DAT_1401c8070) on cell entity
-            fn_InternalBasePtr_CheckPtr(&cellEntity);
             uintptr_t cellEnt = *(uintptr_t*)&cellEntity;
             int compCount = *(int*)(cellEnt + 0x38);
             uintptr_t compArray = *(uintptr_t*)(cellEnt + 0x30);
@@ -650,14 +627,12 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
 
             for (int j = 0; j < compCount; j++) {
                 uintptr_t* ibpSlot = (uintptr_t*)(compArray + (uintptr_t)j * 8);
-                fn_InternalBasePtr_CheckPtr(ibpSlot);
                 uintptr_t comp = *ibpSlot;
                 uintptr_t vt = *(uintptr_t*)comp;
                 typedef uint32_t (*GetTypeId_t)();
                 uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(vt + 0x10)))();
                 if (tid == *s_typeId_1401c8070) {
                     ibpSlot = (uintptr_t*)(compArray + (uintptr_t)j * 8);
-                    fn_InternalBasePtr_CheckPtr(ibpSlot);
                     void* c = (void*)*ibpSlot;
                     if (fn_IsDerivedFrom(c, *s_typeId_1401c8070)) {
                         workplaceComp = c;
@@ -669,7 +644,6 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
             uintptr_t workplaceIBP = 0;
             new (&workplaceIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(workplaceComp));   // B.3.3 bridge
-            fn_InternalBasePtr_CheckPtr(&workplaceIBP);
 
             // ── GUARD FOR ONE OF OUR OWN DEVIATIONS (READ of 0x28) ───────────────────
             // The `*(int*)(workplaceIBP + 0x28)` below is FAITHFUL. Verified against
@@ -719,7 +693,6 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
                         wantName ? wantName : "UNREGISTERED", compCount);
                     for (int k = 0; k < compCount; ++k) {
                         uintptr_t* s2 = (uintptr_t*)(compArray + (uintptr_t)k * 8);
-                        fn_InternalBasePtr_CheckPtr(s2);
                         uintptr_t c2 = *s2;
                         if (!c2) { std::fprintf(stderr, "[FishWork]     [%d] <null>\n", k); continue; }
                         uintptr_t v2 = *(uintptr_t*)c2;
@@ -789,7 +762,6 @@ int FishingWork_Slot9_Impl(FishingWork* self, void* param2) {
             allValid = false;
         } else {
             // Valid — record the spot index from task data
-            fn_InternalBasePtr_CheckPtr(&outTask);
             int taskSpotInfo = *(int*)(outTask + 0x34);
 
             int newCount = mappingCount + 1;
@@ -1039,11 +1011,9 @@ int FishingWork_Slot8_Impl(FishingWork* self) {
         uintptr_t* citizenSlot = (uintptr_t*)(*(uintptr_t*)(selfAddr + 0x48) + offset);
         if (*citizenSlot != 0) {
             // CheckPtr on citizen IBP
-            fn_InternalBasePtr_CheckPtr(citizenSlot);
             uintptr_t citizenEntity = *citizenSlot;
 
             // Get state machine component at citizen+0x278
-            fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
             uintptr_t smComp = *(uintptr_t*)(citizenEntity + 0x278);
 
             // Cancel pending actions on smComp+0x48 (action list)
@@ -1067,7 +1037,6 @@ void* FishingWork_Slot10_Impl(FishingWork* self, void* param2) {
     uintptr_t selfAddr = (uintptr_t)self;
 
     // CheckPtr on building entity IBP (at self+0x10)
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t buildingEntity = *(uintptr_t*)(selfAddr + 0x10);
 
     // Find PositionComponent via FUN_140002e10
@@ -1075,7 +1044,6 @@ void* FishingWork_Slot10_Impl(FishingWork* self, void* param2) {
     s_fn_FindComp_PositionEntity(buildingEntity, posIBP);
 
     // CheckPtr on the returned IBP
-    fn_InternalBasePtr_CheckPtr(posIBP);
 
     // Read position entity's field at +0x48 and store in output
     uintptr_t posEntity = *(uintptr_t*)posIBP;

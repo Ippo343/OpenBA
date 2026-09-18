@@ -37,7 +37,6 @@ static uint64_t TownHall_FindElemRaw(void* dialogElem, const char* name) {
     uint64_t foundBuf[2] = {0, 0};
     fn_FindElement(dialogElem, foundBuf, &strBuf);
 
-    fn_InternalBasePtr_CheckPtr(foundBuf);
     void* elem = *(void**)foundBuf;
 
     uint64_t result = 0;
@@ -50,11 +49,9 @@ static uint64_t TownHall_FindElemRaw(void* dialogElem, const char* name) {
 static uint64_t TownHall_FindElem(void* dialogElem, const char* name, uint32_t typeId) {
     System::String strBuf(name);
 
-    fn_InternalBasePtr_CheckPtr(&dialogElem);
     uint64_t foundBuf[2] = {0, 0};
     fn_FindElement(dialogElem, foundBuf, &strBuf);
 
-    fn_InternalBasePtr_CheckPtr(foundBuf);
     void* elem = *(void**)foundBuf;
 
     void* castElem = nullptr;
@@ -105,19 +102,15 @@ void TownHallUI_InitGraph(TownHallUI* self) {
     self->timeCombo = TownHall_FindElemRaw(dialogElem, "timeCombo");
     self->graphCombo = TownHall_FindElemRaw(dialogElem, "graphCombo");
 
-    fn_InternalBasePtr_CheckPtr((void*)&self->timeCombo);
     fn_Element_SetElementId((void*)self->timeCombo, 0x1964);
 
-    fn_InternalBasePtr_CheckPtr((void*)&self->graphCombo);
     fn_Element_SetElementId((void*)self->graphCombo, 0x1965);
 
     uint64_t* numberPtrs = &self->number0;
     for (int i = 0; i < 5; i++) {
         System::String fmtBuf = System::String::Format("number%i", (uint64_t)i);
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
         uint64_t fb[2] = {0, 0};
         fn_FindElement(*(void**)(s + 0x20), fb, &fmtBuf);
-        fn_InternalBasePtr_CheckPtr(fb);
         uint64_t bp = 0;
         new (&bp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(*(void**)fb));   // B.3.3 bridge
         numberPtrs[i] = bp;
@@ -126,10 +119,8 @@ void TownHallUI_InitGraph(TownHallUI* self) {
     uint64_t* labelPtrs = &self->label0;
     for (int i = 0; i < 4; i++) {
         System::String fmtBuf = System::String::Format("label%i", (uint64_t)i);
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
         uint64_t fb[2] = {0, 0};
         fn_FindElement(*(void**)(s + 0x20), fb, &fmtBuf);
-        fn_InternalBasePtr_CheckPtr(fb);
         uint64_t bp = 0;
         new (&bp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(*(void**)fb));   // B.3.3 bridge
         labelPtrs[i] = bp;
@@ -157,7 +148,6 @@ void TownHallUI_InitGraph(TownHallUI* self) {
         fn_UIString_Ctor_Index(uiStrBuf, self->graphYearsTable, i);
         System::String sysStrBuf;
         fn_UIString_ToSystemString(uiStrBuf, &sysStrBuf);
-        fn_InternalBasePtr_CheckPtr((void*)&self->timeCombo);
         uint8_t emptySprite[16];
         fn_Sprite_Default_Ctor(emptySprite);
         fn_ComboElement_AddItem((void*)self->timeCombo, emptySprite, &sysStrBuf, nullptr);
@@ -176,16 +166,13 @@ void TownHallUI_InitGraph(TownHallUI* self) {
             fn_UIString_Ctor_Index(uiStrBuf, self->graphTypesTable, i);
             System::String sysStrBuf;
             fn_UIString_ToSystemString(uiStrBuf, &sysStrBuf);
-            fn_InternalBasePtr_CheckPtr((void*)&self->graphCombo);
             uint8_t emptySprite[16];
             fn_Sprite_Default_Ctor(emptySprite);
             fn_ComboElement_AddItem((void*)self->graphCombo, emptySprite, &sysStrBuf, nullptr);
         }
     }
 
-    fn_InternalBasePtr_CheckPtr((void*)&self->timeCombo);
     fn_ComboElement_SetCurrentItem((void*)self->timeCombo, 0);
-    fn_InternalBasePtr_CheckPtr((void*)&self->graphCombo);
     fn_ComboElement_SetCurrentItem((void*)self->graphCombo, 0);
 
     TownHallUI_UpdateGraph(self);
@@ -213,11 +200,9 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
 
     // Find "tableProfessions" and cast to TableElement
     System::String strBuf("tableProfessions");
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
 
     uint64_t foundBuf[2] = {0, 0};
     fn_FindElement(*(void**)(s + 0x20), foundBuf, &strBuf);
-    fn_InternalBasePtr_CheckPtr(foundBuf);
     void* foundElem = *(void**)foundBuf;
     void* tableElem = CastElement(foundElem, g_TypeId_TableElement);
     uint64_t tablePtr = 0;
@@ -228,10 +213,8 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
     uintptr_t profList = *(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0xb0);
 
     // Get template row (Child(0)) and its vtable clone function
-    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
     uint64_t childBuf[2] = {0, 0};
     fn_Element_Child((void*)tablePtr, childBuf, 0);
-    fn_InternalBasePtr_CheckPtr(childBuf);
     uintptr_t templateChild = *(uintptr_t*)childBuf;
     // Read the clonable object at field +0xB8 of the template element
     // (NOT vtable+0xB8 — that hits .rdata type name strings)
@@ -239,16 +222,13 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
 
     // Set table size to profession count x 1
     int profCount = *(int*)(profList + 0x28);
-    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
     fn_TableElement_SetSize((void*)tablePtr, profCount, 1);
 
     // Iterate rows
     for (int i = 0; i < profCount; i++) {
         // Clone template row into table slot
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         uintptr_t dialogInst = *(uintptr_t*)(*(uintptr_t*)(s + 0x18) + 0x18);
 
-        fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
         void* tbl = (void*)tablePtr;
 
         // Call vtable clone: cloneObj->vtable[+0x40](cloneObj, retBuf, dialogInst)
@@ -260,17 +240,13 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
         fn_TableElement_SetChild3(tbl, clonedElem, i, 0);
 
         // Get the cloned row element
-        fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
         uint64_t rowBuf[2] = {0, 0};
         fn_Element_Child((void*)tablePtr, rowBuf, i);
-        fn_InternalBasePtr_CheckPtr(rowBuf);
         void* rowElem = *(void**)rowBuf;
 
         // Get row's child(1) — the spinner/content container
-        fn_InternalBasePtr_CheckPtr(rowBuf);
         uint64_t contentBuf[2] = {0, 0};
         fn_Element_Child(rowElem, contentBuf, 1);
-        fn_InternalBasePtr_CheckPtr(contentBuf);
         void* contentElem = *(void**)contentBuf;
 
         // Profession entry struct (0x40 bytes for ProfArrayPush):
@@ -286,50 +262,40 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
         memset(profEntry, 0, sizeof(profEntry));
 
         // Row child 0: LabelElement (profession icon/name)
-        fn_InternalBasePtr_CheckPtr(rowBuf);
         uint64_t c0Buf[2] = {0, 0};
         fn_Element_Child(rowElem, c0Buf, 0);
-        fn_InternalBasePtr_CheckPtr(c0Buf);
         void* c0Elem = CastElement(*(void**)c0Buf, g_TypeId_LabelElement);
         uint64_t labelIBP = 0;
         new (&labelIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(c0Elem));   // B.3.3 bridge
         *(uint64_t*)(profEntry + 0x08) = labelIBP;
 
         // Content child 0: NumberEditElement (desired worker count spinner)
-        fn_InternalBasePtr_CheckPtr(contentBuf);
         uint64_t c1Buf[2] = {0, 0};
         fn_Element_Child(contentElem, c1Buf, 0);
-        fn_InternalBasePtr_CheckPtr(c1Buf);
         void* c1Elem = CastElement(*(void**)c1Buf, g_TypeId_NumberEditElement);
         uint64_t numEditIBP = 0;
         new (&numEditIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(c1Elem));   // B.3.3 bridge
         *(uint64_t*)(profEntry + 0x10) = numEditIBP;
 
         // Row child 2: NumberElement (current count display)
-        fn_InternalBasePtr_CheckPtr(rowBuf);
         uint64_t c2Buf[2] = {0, 0};
         fn_Element_Child(rowElem, c2Buf, 2);
-        fn_InternalBasePtr_CheckPtr(c2Buf);
         void* c2Elem = CastElement(*(void**)c2Buf, g_TypeId_SpinnerElement);
         uint64_t numIBP = 0;
         new (&numIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(c2Elem));   // B.3.3 bridge
         *(uint64_t*)(profEntry + 0x18) = numIBP;
 
         // Row child 3: NumberElement (another counter)
-        fn_InternalBasePtr_CheckPtr(rowBuf);
         uint64_t c3Buf[2] = {0, 0};
         fn_Element_Child(rowElem, c3Buf, 3);
-        fn_InternalBasePtr_CheckPtr(c3Buf);
         void* c3Elem = CastElement(*(void**)c3Buf, g_TypeId_SpinnerElement);
         uint64_t spinIBP = 0;
         new (&spinIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(c3Elem));   // B.3.3 bridge
         *(uint64_t*)(profEntry + 0x20) = spinIBP;
 
         // Row child 4: ButtonElement (go-to button)
-        fn_InternalBasePtr_CheckPtr(rowBuf);
         uint64_t c4Buf[2] = {0, 0};
         fn_Element_Child(rowElem, c4Buf, 4);
-        fn_InternalBasePtr_CheckPtr(c4Buf);
         void* c4Elem = CastElement(*(void**)c4Buf, g_TypeId_HelpButtonElem);
         uint64_t btnIBP = 0;
         new (&btnIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(c4Elem));   // B.3.3 bridge
@@ -416,7 +382,6 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
         fn_UIString_Ctor(uiStr, *(uint64_t*)(profTypeId + 0x20), (void*)(profTypeId + 0x30));
         uint8_t uiStrCopy[16];
         memcpy(uiStrCopy, uiStr, 16);
-        fn_InternalBasePtr_CheckPtr((void*)&labelIBP);
         fn_TextElement_SetText((void*)labelIBP, uiStrCopy);
 
         // Set sprite on label
@@ -424,7 +389,6 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
         fn_Sprite_Ctor(sprBuf, *(uint64_t*)(profTypeId + 0x28), (void*)(profTypeId + 0x30));
         uint8_t sprCopy[16];
         memcpy(sprCopy, sprBuf, 16);
-        fn_InternalBasePtr_CheckPtr((void*)&labelIBP);
         fn_LabelElement_SetSprite((void*)labelIBP, sprCopy);
 
         // Set tooltip
@@ -432,22 +396,17 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
         fn_UIString_Ctor(ttStr, *(uint64_t*)(profTypeId + 0x20), (void*)(profTypeId + 0x38));
         uint8_t ttCopy[16];
         memcpy(ttCopy, ttStr, 16);
-        fn_InternalBasePtr_CheckPtr((void*)&labelIBP);
         fn_Element_SetToolTip((void*)labelIBP, ttCopy);
 
         // Set spinner element IDs on the content container (child 1 of row)
-        fn_InternalBasePtr_CheckPtr(contentBuf);
         fn_SpinnerElement_SetElementId(contentElem, i + 0x1966);
 
         // Set inner child(0) of content container with same ID
-        fn_InternalBasePtr_CheckPtr(contentBuf);
         uint64_t spinChildBuf[2] = {0, 0};
         fn_Element_Child(contentElem, spinChildBuf, 0);
-        fn_InternalBasePtr_CheckPtr(spinChildBuf);
         fn_Element_SetElementId(*(void**)spinChildBuf, i + 0x1966);
 
         // Set button element ID
-        fn_InternalBasePtr_CheckPtr((void*)&btnIBP);
         fn_Element_SetElementId((void*)btnIBP, i + 0x1999);
 
         // Push profession entry into dynamic array at +0x40
@@ -473,10 +432,8 @@ void TownHallUI_InitProduction(TownHallUI* self) {
 
     // Find "limits" and cast to TableElement
     System::String strBuf("limits");
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
     uint64_t foundBuf[2] = {0, 0};
     fn_FindElement(*(void**)(s + 0x20), foundBuf, &strBuf);
-    fn_InternalBasePtr_CheckPtr(foundBuf);
     void* foundElem = *(void**)foundBuf;
     void* tableElem = CastElement(foundElem, g_TypeId_TableElement);
     uint64_t tablePtr = 0;
@@ -484,7 +441,6 @@ void TownHallUI_InitProduction(TownHallUI* self) {
         reinterpret_cast<RtObject::Internal*>((void*)tableElem));   // B.3.3 bridge
 
     // Read column count from table
-    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
     int colCount = *(int*)((uintptr_t)tablePtr + 0xc4);
 
     // Iterate rows of the table
@@ -492,7 +448,6 @@ void TownHallUI_InitProduction(TownHallUI* self) {
     // Column 0 = row label (skipped), columns 1-5 = NumberElements.
     // childBase starts at 2 (first data column after header row),
     // increments by colCount each row.
-    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
     int totalChildren = *(int*)((uintptr_t)tablePtr + 0xc0);
     int childBase = 2;  // starts at child index 2 (skip first row header)
 
@@ -504,10 +459,8 @@ void TownHallUI_InitProduction(TownHallUI* self) {
         //   childBase-1, childBase, childBase+1, childBase+2, childBase+3
         int indices[5] = {childBase - 1, childBase, childBase + 1, childBase + 2, childBase + 3};
         for (int col = 0; col < 5; col++) {
-            fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
             uint64_t cBuf[2] = {0, 0};
             fn_Element_Child((void*)tablePtr, cBuf, indices[col]);
-            fn_InternalBasePtr_CheckPtr(cBuf);
             void* cElem = CastElement(*(void**)cBuf, g_TypeId_SpinnerElement);
             uint64_t ibp = 0;
             new (&ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(cElem));   // B.3.3 bridge
@@ -548,12 +501,10 @@ void TownHallUI_InitProduction(TownHallUI* self) {
         fn_UIString_Ctor_Index(uiStrBuf, yearsTable, i);
         System::String sysStrBuf;
         fn_UIString_ToSystemString(uiStrBuf, &sysStrBuf);
-        fn_InternalBasePtr_CheckPtr((void*)&self->productionCombo);
         uint8_t emptySprite[16];
         fn_Sprite_Default_Ctor(emptySprite);
         fn_ComboElement_AddItem((void*)self->productionCombo, emptySprite, &sysStrBuf, nullptr);
     }
-    fn_InternalBasePtr_CheckPtr((void*)&self->productionCombo);
     fn_ComboElement_SetCurrentItem((void*)self->productionCombo, 0);
 }
 
@@ -570,10 +521,8 @@ void TownHallUI_InitInventory(TownHallUI* self) {
 
     // Find "inventoryTable" and cast to TableElement
     System::String strBuf("inventoryTable");
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
     uint64_t foundBuf[2] = {0, 0};
     fn_FindElement(*(void**)(s + 0x20), foundBuf, &strBuf);
-    fn_InternalBasePtr_CheckPtr(foundBuf);
     void* foundElem = *(void**)foundBuf;
     void* tableElem = CastElement(foundElem, g_TypeId_TableElement);
     uint64_t tablePtr = 0;
@@ -593,29 +542,22 @@ void TownHallUI_InitInventory(TownHallUI* self) {
     }
 
     // Get column count and template row clone vtable
-    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
     int colCount = *(int*)((uintptr_t)tablePtr + 0xc4);
 
-    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
     uint64_t childBuf[2] = {0, 0};
     fn_Element_Child((void*)tablePtr, childBuf, 0);
-    fn_InternalBasePtr_CheckPtr(childBuf);
     uintptr_t templateChild = *(uintptr_t*)childBuf;
     uintptr_t cloneObj = *(uintptr_t*)(templateChild + 0xb8);
 
     // Size table: ceil(resourceCount / colCount) rows
-    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
     int rowCount = ((colCount - 1 + resourceCount) / colCount * colCount) / colCount;
     fn_TableElement_SetSize((void*)tablePtr, rowCount, colCount);
 
     // Clone template rows into all cells
-    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
     int totalChildren = fn_Element_ChildCount((void*)tablePtr);
     for (int i = 0; i < totalChildren; i++) {
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         uint64_t dialogInst = *(uint64_t*)(*(uintptr_t*)(s + 0x18) + 0x18);
 
-        fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
 
         typedef void* (*CloneFunc_t)(void* self, void* retBuf, uint64_t dialogInst);
         CloneFunc_t cloneFunc = *(CloneFunc_t*)(*(uintptr_t*)cloneObj + 0x40);
@@ -624,35 +566,27 @@ void TownHallUI_InitInventory(TownHallUI* self) {
 
         fn_TableElement_SetChild2((void*)tablePtr, clonedElem, i);
 
-        fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
     }
 
     // Extract label + number elements from each cell
-    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
     totalChildren = fn_Element_ChildCount((void*)tablePtr);
     for (int i = 0; i < totalChildren; i++) {
         // Get cell child
-        fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
         uint64_t cellBuf[2] = {0, 0};
         fn_Element_Child((void*)tablePtr, cellBuf, i);
-        fn_InternalBasePtr_CheckPtr(cellBuf);
 
         // Get cell->child(0)->child(0) = LabelElement
         uint64_t sub0[2] = {0, 0};
         fn_Element_Child(*(void**)cellBuf, sub0, 0);
-        fn_InternalBasePtr_CheckPtr(sub0);
         void* labelElem = CastElement(*(void**)sub0, g_TypeId_LabelElement);
         uint64_t labelIBP = 0;
         new (&labelIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(labelElem));   // B.3.3 bridge
 
         // Get cell->child(0)->child(1) = NumberElement
-        fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
         uint64_t cellBuf2[2] = {0, 0};
         fn_Element_Child((void*)tablePtr, cellBuf2, i);
-        fn_InternalBasePtr_CheckPtr(cellBuf2);
         uint64_t sub1[2] = {0, 0};
         fn_Element_Child(*(void**)cellBuf2, sub1, 1);
-        fn_InternalBasePtr_CheckPtr(sub1);
         void* numElem = CastElement(*(void**)sub1, g_TypeId_SpinnerElement);
         uint64_t numIBP = 0;
         new (&numIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(numElem));   // B.3.3 bridge
@@ -685,18 +619,15 @@ void TownHallUI_InitInventory(TownHallUI* self) {
         fn_UIString_Ctor_Index(uiStrBuf, invTypeTable, i);
         System::String sysStrBuf;
         fn_UIString_ToSystemString(uiStrBuf, &sysStrBuf);
-        fn_InternalBasePtr_CheckPtr((void*)&self->inventoryCombo);
         uint8_t emptySprite[16];
         fn_Sprite_Default_Ctor(emptySprite);
         fn_ComboElement_AddItem((void*)self->inventoryCombo, emptySprite, &sysStrBuf, nullptr);
     }
-    fn_InternalBasePtr_CheckPtr((void*)&self->inventoryCombo);
     fn_ComboElement_SetCurrentItem((void*)self->inventoryCombo, 0);
 
     // Find "sortCombo" ComboElement
     self->sortCombo = TownHall_FindElem(
         *(void**)(s + 0x20), "sortCombo", *g_TypeId_ComboElement);
-    fn_InternalBasePtr_CheckPtr((void*)&self->sortCombo);
     fn_ComboElement_SetCurrentItem((void*)self->sortCombo, 0);
 }
 
@@ -713,10 +644,8 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
 
     // Find "agriTable" and cast to TableElement
     System::String strBuf("agriTable");
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
     uint64_t foundBuf[2] = {0, 0};
     fn_FindElement(*(void**)(s + 0x20), foundBuf, &strBuf);
-    fn_InternalBasePtr_CheckPtr(foundBuf);
     void* foundElem = *(void**)foundBuf;
     void* tableElem = CastElement(foundElem, g_TypeId_TableElement);
     uint64_t tablePtr = 0;
@@ -831,29 +760,22 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
 
     // Now set up the table with agriculture BST count
     int agriCount = *(int*)(s + 0x1E0);
-    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
     int colCount = *(int*)((uintptr_t)tablePtr + 0xc4);
 
-    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
     uint64_t templateBuf[2] = {0, 0};
     fn_Element_Child((void*)tablePtr, templateBuf, 0);
-    fn_InternalBasePtr_CheckPtr(templateBuf);
     uintptr_t templateChild = *(uintptr_t*)templateBuf;
     uintptr_t cloneObj = *(uintptr_t*)(templateChild + 0xb8);
 
     // Size table: ceil(agriCount / colCount) rows
-    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
     int rowCount = ((colCount - 1 + agriCount) / colCount * colCount) / colCount;
     fn_TableElement_SetSize((void*)tablePtr, rowCount, colCount);
 
     // Clone template rows into all cells
-    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
     int totalChildren = fn_Element_ChildCount((void*)tablePtr);
     for (int i = 0; i < totalChildren; i++) {
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         uint64_t dialogInst = *(uint64_t*)(*(uintptr_t*)(s + 0x18) + 0x18);
 
-        fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
 
         typedef void* (*CloneFunc_t)(void* self, void* retBuf, uint64_t dialogInst);
         CloneFunc_t cloneFunc = *(CloneFunc_t*)(*(uintptr_t*)cloneObj + 0x40);
@@ -862,17 +784,13 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
 
         fn_TableElement_SetChild2((void*)tablePtr, clonedElem, i);
 
-        fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
     }
 
     // Extract LabelElement from each cell into array at +0x1C8
-    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
     totalChildren = fn_Element_ChildCount((void*)tablePtr);
     for (int i = 0; i < totalChildren; i++) {
-        fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
         uint64_t cellBuf[2] = {0, 0};
         fn_Element_Child((void*)tablePtr, cellBuf, i);
-        fn_InternalBasePtr_CheckPtr(cellBuf);
 
         // Cast child to LabelElement
         void* labelElem = CastElement(*(void**)cellBuf, g_TypeId_LabelElement);
@@ -900,9 +818,7 @@ void TownHallUI_UpdateGraph(TownHallUI* self) {
     self->cachedGameTick = *(int*)(*(uintptr_t*)(*(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0xf0) + 0x150) + 8);
 
     // Read combo selections
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x168));
     int timeIdx = *(int*)(*(uintptr_t*)(s + 0x168) + 0x118);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x170));
     int graphIdx = *(int*)(*(uintptr_t*)(s + 0x170) + 0x118);
 
     // Data series indices (-1 = hidden)
@@ -952,7 +868,6 @@ void TownHallUI_UpdateGraph(TownHallUI* self) {
     graphSeries[4] = pointCount;
 
     // Set x-axis step
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x160));
     *(uint32_t*)(*(uintptr_t*)(s + 0x160) + 0xe4) = ticksPerStep;
 
     // Set x-axis min label (UIString from graphYearsTable at timeIdx)
@@ -960,11 +875,9 @@ void TownHallUI_UpdateGraph(TownHallUI* self) {
     uint64_t* pXMin = (uint64_t*)fn_UIString_Ctor_Index(xMinStr, self->graphYearsTable, timeIdx);
     uint8_t xMinCopy[16];
     memcpy(xMinCopy, pXMin, 16);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x178));
     fn_TextElement_SetText(*(void**)(s + 0x178), xMinCopy);
 
     // Remove existing graphs
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x160));
     fn_GraphElement_RemoveGraphs(*(void**)(s + 0x160));
 
     uintptr_t gameData = *(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0xf0);
@@ -977,17 +890,14 @@ void TownHallUI_UpdateGraph(TownHallUI* self) {
         uint64_t* labelPtr = &self->label0 + g;
 
         if (seriesIdx < 0) {
-            fn_InternalBasePtr_CheckPtr(labelPtr);
             fn_Element_SetFlagsOnOff(*(void**)labelPtr, 1, 0);
         } else {
-            fn_InternalBasePtr_CheckPtr((void*)(s + 0x160));
             fn_GraphElement_AddGraph(*(void**)(s + 0x160), colors[g]);
 
             int startIdx;
             if (currentTick / stepSize < pointCount) {
                 int padCount = pointCount - currentTick / stepSize;
                 for (int p = 0; p < padCount; p++) {
-                    fn_InternalBasePtr_CheckPtr((void*)(s + 0x160));
                     fn_GraphElement_AddGraphPoint(*(void**)(s + 0x160), graphCount, 0);
                 }
                 startIdx = 0;
@@ -999,25 +909,20 @@ void TownHallUI_UpdateGraph(TownHallUI* self) {
                 uintptr_t histBase = *(uintptr_t*)(*(uintptr_t*)(gameData + 0x150) + (uintptr_t)seriesIdx * 0x10);
                 int val = *(int*)(histBase + idx * 4);
                 if (val > maxVal) maxVal = val;
-                fn_InternalBasePtr_CheckPtr((void*)(s + 0x160));
                 fn_GraphElement_AddGraphPoint(*(void**)(s + 0x160), graphCount, val);
             }
 
             // Set label color
-            fn_InternalBasePtr_CheckPtr(labelPtr);
             *(uint32_t*)(*(uintptr_t*)labelPtr + 0x128) = colors[g];
 
             // Set label text from string table
-            fn_InternalBasePtr_CheckPtr(labelPtr);
             uint64_t lblST = *(uint64_t*)(*(uintptr_t*)labelPtr + 0xd8);
             uint8_t lblStr[16];
             uint64_t* pLbl = (uint64_t*)fn_UIString_Ctor_Index(lblStr, lblST, seriesIdx);
             uint8_t lblCopy[16];
             memcpy(lblCopy, pLbl, 16);
-            fn_InternalBasePtr_CheckPtr(labelPtr);
             fn_TextElement_SetText(*(void**)labelPtr, lblCopy);
 
-            fn_InternalBasePtr_CheckPtr(labelPtr);
             fn_Element_SetFlagsOnOff(*(void**)labelPtr, 0, 1);
 
             pointCount = graphSeries[4];
@@ -1034,18 +939,13 @@ void TownHallUI_UpdateGraph(TownHallUI* self) {
     else                    scale = 1000;
     int yMax = ((maxVal - 1 + scale) / scale) * scale;
 
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x160));
     *(float*)(*(uintptr_t*)(s + 0x160) + 0xe0) = (float)yMax;
 
     // Y-axis labels: max, 3/4, 1/2, 1/4
     float quarter = (float)yMax * 0.25f;
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x180));
     fn_NumberElement_SetValueInt(*(void**)(s + 0x180), yMax);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x188));
     fn_NumberElement_SetValueInt(*(void**)(s + 0x188), (int)(quarter * 3.0f));
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x190));
     fn_NumberElement_SetValueInt(*(void**)(s + 0x190), (int)(quarter * 2.0f));
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x198));
     fn_NumberElement_SetValueInt(*(void**)(s + 0x198), (int)quarter);
 }
 
@@ -1063,42 +963,33 @@ void TownHallUI_UpdateGeneral(TownHallUI* self) {
 
     for (int i = 0; i < totalCitizens; i++) {
         uintptr_t citizen = *(uintptr_t*)(*(uintptr_t*)(gameData + 0xa0) + (uintptr_t)i * 8);
-        fn_InternalBasePtr_CheckPtr((void*)&citizen);
 
         float age = *(float*)(citizen + 0x3c);
         float adultAge = *(float*)(*(uintptr_t*)(citizen + 0x288) + 0x44);
         uintptr_t school = *(uintptr_t*)(citizen + 0x208);
 
         if (age < adultAge || school != 0) {
-            fn_InternalBasePtr_CheckPtr((void*)&citizen);
             if (school == 0) { children++; }
             else             { students++; }
         } else {
             adults++;
-            fn_InternalBasePtr_CheckPtr((void*)&citizen);
             if (*(int*)(*(uintptr_t*)(citizen + 0x288) + 0x118) <= *(int*)(citizen + 0x210)) {
                 clothedSum += 1.0f;
             }
-            fn_InternalBasePtr_CheckPtr((void*)&citizen);
             uintptr_t home = *(uintptr_t*)(citizen + 0x250);
             if (home == 0) {
-                fn_InternalBasePtr_CheckPtr((void*)&citizen);
                 if (*(uintptr_t*)(citizen + 0x250) == 0) {
                     familyCount++;
                 }
             } else {
-                fn_InternalBasePtr_CheckPtr((void*)&citizen);
                 if (*(int*)(citizen + 0x38) == 0) {
                     familyCount++;
                 }
             }
         }
 
-        fn_InternalBasePtr_CheckPtr((void*)&citizen);
         healthSum += *(float*)(citizen + 0x80);
-        fn_InternalBasePtr_CheckPtr((void*)&citizen);
         happinessSum += *(float*)(citizen + 0x50);
-        fn_InternalBasePtr_CheckPtr((void*)&citizen);
         if (*(int*)(citizen + 0x1e4) != 0) {
             educatedSum += 1.0f;
         }
@@ -1110,7 +1001,6 @@ void TownHallUI_UpdateGeneral(TownHallUI* self) {
 
     // Year
     int year = **(int**)(*(uintptr_t*)g_pGameSingleton + 0x128);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x60));
     fn_NumberElement_SetValueInt(*(void**)(s + 0x60), year);
 
     // Month
@@ -1118,46 +1008,36 @@ void TownHallUI_UpdateGeneral(TownHallUI* self) {
     int monthIdx = (int)((seconds / 3600.0f) * 12.0f);
     if (monthIdx > 11) monthIdx = 0;
 
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x68));
     uint64_t monthST = *(uint64_t*)(*(uintptr_t*)(s + 0x68) + 0xd8);
     uint8_t monthStr[16];
     uint64_t* pMonth = (uint64_t*)fn_UIString_Ctor_Index(monthStr, monthST, monthIdx);
     uint8_t monthCopy[16];
     memcpy(monthCopy, pMonth, 16);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x68));
     fn_TextElement_SetText(*(void**)(s + 0x68), monthCopy);
 
     // Home count
     int homeCount = *(int*)(gameData + 0x28);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x70));
     fn_NumberElement_SetValueInt(*(void**)(s + 0x70), homeCount);
 
     // Citizen counts
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x80));
     fn_NumberElement_SetValueInt(*(void**)(s + 0x80), totalCitizens);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x88));
     fn_NumberElement_SetValueInt(*(void**)(s + 0x88), adults);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x90));
     fn_NumberElement_SetValueInt(*(void**)(s + 0x90), students);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x98));
     fn_NumberElement_SetValueInt(*(void**)(s + 0x98), children);
 
     // Educated % (at +0xa0)
     {
         System::String fmtBuf = System::String::Format("%i", (uint64_t)(uint32_t)(int)(educatedPct + 0.5f));
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0xa0));
         fn_TextElement_SetParameter(*(void**)(s + 0xa0), 0, &fmtBuf);
     }
 
     // Clothed % (at +0xa8)
     {
         System::String fmtBuf = System::String::Format("%i", (uint64_t)(uint32_t)(int)(clothedPct + 0.5f));
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0xa8));
         fn_TextElement_SetParameter(*(void**)(s + 0xa8), 0, &fmtBuf);
     }
 
     // Family count
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x78));
     fn_NumberElement_SetValueInt(*(void**)(s + 0x78), familyCount);
 
     // Hearts (happiness) and Stars (health) ratings
@@ -1166,7 +1046,6 @@ void TownHallUI_UpdateGeneral(TownHallUI* self) {
         fn_GroupRating_Update((void*)(s + 0xd0), 0.0f, 1.0f);
     } else {
         uintptr_t firstCitizen = **(uintptr_t**)(gameData + 0xa0);
-        fn_InternalBasePtr_CheckPtr((void*)&firstCitizen);
         void* desc = *(void**)(firstCitizen + 0x18);
         void* citizenDesc = fn_IsDerivedFrom(desc, *g_TypeId_CitizenDescription) ? desc : nullptr;
 
@@ -1175,7 +1054,6 @@ void TownHallUI_UpdateGeneral(TownHallUI* self) {
 
         // Re-read first citizen for health max
         firstCitizen = **(uintptr_t**)(gameData + 0xa0);
-        fn_InternalBasePtr_CheckPtr((void*)&firstCitizen);
         desc = *(void**)(firstCitizen + 0x18);
         citizenDesc = fn_IsDerivedFrom(desc, *g_TypeId_CitizenDescription) ? desc : nullptr;
 
@@ -1190,7 +1068,6 @@ void TownHallUI_UpdateGeneral(TownHallUI* self) {
 void TownHallUI_UpdateProfessions(TownHallUI* self) {
     uintptr_t s = (uintptr_t)self;
 
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x100));
     int comboIdx = *(int*)(*(uintptr_t*)(s + 0x100) + 0x118);
 
     uint32_t yearSpan = 0;
@@ -1207,12 +1084,10 @@ void TownHallUI_UpdateProfessions(TownHallUI* self) {
     // Set header text parameters
     {
         System::String fmtBuf = System::String::Format("%i", (uint64_t)yearSpan);
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x108));
         fn_TextElement_SetParameter(*(void**)(s + 0x108), 0, &fmtBuf);
     }
     {
         System::String fmtBuf = System::String::Format("%i", (uint64_t)yearSpan);
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x110));
         fn_TextElement_SetParameter(*(void**)(s + 0x110), 0, &fmtBuf);
     }
 
@@ -1235,7 +1110,6 @@ void TownHallUI_UpdateProfessions(TownHallUI* self) {
             int stock = *(int*)(*(uintptr_t*)(gameData + 0x170) + dataOff);
 
             uintptr_t entry = *(uintptr_t*)(s + 0xf0) + entryOff;
-            fn_InternalBasePtr_CheckPtr((void*)entry);
             fn_NumberElement_SetValueInt(*(void**)entry, stock);
 
             uintptr_t prodData = *(uintptr_t*)(gameData + 0x170);
@@ -1247,19 +1121,15 @@ void TownHallUI_UpdateProfessions(TownHallUI* self) {
             int prodPrev = fn_QueryProductionStat((void*)gameData, resIdx, prevStart, prevEnd);
 
             uintptr_t arr = *(uintptr_t*)(s + 0xf0);
-            fn_InternalBasePtr_CheckPtr((void*)(arr + entryOff + 8));
             fn_NumberElement_SetValueInt(*(void**)(arr + entryOff + 8), usedCur + usedStock);
 
             arr = *(uintptr_t*)(s + 0xf0);
-            fn_InternalBasePtr_CheckPtr((void*)(arr + entryOff + 0x10));
             fn_NumberElement_SetValueInt(*(void**)(arr + entryOff + 0x10), prodCur + prodStock);
 
             arr = *(uintptr_t*)(s + 0xf0);
-            fn_InternalBasePtr_CheckPtr((void*)(arr + entryOff + 0x18));
             fn_NumberElement_SetValueInt(*(void**)(arr + entryOff + 0x18), usedPrev);
 
             arr = *(uintptr_t*)(s + 0xf0);
-            fn_InternalBasePtr_CheckPtr((void*)(arr + entryOff + 0x20));
             fn_NumberElement_SetValueInt(*(void**)(arr + entryOff + 0x20), prodPrev);
 
             resIdx += 3;
@@ -1402,7 +1272,6 @@ static void* TownHall_FindComponentByTypeId_CE(uintptr_t entity, uint32_t typeId
     for (int i = 0; i < compCount; i++) {
         // Each element is an IBP — CheckPtr it before reading
         void* ibpSlot = (void*)(compArrayBase + (uintptr_t)i * 8);
-        fn_InternalBasePtr_CheckPtr(ibpSlot);
         void* comp = *(void**)ibpSlot;
         if (!comp) continue;
 
@@ -1460,9 +1329,7 @@ void TownHallUI_UpdateProduction(TownHallUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     // Read combo selections
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x128));
     int invComboIdx = *(int*)(*(uintptr_t*)(s + 0x128) + 0x118);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x130));
     int sortComboIdx = *(int*)(*(uintptr_t*)(s + 0x130) + 0x118);
 
     // Byte offset into BST node for the selected counter
@@ -1540,7 +1407,6 @@ void TownHallUI_UpdateProduction(TownHallUI* self) {
 
             // Set sprite on label element
             void* labelElem = *(void**)(*(uintptr_t*)(s + 0x118) + elemOff);
-            fn_InternalBasePtr_CheckPtr(&labelElem);
             fn_LabelElement_SetSprite(labelElem, spriteBuf);
 
             // Create UIString from ValueDescription+0x30 (stringTable) and +0x38 (stringName)
@@ -1550,17 +1416,14 @@ void TownHallUI_UpdateProduction(TownHallUI* self) {
 
             // Set text on label element
             void* labelElem2 = *(void**)(*(uintptr_t*)(s + 0x118) + elemOff);
-            fn_InternalBasePtr_CheckPtr(&labelElem2);
             fn_TextElement_SetText(labelElem2, uiStrBuf);
 
             // Set number value on the number element (+8 from label)
             uintptr_t tableBase = *(uintptr_t*)(s + 0x118);
-            fn_InternalBasePtr_CheckPtr((void*)(tableBase + elemOff + 8));
             fn_NumberElement_SetValueInt(*(void**)(tableBase + elemOff + 8), entries[i].value);
 
             // Set active flag (vtable +0x50 with -1)
             tableBase = *(uintptr_t*)(s + 0x118);
-            fn_InternalBasePtr_CheckPtr((void*)(tableBase + elemOff + 8));
             void* numElem = *(void**)(tableBase + elemOff + 8);
             Element_VCall50(numElem, -1);
 
@@ -1577,24 +1440,20 @@ void TownHallUI_UpdateProduction(TownHallUI* self) {
             uint8_t emptySprite[16];
             fn_Sprite_Default_Ctor(emptySprite);
             void* labelElem = *(void**)(*(uintptr_t*)(s + 0x118) + elemOff);
-            fn_InternalBasePtr_CheckPtr(&labelElem);
             fn_LabelElement_SetSprite(labelElem, emptySprite);
 
             // Empty string
             uint8_t emptyStr[16];
             fn_UIString_Ctor(emptyStr, 0, nullptr);
             void* labelElem2 = *(void**)(*(uintptr_t*)(s + 0x118) + elemOff);
-            fn_InternalBasePtr_CheckPtr(&labelElem2);
             fn_TextElement_SetText(labelElem2, emptyStr);
 
             // Set value to 0
             uintptr_t tableBase = *(uintptr_t*)(s + 0x118);
-            fn_InternalBasePtr_CheckPtr((void*)(tableBase + elemOff + 8));
             fn_NumberElement_SetValueInt(*(void**)(tableBase + elemOff + 8), 0);
 
             // Set inactive flag (vtable +0x50 with 0)
             tableBase = *(uintptr_t*)(s + 0x118);
-            fn_InternalBasePtr_CheckPtr((void*)(tableBase + elemOff + 8));
             void* numElem = *(void**)(tableBase + elemOff + 8);
             Element_VCall50(numElem, 0);
 
@@ -1708,7 +1567,6 @@ next_entity: ;
                               (void*)((uintptr_t)selectDesc + 0x28));
 
                 uintptr_t labelPtr = *(uintptr_t*)(s + 0x1C8) + (uintptr_t)displayIdx * 8;
-                fn_InternalBasePtr_CheckPtr((void*)labelPtr);
                 fn_LabelElement_SetSprite(*(void**)labelPtr, spriteBuf);
 
                 // Create UIString from SelectDescription+0x30/+0x38
@@ -1717,19 +1575,16 @@ next_entity: ;
                                 (void*)((uintptr_t)selectDesc + 0x38));
 
                 labelPtr = *(uintptr_t*)(s + 0x1C8) + (uintptr_t)displayIdx * 8;
-                fn_InternalBasePtr_CheckPtr((void*)labelPtr);
                 fn_TextElement_SetText(*(void**)labelPtr, uiStrBuf);
 
                 // Vtable +0x50 call (SetColor) — 0xFFC0C0C0 = opaque silver/gray
                 labelPtr = *(uintptr_t*)(s + 0x1C8) + (uintptr_t)displayIdx * 8;
-                fn_InternalBasePtr_CheckPtr((void*)labelPtr);
                 Element_VCall50(*(void**)labelPtr, (int)0xFFC0C0C0);
             } else {
             }
 
             // Show element (SetFlagsOnOff hide=0, show=1)
             uintptr_t labelPtr = *(uintptr_t*)(s + 0x1C8) + (uintptr_t)displayIdx * 8;
-            fn_InternalBasePtr_CheckPtr((void*)labelPtr);
             fn_Element_SetFlagsOnOff(*(void**)labelPtr, 0, 1);
 
             displayIdx++;
@@ -1743,7 +1598,6 @@ next_entity: ;
     if (displayIdx < *(int*)(s + 0x1D0)) {
         for (int i = displayIdx; i < *(int*)(s + 0x1D0); i++) {
             uintptr_t labelPtr = *(uintptr_t*)(s + 0x1C8) + (uintptr_t)i * 8;
-            fn_InternalBasePtr_CheckPtr((void*)labelPtr);
             fn_Element_SetFlagsOnOff(*(void**)labelPtr, 1, 0);
         }
     }
@@ -1815,7 +1669,6 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
             profEntities.SetSize(profEntities.GetSize() + 1, GameColl::Bytes<8, 8>(entityPtr));
 
             // Check entity for WorkplaceComponent -> active flag + worker count
-            fn_InternalBasePtr_CheckPtr((void*)&entityPtr);
             uintptr_t entity = entityPtr;
 
             // Find WorkplaceComponent (DAT_1401c80e0) — ComponentEntity layout
@@ -1824,12 +1677,10 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
             uint64_t wpBP = 0;
             new (&wpBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(workplaceComp));   // B.3.3 bridge
-            fn_InternalBasePtr_CheckPtr(&wpBP);
 
             // Check if entity is active (workplace+0x50 != 0)
             if (*(uint8_t*)(wpBP + 0x50) != 0) {
                 uintptr_t profEntryBase = *(uintptr_t*)(s + 0x40);
-                fn_InternalBasePtr_CheckPtr((void*)&entityPtr);
                 uintptr_t entity2 = entityPtr;
 
                 // Find WorkplaceComponent again to get StorageLocationComponent
@@ -1838,10 +1689,8 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
                 uint64_t wpBP2 = 0;
                 new (&wpBP2) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(workplaceComp2));   // B.3.3 bridge
-                fn_InternalBasePtr_CheckPtr(&wpBP2);
 
                 // Get parent entity (wpBP2+0x10)
-                fn_InternalBasePtr_CheckPtr((void*)(wpBP2 + 0x10));
                 uintptr_t parentEntity = *(uintptr_t*)(wpBP2 + 0x10);
 
                 // Find StorageLocationComponent (DAT_1401c8070) — ComponentEntity layout
@@ -1850,7 +1699,6 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
                 uint64_t slBP = 0;
                 new (&slBP) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(storageLocComp));   // B.3.3 bridge
-                fn_InternalBasePtr_CheckPtr(&slBP);
 
                 // Get max count
                 int maxCount = *(int*)(slBP + 0x30);
@@ -1866,15 +1714,12 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
 
         // Update number+count display
         uintptr_t profEntry = *(uintptr_t*)(s + 0x40) + profEntryOff;
-        fn_InternalBasePtr_CheckPtr((void*)(profEntry + 0x18));
         fn_NumberElement_SetValueInt(*(void**)(profEntry + 0x18), *(int*)(profEntry + 0x04));
 
         int entityArrayCount = *(int*)(profEntry + 0x38);
-        fn_InternalBasePtr_CheckPtr((void*)(profEntry + 0x20));
         fn_NumberElement_SetValueInt(*(void**)(profEntry + 0x20), entityArrayCount);
 
         // Set visibility via vtable+0x40
-        fn_InternalBasePtr_CheckPtr((void*)(profEntry + 0x28));
         void* visElem = *(void**)(profEntry + 0x28);
         Element_VCall40(visElem, entityArrayCount > 0 ? 1 : 0);
     }
@@ -1883,7 +1728,6 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
     int citizenCount = *(int*)(gameData + 0xa8);
     for (int c = 0; c < citizenCount; c++) {
         uintptr_t citizen = *(uintptr_t*)(*(uintptr_t*)(gameData + 0xa0) + (uintptr_t)c * 8);
-        fn_InternalBasePtr_CheckPtr((void*)&citizen);
 
         float age = *(float*)(citizen + 0x3c);
         float adultAge = *(float*)(*(uintptr_t*)(citizen + 0x288) + 0x44);
@@ -1891,7 +1735,6 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
 
         if (age >= adultAge && school == 0) {
             // Adult citizen — look up profession in profBST (+0x50)
-            fn_InternalBasePtr_CheckPtr((void*)&citizen);
             uint64_t profId = *(uint64_t*)(citizen + 0x1f0);
             void* profNode = *(void**)(s + 0x50);
             while (profNode) {
@@ -1914,21 +1757,17 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
     // Phase 4: Update spinner elements with final counts
     // First profession entry
     int* firstEntry = *(int**)(s + 0x40);
-    fn_InternalBasePtr_CheckPtr((void*)(firstEntry + 4));
     fn_NumberEditElement_SetValue(*(void**)(firstEntry + 4), *firstEntry);
     firstEntry = *(int**)(s + 0x40);
-    fn_InternalBasePtr_CheckPtr((void*)(firstEntry + 4));
     fn_NumberEditElement_SetMinMax(*(void**)(firstEntry + 4), *firstEntry, *firstEntry);
 
     // Remaining profession entries
     int totalProfs = *(int*)(s + 0x48);
     for (int p = 1; p < totalProfs; p++) {
         uintptr_t profEntry = *(uintptr_t*)(s + 0x40) + (uintptr_t)p * 0x40;
-        fn_InternalBasePtr_CheckPtr((void*)(profEntry + 0x10));
         fn_NumberEditElement_SetValue(*(void**)(profEntry + 0x10), *(int*)(profEntry));
 
         int* firstEntryPtr = *(int**)(s + 0x40);
-        fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)firstEntryPtr + (uintptr_t)p * 0x40 + 0x10));
         fn_NumberEditElement_SetMinMax(
             *(void**)((uintptr_t)firstEntryPtr + (uintptr_t)p * 0x40 + 0x10),
             0, *firstEntryPtr + *(int*)((uintptr_t)firstEntryPtr + (uintptr_t)p * 0x40));
@@ -1995,14 +1834,12 @@ void TownHallUI_UpdateAll(TownHallUI* self) {
         uint64_t entityPtr = entities[i];
 
         // Find StorageComponent_FC (DAT_1401c7e78) — ComponentEntity layout
-        fn_InternalBasePtr_CheckPtr((void*)&entityPtr);
         void* storageComp = TownHall_FindComponentByTypeId_CE(entityPtr, *g_TypeId_StorageComponent_FC);
         uint64_t storageBP = 0;
         new (&storageBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(storageComp));   // B.3.3 bridge
 
         // Find StateMachineComponent (DAT_1401c7d98) — ComponentEntity layout
-        fn_InternalBasePtr_CheckPtr((void*)&entityPtr);
         void* buildStateComp = TownHall_FindComponentByTypeId_CE(entityPtr, *g_TypeId_StateMachineComponent_FC);
         uint64_t buildStateBP = 0;
         new (&buildStateBP) ::Object::InternalBasePtr(
@@ -2013,7 +1850,6 @@ void TownHallUI_UpdateAll(TownHallUI* self) {
             counterIndex = 2; // under construction
         } else {
             // Check for TradeComponent (DAT_1401c4b80) — ComponentEntity layout
-            fn_InternalBasePtr_CheckPtr((void*)&entityPtr);
             void* buildingComp = TownHall_FindComponentByTypeId_CE(entityPtr, *g_TypeId_TradeComponent_FC);
             uint64_t buildingBP = 0;
             new (&buildingBP) ::Object::InternalBasePtr(
@@ -2025,12 +1861,10 @@ void TownHallUI_UpdateAll(TownHallUI* self) {
         }
 
         // Iterate StorageComponent resource entries
-        fn_InternalBasePtr_CheckPtr(&storageBP);
         if (storageBP == 0) continue;
         int resourceCount = (int)*(uint64_t*)(storageBP + 0x30);
 
         for (int r = 0; r < resourceCount; r++) {
-            fn_InternalBasePtr_CheckPtr(&storageBP);
             uint64_t resourceEntity = *(uint64_t*)(*(uintptr_t*)(storageBP + 0x28) + (uintptr_t)r * 0x10);
             int resourceQty = *(int*)(*(uintptr_t*)(storageBP + 0x28) + (uintptr_t)r * 0x10 + 8);
 
@@ -2087,7 +1921,6 @@ void TownHallUI_OnProfessionSpinner(TownHallUI* self, int index) {
     int64_t entryOff = (int64_t)index * 0x40;
 
     // Get desired vs current count
-    fn_InternalBasePtr_CheckPtr((void*)(entryBase + entryOff + 0x10));
     int desired = fn_NumberEditElement_GetValue(*(void**)(entryBase + entryOff + 0x10));
     int current = *(int*)(entryBase + entryOff);
 
@@ -2149,10 +1982,8 @@ void TownHallUI_Serialize(TownHallUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     System::String strBuf("tabs");
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
     uint64_t foundBuf[2] = {0, 0};
     fn_FindElement(*(void**)(s + 0x20), foundBuf, &strBuf);
-    fn_InternalBasePtr_CheckPtr(foundBuf);
     void* element = *(void**)foundBuf;
 
     void* tabElement = nullptr;
@@ -2179,17 +2010,11 @@ void TownHallUI_Serialize(TownHallUI* self) {
 void TownHallUI_Update(TownHallUI* self, void* stream) {
     uintptr_t s = (uintptr_t)self;
 
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x30));
     int tabIndex = *(int*)(*(uintptr_t*)(s + 0x30) + 0xf8);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x100));
     int combo1 = *(int*)(*(uintptr_t*)(s + 0x100) + 0x118);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x128));
     int combo2 = *(int*)(*(uintptr_t*)(s + 0x128) + 0x118);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x130));
     int combo3 = *(int*)(*(uintptr_t*)(s + 0x130) + 0x118);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x168));
     int combo4 = *(int*)(*(uintptr_t*)(s + 0x168) + 0x118);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x170));
     int combo5 = *(int*)(*(uintptr_t*)(s + 0x170) + 0x118);
 
     uint64_t serializer[3] = {0, 0, 0};
@@ -2207,17 +2032,11 @@ void TownHallUI_Update(TownHallUI* self, void* stream) {
     g_fn_Serialize_Int(serializer, &combo5, nullptr);
 
     if (*(int*)(serializer[0] + 8) == 0) {
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x30));
         fn_TabElement_SetActiveTab(*(void**)(s + 0x30), tabIndex);
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x100));
         fn_ComboElement_SetCurrentItem(*(void**)(s + 0x100), combo1);
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x128));
         fn_ComboElement_SetCurrentItem(*(void**)(s + 0x128), combo2);
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x130));
         fn_ComboElement_SetCurrentItem(*(void**)(s + 0x130), combo3);
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x168));
         fn_ComboElement_SetCurrentItem(*(void**)(s + 0x168), combo4);
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x170));
         fn_ComboElement_SetCurrentItem(*(void**)(s + 0x170), combo5);
         TownHallUI_UpdateGraph(self);
     }

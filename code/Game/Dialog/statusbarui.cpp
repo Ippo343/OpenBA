@@ -41,7 +41,6 @@ static void* FindElement(void* dialogController, const char* name) {
     uintptr_t s = (uintptr_t)dialogController;
     System::String nameStr(name);
 
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
     void* dialog = *(void**)(s + 0x18);
 
     uint8_t retBuf[16];
@@ -81,7 +80,6 @@ void StatusBarUI_Draw(StatusBarUI* self) {
     for (int i = 0; i < 10; i++) {
         System::String fmtStr = System::String::Format("numberCustom%i", (uint64_t)i);
 
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         void* dialog = *(void**)(s + 0x18);
         uint8_t retBuf[16];
         fn_DialogInstance_FindElement(dialog, retBuf, &fmtStr);
@@ -99,9 +97,7 @@ void StatusBarUI_Draw(StatusBarUI* self) {
     // Set element IDs 100-105 and hide initially (flag 0x10000 off)
     void** statusIcons = &self->imageStatusHome;
     for (int i = 0; i < 6; i++) {
-        fn_InternalBasePtr_CheckPtr(&statusIcons[i]);
         fn_Element_SetElementId(statusIcons[i], 100 + i);
-        fn_InternalBasePtr_CheckPtr(&statusIcons[i]);
         fn_Element_SetFlagsOnOff(statusIcons[i], 0x10000, 0);
     }
 
@@ -123,7 +119,6 @@ void StatusBarUI_Draw(StatusBarUI* self) {
     // --- Hearts/Stars icon groups ---
     {
         System::String nameStr("groupHearts");
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         void* dialog = *(void**)(s + 0x18);
         uint8_t retBuf[16];
         fn_DialogInstance_FindElement(dialog, retBuf, &nameStr);
@@ -133,7 +128,6 @@ void StatusBarUI_Draw(StatusBarUI* self) {
         // groups — with that id the check rejects the element and hearts stay blank.
         // The elements come from our own StatusBar.rsc, so accept the find result
         // directly (CitizenUI's identical groupHearts/groupStars binding does the same).
-        fn_InternalBasePtr_CheckPtr(retBuf);
         void* typedGroup = *(void**)retBuf;
         uint8_t groupPtr[16];
         new (groupPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(typedGroup));   // B.3.3 bridge
@@ -141,12 +135,10 @@ void StatusBarUI_Draw(StatusBarUI* self) {
     }
     {
         System::String nameStr("groupStars");
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         void* dialog = *(void**)(s + 0x18);
         uint8_t retBuf[16];
         fn_DialogInstance_FindElement(dialog, retBuf, &nameStr);
 
-        fn_InternalBasePtr_CheckPtr(retBuf);
         void* typedGroup = *(void**)retBuf;
         uint8_t groupPtr[16];
         new (groupPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(typedGroup));   // B.3.3 bridge
@@ -156,14 +148,12 @@ void StatusBarUI_Draw(StatusBarUI* self) {
     // --- Title label ---
     {
         System::String nameStr("labelTitleParam");
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         void* dialog = *(void**)(s + 0x18);
         uint8_t retBuf[16];
         fn_DialogInstance_FindElement(dialog, retBuf, &nameStr);
 
         // Same wrong-label situation as the hearts/stars groups above: retail checks
         // against the LabelElement type-info, not ButtonElement — accept directly.
-        fn_InternalBasePtr_CheckPtr(retBuf);
         uint8_t labelPtr[16];
         new (labelPtr) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(*(void**)retBuf));   // B.3.3 bridge
@@ -173,7 +163,6 @@ void StatusBarUI_Draw(StatusBarUI* self) {
     // --- Set initial title text from map name ---
     void* gameWorld = *g_pGameWorldSingleton;
     System::String mapName(*reinterpret_cast<const System::String*>((uintptr_t)gameWorld + 0x28));  // B.3.1 bridge; FUN_140011f90: copies gameWorld+0x28 String
-    fn_InternalBasePtr_CheckPtr(&self->labelTitleParam);
     if (self->labelTitleParam)
         fn_TextElement_SetParameter(self->labelTitleParam, 0, &mapName);
 }
@@ -208,7 +197,6 @@ void StatusBarUI_Startup(StatusBarUI* self) {
     for (int i = 0; i < citizenCount; i++) {
         uintptr_t citizen = *(uintptr_t*)(*(uintptr_t*)(popList + 0xA0) + (uintptr_t)i * 8);
 
-        fn_InternalBasePtr_CheckPtr((void*)&citizen);
 
         // Check citizen state: +0x3C = current health
         // *(+0x288) + 0x44 = max health from description
@@ -218,7 +206,6 @@ void StatusBarUI_Startup(StatusBarUI* self) {
         uintptr_t deathStatus = *(uintptr_t*)(citizen + 0x208);
 
         if (currentHealth < maxHealth || deathStatus != 0) {
-            fn_InternalBasePtr_CheckPtr((void*)&citizen);
             if (deathStatus == 0) {
                 buildingCount++;  // health declining but alive
             } else {
@@ -229,16 +216,13 @@ void StatusBarUI_Startup(StatusBarUI* self) {
         }
 
         // Find HappinessComponent on this citizen's entity
-        fn_InternalBasePtr_CheckPtr((void*)&citizen);
         uintptr_t entity = *(uintptr_t*)(citizen + 0x10);
-        fn_InternalBasePtr_CheckPtr((void*)&entity);
 
         int compCount = *(int*)(entity + 0x38);
         void* happyComp = nullptr;
         for (int j = 0; j < compCount; j++) {
             void** compArray = *(void***)(entity + 0x30);
             void* comp = compArray[j];
-            fn_InternalBasePtr_CheckPtr(&comp);
 
             // Check component type via vtable GetTypeId (vtable +0x10)
             void** vtable = *(void***)comp;
@@ -246,7 +230,6 @@ void StatusBarUI_Startup(StatusBarUI* self) {
             int typeId = ((fn_GetTypeId_t)vtable[2])(comp);
 
             if (typeId == (int)*g_TypeId_StatusIconComponent) {
-                fn_InternalBasePtr_CheckPtr(&compArray[j]);
                 void* pComp = compArray[j];
                 bool isDerived = fn_IsDerivedFrom(pComp, *g_TypeId_StatusIconComponent);
                 happyComp = nullptr;
@@ -263,7 +246,6 @@ found_happiness:
             uint8_t happyPtr[16];
             new (happyPtr) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(happyComp));   // B.3.3 bridge
-            fn_InternalBasePtr_CheckPtr(happyPtr);
             uintptr_t hc = *(uintptr_t*)happyPtr;
 
             // Read status bitfield from HappinessComponent+0xF0
@@ -280,9 +262,7 @@ found_happiness:
         }
 
         // Accumulate health (+0x50) and happiness (+0x80)
-        fn_InternalBasePtr_CheckPtr((void*)&citizen);
         healthSum += *(float*)(citizen + 0x50);
-        fn_InternalBasePtr_CheckPtr((void*)&citizen);
         happySum += *(float*)(citizen + 0x80);
     }
 
@@ -294,7 +274,6 @@ found_happiness:
     } else {
         // Get max health from first citizen's description
         uintptr_t firstCitizen = *(uintptr_t*)(*(uintptr_t*)(popList + 0xA0));
-        fn_InternalBasePtr_CheckPtr((void*)&firstCitizen);
         void* desc = *(void**)(firstCitizen + 0x18);
         void* citizenDesc = nullptr;
         if (fn_IsDerivedFrom(desc, *g_TypeId_CitizenDescription)) {
@@ -306,7 +285,6 @@ found_happiness:
 
         // Get max happiness from first citizen's description
         firstCitizen = *(uintptr_t*)(*(uintptr_t*)(popList + 0xA0));
-        fn_InternalBasePtr_CheckPtr((void*)&firstCitizen);
         desc = *(void**)(firstCitizen + 0x18);
         citizenDesc = nullptr;
         if (fn_IsDerivedFrom(desc, *g_TypeId_CitizenDescription)) {
@@ -331,15 +309,12 @@ found_happiness:
         uint32_t showFlag = hasStatus ? 1 : 0;
 
         // imageStatus is at pNum - 0x30 (6 pointers before numberStatus)
-        fn_InternalBasePtr_CheckPtr((void*)(pNum - 0x30));
         fn_Element_SetFlagsOnOff(*(void**)(pNum - 0x30), hideFlag, showFlag);
 
-        fn_InternalBasePtr_CheckPtr((void*)pNum);
         fn_Element_SetFlagsOnOff(*(void**)pNum, hideFlag, showFlag);
 
         // Set count text as parameter 0
         System::String countStr = System::String::Format("%i", (uint64_t)*pCounts);
-        fn_InternalBasePtr_CheckPtr((void*)pNum);
         fn_TextElement_SetParameter(*(void**)pNum, 0, &countStr);
 
         mask = (mask << 1) | (uint32_t)((int32_t)mask < 0);  // rotate left
@@ -351,24 +326,20 @@ found_happiness:
     // --- Update population text (3 params: adults, dying, building) ---
     {
         System::String str = System::String::Format("%i", (uint64_t)adultCount);
-        fn_InternalBasePtr_CheckPtr(&self->textPopulation);
         fn_TextElement_SetParameter(self->textPopulation, 0, &str);
     }
     {
         System::String str = System::String::Format("%i", (uint64_t)dyingCount);
-        fn_InternalBasePtr_CheckPtr(&self->textPopulation);
         fn_TextElement_SetParameter(self->textPopulation, 1, &str);
     }
     {
         System::String str = System::String::Format("%i", (uint64_t)buildingCount);
-        fn_InternalBasePtr_CheckPtr(&self->textPopulation);
         fn_TextElement_SetParameter(self->textPopulation, 2, &str);
     }
 
     // --- Update year ---
     int* timeData = *(int**)((uintptr_t)gameWorld + 0x128);
     int year = *timeData;
-    fn_InternalBasePtr_CheckPtr(&self->numberYear);
     fn_NumberElement_SetValueInt(self->numberYear, year);
 
     // --- Update month/season ---
@@ -379,7 +350,6 @@ found_happiness:
     {
         System::String monthKey = System::String::Format("Month%i", (uint64_t)monthIdx);
 
-        fn_InternalBasePtr_CheckPtr(&self->textSeason);
         void* seasonElem = self->textSeason;
 
         // UIString ctor takes two params from the text element: +0xD8 and the formatted
@@ -395,7 +365,6 @@ found_happiness:
             localUIStr[0] = pResult[0];
             localUIStr[1] = pResult[1];
 
-            fn_InternalBasePtr_CheckPtr(&self->textSeason);
             fn_TextElement_SetText(self->textSeason, localUIStr);
         }
     }
@@ -412,7 +381,6 @@ found_happiness:
     if (settings && *(uint8_t*)((uintptr_t)settings + 0x15) != 0) {
         displayTemp = ((rawTemp - kFreezingF) * kFtoC_Num) / kFtoC_Den;
     }
-    fn_InternalBasePtr_CheckPtr(&self->numberTemperature);
     fn_NumberElement_SetValueInt(self->numberTemperature, (int)displayTemp);
 
     // --- Update weather icons ---
@@ -427,7 +395,6 @@ found_happiness:
     int weatherCount = 5;
     int weatherIdx = 0;
     do {
-        fn_InternalBasePtr_CheckPtr((void*)pWeather);
         fn_Element_SetFlagsOnOff(*(void**)pWeather,
                                   (uint32_t)(weatherIdx != weatherType),
                                   (uint32_t)(weatherIdx == weatherType));
@@ -455,30 +422,19 @@ found_happiness:
     int valTextile  = piVar5[0x50];
 
     // Assignments match decompilation: SetValue(*(param_1 + offset), value)
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x58));       // numberWood
     fn_NumberElement_SetValueInt(*(void**)(s + 0x58), iVar7_wood);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x60));       // numberStone
     fn_NumberElement_SetValueInt(*(void**)(s + 0x60), iVar2_stone);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x68));       // numberIron
     fn_NumberElement_SetValueInt(*(void**)(s + 0x68), iVar3_iron);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x78));       // numberTools
     fn_NumberElement_SetValueInt(*(void**)(s + 0x78), iVar1_tool);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x70));       // numberFireWood
     fn_NumberElement_SetValueInt(*(void**)(s + 0x70), iVar21_fw);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x80));       // numberFood
     fn_NumberElement_SetValueInt(*(void**)(s + 0x80), iVar23_food);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x88));       // numberHerbs
     fn_NumberElement_SetValueInt(*(void**)(s + 0x88), valHerbs);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x90));       // numberClothes
     fn_NumberElement_SetValueInt(*(void**)(s + 0x90), valClothes);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x98));       // numberAlcohol
     fn_NumberElement_SetValueInt(*(void**)(s + 0x98), valAlcohol);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xA0));       // numberCoal
     fn_NumberElement_SetValueInt(*(void**)(s + 0xA0), valCoal);
 
     // Textile (numberTextile at +0xA8) — may be null
     if (*(void**)(s + 0xA8) != nullptr) {
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0xA8));
         fn_NumberElement_SetValueInt(*(void**)(s + 0xA8), valTextile);
     }
 
@@ -489,7 +445,6 @@ found_happiness:
     do {
         if (*(void**)pCustom != nullptr) {
             int value = *(int*)(resOffset + *(uintptr_t*)(popList + 0x170));
-            fn_InternalBasePtr_CheckPtr((void*)pCustom);
             fn_NumberElement_SetValueInt(*(void**)pCustom, value);
         }
         resOffset += 0x20;
@@ -498,7 +453,6 @@ found_happiness:
 
     // --- Update title text (map name) ---
     System::String mapName(*reinterpret_cast<const System::String*>((uintptr_t)gameWorld + 0x28));  // B.3.1 bridge; FUN_140011f90: copies gameWorld+0x28 String
-    fn_InternalBasePtr_CheckPtr(&self->labelTitleParam);
     if (self->labelTitleParam)
         fn_TextElement_SetParameter(self->labelTitleParam, 0, &mapName);
 }
@@ -553,12 +507,10 @@ static void StatusBarUI_StatusIconHandler_Impl(StatusBarUI* self, int iconIndex)
         if (!entityPtr) goto next;
 
         // CheckPtr on entity (InternalBasePtr validation)
-        fn_InternalBasePtr_CheckPtr((void*)&entityPtr);
 
         {
             // Get component entity at entity+0x10
             uintptr_t compEntity = *(uintptr_t*)(entityPtr + 0x10);
-            fn_InternalBasePtr_CheckPtr((void*)&compEntity);
 
             // Search components for HappinessComponent (DAT_1401c7e08)
             void** compArray = *(void***)(compEntity + 0x30);
@@ -588,7 +540,6 @@ static void StatusBarUI_StatusIconHandler_Impl(StatusBarUI* self, int iconIndex)
             new (&happinessPtr) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(happinessComp));   // B.3.3 bridge
 
-            fn_InternalBasePtr_CheckPtr((void*)&happinessPtr);
 
             // Check status bits at HappinessComponent+0xF0
             uint32_t statusBits = happinessPtr ? *(uint32_t*)(happinessPtr + 0xF0) : 0;
@@ -597,10 +548,8 @@ static void StatusBarUI_StatusIconHandler_Impl(StatusBarUI* self, int iconIndex)
                 // Found a match (or exhausted all citizens)
                 // Re-fetch entity for navigation
                 uintptr_t navEntity = *(uintptr_t*)(citizenArray + (int64_t)self->statusCitizenIndex * 8);
-                fn_InternalBasePtr_CheckPtr((void*)&navEntity);
 
                 uintptr_t navCompEntity = *(uintptr_t*)(navEntity + 0x10);
-                fn_InternalBasePtr_CheckPtr((void*)&navCompEntity);
 
                 // FindComponent_MeshInstance (uses same type ID DAT_1401c7e08).
                 // Null-guarded: the exe finder may be unregistered in standalone —
@@ -609,7 +558,6 @@ static void StatusBarUI_StatusIconHandler_Impl(StatusBarUI* self, int iconIndex)
                 if (fn_FindComponent_MeshInstance) {
                     uintptr_t meshComp = 0;
                     fn_FindComponent_MeshInstance((void*)navCompEntity, &meshComp);
-                    fn_InternalBasePtr_CheckPtr((void*)&meshComp);
 
                     // Double-check: if meshComp's status doesn't have our bit, bail
                     if (meshComp) {
@@ -621,7 +569,6 @@ static void StatusBarUI_StatusIconHandler_Impl(StatusBarUI* self, int iconIndex)
                 // Navigate to the citizen entity
                 // FUN_140103040(game+0x120, &dialogRef, &entityRef)
                 uintptr_t navEntity2 = *(uintptr_t*)(citizenArray + (int64_t)self->statusCitizenIndex * 8);
-                fn_InternalBasePtr_CheckPtr((void*)&navEntity2);
                 uintptr_t entityRef = *(uintptr_t*)(navEntity2 + 0x10);
 
                 uintptr_t dialogRef = *(uintptr_t*)((uintptr_t)self + 0x18);
@@ -752,7 +699,7 @@ bool Ready() {
           fn_Element_SetFlagsOnOff && fn_TextElement_SetParameter &&
           fn_TextElement_SetText && fn_NumberElement_SetValueInt &&
           fn_UIString_Ctor && fn_Time_AsSeconds && fn_IsDerivedFrom &&
-          fn_InternalBasePtr_Ctor && fn_InternalBasePtr_CheckPtr &&
+          fn_InternalBasePtr_Ctor &&
           fn_MemAlloc && fn_MemFreeStatic && g_pMemAllocSingleton))
         return false;
     if (!(g_TypeId_StatusIconComponent && g_TypeId_CitizenDescription)) return false;

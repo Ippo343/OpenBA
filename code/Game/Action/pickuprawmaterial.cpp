@@ -85,7 +85,7 @@ bool PickupRawMaterial_ResolveFuncs() {
               s_fn_EntityFlagSet &&
               s_typeId_1401c7158 && g_TypeId_ComponentEntity &&
               g_pGameWorldSingleton &&
-              fn_InternalBasePtr_CheckPtr && fn_IsDerivedFrom &&
+              fn_IsDerivedFrom &&
               fn_InternalBasePtr_Serialize &&
               g_fn_Serializer_Ctor && g_fn_Serializer_Dtor && g_fn_Serialize_Bool;
 
@@ -153,8 +153,6 @@ int PickupRawMaterial_AbstractImpl_Impl(PickupRawMaterial* self, void* actionSta
     uint8_t* s = (uint8_t*)self;
 
     // Get source entity at +0x28
-    void* sourceEntityIBP = s + 0x28;
-    fn_InternalBasePtr_CheckPtr(sourceEntityIBP);
     void* sourceEntity = *(void**)(s + 0x28);
 
     // Find RawMaterial description component on source entity via FUN_1400223c0
@@ -163,20 +161,16 @@ int PickupRawMaterial_AbstractImpl_Impl(PickupRawMaterial* self, void* actionSta
     s_fn_FindComponent_7c80((void*)(uintptr_t)sourceEntity, resultIBP);
 
     // CheckPtr on the result to resolve lazy pointer
-    fn_InternalBasePtr_CheckPtr(resultIBP);
 
     // Read quantity from the found component: *(int*)(component + 0x28)
     void* rawMatDesc = *(void**)resultIBP;
     int quantity = *(int*)((uintptr_t)rawMatDesc + 0x28);
 
     // Read raw material type from source entity (+0x28 field = ExternalPtr)
-    fn_InternalBasePtr_CheckPtr(sourceEntityIBP);
     int64_t itemType = *(int64_t*)((uintptr_t)(*(void**)(s + 0x28)) + 0x28);
 
     // Navigate to source building (+0x20) -> parent entity (+0x10)
-    fn_InternalBasePtr_CheckPtr(s + 0x20);
     void* building = *(void**)(s + 0x20);
-    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)building + 0x10));
     void* parentEntity = *(void**)((uintptr_t)building + 0x10);
 
     // Find StorageComponent on parent entity
@@ -184,7 +178,6 @@ int PickupRawMaterial_AbstractImpl_Impl(PickupRawMaterial* self, void* actionSta
     fn_FindComponent_Storage((void*)parentEntity, &storageIBP);
 
     // CheckPtr + add item to storage
-    fn_InternalBasePtr_CheckPtr(&storageIBP);
     s_fn_Storage_AddItem((void*)storageIBP, itemType, quantity);
 
     // Get source entity again, check if it should be flagged for removal
@@ -195,13 +188,11 @@ int PickupRawMaterial_AbstractImpl_Impl(PickupRawMaterial* self, void* actionSta
     if (entityRef != nullptr) {
         // Store entity ptr for flag check
         uintptr_t localEntity = (uintptr_t)entityRef;
-        fn_InternalBasePtr_CheckPtr(&localEntity);
 
         // Check bit 10 of flags at +0x40
         uint32_t flags = *(uint32_t*)(localEntity + 0x40);
         if (((flags >> 10) & 1) == 0) {
             // Entity not yet flagged -- call entity flag set and add to world removal list
-            fn_InternalBasePtr_CheckPtr(&localEntity);
             s_fn_EntityFlagSet((void*)localEntity);
 
             // Push entity ref to world list at worldList + 0xd0.
@@ -227,7 +218,6 @@ bool PickupRawMaterial_GetTarget_Impl(PickupRawMaterial* self, void* param) {
     uint8_t* s = (uint8_t*)self;
 
     // Check direct match with +0x28
-    fn_InternalBasePtr_CheckPtr(param);
     uintptr_t paramVal = *(uintptr_t*)param;
 
     if (*(uintptr_t*)(s + 0x28) == paramVal) {
@@ -235,10 +225,8 @@ bool PickupRawMaterial_GetTarget_Impl(PickupRawMaterial* self, void* param) {
     }
 
     // Check match with +0x20's parent (+0x10)
-    fn_InternalBasePtr_CheckPtr(s + 0x20);
     uintptr_t building = *(uintptr_t*)(s + 0x20);
     uintptr_t parentEntity = *(uintptr_t*)(building + 0x10);
-    fn_InternalBasePtr_CheckPtr(param);
     return parentEntity == *(uintptr_t*)param;
 }
 

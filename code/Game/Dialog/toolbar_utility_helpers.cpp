@@ -85,7 +85,6 @@ void ToolbarUtility_FindDialogByControllerType_0270(void* /*toolController*/,
     // iterator is the bare node pointer, so `it.node` is the address retail
     // hands to CheckPtr and `it.node->element` is the DialogInstance IBP.
     for (auto it = ui->_dialogs.GetFirst(); it; ++it) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(it.node);
         void* dialog = it.node->element;
 
         // GetController(dialog, &ctrlBuf, ToolUI tid) — R8=type-id filters internally.
@@ -94,7 +93,6 @@ void ToolbarUtility_FindDialogByControllerType_0270(void* /*toolController*/,
         if (dialog && fn_DialogInstance_GetController)
             fn_DialogInstance_GetController(dialog, ctrlBuf, toolUITid);
         if (ctrlBuf[0] != 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ctrlBuf);
             void* c = reinterpret_cast<void*>(ctrlBuf[0]);
             if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, toolUITid)) controller = c;
         }
@@ -104,7 +102,6 @@ void ToolbarUtility_FindDialogByControllerType_0270(void* /*toolController*/,
         if (fn_InternalBasePtr_Ctor) new (&ctrlRef) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(controller));   // B.3.3 bridge
         if (ctrlRef != 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ctrlRef);
             if (*reinterpret_cast<uint64_t*>(ctrlRef + 0x30) == param) {
                 *reinterpret_cast<void**>(retBuf) = it.node->element;
                 return;

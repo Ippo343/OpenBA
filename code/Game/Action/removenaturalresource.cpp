@@ -120,7 +120,7 @@ bool RemoveNaturalResource_ResolveFuncs() {
               s_typeId_NatResDescription &&
               s_vtable_RemoveNaturalResource && s_vtable_Action &&
               s_typeInfo_RemoveNaturalResource &&
-              fn_InternalBasePtr_CheckPtr && fn_IsDerivedFrom &&
+              fn_IsDerivedFrom &&
               fn_MemFreeStatic && g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
               g_fn_Serialize_Bool && g_pGameWorldSingleton;
 
@@ -227,7 +227,6 @@ int RemoveNaturalResource_AbstractImpl_Impl(RemoveNaturalResource* self, void* a
     void* nrCompIBP = nullptr;
 
     // Get NaturalResourceComponent from resource entity at +0x28
-    fn_InternalBasePtr_CheckPtr(s + 0x28);
     s_fn_FindNRComp(*(void**)(s + 0x28), &nrCompIBP);
 
     // Standalone-safety: the NR component find can resolve null when the action's target
@@ -238,7 +237,6 @@ int RemoveNaturalResource_AbstractImpl_Impl(RemoveNaturalResource* self, void* a
     // null+0x18. The diagnostic reports the target so the cut-sequence target wiring (the
     // remaining economy gap, PerformWork_Action_Ctor3) can be closed. Returning 0 completes
     // the action so the citizen isn't wedged. The live-world path (non-null) is unchanged.
-    fn_InternalBasePtr_CheckPtr(&nrCompIBP);
     if (nrCompIBP == nullptr) {
         return 0;
     }
@@ -257,36 +255,30 @@ int RemoveNaturalResource_AbstractImpl_Impl(RemoveNaturalResource* self, void* a
 
     if (ownerRef != 0 && ownerRef != townOwner) {
         // Check if the citizen's current action matches the owner
-        fn_InternalBasePtr_CheckPtr(s + 0x20);
         uintptr_t citizenEntity = *(uintptr_t*)(s + 0x20);
         uintptr_t citizenAction = *(uintptr_t*)(citizenEntity + 0x1f0);
 
         if (citizenAction != ownerRef) {
             // Clear the harvestable flag on NR comp
-            fn_InternalBasePtr_CheckPtr(&nrCompIBP);
             nrComp = (uintptr_t)nrCompIBP;
             *(uint8_t*)(nrComp + 0x2d) = 0;
         }
     }
 
     // Compare citizen's growth value with component threshold
-    fn_InternalBasePtr_CheckPtr(s + 0x20);
     uintptr_t citizenEntity = *(uintptr_t*)(s + 0x20);
     uintptr_t comp288 = *(uintptr_t*)(citizenEntity + 0x288);
     int threshold = *(int*)(comp288 + 0x118);
     int growthValue = *(int*)(citizenEntity + 0x210);
 
-    fn_InternalBasePtr_CheckPtr(&nrCompIBP);
     nrComp = (uintptr_t)nrCompIBP;
     *(bool*)(nrComp + 0x2c) = (threshold <= growthValue);
 
     // Get citizen's tool/work entity ref at +0x248
-    fn_InternalBasePtr_CheckPtr(s + 0x20);
     citizenEntity = *(uintptr_t*)(s + 0x20);
     void* workEntityIBP = *(void**)(citizenEntity + 0x248);
 
     // Call the removal helper
-    fn_InternalBasePtr_CheckPtr(&nrCompIBP);
     nrComp = (uintptr_t)nrCompIBP;
     s_fn_RemoveNatRes((void*)nrComp, &workEntityIBP, *(char*)(s + 0x30));
 
@@ -302,10 +294,8 @@ void RemoveNaturalResource_CheckEntity_Impl(RemoveNaturalResource* self) {
     uint8_t* s = (uint8_t*)self;
     void* localIBP[4];
 
-    fn_InternalBasePtr_CheckPtr(s + 0x28);
     s_fn_FindNRComp(*(void**)(s + 0x28), localIBP);
 
-    fn_InternalBasePtr_CheckPtr(localIBP);
     uint8_t* modelComp = (uint8_t*)(localIBP[0]);
     if (!modelComp) return;   // [standalone] NR component not found -> nothing to clear
     uint32_t flagsOld = *(uint32_t*)(modelComp + 0x20);
@@ -315,7 +305,6 @@ void RemoveNaturalResource_CheckEntity_Impl(RemoveNaturalResource* self) {
     if (((flagsNew ^ flagsOld) & 0xFFFF) != 0) {
         void* parent = *(void**)(modelComp + 0x10);
         if (parent != nullptr) {
-            fn_InternalBasePtr_CheckPtr(modelComp + 0x10);
             s_fn_NotifyEntityChanged(*(void**)(modelComp + 0x10));
         }
     }
@@ -329,16 +318,13 @@ bool RemoveNaturalResource_GetTarget_Impl(RemoveNaturalResource* self, void* par
     RemoveNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = (uint8_t*)self;
 
-    fn_InternalBasePtr_CheckPtr(s + 0x28);
     void* entity28 = *(void**)(s + 0x28);
 
     if (*(void**)param == entity28) {
         return true;
     }
 
-    fn_InternalBasePtr_CheckPtr(s + 0x20);
     void* parentEntity = *(void**)(*(uint8_t**)(s + 0x20) + 0x10);
-    fn_InternalBasePtr_CheckPtr(param);
     return parentEntity == *(void**)param;
 }
 

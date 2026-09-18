@@ -2025,37 +2025,19 @@ extern fn_Configuration_CurrentVersion_t fn_Configuration_CurrentVersion;
 typedef void (*fn_Configuration_CurrentBuildId_t)(void* retStr);
 extern fn_Configuration_CurrentBuildId_t fn_Configuration_CurrentBuildId;
 
-// Object::InternalBasePtr::CheckPtr(this) — validates NOTHING; see below.
-// ?CheckPtr@InternalBasePtr@Object@@IEBAXXZ  (protected AND const)
-// The ...@QEAAXXZ mangling this line carried until Wave 3 does not exist in the
-// DLL. ResolveExport returned null for it and only the ResolveAddr fallback kept
-// the pointer alive — which also means a RegisterRuntimeExport port keyed on the
-// old name would have been silently inert (WAVE2.md finding 4).
-typedef void (*fn_InternalBasePtr_CheckPtr_t)(void* self);
-extern fn_InternalBasePtr_CheckPtr_t fn_InternalBasePtr_CheckPtr;
-// PERF (2026-09-04): the shipped Runtime's CheckPtr body is a bare RET and the port
-// calls it ~60k times per frame through this pointer at 800x10.
-// NOT a debug-build leftover, as this comment claimed until Wave 3: the body is a
-// bare RET in the ToolKit PROFILE build too (0x18008c5d0, and AssignId at
-// 0x18008c5e0 with it), so it was compiled out at source level in every shipped
-// configuration. No build of this engine has ever validated an InternalBasePtr.
-// The resolver verifies the body byte (0xC3) and sets g_checkPtrIsNop; every direct
-// call site then skips the indirect call. Non-call uses (`if (fn_InternalBasePtr_CheckPtr)`)
-// still see the variable because a function-like macro only expands before '('.
-// BANISHED_CHECKPTR_NOP=0 forces the real call (A/B).
-extern bool g_checkPtrIsNop;
-#ifdef BANISHED_CHECKPTR_STATIC_NOP
-// Perf build: the call is compiled out entirely (the resolver still verifies the
-// shipped body is RET 0 and prints a loud warning if it ever is not). The ~60k
-// `load g_checkPtrIsNop + branch` per frame of the runtime form were ~3% of the
-// EntityList phase in the sampler.
-#define fn_InternalBasePtr_CheckPtr(p) ((void)(p))
-#else
-static inline void InternalBasePtr_CheckPtr_Inline(void* p) {
-    if (!g_checkPtrIsNop) fn_InternalBasePtr_CheckPtr(p);
-}
-#define fn_InternalBasePtr_CheckPtr(p) InternalBasePtr_CheckPtr_Inline(p)
-#endif
+// Object::InternalBasePtr::CheckPtr — GONE, ENDGAME B.3.3 step 6D. Nothing calls it
+// any more and nothing may: `?CheckPtr@InternalBasePtr@Object@@IEBAXXZ` is a bare
+// `RET 0` (`C2 00 00`) in the shipped Runtime-x64.dll at 0x1800c0290 AND in the
+// ToolKit profile build at 0x18008c5d0 — read from the disassembly in both, not from
+// decompiled C. It was compiled out at SOURCE level in every shipped configuration,
+// so no build of this engine has ever validated an InternalBasePtr, and the 4,570
+// exe-side call sites were doing nothing at a cost of ~60k indirect calls a frame.
+// The pointer, its typedef, `g_checkPtrIsNop`, `InternalBasePtr_CheckPtr_Inline` and
+// the `BANISHED_CHECKPTR_STATIC_NOP` perf-build variant all went with them.
+// `Object::InternalBasePtr::CheckPtr()` still EXISTS as an empty member of the real
+// class (runtime/types/object/Internal.h) and is still registered as a port, because
+// the SYMBOL has to exist at cutover — see runtime/src/object/internal.cpp.
+// NEVER ADD VALIDATION TO IT, and never reintroduce a caller.
 
 // UI::DialogInstance::DialogInstance(this, ui, dialog, parentInternalPtr, dataSource, extraPtr, flags)
 // Full constructor for creating child dialog instances.
@@ -2192,10 +2174,8 @@ inline int fn_StorageCountQuery(void* component) {
     if (*(uint8_t*)(jt + 0x34) == 0) {
         return *(int*)(jt + 0x24);
     }
-    fn_InternalBasePtr_CheckPtr((void*)(c + 0x10));
     uint64_t buildBP = 0;
     fn_FindComponent_Build(*(void**)(c + 0x10), &buildBP);
-    fn_InternalBasePtr_CheckPtr(&buildBP);
     uintptr_t build = (uintptr_t)buildBP;
     int defaultWorkers = *(int*)(jt + 0x24);   // _defaultWorkers (NOT _maxWorkerCount)
     int maxArea        = *(int*)(jt + 0x30);   // _maxArea (NOT the building's tile area)
@@ -4348,8 +4328,6 @@ inline void* FindDialogByName_Impl(void* retval, void* nameStr) {
         void* node = it.node;
         // CheckPtr on the iterator node (InternalBasePtr) before dereferencing.
         // Original: MOV RCX,RSI; CALL [0x140152ab0] (fn_InternalBasePtr_CheckPtr)
-        if (fn_InternalBasePtr_CheckPtr)
-            fn_InternalBasePtr_CheckPtr(node);
 
         // Deref node to get DialogInstance*
         void* dialog = *(void**)node;
@@ -4367,8 +4345,6 @@ inline void* FindDialogByName_Impl(void* retval, void* nameStr) {
                 //   MOV R8D,EBX(=controllerTypeId); LEA RDX,[retbuf]; MOV RCX,[RSI]; CALL GetController
                 // GetController takes controllerTypeId as R8 — it does the type matching
                 // internally and returns a matching controller or null.
-                if (fn_InternalBasePtr_CheckPtr)
-                    fn_InternalBasePtr_CheckPtr(node);
                 if (fn_DialogInstance_GetController) {
                     uintptr_t controllerBuf[2] = {};
                     fn_DialogInstance_GetController(*(void**)node, controllerBuf, controllerTypeId);
@@ -4587,7 +4563,6 @@ inline void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag
                 do {
                     // Each citizen entry is an InternalBasePtr — load then CheckPtr
                     int64_t citizenIBP = *(int64_t*)(citizenOffset + *param_1);
-                    fn_InternalBasePtr_CheckPtr(&citizenIBP);
                     int64_t citizen = citizenIBP;
 
                     // Find StorageComponent on citizen
@@ -4599,14 +4574,12 @@ inline void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag
                         do {
                             // Each component entry is an InternalBasePtr — CheckPtr before reading
                             void* compIBP = (void*)(*(int64_t*)(citizen + 0x30) + cCompOffset * 8);
-                            fn_InternalBasePtr_CheckPtr(compIBP);
 
                             typedef uint32_t (*GetTypeId_t)(void*);
                             uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)(*(int64_t*)compIBP) + 0x10)))(*(void**)compIBP);
                             if (typeId == *g_TypeId_StorageComponent_FC) {
                                 // Re-CheckPtr the IBP slot and read again
                                 void* compIBP2 = (void*)(*(int64_t*)(citizen + 0x30) + cCompOffset * 8);
-                                fn_InternalBasePtr_CheckPtr(compIBP2);
                                 void* compVal = *(void**)compIBP2;
 
                                 bool isDerived = fn_IsDerivedFrom(compVal, *g_TypeId_StorageComponent_FC);
@@ -4633,13 +4606,11 @@ inline void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag
                             int64_t* matchSlot = (int64_t*)((int64_t)matchArr + (int64_t)(spawned % matchCount) * 8);
 
                             // CheckPtr the storage IBP before use
-                            fn_InternalBasePtr_CheckPtr(&storageIBP);
 
                             // Call original exe CanAdd function (0x14012cd80)
                             uint32_t canAdd = fn_StorageCanAdd((void*)storageIBP, (void*)*matchSlot, 1);
                             if ((char)canAdd != '\0') {
                                 // CheckPtr again before AddItem
-                                fn_InternalBasePtr_CheckPtr(&storageIBP);
 
                                 // Call original exe AddItem function (0x14012d000)
                                 fn_StorageAddItem((void*)storageIBP, (void*)*matchSlot, 1);
@@ -4689,7 +4660,6 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
 
     // === Section 1: Enable tracking on EntityPanel controller ===
     if (*(uintptr_t*)parentDialogPtr != 0) {
-        fn_InternalBasePtr_CheckPtr(parentDialogPtr);
 
         // Retail FUN_140103040 reads DWORD_1401c4f00 — whose registrar is
         // RegisterType_EntityUI — TWICE, and both reads matter. Disassembled at
@@ -4738,7 +4708,6 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
         uintptr_t controllerRaw = *(uintptr_t*)controllerBuf;
         void* panelController = nullptr;
         if (controllerRaw != 0 && tidEntityUI) {
-            fn_InternalBasePtr_CheckPtr(controllerBuf);
             if (fn_IsDerivedFrom((void*)controllerRaw, tidEntityUI)) {
                 panelController = (void*)controllerRaw;
             }
@@ -4748,16 +4717,12 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
         fn_InternalBasePtr_Ctor(&ctrlRef, panelController);
 
         if (ctrlRef != 0) {
-            fn_InternalBasePtr_CheckPtr(&ctrlRef);
             uintptr_t ctrl = (uintptr_t)ctrlRef;
-            fn_InternalBasePtr_CheckPtr((void*)(ctrl + 0x38));
             uintptr_t trackedEntity = *(uintptr_t*)(ctrl + 0x38);
 
             if (*(uint8_t*)(trackedEntity + 0xd8) == 0) {
                 // Enable tracking flag
-                fn_InternalBasePtr_CheckPtr(&ctrlRef);
                 ctrl = (uintptr_t)ctrlRef;
-                fn_InternalBasePtr_CheckPtr((void*)(ctrl + 0x38));
                 *(uint8_t*)(*(uintptr_t*)(ctrl + 0x38) + 0xd8) = 1;
 
                 if (fn_EntityPanel_SyncTracking) {
@@ -4770,7 +4735,6 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
     // === Section 2: Get entity world position ===
     float targetPos[3] = {0.0f, 0.0f, 0.0f};
 
-    fn_InternalBasePtr_CheckPtr(entityPtr);
     uintptr_t entityRaw = *(uintptr_t*)entityPtr;
 
     // Try ModelComponent (DAT_1401c7a50 = g_TypeId_ModelComponent_FC)
@@ -4787,7 +4751,6 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
             // Single object (citizen/animal/tree): use model's transform position
             uint64_t modelRef2 = 0;
             fn_FindComponent_Character((void*)entityRaw, &modelRef2);
-            fn_InternalBasePtr_CheckPtr(&modelRef2);
             uintptr_t model = (uintptr_t)modelRef2;
 
             // Math::Transform at ModelComponent+0x148 is {quat(16 bytes), pos(12 bytes)}
@@ -4801,10 +4764,8 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
 
     if (!gotPosition) {
         // Building/multi-object: calculate center from BuildComponent grid footprint
-        fn_InternalBasePtr_CheckPtr(entityPtr);
         uint64_t buildRef = 0;
         fn_FindComponent_Build(*(void**)entityPtr, &buildRef);
-        fn_InternalBasePtr_CheckPtr(&buildRef);
         uintptr_t build = (uintptr_t)buildRef;
 
         int* mapGrid = *(int**)(game + 0xF8);
@@ -4880,7 +4841,6 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
     void* editTool = nullptr;
 
     if (currentTool && g_TypeId_EditTool) {
-        fn_InternalBasePtr_CheckPtr(&currentTool);
         if (fn_IsDerivedFrom(currentTool, *g_TypeId_EditTool)) {
             editTool = currentTool;
         }
@@ -4897,7 +4857,6 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
         void* newTool = *(void**)(tc + 0x28);
         editTool = nullptr;
         if (newTool && g_TypeId_EditTool) {
-            fn_InternalBasePtr_CheckPtr(&newTool);
             if (fn_IsDerivedFrom(newTool, *g_TypeId_EditTool)) {
                 editTool = newTool;
             }
@@ -4909,7 +4868,6 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
     // Select the entity in the EditTool
     if (editToolRef != 0) {
         void* entityRefCopy = *(void**)entityPtr;
-        fn_InternalBasePtr_CheckPtr(&editToolRef);
         fn_EditTool_SelectEntity((void*)(uintptr_t)editToolRef, &entityRefCopy);
     }
 }
@@ -5185,10 +5143,8 @@ extern fn_CitizenComponent_CheckWorkplaceValid_t fn_CitizenComponent_CheckWorkpl
 // rather than dereferencing null+0x30. Works in both DLL and standalone builds.
 inline bool fn_CitizenComponent_HasVacancy(uintptr_t workplaceComp) {
     int roster = *reinterpret_cast<int*>(workplaceComp + 0x60);
-    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(workplaceComp + 0x10));
     uint64_t slComp = 0;
     fn_FindComponent_Work(*reinterpret_cast<void**>(workplaceComp + 0x10), &slComp);
-    fn_InternalBasePtr_CheckPtr(&slComp);
     if (slComp == 0) return false;
     uintptr_t sl = static_cast<uintptr_t>(slComp);
     if (*reinterpret_cast<int*>(sl + 0x30) == 0) {

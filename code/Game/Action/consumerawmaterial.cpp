@@ -74,7 +74,7 @@ bool ConsumeRawMaterial_ResolveFuncs() {
     bool ok = s_fn_Storage_SubtractItem && s_fn_GetResourceCategoryIndex &&
               s_fn_ArrayResize16 &&
               g_TypeId_ComponentEntity && g_pGameWorldSingleton &&
-              fn_InternalBasePtr_CheckPtr && fn_IsDerivedFrom &&
+              fn_IsDerivedFrom &&
               fn_InternalBasePtr_Serialize &&
               fn_ExternalPtr_BuildSerialize &&
               g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
@@ -189,7 +189,6 @@ int ConsumeRawMaterial_AbstractImpl_Impl(ConsumeRawMaterial* self, void* actionS
     }
 
     // Find StorageComponent on target entity (+0x20)
-    fn_InternalBasePtr_CheckPtr(s + 0x20);
     uintptr_t storageIBP = 0;
     fn_FindComponent_Storage(*(void**)(s + 0x20), &storageIBP);
 
@@ -207,7 +206,6 @@ int ConsumeRawMaterial_AbstractImpl_Impl(ConsumeRawMaterial* self, void* actionS
 
         if (*(uint8_t*)(s + 0x38) == 0) {
             // Check mode: verify sufficient availability
-            fn_InternalBasePtr_CheckPtr(&storageIBP);
             int availableCount = 0;
             int slotCount = *(int*)(storageIBP + 0x30);
             if (slotCount > 0) {
@@ -228,7 +226,6 @@ int ConsumeRawMaterial_AbstractImpl_Impl(ConsumeRawMaterial* self, void* actionS
             }
         } else {
             // Consume mode: subtract from reserved field
-            fn_InternalBasePtr_CheckPtr(&storageIBP);
             int slotCount = *(int*)(storageIBP + 0x30);
             if (slotCount > 0) {
                 int64_t* itemArray = *(int64_t**)(storageIBP + 0x28);
@@ -248,7 +245,6 @@ int ConsumeRawMaterial_AbstractImpl_Impl(ConsumeRawMaterial* self, void* actionS
         }
 
         // SubtractItem from storage
-        fn_InternalBasePtr_CheckPtr(&storageIBP);
         void* storageComp = (void*)storageIBP;
         s_fn_Storage_SubtractItem(storageComp, matEntry[0], requestedCount);
 
@@ -286,7 +282,6 @@ void ConsumeRawMaterial_CheckEntity_Impl(ConsumeRawMaterial* self) {
     }
 
     // Find StorageComponent on target entity (+0x20)
-    fn_InternalBasePtr_CheckPtr(s + 0x20);
     uintptr_t storageIBP = 0;
     fn_FindComponent_Storage(*(void**)(s + 0x20), &storageIBP);
 
@@ -296,7 +291,6 @@ void ConsumeRawMaterial_CheckEntity_Impl(ConsumeRawMaterial* self) {
     int64_t matOffset = 0;
     for (int i = 0; i < matCount; i++) {
         uintptr_t matList = *(uintptr_t*)(s + 0x28);
-        fn_InternalBasePtr_CheckPtr(&storageIBP);
 
         int slotCount = *(int*)(storageIBP + 0x30);
         if (slotCount > 0) {
@@ -327,7 +321,6 @@ bool ConsumeRawMaterial_GetTarget_Impl(ConsumeRawMaterial* self, void* param) {
     ConsumeRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = (uint8_t*)self;
 
-    fn_InternalBasePtr_CheckPtr(s + 0x20);
     return *(uintptr_t*)param == *(uintptr_t*)(s + 0x20);
 }
 

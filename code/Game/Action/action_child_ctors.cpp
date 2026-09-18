@@ -19,7 +19,6 @@
 //   vtable_AnimateNaturalResource 0x14015fb10(animatenaturalresource.cpp)
 //   vtable_CreateNaturalResource 0x14015fca0 (createnaturalresource.cpp)
 //   Object::Internal::Internal   IAT 0x140152768 (fn_ObjectInternal_Ctor)
-//   InternalBasePtr::CheckPtr    (fn_InternalBasePtr_CheckPtr)
 //   Entity_ClearPathQueue        0x140003f60 (reg_action_cnr)
 //   FUN_140004680                0x140004680 (reg_component_nature)
 //   CharacterComponent_impl_f3e0 0x14009f3e0 (mapquery.cpp / cell->world)
@@ -165,26 +164,21 @@ float ActChild_Entity29a0_c29a0(float* worldPos, void* param_2) {
     float pos[3] = {0.0f, 0.0f, 0.0f};
 
     uint8_t retbuf[8] = {0};  // local_res8 — IBP retval for the getters
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2);
     int64_t inner = *reinterpret_cast<int64_t*>(param_2);
     void* pathIbp = s_fn_ClearPathQueue ? s_fn_ClearPathQueue(inner, retbuf) : nullptr;
 
     if (pathIbp && *reinterpret_cast<int64_t*>(pathIbp) != 0) {
         // --- path node present: read its world pos directly ---
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2);
         int64_t inner2 = *reinterpret_cast<int64_t*>(param_2);
         void* ibp2 = s_fn_ClearPathQueue ? s_fn_ClearPathQueue(inner2, retbuf) : nullptr;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp2);
         int64_t node = ibp2 ? *reinterpret_cast<int64_t*>(ibp2) : 0;
         pos[0] = *reinterpret_cast<float*>(node + 0x158);
         pos[1] = *reinterpret_cast<float*>(node + 0x15c);
         pos[2] = *reinterpret_cast<float*>(node + 0x160);
     } else {
         // --- no path node: derive a world pos from the entity's cell node ---
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2);
         int64_t inner2 = *reinterpret_cast<int64_t*>(param_2);
         void* cellIbp = s_fn_GetCellNode ? s_fn_GetCellNode(inner2, retbuf) : nullptr;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cellIbp);
         int64_t node = cellIbp ? *reinterpret_cast<int64_t*>(cellIbp) : 0;
 
         void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;

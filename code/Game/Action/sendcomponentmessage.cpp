@@ -61,7 +61,7 @@ bool SendComponentMessage_ResolveFuncs() {
 
     bool ok = s_fn_IBP_Serialize && s_fn_Type_Serialize && s_fn_Serialize_UInt &&
               s_TypeId_Entity &&
-              fn_InternalBasePtr_CheckPtr && fn_IsDerivedFrom &&
+              fn_IsDerivedFrom &&
               fn_InternalBasePtr_DeletePtr && fn_InternalBasePtr_Ctor &&
               fn_ObjectInternal_Dtor && fn_MemFreeStatic &&
               g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
@@ -167,7 +167,6 @@ int SendComponentMessage_AbstractImpl_Impl(SendComponentMessage* self, void* act
     uint8_t* s = (uint8_t*)self;
 
     // CheckPtr on target entity
-    fn_InternalBasePtr_CheckPtr(&self->_field20);
     uintptr_t entity = (uintptr_t)self->_field20;
 
     // SA-guard: the target at +0x20 is a WEAK ref, and nothing invalidates it when the
@@ -220,7 +219,6 @@ int SendComponentMessage_AbstractImpl_Impl(SendComponentMessage* self, void* act
 
     for (int i = 0; i < compCount; i++) {
         uintptr_t compIBP = compArray + (uintptr_t)i * 8;
-        fn_InternalBasePtr_CheckPtr((void*)compIBP);
         uintptr_t comp = *(uintptr_t*)compIBP;
 
         // Backstop for the same sentinel one level down: an entity that is NOT marked for
@@ -274,7 +272,6 @@ int SendComponentMessage_AbstractImpl_Impl(SendComponentMessage* self, void* act
     }
 
     // Call component's message handler (vtable+0x78)
-    fn_InternalBasePtr_CheckPtr(&foundComp);
     uintptr_t compObj = foundComp;
 
     // Build call args: component, msgId, &sourceEntity, param1, param2
@@ -294,13 +291,11 @@ int SendComponentMessage_AbstractImpl_Impl(SendComponentMessage* self, void* act
 bool SendComponentMessage_GetTarget_Impl(SendComponentMessage* self, void* param) {
     SendComponentMessage_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     // CheckPtr on +0x20, then compare [param] directly (no CheckPtr on param)
-    fn_InternalBasePtr_CheckPtr(&self->_field20);
     if (*(void**)param == self->_field20) {
         return true;
     }
 
     // CheckPtr on +0x28, then compare [param]
-    fn_InternalBasePtr_CheckPtr(&self->_field28);
     return *(void**)param == self->_field28;
 }
 

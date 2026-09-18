@@ -111,7 +111,7 @@ bool RemoveAnimal_ResolveFuncs() {
               s_typeId_ComponentEntity && s_typeInfo_RemoveAnimal &&
               s_dat_VectorDtorReturn &&
               s_vtable_RemoveAnimal && s_vtable_Action &&
-              fn_InternalBasePtr_CheckPtr && fn_InternalBasePtr_DeletePtr &&
+              fn_InternalBasePtr_DeletePtr &&
               fn_IsDerivedFrom && fn_MemFreeStatic &&
               g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
               g_fn_Serialize_Bool && g_pGameWorldSingleton;
@@ -236,12 +236,10 @@ int RemoveAnimal_AbstractImpl_Impl(RemoveAnimal* self, void* actionStack) {
         // Copy to local for CheckPtr
         void* localRef = entityRef;
 
-        fn_InternalBasePtr_CheckPtr(&localRef);
 
         // Check bit 10 of flags at entity+0x40 (already marked for removal?)
         uint32_t flags = *(uint32_t*)((uint8_t*)localRef + 0x40);
         if (((flags >> 10) & 1) == 0) {
-            fn_InternalBasePtr_CheckPtr(&localRef);
 
             // Mark entity for removal
             s_fn_MarkEntityRemoval(localRef);
@@ -267,16 +265,13 @@ void RemoveAnimal_CheckEntity_Impl(RemoveAnimal* self) {
     uint8_t* s = (uint8_t*)self;
     void* localIBP[4];
 
-    fn_InternalBasePtr_CheckPtr(s + 0x20);
     void* entity20 = *(void**)(s + 0x20);
     s_fn_GetModelComp(entity20, localIBP);
 
-    fn_InternalBasePtr_CheckPtr(localIBP);
     uint8_t* modelComp = (uint8_t*)(localIBP[0]);
     uint32_t flagsOld = *(uint32_t*)(modelComp + 0x20);
 
     if ((flagsOld >> 20) & 1) {
-        fn_InternalBasePtr_CheckPtr(localIBP);
         // Re-read (CheckPtr may have updated)
         modelComp = (uint8_t*)(localIBP[0]);
         flagsOld = *(uint32_t*)(modelComp + 0x20);
@@ -285,7 +280,6 @@ void RemoveAnimal_CheckEntity_Impl(RemoveAnimal* self) {
 
         if (((flagsNew ^ flagsOld) & 0xFFFF) != 0) {
             if (*(void**)(modelComp + 0x10) != nullptr) {
-                fn_InternalBasePtr_CheckPtr(modelComp + 0x10);
                 s_fn_NotifyEntityChanged(*(void**)(modelComp + 0x10));
             }
         }
@@ -299,7 +293,6 @@ void RemoveAnimal_CheckEntity_Impl(RemoveAnimal* self) {
 bool RemoveAnimal_GetTarget_Impl(RemoveAnimal* self, void* param) {
     RemoveAnimal_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = (uint8_t*)self;
-    fn_InternalBasePtr_CheckPtr(s + 0x20);
     return *(void**)param == *(void**)(s + 0x20);
 }
 

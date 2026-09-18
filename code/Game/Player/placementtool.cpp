@@ -52,10 +52,6 @@ static fn_CloseDialog_t s_fn_CloseDialog = nullptr;
 typedef void* (*fn_IBP_Ctor_t)(void* self, void* internal);
 static fn_IBP_Ctor_t s_fn_IBP_Ctor = nullptr;
 
-// InternalBasePtr::CheckPtr — IAT dispatch slot [0x140152ab0]
-typedef void (*fn_IBP_CheckPtr_t)(void* self);
-static fn_IBP_CheckPtr_t s_fn_IBP_CheckPtr = nullptr;
-
 // KeyMap::Pressed — IAT dispatch slot [0x140151758]
 typedef bool (*fn_KeyMapPressed_t)(void* keyMap, int slot, int keyId);
 static fn_KeyMapPressed_t s_fn_KeyMapPressed = nullptr;
@@ -164,13 +160,11 @@ static void EnsureFuncs() {
     s_fn_SceneAddObject    = (fn_SceneAddObject_t)resolveIAT(0x140151370);
     s_fn_CloseDialog       = (fn_CloseDialog_t)resolveIAT(0x140151550);
     s_fn_IBP_Ctor          = (fn_IBP_Ctor_t)resolveIAT(0x140152a90);
-    s_fn_IBP_CheckPtr      = (fn_IBP_CheckPtr_t)resolveIAT(0x140152ab0);
     // These IAT dispatch slots are unregistered in standalone (→ null). The resolved
     // engine_funcs globals are the canonical fallback (SetEditMode uses them). A null
     // IBP_Ctor silently makes an IBP wrapping a NON-null object come out 0 — e.g. the
     // rotation setting → rotationIBP(+0x48) null → sub_da00 reads rot+0x10 = crash.
     if (!s_fn_IBP_Ctor)     s_fn_IBP_Ctor     = reinterpret_cast<fn_IBP_Ctor_t>(fn_InternalBasePtr_Ctor);
-    if (!s_fn_IBP_CheckPtr) s_fn_IBP_CheckPtr = reinterpret_cast<fn_IBP_CheckPtr_t>(fn_InternalBasePtr_CheckPtr);
     // CloseDialog slot 0x140151550 is likewise unfilled in standalone → null, so the
     // tool's Shutdown2/OnKey close paths no-op and the CreateBar never disappears when
     // the tool is dismissed (right-click). Fall back to the export-resolved global
@@ -409,17 +403,13 @@ uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
     bool rotCCW = s_fn_KeyMapPressed ? s_fn_KeyMapPressed(keyMap, 0, 0x13) : false;
     if (rotCCW) {
         // Access rotationIBP at self+0x48, CheckPtr, then decrement value at +0x10
-        void* rotIBPAddr = (void*)(selfAddr + 0x48);
-        if (s_fn_IBP_CheckPtr) s_fn_IBP_CheckPtr(rotIBPAddr);
         uintptr_t rotSetting = *(uintptr_t*)(selfAddr + 0x48);
         int* pRot = (int*)(rotSetting + 0x10);
         *pRot = *pRot - 1;
 
         // Wrap: if < 0, set to 3
-        if (s_fn_IBP_CheckPtr) s_fn_IBP_CheckPtr(rotIBPAddr);
         rotSetting = *(uintptr_t*)(selfAddr + 0x48);
         if (*(int*)(rotSetting + 0x10) < 0) {
-            if (s_fn_IBP_CheckPtr) s_fn_IBP_CheckPtr(rotIBPAddr);
             rotSetting = *(uintptr_t*)(selfAddr + 0x48);
             *(int*)(rotSetting + 0x10) = 3;
         }
@@ -427,17 +417,13 @@ uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
         // Key 0x14: Rotate clockwise
         bool rotCW = s_fn_KeyMapPressed ? s_fn_KeyMapPressed(keyMap, 0, 0x14) : false;
         if (rotCW) {
-            void* rotIBPAddr = (void*)(selfAddr + 0x48);
-            if (s_fn_IBP_CheckPtr) s_fn_IBP_CheckPtr(rotIBPAddr);
             uintptr_t rotSetting = *(uintptr_t*)(selfAddr + 0x48);
             int* pRot = (int*)(rotSetting + 0x10);
             *pRot = *pRot + 1;
 
             // Wrap: if > 3, set to 0
-            if (s_fn_IBP_CheckPtr) s_fn_IBP_CheckPtr(rotIBPAddr);
             rotSetting = *(uintptr_t*)(selfAddr + 0x48);
             if (*(int*)(rotSetting + 0x10) > 3) {
-                if (s_fn_IBP_CheckPtr) s_fn_IBP_CheckPtr(rotIBPAddr);
                 rotSetting = *(uintptr_t*)(selfAddr + 0x48);
                 *(int*)(rotSetting + 0x10) = 0;
             }
@@ -813,9 +799,6 @@ void PlacementTool_Draw_Impl(PlacementTool* self, void* context, char param3) {
             uintptr_t descComp1 = (uintptr_t)self->descComponent;  // +0x28
 
             // CheckPtr on rotation IBP at +0x48
-            if (s_fn_IBP_CheckPtr) {
-                s_fn_IBP_CheckPtr((void*)(selfAddr + 0x48));
-            }
 
             // Re-read descComponent after CheckPtr (used for terrainMask, ptrs)
             uintptr_t descComp2 = (uintptr_t)self->descComponent;  // +0x28
@@ -933,7 +916,7 @@ static bool s_startupFuncsResolved = false;
 
 static void EnsureStartupFuncs() {
     if (s_startupFuncsResolved) return;
-    EnsureFuncs();  // resolve common funcs (IBP_Ctor, IBP_CheckPtr, etc.)
+    EnsureFuncs();  // resolve common funcs (IBP_Ctor, etc.)
 
     auto resolveIAT = [](uintptr_t ghidraAddr) -> void* {
         uintptr_t slot = ResolveAddr(Module::Exe, ghidraAddr);
@@ -1052,9 +1035,6 @@ void PlacementTool_Startup_Impl(PlacementTool* self) {
 
     // --- Resolve RotationSetting IBP ---
     // CheckPtr on IBP at +0x18
-    if (s_fn_IBP_CheckPtr) {
-        s_fn_IBP_CheckPtr((void*)((uintptr_t)self + 0x18));
-    }
 
     // Read resolved pointer, check IsDerivedFrom RotationSetting
     void* ibpVal = self->_field18;

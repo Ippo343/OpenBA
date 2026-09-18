@@ -330,7 +330,6 @@ static void OptionsDialog_PopulateFilterCombo(OptionsDialog* self) {
     void* vidDev = g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr;
     if (!vidDev) return;
 
-    fn_InternalBasePtr_CheckPtr(&self->comboFilter);
     fn_ComboElement_RemoveAllItems(self->comboFilter);
 
     void* stringTable = LoadStringTable("Dialog/StringTable.rsc:textureFilter");
@@ -383,7 +382,6 @@ static void OptionsDialog_PopulateFilterCombo(OptionsDialog* self) {
     else if (filterVal == 1) selIdx = 2;
     else selIdx = (filterVal >> 1) + 2;
 
-    fn_InternalBasePtr_CheckPtr(&self->comboFilter);
     fn_ComboElement_SetCurrentItem(self->comboFilter, selIdx);
 }
 
@@ -395,7 +393,6 @@ static void OptionsDialog_PopulateAntialiasCombo(OptionsDialog* self) {
     void* vidDev = g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr;
     if (!vidDev) return;
 
-    fn_InternalBasePtr_CheckPtr(&self->comboAntialias);
     fn_ComboElement_RemoveAllItems(self->comboAntialias);
 
     void* stringTable = LoadStringTable("Dialog/StringTable.rsc:multiSample");
@@ -429,7 +426,6 @@ static void OptionsDialog_PopulateAntialiasCombo(OptionsDialog* self) {
         }
 
         if ((int)self->savedAntialias == i) {
-            fn_InternalBasePtr_CheckPtr(&self->comboAntialias);
             fn_ComboElement_SetCurrentItem(self->comboAntialias, addedIdx);
         }
     }
@@ -465,7 +461,6 @@ static void OptionsDialog_PopulateRefreshCombo(OptionsDialog* self) {
     intptr_t refreshArray = *(intptr_t*)(modeEntry + 8);
     int refreshCount = *(int*)(modeEntry + 0x10);
 
-    fn_InternalBasePtr_CheckPtr(&self->comboRefresh);
     fn_ComboElement_RemoveAllItems(self->comboRefresh);
 
     int currentIdx = -1;
@@ -478,14 +473,12 @@ static void OptionsDialog_PopulateRefreshCombo(OptionsDialog* self) {
         System::String fmtStr = System::String::Format("%i", rate);
         uint8_t spriteBuf[16] = {};
         fn_Sprite_DefaultCtor(spriteBuf);
-        fn_InternalBasePtr_CheckPtr(&self->comboRefresh);
         fn_ComboElement_AddItem(self->comboRefresh, spriteBuf, &fmtStr, (void*)(intptr_t)i);
 
         if ((uint32_t)num == self->savedRefreshNum && (uint32_t)den == self->savedRefreshDen)
             currentIdx = i;
     }
 
-    fn_InternalBasePtr_CheckPtr(&self->comboRefresh);
     fn_ComboElement_SetCurrentItem(self->comboRefresh, currentIdx);
 }
 
@@ -508,7 +501,6 @@ static void OptionsDialog_PopulateResolutionCombo(OptionsDialog* self) {
            self->savedWidth, self->savedHeight, modeCount,
            self->savedRenderer, self->savedAdapter);
 
-    fn_InternalBasePtr_CheckPtr(&self->comboResolution);
     fn_ComboElement_RemoveAllItems(self->comboResolution);
 
     int currentIdx = -1;
@@ -523,14 +515,12 @@ static void OptionsDialog_PopulateResolutionCombo(OptionsDialog* self) {
         System::String fmtStr = System::String::Format("%ix%i", w, h);
         uint8_t spriteBuf[16] = {};
         fn_Sprite_DefaultCtor(spriteBuf);
-        fn_InternalBasePtr_CheckPtr(&self->comboResolution);
         fn_ComboElement_AddItem(self->comboResolution, spriteBuf, &fmtStr, (void*)(intptr_t)i);
 
         if (w == self->savedWidth && h == self->savedHeight)
             currentIdx = i;
     }
 
-    fn_InternalBasePtr_CheckPtr(&self->comboResolution);
     fn_ComboElement_SetCurrentItem(self->comboResolution, currentIdx);
 
     OptionsDialog_PopulateRefreshCombo(self);
@@ -544,7 +534,6 @@ static void OptionsDialog_PopulateAdapterCombo(OptionsDialog* self) {
     void* vidDev = g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr;
     if (!vidDev) return;
 
-    fn_InternalBasePtr_CheckPtr(&self->comboAdapter);
     fn_ComboElement_RemoveAllItems(self->comboAdapter);
 
     void* gfxIface = fn_VideoDevice_GetInterface(vidDev, (int)self->savedRenderer);
@@ -556,11 +545,9 @@ static void OptionsDialog_PopulateAdapterCombo(OptionsDialog* self) {
         void* adapterName = (void*)(adapterArray + (intptr_t)i * 0x38);
         uint8_t spriteBuf[16] = {};
         fn_Sprite_DefaultCtor(spriteBuf);
-        fn_InternalBasePtr_CheckPtr(&self->comboAdapter);
         fn_ComboElement_AddItem(self->comboAdapter, spriteBuf, adapterName, (void*)(intptr_t)i);
     }
 
-    fn_InternalBasePtr_CheckPtr(&self->comboAdapter);
     fn_ComboElement_SetCurrentItem(self->comboAdapter, (int)self->savedAdapter);
 
     OptionsDialog_PopulateResolutionCombo(self);
@@ -577,7 +564,6 @@ static void OptionsDialog_PopulateVideoComboBoxes(OptionsDialog* self) {
     if (!vidDev) return;
 
     // --- Renderer combo ---
-    fn_InternalBasePtr_CheckPtr(&self->comboRenderer);
     fn_ComboElement_RemoveAllItems(self->comboRenderer);
 
     int ifaceCount = fn_VideoDevice_GetInterfaceCount(vidDev);
@@ -586,11 +572,9 @@ static void OptionsDialog_PopulateVideoComboBoxes(OptionsDialog* self) {
         void* gfxIface = fn_VideoDevice_GetInterface(vidDev, i);
         uint8_t spriteBuf[16] = {};
         fn_Sprite_DefaultCtor(spriteBuf);
-        fn_InternalBasePtr_CheckPtr(&self->comboRenderer);
         fn_ComboElement_AddItem(self->comboRenderer, spriteBuf, gfxIface, (void*)(intptr_t)i);
     }
 
-    fn_InternalBasePtr_CheckPtr(&self->comboRenderer);
     fn_ComboElement_SetCurrentItem(self->comboRenderer, (int)self->savedRenderer);
 
     // --- Adapter combo (also populates resolution/antialias/filter) ---
@@ -823,12 +807,10 @@ static void OptionsDialog_ApplyInputSettings(OptionsDialog* self) {
     if (!inputCfg) return;
 
     // Read mouse clip checkbox -> Input::Configuration +0x08
-    fn_InternalBasePtr_CheckPtr(&self->checkMouseClip);
     *(uint8_t*)((uintptr_t)inputCfg + 0x08) =
         *(uint8_t*)((uintptr_t)*(void**)&self->checkMouseClip + 0xD8);
 
     // Read software mouse checkbox -> Input::Configuration +0x0A
-    fn_InternalBasePtr_CheckPtr(&self->checkSoftwareMouse);
     *(uint8_t*)((uintptr_t)inputCfg + 0x0A) =
         *(uint8_t*)((uintptr_t)*(void**)&self->checkSoftwareMouse + 0xD8);
 
@@ -837,7 +819,6 @@ static void OptionsDialog_ApplyInputSettings(OptionsDialog* self) {
     if (fn_UI_EnableCursor) fn_UI_EnableCursor(userInterface, true);
 
     // Enable/disable mouse clipping based on checkbox
-    fn_InternalBasePtr_CheckPtr(&self->checkMouseClip);
     bool mouseClip = *(uint8_t*)((uintptr_t)*(void**)&self->checkMouseClip + 0xD8);
     void* inputDevice = g_pInputDeviceSingleton ? *g_pInputDeviceSingleton : nullptr;
     if (fn_InputDevice_EnableMouseClipping && inputDevice)
@@ -859,54 +840,43 @@ static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
     int32_t* gs = *g_pGameSettingsPtr;
 
     // UI scale slider -> gs[0]
-    fn_InternalBasePtr_CheckPtr(&self->sliderUIScale);
     gs[0] = (int32_t)*(float*)((uintptr_t)*(void**)&self->sliderUIScale + 0x128);
 
     // Autosave combo -> gs[1]
-    fn_InternalBasePtr_CheckPtr(&self->comboAutosave);
     gs[1] = *(int32_t*)((uintptr_t)*(void**)&self->comboAutosave + 0x118);
 
     // Status icon checkbox -> gs[3] (byte at offset +0x0C)
-    fn_InternalBasePtr_CheckPtr(&self->checkStatusIcon);
     *(uint8_t*)(&gs[3]) = *(uint8_t*)((uintptr_t)*(void**)&self->checkStatusIcon + 0xD8);
 
     // Status icon distance slider -> gs[2]
-    fn_InternalBasePtr_CheckPtr(&self->sliderStatusIcon);
     gs[2] = (int32_t)*(float*)((uintptr_t)*(void**)&self->sliderStatusIcon + 0x128);
 
     // Status icon scale slider -> gs[4]
     // Original divides by 100.0f then multiplies by 100.0f (cancels out to identity)
-    fn_InternalBasePtr_CheckPtr(&self->sliderStatusIconScale);
     {
         float sliderVal = *(float*)((uintptr_t)*(void**)&self->sliderStatusIconScale + 0x128);
         gs[4] = (int32_t)sliderVal;
     }
 
     // Edge scroll checkbox -> gs[5] (byte)
-    fn_InternalBasePtr_CheckPtr(&self->checkEdgeScroll);
     *(uint8_t*)(&gs[5]) = *(uint8_t*)((uintptr_t)*(void**)&self->checkEdgeScroll + 0xD8);
 
     // Show celsius -> byte at gs+0x15
-    fn_InternalBasePtr_CheckPtr(&self->checkShowCelsius);
     *(uint8_t*)((uintptr_t)gs + 0x15) =
         *(uint8_t*)((uintptr_t)*(void**)&self->checkShowCelsius + 0xD8);
 
     // Show weather -> byte at gs+0x16
-    fn_InternalBasePtr_CheckPtr(&self->checkShowWeather);
     *(uint8_t*)((uintptr_t)gs + 0x16) =
         *(uint8_t*)((uintptr_t)*(void**)&self->checkShowWeather + 0xD8);
 
     // Auto slow -> byte at gs+0x17
-    fn_InternalBasePtr_CheckPtr(&self->checkAutoslow);
     *(uint8_t*)((uintptr_t)gs + 0x17) =
         *(uint8_t*)((uintptr_t)*(void**)&self->checkAutoslow + 0xD8);
 
     // Auto pause -> gs[6] (byte)
-    fn_InternalBasePtr_CheckPtr(&self->checkAutopause);
     *(uint8_t*)(&gs[6]) = *(uint8_t*)((uintptr_t)*(void**)&self->checkAutopause + 0xD8);
 
     // Last active tab -> gs[7]
-    fn_InternalBasePtr_CheckPtr(&self->tabOptions);
     gs[7] = *(int32_t*)((uintptr_t)*(void**)&self->tabOptions + 0xF8);
 
     // Iterate all open dialogs and update autosave timer on each
@@ -922,10 +892,8 @@ static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
         // whole body is `*retval = this->_dialogs._head`); the iterator is the
         // bare node pointer, so `it.node` is what retail hands to CheckPtr.
         for (auto it = userInterface->_dialogs.GetFirst(); it; ++it) {
-            fn_InternalBasePtr_CheckPtr(it.node);
             void* dialog = it.node->element;
             if (fn_IsA(dialog, typeId)) {
-                fn_InternalBasePtr_CheckPtr(it.node);
                 void* obj = it.node->element;
                 bool isDerived = fn_IsDerivedFrom(obj, typeId);
                 void* target = isDerived ? obj : nullptr;
@@ -995,25 +963,18 @@ static void OptionsDialog_ApplyVideoSettings(OptionsDialog* self) {
 
     // Read new values from UI combos
     // Renderer
-    fn_InternalBasePtr_CheckPtr(&self->comboRenderer);
     int rendItem = *(int*)((uintptr_t)*(void**)&self->comboRenderer + 0x118);
-    fn_InternalBasePtr_CheckPtr(&self->comboRenderer);
     int newRenderer = (int)(intptr_t)fn_ComboElement_GetItemData(*(void**)&self->comboRenderer, rendItem);
 
     // Adapter
-    fn_InternalBasePtr_CheckPtr(&self->comboAdapter);
     int adpItem = *(int*)((uintptr_t)*(void**)&self->comboAdapter + 0x118);
-    fn_InternalBasePtr_CheckPtr(&self->comboAdapter);
     int newAdapter = (int)(intptr_t)fn_ComboElement_GetItemData(*(void**)&self->comboAdapter, adpItem);
 
     // Resolution
-    fn_InternalBasePtr_CheckPtr(&self->comboResolution);
     int resItem = *(int*)((uintptr_t)*(void**)&self->comboResolution + 0x118);
-    fn_InternalBasePtr_CheckPtr(&self->comboResolution);
     void* resData = fn_ComboElement_GetItemData(*(void**)&self->comboResolution, resItem);
 
     // Refresh
-    fn_InternalBasePtr_CheckPtr(&self->comboRefresh);
     int refItem = *(int*)((uintptr_t)*(void**)&self->comboRefresh + 0x118);
 
     // Look up actual width/height/refresh from the video interface data
@@ -1031,29 +992,20 @@ static void OptionsDialog_ApplyVideoSettings(OptionsDialog* self) {
     int newHeight   = *(int*)(modeEntry + 4);
 
     // Antialias
-    fn_InternalBasePtr_CheckPtr(&self->comboAntialias);
     int aaItem = *(int*)((uintptr_t)*(void**)&self->comboAntialias + 0x118);
-    fn_InternalBasePtr_CheckPtr(&self->comboAntialias);
     int newAntialias = (int)(intptr_t)fn_ComboElement_GetItemData(*(void**)&self->comboAntialias, aaItem);
 
     // Filter
-    fn_InternalBasePtr_CheckPtr(&self->comboFilter);
     int fltItem = *(int*)((uintptr_t)*(void**)&self->comboFilter + 0x118);
-    fn_InternalBasePtr_CheckPtr(&self->comboFilter);
     int newFilter = (int)(intptr_t)fn_ComboElement_GetItemData(*(void**)&self->comboFilter, fltItem);
 
     // Shadow res, shadow quality, reflection quality
-    fn_InternalBasePtr_CheckPtr(&self->comboShadowRes);
     int newShadowRes = *(int*)((uintptr_t)*(void**)&self->comboShadowRes + 0x118);
-    fn_InternalBasePtr_CheckPtr(&self->comboShadowQuality);
     int newShadowQ = *(int*)((uintptr_t)*(void**)&self->comboShadowQuality + 0x118);
-    fn_InternalBasePtr_CheckPtr(&self->comboReflectionQuality);
     int newReflQ = *(int*)((uintptr_t)*(void**)&self->comboReflectionQuality + 0x118);
 
     // Fullscreen / VSync checkboxes
-    fn_InternalBasePtr_CheckPtr(&self->checkFullscreen);
     uint8_t newFullscreen = *(uint8_t*)((uintptr_t)*(void**)&self->checkFullscreen + 0xD8);
-    fn_InternalBasePtr_CheckPtr(&self->checkVSync);
     uint8_t newVsync = *(uint8_t*)((uintptr_t)*(void**)&self->checkVSync + 0xD8);
 
     // Check if anything changed. If nothing changed, return early.
@@ -1166,7 +1118,6 @@ static void OptionsDialog_RestoreVideoSettings(OptionsDialog* self) {
         fn_ReadGameSettings(*g_pGameSettingsPtr);
 
     // Restore last tab
-    fn_InternalBasePtr_CheckPtr(&self->tabOptions);
     if (g_pGameSettingsPtr && *g_pGameSettingsPtr)
         (*g_pGameSettingsPtr)[7] = *(int32_t*)((uintptr_t)*(void**)&self->tabOptions + 0xF8);
 
@@ -1280,7 +1231,6 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
         }
         // Input bind button clicks: IDs >= 13
         if (eventData >= kInputBind_Base) {
-            fn_InternalBasePtr_CheckPtr(&element);
             // FUN_140010460: IsDerivedFrom(elem, UIElementBase type) — returns elem if valid, else null
             void* clickedElem = *(void**)element;
             bool isUIElement = g_TypeId_UIElementBase && fn_IsDerivedFrom(clickedElem, *g_TypeId_UIElementBase);
@@ -1304,9 +1254,7 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
     if (eventType == 0x14) {
         // --- Combo selection change ---
         if (eventData == kCombo_Renderer) {
-            fn_InternalBasePtr_CheckPtr(&self->comboRenderer);
             int curItem = *(int*)((uintptr_t)self->comboRenderer + 0x118);
-            fn_InternalBasePtr_CheckPtr(&self->comboRenderer);
             void* data = fn_ComboElement_GetItemData(self->comboRenderer, curItem);
             self->savedRenderer = (uint32_t)(intptr_t)data;
             OptionsDialog_ValidateVideoConfig(self);
@@ -1314,9 +1262,7 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
             return;
         }
         if (eventData == kCombo_Adapter) {
-            fn_InternalBasePtr_CheckPtr(&self->comboAdapter);
             int curItem = *(int*)((uintptr_t)self->comboAdapter + 0x118);
-            fn_InternalBasePtr_CheckPtr(&self->comboAdapter);
             void* data = fn_ComboElement_GetItemData(self->comboAdapter, curItem);
             self->savedAdapter = (uint32_t)(intptr_t)data;
             OptionsDialog_ValidateVideoConfig(self);
@@ -1326,9 +1272,7 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
             return;
         }
         if (eventData == kCombo_Resolution) {
-            fn_InternalBasePtr_CheckPtr(&self->comboResolution);
             int curItem = *(int*)((uintptr_t)self->comboResolution + 0x118);
-            fn_InternalBasePtr_CheckPtr(&self->comboResolution);
             void* resData = fn_ComboElement_GetItemData(self->comboResolution, curItem);
 
             int adapterIdx = self->savedAdapter;
@@ -1351,14 +1295,10 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
             return;
         }
         if (eventData == kCombo_Refresh) {
-            fn_InternalBasePtr_CheckPtr(&self->comboResolution);
             int resItem = *(int*)((uintptr_t)self->comboResolution + 0x118);
-            fn_InternalBasePtr_CheckPtr(&self->comboResolution);
             void* resData = fn_ComboElement_GetItemData(self->comboResolution, resItem);
 
-            fn_InternalBasePtr_CheckPtr(&self->comboRefresh);
             int refItem = *(int*)((uintptr_t)self->comboRefresh + 0x118);
-            fn_InternalBasePtr_CheckPtr(&self->comboRefresh);
             void* refData = fn_ComboElement_GetItemData(self->comboRefresh, refItem);
 
             int adapterIdx = self->savedAdapter;
@@ -1384,18 +1324,14 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
             return;
         }
         if (eventData == kCombo_Antialias) {
-            fn_InternalBasePtr_CheckPtr(&self->comboAntialias);
             int curItem = *(int*)((uintptr_t)self->comboAntialias + 0x118);
-            fn_InternalBasePtr_CheckPtr(&self->comboAntialias);
             void* data = fn_ComboElement_GetItemData(self->comboAntialias, curItem);
             self->savedAntialias = (uint32_t)(intptr_t)data;
             OptionsDialog_ValidateVideoConfig(self);
             return;
         }
         if (eventData == kCombo_Filter) {
-            fn_InternalBasePtr_CheckPtr(&self->comboFilter);
             int curItem = *(int*)((uintptr_t)self->comboFilter + 0x118);
-            fn_InternalBasePtr_CheckPtr(&self->comboFilter);
             void* data = fn_ComboElement_GetItemData(self->comboFilter, curItem);
             self->savedFilter = (uint32_t)(intptr_t)data;
             OptionsDialog_ValidateVideoConfig(self);
@@ -1419,7 +1355,6 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
             default: return;
         }
 
-        fn_InternalBasePtr_CheckPtr(sliderField);
         audioVol[eventData] = (int32_t)*(float*)((uintptr_t)*sliderField + 0x128);
         return;
     }
@@ -1441,7 +1376,6 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
     void* keyMap = GetActualKeyMap();  // for method calls (GetDeviceForId, etc.)
     if (!keyMap) return;
 
-    fn_InternalBasePtr_CheckPtr(&self->inputList);
     void* inputList = self->inputList;
     int childCount = fn_Element_ChildCount(inputList);
 
@@ -1453,7 +1387,6 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
 
     for (int row = 0; row < numRows; row++, inputId++) {
         // Get the 3 children for this row
-        fn_InternalBasePtr_CheckPtr(&self->inputList);
         uint64_t rowChild = 0;
         fn_Element_Child(self->inputList, &rowChild, row * 3);
 
@@ -1461,7 +1394,6 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
         {
             System::String nameStr("textInputName");
             uint64_t textElem = 0;
-            fn_InternalBasePtr_CheckPtr((void*)&rowChild);
             fn_FindElement((void*)rowChild, &textElem, &nameStr);
 
             if (textElem) {
@@ -1478,7 +1410,6 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
 
         // Set bind button texts and element IDs for slots 0 and 1
         for (int slot = 0; slot < 2; slot++) {
-            fn_InternalBasePtr_CheckPtr(&self->inputList);
             uint64_t btnChild = 0;
             fn_Element_Child(self->inputList, &btnChild, row * 3 + 1 + slot);
 
@@ -1490,7 +1421,6 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
             SetInputBindButtonText((void*)&btnChild, device, key);
 
             // Assign element ID
-            fn_InternalBasePtr_CheckPtr((void*)&btnChild);
             fn_Element_SetElementId((void*)btnChild, elemId + slot);
         }
 
@@ -1556,12 +1486,10 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
     fn_UIString_ToSystemString(inputNameUI, &inputNameStr);
 
     // Find TextElement in dialog and set parameter 0
-    fn_InternalBasePtr_CheckPtr((void*)&dialogPtr);
     if (g_TypeId_TextElement) {
         uint64_t textElem = 0;
         fn_DialogInstance_FindElementType((void*)dialogPtr, &textElem, *g_TypeId_TextElement);
         if (textElem) {
-            fn_InternalBasePtr_CheckPtr((void*)&textElem);
             fn_TextElement_SetParameter((void*)textElem, 0, &inputNameStr);
         }
     }
@@ -1572,9 +1500,7 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
     int result = fn_UI_ShowDialog(userInterface, &showPtr);
 
     // Read captured key data from dialog before deleting
-    fn_InternalBasePtr_CheckPtr((void*)&dialogPtr);
     int capturedDevice = *(int*)((uintptr_t)(void*)dialogPtr + 0xC4);
-    fn_InternalBasePtr_CheckPtr((void*)&dialogPtr);
     int capturedKey = *(int*)((uintptr_t)(void*)dialogPtr + 0xC0);
 
     // Check if the new binding conflicts with an existing one
@@ -1655,27 +1581,21 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
             // Set parameters on the confirmation dialog:
             // param 0 = new key name, param 1 = conflicting binding name, param 2 = current input name
             if (g_TypeId_TextElement) {
-                fn_InternalBasePtr_CheckPtr((void*)&dialog2Ptr);
                 uint64_t textElem2 = 0;
                 fn_DialogInstance_FindElementType((void*)dialog2Ptr, &textElem2, *g_TypeId_TextElement);
                 if (textElem2) {
-                    fn_InternalBasePtr_CheckPtr((void*)&textElem2);
                     fn_TextElement_SetParameter((void*)textElem2, 0, &newKeyStr);
                 }
 
-                fn_InternalBasePtr_CheckPtr((void*)&dialog2Ptr);
                 uint64_t textElem3 = 0;
                 fn_DialogInstance_FindElementType((void*)dialog2Ptr, &textElem3, *g_TypeId_TextElement);
                 if (textElem3) {
-                    fn_InternalBasePtr_CheckPtr((void*)&textElem3);
                     fn_TextElement_SetParameter((void*)textElem3, 1, &conflictNameStr);
                 }
 
-                fn_InternalBasePtr_CheckPtr((void*)&dialog2Ptr);
                 uint64_t textElem4 = 0;
                 fn_DialogInstance_FindElementType((void*)dialog2Ptr, &textElem4, *g_TypeId_TextElement);
                 if (textElem4) {
-                    fn_InternalBasePtr_CheckPtr((void*)&textElem4);
                     fn_TextElement_SetParameter((void*)textElem4, 2, &inputNameStr);
                 }
             }

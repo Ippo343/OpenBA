@@ -131,7 +131,6 @@ static void EnsureInit() {
     s_init = true;
 }
 
-static inline void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 static inline float Fc(const float* p, float dflt) { return p ? *p : dflt; }
 
 } // namespace
@@ -154,7 +153,6 @@ extern "C" uint64_t CitizenAI_State_Education(int64_t param_1) {
     *reinterpret_cast<int64_t*>(param_1 + 0x58) = timeStamp;
 
     int64_t* self = reinterpret_cast<int64_t*>(param_1 + 0x38);
-    CheckPtr(self);
     if (*reinterpret_cast<int*>(*self + 0x1e4) != 0) {
         return static_cast<uint64_t>(*self) & 0xffffffffffffff00ULL;  // low byte = 0
     }
@@ -163,11 +161,8 @@ extern "C" uint64_t CitizenAI_State_Education(int64_t param_1) {
     float dest[3] = { 0.0f, 0.0f, 0.0f };
 
     // citizen ModelComponent world pos -> grid cell
-    CheckPtr(self);
     int64_t cz = *self;
-    CheckPtr(reinterpret_cast<void*>(cz + 0x278));
     int64_t ch = *reinterpret_cast<int64_t*>(cz + 0x278);
-    CheckPtr(reinterpret_cast<void*>(ch + 0x68));
     int64_t model = *reinterpret_cast<int64_t*>(ch + 0x68);
     int mapSize = **reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
     int half = mapSize >> 1;
@@ -179,7 +174,6 @@ extern "C" uint64_t CitizenAI_State_Education(int64_t param_1) {
     if (mapSize <= cy) cy = mapSize - 1;
 
     // workplace anchor cell (B-goal) or -1
-    CheckPtr(self);
     uint32_t bGoal;
     if (*reinterpret_cast<int64_t*>(*self + 0x238) == 0) {
         bGoal = 0xffffffff;
@@ -196,9 +190,7 @@ extern "C" uint64_t CitizenAI_State_Education(int64_t param_1) {
                   &local_res8, dest, 4);
 
     if (outBest == 0) {
-        CheckPtr(self);
         *reinterpret_cast<int*>(*self + 0x1e0) = 0;
-        CheckPtr(self);
         int64_t cz2 = *self;
         *reinterpret_cast<uint32_t*>(cz2 + 0x88) |= 4;
         return static_cast<uint64_t>(cz2) & 0xffffffffffffff00ULL;  // low byte 0
@@ -210,7 +202,6 @@ extern "C" uint64_t CitizenAI_State_Education(int64_t param_1) {
     if (s_fn_ctor10)
         s_fn_ctor10(&ibpHolder, &foundEntity, dest, static_cast<uint64_t>(local_res8));
 
-    CheckPtr(self);
     int64_t cz3 = *self;
     *reinterpret_cast<uint32_t*>(cz3 + 0x54) |= 4;
     *reinterpret_cast<int32_t*>(cz3 + 0xb0) = 0;
@@ -236,7 +227,6 @@ extern "C" uint64_t CitizenAI_State_SeekHappiness(int64_t param_1) {
     *reinterpret_cast<int64_t*>(param_1 + 0x80) = timeStamp;
 
     int64_t* self = reinterpret_cast<int64_t*>(param_1 + 0x38);
-    CheckPtr(self);
     if (0 < *reinterpret_cast<int*>(*self + 0xac)) {
         return static_cast<uint64_t>(*self) & 0xffffffffffffff00ULL;
     }
@@ -244,11 +234,8 @@ extern "C" uint64_t CitizenAI_State_SeekHappiness(int64_t param_1) {
     int64_t local_res8 = 0;            // dd30 out: found component (Ctor5 param_4)
     float dest[3] = { 0.0f, 0.0f, 0.0f };
 
-    CheckPtr(self);
     int64_t cz = *self;
-    CheckPtr(reinterpret_cast<void*>(cz + 0x278));
     int64_t ch = *reinterpret_cast<int64_t*>(cz + 0x278);
-    CheckPtr(reinterpret_cast<void*>(ch + 0x68));
     int64_t model = *reinterpret_cast<int64_t*>(ch + 0x68);
     int mapSize = **reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
     int half = mapSize >> 1;
@@ -259,7 +246,6 @@ extern "C" uint64_t CitizenAI_State_SeekHappiness(int64_t param_1) {
     if (cy < 0) cy = 0;
     if (mapSize <= cy) cy = mapSize - 1;
 
-    CheckPtr(self);
     uint32_t bGoal;
     if (*reinterpret_cast<int64_t*>(*self + 0x238) == 0) {
         bGoal = 0xffffffff;
@@ -277,23 +263,17 @@ extern "C" uint64_t CitizenAI_State_SeekHappiness(int64_t param_1) {
 
     if (outBest == 0) {
         // --- no happiness target: clear state + run the MeshInstance "hide" render branch ---
-        CheckPtr(self);
         *reinterpret_cast<int*>(*self + 0xa8) = 0;
-        CheckPtr(self);
         *reinterpret_cast<uint32_t*>(*self + 0x88) |= 4;
 
-        CheckPtr(self);
         int64_t entityIBP = *reinterpret_cast<int64_t*>(*self + 0x10);
-        CheckPtr(&entityIBP);
         int64_t meshOutIBP = 0;
         void* meshRet = s_fn_findMesh
             ? s_fn_findMesh(static_cast<uintptr_t>(entityIBP), &meshOutIBP) : nullptr;
-        CheckPtr(meshRet);
         uint64_t retLow = 0;
         if (meshRet) {
             int64_t mi = *reinterpret_cast<int64_t*>(meshRet);   // MeshInstance object (plVar3)
             if (mi) {
-                CheckPtr(reinterpret_cast<void*>(mi + 0x10));    // plVar3+2 == +0x10
                 int64_t inner = *reinterpret_cast<int64_t*>(mi + 0x10);
                 retLow = static_cast<uint64_t>(mi);
                 // gated by ((inner+0x40 >> 10) & 1) == 0  (disasm: SHR 0xa; TEST CL,1).
@@ -339,7 +319,6 @@ extern "C" uint64_t CitizenAI_State_SeekHappiness(int64_t param_1) {
                     }
                     retLow = static_cast<uint64_t>(changed & 0xffff);
                     if ((changed & 0xffff) != 0 && *reinterpret_cast<int64_t*>(mi + 0x10) != 0) {
-                        CheckPtr(reinterpret_cast<void*>(mi + 0x10));
                         int64_t notifyTarget = *reinterpret_cast<int64_t*>(mi + 0x10);
                         if (s_fn_c3470) s_fn_c3470(reinterpret_cast<void*>(notifyTarget));
                         retLow = 0;  // c3470 returns void; original tail value is its (void) ret
@@ -356,7 +335,6 @@ extern "C" uint64_t CitizenAI_State_SeekHappiness(int64_t param_1) {
     if (s_fn_ctor5)
         s_fn_ctor5(&ibpHolder, &foundEntity, dest, local_res8);
 
-    CheckPtr(self);
     int64_t cz3 = *self;
     *reinterpret_cast<uint32_t*>(cz3 + 0x54) |= 4;
     *reinterpret_cast<int32_t*>(cz3 + 0xb0) = 0;
@@ -379,22 +357,16 @@ extern "C" uint64_t CitizenAI_State_FindWork(int64_t param_1) {
     EnsureInit();
 
     int64_t* self = reinterpret_cast<int64_t*>(param_1 + 0x38);
-    CheckPtr(self);
     int64_t anchor = *reinterpret_cast<int64_t*>(*self + 0x208);
-    CheckPtr(&anchor);
     int64_t anchorEntity = *reinterpret_cast<int64_t*>(anchor + 0x10);
-    CheckPtr(&anchorEntity);
     int64_t posIBP[2] = { 0, 0 };
     if (s_fn_findPos) s_fn_findPos(static_cast<uintptr_t>(anchorEntity), posIBP);
 
     float outVec[3] = { 0.0f, 0.0f, 0.0f };   // local_58 (target out)
 
     // citizen ModelComponent world pos -> local_48 vec3 (x,y,z packed)
-    CheckPtr(self);
     int64_t cz = *self;
-    CheckPtr(reinterpret_cast<void*>(cz + 0x278));
     int64_t ch = *reinterpret_cast<int64_t*>(cz + 0x278);
-    CheckPtr(reinterpret_cast<void*>(ch + 0x68));
     int64_t model = *reinterpret_cast<int64_t*>(ch + 0x68);
     float pos[3];
     pos[0] = *reinterpret_cast<float*>(model + 0x158);
@@ -404,7 +376,6 @@ extern "C" uint64_t CitizenAI_State_FindWork(int64_t param_1) {
     int bestCost = 0x7fffffff;            // local_res8 low 32
 
     // transform sub-object on the Position component (posIBP[0]+0x18), InteractDescription.
-    CheckPtr(posIBP);
     int64_t posComp = posIBP[0];
     void* sub = *reinterpret_cast<void**>(posComp + 0x18);
     void* transform = (sub && fn_IsDerivedFrom && fn_IsDerivedFrom(sub, s_tid_InteractDescription))
@@ -420,7 +391,6 @@ extern "C" uint64_t CitizenAI_State_FindWork(int64_t param_1) {
         int i = 0; int64_t off = 0;
         do {
             int64_t* slot = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(posComp + 0x28) + off);
-            CheckPtr(slot);
             uint8_t r = s_fn_122b00 ? s_fn_122b00(static_cast<uintptr_t>(*slot), 0, pos, outVec, &bestCost) : 0;
             found |= r;
             i++; off += 8;
@@ -429,7 +399,6 @@ extern "C" uint64_t CitizenAI_State_FindWork(int64_t param_1) {
 
     if (found != 0) {
         // WalkTowards toward outVec; time = citizen CitizenDescription +0x120
-        CheckPtr(self);
         void* descRaw = *reinterpret_cast<void**>(*self + 0x18);
         void* desc = (descRaw && fn_IsDerivedFrom && fn_IsDerivedFrom(descRaw, s_tid_CitizenDescription))
                      ? descRaw : nullptr;
@@ -440,7 +409,6 @@ extern "C" uint64_t CitizenAI_State_FindWork(int64_t param_1) {
         if (s_fn_walk)
             s_fn_walk(&ibpHolder, 0xffffffff, reinterpret_cast<uint32_t*>(outVec), 4, walkTime, 1);
 
-        CheckPtr(self);
         int64_t cz2 = *self;
         *reinterpret_cast<uint32_t*>(cz2 + 0x54) |= 4;
         *reinterpret_cast<int32_t*>(cz2 + 0x30) = static_cast<int32_t>(0xffffffff);
@@ -449,7 +417,6 @@ extern "C" uint64_t CitizenAI_State_FindWork(int64_t param_1) {
         return 1;
     }
 
-    CheckPtr(self);
     uint64_t r = s_fn_115a50 ? s_fn_115a50(reinterpret_cast<void*>(*self), '\x01') : 0;
     return r & 0xffffffffffffff00ULL;  // low byte 0
 }

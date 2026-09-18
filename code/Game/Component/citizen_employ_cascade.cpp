@@ -71,7 +71,6 @@ inline uintptr_t GW()          { return reinterpret_cast<uintptr_t>(*g_pGameWorl
 inline int64_t   TownMgr()     { return *reinterpret_cast<int64_t*>(GW() + 0xf0); }
 inline int*      GameObj()     { return *reinterpret_cast<int**>(GW() + 0xf8); }
 inline int64_t   LaborerKey()  { return *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(GW() + 0xb0) + 0x30); }
-inline void CheckPtr(void* p)  { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 inline void Ctor(void* self, void* obj) { if (fn_InternalBasePtr_Ctor) new (self) ::Object::InternalBasePtr(
     reinterpret_cast<RtObject::Internal*>(obj)); }   // B.3.3 bridge
 
@@ -94,12 +93,10 @@ void* FindResidenceComp(int64_t entity) {
     int64_t off = 0;
     while (i < cnt) {
         void* elem = reinterpret_cast<void*>(arr + off);
-        CheckPtr(elem);
         void* comp = *reinterpret_cast<void**>(elem);
         uint32_t tid = ((GetTypeId_t)(*reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10)))(comp);
         if (tid == s_tidResidence) {
             void* elem2 = reinterpret_cast<void*>(arr + off);
-            CheckPtr(elem2);
             void* compVal = *reinterpret_cast<void**>(elem2);
             return (fn_IsDerivedFrom && fn_IsDerivedFrom(compVal, s_tidResidence)) ? compVal : nullptr;
         }
@@ -114,9 +111,8 @@ void* FindResidenceComp(int64_t entity) {
 // +0x1f0 = profKey. `avail` = the workplace building IBP value.
 inline void SeatWorker(int64_t citizen, int64_t avail, int64_t profKey) {
     int64_t bldg = avail;
-    CheckPtr(&citizen);
     if ((*reinterpret_cast<int64_t*>(citizen + 0x1f0) != profKey) ||
-        (CheckPtr(&bldg), *reinterpret_cast<int64_t*>(citizen + 0x248) != bldg)) {
+        (*reinterpret_cast<int64_t*>(citizen + 0x248) != bldg)) {
         int64_t local = bldg;
         CitizenComp_AssignHousing(reinterpret_cast<CitizenComponent*>(citizen), &local);
         *reinterpret_cast<int64_t*>(citizen + 0x1f0) = profKey;
@@ -150,9 +146,7 @@ void* Strat_c4b0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey)
     int64_t off = 0;
     for (int i = 0; i < cnt; ++i, off += 8) {
         int64_t cz = *reinterpret_cast<int64_t*>(off + *reinterpret_cast<int64_t*>(townMgr + 0xa0));
-        CheckPtr(&cz);
         if (AdultIdle(cz)) {
-            CheckPtr(&cz);
             if (*reinterpret_cast<int64_t*>(cz + 0x1f0) == LaborerKey()) {
                 SeatWorker(cz, *availPtr, profKey);
                 *reinterpret_cast<int64_t*>(out) = cz;
@@ -178,11 +172,8 @@ void* Strat_ca20(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey)
     int64_t off = 0;
     for (int i = 0; i < cnt; ++i, off += 8) {
         int64_t cz = *reinterpret_cast<int64_t*>(off + *reinterpret_cast<int64_t*>(townMgr + 0xa0));
-        CheckPtr(&cz);
         if (AdultIdle(cz)) {
-            CheckPtr(&cz);
             if (*reinterpret_cast<int64_t*>(cz + 0x1f0) == LaborerKey()) {
-                CheckPtr(&cz);
                 if (*reinterpret_cast<int64_t*>(cz + 0x238) != 0) {
                     int64_t resAnchor = *reinterpret_cast<int64_t*>(cz + 0x238);
                     uint32_t czCell = s_anchor7fb0 ? (uint32_t)s_anchor7fb0(&resAnchor, nullptr) : 0;
@@ -222,12 +213,9 @@ void* Strat_cbf0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey)
     int64_t off = 0;                      // local_60
     for (int i = 0; i < cnt; ++i, off += 8) {
         int64_t cz = *reinterpret_cast<int64_t*>(off + *reinterpret_cast<int64_t*>(townMgr + 0xa0));   // local_80
-        CheckPtr(&cz);
         if (!AdultIdle(cz)) continue;
-        CheckPtr(&cz);
         if (*reinterpret_cast<int64_t*>(cz + 0x1f0) != profKey) continue;
 
-        CheckPtr(&cz);
         int64_t res = *reinterpret_cast<int64_t*>(cz + 0x238);   // local_90 = their residence
         if (res == 0) continue;
         int64_t resAnchor = res;                                 // local_68
@@ -240,26 +228,20 @@ void* Strat_cbf0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey)
 
         // walk res's c7cf0 roster for an idle laborer. Entity_FindComponent_Storage
         // writes the found component into its out-IBP directly (hidden return).
-        CheckPtr(&res);
         int64_t c7cf0 = 0;                                       // local_98 (IBP)
         CitizenComp_Entity_FindComponent_Storage(res, &c7cf0);
-        CheckPtr(&c7cf0);
         int recCount = *reinterpret_cast<int*>(c7cf0 + 0x58);
         int64_t recBase = 0;
         for (int r = 0; r < recCount; ++r) {
-            CheckPtr(&c7cf0);
             recBase = *reinterpret_cast<int64_t*>(c7cf0 + 0x50);
             int slotCount = *reinterpret_cast<int*>(recBase + 8 + (int64_t)r * 0x10);
             bool matched = false;
             int64_t memberData = *reinterpret_cast<int64_t*>(recBase + (int64_t)r * 0x10);
             for (int m = 0; m < slotCount; ++m) {
-                CheckPtr(&c7cf0);
                 recBase = *reinterpret_cast<int64_t*>(c7cf0 + 0x50);
                 memberData = *reinterpret_cast<int64_t*>(recBase + (int64_t)r * 0x10);
                 int64_t member = *reinterpret_cast<int64_t*>((int64_t)m * 8 + memberData);
-                CheckPtr(&member);
                 if (AdultIdle(member)) {
-                    CheckPtr(&member);
                     if (*reinterpret_cast<int64_t*>(member + 0x1f0) == LaborerKey()) {
                         if (*availPtr == 0) {
                             SeatWorker(member, *availPtr, profKey);
@@ -271,38 +253,30 @@ void* Strat_cbf0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey)
                         break;
                     }
                 }
-                CheckPtr(&c7cf0);
                 slotCount = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(c7cf0 + 0x50) + 8 + (int64_t)r * 0x10);
             }
             (void)matched;
-            CheckPtr(&c7cf0);
             recCount = *reinterpret_cast<int*>(c7cf0 + 0x58);
         }
     }
 
     // Post-scan: seat from the best donor residence's record bestRecordIdx.
     if (bestRes != 0) {
-        CheckPtr(&bestRes);
         void* comp = FindResidenceComp(bestRes);
         int64_t c7cf0 = 0;
         Ctor(&c7cf0, comp);
-        CheckPtr(&c7cf0);
         int64_t recAddr = *reinterpret_cast<int64_t*>(c7cf0 + 0x50) + (int64_t)bestRecordIdx * 0x10;
         int slotCount = *reinterpret_cast<int*>(recAddr + 8);
         for (int m = 0; m < slotCount; ++m) {
-            CheckPtr(&c7cf0);
             int64_t memberData = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(c7cf0 + 0x50) + (int64_t)bestRecordIdx * 0x10);
             int64_t member = *reinterpret_cast<int64_t*>((int64_t)m * 8 + memberData);
-            CheckPtr(&member);
             if (*reinterpret_cast<int64_t*>(member + 0x1f0) == LaborerKey()) {
-                CheckPtr(&member);
                 if (AdultIdle(member)) {
                     SeatWorker(member, *availPtr, profKey);
                     *reinterpret_cast<int64_t*>(out) = member;
                     return out;
                 }
             }
-            CheckPtr(&c7cf0);
             slotCount = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(c7cf0 + 0x50) + 8 + (int64_t)bestRecordIdx * 0x10);
         }
     }
@@ -341,55 +315,41 @@ void* Strat_c5f0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey)
     int64_t hoff = 0;        // local_50[0]
     for (int h = 0; h < houseCnt; ++h, hoff += 8) {
         int64_t house = *reinterpret_cast<int64_t*>(hoff + *reinterpret_cast<int64_t*>(townMgr + 0x20));   // local_60
-        CheckPtr(&house);
         void* comp = FindResidenceComp(house);
         int64_t c7cf0 = 0;   // local_70
         Ctor(&c7cf0, comp);
-        CheckPtr(&c7cf0);
         int recCount = *reinterpret_cast<int*>(c7cf0 + 0x58);
         for (int r = 0; r < recCount; ++r) {
             int laborerN = 0;   // iVar6
-            CheckPtr(&c7cf0);
             int slotCount = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(c7cf0 + 0x50) + 8 + (int64_t)r * 0x10);
             for (int m = 0; m < slotCount; ++m) {
-                CheckPtr(&c7cf0);
                 int64_t memberData = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(c7cf0 + 0x50) + (int64_t)r * 0x10);
                 int64_t member = *reinterpret_cast<int64_t*>((int64_t)m * 8 + memberData);
-                CheckPtr(&member);
                 if (AdultIdle(member)) {
-                    CheckPtr(&member);
                     if (*reinterpret_cast<int64_t*>(member + 0x1f0) == LaborerKey()) laborerN++;
                 }
-                CheckPtr(&c7cf0);
                 slotCount = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(c7cf0 + 0x50) + 8 + (int64_t)r * 0x10);
             }
             if (bestCount < laborerN) { bestHouse = house; bestCount = laborerN; bestRecordIdx = r; }
-            CheckPtr(&c7cf0);
             recCount = *reinterpret_cast<int*>(c7cf0 + 0x58);
         }
     }
 
     if (bestHouse != 0) {
-        CheckPtr(&bestHouse);
         void* comp = FindResidenceComp(bestHouse);
         int64_t c7cf0 = 0;
         Ctor(&c7cf0, comp);
-        CheckPtr(&c7cf0);
         int slotCount = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(c7cf0 + 0x50) + 8 + (int64_t)bestRecordIdx * 0x10);
         for (int m = 0; m < slotCount; ++m) {
-            CheckPtr(&c7cf0);
             int64_t memberData = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(c7cf0 + 0x50) + (int64_t)bestRecordIdx * 0x10);
             int64_t member = *reinterpret_cast<int64_t*>((int64_t)m * 8 + memberData);
-            CheckPtr(&member);
             if (AdultIdle(member)) {
-                CheckPtr(&member);
                 if (*reinterpret_cast<int64_t*>(member + 0x1f0) == LaborerKey()) {
                     SeatWorker(member, *availPtr, profKey);
                     *reinterpret_cast<int64_t*>(out) = member;
                     return out;
                 }
             }
-            CheckPtr(&c7cf0);
             slotCount = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(c7cf0 + 0x50) + 8 + (int64_t)bestRecordIdx * 0x10);
         }
     }

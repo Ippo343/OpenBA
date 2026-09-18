@@ -40,10 +40,6 @@ static fn_IBP_Serialize_t s_fn_IBP_Serialize = nullptr;
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_d = nullptr;
 
-// CheckPtr
-typedef void (*fn_CheckPtr_t)(void* ptr);
-static fn_CheckPtr_t s_fn_CheckPtr = nullptr;
-
 // FUN_1400c2ea0 — mark entity for removal
 typedef void (*fn_MarkForRemoval_t)(void* entity);
 static fn_MarkForRemoval_t s_fn_MarkForRemoval = nullptr;
@@ -152,11 +148,9 @@ void MultiObjectComponent_OnCreate(MultiObjectComponent* self) {
         void* gameWorld = *(void**)((uintptr_t)*s_pGameState + 0xE8);
 
         if (entityPtr != nullptr) {
-            if (s_fn_CheckPtr) s_fn_CheckPtr(&array[i]);
 
             uint32_t entityFlags = *(uint32_t*)((uintptr_t)entityPtr + 0x40);
             if (((entityFlags >> 10) & 1) == 0) {
-                if (s_fn_CheckPtr) s_fn_CheckPtr(&array[i]);
                 if (s_fn_MarkForRemoval) s_fn_MarkForRemoval(entityPtr);
 
                 if (gameWorld) {
@@ -190,8 +184,6 @@ void MultiObjectComponent_InitFuncs() {
     if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152ac8);
     if (slot) s_fn_Serializer_SerializeInt = *reinterpret_cast<fn_Serializer_SerializeInt_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152ab0);
-    if (slot) s_fn_CheckPtr = *reinterpret_cast<fn_CheckPtr_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_d = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
 
@@ -237,7 +229,6 @@ extern "C" void MultiObjectComponent_Slot12(void* selfV, int msgId) {
 
     for (int i = 0; i < childCount; ++i) {
         void** childSlot = reinterpret_cast<void**>(children + static_cast<uintptr_t>(i) * 8);
-        if (s_fn_CheckPtr) s_fn_CheckPtr(childSlot);
         uintptr_t child = reinterpret_cast<uintptr_t>(*childSlot);
         if (!child) continue;
 
@@ -245,7 +236,6 @@ extern "C" void MultiObjectComponent_Slot12(void* selfV, int msgId) {
         const uintptr_t comps = *reinterpret_cast<uintptr_t*>(child + 0x30);
         for (int k = 0; k < compCount && comps; ++k) {
             void* comp = *reinterpret_cast<void**>(comps + static_cast<uintptr_t>(k) * 8);
-            if (s_fn_CheckPtr) s_fn_CheckPtr(reinterpret_cast<void**>(&comp));
             if (!comp) continue;
             typedef void (*MsgSlot_t)(void*, int);
             MsgSlot_t fn = *reinterpret_cast<MsgSlot_t*>(

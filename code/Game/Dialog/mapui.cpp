@@ -139,12 +139,10 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
     // --- Find named image element and set sprite ---
     System::String elemNameStr(elementName);
 
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
     void* dialogElem = *(void**)(s + 0x20);
     uint64_t foundElem = 0;
     fn_FindElement(dialogElem, &foundElem, &elemNameStr);
 
-    fn_InternalBasePtr_CheckPtr((void*)&foundElem);
     void* rawElem = (void*)foundElem;
 
     // Cast to ImageElement via IsDerivedFrom
@@ -163,14 +161,11 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
     // Create Sprite from SpriteSheet (index 0) and set on element
     uint8_t spriteBuf[16];
     fn_Sprite_Ctor_ByIndex(spriteBuf, *spriteSheetOut, 0);
-    fn_InternalBasePtr_CheckPtr((void*)&imageElemPtr);
     fn_ImageElement_SetSprite((void*)imageElemPtr, spriteBuf);
 
     // If blend mode, set flags and element ID
     if (useBlend != '\0') {
-        fn_InternalBasePtr_CheckPtr((void*)&imageElemPtr);
         fn_Element_SetFlagsOnOff((void*)imageElemPtr, 0x10000, 0);
-        fn_InternalBasePtr_CheckPtr((void*)&imageElemPtr);
         fn_Element_SetElementId((void*)imageElemPtr, 1000);
     }
 }
@@ -284,7 +279,6 @@ void MapUI_Slot9(MapUI* self, void* param2, int msg, int id,
     if (msg != 2 || id != 1000) return;
 
     // param2 is an InternalBasePtr to the clicked element
-    fn_InternalBasePtr_CheckPtr(param2);
     uintptr_t elem = *(uintptr_t*)param2;
 
     // Read element position and size

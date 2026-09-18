@@ -185,7 +185,6 @@ uint64_t PlayerEdit_FencedAnchorCalc_dbf90(uintptr_t self, uint32_t* param_2, ui
     }
 
     // Orientation offset param_7 from the rotation IBP (self+0x50, +0x10 = rot 0..3).
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x50));
     int rot = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(self + 0x50) + 0x10);
     if (rot == 0)      *param_7 = 0;
     else if (rot == 1) *param_7 = 0xc2b40000u;   // -90.0f
@@ -193,7 +192,6 @@ uint64_t PlayerEdit_FencedAnchorCalc_dbf90(uintptr_t self, uint32_t* param_2, ui
     else if (rot == 3) *param_7 = 0x42b40000u;   //   90.0f
 
     // Footprint dimensions, swapped for rotations 1/3.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x50));
     int rotA = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(self + 0x50) + 0x10);
     int fw, fd;
     if (rotA == 1 || rotA == 3) {
@@ -206,7 +204,6 @@ uint64_t PlayerEdit_FencedAnchorCalc_dbf90(uintptr_t self, uint32_t* param_2, ui
 
     // Snap the rectangle: branch on the "centered" flag (config +0x68).
     if (*reinterpret_cast<char*>(config + 0x68) == '\0') {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x50));
         int r = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(self + 0x50) + 0x10);
         if (r == 0) {
             *param_2 = (*param_4 - fw) + 1;
@@ -222,7 +219,6 @@ uint64_t PlayerEdit_FencedAnchorCalc_dbf90(uintptr_t self, uint32_t* param_2, ui
             *param_4 = (*param_2 - 1) + fw;
         }
     } else {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x50));
         int r = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(self + 0x50) + 0x10);
         if (r == 0) {
             *param_5 = *param_3;

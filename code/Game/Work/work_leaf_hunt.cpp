@@ -50,12 +50,10 @@ void* WorkLeaf_FindComp_a730(uintptr_t entity, void* retIBP) {
         int64_t off = 0;
         for (;;) {
             void** slot = reinterpret_cast<void**>(list + off);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
             void* comp = *slot;
             uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
             if (t == *s_tid_a730) {
                 void** slot2 = reinterpret_cast<void**>(list + (int64_t)i * 8);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot2);
                 void* c = *slot2;
                 if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_tid_a730)) found = c;
                 break;
@@ -84,12 +82,10 @@ void* WorkLeaf_FindComp_a0b0(uintptr_t entity, void* retIBP) {
         int64_t off = 0;
         for (;;) {
             void** slot = reinterpret_cast<void**>(list + off);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
             void* comp = *slot;
             uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
             if (t == *s_tid_a0b0) {
                 void** slot2 = reinterpret_cast<void**>(list + (int64_t)i * 8);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot2);
                 void* c = *slot2;
                 if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_tid_a0b0)) found = c;
                 break;
@@ -118,12 +114,10 @@ void* WorkLeaf_FindComp_4fe0(uintptr_t entity, void* retIBP) {
         int64_t off = 0;
         for (;;) {
             void** slot = reinterpret_cast<void**>(list + off);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
             void* comp = *slot;
             uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
             if (t == *s_tid_4fe0) {
                 void** slot2 = reinterpret_cast<void**>(list + (int64_t)i * 8);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot2);
                 void* c = *slot2;
                 if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_tid_4fe0)) found = c;
                 break;
@@ -180,8 +174,6 @@ void* WorkLeaf_FindComp_63d0(uintptr_t entity, void** retval) {
 // (matches FUN_1401193a0 disasm: tail compares dword[R15+0x68] with dword[found+0x48])
 // ABI: bool fn(longlong self).
 bool WorkLeaf_ConsumeProduce_93a0(uintptr_t self) {
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
     static const uint32_t* s_tid = nullptr; // 0x1401c7388
     if (!s_tid)
         s_tid = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7388));
@@ -238,11 +230,9 @@ int WorkLeaf_Pasture_8350(uintptr_t self) {
     int64_t outerOff = 0;
     for (int outer = 0; outer < n; ++outer, outerOff += 8) {
         uintptr_t* compSlot = reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(self + 0x30) + outerOff);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(compSlot);
 
         // Nested entity IBP at component+0x10.
         uintptr_t innerEnt = *reinterpret_cast<uintptr_t*>(*compSlot + 0x10);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&innerEnt);
 
         // Find sub-component of type s_tidInner in innerEnt's list (+0x30/+0x38).
         void* sub = nullptr;
@@ -251,12 +241,10 @@ int WorkLeaf_Pasture_8350(uintptr_t self) {
             int64_t innerOff = 0;
             for (int j = 0; j < innerCount; ++j, innerOff += 8) {
                 uintptr_t* slot = reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(innerEnt + 0x30) + innerOff);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
                 void* comp = reinterpret_cast<void*>(*slot);
                 uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
                 if (t == *s_tidInner) {
                     uintptr_t* slot2 = reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(innerEnt + 0x30) + innerOff);
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot2);
                     void* c = reinterpret_cast<void*>(*slot2);
                     sub = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_tidInner)) ? c : nullptr;
                     break;
@@ -268,23 +256,18 @@ int WorkLeaf_Pasture_8350(uintptr_t self) {
         uintptr_t subIBP = 0;
         if (fn_InternalBasePtr_Ctor) new (&subIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(sub));   // B.3.3 bridge
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&subIBP);
 
         // Candidate score = subIBP+0x44. Keep only if strictly greater than current best.
         if (bestScore < *reinterpret_cast<float*>(subIBP + 0x44)) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&subIBP);
             // Skip if bit 20 of +0x20 is set.
             if ((*reinterpret_cast<uint32_t*>(subIBP + 0x20) >> 0x14 & 1) == 0) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&subIBP);
                 float score = *reinterpret_cast<float*>(subIBP + 0x44);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&subIBP);
                 void* obj = *reinterpret_cast<void**>(subIBP + 0x18);
                 void* derived = nullptr;
                 if (s_tidThresh && fn_IsDerivedFrom && fn_IsDerivedFrom(obj, *s_tidThresh)) derived = obj;
                 // Keep only if score strictly exceeds derived+0x30 (threshold).
                 float threshold = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(derived) + 0x30);
                 if (threshold <= score && score != threshold) {
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&subIBP);
                     bestScore = *reinterpret_cast<float*>(subIBP + 0x44);
                     bestIndex = outer;
                 }
@@ -321,18 +304,14 @@ void WorkLeaf_ConsumeProduce_b310(uintptr_t self) {
     WorkLeaf_EnsureB310();
     *reinterpret_cast<uint8_t*>(self + 0x48) = 1;
 
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
     uintptr_t ent = 0;
     if (s_wl_findEntity_3ea0)
         s_wl_findEntity_3ea0(*reinterpret_cast<uintptr_t*>(self + 0x10), &ent);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ent);
 
     char state = *reinterpret_cast<char*>(ent + 0x52);
     if (state < 0) state = *reinterpret_cast<char*>(ent + 0x50);
     if (state == 0x0e) return;
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ent);
     int outVal = 0x0e; // local_res8[0]
 
     // If event byte +0x51 has its high bit set, tick the SM with a zero Time first.

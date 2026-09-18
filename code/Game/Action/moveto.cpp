@@ -41,9 +41,6 @@
 // (NOT in engine_funcs.h -- MoveTo-specific helpers)
 // ============================================================
 
-// Object::InternalBasePtr::CheckPtr -- via IAT at 0x140152ab0
-static void (*s_fn_CheckPtr)(void* ibp) = nullptr;
-
 // Object::InternalBasePtr::Serialize -- via IAT at 0x140152aa0
 static void (*s_fn_IBP_Serialize)(void* ibp, void* serializer) = nullptr;
 
@@ -158,10 +155,7 @@ bool MoveTo_ResolveFuncs() {
     if (s_moveto_funcs_attempted) return s_moveto_funcs_resolved;
     s_moveto_funcs_attempted = true;
 
-    // CheckPtr via IAT at [0x140152ab0]
     uintptr_t iat;
-    iat = ResolveAddr(Module::Exe, 0x140152ab0);
-    if (iat) s_fn_CheckPtr = *reinterpret_cast<void(**)(void*)>(iat);
 
     // IBP::Serialize via IAT at 0x140152aa0
     iat = ResolveAddr(Module::Exe, 0x140152aa0);
@@ -240,7 +234,7 @@ bool MoveTo_ResolveFuncs() {
     s_fMinDistSq = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401720d4));
     s_fHalfCell = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
 
-    bool ok = s_fn_CheckPtr && s_fn_IBP_Serialize &&
+    bool ok = s_fn_IBP_Serialize &&
               s_fn_Serializer_Ctor && s_fn_Serializer_Dtor && s_fn_Serializer_GetVersion &&
               s_fn_Serialize_Bool && s_fn_Serialize_Int && s_fn_Serialize_UInt &&
               s_fn_Serialize_Float && s_fn_Serialize_IntArray &&
@@ -254,8 +248,8 @@ bool MoveTo_ResolveFuncs() {
               g_pGameWorldSingleton && g_fUVScale;
 
 #ifdef _DEBUG
-    printf("[MoveTo] ResolveFuncs: CheckPtr=%p IBPSer=%p SerCtor=%p SerDtor=%p\n",
-           (void*)s_fn_CheckPtr, (void*)s_fn_IBP_Serialize,
+    printf("[MoveTo] ResolveFuncs: IBPSer=%p SerCtor=%p SerDtor=%p\n",
+           (void*)s_fn_IBP_Serialize,
            (void*)s_fn_Serializer_Ctor, (void*)s_fn_Serializer_Dtor);
     printf("[MoveTo]   GetVer=%p Bool=%p Int=%p UInt=%p Float=%p IntArr=%p\n",
            (void*)s_fn_Serializer_GetVersion, (void*)s_fn_Serialize_Bool,
@@ -389,9 +383,7 @@ int MoveTo_AbstractImpl_Impl(void* self, void* actionStack) {
     uint8_t* s = (uint8_t*)self;
 
     // Get target entity's character component position
-    s_fn_CheckPtr(s + 0x28);
     uintptr_t targetEntity = *(uintptr_t*)(s + 0x28);
-    s_fn_CheckPtr((void*)(targetEntity + 0x68));
     uintptr_t charComp = *(uintptr_t*)(targetEntity + 0x68);
 
     // Current character position
@@ -415,9 +407,7 @@ int MoveTo_AbstractImpl_Impl(void* self, void* actionStack) {
     }
 
     // Get current position again (re-read since CheckPtr may update)
-    s_fn_CheckPtr(s + 0x28);
     targetEntity = *(uintptr_t*)(s + 0x28);
-    s_fn_CheckPtr((void*)(targetEntity + 0x68));
     charComp = *(uintptr_t*)(targetEntity + 0x68);
 
     float worldPos[3];
@@ -451,7 +441,6 @@ int MoveTo_AbstractImpl_Impl(void* self, void* actionStack) {
     s_fn_UpdateFacing(self);
 
     // Set walk animation on the target entity
-    s_fn_CheckPtr(s + 0x28);
     targetEntity = *(uintptr_t*)(s + 0x28);
     uint32_t idleAnimId = *(uint32_t*)(s + 0x468);
     s_fn_SetAnimation((void*)targetEntity, idleAnimId, *g_fUVScale, *g_fUVScale);
@@ -497,9 +486,7 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
     int* mapGrid = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
 
     // Get character's current world position
-    s_fn_CheckPtr(s + 0x28);
     uintptr_t targetEntity = *(uintptr_t*)(s + 0x28);
-    s_fn_CheckPtr((void*)(targetEntity + 0x68));
     uintptr_t charComp = *(uintptr_t*)(targetEntity + 0x68);
 
     float curX = *(float*)(charComp + 0x158);
@@ -553,7 +540,6 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
                 s_fn_UpdateFacing(self);
 
                 // Set walk animation
-                s_fn_CheckPtr(s + 0x28);
                 targetEntity = *(uintptr_t*)(s + 0x28);
                 uint32_t walkAnimId = *(uint32_t*)(s + 0x468);
                 s_fn_SetAnimation((void*)targetEntity, walkAnimId, *g_fUVScale, *g_fUVScale);
@@ -612,7 +598,6 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
 
         // Build 3D facing vector and set on character
         Math::Vector3 facing3d(dir2dN.x, dir2dN.y, 0.0f);
-        s_fn_CheckPtr(s + 0x28);
         targetEntity = *(uintptr_t*)(s + 0x28);
         *(uint8_t*)(targetEntity + 0x28) = 0;  // Clear animation lock flag
 
@@ -645,7 +630,6 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
     // Check if we've reached the end of the path nodes
     if (pathIndex >= nodeCount) {
         // Path exhausted -- set idle animation and reset path
-        s_fn_CheckPtr(s + 0x28);
         targetEntity = *(uintptr_t*)(s + 0x28);
         uint32_t idleAnimId = *(uint32_t*)(s + 0x46c);
         s_fn_SetAnimation((void*)targetEntity, idleAnimId, *g_fUVScale, *g_fUVScale);
@@ -688,7 +672,6 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
     }
 
     // Apply speed multiplier and set on character
-    s_fn_CheckPtr(s + 0x28);
     targetEntity = *(uintptr_t*)(s + 0x28);
     *(float*)(targetEntity + 0x38) = speed * *(float*)(s + 0x478);
 
@@ -724,9 +707,7 @@ void MoveTo_Enter_Impl(void* self) {
     uint8_t* s = (uint8_t*)self;
 
     // Get target entity's character component position
-    s_fn_CheckPtr(s + 0x28);
     uintptr_t targetEntity = *(uintptr_t*)(s + 0x28);
-    s_fn_CheckPtr((void*)(targetEntity + 0x68));
     uintptr_t charComp = *(uintptr_t*)(targetEntity + 0x68);
 
     // Read current position
@@ -747,10 +728,8 @@ void MoveTo_Enter_Impl(void* self) {
 
     if (bridgeResult != 0) {
         // Found a nearby entity -- check if it's closer (not the target entity)
-        s_fn_CheckPtr(s + 0x28);
         if (*(uintptr_t*)(s + 0x28) < bridgeResult) {
             // Compare facing directions via dot product
-            s_fn_CheckPtr(s + 0x28);
             targetEntity = *(uintptr_t*)(s + 0x28);
 
             // Our entity's facing direction (+0x2c..+0x34)
@@ -759,7 +738,6 @@ void MoveTo_Enter_Impl(void* self) {
                                    *(float*)(targetEntity + 0x34));
 
             // Bridge entity's facing direction
-            s_fn_CheckPtr(&bridgeResult);
             Math::Vector3 bridgeFacing(*(float*)(bridgeResult + 0x2c),
                                        *(float*)(bridgeResult + 0x30),
                                        *(float*)(bridgeResult + 0x34));
@@ -787,7 +765,6 @@ void MoveTo_Exit_Impl(void* self, void* actionStack) {
     (void)actionStack;
     uint8_t* s = (uint8_t*)self;
 
-    s_fn_CheckPtr(s + 0x28);
     uintptr_t targetEntity = *(uintptr_t*)(s + 0x28);
     uint32_t idleAnimId = *(uint32_t*)(s + 0x46c);
     s_fn_SetAnimation((void*)targetEntity, idleAnimId, *g_fUVScale, *g_fUVScale);
@@ -801,7 +778,6 @@ void MoveTo_CheckEntity_Impl(void* self) {
     MoveTo_ResolveFuncs();
     uint8_t* s = (uint8_t*)self;
 
-    s_fn_CheckPtr(s + 0x28);
     uintptr_t targetEntity = *(uintptr_t*)(s + 0x28);
     uint32_t idleAnimId = *(uint32_t*)(s + 0x46c);
     s_fn_SetAnimation((void*)targetEntity, idleAnimId, *g_fUVScale, *g_fUVScale);
@@ -816,15 +792,10 @@ bool MoveTo_GetTarget_Impl(void* self, void* param) {
     MoveTo_ResolveFuncs();
     uint8_t* s = (uint8_t*)self;
 
-    // CheckPtr on target entity
-    s_fn_CheckPtr(s + 0x28);
     uintptr_t targetEntity = *(uintptr_t*)(s + 0x28);
 
     // Get entity reference at target->+0x10
     uintptr_t entityRef = *(uintptr_t*)(targetEntity + 0x10);
-
-    // CheckPtr on param
-    s_fn_CheckPtr(param);
 
     return entityRef == *(uintptr_t*)param;
 }

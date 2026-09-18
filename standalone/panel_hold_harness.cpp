@@ -94,7 +94,6 @@ void PanelHoldClick(int frameNum) {
     // `_dialogs.GetFirst()` IS retail's GetFirstDialog (0x180031150 = `*retval =
     // this->_dialogs._head`); the iterator is the bare node pointer.
     for (auto it = uiSingleton->_dialogs.GetFirst(); it && !ctrl; ++it) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(it.node);
         void* dlgInst = it.node->element;
         if (!dlgInst) continue;
         ++dialogs;
@@ -116,7 +115,6 @@ void PanelHoldClick(int frameNum) {
         }
         uint64_t ctrlIBP = 0;
         fn_DialogInstance_GetController(dlgInst, &ctrlIBP, tid);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ctrlIBP);
         ctrl = reinterpret_cast<void*>(ctrlIBP);
     }
     s_listed = true;
@@ -151,7 +149,6 @@ void* FindComp(void* ent, uint32_t tid) {
     if (!arr || n <= 0 || n > 4096) return nullptr;
     for (int i = 0; i < n; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* c = *slot;
         if (!c) continue;
         typedef uint32_t (*GetTypeId_t)(void*);
@@ -195,7 +192,6 @@ extern "C" void PanelHoldHarness_Tick(void* entityUI, int frameNum) {
 
     for (int i = 0; i < n; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* ent = *slot;
         if (!ent || !FindComp(ent, tid)) continue;
 

@@ -79,7 +79,6 @@ static void* FindCompInDesc(uintptr_t desc, uint32_t typeId) {
 static void* FindDialogElem(void* dialogInst, const char* name) {
     System::String nameStr(name);
     uint8_t retBuf[16];
-    fn_InternalBasePtr_CheckPtr((void*)&dialogInst);
     fn_DialogInstance_FindElement(dialogInst, retBuf, &nameStr);
     void* result = *(void**)retBuf;
     return result;
@@ -155,7 +154,6 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
             void* elemPtr = *(void**)bpBuf;
 
             if (elemPtr) {
-                fn_InternalBasePtr_CheckPtr(bpBuf);
                 void* userData = fn_Element_GetUserData(elemPtr);
                 // Element_GetUserData can return NULL (element carries no user data);
                 // Runtime IsDerivedFrom has no null-this check (crash READ 0x0 at +0xC039A),
@@ -218,7 +216,6 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
     // --- Set icon sprite from ToolbarDescription ---
     {
         void* imageElem = FindDialogElem(dialogInst, "imageIcon");
-        fn_InternalBasePtr_CheckPtr((void*)&imageElem);
 
         // Check if element is an Object::Internal for InternalBasePtr wrapping
         bool isInternal = fn_IsDerivedFrom(imageElem, *g_TypeId_ObjectInternal);
@@ -237,7 +234,6 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
             fn_Sprite_Ctor(sprite, *(uint64_t*)(brc + 0x20), (void*)(brc + 0x28));
 #endif
 
-            fn_InternalBasePtr_CheckPtr(ibpBuf);
 #ifdef _DEBUG
             Debug_ImageElement_SetSprite(imagePtr, sprite);
 #else
@@ -249,7 +245,6 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
     // --- Set title text from ToolbarDescription ---
     {
         void* textElem = FindDialogElem(dialogInst, "textTitle");
-        fn_InternalBasePtr_CheckPtr((void*)&textElem);
 
         bool isInternal = fn_IsDerivedFrom(textElem, *g_TypeId_ObjectInternal);
         void* checked = isInternal ? textElem : nullptr;
@@ -265,7 +260,6 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
             uint8_t uiStr[16];
             fn_UIString_Ctor(uiStr, *(uint64_t*)(brc + 0x30), (void*)(brc + 0x38));
 
-            fn_InternalBasePtr_CheckPtr(ibpBuf);
             fn_TextElement_SetText(textPtr, uiStr);
         }
     }
@@ -273,7 +267,6 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
     // --- Find "labelBuildMulti" element, hide initially ---
     void* labelMulti = FindDialogElem(dialogInst, "labelBuildMulti");
     if (labelMulti) {
-        fn_InternalBasePtr_CheckPtr(&labelMulti);
         fn_Element_SetFlagsOnOff(labelMulti, 1, 0);  // hide
     }
 
@@ -291,13 +284,11 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
     // Find first label element using format "labelBuild%i"
     {
         System::String fmtBuf = System::String::Format("labelBuild%i", (uint64_t)*(uint32_t*)(s + 0x48));
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         void* retBuf[2] = {0, 0};
         fn_DialogInstance_FindElement(*(void**)(s + 0x18), retBuf, &fmtBuf);
         void* labelElem = retBuf[0];
 
         while (labelElem) {
-            fn_InternalBasePtr_CheckPtr(&labelElem);
 
             // Wrap as InternalBasePtr
             bool isInternal = fn_IsDerivedFrom(labelElem, *g_TypeId_ObjectInternal);
@@ -308,7 +299,6 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
             if (!wrappedElem) break;
 
             // Hide the label initially
-            fn_InternalBasePtr_CheckPtr(ibpBuf);
             fn_Element_SetFlagsOnOff(wrappedElem, 1, 0);
 
             // Push into dynamic array at +0x40 (8-byte InternalBasePtr elements).
@@ -323,7 +313,6 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
 
             // Find next label
             fmtBuf = System::String::Format("labelBuild%i", (uint64_t)newCount);
-            fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
             fn_DialogInstance_FindElement(*(void**)(s + 0x18), retBuf, &fmtBuf);
             labelElem = retBuf[0];
         }
@@ -396,7 +385,6 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
                 fn_Sprite_Ctor(sprite, *(uint64_t*)((uintptr_t)resType + 0x20),
                                (void*)((uintptr_t)resType + 0x38));
 #endif
-                fn_InternalBasePtr_CheckPtr((void*)(*(uintptr_t*)(s + 0x40) + (uintptr_t)i * 8));
 #ifdef _DEBUG
                 Debug_LabelElement_SetSprite(label, sprite);
 #else
@@ -406,11 +394,9 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
 
             // Format count as "%i" and set as text parameter 0
             System::String countStr = System::String::Format("%i", (uint64_t)*(uint32_t*)countPtr);
-            fn_InternalBasePtr_CheckPtr((void*)(*(uintptr_t*)(s + 0x40) + (uintptr_t)i * 8));
             fn_TextElement_SetParameter(label, 0, &countStr);
 
             // Show the label
-            fn_InternalBasePtr_CheckPtr((void*)(*(uintptr_t*)(s + 0x40) + (uintptr_t)i * 8));
             fn_Element_SetFlagsOnOff(label, 0, 1);
         }
     }
@@ -419,7 +405,6 @@ check_multi:
     // If resource component has multi-build flag at +0x34, show "labelBuildMulti"
     if (*(char*)(rc + 0x34) != 0) {
         if (labelMulti) {
-            fn_InternalBasePtr_CheckPtr(&labelMulti);
             fn_Element_SetFlagsOnOff(labelMulti, 0, 1);  // show
         }
     }

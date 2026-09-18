@@ -93,9 +93,6 @@ static uint32_t Tid(uintptr_t rdataAddr, const char* name) {
     return ::Object::GetTypeIdByName(name);
 }
 
-static inline void CheckPtr(void* p) {
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p);
-}
 static inline uint32_t GetTypeIdOf(void* obj) {
     typedef uint32_t (*fn_GetTypeId_t)(void*);
     return (*reinterpret_cast<fn_GetTypeId_t*>(*reinterpret_cast<uintptr_t*>(obj) + 0x10))(obj);
@@ -108,7 +105,6 @@ static void* FindComponent(int64_t entity, uint32_t tid) {
     for (int i = 0; i < count; ++i) {
         void** slot = reinterpret_cast<void**>(
             *reinterpret_cast<int64_t*>(entity + 0x30) + static_cast<int64_t>(i) * 8);
-        CheckPtr(slot);
         void* comp = *slot;
         if (!comp) continue;
         if (GetTypeIdOf(comp) == tid)
@@ -207,7 +203,6 @@ static void DoOverstock(int frameNum) {
         const int entCount = el ? *reinterpret_cast<int*>(el + 0x10) : 0;
         for (int e = 0; e < entCount && arr; ++e) {
             void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(e) * 8);
-            CheckPtr(slot);
             int64_t ent = reinterpret_cast<int64_t>(*slot);
             if (!ent) continue;
             void* mc = FindComponent(ent, tidMarketComp);

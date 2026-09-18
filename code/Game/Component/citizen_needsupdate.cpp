@@ -122,7 +122,6 @@ void CitizenComp_helper_fde0(int64_t selfV, int param) {
     EnsureNeedsUpdateFuncs();
     uint8_t* p = reinterpret_cast<uint8_t*>(selfV);
     if (s_fn_12c3f0 && *reinterpret_cast<void**>(p + 0x280)) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p + 0x280);
         s_fn_12c3f0(*reinterpret_cast<void**>(p + 0x280), 4, 0);
     }
     *reinterpret_cast<int32_t*>(p + 0xac) += param;
@@ -185,15 +184,12 @@ void CitizenComp_helper_21e0(int64_t selfV, void* param_2) {
     if (*reinterpret_cast<int64_t*>(param_2) == 0) return;
     if (!s_fn_find8090) { SkipTraceOnce("8090"); return; }
 
-    fn_InternalBasePtr_CheckPtr(param_2);
     int64_t out1 = 0;
     void* r1 = s_fn_find8090(*reinterpret_cast<int64_t*>(param_2), &out1);
     if (*reinterpret_cast<int64_t*>(r1) == 0) return;
 
-    fn_InternalBasePtr_CheckPtr(param_2);
     int64_t out2 = 0;
     void* r2 = s_fn_find8090(*reinterpret_cast<int64_t*>(param_2), &out2);
-    fn_InternalBasePtr_CheckPtr(r2);
     if (!s_fn_2ac30) { SkipTraceOnce("2ac30"); return; }
     if (s_fn_2ac30(*reinterpret_cast<int64_t*>(r2))) {
         *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(selfV) + 0x48) = 0;

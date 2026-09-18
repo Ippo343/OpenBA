@@ -56,9 +56,6 @@ void EnsureMem() {
     s_memInit = true;
 }
 
-inline void CheckPtr(void* ibp) {
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);
-}
 
 // AVL node field accessors (0x38-byte node; offsets disasm-verified).
 inline uint64_t& NodeKey(int64_t n)    { return *reinterpret_cast<uint64_t*>(n + 0x00); }
@@ -134,7 +131,6 @@ extern "C" void* TradeWork_Insert_c710(int64_t* param_1, void** param_2, int64_t
         void* newNode;
         for (;;) {
             cursor = cur;
-            CheckPtr(reinterpret_cast<void*>(cur));
             if (key < NodeKey(cur)) {
                 // descend LEFT (+0x20)
                 int64_t left = NodeLeft(cur);
@@ -149,7 +145,6 @@ extern "C" void* TradeWork_Insert_c710(int64_t* param_1, void** param_2, int64_t
                 cur = left;
                 continue;
             }
-            CheckPtr(reinterpret_cast<void*>(param_3));
             if (key <= NodeKey(cursor)) {
                 // exact match — return the existing node, no structural change.
                 *param_2 = reinterpret_cast<void*>(cursor);

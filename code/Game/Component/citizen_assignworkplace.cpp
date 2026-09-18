@@ -139,9 +139,6 @@ void EnsureFns() {
     s_p_uvScale = R<const float*>(0x14017214c);
 }
 
-inline void CheckPtr(void* ibp) {
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);
-}
 
 // The live Audio::Scene lives at gameWorld+0x78 (disasm: MOV RAX,[0x1401c3dd8];
 // MOV RDI,[RAX+0x78]). Null in standalone unless the audio scene was built.
@@ -166,14 +163,10 @@ int RosterCompare_9e20(const void* pa, const void* pb) {
     int64_t ea = *reinterpret_cast<const int64_t*>(pa);
     int64_t eb = *reinterpret_cast<const int64_t*>(pb);
 
-    CheckPtr(&ea);
     int64_t a258 = *reinterpret_cast<int64_t*>(ea + 600);   // +0x258 guardian
-    CheckPtr(&ea);
     int a38 = *reinterpret_cast<int*>(ea + 0x38);           // +0x38 state
 
-    CheckPtr(&eb);
     int64_t b258 = *reinterpret_cast<int64_t*>(eb + 600);
-    CheckPtr(&eb);
     int b38 = *reinterpret_cast<int*>(eb + 0x38);
 
     uint32_t ub = (b38 == 1) ? 0x100u : 0u;
@@ -220,7 +213,6 @@ extern "C" void CitizenComponent_helper_a550(int64_t storageComp, int slotIndex,
         int count = rec->count;
         int64_t arr = rec->data;
         for (int i = 0; i < count; ++i) {
-            CheckPtr(selfIBP);
             if (*reinterpret_cast<int64_t*>(arr + static_cast<int64_t>(i) * 8) ==
                 *reinterpret_cast<int64_t*>(selfIBP)) {
                 idx = i;
@@ -253,25 +245,20 @@ extern "C" void CitizenComponent_helper_a550(int64_t storageComp, int slotIndex,
         // Status-icon toggles (flags 6 and 7 off). MeshInstance may be null-wrapped.
         if (s_fn_2f90 && s_fn_2c3f0) {
             for (int flag = 6; flag <= 7; ++flag) {
-                CheckPtr(s + 0x10);
                 int64_t meshIBP[2] = {0, 0};
                 s_fn_2f90(*reinterpret_cast<int64_t*>(s + 0x10), meshIBP);
-                CheckPtr(meshIBP);
                 if (meshIBP[0])
                     s_fn_2c3f0(meshIBP[0], flag, 0);
             }
         }
         // Model refresh (variant 3 = idle/empty).
         if (s_fn_2b70) {
-            CheckPtr(s + 0x10);
             s_fn_2b70(*reinterpret_cast<int64_t*>(s + 0x10), 3);
         }
         // 3D positional audio teardown.
         if (s_fn_2280) {
-            CheckPtr(s + 0x10);
             int64_t emIBP[2] = {0, 0};
             s_fn_2280(*reinterpret_cast<int64_t*>(s + 0x10), emIBP);
-            CheckPtr(emIBP);
             int64_t emData = emIBP[0];
             void* scene = AudioScene();
             if (emData && scene) {
@@ -299,12 +286,9 @@ extern "C" void CitizenComponent_helper_a710(int64_t storageComp, int slotIndex,
     uint8_t* s = reinterpret_cast<uint8_t*>(storageComp);
 
     // --- Material reserve (guarded; the found component may be null-wrapped). ---
-    CheckPtr(s + 0x10);
     int64_t matIBP[2] = {0, 0};
     if (s_fn_3050) s_fn_3050(*reinterpret_cast<int64_t*>(s + 0x10), matIBP);
-    CheckPtr(matIBP);
     if (matIBP[0] && s_fn_ead0 && s_fn_ead0(matIBP[0])) {
-        CheckPtr(matIBP);
         if (s_fn_eb50) s_fn_eb50(matIBP[0]);
     }
 
@@ -312,16 +296,13 @@ extern "C" void CitizenComponent_helper_a710(int64_t storageComp, int slotIndex,
     if (CitizenRoster_CountWorkers_129ff0(storageComp) == 0) {
         int64_t emIBP[2] = {0, 0};
         if (s_fn_2280) {
-            CheckPtr(s + 0x10);
             s_fn_2280(*reinterpret_cast<int64_t*>(s + 0x10), emIBP);
         }
         // Model/transform position (guarded; component may be null-wrapped).
         float pos[3] = {0.0f, 0.0f, 0.0f};
         if (s_fn_3f60) {
-            CheckPtr(s + 0x10);
             int64_t mdlIBP[2] = {0, 0};
             void* r = s_fn_3f60(*reinterpret_cast<int64_t*>(s + 0x10), mdlIBP);
-            CheckPtr(r);
             int64_t modelComp = r ? *reinterpret_cast<int64_t*>(r) : 0;
             if (modelComp) {
                 pos[0] = *reinterpret_cast<float*>(modelComp + 0x158);
@@ -332,7 +313,6 @@ extern "C" void CitizenComponent_helper_a710(int64_t storageComp, int slotIndex,
         int64_t emData = emIBP[0];
         void* scene = AudioScene();
         if (emData) {
-            CheckPtr(emIBP);
             const void* emPos = reinterpret_cast<const void*>(emData + 0x28);
             char same = s_slot_Vec3Eq ? s_slot_Vec3Eq(pos, emPos) : 1;
             if (!same) {
@@ -348,9 +328,7 @@ extern "C" void CitizenComponent_helper_a710(int64_t storageComp, int slotIndex,
                 *reinterpret_cast<float*>(emData + 0x2c) = pos[1];
                 *reinterpret_cast<float*>(emData + 0x30) = pos[2];
             }
-            CheckPtr(emIBP);
             if (s_fn_42c60) s_fn_42c60(emData, 1);
-            CheckPtr(emIBP);
             int64_t desc = *reinterpret_cast<int64_t*>(emData + 0x38);
             if (*reinterpret_cast<uint32_t*>(desc + 0x10) == 0) {
                 *reinterpret_cast<uint32_t*>(desc + 0x14) = 0x3f800000;  // 1.0f
@@ -369,7 +347,6 @@ extern "C" void CitizenComponent_helper_a710(int64_t storageComp, int slotIndex,
     // --- FAITHFUL CORE: model refresh on first worker of this profession, then append. ---
     RosterRec* rec = Roster(storageComp, slotIndex);
     if (rec->count == 0 && s_fn_2b70) {
-        CheckPtr(s + 0x10);
         s_fn_2b70(*reinterpret_cast<int64_t*>(s + 0x10), 2);   // variant 2 = staffed
     }
     // Grow the slot array to count+1 and append the citizen pointer (*selfIBP).
@@ -394,7 +371,6 @@ extern "C" void CitizenComponent_AssignWorkplace(void* selfV, void* workplaceIBP
     EnsureFns();
     uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
 
-    CheckPtr(workplaceIBP);
     int64_t* pWorkplace = reinterpret_cast<int64_t*>(self + 0x238);  // current workplace IBP
     int32_t* pSlot = reinterpret_cast<int32_t*>(self + 0x240);
     int64_t newWp = *reinterpret_cast<int64_t*>(workplaceIBP);
@@ -423,13 +399,11 @@ extern "C" void CitizenComponent_AssignWorkplace(void* selfV, void* workplaceIBP
 
     // --- Remove from the old workplace roster. ---
     if (*pWorkplace != 0) {
-        CheckPtr(pWorkplace);
         int64_t storageIBP[2] = {0, 0};
         if (s_fn_FindCompStorage) s_fn_FindCompStorage(*pWorkplace, storageIBP);
         int64_t selfIBP[2] = {0, 0};
         if (fn_InternalBasePtr_Ctor) new (selfIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-        CheckPtr(storageIBP);
         // Guard: a force-assigned / partially-built workplace may lack a Storage
         // component (null-wrapped IBP); the original relies on the invariant that an
         // assigned workplace always carries one. Skip the roster op crash-safe if absent.
@@ -443,13 +417,11 @@ extern "C" void CitizenComponent_AssignWorkplace(void* selfV, void* workplaceIBP
 
     // --- Add to the new workplace roster. ---
     if (*pWorkplace != 0) {
-        CheckPtr(pWorkplace);
         int64_t storageIBP[2] = {0, 0};
         if (s_fn_FindCompStorage) s_fn_FindCompStorage(*pWorkplace, storageIBP);
         int64_t selfIBP[2] = {0, 0};
         if (fn_InternalBasePtr_Ctor) new (selfIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-        CheckPtr(storageIBP);
         if (storageIBP[0] != 0)
             CitizenComponent_helper_a710(storageIBP[0], *pSlot, selfIBP);
     }
@@ -460,11 +432,8 @@ extern "C" void CitizenComponent_AssignWorkplace(void* selfV, void* workplaceIBP
     if (node != 0) {
         do {
             int64_t wpLocal = *reinterpret_cast<int64_t*>(workplaceIBP);  // fresh IBP holding the raw wp ptr
-            CheckPtr(&node);
             CitizenComponent_AssignWorkplace(reinterpret_cast<void*>(node), &wpLocal, *pSlot);
-            CheckPtr(&node);
             node = *reinterpret_cast<int64_t*>(node + 0x268);
-            CheckPtr(self + 0x260);
         } while (node != *reinterpret_cast<int64_t*>(self + 0x260));
     }
 }

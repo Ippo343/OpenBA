@@ -158,10 +158,8 @@ static void* FindCompInEntity(uintptr_t entity, const uint32_t* pTid) {
     uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
     for (int i = 0; i < n; i++) {
         void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* comp = *slot;
         if (CompTypeId(comp) == *pTid) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
             void* c = *slot;
             return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *pTid)) ? c : nullptr;
         }
@@ -221,7 +219,6 @@ extern "C" void* RemovalCalc_helper_8d50(int64_t param_1, void** param_2, int pa
             if (fn_InternalBasePtr_Ctor) new (param_2) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             return param_2;
         }
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(node + 8));
         int64_t payload = *reinterpret_cast<int64_t*>(node + 8);
         if (*reinterpret_cast<int*>(payload + 0x28) == param_3) {
             *param_2 = nullptr;
@@ -261,9 +258,7 @@ extern "C" void* RemovalCalc_helper_8d50(int64_t param_1, void** param_2, int pa
 extern "C" void RemovalCalc_helper_e4d0(int64_t param_1) {
     EnsureInit();
     int64_t resIBP[4] = {0};
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(param_1 + 0x10));
     if (s_find3ea0) s_find3ea0(*reinterpret_cast<int64_t*>(param_1 + 0x10), resIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(resIBP);
     int64_t state = resIBP[0];
     if (!state) return;  // SA-guard: entity has no StateMachineComponent
     int64_t* stackHead = *reinterpret_cast<int64_t**>(state + 0x48);
@@ -394,14 +389,12 @@ extern "C" void RemovalCalc_StateMachine_dfa0(int64_t param_1) {
     int64_t timeOutSlot = 0;
     int32_t* outState = reinterpret_cast<int32_t*>(&timeOutSlot);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(param_1 + 0x10));
     {
         int64_t buf = 0;
         if (s_find3ea0) s_find3ea0(*reinterpret_cast<int64_t*>(param_1 + 0x10), &buf);
         local_res8  = (int32_t)(uint64_t)buf;
         uStackX_c   = (int32_t)((uint64_t)buf >> 32);
     }
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
     int64_t st0 = ((int64_t)(uint32_t)local_res8) | ((int64_t)uStackX_c << 32);
     if (!st0) {  // SA-guard: no StateMachineComponent on the entity (crashed
                  // live 2026-07-20 on the first upgrade click, pre-7d98 fill)
@@ -418,32 +411,27 @@ extern "C" void RemovalCalc_StateMachine_dfa0(int64_t param_1) {
     if (cVar5 < 0) cVar5 = *reinterpret_cast<char*>(st0 + 0x50);
     if (cVar5 == 6) return;
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(param_1 + 0x10));
     {
         int64_t buf = 0;
         if (s_find3ea0) s_find3ea0(*reinterpret_cast<int64_t*>(param_1 + 0x10), &buf);
         local_res8  = (int32_t)(uint64_t)buf;
         uStackX_c   = (int32_t)((uint64_t)buf >> 32);
     }
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
     int64_t st1 = ((int64_t)(uint32_t)local_res8) | ((int64_t)uStackX_c << 32);
     cVar5 = *reinterpret_cast<char*>(st1 + 0x52);
     if (cVar5 < 0) cVar5 = *reinterpret_cast<char*>(st1 + 0x50);
     // FIX(lead-verify vs disasm 0x14011e01a JZ 0x14011e3b1): the 2nd ==6 exit calls e4d0.
     if (cVar5 == 6) { RemovalCalc_helper_e4d0(param_1); return; }
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
     cVar5 = *reinterpret_cast<char*>(st1 + 0x52);
     if (cVar5 < 0) cVar5 = *reinterpret_cast<char*>(st1 + 0x50);
     // FIX(lead-verify vs disasm 0x14011e03c JZ 0x14011e3b1): the ==7 exit calls e4d0.
     if (cVar5 == 7) { RemovalCalc_helper_e4d0(param_1); return; }
 
     // ---- main tick path ----
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(param_1 + 0x10));
     if (s_find3ea0) s_find3ea0(*reinterpret_cast<int64_t*>(param_1 + 0x10), &local_res10);
     // Time(0.0) into the shared 8-byte slot (see timeOutSlot note above).
     if (s_timeCtor) s_timeCtor(&timeOutSlot, 0.0f);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res10);
     int64_t state = local_res10;
     int64_t* stackPtrField = reinterpret_cast<int64_t*>(state + 0x48);
 
@@ -451,7 +439,6 @@ extern "C" void RemovalCalc_StateMachine_dfa0(int64_t param_1) {
     SM_RunPhase(state, stackPtrField, outState);
 
     // ---- between-phase: choose transition + kick Tick ----
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res10);
     state = local_res10;
     *outState = 3;  // outState seed
     if (*reinterpret_cast<char*>(state + 0x51) < 0) {
@@ -469,7 +456,6 @@ extern "C" void RemovalCalc_StateMachine_dfa0(int64_t param_1) {
         }
     }
     if (s_timeCtor) s_timeCtor(&timeOutSlot, 0.0f);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res10);
     state = local_res10;
     stackPtrField = reinterpret_cast<int64_t*>(state + 0x48);
 
@@ -518,10 +504,8 @@ extern "C" uint64_t RemovalCalc_helper_c700(uint32_t* param_1, int param_2) {
                 reinterpret_cast<void**>(&res18), param_2);
             r13 = 1;  // bVar10 = true by default
             if (res18 != nullptr) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&res18);
                 bool isRoad = (fn_IsA && s_tid_6860) ? fn_IsA(res18, *s_tid_6860) : false;
                 if (isRoad) {
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&res18);
                     void* base = res18;
                     void* derived = (fn_IsDerivedFrom && s_tid_6860 && fn_IsDerivedFrom(base, *s_tid_6860))
                                     ? base : nullptr;
@@ -535,16 +519,12 @@ extern "C" uint64_t RemovalCalc_helper_c700(uint32_t* param_1, int param_2) {
                         res8 = (int32_t)(uint64_t)ibpBuf;
                         resC = (int32_t)((uint64_t)ibpBuf >> 32);
                     }
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&res8);
                     bp = ((int64_t)(uint32_t)res8) | ((int64_t)resC << 32);
                     removeKind = *reinterpret_cast<int*>(bp + 0x60);
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&res8);
                     bp = ((int64_t)(uint32_t)res8) | ((int64_t)resC << 32);
                     ebx = (uint8_t)*reinterpret_cast<uint32_t*>(bp + 0x64);  // ptr = *(uint*)(bp+100)
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&res8);
                     bp = ((int64_t)(uint32_t)res8) | ((int64_t)resC << 32);
                     res10 = *reinterpret_cast<uint32_t*>(bp + 0x68);
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&res18);
                     if (s_charAI8e30)
                         s_charAI8e30(*reinterpret_cast<int64_t*>((uintptr_t)*g_pGameWorldSingleton + 0x118),
                                      *reinterpret_cast<int*>((uintptr_t)res18 + 0x20));
@@ -642,7 +622,6 @@ extern "C" void RemovalCalc_CitizenAI_9ad0(int64_t param_1, int param_2) {
             // exact match
             if (piVar4 == nullptr) return;
             int64_t* self = reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(piVar4) + 8); // piVar4+2
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
             int64_t* puVar7 = nullptr;
             int iVar6 = 0;
             if (*reinterpret_cast<int*>(param_1 + 0x18) != 0) {
@@ -669,9 +648,7 @@ extern "C" void RemovalCalc_CitizenAI_9ad0(int64_t param_1, int param_2) {
                     break;
                 }
             }
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
             *reinterpret_cast<int*>(*self + 0x24) = iVar6;
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
             uint32_t uVar1 = *reinterpret_cast<uint32_t*>(*self + 0x20);
 
             int* cur = reinterpret_cast<int*>(*plVar8);
@@ -845,12 +822,10 @@ extern "C" uint64_t RemovalCalc_Slot13(int64_t param_1, int param_2, int param_3
                         int64_t local_90 = 0;
                         if (fn_InternalBasePtr_Ctor) new (&local_90) ::Object::InternalBasePtr(
                             reinterpret_cast<RtObject::Internal*>(cloned));   // B.3.3 bridge
-                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_90);
                         void* comp = FindCompInEntity(local_90, s_tid_79e0);
                         int64_t local_b0 = 0;
                         if (fn_InternalBasePtr_Ctor) new (&local_b0) ::Object::InternalBasePtr(
                             reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
-                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_b0);
                         *reinterpret_cast<int16_t*>(local_b0 + 0x28) = (int16_t)iVar23;
                         *reinterpret_cast<int16_t*>(local_b0 + 0x2a) = (int16_t)iVar24;
                         *reinterpret_cast<int64_t*>(local_b0 + 0x2c) = 0x10001;
@@ -894,12 +869,10 @@ extern "C" uint64_t RemovalCalc_Slot13(int64_t param_1, int param_2, int param_3
                                 int64_t local_a8 = 0;
                                 if (fn_InternalBasePtr_Ctor) new (&local_a8) ::Object::InternalBasePtr(
                                     reinterpret_cast<RtObject::Internal*>(cloned));   // B.3.3 bridge
-                                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_a8);
                                 void* comp = FindCompInEntity(local_a8, s_tid_79e0);
                                 int64_t local_98 = 0;
                                 if (fn_InternalBasePtr_Ctor) new (&local_98) ::Object::InternalBasePtr(
                                     reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
-                                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_98);
                                 *reinterpret_cast<int16_t*>(local_98 + 0x28) = (int16_t)iVar23;
                                 *reinterpret_cast<int16_t*>(local_98 + 0x2a) = (int16_t)iVar24;
                                 *reinterpret_cast<int64_t*>(local_98 + 0x2c) = 0x10001;
@@ -915,40 +888,30 @@ extern "C" uint64_t RemovalCalc_Slot13(int64_t param_1, int param_2, int param_3
                     // ---- mark-for-removal of resident entity (sub_4770) ----
                     local_e0 = local_e8;
                     if ((char)PlayerPath_Sub_4770(param_1, &local_e0) != 0) {
-                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_e8);
                         if (*reinterpret_cast<int64_t*>(local_e8 + 0x28) ==
                             *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x38) + 0x38)) {
                             local_e0 = local_e8;
                             int64_t lst = *reinterpret_cast<int64_t*>((uintptr_t)*g_pGameWorldSingleton + 0xe8);
-                            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_e0);
                             if ((*reinterpret_cast<uint32_t*>(local_e0 + 0x40) >> 10 & 1) == 0) {
-                                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_e0);
                                 if (s_markRemoval) s_markRemoval(local_e0);
                                 if (s_arrayPush)
                                     s_arrayPush(reinterpret_cast<int64_t*>(lst + 0xd0),
                                                 *reinterpret_cast<int*>(lst + 0xd8) + 1, &local_e0);
                             }
                         } else {
-                            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_e8);
                             void* comp = FindCompInEntity(local_e8, s_tid_75f0);
                             int64_t local_80 = 0;
                             if (fn_InternalBasePtr_Ctor) new (&local_80) ::Object::InternalBasePtr(
                                 reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
                             if (local_80 != 0) {
-                                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_e8);
                                 int64_t local_60[16] = {0};
                                 int64_t* pi = reinterpret_cast<int64_t*>(s_find5780 ? (s_find5780(local_e8, local_60), local_60) : local_60);
-                                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pi);
                                 if (s_sub11e710 && (char)s_sub11e710(*pi) != 0) {
-                                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_e8);
                                     int64_t local_50[16] = {0};
                                     int64_t* pi2 = reinterpret_cast<int64_t*>(s_find5780 ? (s_find5780(local_e8, local_50), local_50) : local_50);
-                                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pi2);
                                     int64_t lr = *pi2;
-                                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(lr + 0x10));
                                     int64_t local_88buf = 0;
                                     if (s_find3ea0) s_find3ea0(*reinterpret_cast<int64_t*>(lr + 0x10), &local_88buf);
-                                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_88buf);
                                     int64_t* head = *reinterpret_cast<int64_t**>(local_88buf + 0x48);
                                     (*reinterpret_cast<void(**)(int64_t*, void*, int, int)>(*head + 0x10))(
                                         head, reinterpret_cast<void*>(local_88buf + 0x48),
@@ -961,12 +924,10 @@ extern "C" uint64_t RemovalCalc_Slot13(int64_t param_1, int param_2, int param_3
                     // ---- StateMachine kick (sub_4670) ----
                     int64_t local_b8 = local_e8;
                     if ((char)PlayerPath_Sub_4670(param_1, &local_b8) != 0) {
-                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_e8);
                         void* comp = FindCompInEntity(local_e8, s_tid_75f0);
                         int64_t local_c0 = 0;
                         if (fn_InternalBasePtr_Ctor) new (&local_c0) ::Object::InternalBasePtr(
                             reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
-                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_c0);
                         RemovalCalc_StateMachine_dfa0(local_c0);
                     }
 
@@ -974,21 +935,17 @@ extern "C" uint64_t RemovalCalc_Slot13(int64_t param_1, int param_2, int param_3
                     local_e0 = local_e8;
                     if ((*reinterpret_cast<char*>(*reinterpret_cast<int64_t*>(param_1 + 0x38) + 0x43) != 0) &&
                         (local_e8 != 0)) {
-                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_e0);
                         void* comp = FindCompInEntity(local_e0, s_tid_8070);
                         int64_t local_d0 = 0;
                         if (fn_InternalBasePtr_Ctor) new (&local_d0) ::Object::InternalBasePtr(
                             reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
                         if (local_d0 != 0) {
-                            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_d0);
                             if (s_sub12ead0 && s_sub12ead0(local_d0)) {
-                                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_e8);
                                 void* comp2 = FindCompInEntity(local_e8, s_tid_8070);
                                 int64_t local_d8 = 0;
                                 if (fn_InternalBasePtr_Ctor) new (&local_d8) ::Object::InternalBasePtr(
                                     reinterpret_cast<RtObject::Internal*>(comp2));   // B.3.3 bridge
                                 if (local_d8 != 0) {
-                                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_d8);
                                     int* bn = *reinterpret_cast<int**>(*reinterpret_cast<int64_t*>((uintptr_t)*g_pGameWorldSingleton + 0x118) + 0x30);
                                     int64_t local_c8 = 0;
                                     bool gotC8 = false;
@@ -1009,7 +966,6 @@ extern "C" uint64_t RemovalCalc_Slot13(int64_t param_1, int param_2, int param_3
                                             nullptr);   // B.3.3 bridge
                                     }
                                     if (local_c8 != 0) {
-                                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_d8);
                                         RemovalCalc_CitizenAI_9ad0(
                                             *reinterpret_cast<int64_t*>((uintptr_t)*g_pGameWorldSingleton + 0x118),
                                             *reinterpret_cast<int*>(local_d8 + 0x28));

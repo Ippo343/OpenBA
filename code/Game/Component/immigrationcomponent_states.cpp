@@ -138,7 +138,6 @@ inline void*    Rng(uint8_t* gw)     { return *reinterpret_cast<void**>(gw + 0xd
 inline int*     Grid(uint8_t* gw)    { return *reinterpret_cast<int**>(gw + 0xf8); }
 inline uintptr_t Tiles(int* grid)    { return *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(grid) + 0x80); }
 
-inline void CheckPtr(void* ibp) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp); }
 inline void MakeIBP(void* dst, void* obj) { if (fn_InternalBasePtr_Ctor) new (dst) ::Object::InternalBasePtr(
     reinterpret_cast<RtObject::Internal*>(obj)); else *reinterpret_cast<void**>(dst) = obj; }   // B.3.3 bridge
 
@@ -170,13 +169,11 @@ void* FindComponentByTid(void* entity, uint32_t tid) {
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(e + 0x30);
     for (int i = 0; i < n; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        CheckPtr(slot);
         void* c = *slot;
         if (!c) continue;
         void** vt = *reinterpret_cast<void***>(c);
         uint32_t got = reinterpret_cast<uint32_t(*)(void*)>(vt[2])(c);
         if (got != tid) continue;
-        CheckPtr(slot);
         c = *slot;
         return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) ? c : nullptr;
     }
@@ -189,7 +186,6 @@ void PostEventToEntity(void* entity, int eventId) {
     if (!entity || !s_FindSM) return;
     uint64_t smcIBP = 0;
     s_FindSM(reinterpret_cast<uintptr_t>(entity), &smcIBP);
-    CheckPtr(&smcIBP);
     uintptr_t smc = static_cast<uintptr_t>(smcIBP);
     if (!smc) return;
     void* node = *reinterpret_cast<void**>(smc + 0x48);
@@ -296,11 +292,9 @@ extern "C" void Nomad_Init(void* nomadV, void* ownerIBP, const float* spawnPos, 
     void* rng = Rng(gw);
     *reinterpret_cast<uint32_t*>(nomad + 0x50) = fn_Random_Rand ? fn_Random_Rand(rng, 2) : 0;
 
-    CheckPtr(reinterpret_cast<void*>(nomad + 0x10));
     void* entity = *reinterpret_cast<void**>(nomad + 0x10);
     uint64_t modelIBP = 0;
     fn_FindComponent_Character(entity, &modelIBP);   // ModelComponent (DAT_1401c7a50)
-    CheckPtr(&modelIBP);
     uintptr_t model = static_cast<uintptr_t>(modelIBP);
     if (!model) return;
     float yaw = fn_Random_RandFloatTol(rng) * kYawRange;
@@ -331,7 +325,6 @@ extern "C" void Immigration_Spawn(void* compV) {
     const int W = *grid;
     const int edge = *reinterpret_cast<int*>(desc + 0x5c);
 
-    CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     uint64_t posIBP = 0;
     fn_Entity_FindComponent_Position(reinterpret_cast<uintptr_t>(*reinterpret_cast<void**>(comp + 0x10)), &posIBP);
 
@@ -345,7 +338,6 @@ extern "C" void Immigration_Spawn(void* compV) {
             x = static_cast<int>(fn_Random_Rand(rng, W));
             y = (r == 2) ? edge : (W - edge) - 1;
         }
-        CheckPtr(&posIBP);
         float hp[3] = {0, 0, 0};
         s_ResolvePos(reinterpret_cast<void*>(posIBP), hp, 0, 0, nullptr);
         int cx = static_cast<int>(hp[0] + static_cast<float>(W >> 1));
@@ -375,10 +367,8 @@ extern "C" void Immigration_Spawn(void* compV) {
         uintptr_t houses = *reinterpret_cast<uintptr_t*>(tm + 0x20);
         for (int i = 0; i < nh; ++i) {
             uint64_t h = *reinterpret_cast<uint64_t*>(houses + static_cast<uintptr_t>(i) * 8);
-            CheckPtr(&h);
             void* res = FindComponentByTid(reinterpret_cast<void*>(h), TidResidence());
             uint64_t rIBP = 0; MakeIBP(&rIBP, res);
-            CheckPtr(&rIBP);
             uintptr_t rc = static_cast<uintptr_t>(rIBP);
             if (!rc) continue;
             int slots = *reinterpret_cast<int*>(rc + 0x58);
@@ -398,7 +388,6 @@ extern "C" void Immigration_Spawn(void* compV) {
         if (c < 0) c = cell;
 
         // A random "use point" on the town hall for this nomad to stand at.
-        CheckPtr(&posIBP);
         uintptr_t pc = static_cast<uintptr_t>(posIBP);
         void* idesc = *reinterpret_cast<void**>(pc + 0x18);
         uint8_t* id = (idesc && fn_IsDerivedFrom && fn_IsDerivedFrom(idesc, TidInteractDesc())) ? reinterpret_cast<uint8_t*>(idesc) : nullptr;
@@ -406,10 +395,8 @@ extern "C" void Immigration_Spawn(void* compV) {
         int nChildren = *reinterpret_cast<int*>(pc + 0x30);
         for (int ci = 0; ci < nChildren; ++ci) {
             int64_t* child = reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(pc + 0x28) + static_cast<uintptr_t>(ci) * 8);
-            CheckPtr(child);
             if (s_ChildSum) nPts += static_cast<uint32_t>(s_ChildSum(*child, 2));
         }
-        CheckPtr(&posIBP);
         uint32_t ptIdx = fn_Random_Rand(rng, nPts);
         float meet[3] = {0, 0, 0};
         s_ResolvePos(reinterpret_cast<void*>(posIBP), meet, 2, static_cast<int>(ptIdx), nullptr);
@@ -426,12 +413,9 @@ extern "C" void Immigration_Spawn(void* compV) {
         fn_MapGetTerrainPos(grid, spawn, cellPos, '\0', nullptr);
 
         // Bind its NomadComponent to this hall and drop it into the world.
-        CheckPtr(&entIBP);
         void* nomad = FindComponentByTid(reinterpret_cast<void*>(entIBP), TidNomadComp());
         uint64_t nomadIBP = 0; MakeIBP(&nomadIBP, nomad);
-        CheckPtr(&nomadIBP);
         if (nomadIBP) Nomad_Init(reinterpret_cast<void*>(nomadIBP), reinterpret_cast<void*>(comp + 0x10), spawn, meet);
-        CheckPtr(&entIBP);
         uintptr_t e = static_cast<uintptr_t>(entIBP);
         if (e && s_RegisterEnt) {
             int category = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(e + 0x28) + 0x20);
@@ -459,7 +443,6 @@ extern "C" void Immigration_Dismiss(void* compV) {
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(comp + 0x58);
     for (int i = 0; i < n; ++i) {
         uint64_t* slot = reinterpret_cast<uint64_t*>(arr + static_cast<uintptr_t>(i) * 8);
-        CheckPtr(slot);
         PostEventToEntity(reinterpret_cast<void*>(*slot), 1);
     }
     if (arr && fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(arr));
@@ -487,19 +470,15 @@ extern "C" void* Nomad_ConvertToCitizen(void* nomadV, uint64_t* outIBP, uint64_t
     void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
     void* ent = mem ? s_CopyCtor(mem, *reinterpret_cast<void**>(ndesc + 0x20)) : nullptr;
     uint64_t entIBP = 0; MakeIBP(&entIBP, ent);
-    CheckPtr(&entIBP);
     fn_FindComponent_Citizen(reinterpret_cast<void*>(entIBP), outIBP);
-    CheckPtr(outIBP);
     uintptr_t cit = static_cast<uintptr_t>(*outIBP);
     if (!cit) return nullptr;
     void* cd = *reinterpret_cast<void**>(cit + 0x18);
     uint8_t* cdesc = (cd && fn_IsDerivedFrom && fn_IsDerivedFrom(cd, TidCitDesc())) ? reinterpret_cast<uint8_t*>(cd) : nullptr;
 
     // Spawn the citizen where the nomad stands (its model transform translation).
-    CheckPtr(reinterpret_cast<void*>(nomad + 0x10));
     uint64_t modelIBP = 0;
     fn_FindComponent_Character(*reinterpret_cast<void**>(nomad + 0x10), &modelIBP);
-    CheckPtr(&modelIBP);
     float pos[3] = {0, 0, 0};
     if (modelIBP) {
         const float* t = reinterpret_cast<const float*>(static_cast<uintptr_t>(modelIBP) + 0x158);
@@ -514,7 +493,6 @@ extern "C" void* Nomad_ConvertToCitizen(void* nomadV, uint64_t* outIBP, uint64_t
     char flag = (r == 0 || isChild != 0) ? 0 : 1;
     int64_t key = *reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(gw + 0xb0) + 0x30);
     int64_t parent = static_cast<int64_t>(*parentIBP);
-    CheckPtr(outIBP);
     s_DeferredInit(static_cast<int64_t>(*outIBP), pos, static_cast<uint32_t>(gender), isChild, age, flag, &parent, key);
 
     uint64_t regIBP = entIBP;
@@ -553,14 +531,12 @@ extern "C" void Immigration_Accept(void* compV) {
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(comp + 0x58);
     auto nomadAt = [&](int i) -> void* {
         uint64_t* slot = reinterpret_cast<uint64_t*>(arr + static_cast<uintptr_t>(i) * 8);
-        CheckPtr(slot);
         return *reinterpret_cast<void**>(slot);
     };
     auto convert = [&](int i, uint64_t* parent, int gender, char child) -> uintptr_t {
         void* ent = nomadAt(i);
         void* nomad = FindComponentByTid(ent, TidNomadComp());
         uint64_t nIBP = 0; MakeIBP(&nIBP, nomad);
-        CheckPtr(&nIBP);
         uint64_t citIBP = 0;
         Nomad_ConvertToCitizen(reinterpret_cast<void*>(nIBP), &citIBP, parent, gender, child);
         PostEventToEntity(nomadAt(i), 0);
@@ -574,8 +550,6 @@ extern "C" void Immigration_Accept(void* compV) {
         if (i + 1 >= n) break;
         uint64_t nullIBP2 = 0; MakeIBP(&nullIBP2, nullptr);
         uintptr_t b = convert(i + 1, &nullIBP2, 0, 0);
-        uint64_t bIBP = b;
-        CheckPtr(&bIBP);
         if (b) *reinterpret_cast<uintptr_t*>(b + 0x250) = a;
         if (a) *reinterpret_cast<uintptr_t*>(a + 0x250) = b;
         if (i + 2 >= n) break;

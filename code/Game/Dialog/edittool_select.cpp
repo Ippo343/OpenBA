@@ -101,14 +101,12 @@ void EntityFindUIComponent(uint64_t entity, uint64_t* outIBP) {
     for (int i = 0; i < count; i++) {
         uint64_t* slot = reinterpret_cast<uint64_t*>(
             *reinterpret_cast<uintptr_t*>(entity + 0x30) + static_cast<int64_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* comp = *reinterpret_cast<void**>(slot);
         uint32_t tid = reinterpret_cast<GetTypeId_t>(
             *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
         if (tid == tidUIComp) {
             uint64_t* slot2 = reinterpret_cast<uint64_t*>(
                 *reinterpret_cast<uintptr_t*>(entity + 0x30) + static_cast<int64_t>(i) * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot2);
             void* comp2 = *reinterpret_cast<void**>(slot2);
             if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp2, tidUIComp)) found = comp2;
             break;
@@ -134,7 +132,6 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
     uint64_t* entityIBP = reinterpret_cast<uint64_t*>(entityIBPv);
 
     // 1. CheckPtr(entity); early-out if this entity is already the selected one.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(entityIBP);
     if (*reinterpret_cast<uint64_t*>(self + 0x30) == *entityIBP) return;
 
     // 2. (Retail calls Entity_impl_cc90 here to tear down the previous panel +
@@ -162,7 +159,6 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
     // this->_dialogs._head`); the iterator is the bare node pointer, so `it.node`
     // is the address retail passes to CheckPtr and `it.node->element` is node[0].
     for (auto it = ui->_dialogs.GetFirst(); it; ++it) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(it.node);
         void* dialog = it.node->element;
 
         // GetController(dialog, &ctrlBuf, EntityUI); filter by IsDerivedFrom.
@@ -171,7 +167,6 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
         if (dialog && fn_DialogInstance_GetController)
             fn_DialogInstance_GetController(dialog, &ctrlBuf, tidEntityUI);
         if (ctrlBuf != 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ctrlBuf);
             void* c = reinterpret_cast<void*>(ctrlBuf);
             if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tidEntityUI)) matched = c;
         }
@@ -181,9 +176,7 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
         if (fn_InternalBasePtr_Ctor) new (&ctrlRef) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(matched));   // B.3.3 bridge
         if (ctrlRef != 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ctrlRef);
             uint64_t ctrlEntity = *reinterpret_cast<uint64_t*>(ctrlRef + 0x30);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(entityIBP);
             if (ctrlEntity == *entityIBP) {
                 resultDialog = reinterpret_cast<uint64_t>(it.node->element);  // *iter = dialog IBP value
                 break;
@@ -194,7 +187,6 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
     if (resultDialog == 0) {
         // 5. No existing dialog — scan the entity's description container for the
         //    UIDescription child, then build a fresh DialogInstance.
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(entityIBP);
         uintptr_t descList = *reinterpret_cast<uintptr_t*>(*entityIBP + 0x28);  // *(entity+0x28)
         int count = *reinterpret_cast<int32_t*>(descList + 0x30);
         const uint32_t tidUIDesc = ResolveTypeId(0x1401c7f90, "UIDescription", &s_tid_UIDescription);
@@ -216,7 +208,6 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
         if (obj == nullptr) return;  // no UIDescription in the list -> nothing to open
 
         // Find the entity's UIComponent (supplies the controller data array).
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(entityIBP);
         uint64_t uiCompIBP = 0;
         EntityFindUIComponent(*entityIBP, &uiCompIBP);
 
@@ -226,12 +217,9 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
             void* ctrlData = nullptr;
             uint32_t ctrlCount = 0;
             if (uiCompIBP != 0) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&uiCompIBP);
                 ctrlCount = *reinterpret_cast<uint32_t*>(uiCompIBP + 0x30);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&uiCompIBP);
                 ctrlData = *reinterpret_cast<void**>(uiCompIBP + 0x28);
             }
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(entityIBP);
             void* entityPtr = *reinterpret_cast<void**>(entityIBP);  // dataSource (ctor arg5)
             void* extRes = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(obj) + 0x28);
             uint64_t nullParent = 0;
@@ -279,14 +267,12 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
             fn_DialogInstance_GetController(oldDialog, &ctrlBuf, tidToolUI);
         void* ctrl = nullptr;
         if (ctrlBuf != 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ctrlBuf);
             void* c = reinterpret_cast<void*>(ctrlBuf);
             if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tidToolUI)) ctrl = c;
         }
         uint64_t ctrlRef = 0;
         if (fn_InternalBasePtr_Ctor) new (&ctrlRef) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(ctrl));   // B.3.3 bridge
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ctrlRef);
         // Not pinned (ctrl+0x40 == 0) -> close it. (A null controller -> ctrlRef 0,
         // reading +0x40 off 0 would fault, so require a resolved controller first.)
         if (ctrlRef != 0 && *reinterpret_cast<char*>(ctrlRef + 0x40) == 0) {

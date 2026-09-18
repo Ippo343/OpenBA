@@ -166,16 +166,13 @@ static void EnsureInit() {
     s_init = true;
 }
 
-static inline void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton); }
 static inline int* MapGrid() { return *reinterpret_cast<int**>(GW() + 0xf8); }
 
 // citizen ModelComponent transform (+0x68 of CharacterComponent at citizen+0x278).
 static int64_t CitizenModel(int64_t citizen) {
-    CheckPtr(reinterpret_cast<void*>(citizen + 0x278));
     int64_t ch = *reinterpret_cast<int64_t*>(citizen + 0x278);
     if (ch == 0) return 0;
-    CheckPtr(reinterpret_cast<void*>(ch + 0x68));
     return *reinterpret_cast<int64_t*>(ch + 0x68);
 }
 
@@ -205,30 +202,22 @@ static int64_t CooldownStamp(int64_t citizen, float mult) {
 // from Gather2 (0x80) — the OR into *(plVar3+0x1e) (== mi+0xf0). Every deref null-guarded.
 static void HideRenderWorkplaceMesh(int64_t* self, fn_findComp_t findStor, int (*getCount)(int64_t),
                                     uint32_t flagBit) {
-    CheckPtr(self);
     int64_t citizen = *self;
     if (*reinterpret_cast<int64_t*>(citizen + 0x238) == 0) return;
 
-    CheckPtr(self);
     int64_t wp = *reinterpret_cast<int64_t*>(*self + 0x238);
-    CheckPtr(&wp);
     int64_t storBuf[2] = {0, 0};
     void* sp = findStor ? findStor(wp, storBuf) : nullptr;
-    CheckPtr(sp);
     int64_t storComp = sp ? *reinterpret_cast<int64_t*>(sp) : 0;
     int cnt = (storComp && getCount) ? getCount(storComp) : 0;
     if (cnt != 0) return;  // not empty -> nothing to hide
 
-    CheckPtr(self);
     int64_t wp2 = *reinterpret_cast<int64_t*>(*self + 0x238);
-    CheckPtr(&wp2);
     int64_t meshBuf[2] = {0, 0};
     void* mp = s_findMesh ? s_findMesh(wp2, meshBuf) : nullptr;
-    CheckPtr(mp);
     if (!mp) return;
     int64_t mi = *reinterpret_cast<int64_t*>(mp);  // plVar3 (MeshInstance object)
     if (mi == 0) return;
-    CheckPtr(reinterpret_cast<void*>(mi + 0x10));  // plVar3+2
     int64_t inner = *reinterpret_cast<int64_t*>(mi + 0x10);
     // gated: ((inner+0x40 >> 10) & 1) == 0
     if (inner == 0 || (*reinterpret_cast<uint32_t*>(inner + 0x40) >> 10 & 1) != 0) return;
@@ -271,7 +260,6 @@ static void HideRenderWorkplaceMesh(int64_t* self, fn_findComp_t findStor, int (
         changed = after ^ before;
     }
     if ((changed & 0xffff) != 0 && *reinterpret_cast<int64_t*>(mi + 0x10) != 0) {
-        CheckPtr(reinterpret_cast<void*>(mi + 0x10));
         int64_t notifyTarget = *reinterpret_cast<int64_t*>(mi + 0x10);
         if (s_c3470) s_c3470(reinterpret_cast<void*>(notifyTarget));
     }
@@ -309,17 +297,14 @@ static void* FindRawMaterialChild(int64_t entity) {
 // ============================================================
 extern "C" int Storage_GetResourceCount2(int64_t param_1) {
     EnsureInit();
-    CheckPtr(reinterpret_cast<void*>(param_1 + 0x10));
     int64_t storBuf[2] = {0, 0};
     if (s_findStor1) s_findStor1(*reinterpret_cast<int64_t*>(param_1 + 0x10), storBuf);
-    CheckPtr(storBuf);
     int64_t stor = storBuf[0];
     int total = 0;
     if (stor == 0) return 0;
     int count = *reinterpret_cast<int*>(stor + 0x30);
     int64_t byteOff = 0;
     for (int i = 0; i < count; ++i) {
-        CheckPtr(storBuf);
         int64_t rows = *reinterpret_cast<int64_t*>(stor + 0x28);
         int64_t row = *reinterpret_cast<int64_t*>(rows + byteOff);
         void* rm = FindRawMaterialChild(row);
@@ -345,7 +330,6 @@ static void GatherTransferLoop(int64_t* self, int64_t pathResult, int64_t found,
         void* rm = FindRawMaterialChild(carrierSlot);
         int slotCost = rm ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rm) + 0x48) : 0x7fffffff;
         if (capLeft < slotCost) break;
-        CheckPtr(&pathResult);
         if (s_transfer) s_transfer(pathResult, carrierSlot, 1);
         capLeft -= slotCost;
         entIBP = found;
@@ -367,10 +351,8 @@ static void SelectAndTransfer(int64_t found, int64_t pathResult, int capLeft) {
     for (;;) {
         // Storage(found) -> stor
         int64_t storWrap = found;
-        CheckPtr(&storWrap);
         int64_t storBuf[2] = {0, 0};
         if (s_findStor1) s_findStor1(storWrap, storBuf);
-        CheckPtr(storBuf);
         int64_t stor = storBuf[0];
         if (stor == 0) {
             return;
@@ -383,7 +365,6 @@ static void SelectAndTransfer(int64_t found, int64_t pathResult, int capLeft) {
         // pass 1: count matches + preferred index
         int64_t rowsBase = 0;  // local_res10 (= *(stor+0x28))
         for (int cur = 0; cur < rowCount; ++cur) {
-            CheckPtr(&storBuf[0]);
             rowsBase = *reinterpret_cast<int64_t*>(stor + 0x28);
             int64_t cursor = (int64_t)cur * 0x10;
             int64_t child = *reinterpret_cast<int64_t*>(rowsBase + cursor);
@@ -408,7 +389,6 @@ static void SelectAndTransfer(int64_t found, int64_t pathResult, int capLeft) {
         int64_t hitChild = 0;   // the row child to transfer (lVar5)
         int hitCursor = -1;
         for (int cur = 0; cur < rowCount; ++cur) {
-            CheckPtr(&storBuf[0]);
             int64_t rb = *reinterpret_cast<int64_t*>(stor + 0x28);   // local_88
             int64_t cursor = (int64_t)cur * 0x10;
             int64_t child = *reinterpret_cast<int64_t*>(rb + cursor);
@@ -431,7 +411,6 @@ static void SelectAndTransfer(int64_t found, int64_t pathResult, int capLeft) {
         if (capLeft < cost) {
             return;
         }
-        CheckPtr(&pathResult);
         if (s_transfer) s_transfer(pathResult, hitChild, 1);
         ++transfers;
         capLeft -= cost;
@@ -454,35 +433,27 @@ static void SelectAndTransfer(int64_t found, int64_t pathResult, int capLeft) {
 extern "C" uint64_t CitizenAI_State_GatherResources(int64_t param_1) {
     EnsureInit();
     int64_t* self = reinterpret_cast<int64_t*>(param_1 + 0x38);
-    CheckPtr(self);
 
     bool haveWorkplace = (*reinterpret_cast<int64_t*>(*self + 0x238) != 0);
     char valid = 0;
     if (haveWorkplace) {
-        CheckPtr(self);
         int64_t workplace = *reinterpret_cast<int64_t*>(*self + 0x238);  // local_res8
-        CheckPtr(self);
         valid = s_checkWork ? s_checkWork(reinterpret_cast<void*>(*self), &workplace) : 0;
     }
 
     if (haveWorkplace && valid != 0) {
         // own-storage QueryCount: Storage(citizen+0x10) -> QueryCount
-        CheckPtr(self);
         int64_t citizen = *self;
-        CheckPtr(reinterpret_cast<void*>(citizen + 0x10));
         int64_t storBuf[2] = {0, 0};
         if (s_findStor1) s_findStor1(*reinterpret_cast<int64_t*>(citizen + 0x10), storBuf);
-        CheckPtr(storBuf);
         int qc = (storBuf[0] && s_queryCount) ? s_queryCount(storBuf[0]) : 0;
         if (qc > 0) {
-            CheckPtr(self);
             uint64_t r = s_ltp ? s_ltp(*self) : 0;
             *reinterpret_cast<int32_t*>(param_1 + 0x2c) = 6;
             return (r & 0xffffffffffffff00ULL) | 1;
         }
 
         // compute the citizen grid cell
-        CheckPtr(self);
         citizen = *self;
         int64_t model = CitizenModel(citizen);
         int* mg = MapGrid();
@@ -490,7 +461,6 @@ extern "C" uint64_t CitizenAI_State_GatherResources(int64_t param_1) {
         uint32_t cell = ModelCell(model, mg);
 
         // bGoal = workplace ? 7fb0(&wp) : -1
-        CheckPtr(self);
         uint32_t bGoal;
         if (*reinterpret_cast<int64_t*>(*self + 0x238) == 0) {
             bGoal = 0xffffffff;
@@ -507,13 +477,11 @@ extern "C" uint64_t CitizenAI_State_GatherResources(int64_t param_1) {
         if (s_dd30) s_dd30(listpair, &found, cell, bGoal, &outComp, dest, 0);
         (void)w;
 
-        CheckPtr(self);
         if (found == 0) {
             // ---- cooldown + hide-render branch ----
             int64_t cz = *self;
             int64_t stamp = CooldownStamp(cz, kMultEmpty);
             *reinterpret_cast<int64_t*>(param_1 + 0x70) = stamp;
-            CheckPtr(self);
             *reinterpret_cast<uint32_t*>(*self + 0x88) |= 4;
             HideRenderWorkplaceMesh(self, s_findStor2, s_getCount, 0x40);
             return static_cast<uint64_t>(stamp) & 0xffffffffffffff00ULL;
@@ -521,28 +489,20 @@ extern "C" uint64_t CitizenAI_State_GatherResources(int64_t param_1) {
 
         // ---- found != 0: build path + transfer ----
         // 1) MeshInstance set-flag(6) on workplace
-        CheckPtr(self);
         if (*reinterpret_cast<int64_t*>(*self + 0x238) != 0) {
-            CheckPtr(self);
             int64_t wp = *reinterpret_cast<int64_t*>(*self + 0x238);
-            CheckPtr(&wp);
             int64_t meshBuf[2] = {0, 0};
             void* mp = s_findMesh ? s_findMesh(wp, meshBuf) : nullptr;
-            CheckPtr(mp);
             if (mp && s_12c3f0) s_12c3f0(*reinterpret_cast<int64_t**>(mp), 6, '\0');
         }
 
         // 2) Position(workplace) -> 2e20 -> destPos; FindPath
-        CheckPtr(self);
         int64_t wpForPos = *reinterpret_cast<int64_t*>(*self + 0x238);
-        CheckPtr(&wpForPos);
         int64_t posBuf[2] = {0, 0};
         void* pp = s_findPos ? s_findPos(wpForPos, posBuf) : nullptr;
-        CheckPtr(pp);
         float destPos[4] = {0, 0, 0, 0};  // local_60
         if (pp && s_2e20) s_2e20(*reinterpret_cast<int64_t*>(pp), destPos, 0, 0, nullptr);
 
-        CheckPtr(self);
         int64_t citizenVal = *self;                                     // local_88
         int64_t destEntityIBP = *reinterpret_cast<int64_t*>(citizenVal + 0x238);  // local_res18
         int64_t pathResult = 0;                                          // local_res20
@@ -553,7 +513,6 @@ extern "C" uint64_t CitizenAI_State_GatherResources(int64_t param_1) {
         // 3) capLeft = max( town-capacity, FUN_140116540(citizen) )
         int townCap = *reinterpret_cast<int*>(
             *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(GW() + 0xb0) + 0x30) + 0x50);
-        CheckPtr(self);
         int citCap = s_116540 ? s_116540(*self) : 0;
         int capLeft = (townCap < citCap) ? citCap : townCap;
 
@@ -561,19 +520,16 @@ extern "C" uint64_t CitizenAI_State_GatherResources(int64_t param_1) {
         GatherTransferLoop(self, pathResult, found, capLeft);
 
         // 5) set citizen action-state flags + return 1
-        CheckPtr(self);
         int64_t cz = *self;
         *reinterpret_cast<uint32_t*>(cz + 0x54) |= 4;
         *reinterpret_cast<int32_t*>(cz + 0x30) = static_cast<int32_t>(0xffffffff);
         *reinterpret_cast<int32_t*>(cz + 0xb0) = 0;
-        CheckPtr(self);
         cz = *self;
         *reinterpret_cast<int32_t*>(cz + 0xb0) = 1;
         return (static_cast<uint64_t>(cz) & 0xffffffffffffff00ULL) | 1;
     }
 
     // ---- no valid workplace: cooldown(*0xd8 * 75.0) -> param_1+0x70 ----
-    CheckPtr(self);
     int64_t citizen = *self;
     int64_t stamp = CooldownStamp(citizen, kMultInvalid);
     *reinterpret_cast<int64_t*>(param_1 + 0x70) = stamp;
@@ -586,35 +542,27 @@ extern "C" uint64_t CitizenAI_State_GatherResources(int64_t param_1) {
 extern "C" uint64_t CitizenAI_State_GatherResources2(int64_t param_1) {
     EnsureInit();
     int64_t* self = reinterpret_cast<int64_t*>(param_1 + 0x38);
-    CheckPtr(self);
 
     bool haveWorkplace = (*reinterpret_cast<int64_t*>(*self + 0x238) != 0);
     char valid = 0;
     if (haveWorkplace) {
-        CheckPtr(self);
         int64_t workplace = *reinterpret_cast<int64_t*>(*self + 0x238);
-        CheckPtr(self);
         valid = s_checkWork ? s_checkWork(reinterpret_cast<void*>(*self), &workplace) : 0;
     }
 
     if (haveWorkplace && valid != 0) {
         // own-storage QueryCount
-        CheckPtr(self);
         int64_t citizen = *self;
-        CheckPtr(reinterpret_cast<void*>(citizen + 0x10));
         int64_t storBuf[2] = {0, 0};
         if (s_findStor1) s_findStor1(*reinterpret_cast<int64_t*>(citizen + 0x10), storBuf);
-        CheckPtr(storBuf);
         int qc = (storBuf[0] && s_queryCount) ? s_queryCount(storBuf[0]) : 0;
         if (qc > 0) {
-            CheckPtr(self);
             uint64_t r = s_ltp ? s_ltp(*self) : 0;
             *reinterpret_cast<int32_t*>(param_1 + 0x2c) = 7;
             return (r & 0xffffffffffffff00ULL) | 1;
         }
 
         // compute cell
-        CheckPtr(self);
         citizen = *self;
         int64_t model = CitizenModel(citizen);
         int* mg = MapGrid();
@@ -622,7 +570,6 @@ extern "C" uint64_t CitizenAI_State_GatherResources2(int64_t param_1) {
         uint32_t cell = ModelCell(model, mg);
 
         // bGoal = workplace ? 7fb0(&wp) : -1
-        CheckPtr(self);
         uint32_t bGoal;
         if (*reinterpret_cast<int64_t*>(*self + 0x238) == 0) {
             bGoal = 0xffffffff;
@@ -641,9 +588,7 @@ extern "C" uint64_t CitizenAI_State_GatherResources2(int64_t param_1) {
 
         if (found == 0) {
             // ---- cooldown + hide-render branch ----
-            CheckPtr(self);
             *reinterpret_cast<uint32_t*>(*self + 0x88) |= 4;
-            CheckPtr(self);
             int64_t cz = *self;
             int64_t stamp = CooldownStamp(cz, kMultEmpty);
             *reinterpret_cast<int64_t*>(param_1 + 0x78) = stamp;
@@ -652,27 +597,19 @@ extern "C" uint64_t CitizenAI_State_GatherResources2(int64_t param_1) {
         }
 
         // ---- found != 0: MeshInstance flag(7), Position+2e20, FindPath ----
-        CheckPtr(self);
         if (*reinterpret_cast<int64_t*>(*self + 0x238) != 0) {
-            CheckPtr(self);
             int64_t wp = *reinterpret_cast<int64_t*>(*self + 0x238);
-            CheckPtr(&wp);
             int64_t meshBuf[2] = {0, 0};
             void* mp = s_findMesh ? s_findMesh(wp, meshBuf) : nullptr;
-            CheckPtr(mp);
             if (mp && s_12c3f0) s_12c3f0(*reinterpret_cast<int64_t**>(mp), 7, '\0');
         }
 
-        CheckPtr(self);
         int64_t wpForPos = *reinterpret_cast<int64_t*>(*self + 0x238);
-        CheckPtr(&wpForPos);
         int64_t posBuf[2] = {0, 0};
         void* pp = s_findPos ? s_findPos(wpForPos, posBuf) : nullptr;
-        CheckPtr(pp);
         float destPos[4] = {0, 0, 0, 0};  // local_98
         if (pp && s_2e20) s_2e20(*reinterpret_cast<int64_t*>(pp), destPos, 0, 0, nullptr);
 
-        CheckPtr(self);
         int64_t citizenVal = *self;                                     // local_res20
         int64_t destEntityIBP = *reinterpret_cast<int64_t*>(citizenVal + 0x238);  // local_res18
         int64_t pathResult = 0;                                          // local_78
@@ -683,7 +620,6 @@ extern "C" uint64_t CitizenAI_State_GatherResources2(int64_t param_1) {
         // capLeft = max( town-capacity, FUN_140116540(citizen) )
         int townCap = *reinterpret_cast<int*>(
             *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(GW() + 0xb0) + 0x30) + 0x50);
-        CheckPtr(self);
         int citCap = s_116540 ? s_116540(*self) : 0;
         int capLeft = (townCap < citCap) ? citCap : townCap;
         // Distribution diagnostic (firewood-evenness): the per-trip take budget is
@@ -707,19 +643,16 @@ extern "C" uint64_t CitizenAI_State_GatherResources2(int64_t param_1) {
         // Did anything actually land in the citizen's own carry storage? This is the
 
         // ---- set citizen action-state flags + return 1 ----
-        CheckPtr(self);
         int64_t cz = *self;
         *reinterpret_cast<uint32_t*>(cz + 0x54) |= 4;
         *reinterpret_cast<int32_t*>(cz + 0x30) = static_cast<int32_t>(0xffffffff);
         *reinterpret_cast<int32_t*>(cz + 0xb0) = 0;
-        CheckPtr(self);
         cz = *self;
         *reinterpret_cast<int32_t*>(cz + 0xb0) = 2;
         return (static_cast<uint64_t>(cz) & 0xffffffffffffff00ULL) | 1;
     }
 
     // ---- no valid workplace: cooldown(*0xd8 * 75.0) -> param_1+0x78 ----
-    CheckPtr(self);
     int64_t citizen = *self;
     int64_t stamp = CooldownStamp(citizen, kMultInvalid);
     *reinterpret_cast<int64_t*>(param_1 + 0x78) = stamp;

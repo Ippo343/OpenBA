@@ -121,7 +121,6 @@ void EnsureFuncs() {
     s_resolved = true;
 }
 
-inline void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 
 // The four growable locals of the outline builder: { data @+0, size @+8, cap @+0xC }.
 //
@@ -175,14 +174,12 @@ void Sub7080(int64_t container, void* outIBP) {
     for (int i = 0; i < count; i++) {
         uint64_t* slot = reinterpret_cast<uint64_t*>(
             *reinterpret_cast<uintptr_t*>(container + 0x30) + (int64_t)i * 8);
-        CheckPtr(slot);
         void* comp = *reinterpret_cast<void**>(slot);
         uint32_t ct = reinterpret_cast<uint32_t(*)(void*)>(
             *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
         if (ct == tid) {
             uint64_t* slot2 = reinterpret_cast<uint64_t*>(
                 *reinterpret_cast<uintptr_t*>(container + 0x30) + (int64_t)i * 8);
-            CheckPtr(slot2);
             void* comp2 = *reinterpret_cast<void**>(slot2);
             if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp2, tid)) found = comp2;
             break;
@@ -210,12 +207,10 @@ void FindModelComp(int64_t container, void* outIBP) {
     for (int i = 0; i < count; i++) {
         uint64_t* slot = reinterpret_cast<uint64_t*>(
             *reinterpret_cast<uintptr_t*>(container + 0x30) + (int64_t)i * 8);
-        CheckPtr(slot);
         void* comp = *reinterpret_cast<void**>(slot);
         uint32_t ct = reinterpret_cast<uint32_t(*)(void*)>(
             *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
         if (ct == tid) {
-            CheckPtr(slot);
             void* comp2 = *reinterpret_cast<void**>(slot);
             if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp2, tid)) found = comp2;
             break;
@@ -327,10 +322,8 @@ void Impl_b930(int64_t self) {
     int* mapGrid = *reinterpret_cast<int**>(gw + 0xf8);
 
     // Entity footprint rect (short fields at +0x28 x, +0x2a y, +0x2c w, +0x2e h).
-    CheckPtr(reinterpret_cast<void*>(self + 0x10));
     uint64_t rectIBP = 0;
     if (s_4680) s_4680(*reinterpret_cast<int64_t*>(self + 0x10), &rectIBP);
-    CheckPtr(&rectIBP);
     int rx = (int)*reinterpret_cast<int16_t*>(rectIBP + 0x28);
     int ry = (int)*reinterpret_cast<int16_t*>(rectIBP + 0x2a);
     int rw = (int)*reinterpret_cast<int16_t*>(rectIBP + 0x2c);
@@ -504,7 +497,6 @@ void Impl_c4a0(int64_t self) {
         uint32_t f1 = f0 & 0xfffffffb;
         *reinterpret_cast<uint32_t*>(self + 0x20) = f1;
         if (((f1 ^ f0) & 0xffff) != 0 && *reinterpret_cast<int64_t*>(self + 0x10) != 0) {
-            CheckPtr(reinterpret_cast<void*>(self + 0x10));
             if (s_c3470) s_c3470(*reinterpret_cast<void**>(self + 0x10));
         }
     }
@@ -522,9 +514,7 @@ void Impl_c4a0(int64_t self) {
     // Look up per-cell prebuilt mesh indices (charComp +0x164/+0x166) + the
     // "any neighbour already highlighting" test over sibling components.
     uint64_t charIBP = 0, compIBP = 0;
-    CheckPtr(reinterpret_cast<void*>(self + 0x10));
     FindModelComp(*reinterpret_cast<int64_t*>(self + 0x10), &charIBP);   // was s_3f60 (null tid in SA)
-    CheckPtr(reinterpret_cast<void*>(self + 0x10));
     if (s_4740) s_4740(*reinterpret_cast<int64_t*>(self + 0x10), &compIBP);
 
     void* ownerObj = *reinterpret_cast<void**>(self + 0x18);
@@ -533,34 +523,27 @@ void Impl_c4a0(int64_t self) {
 
     int iVar10 = -1, iVar11 = -1;
     if (charIBP != 0) {
-        CheckPtr(&charIBP);
         iVar10 = (int)*reinterpret_cast<int16_t*>(charIBP + 0x164);
-        CheckPtr(&charIBP);
         iVar11 = (int)*reinterpret_cast<int16_t*>(charIBP + 0x166);
     }
 
     bool neighbourActive = false;
     if (compIBP != 0) {
-        CheckPtr(&compIBP);
         int cnt = *reinterpret_cast<int32_t*>(compIBP + 0x50);
         if (cnt > 0) {
             int64_t off = 0;
             int i = 0;
             do {
-                CheckPtr(&compIBP);
                 int64_t sib = *reinterpret_cast<int64_t*>(off + *reinterpret_cast<int64_t*>(compIBP + 0x48));
-                CheckPtr(&sib);
                 uint64_t sibHi = 0;
                 Sub7080(sib, &sibHi);
                 if (sibHi != 0) {
-                    CheckPtr(&sibHi);
                     bool active = !(*reinterpret_cast<char*>(sibHi + 0x11c) == 0 ||
                                     *reinterpret_cast<int32_t*>(sibHi + 0x120) < 0 ||
                                     *reinterpret_cast<int64_t*>(sibHi + 0xf8) != 0);
                     neighbourActive = neighbourActive || active;
                 }
                 i++; off += 8;
-                CheckPtr(&compIBP);
             } while (i < *reinterpret_cast<int32_t*>(compIBP + 0x50));
             if (neighbourActive) goto add_prebuilt;
         }
@@ -568,7 +551,6 @@ void Impl_c4a0(int64_t self) {
 
     // No per-cell mesh (both indices < 0) -> build+submit our own EdgeMesh.
     if (iVar10 < 0 || iVar11 < 0) {
-        CheckPtr(reinterpret_cast<void*>(self + 0x10));
         uint64_t footprintIBP = 0;
         void* r = s_4680 ? s_4680(*reinterpret_cast<int64_t*>(self + 0x10), &footprintIBP) : nullptr;
         if (r && *reinterpret_cast<int64_t*>(r) != 0 &&
@@ -595,7 +577,6 @@ add_prebuilt:
     // entities): mesh = descTable[variantIdx][modelVariant], transform from the
     // ModelComponent (charIBP+0x28). descTable = HighlightDescription+0x20.
     if (iVar10 >= 0 && iVar11 >= 0 && desc) {
-        CheckPtr(&charIBP);
         int64_t table = *reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(desc) + 0x20);
         // Standalone guard: if the HighlightDescription's prebuilt-mesh table (or the
         // selected row/entry) never loaded, bail instead of dereferencing null / OOB.
@@ -671,7 +652,6 @@ add_prebuilt:
         uint32_t f1 = f0 | 4;
         *reinterpret_cast<uint32_t*>(self + 0x20) = f1;
         if (((f1 ^ f0) & 0xffff) != 0 && *reinterpret_cast<int64_t*>(self + 0x10) != 0) {
-            CheckPtr(reinterpret_cast<void*>(self + 0x10));
             if (s_c3470) s_c3470(*reinterpret_cast<void**>(self + 0x10));
         }
     }
@@ -763,36 +743,28 @@ void Impl_cb40(int64_t self) {
         }
     }
 
-    CheckPtr(reinterpret_cast<void*>(self + 0x30));
     uint64_t contIBP = 0;
     if (s_4740) s_4740(*reinterpret_cast<int64_t*>(self + 0x30), &contIBP);
     if (contIBP != 0) {
-        CheckPtr(&contIBP);
         int cnt = *reinterpret_cast<int32_t*>(contIBP + 0x50);
         int64_t off = 0;
         for (int i = 0; i < cnt; i++) {
-            CheckPtr(&contIBP);
             int64_t sib = *reinterpret_cast<int64_t*>(off + *reinterpret_cast<int64_t*>(contIBP + 0x48));
-            CheckPtr(&sib);
             uint64_t hi = 0;
             Sub7080(sib, &hi);
             if (hi != 0) {
-                CheckPtr(&hi);
                 if (*reinterpret_cast<char*>(hi + 0x11c) != 0) {
                     *reinterpret_cast<char*>(hi + 0x11c) = 0;
                     Impl_c4a0((int64_t)hi);
                 }
             }
             off += 8;
-            CheckPtr(&contIBP);
             cnt = *reinterpret_cast<int32_t*>(contIBP + 0x50);
         }
     }
-    CheckPtr(reinterpret_cast<void*>(self + 0x30));
     uint64_t hi2 = 0;
     Sub7080(*reinterpret_cast<int64_t*>(self + 0x30), &hi2);
     if (hi2 != 0) {
-        CheckPtr(&hi2);
         if (*reinterpret_cast<char*>(hi2 + 0x11c) != 0) {
             *reinterpret_cast<char*>(hi2 + 0x11c) = 0;
             Impl_c4a0((int64_t)hi2);
@@ -810,36 +782,28 @@ void Impl_c9e0(int64_t self) {
     Impl_cb40(self);
     if (*reinterpret_cast<int64_t*>(self + 0x30) == 0) return;
 
-    CheckPtr(reinterpret_cast<void*>(self + 0x30));
     uint64_t contIBP = 0;
     if (s_4740) s_4740(*reinterpret_cast<int64_t*>(self + 0x30), &contIBP);
     if (contIBP != 0) {
-        CheckPtr(&contIBP);
         int cnt = *reinterpret_cast<int32_t*>(contIBP + 0x50);
         int64_t off = 0;
         for (int i = 0; i < cnt; i++) {
-            CheckPtr(&contIBP);
             int64_t sib = *reinterpret_cast<int64_t*>(off + *reinterpret_cast<int64_t*>(contIBP + 0x48));
-            CheckPtr(&sib);
             uint64_t hi = 0;
             Sub7080(sib, &hi);
             if (hi != 0) {
-                CheckPtr(&hi);
                 if (*reinterpret_cast<char*>(hi + 0x11c) != 1) {
                     *reinterpret_cast<char*>(hi + 0x11c) = 1;
                     Impl_c4a0((int64_t)hi);
                 }
             }
             off += 8;
-            CheckPtr(&contIBP);
             cnt = *reinterpret_cast<int32_t*>(contIBP + 0x50);
         }
     }
-    CheckPtr(reinterpret_cast<void*>(self + 0x30));
     uint64_t hi2 = 0;
     Sub7080(*reinterpret_cast<int64_t*>(self + 0x30), &hi2);
     if (hi2 != 0) {
-        CheckPtr(&hi2);
         if (*reinterpret_cast<char*>(hi2 + 0x11c) != 1) {
             *reinterpret_cast<char*>(hi2 + 0x11c) = 1;
             Impl_c4a0((int64_t)hi2);
@@ -906,7 +870,6 @@ void Impl_cc90(int64_t self) {
 void Impl_HighlightFollow(int64_t self) {
     EnsureFuncs();
     if (*reinterpret_cast<int64_t*>(self + 0x30) == 0) return;      // nothing selected
-    CheckPtr(reinterpret_cast<void*>(self + 0x30));                 // resolve the entity IBP
     int64_t entity = *reinterpret_cast<int64_t*>(self + 0x30);
     // Dead / non-canonical ref (a torn-down entity leaves the -1 sentinel) — Sub7080
     // would deref it. Treat as "nothing to follow" (mirrors edittool.cpp:328).
@@ -916,7 +879,6 @@ void Impl_HighlightFollow(int64_t self) {
     uint64_t hi = 0;
     Sub7080(entity, &hi);                                           // find HighlightComponent
     if (hi == 0) return;
-    CheckPtr(&hi);
     if (*reinterpret_cast<char*>(hi + 0x11c) == 0) return;          // highlight not active
     if (*reinterpret_cast<int32_t*>(hi + 0x120) < 0) return;        // not currently in the scene
 
@@ -935,7 +897,6 @@ void Impl_HighlightFollow(int64_t self) {
         uint64_t mdl = 0;
         FindModelComp(entity, &mdl);
         if (mdl) {
-            CheckPtr(&mdl);
             uint32_t key =
                 (static_cast<uint32_t>(*reinterpret_cast<uint16_t*>(mdl + 0x164)) << 16) |
                  static_cast<uint32_t>(*reinterpret_cast<uint16_t*>(mdl + 0x166));

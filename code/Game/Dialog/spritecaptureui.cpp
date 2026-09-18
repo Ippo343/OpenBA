@@ -31,11 +31,9 @@ void SpriteCaptureUI_Serialize(SpriteCaptureUI* self) {
     uint64_t foundBuf[2] = {0, 0};
     {
         System::String nameStr("editCapture");
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
         fn_FindElement(*(void**)(s + 0x20), foundBuf, &nameStr);
     }
 
-    fn_InternalBasePtr_CheckPtr(foundBuf);
     void* elem = *(void**)foundBuf;
 
     void* editElem = nullptr;
@@ -52,11 +50,9 @@ void SpriteCaptureUI_Serialize(SpriteCaptureUI* self) {
     foundBuf[0] = 0; foundBuf[1] = 0;
     {
         System::String nameStr("buttonCapture");
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
         fn_FindElement(*(void**)(s + 0x20), foundBuf, &nameStr);
     }
 
-    fn_InternalBasePtr_CheckPtr(foundBuf);
     elem = *(void**)foundBuf;
 
     void* buttonElem = nullptr;
@@ -73,11 +69,9 @@ void SpriteCaptureUI_Serialize(SpriteCaptureUI* self) {
     foundBuf[0] = 0; foundBuf[1] = 0;
     {
         System::String nameStr("captureBox");
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
         fn_FindElement(*(void**)(s + 0x20), foundBuf, &nameStr);
     }
 
-    fn_InternalBasePtr_CheckPtr(foundBuf);
     elem = *(void**)foundBuf;
 
     void* captureBoxElem = nullptr;
@@ -91,13 +85,11 @@ void SpriteCaptureUI_Serialize(SpriteCaptureUI* self) {
     *(uint64_t*)(s + 0x40) = tempIBP;
 
     // --- Set button element ID to 1000 ---
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x38));
     fn_Element_SetElementId(*(void**)(s + 0x38), 1000);
 
     // --- Set default capture path in edit element ---
     {
         System::String pathStr("Game/Help/Dialog/");
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x30));
         fn_EditElement_SetText(*(void**)(s + 0x30), &pathStr);
     }
 
@@ -153,7 +145,6 @@ check_pressed:
 
     // 4. While dragging, push current bounds into captureBox element (+0xD0..0xDC)
     if (self->dragging) {
-        fn_InternalBasePtr_CheckPtr(&self->captureBox);
         void* boxElem = *(void**)&self->captureBox;
         if (boxElem) {
             int32_t* bounds = (int32_t*)((uintptr_t)boxElem + 0xd0);
@@ -171,7 +162,6 @@ check_pressed:
             // a. End sprite capture mode on UserInterface
             //    DialogController+0x18 = dialogInstance (InternalBasePtr); dialogInstance+0x10 = UserInterface*
             void* pIBP18 = (void*)((uintptr_t)self + 0x18);
-            fn_InternalBasePtr_CheckPtr(pIBP18);
             void* dialogInst = *(void**)pIBP18;
             void* ui = *(void**)((uintptr_t)dialogInst + 0x10);
             fn_UI_EndSpriteCapture(ui);
@@ -183,7 +173,6 @@ check_pressed:
                 fn_FileSystem_GetSourceDirectory(fsInstance, &sourceDirStr);
 
             // c. Get edit element text (String at editCapture + 0xC8)
-            fn_InternalBasePtr_CheckPtr(&self->editCapture);
             void* editElem = *(void**)&self->editCapture;
             void* editText = editElem ? (void*)((uintptr_t)editElem + 0xc8) : nullptr;
 
@@ -217,7 +206,6 @@ check_pressed:
             self->pendingExternal = nullptr;
 
             // i. Hide captureBox element: SetFlagsOnOff(elem, hideFlags=0, showFlags=1)
-            fn_InternalBasePtr_CheckPtr(&self->captureBox);
             void* box = *(void**)&self->captureBox;
             if (box)
                 fn_Element_SetFlagsOnOff(box, 0, 1);

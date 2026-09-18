@@ -115,7 +115,6 @@ bool NameLess(void* /*ctx*/, const void* a, const void* b) {
 // Returns the low 32 bits of the node's value, or 0 when the key is absent.
 int32_t TreeCountFor(void* ctx, uint64_t key) {
     if (!ctx) return 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ctx);
     const uint8_t* obj = *reinterpret_cast<const uint8_t* const*>(ctx);
     if (!obj) return 0;
     const uint64_t* node = *reinterpret_cast<const uint64_t* const*>(obj + 0x60);

@@ -653,16 +653,10 @@ bool DragPlacementTool_CalcPath(DragPlacementTool* self, int startCell, int endC
     }
 
     // Find BuildComponent on the entity
-    if (fn_InternalBasePtr_CheckPtr) {
-        fn_InternalBasePtr_CheckPtr(&entityIBP);
-    }
 
     void* buildCompIBP = nullptr;
     fn_FindComponent_Build((void*)entityIBP, &buildCompIBP);
 
-    if (fn_InternalBasePtr_CheckPtr) {
-        fn_InternalBasePtr_CheckPtr(&buildCompIBP);
-    }
 
     uintptr_t buildComp = *(uintptr_t*)&buildCompIBP;
 

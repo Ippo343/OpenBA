@@ -1232,18 +1232,14 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
         TRACE("[GameUpdateLoop::Update] checking achievements (scenarioInstance=%p, completed=%d)...\n",
                self->m_scenarioInstance, (int)self->m_scenarioCompleted);
         if (self->m_scenarioInstance != nullptr && self->m_scenarioCompleted == 0) {
-            TRACE("[GameUpdateLoop::Update] calling InternalBasePtr::CheckPtr on scenarioInstance...\n");
-            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)self + 0x150));
             TRACE("[GameUpdateLoop::Update] calling AchievementInstance::Update...\n");
             fn_AchievementInstance_Update(*(void**)((uintptr_t)self + 0x150), time);
             TRACE("[GameUpdateLoop::Update] AchievementInstance::Update done\n");
 
-            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)self + 0x150));
             bool isMet = fn_AchievementInstance_IsMet(*(void**)((uintptr_t)self + 0x150));
             TRACE("[GameUpdateLoop::Update] AchievementInstance::IsMet = %d\n", (int)isMet);
 
             if (!isMet) {
-                fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)self + 0x150));
                 bool hasFailed = fn_AchievementInstance_HasFailed(*(void**)((uintptr_t)self + 0x150));
                 TRACE("[GameUpdateLoop::Update] AchievementInstance::HasFailed = %d\n", (int)hasFailed);
                 if (hasFailed) {
@@ -1971,7 +1967,6 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
         uint64_t drawFlag = (hasInput || pauseCheck) ? 1 : 0;
 
         // EntityUI+0x28 is InternalBasePtr to current tool
-        fn_InternalBasePtr_CheckPtr((void*)(entityUI + 0x28));
         void* tool = *(void**)(entityUI + 0x28);
         if (tool) {
             // vtable[8] (+0x40) = Draw(tool, ctx, flag)
@@ -2442,7 +2437,6 @@ void GameUpdateLoop_Shutdown(GameUpdateLoop* self) {
 
         for (int i = 0; i < citizenCount; i++) {
             void* citizen = citizenArray[i];
-            fn_InternalBasePtr_CheckPtr(&citizen);
 
             uint8_t* cit = (uint8_t*)citizen;
             // Check if citizen needs housing reassignment:
@@ -2722,7 +2716,6 @@ void GameUpdateLoop_OnScenarioComplete(GameUpdateLoop* self) {
     self->m_scenarioCompleted = 1;
 
     // Check if the achievement has a parent Achievement object
-    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)self + 0x150));
     void* achievementInstance = *(void**)((uintptr_t)self + 0x150);
     void* achievement = *(void**)((uintptr_t)achievementInstance + 0x20);
 
@@ -2733,7 +2726,6 @@ void GameUpdateLoop_OnScenarioComplete(GameUpdateLoop* self) {
         int64_t nullEntity[1] = {0};
         new (nullEntity) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
-        fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)self + 0x150));
         bool isMet = fn_AchievementInstance_IsMet(*(void**)((uintptr_t)self + 0x150));
 
         // 0x1c = scenario won (28), 0x1d = scenario failed (29). IsMet=1 -> 0x1c.
@@ -2765,7 +2757,6 @@ void GameUpdateLoop_OnScenarioComplete(GameUpdateLoop* self) {
         int64_t nullEntity[1] = {0};
         new (nullEntity) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
-        fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)self + 0x150));
         bool isMet = fn_AchievementInstance_IsMet(*(void**)((uintptr_t)self + 0x150));
 
         // 0x1a = scenario won with name (26), 0x1b = scenario failed with name (27)

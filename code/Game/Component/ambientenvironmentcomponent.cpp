@@ -181,8 +181,6 @@ inline float saturate(float x, float hi) { return x < 0.0f ? 0.0f : (x > hi ? hi
 // Find the entity's AmbientEmitterComponent by scanning its component list.
 // owner (self+0x10) -> +0x30 array of component IBPs (stride 8), +0x38 count.
 void* FindSiblingEmitter(void* self) {
-    if (!fn_InternalBasePtr_CheckPtr) return nullptr;
-    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(self) + 0x10));
     void* owner = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x10);
     if (!owner) return nullptr;
     int count = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(owner) + 0x38);
@@ -190,7 +188,6 @@ void* FindSiblingEmitter(void* self) {
     if (!list || !s_tidEmitterComp) return nullptr;
     for (int i = 0; i < count; ++i) {
         void** ibp = &list[i];
-        fn_InternalBasePtr_CheckPtr(ibp);
         void* comp = *ibp;
         if (!comp) continue;
         void** vt = *reinterpret_cast<void***>(comp);

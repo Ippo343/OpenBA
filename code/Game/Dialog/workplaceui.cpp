@@ -55,21 +55,17 @@ static void WorkplaceUI_AdjustWorkerCount_Impl(void* self, int delta)
     void* entity = isEntity ? dataSource : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
-    fn_InternalBasePtr_CheckPtr((void*)entityBuf);
     uintptr_t entityPtr = *(uintptr_t*)entityBuf;
 
     // Find the WorkPlaceComponent (FUN_140002e10 — type DAT_1401c80e0)
     uint64_t workComp = 0;
     fn_FindComponent_WorkPlace((void*)entityPtr, &workComp);
-    fn_InternalBasePtr_CheckPtr((void*)&workComp);
     uintptr_t wc = workComp;
 
     // Find StorageLocationComponent on the inner entity at workComp+0x10
-    fn_InternalBasePtr_CheckPtr((void*)(wc + 0x10));
     uintptr_t innerEntity = *(uintptr_t*)(wc + 0x10);
     uint64_t slComp = 0;
     fn_FindComponent_Work((void*)innerEntity, &slComp);
-    fn_InternalBasePtr_CheckPtr((void*)&slComp);
     uintptr_t slc = slComp;
 
     // Lazy-init cached max count at slComp+0x30
@@ -102,13 +98,11 @@ static void WorkplaceUI_ToggleWorkplace_Impl(void* self)
     void* entity = isEntity ? dataSource : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
-    fn_InternalBasePtr_CheckPtr((void*)entityBuf);
     uintptr_t entityPtr = *(uintptr_t*)entityBuf;
 
     // Find the WorkComponent (FUN_140003050 — type DAT_1401c8070)
     uint64_t workComp = 0;
     fn_FindComponent_WorkPlace((void*)entityPtr, &workComp);
-    fn_InternalBasePtr_CheckPtr((void*)&workComp);
     uintptr_t wc = workComp;
 
     // Check if any workplaces exist
@@ -116,18 +110,15 @@ static void WorkplaceUI_ToggleWorkplace_Impl(void* self)
 
     // Advance panel's workplace index, wrap around
     *(int*)(s + 0x60) += 1;
-    fn_InternalBasePtr_CheckPtr((void*)&workComp);
     if (*(int*)(wc + 0x60) <= *(int*)(s + 0x60)) {
         *(int*)(s + 0x60) = 0;
     }
 
     // Get the workplace entity at workplaceArray[panelIndex]
-    fn_InternalBasePtr_CheckPtr((void*)&workComp);
     uintptr_t workplaceArrayBase = *(uintptr_t*)(wc + 0x58);
     uint64_t workplaceRef = *(uint64_t*)(workplaceArrayBase + (uintptr_t)*(int*)(s + 0x60) * 8);
 
     // Get inner entity ptr from workplaceRef+0x10
-    fn_InternalBasePtr_CheckPtr((void*)&workplaceRef);
     uint64_t workplaceEntityInner = *(uint64_t*)(workplaceRef + 0x10);
 
     // Center camera on workplace entity
@@ -238,19 +229,16 @@ void WorkplaceUI_Startup(WorkPlaceUI* self) {
     void* entity = isEntity ? dataSource : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
-    fn_InternalBasePtr_CheckPtr((void*)entityBuf);
     void* entityPtr = *(void**)entityBuf;
 
     // Find the WorkPlaceComponent (FUN_140002e10 — type DAT_1401c80e0). Retail
     // also runs a discarded IsDerivedFrom(wpComp+0x18, WorkPlaceDescription) here.
     void* wpComp = nullptr;
     fn_FindComponent_WorkPlace(entityPtr, &wpComp);
-    fn_InternalBasePtr_CheckPtr(&wpComp);
 
     // Find the WorkComponent (FUN_140003050 — type DAT_1401c8070)
     void* workComp = nullptr;
     fn_FindComponent_Work(entityPtr, &workComp);
-    fn_InternalBasePtr_CheckPtr(&workComp);
 
     // Get the WorkDescription off the WorkComponent: +0x18
     void* jobSubComp = *(void**)((uintptr_t)workComp + 0x18);
@@ -258,7 +246,6 @@ void WorkplaceUI_Startup(WorkPlaceUI* self) {
     void* jobType = isJobType ? jobSubComp : nullptr;
 
     // Check if building is complete: wpComp +0x48 (profession ptr) must be non-null
-    fn_InternalBasePtr_CheckPtr(&wpComp);
     if (*(uintptr_t*)((uintptr_t)wpComp + 0x48) == 0) {
         // Building not complete — hide the entire panel
 #ifdef _DEBUG
@@ -286,7 +273,6 @@ void WorkplaceUI_Startup(WorkPlaceUI* self) {
         if (professionId == laborerProf) {
             // Guard check: FUN_14000d6c0 (type DAT_1401c7008)
             EnsureOrigFindComps();
-            fn_InternalBasePtr_CheckPtr(entityBuf);
             uint64_t posCheck = 0;
             fn_OrigFindCompPosition(*(void**)entityBuf, &posCheck);
             if (posCheck != 0) goto showUpDown;
@@ -303,16 +289,12 @@ showUpDown:
     }
 
     // Get worker count and max worker count
-    fn_InternalBasePtr_CheckPtr(&wpComp);
     uint32_t workerCount = *(uint32_t*)((uintptr_t)wpComp + 0x60);
 
     // Get the WorkComponent from the WorkPlaceComponent's parent entity (+0x10)
-    fn_InternalBasePtr_CheckPtr(&wpComp);
-    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)wpComp + 0x10));
     void* parentEntity = *(void**)((uintptr_t)wpComp + 0x10);
     void* parentWorkComp = nullptr;
     fn_FindComponent_Work(parentEntity, &parentWorkComp);
-    fn_InternalBasePtr_CheckPtr(&parentWorkComp);
 
     // Get max count — lazy-init cached value at +0x30
     if (*(int*)((uintptr_t)parentWorkComp + 0x30) == 0) {
@@ -400,7 +382,6 @@ showUpDown:
 
     // Job count up/down enable based on workplace capacity
     // Use workComp (from main entity), NOT parentWorkComp (from inner entity)
-    fn_InternalBasePtr_CheckPtr(&workComp);
     if (*(int*)((uintptr_t)workComp + 0x30) == 0) {
         int count = fn_StorageCountQuery(workComp);
         *(int*)((uintptr_t)workComp + 0x30) = count;
@@ -425,29 +406,23 @@ showUpDown:
     fflush(stderr);
 
     // Check if this is a laborer profession
-    fn_InternalBasePtr_CheckPtr(&wpComp);
     if (*(void**)((uintptr_t)wpComp + 0x48) ==
         *(void**)((uintptr_t)profList + 0x38)) {
         // Laborer building — check position component for position-based limit
         // Guard check: FUN_14000d6c0 (type DAT_1401c7008)
         EnsureOrigFindComps();
-        fn_InternalBasePtr_CheckPtr(entityBuf);
         uint64_t posGuard = 0;
         fn_OrigFindCompPosition(*(void**)entityBuf, &posGuard);
         if (posGuard != 0) {
             int maxCap = *(int*)((uintptr_t)jobType + 0x2c);
             // Get ResidenceComponent via FUN_140002ed0 (type DAT_1401c7900)
-            fn_InternalBasePtr_CheckPtr(entityBuf);
             uint64_t resIBP = 0;
             fn_OrigFindCompResidence(*(void**)entityBuf, &resIBP);
-            fn_InternalBasePtr_CheckPtr(&resIBP);
             int posCount = fn_ResidenceComponent_GetOccupantCount((void*)resIBP, 1);
             // Use min(jobType max, position count) as the real limit
             if (posCount < maxCap) {
-                fn_InternalBasePtr_CheckPtr(entityBuf);
                 uint64_t resIBP2 = 0;
                 fn_OrigFindCompResidence(*(void**)entityBuf, &resIBP2);
-                fn_InternalBasePtr_CheckPtr(&resIBP2);
                 maxCap = fn_ResidenceComponent_GetOccupantCount((void*)resIBP2, 1);
             }
             // Enable up if current max < capacity limit
@@ -635,13 +610,11 @@ void UpdateVisibility(void* self) {
     void* entity = isEntity ? dataSource : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
-    fn_InternalBasePtr_CheckPtr(entityBuf);
     void* entityPtr = *reinterpret_cast<void**>(entityBuf);
 
     // Find the WorkPlaceComponent (fn_FindComponent_WorkPlace → g_TypeId_WorkplaceComponent).
     uint64_t workComp = 0;
     fn_FindComponent_WorkPlace(entityPtr, &workComp);
-    fn_InternalBasePtr_CheckPtr(&workComp);
 
     // Show only when the workplace has an active profession (+0x48 != 0); hidden
     // on a completed house/barn/pile whose construction workplace has cleared it.
@@ -705,13 +678,11 @@ void PopulateCounts(void* self) {
     if (!fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity)) return;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dataSource));   // B.3.3 bridge
-    fn_InternalBasePtr_CheckPtr(entityBuf);
     void* entityPtr = *reinterpret_cast<void**>(entityBuf);
 
     // WorkPlaceComponent (retail local_res18).
     uint64_t workComp = 0;
     fn_FindComponent_WorkPlace(entityPtr, &workComp);
-    fn_InternalBasePtr_CheckPtr(&workComp);
     if (workComp == 0) return;
     uintptr_t w = static_cast<uintptr_t>(workComp);
 
@@ -771,11 +742,9 @@ void PopulateCounts(void* self) {
     // when still zero, and only when its type-id deps are live (else capacity=0).
     uint32_t capacity = 0;
     if (g_TypeId_WorkComponent && *g_TypeId_WorkComponent) {
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(w + 0x10));
         void* parentEntity = *reinterpret_cast<void**>(w + 0x10);
         uint64_t workC = 0;
         fn_FindComponent_Work(parentEntity, &workC);
-        fn_InternalBasePtr_CheckPtr(&workC);
         if (workC) {
             uintptr_t c = static_cast<uintptr_t>(workC);
             if (*reinterpret_cast<int*>(c + 0x30) == 0 &&
@@ -816,7 +785,6 @@ void PopulateCounts(void* self) {
             uintptr_t arr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(citizenList) + 0xa0);
             for (int i = 0; i < count && arr; ++i) {
                 uintptr_t citizen = *reinterpret_cast<uintptr_t*>(arr + static_cast<uintptr_t>(i) * 8);
-                fn_InternalBasePtr_CheckPtr(&citizen);
                 if (!citizen) continue;
                 // CONTAINMENT, not a fix. CheckPtr is an EMPTY function in the shipping
                 // Runtime (see internal_factory_audit.h): a stale weak ref in the town's
@@ -878,12 +846,10 @@ static void SA_AdjustJobCount(void* self, int delta) {
     if (!fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity)) return;
     uint8_t eb[8];
     new (eb) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dataSource));   // B.3.3 bridge
-    fn_InternalBasePtr_CheckPtr(eb);
     void* entityPtr = *reinterpret_cast<void**>(eb);
 
     uint64_t wpc = 0;
     fn_FindComponent_WorkPlace(entityPtr, &wpc);
-    fn_InternalBasePtr_CheckPtr(&wpc);
     // SA deviation (named): retail's 0x140087610 derefs both of these unguarded, because the
     // workPlace panel is only ever instanced for a real workplace entity. In SA the panel
     // template is shared and can be bound to an entity without a WorkPlace/Work component,
@@ -895,11 +861,9 @@ static void SA_AdjustJobCount(void* self, int delta) {
         return;
     }
 
-    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(static_cast<uintptr_t>(wpc) + 0x10));
     uint64_t workC = 0;
     fn_FindComponent_Work(
         *reinterpret_cast<void**>(static_cast<uintptr_t>(wpc) + 0x10), &workC);
-    fn_InternalBasePtr_CheckPtr(&workC);
     if (!workC) {   // same named SA deviation as the wpc bail above
         fprintf(stderr, "[WorkPlaceUI] jobCount delta=%+d ABORTED: no WorkComponent on wpc=0x%llx\n",
                 delta, static_cast<unsigned long long>(wpc));
@@ -1044,12 +1008,10 @@ void W_OnRemove(void* self, void* /*p2*/, int msg, int id, int /*p5*/, int /*p6*
     if (!fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity)) return;
     uint8_t eb[8];
     new (eb) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dataSource));   // B.3.3 bridge
-    fn_InternalBasePtr_CheckPtr(eb);
     void* entityPtr = *reinterpret_cast<void**>(eb);
 
     uint64_t wpc = 0;
     fn_FindComponent_WorkPlace(entityPtr, &wpc);
-    fn_InternalBasePtr_CheckPtr(&wpc);
     if (!wpc) return;
     uint64_t profId = *reinterpret_cast<uint64_t*>(static_cast<uintptr_t>(wpc) + 0x48);
     if (!profId) return;

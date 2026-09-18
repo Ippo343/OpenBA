@@ -34,9 +34,6 @@
 // (NOT in engine_funcs.h -- PerformWork-specific helpers)
 // ============================================================
 
-// Object::InternalBasePtr::CheckPtr -- via IAT at 0x140152ab0
-static void (*s_fn_CheckPtr)(void* ibp) = nullptr;
-
 // Object::InternalBasePtr::Serialize -- via IAT at 0x140152aa0
 static void (*s_fn_IBP_Serialize)(void* ibp, void* serializer) = nullptr;
 
@@ -110,10 +107,6 @@ static bool s_funcs_resolved = false;
 // ============================================================
 bool PerformWork_ResolveFuncs() {
     if (s_funcs_resolved) return true;
-
-    // CheckPtr via IAT at [0x140152ab0]
-    uintptr_t iatCheckPtr = ResolveAddr(Module::Exe, 0x140152ab0);
-    if (iatCheckPtr) s_fn_CheckPtr = *reinterpret_cast<void(**)(void*)>(iatCheckPtr);
 
     // IBP::Serialize via IAT at [0x140152aa0]
     uintptr_t iatIBPSer = ResolveAddr(Module::Exe, 0x140152aa0);
@@ -192,7 +185,7 @@ bool PerformWork_ResolveFuncs() {
             s_tid_CitizenComponent = &s_tid_CitizenComponent_storage;
     }
 
-    bool ok = s_fn_CheckPtr && s_fn_IBP_Serialize && s_fn_IBP_DeletePtr &&
+    bool ok = s_fn_IBP_Serialize && s_fn_IBP_DeletePtr &&
               s_fn_ObjectInternal_Dtor && s_fn_Time_Serialize &&
               s_fn_Serialize_Float && s_fn_FindFamily &&
               s_fn_SetAnimation && s_fn_SetFacingDirection &&
@@ -215,7 +208,6 @@ bool PerformWork_ResolveFuncs() {
         if (!s_reported) {
             s_reported = true;
             struct { const char* name; const void* p; } kDeps[] = {
-                { "CheckPtr",              (const void*)s_fn_CheckPtr },
                 { "IBP_Serialize",         (const void*)s_fn_IBP_Serialize },
                 { "IBP_DeletePtr",         (const void*)s_fn_IBP_DeletePtr },
                 { "ObjectInternal_Dtor",   (const void*)s_fn_ObjectInternal_Dtor },
@@ -343,14 +335,11 @@ int PerformWork_AbstractImpl_Impl(PerformWork* self, void* actionStack) {
     (void)actionStack;
     uint8_t* s = (uint8_t*)self;
 
-    // CheckPtr on work target entity at +0x20
-    s_fn_CheckPtr(s + 0x20);
     void* entity = *(void**)(s + 0x20);
     uint32_t animId = *(uint32_t*)(s + 0x2C);
 
     // Get family component from entity's +0x278 field and set animation
     uint8_t* ent = (uint8_t*)entity;
-    s_fn_CheckPtr(ent + 0x278);
     void* familyComp = *(void**)(ent + 0x278);
     s_fn_SetAnimation(familyComp, animId, *s_fConst1, 0.0f);
 
@@ -361,16 +350,13 @@ int PerformWork_AbstractImpl_Impl(PerformWork* self, void* actionStack) {
         float pitch = 0.0f;
 
         // Get the entity's parent for direction setting
-        s_fn_CheckPtr(s + 0x20);
         void* entity2 = *(void**)(s + 0x20);
         uintptr_t parentEntity = *(uintptr_t*)((uint8_t*)entity2 + 0x10);
         uintptr_t parentIBP = parentEntity;
-        s_fn_CheckPtr(&parentIBP);
 
         // Find family component on the parent
         void* familyIBP = nullptr;
         s_fn_FindFamily((void*)parentIBP, &familyIBP);
-        s_fn_CheckPtr(&familyIBP);
         void* familyPtr = *(void**)&familyIBP;
 
         // Convert yaw to direction vector and set it
@@ -381,10 +367,8 @@ int PerformWork_AbstractImpl_Impl(PerformWork* self, void* actionStack) {
 
     // If use tool flag is set, decrement tool durability
     if (*(uint8_t*)(s + 0x40) != 0) {
-        s_fn_CheckPtr(s + 0x20);
         void* ent3 = *(void**)(s + 0x20);
         if (*(int32_t*)((uint8_t*)ent3 + 0xAC) > 0) {
-            s_fn_CheckPtr(s + 0x20);
             void* ent4 = *(void**)(s + 0x20);
             int32_t* toolDurability = (int32_t*)((uint8_t*)ent4 + 0xAC);
             (*toolDurability)--;
@@ -413,7 +397,6 @@ int PerformWork_Execute_Impl(PerformWork* self, void* actionStack, void* deltaTi
 
     if (elapsed >= required) {
         // Work time complete -- check if citizen needs a break
-        s_fn_CheckPtr(s + 0x20);
         void* entity = *(void**)(s + 0x20);
         uint8_t needsBreak = s_fn_CitizenBreakCheck(entity);
         // If needs break, return 2; otherwise return 0 (done)
@@ -436,12 +419,10 @@ void PerformWork_Exit_Impl(PerformWork* self, void* actionStack) {
     uint8_t* s = (uint8_t*)self;
 
     // Get work target entity
-    s_fn_CheckPtr(s + 0x20);
     void* entity = *(void**)(s + 0x20);
 
     // Get family component at entity+0x278, reset animation to idle
     uint8_t* ent = (uint8_t*)entity;
-    s_fn_CheckPtr(ent + 0x278);
     void* familyComp = *(void**)(ent + 0x278);
     s_fn_SetAnimation(familyComp, 0, *s_fConst1, *s_fConst1);
 }
@@ -455,12 +436,10 @@ void PerformWork_CheckEntity_Impl(PerformWork* self) {
     uint8_t* s = (uint8_t*)self;
 
     // Get work target entity
-    s_fn_CheckPtr(s + 0x20);
     void* entity = *(void**)(s + 0x20);
 
     // Get family component at entity+0x278, reset animation to idle
     uint8_t* ent = (uint8_t*)entity;
-    s_fn_CheckPtr(ent + 0x278);
     void* familyComp = *(void**)(ent + 0x278);
     s_fn_SetAnimation(familyComp, 0, *s_fConst1, *s_fConst1);
 }
@@ -473,14 +452,10 @@ bool PerformWork_GetTarget_Impl(PerformWork* self, void* param) {
     PerformWork_ResolveFuncs();   // self-init: action built via exe ctor path, not our factory
     uint8_t* s = (uint8_t*)self;
 
-    // CheckPtr on work target
-    s_fn_CheckPtr(s + 0x20);
     void* entity = *(void**)(s + 0x20);
     // Get parent entity at entity+0x10
     uintptr_t parentEntity = *(uintptr_t*)((uint8_t*)entity + 0x10);
 
-    // CheckPtr on param
-    s_fn_CheckPtr(param);
     return parentEntity == *(uintptr_t*)param;
 }
 

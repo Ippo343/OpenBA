@@ -59,7 +59,6 @@
 // on the same allocator under every harness configuration.
 //   [0x140152b60] System::MemoryAllocator::MemAlloc (static 2-arg: size, align)
 //   [0x140152b68] System::MemoryAllocator::MemFree  (static 1-arg)
-//   [0x140152ab0] Object::InternalBasePtr::CheckPtr
 
 #include "Work/marketwork_bst_a9f0.h"
 #include "resolve.h"
@@ -69,13 +68,11 @@ namespace {
 
 typedef void* (*MBst_MemAlloc_t)(uint64_t size, int align);   // slot 0x140152b60
 typedef void  (*MBst_MemFree_t)(void* p);                     // slot 0x140152b68
-typedef void  (*MBst_CheckPtr_t)(void* ibp);                  // slot 0x140152ab0
 typedef void  (*MBst_VectorClone_t)(int64_t* dst, int64_t* src);   // 0x14000d9d0
 typedef void  (*MBst_Retrace_t)(int64_t* tree, int64_t* pNode);    // 0x140025920
 
 MBst_MemAlloc_t    s_memAlloc    = nullptr;
 MBst_MemFree_t     s_memFree     = nullptr;
-MBst_CheckPtr_t    s_checkPtr    = nullptr;
 MBst_VectorClone_t s_vectorClone = nullptr;
 MBst_Retrace_t     s_retrace     = nullptr;
 bool               s_resolved    = false;
@@ -89,8 +86,6 @@ void ResolveOnce() {
         s_memAlloc = *reinterpret_cast<MBst_MemAlloc_t*>(s);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b68))
         s_memFree = *reinterpret_cast<MBst_MemFree_t*>(s);
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152ab0))
-        s_checkPtr = *reinterpret_cast<MBst_CheckPtr_t*>(s);
     // Direct exe calls — these are our own reimplementations, resolved through the
     // address registry exactly as marketwork.cpp resolves its helpers.
     s_vectorClone = reinterpret_cast<MBst_VectorClone_t>(ResolveAddr(Module::Exe, 0x14000d9d0));
@@ -217,7 +212,6 @@ extern "C" int64_t* MarketBst_ab60(int64_t* tree, int64_t* out, int64_t* src) {
     for (;;) {
         retraceSlot = static_cast<int64_t>(cur);
 
-        if (s_checkPtr) s_checkPtr(reinterpret_cast<void*>(cur));      // aba1
         uint64_t curKey = *reinterpret_cast<uint64_t*>(cur);           // abaa
         uint64_t srcKey = *reinterpret_cast<uint64_t*>(src);           // abad (CMP [RBX],RAX)
 
@@ -232,7 +226,6 @@ extern "C" int64_t* MarketBst_ab60(int64_t* tree, int64_t* out, int64_t* src) {
             continue;
         }
 
-        if (s_checkPtr) s_checkPtr(src);                               // abb5
         srcKey = *reinterpret_cast<uint64_t*>(src);                    // abbb — re-read AFTER
                                                                        // CheckPtr, which may
                                                                        // have resolved the ref

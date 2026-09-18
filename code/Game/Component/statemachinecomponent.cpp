@@ -207,8 +207,6 @@ void StateMachineComponent_Serialize(StateMachineComponent* self) {
     bool gotDefaultState = false;
 
     // Check owner InternalBasePtr
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(base + 0x10);
 
     // Get owner entity
     void* ownerEntity = *reinterpret_cast<void**>(base + 0x10);
@@ -223,8 +221,6 @@ void StateMachineComponent_Serialize(StateMachineComponent* self) {
 
     for (int i = 0; i < componentCount; i++) {
         // Re-check owner pointer each iteration (CheckPtr may update it)
-        if (fn_InternalBasePtr_CheckPtr)
-            fn_InternalBasePtr_CheckPtr(base + 0x10);
 
         ownerEntity = *reinterpret_cast<void**>(base + 0x10);
         arrayBase = *reinterpret_cast<uintptr_t*>(
@@ -236,8 +232,6 @@ void StateMachineComponent_Serialize(StateMachineComponent* self) {
 
         // CheckPtr on the component IBP
         tempIBP = comp;
-        if (fn_InternalBasePtr_CheckPtr)
-            fn_InternalBasePtr_CheckPtr(&tempIBP);
         comp = tempIBP;
 
         // Check if this component is derived from ControllerComponent
@@ -256,8 +250,6 @@ void StateMachineComponent_Serialize(StateMachineComponent* self) {
         if (ibpValue != nullptr) {
             if (!gotDefaultState) {
                 // First ControllerComponent: call virtual +0x80 (GetDefaultState)
-                if (fn_InternalBasePtr_CheckPtr)
-                    fn_InternalBasePtr_CheckPtr(&ibpValue);
                 uintptr_t vtbl = *reinterpret_cast<uintptr_t*>(ibpValue);
                 typedef uint8_t (*GetDefaultState_t)(void*);
                 auto fn = *reinterpret_cast<GetDefaultState_t*>(vtbl + 0x80);
@@ -268,8 +260,6 @@ void StateMachineComponent_Serialize(StateMachineComponent* self) {
             }
 
             // Call virtual +0x88 (CreateState) to get a state node
-            if (fn_InternalBasePtr_CheckPtr)
-                fn_InternalBasePtr_CheckPtr(&ibpValue);
             uintptr_t vtbl = *reinterpret_cast<uintptr_t*>(ibpValue);
             typedef void* (*CreateState_t)(void*);
             auto fn = *reinterpret_cast<CreateState_t*>(vtbl + 0x88);
@@ -286,8 +276,6 @@ void StateMachineComponent_Serialize(StateMachineComponent* self) {
         }
 
         // Re-check count (may have changed if CheckPtr triggered lazy load)
-        if (fn_InternalBasePtr_CheckPtr)
-            fn_InternalBasePtr_CheckPtr(base + 0x10);
         ownerEntity = *reinterpret_cast<void**>(base + 0x10);
         componentCount = *reinterpret_cast<int*>(
             reinterpret_cast<uint8_t*>(ownerEntity) + 0x38);
@@ -340,8 +328,6 @@ void StateMachineComponent_OnUpdate2(StateMachineComponent* self) {
     uint8_t* controllerNode = base + 0x28;
 
     // Check owner InternalBasePtr
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(base + 0x10);
 
     void* ownerEntity = *reinterpret_cast<void**>(base + 0x10);
     if (!ownerEntity) goto state_walk;
@@ -352,8 +338,6 @@ void StateMachineComponent_OnUpdate2(StateMachineComponent* self) {
         if (componentCount <= 0) goto state_walk;
 
         for (int i = 0; i < componentCount; i++) {
-            if (fn_InternalBasePtr_CheckPtr)
-                fn_InternalBasePtr_CheckPtr(base + 0x10);
 
             ownerEntity = *reinterpret_cast<void**>(base + 0x10);
             uintptr_t arrayBase = *reinterpret_cast<uintptr_t*>(
@@ -361,8 +345,6 @@ void StateMachineComponent_OnUpdate2(StateMachineComponent* self) {
 
             void* tempIBP = *reinterpret_cast<void**>(arrayBase + i * 8);
 
-            if (fn_InternalBasePtr_CheckPtr)
-                fn_InternalBasePtr_CheckPtr(&tempIBP);
             void* comp = tempIBP;
 
             void* candidate = nullptr;
@@ -378,8 +360,6 @@ void StateMachineComponent_OnUpdate2(StateMachineComponent* self) {
 
             if (ibpValue != nullptr) {
                 // Call virtual +0x88 (CreateState) to get a state node
-                if (fn_InternalBasePtr_CheckPtr)
-                    fn_InternalBasePtr_CheckPtr(&ibpValue);
                 uintptr_t vtbl = *reinterpret_cast<uintptr_t*>(ibpValue);
                 typedef void* (*CreateState_t)(void*);
                 auto fn = *reinterpret_cast<CreateState_t*>(vtbl + 0x88);
@@ -394,8 +374,6 @@ void StateMachineComponent_OnUpdate2(StateMachineComponent* self) {
             }
 
             // Re-check count
-            if (fn_InternalBasePtr_CheckPtr)
-                fn_InternalBasePtr_CheckPtr(base + 0x10);
             ownerEntity = *reinterpret_cast<void**>(base + 0x10);
             componentCount = *reinterpret_cast<int*>(
                 reinterpret_cast<uint8_t*>(ownerEntity) + 0x38);
@@ -627,7 +605,6 @@ static void StateMachineComponent_BodyInit(StateMachineComponent* self) {
 
 static void StateMachineComponent_LinkControllers_Standalone(StateMachineComponent* self) {
     uint8_t* base = reinterpret_cast<uint8_t*>(self);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(base + 0x10);
     void* owner = *reinterpret_cast<void**>(base + 0x10);
     if (!owner) return;
     int cnt = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(owner) + 0x38);
@@ -703,12 +680,10 @@ static void StateMachineComponent_LinkControllers_Standalone(StateMachineCompone
     int linked = 0;
 
     for (int i = 0; i < cnt; ++i) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(base + 0x10);
         owner = *reinterpret_cast<void**>(base + 0x10);
         if (!owner) break;
         uintptr_t arr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uint8_t*>(owner) + 0x30);
         void** ibp = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);
         void* comp = *ibp;
         if (!comp) continue;
 

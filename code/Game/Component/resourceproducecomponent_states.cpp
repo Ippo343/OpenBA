@@ -141,20 +141,16 @@ static char RP_State13Enter(void* self, void* sm) {
 
     // Post it to the reservation ledger so an idle citizen claims it.
     uintptr_t workCompIbp = 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     if (s_findWork) s_findWork(owner, &workCompIbp);
     if (s_postWork && workCompIbp != 0 && workIbp != 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIbp);
         s_postWork(workCompIbp, 1, 0, &workIbp);
     }
 
     // WorkPlaceComponent +0x50 = accepting. Without this the building has workers
     // assigned but every gather bails "no target": the same trap the pasture wave hit.
     uintptr_t wpcIbp = 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     if (s_findWpc) s_findWpc(owner, &wpcIbp);
     if (wpcIbp != 0 && s_setAccepting) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpcIbp);
         // wpcIbp ALREADY holds the component pointer: the finder writes it into the
         // out-param and returns the out-param's ADDRESS, so retail's `local_res18`
         // and this local are the same value. Dereferencing again would pass the
@@ -177,10 +173,8 @@ static char RP_State14Enter(void* self, void* /*sm*/) {
     const uintptr_t owner = *reinterpret_cast<uintptr_t*>(comp + 0x10);
 
     uintptr_t workCompIbp = 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     if (s_findWork) s_findWork(owner, &workCompIbp);
     if (workCompIbp != 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIbp);
         // Same out-param convention as State13Enter: this local is the component.
         if (s_slotOccupied && s_slotRelease && s_slotOccupied(workCompIbp)) {
             s_slotRelease(workCompIbp);
@@ -188,10 +182,8 @@ static char RP_State14Enter(void* self, void* /*sm*/) {
     }
 
     uintptr_t wpcIbp = 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     if (s_findWpc) s_findWpc(owner, &wpcIbp);
     if (wpcIbp != 0 && s_setAccepting) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpcIbp);
         // FIXED 2026-08-15 — this line used to read
         //     s_setAccepting(*reinterpret_cast<uintptr_t*>(wpcIbp), 0);
         // i.e. one deref too many. `s_findWpc(owner, &wpcIbp)` writes the COMPONENT
@@ -277,11 +269,9 @@ extern "C" uint8_t ResourceProduceComponent_CommandMask(void* self) {
     RP_Resolve();
     const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
     if (!s_findSM) return 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     uintptr_t smcIbp = 0;
     s_findSM(*reinterpret_cast<uintptr_t*>(comp + 0x10), &smcIbp);
     if (!smcIbp) return 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&smcIbp);
 
     int8_t cur = *reinterpret_cast<int8_t*>(smcIbp + 0x52);
     if (cur < 0) cur = *reinterpret_cast<int8_t*>(smcIbp + 0x50);
@@ -321,11 +311,9 @@ extern "C" void ResourceProduceComponent_Command(void* self) {
     RP_Resolve();
     const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
     if (!s_findSM) return;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     uintptr_t smcIbp = 0;
     s_findSM(*reinterpret_cast<uintptr_t*>(comp + 0x10), &smcIbp);
     if (!smcIbp) return;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&smcIbp);
 
     const uintptr_t sm = smcIbp + 0x48;
     void* node = *reinterpret_cast<void**>(sm);

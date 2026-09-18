@@ -54,10 +54,6 @@ static fn_SerializeBoolArray_t s_fn_SerializeBoolArray = nullptr;
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_d = nullptr;
 
-// CheckPtr
-typedef void (*fn_CheckPtr_t)(void* ptr);
-static fn_CheckPtr_t s_fn_CheckPtr = nullptr;
-
 // ParticleComponent_sub_2480 — particle setup helper
 typedef void (*fn_ParticleSetup_t)(void* self);
 static fn_ParticleSetup_t s_fn_ParticleSetup = nullptr;
@@ -276,8 +272,6 @@ void ParticleComponent_OnCreate(ParticleComponent* self) {
             *(uint32_t*)(selfAddr + 0x20) = newFlags;
 
             if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && *(uintptr_t*)(selfAddr + 0x10) != 0) {
-                if (s_fn_CheckPtr)
-                    s_fn_CheckPtr((void*)(selfAddr + 0x10));
                 if (s_fn_EntityFlagUpdate)
                     s_fn_EntityFlagUpdate(*(void**)(selfAddr + 0x10));
             }
@@ -384,7 +378,6 @@ static float PC_UVScale() { return 1.0f; }
 static uintptr_t PC_Entity(void* self) {
     void* ibp = (void*)((uintptr_t)self + 0x10);
     if (*(uintptr_t*)ibp == 0) return 0;
-    if (s_fn_CheckPtr) s_fn_CheckPtr(ibp);
     return *(uintptr_t*)ibp;
 }
 
@@ -392,7 +385,6 @@ static void* PC_FindComp(fn_PCFindComponent_t fn, uintptr_t entity) {
     if (!fn || !entity) return nullptr;
     uintptr_t buf[2] = {0, 0};
     fn(entity, buf);
-    if (buf[0] && s_fn_CheckPtr) s_fn_CheckPtr(buf);
     return (void*)buf[0];
 }
 
@@ -565,7 +557,6 @@ extern "C" void ParticleComponent_StopEmitter(ParticleComponent* self, int index
     uint32_t newFlags = oldFlags & ~0x4u;
     *(uint32_t*)(s + 0x20) = newFlags;
     if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && *(uintptr_t*)(s + 0x10) != 0) {
-        if (s_fn_CheckPtr) s_fn_CheckPtr((void*)(s + 0x10));
         if (s_fn_EntityFlagUpdate) s_fn_EntityFlagUpdate(*(void**)(s + 0x10));
     }
 }
@@ -605,7 +596,6 @@ extern "C" void ParticleComponent_StartEmitter(ParticleComponent* self, int inde
         uint32_t newFlags = oldFlags | 0x4u;
         *(uint32_t*)(s + 0x20) = newFlags;
         if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && *(uintptr_t*)(s + 0x10) != 0) {
-            if (s_fn_CheckPtr) s_fn_CheckPtr((void*)(s + 0x10));
             if (s_fn_EntityFlagUpdate) s_fn_EntityFlagUpdate(*(void**)(s + 0x10));
         }
     }
@@ -838,8 +828,6 @@ void ParticleComponent_InitFuncs() {
     if (slot) s_fn_SerializeInt = *reinterpret_cast<fn_SerializeInt_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_d = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152ab0);
-    if (slot) s_fn_CheckPtr = *reinterpret_cast<fn_CheckPtr_t*>(slot);
 
     s_fn_SceneRemoveObject = reinterpret_cast<fn_SceneRemoveObject_t>(
         ResolveExport("?RemoveObject@Scene@Graphics@@QEAAXI@Z"));

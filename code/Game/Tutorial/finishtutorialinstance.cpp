@@ -175,9 +175,6 @@ void FinishTutorialInstance_Slot4(FinishTutorialInstance* self, void* p2, void* 
     }
 
     // Step 6: CheckPtr on self+0x20, then copy goal fields to tutInst
-    if (fn_InternalBasePtr_CheckPtr) {
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
-    }
 
     uintptr_t tutInst = *(uintptr_t*)(s + 0x20);
     if (tutInst && ftGoal) {
@@ -242,9 +239,6 @@ void FinishTutorialInstance_Slot5(FinishTutorialInstance* self, void* p2, void* 
     uintptr_t s = (uintptr_t)self;
 
     // CheckPtr on IBP at +0x20
-    if (fn_InternalBasePtr_CheckPtr) {
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
-    }
 
     // Read the TutorialInstance pointer
     void* tutInst = *(void**)(s + 0x20);
@@ -277,9 +271,6 @@ int FinishTutorialInstance_Slot6(FinishTutorialInstance* self) {
     uintptr_t s = (uintptr_t)self;
 
     // CheckPtr on IBP at +0x20
-    if (fn_InternalBasePtr_CheckPtr) {
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
-    }
 
     // Read the TutorialInstance pointer
     uintptr_t tutInst = *(uintptr_t*)(s + 0x20);

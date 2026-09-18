@@ -253,7 +253,6 @@ void FollowDialog_Slot8(FollowDialog* self, void* /*param2*/, int param3, int pa
     uintptr_t s = (uintptr_t)self;
 
     // Validate and read the followed entity InternalBasePtr at +0xC0
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xC0));
     uintptr_t inner = *(uintptr_t*)(s + 0xC0);
 
     // Null out the back-reference: *(inner+0xE0) = null InternalBasePtr
@@ -328,7 +327,6 @@ void FollowDialog_Slot7(FollowDialog* self) {
     // FUN_140068f00: null back-ref on followed entity at +0xC0, then CloseDialog on self.
     void* keyMap = g_pKeyMapObjectExref ? ***(void****)g_pKeyMapObjectExref : nullptr;
     if (keyMap && fn_KeyMap_Pressed(keyMap, 0, 8)) {
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0xC0));
         uintptr_t followedInner = *(uintptr_t*)(s + 0xC0);
 
         // Null out back-reference: *(followedInner+0xE0) = null InternalBasePtr

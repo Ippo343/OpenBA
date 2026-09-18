@@ -131,14 +131,11 @@ void FireWork_SpiralCell_8730(int64_t param_1, int* param_2, int param_3,
                 int64_t* refSlot = reinterpret_cast<int64_t*>(
                     *reinterpret_cast<int64_t*>(param_1 + 0xe0) +
                     static_cast<int64_t>(-1 - iVar1) * 8);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(refSlot);
 
                 int64_t entIBP = *reinterpret_cast<int64_t*>(*refSlot + 0x10);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entIBP);
 
                 int64_t posIBP = 0;
                 if (s_findCompPos) s_findCompPos(static_cast<uintptr_t>(entIBP), &posIBP);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&posIBP);
 
                 float pos[3] = {0.0f, 0.0f, 0.0f};
                 if (s_resolvePos) s_resolvePos(reinterpret_cast<void*>(posIBP), pos, 0, 0, nullptr);
@@ -331,9 +328,7 @@ int64_t FireWork_SpiralSearch_81d0(int64_t param_1, uint32_t param_2, int param_
     }
 
     // A target was found: dig into its InteractComponent sub-entity tree.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_88);
     int64_t entIBP = *reinterpret_cast<int64_t*>(local_88 + 0x10);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entIBP);
 
     // Scan the entity's children for the first one whose type == DAT_1401c7900,
     // then verify it via IsDerivedFrom; chosen entity -> `chosen`.
@@ -346,7 +341,6 @@ int64_t FireWork_SpiralSearch_81d0(int64_t param_1, uint32_t param_2, int param_
         do {
             uint64_t* childSlot = reinterpret_cast<uint64_t*>(
                 *reinterpret_cast<int64_t*>(entIBP + 0x30) + off);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(childSlot);
             void* child = reinterpret_cast<void*>(*childSlot);
             // GetTypeId via vtable +0x10.
             uint32_t (*getTypeId)(void*) =
@@ -355,7 +349,6 @@ int64_t FireWork_SpiralSearch_81d0(int64_t param_1, uint32_t param_2, int param_
             if (t == typeId) {
                 uint64_t* sel = reinterpret_cast<uint64_t*>(
                     *reinterpret_cast<int64_t*>(entIBP + 0x30) + static_cast<int64_t>(idx) * 8);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(sel);
                 void* candidate = reinterpret_cast<void*>(*sel);
                 if (fn_IsDerivedFrom && fn_IsDerivedFrom(candidate, typeId))
                     chosen = candidate;
@@ -370,12 +363,10 @@ int64_t FireWork_SpiralSearch_81d0(int64_t param_1, uint32_t param_2, int param_
     uint64_t chosenIBP = 0;
     if (fn_InternalBasePtr_Ctor) new (&chosenIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(chosen));   // B.3.3 bridge
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&chosenIBP);
 
     uint32_t count = s_childSum ? static_cast<uint32_t>(s_childSum(static_cast<int64_t>(chosenIBP), 0)) : 0;
     void* rng = *reinterpret_cast<void**>(
         reinterpret_cast<int64_t>(*g_pGameWorldSingleton) + 0xd8);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&chosenIBP);
     uint32_t randIdx = s_rand ? s_rand(rng, count) : 0;
 
     float resolved[3] = {0.0f, 0.0f, 0.0f};

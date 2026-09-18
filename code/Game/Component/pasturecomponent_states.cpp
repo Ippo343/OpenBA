@@ -170,7 +170,6 @@ void Resolve() {
 }
 
 
-inline void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 inline uint64_t MakeIBP(void* obj) {
     uint64_t r = 0;
     if (fn_InternalBasePtr_Ctor) new (&r) ::Object::InternalBasePtr(
@@ -205,7 +204,6 @@ void* FindCompOnEntity(uintptr_t entity, uint32_t tid) {
     if (!arr) return nullptr;
     for (int i = 0; i < n; ++i) {
         void** slot = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
-        CheckPtr(slot);
         void* comp = *slot;
         if (!comp) continue;
         uint32_t t = reinterpret_cast<uint32_t(*)(void*)>((*(void***)comp)[2])(comp);
@@ -248,7 +246,6 @@ void* FindDescOnTemplate(uintptr_t tmpl, uint32_t tid) {
 extern "C" void Pasture_BindAnimal(void* animalComp, void* pastureIBP) {
     Resolve();
     if (!animalComp || !pastureIBP) return;
-    CheckPtr(pastureIBP);
     uintptr_t a = reinterpret_cast<uintptr_t>(animalComp);
     void* target = *reinterpret_cast<void**>(pastureIBP);
     void* cur = *reinterpret_cast<void**>(a + 0x28);
@@ -259,19 +256,15 @@ extern "C" void Pasture_BindAnimal(void* animalComp, void* pastureIBP) {
     if (cur == nullptr) {
         if (gs && s_Erase) s_Erase(reinterpret_cast<void*>(gs + 0x80), &selfIBP);
     } else {
-        CheckPtr(reinterpret_cast<void*>(a + 0x28));
         if (s_Erase) s_Erase(reinterpret_cast<void*>((uintptr_t)cur + 0x30), &selfIBP);
-        CheckPtr(reinterpret_cast<void*>(a + 0x10));
         uint64_t animIBP = 0;
         if (s_FindAnimal) s_FindAnimal(*reinterpret_cast<int64_t*>(a + 0x10), &animIBP);
-        CheckPtr(&animIBP);
         if (animIBP && s_Helper5ed0) s_Helper5ed0(reinterpret_cast<void*>(animIBP));
     }
 
     *reinterpret_cast<void**>(a + 0x28) = target;
     uint64_t againIBP = MakeIBP(animalComp);
     if (target) {
-        CheckPtr(reinterpret_cast<void*>(a + 0x28));
         uintptr_t t = reinterpret_cast<uintptr_t>(target);
         if (s_Append) s_Append(reinterpret_cast<void*>(t + 0x30),
                                *reinterpret_cast<int*>(t + 0x38) + 1, &againIBP);
@@ -320,10 +313,8 @@ extern "C" void Pasture_AdoptWanderers(void* pasture) {
     const int needed = capacity - PastureCount(pasture);
     for (int i = 0; i < freeCount && nCand < kMaxCandidates && nCand < needed; ++i) {
         uint64_t compIBP = *reinterpret_cast<uint64_t*>(freeList + (uintptr_t)i * 8);
-        CheckPtr(&compIBP);
         if (!compIBP) continue;
         uint64_t ownerIBP = *reinterpret_cast<uint64_t*>(compIBP + 0x10);
-        CheckPtr(&ownerIBP);
         if (!ownerIBP) continue;
         if (*reinterpret_cast<void**>(ownerIBP + 0x28) != wanted) continue;
         candidates[nCand++] = reinterpret_cast<void*>(compIBP);
@@ -332,7 +323,6 @@ extern "C" void Pasture_AdoptWanderers(void* pasture) {
 
     for (int i = 0; i < nCand; ++i) {
         uint64_t pastureIBP = MakeIBP(pasture);
-        CheckPtr(&candidates[i]);
         Pasture_BindAnimal(candidates[i], &pastureIBP);
         if (PastureCount(pasture) >= capacity) break;
     }
@@ -356,13 +346,10 @@ extern "C" void Pasture_Reproduce(void* pasture) {
         uintptr_t arr = PastureAnimals(pasture);
         if (!arr) return;
         uint64_t* slot = reinterpret_cast<uint64_t*>(arr + (uintptr_t)i * 8);
-        CheckPtr(slot);
         if (!*slot) continue;
         uint64_t ownerIBP = *reinterpret_cast<uint64_t*>(*slot + 0x10);
-        CheckPtr(&ownerIBP);
         void* animal = FindCompOnEntity(static_cast<uintptr_t>(ownerIBP), s_tidAnimalComp);
         uint64_t animalIBP = MakeIBP(animal);
-        CheckPtr(&animalIBP);
         if (!animalIBP) continue;
 
         uintptr_t an = static_cast<uintptr_t>(animalIBP);
@@ -372,7 +359,6 @@ extern "C" void Pasture_Reproduce(void* pasture) {
         uint32_t newFlags = oldFlags & ~0x200000u;
         *reinterpret_cast<uint32_t*>(an + 0x20) = newFlags;
         if (((newFlags ^ oldFlags) & 0xffff) != 0 && *reinterpret_cast<int64_t*>(an + 0x10) != 0) {
-            CheckPtr(reinterpret_cast<void*>(an + 0x10));
             if (s_FlagNotify) s_FlagNotify(*reinterpret_cast<void**>(an + 0x10));
         }
         if (PastureCount(pasture) < limit) {
@@ -415,14 +401,11 @@ extern "C" void Pasture_MsgReceive(void* pasture, int msg) {
     void* rng = *reinterpret_cast<void**>(w + 0xd8);
     uint32_t idx = fn_Random_Rand(rng, static_cast<uint32_t>(count));
     void** slot = reinterpret_cast<void**>(arr + (uintptr_t)idx * 8);
-    CheckPtr(slot);
     if (!*slot) return;
 
     uint64_t entIBP = *reinterpret_cast<uint64_t*>((uintptr_t)*slot + 0x10);
-    CheckPtr(&entIBP);
     uint64_t animalIBP = 0;
     if (s_FindAnimal) s_FindAnimal(static_cast<int64_t>(entIBP), &animalIBP);
-    CheckPtr(&animalIBP);
     if (!animalIBP) return;
 
     uintptr_t an = static_cast<uintptr_t>(animalIBP);
@@ -430,7 +413,6 @@ extern "C" void Pasture_MsgReceive(void* pasture, int msg) {
     uint32_t newF = oldF | 0x800000u;
     *reinterpret_cast<uint32_t*>(an + 0x20) = newF;
     if (((newF ^ oldF) & 0xffffu) != 0 && *reinterpret_cast<int64_t*>(an + 0x10) != 0) {
-        CheckPtr(reinterpret_cast<void*>(an + 0x10));
         if (s_FlagNotify) s_FlagNotify(*reinterpret_cast<void**>(an + 0x10));
     }
 }
@@ -466,7 +448,6 @@ extern "C" void Pasture_ReleaseAllAnimals(void* pasture) {
         if (!arr) break;
         uint64_t* slot = reinterpret_cast<uint64_t*>(
             arr + (uintptr_t)(PastureCount(pasture) - 1) * 8);
-        CheckPtr(slot);
         void* animal = reinterpret_cast<void*>(*slot);
         if (!animal) break;
         uintptr_t a = reinterpret_cast<uintptr_t>(animal);
@@ -474,13 +455,10 @@ extern "C" void Pasture_ReleaseAllAnimals(void* pasture) {
         if (cur == nullptr) break;                  // already free: retail would spin here
 
         uint64_t ibp = MakeIBP(animal);
-        CheckPtr(reinterpret_cast<void*>(a + 0x28));
         if (s_Erase) s_Erase(reinterpret_cast<void*>((uintptr_t)cur + 0x30), &ibp);
-        CheckPtr(reinterpret_cast<void*>(a + 0x10));
         void* animalComp = FindCompOnEntity(*reinterpret_cast<uintptr_t*>(a + 0x10),
                                             s_tidAnimalComp);
         uint64_t animalIBP = MakeIBP(animalComp);
-        CheckPtr(&animalIBP);
         if (animalIBP && s_Helper5ed0) s_Helper5ed0(reinterpret_cast<void*>(animalIBP));
 
         *reinterpret_cast<void**>(a + 0x28) = nullptr;
@@ -516,10 +494,8 @@ extern "C" char Pasture_State2Enter(void* data, void* /*sm*/) {
         s_Append(reinterpret_cast<void*>(gs + 0x90),
                  *reinterpret_cast<int*>(gs + 0x98) + 1, &selfIBP);
 
-    CheckPtr(reinterpret_cast<void*>((uintptr_t)data + 0x10));
     uint64_t wpc = 0;
     if (s_FindWorkplace) s_FindWorkplace(*reinterpret_cast<int64_t*>((uintptr_t)data + 0x10), &wpc);
-    CheckPtr(&wpc);
     if (wpc && s_ActivateWP) s_ActivateWP(static_cast<int64_t>(wpc), 0);
 
     return 0;
@@ -579,10 +555,8 @@ void PastureProduce(void* self) {
     int* grid = *reinterpret_cast<int**>(w + 0xf8);
     if (!grid) return;
 
-    CheckPtr(reinterpret_cast<void*>(s + 0x10));
     uint64_t mapIBP = 0;
     s_FindMapComp(*reinterpret_cast<int64_t*>(s + 0x10), &mapIBP);
-    CheckPtr(&mapIBP);
     if (!mapIBP) return;
     uintptr_t mc = static_cast<uintptr_t>(mapIBP);
     if (s_StampCells)
@@ -602,7 +576,6 @@ void PastureProduce(void* self) {
     const int perUnit = *reinterpret_cast<int*>(static_cast<uintptr_t>(rawDescIBP) + 0x40);
     if (perUnit <= 0) return;
 
-    CheckPtr(reinterpret_cast<void*>(s + 0x10));
     uint64_t posIBP = 0;
     if (s_FindPosition) s_FindPosition(*reinterpret_cast<int64_t*>(s + 0x10), &posIBP);
 
@@ -627,12 +600,10 @@ void PastureProduce(void* self) {
         }
 
         // Find a footprint cell with no occupant and drop the produce pile there.
-        CheckPtr(&posIBP);
         const int nCells = s_FootprintN(static_cast<int64_t>(posIBP), 2);
         int placedCell = -1;
         for (int c = 0; c < nCells && placedCell < 0; ++c) {
             float xy[3] = {0, 0, 0};
-            CheckPtr(&posIBP);
             s_FootprintAt(static_cast<int64_t>(posIBP), xy, 2, c, nullptr);
             const int dim = *grid;
             int gx = static_cast<int>(xy[0] + static_cast<float>(dim >> 1));
@@ -690,13 +661,11 @@ void PastureProduce(void* self) {
         // ProductionUI's panel reads, so without it the production page is blank even
         // when piles are appearing. Same three-call shape as the already-ported
         // ActRm_RegisterRawMaterial_88ef0 (0x140088ef0), which is a useful cross-check.
-        CheckPtr(reinterpret_cast<void*>(s + 0x10));
         int64_t pastureEntity = *reinterpret_cast<int64_t*>(s + 0x10);
         if (pastureEntity && s_FindTracker) {
             uint64_t trackerIBP = 0;
             s_FindTracker(pastureEntity, &trackerIBP);
             if (trackerIBP) {
-                CheckPtr(&trackerIBP);
                 if (s_TrackerUpsert)
                     s_TrackerUpsert(static_cast<int64_t>(trackerIBP), produced, perUnit);
             }
@@ -797,7 +766,6 @@ extern "C" uint64_t Pasture_CanCommand(void* pasture, int cmd) {
     for (int i = 0; i < n && list; ++i) {
         void* p = *reinterpret_cast<void**>(list + (uintptr_t)i * 8);
         if (!p || p == pasture) continue;
-        CheckPtr(&p);
         if (PastureType(p) != PastureType(pasture)) continue;
         freeElsewhere += static_cast<int>(s_Capacity ? s_Capacity((uintptr_t)p) : 0)
                          - PastureCount(p);
@@ -815,10 +783,8 @@ extern "C" uint64_t Pasture_CanCommand(void* pasture, int cmd) {
     }
     if (cmd == 2) {
         uint64_t wpcIBP = 0;
-        CheckPtr(reinterpret_cast<uint8_t*>(pasture) + 0x10);
         if (s_FindWorkplace)
             s_FindWorkplace(*reinterpret_cast<int64_t*>((uintptr_t)pasture + 0x10), &wpcIBP);
-        CheckPtr(&wpcIBP);
         uint64_t r = hasType;
         if (wpcIBP && *reinterpret_cast<char*>(wpcIBP + 0x50) != 0) r |= 2;
         return r;
@@ -859,9 +825,7 @@ extern "C" void Pasture_Command(void* pasture, int cmd) {
     if (cmd == 2) {
         uint8_t* selfB = reinterpret_cast<uint8_t*>(pasture);
         uint64_t wcIBP = 0, wpcIBP = 0;
-        CheckPtr(selfB + 0x10);
         if (s_FindWork)      s_FindWork(*reinterpret_cast<int64_t*>(selfB + 0x10), &wcIBP);
-        CheckPtr(selfB + 0x10);
         if (s_FindWorkplace) s_FindWorkplace(*reinterpret_cast<int64_t*>(selfB + 0x10), &wpcIBP);
         if (!wcIBP || !wpcIBP || !s_ActivateWP) {   // standalone guard; retail assumes both
             std::fprintf(stderr, "[Pasture] cmd 2: missing %s%s on %p — herder toggle skipped\n",
@@ -871,23 +835,16 @@ extern "C" void Pasture_Command(void* pasture, int cmd) {
             return;
         }
 
-        CheckPtr(&wpcIBP);
         const char cur = *reinterpret_cast<char*>(wpcIBP + 0x50);
-        CheckPtr(&wpcIBP);
         s_ActivateWP(static_cast<int64_t>(wpcIBP), cur == 0 ? 1 : 0);
-        CheckPtr(&wpcIBP);
         if (*reinterpret_cast<char*>(wpcIBP + 0x50) == 0) {
-            CheckPtr(&wcIBP);
             if (s_StopWork) s_StopWork(static_cast<uintptr_t>(wcIBP));
-            CheckPtr(&wpcIBP);
             s_ActivateWP(static_cast<int64_t>(wpcIBP), 0);
         } else {
             uint64_t entRef = *reinterpret_cast<uint64_t*>(selfB + 0x10);
             void* work = PastureWork_CreateForEntity(&entRef);
             uint64_t workIBP = MakeIBP(work);
-            CheckPtr(&wcIBP);
             if (s_PostWork) s_PostWork(static_cast<uintptr_t>(wcIBP), 1, 1, &workIBP);
-            CheckPtr(&wpcIBP);
             s_ActivateWP(static_cast<int64_t>(wpcIBP), 1);
         }
         return;
@@ -905,7 +862,6 @@ extern "C" void Pasture_Command(void* pasture, int cmd) {
     for (int i = 0; i < n && list; ++i) {
         void* p = *reinterpret_cast<void**>(list + (uintptr_t)i * 8);
         if (!p || p == pasture) continue;
-        CheckPtr(&p);
         if (PastureType(p) != PastureType(pasture)) continue;
         const int freeN = static_cast<int>(s_Capacity ? s_Capacity((uintptr_t)p) : 0)
                           - PastureCount(p);
@@ -920,7 +876,6 @@ extern "C" void Pasture_Command(void* pasture, int cmd) {
             uintptr_t arr = PastureAnimals(pasture);
             if (!arr) break;                        // standalone guard
             void** first = reinterpret_cast<void**>(arr);
-            CheckPtr(first);
             if (!*first) break;                     // standalone guard
             uint64_t dstRef = reinterpret_cast<uint64_t>(dst);
             Pasture_BindAnimal(*first, &dstRef);
@@ -931,7 +886,6 @@ extern "C" void Pasture_Command(void* pasture, int cmd) {
     for (int i = 0; i < n && list; ++i) {
         void* p = *reinterpret_cast<void**>(list + (uintptr_t)i * 8);
         if (!p || p == pasture || p == best) continue;
-        CheckPtr(&p);
         if (PastureType(p) != PastureType(pasture)) continue;
         transferInto(p);
     }

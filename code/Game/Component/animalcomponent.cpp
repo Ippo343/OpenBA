@@ -354,17 +354,13 @@ void AnimalComponent_UpdateBehavior(AnimalComponent* self) {
     float scale = (At<float>(self, 0x44) / adultAge) * ScaleGain() + ScaleBase();
     if (scale > ScaleMax()) scale = ScaleMax();
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(Raw(self) + 0x10);
     int64_t entity = At<int64_t>(self, 0x10);
     if (!entity || !s_fnFindCharacter) return;
 
     int64_t character = 0;
     s_fnFindCharacter(entity, &character);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&character);
     if (!character) return;
 
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(character + 0x68));
     int64_t model = At<int64_t>(static_cast<uintptr_t>(character), 0x68);
     if (!model) return;
 
@@ -392,17 +388,14 @@ void AnimalComponent_SetWanderTimer(AnimalComponent* self, uint32_t animId, floa
     EnsureHelpers();
     if (!self) return;
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(Raw(self) + 0x10);
     int64_t entity = At<int64_t>(self, 0x10);
     if (!entity || !s_fnFindCharacter || !s_fnFindModel) return;
 
     int64_t character = 0;
     s_fnFindCharacter(entity, &character);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(Raw(self) + 0x10);
     int64_t model = 0;
     s_fnFindModel(entity, &model);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&character);
     if (!character) return;
 
     void* charDescRaw = At<void*>(static_cast<uintptr_t>(character), 0x18);
@@ -412,7 +405,6 @@ void AnimalComponent_SetWanderTimer(AnimalComponent* self, uint32_t animId, floa
         charDesc = charDescRaw;
     }
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&model);
     if (s_fnSetAnimation && model && charDesc) {
         s_fnSetAnimation(static_cast<uintptr_t>(model), animId, 0.0f,
                          At<float>(charDesc, 0x2c), ScaleMax());
@@ -435,7 +427,6 @@ void AnimalComponent_SetWanderTimer(AnimalComponent* self, uint32_t animId, floa
 
     Math::Vector3 dir = src.Normalize();
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&character);
     At<uint8_t>(static_cast<uintptr_t>(character), 0x28) = 0;
 
     const Math::Vector3 src2(dir.x, dir.y, 0.0f);
@@ -487,10 +478,8 @@ void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {
         const int64_t corpseOwner = world ? At<int64_t>(world, 0xe8) : 0;
         if (entity == 0) return;
 
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entity);
         if ((At<uint32_t>(static_cast<uintptr_t>(entity), 0x40) >> 10) & 1) return;
 
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entity);
         if (s_fnMarkForRemoval) s_fnMarkForRemoval(reinterpret_cast<void*>(entity));
         if (corpseOwner) {
             // B.3.2 bridge: exe 0x140003110 (ActHunt_DynArraySetCount_3110) IS
@@ -567,13 +556,11 @@ void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {
     AnimalComponent_UpdateBehavior(self);
 
     // ---- 4. busy / timer gates -------------------------------------------
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(Raw(self) + 0x10);
     int64_t entity = At<int64_t>(self, 0x10);
     if (!entity || !s_fnFindCharacter) return;
 
     int64_t character = 0;
     s_fnFindCharacter(entity, &character);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&character);
     if (!character) {
         if (s_traceMissing++ < kTraceCap) {
             fprintf(stderr, "[AnimalUpd] no CharacterComponent on entity=%p — pathing skipped\n",
@@ -604,7 +591,6 @@ void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {
 
             bool blocked = false;
             if (occupant != 0) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&occupant);
                 int64_t buildingIBP = 0;
                 fn_FindComponent_Building(reinterpret_cast<void*>(occupant), &buildingIBP);
                 // ⚠ fn_FindComponent_Building is a MISLABEL — retail 0x140015140
@@ -633,8 +619,6 @@ void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {
         }
 
         // Current tile from the model's world position.
-        if (fn_InternalBasePtr_CheckPtr)
-            fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(character + 0x68));
         const int64_t model = At<int64_t>(static_cast<uintptr_t>(character), 0x68);
         if (!model) return;
 
@@ -676,7 +660,6 @@ void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {
         }
 
         if (repath) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(Raw(self) + 0x10);
             uint8_t discard[8] = {0};
             if (s_fnFindModel) s_fnFindModel(At<int64_t>(self, 0x10), discard);
 
@@ -754,7 +737,6 @@ void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {
             }
 
             if (accept) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&character);
                 int64_t* stack = reinterpret_cast<int64_t*>(character + 0x48);
                 if (s_fnActStackClear) s_fnActStackClear(stack);
 
@@ -809,17 +791,13 @@ void AnimalComponent_OnAdd(AnimalComponent* self) {
     const uint32_t flags = At<uint32_t>(self, 0x20);
     if (((flags >> 0x16) & 1) == 0) return;
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(Raw(self) + 0x10);
     int64_t entity = At<int64_t>(self, 0x10);
     if (!entity || !s_fnFindCharacter) return;
 
     int64_t character = 0;
     s_fnFindCharacter(entity, &character);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&character);
     if (!character) return;
 
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(character + 0x68));
     const int64_t model = At<int64_t>(static_cast<uintptr_t>(character), 0x68);
     if (!model) return;
 

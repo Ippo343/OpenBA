@@ -48,24 +48,19 @@
 // Sub-callees (all registered / engine):
 //   0x140006270 Entity_FindComponent_Storage      [reg]
 //   0x14012cf10 StorageComponent_QueryCount        [reg]
-//   slot 0x140152ab0 InternalBasePtr::CheckPtr      [engine dispatch]
 // ============================================================
 namespace {
 typedef void* (*FindCompStorage_t)(intptr_t entity, void* retIBP);
 typedef int   (*StorageQueryCount_t)(void* storageComp);
-typedef void  (*CheckPtr_t)(void* ibp);
 
 FindCompStorage_t   s_FindCompStorage_6270 = nullptr;
 StorageQueryCount_t s_StorageQueryCount_cf10 = nullptr;
-CheckPtr_t          s_CheckPtr_slot = nullptr;
 bool                s_init_116540 = false;
 
 void Ensure_116540() {
     if (s_init_116540) return;
     s_FindCompStorage_6270   = reinterpret_cast<FindCompStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
     s_StorageQueryCount_cf10 = reinterpret_cast<StorageQueryCount_t>(ResolveAddr(Module::Exe, 0x14012cf10));
-    uintptr_t s = ResolveAddr(Module::Exe, 0x140152ab0);
-    if (s) s_CheckPtr_slot = *reinterpret_cast<CheckPtr_t*>(s);
     s_init_116540 = true;
 }
 } // namespace
@@ -75,18 +70,15 @@ int WorkLeaf_FreeStorageCapacity_116540(intptr_t self) {
     void* ibpStorage[4] = { nullptr, nullptr, nullptr, nullptr };
 
     // CheckPtr(self+0x10); FindComponent_Storage(*(self+0x10), &ibpStorage)
-    if (s_CheckPtr_slot) s_CheckPtr_slot(reinterpret_cast<void*>(self + 0x10));
     if (!s_FindCompStorage_6270) return 0;
     s_FindCompStorage_6270(*reinterpret_cast<intptr_t*>(self + 0x10), ibpStorage);
 
     // CheckPtr(&ibpStorage); iVar1 = *(int*)(storage + 0x38)
-    if (s_CheckPtr_slot) s_CheckPtr_slot(ibpStorage);
     void* storage = ibpStorage[0];
     if (!storage) return 0;
     int capacity = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(storage) + 0x38);
 
     // CheckPtr(&ibpStorage); iVar2 = StorageComponent_QueryCount(storage)
-    if (s_CheckPtr_slot) s_CheckPtr_slot(ibpStorage);
     int count = s_StorageQueryCount_cf10 ? s_StorageQueryCount_cf10(storage) : 0;
 
     return capacity - count;
@@ -150,7 +142,6 @@ void* WorkLeaf_FindGrowthDescription_c3c0(intptr_t entity, void* retOut) {
 //     cell = *(void**)(cellArrBase + (mapW*row + col)*0x30 + 0x8)
 // Sub-callees:
 //   0x14000c460 FUN_14000c460 (owner-resolve)          [reg]
-//   slot 0x140152ab0 CheckPtr                          [engine dispatch]
 //   slot 0x140152a98 IsDerivedFrom                     [engine dispatch]
 //   g_pGameWorldSingleton (DAT_1401c3dd8)              [runtime global]
 //   DAT_1401c77e8 type-ID global                        [runtime-filled]
@@ -158,14 +149,11 @@ void* WorkLeaf_FindGrowthDescription_c3c0(intptr_t entity, void* retOut) {
 namespace {
 typedef void* (*OwnerResolve_t)(intptr_t cell, void* retIBP);
 OwnerResolve_t  s_OwnerResolve_c460 = nullptr;
-CheckPtr_t      s_CheckPtr_slot_120c30 = nullptr;
 const uint32_t* s_pTid_120c30 = nullptr; // 0x1401c77e8
 bool            s_init_120c30 = false;
 void Ensure_120c30() {
     if (s_init_120c30) return;
     s_OwnerResolve_c460 = reinterpret_cast<OwnerResolve_t>(ResolveAddr(Module::Exe, 0x14000c460));
-    uintptr_t s = ResolveAddr(Module::Exe, 0x140152ab0);
-    if (s) s_CheckPtr_slot_120c30 = *reinterpret_cast<CheckPtr_t*>(s);
     s_pTid_120c30 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c77e8));
     s_init_120c30 = true;
 }
@@ -198,11 +186,9 @@ long long WorkLeaf_FootprintOwnerCheck_120c30(intptr_t self, int col, int row) {
                         + (static_cast<long long>(mapW) * rowIdx + c) * 0x30 + 0x8);
                     if (cell != nullptr) {
                         touched++;
-                        if (s_CheckPtr_slot_120c30) s_CheckPtr_slot_120c30(&cell);
                         void* outIBP = nullptr;
                         if (s_OwnerResolve_c460) s_OwnerResolve_c460(reinterpret_cast<intptr_t>(cell), &outIBP);
                         if (outIBP != nullptr) {
-                            if (s_CheckPtr_slot_120c30) s_CheckPtr_slot_120c30(&outIBP);
                             void* obj = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(outIBP) + 0x18);
                             void* owner = nullptr;
                             if (s_pTid_120c30 && fn_IsDerivedFrom && fn_IsDerivedFrom(obj, *s_pTid_120c30))

@@ -73,10 +73,8 @@ void ForceSMState(void* ownerIbpSlot, int targetState, const char* /*who*/) {
     EnsureInit();
     if (!s_findSMC || !s_smTick) return;
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ownerIbpSlot);
     uintptr_t smcIbp = 0;
     s_findSMC(*reinterpret_cast<uintptr_t*>(ownerIbpSlot), &smcIbp);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&smcIbp);
 
     uint8_t* L = reinterpret_cast<uint8_t*>(smcIbp);
     if (!L) {
@@ -137,10 +135,8 @@ extern "C" bool FireComponent_IsBeingDemolished_11e690(void* destroyComp) {
     if (!destroyComp || !s_findSMC) return false;
 
     void* ibpSlot = reinterpret_cast<uint8_t*>(destroyComp) + 0x10;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibpSlot);
     uintptr_t smcIbp = 0;
     s_findSMC(*reinterpret_cast<uintptr_t*>(ibpSlot), &smcIbp);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&smcIbp);
     if (!smcIbp) return false;   // standalone: no SMC => not demolishing
 
     uint8_t* L = reinterpret_cast<uint8_t*>(smcIbp);
@@ -171,7 +167,6 @@ extern "C" bool FireComponent_BeginBurning_11e7b0(void* destroyComp, const int64
         uintptr_t buildIbp = 0;
         s_findBuild(*reinterpret_cast<uintptr_t*>(ibpSlot), &buildIbp);
         if (buildIbp != 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&buildIbp);
             if (*reinterpret_cast<int32_t*>(buildIbp + 0x48) == 0) {
                 return false;
             }

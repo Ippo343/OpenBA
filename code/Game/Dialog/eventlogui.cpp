@@ -260,7 +260,6 @@ void EventLogUI_Slot9(EventLogUI* self, void* param2, int msg, int id) {
             int btnIdx = id - 0x67;
             // Button ptr is stored in the notification array at +0x70 (array of 8-byte ptrs)
             void* ibp = (void*)(*(uintptr_t*)(s + 0x70) + (uintptr_t)btnIdx * 8);
-            fn_InternalBasePtr_CheckPtr(ibp);
             void* btnElem = *(void**)ibp;
             // Read button's flag from +0xD8 and write to event log singleton +0x10+btnIdx
             uintptr_t eventLog = *(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0x138);

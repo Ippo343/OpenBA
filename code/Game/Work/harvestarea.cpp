@@ -252,7 +252,7 @@ bool HarvestArea_ResolveFuncs() {
               s_fn_ValidateTask && s_fn_TaskCancel && s_fn_FindPosComp &&
               s_fn_Work_Serialize && s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
               s_fn_BST_RecursiveFree &&
-              fn_InternalBasePtr_CheckPtr && fn_InternalBasePtr_Ctor &&
+              fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom && g_pGameWorldSingleton &&
               s_typeId_CropDesc && s_fHalfCellOffset &&
               s_vtable_HarvestArea && s_vtable_AutoPickupWork && s_vtable_Work;
@@ -354,16 +354,13 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
 
     // Step 2: Find components
     uintptr_t* workEntityPtr = (uintptr_t*)(selfAddr + 0x10);
-    fn_InternalBasePtr_CheckPtr(workEntityPtr);
     uintptr_t matDescIBP = 0;
     s_fn_FindComp_MatDesc(*workEntityPtr, &matDescIBP);
 
-    fn_InternalBasePtr_CheckPtr(workEntityPtr);
     uintptr_t cropDescIBP = 0;
     s_fn_FindComp_CropDesc(*workEntityPtr, &cropDescIBP);
 
     // Check CropDescription -> get description object
-    fn_InternalBasePtr_CheckPtr(&cropDescIBP);
     void* descObj = *(void**)(cropDescIBP + 0x18);
     bool isDerived = fn_IsDerivedFrom(descObj, *s_typeId_CropDesc);
     void* cropDesc = isDerived ? descObj : nullptr;
@@ -386,10 +383,8 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
     }
 
     // Set mesh visibility (group 2) based on capacity
-    fn_InternalBasePtr_CheckPtr(workEntityPtr);
     uintptr_t meshIBP[2] = {0};
     s_fn_FindComp_MeshInstance(*workEntityPtr, meshIBP);
-    fn_InternalBasePtr_CheckPtr(meshIBP);
     s_fn_MeshInstance_SetVisible((void*)(*(uintptr_t*)meshIBP), 2, atCapacity ? 1 : 0);
 
     if (atCapacity) {
@@ -399,7 +394,6 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
 
     // Check tree count vs max workers
     int treeCount = (int)selfQ[10]; // _field50
-    fn_InternalBasePtr_CheckPtr(&matDescIBP);
     if (*(int*)(matDescIBP + 0x30) == 0) {
         int maxWorkers = s_fn_CalcMaxWorkers(matDescIBP);
         *(int*)(matDescIBP + 0x30) = maxWorkers;
@@ -413,11 +407,8 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
     int* mapGrid = *(int**)(gameWorld + 0xf8);
 
     // Get citizen position
-    fn_InternalBasePtr_CheckPtr(citizenIBP);
     uintptr_t citizenEntity = *(uintptr_t*)citizenIBP;
-    fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
     uintptr_t aiComp = *(uintptr_t*)(citizenEntity + 0x278);
-    fn_InternalBasePtr_CheckPtr((void*)(aiComp + 0x68));
     uintptr_t posComp = *(uintptr_t*)(aiComp + 0x68);
 
     int mapSz = *mapGrid;
@@ -466,7 +457,6 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
                 uintptr_t entityAtCell1 = 0;
                 uintptr_t entityAtCell2 = 0;
 
-                fn_InternalBasePtr_CheckPtr(&cropDescIBP);
                 uintptr_t cropDescVal = cropDescIBP;
                 uintptr_t gridData = *(uintptr_t*)(mapGrid + 0x20); // +0x80 byte offset
                 int cellGridIdx = *(int*)((uintptr_t)i * 0x20 + *(uintptr_t*)(cropDescVal + 0x58));
@@ -478,7 +468,6 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
                     validityArray[i] = 0;
                 } else {
                     if (pairedAvailable) {
-                        fn_InternalBasePtr_CheckPtr(&cropDescIBP);
                         uintptr_t cropDescVal2 = cropDescIBP;
                         int cellGridIdx2 = *(int*)((uintptr_t)cellIdx2 * 0x20 + *(uintptr_t*)(cropDescVal2 + 0x58));
                         entityAtCell2 = *(uintptr_t*)(gridData + (uintptr_t)cellGridIdx2 * 0x30 + 8);
@@ -488,7 +477,6 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
                     }
 
                     // Check pathfinding from cell to citizen
-                    fn_InternalBasePtr_CheckPtr(&cropDescIBP);
                     int srcCellIdx = *(int*)(*(uintptr_t*)(cropDescIBP + 0x58) + (uintptr_t)i * 0x20);
                     int nearestCell = s_fn_Map_FindNearestPassable(mapGrid, srcCellIdx, citizenGridCell, 0xe0f);
 
@@ -502,20 +490,17 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
                             uintptr_t& natResIBP1 = natResIBPArray[0];
                             uintptr_t& natResIBP2 = natResIBPArray[1];
 
-                            fn_InternalBasePtr_CheckPtr(&entityAtCell1);
                             uintptr_t natResCompIBP[2] = {0};
                             s_fn_FindComp_NatRes(entityAtCell1, natResCompIBP);
                             natResIBP1 = *(uintptr_t*)natResCompIBP;
 
                             if (pairedAvailable) {
-                                fn_InternalBasePtr_CheckPtr(&entityAtCell2);
                                 uintptr_t natResCompIBP2[2] = {0};
                                 s_fn_FindComp_NatRes(entityAtCell2, natResCompIBP2);
                                 natResIBP2 = *(uintptr_t*)natResCompIBP2;
                             }
 
                             // Check flag bit 20 on NatRes (flagged for removal)
-                            fn_InternalBasePtr_CheckPtr(&natResIBP1);
                             if (natResIBP1 == 0) {
                                 // NatRes component gone — skip this cell
                                 validityArray[i] = 0;
@@ -526,7 +511,6 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
                             }
 
                             if (natResIBP2 != 0) {
-                                fn_InternalBasePtr_CheckPtr(&natResIBP2);
                                 if (natResIBP2 != 0 && (*(uint32_t*)(natResIBP2 + 0x20) >> 20) & 1) {
                                     pairedAvailable = false;
                                 }
@@ -569,7 +553,6 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
 
                                 // Assign work and register with AI
                                 int priority = (int)selfQ[4];
-                                fn_InternalBasePtr_CheckPtr(citizenIBP);
                                 uintptr_t citizenEnt = *(uintptr_t*)citizenIBP;
 
                                 uintptr_t vtable = *(uintptr_t*)self;
@@ -730,9 +713,7 @@ int HarvestArea_Slot8_Impl(HarvestArea* self) {
         }
 
         // Cancel work via citizen AI
-        fn_InternalBasePtr_CheckPtr((void*)(rightmost + 8));
         uintptr_t citizenEntity = *(uintptr_t*)(rightmost + 8);
-        fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
         s_fn_TaskCancel((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
 
         const int before = count;
@@ -887,7 +868,6 @@ void* HarvestArea_Slot10_Impl(HarvestArea* self, void* outPtr) {
     uintptr_t selfAddr = (uintptr_t)self;
 
     // CheckPtr on self->_field10 (work entity IBP)
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t entity = *(uintptr_t*)(selfAddr + 0x10);
 
     // Find position component on entity
@@ -895,7 +875,6 @@ void* HarvestArea_Slot10_Impl(HarvestArea* self, void* outPtr) {
     s_fn_FindPosComp(entity, posCompIBP);
 
     // CheckPtr and read +0x48 (workplace sub-entity)
-    fn_InternalBasePtr_CheckPtr(posCompIBP);
     *(uintptr_t*)outPtr = *(uintptr_t*)(*(uintptr_t*)posCompIBP + 0x48);
 
     return outPtr;

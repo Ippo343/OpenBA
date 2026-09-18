@@ -123,7 +123,7 @@ bool CreateNaturalResource_ResolveFuncs() {
               s_fn_NR_SetVariant && s_fn_RegisterEntity &&
               s_fn_Random_Rand && s_typeId_ComponentEntity &&
               fn_ObjectInternal_Dtor && fn_InternalBasePtr_DeletePtr &&
-              fn_MemFreeStatic && fn_InternalBasePtr_CheckPtr &&
+              fn_MemFreeStatic &&
               fn_InternalBasePtr_Ctor && fn_IsDerivedFrom &&
               fn_InternalBasePtr_Serialize &&
               g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
@@ -252,7 +252,6 @@ int CreateNaturalResource_AbstractImpl_Impl(CreateNaturalResource* self, void* a
 
     // Check if the cell's owner matches our parent entity
     int64_t cellOwner = *(int64_t*)(cellArrayBase + (int64_t)cellIndex * 0x30);
-    fn_InternalBasePtr_CheckPtr(s + 0x28);
     if (cellOwner != *(int64_t*)(s + 0x28)) {
         CNR_BAIL("tile owner != the action's parent entity");
     }
@@ -281,17 +280,13 @@ int CreateNaturalResource_AbstractImpl_Impl(CreateNaturalResource* self, void* a
     new (&entityIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
 
     // Find and set up ModelComponent -- place at cell
-    fn_InternalBasePtr_CheckPtr(&entityIBP);
     void* modelCompIBP = nullptr;
     s_fn_FindComponent_Model(entityIBP, &modelCompIBP);
-    fn_InternalBasePtr_CheckPtr(&modelCompIBP);
     s_fn_SetupModelAtCell(*(int64_t*)&modelCompIBP, cellIndex);
 
     // Find and set up GrowthComponent -- set progress to 0.0
-    fn_InternalBasePtr_CheckPtr(&entityIBP);
     void* growthCompIBP = nullptr;
     s_fn_FindComponent_Growth(entityIBP, &growthCompIBP);
-    fn_InternalBasePtr_CheckPtr(&growthCompIBP);
     // Retail derefs both finder results unguarded, and it is right to: the description this
     // action carries is always a natural-resource template that HAS both components. When one
     // comes back null the description (or the entity copy) is wrong upstream, and the crash
@@ -336,23 +331,17 @@ int CreateNaturalResource_AbstractImpl_Impl(CreateNaturalResource* self, void* a
     // Find NaturalResourceComponent and randomize variant
     void* randomPtr = *(void**)(gameWorld + 0xd8);
 
-    fn_InternalBasePtr_CheckPtr(&entityIBP);
     void* nrCompIBP1 = nullptr;
     s_fn_FindComponent_NR(entityIBP, &nrCompIBP1);
-    fn_InternalBasePtr_CheckPtr(&nrCompIBP1);
     uint32_t variantCount = s_fn_NR_GetVariantCount(*(int64_t*)&nrCompIBP1);
     uint32_t variant = s_fn_Random_Rand(randomPtr, variantCount);
 
-    fn_InternalBasePtr_CheckPtr(&entityIBP);
     void* nrCompIBP2 = nullptr;
     s_fn_FindComponent_NR(entityIBP, &nrCompIBP2);
-    fn_InternalBasePtr_CheckPtr(&nrCompIBP2);
     int64_t nrComp = *(int64_t*)&nrCompIBP2;
 
-    fn_InternalBasePtr_CheckPtr(&entityIBP);
     void* nrCompIBP3 = nullptr;
     s_fn_FindComponent_NR(entityIBP, &nrCompIBP3);
-    fn_InternalBasePtr_CheckPtr(&nrCompIBP3);
     int64_t* nrCompPtr = *(int64_t**)&nrCompIBP3;
 
     uint32_t subVariantCount = s_fn_NR_GetSubVariantCount(nrComp, (int)variant);
@@ -377,7 +366,6 @@ int CreateNaturalResource_AbstractImpl_Impl(CreateNaturalResource* self, void* a
 int CreateNaturalResource_GetTarget_Impl(CreateNaturalResource* self, void* param) {
     CreateNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = (uint8_t*)self;
-    fn_InternalBasePtr_CheckPtr(s + 0x28);
     return (*(void**)param == *(void**)(s + 0x28)) ? 1 : 0;
 }
 

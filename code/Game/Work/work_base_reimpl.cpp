@@ -45,12 +45,10 @@ static void* FindComponentByTypeId(uintptr_t entity, void* retIBP, const uint32_
         uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
         for (int i = 0; i < n; i++) {
             void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
             void* comp = *slot;
             // GetTypeId is component vtable slot +0x10.
             uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
             if (t == *pTypeId) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
                 void* c = *slot;
                 found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *pTypeId)) ? c : nullptr;
                 break;
@@ -169,12 +167,9 @@ void* Work_Ctor25_Impl(void* self, void* pEntityIBP) {
         Find_t f4680 = reinterpret_cast<Find_t>(ResolveAddr(Module::Exe, 0x140004680));
         uintptr_t tmp = 0;
         if (f4680) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(s + 0x10);
             void* r = f4680(*reinterpret_cast<uintptr_t*>(s + 0x10), &tmp);
             if (r && *reinterpret_cast<uintptr_t*>(r) != 0) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(s + 0x10);
                 r = f4680(*reinterpret_cast<uintptr_t*>(s + 0x10), &tmp);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(r);
                 uintptr_t comp = *reinterpret_cast<uintptr_t*>(r);
                 if (comp && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
                     uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
@@ -189,7 +184,6 @@ void* Work_Ctor25_Impl(void* self, void* pEntityIBP) {
                 }
             }
         }
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pEntityIBP);
         void* r2 = WorkBase_FindComponent_3050(
             pEntityIBP ? *reinterpret_cast<uintptr_t*>(pEntityIBP) : 0, &tmp);
         if (r2) *reinterpret_cast<uint64_t*>(s + 0x18) = *reinterpret_cast<uint64_t*>(r2);
@@ -249,10 +243,8 @@ void WorkBase_TaskListCleanup_c5400(void* self) {
         if (!node) continue;
         void* cur = node;
         do {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&cur);
             // action vtable +0x40 — cancel/abort (implicit this = cur)
             (*reinterpret_cast<void(**)(void*)>(*reinterpret_cast<uintptr_t*>(cur) + 0x40))(cur);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&cur);
             cur = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(cur) + 0x10);  // node[2] = next
         } while (cur != nullptr);
         // Slot address recomputed from the CURRENT array pointer (may have moved).
@@ -321,7 +313,6 @@ void WorkBase_Serialize_f7400(void* self, void* stream) {
 
 uint8_t WorkBase_ValidateTask_f7100(void* self, void* /*citizenAI*/, void* taskIBP, void** out) {
     if (*reinterpret_cast<uintptr_t*>(taskIBP) == 0) return 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(taskIBP);
     void* obj = *reinterpret_cast<void**>(taskIBP);
     uint32_t ciTid = g_TypeId_CitizenComponent_FC ? *g_TypeId_CitizenComponent_FC : 0;
     // The IsA gate reads DWORD_1401c7158 (== g_TypeId_CitizenComponent_FC, CitizenComponent's
@@ -333,9 +324,7 @@ uint8_t WorkBase_ValidateTask_f7100(void* self, void* /*citizenAI*/, void* taskI
     if (!ciTid) { static uint32_t v = 0; if (!v) v = ::Object::GetTypeIdByName("CitizenComponent"); ciTid = v; }
     if (!fn_IsA || !ciTid || !fn_IsA(obj, ciTid)) return 0;
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(taskIBP);
     uintptr_t ci = *reinterpret_cast<uintptr_t*>(taskIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(ci + 0x278));
     uintptr_t container = *reinterpret_cast<uintptr_t*>(ci + 0x278);
     int count = *reinterpret_cast<int*>(container + 0x60) + 1;
     uintptr_t arrBase = *reinterpret_cast<uintptr_t*>(container + 0x48);
@@ -353,13 +342,11 @@ uint8_t WorkBase_ValidateTask_f7100(void* self, void* /*citizenAI*/, void* taskI
 
     for (int i = 0; i < count; i++) {
         void* elem = *reinterpret_cast<void**>(arrBase + static_cast<uintptr_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&elem);
         void* ptr = (fn_IsDerivedFrom && completeTaskTid && fn_IsDerivedFrom(elem, completeTaskTid)) ? elem : nullptr;
         uintptr_t res = 0;
         if (fn_InternalBasePtr_Ctor) new (&res) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(ptr));   // B.3.3 bridge
         if (res != 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&res);
             if (*reinterpret_cast<int*>(res + 0x30) == wantId) {
                 if (out) *out = reinterpret_cast<void*>(res);
                 return 1;

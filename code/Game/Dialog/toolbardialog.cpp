@@ -69,7 +69,6 @@ static void ToolbarDialog_CloseSubDialog_Impl(void* self) {
         // Reset sub-dialog index to -1
         *(int32_t*)(s + 0xF0) = -1;
         // Reset radio selection
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0xB8));
         void* radioElem = *(void**)(s + 0xB8);
         fn_RadioElement_SetActiveRadio(radioElem, -1);
     }
@@ -219,7 +218,6 @@ static void ToolbarDialog_UpdateButtons_Impl(void* self) {
 
             // Set button enabled via vtable[8] (offset 0x40)
             void** buttonArray = *(void***)(s + 0xC0);
-            fn_InternalBasePtr_CheckPtr((void*)&buttonArray[i]);
             void* elem = buttonArray[i];
             if (!elem) continue;
             typedef void (*SetEnabled_t)(void* self, bool enabled);
@@ -229,7 +227,6 @@ static void ToolbarDialog_UpdateButtons_Impl(void* self) {
         else if (actionType == 4) {
             // FocusEntity: check if any entities of that type exist
             void** buttonArray = *(void***)(s + 0xC0);
-            fn_InternalBasePtr_CheckPtr((void*)&buttonArray[i]);
             void* elem = buttonArray[i];
             if (!elem) continue;
 
@@ -341,7 +338,6 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
     *(int64_t*)(pc + 0x20) = groupId;
     if (*(int64_t*)(pc + 0x28) != 0) {
         // CheckPtr on the InternalBasePtr
-        fn_InternalBasePtr_CheckPtr((void*)(pc + 0x28));
         // Call controller->Close() via vtable[5] (offset 0x28)
         void* controller = *(void**)(pc + 0x28);
         typedef void (*Close_t)(void* self);
@@ -469,7 +465,6 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
     // Step 7: Create ToolSetting if needed (lazy init on the ToolNode)
     if (*(int64_t*)(foundNode + 0x10) == 0) {
         // Ask the controller for its tool setting type via vtable[11] (offset 0x58)
-        fn_InternalBasePtr_CheckPtr((void*)(pc + 0x28));
         void* ctrl = *(void**)(pc + 0x28);
 
         typedef int* (*GetSettingTypeId_t)(void* self, void* retBuf);
@@ -479,7 +474,6 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
 
         if (*settingTypePtr != 0) {
             // Re-query (matches original's double-call pattern)
-            fn_InternalBasePtr_CheckPtr((void*)(pc + 0x28));
             ctrl = *(void**)(pc + 0x28);
             getSettingFn = (GetSettingTypeId_t)(*(uintptr_t*)(*(uintptr_t*)ctrl + 0x58));
             uint32_t* typeIdPtr = (uint32_t*)getSettingFn(ctrl, &settingBuf);
@@ -500,7 +494,6 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
 
     // Step 8: Configure and start the controller
     uint64_t toolSettingRef = *(uint64_t*)(foundNode + 0x10);
-    fn_InternalBasePtr_CheckPtr((void*)(pc + 0x28));
     void* ctrl = *(void**)(pc + 0x28);
 
     // Set controller fields
@@ -510,7 +503,6 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
     *(uint64_t*)(c + 0x18) = toolSettingRef;                  // ToolSetting ref
 
     // Call controller->Start() via vtable[4] (offset 0x20)
-    fn_InternalBasePtr_CheckPtr((void*)(pc + 0x28));
     ctrl = *(void**)(pc + 0x28);
     typedef void (*Start_t)(void* self);
     Start_t startFn = (Start_t)(*(uintptr_t*)(*(uintptr_t*)ctrl + 0x20));
@@ -688,7 +680,6 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
     *(uint8_t*)((uintptr_t)bstNode + 0x10) = 1;
 
     // Position dialog at saved coordinates from the BST node
-    fn_InternalBasePtr_CheckPtr(&dialogRef);
     int32_t savedX = *(int32_t*)((uintptr_t)bstNode + 0x08);
     int32_t savedY = *(int32_t*)((uintptr_t)bstNode + 0x0C);
     fn_DialogInstance_SetUpperLeft((void*)(uintptr_t)dialogRef, savedX, savedY, false);
@@ -784,7 +775,6 @@ extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName
     printf("[HarnessDrive] UI+0x28 dialog array=%p count=%d\n", data, count);
     for (int idx = 0; data && idx < count && idx < 32; idx++) {
         uintptr_t ip = data[idx];              // InternalPtr value
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ip);
         void* dialog = reinterpret_cast<void*>(ip);
         if (!dialog) { printf("[HarnessDrive] dialog[%d]=null\n", idx); continue; }
         void** ctrlArr = *reinterpret_cast<void***>(reinterpret_cast<uintptr_t>(dialog) + 0x78);
@@ -880,7 +870,6 @@ extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys) {
     void* userInterface = *(void**)((uintptr_t)gameWorld + 0x98);
     // Step 1: If there's an active tool controller at +0x28, close it via vtable[9]
     if (*(uintptr_t*)(gs + 0x28) != 0) {
-        fn_InternalBasePtr_CheckPtr((void*)(gs + 0x28));
         void* toolCtrl = *(void**)(gs + 0x28);
         // vtable[9] = Close (offset 0x48)
         typedef void (*VClose_t)(void* self);
@@ -1113,7 +1102,6 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
     }
 
     // Set radio element ID to 1000
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xB8));
     fn_Element_SetElementId(*(void**)(s + 0xB8), 1000);
 
     // --- Step 5: Collect all Toolbar items matching our group ID ---
@@ -1254,7 +1242,6 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
                                  GameColl::Bytes<0x08, 8>((uint64_t)item));
 
         // Add element as child of table at current buttonIndex
-        fn_InternalBasePtr_CheckPtr((void*)&tableElement);
         void* elemPtr = newElement;
         fn_TableElement_SetChild2(tableElement, &elemPtr, buttonIndex);
 
@@ -1264,7 +1251,6 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
         System::Filename pathObj =
             reinterpret_cast<const ::Object::External*>(item)->GetPath();  // B.3.3 bridge
         System::Filename pathIdObj = pathObj.GetPathIdentifer();
-        fn_InternalBasePtr_CheckPtr((void*)&newElement);
         fn_Element_SetName(newElement, &pathIdObj);
 
         // Get toolbar item's display string and sprite
@@ -1280,7 +1266,6 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
         // --- Configure button element (skip for SpeedDisplay) ---
         if (templateIndex != 0) {
             // Cast element to ButtonElement via IsDerivedFrom
-            fn_InternalBasePtr_CheckPtr((void*)&newElement);
             void* elemForCast = newElement;
             bool isButton = fn_IsDerivedFrom(elemForCast, *g_TypeId_HelpButtonElem);
             void* buttonElem = isButton ? elemForCast : nullptr;
@@ -1336,7 +1321,6 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
             // Assign keyboard shortcut ID
             if (*(uint8_t*)(item + 0x44) == 0) {
                 // Item has explicit shortcut override at +0x40
-                fn_InternalBasePtr_CheckPtr((void*)&buttonRef);
                 *(int32_t*)(buttonRef + 0xC0) = *(int32_t*)(item + 0x40);
 
                 // Remove this shortcut ID from the available pool
@@ -1353,7 +1337,6 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
                 }
             } else if (shortcutCount > 0) {
                 // Auto-assign first available shortcut
-                fn_InternalBasePtr_CheckPtr((void*)&buttonRef);
                 *(int32_t*)(buttonRef + 0xC0) = shortcutIds[0];
 
                 // Remove first shortcut from pool
@@ -1365,31 +1348,24 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
 
             // Set element ID (button index within this toolbar)
             // Set element ID (button index within this toolbar)
-            fn_InternalBasePtr_CheckPtr((void*)&buttonRef);
             fn_Element_SetElementId((void*)buttonRef, buttonIndex);
 
             void* userData = *(void**)(item + 0x58);
-            fn_InternalBasePtr_CheckPtr((void*)&buttonRef);
             fn_Element_SetUserData((void*)buttonRef, userData);
 
             uint8_t tooltipData[16];
             *(uint64_t*)tooltipData = *(uint64_t*)uiString;
             *(uint64_t*)(tooltipData + 8) = *(uint64_t*)(uiString + 8);
-            fn_InternalBasePtr_CheckPtr((void*)&buttonRef);
             fn_Element_SetToolTip((void*)buttonRef, tooltipData);
 
-            fn_InternalBasePtr_CheckPtr((void*)&buttonRef);
             fn_Element_SetFlagsOnOff((void*)buttonRef, 0x10000, 0);
 
             // Set sprite on all ImageElement children
             int childIdx = 0;
-            fn_InternalBasePtr_CheckPtr((void*)&buttonRef);
             int childCount = fn_Element_ChildCount((void*)buttonRef);
             while (childIdx < childCount) {
-                fn_InternalBasePtr_CheckPtr((void*)&buttonRef);
                 uint8_t childBuf[16];
                 fn_Element_Child((void*)buttonRef, childBuf, childIdx);
-                fn_InternalBasePtr_CheckPtr((void*)childBuf);
                 void* childElem = *(void**)childBuf;
 
                 // Cast to ImageElement
@@ -1410,7 +1386,6 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
                     uint8_t sprCopy[16];
                     *(uint64_t*)sprCopy = *(uint64_t*)uiSprite;
                     *(uint64_t*)(sprCopy + 8) = *(uint64_t*)(uiSprite + 8);
-                    fn_InternalBasePtr_CheckPtr((void*)&imageRef);
 #ifdef _DEBUG
                     Debug_ImageElement_SetSprite((void*)imageRef, sprCopy);
 #else
@@ -1419,7 +1394,6 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
                 }
 
                 childIdx++;
-                fn_InternalBasePtr_CheckPtr((void*)&buttonRef);
                 childCount = fn_Element_ChildCount((void*)buttonRef);
             }
         }
@@ -1428,7 +1402,6 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
     }
 
     // --- Step 8: Wire up radio button behavior ---
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xB8));
     fn_RadioElement_FindCheckBoxes(*(void**)(s + 0xB8));
 
     // --- Step 9: Populate speed values array {1, 2, 5, 10, 20, 50} ---
@@ -1645,7 +1618,6 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
         uintptr_t item = (uintptr_t)itemArray[buttonIndex];
 
         // CheckPtr resolves lazy/weak InternalBasePtr before dereference
-        fn_InternalBasePtr_CheckPtr(element);
         // IsDerivedFrom check on the element
         void* elemObj = *(void**)element;
         bool isDerived = fn_IsDerivedFrom(elemObj, *g_TypeId_ToolbarElement);
@@ -1747,7 +1719,6 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
         case 1: {
             // ShowGroup: toggle visibility of a game group
             void* groupId = nullptr;
-            fn_InternalBasePtr_CheckPtr(&localElemRef);
             if (localElemRef != 0 && *(uint8_t*)(localElemRef + 0xD8) != 0) {
                 groupId = *(void**)(item + 0x58);
             }
@@ -1818,7 +1789,6 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
             //   pDVar6 = *(DialogInstance **)(param_1 + 0x28);
             // Our port had dropped that CheckPtr, so the read could see an
             // unresolved lazy/weak handle instead of the parent dialog.
-            fn_InternalBasePtr_CheckPtr((void*)(s + 0x28));
             void* parentDialog = *(void**)(s + 0x28);
             bool isDerivedParent = fn_IsDerivedFrom(parentDialog, *g_TypeId_ToolbarDialogParent);
             void* typedParent = isDerivedParent ? parentDialog : nullptr;
@@ -1859,7 +1829,6 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
         uintptr_t item = (uintptr_t)itemArray[selIndex];
 
         // CheckPtr resolves lazy/weak InternalBasePtr before dereference
-        fn_InternalBasePtr_CheckPtr(element);
         // Dynamic cast the element to get toolbar controller
         void* elemObj = *(void**)element;
         void* castResult = nullptr;

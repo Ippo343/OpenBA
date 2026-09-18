@@ -43,13 +43,11 @@ static int CountOccupiedBuildTiles_Impl(void* smComp)
     uintptr_t sc = (uintptr_t)smComp;
 
     // Entity InternalBasePtr at smComp+0x10
-    fn_InternalBasePtr_CheckPtr((void*)(sc + 0x10));
     uintptr_t entityRef = *(uintptr_t*)(sc + 0x10);  // inner ptr value = self identity
 
     // Find BuildComponent on entity
     uint64_t buildComp = 0;
     fn_FindComponent_Build((void*)entityRef, &buildComp);
-    fn_InternalBasePtr_CheckPtr((void*)&buildComp);
     uintptr_t bc = buildComp;
 
     // BuildComponent footprint fields:
@@ -75,7 +73,6 @@ static int CountOccupiedBuildTiles_Impl(void* smComp)
             int tileIndex = (originY + row) * mapWidth + originX + col;
             uintptr_t occupant = *(uintptr_t*)(tileArrayBase + 8 + (uintptr_t)tileIndex * 0x30);
             // Count tiles occupied by other entities (not self, not null)
-            fn_InternalBasePtr_CheckPtr((void*)(sc + 0x10));
             if (occupant != *(uintptr_t*)(sc + 0x10) && occupant != 0) {
                 count++;
             }
@@ -373,7 +370,6 @@ void BuildUI_Slot7(BuildUI* self) {
 
     // Check if build is complete: totalRequired * multiplier <= posComp delivered total
     if (posComp != 0 && resourceComp != nullptr) {
-        fn_InternalBasePtr_CheckPtr((void*)&posComp);
         int totalRequired = *(int*)((uintptr_t)resourceComp + 0x30);
         int multiplier = *(int*)(posComp + 0x4C);
         if (totalRequired * multiplier <= *(int*)(posComp + 0x48)) {
@@ -382,16 +378,13 @@ void BuildUI_Slot7(BuildUI* self) {
     }
 
     // Calculate remaining capacity: capacity - occupied tiles
-    fn_InternalBasePtr_CheckPtr((void*)&smComp);
     int capacity = *(int*)(smComp + 0x48);
-    fn_InternalBasePtr_CheckPtr((void*)&smComp);
     int occupied = CountOccupiedBuildTiles_Impl((void*)smComp);
     uint32_t remaining = (uint32_t)(capacity - occupied);
 
     // Update header textTotal param 0 with remaining count
     {
         System::String remStr = System::String::Format("%d", (uint64_t)remaining);
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x48));
         fn_TextElement_SetParameter(*(void**)(s + 0x48), 0, &remStr);
     }
 
@@ -400,12 +393,10 @@ void BuildUI_Slot7(BuildUI* self) {
 
     if (posComp == 0 || resourceComp == nullptr) {
         // No resource component — just use capacity
-        fn_InternalBasePtr_CheckPtr((void*)&smComp);
         totalRequired = *(int*)(smComp + 0x48);
         totalDelivered = remaining;
     } else {
         // Find StorageComponent for delivered counts (DAT_1401c7e78, FUN_140006270)
-        fn_InternalBasePtr_CheckPtr((void*)&entityBuf);
         uint64_t stateMachineComp = 0;
         fn_FindComponent_Storage((void*)*(uintptr_t*)entityBuf, &stateMachineComp);
 
@@ -424,7 +415,6 @@ void BuildUI_Slot7(BuildUI* self) {
             uintptr_t resEntry = *(uintptr_t*)(resBase + rowOffset);
 
             // Search StateMachine component for matching resource entry
-            fn_InternalBasePtr_CheckPtr((void*)&stateMachineComp);
             int smCount = stateMachineComp ? *(int*)(stateMachineComp + 0x30) : 0;
             uint64_t delivered = 0;
             if (smCount > 0) {
@@ -446,37 +436,29 @@ void BuildUI_Slot7(BuildUI* self) {
             // Update row textTotal param 0 with delivered count
             {
                 System::String delStr = System::String::Format("%d", delivered);
-                fn_InternalBasePtr_CheckPtr((void*)(rowArrayBase + 8 + rowOffset));
                 void* rowTextTotal = *(void**)(rowArrayBase + 8 + rowOffset);
                 fn_TextElement_SetParameter(rowTextTotal, 0, &delStr);
             }
 
             sumDelivered += (int)delivered;
             int entryCount = *(int*)(resBase + i * 0x10 + 8);
-            fn_InternalBasePtr_CheckPtr((void*)&posComp);
             int multiplier = *(int*)(posComp + 0x4C);
             sumCapacity += entryCount * multiplier;
             rowOffset += 0x10;
         }
 
         // Update the total row (at index = rowCount in array)
-        fn_InternalBasePtr_CheckPtr((void*)&smComp);
         uintptr_t totalRowPtr = rowCount * 0x10 + *(uintptr_t*)(s + 0x30);
-        fn_InternalBasePtr_CheckPtr((void*)&posComp);
         {
             System::String rowStr =
                 System::String::Format("%d", (uint64_t)(uint32_t)*(int*)(posComp + 0x48));
-            fn_InternalBasePtr_CheckPtr((void*)(totalRowPtr + 8));
             void* totalRowText = *(void**)(totalRowPtr + 8);
             fn_TextElement_SetParameter(totalRowText, 0, &rowStr);
         }
 
         // Calculate totals for progress
-        fn_InternalBasePtr_CheckPtr((void*)&posComp);
         int multiplier = *(int*)(posComp + 0x4C);
-        fn_InternalBasePtr_CheckPtr((void*)&smComp);
         totalRequired = *(int*)((uintptr_t)resourceComp + 0x30) * multiplier + *(int*)(smComp + 0x48) + sumCapacity;
-        fn_InternalBasePtr_CheckPtr((void*)&posComp);
         totalDelivered = *(int*)(posComp + 0x48) + sumDelivered + remaining;
     }
 
@@ -488,10 +470,8 @@ void BuildUI_Slot7(BuildUI* self) {
     int percent = (int)(ratio * 100.0f + 0.5f);
 
     // Update progress bar
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x40));
     *(float*)(*(uintptr_t*)(s + 0x40) + 0x128) = ratio;
     System::String pctStr = System::String::Format("%d", (uint64_t)(uint32_t)percent);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x40));
     fn_ProgressElement_SetProgressTextParameter(*(void**)(s + 0x40), 0, &pctStr);
 }
 

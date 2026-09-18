@@ -19,7 +19,7 @@
 //   0x140006270  Entity_FindComponent_Storage (work_base)    — 116760 / 1167c0
 //   0x14012d150  StorageComponent::SubtractItem (rawmat)     — 116760
 //
-// Engine helpers (engine_funcs.h): fn_InternalBasePtr_CheckPtr, fn_IsDerivedFrom,
+// Engine helpers (engine_funcs.h): fn_IsDerivedFrom,
 //   fn_ObjectInternal_Ctor, fn_Time_Ctor_Float.
 // Runtime export: System::Random::RandFloatTol (MoveTo speed default).
 //
@@ -111,15 +111,12 @@ void Pf_ActStackWalkClear_4f10(void* param_1, void* param_2) {
     EnsureInit();
     int64_t lVar1 = *reinterpret_cast<int64_t*>(param_2);
     while (lVar1 != 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2);
         int64_t obj = *reinterpret_cast<int64_t*>(param_2);
         if (*reinterpret_cast<char*>(obj + 0x18) != '\0') {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2);
             int64_t* plVar2 = *reinterpret_cast<int64_t**>(param_2);
             *reinterpret_cast<uint8_t*>(plVar2 + 3) = 0;  // byte at obj+0x18
             (*reinterpret_cast<void(**)(int64_t*, void*)>(*plVar2 + 0x38))(plVar2, param_1);
         }
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2);
         lVar1 = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_2) + 0x10);
         *reinterpret_cast<int64_t*>(param_2) = lVar1;
     }
@@ -250,7 +247,6 @@ void* Pf_MoveToCtor_9170(void* self, void* param_2, uint32_t pathType, int param
     *reinterpret_cast<int*>(s + 0x46c) = param_4;
     *reinterpret_cast<int*>(s + 0x470) = param_7;
     s[0x474] = 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(s + 0x28);
     void* obj = *reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(s + 0x28) + 0x18);
     // DAT_1401c70b0 = the CharacterDescription type-id (written by
     // CharacterDescription_Register). The raw .rdata slot resolves null in standalone,
@@ -309,9 +305,7 @@ void* Pf_PerformWorkCtor7_9720(void* self, void* entity, float animIndex, uint32
     s[0x40] = param_6;
     *reinterpret_cast<int*>(s + 0x44) = param_7;
     if (param_6 != 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(entity);
         if (*reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(entity) + 0xac) < 1) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(s + 0x20);
             void* obj = *reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(s + 0x20) + 0x18);
             // IsDerivedFromOrTrust: the original gates `comp = IsDerivedFrom(obj,c7190) ? obj
             // : null` then UNCONDITIONALLY reads comp+0x114 — i.e. it ASSUMES obj is the type
@@ -388,15 +382,11 @@ void Pf_SetFlagRefreshUpdate_107260(int64_t* param_1) {
     uint32_t uVar2 = uVar1 | 0x100000;
     *reinterpret_cast<uint32_t*>(param_1 + 4) = uVar2;
     if ((((uVar2 ^ uVar1) & 0xffff) != 0) && (param_1[2] != 0)) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_1 + 2);
         if (s_fn_notify) s_fn_notify(reinterpret_cast<void*>(param_1[2]));
     }
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_1 + 2);
     int64_t local_res8 = 0;
     if (s_fn_findFamily) s_fn_findFamily(param_1[2], &local_res8);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
     if (0 < *reinterpret_cast<int*>(local_res8 + 0x60) + 1) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
         if (s_fn_taskCleanup) s_fn_taskCleanup(reinterpret_cast<void*>(local_res8 + 0x48));
         uint64_t timeStore = 0;
         if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&timeStore, 0.0f);
@@ -429,7 +419,6 @@ int Pf_RecursiveChildSum_123070(int64_t param_1, int param_2) {
         do {
             int64_t* self = reinterpret_cast<int64_t*>(
                 *reinterpret_cast<int64_t*>(param_1 + 0x28) + lVar4);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
             int iVar2 = Pf_RecursiveChildSum_123070(*self, param_2);
             iVar5 = iVar5 + 1;
             lVar4 = lVar4 + 8;
@@ -482,10 +471,7 @@ int Pf_ResourceLimitFlagTest_c560(int64_t param_1, int64_t param_2) {
 void Pf_StorageDropOff_116760(int64_t param_1, int64_t param_2, int param_3) {
     EnsureInit();
     int64_t local_res8 = 0;
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(param_1 + 0x10));
     if (s_fn_findStorage) s_fn_findStorage(*reinterpret_cast<int64_t*>(param_1 + 0x10), &local_res8);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
     if (s_fn_storageSub) s_fn_storageSub(local_res8, param_2, param_3);
 }
 
@@ -499,10 +485,7 @@ void Pf_StorageDropOff_116760(int64_t param_1, int64_t param_2, int param_3) {
 int Pf_StorageCountDelta_1167c0(int64_t param_1, int64_t param_2) {
     EnsureInit();
     int64_t local_res8 = 0;
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(param_1 + 0x10));
     if (s_fn_findStorage) s_fn_findStorage(*reinterpret_cast<int64_t*>(param_1 + 0x10), &local_res8);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
     int iVar4 = 0;
     int64_t lVar3 = 0;
     if (0 < static_cast<int64_t>(*reinterpret_cast<int*>(local_res8 + 0x30))) {

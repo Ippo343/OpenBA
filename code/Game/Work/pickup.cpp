@@ -149,7 +149,7 @@ bool Pickup_ResolveFuncs() {
               s_fn_InternalBasePtr_Serialize && s_fn_ArraySerialize &&
               s_fn_ValidateEntity && s_fn_CancelAllWork &&
               s_fn_Slot4_Original &&
-              fn_InternalBasePtr_CheckPtr && fn_InternalBasePtr_Ctor &&
+              fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom && g_pGameWorldSingleton &&
               s_vtable_Pickup && s_vtable_Work;
 
@@ -168,7 +168,6 @@ bool Pickup_ResolveFuncs() {
         if (!s_fn_ValidateEntity) printf("  MISSING: ValidateEntity\n");
         if (!s_fn_CancelAllWork) printf("  MISSING: CancelAllWork\n");
         if (!s_fn_Slot4_Original) printf("  MISSING: Slot4_Original\n");
-        if (!fn_InternalBasePtr_CheckPtr) printf("  MISSING: InternalBasePtr_CheckPtr\n");
         if (!fn_InternalBasePtr_Ctor) printf("  MISSING: InternalBasePtr_Ctor\n");
         if (!fn_IsDerivedFrom) printf("  MISSING: IsDerivedFrom\n");
         if (!g_pGameWorldSingleton) printf("  MISSING: g_pGameWorldSingleton\n");
@@ -440,7 +439,7 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
         !s_x_queryCount || !s_x_findCell || !s_x_validateCell || !s_x_checkAssign ||
         !s_x_findStoreRes || !s_x_calcDist || !s_x_canAdd || !s_x_findComp ||
         !s_x_gridToWorld || !s_x_memAlloc || !s_x_memFree ||
-        !fn_InternalBasePtr_CheckPtr || !fn_InternalBasePtr_Ctor ||
+        !fn_InternalBasePtr_Ctor ||
         !fn_IsDerivedFrom || !g_pGameWorldSingleton) {
         return 1;
     }
@@ -452,10 +451,8 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
     void* targetIBP = reinterpret_cast<void*>(S + 0x10);  // RSI: Work's target entity IBP
 
     // --- pile's RawMaterialComponent + its RawMaterialDescription ---------------
-    fn_InternalBasePtr_CheckPtr(targetIBP);
     void* rawMatIBP = nullptr;
     s_x_findRawMat(*reinterpret_cast<int64_t*>(targetIBP), &rawMatIBP);
-    fn_InternalBasePtr_CheckPtr(&rawMatIBP);
     void* descRaw = *reinterpret_cast<void**>(
         reinterpret_cast<uintptr_t>(rawMatIBP) + 0x18);
     void* desc = fn_IsDerivedFrom(descRaw, tidRawMatDesc) ? descRaw : nullptr;
@@ -465,34 +462,25 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
     int*  grid    = *reinterpret_cast<int**>(gw + 0xf8);
 
     // --- citizen's free carry capacity -----------------------------------------
-    fn_InternalBasePtr_CheckPtr(citizenIBP);
     uintptr_t citizen = *reinterpret_cast<uintptr_t*>(citizenIBP);
-    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(citizen + 0x10));
     void* storageIBP = nullptr;
     s_x_findStorage(*reinterpret_cast<int64_t*>(citizen + 0x10), &storageIBP);
-    fn_InternalBasePtr_CheckPtr(&storageIBP);
     int cap = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(storageIBP) + 0x38);
-    fn_InternalBasePtr_CheckPtr(&storageIBP);
     int freeCap = cap - static_cast<int>(s_x_queryCount(storageIBP));
 
-    fn_InternalBasePtr_CheckPtr(&rawMatIBP);
     // desc+0x48 = per-unit size, rawMat+0x28 = amount in the pile. (The original
     // dereferences desc unguarded here; kept faithful -- desc is non-null whenever
     // 0x1400223c0 found a RawMaterialComponent, which is the only way to get here.)
     const int needed = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x48) *
                        *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rawMatIBP) + 0x28);
     if (freeCap < needed) {
-        fn_InternalBasePtr_CheckPtr(citizenIBP);
         s_x_longTermPlan(*reinterpret_cast<int64_t*>(citizenIBP));
         return 2;  // citizen is full -> re-plan
     }
 
     // --- citizen's cell, from its ModelComponent transform ----------------------
-    fn_InternalBasePtr_CheckPtr(citizenIBP);
     uintptr_t c = *reinterpret_cast<uintptr_t*>(citizenIBP);
-    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(c + 0x278));
     uintptr_t sm = *reinterpret_cast<uintptr_t*>(c + 0x278);
-    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(sm + 0x68));
     uintptr_t model = *reinterpret_cast<uintptr_t*>(sm + 0x68);
 
     // Scratch Vector3 shared by 0x14008d590's out-position and the later
@@ -519,9 +507,7 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
     const int pileRow  = selfCell / dim;
 
     // --- gate: does the town still want this resource? --------------------------
-    fn_InternalBasePtr_CheckPtr(&rawMatIBP);
     int amount = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rawMatIBP) + 0x28);
-    fn_InternalBasePtr_CheckPtr(targetIBP);
     if (!s_x_wantsRes(townMgr,
                       *reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(targetIBP) + 0x28),
                       amount))
@@ -541,16 +527,13 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
     // --- is there anywhere to drop it off? --------------------------------------
     void* dropIBP = nullptr;
     void* storeOut = nullptr;
-    fn_InternalBasePtr_CheckPtr(&rawMatIBP);
     amount = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rawMatIBP) + 0x28);
-    fn_InternalBasePtr_CheckPtr(targetIBP);
     s_x_findStoreRes(townMgr, &storeOut, static_cast<uint32_t>(selfAccess),
                      *reinterpret_cast<uint64_t*>(*reinterpret_cast<uintptr_t*>(targetIBP) + 0x28),
                      amount, 1, &scratch.x, &dropIBP);
     if (storeOut == nullptr) return 1;
 
     // Storage we will haul into -- used to test each candidate for acceptance.
-    fn_InternalBasePtr_CheckPtr(&storeOut);
     void* dstStorageIBP = nullptr;
     s_x_findStorage(reinterpret_cast<int64_t>(storeOut), &dstStorageIBP);
 
@@ -601,15 +584,12 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
             }
             if (occIBP == nullptr) continue;
 
-            fn_InternalBasePtr_CheckPtr(&occIBP);
             void* nRawMatIBP = nullptr;
             s_x_findRawMat(reinterpret_cast<int64_t>(occIBP), &nRawMatIBP);
             if (nRawMatIBP == nullptr) continue;
 
-            fn_InternalBasePtr_CheckPtr(&occIBP);
             int64_t nDesc = *reinterpret_cast<int64_t*>(
                 reinterpret_cast<uintptr_t>(occIBP) + 0x28);
-            fn_InternalBasePtr_CheckPtr(&dstStorageIBP);
             if (!s_x_canAdd(dstStorageIBP, nDesc, 1)) continue;
 
             const int nAccess = s_x_findCell(grid, nCell, citizenCell, 0xe07);
@@ -619,10 +599,8 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
                                   static_cast<uint32_t>(citizenCell)))
                 continue;
 
-            fn_InternalBasePtr_CheckPtr(&occIBP);
             void* compOut = nullptr;
             void* compIBP = s_x_findComp(reinterpret_cast<int64_t>(occIBP), &compOut);
-            fn_InternalBasePtr_CheckPtr(compIBP);
             const int nTypeId = *reinterpret_cast<int*>(
                 *reinterpret_cast<uintptr_t*>(compIBP) + 0x28);
 
@@ -646,7 +624,6 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
                 if (!found) new (&workIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             }
 
-            fn_InternalBasePtr_CheckPtr(&workIBP);
             void* pickupRaw = workIBP;
             void* pickupWork = fn_IsDerivedFrom(pickupRaw, tidPickup) ? pickupRaw : nullptr;
             void* pickupIBP = nullptr;
@@ -655,7 +632,6 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
             if (pickupIBP == nullptr) continue;
 
             // vtable slot 11 (+0x58) = "already has a worker" -> skip this pile.
-            fn_InternalBasePtr_CheckPtr(&pickupIBP);
             {
                 typedef char (*HasWorker_t)(void*);
                 auto hasWorker = *reinterpret_cast<HasWorker_t*>(
@@ -685,14 +661,11 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
 
     for (int i = 0; i < count; ++i) {
         PickupCandidate* p = &buf[i];
-        void* rmIBP = &p->rawMat;
 
-        fn_InternalBasePtr_CheckPtr(rmIBP);
         void* dRaw = *reinterpret_cast<void**>(
             reinterpret_cast<uintptr_t>(p->rawMat) + 0x18);
         void* d = fn_IsDerivedFrom(dRaw, tidRawMatDesc) ? dRaw : nullptr;
 
-        fn_InternalBasePtr_CheckPtr(rmIBP);
         const int need = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(d) + 0x48) *
                          *reinterpret_cast<int*>(
                              reinterpret_cast<uintptr_t>(p->rawMat) + 0x28);
@@ -736,21 +709,17 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
             if (!found) new (&wIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         }
 
-        fn_InternalBasePtr_CheckPtr(&wIBP);
         void* wRaw = wIBP;
         void* wPickup = fn_IsDerivedFrom(wRaw, tidPickup) ? wRaw : nullptr;
         void* claimed = nullptr;
         new (&claimed) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(wPickup));   // B.3.3 bridge
-        fn_InternalBasePtr_CheckPtr(&claimed);
         *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(claimed) + 0x48) = 1;
         void* citEnt = *reinterpret_cast<void**>(citizenIBP);
-        fn_InternalBasePtr_CheckPtr(&claimed);
         *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(claimed) + 0x50) = citEnt;
     }
 
     // --- stamp the citizen ------------------------------------------------------
     const int32_t workTypeId = *reinterpret_cast<int32_t*>(S + 0x20);
-    fn_InternalBasePtr_CheckPtr(citizenIBP);
     uintptr_t citEntity = *reinterpret_cast<uintptr_t*>(citizenIBP);
 
     // vtable slot 10 (+0x50) GetTarget: member value-return ABI -- RCX=this,
@@ -812,18 +781,14 @@ int Pickup_Execute_Impl(Pickup* self, void* entityIBP, void* param3) {
     }
 
     // Check citizenIBP (+0x50)
-    fn_InternalBasePtr_CheckPtr(entityIBP);
     uintptr_t citizenEntity = *(uintptr_t*)(*(uintptr_t*)entityIBP + 0x1f0);
 
-    fn_InternalBasePtr_CheckPtr(&self->citizenIBP);
     uintptr_t storedCitizen = (uintptr_t)self->citizenIBP;
 
     if (citizenEntity != *(uintptr_t*)(storedCitizen + 0x1f0)) {
         // Citizen changed workplace -- cancel old work and re-target
-        fn_InternalBasePtr_CheckPtr(&self->citizenIBP);
         uintptr_t oldCitizen = (uintptr_t)self->citizenIBP;
 
-        fn_InternalBasePtr_CheckPtr((void*)(oldCitizen + 0x278));
         s_fn_CancelAllWork((void*)(*(uintptr_t*)(oldCitizen + 0x278) + 0x48));
 
         // Re-run Slot4 with the new citizen
@@ -886,10 +851,8 @@ int Pickup_Slot7_Impl(Pickup* self) {
 int Pickup_Slot8_Impl(Pickup* self) {
     Pickup_ResolveFuncs();   // lazy-resolve — factory-bypassed Pickups (see Slot9 note)
     if (self->status == 1) {
-        fn_InternalBasePtr_CheckPtr(&self->citizenIBP);
         uintptr_t citizenEntity = (uintptr_t)self->citizenIBP;
 
-        fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
         s_fn_CancelAllWork((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
     }
     return 0;

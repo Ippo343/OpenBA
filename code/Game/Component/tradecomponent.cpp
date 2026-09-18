@@ -192,10 +192,8 @@ uint8_t TradeComponent_Slot13(TradeComponent* selfP) {
     uintptr_t self = (uintptr_t)selfP;
     if (!s_tc_FindWorkPlace) return 1;
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(self + 0x10));
     uint64_t wpc[2] = {0, 0};
     s_tc_FindWorkPlace(*(int64_t*)(self + 0x10), &wpc);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpc);
     if (!wpc[0]) return 1;
 
     return (*(char*)(wpc[0] + 0x50) != 0) ? 3 : 1;
@@ -211,15 +209,12 @@ void TradeComponent_Slot14(TradeComponent* selfP) {
     uintptr_t self = (uintptr_t)selfP;
     if (!s_tc_FindWorkPlace || !s_tc_FindWorkSched || !s_tc_SetAccepting) return;
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(self + 0x10));
     int64_t sched = 0;
     s_tc_FindWorkSched(*(int64_t*)(self + 0x10), &sched);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(self + 0x10));
     int64_t wpc = 0;
     s_tc_FindWorkPlace(*(int64_t*)(self + 0x10), &wpc);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpc);
     if (!wpc) return;
 
     // enable == "the workplace is NOT currently accepting", i.e. this is a toggle.
@@ -250,14 +245,10 @@ void TradeComponent_Slot14(TradeComponent* selfP) {
         uint64_t workIBP[1] = {0};
         if (fn_InternalBasePtr_Ctor) new (workIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&sched);
         if (s_tc_PostWork) s_tc_PostWork(sched, 1, '\0', workIBP);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpc);
         newState = '\x01';
     } else {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&sched);
         if (s_tc_CancelWork) s_tc_CancelWork(sched);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpc);
         newState = '\0';
     }
 

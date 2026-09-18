@@ -73,7 +73,6 @@ bool WorkImpl_WalkablePos_122be0(uintptr_t param_1, uintptr_t param_2,
                                  float* param_3, float* param_4, int* param_5) {
     EnsureWalk();
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(param_1 + 0x10));
     uintptr_t pathObj = 0;   // ClearPathQueue fills this IBP; CheckPtr resolves it to the obj ptr
     if (s_fn_ClearPathQueue) s_fn_ClearPathQueue(*reinterpret_cast<uintptr_t*>(param_1 + 0x10), &pathObj);
 
@@ -86,7 +85,6 @@ bool WorkImpl_WalkablePos_122be0(uintptr_t param_1, uintptr_t param_2,
     uintptr_t recBase  = *reinterpret_cast<uintptr_t*>(param_2);       // *(param_2)
     int       recCount = *reinterpret_cast<int*>(param_2 + 8);         // *(param_2+8)
     for (int i = 0; i < recCount; i++) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&pathObj);
         // Transform = 7 floats at obj+0x148 (quat 4 + translate 3).
         const Math::Transform& xform = *reinterpret_cast<const Math::Transform*>(pathObj + 0x148);   // B.3.1 bridge
         const Math::Vector3& inVec = *reinterpret_cast<const Math::Vector3*>(recBase + static_cast<int64_t>(i) * 0x18);   // B.3.1 bridge
@@ -141,7 +139,6 @@ uint8_t WorkImpl_WalkablePosRecursive_122b00(uintptr_t param_1, int param_2,
     uintptr_t childArr   = *reinterpret_cast<uintptr_t*>(param_1 + 0x28);
     for (int i = 0; i < childCount; i++) {
         uintptr_t* slot = reinterpret_cast<uintptr_t*>(childArr + static_cast<int64_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         uint8_t sub = WorkImpl_WalkablePosRecursive_122b00(*slot, param_2, param_3, param_4, param_5);
         result = static_cast<uint8_t>(result | sub);
     }
@@ -161,13 +158,11 @@ uint64_t WorkImpl_BuildStructureStep_6ef0(uintptr_t param_1, void* param_2IBP,
     *reinterpret_cast<int64_t*>(param_1 + 0x30) +=
         (*reinterpret_cast<int64_t*>(param_5Time) - *reinterpret_cast<int64_t*>(param_1 + 0x38));
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2IBP);
     int64_t gateA = *reinterpret_cast<int64_t*>(
         *reinterpret_cast<uintptr_t*>(WalkGameWorld() + 0xb0) + 0x30);
 
     uintptr_t target = *reinterpret_cast<uintptr_t*>(param_2IBP);
     if (*reinterpret_cast<int64_t*>(target + 0x1f0) != gateA) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2IBP);
         target = *reinterpret_cast<uintptr_t*>(param_2IBP);
         if (*reinterpret_cast<int64_t*>(target + 0x248) != 0) {
             uint64_t resDefault = *reinterpret_cast<uint64_t*>(WalkGameWorld() + 0x130);
@@ -177,7 +172,6 @@ uint64_t WorkImpl_BuildStructureStep_6ef0(uintptr_t param_1, void* param_2IBP,
                                    param_3, static_cast<int>(param_4), '\x01')
                 : -1;
 
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2IBP);
             void* obj = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(param_2IBP) + 0x18);
             uint32_t* pTid7190 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7190));
             void* stage = (pTid7190 && fn_IsDerivedFrom && fn_IsDerivedFrom(obj, *pTid7190)) ? obj : nullptr;

@@ -52,33 +52,19 @@ static void DebugUI_SetDayLighting_Impl(DebugUI* self, int month) {
     if (!weatherTable) return;
     uintptr_t entry = weatherTable + (uintptr_t)month * 0x20;
 
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x80));
     *(float*)(*(uintptr_t*)(s + 0x80) + 0x128) = (float)*(uint8_t*)(entry + 0x3e); // sunR
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x88));
     *(float*)(*(uintptr_t*)(s + 0x88) + 0x128) = (float)*(uint8_t*)(entry + 0x3d); // sunG
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x90));
     *(float*)(*(uintptr_t*)(s + 0x90) + 0x128) = (float)*(uint8_t*)(entry + 0x3c); // sunB
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xe0));
     *(uint32_t*)(*(uintptr_t*)(s + 0xe0) + 0x128) = *(uint32_t*)(entry + 0x50);    // sunH (float)
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xe8));
     *(uint32_t*)(*(uintptr_t*)(s + 0xe8) + 0x128) = *(uint32_t*)(entry + 0x54);    // sunP (float)
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x98));
     *(float*)(*(uintptr_t*)(s + 0x98) + 0x128) = (float)*(uint8_t*)(entry + 0x3a); // ambR
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xa0));
     *(float*)(*(uintptr_t*)(s + 0xa0) + 0x128) = (float)*(uint8_t*)(entry + 0x39); // ambG
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xa8));
     *(float*)(*(uintptr_t*)(s + 0xa8) + 0x128) = (float)*(uint8_t*)(entry + 0x38); // ambB
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xb0));
     *(float*)(*(uintptr_t*)(s + 0xb0) + 0x128) = (float)*(uint8_t*)(entry + 0x42); // fogR
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xb8));
     *(float*)(*(uintptr_t*)(s + 0xb8) + 0x128) = (float)*(uint8_t*)(entry + 0x41); // fogG
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xc0));
     *(float*)(*(uintptr_t*)(s + 0xc0) + 0x128) = (float)*(uint8_t*)(entry + 0x40); // fogB
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xc8));
     *(uint32_t*)(*(uintptr_t*)(s + 0xc8) + 0x128) = *(uint32_t*)(entry + 0x44);    // fogN (float)
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xd0));
     *(uint32_t*)(*(uintptr_t*)(s + 0xd0) + 0x128) = *(uint32_t*)(entry + 0x48);    // fogF (float)
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xd8));
     *(float*)(*(uintptr_t*)(s + 0xd8) + 0x128) =
         *(float*)(entry + 0x4c) * 255.0f;  // fogM (normalize)
 }
@@ -96,42 +82,28 @@ static void DebugUI_WriteLightingColors_Impl(DebugUI* self, int month) {
     if (!weatherTable) return;
     uintptr_t entry = weatherTable + (uintptr_t)month * 0x20;
 
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x80));
     float sunR = *(float*)(*(uintptr_t*)(s + 0x80) + 0x128);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x88));
     float sunG = *(float*)(*(uintptr_t*)(s + 0x88) + 0x128);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x90));
     // Pack sun ARGB at entry+0x3c
     *(uint32_t*)(entry + 0x3c) = ((int)sunR << 8 | (int)sunG) << 8
         | (int)*(float*)(*(uintptr_t*)(s + 0x90) + 0x128) | 0xFF000000;
 
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x98));
     float ambR = *(float*)(*(uintptr_t*)(s + 0x98) + 0x128);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xa0));
     float ambG = *(float*)(*(uintptr_t*)(s + 0xa0) + 0x128);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xa8));
     // Pack amb ARGB at entry+0x38
     *(uint32_t*)(entry + 0x38) = ((int)ambR << 8 | (int)ambG) << 8
         | (int)*(float*)(*(uintptr_t*)(s + 0xa8) + 0x128) | 0xFF000000;
 
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xb0));
     float fogR = *(float*)(*(uintptr_t*)(s + 0xb0) + 0x128);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xb8));
     float fogG = *(float*)(*(uintptr_t*)(s + 0xb8) + 0x128);
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xc0));
     // Pack fog ARGB at entry+0x40
     *(uint32_t*)(entry + 0x40) = ((int)fogR << 8 | (int)fogG) << 8
         | (int)*(float*)(*(uintptr_t*)(s + 0xc0) + 0x128) | 0xFF000000;
 
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xe0));
     *(uint32_t*)(entry + 0x50) = *(uint32_t*)(*(uintptr_t*)(s + 0xe0) + 0x128); // sunH
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xe8));
     *(uint32_t*)(entry + 0x54) = *(uint32_t*)(*(uintptr_t*)(s + 0xe8) + 0x128); // sunP
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xc8));
     *(uint32_t*)(entry + 0x44) = *(uint32_t*)(*(uintptr_t*)(s + 0xc8) + 0x128); // fogN
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xd0));
     *(uint32_t*)(entry + 0x48) = *(uint32_t*)(*(uintptr_t*)(s + 0xd0) + 0x128); // fogF
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xd8));
     *(float*)(entry + 0x4c) = *(float*)(*(uintptr_t*)(s + 0xd8) + 0x128) / 255.0f; // fogM
 }
 
@@ -141,7 +113,6 @@ static void DebugUI_WriteLightingColors_Impl(DebugUI* self, int month) {
 // DAT_1401721cc = 30.0f (days/month for month index calc)
 static void DebugUI_OnDaySliderChanged_Impl(DebugUI* self) {
     uintptr_t s = (uintptr_t)self;
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x78));
     float sliderVal = *(float*)(*(uintptr_t*)(s + 0x78) + 0x128);
 
     // Convert slider (0-359) to game time in ticks
@@ -158,7 +129,6 @@ static void DebugUI_OnDaySliderChanged_Impl(DebugUI* self) {
     if (fn_Weather_ResetTime) fn_Weather_ResetTime(weatherListPtr, &zeroTick);
 
     // Update lighting sliders for the new month
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x78));
     int monthIdx = (int)(sliderVal / 30.0f);  // 30 days/month
     DebugUI_SetDayLighting_Impl(self, monthIdx);
 }
@@ -168,11 +138,9 @@ static void DebugUI_OnDaySliderChanged_Impl(DebugUI* self) {
 // self+0x38 = diseaseCombo (InternalBasePtr); combo item data is the disease entity.
 static void DebugUI_OnDiseaseComboChanged_Impl(DebugUI* self) {
     uintptr_t s = (uintptr_t)self;
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x38));
     int selIdx = *(int*)(*(uintptr_t*)(s + 0x38) + 0x118);  // selected item index
     if (selIdx > 3) {
         // Only take action if index > 3 (first 3 are non-disease entries)
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x38));
         void* comboElem = *(void**)(s + 0x38);
         void* itemData = fn_ComboElement_GetItemData(comboElem, selIdx);
         // Construct InternalBasePtr from item data — used internally by disease system
@@ -235,11 +203,9 @@ static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
     }
 
     // Get selected combo index
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x108));
     int selectedIdx = *(int*)(*(uintptr_t*)(s + 0x108) + 0x118);
 
     // Get item data (cast to int index into draw list)
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x108));
     void* itemData = fn_ComboElement_GetItemData(*(void**)(s + 0x108), selectedIdx);
     int selectedDrawIdx = (int)(intptr_t)itemData;
 
@@ -317,13 +283,11 @@ static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
                     fn_AudioScene_RegisterObject(audioMgr, audioRef, soundType);
 
                     // Find audio component on the audio object
-                    fn_InternalBasePtr_CheckPtr((void*)&audioArray[i]);
                     uint8_t audioCompBuf[8];
                     fn_Entity_FindAudioComponent((void*)audioArray[i], audioCompBuf);
 
                     // Check if position differs from zero — if so, move all emitters
                     Math::Vector3 zeroPos;   // ??0Vector3@Math@@QEAA@XZ 0x180015070
-                    fn_InternalBasePtr_CheckPtr(audioCompBuf);
                     uintptr_t audioComp = *(uintptr_t*)audioCompBuf;
 
                     // ??8Vector3@Math@@QEBA_NAEBV01@@Z  retail 0x1800150a0
@@ -350,7 +314,6 @@ static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
                     }
 
                     // Handle first emitter volume — mute it if needed
-                    fn_InternalBasePtr_CheckPtr(audioCompBuf);
                     audioComp = *(uintptr_t*)audioCompBuf;
                     uint32_t* firstEmitter = *(uint32_t**)(audioComp + 0x38);
                     if (firstEmitter[0] == 0) {
@@ -450,13 +413,11 @@ static void Game_SpawnItemsInStorage_Impl() {
     uintptr_t arrayBase = *(uintptr_t*)(entityListBase + 0x90);
     for (int i = 0; i < storageCount; i++) {
         void* storage = *(void**)(arrayBase + (uintptr_t)i * 8);
-        fn_InternalBasePtr_CheckPtr(&storage);
 
         // Check if storage has items to spawn (component+0x28 != 0)
         if (*(uintptr_t*)((uintptr_t)storage + 0x28) == 0) continue;
 
         for (int j = 0; j < 5; j++) {
-            fn_InternalBasePtr_CheckPtr(&storage);
             int currentCount = *(int*)((uintptr_t)storage + 0x38);
             int capacity = fn_StorageComponent_GetCapacity(storage);
             if (capacity <= currentCount) break;
@@ -464,7 +425,6 @@ static void Game_SpawnItemsInStorage_Impl() {
             // Spawn one item
             uint8_t retBuf[8] = {0};
             new (retBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            fn_InternalBasePtr_CheckPtr(&storage);
             fn_StorageComponent_SpawnItem(storage, retBuf);
         }
     }
@@ -496,7 +456,6 @@ static void Game_SpawnCitizens_Impl() {
                 void* building = *(void**)(buildOffset + buildArrayBase);
 
                 if (building != nullptr) {
-                    fn_InternalBasePtr_CheckPtr(&building);
 
                     // Find ResidenceComponent (DAT_1401c7900) on this building
                     void* residenceComp = nullptr;
@@ -508,14 +467,12 @@ static void Game_SpawnCitizens_Impl() {
                         int64_t cOffset = 0;
                         while (ci < compCount) {
                             void** pComp = (void**)(compArrayBase + cOffset * 8);
-                            fn_InternalBasePtr_CheckPtr(pComp);
                             void* comp = *pComp;
                             typedef uint32_t (*fn_GetTypeId_t)(void*);
                             uint32_t typeId = ((fn_GetTypeId_t)(*(void***)(comp))[2])(comp);
                             if (typeId == *g_TypeId_InteractComponent_FC) {
                                 // Re-read and CheckPtr on the array slot
                                 pComp = (void**)(compArrayBase + cOffset * 8);
-                                fn_InternalBasePtr_CheckPtr(pComp);
                                 comp = *pComp;
                                 bool isRes = fn_IsDerivedFrom(comp, *g_TypeId_InteractComponent_FC);
                                 residenceComp = isRes ? comp : nullptr;
@@ -537,7 +494,6 @@ found_residence:
                         int spawnedHere = 0; // R12D — per-building spawn counter
                         while (true) {
                             // Re-check ResidenceComponent each iteration
-                            fn_InternalBasePtr_CheckPtr(&resCompIBP);
                             uintptr_t resComp = (uintptr_t)resCompIBP;
 
                             // Get ResidenceDescription from component+0x18
@@ -557,7 +513,6 @@ found_residence:
                                 uintptr_t sOffset = 0;
                                 do {
                                     void** pChild = (void**)(childArrayBase + sOffset);
-                                    fn_InternalBasePtr_CheckPtr(pChild);
                                     int occResult = fn_ResidenceComponent_GetOccupantCount(*pChild, 0);
                                     capacityAccum += occResult;
                                     si++;
@@ -569,7 +524,6 @@ found_residence:
                             if (spawnedHere >= capacityAccum) break;
 
                             // Get spawn point for this slot
-                            fn_InternalBasePtr_CheckPtr(&resCompIBP);
                             uint8_t spawnPos[16] = {0};
                             fn_ResidenceComponent_GetSpawnPoint(resCompIBP, spawnPos, 0, spawnedHere, nullptr);
 
@@ -620,7 +574,6 @@ found_residence:
                                 reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
 
                             // Find CitizenAIComponent (DAT_1401c7158) on the new entity
-                            fn_InternalBasePtr_CheckPtr(&newEntityIBP);
                             void* aiComp = nullptr;
                             {
                                 uintptr_t ne = (uintptr_t)newEntityIBP;
@@ -630,13 +583,11 @@ found_residence:
                                 int64_t cOffset = 0;
                                 while (ci < compCount) {
                                     void** pComp = (void**)(compArrayBase + cOffset * 8);
-                                    fn_InternalBasePtr_CheckPtr(pComp);
                                     void* comp = *pComp;
                                     typedef uint32_t (*fn_GetTypeId_t)(void*);
                                     uint32_t typeId = ((fn_GetTypeId_t)(*(void***)(comp))[2])(comp);
                                     if (typeId == *g_TypeId_CitizenComponent_FC) {
                                         pComp = (void**)(compArrayBase + cOffset * 8);
-                                        fn_InternalBasePtr_CheckPtr(pComp);
                                         comp = *pComp;
                                         bool isAI = fn_IsDerivedFrom(comp, *g_TypeId_CitizenComponent_FC);
                                         aiComp = isAI ? comp : nullptr;
@@ -654,7 +605,6 @@ found_ai:
                                 reinterpret_cast<RtObject::Internal*>(aiComp));   // B.3.3 bridge
 
                             // Setup citizen
-                            fn_InternalBasePtr_CheckPtr(&aiCompIBP);
                             void* citizenAI = aiCompIBP;
 
                             // Get CitizenDescription (DAT_1401c7190) from AI component
@@ -671,7 +621,6 @@ found_ai:
                             new (&parentIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
                             // Read age range from CitizenDescription
-                            fn_InternalBasePtr_CheckPtr(&aiCompIBP);
                             citizenAI = aiCompIBP;
                             float minAge = *(float*)((uintptr_t)citDesc + 0x50);
                             float randAge = fn_Random_RandFloat(randomPtr);
@@ -725,7 +674,6 @@ static void DebugUI_TriggerDisasterOnBuilding_Impl(DebugUI* self) {
     uint32_t randIdx = fn_Random_Rand(randomPtr, buildingCount);
 
     // Get disease description from combo selection
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x30));
     void* combo = *(void**)(s + 0x30);
     if (!combo) return;
     int diseaseIdx = *(int*)((uintptr_t)combo + 0x118);
@@ -739,7 +687,6 @@ static void DebugUI_TriggerDisasterOnBuilding_Impl(DebugUI* self) {
 
     // Get building entity from building array
     void* building = *(void**)(*(uintptr_t*)(entityListBase + 0xA0) + (int64_t)(int)randIdx * 8);
-    fn_InternalBasePtr_CheckPtr(&building);
     if (!building) return;
 
     // Apply disease to building
@@ -762,7 +709,6 @@ static void Game_StartRandomFire_Impl() {
 
     // Get random building entity
     void* building = *(void**)(*(uintptr_t*)(entityListBase + 0x20) + (uintptr_t)randIdx * 8);
-    fn_InternalBasePtr_CheckPtr(&building);
 
     // Find FireComponent on the building
     uint8_t fireCompBuf[8] = {0};
@@ -770,7 +716,6 @@ static void Game_StartRandomFire_Impl() {
 
     // Ignite
     void* fireComp = *(void**)fireCompBuf;
-    fn_InternalBasePtr_CheckPtr(&fireComp);
     fn_FireComponent_Ignite(fireComp);
 }
 
@@ -833,7 +778,6 @@ static void Game_InfectRandomCitizen_Impl() {
     uintptr_t citizenArray = *(uintptr_t*)(entityListBase + 0xF0);
     if (!citizenArray) return;
     void* citizen = *(void**)(citizenArray + (uintptr_t)randIdx * 8);
-    fn_InternalBasePtr_CheckPtr(&citizen);
     if (!citizen) return;
 
     // Infect citizen's disease component
@@ -878,19 +822,15 @@ void DebugUI_Slot8(DebugUI* self) {
     if (!engineState) return;
 
     // Read and display 4 debug counters from engine state
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x58));
     void* numBatches = *(void**)(s + 0x58);
     if (numBatches) fn_NumberElement_SetValueInt(numBatches, *(int*)(engineState + 0x2158));
 
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x40));
     void* numDrawCalls = *(void**)(s + 0x40);
     if (numDrawCalls) fn_NumberElement_SetValueInt(numDrawCalls, *(int*)(engineState + 0x215C));
 
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x48));
     void* numTriangles = *(void**)(s + 0x48);
     if (numTriangles) fn_NumberElement_SetValueInt(numTriangles, *(int*)(engineState + 0x2150));
 
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x50));
     void* numVertices = *(void**)(s + 0x50);
     if (numVertices) fn_NumberElement_SetValueInt(numVertices, *(int*)(engineState + 0x2154));
 
@@ -915,15 +855,12 @@ void DebugUI_Slot8(DebugUI* self) {
     *smoothedFrameMS = (*smoothedFrameMS) * alpha + frameSeconds * beta;
 
     // Display smoothed values
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x60));
     void* numFPS = *(void**)(s + 0x60);
     if (numFPS) fn_NumberElement_SetValueInt(numFPS, (int)*smoothedFPS);
 
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x68));
     void* numFrameMS = *(void**)(s + 0x68);
     if (numFrameMS) fn_NumberElement_SetValueFloat(numFrameMS, *smoothedFrameMS * 1000.0f);
 
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x70));
     void* numTotalMS = *(void**)(s + 0x70);
     if (numTotalMS) fn_NumberElement_SetValueFloat(numTotalMS, *smoothedTotalMS * 1000.0f);
 }
@@ -952,12 +889,10 @@ void DebugUI_Slot7(DebugUI* self) {
     // --- Day slider text update ---
     // Original: CheckPtr(+0x78), get child, CheckPtr child, IsDerivedFrom, IBP ctor,
     //           CheckPtr(+0x78) again for value, CheckPtr child for format, SetText
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x78));
     void* sliderDay = *(void**)(s + 0x78);
     if (sliderDay) {
         uint8_t childBuf[16];
         fn_Element_Child(sliderDay, childBuf, 0);
-        fn_InternalBasePtr_CheckPtr(childBuf);
         void* childRaw = *(void**)childBuf;
         // IsDerivedFrom check + IBP wrap (matches original)
         bool isText = childRaw && fn_IsDerivedFrom(childRaw, *g_TypeId_ObjectInternal);
@@ -965,34 +900,28 @@ void DebugUI_Slot7(DebugUI* self) {
         uint8_t textIBP[8];
         new (textIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(textChild));   // B.3.3 bridge
 
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x78));
         float dayValue = *(float*)(*(uintptr_t*)(s + 0x78) + 0x128);
 
-        fn_InternalBasePtr_CheckPtr(textIBP);
         void* textElem = *(void**)textIBP;
         if (textElem) {
             uint8_t uiStrBuf[16];
             uint64_t fmtRef = *(uint64_t*)((uintptr_t)textElem + 0xD8);
             *(uint64_t*)&uiStrBuf[8] = *(uint64_t*)((uintptr_t)textElem + 0xE0);
             fn_UIString_Ctor_Index(uiStrBuf, fmtRef, (int)dayValue / 30);
-            fn_InternalBasePtr_CheckPtr(textIBP);
             fn_TextElement_SetText(*(void**)textIBP, uiStrBuf);
         }
     }
 
     // Helper: read slider value with CheckPtr (matches original pattern)
     auto readSlider = [](uintptr_t s, uintptr_t offset) -> float {
-        fn_InternalBasePtr_CheckPtr((void*)(s + offset));
         return *(float*)(*(uintptr_t*)(s + offset) + 0x128);
     };
 
     // --- Sun color swatch ---
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xF0));
     void* imageColorSun = *(void**)(s + 0xF0);
     if (imageColorSun) {
         float sunB = readSlider(s, 0x90);
         float sunG = readSlider(s, 0x88);
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x80));
         uint32_t sunColor = ((int)*(float*)(*(uintptr_t*)(s + 0x80) + 0x128) << 8
             | (int)sunG) << 8 | (int)sunB | 0xFF000000;
         void** sunVt = *(void***)imageColorSun;
@@ -1000,12 +929,10 @@ void DebugUI_Slot7(DebugUI* self) {
     }
 
     // --- Ambient color swatch ---
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0xF8));
     void* imageColorAmb = *(void**)(s + 0xF8);
     if (imageColorAmb) {
         float ambB = readSlider(s, 0xA8);
         float ambG = readSlider(s, 0xA0);
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0x98));
         uint32_t ambColor = ((int)*(float*)(*(uintptr_t*)(s + 0x98) + 0x128) << 8
             | (int)ambG) << 8 | (int)ambB | 0xFF000000;
         void** ambVt = *(void***)imageColorAmb;
@@ -1013,12 +940,10 @@ void DebugUI_Slot7(DebugUI* self) {
     }
 
     // --- Fog color swatch ---
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x100));
     void* imageColorFog = *(void**)(s + 0x100);
     if (imageColorFog) {
         float fogB = readSlider(s, 0xC0);
         float fogG = readSlider(s, 0xB8);
-        fn_InternalBasePtr_CheckPtr((void*)(s + 0xB0));
         uint32_t fogColor = ((int)*(float*)(*(uintptr_t*)(s + 0xB0) + 0x128) << 8
             | (int)fogG) << 8 | (int)fogB | 0xFF000000;
         void** fogVt = *(void***)imageColorFog;
@@ -1155,7 +1080,6 @@ void DebugUI_ToggleDebugFlag(void* ibpPtr, uint32_t flag) {
     uint32_t* debugFlags = (uint32_t*)((uintptr_t)game + 0xD0);
 
     // CheckPtr resolves the InternalBasePtr (lazy/weak pointer resolution)
-    fn_InternalBasePtr_CheckPtr(ibpPtr);
 
     // Deref through IBP to get actual checkbox element, then read +0xD8
     void* element = *(void**)ibpPtr;
@@ -1406,7 +1330,6 @@ void DebugUI_Slot4(DebugUI* self) {
 
     #define FIND_SLIDER(field, name, id) do { \
         self->field = DebugUI_FindElemBase(parentElem, name); \
-        fn_InternalBasePtr_CheckPtr((void*)(s + offsetof(DebugUI, field))); \
         fn_Element_SetElementId(*(void**)(s + offsetof(DebugUI, field)), id); \
     } while(0)
 
@@ -1441,9 +1364,7 @@ void DebugUI_Slot4(DebugUI* self) {
     // Original uses CheckPtr + deref for every write. +0x118 = min, +0x11C = max.
     // Helper: CheckPtr on IBP field, then write float to resolved element.
     #define SET_MINMAX(field, minVal, maxVal) do { \
-        fn_InternalBasePtr_CheckPtr((void*)(s + offsetof(DebugUI, field))); \
         *(float*)(*(uintptr_t*)(s + offsetof(DebugUI, field)) + 0x118) = minVal; \
-        fn_InternalBasePtr_CheckPtr((void*)(s + offsetof(DebugUI, field))); \
         *(float*)(*(uintptr_t*)(s + offsetof(DebugUI, field)) + 0x11C) = maxVal; \
     } while(0)
 

@@ -251,14 +251,11 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/,
 
     // The trading post's own TradeComponent and StorageComponent.
     uint64_t tradePtr[2] = {0, 0};
-    fn_InternalBasePtr_CheckPtr(&entityPtr);
     fn_FindComponent_Building(reinterpret_cast<void*>(entityPtr[0]), &tradePtr);
 
     uint64_t storagePtr[2] = {0, 0};
-    fn_InternalBasePtr_CheckPtr(&entityPtr);
     fn_FindComponent_Storage(reinterpret_cast<void*>(entityPtr[0]), &storagePtr);
 
-    fn_InternalBasePtr_CheckPtr(&tradePtr);
     TradeDescription_ExtendMerchantStay(reinterpret_cast<void*>(tradePtr[0]));
 
     uintptr_t gameWorld = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
@@ -285,7 +282,6 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/,
             if (qty == 0) continue;
             ++soldRows; soldUnits += qty;
 
-            fn_InternalBasePtr_CheckPtr(&storagePtr);
             void* storage = reinterpret_cast<void*>(storagePtr[0]);
             void* resEntity = *reinterpret_cast<void**>(entry);
 
@@ -306,7 +302,6 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/,
             // Zero the row's spinner and its pending quantity.
             uintptr_t uiRow = *reinterpret_cast<uintptr_t*>(s + 0x60)
                             + static_cast<uintptr_t>(i) * 0x20 + 0x18;
-            fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(uiRow));
             fn_SpinnerElement_SetValue(*reinterpret_cast<void**>(uiRow), 0);
             *reinterpret_cast<int*>(
                 *reinterpret_cast<uintptr_t*>(s + 0x30)
@@ -317,7 +312,6 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/,
     // Bank the sell total. It is read straight off the numberSellTotal element
     // (self+0x100, current value at element+0xd8) rather than recomputed, so the
     // displayed figure and the credited figure cannot disagree.
-    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x100));
     {
         uintptr_t sellTotalElem = *reinterpret_cast<uintptr_t*>(s + 0x100);
         *reinterpret_cast<int*>(townMgr + 0x1ac) +=
@@ -341,7 +335,6 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/,
             void* bought = *reinterpret_cast<void**>(entry);
 
             // Retire this much of the order from the post's buy list.
-            fn_InternalBasePtr_CheckPtr(&tradePtr);
             TradeComponent_RemoveBuyOrder(reinterpret_cast<void*>(tradePtr[0]), bought, qty);
 
             uintptr_t boughtEntity = reinterpret_cast<uintptr_t>(bought);
@@ -350,7 +343,6 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/,
             // material available to the town.
             if (s_tidRawMaterialDesc &&
                 FindComponentByTypeId(boughtEntity, *s_tidRawMaterialDesc)) {
-                fn_InternalBasePtr_CheckPtr(&storagePtr);
                 fn_StorageAddItem(reinterpret_cast<void*>(storagePtr[0]), bought, qty);
                 RawMaterialComponent_RegisterRawMaterial(
                     reinterpret_cast<void*>(townMgr), bought);
@@ -364,7 +356,6 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/,
             else if (s_tidLivestockDesc &&
                      FindComponentByTypeId(boughtEntity, *s_tidLivestockDesc)) {
                 TownMgr_AddAvailableAgri(reinterpret_cast<uint8_t*>(townMgr), bought);
-                fn_InternalBasePtr_CheckPtr(&tradePtr);
                 if (fn_Building_AddBuyToStorage) {
                     fn_Building_AddBuyToStorage(reinterpret_cast<void*>(tradePtr[0]), bought, qty);
                 } else {
@@ -391,7 +382,6 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/,
             // Zero the row's spinner and its pending quantity.
             uintptr_t uiRow = *reinterpret_cast<uintptr_t*>(s + 0x70)
                             + static_cast<uintptr_t>(i) * 0x20 + 0x10;
-            fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(uiRow));
             fn_SpinnerElement_SetValue(*reinterpret_cast<void**>(uiRow), 0);
             *reinterpret_cast<int*>(
                 *reinterpret_cast<uintptr_t*>(s + 0x40)

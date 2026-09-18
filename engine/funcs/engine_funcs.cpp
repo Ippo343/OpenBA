@@ -5,11 +5,6 @@
 #include "options.h"
 #include "resolve.h"
 
-// Implemented in standalone/resolve_standalone.cpp and declared in
-// runtime/funcs/rt_port.h, which this translation unit deliberately does not
-// include (that is the runtime-port seam, this is the exe-side one). Declared
-// here so the CheckPtr resolve can ASK THE REGISTRY instead of sniffing bytes.
-bool RuntimeExportIsRegistered(const char* mangled_name);
 #include <cstdio>
 
 // Shared .rdata-slot type-id resolver. Declared in engine_funcs.h.
@@ -635,8 +630,6 @@ fn_External_GetPath_t fn_External_GetPath = nullptr;
 fn_App_Quit_t fn_App_Quit = nullptr;
 fn_Configuration_CurrentVersion_t fn_Configuration_CurrentVersion = nullptr;
 fn_Configuration_CurrentBuildId_t fn_Configuration_CurrentBuildId = nullptr;
-fn_InternalBasePtr_CheckPtr_t fn_InternalBasePtr_CheckPtr = nullptr;
-bool g_checkPtrIsNop = false;
 fn_DialogInstance_Ctor_t fn_DialogInstance_Ctor = nullptr;
 void** g_MainMenuDialog_BuildIdVtable = nullptr;
 // fn_MainMenu_* handlers — REMOVED, now reimplemented in mainmenudialog.cpp
@@ -2520,63 +2513,6 @@ bool EngineFuncsInit() {
 
     fn_Configuration_CurrentBuildId = reinterpret_cast<fn_Configuration_CurrentBuildId_t>(
         ResolveExport("?CurrentBuildId@Configuration@System@@SA?AVString@2@XZ"));
-
-    fn_InternalBasePtr_CheckPtr = reinterpret_cast<fn_InternalBasePtr_CheckPtr_t>(
-        ResolveExport("?CheckPtr@InternalBasePtr@Object@@IEBAXXZ"));
-    {
-        // See the g_checkPtrIsNop note in engine_funcs.h: only skip the call when
-        // the resolved body really does nothing.
-        //
-        // TWO ways of knowing that. The second was added by WAVE 9 LANE Y on
-        // 2026-09-08, because the first one had frozen a decision into place:
-        //
-        //  (a) BYTE SNIFF. The shipped body is `C2 00 00` = RET 0 (MSVC's form);
-        //      a bare C3 is accepted too. This is what has always been here.
-        //  (b) REGISTRY. `?CheckPtr@...` is now a registered PORT, and our port
-        //      (RtObject_InternalBasePtr_CheckPtr, runtime/src/object/internal.cpp)
-        //      has an empty body BY CONSTRUCTION — we wrote it. Its first byte is
-        //      whatever GCC emits for a prologue, so the sniff cannot see that.
-        //
-        // Why (b) is not a convenience. Without it the sniff makes "register the
-        // port" and "keep the ~60k skipped indirect calls per frame" mutually
-        // exclusive, and internal.cpp recorded exactly that as the reason NOT to
-        // register — a true observation about the DETECTOR that read as a fact
-        // about the port. With it, registering costs nothing: the flag stays true.
-        //
-        // At cutover, NOT registering is the expensive option, and it is measured:
-        // 3,475 `fn_InternalBasePtr_CheckPtr(...)` call sites across 269 files, of
-        // which only 1,142 carry the `if (fn_InternalBasePtr_CheckPtr)` null guard.
-        // The other 2,333 go through the macro in engine_funcs.h, which reads
-        // `if (!g_checkPtrIsNop) fn(...)` — so with no DLL and no port the resolve
-        // returns null, the sniff sees no bytes, the flag goes FALSE, and every one
-        // of those 2,333 sites calls a null pointer. EXEC-of-0 in the hottest code
-        // in the game.
-        const uint8_t* b = reinterpret_cast<const uint8_t*>(fn_InternalBasePtr_CheckPtr);
-        const uint8_t b0 = b ? b[0] : 0;
-        const bool isRet = b && (b0 == 0xC3 || (b0 == 0xC2 && b[1] == 0 && b[2] == 0));
-        const bool isOurPort =
-            b && RuntimeExportIsRegistered("?CheckPtr@InternalBasePtr@Object@@IEBAXXZ");
-        const bool doesNothing = isRet || isOurPort;
-        const char* env = Opt().checkPtrNop;
-        const bool forceOff = env && env[0] == '0';
-        g_checkPtrIsNop = doesNothing && !forceOff;
-#ifdef BANISHED_CHECKPTR_STATIC_NOP
-        if (!doesNothing)
-            std::fprintf(stderr, "[CheckPtr] WARNING: built with BANISHED_CHECKPTR_STATIC_NOP but the "
-                                 "resolved CheckPtr body is neither a bare RET nor our port — "
-                                 "calls are compiled out!\n");
-#endif
-        // A null resolve is now reported as the cutover hazard it is, rather than
-        // silently degrading to "real call" on a pointer that is not there.
-        if (!b)
-            std::fprintf(stderr, "[CheckPtr] *** UNRESOLVED *** — the 2,333 unguarded call sites "
-                                 "would call a NULL pointer. Register the port "
-                                 "(runtime/src/object/internal.cpp).\n");
-        std::fprintf(stderr, "[CheckPtr] export=%p body[0]=0x%02x source=%s -> %s\n",
-                     (void*)fn_InternalBasePtr_CheckPtr, b0,
-                     isOurPort ? "our port" : (b ? "DLL" : "UNRESOLVED"),
-                     g_checkPtrIsNop ? "NOP (calls skipped)" : "real call");
-    }
 
     fn_DialogInstance_Ctor = reinterpret_cast<fn_DialogInstance_Ctor_t>(
         ResolveAddr(Module::Runtime, 0x180114870));

@@ -174,9 +174,6 @@ void LivestockComponent_OnRemove(LivestockComponent* self) {
         if (gs) s_erase(reinterpret_cast<void*>(gs + 0x80), &ibp);
         return;
     }
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(
-            reinterpret_cast<uintptr_t>(self) + 0x28));
     s_erase(reinterpret_cast<void*>(static_cast<uintptr_t>(self->data28) + 0x30), &ibp);
 }
 

@@ -100,7 +100,6 @@ void SegInsertBefore(SegNode* at, SegNode* n) {
 // vtable slot +0x10 is GetTypeId.
 void* FindComponentOn(void* entityIBPSlot, uint32_t typeId) {
     if (!typeId) return nullptr;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(entityIBPSlot);
     uintptr_t entity = *reinterpret_cast<uintptr_t*>(entityIBPSlot);
     if (!entity) return nullptr;
 
@@ -110,7 +109,6 @@ void* FindComponentOn(void* entityIBPSlot, uint32_t typeId) {
 
     for (int i = 0; i < count; i++) {
         void* slot = reinterpret_cast<void*>(arr + static_cast<int64_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* comp = *reinterpret_cast<void**>(slot);
         if (!comp) continue;
         typedef uint32_t (*GetTypeId_t)(void*);

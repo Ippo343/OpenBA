@@ -363,7 +363,6 @@ extern "C" int EntityUI_ToolTick_SA(void* entityUI, int activeFlag, int64_t time
     }
 
     // (1) OnKey (+0x30): open/close CreateBar dialog, rotate/flip, left-click confirm.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(toolSlot);
     void* tool = *(void**)toolSlot;
     if (!tool) return -1;
     char onKeyResult;
@@ -392,7 +391,6 @@ extern "C" int EntityUI_ToolTick_SA(void* entityUI, int activeFlag, int64_t time
     if (onKeyResult != 0 && activeFlag != 0 && *(char*)(pc + 0x80) == 0) {
         void* km = ToolKeyMap();
         if (km && fn_KeyMap_Pressed && fn_KeyMap_Pressed(km, 0, 6)) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(toolSlot);
             void* t2 = *(void**)toolSlot;
             int canStay = 1;
             if (t2) { void** vt2 = *(void***)t2; typedef int (*Slot9_t)(void*); canStay = ((Slot9_t)vt2[9])(t2); }
@@ -404,7 +402,6 @@ extern "C" int EntityUI_ToolTick_SA(void* entityUI, int activeFlag, int64_t time
     }
 
     // (2) Serialize (+0x38): update the ghost-mesh preview + CreateBar cost/validity.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(toolSlot);
     tool = *(void**)toolSlot;
     if (!tool) return -1;
     {
@@ -415,7 +412,6 @@ extern "C" int EntityUI_ToolTick_SA(void* entityUI, int activeFlag, int64_t time
     }
 
     // (3) cursor (+0x60): id used for SetCursor.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(toolSlot);
     tool = *(void**)toolSlot;
     if (!tool) return -1;
     {
@@ -433,7 +429,6 @@ extern "C" void EntityUI_ToolDraw_SA(void* entityUI, void* context, int activeFl
     uintptr_t pc = (uintptr_t)entityUI;
     void* toolSlot = (void*)(pc + 0x28);
     if (*(void**)toolSlot == nullptr) return;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(toolSlot);
     void* tool = *(void**)toolSlot;
     if (!tool) return;
     void** vt = *(void***)tool;

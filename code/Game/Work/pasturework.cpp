@@ -317,7 +317,7 @@ bool PastureWork_ResolveFuncs() {
               s_fn_PastureHelper8350 && s_fn_RemoveAnimalCtor &&
               s_fn_Entity_GetPosition && s_fn_PositionCount &&
               s_fn_StorageOverflowCheck && s_fn_FindComp_Family2 &&
-              fn_InternalBasePtr_CheckPtr && fn_IsDerivedFrom &&
+              fn_IsDerivedFrom &&
               g_pGameWorldSingleton &&
               s_typeId_PastureComponent && s_typeId_ComponentEntity &&
               s_typeId_NatResComponent &&
@@ -405,18 +405,15 @@ int PastureWork_Slot4_Impl(PastureWork* self, void* entityIBP, uint64_t param3, 
     // -------------------------------------------------------
     // Step 2: Find StorageLocation and Pasture components
     // -------------------------------------------------------
-    fn_InternalBasePtr_CheckPtr(plVar17);
     uintptr_t local_58 = 0;  // matDescIBP (StorageLocation component)
     s_fn_FindComp_MatDesc(*plVar17, &local_58);
 
-    fn_InternalBasePtr_CheckPtr(plVar17);
     uintptr_t local_a8 = 0;  // pastureIBP
     s_fn_FindComp_Pasture(*plVar17, &local_a8);
 
     // -------------------------------------------------------
     // Step 3: Get pasture description and worker count
     // -------------------------------------------------------
-    fn_InternalBasePtr_CheckPtr(&local_a8);
     void* pvVar20 = *(void**)(local_a8 + 0x18);  // pasture component description
     bool bVar8 = fn_IsDerivedFrom(pvVar20, *s_typeId_PastureComponent);  // DAT_1401c7bd8
     uintptr_t lVar18 = selfQ[10];  // worker count at self+0x50
@@ -428,7 +425,6 @@ int PastureWork_Slot4_Impl(PastureWork* self, void* entityIBP, uint64_t param3, 
     // -------------------------------------------------------
     // Step 4: Check max workers
     // -------------------------------------------------------
-    fn_InternalBasePtr_CheckPtr(&local_58);
     if (*(int*)(local_58 + 0x30) == 0) {
         int iVar9 = s_fn_CalcMaxWorkers(local_58);
         *(int*)(local_58 + 0x30) = iVar9;
@@ -456,10 +452,8 @@ int PastureWork_Slot4_Impl(PastureWork* self, void* entityIBP, uint64_t param3, 
         bVar8 = (maxCount <= currentCount);  // at capacity?
 
         // Set mesh visibility based on capacity
-        fn_InternalBasePtr_CheckPtr(plVar17);
         uintptr_t meshInstIBP = 0;
         s_fn_FindComp_MeshInstance(*plVar17, &meshInstIBP);
-        fn_InternalBasePtr_CheckPtr(&meshInstIBP);
         s_fn_MeshInstance_SetVisible(*(void**)&meshInstIBP, 2, bVar8 ? 1 : 0);
     }
 
@@ -471,11 +465,8 @@ int PastureWork_Slot4_Impl(PastureWork* self, void* entityIBP, uint64_t param3, 
         int* piVar4 = *(int**)(gameWorld + 0xf8);  // mapGrid
 
         // Get citizen position for pathfinding
-        fn_InternalBasePtr_CheckPtr(citizenIBP);
         uintptr_t citEnt = *(uintptr_t*)citizenIBP;
-        fn_InternalBasePtr_CheckPtr((void*)(citEnt + 0x278));
         uintptr_t aiComp = *(uintptr_t*)(citEnt + 0x278);
-        fn_InternalBasePtr_CheckPtr((void*)(aiComp + 0x68));
         uintptr_t charComp = *(uintptr_t*)(aiComp + 0x68);
 
         int iVar21 = *piVar4;  // map size
@@ -489,38 +480,27 @@ int PastureWork_Slot4_Impl(PastureWork* self, void* entityIBP, uint64_t param3, 
         uint32_t uVar23 = iVar21 * iVar10 + iVar9;  // citizen cell index
 
         // Check if pasture has room for more animals (field+0x40 < field+0x38)
-        fn_InternalBasePtr_CheckPtr(&local_a8);
         int pastureCount = *(int*)(local_a8 + 0x38);
-        fn_InternalBasePtr_CheckPtr(&local_a8);
         if (*(int*)(local_a8 + 0x40) < pastureCount) {
             // Find empty animal slot via helper
-            fn_InternalBasePtr_CheckPtr(&local_a8);
             int slotIdx = s_fn_PastureHelper8350(local_a8);
             if (slotIdx >= 0) {
                 // Get entity from pasture slot array
-                fn_InternalBasePtr_CheckPtr(&local_a8);
                 local_res20 = *(uintptr_t*)(*(uintptr_t*)(local_a8 + 0x30) + (uintptr_t)slotIdx * 8);
 
                 // Navigate entity chain to get NatRes component
-                fn_InternalBasePtr_CheckPtr(&local_res20);
                 uintptr_t local_a0_0 = *(uintptr_t*)(local_res20 + 0x10);
-                fn_InternalBasePtr_CheckPtr(&local_a0_0);
                 uintptr_t natResIBP = 0;
                 s_fn_FindComp_NatRes(local_a0_0, &natResIBP);
 
                 if (natResIBP != 0) {
-                    fn_InternalBasePtr_CheckPtr(&natResIBP);
                     // Check if not flagged for removal (bit 20)
                     if (((*(uint32_t*)(natResIBP + 0x20) >> 0x14) & 1) == 0) {
                         // Get entity from natRes to find Family component
-                        fn_InternalBasePtr_CheckPtr(&natResIBP);
                         local_a0_0 = *(uintptr_t*)(natResIBP + 0x10);
-                        fn_InternalBasePtr_CheckPtr(&local_a0_0);
                         uintptr_t familyIBP[2] = {0};
                         s_fn_FindComp_Family2(local_a0_0, familyIBP);  // Entity_FindComponent_Family @ 0x1400012d0
-                        fn_InternalBasePtr_CheckPtr(familyIBP);
                         uintptr_t familyComp = *(uintptr_t*)familyIBP;
-                        fn_InternalBasePtr_CheckPtr((void*)(familyComp + 0x68));
                         uintptr_t familyCharComp = *(uintptr_t*)(familyComp + 0x68);
 
                         // Get animal position as cell index
@@ -540,7 +520,6 @@ int PastureWork_Slot4_Impl(PastureWork* self, void* entityIBP, uint64_t param3, 
 
                         if ((char)uVar16 != '\0') {
                             // Get description from natRes for RemoveAnimal action
-                            fn_InternalBasePtr_CheckPtr(&natResIBP);
                             void* descPtr = *(void**)(natResIBP + 0x18);
                             bool isDerived = fn_IsDerivedFrom(descPtr, *s_typeId_ComponentEntity);
                             pvVar20 = nullptr;
@@ -571,7 +550,6 @@ int PastureWork_Slot4_Impl(PastureWork* self, void* entityIBP, uint64_t param3, 
 
                             // Assign work to citizen
                             int priority = (int)selfQ[4];
-                            fn_InternalBasePtr_CheckPtr(citizenIBP);
                             uintptr_t citizenEnt = *(uintptr_t*)citizenIBP;
 
                             // Call vtable slot +0x50 (GetWorkEntity)
@@ -600,17 +578,14 @@ int PastureWork_Slot4_Impl(PastureWork* self, void* entityIBP, uint64_t param3, 
         // -------------------------------------------------------
         // Branch B: At animal capacity -> try position-based overflow storage work
         // -------------------------------------------------------
-        fn_InternalBasePtr_CheckPtr(plVar17);
         uintptr_t posCompIBP = 0;
         s_fn_FindComp_Position(*plVar17, &posCompIBP);
 
-        fn_InternalBasePtr_CheckPtr(&posCompIBP);
         int posCount = s_fn_PositionCount(posCompIBP, 2);
 
         if (posCount > 0) {
             int iPvVar20 = 0;
             do {
-                fn_InternalBasePtr_CheckPtr(&posCompIBP);
                 float local_80[3];
                 s_fn_Entity_GetPosition(posCompIBP, local_80, 2, iPvVar20, nullptr);
 
@@ -628,16 +603,13 @@ int PastureWork_Slot4_Impl(PastureWork* self, void* entityIBP, uint64_t param3, 
                 local_res20 = *(uintptr_t*)(mapDataBase + 8 + cellOffset);
 
                 if (local_res20 != 0) {
-                    fn_InternalBasePtr_CheckPtr(&local_res20);
                     uintptr_t familyIBP2[2] = {0};
                     s_fn_FindComp_Family(local_res20, familyIBP2);
 
                     if (*(uintptr_t*)familyIBP2 != 0) {
-                        fn_InternalBasePtr_CheckPtr(&local_res20);
                         uintptr_t storageIBP2[4] = {0};  // local_70
                         s_fn_FindComp_MatDesc(local_res20, storageIBP2);
 
-                        fn_InternalBasePtr_CheckPtr(storageIBP2);
                         uintptr_t local_90_val = *(uintptr_t*)citizenIBP;
                         uintptr_t storageWorkMgr = *(uintptr_t*)(gameWorld + 0x118);
                         uint64_t overflowResult = s_fn_StorageOverflowCheck(
@@ -657,13 +629,11 @@ int PastureWork_Slot4_Impl(PastureWork* self, void* entityIBP, uint64_t param3, 
         // -------------------------------------------------------
         // Branch C: Final fallback -> random area position, create grazing work
         // -------------------------------------------------------
-        fn_InternalBasePtr_CheckPtr(plVar17);
         uintptr_t areaIBP = 0;
         s_fn_GetAreaComponent(*plVar17, &areaIBP);
 
         void* rng = *(void**)(gameWorld + 0xd8);  // Random*
 
-        fn_InternalBasePtr_CheckPtr(&areaIBP);
         short sVar1 = *(short*)(areaIBP + 0x28);
         short sVar2 = *(short*)(areaIBP + 0x2a);
         short sVar3 = *(short*)(areaIBP + 0x2c);
@@ -715,7 +685,6 @@ int PastureWork_Slot4_Impl(PastureWork* self, void* entityIBP, uint64_t param3, 
 
                 // Assign work to citizen
                 int priority = (int)selfQ[4];
-                fn_InternalBasePtr_CheckPtr(local_res10);
                 uintptr_t citizenEnt = *(uintptr_t*)local_res10;
 
                 // ⚠ Retail saves the citizen IBP pointer (pIVar15) BEFORE the
@@ -786,7 +755,6 @@ int PastureWork_Slot7_Impl(PastureWork* self, void* param2, void* param3) {
         return 0;
     }
 
-    fn_InternalBasePtr_CheckPtr(param3);
     uintptr_t entity = *(uintptr_t*)param3;
 
     // Check if derived from ComponentEntity
@@ -803,7 +771,6 @@ int PastureWork_Slot7_Impl(PastureWork* self, void* param2, void* param3) {
     }
 
     // Clear "flagged for removal" bit (0x100000) in entity flags at +0x20
-    fn_InternalBasePtr_CheckPtr(natResIBP);
     uintptr_t natResObj = *(uintptr_t*)natResIBP;
     uint32_t oldFlags = *(uint32_t*)(natResObj + 0x20);
     uint32_t newFlags = oldFlags & ~0x100000u;
@@ -837,10 +804,8 @@ int PastureWork_Slot8_Impl(PastureWork* self) {
             node = *(void**)((uintptr_t)node + 0x10);
         }
 
-        fn_InternalBasePtr_CheckPtr(leftmost);
         uintptr_t citizenEntity = *(uintptr_t*)leftmost;
 
-        fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
         s_fn_CancelAllWork((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
 
         count = *(int*)(selfAddr + 0x50);
@@ -937,11 +902,9 @@ bool PastureWork_Slot9_Impl(PastureWork* self, void* param2) {
         for (uint32_t i = 0; i < removeCount; i++) {
             void* searchNode = *bstRootPtr;
             while (searchNode != nullptr) {
-                fn_InternalBasePtr_CheckPtr(searchNode);
                 if (removeArr[i] < *(uintptr_t*)searchNode) {
                     searchNode = *(void**)((uintptr_t)searchNode + 0x10);
                 } else {
-                    fn_InternalBasePtr_CheckPtr(&removeArr[i]);
                     if (removeArr[i] <= *(uintptr_t*)searchNode) {
                         s_fn_BSTRemove(bstRootPtr, searchNode);
                         break;
@@ -964,13 +927,11 @@ bool PastureWork_Slot9_Impl(PastureWork* self, void* param2) {
 void* PastureWork_Slot10_Impl(PastureWork* self, void* outPtr) {
     uintptr_t selfAddr = (uintptr_t)self;
 
-    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
 
     uintptr_t subIBP[2] = {0};
     void* result = s_fn_FindSubEntity(entityRef, subIBP);
 
-    fn_InternalBasePtr_CheckPtr(result);
 
     uintptr_t resolvedEntity = *(uintptr_t*)result;
     *(uintptr_t*)outPtr = *(uintptr_t*)(resolvedEntity + 0x48);
@@ -1124,11 +1085,9 @@ extern "C" void* PastureWork_Ctor_Impl(void* mem, void* entityIBP) {
     *reinterpret_cast<uint64_t*>(s + 0x10) = *reinterpret_cast<uint64_t*>(entityIBP);
     if (*reinterpret_cast<uint64_t*>(s + 0x10) != 0 &&
         g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-        fn_InternalBasePtr_CheckPtr(s + 0x10);
         uintptr_t areaIBP[2] = {0};
         s_fn_GetAreaComponent(*reinterpret_cast<uintptr_t*>(s + 0x10), areaIBP);
         if (areaIBP[0] != 0) {
-            fn_InternalBasePtr_CheckPtr(areaIBP);
             uintptr_t a = areaIBP[0];
             uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
             int mapDim = **reinterpret_cast<int**>(gw + 0xf8);
@@ -1138,7 +1097,6 @@ extern "C" void* PastureWork_Ctor_Impl(void* mem, void* entityIBP) {
                 ((int)*reinterpret_cast<int16_t*>(a + 0x2c) >> 1) +
                  (int)*reinterpret_cast<int16_t*>(a + 0x28);
         }
-        fn_InternalBasePtr_CheckPtr(entityIBP);
         uintptr_t wcIBP[2] = {0};
         s_fn_FindComp_MatDesc(*reinterpret_cast<uintptr_t*>(entityIBP), wcIBP);  // 0x140003050 = WorkComponent finder
         *reinterpret_cast<uint64_t*>(s + 0x18) = wcIBP[0];

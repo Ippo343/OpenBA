@@ -445,7 +445,6 @@ void FireRoadTool(void* entityUI) {
             uintptr_t ca = *reinterpret_cast<uintptr_t*>(e + 0x30);
             for (int k = 0; k < cc && ca; ++k) {
                 void** slot = reinterpret_cast<void**>(ca + static_cast<uintptr_t>(k) * 8);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
                 void* comp = *slot;
                 if (!comp) continue;
                 typedef uint32_t (*gt_t)(void*);
@@ -636,7 +635,6 @@ void FirePastureTool(void* entityUI) {
             uintptr_t ca = *reinterpret_cast<uintptr_t*>(e + 0x30);
             for (int k = 0; k < cc && ca; ++k) {
                 void** hs = reinterpret_cast<void**>(ca + static_cast<uintptr_t>(k) * 8);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(hs);
                 void* comp = *hs;
                 if (!comp) continue;
                 typedef uint32_t (*gt_t)(void*);
@@ -991,7 +989,6 @@ uint32_t Comp0TypeId(uintptr_t entity) {
     void** arr = *reinterpret_cast<void***>(entity + 0x30);
     if (cnt <= 0 || !arr || !arr[0]) return 0;
     void* comp = arr[0];
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&comp);
     if (!comp) return 0;
     void** cvt = *reinterpret_cast<void***>(comp);
     if (!cvt || !cvt[2]) return 0;                 // vtable +0x10 = GetTypeId
@@ -1041,7 +1038,6 @@ void FireMarkRemoval() {
                 ++occupied;
                 // Mirror helper_7d60: local = slot value; CheckPtr(&local); test +0x40 bit 0x400.
                 void* local = reinterpret_cast<void*>(ent);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local);
                 if (!local) continue;
                 uintptr_t e = reinterpret_cast<uintptr_t>(local);
                 uint32_t flags = *reinterpret_cast<uint32_t*>(e + 0x40);
@@ -1053,7 +1049,6 @@ void FireMarkRemoval() {
                        row, col, cell, slot, local, flags, compCnt, tid);
 
                 // --- Step 1: MarkForRemoval (sets flag 0x400, notifies components) ---
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local);
                 c2ea0(local);
                 uint32_t flagsAfter = *reinterpret_cast<uint32_t*>(
                     reinterpret_cast<uintptr_t>(local) + 0x40);
@@ -1110,7 +1105,6 @@ void* GetControllerByName(void* dialog, const char* name) {
     uintptr_t buf[2] = {};
     fn_DialogInstance_GetController(dialog, buf, tid);
     void* ctrl = reinterpret_cast<void*>(buf[0]);
-    if (ctrl && fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ctrl);
     return ctrl;
 }
 
@@ -1153,7 +1147,6 @@ void FirePinPanel(void* entityUI) {
     auto c2ea0   = reinterpret_cast<void(*)(void*)>(ResolveAddr(Module::Exe, 0x1400c2ea0));
     auto push3110 = reinterpret_cast<void(*)(void*, int, void*)>(ResolveAddr(Module::Exe, 0x140003110));
     void* local = house;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local);
     if (!local || !c2ea0 || !push3110 || !entityList) {
         fprintf(stderr, "[PinPanel] mark preconditions missing (local=%p c2ea0=%p push=%p el=%p)\n",
                local, (void*)c2ea0, (void*)push3110, entityList);
@@ -1421,7 +1414,6 @@ static void FireUIComponentCensus() {
 
     for (int i = 0; i < en && arr; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* ent = *slot;
         if (!ent) continue;
         ++entities;
@@ -1432,7 +1424,6 @@ static void FireUIComponentCensus() {
         const char* firstName = nullptr;
         for (int c = 0; c < cN && cA; ++c) {
             void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs);
             void* comp = *cs;
             if (!comp) continue;
             ++compsWalked;
@@ -1524,14 +1515,12 @@ static void FireDlgSettingsRoute(void* entityUI) {
     void* A = nullptr; int aIdx = -1;
     for (int i = 0; i < en && arr && !A; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* ent = *slot;
         if (!ent) continue;
         const int       cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
         const uintptr_t cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
         for (int c = 0; c < cN && cA; ++c) {
             void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs);
             void* comp = *cs;
             if (!comp) continue;
             const uint32_t tid = reinterpret_cast<uint32_t (*)(void*)>(
@@ -1646,14 +1635,12 @@ void FirePasturePanel(void* entityUI) {
         const uint32_t tidPastureComp = ::Object::GetTypeIdByName("PastureComponent");
         for (int i = 0; i < en && arr && !pastureComp; ++i) {
             void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
             void* ent = *slot;
             if (!ent) continue;
             int       cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
             uintptr_t cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
             for (int c = 0; c < cN && cA; ++c) {
                 void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs);
                 void* comp = *cs;
                 if (!comp) continue;
                 void** vt = *reinterpret_cast<void***>(comp);
@@ -1673,7 +1660,6 @@ void FirePasturePanel(void* entityUI) {
     }
     uint64_t entRef =
         *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(pastureComp) + 0x10);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entRef);
     if (!entRef) { fprintf(stderr, "[PasturePanel] pasture[0] has no entity backref\n"); return; }
 
     int opened = EditTool_HarnessSelectEntity(tool, reinterpret_cast<void*>(entRef));
@@ -1786,14 +1772,12 @@ void FireOrchardPanel(void* entityUI) {
     void* orchComp = nullptr;
     for (int i = 0; i < n && !orchEnt; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* ent = *slot;
         if (!ent) continue;
         int       cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
         uintptr_t cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
         for (int c = 0; c < cN && cA; ++c) {
             void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs);
             void* comp = *cs;
             if (!comp) continue;
             void** vt = *reinterpret_cast<void***>(comp);
@@ -1901,14 +1885,12 @@ void FireTradePanel(void* entityUI) {
     void* postEnt = nullptr;
     for (int i = 0; i < n && !postEnt; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* ent = *slot;
         if (!ent) continue;
         int       cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
         uintptr_t cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
         for (int c = 0; c < cN && cA; ++c) {
             void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs);
             void* comp = *cs;
             if (!comp) continue;
             void** vt = *reinterpret_cast<void***>(comp);
@@ -2052,7 +2034,6 @@ void FireClearPlace() {
     if (!house) { fprintf(stderr, "[ClearPlace] no founding house to borrow\n"); return; }
     uint64_t bc = 0;
     fn_FindComponent_Build(house, &bc);
-    fn_InternalBasePtr_CheckPtr(&bc);
     if (!bc) { fprintf(stderr, "[ClearPlace] house has no BuildComponent\n"); return; }
     uintptr_t b = (uintptr_t)bc;
 
@@ -2123,7 +2104,6 @@ void FireClearLive() {
 
     uint64_t bc = 0;
     fn_FindComponent_Build(house, &bc);
-    fn_InternalBasePtr_CheckPtr(&bc);
     if (!bc) { fprintf(stderr, "[ClearLive] no BuildComponent\n"); return; }
     uintptr_t b = (uintptr_t)bc;
     // Override the footprint to a 1x1 rect over the resource (persistent — the live tick
@@ -2220,7 +2200,6 @@ void FireClearHarvest() {
 
     uint64_t bc = 0;
     fn_FindComponent_Build(house, &bc);
-    fn_InternalBasePtr_CheckPtr(&bc);
     if (!bc) { fprintf(stderr, "[ClearHarvest] house has no BuildComponent\n"); return; }
     uintptr_t b = (uintptr_t)bc;
     int16_t sCol = *reinterpret_cast<int16_t*>(b + 0x28);
@@ -2317,7 +2296,6 @@ void* UpgradeFindBuildComp(void* entity) {
     if (!find) return nullptr;
     uint64_t ibp = 0;
     find(reinterpret_cast<uintptr_t>(entity), &ibp);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ibp);
     return reinterpret_cast<void*>(ibp);
 }
 // Retail's own two reads: +0x48 = delivered build effort, required = desc(+0x18)+0x30
@@ -2599,7 +2577,6 @@ void BridgeDumpEntity(const char* what, void* ent) {
     fprintf(stderr, "[Bridge] %s=%p components=%d:", what, ent, count);
     for (int i = 0; i < count && arr; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* comp = *slot;
         if (!comp) continue;
         typedef uint32_t (*gt_t)(void*);
@@ -2685,7 +2662,6 @@ void FireBridgeTool(void* entityUI) {
             uintptr_t ca = *reinterpret_cast<uintptr_t*>(e + 0x30);
             for (int k = 0; k < cc && ca; ++k) {
                 void** slot = reinterpret_cast<void**>(ca + static_cast<uintptr_t>(k) * 8);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
                 void* comp = *slot;
                 if (!comp) continue;
                 typedef uint32_t (*gt_t)(void*);
@@ -3022,7 +2998,6 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
             // CheckPtr-hardened read: CheckPtr a COPY of the +0x28 IBP so the probe
             // is non-destructive; it nulls if the weak-ref's target was freed.
             uint64_t ibpCopy = *reinterpret_cast<uint64_t*>(ctrl + 0x28);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ibpCopy);
             void* checkedDS = reinterpret_cast<void*>(ibpCopy);
             // NOTE: CheckPtr does NOT null this dangling ref (the datasource weak-ref
             // isn't generation-invalidated by a raw free) — so a guard-side CheckPtr is

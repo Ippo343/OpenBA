@@ -126,7 +126,7 @@ static void ClearArea_ResolveSweepFuncs() {
 // Returns the number of footprint entities newly marked for removal.
 int ClearAreaComponent_FootprintSweep(ClearAreaComponent* self) {
     ClearArea_ResolveSweepFuncs();
-    if (!self || !s_fn_MarkForRemoval || !fn_InternalBasePtr_CheckPtr) {
+    if (!self || !s_fn_MarkForRemoval) {
         return 0;
     }
 
@@ -135,16 +135,12 @@ int ClearAreaComponent_FootprintSweep(ClearAreaComponent* self) {
     if (!gw) return 0;
     uintptr_t gwA = reinterpret_cast<uintptr_t>(gw);
 
-    // ownerIBP: self+0x10 holds the building entity IBP value (param_1+0x10 in 7d60).
-    void* ownerIBP = reinterpret_cast<void*>(sAddr + 0x10);
-    fn_InternalBasePtr_CheckPtr(ownerIBP);
     void* entity = *reinterpret_cast<void**>(sAddr + 0x10);
     if (!entity) return 0;
 
     // FindComponent_Build(entity) -> the BuildComponent that holds the footprint rect.
     uint64_t buildComp = 0;
     fn_FindComponent_Build(entity, &buildComp);
-    fn_InternalBasePtr_CheckPtr(&buildComp);
     if (!buildComp) return 0;
     uintptr_t bc = static_cast<uintptr_t>(buildComp);
 
@@ -168,18 +164,15 @@ int ClearAreaComponent_FootprintSweep(ClearAreaComponent* self) {
             uint64_t occ = *reinterpret_cast<uint64_t*>(tileArray + static_cast<uintptr_t>(cell) * 0x30 + 8);
 
             // Skip empty cells and the building's own entity.
-            fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(sAddr + 0x10));
             void* selfEnt = *reinterpret_cast<void**>(sAddr + 0x10);
             if (occ == 0 || occ == reinterpret_cast<uint64_t>(selfEnt)) continue;
 
             void* local = reinterpret_cast<void*>(occ);
-            fn_InternalBasePtr_CheckPtr(&local);
             if (!local) continue;
             uint32_t flags = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(local) + 0x40);
             if (flags & 0x400) continue;   // already marked for removal
 
             // Mark + push (the proven backend).
-            fn_InternalBasePtr_CheckPtr(&local);
             s_fn_MarkForRemoval(local);
             uintptr_t rl = reinterpret_cast<uintptr_t>(entityList) + 0xD0;
             int cnt = *reinterpret_cast<int*>(rl + 0x8);
@@ -288,11 +281,10 @@ REGISTER_TYPE(ClearAreaComponent, "ControllerComponent",
 // ptr (or null). outFlags gets the component's +0x20 capability flags (bit 0x4 = ticked).
 extern "C" void* ClearAreaComponent_HarnessFind(void* entity, uint32_t* outFlags) {
     if (outFlags) *outFlags = 0;
-    if (!entity || !fn_InternalBasePtr_CheckPtr) return nullptr;
+    if (!entity) return nullptr;
     uint32_t wantTid = ::Object::GetTypeIdByName("ClearAreaComponent");
     if (!wantTid) return nullptr;
     uintptr_t e = reinterpret_cast<uintptr_t>(entity);
-    fn_InternalBasePtr_CheckPtr(&entity);
     e = reinterpret_cast<uintptr_t>(entity);
     int count = *reinterpret_cast<int*>(e + 0x38);
     void** comps = *reinterpret_cast<void***>(e + 0x30);
@@ -300,7 +292,6 @@ extern "C" void* ClearAreaComponent_HarnessFind(void* entity, uint32_t* outFlags
     for (int i = 0; i < count; ++i) {
         void* c = comps[i];
         if (!c) continue;
-        fn_InternalBasePtr_CheckPtr(&c);
         if (!c) continue;
         void** vt = *reinterpret_cast<void***>(c);
         if (!vt || !vt[2]) continue;

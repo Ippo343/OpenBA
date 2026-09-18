@@ -64,9 +64,6 @@ static void EnsureConsts() {
     s_constInit = true;
 }
 
-static inline void CheckPtr(void* p) {
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p);
-}
 
 } // namespace
 
@@ -77,13 +74,10 @@ static inline void CheckPtr(void* p) {
 //   rect = char model pos (+0x158/+0x15c) +/- CharacterDescription radius (+0x20).
 // ===========================================================================
 extern "C" float* CharMgr_helper_28c0(void* slotPtr, float* outRect) {
-    CheckPtr(slotPtr);
     int64_t ch = *reinterpret_cast<int64_t*>(slotPtr);             // CharacterComponent (via IBP)
-    CheckPtr(reinterpret_cast<void*>(ch + 0x68));
     int64_t model = *reinterpret_cast<int64_t*>(ch + 0x68);        // ModelComponent
     float px = *reinterpret_cast<float*>(model + 0x158);
     float py = *reinterpret_cast<float*>(model + 0x15c);
-    CheckPtr(slotPtr);
     float r = *reinterpret_cast<float*>(
                   *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(slotPtr) + 0x78) + 0x20);
     outRect[0] = px - r;   // min.x

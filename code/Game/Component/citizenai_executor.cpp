@@ -95,9 +95,6 @@ static inline void CallExit(int64_t* node, void* stack) {
     reinterpret_cast<ActSlotExit_t>(*reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(vt) + 0x38))(node, stack);
 }
 
-static inline void CheckPtr(void* ibp) {
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);
-}
 
 // FUN_1400c5400 — TaskListCleanup, called when a main-slot returns 2 (push-more / requeue).
 typedef void (*fn_taskCleanup_t)(void* stack);   // 0x1400c5400 (registered: WorkBase_TaskListCleanup_c5400)
@@ -125,14 +122,12 @@ extern "C" void CitizenAI_ActionFlush_c4bb0(int64_t param_1) {
     int64_t* node = *reinterpret_cast<int64_t**>(param_1 + 0x10);
     if (node != nullptr) {
         do {
-            CheckPtr(&node);
             *reinterpret_cast<uint8_t*>(node + 3) = 1;          // node+0x18 = 1
             // precheck +0x20 with RCX=node only (single-arg form, per disasm)
             void* vt = *reinterpret_cast<void**>(node);
             int iVar1 = reinterpret_cast<int(*)(void*)>(
                 *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(vt) + 0x20))(node);
             if (iVar1 != 1) break;
-            CheckPtr(&node);
             node = reinterpret_cast<int64_t*>(node[2]);          // advance via node+0x10
         } while (node != nullptr);
         if (fn_InternalBasePtr_DeletePtr)
@@ -160,7 +155,6 @@ extern "C" void CitizenAI_ActionExecutor_c4c50(int64_t* param_1, void* param_2) 
         } else {
             int iVar3 = 1;
             if (-1 < iVar1) {
-                CheckPtr(self);
                 int64_t* local_res8;
                 if (*reinterpret_cast<char*>(*self + 0x18) == '\0') {
                     // PRECHECK phase: walk the node list, set +0x18=1, call precheck(node,stack).
@@ -168,11 +162,9 @@ extern "C" void CitizenAI_ActionExecutor_c4c50(int64_t* param_1, void* param_2) 
                              *param_1 + static_cast<int64_t>(static_cast<int>(param_1[3])) * 8);
                          local_res8 != nullptr;
                          local_res8 = reinterpret_cast<int64_t*>(local_res8[2])) {
-                        CheckPtr(&local_res8);
                         *reinterpret_cast<uint8_t*>(local_res8 + 3) = 1;   // node+0x18 = 1
                         iVar3 = CallPre(local_res8, param_1);
                         if (iVar3 != 1) goto LAB_d17;
-                        CheckPtr(&local_res8);
                     }
                     iVar3 = 1;
                 }
@@ -184,10 +176,8 @@ LAB_d17:
                                  *param_1 + static_cast<int64_t>(static_cast<int>(param_1[3])) * 8);
                              local_res8 != nullptr;
                              local_res8 = reinterpret_cast<int64_t*>(local_res8[2])) {
-                            CheckPtr(&local_res8);
                             iVar3 = CallMain(local_res8, param_1, param_2);
                             if (iVar3 != 1) goto LAB_d85;
-                            CheckPtr(&local_res8);
                         }
                         iVar3 = 1;
                         bVar2 = true;
@@ -200,13 +190,10 @@ LAB_d85:
                                  *param_1 + static_cast<int64_t>(static_cast<int>(param_1[3])) * 8);
                              local_res8 != nullptr;
                              local_res8 = reinterpret_cast<int64_t*>(local_res8[2])) {
-                            CheckPtr(&local_res8);
                             if (*reinterpret_cast<char*>(local_res8 + 3) != '\0') {  // node+0x18
-                                CheckPtr(&local_res8);
                                 *reinterpret_cast<uint8_t*>(local_res8 + 3) = 0;
                                 CallExit(local_res8, param_1);
                             }
-                            CheckPtr(&local_res8);
                         }
                         if (fn_InternalBasePtr_DeletePtr)
                             reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>( *param_1 + static_cast<int64_t>(static_cast<int>(param_1[3])) * 8))->DeletePtr(
@@ -472,7 +459,6 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
 
     uint8_t rootOnly = s_pRootOnlyUpdates ? *s_pRootOnlyUpdates : 0;
 
-    CheckPtr(self + 0x68);
     int64_t model = *reinterpret_cast<int64_t*>(self + 0x68);
     float fx = *reinterpret_cast<float*>(model + 0x158);
     float fy = *reinterpret_cast<float*>(model + 0x15c);
@@ -480,7 +466,6 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
     float pos[3] = { fx, fy, fz };
     const float mtEntryX = fx, mtEntryY = fy, mtEntryZ = fz;  // for movement trace
 
-    CheckPtr(self + 0x68);
     float fVar14 = *reinterpret_cast<float*>(self + 0x3c);
     float fVar10 = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(self + 0x68) + 0x168) -
                    *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(self + 0x78) + 0x24);
@@ -517,7 +502,6 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
         }
     }
 
-    CheckPtr(self + 0x68);
     // this = MeshInstance::RootAnimationOffset(model+0x28) (Vector3 by-value into retbuf);
     // speed = sqrt(this.Dot(this)) * self+0x38 — magnitude of the root-motion offset.
     float rootAnimVec[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -609,7 +593,6 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
     xform[4] = pos[0]; xform[5] = pos[1];
     xform[6] = pos[2]; xform[7] = 0.0f;
 
-    CheckPtr(self + 0x68);
     model = *reinterpret_cast<int64_t*>(self + 0x68);
     if (s_slot_xfAssign) s_slot_xfAssign(reinterpret_cast<void*>(model + 0x148), xform);
     *reinterpret_cast<float*>(model + 0x168) = fVar14;
@@ -672,11 +655,9 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
     }
 
     if ((*reinterpret_cast<int64_t*>(self + 0x70) != 0) && (rootOnly == 0)) {
-        CheckPtr(self + 0x68);
         uint8_t localXform[136];
         if (s_slot_xfCtor)
             s_slot_xfCtor(localXform, reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(self + 0x68) + 0x148));
-        CheckPtr(self + 0x70);
         uint32_t pickId = *reinterpret_cast<uint32_t*>(*reinterpret_cast<int64_t*>(self + 0x70) + 0x28);
         // First time through (pick-id still unregistered) register the citizen mesh in
         // the Picking::Scene so it becomes clickable.

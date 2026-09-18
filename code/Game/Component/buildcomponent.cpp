@@ -258,7 +258,6 @@ int BuildComponent_FindInQueue(void* arrayBase, void* entityPtr) {
     int count = (int)arr[1];
     for (int i = 0; i < count; i++) {
         int64_t base = arr[0];
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(entityPtr);
         if (*(int64_t*)(base + (int64_t)i * 8) == *(int64_t*)entityPtr) {
             return i;
         }
@@ -334,7 +333,6 @@ static void* BC_FindComponentByType(int64_t compHost, uint32_t typeId) {
     int64_t arr = *(int64_t*)(compHost + 0x30);
     for (int i = 0; i < count; i++) {
         int64_t* slot = (int64_t*)(arr + (int64_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* comp = (void*)*slot;
         if (!comp) continue;
         typedef uint32_t (*GetTypeId_t)(void*);
@@ -383,23 +381,18 @@ void BuildComponent_DrawReimpl(void* selfP) {
 
     // --- Stage 1: append the site's own ModelComponent (whose +0x18 ModelDescription
     //     has a non-empty frame group) to the +0x58 mesh list / +0x68 storage list.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 2);
     int64_t multiBuf = 0;
     if (s_fn_BC_FindMulti) s_fn_BC_FindMulti(self[2], &multiBuf);
     if (multiBuf != 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 2);
         if (s_fn_BC_FindMulti) s_fn_BC_FindMulti(self[2], &multiBuf);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&multiBuf);
         void* objBase = *(void**)(multiBuf + 0x18);
         void* multi = (fn_IsDerivedFrom && s_tid_ModelDesc &&
                        fn_IsDerivedFrom(objBase, s_tid_ModelDesc)) ? objBase : nullptr;
         if (multi && *(int*)((uintptr_t)multi + 0x28) > 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 2);
             int64_t b1 = 0;
             if (s_fn_BC_FindMulti) s_fn_BC_FindMulti(self[2], &b1);
             // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
             GameColl::AsArray<GameColl::Ptr8>(self + 0xb).SetSizeFill((int)self[0xc] + 1, &b1);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 2);
             int64_t b2 = 0;
             if (s_fn_BC_Find26a30) s_fn_BC_Find26a30(self[2], &b2);
             GameColl::AsArray<GameColl::Ptr8>(self + 0xd).SetSizeFill((int)self[0xe] + 1, &b2);
@@ -408,33 +401,25 @@ void BuildComponent_DrawReimpl(void* selfP) {
 
     // --- Stage 2: iterate the owner workplace's job hosts, collecting the
     //     Build component and Storage component of each into +0xb / +0xd lists.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 2);
     int64_t workBuf = 0;
     if (s_fn_BC_FindWork) s_fn_BC_FindWork(self[2], &workBuf);
     if (workBuf != 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 2);
         if (s_fn_BC_FindWork) s_fn_BC_FindWork(self[2], &workBuf);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workBuf);
         int jobCount = *(int*)(workBuf + 0x50);
         for (int j = 0; j < jobCount; j++) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workBuf);
             int64_t host = *(int64_t*)((int64_t)j * 8 + *(int64_t*)(workBuf + 0x48));
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&host);
             void* buildComp = BC_FindComponentByType(host, s_tid_ModelComp);
             int64_t ib1 = 0;
             if (fn_InternalBasePtr_Ctor) new (&ib1) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(buildComp));   // B.3.3 bridge
             GameColl::AsArray<GameColl::Ptr8>(self + 0xb).SetSizeFill((int)self[0xc] + 1, &ib1);
 
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workBuf);
             int64_t host2 = *(int64_t*)((int64_t)j * 8 + *(int64_t*)(workBuf + 0x48));
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&host2);
             void* storeComp = BC_FindComponentByType(host2, s_tid_Picking);
             int64_t ib2 = 0;
             if (fn_InternalBasePtr_Ctor) new (&ib2) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(storeComp));   // B.3.3 bridge
             GameColl::AsArray<GameColl::Ptr8>(self + 0xd).SetSizeFill((int)self[0xe] + 1, &ib2);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workBuf);
         }
     }
 
@@ -453,16 +438,13 @@ void BuildComponent_DrawReimpl(void* selfP) {
     for (int i = 0; i < buildCount; i++) {
         int64_t arrB = self[0xb];
         int64_t* slot = (int64_t*)(arrB + (int64_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         int64_t* node = (int64_t*)*slot;
         int16_t mark = *(int16_t*)((uintptr_t)node + 0x166);
         if (mark == -1) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(node + 2);
             int64_t host = node[2];
             int hc = *(int*)(host + 0x38);
             for (int k = 0; k < hc; k++) {
                 int64_t* h = *(int64_t**)(*(int64_t*)(host + 0x30) + (int64_t)k * 8);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&h);
                 typedef void (*VFn_t)(void*);
                 ((VFn_t)(*(uintptr_t*)(*h + 0x60)))(h);
             }
@@ -472,36 +454,30 @@ void BuildComponent_DrawReimpl(void* selfP) {
                 ((VFn38_t)(*(uintptr_t*)(*node + 0x38)))(node);
             }
             *(int16_t*)((uintptr_t)node + 0x166) = (int16_t)0xffff;
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(node + 2);
             int64_t host = node[2];
             int hc = *(int*)(host + 0x38);
             for (int k = 0; k < hc; k++) {
                 int64_t* h = *(int64_t**)(*(int64_t*)(host + 0x30) + (int64_t)k * 8);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&h);
                 typedef void (*VFn_t)(void*, int);
                 ((VFn_t)(*(uintptr_t*)(*h + 0x60)))(h, 0);
             }
         }
         int64_t* sslot = (int64_t*)(self[0xd] + (int64_t)i * 8);
         if (*sslot != 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(sslot);
             if (s_fn_BC_Entity8f50) s_fn_BC_Entity8f50((int64_t*)*sslot);
         }
     }
 
     // --- Stage 4: progress = 1; then read the WorkplaceComponent's progress at +0xb*8.
     *(int*)((uintptr_t)self + 0x4c) = 1;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 2);
     void* wp = BC_FindComponentByType(self[2], s_tid_MultiObj);
     int64_t wpIbp = 0;
     if (fn_InternalBasePtr_Ctor) new (&wpIbp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(wp));   // B.3.3 bridge
     if (wpIbp != 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 2);
         void* wp2 = BC_FindComponentByType(self[2], s_tid_MultiObj);
         if (fn_InternalBasePtr_Ctor) new (&wpIbp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(wp2));   // B.3.3 bridge
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpIbp);
         // Retail: bc+0x4c = WorkPlaceComponent+0x58 (the build-effort multiplier). In the
         // standalone exe the WorkPlaceComponent lifecycle is inert, so +0x58 stays 0 — which
         // would clobber the default 1 set above and collapse the build target
@@ -536,12 +512,10 @@ void* BuildComponent_FindStorage26a30(int64_t compHost, void* retbuf) {
         int64_t arr = *(int64_t*)(compHost + 0x30);
         for (int i = 0; i < count; i++) {
             int64_t* slot = (int64_t*)(arr + (int64_t)i * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
             void* comp = (void*)*slot;
             typedef uint32_t (*GetTypeId_t)(void*);
             uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
             if (tid == *s_TypeId_PickingComp) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
                 void* c = (void*)*slot;
                 if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_TypeId_PickingComp))
                     found = c;

@@ -70,7 +70,6 @@ typedef void*  (*WAP_fn_PerformWork7_t)(void* self, void* entityInnerPtr, float 
 typedef void*  (*WAP_fn_MoveTo_t)(void* self, void* familyIBP, int pathType, int p4, float* dest, int p6, int p7, float speed);
 
 // --- dispatch slots (deref once to get the runtime fn ptr) ---
-typedef void*  (*WAP_fn_CheckPtr_t)(void* p);                 // 0x140152ab0
 typedef void   (*WAP_fn_IbpCtor_t)(void* ibp, void* obj);     // 0x140152a90
 typedef void   (*WAP_fn_DeletePtr_t)(void* ibp);              // 0x140151ab8
 typedef void*  (*WAP_fn_MemAlloc_t)(uint64_t size, uint32_t align); // 0x140152b60
@@ -112,7 +111,6 @@ static WAP_fn_PickupStored_t        s_wap_PickupStored    = nullptr;
 static WAP_fn_PerformWork7_t        s_wap_PerformWork7    = nullptr;
 static WAP_fn_MoveTo_t              s_wap_MoveTo          = nullptr;
 
-static WAP_fn_CheckPtr_t            s_wap_CheckPtr        = nullptr;
 static WAP_fn_IbpCtor_t             s_wap_IbpCtor         = nullptr;
 static WAP_fn_DeletePtr_t           s_wap_DeletePtr       = nullptr;
 static WAP_fn_MemAlloc_t            s_wap_MemAlloc        = nullptr;
@@ -152,8 +150,6 @@ static void ResolveAll() {
     s_wap_MoveTo       = reinterpret_cast<WAP_fn_MoveTo_t>(ResolveAddr(Module::Exe, 0x1400c9170));
 
     // Dispatch slots — deref once to get the runtime fn ptr (with engine_funcs fallbacks).
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152ab0)) s_wap_CheckPtr        = *reinterpret_cast<WAP_fn_CheckPtr_t*>(s);
-    if (!s_wap_CheckPtr) s_wap_CheckPtr = reinterpret_cast<WAP_fn_CheckPtr_t>(fn_InternalBasePtr_CheckPtr);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152a90)) s_wap_IbpCtor         = *reinterpret_cast<WAP_fn_IbpCtor_t*>(s);
     if (!s_wap_IbpCtor) s_wap_IbpCtor = reinterpret_cast<WAP_fn_IbpCtor_t>(fn_InternalBasePtr_Ctor);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140151ab8)) s_wap_DeletePtr       = *reinterpret_cast<WAP_fn_DeletePtr_t*>(s);
@@ -180,7 +176,6 @@ static inline void* WAP_Alloc(uint64_t size, uint32_t align) {
     if (fn_MemAlloc && g_pMemAllocSingleton) return fn_MemAlloc(g_pMemAllocSingleton, size, align);
     return nullptr;
 }
-static inline void  WAP_CheckPtr(void* p)             { if (s_wap_CheckPtr) s_wap_CheckPtr(p); }
 static inline void  WAP_IbpCtor(void* ibp, void* obj) { if (s_wap_IbpCtor) s_wap_IbpCtor(ibp, obj); }
 static inline void  WAP_Append(void* list, void* ibp) { if (s_wap_TaskAppend) s_wap_TaskAppend(list, ibp); }
 
@@ -226,9 +221,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
     ResolveAll();
 
     // list base = (*(citizen)+0x278) + 0x48 ; cleanup (0x1400baa2f..0x1400baa53)
-    WAP_CheckPtr(citizenIBP);
     uintptr_t ci = *reinterpret_cast<uintptr_t*>(citizenIBP);
-    WAP_CheckPtr(reinterpret_cast<void*>(ci + 0x278));
     uintptr_t aiComp = *reinterpret_cast<uintptr_t*>(ci + 0x278);
     void* list = reinterpret_cast<void*>(aiComp + 0x48);
     if (s_wap_TaskCleanup) s_wap_TaskCleanup(list);
@@ -242,7 +235,6 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
         uintptr_t innerIbp = 0;
         WAP_IbpCtor(&innerIbp, nullptr);
         uint32_t msgId = s_wap_pDword_c70e8 ? *s_wap_pDword_c70e8 : 0; // 0x1401c70e8
-        WAP_CheckPtr(citizenIBP);
         void* entityInner = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
         if (s_wap_SendCompMsg) sm = s_wap_SendCompMsg(obj, &entityInner, &msgId, 0, &innerIbp, 0); // 0x1400cb1d0
     }
@@ -335,9 +327,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
     obj = WAP_Alloc(0x480, 8); // 0x1400badc8: ECX=0x480
     void* mv1 = nullptr;
     if (obj) {
-        WAP_CheckPtr(citizenIBP);
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
-        WAP_CheckPtr(&entityInner);
         void* familyIBP = nullptr;
         uintptr_t famRet = 0;
         if (s_wap_FindFamily) familyIBP = s_wap_FindFamily(entityInner, &famRet); // 0x1400012d0
@@ -387,9 +377,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
     obj = WAP_Alloc(0x480, 8); // 0x1400bafda: ECX=0x480
     void* mv2 = nullptr;
     if (obj) {
-        WAP_CheckPtr(citizenIBP);
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
-        WAP_CheckPtr(&entityInner);
         void* familyIBP = nullptr;
         uintptr_t famRet = 0;
         if (s_wap_FindFamily) familyIBP = s_wap_FindFamily(entityInner, &famRet);
@@ -428,9 +416,7 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
     ResolveAll();
 
     // list base = (*(citizen)+0x278) + 0x48 ; cleanup (0x1400c0010..0x1400c0034)
-    WAP_CheckPtr(citizenIBP);
     uintptr_t ci = *reinterpret_cast<uintptr_t*>(citizenIBP);
-    WAP_CheckPtr(reinterpret_cast<void*>(ci + 0x278));
     uintptr_t aiComp = *reinterpret_cast<uintptr_t*>(ci + 0x278);
     void* list = reinterpret_cast<void*>(aiComp + 0x48);  // RSI = aiComp+0x48
     if (s_wap_TaskCleanup) s_wap_TaskCleanup(list);
@@ -444,7 +430,6 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
         uintptr_t innerIbp = 0;
         WAP_IbpCtor(&innerIbp, nullptr);
         uint32_t msgId = s_wap_pDword_c70e8 ? *s_wap_pDword_c70e8 : 0; // 0x1401c70e8
-        WAP_CheckPtr(citizenIBP);
         void* entityInner = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
         if (s_wap_SendCompMsg) sm = s_wap_SendCompMsg(obj, &entityInner, &msgId, 0, &innerIbp, 0); // 0x1400cb1d0
     }
@@ -499,7 +484,6 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
                                   // bffd0+0x3ff, 2026-07-26.)
         void* crm = nullptr;
         if (obj) {
-            WAP_CheckPtr(citizenIBP);
             uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10); // 0x1400c01ed
             // 0x1400c01f8: byte[RSP+0x20]=0 (p4) ; R8=[RBP+0x6f]=param_8 (p3) ; RDX=&entityInner
             if (s_wap_ConsumeRaw) crm = s_wap_ConsumeRaw(obj, &entityInner, consumeArg8, 0); // 0x1400c63b0
@@ -533,9 +517,7 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
     obj = WAP_Alloc(0x480, 8); // 0x1400c02b0: ECX=0x480
     void* mv1 = nullptr;
     if (obj) {
-        WAP_CheckPtr(citizenIBP);
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
-        WAP_CheckPtr(&entityInner);
         void* familyIBP = nullptr;
         uintptr_t famRet = 0;
         if (s_wap_FindFamily) familyIBP = s_wap_FindFamily(entityInner, &famRet);
@@ -609,20 +591,15 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
         void* mv2 = nullptr;
         if (obj) {
             // QueryCount(entity storage) → BL=(count>0) (0x1400c059a..0x1400c05d2)
-            WAP_CheckPtr(citizenIBP);
             uintptr_t entObj = *reinterpret_cast<uintptr_t*>(citizenIBP);    // 0x1400c05a3: [R14]
-            WAP_CheckPtr(reinterpret_cast<void*>(entObj + 0x10));            // 0x1400c05a6: [RBX+0x10]
             uintptr_t storRet = 0;
             void* storIbp = reinterpret_cast<void*>(&storRet);
             if (s_wap_FindStorage) s_wap_FindStorage(*reinterpret_cast<uintptr_t*>(entObj + 0x10), &storRet); // 0x140006270 (local_78)
-            WAP_CheckPtr(&storRet);                                          // 0x1400c05c1: CheckPtr(&local_78)
             int count = 0;
             if (s_wap_QueryCount) count = s_wap_QueryCount(reinterpret_cast<void*>(storRet)); // 0x14012cf10
             bool countPositive = (count > 0); // 0x1400c05d0: TEST EAX,EAX; SETG BL
 
-            WAP_CheckPtr(citizenIBP);
             uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
-            WAP_CheckPtr(&entityInner);
             int pathType = 1; // R13D = Slow (default); 0x1400c05fc: CMOVNZ R13D, 4 if BL
             if (countPositive) pathType = 4; // Faster
             void* familyIBP = nullptr;

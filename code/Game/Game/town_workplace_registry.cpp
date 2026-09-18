@@ -66,13 +66,11 @@ void* FindComponentByTypeId(int64_t entity, uint32_t typeId) {
     int i = 0;
     while (i < *reinterpret_cast<int*>(entity + 0x38)) {           // count re-read (faithful)
         void* elem = reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(entity + 0x30) + (int64_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(elem);
         void* comp = *reinterpret_cast<void**>(elem);
         if (comp == nullptr) { ++i; continue; }
         uint32_t tid = ((GetTypeId_t)(*reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10)))(comp);
         if (tid == typeId) {
             void* elem2 = reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(entity + 0x30) + (int64_t)i * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(elem2);
             void* compVal = *reinterpret_cast<void**>(elem2);
             return (fn_IsDerivedFrom && fn_IsDerivedFrom(compVal, typeId)) ? compVal : nullptr;
         }
@@ -123,7 +121,6 @@ extern "C" void ResidenceComponent_impl_95a0(int64_t param_1, void* param_2, uin
     int count = static_cast<int>(found[2]);           // +0x10 count (low dword)
     int64_t arrBase = static_cast<int64_t>(found[1]); // +0x08 array data
     for (int i = 0; i < count; ++i) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2);
         if (*reinterpret_cast<int64_t*>(arrBase + static_cast<int64_t>(i) * 8) ==
             *reinterpret_cast<int64_t*>(param_2)) {
             return;   // already registered — no duplicate
@@ -253,7 +250,6 @@ extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t prof
     for (int i = 0; i < count; ++i) {
         // building entity ref (InternalBasePtr value) at node.arr[i].
         int64_t buildingIBP = *reinterpret_cast<int64_t*>(static_cast<int64_t>(found[1]) + (int64_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&buildingIBP);
         int64_t building = buildingIBP;
         if (building == 0) continue;
 
@@ -262,14 +258,12 @@ extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t prof
         int64_t wpcIBP = 0;
         if (fn_InternalBasePtr_Ctor) new (&wpcIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(wpc));   // B.3.3 bridge
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpcIBP);
         int64_t wpcPtr = wpcIBP;
         if (wpcPtr == 0) continue;                        // defensive (never in valid data)
 
         int workerCount = *reinterpret_cast<int*>(wpcPtr + 0x60);   // WPC+0x60 = live workers
 
         // owning entity is the embedded IBP at WPC+0x10 — CheckPtr then deref.
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(wpcPtr + 0x10));
         int64_t owner = *reinterpret_cast<int64_t*>(wpcPtr + 0x10);
         if (owner == 0) continue;                         // defensive
 
@@ -278,7 +272,6 @@ extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t prof
         int64_t wcIBP = 0;
         if (fn_InternalBasePtr_Ctor) new (&wcIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(wc));   // B.3.3 bridge
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wcIBP);
         int64_t wcPtr = wcIBP;
         if (wcPtr == 0) continue;                         // defensive
 
@@ -294,11 +287,9 @@ extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t prof
         char accepting = -1;
         bool reachOk = false;
         if (workerCount < capacity) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&buildingIBP);
             int64_t tmpIBP[2] = { 0, 0 };                 // 16-byte scratch IBP (matches local_50)
             if (s_findReach) {
                 void* reach = s_findReach(building, tmpIBP);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reach);
                 if (reach) {
                     accepting = *reinterpret_cast<char*>(*reinterpret_cast<int64_t*>(reach) + 0x50);
                     reachOk = (accepting != 0);

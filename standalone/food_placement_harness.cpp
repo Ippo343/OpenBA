@@ -156,7 +156,6 @@ void* FindComp(void* ent, uint32_t tid) {
     uintptr_t a = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
     for (int i = 0; i < n && a; ++i) {
         void** cs = reinterpret_cast<void**>(a + static_cast<uintptr_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs);
         void* c = *cs;
         if (!c) continue;
         void** vt = *reinterpret_cast<void***>(c);
@@ -183,7 +182,6 @@ void ProbeClass(const FoodClass& fc) {
     void* ent = nullptr; void* comp = nullptr;
     for (int i = 0; i < n && arr; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* e = *slot;
         if (!e) continue;
         if (void* c = FindComp(e, tid)) {

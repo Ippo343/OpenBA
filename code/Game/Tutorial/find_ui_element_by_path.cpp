@@ -81,7 +81,7 @@ void* NarrowComponentEntity(void* obj) {
 // Retail compares the entity description's path filename (extension stripped)
 // against parts[3] and SKIPS the dialog when they differ.
 bool ResourceNameMismatch(void* dialog, const System::String& wantName) {
-    if (!fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr) return false;
+    if (!fn_InternalBasePtr_Ctor) return false;
     void* owner = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(dialog) + 0x30);
     if (!owner) return false;
     void* entity = NarrowComponentEntity(owner);
@@ -89,7 +89,6 @@ bool ResourceNameMismatch(void* dialog, const System::String& wantName) {
     uintptr_t entityIBP = 0;
     new (&entityIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
     if (entityIBP == 0) return false;
-    fn_InternalBasePtr_CheckPtr(&entityIBP);
 
     if (!fn_External_GetPath) return false;
 
@@ -126,7 +125,7 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
 
     if (!g_pFactorySingleton || !*g_pFactorySingleton || !fn_Factory_GetTypeIdFromName ||
         !g_pGameWorldSingleton || !*g_pGameWorldSingleton ||
-        !fn_IsA || !fn_InternalBasePtr_CheckPtr) {
+        !fn_IsA) {
         return outElementIBP;
     }
     void* factory = *reinterpret_cast<void**>(*g_pFactorySingleton);
@@ -155,7 +154,6 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
     // CheckPtr and `it.node->element` the InternalBasePtr(DialogInstance*).
     uint64_t found = 0;
     for (auto it = ui->_dialogs.GetFirst(); it && found == 0; ++it) {
-        fn_InternalBasePtr_CheckPtr(it.node);
         void* dialog = it.node->element;
         if (!dialog || !fn_IsA(dialog, dialogTypeId)) continue;
 
@@ -163,7 +161,6 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
             // "Dialog:element" — the element is looked up on the dialog itself.
             if (outDialog) *outDialog = reinterpret_cast<uint64_t>(dialog);
             if (!fn_DialogInstance_FindElement) continue;
-            fn_InternalBasePtr_CheckPtr(it.node);
             uint64_t elemIBP = 0;
             fn_DialogInstance_FindElement(dialog, &elemIBP, &parts[1]);
             if (elemIBP) found = elemIBP;
@@ -171,14 +168,12 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
         }
 
         // "Dialog:Controller:element[:resource]"
-        fn_InternalBasePtr_CheckPtr(it.node);
         uint64_t controller = 0;
         if (fn_DialogInstance_GetController)
             fn_DialogInstance_GetController(dialog, &controller, controllerTypeId);
         if (controller == 0) continue;
 
         if (partCount == 4) {
-            fn_InternalBasePtr_CheckPtr(it.node);
             if (ResourceNameMismatch(it.node->element, parts[3])) continue;
         }
 
@@ -187,17 +182,14 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
         // The controller's container first...
         uint64_t elemIBP = 0;
         if (fn_DialogController_GetContainer && fn_Element_FindElement) {
-            fn_InternalBasePtr_CheckPtr(&controller);
             uint64_t containerIBP = 0;
             fn_DialogController_GetContainer(reinterpret_cast<void*>(controller), &containerIBP);
             if (containerIBP) {
-                fn_InternalBasePtr_CheckPtr(&containerIBP);
                 fn_Element_FindElement(reinterpret_cast<void*>(containerIBP), &elemIBP, &parts[2]);
             }
         }
         // ...then the dialog itself.
         if (elemIBP == 0 && fn_DialogInstance_FindElement) {
-            fn_InternalBasePtr_CheckPtr(it.node);
             fn_DialogInstance_FindElement(dialog, &elemIBP, &parts[2]);
         }
         if (elemIBP) found = elemIBP;

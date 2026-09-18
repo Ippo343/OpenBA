@@ -44,7 +44,6 @@ void RadiusUI_Slot5(RadiusUI* self) {
     uint64_t entityBasePtr = 0;
     new (&entityBasePtr) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(checkedEntity));   // B.3.3 bridge
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entityBasePtr);
 
     // SA-only guard (retail derefs this unguarded): retail can only route a RadiusUI
     // controller to a live ComponentEntity, but our promoted vtable is also dispatched
@@ -79,7 +78,6 @@ void RadiusUI_Slot5(RadiusUI* self) {
     // "MapComponent" in reg_economy_typeids; the finder name is a known misnomer).
     uint64_t buildComp = 0;
     fn_FindComponent_Build((void*)entityBasePtr, &buildComp);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&buildComp);
 
     // SA-only guards (retail derefs both unguarded). Retail reaches Slot5 only from a
     // .rsc panel whose entity is a placed building carrying both components; our

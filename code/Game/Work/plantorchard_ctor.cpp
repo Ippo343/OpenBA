@@ -108,10 +108,8 @@ extern "C" void* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, void* 
                                                               // no null test, no validation,
                                                               // no refcount — as retail does.
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
     int64_t orchardIBP = 0;
     if (s_FindOrchard) s_FindOrchard(*reinterpret_cast<int64_t*>(s + 0x10), &orchardIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&orchardIBP);
     if (!orchardIBP) return mem;      // SA: retail derefs unguarded below; a PlantOrchard is
                                       // only ever built for an entity that has an orchard, so
                                       // this can only fire if our caller is wrong. Returning
@@ -119,7 +117,6 @@ extern "C" void* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, void* 
                                       // rather than faulting on a null component.
 
     if (s_ValidateRefs) s_ValidateRefs(orchardIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&orchardIBP);
 
     // Size the per-slot validity array from the orchard's CURRENT slot count.
     // B.3.2 bridge: FUN_14000a590 == Collection::Array<uint8>::SetSize.
@@ -129,12 +126,10 @@ extern "C" void* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, void* 
     // Zero each byte. Retail re-reads orchardComp->+0x58 and re-runs CheckPtr on every
     // iteration; the re-read is preserved because ValidateRefs/CheckPtr can in principle
     // shrink the component's slot array underneath the loop.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&orchardIBP);
     for (int i = 0; i < *reinterpret_cast<int32_t*>(orchardIBP + 0x58); ++i) {
         uint8_t* base = *reinterpret_cast<uint8_t**>(s + 0x58);
         if (!base) break;
         base[i] = 0;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&orchardIBP);
     }
     return mem;
 }

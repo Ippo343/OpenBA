@@ -177,9 +177,7 @@ extern "C" int TradeWork_impl_0d80(int64_t sys, int minX, int minY, int maxX, in
 
 // Draw-path helpers (resolved independently of DecalComponent_InitFuncs, which is
 // not invoked — the driver calls Draw without InitFuncs).
-typedef void  (*fn_CheckPtr_draw_t)(void* ptr);
 typedef void* (*fn_FindComp_t)(void* entityInner, void* retIBP);
-static fn_CheckPtr_draw_t s_fn_CheckPtr_draw   = nullptr;
 static fn_FindComp_t      s_fn_FindComp_Map    = nullptr;   // 0x140004680 (MapComponent)
 static fn_FindComp_t      s_fn_FindComp_Model  = nullptr;   // 0x140003f60 (ModelComponent)
 static void**             s_pGameStateDraw      = nullptr;   // DAT_1401c3dd8
@@ -204,8 +202,6 @@ static uint32_t DecalDescTypeId() {
 
 static void EnsureDrawHelpers() {
     if (s_drawHelpersInit) return;
-    uintptr_t slot = ResolveAddr(Module::Exe, 0x140152ab0);   // InternalBasePtr::CheckPtr
-    if (slot) s_fn_CheckPtr_draw = *reinterpret_cast<fn_CheckPtr_draw_t*>(slot);
     s_fn_FindComp_Map   = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140004680));
     s_fn_FindComp_Model = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140003f60));
     s_pGameStateDraw    = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401c3dd8));
@@ -238,7 +234,6 @@ static void* FindModelComponentOnOwner(void* ownerEnt) {
         uintptr_t exeBuf[2] = {0, 0};
         s_fn_FindComp_Model(ownerEnt, exeBuf);
         if (exeBuf[0]) {
-            if (s_fn_CheckPtr_draw) s_fn_CheckPtr_draw(exeBuf);
             return reinterpret_cast<void*>(exeBuf[0]);
         }
     }
@@ -251,14 +246,12 @@ static void* FindModelComponentOnOwner(void* ownerEnt) {
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(e + 0x30);
     for (int i = 0; i < count; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        if (s_fn_CheckPtr_draw) s_fn_CheckPtr_draw(slot);
         void* comp = *slot;
         if (!comp) continue;
         uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
         typedef uint32_t (*fn_GetTypeId_t)(void*);
         uint32_t id = (*reinterpret_cast<fn_GetTypeId_t*>(vt + 0x10))(comp);
         if (id == s_tidModel) {
-            if (s_fn_CheckPtr_draw) s_fn_CheckPtr_draw(slot);
             return *slot;
         }
     }
@@ -273,10 +266,8 @@ void DecalComponent_Draw(DecalComponent* self) {
     uintptr_t selfA = reinterpret_cast<uintptr_t>(self);
 
     // CheckPtr(owner) then FindComponent(MapComponent) for the tile footprint.
-    if (s_fn_CheckPtr_draw) s_fn_CheckPtr_draw(reinterpret_cast<void*>(selfA + 0x10));
     uintptr_t mapBuf[2] = {0, 0};
     if (s_fn_FindComp_Map) s_fn_FindComp_Map(*reinterpret_cast<void**>(selfA + 0x10), mapBuf);
-    if (s_fn_CheckPtr_draw) s_fn_CheckPtr_draw(mapBuf);
     uintptr_t mapComp = mapBuf[0];
     if (!mapComp) {
         return;
@@ -293,7 +284,6 @@ void DecalComponent_Draw(DecalComponent* self) {
     // retail); it selects which atlas cell of the tiled-decal material this building's
     // foundation samples. Defaults to 0 if no ModelComponent is found.
     int variant = 0;
-    if (s_fn_CheckPtr_draw) s_fn_CheckPtr_draw(reinterpret_cast<void*>(selfA + 0x10));
     void* modelComp = FindModelComponentOnOwner(*reinterpret_cast<void**>(selfA + 0x10));
     if (modelComp != nullptr) {
         uintptr_t mc = reinterpret_cast<uintptr_t>(modelComp);
@@ -487,7 +477,6 @@ static void DecalComponent_SetDrawFlag(void* s, bool on) {
     if (newFlags == oldFlags) return;
     *reinterpret_cast<uint32_t*>(c + 0x20) = newFlags;
     if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && *reinterpret_cast<void**>(c + 0x10)) {
-        if (s_fn_CheckPtr_draw) s_fn_CheckPtr_draw(reinterpret_cast<void*>(c + 0x10));
         if (s_fn_EntityFlagUpdate) s_fn_EntityFlagUpdate(*reinterpret_cast<void**>(c + 0x10));
     }
 }
@@ -540,7 +529,6 @@ extern "C" void DecalComponent_MarkOwnerBuilt(void* entity) {
     if (!arr) return;
     for (int i = 0; i < count; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<int64_t>(i) * 8);
-        if (s_fn_CheckPtr_draw) s_fn_CheckPtr_draw(slot);
         void* comp = *slot;
         if (!comp) continue;
         typedef uint32_t (*GT_t)(void*);

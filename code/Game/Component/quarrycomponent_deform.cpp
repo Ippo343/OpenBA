@@ -63,7 +63,6 @@ namespace {
 typedef void  (*fn_FindCompOut_t)(void* entity, void* outIbp);
 typedef void* (*fn_MeshVertices_t)(void* mesh, int lod);
 typedef bool  (*fn_IsDerivedFromId_t)(void* self, uint32_t typeId);
-typedef void  (*fn_CheckPtrSlot_t)(void* ibp);
 
 fn_FindCompOut_t     s_fn_FindComp_Model = nullptr;   // 0x140003f60
 fn_FindCompOut_t     s_fn_FindComp_Map   = nullptr;   // 0x140004680
@@ -71,7 +70,6 @@ fn_FindCompOut_t     s_fn_FindComp_Decal = nullptr;   // 0x14000b630
 fn_FindCompOut_t     s_fn_FindComp_CP    = nullptr;   // 0x14000b6f0
 fn_MeshVertices_t    s_fn_MeshVertices   = nullptr;   // slot 0x140151478
 fn_IsDerivedFromId_t s_fn_IsDerivedFrom  = nullptr;   // slot 0x140152a98
-fn_CheckPtrSlot_t    s_fn_CheckPtr       = nullptr;   // slot 0x140152ab0
 bool s_deformInit = false;
 
 // .rdata constants, each verified with read_memory:
@@ -94,7 +92,6 @@ void QuarryDeformResolve() {
     uintptr_t slot;
     slot = ResolveAddr(Module::Exe, 0x140151478); if (slot) s_fn_MeshVertices  = *reinterpret_cast<fn_MeshVertices_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152a98); if (slot) s_fn_IsDerivedFrom = *reinterpret_cast<fn_IsDerivedFromId_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152ab0); if (slot) s_fn_CheckPtr      = *reinterpret_cast<fn_CheckPtrSlot_t*>(slot);
 
     struct RF { static void Get(uintptr_t a, float& dst) {
         const float* p = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, a));
@@ -119,7 +116,6 @@ void QuarryBail(const char* where, const char* why) {
 }
 
 void* QuarryOwnerEntity(uintptr_t self) {
-    if (s_fn_CheckPtr) s_fn_CheckPtr(reinterpret_cast<void*>(self + 0x10));
     return *reinterpret_cast<void**>(self + 0x10);
 }
 
@@ -128,7 +124,6 @@ void* QuarryFindComp(fn_FindCompOut_t finder, void* entity) {
     uintptr_t out[2] = {0, 0};
     finder(entity, out);
     if (!out[0]) return nullptr;
-    if (s_fn_CheckPtr) s_fn_CheckPtr(out);
     return reinterpret_cast<void*>(out[0]);
 }
 

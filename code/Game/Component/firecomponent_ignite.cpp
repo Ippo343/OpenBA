@@ -199,10 +199,8 @@ extern "C" void FireComp_MarkDanger_99c0(void* self, short delta) {
     if (!s_findMapComp) return;
 
     void* ibpSlot = reinterpret_cast<uint8_t*>(self) + 0x10;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibpSlot);
     uintptr_t mapIbp = 0;
     s_findMapComp(*reinterpret_cast<uintptr_t*>(ibpSlot), &mapIbp);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&mapIbp);
 
     const int r = *reinterpret_cast<int*>(
         reinterpret_cast<uintptr_t>(desc) + FireDescriptionField::DangerRadius);
@@ -318,10 +316,8 @@ extern "C" void FireComponent_Extinguish_4c0(void* self) {
 
     // ParticleComponent: fade the flames out.
     if (s_findParticle) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibpSlot);
         uintptr_t partIbp = 0;
         s_findParticle(*reinterpret_cast<uintptr_t*>(ibpSlot), &partIbp);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&partIbp);
         if (s_particleFadeOut)
             s_particleFadeOut(reinterpret_cast<void*>(partIbp),
                               *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) +
@@ -330,29 +326,23 @@ extern "C" void FireComponent_Extinguish_4c0(void* self) {
 
     // DestroyComponent: leave the BURNING state.
     if (s_findDestroy) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibpSlot);
         uintptr_t destIbp = 0;
         s_findDestroy(*reinterpret_cast<uintptr_t*>(ibpSlot), &destIbp);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&destIbp);
         FireComponent_StopBurning_11ea10(reinterpret_cast<void*>(destIbp));
     }
 
     // WorkComponent: release the firefighting work slot (this is what retires the
     // FireWork Ignite posted).
     if (s_findWorkComp && s_stopSlot) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibpSlot);
         uintptr_t workIbp = 0;
         s_findWorkComp(*reinterpret_cast<uintptr_t*>(ibpSlot), &workIbp);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workIbp);
         s_stopSlot(workIbp);
     }
 
     // AmbientEmitterComponent: stop the crackle.
     if (s_findAmbient) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibpSlot);
         uintptr_t ambIbp = 0;
         s_findAmbient(*reinterpret_cast<uintptr_t*>(ibpSlot), &ambIbp);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ambIbp);
         int64_t base = ambIbp ? *reinterpret_cast<int64_t*>(ambIbp + 0x38) : 0;
         const uintptr_t gw = GameWorld();
         if (base && gw) {
@@ -390,10 +380,8 @@ extern "C" void FireComponent_Ignite_610(void* self) {
     if (!gw || !s_findDestroy) return;
 
     // --- the two abort gates, on the DestroyComponent ---
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibpSlot);
     uintptr_t destIbp = 0;
     s_findDestroy(*reinterpret_cast<uintptr_t*>(ibpSlot), &destIbp);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&destIbp);
     void* destroyComp = reinterpret_cast<void*>(destIbp);
 
     if (FireComponent_IsBeingDemolished_11e690(destroyComp)) {
@@ -426,10 +414,8 @@ extern "C" void FireComponent_Ignite_610(void* self) {
 
     // ParticleComponent: fade the flames in.
     if (s_findParticle && s_particleFadeIn) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibpSlot);
         uintptr_t partIbp = 0;
         s_findParticle(*reinterpret_cast<uintptr_t*>(ibpSlot), &partIbp);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&partIbp);
         s_particleFadeIn(reinterpret_cast<void*>(partIbp),
                          *reinterpret_cast<int*>(d + FireDescriptionField::ParticleEmitter));
     }
@@ -437,7 +423,6 @@ extern "C" void FireComponent_Ignite_610(void* self) {
     // --- MINT the FireWork and POST it to the reservation ledger ---
     uintptr_t workCompIbp = 0;
     if (s_findWorkComp) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibpSlot);
         s_findWorkComp(*reinterpret_cast<uintptr_t*>(ibpSlot), &workCompIbp);
     }
 
@@ -457,11 +442,9 @@ extern "C" void FireComponent_Ignite_610(void* self) {
         reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
 
     if (s_postWork && workCompIbp) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIbp);
         s_postWork(workCompIbp, 0x4000, 0, &workIbp);
     }
     if (s_removalCalc && workCompIbp) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIbp);
         s_removalCalc(*reinterpret_cast<int64_t*>(gw + 0x118),
                       *reinterpret_cast<int*>(workCompIbp + 0x28));
     }
@@ -491,23 +474,18 @@ extern "C" void FireComponent_Ignite_610(void* self) {
 
     // --- audio: move this entity's emitters to its world position, then start one ---
     if (s_findAmbient && s_findXform) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibpSlot);
         uintptr_t ambIbp = 0;
         s_findAmbient(*reinterpret_cast<uintptr_t*>(ibpSlot), &ambIbp);
 
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibpSlot);
         uintptr_t xformIbp = 0;
         s_findXform(*reinterpret_cast<uintptr_t*>(ibpSlot), &xformIbp);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&xformIbp);
 
         if (ambIbp && xformIbp) {
             float pos[3];
             pos[0] = *reinterpret_cast<float*>(xformIbp + 0x158);
             pos[1] = *reinterpret_cast<float*>(xformIbp + 0x15c);
             pos[2] = *reinterpret_cast<float*>(xformIbp + 0x160);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ambIbp);
             if (s_audioMove) s_audioMove(reinterpret_cast<void*>(ambIbp), pos);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ambIbp);
             FireComp_StartAudioEmitter_42c60(
                 reinterpret_cast<void*>(ambIbp),
                 *reinterpret_cast<int*>(d + FireDescriptionField::AudioEmitter));
@@ -535,10 +513,8 @@ extern "C" void FireComponent_Spread_130(void* self) {
     if (!grid) return;
 
     void* ibpSlot = reinterpret_cast<void*>(s + 0x10);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibpSlot);
     uintptr_t mapIbp = 0;
     s_findMapComp(*reinterpret_cast<uintptr_t*>(ibpSlot), &mapIbp);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&mapIbp);
 
     // Footprint-derived sample rect, expanded by min(w,h) on each side.
     int w  = static_cast<int>(*reinterpret_cast<int16_t*>(mapIbp + 0x2c));
@@ -590,17 +566,14 @@ extern "C" void FireComponent_Spread_130(void* self) {
 
         uint64_t neighbourFire = 0;
         if (occupant != 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&occupant);
             const int n = *reinterpret_cast<int*>(occupant + 0x38);
             int64_t comps = *reinterpret_cast<int64_t*>(occupant + 0x30);
             for (int i = 0; i < n; ++i) {
                 uint64_t* slot = reinterpret_cast<uint64_t*>(comps + static_cast<int64_t>(i) * 8);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
                 void** vt = *reinterpret_cast<void***>(*slot);
                 uint32_t tid = reinterpret_cast<uint32_t(*)(void*)>(vt[2])(
                                    reinterpret_cast<void*>(*slot));
                 if (tid == g_tid_FireComponent) {
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
                     neighbourFire = *slot;
                     break;
                 }
@@ -625,7 +598,6 @@ extern "C" void FireComponent_Spread_130(void* self) {
             const float roll = fn_Random_RandFloat ? fn_Random_RandFloat(rng) : 1.0f;
             const bool caught = roll < chance;
             if (caught) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&neighbourFire);
                 FireComponent_Ignite_610(reinterpret_cast<void*>(neighbourFire));
             }
         }

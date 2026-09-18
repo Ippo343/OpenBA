@@ -68,7 +68,7 @@ bool AnimateNaturalResource_ResolveFuncs() {
 
     bool ok = s_fn_IBP_Serialize && s_fn_GetNRComp && s_fn_SetAnimIndex &&
               s_fn_GetModelComp && s_fn_IsAnimating && s_TypeId_ComponentEntity &&
-              fn_InternalBasePtr_CheckPtr && fn_IsDerivedFrom &&
+              fn_IsDerivedFrom &&
               fn_InternalBasePtr_DeletePtr && fn_ObjectInternal_Dtor && fn_MemFreeStatic &&
               g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
               g_fn_Serialize_Bool && g_fn_Serialize_Int;
@@ -156,9 +156,7 @@ int AnimateNaturalResource_AbstractImpl_Impl(AnimateNaturalResource* self, void*
     (void)actionStack;
 
     void* localIBP;
-    fn_InternalBasePtr_CheckPtr(&self->_field20);
     s_fn_GetNRComp(self->_field20, &localIBP);
-    fn_InternalBasePtr_CheckPtr(&localIBP);
     s_fn_SetAnimIndex(localIBP, (uint32_t)self->animIndex);
 
     return (self->waitForAnim != 0) ? 1 : 0;
@@ -173,9 +171,7 @@ int AnimateNaturalResource_Execute_Impl(AnimateNaturalResource* self, void* acti
     (void)time;
 
     void* localIBP[4] = {nullptr, nullptr, nullptr, nullptr};
-    fn_InternalBasePtr_CheckPtr(&self->_field20);
     s_fn_GetModelComp(self->_field20, localIBP);
-    fn_InternalBasePtr_CheckPtr(localIBP);
 
     // Standalone-inert guard: on a tree whose ModelComponent find resolves null (inert
     // resource-entity render layer, unfilled type-id global), report "not animating" so the
@@ -193,7 +189,6 @@ int AnimateNaturalResource_Execute_Impl(AnimateNaturalResource* self, void* acti
 // ============================================================
 bool AnimateNaturalResource_GetTarget_Impl(AnimateNaturalResource* self, void* param) {
     AnimateNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
-    fn_InternalBasePtr_CheckPtr(param);
     return self->_field20 == *(void**)param;
 }
 

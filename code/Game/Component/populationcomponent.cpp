@@ -63,12 +63,10 @@ static void* PopulationFindComponent(int64_t entity, uint32_t typeId) {
     uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
     for (int i = 0; i < n; i++) {
         void** slot = reinterpret_cast<void**>(list + (int64_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* comp = *slot;
         if (!comp) continue;
         uint32_t t = (*reinterpret_cast<uint32_t (**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
         if (t != typeId) continue;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* c = *slot;
         return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, typeId)) ? c : nullptr;
     }
@@ -464,7 +462,6 @@ void PopulationComponent_Startup(PopulationComponent* selfC) {
         void* ent = (mem && s_fn_CopyCtor) ? s_fn_CopyCtor(mem, herdTemplate) : nullptr;
         uint64_t entRef = 0;
         new (&entRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(ent));   // B.3.3 bridge
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entRef);
         int64_t entObj = static_cast<int64_t>(entRef);
         if (!entObj) continue;
 
@@ -473,7 +470,6 @@ void PopulationComponent_Startup(PopulationComponent* selfC) {
         new (&herdRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(herdComp));   // B.3.3 bridge
         uint64_t selfRef = 0;
         new (&selfRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&herdRef);
         uint8_t* herd = reinterpret_cast<uint8_t*>(herdRef);
         if (!herd) continue;
 

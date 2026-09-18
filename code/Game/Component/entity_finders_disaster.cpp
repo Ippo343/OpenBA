@@ -86,13 +86,11 @@ void* FindByTypeId(uintptr_t entity, void* retIBP, uint32_t typeId) {
         const uintptr_t base = *reinterpret_cast<uintptr_t*>(entity + 0x30);
         for (int i = 0; i < n; ++i) {
             void** ibp = reinterpret_cast<void**>(base + static_cast<uintptr_t>(i) * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);
             void* obj = *ibp;
             if (!obj) continue;
             const uint32_t t = (*reinterpret_cast<uint32_t (**)(void*)>(
                 *reinterpret_cast<uintptr_t*>(obj) + 0x10))(obj);
             if (t == typeId) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);
                 void* o = *ibp;
                 if (fn_IsDerivedFrom && fn_IsDerivedFrom(o, typeId)) found = o;
                 break;

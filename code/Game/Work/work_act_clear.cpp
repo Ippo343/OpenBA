@@ -72,7 +72,6 @@ typedef void* (*s_wac_MoveTo_t)(void* self, void* familyIBP, int pathType, int p
                                 float* destination, int p6, int p7, float speed);
 
 // --- dispatch slots (deref once to get runtime fn ptr) ---
-typedef void  (*s_wac_CheckPtr_t)(void* ibp);                    // 0x140152ab0
 typedef bool  (*s_wac_IsDerivedFrom_t)(void* obj, uint32_t tid); // 0x140152a98
 typedef void* (*s_wac_MemAlloc_t)(uint64_t size, uint32_t align);// 0x140152b60
 typedef void  (*s_wac_IbpCtor_t)(void* ibp, void* obj);          // 0x140152a90
@@ -91,7 +90,6 @@ static s_wac_ShowTool_t        s_wac_ShowTool       = nullptr;
 static s_wac_PerformWork7_t    s_wac_PerformWork7   = nullptr;
 static s_wac_MoveTo_t          s_wac_MoveTo         = nullptr;
 
-static s_wac_CheckPtr_t        s_wac_CheckPtr       = nullptr;
 static s_wac_IsDerivedFrom_t   s_wac_IsDerivedFrom  = nullptr;
 static s_wac_MemAlloc_t        s_wac_MemAlloc       = nullptr;
 static s_wac_IbpCtor_t         s_wac_IbpCtor        = nullptr;
@@ -125,7 +123,6 @@ static void s_wac_ResolveAll() {
     s_wac_MoveTo         = reinterpret_cast<s_wac_MoveTo_t>(ResolveAddr(Module::Exe, 0x1400c9170));
 
     // Dispatch slots — deref once to reach the runtime fn ptr.
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152ab0)) s_wac_CheckPtr        = *reinterpret_cast<s_wac_CheckPtr_t*>(s);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152a98)) s_wac_IsDerivedFrom   = *reinterpret_cast<s_wac_IsDerivedFrom_t*>(s);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b60)) s_wac_MemAlloc        = *reinterpret_cast<s_wac_MemAlloc_t*>(s);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152a90)) s_wac_IbpCtor         = *reinterpret_cast<s_wac_IbpCtor_t*>(s);
@@ -134,7 +131,6 @@ static void s_wac_ResolveAll() {
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b68)) s_wac_MemFree         = *reinterpret_cast<s_wac_MemFree_t*>(s);
 
     // Engine-funcs fallbacks (same IAT targets) when the dispatch slot is unregistered.
-    if (!s_wac_CheckPtr  && fn_InternalBasePtr_CheckPtr)  s_wac_CheckPtr  = reinterpret_cast<s_wac_CheckPtr_t>(fn_InternalBasePtr_CheckPtr);
     if (!s_wac_IbpCtor   && fn_InternalBasePtr_Ctor)      s_wac_IbpCtor   = reinterpret_cast<s_wac_IbpCtor_t>(fn_InternalBasePtr_Ctor);
     if (!s_wac_DeletePtr && fn_InternalBasePtr_DeletePtr) s_wac_DeletePtr = reinterpret_cast<s_wac_DeletePtr_t>(fn_InternalBasePtr_DeletePtr);
     if (!s_wac_ObjInternalCtor && fn_ObjectInternal_Ctor) s_wac_ObjInternalCtor = reinterpret_cast<s_wac_ObjInternalCtor_t>(fn_ObjectInternal_Ctor);
@@ -154,7 +150,6 @@ static inline void* WAC_Alloc(uint64_t size, uint32_t align) {
     if (fn_MemAlloc && g_pMemAllocSingleton) return fn_MemAlloc(g_pMemAllocSingleton, size, align);
     return nullptr;
 }
-static inline void WAC_CheckPtr(void* p)            { if (s_wac_CheckPtr) s_wac_CheckPtr(p); }
 static inline void WAC_IbpCtor(void* ibp, void* o)  { if (s_wac_IbpCtor) s_wac_IbpCtor(ibp, o); }
 
 // Inlined task-list append, mirroring the disasm's inlined FUN_1400c54e0 body
@@ -199,16 +194,13 @@ static void WAC_AppendInline(uintptr_t aiComp, void** plVar15, uintptr_t actionI
         for (void* node = reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(plVar15))[*reinterpret_cast<int*>(aiComp + 0x60)];
              node != nullptr;
              node = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(node) + 0x10)) {
-            WAC_CheckPtr(&node);
             if (*reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(node) + 0x18) != 0) {
-                WAC_CheckPtr(&node);
                 *reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(node) + 0x18) = 0;
                 // virtual call vtable+0x38(node, plVar15)
                 void** vt = *reinterpret_cast<void***>(node);
                 typedef void (*Slot38_t)(void* self, void* list);
                 reinterpret_cast<Slot38_t>(vt[0x38 / 8])(node, plVar15);
             }
-            WAC_CheckPtr(&node);
         }
     }
 
@@ -232,13 +224,11 @@ void WorkAct_HarvestAreaCtor_c1530(void* param_1, uint32_t param_2, int param_3,
     s_wac_ResolveAll();
 
     // --- heading = Entity_impl_29a0(param_5, &{param_4[0] inner}) → XMM6 (0x1400c1563..0x1400c158b) ---
-    WAC_CheckPtr(param_4);
     uintptr_t firstEntityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(param_4) + 0x10);
     float heading = 0.0f;
     if (s_wac_Entity29a0) heading = s_wac_Entity29a0(param_5, &firstEntityInner);
 
     // --- derive target component off param_4[0]+0x18; keep if IsDerivedFrom(c7b68) (0x1400c158e..0x1400c15b6) ---
-    WAC_CheckPtr(param_4);
     void* targetComp = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(param_4) + 0x18);
     uintptr_t local_60 = 0; // derived target (the "pIVar8 = local_60" used post-loop)
     bool derived = false;
@@ -247,9 +237,7 @@ void WorkAct_HarvestAreaCtor_c1530(void* param_1, uint32_t param_2, int param_3,
     if (derived) local_60 = reinterpret_cast<uintptr_t>(targetComp);
 
     // --- list base = (*(citizen)+0x278) + 0x48 ; cleanup (0x1400c15ba..0x1400c15e2) ---
-    WAC_CheckPtr(param_1);
     uintptr_t lVar3 = *reinterpret_cast<uintptr_t*>(param_1);
-    WAC_CheckPtr(reinterpret_cast<void*>(lVar3 + 0x278));
     uintptr_t aiComp = *reinterpret_cast<uintptr_t*>(lVar3 + 0x278);
     void** plVar15 = reinterpret_cast<void**>(aiComp + 0x48);
     if (s_wac_TaskCleanup) s_wac_TaskCleanup(plVar15);
@@ -265,7 +253,6 @@ void WorkAct_HarvestAreaCtor_c1530(void* param_1, uint32_t param_2, int param_3,
             uintptr_t innerIbp = 0;
             WAC_IbpCtor(&innerIbp, nullptr);
             uint32_t msgId = s_wac_pMsgId_c70e8 ? *s_wac_pMsgId_c70e8 : 0; // DWORD_1401c70e8
-            WAC_CheckPtr(param_1);
             uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(param_1) + 0x10);
             if (s_wac_SendCompMsg) sm = s_wac_SendCompMsg(obj, &entityInner, &msgId, 0, &innerIbp, 0);
         }
@@ -308,7 +295,6 @@ void WorkAct_HarvestAreaCtor_c1530(void* param_1, uint32_t param_2, int param_3,
     if (param_3 > 0) {
         int64_t loopCtr = static_cast<int64_t>(param_3); // R12=R14=param_3
         do {
-            WAC_CheckPtr(param_4);
             uintptr_t innerR4 = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(param_4) + 0x10); // RDI
 
             void* obj = WAC_Alloc(0x38, 8); // MOV EDX,8; LEA ECX,[RDX+0x30] @0x1400c174a = 8+0x30 = 0x38
@@ -333,14 +319,12 @@ void WorkAct_HarvestAreaCtor_c1530(void* param_1, uint32_t param_2, int param_3,
 
             // set bit 0x14 (0x100000) on param_4[i] target's +0x20 flags; on change & +0x10 set,
             // detach via FUN_1400c3470 (0x1400c18f0..0x1400c1929)
-            WAC_CheckPtr(param_4);
             uintptr_t targetObj = *reinterpret_cast<uintptr_t*>(param_4);
             uint32_t oldFlags = *reinterpret_cast<uint32_t*>(targetObj + 0x20);
             uint32_t newFlags = oldFlags | 0x100000u; // BTS EAX,0x14
             *reinterpret_cast<uint32_t*>(targetObj + 0x20) = newFlags;
             if (static_cast<uint16_t>(oldFlags ^ newFlags) != 0 &&            // TEST CX,CX
                 *reinterpret_cast<uintptr_t*>(targetObj + 0x10) != 0) {
-                WAC_CheckPtr(reinterpret_cast<void*>(targetObj + 0x10));
                 void* detach = *reinterpret_cast<void**>(targetObj + 0x10);
                 if (s_wac_WorkDetach) s_wac_WorkDetach(detach);
             }
@@ -397,9 +381,7 @@ void WorkAct_HarvestAreaCtor_c1530(void* param_1, uint32_t param_2, int param_3,
                     default:                                 pathType = 1; break;
                 }
             }
-            WAC_CheckPtr(param_1);
             uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(param_1) + 0x10);
-            WAC_CheckPtr(&entityInner);
             uintptr_t famRet = 0;
             void* familyIBP = nullptr;
             if (s_wac_FindCompFamily) familyIBP = s_wac_FindCompFamily(entityInner, &famRet);

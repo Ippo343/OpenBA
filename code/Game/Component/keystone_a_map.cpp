@@ -178,16 +178,12 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
 
                     // Evict any stale entity occupying this cell.
                     if ((*param_2 != 0) && (*reinterpret_cast<int64_t*>(lVar14 + 8) != 0)) {
-                        if (fn_InternalBasePtr_CheckPtr)
-                            fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(lVar14 + 8));
                         int64_t lVar2 = *reinterpret_cast<int64_t*>(lVar14 + 8);
                         if (*param_2 != lVar2) {
                             int64_t lVar3 = *reinterpret_cast<int64_t*>(
                                 reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xe8);
                             int64_t local_68 = lVar2;
                             if (lVar2 != 0) {
-                                if (fn_InternalBasePtr_CheckPtr)
-                                    fn_InternalBasePtr_CheckPtr(&local_68);
                                 if ((*reinterpret_cast<uint32_t*>(local_68 + 0x40) >> 10 & 1) == 0) {
                                     // Always-on tally (the trace above is opt-in AND capped at
                                     // 40 lines, so nothing countable survived a default run).
@@ -214,8 +210,6 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
                                         }
                                         if (participating == 0) ++g_dc20EvictNoParticipant;
                                     }
-                                    if (fn_InternalBasePtr_CheckPtr)
-                                        fn_InternalBasePtr_CheckPtr(&local_68);
                                     if (s_c2ea0) s_c2ea0(local_68);
                                     // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
                                     GameColl::AsArray<GameColl::Ptr8>(
@@ -363,8 +357,6 @@ void CreateNaturalResource_impl_dee0(int* param_1, void* param_2, int param_3,
                         int cls = CreateNaturalResource_helper_e2c0(param_1, iVar14);
                         uint8_t bVar13 = (uint8_t)cls;
                         if (((1 << (bVar13 & 0x1f) & 0x1e0u) != 0) && (*plVar11 != 0)) {
-                            if (fn_InternalBasePtr_CheckPtr)
-                                fn_InternalBasePtr_CheckPtr(param_2);
                             if (*plVar11 != *reinterpret_cast<int64_t*>(param_2)) {
                                 bVar13 = 2;
                             }
@@ -433,8 +425,6 @@ void MapComponent_sub_41b0(int64_t param_1) {
         *reinterpret_cast<uint32_t*>(param_1 + 0x20) = uVar4;
         if ((((uVar4 ^ uVar1) & 0xffff) != 0) &&
             (*reinterpret_cast<int64_t*>(param_1 + 0x10) != 0)) {
-            if (fn_InternalBasePtr_CheckPtr)
-                fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(param_1 + 0x10));
             if (s_c3470) s_c3470(*reinterpret_cast<void**>(param_1 + 0x10));
         }
     }
@@ -473,8 +463,6 @@ void CreateNaturalResource_impl_4750(int64_t param_1) {
     *reinterpret_cast<uint32_t*>(param_1 + 0x20) = uVar4;
     if ((((uVar4 ^ uVar1) & 0xffff) != 0) &&
         (*reinterpret_cast<int64_t*>(param_1 + 0x10) != 0)) {
-        if (fn_InternalBasePtr_CheckPtr)
-            fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(param_1 + 0x10));
         if (s_c3470) s_c3470(*reinterpret_cast<void**>(param_1 + 0x10));
     }
 }

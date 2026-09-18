@@ -83,8 +83,6 @@ typedef void* (*WAP2_MoveTo_t)(void* self, void* familyIBP, int pathType, int p4
 typedef void* (*WAP2_MemAlloc_t)(uint64_t size, uint32_t align);
 // 0x140152a90 — Object::InternalBasePtr::InternalBasePtr(self, obj). (0xbf86a etc.)
 typedef void* (*WAP2_IbpCtor_t)(void* self, void* obj);
-// 0x140152ab0 — Object::InternalBasePtr::CheckPtr(self). (0xbf7cf etc.)
-typedef void  (*WAP2_IbpCheck_t)(void* self);
 // 0x140151ab8 — Object::InternalBasePtr::DeletePtr(self). (0xbf87b)
 typedef void  (*WAP2_IbpDelete_t)(void* self);
 // 0x140152768 — Object::Internal::Internal(self) base ctor. (0xbf989 / 0xbfc79)
@@ -106,7 +104,6 @@ static WAP2_MoveTo_t              s_wap2_MoveTo            = nullptr;
 
 static WAP2_MemAlloc_t            s_wap2_MemAlloc          = nullptr;
 static WAP2_IbpCtor_t             s_wap2_IbpCtor           = nullptr;
-static WAP2_IbpCheck_t            s_wap2_IbpCheck          = nullptr;
 static WAP2_IbpDelete_t           s_wap2_IbpDelete         = nullptr;
 static WAP2_ObjInternalCtor_t     s_wap2_ObjInternalCtor   = nullptr;
 static WAP2_TimeCtor_t            s_wap2_TimeCtor          = nullptr;
@@ -145,14 +142,12 @@ static void ResolveAll() {
     // Dispatch slots — deref once for the runtime fn ptr.
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b60)) s_wap2_MemAlloc        = *reinterpret_cast<WAP2_MemAlloc_t*>(s);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152a90)) s_wap2_IbpCtor         = *reinterpret_cast<WAP2_IbpCtor_t*>(s);
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152ab0)) s_wap2_IbpCheck        = *reinterpret_cast<WAP2_IbpCheck_t*>(s);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140151ab8)) s_wap2_IbpDelete       = *reinterpret_cast<WAP2_IbpDelete_t*>(s);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152768)) s_wap2_ObjInternalCtor = *reinterpret_cast<WAP2_ObjInternalCtor_t*>(s);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b00)) s_wap2_TimeCtor        = *reinterpret_cast<WAP2_TimeCtor_t*>(s);
 
     // Fallbacks to engine_funcs helpers (same IAT targets) when a slot is unregistered.
     if (!s_wap2_IbpCtor)         s_wap2_IbpCtor         = reinterpret_cast<WAP2_IbpCtor_t>(fn_InternalBasePtr_Ctor);
-    if (!s_wap2_IbpCheck)        s_wap2_IbpCheck        = reinterpret_cast<WAP2_IbpCheck_t>(fn_InternalBasePtr_CheckPtr);
     if (!s_wap2_IbpDelete)       s_wap2_IbpDelete       = reinterpret_cast<WAP2_IbpDelete_t>(fn_InternalBasePtr_DeletePtr);
     if (!s_wap2_ObjInternalCtor) s_wap2_ObjInternalCtor = reinterpret_cast<WAP2_ObjInternalCtor_t>(fn_ObjectInternal_Ctor);
 
@@ -171,7 +166,6 @@ static inline void* WAP2_Alloc(uint64_t size, uint32_t align) {
     return nullptr;
 }
 static inline void  WAP2_IbpCtor(void* ibp, void* obj) { if (s_wap2_IbpCtor) s_wap2_IbpCtor(ibp, obj); }
-static inline void  WAP2_Check(void* p)                { if (s_wap2_IbpCheck) s_wap2_IbpCheck(p); }
 static inline void  WAP2_Append(void* list, void* ibp) { if (s_wap2_TaskListAppend) s_wap2_TaskListAppend(list, ibp); }
 
 // Read a runtime Time qword via System::Time::Time(&buf, seconds); the original reads
@@ -210,9 +204,7 @@ extern "C" void* WorkAct_GatherRawMatCtor_bf790(
     ResolveAll();
 
     // --- list base = (*(entity)+0x278) + 0x48 ; cleanup pending actions (0xbf7cf-0xbf7f3) ---
-    WAP2_Check(entity);
     uintptr_t ent = *reinterpret_cast<uintptr_t*>(entity);
-    WAP2_Check(reinterpret_cast<void*>(ent + 0x278));
     uintptr_t aiComp = *reinterpret_cast<uintptr_t*>(ent + 0x278);
     void* list = reinterpret_cast<void*>(aiComp + 0x48);
     if (s_wap2_TaskListCleanup) s_wap2_TaskListCleanup(list);
@@ -230,7 +222,6 @@ extern "C" void* WorkAct_GatherRawMatCtor_bf790(
         ibpInner = 0;
         WAP2_IbpCtor(&ibpInner, nullptr);
         uint32_t msgId = s_wap2_pMsgId_c70e8 ? *s_wap2_pMsgId_c70e8 : 0; // DWORD_1401c70e8 (0xbf81e)
-        WAP2_Check(entity);
         void* entityInner = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(entity) + 0x10);
         if (s_wap2_SendCompMsg) sm = s_wap2_SendCompMsg(obj, &entityInner, &msgId, 0, &ibpInner, 0);
     }
@@ -252,7 +243,6 @@ extern "C" void* WorkAct_GatherRawMatCtor_bf790(
         if (obj) {
             uint64_t innerSlot = srcLoc ? *srcLoc : 0;                  // local_res8 = *srcLoc (0xbf8b0)
             uint32_t msgId = s_wap2_pMsgId_c7158 ? *s_wap2_pMsgId_c7158 : 0; // DWORD_1401c7158 (0xbf8b8)
-            WAP2_Check(entity);
             void* entityInner = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(entity) + 0x10);
             if (s_wap2_SendCompMsg) sm2 = s_wap2_SendCompMsg(obj, &entityInner, &msgId, 0, &innerSlot, 0);
         }
@@ -373,10 +363,8 @@ extern "C" void* WorkAct_GatherRawMatCtor_bf790(
     obj = WAP2_Alloc(0x480, 8);
     void* mv1 = nullptr;
     if (obj) {
-        WAP2_Check(entity);                                            // (0xbfbc6)
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(
             *reinterpret_cast<uintptr_t*>(entity) + 0x10);             // *((*entity)+0x10) (0xbfbcc-0xbfbd7)
-        WAP2_Check(&entityInner);                                      // (0xbfbdf)
         int pathT = 4 + (param_14 != 0 ? 1 : 0);                       // LEA R8D,[RBX+4], RBX=SETNZ (0xbfbe7-0xbfc1b)
         void* familyIBP = nullptr;
         ibpInner = 0;
@@ -485,10 +473,8 @@ extern "C" void* WorkAct_GatherRawMatCtor_bf790(
     obj = WAP2_Alloc(0x480, 8);
     void* mv2 = nullptr;
     if (obj) {
-        WAP2_Check(entity);                                            // (0xbfec5)
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(
             *reinterpret_cast<uintptr_t*>(entity) + 0x10);             // *((*entity)+0x10) (0xbfecb-0xbfed6)
-        WAP2_Check(&entityInner);                                      // (0xbfede)
         int pathT = (param_14 != 0) ? 5 : 1;                           // MOV EBX,1; MOV EAX,5; CMOVNZ (0xbfee4-0xbfef1)
         void* familyIBP = nullptr;
         ibpInner = 0;

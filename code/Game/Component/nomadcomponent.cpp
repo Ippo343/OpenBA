@@ -199,7 +199,6 @@ void NomadComp_RebuildController_b60(int64_t param_1, int64_t param_2) {
 
     // Tear down existing controller IBP
     if (*reinterpret_cast<int64_t*>(self + 0x28) != 0) {
-        fn_InternalBasePtr_CheckPtr(self + 0x28);
         int64_t ctrl = *reinterpret_cast<int64_t*>(self + 0x28);
         int64_t vt = *reinterpret_cast<int64_t*>(ctrl);
         (*reinterpret_cast<void(**)(void*)>(vt + 0x28))(reinterpret_cast<void*>(ctrl));
@@ -281,13 +280,11 @@ void NomadComp_RebuildController_b60(int64_t param_1, int64_t param_2) {
 
     // --- Build the cached setting (node+0x10) if absent ---
     if (*reinterpret_cast<int64_t*>(found + 4) == 0) {
-        fn_InternalBasePtr_CheckPtr(self + 0x28);
         int64_t ctrl = *reinterpret_cast<int64_t*>(self + 0x28);
         int* probe = reinterpret_cast<int*>(
             (*reinterpret_cast<void*(**)(void*, void*)>(*reinterpret_cast<int64_t*>(ctrl) + 0x58))(
                 reinterpret_cast<void*>(ctrl), &ibpA));
         if (probe && *probe != 0) {
-            fn_InternalBasePtr_CheckPtr(self + 0x28);
             ctrl = *reinterpret_cast<int64_t*>(self + 0x28);
             uint32_t* setRef = reinterpret_cast<uint32_t*>(
                 (*reinterpret_cast<void*(**)(void*, void*)>(*reinterpret_cast<int64_t*>(ctrl) + 0x58))(
@@ -307,13 +304,11 @@ void NomadComp_RebuildController_b60(int64_t param_1, int64_t param_2) {
 
     // --- Wire the controller and start it ---
     int64_t setting = *reinterpret_cast<int64_t*>(found + 4);
-    fn_InternalBasePtr_CheckPtr(self + 0x28);
     int64_t ctrl = *reinterpret_cast<int64_t*>(self + 0x28);
     int64_t keyVal = *reinterpret_cast<int64_t*>(self + 0x20);
     *reinterpret_cast<int64_t*>(ctrl + 0x10) = param_1;
     *reinterpret_cast<int64_t*>(ctrl + 0x20) = keyVal;
     *reinterpret_cast<int64_t*>(ctrl + 0x18) = setting;
-    fn_InternalBasePtr_CheckPtr(self + 0x28);
     ctrl = *reinterpret_cast<int64_t*>(self + 0x28);
     (*reinterpret_cast<void(**)(void*)>(*reinterpret_cast<int64_t*>(ctrl) + 0x20))(
         reinterpret_cast<void*>(ctrl));
@@ -422,7 +417,6 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
     uint8_t* self = reinterpret_cast<uint8_t*>(param_1);
 
     if (*reinterpret_cast<int64_t*>(self + 0x28) != 0) {
-        fn_InternalBasePtr_CheckPtr(self + 0x28);
         // Retail's local_res8: seeded from *param_2 BEFORE the call, and passed by
         // address as the slot's second argument (see the typedef note above).
         int64_t entityRef = *reinterpret_cast<int64_t*>(param_2);
@@ -486,7 +480,6 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
     for (auto it = ui->_dialogs.GetFirst(); it; ++it) {
         ++visited;
         if (it.node->element != nullptr) {
-            fn_InternalBasePtr_CheckPtr(it.node);
             void* ctrlBuf[2] = {nullptr, nullptr};
             // R8 = EntityUI (retail `MOV R8D,[0x1401c4f00]` at 0x140103517). The
             // IsDerivedFrom(EntityUI) narrow just below is retail's own second check,
@@ -496,16 +489,13 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
                 s_fn_GetController(it.node->element, ctrlBuf, s_TypeId_EntityUI);
             void* found = nullptr;
             if (ctrlBuf[0] != nullptr) {
-                fn_InternalBasePtr_CheckPtr(ctrlBuf);
                 if (s_TypeId_EntityUI && fn_IsDerivedFrom(ctrlBuf[0], s_TypeId_EntityUI))
                     found = ctrlBuf[0];
             }
             int64_t ibp = 0;
             new (&ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
             if (ibp != 0) {
-                fn_InternalBasePtr_CheckPtr(&ibp);
                 int64_t bound = *reinterpret_cast<int64_t*>(ibp + 0x30);
-                fn_InternalBasePtr_CheckPtr(param_2);
                 if (bound == *reinterpret_cast<int64_t*>(param_2)) {
                     void* dlgPtr = it.node->element;
                     if (s_fn_CloseDialog_slot) s_fn_CloseDialog_slot(ui, &dlgPtr);

@@ -152,7 +152,6 @@ extern "C" void UpdateToolUI_e600(void* ctrl, void* str) {
     System::String nameStr("textSize");
 
     void* dlgIBP = reinterpret_cast<uint8_t*>(ctrl) + 0x18;   // controller+0x18 = DialogInstance IBP
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(dlgIBP);
     void* dialog = *reinterpret_cast<void**>(dlgIBP);
 
     uint64_t elemBuf = 0;                              // InternalPtr retbuf
@@ -160,14 +159,12 @@ extern "C" void UpdateToolUI_e600(void* ctrl, void* str) {
     void* elem = reinterpret_cast<void*>(elemBuf);     // *retbuf = element ptr
 
     if (elem) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&elem);
         if (fn_TextElement_SetParameter) fn_TextElement_SetParameter(elem, 0, str);
 
         // hide/show by empty string
         System::String tmp(*reinterpret_cast<const System::String*>(str));
         bool isEmpty = StringIsEmpty(&tmp);
 
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&elem);
         if (fn_Element_SetFlagsOnOff)
             fn_Element_SetFlagsOnOff(elem, isEmpty ? 1u : 0u, isEmpty ? 0u : 1u);
     }
@@ -206,7 +203,6 @@ extern "C" void UpdateToolUI_e420(void* ctrl, void* costStr) {
 
     System::String nameStr("textStatus");
     void* dlgIBP = reinterpret_cast<uint8_t*>(ctrl) + 0x18;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(dlgIBP);
     void* dialog = *reinterpret_cast<void**>(dlgIBP);
     uint64_t elemBuf = 0;
     if (fn_DialogInstance_FindElement) fn_DialogInstance_FindElement(dialog, &elemBuf, &nameStr);
@@ -232,7 +228,6 @@ extern "C" void UpdateToolUI_e420(void* ctrl, void* costStr) {
     if (fn_UIString_Ctor) fn_UIString_Ctor(uiA, reinterpret_cast<uint64_t>(stringTable), costStr);
     uint8_t uiA_copy[16];
     std::memcpy(uiA_copy, uiA, 16);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&elem);
     if (fn_TextElement_SetText) fn_TextElement_SetText(elem, uiA_copy);
 
     // UIString_B = UIString(stringTable, comp+0x40); SetParameter(elem, 0, (SysStr)UIString_B).
@@ -242,7 +237,6 @@ extern "C" void UpdateToolUI_e420(void* ctrl, void* costStr) {
                          reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(comp) + 0x40));
     System::String sysB;
     if (s_fn_UIStrToSys) s_fn_UIStrToSys(uiB, &sysB);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&elem);
     if (fn_TextElement_SetParameter) fn_TextElement_SetParameter(elem, 0, &sysB);
 
     // hide/show by whether costString (UIString_A) is empty.
@@ -251,7 +245,6 @@ extern "C" void UpdateToolUI_e420(void* ctrl, void* costStr) {
     System::String sysA_copy(sysA);
     bool isEmpty = StringIsEmpty(&sysA_copy);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&elem);
     if (fn_Element_SetFlagsOnOff)
         fn_Element_SetFlagsOnOff(elem, isEmpty ? 1u : 0u, isEmpty ? 0u : 1u);
 }
@@ -295,7 +288,6 @@ extern "C" void UpdateToolUI_e700(void* ctrl, uint32_t param_8) {
         void* elem = nullptr;
         if (elemArr) {
             void* elemIBP = reinterpret_cast<void*>(elemArr + static_cast<int64_t>(i) * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(elemIBP);
             elem = *reinterpret_cast<void**>(elemIBP);
         }
         if (elem) {
@@ -326,12 +318,10 @@ extern "C" void UpdateToolUI_e360(void* ctrl, uint32_t color) {
     System::String nameStr("imageIcon");
 
     void* dlgIBP = reinterpret_cast<uint8_t*>(ctrl) + 0x18;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(dlgIBP);
     void* dialog = *reinterpret_cast<void**>(dlgIBP);
     uint64_t elemBuf = 0;
     if (fn_DialogInstance_FindElement) fn_DialogInstance_FindElement(dialog, &elemBuf, &nameStr);
     void* elemIBP = &elemBuf;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(elemIBP);
     void* obj = *reinterpret_cast<void**>(elemIBP);
 
     uint32_t imgTid = ImageElementTypeId();
@@ -342,7 +332,6 @@ extern "C" void UpdateToolUI_e360(void* ctrl, uint32_t color) {
         reinterpret_cast<RtObject::Internal*>(ptr));   // B.3.3 bridge
 
     if (ibp != 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ibp);
         void* elem = reinterpret_cast<void*>(ibp);
         // virtual slot +0x50 = ImageElement::SetColor(this, color).
         void* vtbl = *reinterpret_cast<void**>(elem);
@@ -395,13 +384,11 @@ extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void*
     void* dialog = *reinterpret_cast<void**>(param_1);
 
     // Resolve the CreateBar controller (BuildRequirementUI) from the dialog.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_1);
     uint32_t ctrlTid = BuildReqUICtrlTypeId();
     uint64_t ctrlBuf = 0;
     if (fn_DialogInstance_GetController) fn_DialogInstance_GetController(dialog, &ctrlBuf, ctrlTid);
     void* ctrl = nullptr;
     if (ctrlBuf != 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ctrlBuf);
         void* c = reinterpret_cast<void*>(ctrlBuf);
         if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, ctrlTid)) ctrl = c;
     }
@@ -432,20 +419,15 @@ extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void*
             fmtBuf = System::String::Format("%i",
                                  static_cast<uint64_t>(static_cast<uint32_t>(param_2)));
         }
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ctrlIBP);
         UpdateToolUI_e600(reinterpret_cast<void*>(ctrlIBP), &fmtBuf);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ctrlIBP);
         UpdateToolUI_e700(reinterpret_cast<void*>(ctrlIBP), static_cast<uint32_t>(param_8));
     } else {
         System::String emptyStr;                       // null System::String -> clears "textSize"
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ctrlIBP);
         UpdateToolUI_e600(reinterpret_cast<void*>(ctrlIBP), &emptyStr);
     }
 
     // --- Status text (cost) + icon tint ---
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ctrlIBP);
     UpdateToolUI_e420(reinterpret_cast<void*>(ctrlIBP), param_4);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ctrlIBP);
     uint32_t color = (param_5 != 0) ? 0xffffffffu : 0xffff0000u;
     UpdateToolUI_e360(reinterpret_cast<void*>(ctrlIBP), color);
 
@@ -489,11 +471,9 @@ extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void*
     if (ok == 0) return;
 
     // --- Read the dialog root bounds (+0x68 left, +0x6c top, +0x70 right, +0x74 bottom) ---
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_1);
     // GetRoot returns InternalPtr<Element> by value (hidden retbuf); rootIBP == &rootRetbuf.
     uint64_t rootRetbuf = 0;
     void* rootIBP = fn_DialogInstance_GetRoot ? fn_DialogInstance_GetRoot(dialog, &rootRetbuf) : nullptr;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(rootIBP);
     void* rootElem = rootIBP ? *reinterpret_cast<void**>(rootIBP) : nullptr;
     {
         static bool s_rootLogged = false;
@@ -532,7 +512,6 @@ extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void*
         *cachedY = static_cast<float>(screenY);
     }
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_1);
     if (fn_DialogInstance_SetUpperLeft)
         fn_DialogInstance_SetUpperLeft(dialog, static_cast<int>(*cachedX),
                                        static_cast<int>(*cachedY), true);

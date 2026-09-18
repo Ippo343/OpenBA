@@ -115,11 +115,9 @@ static void* FindComponentInEntity(uintptr_t entity, const uint32_t* pTid) {
     uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
     for (int i = 0; i < n; i++) {
         void** slot = reinterpret_cast<void**>(list + (int64_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* comp = *slot;
         uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
         if (t == *pTid) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
             return DerivedOr0(*slot, pTid);
         }
     }
@@ -322,19 +320,14 @@ static void* Find_4680(uintptr_t entity, void* outIBP) {
 // "buildState/desc" component (3ea0), then test its category byte (+0x52 signed,
 // else +0x50) is one of {3,4,5}. Returns 1 if so, else 0.
 static int Sub_e710(uintptr_t param1) {
-    uintptr_t ibp10 = param1 + 0x10;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(ibp10));
     int64_t res = 0;
     Find_3ea0(*reinterpret_cast<uintptr_t*>(param1 + 0x10), &res);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&res);
     char c = *reinterpret_cast<char*>(res + 0x52);
     if (c < 0) c = *reinterpret_cast<char*>(res + 0x50);
     if (c != 3) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&res);
         c = *reinterpret_cast<char*>(res + 0x52);
         if (c < 0) c = *reinterpret_cast<char*>(res + 0x50);
         if (c != 4) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&res);
             c = *reinterpret_cast<char*>(res + 0x52);
             if (c < 0) c = *reinterpret_cast<char*>(res + 0x50);
             if (c != 5) return 0;
@@ -357,7 +350,6 @@ static int Sub_6dd0(uintptr_t param1) {
                 *reinterpret_cast<uintptr_t*>(world2 + 0x80) + 8 + (int64_t)tileIndex * 0x30);
             if (occupant != 0) {
                 int64_t res = (int64_t)occupant;
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&res);
                 void* comp = FindComponentInEntity((uintptr_t)res, s_tid_4a30);
                 int64_t resIBP = 0;
                 if (fn_InternalBasePtr_Ctor) new (&resIBP) ::Object::InternalBasePtr(
@@ -407,11 +399,9 @@ static uint32_t Helper_a410() {
     int count = 0;
     for (int i = 0; i < n; i++) {
         int64_t c = *reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(world2 + 0xa0) + (int64_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&c);
         float age   = *reinterpret_cast<float*>(c + 0x3c);
         float adult = *reinterpret_cast<float*>(*reinterpret_cast<uintptr_t*>(c + 0x288) + 0x44);
         if (adult <= age && *reinterpret_cast<int64_t*>(c + 0x208) == 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&c);
             int minAge = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(c + 0x288) + 0x118);
             if (minAge <= *reinterpret_cast<int*>(c + 0x210)) count++;
         }
@@ -430,15 +420,12 @@ static uint32_t Helper_a2a0(uintptr_t /*self*/, void* ext) {
     int count = 0;
     for (int i = 0; i < n; i++) {
         int64_t c = *reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(world2 + 0xa0) + (int64_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&c);
         float age   = *reinterpret_cast<float*>(c + 0x3c);
         float adult = *reinterpret_cast<float*>(*reinterpret_cast<uintptr_t*>(c + 0x288) + 0x44);
         if (adult <= age && *reinterpret_cast<int64_t*>(c + 0x208) == 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&c);
             int homeId = *reinterpret_cast<int*>(c + 0xa8);
             int wantId = prof ? *reinterpret_cast<int*>((uintptr_t)prof + 0x54) : 0;
             if (homeId == wantId) { count++; continue; }
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&c);
             if (*reinterpret_cast<int*>(c + 0xa8) < 0) count++;
         }
     }
@@ -455,7 +442,6 @@ static uint32_t Helper_a150(uintptr_t /*self*/, void* ext) {
     uint32_t flag = prof ? *reinterpret_cast<uint32_t*>((uintptr_t)prof + 0x5c) : 0;
     for (int i = 0; i < n; i++) {
         int64_t c = *reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(world2 + 0xa0) + (int64_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&c);
         int state = *reinterpret_cast<int*>(c + 0x1e0);
         bool hi = (flag & 0x8000) != 0;
         if ((((state - 2U) & 0xfffffffd) == 0 && hi) ||
@@ -473,7 +459,6 @@ static uint32_t Helper_a0a0() {
     float sum = 0.0f;
     for (int i = 0; i < n; i++) {
         int64_t c = *reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(world2 + 0xa0) + (int64_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&c);
         sum += *reinterpret_cast<float*>(c + 0x80);
     }
     return (n == 0) ? 0u : (uint32_t)(int)(sum / (float)n);
@@ -486,7 +471,6 @@ static uint32_t Helper_9ff0() {
     float sum = 0.0f;
     for (int i = 0; i < n; i++) {
         int64_t c = *reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(world2 + 0xa0) + (int64_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&c);
         sum += *reinterpret_cast<float*>(c + 0x50);
     }
     return (n == 0) ? 0u : (uint32_t)(int)(sum / (float)n);
@@ -499,7 +483,6 @@ static uint32_t Helper_9f20() {
     int count = 0;
     for (int i = 0; i < n; i++) {
         int64_t c = *reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(world2 + 0xa0) + (int64_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&c);
         float age   = *reinterpret_cast<float*>(c + 0x3c);
         float adult = *reinterpret_cast<float*>(*reinterpret_cast<uintptr_t*>(c + 0x288) + 0x44);
         if (adult <= age && *reinterpret_cast<int64_t*>(c + 0x208) == 0) count++;
@@ -514,7 +497,6 @@ static uint32_t Helper_9e80() {
     int count = 0;
     for (int i = 0; i < n; i++) {
         int64_t c = *reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(world2 + 0xa0) + (int64_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&c);
         if (*reinterpret_cast<int64_t*>(c + 0x208) != 0) count++;
     }
     return (uint32_t)count;
@@ -528,11 +510,9 @@ static uint32_t Helper_9dc0() {
     int count = 0;
     for (int i = 0; i < n; i++) {
         int64_t c = *reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(world2 + 0xa0) + (int64_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&c);
         float age   = *reinterpret_cast<float*>(c + 0x3c);
         float adult = *reinterpret_cast<float*>(*reinterpret_cast<uintptr_t*>(c + 0x288) + 0x44);
         if ((age < adult || *reinterpret_cast<int64_t*>(c + 0x208) != 0)) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&c);
             if (*reinterpret_cast<int64_t*>(c + 0x208) == 0) count++;
         }
     }
@@ -548,11 +528,9 @@ static uint32_t Helper_9cd0(uintptr_t /*self*/, void* ext) {
     int count = 0;
     for (int i = 0; i < n; i++) {
         int64_t c = *reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(world2 + 0xa0) + (int64_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&c);
         float age   = *reinterpret_cast<float*>(c + 0x3c);
         float adult = *reinterpret_cast<float*>(*reinterpret_cast<uintptr_t*>(c + 0x288) + 0x44);
         if (adult <= age && *reinterpret_cast<int64_t*>(c + 0x208) == 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&c);
             if (*reinterpret_cast<void**>(c + 0x1f0) == prof) count++;
         }
     }
@@ -580,7 +558,6 @@ static uint32_t Helper_9b80() {
     int total = 0;
     for (int i = 0; i < n; i++) {
         int64_t b = *reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(world2 + 0x40) + (int64_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&b);
         total += Sub_6dd0((uintptr_t)b);
     }
     return (uint32_t)total;
@@ -616,9 +593,7 @@ static uint32_t Helper_92d0(uintptr_t /*self*/, void* ext) {
     int total = 0;
     for (int i = 0; i < n; i++) {
         int64_t e = *reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(world2 + 0x90) + (int64_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&e);
         if (*reinterpret_cast<void**>(e + 0x28) == ext) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&e);
             total += *reinterpret_cast<int*>(e + 0x38);
         }
     }
@@ -660,7 +635,6 @@ static uint32_t Helper_8d70(uintptr_t self, void* extPtr) {
             }
             if (!match) continue;
             int64_t entityRef = *reinterpret_cast<int64_t*>(match[1] + (int64_t)bi * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entityRef);
             // find Storage component (DWORD_1401c4b10) on the entity (entity layout).
             void* storageComp = FindComponentInEntity((uintptr_t)entityRef, s_tid_4b10);
             int64_t storageIBP = 0;
@@ -669,13 +643,10 @@ static uint32_t Helper_8d70(uintptr_t self, void* extPtr) {
             if (storageIBP == 0) continue;
             // optional owner filter (param_2): entity+0x28 == param_2.
             if (param2 != 0) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entityRef);
                 if (*reinterpret_cast<uintptr_t*>(entityRef + 0x28) != param2) continue;
             }
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&storageIBP);
             int childN = *reinterpret_cast<int*>(storageIBP + 0x30);
             for (int ci = 0; ci < childN; ci++) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&storageIBP);
                 uint64_t childObj = *reinterpret_cast<uint64_t*>((int64_t)ci * 0x10 + *reinterpret_cast<uintptr_t*>(storageIBP + 0x28));
                 // find Profession (DWORD_1401c7cb8) within childObj (at +0x28/+0x30).
                 void* prof = FindComponentAt28((uintptr_t)childObj, s_tidProfComp);
@@ -756,26 +727,21 @@ static uint32_t Helper_88e0(uintptr_t self, void* extPtr) {
         if (!node) node = nullptr;
         int64_t entityRef = node ? *reinterpret_cast<int64_t*>(node[1] + (int64_t)bi * 8) : 0;
         if (param2 != 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entityRef);
             if (*reinterpret_cast<uintptr_t*>(entityRef + 0x28) != param2) continue;
         }
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entityRef);
         void* storageComp = FindComponentInEntity((uintptr_t)entityRef, s_tid_4b10);
         int64_t storageIBP = 0;
         if (fn_InternalBasePtr_Ctor) new (&storageIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(storageComp));   // B.3.3 bridge
         if (storageIBP == 0) continue;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&storageIBP);
         int childN = *reinterpret_cast<int*>(storageIBP + 0x30);
         for (int ci = 0; ci < childN; ci++) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&storageIBP);
             uintptr_t slotBase = (int64_t)ci * 0x10 + *reinterpret_cast<uintptr_t*>(storageIBP + 0x28);
             uintptr_t childObj = *reinterpret_cast<uintptr_t*>(slotBase);
             void* prof = FindComponentAt28(childObj, s_tidProfComp);
             uint32_t selfFlags = *reinterpret_cast<uint32_t*>(self + 0x78);
             uint32_t profFlags = prof ? *reinterpret_cast<uint32_t*>((uintptr_t)prof + 0x5c) : 0;
             if ((selfFlags & profFlags) != 0) {
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&storageIBP);
                 total += *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(storageIBP + 0x28) + 8 + (int64_t)ci * 0x10);
             }
         }
@@ -813,12 +779,10 @@ static uint32_t Helper_86e0(uintptr_t /*self*/, void* extPtr) {
         }
         if (!node) node = nullptr;
         int64_t entityRef = node ? *reinterpret_cast<int64_t*>(node[1] + (int64_t)bi * 8) : 0;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entityRef);
         void* comp = FindComponentInEntity((uintptr_t)entityRef, s_tid_80e0);
         int64_t compIBP = 0;
         if (fn_InternalBasePtr_Ctor) new (&compIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&compIBP);
         total += *reinterpret_cast<int*>(compIBP + 0x60);
     }
     return (uint32_t)total;
@@ -845,7 +809,6 @@ static uint32_t Helper_85f0(uintptr_t /*self*/, void* extPtr) {
     int count = 0;
     for (int i = 0; i < n; i++) {
         int64_t e = *reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(world2 + 0x20) + (int64_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&e);
         if (*reinterpret_cast<uintptr_t*>(e + 0x28) == param2) count++;
     }
     return (uint32_t)count;
@@ -881,14 +844,12 @@ static uint32_t Helper_81b0(uintptr_t /*self*/, void* extPtr) {
         }
         if (!found) { if (fn_InternalBasePtr_Ctor) new (&entRef) ::Object::InternalBasePtr(nullptr); }   // B.3.3 bridge
 
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entRef);
         // find work-progress component (DWORD_1401c7008)
         void* workComp = FindComponentInEntity((uintptr_t)entRef, s_tid_7008);
         int64_t workIBP = 0;
         if (fn_InternalBasePtr_Ctor) new (&workIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(workComp));   // B.3.3 bridge
         // find build component (DWORD_1401c75f0)
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entRef);
         void* buildComp = FindComponentInEntity((uintptr_t)entRef, s_tid_75f0);
         int64_t buildIBP = 0;
         if (fn_InternalBasePtr_Ctor) new (&buildIBP) ::Object::InternalBasePtr(
@@ -898,7 +859,6 @@ static uint32_t Helper_81b0(uintptr_t /*self*/, void* extPtr) {
         if (workIBP == 0) {
             done = true;
         } else {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workIBP);
             uintptr_t w = (uintptr_t)workIBP;
             void* desc = DerivedOr0(*reinterpret_cast<void**>(w + 0x18), s_tid_7040);
             int needed = desc ? (*reinterpret_cast<int*>((uintptr_t)desc + 0x30) * *reinterpret_cast<int*>(w + 0x4c)) : 0;
@@ -908,37 +868,29 @@ static uint32_t Helper_81b0(uintptr_t /*self*/, void* extPtr) {
 
         // done-path: look at the build's child entity (+0x10 IBP) for a
         // category (DWORD_1401c7d98) component; skip if category 6 or 7.
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&buildIBP);
         int64_t* child10 = reinterpret_cast<int64_t*>(buildIBP + 0x10);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(child10);
         uintptr_t childEnt = (uintptr_t)*child10;
         void* catComp = FindComponentInEntity(childEnt, s_tid_7d98);
         int64_t catIBP = 0;
         if (fn_InternalBasePtr_Ctor) new (&catIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(catComp));   // B.3.3 bridge
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&catIBP);
         char cat = *reinterpret_cast<char*>(catIBP + 0x52);
         if (cat < 0) cat = *reinterpret_cast<char*>(catIBP + 0x50);
         if (cat == 6) continue;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&catIBP);
         cat = *reinterpret_cast<char*>(catIBP + 0x52);
         if (cat < 0) cat = *reinterpret_cast<char*>(catIBP + 0x50);
         if (cat == 7) continue;
 
         // second category fetch (local_50) — skip if 6.
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&buildIBP);
         int64_t* child10b = reinterpret_cast<int64_t*>(buildIBP + 0x10);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(child10b);
         void* catComp2 = FindComponentInEntity((uintptr_t)*child10b, s_tid_7d98);
         int64_t catIBP2 = 0;
         if (fn_InternalBasePtr_Ctor) new (&catIBP2) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(catComp2));   // B.3.3 bridge
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&catIBP2);
         char cat2 = *reinterpret_cast<char*>(catIBP2 + 0x52);
         if (cat2 < 0) cat2 = *reinterpret_cast<char*>(catIBP2 + 0x50);
         if (cat2 == 6) continue;
 
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&buildIBP);
         if (Sub_e710((uintptr_t)buildIBP) == 0) result++;
     }
     return (uint32_t)result;
@@ -972,12 +924,10 @@ static uint32_t Helper_7cf0(uintptr_t /*self*/, void* extPtr) {
         }
         if (!found) { if (fn_InternalBasePtr_Ctor) new (&entRef) ::Object::InternalBasePtr(nullptr); }   // B.3.3 bridge
 
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entRef);
         void* workComp = FindComponentInEntity((uintptr_t)entRef, s_tid_7008);
         int64_t workIBP = 0;
         if (fn_InternalBasePtr_Ctor) new (&workIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(workComp));   // B.3.3 bridge
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entRef);
         void* buildComp = FindComponentInEntity((uintptr_t)entRef, s_tid_75f0);
         int64_t buildIBP = 0;
         if (fn_InternalBasePtr_Ctor) new (&buildIBP) ::Object::InternalBasePtr(
@@ -987,7 +937,6 @@ static uint32_t Helper_7cf0(uintptr_t /*self*/, void* extPtr) {
         if (workIBP == 0) {
             done = true;
         } else {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workIBP);
             uintptr_t w = (uintptr_t)workIBP;
             void* desc = DerivedOr0(*reinterpret_cast<void**>(w + 0x18), s_tid_7040);
             int needed = desc ? (*reinterpret_cast<int*>((uintptr_t)desc + 0x30) * *reinterpret_cast<int*>(w + 0x4c)) : 0;
@@ -995,40 +944,30 @@ static uint32_t Helper_7cf0(uintptr_t /*self*/, void* extPtr) {
         }
         if (!done) continue;
 
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&buildIBP);
         int64_t* child10 = reinterpret_cast<int64_t*>(buildIBP + 0x10);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(child10);
         void* catComp = FindComponentInEntity((uintptr_t)*child10, s_tid_7d98);
         int64_t catIBP = 0;
         if (fn_InternalBasePtr_Ctor) new (&catIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(catComp));   // B.3.3 bridge
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&catIBP);
         char cat = *reinterpret_cast<char*>(catIBP + 0x52);
         if (cat < 0) cat = *reinterpret_cast<char*>(catIBP + 0x50);
         if (cat == 6) continue;
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&catIBP);
         cat = *reinterpret_cast<char*>(catIBP + 0x52);
         if (cat < 0) cat = *reinterpret_cast<char*>(catIBP + 0x50);
         if (cat == 7) continue;
 
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&buildIBP);
         int64_t* child10b = reinterpret_cast<int64_t*>(buildIBP + 0x10);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(child10b);
         void* catComp2 = FindComponentInEntity((uintptr_t)*child10b, s_tid_7d98);
         int64_t catIBP2 = 0;
         if (fn_InternalBasePtr_Ctor) new (&catIBP2) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(catComp2));   // B.3.3 bridge
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&catIBP2);
         char cat2 = *reinterpret_cast<char*>(catIBP2 + 0x52);
         if (cat2 < 0) cat2 = *reinterpret_cast<char*>(catIBP2 + 0x50);
         if (cat2 == 6) continue;
 
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&buildIBP);
         if (Sub_e710((uintptr_t)buildIBP) == 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entRef);
             int64_t tierIBP = 0;
             Find_4680((uintptr_t)entRef, &tierIBP);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&tierIBP);
             short s1 = *reinterpret_cast<short*>(tierIBP + 0x2c);
             short s2 = *reinterpret_cast<short*>(tierIBP + 0x2e);
             if (result < s1) result = s1;
@@ -1083,23 +1022,19 @@ static uint32_t Helper_9650(uintptr_t self, void* extPtr) {
     for (int i = 0; i < gi; i++) {
         int64_t entRef = gathered[i];
         if (owner != nullptr) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entRef);
             // entRef is the entity object ptr (used as such below); owner field
             // is at entity+0x28 — NOT *(entity)+0x28. (Matches the entityRef+0x28
             // owner filter in Helper_8d70 / Helper_81b0 / Helper_7cf0.)
             if (owner != *reinterpret_cast<void**>((uintptr_t)entRef + 0x28)) continue;
         }
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entRef);
         uintptr_t entity = (uintptr_t)entRef;
         // find Storage (DWORD_1401c7e78) on the entity (entity +0x30/+0x38 layout).
         void* storageComp = FindComponentInEntity(entity, s_tidStorage);
         int64_t storageIBP = 0;
         if (fn_InternalBasePtr_Ctor) new (&storageIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(storageComp));   // B.3.3 bridge
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&storageIBP);
         int childN = *reinterpret_cast<int*>(storageIBP + 0x30);
         for (int ci = 0; ci < childN; ci++) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&storageIBP);
             uintptr_t slot = *reinterpret_cast<uintptr_t*>(storageIBP + 0x28) + (int64_t)ci * 0x10;
             uintptr_t childObj = *reinterpret_cast<uintptr_t*>(slot);
             void* prof = FindComponentAt28(childObj, s_tidProfComp);

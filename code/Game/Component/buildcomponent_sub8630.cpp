@@ -70,8 +70,6 @@ extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp) {
     uintptr_t descAddr = reinterpret_cast<uintptr_t>(desc);
 
     // --- Find the site StorageComponent via BuildComponent+0x10 entity IBP ---
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
     uintptr_t storage = 0;
     BC8630_FindCompStorage_t findStorage =
         reinterpret_cast<BC8630_FindCompStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
@@ -94,8 +92,6 @@ extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp) {
         // Delivered amount = matching site-storage slot's (total - reserved), else 0.
         int delivered = 0;
         if (storage) {
-            if (fn_InternalBasePtr_CheckPtr)
-                fn_InternalBasePtr_CheckPtr(&storage);
             int slotCount = *reinterpret_cast<int*>(storage + 0x30);
             uintptr_t* slots = *reinterpret_cast<uintptr_t**>(storage + 0x28);
             if (slots) {

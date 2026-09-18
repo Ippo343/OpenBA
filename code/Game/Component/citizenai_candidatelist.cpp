@@ -151,7 +151,6 @@ int CitizenComp_HasSufficientResources(int64_t self) {
 
     // local_res8 = first find (feeds GetResourceCount + row scan)
     int64_t local_res8 = 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p + 0x238);
     if (s_fn_FindComponentStorage)
         s_fn_FindComponentStorage(*reinterpret_cast<int64_t*>(p + 0x238), &local_res8);
 
@@ -159,12 +158,10 @@ int CitizenComp_HasSufficientResources(int64_t self) {
 
     // local_res10 = second find (feeds the per-slot requirement read)
     int64_t local_res10 = 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p + 0x238);
     void* self2 = nullptr;
     if (s_fn_FindComponentStorage)
         self2 = s_fn_FindComponentStorage(*reinterpret_cast<int64_t*>(p + 0x238), &local_res10);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self2);
     // iVar2 = *(int*)( *(int64*)(*self2 + 0x50) + 8 + citizen[+0x240]*0x10 )
     // [STANDALONE GUARD] FindComponentStorage returns a non-null IBP wrapper but a
     // null resolved component when the StorageComponent type-id global is unfilled
@@ -183,9 +180,7 @@ int CitizenComp_HasSufficientResources(int64_t self) {
     int factor = (int)fVar1;
 
     // Row scan over local_res8.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
     int64_t lVar3 = local_res8;  // storage obj (for GetResourceCount)
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
     if (local_res8 == 0) return 0;   // no storage resolved -> "insufficient"
     int rowCount = *reinterpret_cast<int*>(local_res8 + 0x58);
     int iVar7 = 0;
@@ -218,15 +213,12 @@ int CitizenComp_HasSufficientResources2(int64_t self) {
     if (*reinterpret_cast<int64_t*>(p + 0x238) == 0) return 0;
 
     int64_t local_res8 = 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p + 0x238);
     if (s_fn_FindComponentStorage)
         s_fn_FindComponentStorage(*reinterpret_cast<int64_t*>(p + 0x238), &local_res8);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
     int64_t lVar2 = local_res8;                                   // storage obj
     int64_t lVar1desc = *reinterpret_cast<int64_t*>(p + 0x288);   // CitizenDescription
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
     if (local_res8 == 0) return 0;   // [STANDALONE GUARD] no storage resolved
     int rowCount = *reinterpret_cast<int*>(local_res8 + 0x58);
     int iVar6 = 0;
@@ -279,11 +271,9 @@ int CitizenComp_GetHappiness(int64_t self) {
     uint8_t* p = reinterpret_cast<uint8_t*>(self);
     void* local_res8[4] = {nullptr, nullptr, nullptr, nullptr};
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p + 0x10);
     if (s_fn_FindComponentCarry)
         s_fn_FindComponentCarry(*reinterpret_cast<int64_t*>(p + 0x10),
                                 reinterpret_cast<void*>(local_res8));
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(local_res8);
     if (!s_fn_StorageQueryCount) return 0;
     // Standalone: the citizen's own-entity StorageComponent find returns null when
     // its type-id global is unfilled (the recurring keystone-B pattern). The real
@@ -408,10 +398,8 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
     // Census (open C): which exit the function took. Purely observational.
 
     // --- Special early branch: SICK (+0x68 = Disease*) with a care building (+0x228) ---
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
     int64_t cz = *reinterpret_cast<int64_t*>(self);
     if (cz != 0 && *reinterpret_cast<int64_t*>(cz + 0x68) != 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
         cz = *reinterpret_cast<int64_t*>(self);
         if (*reinterpret_cast<int64_t*>(cz + 0x228) != 0) {
             // Single candidate {5 (Work), 6, 0}, no shuffle/sort (function returns).
@@ -421,7 +409,6 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
     }
 
     // --- hunger (Work-state 6 candidate id 0xe, prio 7) : desc[+0xcc] ---
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
     cz = *reinterpret_cast<int64_t*>(self);
     {
         float fv = *reinterpret_cast<float*>(cz + 0x44);
@@ -430,7 +417,6 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
     }
 
     // --- thirst (id 0xf, prio 7) : desc[+0xec] ---
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
     cz = *reinterpret_cast<int64_t*>(self);
     {
         float fv = *reinterpret_cast<float*>(cz + 0x48);
@@ -439,7 +425,6 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
     }
 
     // --- hunger-other (id 0, prio 6) : desc[+0xc8] ---
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
     cz = *reinterpret_cast<int64_t*>(self);
     {
         float fv = *reinterpret_cast<float*>(cz + 0x44);
@@ -448,7 +433,6 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
     }
 
     // --- thirst-other (id 1, prio 6) : desc[+0xe8] ---
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
     cz = *reinterpret_cast<int64_t*>(self);
     {
         float fv = *reinterpret_cast<float*>(cz + 0x48);
@@ -457,22 +441,18 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
     }
 
     // --- main branch: HEALTHY (+0x68 == 0) vs SICK (+0x68 != 0) ---
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
     cz = *reinterpret_cast<int64_t*>(self);
     if (*reinterpret_cast<int64_t*>(cz + 0x68) == 0) {
         // FindHousing (id 2, prio 7) if CanFindHousing
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
         char canHouse = s_fn_CanFindHousing
             ? s_fn_CanFindHousing(*reinterpret_cast<int64_t*>(self)) : 0;
         if (canHouse != '\0') AppendCandidate(outList, 2, 7);
 
         // Education (id 3, prio 3) if cz[+0x1e4] == 0
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
         cz = *reinterpret_cast<int64_t*>(self);
         if (*reinterpret_cast<int*>(cz + 0x1e4) == 0) AppendCandidate(outList, 3, 3);
 
         // GrowUp (id 4, prio 3) if desc[+0x74] is in (cz[+0x50], ..] and (cz[+0x54]>>9 & 1)==0
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
         cz = *reinterpret_cast<int64_t*>(self);
         {
             float fv = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(cz + 0x288) + 0x74);
@@ -494,7 +474,6 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
 
     // --- Leisure (id 0xc) : prio 2 if leisure-thresholds tripped, else prio 0 ---
     {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
         cz = *reinterpret_cast<int64_t*>(self);
         bool leisure = false;
         // (cz.desc[+0xb8] in (cz[+0x80],..] and AsSeconds(self.acc@+0xc0) > DAT_1721fc)
@@ -507,7 +486,6 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
         }
         if (!leisure) {
             // OR (cz.desc[+0xb4] in (cz[+0x80],..] and AsSeconds(self.acc) > DAT_172234)
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
             cz = *reinterpret_cast<int64_t*>(self);
             float fv2 = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(cz + 0x288) + 0xb4);
             float* pf2 = reinterpret_cast<float*>(cz + 0x80);
@@ -527,60 +505,48 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
     }
 
     // --- age / work-need block ---
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
     cz = *reinterpret_cast<int64_t*>(self);
     float age = *reinterpret_cast<float*>(cz + 0x3c);
     float ageThresh = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(cz + 0x288) + 0x44);
     if ((age < ageThresh) || (*reinterpret_cast<int64_t*>(cz + 0x208) != 0)) {
         // (age >= thresh) OR elder-flag set  [negation of the not-grown branch]
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
         cz = *reinterpret_cast<int64_t*>(self);
         if (*reinterpret_cast<int64_t*>(cz + 0x208) == 0) {
             // not elder: housing/work candidates
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
             cz = *reinterpret_cast<int64_t*>(self);
             if (*reinterpret_cast<int64_t*>(cz + 0x68) == 0) {
                 AppendCandidate(outList, 0xb, 0);   // Wander (id 0xb, prio 0)
             }
 
             // GatherResources (id 6, prio 4) if !HasSufficientResources
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
             int hsr = CitizenComp_HasSufficientResources(*reinterpret_cast<int64_t*>(self));
             if ((char)hsr == '\0') AppendCandidate(outList, 6, 4);
 
             // GatherResources2 (id 7, prio 4) if !HasSufficientResources2
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
             int hsr2 = CitizenComp_HasSufficientResources2(*reinterpret_cast<int64_t*>(self));
             if ((char)hsr2 == '\0') AppendCandidate(outList, 7, 4);
             // (if hsr2 != 0, original goes to the shuffle/sort tail = LAB_14010f144)
         } else {
             // elder: FindWork (id 10, prio 2) only while healthy (+0x68 == 0)
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
             if (*reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(self) + 0x68) == 0) {
                 AppendCandidate(outList, 10, 2);
             }
         }
     } else {
         // not grown up yet (age < thresh, elder-flag clear): adult-with-workplace block
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
         cz = *reinterpret_cast<int64_t*>(self);
         if (*reinterpret_cast<int64_t*>(cz + 0x238) != 0) {
             // --- hunger gather (id 6) ---
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
             int hsr = CitizenComp_HasSufficientResources(*reinterpret_cast<int64_t*>(self));
             if ((char)hsr == '\0') {
                 bool reserved6 = false;
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
                 cz = *reinterpret_cast<int64_t*>(self);
                 if (*reinterpret_cast<int64_t*>(cz + 0x250) != 0) {
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
                     int64_t resv = *reinterpret_cast<int64_t*>(
                         *reinterpret_cast<int64_t*>(self) + 0x250);
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&resv);
                     if (*reinterpret_cast<int*>(resv + 0xb0) == 1) reserved6 = true;  // skip to LAB_14010e8e7
                 }
                 if (!reserved6) {
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
                     cz = *reinterpret_cast<int64_t*>(self);
                     float fv = *reinterpret_cast<float*>(cz + 0x44);
                     float* pf = reinterpret_cast<float*>(
@@ -591,21 +557,16 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
             }
 
             // --- LAB_14010e8e7: thirst gather (id 7) ---
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
             int hsr2 = CitizenComp_HasSufficientResources2(*reinterpret_cast<int64_t*>(self));
             if ((char)hsr2 == '\0') {
                 bool reserved7 = false;
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
                 cz = *reinterpret_cast<int64_t*>(self);
                 if (*reinterpret_cast<int64_t*>(cz + 0x250) != 0) {
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
                     int64_t resv = *reinterpret_cast<int64_t*>(
                         *reinterpret_cast<int64_t*>(self) + 0x250);
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&resv);
                     if (*reinterpret_cast<int*>(resv + 0xb0) == 2) reserved7 = true;  // skip to LAB_14010ea39
                 }
                 if (!reserved7) {
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
                     cz = *reinterpret_cast<int64_t*>(self);
                     float fv = *reinterpret_cast<float*>(cz + 0x48);
                     float* pf = reinterpret_cast<float*>(
@@ -617,11 +578,9 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
         }
 
         // --- LAB_14010ea39: idle / happiness / long-term-plan tail ---
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
         cz = *reinterpret_cast<int64_t*>(self);
         if (*reinterpret_cast<int64_t*>(cz + 0x68) == 0) {   // else -> LAB_14010f144 (shuffle/sort)
             // SeekHappiness (id 8, prio 5) if cz[+0xac] < 1
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
             cz = *reinterpret_cast<int64_t*>(self);
             if (*reinterpret_cast<int*>(cz + 0xac) < 1) AppendCandidate(outList, 8, 5);
 
@@ -629,7 +588,6 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
             AppendCandidate(outList, 9, 2);
 
             // LongTermPlan (id 0xd) only if GetHappiness > 0
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
             int happy = CitizenComp_GetHappiness(*reinterpret_cast<int64_t*>(self));
             int ltpPrio = 0;
             if (happy >= 1) {
@@ -724,7 +682,6 @@ int CitizenAI_ValidateAndEnterState(void* selfV, int state) {
 
         if (state == 0xd) {
             // case 0xd: CheckPtr(self+0x38); ret = handler(*(self+0x38)); return low byte 1.
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(base + 0x38);
             void* internal = *reinterpret_cast<void**>(base + 0x38);
             (reinterpret_cast<fn_StateHandlerPtr_t>(fp))(internal);
             return 1;   // original returns CONCAT71(.., 1) -> low byte always 1

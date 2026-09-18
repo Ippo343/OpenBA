@@ -29,14 +29,12 @@ static bool DestroyComponent_CanReclaim_Impl(void* destroyComp)
 
     // Get entity at +0x10
     void* entity = *(void**)((uintptr_t)destroyComp + 0x10);
-    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)destroyComp + 0x10));
 
     // Find BuildState component on entity
     uint64_t bsRef = 0;
     fn_FindComponent_BuildState(entity, &bsRef);
     if (!bsRef) return false;
 
-    fn_InternalBasePtr_CheckPtr((void*)&bsRef);
     uintptr_t buildState = bsRef;
 
     int8_t stateByte = *(int8_t*)(buildState + 0x52);
@@ -46,7 +44,6 @@ static bool DestroyComponent_CanReclaim_Impl(void* destroyComp)
 
     if (stateByte != 6) {
         // Check again (second pass from decompile)
-        fn_InternalBasePtr_CheckPtr((void*)&bsRef);
         stateByte = *(int8_t*)(buildState + 0x52);
         if (stateByte < 0) stateByte = *(int8_t*)(buildState + 0x50);
         if (stateByte != 7) return false;
@@ -79,7 +76,6 @@ static bool DestroyComponent_CanRebuild_Impl(void* destroyComp)
     int64_t upgradeRef = *(int64_t*)((uintptr_t)destroyComp + 0x60);
 
     // Get entity
-    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)destroyComp + 0x10));
     uintptr_t entity = *(uintptr_t*)((uintptr_t)destroyComp + 0x10);
 
     // Return: upgradeRef != entity.stateDesc (at entity+0x28) AND upgradeRef != desc+0x20
@@ -117,13 +113,11 @@ static bool DestroyComponent_CanRebuild_Impl(void* destroyComp)
 static void DestroyComp_CallBuildStateAction(void* destroyComp_entity_field, int last_param)
 {
     // entity at +0x10 (passed as the entity ptr for FindBuildState)
-    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)destroyComp_entity_field));
 
     // Find BuildState on entity
     uint64_t bsRef = 0;
     uintptr_t entity = *(uintptr_t*)destroyComp_entity_field;
     fn_FindComponent_BuildState((void*)entity, &bsRef);
-    fn_InternalBasePtr_CheckPtr((void*)&bsRef);
 
     uintptr_t buildState = bsRef;
     int8_t stateFrom = *(int8_t*)(buildState + 0x51);  // current sub-state
@@ -142,11 +136,9 @@ static void DestroyComponent_Reclaim_Impl(void* destroyComp)
     if (!destroyComp) return;
     // Find BuildState on entity (param_1+0x10 in decompile, where param_1 is longlong*)
     // param_1[2] = *(param_1 + 0x10) = *(destroyComp + 0x10)
-    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)destroyComp + 0x10));
     uint64_t bsRef = 0;
     uintptr_t entity = *(uintptr_t*)((uintptr_t)destroyComp + 0x10);
     fn_FindComponent_BuildState((void*)entity, &bsRef);
-    fn_InternalBasePtr_CheckPtr((void*)&bsRef);
 
     uintptr_t buildState = bsRef;
     int8_t stateFrom = *(int8_t*)(buildState + 0x51);
@@ -165,11 +157,9 @@ static void DestroyComponent_Reclaim_Impl(void* destroyComp)
 static void DestroyComponent_Rebuild_Impl(void* destroyComp)
 {
     if (!destroyComp) return;
-    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)destroyComp + 0x10));
     uint64_t bsRef = 0;
     uintptr_t entity = *(uintptr_t*)((uintptr_t)destroyComp + 0x10);
     fn_FindComponent_BuildState((void*)entity, &bsRef);
-    fn_InternalBasePtr_CheckPtr((void*)&bsRef);
 
     uintptr_t buildState = bsRef;
     int8_t stateFrom = *(int8_t*)(buildState + 0x51);
@@ -183,11 +173,9 @@ static void DestroyComponent_Rebuild_Impl(void* destroyComp)
 static void DestroyComponent_Destroy_Impl(void* destroyComp)
 {
     if (!destroyComp) return;
-    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)destroyComp + 0x10));
     uint64_t bsRef = 0;
     uintptr_t entity = *(uintptr_t*)((uintptr_t)destroyComp + 0x10);
     fn_FindComponent_BuildState((void*)entity, &bsRef);
-    fn_InternalBasePtr_CheckPtr((void*)&bsRef);
 
     uintptr_t buildState = bsRef;
     int8_t stateFrom = *(int8_t*)(buildState + 0x51);
@@ -589,7 +577,7 @@ bool Ready() {
     return g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
         && g_TypeId_DestroyComponent && *g_TypeId_DestroyComponent
         && fn_IsDerivedFrom && fn_InternalBasePtr_Ctor
-        && fn_InternalBasePtr_CheckPtr && fn_Element_SetFlagsOnOff;
+        && fn_Element_SetFlagsOnOff;
 }
 
 // SA-guard: the data-source entity ref (+0x28) is nulled by entity destruction

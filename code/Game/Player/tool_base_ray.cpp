@@ -351,7 +351,6 @@ extern "C" uint8_t PlayerRay_PlacementPosCalc_fda00(uintptr_t param_1, int* para
 
     // Orientation: rot+0x10 == 1 or 3 swaps width/height.
     uint32_t dimX = footW, dimY = footH;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(descIbpSlot));
     uintptr_t rot = *reinterpret_cast<uintptr_t*>(descIbpSlot);
     int orient = *reinterpret_cast<int*>(rot + 0x10);
     if (orient == 1 || orient == 3) {
@@ -399,7 +398,6 @@ extern "C" uint8_t PlayerRay_PlacementPosCalc_fda00(uintptr_t param_1, int* para
     }
 
     // outYaw = orientation * 90.0f.
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(descIbpSlot));
     uintptr_t rot2 = *reinterpret_cast<uintptr_t*>(descIbpSlot);
     *param_7 = static_cast<float>(*reinterpret_cast<int*>(rot2 + 0x10)) * yawScalar;
 

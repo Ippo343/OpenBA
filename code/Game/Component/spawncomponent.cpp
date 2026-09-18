@@ -99,8 +99,6 @@ void SpawnComponent_Update(SpawnComponent* self, int64_t* pDeltaTime) {
 
     // CheckPtr on owner IBP, then get linked object
     uintptr_t ownerIBP = (uintptr_t)self + 0x10;
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr((void*)ownerIBP);
     uintptr_t linkedObjPtr = 0;
     if (s_fn_GetLinkedObject)
         s_fn_GetLinkedObject(*(void**)ownerIBP, &linkedObjPtr);
@@ -121,8 +119,6 @@ void SpawnComponent_Update(SpawnComponent* self, int64_t* pDeltaTime) {
     }
 
     // CheckPtr on linked object IBP before reading growth
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(&linkedObjPtr);
     // [BRING-UP GUARD] The owner needs a sibling NaturalResourceComponent (found by
     // GetLinkedObject 0x1400052c0) for the growth read; bail rather than null-deref
     // if a spawner lacks one in standalone.
@@ -242,10 +238,8 @@ void SpawnComponent_InitialSpawn(SpawnComponent* self) {
 
     // Sibling NaturalResourceComponent — carries the growth value at +0x28.
     uintptr_t ownerIBP = comp + 0x10;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)ownerIBP);
     uintptr_t natRes = 0;
     if (s_fn_GetLinkedObject) s_fn_GetLinkedObject(*(void**)ownerIBP, &natRes);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&natRes);
     if (natRes == 0) return;
     const float growth = *(float*)(natRes + 0x28);
 
@@ -560,10 +554,8 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
     if (roll > density) { ++g_doSpawn.densityRoll; return; }
 
     // Owner tile
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(self + 0x10));
     uint8_t mapBuf[8] = {0};
     if (s_sc_FindMap) s_sc_FindMap(*(uintptr_t*)(self + 0x10), mapBuf);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(mapBuf);
     int64_t mapComp = *(int64_t*)mapBuf;
     int16_t baseX = *(int16_t*)(mapComp + 0x28);
     int16_t baseY = *(int16_t*)(mapComp + 0x2a);
@@ -596,25 +588,20 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
         reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
 
     // Place at tile index
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entityIbp);
     int64_t linkBufA = 0;
     void* pa = s_sc_FindLinkA ? s_sc_FindLinkA(entityIbp, &linkBufA) : nullptr;
     if (pa) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pa);
         if (s_sc_SetTile) s_sc_SetTile(*(int64_t*)pa, placeMapSize * y + x);
     }
 
     // Reset orientation
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entityIbp);
     int64_t linkBufB = 0;
     void* pb = s_sc_FindLinkB ? s_sc_FindLinkB(entityIbp, &linkBufB) : nullptr;
     if (pb) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pb);
         if (s_sc_SetOrient) s_sc_SetOrient(*(int64_t*)pb, 0.0f);
     }
 
     // Register with world entity list
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(self + 0x10));
     int64_t regIbp = entityIbp;
     if (s_sc_Register) {
         // EntityList::RegisterEntity (0x1400c48a0) opens with
@@ -635,14 +622,11 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
 
     // Optional random orientation
     if (flag != '\0') {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entityIbp);
         int64_t b2 = 0;
         void* p2 = s_sc_FindLinkB ? s_sc_FindLinkB(entityIbp, &b2) : nullptr;
         if (p2 && *(int64_t*)p2 != 0) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entityIbp);
             int64_t b3 = 0;
             void* p3 = s_sc_FindLinkB ? s_sc_FindLinkB(entityIbp, &b3) : nullptr;
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p3);
             float rf = s_sc_RandFloat ? s_sc_RandFloat(random) : 0.0f;
             if (p3 && s_sc_SetOrient) s_sc_SetOrient(*(int64_t*)p3, rf);
         }

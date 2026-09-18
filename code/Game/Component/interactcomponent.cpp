@@ -48,10 +48,6 @@ static fn_IBP_Serialize_t s_fn_IBP_Serialize = nullptr;
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
 
-// CheckPtr
-typedef void (*fn_CheckPtr_t)(void* ptrField);
-static fn_CheckPtr_t s_fn_CheckPtr = nullptr;
-
 // InternalBasePtr::Ctor(retbuf, rawPtr)
 typedef void (*fn_IBP_Ctor_t)(void* retbuf, void* rawPtr);
 static fn_IBP_Ctor_t s_fn_IBP_Ctor = nullptr;
@@ -95,9 +91,6 @@ static void EnsureHelpers() {
     // this component on load (save/load wave 2026-08-28).
     s_fn_IBP_Serialize = reinterpret_cast<fn_IBP_Serialize_t>(
         reinterpret_cast<uintptr_t>(fn_InternalBasePtr_Serialize));
-
-    s_fn_CheckPtr = reinterpret_cast<fn_CheckPtr_t>(
-        ResolveAddr(Module::Runtime, 0x1800c0290));
 
     s_fn_IBP_Ctor = reinterpret_cast<fn_IBP_Ctor_t>(
         reinterpret_cast<uintptr_t>(fn_InternalBasePtr_Ctor));
@@ -216,12 +209,10 @@ void InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf) {
         int64_t arr = *(int64_t*)(entity + 0x30);
         for (int i = 0; i < count; i++) {
             int64_t* slot = (int64_t*)(arr + (int64_t)i * 8);
-            if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
             void* comp = (void*)*slot;
             typedef uint32_t (*GetTypeId_t)(void*);
             uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
             if (tid == *s_pTId_Workplace) {
-                if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
                 void* c = (void*)*slot;
                 if (s_fn_IsDerivedFrom_dispatch && s_fn_IsDerivedFrom_dispatch(c, *s_pTId_Workplace))
                     found = c;
@@ -244,7 +235,6 @@ void InteractComponent_Draw(InteractComponent* self) {
     EnsureHelpers();
     uintptr_t selfA = (uintptr_t)self;
 
-    if (s_fn_CheckPtr) s_fn_CheckPtr((void*)(selfA + 0x10));
     int64_t multiBuf = 0;
     if (s_fn_FindMultiObjComp) s_fn_FindMultiObjComp(*(uintptr_t*)(selfA + 0x10), &multiBuf);
     if (multiBuf == 0) return;
@@ -254,12 +244,9 @@ void InteractComponent_Draw(InteractComponent* self) {
     *(int64_t*)(selfA + 0x28) = 0;
     *(int64_t*)(selfA + 0x30) = 0;
 
-    if (s_fn_CheckPtr) s_fn_CheckPtr(&multiBuf);
     int childCount = *(int*)(multiBuf + 0x50);
     for (int ci = 0; ci < childCount; ci++) {
-        if (s_fn_CheckPtr) s_fn_CheckPtr(&multiBuf);
         int64_t host = *(int64_t*)((int64_t)ci * 8 + *(int64_t*)(multiBuf + 0x48));
-        if (s_fn_CheckPtr) s_fn_CheckPtr(&host);
 
         // Find the InteractComponent (DAT_1401c7900) on this host
         void* interact = nullptr;
@@ -267,12 +254,10 @@ void InteractComponent_Draw(InteractComponent* self) {
         int64_t harr = *(int64_t*)(host + 0x30);
         for (int k = 0; k < hc; k++) {
             int64_t* slot = (int64_t*)(harr + (int64_t)k * 8);
-            if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
             void* comp = (void*)*slot;
             typedef uint32_t (*GetTypeId_t)(void*);
             uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
             if (tid == (s_TypeId_Interact ? *s_TypeId_Interact : 0xffffffff)) {
-                if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
                 void* c = (void*)*slot;
                 if (s_fn_IsDerivedFrom_dispatch && s_TypeId_Interact &&
                     s_fn_IsDerivedFrom_dispatch(c, *s_TypeId_Interact))
@@ -311,7 +296,6 @@ void InteractComponent_Draw(InteractComponent* self) {
                 if (oldBuf != *(void**)(selfA + 0x28)) fn_MemFreeStatic(oldBuf);
             }
         }
-        if (s_fn_CheckPtr) s_fn_CheckPtr(&multiBuf);
     }
 }
 

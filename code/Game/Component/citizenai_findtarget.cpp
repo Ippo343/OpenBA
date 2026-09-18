@@ -123,12 +123,10 @@ void* CitizenAI_sub_78c0(int64_t param_1, void* param_2) {
         int64_t byteOff = 0;
         do {
             int64_t* ibp = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x30) + byteOff);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);
             void* comp = reinterpret_cast<void*>(*ibp);
             if (comp && CompTypeId(comp) == tid) {
                 int64_t* ibp2 = reinterpret_cast<int64_t*>(
                     *reinterpret_cast<int64_t*>(param_1 + 0x30) + static_cast<int64_t>(i) * 8);
-                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp2);
                 void* cand = reinterpret_cast<void*>(*ibp2);
                 if (cand && fn_IsDerivedFrom && fn_IsDerivedFrom(cand, tid)) {
                     ptr = cand;
@@ -186,7 +184,6 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
             int64_t local_a0 = *reinterpret_cast<int64_t*>(lVar21 + param_1[2]);  // candidate entity
             int64_t local_90 = local_a0;                                         // IBP scratch
             uint32_t cell = s_fn_7fb0 ? s_fn_7fb0(&local_90, nullptr) : 0;        // entity -> cell idx
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_a0);
 
             // -- find RadiusDescription (DWORD_1401c4870) in candidate component-list2 (+0x28) --
             int64_t lVar16 = *reinterpret_cast<int64_t*>(local_a0 + 0x28);
@@ -243,10 +240,8 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
                     local_98_flag = newFlag;
 
                     float local_78[3] = {0.0f, 0.0f, 0.0f};
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_a0);
                     int64_t local_50_ibp[2] = {0, 0};
                     void* pIVar10 = CitizenAI_sub_78c0(local_a0, local_50_ibp);  // find MarketLocationComponent
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pIVar10);
                     int64_t marketComp = *reinterpret_cast<int64_t*>(pIVar10);
                     int cost = (marketComp && s_fn_edb0) ? s_fn_edb0(marketComp, param_3, local_78) : -1;
                     if ((-1 < cost) && (cost < local_a8_best)) {
@@ -316,7 +311,6 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
                     }
 
                     // -- find StorageLocationComponent (DAT_1401c7ee8) in candidate entity list (+0x30/+0x38) --
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_a0);
                     int64_t lVar16 = local_a0;
                     void* pvVar14 = nullptr;
                     {
@@ -324,11 +318,9 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
                         int idx = 0; int64_t off = 0;
                         while (idx < n) {
                             int64_t* slot = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(lVar16 + 0x30) + off * 8);
-                            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
                             void* comp = reinterpret_cast<void*>(*slot);
                             if (comp && CompTypeId(comp) == s_tid_StorageLocationComp) {
                                 int64_t* slot2 = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(lVar16 + 0x30) + off * 8);
-                                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot2);
                                 void* c = reinterpret_cast<void*>(*slot2);
                                 if (c && fn_IsDerivedFrom && fn_IsDerivedFrom(c, s_tid_StorageLocationComp))
                                     pvVar14 = c;
@@ -343,7 +335,6 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
                         reinterpret_cast<RtObject::Internal*>(pvVar14));   // B.3.3 bridge
 
                     if (local_98_ibp != 0) {
-                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_98_ibp);
                         int64_t lVarComp = local_98_ibp;
                         // IsDerivedFrom((found+0x18), StorageLocationDescription) -> read +0x20 mask
                         void* sub = *reinterpret_cast<void**>(lVarComp + 0x18);
@@ -351,10 +342,8 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
                         uint32_t mask = derived ? *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(derived) + 0x20) : 0;
                         if (mask == 0) {
                             // fall back to Entity_FindComponent_Storage(found+0x10)->+0x3c
-                            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(lVarComp + 0x10));
                             float local_78s[4] = {0,0,0,0};
                             void* pIVar10 = s_fn_findStorage ? s_fn_findStorage(*reinterpret_cast<int64_t*>(lVarComp + 0x10), local_78s) : nullptr;
-                            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pIVar10);
                             int64_t stor = pIVar10 ? *reinterpret_cast<int64_t*>(pIVar10) : 0;
                             // [M-D SCOPED FALLBACK] the registered 6270-family finder reads
                             // dead .rdata typeid 0x1401c7e78 (unregistered in standalone) ->
@@ -383,7 +372,6 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
 
                             // -- 2nd RawMaterialDescription-style scan? NO: this is the StorageLocationComponent
                             //    scan again over the candidate entity (+0x30/+0x38) for the COST source --
-                            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_a0);
                             int64_t lVar16b = local_a0;
                             void* pvVar12b = nullptr;
                             {
@@ -391,11 +379,9 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
                                 int idx = 0; int64_t off = 0;
                                 while (idx < n) {
                                     int64_t* slot = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(lVar16b + 0x30) + off * 8);
-                                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
                                     void* comp = reinterpret_cast<void*>(*slot);
                                     if (comp && CompTypeId(comp) == s_tid_StorageLocationComp) {
                                         int64_t* slot2 = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(lVar16b + 0x30) + off * 8);
-                                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot2);
                                         void* c = reinterpret_cast<void*>(*slot2);
                                         if (c && fn_IsDerivedFrom && fn_IsDerivedFrom(c, s_tid_StorageLocationComp))
                                             pvVar12b = c;
@@ -408,7 +394,6 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
                             int64_t local_88_ibp = 0;
                             if (fn_InternalBasePtr_Ctor) new (&local_88_ibp) ::Object::InternalBasePtr(
                                 reinterpret_cast<RtObject::Internal*>(pvVar12b));   // B.3.3 bridge
-                            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_88_ibp);
                             int64_t costSrc = local_88_ibp;
                             int cost = (costSrc && s_fn_d5d0) ? s_fn_d5d0(costSrc, param_3, local_68, uVar19) : -1;
                             if ((-1 < cost) && (cost < local_a8_best)) {

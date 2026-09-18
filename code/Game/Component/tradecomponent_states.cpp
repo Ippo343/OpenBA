@@ -284,17 +284,14 @@ extern "C" char TradeCtrl_State2_Enter(void* selfV, void* /*sm*/) {
     const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
     if (!s_FindWorkPlace || !s_FindSched || !s_HasWorkSlot) return 0;
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     int64_t wpc[2] = {0, 0};
     s_FindWorkPlace(*reinterpret_cast<int64_t*>(comp + 0x10), wpc);
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     int64_t schedBuf[2] = {0, 0};
     // The finder RETURNS its out-param; use the returned pointer, never the local.
     // See reference_outparam_finder_recycled_ibp.
     int64_t* sched = static_cast<int64_t*>(
         s_FindSched(*reinterpret_cast<int64_t*>(comp + 0x10), schedBuf));
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(sched);
 
     if (s_HasWorkSlot(*sched)) {          // already holds work — nothing to post
         TradeCtrlReport(comp, false, nullptr, true);
@@ -302,7 +299,6 @@ extern "C" char TradeCtrl_State2_Enter(void* selfV, void* /*sm*/) {
         return 0;
     }
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(wpc);
     if (*reinterpret_cast<char*>(wpc[0] + 0x50) != 0) {   // workplace accepting
         void* work = nullptr;
         if (fn_MemAllocStatic) {
@@ -316,11 +312,9 @@ extern "C" char TradeCtrl_State2_Enter(void* selfV, void* /*sm*/) {
         if (fn_InternalBasePtr_Ctor) new (workIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
 
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
         int64_t schedBuf2[2] = {0, 0};
         int64_t* sched2 = static_cast<int64_t*>(
             s_FindSched(*reinterpret_cast<int64_t*>(comp + 0x10), schedBuf2));
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(sched2);
         if (s_PostWork) s_PostWork(*sched2, 1, '\0', workIBP);
 
         // OUTCOME, not intent: report whether a TradeWork was really constructed and
@@ -486,12 +480,9 @@ extern "C" char TradeCtrl_State2_Tick(void* selfV, void* smV, void* deltaTime) {
 
     // Route it to THIS post. The destination is the trading post's own entity (comp+0x10).
     int64_t destIBP = *reinterpret_cast<int64_t*>(comp + 0x10);
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x80));
     uint64_t boatCompIBP[2] = {0, 0};
     void* boatComp = BoatRoute_FindBoatComponent(*reinterpret_cast<int64_t*>(comp + 0x80),
                                                  boatCompIBP);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(boatComp);
     // eb20 returns its OUT-PARAM, so `boatComp` is always non-null; the component is the
     // value inside it. Retail derefs that value unguarded because a merchant template
     // always carries a BoatComponent.
@@ -564,12 +555,9 @@ extern "C" char TradeCtrl_Teardown(void* selfV) {
     if (*reinterpret_cast<int64_t*>(comp + 0x80) != 0) {
         int64_t nullDest = 0;
         if (fn_InternalBasePtr_Ctor) new (&nullDest) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        if (fn_InternalBasePtr_CheckPtr)
-            fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x80));
         uint64_t boatCompIBP[2] = {0, 0};
         void* boatComp = BoatRoute_FindBoatComponent(*reinterpret_cast<int64_t*>(comp + 0x80),
                                                      boatCompIBP);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(boatComp);
         const int64_t boatCompPtr = *reinterpret_cast<int64_t*>(boatComp);
         if (boatCompPtr) BoatComponent_SetDestination(boatCompPtr, &nullDest);
 

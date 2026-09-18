@@ -116,8 +116,6 @@ void ZoneComponent_ZoneMapAdd(void* zoneMapV, void* entityPtrV) {
     uintptr_t zoneMap = reinterpret_cast<uintptr_t>(zoneMapV);
     void* entityPtr = entityPtrV;
 
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(entityPtr);
     uint64_t key = *reinterpret_cast<uint64_t*>(
         *reinterpret_cast<uintptr_t*>(entityPtr) + 0x28);
 
@@ -185,14 +183,10 @@ void ZoneComponent_Draw(ZoneComponent* self) {
     uintptr_t selfAddr = reinterpret_cast<uintptr_t>(self);
     int64_t* ownerSlot = reinterpret_cast<int64_t*>(selfAddr + 0x10);
 
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(ownerSlot);
 
     int64_t mapIBP = 0;
     if (s_fn_FindMapComponent)
         s_fn_FindMapComponent(*ownerSlot, &mapIBP);
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(&mapIBP);
     if (!mapIBP) {
         return;   // standalone-defensive: retail data guarantees the map comp
     }
@@ -203,8 +197,6 @@ void ZoneComponent_Draw(ZoneComponent* self) {
     int16_t h = *reinterpret_cast<int16_t*>(mapIBP + 0x2e);
     int kind = *reinterpret_cast<int*>(mapIBP + 0x30);
 
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(&mapIBP);
     // Retail gates the description through IsDerivedFrom(DAT_1401c7a18); in
     // standalone's partial factory tree that check rejects valid descriptions
     // (the documented FUN_1401253d0-class landmine, same accommodation as
@@ -252,14 +244,10 @@ void ZoneComponent_OnCreate(ZoneComponent* self) {
     uintptr_t selfAddr = reinterpret_cast<uintptr_t>(self);
     int64_t* ownerSlot = reinterpret_cast<int64_t*>(selfAddr + 0x10);
 
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(ownerSlot);
 
     int64_t mapIBP = 0;
     if (s_fn_FindMapComponent)
         s_fn_FindMapComponent(*ownerSlot, &mapIBP);
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(&mapIBP);
     if (!mapIBP) return;   // standalone-defensive: retail data guarantees the map comp
 
     int16_t x = *reinterpret_cast<int16_t*>(mapIBP + 0x28);
@@ -268,8 +256,6 @@ void ZoneComponent_OnCreate(ZoneComponent* self) {
     int16_t h = *reinterpret_cast<int16_t*>(mapIBP + 0x2e);
     int kind = *reinterpret_cast<int*>(mapIBP + 0x30);
 
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(&mapIBP);
     // Same IsDerivedFrom landmine accommodation as Draw above: trust the linked
     // description or d360 derefs (null+0x28).
     void* desc = *reinterpret_cast<void**>(mapIBP + 0x18);
@@ -289,8 +275,6 @@ void ZoneComponent_OnCreate(ZoneComponent* self) {
     // Walk the zone-map tree for the owner's entity id (key at owner_deref+0x28).
     int64_t ownerRef = *ownerSlot;
     uintptr_t zoneMap = *reinterpret_cast<uintptr_t*>(world + 0xf0);
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(&ownerRef);
     uint64_t key = *reinterpret_cast<uint64_t*>(ownerRef + 0x28);
 
     uint64_t* node = *reinterpret_cast<uint64_t**>(zoneMap + 0x160);

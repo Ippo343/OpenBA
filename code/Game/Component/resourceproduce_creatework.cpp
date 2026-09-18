@@ -121,11 +121,9 @@ extern "C" uintptr_t* FishingComponent_CreateWork(void* self, uintptr_t* out) {
     *reinterpret_cast<uint32_t*>(w + 0x68) = 0;
 
     if (s_findPos && s_childSum) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entity);
         uintptr_t posIbp = 0;
         s_findPos(entity, &posIbp);
         if (posIbp) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&posIbp);
             // posIbp IS the component — the finder returns its out-param, so retail's
             // `*pIVar3` and this local are the same value. Dereferencing again handed
             // the component's VTABLE to the child-count helper, whose garbage result
@@ -223,10 +221,8 @@ extern "C" uintptr_t* ForesterComponent_CreateWork(void* self, uintptr_t* out) {
     uintptr_t entity = *reinterpret_cast<uintptr_t*>(comp + 0x10);
 
     if (s_findSM) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entity);
         uintptr_t smIbp = 0;
         s_findSM(entity, &smIbp);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&smIbp);
         char st = *reinterpret_cast<char*>(smIbp + 0x52);
         if (st < 0) st = *reinterpret_cast<char*>(smIbp + 0x50);
         if (st != 14 && *reinterpret_cast<char*>(comp + 0x50) == 0
@@ -347,11 +343,9 @@ extern "C" void* ConsumeProduceAction_Ctor(void* mem, uintptr_t* entityIbp,
     *reinterpret_cast<uint64_t*>(w + 0x70) = 0;
 
     if (s_findPos && s_childSum) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(entityIbp);
         uintptr_t posIbp = 0;
         s_findPos(*entityIbp, &posIbp);
         if (posIbp) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&posIbp);
             // posIbp IS the component — the finder returns its own out-param. Retail's
             // `*pIVar3` and this local are the same value; dereferencing again would
             // hand the component's VTABLE to the child-count helper (the trap the
@@ -378,9 +372,6 @@ extern "C" uintptr_t* ConsumeProduceComponent_CreateWork(void* self, uintptr_t* 
     Resolve();
     ConsumeProduce_ResolveFuncs();
 
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(
-            reinterpret_cast<uintptr_t>(self) + 0x10));
 
     uintptr_t entity = *reinterpret_cast<uintptr_t*>(
         reinterpret_cast<uintptr_t>(self) + 0x10);

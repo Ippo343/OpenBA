@@ -128,13 +128,12 @@ static uint32_t TidCitizenDescription() {
 static void FoundingSpawn_FindCitizenComp(void* entity, uintptr_t* outIBP) {
     void* found = nullptr;
     uint32_t want = TidCitizenComponent();
-    if (entity && want != 0 && fn_InternalBasePtr_CheckPtr) {
+    if (entity && want != 0) {
         uint8_t* e = reinterpret_cast<uint8_t*>(entity);
         int count = *reinterpret_cast<int32_t*>(e + ENT_COMP_CNT);
         uintptr_t arr = *reinterpret_cast<uintptr_t*>(e + ENT_COMP_ARR);
         for (int i = 0; i < count && arr; ++i) {
             void** slot = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
-            fn_InternalBasePtr_CheckPtr(slot);
             void* comp = *slot;
             if (!comp) continue;
             uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
@@ -267,7 +266,7 @@ extern "C" void* StartTown_SpawnColonistRetail(uint8_t* startConfig, void* citiz
                                                uint8_t** outCitizenComp) {
     if (outCitizenComp) *outCitizenComp = nullptr;
     if (!fn_MemAlloc || !fn_EntityFactory_CreateEntity || !fn_EntityList_RegisterEntity ||
-        !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr) {
+        !fn_InternalBasePtr_Ctor) {
         fprintf(stderr, "[FoundingSpawn] BAIL: entity primitives unresolved\n");
         fflush(stderr);
         return nullptr;
@@ -288,12 +287,10 @@ extern "C" void* StartTown_SpawnColonistRetail(uint8_t* startConfig, void* citiz
 
     uintptr_t entIBP = 0;
     new (&entIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(ent));   // B.3.3 bridge
-    fn_InternalBasePtr_CheckPtr(&entIBP);
 
     // 2. find the CitizenComponent
     uintptr_t compIBP = 0;
     FoundingSpawn_FindCitizenComp(reinterpret_cast<void*>(entIBP), &compIBP);
-    fn_InternalBasePtr_CheckPtr(&compIBP);
     uint8_t* comp = reinterpret_cast<uint8_t*>(compIBP);
     if (!comp) {
         // Never true in retail (the entity is a copy of the citizen template, so it
@@ -348,7 +345,6 @@ extern "C" void* StartTown_SpawnColonistRetail(uint8_t* startConfig, void* citiz
     // 7. the whole per-citizen init
     int64_t nullIBP = 0;
     new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    fn_InternalBasePtr_CheckPtr(&compIBP);
     static fn_DeferredInit_117080_t s_deferredInit = nullptr;
     static bool s_resolved = false;
     if (!s_resolved) {

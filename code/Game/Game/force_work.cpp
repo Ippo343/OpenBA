@@ -101,7 +101,6 @@ void* FindComp(void* entity, uint32_t tid) {
         return nullptr;
     for (int i = 0; i < count; ++i) {
         void** slot = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
         void* comp = *slot;
         if (SafeGetTypeId(comp) == tid) return comp;
     }

@@ -218,8 +218,6 @@ void* TutorialImageToolbarIcon_Slot9(void* self, void* retIBP, void* dialog) {
         fn_Dialog_CreateElement(dialog, retIBP, *(void**)(p + 0x20));
 
     // 2. CheckPtr on the returned IBP
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(retIBP);
 
     // 3. FindElementType — find ImageElement child
     void* element = *(void**)retIBP;
@@ -228,8 +226,6 @@ void* TutorialImageToolbarIcon_Slot9(void* self, void* retIBP, void* dialog) {
         fn_Element_FindElementType(element, foundIBP, *g_TypeId_ImageElement);
 
     // 4. CheckPtr on found element
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(foundIBP);
 
     // 5. IsDerivedFrom check — verify it's an ImageElement
     void* foundObj = *(void**)foundIBP;
@@ -316,8 +312,6 @@ void* TutorialImageToolbarIcon_Slot9(void* self, void* retIBP, void* dialog) {
 
 
     // 10. Set sprite on the ImageElement
-    if (fn_InternalBasePtr_CheckPtr)
-        fn_InternalBasePtr_CheckPtr(&imageRef);
     if (fn_ImageElement_SetSprite && imageRef)
         fn_ImageElement_SetSprite(imageRef, spriteBuf);
     return retIBP;
