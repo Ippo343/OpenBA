@@ -48,9 +48,7 @@ void StatGoal_ResolveExternalPtr(void* externalRef) {
     // +0x00 of the ExternalPtr is the name String (B.3.1 bridge: the containing
     // ExternalPtr struct is still untyped bytes).
     System::Filename filename(reinterpret_cast<const System::String&>(*reinterpret_cast<char*>(s)));
-    void* found = fn_ExternalFactory_Find
-                      ? const_cast<void*>(static_cast<const void*>(efactory->Find(filename)))
-                      : nullptr;
+    void* found = const_cast<void*>(static_cast<const void*>(efactory->Find(filename)));
 
     // STANDALONE DEVIATION, deliberate — identical to the one documented at
     // length in TutRestrict_ResolveRefOrLoad (tutorialsetuprestrictplayer.cpp)
@@ -74,7 +72,7 @@ void StatGoal_ResolveExternalPtr(void* externalRef) {
     // a guard over a faithful crash — it is the standalone resource-environment
     // gap. The real fix remains making the preload populate the factory.
     bool loaded = false;
-    if (!found && fn_ExternalFactory_FindOrLoad) {
+    if (!found) {
         const char* name = *reinterpret_cast<const char* const*>(s);
         if (name && name[0]) {
             // Only the LOADER rejects backslashes; the factory's key comparison

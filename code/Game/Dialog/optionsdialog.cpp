@@ -229,7 +229,7 @@ static inline void SetSliderValue(void* elem, float val) {
 // Same pattern as LoadStringTable's StringTable type-id lazy-resolve.
 static void EnsureTextElementTypeId() {
     if (g_TypeId_TextElement) return;
-    if (!fn_Factory_GetTypeIdFromName || !g_pFactorySingleton || !*g_pFactorySingleton)
+    if (!g_pFactorySingleton || !*g_pFactorySingleton)
         return;
     static uint32_t s_lazyId = 0;
     if (s_lazyId == 0) {
@@ -257,7 +257,7 @@ static void* LoadStringTable(const char* path) {
             ->FindOrLoad(filenameObj));
     if (!ext) return nullptr;
 
-    if (!g_TypeId_StringTable && fn_Factory_GetTypeIdFromName
+    if (!g_TypeId_StringTable
             && g_pFactorySingleton && *g_pFactorySingleton) {
         static uint32_t s_lazyStringTableTypeId = 0;
         if (s_lazyStringTableTypeId == 0) {

@@ -90,7 +90,6 @@ bool ResourceNameMismatch(void* dialog, const System::String& wantName) {
     new (&entityIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
     if (entityIBP == 0) return false;
 
-    if (!fn_External_GetPath) return false;
 
     void* description = *reinterpret_cast<void**>(entityIBP + 0x28);
     if (!description) return false;
@@ -123,7 +122,7 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
         return outElementIBP;
     }
 
-    if (!g_pFactorySingleton || !*g_pFactorySingleton || !fn_Factory_GetTypeIdFromName ||
+    if (!g_pFactorySingleton || !*g_pFactorySingleton ||
         !g_pGameWorldSingleton || !*g_pGameWorldSingleton ||
         !fn_IsA) {
         return outElementIBP;

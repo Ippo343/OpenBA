@@ -142,7 +142,7 @@ uint32_t ResolveTypeIdByNameLazy(const char* simpleName) {
 
     // 2. Try Runtime DLL Factory (covers self-registered Runtime types).
     uint32_t typeId = 0;
-    if (fn_Factory_GetTypeIdFromName && g_pFactorySingleton
+    if (g_pFactorySingleton
             && *g_pFactorySingleton) {
         // Triple deref: dispatch slot -> pointer -> Factory*. See the same
         // pattern in inputbindings.cpp / engine_funcs.h FindDialogByName_Impl.

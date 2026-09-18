@@ -356,7 +356,7 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
         void* profDesc = *(void**)((uintptr_t)profArray + (uintptr_t)i * 8);
 
         // Set element name from profession file path
-        if (fn_External_GetPath) {
+        {
             // `GetPath` returns by value through a hidden return slot and the callee
             // CONSTRUCTS into it; copy-initialising the local is the same store.
             System::Filename pathObj =

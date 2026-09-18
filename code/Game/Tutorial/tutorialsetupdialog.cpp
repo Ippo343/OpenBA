@@ -253,9 +253,7 @@ uint64_t TutorialSetupDialog_Shutdown(void* self, void* stream) {
             System::Filename filenameBuf(*reinterpret_cast<const System::String*>(namePtr));
             ::Object::ExternalFactory* efactory =
                 reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
-            void* found = fn_ExternalFactory_Find
-                              ? const_cast<void*>(static_cast<const void*>(efactory->Find(filenameBuf)))
-                              : nullptr;
+            void* found = const_cast<void*>(static_cast<const void*>(efactory->Find(filenameBuf)));
             // Cache the result if it passes the BuildComponent type check
             bool valid = found && g_TypeId_ComponentDescription_FC && fn_IsDerivedFrom(found, *g_TypeId_ComponentDescription_FC);
             *(void**)((uintptr_t)namePtr + 0x10) = valid ? found : nullptr;

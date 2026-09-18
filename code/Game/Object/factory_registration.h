@@ -125,8 +125,8 @@ inline void* WriteComponentTypeId(void* out, const char* componentName) {
 // not "Graphics::MaterialInstance"). The helper caches per-name results in
 // a small static table to avoid re-walking the factory tree every serialize.
 //
-// Returns 0 when the Factory singleton or fn_Factory_GetTypeIdFromName is
-// not yet wired (caller should fall back to skip-validation).
+// Returns 0 when the Factory singleton is not yet wired (caller should fall
+// back to skip-validation).
 uint32_t ResolveTypeIdByNameLazy(const char* simpleName);
 
 // IsDerivedFrom wrapper. Returns true if obj is non-null. Per

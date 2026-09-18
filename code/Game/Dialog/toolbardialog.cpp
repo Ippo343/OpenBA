@@ -913,7 +913,7 @@ extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys) {
     System::Filename filename("Dialog/Pause.rsc");
 
     void* externalRes = nullptr;
-    if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton && fn_ExternalFactory_FindOrLoad) {
+    if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
         externalRes = const_cast<::Object::External*>(
             reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
                 ->FindOrLoad(filename));

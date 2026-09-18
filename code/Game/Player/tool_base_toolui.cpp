@@ -172,9 +172,9 @@ extern "C" void ToolUI_InitChildDialogVtable() {
 //   placementtool.cpp: same shape.
 //
 // Closure (all satisfied):
-//   - fn_UI_CloseDialog, fn_InternalBasePtr_Ctor,
-//     fn_ExternalFactory_FindOrLoad, fn_IsDerivedFrom,
+//   - fn_UI_CloseDialog, fn_InternalBasePtr_Ctor, fn_IsDerivedFrom,
 //     fn_MemAlloc, fn_DialogInstance_Ctor, fn_UI_AddDialog  — engine_funcs exports
+//   - ::Object::ExternalFactory::FindOrLoad — member call (B.3.3)
 //   - g_pGameWorldSingleton, g_pExternalFactorySingleton, g_pExternalTypeId,
 //     g_pMemAllocSingleton  — singleton globals
 //   - DWORD_1401c7f58  — exe type-id storage global (ResolveAddr, lazily)
@@ -202,7 +202,7 @@ extern "C" void* ToolUI_OpenToolDialog_ff9e0(void* param_1, void* param_2, uint6
     {
         System::Filename fname("Dialog/CreateBar.rsc");
         void* obj = nullptr;
-        if (fn_ExternalFactory_FindOrLoad && g_pExternalFactorySingleton &&
+        if (g_pExternalFactorySingleton &&
             *g_pExternalFactorySingleton) {
             ::Object::ExternalFactory* efactory =
                 reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton);  // B.3.3 bridge

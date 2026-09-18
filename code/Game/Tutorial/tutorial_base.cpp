@@ -85,7 +85,6 @@ extern "C" void TutBase_ResolveToolbarRef(void* stringField) {
     if (!stringField || !g_pExternalFactorySingleton) return;
     void* factory = *g_pExternalFactorySingleton;
     if (!factory) return;
-    if (!fn_ExternalFactory_Find) return;
 
     uintptr_t s = reinterpret_cast<uintptr_t>(stringField);
 
@@ -123,7 +122,7 @@ extern "C" void TutBase_ResolveToolbarRef(void* stringField) {
     // The real fix is to make the preload leave these in the factory as retail's
     // does; until then this loads on demand, which is what retail's environment
     // has already done by this point.
-    if (!found && fn_ExternalFactory_FindOrLoad) {
+    if (!found) {
         const char* name = *reinterpret_cast<const char* const*>(s);
         if (name) {
             char normalized[260];

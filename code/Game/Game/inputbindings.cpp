@@ -164,7 +164,7 @@ void RegisterDefaultInputBindings() {
 // ExternalList wired in standalone (it's populated by the LoaderLoop chain),
 // but `Object::ExternalFactory::FindOrLoad` on the singleton resolves the
 // same files and returns the same StringTable instance. We do the StringTable
-// type check via fn_Factory_GetTypeIdFromName since the .rdata exref slot
+// type check via Object::Factory::GetTypeIdFromName since the .rdata exref slot
 // (0x140151488) is not populated in standalone — see the same pattern in
 // optionsdialog.cpp's LoadStringTable.
 void LoadInputNameTables() {
@@ -172,8 +172,7 @@ void LoadInputNameTables() {
         printf("[InputBindings] LoadInputNameTables: KeyMap container NULL\n");
         return;
     }
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton
-            || !fn_ExternalFactory_FindOrLoad) {
+    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
         printf("[InputBindings] LoadInputNameTables: ExternalFactory or string "
                "fns not resolved\n");
         return;
@@ -182,7 +181,7 @@ void LoadInputNameTables() {
     // Lazy-resolve StringTable type ID once via Factory::GetTypeIdFromName
     // (Factory::Startup has already run by this point).
     static uint32_t s_stringTableTypeId = 0;
-    if (s_stringTableTypeId == 0 && fn_Factory_GetTypeIdFromName
+    if (s_stringTableTypeId == 0
             && g_pFactorySingleton && *g_pFactorySingleton) {
         void* factoryObj = *(void**)*g_pFactorySingleton;
         if (factoryObj) {

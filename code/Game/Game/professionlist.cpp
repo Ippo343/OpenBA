@@ -213,7 +213,7 @@ int ProfessionList_Serialize(ProfessionList* self, void* stream) {
 namespace Object { uint32_t GetTypeIdByName(const char* name); }  // fwd (full header below)
 extern "C" void ProfessionList_Startup_Impl(void* profList) {
     uintptr_t pl = (uintptr_t)profList;
-    if (!pl || !fn_ExternalFactory_FindNext || !fn_IsDerivedFrom ||
+    if (!pl || !fn_IsDerivedFrom ||
         !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton)
         return;
 

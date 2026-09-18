@@ -409,9 +409,9 @@ uint32_t RtObject_ExternalFactory_GetReferenceId(const ExternalFactory* self,
 // ?GetPathForReferenceId@ExternalFactory@Object@@QEBA?AVFilename@System@@I@Z
 //   retail 0x1800bf1d0                                             — DIFFED
 //
-// HIDDEN RETURN SLOT: (this in RCX, ret in RDX, id in R8D). The existing
-// fn_ExternalFactory_GetPathForReferenceId typedef in engine_funcs.h:5758 has
-// all three and is correct.
+// HIDDEN RETURN SLOT: (this in RCX, ret in RDX, id in R8D). The exe-side
+// `fn_ExternalFactory_GetPathForReferenceId` typedef carried all three and was
+// correct; it is gone with B.3.3 step 7 (callers are member calls now).
 //
 // Ordinary integer-keyed AVL descent over `_references`. On a miss retail does
 // NOT leave the slot untouched — it copy-constructs from a null temporary, so

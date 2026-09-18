@@ -509,7 +509,7 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
                 // Create new component from factory
                 void* factoryPtr = g_pFactorySingleton ? *(void**)*g_pFactorySingleton : nullptr;
                 void* newObj = nullptr;
-                if (factoryPtr && fn_Factory_CreateObject) {
+                if (factoryPtr) {
                     newObj = reinterpret_cast<const ::Object::Factory*>(factoryPtr)->CreateObject(
                         typeId);   // B.3.3 bridge
                 }
@@ -757,7 +757,7 @@ ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void
             // Create component from factory
             void* factoryPtr = g_pFactorySingleton ? *(void**)*g_pFactorySingleton : nullptr;
             void* newObj = nullptr;
-            if (factoryPtr && fn_Factory_CreateObject) {
+            if (factoryPtr) {
                 newObj = reinterpret_cast<const ::Object::Factory*>(factoryPtr)->CreateObject(
                     typeId);   // B.3.3 bridge
             }

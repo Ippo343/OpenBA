@@ -257,12 +257,11 @@ void Game_WeatherDtor(void* self) {
 // Disasm-verified offsets (14001fd10): cmp [RCX+8],factoryGen ; [RBX+0x10]=result
 // ; [RBX+8]=factoryGen. Filename built via the String& ctor (slot 0x140151d68 =
 // fn_Filename_CtorString = ??0Filename@System@@QEAA@AEBVString@1@@Z), Find via
-// fn_ExternalFactory_Find. Cascade-safe: if the type slot is unresolved, load
+// ::Object::ExternalFactory::Find. Cascade-safe: if the type slot is unresolved, load
 // without IsDerivedFrom validation rather than dereferencing a null BaseTypeInfo.
 void Game_TerrainResolveMaterial(void* refTriple) {
     if (!refTriple) return;
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) return;
-    if (!fn_ExternalFactory_Find) return;
     void* factory = *g_pExternalFactorySingleton;
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     // The singleton is still read through the EXISTING door, so the guard

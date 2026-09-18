@@ -136,11 +136,9 @@ extern "C" void* ProfessionList_Factory(void);
 
 static void LoadProfessionList_Step2(uint8_t* p) {
 
-    if (!fn_ExternalFactory_FindOrLoad || !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
         *(void**)(p + 0xB0) = nullptr;
-        fprintf(stderr, "[GUL::ProfList] SKIP — loader fns/factory unavailable "
-                "(FindOrLoad=%p factory=%p)\n",
-                (void*)fn_ExternalFactory_FindOrLoad,
+        fprintf(stderr, "[GUL::ProfList] SKIP — factory unavailable (factory=%p)\n",
                 g_pExternalFactorySingleton ? *g_pExternalFactorySingleton : nullptr);
         fflush(stderr);
         return;
@@ -191,7 +189,7 @@ static void LoadProfessionList_Step2(uint8_t* p) {
 static void LoadUIMaterial_Step3(uint8_t* p) {
     *(void**)(p + 0xB8) = nullptr;
 
-    if (!fn_ExternalFactory_FindOrLoad || !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton)
+    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton)
         return;
 
     System::Filename fname("Material/UI/UIMaterialNoBlend.rsc");
@@ -217,10 +215,8 @@ static void LoadUIMaterial_Step3(uint8_t* p) {
 static void LoadHelpTopics_Step4(uint8_t* p) {
     *(void**)(p + 0xA0) = nullptr;
 
-    if (!fn_ExternalFactory_FindOrLoad || !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
-        fprintf(stderr, "[GUL::Help] SKIP — loader fns/factory unavailable "
-                "(FindOrLoad=%p factory=%p)\n",
-                (void*)fn_ExternalFactory_FindOrLoad,
+    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+        fprintf(stderr, "[GUL::Help] SKIP — factory unavailable (factory=%p)\n",
                 g_pExternalFactorySingleton ? *g_pExternalFactorySingleton : nullptr);
         fflush(stderr);
         return;
@@ -275,10 +271,8 @@ static void LoadHelpTopics_Step4(uint8_t* p) {
 static void LoadDiseaseList_Step1(uint8_t* p) {
     *(void**)(p + 0xA8) = nullptr;
 
-    if (!fn_ExternalFactory_FindOrLoad || !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
-        fprintf(stderr, "[GUL::DiseaseList] SKIP — loader fns/factory unavailable "
-                "(FindOrLoad=%p factory=%p)\n",
-                (void*)fn_ExternalFactory_FindOrLoad,
+    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+        fprintf(stderr, "[GUL::DiseaseList] SKIP — factory unavailable (factory=%p)\n",
                 g_pExternalFactorySingleton ? *g_pExternalFactorySingleton : nullptr);
         fflush(stderr);
         return;
@@ -853,7 +847,7 @@ static void BuildSkyMesh_Step28(uint8_t* p) {
 
     // Load the sky dome resource (the `_clear_`-material mesh) via the global factory.
     void* meshRes = nullptr;
-    if (fn_ExternalFactory_FindOrLoad && g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
+    if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
         void* factory = *g_pExternalFactorySingleton;
         // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
         ::Object::ExternalFactory* efactory =
@@ -1069,8 +1063,7 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
     // sim still runs its temperature/snow half).
     if (*(void**)(p + 0x130)) {
         void* envRes = nullptr;
-        if (fn_ExternalFactory_FindOrLoad &&
-            g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
+        if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
             System::Filename fname("Environment/Environment.rsc");
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
             envRes = const_cast<::Object::External*>(
@@ -1205,7 +1198,7 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
     // suffix selects the named sub-resource within Dialog/StringTable.rsc.
     {
         void* evStruct = *(void**)(p + 0x138);
-        if (evStruct && fn_ExternalFactory_FindOrLoad && g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
+        if (evStruct && g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
             void* factory = *g_pExternalFactorySingleton;
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
             ::Object::ExternalFactory* efactory =
@@ -1216,7 +1209,7 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
             // LoadStringTable — the IsDerivedFrom validation is what makes FindOrLoad
             // return the actual :events/:seasons sub-table instead of the wrong level.
             static uint32_t s_stTid = 0;
-            if (!g_TypeId_StringTable && s_stTid == 0 && fn_Factory_GetTypeIdFromName &&
+            if (!g_TypeId_StringTable && s_stTid == 0 &&
                 g_pFactorySingleton && *g_pFactorySingleton) {
                 void* factoryObj = *(void**)*g_pFactorySingleton;
                 if (factoryObj) s_stTid = reinterpret_cast<const ::Object::Factory*>(factoryObj)->GetTypeIdFromName(

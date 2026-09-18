@@ -213,7 +213,7 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
                             ? *g_pExternalFactorySingleton : nullptr;
         ::Object::ExternalFactory* efactory =
             reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
-        void* obj = (factory && fn_ExternalFactory_FindOrLoad)
+        void* obj = (factory)
                         ? const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fname))) : nullptr;
         // Exe: material=obj unless IsDerivedFrom(MaterialInstance) is false. In standalone
         // the type-id slot 0x140151350 may be unfilled → can't verify → TRUST the load

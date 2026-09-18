@@ -36,9 +36,8 @@ void ExternalPtrSerializeGeneric_7140(void** refField, void* serializer,
                                       const char* typeName) {
     if (!refField || !serializer) return;
 
-    if (!fn_Serializer_GetEncoding || !fn_ExternalFactory_FindOrLoad ||
-        !fn_IsDerivedFrom || !fn_ExternalFactory_IsReferenceModeEnabled ||
-        !fn_External_GetPath || !fn_Serializer_Serialize_Uint || !g_fn_Serialize_Bool ||
+    if (!fn_Serializer_GetEncoding ||
+        !fn_IsDerivedFrom || !fn_Serializer_Serialize_Uint || !g_fn_Serialize_Bool ||
         !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
         static bool s_warned = false;
         if (!s_warned) {
@@ -183,8 +182,8 @@ void ExternalPtrSerializeGeneric_7140(void** refField, void* serializer,
 extern "C" void Reimpl_ExternalPtr_Serialize_Typed_7140(
     void* refField, void* serializer) {
 
-    // fn_ExternalPtr_Serialize_Typed_7140 resolves back to ourselves via the
-    // address registry, so we always run the cleaned body here.
+    // 0x140007140 resolves back to ourselves via the address registry, so we
+    // always run the cleaned body here.
 
     const uint32_t* typeIdPtr = nullptr;
     if (g_ppTypeInfo_MaterialInstance && *g_ppTypeInfo_MaterialInstance) {
