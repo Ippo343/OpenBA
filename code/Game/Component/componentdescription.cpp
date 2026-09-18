@@ -52,8 +52,7 @@ static inline int SerStreamErr(void* serializer) {
 // etc.) reuse this exact proven loop.
 extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayBase) {
     if (!serializer || count <= 0 || !arrayBase) return;
-    if (!fn_Serializer_GetEncoding || !fn_ExternalFactory_FindOrLoad ||
-        !fn_ExternalFactory_IsReferenceModeEnabled || !fn_External_GetPath ||
+    if (!fn_Serializer_GetEncoding ||
         !fn_Serializer_Serialize_Uint || !g_fn_Serialize_Bool ||
         !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
         static bool warned = false;

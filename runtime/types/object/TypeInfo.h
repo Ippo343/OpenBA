@@ -515,6 +515,20 @@ public:
     // ?Startup@Factory@Object@@QEAA_NXZ   retail 0x1800c0630.
     bool Startup();
 
+    // ?Shutdown@Factory@Object@@QEAAXXZ   retail 0x1800c0600, EIGHT instructions
+    // and NOT a tree walk:
+    //     RCX = *(void**)0x1801fc6d0;  if (RCX) FreeLibrary(RCX);
+    //     *(void**)0x1801fc6d0 = 0;
+    // 0x1801fc6d0 is the UNEXPORTED compiler-plugin HMODULE that
+    // `LoadCompilers`/`UnloadCompilers` (0x1800bfad4) own; Shutdown never reads
+    // `root`, `count` or `_singleton`. The type-tree teardown lives in
+    // `~Factory` (0x1800071a0 -> 0x180008110), which is already ported as
+    // `RtObject_Factory_Dtor` in runtime/src/object/factory_dtors.cpp — and
+    // this member's body is there too, because it needs the address door and a
+    // platform `FreeLibrary` that type_reflection.cpp must not pull into
+    // `make unit`.
+    void Shutdown();
+
     // ?CreateObject@Factory@Object@@QEBAPEAVBase@2@I@Z      0x1800c0ae0
     // ?CreateObject@Factory@Object@@QEBAPEAVBase@2@IPEAX@Z  0x1800c0aa0
     Base* CreateObject(uint32_t typeId) const;

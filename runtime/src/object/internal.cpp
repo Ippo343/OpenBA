@@ -131,7 +131,6 @@
 #include <cstring>
 
 #include "../../types/object/Internal.h"
-#include "../../types/object/internal_class.h"
 #include "../../funcs/rt_port.h"
 
 namespace RtObject {

@@ -191,8 +191,7 @@ static void GenerateName(uintptr_t db, void* rng, int minLen, int maxLen, char* 
 // .rdata (DWORD_1401c5a60) is NULL in standalone, and FindOrLoad by exact
 // filename is authoritative.
 static uintptr_t LoadNameDb(const char* path) {
-    if (!path || !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton ||
-        !fn_ExternalFactory_FindOrLoad)
+    if (!path || !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton)
         return 0;
 
     System::Filename fname(path);

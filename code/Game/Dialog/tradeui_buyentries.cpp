@@ -27,7 +27,7 @@
 // ⚠ AND `0x1401514d0` IS NOT `fn_Sprite_IsValid`. Ghidra labels both call sites as
 // that and types the result as `bool`, which is what makes the loop look degenerate.
 // It is `ExternalFactory::FindNext(self, typeId, prev) -> void*` — already in the
-// tree as `fn_ExternalFactory_FindNext`, with the exact RCX/EDX/R8 signature the
+// tree as `::Object::ExternalFactory::FindNext`, with the exact RCX/EDX/R8 signature the
 // disassembly shows. The dependency list this leaf was handed off with named
 // `fn_Sprite_IsValid`; that came from the bad label and no sprite is involved.
 //
@@ -165,7 +165,7 @@ extern "C" void TradeUI_GetBuyEntries_59670(void* tradeState, void* outArray) {
 
     // ── 2 & 3. Walk every ComponentDescription the ExternalFactory knows ──────
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) return;
-    if (!fn_ExternalFactory_FindNext || !g_TypeId_ComponentDescription_FC) return;
+    if (!g_TypeId_ComponentDescription_FC) return;
     void* factory = *g_pExternalFactorySingleton;
     const uint32_t tidComponentDesc = *g_TypeId_ComponentDescription_FC;
 

@@ -103,9 +103,6 @@ fn_VideoDevice_Unlock_t fn_VideoDevice_Unlock = nullptr;
 
 // ExternalFactory
 void** g_pExternalFactorySingleton = nullptr;
-fn_ExternalFactory_FindOrLoad_t fn_ExternalFactory_FindOrLoad = nullptr;
-fn_ExternalFactory_Find_t fn_ExternalFactory_Find = nullptr;
-fn_ExternalFactory_Clean_t fn_ExternalFactory_Clean = nullptr;
 fn_IsDerivedFrom_t fn_IsDerivedFrom = nullptr;
 // Null-safe trampoline installed over the Runtime IsDerivedFrom (see EngineFuncsInit).
 static fn_IsDerivedFrom_t s_fn_IsDerivedFrom_real = nullptr;
@@ -420,7 +417,6 @@ uint32_t* g_TypeId_EditTool = nullptr;
 // EntityUI helpers — now reimplemented inline in entityui.cpp
 // fn_EntityUI_SetEditMode — inlined
 // fn_EntityUI_SelectEntity — inlined
-fn_Factory_CreateObject_t fn_Factory_CreateObject = nullptr;
 uint32_t* g_TypeId_ToolController = nullptr;
 uint32_t* g_TypeId_ToolSetting = nullptr;
 fn_AVL_Rebalance_0x38_t fn_AVL_Rebalance_0x38 = nullptr;
@@ -561,7 +557,6 @@ fn_TabElement_SetActiveTab_t fn_TabElement_SetActiveTab = nullptr;
 int32_t** g_pGameSettingsPtr = nullptr;
 
 // StorageUI support
-fn_ExternalFactory_FindNext_t fn_ExternalFactory_FindNext = nullptr;
 // fn_StorageUI_SortItems — reimplemented as StorageUI_SortItems() in storageui.cpp
 
 // MapUI helpers — REIMPLEMENTED in code/Game/Dialog/mapui.cpp
@@ -621,7 +616,6 @@ void** g_FollowDialog_Vtable = nullptr;
 // fn_TrackerComponent_Rebuild — inline in engine_funcs.h
 
 // ProfessionUI support
-fn_External_GetPath_t fn_External_GetPath = nullptr;
 // BSTRebalance — now static inline in professionui.cpp
 // fn_ProfessionUI_HandleSpinner — reimplemented in professionui.cpp
 // fn_ProfessionUI_HandleButton — reimplemented in professionui.cpp
@@ -875,7 +869,6 @@ fn_Input_Device_Pressed_t  fn_Input_Device_Pressed  = nullptr;
 fn_UI_EndSpriteCapture_t   fn_UI_EndSpriteCapture   = nullptr;
 void** g_pFileSystemSingleton = nullptr;
 fn_FileSystem_GetSourceDirectory_t fn_FileSystem_GetSourceDirectory = nullptr;
-fn_External_SaveText_t     fn_External_SaveText     = nullptr;
 
 // ============================================================
 // Engine globals
@@ -976,7 +969,6 @@ uint32_t* g_TypeId_DialogInstance = nullptr;
 fn_MapGetTerrainPos_t fn_MapGetTerrainPos = nullptr;
 
 // Phase H: Sub-dependency blockers
-fn_Factory_GetTypeIdFromName_t fn_Factory_GetTypeIdFromName = nullptr;
 void** g_pFactorySingleton = nullptr;
 fn_IsA_t fn_IsA = nullptr;
 
@@ -1135,7 +1127,8 @@ void Entity_FindComponentByExeTypeId(void* entity, void* retval, uint32_t* typeI
     }
 
     // Store result via InternalBasePtr::InternalBasePtr(retval, found)
-    fn_InternalBasePtr_Ctor(retval, found);
+    new (retval) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
 }
 
 // ============================================================
@@ -1227,16 +1220,12 @@ fn_Struct60B_SubArrayCopy_t fn_Struct60B_SubArrayCopyStride02 = nullptr;
 // Runtime DLL primitives needed only by the standalone reimpls.
 fn_Serializer_GetEncoding_t fn_Serializer_GetEncoding = nullptr;
 fn_Serializer_Serialize_Uint_t fn_Serializer_Serialize_Uint = nullptr;
-fn_ExternalFactory_IsReferenceModeEnabled_t fn_ExternalFactory_IsReferenceModeEnabled = nullptr;
-fn_ExternalFactory_GetReferenceId_t fn_ExternalFactory_GetReferenceId = nullptr;
-fn_ExternalFactory_GetPathForReferenceId_t fn_ExternalFactory_GetPathForReferenceId = nullptr;
 
 uint32_t** g_ppTypeInfo_GraphicsMesh = nullptr;
 uint32_t** g_ppTypeInfo_Particle = nullptr;
 uint32_t*  g_pTypeId_Weather = nullptr;
 
 // M3.5 Path B session 3 — typed-ExternalPtr serialize helper at 0x140007140.
-fn_ExternalPtr_Serialize_Typed_t fn_ExternalPtr_Serialize_Typed_7140 = nullptr;
 uint32_t** g_ppTypeInfo_MaterialInstance = nullptr;
 
 // M3.5 Path B session 5 — additional Geometry::Serialize resize helpers.
@@ -1395,14 +1384,8 @@ bool EngineFuncsInit() {
     g_pExternalFactorySingleton = reinterpret_cast<void**>(
         ResolveAddr(Module::Runtime, 0x1801fc6c8));
 
-    fn_ExternalFactory_FindOrLoad = reinterpret_cast<fn_ExternalFactory_FindOrLoad_t>(
-        ResolveExport("?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z"));
 
-    fn_ExternalFactory_Find = reinterpret_cast<fn_ExternalFactory_Find_t>(
-        ResolveExport("?Find@ExternalFactory@Object@@QEBAPEBVExternal@2@AEBVFilename@System@@@Z"));
 
-    fn_ExternalFactory_Clean = reinterpret_cast<fn_ExternalFactory_Clean_t>(
-        ResolveExport("?Clean@ExternalFactory@Object@@QEAAXXZ"));
 
     fn_IsDerivedFrom = reinterpret_cast<fn_IsDerivedFrom_t>(
         ResolveExport("?IsDerivedFrom@Base@Object@@QEBA_NI@Z"));
@@ -2124,8 +2107,6 @@ bool EngineFuncsInit() {
 
     // EntityUI helpers — SetEditMode/SelectEntity now reimplemented in entityui.cpp
     // Resolve sub-functions needed by reimplementations:
-    fn_Factory_CreateObject = reinterpret_cast<fn_Factory_CreateObject_t>(
-        ResolveExport("?CreateObject@Factory@Object@@QEBAPEAVBase@2@I@Z"));
     g_TypeId_ToolController = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c6eb8));
     g_TypeId_ToolSetting = reinterpret_cast<uint32_t*>(
@@ -2441,8 +2422,6 @@ bool EngineFuncsInit() {
     }
 
     // --- StorageUI support ---
-    fn_ExternalFactory_FindNext = reinterpret_cast<fn_ExternalFactory_FindNext_t>(
-        ResolveExport("?FindNext@ExternalFactory@Object@@QEBAPEBVExternal@2@IPEBV32@@Z"));
     // fn_StorageUI_SortItems — reimplemented in storageui.cpp as StorageUI_SortItems()
 
     // --- MapUI helpers — REIMPLEMENTED in code/Game/Dialog/mapui.cpp ---
@@ -2498,8 +2477,6 @@ bool EngineFuncsInit() {
     // by Wave 9 lane R, then deleted by lane F -- with the DLL gone every
     // fallback would fire at once into an unmapped module, so a null here is
     // the better failure (RtResolveMiss records the name; see resolve.h).
-    fn_External_GetPath = reinterpret_cast<fn_External_GetPath_t>(
-        ResolveExport("?GetPath@External@Object@@QEBA?AVFilename@System@@XZ"));
     // BSTRebalance — now static inline in professionui.cpp (BSTRebalance_Impl)
     // fn_ProfessionUI_HandleSpinner — reimplemented in professionui.cpp
     // fn_ProfessionUI_HandleButton — reimplemented in professionui.cpp
@@ -3383,8 +3360,6 @@ bool EngineFuncsInit() {
            g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr);
     printf("  ExtFactory::_singleton    = %p -> %p\n", (void*)g_pExternalFactorySingleton,
            g_pExternalFactorySingleton ? *g_pExternalFactorySingleton : nullptr);
-    printf("  ExtFactory::FindOrLoad    = %p\n", (void*)fn_ExternalFactory_FindOrLoad);
-    printf("  ExtFactory::Clean         = %p\n", (void*)fn_ExternalFactory_Clean);
     printf("  IsDerivedFrom             = %p\n", (void*)fn_IsDerivedFrom);
     printf("  ExternalTypeId            = %p -> 0x%x\n", (void*)g_pExternalTypeId,
            g_pExternalTypeId ? *g_pExternalTypeId : 0);
@@ -3496,8 +3471,6 @@ bool EngineFuncsInit() {
     fn_FileSystem_GetSourceDirectory = reinterpret_cast<fn_FileSystem_GetSourceDirectory_t>(
         ResolveExport("?GetSourceDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ"));
 
-    fn_External_SaveText = reinterpret_cast<fn_External_SaveText_t>(
-        ResolveExport("?SaveText@External@Object@@QEAA_NAEBVFilename@System@@0@Z"));
 
     // --- Stage 3: OptionsDialog Runtime exports ---
 
@@ -3750,9 +3723,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140152b48));
 
     // --- Phase H: Sub-dependency blockers ---
-    // Factory::GetTypeIdFromName — Runtime DLL export
-    fn_Factory_GetTypeIdFromName = reinterpret_cast<fn_Factory_GetTypeIdFromName_t>(
-        ResolveExport("?GetTypeIdFromName@Factory@Object@@QEBAIPEBD_N@Z"));
     // Factory singleton — dispatch table at 0x140152760 (double-indirect)
     {
         void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152760));
@@ -3764,13 +3734,11 @@ bool EngineFuncsInit() {
     fn_IsA = reinterpret_cast<fn_IsA_t>(
         ResolveExport("?IsA@Base@Object@@QEBA_NI@Z"));
 #ifdef _DEBUG
-    if (fn_Factory_GetTypeIdFromName && g_pFactorySingleton && fn_IsA) {
-        printf("[EngineFuncs] Phase H: Factory::GetTypeIdFromName + IsA + Factory singleton resolved\n");
+    if (g_pFactorySingleton && fn_IsA) {
+        printf("[EngineFuncs] Phase H: IsA + Factory singleton resolved\n");
     }
-    if (fn_Factory_GetTypeIdFromName) {
-        printf("[EngineFuncs] Phase H: FindDialogByName_Impl, Game_TriggerDisasterByType_Impl, "
-               "Game_SpawnResources_Impl now available as inline replacements\n");
-    }
+    printf("[EngineFuncs] Phase H: FindDialogByName_Impl, Game_TriggerDisasterByType_Impl, "
+           "Game_SpawnResources_Impl now available as inline replacements\n");
 #endif
 
     // --- Phase I: Work class helpers ---
@@ -4146,33 +4114,12 @@ bool EngineFuncsInit() {
             fn_Serializer_Serialize_Uint = reinterpret_cast<fn_Serializer_Serialize_Uint_t>(
                 ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAIPEBD@Z"));
 
-        slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151218));
-        if (slot && *slot)
-            fn_ExternalFactory_IsReferenceModeEnabled =
-                reinterpret_cast<fn_ExternalFactory_IsReferenceModeEnabled_t>(*slot);
-        else
-            fn_ExternalFactory_IsReferenceModeEnabled =
-                reinterpret_cast<fn_ExternalFactory_IsReferenceModeEnabled_t>(
-                    ResolveExport("?IsReferenceModeEnabled@ExternalFactory@Object@@QEBA_NXZ"));
-
-        slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151220));
-        if (slot && *slot)
-            fn_ExternalFactory_GetReferenceId =
-                reinterpret_cast<fn_ExternalFactory_GetReferenceId_t>(*slot);
-        else
-            fn_ExternalFactory_GetReferenceId =
-                reinterpret_cast<fn_ExternalFactory_GetReferenceId_t>(
-                    ResolveExport("?GetReferenceId@ExternalFactory@Object@@QEBAIPEBVExternal@2@@Z"));
-
-        slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151228));
-        if (slot && *slot)
-            fn_ExternalFactory_GetPathForReferenceId =
-                reinterpret_cast<fn_ExternalFactory_GetPathForReferenceId_t>(*slot);
-        else
-            fn_ExternalFactory_GetPathForReferenceId =
-                reinterpret_cast<fn_ExternalFactory_GetPathForReferenceId_t>(
-                    ResolveExport("?GetPathForReferenceId@ExternalFactory@Object@@QEBA?AVFilename@System@@I@Z"));
-
+        // 0x140151218 / 0x140151220 / 0x140151228 —
+        // ExternalFactory::IsReferenceModeEnabled / GetReferenceId /
+        // GetPathForReferenceId. ENDGAME B.3.3 step 7: their last callers are
+        // member calls on ::Object::ExternalFactory, so the pointers and the
+        // slot-or-export resolution behind them are gone. The dispatch slots
+        // themselves stay registered.
     }
 
     // BaseTypeInfo* slots / typeId storage. These get filled by Runtime DLL
@@ -4187,9 +4134,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1401c6198));
 
     // M3.5 Path B session 3 — FUN_140007140 + MaterialInstance typeInfo slot.
-    fn_ExternalPtr_Serialize_Typed_7140 =
-        reinterpret_cast<fn_ExternalPtr_Serialize_Typed_t>(
-            ResolveAddr(Module::Exe, 0x140007140));
     g_ppTypeInfo_MaterialInstance = reinterpret_cast<uint32_t**>(
         ResolveAddr(Module::Exe, 0x140151350));
 
@@ -4214,15 +4158,10 @@ bool EngineFuncsInit() {
         (void*)fn_ExternalPtr_Serialize_Weather);
     printf("  Serializer_GetEncoding  = %p\n", (void*)fn_Serializer_GetEncoding);
     printf("  Serializer_Serialize_U  = %p\n", (void*)fn_Serializer_Serialize_Uint);
-    printf("  EFactory_IsRefModeEn    = %p\n", (void*)fn_ExternalFactory_IsReferenceModeEnabled);
-    printf("  EFactory_GetReferenceId = %p\n", (void*)fn_ExternalFactory_GetReferenceId);
-    printf("  EFactory_GetPathForRef  = %p\n", (void*)fn_ExternalFactory_GetPathForReferenceId);
     printf("  TypeInfo Mesh/Particle  = %p / %p\n",
         (void*)g_ppTypeInfo_GraphicsMesh, (void*)g_ppTypeInfo_Particle);
     printf("  TypeId Weather          = %p\n", (void*)g_pTypeId_Weather);
     // M3.5 Path B session 3
-    printf("  ExtPtr_Typed_7140       = %p\n",
-        (void*)fn_ExternalPtr_Serialize_Typed_7140);
     printf("  TypeInfo MaterialInst   = %p\n",
         (void*)g_ppTypeInfo_MaterialInstance);
 #endif

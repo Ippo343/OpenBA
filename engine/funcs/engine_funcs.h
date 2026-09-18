@@ -9,10 +9,18 @@
 #include <windows.h>
 #include "options.h"
 #include <cstdint>
+#include <new>
 #include "math/Math.h"
 #include "system/String.h"
 #include "system/Filename.h"
 #include "ui/UserInterface.h"   // UI::UserInterface::_dialogs (LinkedList walk below)
+// ENDGAME B.3.3 step 7: the inline bodies below were the last callers of the
+// `fn_ExternalFactory_*` / `fn_Factory_*` / `fn_InternalBasePtr_Ctor` pointers.
+// They call the real classes now. GLOBAL SCOPE, and never inside an #if —
+// B33_RULES' namespace hazard.
+#include "object/External.h"    // ::Object::ExternalFactory
+#include "object/Internal.h"    // ::Object::InternalBasePtr
+#include "object/TypeInfo.h"    // ::Object::Factory
 
 // ============================================================
 // Timer globals (in Runtime-x64.dll .data section)
@@ -171,8 +179,15 @@ extern fn_VideoDevice_Unlock_t fn_VideoDevice_Unlock;
 // ExternalFactory::_singleton — pointer to the global ExternalFactory instance
 extern void** g_pExternalFactorySingleton;
 
+// ENDGAME B.3.3 step 7: the `fn_ExternalFactory_*` and `fn_External_GetPath` /
+// `fn_External_SaveText` pointers are DELETED — every caller is a member call on
+// `::Object::ExternalFactory` / `::Object::External` (runtime/types/object/External.h).
+// The notes below stay because they describe those members' behaviour, which the
+// callers still have to reason about.
+
 // ExternalFactory::FindOrLoad(this, Filename const&) -> External const*
 // Retail 0x1800bf320, reversed 2026-09-06 (runtime port Wave 3 lane C).
+// Ported: runtime/src/object/external_compiled.cpp.
 //
 // CACHING SEMANTICS, because several exe-side bugs have traced back to a wrong
 // belief about them:
@@ -192,14 +207,9 @@ extern void** g_pExternalFactorySingleton;
 //     relative path even though the file was opened by an absolute one.
 //   * A path with no `:identifier` suffix is looked up as `path + ":resource"`.
 //   * Lookup is case-INSENSITIVE (the tree compares with _stricmp).
-// NOT PORTED: it rewrites the resource tree and has no available oracle.
-typedef void* (*fn_ExternalFactory_FindOrLoad_t)(void* self, const void* filename);
-extern fn_ExternalFactory_FindOrLoad_t fn_ExternalFactory_FindOrLoad;
 
 // ExternalFactory::Find(this, Filename const&) -> External const*
 // Ordinal 2337: ?Find@ExternalFactory@Object@@QEBAPEBVExternal@2@AEBVFilename@System@@@Z
-typedef void* (*fn_ExternalFactory_Find_t)(void* self, const void* filename);
-extern fn_ExternalFactory_Find_t fn_ExternalFactory_Find;
 
 // ExternalFactory::Clean(this) — evict resources unused in this generation.
 // Retail 0x1800be310, reversed 2026-09-06 (runtime port Wave 3 lane C). The old
@@ -214,9 +224,7 @@ extern fn_ExternalFactory_Find_t fn_ExternalFactory_Find;
 //   now dangling) and erase the tree node. Finally bump the generation counter
 //   at factory+0x08, which is what invalidates the exe's ExternalRef caches
 //   (see ResolveExternalByName_Impl below).
-// NOT PORTED: it rewrites the resource tree and has no available oracle.
-typedef void (*fn_ExternalFactory_Clean_t)(void* self);
-extern fn_ExternalFactory_Clean_t fn_ExternalFactory_Clean;
+// Ported: runtime/src/object/external_set.cpp.
 
 // Object::Base::IsDerivedFrom(this, uint typeId) -> bool
 typedef bool (*fn_IsDerivedFrom_t)(void* self, uint32_t typeId);
@@ -1124,8 +1132,8 @@ extern fn_SaveLoad_GetSaveState_t fn_SaveLoad_GetSaveState;
 //
 // ⚠ THIS DECLARATION IS CORRECT — do not "fix" it. Ghidra USED to label the exe
 // dispatch slot 0x1401514d0 as fn_Sprite_IsValid, which is wrong: that slot is
-// ExternalFactory::FindNext(self, typeId, prev) -> void*, and it is declared below as
-// fn_ExternalFactory_FindNext. The mislabel cost real time on 2026-07-31 because it
+// ExternalFactory::FindNext(self, typeId, prev) -> void*, which is now reached as
+// ::Object::ExternalFactory::FindNext. The mislabel cost real time on 2026-07-31 because it
 // made the decompiler type the iterator's return as `bool`, which turned the cursor
 // walk in Building_GetBuyEntries (0x140059670) into an apparent infinite loop. The
 // Ghidra data label has since been renamed to Object_ExternalFactory_FindNext.
@@ -1450,8 +1458,6 @@ void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
 // Factory::CreateObject(factory_singleton, typeId) -> Base*
 // Used by SetEditMode to create tool controller objects.
 // Ordinal for Object::Factory::CreateObject
-typedef void* (*fn_Factory_CreateObject_t)(void* factory, uint32_t typeId);
-extern fn_Factory_CreateObject_t fn_Factory_CreateObject;
 
 // ToolController type ID — DAT_1401c6eb8 (IsDerivedFrom check on Factory::CreateObject result)
 extern uint32_t* g_TypeId_ToolController;
@@ -1751,7 +1757,9 @@ inline void ResolveExternalByName_Impl(void* nameString) {
     // Convert String to Filename, look up in factory.
     // ??0Filename@System@@QEAA@AEBVString@1@@Z  retail 0x1800c6360
     System::Filename filename(*reinterpret_cast<const System::String*>(s));
-    void* found = fn_ExternalFactory_Find(factory, &filename);
+    void* found = const_cast<void*>(static_cast<const void*>(
+        reinterpret_cast<const ::Object::ExternalFactory*>(factory)   // B.3.3 bridge
+            ->Find(filename)));
 
     // Validate the found object is the expected type (Description base).
     // In standalone the exe-side type-id storage (g_TypeId_ComponentDescription_FC ->
@@ -1998,8 +2006,6 @@ inline void fn_TrackerComponent_Rebuild(void* dstArray, void* srcArray) {
 
 // Object::External::GetPath() — returns Filename by value (non-trivial return ABI)
 // Member function: RCX=this, RDX=retBuf (Filename, 8 bytes). Returns retBuf in RAX.
-typedef void* (*fn_External_GetPath_t)(void* self, void* retBuf);
-extern fn_External_GetPath_t fn_External_GetPath;
 
 // BSTRebalance — now inline in professionui.cpp (BSTRebalance_Impl)
 
@@ -2291,8 +2297,6 @@ extern int32_t** g_pGameSettingsPtr;  // DAT_1401c3de0 — pointer TO pointer to
 // ExternalFactory::FindNext(this, typeId, prevExternal) -> External const*
 // Iterates all loaded externals matching typeId. Pass nullptr to start.
 // ?FindNext@ExternalFactory@Object@@QEBAPEBVExternal@2@IPEBV32@@Z
-typedef void* (*fn_ExternalFactory_FindNext_t)(void* self, uint32_t typeId, void* prev);
-extern fn_ExternalFactory_FindNext_t fn_ExternalFactory_FindNext;
 
 // StorageUI sort function (FUN_1400213f0) — sorts 0x18-byte entries by resource name.
 // Quicksort/introsort with inline comparator using UI::String → System::String.
@@ -3543,8 +3547,6 @@ extern fn_FileSystem_GetSourceDirectory_t fn_FileSystem_GetSourceDirectory;
 
 // Object::External::SaveText(this, path, subdir) -> bool
 // ?SaveText@External@Object@@QEAA_NAEBVFilename@System@@0@Z (0x1800bb9d0, ordinal 364)
-typedef bool (*fn_External_SaveText_t)(void* self, void* pathFilename, void* subdirFilename);
-extern fn_External_SaveText_t fn_External_SaveText;
 
 // ============================================================
 // Stage 3: OptionsDialog Runtime exports
@@ -4080,8 +4082,6 @@ extern fn_MapGetTerrainPos_t fn_MapGetTerrainPos;
 // Runtime DLL export ordinal 2991: ?GetTypeIdFromName@Factory@Object@@QEBAIPEBD_N@Z
 // Looks up type name CRC in Factory BST. Returns type ID (uint32) or 0 if not found.
 // RCX=this(Factory*), RDX=name(const char*), R8=includeBase(bool)
-typedef uint32_t (*fn_Factory_GetTypeIdFromName_t)(void* self, const char* name, bool includeBase);
-extern fn_Factory_GetTypeIdFromName_t fn_Factory_GetTypeIdFromName;
 
 // Object::Factory::_singleton — dispatch table pointer at 0x140152760 in exe
 // Double-indirect: *(void**)0x140152760 -> Factory*
@@ -4283,7 +4283,7 @@ inline void* FindDialogByName_Impl(void* retval, void* nameStr) {
     }
 
     // Get type IDs from Factory (double-deref: dispatch slot -> pointer -> Factory*)
-    if (!g_pFactorySingleton || !*g_pFactorySingleton || !fn_Factory_GetTypeIdFromName) {
+    if (!g_pFactorySingleton || !*g_pFactorySingleton) {
         *(uintptr_t*)ret = 0;
         return retval;
     }
@@ -4293,7 +4293,9 @@ inline void* FindDialogByName_Impl(void* retval, void* nameStr) {
         return retval;
     }
 
-    uint32_t dialogTypeId = fn_Factory_GetTypeIdFromName(factoryObj, part1, true);
+    uint32_t dialogTypeId =
+        reinterpret_cast<const ::Object::Factory*>(factoryObj)   // B.3.3 bridge
+            ->GetTypeIdFromName(part1, true);
     if (dialogTypeId == 0) {
         *(uintptr_t*)ret = 0;
         return retval;
@@ -4301,7 +4303,9 @@ inline void* FindDialogByName_Impl(void* retval, void* nameStr) {
 
     uint32_t controllerTypeId = 0;
     if (partCount == 2 && part2[0] != 0) {
-        controllerTypeId = fn_Factory_GetTypeIdFromName(factoryObj, part2, true);
+        controllerTypeId =
+            reinterpret_cast<const ::Object::Factory*>(factoryObj)   // B.3.3 bridge
+                ->GetTypeIdFromName(part2, true);
     }
 
     // Get UI singleton
@@ -4372,7 +4376,7 @@ inline void* FindDialogByName_Impl(void* retval, void* nameStr) {
 // removes matching entity via Game_RemoveEntity.
 inline void Game_TriggerDisasterByType_Impl(int disasterType) {
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) return;
-    if (!fn_ExternalFactory_FindNext || !fn_IsDerivedFrom) return;
+    if (!fn_IsDerivedFrom) return;
 
     void* factory = *g_pExternalFactorySingleton;
     void* gameWorld = *g_pGameWorldSingleton;
@@ -4380,7 +4384,10 @@ inline void Game_TriggerDisasterByType_Impl(int disasterType) {
     void* entityList = *(void**)((uintptr_t)gameWorld + 0xf0);
 
     // Iterate all ComponentDescription-type externals
-    void* ext = fn_ExternalFactory_FindNext(factory, *g_TypeId_ComponentDescription_FC, nullptr);
+    const ::Object::ExternalFactory* efactory =
+        reinterpret_cast<const ::Object::ExternalFactory*>(factory);   // B.3.3 bridge
+    void* ext = const_cast<void*>(static_cast<const void*>(
+        efactory->FindNext(*g_TypeId_ComponentDescription_FC, nullptr)));
     while (ext != nullptr) {
         uintptr_t e = (uintptr_t)ext;
         if (fn_IsDerivedFrom(ext, *g_TypeId_ComponentDescription_FC)) {
@@ -4422,7 +4429,9 @@ inline void Game_TriggerDisasterByType_Impl(int disasterType) {
                 }
             }
         }
-        ext = fn_ExternalFactory_FindNext(factory, *g_TypeId_ComponentDescription_FC, ext);
+        ext = const_cast<void*>(static_cast<const void*>(
+            efactory->FindNext(*g_TypeId_ComponentDescription_FC,
+                               reinterpret_cast<const ::Object::External*>(ext))));
     }
 }
 
@@ -4597,9 +4606,10 @@ inline void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag
 
                 phase2_found:
                     {
-                        // Wrap found storage component in an InternalBasePtr via fn_InternalBasePtr_Ctor
+                        // Wrap found storage component in an InternalBasePtr
                         int64_t storageIBP = 0;
-                        fn_InternalBasePtr_Ctor(&storageIBP, storageComp);
+                        new (&storageIBP) ::Object::InternalBasePtr(
+                            reinterpret_cast<RtObject::Internal*>(storageComp));   // B.3.3 bridge
 
                         // Try to add one item via round-robin
                         if (spawned < count) {
@@ -4714,7 +4724,8 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
         }
 
         uint64_t ctrlRef = 0;
-        fn_InternalBasePtr_Ctor(&ctrlRef, panelController);
+        new (&ctrlRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(panelController));   // B.3.3 bridge
 
         if (ctrlRef != 0) {
             uintptr_t ctrl = (uintptr_t)ctrlRef;
@@ -4847,7 +4858,8 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
     }
 
     uint64_t editToolRef = 0;
-    fn_InternalBasePtr_Ctor(&editToolRef, editTool);
+    new (&editToolRef) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(editTool));   // B.3.3 bridge
 
     if (editToolRef == 0 && g_TypeId_EditTool) {
         // Switch to EditTool mode
@@ -4862,7 +4874,8 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
             }
         }
         editToolRef = 0;
-        fn_InternalBasePtr_Ctor(&editToolRef, editTool);
+        new (&editToolRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(editTool));   // B.3.3 bridge
     }
 
     // Select the entity in the EditTool
@@ -5698,17 +5711,11 @@ typedef void (*fn_Serializer_Serialize_Uint_t)(void* self, uint32_t* field, cons
 extern fn_Serializer_Serialize_Uint_t fn_Serializer_Serialize_Uint;
 
 // Object::ExternalFactory::IsReferenceModeEnabled — dispatch slot 0x140151218.
-typedef bool (*fn_ExternalFactory_IsReferenceModeEnabled_t)(void* self);
-extern fn_ExternalFactory_IsReferenceModeEnabled_t fn_ExternalFactory_IsReferenceModeEnabled;
 
 // Object::ExternalFactory::GetReferenceId — dispatch slot 0x140151220.
-typedef uint32_t (*fn_ExternalFactory_GetReferenceId_t)(void* self, void* external);
-extern fn_ExternalFactory_GetReferenceId_t fn_ExternalFactory_GetReferenceId;
 
 // Object::ExternalFactory::GetPathForReferenceId — dispatch slot 0x140151228.
 // Member function returning Filename: hidden retval ABI -> RCX=this, RDX=retbuf, R8=refId.
-typedef void* (*fn_ExternalFactory_GetPathForReferenceId_t)(void* self, void* retFilename, uint32_t refId);
-extern fn_ExternalFactory_GetPathForReferenceId_t fn_ExternalFactory_GetPathForReferenceId;
 
 // ============================================================
 // MenuScene serialize helper — typeInfo storage (standalone-only)
@@ -5733,8 +5740,6 @@ extern uint32_t*  g_pTypeId_Weather;           // direct dword 0x1401c6198
 // Graphics::MaterialInstance::Setup on the result, validating against the
 // same slot — so 0x140151350 is the BaseTypeInfo* pointer slot for
 // Graphics::MaterialInstance.
-typedef void (*fn_ExternalPtr_Serialize_Typed_t)(void* refField, void* serializer);
-extern fn_ExternalPtr_Serialize_Typed_t fn_ExternalPtr_Serialize_Typed_7140;  // 0x140007140
 extern uint32_t** g_ppTypeInfo_MaterialInstance;  // .rdata slot 0x140151350
 
 // ============================================================

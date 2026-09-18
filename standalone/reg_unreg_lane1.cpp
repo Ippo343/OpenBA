@@ -134,9 +134,14 @@ extern "C" void RegisterUnregLane1Batch() {
     //   Object::ExternalFactory::GetReferenceId
     //   Object::ExternalFactory::GetPathForReferenceId
     // ------------------------------------------------------------------
-    // Consumer: engine/funcs/engine_funcs.cpp:5017-5056, the reference-mode
-    // block used by code/Game/Action/action_base_move.cpp's
-    // ExternalPtr::Serialize. Each of the four is dispatch-or-fallback:
+    // Consumer WAS engine/funcs/engine_funcs.cpp's reference-mode block, used by
+    // code/Game/Action/action_base_move.cpp's ExternalPtr::Serialize. ENDGAME
+    // B.3.3 step 7 turned the last three into member calls on
+    // ::Object::ExternalFactory and deleted the three `fn_ExternalFactory_*`
+    // pointers, so 0x140151218/0x140151220/0x140151228 now have no exe-side
+    // reader; the three rows STAY because they are the exe's own PE import
+    // slots (dispatch_slot_map --check counts them) and the Runtime ports
+    // behind them are unchanged. Each of the four was dispatch-or-fallback:
     //     slot && *slot ? *slot : ResolveExport(<same mangled name>)
     // so they already reach the correct Runtime function today. Registering
     // changes NOTHING functionally — it just makes the primary path the live

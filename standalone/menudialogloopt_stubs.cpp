@@ -80,10 +80,6 @@ static void EnsureCursorsLoaded() {
         printf("[CursorLoad] WARN: ExternalFactory singleton not populated, skipping\n");
         return;
     }
-    if (!fn_ExternalFactory_FindOrLoad) {
-        printf("[CursorLoad] WARN: required engine fns not resolved\n");
-        return;
-    }
 
     void* keyMap = *g_pKeyMapSingleton;
     void* factory = *g_pExternalFactorySingleton;
@@ -137,10 +133,6 @@ static void EnsureUISoundsLoaded() {
         printf("[UISoundLoad] WARN: ExternalFactory singleton not populated, skipping\n");
         return;
     }
-    if (!fn_ExternalFactory_FindOrLoad) {
-        printf("[UISoundLoad] WARN: required engine fns not resolved\n");
-        return;
-    }
 
     void* keyMap = *g_pKeyMapSingleton;
     void* factory = *g_pExternalFactorySingleton;
@@ -192,7 +184,7 @@ static void EnsureUISoundsLoaded() {
 extern "C" void StandaloneEnsureSpriteSheetLoaded() {
     if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) return;
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) return;
-    if (!fn_ExternalFactory_FindOrLoad || !fn_Sprite_Ctor) {
+    if (!fn_Sprite_Ctor) {
         printf("[SpriteSheetLoad] WARN: missing engine fns, skipping\n");
         return;
     }

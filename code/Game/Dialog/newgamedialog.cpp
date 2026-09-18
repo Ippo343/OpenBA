@@ -49,7 +49,7 @@ static void* FindElement(void* dialog, const char* name) {
 // Object::Factory::GetTypeIdFromName into a static, then point the global at it.
 static uint32_t* LazyTypeId(uint32_t* current, const char* typeName, uint32_t* storage) {
     if (current) return current;
-    if (!fn_Factory_GetTypeIdFromName || !g_pFactorySingleton || !*g_pFactorySingleton)
+    if (!g_pFactorySingleton || !*g_pFactorySingleton)
         return nullptr;
     if (*storage == 0) {
         void* factoryObj = *(void**)*g_pFactorySingleton;
@@ -168,8 +168,7 @@ static void GenerateTownName(System::String& retStr, void* random, int maxLen) {
     // walk NULL-faults, while FindOrLoad by exact filename is authoritative
     // (same call shape as citizen_names.cpp's Male.ndb/Female.ndb load).
     void* nameDB = nullptr;
-    if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton &&
-        fn_ExternalFactory_FindOrLoad) {
+    if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
         System::Filename fn("Game/Names/Cities.ndb");
         nameDB = const_cast<::Object::External*>(
             reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge

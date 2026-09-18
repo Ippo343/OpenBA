@@ -75,7 +75,7 @@ static void* LoadDialogResource(const char* rscPath) {
                 ResolveAddr(Module::Exe, 0x140151728));
         }
         uint32_t typeId = (g_dialogTypeIdSlot ? *g_dialogTypeIdSlot : 0);
-        if (typeId == 0 && fn_Factory_GetTypeIdFromName &&
+        if (typeId == 0 &&
             g_pFactorySingleton && *g_pFactorySingleton) {
             // Standalone: slot wasn't filled by an exe loader, so look up
             // UI::Dialog via the Runtime factory. g_pFactorySingleton is a
@@ -451,7 +451,7 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
         printf("[BuildId] selfDialog or UI null, skipping\n");
         return false;
     }
-    if (!fn_ExternalFactory_FindOrLoad || !fn_IsDerivedFrom ||
+    if (!fn_IsDerivedFrom ||
         !fn_MemAlloc || !fn_InternalBasePtr_Ctor ||
         !fn_DialogInstance_Ctor || !fn_UI_AddDialog ||
         !fn_DialogInstance_FindElement ||

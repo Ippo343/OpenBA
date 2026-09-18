@@ -541,7 +541,7 @@ static void* wg_BlendTexture_cf440(int32_t* hf) {
 static void* wg_ResolveMaterial_fd10(void* triple) {
     if (!triple || !g_pExternalFactorySingleton) return nullptr;
     void* factory = *g_pExternalFactorySingleton;
-    if (!factory || !fn_ExternalFactory_Find) return nullptr;
+    if (!factory) return nullptr;
 
     // String is at +0 of the triple.
     System::Filename fnbuf(*reinterpret_cast<const System::String*>(triple));

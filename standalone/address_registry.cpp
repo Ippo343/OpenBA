@@ -1545,7 +1545,7 @@ static void RegisterDispatchSlots() {
 
     // Object::Factory::_singleton — same pattern.
     // engine_funcs.cpp Phase H reads slot 0x140152760, expecting **slot to
-    // be the live Factory*. Without this, fn_Factory_GetTypeIdFromName +
+    // be the live Factory*. Without this, Object::Factory::GetTypeIdFromName +
     // singleton are unusable, blocking the type-ID fallback in
     // LoadDialogResource (and many other Factory consumers).
     RegisterDispatchSlot(0x140152760,
@@ -1563,7 +1563,7 @@ static void RegisterDispatchSlots() {
     // this slot, and the .rsc loads as a UI::Dialog External.
     //
     // Type ID isn't known until Factory::Startup runs; LoadDialogResource has
-    // a fallback path that uses fn_Factory_GetTypeIdFromName instead, so we
+    // a fallback path that uses Object::Factory::GetTypeIdFromName instead, so we
     // leave this slot zero-filled until something else needs it.
     RegisterDispatchSlot(0x140151728, 0);
 

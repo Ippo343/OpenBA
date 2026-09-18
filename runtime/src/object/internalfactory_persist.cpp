@@ -125,7 +125,6 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/object/Internal.h"
-#include "../../types/object/internal_class.h"
 #include "../../types/object/TypeInfo.h"
 
 namespace RtObject {

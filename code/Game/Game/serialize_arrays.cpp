@@ -479,9 +479,8 @@ void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
     if (!serializer || count <= 0 || !arrayBase) return;
 
     // Required Runtime primitives. If any are missing, log once and bail.
-    if (!fn_Serializer_GetEncoding || !fn_ExternalFactory_FindOrLoad ||
-        !fn_IsDerivedFrom || !fn_ExternalFactory_IsReferenceModeEnabled ||
-        !fn_External_GetPath || !fn_Serializer_Serialize_Uint || !g_fn_Serialize_Bool ||
+    if (!fn_Serializer_GetEncoding ||
+        !fn_IsDerivedFrom || !fn_Serializer_Serialize_Uint || !g_fn_Serialize_Bool ||
         !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
         static bool s_warned = false;
         if (!s_warned) {

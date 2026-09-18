@@ -264,8 +264,7 @@ void EnsureBaseSlots() {
 // Local copy of MainMenuDialog's Dialog/*.rsc loader (that one is file-static).
 // ---------------------------------------------------------------------------
 void* ModDlg_LoadDialogResource(const char* rscPath) {
-    if (!fn_ExternalFactory_FindOrLoad ||
-        !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
         printf("[ModDialog] LoadDialogResource('%s'): loader fns unresolved\n", rscPath);
         return nullptr;
     }
@@ -277,7 +276,7 @@ void* ModDlg_LoadDialogResource(const char* rscPath) {
     if (resource) {
         uint32_t* slot = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x140151728));
         uint32_t typeId = slot ? *slot : 0;
-        if (typeId == 0 && fn_Factory_GetTypeIdFromName &&
+        if (typeId == 0 &&
             g_pFactorySingleton && *g_pFactorySingleton) {
             void* factoryObj = *reinterpret_cast<void**>(*g_pFactorySingleton);
             if (factoryObj) {

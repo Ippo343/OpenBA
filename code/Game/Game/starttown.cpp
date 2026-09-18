@@ -525,8 +525,7 @@ static void* StartTown_ResolveTemplate(uint8_t* entry) {
     ResolveExternalByName_Impl(entry);                       // try the cheap cached path first
     void* tmpl = *(void**)(entry + EXTREF_TEMPLATE);
     if (tmpl) return tmpl;
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton ||
-        !fn_ExternalFactory_FindOrLoad)
+    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton)
         return nullptr;
     void* factory = *g_pExternalFactorySingleton;
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
@@ -3606,8 +3605,7 @@ extern "C" void StartTown_DeferredSpawn_Tick(int frameNum) {
 // Resolve a template by its full "Template\Name.rsc" path (FindOrLoad-by-cstring),
 // mirroring StartTown_ResolveTemplate but without a pool-entry String.
 static void* ResolveTemplateByPath(const char* path) {
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton ||
-        !fn_ExternalFactory_FindOrLoad)
+    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton)
         return nullptr;
     void* factory = *g_pExternalFactorySingleton;
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.

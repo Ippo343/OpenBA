@@ -2203,7 +2203,7 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
         uint32_t typeInfo = g_pDialogTypeId ? *g_pDialogTypeId : 0; // [GUARD-M5] slot 0x1401c4138 unregistered
         if (self->m_resourceList && fn_ExternalList_Find)
             fn_ExternalList_Find(self->m_resourceList, &foundBase, &filename, &typeInfo);
-        if (foundBase == nullptr && fn_ExternalFactory_FindOrLoad &&
+        if (foundBase == nullptr &&
             g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
             foundBase = const_cast<::Object::External*>(
@@ -2266,7 +2266,7 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
         uint32_t typeInfo = g_pDialogTypeId ? *g_pDialogTypeId : 0;
         if (self->m_resourceList && fn_ExternalList_Find)
             fn_ExternalList_Find(self->m_resourceList, &foundBase, &filename, &typeInfo);
-        if (foundBase == nullptr && fn_ExternalFactory_FindOrLoad &&
+        if (foundBase == nullptr &&
             g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
             foundBase = const_cast<::Object::External*>(
@@ -2319,7 +2319,7 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
         uint32_t typeInfo = g_pDialogTypeId ? *g_pDialogTypeId : 0;
         if (self->m_resourceList && fn_ExternalList_Find)
             fn_ExternalList_Find(self->m_resourceList, &foundBase, &filename, &typeInfo);
-        if (foundBase == nullptr && fn_ExternalFactory_FindOrLoad &&
+        if (foundBase == nullptr &&
             g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
             foundBase = const_cast<::Object::External*>(

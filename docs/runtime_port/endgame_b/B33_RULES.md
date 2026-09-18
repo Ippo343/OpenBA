@@ -588,9 +588,42 @@ merge cleanly.
    `runtime/src/object/internal.cpp`,
    `runtime/src/object/internal_ptr_array_serialize.cpp`.
 
-7. **One closing agent.** Pointers, shims and rows at zero callers by NAME and by ADDRESS,
-   `.inc` files regenerated with their tools, STATUS and the B.4 cast table. The list steps
-   3-5 produced, each with its condition:
+7. ~~**One closing agent.**~~ — DONE. Pointers, shims and rows at zero callers by NAME and by
+   ADDRESS, `.inc` files checked against their generators, STATUS and the B.4 cast table.
+   What the pass actually did, against the list steps 3-5 produced:
+   - **DONE** — 12 zero-caller `fn_*` pointers deleted with their typedefs, externs,
+     definitions, initialisers and `_DEBUG` value prints (the ten `fn_External*` /
+     `fn_ExternalFactory_*` / `fn_Factory_*` ones freed by converting the last ten
+     engine/funcs call sites, plus the two already at zero). 117 guard conjuncts + 9 hand
+     edits. `fn_ExternalList_GetResourceCount` STAYS (two real calls in fprintf argument
+     lists); `fn_InternalBasePtr_Ctor` / `_DeletePtr` STAY (ten files cache them in
+     file-static pointers behind an IAT-slot preference and call through the cache — a
+     caller batch, not a sweep).
+   - **DONE** — `ThreadBaseVtable()`; `rtavl::TypeSetInsert` + its 0x180030140 registration
+     and declaration; `internal_class.h` merged back into `Internal.h` with External.h's
+     inert second `#include "TypeInfo.h"`; §6.3's wrong reason deleted where it was written
+     (runtime/types/object/Internal.h's `DeletePtr` comment).
+   - **DONE, with a correction** — `Factory::Shutdown` (0x1800c0600) ported. It is NOT the
+     tree walk this section describes: that is `??1Factory@Object@@`
+     (0x1800071a0 -> 0x180008110), ported since Wave 11. `Shutdown` FreeLibrary's the
+     compiler-plugin HMODULE at the unexported 0x1801fc6d0 and never touches `root`,
+     `count` or `_singleton` — so it is **not** a prerequisite for moving
+     `?_singleton@Factory@Object@@`, and that cell stays on the mint.
+   - **NOT DONE, deliberately** — the `tools/rt_mint_gen.py` re-run. `--check` says the
+     committed `.inc` is UP TO DATE (152 vtables, 104 BaseTypeInfo, 48 storage) and nothing
+     was regenerated. Dropping the `?_firstTypeInfo@` row would remove a LIVE door, not
+     inert bytes: `standalone/main.cpp` reads 0x1801fc6e0 by ADDRESS twice (the boot probe
+     and the factory self-test, i.e. the `[GameMain] Post-Startup _firstTypeInfo` line the
+     gate reads) and `cutover_manifest.inc:57` carries the name as `CUTOVER_REQUIRED`. Only
+     the row's 8 bytes in `kStorageBytes` are inert; `MintStorageCell()` is what makes the
+     name door, the address door and the class one cell, so it stays too. Redirecting the
+     five `?_typeInfo@` rows stays blocked for the reason External.h's closing banner
+     already states, now re-measured: ~20 live by-name `RT_DATA_SLOT` readers, two
+     `CUTOVER_REQUIRED` rows (`CompiledExternal` 0x1801f9b00, `Internal` 0x1801f9c18), two
+     by-address readers, `reg_mint_promoted.cpp`'s promotion rows, and no way to show the
+     post-Startup type ids are unchanged without a boot the closing agent cannot run.
+
+   The original list, kept for the record:
    - **`tools/rt_mint_gen.py` re-run**, to (a) drop the `?_firstTypeInfo@BaseTypeInfo@Object@@`
      STORAGE row, whose 8 bytes have been inert since step 3 redirected it to
      `Object::BaseTypeInfo::_firstTypeInfo` (`rt_data_mint.cpp`'s `MintStorageCell`), and

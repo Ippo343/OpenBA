@@ -178,8 +178,7 @@ void Dialog_AutoSaveHandler(void* self, void* /*p2*/, int /*p3*/, int /*p4*/) {
 // newgamedialog.cpp's original note). Idempotent: each slot is loaded at most once.
 void GameContainer_EnsureLists() {
     if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) return;
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton ||
-        !fn_ExternalFactory_FindOrLoad) return;
+    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) return;
 
     char* container = reinterpret_cast<char*>(*g_pKeyMapSingleton);
 

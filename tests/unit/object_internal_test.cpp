@@ -38,7 +38,7 @@
 #include <cstdint>
 #include <type_traits>
 
-#include "../../runtime/types/object/internal_class.h"
+#include "../../runtime/types/object/Internal.h"
 
 // The two unit-only seams runtime/src/object/internal_class.cpp defines under
 // -DBANISHED_UNIT_TEST. They do not exist in the standalone build.

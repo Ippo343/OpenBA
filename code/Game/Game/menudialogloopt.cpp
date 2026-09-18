@@ -656,8 +656,7 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
     }
 
     // Required factory
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton ||
-        !fn_ExternalFactory_FindOrLoad || !fn_Random_Rand || !fn_IsDerivedFrom) {
+    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton || !fn_Random_Rand || !fn_IsDerivedFrom) {
         printf("[MenuDLT::LoadScene] missing factory/filename helpers — bailing out\n");
         return false;
     }
@@ -1131,8 +1130,7 @@ void MenuDialogLoopT_TickAudio(void* time) {
 // StartMusic (the original splits Load from the Startup-time PlayEffect).
 bool MenuDialogLoopT_LoadMusic(void* self) {
     if (!self) return false;
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton ||
-        !fn_ExternalFactory_FindOrLoad) {
+    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
         printf("[MenuDLT::LoadMusic] missing factory/filename helpers — skipping\n");
         return false;
     }

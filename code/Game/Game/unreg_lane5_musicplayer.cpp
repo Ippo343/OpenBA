@@ -151,10 +151,8 @@ void EnsureTrackList(uint8_t* mp) {
     if (attempted) return;              // one shot — never re-hit the loader
     attempted = true;
 
-    if (!fn_ExternalFactory_FindOrLoad || !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
-        fprintf(stderr, "[MusicPlayer] SKIP — loader unavailable "
-                        "(FindOrLoad=%p factory=%p)\n",
-                (void*)fn_ExternalFactory_FindOrLoad,
+    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+        fprintf(stderr, "[MusicPlayer] SKIP — factory unavailable (factory=%p)\n",
                 g_pExternalFactorySingleton ? *g_pExternalFactorySingleton : nullptr);
         fflush(stderr);
         return;

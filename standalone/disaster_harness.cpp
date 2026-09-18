@@ -415,12 +415,11 @@ void ForceTornado(int frameNum, int want) {
     // Preconditions, named individually — "nothing appeared" has three distinct causes
     // and they must not look alike in the log.
     void* entityList = *reinterpret_cast<void**>(gw + 0xe8);
-    DLOG("Tornado", "frame %d: preconditions — FindOrLoad=%p CreateEntity=%p "
+    DLOG("Tornado", "frame %d: preconditions — CreateEntity=%p "
          "RegisterEntity=%p entityList=%p\n", frameNum,
-         reinterpret_cast<void*>(fn_ExternalFactory_FindOrLoad),
          reinterpret_cast<void*>(fn_EntityFactory_CreateEntity),
          reinterpret_cast<void*>(fn_EntityList_RegisterEntity), entityList);
-    if (!fn_ExternalFactory_FindOrLoad || !fn_EntityFactory_CreateEntity ||
+    if (!fn_EntityFactory_CreateEntity ||
         !fn_EntityList_RegisterEntity || !entityList) {
         DLOG("Tornado", "spawn leaf unresolved — port not landed. Nothing spawned.\n");
         return;

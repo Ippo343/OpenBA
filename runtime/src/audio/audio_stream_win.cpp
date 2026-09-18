@@ -297,15 +297,6 @@ const void* StreamVtable() {
     return v;
 }
 
-// `??_7Thread@System@@6B@` @ 0x180155f20 — the BASE vtable `??0Thread@System@@`
-// stamps and `??1Thread@System@@` re-stamps. Read ONLY by the ctor self-check,
-// to prove our stamp landed AFTER the base ctor's. Never written by this file.
-const void* ThreadBaseVtable() {
-    static const void* v = nullptr;
-    if (!v) v = reinterpret_cast<const void*>(ResolveAddr(Module::Runtime, 0x180155f20));
-    return v;
-}
-
 // `??0Thread@System@@QEAA@I@Z` @ 0x1800ca4e0 — PORTED and registered
 // (runtime/src/system/thread_win.cpp:457). Reached BY NAME, which is what makes
 // this call site follow the port.
@@ -386,9 +377,14 @@ extern "C" void* RtAudio_Stream_Ctor(void* self) {
     // can only disagree if the stamp landed in the wrong ORDER — and that is a
     // real and specific defect mode here, because `??0Thread@System@@` stamps
     // `??_7Thread@System@@6B@` (0x180155f20) and our stamp must come AFTER it.
-    // The explicit `!= ThreadBaseVtable()` term is what makes that failure
-    // detectable rather than merely improbable; without it the comparison is
-    // close to a tautology.
+    //
+    // ENDGAME B.3.3 step 7: the `!= ThreadBaseVtable()` term this paragraph
+    // describes is NOT in the check any more and has not been for some time —
+    // the helper it called had no caller left, only this comment, so it is
+    // deleted here (B33_RULES §5, §9 step 7). The ordering defect the term
+    // would have caught is still the one to look for if this self-check ever
+    // fires; 0x180155f20 itself stays, reached by persistence_worker_win.cpp
+    // and by the mint/export tables.
 
     return self;                                         // 0x1800a0ebc
 }

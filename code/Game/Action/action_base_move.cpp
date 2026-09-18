@@ -104,14 +104,14 @@ void* ActMv_FindComponentFamily_12d0(uintptr_t entity, void* retIBP) {
 //
 // Dispatch-slot map (verified in disassembly):
 //   0x1401529f8 Serializer::GetEncoding      -> fn_Serializer_GetEncoding
-//   0x1401529f0 External::GetPath(retbuf)    -> fn_External_GetPath
+//   0x1401529f0 External::GetPath(retbuf)    -> ::Object::External::GetPath (B.3.3)
 //   0x1401529d8 ExternalFactory _singleton   -> g_pExternalFactorySingleton
-//   0x140151230 ExternalFactory::FindOrLoad  -> fn_ExternalFactory_FindOrLoad
+//   0x140151230 ExternalFactory::FindOrLoad  -> ::Object::ExternalFactory::FindOrLoad (B.3.3)
 //   0x140152a98 IsDerivedFrom                -> fn_IsDerivedFrom
 //   0x140151d40 Filename::Filename()         -> System::Filename ctor (B.3.1)
-//   0x140151218 IsReferenceModeEnabled       -> fn_ExternalFactory_IsReferenceModeEnabled
-//   0x140151220 GetReferenceId               -> fn_ExternalFactory_GetReferenceId
-//   0x140151228 GetPathForReferenceId        -> fn_ExternalFactory_GetPathForReferenceId
+//   0x140151218 IsReferenceModeEnabled       -> ::Object::ExternalFactory member (B.3.3)
+//   0x140151220 GetReferenceId               -> ::Object::ExternalFactory member (B.3.3)
+//   0x140151228 GetPathForReferenceId        -> ::Object::ExternalFactory member (B.3.3)
 //   0x1401529e0 Filename::operator=          -> System::Filename::operator= (B.3.1)
 //   0x1401529e8 Filename::~Filename          -> System::Filename dtor, RAII (B.3.1)
 //   0x140152a50 Serializer::Serialize(uint*) -> local resolve
@@ -151,9 +151,8 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
         // Read-only text path: drop the External; re-resolve by its current path.
         if (*pSlot == 0) return;
         System::Filename fnStorage;  // Filename retbuf (local_res18 in the original)
-        if (fn_External_GetPath)
-            fnStorage = reinterpret_cast<const ::Object::External*>(*pSlot)->GetPath();  // B.3.3 bridge
-        if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton && fn_ExternalFactory_FindOrLoad) {
+        fnStorage = reinterpret_cast<const ::Object::External*>(*pSlot)->GetPath();  // B.3.3 bridge
+        if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
             ::Object::ExternalFactory* efactory =
                 reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton);  // B.3.3 bridge
             void* found = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fnStorage)));
@@ -169,7 +168,7 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
                         ? *g_pExternalFactorySingleton : nullptr;
     ::Object::ExternalFactory* efactory =
         reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
-    bool refMode = (factory && fn_ExternalFactory_IsReferenceModeEnabled)
+    bool refMode = (factory)
                        ? efactory->IsReferenceModeEnabled() : false;
 
     uint32_t refId = 0xffffffff;
@@ -178,7 +177,7 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
     if (refMode) {
         if (*pSlot == 0) {
             refId = 0xffffffff;
-        } else if (factory && fn_ExternalFactory_GetReferenceId) {
+        } else if (factory) {
             refId = efactory->GetReferenceId(
                 reinterpret_cast<const ::Object::External*>(*pSlot));  // B.3.3 bridge
         }
@@ -192,7 +191,7 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
             if (s_fn_SerUInt_a50) s_fn_SerUInt_a50(serializer, &refId, nullptr);
             if ((int)refId != -1) {
                 streamFlag = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(serializer) + 8);
-                if (streamFlag == 0 && factory && fn_ExternalFactory_GetPathForReferenceId) {
+                if (streamFlag == 0 && factory) {
                     System::Filename pathBuf = efactory->GetPathForReferenceId(refId);
                     fnLocal = pathBuf;
                 }   // ~Filename releases pathBuf
@@ -204,7 +203,7 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
         uint8_t present = (*pSlot != 0) ? 1 : 0;
         if (s_fn_SerBool_a58) s_fn_SerBool_a58(serializer, &present, nullptr);
         if (present != 0) {
-            if (*pSlot != 0 && fn_External_GetPath) {
+            if (*pSlot != 0) {
                 System::Filename pathBuf =
                     reinterpret_cast<const ::Object::External*>(*pSlot)->GetPath();  // B.3.3 bridge
                 fnLocal = pathBuf;
@@ -220,7 +219,7 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
         int streamFlag = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(serializer) + 8);
         if (streamFlag == 0) {
             void* found = nullptr;
-            if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton && fn_ExternalFactory_FindOrLoad)
+            if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton)
                 found = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fnLocal)));
             uintptr_t result = 0;
             if (found && fn_IsDerivedFrom && fn_IsDerivedFrom(found, typeId))

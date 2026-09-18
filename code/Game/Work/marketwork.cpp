@@ -840,7 +840,7 @@ static uint8_t* MW_TreeFind(uint8_t* root, uintptr_t key) {
 static void MW_ReportTreeMiss(const char* site, int entityIdx, uintptr_t entityIBP,
                               uintptr_t resType, void* rawMat, uintptr_t town) {
     char path[160] = "?";
-    if (fn_External_GetPath && resType) {
+    if (resType) {
         // the hidden return slot GetPath constructs into
         System::Filename fnPath =
             reinterpret_cast<const ::Object::External*>(resType)->GetPath();  // B.3.3 bridge

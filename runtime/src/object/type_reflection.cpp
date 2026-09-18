@@ -336,14 +336,15 @@ uint32_t Factory::GetTypeFromNameCRC(const char* name) const {
 // THE INSERT IS NOW `Collection::Set<TypeEntry,…>::Insert`, not the by-address
 // call to 0x180030140 this body used to make. It is the SAME CODE: `Set::Insert`
 // runs `detail::InsertCorePattern<Policy>` and `AvlOps<Node, 0x30>::Retrace`,
-// which is `PortedRetrace48` — the very bodies `rtavl::TypeSetInsert`
-// (runtime/src/collection/avl_trees.cpp:708) calls. What is gone is the wrapper
-// that built the 0x30-byte Pair on the stack, copy-assigned its `Array` through
-// 0x180009350 and destroyed it through 0x1800093e0; with `children` `{nullptr,
-// 0, 0}` on every insert Startup makes, that copy-assign and that destructor are
-// both no-ops on a zeroed Array, so removing them removes no observable effect.
-// `TypeSetInsert` keeps its registration at 0x180030140 for any caller that
-// still resolves that address; it simply has no caller in this file any more.
+// which is `PortedRetrace48` — the very bodies `rtavl::TypeSetInsert` used to
+// call. What is gone is the wrapper that built the 0x30-byte Pair on the stack,
+// copy-assigned its `Array` through 0x180009350 and destroyed it through
+// 0x1800093e0; with `children` `{nullptr, 0, 0}` on every insert Startup makes,
+// that copy-assign and that destructor are both no-ops on a zeroed Array, so
+// removing them removes no observable effect. `TypeSetInsert` and its
+// 0x180030140 registration are DELETED (B.3.3 step 7): the sweep found no
+// reader of that address by name, by wrapper, in the mint tables or in
+// rt_export_addrs.inc.
 //
 // TWO UNGUARDED DEREFS THAT ARE LOAD-BEARING. Both are kept (CLAUDE.md, "Don't
 // 'fix' a faithful crash with a null check"):

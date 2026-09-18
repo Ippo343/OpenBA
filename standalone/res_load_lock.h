@@ -57,7 +57,7 @@
 //      loaded — but at cutover the detour is gone and the port IS the only
 //      body. If the lock is only in the wrapper, the serialization silently
 //      ceases to exist on exactly the build that has no fallback.
-//   2. Our ~40 `fn_ExternalFactory_FindOrLoad` call sites in `code/Game/` are
+//   2. Our ~40 `ExternalFactory::FindOrLoad` call sites in `code/Game/` are
 //      not the only callers. Ported Runtime bodies (`UpdateLoop::LoadResources`
 //      calls it three times) and the loader thread reach it too. A lock spread
 //      over call sites is a lock with a hole in it the first time somebody adds

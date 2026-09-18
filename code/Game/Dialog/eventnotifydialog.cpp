@@ -63,7 +63,7 @@ static void* EventNotifyDialog_CreatePopup(EventNotifyDialog* self, int eventInd
     // a lookup-or-load; the repeat cost is a hash lookup, and popups are rare.
     void* s_popupRes = nullptr;
     {
-        if (fn_ExternalFactory_FindOrLoad && g_pExternalFactorySingleton &&
+        if (g_pExternalFactorySingleton &&
             *g_pExternalFactorySingleton) {
             System::Filename filename("Dialog/EventPopup.rsc");
             void* found = const_cast<::Object::External*>(
