@@ -77,6 +77,13 @@ struct Internal {
 static_assert(offsetof(Internal, factoryIndex) == 0x08, "Internal::_factoryIndex at +0x08");
 static_assert(offsetof(Internal, generation)   == 0x0c, "Internal::_generation at +0x0c");
 static_assert(sizeof(Internal) == 0x10, "Object::Internal is 16 bytes");
+// ENDGAME B.3.3 step 5. This POD is now an ALIAS for the real class
+// `Object::Internal` below, and it must STAY TRIVIALLY DESTRUCTIBLE: the ported
+// bodies in runtime/src/object/ hold `RtObject::Internal` by pointer and the
+// registered `RtObject_Internal_Dtor` shim is called BY HAND out of a vtable
+// slot. Give the POD a destructor and the compiler runs a second one —
+// B31_RULES' `RtSystem::String` double-free lesson, verbatim. The assertion
+// itself is below, next to <type_traits>.
 
 // ============================================================
 // Object::InternalBasePtr — 8 bytes, one raw pointer. NOT refcounted, NOT
@@ -408,5 +415,12 @@ static_assert(std::is_trivially_copyable<InternalPtr<RtObject::Internal> >::valu
               "the typed wrapper must stay as trivial as its base");
 static_assert(std::is_trivially_destructible<InternalPtr<RtObject::Internal> >::value,
               "the typed wrapper must stay as trivial as its base");
+
+// The POD alias's trivial destructibility, asserted where <type_traits> is in
+// scope. See the note beside `RtObject::Internal` itself.
+static_assert(std::is_trivially_destructible<RtObject::Internal>::value,
+              "RtObject::Internal is an ALIAS POD for Object::Internal and is "
+              "destroyed by hand through a vtable slot; a destructor here is a "
+              "double free (B31_RULES, the RtSystem::String lesson)");
 
 }  // namespace Object
