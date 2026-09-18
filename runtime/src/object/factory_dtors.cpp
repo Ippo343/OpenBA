@@ -264,6 +264,47 @@ void RtObject_Factory_Dtor(void* self) {
 }
 
 // ============================================================================
+// ?Shutdown@Factory@Object@@QEAAXXZ   retail 0x1800c0600
+// ============================================================================
+//
+// THE WHOLE BODY, read off the disassembly (Runtime-x64.dll, image base
+// 0x180000000, 2026-09-18) — eight instructions:
+//
+//     1800c0600  SUB  RSP,0x28
+//     1800c0604  MOV  RCX,qword ptr [0x1801fc6d0]
+//     1800c060b  TEST RCX,RCX
+//     1800c060e  JZ   0x1800c0616
+//     1800c0610  CALL qword ptr [0x18014b118]        ; PTR_FreeLibrary
+//     1800c0616  MOV  qword ptr [0x1801fc6d0],0x0
+//     1800c0621  ADD  RSP,0x28
+//     1800c0625  RET
+//
+// *** IT IS NOT THE TYPE-TREE WALK. *** B33_RULES §9 step 7 describes
+// `Factory::Shutdown` as "0x1800071a0 -> 0x180008110 walks the whole TypeNode
+// tree"; that is `??1Factory@Object@@`, ported above as `RtObject_Factory_Dtor`,
+// a different function at a different address. `Shutdown` never reads `root`,
+// `count` or `_singleton` — it releases the COMPILER PLUGIN module, the same
+// unexported HMODULE at 0x1801fc6d0 that `?UnloadCompilers@Factory@Object@@`
+// (0x1800bfad4/0x1800bfae6) reads and writes, and that `Engine::Shutdown`
+// (0x1800db62d) releases with the identical three-step sequence. So porting it
+// is NOT a prerequisite for moving `?_singleton@Factory@Object@@` off the mint:
+// that cell is untouched here. Recorded rather than quietly worked around.
+//
+// `this` IS IGNORED by the body (RCX is overwritten at 0x1800c0604 before any
+// read), which is why the shim takes a void* it never uses.
+//
+// THE ONE STANDALONE DIFFERENCE, stated the way engine_lifecycle.cpp:813-821
+// states the identical one on the identical global: 0x1801fc6d0 is UNEXPORTED
+// and, with no DLL mapped, our side has no such variable unless the mint's
+// address-only row for it is registered. `ResolveAddr` then hands back 0 and the
+// step is skipped. That is a real environment difference, not a guard over a
+// faithful fault — retail always has its own .data here and we may have nothing
+// at all — and it is spelled exactly as its sibling spells it.
+// ============================================================================
+// The body and the member definition are at GLOBAL scope, below this file's
+// `namespace RtObjFactoryDtor` block — see `RtObject_Factory_Shutdown` there.
+
+// ============================================================================
 // ??1InternalFactory@Object@@QEAA@XZ   retail 0x18002f860
 // ============================================================================
 //
@@ -476,6 +517,26 @@ void RtObject_ExternalFactory_Dtor(void* self) {
 }  // namespace RtObjFactoryDtor
 
 // ============================================================================
+// ?Shutdown@Factory@Object@@QEAAXXZ — the body, at GLOBAL scope
+// ============================================================================
+// See the banner beside ~Factory above for the disassembly and for why this is
+// NOT the type-tree walk. `runtime/src/engine/engine_lifecycle_win.cpp` owns the
+// platform seam; this is the same one Engine::Shutdown's identical step uses.
+void RtEngineLifecyclePlatformFreeLibrary(void* module);
+
+extern "C" void RtObject_Factory_Shutdown(void* /*self — RCX is overwritten*/) {
+    if (uintptr_t g = ResolveAddr(Module::Runtime, 0x1801fc6d0)) {
+        void** slot = reinterpret_cast<void**>(g);
+        if (*slot) RtEngineLifecyclePlatformFreeLibrary(*slot);
+        *slot = nullptr;
+    }
+}
+
+namespace Object {
+void Factory::Shutdown() { RtObject_Factory_Shutdown(this); }
+}  // namespace Object
+
+// ============================================================================
 // Registration
 // ============================================================================
 //
@@ -504,6 +565,11 @@ int RtObjectFactoryDtorsRegister() {
                           (void*)&RtObject_Factory_Dtor); ++n;
     RegisterRuntimeAddr(0x1800071a0, (void*)&RtObject_Factory_Dtor);  // EH thunk
     RegisterRuntimeAddr(0x180008110, (void*)&RtObject_Factory_Dtor);  // real body
+
+    // ENDGAME B.3.3 step 7 — ?Shutdown@Factory@Object@@QEAAXXZ, 0x1800c0600.
+    RegisterRuntimeExport("?Shutdown@Factory@Object@@QEAAXXZ",
+                          (void*)&RtObject_Factory_Shutdown); ++n;
+    RegisterRuntimeAddr(0x1800c0600, (void*)&RtObject_Factory_Shutdown);
 
     RegisterRuntimeExport("??1InternalFactory@Object@@QEAA@XZ",
                           (void*)&RtObject_InternalFactory_Dtor); ++n;
