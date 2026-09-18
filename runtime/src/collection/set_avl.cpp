@@ -101,6 +101,7 @@
 #include <cstdint>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/collection/Collection.h"   // rtcoll::DoorFree (the one allocator door)
 #include "set_avl.h"
 
 // Declared locally rather than by including standalone/resolve.h, which drags
@@ -395,11 +396,20 @@ void Erase(Set* set, Node* z) {
 // pointer is passed here because that is what retail's register happens to hold
 // most often; it is not read.
 // ---------------------------------------------------------------------------
+// ENDGAME B.3.2 closing pass: the node goes back through `rtcoll::DoorFree`
+// (runtime/src/collection/alloc_door.cpp) instead of through a cached
+// resolution of 0x180009c30. The two are the same free — 0x180009c30's own
+// registered body (`FreeLockedIgnoringSelf`, runtime/src/system/allocator.cpp)
+// drops the ignored argument and calls 0x1800c7ad0, which is what the door
+// resolves to — but the door is the exe dispatch slot 0x140152b68, so a Set
+// node freed here is visible to `BANISHED_REDZONE`, and the tree's allocs and
+// frees stay on ONE channel. A half-shimmed heap is worse than an unshimmed
+// one (standalone/redzone_alloc.cpp's `ShimAllocStatic` banner: it reports
+// phantom overflows). The ignored first parameter stays in the SIGNATURE: every
+// caller in the tree declares this door with two arguments.
 void SetNodeFree(void* ignored, void* node) {
-    using Fn = void (*)(void*, void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180009c30));
-    if (fn) fn(ignored, node);
+    (void)ignored;
+    rtcoll::DoorFree()(node);   // the null test is inside ?MemFree@, as before
 }
 
 }  // namespace rtsetavl

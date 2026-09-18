@@ -162,11 +162,16 @@ void* MemAlloc(uint64_t bytes, int align) {
     return std::malloc(static_cast<size_t>(bytes));
 }
 #else
+// ENDGAME B.3.2 closing pass: the resolution moved into `rtcoll::DoorAlloc`
+// (alloc_door.cpp), which asks the exe dispatch slot 0x140152b60 first and only
+// falls back to this address. Same allocator, but through the door the rest of
+// the tree uses and the door `BANISHED_REDZONE` rewrites — see that file's
+// banner, and Collection.h's `DoorAlloc` block, for why a container that
+// resolved 0x1800c7a50 itself was invisible to the instrument. The call stays
+// UNGUARDED, exactly as it was: a null here means the allocator never armed,
+// and that is a crash worth having rather than a silent null buffer.
 void* MemAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    return fn(bytes, align);
+    return DoorAlloc()(bytes, align);
 }
 #endif
 
@@ -177,10 +182,7 @@ void* MemAlloc(uint64_t bytes, int align) {
 void MemFree(void* p) { std::free(p); }   // retail's null test lives in free()
 #else
 void MemFree(void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;   // retry a miss — see MemAlloc above
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
-    fn(p);
+    DoorFree()(p);            // dispatch slot 0x140152b68 first — see MemAlloc
 }
 #endif
 

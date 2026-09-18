@@ -206,14 +206,20 @@ static_assert(sizeof(AVLCompare) == 1, "policy struct, never stored");
 //     copy-THEN-destroy-then-free in retail's element order and a move would
 //     change the String/Filename/ExternalPtr refcount sequences the resave gate
 //     observes (hazard 2).
-//   * Copy construction and copy assignment are `= default`, i.e. the SHALLOW
-//     memberwise copy the unconverted tree already relies on when it copies an
-//     overlay struct that embeds an Array. Retail's deep `Array<T>::operator=`
-//     is 0x18001cdf0 / `rtcoll::ArrayAssignCore` (array_destroy.cpp) and stays
-//     reachable under its own address; it becomes this class's `operator=` in
-//     step 2, when the last bitwise copier is gone. They are DEFAULTED rather
-//     than left implicit so that declaring `~Array` does not make every copy a
-//     -Wdeprecated-copy-dtor warning.
+//   * Copy construction is `= default`, i.e. the SHALLOW memberwise copy the
+//     unconverted tree already relies on when it copies an overlay struct that
+//     embeds an Array. It is DEFAULTED rather than left implicit so that
+//     declaring `~Array` does not make every copy a -Wdeprecated-copy-dtor
+//     warning.
+//
+//   * COPY ASSIGNMENT IS RETAIL'S DEEP ONE (closing pass, see `Assign` below).
+//     0x18001cdf0 and its twins are `rtcoll::ArrayAssignCore` (array_destroy.cpp):
+//     self-assign early-out, CLEAR (element destroy, then the buffer free),
+//     `_size = src._size`, the same grow rule and `MemAlloc`, then a
+//     per-element `assign` in retail's element order, and NO free after the
+//     copy because the clear already did it. Copy-THEN-destroy, never a move
+//     (COLLECTION_INVENTORY.md hazard 2: a move would change the
+//     String/Filename/ExternalPtr refcount sequences the resave gate observes).
 //   * The three fields stay PUBLIC. 419 sites across the tree name
 //     `Collection::Array<...>` and read `_data`/`_size`/`_capacity` directly;
 //     they become private with the last of them (B31_RULES step 2).
@@ -314,8 +320,12 @@ public:
     // Retail's ctor is the three zero stores every inlined copy begins with.
     Array() : _data(nullptr), _size(0), _capacity(0) {}
     // Shallow, and deliberately so — see the banner.
-    Array(const Array&)            = default;
-    Array& operator=(const Array&) = default;
+    Array(const Array&) = default;
+
+    // Retail's deep `Array<T>::operator=` — see the banner. `Assign` carries
+    // the body; `operator=` is the spelling every call site already uses.
+    Array& Assign(const Array& src);
+    Array& operator=(const Array& src) { return Assign(src); }
 
     // ~Array — 0x18001c750 and its ten twins for a trivial element; the J2
     // family (array_destroy.cpp) for one with a destroy step. Element destroy
@@ -342,6 +352,14 @@ public:
 
     static const rtcoll::ArraySpec* Spec() { return SpecPolicy::Get(); }
 
+    // The CLEAR half of retail's `operator=`, and the whole of `~Array`: run
+    // the element destroy over the live range, then the J1 buffer free. It is
+    // `ArrayAssignCore`'s fourth argument — array_destroy.cpp passes
+    // `ArrayClearTrivial` (the J1 body alone) for a trivial element and
+    // `ArrayClearMetaEntry20` (destroy-then-J1) for a refcounted one, and this
+    // is both of those, chosen by the spec instead of by the call site.
+    static void ClearCallback(Array<uint8_t>* hdr);
+
     // PUBLIC during the migration — see the banner.
     T*      _data;       // +0x00: element buffer, or null when capacity == 0
     int32_t _size;       // +0x08: live element count
@@ -359,6 +377,32 @@ namespace rtcoll {
 // byte cursor every body wants; sizeof(Array<T>) is T-independent.
 using ArrayHdr = Collection::Array<uint8_t>;
 
+// ---------------------------------------------------------------------------
+// THE ONE ALLOCATOR DOOR (ENDGAME B.3.2 closing pass, runtime/src/collection/
+// alloc_door.cpp — read its banner for the evidence).
+//
+// `MemAlloc`/`MemFree` below, the Set node pair and the LinkedList node pair
+// all ask these two for the function to call, and they answer with whatever the
+// exe `.rdata` dispatch slots 0x140152b60 / 0x140152b68 currently hold — the
+// same door `code/Game`'s allocating bodies use, and the one
+// `standalone/redzone_alloc.cpp` rewrites when `BANISHED_REDZONE` is armed.
+// Resolving `?MemAlloc@`'s RUNTIME address directly, which is what all four
+// seams used to do, reaches the same allocator through a door the instrument
+// cannot see — and a HALF-shimmed heap is worse than an unshimmed one
+// (redzone_alloc.cpp's `ShimAllocStatic` banner: alloc through one channel and
+// free through the other leaves a stale live-block entry and the canary scan
+// then reports a PHANTOM overflow).
+//
+// They hand back a POINTER rather than performing the call so that each seam
+// keeps its own null handling: `MemAlloc` calls unguarded (a faithful crash
+// names an unarmed allocator), the Set and LinkedList seams keep their
+// `fn ? fn(…) : nullptr` shape.
+// ---------------------------------------------------------------------------
+using DoorAllocFn_t = void* (*)(uint64_t bytes, int align);
+using DoorFreeFn_t  = void  (*)(void* p);
+DoorAllocFn_t DoorAlloc();
+DoorFreeFn_t  DoorFree();
+
 void* MemAlloc(uint64_t bytes, int align);
 void  MemFree(void* p);
 
@@ -366,16 +410,41 @@ void* ArrayDtorImpl(ArrayHdr* a);
 void  SetSizeCore(ArrayHdr* a, int newSize, const uint8_t* fill,
                   const ArraySpec* spec);
 
+// retail 0x18001cdf0 and its ten twins — `Array<T>::operator=`, defined in
+// runtime/src/collection/array_destroy.cpp and unchanged by the closing pass.
+// `clear` is the destroy-and-free half; `Collection::Array<T>::ClearCallback`
+// is what the template hands it.
+using ArrayClearFn = void (*)(ArrayHdr*);
+void* ArrayAssignCore(ArrayHdr* a, const ArrayHdr* s, const ArraySpec* spec,
+                      ArrayClearFn clear);
+
 }  // namespace rtcoll
 
 namespace Collection {
 
 template <class T, class Allocator, class SpecPolicy>
-inline Array<T, Allocator, SpecPolicy>::~Array() {
+inline void Array<T, Allocator, SpecPolicy>::ClearCallback(Array<uint8_t>* hdr) {
     const rtcoll::ArraySpec* spec = Spec();
-    if (spec->destroy && _size > 0)
-        spec->destroy(nullptr, reinterpret_cast<uint8_t*>(_data), _size);
-    rtcoll::ArrayDtorImpl(reinterpret_cast<rtcoll::ArrayHdr*>(this));
+    if (spec->destroy && hdr->_size > 0)
+        spec->destroy(nullptr, hdr->_data, hdr->_size);
+    rtcoll::ArrayDtorImpl(hdr);
+}
+
+template <class T, class Allocator, class SpecPolicy>
+inline Array<T, Allocator, SpecPolicy>::~Array() {
+    ClearCallback(reinterpret_cast<rtcoll::ArrayHdr*>(this));
+}
+
+// retail 0x18001cdf0 — the deep assign. Every arm of it is
+// `rtcoll::ArrayAssignCore`; nothing is re-derived here, and the element order
+// and the copy-THEN-destroy shape are that body's.
+template <class T, class Allocator, class SpecPolicy>
+inline Array<T, Allocator, SpecPolicy>&
+Array<T, Allocator, SpecPolicy>::Assign(const Array& src) {
+    rtcoll::ArrayAssignCore(reinterpret_cast<rtcoll::ArrayHdr*>(this),
+                            reinterpret_cast<const rtcoll::ArrayHdr*>(&src),
+                            Spec(), &ClearCallback);
+    return *this;
 }
 
 template <class T, class Allocator, class SpecPolicy>
@@ -1106,6 +1175,20 @@ struct AvlGeneric {
 // generic core IS those bodies (see the banner above).
 // ---------------------------------------------------------------------------
 #if !defined(BANISHED_UNIT_TEST)
+// element 8 / node 0x28 — the `Set<System::Filename>` path set every
+// `IO::Modification::Mod` carries. ENDGAME B.3.2 closing pass; the three bodies
+// are runtime/src/io/modification_refresh.cpp's (its PART 1 banner carries the
+// instruction-level evidence) and the forwarders are defined beside them.
+//
+// Its retrace's first argument is `&set.root`, not the set — that is what
+// `CMP RDX,[RCX]` at 0x180027f50's entry reads. `&set._root == (void*)&set`,
+// since `_root` is at +0x00, so the `void* set` the other widths pass IS that
+// pointer and the two spellings agree byte for byte. The retrace never touches
+// `_count`, exactly like the other three widths.
+void  PortedRetrace8(void* set, void** slot);         // 0x1800274c0
+void* PortedRotateLeft8(void* set, void* n);          // 0x180027e20
+void* PortedRotateRight8(void* set, void* n);         // 0x180027f50
+
 void  PortedRetrace16(void* set, void** slot);        // 0x18000adc0
 void* PortedRotateLeft16(void* set, void* n);         // 0x18000b040
 void* PortedRotateRight16(void* set, void* n);        // 0x18000b170
@@ -1122,6 +1205,22 @@ template <class NodeT, unsigned ElemWidth>
 struct AvlOps : AvlGeneric<NodeT> {};
 
 #if !defined(BANISHED_UNIT_TEST)
+template <class NodeT>
+struct AvlOps<NodeT, 0x8> : AvlGeneric<NodeT> {
+    static void Retrace(void* set, NodeT** slot) {
+        PortedRetrace8(set, reinterpret_cast<void**>(slot));
+    }
+    static NodeT* RotateLeft(void* set, NodeT* n) {
+        return static_cast<NodeT*>(PortedRotateLeft8(set, n));
+    }
+    static NodeT* RotateRight(void* set, NodeT* n) {
+        return static_cast<NodeT*>(PortedRotateRight8(set, n));
+    }
+    // No erase was ever emitted at this width either: `Mod::~Mod` tears the
+    // whole tree down post-order (0x180010470) and nothing ever removes one
+    // key. The generic body — the same algorithm — serves a caller that does.
+};
+
 template <class NodeT>
 struct AvlOps<NodeT, 0x10> : AvlGeneric<NodeT> {
     static void Retrace(void* set, NodeT** slot) {
@@ -1352,6 +1451,46 @@ public:
         return out;
     }
 
+    // ---- InsertInPlace / Emplace (ENDGAME B.3.2 closing pass) ----------
+    //
+    // The same descent, the same retrace, the same duplicate-key rule — but the
+    // element is CONSTRUCTED IN THE NODE from `args` instead of copy-constructed
+    // from a `T` the caller built first. `AllocNode` already placement-news into
+    // the node, so what this removes is the caller's temporary, not a copy
+    // inside the container.
+    //
+    // *** WHEN IT IS OBSERVABLY IDENTICAL TO `Insert`, AND WHEN IT IS NOT. ***
+    // `Insert(tmp)` runs `T(const T&)` once and, at the caller, `~T()` on the
+    // temporary. `Emplace(key, args…)` runs `T(args…)` once and nothing else.
+    // For a trivially-copyable, trivially-destructible `T` those two are the
+    // same bytes and the same (empty) side effects, so the swap is free.
+    // For `System::String` / `System::Filename` / `Object::ExternalPtr<T>`
+    // elements they are NOT the same: the temporary's AddRef and its matching
+    // Release disappear, and COLLECTION_INVENTORY.md hazard 2 records that those
+    // refcount sequences are observable through the resave gate. Retail's four
+    // keyed inserts all build their `Pair` on the stack and let the insert copy
+    // it, so every one of them keeps `Insert` — this is for a caller that has
+    // no temporary to begin with.
+    //
+    // `key` is separate from the arguments because the descent needs the key
+    // BEFORE anything is allocated: it is read on every comparison of the walk
+    // and the node only exists at the end of it.
+    template <class Ctor>
+    Node* InsertInPlace(const Key& key, const Ctor& construct) {
+        EmplaceReq<Ctor> req = { &key, &construct };
+        Node* out = nullptr;
+        detail::InsertCorePattern<EmplacePolicy<Ctor>>(this, &out, &req);
+        return out;
+    }
+
+    template <class... Args>
+    Node* Emplace(const Key& key, Args&&... args) {
+        // Not <utility>'s forward: this header is a types header and the cast
+        // is the whole of what `std::forward` does here.
+        auto ctor = [&](void* raw) { new (raw) T(static_cast<Args&&>(args)...); };
+        return InsertInPlace(key, ctor);
+    }
+
     // ---- Find (retail 0x18002ace0) ------------------------------------
     // Descends left while searchKey < nodeKey and right while nodeKey <
     // searchKey, returns the node when neither holds and null on falling off
@@ -1472,6 +1611,50 @@ private:
         // holding allocator bytes (set_avl.h's pad2c, set_avl_e24.h's pad34).
         return n;
     }
+
+    // The in-place request `InsertInPlace` walks the tree with: the key to
+    // descend by, and the constructor to run in the node once the slot is
+    // found. It plays the part `const T*` plays for `Insert`.
+    template <class Ctor>
+    struct EmplaceReq { const Key* key; const Ctor* ctor; };
+
+    // `AllocNode` with the copy constructor replaced by `*req->ctor`. Every
+    // other store — parent, the two null children, balance and height as one
+    // dword, `_padTail` deliberately untouched — is byte-for-byte AllocNode's,
+    // which is byte-for-byte retail's four node constructors'.
+    template <class Ctor>
+    static Node* EmplaceNode(const EmplaceReq<Ctor>* req, Node* parent) {
+        void* mem = Alloc::Alloc(sizeof(Node), 8);
+        if (!mem) return nullptr;
+        Node* n = static_cast<Node*>(mem);
+        (*req->ctor)(static_cast<void*>(&n->element));
+        n->parent  = parent;
+        n->left    = nullptr;
+        n->right   = nullptr;
+        n->balance = 0;
+        n->height  = 0;
+        return n;
+    }
+
+    template <class Ctor>
+    struct EmplacePolicy : detail::NoCounters {
+        using Node    = typename Set::Node;
+        using SetT    = Set;
+        using Element = EmplaceReq<Ctor>;
+        static Node*&   Root(Set* s)  { return s->_root; }
+        static int32_t& Count(Set* s) { return s->_count; }
+        static const Key& NodeKey(const Node* n)      { return KeyOf(n->element); }
+        static const Key& SearchKey(const Element* e) { return *e->key; }
+        static bool IsNull(const Key& k) { return detail::KeyTraits<Key>::IsNull(k); }
+        static bool Less(const Key& a, const Key& b) { return Cmp::Less(a, b); }
+        static Node* Alloc(Set* /*ignored*/, const Element* e, Node* parent) {
+            return EmplaceNode(e, parent);
+        }
+        static Node* Alloc(decltype(nullptr), const Element* e, Node* parent) {
+            return EmplaceNode(e, parent);
+        }
+        static void Retrace(Set* s, Node** slot) { Ops::Retrace(s, slot); }
+    };
 
     // The policy `InsertCorePattern` runs on. It is the same shape the four
     // ported insert cores now hand it.

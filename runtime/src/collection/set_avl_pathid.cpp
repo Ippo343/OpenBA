@@ -127,18 +127,17 @@ static_assert(offsetof(PathId, value) == 0x08,
 
 namespace {
 
-// The two allocator doors, same shape and same reasoning as avl_trees.cpp:165.
+// The two allocator doors, same shape and same reasoning as avl_trees.cpp:165 —
+// and, since the ENDGAME B.3.2 closing pass, the same ONE door:
+// `rtcoll::DoorAlloc`/`DoorFree` (runtime/src/collection/alloc_door.cpp) go
+// through the exe dispatch slots 0x140152b60 / 0x140152b68 with 0x1800c7a50 /
+// 0x1800c7ad0 as the fallback, so this tree's blocks are visible to
+// `BANISHED_REDZONE` like every other allocation in the tree.
 void* MemAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;                 // cache a hit, retry a miss
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    return fn(bytes, align);
+    return rtcoll::DoorAlloc()(bytes, align);
 }
-void MemFree(void* p) {                     // the null test is INSIDE 0x1800c7ad0
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
-    fn(p);
+void MemFree(void* p) {                     // the null test is INSIDE ?MemFree@
+    rtcoll::DoorFree()(p);
 }
 
 // Retail's inlined String release. NOTE THE ASYMMETRY, which is reproduced:

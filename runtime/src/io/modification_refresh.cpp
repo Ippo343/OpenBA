@@ -182,6 +182,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Modification.h"
 #include "../../types/system/Filename.h"
+#include "../../types/collection/Collection.h"   // ENDGAME B.3.2 closing pass
 #include "../system/pod_bridge.h"
 
 // Byte-identical to standalone/resolve.h; see modification.cpp's note on why
@@ -386,6 +387,100 @@ extern "C" void RtColl_SetInsertFixup_1800274c0(void* rootv, void* cursorv) {
     } while (*cursor != nullptr);                      // TEST RSI,RSI ; JNZ
 }
 
+// ---------------------------------------------------------------------------
+// 0x18007eefc — `__ascii_stricmp`, the comparator of THIS tree. Hoisted to file
+// scope (ENDGAME B.3.2 closing pass) because the `Compare` policy below needs
+// it as well as `RefreshList`'s two walks; the cache is the same "hit once,
+// retry a miss" it had inside the function.
+//
+// It is `_stricmp`, NOT the signed `strcmp` the pathid tree uses
+// (set_avl_pathid.cpp's banner makes that the one field that separates the two
+// families). A differently-cased path is the SAME key here.
+// ---------------------------------------------------------------------------
+int ModStrICmp(const char* a, const char* b) {
+    using Fn = int (*)(const char*, const char*);
+    static Fn fn = nullptr;
+    if (fn == nullptr) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18007eefc));
+    return fn(a, b);
+}
+
+}  // namespace RtIO  (reopened below)
+
+// ===========================================================================
+// PART 1b — the width-8 AVL core, as `Collection::AvlOps<Node, 0x8>`
+// (ENDGAME B.3.2 closing pass)
+// ===========================================================================
+//
+// The three bodies above ARE the ported core for element width 8 / node 0x28,
+// and they were the last width `Collection::Set<T>` could not reach: the
+// template's `AvlOps` carried 0x10, 0x18 and 0x30 and fell through to
+// `AvlGeneric` for 8. These three forwarders are what set_core.cpp's are for
+// the other three widths, and they live HERE, next to the bodies, rather than
+// in set_core.cpp: that file's rule is that it is the only place that knows the
+// three node TYPES, and this node type belongs to IO::Modification.
+//
+// NOTHING IS RE-DERIVED. `AvlRotateLeft`/`AvlRotateRight`/the retrace are
+// unchanged above, still registered at 0x180027e20 / 0x180027f50 / 0x1800274c0,
+// and still reached by address by anything that wants them that way.
+//
+// THE RETRACE TAKES `&set.root`. Retail's `CMP RDX,[RCX]` reads RCX as a
+// pointer to the root SLOT, and the template hands its `Set*`; `_root` is at
+// +0x00, so the two are the same address. The other three widths' cores take
+// the set and read `set->root` themselves — a spelling difference, not a
+// behavioural one, and it is why these forwarders cast rather than offset.
+namespace Collection {
+namespace detail {
+
+void PortedRetrace8(void* set, void** slot) {               // 0x1800274c0
+    RtIO::RtColl_SetInsertFixup_1800274c0(set, slot);
+}
+void* PortedRotateLeft8(void* set, void* n) {               // 0x180027e20
+    return RtIO::AvlRotateLeft(static_cast<RtIO::AvlNode**>(set),
+                               static_cast<RtIO::AvlNode*>(n));
+}
+void* PortedRotateRight8(void* set, void* n) {              // 0x180027f50
+    return RtIO::AvlRotateRight(static_cast<RtIO::AvlNode**>(set),
+                                static_cast<RtIO::AvlNode*>(n));
+}
+
+// `System::Filename`'s null state. Only a POINTER-shaped key has one, and the
+// descent treats it asymmetrically — a null NODE key skips the left test, a
+// null SEARCH key descends left and then reports EQUAL. That is retail's, read
+// off 0x1800afd50 / 0x1800afd81, and it is exactly the shape
+// `InsertCorePattern` already carries for `char*`.
+template <> struct KeyTraits<System::Filename> {
+    static bool IsNull(const System::Filename& k) { return k._data == nullptr; }
+};
+
+}  // namespace detail
+}  // namespace Collection
+
+namespace RtIO {
+
+// The `Compare` policy of the mod path set: retail's `_stricmp`, not
+// `AVLCompare`'s signed `strcmp`.
+struct FilenameICompare {
+    static bool Less(const System::Filename& a, const System::Filename& b) {
+        return ModStrICmp(a._data, b._data) < 0;
+    }
+};
+
+// The set itself. `Key == T` is retail's rule (Collection.h's Set banner: both
+// mangled names that spell the parameters out have it), the element IS the key,
+// and `align8(sizeof(System::Filename)) == 8` selects `AvlOps<Node, 0x8>` — the
+// three bodies above.
+using ModFilenameSet = Collection::Set<System::Filename, FilenameICompare>;
+
+static_assert(sizeof(ModFilenameSet) == sizeof(ModSet),
+              "Set<Filename> is ModSet's 0x10 bytes");
+static_assert(sizeof(ModFilenameSet::Node) == sizeof(ModSetNode),
+              "Set<Filename>::Node is ModSetNode's 0x28 bytes");
+static_assert(offsetof(ModFilenameSet::Node, parent) == offsetof(ModSetNode, parent), "parent");
+static_assert(offsetof(ModFilenameSet::Node, left)   == offsetof(ModSetNode, left),   "left");
+static_assert(offsetof(ModFilenameSet::Node, right)  == offsetof(ModSetNode, right),  "right");
+static_assert(offsetof(ModFilenameSet::Node, balance) == offsetof(ModSetNode, w20),   "balance @ +0x20");
+static_assert(offsetof(ModFilenameSet::Node, height)  == offsetof(ModSetNode, w22),   "height @ +0x22");
+
 // ===========================================================================
 // PART 2 — 0x180028610, Collection::Array<Mod>::SetSize(int n, const Mod& fill)
 // ===========================================================================
@@ -550,7 +645,6 @@ using FnCloseFile        = void     (*)(void*, void*);                  // 0x180
 using FnMapFind          = void*    (*)(void*, const void*);            // 0x18002ace0
 using FnGetPathFilename  = System::Filename*(*)(const System::Filename*,
                                                 System::Filename*, bool);  // 0x1800c6740
-using FnStrICmp          = int      (*)(const char*, const char*);      // 0x18007eefc
 using FnArrayFilenameFill= void     (*)(void*, int, const Filename*);   // 0x180026880
 using FnModSort          = void     (*)(void*, int, void*);             // 0x180028760 (PORTED, BATCH 8b)
 
@@ -743,7 +837,6 @@ extern "C" void RtIo_Modification_RefreshList(void* selfv) {
     static FnCloseFile         fnCloseFile        = nullptr;
     static FnMapFind           fnMapFind          = nullptr;
     static FnGetPathFilename   fnGetPathFilename  = nullptr;
-    static FnStrICmp           fnStrICmp          = nullptr;
     static FnArrayFilenameFill fnFilesFill        = nullptr;
     static FnModSort           fnModSort          = nullptr;
 
@@ -803,8 +896,6 @@ extern "C" void RtIo_Modification_RefreshList(void* selfv) {
         ResolveAddr(Module::Runtime, 0x18002ace0));
     if (fnGetPathFilename == nullptr) fnGetPathFilename = reinterpret_cast<decltype(fnGetPathFilename)>(
         ResolveAddr(Module::Runtime, 0x1800c6740));
-    if (fnStrICmp == nullptr) fnStrICmp = reinterpret_cast<decltype(fnStrICmp)>(
-        ResolveAddr(Module::Runtime, 0x18007eefc));
     if (fnStringFormat == nullptr) fnStringFormat = reinterpret_cast<decltype(fnStringFormat)>(
         ResolveAddr(Module::Runtime, 0x1800c9730));
     if (fnFilesFill == nullptr) fnFilesFill = reinterpret_cast<decltype(fnFilesFill)>(
@@ -935,79 +1026,27 @@ extern "C" void RtIo_Modification_RefreshList(void* selfv) {
             System::Filename key;
             fnGetFileName(pkg, &key, e);                          // 0x180025450
 
-            AvlNode** const root = reinterpret_cast<AvlNode**>(&m->set.root);
-            if (*root == nullptr) {
-                // 0x1800afccc — the empty-tree case. A failed allocation still
-                // increments the count and stores a NULL root; transcribed,
-                // because a guard here would leave a count and a tree that
-                // disagree in a DIFFERENT way from retail's.
-                AvlNode* n = static_cast<AvlNode*>(ModMemAlloc(0x28, 8));
-                if (n != nullptr) {
-                    // CALL 0x1800067d0 — Filename copy ctor, into the freshly
-                    // allocated node's raw `key` bytes (AvlNode is a view of
-                    // ModSetNode; its first field IS the Filename).
-                    new (reinterpret_cast<System::Filename*>(n)) System::Filename(key);
-                    n->parent = nullptr;
-                    n->left = nullptr;
-                    n->right = nullptr;
-                    n->balance = 0; n->height = 0;               // one dword store
-                }
-                m->set.count += 1;
-                *root = n;
-            } else {
-                AvlNode* cur = *root;
-                bool inserted = false;
-                for (;;) {
-                    // --- left arm, 0x1800afd50 ---
-                    bool goLeft;
-                    if (cur->key == nullptr)        goLeft = false;   // JZ right arm
-                    else if (key._data == nullptr)  goLeft = true;    // JZ go-left
-                    else goLeft = (fnStrICmp(key._data, cur->key) < 0);   // SETS
-                    if (goLeft) {
-                        if (cur->left == nullptr) {
-                            AvlNode* n = static_cast<AvlNode*>(ModMemAlloc(0x28, 8));
-                            if (n != nullptr) {
-                                new (reinterpret_cast<System::Filename*>(n)) System::Filename(key);
-                                n->parent = cur;
-                                n->left = nullptr; n->right = nullptr;
-                                n->balance = 0; n->height = 0;
-                            }
-                            cur->left = n;                       // MOV [RDI+0x10],RSI
-                            inserted = true;
-                        } else {
-                            cur = cur->left;
-                            continue;
-                        }
-                        break;
-                    }
-                    // --- right arm, 0x1800afd81 ---
-                    if (key._data == nullptr) break;             // no insert
-                    if (cur->key != nullptr &&
-                        !(fnStrICmp(cur->key, key._data) < 0)) break;   // no insert
-                    if (cur->right == nullptr) {
-                        AvlNode* n = static_cast<AvlNode*>(ModMemAlloc(0x28, 8));
-                        if (n != nullptr) {
-                            new (reinterpret_cast<System::Filename*>(n)) System::Filename(key);
-                            n->parent = cur;
-                            n->left = nullptr; n->right = nullptr;
-                            n->balance = 0; n->height = 0;
-                        }
-                        cur->right = n;                          // MOV [RDI+0x18],RSI
-                        inserted = true;
-                        break;
-                    }
-                    cur = cur->right;
-                }
-                if (inserted) {
-                    // 0x1800afea2 — the retrace starts at the PARENT of the new
-                    // node. Retail keeps that in [RSP+0x40], updated on every
-                    // descent step, so it always equals the cursor at the point
-                    // the child was hung.
-                    AvlNode* slot = cur;
-                    RtColl_SetInsertFixup_1800274c0(root, &slot);
-                    m->set.count += 1;
-                }
-            }
+            // ENDGAME B.3.2 closing pass: the 70 lines retail inlined here are
+            // `Collection::Set<System::Filename, FilenameICompare>::Insert`, arm
+            // for arm — the template's `InsertCorePattern` IS this descent (its
+            // banner names 0x180030380 / 0x18002a170 / 0x180025c70 / 0x1800275e0
+            // as the other four copies of it), and `AvlOps<Node, 0x8>` is the
+            // retrace and the two rotations THIS FILE ports at 0x1800274c0 /
+            // 0x180027e20 / 0x180027f50. Nothing moved to a different body.
+            //
+            // Every asymmetry the transcription called out survives in the
+            // template and is worth naming once more, because each is one `if`:
+            //   * empty tree (0x1800afccc): the count is incremented and the
+            //     root stored EVEN IF THE ALLOCATION FAILED — `InsertCorePattern`
+            //     stores whatever `AllocNode` returned, null included.
+            //   * a null NODE key skips the left test; a null SEARCH key
+            //     descends LEFT in the first arm and reports EQUAL (no insert,
+            //     no count) in the second — `KeyTraits<System::Filename>` above
+            //     plus the pattern's two arms.
+            //   * the retrace starts at the PARENT of the new node and takes a
+            //     SLOT, re-read after every rotation.
+            //   * a duplicate key returns the existing node and does not count.
+            reinterpret_cast<ModFilenameSet&>(m->set).Insert(key);
             // ~key releases here, retail's 0x1800afeb5 release -- the last
             // statement of the loop body, exactly where retail's release sat.
         }
@@ -1098,13 +1137,13 @@ extern "C" void RtIo_Modification_RefreshList(void* selfv) {
                     bool goLeft;
                     if (probe->key == nullptr)     goLeft = false;
                     else if (node->key == nullptr) goLeft = true;
-                    else goLeft = (fnStrICmp(node->key, probe->key) < 0);
+                    else goLeft = (ModStrICmp(node->key, probe->key) < 0);
                     if (goLeft) { probe = probe->left; continue; }
                     // 0x1800b0258 — a null node->key here is a MATCH, and so is
                     // any probe->key that does not sort before it.
                     if (node->key == nullptr) { hit = true; break; }
                     if (probe->key == nullptr) { probe = probe->right; continue; }
-                    if (fnStrICmp(probe->key, node->key) < 0) { probe = probe->right; continue; }
+                    if (ModStrICmp(probe->key, node->key) < 0) { probe = probe->right; continue; }
                     hit = true;
                     break;
                 }

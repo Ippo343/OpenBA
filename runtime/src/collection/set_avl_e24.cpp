@@ -63,6 +63,7 @@
 #include <cstdint>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/collection/Collection.h"   // rtcoll::DoorFree (the one allocator door)
 #include "set_avl_e24.h"
 
 // Declared locally rather than by including standalone/resolve.h, which drags
@@ -355,11 +356,13 @@ Node* AllocNode(void* /*unused, never read*/, const void* src, Node* parent) {
 // cannot free the ignored first argument. See set_avl.cpp's "THE FIFTH HELPER"
 // banner for the shadowed-registration history.
 // ---------------------------------------------------------------------------
+// ENDGAME B.3.2 closing pass: through `rtcoll::DoorFree` (alloc_door.cpp) —
+// the same free 0x180009c30 performs, reached through the exe dispatch slot so
+// this tree's allocs and frees stay on one channel. set_avl.cpp's copy of this
+// door carries the full argument.
 void SetNodeFree(void* ignored, void* node) {
-    using Fn = void (*)(void*, void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180009c30));
-    if (fn) fn(ignored, node);
+    (void)ignored;
+    rtcoll::DoorFree()(node);
 }
 
 }  // namespace rtsetavl24

@@ -187,17 +187,21 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace RtIO {
 
+// ENDGAME B.3.2 closing pass: both go through `rtcoll::DoorAlloc`/`DoorFree`
+// (runtime/src/collection/alloc_door.cpp) — the exe dispatch slots
+// 0x140152b60 / 0x140152b68, with these two addresses as the fallback. That is
+// the same allocator and the same lock, reached through the channel
+// `BANISHED_REDZONE` rewrites. It matters HERE in particular because the
+// `Set<Filename>` this file's cluster builds is now allocated by
+// `Collection::Set<System::Filename, …>` (modification_refresh.cpp), which frees
+// through that door: allocating one side of a tree through a different channel
+// is exactly the half-shimmed heap redzone_alloc.cpp reports phantom overflows
+// for.
 void* ModMemAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    return fn(bytes, align);
+    return rtcoll::DoorAlloc()(bytes, align);
 }
 void ModMemFree(void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
-    fn(p);
+    rtcoll::DoorFree()(p);      // the null test is inside ?MemFree@, as before
 }
 
 static inline int32_t& RefCount(char* s) {

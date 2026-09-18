@@ -68,10 +68,14 @@ namespace detail {
 // would make every later insert return nullptr for the life of the process —
 // the ordering defect Wave 9 attempt 14 fixed for `rtcoll::MemAlloc`.
 // ---------------------------------------------------------------------------
+//
+// ENDGAME B.3.2 closing pass: the resolution moved into `rtcoll::DoorAlloc`
+// (runtime/src/collection/alloc_door.cpp) so this seam reaches the allocator
+// through the exe dispatch slot 0x140152b60 — the door the rest of the tree
+// uses and the one `BANISHED_REDZONE` rewrites — falling back to the runtime
+// address above. The `fn ? … : nullptr` shape is this seam's own and is kept.
 void* SetNodeAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
+    const rtcoll::DoorAllocFn_t fn = rtcoll::DoorAlloc();
     return fn ? fn(bytes, align) : nullptr;
 }
 

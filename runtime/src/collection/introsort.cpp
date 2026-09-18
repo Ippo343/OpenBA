@@ -72,6 +72,7 @@
 #include <cstdint>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/collection/Collection.h"   // rtcoll::DoorAlloc (the one allocator door)
 #include "avl_trees.h"
 
 // Declared locally rather than including standalone/resolve.h (PLAN §4.1
@@ -372,12 +373,12 @@ void* Array16Assign(void* dstRaw, const void* srcRaw) {
         dst->_capacity = n;
         if (n == static_cast<int32_t>(old + 1) && old != 0)
             dst->_capacity = static_cast<int32_t>(n * 3);
-        using AllocFn = void* (*)(uint64_t, int);
-        static AllocFn alloc = nullptr;
-        if (!alloc)
-            alloc = reinterpret_cast<AllocFn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-        dst->_data = static_cast<uint8_t*>(
-            alloc(static_cast<uint64_t>(static_cast<int64_t>(dst->_capacity)) * 0x10, 4));
+        // ENDGAME B.3.2 closing pass: through the one collection allocator door
+        // (runtime/src/collection/alloc_door.cpp) rather than a private
+        // resolution of 0x1800c7a50 — same allocator, but the channel
+        // `BANISHED_REDZONE` can see. `4` is this instantiation's own align.
+        dst->_data = static_cast<uint8_t*>(rtcoll::DoorAlloc()(
+            static_cast<uint64_t>(static_cast<int64_t>(dst->_capacity)) * 0x10, 4));
     }
     for (int32_t k = 0; k < dst->_size; ++k) {
         uint8_t* p = dst->_data + static_cast<int64_t>(k) * 0x10;
