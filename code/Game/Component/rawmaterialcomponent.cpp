@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Resolved helpers
@@ -339,7 +340,8 @@ void RawMaterialComponent_Draw(RawMaterialComponent* self) {
     // Wrap in InternalBasePtr
     uintptr_t itemRef[2] = {0, 0};
     if (fn_InternalBasePtr_Ctor) {
-        fn_InternalBasePtr_Ctor(&itemRef, pickupItemResult);
+        new (&itemRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(pickupItemResult));   // B.3.3 bridge
     }
 
     // CheckPtr on the WorkComponent ref

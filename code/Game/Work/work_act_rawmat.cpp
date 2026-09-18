@@ -21,6 +21,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Sub-callee / dispatch-slot resolution (self-contained, s_war_* prefix)
@@ -133,7 +134,8 @@ static inline void* WAR_Alloc(uint64_t size, uint32_t align) {
 }
 static inline void WAR_IbpCtor(void* ibp, void* obj) {
     if (s_war_IbpCtorSlot) s_war_IbpCtorSlot(ibp, obj);
-    else if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(ibp, obj);
+    else if (fn_InternalBasePtr_Ctor) new (ibp) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(obj));   // B.3.3 bridge
 }
 static inline void WAR_CheckPtr(void* p) {
     if (s_war_IbpCheckSlot) s_war_IbpCheckSlot(p);
@@ -141,7 +143,8 @@ static inline void WAR_CheckPtr(void* p) {
 }
 static inline void WAR_DeletePtr(void* p) {
     if (s_war_IbpDeleteSlot) s_war_IbpDeleteSlot(p);
-    else if (fn_InternalBasePtr_DeletePtr) fn_InternalBasePtr_DeletePtr(p);
+    else if (fn_InternalBasePtr_DeletePtr) reinterpret_cast< ::Object::InternalBasePtr*>(p)->DeletePtr(
+        );   // B.3.3 bridge
 }
 static inline void WAR_Append(void* list, void* ibp) { if (s_war_TaskListAppend) s_war_TaskListAppend(list, ibp); }
 

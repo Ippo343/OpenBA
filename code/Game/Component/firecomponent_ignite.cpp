@@ -40,6 +40,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // EventLog::AddEvent (0x140095580) — ported by the tornado lane (eventlog.cpp).
 extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, void* entityIBP);
@@ -452,7 +453,8 @@ extern "C" void FireComponent_Ignite_610(void* self) {
     }
 
     uint64_t workIbp = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&workIbp, work);
+    if (fn_InternalBasePtr_Ctor) new (&workIbp) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
 
     if (s_postWork && workCompIbp) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIbp);

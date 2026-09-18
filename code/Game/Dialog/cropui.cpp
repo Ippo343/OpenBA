@@ -11,6 +11,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // SelectDescription layout (from Ghidra analysis):
@@ -75,7 +76,7 @@ static int CropUI_IterateResources(CropUI* self, void* combo, int* selectedIndex
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, entityPtr);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
 
     int comboIdx = 0;
 
@@ -208,7 +209,7 @@ void CropUI_Slot4(CropUI* self) {
 
     // Wrap in InternalBasePtr, store at +0x30
     uint8_t basePtrBuf[8];
-    fn_InternalBasePtr_Ctor(basePtrBuf, foundElem);
+    new (basePtrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(foundElem));   // B.3.3 bridge
     self->internalBasePtr = *(uint64_t*)basePtrBuf;
 
     // Set element ID 500
@@ -236,7 +237,7 @@ void CropUI_Slot7(CropUI* self) {
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, entityPtr);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
 
     // Get selectResource combo element
     void* combo = (void*)self->internalBasePtr;

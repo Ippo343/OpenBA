@@ -20,6 +20,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Resolved helpers
@@ -187,7 +188,7 @@ void HappinessComponent_OnRemove(HappinessComponent* self) {
         // Create InternalBasePtr from self (the component, passed as entity ref)
         uint8_t basePtr[24];
         if (fn_InternalBasePtr_Ctor) {
-            fn_InternalBasePtr_Ctor(basePtr, self);
+            new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
         }
 
         // ERASE from the happiness list at (gameWorld->+0xF0)->+0x50.
@@ -464,7 +465,8 @@ extern "C" void HappinessComponent_Register(void* selfV) {
     if (s_fn_SetEntityIndex) s_fn_SetEntityIndex(self, 1);
 
     uint8_t basePtr[24] = {};
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(basePtr, self);
+    if (fn_InternalBasePtr_Ctor) new (basePtr) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
 
     if (s_pGameWorld && *s_pGameWorld) {
         const uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
@@ -498,7 +500,8 @@ extern "C" void HappinessComponent_Unregister(void* selfV) {
     EnsureHelpers();
 
     uint8_t basePtr[24] = {};
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(basePtr, self);
+    if (fn_InternalBasePtr_Ctor) new (basePtr) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
 
     if (s_fn_ArrayEraseByValue && s_pGameWorld && *s_pGameWorld) {
         const uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(

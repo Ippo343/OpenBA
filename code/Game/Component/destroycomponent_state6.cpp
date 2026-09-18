@@ -69,6 +69,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Tracing
@@ -201,7 +202,8 @@ extern "C" void* Destroy_FindDecalComponent_b630(uintptr_t entity, void* retIBP)
             }
         }
     }
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(retIBP, found);
+    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     else *reinterpret_cast<void**>(retIBP) = found;
     return retIBP;
 }
@@ -267,17 +269,19 @@ extern "C" void ActionStack_AbortForEntity_c52c0(void* stack, void** pEntityIbp)
             reinterpret_cast<void (*)(void*)>(fn)(p);
             p = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(p) + 0x10);
         }
-        if (fn_InternalBasePtr_DeletePtr) fn_InternalBasePtr_DeletePtr(&items[i]);
+        if (fn_InternalBasePtr_DeletePtr) reinterpret_cast< ::Object::InternalBasePtr*>(&items[i])->DeletePtr(
+            );   // B.3.3 bridge
         void* nullIbp = nullptr;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nullIbp, nullptr);
+        if (fn_InternalBasePtr_Ctor) new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         items[i] = nullIbp;
     }
 
     *reinterpret_cast<int*>(st + 0x18) = -1;
     if (*reinterpret_cast<void**>(st + 0x10) != nullptr) {
-        if (fn_InternalBasePtr_DeletePtr) fn_InternalBasePtr_DeletePtr(reinterpret_cast<void*>(st + 0x10));
+        if (fn_InternalBasePtr_DeletePtr) reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(st + 0x10))->DeletePtr(
+            );   // B.3.3 bridge
         void* nullIbp = nullptr;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nullIbp, nullptr);
+        if (fn_InternalBasePtr_Ctor) new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *reinterpret_cast<void**>(st + 0x10) = nullIbp;
     }
 

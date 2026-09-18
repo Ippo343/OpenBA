@@ -78,6 +78,7 @@
 #include <vector>
 
 #include "Component/controller_state_table.h"
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Resolved helpers (once)
@@ -460,7 +461,8 @@ static void Destroy_ScatterContents_c530(int64_t comp, int baseX, int baseY,
                                           ? s_copyCtor(mem, reinterpret_cast<void*>(tmpl)) : nullptr;
                     if (newEntity) {
                         int64_t entIBP = 0;
-                        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&entIBP, newEntity);
+                        if (fn_InternalBasePtr_Ctor) new (&entIBP) ::Object::InternalBasePtr(
+                            reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
                         else entIBP = reinterpret_cast<int64_t>(newEntity);
                         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entIBP);
 
@@ -627,7 +629,8 @@ extern "C" char Destroy_State4Enter_cfd0(void* data, void* sm) {
             *reinterpret_cast<int64_t*>(w + 0x58) = 0;
             *reinterpret_cast<int64_t*>(w + 0x60) = 0;
             int64_t workIBP = 0;
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&workIBP, mem);
+            if (fn_InternalBasePtr_Ctor) new (&workIBP) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(mem));   // B.3.3 bridge
             else workIBP = reinterpret_cast<int64_t>(mem);
             s_ec60(yard, 1, 0, &workIBP);
         }
@@ -689,7 +692,8 @@ extern "C" char Destroy_State5Enter_cc70(void* data, void* sm) {
                 int64_t entityIBP = entity;
                 BuildStructure_CreateInPlaceFull(mem, &entityIBP, 1);
                 int64_t workIBP = 0;
-                if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&workIBP, mem);
+                if (fn_InternalBasePtr_Ctor) new (&workIBP) ::Object::InternalBasePtr(
+                    reinterpret_cast<RtObject::Internal*>(mem));   // B.3.3 bridge
                 else workIBP = reinterpret_cast<int64_t>(mem);
                 s_ec60(yard, 0x2001, 0, &workIBP);
             }
@@ -831,7 +835,8 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
                     mem, *reinterpret_cast<void**>(comp + 0x60)) : nullptr;
                 if (newEntity) {
                     int64_t hold = 0;
-                    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&hold, newEntity);
+                    if (fn_InternalBasePtr_Ctor) new (&hold) ::Object::InternalBasePtr(
+                        reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
                     else hold = reinterpret_cast<int64_t>(newEntity);
 
                     int64_t nfp = FindOn(reinterpret_cast<int64_t>(newEntity), s_find4680);

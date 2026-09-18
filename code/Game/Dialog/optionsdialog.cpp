@@ -22,6 +22,8 @@
 // In-app RenderDoc capture (standalone only) — ApplyVideoSettings arms a delayed
 // capture after a video change so we can inspect the post-rebuild render targets.
 #include "renderdoc_integration.h"
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 
 // ============================================================
 // Element IDs assigned in Startup, dispatched in OnEvent
@@ -233,7 +235,8 @@ static void EnsureTextElementTypeId() {
     if (s_lazyId == 0) {
         void* factoryObj = *(void**)*g_pFactorySingleton;
         if (factoryObj) {
-            s_lazyId = fn_Factory_GetTypeIdFromName(factoryObj, "TextElement", true);
+            s_lazyId = reinterpret_cast<const ::Object::Factory*>(factoryObj)->GetTypeIdFromName(
+                "TextElement", true);   // B.3.3 bridge
             printf("[OptionsDialog] Lazy-resolved TextElement typeId = %u\n", s_lazyId);
         }
     }
@@ -261,7 +264,8 @@ static void* LoadStringTable(const char* path) {
             void* factoryObj = *(void**)*g_pFactorySingleton;
             if (factoryObj) {
                 s_lazyStringTableTypeId =
-                    fn_Factory_GetTypeIdFromName(factoryObj, "StringTable", true);
+                    reinterpret_cast<const ::Object::Factory*>(factoryObj)->GetTypeIdFromName(
+                        "StringTable", true);   // B.3.3 bridge
                 printf("[OptionsDialog] Lazy-resolved StringTable typeId = %u\n",
                        s_lazyStringTableTypeId);
             }
@@ -1204,7 +1208,7 @@ void OptionsDialog_OnOk(OptionsDialog* self) {
 
     // Close dialog
     uint8_t ibpBuf[8];
-    fn_InternalBasePtr_Ctor(ibpBuf, self);
+    new (ibpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
     void* userInterface = *(void**)((uintptr_t)self + 0x10);
     fn_UI_CloseDialog(userInterface, ibpBuf);
 }
@@ -1249,7 +1253,7 @@ void OptionsDialog_OnCancel(OptionsDialog* self) {
 
     // Close dialog
     uint8_t ibpBuf[8];
-    fn_InternalBasePtr_Ctor(ibpBuf, self);
+    new (ibpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
     void* userInterface = *(void**)((uintptr_t)self + 0x10);
     fn_UI_CloseDialog(userInterface, ibpBuf);
 }
@@ -1282,7 +1286,8 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
             bool isUIElement = g_TypeId_UIElementBase && fn_IsDerivedFrom(clickedElem, *g_TypeId_UIElementBase);
             void* parent = isUIElement ? clickedElem : nullptr;
             uint8_t parentPtr[16];
-            fn_InternalBasePtr_Ctor(parentPtr, parent);
+            new (parentPtr) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(parent));   // B.3.3 bridge
 
             unsigned int offset = (unsigned int)(eventData - kInputBind_Base);
             unsigned int slot = offset & 0x80000001;
@@ -1530,14 +1535,15 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
     void* dialog = nullptr;
     if (mem) {
         uint8_t nullPtr[8] = {};
-        fn_InternalBasePtr_Ctor(nullPtr, nullptr);
+        new (nullPtr) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         void* userInterface = *(void**)((uintptr_t)self + 0x10);
         dialog = fn_OptionInputBindDialog_Ctor(mem, userInterface, external, nullPtr);
     }
 
     // Wrap in InternalPtr
     uint64_t dialogPtr = 0;
-    fn_InternalBasePtr_Ctor((void*)&dialogPtr, dialog);
+    new ((void*)&dialogPtr) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(dialog));   // B.3.3 bridge
 
     // Set the input name text on the dialog
     // Get input name from KeyMap container's name table at +0xC8
@@ -1575,7 +1581,7 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
     int conflictId = fn_KeyMap_GetIdForDeviceInput(keyMap, capturedDevice, capturedKey);
 
     // Delete the input bind dialog
-    fn_InternalBasePtr_DeletePtr((void*)&dialogPtr);
+    reinterpret_cast< ::Object::InternalBasePtr*>((void*)&dialogPtr)->DeletePtr();   // B.3.3 bridge
 
     if (result == 2) {
         // User chose "clear" — unbind this slot
@@ -1610,13 +1616,14 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
         void* dialog2 = nullptr;
         if (mem2) {
             uint8_t nullPtr2[8] = {};
-            fn_InternalBasePtr_Ctor(nullPtr2, nullptr);
+            new (nullPtr2) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             void* ui = *(void**)((uintptr_t)self + 0x10);
             dialog2 = fn_MessageDialog_Ctor(mem2, ui, external2, nullPtr2);
         }
 
         uint64_t dialog2Ptr = 0;
-        fn_InternalBasePtr_Ctor((void*)&dialog2Ptr, dialog2);
+        new ((void*)&dialog2Ptr) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(dialog2));   // B.3.3 bridge
 
         // Get the name of the key that was pressed (new binding)
         uint8_t newKeyUI[16];
@@ -1676,7 +1683,7 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
             // Show confirmation dialog
             uint64_t show2Ptr = dialog2Ptr;
             confirmResult = fn_UI_ShowDialog(userInterface, &show2Ptr);
-            fn_InternalBasePtr_DeletePtr((void*)&dialog2Ptr);
+            reinterpret_cast< ::Object::InternalBasePtr*>((void*)&dialog2Ptr)->DeletePtr();   // B.3.3 bridge
         }
 
         if (confirmResult >= 1 && confirmResult <= 2) {

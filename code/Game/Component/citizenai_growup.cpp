@@ -77,6 +77,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 
@@ -237,7 +238,7 @@ static void* ScanForType(int64_t node, uint32_t typeId,
 extern "C" void* CitizenAI_Entity_impl_f230(int64_t param_1, void* param_2, uint32_t param_3, float* param_4) {
     EnsureInit();
     if (*reinterpret_cast<int*>(param_1 + 0x78) == 0) {
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(param_2, nullptr);
+        if (fn_InternalBasePtr_Ctor) new (param_2) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         return param_2;
     }
     int* mapGrid = MapGrid();
@@ -285,7 +286,8 @@ extern "C" void* CitizenAI_Entity_impl_f230(int64_t param_1, void* param_2, uint
             }
         }
         int64_t wpIBP = 0;  // local_98
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&wpIBP, wp);
+        if (fn_InternalBasePtr_Ctor) new (&wpIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(wp));   // B.3.3 bridge
         CheckPtr(&wpIBP);
         // wp+0x60 != 0 → this workplace accepts a worker
         if (wpIBP != 0 && *reinterpret_cast<int*>(wpIBP + 0x60) != 0) {
@@ -374,7 +376,8 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
             // find that entry's StorageComponent
             void* sc = ScanForType(entry, s_tid_StorageComponent);
             int64_t scIBP = 0;
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&scIBP, sc);
+            if (fn_InternalBasePtr_Ctor) new (&scIBP) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(sc));   // B.3.3 bridge
             CheckPtr(&scIBP);
             int64_t descComp = *reinterpret_cast<int64_t*>(rowBase);   // row entity (RawMaterialDescription)
             int amount = *reinterpret_cast<int*>(rowBase + 8);
@@ -451,9 +454,10 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
     // push a PerformWork(Ctor4) per candidate and run the executor.
     if (arrACount != 0) {
         int64_t firstIBP = 0;       // local_90
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&firstIBP, nullptr);
+        if (fn_InternalBasePtr_Ctor) new (&firstIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         int64_t selfIBP = 0;        // local_98
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&selfIBP, reinterpret_cast<void*>(param_1));
+        if (fn_InternalBasePtr_Ctor) new (&selfIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(param_1));   // B.3.3 bridge
 
         // Vector3((Scalar&)0) — the first push uses a zero-vector built from local_res10 (=0).
         float zeroScalar = 0.0f;
@@ -466,7 +470,8 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
         for (int i = 0; i < arrACount; ++i) {
             int64_t entIBP = reinterpret_cast<int64_t*>(arrA)[i];  // local_res8 = *pfVar11
             int64_t citizenIBP = 0;     // local_res10
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&citizenIBP, reinterpret_cast<void*>(param_1));
+            if (fn_InternalBasePtr_Ctor) new (&citizenIBP) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(param_1));   // B.3.3 bridge
             float* destB = &arrB[i * 3];
             if (s_ctor4) s_ctor4(&citizenIBP, &entIBP, destB, homeCell, 0, 0);
         }

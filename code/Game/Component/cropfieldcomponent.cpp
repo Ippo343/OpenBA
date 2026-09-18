@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Resolved helpers
@@ -201,10 +202,10 @@ void CropFieldComponent_ValidateEntityRefs(uintptr_t self) {
         // Stale: reset entry to state 2 and null the two IBP slots.
         *(int*)(entry + 0x4) = 2;
         uint64_t nullIBP = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+        if (fn_InternalBasePtr_Ctor) new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *(uint64_t*)(entry + 0x8) = nullIBP;
         nullIBP = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+        if (fn_InternalBasePtr_Ctor) new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *(uint64_t*)(entry + 0x10) = nullIBP;
     }
 }

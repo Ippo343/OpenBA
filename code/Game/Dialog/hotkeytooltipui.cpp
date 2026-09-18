@@ -29,6 +29,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace Game {
 
@@ -126,7 +127,7 @@ void HotKeyToolTipUI_Slot4(void* self) {
     void* elem = (obj && fn_IsDerivedFrom(obj, *g_TypeId_ObjectInternal)) ? obj : nullptr;
 
     uint64_t elemIbp = 0;
-    fn_InternalBasePtr_Ctor(&elemIbp, elem);
+    new (&elemIbp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
     if (!elemIbp) return;
     fn_InternalBasePtr_CheckPtr(&elemIbp);
 

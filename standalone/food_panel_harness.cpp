@@ -37,6 +37,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Both provided by the existing tool harness / dialog layer.
 extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity);
@@ -755,7 +756,8 @@ void FollowUp(int frameNum) {
                             // WorkPlaceComponent, whose +0x30 is an unrelated field, and
                             // printing it made a successful enrolment read as "queue 0 -> 0".
                             int64_t seed = 0;
-                            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&seed, nullptr);
+                            if (fn_InternalBasePtr_Ctor) new (&seed) ::Object::InternalBasePtr(
+                                nullptr);   // B.3.3 bridge
                             const char ok = s_enrol(victim, &seed);
                             uintptr_t att = *reinterpret_cast<uintptr_t*>(
                                                 reinterpret_cast<uintptr_t>(victim) + 0x208);

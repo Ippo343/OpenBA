@@ -2,6 +2,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // MessageDialog::Slot4 (0x14006D140) — Setup
 // Finds buttonCancel, buttonOk, buttonYes, buttonNo elements by name.
@@ -84,7 +85,7 @@ void MessageDialog_Slot8(MessageDialog* self, void* /*param2*/, int param3, int 
 void MessageDialog_Slot10(MessageDialog* self) {
     *(uint32_t*)((uintptr_t)self + 0x24) = 1;
     uint8_t selfIBP[16];
-    fn_InternalBasePtr_Ctor(selfIBP, self);
+    new (selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
     fn_UI_CloseDialog(*(void**)((uintptr_t)self + 0x10), selfIBP);
 }
 
@@ -97,7 +98,7 @@ void MessageDialog_Slot10(MessageDialog* self) {
 void MessageDialog_Slot11(MessageDialog* self) {
     *(uint32_t*)((uintptr_t)self + 0x24) = 0;
     uint8_t selfIBP[16];
-    fn_InternalBasePtr_Ctor(selfIBP, self);
+    new (selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
     fn_UI_CloseDialog(*(void**)((uintptr_t)self + 0x10), selfIBP);
 }
 
@@ -110,7 +111,7 @@ void MessageDialog_Slot11(MessageDialog* self) {
 void MessageDialog_Slot12(MessageDialog* self) {
     *(uint32_t*)((uintptr_t)self + 0x24) = 2;
     uint8_t selfIBP[16];
-    fn_InternalBasePtr_Ctor(selfIBP, self);
+    new (selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
     fn_UI_CloseDialog(*(void**)((uintptr_t)self + 0x10), selfIBP);
 }
 
@@ -123,7 +124,7 @@ void MessageDialog_Slot12(MessageDialog* self) {
 void MessageDialog_Slot13(MessageDialog* self) {
     *(uint32_t*)((uintptr_t)self + 0x24) = 3;
     uint8_t selfIBP[16];
-    fn_InternalBasePtr_Ctor(selfIBP, self);
+    new (selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
     fn_UI_CloseDialog(*(void**)((uintptr_t)self + 0x10), selfIBP);
 }
 

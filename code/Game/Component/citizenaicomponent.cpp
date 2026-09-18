@@ -27,6 +27,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Force-work harness target: the first start-town structure (StorageBarn), captured
 // in starttown.cpp. Used only when env BANISHED_FORCE_WORK is set. See UpdateAdapter.
@@ -482,7 +483,7 @@ void* CitizenComp_Entity_FindComponent_Storage(int64_t entity, void* outIBP) {
             break;
         }
     }
-    fn_InternalBasePtr_Ctor(outIBP, found);
+    new (outIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return outIBP;
 }
 
@@ -844,7 +845,8 @@ static void CitizenAIComponent_UpdateAdapter(CitizenAIComponent* self, int64_t* 
             uint8_t* cz = reinterpret_cast<uint8_t*>(citizen);
             if (*reinterpret_cast<int64_t*>(cz + 0x238) == 0) {
                 if (fn_InternalBasePtr_Ctor)
-                    fn_InternalBasePtr_Ctor(cz + 0x238, g_pForceWorkBuilding);
+                    new (cz + 0x238) ::Object::InternalBasePtr(
+                        reinterpret_cast<RtObject::Internal*>(g_pForceWorkBuilding));   // B.3.3 bridge
                 else
                     *reinterpret_cast<void**>(cz + 0x238) = g_pForceWorkBuilding;
                 *reinterpret_cast<void**>(cz + 0x68) = g_pForceWorkBuilding;  // housed flag

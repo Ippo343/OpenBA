@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "scene_watch.h"
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Resolved helpers
@@ -638,7 +639,7 @@ void WorkPlaceComponent_OnCreateInit(void* selfP) {
         const int countBefore = *(int*)(self + 0x60);
 
         int64_t emptyIbp = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&emptyIbp, nullptr);
+        if (fn_InternalBasePtr_Ctor) new (&emptyIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
         int64_t* workerSlot = *(int64_t**)(self + 0x58);
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(workerSlot);
@@ -650,9 +651,11 @@ void WorkPlaceComponent_OnCreateInit(void* selfP) {
             int64_t host = *pJobHost;
             void* comp = WPC_FindJobHostComponent(host, s_pTId_JobHostComp);
             int64_t compIbp = 0;
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&compIbp, comp);
+            if (fn_InternalBasePtr_Ctor) new (&compIbp) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
             int64_t workerIbp = 0;
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&workerIbp, (void*)worker);
+            if (fn_InternalBasePtr_Ctor) new (&workerIbp) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>((void*)worker));   // B.3.3 bridge
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&compIbp);
             if (s_fn_WPC_Detach) s_fn_WPC_Detach(compIbp, &workerIbp);
         }
@@ -663,9 +666,11 @@ void WorkPlaceComponent_OnCreateInit(void* selfP) {
             int64_t host = *pJobHost;
             void* comp = WPC_FindJobHostComponent(host, s_pTId_JobHostComp);
             int64_t compIbp = 0;
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&compIbp, comp);
+            if (fn_InternalBasePtr_Ctor) new (&compIbp) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
             int64_t workerIbp = 0;
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&workerIbp, (void*)worker);
+            if (fn_InternalBasePtr_Ctor) new (&workerIbp) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>((void*)worker));   // B.3.3 bridge
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&compIbp);
             if (s_fn_WPC_Attach) s_fn_WPC_Attach(compIbp, &workerIbp);
         }

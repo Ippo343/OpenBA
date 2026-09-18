@@ -35,6 +35,7 @@
 #include "Component/spawncomponent_funcs.h"     // SpawnComponent_InitialSpawn (5cc0 seed)
 #include "stress_harness.h"                     // BANISHED_STRESS targets (standalone/)
 #include <chrono>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 extern "C" void MapComponent_ReportDc20Evictions(const char* tag);  // keystone_a_map.cpp
 #include <cstdint>
 #include <cstdio>
@@ -188,7 +189,7 @@ static void StartTown_MarkBuildingCells(void* game, int tileX, int tileY, int fp
     const int h0 = swapped ? fpW : fpH;
 
     uintptr_t nullIBP = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+    if (fn_InternalBasePtr_Ctor) new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
     int marked = 0, freed = 0, roadCells = 0;
     for (int iy = 0; iy < fpH; ++iy)
@@ -509,7 +510,7 @@ static bool SpawnAndRegister(void* tmpl, void* entityList) {
     void* mem = fn_MemAlloc(g_pMemAllocSingleton, ENTITY_SIZE, 8);
     void* ent = mem ? fn_EntityFactory_CreateEntity(mem, tmpl) : nullptr;
     void* ibp = nullptr;
-    fn_InternalBasePtr_Ctor(&ibp, ent);
+    new (&ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(ent));   // B.3.3 bridge
     int category = *(int32_t*)((uint8_t*)tmpl + TEMPLATE_CATEGORY);
     fn_EntityList_RegisterEntity(entityList, &ibp, category);
     return ent != nullptr;
@@ -1567,7 +1568,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         void* mem = fn_MemAlloc(g_pMemAllocSingleton, ENTITY_SIZE, 8);
         void* ent = mem ? fn_EntityFactory_CreateEntity(mem, tmpl) : nullptr;
         uintptr_t entIBP = 0;
-        fn_InternalBasePtr_Ctor(&entIBP, ent);
+        new (&entIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(ent));   // B.3.3 bridge
 
         // 90 / -90 / 270 degrees swap the footprint axes.
         int fpW = w0, fpH = h0;
@@ -1653,7 +1654,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         void* mapComp = FindComponentOnEntity(entity, tidMapComponent);
         if (mapComp) {
             uintptr_t mapIBP = 0;
-            fn_InternalBasePtr_Ctor(&mapIBP, mapComp);
+            new (&mapIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(mapComp));   // B.3.3 bridge
             fn_InternalBasePtr_CheckPtr(&mapIBP);
             uint8_t* mc = (uint8_t*)mapIBP;
             if (mc) {
@@ -1688,7 +1689,8 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
             void* modelComp = FindComponentOnEntity(entity, tidModelComponent);
             if (modelComp) {
                 uintptr_t mcIBP = 0;
-                fn_InternalBasePtr_Ctor(&mcIBP, modelComp);
+                new (&mcIBP) ::Object::InternalBasePtr(
+                    reinterpret_cast<RtObject::Internal*>(modelComp));   // B.3.3 bridge
                 fn_InternalBasePtr_CheckPtr(&mcIBP);
                 uint8_t* mc = (uint8_t*)mcIBP;
                 const int dim = *(int32_t*)game;
@@ -1739,7 +1741,8 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
             void* modelComp = FindComponentOnEntity(entity, tidModelComponent);
             if (modelComp) {
                 uintptr_t mIBP = 0;
-                fn_InternalBasePtr_Ctor(&mIBP, modelComp);
+                new (&mIBP) ::Object::InternalBasePtr(
+                    reinterpret_cast<RtObject::Internal*>(modelComp));   // B.3.3 bridge
                 fn_InternalBasePtr_CheckPtr(&mIBP);
                 uint8_t* m = (uint8_t*)mIBP;
                 void* modelDesc = m ? *(void**)(m + 0x18) : nullptr;
@@ -4551,7 +4554,7 @@ static void ApplyResourceModelVariant(void* entity, uint32_t tidModel,
     void* mc = FindComponentOnEntity(entity, tidModel);
     if (!mc) return;
     uintptr_t mcIBP = 0;
-    fn_InternalBasePtr_Ctor(&mcIBP, mc);
+    new (&mcIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(mc));   // B.3.3 bridge
     fn_InternalBasePtr_CheckPtr(&mcIBP);
     uint8_t* m = (uint8_t*)mcIBP;
     if (!m) return;
@@ -4765,12 +4768,13 @@ static void StartTown_MarkResourceCellGrid(void* gameVoid, void* ownerEntity, in
             // landmine documented for FUN_1401253d0); here we trust the linked entity.
             if (occupied && ownerEntity) {
                 uintptr_t entIBP = 0;
-                if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&entIBP, ownerEntity);
+                if (fn_InternalBasePtr_Ctor) new (&entIBP) ::Object::InternalBasePtr(
+                    reinterpret_cast<RtObject::Internal*>(ownerEntity));   // B.3.3 bridge
                 *(uintptr_t*)(cell + 0x08) = entIBP;   // dc20: *(cell+8) = owner entity
             } else {
                 // dee0's clear (occupancy disabled, or non-occupied footprint cell).
                 uintptr_t nullIBP = 0;
-                if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+                if (fn_InternalBasePtr_Ctor) new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                 *(uintptr_t*)(cell + 0x08) = nullIBP;
             }
         }
@@ -4852,7 +4856,7 @@ static void StartTown_PlaceResourceCell(void* entity, int cellIdx, void* game, v
     void* mapComp = FindComponentOnEntity(entity, tidMap);
     if (mapComp && fn_InternalBasePtr_Ctor && fn_InternalBasePtr_CheckPtr) {
         uintptr_t mapIBP = 0;
-        fn_InternalBasePtr_Ctor(&mapIBP, mapComp);
+        new (&mapIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(mapComp));   // B.3.3 bridge
         fn_InternalBasePtr_CheckPtr(&mapIBP);
         uint8_t* mc = (uint8_t*)mapIBP;
         if (mc) {
@@ -4913,7 +4917,7 @@ static void StartTown_PlaceResourceCell(void* entity, int cellIdx, void* game, v
     void* modelComp = FindComponentOnEntity(entity, tidModel);
     if (!modelComp || !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr) return;
     uintptr_t mIBP = 0;
-    fn_InternalBasePtr_Ctor(&mIBP, modelComp);
+    new (&mIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(modelComp));   // B.3.3 bridge
     fn_InternalBasePtr_CheckPtr(&mIBP);
     uint8_t* m = (uint8_t*)mIBP;
     if (!m) return;
@@ -4942,7 +4946,7 @@ static void StartTown_GrowthInitResource(void* entity, uint32_t tidGrowth, void*
     void* gComp = FindComponentOnEntity(entity, tidGrowth);
     if (!gComp || !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr) return;
     uintptr_t gIBP = 0;
-    fn_InternalBasePtr_Ctor(&gIBP, gComp);
+    new (&gIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(gComp));   // B.3.3 bridge
     fn_InternalBasePtr_CheckPtr(&gIBP);
     uint8_t* s = (uint8_t*)gIBP;
     if (!s) return;
@@ -5175,7 +5179,7 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
                 void* mem = fn_MemAlloc(g_pMemAllocSingleton, ENTITY_SIZE, 8);
                 void* ent = mem ? fn_EntityFactory_CreateEntity(mem, tmpl) : nullptr;
                 uintptr_t entIBP = 0;
-                fn_InternalBasePtr_Ctor(&entIBP, ent);
+                new (&entIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(ent));   // B.3.3 bridge
                 // Entity_impl_6540 — write the MapComponent grid cell (tileX/tileY,
                 // w=1,h=1) AND the jittered ModelComponent world transform. This is the
                 // canonical FUN_1400a12b0 per-cell placement: the grid fields let
@@ -5305,7 +5309,7 @@ static bool SpawnEnvVolumeAndRegister(void* tmpl, void* entityList,
             gridX, gridY, chunk, chunk);
 
     void* ibp = nullptr;
-    fn_InternalBasePtr_Ctor(&ibp, ent);
+    new (&ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(ent));   // B.3.3 bridge
     int category = *(int32_t*)((uint8_t*)tmpl + TEMPLATE_CATEGORY);
     fn_EntityList_RegisterEntity(entityList, &ibp, category);
     return true;

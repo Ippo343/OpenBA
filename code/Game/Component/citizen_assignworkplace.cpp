@@ -38,6 +38,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdlib>   // qsort
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Roster array record: storage+0x50 points at an array of these, indexed by
@@ -426,7 +427,8 @@ extern "C" void CitizenComponent_AssignWorkplace(void* selfV, void* workplaceIBP
         int64_t storageIBP[2] = {0, 0};
         if (s_fn_FindCompStorage) s_fn_FindCompStorage(*pWorkplace, storageIBP);
         int64_t selfIBP[2] = {0, 0};
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(selfIBP, self);
+        if (fn_InternalBasePtr_Ctor) new (selfIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
         CheckPtr(storageIBP);
         // Guard: a force-assigned / partially-built workplace may lack a Storage
         // component (null-wrapped IBP); the original relies on the invariant that an
@@ -445,7 +447,8 @@ extern "C" void CitizenComponent_AssignWorkplace(void* selfV, void* workplaceIBP
         int64_t storageIBP[2] = {0, 0};
         if (s_fn_FindCompStorage) s_fn_FindCompStorage(*pWorkplace, storageIBP);
         int64_t selfIBP[2] = {0, 0};
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(selfIBP, self);
+        if (fn_InternalBasePtr_Ctor) new (selfIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
         CheckPtr(storageIBP);
         if (storageIBP[0] != 0)
             CitizenComponent_helper_a710(storageIBP[0], *pSlot, selfIBP);

@@ -15,6 +15,7 @@
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "resolve.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // g_ToolUI_ChildDialog_Vtable  (exe vtable @ 0x14015f5a0)
@@ -189,7 +190,7 @@ extern "C" void* ToolUI_OpenToolDialog_ff9e0(void* param_1, void* param_2, uint6
         void* ui = *reinterpret_cast<void**>(
             reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x98);
         if (fn_UI_CloseDialog) fn_UI_CloseDialog(ui, &local);
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&local, nullptr);
+        if (fn_InternalBasePtr_Ctor) new (&local) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *slot = local;
     }
 
@@ -221,7 +222,7 @@ extern "C" void* ToolUI_OpenToolDialog_ff9e0(void* param_1, void* param_2, uint6
     void* dialogToWrap = nullptr;
     if (dialog) {
         uint8_t parentIBP[16] = {};
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(parentIBP, nullptr);
+        if (fn_InternalBasePtr_Ctor) new (parentIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         if (fn_DialogInstance_Ctor) {
             fn_DialogInstance_Ctor(dialog, ui, resource, parentIBP,
                                    reinterpret_cast<void*>(param_3), nullptr, 0);
@@ -234,7 +235,8 @@ extern "C" void* ToolUI_OpenToolDialog_ff9e0(void* param_1, void* param_2, uint6
     // (4) Wrap into IBP, store, and add to the UI.
     {
         uint64_t newIBP = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&newIBP, dialogToWrap);
+        if (fn_InternalBasePtr_Ctor) new (&newIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(dialogToWrap));   // B.3.3 bridge
         *slot = newIBP;
         uint64_t addIBP = newIBP;
         if (fn_UI_AddDialog) fn_UI_AddDialog(ui, &addIBP);

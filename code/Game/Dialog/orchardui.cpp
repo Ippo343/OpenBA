@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Retail's Slot4 filters the "yield" FindElement result through
 // IsDerivedFrom(elem, *g_TypeId_ProgressElement) before storing it at +0x38.
@@ -63,7 +64,7 @@ void OrchardUI_Slot4(OrchardUI* self) {
     void* checked = fn_IsDerivedFrom(rawElem, OrchardUI_ProgressElementTypeId())
                         ? rawElem : nullptr;
     uint64_t basePtrVal = 0;
-    fn_InternalBasePtr_Ctor(&basePtrVal, checked);
+    new (&basePtrVal) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
     *(uint64_t*)(s + 0x38) = basePtrVal;
 
     // Set initial progress value to 1.0f (100%).
@@ -102,7 +103,8 @@ void OrchardUI_Slot7(OrchardUI* self) {
         checkedEntity = entity;
     }
     uint64_t entityBasePtr = 0;
-    fn_InternalBasePtr_Ctor(&entityBasePtr, checkedEntity);
+    new (&entityBasePtr) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(checkedEntity));   // B.3.3 bridge
 
     // Find OrchardComponent on entity
     uint64_t orchardComp = 0;
@@ -157,7 +159,8 @@ void OrchardUI_Slot11(OrchardUI* self, int64_t param2) {
         checkedEntity = entity;
     }
     uint64_t entityBasePtr = 0;
-    fn_InternalBasePtr_Ctor(&entityBasePtr, checkedEntity);
+    new (&entityBasePtr) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(checkedEntity));   // B.3.3 bridge
 
     // Find OrchardComponent on entity
     uint64_t orchardComp = 0;
@@ -200,7 +203,8 @@ void* OrchardUI_Slot12(OrchardUI* self, void* param2) {
         checkedEntity = entity;
     }
     uint64_t entityBasePtr = 0;
-    fn_InternalBasePtr_Ctor(&entityBasePtr, checkedEntity);
+    new (&entityBasePtr) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(checkedEntity));   // B.3.3 bridge
 
     // Find OrchardComponent on entity
     uint64_t orchardComp = 0;

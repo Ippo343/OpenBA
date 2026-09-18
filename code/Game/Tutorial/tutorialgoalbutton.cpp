@@ -26,6 +26,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // TutorialGoalButton::Dtor (vtable +0x00, 0x1400273b0)
@@ -170,7 +171,8 @@ int TutorialGoalButton_Check(void* self) {
     // Wrap in another InternalBasePtr
     uintptr_t wrappedIBP = 0;
     if (fn_InternalBasePtr_Ctor) {
-        fn_InternalBasePtr_Ctor(&wrappedIBP, validElement);
+        new (&wrappedIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(validElement));   // B.3.3 bridge
     }
 
     if (wrappedIBP == 0) {

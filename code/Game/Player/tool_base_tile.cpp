@@ -21,6 +21,7 @@
 #include <cstdlib>                           // std::getenv
 #include <cstring>                           // std::strcmp (BANISHED_CLEAR_PLACE_OVER)
 #include <climits>                           // INT_MIN (reject-trace dedupe)
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // 0x140003870 — SetTransformFromYaw
@@ -354,7 +355,8 @@ unsigned long long ToolTile_ValidateCreate_fd650(
 
     long long local_res8 = 0;
     void* local_48 = mem; // doubles as the out-IBP scratch (matches the exe stack reuse)
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&local_res8, ptr);
+    if (fn_InternalBasePtr_Ctor) new (&local_res8) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(ptr));   // B.3.3 bridge
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
 
     // Resolve the placed-entity sub-component (004680) and write the footprint rect.

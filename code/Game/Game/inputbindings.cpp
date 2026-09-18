@@ -19,6 +19,7 @@
 #include "system/String.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdio>
+#include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 
 namespace Game {
 
@@ -186,7 +187,8 @@ void LoadInputNameTables() {
         void* factoryObj = *(void**)*g_pFactorySingleton;
         if (factoryObj) {
             s_stringTableTypeId =
-                fn_Factory_GetTypeIdFromName(factoryObj, "StringTable", true);
+                reinterpret_cast<const ::Object::Factory*>(factoryObj)->GetTypeIdFromName(
+                    "StringTable", true);   // B.3.3 bridge
             printf("[InputBindings] StringTable typeId = %u\n",
                    s_stringTableTypeId);
         }

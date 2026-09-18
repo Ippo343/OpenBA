@@ -12,6 +12,7 @@
 #include "system/String.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // SelectDescription layout (from Ghidra analysis):
@@ -92,7 +93,7 @@ static int SelectResourceUI_IterateResources(void* self, void* combo, int* selec
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, entityPtr);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
 
     int comboIdx = 0;
 
@@ -224,7 +225,7 @@ void SelectResourceUI_Slot4(void* self) {
     void* rawElem = (void*)findResult;
     void* checked = rawElem ? rawElem : nullptr;
     uint64_t basePtrVal = 0;
-    fn_InternalBasePtr_Ctor(&basePtrVal, checked);
+    new (&basePtrVal) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
     *(uint64_t*)(s + 0x30) = basePtrVal;
 
     // Set element ID to 500 (combo selection event ID)

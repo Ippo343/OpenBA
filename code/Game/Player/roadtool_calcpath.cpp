@@ -33,6 +33,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 
@@ -210,7 +211,7 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(uint32_t* mapGrid, uint32_t cell
     void* work = nullptr;
     void* mem = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x70, 8) : nullptr;
     if (mem) {
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&ownerIbp, nullptr);
+        if (fn_InternalBasePtr_Ctor) new (&ownerIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         if (s_fn_BuildRoadCtor)
             work = s_fn_BuildRoadCtor(mem, &ownerIbp, cellIdx, mapDescVal, roadDescExtra,
                                       *(uint8_t*)(cell + 0x2a),   // existing road type
@@ -223,7 +224,8 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(uint32_t* mapGrid, uint32_t cell
     }
 
     uint64_t workIbp = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&workIbp, work);
+    if (fn_InternalBasePtr_Ctor) new (&workIbp) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
 
     // Post to the work scheduler at gameWorld+0x118. code 0x2000 = the road category;
     // retail passes fromExisting='\0' and prio=-1 (the prio is dead on this path).

@@ -67,6 +67,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Work reimpl resolvers — see the note in CF_MakeAreaWork.
 bool PlantArea_ResolveFuncs();
@@ -275,7 +276,8 @@ void CF_PostWork(uintptr_t comp, void* work) {
         return;
     }
     uintptr_t workIbp = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&workIbp, work);
+    if (fn_InternalBasePtr_Ctor) new (&workIbp) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
     else workIbp = reinterpret_cast<uintptr_t>(work);
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     uintptr_t workCompIbp = 0;
@@ -432,10 +434,10 @@ static char CropField_State9Enter(void* self, void* /*sm*/) {
             if (!s) continue;
             *reinterpret_cast<int32_t*>(s + 0x00) = (row + oy) * mapW + col + ox;
             uintptr_t nullIbp = 0;
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nullIbp, nullptr);
+            if (fn_InternalBasePtr_Ctor) new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             *reinterpret_cast<uintptr_t*>(s + 0x10) = nullIbp;
             nullIbp = 0;
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nullIbp, nullptr);
+            if (fn_InternalBasePtr_Ctor) new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             *reinterpret_cast<uintptr_t*>(s + 0x08) = nullIbp;
             *reinterpret_cast<int32_t*>(s + 0x04) = 0;
         }

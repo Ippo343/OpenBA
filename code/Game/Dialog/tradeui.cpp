@@ -41,6 +41,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 
 // Dispatch slot addresses for element type IDs used in Serialize inner loops
@@ -114,7 +115,7 @@ void TradeUI_Draw(TradeUI* self) {
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
-    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
 
     fn_InternalBasePtr_CheckPtr(&entityPtr);
     uint64_t buildingPtr[2] = {0, 0};
@@ -141,7 +142,7 @@ void TradeUI_Slot6(TradeUI* self) {
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
-    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
 
     fn_InternalBasePtr_CheckPtr(&entityPtr);
     uint64_t buildingPtr[2] = {0, 0};
@@ -324,7 +325,7 @@ void TradeUI_RefreshSellTable(TradeUI* self)
     void* compEntity = isDerived ? entityRaw : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
-    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
 
     fn_InternalBasePtr_CheckPtr(&entityPtr);
     uint64_t buildingPtr[2] = {0, 0};
@@ -443,7 +444,8 @@ void TradeUI_RefreshSellTable(TradeUI* self)
     // Check trade state: buildState byte +0x52 (or +0x50 if negative)
     bool tradeActive = false;
     if (buildStateComp) {
-        fn_InternalBasePtr_Ctor(&buildStateComp, buildStateComp);
+        new (&buildStateComp) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(buildStateComp));   // B.3.3 bridge
         fn_InternalBasePtr_CheckPtr(&buildStateComp);
         int8_t state52 = *(int8_t*)((uintptr_t)buildStateComp + 0x52);
         int8_t stateVal = state52;
@@ -619,7 +621,7 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
     void* compEntity = isDerived ? entityRaw : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
-    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
 
     fn_InternalBasePtr_CheckPtr(&entityPtr);
     uint64_t buildingPtr[2] = {0, 0};
@@ -649,7 +651,7 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
             if (isText) textElem = *(void**)foundBuf;
         }
         uint64_t textIbp[1] = {0};
-        fn_InternalBasePtr_Ctor(textIbp, textElem);
+        new (textIbp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(textElem));   // B.3.3 bridge
 
         // Set text parameters based on current order
         fn_InternalBasePtr_CheckPtr(&buildingPtr);
@@ -882,7 +884,8 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
                     if (isText) childElem = *(void**)childBuf;
                 }
                 uint64_t childIbp[2] = {0, 0};
-                fn_InternalBasePtr_Ctor(childIbp, childElem);
+                new (childIbp) ::Object::InternalBasePtr(
+                    reinterpret_cast<RtObject::Internal*>(childElem));   // B.3.3 bridge
 
                 if ((void*)*childIbp != nullptr) {
                     // Set sprite
@@ -954,7 +957,8 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
                     if (isText) childElem = *(void**)childBuf;
                 }
                 uint64_t childIbp[2] = {0, 0};
-                fn_InternalBasePtr_Ctor(childIbp, childElem);
+                new (childIbp) ::Object::InternalBasePtr(
+                    reinterpret_cast<RtObject::Internal*>(childElem));   // B.3.3 bridge
 
                 if ((void*)*childIbp != nullptr) {
                     uint8_t emptySprite[16] = {0};
@@ -1025,7 +1029,7 @@ void TradeUI_Serialize(TradeUI* self) {
     void* compEntity = isDerived ? entityRaw : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
-    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
 
     fn_InternalBasePtr_CheckPtr(&entityPtr);
     uint64_t buildingPtr[2] = {0, 0};
@@ -1143,11 +1147,11 @@ void TradeUI_Serialize(TradeUI* self) {
 
         // Set element IDs
         uint64_t r0[2] = {0, 0};
-        fn_InternalBasePtr_Ctor(r0, label);
+        new (r0) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(label));   // B.3.3 bridge
         fn_InternalBasePtr_CheckPtr(r0);
         if (*(void**)r0) fn_Element_SetElementId(*(void**)r0, baseId - 1000);
 
-        fn_InternalBasePtr_Ctor(r0, number);
+        new (r0) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(number));   // B.3.3 bridge
         fn_InternalBasePtr_CheckPtr(r0);
         if (*(void**)r0) fn_Element_SetElementId(*(void**)r0, baseId);
 
@@ -1158,7 +1162,7 @@ void TradeUI_Serialize(TradeUI* self) {
         // writes +0x88 on the spinner AND on the inner edit element at *(spinner+0xa0), so
         // both halves of the widget answer to the same id. Faithful, verified at the four
         // retail call sites (EDX = base+0x3e8 / +0x7d0 / +0xbb8 / +0xfa0).
-        fn_InternalBasePtr_Ctor(r0, spinner);
+        new (r0) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(spinner));   // B.3.3 bridge
         fn_InternalBasePtr_CheckPtr(r0);
         if (*(void**)r0) fn_SpinnerElement_SetElementId(*(void**)r0, baseId + 1000);
         TradeUI_ReportSpinnerTag("purchase", row, *(void**)r0, baseId + 1000);
@@ -1270,7 +1274,7 @@ void TradeUI_Serialize(TradeUI* self) {
         // SpinnerElement::SetElementId (slot 0x140151cd8), which sets +0x88 on the spinner
         // and on its inner edit element at *(spinner+0xa0). Retail call site 0x140085d40,
         // EDX = i + 0x7d0. See the tablePurchase loop above.
-        fn_InternalBasePtr_Ctor(c0, e1);
+        new (c0) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(e1));   // B.3.3 bridge
         fn_InternalBasePtr_CheckPtr(c0);
         fn_SpinnerElement_SetElementId(*(void**)c0, i + 2000);
         TradeUI_ReportSpinnerTag("storage", i, *(void**)c0, i + 2000);
@@ -1337,7 +1341,7 @@ void TradeUI_Serialize(TradeUI* self) {
 
         // child(3) is a SpinnerElement (the "SliderElement" naming is the same mislabel
         // reg_element_typeids.cpp:36 documents). Retail call site 0x14008614e, EDX = i+0xbb8.
-        fn_InternalBasePtr_Ctor(c, sliderElem);
+        new (c) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(sliderElem));   // B.3.3 bridge
         fn_InternalBasePtr_CheckPtr(c);
         fn_SpinnerElement_SetElementId(*(void**)c, i + 3000);
         TradeUI_ReportSpinnerTag("sell", i, *(void**)c, i + 3000);
@@ -1406,7 +1410,7 @@ void TradeUI_Serialize(TradeUI* self) {
 
         // child(3) is a SpinnerElement (same mislabel as the sell loop).
         // Retail call site 0x14008653e, EDX = i + 0xfa0.
-        fn_InternalBasePtr_Ctor(c, sliderElem);
+        new (c) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(sliderElem));   // B.3.3 bridge
         fn_InternalBasePtr_CheckPtr(c);
         fn_SpinnerElement_SetElementId(*(void**)c, i + 4000);
         TradeUI_ReportSpinnerTag("buy", i, *(void**)c, i + 4000);
@@ -1451,7 +1455,7 @@ void TradeUI_Serialize(TradeUI* self) {
 
         void* typed = *(void**)cellBuf;
         uint64_t ibp[2] = {0, 0};
-        fn_InternalBasePtr_Ctor(ibp, typed);
+        new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(typed));   // B.3.3 bridge
         fn_InternalBasePtr_CheckPtr(ibp);
         fn_Element_SetElementId(*(void**)ibp, i + 0x1F40);
 
@@ -1533,7 +1537,7 @@ void TradeUI_Startup(TradeUI* self) {
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
-    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
 
     fn_InternalBasePtr_CheckPtr(&entityPtr);
     uint64_t buildingPtr[2] = {0, 0};
@@ -1686,7 +1690,7 @@ void TradeUI_OnCreate(TradeUI* self) {
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
-    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
 
     fn_InternalBasePtr_CheckPtr(&entityPtr);
     uint64_t buildingPtr[2] = {0, 0};
@@ -1884,7 +1888,7 @@ void TradeUI_Update(TradeUI* self, void* stream, void* p3, int64_t p4) {
     }
 
     uint64_t tabIBP = 0;
-    fn_InternalBasePtr_Ctor(&tabIBP, tabElement);
+    new (&tabIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(tabElement));   // B.3.3 bridge
 
     // Read current tab index from TabElement (+0xf8)
     fn_InternalBasePtr_CheckPtr(&tabIBP);
@@ -1938,7 +1942,7 @@ void TradeUI_UpdateBuyTotals(TradeUI* self) {
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
-    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
 
     fn_InternalBasePtr_CheckPtr(&entityPtr);
     uint64_t buildingPtr[2] = {0, 0};
@@ -1996,7 +2000,7 @@ void TradeUI_UpdateSellTotals(TradeUI* self) {
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
-    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
 
     fn_InternalBasePtr_CheckPtr(&entityPtr);
     uint64_t buildingPtr[2] = {0, 0};
@@ -2085,7 +2089,7 @@ void TradeUI_OnComboPurchase(TradeUI* self) {
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
-    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
 
     fn_InternalBasePtr_CheckPtr(&entityPtr);
     uint64_t buildingPtr[2] = {0, 0};
@@ -2115,7 +2119,7 @@ void TradeUI_OnComboOrder(TradeUI* self) {
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
-    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
 
     fn_InternalBasePtr_CheckPtr(&entityPtr);
     uint64_t buildingPtr[2] = {0, 0};
@@ -2147,7 +2151,7 @@ void TradeUI_OnOrderAmountSpinner(TradeUI* self, int idx) {
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
-    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
 
     fn_InternalBasePtr_CheckPtr(&entityPtr);
     uint64_t buildingPtr[2] = {0, 0};
@@ -2180,7 +2184,7 @@ void TradeUI_OnOrderSpinner(TradeUI* self, int idx, int idx2) {
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
-    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
 
     fn_InternalBasePtr_CheckPtr(&entityPtr);
     uint64_t buildingPtr[2] = {0, 0};
@@ -2228,7 +2232,7 @@ void TradeUI_OnDismissButton(TradeUI* self) {
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
-    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
 
     // Find BuildState component (FUN_140003ea0)
     fn_InternalBasePtr_CheckPtr(&entityPtr);
@@ -2271,7 +2275,7 @@ void TradeUI_OnPurchaseButton(TradeUI* self, int idx) {
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
-    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
 
     fn_InternalBasePtr_CheckPtr(&entityPtr);
     uint64_t buildingPtr[2] = {0, 0};
@@ -2318,7 +2322,7 @@ void TradeUI_OnStorageSpinner(TradeUI* self, int idx, void* /*reserved*/) {
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
-    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
 
     fn_InternalBasePtr_CheckPtr(&entityPtr);
     uint64_t buildingPtr[2] = {0, 0};
@@ -2367,7 +2371,7 @@ void TradeUI_RefreshOrderQuantityDisplay(TradeUI* self) {
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
-    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
 
     fn_InternalBasePtr_CheckPtr(&entityPtr);
     uint64_t buildingPtr[2] = {0, 0};
@@ -2435,7 +2439,7 @@ void TradeUI_RefreshSellSpinnerValues(TradeUI* self) {
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
-    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
 
     fn_InternalBasePtr_CheckPtr(&entityPtr);
     uint64_t buildingPtr[2] = {0, 0};
@@ -2546,7 +2550,7 @@ void TradeUI_RefreshOrderDisplay(TradeUI* self) {
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
-    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
 
     fn_InternalBasePtr_CheckPtr(&entityPtr);
     uint64_t buildingPtr[2] = {0, 0};
@@ -2716,7 +2720,7 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
     void* compEntity = isDerived ? ownerEntity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
-    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
 
     // Find TradeComponent (uses g_TypeId_TradeComponent_FC = DAT_1401c4b80)
     fn_InternalBasePtr_CheckPtr(&entityPtr);

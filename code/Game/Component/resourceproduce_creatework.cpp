@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Each Work reimpl resolves its own engine-function pointers in a *_ResolveFuncs()
 // that only the FACTORY path calls. CreateWork allocates and constructs directly —
@@ -85,7 +86,8 @@ void* AllocWork(int size) {
 
 // The tail shared by all three: hand the raw object back as an InternalBasePtr.
 uintptr_t* WrapIBP(uintptr_t* out, void* obj) {
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(out, obj);
+    if (fn_InternalBasePtr_Ctor) new (out) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(obj));   // B.3.3 bridge
     else *out = reinterpret_cast<uintptr_t>(obj);
     return out;
 }

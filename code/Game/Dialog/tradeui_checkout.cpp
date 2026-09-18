@@ -71,6 +71,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ── Cross-module reimpls this calls ──────────────────────────────────────────
 // 0x140091e60 — appends into townMgr+0x110 (code/Game/Component/rawmaterialcomponent.cpp)
@@ -246,7 +247,7 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/,
     void* entity  = fn_IsDerivedFrom(subject, *g_TypeId_ComponentEntity) ? subject : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
-    fn_InternalBasePtr_Ctor(&entityPtr, entity);
+    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
 
     // The trading post's own TradeComponent and StorageComponent.
     uint64_t tradePtr[2] = {0, 0};

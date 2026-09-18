@@ -47,6 +47,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 extern "C" void Pasture_BindAnimal(void* animalComp, void* pastureIBP);
 
@@ -97,7 +98,8 @@ void Resolve() {
 inline void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 inline uint64_t MakeIBP(void* obj) {
     uint64_t r = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&r, obj);
+    if (fn_InternalBasePtr_Ctor) new (&r) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(obj));   // B.3.3 bridge
     else r = reinterpret_cast<uint64_t>(obj);
     return r;
 }
@@ -144,7 +146,8 @@ extern "C" void* Pasture_FindLivestockComp(int64_t entity, void* retIBP) {
             }
         }
     }
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(retIBP, found);
+    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return retIBP;
 }
 

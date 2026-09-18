@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // By-name StatusIconComponent finder, defined in the STANDALONE promotion block at the
 // bottom of this file. StatusIconUI_Startup calls it as a fallback because the exe
@@ -65,7 +66,7 @@ void StatusIconUI_Serialize(StatusIconUI* self) {
     // since FindElement by name always returns a valid element.
     void* rawElem = (void*)findResult;
     uint8_t iconsBuf[8];
-    fn_InternalBasePtr_Ctor(iconsBuf, rawElem);
+    new (iconsBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(rawElem));   // B.3.3 bridge
     void* iconsElem = *(void**)iconsBuf;
 
     // Get child count
@@ -106,7 +107,7 @@ void StatusIconUI_Startup(StatusIconUI* self) {
 
     // Wrap entity in InternalBasePtr
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, entityPtr);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
     void* entityInternal = *(void**)entityBuf;
 
     // Find the StatusIconComponent (the exe finder is named "MeshInstance" but it keys
@@ -159,7 +160,7 @@ void StatusIconUI_Startup(StatusIconUI* self) {
             }
 
             uint8_t ptBuf[8];
-            fn_InternalBasePtr_Ctor(ptBuf, entityUI);
+            new (ptBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityUI));   // B.3.3 bridge
             void* ptInternal = *(void**)ptBuf;
 
             // Retail: iconsActive = (GetActivePage(ctrl+0x40) - 2U <= 1), i.e. the page

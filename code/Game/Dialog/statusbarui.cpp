@@ -18,6 +18,7 @@
 #include "system/String.h"
 #include <cstdint>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // CitizenUI_UpdateIconDisplay_Impl and CitizenUI_BuildIconArray_Impl
 // are now in the shared header: Dialog/citizen_icon_helpers.h
@@ -135,7 +136,7 @@ void StatusBarUI_Draw(StatusBarUI* self) {
         fn_InternalBasePtr_CheckPtr(retBuf);
         void* typedGroup = *(void**)retBuf;
         uint8_t groupPtr[16];
-        fn_InternalBasePtr_Ctor(groupPtr, typedGroup);
+        new (groupPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(typedGroup));   // B.3.3 bridge
         CitizenUI_BuildIconArray_Impl(s + 0x108, (uintptr_t)groupPtr);
     }
     {
@@ -148,7 +149,7 @@ void StatusBarUI_Draw(StatusBarUI* self) {
         fn_InternalBasePtr_CheckPtr(retBuf);
         void* typedGroup = *(void**)retBuf;
         uint8_t groupPtr[16];
-        fn_InternalBasePtr_Ctor(groupPtr, typedGroup);
+        new (groupPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(typedGroup));   // B.3.3 bridge
         CitizenUI_BuildIconArray_Impl(s + 0x128, (uintptr_t)groupPtr);
     }
 
@@ -164,7 +165,8 @@ void StatusBarUI_Draw(StatusBarUI* self) {
         // against the LabelElement type-info, not ButtonElement — accept directly.
         fn_InternalBasePtr_CheckPtr(retBuf);
         uint8_t labelPtr[16];
-        fn_InternalBasePtr_Ctor(labelPtr, *(void**)retBuf);
+        new (labelPtr) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(*(void**)retBuf));   // B.3.3 bridge
         self->labelTitleParam = *(void**)labelPtr;
     }
 
@@ -259,7 +261,8 @@ found_happiness:
 
         {
             uint8_t happyPtr[16];
-            fn_InternalBasePtr_Ctor(happyPtr, happyComp);
+            new (happyPtr) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(happyComp));   // B.3.3 bridge
             fn_InternalBasePtr_CheckPtr(happyPtr);
             uintptr_t hc = *(uintptr_t*)happyPtr;
 
@@ -582,7 +585,8 @@ static void StatusBarUI_StatusIconHandler_Impl(StatusBarUI* self, int iconIndex)
 
             // If no HappinessComponent found, store null
             uintptr_t happinessPtr = (uintptr_t)happinessComp;
-            fn_InternalBasePtr_Ctor(&happinessPtr, happinessComp);
+            new (&happinessPtr) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(happinessComp));   // B.3.3 bridge
 
             fn_InternalBasePtr_CheckPtr((void*)&happinessPtr);
 

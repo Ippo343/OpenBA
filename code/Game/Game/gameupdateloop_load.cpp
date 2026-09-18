@@ -39,6 +39,8 @@
 #include <atomic>
 #include <windows.h>  // GetCurrentThreadId (double-dispatch diagnostic)
 #include "rt_port.h"                        // RT_DATA_SLOT (never caches a null resolve)
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 
 // ============================================================
 // Externs from sibling reimpl TUs (already registered/defined)
@@ -767,11 +769,11 @@ extern "C" void* Reimpl_FUN_140098660(void* camera, float fovY, float nearZ, flo
 // FUN_1401025c0 (helper_25c0) — in-game EntityUI-style ctor (+0x120, 0xb0).
 static void* Reimpl_FUN_1401025c0(void* selfMem) {
     uint8_t* p = (uint8_t*)selfMem;
-    fn_InternalBasePtr_Ctor((void*)(p + 0x00), nullptr);
+    new ((void*)(p + 0x00)) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     *(int64_t*)(p + 0x10) = 0;
     *(int32_t*)(p + 0x18) = 0;
     *(int64_t*)(p + 0x20) = 0;
-    fn_InternalBasePtr_Ctor((void*)(p + 0x28), nullptr);
+    new ((void*)(p + 0x28)) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     *(uint8_t*)(p + 0x30) = 0;
     *(int32_t*)(p + 0x34) = 1;
     *(uint8_t*)(p + 0x38) = 0;
@@ -1217,7 +1219,8 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
             if (!g_TypeId_StringTable && s_stTid == 0 && fn_Factory_GetTypeIdFromName &&
                 g_pFactorySingleton && *g_pFactorySingleton) {
                 void* factoryObj = *(void**)*g_pFactorySingleton;
-                if (factoryObj) s_stTid = fn_Factory_GetTypeIdFromName(factoryObj, "StringTable", true);
+                if (factoryObj) s_stTid = reinterpret_cast<const ::Object::Factory*>(factoryObj)->GetTypeIdFromName(
+                    "StringTable", true);   // B.3.3 bridge
                 if (s_stTid) g_TypeId_StringTable = &s_stTid;
             }
             uint32_t stTid = g_TypeId_StringTable ? *g_TypeId_StringTable : 0;
@@ -1625,7 +1628,7 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
                 instance = mem;
             }
             uint64_t ibp = 0;
-            fn_InternalBasePtr_Ctor(&ibp, instance);
+            new (&ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(instance));   // B.3.3 bridge
             *(uint64_t*)(p + 0x150) = ibp;
 
             // scenario = resourceList->data[achievementId]

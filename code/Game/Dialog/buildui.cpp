@@ -19,6 +19,7 @@
 #include "system/String.h"
 #include <cstdint>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 #ifdef _DEBUG
 // Debug sprite logging wrappers (runtime/src/ui/)
@@ -96,7 +97,7 @@ static void* BuildUI_FindChildElem(void* parentElem, const char* name) {
 static uint64_t BuildUI_FindElemAsBasePtr(void* parentElem, const char* name) {
     void* raw = BuildUI_FindChildElem(parentElem, name);
     uint8_t bpBuf[8];
-    fn_InternalBasePtr_Ctor(bpBuf, raw);
+    new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(raw));   // B.3.3 bridge
     return *(uint64_t*)bpBuf;
 }
 
@@ -129,7 +130,7 @@ void BuildUI_Slot4(BuildUI* self) {
     bool isEntity = fn_IsDerivedFrom(entityRaw, *g_TypeId_ComponentEntity);
     void* entity = isEntity ? entityRaw : nullptr;
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, entity);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
     uintptr_t entityPtr = *(uintptr_t*)entityBuf;
 
     // Find PositionComponent (FUN_14000d6c0) → has ToolbarDescription at +0x18
@@ -344,7 +345,7 @@ void BuildUI_Slot7(BuildUI* self) {
     bool isEntity = fn_IsDerivedFrom(entityRaw, *g_TypeId_ComponentEntity);
     void* entity = isEntity ? entityRaw : nullptr;
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, entity);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
     uintptr_t entityPtr = *(uintptr_t*)entityBuf;
 
     // Find PositionComponent → ToolbarDescription at +0x18
@@ -509,7 +510,8 @@ void BuildUI_Slot9(BuildUI* self, uint64_t param2, int param3, int param4) {
 
         // Wrap in InternalBasePtr for FindComponent call
         uint64_t entityBasePtr = 0;
-        fn_InternalBasePtr_Ctor(&entityBasePtr, checkedEntity);
+        new (&entityBasePtr) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(checkedEntity));   // B.3.3 bridge
 
         // Find the WorkPlaceComponent on the entity. Retail (BuildUI_Update 0x1400b1ea0)
         // calls FUN_140002e10 — the DAT_1401c80e0 (WorkPlaceComponent) finder. It must NOT

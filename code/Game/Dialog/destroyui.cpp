@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // DestroyComponent_CanReclaim (0x14011e690)
@@ -231,7 +232,7 @@ static uint64_t FindElemAsBasePtr(void* dialogElem, const char* name) {
     void* rawElem = (void*)intPtr;
     // Wrap in InternalBasePtr (skip IsDerivedFrom check — dialog layout is fixed)
     uint8_t basePtrBuf[8];
-    fn_InternalBasePtr_Ctor(basePtrBuf, rawElem);
+    new (basePtrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(rawElem));   // B.3.3 bridge
     return *(uint64_t*)basePtrBuf;
 }
 
@@ -271,7 +272,7 @@ void DestroyUI_Slot4(DestroyUI* self) {
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, entityPtr);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
     void* entityInternal = *(void**)entityBuf;
 
     // --- Button elements (stored as InternalBasePtr, with element IDs) ---
@@ -322,7 +323,7 @@ void DestroyUI_Slot7(DestroyUI* self) {
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, entityPtr);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
     void* entityInternal = *(void**)entityBuf;
 
     // Find StorageComponent and Destroy component. (Ghidra-verified: retail
@@ -513,7 +514,7 @@ void DestroyUI_Slot9(DestroyUI* self, uint64_t /*param2*/, int param3, int param
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, entityPtr);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
     void* entityInternal = *(void**)entityBuf;
 
     // Find DestroyComponent on entity

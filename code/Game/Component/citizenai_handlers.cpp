@@ -30,6 +30,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 
@@ -122,7 +123,7 @@ void CitizenAI_PlayAnimationActionCtor5(void* param_1, float* dest, float animTi
                 ? fn_MemAlloc(g_pMemAllocSingleton, 0x40, 8) : nullptr;
     if (mem) {
         int64_t destIBP = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&destIBP, nullptr);
+        if (fn_InternalBasePtr_Ctor) new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         uint32_t msgId[2] = { s_pMsgId_c70e8 ? *s_pMsgId_c70e8 : 0u, 0u };
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_1);
         uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
@@ -131,9 +132,11 @@ void CitizenAI_PlayAnimationActionCtor5(void* param_1, float* dest, float animTi
                     : mem;
     }
     int64_t msgIBP = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&msgIBP, msgAction);
+    if (fn_InternalBasePtr_Ctor) new (&msgIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(msgAction));   // B.3.3 bridge
     if (*reinterpret_cast<int64_t*>(character + 0x58) != 0) {
-        if (fn_InternalBasePtr_DeletePtr) fn_InternalBasePtr_DeletePtr(reinterpret_cast<void*>(character + 0x58));
+        if (fn_InternalBasePtr_DeletePtr) reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(character + 0x58))->DeletePtr(
+            );   // B.3.3 bridge
     }
     *reinterpret_cast<int64_t*>(character + 0x58) = msgIBP;
 
@@ -160,7 +163,8 @@ void CitizenAI_PlayAnimationActionCtor5(void* param_1, float* dest, float animTi
             animAction = pmem;
         }
         int64_t animIBP = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&animIBP, animAction);
+        if (fn_InternalBasePtr_Ctor) new (&animIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(animAction));   // B.3.3 bridge
         if (s_fn_actPush) s_fn_actPush(stack, &animIBP);
     }
 
@@ -179,7 +183,8 @@ void CitizenAI_PlayAnimationActionCtor5(void* param_1, float* dest, float animTi
             // Entity_FindComponent_Family is unfilled, so the list-scan returns null. The
             // "family" component IS the citizen's own CharacterComponent (citizen+0x278),
             // populated by Brick 2/4a — use it directly (Brick self-contained pattern).
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&familyOut, reinterpret_cast<void*>(character));
+            if (fn_InternalBasePtr_Ctor) new (&familyOut) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(character));   // B.3.3 bridge
         }
         float speed = s_pf_172280 ? *s_pf_172280 : -1.0f;
         moveAction = s_fn_moveToCtor
@@ -187,7 +192,8 @@ void CitizenAI_PlayAnimationActionCtor5(void* param_1, float* dest, float animTi
                      : mmem;
     }
     int64_t moveIBP = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&moveIBP, moveAction);
+    if (fn_InternalBasePtr_Ctor) new (&moveIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(moveAction));   // B.3.3 bridge
     if (s_fn_actPush) s_fn_actPush(stack, &moveIBP);
 }
 

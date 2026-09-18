@@ -44,6 +44,7 @@
 #include "Object/factory_registration.h"
 #include "ui/UserInterface.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 
@@ -113,7 +114,8 @@ void EntityFindUIComponent(uint64_t entity, uint64_t* outIBP) {
             break;
         }
     }
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(outIBP, found);
+    if (fn_InternalBasePtr_Ctor) new (outIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
 }
 
 }  // namespace
@@ -152,7 +154,7 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
 
     // Result-dialog IBP holder (local_res18), initialized null.
     uint64_t resultDialog = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&resultDialog, nullptr);
+    if (fn_InternalBasePtr_Ctor) new (&resultDialog) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
     // 4. Walk the open-dialog list for an existing EntityUI dialog bound to this entity.
     const uint32_t tidEntityUI = ResolveTypeId(0x1401c4f00, "EntityUI", &s_tid_EntityUI);
@@ -176,7 +178,8 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
 
         // Wrap the (possibly null) controller in an IBP, resolve, compare +0x30 to *entity.
         uint64_t ctrlRef = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&ctrlRef, matched);
+        if (fn_InternalBasePtr_Ctor) new (&ctrlRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(matched));   // B.3.3 bridge
         if (ctrlRef != 0) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ctrlRef);
             uint64_t ctrlEntity = *reinterpret_cast<uint64_t*>(ctrlRef + 0x30);
@@ -232,7 +235,7 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
             void* entityPtr = *reinterpret_cast<void**>(entityIBP);  // dataSource (ctor arg5)
             void* extRes = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(obj) + 0x28);
             uint64_t nullParent = 0;
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nullParent, nullptr);
+            if (fn_InternalBasePtr_Ctor) new (&nullParent) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             fn_DialogInstance_Ctor(dlg, ui, extRes, &nullParent, entityPtr, ctrlData,
                                    static_cast<int>(ctrlCount));
             *reinterpret_cast<uintptr_t*>(dlg) = g_ToolUI_ChildDialog_Vtable;
@@ -241,7 +244,8 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
 
         // Wrap in IBP; if null (alloc failed) -> abort before finalize.
         uint64_t dialogRef = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&dialogRef, newDialog);
+        if (fn_InternalBasePtr_Ctor) new (&dialogRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(newDialog));   // B.3.3 bridge
         resultDialog = dialogRef;
         if (dialogRef == 0) return;
 
@@ -280,7 +284,8 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
             if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tidToolUI)) ctrl = c;
         }
         uint64_t ctrlRef = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&ctrlRef, ctrl);
+        if (fn_InternalBasePtr_Ctor) new (&ctrlRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(ctrl));   // B.3.3 bridge
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ctrlRef);
         // Not pinned (ctrl+0x40 == 0) -> close it. (A null controller -> ctrlRef 0,
         // reading +0x40 off 0 would fault, so require a resolved controller first.)

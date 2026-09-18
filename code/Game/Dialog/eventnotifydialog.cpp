@@ -27,6 +27,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <new>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // EventNotifyDialog_CreatePopup — modal popup creation (Slot7 popup branch)
@@ -80,12 +81,12 @@ static void* EventNotifyDialog_CreatePopup(EventNotifyDialog* self, int eventInd
     void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0xC0, 8);
     if (!mem) return nullptr;
     int64_t nullParent[1];
-    fn_InternalBasePtr_Ctor(nullParent, nullptr);
+    new (nullParent) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     void* popup = EventPopupDialog_Ctor_Standalone(mem, ui, s_popupRes, nullParent, eventIndex);
     if (!popup) { fn_MemFreeStatic(mem); return nullptr; }
 
     int64_t dialogPtr[1];
-    fn_InternalBasePtr_Ctor(dialogPtr, popup);
+    new (dialogPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(popup));   // B.3.3 bridge
     fn_UI_AddDialog(ui, dialogPtr);
     return popup;
 }
@@ -700,7 +701,8 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
             void* imgChild = isImage ? child4 : nullptr;
             // Construct InternalBasePtr for imgChild on stack
             uint8_t imgChildPtr[16];
-            fn_InternalBasePtr_Ctor(imgChildPtr, imgChild);
+            new (imgChildPtr) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(imgChild));   // B.3.3 bridge
             // Copy same sprite from active_entry+0x10
             uint8_t sprite2[16];
             *(uint64_t*)(sprite2 + 0) = *(uint64_t*)(activeEntry + 0x10);

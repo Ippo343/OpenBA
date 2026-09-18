@@ -11,6 +11,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // FUN_1400a0280 — EntityAtCell: get the entity occupying a world cell.
@@ -37,7 +38,7 @@ void* PlayerEdit_EntityAtCell_a0280(uintptr_t entityList, void* retIBP, int cell
         reinterpret_cast<uintptr_t*>(retIBP)[0] = cell[1];
         return retIBP;
     }
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(retIBP, nullptr);
+    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     return retIBP;
 }
 

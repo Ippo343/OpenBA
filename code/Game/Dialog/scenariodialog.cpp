@@ -16,6 +16,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // ScenarioDialog::Slot4 (vtable +0x20) — Setup
@@ -377,7 +378,7 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
 
         // Build InternalBasePtr(null) for retval
         uint8_t nullIBP[8];
-        fn_InternalBasePtr_Ctor(nullIBP, nullptr);
+        new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
         printf("[ScenarioDialog::LoadSelected] NEW SCENARIO: seed=%u, terrainSize=%u, disasterOff=%d, scenarioResIdx=%u\n",
                seedVal, terrainSizeVal, (int)disasterOff, scenarioResIdx);
@@ -469,7 +470,7 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
         void* parentCtrl = *(void**)(s + 0xC0);
 
         uint8_t nullIBP[8];
-        fn_InternalBasePtr_Ctor(nullIBP, nullptr);
+        new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
         uint32_t scenarioResIdx = *(uint32_t*)(entryArray + (uintptr_t)selectedIdx * 0x38 + 0x30);
         void* savedState = fn_SaveLoad_GetSaveState(saveLoad);
@@ -502,7 +503,7 @@ void ScenarioDialog_Slot8(ScenarioDialog* self, uint64_t param2,
         if (param4 == 100) {
             // Close button
             uint8_t basePtr[16];
-            fn_InternalBasePtr_Ctor(basePtr, self);
+            new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
             void* ui = *(void**)(s + 0x10);
             fn_UI_CloseDialog(ui, basePtr);
         } else if (param4 == 0x65) {

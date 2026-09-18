@@ -38,6 +38,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Clean C++ name generator (code/Game/Game/citizen_names.cpp) — replaces the retail
 // name-gen chain (FUN_1400a4c60/a4b30/a4880) that 0x140117080 would otherwise call.
@@ -126,20 +127,20 @@ void CitizenComp_LeaveRoster_2040(int64_t selfV, void* param2V) {
     Ck(reinterpret_cast<void*>(node + 0x268));
     *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(node + 0x268) + 0x270) = prevLink;
     // node's own links -> empty IBPs
-    fn_InternalBasePtr_Ctor(&empty, nullptr); Ck(ibp);
+    new (&empty) ::Object::InternalBasePtr(nullptr); Ck(ibp);   // B.3.3 bridge
     *reinterpret_cast<int64_t*>(*ibp + 0x270) = (int64_t)empty;
-    fn_InternalBasePtr_Ctor(&empty, nullptr); Ck(ibp);
+    new (&empty) ::Object::InternalBasePtr(nullptr); Ck(ibp);   // B.3.3 bridge
     *reinterpret_cast<int64_t*>(*ibp + 0x268) = (int64_t)empty;
     // if this node was the head, clear the head cache
     Ck(ibp);
     if (*reinterpret_cast<int64_t*>(base + 0x260) == *ibp) {
-        fn_InternalBasePtr_Ctor(&empty, nullptr);
+        new (&empty) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *reinterpret_cast<int64_t*>(base + 0x260) = (int64_t)empty;
     }
     // clear the workplace slot + the current-workplace link (+0x258)
-    fn_InternalBasePtr_Ctor(&empty, nullptr); Ck(ibp);
+    new (&empty) ::Object::InternalBasePtr(nullptr); Ck(ibp);   // B.3.3 bridge
     if (s_fn_AssignWorkplace) s_fn_AssignWorkplace(reinterpret_cast<void*>(*ibp), &empty, -1);
-    fn_InternalBasePtr_Ctor(&empty, nullptr); Ck(ibp);
+    new (&empty) ::Object::InternalBasePtr(nullptr); Ck(ibp);   // B.3.3 bridge
     *reinterpret_cast<int64_t*>(*ibp + 0x258) = (int64_t)empty;
 }
 
@@ -188,7 +189,7 @@ void CitizenComp_JoinRoster_68a0(void* selfV, void* param2V) {
 
     // store self as an IBP at node +0x258, then AssignWorkplace via self's descriptor
     uint64_t selfIBP = 0;
-    fn_InternalBasePtr_Ctor(&selfIBP, base);
+    new (&selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(base));   // B.3.3 bridge
     Ck(ibp);
     *reinterpret_cast<int64_t*>(*ibp + 0x258) = (int64_t)selfIBP;
     Ck(ibp);
@@ -326,7 +327,7 @@ void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender,
 
     // 11. housing: (re)assign unless spawn-key and housing IBP already match
     uint64_t housingIBP = 0;
-    fn_InternalBasePtr_Ctor(&housingIBP, nullptr);
+    new (&housingIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     bool needAssign = (*reinterpret_cast<int64_t*>(p + 0x1f0) != spawnKey);
     if (!needAssign) {
         Ck(&housingIBP);

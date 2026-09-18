@@ -21,6 +21,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // FindComponent-by-typeId family
@@ -64,7 +65,8 @@ void* WorkLeaf_FindComp_a730(uintptr_t entity, void* retIBP) {
             if (i >= n) { found = nullptr; break; }
         }
     }
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(retIBP, found);
+    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return retIBP;
 }
 
@@ -97,7 +99,8 @@ void* WorkLeaf_FindComp_a0b0(uintptr_t entity, void* retIBP) {
             if (i >= n) { found = nullptr; break; }
         }
     }
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(retIBP, found);
+    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return retIBP;
 }
 
@@ -130,7 +133,8 @@ void* WorkLeaf_FindComp_4fe0(uintptr_t entity, void* retIBP) {
             if (i >= n) { found = nullptr; break; }
         }
     }
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(retIBP, found);
+    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return retIBP;
 }
 
@@ -262,7 +266,8 @@ int WorkLeaf_Pasture_8350(uintptr_t self) {
 
         // Wrap the sub-component in an IBP buffer (matches the exe's local_res8).
         uintptr_t subIBP = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&subIBP, sub);
+        if (fn_InternalBasePtr_Ctor) new (&subIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(sub));   // B.3.3 bridge
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&subIBP);
 
         // Candidate score = subIBP+0x44. Keep only if strictly greater than current best.

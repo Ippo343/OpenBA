@@ -15,6 +15,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Vtable pointer for FinishTutorialGoal (resolved at runtime)
 static void* s_vtable_FinishTutorialGoal = nullptr;
@@ -205,7 +206,7 @@ void* FinishTutorialGoal_Slot11(void* self, uint32_t flags) {
 
     // Delete InternalBasePtr at +0x20
     if (fn_InternalBasePtr_DeletePtr) {
-        fn_InternalBasePtr_DeletePtr((void*)(s + 0x20));
+        reinterpret_cast< ::Object::InternalBasePtr*>((void*)(s + 0x20))->DeletePtr();   // B.3.3 bridge
     }
 
     // Call GoalInstance base destructor

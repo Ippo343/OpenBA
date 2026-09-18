@@ -11,6 +11,7 @@
 #include "action_base_standalone.h"
 #include "engine_funcs.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // slot0 (+0x00) ScalarDtor — generic Internal teardown (exe 0x140001260).
 // The exe also rewrites the vtable to the Action base before destruction; that
@@ -19,7 +20,7 @@ extern "C" void* Action_ScalarDtor(void* self, unsigned int flags) {
     if (!self) return self;
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (*(void**)(s + 0x10) != nullptr && fn_InternalBasePtr_DeletePtr)
-        fn_InternalBasePtr_DeletePtr(s + 0x10);
+        reinterpret_cast< ::Object::InternalBasePtr*>(s + 0x10)->DeletePtr();   // B.3.3 bridge
     if (fn_ObjectInternal_Dtor) fn_ObjectInternal_Dtor(self);
     if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
     return self;

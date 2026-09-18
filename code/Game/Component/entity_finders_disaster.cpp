@@ -64,6 +64,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 
@@ -98,7 +99,8 @@ void* FindByTypeId(uintptr_t entity, void* retIBP, uint32_t typeId) {
             }
         }
     }
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(retIBP, found);
+    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     else *reinterpret_cast<void**>(retIBP) = found;
     return retIBP;
 }

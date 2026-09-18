@@ -18,6 +18,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // EventLogUI::Slot5 (vtable +0x28) — Setup event log display
@@ -40,7 +41,7 @@ void EventLogUI_Slot5(EventLogUI* self) {
         fn_FindElement(dialogElem, retBuf, &nameStr);
         void* elem = *(void**)retBuf;
         uint8_t bpBuf[8];
-        fn_InternalBasePtr_Ctor(bpBuf, elem);
+        new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
         *(uint64_t*)(s + 0x38) = *(uint64_t*)bpBuf;
     }
 
@@ -51,7 +52,7 @@ void EventLogUI_Slot5(EventLogUI* self) {
         fn_FindElement(dialogElem, retBuf, &nameStr);
         void* elem = *(void**)retBuf;
         uint8_t bpBuf[8];
-        fn_InternalBasePtr_Ctor(bpBuf, elem);
+        new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
         *(uint64_t*)(s + 0x40) = *(uint64_t*)bpBuf;
     }
 
@@ -62,7 +63,7 @@ void EventLogUI_Slot5(EventLogUI* self) {
         fn_FindElement(dialogElem, retBuf, &nameStr);
         void* elem = *(void**)retBuf;
         uint8_t bpBuf[8];
-        fn_InternalBasePtr_Ctor(bpBuf, elem);
+        new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
         *(uint64_t*)(s + 0x30) = *(uint64_t*)bpBuf;
     }
 
@@ -79,7 +80,7 @@ void EventLogUI_Slot5(EventLogUI* self) {
         fn_FindElement(dialogElem, retBuf, &nameStr);
         void* elem = *(void**)retBuf;
         uint8_t bpBuf[8];
-        fn_InternalBasePtr_Ctor(bpBuf, elem);
+        new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
         displayElem = *(void**)bpBuf;
     }
 
@@ -104,7 +105,7 @@ void EventLogUI_Slot5(EventLogUI* self) {
         void* rowChild = *(void**)childBuf;
         // The button child is obtained by IsDerivedFrom check (generic element type)
         uint8_t bpBuf[8];
-        fn_InternalBasePtr_Ctor(bpBuf, rowChild);
+        new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(rowChild));   // B.3.3 bridge
         *(uint64_t*)(*(uintptr_t*)(s + 0x60) + i * 8) = *(uint64_t*)bpBuf;
 
         // Set element ID on the button: 0x6C + index
@@ -133,7 +134,7 @@ void EventLogUI_Slot5(EventLogUI* self) {
         fn_Element_Child(notifyContainer, childBuf, i);
         void* childElem = *(void**)childBuf;
         uint8_t bpBuf[8];
-        fn_InternalBasePtr_Ctor(bpBuf, childElem);
+        new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(childElem));   // B.3.3 bridge
         void* btnElem = *(void**)bpBuf;
 
         // Set element ID: 0x67 + index

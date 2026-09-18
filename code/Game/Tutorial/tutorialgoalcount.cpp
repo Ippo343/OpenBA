@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Exe-internal helpers resolved at runtime
@@ -666,7 +667,7 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
             } else {
                 // Not found — initialize empty IBP
                 if (fn_InternalBasePtr_Ctor) {
-                    fn_InternalBasePtr_Ctor(&entityIBP, nullptr);
+                    new (&entityIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                 }
             }
 

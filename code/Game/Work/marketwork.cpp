@@ -29,6 +29,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Local function pointers (resolved once by MarketWork_ResolveFuncs)
@@ -740,7 +741,8 @@ static void MW_MakeStrongRef(uintptr_t* dst, uintptr_t* src) {
     }
     dst[0] = 0;
     dst[1] = 0;
-    fn_InternalBasePtr_Ctor(dst, reinterpret_cast<void*>(src[0]));
+    new (dst) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(src[0]));   // B.3.3 bridge
 }
 
 // Retail inlines this component scan at every site; slot 4 alone contains eight
@@ -1033,7 +1035,8 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
     void* marketComp = MW_FindComponentByTypeId(marketEntity, tidMarketComponent);
 
     uintptr_t marketCompIBP[2] = {0, 0};
-    fn_InternalBasePtr_Ctor(marketCompIBP, marketComp);
+    new (marketCompIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(marketComp));   // B.3.3 bridge
     fn_InternalBasePtr_CheckPtr(marketCompIBP);
     void* descRaw = *reinterpret_cast<void**>(marketCompIBP[0] + 0x18);
     void* marketDesc = fn_IsDerivedFrom(descRaw, tidMarketDescription) ? descRaw : nullptr;
@@ -1299,7 +1302,8 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
             fn_InternalBasePtr_CheckPtr(&entityIBP);
             void* storage = MW_FindComponentByTypeId(entityIBP, tidStorageComponent);
             uintptr_t storageIBP[2] = {0, 0};
-            fn_InternalBasePtr_Ctor(storageIBP, storage);
+            new (storageIBP) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(storage));   // B.3.3 bridge
 
             entityIBP = *reinterpret_cast<uintptr_t*>(
                 *reinterpret_cast<uintptr_t*>(town + 0x00) + static_cast<int64_t>(e) * 8);
@@ -1307,7 +1311,8 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
             void* consumeProduce =
                 MW_FindComponentByTypeId(entityIBP, tidConsumeProduceComponent);
             uintptr_t cpIBP[2] = {0, 0};
-            fn_InternalBasePtr_Ctor(cpIBP, consumeProduce);
+            new (cpIBP) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(consumeProduce));   // B.3.3 bridge
 
             if (cpIBP[0] != 0) continue;   // 0x1400f0812: has a consumer -> skip
 
@@ -1430,7 +1435,8 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
             const uintptr_t marketEntity2 = *reinterpret_cast<uintptr_t*>(a + 0x10);
             void* interact = MW_FindComponentByTypeId(marketEntity2, tidInteractComponent);
             uintptr_t interactIBP[2] = {0, 0};
-            fn_InternalBasePtr_Ctor(interactIBP, interact);
+            new (interactIBP) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(interact));   // B.3.3 bridge
             fn_InternalBasePtr_CheckPtr(interactIBP);
             const uintptr_t ic = interactIBP[0];
             void* icDescRaw = *reinterpret_cast<void**>(ic + 0x18);
@@ -1523,13 +1529,14 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
             townEntities + static_cast<int64_t>(e) * 8);
         fn_InternalBasePtr_CheckPtr(&entIBP);
         uintptr_t candStorage[2] = {0, 0};
-        fn_InternalBasePtr_Ctor(candStorage,
-                                MW_FindComponentByTypeId(entIBP, tidStorageComponent));
+        new (candStorage) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(MW_FindComponentByTypeId(entIBP, tidStorageComponent)));   // B.3.3 bridge
 
         entIBP = *reinterpret_cast<uintptr_t*>(townEntities + static_cast<int64_t>(e) * 8);
         fn_InternalBasePtr_CheckPtr(&entIBP);
         uintptr_t candMap[2] = {0, 0};
-        fn_InternalBasePtr_Ctor(candMap, MW_FindComponentByTypeId(entIBP, tidMapComponent));
+        new (candMap) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(MW_FindComponentByTypeId(entIBP, tidMapComponent)));   // B.3.3 bridge
 
         // 0x1400f1013: the candidate's anchor cell index.
         uintptr_t anchorIBP = *reinterpret_cast<uintptr_t*>(
@@ -1539,8 +1546,8 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
         entIBP = *reinterpret_cast<uintptr_t*>(townEntities + static_cast<int64_t>(e) * 8);
         fn_InternalBasePtr_CheckPtr(&entIBP);
         uintptr_t candCP[2] = {0, 0};
-        fn_InternalBasePtr_Ctor(candCP,
-                                MW_FindComponentByTypeId(entIBP, tidConsumeProduceComponent));
+        new (candCP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(MW_FindComponentByTypeId(entIBP, tidConsumeProduceComponent)));   // B.3.3 bridge
 
         // 0x1400f10bc: a building that consumes its own stock is not a source.
         // (Ghidra renders the other side of this branch as an empty
@@ -1647,8 +1654,8 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
         uintptr_t winnerIBP = winner;
         fn_InternalBasePtr_CheckPtr(&winnerIBP);
         uintptr_t winStorage[2] = {0, 0};
-        fn_InternalBasePtr_Ctor(winStorage,
-                                MW_FindComponentByTypeId(winnerIBP, tidStorageComponent));
+        new (winStorage) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(MW_FindComponentByTypeId(winnerIBP, tidStorageComponent)));   // B.3.3 bridge
 
         // --- 0x1400f1425..0x1400f16a0: build the take list ------------------
         // 0x18-byte records: +0x00 resource type, +0x08 rank (the ba70 sort key,
@@ -1731,8 +1738,8 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
         fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(a + 0x10));
         const uintptr_t mktEntity = *reinterpret_cast<uintptr_t*>(a + 0x10);
         uintptr_t mktInteract[2] = {0, 0};
-        fn_InternalBasePtr_Ctor(mktInteract,
-                                MW_FindComponentByTypeId(mktEntity, tidInteractComponent));
+        new (mktInteract) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(MW_FindComponentByTypeId(mktEntity, tidInteractComponent)));   // B.3.3 bridge
         fn_InternalBasePtr_CheckPtr(mktInteract);
         const uintptr_t mic = mktInteract[0];
         void* micDescRaw = *reinterpret_cast<void**>(mic + 0x18);
@@ -1758,8 +1765,8 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
         uintptr_t winnerIBP2 = winner;
         fn_InternalBasePtr_CheckPtr(&winnerIBP2);
         uintptr_t winLoc[2] = {0, 0};
-        fn_InternalBasePtr_Ctor(winLoc,
-            MW_FindComponentByTypeId(winnerIBP2, tidStorageLocationComponent));
+        new (winLoc) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(MW_FindComponentByTypeId(winnerIBP2, tidStorageLocationComponent)));   // B.3.3 bridge
         fn_InternalBasePtr_CheckPtr(winLoc);
         s_fn_FindBestAdjacentCell(static_cast<int64_t>(winLoc[0]),
                                   static_cast<uint32_t>(cellIdx), winnerPos,

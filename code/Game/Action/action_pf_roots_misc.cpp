@@ -20,6 +20,7 @@
 #include "math/Math.h"
 #include <cstdint>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 
@@ -443,7 +444,8 @@ int64_t* Pf_SpatialProximityQuery_92260(float* param_1, int64_t* param_2, float*
                             }
                         }
                         if (found == 0) {
-                            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&found, nullptr);
+                            if (fn_InternalBasePtr_Ctor) new (&found) ::Object::InternalBasePtr(
+                                nullptr);   // B.3.3 bridge
                         }
                         region = *reinterpret_cast<int64_t*>(walker + 0x2428); // lVar15 = local_e0 reload
                         if (found == 0) dropped = true;
@@ -601,7 +603,8 @@ void Pf_HerdStartMigration_122340(void* param_1) {
                 continue;
             }
             int64_t local_50[2];
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(local_50, foundComp);
+            if (fn_InternalBasePtr_Ctor) new (local_50) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(foundComp));   // B.3.3 bridge
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(local_50);
             *reinterpret_cast<int16_t*>(local_50[0] + 0x38) = (int16_t)local_res18;
             *reinterpret_cast<int16_t*>(local_50[0] + 0x3a) = (int16_t)local_res20;

@@ -36,6 +36,7 @@
 #include <cstdlib>
 #include <cstdint>
 #include <cmath>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -198,7 +199,7 @@ void* HuntAnimal_ScalarDtor_Impl(HuntAnimal* self, uint32_t flags) {
 
     // If entity ref at +0x10 is non-null, delete it
     if (*(void**)(s + 0x10) != nullptr) {
-        fn_InternalBasePtr_DeletePtr(s + 0x10);
+        reinterpret_cast< ::Object::InternalBasePtr*>(s + 0x10)->DeletePtr();   // B.3.3 bridge
     }
 
     // Call Object::Internal::~Internal
@@ -331,7 +332,7 @@ void HuntAnimal_Enter_Impl(HuntAnimal* self) {
 
     // Initialize output IBP for spatial query
     void* queryOutIBP = nullptr;
-    fn_InternalBasePtr_Ctor(&queryOutIBP, nullptr);
+    new (&queryOutIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
     // Get the search type ID
     int searchTypeId = *s_typeId_HuntAnimalSearch;

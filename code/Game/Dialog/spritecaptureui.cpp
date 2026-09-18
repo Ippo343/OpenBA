@@ -19,6 +19,7 @@
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A — Object::External
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // SpriteCaptureUI::Serialize (vtable +0x20, 0x140079640)
@@ -44,7 +45,7 @@ void SpriteCaptureUI_Serialize(SpriteCaptureUI* self) {
     }
 
     uint64_t tempIBP = 0;
-    fn_InternalBasePtr_Ctor(&tempIBP, editElem);
+    new (&tempIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(editElem));   // B.3.3 bridge
     *(uint64_t*)(s + 0x30) = tempIBP;
 
     // --- Find "buttonCapture" element, check IsDerivedFrom(ButtonElement) ---
@@ -65,7 +66,7 @@ void SpriteCaptureUI_Serialize(SpriteCaptureUI* self) {
     }
 
     tempIBP = 0;
-    fn_InternalBasePtr_Ctor(&tempIBP, buttonElem);
+    new (&tempIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(buttonElem));   // B.3.3 bridge
     *(uint64_t*)(s + 0x38) = tempIBP;
 
     // --- Find "captureBox" element, check IsDerivedFrom(CaptureBoxElement) ---
@@ -86,7 +87,7 @@ void SpriteCaptureUI_Serialize(SpriteCaptureUI* self) {
     }
 
     tempIBP = 0;
-    fn_InternalBasePtr_Ctor(&tempIBP, captureBoxElem);
+    new (&tempIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(captureBoxElem));   // B.3.3 bridge
     *(uint64_t*)(s + 0x40) = tempIBP;
 
     // --- Set button element ID to 1000 ---

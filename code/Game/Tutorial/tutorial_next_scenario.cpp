@@ -46,6 +46,7 @@
 #include "Tutorial/tutorial_funcs.h"
 #include <cstdint>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 
@@ -229,7 +230,7 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
     fflush(stderr);
 
     uint8_t nullIBP[8];
-    fn_InternalBasePtr_Ctor(nullIBP, nullptr);
+    new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     uint64_t ibpCopy = *reinterpret_cast<uint64_t*>(nullIBP);
 
     void* pGameLoop = nullptr;

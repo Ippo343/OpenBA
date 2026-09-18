@@ -49,6 +49,7 @@
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 
@@ -337,7 +338,8 @@ extern "C" void UpdateToolUI_e360(void* ctrl, uint32_t color) {
     void* ptr = (obj && fn_IsDerivedFrom && fn_IsDerivedFrom(obj, imgTid)) ? obj : nullptr;
 
     uint64_t ibp = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&ibp, ptr);
+    if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(ptr));   // B.3.3 bridge
 
     if (ibp != 0) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ibp);
@@ -404,7 +406,8 @@ extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void*
         if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, ctrlTid)) ctrl = c;
     }
     uint64_t ctrlIBP = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&ctrlIBP, ctrl);
+    if (fn_InternalBasePtr_Ctor) new (&ctrlIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(ctrl));   // B.3.3 bridge
     // One-shot diagnostic: confirm the CreateBar controller resolved (type-ids correct)
     // — else the populate silently no-ops here. Logs once; A/B-safe (only when fc60 runs).
     {

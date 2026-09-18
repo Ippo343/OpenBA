@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <cmath>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Local function pointers (resolved once by HerbalistWork_ResolveFuncs)
@@ -456,7 +457,8 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
 
     // Wrap in InternalBasePtr
     uintptr_t workplaceIBP = 0;
-    fn_InternalBasePtr_Ctor(&workplaceIBP, workplaceComp);
+    new (&workplaceIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(workplaceComp));   // B.3.3 bridge
 
     // Get RadiusComponent from workplace description (+0x18)
     fn_InternalBasePtr_CheckPtr(&workplaceIBP);

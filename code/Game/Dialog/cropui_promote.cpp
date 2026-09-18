@@ -32,6 +32,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include "dialog_controller_vtable.h"
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 
@@ -59,7 +60,7 @@ void* FindComp(void* self) {
     uint32_t entTid = g_TypeId_ComponentEntity ? *g_TypeId_ComponentEntity : 0;
     void* checked = fn_IsDerivedFrom(entity, entTid) ? entity : nullptr;
     uint64_t entIbp = 0;
-    fn_InternalBasePtr_Ctor(&entIbp, checked);
+    new (&entIbp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entIbp);
     uint64_t comp = 0;
     s_findCropComp(static_cast<int64_t>(entIbp), &comp);
@@ -162,7 +163,7 @@ void W_Slot4(void* self) {
     void* raw = reinterpret_cast<void*>(found);
     void* checked = fn_IsDerivedFrom(raw, ProgressElementTypeId()) ? raw : nullptr;
     uint64_t ibp = 0;
-    fn_InternalBasePtr_Ctor(&ibp, checked);
+    new (&ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
     *reinterpret_cast<uint64_t*>(s + 0x38) = ibp;
 
     // Retail writes this unguarded (Crop.rsc always carries "yield"); guarded here for

@@ -13,6 +13,7 @@
 #include "resolve.h"
 #include <cstdio>
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -97,7 +98,7 @@ void* AnimateNaturalResource_ScalarDtor_Impl(AnimateNaturalResource* self, uint3
 
     // DeletePtr on entity IBP at +0x10 if non-null
     if (self->entity != nullptr) {
-        fn_InternalBasePtr_DeletePtr(&self->entity);
+        reinterpret_cast< ::Object::InternalBasePtr*>(&self->entity)->DeletePtr();   // B.3.3 bridge
     }
 
     fn_ObjectInternal_Dtor(self);

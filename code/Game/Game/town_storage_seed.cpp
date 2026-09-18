@@ -75,6 +75,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Type-ids (raw .rdata preferred, GetTypeIdByName fallback)
@@ -301,7 +302,8 @@ extern "C" void TownStorage_BuildCompleteInit_7ff0(void* componentWithEntity) {
         }
         // Original wraps in an IBP (fn_InternalBasePtr_Ctor) then CheckPtr's it.
         uintptr_t mapIBP = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&mapIBP, mapComp);
+        if (fn_InternalBasePtr_Ctor) new (&mapIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(mapComp));   // B.3.3 bridge
         CheckPtr(&mapIBP);
         if (mapIBP) {
             tileArea = static_cast<int>(*reinterpret_cast<int16_t*>(mapIBP + 0x2e)) *
@@ -369,7 +371,8 @@ extern "C" void TownStorage_SpawnResources_91660(void* townMgrV, uint32_t mask, 
                 void* storage = FindStorageOnEntity(entityRef);
                 // Original wraps the found component in an IBP before use.
                 uintptr_t compIBP = 0;
-                if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&compIBP, storage);
+                if (fn_InternalBasePtr_Ctor) new (&compIBP) ::Object::InternalBasePtr(
+                    reinterpret_cast<RtObject::Internal*>(storage));   // B.3.3 bridge
                 if (placed < count) {
                     int64_t tmpl = matched[placed % matchedCount];
                     CheckPtr(&compIBP);

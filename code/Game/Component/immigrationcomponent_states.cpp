@@ -66,6 +66,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, void* entityIBP);
 
@@ -138,7 +139,8 @@ inline int*     Grid(uint8_t* gw)    { return *reinterpret_cast<int**>(gw + 0xf8
 inline uintptr_t Tiles(int* grid)    { return *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(grid) + 0x80); }
 
 inline void CheckPtr(void* ibp) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp); }
-inline void MakeIBP(void* dst, void* obj) { if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(dst, obj); else *reinterpret_cast<void**>(dst) = obj; }
+inline void MakeIBP(void* dst, void* obj) { if (fn_InternalBasePtr_Ctor) new (dst) ::Object::InternalBasePtr(
+    reinterpret_cast<RtObject::Internal*>(obj)); else *reinterpret_cast<void**>(dst) = obj; }   // B.3.3 bridge
 
 // desc = comp+0x18 if IsDerivedFrom(ImmigrationDescription) else null — retail
 // dereferences the null; a town hall without its description is a broken template.

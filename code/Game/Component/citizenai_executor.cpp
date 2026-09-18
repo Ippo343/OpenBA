@@ -53,6 +53,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 
@@ -135,10 +136,11 @@ extern "C" void CitizenAI_ActionFlush_c4bb0(int64_t param_1) {
             node = reinterpret_cast<int64_t*>(node[2]);          // advance via node+0x10
         } while (node != nullptr);
         if (fn_InternalBasePtr_DeletePtr)
-            fn_InternalBasePtr_DeletePtr(reinterpret_cast<void*>(param_1 + 0x10));
+            reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(param_1 + 0x10))->DeletePtr(
+                );   // B.3.3 bridge
         // re-Ctor a default InternalBasePtr (null internal) and store into [stack+0x10]
         node = nullptr;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&node, nullptr);
+        if (fn_InternalBasePtr_Ctor) new (&node) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *reinterpret_cast<int64_t*>(param_1 + 0x10) = reinterpret_cast<int64_t>(node);
     }
 }
@@ -207,10 +209,11 @@ LAB_d85:
                             CheckPtr(&local_res8);
                         }
                         if (fn_InternalBasePtr_DeletePtr)
-                            fn_InternalBasePtr_DeletePtr(reinterpret_cast<void*>(
-                                *param_1 + static_cast<int64_t>(static_cast<int>(param_1[3])) * 8));
+                            reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>( *param_1 + static_cast<int64_t>(static_cast<int>(param_1[3])) * 8))->DeletePtr(
+                                );   // B.3.3 bridge
                         int64_t local_res18 = 0;
-                        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&local_res18, nullptr);
+                        if (fn_InternalBasePtr_Ctor) new (&local_res18) ::Object::InternalBasePtr(
+                            nullptr);   // B.3.3 bridge
                         *reinterpret_cast<int64_t*>(
                             *param_1 + static_cast<int64_t>(static_cast<int>(param_1[3])) * 8) = local_res18;
                         *reinterpret_cast<int*>(param_1 + 3) = static_cast<int>(param_1[3]) - 1;

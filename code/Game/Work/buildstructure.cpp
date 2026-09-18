@@ -26,6 +26,7 @@
 #include <cstddef>
 #include <cstring>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Helper: Object::Internal ctor/dtor (via dispatch slots)
@@ -721,7 +722,8 @@ static bool CheckCitizenHasTask(BuildStructure* self, void* citizenIBP, uintptr_
 
         // Found a CompleteTask — wrap in IBP and check priority match
         uint8_t taskBuf[8];
-        fn_InternalBasePtr_Ctor(taskBuf, isCompleteTask ? (void*)actionIBP : nullptr);
+        new (taskBuf) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(isCompleteTask ? (void*)actionIBP : nullptr));   // B.3.3 bridge
         uintptr_t taskPtr = *(uintptr_t*)taskBuf;
 
         if (taskPtr != 0) {

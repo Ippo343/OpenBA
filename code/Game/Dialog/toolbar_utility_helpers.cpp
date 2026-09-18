@@ -22,6 +22,7 @@
 #include "Object/factory_registration.h"
 #include "ui/UserInterface.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 
@@ -64,7 +65,7 @@ extern "C" {
 void ToolbarUtility_FindDialogByControllerType_0270(void* /*toolController*/,
                                                     void* retBuf, uint64_t param) {
     // Init retBuf InternalBasePtr to null (matches the exe's leading IBP_Ctor).
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(retBuf, nullptr);
+    if (fn_InternalBasePtr_Ctor) new (retBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
     void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     if (!gameWorld) return;
@@ -100,7 +101,8 @@ void ToolbarUtility_FindDialogByControllerType_0270(void* /*toolController*/,
 
         // Wrap the (possibly null) controller in an IBP, resolve, compare +0x30.
         uintptr_t ctrlRef = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&ctrlRef, controller);
+        if (fn_InternalBasePtr_Ctor) new (&ctrlRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(controller));   // B.3.3 bridge
         if (ctrlRef != 0) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ctrlRef);
             if (*reinterpret_cast<uint64_t*>(ctrlRef + 0x30) == param) {

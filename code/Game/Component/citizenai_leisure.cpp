@@ -69,6 +69,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 
@@ -248,7 +249,8 @@ static int64_t* CitizenAI_State_Leisure_sub_fd50(int64_t param_1, int64_t* param
         ++idx;
         byteOff += 8;
     }
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(param_2, result);
+    if (fn_InternalBasePtr_Ctor) new (param_2) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(result));   // B.3.3 bridge
     return param_2;
 }
 
@@ -296,7 +298,8 @@ static int64_t* CitizenAI_State_Leisure_sub_99d0(int64_t param_1, int64_t* param
             void* interact = nullptr;
             interact = ScanArrAt(reinterpret_cast<int64_t*>(entObj), 0x30, 0x38, s_tid_InteractComponent);
             int64_t interactIBP[2] = {0, 0};
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(interactIBP, interact);
+            if (fn_InternalBasePtr_Ctor) new (interactIBP) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(interact));   // B.3.3 bridge
             CheckPtr(interactIBP);
 
             // resolve world pos -> clamped grid cell
@@ -374,7 +377,7 @@ static int64_t* CitizenAI_State_Leisure_sub_99d0(int64_t param_1, int64_t* param
             return param_2;
         }
     }
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(param_2, nullptr);
+    if (fn_InternalBasePtr_Ctor) new (param_2) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     if (curArr && fn_MemFreeStatic) fn_MemFreeStatic(curArr);
     return param_2;
 }
@@ -432,7 +435,7 @@ extern "C" uint64_t CitizenAI_State_Leisure(int64_t param_1) {
         float fVar39 = fn_Random_RandFloat ? fn_Random_RandFloat(pRVar6) : 0.0f;
         if (fVar39 < kRandThresh) {
             int64_t nullIBP = 0;
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+            if (fn_InternalBasePtr_Ctor) new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             local_res20 = reinterpret_cast<int64_t*>(nullIBP);
         }
     }
@@ -518,7 +521,8 @@ LAB_14010a846:
                         static_cast<int64_t>(w * boxRow + dxo + baseCol) * 0x30 + CellArrayBase(piVar5));
                     int64_t cand = 0;     // local_res18
                     if (plVar20[0] == 0) {
-                        if (plVar20[1] == 0) { if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&cand, nullptr); }
+                        if (plVar20[1] == 0) { if (fn_InternalBasePtr_Ctor) new (&cand) ::Object::InternalBasePtr(
+                            nullptr); }   // B.3.3 bridge
                         else cand = plVar20[1];
                     } else cand = plVar20[0];
                     if (cand != 0) {
@@ -645,14 +649,16 @@ LAB_after_target:
         CheckPtr(&local_res20);
         void* hcomp = ScanArr(local_res20, s_tid_HappinessComponent);
         int64_t local_res18 = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&local_res18, hcomp);
+        if (fn_InternalBasePtr_Ctor) new (&local_res18) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(hcomp));   // B.3.3 bridge
         if (local_res18 == 0) {
             happinessMode = false;   // LAB_14010adba
         } else {
             CheckPtr(&local_res20);
             void* hcomp2 = ScanArr(local_res20, s_tid_HappinessComponent);
             int64_t local_res10n = 0;
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&local_res10n, hcomp2);
+            if (fn_InternalBasePtr_Ctor) new (&local_res10n) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(hcomp2));   // B.3.3 bridge
             // LAB_14010ad7a: node[3] = HappinessDescription (0x1c42f8); if +0x20==5 || node[5]==0 -> false.
             CheckPtr(&local_res10n);
             int64_t* hnode = reinterpret_cast<int64_t*>(local_res10n);
@@ -666,7 +672,8 @@ LAB_after_target:
         // third scan: MapComponent (0x1c79e0) -> local_b8; read bounds shorts (+0x28..+0x2e).
         void* mapc = ScanArr(local_res20, s_tid_MapComponent);
         int64_t local_b8 = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&local_b8, mapc);
+        if (fn_InternalBasePtr_Ctor) new (&local_b8) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(mapc));   // B.3.3 bridge
         CheckPtr(&local_b8);
         int64_t* mnode = reinterpret_cast<int64_t*>(local_b8);
         iVar30          = static_cast<int>(*reinterpret_cast<short*>(reinterpret_cast<uintptr_t>(mnode) + 0x28));
@@ -788,7 +795,8 @@ LAB_14010ae8a:
             // entity to anim toward (local_res18): if happinessMode use target else null IBP.
             char cVar12 = happinessMode ? 1 : 0;
             int64_t entIBP;
-            if (cVar12 == '\0') { entIBP = 0; if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&entIBP, nullptr); }
+            if (cVar12 == '\0') { entIBP = 0; if (fn_InternalBasePtr_Ctor) new (&entIBP) ::Object::InternalBasePtr(
+                nullptr); }   // B.3.3 bridge
             else entIBP = reinterpret_cast<int64_t>(local_res20);
             int64_t local_res18 = entIBP;
 

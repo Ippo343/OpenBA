@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <climits>
 #include <windows.h>   // VirtualQuery
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace ForceWork {
 
@@ -140,7 +141,7 @@ int DriveWhenIdle(void* citizen, void* work, int (*driveFn)(void*, void*),
     if (!CitizenStackIdle(citizen)) return INT_MIN;
 
     int64_t citizenIBP = 0;
-    fn_InternalBasePtr_Ctor(&citizenIBP, citizen);
+    new (&citizenIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(citizen));   // B.3.3 bridge
     int rc = driveFn(work, &citizenIBP);
 
     if (driveCount && *driveCount < traceMax) {

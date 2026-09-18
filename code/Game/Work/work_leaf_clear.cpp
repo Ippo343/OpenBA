@@ -28,6 +28,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdlib>   // qsort
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // 0x140003ea0 — entity-resolve behind an action IBP (registered).
 typedef void* (*fn_FindEntity_3ea0_t)(uintptr_t actionIBP, void* retIBP);
@@ -456,7 +457,7 @@ void WorkLeaf_GetTilesInArea_9fc00(int* grid, int x, int y, int w, int h,
                 }
                 if (emit) {
                     uint64_t nullIBP = 0;
-                    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+                    if (fn_InternalBasePtr_Ctor) new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                     int rec[4];
                     rec[0] = cellIdx;
                     rec[1] = 0;

@@ -41,6 +41,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 
@@ -79,7 +80,8 @@ uint32_t TidCharacter() { static uint32_t t = 0; if (!t) t = ::Object::ResolveTy
 
 inline uint8_t* GW() { return (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) : nullptr; }
 inline void CheckPtr(void* ibp) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp); }
-inline void MakeIBP(void* dst, void* obj) { if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(dst, obj); else *reinterpret_cast<void**>(dst) = obj; }
+inline void MakeIBP(void* dst, void* obj) { if (fn_InternalBasePtr_Ctor) new (dst) ::Object::InternalBasePtr(
+    reinterpret_cast<RtObject::Internal*>(obj)); else *reinterpret_cast<void**>(dst) = obj; }   // B.3.3 bridge
 
 // Entity_FindComponent_Family (0x1400012d0) — the CharacterComponent (DAT_1401c7078).
 uintptr_t FindCharacter(void* entity) {

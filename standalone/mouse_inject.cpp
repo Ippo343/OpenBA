@@ -337,7 +337,13 @@ Report g_report;
 // ---------------------------------------------------------------------------
 // Input::Device singleton.
 // ---------------------------------------------------------------------------
-uint8_t* InputDevice() {
+// RENAMED (ENDGAME B.3.3 step 6B): was `InputDevice()`. This file now reaches
+// `engine/types/common.h` (through DialogInstance.h -> object/Internal.h ->
+// system/Value.h, which stopped duplicating the global `struct Time`), and
+// common.h:57 forward-declares `struct InputDevice` at global scope — which
+// made the unqualified call at MouseInject::PreUpdate ambiguous. The helper is
+// file-local; only its two call sites move.
+uint8_t* InputDeviceSingleton() {
     static void** slot = nullptr;
     if (!slot)
         slot = reinterpret_cast<void**>(
@@ -488,7 +494,7 @@ bool FindTarget(UI::UserInterface* ui, Target* out, bool dump) {
         // on _clipRegion, so a degenerate clip makes every hover impossible no
         // matter where the cursor is put -- print it rather than infer it from
         // element rects.
-        uint8_t* dev = InputDevice();
+        uint8_t* dev = InputDeviceSingleton();
         printf("[MouseInject/probe] ui=%p clip=(%d,%d)-(%d,%d) uiScale=%.4f "
                "rawMouse=(%d,%d) dev=%p" "\n",
                (void*)ui, (int)ui->_clipRegion.left, (int)ui->_clipRegion.top,
@@ -818,7 +824,7 @@ void PreUpdate(void* uiRaw) {
         StartDrag(ui, t);
 
     // ---- solve, then write ------------------------------------------------
-    uint8_t* dev = InputDevice();
+    uint8_t* dev = InputDeviceSingleton();
     if (!dev) return;
 
     const float scale = ui->_uiScale;

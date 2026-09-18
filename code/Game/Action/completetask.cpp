@@ -17,6 +17,7 @@
 #include <cstring>
 
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (heal .rdata type-ids)
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 
 // ============================================================
@@ -124,7 +125,7 @@ void* CompleteTask_ScalarDtor_Impl(CompleteTask* self, uint32_t flags) {
 
     // DeletePtr on entity IBP at +0x10 if non-null
     if (self->entity != nullptr) {
-        fn_InternalBasePtr_DeletePtr(&self->entity);
+        reinterpret_cast< ::Object::InternalBasePtr*>(&self->entity)->DeletePtr();   // B.3.3 bridge
     }
 
     fn_ObjectInternal_Dtor(self);

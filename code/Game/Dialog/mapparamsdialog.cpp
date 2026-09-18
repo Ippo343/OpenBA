@@ -5,6 +5,7 @@
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // MapParamsDialog::Slot5 (vtable +0x28) — Shutdown
@@ -254,7 +255,7 @@ void MapParamsDialog_OnEvent(MapParamsDialog* self, void* element, int eventType
         // Close dialog
         void* ui = *(void**)(s + 0x10);
         uint64_t basePtr[2];
-        fn_InternalBasePtr_Ctor(basePtr, self);
+        new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
         fn_UI_CloseDialog(ui, basePtr);
         return;
     }
@@ -263,7 +264,7 @@ void MapParamsDialog_OnEvent(MapParamsDialog* self, void* element, int eventType
         // buttonCancel: close dialog
         void* ui = *(void**)(s + 0x10);
         uint64_t basePtr[2];
-        fn_InternalBasePtr_Ctor(basePtr, self);
+        new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
         fn_UI_CloseDialog(ui, basePtr);
         return;
     }

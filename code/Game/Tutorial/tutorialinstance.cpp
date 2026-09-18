@@ -18,6 +18,7 @@
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Local function pointers (resolved lazily)
@@ -195,8 +196,8 @@ static void* TutorialInstance_Build(void* p) {
     if (vt) *reinterpret_cast<uintptr_t*>(s) = vt;
     *reinterpret_cast<int32_t*>(s + 0x10) = -1;
     if (fn_InternalBasePtr_Ctor) {
-        fn_InternalBasePtr_Ctor(s + 0x18, nullptr);
-        fn_InternalBasePtr_Ctor(s + 0x20, nullptr);
+        new (s + 0x18) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (s + 0x20) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     }
     *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
     return p;

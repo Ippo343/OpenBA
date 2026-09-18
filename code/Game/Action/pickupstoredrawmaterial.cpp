@@ -33,6 +33,7 @@
 #include "resolve.h"
 #include <cstdio>
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -266,7 +267,8 @@ int PickupStoredRawMaterial_AbstractImpl_Impl(PickupStoredRawMaterial* self, voi
 
             // Create IBP for parent storage, get max capacity and current count
             uintptr_t parentStorageIBP = 0;
-            fn_InternalBasePtr_Ctor(&parentStorageIBP, parentStorage);
+            new (&parentStorageIBP) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(parentStorage));   // B.3.3 bridge
             fn_InternalBasePtr_CheckPtr(&parentStorageIBP);
             int maxCapacity = *(int*)(parentStorageIBP + 0x38);
             fn_InternalBasePtr_CheckPtr(&parentStorageIBP);
@@ -346,7 +348,8 @@ int PickupStoredRawMaterial_AbstractImpl_Impl(PickupStoredRawMaterial* self, voi
         void* parentStorage = FindComponentByTypeId(parentEntity, s_typeId_StorageComp, 0x30, 0x38);
 
         uintptr_t parentStorageIBP2[2];
-        fn_InternalBasePtr_Ctor(parentStorageIBP2, parentStorage);
+        new (parentStorageIBP2) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(parentStorage));   // B.3.3 bridge
         fn_InternalBasePtr_CheckPtr(parentStorageIBP2);
         s_fn_Storage_AddItem((void*)parentStorageIBP2[0], itemType, requestedCount);
 

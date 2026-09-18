@@ -40,6 +40,7 @@
 
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"   // ComponentFactory::the live gate (default-on gates)
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp);   // sub_8630 (ported)
 extern "C" void* g_pConstructionDemoSite;                            // the seeded foundation
@@ -333,7 +334,8 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
             if (bsWork) {
                 g_pBuildStructureWork = bsWork;   // 2c-B probe: correlate with 7b60 claim walk
                 uintptr_t bsIBP = 0;
-                if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&bsIBP, bsWork);
+                if (fn_InternalBasePtr_Ctor) new (&bsIBP) ::Object::InternalBasePtr(
+                    reinterpret_cast<RtObject::Internal*>(bsWork));   // B.3.3 bridge
                 // find the site WorkComponent (c8070) the work posts under
                 if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(bc + 0x10));
                 uintptr_t workCompIBP = 0;
@@ -510,7 +512,8 @@ extern "C" char BuildComponent_State8OneShot(void* buildComp, void* sm) {
     if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
         townMgr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
     uintptr_t selfIBP = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&selfIBP, buildComp);
+    if (fn_InternalBasePtr_Ctor) new (&selfIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(buildComp));   // B.3.3 bridge
     if (townMgr && s_findInQueue) {
         int idx = s_findInQueue(reinterpret_cast<void*>(townMgr + 0xd0), &selfIBP);
         if (idx >= 0) {

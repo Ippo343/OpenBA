@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Original FUN_14000d6c0 — FindComponent with type DAT_1401c7008 (guard check only)
 typedef void* (*fn_OrigFindComp_t)(void* entity, void* retval);
@@ -53,7 +54,7 @@ static void WorkplaceUI_AdjustWorkerCount_Impl(void* self, int delta)
     bool isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
     void* entity = isEntity ? dataSource : nullptr;
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, entity);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
     fn_InternalBasePtr_CheckPtr((void*)entityBuf);
     uintptr_t entityPtr = *(uintptr_t*)entityBuf;
 
@@ -100,7 +101,7 @@ static void WorkplaceUI_ToggleWorkplace_Impl(void* self)
     bool isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
     void* entity = isEntity ? dataSource : nullptr;
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, entity);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
     fn_InternalBasePtr_CheckPtr((void*)entityBuf);
     uintptr_t entityPtr = *(uintptr_t*)entityBuf;
 
@@ -151,7 +152,7 @@ static uint64_t FindElemAsBasePtr(void* dialogElem, const char* name) {
     uint64_t intPtr = FindElemByName(dialogElem, name);
     void* rawElem = (void*)intPtr;
     uint8_t basePtrBuf[8];
-    fn_InternalBasePtr_Ctor(basePtrBuf, rawElem);
+    new (basePtrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(rawElem));   // B.3.3 bridge
     return *(uint64_t*)basePtrBuf;
 }
 
@@ -190,7 +191,7 @@ void WorkplaceUI_Serialize(WorkPlaceUI* self) {
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, entityPtr);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
     void* entityInternal = *(void**)entityBuf;
 
     // Find the WorkComponent (FUN_140003050 — type DAT_1401c8070)
@@ -236,7 +237,7 @@ void WorkplaceUI_Startup(WorkPlaceUI* self) {
     bool isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
     void* entity = isEntity ? dataSource : nullptr;
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, entity);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
     fn_InternalBasePtr_CheckPtr((void*)entityBuf);
     void* entityPtr = *(void**)entityBuf;
 
@@ -633,7 +634,7 @@ void UpdateVisibility(void* self) {
     bool isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
     void* entity = isEntity ? dataSource : nullptr;
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, entity);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
     fn_InternalBasePtr_CheckPtr(entityBuf);
     void* entityPtr = *reinterpret_cast<void**>(entityBuf);
 
@@ -703,7 +704,7 @@ void PopulateCounts(void* self) {
     void* dataSource = *reinterpret_cast<void**>(s + 0x28);
     if (!fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity)) return;
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, dataSource);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dataSource));   // B.3.3 bridge
     fn_InternalBasePtr_CheckPtr(entityBuf);
     void* entityPtr = *reinterpret_cast<void**>(entityBuf);
 
@@ -876,7 +877,7 @@ static void SA_AdjustJobCount(void* self, int delta) {
     void* dataSource = *reinterpret_cast<void**>(s + 0x28);
     if (!fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity)) return;
     uint8_t eb[8];
-    fn_InternalBasePtr_Ctor(eb, dataSource);
+    new (eb) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dataSource));   // B.3.3 bridge
     fn_InternalBasePtr_CheckPtr(eb);
     void* entityPtr = *reinterpret_cast<void**>(eb);
 
@@ -1042,7 +1043,7 @@ void W_OnRemove(void* self, void* /*p2*/, int msg, int id, int /*p5*/, int /*p6*
     void* dataSource = *reinterpret_cast<void**>(s + 0x28);
     if (!fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity)) return;
     uint8_t eb[8];
-    fn_InternalBasePtr_Ctor(eb, dataSource);
+    new (eb) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dataSource));   // B.3.3 bridge
     fn_InternalBasePtr_CheckPtr(eb);
     void* entityPtr = *reinterpret_cast<void**>(eb);
 

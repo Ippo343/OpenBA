@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Resolved helpers
@@ -228,7 +229,7 @@ static void CharacterComponent_BodyInit(CharacterComponent* self) {
             *reinterpret_cast<int32_t*>(p + 0x3c) = *reinterpret_cast<int32_t*>(model + 0x168);
             // wrap self as an InternalBasePtr, register with the manager -> char-index.
             int64_t selfIbp = 0;
-            fn_InternalBasePtr_Ctor(&selfIbp, self);
+            new (&selfIbp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
             int64_t ibpArg = selfIbp;
             *reinterpret_cast<int32_t*>(p + 0x40) =
                 static_cast<int32_t>(CharMgr_sub_83f0(reinterpret_cast<float*>(charMgr), &ibpArg));

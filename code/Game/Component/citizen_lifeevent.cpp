@@ -23,6 +23,7 @@
 #include "resolve.h"
 #include "system/String.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // code/Game/Game/eventlog.cpp
 extern "C" void EventLog_AddCitizenEvent(void* eventLog, int eventType, int severity,
@@ -72,7 +73,7 @@ extern "C" void CitizenComponent_PostLifeEvent(void* self, int eventType, int se
 
     // --- Post (null entity IBP: citizen life events carry no map location) ---
     int64_t nullIBP = 0;
-    fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+    new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     EventLog_AddCitizenEvent(eventLog, eventType, severity, &nullIBP,
                              p + 0x28 /* citizen name String */, &titleStr, &paramStr);
 }

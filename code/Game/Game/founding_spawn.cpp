@@ -71,6 +71,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Start-config offsets (mirrors of the constants in starttown.cpp).
 static constexpr int SC_JITTER       = 0x40;   // float spawn-jitter radius
@@ -144,7 +145,8 @@ static void FoundingSpawn_FindCitizenComp(void* entity, uintptr_t* outIBP) {
             }
         }
     }
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(outIBP, found);
+    if (fn_InternalBasePtr_Ctor) new (outIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     else                         *outIBP = reinterpret_cast<uintptr_t>(found);
 }
 
@@ -285,7 +287,7 @@ extern "C" void* StartTown_SpawnColonistRetail(uint8_t* startConfig, void* citiz
     }
 
     uintptr_t entIBP = 0;
-    fn_InternalBasePtr_Ctor(&entIBP, ent);
+    new (&entIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(ent));   // B.3.3 bridge
     fn_InternalBasePtr_CheckPtr(&entIBP);
 
     // 2. find the CitizenComponent
@@ -345,7 +347,7 @@ extern "C" void* StartTown_SpawnColonistRetail(uint8_t* startConfig, void* citiz
 
     // 7. the whole per-citizen init
     int64_t nullIBP = 0;
-    fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+    new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     fn_InternalBasePtr_CheckPtr(&compIBP);
     static fn_DeferredInit_117080_t s_deferredInit = nullptr;
     static bool s_resolved = false;

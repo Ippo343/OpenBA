@@ -41,6 +41,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 
 namespace {
 
@@ -85,7 +87,7 @@ bool ResourceNameMismatch(void* dialog, const System::String& wantName) {
     void* entity = NarrowComponentEntity(owner);
 
     uintptr_t entityIBP = 0;
-    fn_InternalBasePtr_Ctor(&entityIBP, entity);
+    new (&entityIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
     if (entityIBP == 0) return false;
     fn_InternalBasePtr_CheckPtr(&entityIBP);
 
@@ -130,14 +132,16 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
     void* factory = *reinterpret_cast<void**>(*g_pFactorySingleton);
     if (!factory) return outElementIBP;
 
-    uint32_t dialogTypeId = fn_Factory_GetTypeIdFromName(factory, parts[0]._data, true);
+    uint32_t dialogTypeId = reinterpret_cast<const ::Object::Factory*>(factory)->GetTypeIdFromName(
+        parts[0]._data, true);   // B.3.3 bridge
     if (dialogTypeId == 0) {
         return outElementIBP;
     }
 
     uint32_t controllerTypeId = 0;
     if (partCount >= 3)
-        controllerTypeId = fn_Factory_GetTypeIdFromName(factory, parts[1]._data, true);
+        controllerTypeId = reinterpret_cast<const ::Object::Factory*>(factory)->GetTypeIdFromName(
+            parts[1]._data, true);   // B.3.3 bridge
 
     UI::UserInterface* ui = *reinterpret_cast<UI::UserInterface**>(
         reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x98);

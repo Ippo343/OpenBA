@@ -107,6 +107,7 @@
 #include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Externs for already-ported/registered sibling functions
@@ -854,7 +855,8 @@ extern "C" void CitizenList_PostLoad_8f580(void* self) {
             }
 
             uint8_t chosenIBP[8] = {0};
-            fn_InternalBasePtr_Ctor(chosenIBP, chosen);
+            new (chosenIBP) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(chosen));   // B.3.3 bridge
             fn_InternalBasePtr_CheckPtr(chosenIBP);
             uint64_t chosenVal = *reinterpret_cast<uint64_t*>(chosenIBP);
             int16_t cx = chosenVal ? *reinterpret_cast<int16_t*>(chosenVal + 0x28) : 0;

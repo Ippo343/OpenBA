@@ -40,6 +40,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Spawn side (pasturecomponent_spawn.cpp).
 extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP);
@@ -172,7 +173,8 @@ void Resolve() {
 inline void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 inline uint64_t MakeIBP(void* obj) {
     uint64_t r = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&r, obj);
+    if (fn_InternalBasePtr_Ctor) new (&r) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(obj));   // B.3.3 bridge
     else r = reinterpret_cast<uint64_t>(obj);
     return r;
 }

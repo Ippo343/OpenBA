@@ -10,6 +10,7 @@
 #include "Object/factory_registration.h"   // Object::ResolveTypeIdByNameLazy
 #include "system/String.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ---- UI::CheckElement type id -----------------------------------------------
 // Retail reads this through exe .rdata exref 0x1401516a8 (import string
@@ -57,7 +58,7 @@ void PageToggleUI_Slot4(PageToggleUI* self) {
         if (derived) checked = elemPtr;
     }
     uint64_t basePtr = 0;
-    fn_InternalBasePtr_Ctor(&basePtr, checked);
+    new (&basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
     *(uint64_t*)(s + 0x30) = basePtr;
 
     // SetElementId on checkbox = 700

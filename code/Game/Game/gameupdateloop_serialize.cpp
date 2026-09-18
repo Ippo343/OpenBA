@@ -57,6 +57,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <windows.h>   // QueryPerformanceCounter for the BANISHED_SAVE_TIMING probe
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // code/Game/Game/minimap_upload.cpp — ports FUN_1400a4e80 + the CopyToTexture tail.
 extern "C" void Minimap_CreateAndUpload(void* mapObj);
@@ -687,13 +688,15 @@ extern "C" void EntityList_PostLoad_c4730(void* elVoid, void* stream) {
             uint32_t flags = *(uint32_t*)(e + 0x40);
             if (flags & 4) {
                 void* ibp = nullptr;
-                fn_InternalBasePtr_Ctor(&ibp, (void*)e);
+                new (&ibp) ::Object::InternalBasePtr(
+                    reinterpret_cast<RtObject::Internal*>((void*)e));   // B.3.3 bridge
                 s_fn_DynArr8_ResizeFill((void*)(owner + 0x88),
                                         *(int*)(owner + 0x90) + 1, &ibp);
             }
             if (flags & 0x10) {
                 void* ibp = nullptr;
-                fn_InternalBasePtr_Ctor(&ibp, (void*)e);
+                new (&ibp) ::Object::InternalBasePtr(
+                    reinterpret_cast<RtObject::Internal*>((void*)e));   // B.3.3 bridge
                 s_fn_DynArr8_ResizeFill((void*)(owner + 0x98),
                                         *(int*)(owner + 0xa0) + 1, &ibp);
             }

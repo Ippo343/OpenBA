@@ -13,6 +13,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Resolved helpers
@@ -272,13 +273,13 @@ void OrchardComponent_ValidateRefs(void* selfV) {
         // Stale -> mark removed (kind=2) and null the 3 IBP slots.
         *reinterpret_cast<int32_t*>(entry + 4) = 2;
         int64_t z = 0;
-        if (fn_InternalBasePtr_Ctor) { fn_InternalBasePtr_Ctor(&z, nullptr);
+        if (fn_InternalBasePtr_Ctor) { new (&z) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             *reinterpret_cast<int64_t*>(entry + 8) = z; }
         z = 0;
-        if (fn_InternalBasePtr_Ctor) { fn_InternalBasePtr_Ctor(&z, nullptr);
+        if (fn_InternalBasePtr_Ctor) { new (&z) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             *reinterpret_cast<int64_t*>(entry + 0x10) = z; }
         z = 0;
-        if (fn_InternalBasePtr_Ctor) { fn_InternalBasePtr_Ctor(&z, nullptr);
+        if (fn_InternalBasePtr_Ctor) { new (&z) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             *reinterpret_cast<int64_t*>(entry + 0x18) = z; }
     }
 }

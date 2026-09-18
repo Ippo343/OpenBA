@@ -15,6 +15,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Helper: Find element by name in dialog, return InternalPtr value (8 bytes)
 static uint64_t FindElemByName(void* dialogElem, const char* name) {
@@ -31,7 +32,7 @@ static uint64_t FindElemAsBasePtr(void* dialogElem, const char* name) {
     uint64_t intPtr = FindElemByName(dialogElem, name);
     void* rawElem = (void*)intPtr;
     uint8_t basePtrBuf[8];
-    fn_InternalBasePtr_Ctor(basePtrBuf, rawElem);
+    new (basePtrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(rawElem));   // B.3.3 bridge
     return *(uint64_t*)basePtrBuf;
 }
 

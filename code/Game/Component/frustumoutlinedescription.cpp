@@ -24,6 +24,7 @@
 #include "system/String.h"
 #include "resolve.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 static const uintptr_t kFrustumOutlineDescriptionVtable = 0x14015c300;
 
@@ -113,7 +114,8 @@ static void* FrustumOutlineDescription_CreateElement(void* self, void** param_2)
     void* elem = FrustumOutlineElement_Factory_SA();
 
     uint8_t ibp[16] = {};
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(ibp, elem);
+    if (fn_InternalBasePtr_Ctor) new (ibp) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
     if (fn_ElementDescription_CreateInstance)
         fn_ElementDescription_CreateInstance(self, ibp);
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);

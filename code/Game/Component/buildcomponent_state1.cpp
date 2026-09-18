@@ -35,6 +35,7 @@
 #include "Component/component_factory_base.h"   // ComponentFactory::the live gate (default-on gates)
 #include "Component/controller_state_table.h"   // ControllerLive::RequestStateTransition
 #include "Component/clearareacomponent_funcs.h" // ClearArea_Finalize8270 (port of ModelComponent_impl_8270)
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Ported leaves (this brick):
 extern "C" bool  BuildComponent_HaveAllMaterials(void* buildComp);          // sub_8630
@@ -282,7 +283,8 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
     if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
         townMgr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
     uintptr_t siteIbp = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&siteIbp, buildComp);
+    if (fn_InternalBasePtr_Ctor) new (&siteIbp) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(buildComp));   // B.3.3 bridge
     if (townMgr && s_findInQueue) {
         int idx = s_findInQueue(reinterpret_cast<void*>(townMgr + 0xd0), &siteIbp);
         if (idx < 0) {
@@ -311,7 +313,8 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
             work = GatherRawMaterials_Ctor_Impl(mem, &entIbp);
         }
         uintptr_t workIbp = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&workIbp, work);
+        if (fn_InternalBasePtr_Ctor) new (&workIbp) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
 
         // find the WorkComponent (0x1401c8070) the work posts under
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));

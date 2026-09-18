@@ -24,6 +24,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Locally-resolved dispatch-slot / math helpers
@@ -86,7 +87,8 @@ void* ActMv_FindComponentFamily_12d0(uintptr_t entity, void* retIBP) {
             }
         }
     }
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(retIBP, found);
+    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return retIBP;
 }
 
@@ -410,7 +412,7 @@ uint8_t ActMv_CitizenBreakCheck_116650(void* entityp) {
     }
     if (!haveValue) {
         // (*fn_InternalBasePtr_Ctor)(&local_res10, 0): value stays null.
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&valueIBP, nullptr);
+        if (fn_InternalBasePtr_Ctor) new (&valueIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         valueObj = reinterpret_cast<uintptr_t>(valueIBP);
     }
 

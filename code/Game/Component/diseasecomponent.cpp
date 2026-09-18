@@ -86,6 +86,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <new>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 
@@ -399,7 +400,8 @@ extern "C" void* DiseaseComp_FindSibling(int64_t entity, void* outIBP) {
             break;
         }
     }
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(outIBP, found);
+    if (fn_InternalBasePtr_Ctor) new (outIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return outIBP;
 }
 
@@ -934,7 +936,8 @@ extern "C" void DiseaseComponent_OnAdded(DiseaseComponent* self) {
     int64_t* reg = reinterpret_cast<int64_t*>(town + 0xF0);
 
     uint8_t ibp[16] = {0};
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(ibp, self);
+    if (fn_InternalBasePtr_Ctor) new (ibp) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
     int count = *reinterpret_cast<int32_t*>((uintptr_t)reg + 8);
     if (s_arrResizeFill) s_arrResizeFill(reg, count + 1, ibp);
 
@@ -956,7 +959,8 @@ extern "C" void DiseaseComponent_OnRemoved(DiseaseComponent* self) {
         uintptr_t town = *reinterpret_cast<uintptr_t*>((uintptr_t)gw + 0xF0);
         if (town) {
             uint8_t ibp[16] = {0};
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(ibp, self);
+            if (fn_InternalBasePtr_Ctor) new (ibp) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
             if (s_arrErase) s_arrErase(reinterpret_cast<int64_t*>(town + 0xF0), ibp);
         }
     }

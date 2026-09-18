@@ -28,6 +28,7 @@
 #include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // AssignHousing (0x140111ee0) — sets citizen+0x248 (workplace roster link); ported in
 // citizencomponent.cpp and registered in standalone. Same decl as citizen_employ_cascade.
@@ -37,7 +38,8 @@ extern void CitizenComp_AssignHousing(CitizenComponent* self, int64_t* buildingI
 namespace {
 
 inline void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
-inline void IbpCtor(void* slot, void* obj) { if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(slot, obj); }
+inline void IbpCtor(void* slot, void* obj) { if (fn_InternalBasePtr_Ctor) new (slot) ::Object::InternalBasePtr(
+    reinterpret_cast<RtObject::Internal*>(obj)); }   // B.3.3 bridge
 
 // ---------------------------------------------------------------------------
 // Growable ptr-array push, 8-byte elements (shared shape of the exe's inline

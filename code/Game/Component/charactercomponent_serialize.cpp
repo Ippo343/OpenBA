@@ -50,6 +50,7 @@
 #include "engine_funcs.h"
 #include "Component/coll_bridge.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 extern void Component_SerializeReimpl(void* self, void* stream);
 
@@ -141,7 +142,7 @@ extern "C" void CharacterComponent_Serialize(void* self, void* stream) {
 
         if (fn_InternalBasePtr_Ctor) {
             int64_t selfIbp = 0;
-            fn_InternalBasePtr_Ctor(&selfIbp, self);
+            new (&selfIbp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
             void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
             float* charMgr = gw ? reinterpret_cast<float*>(
                 *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(gw) + 0x88)) : nullptr;

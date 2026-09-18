@@ -23,6 +23,7 @@
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Thumbnail vtable stamps — see code/Game/Dialog/thumb_vtables.cpp.
 extern uintptr_t ThumbVtable_StampMaterialInstance(void* obj);
@@ -43,7 +44,7 @@ static uint64_t NoiseUI_FindElemAsBasePtr(void* parentElem, const char* name) {
 
     // Cast to specific type via IsDerivedFrom check
     // (Ghidra shows the pattern: CheckPtr -> deref -> IsDerivedFrom -> InternalBasePtr_Ctor)
-    fn_InternalBasePtr_Ctor(bpBuf, raw);
+    new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(raw));   // B.3.3 bridge
     uint64_t result = *(uint64_t*)bpBuf;
 
     return result;
@@ -154,7 +155,8 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
         imageElem = rawElem;
     }
     uint64_t imageElemPtr = 0;
-    fn_InternalBasePtr_Ctor((void*)&imageElemPtr, imageElem);
+    new ((void*)&imageElemPtr) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(imageElem));   // B.3.3 bridge
 
     // Create Sprite from SpriteSheet (index 0) and set on element
     uint8_t spriteBuf[16];
@@ -333,7 +335,7 @@ void NoiseUI_Slot4(NoiseUI* self) {
     fn_FindElement(dialogElem, retBuf, &nameStr);
     fn_InternalBasePtr_CheckPtr(retBuf);
     void* raw = *(void**)retBuf;
-    fn_InternalBasePtr_Ctor(bpBuf, raw);
+    new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(raw));   // B.3.3 bridge
 
     // Set element ID on the button
     fn_InternalBasePtr_CheckPtr(bpBuf);

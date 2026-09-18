@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <new>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Resolved helpers
@@ -247,7 +248,8 @@ void TradeComponent_Slot14(TradeComponent* selfP) {
             }
         }
         uint64_t workIBP[1] = {0};
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(workIBP, work);
+        if (fn_InternalBasePtr_Ctor) new (workIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&sched);
         if (s_tc_PostWork) s_tc_PostWork(sched, 1, '\0', workIBP);
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpc);

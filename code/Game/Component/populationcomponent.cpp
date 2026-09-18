@@ -20,6 +20,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Resolved helpers
@@ -462,16 +463,16 @@ void PopulationComponent_Startup(PopulationComponent* selfC) {
         void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
         void* ent = (mem && s_fn_CopyCtor) ? s_fn_CopyCtor(mem, herdTemplate) : nullptr;
         uint64_t entRef = 0;
-        fn_InternalBasePtr_Ctor(&entRef, ent);
+        new (&entRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(ent));   // B.3.3 bridge
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entRef);
         int64_t entObj = static_cast<int64_t>(entRef);
         if (!entObj) continue;
 
         void* herdComp = PopulationFindComponent(entObj, tidHerdComp);
         uint64_t herdRef = 0;
-        fn_InternalBasePtr_Ctor(&herdRef, herdComp);
+        new (&herdRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(herdComp));   // B.3.3 bridge
         uint64_t selfRef = 0;
-        fn_InternalBasePtr_Ctor(&selfRef, self);
+        new (&selfRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&herdRef);
         uint8_t* herd = reinterpret_cast<uint8_t*>(herdRef);
         if (!herd) continue;
@@ -520,7 +521,8 @@ void PopulationComponent_OnAdd(void* selfV) {
     if (!townMgr) return;
 
     uint64_t selfRef = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&selfRef, selfV);
+    if (fn_InternalBasePtr_Ctor) new (&selfRef) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(selfV));   // B.3.3 bridge
     // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
     GameColl::AsArray<GameColl::Ptr8>(townMgr + 0xc0)
         .SetSizeFill(*reinterpret_cast<int*>(townMgr + 0xc8) + 1, &selfRef);
@@ -542,7 +544,8 @@ void PopulationComponent_OnRemove(void* selfV) {
     if (!townMgr || !s_fn_ArrErase) return;
 
     uint64_t selfRef = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&selfRef, selfV);
+    if (fn_InternalBasePtr_Ctor) new (&selfRef) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(selfV));   // B.3.3 bridge
     s_fn_ArrErase(reinterpret_cast<int64_t*>(townMgr + 0xc0), &selfRef);
 }
 

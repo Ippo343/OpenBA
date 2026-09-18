@@ -26,6 +26,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "resolve.h"
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // code/Game/Object/factory_registration.cpp
 namespace Object { uint32_t ResolveTypeIdByNameLazy(const char* simpleName); }
@@ -170,7 +171,7 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
 
         // Wrap in InternalBasePtr
         void* tabPtr = nullptr;
-        fn_InternalBasePtr_Ctor(&tabPtr, tabElement);
+        new (&tabPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(tabElement));   // B.3.3 bridge
 
         // Create a new tab page: AddTab(tabElement, retval, tabDesc, elementDesc)
         // Non-trivial return ABI: this=RCX, retval=RDX, tabDesc=R8, elementDesc=R9
@@ -517,7 +518,8 @@ void ToolUI_Slot8(ToolUI* self) {
             void* entity = check ? ds2 : nullptr;
 
             uint8_t entityBuf[8];
-            fn_InternalBasePtr_Ctor(entityBuf, entity);
+            new (entityBuf) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
 
             EntityUI_SelectEntity_Impl(
                 *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x120),

@@ -10,6 +10,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // CitizenUI_UpdateIconDisplay (0x14006aed0)
@@ -99,7 +100,8 @@ inline void CitizenUI_BuildIconArray_Impl(uintptr_t param1, uintptr_t groupElemI
             void* wholeElem = *(void**)foundBuf;
 
             uint8_t ibpBuf[8];
-            fn_InternalBasePtr_Ctor(ibpBuf, wholeElem);
+            new (ibpBuf) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(wholeElem));   // B.3.3 bridge
 
             // Push to whole array (dynamic array at param1+0).
             // B.3.2 bridge: param1+0 is Collection::Array<{InternalBasePtr}>
@@ -130,7 +132,7 @@ inline void CitizenUI_BuildIconArray_Impl(uintptr_t param1, uintptr_t groupElemI
             void* halfElem = *(void**)foundBuf;
 
             uint8_t ibpBuf[8];
-            fn_InternalBasePtr_Ctor(ibpBuf, halfElem);
+            new (ibpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(halfElem));   // B.3.3 bridge
 
             // Push to half array (at param1+0x10).
             // B.3.2 bridge: param1+0x10 is Collection::Array<{InternalBasePtr}>

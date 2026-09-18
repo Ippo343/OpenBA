@@ -41,6 +41,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Thumbnail vtable stamps — see code/Game/Dialog/thumb_vtables.cpp.
 extern uintptr_t ThumbVtable_StampMaterialInstance(void* obj);
@@ -266,7 +267,8 @@ void ModDialog_Slot4(ModDialog* self) {
         fn_InternalBasePtr_CheckPtr(elemBuf);
         void* elem = *(void**)elemBuf;
         // Store InternalPtr at +0xC8
-        fn_InternalBasePtr_Ctor((void*)(s + 0xC8), elem);
+        new ((void*)(s + 0xC8)) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
     }
 
     void* modSingleton = *(void**)g_ppModificationSingleton;
@@ -329,7 +331,7 @@ void ModDialog_Slot4(ModDialog* self) {
             fn_FindElement(clonedElem, retBuf, &strBuf);
             fn_InternalBasePtr_CheckPtr(retBuf);
             void* found = *(void**)retBuf;
-            fn_InternalBasePtr_Ctor(e.buf, found);
+            new (e.buf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
         }
 
         // Get vtable[0x58] child (Child(0)) of cloned element
@@ -343,7 +345,8 @@ void ModDialog_Slot4(ModDialog* self) {
             ((fn_Child_t)vt[11])(clonedElem, childRetBuf, 0);
             fn_InternalBasePtr_CheckPtr(childRetBuf);
             void* child = *(void**)childRetBuf;
-            fn_InternalBasePtr_Ctor(vtChildBuf, child);
+            new (vtChildBuf) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(child));   // B.3.3 bridge
         }
 
         // Assign element IDs
@@ -605,7 +608,7 @@ static void ModDialog_ShowDetails_Impl(ModDialog* self, int index) {
 
         // Construct DialogInstance base (0xB8)
         uint64_t nullRef;
-        fn_InternalBasePtr_Ctor(&nullRef, nullptr);
+        new (&nullRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         fn_DialogInstance_Ctor(newDialog, *(void**)(s + 0x10), dialog, &nullRef, 0, 0, 0);
 
         // Set vtable to ModDetailsDialog
@@ -622,7 +625,7 @@ static void ModDialog_ShowDetails_Impl(ModDialog* self, int index) {
 
     // Add to UI
     uint64_t dialogRef;
-    fn_InternalBasePtr_Ctor(&dialogRef, dialogInst);
+    new (&dialogRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dialogInst));   // B.3.3 bridge
     fn_UI_AddDialog(*(void**)(s + 0x10), &dialogRef);
 }
 
@@ -669,7 +672,7 @@ static void ModDialog_Apply_Impl(ModDialog* self) {
         void* dialogInst = nullptr;
         if (newDialog) {
             uint64_t nullRef;
-            fn_InternalBasePtr_Ctor(&nullRef, nullptr);
+            new (&nullRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             fn_DialogInstance_Ctor(newDialog, *(void**)(s + 0x10), dialog, &nullRef, 0, 0, 0);
             if (g_ReloadDialog_Vtable) {
                 *(uintptr_t*)newDialog = g_ReloadDialog_Vtable;
@@ -679,7 +682,8 @@ static void ModDialog_Apply_Impl(ModDialog* self) {
 
         // ShowDialog (modal) — blocks until user responds
         uint64_t dialogRef;
-        fn_InternalBasePtr_Ctor(&dialogRef, dialogInst);
+        new (&dialogRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(dialogInst));   // B.3.3 bridge
         // BANISHED_MODAL_ANSWER=<n>: unattended harness only. ShowDialog pumps its
         // own message loop until a button is pressed, which no driver can reach, so
         // the answer is injected here instead (1/2 = confirm, anything else = cancel).
@@ -687,10 +691,10 @@ static void ModDialog_Apply_Impl(ModDialog* self) {
         if (Opt().modalAnswer) {
             result = Opt().modalAnswerValue;
             printf("[ModDialog::Apply] BANISHED_MODAL_ANSWER=%d (reload dialog skipped)\n", result);
-            fn_InternalBasePtr_DeletePtr(&dialogRef);
+            reinterpret_cast< ::Object::InternalBasePtr*>(&dialogRef)->DeletePtr();   // B.3.3 bridge
         } else {
             result = fn_UI_ShowDialog(*(void**)(s + 0x10), &dialogRef);
-            fn_InternalBasePtr_DeletePtr(&dialogRef);
+            reinterpret_cast< ::Object::InternalBasePtr*>(&dialogRef)->DeletePtr();   // B.3.3 bridge
         }
         printf("[ModDialog::Apply] dirty=1 gameWorld=%p reload answer=%d\n", gameWorld, result);
 
@@ -725,7 +729,7 @@ static void ModDialog_Apply_Impl(ModDialog* self) {
 
                 // Build null InternalBasePtr
                 uint64_t nullRef2;
-                fn_InternalBasePtr_Ctor(&nullRef2, nullptr);
+                new (&nullRef2) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
                 // Trigger game reload with saved state
                 fn_InternalBasePtr_CheckPtr((void*)(s + 0xD0));
@@ -739,7 +743,7 @@ static void ModDialog_Apply_Impl(ModDialog* self) {
 
     // Close the mod dialog
     uint64_t closeRef;
-    fn_InternalBasePtr_Ctor(&closeRef, (void*)self);
+    new (&closeRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>((void*)self));   // B.3.3 bridge
     fn_UI_CloseDialog(*(void**)(s + 0x10), &closeRef);
 }
 
@@ -771,7 +775,8 @@ void ModDialog_Slot8(ModDialog* self, void* param2, int msg, int id,
 
             // Build InternalBasePtr for CloseDialog
             void* dialogPtr = nullptr;
-            fn_InternalBasePtr_Ctor(&dialogPtr, (void*)self);
+            new (&dialogPtr) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>((void*)self));   // B.3.3 bridge
 
             void* ui = *(void**)(s + 0x10);
             fn_UI_CloseDialog(ui, &dialogPtr);

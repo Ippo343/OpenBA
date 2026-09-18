@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // EntityTrackingSet_Remove (0x14002c690)
@@ -321,7 +322,8 @@ void EntityUI_Slot4(EntityUI* self) {
     void* dataSource = *(void**)(s + 0x28);
     bool isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
     void* entity = isEntity ? dataSource : nullptr;
-    fn_InternalBasePtr_Ctor((void*)(s + 0x30), entity);
+    new ((void*)(s + 0x30)) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
 
     // Find "buttonCenter" element and set ID 101 (0x65)
     {
@@ -357,7 +359,7 @@ void EntityUI_Slot4(EntityUI* self) {
         }
 
         uint8_t toolBuf[16];
-        fn_InternalBasePtr_Ctor(toolBuf, toolUI);
+        new (toolBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(toolUI));   // B.3.3 bridge
         void* toolPtr = *(void**)toolBuf;
 
         // Reset flags at controller+0x40 and +0x41
@@ -547,7 +549,7 @@ void EntityUI_Slot8(EntityUI* self) {
         if (isTool) toolUI = controller;
     }
     uint8_t toolBuf[8];
-    fn_InternalBasePtr_Ctor(toolBuf, toolUI);
+    new (toolBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(toolUI));   // B.3.3 bridge
     uintptr_t toolPtr = *(uintptr_t*)toolBuf;
 
     // Set controller +0x4C = 1 (input active flag)
@@ -588,7 +590,7 @@ void EntityUI_Slot8(EntityUI* self) {
     void* editTool = isEditTool ? currentTool : nullptr;
 
     uint8_t editToolBuf[8];
-    fn_InternalBasePtr_Ctor(editToolBuf, editTool);
+    new (editToolBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(editTool));   // B.3.3 bridge
 
     if (*(void**)editToolBuf == nullptr) {
         // No EditTool active — deselect first, then get new EditTool
@@ -600,7 +602,8 @@ void EntityUI_Slot8(EntityUI* self) {
         isEditTool = fn_IsDerivedFrom(currentTool, *g_TypeId_EditTool);
         void* newEditTool = isEditTool ? currentTool : nullptr;
 
-        fn_InternalBasePtr_Ctor(editToolBuf, newEditTool);
+        new (editToolBuf) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(newEditTool));   // B.3.3 bridge
     }
 
     // Select the entity in the edit tool
@@ -725,7 +728,7 @@ void EntityUI_Slot9(EntityUI* self, void* param2, int msg, int id) {
             if (isTool) toolUI = controller;
         }
         uint8_t toolBuf[8];
-        fn_InternalBasePtr_Ctor(toolBuf, toolUI);
+        new (toolBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(toolUI));   // B.3.3 bridge
         void* toolPtr = *(void**)toolBuf;
 
         // The pin state lives on the checkPin element (+0x38, set in Slot4) and the

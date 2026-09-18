@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ResidenceUI::Slot7 is the per-frame roster refresh (driven via the +0x40 W_OnUpdate
 // hack in standalone). Its _DEBUG bring-up logs used to fflush an unbuffered log once
@@ -55,7 +56,7 @@ static void* FindChildElem(void* parentElem, const char* name) {
 static uint64_t FindElemAsBasePtr(void* parentElem, const char* name) {
     void* elem = FindChildElem(parentElem, name);
     uint8_t bpBuf[8];
-    fn_InternalBasePtr_Ctor(bpBuf, elem);
+    new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
     return *(uint64_t*)bpBuf;
 }
 
@@ -81,11 +82,12 @@ void ResidenceUI_Slot4(ResidenceUI* self) {
         // Fallback: find "residenceLongTable"
         void* longTable = FindChildElem(dialogElem, "residenceLongTable");
         uint8_t basePtrBuf[8];
-        fn_InternalBasePtr_Ctor(basePtrBuf, longTable);
+        new (basePtrBuf) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(longTable));   // B.3.3 bridge
         tableElem = *(void**)basePtrBuf;
     } else {
         uint8_t basePtrBuf[8];
-        fn_InternalBasePtr_Ctor(basePtrBuf, tableRaw);
+        new (basePtrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(tableRaw));   // B.3.3 bridge
         tableElem = *(void**)basePtrBuf;
     }
 
@@ -197,7 +199,7 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
     bool isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
     void* entity = isEntity ? dataSource : nullptr;
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, entity);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
     uintptr_t entityPtr = *(uintptr_t*)entityBuf;
 
     // Find ResidenceComponent — original uses type ID at 0x1401c7cf0 (ResidenceComponent),
@@ -459,7 +461,7 @@ static void ResidenceUI_GoToCitizen(ResidenceUI* self, int citizenIndex) {
     bool isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
     void* entity = isEntity ? dataSource : nullptr;
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, entity);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
     uintptr_t entityPtr = *(uintptr_t*)entityBuf;
 
     // Find StorageComponent on the residence entity

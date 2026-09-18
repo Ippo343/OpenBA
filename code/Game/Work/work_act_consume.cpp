@@ -23,6 +23,7 @@
 #include "resolve.h"
 #include "Component/coll_bridge.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Sub-callee typedefs (all exe code, resolved via ResolveAddr)
@@ -155,7 +156,8 @@ static inline void* WCP_Alloc(uint64_t size) {
     return nullptr;
 }
 static inline void WCP_CheckPtr(void* p)            { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
-static inline void WCP_IbpCtor(void* ibp, void* o)  { if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(ibp, o); }
+static inline void WCP_IbpCtor(void* ibp, void* o)  { if (fn_InternalBasePtr_Ctor) new (ibp) ::Object::InternalBasePtr(
+    reinterpret_cast<RtObject::Internal*>(o)); }   // B.3.3 bridge
 static inline void WCP_Append(void* list, void* ibp){ if (s_wcp_TaskListAppend) s_wcp_TaskListAppend(list, ibp); }
 
 // Search a component list (base = listBase) for an element whose vtable GetTypeId
@@ -283,7 +285,8 @@ void WorkAct_ConsumeProduceCtor_bef70(void* param_1, uint32_t param_2, void* par
     uintptr_t ibpSm1 = 0;
     WCP_IbpCtor(&ibpSm1, sm1);                // ctor(&local_60, sm1)
     if (*reinterpret_cast<uintptr_t*>(aiComp + 0x58) != 0 && fn_InternalBasePtr_DeletePtr)  // [lVar2+0x58]
-        fn_InternalBasePtr_DeletePtr(reinterpret_cast<void*>(aiComp + 0x58));
+        reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(aiComp + 0x58))->DeletePtr(
+            );   // B.3.3 bridge
     *reinterpret_cast<uintptr_t*>(aiComp + 0x58) = ibpSm1;
 
     // --- CompleteTask action (0x1400bf06b..) ---

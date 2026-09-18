@@ -19,6 +19,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // No class-level resolved state needed — all resolved lazily in individual functions.
 // Slot4/Slot5 use function pointers from engine_funcs.h (resolved at startup).
@@ -145,8 +146,8 @@ void FinishTutorialInstance_Slot4(FinishTutorialInstance* self, void* p2, void* 
 
         // InternalBasePtr::Ctor on fields +0x18 and +0x20 with NULL
         if (fn_InternalBasePtr_Ctor) {
-            fn_InternalBasePtr_Ctor((void*)(obj + 0x18), nullptr);
-            fn_InternalBasePtr_Ctor((void*)(obj + 0x20), nullptr);
+            new ((void*)(obj + 0x18)) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+            new ((void*)(obj + 0x20)) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         }
 
         // Set field+0x30 = 0
@@ -159,7 +160,7 @@ void FinishTutorialInstance_Slot4(FinishTutorialInstance* self, void* p2, void* 
     // Use a local IBP buffer (8 bytes), then copy to self+0x20
     uint64_t localIBP = 0;
     if (fn_InternalBasePtr_Ctor) {
-        fn_InternalBasePtr_Ctor(&localIBP, newObj);
+        new (&localIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(newObj));   // B.3.3 bridge
     }
     *(uint64_t*)(s + 0x20) = localIBP;
 

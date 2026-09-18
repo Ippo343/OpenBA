@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Lazily-resolved exe sub-helpers and type-ID globals (shared by this batch).
@@ -179,7 +180,8 @@ void* FindComponentByTypeId(uintptr_t entity, void* retIBP, const uint32_t* pTyp
             }
         }
     }
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(retIBP, found);
+    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return retIBP;
 }
 
@@ -384,7 +386,7 @@ void ActCNR_SetAnimIndex_126440(int64_t self, uint32_t animIdx) {
     if (*reinterpret_cast<int8_t*>(reinterpret_cast<uintptr_t>(d) + 100) == 0) {
         if (((*reinterpret_cast<uint32_t*>(s + 0x20) >> 0x15) & 1) != 0) {
             int64_t nullIBP = 0;
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+            if (fn_InternalBasePtr_Ctor) new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             ActCNR_RemoveNatRes_1260f0(self, &nullIBP, 0);
         }
     } else {
@@ -566,7 +568,8 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
                       ? s_fn_c3720(mem, *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(d) + 0x20))
                       : nullptr;
     int64_t newIBP = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&newIBP, newEntity);
+    if (fn_InternalBasePtr_Ctor) new (&newIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
 
     int64_t rawMatIBP = 0;
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&newIBP);

@@ -55,6 +55,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cmath>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 
@@ -128,7 +129,7 @@ void SpawnAmbientEntity(uint8_t* w, uint8_t* gw) {
     void* entity = s_fnEntityCopyCtor(mem, templateDesc);
 
     void* ibp = nullptr;                                 // Object::InternalBasePtr (8 bytes)
-    fn_InternalBasePtr_Ctor(&ibp, entity);
+    new (&ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
     int typeId = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(templateDesc) + 0x20);
     void* entityList = *reinterpret_cast<void**>(gw + 0xe8);
     if (entityList)

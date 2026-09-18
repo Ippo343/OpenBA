@@ -12,6 +12,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Helper: Find element by name in dialog, return InternalPtr value (8 bytes)
 static uint64_t FindElemByName(void* dialogElem, const char* name) {
@@ -28,7 +29,7 @@ static uint64_t FindElemAsBasePtr(void* dialogElem, const char* name) {
     uint64_t intPtr = FindElemByName(dialogElem, name);
     void* rawElem = (void*)intPtr;
     uint8_t basePtrBuf[8];
-    fn_InternalBasePtr_Ctor(basePtrBuf, rawElem);
+    new (basePtrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(rawElem));   // B.3.3 bridge
     return *(uint64_t*)basePtrBuf;
 }
 
@@ -79,7 +80,8 @@ void ImmigrationUI_Slot7(ImmigrationUI* self) {
 
     // Wrap in InternalBasePtr for FindComponent
     uint64_t entityBasePtr = 0;
-    fn_InternalBasePtr_Ctor(&entityBasePtr, checkedEntity);
+    new (&entityBasePtr) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(checkedEntity));   // B.3.3 bridge
 
     // Find ImmigrationComponent
     uint64_t immigComp = 0;
@@ -186,7 +188,8 @@ void ImmigrationUI_Slot9(ImmigrationUI* self, void* param2, int msg, int id,
 
     // Find ImmigrationComponent
     uint64_t entityBasePtr = 0;
-    fn_InternalBasePtr_Ctor(&entityBasePtr, checkedEntity);
+    new (&entityBasePtr) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(checkedEntity));   // B.3.3 bridge
     fn_InternalBasePtr_CheckPtr(&entityBasePtr);
 
     uint64_t immigComp = 0;

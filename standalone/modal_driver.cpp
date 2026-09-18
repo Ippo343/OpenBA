@@ -107,6 +107,7 @@
 #include "engine_funcs.h"
 #include "options.h"
 #include "ui/Dialogs.h"      // MessageDialogAddr::Vtable, for the self-test subject
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace ModalDriver {
 namespace {
@@ -260,7 +261,7 @@ void Tick(void*, void*) {
     // Exactly what MessageDialog::Slot10..13 do (see the header comment).
     *reinterpret_cast<uint32_t*>(d + kDlg_Result) = (uint32_t)s_answer;
     uint8_t ibp[16] = {};
-    fn_InternalBasePtr_Ctor(ibp, dialog);
+    new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dialog));   // B.3.3 bridge
     fn_UI_CloseDialog(ui, ibp);
 
     ++s_dismissed;
