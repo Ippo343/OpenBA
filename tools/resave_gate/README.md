@@ -65,7 +65,10 @@ golden and run twice. The `.bin` files are git-ignored; the golden's md5 is comm
   the same exe. No semantic cause exists in that batch (members return raw pointers, call
   counts match one-for-one, no flag or argument changed). Read a failure with the count and
   the extra row: count <= 5689 and a single extra/missing row is THIS; a count of 5690+, or
-  several rows, is a real change. Re-run twice before reading it either way. The race
+  several rows, is a real change. Re-run twice before reading it either way. The extra row
+  is NOT always the same resource: after step 6B/6C one failing run in three carried
+  `ToolbarRemoval.rsc:resource` (+46 bytes, count 5689) instead — a varying single row is
+  what a race looks like; the same NEW row on every run would be a semantic change. The race
   itself is the `ExternalFactory::Add` loader investigation, not a gate defect.
 - Intermittent, not fixed, both pre-existing: (1) one run in ~12 crashed in
   `ExternalFactory::Add`'s AVL rotate during the loader, with a `[GUL::Load] redundant

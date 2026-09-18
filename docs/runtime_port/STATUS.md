@@ -192,7 +192,28 @@ built them wrong, and callbacks stored in data.
   identical to the pre-merge boot, dispatch 0, stress clean quit (0.21 ms/iter, recorded).
   Resave gate: 8 PASS / 2 DIFF in 10 runs (0/9 DIFF on the commit before) — the known
   loader-race flake one step further, one extra `CropField.rsc:resource` row at count 5689;
-  documented in `tools/resave_gate/README.md`, no semantic cause in the batch. Next: 6B/6C.
+  documented in `tools/resave_gate/README.md`, no semantic cause in the batch.
+  Batches 6B/6C done (merge of `ad54c8a4` + one coordinator fix): 876 real call sites in
+  225 files — `fn_InternalBasePtr_Ctor` 815 (placement-new of `::Object::InternalBasePtr`
+  into the SAME raw storage, which is literally what the registered door runs; the class is
+  static_asserted trivially destructible and copyable, so no second destructor exists),
+  `fn_InternalBasePtr_DeletePtr` 47, `fn_Factory_GetTypeIdFromName` 10,
+  `fn_Factory_CreateObject` 4. NOT converted, by design: all 61 `fn_ObjectInternal_Ctor` /
+  `_Dtor` sites (the door stamps the MINTED vtables on purpose; every receiver is a derived
+  exe POD — they convert with `Object::Component`), `fn_BaseTypeInfo_Ctor` (staging path).
+  One `runtime/` edit, a real bug fix: `runtime/types/system/Value.h` no longer duplicates
+  the global `struct Time` that `engine/types/common.h` owns — the redefinition is why no
+  exe-side file could include `object/Internal.h` before (`mouse_inject.cpp`'s file-local
+  `InputDevice()` renamed `InputDeviceSingleton()` as the one collateral).
+  Coordinator fix: `buildrequirementui.cpp`'s new include had landed inside
+  `#if defined(_DEBUG)` — debug built, the PERF build did not. All 245 step-6 includes
+  scanned, that was the only one. (Agents must build `standalone-perf` too, not just
+  `standalone`.) Gate: debug + release + perf build, unit 206/0, three routes exit 0, type
+  table and list counts identical, `[RtResolve] 0 misses`, dispatch 0, resave 2 PASS + 1
+  flake of the documented signature (count 5689, one extra row, this time
+  `ToolbarRemoval.rsc:resource`), stress clean quit (0.21 ms/iter, recorded). The 6C
+  `GetTypeIdFromName` sites in Options/NewGame dialogs have build coverage only on these
+  routes. Next: 6D, the `CheckPtr` deletion.
 
 - **B.3.1 CLOSED (2026-09-13 night):** `System::String`, `System::Filename` and the nine
   `Math` value types are real classes under retail's names (`runtime/types/system/*.h`,
