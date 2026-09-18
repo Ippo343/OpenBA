@@ -277,9 +277,83 @@ uint32_t TypeIdFromName(const char* name);
 
 namespace Object {
 
-// `Object::Base` is B.3.3 step 4; only the pointer type is needed here, for the
-// two factory function pointers `BaseTypeInfo` stores at +0x20 and +0x28.
-class Base;
+class Factory;
+
+// ============================================================
+// Object::Base — ENDGAME §B.1 decision 2, the first real class with a
+// compiler-generated vtable.
+//
+// THE SLOT LIST IS MEASURED, NOT CHOSEN. `??1Base@Object@@UEAA@XZ` @ 0x1800c0360
+// is `LEA RAX,[0x180154788]; MOV [RCX],RAX; RET`, so Base's vtable is at
+// 0x180154788, and it has EXACTLY THREE SLOTS — bounded by
+// `??_7External@Object@@6B@` starting 0x18 bytes later at 0x1801547a0.
+// standalone/rt_data_mint_tables.inc's own generated row agrees independently:
+// "??_7Base@Object@@6B@  DLL 0x180154788  3 slots".
+//
+//   [0] +0x00  0x1800065b0  vector deleting dtor (`MOV EDX,0x8` = elem size 8,
+//                           `LEA R9,[0x1800c0360]` = ~Base)
+//   [1] +0x08  0x18007ec28  _purecall  -> pure `TypeName()`
+//   [2] +0x10  0x1800c0380  `XOR EAX,EAX; RET` -> `?Type@Base@Object@@UEBAIXZ`
+//
+// NO VIRTUAL DESTRUCTOR, and that is the whole premise of per-class migration:
+// GCC spends TWO slots on `virtual ~T()` (complete + deleting) and every slot
+// after it shifts, so the ~83 files that still stamp the MINTED
+// `??_7Base@Object@@6B@` into their objects would start dispatching one slot
+// out. `tests/unit/object_vtable_abi_test.cpp` is the regression test for that
+// rule, and it also proves the two tables are interchangeable in both
+// directions — which is why this class and the minted one coexist.
+//
+// Deletion goes through `Object::Destroy(p)`, never `delete p`; `~Base()` is
+// protected and non-virtual so `delete (Base*)p` does not compile.
+// ============================================================
+class Base {
+public:
+    // slot 0. MSVC's vector deleting destructor: flags&1 = free the storage,
+    // flags&2 = array form. Returns `this`, as every MSVC `??_G` does.
+    virtual Base* DeletingDtor(unsigned flags);
+
+    // slot 1. `?TypeName@X@Ns@@UEBAPEBDXZ` in every subclass; `_purecall` in
+    // Base itself, so it is pure here. DECLARE_TYPE emits the override.
+    virtual const char* TypeName() const = 0;
+
+    // slot 2. `?Type@Base@Object@@UEBAIXZ` — retail's body is `XOR EAX,EAX;
+    // RET`, i.e. an unregistered type answers 0. NOT named `GetTypeId`: the
+    // export table says `Type`, and decision 5 says the export table wins.
+    // The STATIC companion `TypeId()` is a different, non-virtual member that
+    // DECLARE_TYPE emits.
+    virtual uint32_t Type() const;
+
+    // ?IsA@Base@Object@@QEBA_NI@Z            retail 0x1800491c0
+    // An EXACT-type test, not a derivation test. Two instructions of substance.
+    bool IsA(uint32_t typeId) const { return typeId == Type(); }
+
+    // ?IsDerivedFrom@Base@Object@@QEBA_NI@Z  retail 0x1800c0390
+    // `Factory::IsDerivedFrom(_singleton, this->Type(), typeId)`, inlined by
+    // retail. ORDER: retail loads `_singleton` into RDI BEFORE the virtual
+    // call (0x1800c039a-0x1800c03a6); the body preserves that.
+    bool IsDerivedFrom(uint32_t typeId) const;
+
+protected:
+    // Retail's ctor is the compiler's: one vptr store, which the compiler
+    // emits for us. `= default` rather than a user-provided no-op (B31_RULES
+    // class rule 5).
+    Base() = default;
+    ~Base() = default;   // NON-VIRTUAL — decision 2. Reached by DeletingDtor.
+};
+static_assert(sizeof(Base) == 8, "Object::Base is one vtable pointer");
+static_assert(sizeof(Base) == sizeof(RtObject::Base),
+              "the real class and the POD describe the same bytes");
+
+// `Object::Destroy(p)` — decision 2's one deletion helper. `CallSlot0(p, 1)`
+// and the 194 `DeletePtr` sites become this as their classes convert; the
+// flags are retail's (`&1` = free the storage).
+//
+// It is NOT `delete p`: `~Base()` is non-virtual, so `delete` would run the
+// wrong destructor and skip every derived member. The "normal virtual cutover"
+// ENDGAME decision 2 describes — `DeletingDtor` becomes `virtual ~T()` and
+// `Destroy` becomes `delete` — happens only when the LAST hand-built vtable is
+// gone, which is a long way past B.3.3.
+inline void Destroy(Base* p) { if (p) p->DeletingDtor(1); }
 
 using TypeRecord = RtObject::TypeRecord;
 
@@ -515,15 +589,20 @@ uint32_t TypeNameCRC(const char* name);
 //   ?CreateInPlaceObject@Achievement@1@SAPEAVBase@Object@@PEAX@Z
 //   ?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A private static
 //
-// TWO MEMBERS ARE NOT EMITTED HERE, deliberately:
-//   * `Type()`/`TypeName()` are the VIRTUALS at slots 2 and 1. They cannot be
-//     declared until `Object::Base` is a real class — that is step 4 — so
-//     DECLARE_TYPE emits the STATICS now and step 4 adds
-//     `DECLARE_TYPE_VIRTUALS` (or folds them in here) once there is a base to
-//     override. Emitting `override` against a POD base would not compile.
-//   * the three `operator new`/`delete` overloads: retail's route allocation
-//     through `System::MemoryAllocator`, and that is B.3 step 4's allocator
-//     work, not step 3's. A class that needs them declares them itself.
+// `Type()` and `TypeName()` ARE emitted as of step 4, now that `Object::Base`
+// is a real class to override. Their bodies are retail's: `MOV EAX,[dword]`
+// and `MOV RAX,[qword]` over the class's own `_typeInfo` record, which is where
+// the two globals retail reads live.
+//
+// THE THREE `operator new`/`delete` OVERLOADS ARE STILL NOT EMITTED, and this
+// is a decision, not an omission. Retail's route every allocation through
+// `System::MemoryAllocator` (`??2X@Ns@@SAPEAX_K@Z` is `MemAlloc(size, 4)`,
+// `??3X@Ns@@SAXPEAX@Z` is `MemFree` verbatim — proved for 88 classes in
+// runtime/src/object/class_operator_delete.cpp and ui_operator_delete.cpp).
+// Emitting them here would silently reroute every future `new X` in converted
+// code through a `RT_EXPORT_ONCE` seam, in a commit that has no caller to
+// justify it and no gate that would notice. They land with the allocator's own
+// conversion, and a class that needs them before then declares its own.
 //
 // `X::TypeId()` returns `_typeInfo.typeId`, which is 0xFFFFFFFF until
 // `Factory::Startup` runs — B33_RULES §2.5: it is NOT self-initialising, and
@@ -544,6 +623,12 @@ uint32_t TypeNameCRC(const char* name);
 // ############################################################################
 #define DECLARE_TYPE(Class)                                                      \
 public:                                                                          \
+    /* vtable slot 1 — retail `MOV RAX,[qword]; RET` over this class's own    */ \
+    /* record. `BaseTypeInfo::name` is content-only: never compared by pointer.*/ \
+    const char* TypeName() const override { return _typeInfo.name; }               \
+    /* vtable slot 2 — retail `MOV EAX,[dword]; RET`. 0xFFFFFFFF until        */ \
+    /* Factory::Startup, exactly as TypeId() is.                              */ \
+    uint32_t Type() const override { return _typeInfo.typeId; }                    \
     static ::Object::Base* CreateNewObject();                                     \
     static ::Object::Base* CreateInPlaceObject(void* storage);                     \
     static uint32_t TypeId() { return _typeInfo.typeId; }                          \
@@ -556,12 +641,16 @@ private:                                                                        
 // The statics `DECLARE_TYPE` promises, plus the one object whose construction
 // IS the registration. `_TypeName`/`_ParentTypeName` are retail's own accessors
 // over the two literals; they are emitted here rather than in the class so the
-// literals live once, next to the record they feed.
+// literals live once, next to the record they feed — and the record is
+// initialised THROUGH them, so each literal has exactly one spelling and
+// neither accessor can drift from what was registered. (A private static
+// member's initialiser is in the class's scope, so it may call them.)
 #define DEFINE_TYPE(Class, ParentName, FileExt)                                   \
-    const char* Class::_TypeName()       { return #Class; }                        \
+    const char* Class::_TypeName()       {                                         \
+        return ::Object::detail::LastComponent(#Class); }                           \
     const char* Class::_ParentTypeName() { return (ParentName); }                  \
     ::Object::BaseTypeInfo Class::_typeInfo(                                       \
-        ::Object::detail::LastComponent(#Class), (ParentName), (FileExt),          \
+        Class::_TypeName(), Class::_ParentTypeName(), (FileExt),                   \
         &Class::CreateNewObject, &Class::CreateInPlaceObject);
 
 // `#Class` is spelled with its namespace at the DEFINE_TYPE site

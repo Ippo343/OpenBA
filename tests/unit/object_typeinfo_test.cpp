@@ -351,6 +351,159 @@ UNIT_TEST(factory_startup_is_independent_of_chain_order) {
 }
 
 // ===========================================================================
+// Object::Base — ENDGAME B.3.3 step 4.
+//
+// `Base::IsDerivedFrom` is NOT tested here: it reaches `Factory::Get()`, which
+// returns null on the host by design (there is no minted `?_singleton@` cell),
+// and retail's body derefs it unguarded. The derivation walk itself is covered
+// by `factory_lookups_answer_the_retail_surface` above, on a Factory the test
+// owns.
+// ===========================================================================
+
+// A three-deep chain in retail's shape, each level using DECLARE_TYPE/
+// DEFINE_TYPE so the macro is what is under test and not a hand-written stub.
+// Every level tracks its own destruction so `Destroy` can be checked for
+// reaching the MOST DERIVED slot 0 and running the whole chain.
+int g_dtorCalls[3];
+int g_freeCalls;
+
+// `Base::DeletingDtor`'s free arm goes through `Object::TypeTreeFree`, which is
+// malloc's `free` under -DBANISHED_UNIT_TEST. A test that wants to observe the
+// flag without handing a stack object to `free` overrides the slot instead.
+class TestBase : public ::Object::Base {
+    DECLARE_TYPE(TestBase)
+    // NOTE: DECLARE_TYPE ends in a `private:` section (retail's `_typeInfo` and
+    // the two name accessors are private), so a class body must reopen its
+    // access after it. That is retail's macro shape, not an accident.
+public:
+    // Slot 0 override that records the flags and does NOT free — the shape a
+    // class with its own allocator uses, and the only shape a stack object can
+    // survive.
+    ::Object::Base* DeletingDtor(unsigned flags) override {
+        g_dtorCalls[0]++; g_freeCalls = (int)flags;
+        return this;
+    }
+    ~TestBase() = default;   // non-virtual, and public so a local can exist
+};
+::Object::Base* TestBase::CreateNewObject() { return nullptr; }
+::Object::Base* TestBase::CreateInPlaceObject(void*) { return nullptr; }
+DEFINE_TYPE(TestBase, nullptr, nullptr)
+
+class TestMiddle : public TestBase {
+    DECLARE_TYPE(TestMiddle)
+public:
+    ::Object::Base* DeletingDtor(unsigned flags) override {
+        g_dtorCalls[1]++; g_freeCalls = (int)flags;
+        return this;
+    }
+    ~TestMiddle() = default;
+};
+::Object::Base* TestMiddle::CreateNewObject() { return nullptr; }
+::Object::Base* TestMiddle::CreateInPlaceObject(void*) { return nullptr; }
+DEFINE_TYPE(TestMiddle, "TestBase", nullptr)
+
+class TestLeaf : public TestMiddle {
+    DECLARE_TYPE(TestLeaf)
+public:
+    ::Object::Base* DeletingDtor(unsigned flags) override {
+        g_dtorCalls[2]++; g_freeCalls = (int)flags;
+        return this;
+    }
+    ~TestLeaf() = default;
+};
+::Object::Base* TestLeaf::CreateNewObject() { return nullptr; }
+::Object::Base* TestLeaf::CreateInPlaceObject(void*) { return nullptr; }
+DEFINE_TYPE(TestLeaf, "TestMiddle", "leaf")
+
+UNIT_TEST(base_is_one_vptr_with_three_slots_and_no_virtual_dtor) {
+    static_assert(sizeof(::Object::Base) == 8, "Base is one vtable pointer");
+    static_assert(sizeof(::Object::Base) == sizeof(RtObject::Base), "alias");
+    CHECK(std::has_virtual_destructor<::Object::Base>::value == false);
+    CHECK(std::is_polymorphic<::Object::Base>::value == true);
+
+    // A subclass adds no slot beyond its own: the three retail slots are at
+    // 0, 1, 2 and the compiler put nothing in front of them. Read them the way
+    // an unconverted C body does.
+    TestLeaf leaf;
+    void** vt = *reinterpret_cast<void***>(&leaf);
+    using TypeNameFn = const char* (*)(const void*);
+    using TypeFn     = uint32_t (*)(const void*);
+    CHECK_STREQ(reinterpret_cast<TypeNameFn>(vt[1])(&leaf), "TestLeaf");
+    // The id is the SENTINEL, not the CRC: no Factory::Startup has run over
+    // these three statics, and `Type()` is not self-initialising (§2.5).
+    CHECK_EQ(reinterpret_cast<TypeFn>(vt[2])(&leaf), TestLeaf::TypeId());
+    CHECK_EQ(TestLeaf::TypeId(), 0xFFFFFFFFu);
+}
+
+UNIT_TEST(destroy_reaches_slot_zero_with_flags_one) {
+    TestLeaf leaf;
+    ::Object::Base* p = &leaf;
+
+    for (int i = 0; i < 3; ++i) g_dtorCalls[i] = 0;
+    g_freeCalls = -1;
+
+    ::Object::Destroy(p);
+
+    // The MOST DERIVED slot 0 runs, exactly once, and the flag is retail's
+    // `&1` = free-the-storage.
+    CHECK_EQ(g_dtorCalls[2], 1);
+    CHECK_EQ(g_dtorCalls[1], 0);
+    CHECK_EQ(g_dtorCalls[0], 0);
+    CHECK_EQ(g_freeCalls, 1);
+
+    // Destroy(nullptr) is a no-op — retail's `if (p)` at every CallSlot0 site.
+    g_dtorCalls[2] = 0;
+    ::Object::Destroy(nullptr);
+    CHECK_EQ(g_dtorCalls[2], 0);
+
+    // And the same call reached through a RAW SLOT READ, which is what every
+    // unconverted C body still does, lands on the same body with the same flag.
+    using Slot0Fn = void* (*)(void*, unsigned);
+    void** vt = *reinterpret_cast<void***>(&leaf);
+    g_dtorCalls[2] = 0; g_freeCalls = -1;
+    void* r = reinterpret_cast<Slot0Fn>(vt[0])(&leaf, 1u);
+    CHECK_EQ(g_dtorCalls[2], 1);
+    CHECK_EQ(g_freeCalls, 1);
+    CHECK(r == static_cast<void*>(&leaf));   // every MSVC ??_G returns `this`
+}
+
+UNIT_TEST(type_and_typename_resolve_through_a_three_deep_chain) {
+    // The three `_typeInfo` statics were constructed at CRT-init and are in the
+    // process-wide chain; this test drives the VIRTUALS only and leaves the
+    // chain alone. The tree side is covered by the Factory tests above.
+    TestLeaf   leaf;
+    TestMiddle middle;
+    TestBase*  asBase = &leaf;
+
+    // Each level answers with ITS OWN record, through the base's slots.
+    CHECK_STREQ(asBase->TypeName(), "TestLeaf");
+    CHECK_STREQ(static_cast<::Object::Base*>(&middle)->TypeName(), "TestMiddle");
+
+    // Before Factory::Startup every id is the sentinel — Type() is not
+    // self-initialising (B33_RULES §2.5), and neither is TypeId().
+    CHECK_EQ(TestLeaf::TypeId(), TestLeaf::GetTypeInfo().typeId);
+    CHECK_EQ(asBase->Type(), TestLeaf::TypeId());
+    CHECK_EQ(static_cast<::Object::Base*>(&middle)->Type(), TestMiddle::TypeId());
+
+    // The macro stored the BARE class name and the parent verbatim-stripped.
+    CHECK_STREQ(TestLeaf::GetTypeInfo().name, "TestLeaf");
+    CHECK_STREQ(TestLeaf::GetTypeInfo().parentName, "TestMiddle");
+    CHECK_STREQ(TestLeaf::GetTypeInfo().fileExtension, "leaf");
+    CHECK(TestBase::GetTypeInfo().parentName == nullptr);
+
+    // `Base::Type()`'s own body is `XOR EAX,EAX; RET` — an unregistered type
+    // answers 0, the same value a missing name yields from the factory.
+    struct Bare : ::Object::Base {
+        const char* TypeName() const override { return "Bare"; }
+        ~Bare() = default;
+    };
+    Bare bare;
+    CHECK_EQ(static_cast<::Object::Base*>(&bare)->Type(), 0u);
+    CHECK(static_cast<::Object::Base*>(&bare)->IsA(0u) == true);
+    CHECK(static_cast<::Object::Base*>(&bare)->IsA(1u) == false);
+}
+
+// ===========================================================================
 // The POD aliases stay byte-compatible — decision 1's invariant, exercised
 // rather than only asserted.
 // ===========================================================================

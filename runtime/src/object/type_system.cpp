@@ -72,22 +72,22 @@ namespace RtObject {
 // ============================================================
 namespace {
 
-Factory**      g_factorySingleton = nullptr;// ?_singleton@Factory@Object@@0PEAV12@EA           0x1801fc6e8
-
-// `?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA` (0x1801fc6e0) is NO LONGER
-// RESOLVED (ENDGAME B.3.3 step 3). It is `Object::BaseTypeInfo::_firstTypeInfo`,
-// a plain static in runtime/src/object/type_reflection.cpp, because the
-// constructor that writes it runs at CRT-init where the registry does not exist
-// yet. standalone/rt_data_mint.cpp routes the minted row's two doors at that
-// address to the same cell, so every by-name and by-address consumer — the
-// probes in standalone/main.cpp, `[GameMain] Post-Startup _firstTypeInfo`,
+// NEITHER OF THE TWO DLL GLOBALS THIS BLOCK USED TO RESOLVE IS RESOLVED HERE
+// ANY MORE; both moved to the classes that own them.
+//
+// `?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA` (0x1801fc6e0) — B.3.3 step 3.
+// It is `Object::BaseTypeInfo::_firstTypeInfo`, a plain static in
+// runtime/src/object/type_reflection.cpp, because the constructor that writes it
+// runs at CRT-init where the registry does not exist yet.
+// standalone/rt_data_mint.cpp routes the minted row's two doors at that address
+// to the same cell, so every by-name and by-address consumer — the probes in
+// standalone/main.cpp, `[GameMain] Post-Startup _firstTypeInfo`,
 // `cutover_manifest` — still reads exactly one head pointer, ours.
-void ResolveGlobals() {
-    if (!g_factorySingleton) {
-        g_factorySingleton = reinterpret_cast<Factory**>(
-            ResolveExport("?_singleton@Factory@Object@@0PEAV12@EA"));
-    }
-}
+//
+// `?_singleton@Factory@Object@@0PEAV12@EA` (0x1801fc6e8) — B.3.3 step 4. It is
+// read by `Object::Factory::Get()` through `RT_DATA_SLOT`, which is the same
+// minted cell through the same door; the hand-rolled cache here had no caller
+// left once `Base::IsDerivedFrom` became the real body.
 
 // ---- CRC-32, the type-id hash -------------------------------------------
 //
@@ -105,10 +105,17 @@ inline ::Object::Factory* AsFactory(const void* factory) {
     return reinterpret_cast<::Object::Factory*>(const_cast<void*>(factory));
 }
 
-// vtable slot 2 (+0x10) — `virtual uint32_t GetTypeId() const`.
-inline uint32_t GetTypeIdVirtual(const void* self) {
-    void* const* vt = *reinterpret_cast<void* const* const*>(self);
-    return reinterpret_cast<uint32_t (*)(const void*)>(vt[2])(self);
+// The object, viewed as the real class (ENDGAME B.3.3 step 4). The B.3.3 bridge
+// from a caller that still hands us a `void*`.
+//
+// THIS IS SAFE FOR AN OBJECT CARRYING A MINTED VTABLE, which is every object in
+// the game today: `p->Type()` compiles to `(*(void***)p)[2](p)`, the exact
+// instruction the hand-written cast below used to be, and
+// tests/unit/object_vtable_abi_test.cpp proves a real class's virtual call
+// lands correctly in a hand-built table at retail slot indices. It is what
+// makes the class usable before any of its subclasses convert.
+inline const ::Object::Base* AsBase(const void* self) {
+    return reinterpret_cast<const ::Object::Base*>(self);
 }
 
 // ---- Raw ABI typedefs for the originals ----------------------------------
@@ -169,8 +176,7 @@ uint32_t TypeIdFromName(const char* name) { return TypeNameCRC(name); }
 // slot 2 a side effect, this site becomes unsound; nothing does today.
 // ============================================================================
 bool RtObject_Base_IsA(const void* self, uint32_t typeId) {
-    const bool ours = (typeId == GetTypeIdVirtual(self));
-    return ours;
+    return AsBase(self)->IsA(typeId);
 }
 
 // ============================================================================
@@ -201,17 +207,11 @@ bool RtObject_Base_IsA(const void* self, uint32_t typeId) {
 // DIFF: full oracle. Read-only on both sides.
 // ============================================================================
 bool RtObject_Base_IsDerivedFrom(const void* self, uint32_t typeId) {
-    ResolveGlobals();
-
-    // ORDER MATTERS AND IS PRESERVED: retail loads `_singleton` into RDI BEFORE
-    // making the virtual GetTypeId call (0x1800c039a-0x1800c03a6).
-    const Factory* factory = *g_factorySingleton;
-    const uint32_t ownId   = GetTypeIdVirtual(self);
-
-    // The walk itself is `Object::Factory::IsDerivedFrom` — including retail's
-    // unguarded `ADD RAX,0x8` on a null find, which is why a missing
-    // registration still faults here rather than returning false.
-    return AsFactory(factory)->IsDerivedFrom(ownId, typeId);
+    // The body is `Object::Base::IsDerivedFrom` as of step 4, which keeps the
+    // singleton-before-virtual-call order and the unguarded find. `_singleton`
+    // is reached through `Factory::Get()` — the same minted cell this file used
+    // to resolve by hand.
+    return AsBase(self)->IsDerivedFrom(typeId);
 }
 
 // ============================================================================
@@ -378,9 +378,10 @@ void RtObject_Type_Serialize(void* self, void* serializer) {
 // by name and by address: it placement-constructs the real class into storage
 // the CALLER owns, exactly as retail's ctor does.
 //
-// `?_firstTypeInfo@` is no longer resolved — see ResolveGlobals' banner. The
-// consequence that matters at cutover: this shim no longer needs the registry
-// at all, so it works from a static initialiser.
+// `?_firstTypeInfo@` is no longer resolved — see the "NEITHER OF THE TWO DLL
+// GLOBALS" banner at the top of the anonymous namespace. The consequence that
+// matters at cutover: this shim no longer needs the registry at all, so it
+// works from a static initialiser.
 BaseTypeInfo* RtObject_BaseTypeInfo_Ctor(BaseTypeInfo* self,
                                          const char* name,
                                          const char* parentName,

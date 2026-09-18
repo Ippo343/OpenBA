@@ -220,7 +220,7 @@ one dead helper.** Each needs its decision landed BEFORE the class it reads is f
 |---|---|---|
 | `code/Game/Game/tornado.cpp:627` `if (vt == s_tornadoVtable) return;` | re-entry guard: is this object already wearing the patched copy? Both sides are LOCALLY built arrays (`s_tornadoVtable` is a copy of the live `Graphics::ParticleSystem` table with 8 slots patched, :622-640). | Survives `Object::Base` flipping unchanged — it never names a compiler-generated table. It dies with `Graphics::ParticleSystem`'s own conversion (B.3 step 5), not here. Leave it; do not "tidy" it into a type-id check while the patched copy still exists. |
 | `standalone/pausemenu_harness.cpp:237, :250` `*(void**)s_dialog == s_vtable` | liveness: "was the dialog destroyed under us?" Both sides come from the SAME live object at two times. | Survives: a converted `UI::Dialog`'s destructor still re-stamps the base vptr, so the value still changes on destruction. When `UI::Dialog` converts, restate it as `s_dialog->Type() == s_dialogTypeId` — a harness, so it may lag one step. |
-| `standalone/stress_harness.cpp:568-575` | uses the vptr as a HASH KEY into a profiler slot table, then reads `vt[2]` as `GetTypeId`. | The key use survives (any stable pointer works). **The hard-coded `vt[2]` must become `comp->Type()` in the same commit that gives `Component` a real class** — this is the one site where a slot index is read off an object whose class is being converted. |
+| `standalone/stress_harness.cpp:568-575` | uses the vptr as a HASH KEY into a profiler slot table, then reads `vt[2]` as `GetTypeId`. | The key use survives (any stable pointer works). **The hard-coded `vt[2]` becomes `comp->Type()` in the same commit that gives `Component` a real class**, NOT with Base's (re-confirmed at step 4): the object is a `Component` POD, so `Base*` would assert a relationship that does not exist, and since `p->Type()` emits the same `(*(void***)p)[2](p)` there is no behaviour to gain by moving early — only an over-stated claim. |
 | `runtime/src/io/file_stream.cpp:393` `if (vptr == ours)` in `NoteSlotDispatch` | attendance counter: did this dispatch arrive through OUR minted `BinaryFileStream` table? | Becomes meaningless the moment `IO::BinaryFileStream` is a real class — that is B.3 step 4, not B.3.3. Delete the counter with that class; do not leave it silently counting zero. |
 | `runtime/src/audio/audio_stream_win.cpp:303` `ThreadBaseVtable()` | **nothing.** The comparison the inventory describes no longer exists: the helper is defined and referenced only by a comment at :389. | Zero callers → delete it in this step's closing pass (§9 step 7), by name and by address (0x180155f20). |
 
@@ -244,10 +244,17 @@ guards the count). `Object::Base`'s own row is
 
 Rules:
 
-1. **A class's row dies in the same commit that gives that class a real `DeletingDtor`.** Not
-   before (the address is still dispatched by `DeletingDtorCore`), not after (two mechanisms
-   for one class is how a silent divergence starts). One row per commit is normal; a commit
-   that converts a class and leaves its row is incomplete.
+1. **A class's row dies in the same commit that gives that class a real `DeletingDtor` AND
+   nothing reads its minted vtable any more.** The second clause was learned at step 4 and is
+   the one that binds: a `RT_DELDTOR` row is not only `DeletingDtorCore`'s dispatch table, it
+   is also what FILLS slot 0 of the minted vtable. `standalone/rt_data_mint.cpp`'s `OurPort()`
+   resolves an `RT_MINT_UNNAMED` slot with `RtPortLookupAddr(dllVa)`, so deleting the row's
+   `RegisterRuntimeAddr` turns that slot into a named abort trap — a build-clean, link-clean
+   EXEC-of-a-trap at the first virtual call. **Before retiring a row, check
+   `rt_data_mint_tables.inc` for a `{ nullptr, <the row's addr>, RT_MINT_UNNAMED }` slot as
+   well as the by-name and by-address callers.** One row per commit is normal; a commit that
+   converts a class and leaves its row is incomplete, and a commit that removes a row a
+   minted vtable still needs is worse.
 2. **Row indices are table POSITIONS, not identities.** The header's own MERGE HAZARD banner
    (`deleting_dtor_internal.h:86-96`) records three lanes once appending at the same index.
    Re-count on every merge, and never cite a row by index in a commit message or a comment —
@@ -386,9 +393,42 @@ merge cleanly.
    - `-Wno-invalid-offsetof` was **not** needed: neither class is polymorphic, so every
      `static_assert(offsetof(...))` still compiles clean. §4.6 stands for step 4, which is the
      first polymorphic type header.
-4. **`Object::Base` as a real class**; `Object::Destroy(p)`; Base's `RT_DELDTOR` row retired;
-   the `stress_harness.cpp` `vt[2]` decision (§5) lands here. Gate — **all routes plus the
-   resave gate**: every object in the game derives from this.
+4. ~~**`Object::Base` as a real class**; `Object::Destroy(p)`.~~ — done. What landed:
+   - `Object::Base` in `runtime/types/object/TypeInfo.h`: the three measured slots in retail
+     order (`DeletingDtor(unsigned)`, pure `TypeName() const`, `Type() const`), a protected
+     NON-virtual `~Base()`, `IsA`/`IsDerivedFrom` as members, and `inline Object::Destroy(p)`.
+     `RtObject::Base` stays, size-asserted against it. Bodies in `type_reflection.cpp`.
+   - `DECLARE_TYPE` now emits the two virtuals over the class's own `_typeInfo`, and
+     `DEFINE_TYPE` initialises the record THROUGH `_TypeName()`/`_ParentTypeName()` so each
+     literal has one spelling and the accessors cannot drift from what was registered.
+     `operator new`/`delete` are still not emitted — see the macro's banner.
+   - The three `RtObject_Base_*` shims now delegate to the class. `AsBase(self)` is safe on an
+     object carrying a MINTED vtable — `p->Type()` compiles to `(*(void***)p)[2](p)`, the same
+     instruction the hand-written cast was — which is what makes the class usable before any
+     subclass converts.
+   - **BASE'S `RT_DELDTOR` ROW, `RtObject_Base_Dtor` AND THE MINTED VTABLE ALL STAY.** The
+     sweep by name and by address found the readers are very much alive:
+     `standalone/cutover_manifest.inc:49` carries `??_7Base@Object@@6B@` as
+     `CUTOVER_REQUIRED` with **64 by-name doors**; 22 `RtFactOp::Vptr` rows in the
+     `rt_factories_*.inc` replay tables stamp it; 59 non-comment `.cpp` sites read it
+     (`goal.cpp`, `achievement_manager.cpp`, `internal.cpp`, `external.cpp`,
+     `description_common.h`'s `VtBase()`, the UI description family, the Graphics/Video/Audio
+     vtable files…), 134 occurrences over 83 files in all. And
+     `rt_data_mint_tables.inc`'s `kVSlots12` — the generated row for
+     `??_7Base@Object@@6B@`, which independently agrees it has **3 slots** — fills slot 0 from
+     `RtPortLookupAddr(0x1800065b0)`, i.e. straight out of the row. Retiring any of the three
+     now would publish a trap table into every live object. **The retirement condition is that
+     the last of those readers converts**, which is the END of the fan-out (step 6/7), not
+     step 4. A faithful partial beats a complete-looking deletion.
+   - `-Wno-invalid-offsetof` was **not** needed and was not added: `Object::Base` is
+     polymorphic but has no data members, so no `static_assert(offsetof(...))` is taken on it
+     or on anything deriving from it yet. §4.6 now applies to the first CONVERTED class with
+     FIELDS — `Object::External` or `Object::Internal`, step 5.
+   - `standalone/stress_harness.cpp:568-575`'s `vt[2]`: **left as it is**, with the reason in
+     §5. It reads a `Component`, which is still a POD with a hand-built vtable; spelling it
+     `Base*` would assert a type relationship that does not exist yet, would have to be
+     re-examined when `Component` converts anyway, and changes no instruction — there is no
+     correctness to bank, only a claim to over-state.
 5. Fan out (opus, worktrees, disjoint file sets, the B31 hygiene block). The two sets are
    disjoint by construction; neither touches `type_system.cpp`, `deleting_dtor*.cpp`,
    `rt_factories_*` or `object_typeinfo_accessors.cpp`, which stay with the owner:
