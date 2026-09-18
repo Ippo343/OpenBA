@@ -67,9 +67,8 @@ RtObject::TypeNode*  TypeNodeAlloc(void* ignored, const void* pair,
                                    RtObject::TypeNode* parent);        // 0x180008440
 RtObject::TypeNode** TypeInsertCore(RtObject::Factory*, RtObject::TypeNode**,
                                     const void* pair);                 // 0x180030380
-RtObject::TypeNode** TypeSetInsert(RtObject::Factory*, RtObject::TypeNode**,
-                                   const uint32_t* key,
-                                   const RtObject::TypeRecord* value); // 0x180030140
+// 0x180030140 (TypeSetInsert) — deleted in ENDGAME B.3.3 step 7; Object::Factory
+// is a Collection::Set and reaches TypeInsertCore directly.
 
 // ---- group B: Map<String,String>, 0x30-byte node --------------------------
 rtsetavl::Node*  StringPairCtor  (void* node, const void* src, rtsetavl::Node* parent);

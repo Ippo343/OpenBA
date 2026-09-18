@@ -496,8 +496,8 @@ namespace {
 //
 // The by-address call to the Set insert at 0x180030140 is also gone: the
 // template reaches the SAME ported core (`AvlOps<Node,0x30>::Retrace` ->
-// `PortedRetrace48`). `rtavl::TypeSetInsert` keeps its registration for any
-// caller that still resolves that address.
+// `PortedRetrace48`). `rtavl::TypeSetInsert` and its 0x180030140 registration
+// are deleted in B.3.3 step 7 — nothing resolved that address any more.
 // ----------------------------------------------------------------------------
 
 }  // namespace

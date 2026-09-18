@@ -697,49 +697,19 @@ TypeNode** TypeInsertCore(RtObject::Factory* set, TypeNode** outSlot,
 }
 
 // ---------------------------------------------------------------------------
-// 0x180030140 — the public insert. Builds the Pair on the stack, calls the
-// core, destroys the temporary Array, returns the out-slot.
+// 0x180030140 — the public insert (builds the 0x30-byte Pair on the stack,
+// copy-assigns its Array through 0x180009350, calls the core, destroys the
+// temporary through 0x1800093e0, returns the out-slot).
 //
-// The temp's Array member is ZEROED before the copy-assign for the same reason
-// the node's is: `operator=` destroys the destination first.
-//
-// RAX at the RET is RDI — the SECOND parameter, the out-slot — not the node.
+// DELETED in ENDGAME B.3.3 step 7, with its declaration in avl_trees.h and its
+// `RegisterRuntimeAddr(0x180030140, …)` row. Step 3 moved `Object::Factory`
+// onto `Collection::Set<TypeEntry,…>`, whose `Insert` reaches the SAME ported
+// core (`TypeInsertCore` / `AvlOps<Node,0x30>::Retrace` = `PortedRetrace48`,
+// both still here and still registered). That left `TypeSetInsert` with zero
+// callers by NAME and zero readers of 0x180030140 by ADDRESS — no `ResolveAddr`,
+// no per-file wrapper, no `rt_data_mint_tables.inc` `RT_MINT_UNNAMED` slot and
+// no `rt_export_addrs.inc` row cite it (swept 2026-09-18).
 // ---------------------------------------------------------------------------
-TypeNode** TypeSetInsert(RtObject::Factory* set, TypeNode** outSlot,
-                         const uint32_t* key, const TypeRecord* value) {
-    // The probe ALLOCATES, so it cannot run from a *PortInit (WAVE9.md, lane
-    // PKG2). It self-schedules here instead: this moment is provably safe
-    // because the caller is itself about to allocate a node.
-    // Not zero-initialised as a whole: retail writes exactly +0x00, +0x08,
-    // +0x10, +0x18 and the two Array qwords and leaves +0x04 untouched. A
-    // `{}` here would write a byte retail never writes, and the probe compares
-    // the node bytes.
-    uint8_t pair[0x30];
-    *reinterpret_cast<uint32_t*>(pair + 0x00) = *key;
-    *reinterpret_cast<uint32_t*>(pair + 0x08) =
-        *reinterpret_cast<const uint32_t*>(value);
-    *reinterpret_cast<uint64_t*>(pair + 0x10) =
-        *reinterpret_cast<const uint64_t*>(reinterpret_cast<const uint8_t*>(value) + 0x08);
-    *reinterpret_cast<uint64_t*>(pair + 0x18) =
-        *reinterpret_cast<const uint64_t*>(reinterpret_cast<const uint8_t*>(value) + 0x10);
-    *reinterpret_cast<uint64_t*>(pair + 0x20) = 0;
-    *reinterpret_cast<uint64_t*>(pair + 0x28) = 0;
-
-    using AssignFn = void* (*)(void*, const void*);
-    static AssignFn assign = nullptr;
-    if (!assign)
-        assign = reinterpret_cast<AssignFn>(ResolveAddr(Module::Runtime, 0x180009350));
-    assign(pair + 0x20, reinterpret_cast<const uint8_t*>(value) + 0x18);
-
-    TypeInsertCore(set, outSlot, pair);
-
-    using DtorFn = void* (*)(void*);
-    static DtorFn dtor = nullptr;
-    if (!dtor) dtor = reinterpret_cast<DtorFn>(ResolveAddr(Module::Runtime, 0x1800093e0));
-    dtor(pair + 0x20);
-
-    return outSlot;
-}
 
 // ============================================================================
 // GROUP B — Map<String,String> : Persistence / Configuration
@@ -1173,7 +1143,7 @@ int RtCollectionAvlTreesRegister() {
     int n = 0;
 
     // ---- group A: the 0x50-node type tree ---------------------------------
-    RegisterRuntimeAddr(0x180030140, (void*)&rtavl::TypeSetInsert);   ++n;
+    // 0x180030140 (TypeSetInsert) retired in B.3.3 step 7 — see the banner above.
     RegisterRuntimeAddr(0x180030380, (void*)&rtavl::TypeInsertCore);  ++n;
     RegisterRuntimeAddr(0x180008440, (void*)&rtavl::TypeNodeAlloc);   ++n;
     RegisterRuntimeAddr(0x1800087c0, (void*)&rtavl::TypePairCtor);    ++n;
