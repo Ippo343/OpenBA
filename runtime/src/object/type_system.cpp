@@ -42,6 +42,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <new>          // placement new, for the BaseTypeInfo ctor shim
 
 #include "../../types/object/TypeInfo.h"
 #include "../../funcs/rt_port.h"
@@ -71,14 +72,17 @@ namespace RtObject {
 // ============================================================
 namespace {
 
-BaseTypeInfo** g_firstTypeInfo = nullptr;   // ?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA  0x1801fc6e0
 Factory**      g_factorySingleton = nullptr;// ?_singleton@Factory@Object@@0PEAV12@EA           0x1801fc6e8
 
+// `?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA` (0x1801fc6e0) is NO LONGER
+// RESOLVED (ENDGAME B.3.3 step 3). It is `Object::BaseTypeInfo::_firstTypeInfo`,
+// a plain static in runtime/src/object/type_reflection.cpp, because the
+// constructor that writes it runs at CRT-init where the registry does not exist
+// yet. standalone/rt_data_mint.cpp routes the minted row's two doors at that
+// address to the same cell, so every by-name and by-address consumer — the
+// probes in standalone/main.cpp, `[GameMain] Post-Startup _firstTypeInfo`,
+// `cutover_manifest` — still reads exactly one head pointer, ours.
 void ResolveGlobals() {
-    if (!g_firstTypeInfo) {
-        g_firstTypeInfo = reinterpret_cast<BaseTypeInfo**>(
-            ResolveExport("?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA"));
-    }
     if (!g_factorySingleton) {
         g_factorySingleton = reinterpret_cast<Factory**>(
             ResolveExport("?_singleton@Factory@Object@@0PEAV12@EA"));
@@ -87,68 +91,18 @@ void ResolveGlobals() {
 
 // ---- CRC-32, the type-id hash -------------------------------------------
 //
-// Retail's ?GetTypeFromNameCRC@Factory@Object@@AEBAIPEBD@Z (0x1800c0930)
-// widens the ASCII name to UTF-16LE on the stack and CRC-32s the resulting
-// BYTES, so the id of "Base" is the CRC of "B\0a\0s\0e\0". The table it uses is
-// System::CRC::_crcTable (exported at 0x1801f9080). All 256 entries of that
-// table were compared against the textbook reflected-CRC-32 table
-// (polynomial 0xEDB88320) and are IDENTICAL, so we generate it rather than
-// reading the DLL's — PLAN.md §4.1 decision 1 wants ported code to survive
-// cutover, and a table we can regenerate does.
-//
-//     python: t[i] = fold8(i, 0xEDB88320);  compared byte-for-byte with
-//     pefile.get_data(0x1f9080, 1024)  ->  identical: True
-uint32_t g_crcTable[256];
-bool     g_crcTableBuilt = false;
+// MOVED (B.3.3 step 3) to `Object::TypeNameCRC` in
+// runtime/src/object/type_reflection.cpp, together with the crcTable evidence,
+// so the class, this file's ABI shims and standalone/rt_data_mint.cpp all call
+// ONE body. The name is kept here because six sites below read better with it.
+inline uint32_t TypeNameCRC(const char* name) { return ::Object::TypeNameCRC(name); }
 
-void BuildCrcTable() {
-    if (g_crcTableBuilt) return;
-    for (uint32_t i = 0; i < 256; ++i) {
-        uint32_t c = i;
-        for (int k = 0; k < 8; ++k) c = (c & 1u) ? ((c >> 1) ^ 0xEDB88320u) : (c >> 1);
-        g_crcTable[i] = c;
-    }
-    g_crcTableBuilt = true;
-}
-
-// Faithful transcription of GetTypeFromNameCRC's body. The 264-byte stack
-// buffer is retail's own (132 wide characters); a longer type name overflows
-// it in retail exactly as it does here, and no bound check is added because
-// adding one would change behaviour retail relies on never needing.
-uint32_t TypeNameCRC(const char* name) {
-    BuildCrcTable();
-
-    uint8_t wide[264];
-    int len = 0;
-    for (const char* p = name; *p; ++p) ++len;
-    for (int i = 0; i < len; ++i) {
-        // (short)param_1[i] in the decompilation: MSVC's `char` is signed, so
-        // this sign-extends. Irrelevant for the ASCII type names the engine
-        // registers, spelled out so nobody has to rediscover it.
-        const int16_t w = static_cast<int16_t>(static_cast<signed char>(name[i]));
-        wide[i * 2 + 0] = static_cast<uint8_t>(static_cast<uint16_t>(w) & 0xFFu);
-        wide[i * 2 + 1] = static_cast<uint8_t>((static_cast<uint16_t>(w) >> 8) & 0xFFu);
-    }
-
-    uint32_t crc = 0xFFFFFFFFu;
-    const int nbytes = len * 2;
-    for (int i = 0; i < nbytes; ++i)
-        crc = g_crcTable[(crc & 0xFFu) ^ wide[i]] ^ (crc >> 8);
-    return ~crc;   // len == 0 leaves crc at 0xFFFFFFFF, so the id is 0
-}
-
-// The tree walk shared by CreateObject, GetTypeIdFromName, GetTypeName and
-// the first half of IsDerivedFrom. Identical instruction sequence in all four
-// (e.g. 0x1800c0ae8..0x1800c0b01): descend left when the node's key is
-// greater, right when smaller, and yield nullptr on a miss.
-TypeNode* FindNode(const Factory* factory, uint32_t typeId) {
-    TypeNode* n = factory->root;
-    while (n) {
-        if (typeId < n->key)      n = n->left;
-        else if (typeId > n->key) n = n->right;
-        else                      return n;
-    }
-    return nullptr;
+// The live factory, viewed as the real class. The two describe the same 0x10
+// bytes (`Object::Factory` asserts `sizeof == 0x10` and `offsetof(_types) == 0`
+// against `??0Factory@Object@@`'s two stores), so this is the B.3.3 bridge from
+// a caller that still hands us a `void*`/`RtObject::Factory*`.
+inline ::Object::Factory* AsFactory(const void* factory) {
+    return reinterpret_cast<::Object::Factory*>(const_cast<void*>(factory));
 }
 
 // vtable slot 2 (+0x10) — `virtual uint32_t GetTypeId() const`.
@@ -249,27 +203,15 @@ bool RtObject_Base_IsA(const void* self, uint32_t typeId) {
 bool RtObject_Base_IsDerivedFrom(const void* self, uint32_t typeId) {
     ResolveGlobals();
 
+    // ORDER MATTERS AND IS PRESERVED: retail loads `_singleton` into RDI BEFORE
+    // making the virtual GetTypeId call (0x1800c039a-0x1800c03a6).
     const Factory* factory = *g_factorySingleton;
     const uint32_t ownId   = GetTypeIdVirtual(self);
 
-    bool ours;
-    if (ownId == typeId) {
-        ours = true;
-    } else {
-        // Retail's `ADD RAX,0x8` happens on the found pointer WHETHER OR NOT
-        // it is null, so a missing registration reads address 0x8 and faults.
-        // Reproduced exactly; see the header comment.
-        TypeNode* n = FindNode(factory, ownId);
-        const TypeRecord* rec =
-            reinterpret_cast<const TypeRecord*>(reinterpret_cast<const char*>(n) + 8);
-        for (;;) {
-            if (rec->typeId == typeId) { ours = true; break; }
-            rec = rec->parent;
-            if (!rec) { ours = false; break; }
-        }
-    }
-
-    return ours;
+    // The walk itself is `Object::Factory::IsDerivedFrom` — including retail's
+    // unguarded `ADD RAX,0x8` on a null find, which is why a missing
+    // registration still faults here rather than returning false.
+    return AsFactory(factory)->IsDerivedFrom(ownId, typeId);
 }
 
 // ============================================================================
@@ -293,13 +235,7 @@ bool RtObject_Base_IsDerivedFrom(const void* self, uint32_t typeId) {
 // ============================================================================
 uint32_t RtObject_Factory_GetTypeIdFromName(const void* factory, const char* name,
                                             bool existingOnly) {
-    (void)existingOnly;   // retail-unused; see above
-
-    const uint32_t crc = TypeNameCRC(name);
-    const uint32_t ours =
-        FindNode(static_cast<const Factory*>(factory), crc) ? crc : 0u;
-
-    return ours;
+    return AsFactory(factory)->GetTypeIdFromName(name, existingOnly);
 }
 
 // ============================================================================
@@ -359,16 +295,9 @@ uint32_t RtObject_Factory_GetTypeFromNameCRC(const void* /*factory*/, const char
 // which is one indirect call through a pointer we did not compute.
 // ============================================================================
 void* RtObject_Factory_CreateObject(const void* factory, uint32_t typeId) {
-
-    TypeNode* n = FindNode(static_cast<const Factory*>(factory), typeId);
     // Faithful: retail's `MOV RCX,[RAX+0x10]` at 0x1800c0b03 runs on a null
-    // RAX and faults. No guard.
-    const TypeRecord* rec =
-        reinterpret_cast<const TypeRecord*>(reinterpret_cast<const char*>(n) + 8);
-    BaseTypeInfo* info = rec->info;
-
-
-    return reinterpret_cast<void* (*)()>(info->factoryFn)();
+    // RAX and faults. No guard — `Object::Factory::CreateObject` keeps it.
+    return reinterpret_cast<void*>(AsFactory(factory)->CreateObject(typeId));
 }
 
 // ============================================================================
@@ -442,39 +371,30 @@ void RtObject_Type_Serialize(void* self, void* serializer) {
 // approximate. This runs only under the old DLL-era switch and only during static
 // registration, which is single-threaded.
 // ============================================================================
+// B.3.3 step 3: THE BODY IS NOW `Object::BaseTypeInfo`'s constructor
+// (runtime/src/object/type_reflection.cpp), including the backward scan, which
+// is retail's own `?StripNamespace@BaseTypeInfo@Object@@QEAAXXZ`. This is the
+// ABI shim the registry and code/Game/Object/factory_registration.cpp still call
+// by name and by address: it placement-constructs the real class into storage
+// the CALLER owns, exactly as retail's ctor does.
+//
+// `?_firstTypeInfo@` is no longer resolved — see ResolveGlobals' banner. The
+// consequence that matters at cutover: this shim no longer needs the registry
+// at all, so it works from a static initialiser.
 BaseTypeInfo* RtObject_BaseTypeInfo_Ctor(BaseTypeInfo* self,
                                          const char* name,
                                          const char* parentName,
                                          const char* fileExtension,
                                          void* factoryFn,
                                          void* inPlaceFactoryFn) {
-    ResolveGlobals();
+    using Real = ::Object::BaseTypeInfo;
+    static_assert(sizeof(Real) == sizeof(BaseTypeInfo),
+                  "the shim writes the caller's 0x38 bytes in place");
 
-    BaseTypeInfo* const prevHead = *g_firstTypeInfo;
-
-    self->name             = name;
-    self->parentName       = parentName;
-    self->factoryFn        = factoryFn;
-    self->typeId           = 0xFFFFFFFFu;
-    self->fileExtension    = fileExtension;
-    self->inPlaceFactoryFn = inPlaceFactoryFn;
-    self->next             = prevHead;
-    *g_firstTypeInfo       = self;
-
-    if (self->parentName) {
-        const char* p = self->parentName;
-        int len = 0;
-        for (const char* s = p; *s; ++s) ++len;
-        const char* q = p + len;
-        while (q > p) {
-            if (*q == ':') { ++q; goto stored; }
-            --q;
-        }
-        if (*q == ':') ++q;
-    stored:
-        self->parentName = q;
-    }
-
+    new (static_cast<void*>(self)) Real(
+        name, parentName, fileExtension,
+        reinterpret_cast<Real::FactoryFn>(factoryFn),
+        reinterpret_cast<Real::InPlaceFn>(inPlaceFactoryFn));
 
     return self;   // MSVC returns `this` from every ctor; so does retail (RAX=R10)
 }
@@ -551,228 +471,33 @@ BaseTypeInfo* RtObject_BaseTypeInfo_Ctor(BaseTypeInfo* self,
 
 namespace {
 
-// ---- The allocator boundary ----------------------------------------------
+// ---- WHAT USED TO LIVE HERE ------------------------------------------------
 //
-// Retail INLINES `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` (0x1800c7a50)
-// and `?MemFree@...` (0x1800c7ad0) here rather than calling them:
-// 0x1800c07e5..0x1800c0826 is Enter(&_singleton->cs) / Allocate(_singleton,
-// bytes, 8) / Leave, which is 0x1800c7a50's whole body with align=8, and
-// 0x1800c0873..0x1800c08a6 is 0x1800c7ad0's body with retail's `if (p)` hoisted
-// to 0x1800c086e. So calling the two wrappers is the same instruction sequence,
-// and it goes through the door lane E's allocator port will own instead of
-// pinning 0x1800c6e60 / 0x1800c6c00 / the +0x640 lock offset in a third place.
-typedef void* (*FactoryMemAllocFn)(uint64_t, int);
-typedef void  (*FactoryMemFreeFn)(void*);
-
-void* FactoryMemAlloc(uint64_t bytes, int align) {
-    return RT_EXPORT_ONCE(FactoryMemAllocFn,
-        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(bytes, align);
-}
-void FactoryMemFree(void* p) {
-    // The `if (p)` lives INSIDE 0x1800c7ad0 (`TEST RCX,RCX; JZ ret` is its
-    // first instruction). The one call site below still tests, because retail
-    // does too, at 0x1800c086e.
-    RT_EXPORT_ONCE(FactoryMemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
-}
-
-// ---- MEASURED CORRECTIONS to two layouts TypeInfo.h records as guesses -----
+// The allocator boundary, the `FactorySet` probe-only view struct, `LeftMost`,
+// `Successor` and `FactoryStartupRun` — ~225 lines of hand-walked AVL and an
+// inlined `Array<TypeRecord*>::SetSize` — are now `Object::Factory::Startup`
+// and the `Collection::Set` it stands on (ENDGAME B.3.3 step 3,
+// runtime/src/object/type_reflection.cpp). Every measurement they carried moved
+// with them; the two that a reader of THIS file still needs are repeated in
+// runtime/types/object/TypeInfo.h next to the class:
 //
-// `Object::Factory` is 0x10 bytes, not 8. `??0Factory@Object@@QEAA@XZ`
-// (0x1800c09d0) is: `[RCX]=0; [RCX+8]=0(dword); _singleton=RCX; return RCX`,
-// and the Set insert core INCs that dword at 0x1800303ac / 0x18003043c on
-// every successful insert. It is the Set's element count. TypeInfo.h's
-// `struct Factory { TypeNode* root; }` is CORRECT AS A VIEW — every lookup
-// only needs +0x00 — but it is 8 bytes, so it must never be used as STORAGE.
-// The probe below allocates one, hence this declaration.
-struct FactorySet {
-    TypeNode* root;    // +0x00
-    uint32_t  count;   // +0x08
-    uint32_t  _pad0c;  // +0x0c  zeroed by the ctor's qword store? no: the ctor
-                       //        writes a DWORD at +8 only. Never read.
-};
-static_assert(sizeof(FactorySet) == 0x10, "Object::Factory is MemAlloc(0x10,4)");
-
-// `TypeNode` is 0x50 bytes and its +0x48 is TWO 16-bit fields, not one int32.
-// TypeInfo.h marks both facts "GUESS, NOT MEASURED"; here is the measurement:
-//   0x180008440  MOV EDX,0x50 / LEA R8D,[RDX-0x48]  -> Allocate(0x50, align 8)
-//   0x180030540  MOVZX ...,word [RAX+0x4a] / INC    -> +0x4a is a HEIGHT
-//                MOV word [RDX+0x48],CX             -> +0x48 is a SIGNED
-//                CMP word [RDX+0x48],-1 / JGE       -> ...balance factor
-// Nothing in this file allocates or rebalances a node, so nothing here relies
-// on them; they are recorded because the Set lane above will.
-
-// ---- Tree walking ---------------------------------------------------------
-
-TypeNode* LeftMost(TypeNode* n) {
-    // Retail 0x1800c0747: `while ((RAX = node->left)) node = RAX;`
-    if (!n) return nullptr;
-    while (n->left) n = n->left;
-    return n;
-}
-
-// Retail's in-order successor, 0x1800c08ac..0x1800c08f6, transcribed branch for
-// branch. The `!p` arm reads `node->parent` a second time to produce its null;
-// that is retail's 0x1800c08f2 shared exit, not a redundancy to tidy away.
-TypeNode* Successor(TypeNode* node) {
-    if (TypeNode* r = node->right)
-        return LeftMost(r);
-
-    TypeNode* p = node->parent;
-    if (!p)                    return node->parent;   // nullptr, via 0x1800c08f2
-    if (p->left == node)       return p;              // via 0x1800c08d2
-    while (p && p->right == node) { node = p; p = p->parent; }
-    return node->parent;
-}
-
-// ---- The body, factored so the probe can drive it on a synthetic Factory ---
+//   * `Object::Factory` is 0x10 bytes, not 8. `??0Factory@Object@@QEAA@XZ`
+//     (0x1800c09d0) writes `[RCX]=0` and a DWORD `[RCX+8]=0`, and the insert
+//     core INCs that dword at 0x1800303ac / 0x18003043c — it is the Set's
+//     element count. `RtObject::Factory`'s `{ TypeNode* root; }` above stays a
+//     correct VIEW that must never be used as STORAGE.
+//   * `TypeNode` is 0x50 bytes and its +0x48 is TWO 16-BIT FIELDS, not one
+//     int32 (0x180030540 `CMP word [RDX+0x48],-1` and
+//     `MOVZX ...,word [RAX+0x4a]`; 0x1800087c0 zeroes both in one dword store,
+//     which is why an int32 view looked right until something rebalanced).
+//     `Collection::Set<TypeEntry,…>::Node` spells them as `int16_t balance` and
+//     `int16_t height` and the header asserts both offsets.
 //
-// `self` is a FactorySet, never the 8-byte view. The real entry point passes
-// the engine's own factory; the probe passes storage it owns.
-void FactoryStartupRun(FactorySet* self) {
-    // ---- Pass 1: CRC every name, insert a record per type -----------------
-    //
-    // `_firstTypeInfo` is read ONCE into RBX at 0x1800c065b and then followed
-    // through `info->next`; the loop does not re-read the global, so a
-    // BaseTypeInfo constructed DURING Startup would not be seen. Nothing
-    // constructs one during Startup, but the port matches the read anyway.
-    // The one unexported callee. Resolved through the PORT-AWARE address door,
-    // so the day a Collection::Set lane registers 0x180030140 this body picks
-    // the port up with no edit. A NULL IS NOT CACHED (rt_resolve_cache.cpp's
-    // contract): freezing one here would mean a Set port registered later
-    // could never be reached, and nothing would say which symbol was missing.
-    //
-    // NOT CONVERTED to `Collection::Set<...>::Insert` (ENDGAME B.3.2 step 2),
-    // though this is the one Set-shaped site in this batch that looks
-    // PLAUSIBLE rather than clearly out of reach: `FactorySet` above is
-    // exactly `detail::SetHdr<TypeNode>`'s {root, count, pad} layout, `TypeNode`
-    // is 0x50 bytes — an 0x30-byte element, the width `runtime/src/collection/
-    // avl_trees.cpp` already has a ported core for (Collection.h's Set
-    // banner table) — and the key is a plain `uint32_t` compared numerically,
-    // which `AVLCompare`'s generic `a < b` fallback (`detail::CompareTraits
-    // <AVLCompare, K>`) already covers with no new Compare policy. But
-    // `FactorySet` is this file's own PROBE-ONLY view struct (its comment
-    // above: "the probe below allocates one, hence this declaration"), not the
-    // live `Object::Factory`'s type in `runtime/types/object` — retyping the
-    // ENGINE'S OWN factory singleton to a real `Collection::Set<TypeRecord,
-    // AVLCompare, DefaultAllocator, uint32_t>` is Object::Factory struct work
-    // (a different file, a different owner) this "callers" step should not do
-    // unverified, so this stays a by-address call. Whoever owns
-    // `Object::Factory`'s type header should read this paragraph first.
-    typedef TypeNode** (*SetInsertFn)(FactorySet*, TypeNode**,
-                                      const uint32_t*, const TypeRecord*);
-    static SetInsertFn setInsert = nullptr;
-    if (!setInsert)
-        setInsert = reinterpret_cast<SetInsertFn>(
-            ResolveAddr(Module::Runtime, 0x180030140));
-    if (!setInsert) {
-        // At cutover this is where the row that is NOT closed announces
-        // itself, by name, instead of as EXEC-of-0 with no context.
-        printf("[RtPort] Object::Factory::Startup: Collection::Set insert "
-                    "0x180030140 is UNPORTED and the DLL is absent -- the type "
-                    "tree cannot be built\n");
-        return;
-    }
-
-    for (BaseTypeInfo* info = *g_firstTypeInfo; info; info = info->next) {
-        info->typeId = TypeNameCRC(info->name);
-
-        TypeRecord rec;
-        // Retail stamps 0xFFFFFFFF into rec.typeId at 0x1800c06e3 and then
-        // overwrites it with info->typeId at 0x1800c0706 — the sentinel is
-        // dead. `_pad04` is written by NEITHER retail nor the insert wrapper
-        // (which copies +0x00 as a dword, then +0x08, +0x10, then
-        // copy-constructs the Array at +0x18), so it is unobservable; it is
-        // zeroed here only so this struct has no indeterminate member.
-        rec.typeId        = info->typeId;
-        rec._pad04        = 0;
-        rec.info          = info;
-        rec.parent        = nullptr;
-        rec.children      = nullptr;
-        rec.childCount    = 0;
-        rec.childCapacity = 0;
-
-        // R8 and R9 are the SAME address at 0x1800c070f/0x1800c070a: the key
-        // IS the record's first field. Passed as two arguments because that is
-        // what the callee's signature is.
-        TypeNode* it = nullptr;
-        setInsert(self, &it, &rec.typeId, &rec);
-    }
-
-
-    // ---- Pass 2: link parents, fill children ------------------------------
-    for (TypeNode* node = LeftMost(self->root); node; node = Successor(node)) {
-        BaseTypeInfo* const info = node->value.info;
-        const char* const parentName = info->parentName;
-        if (!parentName) continue;                    // 0x1800c076b
-
-        const uint32_t parentId = TypeNameCRC(parentName);
-
-        // 0x1800c0779..0x1800c079a, the same descend as FindNode above,
-        // written out because retail wrote it out.
-        TypeNode* p = self->root;
-        while (p) {
-            if (parentId < p->key)      p = p->left;
-            else if (p->key < parentId) p = p->right;
-            else                        break;
-        }
-
-        // FAITHFUL: `LEA RBP,[RCX+8]` on a null RCX. See the banner — a
-        // parentName naming an unregistered type yields (TypeRecord*)8 and
-        // faults on the next line, exactly as retail does. uintptr_t
-        // arithmetic rather than `(char*)p + 8` only because null pointer
-        // arithmetic is UB in C++ and this must be the LEA, not whatever the
-        // optimiser concludes from a UB premise.
-        // NOT A GUARD (lane TYPE, 2026-09-08). The deref below is unchanged
-        // and still faults; this only puts a NAME on the fault before it
-        // happens. "READ of 0x0000000000000028 in FactoryStartupRun" with no
-        // name is the entire cost of the faithful LEA, and one printf buys it
-        // back without altering a single subsequent instruction's inputs.
-        if (!p) {
-            printf("[RtPort] Factory::Startup: type \"%s\" (id 0x%08X) names "
-                        "parent \"%s\" (id 0x%08X), which is NOT in the type "
-                        "chain. The faithful LEA below yields (TypeRecord*)8 "
-                        "and the next read faults at 0x28 -- as retail does.\n",
-                        info->name ? info->name : "(null)", node->value.typeId,
-                        parentName, parentId);
-            std::fflush(stdout);
-        }
-
-        TypeRecord* const parentRec =
-            reinterpret_cast<TypeRecord*>(reinterpret_cast<uintptr_t>(p) + 8);
-        node->value.parent = parentRec;
-
-        // ---- Array<TypeRecord*>::SetSize(count + 1, &node->value) ---------
-        const int64_t oldSize = parentRec->childCount;             // MOVSXD
-        const int32_t newSize = static_cast<int32_t>(oldSize) + 1;
-        if (newSize == static_cast<int32_t>(oldSize)) continue;    // 0x1800c07b0
-
-        TypeRecord** const old = parentRec->children;
-        parentRec->childCount = newSize;
-        if (newSize > parentRec->childCapacity) {                  // SIGNED
-            parentRec->childCapacity = newSize;
-            // The growth rule: triple ONLY when this is a one-element growth
-            // of a non-empty array, i.e. never on the first push. A type with
-            // two or more children is what exercises it.
-            if (newSize == static_cast<int32_t>(oldSize) + 1 && oldSize != 0)
-                parentRec->childCapacity = newSize * 3;            // 32-bit LEA
-            parentRec->children = static_cast<TypeRecord**>(FactoryMemAlloc(
-                static_cast<uint64_t>(
-                    static_cast<int64_t>(parentRec->childCapacity)) * 8, 8));
-        }
-
-        // 0x1800c082c: start at oldSize when the buffer did NOT move (append
-        // only), at 0 when it did (copy then append).
-        for (int64_t i = (old == parentRec->children) ? oldSize : 0;
-             i < newSize; ++i) {
-            TypeRecord** const dst = parentRec->children + i;
-            if (!dst) continue;      // retail's TEST RDX,RDX at 0x1800c0849
-            *dst = (i < oldSize) ? old[i] : &node->value;
-        }
-
-        if (old != parentRec->children && old)                     // 0x1800c086e
-            FactoryMemFree(old);
-    }
-}
+// The by-address call to the Set insert at 0x180030140 is also gone: the
+// template reaches the SAME ported core (`AvlOps<Node,0x30>::Retrace` ->
+// `PortedRetrace48`). `rtavl::TypeSetInsert` keeps its registration for any
+// caller that still resolves that address.
+// ----------------------------------------------------------------------------
 
 }  // namespace
 
@@ -787,12 +512,10 @@ void FactoryStartupRun(FactorySet* self) {
 // own postcondition holds", NOT as "this port agrees with the DLL".
 // ============================================================================
 bool RtObject_Factory_Startup(void* factory) {
-    ResolveGlobals();
-
-    FactoryStartupRun(static_cast<FactorySet*>(factory));
-
-
-    return true;   // MOV AL,1 at 0x1800c0907 is Startup's only exit
+    // `factory` is the singleton `??0Factory@Object@@` built
+    // (runtime/src/engine/singleton_ctors.cpp:288) — 0x10 bytes, zeroed. The
+    // real class is laid over it; the walk itself is Object::Factory::Startup.
+    return AsFactory(factory)->Startup();
 }
 
 } // namespace RtObject

@@ -553,8 +553,30 @@ static void MintStorage() {
         }
         // ?_firstTypeInfo@ is the head of the reflection chain. In the DLL it
         // is filled by static initialisers; ours is filled by MintTypeInfos.
-        if (s.symbol && strcmp(s.symbol, "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA") == 0)
-            *(RtObject::BaseTypeInfo**)s.storage = g_mintTypeInfoHead;
+        //
+        // ENDGAME B.3.3 step 3: the CELL is no longer `s.storage`. It is
+        // `Object::BaseTypeInfo::_firstTypeInfo`, a plain static, because the
+        // BaseTypeInfo constructor runs at CRT-init where no registry exists and
+        // so cannot resolve a cell — it must own one. `MintFirstTypeInfoCell()`
+        // below is what both doors publish, so there is exactly ONE head
+        // pointer, which is the end of the "split brain" this file's own
+        // RT_UNPROMOTABLE note describes. The generated row's 8 bytes are now
+        // inert; the closing pass (B33_RULES §9 step 7) drops the row with the
+        // generator rather than by hand.
+        //
+        // SPLICE, NOT ASSIGN. By the time this runs, CRT-init may already have
+        // linked real `DEFINE_TYPE` statics into the chain. Overwriting the head
+        // would drop them silently, which is exactly the failure mode that has
+        // no log line. The 14 minted nodes go in FRONT of whatever is there.
+        if (s.symbol && strcmp(s.symbol, "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA") == 0) {
+            if (g_mintTypeInfoHead) {
+                RtObject::BaseTypeInfo* tail = g_mintTypeInfoHead;
+                while (tail->next) tail = tail->next;
+                tail->next = (RtObject::BaseTypeInfo*)::Object::BaseTypeInfo::_firstTypeInfo;
+                ::Object::BaseTypeInfo::_firstTypeInfo =
+                    (::Object::BaseTypeInfo*)g_mintTypeInfoHead;
+            }
+        }
     }
     if (seeded)
         printf("[RtMint] seeded %d storage row(s) with a known constant value\n", seeded);
@@ -602,6 +624,19 @@ struct RtMintRow {
     int                index;     // index within that kind's table
 };
 
+// ENDGAME B.3.3 step 3. The ONE storage row whose bytes are not in
+// `kStorageBytes`: `?_firstTypeInfo@` is `Object::BaseTypeInfo::_firstTypeInfo`,
+// a plain static in runtime/src/object/type_reflection.cpp. Routing it HERE,
+// at the single point `MintRowAt` that both `RegisterMintedData()` and
+// `RtMintRegisterRow()` (and therefore standalone/cutover_manifest.cpp's
+// REQUIRED publish) funnel through, is what makes the name door, the address
+// door 0x1801fc6e0 and the class all answer with the same eight bytes.
+static void* MintStorageCell(const RtMintStorage& s) {
+    if (s.symbol && strcmp(s.symbol, "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA") == 0)
+        return (void*)&::Object::BaseTypeInfo::_firstTypeInfo;
+    return s.storage;
+}
+
 static bool MintRowAt(int kind, int i, RtMintRow* out) {
     if (kind == 0) {
         if (i < 0 || i >= kVtableCount) return false;
@@ -614,7 +649,7 @@ static bool MintRowAt(int kind, int i, RtMintRow* out) {
     } else {
         if (i < 0 || i >= kStorageCount) return false;
         const RtMintStorage& s = kMintStorage[i];
-        *out = { s.symbol, s.dllVa, s.storage, "storage", i };
+        *out = { s.symbol, s.dllVa, MintStorageCell(s), "storage", i };
     }
     return true;
 }
