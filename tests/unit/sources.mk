@@ -71,3 +71,15 @@ UNIT_TREE_SRCS += \
 # `AvlOps<Node,0x30>` falls back to the generic core, so set_core.cpp is not
 # needed either.
 UNIT_TREE_SRCS += runtime/src/object/type_reflection.cpp
+# ENDGAME B.3.3 step 5 INTERNAL core (tests/unit/object_internal_test.cpp):
+# `Object::Internal` and `Object::InternalFactory` as real classes.
+# internal_class.cpp is registry-free by construction — the `RtObject_*` ABI
+# shims, the mangled-name/address doors and the attendance counters stay in
+# runtime/src/object/internal.cpp, which cannot link here. Its seam
+# (`Object::detail::InternalMemAlloc`/`InternalMemFree`/`InternalRand` and
+# `InternalFactory::Get()`) takes a malloc + test-hook branch under
+# -DBANISHED_UNIT_TEST, and `ResetPersistState`/`PersistObject` are compiled out
+# there because they need a live IO::Stream and the Factory type tree.
+# type_reflection.cpp (above) supplies `Object::Base` and `BaseTypeInfo`, and
+# array.cpp (above) supplies `~Array` for the two handle-table arrays.
+UNIT_TREE_SRCS += runtime/src/object/internal_class.cpp

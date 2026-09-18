@@ -108,60 +108,27 @@
 // PORTABILITY: no <windows.h> (PLAN.md §4.1 decision 1).
 // ============================================================================
 
+// ============================================================================
+// ENDGAME B.3.3 step 5 — THE BODY MOVED, THIS IS THE REGISTERED SHIM
+// ============================================================================
+// Everything above still describes the function; what changed is where it
+// lives. `Object::InternalFactory` is a real class as of step 5, so the body is
+// `Object::InternalFactory::PersistObject` in
+// runtime/src/object/internal_class.cpp — moved VERBATIM, including the
+// unguarded miss arm, the two re-loads and the sentinel/index asymmetry. This
+// file keeps the two registrations (by name and by address), which is what the
+// cutover manifest and tools/runtime_census.py see.
+// ============================================================================
+
 #include <cstddef>
 #include <cstdint>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/object/Internal.h"
+#include "../../types/object/internal_class.h"
 #include "../../types/object/TypeInfo.h"
 
 namespace RtObject {
-
-namespace {
-
-// `?_singleton@Factory@Object@@0PEAV12@EA` — note the `0PEAV12@EA` spelling;
-// the obvious `1PEAV12@A` is a phantom that resolves NULL silently
-// (reference_resolveexport_phantom_names.md). RtResolveCached caches a hit and
-// RETRIES a miss, so a row minted later is picked up.
-void* g_factorySingletonCache = nullptr;                 // Runtime 0x1801fc6e8
-
-Factory** FactorySingletonSlot() {
-    return reinterpret_cast<Factory**>(RtResolveCached(
-        "?_singleton@Factory@Object@@0PEAV12@EA", &g_factorySingletonCache));
-}
-
-// `Object::Internal`'s own BaseTypeInfo node, read through the NAME door so a
-// promotion of the row is followed. Field +0x00 is the type id.
-const uint8_t* InternalTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@Internal@Object@@0VBaseTypeInfo@2@A");
-}
-
-// `?IsDerivedFrom@Base@Object@@QEBA_NI@Z` (0x1800c0390), ported and registered
-// by runtime/src/object/type_system.cpp. Reached through the registry so this
-// call lands on OUR body with the DLL present or absent.
-bool IsDerivedFrom(const void* self, uint32_t typeId) {
-    using Fn = bool (*)(const void*, uint32_t);
-    static void* cache = nullptr;
-    Fn fn = reinterpret_cast<Fn>(
-        RtResolveCached("?IsDerivedFrom@Base@Object@@QEBA_NI@Z", &cache));
-    return fn(self, typeId);
-}
-
-// IO::Stream + 0x08 — `0 == reading`, non-zero == writing. The only field of
-// Stream this body touches.
-inline int32_t StreamMode(const void* stream) {
-    return *reinterpret_cast<const int32_t*>(
-        reinterpret_cast<const uint8_t*>(stream) + 0x08);
-}
-
-// vtable slot 3 (+0x18) — `virtual void Serialize(IO::Stream&)`.
-inline void SerializeVirtual(void* self, void* stream) {
-    void* const* vt = *reinterpret_cast<void* const* const*>(self);
-    reinterpret_cast<void (*)(void*, void*)>(vt[3])(self, stream);
-}
-
-}  // namespace
 
 // ============================================================================
 // ?PersistObject@InternalFactory@Object@@QEAAPEAVInternal@2@AEAVStream@IO@@IHI@Z
@@ -172,66 +139,12 @@ Internal* RtObject_InternalFactory_PersistObject(InternalFactory* self,
                                                  uint32_t     generation,
                                                  int          index,
                                                  uint32_t     typeId) {
-    int32_t* const persistIds =
-        reinterpret_cast<int32_t*>(self->persistIds._data);   // 0x1800bff27
-    const int64_t i = index;                                  // MOVSXD RBX,R9D
-
-    int32_t slot = index;
-
-    if (StreamMode(stream) != 0) {
-        // ---- WRITE, 0x1800bffd4 --------------------------------------------
-        if (persistIds[i] < 0) {
-            persistIds[i] = static_cast<int32_t>(i);
-            Internal* obj = reinterpret_cast<Internal**>(self->objects._data)[i];
-            SerializeVirtual(obj, stream);
-        }
-        // `slot` stays `index`: EBX is never reassigned on this arm.
-    } else {
-        // ---- READ, 0x1800bff3d ---------------------------------------------
-        slot = persistIds[i];
-        if (slot < 0) {
-            // ---- the type-tree descent, 0x1800bff5f ------------------------
-            Factory** const pSingleton = FactorySingletonSlot();
-            TypeNode* node = pSingleton ? (*pSingleton)->root : nullptr;
-            TypeNode* found = nullptr;
-            while (node != nullptr) {
-                if (typeId < node->key)      { node = node->left;  continue; }
-                if (node->key >= typeId)     { found = node; break; }   // equal
-                node = node->right;
-            }
-            // A MISS LEAVES `found` NULL AND RETAIL DEREFERENCES IT. See the
-            // banner; no guard is added.
-            BaseTypeInfo* const info = found->value.info;      // node + 0x10
-            // Zero-argument, exactly as type_system.cpp:390 calls it — retail
-            // leaves `info` in RCX at the call site but the factory is a
-            // static that reads nothing.
-            void* const created =
-                reinterpret_cast<void* (*)()>(info->factoryFn)();   // CALL [RCX+0x20]
-
-            const uint32_t internalTypeId =
-                *reinterpret_cast<const uint32_t*>(InternalTypeInfo());
-            Internal* obj = IsDerivedFrom(created, internalTypeId)
-                                ? static_cast<Internal*>(created)
-                                : nullptr;                     // CMOVNZ RSI,RBX
-
-            // UNGUARDED on purpose — see the banner. Retail reads
-            // `_factoryIndex` (+0x08) BEFORE it writes `_generation` (+0x0c);
-            // two distinct fields, so the order is unobservable, and it is
-            // kept because an unobservable order that is transcribed costs
-            // nothing while one that is tidied is a difference nobody can find.
-            const int32_t newIndex = obj->factoryIndex;        // 0x1800bffad
-            obj->generation = generation;                      // 0x1800bffb0
-            // `_persistIds` is RE-LOADED here (0x1800bffb4 / 0x1800bffbc):
-            // the factory call can have grown the table.
-            reinterpret_cast<int32_t*>(self->persistIds._data)[i] = newIndex;
-            slot = reinterpret_cast<int32_t*>(self->persistIds._data)[i];
-
-            SerializeVirtual(obj, stream);                     // 0x1800bffca
-        }
-    }
-
-    // 0x1800bffea — `_objects._data` is re-read AFTER the Serialize.
-    return reinterpret_cast<Internal**>(self->objects._data)[static_cast<int64_t>(slot)];
+    // B.3.3 bridge — `RtObject::InternalFactory` is the layout-asserted alias
+    // of `Object::InternalFactory`.
+    ::Object::Internal* p =
+        reinterpret_cast< ::Object::InternalFactory*>(self)->PersistObject(
+            stream, generation, index, typeId);
+    return reinterpret_cast<Internal*>(p);
 }
 
 }  // namespace RtObject

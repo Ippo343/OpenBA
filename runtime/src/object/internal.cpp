@@ -131,66 +131,32 @@
 #include <cstring>
 
 #include "../../types/object/Internal.h"
+#include "../../types/object/internal_class.h"
 #include "../../funcs/rt_port.h"
 
 namespace RtObject {
 namespace {
 
 // ============================================================
-// The allocator and PRNG
+// ENDGAME B.3.3 step 5 — the allocator, the PRNG and the live singleton MOVED
 // ============================================================
-// The handle table's buffers used to cross the Runtime-x64.dll boundary in both
-// directions, so allocation had to stay on the DLL's heap and the door here was
-// the raw one (GetProcAddress). With the DLL gone there is exactly ONE heap --
-// our own MemoryAllocator port -- and the registry door is the only door.
+// `MemAlloc`/`MemFree`/`RandomRand` and the `?_singleton@InternalFactory@...`
+// door used to live here. They are now `Object::detail::InternalMemAlloc` /
+// `InternalMemFree` / `InternalRand` and `Object::InternalFactory::Get()`
+// (runtime/src/object/internal_class.cpp), which is the file that can link into
+// `make unit`. The doors are the SAME mangled names resolved through the SAME
+// registry; only the spelling moved.
 //
-// ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z  0x1800c7a50
-// ?MemFree@MemoryAllocator@System@@SAXPEAX@Z     0x1800c7ad0
-// Retail's Array bodies inline `EnterCS(_singleton+0x640); Allocate(...);
-// LeaveCS`, which is precisely what these two statics are.
-using MemAllocFn = void* (*)(uint64_t, int);
-using MemFreeFn  = void  (*)(void*);
-using RandFn     = uint32_t (*)(void*);
-
-MemAllocFn g_memAlloc = nullptr;
-MemFreeFn  g_memFree  = nullptr;
-RandFn     g_rand     = nullptr;
-
-void* MemAlloc(uint64_t bytes, int align) {
-    if (!g_memAlloc)
-        g_memAlloc = reinterpret_cast<MemAllocFn>(
-            ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
-    return g_memAlloc(bytes, align);
-}
-
-void MemFree(void* p) {
-    if (!g_memFree)
-        g_memFree = reinterpret_cast<MemFreeFn>(
-            ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
-    g_memFree(p);
-}
-
-// ?Rand@Random@System@@QEAAIXZ  0x1800c7f90. Wave 2 ported this and proved it
-// bit-exact over 16,035,064 calls.
-uint32_t RandomRand(void* random) {
-    if (!g_rand)
-        g_rand = reinterpret_cast<RandFn>(ResolveExport("?Rand@Random@System@@QEAAIXZ"));
-    return g_rand(random);
-}
+//   ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z  0x1800c7a50
+//   ?MemFree@MemoryAllocator@System@@SAXPEAX@Z     0x1800c7ad0
+//   ?Rand@Random@System@@QEAAIXZ                   0x1800c7f90
+//   ?_singleton@InternalFactory@Object@@0PEAV12@EA 0x1801fc6d8
 
 // ============================================================
-// The live singleton and the two exported vtables
+// The two exported vtables
 // ============================================================
-InternalFactory** g_ppFactory     = nullptr;
-void*             g_vtblInternal  = nullptr;
-void*             g_vtblBase      = nullptr;
-
-InternalFactory* Factory() {
-    if (!g_ppFactory)
-        g_ppFactory = reinterpret_cast<InternalFactory**>(
-            ResolveExport("?_singleton@InternalFactory@Object@@0PEAV12@EA"));
-    return g_ppFactory ? *g_ppFactory : nullptr;
-}
+void* g_vtblInternal  = nullptr;
+void* g_vtblBase      = nullptr;
 
 // An exported ??_7 symbol's ADDRESS *is* the vtable (slot 0 first), so these
 // are used as values, not dereferenced. Verified against the .rdata dump in
@@ -244,72 +210,18 @@ void* VtblBase() {
 // global scope with the other read-outs.
 
 // ============================================================
-// Collection::Array<T> bodies, as retail instantiates them
+// Collection::Array<T> bodies, as retail instantiates them — MOVED
 // ============================================================
-// WAVE2's warning is live here: node/element offsets are a function of
-// sizeof(T), so MSVC emits a SEPARATE body per instantiation and one ported
-// body cannot serve two element widths. Retail has four distinct ones in this
-// class alone, and all four are ported separately below with their own
-// addresses. The growth policy is identical in all four and matches
-// runtime/types/collection/Collection.h exactly.
-//
-// The `if (slot != nullptr)` tests are RETAIL's, not ours. They are the
-// template's per-element address check surviving into codegen; they can never
-// fire for a non-null buffer. Kept because this file is byte-faithful first.
+// All four (FUN_18002ffa0, FUN_18002fca0, FUN_18002fd90, FUN_18002fea0) are now
+// `Object::detail::ArrayPtrSetSizeFill` / `ArrayPtrSetSize` / `ArrayPtrReserve`
+// / `ArrayIntSetSize` in runtime/src/object/internal_class.cpp, moved VERBATIM
+// with the element spelling changed from `RtObject::Internal*` to
+// `Object::Internal*` — the same eight bytes. They moved because
+// `InternalFactory::AddObject`/`RemoveObject`/`ResetPersistState` are the only
+// callers and those are now the real class's members. WAVE2's warning stands
+// where they live now: one ported body cannot serve two element widths.
 
-// FUN_18002ffa0 — Array<Internal*>::SetSize(int newSize, const Internal*& fill)
-void ArrayPtrSetSizeFill(Collection::Array<Internal*>* a, int newSize, Internal* const* fill) {
-    const int oldSize = a->_size;
-    if (newSize == oldSize)
-        return;
-    Internal** old = a->_data;
-    a->_size = newSize;
-    if (a->_capacity < newSize) {
-        a->_capacity = newSize;
-        if (newSize == oldSize + 1 && oldSize != 0)
-            a->_capacity = newSize * 3;
-        a->_data = static_cast<Internal**>(
-            MemAlloc(static_cast<uint64_t>(static_cast<int64_t>(a->_capacity) << 3), 8));
-    }
-    int i = (old == a->_data) ? oldSize : 0;
-    for (; i < newSize; ++i) {
-        Internal** slot = a->_data + i;
-        if (slot != nullptr)
-            *slot = (i < oldSize) ? old[i] : *fill;
-    }
-    if (old != a->_data && old != nullptr)
-        MemFree(old);
-}
-
-// FUN_18002fca0 — Array<Internal*>::SetSize(int newSize), no fill value.
-// Only the surviving prefix is copied; a grown tail is left UNINITIALISED,
-// which is why retail only ever calls this one to SHRINK.
-void ArrayPtrSetSize(Collection::Array<Internal*>* a, int newSize) {
-    const int oldSize = a->_size;
-    if (newSize == oldSize)
-        return;
-    Internal** old = a->_data;
-    a->_size = newSize;
-    if (a->_capacity < newSize) {
-        a->_capacity = newSize;
-        if (newSize == oldSize + 1 && oldSize != 0)
-            a->_capacity = newSize * 3;
-        a->_data = static_cast<Internal**>(
-            MemAlloc(static_cast<uint64_t>(static_cast<int64_t>(a->_capacity) << 3), 8));
-    }
-    int i = (old == a->_data) ? oldSize : 0;
-    for (; i < newSize; ++i) {
-        if (i < oldSize) {
-            Internal** slot = a->_data + i;
-            if (slot != nullptr)
-                *slot = old[i];
-        }
-    }
-    if (old != a->_data && old != nullptr)
-        MemFree(old);
-}
-
-// ---- 0x18002fca0 — THE ADDRESS DOOR FOR THE BODY ABOVE ---------------------
+// ---- 0x18002fca0 — THE ADDRESS DOOR FOR THAT BODY --------------------------
 // WAVE 9 LANE UID. `ArrayPtrSetSize` has BEEN the port of FUN_18002fca0 since
 // Wave 3 — the comment above it says so — but nothing ever registered it at
 // that address, so `ResolveAddr(Module::Runtime, 0x18002fca0)` fell through to
@@ -332,77 +244,10 @@ void ArrayPtrSetSize(Collection::Array<Internal*>* a, int newSize) {
 // reaches it through. Element width is 8 and the type is erased in the callee,
 // so `Internal*` here is a name, not a constraint.
 extern "C" void RtObject_ArrayPtrSetSize_18002fca0(void* arrayPtr, int newSize) {
-    ArrayPtrSetSize(static_cast<Collection::Array<Internal*>*>(arrayPtr), newSize);
-}
-
-// FUN_18002fd90 — Array<Internal*>::Reserve(int n). Grows CAPACITY only: it
-// sets _size to n while it reallocates and restores the old _size on the way
-// out, and it returns immediately unless n is strictly greater than _size.
-void ArrayPtrReserve(Collection::Array<Internal*>* a, int n) {
-    const int oldSize = a->_size;
-    if (oldSize >= n)
-        return;
-    Internal** old = a->_data;
-    a->_size = n;
-    if (a->_capacity < n) {
-        a->_capacity = n;
-        if (n == oldSize + 1 && oldSize != 0)
-            a->_capacity = n * 3;
-        a->_data = static_cast<Internal**>(
-            MemAlloc(static_cast<uint64_t>(static_cast<int64_t>(a->_capacity) << 3), 8));
-    }
-    if (old != a->_data) {
-        for (int i = 0; i < oldSize; ++i) {
-            Internal** slot = a->_data + i;
-            if (slot != nullptr)
-                *slot = old[i];
-        }
-        if (old != nullptr)
-            MemFree(old);
-    }
-    a->_size = oldSize;
-}
-
-// FUN_18002fea0 — Array<int32_t>::SetSize(int newSize). Element width 4,
-// alignment 4 (Collection.h: the alignment argument is alignof(T), not
-// sizeof(T)); otherwise identical to ArrayPtrSetSize.
-void ArrayIntSetSize(Collection::Array<int32_t>* a, int newSize) {
-    const int oldSize = a->_size;
-    if (newSize == oldSize)
-        return;
-    int32_t* old = a->_data;
-    a->_size = newSize;
-    if (a->_capacity < newSize) {
-        a->_capacity = newSize;
-        if (newSize == oldSize + 1 && oldSize != 0)
-            a->_capacity = newSize * 3;
-        a->_data = static_cast<int32_t*>(
-            MemAlloc(static_cast<uint64_t>(static_cast<int64_t>(a->_capacity) << 2), 4));
-    }
-    int i = (old == a->_data) ? oldSize : 0;
-    for (; i < newSize; ++i) {
-        if (i < oldSize) {
-            int32_t* slot = a->_data + i;
-            if (slot != nullptr)
-                *slot = old[i];
-        }
-    }
-    if (old != a->_data && old != nullptr)
-        MemFree(old);
-}
-
-// The capacity ArrayPtrSetSizeFill/SetSize will end up with, given a starting
-// (size, capacity) and a target size. Used by the shadow oracle so that the
-// growth policy — the only non-trivial arithmetic in the whole class — is
-// actually checked and not just assumed.
-int PredictCapacity(int oldSize, int oldCapacity, int newSize) {
-    if (newSize == oldSize)
-        return oldCapacity;
-    if (oldCapacity >= newSize)
-        return oldCapacity;
-    if (newSize == oldSize + 1 && oldSize != 0)
-        return newSize * 3;
-    return newSize;
+    // B.3.3 bridge — the caller hands us whatever array it owns; the element
+    // type is erased in the callee and the width is 8 either way.
+    ::Object::detail::ArrayPtrSetSize(
+        static_cast<Collection::Array< ::Object::Internal*>*>(arrayPtr), newSize);
 }
 
 // ---- ENDGAME B.3.1 step 1: the bridge to the real class ---------------------
@@ -506,7 +351,13 @@ void RtObject_InternalBasePtr_CheckPtr(const InternalBasePtr* self) {
 // Empty in both builds. It is slot 3 of ??_7Internal@Object@@6B@ and exists so
 // that a subclass has something to override; InternalFactory::PersistObject
 // calls it on every object it creates from a stream.
-void RtObject_Internal_Persist(Internal*, void* /*IO::Stream&*/) {
+// B.3.3 step 5: the body is `Object::Internal::Persist`, and the call is
+// QUALIFIED so it is NOT a virtual dispatch — this shim IS slot 3, so
+// re-entering the vtable here would recurse on a minted-table object.
+void RtObject_Internal_Persist(Internal* self, void* stream /*IO::Stream&*/) {
+    // B.3.3 bridge
+    ::Object::Internal* p = reinterpret_cast< ::Object::Internal*>(self);
+    p->Object::Internal::Persist(stream);
 }
 
 // ?DeletePtr@InternalBasePtr@Object@@QEAAXXZ
@@ -569,6 +420,15 @@ unsigned long long g_tableDtorRuns  = 0;
 unsigned long long g_tableClearRuns = 0;
 unsigned long long g_tableResetRuns = 0;
 
+// ENDGAME B.3.3 step 5. The TABLE half of this body is now
+// `Object::InternalFactory::AddObject`. The two vptr stores stay HERE and are
+// NOT routed through `Object::Internal`'s real constructor, deliberately: this
+// door serves objects whose derived classes still carry MINTED vtables, so the
+// value it must stamp is the one `VtblInternal()` answers — the DLL's while the
+// DLL is present, the minted table at cutover. A placement-new of the real class
+// would stamp the COMPILER's table instead, which is a different pointer in
+// every live object built through this door. That is the split-vptr hazard the
+// banner at the top of this file exists to deny.
 Internal* RtObject_Internal_Ctor(Internal* self) {
     ++g_tableCtorRuns;
     self->vptr = VtblBase();
@@ -576,11 +436,10 @@ Internal* RtObject_Internal_Ctor(Internal* self) {
     self->factoryIndex = -1;
     self->generation   = 0;
 
-    InternalFactory* f = Factory();
-    self->factoryIndex = f->objects._size;
-    Internal* elem = self;
-    self->generation = RandomRand(&f->random);
-    ArrayPtrSetSizeFill(&f->objects, f->objects._size + 1, &elem);
+    // B.3.3 bridge — `RtObject::Internal` is the layout-asserted alias of
+    // `Object::Internal`; the factory's members now own the table arithmetic.
+    ::Object::InternalFactory::Get()->AddObject(
+        reinterpret_cast< ::Object::Internal*>(self));
     return self;
 }
 
@@ -606,14 +465,11 @@ void RtObject_Internal_Dtor(Internal* self) {
     self->vptr = VtblInternal();
     self->generation = 0;
 
-    InternalFactory* f = Factory();
-    const int last = f->objects._size - 1;
-    const int idx  = self->factoryIndex;
-    if (last != idx) {
-        f->objects._data[idx] = f->objects._data[last];
-        f->objects._data[idx]->factoryIndex = idx;
-    }
-    ArrayPtrSetSize(&f->objects, last);
+    // B.3.3 bridge — the swap-remove is `Object::InternalFactory::RemoveObject`
+    // now, unguarded exactly as it was. The two vptr stores stay here for the
+    // reason given on the constructor above.
+    ::Object::InternalFactory::Get()->RemoveObject(
+        reinterpret_cast< ::Object::Internal*>(self));
 
     self->vptr = VtblBase();
 }
@@ -635,11 +491,8 @@ void RtObject_InternalFactory_ClearPersistState(InternalFactory* self) {
         printf("[RtPort] FIRST LIVE CALL into our ?ClearPersistState@InternalFactory@Object@@ "
                "(default-on since Wave 11 lane OBJINT)\n"); }
 
-    if (self->persistIds._data != nullptr)
-        MemFree(self->persistIds._data);
-    self->persistIds._data     = nullptr;
-    self->persistIds._size     = 0;
-    self->persistIds._capacity = 0;
+    // B.3.3 bridge — the body is `Object::InternalFactory::ClearPersistState`.
+    reinterpret_cast< ::Object::InternalFactory*>(self)->ClearPersistState();
 }
 
 // ?ResetPersistState@InternalFactory@Object@@QEAAXAEAVStream@IO@@@Z
@@ -690,35 +543,10 @@ void RtObject_InternalFactory_ClearPersistState(InternalFactory* self) {
 // constant so the 0 cannot be mistaken for a placeholder.
 void RtObject_InternalFactory_ResetPersistState(InternalFactory* self, void* stream) {
     ++g_tableResetRuns;
-    SerializerLite ser;
-    ser.stream   = stream;
-    ser.readerWriter = nullptr;
-
-    char*  s       = static_cast<char*>(stream);
-    void*  factory = *reinterpret_cast<void**>(s + 0x10);
-    void** fvtbl   = *reinterpret_cast<void***>(factory);
-    const int mode = *reinterpret_cast<int*>(s + 0x08);
-    const int kSerializerVersion = 0;   // retail's XOR R8D,R8D at 0x1800bfe6c
-    ser.readerWriter = reinterpret_cast<void* (*)(void*, void*, int)>(
-        fvtbl[(mode == 0 ? 0x18 : 0x20) / 8])(factory, &ser, kSerializerVersion);
-
-    void*  enc     = ser.readerWriter;
-    void** encVtbl = *reinterpret_cast<void***>(enc);
-
-    int count = self->objects._size;
-    reinterpret_cast<void (*)(void*, int*, const char*)>(encVtbl[kEncSerializeInt / 8])(
-        enc, &count, nullptr);
-
-    ArrayIntSetSize(&self->persistIds, count);
-    ArrayPtrReserve(&self->objects, count);
-
-    // The bound is re-read from _persistIds._size on every iteration, as retail
-    // does; it cannot change, but this file is byte-faithful first.
-    for (int i = 0; i < self->persistIds._size; ++i)
-        self->persistIds._data[i] = -1;
-
-    if (enc != nullptr)
-        reinterpret_cast<void (*)(void*, int)>(encVtbl[0])(enc, 1);
+    // B.3.3 bridge — the body is `Object::InternalFactory::ResetPersistState`,
+    // moved verbatim including the three-argument encoding-factory call and the
+    // RETAIL ReaderWriter vtable offsets.
+    reinterpret_cast< ::Object::InternalFactory*>(self)->ResetPersistState(stream);
 }
 
 // ?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z
@@ -844,7 +672,13 @@ void InternalBasePtrSerializeBody(RtObject::Internal** self,
                                                     uint32_t, int, uint32_t);
     PersistObjectFn persist = RT_EXPORT_ONCE(PersistObjectFn,
         "?PersistObject@InternalFactory@Object@@QEAAPEAVInternal@2@AEAVStream@IO@@IHI@Z");
-    *self = persist(RtObject::Factory(), ser.stream, gen, index, type);
+    // B.3.3 bridge — the singleton comes from `Object::InternalFactory::Get()`
+    // now (the same `?_singleton@InternalFactory@Object@@0PEAV12@EA` door this
+    // file's own `Factory()` used to open), and the shim it is handed to still
+    // takes the POD alias.
+    *self = persist(reinterpret_cast<RtObject::InternalFactory*>(
+                        ::Object::InternalFactory::Get()),
+                    ser.stream, gen, index, type);
 }
 
 }  // namespace Object
