@@ -155,7 +155,24 @@ built them wrong, and callbacks stored in data.
   after the resave gate printed +10.1% and did not reproduce).
   `-Wno-invalid-offsetof` is in `SA_CXXFLAGS` and `UNIT_CXXFLAGS` (every build variant
   expands `SA_CXXFLAGS`) ahead of step 5, where the first polymorphic classes WITH fields
-  land. Next: step 5, the External / Internal fan-out.
+  land.
+  Step 5 done (merges of `3593efd3` External, `7302ecb3` Internal): `Object::External`
+  (8 slots; slot 4 is `Compile()`, not nameless), `CompiledExternal`, `ExternalList`
+  (9 slots), `ExternalFactory`, `Object::Internal` (4 slots: dtor, `TypeName`, `Type`,
+  `Persist`) and `InternalFactory` are real classes over `Object::Base`; the `RtObject::*`
+  PODs stay as layout-asserted trivially-destructible aliases, every `RtObject_*` door and
+  registration is unchanged, no `RT_DELDTOR` row or minted vtable retired, nothing on the
+  `ExternalFactory::Add` path reordered. `Internal` uses `DEFINE_TYPE` (a second chain
+  record beside the minted one: same id in pass 1, no tree node, no child — the chain reads
+  417 entries, was 416); the three External classes do NOT, until their minted
+  `?_typeInfo@` rows are redirected the way `_firstTypeInfo` was (needs
+  `standalone/rt_data_mint.cpp` + `tools/rt_mint_gen.py` — closing pass). Left for B.3
+  step 4 (IO): `Internal::Clone`, `SerializeReferenceTable` as a member.
+  Gate: debug + perf build, unit 206/0, 0 GATE WARN, three routes exit 0, same ten
+  id/name pairs, `[RtResolve] 0 misses`, no `[RtMint] TRAP`, resave PASS with the persist
+  pair live (`clearRuns=2 resetRuns=2`), dispatch 0. `make sa-stress`: clean quit, sim
+  0.21 ms/iteration (+9–10% printed; External-only read +7%). **Recorded, not chased** —
+  perf is revisited after B closes (B33_RULES §10). Next: step 6, the caller batches.
 
 - **B.3.1 CLOSED (2026-09-13 night):** `System::String`, `System::Filename` and the nine
   `Math` value types are real classes under retail's names (`runtime/types/system/*.h`,

@@ -463,4 +463,8 @@ Load Game dialog route · `tools/resave_gate/resave_gate.sh Gate` PASS (a ONE-by
 `tools/dispatch_slot_map.py --check` 0 · `tools/runtime_census.py` whenever a `RT_DELDTOR` row
 or a registration moved (§6.3) · `git diff --stat` against the agent's declared file set
 before merging ·
-`make sa-stress` at each step close.
+`make sa-stress` at each step close — **for the functional signal only** (6000 sim frames, exit
+0, empty crash log). Record the printed sim ms/iteration in STATUS.md and move on: perf deltas
+are NOT chased while B is open (no re-runs, no A/B of older commits, no profiler, no merge
+blocked on the PLAN 5% line). The shims and doors B adds are transitional; perf is revisited
+once B is closed, from the numbers recorded at each close.
