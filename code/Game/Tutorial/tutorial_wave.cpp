@@ -44,6 +44,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include "Game/serialize_externals.h"
+#include "ui/UserInterface.h"
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>
@@ -76,9 +77,9 @@ void DarkOnce(const char* what) {
 inline uintptr_t GameWorld() {
     return g_pGameWorldSingleton ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
 }
-inline void* UserInterface() {
+inline UI::UserInterface* UserInterface() {
     uintptr_t gw = GameWorld();
-    return gw ? *reinterpret_cast<void**>(gw + 0x98) : nullptr;
+    return gw ? *reinterpret_cast<UI::UserInterface**>(gw + 0x98) : nullptr;
 }
 
 // Runtime exports the Tutorial helpers need that engine_funcs does not carry.
@@ -257,18 +258,18 @@ extern "C" void TutWave_SetElementFlagsRecursive(void* self, void* elemIBP, char
 // only the paths named in the step's first string vector.
 // ===========================================================================
 extern "C" void TutWave_SetAllDialogFlags(void* self, char show) {
-    void* ui = UserInterface();
-    if (!ui || !fn_UI_GetFirstDialog || !fn_DialogInstance_GetRoot) return;
+    UI::UserInterface* ui = UserInterface();
+    if (!ui || !fn_DialogInstance_GetRoot) return;
     if (!fn_Element_SetFlagsOnOff || !fn_Element_ChildCount || !fn_Element_Child) return;
 
-    uint64_t iter = 0;
-    fn_UI_GetFirstDialog(ui, &iter);
-    uint64_t* node = reinterpret_cast<uint64_t*>(iter);
+    // `_dialogs.GetFirst()` IS retail's GetFirstDialog (0x180031150, which is
+    // literally `*retval = this->_dialogs._head`); the iterator is the bare node
+    // pointer, so `it.node` is what retail hands to CheckPtr.
     int dialogs = 0;
-    while (node) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(node);
+    for (auto it = ui->_dialogs.GetFirst(); it; ++it) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(it.node);
         uint64_t rootIBP = 0;
-        fn_DialogInstance_GetRoot(reinterpret_cast<void*>(node[0]), &rootIBP);
+        fn_DialogInstance_GetRoot(it.node->element, &rootIBP);
         if (rootIBP) {
             // Retail applies the flags to the root itself and then walks the
             // children — the root pass is inlined here, the children go through
@@ -293,7 +294,6 @@ extern "C" void TutWave_SetAllDialogFlags(void* self, char show) {
             }
         }
         ++dialogs;
-        node = reinterpret_cast<uint64_t*>(node[2]);   // iterator +0x10 = next
     }
 }
 
@@ -322,21 +322,19 @@ extern "C" void* TutWave_FindHighlightDialog(void* self, void* outIBP) {
         if (*reinterpret_cast<uint64_t*>(s + 0x68) == 0) return outIBP;
     }
 
-    void* ui = UserInterface();
-    if (!ui || !fn_UI_GetFirstDialog || !fn_IsA) return outIBP;
+    UI::UserInterface* ui = UserInterface();
+    if (!ui || !fn_IsA) return outIBP;
     uint32_t tid = HighlightTypeId();
     if (!tid) return outIBP;   // type not registered yet — a safe no-match
 
-    uint64_t iter = 0;
-    fn_UI_GetFirstDialog(ui, &iter);
-    uint64_t* node = reinterpret_cast<uint64_t*>(iter);
-    while (node) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(node);
-        if (fn_IsA(reinterpret_cast<void*>(node[0]), tid)) {
-            *reinterpret_cast<uint64_t*>(outIBP) = node[0];
+    // Same list, same order as retail's GetFirstDialog walk (see above).
+    for (auto it = ui->_dialogs.GetFirst(); it; ++it) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(it.node);
+        if (fn_IsA(it.node->element, tid)) {
+            *reinterpret_cast<uint64_t*>(outIBP) =
+                reinterpret_cast<uint64_t>(it.node->element);
             return outIBP;
         }
-        node = reinterpret_cast<uint64_t*>(node[2]);
     }
     return outIBP;
 }

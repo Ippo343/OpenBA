@@ -6,7 +6,7 @@
 //   CitizenUI_UpdateIconDisplay — FUN_14006aed0
 //   CitizenUI_BuildIconArray   — FUN_14006abf0
 
-#include "Dialog/dialog_array_bridge.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
@@ -108,8 +108,8 @@ inline void CitizenUI_BuildIconArray_Impl(uintptr_t param1, uintptr_t groupElemI
             // `*dst = 0;` then unconditionally overwrote the same qword — a
             // transcription artifact with no net effect; only the second write
             // (the copied-old-entry or the new IBP) mattered.
-            auto& wholeArr = DlgArray<8>(param1, 0);
-            wholeArr.SetSize(wholeArr.GetSize() + 1, DlgElem<8>{{*(uint64_t*)ibpBuf}});
+            auto& wholeArr = GameColl::ArrayAt<GameColl::Bytes<8, 8>>(param1, 0);
+            wholeArr.SetSize(wholeArr.GetSize() + 1, GameColl::Bytes<8, 8>(*(uint64_t*)ibpBuf));
         }
 
         // --- Half icon element ---
@@ -138,8 +138,8 @@ inline void CitizenUI_BuildIconArray_Impl(uintptr_t param1, uintptr_t groupElemI
             // converted, so it is reached at its offset. Same transcription-artifact
             // double-write as the whole array above; only the second write mattered.
             uintptr_t halfBase = param1 + 0x10;
-            auto& halfArr = DlgArray<8>(halfBase, 0);
-            halfArr.SetSize(halfArr.GetSize() + 1, DlgElem<8>{{*(uint64_t*)ibpBuf}});
+            auto& halfArr = GameColl::ArrayAt<GameColl::Bytes<8, 8>>(halfBase, 0);
+            halfArr.SetSize(halfArr.GetSize() + 1, GameColl::Bytes<8, 8>(*(uint64_t*)ibpBuf));
         }
 
         // Re-check group element (may have been reallocated)

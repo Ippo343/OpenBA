@@ -14,7 +14,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_panels.h"
-#include "Dialog/dialog_array_bridge.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
@@ -85,8 +85,10 @@ void EventLogUI_Slot5(EventLogUI* self) {
 
     // Resize display text array (+0x50) and display button array (+0x60) to row count
     int displayRowCount = fn_Element_ChildCount(displayElem);
-    fn_ExeArrayResize((void*)(s + 0x50), displayRowCount);
-    fn_ExeArrayResize((void*)(s + 0x60), displayRowCount);
+    // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
+    // new tail zeroed. Both elements are 8-byte InternalBasePtr handles (byte-copy).
+    GameColl::ArrayAt<GameColl::Ptr8>(s, 0x50).SetSize(displayRowCount);
+    GameColl::ArrayAt<GameColl::Ptr8>(s, 0x60).SetSize(displayRowCount);
 
     // Iterate display rows: store child text element in +0x50 array,
     // find button child, store in +0x60 array, set element IDs
@@ -145,8 +147,9 @@ void EventLogUI_Slot5(EventLogUI* self) {
         // B.3.2 bridge: EventLogUI+0x70 is Collection::Array<{InternalBasePtr}>
         // (stride 8, count +0x78, capacity +0x7C) inside a struct §B.2 has not
         // converted, so it is reached at its offset.
-        auto& notifyBtns = DlgArray<8>(s, 0x70);
-        notifyBtns.SetSize(notifyBtns.GetSize() + 1, DlgElem<8>{{(uint64_t)btnElem}});
+        auto& notifyBtns = GameColl::ArrayAt<GameColl::Bytes<8, 8>>(s, 0x70);
+        notifyBtns.SetSize(notifyBtns.GetSize() + 1,
+                           GameColl::Bytes<8, 8>((uint64_t)btnElem));
     }
 }
 

@@ -25,7 +25,8 @@
 //                elem+0x08 int
 //                elem+0x10 ptr-array {ptr,count:i32,cap:i32} of
 //                          ExternalPtr<ComponentDescription>; count is
-//                          elem+0x18, resized (load only) via fn_ExeArrayResize3
+//                          elem+0x18, resized (load only) via
+//                          Collection::Array<Ptr8>::SetSize
 //                          (retail 0x140001bb0), contents via
 //                          fn_ExternalRefArray_Serialize (retail 0x1400049c0,
 //                          already ported as Reimpl_ExternalPtrArray_Serialize
@@ -74,6 +75,7 @@
 // instead of replicating that specific piece of undefined behaviour.
 
 #include "Component/tradecomponent_funcs.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
@@ -402,8 +404,10 @@ extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream) {
             reinterpret_cast<System::String*>(elem + 0x0)->Serialize(ser);   // B.3.1 bridge
             int32_t innerCount = *reinterpret_cast<int32_t*>(elem + 0x18);
             fn_Ser_Slot_SerInt_AC8(ser, &innerCount, nullptr);
-            if (Loading(ser) && fn_ExeArrayResize3)
-                fn_ExeArrayResize3(elem + 0x10, innerCount);
+            // B.3.2: Collection::Array<T>::SetSize — retail 0x140001bb0, stride 8 align 8,
+            // new tail zeroed. Element is the 8-byte ExternalPtr<ComponentDescription>.
+            if (Loading(ser))
+                GameColl::ArrayAt<GameColl::Ptr8>(elem, 0x10).SetSize(innerCount);
             if (fn_ExternalRefArray_Serialize)
                 fn_ExternalRefArray_Serialize(ser, innerCount,
                     *reinterpret_cast<void**>(elem + 0x10), nullptr);

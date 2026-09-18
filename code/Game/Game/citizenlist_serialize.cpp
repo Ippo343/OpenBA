@@ -10,8 +10,8 @@
 // CitizenBehaviorRaw field layout used by Serialize (byte offsets; Ghidra's
 // decompile indexes `longlong *param_1` in qwords — every offset below is
 // that index * 8). Each "IBP array" is a 0x10-byte header {void* data@+0,
-// int32 count@+8, int32 cap@+0xC} matching fn_ExeArrayResize's own
-// convention; elements are 8-byte Object::InternalBasePtr slots.
+// int32 count@+8, int32 cap@+0xC} — i.e. Collection::Array<T>;
+// elements are 8-byte Object::InternalBasePtr slots.
 //
 //   +0x00  IBP[]  type=ComponentEntity                 (count field +0x08)
 //   +0x10  IBP[]  type=ComponentEntity                 (count field +0x18)
@@ -53,8 +53,9 @@
 // (see per-field comments below).
 //
 // Dependencies (all verified against the live tree; nothing here is stubbed):
-//   fn_ExeArrayResize / _2 / _3     — code/Game/../engine_funcs (0x1400032e0/1400021d0/140001bb0),
-//                                     clean reimpls, no resolve needed.
+//   Collection::Array<T>::SetSize   — the exe's own monomorphisations
+//                                     (0x1400032e0/0x1400021d0/0x140001bb0) reached
+//                                     by name through Component/coll_bridge.h.
 //   fn_InternalBasePtr_Serialize    — engine_funcs.h (0x140152aa0 dispatch slot)
 //   fn_InternalBasePtr_CheckPtr     — engine_funcs.h
 //   fn_IsDerivedFrom                — engine_funcs.h
@@ -103,6 +104,7 @@
 #include "resolve.h"
 #include "address_registry.h"
 #include "collection/Collection.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstring>
 
@@ -187,7 +189,9 @@ void SerializeIBPArray(uint8_t* hdr, void* serializer, const uint32_t* typeIdPtr
     int32_t count = *reinterpret_cast<int32_t*>(hdr + 8);
     g_fn_Serialize_Int(serializer, &count, nullptr);
     bool loading = SerializerLoading(serializer);
-    if (loading) fn_ExeArrayResize(hdr, count);
+    // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
+    // new tail zeroed. Element is the 8-byte InternalBasePtr slot walked below.
+    if (loading) GameColl::AsArray<GameColl::Ptr8>(hdr).SetSize(count);
 
     uint8_t* arr = *reinterpret_cast<uint8_t**>(hdr);
     for (int32_t i = 0; i < count; ++i) {
@@ -352,7 +356,7 @@ void ResizeStride08Pair(void* hdr, int newCount) {
 
 // ------------------------------------------------------------
 // int-assoc array (stride-0x10 outer, resized via ResizeStride0x10; each
-// slot is itself a stride-4 int32[] array resized via fn_ExeArrayResize2,
+// slot is itself a stride-4 int32[] array resized via Array<I32NoInit>::SetSize,
 // bulk-serialized via fn_Serializer_SerializeBulk). Used at +0x140 (v>4)
 // and +0x150 ("stats").
 // ------------------------------------------------------------
@@ -387,7 +391,10 @@ void SerializeIntAssocArray(uint8_t* hdr, void* serializer) {
     for (int32_t i = 0; i < count; ++i) {
         int32_t innerCount = *reinterpret_cast<int32_t*>(slot + 8);
         g_fn_Serialize_Int(serializer, &innerCount, nullptr);
-        if (loading) fn_ExeArrayResize2(slot, innerCount);
+        // B.3.2: Collection::Array<T>::SetSize — retail 0x1400021d0, stride 4 align 4,
+        // grown tail left as the allocation found it (no init arm). The bulk int
+        // serializer below overwrites all `innerCount` elements either way.
+        if (loading) GameColl::AsArray<GameColl::I32NoInit>(slot).SetSize(innerCount);
         void* innerPtr = *reinterpret_cast<void**>(slot + 0);
         // Retail (0x1400900e7 for +0x150, 0x1400903b8 for +0x140) dispatches
         // through slot 0x140151278 = IO::Serializer::Serialize(int count,
@@ -617,13 +624,16 @@ extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3
     SerializeIBPArray(base + 0xc0, ser, s_tid_PopulationComponent);
     SerializeIBPArray(base + 0xd0, ser, s_tid_BuildComponent);
 
-    // ExternalPtr<ComponentDescription>[] arrays, resized via fn_ExeArrayResize3
+    // ExternalPtr<ComponentDescription>[] arrays, resized via Array<Ptr8>::SetSize
     // (FUN_140001bb0) then bulk-serialized via Reimpl_ExternalPtrArray_Serialize
     // (0x1400049c0), matching FUN_140001bb0(hdr,count) + FUN_1400049c0(ser,count,ptr,p4).
     {
         int32_t count = *reinterpret_cast<int32_t*>(base + 0x118);
         g_fn_Serialize_Int(ser, &count, nullptr);
-        if (SerializerLoading(ser)) fn_ExeArrayResize3(base + 0x110, count);
+        // B.3.2: Collection::Array<T>::SetSize — retail 0x140001bb0, stride 8 align 8,
+        // new tail zeroed. Element is the 8-byte ExternalPtr<ComponentDescription>.
+        if (SerializerLoading(ser))
+            GameColl::ArrayAt<GameColl::Ptr8>(base, 0x110).SetSize(count);
         // Reimpl_ExternalPtrArray_Serialize is registered at 0x1400049c0; its
         // signature (serializer,count,arrayBase,deadInit) differs from the
         // single-field fn_ExternalPtr_BuildSerialize typedef, so resolve locally.
@@ -634,7 +644,10 @@ extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3
     {
         int32_t count = *reinterpret_cast<int32_t*>(base + 0x128);
         g_fn_Serialize_Int(ser, &count, nullptr);
-        if (SerializerLoading(ser)) fn_ExeArrayResize3(base + 0x120, count);
+        // B.3.2: Collection::Array<T>::SetSize — retail 0x140001bb0, stride 8 align 8,
+        // new tail zeroed. Element is the 8-byte ExternalPtr<ComponentDescription>.
+        if (SerializerLoading(ser))
+            GameColl::ArrayAt<GameColl::Ptr8>(base, 0x120).SetSize(count);
         typedef void (*fn_ExtArr_t)(void*, int, long long, void*);
         static fn_ExtArr_t s_extArr = reinterpret_cast<fn_ExtArr_t>(ResolveAddr(Module::Exe, 0x1400049c0));
         if (s_extArr) s_extArr(ser, count, reinterpret_cast<long long>(*reinterpret_cast<void**>(base + 0x120)), nullptr);

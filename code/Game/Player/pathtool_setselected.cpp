@@ -33,6 +33,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "collection/Collection.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
@@ -250,34 +251,34 @@ static void* InorderNext(void* n) {
 // free the old block when it moved. 6ba0 is the general form and matches the
 // reference line for line, fill included. Rows:
 //   * +0x40 point list: trait-derived Array<int32_t> (stride 4, align 4, byteCopy);
-//   * +0x50 segment list: hand-derived — this site allocates 8-byte elements with
-//     ALIGN 4 (`fn_MemAlloc(..., cap << 3, 4)`), kept as written;
-//   * +0x30 route list: hand-derived, stride 0x200c, align 4, memcpy assign.
+//   * +0x50 segment list: 8-byte elements at ALIGN 4, because this site allocates
+//     `fn_MemAlloc(..., cap << 3, 4)` — kept as written;
+//   * +0x30 route list: stride 0x200c, align 4, memcpy assign.
 // All three: byteCopy == true, init == nullptr (a fill is always supplied),
 // destroy == nullptr (trivial elements).
-void AssignU64(uint8_t* d, const uint8_t* s) {
-    *reinterpret_cast<uint64_t*>(d) = *reinterpret_cast<const uint64_t*>(s);
-}
-void AssignRouteEntry(uint8_t* d, const uint8_t* s) { std::memcpy(d, s, 0x200c); }
+// ENDGAME B.3.2 closing pass: both hand-derived rows said only what a C++ type's
+// traits say — a whole-stride byte copy, `init == nullptr` (retail's empty else
+// arm: the new tail keeps whatever the allocation held), `destroy == nullptr`,
+// and no deliberately-untouched extent — so each is now the trait-derived
+// `Collection::Array<T>` over an element with the row's stride and align. The
+// elements deliberately carry NO initialiser, which is what makes
+// `SpecFor<T>()` derive `init == nullptr`.
 
-const rtcoll::ArraySpec kSpec_PathSegU64 = {
-    "Array<uint64 segment (align 4)>", 8, 4,
-    &AssignU64, nullptr, nullptr, true,
-    /*assign unwritten*/ 0, 0,
-    /*init   unwritten*/ 0, 0,
-    /*seed zero       */ 0, 0 };
-const rtcoll::ArraySpec kSpec_PathRouteEntry = {   // exe 0x140026ba0
-    "Array<PathTool route entry 0x200c>", 0x200c, 4,
-    &AssignRouteEntry, nullptr, nullptr, true,
-    /*assign unwritten*/ 0, 0,
-    /*init   unwritten*/ 0, 0,
-    /*seed zero       */ 0, 0 };
+// The +0x50 segment element: 8 bytes at ALIGN 4, because this site allocates
+// with `fn_MemAlloc(..., cap << 3, 4)`. `GameColl::I32Pair` is exactly that
+// shape, and coll_bridge.h's GAMECOLL_CHECK_ELEM_NOINIT already asserts it
+// leaves its new tail alone.
+static_assert(sizeof(GameColl::I32Pair)  == 8, "PathSeg stride");
+static_assert(alignof(GameColl::I32Pair) == 4, "PathSeg align");
+
+// The +0x30 route element, exe 0x140026ba0: 0x200c bytes at align 4.
+struct alignas(4) PathRouteEntry { uint8_t b[0x200c]; };   // exe 0x140026ba0
+static_assert(sizeof(PathRouteEntry)  == 0x200c, "PathRouteEntry stride");
+static_assert(alignof(PathRouteEntry) == 4,      "PathRouteEntry align");
 
 using PointArray = Collection::Array<int32_t>;
-using SegArray   = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                     Collection::ExplicitSpec<&kSpec_PathSegU64>>;
-using RouteArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                     Collection::ExplicitSpec<&kSpec_PathRouteEntry>>;
+using SegArray   = Collection::Array<GameColl::I32Pair>;
+using RouteArray = Collection::Array<PathRouteEntry>;
 
 // Dynamic-array push (exe grow pattern: cap = newCount*3 on the first non-empty grow).
 static void IntArrayPush(PointArray* a, int val)     { a->SetSize(a->_size + 1, val); }

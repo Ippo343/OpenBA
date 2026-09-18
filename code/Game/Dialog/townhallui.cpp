@@ -17,7 +17,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Filename.h"
-#include "Dialog/dialog_array_bridge.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -648,8 +648,8 @@ void TownHallUI_InitInventory(TownHallUI* self) {
         // B.3.2 bridge: TownHallUI+0x118 is Collection::Array<{InternalBasePtr,
         // InternalBasePtr}> (stride 0x10, count +0x120, capacity +0x124) inside a
         // struct §B.2 has not converted, so it is reached at its offset.
-        auto& invRows = DlgArray<0x10>(s, 0x118);
-        invRows.SetSize(invRows.GetSize() + 1, DlgElem<0x10>{{labelIBP, numIBP}});
+        auto& invRows = GameColl::ArrayAt<GameColl::Bytes<0x10, 8>>(s, 0x118);
+        invRows.SetSize(invRows.GetSize() + 1, GameColl::Bytes<0x10, 8>(labelIBP, numIBP));
     }
 
     // Load inventoryType string table
@@ -862,8 +862,8 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
         // B.3.2 bridge: TownHallUI+0x1C8 is Collection::Array<InternalBasePtr>
         // (stride 8, count +0x1D0, capacity +0x1D4) inside a struct §B.2 has not
         // converted, so it is reached at its offset.
-        auto& labelRows = DlgArray<8>(s, 0x1C8);
-        labelRows.SetSize(labelRows.GetSize() + 1, DlgElem<8>{{labelIBP}});
+        auto& labelRows = GameColl::ArrayAt<GameColl::Bytes<8, 8>>(s, 0x1C8);
+        labelRows.SetSize(labelRows.GetSize() + 1, GameColl::Bytes<8, 8>(labelIBP));
     }
 }
 
@@ -1790,8 +1790,8 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
             // (stride 8, count +0x38, capacity +0x3C) inside a struct §B.2 has not
             // converted, so it is reached at its offset off the per-profession entry.
             uintptr_t profEntry = *(uintptr_t*)(s + 0x40) + (uintptr_t)profEntryOff;
-            auto& profEntities = DlgArray<8>(profEntry, 0x30);
-            profEntities.SetSize(profEntities.GetSize() + 1, DlgElem<8>{{entityPtr}});
+            auto& profEntities = GameColl::ArrayAt<GameColl::Bytes<8, 8>>(profEntry, 0x30);
+            profEntities.SetSize(profEntities.GetSize() + 1, GameColl::Bytes<8, 8>(entityPtr));
 
             // Check entity for WorkplaceComponent -> active flag + worker count
             fn_InternalBasePtr_CheckPtr((void*)&entityPtr);
@@ -1951,7 +1951,7 @@ void TownHallUI_UpdateAll(TownHallUI* self) {
     // B.3.2 bridge: this is a local Collection::Array<uint64_t> (retail's
     // hand-inlined SetSize on a stack-local {data,size,capacity} triple, not a
     // struct field), so it is a real instance of the template rather than a
-    // DlgArray view over someone else's bytes.
+    // GameColl::ArrayAt view over someone else's bytes.
     Collection::Array<uint64_t> entityArr;
 
     for (int listIdx = 0; listIdx < 4; listIdx++) {

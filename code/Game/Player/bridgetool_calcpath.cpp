@@ -40,6 +40,7 @@
 //  click anywhere on the span selects the bridge — see SeatSegmentPickOwner below.)
 
 #include "BridgeTool.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
@@ -414,10 +415,13 @@ extern "C" uint64_t BridgeTool_CalcPath_Impl(void* selfPtr, int startCell, int e
             ApplyYaw(FindComponentOn(&segIBP, tidModel), static_cast<float>(rot), segCentre);
 
             // Append to the master's MultiObjectComponent (array +0x48, count +0x50).
-            if (multi && fn_ExeArrayResize) {
+            if (multi) {
                 uintptr_t m = reinterpret_cast<uintptr_t>(multi);
                 const int newCount = *reinterpret_cast<int*>(m + 0x50) + 1;
-                fn_ExeArrayResize(reinterpret_cast<void*>(m + 0x48), newCount);
+                // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8
+                // align 8, new tail zeroed. Element is the 8-byte segment
+                // InternalBasePtr written into the new slot just below.
+                GameColl::ArrayAt<GameColl::Ptr8>(m, 0x48).SetSize(newCount);
                 uintptr_t arr = *reinterpret_cast<uintptr_t*>(m + 0x48);
                 if (arr) {
                     *reinterpret_cast<uint64_t*>(arr + static_cast<int64_t>(newCount - 1) * 8) =

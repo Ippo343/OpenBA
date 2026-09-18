@@ -22,7 +22,9 @@
 //   6. Finalize: self+0x28 = dialog, self+0x30 = *entity, Entity_impl_c9e0(self).
 //
 // ABI notes (from disassembly):
-//   [0x140151ca0] GetFirstDialog: member, RCX=this RDX=retbuf(node*) -> fn_UI_GetFirstDialog
+//   [0x140151ca0] GetFirstDialog: member, RCX=this RDX=retbuf(node*). Its whole body is
+//                                 `*retbuf = this->_dialogs._head`, so we now iterate
+//                                 UI::UserInterface::_dialogs directly (B.3.2).
 //   [0x140151768] GetController : member, RCX=dialog RDX=retbuf R8=typeId (Ghidra drops R8);
 //                                 R8 = DWORD_1401c4f00 (EntityUI) -> fn_DialogInstance_GetController
 //   [0x140151518] DialogInstance ctor: RCX=self RDX=ui R8=extRes R9=&parentIBP
@@ -40,6 +42,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
+#include "ui/UserInterface.h"
 #include <cstdint>
 
 namespace {
@@ -144,7 +147,8 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
 
     // 3. UserInterface = *(gameWorld + 0x98).
     void* gameWorld = *g_pGameWorldSingleton;
-    void* ui = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gameWorld) + 0x98);
+    UI::UserInterface* ui = *reinterpret_cast<UI::UserInterface**>(
+        reinterpret_cast<uintptr_t>(gameWorld) + 0x98);
 
     // Result-dialog IBP holder (local_res18), initialized null.
     uint64_t resultDialog = 0;
@@ -152,12 +156,12 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
 
     // 4. Walk the open-dialog list for an existing EntityUI dialog bound to this entity.
     const uint32_t tidEntityUI = ResolveTypeId(0x1401c4f00, "EntityUI", &s_tid_EntityUI);
-    uint64_t iterNode = 0;
-    if (fn_UI_GetFirstDialog) fn_UI_GetFirstDialog(ui, &iterNode);
-    while (iterNode != 0) {
-        uint64_t* node = reinterpret_cast<uint64_t*>(iterNode);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(node);
-        void* dialog = *reinterpret_cast<void**>(node);   // node[0]
+    // `_dialogs.GetFirst()` IS retail's GetFirstDialog (0x180031150 = `*retval =
+    // this->_dialogs._head`); the iterator is the bare node pointer, so `it.node`
+    // is the address retail passes to CheckPtr and `it.node->element` is node[0].
+    for (auto it = ui->_dialogs.GetFirst(); it; ++it) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(it.node);
+        void* dialog = it.node->element;
 
         // GetController(dialog, &ctrlBuf, EntityUI); filter by IsDerivedFrom.
         uint64_t ctrlBuf = 0;
@@ -178,11 +182,10 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
             uint64_t ctrlEntity = *reinterpret_cast<uint64_t*>(ctrlRef + 0x30);
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(entityIBP);
             if (ctrlEntity == *entityIBP) {
-                resultDialog = *reinterpret_cast<uint64_t*>(node);  // *iter = dialog IBP value
+                resultDialog = reinterpret_cast<uint64_t>(it.node->element);  // *iter = dialog IBP value
                 break;
             }
         }
-        iterNode = *reinterpret_cast<uint64_t*>(iterNode + 0x10);   // next (node+0x10)
     }
 
     if (resultDialog == 0) {

@@ -115,7 +115,9 @@ void BuildComponent_Shutdown(BuildComponent* self, void* stream) {
     // On load: resize array
     int64_t serFirst = *(int64_t*)ser1;
     if (*(int32_t*)(serFirst + 8) == 0) {
-        fn_ExeArrayResize((void*)(s + 0x58), count1);
+        // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8, new tail zeroed.
+        // Element is the 8-byte InternalBasePtr slot serialized below (byte-copy, zeroing).
+        GameColl::ArrayAt<GameColl::Ptr8>(s, 0x58).SetSize(count1);
     }
 
     // Serialize each IBP in array1, validate with IsDerivedFrom
@@ -142,7 +144,9 @@ void BuildComponent_Shutdown(BuildComponent* self, void* stream) {
     // On load: resize array2
     serFirst = *(int64_t*)ser1;
     if (*(int32_t*)(serFirst + 8) == 0) {
-        fn_ExeArrayResize((void*)(s + 0x68), count2);
+        // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8, new tail zeroed.
+        // Element is the 8-byte InternalBasePtr slot serialized below (byte-copy, zeroing).
+        GameColl::ArrayAt<GameColl::Ptr8>(s, 0x68).SetSize(count2);
     }
 
     // Serialize each IBP in array2, validate with IsDerivedFrom

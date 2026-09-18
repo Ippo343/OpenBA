@@ -22,6 +22,8 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Entity/entitylist_funcs.h"
+#include "Component/coll_bridge.h"
+#include "ui/UserInterface.h"
 #include "options.h"
 #include "perf_experimental.h"   // [PerfX] TREE_SNAPSHOT walk
 #include "sampler.h"
@@ -839,7 +841,7 @@ void EntityList_Update(EntityList* self, void* time) {
 // entity panel (pinned or not), not just ResidenceUI.
 static void EntityList_CloseDialogsForDyingEntities() {
     void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
-    if (!gw || !fn_UI_GetFirstDialog || !fn_UI_CloseDialog || !fn_DialogInstance_GetController)
+    if (!gw || !fn_UI_CloseDialog || !fn_DialogInstance_GetController)
         return;
     void* ui = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x98);
     if (!ui) return;
@@ -855,12 +857,15 @@ static void EntityList_CloseDialogsForDyingEntities() {
     void* toClose[16];
     int nClose = 0;
 
-    uintptr_t nodeBuf[4] = {};
-    fn_UI_GetFirstDialog(ui, nodeBuf);
-    uintptr_t node = nodeBuf[0];
-    while (node != 0 && nClose < 16) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)node);
-        void* dialog = *reinterpret_cast<void**>(node);            // node[0] = DialogInstance*
+    // B.3.2: UI::UserInterface::_dialogs IS a Collection::LinkedList<DialogInstancePtr>
+    // at +0x000, and retail's UI::UserInterface::GetFirstDialog (0x180031150) is just
+    // `*(void**)retval = _dialogs._head`. Walking the container by name replaces the
+    // raw head-fetch + `node + 0x10` next-pointer arithmetic; the node layout it read
+    // (element +0x00, prev +0x08, next +0x10) is exactly LinkedList<T>::Node.
+    auto& dialogs = reinterpret_cast<UI::UserInterface*>(ui)->_dialogs;
+    for (auto it = dialogs.GetFirst(); it && nClose < 16; ++it) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(it.node);
+        void* dialog = *it;                                        // node[0] = DialogInstance*
         if (dialog) {
             uintptr_t ctrlBuf[2] = {};
             fn_DialogInstance_GetController(dialog, ctrlBuf, s_tidEntityUI);
@@ -872,7 +877,6 @@ static void EntityList_CloseDialogsForDyingEntities() {
                     toClose[nClose++] = dialog;
             }
         }
-        node = *reinterpret_cast<uintptr_t*>(node + 0x10);          // node+0x10 = next
     }
 
     for (int i = 0; i < nClose; i++) {
@@ -1014,7 +1018,9 @@ void EntityList_DrainRemovals(EntityList* self) {
         EntityList_RemoveEntity(self, &entityIBP);
     }
 
-    fn_ExeArrayResize(&self->removalList, 0);
+    // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
+    // new tail zeroed. Element is the 8-byte entity InternalBasePtr (byte-copy).
+    GameColl::AsArray<GameColl::Ptr8>(&self->removalList).SetSize(0);
 
 }
 
@@ -1031,7 +1037,9 @@ void EntityList_DrainRemovals(EntityList* self) {
 void EntityList_PreUpdate(EntityList* self) {
     int32_t stagingCount = self->stagingUpdate.count;
     if (stagingCount <= 0) {
-        fn_ExeArrayResize(&self->stagingUpdate, 0);
+        // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
+        // new tail zeroed. Element is the 8-byte entity InternalBasePtr (byte-copy).
+        GameColl::AsArray<GameColl::Ptr8>(&self->stagingUpdate).SetSize(0);
         return;
     }
 
@@ -1083,7 +1091,9 @@ void EntityList_PreUpdate(EntityList* self) {
         }
     }
 
-    fn_ExeArrayResize(&self->stagingUpdate, 0);
+    // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
+    // new tail zeroed. Element is the 8-byte entity InternalBasePtr (byte-copy).
+    GameColl::AsArray<GameColl::Ptr8>(&self->stagingUpdate).SetSize(0);
 }
 
 // ============================================================
@@ -1096,7 +1106,9 @@ void EntityList_PreUpdate(EntityList* self) {
 void EntityList_PostUpdateStaging(EntityList* self) {
     int32_t stagingCount = self->stagingPostUpdate.count;
     if (stagingCount <= 0) {
-        fn_ExeArrayResize(&self->stagingPostUpdate, 0);
+        // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
+        // new tail zeroed. Element is the 8-byte entity InternalBasePtr (byte-copy).
+        GameColl::AsArray<GameColl::Ptr8>(&self->stagingPostUpdate).SetSize(0);
         return;
     }
 
@@ -1146,7 +1158,9 @@ void EntityList_PostUpdateStaging(EntityList* self) {
         }
     }
 
-    fn_ExeArrayResize(&self->stagingPostUpdate, 0);
+    // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
+    // new tail zeroed. Element is the 8-byte entity InternalBasePtr (byte-copy).
+    GameColl::AsArray<GameColl::Ptr8>(&self->stagingPostUpdate).SetSize(0);
 }
 
 // ============================================================
@@ -1245,8 +1259,10 @@ void EntityList_RemoveEntity(EntityList* self, void* entityIBP) {
             *packedField = *packedField ^ ((*(uint32_t*)(swappedEntity + 0x1C) ^ entityBucketIdx) & 0xFFFFFF);
         }
 
-        // Shrink bucket array
-        fn_ExeArrayResize((void*)bucketBase, lastIdx);
+        // Shrink bucket array.
+        // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
+        // new tail zeroed. Element is the 8-byte entity InternalBasePtr (byte-copy).
+        GameColl::AsArray<GameColl::Ptr8>(bucketBase).SetSize((int)lastIdx);
     }
 
     // Step 2: Remove from master array (+0x08)
@@ -1267,8 +1283,10 @@ void EntityList_RemoveEntity(EntityList* self, void* entityIBP) {
         *(int32_t*)(*(int64_t*)swappedIBP + 0x18) = entityMasterIdx;
     }
 
-    // Shrink master array
-    fn_ExeArrayResize(&self->masterArray, lastMasterIdx);
+    // Shrink master array.
+    // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
+    // new tail zeroed. Element is the 8-byte entity InternalBasePtr (byte-copy).
+    GameColl::AsArray<GameColl::Ptr8>(&self->masterArray).SetSize(lastMasterIdx);
 
     // Step 3: Search and remove from update tree (+0x68)
     EntityTreeNode* updateNode = self->updateTreeRoot;
@@ -1359,7 +1377,9 @@ void EntityList_Serialize(EntityList* self, void* stream) {
                 uint64_t localIBP = ibpVal;
                 EntityList_RemoveEntity(self, &localIBP);
             }
-            fn_ExeArrayResize(&self->removalList, 0);
+            // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8
+            // align 8, new tail zeroed. Element is the entity InternalBasePtr.
+            GameColl::AsArray<GameColl::Ptr8>(&self->removalList).SetSize(0);
         }
     }
 
@@ -1373,7 +1393,9 @@ void EntityList_Serialize(EntityList* self, void* stream) {
     // On load (mode == 0): resize master array to deserialized count
     void* serializerInner = *(void**)serializer;
     if (*(int32_t*)((uintptr_t)serializerInner + 0x08) == 0) {
-        fn_ExeArrayResize(&self->masterArray, serializedCount);
+        // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
+        // new tail zeroed. Element is the 8-byte entity InternalBasePtr (byte-copy).
+        GameColl::AsArray<GameColl::Ptr8>(&self->masterArray).SetSize(serializedCount);
     }
 
     // Serialize each entity IBP in master array

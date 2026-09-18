@@ -10,6 +10,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Entity/citizenbehavior_funcs.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Game/force_work.h"   // ForceWork::Readable — CollectStats stale-entry guard
@@ -1519,62 +1520,68 @@ void CitizenBehavior_CollectStats(CitizenBehaviorRaw* self) {
         uintptr_t histSlot = hist + 0x80 + prof * 0x30;
         uintptr_t profEntry = profRes + prof * 0x20;
 
+        // Every push below is Collection::Array<T>::SetSize(n, fill) — B.3.2,
+        // retail 0x140003600, stride 4 align 4, no init arm (every new slot takes
+        // the fill). Elements are the int32 history samples.
+
         // Push currentCount (+0x00)
         int curArrayCount = *reinterpret_cast<int*>(histSlot + 0x08);
-        fn_ExeArrayPush(reinterpret_cast<void*>(histSlot),
-                        curArrayCount + 1,
-                        reinterpret_cast<void*>(profEntry + 0x00));
+        GameColl::ArrayAt<GameColl::I32NoInit>(histSlot, 0x00).SetSize(
+            curArrayCount + 1,
+            *reinterpret_cast<const GameColl::I32NoInit*>(profEntry + 0x00));
 
         // Push field_0C (+0x0C)
         int f0CArrayCount = *reinterpret_cast<int*>(histSlot + 0x10 + 0x08);
-        fn_ExeArrayPush(reinterpret_cast<void*>(histSlot + 0x10),
-                        f0CArrayCount + 1,
-                        reinterpret_cast<void*>(profEntry + 0x0C));
+        GameColl::ArrayAt<GameColl::I32NoInit>(histSlot, 0x10).SetSize(
+            f0CArrayCount + 1,
+            *reinterpret_cast<const GameColl::I32NoInit*>(profEntry + 0x0C));
 
         // Push field_10 (+0x10)
         int f10ArrayCount = *reinterpret_cast<int*>(histSlot + 0x20 + 0x08);
-        fn_ExeArrayPush(reinterpret_cast<void*>(histSlot + 0x20),
-                        f10ArrayCount + 1,
-                        reinterpret_cast<void*>(profEntry + 0x10));
+        GameColl::ArrayAt<GameColl::I32NoInit>(histSlot, 0x20).SetSize(
+            f10ArrayCount + 1,
+            *reinterpret_cast<const GameColl::I32NoInit*>(profEntry + 0x10));
     }
 
     // -- Phase 3: Push population stats --
     // 8 computed stats at hist + 0x00..0x70 (each 0x10-byte sub-array)
+    // Same helper as Phase 2: Collection::Array<T>::SetSize(n, fill) — B.3.2,
+    // retail 0x140003600, stride 4 align 4, no init arm (every new slot takes the fill).
     int32_t totalCount = citizenCount;
-    fn_ExeArrayPush(reinterpret_cast<void*>(hist + 0x00),
-                    *reinterpret_cast<int*>(hist + 0x08) + 1,
-                    &totalCount);
+    GameColl::ArrayAt<GameColl::I32NoInit>(hist, 0x00).SetSize(
+        *reinterpret_cast<int*>(hist + 0x08) + 1,
+        *reinterpret_cast<const GameColl::I32NoInit*>(&totalCount));
 
     int32_t adultsVal = adults;
-    fn_ExeArrayPush(reinterpret_cast<void*>(hist + 0x10),
-                    *reinterpret_cast<int*>(hist + 0x18) + 1,
-                    &adultsVal);
+    GameColl::ArrayAt<GameColl::I32NoInit>(hist, 0x10).SetSize(
+        *reinterpret_cast<int*>(hist + 0x18) + 1,
+        *reinterpret_cast<const GameColl::I32NoInit*>(&adultsVal));
 
     int32_t deadVal = dead;
-    fn_ExeArrayPush(reinterpret_cast<void*>(hist + 0x20),
-                    *reinterpret_cast<int*>(hist + 0x28) + 1,
-                    &deadVal);
+    GameColl::ArrayAt<GameColl::I32NoInit>(hist, 0x20).SetSize(
+        *reinterpret_cast<int*>(hist + 0x28) + 1,
+        *reinterpret_cast<const GameColl::I32NoInit*>(&deadVal));
 
     int32_t childrenVal = children;
-    fn_ExeArrayPush(reinterpret_cast<void*>(hist + 0x30),
-                    *reinterpret_cast<int*>(hist + 0x38) + 1,
-                    &childrenVal);
+    GameColl::ArrayAt<GameColl::I32NoInit>(hist, 0x30).SetSize(
+        *reinterpret_cast<int*>(hist + 0x38) + 1,
+        *reinterpret_cast<const GameColl::I32NoInit*>(&childrenVal));
 
-    fn_ExeArrayPush(reinterpret_cast<void*>(hist + 0x40),
-                    *reinterpret_cast<int*>(hist + 0x48) + 1,
-                    &happinessPct);
+    GameColl::ArrayAt<GameColl::I32NoInit>(hist, 0x40).SetSize(
+        *reinterpret_cast<int*>(hist + 0x48) + 1,
+        *reinterpret_cast<const GameColl::I32NoInit*>(&happinessPct));
 
-    fn_ExeArrayPush(reinterpret_cast<void*>(hist + 0x60),
-                    *reinterpret_cast<int*>(hist + 0x68) + 1,
-                    &healthPct);
+    GameColl::ArrayAt<GameColl::I32NoInit>(hist, 0x60).SetSize(
+        *reinterpret_cast<int*>(hist + 0x68) + 1,
+        *reinterpret_cast<const GameColl::I32NoInit*>(&healthPct));
 
-    fn_ExeArrayPush(reinterpret_cast<void*>(hist + 0x50),
-                    *reinterpret_cast<int*>(hist + 0x58) + 1,
-                    &educatedPct);
+    GameColl::ArrayAt<GameColl::I32NoInit>(hist, 0x50).SetSize(
+        *reinterpret_cast<int*>(hist + 0x58) + 1,
+        *reinterpret_cast<const GameColl::I32NoInit*>(&educatedPct));
 
-    fn_ExeArrayPush(reinterpret_cast<void*>(hist + 0x70),
-                    *reinterpret_cast<int*>(hist + 0x78) + 1,
-                    &workingPct);
+    GameColl::ArrayAt<GameColl::I32NoInit>(hist, 0x70).SetSize(
+        *reinterpret_cast<int*>(hist + 0x78) + 1,
+        *reinterpret_cast<const GameColl::I32NoInit*>(&workingPct));
 
     // -- Phase 4: Clear per-tick accumulators in profResources --
     // Clear +0x0C and +0x10 of each ProfessionResourceEntry

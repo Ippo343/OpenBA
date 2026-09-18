@@ -8,7 +8,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_dialogs.h"
-#include "Dialog/dialog_array_bridge.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
@@ -153,10 +153,10 @@ void GoalDialog_Slot4(GoalDialog* self) {
             // offset. The original was GoalDialog::Slot4's own inlined copy of
             // Collection::Array<T>::SetSize — NOT FUN_140011750 (that one has a
             // 0x30 stride with a String at +0x20 — different array).
-            auto& goals = DlgArray<0x18>(s, 0xB8);
+            auto& goals = GameColl::ArrayAt<GameColl::Bytes<0x18, 8>>(s, 0xB8);
             goals.SetSize(goals.GetSize() + 1,
-                          DlgElem<0x18>{{(uint64_t)imageComplete, (uint64_t)imageFail,
-                                         (uint64_t)textGoal}});
+                          GameColl::Bytes<0x18, 8>((uint64_t)imageComplete, (uint64_t)imageFail,
+                                         (uint64_t)textGoal));
         }
     }
 

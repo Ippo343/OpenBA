@@ -74,6 +74,9 @@ void DestroyRefTriple18(void* /*ignoredThis*/, uint8_t* base, int count) {
     for (int i = 0; i < count; ++i)
         reinterpret_cast<System::String*>(base + static_cast<int64_t>(i) * 0x18)->~String();
 }
+// stays explicit: a String copy-ctor `assign` (byteCopy=false) with a real
+// `destroy`, a -1 generation seed in `init`, and an unwritten extent at
+// [0x0c,0x10) — none of which a C++ element type's traits can state.
 const rtcoll::ArraySpec kSpec_RefTriple18 = {           // exe 0x14001b340 / 0x14001b030
     "Array<{String,int32,External*}>", 0x18, 8,
     &AssignRefTriple18, &InitRefTriple18, &DestroyRefTriple18, false,
@@ -106,6 +109,8 @@ void DestroyInitialStructure30(void* /*ignoredThis*/, uint8_t* base, int count) 
     for (int i = 0; i < count; ++i)
         reinterpret_cast<System::String*>(base + static_cast<int64_t>(i) * 0x30)->~String();
 }
+// stays explicit: same three reasons as the 0x18 row above, plus a -1 seed for
+// _width/_height at +0x20 and a second unwritten extent at [0x2c,0x30).
 const rtcoll::ArraySpec kSpec_InitialStructure30 = {    // exe 0x14001b4e0 / 0x14001b0a0
     "Array<MapGenerator::InitialStructure>", 0x30, 8,
     &AssignInitialStructure30, &InitInitialStructure30, &DestroyInitialStructure30, false,

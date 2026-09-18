@@ -7,7 +7,7 @@
 
 #include "Dialog/ui_dialogs.h"
 #include "Dialog/dialog_exe_helpers.h"
-#include "Dialog/dialog_array_bridge.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "Object/factory_registration.h"
@@ -244,10 +244,10 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
         // FUN_140013b60's own inlined SetSize (ScenarioDialog_ArrayPush_Impl).
         {
             uint64_t* entryQW = (uint64_t*)entry;
-            auto& rows = DlgArray<0x38>(s, 0xD8);
+            auto& rows = GameColl::ArrayAt<GameColl::Bytes<0x38, 8>>(s, 0xD8);
             rows.SetSize(rows.GetSize() + 1,
-                         DlgElem<0x38>{{entryQW[0], entryQW[1], entryQW[2], entryQW[3],
-                                        entryQW[4], entryQW[5], entryQW[6]}});
+                         GameColl::Bytes<0x38, 8>(entryQW[0], entryQW[1], entryQW[2], entryQW[3],
+                                        entryQW[4], entryQW[5], entryQW[6]));
         }
 
         printf("[ScenarioDialog::Slot4] Added entry[%d] for scenario[%d]\n", entryIndex, i);

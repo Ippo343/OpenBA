@@ -20,6 +20,7 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "Object/factory_registration.h"
+#include "ui/UserInterface.h"
 #include <cstdint>
 
 namespace {
@@ -67,8 +68,9 @@ void ToolbarUtility_FindDialogByControllerType_0270(void* /*toolController*/,
 
     void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     if (!gameWorld) return;
-    void* ui = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gameWorld) + 0x98);
-    if (!ui || !fn_UI_GetFirstDialog) return;
+    UI::UserInterface* ui = *reinterpret_cast<UI::UserInterface**>(
+        reinterpret_cast<uintptr_t>(gameWorld) + 0x98);
+    if (!ui) return;
 
     // ToolUI type-id (DWORD_1401c5788, RegisterType_ToolUI writer). Raw .rdata →
     // NULL in standalone; fill from the live factory tree. GetTypeIdByName is a
@@ -77,14 +79,13 @@ void ToolbarUtility_FindDialogByControllerType_0270(void* /*toolController*/,
     if (s_toolUITid == 0) s_toolUITid = ::Object::GetTypeIdByName("ToolUI");
     const uint32_t toolUITid = s_toolUITid;
 
-    // Walk the dialog linked list. Node: [0]=DialogInstance IBP, [0x10]=next.
-    uintptr_t nodeBuf[4] = {};
-    fn_UI_GetFirstDialog(ui, nodeBuf);
-    uintptr_t node = nodeBuf[0];
-
-    while (node != 0) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(node));
-        void* dialog = *reinterpret_cast<void**>(node);
+    // Walk the dialog linked list. `_dialogs.GetFirst()` IS retail's
+    // GetFirstDialog (0x180031150 = `*retval = this->_dialogs._head`), and the
+    // iterator is the bare node pointer, so `it.node` is the address retail
+    // hands to CheckPtr and `it.node->element` is the DialogInstance IBP.
+    for (auto it = ui->_dialogs.GetFirst(); it; ++it) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(it.node);
+        void* dialog = it.node->element;
 
         // GetController(dialog, &ctrlBuf, ToolUI tid) — R8=type-id filters internally.
         void* controller = nullptr;
@@ -103,11 +104,10 @@ void ToolbarUtility_FindDialogByControllerType_0270(void* /*toolController*/,
         if (ctrlRef != 0) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ctrlRef);
             if (*reinterpret_cast<uint64_t*>(ctrlRef + 0x30) == param) {
-                *reinterpret_cast<void**>(retBuf) = *reinterpret_cast<void**>(node);
+                *reinterpret_cast<void**>(retBuf) = it.node->element;
                 return;
             }
         }
-        node = *reinterpret_cast<uintptr_t*>(node + 0x10);  // next
     }
 }
 

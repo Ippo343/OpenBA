@@ -27,6 +27,7 @@
 // drops it entirely.
 
 #include "engine_funcs.h"
+#include "Component/coll_bridge.h"
 #include "system/Filename.h"
 #include "system/String.h"
 #include "resolve.h"
@@ -286,42 +287,37 @@ extern "C" void Reimpl_Transform_SerializeWrapper(void* transform, void* stream)
 // early-out stays on each entry point exactly as before.
 namespace {
 
-// Whole-stride byte copy and whole-stride zero, for the plain-data rows.
+// Whole-stride byte copy, for the plain-data rows.
 template <uint32_t N> void ByteAssign(uint8_t* d, const uint8_t* s) { std::memcpy(d, s, N); }
-template <uint32_t N> void ZeroInit(uint8_t* d)                     { std::memset(d, 0, N); }
+
+// ENDGAME B.3.2 closing pass: three of the four rows that used to sit here said
+// nothing a C++ type's traits do not say — whole-stride byte copy, whole-stride
+// zero tail, no destroy, no deliberately-untouched extent — so each is now the
+// trait-derived `Collection::Array<T>` over an element that zeroes itself.
+// `GameColl::Bytes<N,A>` and `GameColl::Ptr8` are exactly those elements
+// (coll_bridge.h: NSDMI-zeroed, trivially copyable, trivially destructible), so
+// `SpecFor<T>()` re-derives the identical row. The retail addresses stay here as
+// the provenance. `kSpec_SpawnEntry` below does NOT collapse and stays explicit.
 
 // FUN_14001baf0 — stride 0x20, align 4, byte copy, zero tail. (Not the
 // citizenlist ProfessionResourceEntry row: that one seeds 100 at +0x08.)
-const rtcoll::ArraySpec kSpec_Pod20A4 = {                // exe 0x14001baf0
-    "Array<32B pod, align 4>", 0x20, 4,
-    &ByteAssign<0x20>, &ZeroInit<0x20>, nullptr, true,
-    /*assign unwritten*/ 0, 0,
-    /*init   unwritten*/ 0, 0,
-    /*seed zero       */ 0, 0 };
-using Pod20A4Array = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                       Collection::ExplicitSpec<&kSpec_Pod20A4>>;
+using Pod20A4Elem = GameColl::Bytes<0x20, 4>;            // exe 0x14001baf0
+static_assert(sizeof(Pod20A4Elem)  == 0x20, "Pod20A4Elem stride");
+static_assert(alignof(Pod20A4Elem) == 4,    "Pod20A4Elem align");
+using Pod20A4Array = Collection::Array<Pod20A4Elem>;
 
 // FUN_14001bf10 — stride 0x14, align 4, byte copy, zero tail.
-const rtcoll::ArraySpec kSpec_Pod14A4 = {                // exe 0x14001bf10
-    "Array<20B pod, align 4>", 0x14, 4,
-    &ByteAssign<0x14>, &ZeroInit<0x14>, nullptr, true,
-    /*assign unwritten*/ 0, 0,
-    /*init   unwritten*/ 0, 0,
-    /*seed zero       */ 0, 0 };
-using Pod14A4Array = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                       Collection::ExplicitSpec<&kSpec_Pod14A4>>;
+using Pod14A4Elem = GameColl::Bytes20x4;                 // exe 0x14001bf10
+static_assert(sizeof(Pod14A4Elem)  == 0x14, "Pod14A4Elem stride");
+static_assert(alignof(Pod14A4Elem) == 4,    "Pod14A4Elem align");
+using Pod14A4Array = Collection::Array<Pod14A4Elem>;
 
 // FUN_140001bb0 — stride 8, align 8: raw pointer slots, zeroed on every new
 // slot (the heap-corruption note above Reimpl_Array_Resize_Stride08 says why
-// that zero is load-bearing).
-const rtcoll::ArraySpec kSpec_Ptr8Zero = {               // exe 0x140001bb0
-    "Array<void*> (zero tail)", 8, 8,
-    &ByteAssign<8>, &ZeroInit<8>, nullptr, true,
-    /*assign unwritten*/ 0, 0,
-    /*init   unwritten*/ 0, 0,
-    /*seed zero       */ 0, 0 };
-using Ptr8ZeroArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                        Collection::ExplicitSpec<&kSpec_Ptr8Zero>>;
+// that zero is load-bearing — `GameColl::Ptr8`'s `= nullptr` NSDMI IS that zero).
+static_assert(sizeof(GameColl::Ptr8)  == 8, "Ptr8 stride");   // exe 0x140001bb0
+static_assert(alignof(GameColl::Ptr8) == 8, "Ptr8 align");
+using Ptr8ZeroArray = Collection::Array<GameColl::Ptr8>;
 
 // FUN_14000c520 — SpawnDescription entry {ExternalPtr @0, float minSpawnAge
 // @8, float maxSpawnAge @0xc}, stride 0x10, align 8. Whole-stride copy; the
@@ -332,6 +328,8 @@ void InitSpawnEntry(uint8_t* e) {
     *reinterpret_cast<float*>(e + 0x08)    = 0.0f;   // minSpawnAge
     *reinterpret_cast<float*>(e + 0x0c)    = 10.0f;  // maxSpawnAge (0x41200000)
 }
+// stays explicit: `init` is a patterned fill (maxSpawnAge = 10.0f at +0x0c), not
+// the zero/as-found tail any element type's `T()` would write.
 const rtcoll::ArraySpec kSpec_SpawnEntry = {             // exe 0x14000c520
     "Array<SpawnEntry>", 0x10, 8,
     &ByteAssign<0x10>, &InitSpawnEntry, nullptr, true,

@@ -179,39 +179,32 @@ static inline float fnegate(float v) {
 // immediately after the resize and every x,y before any read — but "believed
 // unobservable" is not a licence to change world generation inside a refactor
 // whose contract is no behaviour change (B32_RULES / B31_RULES step 2). So each
-// site keeps ITS OWN arm, in its own row: `kSpec_WgPathPointNoInit` here,
-// `kSpec_WgPathPointZeroInit` (memset 0x1C) for ranges. Collapsing the two onto
+// site keeps ITS OWN arm: `kSpec_WgPathPointNoInit` here, and for ranges the
+// zeroing element `Collection::Array<GameColl::Bytes<0x1C,4>>` it now spells
+// itself (ENDGAME B.3.2 closing pass — that arm's row was a whole-stride byte
+// copy plus a whole-stride zero tail with no destroy and no untouched extent,
+// i.e. exactly what `SpecFor<Bytes<0x1C,4>>()` derives, so the shared row object
+// this file used to export for it is gone). Collapsing the two arms onto
 // retail's single-QWORD arm is a separate, separately-verified change.
 // ============================================================
 // The rows this stage instantiates. EXTERNAL linkage on purpose:
-// worldgen_f390_ranges.cpp (ResizeVec1c, its local `pts`) and worldgen.cpp
-// (wg_FreePatchList, the hf+0x18 teardown) name them through an `extern`
-// declaration — same element type, and for the PathVec row the same instance.
+// worldgen.cpp (wg_FreePatchList, the hf+0x18 teardown) names the PathVec row
+// through an `extern` declaration — the same row instance.
 static void AssignWgPathPoint(uint8_t* d, const uint8_t* s) {
     __builtin_memcpy(d, s, PATHPT_STRIDE);          // 7 dwords, the whole stride
 }
 // This site's arm: NOTHING. `init == nullptr` is how an ArraySpec spells "the
 // new tail keeps whatever the allocation contained", which is exactly what the
 // hand-written loop here did (it only ran for i < oldCount).
+// stays explicit: the whole stride is a deliberately-untouched extent
+// (`init unwritten` = [0, 0x1C)) — the probe contract for "this site's new tail
+// keeps whatever the allocation held", which no element type can state.
 extern const rtcoll::ArraySpec kSpec_WgPathPointNoInit;
 const rtcoll::ArraySpec kSpec_WgPathPointNoInit = {  // exe 0x140023b70, coastline arm
     "Array<PathPoint> (tail untouched)", PATHPT_STRIDE, 4,
     &AssignWgPathPoint, nullptr, nullptr, /*byteCopy*/true,
     /*assign unwritten*/ 0, 0,
     /*init   unwritten*/ 0, PATHPT_STRIDE,
-    /*seed zero       */ 0, 0 };
-// worldgen_f390_ranges.cpp's arm: zero the whole 0x1C record. Defined here so
-// the two arms of one retail body sit side by side and the difference is
-// visible rather than split across two files.
-static void InitWgPathPointZero(uint8_t* d) {
-    __builtin_memset(d, 0, PATHPT_STRIDE);
-}
-extern const rtcoll::ArraySpec kSpec_WgPathPointZeroInit;
-const rtcoll::ArraySpec kSpec_WgPathPointZeroInit = {  // exe 0x140023b70, ranges arm
-    "Array<PathPoint> (tail zeroed)", PATHPT_STRIDE, 4,
-    &AssignWgPathPoint, &InitWgPathPointZero, nullptr, /*byteCopy*/true,
-    /*assign unwritten*/ 0, 0,
-    /*init   unwritten*/ 0, 0,
     /*seed zero       */ 0, 0 };
 using WgPathPointArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
                                            Collection::ExplicitSpec<&kSpec_WgPathPointNoInit>>;
@@ -292,6 +285,9 @@ static void DestroyWgPathVec(void* /*ignoredThis*/, uint8_t* base, int count) {
         *(int64_t*)(slot + 0x08) = 0;
     }
 }
+// stays explicit: `assign` is a deep copy (24ac0), not a byte copy, and
+// `destroy` frees each element's inner buffer — byteCopy=false with a destroy is
+// a combination C++ traits cannot produce.
 extern const rtcoll::ArraySpec kSpec_WgPathVec;
 const rtcoll::ArraySpec kSpec_WgPathVec = {         // exe 0x140024460 (grow), 0x1400175d0 (dtor)
     "Array<Array<PathPoint>>", 0x10, 8,

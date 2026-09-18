@@ -36,6 +36,7 @@
 #include "address_registry.h"
 #include "system/String.h"
 #include "system/Filename.h"
+#include "ui/UserInterface.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -122,7 +123,7 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
 
     if (!g_pFactorySingleton || !*g_pFactorySingleton || !fn_Factory_GetTypeIdFromName ||
         !g_pGameWorldSingleton || !*g_pGameWorldSingleton ||
-        !fn_UI_GetFirstDialog || !fn_IsA || !fn_InternalBasePtr_CheckPtr) {
+        !fn_IsA || !fn_InternalBasePtr_CheckPtr) {
         return outElementIBP;
     }
     void* factory = *reinterpret_cast<void**>(*g_pFactorySingleton);
@@ -137,28 +138,27 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
     if (partCount >= 3)
         controllerTypeId = fn_Factory_GetTypeIdFromName(factory, parts[1]._data, true);
 
-    void* ui = *reinterpret_cast<void**>(
+    UI::UserInterface* ui = *reinterpret_cast<UI::UserInterface**>(
         reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x98);
     if (!ui) {
         return outElementIBP;
     }
 
-    // Iterator node: [0] = InternalBasePtr(DialogInstance*), [0x10] = next node.
-    uintptr_t nodeBuf[4] = {};
-    fn_UI_GetFirstDialog(ui, nodeBuf);
-    uintptr_t node = nodeBuf[0];
-
+    // The open-dialog list. `_dialogs.GetFirst()` IS retail's GetFirstDialog
+    // (0x180031150 = `*retval = this->_dialogs._head`), and the iterator is the
+    // bare node pointer, so `it.node` is the same address retail hands to
+    // CheckPtr and `it.node->element` the InternalBasePtr(DialogInstance*).
     uint64_t found = 0;
-    for (; node != 0 && found == 0; node = *reinterpret_cast<uintptr_t*>(node + 0x10)) {
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(node));
-        void* dialog = *reinterpret_cast<void**>(node);
+    for (auto it = ui->_dialogs.GetFirst(); it && found == 0; ++it) {
+        fn_InternalBasePtr_CheckPtr(it.node);
+        void* dialog = it.node->element;
         if (!dialog || !fn_IsA(dialog, dialogTypeId)) continue;
 
         if (controllerTypeId == 0 || partCount < 3) {
             // "Dialog:element" — the element is looked up on the dialog itself.
             if (outDialog) *outDialog = reinterpret_cast<uint64_t>(dialog);
             if (!fn_DialogInstance_FindElement) continue;
-            fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(node));
+            fn_InternalBasePtr_CheckPtr(it.node);
             uint64_t elemIBP = 0;
             fn_DialogInstance_FindElement(dialog, &elemIBP, &parts[1]);
             if (elemIBP) found = elemIBP;
@@ -166,15 +166,15 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
         }
 
         // "Dialog:Controller:element[:resource]"
-        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(node));
+        fn_InternalBasePtr_CheckPtr(it.node);
         uint64_t controller = 0;
         if (fn_DialogInstance_GetController)
             fn_DialogInstance_GetController(dialog, &controller, controllerTypeId);
         if (controller == 0) continue;
 
         if (partCount == 4) {
-            fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(node));
-            if (ResourceNameMismatch(*reinterpret_cast<void**>(node), parts[3])) continue;
+            fn_InternalBasePtr_CheckPtr(it.node);
+            if (ResourceNameMismatch(it.node->element, parts[3])) continue;
         }
 
         if (outDialog) *outDialog = reinterpret_cast<uint64_t>(dialog);
@@ -192,7 +192,7 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
         }
         // ...then the dialog itself.
         if (elemIBP == 0 && fn_DialogInstance_FindElement) {
-            fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(node));
+            fn_InternalBasePtr_CheckPtr(it.node);
             fn_DialogInstance_FindElement(dialog, &elemIBP, &parts[2]);
         }
         if (elemIBP) found = elemIBP;

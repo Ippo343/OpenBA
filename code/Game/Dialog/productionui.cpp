@@ -12,7 +12,7 @@
 #include "engine_funcs.h"
 #include "Object/factory_registration.h"   // Object::ResolveTypeIdByNameLazy
 #include "system/String.h"
-#include "Dialog/dialog_array_bridge.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -41,8 +41,8 @@
 // its offset.
 static void PushElementPair(uintptr_t self, int arrayOffset,
                             uint64_t labelPtr, uint64_t numberPtr) {
-    auto& arr = DlgArray<0x10>(self, arrayOffset);
-    arr.SetSize(arr.GetSize() + 1, DlgElem<0x10>{{labelPtr, numberPtr}});
+    auto& arr = GameColl::ArrayAt<GameColl::Bytes<0x10, 8>>(self, arrayOffset);
+    arr.SetSize(arr.GetSize() + 1, GameColl::Bytes<0x10, 8>(labelPtr, numberPtr));
 }
 
 // ---- element type ids for retail's two casts --------------------------------

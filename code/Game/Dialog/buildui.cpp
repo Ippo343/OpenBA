@@ -14,7 +14,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_panels.h"
-#include "Dialog/dialog_array_bridge.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
@@ -213,8 +213,8 @@ void BuildUI_Slot4(BuildUI* self) {
         // B.3.2 bridge: BuildUI+0x30 is Collection::Array<{InternalBasePtr,
         // InternalBasePtr}> (stride 0x10, count +0x38, capacity +0x3C) inside a
         // struct §B.2 has not converted, so it is reached at its offset.
-        auto& rows = DlgArray<0x10>(s, 0x30);
-        rows.SetSize(rows.GetSize() + 1, DlgElem<0x10>{{labelStorage, rowTextTotal}});
+        auto& rows = GameColl::ArrayAt<GameColl::Bytes<0x10, 8>>(s, 0x30);
+        rows.SetSize(rows.GetSize() + 1, GameColl::Bytes<0x10, 8>(labelStorage, rowTextTotal));
 
         // Populate row content based on resource index
         uintptr_t resBase = resourceComp ? *(uintptr_t*)((uintptr_t)resourceComp + 0x20) : 0;

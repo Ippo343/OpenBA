@@ -273,6 +273,9 @@ void MG_InitFamily(uint8_t* e) {
     *e = 0;
     *(int32_t*)(e + 4) = 0;
 }
+// stays explicit: `init` writes byte 0 and dword 4 and deliberately leaves
+// [1,4) untouched — an `init unwritten` extent, i.e. a probe contract, not a
+// trait. (An element with zeroing NSDMIs would also write the padding.)
 const rtcoll::ArraySpec kSpec_MGFamily = {           // exe 0x14001b270
     "Array<InitialFamily>", 8, 4,
     &AssignMGFamily, &MG_InitFamily, nullptr, /*byteCopy*/true,
@@ -299,6 +302,8 @@ void DestroyMGRef(void* /*ignoredThis*/, uint8_t* base, int count) {
     for (int i = 0; i < count; ++i)
         reinterpret_cast<System::String*>(base + static_cast<int64_t>(i) * 0x18)->~String();
 }
+// stays explicit: String copy-ctor `assign` (byteCopy=false) plus a real
+// `destroy`, a -1 generation seed, and an unwritten extent at [0x0c,0x10).
 const rtcoll::ArraySpec kSpec_MGRef = {              // exe 0x14001b340
     "Array<ExternalRef>", 0x18, 8,
     &AssignMGRef, &MG_InitRef, &DestroyMGRef, /*byteCopy*/false,
@@ -327,6 +332,8 @@ void DestroyMGStructure(void* /*ignoredThis*/, uint8_t* base, int count) {
     for (int i = 0; i < count; ++i)
         reinterpret_cast<System::String*>(base + static_cast<int64_t>(i) * 0x30)->~String();
 }
+// stays explicit: same as kSpec_MGRef, plus a -1 seed for _width/_height at
+// +0x20 and a second unwritten extent at [0x2c,0x30).
 const rtcoll::ArraySpec kSpec_MGStructure = {        // exe 0x14001b4e0
     "Array<InitialStructure>", 0x30, 8,
     &AssignMGStructure, &MG_InitStructure, &DestroyMGStructure, /*byteCopy*/false,

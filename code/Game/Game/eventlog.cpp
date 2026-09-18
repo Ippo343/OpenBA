@@ -85,6 +85,9 @@ void DestroyEventEntry(void* /*ignoredThis*/, uint8_t* base, int count) {
         reinterpret_cast<System::String*>(base + static_cast<int64_t>(i) * 0x28 + 0x08)->~String();
 }
 
+// stays explicit: byteCopy=false with a String copy-ctor `assign`, a real
+// `destroy`, and an `assign unwritten` extent ([0x04,0x08) padding) — a
+// combination no C++ element type can express.
 const rtcoll::ArraySpec kSpec_EventEntry = {            // exe 0x140019b70 (grow),
     "Array<EventLog::Entry>", 0x28, 8,                  //     0x14000a8a0 (~Array)
     &AssignEventEntry, nullptr, &DestroyEventEntry, false,

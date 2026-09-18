@@ -25,7 +25,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "system/String.h"
-#include "Dialog/dialog_array_bridge.h"
+#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstring>
 
@@ -46,8 +46,8 @@ inline void IbpCtor(void* slot, void* obj) { if (fn_InternalBasePtr_Ctor) fn_Int
 // reached through the B.3.2 bridge rather than by hand.
 // ---------------------------------------------------------------------------
 void PushPtr(uint64_t* base, uint64_t value) {
-    auto& arr = DlgArray<8>((void*)base, 0);
-    arr.SetSize(arr.GetSize() + 1, DlgElem<8>{{value}});
+    auto& arr = GameColl::ArrayAt<GameColl::Bytes<8, 8>>((void*)base, 0);
+    arr.SetSize(arr.GetSize() + 1, GameColl::Bytes<8, 8>(value));
 }
 
 // Find a named child element under `parent` and cast it via IsDerivedFrom(typeId).
@@ -209,8 +209,8 @@ extern "C" void TownHall_ProfArrayPush(void* arrayBase, int newCount, void* entr
 // just the tail, which is exactly rtcoll::SetSizeCore's fill loop.
 // ===========================================================================
 extern "C" void TownHall_ProdArrayPush(void* arrayBase, int newCount, void* entry) {
-    auto& arr = DlgArray<0x28>(arrayBase, 0);
-    arr.SetSize(newCount, *reinterpret_cast<const DlgElem<0x28>*>(entry));
+    auto& arr = GameColl::ArrayAt<GameColl::Bytes<0x28, 8>>(arrayBase, 0);
+    arr.SetSize(newCount, *reinterpret_cast<const GameColl::Bytes<0x28, 8>*>(entry));
 }
 
 // ===========================================================================

@@ -32,7 +32,7 @@
 //   +0x140: sortCombo element
 
 #include "Dialog/ui_panels.h"
-#include "Dialog/dialog_array_bridge.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "system/String.h"
@@ -183,8 +183,8 @@ static void* TradeUI_FindTypedElement(void* dialogElem, const char* name, uint32
 
 // B.3.2 bridge: every TradeUI_DynArrayPush(s, ptrOff, countOff, capOff, entry, stride)
 // call site below was a hand-transcribed copy of retail's inlined
-// Collection::Array<T>::SetSize(count+1, fill) (see dialog_array_bridge.h). Converted
-// in place to DlgArray<stride>(s, ptrOff).SetSize(...) — the runtime stride parameter
+// Collection::Array<T>::SetSize(count+1, fill) (see Component/coll_bridge.h). Converted
+// in place to GameColl::ArrayAt<GameColl::Bytes<stride, 8>>(s, ptrOff).SetSize(...) — the runtime stride parameter
 // this helper took becomes the compile-time N of the blob element, so the helper is
 // deleted (zero remaining callers, confirmed by grep across code/, standalone/,
 // engine/, runtime/).
@@ -407,10 +407,10 @@ void TradeUI_RefreshSellTable(TradeUI* self)
             // Build 0x20-byte sell data entry and push to array at +0x30.
             // B.3.2 bridge: TradeUI+0x30 is Collection::Array<{resEntity, valueDesc,
             // resTypeComp, pad}> (stride 0x20, count +0x38, capacity +0x3C).
-            auto& sellRows = DlgArray<0x20>(s, 0x30);
+            auto& sellRows = GameColl::ArrayAt<GameColl::Bytes<0x20, 8>>(s, 0x30);
             sellRows.SetSize(sellRows.GetSize() + 1,
-                              DlgElem<0x20>{{resEntity, (uint64_t)valueDesc,
-                                             (uint64_t)resTypeComp, 0}});
+                              GameColl::Bytes<0x20, 8>(resEntity, (uint64_t)valueDesc,
+                                             (uint64_t)resTypeComp, 0));
         }
     }
 
@@ -706,9 +706,9 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
             // Build 0x18-byte buy data entry and push to array at +0x40.
             // B.3.2 bridge: TradeUI+0x40 is Collection::Array<{orderEntry, valDesc,
             // pad}> (stride 0x18, count +0x48, capacity +0x4C).
-            auto& buyRows = DlgArray<0x18>(s, 0x40);
+            auto& buyRows = GameColl::ArrayAt<GameColl::Bytes<0x18, 8>>(s, 0x40);
             buyRows.SetSize(buyRows.GetSize() + 1,
-                             DlgElem<0x18>{{orderEntry, (uint64_t)valDesc, 0}});
+                             GameColl::Bytes<0x18, 8>(orderEntry, (uint64_t)valDesc, 0));
         }
     }
 
@@ -1164,10 +1164,10 @@ void TradeUI_Serialize(TradeUI* self) {
         // order-entries array at +0x90.
         // B.3.2 bridge: TradeUI+0x90 is Collection::Array<{label, number, button,
         // spinner}> (stride 0x20, count +0x98, capacity +0x9C).
-        auto& orderRows = DlgArray<0x20>(s, 0x90);
+        auto& orderRows = GameColl::ArrayAt<GameColl::Bytes<0x20, 8>>(s, 0x90);
         orderRows.SetSize(orderRows.GetSize() + 1,
-                           DlgElem<0x20>{{(uint64_t)label, (uint64_t)number,
-                                          (uint64_t)button, (uint64_t)spinner}});
+                           GameColl::Bytes<0x20, 8>((uint64_t)label, (uint64_t)number,
+                                          (uint64_t)button, (uint64_t)spinner));
 
         baseId++;
     }
@@ -1269,9 +1269,9 @@ void TradeUI_Serialize(TradeUI* self) {
         // at +0x80.
         // B.3.2 bridge: TradeUI+0x80 is Collection::Array<{e0, e1, e2}> (stride
         // 0x18, count +0x88, capacity +0x8C).
-        auto& storageRows = DlgArray<0x18>(s, 0x80);
+        auto& storageRows = GameColl::ArrayAt<GameColl::Bytes<0x18, 8>>(s, 0x80);
         storageRows.SetSize(storageRows.GetSize() + 1,
-                             DlgElem<0x18>{{(uint64_t)e0, (uint64_t)e1, (uint64_t)e2}});
+                             GameColl::Bytes<0x18, 8>((uint64_t)e0, (uint64_t)e1, (uint64_t)e2));
     }
 
     // --- Phase 4b: Setup tableSell ---
@@ -1336,10 +1336,10 @@ void TradeUI_Serialize(TradeUI* self) {
         // +0=LabelElement, +8=SpinnerElement, +10=SpinnerElement, +18=SliderElement
         // B.3.2 bridge: TradeUI+0x60 is Collection::Array<{labelElem, spinElem,
         // numElem, sliderElem}> (stride 0x20, count +0x68, capacity +0x6C).
-        auto& sellEntryRows = DlgArray<0x20>(s, 0x60);
+        auto& sellEntryRows = GameColl::ArrayAt<GameColl::Bytes<0x20, 8>>(s, 0x60);
         sellEntryRows.SetSize(sellEntryRows.GetSize() + 1,
-                               DlgElem<0x20>{{(uint64_t)labelElem, (uint64_t)spinElem,
-                                              (uint64_t)numElem, (uint64_t)sliderElem}});
+                               GameColl::Bytes<0x20, 8>((uint64_t)labelElem, (uint64_t)spinElem,
+                                              (uint64_t)numElem, (uint64_t)sliderElem));
     }
 
     // --- Phase 4c: Setup tableBuy ---
@@ -1405,10 +1405,10 @@ void TradeUI_Serialize(TradeUI* self) {
         // +0=LabelElement, +8=SpinnerElement, +10=SliderElement, +18=SpinnerElement
         // B.3.2 bridge: TradeUI+0x70 is Collection::Array<{labelElem, numElem,
         // sliderElem, spinElem}> (stride 0x20, count +0x78, capacity +0x7C).
-        auto& buyEntryRows = DlgArray<0x20>(s, 0x70);
+        auto& buyEntryRows = GameColl::ArrayAt<GameColl::Bytes<0x20, 8>>(s, 0x70);
         buyEntryRows.SetSize(buyEntryRows.GetSize() + 1,
-                              DlgElem<0x20>{{(uint64_t)labelElem, (uint64_t)numElem,
-                                             (uint64_t)sliderElem, (uint64_t)spinElem}});
+                              GameColl::Bytes<0x20, 8>((uint64_t)labelElem, (uint64_t)numElem,
+                                             (uint64_t)sliderElem, (uint64_t)spinElem));
     }
 
     // --- Phase 4d: Setup tableOrder ---
@@ -1448,9 +1448,9 @@ void TradeUI_Serialize(TradeUI* self) {
         // at +0xA0.
         // B.3.2 bridge: TradeUI+0xA0 is Collection::Array<{elem}> (stride 0x08,
         // count +0xA8, capacity +0xAC).
-        auto& purchaseRows = DlgArray<0x08>(s, 0xA0);
+        auto& purchaseRows = GameColl::ArrayAt<GameColl::Bytes<0x08, 8>>(s, 0xA0);
         purchaseRows.SetSize(purchaseRows.GetSize() + 1,
-                              DlgElem<0x08>{{*(uint64_t*)ibp}});
+                              GameColl::Bytes<0x08, 8>(*(uint64_t*)ibp));
     }
 
     // --- Phase 5: Call refresh functions ---
@@ -2693,10 +2693,10 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
         // array at +0x50.
         // B.3.2 bridge: TradeUI+0x50 is Collection::Array<{entity, resourceComp,
         // valueComp}> (stride 0x18, count +0x58, capacity +0x5C).
-        auto& displayRows = DlgArray<0x18>(s, 0x50);
+        auto& displayRows = GameColl::ArrayAt<GameColl::Bytes<0x18, 8>>(s, 0x50);
         displayRows.SetSize(displayRows.GetSize() + 1,
-                             DlgElem<0x18>{{entity, (uint64_t)resourceComp,
-                                            (uint64_t)valueComp}});
+                             GameColl::Bytes<0x18, 8>(entity, (uint64_t)resourceComp,
+                                            (uint64_t)valueComp));
     }
 
     // Get owning entity -> TradeComponent + StorageComponent

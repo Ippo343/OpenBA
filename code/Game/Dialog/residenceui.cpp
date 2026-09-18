@@ -16,7 +16,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_panels.h"
-#include "Dialog/dialog_array_bridge.h"
+#include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
@@ -160,10 +160,10 @@ void ResidenceUI_Slot4(ResidenceUI* self) {
         // (stride 0x30, count +0x38, capacity +0x3C) inside a struct §B.2 has
         // not converted, so it is reached at its offset. Was FUN_140021020's
         // own inlined SetSize (ResidenceUI_ArrayPush_Impl).
-        auto& rows = DlgArray<0x30>(s, 0x30);
+        auto& rows = GameColl::ArrayAt<GameColl::Bytes<0x30, 8>>(s, 0x30);
         rows.SetSize(rows.GetSize() + 1,
-                     DlgElem<0x30>{{entry[0], entry[1], entry[2],
-                                    entry[3], entry[4], entry[5]}});
+                     GameColl::Bytes<0x30, 8>(entry[0], entry[1], entry[2],
+                                    entry[3], entry[4], entry[5]));
     }
 }
 
