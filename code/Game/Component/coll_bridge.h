@@ -164,19 +164,23 @@ struct Vec3 { float x = 0.0f, y = 0.0f, z = 0.0f; };   // stride 0x0c, align 4
 // from 0x1400021d0 / 0x140003600; `I32` stays for the sites whose own ported
 // body does write a zero.
 //
-// *** OPEN DIVERGENCE, LEFT DELIBERATELY UNFIXED BY THE CLOSING PASS ***
-// About twenty sites converted in step 2 name 0x1400021d0 in their own comment
-// and use `I32` — i.e. they ZERO a tail retail leaves as-found. Grep
-// `GameColl::I32>` together with `0x1400021d0` to list them (action_pf_region,
-// action_pf_astar, gatherrawmaterials{,_ctor}, cemeterycomponent,
-// createplaceddescription, autopickupcomponent, resourceproduce_creatework,
-// consumeproduce, fishingwork, …). Most are `SetSize(0)` or a shrink, where the
-// two agree; the growing ones differ only on a REUSED allocator block, and in
-// every one of them the caller writes all `n` elements straight afterwards.
-// Flipping them to `I32NoInit` is the faithful change, but it turns a zeroed
-// tail into allocator garbage across the pathfinder and the work scheduler, so
-// it belongs to a change that the resave gate and the stress run can cover —
-// not to a closing pass verified by one boot. Do it as its own step.
+// THAT DIVERGENCE IS CLOSED. Every `code/Game/` site whose ported body comes
+// from 0x1400021d0 now uses `I32NoInit`: action_base_move, action_pf_astar,
+// action_pf_region (7), action_pf_road, autopickupcomponent, cemeterycomponent,
+// createplaceddescription, resourceproduce_creatework (2), consumeproduce,
+// fishingwork, gatherrawmaterials (2), gatherrawmaterials_ctor (2) — each one
+// checked against the retail caller's own call to 0x1400021d0. Nine are
+// `SetSize(0)` or a pop, where the two element types agree anyway; the eleven
+// that can grow all write every element immediately afterwards (a zero/seed loop
+// in the ctors and the rebuild, a bulk stream read in the serializers), and each
+// call site now says which write covers it. No read of an unwritten element was
+// found, in retail or in the port.
+//
+// `I32` remains correct for a site whose own ported body writes a zero — the
+// stride-8 helpers and `GenericArrayResize`. Two `Array<int32>` sites keep `I32`
+// because their helper is NOT 0x1400021d0: createrawmaterial (0x140044810) and
+// toolbardialog's speed array; both are `SetSize(n, fill)` appends where the one
+// new element takes the fill, so the element type cannot be observed.
 struct I32NoInit { int32_t v; };          // stride 0x04, align 4, tail as-found
 
 // stride 0x08 at ALIGN 4 — a {int32,int32} pair, and retail's helper for this

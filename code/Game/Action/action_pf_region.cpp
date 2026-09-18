@@ -60,8 +60,10 @@ namespace {
 // ---- exe sub-callee fn-ptrs (resolved once, all registered in earlier batches) ----
 // 0x1400021d0 (int-array SetSize) is the exe-side Collection::Array<int32>
 // monomorphisation -- ENDGAME B.3.2 step 2 converted its call sites below to
-// GameColl::AsArray<GameColl::I32> member calls, so its resolved-pointer stand-in
-// is gone.
+// GameColl::AsArray<GameColl::I32NoInit> member calls, so its resolved-pointer stand-in
+// is gone. I32NoInit, not I32: 0x1400021d0's loop body only copies the OLD prefix, so a
+// grown tail keeps whatever the allocation held. Every call site here is SetSize(0) or a
+// pop, so none of them actually grows.
 typedef void     (*fn_VecResize30_t)(int64_t* vec, uint32_t newCount, uint32_t* fill); // 0x14001e210
 typedef void*    (*fn_WorklistAlloc_t)(uintptr_t pool, uint64_t* val);      // 0x14001df40
 typedef void     (*fn_ArrResize18_t)(int64_t* arr, int newCount);           // 0x14001d830
@@ -111,8 +113,10 @@ void Pf_RegionNodeFree_8200(int64_t param_1, int param_2) {
     EnsureFns();
     int64_t lVar7 = (int64_t)param_2 * 0x30;
     *(uint32_t*)(*(int64_t*)(param_1 + 0x68) + 8 + lVar7) = 0xffffffff;
-    GameColl::AsArray<GameColl::I32>((void*)(*(int64_t*)(param_1 + 0x68) + 0x10 + lVar7)).SetSize(0);  // B.3.2 bridge: 0x1400021d0
-    GameColl::AsArray<GameColl::I32>((void*)(*(int64_t*)(param_1 + 0x68) + 0x20 + lVar7)).SetSize(0);  // B.3.2 bridge: 0x1400021d0
+    // 0x1400021d0 leaves a GROWN tail as the allocation found it, so the element type is
+    // I32NoInit. SetSize(0) never grows, so the two types agree here.
+    GameColl::AsArray<GameColl::I32NoInit>((void*)(*(int64_t*)(param_1 + 0x68) + 0x10 + lVar7)).SetSize(0);  // B.3.2 bridge: 0x1400021d0
+    GameColl::AsArray<GameColl::I32NoInit>((void*)(*(int64_t*)(param_1 + 0x68) + 0x20 + lVar7)).SetSize(0);  // B.3.2 bridge: 0x1400021d0
     *(uint32_t*)(lVar7 + *(int64_t*)(param_1 + 0x68)) = 0xffffffff;
     *(uint32_t*)(*(int64_t*)(param_1 + 0x68) + 4 + lVar7) = 0xffffffff;
     int iVar2 = *(int*)(param_1 + 0xb0);
@@ -175,7 +179,9 @@ int Pf_RegionFreeId_8350(int64_t param_1) {
         MemFree(t.local_30);
     } else {
         uVar2 = *(uint32_t*)(*(int64_t*)(param_1 + 0xa8) + -4 + (int64_t)iVar1 * 4);
-        GameColl::AsArray<GameColl::I32>((void*)(param_1 + 0xa8)).SetSize(iVar1 + -1);  // B.3.2 bridge: 0x1400021d0
+        // I32NoInit: 0x1400021d0 leaves a grown tail as-found. This is a pop (n-1), a
+        // pure shrink, so nothing is grown and the two element types agree.
+        GameColl::AsArray<GameColl::I32NoInit>((void*)(param_1 + 0xa8)).SetSize(iVar1 + -1);  // B.3.2 bridge: 0x1400021d0
     }
     return (int)uVar2;
 }
@@ -242,7 +248,8 @@ void Pf_RegionRebuildAdjacency_7480(int64_t param_1, int param_2) {
         do {
             int64_t lVar11 = (int64_t)*(int*)(*(int64_t*)(lVar4 + 0x10) + local_res18) * 0x30 +
                              *(int64_t*)(param_1 + 0x68);
-            GameColl::AsArray<GameColl::I32>((void*)(lVar11 + 0x10)).SetSize(0);  // B.3.2 bridge: 0x1400021d0
+            // I32NoInit: tail as-found, like 0x1400021d0. SetSize(0) never grows.
+            GameColl::AsArray<GameColl::I32NoInit>((void*)(lVar11 + 0x10)).SetSize(0);  // B.3.2 bridge: 0x1400021d0
             int iVar12 = 0;
             if (0 < *(int*)(lVar11 + 0x28)) {
                 int64_t lVar10 = 0;
@@ -743,7 +750,8 @@ void Pf_RebuildRegionChunk_80a0(int64_t param_1, uint32_t param_2) {
             lVar7 = lVar7 + 4;
         } while (iVar10 < *(int*)(lVar8 + 0x18));
     }
-    GameColl::AsArray<GameColl::I32>((void*)(lVar8 + 0x10)).SetSize(0);  // B.3.2 bridge: 0x1400021d0
+    // I32NoInit: tail as-found, like 0x1400021d0. SetSize(0) never grows.
+    GameColl::AsArray<GameColl::I32NoInit>((void*)(lVar8 + 0x10)).SetSize(0);  // B.3.2 bridge: 0x1400021d0
     iVar10 = Pf_SeedFloodFills_7f20(param_1, param_2);
     int iVar14 = 0;
     uint32_t uVar12 = param_2;
@@ -827,8 +835,9 @@ void Pf_FlushDirtyChunks_8a90(int64_t param_1) {
                 uVar3 = (uint64_t)uVar2;
             } while ((int)uVar2 < *(int*)(param_1 + 0xa0));
         }
-        GameColl::AsArray<GameColl::I32>((void*)(param_1 + 0x88)).SetSize(0);  // B.3.2 bridge: 0x1400021d0
-        GameColl::AsArray<GameColl::I32>((void*)(param_1 + 0x98)).SetSize(0);  // B.3.2 bridge: 0x1400021d0
+        // I32NoInit: tail as-found, like 0x1400021d0. Both are SetSize(0) — no growth.
+        GameColl::AsArray<GameColl::I32NoInit>((void*)(param_1 + 0x88)).SetSize(0);  // B.3.2 bridge: 0x1400021d0
+        GameColl::AsArray<GameColl::I32NoInit>((void*)(param_1 + 0x98)).SetSize(0);  // B.3.2 bridge: 0x1400021d0
         s_ArrResize18((int64_t*)(param_1 + 8), *(int*)(param_1 + 0x70));
     }
 }

@@ -78,8 +78,9 @@ typedef int   (*fn_NeighbourTile_t)(uintptr_t ctx, int cell, int dir);      // 0
 typedef float (*fn_Sqrtf_t)(float x);                                       // 0x140132010 (reg)
 // 0x1400021d0 (int-array SetSize) is the exe-side Collection::Array<int32>
 // monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
-// GameColl::AsArray<GameColl::I32> member call, so its resolved-pointer stand-in
-// is gone.
+// GameColl::AsArray<GameColl::I32NoInit> member call, so its resolved-pointer stand-in
+// is gone. I32NoInit, not I32: 0x1400021d0 copies only the OLD prefix and leaves a grown
+// tail as the allocation found it.
 typedef void* (*fn_FloodNodeAlloc_t)(uintptr_t avlHdr, uint32_t* key);      // 0x14001a9b0 (reg)
 typedef void  (*fn_TradeSlotResize_t)(int64_t* vec, int count, uint8_t* tmp); // 0x14001d940 (reg)
 
@@ -792,8 +793,11 @@ void Pf_WorkerApplyCmd_a6430(int64_t param_1, uint32_t* param_2, void* param_3, 
         // mutually exclusive. Extra hold time is negligible (the expensive A* already ran
         // outside the lock) and widening a lock can only remove races, never add them.
         if (s_fn_CSLock) s_fn_CSLock(reinterpret_cast<void*>(param_1 + 0x30));
-        // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize.
-        GameColl::AsArray<GameColl::I32>(reinterpret_cast<void*>(
+        // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize. I32NoInit —
+        // the grown tail stays as the allocation found it, as retail's helper leaves it
+        // (1400a6582). Safe: the cell loop immediately below writes all iVar2 elements
+        // before the ready byte at +0x160[slot] lets any reader touch them.
+        GameColl::AsArray<GameColl::I32NoInit>(reinterpret_cast<void*>(
                 *reinterpret_cast<int64_t*>(param_1 + 0x160) +
                 (static_cast<uint64_t>(static_cast<uint>(param_2[3])) * 3 + 1) * 8))
             .SetSize(iVar2);

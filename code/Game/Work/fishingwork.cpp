@@ -924,9 +924,12 @@ void FishingWork_Serialize_Impl(FishingWork* self, void* stream) {
 
     // If loading, resize the int array at +0x58
     serPtr = *(uintptr_t*)serializer;
-    // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize.
+    // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize (retail
+    // FishingWork_Shutdown calls it at 1400ea9ef). I32NoInit — a grown tail is left as
+    // the allocation found it, like retail. Safe: the resize runs only when loading and
+    // the bulk int read below writes all spotCount spot states from the stream.
     if (*(int*)(serPtr + 8) == 0) {
-        GameColl::AsArray<GameColl::I32>((void*)(selfAddr + 0x58)).SetSize(spotCount);
+        GameColl::AsArray<GameColl::I32NoInit>((void*)(selfAddr + 0x58)).SetSize(spotCount);
     }
 
     // 6. Serialize the spotStates int array

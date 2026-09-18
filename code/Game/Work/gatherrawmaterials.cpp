@@ -55,7 +55,7 @@ static GRM_SerializeIntBulk_t s_fn_SerializeIntBulk = nullptr;
 
 // 0x1400021d0 (int-array SetSize) is the exe-side Collection::Array<int32>
 // monomorphisation -- ENDGAME B.3.2 step 2 converted its two call sites below to
-// GameColl::AsArray<GameColl::I32> member calls, so its resolved-pointer stand-in
+// GameColl::AsArray<GameColl::I32NoInit> member calls, so its resolved-pointer stand-in
 // is gone.
 
 // CitizenAI tree set serialize: CitizenAI_impl_96b0(treePtr, serializer)
@@ -430,8 +430,11 @@ void GatherRawMaterials_Serialize_Impl(GatherRawMaterials* self, void* stream) {
     s_fn_SerializeInt(serializerBuf, &count50, nullptr);
 
     if (isLoading) {
-        // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize.
-        GameColl::AsArray<GameColl::I32>((void*)(selfAddr + 0x48)).SetSize(count50);
+        // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize (retail
+        // GatherRawMaterials_Shutdown calls it at 1400ec5be). I32NoInit — a grown tail
+        // is left as the allocation found it, like retail. Safe: load-only, and the bulk
+        // int read below writes all count50 elements from the stream.
+        GameColl::AsArray<GameColl::I32NoInit>((void*)(selfAddr + 0x48)).SetSize(count50);
         self->field_50 = count50;
     }
 
@@ -443,8 +446,11 @@ void GatherRawMaterials_Serialize_Impl(GatherRawMaterials* self, void* stream) {
     s_fn_SerializeInt(serializerBuf, &count60, nullptr);
 
     if (isLoading) {
-        // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize.
-        GameColl::AsArray<GameColl::I32>((void*)(selfAddr + 0x58)).SetSize(count60);
+        // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize (retail
+        // GatherRawMaterials_Shutdown calls it at 1400ec606). I32NoInit — a grown tail
+        // is left as the allocation found it, like retail. Safe: load-only, and the bulk
+        // int read below writes all count60 elements from the stream.
+        GameColl::AsArray<GameColl::I32NoInit>((void*)(selfAddr + 0x58)).SetSize(count60);
         self->field_60 = count60;
     }
 
