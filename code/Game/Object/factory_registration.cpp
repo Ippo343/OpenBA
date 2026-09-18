@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include "Component/component_factory_base.h"
 #include <cstring>
+#include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 
 namespace Object {
 
@@ -147,8 +148,8 @@ uint32_t ResolveTypeIdByNameLazy(const char* simpleName) {
         // pattern in inputbindings.cpp / engine_funcs.h FindDialogByName_Impl.
         void* factoryObj = *(void**)*g_pFactorySingleton;
         if (factoryObj) {
-            typeId = fn_Factory_GetTypeIdFromName(
-                factoryObj, simpleName, /*includeBase=*/true);
+            typeId = reinterpret_cast<const ::Object::Factory*>(factoryObj)->GetTypeIdFromName(
+                simpleName, /*includeBase=*/true);   // B.3.3 bridge
         }
     }
 

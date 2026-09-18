@@ -11,6 +11,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // AttendanceUI::Slot4 (vtable +0x20) — Setup/refresh
@@ -33,7 +34,7 @@ void AttendanceUI_Slot4(AttendanceUI* self) {
     bool isProgress = fn_IsDerivedFrom(foundElem, *g_TypeId_ProgressElement);
     void* progressPtr = isProgress ? foundElem : nullptr;
     uint8_t basePtrBuf[8];
-    fn_InternalBasePtr_Ctor(basePtrBuf, progressPtr);
+    new (basePtrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(progressPtr));   // B.3.3 bridge
     self->data30 = *(uint64_t*)basePtrBuf;
 
     // Get entity, find AttendanceComponent
@@ -41,7 +42,7 @@ void AttendanceUI_Slot4(AttendanceUI* self) {
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, entityPtr);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
     void* entityInternal = *(void**)entityBuf;
 
     void* attendComp = nullptr;
@@ -72,7 +73,7 @@ void AttendanceUI_Slot7(AttendanceUI* self) {
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, entityPtr);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
     void* entityInternal = *(void**)entityBuf;
 
     void* attendComp = nullptr;

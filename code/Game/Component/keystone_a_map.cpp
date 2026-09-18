@@ -39,6 +39,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // dc20 stale-occupant EVICTION tally. Counts only the arm that actually destroys
 // (MarkForRemoval + push onto the world removal queue), not the arm that skips an
@@ -288,7 +289,7 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
                         plVar9 = &local_60;
                     } else {
                         if (fn_InternalBasePtr_Ctor)
-                            fn_InternalBasePtr_Ctor(local_58, nullptr);
+                            new (local_58) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                         plVar9 = local_58;
                     }
                     iVar13 = iVar13 + 1;
@@ -373,7 +374,7 @@ void CreateNaturalResource_impl_dee0(int* param_1, void* param_2, int param_3,
 
                     int64_t local_40 = 0;
                     if (fn_InternalBasePtr_Ctor)
-                        fn_InternalBasePtr_Ctor(&local_40, nullptr);
+                        new (&local_40) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                     iVar12 = iVar12 + 1;
                     plVar11[1] = local_40;
                 } while (iVar12 < param_5);

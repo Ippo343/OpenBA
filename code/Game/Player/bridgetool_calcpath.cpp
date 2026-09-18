@@ -51,6 +51,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 extern "C" int      BridgeTool_SnapEndCell_Impl(void* self, int endCell);
 extern "C" uint32_t BridgeTool_ValidatePath_Impl(void* self, int startCell, int endCell,
@@ -351,7 +352,8 @@ extern "C" uint64_t BridgeTool_CalcPath_Impl(void* selfPtr, int startCell, int e
     // ---- 3. Master entity ----------------------------------------------------------
     void* master = CloneEntity(self->descriptionPtr);
     void* masterIBP = nullptr;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&masterIBP, master);
+    if (fn_InternalBasePtr_Ctor) new (&masterIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(master));   // B.3.3 bridge
     if (!master) return 0;
 
     const uint32_t tidMap     = Tid("MapComponent");
@@ -405,7 +407,8 @@ extern "C" uint64_t BridgeTool_CalcPath_Impl(void* selfPtr, int startCell, int e
         void* seg = CloneEntity(tpl);
         if (seg) {
             void* segIBP = nullptr;
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&segIBP, seg);
+            if (fn_InternalBasePtr_Ctor) new (&segIBP) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(seg));   // B.3.3 bridge
 
 
             StampCells(FindComponentOn(&segIBP, tidMap), cursorCol, cursorRow, segW, segH, rot);

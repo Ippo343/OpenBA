@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // ProductionUI struct layout:
@@ -148,7 +149,8 @@ void ProductionUI_Slot4(ProductionUI* self) {
         // Retail casts the hit through IsDerivedFrom(LabelElement) and stores NULL
         // when it isn't one (0x140075da0 uses g_TypeId_LabelElement_exref @0x140151668).
         uint64_t labelBP = 0;
-        fn_InternalBasePtr_Ctor(&labelBP, CastLabel((void*)labelResult));
+        new (&labelBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(CastLabel((void*)labelResult)));   // B.3.3 bridge
 
         // Find "numberCount" sub-element
         uint64_t numberResult = 0;
@@ -158,7 +160,8 @@ void ProductionUI_Slot4(ProductionUI* self) {
         // Retail casts through IsDerivedFrom(NumberElement) (exref 0x1401516c8,
         // engine_funcs label "SpinnerElement" — the id is UI::NumberElement's).
         uint64_t numberBP = 0;
-        fn_InternalBasePtr_Ctor(&numberBP, CastNumber((void*)numberResult));
+        new (&numberBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(CastNumber((void*)numberResult)));   // B.3.3 bridge
 
         // Push pair to consumed array at +0x30
         PushElementPair(s, 0x30, labelBP, numberBP);
@@ -179,14 +182,16 @@ void ProductionUI_Slot4(ProductionUI* self) {
           fn_FindElement((void*)childElem, &labelResult, &nameStr); }
 
         uint64_t labelBP = 0;
-        fn_InternalBasePtr_Ctor(&labelBP, CastLabel((void*)labelResult));
+        new (&labelBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(CastLabel((void*)labelResult)));   // B.3.3 bridge
 
         uint64_t numberResult = 0;
         { System::String nameStr("numberCount");
           fn_FindElement((void*)childElem, &numberResult, &nameStr); }
 
         uint64_t numberBP = 0;
-        fn_InternalBasePtr_Ctor(&numberBP, CastNumber((void*)numberResult));
+        new (&numberBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(CastNumber((void*)numberResult)));   // B.3.3 bridge
 
         // Push pair to produced array at +0x40
         PushElementPair(s, 0x40, labelBP, numberBP);
@@ -214,7 +219,7 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
     void* entityPtr = isEntity ? entity : nullptr;
 
     uint64_t entityBP = 0;
-    fn_InternalBasePtr_Ctor(&entityBP, entityPtr);
+    new (&entityBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
 
     // Find TrackerComponent via fn_FindComponent_Tracker
     uint64_t trackerBP = 0;

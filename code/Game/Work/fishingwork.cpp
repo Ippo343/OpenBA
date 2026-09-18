@@ -26,6 +26,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -292,7 +293,7 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
 
     // Wrap in IBP
     uintptr_t fishingIBP = 0;
-    fn_InternalBasePtr_Ctor(&fishingIBP, fishingComp);
+    new (&fishingIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(fishingComp));   // B.3.3 bridge
 
     // Get fishing description via IsDerivedFrom check on component+0x18
     fn_InternalBasePtr_CheckPtr(&fishingIBP);
@@ -568,7 +569,8 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
             // Find StorageComponent on home entity
             void* storageComp = FindComponentOnEntity(homeEntity, *s_typeId_1401c7e78);
             uintptr_t storageIBP = 0;
-            fn_InternalBasePtr_Ctor(&storageIBP, storageComp);
+            new (&storageIBP) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(storageComp));   // B.3.3 bridge
 
             fn_InternalBasePtr_CheckPtr(&storageIBP);
             int storageCount = fn_StorageComponent_QueryCount((void*)storageIBP);
@@ -665,7 +667,8 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
             }
 
             uintptr_t workplaceIBP = 0;
-            fn_InternalBasePtr_Ctor(&workplaceIBP, workplaceComp);
+            new (&workplaceIBP) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(workplaceComp));   // B.3.3 bridge
             fn_InternalBasePtr_CheckPtr(&workplaceIBP);
 
             // ── GUARD FOR ONE OF OUR OWN DEVIATIONS (READ of 0x28) ───────────────────
@@ -781,7 +784,7 @@ int FishingWork_Slot9_Impl(FishingWork* self, void* param2) {
         if (valid == '\0') {
             // Invalid — clear citizen slot
             uintptr_t temp = 0;
-            fn_InternalBasePtr_Ctor(&temp, nullptr);
+            new (&temp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             *(uintptr_t*)(citizenRefs + (uintptr_t)i * 8) = temp;
             allValid = false;
         } else {
@@ -961,7 +964,7 @@ int FishingWork_Slot6_Impl(FishingWork* self, void* param2, void* param3, uint32
 
     // Clear citizen IBP slot: citizenRefs[param4 & 0xf] = nullptr IBP
     uintptr_t nullIBP = 0;
-    fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+    new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     uint32_t citizenSlot = param4 & 0xf;
     *(uintptr_t*)(*(uintptr_t*)(selfAddr + 0x48) + (uintptr_t)citizenSlot * 8) = nullIBP;
 

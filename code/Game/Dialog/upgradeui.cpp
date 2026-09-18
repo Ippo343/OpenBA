@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // UpgradeUI::Serialize (vtable +0x20) — Slot4
@@ -42,7 +43,8 @@ void UpgradeUI_Serialize(UpgradeUI* self) {
     void* checkedElem = isButton ? elem : nullptr;
 
     // Properly construct InternalBasePtr at +0x30 (button reference)
-    fn_InternalBasePtr_Ctor((void*)(s + 0x30), checkedElem);
+    new ((void*)(s + 0x30)) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(checkedElem));   // B.3.3 bridge
 
     // Set button element ID to 33000
     fn_InternalBasePtr_CheckPtr((void*)(s + 0x30));
@@ -63,7 +65,7 @@ void UpgradeUI_Serialize(UpgradeUI* self) {
 
     // Construct an IBP for the image element
     uint8_t imageIBP[8];
-    fn_InternalBasePtr_Ctor(imageIBP, checkedImage);
+    new (imageIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checkedImage));   // B.3.3 bridge
 
     // Get the target ComponentEntity template from UpgradeUIConfig+0x20
     uintptr_t subDesc = *(uintptr_t*)((uintptr_t)upgradeDesc + 0x20);

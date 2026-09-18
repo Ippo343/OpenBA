@@ -24,6 +24,7 @@
 #include "Component/component_factory_base.h"     // the live gate + inert factory helpers
 #include <cstdint>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // BANISHED_FLOOR_TRACE (code/Game/Game/mapquery.cpp) — shared with the consumer side.
 
@@ -320,7 +321,8 @@ void* FloorComponent_FindResData(void* owner, void* outIBP) {
             break;
         }
     }
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(outIBP, found);
+    if (fn_InternalBasePtr_Ctor) new (outIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return outIBP;
 }
 

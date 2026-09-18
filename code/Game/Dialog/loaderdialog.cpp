@@ -3,6 +3,7 @@
 #include "system/String.h"
 #include <cstdint>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // LoaderDialog::Slot4 (0x1400B2D90) — vtable +0x20, Setup
@@ -158,7 +159,7 @@ void* LoaderDialog_Ctor_FromLoop(void* mem, void* loop) {
     if (loop && rsc && fn_DialogInstance_Ctor && fn_InternalBasePtr_Ctor) {
         void* ui = reinterpret_cast<void*>(lp + 0x60);
         uint8_t parentIBP[8] = {0};
-        fn_InternalBasePtr_Ctor(parentIBP, nullptr);
+        new (parentIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         fn_DialogInstance_Ctor(mem, ui, rsc, parentIBP, nullptr, nullptr, 0);
     } else {
         printf("[LoaderDialog_FromLoop] bare-bones init (loop=%p rsc=%p) — "
@@ -199,7 +200,8 @@ extern "C" void* LoaderDialog_FromSplashDLT(void* loop, void* retInternalBasePtr
     }
     void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0xC8, 8);
     void* dlg = LoaderDialog_Ctor_FromLoop(mem, loop);
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(retInternalBasePtr, dlg);
+    if (fn_InternalBasePtr_Ctor) new (retInternalBasePtr) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(dlg));   // B.3.3 bridge
     return retInternalBasePtr;
 }
 

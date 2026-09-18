@@ -42,6 +42,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cmath>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ---------------------------------------------------------------- resolved deps
 typedef void*    (*fn_FindCompPos_2ed0_t)(uintptr_t comp, void* outIBP);            // 0x140002ed0
@@ -172,7 +173,8 @@ extern "C" uint32_t Cemetery_PickFreeSlot_6c60(void* cemCompV) {
         ChkPtr(&occupant);
         void* ts = FindComponentByTypeId(occupant, tid);
         int64_t tsIBP = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&tsIBP, ts);
+        if (fn_InternalBasePtr_Ctor) new (&tsIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(ts));   // B.3.3 bridge
         if (!tsIBP) return static_cast<uint32_t>(idx);         // occupant is not a tombstone
         idx = (idx + 1 >= count) ? 0 : idx + 1;
     }
@@ -205,7 +207,8 @@ extern "C" void** Cemetery_FindNearestWithSlot_9740(void* listMgrV, void** out, 
         // The cemetery's map position = its InteractComponent's resolved position.
         void* ic = FindComponentByTypeId(entity, tidInteract);
         int64_t icIBP = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&icIBP, ic);
+        if (fn_InternalBasePtr_Ctor) new (&icIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(ic));   // B.3.3 bridge
         ChkPtr(&icIBP);
         float pos[3] = {0.0f, 0.0f, 0.0f};
         if (s_resolvePos) s_resolvePos(reinterpret_cast<void*>(icIBP), pos, 0, 0, nullptr);
@@ -241,7 +244,8 @@ extern "C" void** ComponentEntity_FindTombstoneComp_4800(void* entityV, void** o
     EnsureResolved();
     void* found = FindComponentByTypeId(reinterpret_cast<uint8_t*>(entityV),
                                         s_tid_Tombstone ? *s_tid_Tombstone : 0);
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(outIBP, found);
+    if (fn_InternalBasePtr_Ctor) new (outIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     else *outIBP = found;
     return outIBP;
 }
@@ -303,7 +307,7 @@ extern "C" void Cemetery_SpawnTombstone_6a90(void* cemCompV, int cell,
     uint8_t* world = g_pGameWorldSingleton ? reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) : nullptr;
     if (!world || !cem) return;
     int64_t nullIBP = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+    if (fn_InternalBasePtr_Ctor) new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     uint8_t* map = *reinterpret_cast<uint8_t**>(world + 0xf8);
     int64_t cellRec = *reinterpret_cast<int64_t*>(map + 0x80);
     uint8_t oldState = *reinterpret_cast<uint8_t*>(cellRec + 0x29 + static_cast<int64_t>(cell) * 0x30);
@@ -341,7 +345,8 @@ extern "C" void Cemetery_SpawnTombstone_6a90(void* cemCompV, int cell,
         ? fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8) : nullptr;
     if (mem && s_ctorFromDesc) built = s_ctorFromDesc(mem, tombDesc);
     int64_t entIBP = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&entIBP, built);
+    if (fn_InternalBasePtr_Ctor) new (&entIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(built));   // B.3.3 bridge
     ChkPtr(&entIBP);
     if (!entIBP) return;   // [STANDALONE GUARD] alloc/ctor failed
     int64_t tsIBP = 0;

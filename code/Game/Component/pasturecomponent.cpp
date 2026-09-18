@@ -17,6 +17,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Resolved helpers
@@ -573,7 +574,7 @@ extern "C" void PastureComponent_Slot12VSlot(void* selfV, int msgId) {
         const int cell = width * y + x;
 
         uintptr_t nullIbp = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nullIbp, nullptr);
+        if (fn_InternalBasePtr_Ctor) new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
         uint8_t* terrain = reinterpret_cast<uint8_t*>(grid + 0x29 + (uintptr_t)cell * 0x30);
         const uint8_t was = *terrain;

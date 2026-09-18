@@ -20,6 +20,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <windows.h>  // PostQuitMessage fallback in standalone Quit handler
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 
 // ============================================================
 // Helper: find element by name, returns raw element pointer
@@ -81,8 +83,8 @@ static void* LoadDialogResource(const char* rscPath) {
             // Runtime DLL's _singleton variable; **g is the actual Factory*.
             void* factoryObj = *(void**)*g_pFactorySingleton;
             if (factoryObj) {
-                typeId = fn_Factory_GetTypeIdFromName(factoryObj,
-                                                      "Dialog", true);
+                typeId = reinterpret_cast<const ::Object::Factory*>(factoryObj)->GetTypeIdFromName(
+                    "Dialog", true);   // B.3.3 bridge
                 if (g_dialogTypeIdSlot) *g_dialogTypeIdSlot = typeId;
             }
         }
@@ -101,7 +103,7 @@ static void* LoadDialogResource(const char* rscPath) {
 // ============================================================
 static void AddDialogToUI(MainMenuDialog* self, void* dlgObj) {
     uint8_t ibp[8];
-    fn_InternalBasePtr_Ctor(ibp, dlgObj);
+    new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dlgObj));   // B.3.3 bridge
     fn_UI_AddDialog(*(void**)((uintptr_t)self + 0x10), ibp);
 }
 
@@ -122,9 +124,10 @@ void MainMenuDialog_OpenNewGame(MainMenuDialog* self) {
     void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 0xAE8, 8);
     if (dlgMem) {
         uint8_t parentIBP[8];
-        fn_InternalBasePtr_Ctor(parentIBP, (void*)self);
+        new (parentIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>((void*)self));   // B.3.3 bridge
         uint8_t nullIBP[8];
-        fn_InternalBasePtr_Ctor(nullIBP, nullptr);
+        new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         // Ctor args: self, ui, extRes, nullParent, parentMenuIBP (stack arg)
         dlgObj = fn_NewGameDialog_Ctor(dlgMem,
                                         *(void**)((uintptr_t)self + 0x10),
@@ -154,7 +157,7 @@ void MainMenuDialog_OpenLoad(MainMenuDialog* self) {
     void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 0x160, 8);
     if (dlgMem) {
         uint8_t nullIBP[8];
-        fn_InternalBasePtr_Ctor(nullIBP, nullptr);
+        new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         dlgObj = fn_SaveLoadDialog_Ctor(dlgMem,
                                          *(void**)(s + 0x10),
                                          extRes, nullIBP,
@@ -177,7 +180,7 @@ void MainMenuDialog_OpenSave(MainMenuDialog* self) {
     void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 0x160, 8);
     if (dlgMem) {
         uint8_t nullIBP[8];
-        fn_InternalBasePtr_Ctor(nullIBP, nullptr);
+        new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         dlgObj = fn_SaveLoadDialog_Ctor(dlgMem,
                                          *(void**)(s + 0x10),
                                          extRes, nullIBP,
@@ -196,7 +199,7 @@ void MainMenuDialog_OpenOptions(MainMenuDialog* self) {
     void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 0x1C0, 8);
     if (dlgMem) {
         uint8_t nullIBP[8];
-        fn_InternalBasePtr_Ctor(nullIBP, nullptr);
+        new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         dlgObj = fn_OptionsDialog_Ctor(dlgMem,
                                         *(void**)((uintptr_t)self + 0x10),
                                         extRes, nullIBP);
@@ -300,7 +303,7 @@ void MainMenuDialog_OpenAchievement(MainMenuDialog* self) {
     void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 0xD0, 8);
     if (dlgMem) {
         uint8_t nullIBP[8];
-        fn_InternalBasePtr_Ctor(nullIBP, nullptr);
+        new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         uint64_t parentBuf = *(uint64_t*)nullIBP;
         fn_DialogInstance_Ctor(dlgMem,
                                 *(void**)((uintptr_t)self + 0x10),
@@ -323,9 +326,10 @@ void MainMenuDialog_OpenScenario(MainMenuDialog* self) {
     void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 0xE8, 8);
     if (dlgMem) {
         uint8_t parentIBP[8];
-        fn_InternalBasePtr_Ctor(parentIBP, (void*)self);
+        new (parentIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>((void*)self));   // B.3.3 bridge
         uint8_t nullIBP[8];
-        fn_InternalBasePtr_Ctor(nullIBP, nullptr);
+        new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         dlgObj = fn_ScenarioDialog_Ctor(dlgMem,
                                          *(void**)((uintptr_t)self + 0x10),
                                          extRes, nullIBP,
@@ -344,7 +348,7 @@ void MainMenuDialog_OpenGoal(MainMenuDialog* self) {
     void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 200, 8);
     if (dlgMem) {
         uint8_t nullIBP[8];
-        fn_InternalBasePtr_Ctor(nullIBP, nullptr);
+        new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         uint64_t parentBuf = *(uint64_t*)nullIBP;
         fn_DialogInstance_Ctor(dlgMem,
                                 *(void**)((uintptr_t)self + 0x10),
@@ -365,7 +369,7 @@ void MainMenuDialog_OpenMap(MainMenuDialog* self) {
     void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 0xF8, 8);
     if (dlgMem) {
         uint8_t nullIBP[8];
-        fn_InternalBasePtr_Ctor(nullIBP, nullptr);
+        new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         dlgObj = fn_MapParamsDialog_Ctor(dlgMem,
                                           *(void**)((uintptr_t)self + 0x10),
                                           extRes, nullIBP);
@@ -384,9 +388,10 @@ void MainMenuDialog_OpenTutorial(MainMenuDialog* self) {
     printf("[MainMenuDialog] OpenTutorial: dlgMem=%p\n", dlgMem);
     if (dlgMem) {
         uint8_t parentIBP[8];
-        fn_InternalBasePtr_Ctor(parentIBP, (void*)self);
+        new (parentIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>((void*)self));   // B.3.3 bridge
         uint8_t nullIBP[8];
-        fn_InternalBasePtr_Ctor(nullIBP, nullptr);
+        new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         dlgObj = fn_ScenarioDialog_Ctor(dlgMem,
                                          *(void**)((uintptr_t)self + 0x10),
                                          extRes, nullIBP,
@@ -413,9 +418,10 @@ void MainMenuDialog_OpenMod(MainMenuDialog* self) {
     void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 0xD8, 8);
     if (dlgMem) {
         uint8_t parentIBP[8];
-        fn_InternalBasePtr_Ctor(parentIBP, (void*)self);
+        new (parentIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>((void*)self));   // B.3.3 bridge
         uint8_t nullIBP[8];
-        fn_InternalBasePtr_Ctor(nullIBP, nullptr);
+        new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         dlgObj = fn_ModDialog_Ctor(dlgMem,
                                     *(void**)((uintptr_t)self + 0x10),
                                     extRes, nullIBP, parentIBP);
@@ -484,7 +490,7 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
     }
 
     uint8_t parentPtr[16] = {};
-    fn_InternalBasePtr_Ctor(parentPtr, selfDialog);
+    new (parentPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(selfDialog));   // B.3.3 bridge
 
     fn_DialogInstance_Ctor(childDialog,
                            userInterfacePtr,
@@ -500,7 +506,8 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
 
     // --- Add child to UI ---
     uint8_t childInternalPtr[16] = {};
-    fn_InternalBasePtr_Ctor(childInternalPtr, childDialog);
+    new (childInternalPtr) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(childDialog));   // B.3.3 bridge
     fn_UI_AddDialog(userInterfacePtr, childInternalPtr);
 
     // --- Find textBuildNotice inside the child dialog ---
@@ -526,7 +533,8 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
     void* textBuildNotice = textElem;
 
     uint8_t textElemPtr[16] = {};
-    fn_InternalBasePtr_Ctor(textElemPtr, textBuildNotice);
+    new (textElemPtr) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(textBuildNotice));   // B.3.3 bridge
 
     // --- Set parameter 0 = CurrentVersion, 1 = CurrentBuildId ---
     // Both Configuration:: helpers return UI::String via hidden return ptr ABI.
@@ -739,7 +747,7 @@ void MainMenuDialog_Slot8(MainMenuDialog* self, void* param2, int param3, int pa
     case kButton_Resume: {
         // Close this dialog (return to gameplay)
         uint8_t selfPtr[16];
-        fn_InternalBasePtr_Ctor(selfPtr, (void*)self);
+        new (selfPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>((void*)self));   // B.3.3 bridge
         fn_UI_CloseDialog(*(void**)(s + 0x10), selfPtr);
         break;
     }
@@ -985,7 +993,7 @@ void StandaloneStub_Slot8_OnCommand(void* self, void* /*p2*/, int msg, int id) {
         // which the standalone toolbar already exercises (so they're resolved).
         printf("[MainMenuDialog::OnCommand] -> Resume (CloseDialog)\n");
         uint8_t selfPtr[16];
-        fn_InternalBasePtr_Ctor(selfPtr, self);
+        new (selfPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
         fn_UI_CloseDialog(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x10),
                           selfPtr);
         break;
@@ -1202,12 +1210,12 @@ static void StandaloneOpenMapParams_UI(void* ui) {
     for (size_t o = 0; o < 0xF8; o += 8)
         *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(dlgMem) + o) = 0;
     uint8_t nullIBP[8] = {};
-    fn_InternalBasePtr_Ctor(nullIBP, nullptr);
+    new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     uint64_t parentBuf = *reinterpret_cast<uint64_t*>(nullIBP);
     fn_DialogInstance_Ctor(dlgMem, ui, extRes, &parentBuf, 0, 0, 0);
     *reinterpret_cast<void**>(dlgMem) = g_MapParamsDialog_Vtable_Standalone;
     uint8_t ibp[8] = {};
-    fn_InternalBasePtr_Ctor(ibp, dlgMem);
+    new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dlgMem));   // B.3.3 bridge
     fn_UI_AddDialog(ui, ibp);
     printf("[OpenMap] MapParamsDialog opened + AddDialog'd (dlg=%p)\n", dlgMem);
 }
@@ -1265,7 +1273,7 @@ void* MainMenuDialog_Ctor_FromLoop(void* mem, void* loop) {
         // Real construction — rsc is loaded.
         void* ui = reinterpret_cast<void*>(lp + 0x40);
         uint8_t parentIBP[8] = {0};
-        fn_InternalBasePtr_Ctor(parentIBP, nullptr);
+        new (parentIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         fn_DialogInstance_Ctor(mem, ui, rsc, parentIBP, nullptr, nullptr, 0);
     } else {
         printf("[MainMenuDialog_FromLoop] bare-bones init (loop=%p rsc=%p) — "
@@ -1325,7 +1333,8 @@ extern "C" void* MainMenuDialog_FromMenuDLT(void* loop, void* retInternalBasePtr
     }
     void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0xC8, 8);
     void* dlg = MainMenuDialog_Ctor_FromLoop(mem, loop);
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(retInternalBasePtr, dlg);
+    if (fn_InternalBasePtr_Ctor) new (retInternalBasePtr) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(dlg));   // B.3.3 bridge
     return retInternalBasePtr;
 }
 

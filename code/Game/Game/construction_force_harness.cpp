@@ -40,6 +40,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace Object { uint32_t GetTypeIdByName(const char* name); }  // factory_registration.h
 
@@ -166,7 +167,7 @@ extern "C" bool StartTown_ForcePushConstructionWork(void* citizen) {
         static void* s_gather = nullptr;
         if (!s_gather) {
             int64_t siteIBP = 0;
-            fn_InternalBasePtr_Ctor(&siteIBP, site);
+            new (&siteIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(site));   // B.3.3 bridge
             s_gather = GatherRawMaterials_ConstructForSite(&siteIBP);
             if (!s_gather) return true;   // own it, retry construction next tick
             fprintf(stderr, "[ForceConstruct] constructed GatherRawMaterials=%p for site=%p\n",
@@ -199,7 +200,7 @@ extern "C" bool StartTown_ForcePushConstructionWork(void* citizen) {
     static void* s_build = nullptr;
     if (!s_build) {
         int64_t siteIBP = 0;
-        fn_InternalBasePtr_Ctor(&siteIBP, site);
+        new (&siteIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(site));   // B.3.3 bridge
         s_build = BuildStructure_ConstructForSite(&siteIBP);
         if (!s_build) return true;   // own it, retry construction next tick
         fprintf(stderr, "[ForceBuild] constructed BuildStructure=%p for site=%p (buildPositions=%d)\n",

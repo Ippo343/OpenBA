@@ -14,6 +14,7 @@
 #include "resolve.h"
 #include <cstdio>
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -279,7 +280,7 @@ void BuildRoad_Serialize_Impl(BuildRoad* self, void* stream) {
 int BuildRoad_OnComplete_Impl(BuildRoad* self, void* /*param2*/, void* /*param3*/, int param4) {
     // Clear entity ref: InternalBasePtr_Ctor(temp, NULL) then store to +0x48
     uintptr_t temp = 0;
-    fn_InternalBasePtr_Ctor(&temp, nullptr);
+    new (&temp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     self->field_48 = (void*)temp;
 
     return (param4 == 1) ? 1 : 0;
@@ -291,7 +292,7 @@ int BuildRoad_OnComplete_Impl(BuildRoad* self, void* /*param2*/, void* /*param3*
 // ============================================================
 int BuildRoad_OnCancel_Impl(BuildRoad* self) {
     uintptr_t temp = 0;
-    fn_InternalBasePtr_Ctor(&temp, nullptr);
+    new (&temp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     self->field_48 = (void*)temp;
     return 0;
 }
@@ -330,7 +331,7 @@ int BuildRoad_Validate_Impl(BuildRoad* self, void* param2) {
         if (result == 0) {
             // Task invalid — clear entity ref
             uintptr_t temp = 0;
-            fn_InternalBasePtr_Ctor(&temp, nullptr);
+            new (&temp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             self->field_48 = (void*)temp;
             return 0;
         }
@@ -531,7 +532,7 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
     if ((int64_t)self->field_50 == 0) {
         ++g_brExecClearPath;
         uint64_t actionRef = 0;
-        fn_InternalBasePtr_Ctor(&actionRef, nullptr);
+        new (&actionRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
         float velocity[3] = { 0.0f, 0.0f, 0.0f };
         Math::Vector3 worldPos = CellToWorldVec3(mapGrid, targetCell);
@@ -564,7 +565,7 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
 
         if (available > 0) {
             uint64_t actionRef = 0;
-            fn_InternalBasePtr_Ctor(&actionRef, nullptr);
+            new (&actionRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
             float velocity[3] = { 0.0f, 0.0f, 0.0f };
             Math::Vector3 worldPos = CellToWorldVec3(mapGrid, targetCell);

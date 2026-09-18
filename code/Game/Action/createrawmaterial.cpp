@@ -27,6 +27,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -253,7 +254,7 @@ void* CreateRawMaterial_ScalarDtor_Impl(CreateRawMaterial* self, uint32_t flags)
 
     // If entity ref at +0x10 is non-null, delete it
     if (self->entity != nullptr) {
-        fn_InternalBasePtr_DeletePtr(&self->entity);
+        reinterpret_cast< ::Object::InternalBasePtr*>(&self->entity)->DeletePtr();   // B.3.3 bridge
     }
 
     fn_ObjectInternal_Dtor(self);
@@ -467,7 +468,8 @@ int CreateRawMaterial_AbstractImpl_Impl(CreateRawMaterial* self, void* actionSta
 
             // Wrap in InternalBasePtr
             int64_t entityIBP = 0;
-            fn_InternalBasePtr_Ctor(&entityIBP, newEntity);
+            new (&entityIBP) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
 
             // Find component on new entity (DAT_1401c7c80 type)
             fn_InternalBasePtr_CheckPtr(&entityIBP);
@@ -475,7 +477,7 @@ int CreateRawMaterial_AbstractImpl_Impl(CreateRawMaterial* self, void* actionSta
 
             // Wrap component in IBP
             int64_t compIBP = 0;
-            fn_InternalBasePtr_Ctor(&compIBP, comp);
+            new (&compIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
 
             // Position entity at cell with random rotation
             void* randomPtr = *(void**)(gameWorld + 0xd8);

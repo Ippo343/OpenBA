@@ -9,6 +9,7 @@
 #include "engine_funcs.h"
 #include "Object/factory_registration.h"   // Object::ResolveTypeIdByNameLazy
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ---- Element type ids: UI::ButtonElement and UI::CheckElement ----------------
 // Retail reads these through exe .rdata exrefs 0x1401514f8 (ButtonElement, tested
@@ -74,7 +75,7 @@ void ControlUI_Slot4(ControlUI* self) {
         checkedElem = dialogElem;
     }
     uint64_t stored = 0;
-    fn_InternalBasePtr_Ctor(&stored, checkedElem);
+    new (&stored) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checkedElem));   // B.3.3 bridge
     *(uint64_t*)(s + 0x30) = stored;
 
     // Set element ID 50000 (0xC350). SA guard: retail assumes the .rsc always binds

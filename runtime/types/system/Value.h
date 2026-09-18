@@ -61,10 +61,20 @@ static_assert(sizeof(Random) == 2500, "System::Random must be 2500 (0x9c4) bytes
 // AsSeconds delegate to those two exports via the registry rather than
 // duplicating Timer::_secondsPerTick, which is a runtime-computed global
 // (QueryPerformanceFrequency-derived) and not a compile-time constant.
+//
+// ENDGAME B.3.3 step 6B — THE DEFINITION IS NOT HERE ANY MORE, AND THAT IS A
+// BUG FIX, NOT A TIDY. `engine/types/common.h:12` defines the same global
+// `struct Time` (identical: one `int64_t ticks`, asserted at 8 bytes in both
+// places), and `runtime/types/math/Math.h:529` includes that header for its
+// `Vector2/3/4` aliases. So ANY translation unit that included both
+// `runtime/types/math/Math.h` and this file was a hard `redefinition of
+// 'struct Time'` error — the two headers could never meet, which is why no
+// exe-side file has ever been able to include `runtime/types/object/Internal.h`
+// (it pulls this header for `::Random`). Proven with a two-line TU before this
+// edit. The definition is taken from the one place that owns it; the pin stays
+// here so a layout change still fails this header's build.
 // ============================================================
-struct Time {
-    int64_t ticks;
-};
+#include "../../../engine/types/common.h"   // the one global `struct Time`
 static_assert(sizeof(Time) == 8, "System::Time must be 8 bytes");
 
 // ============================================================

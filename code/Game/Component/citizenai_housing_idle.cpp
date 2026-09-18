@@ -80,6 +80,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // 2c-B probe: the last BuildStructure work spawned by State8Enter (buildcomponent_state8.cpp).
 extern "C" void* g_pBuildStructureWork;
@@ -584,7 +585,7 @@ uint64_t Helper_sub_79b0(int64_t param_1, void** param_2, void** param_3, int64_
 
     int64_t ctorBuf[2] = {0, 0};  // local_res10 (IBP-Ctor scratch + 7b60 citizen holder)
     if (param_6 != '\0') {
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(ctorBuf, nullptr);
+        if (fn_InternalBasePtr_Ctor) new (ctorBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         gate = ctorBuf[0];   // fresh empty IBP -> typically 0
     }
 
@@ -634,7 +635,7 @@ uint64_t Helper_sub_79b0(int64_t param_1, void** param_2, void** param_3, int64_
         // TODO(2c-B follow-up): root-cause why some SA citizens have citizen+0x1f0 == 0.
         if ((local_res20 != 0 && *reinterpret_cast<char*>(local_res20 + 0x4c) != '\0') || (param_6 != '\0')) {
             int64_t freshIbp[2] = {0, 0};
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(freshIbp, nullptr);
+            if (fn_InternalBasePtr_Ctor) new (freshIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             uint8_t hit = BuildAndWalk(freshIbp[0]);
             ret = (hit != 0) ? 1 : 0;
         }

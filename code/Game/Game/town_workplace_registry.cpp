@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Already-ported Keystone-A insert wrapper (0x140017230). Returns param_2 (&out);
 // *out = the found/created node. p4 = the empty array record {data=0, count/cap=0}.
@@ -243,7 +244,7 @@ extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t prof
 
     // Key absent -> empty result.
     if (found == nullptr) {
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(out, nullptr);
+        if (fn_InternalBasePtr_Ctor) new (out) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         return out;
     }
 
@@ -259,7 +260,8 @@ extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t prof
         // 3a: find its WorkPlaceComponent; wrap in an IBP (matches original).
         void* wpc = FindComponentByTypeId(building, s_tidWorkPlace);
         int64_t wpcIBP = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&wpcIBP, wpc);
+        if (fn_InternalBasePtr_Ctor) new (&wpcIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(wpc));   // B.3.3 bridge
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpcIBP);
         int64_t wpcPtr = wpcIBP;
         if (wpcPtr == 0) continue;                        // defensive (never in valid data)
@@ -274,7 +276,8 @@ extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t prof
         // 3b: find the WorkComponent on the owning entity; wrap in an IBP.
         void* wc = FindComponentByTypeId(owner, s_tidWork);
         int64_t wcIBP = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&wcIBP, wc);
+        if (fn_InternalBasePtr_Ctor) new (&wcIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(wc));   // B.3.3 bridge
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wcIBP);
         int64_t wcPtr = wcIBP;
         if (wcPtr == 0) continue;                         // defensive
@@ -309,6 +312,6 @@ extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t prof
     }
 
     // No qualifying building -> empty result.
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(out, nullptr);
+    if (fn_InternalBasePtr_Ctor) new (out) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     return out;
 }

@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // RemovalTool vtable addresses (for vtable chain in Dtor)
@@ -400,7 +401,7 @@ void RemovalTool_Draw(RemovalTool* self, void* context, char param3) {
                         // No entity — construct null IBP
                         void* nullIBP = nullptr;
                         if (fn_InternalBasePtr_Ctor)
-                            fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+                            new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                         entity = nullIBP;
                     } else {
                         entity = (void*)entityPtr2;

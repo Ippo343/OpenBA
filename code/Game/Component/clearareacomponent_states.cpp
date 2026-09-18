@@ -44,6 +44,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // The instant footprint sweep lives in clearareacomponent.cpp (also used by the
 // harness + the _flag5 instant path). Reused here for the guarded sweep.
@@ -466,7 +467,8 @@ extern "C" char ClearArea_State0Enter(void* data, void* sm) {
     ClearArea_BuildWork(work, ownerEnt, descRef, f0, f1, f2);
 
     uint64_t workIBP = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&workIBP, work);
+    if (fn_InternalBasePtr_Ctor) new (&workIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIBP);
     s_WorkSchedPost(static_cast<uintptr_t>(workCompIBP), kind, static_cast<char>(f3), &workIBP);
 

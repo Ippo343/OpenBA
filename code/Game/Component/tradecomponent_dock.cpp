@@ -64,6 +64,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Layer 1 leaf, used by the manifest generator to pick the merchant's price tier.
 extern "C" int TradeComponent_PickMerchantTier(void* self);   // 0x14005b4f0
@@ -836,7 +837,7 @@ extern "C" char TradeCtrl_State13_Update(void* selfV, void* /*sm*/) {
     }
 
     uint64_t clearIBP[2] = {0, 0};
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(clearIBP, nullptr);
+    if (fn_InternalBasePtr_Ctor) new (clearIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     *reinterpret_cast<uint64_t*>(comp + 0x80) = clearIBP[0];
 
     if (fn_MemFreeStatic) fn_MemFreeStatic(*reinterpret_cast<void**>(comp + 0x50));

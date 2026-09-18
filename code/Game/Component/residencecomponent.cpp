@@ -17,6 +17,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Resolved helpers
@@ -453,7 +454,7 @@ void ResidenceComponent_ResidenceInit(void* selfP) {
         uintptr_t entry = base + (uintptr_t)s * 0x10;
         int innerCount = *(int*)(entry + 8);
         while (innerCount > 0) {
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(ibpBuf, nullptr);
+            if (fn_InternalBasePtr_Ctor) new (ibpBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             uintptr_t cur = *(uintptr_t*)(self + 0x50) + (uintptr_t)s * 0x10;
             void* residentSlotPtr = *(void**)cur;
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(residentSlotPtr);

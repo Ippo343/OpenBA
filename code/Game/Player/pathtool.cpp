@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Resolved vtable pointers (set once on first call)
@@ -258,7 +259,8 @@ uint64_t PathTool_OnKey(PathTool* self, char key) {
             void* userData = s_fn_PickingGetUserData(pickingScene, hitIdx);
             if (fn_InternalBasePtr_Ctor) {
                 uint64_t tmpIBP = 0;
-                fn_InternalBasePtr_Ctor(&tmpIBP, userData);
+                new (&tmpIBP) ::Object::InternalBasePtr(
+                    reinterpret_cast<RtObject::Internal*>(userData));   // B.3.3 bridge
                 entityIBP = tmpIBP;
             }
         }

@@ -25,6 +25,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <new>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 
 // ============================================================
 // Helper: find element by name, returns raw element pointer
@@ -52,7 +54,8 @@ static uint32_t* LazyTypeId(uint32_t* current, const char* typeName, uint32_t* s
     if (*storage == 0) {
         void* factoryObj = *(void**)*g_pFactorySingleton;
         if (factoryObj) {
-            *storage = fn_Factory_GetTypeIdFromName(factoryObj, typeName, true);
+            *storage = reinterpret_cast<const ::Object::Factory*>(factoryObj)->GetTypeIdFromName(
+                typeName, true);   // B.3.3 bridge
             printf("[NewGameDialog] Lazy-resolved %s typeId = %u\n", typeName, *storage);
         }
     }
@@ -885,7 +888,7 @@ void* StartNewGame_Impl(void* worldSetup, void* nameStr, uint32_t seed, uint32_t
             }
             // Store retval ptr at +0x150
             uint8_t nullIBP[8];
-            fn_InternalBasePtr_Ctor(nullIBP, nullptr);
+            new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             // +0x150 = saved-state IBP (retail *param_10; null for a new sandbox game).
             *(uint64_t*)((uintptr_t)gameLoop + 0x150) =
                 savedStateIBP ? *(uint64_t*)savedStateIBP : *(uint64_t*)nullIBP;
@@ -974,7 +977,7 @@ void NewGameDialog_OnEvent(NewGameDialog* self, void* /*element*/, int eventType
             // buttonCancel: close dialog
             void* ui = *(void**)(s + 0x10);
             uint64_t basePtr[2];
-            fn_InternalBasePtr_Ctor(basePtr, self);
+            new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
             fn_UI_CloseDialog(ui, basePtr);
             return;
         }

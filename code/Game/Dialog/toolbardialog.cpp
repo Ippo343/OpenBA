@@ -37,6 +37,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 
 
 #ifdef _DEBUG
@@ -62,7 +64,7 @@ static void ToolbarDialog_CloseSubDialog_Impl(void* self) {
         fn_UI_CloseDialog(ui, (void*)(s + 0xE8));
         // Null out the sub-dialog ptr
         uint8_t nullBuf[8];
-        fn_InternalBasePtr_Ctor(nullBuf, nullptr);
+        new (nullBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *(uint64_t*)(s + 0xE8) = *(uint64_t*)nullBuf;
         // Reset sub-dialog index to -1
         *(int32_t*)(s + 0xF0) = -1;
@@ -118,7 +120,7 @@ static void* Toolbar_FindEntity_Impl(void* entityList, void* retBuf, uint64_t ty
         }
     }
     // Not found: return null
-    fn_InternalBasePtr_Ctor(retBuf, nullptr);
+    new (retBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     return nullptr;
 }
 
@@ -346,7 +348,7 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
         Close_t closeFn = (Close_t)(*(uintptr_t*)(*(uintptr_t*)controller + 0x28));
         closeFn(controller);
         // DeletePtr releases the reference
-        fn_InternalBasePtr_DeletePtr((void*)(pc + 0x28));
+        reinterpret_cast< ::Object::InternalBasePtr*>((void*)(pc + 0x28))->DeletePtr();   // B.3.3 bridge
     }
 
 
@@ -452,7 +454,8 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
     // g_pFactorySingleton is dispatch table → points to Factory::_singleton → holds Factory*
     // Need double-deref: *(void**)*g_pFactorySingleton to get the actual Factory object
     uint32_t factoryTypeId = *(uint32_t*)(foundNode + 0x08);
-    void* newObj = fn_Factory_CreateObject(*(void**)*g_pFactorySingleton, factoryTypeId);
+    void* newObj = reinterpret_cast<const ::Object::Factory*>(*(void**)*g_pFactorySingleton)->CreateObject(
+        factoryTypeId);   // B.3.3 bridge
     // IsDerivedFrom check for ToolController type
     bool isToolCtrl = fn_IsDerivedFrom(newObj, *g_TypeId_ToolController);
     void* toolController = isToolCtrl ? newObj : nullptr;
@@ -460,7 +463,7 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
 
     // Store as InternalBasePtr at pc+0x28
     uint64_t ctrlRef = 0;
-    fn_InternalBasePtr_Ctor(&ctrlRef, toolController);
+    new (&ctrlRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(toolController));   // B.3.3 bridge
     *(uint64_t*)(pc + 0x28) = ctrlRef;
 
     // Step 7: Create ToolSetting if needed (lazy init on the ToolNode)
@@ -483,12 +486,14 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
             uint32_t settingFactoryId = *typeIdPtr;
 
             // Create the ToolSetting object
-            void* settingObj = fn_Factory_CreateObject(*(void**)*g_pFactorySingleton, settingFactoryId);
+            void* settingObj = reinterpret_cast<const ::Object::Factory*>(*(void**)*g_pFactorySingleton)->CreateObject(
+                settingFactoryId);   // B.3.3 bridge
             bool isToolSetting = fn_IsDerivedFrom(settingObj, *g_TypeId_ToolSetting);
             void* toolSetting = isToolSetting ? settingObj : nullptr;
 
             uint64_t settingRef = 0;
-            fn_InternalBasePtr_Ctor(&settingRef, toolSetting);
+            new (&settingRef) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(toolSetting));   // B.3.3 bridge
             *(uint64_t*)(foundNode + 0x10) = settingRef;
         }
     }
@@ -586,7 +591,7 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
         }
 
         // Return null InternalBasePtr
-        fn_InternalBasePtr_Ctor(retBuf, nullptr);
+        new (retBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         return;
     }
 
@@ -612,7 +617,7 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
     }
 
     if (uiDescItem == nullptr) {
-        fn_InternalBasePtr_Ctor(retBuf, nullptr);
+        new (retBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         return;
     }
 
@@ -623,7 +628,7 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
     if (newBuf != nullptr) {
         // Null parent InternalBasePtr
         uint8_t nullParent[8];
-        fn_InternalBasePtr_Ctor(nullParent, nullptr);
+        new (nullParent) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
         // External resource from uiDescItem+0x28
         void* extRes = *(void**)((uintptr_t)uiDescItem + 0x28);
@@ -641,10 +646,10 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
 
     // Wrap in InternalBasePtr
     void* dialogRef = nullptr;
-    fn_InternalBasePtr_Ctor(&dialogRef, dialogInst);
+    new (&dialogRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dialogInst));   // B.3.3 bridge
 
     if (dialogRef == nullptr) {
-        fn_InternalBasePtr_Ctor(retBuf, nullptr);
+        new (retBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         return;
     }
 
@@ -934,7 +939,7 @@ extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys) {
     if (pauseDialog != nullptr) {
         // Construct null parent InternalBasePtr
         uint64_t parentRef;
-        fn_InternalBasePtr_Ctor(&parentRef, nullptr);
+        new (&parentRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         uint64_t parentCopy = parentRef;
 
         // Step 7: Construct DialogInstance base class
@@ -953,7 +958,7 @@ extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys) {
 
     // Step 8: Wrap in InternalBasePtr and add to UI
     uint64_t dialogRef;
-    fn_InternalBasePtr_Ctor(&dialogRef, finalDialog);
+    new (&dialogRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(finalDialog));   // B.3.3 bridge
     uint64_t addRef = dialogRef;
     fn_UI_AddDialog(userInterface, &addRef);
     return finalDialog;
@@ -1084,7 +1089,7 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
     *(uint64_t*)(s + 0xD0) = 0;         // toolbarItems data
     *(uint64_t*)(s + 0xD8) = 0;         // itemCount + capacity
     *(uint64_t*)(s + 0xE0) = groupId;   // toolbar group ID
-    fn_InternalBasePtr_Ctor((void*)(s + 0xE8), nullptr); // subDialog = null
+    new ((void*)(s + 0xE8)) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge // subDialog = null
     *(int32_t*)(s + 0xF0) = -1;         // openSubIndex = -1
     *(uint64_t*)(s + 0xF8) = 0;         // speedValues data
     *(uint64_t*)(s + 0x100) = 0;        // speedValueCount + capacity
@@ -1281,7 +1286,8 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
             void* buttonElem = isButton ? elemForCast : nullptr;
 
             uint64_t buttonRef;
-            fn_InternalBasePtr_Ctor(&buttonRef, buttonElem);
+            new (&buttonRef) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(buttonElem));   // B.3.3 bridge
 
             // For ShowGroup (1) and Utility (2), override string/sprite from
             // the item's entity description (ToolbarDescription)
@@ -1391,7 +1397,8 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
                 void* imageElem = isImage ? childElem : nullptr;
 
                 uint64_t imageRef;
-                fn_InternalBasePtr_Ctor(&imageRef, imageElem);
+                new (&imageRef) ::Object::InternalBasePtr(
+                    reinterpret_cast<RtObject::Internal*>(imageElem));   // B.3.3 bridge
 
                 // Set sprite if valid and imageElem is non-null
 #ifdef _DEBUG
@@ -1515,7 +1522,8 @@ void ToolbarDialog_Update(void* self, uint64_t /*param2*/, uint64_t /*param3*/, 
 
                 // InternalBasePtr::Ctor to create a local ref
                 int64_t localRef;
-                fn_InternalBasePtr_Ctor(&localRef, typedElem);
+                new (&localRef) ::Object::InternalBasePtr(
+                    reinterpret_cast<RtObject::Internal*>(typedElem));   // B.3.3 bridge
 
                 // If button is currently checked (+0xD8 != 0), uncheck it
                 if (localRef != 0 && *(uint8_t*)(localRef + 0xD8) != 0) {
@@ -1589,7 +1597,8 @@ void ToolbarDialog_Update(void* self, uint64_t /*param2*/, uint64_t /*param3*/, 
 
             // Build local InternalPtr
             int64_t textRef;
-            fn_InternalBasePtr_Ctor(&textRef, textElem);
+            new (&textRef) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(textElem));   // B.3.3 bridge
 
             // Format speed string: "%ix" with gameSpeed value
             System::String fmtStr = System::String::Format("%ix", (uint64_t)gameSpeed);
@@ -1643,7 +1652,8 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
         void* typedElem = isDerived ? elemObj : nullptr;
 
         int64_t localElemRef;
-        fn_InternalBasePtr_Ctor(&localElemRef, typedElem);
+        new (&localElemRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(typedElem));   // B.3.3 bridge
 
         int32_t actionType = *(int32_t*)(item + 0x48);
 
@@ -1664,7 +1674,7 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
                 // Same button clicked again — toggle off
                 *(int32_t*)(s + 0xF0) = -1;
                 int64_t nullRef;
-                fn_InternalBasePtr_Ctor(&nullRef, nullptr);
+                new (&nullRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                 *subDialogPtr = nullRef;
             } else {
                 // Open new sub-toolbar
@@ -1674,7 +1684,8 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
                 if (newDialog) {
                     // Create InternalPtr to self for parent reference
                     int64_t selfRef;
-                    fn_InternalBasePtr_Ctor(&selfRef, self);
+                    new (&selfRef) ::Object::InternalBasePtr(
+                        reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
 
                     // Construct child ToolbarDialog (recursive call)
                     childDialog = ToolbarDialog_Ctor_Impl(
@@ -1688,7 +1699,8 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
 
                 // Store child dialog reference
                 int64_t childRef;
-                fn_InternalBasePtr_Ctor(&childRef, childDialog);
+                new (&childRef) ::Object::InternalBasePtr(
+                    reinterpret_cast<RtObject::Internal*>(childDialog));   // B.3.3 bridge
                 *subDialogPtr = childRef;
 
                 // Position the sub-dialog relative to toolbar
@@ -1766,7 +1778,7 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
 
             // Create null InternalPtr for parent
             int64_t parentRef;
-            fn_InternalBasePtr_Ctor(&parentRef, nullptr);
+            new (&parentRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
             // Find entity by type
             uint8_t entityBuf[16];
@@ -1856,7 +1868,8 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
         if (isDerived) castResult = elemObj;
 
         int64_t localElemRef;
-        fn_InternalBasePtr_Ctor(&localElemRef, castResult);
+        new (&localElemRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(castResult));   // B.3.3 bridge
 
         int32_t actionType = *(int32_t*)(item + 0x48);
 
@@ -1866,7 +1879,7 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
             fn_UI_CloseDialog(*(void**)(s + 0x10), &closeRef);
 
             int64_t nullRef;
-            fn_InternalBasePtr_Ctor(&nullRef, nullptr);
+            new (&nullRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             *(int64_t*)(s + 0xE8) = nullRef;
             *(int32_t*)(s + 0xF0) = -1;
         }

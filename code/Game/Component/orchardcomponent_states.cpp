@@ -67,6 +67,7 @@
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace { struct OrchardCtrlTag {}; }
 using OrchardDispatch = ::ControllerLive::Dispatcher<OrchardCtrlTag>;
@@ -334,9 +335,9 @@ extern "C" char Orchard_State9Enter(void* selfV, void* /*sm*/) {
                 *reinterpret_cast<int32_t*>(slot + 0x00) = curY * mapStride + colOff + rectX;
                 // Retail writes the three IBPs in the order +0x10, +0x18, +0x08.
                 if (fn_InternalBasePtr_Ctor) {
-                    fn_InternalBasePtr_Ctor(reinterpret_cast<void*>(slot + 0x10), nullptr);
-                    fn_InternalBasePtr_Ctor(reinterpret_cast<void*>(slot + 0x18), nullptr);
-                    fn_InternalBasePtr_Ctor(reinterpret_cast<void*>(slot + 0x08), nullptr);
+                    new (reinterpret_cast<void*>(slot + 0x10)) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+                    new (reinterpret_cast<void*>(slot + 0x18)) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+                    new (reinterpret_cast<void*>(slot + 0x08)) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                 } else {
                     *reinterpret_cast<uint64_t*>(slot + 0x10) = 0;
                     *reinterpret_cast<uint64_t*>(slot + 0x18) = 0;
@@ -366,7 +367,8 @@ extern "C" char Orchard_State9Enter(void* selfV, void* /*sm*/) {
         }
     }
     uintptr_t workIBP = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&workIBP, work);
+    if (fn_InternalBasePtr_Ctor) new (&workIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
     else workIBP = reinterpret_cast<uintptr_t>(work);
 
     // 8. post it. Retail hand-rolls the component scan for type id DWORD_1401c8070 here
@@ -499,7 +501,8 @@ void OrchardPostTendArea(uintptr_t s) {
         }
     }
     uintptr_t workIBP = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&workIBP, work);
+    if (fn_InternalBasePtr_Ctor) new (&workIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
     else workIBP = reinterpret_cast<uintptr_t>(work);
 
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
@@ -748,7 +751,8 @@ extern "C" char Orchard_State12Enter(void* selfV, void* /*sm*/) {
         }
     }
     uintptr_t workIBP = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&workIBP, work);
+    if (fn_InternalBasePtr_Ctor) new (&workIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
     else workIBP = reinterpret_cast<uintptr_t>(work);
 
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
@@ -821,7 +825,8 @@ extern "C" char Orchard_State11Enter(void* selfV, void* /*sm*/) {
         }
     }
     uintptr_t workIBP = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&workIBP, work);
+    if (fn_InternalBasePtr_Ctor) new (&workIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
     else workIBP = reinterpret_cast<uintptr_t>(work);
 
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
@@ -1019,7 +1024,8 @@ extern "C" char Orchard_State20Enter(void* selfV, void* /*sm*/) {
     if (!work) return 1;
 
     uintptr_t workIBP = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&workIBP, work);
+    if (fn_InternalBasePtr_Ctor) new (&workIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
     else workIBP = reinterpret_cast<uintptr_t>(work);
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wcIBP);
     if (s_PostWork) s_PostWork(wcIBP, 0x401, 0, &workIBP);

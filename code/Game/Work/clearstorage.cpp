@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Local function pointers (resolved once on first use)
@@ -221,7 +222,8 @@ found_dest_storage:
 
         // Create InternalBasePtr for destStorage
         uint64_t destStorageIBP = 0;
-        fn_InternalBasePtr_Ctor(&destStorageIBP, destStorage);
+        new (&destStorageIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(destStorage));   // B.3.3 bridge
 
         // Check capacity: destStorage capacity - count vs rawMat resourceSize * availCount
         fn_InternalBasePtr_CheckPtr(&destStorageIBP);

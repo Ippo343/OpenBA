@@ -37,6 +37,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <windows.h>   // QueryPerformanceCounter for the BANISHED_SAVE_TIMING probe
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Resolved function pointers (exe-internal, resolved lazily)
@@ -1328,7 +1329,7 @@ void EntityList_RemoveEntity(EntityList* self, void* entityIBP) {
     }
 
     // Step 5: Delete the entity IBP reference
-    fn_InternalBasePtr_DeletePtr(entityIBP);
+    reinterpret_cast< ::Object::InternalBasePtr*>(entityIBP)->DeletePtr();   // B.3.3 bridge
 }
 
 // ============================================================

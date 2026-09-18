@@ -23,6 +23,7 @@
 #include "system/String.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // File-local helpers
@@ -190,28 +191,32 @@ void HelpUI_Slot4(HelpUI* self) {
     fn_Element_FindElementType(dialogElem, retBuf, *g_TypeId_HelpFirstElem);
     elem = *(void**)retBuf;
     derived = fn_IsDerivedFrom(elem, *g_TypeId_HelpFirstElem);
-    fn_InternalBasePtr_Ctor(bpBuf, derived ? elem : nullptr);
+    new (bpBuf) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(derived ? elem : nullptr));   // B.3.3 bridge
     *(uint64_t*)(s + 0x30) = *(uint64_t*)bpBuf;
 
     // 2. Find ComboElement (type 0x140151690) -> +0x40
     fn_Element_FindElementType(dialogElem, retBuf, *g_TypeId_HelpComboElem);
     elem = *(void**)retBuf;
     derived = fn_IsDerivedFrom(elem, *g_TypeId_HelpComboElem);
-    fn_InternalBasePtr_Ctor(bpBuf, derived ? elem : nullptr);
+    new (bpBuf) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(derived ? elem : nullptr));   // B.3.3 bridge
     *(uint64_t*)(s + 0x40) = *(uint64_t*)bpBuf;
 
     // 3. Find DocumentTextElement (type 0x1401517f0) -> +0x38
     fn_Element_FindElementType(dialogElem, retBuf, *g_TypeId_HelpDocTextElem);
     elem = *(void**)retBuf;
     derived = fn_IsDerivedFrom(elem, *g_TypeId_HelpDocTextElem);
-    fn_InternalBasePtr_Ctor(bpBuf, derived ? elem : nullptr);
+    new (bpBuf) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(derived ? elem : nullptr));   // B.3.3 bridge
     *(uint64_t*)(s + 0x38) = *(uint64_t*)bpBuf;
 
     // 4. Find ContainerElement (type 0x1401517f8) -> +0x58
     fn_Element_FindElementType(dialogElem, retBuf, *g_TypeId_HelpContainerElem);
     elem = *(void**)retBuf;
     derived = fn_IsDerivedFrom(elem, *g_TypeId_HelpContainerElem);
-    fn_InternalBasePtr_Ctor(bpBuf, derived ? elem : nullptr);
+    new (bpBuf) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(derived ? elem : nullptr));   // B.3.3 bridge
     *(uint64_t*)(s + 0x58) = *(uint64_t*)bpBuf;
 
     // Set element IDs on combo and document elements
@@ -227,7 +232,8 @@ void HelpUI_Slot4(HelpUI* self) {
         backBtn = *(void**)retBuf;
     }
     derived = fn_IsDerivedFrom(backBtn, *g_TypeId_HelpButtonElem);
-    fn_InternalBasePtr_Ctor(bpBuf, derived ? backBtn : nullptr);
+    new (bpBuf) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(derived ? backBtn : nullptr));   // B.3.3 bridge
     *(uint64_t*)(s + 0x48) = *(uint64_t*)bpBuf;
 
     // Find "buttonForward" by name -> +0x50, set ID 0xE77
@@ -238,7 +244,8 @@ void HelpUI_Slot4(HelpUI* self) {
         fwdBtn = *(void**)retBuf;
     }
     derived = fn_IsDerivedFrom(fwdBtn, *g_TypeId_HelpButtonElem);
-    fn_InternalBasePtr_Ctor(bpBuf, derived ? fwdBtn : nullptr);
+    new (bpBuf) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(derived ? fwdBtn : nullptr));   // B.3.3 bridge
     *(uint64_t*)(s + 0x50) = *(uint64_t*)bpBuf;
 
     if (*(void**)(s + 0x48)) fn_Element_SetElementId(*(void**)(s + 0x48), 0xE76);

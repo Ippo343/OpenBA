@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Thumbnail vtable stamps — see code/Game/Dialog/thumb_vtables.cpp.
 extern uintptr_t ThumbVtable_StampMaterialInstance(void* obj);
@@ -156,7 +157,8 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
         printf("[SetupImage] elem '%s': raw=%p imageElem=%p mat=%p sheet=%p\n",
                elementName, rawElem, imageElem, *materialOut, *spriteSheetOut);
     uint64_t imageElemPtr = 0;
-    fn_InternalBasePtr_Ctor((void*)&imageElemPtr, imageElem);
+    new ((void*)&imageElemPtr) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(imageElem));   // B.3.3 bridge
 
     // Create Sprite from SpriteSheet (index 0) and set on element
     uint8_t spriteBuf[16];

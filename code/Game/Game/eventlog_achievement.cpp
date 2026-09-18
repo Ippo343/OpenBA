@@ -45,6 +45,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // eventlog.cpp — the shared AddEvent family core, exposed for this sibling.
 extern "C" void EventLog_AddEventWithName(void* eventLog, int eventType, int severity,
@@ -90,7 +91,7 @@ extern "C" void EventLog_OnAchievementAwarded(int achievementId) {
     }
 
     int64_t nullEntity[1] = {0};
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(nullEntity, nullptr);
+    if (fn_InternalBasePtr_Ctor) new (nullEntity) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
     EventLog_AddEventWithName(eventLog, /*eventType*/ 0x19, /*severity*/ 4,
                               nullEntity, &titleText);

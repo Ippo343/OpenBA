@@ -38,6 +38,7 @@
 
 #include "scene_watch.h"
 #include <windows.h>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 
@@ -323,7 +324,8 @@ void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
         (*reinterpret_cast<void(**)(void*)>(*owner + 0x40))(owner);
     }
     if (fn_InternalBasePtr_DeletePtr)
-        fn_InternalBasePtr_DeletePtr(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(task) + 0x8));
+        reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(task) + 0x8))->DeletePtr(
+            );   // B.3.3 bridge
     if (s_ca60) s_ca60(reinterpret_cast<void*>(self + 0x30), task);
 }
 

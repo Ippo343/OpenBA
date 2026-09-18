@@ -22,6 +22,7 @@
 #include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Shared sub-callee / dispatch-slot resolution
@@ -177,7 +178,8 @@ static inline void* WA_Alloc(uint64_t size, uint32_t align) {
     if (fn_MemAlloc && g_pMemAllocSingleton) return fn_MemAlloc(g_pMemAllocSingleton, size, align);
     return nullptr;
 }
-static inline void WA_IbpCtor(void* ibp, void* obj) { if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(ibp, obj); }
+static inline void WA_IbpCtor(void* ibp, void* obj) { if (fn_InternalBasePtr_Ctor) new (ibp) ::Object::InternalBasePtr(
+    reinterpret_cast<RtObject::Internal*>(obj)); }   // B.3.3 bridge
 static inline void WA_CheckPtr(void* p)             { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 static inline void WA_Append(void* list, void* ibp) { if (s_fn_TaskListAppend) s_fn_TaskListAppend(list, ibp); }
 
@@ -263,7 +265,8 @@ void WorkAct_PerformWorkCtor_c1eb0(void* citizenIBP, uint32_t workId, void* targ
     }
     WA_IbpCtor(&ibpA, sm);
     if (*reinterpret_cast<uintptr_t*>(aiComp + 0x58) != 0 && fn_InternalBasePtr_DeletePtr)
-        fn_InternalBasePtr_DeletePtr(reinterpret_cast<void*>(aiComp + 0x58));
+        reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(aiComp + 0x58))->DeletePtr(
+            );   // B.3.3 bridge
     *reinterpret_cast<uintptr_t*>(aiComp + 0x58) = ibpA;
 
     // --- CompleteTask action ---
@@ -518,7 +521,8 @@ void WorkAct_PerformWorkCtor9_c0ad0(void* citizenIBP, uint32_t workId, void* tar
     uintptr_t ibpSm = 0;
     WA_IbpCtor(&ibpSm, sm);
     if (*reinterpret_cast<uintptr_t*>(aiComp + 0x58) != 0 && fn_InternalBasePtr_DeletePtr)
-        fn_InternalBasePtr_DeletePtr(reinterpret_cast<void*>(aiComp + 0x58));
+        reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(aiComp + 0x58))->DeletePtr(
+            );   // B.3.3 bridge
     *reinterpret_cast<uintptr_t*>(aiComp + 0x58) = ibpSm;
 
     // --- path-mask byte from the pile's map cell: cells(+0x80) + cellIdx*0x30, byte +0x29 ---
@@ -681,7 +685,8 @@ void WorkAct_PlayAnimationCtor_c2490(void* citizenIBP, uint32_t priority, uint32
     }
     WA_IbpCtor(&ibp30, sm);
     if (*reinterpret_cast<uintptr_t*>(aiComp + 0x58) != 0 && fn_InternalBasePtr_DeletePtr)
-        fn_InternalBasePtr_DeletePtr(reinterpret_cast<void*>(aiComp + 0x58));
+        reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(aiComp + 0x58))->DeletePtr(
+            );   // B.3.3 bridge
     *reinterpret_cast<uintptr_t*>(aiComp + 0x58) = ibp30;
 
     // --- CompleteTask action (param_3 forwarded as param_5) ---
@@ -761,7 +766,8 @@ void WorkAct_GrazingWorkCtor_bb0a0(void* citizenIBP, uint32_t priority, void* wo
     }
     WA_IbpCtor(&ibp30, sm);
     if (*reinterpret_cast<uintptr_t*>(aiComp + 0x58) != 0 && fn_InternalBasePtr_DeletePtr)
-        fn_InternalBasePtr_DeletePtr(reinterpret_cast<void*>(aiComp + 0x58));
+        reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(aiComp + 0x58))->DeletePtr(
+            );   // B.3.3 bridge
     *reinterpret_cast<uintptr_t*>(aiComp + 0x58) = ibp30;
 
     // --- CompleteTask action ---
@@ -890,7 +896,8 @@ void WorkAct_PlantWorkCtor_be6e0(void* citizenIBP, uint32_t priority, void* work
     }
     WA_IbpCtor(&ibp40, sm);
     if (*reinterpret_cast<uintptr_t*>(aiComp + 0x58) != 0 && fn_InternalBasePtr_DeletePtr)
-        fn_InternalBasePtr_DeletePtr(reinterpret_cast<void*>(aiComp + 0x58));
+        reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(aiComp + 0x58))->DeletePtr(
+            );   // B.3.3 bridge
     *reinterpret_cast<uintptr_t*>(aiComp + 0x58) = ibp40;
 
     // --- CompleteTask action (param_5 = param_7) ---

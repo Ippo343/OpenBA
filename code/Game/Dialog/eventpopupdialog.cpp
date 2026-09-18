@@ -2,6 +2,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // EventPopupDialog::Slot4 (0x140068C20) — Setup
 // Finds imageIcon, textEvent, buttonOk elements.
@@ -78,7 +79,7 @@ void EventPopupDialog_Slot4(EventPopupDialog* self) {
 void EventPopupDialog_Slot8(EventPopupDialog* self, void* /*param2*/, int param3, int param4) {
     if (param3 == 0x12 && param4 == 200) {
         uint8_t selfIBP[16];
-        fn_InternalBasePtr_Ctor(selfIBP, self);
+        new (selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
         fn_UI_CloseDialog(*(void**)((uintptr_t)self + 0x10), selfIBP);
     }
 }

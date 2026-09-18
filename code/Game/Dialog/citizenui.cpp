@@ -34,6 +34,7 @@
 #endif
 
 #include "Object/factory_registration.h"
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 // FollowDialog's real standalone vtable (built in followdialog.cpp). In standalone
 // mode the exe .rdata FollowDialog vtable (0x14015be00) is never populated, so
 // g_FollowDialog_Vtable stays null; Slot9 uses this as the fallback.
@@ -121,7 +122,7 @@ static void* WorldGrid_FindEntity_Impl(void* worldGrid, void* retval, int tileIn
     int* piVar1 = *(int**)((uintptr_t)worldGrid + 0x30);
     while (true) {
         if (piVar1 == nullptr) {
-            fn_InternalBasePtr_Ctor(retval, nullptr);
+            new (retval) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             return retval;
         }
         if (*piVar1 <= tileIndex) {
@@ -132,7 +133,7 @@ static void* WorldGrid_FindEntity_Impl(void* worldGrid, void* retval, int tileIn
                     *(uint64_t*)retval = *(uint64_t*)(piVar1 + 2);
                     return retval;
                 }
-                fn_InternalBasePtr_Ctor(retval, nullptr);
+                new (retval) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                 return retval;
             }
             // Go right
@@ -236,7 +237,7 @@ void CitizenUI_Slot6(CitizenUI* self) {
 
     // Reset +0xE0 to null InternalBasePtr
     uint64_t nullPtr = 0;
-    fn_InternalBasePtr_Ctor(&nullPtr, nullptr);
+    new (&nullPtr) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     *(uint64_t*)(s + 0xE0) = nullPtr;
 }
 
@@ -270,7 +271,7 @@ void CitizenUI_Slot7(CitizenUI* self) {
     bool isEntity = fn_IsDerivedFrom(entityBase, *g_TypeId_ComponentEntity);
     void* entity = isEntity ? entityBase : nullptr;
     uint64_t entityRef = 0;
-    fn_InternalBasePtr_Ctor(&entityRef, entity);
+    new (&entityRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
 
     // Find CitizenAIComponent
     uint64_t citizenAIRef = 0;
@@ -575,7 +576,7 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
         bool isEntity = fn_IsDerivedFrom(entityBase, *g_TypeId_ComponentEntity);
         void* entity = isEntity ? entityBase : nullptr;
         uint64_t entityRef = 0;
-        fn_InternalBasePtr_Ctor(&entityRef, entity);
+        new (&entityRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
 
         uint64_t aiRef = 0;
         fn_FindComponent_Citizen((void*)entityRef, &aiRef);
@@ -605,7 +606,7 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
         bool isEntity = fn_IsDerivedFrom(entityBase, *g_TypeId_ComponentEntity);
         void* entity = isEntity ? entityBase : nullptr;
         uint64_t entityRef = 0;
-        fn_InternalBasePtr_Ctor(&entityRef, entity);
+        new (&entityRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
 
         uint64_t aiRef = 0;
         fn_FindComponent_Citizen((void*)entityRef, &aiRef);
@@ -627,7 +628,7 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
         bool isEntity = fn_IsDerivedFrom(entityBase, *g_TypeId_ComponentEntity);
         void* entity = isEntity ? entityBase : nullptr;
         uint64_t entityRef = 0;
-        fn_InternalBasePtr_Ctor(&entityRef, entity);
+        new (&entityRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
         fn_InternalBasePtr_CheckPtr(&entityRef);
 
         // Find CitizenAI component on entity
@@ -670,7 +671,8 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
             *(uint64_t*)(fd + 0xB8) = citizenAIRef;   // entity to follow (CitizenAI IBP)
 
             uint64_t selfRef = 0;
-            fn_InternalBasePtr_Ctor(&selfRef, (void*)self);
+            new (&selfRef) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>((void*)self));   // B.3.3 bridge
             *(uint64_t*)(fd + 0xC0) = selfRef;         // controller back-reference
 
             *(uint64_t*)(fd + 0xC8) = 0;               // textFollow (set by Slot4)
@@ -681,7 +683,8 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
 
         // Store dialog ref at CitizenUI+0xE0
         uint64_t dialogIBP = 0;
-        fn_InternalBasePtr_Ctor(&dialogIBP, resultPtr);
+        new (&dialogIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(resultPtr));   // B.3.3 bridge
         *(uint64_t*)(s + 0xE0) = dialogIBP;
 
         // Add dialog to UI

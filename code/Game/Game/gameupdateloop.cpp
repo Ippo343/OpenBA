@@ -35,6 +35,7 @@
 #include <cstdint>
 #include <cmath>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Toolbar HUD standalone bring-up (code/Game/Dialog/toolbar_vtable_standalone.cpp):
 // builds the ToolbarDialog vtable + fills the toolbar type-id globals. Called only
@@ -2234,7 +2235,7 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
         // failed (dialogRes null), skip construction rather than crash.
         if (mem != nullptr && fn_ToolbarDialog_Ctor && dialogRes != nullptr) {
             int64_t nullParent[1] = {0};
-            fn_InternalBasePtr_Ctor(nullParent, nullptr);
+            new (nullParent) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             toolbar = fn_ToolbarDialog_Ctor(mem, self->m_userInterface, dialogRes, nullParent, nullptr);
         }
 
@@ -2242,7 +2243,8 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
         if (toolbar) {
             g_ribbonParentToolbar = toolbar;  // parent for the EventNotify ribbon
             int64_t dialogPtr[1];
-            fn_InternalBasePtr_Ctor(dialogPtr, toolbar);
+            new (dialogPtr) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(toolbar));   // B.3.3 bridge
             fn_UI_AddDialog(self->m_userInterface, dialogPtr);
             fprintf(stderr, "[HUD] Toolbar CONSTRUCTED + added to UI: toolbar=%p itemCount(+0xD8)=%d "
                     "buttonCount(+0xC8)=%d speedCount(+0x100)=%d\n", toolbar,
@@ -2288,13 +2290,15 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
         void* eventNotify = nullptr;
         if (mem != nullptr && dialogRes != nullptr) {
             int64_t parentIBP[1];
-            fn_InternalBasePtr_Ctor(parentIBP, g_ribbonParentToolbar);
+            new (parentIBP) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(g_ribbonParentToolbar));   // B.3.3 bridge
             eventNotify = EventNotifyDialog_Ctor_Standalone(mem, self->m_userInterface, dialogRes, parentIBP);
         }
 
         if (eventNotify) {
             int64_t dialogPtr[1];
-            fn_InternalBasePtr_Ctor(dialogPtr, eventNotify);
+            new (dialogPtr) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(eventNotify));   // B.3.3 bridge
             fn_UI_AddDialog(self->m_userInterface, dialogPtr);
             fprintf(stderr, "[HUD] EventNotify ribbon CONSTRUCTED + added to UI: %p\n", eventNotify);
             fflush(stderr);
@@ -2335,13 +2339,14 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
         void* autoSave = nullptr;
         if (mem != nullptr && dialogRes != nullptr) {
             int64_t nullParent[1] = {0};
-            fn_InternalBasePtr_Ctor(nullParent, nullptr);
+            new (nullParent) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             autoSave = AutoSaveDialog_Ctor_Standalone(mem, self->m_userInterface, dialogRes, nullParent);
         }
 
         if (autoSave) {
             int64_t dialogPtr[1];
-            fn_InternalBasePtr_Ctor(dialogPtr, autoSave);
+            new (dialogPtr) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(autoSave));   // B.3.3 bridge
             fn_UI_AddDialog(self->m_userInterface, dialogPtr);
         } else if (mem) {
             fn_MemFreeStatic(mem);
@@ -2457,7 +2462,7 @@ void GameUpdateLoop_Shutdown(GameUpdateLoop* self) {
                 int64_t citHousingRef = *(int64_t*)(cit + 0x248);
 
                 int64_t nullRef[1] = {0};
-                fn_InternalBasePtr_Ctor(nullRef, nullptr);
+                new (nullRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
                 if (citBuilding != townHall || citHousingRef != nullRef[0]) {
                     fn_CitizenComponent_AssignHousing(citizen, nullRef);
@@ -2495,7 +2500,8 @@ void GameUpdateLoop_Shutdown(GameUpdateLoop* self) {
     // Delete scenario instance
     if (self->m_scenarioInstance != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown] deleting scenario instance...\n");
-        fn_InternalBasePtr_DeletePtr((void*)((uintptr_t)self + 0x150));
+        reinterpret_cast< ::Object::InternalBasePtr*>((void*)((uintptr_t)self + 0x150))->DeletePtr(
+            );   // B.3.3 bridge
     }
 
     // Free/destroy all subsystems
@@ -2725,7 +2731,7 @@ void GameUpdateLoop_OnScenarioComplete(GameUpdateLoop* self) {
         // Event type: 0x1d (win) or 0x1c (fail) depending on IsMet
         TRACE("[GameUpdateLoop::OnScenarioComplete] no parent achievement, firing simple notification...\n");
         int64_t nullEntity[1] = {0};
-        fn_InternalBasePtr_Ctor(nullEntity, nullptr);
+        new (nullEntity) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
         fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)self + 0x150));
         bool isMet = fn_AchievementInstance_IsMet(*(void**)((uintptr_t)self + 0x150));
@@ -2757,7 +2763,7 @@ void GameUpdateLoop_OnScenarioComplete(GameUpdateLoop* self) {
         fn_UIString_ToSystemString(uiStr, &sysStr);
 
         int64_t nullEntity[1] = {0};
-        fn_InternalBasePtr_Ctor(nullEntity, nullptr);
+        new (nullEntity) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
         fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)self + 0x150));
         bool isMet = fn_AchievementInstance_IsMet(*(void**)((uintptr_t)self + 0x150));

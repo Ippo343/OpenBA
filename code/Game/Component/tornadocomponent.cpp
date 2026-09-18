@@ -53,6 +53,7 @@
 
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // EventLog::AddEvent (0x140095580) — already ported in code/Game/Game/eventlog.cpp.
 // Reused rather than re-inlined: retail's Startup builds the same 0x28-byte record
@@ -804,7 +805,7 @@ void TornadoComponent_Serialize(TornadoComponent* self) {
     // --- post the warning to the event log, and pause if the setting says so ---
     void* eventLog = *reinterpret_cast<void**>(g + 0x138);
     int64_t nullIbp = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nullIbp, nullptr);
+    if (fn_InternalBasePtr_Ctor) new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     EventLog_AddEvent(eventLog, 0x1e, 3, &nullIbp);
 
     if (g_pGameSettingsPtr && *g_pGameSettingsPtr &&

@@ -10,6 +10,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // StorageCapacityUI::Serialize (vtable +0x20) — Find progress element
@@ -34,7 +35,7 @@ void StorageCapacityUI_Serialize(StorageCapacityUI* self) {
     void* checkedElem = valid ? rawElem : nullptr;
 
     uint8_t basePtrBuf[8];
-    fn_InternalBasePtr_Ctor(basePtrBuf, checkedElem);
+    new (basePtrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checkedElem));   // B.3.3 bridge
     self->data30 = *(uint64_t*)basePtrBuf;
 
     // Set progress max scale at element +0x124 to 1.0f
@@ -64,7 +65,7 @@ void StorageCapacityUI_Startup(StorageCapacityUI* self) {
 
     // Wrap entity in InternalBasePtr
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, entityPtr);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
     void* entityInternal = *(void**)entityBuf;
 
     // Find StorageComponent via FUN_140006270

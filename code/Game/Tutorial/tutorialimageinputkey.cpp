@@ -19,6 +19,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // hotkeytooltipui.cpp - the existing byte-faithful port of exe 0x140099c20.
 namespace Game { void Hotkey_BuildKeyName(void* retval, int device, int keyIndex); }
@@ -236,7 +237,8 @@ void* TutorialImageInputKey_Slot9(void* self, void* retIBP, void* dialog) {
     // 6. Wrap in InternalBasePtr
     void* textRef = nullptr;
     if (fn_InternalBasePtr_Ctor)
-        fn_InternalBasePtr_Ctor(&textRef, textElement);
+        new (&textRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(textElement));   // B.3.3 bridge
 
     // 7. Get actual KeyMap object (triple deref from exref)
     void* keymap = nullptr;

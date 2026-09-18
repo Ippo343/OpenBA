@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Resolved helpers
@@ -500,7 +501,7 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
                     found = ctrlBuf[0];
             }
             int64_t ibp = 0;
-            fn_InternalBasePtr_Ctor(&ibp, found);
+            new (&ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
             if (ibp != 0) {
                 fn_InternalBasePtr_CheckPtr(&ibp);
                 int64_t bound = *reinterpret_cast<int64_t*>(ibp + 0x30);

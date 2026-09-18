@@ -65,6 +65,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 
@@ -117,7 +118,8 @@ void EnsureResolved() {
 }
 
 inline void Ck(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
-inline void Ctor(void* dst, void* obj) { if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(dst, obj); }
+inline void Ctor(void* dst, void* obj) { if (fn_InternalBasePtr_Ctor) new (dst) ::Object::InternalBasePtr(
+    reinterpret_cast<RtObject::Internal*>(obj)); }   // B.3.3 bridge
 
 // The family/roster ring is doubly linked through member +0x268 (next) / +0x270
 // (prev) with the head cached at host +0x260 — see CitizenComp_LeaveRoster_2040 /

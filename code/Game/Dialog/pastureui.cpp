@@ -11,6 +11,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // File-local helper: PastureCalcMaxCount_Impl (FUN_140128570)
@@ -99,7 +100,7 @@ static void PastureUI_UpdateSlider_Impl(void* self) {
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
     void* entityPtr = isEntity ? entity : nullptr;
     uint64_t entityIPtr = 0;
-    fn_InternalBasePtr_Ctor(&entityIPtr, entityPtr);
+    new (&entityIPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
     fn_InternalBasePtr_CheckPtr(&entityIPtr);
     uintptr_t entityVal = entityIPtr;
 
@@ -159,7 +160,7 @@ void PastureUI_Slot4(PastureUI* self) {
     void* rawElem = (void*)findResult;
     void* checked = rawElem ? rawElem : nullptr;
     uint64_t basePtrVal = 0;
-    fn_InternalBasePtr_Ctor(&basePtrVal, checked);
+    new (&basePtrVal) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
     *(uint64_t*)(s + 0x38) = basePtrVal;
 
     // Set slider element ID to 501 (0x1f5)
@@ -189,7 +190,7 @@ void PastureUI_Slot7(PastureUI* self) {
     bool isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
     void* entity = isEntity ? dataSource : nullptr;
     uint8_t entityBuf[16];
-    fn_InternalBasePtr_Ctor(entityBuf, entity);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
 
     uint8_t compBuf[16];
     fn_FindComponent_Pasture(*(void**)entityBuf, compBuf);
@@ -246,7 +247,8 @@ void PastureUI_Slot11(PastureUI* self, int64_t param2) {
         checkedEntity = entity;
     }
     uint64_t entityBasePtr = 0;
-    fn_InternalBasePtr_Ctor(&entityBasePtr, checkedEntity);
+    new (&entityBasePtr) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(checkedEntity));   // B.3.3 bridge
 
     // Find PastureComponent on entity
     uint64_t pastureComp = 0;
@@ -293,7 +295,8 @@ void* PastureUI_Slot12(PastureUI* self, void* param2) {
         checkedEntity = entity;
     }
     uint64_t entityBasePtr = 0;
-    fn_InternalBasePtr_Ctor(&entityBasePtr, checkedEntity);
+    new (&entityBasePtr) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(checkedEntity));   // B.3.3 bridge
 
     // Find PastureComponent on entity
     uint64_t pastureComp = 0;
@@ -339,7 +342,8 @@ void PastureUI_Slot9(PastureUI* self, void* param2, int param3, int param4) {
         bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
         void* checkedEntity = isEntity ? entity : nullptr;
         uint64_t entityBasePtr = 0;
-        fn_InternalBasePtr_Ctor(&entityBasePtr, checkedEntity);
+        new (&entityBasePtr) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(checkedEntity));   // B.3.3 bridge
 
         uint64_t pastureComp = 0;
         fn_FindComponent_Pasture((void*)entityBasePtr, &pastureComp);

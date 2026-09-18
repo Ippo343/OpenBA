@@ -45,6 +45,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <initializer_list>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 
@@ -209,7 +210,7 @@ extern "C" void TreeNodeFree_2df90(void* hdrV, void* nodeV) {
     TreeNodeFree_2df90(hdrV, P(nodeV, 0x20));
     TreeNodeFree_2df90(hdrV, P(nodeV, 0x28));
     if (P(nodeV, 0x10) != nullptr && fn_InternalBasePtr_DeletePtr)
-        fn_InternalBasePtr_DeletePtr(B(nodeV) + 0x10);
+        reinterpret_cast< ::Object::InternalBasePtr*>(B(nodeV) + 0x10)->DeletePtr();   // B.3.3 bridge
     MemFree(nodeV);
 }
 
@@ -223,7 +224,7 @@ extern "C" void IbpTree_Clear_2de90(void* hdrV) {
         TreeNodeFree_2df90(hdrV, P(root, 0x20));
         TreeNodeFree_2df90(hdrV, P(root, 0x28));
         if (P(root, 0x10) != nullptr && fn_InternalBasePtr_DeletePtr)
-            fn_InternalBasePtr_DeletePtr(B(root) + 0x10);
+            reinterpret_cast< ::Object::InternalBasePtr*>(B(root) + 0x10)->DeletePtr();   // B.3.3 bridge
         MemFree(root);
     }
     P(hdrV, 0x00) = nullptr;
@@ -386,7 +387,8 @@ extern "C" void EntityUI_Dtor_1024d0(void* selfV) {
         typedef void (*fn_Close_t)(void*);
         fn_Close_t close = reinterpret_cast<fn_Close_t>(P(vtbl, 0x28));
         if (close) close(tool);
-        if (fn_InternalBasePtr_DeletePtr) fn_InternalBasePtr_DeletePtr(self + 0x28);
+        if (fn_InternalBasePtr_DeletePtr) reinterpret_cast< ::Object::InternalBasePtr*>(self + 0x28)->DeletePtr(
+            );   // B.3.3 bridge
     }
 
     Arr(self, 0x70).~Array();
@@ -422,7 +424,8 @@ extern "C" void Tutorial_Dtor_f8ff0(void* selfV) {
         uint8_t* node = P(self, 0x30) ? B(P(self, 0x30)) : nullptr;
         while (node && P(node, 0x18)) node = B(P(node, 0x18));
         while (node) {
-            if (fn_InternalBasePtr_DeletePtr) fn_InternalBasePtr_DeletePtr(node + 0x08);
+            if (fn_InternalBasePtr_DeletePtr) reinterpret_cast< ::Object::InternalBasePtr*>(node + 0x08)->DeletePtr(
+                );   // B.3.3 bridge
             uint8_t* right = P(node, 0x20) ? B(P(node, 0x20)) : nullptr;
             if (right) {
                 node = right;

@@ -24,6 +24,7 @@
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <utility>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // File-local helper: ModDetails_StringArrayPush (FUN_14006e290)
@@ -345,7 +346,7 @@ static void ModDetailsDialog_OpenDialog_Impl(void* self, const char* rscPath) {
     void* dialogInst = nullptr;
     if (newDialog) {
         uint64_t nullRef;
-        fn_InternalBasePtr_Ctor(&nullRef, nullptr);
+        new (&nullRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         fn_DialogInstance_Ctor(newDialog, *(void**)(s + 0x10), dialog, &nullRef, 0, 0, 0);
         // Set vtable to ModUpdateDialog
         if (g_ModUpdateDialog_Vtable) {
@@ -356,7 +357,7 @@ static void ModDetailsDialog_OpenDialog_Impl(void* self, const char* rscPath) {
 
     // Add to UI
     uint64_t dialogRef;
-    fn_InternalBasePtr_Ctor(&dialogRef, dialogInst);
+    new (&dialogRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dialogInst));   // B.3.3 bridge
     fn_UI_AddDialog(*(void**)(s + 0x10), &dialogRef);
 }
 
@@ -372,7 +373,7 @@ void ModDetailsDialog_Slot8(ModDetailsDialog* self, uint64_t /*param2*/,
 
     if (param4 == 0) {
         uint8_t basePtr[16];
-        fn_InternalBasePtr_Ctor(basePtr, self);
+        new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
         void* ui = *(void**)(s + 0x10);
         fn_UI_CloseDialog(ui, basePtr);
     } else if (param4 == 1) {

@@ -16,6 +16,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Resolved helpers
@@ -121,7 +122,7 @@ void HealerComponent_OnRemove(HealerComponent* self) {
 
     uint8_t basePtr[24] = {};
     if (fn_InternalBasePtr_Ctor) {
-        fn_InternalBasePtr_Ctor(basePtr, self);
+        new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
     }
 
     if (s_fn_ArrayEraseBasePtr && s_pWorldManager && *s_pWorldManager) {
@@ -163,7 +164,7 @@ extern "C" char HealerComponent_EnterBuilt(void* comp, void* /*sm*/) {
         !s_pWorldManager || !*s_pWorldManager) return 0;
 
     uint8_t ibp[24] = {};
-    fn_InternalBasePtr_Ctor(ibp, comp);
+    new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
 
     uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
         reinterpret_cast<uintptr_t>(*s_pWorldManager) + 0xF0);

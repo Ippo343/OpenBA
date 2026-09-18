@@ -17,6 +17,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Local function pointers (resolved once by LocationWork_ResolveFuncs)
@@ -403,7 +404,7 @@ int LocationWork_Slot4_Impl(LocationWork* self, void* citizenIBP, uint64_t /*par
 // ============================================================
 bool LocationWork_Slot6_Impl(LocationWork* self) {
     uintptr_t nullIBP = 0;
-    fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+    new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     self->_field48 = (void*)nullIBP;
     return false;
 }
@@ -415,7 +416,7 @@ bool LocationWork_Slot6_Impl(LocationWork* self) {
 // ============================================================
 int LocationWork_Slot7_Impl(LocationWork* self) {
     uintptr_t nullIBP = 0;
-    fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+    new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     self->_field48 = (void*)nullIBP;
     return 0;
 }
@@ -464,7 +465,7 @@ bool LocationWork_Slot9_Impl(LocationWork* self, void* citizenIBP) {
     if (!stillValid) {
         // Clear the target — construct null InternalBasePtr
         uintptr_t nullIBP = 0;
-        fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+        new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *(uintptr_t*)(selfAddr + 0x48) = nullIBP;
         return false;
     }

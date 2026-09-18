@@ -17,6 +17,7 @@
 #include "system/String.h"
 #include <cstdint>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Helper: Find element by name in dialog instance
@@ -107,7 +108,7 @@ void OptionInputBindDialog_OnOk(OptionInputBindDialog* self) {
     uintptr_t s = (uintptr_t)self;
     *(int*)(s + 0x24) = 1;
     uint64_t basePtr = 0;
-    fn_InternalBasePtr_Ctor(&basePtr, self);
+    new (&basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
     void* ui = *(void**)(s + 0x10);
     fn_UI_CloseDialog(ui, &basePtr);
 }
@@ -121,7 +122,7 @@ void OptionInputBindDialog_OnCancel(OptionInputBindDialog* self) {
     uintptr_t s = (uintptr_t)self;
     *(int*)(s + 0x24) = 0;
     uint64_t basePtr = 0;
-    fn_InternalBasePtr_Ctor(&basePtr, self);
+    new (&basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
     void* ui = *(void**)(s + 0x10);
     fn_UI_CloseDialog(ui, &basePtr);
 }
@@ -135,7 +136,7 @@ void OptionInputBindDialog_OnButton2(OptionInputBindDialog* self) {
     uintptr_t s = (uintptr_t)self;
     *(int*)(s + 0x24) = 2;
     uint64_t basePtr = 0;
-    fn_InternalBasePtr_Ctor(&basePtr, self);
+    new (&basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
     void* ui = *(void**)(s + 0x10);
     fn_UI_CloseDialog(ui, &basePtr);
 }
@@ -149,7 +150,7 @@ void OptionInputBindDialog_OnButton3(OptionInputBindDialog* self) {
     uintptr_t s = (uintptr_t)self;
     *(int*)(s + 0x24) = 3;
     uint64_t basePtr = 0;
-    fn_InternalBasePtr_Ctor(&basePtr, self);
+    new (&basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
     void* ui = *(void**)(s + 0x10);
     fn_UI_CloseDialog(ui, &basePtr);
 }

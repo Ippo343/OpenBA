@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ---- deps ported elsewhere (link to them) ----
 struct CitizenComponent;   // opaque — only for matching the AssignHousing mangled name
@@ -71,7 +72,8 @@ inline int64_t   TownMgr()     { return *reinterpret_cast<int64_t*>(GW() + 0xf0)
 inline int*      GameObj()     { return *reinterpret_cast<int**>(GW() + 0xf8); }
 inline int64_t   LaborerKey()  { return *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(GW() + 0xb0) + 0x30); }
 inline void CheckPtr(void* p)  { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
-inline void Ctor(void* self, void* obj) { if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(self, obj); }
+inline void Ctor(void* self, void* obj) { if (fn_InternalBasePtr_Ctor) new (self) ::Object::InternalBasePtr(
+    reinterpret_cast<RtObject::Internal*>(obj)); }   // B.3.3 bridge
 
 typedef uint32_t (*GetTypeId_t)(void*);
 

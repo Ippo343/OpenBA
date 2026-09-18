@@ -49,6 +49,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 
@@ -140,7 +141,8 @@ void* CitizenAI_sub_78c0(int64_t param_1, void* param_2) {
     }
     ptr = nullptr;
 done:
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(param_2, ptr);
+    if (fn_InternalBasePtr_Ctor) new (param_2) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(ptr));   // B.3.3 bridge
     return param_2;
 }
 
@@ -337,7 +339,8 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
                     }
 
                     int64_t local_98_ibp = 0;  // CONCAT44(uStack_94, local_98) — IBP for pvVar14
-                    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&local_98_ibp, pvVar14);
+                    if (fn_InternalBasePtr_Ctor) new (&local_98_ibp) ::Object::InternalBasePtr(
+                        reinterpret_cast<RtObject::Internal*>(pvVar14));   // B.3.3 bridge
 
                     if (local_98_ibp != 0) {
                         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_98_ibp);
@@ -403,7 +406,8 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
                             }
 
                             int64_t local_88_ibp = 0;
-                            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&local_88_ibp, pvVar12b);
+                            if (fn_InternalBasePtr_Ctor) new (&local_88_ibp) ::Object::InternalBasePtr(
+                                reinterpret_cast<RtObject::Internal*>(pvVar12b));   // B.3.3 bridge
                             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_88_ibp);
                             int64_t costSrc = local_88_ibp;
                             int cost = (costSrc && s_fn_d5d0) ? s_fn_d5d0(costSrc, param_3, local_68, uVar19) : -1;

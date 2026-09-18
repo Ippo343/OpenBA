@@ -66,6 +66,8 @@
 #include <initializer_list>
 #include <cstdlib>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 
 // Exposed by moddialog.cpp so the retail address 0x14006eec0 can be registered.
 extern "C" void ModDialog_RefreshDisplay(void* self);
@@ -131,10 +133,10 @@ void* ModDialog_VDtor(void* self, uint32_t flags) {
     *reinterpret_cast<uint64_t*>(s + 0xC0) = 0;
     if (fn_InternalBasePtr_Ctor) {
         uint64_t nullIbp = 0;
-        fn_InternalBasePtr_Ctor(&nullIbp, nullptr);
+        new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *reinterpret_cast<uint64_t*>(s + 0xC8) = nullIbp;
         nullIbp = 0;
-        fn_InternalBasePtr_Ctor(&nullIbp, nullptr);
+        new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *reinterpret_cast<uint64_t*>(s + 0xD0) = nullIbp;
     }
     if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
@@ -279,7 +281,8 @@ void* ModDlg_LoadDialogResource(const char* rscPath) {
             g_pFactorySingleton && *g_pFactorySingleton) {
             void* factoryObj = *reinterpret_cast<void**>(*g_pFactorySingleton);
             if (factoryObj) {
-                typeId = fn_Factory_GetTypeIdFromName(factoryObj, "Dialog", true);
+                typeId = reinterpret_cast<const ::Object::Factory*>(factoryObj)->GetTypeIdFromName(
+                    "Dialog", true);   // B.3.3 bridge
                 if (slot) *slot = typeId;
             }
         }
@@ -366,15 +369,15 @@ extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf) {
         *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(dlgMem) + o) = 0;
 
     uint8_t nullIBP[8] = {};
-    fn_InternalBasePtr_Ctor(nullIBP, nullptr);
+    new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     uint8_t parentIBP[8] = {};
-    fn_InternalBasePtr_Ctor(parentIBP, mainMenuSelf);
+    new (parentIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(mainMenuSelf));   // B.3.3 bridge
 
     void* dlg = ModDialog_Ctor_Standalone(dlgMem, ui, extRes, nullIBP, parentIBP);
     s_lastModDialog = dlg;
 
     uint8_t ibp[8] = {};
-    fn_InternalBasePtr_Ctor(ibp, dlg);
+    new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dlg));   // B.3.3 bridge
     fn_UI_AddDialog(ui, ibp);
     printf("[ModDialog] opened + AddDialog'd (dlg=%p mods=%d)\n", dlg,
                 fn_Modification_GetCount ?
@@ -431,7 +434,7 @@ extern "C" void ModDialog_CloseAndReload(void* self) {
     }
 
     uint64_t nullIbp = 0;
-    fn_InternalBasePtr_Ctor(&nullIbp, nullptr);
+    new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0xD0));
     if (fn_Game_ReloadWithSave)
         fn_Game_ReloadWithSave(*reinterpret_cast<void**>(s + 0xD0), statePtr,

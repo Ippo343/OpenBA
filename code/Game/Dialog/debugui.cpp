@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Static inline implementations (replaces fn_* exe pointer calls)
@@ -176,7 +177,7 @@ static void DebugUI_OnDiseaseComboChanged_Impl(DebugUI* self) {
         void* itemData = fn_ComboElement_GetItemData(comboElem, selIdx);
         // Construct InternalBasePtr from item data — used internally by disease system
         uint8_t basePtrBuf[8];
-        fn_InternalBasePtr_Ctor(basePtrBuf, itemData);
+        new (basePtrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(itemData));   // B.3.3 bridge
         // (result discarded — original function only constructs local_res8 on stack)
     }
 }
@@ -303,7 +304,8 @@ static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
 
                     // Store via InternalBasePtr
                     uint8_t audioBasePtrBuf[8];
-                    fn_InternalBasePtr_Ctor(audioBasePtrBuf, audioObj);
+                    new (audioBasePtrBuf) ::Object::InternalBasePtr(
+                        reinterpret_cast<RtObject::Internal*>(audioObj));   // B.3.3 bridge
                     audioArray[i] = *(void**)audioBasePtrBuf;
 
                     // Register with audio manager
@@ -461,7 +463,7 @@ static void Game_SpawnItemsInStorage_Impl() {
 
             // Spawn one item
             uint8_t retBuf[8] = {0};
-            fn_InternalBasePtr_Ctor(retBuf, nullptr);
+            new (retBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             fn_InternalBasePtr_CheckPtr(&storage);
             fn_StorageComponent_SpawnItem(storage, retBuf);
         }
@@ -527,7 +529,8 @@ static void Game_SpawnCitizens_Impl() {
 found_residence:
                     // Store in InternalBasePtr
                     void* resCompIBP = nullptr;
-                    fn_InternalBasePtr_Ctor(&resCompIBP, residenceComp);
+                    new (&resCompIBP) ::Object::InternalBasePtr(
+                        reinterpret_cast<RtObject::Internal*>(residenceComp));   // B.3.3 bridge
 
                     if (resCompIBP != nullptr) {
                         // Inner while(true) loop: spawn citizens at this building until full
@@ -613,7 +616,8 @@ found_residence:
 
                             // Wrap new entity in InternalBasePtr
                             void* newEntityIBP = nullptr;
-                            fn_InternalBasePtr_Ctor(&newEntityIBP, newEntity);
+                            new (&newEntityIBP) ::Object::InternalBasePtr(
+                                reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
 
                             // Find CitizenAIComponent (DAT_1401c7158) on the new entity
                             fn_InternalBasePtr_CheckPtr(&newEntityIBP);
@@ -646,7 +650,8 @@ found_residence:
 found_ai:
                             // Wrap CitizenAI in InternalBasePtr
                             void* aiCompIBP = nullptr;
-                            fn_InternalBasePtr_Ctor(&aiCompIBP, aiComp);
+                            new (&aiCompIBP) ::Object::InternalBasePtr(
+                                reinterpret_cast<RtObject::Internal*>(aiComp));   // B.3.3 bridge
 
                             // Setup citizen
                             fn_InternalBasePtr_CheckPtr(&aiCompIBP);
@@ -663,7 +668,7 @@ found_ai:
 
                             // Create null parent InternalBasePtr
                             void* parentIBP = nullptr;
-                            fn_InternalBasePtr_Ctor(&parentIBP, nullptr);
+                            new (&parentIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
                             // Read age range from CitizenDescription
                             fn_InternalBasePtr_CheckPtr(&aiCompIBP);
@@ -803,7 +808,7 @@ static void Game_SpawnTornado_Impl() {
 
     // Register entity with entity manager
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, newEntity);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
     void* entityRef = *(void**)entityBuf;
     void* entityMgr = *(void**)(game + 0xE8);
     fn_EntityList_RegisterEntity(entityMgr, &entityRef,
@@ -958,7 +963,7 @@ void DebugUI_Slot7(DebugUI* self) {
         bool isText = childRaw && fn_IsDerivedFrom(childRaw, *g_TypeId_ObjectInternal);
         void* textChild = isText ? childRaw : nullptr;
         uint8_t textIBP[8];
-        fn_InternalBasePtr_Ctor(textIBP, textChild);
+        new (textIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(textChild));   // B.3.3 bridge
 
         fn_InternalBasePtr_CheckPtr((void*)(s + 0x78));
         float dayValue = *(float*)(*(uintptr_t*)(s + 0x78) + 0x128);
@@ -1214,7 +1219,7 @@ static void* DebugUI_FindElemBase(void* parentElem, const char* name) {
         rawElem = nullptr;
     }
     uint8_t basePtrBuf[8];
-    fn_InternalBasePtr_Ctor(basePtrBuf, rawElem);
+    new (basePtrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(rawElem));   // B.3.3 bridge
     return *(void**)basePtrBuf;
 }
 
@@ -1384,7 +1389,7 @@ void DebugUI_Slot4(DebugUI* self) {
 
                 // Check if current entry matches the null/default internal ptr
                 uint8_t nullBuf[8];
-                fn_InternalBasePtr_Ctor(nullBuf, nullptr);
+                new (nullBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                 if (entry == *(void**)nullBuf) {
                     selectedIndex = i + 4;
                 }

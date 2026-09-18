@@ -21,6 +21,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Sub-callee / dispatch-slot resolution
@@ -137,7 +138,8 @@ static inline void* WAH_Alloc(uint64_t size, uint32_t align) {
     if (fn_MemAlloc && g_pMemAllocSingleton) return fn_MemAlloc(g_pMemAllocSingleton, size, align);
     return nullptr;
 }
-static inline void  WAH_IbpCtor(void* ibp, void* obj) { if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(ibp, obj); }
+static inline void  WAH_IbpCtor(void* ibp, void* obj) { if (fn_InternalBasePtr_Ctor) new (ibp) ::Object::InternalBasePtr(
+    reinterpret_cast<RtObject::Internal*>(obj)); }   // B.3.3 bridge
 static inline void  WAH_CheckPtr(void* p)             { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 static inline void  WAH_Append(void* list, void* ibp) { if (s_wah_TaskListAppend) s_wah_TaskListAppend(list, ibp); }
 
@@ -188,7 +190,8 @@ void WorkAct_HuntWorkCtor_bbbc0(void* citizenIBP, uint32_t workId, int64_t* targ
     }
     WAH_IbpCtor(&ibpA, sm);
     if (*reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(list) + 0x10) != 0 && fn_InternalBasePtr_DeletePtr)
-        fn_InternalBasePtr_DeletePtr(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(list) + 0x10));
+        reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(list) + 0x10))->DeletePtr(
+            );   // B.3.3 bridge
     *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(list) + 0x10) = ibpA;  // [RDI+0x10] = aiComp+0x58
 
     // --- CompleteTask action --- disasm 0x1400bbcad..0x1400bbd0f (alloc 0x38,8)
@@ -306,7 +309,8 @@ void WorkAct_ShowToolCtor3_bdd20(void* citizenIBP, uint32_t workId, uint32_t* cr
     }
     WAH_IbpCtor(&ibpA, sm);
     if (*reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(list) + 0x10) != 0 && fn_InternalBasePtr_DeletePtr)
-        fn_InternalBasePtr_DeletePtr(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(list) + 0x10));
+        reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(list) + 0x10))->DeletePtr(
+            );   // B.3.3 bridge
     *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(list) + 0x10) = ibpA;
 
     // --- CompleteTask action (param_5 = param_8) --- disasm 0x1400bde13..0x1400bde72 (alloc 0x38,8)

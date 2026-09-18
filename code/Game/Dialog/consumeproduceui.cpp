@@ -12,6 +12,7 @@
 #include "system/String.h"
 #include <cstdint>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // ConsumeProduceUI::Slot4 (vtable +0x20) — Setup/refresh
@@ -36,7 +37,7 @@ void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
 
     // Wrap entity in InternalBasePtr
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, entityPtr);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
     void* entityInternal = *(void**)entityBuf;
 
     // Find ConsumeProduceComponent
@@ -79,7 +80,7 @@ void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
         bool isCombo = fn_IsDerivedFrom(foundElem, *g_TypeId_ComboElement);
         void* comboRaw = isCombo ? foundElem : nullptr;
         uint64_t comboBP = 0;
-        fn_InternalBasePtr_Ctor(&comboBP, comboRaw);
+        new (&comboBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(comboRaw));   // B.3.3 bridge
         *(uint64_t*)(s + 0x30) = comboBP;
 
         // Set element ID 22000
@@ -194,7 +195,7 @@ void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
         bool isProgress = fn_IsDerivedFrom(progElem, *g_TypeId_ProgressElement);
         void* progRaw = isProgress ? progElem : nullptr;
         uint64_t progBP = 0;
-        fn_InternalBasePtr_Ctor(&progBP, progRaw);
+        new (&progBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(progRaw));   // B.3.3 bridge
         *(uint64_t*)(s + 0x38) = progBP;
 
         // Set initial progress to 1.0f at element+0x124
@@ -230,7 +231,7 @@ void ConsumeProduceUI_Slot7(ConsumeProduceUI* self) {
 
     // Wrap entity in InternalBasePtr
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, entityPtr);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
     void* entityInternal = *(void**)entityBuf;
 
     // Find component via FUN_14000b6f0 (same FindComponent used in StorageCapacityUI)
@@ -279,7 +280,7 @@ void ConsumeProduceUI_Slot9(ConsumeProduceUI* self, uint64_t /*param2*/,
 
     // Wrap entity in InternalBasePtr
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, entityPtr);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
     void* entityInternal = *(void**)entityBuf;
 
     // Find component

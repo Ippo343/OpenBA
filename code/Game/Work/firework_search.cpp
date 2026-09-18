@@ -55,6 +55,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ---------------------------------------------------------------------------
 // Lazily-resolved sub-helpers (resolve once; in standalone -> our registered ports). Mirrors action_pf_road.cpp's style.
@@ -191,7 +192,8 @@ void FireWork_SpiralCell_8730(int64_t param_1, int* param_2, int param_3,
                                 (static_cast<int64_t>(iVar1) * 8 + 8));
                         } else {
                             uint64_t emptyIBP = 0;
-                            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&emptyIBP, nullptr);
+                            if (fn_InternalBasePtr_Ctor) new (&emptyIBP) ::Object::InternalBasePtr(
+                                nullptr);   // B.3.3 bridge
                             bestRef = emptyIBP;
                         }
                         *param_9 = bestRef;
@@ -366,7 +368,8 @@ int64_t FireWork_SpiralSearch_81d0(int64_t param_1, uint32_t param_2, int param_
 
     // Wrap the chosen entity in an IBP, random-index a sub-entity, resolve its position.
     uint64_t chosenIBP = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&chosenIBP, chosen);
+    if (fn_InternalBasePtr_Ctor) new (&chosenIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(chosen));   // B.3.3 bridge
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&chosenIBP);
 
     uint32_t count = s_childSum ? static_cast<uint32_t>(s_childSum(static_cast<int64_t>(chosenIBP), 0)) : 0;

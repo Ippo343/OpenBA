@@ -13,6 +13,7 @@
 #include "system/String.h"
 #include <cstdint>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Standalone profession-list data is not fully live (the CitizenAI +0x288 desc
 // backref and the ProfessionList entries can be garbage/-1). Mirror the
@@ -32,7 +33,7 @@ static void* WorldGrid_FindEntity_Impl(void* worldGrid, void* retval, int tileIn
     int* node = *(int**)((uintptr_t)worldGrid + 0x30);
     while (true) {
         if (node == nullptr) {
-            fn_InternalBasePtr_Ctor(retval, nullptr);
+            new (retval) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             return retval;
         }
         if (*node <= tileIndex) {
@@ -43,7 +44,7 @@ static void* WorldGrid_FindEntity_Impl(void* worldGrid, void* retval, int tileIn
                     *(uint64_t*)retval = *(uint64_t*)(node + 2);
                     return retval;
                 }
-                fn_InternalBasePtr_Ctor(retval, nullptr);
+                new (retval) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                 return retval;
             }
             node = *(int**)(node + 8);  // right child
@@ -258,14 +259,14 @@ void FollowDialog_Slot8(FollowDialog* self, void* /*param2*/, int param3, int pa
     // Null out the back-reference: *(inner+0xE0) = null InternalBasePtr
     {
         uint8_t nullPtr[8] = {};
-        fn_InternalBasePtr_Ctor(nullPtr, nullptr);
+        new (nullPtr) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *(uint64_t*)(inner + 0xE0) = *(uint64_t*)nullPtr;
     }
 
     // Close dialog: wrap self in InternalBasePtr, call CloseDialog
     {
         uint8_t selfIBP[8];
-        fn_InternalBasePtr_Ctor(selfIBP, (void*)self);
+        new (selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>((void*)self));   // B.3.3 bridge
         void* ui = *(void**)(s + 0x10);
         fn_UI_CloseDialog(ui, selfIBP);
     }
@@ -333,14 +334,15 @@ void FollowDialog_Slot7(FollowDialog* self) {
         // Null out back-reference: *(followedInner+0xE0) = null InternalBasePtr
         {
             uint8_t nullPtr[8] = {};
-            fn_InternalBasePtr_Ctor(nullPtr, nullptr);
+            new (nullPtr) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             *(uint64_t*)(followedInner + 0xE0) = *(uint64_t*)nullPtr;
         }
 
         // Close dialog: wrap self, call CloseDialog
         {
             uint8_t selfIBP[8];
-            fn_InternalBasePtr_Ctor(selfIBP, (void*)self);
+            new (selfIBP) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>((void*)self));   // B.3.3 bridge
             void* ui = *(void**)(s + 0x10);
             fn_UI_CloseDialog(ui, selfIBP);
         }

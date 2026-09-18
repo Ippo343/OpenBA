@@ -60,6 +60,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 
@@ -106,7 +107,8 @@ inline void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBase
 
 inline uint64_t MakeIBP(void* obj) {
     uint64_t r = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&r, obj);
+    if (fn_InternalBasePtr_Ctor) new (&r) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(obj));   // B.3.3 bridge
     else r = reinterpret_cast<uint64_t>(obj);
     return r;
 }

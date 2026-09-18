@@ -19,6 +19,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // DragTool vtable addresses (for vtable chain in Dtor)
@@ -244,7 +245,7 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
         if (DIALOG_IBP() != nullptr && *DIALOG_IBP() != 0) {
             uint64_t tempIBP = *DIALOG_IBP();  // copy the IBP value
             fn_UI_CloseDialog(GetUserInterface(), &tempIBP);
-            fn_InternalBasePtr_Ctor(&tempIBP, nullptr);
+            new (&tempIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             *DIALOG_IBP() = tempIBP;  // write null IBP back through the pointer
         }
 
@@ -453,7 +454,7 @@ extern "C" int DragTool_CancelDrag_Impl(DragTool* self) {
     if (ibp && *ibp && fn_UI_CloseDialog && fn_InternalBasePtr_Ctor) {
         uint64_t tempIBP = *ibp;
         fn_UI_CloseDialog(GetUserInterface(), &tempIBP);
-        fn_InternalBasePtr_Ctor(&tempIBP, nullptr);
+        new (&tempIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *ibp = tempIBP;
     }
     return 1;

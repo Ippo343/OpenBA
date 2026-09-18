@@ -26,6 +26,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Resolved helpers
@@ -616,7 +617,8 @@ void GrowthComponent_Startup(GrowthComponent* self) {
                 void* c = *slot;
                 if (!c) continue;
                 uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(c) + 0x10))(c);
-                if (t == s_tidModel) { fn_InternalBasePtr_Ctor(&res30IBP, c); break; }
+                if (t == s_tidModel) { new (&res30IBP) ::Object::InternalBasePtr(
+                    reinterpret_cast<RtObject::Internal*>(c)); break; }   // B.3.3 bridge
             }
         }
     }
@@ -774,7 +776,8 @@ void GrowthComponent_SpawnSubResource(void* growthComp, void* config) {
         else newEnt = mem;
     }
     int64_t newIBP = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&newIBP, newEnt);
+    if (fn_InternalBasePtr_Ctor) new (&newIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(newEnt));   // B.3.3 bridge
 
     if (s_fn_CheckPtr) s_fn_CheckPtr(&newIBP);
     int64_t acc1 = 0;

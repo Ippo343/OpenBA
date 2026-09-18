@@ -25,6 +25,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cmath>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Vtable addresses (for vtable chain reset in Dtor)
@@ -927,7 +928,8 @@ void FencedTool_Startup_Impl(FencedTool* self) {
     // Construct InternalBasePtr at +0x50 with the resolved RotationSetting
     if (fn_InternalBasePtr_Ctor) {
         void* localIBP = nullptr;
-        fn_InternalBasePtr_Ctor(&localIBP, rotSetting);
+        new (&localIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(rotSetting));   // B.3.3 bridge
         *(void**)(selfAddr + 0x50) = localIBP;
     }
 

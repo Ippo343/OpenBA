@@ -20,6 +20,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <windows.h>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Tick-driven Builder pool (builder_pool_driver.cpp). No-op unless BANISHED_BUILDER_NATURAL
 // is set. Called at the end of CitizenBehavior_Update.
@@ -399,7 +400,7 @@ void* CitizenBehavior_FindAny(CitizenBehaviorRaw* self, void* retval,
 
     // Fallback: return null InternalBasePtr
     if (fn_InternalBasePtr_Ctor) {
-        fn_InternalBasePtr_Ctor(retval, nullptr);
+        new (retval) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     }
     return retval;
 }
@@ -1028,7 +1029,8 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
         // Wrap in InternalBasePtr
         int64_t storageIBP = 0;
         if (fn_InternalBasePtr_Ctor) {
-            fn_InternalBasePtr_Ctor(&storageIBP, storageComp);
+            new (&storageIBP) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(storageComp));   // B.3.3 bridge
         }
 
         // Read item count from storage: *(int*)(storage + 0x30)
@@ -1135,7 +1137,8 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
         // Wrap in InternalBasePtr
         int64_t storageIBP = 0;
         if (fn_InternalBasePtr_Ctor) {
-            fn_InternalBasePtr_Ctor(&storageIBP, storageComp);
+            new (&storageIBP) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(storageComp));   // B.3.3 bridge
         }
 
         // Read item count from storage: *(int*)(storage + 0x30)
@@ -1244,7 +1247,7 @@ void CitizenBehavior_CheckThresholds(CitizenBehaviorRaw* self, int64_t* deltaTim
                 // Fire shortage notification
                 if (fn_NotificationEvent && fn_InternalBasePtr_Ctor) {
                     uint64_t nullIBP = 0;
-                    fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+                    new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                     fn_NotificationEvent(notifMgr, i + 0x11, 3, &nullIBP);
                 }
                 // Reset timer to notification cooldown (120 seconds)
@@ -1284,7 +1287,7 @@ void CitizenBehavior_CheckThresholds(CitizenBehaviorRaw* self, int64_t* deltaTim
                 int notifType = 0x17 + (i != 0 ? 1 : 0);
                 if (fn_NotificationEvent && fn_InternalBasePtr_Ctor) {
                     uint64_t nullIBP = 0;
-                    fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+                    new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                     fn_NotificationEvent(notifMgr, notifType, 3, &nullIBP);
                 }
                 if (s_fn_Time_Ctor) {
@@ -1796,7 +1799,8 @@ void* CitizenBehavior_FindIdle(CitizenBehaviorRaw* self, void* retval,
     found_residence:
         // Wrap in IBP via fn_InternalBasePtr_Ctor
         void* residenceIBP = nullptr;
-        fn_InternalBasePtr_Ctor(&residenceIBP, residenceComp);
+        new (&residenceIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(residenceComp));   // B.3.3 bridge
 
         // Iterate occupants of bestRoomIdx to find the idle citizen
         fn_InternalBasePtr_CheckPtr(&residenceIBP);
@@ -1844,7 +1848,7 @@ void* CitizenBehavior_FindIdle(CitizenBehaviorRaw* self, void* retval,
     }
 
     // No candidate found — return null InternalBasePtr
-    fn_InternalBasePtr_Ctor(retval, nullptr);
+    new (retval) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     return retval;
 
     // Old delegate (kept as fallback reference):
@@ -1961,7 +1965,7 @@ void* CitizenBehavior_FindWorking(CitizenBehaviorRaw* self, void* retval,
     }
 
     // No candidate found — return null InternalBasePtr
-    fn_InternalBasePtr_Ctor(retval, nullptr);
+    new (retval) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     return retval;
 
     // Old delegate (kept as fallback reference):
@@ -2042,7 +2046,8 @@ void* CitizenBehavior_FindStudent(CitizenBehaviorRaw* self, void* retval,
     found_residence_phase1:
         // Wrap in IBP via fn_InternalBasePtr_Ctor
         void* residenceIBP = nullptr;
-        fn_InternalBasePtr_Ctor(&residenceIBP, residenceComp);
+        new (&residenceIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(residenceComp));   // B.3.3 bridge
 
         // Iterate rooms in the ResidenceComponent (+0x50 = room array, +0x58 = room count)
         fn_InternalBasePtr_CheckPtr(&residenceIBP);
@@ -2132,7 +2137,8 @@ void* CitizenBehavior_FindStudent(CitizenBehaviorRaw* self, void* retval,
 
     found_residence_phase2:
         void* residenceIBP = nullptr;
-        fn_InternalBasePtr_Ctor(&residenceIBP, residenceComp);
+        new (&residenceIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(residenceComp));   // B.3.3 bridge
 
         // Iterate occupants of bestRoomIdx to find the first eligible student
         fn_InternalBasePtr_CheckPtr(&residenceIBP);
@@ -2181,7 +2187,7 @@ void* CitizenBehavior_FindStudent(CitizenBehaviorRaw* self, void* retval,
     }
 
     // No student found — return null InternalBasePtr
-    fn_InternalBasePtr_Ctor(retval, nullptr);
+    new (retval) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     return retval;
 
     // Old delegate (kept as fallback reference):

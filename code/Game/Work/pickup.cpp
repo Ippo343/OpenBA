@@ -22,6 +22,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "Object/factory_registration.h"  // Object::GetTypeIdByName (.rdata tid fallback)
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 
 // ============================================================
@@ -596,7 +597,7 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
             } else if (*reinterpret_cast<uintptr_t*>(cellPtr + 8) != 0) {
                 occIBP = *reinterpret_cast<void**>(cellPtr + 8);
             } else {
-                fn_InternalBasePtr_Ctor(&occIBP, nullptr);
+                new (&occIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             }
             if (occIBP == nullptr) continue;
 
@@ -642,14 +643,15 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
                         break;
                     }
                 }
-                if (!found) fn_InternalBasePtr_Ctor(&workIBP, nullptr);
+                if (!found) new (&workIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             }
 
             fn_InternalBasePtr_CheckPtr(&workIBP);
             void* pickupRaw = workIBP;
             void* pickupWork = fn_IsDerivedFrom(pickupRaw, tidPickup) ? pickupRaw : nullptr;
             void* pickupIBP = nullptr;
-            fn_InternalBasePtr_Ctor(&pickupIBP, pickupWork);
+            new (&pickupIBP) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(pickupWork));   // B.3.3 bridge
             if (pickupIBP == nullptr) continue;
 
             // vtable slot 11 (+0x58) = "already has a worker" -> skip this pile.
@@ -731,14 +733,14 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
                     break;
                 }
             }
-            if (!found) fn_InternalBasePtr_Ctor(&wIBP, nullptr);
+            if (!found) new (&wIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         }
 
         fn_InternalBasePtr_CheckPtr(&wIBP);
         void* wRaw = wIBP;
         void* wPickup = fn_IsDerivedFrom(wRaw, tidPickup) ? wRaw : nullptr;
         void* claimed = nullptr;
-        fn_InternalBasePtr_Ctor(&claimed, wPickup);
+        new (&claimed) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(wPickup));   // B.3.3 bridge
         fn_InternalBasePtr_CheckPtr(&claimed);
         *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(claimed) + 0x48) = 1;
         void* citEnt = *reinterpret_cast<void**>(citizenIBP);
@@ -857,7 +859,7 @@ int Pickup_Execute_Impl(Pickup* self, void* entityIBP, void* param3) {
 // ============================================================
 bool Pickup_Slot6_Impl(Pickup* self) {
     uintptr_t nullIBP = 0;
-    fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+    new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     self->citizenIBP = (void*)nullIBP;
     self->status = 2;
     return false;
@@ -870,7 +872,7 @@ bool Pickup_Slot6_Impl(Pickup* self) {
 // ============================================================
 int Pickup_Slot7_Impl(Pickup* self) {
     uintptr_t nullIBP = 0;
-    fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+    new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     self->citizenIBP = (void*)nullIBP;
     self->status = 0;
     return 0;
@@ -923,7 +925,7 @@ bool Pickup_Slot9_Impl(Pickup* self, void* param2) {
     if (!valid) {
         // Entity no longer valid -- reset
         uintptr_t nullIBP = 0;
-        fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+        new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         self->citizenIBP = (void*)nullIBP;
         self->status = 0;
         return false;

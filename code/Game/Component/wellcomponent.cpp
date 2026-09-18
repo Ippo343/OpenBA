@@ -24,6 +24,7 @@
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Resolved helpers
@@ -115,7 +116,7 @@ void WellComponent_OnRemove(WellComponent* self) {
     // depends on wells being findable in the gw+0xf0 entity index.
     uint8_t basePtr[24];
     if (fn_InternalBasePtr_Ctor)
-        fn_InternalBasePtr_Ctor(basePtr, self);
+        new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
 
     // *(GameWorld + 0xF0) is the TownManager itself -- not a "water source array".
     // 0x140091ba0 takes the manager and indexes its own +0xe0/+0xe8 pair.
@@ -207,7 +208,7 @@ void WellComp_UnregisterEntity_91ba0(int64_t manager, void* param2) {
             int ry = (int)*reinterpret_cast<int16_t*>(resData + 0x2a);
             WellComp_RemoveCellEntry_889e0(manager, rx, ry, -1 - idx);
             int64_t cleared = 0;
-            fn_InternalBasePtr_Ctor(&cleared, nullptr);
+            new (&cleared) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             *reinterpret_cast<int64_t*>((int64_t)idx * 8 + *reinterpret_cast<int64_t*>(manager + 0xe0)) = cleared;
             return;
         }
@@ -374,7 +375,8 @@ void WellComp_RegisterEntity_91cb0(int64_t townMgr, void* ibp) {
     }
 
     int64_t pos = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&pos, mapComp);
+    if (fn_InternalBasePtr_Ctor) new (&pos) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(mapComp));   // B.3.3 bridge
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&pos);
     if (pos == 0) {
         // Retail derefs this unguarded -- it relies on every registered water source
@@ -414,7 +416,7 @@ extern "C" char WellComponent_EnterBuilt(void* comp, void* /*sm*/) {
     WellComponent_InitFuncs();
     if (!fn_InternalBasePtr_Ctor || !s_pWorldManager || !*s_pWorldManager) return 0;
     uint8_t ibp[24] = {};
-    fn_InternalBasePtr_Ctor(ibp, comp);
+    new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
     void* gw = *s_pWorldManager;
     int64_t townMgr = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(gw) + 0xf0);
     if (!townMgr) return 0;

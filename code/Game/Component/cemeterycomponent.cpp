@@ -18,6 +18,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Resolved helpers
@@ -289,7 +290,7 @@ void CemeteryComponent_BuildPlotGrid(CemeteryComponent* self) {
 void CemeteryComponent_OnRemove(CemeteryComponent* self) {
     uint8_t ptrBuf[8];
     if (fn_InternalBasePtr_Ctor)
-        fn_InternalBasePtr_Ctor(ptrBuf, self->owner);
+        new (ptrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self->owner));   // B.3.3 bridge
 
     if (s_g_pGameState && *s_g_pGameState && s_fn_ListAdd) {
         void* gameState = *s_g_pGameState;
@@ -407,7 +408,7 @@ extern "C" char CemeteryComponent_EnterBuilt(void* compV, void* /*sm*/) {
     if (!townMgr) return 0;
 
     uint8_t ibp[24] = {};
-    fn_InternalBasePtr_Ctor(ibp, self);
+    new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
     const int count = *reinterpret_cast<int*>(townMgr + 0x48);
     // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
     GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(townMgr + 0x40))
@@ -467,7 +468,7 @@ extern "C" char CemeteryComponent_EnterBuilt(void* compV, void* /*sm*/) {
         }
 
         uint8_t nullIbp[24] = {};
-        fn_InternalBasePtr_Ctor(nullIbp, nullptr);
+        new (nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *reinterpret_cast<void**>(cell + 0x08) = *reinterpret_cast<void**>(nullIbp);
         ++claimed;
     }

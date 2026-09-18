@@ -44,6 +44,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ---- resolved deps ------------------------------------------------------------
 namespace {
@@ -185,7 +186,8 @@ void SpawnFencePiece_dbc80(FencedTool* self, int sectionIdx, int x, int y,
     void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
     void* ent = mem ? s_ctorFromDesc(mem, sectionTmpl) : nullptr;
     int64_t entIBP = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&entIBP, ent);
+    if (fn_InternalBasePtr_Ctor) new (&entIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(ent));   // B.3.3 bridge
     CheckPtr(&entIBP);
     if (!entIBP) return;
 
@@ -378,7 +380,8 @@ extern "C" uint64_t FencedTool_CalcPath_Port(FencedTool* self, int64_t startCell
     void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
     void* master = mem ? s_ctorFromDesc(mem, self->descriptionPtr) : nullptr;
     int64_t masterIBP = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&masterIBP, master);
+    if (fn_InternalBasePtr_Ctor) new (&masterIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(master));   // B.3.3 bridge
     CheckPtr(&masterIBP);
     if (!masterIBP) return 0;
 
@@ -403,7 +406,8 @@ extern "C" uint64_t FencedTool_CalcPath_Port(FencedTool* self, int64_t startCell
     void* smem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
     void* shelter = (smem && shelterTmpl) ? s_ctorFromDesc(smem, shelterTmpl) : nullptr;
     int64_t shelterIBP = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&shelterIBP, shelter);
+    if (fn_InternalBasePtr_Ctor) new (&shelterIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(shelter));   // B.3.3 bridge
     CheckPtr(&shelterIBP);
     if (shelterIBP) {
         void* shMap = FindOn(s_findMap, shelter, &shelterIBP);

@@ -11,6 +11,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // File-local helper: CemeteryGetBurialCount (FUN_140046dd0)
@@ -100,7 +101,7 @@ void CemeteryUI_Slot4(CemeteryUI* self) {
     bool isProgress = fn_IsDerivedFrom(foundElem, *g_TypeId_ProgressElement);
     void* progressPtr = isProgress ? foundElem : nullptr;
     uint8_t basePtrBuf[8];
-    fn_InternalBasePtr_Ctor(basePtrBuf, progressPtr);
+    new (basePtrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(progressPtr));   // B.3.3 bridge
     self->data30 = *(uint64_t*)basePtrBuf;
 
     // Setup: bail on a dead / marked-for-removal datasource (see Slot7).
@@ -110,7 +111,7 @@ void CemeteryUI_Slot4(CemeteryUI* self) {
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, entityPtr);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
     void* entityInternal = *(void**)entityBuf;
 
     void* cemetComp = nullptr;
@@ -140,7 +141,7 @@ void CemeteryUI_Slot7(CemeteryUI* self) {
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, entityPtr);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
     void* entityInternal = *(void**)entityBuf;
 
     void* cemetComp = nullptr;

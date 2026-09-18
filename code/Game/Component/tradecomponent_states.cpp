@@ -78,6 +78,7 @@
 #include <cstdlib>
 
 #include "Work/tradework_funcs.h"
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Layer 2 lives in boatcomponent_route.cpp (retail 0x14000eb20 / 0x1400456e0).
 extern "C" void* BoatRoute_FindBoatComponent(int64_t entity, void* outIBP);
@@ -312,7 +313,8 @@ extern "C" char TradeCtrl_State2_Enter(void* selfV, void* /*sm*/) {
             }
         }
         uint64_t workIBP[2] = {0, 0};
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(workIBP, work);
+        if (fn_InternalBasePtr_Ctor) new (workIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
 
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
         int64_t schedBuf2[2] = {0, 0};
@@ -411,7 +413,7 @@ extern "C" char TradeCtrl_Event09_MerchantDocked(void* selfV, void* sm) {
 extern "C" char TradeCtrl_Event0B_MerchantLost(void* selfV, void* sm) {
     const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
     uint64_t nullIBP[2] = {0, 0};
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(nullIBP, nullptr);
+    if (fn_InternalBasePtr_Ctor) new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     *reinterpret_cast<uint64_t*>(comp + 0x80) = nullIBP[0];
     ::ControllerLive::RequestStateTransition(sm, 2);
     return 1;
@@ -478,7 +480,8 @@ extern "C" char TradeCtrl_State2_Tick(void* selfV, void* smV, void* deltaTime) {
                                          reinterpret_cast<uintptr_t>(desc) + 0x30));
 
     uint64_t boatIBP[2] = {0, 0};
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(boatIBP, boat);
+    if (fn_InternalBasePtr_Ctor) new (boatIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(boat));   // B.3.3 bridge
     *reinterpret_cast<uint64_t*>(comp + 0x80) = boatIBP[0];
 
     // Route it to THIS post. The destination is the trading post's own entity (comp+0x10).
@@ -560,7 +563,7 @@ extern "C" char TradeCtrl_Teardown(void* selfV) {
 
     if (*reinterpret_cast<int64_t*>(comp + 0x80) != 0) {
         int64_t nullDest = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nullDest, nullptr);
+        if (fn_InternalBasePtr_Ctor) new (&nullDest) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         if (fn_InternalBasePtr_CheckPtr)
             fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x80));
         uint64_t boatCompIBP[2] = {0, 0};
@@ -576,7 +579,7 @@ extern "C" char TradeCtrl_Teardown(void* selfV) {
         *reinterpret_cast<int32_t*>(comp + 0x2c) = -1;      // no merchant docked
 
         uint64_t clearIBP[2] = {0, 0};
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(clearIBP, nullptr);
+        if (fn_InternalBasePtr_Ctor) new (clearIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *reinterpret_cast<uint64_t*>(comp + 0x80) = clearIBP[0];
     }
     return 1;

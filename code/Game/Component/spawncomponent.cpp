@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Resolved helpers
@@ -591,7 +592,8 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
     if (!newEntity) { ++g_doSpawn.allocFailed; return; }
 
     int64_t entityIbp = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&entityIbp, newEntity);
+    if (fn_InternalBasePtr_Ctor) new (&entityIbp) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
 
     // Place at tile index
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entityIbp);

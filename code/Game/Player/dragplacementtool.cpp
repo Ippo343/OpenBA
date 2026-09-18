@@ -29,6 +29,7 @@
 #include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Vtable addresses (for vtable chain reset in Dtor)
@@ -647,7 +648,8 @@ bool DragPlacementTool_CalcPath(DragPlacementTool* self, int startCell, int endC
     // Wrap in InternalBasePtr
     void* entityIBP = nullptr;
     if (fn_InternalBasePtr_Ctor) {
-        fn_InternalBasePtr_Ctor(&entityIBP, newEntity);
+        new (&entityIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
     }
 
     // Find BuildComponent on the entity

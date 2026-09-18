@@ -10,6 +10,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Helper: FindElemByName with IsDerivedFrom check, stores InternalBasePtr
 static void FindAndStore(uintptr_t self, const char* name, int fieldOffset) {
@@ -26,7 +27,7 @@ static void FindAndStore(uintptr_t self, const char* name, int fieldOffset) {
         checked = found;
     }
     uint64_t stored = 0;
-    fn_InternalBasePtr_Ctor(&stored, checked);
+    new (&stored) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
     *(uint64_t*)(self + fieldOffset) = stored;
 }
 

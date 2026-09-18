@@ -57,6 +57,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ── Resolved leaves ──────────────────────────────────────────────────────────────
 namespace {
@@ -196,7 +197,8 @@ extern "C" bool BoatRoute_FindAttachPoint(void* compV, const void* nameStr,
     }
 
     uint64_t modelIBP[2] = {0, 0};
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(modelIBP, model);
+    if (fn_InternalBasePtr_Ctor) new (modelIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(model));   // B.3.3 bridge
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(modelIBP);
     const uintptr_t m = static_cast<uintptr_t>(modelIBP[0]);
     if (!m) return false;   // no ModelComponent: retail would fault on m+0x148
@@ -260,7 +262,8 @@ extern "C" void* BoatRoute_FindBoatComponent(int64_t entity, void* outIBP) {
             break;
         }
     }
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(outIBP, found);
+    if (fn_InternalBasePtr_Ctor) new (outIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return outIBP;
 }
 

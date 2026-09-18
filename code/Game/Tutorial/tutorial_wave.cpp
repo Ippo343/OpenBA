@@ -50,6 +50,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <new>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 extern "C" void* GetTutorialHighlightDialogVtable();
 // Port of exe 0x1400E0D70 -- boots the next scenario when a tutorial finishes.
@@ -593,7 +594,7 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
             fn_Element_RemoveChildren(table);
             for (int i = 0; i < n; ++i) {
                 uint64_t nullChild = 0;
-                fn_InternalBasePtr_Ctor(&nullChild, nullptr);
+                new (&nullChild) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                 fn_Element_AddChild(table, &nullChild);
             }
         }
@@ -734,7 +735,8 @@ extern "C" void TutWave_StepExecute(void* self, void* param2, void* param3, uint
             void** vt = *reinterpret_cast<void***>(obj);
             if (!vt || !vt[8]) continue;
             uint64_t selfIBP = 0;
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&selfIBP, self);
+            if (fn_InternalBasePtr_Ctor) new (&selfIBP) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
             else selfIBP = reinterpret_cast<uint64_t>(self);
             char ok = reinterpret_cast<char (*)(void*, void*, void*)>(vt[8])(obj, param2, &selfIBP);
             if (ok) ++passed;

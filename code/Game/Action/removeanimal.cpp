@@ -27,6 +27,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -144,7 +145,7 @@ void* RemoveAnimal_ScalarDtor_Impl(RemoveAnimal* self, uint32_t flags) {
 
     // If entity ref at +0x10 is non-null, delete it
     if (*(void**)(s + 0x10) != nullptr) {
-        fn_InternalBasePtr_DeletePtr(s + 0x10);
+        reinterpret_cast< ::Object::InternalBasePtr*>(s + 0x10)->DeletePtr();   // B.3.3 bridge
     }
 
     // Call Object::Internal::~Internal

@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // FindComponent family (same shape as work_base_reimpl.cpp FindComponentByTypeId)
@@ -48,7 +49,8 @@ static void* HuntFindComponentByTypeId(uintptr_t entity, void* retIBP, const uin
             }
         }
     }
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(retIBP, found);
+    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return retIBP;
 }
 
@@ -216,13 +218,15 @@ void ActHunt_NotifyEntityChanged_c3470(void* self) {
         uint32_t newFlags = *reinterpret_cast<uint32_t*>(s + 0x40);
         if (((oldFlags ^ newFlags) & 4) != 0) {
             void* ibp = nullptr;
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&ibp, self);
+            if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
             ActHunt_DynArraySetCount_3110(reinterpret_cast<void*>(owner + 0x88),
                                           *reinterpret_cast<int*>(owner + 0x90) + 1, &ibp);
         }
         if (((oldFlags ^ newFlags) & 0x10) != 0) {
             void* ibp = nullptr;
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&ibp, self);
+            if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
             ActHunt_DynArraySetCount_3110(reinterpret_cast<void*>(owner + 0x98),
                                           *reinterpret_cast<int*>(owner + 0xa0) + 1, &ibp);
         }

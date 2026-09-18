@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Resolved helpers
@@ -268,7 +269,7 @@ bool WorkComponent_CheckWorkSlot(void* selfP) {
     }
     // not found: construct an empty IBP and report non-null (matches original)
     int64_t ibp[1] = {0};
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(ibp, nullptr);
+    if (fn_InternalBasePtr_Ctor) new (ibp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     return ibp[0] != 0;
 }
 
@@ -298,7 +299,7 @@ void WorkComponent_RegisterWorkSlot(void* selfP) {
         }
     }
     if (!found) {
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(valueIbp, nullptr);
+        if (fn_InternalBasePtr_Ctor) new (valueIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     }
 
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(valueIbp);

@@ -39,6 +39,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName / ResolveTypeIdByNameLazy
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 
@@ -306,7 +307,8 @@ static void* PathSel_FindHighlight_7080(int64_t param_1, void* param_2) {
             break;
         }
     }
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(param_2, found);
+    if (fn_InternalBasePtr_Ctor) new (param_2) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return param_2;
 }
 

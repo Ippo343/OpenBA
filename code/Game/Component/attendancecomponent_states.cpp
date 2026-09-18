@@ -38,6 +38,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace { struct AttendanceCtrlTag {}; }
 using AttendanceDispatch = ::ControllerLive::Dispatcher<AttendanceCtrlTag>;
@@ -192,7 +193,8 @@ static char Attendance_State2Enter(void* selfP, void* /*sm*/) {
     const uintptr_t town = AC_TownObject();
     if (town) {
         uintptr_t selfIbp = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&selfIbp, selfP);
+        if (fn_InternalBasePtr_Ctor) new (&selfIbp) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(selfP));   // B.3.3 bridge
         // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
         const int32_t newCount = *reinterpret_cast<int32_t*>(town + 0x68) + 1;
         GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(town + 0x60))
@@ -211,7 +213,8 @@ static char Attendance_State2Enter(void* selfP, void* /*sm*/) {
         *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(work) + 0x48) = 0;
     }
     uintptr_t workIbp = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&workIbp, work);
+    if (fn_InternalBasePtr_Ctor) new (&workIbp) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
 
     // 3. post it to the citizen work ledger
     if (s_findWork && s_postWork) {

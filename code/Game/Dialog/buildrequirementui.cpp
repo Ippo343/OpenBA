@@ -24,6 +24,7 @@
 #if defined(_DEBUG)
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #endif
 
 #ifdef _DEBUG
@@ -90,7 +91,7 @@ static uint64_t FindDialogElemAsBasePtr(void* dialogInst, const char* name) {
     bool isInternal = fn_IsDerivedFrom(raw, *g_TypeId_ObjectInternal);
     void* checked = isInternal ? raw : nullptr;
     uint8_t bpBuf[8];
-    fn_InternalBasePtr_Ctor(bpBuf, checked);
+    new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
     return *(uint64_t*)bpBuf;
 }
 
@@ -149,7 +150,8 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
             void* internalObj = isInternal ? dataSource : nullptr;
 
             uint8_t bpBuf[8];
-            fn_InternalBasePtr_Ctor(bpBuf, internalObj);
+            new (bpBuf) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(internalObj));   // B.3.3 bridge
             void* elemPtr = *(void**)bpBuf;
 
             if (elemPtr) {
@@ -222,7 +224,7 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
         bool isInternal = fn_IsDerivedFrom(imageElem, *g_TypeId_ObjectInternal);
         void* checked = isInternal ? imageElem : nullptr;
         uint8_t ibpBuf[8];
-        fn_InternalBasePtr_Ctor(ibpBuf, checked);
+        new (ibpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
         void* imagePtr = *(void**)ibpBuf;
 
         if (imagePtr && buildReqComp) {
@@ -252,7 +254,7 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
         bool isInternal = fn_IsDerivedFrom(textElem, *g_TypeId_ObjectInternal);
         void* checked = isInternal ? textElem : nullptr;
         uint8_t ibpBuf[8];
-        fn_InternalBasePtr_Ctor(ibpBuf, checked);
+        new (ibpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
         void* textPtr = *(void**)ibpBuf;
 
         if (textPtr && buildReqComp) {
@@ -301,7 +303,7 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
             bool isInternal = fn_IsDerivedFrom(labelElem, *g_TypeId_ObjectInternal);
             void* checked = isInternal ? labelElem : nullptr;
             uint8_t ibpBuf[8];
-            fn_InternalBasePtr_Ctor(ibpBuf, checked);
+            new (ibpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
             void* wrappedElem = *(void**)ibpBuf;
             if (!wrappedElem) break;
 

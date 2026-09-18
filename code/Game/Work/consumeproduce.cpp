@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -555,7 +556,7 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
     void* meshComp = FindComponentOnEntity(entity, *g_TypeId_StatusIconComponent);
 
     uintptr_t meshCompIBP = 0;
-    fn_InternalBasePtr_Ctor(&meshCompIBP, meshComp);
+    new (&meshCompIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(meshComp));   // B.3.3 bridge
 
     // Set active state = 2, enabled = resourcesDepleted
     fn_InternalBasePtr_CheckPtr(&meshCompIBP);
@@ -567,7 +568,7 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
     void* smComp2 = FindComponentOnEntity(entity, *g_TypeId_ConsumeProduceComponent_FC);
 
     uintptr_t smComp2IBP = 0;
-    fn_InternalBasePtr_Ctor(&smComp2IBP, smComp2);
+    new (&smComp2IBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(smComp2));   // B.3.3 bridge
 
     // Check produce threshold
     fn_InternalBasePtr_CheckPtr(&smComp2IBP);
@@ -627,7 +628,8 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
         void* storageComp = FindComponentOnEntity(entity, *g_TypeId_StorageComponent_FC);
 
         uintptr_t storageCompIBP = 0;
-        fn_InternalBasePtr_Ctor(&storageCompIBP, storageComp);
+        new (&storageCompIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(storageComp));   // B.3.3 bridge
 
         // --- Setup loop vars for product iteration ---
         int64_t productStride = (int64_t)activeProductIdx * 5;
@@ -719,7 +721,8 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
                 // Find StorageComponent on home entity
                 void* homeStorage = FindComponentOnEntity(homeEntity, *g_TypeId_StorageComponent_FC);
                 uintptr_t homeStorageIBP = 0;
-                fn_InternalBasePtr_Ctor(&homeStorageIBP, homeStorage);
+                new (&homeStorageIBP) ::Object::InternalBasePtr(
+                    reinterpret_cast<RtObject::Internal*>(homeStorage));   // B.3.3 bridge
 
                 // Check if home storage has capacity for the material
                 fn_InternalBasePtr_CheckPtr(&homeStorageIBP);
@@ -736,7 +739,8 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
 
                     void* citizenStorage = FindComponentOnEntity(homeEntity, *g_TypeId_StorageComponent_FC);
                     uintptr_t citizenStorageIBP = 0;
-                    fn_InternalBasePtr_Ctor(&citizenStorageIBP, citizenStorage);
+                    new (&citizenStorageIBP) ::Object::InternalBasePtr(
+                        reinterpret_cast<RtObject::Internal*>(citizenStorage));   // B.3.3 bridge
 
                     fn_InternalBasePtr_CheckPtr(&citizenStorageIBP);
                     int cap2 = *(int*)(citizenStorageIBP + 0x38);
@@ -876,7 +880,8 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
                     uintptr_t fStorage = foundStorage;
                     void* fStorageComp = FindComponentOnEntity(fStorage, *g_TypeId_StorageComponent_FC);
                     uintptr_t fStorageIBP = 0;
-                    fn_InternalBasePtr_Ctor(&fStorageIBP, fStorageComp);
+                    new (&fStorageIBP) ::Object::InternalBasePtr(
+                        reinterpret_cast<RtObject::Internal*>(fStorageComp));   // B.3.3 bridge
 
                     // Check if storage has the material
                     fn_InternalBasePtr_CheckPtr(&fStorageIBP);
@@ -893,7 +898,8 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
                                     uintptr_t homeEnt2 = *(uintptr_t*)(citizenEntity + 0x10);
                                     void* homeStorage2 = FindComponentOnEntity(homeEnt2, *g_TypeId_StorageComponent_FC);
                                     uintptr_t homeStorage2IBP = 0;
-                                    fn_InternalBasePtr_Ctor(&homeStorage2IBP, homeStorage2);
+                                    new (&homeStorage2IBP) ::Object::InternalBasePtr(
+                                        reinterpret_cast<RtObject::Internal*>(homeStorage2));   // B.3.3 bridge
 
                                     fn_InternalBasePtr_CheckPtr(&homeStorage2IBP);
                                     int hs2Count = fn_StorageComponent_QueryCount((void*)homeStorage2IBP);
@@ -1018,7 +1024,8 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
                     fn_InternalBasePtr_CheckPtr(&structEntity);
                     void* locComp = FindComponentOnEntity(structEntity, *g_TypeId_WorkComponent);
                     uintptr_t locCompIBP = 0;
-                    fn_InternalBasePtr_Ctor(&locCompIBP, locComp);
+                    new (&locCompIBP) ::Object::InternalBasePtr(
+                        reinterpret_cast<RtObject::Internal*>(locComp));   // B.3.3 bridge
 
                     fn_InternalBasePtr_CheckPtr(&locCompIBP);
                     uintptr_t citizenRef3 = *(uintptr_t*)entityIBP;
@@ -1043,7 +1050,8 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
         entity = *(uintptr_t*)entityFieldPtr;
         void* meshComp2 = FindComponentOnEntity(entity, *g_TypeId_StatusIconComponent);
         uintptr_t meshComp2IBP = 0;
-        fn_InternalBasePtr_Ctor(&meshComp2IBP, meshComp2);
+        new (&meshComp2IBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(meshComp2));   // B.3.3 bridge
         fn_InternalBasePtr_CheckPtr(&meshComp2IBP);
         s_fn_ModelComp_SetActiveState((void*)meshComp2IBP, 3, !allInputsAvailable ? '\x01' : '\0');
 
@@ -1093,7 +1101,8 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
                     entity = *(uintptr_t*)((uintptr_t)self + 0x10);
                     void* smComp3 = FindComponentOnEntity(entity, *g_TypeId_ConsumeProduceComponent_FC);
                     uintptr_t smComp3IBP = 0;
-                    fn_InternalBasePtr_Ctor(&smComp3IBP, smComp3);
+                    new (&smComp3IBP) ::Object::InternalBasePtr(
+                        reinterpret_cast<RtObject::Internal*>(smComp3));   // B.3.3 bridge
                     fn_InternalBasePtr_CheckPtr(&smComp3IBP);
                     *(int*)(smComp3IBP + 0x68) += 1;
                 }
@@ -1182,7 +1191,7 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
 int ConsumeProduce_OnComplete_Impl(ConsumeProduceAction* self, void* /*param2*/, void* /*param3*/, uint32_t param4) {
     // Clear the citizen assignment: store null IBP into slot
     uintptr_t nullIBP = 0;
-    fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+    new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
     uint32_t slotIdx = param4 & 0x7F;
     uintptr_t* ibpArray = (uintptr_t*)self->field_58;
@@ -1290,7 +1299,7 @@ int ConsumeProduce_Validate_Impl(ConsumeProduceAction* self, void* param2) {
         if (valid == 0) {
             // Task invalid -- clear citizen from slot
             uintptr_t nullIBP = 0;
-            fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+            new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             ibpArray[i] = nullIBP;
             allValid = false;
         } else {

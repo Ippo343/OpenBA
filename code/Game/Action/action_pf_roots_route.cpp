@@ -61,6 +61,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName (.rdata type-id fallback)
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 
@@ -518,7 +519,8 @@ LAB_14008d65b:;
                         }
                         pvVar13 = (void*)0x0;
 FOUND_c0:
-                        fn_InternalBasePtr_Ctor(&local_c0, pvVar13);
+                        new (&local_c0) ::Object::InternalBasePtr(
+                            reinterpret_cast<RtObject::Internal*>(pvVar13));   // B.3.3 bridge
                     }
                     CheckPtr(&local_c8);
                     // --- find comp DAT_1401c4560 -> local_70 ---
@@ -547,7 +549,8 @@ FOUND_c0:
                         }
                         pvVar13 = (void*)0x0;
 FOUND_70:
-                        fn_InternalBasePtr_Ctor(&local_70v, pvVar13);
+                        new (&local_70v) ::Object::InternalBasePtr(
+                            reinterpret_cast<RtObject::Internal*>(pvVar13));   // B.3.3 bridge
                     }
                     CheckPtr(&local_c8);
                     // --- find comp DWORD_1401c7e78 (StorageComponent) -> local_a8 ---
@@ -576,7 +579,8 @@ FOUND_70:
                         }
                         pvVar13 = (void*)0x0;
 FOUND_a8:
-                        fn_InternalBasePtr_Ctor(&local_a8, pvVar13);
+                        new (&local_a8) ::Object::InternalBasePtr(
+                            reinterpret_cast<RtObject::Internal*>(pvVar13));   // B.3.3 bridge
                     }
                     if (local_c0 != 0) {
                         CheckPtr(&local_c0);
@@ -613,7 +617,8 @@ FOUND_a8:
                             pvVar13b = (void*)0x0;
 FOUND_78:
                             int64_t local_78;
-                            fn_InternalBasePtr_Ctor(&local_78, pvVar13b);
+                            new (&local_78) ::Object::InternalBasePtr(
+                                reinterpret_cast<RtObject::Internal*>(pvVar13b));   // B.3.3 bridge
                             CheckPtr(&local_78);
                             uVar10 = *(uint32_t*)(local_78 + 0x3c);
                         }

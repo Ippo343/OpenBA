@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <windows.h>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace Object { uint32_t GetTypeIdByName(const char* name); }  // factory_registration.h
 
@@ -56,7 +57,8 @@ static void* FindComponentByTypeId(uintptr_t entity, void* retIBP, const uint32_
             }
         }
     }
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(retIBP, found);
+    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return retIBP;
 }
 
@@ -255,16 +257,18 @@ void WorkBase_TaskListCleanup_c5400(void* self) {
         } while (cur != nullptr);
         // Slot address recomputed from the CURRENT array pointer (may have moved).
         slot = p[0] + static_cast<uintptr_t>(i) * 8;
-        if (fn_InternalBasePtr_DeletePtr) fn_InternalBasePtr_DeletePtr(reinterpret_cast<void*>(slot));
+        if (fn_InternalBasePtr_DeletePtr) reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(slot))->DeletePtr(
+            );   // B.3.3 bridge
         uintptr_t nul = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nul, nullptr);
+        if (fn_InternalBasePtr_Ctor) new (&nul) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *reinterpret_cast<uintptr_t*>(slot) = nul;
     }
     *reinterpret_cast<int*>(base + 0x18) = -1;
     if (p[2] != 0) {
-        if (fn_InternalBasePtr_DeletePtr) fn_InternalBasePtr_DeletePtr(&p[2]);
+        if (fn_InternalBasePtr_DeletePtr) reinterpret_cast< ::Object::InternalBasePtr*>(&p[2])->DeletePtr(
+            );   // B.3.3 bridge
         uintptr_t nul = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nul, nullptr);
+        if (fn_InternalBasePtr_Ctor) new (&nul) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         p[2] = nul;
     }
 }
@@ -352,7 +356,8 @@ uint8_t WorkBase_ValidateTask_f7100(void* self, void* /*citizenAI*/, void* taskI
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&elem);
         void* ptr = (fn_IsDerivedFrom && completeTaskTid && fn_IsDerivedFrom(elem, completeTaskTid)) ? elem : nullptr;
         uintptr_t res = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&res, ptr);
+        if (fn_InternalBasePtr_Ctor) new (&res) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(ptr));   // B.3.3 bridge
         if (res != 0) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&res);
             if (*reinterpret_cast<int*>(res + 0x30) == wantId) {

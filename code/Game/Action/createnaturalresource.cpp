@@ -15,6 +15,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -163,7 +164,7 @@ void* CreateNaturalResource_ScalarDtor_Impl(CreateNaturalResource* self, uint32_
 
     // If entity ref at +0x10 is non-null, delete it
     if (self->entity != nullptr) {
-        fn_InternalBasePtr_DeletePtr(&self->entity);
+        reinterpret_cast< ::Object::InternalBasePtr*>(&self->entity)->DeletePtr();   // B.3.3 bridge
     }
 
     // Call Object::Internal::~Internal
@@ -277,7 +278,7 @@ int CreateNaturalResource_AbstractImpl_Impl(CreateNaturalResource* self, void* a
 
     // Wrap in InternalBasePtr
     int64_t entityIBP = 0;
-    fn_InternalBasePtr_Ctor(&entityIBP, newEntity);
+    new (&entityIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
 
     // Find and set up ModelComponent -- place at cell
     fn_InternalBasePtr_CheckPtr(&entityIBP);

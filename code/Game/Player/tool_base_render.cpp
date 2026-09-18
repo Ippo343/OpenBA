@@ -73,6 +73,7 @@
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // [diag] last entities committed into EditTool+0x30 (edittool_select.cpp step 6).
 extern "C" void* g_LastSelectStore[4];
@@ -187,7 +188,8 @@ void Sub7080(int64_t container, void* outIBP) {
             break;
         }
     }
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(outIBP, found);
+    if (fn_InternalBasePtr_Ctor) new (outIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
 }
 
 // ===========================================================================
@@ -219,7 +221,8 @@ void FindModelComp(int64_t container, void* outIBP) {
             break;
         }
     }
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(outIBP, found);
+    if (fn_InternalBasePtr_Ctor) new (outIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
 }
 
 // ===========================================================================

@@ -15,6 +15,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Resolved helpers
@@ -132,7 +133,7 @@ void NaturalResourceComponent_OnRemove(NaturalResourceComponent* self) {
     if ((*(uint32_t*)(selfAddr + 0x20) >> 0x15) & 1) {
         uint8_t nullIBP[16];
         if (fn_InternalBasePtr_Ctor)
-            fn_InternalBasePtr_Ctor(nullIBP, nullptr);
+            new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         if (s_fn_ReassignResource)
             s_fn_ReassignResource((void*)selfAddr, nullIBP, 0);
     }
@@ -191,7 +192,7 @@ void NaturalResourceComponent_FindComponentByType(void* entity, void* outIBP) {
     }
 
     if (fn_InternalBasePtr_Ctor)
-        fn_InternalBasePtr_Ctor(outIBP, found);
+        new (outIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
 }
 
 // ============================================================

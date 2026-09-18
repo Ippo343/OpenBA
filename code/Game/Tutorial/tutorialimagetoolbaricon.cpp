@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Vtable pointers (resolved once)
@@ -241,7 +242,8 @@ void* TutorialImageToolbarIcon_Slot9(void* self, void* retIBP, void* dialog) {
     // 6. Wrap in InternalBasePtr
     void* imageRef = nullptr;
     if (fn_InternalBasePtr_Ctor)
-        fn_InternalBasePtr_Ctor(&imageRef, imageElement);
+        new (&imageRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(imageElement));   // B.3.3 bridge
 
     // 7. Resolve toolbar ref from String at +0x30
     if (s_fn_ResolveToolbar)

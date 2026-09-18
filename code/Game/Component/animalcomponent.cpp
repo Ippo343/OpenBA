@@ -60,6 +60,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // .rdata float constants (exact retail bit patterns, verified by reading
@@ -771,7 +772,8 @@ void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {
                 // MemAlloc fails (0x140106a8e: MOV RAX,RDI with RDI == 0).
 
                 int64_t actionIBP = 0;
-                if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&actionIBP, action);
+                if (fn_InternalBasePtr_Ctor) new (&actionIBP) ::Object::InternalBasePtr(
+                    reinterpret_cast<RtObject::Internal*>(action));   // B.3.3 bridge
                 if (s_fnActStackPush) s_fnActStackPush(stack, &actionIBP);
                 At<int64_t>(self, 0x30) = 0;
 

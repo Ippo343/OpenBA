@@ -31,6 +31,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Match the action_pf_*.cpp decompile token aliases.
 typedef unsigned int  uint;
@@ -260,7 +261,7 @@ void ZoneComponent_sub_d360(int* param_1, int64_t* param_2, int param_3, int par
                                      (uVar16 + 1) * ((uVar8 - static_cast<int64_t>(iVar10)) - 1) +
                                      lVar3) == '.';
                         if (!bVar18) goto LAB_clear;
-                        fn_InternalBasePtr_Ctor(&local_58, nullptr);
+                        new (&local_58) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                         plVar9 = &local_58;
                     } else {
 LAB_clear:

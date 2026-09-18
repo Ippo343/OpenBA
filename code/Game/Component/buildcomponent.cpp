@@ -26,6 +26,7 @@
 #include <cstring>
 
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 extern "C" void* g_pConstructionDemoSite;
 
@@ -190,7 +191,7 @@ void BuildComponent_OnCreate(BuildComponent* self) {
 
     // Create InternalBasePtr on stack — original passes self (component ptr)
     uint8_t ptrBuf[8];
-    fn_InternalBasePtr_Ctor(ptrBuf, (void*)self);
+    new (ptrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>((void*)self));   // B.3.3 bridge
 
     void* gameState = *s_pGameState;
     void* worldData = *(void**)((uintptr_t)gameState + 0xF0);
@@ -421,7 +422,8 @@ void BuildComponent_DrawReimpl(void* selfP) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&host);
             void* buildComp = BC_FindComponentByType(host, s_tid_ModelComp);
             int64_t ib1 = 0;
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&ib1, buildComp);
+            if (fn_InternalBasePtr_Ctor) new (&ib1) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(buildComp));   // B.3.3 bridge
             GameColl::AsArray<GameColl::Ptr8>(self + 0xb).SetSizeFill((int)self[0xc] + 1, &ib1);
 
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workBuf);
@@ -429,7 +431,8 @@ void BuildComponent_DrawReimpl(void* selfP) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&host2);
             void* storeComp = BC_FindComponentByType(host2, s_tid_Picking);
             int64_t ib2 = 0;
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&ib2, storeComp);
+            if (fn_InternalBasePtr_Ctor) new (&ib2) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(storeComp));   // B.3.3 bridge
             GameColl::AsArray<GameColl::Ptr8>(self + 0xd).SetSizeFill((int)self[0xe] + 1, &ib2);
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workBuf);
         }
@@ -491,11 +494,13 @@ void BuildComponent_DrawReimpl(void* selfP) {
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 2);
     void* wp = BC_FindComponentByType(self[2], s_tid_MultiObj);
     int64_t wpIbp = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&wpIbp, wp);
+    if (fn_InternalBasePtr_Ctor) new (&wpIbp) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(wp));   // B.3.3 bridge
     if (wpIbp != 0) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 2);
         void* wp2 = BC_FindComponentByType(self[2], s_tid_MultiObj);
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&wpIbp, wp2);
+        if (fn_InternalBasePtr_Ctor) new (&wpIbp) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(wp2));   // B.3.3 bridge
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpIbp);
         // Retail: bc+0x4c = WorkPlaceComponent+0x58 (the build-effort multiplier). In the
         // standalone exe the WorkPlaceComponent lifecycle is inert, so +0x58 stays 0 — which
@@ -544,7 +549,8 @@ void* BuildComponent_FindStorage26a30(int64_t compHost, void* retbuf) {
             }
         }
     }
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(retbuf, found);
+    if (fn_InternalBasePtr_Ctor) new (retbuf) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return retbuf;
 }
 

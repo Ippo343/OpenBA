@@ -19,6 +19,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 static uintptr_t s_vt_Action       = 0;  // 0x14015faa0
@@ -473,7 +474,8 @@ void* Entity_FindConsumeProduce_b6f0(int64_t param_1, void* param_2) {
             if (idx >= count) break;
         }
     }
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(param_2, found);
+    if (fn_InternalBasePtr_Ctor) new (param_2) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return param_2;
 }
 

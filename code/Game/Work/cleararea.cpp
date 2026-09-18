@@ -25,6 +25,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Diagnostic trace for the harvest-completion investigation. Gated by
 // BANISHED_CLEAR_TRACE (shared with clearareacomponent_states.cpp); default off.
@@ -906,7 +907,7 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
 
                 // Create InternalBasePtr for null entity
                 uint64_t nullIBP = 0;
-                fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+                new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
                 // Zero-init clear info
                 struct { int64_t a; int32_t b; } clearInfo;
@@ -1013,7 +1014,8 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
 
                 // Create IBP for natRes component
                 uint64_t natResIBP = 0;
-                fn_InternalBasePtr_Ctor(&natResIBP, natResComp);
+                new (&natResIBP) ::Object::InternalBasePtr(
+                    reinterpret_cast<RtObject::Internal*>(natResComp));   // B.3.3 bridge
 
                 if (natResIBP == 0) continue;
 
@@ -1047,7 +1049,8 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
                 }
 
                 uint64_t storageIBP = 0;
-                fn_InternalBasePtr_Ctor(&storageIBP, storageLocComp);
+                new (&storageIBP) ::Object::InternalBasePtr(
+                    reinterpret_cast<RtObject::Internal*>(storageLocComp));   // B.3.3 bridge
 
                 // Get resource type ID from storage location component
                 fn_InternalBasePtr_CheckPtr(&storageIBP);

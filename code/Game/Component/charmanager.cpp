@@ -47,6 +47,7 @@
 #include <cstdint>
 #include <vector>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 
@@ -378,7 +379,7 @@ extern "C" void CharMgr_impl_8560(int64_t mgr, int idx) {
     uint8_t* slot = *reinterpret_cast<uint8_t**>(m + 0x10) + static_cast<int64_t>(idx) * 0x18;
     CharMgr_helper_8d00(mgr, idx);
     int64_t nullIbp = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nullIbp, nullptr);
+    if (fn_InternalBasePtr_Ctor) new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     *reinterpret_cast<int64_t*>(slot + 0x00) = nullIbp;
     *reinterpret_cast<int64_t*>(slot + 0x08) = 0;
     *reinterpret_cast<int*>(slot + 0x10) = -1;

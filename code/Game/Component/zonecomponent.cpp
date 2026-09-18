@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Resolved helpers
@@ -279,7 +280,7 @@ void ZoneComponent_OnCreate(ZoneComponent* self) {
 
     int64_t entityRef = 0;
     if (fn_InternalBasePtr_Ctor)
-        fn_InternalBasePtr_Ctor(&entityRef, nullptr);
+        new (&entityRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     if (s_fn_ZoneRaster)
         s_fn_ZoneRaster(*reinterpret_cast<int**>(world + 0xf8), &entityRef,
             (int)x, (int)y, (int)w, (int)h,

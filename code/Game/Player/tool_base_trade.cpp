@@ -32,6 +32,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 
@@ -497,7 +498,8 @@ extern "C" void PlayerTrade_EntityUI_66b0(int64_t param_1) {
     }
 
     int64_t controllerIBP = 0;  // local_res10
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&controllerIBP, ctrlPtr);
+    if (fn_InternalBasePtr_Ctor) new (&controllerIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(ctrlPtr));   // B.3.3 bridge
 
     // Copy the edit/track flag (+0xd8) into the controller (+0x40).
     CheckPtr(reinterpret_cast<void*>(param_1 + 0x38));

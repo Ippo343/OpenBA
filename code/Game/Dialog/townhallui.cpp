@@ -23,6 +23,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 
 // ============================================================
@@ -40,7 +41,7 @@ static uint64_t TownHall_FindElemRaw(void* dialogElem, const char* name) {
     void* elem = *(void**)foundBuf;
 
     uint64_t result = 0;
-    fn_InternalBasePtr_Ctor(&result, elem);
+    new (&result) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
 
     return result;
 }
@@ -62,7 +63,7 @@ static uint64_t TownHall_FindElem(void* dialogElem, const char* name, uint32_t t
     }
 
     uint64_t result = 0;
-    fn_InternalBasePtr_Ctor(&result, castElem);
+    new (&result) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(castElem));   // B.3.3 bridge
 
     return result;
 }
@@ -118,7 +119,7 @@ void TownHallUI_InitGraph(TownHallUI* self) {
         fn_FindElement(*(void**)(s + 0x20), fb, &fmtBuf);
         fn_InternalBasePtr_CheckPtr(fb);
         uint64_t bp = 0;
-        fn_InternalBasePtr_Ctor(&bp, *(void**)fb);
+        new (&bp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(*(void**)fb));   // B.3.3 bridge
         numberPtrs[i] = bp;
     }
 
@@ -130,7 +131,7 @@ void TownHallUI_InitGraph(TownHallUI* self) {
         fn_FindElement(*(void**)(s + 0x20), fb, &fmtBuf);
         fn_InternalBasePtr_CheckPtr(fb);
         uint64_t bp = 0;
-        fn_InternalBasePtr_Ctor(&bp, *(void**)fb);
+        new (&bp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(*(void**)fb));   // B.3.3 bridge
         labelPtrs[i] = bp;
     }
 
@@ -220,7 +221,8 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
     void* foundElem = *(void**)foundBuf;
     void* tableElem = CastElement(foundElem, g_TypeId_TableElement);
     uint64_t tablePtr = 0;
-    fn_InternalBasePtr_Ctor(&tablePtr, (void*)tableElem);
+    new (&tablePtr) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>((void*)tableElem));   // B.3.3 bridge
 
     // Get profession list from game singleton
     uintptr_t profList = *(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0xb0);
@@ -290,7 +292,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
         fn_InternalBasePtr_CheckPtr(c0Buf);
         void* c0Elem = CastElement(*(void**)c0Buf, g_TypeId_LabelElement);
         uint64_t labelIBP = 0;
-        fn_InternalBasePtr_Ctor(&labelIBP, c0Elem);
+        new (&labelIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(c0Elem));   // B.3.3 bridge
         *(uint64_t*)(profEntry + 0x08) = labelIBP;
 
         // Content child 0: NumberEditElement (desired worker count spinner)
@@ -300,7 +302,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
         fn_InternalBasePtr_CheckPtr(c1Buf);
         void* c1Elem = CastElement(*(void**)c1Buf, g_TypeId_NumberEditElement);
         uint64_t numEditIBP = 0;
-        fn_InternalBasePtr_Ctor(&numEditIBP, c1Elem);
+        new (&numEditIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(c1Elem));   // B.3.3 bridge
         *(uint64_t*)(profEntry + 0x10) = numEditIBP;
 
         // Row child 2: NumberElement (current count display)
@@ -310,7 +312,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
         fn_InternalBasePtr_CheckPtr(c2Buf);
         void* c2Elem = CastElement(*(void**)c2Buf, g_TypeId_SpinnerElement);
         uint64_t numIBP = 0;
-        fn_InternalBasePtr_Ctor(&numIBP, c2Elem);
+        new (&numIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(c2Elem));   // B.3.3 bridge
         *(uint64_t*)(profEntry + 0x18) = numIBP;
 
         // Row child 3: NumberElement (another counter)
@@ -320,7 +322,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
         fn_InternalBasePtr_CheckPtr(c3Buf);
         void* c3Elem = CastElement(*(void**)c3Buf, g_TypeId_SpinnerElement);
         uint64_t spinIBP = 0;
-        fn_InternalBasePtr_Ctor(&spinIBP, c3Elem);
+        new (&spinIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(c3Elem));   // B.3.3 bridge
         *(uint64_t*)(profEntry + 0x20) = spinIBP;
 
         // Row child 4: ButtonElement (go-to button)
@@ -330,7 +332,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
         fn_InternalBasePtr_CheckPtr(c4Buf);
         void* c4Elem = CastElement(*(void**)c4Buf, g_TypeId_HelpButtonElem);
         uint64_t btnIBP = 0;
-        fn_InternalBasePtr_Ctor(&btnIBP, c4Elem);
+        new (&btnIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(c4Elem));   // B.3.3 bridge
         *(uint64_t*)(profEntry + 0x28) = btnIBP;
 
         // Get profession type entry: profList->types[i]
@@ -478,7 +480,8 @@ void TownHallUI_InitProduction(TownHallUI* self) {
     void* foundElem = *(void**)foundBuf;
     void* tableElem = CastElement(foundElem, g_TypeId_TableElement);
     uint64_t tablePtr = 0;
-    fn_InternalBasePtr_Ctor(&tablePtr, (void*)tableElem);
+    new (&tablePtr) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>((void*)tableElem));   // B.3.3 bridge
 
     // Read column count from table
     fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
@@ -507,7 +510,7 @@ void TownHallUI_InitProduction(TownHallUI* self) {
             fn_InternalBasePtr_CheckPtr(cBuf);
             void* cElem = CastElement(*(void**)cBuf, g_TypeId_SpinnerElement);
             uint64_t ibp = 0;
-            fn_InternalBasePtr_Ctor(&ibp, cElem);
+            new (&ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(cElem));   // B.3.3 bridge
             *(uint64_t*)(entry + col * 8) = ibp;
         }
 
@@ -574,7 +577,8 @@ void TownHallUI_InitInventory(TownHallUI* self) {
     void* foundElem = *(void**)foundBuf;
     void* tableElem = CastElement(foundElem, g_TypeId_TableElement);
     uint64_t tablePtr = 0;
-    fn_InternalBasePtr_Ctor(&tablePtr, (void*)tableElem);
+    new (&tablePtr) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>((void*)tableElem));   // B.3.3 bridge
 
     // Count resource types via ExternalFactory::FindNext
     int resourceCount = 0;
@@ -639,7 +643,7 @@ void TownHallUI_InitInventory(TownHallUI* self) {
         fn_InternalBasePtr_CheckPtr(sub0);
         void* labelElem = CastElement(*(void**)sub0, g_TypeId_LabelElement);
         uint64_t labelIBP = 0;
-        fn_InternalBasePtr_Ctor(&labelIBP, labelElem);
+        new (&labelIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(labelElem));   // B.3.3 bridge
 
         // Get cell->child(0)->child(1) = NumberElement
         fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
@@ -651,7 +655,7 @@ void TownHallUI_InitInventory(TownHallUI* self) {
         fn_InternalBasePtr_CheckPtr(sub1);
         void* numElem = CastElement(*(void**)sub1, g_TypeId_SpinnerElement);
         uint64_t numIBP = 0;
-        fn_InternalBasePtr_Ctor(&numIBP, numElem);
+        new (&numIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(numElem));   // B.3.3 bridge
 
         // Push {labelIBP, numIBP} into the inventory table array at +0x118.
         // B.3.2 bridge: TownHallUI+0x118 is Collection::Array<{InternalBasePtr,
@@ -716,7 +720,8 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
     void* foundElem = *(void**)foundBuf;
     void* tableElem = CastElement(foundElem, g_TypeId_TableElement);
     uint64_t tablePtr = 0;
-    fn_InternalBasePtr_Ctor(&tablePtr, (void*)tableElem);
+    new (&tablePtr) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>((void*)tableElem));   // B.3.3 bridge
 
     // Iterate ExternalFactory for ComponentDescription entities
     void* factory = *g_pExternalFactorySingleton;
@@ -872,7 +877,7 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
         // Cast child to LabelElement
         void* labelElem = CastElement(*(void**)cellBuf, g_TypeId_LabelElement);
         uint64_t labelIBP = 0;
-        fn_InternalBasePtr_Ctor(&labelIBP, labelElem);
+        new (&labelIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(labelElem));   // B.3.3 bridge
 
         // Push labelIBP into the label array at +0x1C8.
         // B.3.2 bridge: TownHallUI+0x1C8 is Collection::Array<InternalBasePtr>
@@ -1817,7 +1822,8 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
             void* workplaceComp = TownHall_FindComponentByTypeId_CE(entity, *g_TypeId_WorkplaceComponent);
 
             uint64_t wpBP = 0;
-            fn_InternalBasePtr_Ctor(&wpBP, workplaceComp);
+            new (&wpBP) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(workplaceComp));   // B.3.3 bridge
             fn_InternalBasePtr_CheckPtr(&wpBP);
 
             // Check if entity is active (workplace+0x50 != 0)
@@ -1830,7 +1836,8 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
                 void* workplaceComp2 = TownHall_FindComponentByTypeId_CE(entity2, *g_TypeId_WorkplaceComponent);
 
                 uint64_t wpBP2 = 0;
-                fn_InternalBasePtr_Ctor(&wpBP2, workplaceComp2);
+                new (&wpBP2) ::Object::InternalBasePtr(
+                    reinterpret_cast<RtObject::Internal*>(workplaceComp2));   // B.3.3 bridge
                 fn_InternalBasePtr_CheckPtr(&wpBP2);
 
                 // Get parent entity (wpBP2+0x10)
@@ -1841,7 +1848,8 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
                 void* storageLocComp = TownHall_FindComponentByTypeId_CE(parentEntity, *g_TypeId_WorkComponent);
 
                 uint64_t slBP = 0;
-                fn_InternalBasePtr_Ctor(&slBP, storageLocComp);
+                new (&slBP) ::Object::InternalBasePtr(
+                    reinterpret_cast<RtObject::Internal*>(storageLocComp));   // B.3.3 bridge
                 fn_InternalBasePtr_CheckPtr(&slBP);
 
                 // Get max count
@@ -1990,13 +1998,15 @@ void TownHallUI_UpdateAll(TownHallUI* self) {
         fn_InternalBasePtr_CheckPtr((void*)&entityPtr);
         void* storageComp = TownHall_FindComponentByTypeId_CE(entityPtr, *g_TypeId_StorageComponent_FC);
         uint64_t storageBP = 0;
-        fn_InternalBasePtr_Ctor(&storageBP, storageComp);
+        new (&storageBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(storageComp));   // B.3.3 bridge
 
         // Find StateMachineComponent (DAT_1401c7d98) — ComponentEntity layout
         fn_InternalBasePtr_CheckPtr((void*)&entityPtr);
         void* buildStateComp = TownHall_FindComponentByTypeId_CE(entityPtr, *g_TypeId_StateMachineComponent_FC);
         uint64_t buildStateBP = 0;
-        fn_InternalBasePtr_Ctor(&buildStateBP, buildStateComp);
+        new (&buildStateBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(buildStateComp));   // B.3.3 bridge
 
         int counterIndex; // which of the 3 counters to increment (offset = counterIndex*4 + 8)
         if (buildStateBP != 0) {
@@ -2006,7 +2016,8 @@ void TownHallUI_UpdateAll(TownHallUI* self) {
             fn_InternalBasePtr_CheckPtr((void*)&entityPtr);
             void* buildingComp = TownHall_FindComponentByTypeId_CE(entityPtr, *g_TypeId_TradeComponent_FC);
             uint64_t buildingBP = 0;
-            fn_InternalBasePtr_Ctor(&buildingBP, buildingComp);
+            new (&buildingBP) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(buildingComp));   // B.3.3 bridge
             if (buildingBP != 0)
                 counterIndex = 1; // has building component
             else
@@ -2151,7 +2162,7 @@ void TownHallUI_Serialize(TownHallUI* self) {
     }
 
     uint64_t tempIBP = 0;
-    fn_InternalBasePtr_Ctor(&tempIBP, tabElement);
+    new (&tempIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(tabElement));   // B.3.3 bridge
     *(uint64_t*)(s + 0x30) = tempIBP;
 
     TownHallUI_InitGeneral(self);

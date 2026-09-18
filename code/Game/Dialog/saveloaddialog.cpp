@@ -44,6 +44,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Thumbnail vtable stamps — see code/Game/Dialog/thumb_vtables.cpp.
 extern uintptr_t ThumbVtable_StampMaterialInstance(void* obj);
@@ -70,7 +71,7 @@ static uint64_t FindChildElem(void* parentElem, const char* name) {
     void* rawElem = (void*)resultPtr;
     // Wrap in InternalBasePtr
     uint64_t basePtr = 0;
-    fn_InternalBasePtr_Ctor(&basePtr, rawElem);
+    new (&basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(rawElem));   // B.3.3 bridge
     return basePtr;
 }
 
@@ -745,7 +746,7 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
     // saveFlag (+0xB9): save done, close dialog (no game transition needed)
     if (*(uint8_t*)(s + 0xB9) != 0) {
         uint64_t basePtr = 0;
-        fn_InternalBasePtr_Ctor(&basePtr, (void*)s);
+        new (&basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>((void*)s));   // B.3.3 bridge
         void* ui = *(void**)(s + 0x10);
         fn_UI_CloseDialog(ui, &basePtr);
         *(uint8_t*)(s + 0xB9) = 0;
@@ -756,7 +757,7 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
     if (*(uint8_t*)(s + 0xBA) != 0) {
         // Close the SaveLoad dialog
         uint64_t basePtr = 0;
-        fn_InternalBasePtr_Ctor(&basePtr, (void*)s);
+        new (&basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>((void*)s));   // B.3.3 bridge
         void* ui = *(void**)(s + 0x10);
         fn_UI_CloseDialog(ui, &basePtr);
 
@@ -931,9 +932,9 @@ static int SaveLoad_ShowConfirmDialog(void* self, const char* rscPath) {
 
     // ShowDialog(ui, InternalPtr<DialogInstance>)
     uint64_t dlgPtr = 0;
-    fn_InternalBasePtr_Ctor(&dlgPtr, dlg);
+    new (&dlgPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dlg));   // B.3.3 bridge
     int result = SaveLoad_ModalShowDialog(*(void**)(s + 0x10), &dlgPtr, rscPath);
-    fn_InternalBasePtr_DeletePtr(&dlgPtr);
+    reinterpret_cast< ::Object::InternalBasePtr*>(&dlgPtr)->DeletePtr();   // B.3.3 bridge
     return result;
 }
 
@@ -1112,7 +1113,7 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
         // Find the TextElement inside the warning dialog and set mod info parameters
         // FindElementType on the dialog InternalPtr returns a TextElement InternalPtr
         uint64_t warnDlgPtr = 0;
-        fn_InternalBasePtr_Ctor(&warnDlgPtr, warnDlg);
+        new (&warnDlgPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(warnDlg));   // B.3.3 bridge
         fn_InternalBasePtr_CheckPtr(&warnDlgPtr);
 
         // Find TextElement within dialog (uses g_TypeId_TextElement)
@@ -1126,7 +1127,7 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
         void* textElem = isText ? rawElem : nullptr;
 
         uint64_t textPtr = 0;
-        fn_InternalBasePtr_Ctor(&textPtr, textElem);
+        new (&textPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(textElem));   // B.3.3 bridge
         fn_InternalBasePtr_CheckPtr(&textPtr);
 
         // SetParameter(0) = mod name, SetParameter(1) = mod name (again, as per decompilation)
@@ -1166,7 +1167,7 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
         // mod that is not installed.
         uint64_t showPtr = warnDlgPtr;
         int warnResult = SaveLoad_ModalShowDialog(*(void**)(s + 0x10), &showPtr, warnPath);
-        fn_InternalBasePtr_DeletePtr(&warnDlgPtr);
+        reinterpret_cast< ::Object::InternalBasePtr*>(&warnDlgPtr)->DeletePtr();   // B.3.3 bridge
 
         if (warnResult != 2) return;  // user declined mod warning — abort load
     }
@@ -1218,7 +1219,7 @@ void SaveLoadDialog_OnEvent(SaveLoadDialog* self, void* element, int eventType, 
             // buttonCancel: close dialog
             void* ui = *(void**)(s + 0x10);
             uint64_t basePtr[2];
-            fn_InternalBasePtr_Ctor(basePtr, self);
+            new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
             fn_UI_CloseDialog(ui, basePtr);
             return;
         }

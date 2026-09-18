@@ -24,6 +24,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Locally resolved function pointers
@@ -249,7 +250,8 @@ void StateMachineComponent_Serialize(StateMachineComponent* self) {
         // Wrap in InternalBasePtr
         void* ibpValue = nullptr;
         if (fn_InternalBasePtr_Ctor)
-            fn_InternalBasePtr_Ctor(&ibpValue, candidate);
+            new (&ibpValue) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(candidate));   // B.3.3 bridge
 
         if (ibpValue != nullptr) {
             if (!gotDefaultState) {
@@ -371,7 +373,8 @@ void StateMachineComponent_OnUpdate2(StateMachineComponent* self) {
 
             void* ibpValue = nullptr;
             if (fn_InternalBasePtr_Ctor)
-                fn_InternalBasePtr_Ctor(&ibpValue, candidate);
+                new (&ibpValue) ::Object::InternalBasePtr(
+                    reinterpret_cast<RtObject::Internal*>(candidate));   // B.3.3 bridge
 
             if (ibpValue != nullptr) {
                 // Call virtual +0x88 (CreateState) to get a state node

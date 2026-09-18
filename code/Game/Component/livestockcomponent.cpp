@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Resolved helpers
@@ -134,7 +135,8 @@ void LivestockComponent_OnAdd(LivestockComponent* self) {
         reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
     if (!gs) return;
     uint64_t ibp = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&ibp, self);
+    if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
     else ibp = reinterpret_cast<uint64_t>(self);
     // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
     GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(gs + 0x80))
@@ -161,7 +163,8 @@ void LivestockComponent_OnRemove(LivestockComponent* self) {
     if (!s_erase) return;
 
     uint64_t ibp = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&ibp, self);
+    if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
     else ibp = reinterpret_cast<uint64_t>(self);
 
     if (self->data28 == 0) {

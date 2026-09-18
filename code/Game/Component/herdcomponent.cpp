@@ -30,6 +30,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Resolved helpers
@@ -426,7 +427,8 @@ char HerdComponent_CheckMigrationDone(int64_t herdComp) {
 
         void* member = HerdFindComponent(entity, s_pTypeId_1c6f98);
         uint64_t memberRef = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&memberRef, member);
+        if (fn_InternalBasePtr_Ctor) new (&memberRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(member));   // B.3.3 bridge
         if (s_fn_CheckPtr) s_fn_CheckPtr(&memberRef);
         char done = s_fn_Herd_helper6b10 ? s_fn_Herd_helper6b10((int64_t)memberRef) : 1;
         if (done == 0) return 0;
@@ -468,7 +470,8 @@ void HerdComponent_AdjustSize(void* herdComp, int targetSize) {
         void* ent = (mem && s_fn_ComponentEntity_CopyCtor)
                         ? s_fn_ComponentEntity_CopyCtor(mem, descr) : nullptr;
         uint64_t entRef = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&entRef, ent);
+        if (fn_InternalBasePtr_Ctor) new (&entRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(ent));   // B.3.3 bridge
         if (s_fn_CheckPtr) s_fn_CheckPtr(&entRef);
         int64_t entObj = (int64_t)entRef;
 
@@ -478,15 +481,18 @@ void HerdComponent_AdjustSize(void* herdComp, int targetSize) {
         // performed and discarded — kept so the search order matches.
         void* wildComp = HerdFindComponent(entObj, s_pTypeId_1c8000);
         uint64_t wildRef = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&wildRef, wildComp);
+        if (fn_InternalBasePtr_Ctor) new (&wildRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(wildComp));   // B.3.3 bridge
 
         void* animalComp = HerdFindComponent(entObj, s_pTypeId_1c6f98);
         uint64_t animalRef = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&animalRef, animalComp);
+        if (fn_InternalBasePtr_Ctor) new (&animalRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(animalComp));   // B.3.3 bridge
 
         void* charComp = HerdFindComponent(entObj, s_pTypeId_1c7078);
         uint64_t charRef = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&charRef, charComp);
+        if (fn_InternalBasePtr_Ctor) new (&charRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(charComp));   // B.3.3 bridge
         (void)charRef;
 
         // Spread radius from the herd config animal count.
@@ -528,7 +534,8 @@ void HerdComponent_AdjustSize(void* herdComp, int targetSize) {
         if (fn_IsDerivedFrom && s_pHerdTypeId)
             fn_IsDerivedFrom(*(void**)(self + 0x18), *s_pHerdTypeId);
         uint64_t selfRef = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&selfRef, self);
+        if (fn_InternalBasePtr_Ctor) new (&selfRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
         if (s_fn_CheckPtr) s_fn_CheckPtr(&wildRef);
         if (s_fn_Herd_imple510) s_fn_Herd_imple510((void*)wildRef, &selfRef);
 
@@ -623,7 +630,8 @@ void HerdComponent_Impl_e510(void* memberComp, void* newHerdIbp) {
 
     if (*(int64_t*)(self + 0x28) != 0) {
         uint64_t selfRef = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&selfRef, self);
+        if (fn_InternalBasePtr_Ctor) new (&selfRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
         if (s_fn_CheckPtr) s_fn_CheckPtr(self + 0x28);
         if (s_fn_Herd_RemoveFromList)
             s_fn_Herd_RemoveFromList((int64_t*)(*(int64_t*)(self + 0x28) + 0x38), &selfRef);
@@ -633,7 +641,8 @@ void HerdComponent_Impl_e510(void* memberComp, void* newHerdIbp) {
     *(int64_t*)(self + 0x28) = newHerd;
     if (newHerd != 0) {
         uint64_t selfRef = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&selfRef, self);
+        if (fn_InternalBasePtr_Ctor) new (&selfRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
         if (s_fn_CheckPtr) s_fn_CheckPtr(self + 0x28);
         HerdComponent_Helper1ad0(*(int64_t*)(self + 0x28), &selfRef);
     }
@@ -721,18 +730,21 @@ void HerdComponent_Populate(int64_t herdComp, int count) {
         void* ent = (mem && s_fn_ComponentEntity_CopyCtor)
                         ? s_fn_ComponentEntity_CopyCtor(mem, descr) : nullptr;
         uint64_t entRef = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&entRef, ent);
+        if (fn_InternalBasePtr_Ctor) new (&entRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(ent));   // B.3.3 bridge
         if (s_fn_CheckPtr) s_fn_CheckPtr(&entRef);
         int64_t entObj = (int64_t)entRef;
         if (!entObj) continue;
 
         void* animalComp = HerdFindComponent(entObj, s_pTypeId_1c6f98);
         uint64_t animalRef = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&animalRef, animalComp);
+        if (fn_InternalBasePtr_Ctor) new (&animalRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(animalComp));   // B.3.3 bridge
 
         void* wildComp = HerdFindComponent(entObj, s_pTypeId_1c8000);
         uint64_t wildRef = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&wildRef, wildComp);
+        if (fn_InternalBasePtr_Ctor) new (&wildRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(wildComp));   // B.3.3 bridge
 
         mapDim = *mapDimPtr;
         int tile = mapDim * (by + rndY) + bx + rndX;
@@ -781,7 +793,8 @@ void HerdComponent_Populate(int64_t herdComp, int count) {
         }
 
         uint64_t herdRef = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&herdRef, self);
+        if (fn_InternalBasePtr_Ctor) new (&herdRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
         if (s_fn_CheckPtr) s_fn_CheckPtr(&wildRef);
         if (s_fn_Herd_imple510) s_fn_Herd_imple510((void*)wildRef, &herdRef);
 
@@ -818,7 +831,8 @@ void HerdComponent_OnAdd(void* selfV) {
     if (!townMgr) return;
 
     uint64_t selfRef = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&selfRef, selfV);
+    if (fn_InternalBasePtr_Ctor) new (&selfRef) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(selfV));   // B.3.3 bridge
     // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
     GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(townMgr + 0xb0))
         .SetSizeFill(*(int*)(townMgr + 0xb8) + 1, &selfRef);
@@ -838,7 +852,7 @@ void HerdComponent_OnRemove(void* selfV) {
 
     while (*(int*)(self + 0x40) > 0) {
         uint64_t nullRef = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nullRef, nullptr);
+        if (fn_InternalBasePtr_Ctor) new (&nullRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
         void** slot = reinterpret_cast<void**>(
             *(uintptr_t*)(self + 0x38) + (int64_t)(*(int*)(self + 0x40) - 1) * 8);
@@ -851,7 +865,8 @@ void HerdComponent_OnRemove(void* selfV) {
 
         if (*(int64_t*)(member + 0x28) != 0) {
             uint64_t memberRef = 0;
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&memberRef, member);
+            if (fn_InternalBasePtr_Ctor) new (&memberRef) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(member));   // B.3.3 bridge
             if (s_fn_CheckPtr) s_fn_CheckPtr(member + 0x28);
             if (s_fn_DynArray8_EraseByValue)
                 s_fn_DynArray8_EraseByValue(
@@ -860,7 +875,8 @@ void HerdComponent_OnRemove(void* selfV) {
         *(int64_t*)(member + 0x28) = (int64_t)nullRef;
         if (nullRef != 0) {
             uint64_t memberRef = 0;
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&memberRef, member);
+            if (fn_InternalBasePtr_Ctor) new (&memberRef) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(member));   // B.3.3 bridge
             if (s_fn_CheckPtr) s_fn_CheckPtr(member + 0x28);
             HerdComponent_Helper1ad0(*(int64_t*)(member + 0x28), &memberRef);
         }
@@ -871,7 +887,8 @@ void HerdComponent_OnRemove(void* selfV) {
     uint8_t* townMgr = *(uint8_t**)(gw + 0xf0);
     if (!townMgr || !s_fn_DynArray8_EraseByValue) return;
     uint64_t selfRef = 0;
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&selfRef, self);
+    if (fn_InternalBasePtr_Ctor) new (&selfRef) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
     s_fn_DynArray8_EraseByValue(reinterpret_cast<int64_t*>(townMgr + 0xb0), &selfRef);
 }
 

@@ -45,6 +45,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // The force-worked ForesterLodge (starttown.cpp, BANISHED_LIVE_WORKPLACE).
 extern void* g_pForceWorkBuilding;
@@ -180,7 +181,8 @@ extern "C" bool StartTown_ForcePushForesterWork(void* citizen) {
     if (!s_fw) {
         s_fw = ForesterWork_Factory();
         if (!s_fw) return true;
-        fn_InternalBasePtr_Ctor(reinterpret_cast<uint8_t*>(s_fw) + 0x10, lodge);  // +0x10 work-area IBP
+        new (reinterpret_cast<uint8_t*>(s_fw) + 0x10) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(lodge));   // B.3.3 bridge  // +0x10 work-area IBP
         int cell = ForceWork::WorkAreaCenterCell(lodge);
         if (cell >= 0) *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(s_fw) + 0x28) = cell;
         fprintf(stderr, "[ForceForester] constructed ForesterWork=%p work+0x10=lodge "

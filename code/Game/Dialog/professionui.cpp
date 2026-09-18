@@ -40,6 +40,7 @@
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <cstdio>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // File-local helper: CalcWorkerSlots (FUN_14012e5c0)
@@ -492,7 +493,8 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
             numEditChecked = numEditRaw;
         }
         uint64_t numEditIBP = 0;
-        fn_InternalBasePtr_Ctor(&numEditIBP, numEditChecked);
+        new (&numEditIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(numEditChecked));   // B.3.3 bridge
 
         // Push spinner's NumberEditElement to spinner array at +0x40
         PushToArray8(s, 0x40, numEditIBP);
@@ -699,7 +701,8 @@ void ProfessionUI_Slot8(ProfessionUI* self) {
             if (workplaceComp) {
                 // Wrap in IBP and CheckPtr (original does InternalBasePtr_Ctor + CheckPtr)
                 uint64_t wpcIBP = 0;
-                fn_InternalBasePtr_Ctor(&wpcIBP, (void*)workplaceComp);
+                new (&wpcIBP) ::Object::InternalBasePtr(
+                    reinterpret_cast<RtObject::Internal*>((void*)workplaceComp));   // B.3.3 bridge
                 fn_InternalBasePtr_CheckPtr((void*)&wpcIBP);
                 workplaceComp = (uintptr_t)wpcIBP;
 
@@ -732,7 +735,8 @@ void ProfessionUI_Slot8(ProfessionUI* self) {
                     if (storageLocComp) {
                         // Wrap in IBP and CheckPtr (original does InternalBasePtr_Ctor + CheckPtr)
                         uint64_t slcIBP = 0;
-                        fn_InternalBasePtr_Ctor(&slcIBP, (void*)storageLocComp);
+                        new (&slcIBP) ::Object::InternalBasePtr(
+                            reinterpret_cast<RtObject::Internal*>((void*)storageLocComp));   // B.3.3 bridge
                         fn_InternalBasePtr_CheckPtr((void*)&slcIBP);
                         storageLocComp = (uintptr_t)slcIBP;
 

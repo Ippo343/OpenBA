@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "resolve.h"
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // StorageUI::Startup is the per-frame content refresh (driven via the +0x40
 // W_OnUpdate hack in standalone). Its _DEBUG bring-up logs used to fire every
@@ -45,7 +46,7 @@ static void* StorageUI_FindChildElem(void* parentElem, const char* name) {
 static uint64_t StorageUI_FindElemAsBasePtr(void* parentElem, const char* name) {
     void* raw = StorageUI_FindChildElem(parentElem, name);
     uint8_t bpBuf[8];
-    fn_InternalBasePtr_Ctor(bpBuf, raw);
+    new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(raw));   // B.3.3 bridge
     return *(uint64_t*)bpBuf;
 }
 
@@ -75,7 +76,7 @@ void StorageUI_Serialize(StorageUI* self) {
 
     // Wrap table as InternalBasePtr
     uint8_t tableBpBuf[8];
-    fn_InternalBasePtr_Ctor(tableBpBuf, tableRaw);
+    new (tableBpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(tableRaw));   // B.3.3 bridge
     uintptr_t tableElem = *(uintptr_t*)tableBpBuf;
 
     // Count resource types via ExternalFactory::FindNext
@@ -181,7 +182,7 @@ void StorageUI_Startup(StorageUI* self) {
     bool isEntity = fn_IsDerivedFrom(entityRaw, *g_TypeId_ComponentEntity);
     void* entity = isEntity ? entityRaw : nullptr;
     uint8_t entityBuf[8];
-    fn_InternalBasePtr_Ctor(entityBuf, entity);
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
     uintptr_t entityPtr = *(uintptr_t*)entityBuf;
 
     // Find StorageComponent (type ID 0x1401c7e78) — NOT StateMachine!

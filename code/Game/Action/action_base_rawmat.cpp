@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 // Type-ID globals (resolved lazily from the exe .rdata).
@@ -334,7 +335,8 @@ void* ActRm_FindComponent_223c0(uintptr_t entity, void* retIBP) {
             break;
         }
     }
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(retIBP, found);
+    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return retIBP;
 }
 
@@ -365,7 +367,8 @@ void* ActRm_FindComp_013320(uintptr_t self, void* retIBP) {
             break;
         }
     }
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(retIBP, found);
+    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return retIBP;
 }
 

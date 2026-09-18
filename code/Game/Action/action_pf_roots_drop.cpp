@@ -44,6 +44,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 
@@ -175,7 +176,7 @@ void Pf_SpawnRawMaterialOnCell_78c0(int64_t param_1, int64_t param_2, int param_
     uint32_t local_38 = 0;
 
     int* piVar2 = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(gworld) + 0xf8);
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&local_res20, nullptr);
+    if (fn_InternalBasePtr_Ctor) new (&local_res20) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(param_1 + 0x30));
     int64_t lVar3 = *reinterpret_cast<int64_t*>(param_1 + 0x30);
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(lVar3 + 0x278));
@@ -197,7 +198,8 @@ void Pf_SpawnRawMaterialOnCell_78c0(int64_t param_1, int64_t param_2, int param_
         if (local_40 != nullptr) {
             ptr = s_fn_entityCopyCtor ? s_fn_entityCopyCtor(local_40, param_2) : nullptr;
         }
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&local_48, ptr);
+        if (fn_InternalBasePtr_Ctor) new (&local_48) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(ptr));   // B.3.3 bridge
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_48);
         if (s_fn_223c0) s_fn_223c0(local_48, &local_res20);
         void* random = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gworld) + 0xd8);
@@ -322,7 +324,8 @@ uint64_t Pf_DropOffExec_7620(int64_t param_1, int64_t* param_2, void* param_3, u
             ptr = s_fn_moveToCtor ? s_fn_moveToCtor(self, pIVar7, /*Slow*/1, 0, local_50, 0xe1f, 0,
                                                     s_pDAT_172280 ? *s_pDAT_172280 : 0.0f) : nullptr;
         }
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(local_70, ptr);
+        if (fn_InternalBasePtr_Ctor) new (local_70) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(ptr));   // B.3.3 bridge
         if (s_fn_push) s_fn_push(param_2, local_70);
         (void)local_58;
     }
@@ -363,7 +366,7 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
         void* pIVar8 = nullptr;
         local_68 = pIVar7;
         if (pIVar7 != nullptr) {
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&local_res8_v, nullptr);
+            if (fn_InternalBasePtr_Ctor) new (&local_res8_v) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             uint32_t msgId = s_pDAT_1c70e8 ? *s_pDAT_1c70e8 : 0;  // param_7 = DWORD_1401c70e8
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_1);
             local_78 = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
@@ -371,9 +374,11 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
                                                          &msgId, 0, reinterpret_cast<uint64_t*>(&local_res8_v), 0)
                                       : nullptr;
         }
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&local_70, pIVar8);
+        if (fn_InternalBasePtr_Ctor) new (&local_70) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(pIVar8));   // B.3.3 bridge
         if (*reinterpret_cast<int64_t*>(lVar3 + 0x58) != 0) {
-            if (fn_InternalBasePtr_DeletePtr) fn_InternalBasePtr_DeletePtr(reinterpret_cast<void*>(lVar3 + 0x58));
+            if (fn_InternalBasePtr_DeletePtr) reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(lVar3 + 0x58))->DeletePtr(
+                );   // B.3.3 bridge
         }
         *reinterpret_cast<uint64_t*>(lVar3 + 0x58) = local_70;
         // --- CompleteTask child action ---
@@ -388,7 +393,8 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
                                                            &local_70, reinterpret_cast<uint64_t*>(&local_res8_v), 0)
                                        : nullptr;
         }
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&local_78, pIVar9);
+        if (fn_InternalBasePtr_Ctor) new (&local_78) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(pIVar9));   // B.3.3 bridge
         if (s_fn_push) s_fn_push(plVar18, &local_78);
     }
 
@@ -440,7 +446,8 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
                     uVar1 /*arg7 = R12D = StorageComponent+0x38*/, param_4 /*arg8 = R13D*/, 1,
                     reinterpret_cast<uint64_t*>(&local_res8_v), 0xc) : nullptr;
             }
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&local_68, pIVar9);
+            if (fn_InternalBasePtr_Ctor) new (&local_68) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(pIVar9));   // B.3.3 bridge
             if (s_fn_push) s_fn_push(plVar18, &local_68);
             iVar20 = iVar20 + 1;
         } while (iVar20 < *reinterpret_cast<int*>(param_6 + 0x50));
@@ -460,7 +467,8 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
             *reinterpret_cast<uintptr_t*>(s) = s_vt_RemoveAnimal;
             *reinterpret_cast<uint64_t*>(s + 0x20) = uVar4;
         }
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&local_res8_v, pIVar9);
+        if (fn_InternalBasePtr_Ctor) new (&local_res8_v) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(pIVar9));   // B.3.3 bridge
         if (s_fn_push) s_fn_push(plVar18, &local_res8_v);
     }
 
@@ -478,7 +486,8 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
                                                           0xb /*Fast|ShowGroup*/, static_cast<int64_t>(timeStore),
                                                           1, 2) : nullptr;
         }
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&local_68, pvVar11);
+        if (fn_InternalBasePtr_Ctor) new (&local_68) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(pvVar11));   // B.3.3 bridge
         if (s_fn_push) s_fn_push(plVar18, &local_68);
     }
 
@@ -495,7 +504,8 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
                                                         reinterpret_cast<float*>(param_3), 0xe1f, 0,
                                                         s_pDAT_172280 ? *s_pDAT_172280 : 0.0f) : nullptr;
         }
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&local_68, pvVar11);
+        if (fn_InternalBasePtr_Ctor) new (&local_68) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(pvVar11));   // B.3.3 bridge
         if (s_fn_push) s_fn_push(plVar18, &local_68);
     }
 

@@ -39,6 +39,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace {
 
@@ -101,7 +102,8 @@ void EnsureInit() {
 }
 
 
-inline void  Ctor(void* self, void* obj) { if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(self, obj); }
+inline void  Ctor(void* self, void* obj) { if (fn_InternalBasePtr_Ctor) new (self) ::Object::InternalBasePtr(
+    reinterpret_cast<RtObject::Internal*>(obj)); }   // B.3.3 bridge
 inline void  CheckPtr(void* p)           { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 inline void* Alloc(uint64_t sz)          { return (fn_MemAlloc && g_pMemAllocSingleton) ? fn_MemAlloc(g_pMemAllocSingleton, sz, 8) : nullptr; }
 
@@ -141,7 +143,8 @@ extern "C" void BuildStructure_SetupBuildActions(void* citizenIBPptr, uint32_t p
         }
         int64_t leadIBP = 0; Ctor(&leadIBP, act);
         if (*reinterpret_cast<int64_t*>(charComp + 0x58) != 0 && fn_InternalBasePtr_DeletePtr)
-            fn_InternalBasePtr_DeletePtr(reinterpret_cast<void*>(charComp + 0x58));
+            reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(charComp + 0x58))->DeletePtr(
+                );   // B.3.3 bridge
         *reinterpret_cast<int64_t*>(charComp + 0x58) = leadIBP;
     }
 

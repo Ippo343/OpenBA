@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // RadiusUI::Slot6 (vtable +0x30) — Remove radius overlay
@@ -41,7 +42,8 @@ void RadiusUI_Slot5(RadiusUI* self) {
     }
 
     uint64_t entityBasePtr = 0;
-    fn_InternalBasePtr_Ctor(&entityBasePtr, checkedEntity);
+    new (&entityBasePtr) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(checkedEntity));   // B.3.3 bridge
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&entityBasePtr);
 
     // SA-only guard (retail derefs this unguarded): retail can only route a RadiusUI

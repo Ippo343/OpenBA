@@ -20,6 +20,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Local function pointers (resolved once by ForesterWork_ResolveFuncs)
@@ -570,7 +571,8 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
 
     // Wrap in InternalBasePtr
     uintptr_t workplaceIBP = 0;
-    fn_InternalBasePtr_Ctor(&workplaceIBP, workplaceComp);
+    new (&workplaceIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(workplaceComp));   // B.3.3 bridge
 
     // Get RadiusComponent from workplace description (+0x18)
     fn_InternalBasePtr_CheckPtr(&workplaceIBP);

@@ -75,6 +75,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 
 namespace {
@@ -751,7 +752,8 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
                 }
 
                 void* ibp = nullptr;
-                if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&ibp, workComponent);
+                if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+                    reinterpret_cast<RtObject::Internal*>(workComponent));   // B.3.3 bridge
                 if (ibp != nullptr) {
                     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ibp);
                     int32_t workId = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(ibp) + 0x28);
@@ -830,7 +832,8 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
                         }
                     }
 
-                    if (fn_InternalBasePtr_DeletePtr) fn_InternalBasePtr_DeletePtr(ibpField);
+                    if (fn_InternalBasePtr_DeletePtr) reinterpret_cast< ::Object::InternalBasePtr*>(ibpField)->DeletePtr(
+                        );   // B.3.3 bridge
                     if (s_eraseB) s_eraseB(self + 0x30, idTreeNode);
                 }
 

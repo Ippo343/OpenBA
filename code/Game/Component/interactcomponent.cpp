@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
 // Resolved helpers
@@ -228,7 +229,8 @@ void InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf) {
             }
         }
     }
-    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(retBuf, found);
+    if (fn_InternalBasePtr_Ctor) new (retBuf) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
 }
 
 // ============================================================
@@ -280,7 +282,8 @@ void InteractComponent_Draw(InteractComponent* self) {
         }
 
         int64_t interactIbp = 0;
-        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&interactIbp, interact);
+        if (fn_InternalBasePtr_Ctor) new (&interactIbp) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(interact));   // B.3.3 bridge
         if (interactIbp != 0) {
             // Append interactIbp to the use-location array at +0x28 (count +0x30, cap +0x34)
             uint32_t oldCount = *(uint32_t*)(selfA + 0x30);
