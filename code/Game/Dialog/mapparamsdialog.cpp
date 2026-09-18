@@ -2,6 +2,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Filename.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <cstring>
 
@@ -290,7 +291,9 @@ void MapParamsDialog_OnEvent(MapParamsDialog* self, void* element, int eventType
             System::String nameBuf;
             {
                 System::Filename fnBuf("Game/Names/Cities.ndb");
-                void* nameDB = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fnBuf);
+                void* nameDB = const_cast<::Object::External*>(
+                    reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+                        ->FindOrLoad(fnBuf));
                 // The IsDerivedFrom type-check retail runs here is skipped, as in
                 // NewGameDialog::GenerateTownName and citizen_names.cpp: the
                 // standalone factory tree is incomplete so the walk NULL-faults,

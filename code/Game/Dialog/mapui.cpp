@@ -15,6 +15,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Filename.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -73,7 +74,9 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
                                                    : "Material/UI/UIMaterial.rsc");
 
     MAPTRC("material alloc+ctor done");
-    void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filenameObj);
+    void* ext = const_cast<::Object::External*>(
+        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+            ->FindOrLoad(filenameObj));
     void* material = nullptr;
     if (ext) {
         if (g_TypeId_Material && fn_IsDerivedFrom(ext, *g_TypeId_Material)) {

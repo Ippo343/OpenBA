@@ -23,6 +23,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Filename.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -60,6 +61,8 @@ extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayB
         return;
     }
     void* factory = *g_pExternalFactorySingleton;
+    ::Object::ExternalFactory* efactory =
+        reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
 
     void* encoding = fn_Serializer_GetEncoding(serializer);
     if (!encoding) return;
@@ -74,25 +77,25 @@ extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayB
 
         if (encState == 3) {                       // path-export walk (read-only)
             if (!*slot) continue;
-            System::Filename pathBuf;
-            void* path = fn_External_GetPath(*slot, &pathBuf);
-            fn_ExternalFactory_FindOrLoad(factory, path);
+            System::Filename pathBuf =
+                reinterpret_cast<const ::Object::External*>(*slot)->GetPath();  // B.3.3 bridge
+            (void)efactory->FindOrLoad(pathBuf);
             continue;
         }
 
         System::Filename fnameBuf;
-        bool refMode = fn_ExternalFactory_IsReferenceModeEnabled(factory);
+        bool refMode = efactory->IsReferenceModeEnabled();
 
         if (refMode) {
             uint32_t refId = 0xFFFFFFFFu;
-            if (*slot) refId = fn_ExternalFactory_GetReferenceId(factory, *slot);
+            if (*slot) refId = efactory->GetReferenceId(
+                reinterpret_cast<const ::Object::External*>(*slot));  // B.3.3 bridge
             bool needsPath = false;
             if (!*slot || SerStreamErr(serializer) != 0 || refId != 0xFFFFFFFFu) {
                 fn_Serializer_Serialize_Uint(serializer, &refId, nullptr);
                 if (refId != 0xFFFFFFFFu) {
                     if (SerStreamErr(serializer) == 0) {
-                        System::Filename tmpFn;
-                        fn_ExternalFactory_GetPathForReferenceId(factory, &tmpFn, refId);
+                        System::Filename tmpFn = efactory->GetPathForReferenceId(refId);
                         fnameBuf = tmpFn;
                     }
                     needsPath = true;
@@ -101,20 +104,18 @@ extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayB
                 fn_Serializer_Serialize_Uint(serializer, &refId, nullptr);
             }
             if (needsPath && SerStreamErr(serializer) == 0) {
-                *slot = fn_ExternalFactory_FindOrLoad(factory, &fnameBuf);
+                *slot = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fnameBuf)));
             }
         } else {
             bool hasRef = (*slot != nullptr);
             g_fn_Serialize_Bool(serializer, &hasRef, nullptr);
             if (hasRef) {
                 if (*slot) {
-                    System::Filename pathBuf;
-                    void* path = fn_External_GetPath(*slot, &pathBuf);
-                    fnameBuf = *static_cast<System::Filename*>(path);  // B.3.1 bridge
+                    fnameBuf = reinterpret_cast<const ::Object::External*>(*slot)->GetPath();  // B.3.3 bridge
                 }
                 fnameBuf.AsString().Serialize(serializer);
                 if (SerStreamErr(serializer) == 0) {
-                    *slot = fn_ExternalFactory_FindOrLoad(factory, &fnameBuf);
+                    *slot = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fnameBuf)));
                 }
             }
         }

@@ -16,6 +16,7 @@
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -80,10 +81,13 @@ void StorageUI_Serialize(StorageUI* self) {
     // Count resource types via ExternalFactory::FindNext
     uint32_t resourceTypeCount = 0;
     void* factory = *g_pExternalFactorySingleton;
-    void* ext = fn_ExternalFactory_FindNext(factory, *g_TypeId_RawMaterialDescription, nullptr);
+    const ::Object::ExternalFactory* efactory =
+        reinterpret_cast<const ::Object::ExternalFactory*>(factory);   // B.3.3 bridge
+    const ::Object::External* ext =
+        efactory->FindNext(*g_TypeId_RawMaterialDescription, nullptr);
     while (ext != nullptr) {
         resourceTypeCount++;
-        ext = fn_ExternalFactory_FindNext(factory, *g_TypeId_RawMaterialDescription, ext);
+        ext = efactory->FindNext(*g_TypeId_RawMaterialDescription, ext);
     }
 
     // Get column count from table element +0xC4

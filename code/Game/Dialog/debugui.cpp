@@ -17,6 +17,7 @@
 #include "math/Math.h"
 #include "system/String.h"
 #include "system/Filename.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -391,9 +392,12 @@ static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
 // ============================================================
 static void Game_DestroyAllRawMaterials_Impl() {
     void* factory = *g_pExternalFactorySingleton;
+    const ::Object::ExternalFactory* efactoryRaw =
+        reinterpret_cast<const ::Object::ExternalFactory*>(factory);   // B.3.3 bridge
 
     // Iterate all entities with ComponentDescription type
-    void* entity = fn_ExternalFactory_FindNext(factory, *g_TypeId_ComponentDescription_FC, nullptr);
+    void* entity = const_cast<::Object::External*>(
+        efactoryRaw->FindNext(*g_TypeId_ComponentDescription_FC, nullptr));  // B.3.3 bridge
     while (entity) {
         // IsDerivedFrom check against ComponentDescription
         bool isBuild = fn_IsDerivedFrom(entity, *g_TypeId_ComponentDescription_FC);
@@ -423,7 +427,9 @@ static void Game_DestroyAllRawMaterials_Impl() {
             }
         }
 
-        entity = fn_ExternalFactory_FindNext(factory, *g_TypeId_ComponentDescription_FC, entity);
+        entity = const_cast<::Object::External*>(
+            efactoryRaw->FindNext(*g_TypeId_ComponentDescription_FC,
+                                  reinterpret_cast<const ::Object::External*>(entity)));  // B.3.3 bridge
     }
 }
 
@@ -583,7 +589,9 @@ found_residence:
                             // Load citizen template
                             System::Filename filenameBuf("Template/Citizen.rsc");
                             void* factory = *g_pExternalFactorySingleton;
-                            void* extTemplate = fn_ExternalFactory_FindOrLoad(factory, &filenameBuf);
+                            void* extTemplate = const_cast<::Object::External*>(
+                                reinterpret_cast<::Object::ExternalFactory*>(factory)   // B.3.3 bridge
+                                    ->FindOrLoad(filenameBuf));
 
                             // Determine entity description (RDI in disasm)
                             // If extTemplate is null, use null.
@@ -771,7 +779,9 @@ static void Game_SpawnTornado_Impl() {
     // Load tornado template
     System::Filename filenameBuf("Template/Tornado.rsc");
     void* factory = *g_pExternalFactorySingleton;
-    void* extTemplate = fn_ExternalFactory_FindOrLoad(factory, &filenameBuf);
+    void* extTemplate = const_cast<::Object::External*>(
+        reinterpret_cast<::Object::ExternalFactory*>(factory)   // B.3.3 bridge
+            ->FindOrLoad(filenameBuf));
 
     // Cast to entity description (must be derived from ComponentDescription type)
     void* entityDesc = nullptr;
@@ -1270,7 +1280,9 @@ void DebugUI_Slot4(DebugUI* self) {
             void* gameWorld_dc = *g_pGameWorldSingleton;
             void* externalList = gameWorld_dc ? *(void**)((uintptr_t)gameWorld_dc + 0xa8) : nullptr;
             int resourceCount = (externalList && fn_ExternalList_GetResourceCount)
-                                    ? fn_ExternalList_GetResourceCount(externalList) : 0;
+                                    ? reinterpret_cast<const ::Object::ExternalList*>(
+                                          externalList)->GetResourceCount()  // B.3.3 bridge
+                                    : 0;
             for (int i = 0; i < resourceCount; i++) {
                 void* resource = *(void**)((uintptr_t)i * 8 +
                     *(uintptr_t*)((uintptr_t)externalList + 0x20));
@@ -1470,8 +1482,10 @@ void DebugUI_Slot4(DebugUI* self) {
             for (int i = 0; i < weatherCount; i++) {
                 void* entry = *(void**)((uintptr_t)i * 0x10 +
                     *(uintptr_t*)(weatherList + 0x28));
-                System::Filename pathBuf;
-                fn_External_GetPath(entry, &pathBuf);
+                // `GetPath` returns by value through a hidden return slot and the callee
+                // CONSTRUCTS into it; copy-initialising the local is the same store.
+                System::Filename pathBuf =
+                    reinterpret_cast<const ::Object::External*>(entry)->GetPath();  // B.3.3 bridge
                 System::Filename filenameBuf = pathBuf.GetPathFilename(false);
 
                 uint8_t spr[16];

@@ -26,6 +26,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Filename.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #if defined(_DEBUG)
 #include <cstdio>
@@ -635,7 +636,9 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
 
         // Load Dialog/Follow.rsc resource
         System::Filename filename("Dialog/Follow.rsc");
-        void* extResource = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filename);
+        void* extResource = const_cast<::Object::External*>(
+            reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+                ->FindOrLoad(filename));
 
         // Type-check the resource
         void* checkedRes = nullptr;

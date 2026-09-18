@@ -33,6 +33,7 @@
 #include "system/String.h"
 #include "system/Filename.h"
 #include "Object/factory_registration.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -919,7 +920,9 @@ extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys) {
 
     void* externalRes = nullptr;
     if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton && fn_ExternalFactory_FindOrLoad) {
-        externalRes = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filename);
+        externalRes = const_cast<::Object::External*>(
+            reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+                ->FindOrLoad(filename));
     }
 
     // Step 6: Allocate PauseDialog (0xC8 bytes)
@@ -1118,7 +1121,10 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
     int32_t itemListCount = 0;
     int32_t itemListCap = 0;
 
-    void* ext = fn_ExternalFactory_FindNext(factory, toolbarTypeId, nullptr);
+    const ::Object::ExternalFactory* etbFactory =
+        reinterpret_cast<const ::Object::ExternalFactory*>(factory);   // B.3.3 bridge
+    void* ext = const_cast<::Object::External*>(
+        etbFactory->FindNext(toolbarTypeId, nullptr));                  // B.3.3 bridge
     while (ext != nullptr) {
         // IsDerivedFrom check
         bool isDerived = fn_IsDerivedFrom(ext, toolbarTypeId);
@@ -1134,7 +1140,9 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
             }
         }
 
-        ext = fn_ExternalFactory_FindNext(factory, toolbarTypeId, ext);
+        ext = const_cast<::Object::External*>(
+            etbFactory->FindNext(toolbarTypeId,
+                                 reinterpret_cast<const ::Object::External*>(ext)));  // B.3.3 bridge
     }
 
     // Sort the collected items by their priority field at +0x50, ascending.
@@ -1245,9 +1253,11 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
         void* elemPtr = newElement;
         fn_TableElement_SetChild2(tableElement, &elemPtr, buttonIndex);
 
-        // Set element name from toolbar item's resource path
-        System::Filename pathObj;
-        fn_External_GetPath((void*)item, &pathObj);
+        // Set element name from toolbar item's resource path.
+        // `GetPath` returns by value through a hidden return slot and the callee
+        // CONSTRUCTS into it; copy-initialising the local is the same store.
+        System::Filename pathObj =
+            reinterpret_cast<const ::Object::External*>(item)->GetPath();  // B.3.3 bridge
         System::Filename pathIdObj = pathObj.GetPathIdentifer();
         fn_InternalBasePtr_CheckPtr((void*)&newElement);
         fn_Element_SetName(newElement, &pathIdObj);

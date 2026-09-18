@@ -14,6 +14,7 @@
 #include "resolve.h"
 #include "system/String.h"
 #include "system/Filename.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -195,7 +196,9 @@ void GameContainer_EnsureLists() {
         void** slot = reinterpret_cast<void**>(container + e.off);
         if (*slot) continue;                       // already loaded
         System::Filename fnameObj(e.path);   // ctor already normalises delimiters
-        void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fnameObj);
+        void* ext = const_cast<::Object::External*>(
+            reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+                ->FindOrLoad(fnameObj));
         *slot = ext;
         fprintf(stderr, "[GameContainer] +0x%02zx '%s' -> %p\n", e.off, e.path, ext);
     }

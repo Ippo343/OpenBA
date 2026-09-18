@@ -21,6 +21,7 @@
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 
 // ============================================================
@@ -128,7 +129,8 @@ static void HelpUI_LoadPage(HelpUI* self) {
 static int HelpUI_FindLinkTarget(System::String searchStr) {
     void* extList = GetHelpExternalList();
     if (!extList) { return -1; }   // standalone guard
-    int count = fn_ExternalList_GetResourceCount(extList);
+    int count = reinterpret_cast<const ::Object::ExternalList*>(extList)  // B.3.3 bridge
+                        ->GetResourceCount();
 
     for (int i = 0; i < count; i++) {
         void* resourceArray = *(void**)((uintptr_t)extList + 0x20);
@@ -148,7 +150,8 @@ static int HelpUI_FindLinkTarget(System::String searchStr) {
         }
 
         // Re-check count each iteration (matches original)
-        count = fn_ExternalList_GetResourceCount(extList);
+        count = reinterpret_cast<const ::Object::ExternalList*>(extList)  // B.3.3 bridge
+                        ->GetResourceCount();
     }
 
     return -1;
@@ -245,7 +248,8 @@ void HelpUI_Slot4(HelpUI* self) {
     void* extList = GetHelpExternalList();
     void* comboElem = *(void**)(s + 0x40);
     if (!extList || !comboElem) return;    // standalone guard
-    int topicCount = fn_ExternalList_GetResourceCount(extList);
+    int topicCount = reinterpret_cast<const ::Object::ExternalList*>(extList)  // B.3.3 bridge
+                        ->GetResourceCount();
 
     for (int i = 0; i < topicCount; i++) {
         void* resourceArray = *(void**)((uintptr_t)extList + 0x20);
@@ -266,7 +270,8 @@ void HelpUI_Slot4(HelpUI* self) {
         }
 
         // Re-check count each iteration (matches original)
-        topicCount = fn_ExternalList_GetResourceCount(extList);
+        topicCount = reinterpret_cast<const ::Object::ExternalList*>(extList)  // B.3.3 bridge
+                        ->GetResourceCount();
     }
 
     // Select first item and load its content

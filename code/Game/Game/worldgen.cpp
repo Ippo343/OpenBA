@@ -39,6 +39,7 @@
 
 #include "engine_funcs.h"
 #include "system/Filename.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "resolve.h"
 #include "collection/Collection.h"
 #include <cstdint>
@@ -544,7 +545,9 @@ static void* wg_ResolveMaterial_fd10(void* triple) {
 
     // String is at +0 of the triple.
     System::Filename fnbuf(*reinterpret_cast<const System::String*>(triple));
-    return fn_ExternalFactory_Find(factory, &fnbuf);
+    return const_cast<::Object::External*>(
+        reinterpret_cast<const ::Object::ExternalFactory*>(factory)         // B.3.3 bridge
+            ->Find(fnbuf));
 }
 
 // ============================================================

@@ -17,6 +17,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Filename.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A — Object::External
 #include <cstdint>
 
 // ============================================================
@@ -202,7 +203,8 @@ check_pressed:
             System::Filename filenameRsc("resource");
 
             // f. Save: External::SaveText(this, pathFilename, subdirFilename)
-            fn_External_SaveText(pending, &pathFilename, &filenameRsc);
+            reinterpret_cast<::Object::External*>(pending)                 // B.3.3 bridge
+                ->SaveText(pathFilename, filenameRsc);
 
             // g. Call vtable[0] on the External object (scalar dtor with flag=1, frees it)
             typedef void (*fn_VtableDtor_t)(void* self, uint32_t flags);

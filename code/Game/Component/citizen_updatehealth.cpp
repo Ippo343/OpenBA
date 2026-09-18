@@ -41,6 +41,7 @@
 #include "options.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "math/Math.h"
 #include "system/String.h"
 #include <cstdint>
@@ -592,7 +593,8 @@ extern "C" void CitizenComp_CatchDisease(void* self) {
                     "BANISHED_LIVE_DISEASELIST=1) citizen=%p\n", self), fflush(stderr);
         return;
     }
-    int count = fn_ExternalList_GetResourceCount(list);
+    int count = reinterpret_cast<const ::Object::ExternalList*>(list)  // B.3.3 bridge
+                    ->GetResourceCount();
 
     struct { uintptr_t data; int count; int cap; } cum = { 0, 0, 0 };
     float total = 0.0f;

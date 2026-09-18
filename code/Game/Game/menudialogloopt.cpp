@@ -25,6 +25,7 @@
 #include "system/String.h"
 #include "collection/Collection.h"
 #include "resolve.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -662,6 +663,11 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
     }
 
     void* factory = *g_pExternalFactorySingleton;
+    // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
+    // The singleton is still read through the EXISTING door, so the guard
+    // above still gates the same cell and the same registered body still runs.
+    ::Object::ExternalFactory* efactory =
+        reinterpret_cast<::Object::ExternalFactory*>(factory);   // B.3.3 bridge
 
     // Engine::Random lives at self+0x168 (UpdateLoop base + DialogLoopT field area).
     void* sceneRng = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(self) + 0x168);
@@ -685,7 +691,7 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
     // Filename(const String&) is what retail builds here: Format gave us a String.
     System::Filename fnBuf(stringBuf);
 
-    void* obj = fn_ExternalFactory_FindOrLoad(factory, &fnBuf);
+    void* obj = const_cast<::Object::External*>(efactory->FindOrLoad(fnBuf));  // B.3.3 bridge
 
     // Original validates via IsDerivedFrom against TypeInfo_MenuScene at exe 0x1401c59f0.
     // In standalone the Runtime factory tree doesn't have every base type registered,
@@ -1132,8 +1138,11 @@ bool MenuDialogLoopT_LoadMusic(void* self) {
     }
 
     void* factory = *g_pExternalFactorySingleton;
+    // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     System::Filename fnBuf("Audio/Music/Menu.rsc");  // System::Filename
-    void* music = fn_ExternalFactory_FindOrLoad(factory, &fnBuf);
+    void* music = const_cast<::Object::External*>(
+        reinterpret_cast<::Object::ExternalFactory*>(factory)
+            ->FindOrLoad(fnBuf));                                            // B.3.3 bridge
 
     Field<void*>(self, MenuDLTOff::musicExt_b88) = music;
     printf("[MenuDLT::LoadMusic] Audio/Music/Menu.rsc -> %p (self+0xb88)\n", music);

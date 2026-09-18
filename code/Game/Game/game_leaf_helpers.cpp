@@ -22,6 +22,7 @@
 #include "system/String.h"
 #include "collection/Collection.h"
 #include "resolve.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <initializer_list>
 #include <new>
@@ -263,12 +264,17 @@ void Game_TerrainResolveMaterial(void* refTriple) {
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) return;
     if (!fn_ExternalFactory_Find) return;
     void* factory = *g_pExternalFactorySingleton;
+    // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
+    // The singleton is still read through the EXISTING door, so the guard
+    // above still gates the same cell and the same registered body still runs.
+    ::Object::ExternalFactory* efactory =
+        reinterpret_cast<::Object::ExternalFactory*>(factory);   // B.3.3 bridge
     uint8_t* b = reinterpret_cast<uint8_t*>(refTriple);
     int factoryGen = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(factory) + 8);
     if (*reinterpret_cast<int*>(b + 8) == factoryGen) return;
 
     System::Filename fnameBuf(*reinterpret_cast<const System::String*>(b));  // String @ b+0
-    void* obj = fn_ExternalFactory_Find(factory, &fnameBuf);
+    void* obj = const_cast<::Object::External*>(efactory->Find(fnameBuf));  // B.3.3 bridge
 
     void* result = nullptr;
     if (obj) {

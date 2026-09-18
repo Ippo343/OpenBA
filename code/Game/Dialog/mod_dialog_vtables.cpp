@@ -59,6 +59,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "system/Filename.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 
 #include <cstdint>
 #include <cstdio>
@@ -267,7 +268,9 @@ void* ModDlg_LoadDialogResource(const char* rscPath) {
         return nullptr;
     }
     System::Filename filenameObj(rscPath);
-    void* resource = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filenameObj);
+    void* resource = const_cast<::Object::External*>(
+        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+            ->FindOrLoad(filenameObj));
     void* extRes = nullptr;
     if (resource) {
         uint32_t* slot = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x140151728));

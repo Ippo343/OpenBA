@@ -27,6 +27,7 @@
 #include "perf_terrain.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "Component/ambientenvironmentcomponent_funcs.h"  // InitRegion (ambient biome region/pos)
 #include "Component/pickingcomponent_funcs.h"   // PickingComponent_RegisterMesh (mesh-precise picking)
 #include "Component/storagecomponent_funcs.h"   // StorageComponent_Draw (citizen carry-capacity init)
@@ -527,8 +528,13 @@ static void* StartTown_ResolveTemplate(uint8_t* entry) {
         !fn_ExternalFactory_FindOrLoad)
         return nullptr;
     void* factory = *g_pExternalFactorySingleton;
+    // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
+    // The singleton is still read through the EXISTING door, so the guard
+    // above still gates the same cell and the same registered body still runs.
+    ::Object::ExternalFactory* efactory =
+        reinterpret_cast<::Object::ExternalFactory*>(factory);   // B.3.3 bridge
     System::Filename fname(*reinterpret_cast<const System::String*>(entry));  // String -> Filename
-    tmpl = fn_ExternalFactory_FindOrLoad(factory, &fname);
+    tmpl = const_cast<::Object::External*>(efactory->FindOrLoad(fname));    // B.3.3 bridge
     *(void**)(entry + EXTREF_TEMPLATE) = tmpl;               // cache
     return tmpl;
 }
@@ -3611,8 +3617,11 @@ static void* ResolveTemplateByPath(const char* path) {
         !fn_ExternalFactory_FindOrLoad)
         return nullptr;
     void* factory = *g_pExternalFactorySingleton;
+    // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     System::Filename fname(path);
-    void* tmpl = fn_ExternalFactory_FindOrLoad(factory, &fname);
+    void* tmpl = const_cast<::Object::External*>(
+        reinterpret_cast<::Object::ExternalFactory*>(factory)
+            ->FindOrLoad(fname));                                            // B.3.3 bridge
     return tmpl;
 }
 

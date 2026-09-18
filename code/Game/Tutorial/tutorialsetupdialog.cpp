@@ -31,6 +31,7 @@
 #include "engine_funcs.h"
 #include "system/Filename.h"
 #include "system/String.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "resolve.h"
 #include "collection/Collection.h"
 #include <cstdint>
@@ -250,7 +251,11 @@ uint64_t TutorialSetupDialog_Shutdown(void* self, void* stream) {
         if (*(int32_t*)((uintptr_t)namePtr + 8) != *(int32_t*)((uintptr_t)factory + 8)) {
             // Construct Filename from the String and look it up in the factory
             System::Filename filenameBuf(*reinterpret_cast<const System::String*>(namePtr));
-            void* found = fn_ExternalFactory_Find ? fn_ExternalFactory_Find(factory, &filenameBuf) : nullptr;
+            ::Object::ExternalFactory* efactory =
+                reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
+            void* found = fn_ExternalFactory_Find
+                              ? const_cast<void*>(static_cast<const void*>(efactory->Find(filenameBuf)))
+                              : nullptr;
             // Cache the result if it passes the BuildComponent type check
             bool valid = found && g_TypeId_ComponentDescription_FC && fn_IsDerivedFrom(found, *g_TypeId_ComponentDescription_FC);
             *(void**)((uintptr_t)namePtr + 0x10) = valid ? found : nullptr;

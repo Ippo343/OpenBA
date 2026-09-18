@@ -18,6 +18,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Filename.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cctype>
 #include <cstdint>
 #include <cstdio>
@@ -110,7 +111,8 @@ static void PopulateGeneratorCombo(void** comboFieldPtr, void* externalList,
     // may be unpopulated if the Game resource container hasn't run yet — leave
     // the combo empty rather than dereferencing a null list.
     if (!externalList) return;
-    int count = fn_ExternalList_GetResourceCount(externalList);
+    int count = reinterpret_cast<const ::Object::ExternalList*>(externalList)  // B.3.3 bridge
+                     ->GetResourceCount();
     for (int i = 0; i < count; i++) {
         // ExternalList+0x20 holds pointer to the resource pointer array
         void** ptrArray = *(void***)((uintptr_t)externalList + 0x20);
@@ -144,7 +146,8 @@ static void PopulateGeneratorCombo(void** comboFieldPtr, void* externalList,
         }
 
         // Re-fetch count in case it changed (matches original)
-        count = fn_ExternalList_GetResourceCount(externalList);
+        count = reinterpret_cast<const ::Object::ExternalList*>(externalList)  // B.3.3 bridge
+                     ->GetResourceCount();
     }
 }
 
@@ -166,7 +169,9 @@ static void GenerateTownName(System::String& retStr, void* random, int maxLen) {
     if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton &&
         fn_ExternalFactory_FindOrLoad) {
         System::Filename fn("Game/Names/Cities.ndb");
-        nameDB = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fn);
+        nameDB = const_cast<::Object::External*>(
+            reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+                ->FindOrLoad(fn));
     }
 
     // minLen 5 is retail's constant; maxLen is derived from the edit box's
@@ -349,7 +354,8 @@ static void SelectStartConditionOverride(NewGameDialog* self) {
     };
 
     void* list = self->mapGeneratorList;
-    int count = fn_ExternalList_GetResourceCount(list);
+    int count = reinterpret_cast<const ::Object::ExternalList*>(list)  // B.3.3 bridge
+                     ->GetResourceCount();
     void** ptrArray = *(void***)((uintptr_t)list + 0x20);
     int target = -1;
     for (int i = 0; i < count; ++i) {
@@ -703,7 +709,8 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
                 wantIdx = 2;  // Easy default for the autostart demo town
         }
         if (wantIdx >= 0 && self->mapGeneratorList && mapPtrArray) {
-            int listCount = fn_ExternalList_GetResourceCount(self->mapGeneratorList);
+            int listCount = reinterpret_cast<const ::Object::ExternalList*>(
+                self->mapGeneratorList)->GetResourceCount();   // B.3.3 bridge
             if (wantIdx < listCount) {
                 void* r = mapPtrArray[wantIdx];
                 if (ResourceIsType(r, g_TypeId_MapGenerator)) {

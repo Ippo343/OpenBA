@@ -56,6 +56,7 @@
 // out. Noted here so the next reader does not go looking for the missing use.
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 
 namespace {
@@ -172,7 +173,10 @@ extern "C" void TradeUI_GetBuyEntries_59670(void* tradeState, void* outArray) {
     const int32_t* selectIds  = *reinterpret_cast<const int32_t* const*>(M + 0x30);
     const int32_t  selectN    = *reinterpret_cast<const int32_t*>(M + 0x38);
 
-    void* cur = fn_ExternalFactory_FindNext(factory, tidComponentDesc, nullptr);
+    const ::Object::ExternalFactory* ebuyFactory =
+        reinterpret_cast<const ::Object::ExternalFactory*>(factory);   // B.3.3 bridge
+    void* cur = const_cast<::Object::External*>(
+        ebuyFactory->FindNext(tidComponentDesc, nullptr));              // B.3.3 bridge
     while (cur) {
         void* desc = cur;
         if (fn_IsDerivedFrom && !fn_IsDerivedFrom(cur, tidComponentDesc)) desc = nullptr;
@@ -192,7 +196,9 @@ extern "C" void TradeUI_GetBuyEntries_59670(void* tradeState, void* outArray) {
         // uses it at the bottom of the loop. Order preserved: FindNext is an engine
         // call and moving it could change what the iterator observes if the pass
         // below ever mutates the factory.
-        void* next = fn_ExternalFactory_FindNext(factory, tidComponentDesc, cur);
+        void* next = const_cast<::Object::External*>(
+            ebuyFactory->FindNext(tidComponentDesc,
+                                  reinterpret_cast<const ::Object::External*>(cur)));  // B.3.3 bridge
 
         if (desc && selectIds) {
             // 3. Select-type id match. Note the append is INSIDE the id loop, so an

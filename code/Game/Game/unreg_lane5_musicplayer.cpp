@@ -91,6 +91,7 @@
 #include "system/String.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -160,7 +161,10 @@ void EnsureTrackList(uint8_t* mp) {
     }
 
     System::Filename fname("Game/MusicTracks.rsc");
-    void* list = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fname);
+    // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
+    void* list = const_cast<::Object::External*>(
+        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)
+            ->FindOrLoad(fname));                                            // B.3.3 bridge
     *reinterpret_cast<void**>(mp + 0x08) = list;
 
     fprintf(stderr, "[MusicPlayer] MusicTracks.rsc -> %p tracks=%d\n", list,

@@ -12,6 +12,7 @@
 
 #include "engine_funcs.h"
 #include "system/Filename.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "resolve.h"
 #include <cstdint>
 
@@ -202,7 +203,9 @@ extern "C" void* ToolUI_OpenToolDialog_ff9e0(void* param_1, void* param_2, uint6
         void* obj = nullptr;
         if (fn_ExternalFactory_FindOrLoad && g_pExternalFactorySingleton &&
             *g_pExternalFactorySingleton) {
-            obj = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fname);
+            ::Object::ExternalFactory* efactory =
+                reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton);  // B.3.3 bridge
+            obj = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fname)));
         }
         if (obj && fn_IsDerivedFrom && g_pExternalTypeId &&
             fn_IsDerivedFrom(obj, *g_pExternalTypeId)) {

@@ -22,6 +22,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Filename.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -64,7 +65,9 @@ static void* EventNotifyDialog_CreatePopup(EventNotifyDialog* self, int eventInd
         if (fn_ExternalFactory_FindOrLoad && g_pExternalFactorySingleton &&
             *g_pExternalFactorySingleton) {
             System::Filename filename("Dialog/EventPopup.rsc");
-            void* found = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filename);
+            void* found = const_cast<::Object::External*>(
+                reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+                    ->FindOrLoad(filename));
             // Accept the loaded resource if it is External-derived — the same guard the
             // exe applies (IsDerivedFrom(External)) before using it as the popup's
             // external context. g_pExternalTypeId is filled by EnsureGlobals each tick.

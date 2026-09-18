@@ -37,6 +37,7 @@
 #include "resolve.h"
 #include "system/String.h"
 #include "system/Filename.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -267,8 +268,10 @@ static void SetSpinnerIncrement(void* spinner)
 // ============================================================
 static void SetElementNameFromExternal(void* element, void* externalPtr)
 {
-    System::Filename pathBuf;
-    fn_External_GetPath(externalPtr, &pathBuf);
+    // `GetPath` returns by value through a hidden return slot and the callee
+    // CONSTRUCTS into it; copy-initialising the local is the same store.
+    System::Filename pathBuf =
+        reinterpret_cast<const ::Object::External*>(externalPtr)->GetPath();  // B.3.3 bridge
     System::Filename nameStr = pathBuf.GetPathFilename(false);
     fn_InternalBasePtr_CheckPtr(&element);
     fn_Element_SetName(element, &nameStr);
@@ -1175,14 +1178,20 @@ void TradeUI_Serialize(TradeUI* self) {
     // --- Phase 3: Count resources and selectable builds via ExternalFactory ---
     int resourceTypeCount = 0;
     void* factory = *g_pExternalFactorySingleton;
-    void* ext = fn_ExternalFactory_FindNext(factory, *g_TypeId_RawMaterialDescription, nullptr);
+    const ::Object::ExternalFactory* etuFactory =
+        reinterpret_cast<const ::Object::ExternalFactory*>(factory);   // B.3.3 bridge
+    void* ext = const_cast<::Object::External*>(
+        etuFactory->FindNext(*g_TypeId_RawMaterialDescription, nullptr));  // B.3.3 bridge
     while (ext != nullptr) {
         resourceTypeCount++;
-        ext = fn_ExternalFactory_FindNext(factory, *g_TypeId_RawMaterialDescription, ext);
+        ext = const_cast<::Object::External*>(
+            etuFactory->FindNext(*g_TypeId_RawMaterialDescription,
+                                 reinterpret_cast<const ::Object::External*>(ext)));  // B.3.3 bridge
     }
 
     int selectableCount = 0;
-    void* buildExt = fn_ExternalFactory_FindNext(factory, *g_TypeId_ComponentDescription_FC, nullptr);
+    void* buildExt = const_cast<::Object::External*>(
+        etuFactory->FindNext(*g_TypeId_ComponentDescription_FC, nullptr)); // B.3.3 bridge
     while (buildExt != nullptr) {
         // Check if this ComponentDescription external has a SelectDescription sub-component
         bool isDerivedBuild = fn_IsDerivedFrom(buildExt, *g_TypeId_ComponentDescription_FC);
@@ -1204,7 +1213,9 @@ void TradeUI_Serialize(TradeUI* self) {
                 }
             }
         }
-        buildExt = fn_ExternalFactory_FindNext(factory, *g_TypeId_ComponentDescription_FC, buildExt);
+        buildExt = const_cast<::Object::External*>(
+            etuFactory->FindNext(*g_TypeId_ComponentDescription_FC,
+                                 reinterpret_cast<const ::Object::External*>(buildExt))); // B.3.3 bridge
     }
 
     // --- Phase 4a: Setup tableStorage ---
@@ -2818,9 +2829,11 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
         fn_InternalBasePtr_CheckPtr(spinSlot);
         fn_SpinnerElement_SetMinMax(*(void**)spinSlot, 0, 9999);
 
-        // Set spinner element name to resource path filename
-        System::Filename pathBuf;
-        fn_External_GetPath((void*)entry[0], &pathBuf);
+        // Set spinner element name to resource path filename.
+        // `GetPath` returns by value through a hidden return slot and the callee
+        // CONSTRUCTS into it; copy-initialising the local is the same store.
+        System::Filename pathBuf =
+            reinterpret_cast<const ::Object::External*>(entry[0])->GetPath();  // B.3.3 bridge
         System::Filename filenameBuf = pathBuf.GetPathFilename(false);
         fn_InternalBasePtr_CheckPtr(spinSlot);
         fn_Element_SetName(*(void**)spinSlot, &filenameBuf);

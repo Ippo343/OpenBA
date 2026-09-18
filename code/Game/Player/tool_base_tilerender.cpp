@@ -36,6 +36,7 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "system/Filename.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "resolve.h"
 #include "collection/Collection.h"
 #include <cstdint>
@@ -210,8 +211,10 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
         System::Filename fname("Terrain/Selection.rsc");
         void* factory = (g_pExternalFactorySingleton && *g_pExternalFactorySingleton)
                             ? *g_pExternalFactorySingleton : nullptr;
+        ::Object::ExternalFactory* efactory =
+            reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
         void* obj = (factory && fn_ExternalFactory_FindOrLoad)
-                        ? fn_ExternalFactory_FindOrLoad(factory, &fname) : nullptr;
+                        ? const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fname))) : nullptr;
         // Exe: material=obj unless IsDerivedFrom(MaterialInstance) is false. In standalone
         // the type-id slot 0x140151350 may be unfilled → can't verify → TRUST the load
         // (IsDerivedFromOrTrust pattern) rather than dropping a valid material.

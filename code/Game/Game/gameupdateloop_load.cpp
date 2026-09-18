@@ -30,6 +30,7 @@
 #include "Component/component_factory_base.h"  // ComponentFactory::the live gate
 #include "collection/Collection.h"
 #include "Component/coll_bridge.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -144,8 +145,14 @@ static void LoadProfessionList_Step2(uint8_t* p) {
     }
 
     void* factory = *g_pExternalFactorySingleton;
+    // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
+    // The singleton is still read through the EXISTING door, so the guard
+    // above still gates the same cell and the same registered body still runs.
+    ::Object::ExternalFactory* efactory =
+        reinterpret_cast<::Object::ExternalFactory*>(factory);   // B.3.3 bridge
     System::Filename fname("Game/Profession/Profession.rsc");
-    void* profList = fn_ExternalFactory_FindOrLoad(factory, &fname);
+    void* profList = const_cast<::Object::External*>(
+        efactory->FindOrLoad(fname));                                       // B.3.3 bridge
     *(void**)(p + 0xB0) = profList;
 
     void* defProf  = profList ? *(void**)((uint8_t*)profList + 0x30) : nullptr;
@@ -186,7 +193,10 @@ static void LoadUIMaterial_Step3(uint8_t* p) {
         return;
 
     System::Filename fname("Material/UI/UIMaterialNoBlend.rsc");
-    void* mat = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fname);
+    // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
+    void* mat = const_cast<::Object::External*>(
+        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)
+            ->FindOrLoad(fname));                                          // B.3.3 bridge
 
     // Retail's type gate (exe .rdata Material typeinfo slot is unfilled in SA —
     // resolve Graphics::Material's BaseTypeInfo from the Runtime export).
@@ -215,7 +225,10 @@ static void LoadHelpTopics_Step4(uint8_t* p) {
     }
 
     System::Filename fname("Game/Help/HelpTopics.rsc");
-    void* list = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fname);
+    // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
+    void* list = const_cast<::Object::External*>(
+        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)
+            ->FindOrLoad(fname));                                          // B.3.3 bridge
 
     // Retail's type gate. Resolve Object::ExternalList's own BaseTypeInfo from the
     // Runtime (the exe .rdata slot 0x140151ef0 that retail reads is unfilled in SA).
@@ -270,7 +283,10 @@ static void LoadDiseaseList_Step1(uint8_t* p) {
     }
 
     System::Filename fname("Game/Disease/Diseases.rsc");
-    void* list = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fname);
+    // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
+    void* list = const_cast<::Object::External*>(
+        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)
+            ->FindOrLoad(fname));                                          // B.3.3 bridge
 
     // Retail's type gate (same Runtime-side BaseTypeInfo as the HelpTopics list; the
     // exe .rdata slot retail reads is unfilled in standalone).
@@ -281,8 +297,13 @@ static void LoadDiseaseList_Step1(uint8_t* p) {
         isList = fn_IsDerivedFrom(list, *s_extListTypeInfo);
     if (isList) *(void**)(p + 0xA8) = list;
 
+    // The `fn_ExternalList_GetResourceCount` test is KEPT even though the call
+    // is now a member call: it is an existing behavioural gate and the pointer
+    // keeps its typedef/extern/initialiser until step 7's closing pass.
     int count = (isList && fn_ExternalList_GetResourceCount)
-                    ? fn_ExternalList_GetResourceCount(list) : -1;
+                    ? reinterpret_cast<const ::Object::ExternalList*>(list)  // B.3.3 bridge
+                          ->GetResourceCount()
+                    : -1;
     fprintf(stderr, "[GUL::DiseaseList] gw+0xa8=%p (loaded=%p isExternalList=%d diseases=%d)\n",
             *(void**)(p + 0xA8), list, (int)isList, count);
 
@@ -832,8 +853,11 @@ static void BuildSkyMesh_Step28(uint8_t* p) {
     void* meshRes = nullptr;
     if (fn_ExternalFactory_FindOrLoad && g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
         void* factory = *g_pExternalFactorySingleton;
+        // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
+        ::Object::ExternalFactory* efactory =
+            reinterpret_cast<::Object::ExternalFactory*>(factory);   // B.3.3 bridge
         System::Filename fname("Models/Sky/SkyMesh.rsc");
-        meshRes = fn_ExternalFactory_FindOrLoad(factory, &fname);
+        meshRes = const_cast<::Object::External*>(efactory->FindOrLoad(fname));  // B.3.3 bridge
     }
 
     if (meshRes && s_SetMesh) s_SetMesh(mem, meshRes);
@@ -1046,7 +1070,10 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
         if (fn_ExternalFactory_FindOrLoad &&
             g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
             System::Filename fname("Environment/Environment.rsc");
-            envRes = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fname);
+            // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
+            envRes = const_cast<::Object::External*>(
+                reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)
+                    ->FindOrLoad(fname));                                    // B.3.3 bridge
             int wxCount = envRes ? *(int*)((uint8_t*)envRes + 0x30) : 0;
             fprintf(stderr, "[GUL::Weather] Environment.rsc envRes=%p weatherDescCount=%d\n",
                     envRes, wxCount);
@@ -1178,6 +1205,9 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
         void* evStruct = *(void**)(p + 0x138);
         if (evStruct && fn_ExternalFactory_FindOrLoad && g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
             void* factory = *g_pExternalFactorySingleton;
+            // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
+            ::Object::ExternalFactory* efactory =
+                reinterpret_cast<::Object::ExternalFactory*>(factory);   // B.3.3 bridge
 
             // Lazy-resolve the StringTable type-id from the factory tree (its exe
             // .rdata global is null in standalone). Same as optionsdialog.cpp's
@@ -1198,7 +1228,8 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
                 // Retail: String(name) then Filename::AdjustDelimiters on it —
                 // Filename(const char*) is exactly Set + AdjustDelimiters.
                 System::Filename fname(name);
-                void* ext = fn_ExternalFactory_FindOrLoad(factory, &fname);
+                void* ext = const_cast<::Object::External*>(
+                    efactory->FindOrLoad(fname));                            // B.3.3 bridge
                 if (!ext) return nullptr;
                 if (stTid != 0 && fn_IsDerivedFrom && !fn_IsDerivedFrom(ext, stTid)) return nullptr;
                 return ext;

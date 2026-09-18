@@ -14,6 +14,7 @@
 #include "system/String.h"
 #include "system/Filename.h"
 #include "ui/UserInterface.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -248,7 +249,9 @@ static void EnsureTextElementTypeId() {
 // has already populated its tree by Engine::Startup, so this hits a real id.
 static void* LoadStringTable(const char* path) {
     System::Filename filenameObj(path);   // ctor already normalises delimiters
-    void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filenameObj);
+    void* ext = const_cast<::Object::External*>(
+        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+            ->FindOrLoad(filenameObj));
     if (!ext) return nullptr;
 
     if (!g_TypeId_StringTable && fn_Factory_GetTypeIdFromName
@@ -1512,7 +1515,9 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
 
     // Load the input bind dialog resource
     System::Filename filenameObj("Dialog/Options.rsc:inputBind");   // ctor already normalises
-    void* extResult = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filenameObj);
+    void* extResult = const_cast<::Object::External*>(
+        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+            ->FindOrLoad(filenameObj));
     // Type check the external resource
     void* external = nullptr;
     if (extResult && g_pExternalTypeId) {
@@ -1592,7 +1597,9 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
     {
         // Load the inputBound dialog resource
         System::Filename fnameObj2("Dialog/Options.rsc:inputBound");   // ctor already normalises
-        void* extResult2 = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fnameObj2);
+        void* extResult2 = const_cast<::Object::External*>(
+            reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+                ->FindOrLoad(fnameObj2));
         void* external2 = nullptr;
         if (extResult2 && g_pExternalTypeId) {
             if (fn_IsDerivedFrom(extResult2, *g_pExternalTypeId)) external2 = extResult2;

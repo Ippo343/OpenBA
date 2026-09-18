@@ -37,6 +37,7 @@
 #include "system/String.h"
 #include "system/Filename.h"
 #include "Component/coll_bridge.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <cstdio>
 
@@ -365,8 +366,10 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
 
         // Set element name from profession file path
         if (fn_External_GetPath) {
-            System::Filename pathObj;
-            fn_External_GetPath(profDesc, &pathObj);
+            // `GetPath` returns by value through a hidden return slot and the callee
+            // CONSTRUCTS into it; copy-initialising the local is the same store.
+            System::Filename pathObj =
+                reinterpret_cast<const ::Object::External*>(profDesc)->GetPath();  // B.3.3 bridge
             System::Filename identObj = pathObj.GetPathIdentifer();
             fn_InternalBasePtr_CheckPtr((void*)&spinnerBuf);
             fn_Element_SetName((void*)spinnerBuf, &identObj);

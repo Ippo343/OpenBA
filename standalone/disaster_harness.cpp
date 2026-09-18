@@ -106,6 +106,7 @@
 #include "resolve.h"
 #include "options.h"
 #include "Object/factory_registration.h"
+#include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "Dialog/ui_panels.h"          // DebugUI, DebugUI_Slot9
 #include "Component/diseasecomponent_funcs.h"  // DiseaseComp_CheckCure (0x1400481b0)
 #include <cstdint>
@@ -494,7 +495,8 @@ void* FindDiseaseDescription(int wantIdx, int* outFound, int* outScanned,
     if (!fn_ExternalList_GetResourceCount || !fn_IsDerivedFrom) return nullptr;
     if (!*outTypeId || *outTypeId == 0xFFFFFFFFu) return nullptr;
 
-    const int count = fn_ExternalList_GetResourceCount(externalList);
+    const int count = reinterpret_cast<const ::Object::ExternalList*>(externalList)  // B.3.3 bridge
+                          ->GetResourceCount();
     *outScanned = count;
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(
                         static_cast<uint8_t*>(externalList) + 0x20);
