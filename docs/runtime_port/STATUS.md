@@ -213,7 +213,21 @@ built them wrong, and callbacks stored in data.
   flake of the documented signature (count 5689, one extra row, this time
   `ToolbarRemoval.rsc:resource`), stress clean quit (0.21 ms/iter, recorded). The 6C
   `GetTypeIdFromName` sites in Options/NewGame dialogs have build coverage only on these
-  routes. Next: 6D, the `CheckPtr` deletion.
+  routes.
+  Batch 6D done (merge of `b3364b8e`): all 4,670 `InternalBasePtr::CheckPtr` calls deleted
+  (3,373 through the macro, 1,297 through aliases/wrappers — 110 of those through wrappers
+  whose names do not contain "CheckPtr"), 299 files, −5,463 lines. Retail's body is
+  `C2 00 00` (`RET 0`) in the shipped AND the profile DLL and the exe has no import for it.
+  Side-effect audit first: 1,302 distinct argument expressions, none with a side effect;
+  1,402 `if (<pointer>) call;` statements deleted whole, none was the sole body of a
+  loop/else; 11 comma-operator operands rewritten keeping the survivor. Gone with them: the
+  macro (both forms), typedef, extern, `g_checkPtrIsNop` and its byte-sniff block, the
+  `BANISHED_CHECKPTR_NOP` option, `-DBANISHED_CHECKPTR_STATIC_NOP`, the exe dispatch-slot
+  row 0x140152ab0 (dispatch check now 109 rows, 0 mismatches). The runtime port of the
+  empty member STAYS (it is the real class's ABI door; a unit test calls it).
+  Gate: debug + release + perf (clean dir) build, unit 206/0, three routes exit 0, type
+  table and list counts identical, no `[CheckPtr]` boot line, `[RtResolve] 0 misses`,
+  resave PASS 3/3, stress clean quit (0.20 ms/iter, recorded). Next: step 7, closing pass.
 
 - **B.3.1 CLOSED (2026-09-13 night):** `System::String`, `System::Filename` and the nine
   `Math` value types are real classes under retail's names (`runtime/types/system/*.h`,
