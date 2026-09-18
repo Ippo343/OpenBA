@@ -140,7 +140,22 @@ built them wrong, and callbacks stored in data.
   Gate: debug + perf build, unit 185/0, a live boot with the type table byte-for-byte the
   same as the pre-merge boot (312 registered, 416/416 ids, same ten id/name pairs),
   autostart + pause-menu quit, tutorial, Load Game dialog exit 0, resave PASS, dispatch 0,
-  `make sa-stress` -0.2% (`perf/results/*_b33step3`). Next: step 4, `Object::Base`.
+  `make sa-stress` -0.2% (`perf/results/*_b33step3`).
+  Step 4 done (merge of `62926d44`): `Object::Base` is a real class — three virtuals in
+  retail order (`DeletingDtor`, `TypeName()`, `Type()`), non-virtual `~Base()`,
+  `Object::Destroy(p)`, `IsA`/`IsDerivedFrom` members; `DECLARE_TYPE` emits `Type()` /
+  `TypeName()`. The three `RtObject_Base_*` shims delegate to it. Base's `RT_DELDTOR` row,
+  `RtObject_Base_Dtor` and the minted `??_7Base@Object@@6B@` table all STAY: 64 by-name
+  doors, 22 factory-replay `Vptr` rows and 59 `.cpp` readers still stamp that table, and
+  its minted slot 0 is filled FROM the row (B33_RULES §6.1: check `rt_data_mint_tables.inc`
+  for a `RT_MINT_UNNAMED` slot before retiring any row). They retire at the end of the
+  fan-out. Gate: debug + perf build, unit 188/0, live type table identical to the
+  pre-step-3 boot, `[RtResolve] 0 misses`, no `[RtMint] TRAP`, three routes exit 0, resave
+  PASS, dispatch 0, `make sa-stress` +0.4% / +0.8% on two quiet runs (a first run straight
+  after the resave gate printed +10.1% and did not reproduce).
+  `-Wno-invalid-offsetof` is in `SA_CXXFLAGS` and `UNIT_CXXFLAGS` (every build variant
+  expands `SA_CXXFLAGS`) ahead of step 5, where the first polymorphic classes WITH fields
+  land. Next: step 5, the External / Internal fan-out.
 
 - **B.3.1 CLOSED (2026-09-13 night):** `System::String`, `System::Filename` and the nine
   `Math` value types are real classes under retail's names (`runtime/types/system/*.h`,

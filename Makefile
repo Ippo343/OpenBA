@@ -56,7 +56,7 @@ SA_TARGET = $(SA_BUILD_DIR)/reimpl-x64.exe
 # load: at -O2+ it proved CitizenAI_ActionExecutor_c4c50's pop loop could never exit and
 # emitted a literal `jmp .` self-loop, which froze the game in-world with the citizens
 # T-posing (the sim tick never returned). Do not remove.
-SA_CXXFLAGS = -std=c++17 -fno-strict-aliasing -Wall -Wextra -Wno-cast-function-type -MMD -MP
+SA_CXXFLAGS = -std=c++17 -fno-strict-aliasing -Wall -Wextra -Wno-cast-function-type -Wno-invalid-offsetof -MMD -MP
 SA_LDFLAGS = -static-libgcc -static-libstdc++ -mwindows
 # -lshell32: runtime/src/io/filesystem_win.cpp (Wave 4 lane D) calls SHGetFolderPathW
 # for FileSystem::GetSaveDirectory. Behind the _win seam per PLAN.md §4.1 decision 1.
@@ -117,7 +117,7 @@ include tests/unit/sources.mk
 UNIT_BUILD_DIR = tests/unit/build
 UNIT_SRCS = $(wildcard tests/unit/*.cpp) $(UNIT_TREE_SRCS)
 UNIT_OBJECTS = $(addprefix $(UNIT_BUILD_DIR)/, $(subst /,__,$(UNIT_SRCS:.cpp=.o)))
-UNIT_CXXFLAGS = -std=c++17 -fno-strict-aliasing -Wall -Wextra -g -O0 -D_DEBUG -DBANISHED_UNIT_TEST -MMD -MP
+UNIT_CXXFLAGS = -std=c++17 -fno-strict-aliasing -Wall -Wextra -Wno-invalid-offsetof -g -O0 -D_DEBUG -DBANISHED_UNIT_TEST -MMD -MP
 .PHONY: unit
 unit: $(UNIT_BUILD_DIR)/unit.exe
 	@$(UNIT_BUILD_DIR)/unit.exe
