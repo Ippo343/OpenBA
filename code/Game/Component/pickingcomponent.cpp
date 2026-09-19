@@ -18,6 +18,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <new>
+#include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 
 // ============================================================
 // Resolved helpers
@@ -66,7 +67,7 @@ void PickingComponent_Shutdown(PickingComponent* self, void* stream) {
 
     // Serialize IBP at +0x30
     if (s_fn_IBP_Serialize)
-        s_fn_IBP_Serialize((void*)(selfAddr + 0x30), serializer);
+        reinterpret_cast<Object::InternalBasePtr*>((void*)(selfAddr + 0x30))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
 
     // Validate: if not ComponentEntity, null it out
     void* ibpVal = *(void**)(selfAddr + 0x30);

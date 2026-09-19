@@ -75,7 +75,8 @@ void GUL_DrawFailed(void* self) {
 // WorldGeometry, SunLight, the Graphics/Audio/Picking scenes, AnimationManager,
 // SaveLoad). First slice defers the 8 resource Finds, the SkyMesh MeshInstance,
 // and the deep worldgen — see project_gameupdateloop_load_map. The
-// GameLoadDialogLoopT AsyncLoader worker dispatches this slot on a background thread.
+// GameLoadDialogLoopT splash kicks the single Runtime Engine::Loader thread, and
+// that thread dispatches this slot (Loader::Run -> _loop->vtable[6]).
 
 // +0x38 SaveRestore(self, saveFlag, savedState, outParam) — serializes loop
 // state to/from a Save::SavedState. REAL since the save/load wave 2026-08-27:

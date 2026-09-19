@@ -173,7 +173,7 @@ void InteractComponent_Shutdown(InteractComponent* self, void* stream) {
 
         // Serialize InternalBasePtr
         if (s_fn_IBP_Serialize) {
-            s_fn_IBP_Serialize(element, serializer);
+            reinterpret_cast<Object::InternalBasePtr*>(element)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
         }
 
         // Validate with IsDerivedFrom

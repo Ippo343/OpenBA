@@ -408,7 +408,7 @@ extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serial
             int32_t key = 0;
             if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(key, nullptr);   // B.3.4 bridge
             void* payload = nullptr;
-            if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(&payload, serializer);
+            if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(&payload)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, g_tid_Work)) {
                 payload = nullptr;
             }
@@ -467,7 +467,7 @@ extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serial
         uint8_t* root = *reinterpret_cast<uint8_t**>(treeField);
         for (uint8_t* node = BstLeftmostB(root); node; node = BstNextB(node)) {
             if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int32_t*>(node), nullptr);   // B.3.4 bridge
-            if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(node + 0x08, serializer);
+            if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(node + 0x08)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             void* payload = *reinterpret_cast<void**>(node + 0x08);
             if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, g_tid_Work)) {
                 *reinterpret_cast<void**>(node + 0x08) = nullptr;
@@ -497,7 +497,7 @@ extern "C" void Goals_TreeArray_Serialize_d060(void* serializer, int32_t count, 
                 int32_t key = 0;
                 if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(key, nullptr);   // B.3.4 bridge
                 void* payload = nullptr;
-                if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(&payload, serializer);
+                if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(&payload)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
                 if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, g_tid_Work)) {
                     payload = nullptr;
                 }
@@ -556,7 +556,7 @@ extern "C" void Goals_TreeArray_Serialize_d060(void* serializer, int32_t count, 
             uint8_t* root = reinterpret_cast<uint8_t*>(slot[0]);
             for (uint8_t* node = BstLeftmostB(root); node; node = BstNextB(node)) {
                 if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int32_t*>(node), nullptr);   // B.3.4 bridge
-                if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(node + 0x08, serializer);
+                if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(node + 0x08)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
                 void* payload = *reinterpret_cast<void**>(node + 0x08);
                 if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, g_tid_Work)) {
                     *reinterpret_cast<void**>(node + 0x08) = nullptr;

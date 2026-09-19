@@ -206,17 +206,17 @@ void OrchardComponent_SerializeRefEntries(void* serializer, int count, void* arr
         if (s_fn_SerializeInt) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(e + 0), nullptr);   // B.3.4 bridge
         if (s_fn_SerializeInt) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(e + 4), nullptr);   // B.3.4 bridge
 
-        if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(e + 8, serializer);
+        if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(e + 8)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
         if (*reinterpret_cast<void**>(e + 8) != nullptr && s_pTypeComponentEntity &&
             !(fn_IsDerivedFrom && fn_IsDerivedFrom(*reinterpret_cast<void**>(e + 8), *s_pTypeComponentEntity)))
             *reinterpret_cast<void**>(e + 8) = nullptr;
 
-        if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(e + 0x10, serializer);
+        if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(e + 0x10)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
         if (*reinterpret_cast<void**>(e + 0x10) != nullptr && s_pType7b30 &&
             !(fn_IsDerivedFrom && fn_IsDerivedFrom(*reinterpret_cast<void**>(e + 0x10), *s_pType7b30)))
             *reinterpret_cast<void**>(e + 0x10) = nullptr;
 
-        if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(e + 0x18, serializer);
+        if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(e + 0x18)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
         if (*reinterpret_cast<void**>(e + 0x18) != nullptr && s_pType4250 &&
             !(fn_IsDerivedFrom && fn_IsDerivedFrom(*reinterpret_cast<void**>(e + 0x18), *s_pType4250)))
             *reinterpret_cast<void**>(e + 0x18) = nullptr;

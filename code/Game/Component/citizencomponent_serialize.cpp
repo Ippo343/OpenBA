@@ -81,6 +81,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <new>
+#include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 
 extern void Component_SerializeReimpl(void* self, void* stream);
 extern "C" void Reimpl_ExternalPtrArray_Serialize(void* serializer, int count,
@@ -149,7 +150,7 @@ inline bool Loading(void* stream) {
 
 void SerializeValidatedIBP(void* ibp, void* ser, uintptr_t addr) {
     const uint32_t* tid = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, addr));
-    if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(ibp, ser);
+    if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
     void* obj = *reinterpret_cast<void**>(ibp);
     const bool checked = (obj && fn_IsDerivedFrom && tid && *tid);
     const bool derived = checked ? fn_IsDerivedFrom(obj, *tid) : true;

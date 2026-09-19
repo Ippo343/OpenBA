@@ -204,7 +204,7 @@ void CreateNaturalResource_Serialize_Impl(CreateNaturalResource* self, void* str
 
     int version = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
     if (version > 0) {
-        fn_InternalBasePtr_Serialize(s + 0x28, ser2);
+        reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
         if (*(void**)(s + 0x28) != nullptr) {
             if (!fn_IsDerivedFrom(*(void**)(s + 0x28), *s_typeId_ComponentEntity)) {
                 *(void**)(s + 0x28) = nullptr;

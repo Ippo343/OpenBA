@@ -36,6 +36,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <new>
+#include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -192,7 +193,7 @@ void DropOffRawMaterial_Serialize_Impl(DropOffRawMaterial* self, void* stream) {
     ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize target storage entity ref (+0x30)
-    s_fn_IBP_Serialize(s + 0x30, ser2);
+    reinterpret_cast<Object::InternalBasePtr*>(s + 0x30)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (*(void**)(s + 0x30) != nullptr) {
         if (!fn_IsDerivedFrom(*(void**)(s + 0x30), *s_typeId_1401c7158)) {
             *(void**)(s + 0x30) = nullptr;
@@ -200,7 +201,7 @@ void DropOffRawMaterial_Serialize_Impl(DropOffRawMaterial* self, void* stream) {
     }
 
     // Serialize source entity ref (+0x38)
-    s_fn_IBP_Serialize(s + 0x38, ser2);
+    reinterpret_cast<Object::InternalBasePtr*>(s + 0x38)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (*(void**)(s + 0x38) != nullptr) {
         if (!fn_IsDerivedFrom(*(void**)(s + 0x38), *g_TypeId_ComponentEntity)) {
             *(void**)(s + 0x38) = nullptr;

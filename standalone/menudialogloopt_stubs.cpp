@@ -503,7 +503,8 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     // StartGame's SetDialogLoaderNextLoop (MenuDLT+0xb68). Once the fullscreen
     // fade-to-black settles (UI fade RATE at self+0x130 == UI(+0x40)+0xF0 == 0.0),
     // advance the MainLoop to the queued loader chain (outer LoaderLoop ->
-    // GameLoadDialogLoopT -> AsyncLoader -> GameUpdateLoop::Load). Mirrors retail
+    // GameLoadDialogLoopT -> Engine::Loader thread -> GameUpdateLoop::Load).
+    // Mirrors retail
     // MenuDialogLoopT::Update (exe 0x14009b6e0) and our own GameUpdateLoop::Update
     // transition (gameupdateloop.cpp:886). Without this the menu loop never
     // advances and we never reach the in-game world build. Done BEFORE the
@@ -647,8 +648,9 @@ void Stub_Load(UpdateLoop* self) {
     // ("Dialog\MainMenu.rsc"), then loads companion resources (Audio/Music/Menu.rsc,
     // Game/MenuScene/SceneN.rsc) for the 3D menu background.
     //
-    // In standalone, this Stub_Load runs on the AsyncLoader worker thread (kicked
-    // by Loading splash's Stub_Startup). Only thread-safe work goes here:
+    // This Stub_Load runs on the single Runtime Engine::Loader thread (kicked by
+    // the Loading splash's Stub_Startup, as in retail). Only thread-safe work
+    // goes here:
     // fn_DialogLoopT_Load is safe (it's a single-call resource load with internal
     // refcounting). MenuDialogLoopT_LoadScene_PhaseA is NOT — it iterates 15K+
     // calls to Graphics_Scene_AddGlobalObject which mutates global scene state in
@@ -670,7 +672,7 @@ void Stub_Load(UpdateLoop* self) {
     // Load the menu music (Audio/Music/Menu.rsc -> self+0xb88). Mirrors the
     // music-load block at the top of the original MenuDLT::Load (exe 0x14009a930).
     // Like fn_DialogLoopT_Load this is a plain refcounted ExternalFactory load,
-    // safe to run on the AsyncLoader worker thread (no scene-graph mutation).
+    // safe to run on the Engine::Loader thread (no scene-graph mutation).
     // Playback is started later from Stub_Startup (main thread).
     MenuDialogLoopT_LoadMusic(self);
 }

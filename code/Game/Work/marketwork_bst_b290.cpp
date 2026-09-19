@@ -34,6 +34,7 @@
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 
 // ============================================================
 // External closure — every one of these is already ported + registered
@@ -211,7 +212,7 @@ void MarketBst_b290(int64_t* tree, void* serializer) {
             // 14002b2fd..b329: read the key, then drop it unless it derives from the
             // expected type. Retail overwrites the key with 0 on a type mismatch and
             // still inserts the node — a null-keyed node, not a skipped one.
-            s_fn_IBP_Serialize(&key, serializer);
+            reinterpret_cast<Object::InternalBasePtr*>(&key)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             if (key != 0 && !fn_IsDerivedFrom(reinterpret_cast<void*>(key), *s_TypeId_1401c7158)) {
                 key = 0;
             }
@@ -285,7 +286,7 @@ void MarketBst_b290(int64_t* tree, void* serializer) {
             // 14002b506..b524: write the key, and null it out in memory if it no longer
             // derives from the expected type. This MUTATES the live tree on save —
             // faithful, and deliberate in retail (it is how stale refs get culled).
-            s_fn_IBP_Serialize(reinterpret_cast<void*>(node), serializer);
+            reinterpret_cast<Object::InternalBasePtr*>(reinterpret_cast<void*>(node))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             uintptr_t key = NodeKey(node);
             if (key != 0 && !fn_IsDerivedFrom(reinterpret_cast<void*>(key), *s_TypeId_1401c7158)) {
                 *reinterpret_cast<uintptr_t*>(node + 0x00) = 0;

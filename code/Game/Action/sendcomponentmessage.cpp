@@ -126,7 +126,7 @@ void SendComponentMessage_Serialize_Impl(SendComponentMessage* self, void* strea
     ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Target entity ref (+0x20) with type validation
-    s_fn_IBP_Serialize(&self->_field20, ser2);
+    reinterpret_cast<Object::InternalBasePtr*>(&self->_field20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (self->_field20 != nullptr) {
         if (!fn_IsDerivedFrom(self->_field20, *s_TypeId_Entity)) {
             self->_field20 = nullptr;
@@ -134,7 +134,7 @@ void SendComponentMessage_Serialize_Impl(SendComponentMessage* self, void* strea
     }
 
     // Source entity ref (+0x28) with type validation
-    s_fn_IBP_Serialize(&self->_field28, ser2);
+    reinterpret_cast<Object::InternalBasePtr*>(&self->_field28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (self->_field28 != nullptr) {
         if (!fn_IsDerivedFrom(self->_field28, *s_TypeId_Entity)) {
             self->_field28 = nullptr;

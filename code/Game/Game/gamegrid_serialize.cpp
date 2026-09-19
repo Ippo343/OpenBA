@@ -57,6 +57,7 @@
 #include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
 #include <cstdint>
 #include <new>
+#include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 
 // ============================================================
 // External declarations -- functions already ported elsewhere.
@@ -204,7 +205,7 @@ void GameGrid_SerializeCellArray_ac10(void* serializer, int32_t count, int64_t a
     uint8_t* elem = reinterpret_cast<uint8_t*>(arrayBase);
     for (int32_t i = 0; i < count; ++i) {
         if (fn_InternalBasePtr_Serialize) {
-            fn_InternalBasePtr_Serialize(elem + 0x00, serializer);
+            reinterpret_cast<Object::InternalBasePtr*>(elem + 0x00)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
         }
         void* refA = *reinterpret_cast<void**>(elem + 0x00);
         if (refA != nullptr && fn_IsDerivedFrom && g_TypeId_ComponentEntity &&
@@ -213,7 +214,7 @@ void GameGrid_SerializeCellArray_ac10(void* serializer, int32_t count, int64_t a
         }
 
         if (fn_InternalBasePtr_Serialize) {
-            fn_InternalBasePtr_Serialize(elem + 0x08, serializer);
+            reinterpret_cast<Object::InternalBasePtr*>(elem + 0x08)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
         }
         void* refB = *reinterpret_cast<void**>(elem + 0x08);
         if (refB != nullptr && fn_IsDerivedFrom && g_TypeId_ComponentEntity &&

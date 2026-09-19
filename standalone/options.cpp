@@ -253,8 +253,6 @@ void OptionsInit() {
         o.skipEngineLoader = v && v[0] != '0'; }
     {   const char* v = Raw("BANISHED_SYNC_ENGINE_LOADER");
         o.syncEngineLoader = !(v && (v[0] == '0' || v[0] == 'f' || v[0] == 'F')); }
-    {   const char* v = Raw("BANISHED_ASYNC_LOAD");
-        o.asyncLoad = v && v[0] != '0'; }
     {   const char* v = Raw("BANISHED_NO_FOL_LOCK");
         o.noFolLock = v && v[0] != '0'; }
     {   const char* v = Raw("BANISHED_UNREG_CENSUS");

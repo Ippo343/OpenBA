@@ -127,7 +127,7 @@ void BuildComponent_Shutdown(BuildComponent* self, void* stream) {
     if (s_fn_IBP_Serialize && count1 > 0) {
         for (int i = 0; i < count1; i++) {
             void* ibp = (void*)((uintptr_t)arr1 + i * 8);
-            s_fn_IBP_Serialize(ibp, ser1);
+            reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser1));   // B.3.4 bridge
             // Validate: if non-null but wrong type, clear
             void* val = *(void**)ibp;
             if (val != nullptr && s_TypeId_ModelComp2) {
@@ -155,7 +155,7 @@ void BuildComponent_Shutdown(BuildComponent* self, void* stream) {
     if (s_fn_IBP_Serialize && count2 > 0) {
         for (int i = 0; i < count2; i++) {
             void* ibp = (void*)((uintptr_t)arr2 + i * 8);
-            s_fn_IBP_Serialize(ibp, ser1);
+            reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser1));   // B.3.4 bridge
             // Validate with PickingComponent type (DAT_1401c7c10)
             void* val = *(void**)ibp;
             if (val != nullptr && s_TypeId_PickingComp) {

@@ -44,6 +44,7 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>
+#include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 
 namespace {
 
@@ -93,7 +94,7 @@ void Resolve() {
 }
 
 inline void SerializeValidatedIBP(void* ibp, void* ser, const uint32_t* tid) {
-    if (s_IBPSer) s_IBPSer(ibp, ser);
+    if (s_IBPSer) reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
     void* obj = *reinterpret_cast<void**>(ibp);
     if (obj && s_IsDerived && tid && *tid && !s_IsDerived(obj, *tid))
         *reinterpret_cast<uint64_t*>(ibp) = 0;

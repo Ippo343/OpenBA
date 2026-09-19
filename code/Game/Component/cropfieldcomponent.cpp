@@ -269,13 +269,13 @@ void CropFieldComponent_SerializeEntityList(void* serializer, int count, uintptr
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(int*)(entry + 4), nullptr);   // B.3.4 bridge
         }
         // IBP #1 -> ComponentEntity
-        if (s_fn_IBP_Serialize2) s_fn_IBP_Serialize2((void*)(entry + 8), serializer);
+        if (s_fn_IBP_Serialize2) reinterpret_cast<Object::InternalBasePtr*>((void*)(entry + 8))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
         if (*(void**)(entry + 8) != nullptr && s_pTypeId_ComponentEntity &&
             !fn_IsDerivedFrom(*(void**)(entry + 8), *s_pTypeId_ComponentEntity)) {
             *(uint64_t*)(entry + 8) = 0;
         }
         // IBP #2 -> BuildStateComponent
-        if (s_fn_IBP_Serialize2) s_fn_IBP_Serialize2((void*)(entry + 0x10), serializer);
+        if (s_fn_IBP_Serialize2) reinterpret_cast<Object::InternalBasePtr*>((void*)(entry + 0x10))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
         if (*(void**)(entry + 0x10) != nullptr && s_pTypeId_BuildStateComp &&
             !fn_IsDerivedFrom(*(void**)(entry + 0x10), *s_pTypeId_BuildStateComp)) {
             *(uint64_t*)(entry + 0x10) = 0;

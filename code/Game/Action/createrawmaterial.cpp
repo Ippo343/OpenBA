@@ -292,7 +292,7 @@ void CreateRawMaterial_Serialize_Impl(CreateRawMaterial* self, void* stream) {
     s_fn_SerializeTypeRef(s + 0x20, ser2);
 
     // Source building IBP (+0x28)
-    fn_InternalBasePtr_Serialize(s + 0x28, ser2);
+    reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (*(void**)(s + 0x28) != nullptr) {
         if (!fn_IsDerivedFrom(*(void**)(s + 0x28), *s_typeId_1401c7158)) {
             *(void**)(s + 0x28) = nullptr;
@@ -317,7 +317,7 @@ void CreateRawMaterial_Serialize_Impl(CreateRawMaterial* self, void* stream) {
     // Version > 0: secondary entity IBP (+0x30)
     int version = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
     if (version > 0) {
-        fn_InternalBasePtr_Serialize(s + 0x30, ser2);
+        reinterpret_cast<Object::InternalBasePtr*>(s + 0x30)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
         if (*(void**)(s + 0x30) != nullptr) {
             if (!fn_IsDerivedFrom(*(void**)(s + 0x30), *s_typeId_ComponentEntity)) {
                 *(void**)(s + 0x30) = nullptr;
@@ -336,7 +336,7 @@ void CreateRawMaterial_Serialize_Impl(CreateRawMaterial* self, void* stream) {
     // Version > 2: tertiary entity IBP (+0x38)
     version = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
     if (version > 2) {
-        fn_InternalBasePtr_Serialize(s + 0x38, ser2);
+        reinterpret_cast<Object::InternalBasePtr*>(s + 0x38)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
         if (*(void**)(s + 0x38) != nullptr) {
             if (!fn_IsDerivedFrom(*(void**)(s + 0x38), *s_typeId_ComponentEntity)) {
                 *(void**)(s + 0x38) = nullptr;

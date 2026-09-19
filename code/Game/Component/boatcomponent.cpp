@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <new>
+#include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 
 // ============================================================
 // Resolved helpers
@@ -96,7 +97,7 @@ void BoatComponent_Shutdown(BoatComponent* self, void* stream) {
 
     // Serialize InternalBasePtr at +0x28 (entity ref)
     if (s_fn_IBP_Serialize)
-        s_fn_IBP_Serialize((void*)(selfAddr + 0x28), serializer);
+        reinterpret_cast<Object::InternalBasePtr*>((void*)(selfAddr + 0x28))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
 
     // Validate +0x28 against ComponentEntity type
     if (*(void**)(selfAddr + 0x28) != nullptr) {
@@ -117,7 +118,7 @@ void BoatComponent_Shutdown(BoatComponent* self, void* stream) {
 
     // Serialize InternalBasePtr at +0x30
     if (s_fn_IBP_Serialize)
-        s_fn_IBP_Serialize((void*)(selfAddr + 0x30), serializer);
+        reinterpret_cast<Object::InternalBasePtr*>((void*)(selfAddr + 0x30))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
 
     // Validate +0x30 against type 0x1401c7a50
     if (*(void**)(selfAddr + 0x30) != nullptr) {
@@ -131,7 +132,7 @@ void BoatComponent_Shutdown(BoatComponent* self, void* stream) {
 
     // Serialize InternalBasePtr at +0x38
     if (s_fn_IBP_Serialize)
-        s_fn_IBP_Serialize((void*)(selfAddr + 0x38), serializer);
+        reinterpret_cast<Object::InternalBasePtr*>((void*)(selfAddr + 0x38))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
 
     // Validate +0x38 against type 0x1401c7078
     if (*(void**)(selfAddr + 0x38) != nullptr) {

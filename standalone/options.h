@@ -148,7 +148,6 @@ struct Options {
     bool        deferWindowShow      = true;   // standalone/boot_window.cpp — default ON, "0"/"false" shows the window early
     bool        skipEngineLoader     = false;  // standalone/loader_loop_stubs.cpp [no tool reader]
     bool        syncEngineLoader     = true;   // standalone/loader_loop_stubs.cpp — default ON, "0"/"f" goes async
-    bool        asyncLoad            = false;  // standalone/async_loader.cpp — threaded scene load opt-in [no tool reader]
     bool        noFolLock            = false;  // standalone/res_load_lock.cpp — kill switch for the resource-load lock
     bool        unregCensus          = false;  // tools/unreg_full.py — census of unregistered addresses
 

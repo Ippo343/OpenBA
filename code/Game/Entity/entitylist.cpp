@@ -1372,7 +1372,7 @@ void EntityList_Serialize(EntityList* self, void* stream) {
     if (ibpCount > 0) {
         for (int64_t j = 0; j < ibpCount; j++) {
             void* currentIBP = (void*)((uintptr_t)ibpIter + j * 8);
-            fn_InternalBasePtr_Serialize(currentIBP, serializer);
+            reinterpret_cast<Object::InternalBasePtr*>(currentIBP)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
 
             // After loading, verify it's a ComponentEntity
             if (*(void**)currentIBP != nullptr) {

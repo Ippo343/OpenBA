@@ -879,7 +879,7 @@ void FishingWork_Serialize_Impl(FishingWork* self, void* stream) {
         uintptr_t ibpPtr = ibpArray;
         do {
             // Serialize the InternalBasePtr
-            s_fn_IBP_Serialize((void*)ibpPtr, serializer);
+            reinterpret_cast<Object::InternalBasePtr*>((void*)ibpPtr)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
 
             // Validate: if the ptr is non-null and not derived from expected type, null it
             uintptr_t ptrVal = *(uintptr_t*)ibpPtr;
