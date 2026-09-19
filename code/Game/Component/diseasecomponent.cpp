@@ -81,6 +81,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A residual
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include <cstdint>
 #include <cstdio>
@@ -922,10 +923,10 @@ extern "C" void DiseaseComponent_Serialize(DiseaseComponent* self, void* stream)
     if (s_compSerialize) s_compSerialize(self, stream);
     if (!s_serCtor || !s_serDtor) return;
 
-    uint8_t ser[24] = {0};
-    s_serCtor(ser, stream, 1);
+    alignas(8) uint8_t ser[24] = {0};
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
     if (s_extPtrSerialize) s_extPtrSerialize(&self->curedIdentity, ser);
-    if (s_serInt)  s_serInt(ser, &self->isPasture, nullptr);
+    if (s_serInt)  reinterpret_cast<IO::Serializer*>(ser)->Serialize(self->isPasture, nullptr);   // B.3.4 bridge
     if (s_serTime) {
         s_serTime(&self->rollAccum,   ser);
         s_serTime(&self->duration,    ser);
@@ -933,13 +934,13 @@ extern "C" void DiseaseComponent_Serialize(DiseaseComponent* self, void* stream)
         s_serTime(&self->spreadAccum, ser);
     }
     // Version-0 saves predate the registry, so re-run OnAdded (vtable +0x30 = slot 6).
-    if (s_serGetVer && s_serGetVer(ser) == 0 &&
+    if (s_serGetVer && reinterpret_cast<IO::Serializer*>(ser)->GetVersion() == 0 &&   // B.3.4 bridge
         *reinterpret_cast<int32_t*>((uintptr_t)stream + 8) == 0) {
         void** vt = *reinterpret_cast<void***>(self);
         typedef void (*fn_slot6_t)(void*);
         if (vt && vt[6]) reinterpret_cast<fn_slot6_t>(vt[6])(self);
     }
-    s_serDtor(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

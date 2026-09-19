@@ -46,6 +46,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "math/Math.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A residual
+#include <new>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -294,14 +296,17 @@ void TornadoComponent_Shutdown(TornadoComponent* self, void* stream) {
 
     if (g_h.componentSerialize) g_h.componentSerialize(self, stream);
 
-    uint8_t serializer[24];
-    if (g_h.serializerCtor) g_h.serializerCtor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    if (g_h.serializerCtor)
+        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     reinterpret_cast<Math::Vector3*>(s + 0x30)->Serialize(serializer);   // B.3.1 bridge
-    if (g_h.serializeInt) g_h.serializeInt(serializer, reinterpret_cast<int*>(s + 0x50), nullptr);
+    if (g_h.serializeInt)
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x50), nullptr);   // B.3.4 bridge
 
     int pathCount = *reinterpret_cast<int*>(s + 0x48);
-    if (g_h.serializeInt) g_h.serializeInt(serializer, &pathCount, nullptr);
+    if (g_h.serializeInt)
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(pathCount, nullptr);   // B.3.4 bridge
 
     // stream+8 == 0 means "loading": grow the array before reading the waypoints.
     // B.3.2 bridge: FUN_14000d030 is Collection::Array<Vector3>::SetSize(n)
@@ -319,7 +324,7 @@ void TornadoComponent_Shutdown(TornadoComponent* self, void* stream) {
     if (g_h.timeSerialize) g_h.timeSerialize(reinterpret_cast<void*>(s + 0x28), serializer);
     reinterpret_cast<Math::Vector3*>(s + 0x58)->Serialize(serializer);   // B.3.1 bridge
 
-    if (g_h.serializerDtor) g_h.serializerDtor(serializer);
+    if (g_h.serializerDtor) reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
