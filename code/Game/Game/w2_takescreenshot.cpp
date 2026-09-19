@@ -175,7 +175,9 @@ bool ResolveFuncs() {
            s_Filename_CtorStr && s_Filename_Assign && s_Filename_Dtor &&
            s_SaveImageToFile && s_pFileSystemSingleton &&
            // from engine_funcs.h — both are exref-backed and could be null:
-           fn_ImageBuffer_CopyFromTexture && g_pVideoDeviceSingleton && g_pEngineSingleton;
+           // B.3.5: the CopyFromTexture readiness term went with its door (the
+           // global itself stays, and the printf below still reports it).
+           g_pVideoDeviceSingleton && g_pEngineSingleton;
 
     if (!s_ok) {
         printf("[TakeScreenshot] primitives unresolved — screenshot disabled\n"
@@ -276,7 +278,11 @@ extern "C" void GameUpdateLoop_TakeScreenshot(void* self) {
     // --- Read the pixels back and write the file -----------------------------
     unsigned int* pixels = reinterpret_cast<unsigned int*>(
         s_MemAlloc(static_cast<uint64_t>(static_cast<int64_t>(height * width)) << 2, 4));
-    fn_ImageBuffer_CopyFromTexture(frameCopy, pixels, width, height);
+    // B.3.5 bridge — ?CopyFromTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z.
+    // `frameCopy` is a FrameCopyImageBuffer, which derives from Video::ImageBuffer
+    // at offset 0 (GeneratedImageBuffer.h's chain), so the base member applies.
+    reinterpret_cast<Video::ImageBuffer*>(frameCopy)->CopyFromTexture(
+        pixels, width, height);   // B.3.5 bridge
     // B.3.5 bridge — ?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z
     // is STATIC (`SA_N`), so there is no receiver: the door's first argument was
     // the Filename, not a `this`. `s_SaveImageToFile` and its resolve STAY — the

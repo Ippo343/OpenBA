@@ -91,9 +91,8 @@ namespace {
 //       Camera.h but DEFINED NOWHERE: its body is still the door in
 //       runtime/src/graphics/wave27_lane_gfxbig.cpp. Converting it would be a
 //       link error, which is the proof the brief asks for.
-//   fn_ImageBuffer_Ctor / fn_ImageBuffer_CopyFromTexture — the ctor is a ctor
-//       door; `Video::ImageBuffer::CopyFromTexture` is declared in ImageBuffer.h
-//       and defined nowhere (its body is block D's door in buffers.cpp).
+//   fn_ImageBuffer_Ctor — a CTOR door. (`CopyFromTexture` was on this list until
+//       block D2's buffers.cpp landed the member; it is converted now.)
 typedef void* (*fn_RenderBuffer_Ctor_t)(void* self);
 typedef void  (*fn_RenderBuffer_Dtor_t)(void* self);
 typedef void* (*fn_Frustum_Ortho_Ctor_t)(void* self, bool ortho, const void* near_,
@@ -126,7 +125,8 @@ bool ResolveFuncs() {
            s_Renderer_Dtor && s_Scene_Dtor &&
            // engine_funcs primitives this port relies on:
            fn_MemAlloc && g_pMemAllocSingleton && fn_MemFreeStatic &&
-           fn_ImageBuffer_Ctor && g_NoiseUI_ImageBufferVtable && fn_ImageBuffer_CopyFromTexture &&
+           // B.3.5: the CopyFromTexture readiness term went with its door.
+           fn_ImageBuffer_Ctor && g_NoiseUI_ImageBufferVtable &&
            fn_Graphics_Camera_Ctor &&
            fn_Graphics_Renderer_Ctor && fn_Graphics_Scene_Ctor &&
            fn_Graphics_Renderer_Draw &&
@@ -319,7 +319,9 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context,
     // Read the rendered color back into the minimap terrain pixel array (+0x18).
     void* terrainPixels = *reinterpret_cast<void**>(map + 0x18);
     if (colorBuf && terrainPixels)
-        fn_ImageBuffer_CopyFromTexture(colorBuf, terrainPixels, width, width);
+        // B.3.5 bridge — ?CopyFromTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z.
+        reinterpret_cast<Video::ImageBuffer*>(colorBuf)->CopyFromTexture(
+            terrainPixels, width, width);   // B.3.5 bridge
 
     // Free the temporary render surfaces.
     if (renderBuffer) {
