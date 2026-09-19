@@ -27,6 +27,20 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <type_traits>   // B.3.4b: the "none of these acquires a vtable" pins
+
+// ENDGAME B.3.4b: `System::DateTime::AsString` and friends return
+// `System::String` BY VALUE, so the definition is needed, not a declaration.
+// Global scope, above every namespace block, never inside an `#if` (B31
+// hygiene / B34_BRIEFS §A.8).
+#include "String.h"
+
+// `IO::Serializer` is only ever a reference parameter here, so a forward
+// declaration is enough and this header does not drag `runtime/types/io/` in.
+// Spelled `class` because that is what `runtime/types/io/Serializer.h` declares
+// it as — B34B_RULES rule B4b-5: GCC accepts a struct/class tag mismatch in a
+// forward declaration SILENTLY, so the tag is matched deliberately.
+namespace IO { class Serializer; }
 
 // ============================================================
 // System::Random — a Mersenne-Twister-shaped PRNG (NOT the textbook MT19937:
@@ -91,3 +105,254 @@ struct Color {
     uint32_t value;
 };
 static_assert(sizeof(Color) == 4, "System::Color must be 4 bytes");
+
+// ============================================================================
+// ENDGAME B.3.4b — the REAL `System::Random`, `Time`, `Color` and `DateTime`.
+// ============================================================================
+//
+// Design: B34B_RULES.md §1.1 (the exported member list, by mangled name and
+// retail address), rule B4b-2 (no real constructors in 4b — the reason here is
+// NOT Thread's, see below), rule B4b-5 (forward-declaration tags);
+// B34_RULES.md §1.5 rule 3 (the POD stays) and §4.3 (the ctor-door question);
+// ENDGAME §B.1 decision 5 (retail's names) and decision 6 (value types).
+//
+// *** RULE B4b-1 DOES NOT APPLY TO THIS HEADER, AND THAT IS WORTH SAYING. ***
+// `Thread.h` had to move its PODs because they sat inside `namespace System`
+// and occupied the classes' own names. The PODs here do NOT: `Random` and
+// `Color` are at GLOBAL scope above, and `Time` is the global `struct Time`
+// that `engine/types/common.h:12` owns and shares with the exe tree. So
+// nothing is renamed, nothing outside `runtime/` is touched, and the four
+// classes below are cross-asserted against PODs that stay exactly where they
+// are. Spell the POD `::Random` / `::Time` / `::Color` everywhere inside a
+// `namespace System` block — B34_RULES §7.2's grep hazard is armed for these
+// three names from this commit on, and it bites SILENTLY because the layouts
+// match: the wrong spelling compiles and does the right thing until the day
+// one of the two gains a member.
+//
+// *** WHY `System::Time` COULD BE DECLARED HERE AT ALL. ***
+// `::Time` lives in `engine/types/common.h`, which `runtime/types/math/Math.h`
+// includes and which therefore reaches most of the tree; B.3.3 step 6B
+// deliberately de-duplicated it there (see the banner above) and moving it
+// would be an `engine/` edit. It does not have to move: `System::Time` is a
+// NEW name in a NEW namespace over the SAME eight bytes, cross-asserted
+// against `::Time` below. Every one of the ~68 files that reaches a Time
+// function does so through a `void*` door — `fn_Time_Ctor_Float`,
+// `fn_Time_AsSeconds`, `g_fn_Time_Serialize` (engine_funcs.h:1827, 1083, 5475;
+// all three typedefs take `void*`) — and every `System::Time` spelling under
+// `code/Game` is a COMMENT. So the class costs ZERO edits outside `runtime/`,
+// and `::Time` keeps its single definition.
+//
+// *** NONE OF THE FOUR GETS A REAL CONSTRUCTOR IN 4b, AND THE REASON IS NOT
+// *** THREAD'S. *** B34_RULES §4.3 forbids a ctor door converting when the
+// member form would change which vtable a live object wears; none of these four
+// has a vtable, so that test PASSES and a real constructor would be PERMITTED.
+// It is deferred anyway, for a concrete reason per class:
+//
+//   `Random`  — `Object::InternalFactory` is a REAL class since B.3.3 and holds
+//               `::Random _random;` BY VALUE at +0x20
+//               (`runtime/types/object/Internal.h:662`), while
+//               `Ctor_InternalFactory`
+//               (`runtime/src/engine/singleton_ctors.cpp:352-361`, outside this
+//               step's file set) seeds it through the
+//               `??0Random@System@@QEAA@XZ` DOOR. Give `System::Random` a real
+//               constructor and the moment anyone re-spells that member, the
+//               holder's implicit constructor seeds it AND the door seeds it
+//               again — two different `time(nullptr)` seeds on the object
+//               factory's RNG, i.e. a determinism change with no build error.
+//               `Graphics::Particle::_rng` (0x1801fe7f0) is a second by-value
+//               instance with its own seeding path.
+//   `Time`    — its ~132 `fn_Time_Ctor_Float` call sites construct into RAW
+//               BYTE BUFFERS and convert as placement-new (B34_RULES §7.3),
+//               which is caller-batch work gated behind the 4a closing pass.
+//               The constructor converts WITH them, not before.
+//   `Color`   — retail's three constructors (0x18001fdd0 / 0x18001fde0 /
+//               0x18001fdf0) are exported but were never ported or registered,
+//               and an uncalled port is an unverified port. Nothing is invented.
+//   `DateTime`— likewise: `??0DateTime@System@@QEAA@XZ` (0x1800c57f0),
+//               `??0…@QEAA@U_FILETIME@@@Z` (0x1800c5800) and `??1…` (0x1800c5860)
+//               have no body anywhere in this tree.
+//
+// So every class below declares its PORTED members only, the registered doors
+// keep their addresses and delegate, and each class stays trivially
+// destructible so no implicit destructor can run beside a hand-written one.
+// ============================================================================
+
+namespace System {
+
+// ----------------------------------------------------------------------------
+// System::Random — 0x9c4 bytes, NO vtable. The tempering constants are Shining
+// Rock's own, not the textbook MT19937's; see the POD banner at the top.
+// ----------------------------------------------------------------------------
+class Random {
+public:
+    // ?Rand@Random@System@@QEAAIXZ         0x1800c7f90  — the full 32-bit draw
+    uint32_t Rand();
+    // ?Rand@Random@System@@QEAAII@Z        0x1800c8040  — bound==0 returns 0
+    //   WITHOUT drawing, so the state must stay untouched.
+    uint32_t Rand(uint32_t bound);
+    // ?Rand@Random@System@@QEAAHHH@Z       0x1800c7d70
+    int32_t  Rand(int32_t lo, int32_t hi);
+    // ?RandFloat@Random@System@@QEAAMXZ    0x1800c7d40  — [0,1)
+    float    RandFloat();
+    // ?RandFloatTol@Random@System@@QEAAMXZ 0x1800c8000  — left-associated
+    float    RandFloatTol();
+    // ?RandTol@Random@System@@QEAAHH@Z     0x1800c7da0  — [-tol, +tol]
+    int32_t  RandTol(int32_t tol);
+
+    // ?NextGroup@Random@System@@AEAAXXZ    0x1800c7dd0
+    // `AEAA` is the PRIVATE spelling, not the unexported one — it is a real
+    // export (ord 3245) and it is registered. PUBLIC here rather than private
+    // because its registered door calls it, and access control is not ABI.
+    void NextGroup();
+
+    // ?Serialize@Random@System@@QEAAXAEAVSerializer@IO@@@Z  0x1800c7cf0
+    void Serialize(::IO::Serializer& s);
+
+    // ---- the 0x9c4 bytes, at retail's offsets ------------------------------
+    // PUBLIC for the same reason `IO::Stream`'s three are: the unconverted tree
+    // reads them through a cast to the POD, and `offsetof` has to be well
+    // formed.
+    int32_t  _index;     // +0x000
+    uint32_t _mt[624];   // +0x004
+};
+
+static_assert(sizeof(Random) == 2500, "System::Random is 2500 (0x9c4) bytes");
+static_assert(sizeof(Random) == sizeof(::Random), "class and POD interchangeable");
+static_assert(offsetof(Random, _index) == 0x00, "Random::_index @ +0x00");
+static_assert(offsetof(Random, _mt)    == 0x04, "Random::_mt @ +0x04");
+static_assert(offsetof(Random, _index) == offsetof(::Random, index), "alias index");
+static_assert(offsetof(Random, _mt)    == offsetof(::Random, mt),    "alias mt");
+static_assert(!std::is_polymorphic<Random>::value,
+              "System::Random must never acquire a vtable: retail has none");
+static_assert(std::is_standard_layout<Random>::value,
+              "the doors reach these two fields through a reinterpret_cast");
+static_assert(std::is_trivially_destructible<Random>::value,
+              "B4b-2: no implicit destructor may run beside a ported teardown");
+
+// ----------------------------------------------------------------------------
+// System::Time — 8 bytes, NO vtable. One tick count at Timer's resolution.
+// ----------------------------------------------------------------------------
+class Time {
+public:
+    // ?AsSeconds@Time@System@@QEBAMXZ  0x180007900
+    // Delegates to `Timer::TicksToSeconds` BY NAME rather than duplicating
+    // `Timer::_secondsPerTick`, which is a QueryPerformanceFrequency-derived
+    // runtime global and one of the eleven CUTOVER_REQUIRED cells
+    // (B34B_RULES §4.1) — not a compile-time constant.
+    float AsSeconds() const;
+
+    // ?Serialize@Time@System@@QEAAXAEAVSerializer@IO@@@Z  0x1800ca740
+    //
+    // ⚠ ITS BODY IS STILL THE HAND-INLINED ReaderWriter +0x90 SLOT CALL, and
+    // that is deliberate. `IO::Serializer` does not declare the int64 scalar
+    // overload; retail DOES export one
+    // (`?Serialize@Serializer@IO@@QEAAXAEA_JPEBD@Z` @ 0x180035000, confirmed in
+    // `standalone/rt_export_addrs.inc:1204`), and B34B_RULES §3 carries the
+    // coordinator's decision to add it — sequenced AFTER the 4a closing pass,
+    // because the member body belongs in `runtime/src/io/serializer.cpp`, which
+    // another agent owns. Until then this site stays byte-identical. Do NOT
+    // "fix" it by routing eight bytes through the four-byte int door.
+    void Serialize(::IO::Serializer& s);
+
+    // ---- the 8 bytes -------------------------------------------------------
+    int64_t _ticks;   // +0x00
+};
+
+static_assert(sizeof(Time) == 8, "System::Time is 8 bytes");
+static_assert(sizeof(Time) == sizeof(::Time), "class and POD interchangeable");
+static_assert(offsetof(Time, _ticks) == 0x00, "Time::_ticks @ +0x00");
+static_assert(offsetof(Time, _ticks) == offsetof(::Time, ticks), "alias ticks");
+static_assert(!std::is_polymorphic<Time>::value,
+              "System::Time must never acquire a vtable: retail has none");
+static_assert(std::is_standard_layout<Time>::value, "reached through a cast");
+static_assert(std::is_trivially_destructible<Time>::value,
+              "B4b-2: the ~132 call sites build these in RAW BYTE BUFFERS");
+
+// ----------------------------------------------------------------------------
+// System::Color — 4 bytes, NO vtable. One packed uint32, byte-addressed B,G,R,A.
+// ----------------------------------------------------------------------------
+// The eight accessors and three constructors retail exports are NOT declared
+// here: none is ported and none is registered, and an uncalled port is an
+// unverified port. Their addresses are in B34B_RULES §1.1 for whoever ports
+// them. `?Serialize@` is the whole live surface — six CALL sites, all through
+// `fn_System_Color_Serialize`.
+class Color {
+public:
+    // ?Serialize@Color@System@@QEAAXAEAVSerializer@IO@@@Z  0x1800c4150
+    // Slot +0x98 (`rw_vtbl::kScalarUInt`) — the same door `Random::Serialize`
+    // uses for its own 4-byte scalar.
+    void Serialize(::IO::Serializer& s);
+
+    // ---- the 4 bytes -------------------------------------------------------
+    uint32_t _value;   // +0x00  as a uint32 it reads 0xAARRGGBB
+};
+
+static_assert(sizeof(Color) == 4, "System::Color is 4 bytes");
+static_assert(sizeof(Color) == sizeof(::Color), "class and POD interchangeable");
+static_assert(offsetof(Color, _value) == 0x00, "Color::_value @ +0x00");
+static_assert(offsetof(Color, _value) == offsetof(::Color, value), "alias value");
+static_assert(!std::is_polymorphic<Color>::value,
+              "System::Color must never acquire a vtable: retail has none");
+static_assert(std::is_standard_layout<Color>::value, "reached through a cast");
+static_assert(std::is_trivially_destructible<Color>::value, "B4b-2");
+
+// ----------------------------------------------------------------------------
+// System::DateTime — 8 bytes, NO vtable. IT IS A FILETIME.
+// ----------------------------------------------------------------------------
+// *** THIS IS THE ONE CLASS IN THIS HEADER THAT HAD NO POD AT ALL. *** The
+// banner at the top of this file still says DateTime "is NOT modeled below …
+// `this` IS A FILETIME", and every ported body took it as `const void*`. The
+// layout is spelled out now, and the evidence is exactly the sentence that used
+// to justify NOT spelling it: retail's first instruction in `DateAsString`
+// (0x1800c56a0) hands `this` STRAIGHT to `FileTimeToLocalFileTime`, whose
+// parameter is a `const FILETIME*`. A FILETIME is `{DWORD dwLowDateTime; DWORD
+// dwHighDateTime;}` — two 32-bit halves, NOT one int64 — and
+// `?AsFileTime@DateTime@System@@QEBA?AU_FILETIME@@XZ` (0x180026dc0) returns one
+// by value, which is the second pin.
+//
+// The two halves are spelled separately rather than as a `uint64_t` so the
+// header stays honest about the shape AND stays free of <windows.h>
+// (PLAN.md §4.1 decision 1). `runtime/src/system/value_types.cpp` is the only
+// file that casts them to a real `FILETIME`, and it is the platform-side half
+// that already includes the header.
+//
+// NO LAYOUT WAS INVENTED: there is no third field, because 8 bytes is all
+// `FileTimeToLocalFileTime` reads and all `AsFileTime` returns.
+class DateTime {
+public:
+    // ?AsString@DateTime@System@@QEBA?AVString@2@XZ      0x1800c54d0
+    // ?DateAsString@DateTime@System@@QEBA?AVString@2@XZ  0x1800c56a0
+    // ?TimeAsString@DateTime@System@@QEBA?AVString@2@XZ  0x1800c55b0
+    //
+    // ⚠ ALL THREE RETURN `System::String` BY VALUE, WHICH IS A HIDDEN RETURN
+    // SLOT AT THE ABI. Retail's is `String* f(const DateTime* this, String* ret)`
+    // — RCX = this, RDX = ret — and Ghidra DROPS the second parameter and the
+    // return for all three (`reference_ghidra_c_output_vs_disassembly.md`;
+    // `value_types.cpp` quotes the three instructions that prove it). The
+    // registered DOORS keep that two-argument shape and placement-new the
+    // member's prvalue into the caller's slot; the MEMBERS return by value,
+    // which is what retail's source said. Never register a member directly and
+    // never reach one from a raw slot caller — that is
+    // `reference_hidden_retslot_wild_write.md`.
+    String AsString() const;
+    String DateAsString() const;
+    String TimeAsString() const;
+
+    // ---- the 8 bytes: a FILETIME ------------------------------------------
+    uint32_t _lowDateTime;    // +0x00  FILETIME::dwLowDateTime
+    uint32_t _highDateTime;   // +0x04  FILETIME::dwHighDateTime
+};
+
+static_assert(sizeof(DateTime) == 8, "System::DateTime is a FILETIME: 8 bytes");
+static_assert(offsetof(DateTime, _lowDateTime)  == 0x00, "FILETIME::dwLowDateTime");
+static_assert(offsetof(DateTime, _highDateTime) == 0x04, "FILETIME::dwHighDateTime");
+static_assert(alignof(DateTime) == 4,
+              "a FILETIME is two DWORDs and is 4-aligned -- NOT an int64. Every "
+              "caller passes it by pointer, so this must not drift to 8.");
+static_assert(!std::is_polymorphic<DateTime>::value,
+              "System::DateTime must never acquire a vtable: retail has none");
+static_assert(std::is_standard_layout<DateTime>::value,
+              "the three doors reach it through a reinterpret_cast from void*");
+static_assert(std::is_trivially_destructible<DateTime>::value, "B4b-2");
+
+}  // namespace System
