@@ -180,10 +180,17 @@ public:
     int32_t GetConstantDest(int32_t index) const;                 // 0x18004e500
 
     // The two hidden-return-slot members (B35_RULES 2.5, RULE B5-12). `?AV` in
-    // `?AVString@System@@` is the by-VALUE spelling: MSVC hands the caller's
-    // storage in RDX and returns it in RAX, and GCC's Microsoft-ABI lowering of
-    // a by-value class return produces the same slot and the same RAX — which is
-    // the point of spelling it as a real return type here. The analysis is in
+    // `?AVString@System@@` is the by-VALUE spelling, and retail's bodies confirm it
+    // by READING RDX three times (0x18004e4b0: `MOV [RSP+0x10],RDX`, `MOV [RDX],R9`,
+    // `MOV RAX,RDX`) — settled from the prologue, not from the mangling.
+    //
+    // NEITHER IS A VIRTUAL, which is what makes declaring them by value safe: RULE
+    // B5-12 as amended records that GCC's ms_abi lowering passes the hidden return
+    // pointer BEFORE `this` while MSVC/retail passes `this` first, so a retail
+    // VTABLE SLOT that returns by value must be declared `T* M(T* ret, …)` in retail
+    // order. These two are reached only through their registered doors, which keep
+    // the explicit retail-order `(this, ret, index)` signature and placement-new the
+    // member's prvalue into the slot. The analysis is in
     // `runtime/src/video/shader_program_names.cpp`.
     System::String GetTextureName(int32_t index) const;           // 0x18004e420
     System::String GetConstantName(int32_t index) const;          // 0x18004e4b0

@@ -158,3 +158,26 @@ UNIT_TREE_SRCS +=
 # runtime/types/object/External.h, whose linkable half (external_class.cpp) is
 # already on this list.
 UNIT_TREE_SRCS +=
+
+# ENDGAME B.3.5 block B — the Video program/shader family's ABI proof
+# (tests/unit/video_program_abi_test.cpp). NO tree source links, for the same
+# reason block A's test links none: every body of `Video::ShaderProgram`,
+# `VertexProgram`, `PixelProgram`, `VertexLayout` and `VideoProgram` is a
+# registered door in `runtime/src/video/`, standing on `RegisterRuntimeExport`,
+# `RT_DATA_SLOT`, `ResolveAddr` and `Video::Device::_singleton`. All five classes
+# also declare slot 0 `override = 0` (their slot-0 bodies are the `RT_DELDTOR`
+# rows in `runtime/src/object/deleting_dtor.cpp`, registered BY ADDRESS and kept
+# by B35_RULES 11), so none can be instantiated to have a vtable read back.
+#
+# The test therefore checks the real classes' `sizeof`/`offsetof` and their
+# INHERITANCE directly — none of which needs a definition or an instantiation —
+# and checks the slot ABI on mirror classes declared in the test, exactly as
+# io_vtable_abi_test.cpp does with `TestReaderWriter`. The inheritance part is the
+# point: `Object::CompiledExternal` adds no bytes over `Object::External`, so
+# re-parenting `Video::VideoProgram` onto it would pass every size and offset
+# assertion and change only which vtable the ctor stamps.
+#
+# `Object::External` / `CompiledExternal` and `Collection::Array<T>`'s spec come
+# in through runtime/types, whose linkable halves (external_class.cpp, array
+# headers) are already on this list.
+UNIT_TREE_SRCS +=
