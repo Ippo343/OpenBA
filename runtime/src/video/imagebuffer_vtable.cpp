@@ -1,7 +1,12 @@
 // ============================================================================
 // runtime/src/video/imagebuffer_vtable.cpp — Wave 18 lane VDATA
-// The seven ABORT-TRAP slots of ??_7ImageBuffer@Video@@6B@ (DLL 0x180154fc0)
+// The seven slots of ??_7ImageBuffer@Video@@6B@ (DLL 0x180154fc0) this file owns
 // ============================================================================
+//
+// ENDGAME B.3.5 block C. `Video::ImageBuffer` is now a REAL C++ class
+// (runtime/types/video/ImageBuffer.h) and the seven bodies below have MOVED INTO
+// members of it; each registered door is a one-line delegation with a QUALIFIED
+// non-virtual call, so no registration, address or mangled name changed.
 //
 // WHAT THIS FILE IS FOR, IN ONE PARAGRAPH.
 //
@@ -31,15 +36,7 @@
 // the shipped `Runtime-x64.dll` before a line was written — every one resolves
 // at offset 0 of its own export, so not one of them needs an address door and
 // none of the `AEAA`-means-unexported confusion applies
-// (`reference_aeaa_is_private_not_unexported.md`). `PlatformSerialize`, the one
-// callee this file does not port, is exported too (`AEAA`, private, ordinal
-// present) and is reached BY NAME below for the same reason.
-//
-// GREPPED BEFORE WRITING, per WAVE18_KICKOFF §4.1. All seven retail VAs and all
-// seven mangled names were grepped across `code/ engine/ runtime/ standalone/
-// dx11/`. Zero hits outside the generated mint table — nothing in the tree
-// already ports any of them, so this file duplicates nothing and shadows
-// nothing.
+// (`reference_aeaa_is_private_not_unexported.md`).
 //
 // ----------------------------------------------------------------------------
 // READ FROM THE DISASSEMBLY, NOT THE DECOMPILED C
@@ -52,6 +49,28 @@
 // JNZ <ctor>` whose fallthrough returns zero in EAX.
 //
 // ----------------------------------------------------------------------------
+// WHAT THE B.3.5 CLASS CONVERSION CHANGED
+// ----------------------------------------------------------------------------
+//   * `Serialize` uses the REAL `IO::Serializer` (B.3.4 block 3) and its
+//     `Serialize(T&, const char*)` overloads, so this file no longer carries its
+//     own copy of the encoding-factory prologue (`MakeCodec`), the codec
+//     teardown (`DestroyCodec`) or the two `rw_vtbl::k*` byte offsets. The
+//     Serializer local's SCOPE is what places construction and destruction at
+//     retail's positions — the prologue before the first emission, the teardown
+//     AFTER `PlatformSerialize` — because moving either relative to another
+//     stream operation is a save-format change (Serializer.h's banner).
+//   * `PlatformSerialize` is a member of the class now (its body is
+//     `imagebuffer_platform_serialize.cpp`, also this block's), so the
+//     `RT_EXPORT_ONCE` name door it was reached through is gone. That is the
+//     ONE binding in this file that could be retired: the other two —
+//     `??0ImageBuffer` (body in `buffers.cpp`, block D2's) and
+//     `?Serialize@String@System@@` — keep their doors, because the door is what
+//     decides which body runs while the body still lives behind one.
+//   * The two dead `using Fn = …` typedefs in `Type` and `GetFileVersion`, left
+//     over from a differential oracle that no longer exists, are gone with the
+//     two `-Wunused-local-typedefs` warnings they carried.
+//
+// ----------------------------------------------------------------------------
 // THE ORACLES, PER BODY — three different kinds, for three different reasons
 // ----------------------------------------------------------------------------
 //   TypeName / Type / GetFileVersion   FULL differential oracle: pure reads of
@@ -61,11 +80,7 @@
 //
 //   Reconstruct / Destruct / Construct   SHADOW post-conditions. There is no
 //       replay: all three destroy or construct the live object in place, and
-//       running theirs afterwards would double-destruct it. Every term of each
-//       shadow is read back OUT of the object after the body and none is
-//       written by this file's own arithmetic — they are written by the
-//       deleting destructor and the constructor this file reaches THROUGH THE
-//       REGISTRY DOOR (see `ImageBufferCtor()` and the kill-switch note there).
+//       running theirs afterwards would double-destruct it.
 //
 //   Serialize   the emission oracle, WRITING direction, two independent
 //       synthetic sinks, **with a prefix stop at 10 emissions**. The prefix is
@@ -88,11 +103,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/video/ImageBuffer.h"
 #include "../../types/io/Serializer.h"
-
-using rt::io::Encoding;
-using rt::io::ReaderWriter;
-using rt::io::Serializer;
-using rt::io::Stream;
+#include "../../types/io/Stream.h"
 
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h:
 // that header drags in <windows.h> and PLAN §4.1 requires runtime/src/ to stay
@@ -100,6 +111,21 @@ using rt::io::Stream;
 // internal-linkage function. Byte-identical to resolve.h's declaration.
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+
+// The door over `Video::ImageBuffer`'s protected surface. `?PlatformSerialize@`
+// is PRIVATE in retail (`AEAA`) and `protected` on the class, yet it is exported
+// and keeps its registered door in `imagebuffer_platform_serialize.cpp`; this
+// file also has to CALL it from `Serialize`, and neither an `extern "C"` function
+// nor an anonymous-namespace helper can name a protected member. B34_BRIEFS A.4:
+// friend the holder rather than widen the access, so the header keeps saying what
+// retail says. It has no fields and is never instantiated. A DERIVED helper would
+// not work — deriving forces GCC to reference `vtable for Video::ImageBuffer`,
+// whose slot 0 is a `deleting_dtor.cpp` table row defined in no translation unit.
+struct ImageBufferDoorAccess {
+    static void PlatformSerialize(Video::ImageBuffer* p, IO::Serializer& ser) {
+        p->Video::ImageBuffer::PlatformSerialize(ser);
+    }
+};
 
 namespace {
 
@@ -124,7 +150,9 @@ const uint8_t* TypeInfoImageBuffer() {
 }
 
 // `??0ImageBuffer@Video@@QEAA@XZ` — retail 0x1800f2580, PORTED by Wave 6 lane C
-// (`buffers.cpp`, registered by BOTH name and address).
+// (`buffers.cpp`, registered by BOTH name and address). `buffers.cpp` belongs to
+// ENDGAME B.3.5 block D2, so the body is still behind a door and STAYS behind
+// one until that block converts it.
 //
 // REACHED THROUGH THE REGISTRY DOOR, NOT AS A C++ CALL, and the first draft of
 // this file had it wrong. `Video_ImageBuffer_Ctor` has external linkage, so a
@@ -140,21 +168,11 @@ const uint8_t* TypeInfoImageBuffer() {
 // `ResolveAddr(Module::Runtime, …)` is registry-FIRST, so this reaches our port
 // when it is registered and the DLL's body when it is not — which is what
 // retail's tail JMP to 0x1800f2580 does.
-using CtorFn = void (*)(ImageBuffer*);
+using CtorFn = void (*)(Video::ImageBuffer*);
 CtorFn ImageBufferCtor() {
     static CtorFn f =
         reinterpret_cast<CtorFn>(ResolveAddr(Module::Runtime, 0x1800f2580));
     return f;
-}
-
-// `?PlatformSerialize@ImageBuffer@Video@@AEAAXAEAVSerializer@IO@@@Z`
-// retail 0x1800f3130. NOT ported (it drives `Create` and a Collection::Array of
-// byte arrays); called through, by NAME, because it is exported — `AEAA` is
-// PRIVATE, not unexported, and this DLL exports its private members.
-using PlatformSerializeFn = void (*)(ImageBuffer*, Serializer*);
-PlatformSerializeFn ImageBufferPlatformSerialize() {
-    return RT_EXPORT_ONCE(PlatformSerializeFn,
-                          "?PlatformSerialize@ImageBuffer@Video@@AEAAXAEAVSerializer@IO@@@Z");
 }
 
 // `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z` — retail 0x1800c9930,
@@ -168,65 +186,34 @@ PlatformSerializeFn ImageBufferPlatformSerialize() {
 // (`reference_converting_a_door_is_not_satisfying_it.md`), and the census would
 // still have counted the port. goal_serialize.cpp reached the same conclusion
 // and states the same reason.
-using StringSerializeFn = void (*)(void*, Serializer*);
+using StringSerializeFn = void (*)(void*, IO::Serializer*);
 StringSerializeFn StringSerialize() {
     static StringSerializeFn f =
         reinterpret_cast<StringSerializeFn>(ResolveAddr(Module::Runtime, 0x1800c9930));
     return f;
 }
 
-// The shared Serializer prologue/epilogue, IDENTICAL to the pair
-// `runtime/src/achievement/goal_serialize.cpp` transcribes from
-// `Achievement::Goal::Serialize`. Not shared through a header because that file
-// keeps them in its own anonymous namespace; the two are four lines each and a
-// header per free function is a header per function (external_set.cpp's rule).
-//
-//   Serializer ser{ &stream, nullptr };
-//   Encoding* enc = stream.encoding;              // [stream+0x10]
-//   ser.readerWriter = stream.direction == 0      // [stream+0x08]
-//        ? enc->vtable[+0x18](enc, &ser, 0)       // CreateReader
-//        : enc->vtable[+0x20](enc, &ser, 0);      // CreateWriter
-//
-// The third argument is the save-format VERSION and it is ZERO: retail zeroes
-// R8D at 0x1800f2714 for the `CMP [RDX+8],R8D` and never reloads it before the
-// factory call at 0x1800f2725 / 0x1800f272a.
-ReaderWriter* MakeCodec(Stream* stream, Serializer* ser) {
-    ser->stream = stream;
-    ser->readerWriter = nullptr;
-
-    Encoding* enc = stream->encoding;
-    void** encVt = enc->vtable;
-    const int slot = (stream->direction == rt::io::kDirectionReading)
-                         ? rt::io::encoding_vtbl::kCreateReader
-                         : rt::io::encoding_vtbl::kCreateWriter;
-
-    using FactoryFn = ReaderWriter* (*)(Encoding*, Serializer*, int);
-    ReaderWriter* rw = reinterpret_cast<FactoryFn>(encVt[slot / 8])(enc, ser, 0);
-    ser->readerWriter = rw;
-    return rw;
-}
-
-// `if (rw) rw->vtable[0](rw, 1)` — the scalar DELETING destructor (0x1800f2820
-// .. 0x1800f2832). Skipping it leaks the 0x30-byte codec per Serialize.
-void DestroyCodec(ReaderWriter* rw) {
-    if (!rw) return;
-    using DtorFn = void (*)(ReaderWriter*, int);
-    reinterpret_cast<DtorFn>(rw->vtable[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
-}
-
-// The two scalar emitters this body uses, spelled once. `+0xa0` is
-// `kScalarInt`, `+0x98` is `kScalarUInt` (runtime/types/io/Serializer.h, RETAIL
-// offsets — the profile build's differ and must never be copied).
-void EmitInt(ReaderWriter* rw, int32_t* p) {
-    using Fn = void (*)(ReaderWriter*, int32_t*, const char*);
-    reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8])(rw, p, nullptr);
-}
-void EmitUInt(ReaderWriter* rw, uint32_t* p) {
-    using Fn = void (*)(ReaderWriter*, uint32_t*, const char*);
-    reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kScalarUInt / 8])(rw, p, nullptr);
+// The object's OWN vtable slot 0, the vector deleting destructor, with the flags
+// byte spelled out at each call site. Read through the object rather than
+// through a resolved symbol because a derived class (`Graphics::
+// ReflectionImageBuffer`, `FrameCopyImageBuffer`, `GeneratedImageBuffer`)
+// inherits `Destruct`/`Reconstruct` and must reach ITS OWN slot 0 — which is
+// what the indirection is for, and why this is not
+// `this->DeletingDtor(flags)`: the live object wears the MINTED table, so the
+// call has to go through the object's vptr rather than through a C++ vtable
+// GCC would resolve against its own.
+void CallSlot0(void* self, unsigned flags) {
+    void** vt = *reinterpret_cast<void***>(self);
+    reinterpret_cast<void* (*)(void*, unsigned)>(vt[0])(self, flags);
 }
 
 }  // namespace
+
+// ############################################################################
+// The members
+// ############################################################################
+
+namespace Video {
 
 // ============================================================================
 // slot 2 — uint Video::ImageBuffer::Type() const
@@ -241,13 +228,13 @@ void EmitUInt(ReaderWriter* rw, uint32_t* p) {
 // ORACLE: full. Pure read of a static; ours and theirs are both called and
 // compared on every call under the diff-oracle flag.
 // ============================================================================
-extern "C" uint32_t Video_ImageBuffer_Type(const ImageBuffer* self) {
-    (void)self;   // retail never touches RCX
+uint32_t ImageBuffer::Type() const {
+    // retail never touches RCX.
+    return *reinterpret_cast<const uint32_t*>(TypeInfoImageBuffer());
+}
 
-    const uint32_t ours = *reinterpret_cast<const uint32_t*>(TypeInfoImageBuffer());
-
-    using Fn = uint32_t (*)(const ImageBuffer*);
-    return ours;
+uint32_t ImageBuffer::TypeId() {
+    return *reinterpret_cast<const uint32_t*>(TypeInfoImageBuffer());
 }
 
 // ============================================================================
@@ -270,14 +257,14 @@ extern "C" uint32_t Video_ImageBuffer_Type(const ImageBuffer* self) {
 // nothing, on every call, and would drown the one that would mean something —
 // a name whose TEXT differs.
 // ============================================================================
-extern "C" const char* Video_ImageBuffer_TypeName(const ImageBuffer* self) {
-    (void)self;
-
-    const char* ours =
-        *reinterpret_cast<const char* const*>(TypeInfoImageBuffer() + 8);
-
-    return ours;
+const char* ImageBuffer::TypeName() const {
+    return *reinterpret_cast<const char* const*>(TypeInfoImageBuffer() + 8);
 }
+
+// RULE B5-15: the two literals, COPIED from B35_SLOTS section 3 (read byte-wise
+// at 0x18001e8c0 / 0x18001e8d0), not stringised from the C++ base name.
+const char* ImageBuffer::_TypeName()       { return "ImageBuffer"; }
+const char* ImageBuffer::_ParentTypeName() { return "Object::CompiledExternal"; }
 
 // ============================================================================
 // slot 3 — int Video::ImageBuffer::GetFileVersion() const
@@ -291,14 +278,7 @@ extern "C" const char* Video_ImageBuffer_TypeName(const ImageBuffer* self) {
 // silently changes which branch a loader takes on every image in the game.
 // ORACLE: full.
 // ============================================================================
-extern "C" int Video_ImageBuffer_GetFileVersion(const ImageBuffer* self) {
-    (void)self;
-
-    const int ours = 7;
-
-    using Fn = int (*)(const ImageBuffer*);
-    return ours;
-}
+int32_t ImageBuffer::GetFileVersion() const { return 7; }
 
 // ============================================================================
 // slot 7 — void Video::ImageBuffer::Destruct()
@@ -313,30 +293,15 @@ extern "C" int Video_ImageBuffer_GetFileVersion(const ImageBuffer* self) {
 // the dropped argument `reference_ghidra_c_output_vs_disassembly.md` is about.
 // Passing 1 here instead would free an object the caller still owns.
 //
-// Read through the object's own `vtable[0]`, not through a resolved symbol: a
-// derived class (`Graphics::ReflectionImageBuffer`, `FrameCopyImageBuffer`,
-// `GeneratedImageBuffer`) inherits this body and must reach ITS deleting
-// destructor, which is what the indirection is for.
-//
 // ORACLE: shadow post-condition. No replay — a second Destruct on the same
-// object is a double destruction.
+// object is a double destruction. The one term is the vptr, which ~ImageBuffer
+// MOVES to `??_7CompiledExternal@Object@@6B@` (buffers.cpp, transcribed from
+// 0x1800f2610); the term is written by the destructor, not by this function's
+// own arithmetic, which is what stops the shadow from restating the code above
+// it. A predicate that cannot fail is not a check
+// (`reference_a_predicate_nobody_evaluates.md`).
 // ============================================================================
-extern "C" void Video_ImageBuffer_Destruct(ImageBuffer* self) {
-
-    void* const vtBefore = self->vtable;
-    void** vt = static_cast<void**>(vtBefore);
-    using DelDtorFn = void* (*)(ImageBuffer*, unsigned);
-    reinterpret_cast<DelDtorFn>(vt[0])(self, 0u);
-
-    // ONE TERM, AND IT IS EVALUATED. The destructor's last act before
-    // ~External is `self->vtable = ??_7CompiledExternal@Object@@6B@`
-    // (buffers.cpp's ported ~ImageBuffer, transcribed from 0x1800f2610), so the
-    // vptr must have MOVED. The term is written by the destructor, not by this
-    // function's own arithmetic, which is what stops the shadow from restating
-    // the code above it. A predicate that cannot fail is not a check
-    // (`reference_a_predicate_nobody_evaluates.md`) — the first draft of this
-    // line was `x ? true : true` and would have passed forever.
-}
+void ImageBuffer::Destruct() { CallSlot0(this, 0u); }
 
 // ============================================================================
 // slot 8 — Object::External* Video::ImageBuffer::Construct()
@@ -353,6 +318,9 @@ extern "C" void Video_ImageBuffer_Destruct(ImageBuffer* self) {
 // null check it emits for every placement new. It looks redundant for a
 // virtual — `this` cannot be null at a virtual call — and it is transcribed
 // anyway, because "obviously unreachable" is not a licence to drop a branch.
+// It lives in the DOOR (`Video_ImageBuffer_Construct` below) rather than here,
+// because `this == nullptr` inside a member is a comparison GCC folds and warns
+// about, and the door is where retail's test is observable.
 //
 // The return value is `this`: the ctor at 0x1800f2580 ends `MOV RAX,RBX; RET`
 // (read at 0x1800f25ff), and this body TAIL JUMPS to it, so RAX at return is
@@ -361,17 +329,14 @@ extern "C" void Video_ImageBuffer_Destruct(ImageBuffer* self) {
 // retail's body (which returns `this`) or our port (which returns `void`, so
 // RAX would be whatever was left in it). Declaring a return the callee may not
 // have written and then using it is `reference_hidden_retslot_wild_write.md`'s
-// family of bug; returning `self` ourselves is correct against both.
+// family of bug; returning `this` ourselves is correct against both.
 //
 // ORACLE: shadow post-condition, on the constants the CTOR writes. No replay:
 // constructing twice over one object leaks its platform data.
 // ============================================================================
-extern "C" void* Video_ImageBuffer_Construct(ImageBuffer* self) {
-
-    if (self == nullptr) return nullptr;
-    ImageBufferCtor()(self);
-
-    return self;
+Object::External* ImageBuffer::Construct() {
+    ImageBufferCtor()(this);
+    return this;
 }
 
 // ============================================================================
@@ -400,15 +365,10 @@ extern "C" void* Video_ImageBuffer_Construct(ImageBuffer* self) {
 //
 // ORACLE: shadow post-condition. No replay, for both reasons at once.
 // ============================================================================
-extern "C" void* Video_ImageBuffer_Reconstruct(ImageBuffer* self) {
-
-    void** vt = static_cast<void**>(self->vtable);
-    using DelDtorFn = void* (*)(ImageBuffer*, unsigned);
-    reinterpret_cast<DelDtorFn>(vt[0])(self, 0u);
-
-    ImageBufferCtor()(self);
-
-    return self;
+Object::External* ImageBuffer::Reconstruct() {
+    CallSlot0(this, 0u);
+    ImageBufferCtor()(this);
+    return this;
 }
 
 // ============================================================================
@@ -442,43 +402,76 @@ extern "C" void* Video_ImageBuffer_Reconstruct(ImageBuffer* self) {
 // **signed** slot (+0xa0) and the other eight through the **unsigned** slot
 // (+0x98). On a binary encoding both are four bytes and the distinction is
 // invisible; on any other it is not, and the slot number is what the shipped
-// bytes say.
-//
-// ----------------------------------------------------------------------------
-// A CORRECTION TO `runtime/types/video/ImageBuffer.h`
-// ----------------------------------------------------------------------------
-// The header calls `+0x48` `pixelData`, "refcounted pixel buffer (refcount at
-// ptr-4, frees at 0)". This body hands `this+0x48` to
-// `?Serialize@String@System@@` — so the field is a **`System::String`**, not a
-// pixel buffer. Both readings describe the same 8 bytes (a `System::String` IS
-// one pointer to a refcounted payload with its count at -4, which is why the
-// dtor in `buffers.cpp` is correct as written), but the NAME is wrong and a
-// reader who believes it will look for pixels in a filename. Corrected in the
-// header by comment rather than by rename, so that no other lane's file has to
-// move in this wave.
+// bytes say. With the real `IO::Serializer` the distinction is carried by the
+// OVERLOAD chosen — `Serialize(int&)` reaches +0xa0 and `Serialize(unsigned
+// int&)` reaches +0x98 — which is why the eight unsigned emissions cast through
+// `uint32_t&` on fields the class declares as `int32_t`, exactly as retail does
+// by picking the other slot for the same address.
 //
 // ORACLE: see the file banner — emission prefix oracle, stop at 10.
 // ============================================================================
-extern "C" bool Video_ImageBuffer_Serialize(ImageBuffer* self, Stream* stream) {
-    Serializer ser;
-    ReaderWriter* rw = MakeCodec(stream, &ser);
+bool ImageBuffer::Serialize(void* stream) {
+    // B.3.5 bridge: the slot's parameter is `IO::Stream&` in retail, but
+    // `Object::External::Serialize` is declared `bool(void*)` across the whole
+    // External family and that signature is not this block's to change.
+    IO::Stream& s = *reinterpret_cast<IO::Stream*>(stream);
+    {
+        // Version 0: retail zeroes R8D at 0x1800f2714 for the `CMP [RDX+8],R8D`
+        // and never reloads it before the factory call at 0x1800f2725/0x1800f272a.
+        IO::Serializer ser(s, 0);
 
-    EmitInt(rw, &self->width);          // +0x20
-    EmitInt(rw, &self->height);         // +0x24
-    EmitUInt(rw, reinterpret_cast<uint32_t*>(&self->dimension));   // +0x28
-    EmitUInt(rw, reinterpret_cast<uint32_t*>(&self->kind));        // +0x2c
-    EmitUInt(rw, &self->format);                                   // +0x30
-    EmitUInt(rw, &self->flags);                                    // +0x34
-    EmitUInt(rw, reinterpret_cast<uint32_t*>(&self->addressU));    // +0x38
-    EmitUInt(rw, reinterpret_cast<uint32_t*>(&self->addressV));    // +0x3c
-    EmitUInt(rw, reinterpret_cast<uint32_t*>(&self->addressW));    // +0x40
-    EmitUInt(rw, reinterpret_cast<uint32_t*>(&self->filter));      // +0x44
+        ser.Serialize(_width, nullptr);                                     // +0x20
+        ser.Serialize(_height, nullptr);                                    // +0x24
+        ser.Serialize(reinterpret_cast<uint32_t&>(_dimension), nullptr);    // +0x28
+        ser.Serialize(reinterpret_cast<uint32_t&>(_kind), nullptr);         // +0x2c
+        ser.Serialize(reinterpret_cast<uint32_t&>(_format), nullptr);       // +0x30
+        ser.Serialize(_flags, nullptr);                                     // +0x34
+        ser.Serialize(reinterpret_cast<uint32_t&>(_addressU), nullptr);     // +0x38
+        ser.Serialize(reinterpret_cast<uint32_t&>(_addressV), nullptr);     // +0x3c
+        ser.Serialize(reinterpret_cast<uint32_t&>(_addressW), nullptr);     // +0x40
+        ser.Serialize(reinterpret_cast<uint32_t&>(_filter), nullptr);       // +0x44
 
-    StringSerialize()(&self->pixelData, &ser);          // +0x48, a System::String
-    ImageBufferPlatformSerialize()(self, &ser);
-
-    DestroyCodec(rw);
+        StringSerialize()(&_sourceName, &ser);          // +0x48, a System::String
+        ImageBufferDoorAccess::PlatformSerialize(this, ser);
+    }   // ~Serializer: `if (rw) rw->slot0(rw, 1)` at 0x1800f2820 .. 0x1800f2832
     return true;
+}
+
+}  // namespace Video
+
+// ############################################################################
+// The registered doors — every one a QUALIFIED non-virtual delegation.
+// Names and addresses are UNCHANGED; nothing is retired (B35_RULES 11).
+// ############################################################################
+
+extern "C" uint32_t Video_ImageBuffer_Type(const Video::ImageBuffer* self) {
+    return self->Video::ImageBuffer::Type();
+}
+
+extern "C" const char* Video_ImageBuffer_TypeName(const Video::ImageBuffer* self) {
+    return self->Video::ImageBuffer::TypeName();
+}
+
+extern "C" int Video_ImageBuffer_GetFileVersion(const Video::ImageBuffer* self) {
+    return self->Video::ImageBuffer::GetFileVersion();
+}
+
+extern "C" void Video_ImageBuffer_Destruct(Video::ImageBuffer* self) {
+    self->Video::ImageBuffer::Destruct();
+}
+
+// The retail null-`this` test lives HERE. See the member's banner.
+extern "C" void* Video_ImageBuffer_Construct(Video::ImageBuffer* self) {
+    if (self == nullptr) return nullptr;
+    return self->Video::ImageBuffer::Construct();
+}
+
+extern "C" void* Video_ImageBuffer_Reconstruct(Video::ImageBuffer* self) {
+    return self->Video::ImageBuffer::Reconstruct();
+}
+
+extern "C" bool Video_ImageBuffer_Serialize(Video::ImageBuffer* self, void* stream) {
+    return self->Video::ImageBuffer::Serialize(stream);
 }
 
 // ============================================================================
@@ -489,6 +482,7 @@ extern "C" bool Video_ImageBuffer_Serialize(ImageBuffer* self, Stream* stream) {
 // registry-first, so a name-only registration is invisible to them. Each name
 // is one string LITERAL on one line so `tools/runtime_census.py` can see it —
 // it cannot follow a named constant.
+// ============================================================================
 int RtVideoImageBufferVtableRegister() {
     int n = 0;
 
