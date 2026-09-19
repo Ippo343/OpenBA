@@ -27,6 +27,12 @@
 // unit light direction ready for SunLight::Set (no negate): x=-cos(p)sin(y),
 // y=cos(p)cos(y), z=sin(p).
 
+// ENDGAME B.3.5 Video/Graphics caller batch: Graphics::SunLight and
+// Video::Context are real classes. Both headers go AHEAD of "resolve.h" —
+// resolve.h pulls <windows.h>, and <wingdi.h>'s global `Rectangle` FUNCTION
+// hides `Volume::Rectangle`'s class name inside Volume.h's own static_asserts.
+#include "graphics/SunLight.h"
+#include "video/Context.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
@@ -71,17 +77,9 @@ constexpr EnvKeyframe kKeyframes[12] = {
 constexpr float kDayLength    = 3600.0f;   // exe DAT_14017225c
 constexpr float kKeyframeSpan = 300.0f;    // exe literal (dayLength / 12)
 
-// Resolved Runtime helpers (lazy, latched).
-typedef void  (*fn_Context_SetFog_t)(void* ctx, float fogNear, float fogFar, const float* color);
-fn_Context_SetFog_t s_fn_Context_SetFog = nullptr;
-bool s_resolved = false;
-
-void EnsureResolved() {
-    if (s_resolved) return;
-    s_resolved = true;
-    s_fn_Context_SetFog = reinterpret_cast<fn_Context_SetFog_t>(
-        ResolveExport("?SetFog@Context@Video@@QEAAXMMAEBVVector4@Math@@@Z"));
-}
+// ENDGAME B.3.5: the lazy `?SetFog@Context@Video@@QEAAXMMAEBVVector4@Math@@@Z`
+// door cache (typedef + static + EnsureResolved + its latch) is GONE — its only
+// caller in this file now calls `Video::Context::SetFog` directly.
 
 inline void UnpackColor(uint32_t c, float out[4]) {
     out[0] = (float)((c >> 16) & 0xFF) / 255.0f;  // R
@@ -110,11 +108,12 @@ inline void LerpColor(uint32_t a, uint32_t b, float t, float out[4]) {
 // ============================================================
 extern "C" void Weather_SunUpdate(void* self, void* ctx) {
     if (!self) return;
-    EnsureResolved();
 
     uint8_t* p = reinterpret_cast<uint8_t*>(self);
     void* sun = *reinterpret_cast<void**>(p + 0x100);
-    if (!sun || !fn_Graphics_SunLight_Set) return;
+    // B.3.5: the `!fn_Graphics_SunLight_Set` term is gone with the door call;
+    // the `!sun` object test is retail's and stays.
+    if (!sun) return;
 
     // Game time in seconds (the sim clock). +0x128 -> Time struct, time @ +8.
     float seconds = 0.0f;
@@ -217,10 +216,16 @@ extern "C" void Weather_SunUpdate(void* self, void* ctx) {
     dir[2] = -dir[2];
 
 
-    fn_Graphics_SunLight_Set(sun, dir, lightCol, ambientCol);
+    // B.3.5 bridge — ?Set@SunLight@Graphics@@QEAAXAEBVVector3@Math@@AEBVVector4@4@1@Z.
+    reinterpret_cast<Graphics::SunLight*>(sun)->Set(
+        *reinterpret_cast<const Math::Vector3*>(dir),
+        *reinterpret_cast<const Math::Vector4*>(lightCol),
+        *reinterpret_cast<const Math::Vector4*>(ambientCol));   // B.3.5 bridge
 
     // Fog (day-cycle distances + color, effect-blended above).
-    if (ctx && s_fn_Context_SetFog) {
-        s_fn_Context_SetFog(ctx, fogNear, fogFar, fogCol);
+    if (ctx) {
+        // B.3.5 bridge — ?SetFog@Context@Video@@QEAAXMMAEBVVector4@Math@@@Z.
+        reinterpret_cast<Video::Context*>(ctx)->SetFog(
+            fogNear, fogFar, *reinterpret_cast<const Math::Vector4*>(fogCol));   // B.3.5 bridge
     }
 }

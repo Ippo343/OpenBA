@@ -70,8 +70,15 @@
 // Matrix::Matrix, and the six Video::Context methods) are resolved from
 // Runtime-x64.dll.
 
+// ENDGAME B.3.5 Video/Graphics caller batch: Graphics::Camera and Video::Context
+// are real classes. Both headers go AHEAD of "resolve.h" — resolve.h pulls
+// <windows.h>, whose <wingdi.h> declares a global `Rectangle` FUNCTION that hides
+// `Volume::Rectangle`'s class name inside Volume.h's own static_asserts.
+#include "graphics/Camera.h"
+#include "video/Context.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include <new>
 #include <cstdint>
 #include <cmath>
 #include <cstring>
@@ -81,30 +88,26 @@ namespace {
 // ------------------------------------------------------------------
 // Runtime function pointers (lazy, resolved once on first Draw call).
 // ------------------------------------------------------------------
+// ENDGAME B.3.5 Video/Graphics caller batch: SEVEN doors left this block —
+// `?GetFrustum@Camera@Graphics@@QEBA?AVFrustum@Volume@@XZ` and the six
+// `Video::Context` members below, which are now direct member calls:
+//     0x18001a8e0  ?SetColor@Context@Video@@QEAAXAEBVVector4@Math@@@Z
+//     0x18001a880  Context::SetInverseScale(float,float,float,float)
+//     0x1800f21d0  Context::GetMaxDynamicInstances(int,int,int) const
+//     0x18001a6b0  ?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z
+//     0x1800f2130  Context::BeginInstancedIndexedVertices(int,int,int,int)
+//     0x1800f2110  Context::EndInstancedIndexedVertices(int)
+// The FOUR remaining doors are Math/Volume, not Video/Graphics, and stay.
 typedef void  (*Transform3Copy_t)(void* dst, const void* src);                       // ??0Transform3@Math@@QEAA@AEBV01@@Z
-typedef void* (*CameraGetFrustum_t)(void* camera, void* retbuf);                      // ?GetFrustum@Camera@Graphics@@QEBA?AVFrustum@Volume@@XZ
 typedef void* (*FrustumMul_t)(void* frustum, void* retbuf, const void* transform);    // ??DFrustum@Volume@@QEBA?AV01@AEBVTransform3@Math@@@Z
 typedef uint32_t (*FrustumContains_t)(void* frustum, const void* box, uint32_t mask); // ?Contains@Frustum@Volume@@QEBAIAEBVBox@2@I@Z
 typedef void* (*MatrixCtor_t)(void* self, const void* c0, const void* c1,
                               const void* c2, const void* pos);                       // ??0Matrix@Math@@QEAA@AEBVVector4@1@000@Z @ Runtime 0x18001e540
-typedef void  (*CtxSetColor_t)(void* ctx, const void* vec4);                          // ?SetColor@Context@Video@@QEAAXAEBVVector4@Math@@@Z
-typedef void  (*CtxSetInverseScale_t)(void* ctx, float, float, float, float);         // Runtime 0x18001a880
-typedef int   (*CtxGetMaxDynInst_t)(void* ctx, int vtxCount, int stride, int idxCount);// Runtime 0x1800f21d0
-typedef void  (*CtxSetTransform_t)(void* ctx, int slot, const void* matrix);          // ?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z
-typedef bool  (*CtxBeginInst_t)(void* ctx, int vtxCount, int stride, int idxCount, int inst);// Runtime 0x1800f2130
-typedef void  (*CtxEndInst_t)(void* ctx, int primType);                              // Runtime 0x1800f2110
 
 Transform3Copy_t     s_Transform3Copy    = nullptr;
-CameraGetFrustum_t   s_CameraGetFrustum  = nullptr;
 FrustumMul_t         s_FrustumMul        = nullptr;
 FrustumContains_t    s_FrustumContains   = nullptr;
 MatrixCtor_t         s_MatrixCtor        = nullptr;
-CtxSetColor_t        s_SetColor          = nullptr;
-CtxSetInverseScale_t s_SetInverseScale   = nullptr;
-CtxGetMaxDynInst_t   s_GetMaxDynInst     = nullptr;
-CtxSetTransform_t    s_SetTransform      = nullptr;
-CtxBeginInst_t       s_BeginInst         = nullptr;
-CtxEndInst_t         s_EndInst           = nullptr;
 bool s_resolved = false;
 
 void ResolvePtrs() {
@@ -113,16 +116,10 @@ void ResolvePtrs() {
     // Functions with verified mangled names: ResolveExport primary.
     s_Transform3Copy   = reinterpret_cast<Transform3Copy_t>(
         ResolveExport("??0Transform3@Math@@QEAA@AEBV01@@Z"));
-    s_CameraGetFrustum = reinterpret_cast<CameraGetFrustum_t>(
-        ResolveExport("?GetFrustum@Camera@Graphics@@QEBA?AVFrustum@Volume@@XZ"));
     s_FrustumMul       = reinterpret_cast<FrustumMul_t>(
         ResolveExport("??DFrustum@Volume@@QEBA?AV01@AEBVTransform3@Math@@@Z"));
     s_FrustumContains  = reinterpret_cast<FrustumContains_t>(
         ResolveExport("?Contains@Frustum@Volume@@QEBAIAEBVBox@2@I@Z"));
-    s_SetColor         = reinterpret_cast<CtxSetColor_t>(
-        ResolveExport("?SetColor@Context@Video@@QEAAXAEBVVector4@Math@@@Z"));
-    s_SetTransform     = reinterpret_cast<CtxSetTransform_t>(
-        ResolveExport("?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z"));
 
     // WAVE 9 LANE SAVE2: the Matrix column ctor moved UP into the name group.
     // It was in the by-address group below under "no verified mangled name to
@@ -133,17 +130,6 @@ void ResolvePtrs() {
     // the DLL, which is the defect tools/port_bypass_audit.py exists to catch.
     s_MatrixCtor      = reinterpret_cast<MatrixCtor_t>(
         ResolveExport("??0Matrix@Math@@QEAA@AEBVVector4@1@000@Z"));
-
-    // Functions resolved by pinned Runtime-x64.dll address (no verified mangled
-    // name to hand); ResolveAddr(Module::Runtime, ...) applies ASLR delta.
-    s_SetInverseScale = reinterpret_cast<CtxSetInverseScale_t>(
-        ResolveAddr(Module::Runtime, 0x18001a880));
-    s_GetMaxDynInst   = reinterpret_cast<CtxGetMaxDynInst_t>(
-        ResolveAddr(Module::Runtime, 0x1800f21d0));
-    s_BeginInst       = reinterpret_cast<CtxBeginInst_t>(
-        ResolveAddr(Module::Runtime, 0x1800f2130));
-    s_EndInst         = reinterpret_cast<CtxEndInst_t>(
-        ResolveAddr(Module::Runtime, 0x1800f2110));
 
     s_resolved = true;
 }
@@ -183,9 +169,9 @@ extern "C" void WeatherParticle_Draw(void* geo, void* context, void* camera) {
     if (!geo || !context || !camera) return;
 
     ResolvePtrs();
-    if (!s_Transform3Copy || !s_CameraGetFrustum || !s_FrustumMul || !s_FrustumContains ||
-        !s_MatrixCtor || !s_SetColor || !s_SetInverseScale || !s_GetMaxDynInst ||
-        !s_SetTransform || !s_BeginInst || !s_EndInst ||
+    // B.3.5: the seven Video/Graphics readiness terms are gone with their doors.
+    if (!s_Transform3Copy || !s_FrustumMul || !s_FrustumContains ||
+        !s_MatrixCtor ||
         !fn_MemAlloc || !g_pMemAllocSingleton || !fn_MemFreeStatic) {
         static bool s_warned = false;
         if (!s_warned) {
@@ -235,9 +221,17 @@ extern "C" void WeatherParticle_Draw(void* geo, void* context, void* camera) {
     int visibleTiles = 0;
 
     // worldFrustum = GetFrustum(camera) * camXform
-    uint8_t frBuf[0x100];
+    // B.3.5: `alignas` added because the retslot door's caller storage is now
+    // placement-new'd into as a real `Volume::Frustum` (0x64 bytes of float).
+    // The retail door wrote the same bytes here through RDX.
+    alignas(16) uint8_t frBuf[0x100];
     uint8_t worldFrustum[0x100];
-    void* fr = s_CameraGetFrustum(camera, frBuf);
+    // B.3.5 bridge — ?GetFrustum@Camera@Graphics@@QEBA?AVFrustum@Volume@@XZ is a
+    // hidden-retslot door (B5-12). `Graphics::Camera::GetFrustum` is NON-VIRTUAL
+    // and returns `::Frustum` by value, so the door body moves to the call site:
+    // ONE construction, into the SAME caller storage the door was handed.
+    void* fr = ::new (static_cast<void*>(frBuf))
+        ::Frustum(reinterpret_cast<const Graphics::Camera*>(camera)->GetFrustum());   // B.3.5 bridge
     s_FrustumMul(fr, worldFrustum, camXform);
 
     for (int i = -2; i < 3; ++i) {            // z (outer)
@@ -268,11 +262,11 @@ extern "C" void WeatherParticle_Draw(void* geo, void* context, void* camera) {
 
     // (4) Per-draw context state.
     float color[4] = { 1.0f, 1.0f, 1.0f, intensity };
-    s_SetColor(ctx, color);
+    reinterpret_cast<Video::Context*>(ctx)->SetColor(
+        *reinterpret_cast<const Math::Vector4*>(color));   // B.3.5 bridge
 
     const float g_fUVScale = 1.0f;            // 0x14017214c
-    s_SetInverseScale(
-        ctx,
+    reinterpret_cast<Video::Context*>(ctx)->SetInverseScale(   // B.3.5 bridge
         -rd_f(desc, 0x50),                                        // -near_hi (XOR sign flip)
         g_fUVScale / (rd_f(desc, 0x4c) - rd_f(desc, 0x50)),       // 1 / (near_lo - near_hi)
         -rd_f(desc, 0x58),                                        // -far_hi
@@ -345,7 +339,8 @@ extern "C" void WeatherParticle_Draw(void* geo, void* context, void* camera) {
     }
 
     // (6) Instanced submit, batched by the max dynamic-instance count.
-    int batch = s_GetMaxDynInst(ctx, vtxCount, kVtxStride, indexCount);
+    int batch = reinterpret_cast<const Video::Context*>(ctx)
+                    ->GetMaxDynamicInstances(vtxCount, kVtxStride, indexCount);   // B.3.5 bridge
     if (visibleTiles < batch) batch = visibleTiles;
 
     if (visibleTiles > 0) {
@@ -362,10 +357,12 @@ extern "C" void WeatherParticle_Draw(void* geo, void* context, void* camera) {
                     // Matrix::Matrix reads a 4th float from `pos`; the tiles[]
                     // buffer is padded/zeroed so that read is well-defined.
                     s_MatrixCtor(matrix, mcol0, mcol1, mcol2, &tiles[(tileBase + t) * 3]);
-                    s_SetTransform(ctx, t, matrix);
+                    reinterpret_cast<Video::Context*>(ctx)->SetTransform(
+                        t, *reinterpret_cast<const Math::Matrix*>(matrix));   // B.3.5 bridge
                 }
             }
-            if (s_BeginInst(ctx, vtxCount, kVtxStride, indexCount, batch)) {
+            if (reinterpret_cast<Video::Context*>(ctx)->BeginInstancedIndexedVertices(
+                    vtxCount, kVtxStride, indexCount, batch)) {   // B.3.5 bridge
                 int    stride = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(ctx) + 0x20e8);
                 void*& vtxCur = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(ctx) + 0x20e0);
                 void*& idxCur = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(ctx) + 0x20f0);
@@ -380,7 +377,8 @@ extern "C" void WeatherParticle_Draw(void* geo, void* context, void* camera) {
                 std::memcpy(idxCur, *reinterpret_cast<void**>(g + 0xd0), idxBytes);
                 idxCur = reinterpret_cast<uint8_t*>(idxCur) + idxBytes;
 
-                s_EndInst(ctx, 0);
+                reinterpret_cast<Video::Context*>(ctx)
+                    ->EndInstancedIndexedVertices(0);   // B.3.5 bridge
             }
             tileBase += batch;
         } while (tileBase < visibleTiles);

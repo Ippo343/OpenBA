@@ -28,6 +28,10 @@
 #include "io/Modification.h"   // ENDGAME B.3.4 caller batch P
 #include "io/Persistence.h"    // ENDGAME B.3.4 caller batch P
 #include "io/FileSystem.h"     // ENDGAME B.3.4a closing: FileSystem::ClosePackages
+// ENDGAME B.3.5 Video/Graphics caller batch: Video::Device and
+// Video::Configuration are real classes. Device.h pulls no Volume.h, so it is
+// safe after <windows.h> here.
+#include "video/Device.h"
 #include "UpdateLoop.h"
 #include "Game/game.h"
 #include "Game/inputbindings.h"
@@ -307,9 +311,10 @@ static void ShutdownEngineStaged(void* engineP) {
     // 7. Video::Device::PlatformShutdown + FreeLibrary on the three plugin
     // HMODULE slots at video_device+0xb0/+0xc8/+0xe0.
     if (void* vdev = load_ptr(0x6c0)) {
-        if (auto ps = ResolveFn<void(*)(void*)>(
-                "?PlatformShutdown@Device@Video@@AEAAXXZ"))
-            ps(vdev);
+        // B.3.5 bridge — ?PlatformShutdown@Device@Video@@AEAAXXZ. `AEAA` is
+        // retail's PRIVATE, but Device.h declares the member public (this DLL
+        // exports its private members — reference_aeaa_is_private_not_unexported).
+        reinterpret_cast<Video::Device*>(vdev)->PlatformShutdown();   // B.3.5 bridge
         uintptr_t pv = reinterpret_cast<uintptr_t>(vdev) + 0xb0;
         for (int i = 0; i < 3; ++i, pv += 24) {
             HMODULE m = *reinterpret_cast<HMODULE*>(pv);
@@ -349,9 +354,8 @@ static void ShutdownEngineStaged(void* engineP) {
             winW = -1;
             winH = -1;
         }
-        if (auto save = ResolveFn<void(*)(void*)>(
-                "?Save@Configuration@Video@@QEAAXXZ"))
-            save(cfg);
+        // B.3.5 bridge — ?Save@Configuration@Video@@QEAAXXZ.
+        reinterpret_cast<Video::Configuration*>(cfg)->Save();   // B.3.5 bridge
     }
 
     // 9. Application::PlatformShutdown — DestroyWindow + UnregisterClass.

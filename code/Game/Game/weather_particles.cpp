@@ -21,6 +21,11 @@
 // In standalone the exe .text is not loaded, so this backs the vtable directly;
 // the Runtime Graphics/Video primitives are resolved from Runtime-x64.dll.
 
+// ENDGAME B.3.5 Video/Graphics caller batch: Graphics::Geometry and
+// Graphics::Scene are real classes. Ahead of "resolve.h" — resolve.h pulls
+// <windows.h>, whose <wingdi.h> declares a global `Rectangle` FUNCTION that
+// hides `Volume::Rectangle`'s class name inside Volume.h's own static_asserts.
+#include "graphics/Scene.h"     // also brings Graphics::Geometry
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
@@ -44,18 +49,18 @@ constexpr float kBoundLo  = -1024.0f;  // DAT_1401722ac (SetBounds min)
 constexpr float kUVScale  = 1.0f;      // g_fUVScale
 
 // Local lazy-resolved Runtime helpers not in engine_funcs.h.
-typedef void  (*fn_Geo_SetBounds_t)(void* geo, void* box);        // ?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z
+// ENDGAME B.3.5: the `?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z`
+// cache is GONE — its one caller calls `Graphics::Geometry::SetBounds` directly.
+// `??1Geometry@Graphics@@UEAA@XZ` STAYS a door: it is a DESTRUCTOR, and no
+// Video/Graphics class has a real ctor/dtor (B4b-2, B35_RULES section 11).
 typedef void  (*fn_Geo_BaseDtor_t)(void* geo);                    // ??1Geometry@Graphics@@UEAA@XZ  (Runtime 0x1800a41c0)
 
-fn_Geo_SetBounds_t      s_fnSetBounds    = nullptr;
 fn_Geo_BaseDtor_t       s_fnGeoBaseDtor  = nullptr;
 bool s_resolved = false;
 
 void EnsureResolved() {
     if (s_resolved) return;
     s_resolved = true;
-    s_fnSetBounds = reinterpret_cast<fn_Geo_SetBounds_t>(
-        ResolveExport("?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z"));
     s_fnGeoBaseDtor = reinterpret_cast<fn_Geo_BaseDtor_t>(
         ResolveExport("??1Geometry@Graphics@@UEAA@XZ"));
 }
@@ -252,9 +257,11 @@ extern "C" void WeatherParticle_Config(void* geo, void* descriptor) {
         Math::Transform tf = Math::Transform::Identity();
         fn_Geometry_SetTransform(geo, &tf);
     }
-    if (s_fnSetBounds) {
+    {
         float box[6] = { kBoundLo, kBoundLo, kBoundLo, kBoundHi, kBoundHi, kBoundHi };
-        s_fnSetBounds(geo, box);
+        // B.3.5 bridge — ?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z.
+        reinterpret_cast<Graphics::Geometry*>(geo)->SetBounds(
+            *reinterpret_cast<const ::Box*>(box));   // B.3.5 bridge
     }
 
     // Material layer bitmask: geo+0x30 = 1 << (material+0x20 & 0x1f).
@@ -374,9 +381,13 @@ extern "C" void WeatherEffect_SetEnabled(void* sim, int slot, int enable) {
     WeatherParticle_Config(geo, descriptor);
 
     // Add to the Graphics scene global object list (gameWorld+0x60).
-    if (fn_Graphics_Scene_AddGlobalObject && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+    // B.3.5: the `fn_Graphics_Scene_AddGlobalObject` readiness term is gone; the
+    // two singleton tests are object tests and stay.
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
         void* scene = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0x60);
-        if (scene) fn_Graphics_Scene_AddGlobalObject(scene, geo);
+        if (scene)
+            reinterpret_cast<Graphics::Scene*>(scene)->AddGlobalObject(
+                reinterpret_cast<Graphics::Geometry*>(geo));   // B.3.5 bridge
     }
     *reinterpret_cast<int*>(s + 0x10) = 0;   // sim state = active
     // NOTE: the audio ambient entity (entry+8 template) is intentionally not
