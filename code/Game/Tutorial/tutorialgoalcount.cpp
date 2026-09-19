@@ -193,18 +193,12 @@ void TutorialGoalCount_Serialize(void* self, void* stream) {
 
     // Base class serialize (empty)
     alignas(8) uint8_t ser0[32];
-    if (g_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(ser0)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
-    if (g_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(ser0)->~Serializer();   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(ser0)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser0)->~Serializer();   // B.3.4 bridge
 
     // Create serializer for our fields
     alignas(8) uint8_t ser[32];
-    if (g_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // +0x20 through the UINT door. `ser + 0x08` was the READERWRITER
     // (IO::Serializer::_readerWriter), not "the serializer object", and its
@@ -214,41 +208,24 @@ void TutorialGoalCount_Serialize(void* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x20), nullptr);   // B.3.4 bridge  (0x98 = uint door)
 
     // Serialize targetCount (+0x24) as int
-    if (g_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);   // B.3.4 bridge
 
     // Serialize typeName (+0x30) as String
     reinterpret_cast<System::String*>(s + 0x30)->Serialize(ser);
 
     // If loading (serializer version == 0), resolve the external ref
-    if (g_fn_Serializer_GetVersion) {
-        int version = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
-        if (version == 0 && s_fn_ResolveExternalRef) {
-            s_fn_ResolveExternalRef((void*)(s + 0x30));
-        }
-    } else {
-        // Check raw field: ser+0x08 -> version at +0x08
-        uintptr_t serData = *(uintptr_t*)(ser + 0x00);
-        if (serData != 0) {
-            int version = static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-            if (version == 0 && s_fn_ResolveExternalRef) {
-                s_fn_ResolveExternalRef((void*)(s + 0x30));
-            }
-        }
+    int version = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
+    if (version == 0 && s_fn_ResolveExternalRef) {
+        s_fn_ResolveExternalRef((void*)(s + 0x30));
     }
 
     // Serialize greaterOrEqual (+0x28) as bool
-    if (g_fn_Serialize_Bool) {
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(s + 0x28), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(s + 0x28), nullptr);   // B.3.4 bridge
 
     // Serialize elementName (+0x48) as String
     reinterpret_cast<System::String*>(s + 0x48)->Serialize(ser);
 
-    if (g_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

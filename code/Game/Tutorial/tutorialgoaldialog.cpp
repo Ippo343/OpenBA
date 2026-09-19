@@ -20,14 +20,6 @@
 // Local function pointers (resolved once)
 // ============================================================
 
-// IO::Serializer::Serializer(this, stream, mode)
-typedef void* (*fn_Serializer_Ctor_t)(void* self, void* stream, int mode);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-// IO::Serializer::~Serializer(this)
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
 static bool s_resolved = false;
 
 static void EnsureResolved() {
@@ -39,17 +31,6 @@ static void EnsureResolved() {
         fn_External_Dtor = (fn_External_Dtor_t)ResolveAddr(Module::Runtime, 0x1800bc950);
     if (!fn_External_External)
         fn_External_External = (fn_External_External_t)ResolveAddr(Module::Runtime, 0x1800bc9c0);
-
-    // IO::Serializer — BY NAME (retail 0x1800b9960 / 0x1800b99b0).
-    // Both are ported (runtime/src/io/serializer.cpp:636-637). ResolveAddr
-    // consults the ADDRESS registry only, so the by-address form these two lines
-    // used until 2026-09-07 walked past the port into the shipped DLL, and was
-    // counted as ported by the census. Only the name reaches the port, and only
-    // the name survives cutover.
-    s_fn_Serializer_Ctor = (fn_Serializer_Ctor_t)ResolveExport(
-        "??0Serializer@IO@@QEAA@AEAVStream@1@H@Z");
-    s_fn_Serializer_Dtor = (fn_Serializer_Dtor_t)ResolveExport(
-        "??1Serializer@IO@@QEAA@XZ");
 }
 
 // ============================================================

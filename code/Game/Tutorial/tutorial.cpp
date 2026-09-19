@@ -24,18 +24,6 @@
 // Local function pointers (resolved lazily)
 // ============================================================
 
-// Serializer::Ctor -- dispatch slot 0x140152ad8
-typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-// Serializer::Dtor -- dispatch slot 0x140152ad0
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-// Serializer::Serialize(int*) -- dispatch slot 0x140152ac8
-typedef void (*fn_Serializer_SerializeInt_t)(void* serializer, void* intPtr, const char* name);
-static fn_Serializer_SerializeInt_t s_fn_Serializer_SerializeInt = nullptr;
-
 // DynArray resize helper (0x140001bb0) -- resize 8-byte element array
 typedef void (*fn_DynArrayResize_t)(void* arrayField, int newCount);
 static fn_DynArrayResize_t s_fn_DynArrayResize = nullptr;
@@ -53,18 +41,6 @@ static bool s_resolved = false;
 static void EnsureResolved() {
     if (s_resolved) return;
     s_resolved = true;
-
-    void** slot;
-
-    // Serializer dispatch slots
-    slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152ad8));
-    if (slot && *slot) s_fn_Serializer_Ctor = reinterpret_cast<fn_Serializer_Ctor_t>(*slot);
-
-    slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152ad0));
-    if (slot && *slot) s_fn_Serializer_Dtor = reinterpret_cast<fn_Serializer_Dtor_t>(*slot);
-
-    slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152ac8));
-    if (slot && *slot) s_fn_Serializer_SerializeInt = reinterpret_cast<fn_Serializer_SerializeInt_t>(*slot);
 
     // Direct exe functions
     s_fn_DynArrayResize = reinterpret_cast<fn_DynArrayResize_t>(
@@ -199,17 +175,11 @@ void Tutorial_Serialize(void* self, void* stream) {
 
     // Create Serializer on stack (24 bytes)
     alignas(8) uint8_t serializer[24];
-    if (s_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    } else {
-        return;
-    }
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // 1. Serialize step count (+0x30)
     int32_t localCount = *reinterpret_cast<int32_t*>(s + 0x30);
-    if (s_fn_Serializer_SerializeInt) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
 
     // 2. On load: resize steps array
     if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
@@ -231,14 +201,10 @@ void Tutorial_Serialize(void* self, void* stream) {
     }
 
     // 5. Serialize currentStep at +0x38
-    if (s_fn_Serializer_SerializeInt) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x38), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x38), nullptr);   // B.3.4 bridge
 
     // Destroy Serializer
-    if (s_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

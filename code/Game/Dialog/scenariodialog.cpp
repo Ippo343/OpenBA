@@ -403,8 +403,6 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
             else if (!g_pFileSystemSingleton2 || !*g_pFileSystemSingleton2) missing = "FileSystem singleton";
             else if (!fn_SaveLoad_SetOperation) missing = "SaveLoad::SetOperation";
             else if (!fn_SaveLoad_SetSaveName) missing = "SaveLoad::SetSaveName";
-            else if (!fn_Persistence_GetSavePath) missing = "Persistence::GetSavePath";
-            else if (!fn_FileSystem_GetDataDirectory) missing = "FileSystem::GetDataDirectory";
             else if (!fn_SaveLoad_GetOperation) missing = "SaveLoad::GetOperation";
             else if (!fn_SaveLoad_Update) missing = "SaveLoad::Update";
             else if (!fn_Time_Ctor_Float) missing = "Time::Time(float)";

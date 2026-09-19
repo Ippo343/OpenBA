@@ -2367,9 +2367,6 @@ void W_OnEvent(void* self, void* param2, int msg, int id) {
 void W_Update(void* self, void* stream) {
     EnsureGlobals();
     if (!self || !stream || !Built(self) || !Ready() || !TownReady()) return;
-    if (!(g_fn_Serializer_Ctor && g_fn_Serializer_Dtor && g_fn_Serialize_Int &&
-          g_fn_Serializer_GetVersion))
-        return;
     TownHallUI_Update((TownHallUI*)self, stream);
 }
 

@@ -161,8 +161,6 @@ const char* MissingDependency(bool needSaveLoad) {
     if (!fn_SaveLoad_GetOperation) return "SaveLoad::GetOperation";
     if (!fn_SaveLoad_Update) return "SaveLoad::Update";
     if (!fn_SaveLoad_GetSaveState) return "SaveLoad::GetSaveState";
-    if (!fn_Persistence_GetSavePath) return "Persistence::GetSavePath";
-    if (!fn_FileSystem_GetDataDirectory) return "FileSystem::GetDataDirectory";
     return nullptr;
 }
 

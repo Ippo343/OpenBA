@@ -105,51 +105,37 @@ void TutorialImageHotKey_Serialize(void* self, void* stream) {
 
     // Phase 1: Base TutorialImage fields
     alignas(8) uint8_t ser1[32];
-    if (g_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize int at +0x28
-    if (g_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
 
     // Serialize int at +0x2c
-    if (g_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x2c), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x2c), nullptr);   // B.3.4 bridge
 
     // Serialize external ref at +0x20
     if (s_fn_ExternalRef_Serialize) {
         s_fn_ExternalRef_Serialize((void*)(s + 0x20), ser1);
     }
 
-    if (g_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     // Phase 2: HotKey-specific fields
     alignas(8) uint8_t ser2[32];
-    if (g_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize String at +0x30
     reinterpret_cast<System::String*>(s + 0x30)->Serialize(ser2);
 
     // If loading (version == 0), resolve the hotkey string to an External ref
-    if (g_fn_Serializer_GetVersion) {
-        int version = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
-        if (version == 0) {
-            if (s_fn_ResolveHotkeyRef) {
-                s_fn_ResolveHotkeyRef((void*)(s + 0x30));
-            }
+    int version = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
+    if (version == 0) {
+        if (s_fn_ResolveHotkeyRef) {
+            s_fn_ResolveHotkeyRef((void*)(s + 0x30));
         }
     }
 
-    if (g_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

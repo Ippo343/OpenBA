@@ -101,23 +101,15 @@ void TutorialSetupGameSpeed_Serialize(void* self, void* stream) {
     uintptr_t s = (uintptr_t)self;
 
     alignas(8) uint8_t ser[32];
-    if (g_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize speed (+0x20) -- int
-    if (g_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x20), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x20), nullptr);   // B.3.4 bridge
 
     // Serialize _field24 (+0x24) -- bool
-    if (g_fn_Serialize_Bool) {
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(s + 0x24), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(s + 0x24), nullptr);   // B.3.4 bridge
 
-    if (g_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
