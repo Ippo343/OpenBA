@@ -169,6 +169,7 @@
 
 #include <windows.h>
 
+#include <new>        // placement new -- the ctor door's delegation shape
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>
@@ -379,15 +380,52 @@ uint64_t DigestMap(const void* root, uint32_t* countOut, const char** firstKeyOu
 
 // ============================================================================
 // ??0Registry@IO@@QEAA@PEBD@Z                              retail 0x1800b9500
+// ----------------------------------------------------------------------------
+// ENDGAME B.3.4 PACKAGE+FS commit 1 — the body is now
+// `IO::Registry::Registry(const char*)` (below). The door keeps its name, its
+// by-name AND by-address registration, and DELEGATES.
+//
+// It delegates by PLACEMENT-NEW rather than by a member call, because a
+// constructor is not callable on an already-live object: the door's contract is
+// "turn these 0x18 uninitialised bytes into a Registry", which is exactly what
+// placement-new into the caller's storage is. Nothing is allocated and nothing
+// moves — `IO::Registry` is layout-identical to the `RtIo::Registry` POD the
+// door's signature names (both `static_assert`ed in runtime/types/io/Registry.h)
+// — so the object the caller sees is byte-for-byte the one retail's ctor built.
+//
+// No qualified `IO::Registry::` call and no recursion hazard here: B34_BRIEFS
+// §A.1's rule is about POLYMORPHIC receivers whose live instances wear a MINTED
+// table resolving back to these doors. `IO::Registry` has no vtable at all
+// (Registry.h's banner), so there is nothing to dispatch through.
 // ============================================================================
 extern "C" Registry* RtIo_Registry_Ctor(Registry* self, const char* subKey) {
+    ::new (static_cast<void*>(self)) IO::Registry(subKey);
+    return self;   // 0x1800b9747: MOV RAX,RDI
+}
+
+namespace IO {
+
+// ---------------------------------------------------------------------------
+// IO::Registry::Registry(const char* subKey)              retail 0x1800b9500
+// ---------------------------------------------------------------------------
+// Member bodies of `IO::X` cannot be written inside `namespace RtIo` — `IO` and
+// `RtIo` are siblings, so the definition has to appear in a namespace enclosing
+// the class (B34_BRIEFS §A.2). This block sits AFTER the file's anonymous
+// namespace, which is what lets the body still reach `AssignFromWide` and
+// friends as ordinary file-scope names.
+//
+// Inside this block a bare `Registry` binds to the REAL CLASS, never to the POD
+// (B34_RULES §7.2, THE GREP HAZARD). The POD is spelled `RtIo::Registry` here.
+Registry::Registry(const char* subKey) {
 
     // 0x1800b9520-0x1800b952a. The qword store at +0x10 clears BOTH dword
-    // cursors; see runtime/types/io/Registry.h.
-    self->path.data      = nullptr;
-    self->key            = nullptr;
-    self->enumIndex      = 0;
-    self->enumGroupIndex = 0;
+    // cursors; see runtime/types/io/Registry.h. Written as retail's four
+    // stores rather than as a member-init list so the ORDER stays visible and
+    // so `_path` keeps its POD spelling (no String constructor runs).
+    _path.data      = nullptr;
+    _key            = nullptr;
+    _enumIndex      = 0;
+    _enumGroupIndex = 0;
 
     // 0x1800b954b: String::Format(&tmp, "Software\\%s\\%s", company, product),
     // then String::operator= inlined at 0x1800b9553. Format is real varargs, so
@@ -411,10 +449,11 @@ extern "C" Registry* RtIo_Registry_Ctor(Registry* self, const char* subKey) {
     System::String tmp(std::move(Sys(tmpPod)));
     // The leading equality test is retail's self-assignment guard (see
     // persistence_startup.cpp's banner for why it must not be tidied away) --
-    // this IS `String::operator=` (retail 0x1800c9810). `path` is a
-    // `RtSystem::String` member of the not-yet-converted `Registry`, reached
-    // through the transitional bridge.
-    Sys(self->path) = tmp;
+    // this IS `String::operator=` (retail 0x1800c9810). `_path` is still the
+    // `RtSystem::String` POD spelling (Registry.h's banner says why: three
+    // hand-written inlined `~Registry`s, one of them in a body left as C), so
+    // it is reached through the transitional bridge.
+    Sys(_path) = tmp;
     // ~tmp is retail's release.
 
     // 0x1800b95c0: `subKey != nullptr && subKey[0] != '\0'`. Retail then walks
@@ -428,9 +467,9 @@ extern "C" Registry* RtIo_Registry_Ctor(Registry* self, const char* subKey) {
         // (??HSystem@@... and ??4String@System@@...) are spelled as
         // themselves rather than through RT_EXPORT_ONCE — table entries
         // `ConcatCStr` -> `a + p` and `Assign` -> `s = o`.
-        System::String withSep = Sys(self->path) + RtIo::kRegistryPathSeparator; // 0x1800b9605
+        System::String withSep = Sys(_path) + RtIo::kRegistryPathSeparator;     // 0x1800b9605
         System::String full    = withSep + subKey;                              // 0x1800b9619
-        Sys(self->path) = full;                                                 // 0x1800b9625
+        Sys(_path) = full;                                                      // 0x1800b9625
         // ~full, ~withSep are retail's two releases at
         // 0x1800b962b/0x1800b9664.
     }
@@ -442,23 +481,22 @@ extern "C" Registry* RtIo_Registry_Ctor(Registry* self, const char* subKey) {
     WideStringHandle wpath;
     wpath.data = nullptr;
     RT_EXPORT_ONCE(WideCtorFromStringFn, "??0WideString@System@@QEAA@AEBVString@1@@Z")
-        (&wpath, &self->path);
+        (&wpath, &_path);
 
-    HKEY* phKey = reinterpret_cast<HKEY*>(&self->key);
+    HKEY* phKey = reinterpret_cast<HKEY*>(&_key);
     const wchar_t* w = reinterpret_cast<const wchar_t*>(wpath.data);
 
     if (RegOpenKeyExW(HKEY_CURRENT_USER, w, 0, kSam, phKey) != ERROR_SUCCESS) {
         if (RegCreateKeyExW(HKEY_CURRENT_USER, w, 0, nullptr, 0, kSam,
                             nullptr, phKey, &disposition) != ERROR_SUCCESS) {
-            self->key = nullptr;    // 0x1800b971c
+            _key = nullptr;    // 0x1800b971c
         }
     }
 
     RtSystem::RtString_ReleaseInline(&wpath);
-
-
-    return self;   // 0x1800b9747: MOV RAX,RDI
 }
+
+}  // namespace IO
 
 // ============================================================================
 // ?ReadSettings@Persistence@IO@@QEAAXXZ                    retail 0x1800b84b0
@@ -467,8 +505,17 @@ extern "C" void RtIo_Persistence_ReadSettings(Persistence* self) {
 
     MapClear(self);                                            // 0x1800b84db
 
-    Registry reg;
-    RT_EXPORT_ONCE(RegistryCtorFn, "??0Registry@IO@@QEAA@PEBD@Z")(&reg, nullptr);
+    // 0x1800b84e7 `Registry reg(nullptr)`. B.3.4 PACKAGE+FS commit 1: the local
+    // is the REAL class now, constructed directly instead of through
+    // `RT_EXPORT_ONCE("??0Registry@IO@@QEAA@PEBD@Z")`. That name resolves to
+    // `RtIo_Registry_Ctor`, which since this commit does nothing but
+    // placement-new the same constructor into the same bytes — so this is the
+    // identical body reached one indirection earlier, not a different one.
+    //
+    // `IO::Registry` has NO destructor (Registry.h's banner), so this local is
+    // still torn down BY HAND at the bottom of this function, at retail's own
+    // position. Nothing implicit runs at scope exit and nothing can run twice.
+    IO::Registry reg(nullptr);
 
     // `name`/`value` stay `RtSystem::String` (not `System::String`) because
     // `AssignFromWide` and `MapInsert` below are external-door signatures
@@ -484,19 +531,19 @@ extern "C" void RtIo_Persistence_ReadSettings(Persistence* self) {
 
     for (;;) {
         DWORD cchName = kNameChars;                            // 0x1800b8510
-        const DWORD index = reg.enumIndex++;                   // 0x1800b851a
+        const DWORD index = reg._enumIndex++;                   // 0x1800b851a
 
-        if (RegEnumValueW(static_cast<HKEY>(reg.key), index, nameBuf, &cchName,
+        if (RegEnumValueW(static_cast<HKEY>(reg._key), index, nameBuf, &cchName,
                           nullptr, nullptr, nullptr, nullptr) != ERROR_SUCCESS)
             break;                                             // 0x1800b8552
         if (cchName > kNameChars)
             break;                                             // 0x1800b8562
 
-        if (reg.key != nullptr) {                              // 0x1800b8570, dead
+        if (reg._key != nullptr) {                              // 0x1800b8570, dead
             DWORD type    = REG_SZ;                            // 0x1800b8572, = 1
             DWORD cbData  = kValueBytes;                       // 0x1800b857c
             // Return value IGNORED, exactly as at 0x1800b85b2.
-            RegQueryValueExW(static_cast<HKEY>(reg.key), nameBuf, nullptr, &type,
+            RegQueryValueExW(static_cast<HKEY>(reg._key), nameBuf, nullptr, &type,
                              reinterpret_cast<BYTE*>(valueBuf), &cbData);
         }
 
@@ -519,7 +566,7 @@ extern "C" void RtIo_Persistence_ReadSettings(Persistence* self) {
         }
     }
 
-    reg.enumIndex = 0;                                         // 0x1800b8832
+    reg._enumIndex = 0;                                         // 0x1800b8832
     // `name`/`value` are plain locals of a type that keeps its POD shape
     // here (see the declaration comment), so there is no outer RAII to run
     // this for us; retail's two releases are spelled as the destructors
@@ -530,9 +577,9 @@ extern "C" void RtIo_Persistence_ReadSettings(Persistence* self) {
     // ~Registry, inlined at 0x1800b887d. `reg` is a plain local (`Registry`
     // is not yet converted), so `path`'s release is spelled as the
     // destructor itself through the bridge.
-    if (reg.key != nullptr) RegCloseKey(static_cast<HKEY>(reg.key));
-    reg.key = nullptr;
-    Sys(reg.path).~String();                                   // 0x1800b8892
+    if (reg._key != nullptr) RegCloseKey(static_cast<HKEY>(reg._key));
+    reg._key = nullptr;
+    Sys(reg._path).~String();                                   // 0x1800b8892
 }
 
 // ============================================================================
