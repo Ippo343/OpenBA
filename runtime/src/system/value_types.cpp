@@ -51,6 +51,7 @@
 #include <new>          // placement new into the retail hidden return slot
 #include "../../types/system/Value.h"
 #include "../../types/system/String.h"
+#include "../../types/system/Configuration.h"   // ENDGAME B.3.4b SYSTEM (4c)
 #include "../../types/io/Serializer.h"   // ENDGAME B.3.4 callers batch H
 #include "../../funcs/rt_port.h"
 #include "widestring.h"
@@ -589,6 +590,21 @@ System::String System::DateTime::TimeAsString() const {
 }
 
 // ?CurrentBuildId@Configuration@System@@SA?AVString@2@XZ  retail 0x1800c4c60
+//
+// ⚠ ENDGAME B.3.4b SYSTEM (4c): THIS IS THE ONE PORTED `Configuration` MEMBER
+// THAT DID **NOT** BECOME A MEMBER, AND IT IS A RECORDED OUTCOME, NOT A GAP.
+// Every other String-returning body in this class and in `System::DateTime`
+// placement-constructs the hidden return slot before writing it; this one does
+// not — see the "NOTE, TRANSCRIBED NOT TIDIED" paragraph at the bottom of the
+// body. A by-value member plus a placement-newing door would zero the slot
+// FIRST, which is either the faithful reading (MSVC inlined `Set`, proved
+// `data` null and folded the store away) or a behaviour change on a slot the
+// caller did not zero. That question is open, this file already decided "left
+// exactly as retail spells it", and B.3.4b does not overturn a prior decision
+// on inference. The body stays the registered free door it is; the conversion
+// is OWED once someone reads 0x1800c4c60's prologue and settles which it is.
+// Recorded in runtime/types/system/Configuration.h and in B34B_RULES section 1.5.
+//
 // Builds a 6-character stamp "<last 2 digits of year><2-letter month><day,
 // zero-padded>" from the DLL's own compiled-in date string (e.g.
 // "Sep 10 2017" -> "17Se10"), read via String::Set/Release so the DLL's own
@@ -630,8 +646,32 @@ System::String* RtSystem_Configuration_CurrentBuildId(System::String* ret) {
     return ret;
 }
 
+// ============================================================================
+// ENDGAME B.3.4b SYSTEM (4c) — two of `System::Configuration`'s three `SA`
+// statics move onto the class; the doors delegate.
+// ============================================================================
+// The class is declared in `runtime/types/system/Configuration.h`, whose banner
+// carries the "is it a class?" evidence, the 0x30-byte layout and the four rows
+// that deliberately did NOT convert. `?CurrentBuildId@` (0x1800c4c60, below) is
+// one of those four and stays exactly where it is — see the header, and the
+// note on its own body.
+//
+// Both doors below are HIDDEN-RETSLOT doors: `ret` is the caller's RAW BYTES,
+// so the member's prvalue is placement-CONSTRUCTED into it and the door returns
+// that slot, which is retail's `MOV RAX,R14`.
+
 // ?CurrentVersion@Configuration@System@@SA?AVString@2@XZ  retail 0x1800c4f40
-System::String* RtSystem_Configuration_CurrentVersion(System::String* ret);  // fwd, defined below GetVersionString
+System::String* RtSystem_Configuration_CurrentVersion(System::String* ret) {
+    new (ret) System::String(System::Configuration::CurrentVersion());
+    return ret;
+}
+
+// ?GetVersionString@Configuration@System@@SA?AVString@2@I_N@Z  retail 0x1800c4f90
+System::String* RtSystem_Configuration_GetVersionString(System::String* ret, uint32_t version,
+                                                        bool detailed) {
+    new (ret) System::String(System::Configuration::GetVersionString(version, detailed));
+    return ret;
+}
 
 // ?GetVersionString@Configuration@System@@SA?AVString@2@I_N@Z  retail 0x1800c4f90
 // version is packed major<<24 | minor<<16 | patch<<8 | suffix. suffix in
@@ -640,12 +680,12 @@ System::String* RtSystem_Configuration_CurrentVersion(System::String* ret);  // 
 // shipped 0xff) appends nothing. Text taken from the DLL's own .rdata
 // literals at 0x180155c14..0x180155c40, transcribed to source for
 // readability -- content verified byte-for-byte against inspect_memory.
-System::String* RtSystem_Configuration_GetVersionString(System::String* ret, uint32_t version,
-                                                        bool detailed) {
+System::String System::Configuration::GetVersionString(uint32_t version, bool detailed) {
     // ENDGAME B.3.1 step 2: ?Format@String@System@@SA?AV12@PEBDZZ (0x1800c9730)
-    // spelled as itself, placement-constructed into the raw hidden return slot.
-    new (ret) System::String(System::String::Format(
-        "%i.%i.%i", version >> 24, (version >> 16) & 0xffu, (version >> 8) & 0xffu));
+    // spelled as itself. B.3.4b: the hidden return slot is the compiler's
+    // business now, so this is an ordinary local and the DOOR places it.
+    System::String ret = System::String::Format(
+        "%i.%i.%i", version >> 24, (version >> 16) & 0xffu, (version >> 8) & 0xffu);
 
     const char* text = nullptr;
     switch (version & 0xffu) {
@@ -660,12 +700,13 @@ System::String* RtSystem_Configuration_GetVersionString(System::String* ret, uin
     // VALUE and the caller discards the copy; that discarded temporary IS
     // retail's `tmp`, and its destructor IS the 0x1800c9870 release below it.
     // Both lines collapse into this one (cookbook APPEND).
-    *ret += text;
+    ret += text;
     return ret;
 }
 
-System::String* RtSystem_Configuration_CurrentVersion(System::String* ret) {
-    return RtSystem_Configuration_GetVersionString(ret, 0x010007ffu, false);
+// ?CurrentVersion@Configuration@System@@SA?AVString@2@XZ  retail 0x1800c4f40
+System::String System::Configuration::CurrentVersion() {
+    return GetVersionString(0x010007ffu, false);
 }
 
 // ============================================================

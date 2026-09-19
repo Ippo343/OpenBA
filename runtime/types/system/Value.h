@@ -14,6 +14,15 @@
 // assume otherwise) would be returned BY MEMORY with the hidden slot as an
 // explicit argument. Every member port here is a plain free function.
 //
+// ENDGAME B.3.4b SYSTEM (4c) CORRECTS THE NEXT PARAGRAPH ON BOTH COUNTS.
+// `System::DateTime` IS modelled below (it is a FILETIME; see its banner), and
+// `System::Configuration` has 0x30 bytes of instance data and now has its own
+// header, `runtime/types/system/Configuration.h`. The claim "Configuration has
+// no instance data" was true only of the three `SA` statics this file happens
+// to host; the class's five instance members live in
+// `runtime/src/system/configuration.cpp`. The paragraph is kept rather than
+// rewritten because it is the Wave-2 reasoning of record.
+//
 // System::DateTime and System::Configuration are NOT modeled below.
 // DateTime::AsString is the only DateTime function in this lane's scope and
 // treats `this` as opaque (it forwards to the DLL's own DateAsString/
