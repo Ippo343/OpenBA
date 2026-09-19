@@ -59,6 +59,7 @@
 #include <windows.h>   // QueryPerformanceCounter for the BANISHED_SAVE_TIMING probe
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
+#include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 
 // code/Game/Game/minimap_upload.cpp — ports FUN_1400a4e80 + the CopyToTexture tail.
 extern "C" void Minimap_CreateAndUpload(void* mapObj);
@@ -839,7 +840,7 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
     if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 2)   // B.3.4 bridge
         reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(self + 0x15c), nullptr);   // B.3.4 bridge
 
-    s_fn_Random_Serialize(*(void**)(self + 0xd8), ser);
+    reinterpret_cast<System::Random*>(*(void**)(self + 0xd8))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
     reinterpret_cast<System::String*>(self + 0x28)->Serialize(ser);
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(self + 0x158), nullptr);   // B.3.4 bridge
 
@@ -888,7 +889,7 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
         alignas(8) uint8_t ser0[24];
         ::new (static_cast<void*>(ser0)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
         reinterpret_cast<IO::Serializer*>(ser0)->Serialize(*reinterpret_cast<int*>(dc), nullptr);   // B.3.4 bridge
-        g_fn_Time_Serialize(dc + 0x8, ser0);
+        reinterpret_cast<System::Time*>(dc + 0x8)->Serialize(*reinterpret_cast<IO::Serializer*>(ser0));   // B.3.4b bridge
         reinterpret_cast<IO::Serializer*>(ser0)->~Serializer();   // B.3.4 bridge
     }
 

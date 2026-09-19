@@ -61,6 +61,7 @@
 #include "resolve.h"
 #include "collection/Collection.h"
 #include <cstdint>
+#include "system/Thread.h"     // ENDGAME B.3.4b System caller batch (CriticalSection/Thread)
 
 namespace {
 
@@ -383,11 +384,11 @@ extern "C" void GameDtor_ThreadDtor_a6720(int64_t thread) {
 extern "C" void GameDtor_DrainQueue_a6690(int64_t thread) {
     EnsureFns();
     for (;;) {
-        if (s_fn_CSLock) s_fn_CSLock(reinterpret_cast<void*>(thread + 0x30));
+        if (s_fn_CSLock) reinterpret_cast<System::CriticalSection*>(reinterpret_cast<void*>(thread + 0x30))->Lock();   // B.3.4b bridge
         int count = *reinterpret_cast<int*>(thread + 0x70);
         if (count > 0) {
             if ((*reinterpret_cast<uint8_t*>(thread + 0x08) & 1) == 0) {
-                if (s_fn_ThreadStart) s_fn_ThreadStart(reinterpret_cast<void*>(thread));
+                if (s_fn_ThreadStart) reinterpret_cast<System::Thread*>(reinterpret_cast<void*>(thread))->Start();   // B.3.4b bridge
             }
             count = *reinterpret_cast<int*>(thread + 0x70);
         }
@@ -395,10 +396,10 @@ extern "C" void GameDtor_DrainQueue_a6690(int64_t thread) {
         // YieldToThreads(*g_pAppSingleton)
         if (s_fn_Yield && g_pAppSingleton)
             s_fn_Yield(*reinterpret_cast<void**>(g_pAppSingleton));
-        if (s_fn_CSUnlock) s_fn_CSUnlock(reinterpret_cast<void*>(thread + 0x30));
+        if (s_fn_CSUnlock) reinterpret_cast<System::CriticalSection*>(reinterpret_cast<void*>(thread + 0x30))->Unlock();   // B.3.4b bridge
     }
-    if (s_fn_CSUnlock) s_fn_CSUnlock(reinterpret_cast<void*>(thread + 0x30));
-    if (s_fn_WaitFinish) s_fn_WaitFinish(reinterpret_cast<void*>(thread)); // tail-call
+    if (s_fn_CSUnlock) reinterpret_cast<System::CriticalSection*>(reinterpret_cast<void*>(thread + 0x30))->Unlock();   // B.3.4b bridge
+    if (s_fn_WaitFinish) reinterpret_cast<System::Thread*>(reinterpret_cast<void*>(thread))->WaitForFinish(); // tail-call  B.3.4b bridge
 }
 
 // ============================================================================

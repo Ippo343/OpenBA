@@ -28,6 +28,7 @@
 // Heap-overflow checkpoint (standalone diagnostic; no-op when
 // BANISHED_REDZONE is unset).
 #include "redzone_alloc.h"
+#include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 #define RZ_CHECK(tag) RedzoneAlloc_CheckLinks(tag)
 
 // ============================================================
@@ -512,9 +513,9 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
         reinterpret_cast<Math::Vector4*>(
             reinterpret_cast<uint8_t*>(self) + 0x1B4)->Serialize(outer_ser);
         if (fn_System_Color_Serialize) {
-            fn_System_Color_Serialize(&self->ambientColor, outer_ser);
-            fn_System_Color_Serialize(&self->sunColor,     outer_ser);
-            fn_System_Color_Serialize(&self->skyColor,     outer_ser);
+            reinterpret_cast<System::Color*>(&self->ambientColor)->Serialize(*reinterpret_cast<IO::Serializer*>(outer_ser));   // B.3.4b bridge
+            reinterpret_cast<System::Color*>(&self->sunColor)->Serialize(*reinterpret_cast<IO::Serializer*>(outer_ser));   // B.3.4b bridge
+            reinterpret_cast<System::Color*>(&self->skyColor)->Serialize(*reinterpret_cast<IO::Serializer*>(outer_ser));   // B.3.4b bridge
             // Color::Serialize from Runtime appears to write only the RGB
             // bytes and leave alpha at zero; Init defaults use 0xFF and the
             // renderer's uint32→Vector4 conversion treats the alpha byte as

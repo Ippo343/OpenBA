@@ -30,6 +30,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <cmath>
+#include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 
 // ============================================================
 // Exe-resident float constants (bit-exact, embedded — .rdata not present in
@@ -221,16 +222,16 @@ extern "C" void WeatherParticle_Config(void* geo, void* descriptor) {
         float* p = particles + (size_t)i * 9;   // stride 0x24 = 9 floats
 
         // Random position within the box: randTol per axis * size * 0.5.
-        float r0 = (rng && s_fnRandFloatTol) ? s_fnRandFloatTol(rng) : 0.0f;
-        float r1 = (rng && s_fnRandFloatTol) ? s_fnRandFloatTol(rng) : 0.0f;
-        float r2 = (rng && s_fnRandFloatTol) ? s_fnRandFloatTol(rng) : 0.0f;
+        float r0 = (rng && s_fnRandFloatTol) ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
+        float r1 = (rng && s_fnRandFloatTol) ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
+        float r2 = (rng && s_fnRandFloatTol) ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
         // Original order: Vector3(r2*size, size*r1, size*r0) then *0.5.
         p[0] = r2 * boxSize * kHalf;
         p[1] = r1 * boxSize * kHalf;
         p[2] = r0 * boxSize * kHalf;
 
         // Velocity = dir * (randTol*speedTol + speedBase).
-        float rs = (rng && s_fnRandFloatTol) ? s_fnRandFloatTol(rng) : 0.0f;
+        float rs = (rng && s_fnRandFloatTol) ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
         float speed = rs * speedTol + speedBase;
         p[6] = dir[0] * speed;
         p[7] = dir[1] * speed;
@@ -280,7 +281,7 @@ extern "C" void WeatherParticle_Update(void* geo, void* time) {
     if (!desc) return;
     uint8_t* d = reinterpret_cast<uint8_t*>(desc);
 
-    float sec = fn_Time_AsSeconds(time);
+    float sec = reinterpret_cast<const System::Time*>(time)->AsSeconds();   // B.3.4b bridge
 
     // Intensity fade toward the fade-direction target, clamped [0,1].
     float transition = *reinterpret_cast<float*>(d + 0x5c);   // Weather.transitionTime

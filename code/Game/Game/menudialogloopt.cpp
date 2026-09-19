@@ -31,6 +31,7 @@
 #include <cstring>
 #include <cmath>
 #include <cstdlib>
+#include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 
 // Wave 9 lane S probe (runtime/src/audio/audio.cpp).
 
@@ -670,7 +671,7 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
 
     // Engine::Random lives at self+0x168 (UpdateLoop base + DialogLoopT field area).
     void* sceneRng = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(self) + 0x168);
-    uint32_t variant = fn_Random_Rand(sceneRng, 10);
+    uint32_t variant = reinterpret_cast<System::Random*>(sceneRng)->Rand(10);   // B.3.4b bridge
 
     // Diagnostic lever: BANISHED_MENU_SCENE pins the menu scene index (0..9) so
     // the otherwise-random MenuScene/SceneN.rsc choice becomes deterministic.

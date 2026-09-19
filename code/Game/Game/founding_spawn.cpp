@@ -72,6 +72,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 
 // Start-config offsets (mirrors of the constants in starttown.cpp).
 static constexpr int SC_JITTER       = 0x40;   // float spawn-jitter radius
@@ -216,7 +217,7 @@ extern "C" float StartTown_FoundingAdultAge(void* citizenTemplate) {
     const uint8_t* d = reinterpret_cast<const uint8_t*>(desc);
     float ageMin = *reinterpret_cast<const float*>(d + 0x50);
     float ageMax = *reinterpret_cast<const float*>(d + 0x54);
-    float r = fn_Random_RandFloat(rng);
+    float r = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
     // FAITHFUL, including the odd shape: the upper bound is HALF the description's max
     // age, so the range is [ageMin, ageMax*0.5). No clamp to the adult threshold —
     // the hand-rolled path added one; retail has none, and if this ever produces an
@@ -230,7 +231,7 @@ extern "C" float StartTown_FoundingChildAge(void* citizenTemplate) {
     if (!desc || !rng || !fn_Random_RandFloat) return 0.0f;
     float adultAge = *reinterpret_cast<const float*>(
         reinterpret_cast<const uint8_t*>(desc) + 0x44);
-    return fn_Random_RandFloat(rng) * adultAge;   // uniform [0, adult threshold)
+    return reinterpret_cast<System::Random*>(rng)->RandFloat() * adultAge;   // uniform [0, adult threshold)  B.3.4b bridge
 }
 
 // Retail's two FUN_14001b1d0 calls (steps 1 and 8) — see deviation (c). Returns the

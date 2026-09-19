@@ -34,6 +34,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
+#include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 
 // ============================================================
 // Base-game day-cycle keyframes (Environment/Environment.rsc)
@@ -119,7 +120,7 @@ extern "C" void Weather_SunUpdate(void* self, void* ctx) {
     float seconds = 0.0f;
     void* timeObj = *reinterpret_cast<void**>(p + 0x128);
     if (timeObj && fn_Time_AsSeconds)
-        seconds = fn_Time_AsSeconds(reinterpret_cast<uint8_t*>(timeObj) + 8);
+        seconds = reinterpret_cast<const System::Time*>(reinterpret_cast<uint8_t*>(timeObj) + 8)->AsSeconds();   // B.3.4b bridge
 
     // Phase within the day -> keyframe index + interpolation fraction.
     float dayT = seconds - kDayLength * floorf(seconds / kDayLength);  // wrap into [0,dayLen)
