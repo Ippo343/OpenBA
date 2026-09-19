@@ -350,6 +350,25 @@ void RtObject_Internal_Persist(Internal* self, void* stream /*IO::Stream&*/) {
     p->Object::Internal::Persist(stream);
 }
 
+// ?Clone@Internal@Object@@QEAAPEAV12@XZ            retail 0x1800bfb10, ord 1716
+//
+// ENDGAME B.3.4 STREAMS (6/6). The body is `Object::Internal::Clone` in
+// internal_class.cpp; this is the registered entry point, and it is the FIRST
+// one this symbol has ever had — B34_RULES §6.5(e) measured it as genuinely
+// unported, with no registration by name or by address, no stub and no TODO.
+//
+// `Clone` IS NOT A VTABLE SLOT. It is `QEAA` — public, non-virtual — and it
+// appears in none of `??_7Internal@Object@@6B@`'s four slots. So unlike the
+// `Persist` shim above this one is NOT slot 3, there is no minted table that
+// resolves back into it, and the qualification below is ordinary style rather
+// than the recursion guard it is next door. Spelled qualified anyway so the two
+// shims read the same way.
+Internal* RtObject_Internal_Clone(Internal* self) {
+    // B.3.3 bridge
+    ::Object::Internal* p = reinterpret_cast< ::Object::Internal*>(self);
+    return reinterpret_cast<Internal*>(p->Object::Internal::Clone());
+}
+
 // ?DeletePtr@InternalBasePtr@Object@@QEAAXXZ
 //                                      retail 0x1800c0150, profile 0x18008c5a0
 //
@@ -845,6 +864,19 @@ int RtObjectInternalRegister() {
     RegisterRuntimeExport("?Persist@Internal@Object@@UEAAXAEAVStream@IO@@@Z",
                           (void*)&RtObject_Internal_Persist); ++n;
     RegisterRuntimeAddr(0x1800bfda0, (void*)&RtObject_Internal_Persist);
+
+    // B.3.4 STREAMS (6/6) — the symbol's FIRST registration. BY NAME *AND* BY
+    // ADDRESS, because `ResolveExport` falls through silently for an unported
+    // symbol while `ResolveAddr(Module::Runtime, ..)` is registry-first: a
+    // caller arriving by address is invisible to a name-only registration
+    // (reference_count_the_doors_not_the_calls.md). The mangled name is spelled
+    // on ONE line — tools/runtime_census.py cannot see a name split across a
+    // string-literal concatenation — and was read off the export directory at
+    // the VA whose bytes the body transcribes (ord 1716), not assembled by
+    // analogy with its `UEAA` neighbours (reference_resolveexport_phantom_names.md).
+    RegisterRuntimeExport("?Clone@Internal@Object@@QEAAPEAV12@XZ",
+                          (void*)&RtObject_Internal_Clone); ++n;
+    RegisterRuntimeAddr(0x1800bfb10, (void*)&RtObject_Internal_Clone);
 
     // ---- CheckPtr: STILL REGISTERED, for a reason B.3.3 step 6D changed ------
     //
