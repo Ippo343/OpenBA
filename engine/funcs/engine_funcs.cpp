@@ -375,8 +375,6 @@ fn_Audio_Scene_Pause_t fn_Audio_Scene_Pause = nullptr;
 fn_Audio_Scene_Update_t fn_Audio_Scene_Update = nullptr;
 // fn_ScenarioDialog_LoadSelected — REMOVED, now reimplemented in scenariodialog.cpp
 fn_SaveLoad_Update_t fn_SaveLoad_Update = nullptr;
-fn_Persistence_GetSavePath_t fn_Persistence_GetSavePath = nullptr;
-fn_FileSystem_GetDataDirectory_t fn_FileSystem_GetDataDirectory = nullptr;
 void** g_pFileSystemSingleton2 = nullptr;
 fn_LoadScenarioFromSave_t fn_LoadScenarioFromSave = nullptr;
 uintptr_t g_ModUpdateDialog_Vtable = 0;  // PTR_FUN_14015c6c0
@@ -630,8 +628,6 @@ void** g_GoalDialog_Vtable = nullptr;
 
 // ModDialog support
 void** g_ppModificationSingleton = nullptr;
-fn_Modification_GetCount_t fn_Modification_GetCount = nullptr;
-fn_Modification_GetMod_t fn_Modification_GetMod = nullptr;
 fn_DialogInstance_OnElementEvent_t fn_DialogInstance_OnElementEvent = nullptr;
 // fn_DialogInstance_AddController removed — see engine_funcs.h (Wave 7 lane B)
 fn_DialogInstance_OnUpdateLayout_t fn_DialogInstance_OnUpdateLayout = nullptr;
@@ -649,12 +645,7 @@ fn_Game_ReloadWithSave_t fn_Game_ReloadWithSave = nullptr;
 fn_SavedState_Ctor_t fn_SavedState_Ctor = nullptr;
 uintptr_t g_ReloadDialog_Vtable = 0;  // PTR_FUN_14015c480
 
-// IO::Serializer (shared globals with g_ prefix)
-g_fn_Serializer_Ctor_t g_fn_Serializer_Ctor = nullptr;
-g_fn_Serializer_Dtor_t g_fn_Serializer_Dtor = nullptr;
-g_fn_Serialize_Int_t g_fn_Serialize_Int = nullptr;
-g_fn_Serialize_Bool_t g_fn_Serialize_Bool = nullptr;
-g_fn_Serializer_GetVersion_t g_fn_Serializer_GetVersion = nullptr;
+// IO::Serializer shared globals — all five removed, ENDGAME B.3.4a closing 2d.
 
 // TownHallUI support
 uint32_t* g_TypeId_TabElement = nullptr;
@@ -883,8 +874,6 @@ fn_VideoConfig_Save_t fn_VideoConfig_Save = nullptr;
 fn_InputConfig_Save_t fn_InputConfig_Save = nullptr;
 fn_InputConfig_Load_t fn_InputConfig_Load = nullptr;
 void** g_pInputConfigSingleton = nullptr;
-fn_Persistence_WriteSettings_t fn_Persistence_WriteSettings = nullptr;
-fn_Persistence_ReadSettings_t fn_Persistence_ReadSettings = nullptr;
 fn_InputDevice_EnableMouseClipping_t fn_InputDevice_EnableMouseClipping = nullptr;
 fn_InputDevice_ResetState_t fn_InputDevice_ResetState = nullptr;
 fn_VideoDevice_ApplyChangedSettings_t fn_VideoDevice_ApplyChangedSettings = nullptr;
@@ -928,7 +917,6 @@ fn_ExternalPtr_Serialize_t fn_ExternalPtr_Serialize = nullptr;
 fn_ExternalPtr_Serialize2_t fn_ExternalPtr_Serialize2 = nullptr;
 fn_ExternalPtr_Serialize3_t fn_ExternalPtr_Serialize3 = nullptr;
 fn_ExternalRefArray_Serialize_t fn_ExternalRefArray_Serialize = nullptr;
-fn_Serializer_SerializeBulk_t fn_Serializer_SerializeBulk = nullptr;
 fn_ComponentBase_Serialize_t fn_ComponentBase_Serialize = nullptr;
 fn_DynArray_Resize_t fn_DynArray_Resize = nullptr;
 fn_StringArray_Resize_t fn_StringArray_Resize = nullptr;
@@ -1013,7 +1001,6 @@ fn_Goal_BaseCtor_t fn_Goal_BaseCtor = nullptr;
 fn_Goal_BaseSerialize_t fn_Goal_BaseSerialize = nullptr;
 fn_GoalInstance_BaseDtor_t fn_GoalInstance_BaseDtor = nullptr;
 fn_GoalInstance_Persist_t fn_GoalInstance_Persist = nullptr;
-fn_InternalBasePtr_Serialize_t fn_InternalBasePtr_Serialize = nullptr;
 fn_IsRunning_t fn_IsRunning = nullptr;
 fn_ExternalPtr_SerializeTutorial_t fn_ExternalPtr_SerializeTutorial = nullptr;
 fn_BuildingTypeArray_Dtor_t fn_BuildingTypeArray_Dtor = nullptr;
@@ -1183,7 +1170,6 @@ fn_Graphics_Geometry_Ctor_t fn_Graphics_Geometry_Ctor = nullptr;
 fn_Video_VertexBuffer_Ctor_t fn_Video_VertexBuffer_Ctor = nullptr;
 fn_Video_IndexBuffer_Ctor_t fn_Video_IndexBuffer_Ctor = nullptr;
 fn_System_Color_Serialize_t     fn_System_Color_Serialize     = nullptr;
-fn_Serializer_Serialize_Float_t fn_Serializer_Serialize_Float = nullptr;
 
 fn_Array_Resize_t fn_Array_Resize_Stride20 = nullptr;
 fn_Array_Resize_t fn_Array_Resize_Stride08 = nullptr;
@@ -1201,10 +1187,6 @@ fn_Struct60B_CopyCtor_t     fn_Struct60B_CopyCtor           = nullptr;
 fn_Struct60B_DtorRange_t    fn_Struct60B_DtorRange          = nullptr;
 fn_Struct60B_SubArrayCopy_t fn_Struct60B_SubArrayCopyStride14 = nullptr;
 fn_Struct60B_SubArrayCopy_t fn_Struct60B_SubArrayCopyStride02 = nullptr;
-
-// Runtime DLL primitives needed only by the standalone reimpls.
-fn_Serializer_GetEncoding_t fn_Serializer_GetEncoding = nullptr;
-fn_Serializer_Serialize_Uint_t fn_Serializer_Serialize_Uint = nullptr;
 
 uint32_t** g_ppTypeInfo_GraphicsMesh = nullptr;
 uint32_t** g_ppTypeInfo_Particle = nullptr;
@@ -1228,12 +1210,9 @@ fn_Geometry_ChunkUpdate_t  fn_Geometry_ChunkUpdate  = nullptr;  // 0x1400aad50  
 fn_TradeWork_sub_c780_t fn_TradeWork_sub_c780 = nullptr;  // 0x1400ac780
 
 
-// M3.5 Path B session 8 — promoted IO::Serializer dispatch slots.
-// `SerInt_AC8` and `SerFloat_A60` retired in ENDGAME B.3.4 step 0; see the
-// banner on the typedef block in engine_funcs.h for why.
-fn_Ser_SerByte_t      fn_Ser_Slot_SerByte_410      = nullptr;  // 0x140152410
-fn_Ser_SerSizedRaw_t  fn_Ser_Slot_SerSizedRaw_3F8  = nullptr;  // 0x1401523f8
-fn_Ser_SerSizedRaw_t  fn_Ser_Slot_SerSizedRaw_400  = nullptr;  // 0x140152400
+// M3.5 Path B session 8 — the promoted IO::Serializer dispatch-slot pointers
+// are all gone now; see the banner on the (former) typedef block in
+// engine_funcs.h. The slot rows in address_registry.cpp are untouched.
 
 // M3.5 — Geometry vtable draw primitives (slot 0x14015f110)
 fn_Renderer_GetCullCamera_t            fn_Renderer_GetCullCamera           = nullptr;
@@ -1968,26 +1947,9 @@ bool EngineFuncsInit() {
         void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151d20));
         if (d && *d) fn_SaveLoad_Update = reinterpret_cast<fn_SaveLoad_Update_t>(*d);
     }
-    // NOTE (2026-08-30): the two mangled names below were both wrong, and wrong in the
-    // same way - their RETURN TYPES were swapped. Persistence::GetSavePath returns a
-    // System::String; FileSystem::GetDataDirectory returns a System::Filename. Verified
-    // against the DLL export table (objdump -p Runtime-x64.dll). Both ResolveExports
-    // therefore failed, and both exe dispatch-slot fallbacks (0x140151d38 / 0x140151d30)
-    // are unregistered, so both pointers stayed NULL - which made
-    // ScenarioDialog::LoadSelected's saved-scenario branch an EXEC-of-0. That branch is
-    // the one every tutorial takes.
-    fn_Persistence_GetSavePath = reinterpret_cast<fn_Persistence_GetSavePath_t>(
-        ResolveExport("?GetSavePath@Persistence@IO@@QEBA?AVString@System@@XZ"));
-    if (!fn_Persistence_GetSavePath) {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151d38));
-        if (d && *d) fn_Persistence_GetSavePath = reinterpret_cast<fn_Persistence_GetSavePath_t>(*d);
-    }
-    fn_FileSystem_GetDataDirectory = reinterpret_cast<fn_FileSystem_GetDataDirectory_t>(
-        ResolveExport("?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ"));
-    if (!fn_FileSystem_GetDataDirectory) {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151d30));
-        if (d && *d) fn_FileSystem_GetDataDirectory = reinterpret_cast<fn_FileSystem_GetDataDirectory_t>(*d);
-    }
+    // Persistence::GetSavePath and FileSystem::GetDataDirectory resolved here
+    // until ENDGAME B.3.4a closing 2d; both were 0-CALL and are gone, resolver,
+    // slot fallback and all.
     // FileSystem singleton: exe dispatch at 0x140151d18 → pointer to Runtime singleton.
     // Original: MOV RAX,[0x140151d18]; MOV RCX,[RAX] (at 0x140077d5a)
     {
@@ -2707,10 +2669,10 @@ bool EngineFuncsInit() {
         void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401519e8));
         g_ppModificationSingleton = exref ? reinterpret_cast<void**>(*exref) : nullptr;
     }
-    fn_Modification_GetCount = reinterpret_cast<fn_Modification_GetCount_t>(
-        ResolveAddr(Module::Runtime, 0x18000da90));
-    fn_Modification_GetMod = reinterpret_cast<fn_Modification_GetMod_t>(
-        ResolveAddr(Module::Runtime, 0x18000da80));
+    // Modification::GetCount / ::GetModification (Runtime 0x18000da90 /
+    // 0x18000da80) were resolved here until ENDGAME B.3.4a closing 2d; both
+    // reached 0 CALLs. The ported bodies stay registered by address in
+    // runtime/src/io/modification.cpp — only these two readers died.
 
     // --- DialogInstance::OnElementEvent (exe dispatch table) ---
     // TWO overloads exist. The exe's dispatch slot 0x140151a30 (tools/dispatch_slot_map.py)
@@ -2787,16 +2749,9 @@ bool EngineFuncsInit() {
     g_ReloadDialog_Vtable = ResolveAddr(Module::Exe, 0x14015c480);
 
     // --- IO::Serializer (shared globals) ---
-    g_fn_Serializer_Ctor = reinterpret_cast<g_fn_Serializer_Ctor_t>(
-        ResolveExport("??0Serializer@IO@@QEAA@AEAVStream@1@H@Z"));
-    g_fn_Serializer_Dtor = reinterpret_cast<g_fn_Serializer_Dtor_t>(
-        ResolveExport("??1Serializer@IO@@QEAA@XZ"));
-    g_fn_Serialize_Int = reinterpret_cast<g_fn_Serialize_Int_t>(
-        ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAHPEBD@Z"));
-    g_fn_Serialize_Bool = reinterpret_cast<g_fn_Serialize_Bool_t>(
-        ResolveExport("?Serialize@Serializer@IO@@QEAAXAEA_NPEBD@Z"));
-    g_fn_Serializer_GetVersion = reinterpret_cast<g_fn_Serializer_GetVersion_t>(
-        ResolveExport("?GetVersion@Serializer@IO@@QEBAHXZ"));
+    // The five ??0Serializer / ??1Serializer / Serialize(int&) / Serialize(bool&)
+    // / GetVersion exports were resolved into globals here until ENDGAME B.3.4a
+    // closing 2d. IO::Serializer is a real class now, so nothing read them.
 
     // --- TownHallUI support ---
     {
@@ -3443,11 +3398,8 @@ bool EngineFuncsInit() {
             g_pInputConfigSingleton = p;
     }
 
-    // IO::Persistence
-    fn_Persistence_WriteSettings = reinterpret_cast<fn_Persistence_WriteSettings_t>(
-        ResolveExport("?WriteSettings@Persistence@IO@@QEBAXXZ"));
-    fn_Persistence_ReadSettings = reinterpret_cast<fn_Persistence_ReadSettings_t>(
-        ResolveExport("?ReadSettings@Persistence@IO@@QEAAXXZ"));
+    // IO::Persistence WriteSettings / ReadSettings resolved here until
+    // ENDGAME B.3.4a closing 2d; both were 0-CALL.
 
     // Input::Device
     fn_InputDevice_EnableMouseClipping = reinterpret_cast<fn_InputDevice_EnableMouseClipping_t>(
@@ -3573,8 +3525,8 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1401518e8));
     fn_Element_GetAlignedPosition = *reinterpret_cast<fn_Element_GetAlignedPosition_t*>(
         ResolveAddr(Module::Exe, 0x1401518f0));
-    fn_Serializer_SerializeBulk = *reinterpret_cast<fn_Serializer_SerializeBulk_t*>(
-        ResolveAddr(Module::Exe, 0x140152400));
+    // fn_Serializer_SerializeBulk read slot 0x140152400 here until ENDGAME
+    // B.3.4a closing 2d; it was 0-CALL. The slot row itself stays registered.
 
     // Direct exe function calls used by Description serializers
     fn_ExternalPtr_Serialize = reinterpret_cast<fn_ExternalPtr_Serialize_t>(
@@ -3805,8 +3757,8 @@ bool EngineFuncsInit() {
     fn_GoalInstance_Persist = reinterpret_cast<fn_GoalInstance_Persist_t>(
         ResolveExport("?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z"));
 
-    fn_InternalBasePtr_Serialize = reinterpret_cast<fn_InternalBasePtr_Serialize_t>(
-        ResolveExport("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z"));
+    // InternalBasePtr::Serialize was resolved here until ENDGAME B.3.4a
+    // closing 2d; it was 0-CALL.
 
     // IsRunning via dispatch slot 0x140152850
     {
@@ -3829,7 +3781,6 @@ bool EngineFuncsInit() {
     printf("  Goal::Serialize     = %p\n", (void*)fn_Goal_BaseSerialize);
     printf("  GoalInst::~GoalInst = %p\n", (void*)fn_GoalInstance_BaseDtor);
     printf("  GoalInst::Persist   = %p\n", (void*)fn_GoalInstance_Persist);
-    printf("  IBP::Serialize      = %p\n", (void*)fn_InternalBasePtr_Serialize);
     printf("  IsRunning           = %p\n", (void*)fn_IsRunning);
 #endif
 
@@ -3980,8 +3931,8 @@ bool EngineFuncsInit() {
         ResolveExport("??0IndexBuffer@Video@@QEAA@XZ"));
     fn_System_Color_Serialize = reinterpret_cast<fn_System_Color_Serialize_t>(
         ResolveExport("?Serialize@Color@System@@QEAAXAEAVSerializer@IO@@@Z"));
-    fn_Serializer_Serialize_Float = reinterpret_cast<fn_Serializer_Serialize_Float_t>(
-        ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAMPEBD@Z"));
+    // Serializer::Serialize(float&) was resolved here until ENDGAME B.3.4a
+    // closing 2d; it was 0-CALL.
 
     fn_Array_Resize_Stride20 = reinterpret_cast<fn_Array_Resize_t>(
         ResolveAddr(Module::Exe, 0x14001baf0));
@@ -4040,30 +3991,17 @@ bool EngineFuncsInit() {
     printf("  Array_Resize_Stride16B      = %p\n", (void*)fn_Array_Resize_Stride16B);
 #endif
 
-    // Runtime DLL primitives — resolve via dispatch slots, fall back to mangled.
-    {
-        void** slot;
-        slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401529f8));
-        if (slot && *slot)
-            fn_Serializer_GetEncoding = reinterpret_cast<fn_Serializer_GetEncoding_t>(*slot);
-        else
-            fn_Serializer_GetEncoding = reinterpret_cast<fn_Serializer_GetEncoding_t>(
-                ResolveExport("?GetEncoding@Serializer@IO@@QEAAAEBVEncoding@2@XZ"));
-
-        slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152a50));
-        if (slot && *slot)
-            fn_Serializer_Serialize_Uint = reinterpret_cast<fn_Serializer_Serialize_Uint_t>(*slot);
-        else
-            fn_Serializer_Serialize_Uint = reinterpret_cast<fn_Serializer_Serialize_Uint_t>(
-                ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAIPEBD@Z"));
-
-        // 0x140151218 / 0x140151220 / 0x140151228 —
-        // ExternalFactory::IsReferenceModeEnabled / GetReferenceId /
-        // GetPathForReferenceId. ENDGAME B.3.3 step 7: their last callers are
-        // member calls on ::Object::ExternalFactory, so the pointers and the
-        // slot-or-export resolution behind them are gone. The dispatch slots
-        // themselves stay registered.
-    }
+    // Runtime DLL primitives — this block resolved a handful of Serializer and
+    // ExternalFactory doors via dispatch slot, falling back to the mangled
+    // export. It is EMPTY now and the shared `void** slot` scratch local went
+    // with its last reader:
+    //   0x1401529f8 / 0x140152a50 — Serializer::GetEncoding and
+    //     Serializer::Serialize(uint&), both 0-CALL, ENDGAME B.3.4a closing 2d.
+    //   0x140151218 / 0x140151220 / 0x140151228 —
+    //     ExternalFactory::IsReferenceModeEnabled / GetReferenceId /
+    //     GetPathForReferenceId, ENDGAME B.3.3 step 7: their last callers are
+    //     member calls on ::Object::ExternalFactory.
+    // All five dispatch slots stay registered in address_registry.cpp.
 
     // BaseTypeInfo* slots / typeId storage. These get filled by Runtime DLL
     // type-registration plumbing in the original; in standalone they may be
@@ -4087,7 +4025,6 @@ bool EngineFuncsInit() {
     printf("  Video_VertexBuffer_Ctor = %p\n", (void*)fn_Video_VertexBuffer_Ctor);
     printf("  Video_IndexBuffer_Ctor  = %p\n", (void*)fn_Video_IndexBuffer_Ctor);
     printf("  System_Color_Serial     = %p\n", (void*)fn_System_Color_Serialize);
-    printf("  Serializer_Float        = %p\n", (void*)fn_Serializer_Serialize_Float);
     printf("  Array_Resize_S20/S08/S14= %p / %p / %p\n",
         (void*)fn_Array_Resize_Stride20,
         (void*)fn_Array_Resize_Stride08,
@@ -4099,8 +4036,6 @@ bool EngineFuncsInit() {
     printf("  ExtPtr Mesh/Weather     = %p / %p\n",
         (void*)fn_ExternalPtr_Serialize_GraphicsMesh,
         (void*)fn_ExternalPtr_Serialize_Weather);
-    printf("  Serializer_GetEncoding  = %p\n", (void*)fn_Serializer_GetEncoding);
-    printf("  Serializer_Serialize_U  = %p\n", (void*)fn_Serializer_Serialize_Uint);
     printf("  TypeInfo Mesh/Particle  = %p / %p\n",
         (void*)g_ppTypeInfo_GraphicsMesh, (void*)g_ppTypeInfo_Particle);
     printf("  TypeId Weather          = %p\n", (void*)g_pTypeId_Weather);
@@ -4164,26 +4099,15 @@ bool EngineFuncsInit() {
     // M3.5 Path B session 8 — Geometry::Serialize body + extra.
     // ============================================================
 
-    // M3.5 Path B session 8 — promoted IO::Serializer dispatch slots.
-    {
-        void** sp;
-        // 0x140152ac8 and 0x140152a60 are no longer read here: their pointers
-        // were aliases of g_fn_Serialize_Int / fn_Serializer_Serialize_Float and
-        // retired in ENDGAME B.3.4 step 0. The SLOTS stay bound in
-        // standalone/address_registry.cpp:1628-1629 (PE imports).
-        sp = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152410));
-        if (sp && *sp) fn_Ser_Slot_SerByte_410 = reinterpret_cast<fn_Ser_SerByte_t>(*sp);
-        sp = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401523f8));
-        if (sp && *sp) fn_Ser_Slot_SerSizedRaw_3F8 = reinterpret_cast<fn_Ser_SerSizedRaw_t>(*sp);
-        sp = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152400));
-        if (sp && *sp) fn_Ser_Slot_SerSizedRaw_400 = reinterpret_cast<fn_Ser_SerSizedRaw_t>(*sp);
-    }
-#ifdef _DEBUG
-    printf("[EngineFuncs] M3.5 Path B session 8 (Geometry::Serialize) resolved\n");
-    printf("  Ser slot SerByte_410    = %p\n", (void*)fn_Ser_Slot_SerByte_410);
-    printf("  Ser slot SerSizedRaw_3F8= %p\n", (void*)fn_Ser_Slot_SerSizedRaw_3F8);
-    printf("  Ser slot SerSizedRaw_400= %p\n", (void*)fn_Ser_Slot_SerSizedRaw_400);
-#endif
+    // M3.5 Path B session 8 — the promoted IO::Serializer dispatch-slot block
+    // that used to stand here is gone, and the shared `void** sp` scratch local
+    // with it. 0x140152ac8 / 0x140152a60 retired in ENDGAME B.3.4 step 0 (they
+    // aliased g_fn_Serialize_Int / fn_Serializer_Serialize_Float);
+    // 0x140152488 / 0x140152618 retired in closing 2a; and 0x140152410 /
+    // 0x1401523f8 / 0x140152400 retire here in closing 2d with the guards that
+    // were their last readers. Every one of those SLOTS stays bound in
+    // standalone/address_registry.cpp — they are PE imports read by unported
+    // exe code, not our call sites.
 
     // ============================================================
     // M3.5 — Geometry vtable draw primitives (slot 0x14015f110)
