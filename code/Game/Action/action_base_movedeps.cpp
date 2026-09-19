@@ -35,8 +35,8 @@
 //   pair[1] (the weight) must be > 0, else clears *time and returns false.
 //   Otherwise: denom = pair[0] * DAT_1401721b8 * DAT_140172234 * pair[1];
 //   roll = AsSeconds(time) / denom; clears *time; returns RandFloat(rng) < roll.
-// Verified ABI (disasm 0x1400a9290): RCX=time, RDX=pair, R8=rng; AsSeconds slot 0x140151318
-// (== fn_Time_AsSeconds export), RandFloat slot 0x1401512f8 (== fn_Random_RandFloat export);
+// Verified ABI (disasm 0x1400a9290): RCX=time, RDX=pair, R8=rng; AsSeconds slot 0x140151318,
+// RandFloat slot 0x1401512f8 (both are System::Time / System::Random members now);
 // constants DAT_1401721b8 / DAT_140172234. The original reads BOTH pair[0] and pair[1], so
 // the caller must hand it 8 bytes (two floats), not one.
 namespace {
@@ -61,9 +61,9 @@ bool ActMvDep_TimeCheck_a9290(void* timeV, float* pair, void* rng) {
     float k1 = s_pK1 ? *s_pK1 : 1.0f;
     float k2 = s_pK2 ? *s_pK2 : 1.0f;
     float denom = pair[0] * k1 * k2;
-    float secs = fn_Time_AsSeconds ? reinterpret_cast<const System::Time*>(timeV)->AsSeconds() : 0.0f;   // B.3.4b bridge
+    float secs = reinterpret_cast<const System::Time*>(timeV)->AsSeconds();   // B.3.4b bridge
     *reinterpret_cast<uint64_t*>(timeV) = 0;
-    float roll = fn_Random_RandFloat ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 0.0f;   // B.3.4b bridge
+    float roll = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
     return roll < secs / (denom * weight);
 }
 

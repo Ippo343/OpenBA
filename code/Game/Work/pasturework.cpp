@@ -44,7 +44,6 @@ typedef void  (*PW_MeshInstance_SetVisible_t)(void* meshInst, uint8_t group, cha
 typedef int   (*PW_CalcMaxWorkers_t)(uintptr_t matDesc);
 typedef void* (*PW_FindComp_Storage_t)(uintptr_t entity, void* outIBP);
 typedef int   (*PW_StorageQueryCount_t)(void* storageComp);
-typedef int   (*PW_Random_RandTol_t)(void* rng, int range);
 typedef float*(*PW_GetTerrainPos_t)(int* mapGrid, float* outPos, float* gridPos,
                                     char param4, uint32_t* outNormal);
 typedef void  (*PW_CitizenAI_RegisterWork_t)(void* citizenAISub, void* entityIBP, void* citizenIBP);
@@ -106,7 +105,6 @@ static PW_MeshInstance_SetVisible_t     s_fn_MeshInstance_SetVisible = nullptr;
 static PW_CalcMaxWorkers_t              s_fn_CalcMaxWorkers = nullptr;
 static PW_FindComp_Storage_t            s_fn_FindComp_Storage = nullptr;
 static PW_StorageQueryCount_t           s_fn_StorageQueryCount = nullptr;
-static PW_Random_RandTol_t              s_fn_Random_RandTol = nullptr;
 static PW_GetTerrainPos_t              s_fn_GetTerrainPos = nullptr;
 static PW_CitizenAI_RegisterWork_t     s_fn_CitizenAI_RegisterWork = nullptr;
 static PW_CitizenAI_LongTermPlan_t     s_fn_CitizenAI_LongTermPlan = nullptr;
@@ -252,11 +250,6 @@ bool PastureWork_ResolveFuncs() {
     s_fn_OrigSlot4 = reinterpret_cast<PW_OrigSlot4_t>(
         ResolveAddr(Module::Exe, 0x1400F2370));
 
-    // Dispatch slots (indirect through .rdata)
-    uintptr_t iatRandTol = ResolveAddr(Module::Exe, 0x1401512f0);
-    if (iatRandTol)
-        s_fn_Random_RandTol = *reinterpret_cast<PW_Random_RandTol_t*>(iatRandTol);
-
     // Static MemAlloc/MemFree. These previously read exe dispatch slots 0x140151460 /
     // 0x140151468; 0x140151460 is NOT MemAlloc, it is Graphics::Geometry::GetTransform
     // (see placementtool.cpp:78). Since that slot is registered, the pointer was
@@ -292,7 +285,7 @@ bool PastureWork_ResolveFuncs() {
     bool ok = s_fn_AutoPickup_CheckAssignments && s_fn_FindComp_MatDesc &&
               s_fn_FindComp_MeshInstance && s_fn_MeshInstance_SetVisible &&
               s_fn_CalcMaxWorkers && s_fn_FindComp_Storage &&
-              s_fn_StorageQueryCount && s_fn_Random_RandTol &&
+              s_fn_StorageQueryCount &&
               s_fn_GetTerrainPos &&
               s_fn_CitizenAI_RegisterWork && s_fn_CitizenAI_LongTermPlan &&
               s_fn_FindComp_Pasture && s_fn_GetAreaComponent &&
@@ -324,7 +317,6 @@ bool PastureWork_ResolveFuncs() {
         if (!s_fn_CalcMaxWorkers) printf("  MISSING: CalcMaxWorkers\n");
         if (!s_fn_FindComp_Storage) printf("  MISSING: FindComp_Storage\n");
         if (!s_fn_StorageQueryCount) printf("  MISSING: StorageQueryCount\n");
-        if (!s_fn_Random_RandTol) printf("  MISSING: Random_RandTol\n");
         if (!s_fn_GetTerrainPos) printf("  MISSING: GetTerrainPos\n");
         if (!s_fn_CitizenAI_RegisterWork) printf("  MISSING: CitizenAI_RegisterWork\n");
         if (!s_fn_CitizenAI_LongTermPlan) printf("  MISSING: CitizenAI_LongTermPlan\n");

@@ -197,8 +197,8 @@ uint64_t WorkImpl_BuildStructureStep_6ef0(uintptr_t param_1, void* param_2IBP,
                 *reinterpret_cast<int64_t*>(param_1 + 0x30) = cap;
             }
 
-            float accSec = fn_Time_AsSeconds ? reinterpret_cast<const System::Time*>(param_1 + 0x30)->AsSeconds() : 0.0f;   // B.3.4b bridge
-            float nowSec = fn_Time_AsSeconds ? reinterpret_cast<const System::Time*>(param_5Time)->AsSeconds() : 1.0f;   // B.3.4b bridge
+            float accSec = reinterpret_cast<const System::Time*>(param_1 + 0x30)->AsSeconds();   // B.3.4b bridge
+            float nowSec = reinterpret_cast<const System::Time*>(param_5Time)->AsSeconds();   // B.3.4b bridge
             uint32_t progress = static_cast<uint32_t>(((accSec / nowSec) / static_cast<float>(field104 * 300))
                                 * static_cast<float>(field100 - field0fc)) + static_cast<uint32_t>(field0fc);
 

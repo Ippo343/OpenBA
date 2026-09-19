@@ -169,7 +169,7 @@ bool ConsumeProduce_ResolveFuncs() {
               fn_IsDerivedFrom && fn_MemFreeStatic &&
               fn_GetActiveProductIndex &&
               fn_FindStorageForResource && fn_Map_CheckPassable &&
-              fn_Storage_FindSlot && fn_Random_Rand &&
+              fn_Storage_FindSlot &&
               fn_Entity_GetPosition && fn_Entity_FindComponent_Position &&
               fn_CitizenAI_LongTermPlan && fn_TryAssignWorkplace &&
               fn_Pathfinding_FindPath &&

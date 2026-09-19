@@ -108,18 +108,10 @@ static constexpr float kOne = 1.0f;
 
 // ============================================================
 // Late-bound Runtime resolves not yet in engine_funcs.h.
-//   Random::Rand(min,max)   2-arg  ?Rand@Random@System@@QEAAHHH@Z       (slot 0x140151310)
-//   Random::RandFloatTol()         ?RandFloatTol@Random@System@@QEAAMXZ (slot 0x140151400)
 //   Vector2::Normalize(this)       ?Normalize@Vector2@Math@@QEAAAEAV12@XZ (slot 0x1401526b0)
-// (Random::Rand(uint) [slot 0x1401512e8], RandFloat() [slot 0x1401512f8] and
-//  MemAlloc/MemFree are already wired in engine_funcs.)
 // ============================================================
-typedef int    (*fn_Random_Rand2_t)(void* self, int lo, int hi);
-typedef float  (*fn_Random_RandFloatTol_t)(void* self);
 typedef float* (*fn_Vec2_Normalize_t)(float* self);   // normalizes in place, returns self
 
-static fn_Random_Rand2_t        s_fn_Rand2        = nullptr;
-static fn_Random_RandFloatTol_t s_fn_RandFloatTol = nullptr;
 static fn_Vec2_Normalize_t      s_fn_Vec2Norm     = nullptr;
 static bool s_rangesResolved = false;
 
@@ -140,13 +132,9 @@ static float* vec2_normalize_real(float* self) {
 static void rg_EnsureInit() {
     if (s_rangesResolved) return;
     s_rangesResolved = true;
-    s_fn_Rand2        = (fn_Random_Rand2_t)ResolveExport("?Rand@Random@System@@QEAAHHH@Z");
-    s_fn_RandFloatTol = (fn_Random_RandFloatTol_t)ResolveExport("?RandFloatTol@Random@System@@QEAAMXZ");
     s_fn_Vec2Norm     = &vec2_normalize_real;
-    fprintf(stderr, "[worldgen] ranges resolves: Rand2=%p RandFloatTol=%p "
-            "Rand1=%p RandFloat=%p\n",
-            (void*)s_fn_Rand2, (void*)s_fn_RandFloatTol,
-            (void*)fn_Random_Rand, (void*)fn_Random_RandFloat);
+    fprintf(stderr, "[worldgen] ranges resolves: Vec2Norm=%p\n",
+            (void*)s_fn_Vec2Norm);
     fflush(stderr);
 }
 
@@ -162,10 +150,10 @@ static inline void vec2_normalize2(float* v) {
     if (len > 0.0f) { v[0] /= len; v[1] /= len; }
 }
 static inline float rftol(void* rng) {
-    return s_fn_RandFloatTol ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
+    return reinterpret_cast<System::Random*>(rng)->RandFloatTol();   // B.3.4b bridge
 }
 static inline float rfloat(void* rng) {
-    return fn_Random_RandFloat ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 0.0f;   // B.3.4b bridge
+    return reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
 }
 
 // ============================================================
@@ -425,7 +413,7 @@ static int TryPlacePath(int32_t* param_1, int param_2 /*nptCount*/, float param_
         float* p0 = (float*)pd;
         p0[0] = 0.0f; p0[1] = param_3 * kNegHalf;     // first: {0, scale*-0.5}
 
-        uint32_t r = fn_Random_Rand ? reinterpret_cast<System::Random*>(rng)->Rand(3) : 0;   // B.3.4b bridge
+        uint32_t r = reinterpret_cast<System::Random*>(rng)->Rand(3);   // B.3.4b bridge
         float* pl = (float*)(pd + (size_t)last * 0x1c);
         if (r == 0) {
             pl[0] = 0.0f; pl[1] = param_3 * kHalf;    // {0, scale*0.5}
@@ -451,14 +439,14 @@ static int TryPlacePath(int32_t* param_1, int param_2 /*nptCount*/, float param_
         uint8_t* selHdr = (uint8_t*)aoa + (size_t)(int)param_9 * 0x10;
         int selCount = *(int*)(selHdr + 0x08);
         int q = (selCount + ((selCount >> 31) & 3)) >> 2;          // selCount/4 (toward 0)
-        int startIdx = s_fn_Rand2 ? reinterpret_cast<System::Random*>(rng)->Rand(q, q * 3) : q;   // B.3.4b bridge
+        int startIdx = reinterpret_cast<System::Random*>(rng)->Rand(q, q * 3);   // B.3.4b bridge
         uint8_t* selData = *(uint8_t**)(selHdr + 0x00);
         *(uint64_t*)pd = *(uint64_t*)(selData + (size_t)startIdx * 0x1c);  // first pt = selected pt {x,y}
 
         float jitter = rftol(rng) * param_3 * kHalf;  // fVar17
         int last = pts._size - 1;
         float* pl = (float*)(pd + (size_t)last * 0x1c);
-        uint32_t r = fn_Random_Rand ? reinterpret_cast<System::Random*>(rng)->Rand(4) : 0;   // B.3.4b bridge
+        uint32_t r = reinterpret_cast<System::Random*>(rng)->Rand(4);   // B.3.4b bridge
         float half = param_3 * kHalf;                 // fVar24 = scale*0.5
         // CONCAT44(hi,lo) -> pl[0]=lo, pl[1]=hi
         if (r == 0)      { pl[0] = jitter;            pl[1] = half;             } // {jitter, scale*0.5}
@@ -613,8 +601,8 @@ extern "C" void wg_f390_ranges(void* hf) {
     int radiusMax    = *(int*)((uint8_t*)sizeRow + 0x3c);
     int radiusMin    = *(int*)((uint8_t*)sizeRow + 0x40);
 
-    uint32_t rRange = fn_Random_Rand ? reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)(maxRangeCnt - minRangeCnt + 1)) : 0;   // B.3.4b bridge
-    uint32_t rBand  = fn_Random_Rand ? reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)(maxBandX - minBandX)) : 0;   // B.3.4b bridge
+    uint32_t rRange = reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)(maxRangeCnt - minRangeCnt + 1));   // B.3.4b bridge
+    uint32_t rBand  = reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)(maxBandX - minBandX));   // B.3.4b bridge
     int bandX       = (int)rBand + minBandX;                // iVar10
     int rangeCount  = (int)rRange + minRangeCnt;            // uVar8 + iVar2
     if (rangeCount <= 0) return;
@@ -711,7 +699,7 @@ extern "C" void wg_f390_paths(void* hf) {
             // (coastline ring not placed), there is nothing to branch from — skip
             // rather than null-deref the empty patchList in TryPlacePath's branch path.
             if (pathCount <= 0) break;
-            float branchSel = (float)(fn_Random_Rand ? reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)pathCount) : 0u);   // B.3.4b bridge
+            float branchSel = (float)reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)pathCount);   // B.3.4b bridge
             int ok = TryPlacePath(p, dim + 1, (float)dim, u4, u5, u6, u7, u8, branchSel);
             if (ok) break;
         }

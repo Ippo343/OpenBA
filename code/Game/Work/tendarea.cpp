@@ -57,7 +57,6 @@ typedef void* (*TAW_FindComp_MatDesc_t)(uintptr_t entity, void* outIBP);
 typedef void* (*TAW_FindComp_AreaCrop_t)(uintptr_t entity, void* outIBP);
 typedef void* (*TAW_FindComp_AreaOrchard_t)(uintptr_t entity, void* outIBP);
 // Random
-typedef uint32_t (*TAW_Random_Rand_t)(void* rng, uint32_t max);
 // Map functions
 typedef int   (*TAW_Map_FindNearestPassable_t)(int* mapGrid, int srcCell, int destCell, uint32_t flags);
 typedef bool  (*TAW_Map_CanPathTo_t)(int* mapGrid, uint32_t pathType, uint32_t destCell, int srcCell);
@@ -92,7 +91,6 @@ static TAW_CalcMaxWorkers_t          s_fn_CalcMaxWorkers = nullptr;
 static TAW_FindComp_MatDesc_t        s_fn_FindComp_MatDesc = nullptr;
 static TAW_FindComp_AreaCrop_t       s_fn_FindComp_AreaCrop = nullptr;
 static TAW_FindComp_AreaOrchard_t    s_fn_FindComp_AreaOrchard = nullptr;
-static TAW_Random_Rand_t             s_fn_Random_Rand = nullptr;
 static TAW_Map_FindNearestPassable_t s_fn_Map_FindNearestPassable = nullptr;
 static TAW_Map_CanPathTo_t           s_fn_Map_CanPathTo = nullptr;
 static TAW_GetTerrainPos_t           s_fn_GetTerrainPos = nullptr;
@@ -178,10 +176,6 @@ bool TendArea_ResolveFuncs() {
     s_fn_MemAlloc = reinterpret_cast<TAW_MemAlloc_t>(fn_MemAllocStatic);
     s_fn_MemFree  = reinterpret_cast<TAW_MemFree_t>(fn_MemFreeStatic);
 
-    // Random::Rand from dispatch slot
-    uintptr_t iatRand = ResolveAddr(Module::Exe, 0x1401512e8);
-    if (iatRand) s_fn_Random_Rand = *reinterpret_cast<TAW_Random_Rand_t*>(iatRand);
-
     // fn_MemFreeStatic from engine_funcs
     s_fn_MemFreeStatic = reinterpret_cast<TAW_MemFreeStatic_t>(fn_MemFreeStatic);
 
@@ -218,7 +212,7 @@ bool TendArea_ResolveFuncs() {
               s_fn_TreeNodeCleanup && s_fn_FindSubEntity &&
               s_fn_CalcMaxWorkers && s_fn_FindComp_MatDesc &&
               s_fn_FindComp_AreaCrop && s_fn_FindComp_AreaOrchard &&
-              s_fn_Random_Rand && s_fn_Map_FindNearestPassable &&
+              s_fn_Map_FindNearestPassable &&
               s_fn_Map_CanPathTo && s_fn_GetTerrainPos &&
               s_fn_PerformWork_Ctor && s_fn_CitizenAI_RegisterWork &&
               s_fn_CitizenAI_LongTermPlan && s_fn_FindComp_Storage &&
@@ -245,7 +239,6 @@ bool TendArea_ResolveFuncs() {
         if (!s_fn_FindComp_MatDesc) printf("  MISSING: FindComp_MatDesc\n");
         if (!s_fn_FindComp_AreaCrop) printf("  MISSING: FindComp_AreaCrop\n");
         if (!s_fn_FindComp_AreaOrchard) printf("  MISSING: FindComp_AreaOrchard\n");
-        if (!s_fn_Random_Rand) printf("  MISSING: Random_Rand\n");
         if (!s_fn_Map_FindNearestPassable) printf("  MISSING: Map_FindNearestPassable\n");
         if (!s_fn_Map_CanPathTo) printf("  MISSING: Map_CanPathTo\n");
         if (!s_fn_GetTerrainPos) printf("  MISSING: GetTerrainPos\n");

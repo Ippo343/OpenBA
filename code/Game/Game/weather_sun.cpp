@@ -119,7 +119,7 @@ extern "C" void Weather_SunUpdate(void* self, void* ctx) {
     // Game time in seconds (the sim clock). +0x128 -> Time struct, time @ +8.
     float seconds = 0.0f;
     void* timeObj = *reinterpret_cast<void**>(p + 0x128);
-    if (timeObj && fn_Time_AsSeconds)
+    if (timeObj)
         seconds = reinterpret_cast<const System::Time*>(reinterpret_cast<uint8_t*>(timeObj) + 8)->AsSeconds();   // B.3.4b bridge
 
     // Phase within the day -> keyframe index + interpolation fraction.

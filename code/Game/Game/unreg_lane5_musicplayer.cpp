@@ -224,11 +224,9 @@ extern "C" void MusicPlayer_Update(void* musicPlayer) {
     // --- Current month from the accumulated day-counter time. ---------------
     int month = 0;
     if (void* dayCounter = *reinterpret_cast<void**>(gw + 0x128)) {
-        if (fn_Time_AsSeconds) {
-            float secs = reinterpret_cast<const System::Time*>(reinterpret_cast<uint8_t*>(dayCounter) + 8)->AsSeconds();   // B.3.4b bridge
-            int m = static_cast<int>((secs / kSecondsPerYear) * kMonthsPerYear);
-            month = (m > 11) ? 0 : m;   // faithful: >11 wraps to 0, not to 11
-        }
+        float secs = reinterpret_cast<const System::Time*>(reinterpret_cast<uint8_t*>(dayCounter) + 8)->AsSeconds();   // B.3.4b bridge
+        int m = static_cast<int>((secs / kSecondsPerYear) * kMonthsPerYear);
+        month = (m > 11) ? 0 : m;   // faithful: >11 wraps to 0, not to 11
     }
 
     // --- Collect every track whose month AND mood windows contain us. -------
@@ -257,7 +255,7 @@ extern "C" void MusicPlayer_Update(void* musicPlayer) {
         return;                       // nothing eligible this month/mood
     } else {
         void* rng = *reinterpret_cast<void**>(gw + 0xd8);
-        if (!fn_Random_Rand || !rng) return;
+        if (!rng) return;
         pick = static_cast<int>(reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(n)));   // B.3.4b bridge
         // Don't immediately repeat the last track: step one past it, wrapping.
         if (matches[static_cast<size_t>(pick)] == *reinterpret_cast<uint64_t*>(mp + 0x10)) {

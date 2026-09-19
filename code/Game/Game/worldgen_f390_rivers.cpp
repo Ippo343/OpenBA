@@ -86,10 +86,10 @@ static constexpr uint32_t kSignBit = 0x80000000u;// 0x1401722c0               fl
 // (void)kInf / kJoinThresh used in cd460 labeling/connect below.
 
 // ============================================================
-// Engine helpers used by these stages. Some are already wired (fn_Random_Rand,
-// fn_Random_RandFloat, fn_MemAlloc, fn_MemFreeStatic, g_pMemAllocSingleton);
-// the Vector2 + RandFloatTol pointers are declared extern here and must be added
-// to engine_funcs.{h,cpp} before this TU links (NEW in blueprint §3).
+// Engine helpers used by these stages. Some are already wired (fn_MemAlloc,
+// fn_MemFreeStatic, g_pMemAllocSingleton); the Vector2 + RandFloatTol shims are
+// declared extern here and must be added to engine_funcs.{h,cpp} before this TU
+// links (NEW in blueprint §3).
 // ============================================================
 extern "C" {
 // System::Random::RandFloatTol()  ?RandFloatTol@Random@System@@QEAAMXZ

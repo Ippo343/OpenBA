@@ -150,7 +150,7 @@ extern "C" void BuildStructure_SetupBuildActions(void* citizenIBPptr, uint32_t p
     {
         uintptr_t gw = g_pGameWorldSingleton ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
         void* rng = gw ? *reinterpret_cast<void**>(gw + 0xd8) : nullptr;
-        if (rng && fn_Random_Rand) uVar2 = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(2));   // B.3.4b bridge
+        if (rng) uVar2 = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(2));   // B.3.4b bridge
     }
 
     // --- CompleteTask (0x38) -> PUSH ---

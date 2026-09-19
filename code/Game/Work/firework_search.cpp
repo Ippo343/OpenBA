@@ -49,7 +49,6 @@
 //   0x14009f810 BuildStructure_impl_f810 (reg_pf_roots_route.cpp Pf_IsDstReachable_f810)
 //   0x140132010 FUN_140132010       (reg_work_impl2.cpp WorkImpl_Sqrtf_132010)
 //   0x140002ed0 Entity_FindComponent_Position (reg_work_base.cpp WorkBase_FindComponent_2ed0)
-//   0x1401512e8 System::Random::Rand (dispatch slot, registered in address_registry.cpp)
 //
 
 #include "engine_funcs.h"
@@ -69,7 +68,6 @@ typedef void* (*fw_FindCompPos_t)(uintptr_t entity, void* retIBP);              
 typedef uint64_t (*fw_ValidateCell_t)(int* mapGrid, uint32_t pathType, uint32_t destCell, int srcCell); // 0x1400a00f0
 typedef int   (*fw_IsDstReachable_t)(int* map, uint32_t srcCell, uint32_t dstCell, char useCache);      // 0x14009f810
 typedef float (*fw_Sqrtf_t)(float v);                                                            // 0x140132010
-typedef uint32_t (*fw_RandomRand_t)(void* rng, uint32_t range);                                  // [0x1401512e8]
 
 static bool                   s_init = false;
 static fw_EntityResolvePos_t  s_resolvePos   = nullptr;
@@ -79,7 +77,6 @@ static fw_FindCompPos_t       s_findCompPos  = nullptr;
 static fw_ValidateCell_t      s_validateCell = nullptr;
 static fw_IsDstReachable_t    s_isReachable  = nullptr;
 static fw_Sqrtf_t             s_sqrtf        = nullptr;
-static fw_RandomRand_t        s_rand         = nullptr;
 static const float*           s_pHalfCell    = nullptr;  // DAT_140172114 = 0.5f
 static const uint32_t*        s_pTid_c7900   = nullptr;  // DAT_1401c7900 (InteractComponent)
 
@@ -92,8 +89,6 @@ static void EnsureInit() {
     s_validateCell = reinterpret_cast<fw_ValidateCell_t>(ResolveAddr(Module::Exe, 0x1400a00f0));
     s_isReachable  = reinterpret_cast<fw_IsDstReachable_t>(ResolveAddr(Module::Exe, 0x14009f810));
     s_sqrtf        = reinterpret_cast<fw_Sqrtf_t>(ResolveAddr(Module::Exe, 0x140132010));
-    uintptr_t slot = ResolveAddr(Module::Exe, 0x1401512e8);
-    if (slot) s_rand = *reinterpret_cast<fw_RandomRand_t*>(slot);
     s_pHalfCell    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
     s_pTid_c7900   = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7900));
     s_init = true;
@@ -368,7 +363,7 @@ int64_t FireWork_SpiralSearch_81d0(int64_t param_1, uint32_t param_2, int param_
     uint32_t count = s_childSum ? static_cast<uint32_t>(s_childSum(static_cast<int64_t>(chosenIBP), 0)) : 0;
     void* rng = *reinterpret_cast<void**>(
         reinterpret_cast<int64_t>(*g_pGameWorldSingleton) + 0xd8);
-    uint32_t randIdx = s_rand ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(count)) : 0;   // B.3.4b bridge
+    uint32_t randIdx = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(count));   // B.3.4b bridge
 
     float resolved[3] = {0.0f, 0.0f, 0.0f};
     if (s_resolvePos)

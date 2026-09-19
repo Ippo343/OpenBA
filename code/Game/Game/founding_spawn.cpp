@@ -213,7 +213,7 @@ static void* FoundingSpawn_Rng() {
 extern "C" float StartTown_FoundingAdultAge(void* citizenTemplate) {
     void* desc = StartTown_FoundingCitizenDescription(citizenTemplate);
     void* rng  = FoundingSpawn_Rng();
-    if (!desc || !rng || !fn_Random_RandFloat) return 0.0f;
+    if (!desc || !rng) return 0.0f;
     const uint8_t* d = reinterpret_cast<const uint8_t*>(desc);
     float ageMin = *reinterpret_cast<const float*>(d + 0x50);
     float ageMax = *reinterpret_cast<const float*>(d + 0x54);
@@ -228,7 +228,7 @@ extern "C" float StartTown_FoundingAdultAge(void* citizenTemplate) {
 extern "C" float StartTown_FoundingChildAge(void* citizenTemplate) {
     void* desc = StartTown_FoundingCitizenDescription(citizenTemplate);
     void* rng  = FoundingSpawn_Rng();
-    if (!desc || !rng || !fn_Random_RandFloat) return 0.0f;
+    if (!desc || !rng) return 0.0f;
     float adultAge = *reinterpret_cast<const float*>(
         reinterpret_cast<const uint8_t*>(desc) + 0x44);
     return reinterpret_cast<System::Random*>(rng)->RandFloat() * adultAge;   // uniform [0, adult threshold)  B.3.4b bridge

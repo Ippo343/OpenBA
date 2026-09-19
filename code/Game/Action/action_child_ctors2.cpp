@@ -39,9 +39,6 @@ static fn_calc116540_t  s_fn_calc116540  = nullptr;
 static const uint32_t* s_pTid_RawMatDesc = nullptr;
 // StateMachineComponent type-id global (0x1401c7350) — for the bef70 component-find leaf.
 static const uint32_t* s_pTid_StateMachine = nullptr;
-// System::Random::RandFloat (Runtime export) — for the bef70 weighted-random leaf.
-typedef float (*fn_randFloat_t)(void* random);
-static fn_randFloat_t s_fn_randFloat = nullptr;
 
 static bool s_init = false;
 static void EnsureInit() {
@@ -56,7 +53,6 @@ static void EnsureInit() {
     s_fn_calc116540   = reinterpret_cast<fn_calc116540_t >(ResolveAddr(Module::Exe, 0x140116540));
     s_pTid_RawMatDesc = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
     s_pTid_StateMachine = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7350));
-    s_fn_randFloat = reinterpret_cast<fn_randFloat_t>(ResolveExport("?RandFloat@Random@System@@QEAAMXZ"));
     s_init = true;
 }
 } // namespace
@@ -492,7 +488,7 @@ uint64_t WeightedRandomIndex_119470(int64_t param_1) {
             void* random = g_pGameWorldSingleton
                 ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8)
                 : nullptr;
-            float r = (s_fn_randFloat && random) ? reinterpret_cast<System::Random*>(random)->RandFloat() : 0.0f;   // B.3.4b bridge
+            float r = random ? reinterpret_cast<System::Random*>(random)->RandFloat() : 0.0f;   // B.3.4b bridge
             result = 0;
             if (0 < n) {
                 float* w = *reinterpret_cast<float**>(param_1 + 0x58);

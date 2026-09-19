@@ -73,9 +73,6 @@ static fn_findFamily_t  s_fn_findFamily  = nullptr;
 static fn_taskCleanup_t s_fn_taskCleanup = nullptr;
 static fn_findStorage_t s_fn_findStorage = nullptr;
 static fn_storageSub_t  s_fn_storageSub  = nullptr;
-// --- Runtime export: System::Random::RandFloatTol (returns float, takes Random*). ---
-typedef float (*fn_RandFloatTol_t)(void* random);
-static fn_RandFloatTol_t s_fn_RandFloatTol = nullptr;
 
 static bool s_init = false;
 static void EnsureInit() {
@@ -96,8 +93,6 @@ static void EnsureInit() {
     s_fn_taskCleanup = reinterpret_cast<fn_taskCleanup_t>(ResolveAddr(Module::Exe, 0x1400c5400));
     s_fn_findStorage = reinterpret_cast<fn_findStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
     s_fn_storageSub  = reinterpret_cast<fn_storageSub_t>(ResolveAddr(Module::Exe, 0x14012d150));
-    s_fn_RandFloatTol = reinterpret_cast<fn_RandFloatTol_t>(
-        ResolveExport("?RandFloatTol@Random@System@@QEAAMXZ"));
     s_init = true;
 }
 } // namespace
@@ -272,7 +267,7 @@ void* Pf_MoveToCtor_9170(void* self, void* param_2, uint32_t pathType, int param
     } else {
         void* random = *reinterpret_cast<void**>(
             reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8);
-        float r = (s_fn_RandFloatTol && random) ? reinterpret_cast<System::Random*>(random)->RandFloatTol() : 0.0f;   // B.3.4b bridge
+        float r = random ? reinterpret_cast<System::Random*>(random)->RandFloatTol() : 0.0f;   // B.3.4b bridge
         *reinterpret_cast<float*>(s + 0x478) =
             r * (s_pDAT_1720e4 ? *s_pDAT_1720e4 : 0.0f) + (s_pDAT_17214c ? *s_pDAT_17214c : 0.0f);
     }

@@ -510,7 +510,7 @@ int TradeWork_Slot4_Impl(TradeWork* self, void* citizenIBP, uint64_t /*param3*/,
         uint64_t destPos[2] = {0};                         // local_a0
         uint32_t range = s_s4_ChildSum ? s_s4_ChildSum(posComp, 0) : 0;
         void* rng = gw ? *reinterpret_cast<void**>(gw + 0xd8) : nullptr;
-        uint32_t rnd = (rng && fn_Random_Rand) ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(range)) : 0;   // B.3.4b bridge
+        uint32_t rnd = rng ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(range)) : 0;   // B.3.4b bridge
         if (s_s4_EntityPos) s_s4_EntityPos(posComp, destPos, 0, rnd, nullptr);
 
         // build the fetch path (branch 1): dest = source storage, src = trade-post building.
@@ -601,7 +601,7 @@ int TradeWork_Slot4_Impl(TradeWork* self, void* citizenIBP, uint64_t /*param3*/,
             }
         }
         void* rng = gw ? *reinterpret_cast<void**>(gw + 0xd8) : nullptr;
-        uint32_t rnd = (rng && fn_Random_Rand) ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(range)) : 0;   // B.3.4b bridge
+        uint32_t rnd = rng ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(range)) : 0;   // B.3.4b bridge
         uint64_t srcPos2[2] = {0};                         // local_68
         if (s_s4_EntityPos) s_s4_EntityPos(posComp, srcPos2, 0, rnd, nullptr);
 

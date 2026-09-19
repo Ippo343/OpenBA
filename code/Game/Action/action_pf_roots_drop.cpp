@@ -201,7 +201,7 @@ void Pf_SpawnRawMaterialOnCell_78c0(int64_t param_1, int64_t param_2, int param_
         if (s_fn_223c0) s_fn_223c0(local_48, &local_res20);
         void* random = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gworld) + 0xd8);
         int64_t entAdj = local_res20;
-        int randv = (fn_Random_RandTol && random) ? reinterpret_cast<System::Random*>(random)->RandTol(2) : 0;   // B.3.4b bridge
+        int randv = random ? reinterpret_cast<System::Random*>(random)->RandTol(2) : 0;   // B.3.4b bridge
         if (s_fn_pos9760)
             s_fn_pos9760(entAdj, cell,
                          static_cast<float>(randv) * (s_pDAT_172204 ? *s_pDAT_172204 : 0.0f));

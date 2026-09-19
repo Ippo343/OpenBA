@@ -59,8 +59,6 @@
 //   fn_InternalBasePtr_Serialize    — engine_funcs.h (0x140152aa0 dispatch slot)
 //   fn_InternalBasePtr_CheckPtr     — engine_funcs.h
 //   fn_IsDerivedFrom                — engine_funcs.h
-//   g_fn_Serializer_Ctor/Dtor/GetVersion, g_fn_Serialize_Int/Bool, g_fn_Time_Serialize
-//                                   — engine_funcs.h
 //   fn_ExternalPtr_BuildSerialize   — engine_funcs.h, resolves to registered 0x140002340
 //                                     (used as TREE #2's key resolver: Ghidra's
 //                                     "Object_ExternalPtr_BuildComponentRef_Serialize")

@@ -209,24 +209,20 @@ static_assert(offsetof(TornadoPool, items) == 0x18, "TornadoPool items");
 static_assert(offsetof(TornadoPool, spawnAccum) == 0x30, "TornadoPool spawnAccum");
 
 // Runtime leaves. Every one is resolved by mangled export name rather than through a
-// .rdata dispatch slot: the nine slots this body uses (0x1401513f0, 0x140151320,
-// 0x140151400, 0x1401525e8, 0x1401527a8, 0x1401527d0, 0x1401527e0, 0x1401527e8,
+// .rdata dispatch slot: the slots this body uses (0x1401513f0, 0x140151320,
+// 0x1401525e8, 0x1401527a8, 0x1401527d0, 0x1401527e0, 0x1401527e8,
 // 0x1401527f0) are NOT in standalone/address_registry.cpp, so ResolveAddr would hand
 // back a null slot.
 typedef bool   (*fn_PIUpdate_t)(void* self);                      // ParticleInstance::Update
 typedef bool   (*fn_IsDerived_t)(const void* obj, uint32_t tid);  // Object::Base::IsDerivedFrom
-typedef float  (*fn_AsSeconds_t)(const void* time);
 typedef void   (*fn_TimeCtor_t)(void* retTime, float seconds);
-typedef float  (*fn_RandFloatTol_t)(void* rng);                   // symmetric, [-1,1)
 typedef void*  (*fn_BoxExtend_t)(const void* box, void* ret, const float* v3);
 typedef void   (*fn_SetBounds_t)(void* geometry, const void* box);
 
 struct TornadoInstFuncs {
     fn_PIUpdate_t     baseUpdate;
     fn_IsDerived_t    isDerived;
-    fn_AsSeconds_t    asSeconds;
     fn_TimeCtor_t     timeCtor;
-    fn_RandFloatTol_t randFloatTol;
     fn_BoxExtend_t    boxExtend;
     fn_SetBounds_t    setBounds;
     void*             rng;        // Graphics::Particle::_rng, the static the retail body uses
@@ -240,20 +236,18 @@ const TornadoInstFuncs& InstFuncs() {
     done = true;
     f.baseUpdate   = (fn_PIUpdate_t)    ResolveExport("?Update@ParticleInstance@Graphics@@QEAA_NXZ");
     f.isDerived    = (fn_IsDerived_t)   ResolveExport("?IsDerivedFrom@Base@Object@@QEBA_NI@Z");
-    f.asSeconds    = (fn_AsSeconds_t)   ResolveExport("?AsSeconds@Time@System@@QEBAMXZ");
     f.timeCtor     = (fn_TimeCtor_t)    ResolveExport("??0Time@System@@QEAA@M@Z");
-    f.randFloatTol = (fn_RandFloatTol_t)ResolveExport("?RandFloatTol@Random@System@@QEAAMXZ");
     f.boxExtend    = (fn_BoxExtend_t)   ResolveExport("?Extend@Box@Volume@@QEBA?AV12@AEBVVector3@Math@@@Z");
     f.setBounds    = (fn_SetBounds_t)   ResolveExport("?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z");
     f.rng          =                    ResolveExport("?_rng@Particle@Graphics@@1VRandom@System@@A");
-    f.ok = f.baseUpdate && f.isDerived && f.asSeconds && f.timeCtor && f.randFloatTol &&
+    f.ok = f.baseUpdate && f.isDerived && f.timeCtor &&
            f.boxExtend && f.setBounds && f.rng;
     if (!f.ok) {
         fprintf(stderr, "[Tornado/particle] Update UNRESOLVED leaf: baseUpdate=%p isDerived=%p "
-                "asSeconds=%p timeCtor=%p rand=%p extend=%p setBounds=%p "
+                "timeCtor=%p extend=%p setBounds=%p "
                 "rng=%p -- the funnel will stand still\n",
-                (void*)f.baseUpdate, (void*)f.isDerived, (void*)f.asSeconds, (void*)f.timeCtor,
-                (void*)f.randFloatTol, (void*)f.boxExtend,
+                (void*)f.baseUpdate, (void*)f.isDerived, (void*)f.timeCtor,
+                (void*)f.boxExtend,
                 (void*)f.setBounds, f.rng);
         fflush(stderr);
     }
@@ -523,23 +517,6 @@ bool Tornado_Serialize(void* self, void* stream) {
     typedef void (*baseSer_t)(void*, void*);
     baseSer_t base = reinterpret_cast<baseSer_t>(s_baseVtable[5]);
     if (base) base(self, stream);            // retail discards the base return
-
-    if (!fn_System_Color_Serialize || !g_fn_Time_Serialize) {
-        // Any missing leaf leaves the body unread and the load fails exactly as it did
-        // before this slot existed -- so say which one, rather than regress in silence.
-        // (The Serializer ctor/dtor/float conjuncts are gone with their doors: the
-        // serializer is a real IO::Serializer now. Time::Serialize is B.3 step 4b.)
-        static bool warned = false;
-        if (!warned) {
-            warned = true;
-            fprintf(stderr, "[Tornado/particle] Serialize UNRESOLVED leaf: color=%p "
-                    "time=%p -- Tornado.rsc will fail to "
-                    "load and its ExternalPtr will stay null\n",
-                    (void*)fn_System_Color_Serialize, (void*)g_fn_Time_Serialize);
-            fflush(stderr);
-        }
-        return true;
-    }
 
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     alignas(8) uint8_t ser[32] = {};

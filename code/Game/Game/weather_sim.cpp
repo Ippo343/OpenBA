@@ -87,15 +87,12 @@ const float kPerlinOctaves = 4.0f;             // DAT_140172194
 const float k1_12          = f32(0x3daaaaab);  // DAT_1401720e0 = 1/12
 const float kKfCount       = 48.0f;            // DAT_1401721e4
 
-// RandFloatTol (float in [-1,1]) + Scene::RemoveGlobalObject — not in
-// engine_funcs; resolve lazily.
-typedef float (*fn_RandFloatTol_t)(void* rng);   // ?RandFloatTol@Random@System@@QEAAMXZ
+// Scene::RemoveGlobalObject — not in engine_funcs; resolve lazily.
 typedef void  (*fn_RemoveGlobalObject_t)(void* scene, void* geo);
 // ComponentEntity_CopyCtor (0x1400c3720) — clone an entity from a template desc.
 typedef void* (*fn_EntityCopyCtor_t)(void* mem, void* templateDesc);
 // EntityList register (0x1400c48a0) — RCX=entityList(gameWorld+0xe8), RDX=IBP*, R8D=typeId.
 typedef void  (*fn_EntityRegister_t)(void* entityList, void* ibp, int typeId);
-fn_RandFloatTol_t       s_fnRandFloatTol       = nullptr;
 fn_RemoveGlobalObject_t s_fnRemoveGlobalObject = nullptr;
 fn_EntityCopyCtor_t     s_fnEntityCopyCtor     = nullptr;
 fn_EntityRegister_t     s_fnEntityRegister     = nullptr;
@@ -103,8 +100,6 @@ bool s_simResolved = false;
 void EnsureSimResolved() {
     if (s_simResolved) return;
     s_simResolved = true;
-    s_fnRandFloatTol = reinterpret_cast<fn_RandFloatTol_t>(
-        ResolveExport("?RandFloatTol@Random@System@@QEAAMXZ"));
     s_fnRemoveGlobalObject = reinterpret_cast<fn_RemoveGlobalObject_t>(
         ResolveExport("?RemoveGlobalObject@Scene@Graphics@@QEAAXPEAVGeometry@2@@Z"));
     s_fnEntityCopyCtor = reinterpret_cast<fn_EntityCopyCtor_t>(
@@ -153,7 +148,7 @@ void WeatherTypeStateMachine(uint8_t* w, uint8_t* gw, float sec) {
     if (kf > 47) kf = 0;
 
     if (kf == 0 || kf == 0x18) {
-        if (fn_Random_Rand && fn_PerlinNoise_Ctor) {
+        if (fn_PerlinNoise_Ctor) {
             uint32_t s1 = reinterpret_cast<System::Random*>(rng)->Rand(0xffffffffu);   // B.3.4b bridge
             uint32_t s2 = reinterpret_cast<System::Random*>(rng)->Rand(0xffffffffu);   // B.3.4b bridge
             uint8_t pn[0x10];
@@ -161,18 +156,16 @@ void WeatherTypeStateMachine(uint8_t* w, uint8_t* gw, float sec) {
             std::memcpy(w + 0x34, pn, 0x10);
         }
         float accInt = 0.0f, accType = 0.0f;
-        if (s_fnRandFloatTol) {
-            for (int k = 0; k < 12; ++k) {
-                accInt  += reinterpret_cast<System::Random*>(rng)->RandFloatTol() * k1_12;   // -> w+0x48  B.3.4b bridge
-                accType += reinterpret_cast<System::Random*>(rng)->RandFloatTol() * k1_12;   // -> w+0x30  B.3.4b bridge
-            }
+        for (int k = 0; k < 12; ++k) {
+            accInt  += reinterpret_cast<System::Random*>(rng)->RandFloatTol() * k1_12;   // -> w+0x48  B.3.4b bridge
+            accType += reinterpret_cast<System::Random*>(rng)->RandFloatTol() * k1_12;   // -> w+0x30  B.3.4b bridge
         }
         *reinterpret_cast<float*>(w + 0x30) =
             accType * *reinterpret_cast<float*>(c + 0x40) + *reinterpret_cast<float*>(c + 0x34);
         *reinterpret_cast<float*>(w + 0x48) = accInt * *reinterpret_cast<float*>(c + 0x104);
     }
 
-    float randf = fn_Random_RandFloat ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 0.0f;   // B.3.4b bridge
+    float randf = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
     *reinterpret_cast<int*>(w + 0x10) = 0;
     do {
         int type = *reinterpret_cast<int*>(w + 0x10);
@@ -196,9 +189,9 @@ bool SpawnChance(uint8_t* timer, const float* p, void* rng) {
     float p1 = p[1];
     if (p1 <= 0.0f) { *reinterpret_cast<int64_t*>(timer) = 0; return false; }
     float scale = p[0] * 12.0f * 300.0f;   // DAT_1401721b8 * DAT_140172234
-    float elapsed = fn_Time_AsSeconds ? reinterpret_cast<const System::Time*>(timer)->AsSeconds() : 0.0f;   // B.3.4b bridge
+    float elapsed = reinterpret_cast<const System::Time*>(timer)->AsSeconds();   // B.3.4b bridge
     *reinterpret_cast<int64_t*>(timer) = 0;
-    float r = fn_Random_RandFloat ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 1.0f;   // B.3.4b bridge
+    float r = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
     return r < elapsed / (scale * p1);
 }
 
@@ -220,7 +213,7 @@ extern "C" void Weather_ResetTime_Reimpl(void* weatherSelf, void* time) {
     // --- Game clock (seconds) — reads the sim clock at gameWorld+0x128 -> Time+8,
     //     exactly like the original helper_3810 / FUN_140093420. ---
     void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
-    if (!gw || !fn_Time_AsSeconds) return;
+    if (!gw) return;
     void* timeObj = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(gw) + 0x128);
     if (!timeObj) return;
     float sec = reinterpret_cast<const System::Time*>(reinterpret_cast<uint8_t*>(timeObj) + 8)->AsSeconds();   // B.3.4b bridge
