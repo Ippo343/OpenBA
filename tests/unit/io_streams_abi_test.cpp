@@ -296,4 +296,156 @@ UNIT_TEST(the_compressed_classes_are_layout_identical_to_their_PODs) {
     CHECK_EQ((int)pod->base.direction, 1);
 }
 
+// ===========================================================================
+// ENDGAME B.3.4 STREAMS (4/6) — IO::TextFileStream and IO::VisitorStream.
+// ===========================================================================
+
+// The ten-slot table. Slot 7 is `Open(const Filename&)` — the FileStream branch
+// meaning — and slot 8 is `OpenWithFormat`, TextFileStream's own overload of it.
+// The probe overrides BOTH with distinct markers, which is the whole point:
+// if the two ever swapped, a caller asking for the formatted open would get the
+// plain one and silently read the file with the wrong codec.
+struct TextFileStreamProbe final : IO::TextFileStream {
+    STREAM_PROBE_SEVEN
+    bool Open(const System::Filename&) override { Note(this, 7); return true; }
+    bool OpenWithFormat(const System::Filename&, int32_t) override {
+        Note(this, 8); return true;
+    }
+    bool Create(const System::Filename&, int32_t, int32_t) override {
+        Note(this, 9); return true;
+    }
+    ~TextFileStreamProbe() = default;
+};
+
+struct VisitorStreamProbe final : IO::VisitorStream {
+    STREAM_PROBE_SEVEN
+    ~VisitorStreamProbe() = default;
+};
+
+UNIT_TEST(the_real_TextFileStream_has_10_slots_with_Open_at_7_and_OpenWithFormat_at_8) {
+    TextFileStreamProbe p;
+    void* raw = static_cast<void*>(static_cast<IO::Stream*>(&p));
+
+    CheckSharedStreamSlots(raw);
+
+    // Slot 7 is `Open`, NOT `Close`. This is the one place the family disagrees
+    // with itself about what +0x38 means: on the memory / compressed branch it
+    // is `Close()`, here it is `Open(const Filename&)`. Same offset, same table
+    // shape, completely different behaviour, and nothing else diagnoses it.
+    using OpenFn = bool (*)(void*, const void*);
+    Reset();
+    CHECK(SlotAt<OpenFn>(raw, kSlot7)(raw, nullptr) == true);
+    CHECK_EQ(g_lastMark, 7);
+
+    // Slot 8 is the class's OWN overload of that same name. On the compressed
+    // branch this offset is `PreCommit()`.
+    using OpenFmtFn = bool (*)(void*, const void*, int32_t);
+    Reset();
+    CHECK(SlotAt<OpenFmtFn>(raw, kSlot8)(raw, nullptr, 3) == true);
+    CHECK_EQ(g_lastMark, 8);
+
+    // Slot 9 — `Create(Filename const&, Format, Format)`. THREE arguments after
+    // `this`, because the last two are both formats (the mangled name's
+    // trailing `1` back-references `W4Format@Text@4@`, and retail stores both
+    // as DWORDs at +0x68 and +0x6c).
+    constexpr int kSlot9 = 0x48;
+    using CreateFn = bool (*)(void*, const void*, int32_t, int32_t);
+    Reset();
+    CHECK(SlotAt<CreateFn>(raw, kSlot9)(raw, nullptr, 6, 3) == true);
+    CHECK_EQ(g_lastMark, 9);
+
+    CheckDistinctSlots(raw, 10);
+
+    // Slot 1 by elimination (the file's banner explains why GetSource is never
+    // raw-called), plus the ordinary virtual call that proves it is a virtual.
+    Reset();
+    { const IO::Stream& s = p; (void)s.GetSource(); }
+    CHECK_EQ(g_lastMark, kGetSource / 8);
+
+    static_assert(!std::has_virtual_destructor<IO::TextFileStream>::value,
+                  "IO::TextFileStream must not acquire a virtual destructor");
+
+    // `this` is unadjusted through the three-level chain, which every raw slot
+    // caller in runtime/src assumes.
+    CHECK(static_cast<void*>(static_cast<IO::Stream*>(&p)) ==
+          static_cast<void*>(static_cast<IO::FileStream*>(&p)));
+    CHECK(static_cast<void*>(static_cast<IO::FileStream*>(&p)) ==
+          static_cast<void*>(static_cast<IO::TextFileStream*>(&p)));
+}
+
+UNIT_TEST(the_real_VisitorStream_has_exactly_7_slots_and_no_fields) {
+    VisitorStreamProbe p;
+    void* raw = static_cast<void*>(static_cast<IO::Stream*>(&p));
+
+    CheckSharedStreamSlots(raw);
+    CheckDistinctSlots(raw, 7);
+
+    Reset();
+    { const IO::Stream& s = p; (void)s.GetSource(); }
+    CHECK_EQ(g_lastMark, kGetSource / 8);
+
+    // SEVEN, not eight. VisitorStream is the bare IO::Stream shape: no Open, no
+    // Close, no PreCommit. It adds no field either, so it is exactly IO::Stream
+    // with five overrides — which is what makes it a NULL SINK rather than a
+    // stream with a degenerate buffer.
+    static_assert(sizeof(IO::VisitorStream) == 0x18, "eh_vector stride 0x18002bf80");
+    static_assert(sizeof(IO::VisitorStream) == sizeof(IO::Stream),
+                  "IO::VisitorStream adds no field to IO::Stream");
+    static_assert(!std::has_virtual_destructor<IO::VisitorStream>::value,
+                  "IO::VisitorStream must not acquire a virtual destructor");
+
+    CHECK(static_cast<void*>(static_cast<IO::Stream*>(&p)) ==
+          static_cast<void*>(static_cast<IO::VisitorStream*>(&p)));
+}
+
+UNIT_TEST(TextFileStream_and_VisitorStream_are_layout_identical_to_their_PODs) {
+    static_assert(sizeof(IO::TextFileStream) == sizeof(RtIo::TextFileStream), "POD");
+    static_assert(sizeof(IO::VisitorStream)  == sizeof(RtIo::VisitorStream),  "POD");
+
+    CHECK_EQ((int)offsetof(IO::TextFileStream, _objectVersion),   0x50);
+    CHECK_EQ((int)offsetof(IO::TextFileStream, _objectName),      0x58);
+    CHECK_EQ((int)offsetof(IO::TextFileStream, _objectType),      0x60);
+    CHECK_EQ((int)offsetof(IO::TextFileStream, _requestedFormat), 0x68);
+    CHECK_EQ((int)offsetof(IO::TextFileStream, _activeEncoding),  0x6c);
+    CHECK_EQ((int)offsetof(IO::TextFileStream, _buffer),          0x70);
+    CHECK_EQ((int)offsetof(IO::TextFileStream, _bufSize),         0x78);
+    CHECK_EQ((int)offsetof(IO::TextFileStream, _bufCursor),       0x7c);
+
+    // THE NAME/TYPE PAIR IS THE OTHER WAY ROUND FROM THE OBVIOUS READING and it
+    // is a coin flip nothing but a body that NAMES one of them settles:
+    // ?GetObjectName@ is `LEA RAX,[RCX+0x58]` and ?GetObjectType@ is
+    // `LEA RAX,[RCX+0x60]`, so the LOWER offset is the NAME.
+    CHECK((int)offsetof(IO::TextFileStream, _objectName) <
+          (int)offsetof(IO::TextFileStream, _objectType));
+
+    // THE CLASS SAYS MORE THAN THE POD AT +0x78, and this is the pin for it:
+    // the POD's single `void* _unk78` is the class's `_bufSize` + `_bufCursor`
+    // int32 pair, occupying the same eight bytes. `GetSize` returns +0x78 in
+    // its buffer arm and the inherited FileInfo::size in its file arm, which is
+    // what identifies +0x78 as a SIZE and not a pointer.
+    CHECK_EQ((int)offsetof(IO::TextFileStream, _bufSize),
+             (int)offsetof(RtIo::TextFileStream, _unk78));
+    CHECK_EQ((int)(sizeof(TextFileStreamProbe::_bufSize) +
+                   sizeof(TextFileStreamProbe::_bufCursor)),
+             (int)sizeof(RtIo::TextFileStream::_unk78));
+
+    // A field write through the CLASS is visible through the POD at the same
+    // bytes — the property every reinterpret_cast in text_file_stream_win.cpp
+    // now relies on, including the two `RtIO::TextFileStream*` bridges the
+    // `Create` and `OpenWithFormat` members use to reach the FileStream doors.
+    TextFileStreamProbe p;
+    p._objectVersion   = 0x11;
+    p._requestedFormat = 6;
+    p._activeEncoding  = 3;
+    p._bufSize         = 0x333;
+    const RtIo::TextFileStream* pod =
+        reinterpret_cast<const RtIo::TextFileStream*>(
+            static_cast<IO::TextFileStream*>(&p));
+    CHECK_EQ((int)pod->objectVersion,   0x11);
+    CHECK_EQ((int)pod->requestedFormat, 6);
+    CHECK_EQ((int)pod->activeEncoding,  3);
+    CHECK_EQ((int)*reinterpret_cast<const int32_t*>(
+                 reinterpret_cast<const char*>(pod) + 0x78), 0x333);
+}
+
 }  // namespace

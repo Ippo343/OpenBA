@@ -565,6 +565,206 @@ static_assert(std::is_trivially_destructible<RtIo::FileStream>::value,
 static_assert(std::is_trivially_destructible<RtIo::BinaryFileStream>::value,
               "the POD must stay trivially destructible while both views are live");
 
+// ---------------------------------------------------------------------------
+// IO::TextFileStream — vtable 0x180155980, 10 slots, 0x80 bytes.
+// ---------------------------------------------------------------------------
+// THE FAMILY'S ONE OVERLOAD-ORDER CASE, and the reason B34_RULES section 1.3
+// gives slot 8 a different NAME rather than a second `Open`:
+//
+//   slot 7  +0x38  0x1800aac70  Open(const Filename&)           INHERITED from
+//                                                               IO::FileStream
+//   slot 8  +0x40  0x1800ba640  Open(const Filename&, Format)   TextFileStream's
+//                                                               OWN overload
+//
+// So `Open` is overloaded ACROSS the base/derived boundary and BOTH entries are
+// live in the shipped table. Declaring the slot-8 form `Open` here would HIDE
+// the base's name — a compile error at every inherited-`Open` call site rather
+// than a silent fault, but decision 2 asks for distinct names anyway and
+// `OpenWithFormat` is what makes slot 8 unmistakable at a glance.
+//
+// Slot 1 is FileStream's `GetSource` (0x1800aab50), also inherited and NOT
+// overridden, so this class overrides seven of the ten and adds two.
+//
+// ⚠ ITS CONSTRUCTION SITE IS NOT IN THIS BLOCK'S FILE SET. `External::SaveText`
+// stack-builds one — `RtIo::TextFileStream ts;` at
+// runtime/src/object/external_savetext_win.cpp:286, with a real ctor door at
+// :299 and an independent re-stamp at :362. That file is not block 4's, which
+// is exactly why section 4.3's "no real constructors" is non-negotiable here:
+// a C++ constructor would swap the table under an object built elsewhere.
+// ABSTRACT (slot 0 pure, body registered by RT_DELDTOR row 41 in
+// deleting_dtor.cpp) because nothing holds a `TextFileStream` by value.
+//
+// ---------------------------------------------------------------------------
+// +0x78 IS TWO int32s, NOT THE POD'S `void* _unk78`
+// ---------------------------------------------------------------------------
+// The `RtIo::TextFileStream` POD above models +0x78 as `void* _unk78`, "zeroed
+// by the ctor, never freed", and text_file_stream_win.cpp reached the two real
+// fields through explicit offsets rather than edit that POD — deliberately, so
+// the disagreement stayed visible at the point of use. The CLASS resolves it,
+// because the bodies that pin it now live on the class:
+//
+//   `GetSize`       returns +0x78 or the inherited FileInfo::size   (+0x28)
+//   `GetCurrentPos` returns +0x7c or the inherited FileInfo::cursor (+0x2c)
+//
+// from the two arms of one branch each, so each buffer field is identified by
+// the inherited field it stands in for, and both of those are independently
+// asserted above. `Open` (slot 8) then WRITES +0x78 with the transcoded byte
+// count. So +0x78 is an int32 SIZE and +0x7c an int32 CURSOR; the POD's "never
+// freed" stops being an observation and becomes a consequence — it is not a
+// pointer, so there is nothing to free. Same eight bytes either way, and the
+// cross-assert below pins the class's pair against the POD's single field.
+class TextFileStream : public FileStream {
+public:
+    // slot 0  +0x00  0x18002ba90 — PURE. Its body is deleting_dtor.cpp's row 41,
+    // filling slot 0 of the LIVE minted table (rt_data_mint_tables.inc:3697);
+    // section 4.2 keeps that registration for the whole step.
+    Stream* DeletingDtor(unsigned flags) override = 0;
+    // slot 1  +0x08  0x1800aab50 — IO::FileStream::GetSource, NOT overridden.
+    bool     Write(int n, const void* src) override;   // slot 2 +0x10  0x1800ba9f0
+    bool     Read(int n, void* dst) override;          // slot 3 +0x18  0x1800ba900
+    bool     SetCurrentPos(int pos) override;          // slot 4 +0x20  0x1800babd0
+    uint32_t GetCurrentPos() const override;           // slot 5 +0x28  0x1800bac30
+    uint32_t GetSize() const override;                 // slot 6 +0x30  0x1800ba8e0
+    // slot 7  +0x38  0x1800aac70 — IO::FileStream::Open, NOT overridden.
+
+    // slot 8  +0x40  0x1800ba640 — `?Open@TextFileStream@IO@@UEAA_NAEBVFilename@
+    // System@@W4Format@Text@4@@Z`. Named `OpenWithFormat`, not `Open`: see the
+    // banner. It is the body that INSTALLS `_buffer`, and it CLOSES the file
+    // before returning, which is why `Read` never touches the handle.
+    virtual bool OpenWithFormat(const System::Filename& path, int32_t format);
+
+    // slot 9  +0x48  0x1800ba940 — `(Filename const&, Text::Format,
+    // Text::Format)`. THE LAST TWO ARGUMENTS ARE BOTH FORMATS: the mangled
+    // name's trailing `1` back-references `W4Format@Text@4@`, and
+    // `MOV [RCX+0x68],R8D ; MOV [RCX+0x6c],R9D` stores both as DWORDS, which a
+    // `Filename const&` in R9 could not be.
+    virtual bool Create(const System::Filename& path,
+                        int32_t requestedFormat, int32_t activeEncoding);
+
+    // ---- the 0x80 bytes, at retail's offsets -------------------------------
+    int32_t _objectVersion;    // +0x50  ?GetObjectVersion@ is `MOV EAX,[RCX+0x50]`
+    int32_t _pad54;            // +0x54  never written by either constructor
+    char*   _objectName;       // +0x58  a System::String — ?GetObjectName@ LEAs it
+    char*   _objectType;       // +0x60  a System::String — ?GetObjectType@ LEAs it
+    int32_t _requestedFormat;  // +0x68  ctor: 6 ("detect from the data")
+    int32_t _activeEncoding;   // +0x6c  ctor: 6 — THE BOM SELECTOR
+    void*   _buffer;           // +0x70  owned, bare MemFree in the dtor door
+    int32_t _bufSize;          // +0x78  bytes in _buffer — see the banner
+    int32_t _bufCursor;        // +0x7c  position IN _buffer
+
+protected:
+    ~TextFileStream() = default;
+};
+
+static_assert(sizeof(TextFileStream) == 0x80,
+              "sizeof(IO::TextFileStream) == 0x80 (eh_vector_dtor stride 0x18002ba90)");
+static_assert(offsetof(TextFileStream, _objectVersion)  == 0x50,
+              "?GetObjectVersion@TextFileStream 0x1800ba250: `MOV EAX,[RCX+0x50]`");
+static_assert(offsetof(TextFileStream, _objectName)     == 0x58,
+              "?GetObjectName@TextFileStream 0x1800ba270: `LEA RAX,[RCX+0x58]`");
+static_assert(offsetof(TextFileStream, _objectType)     == 0x60,
+              "?GetObjectType@TextFileStream 0x1800ba260: `LEA RAX,[RCX+0x60]`");
+static_assert(offsetof(TextFileStream, _requestedFormat) == 0x68,
+              "?Create@TextFileStream 0x1800ba949: `MOV [RCX+0x68],R8D`");
+static_assert(offsetof(TextFileStream, _activeEncoding)  == 0x6c,
+              "?Create@TextFileStream 0x1800ba94d: `MOV [RCX+0x6c],R9D`; "
+              "?SaveText@External branches on THIS one for the BOM");
+static_assert(offsetof(TextFileStream, _buffer)   == 0x70,
+              "the discriminator four bodies branch on; ~TextFileStream frees it "
+              "with a bare MemFree, not the String idiom");
+static_assert(offsetof(TextFileStream, _bufSize)   == 0x78,
+              "?GetSize@TextFileStream 0x1800ba8e7: `MOV EAX,[RCX+0x78]` in the "
+              "buffer arm, against FileInfo::size in the file arm");
+static_assert(offsetof(TextFileStream, _bufCursor) == 0x7c,
+              "?GetCurrentPos@TextFileStream 0x1800bac37: `MOV EAX,[RCX+0x7c]`");
+
+// ---------------------------------------------------------------------------
+// IO::VisitorStream — vtable 0x180155a20, 7 slots, 0x18 bytes.
+// ---------------------------------------------------------------------------
+// A `Stream` AND NOTHING ELSE, and a NULL SINK: its five stream slots are two
+// instructions each and its `Read` returns true WITHOUT touching the caller's
+// buffer. That is the mechanism of the whole reference-visit pass —
+// `?Add@ExternalFactory@Object@@` stack-constructs one, the ctor sets
+// `_direction` to 1 (WRITING) and installs the VISITOR Encoding at +0x10
+// (0x1801559f8, NOT the shared BinaryEncoding 0x1801554a8), then runs the
+// External's own `Serialize` against it. The object walks itself exactly as a
+// save would, every byte is swallowed, and the only thing that happens is the
+// Encoding's side effect: recording the resource references the walk passes.
+//
+// SEVEN SLOTS, the bare `IO::Stream` shape — no `Open`, no `Close`, no
+// `PreCommit`. Slot 1 is `IO::Stream`'s OWN `GetSource` (0x18000c6a0), not
+// overridden, so this class overrides exactly slots 2..6 and adds nothing.
+// The table is bounded by a STRING: the qword at 0x180155a58 is "External".
+//
+// ⚠ ITS CONSTRUCTION SITE IS ITS OWN PORTED CTOR (0x1800bb090,
+// iobase_vtables.cpp), which does the base->derived vptr restamp by hand
+// against `RT_DATA_SLOT("??_7VisitorStream@IO@@6B@")`. Section 4.3: that ctor
+// does NOT convert, and `??_7VisitorStream@` is additionally stamped from
+// OUTSIDE runtime/src/io (external_add.cpp), so its minted row stays.
+// ABSTRACT (slot 0 pure, 0x18002bf80 registered by address at
+// iobase_vtables.cpp) because nothing holds a `VisitorStream` by value.
+//
+// DO NOT CONFUSE THIS WITH `IO::Visitor` (??_7Visitor@IO@@6B@, 0x1801558b0),
+// which is a 26-slot `ReaderWriter` subclass. VisitorStream is the Stream;
+// Visitor is the serializer that rides on it. The names are one token apart and
+// the two are not related by inheritance.
+class VisitorStream : public Stream {
+public:
+    // slot 0  +0x00  0x18002bf80 — PURE; body registered by address, and it
+    // fills slot 0 of the live minted table (rt_data_mint_tables.inc:3872).
+    Stream* DeletingDtor(unsigned flags) override = 0;
+    // slot 1  +0x08  0x18000c6a0 — IO::Stream::GetSource, NOT overridden.
+    bool     Write(int n, const void* src) override;   // slot 2 +0x10  0x1800bb030
+    bool     Read(int n, void* dst) override;          // slot 3 +0x18  0x1800bb020
+    bool     SetCurrentPos(int pos) override;          // slot 4 +0x20  0x1800bb010
+    uint32_t GetCurrentPos() const override;           // slot 5 +0x28  0x1800bb000
+    uint32_t GetSize() const override;                 // slot 6 +0x30  0x1800baff0
+
+    // NO FIELDS. sizeof is IO::Stream's 0x18, measured from the eh_vector stride
+    // at 0x18002bf80 and cross-checked by `?Add@ExternalFactory@`'s stack slot,
+    // which spans exactly vptr / direction / encoding.
+
+protected:
+    ~VisitorStream() = default;
+};
+
+static_assert(sizeof(VisitorStream) == 0x18,
+              "sizeof(IO::VisitorStream) == 0x18 (eh_vector_dtor stride 0x18002bf80)");
+static_assert(sizeof(VisitorStream) == sizeof(Stream),
+              "IO::VisitorStream adds no field to IO::Stream");
+
+// ---- the duplicate-POD cross-asserts, TextFileStream and VisitorStream -----
+static_assert(sizeof(TextFileStream) == sizeof(RtIo::TextFileStream),
+              "IO::TextFileStream and its POD stay interchangeable");
+static_assert(offsetof(TextFileStream, _objectVersion) ==
+                  offsetof(RtIo::TextFileStream, objectVersion), "alias objectVersion");
+static_assert(offsetof(TextFileStream, _objectName) ==
+                  offsetof(RtIo::TextFileStream, objectName), "alias objectName");
+static_assert(offsetof(TextFileStream, _objectType) ==
+                  offsetof(RtIo::TextFileStream, objectType), "alias objectType");
+static_assert(offsetof(TextFileStream, _requestedFormat) ==
+                  offsetof(RtIo::TextFileStream, requestedFormat), "alias requestedFormat");
+static_assert(offsetof(TextFileStream, _activeEncoding) ==
+                  offsetof(RtIo::TextFileStream, activeEncoding), "alias activeEncoding");
+static_assert(offsetof(TextFileStream, _buffer) ==
+                  offsetof(RtIo::TextFileStream, buffer), "alias buffer");
+// The one place the class says MORE than the POD: the POD's single `void*
+// _unk78` covers the class's `_bufSize` + `_bufCursor` pair. Same eight bytes,
+// and the pin is that the pair STARTS where the POD's field does.
+static_assert(offsetof(TextFileStream, _bufSize) ==
+                  offsetof(RtIo::TextFileStream, _unk78),
+              "the class's int32 pair starts at the POD's _unk78");
+static_assert(sizeof(RtIo::TextFileStream::_unk78) ==
+                  sizeof(TextFileStream::_bufSize) + sizeof(TextFileStream::_bufCursor),
+              "two int32s cover exactly the POD's one pointer-sized field");
+static_assert(std::is_trivially_destructible<RtIo::TextFileStream>::value,
+              "the POD must stay trivially destructible while both views are live");
+
+static_assert(sizeof(VisitorStream) == sizeof(RtIo::VisitorStream),
+              "IO::VisitorStream and its POD stay interchangeable");
+static_assert(std::is_trivially_destructible<RtIo::VisitorStream>::value,
+              "the POD must stay trivially destructible while both views are live");
+
 }  // namespace IO
 
 // ===========================================================================
