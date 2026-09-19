@@ -59,12 +59,6 @@ fn_AudioDevice_FreeChannel_t fn_AudioDevice_FreeChannel = nullptr;
 // Application::Application::PlatformUpdate — TBD
 fn_App_PlatformUpdate_t fn_App_PlatformUpdate = nullptr;
 
-// Video::Context::ClearResources — TBD
-fn_VideoCtx_ClearResources_t fn_VideoCtx_ClearResources = nullptr;
-
-// Video::Context::Reset — TBD
-fn_VideoCtx_Reset_t fn_VideoCtx_Reset = nullptr;
-
 // Engine::Loader::Load
 fn_Loader_Load_t fn_Loader_Load = nullptr;
 
@@ -84,10 +78,8 @@ fn_UI_CloseDialog_t fn_UI_CloseDialog = nullptr;
 fn_DynArrayPush_t fn_PostDrawPush = nullptr;
 fn_DynArrayPush_t fn_PostUpdatePush = nullptr;
 
-// Video::Context lifecycle
-fn_VideoCtx_Ctor_t fn_VideoCtx_Ctor = nullptr;
-fn_VideoCtx_Dtor_t fn_VideoCtx_Dtor = nullptr;
-fn_VideoCtx_Delete_t fn_VideoCtx_Delete = nullptr;
+// Video::Context lifecycle — the whole group RETIRED by ENDGAME B.3.5 (b35-K2),
+// zero callers tree-wide. See engine_funcs.h.
 
 // MemoryAllocator
 fn_MemAlloc_t fn_MemAlloc = nullptr;
@@ -339,7 +331,6 @@ fn_OrchardGetGrowth_t fn_OrchardGetGrowth = nullptr;
 // Video::ImageBuffer (Runtime DLL exports)
 // ============================================================
 fn_ImageBuffer_Ctor_t fn_ImageBuffer_Ctor = nullptr;
-fn_ImageBuffer_Dtor_t fn_ImageBuffer_Dtor = nullptr;
 fn_ImageBuffer_CopyToTexture_t fn_ImageBuffer_CopyToTexture = nullptr;
 fn_ImageBuffer_CopyFromTexture_t fn_ImageBuffer_CopyFromTexture = nullptr;
 
@@ -579,7 +570,6 @@ fn_EdgeMesh_TriangleVertex_Ctor_t  fn_EdgeMesh_TriangleVertex_Ctor = nullptr;
 fn_EdgeMesh_EdgeVertex_Ctor_t      fn_EdgeMesh_EdgeVertex_Ctor = nullptr;
 fn_EdgeMesh_Set_t                  fn_EdgeMesh_Set = nullptr;
 fn_EdgeMesh_SetMaterials_t         fn_EdgeMesh_SetMaterials = nullptr;
-fn_EdgeMeshInstance_SetMesh_t      fn_EdgeMeshInstance_SetMesh = nullptr;
 fn_EdgeMeshInstance_Ctor_t         fn_EdgeMeshInstance_Ctor = nullptr;
 fn_TileRender_t fn_TileRender = nullptr;
 fn_TileValidityCheck_t fn_TileValidityCheck = nullptr;
@@ -761,12 +751,7 @@ fn_DrawGeometry_Init_t fn_DrawGeometry_Init = nullptr;
 fn_AudioObjectGroup_Ctor_t fn_AudioObjectGroup_Ctor = nullptr;
 fn_AudioScene_RegisterObject_t fn_AudioScene_RegisterObject = nullptr;
 fn_Entity_FindAudioComponent_t fn_Entity_FindAudioComponent = nullptr;
-fn_Graphics_Scene_AddGlobalObject_t fn_Graphics_Scene_AddGlobalObject = nullptr;
-fn_Graphics_Scene_AddObject_t       fn_Graphics_Scene_AddObject       = nullptr;
-fn_Graphics_GraphicsMesh_GetMaterialList_t fn_Graphics_GraphicsMesh_GetMaterialList = nullptr;
-fn_Graphics_MeshInstance_SetMaterialInstance_t fn_Graphics_MeshInstance_SetMaterialInstance = nullptr;
 fn_Graphics_ParticleSystemInstance_Ctor_t fn_Graphics_ParticleSystemInstance_Ctor = nullptr;
-fn_Graphics_ParticleInstance_IncrementInstanceIndex_t fn_Graphics_ParticleInstance_IncrementInstanceIndex = nullptr;
 fn_Graphics_Particle_Ctor_t fn_Graphics_Particle_Ctor = nullptr;
 fn_Graphics_Scene_Clean_t fn_Graphics_Scene_Clean = nullptr;
 
@@ -774,14 +759,10 @@ fn_Graphics_Scene_Clean_t fn_Graphics_Scene_Clean = nullptr;
 fn_Graphics_Renderer_Ctor_t      fn_Graphics_Renderer_Ctor      = nullptr;
 fn_Graphics_Scene_Ctor_t         fn_Graphics_Scene_Ctor         = nullptr;
 fn_Graphics_SunLight_Ctor_t      fn_Graphics_SunLight_Ctor      = nullptr;
-fn_Graphics_SunLight_Set_t       fn_Graphics_SunLight_Set       = nullptr;
 fn_Graphics_MeshInstance_Ctor_t  fn_Graphics_MeshInstance_Ctor  = nullptr;
-fn_Graphics_MeshInstance_SetMesh_t fn_Graphics_MeshInstance_SetMesh = nullptr;
 fn_Graphics_Renderer_Draw_t      fn_Graphics_Renderer_Draw      = nullptr;
-fn_Video_Context_SetFog_t        fn_Video_Context_SetFog        = nullptr;
 fn_Volume_Frustum_Ctor_t         fn_Volume_Frustum_Ctor         = nullptr;
 fn_Graphics_Camera_Ctor_t        fn_Graphics_Camera_Ctor        = nullptr;
-fn_Graphics_Camera_SetFrustum_t  fn_Graphics_Camera_SetFrustum  = nullptr;
 
 fn_Audio_Scene_MoveEmitter_t fn_Audio_Scene_MoveEmitter = nullptr;
 fn_Audio_Scene_SetEmitterVolume_t fn_Audio_Scene_SetEmitterVolume = nullptr;
@@ -1259,14 +1240,6 @@ bool EngineFuncsInit() {
     fn_App_PlatformUpdate = reinterpret_cast<fn_App_PlatformUpdate_t>(
         ResolveExport("?PlatformUpdate@Application@1@AEAA_NXZ"));
 
-    // Video::Context::ClearResources — resolve by name
-    fn_VideoCtx_ClearResources = reinterpret_cast<fn_VideoCtx_ClearResources_t>(
-        ResolveExport("?ClearResources@Context@Video@@QEAAXXZ"));
-
-    // Video::Context::Reset — resolve by name
-    fn_VideoCtx_Reset = reinterpret_cast<fn_VideoCtx_Reset_t>(
-        ResolveExport("?Reset@Context@Video@@QEAAXXZ"));
-
     // Engine::Loader::Load(UpdateLoop*) — resolve by name
     fn_Loader_Load = reinterpret_cast<fn_Loader_Load_t>(
         ResolveExport("?Load@Loader@Engine@@QEAAXPEAVUpdateLoop@2@@Z"));
@@ -1306,13 +1279,8 @@ bool EngineFuncsInit() {
     fn_PostUpdatePush = reinterpret_cast<fn_DynArrayPush_t>(
         ResolveAddr(Module::Runtime, 0x18004f8e0));
 
-    // Video::Context lifecycle
-    fn_VideoCtx_Ctor = reinterpret_cast<fn_VideoCtx_Ctor_t>(
-        ResolveAddr(Module::Runtime, 0x1800f1820));
-    fn_VideoCtx_Dtor = reinterpret_cast<fn_VideoCtx_Dtor_t>(
-        ResolveExport("??1Context@Video@@QEAA@XZ"));
-    fn_VideoCtx_Delete = reinterpret_cast<fn_VideoCtx_Delete_t>(
-        ResolveAddr(Module::Runtime, 0x180018500));
+    // Video::Context lifecycle — the five resolves that used to sit here are GONE
+    // (ENDGAME B.3.5, b35-K2: zero callers tree-wide). See engine_funcs.h.
 
     // MemoryAllocator
     g_pMemAllocSingleton = reinterpret_cast<void*>(
@@ -1792,9 +1760,6 @@ bool EngineFuncsInit() {
     // ================================================================
     fn_ImageBuffer_Ctor = reinterpret_cast<fn_ImageBuffer_Ctor_t>(
         ResolveExport("??0ImageBuffer@Video@@QEAA@XZ"));
-
-    fn_ImageBuffer_Dtor = reinterpret_cast<fn_ImageBuffer_Dtor_t>(
-        ResolveExport("??1ImageBuffer@Video@@UEAA@XZ"));
 
     fn_ImageBuffer_CopyToTexture = reinterpret_cast<fn_ImageBuffer_CopyToTexture_t>(
         ResolveExport("?CopyToTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z"));
@@ -2592,8 +2557,6 @@ bool EngineFuncsInit() {
         ResolveExport("?Set@EdgeMesh@Graphics@@QEAA_NHPEBUTriangleList@GraphicsMesh@2@H0HPEAGHPEAXHH1H2HH1H2HH1H2HAEBVBox@Volume@@@Z"));
     fn_EdgeMesh_SetMaterials = reinterpret_cast<fn_EdgeMesh_SetMaterials_t>(
         ResolveExport("?SetMaterials@EdgeMesh@Graphics@@QEAAXV?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@000@Z"));
-    fn_EdgeMeshInstance_SetMesh = reinterpret_cast<fn_EdgeMeshInstance_SetMesh_t>(
-        ResolveExport("?SetMesh@EdgeMeshInstance@Graphics@@QEAAXV?$ExternalPtr@VEdgeMesh@Graphics@@@Object@@PEAVMeshInstance@2@@Z"));
     fn_EdgeMeshInstance_Ctor = reinterpret_cast<fn_EdgeMeshInstance_Ctor_t>(
         ResolveExport("??0EdgeMeshInstance@Graphics@@QEAA@XZ"));
     // NO FALLBACK. There used to be a `if (!fn_EdgeMeshInstance_Ctor)` branch here
@@ -3057,35 +3020,25 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1400c48a0));
     fn_Entity_FindAudioComponent = reinterpret_cast<fn_Entity_FindAudioComponent_t>(
         ResolveAddr(Module::Exe, 0x140002280));
-    fn_Graphics_Scene_AddGlobalObject = reinterpret_cast<fn_Graphics_Scene_AddGlobalObject_t>(
-        ResolveExport("?AddGlobalObject@Scene@Graphics@@QEAAXPEAVGeometry@2@@Z"));
-    fn_Graphics_Scene_AddObject = reinterpret_cast<fn_Graphics_Scene_AddObject_t>(
-        ResolveExport("?AddObject@Scene@Graphics@@QEAAIPEAVGeometry@2@@Z"));
-    fn_Graphics_GraphicsMesh_GetMaterialList = reinterpret_cast<fn_Graphics_GraphicsMesh_GetMaterialList_t>(
-        ResolveExport("?GetMaterialList@GraphicsMesh@Graphics@@QEBAAEBV?$Array@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@@Collection@@H@Z"));
-    fn_Graphics_MeshInstance_SetMaterialInstance = reinterpret_cast<fn_Graphics_MeshInstance_SetMaterialInstance_t>(
-        ResolveExport("?SetMaterialInstance@MeshInstance@Graphics@@QEAAXHV?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@@Z"));
+    // ENDGAME B.3.5 (b35-K2): `fn_Graphics_Scene_AddGlobalObject`,
+    // `fn_Graphics_Scene_AddObject`, `fn_Graphics_GraphicsMesh_GetMaterialList`,
+    // `fn_Graphics_MeshInstance_SetMaterialInstance` and
+    // `fn_Graphics_ParticleInstance_IncrementInstanceIndex` are GONE — zero callers
+    // tree-wide — and the dump below lost their five lines with them. The two ctor
+    // doors keep their rows.
     fn_Graphics_ParticleSystemInstance_Ctor = reinterpret_cast<fn_Graphics_ParticleSystemInstance_Ctor_t>(
         ResolveExport("??0ParticleSystemInstance@Graphics@@QEAA@XZ"));
-    fn_Graphics_ParticleInstance_IncrementInstanceIndex = reinterpret_cast<fn_Graphics_ParticleInstance_IncrementInstanceIndex_t>(
-        ResolveExport("?IncrementInstanceIndex@ParticleInstance@Graphics@@SAXXZ"));
     fn_Graphics_Particle_Ctor = reinterpret_cast<fn_Graphics_Particle_Ctor_t>(
         ResolveExport("??0Particle@Graphics@@QEAA@XZ"));
     fn_Graphics_Scene_Clean = reinterpret_cast<fn_Graphics_Scene_Clean_t>(
         ResolveExport("?Clean@Scene@Graphics@@QEAAXXZ"));
     printf("[EngineFuncs] MenuDLT static-mesh + particle helpers:\n"
-           "  Scene::AddObject              = %p\n"
-           "  GraphicsMesh::GetMaterialList = %p\n"
-           "  MeshInstance::SetMatInstance  = %p\n"
            "  ParticleSystemInstance::Ctor  = %p\n"
-           "  ParticleInstance::IncrementInstanceIndex = %p\n"
-           "  Particle::Ctor                = %p\n",
-           (void*)fn_Graphics_Scene_AddObject,
-           (void*)fn_Graphics_GraphicsMesh_GetMaterialList,
-           (void*)fn_Graphics_MeshInstance_SetMaterialInstance,
+           "  Particle::Ctor                = %p\n"
+           "  Scene::Clean                  = %p\n",
            (void*)fn_Graphics_ParticleSystemInstance_Ctor,
-           (void*)fn_Graphics_ParticleInstance_IncrementInstanceIndex,
-           (void*)fn_Graphics_Particle_Ctor);
+           (void*)fn_Graphics_Particle_Ctor,
+           (void*)fn_Graphics_Scene_Clean);
     fflush(stdout);
 
     // --- MenuScene 3D rendering (Phase A) ---
@@ -3095,22 +3048,18 @@ bool EngineFuncsInit() {
         ResolveExport("??0Scene@Graphics@@QEAA@XZ"));
     fn_Graphics_SunLight_Ctor = reinterpret_cast<fn_Graphics_SunLight_Ctor_t>(
         ResolveExport("??0SunLight@Graphics@@QEAA@XZ"));
-    fn_Graphics_SunLight_Set = reinterpret_cast<fn_Graphics_SunLight_Set_t>(
-        ResolveExport("?Set@SunLight@Graphics@@QEAAXAEBVVector3@Math@@AEBVVector4@4@1@Z"));
     fn_Graphics_MeshInstance_Ctor = reinterpret_cast<fn_Graphics_MeshInstance_Ctor_t>(
         ResolveExport("??0MeshInstance@Graphics@@QEAA@XZ"));
-    fn_Graphics_MeshInstance_SetMesh = reinterpret_cast<fn_Graphics_MeshInstance_SetMesh_t>(
-        ResolveExport("?SetMesh@MeshInstance@Graphics@@QEAAXV?$ExternalPtr@VGraphicsMesh@Graphics@@@Object@@@Z"));
     fn_Graphics_Renderer_Draw = reinterpret_cast<fn_Graphics_Renderer_Draw_t>(
         ResolveExport("?Draw@Renderer@Graphics@@QEAAXAEAVContext@Video@@MAEBVScene@2@AEBVCamera@2@@Z"));
-    fn_Video_Context_SetFog = reinterpret_cast<fn_Video_Context_SetFog_t>(
-        ResolveExport("?SetFog@Context@Video@@QEAAXMMAEBVVector4@Math@@@Z"));
     fn_Volume_Frustum_Ctor = reinterpret_cast<fn_Volume_Frustum_Ctor_t>(
         ResolveExport("??0Frustum@Volume@@QEAA@AEBVScalar@Math@@000@Z"));
     fn_Graphics_Camera_Ctor = reinterpret_cast<fn_Graphics_Camera_Ctor_t>(
         ResolveExport("??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z"));
-    fn_Graphics_Camera_SetFrustum = reinterpret_cast<fn_Graphics_Camera_SetFrustum_t>(
-        ResolveExport("?SetFrustum@Camera@Graphics@@QEAAXAEBVFrustum@Volume@@@Z"));
+    // ENDGAME B.3.5 (b35-K2): `fn_Graphics_SunLight_Set`,
+    // `fn_Graphics_MeshInstance_SetMesh`, `fn_Video_Context_SetFog` and
+    // `fn_Graphics_Camera_SetFrustum` are GONE — zero callers tree-wide. The three
+    // ctor doors in this block stay.
 
     fn_Audio_Scene_MoveEmitter = reinterpret_cast<fn_Audio_Scene_MoveEmitter_t>(
         ResolveExport("?MoveEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@0@Z"));
@@ -3235,8 +3184,6 @@ bool EngineFuncsInit() {
     printf("  Audio::Device::Update     = %p\n", (void*)fn_AudioDevice_Update);
     printf("  Audio::FreeChannel        = %p\n", (void*)fn_AudioDevice_FreeChannel);
     printf("  App::PlatformUpdate       = %p\n", (void*)fn_App_PlatformUpdate);
-    printf("  VideoCtx::ClearResources  = %p\n", (void*)fn_VideoCtx_ClearResources);
-    printf("  VideoCtx::Reset           = %p\n", (void*)fn_VideoCtx_Reset);
     printf("  Loader::Load              = %p\n", (void*)fn_Loader_Load);
     printf("  App::SleepThread          = %p\n", (void*)fn_App_SleepThread);
     printf("  UI::Update                = %p\n", (void*)fn_UI_Update);
@@ -3244,9 +3191,6 @@ bool EngineFuncsInit() {
     printf("  UI::CloseDialog           = %p\n", (void*)fn_UI_CloseDialog);
     printf("  PostDrawPush              = %p\n", (void*)fn_PostDrawPush);
     printf("  PostUpdatePush            = %p\n", (void*)fn_PostUpdatePush);
-    printf("  VideoCtx::Ctor            = %p\n", (void*)fn_VideoCtx_Ctor);
-    printf("  VideoCtx::Dtor            = %p\n", (void*)fn_VideoCtx_Dtor);
-    printf("  VideoCtx::Delete          = %p\n", (void*)fn_VideoCtx_Delete);
     printf("  MemAlloc                  = %p\n", (void*)fn_MemAlloc);
     printf("  MemAllocSingleton         = %p\n", g_pMemAllocSingleton);
     printf("  VideoDevice::_singleton   = %p -> %p\n", (void*)g_pVideoDeviceSingleton,
@@ -3325,7 +3269,6 @@ bool EngineFuncsInit() {
     // DestroyComponent_Reclaim/Rebuild/Destroy: now implemented as statics in destroyui.cpp
     printf("[EngineFuncs] Video::ImageBuffer:\n");
     printf("  ImageBuffer::Ctor         = %p\n", (void*)fn_ImageBuffer_Ctor);
-    printf("  ImageBuffer::Dtor         = %p\n", (void*)fn_ImageBuffer_Dtor);
     printf("  ImageBuffer::CopyToTex    = %p\n", (void*)fn_ImageBuffer_CopyToTexture);
     printf("  ImageBuffer::CopyFromTex  = %p\n", (void*)fn_ImageBuffer_CopyFromTexture);
     printf("[EngineFuncs] Globals:\n");
