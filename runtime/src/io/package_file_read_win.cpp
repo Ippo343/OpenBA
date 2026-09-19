@@ -623,7 +623,7 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
     // Not two objects: the CompressedStream base ctor, then the class's own
     // vtable stamped over it, then the EMBEDDED MemoryStream's ctor at +0x68,
     // then four raw field stores, then Open with the embedded stream as source.
-    CompressedMemoryStream cms;
+    RtIo::CompressedMemoryStream cms;   // the POD, by name: a bare name here binds IO::CompressedMemoryStream (B34_RULES 7.2)
     RtIo::RtIo_CompressedStream_Ctor(&cms.base);               // 1800b482a
     *reinterpret_cast<const void**>(&cms) = VtblCompressedMemoryStream();  // 1800b4837
     RtIo::RtIo_MemoryStream_Ctor(&cms.memoryStream);           // 1800b4840
@@ -633,7 +633,7 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
     cms.memoryStream.base.direction = 0;                       // 1800b4854
     RtIo::RtIo_CompressedStream_Open(&cms.base, &cms.memoryStream.base, 1);  // 1800b4864
 
-    CompressedStream* const cs = &cms.base;
+    RtIo::CompressedStream* const cs = &cms.base;
 
     // The frame's one buffer region, §93.
     uint8_t  frameBuf[kFrameBufBytes];
