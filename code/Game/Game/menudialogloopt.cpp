@@ -1188,6 +1188,40 @@ void MenuDialogLoopT_StartMusic(void* self) {
 }
 
 // ============================================================
+// MenuDialogLoopT_StopMusic — the audio tail of MenuDLT::Shutdown
+// ============================================================
+// Mirror of the audio statement at the tail of MenuDLT::Shutdown (exe
+// 0x14009b280):
+//   Engine::DialogLoopT::Shutdown(self);
+//   Audio::Scene::StopAll(self+0xb30);          // 0x14009b413/1a  <- this
+//   UI::UserInterface::EnableCursor(self+0x40, false);
+//
+// LOAD-BEARING, not cosmetic. The menu music is a STREAMED sound: its
+// Audio::Stream thread (Runtime 0x1800a0f60) keeps a packed IO::FileInfo open
+// and calls FileSystem::ReadFile (0x1800ace00) once per buffer slot, and
+// ReadFile indexes `_packfiles[handle>>24]` with NO lock (0x1800ace31/39). The
+// next thing the main thread does after this Shutdown is LoaderLoop::Startup ->
+// Engine::Loader::Load (0x1800dc050) -> Modification::SetupFileSystem
+// (0x1800aebb0), which on a load-a-save is dirty (SaveLoad::UpdateLoad
+// 0x1800c2690 marks the mod list dirty unconditionally) and so runs
+// ClosePackages (frees `_packfiles` and nulls it) + LoadPackages. Retail takes
+// no lock anywhere on that path either. What keeps the stream thread out of
+// ReadFile during the remount is THIS call: StopAll -> Device::StopPlatform
+// (0x1800dea20) raises the stream's stop flag and signals its wake event, so
+// the thread abandons its pass and closes the file before the remount starts.
+// Without it the stream kept reading through the remount and faulted on the
+// freed/null array (STATUS open defect (c), ~1 in 60 resave runs).
+void MenuDialogLoopT_StopMusic(void* self) {
+    if (!self) return;
+    using StopAllFn = void (*)(void* scene);
+    static StopAllFn stopAll = reinterpret_cast<StopAllFn>(
+        ResolveExport("?StopAll@Scene@Audio@@QEAAXXZ"));
+    void* audioScene = reinterpret_cast<void*>(
+        reinterpret_cast<uintptr_t>(self) + MenuDLTOff::audioScene_b30);
+    stopAll(audioScene);
+}
+
+// ============================================================
 // MenuDialogLoopT_BindUISounds — bind UI hover/press/click sound effects
 // ============================================================
 // Mirror of the sound-binding block of OptionsDialog_helper_9260 (exe

@@ -212,8 +212,12 @@ const char* Inner_GetResourceFilename(UpdateLoop* self) {
 
 bool Inner_AllowsModChanges(UpdateLoop* self) {
     (void)self;
-    // Original thunks to Runtime LoaderLoop::AllowsModChanges → true.
-    return true;
+    // Exe slot 11 (vtable 0x140158870 +0x58) is the import thunk 0x14003a8f4 ->
+    // the ONE Runtime export ?AllowsModChanges@UpdateLoop@Engine@@ (0x180031790,
+    // `XOR AL,AL ; RET`): FALSE. There is no LoaderLoop override; only
+    // MenuDialogLoopT (exe 0x14001a2c0) returns true. See GUL_AllowsModChanges
+    // (gameupdateloop_stubs.cpp) for what Engine::Loader::Load does with it.
+    return false;
 }
 
 void* g_innerLoaderLoopVtable[12] = {
@@ -319,7 +323,9 @@ const char* Outer_GetResourceFilename(UpdateLoop* self) {
 
 bool Outer_AllowsModChanges(UpdateLoop* self) {
     (void)self;
-    return true;
+    // Vtable 0x1401588d0 +0x58 = the same thunk 0x14003a8f4 as the inner loop:
+    // the Runtime base, FALSE (see Inner_AllowsModChanges).
+    return false;
 }
 
 void* g_outerLoaderLoopVtable[12] = {

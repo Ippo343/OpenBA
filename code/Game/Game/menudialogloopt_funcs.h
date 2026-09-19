@@ -174,6 +174,12 @@ bool MenuDialogLoopT_LoadMusic(void* self);
 // resolved. Call on the main thread (Startup), after LoadMusic populated +0xb88.
 void MenuDialogLoopT_StartMusic(void* self);
 
+// MenuDialogLoopT_StopMusic — mirror the `Audio::Scene::StopAll(self+0xb30)` at
+// the tail of MenuDLT::Shutdown (exe 0x14009b280, call at 0x14009b41a). Stops the
+// streamed menu music BEFORE the next LoaderLoop's Loader::Load remounts the
+// packages; the body's banner says why that ordering is load-bearing.
+void MenuDialogLoopT_StopMusic(void* self);
+
 // MenuDialogLoopT_BindUISounds — mirror the sound-binding block of
 // OptionsDialog_helper_9260 (exe 0x140099260). Copies five SoundEffect
 // Externals from the KeyMap/PlacementTool container into the embedded
