@@ -20,12 +20,14 @@
 #include "FishingWork.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/coll_bridge.h"
 #include "redzone_alloc.h"   // RedzoneAlloc_PrintBacktrace (wild-write diagnostic)
 #include "Object/factory_registration.h"   // GetTypeIdByName (drop-spot occupancy dump)
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
@@ -855,12 +857,12 @@ void FishingWork_Serialize_Impl(FishingWork* self, void* stream) {
     s_fn_Work_Serialize(self, stream);
 
     // 2. Create IO::Serializer (version=0)
-    uint8_t serializer[24] = {0};
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24] = {0};
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // 3. Serialize citizenCount at +0x50
     int citizenCount = *(int*)(selfAddr + 0x50);
-    g_fn_Serialize_Int(serializer, &citizenCount, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&citizenCount), nullptr);   // B.3.4 bridge
 
     // If loading (serializer mode == 0 at *(int*)(serializer[0] + 8)):
     // resize the IBP array at +0x48 to the deserialized count
@@ -895,7 +897,7 @@ void FishingWork_Serialize_Impl(FishingWork* self, void* stream) {
 
     // 5. Serialize spotCount at +0x60
     int spotCount = *(int*)(selfAddr + 0x60);
-    g_fn_Serialize_Int(serializer, &spotCount, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&spotCount), nullptr);   // B.3.4 bridge
 
     // If loading, resize the int array at +0x58
     serPtr = *(uintptr_t*)serializer;
@@ -908,14 +910,13 @@ void FishingWork_Serialize_Impl(FishingWork* self, void* stream) {
     }
 
     // 6. Serialize the spotStates int array
-    s_fn_Serialize_IntArray(serializer, spotCount,
-                            *(int**)(selfAddr + 0x58), nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(spotCount, reinterpret_cast<int*>(*(int**)(selfAddr + 0x58)), nullptr);   // B.3.4 bridge
 
     // 7. Serialize retryCount at +0x68
-    g_fn_Serialize_Int(serializer, (int*)(selfAddr + 0x68), nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>((selfAddr + 0x68)), nullptr);   // B.3.4 bridge
 
     // Destroy serializer
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

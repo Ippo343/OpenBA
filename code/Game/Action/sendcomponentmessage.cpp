@@ -12,10 +12,12 @@
 #include "SendComponentMessage.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Game/force_work.h"   // ForceWork::Readable — stale action-target guard
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (diagnostic filter)
 #include <cstdio>
 #include <cstdint>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
@@ -112,16 +114,16 @@ void SendComponentMessage_Serialize_Impl(SendComponentMessage* self, void* strea
     // has to touch — an exe-ctor-built action arrives here with the file
     // statics still null. Lazy-resolve like the other entry points do.
     SendComponentMessage_ResolveFuncs();
-    uint8_t ser1[24];
-    uint8_t ser2[24];
+    alignas(8) uint8_t ser1[24];
+    alignas(8) uint8_t ser2[24];
 
     // Serialize status (version 0)
-    g_fn_Serializer_Ctor(ser1, stream, 0);
-    g_fn_Serialize_Bool(ser1, &self->status, nullptr);
-    g_fn_Serializer_Dtor(ser1);
+    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(&self->status), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     // Serialize entity refs + message fields (version 0)
-    g_fn_Serializer_Ctor(ser2, stream, 0);
+    ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Target entity ref (+0x20) with type validation
     s_fn_IBP_Serialize(&self->_field20, ser2);
@@ -143,14 +145,14 @@ void SendComponentMessage_Serialize_Impl(SendComponentMessage* self, void* strea
     s_fn_Type_Serialize(&self->_field30, ser2);
 
     // Message ID (+0x34) — int
-    g_fn_Serialize_Int(ser2, &self->_field34, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(&self->_field34), nullptr);   // B.3.4 bridge
 
     // Message params (+0x38, +0x3c) — uint
     // Note: _field38 is void* in struct but actually two uint32s packed
-    s_fn_Serialize_UInt(ser2, (void*)((uint8_t*)self + 0x38), nullptr);
-    s_fn_Serialize_UInt(ser2, (void*)((uint8_t*)self + 0x3c), nullptr);
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<unsigned int*>(((uint8_t*)self + 0x38)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<unsigned int*>(((uint8_t*)self + 0x3c)), nullptr);   // B.3.4 bridge
 
-    g_fn_Serializer_Dtor(ser2);
+    reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

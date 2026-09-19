@@ -26,6 +26,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
 #include <cstdlib>   // qsort
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -226,7 +227,7 @@ void WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, void* ser) {
     uint64_t* selfSlot = reinterpret_cast<uint64_t*>(treeRootSlot);
 
     int count = static_cast<int>(selfSlot[1]);
-    if (g_fn_Serialize_Int) g_fn_Serialize_Int(ser, &count, nullptr);
+    if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(&count), nullptr);   // B.3.4 bridge
 
     // serializer mode lives at *(*ser + 8); 0 => reading.
     int mode = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(ser) + 8);

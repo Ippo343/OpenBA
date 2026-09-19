@@ -18,6 +18,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
 
 // ============================================================
@@ -279,7 +280,7 @@ void WorkBST_BSTFindRemove_25520(uintptr_t* root, void* keyIBP) {
 // Caller: void fn(void* bstRoot, void* serializer).
 void WorkBST_BST_Serialize_296b0(uintptr_t* root, void* serializer) {
     int count = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(root) + 8);
-    if (g_fn_Serialize_Int) g_fn_Serialize_Int(serializer, &count, nullptr);
+    if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&count), nullptr);   // B.3.4 bridge
     bool loading = (*reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(serializer) + 8) == 0);
     uint32_t citTid = g_TypeId_CitizenComponent_FC ? *g_TypeId_CitizenComponent_FC : 0;
 

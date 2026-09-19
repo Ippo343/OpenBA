@@ -25,9 +25,11 @@
 #include "PerformWork.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdio>
 #include <cstdint>
+#include <new>
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -286,16 +288,16 @@ uint32_t PerformWork_BaseDtor_Impl() {
 void PerformWork_Serialize_Impl(PerformWork* self, void* stream) {
     PerformWork_ResolveFuncs();   // self-init: action built via exe ctor path, not our factory
     uint8_t* s = (uint8_t*)self;
-    uint8_t ser1[24];
-    uint8_t ser2[24];
+    alignas(8) uint8_t ser1[24];
+    alignas(8) uint8_t ser2[24];
 
     // First serializer: serialize status byte (+0x18)
-    g_fn_Serializer_Ctor(ser1, stream, 0);
-    g_fn_Serialize_Bool(ser1, s + 0x18, nullptr);
-    g_fn_Serializer_Dtor(ser1);
+    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x18), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     // Second serializer: serialize all PerformWork-specific fields
-    g_fn_Serializer_Ctor(ser2, stream, 0);
+    ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize work target entity ref (+0x20)
     s_fn_IBP_Serialize(s + 0x20, ser2);
@@ -306,22 +308,22 @@ void PerformWork_Serialize_Impl(PerformWork* self, void* stream) {
     }
 
     // Serialize facing yaw (+0x28) as float
-    s_fn_Serialize_Float(ser2, s + 0x28, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<float*>(s + 0x28), nullptr);   // B.3.4 bridge
 
     // Serialize animation ID (+0x2C) as int
-    g_fn_Serialize_Int(ser2, s + 0x2C, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(s + 0x2C), nullptr);   // B.3.4 bridge
 
     // Serialize required time (+0x30) and elapsed time (+0x38) as Time
     s_fn_Time_Serialize(s + 0x30, ser2);
     s_fn_Time_Serialize(s + 0x38, ser2);
 
     // Serialize use tool flag (+0x40) as bool
-    g_fn_Serialize_Bool(ser2, s + 0x40, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<bool*>(s + 0x40), nullptr);   // B.3.4 bridge
 
     // Serialize field44 (+0x44) as int
-    g_fn_Serialize_Int(ser2, s + 0x44, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(s + 0x44), nullptr);   // B.3.4 bridge
 
-    g_fn_Serializer_Dtor(ser2);
+    reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

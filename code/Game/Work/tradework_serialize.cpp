@@ -37,6 +37,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
 
 namespace {
@@ -183,7 +184,7 @@ extern "C" void* TradeWork_Insert_c710(int64_t* param_1, void** param_2, int64_t
 extern "C" void TradeWork_Serialize_c8a0(int64_t* param_1, void* param_2) {
     // Serialize the node count (read or write).
     int32_t count = *reinterpret_cast<int32_t*>(reinterpret_cast<int64_t>(param_1) + 0x08);
-    if (g_fn_Serialize_Int) g_fn_Serialize_Int(param_2, &count, nullptr);
+    if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(param_2)->Serialize(*reinterpret_cast<int*>(&count), nullptr);   // B.3.4 bridge
 
     bool readMode = (*reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(param_2) + 8) == 0);
 
@@ -205,7 +206,7 @@ extern "C" void TradeWork_Serialize_c8a0(int64_t* param_1, void* param_2) {
             }
             // int payload at record +0x10.
             if (g_fn_Serialize_Int)
-                g_fn_Serialize_Int(param_2, reinterpret_cast<int32_t*>(&rec[2]), nullptr);
+                reinterpret_cast<IO::Serializer*>(param_2)->Serialize(*reinterpret_cast<int*>(&rec[2]), nullptr);   // B.3.4 bridge
             // ExternalPtr at record +0x08 (0x140002340 = fn_ExternalPtr_BuildSerialize).
             if (fn_ExternalPtr_BuildSerialize)
                 fn_ExternalPtr_BuildSerialize(&rec[1], param_2);
@@ -236,8 +237,7 @@ extern "C" void TradeWork_Serialize_c8a0(int64_t* param_1, void* param_2) {
                 *reinterpret_cast<int64_t*>(node) = 0;
             }
             if (g_fn_Serialize_Int)
-                g_fn_Serialize_Int(param_2,
-                                       reinterpret_cast<int32_t*>(node + 0x10), nullptr);
+                reinterpret_cast<IO::Serializer*>(param_2)->Serialize(*reinterpret_cast<int*>(node + 0x10), nullptr);   // B.3.4 bridge
             if (fn_ExternalPtr_BuildSerialize)
                 fn_ExternalPtr_BuildSerialize(reinterpret_cast<void*>(node + 0x08), param_2);
 

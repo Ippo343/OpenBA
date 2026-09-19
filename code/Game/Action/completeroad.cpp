@@ -11,8 +11,10 @@
 #include "CompleteRoad.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdio>
 #include <cstdint>
+#include <new>
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -79,20 +81,20 @@ void CompleteRoad_Serialize_Impl(void* self, void* stream) {
     // Same hole BuildRoad_ScalarDtor_Impl documents for the BuildRoad ctor path.
     CompleteRoad_ResolveFuncs();
     uint8_t* s = (uint8_t*)self;
-    uint8_t ser1[24];
-    uint8_t ser2[24];
+    alignas(8) uint8_t ser1[24];
+    alignas(8) uint8_t ser2[24];
 
     // Serialize status
-    g_fn_Serializer_Ctor(ser1, stream, 0);
-    g_fn_Serialize_Bool(ser1, s + 0x18, nullptr);
-    g_fn_Serializer_Dtor(ser1);
+    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x18), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     // Serialize road fields
-    g_fn_Serializer_Ctor(ser2, stream, 0);
-    g_fn_Serialize_Int(ser2, s + 0x20, nullptr);
-    s_fn_Serialize_UChar(ser2, s + 0x28, nullptr);
-    g_fn_Serialize_Int(ser2, s + 0x24, nullptr);
-    g_fn_Serializer_Dtor(ser2);
+    ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(s + 0x20), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<unsigned char*>(s + 0x28), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

@@ -17,10 +17,12 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <new>
 #include "Object/factory_registration.h"  // Object::GetTypeIdByName (.rdata tid fallback)
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
@@ -191,11 +193,11 @@ void Pickup_Serialize_Impl(Pickup* self, void* stream) {
     s_fn_Work_Serialize(self, stream);
 
     // Create serializer (version=2)
-    uint8_t serializerBuf[24] = {0};
-    s_fn_Serializer_Ctor(serializerBuf, stream, 2);
+    alignas(8) uint8_t serializerBuf[24] = {0};
+    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 2);   // B.3.4 bridge
 
     // Serialize uint32 status at +0x48
-    s_fn_Serializer_Serialize(serializerBuf, reinterpret_cast<int*>(&self->status), nullptr);
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->status), nullptr);   // B.3.4 bridge
 
     // Serialize InternalBasePtr at +0x50
     s_fn_InternalBasePtr_Serialize(&self->citizenIBP, serializerBuf);
@@ -208,12 +210,12 @@ void Pickup_Serialize_Impl(Pickup* self, void* stream) {
     }
 
     // Version >= 1: serialize candidate list at +0x58
-    int version = s_fn_Serializer_GetVersion(serializerBuf);
+    int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
     if (version > 0) {
         s_fn_ArraySerialize(&self->candidateList, serializerBuf);
     }
 
-    s_fn_Serializer_Dtor(serializerBuf);
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
 
 

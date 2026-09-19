@@ -11,9 +11,11 @@
 #include "PlayAnimation.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Game/force_work.h"   // ForceWork::Readable — VirtualQuery-backed crash-safe probe
 #include <cstdio>
 #include <cstdint>
+#include <new>
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -88,24 +90,24 @@ bool PlayAnimation_ResolveFuncs() {
 void PlayAnimation_Serialize_Impl(void* self, void* stream) {
     PlayAnimation_ResolveFuncs();   // lazy-resolve: action may be built inline by ba6b0, not our ctor
     uint8_t* s = (uint8_t*)self;
-    uint8_t ser1[24];
-    uint8_t ser2[24];
+    alignas(8) uint8_t ser1[24];
+    alignas(8) uint8_t ser2[24];
 
-    g_fn_Serializer_Ctor(ser1, stream, 0);
-    g_fn_Serialize_Bool(ser1, s + 0x18, nullptr);
-    g_fn_Serializer_Dtor(ser1);
+    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x18), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
-    g_fn_Serializer_Ctor(ser2, stream, 0);
+    ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     s_fn_IBP_Serialize(s + 0x20, ser2);
     if (*(void**)(s + 0x20) != nullptr) {
         if (!fn_IsDerivedFrom(*(void**)(s + 0x20), *s_TypeInfo_ComponentEntity)) {
             *(void**)(s + 0x20) = nullptr;
         }
     }
-    g_fn_Serialize_Int(ser2, s + 0x28, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
     s_fn_Time_Serialize(s + 0x30, ser2);
     s_fn_Time_Serialize(s + 0x38, ser2);
-    g_fn_Serializer_Dtor(ser2);
+    reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

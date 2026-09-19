@@ -20,9 +20,11 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 // Diagnostics-only counters (standalone/orchard_diag.cpp). No-op unless
 // BANISHED_ORCHARD_DIAG is set; never change behaviour.
@@ -686,13 +688,13 @@ void PlantOrchard_Serialize_Impl(PlantOrchard* self, void* stream) {
 
     s_fn_Work_Serialize(self, stream);
 
-    uint8_t serializerBuf[24] = {0};
-    s_fn_Serializer_Ctor(serializerBuf, stream, 0);
+    alignas(8) uint8_t serializerBuf[24] = {0};
+    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     s_fn_BST_Serialize((void*)(selfAddr + 0x48), serializerBuf);
 
     int cellCountBuf[2] = { *(int*)(selfAddr + 0x60), 0 };
-    s_fn_Serializer_SerializeInt(serializerBuf, cellCountBuf, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(cellCountBuf), nullptr);   // B.3.4 bridge
 
     // B.3.2 bridge: FUN_14000a590 == Collection::Array<uint8>::SetSize.
     if (*(int*)(*(uintptr_t*)serializerBuf + 8) == 0) {
@@ -704,7 +706,7 @@ void PlantOrchard_Serialize_Impl(PlantOrchard* self, void* stream) {
 
     s_fn_ExternalRef_Serialize((void*)(selfAddr + 0x68), serializerBuf);
 
-    s_fn_Serializer_Dtor(serializerBuf);
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
 
 

@@ -29,9 +29,11 @@
 #include "RemoveNaturalResource.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
+#include <new>
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -182,16 +184,16 @@ void RemoveNaturalResource_Serialize_Impl(RemoveNaturalResource* self, void* str
     // statics still null. Lazy-resolve like the other entry points do.
     RemoveNaturalResource_ResolveFuncs();
     uint8_t* s = (uint8_t*)self;
-    uint8_t ser1[24];
-    uint8_t ser2[24];
+    alignas(8) uint8_t ser1[24];
+    alignas(8) uint8_t ser2[24];
 
     // Serialize status byte (+0x18)
-    g_fn_Serializer_Ctor(ser1, stream, 0);
-    g_fn_Serialize_Bool(ser1, s + 0x18, nullptr);
-    g_fn_Serializer_Dtor(ser1);
+    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x18), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     // Serialize entity refs and harvest flag
-    g_fn_Serializer_Ctor(ser2, stream, 0);
+    ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize citizen entity ref (+0x20)
     s_fn_IBP_Serialize(s + 0x20, ser2);
@@ -210,9 +212,9 @@ void RemoveNaturalResource_Serialize_Impl(RemoveNaturalResource* self, void* str
     }
 
     // Serialize harvest flag (+0x30)
-    g_fn_Serialize_Bool(ser2, s + 0x30, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<bool*>(s + 0x30), nullptr);   // B.3.4 bridge
 
-    g_fn_Serializer_Dtor(ser2);
+    reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

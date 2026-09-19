@@ -14,11 +14,13 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <windows.h>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 namespace Object { uint32_t GetTypeIdByName(const char* name); }  // factory_registration.h
@@ -278,9 +280,9 @@ void WorkBase_TaskListCleanup_c5400(void* self) {
 void WorkBase_Serialize_f7400(void* self, void* stream) {
     EnsureTypeIds();
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    uint64_t ser[3];  // IO::Serializer, 0x18 bytes on the original's stack
+    alignas(8) uint64_t ser[3];  // IO::Serializer, 0x18 bytes on the original's stack
     if (!g_fn_Serializer_Ctor) return;
-    g_fn_Serializer_Ctor(ser, stream, 3);
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge
 
     if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(reinterpret_cast<void*>(s + 0x10), ser);
     if (*reinterpret_cast<void**>(s + 0x10) && fn_IsDerivedFrom && g_TypeId_ComponentEntity) {
@@ -293,22 +295,22 @@ void WorkBase_Serialize_f7400(void* self, void* stream) {
             *reinterpret_cast<void**>(s + 0x18) = nullptr;
     }
     if (g_fn_Serialize_Int) {
-        g_fn_Serialize_Int(ser, reinterpret_cast<void*>(s + 0x20), nullptr);
-        g_fn_Serialize_Int(ser, reinterpret_cast<void*>(s + 0x28), nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x20), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
     }
-    int ver = g_fn_Serializer_GetVersion ? g_fn_Serializer_GetVersion(ser) : 0;
+    int ver = g_fn_Serializer_GetVersion ? reinterpret_cast<IO::Serializer*>(ser)->GetVersion() : 0;   // B.3.4 bridge
     if (ver < 1)
         *reinterpret_cast<int*>(s + 0x24) = *reinterpret_cast<int*>(s + 0x20);
     else if (g_fn_Serialize_Int)
-        g_fn_Serialize_Int(ser, reinterpret_cast<void*>(s + 0x24), nullptr);
-    if ((g_fn_Serializer_GetVersion ? g_fn_Serializer_GetVersion(ser) : 0) > 2) {
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);   // B.3.4 bridge
+    if ((g_fn_Serializer_GetVersion ? reinterpret_cast<IO::Serializer*>(ser)->GetVersion() : 0) > 2) {   // B.3.4 bridge
         if (g_fn_Time_Serialize) {
             g_fn_Time_Serialize(reinterpret_cast<void*>(s + 0x30), ser);
             g_fn_Time_Serialize(reinterpret_cast<void*>(s + 0x38), ser);
         }
-        if (g_fn_Serialize_Int) g_fn_Serialize_Int(ser, reinterpret_cast<void*>(s + 0x40), nullptr);
+        if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x40), nullptr);   // B.3.4 bridge
     }
-    if (g_fn_Serializer_Dtor) g_fn_Serializer_Dtor(ser);
+    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 uint8_t WorkBase_ValidateTask_f7100(void* self, void* /*citizenAI*/, void* taskIBP, void** out) {

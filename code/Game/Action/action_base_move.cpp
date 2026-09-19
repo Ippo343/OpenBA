@@ -14,6 +14,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Object/factory_registration.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -142,7 +143,7 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
     // GetEncoding -> encoding->vtable[+0x10](encoding) == 3 ?
     int encType = -1;
     if (fn_Serializer_GetEncoding) {
-        void* enc = fn_Serializer_GetEncoding(serializer);
+        void* enc = const_cast<IO::Encoding*>(&reinterpret_cast<IO::Serializer*>(serializer)->GetEncoding());   // B.3.4 bridge
         if (enc)
             encType = (*reinterpret_cast<int(**)(void*)>(*reinterpret_cast<uintptr_t*>(enc) + 0x10))(enc);
     }
@@ -185,10 +186,10 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
         int streamFlag = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(serializer) + 8);
         if (*pSlot != 0 && streamFlag == 0 && refId == 0xffffffff) {
             // Special case: present but no ref id and writing -> just serialize the (-1) id.
-            if (s_fn_SerUInt_a50) s_fn_SerUInt_a50(serializer, &refId, nullptr);
+            if (s_fn_SerUInt_a50) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(&refId), nullptr);   // B.3.4 bridge
             // (no write-back)
         } else {
-            if (s_fn_SerUInt_a50) s_fn_SerUInt_a50(serializer, &refId, nullptr);
+            if (s_fn_SerUInt_a50) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(&refId), nullptr);   // B.3.4 bridge
             if ((int)refId != -1) {
                 streamFlag = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(serializer) + 8);
                 if (streamFlag == 0 && factory) {
@@ -201,7 +202,7 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
     } else {
         // Reference mode off: bool "present" flag then the path String.
         uint8_t present = (*pSlot != 0) ? 1 : 0;
-        if (s_fn_SerBool_a58) s_fn_SerBool_a58(serializer, &present, nullptr);
+        if (s_fn_SerBool_a58) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&present), nullptr);   // B.3.4 bridge
         if (present != 0) {
             if (*pSlot != 0) {
                 System::Filename pathBuf =

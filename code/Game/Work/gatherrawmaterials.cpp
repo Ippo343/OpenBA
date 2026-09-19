@@ -21,6 +21,7 @@
 #include "BuildActions.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/coll_bridge.h"
 #include <cstdio>
 #include <cstdint>
@@ -170,6 +171,7 @@ static bool s_resolved = false;
 // gather work bails before enqueuing a real town->site haul. Diagnostic only.
 #include <cstdlib>
 #include <cstring>
+#include <new>
 
 // ============================================================
 // Resolution -- called once during hook installation
@@ -418,8 +420,8 @@ void GatherRawMaterials_Serialize_Impl(GatherRawMaterials* self, void* stream) {
     s_fn_Work_Serialize(self, stream);
 
     // Create IO::Serializer with version 0
-    uint8_t serializerBuf[24];
-    s_fn_Serializer_Ctor(serializerBuf, stream, 0);
+    alignas(8) uint8_t serializerBuf[24];
+    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Check if loading (stream+8 == 0 means loading)
     uintptr_t serStreamPtr = *(uintptr_t*)serializerBuf;
@@ -427,7 +429,7 @@ void GatherRawMaterials_Serialize_Impl(GatherRawMaterials* self, void* stream) {
 
     // --- Serialize first int array count (+0x50) ---
     int count50 = self->field_50;
-    s_fn_SerializeInt(serializerBuf, &count50, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&count50), nullptr);   // B.3.4 bridge
 
     if (isLoading) {
         // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize (retail
@@ -439,11 +441,11 @@ void GatherRawMaterials_Serialize_Impl(GatherRawMaterials* self, void* stream) {
     }
 
     // Bulk-serialize the first int array
-    s_fn_SerializeIntBulk(serializerBuf, self->field_50, self->field_48, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(self->field_50, reinterpret_cast<int*>(self->field_48), nullptr);   // B.3.4 bridge
 
     // --- Serialize second int array count (+0x60) ---
     int count60 = self->field_60;
-    s_fn_SerializeInt(serializerBuf, &count60, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&count60), nullptr);   // B.3.4 bridge
 
     if (isLoading) {
         // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize (retail
@@ -455,12 +457,12 @@ void GatherRawMaterials_Serialize_Impl(GatherRawMaterials* self, void* stream) {
     }
 
     // Bulk-serialize the second int array
-    s_fn_SerializeIntBulk(serializerBuf, self->field_60, self->field_58, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(self->field_60, reinterpret_cast<int*>(self->field_58), nullptr);   // B.3.4 bridge
 
     // --- Serialize tree at +0x68 ---
     s_fn_TreeSerialize((void*)(selfAddr + 0x68), serializerBuf);
 
-    s_fn_Serializer_Dtor(serializerBuf);
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

@@ -29,10 +29,12 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <new>
 
 // ============================================================
 // Local function pointers (resolved once by HarvestArea_ResolveFuncs)
@@ -892,15 +894,15 @@ void HarvestArea_Serialize_Impl(HarvestArea* self, void* stream) {
     s_fn_Work_Serialize(self, stream);
 
     // Create Serializer with version=0
-    uint8_t serializerBuf[24];
-    s_fn_Serializer_Ctor(serializerBuf, stream, 0);
+    alignas(8) uint8_t serializerBuf[24];
+    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Immediately destroy (version block with no extra data)
-    s_fn_Serializer_Dtor(serializerBuf);
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 
     // Create new Serializer (version=0) for our data
-    uint8_t serializerBuf2[16];
-    s_fn_Serializer_Ctor(serializerBuf2, stream, 0);
+    alignas(8) uint8_t serializerBuf2[16];
+    ::new (static_cast<void*>(serializerBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize BST at +0x48
     s_fn_BST_Serialize((void*)(selfAddr + 0x48), serializerBuf2);
@@ -908,7 +910,7 @@ void HarvestArea_Serialize_Impl(HarvestArea* self, void* stream) {
     // Serialize field cell count at +0x60
     int cellCount = *(int*)(selfAddr + 0x60);
     int cellCountBuf[2] = { cellCount, 0 };
-    s_fn_Serializer_SerializeInt(serializerBuf2, cellCountBuf, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializerBuf2)->Serialize(*reinterpret_cast<int*>(cellCountBuf), nullptr);   // B.3.4 bridge
 
     // If reading (serializer mode == 0), resize validity array.
     // B.3.2 bridge: FUN_14000a590 == Collection::Array<uint8>::SetSize.
@@ -921,7 +923,7 @@ void HarvestArea_Serialize_Impl(HarvestArea* self, void* stream) {
                                         *(void**)(selfAddr + 0x58), nullptr);
 
     // Destroy serializer
-    s_fn_Serializer_Dtor(serializerBuf2);
+    reinterpret_cast<IO::Serializer*>(serializerBuf2)->~Serializer();   // B.3.4 bridge
 }
 
 

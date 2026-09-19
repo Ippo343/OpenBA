@@ -23,10 +23,12 @@
 #include "CreateRawMaterial.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/coll_bridge.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
@@ -275,16 +277,16 @@ void CreateRawMaterial_Serialize_Impl(CreateRawMaterial* self, void* stream) {
     // CompleteRoad once roads started being built; these four are the same shape.
     CreateRawMaterial_ResolveFuncs();
     uint8_t* s = (uint8_t*)self;
-    uint8_t ser1[24];
-    uint8_t ser2[24];
+    alignas(8) uint8_t ser1[24];
+    alignas(8) uint8_t ser2[24];
 
     // Serialize status (version 0)
-    g_fn_Serializer_Ctor(ser1, stream, 0);
-    g_fn_Serialize_Bool(ser1, s + 0x18, nullptr);
-    g_fn_Serializer_Dtor(ser1);
+    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x18), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     // Serialize resource data (version 3)
-    g_fn_Serializer_Ctor(ser2, stream, 3);
+    ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge
 
     // Type reference (+0x20)
     s_fn_SerializeTypeRef(s + 0x20, ser2);
@@ -298,22 +300,22 @@ void CreateRawMaterial_Serialize_Impl(CreateRawMaterial* self, void* stream) {
     }
 
     // Material type index (+0x44) as int
-    g_fn_Serialize_Int(ser2, s + 0x44, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(s + 0x44), nullptr);   // B.3.4 bridge
 
     // Yield multiplier (+0x4c) as float
-    s_fn_Serialize_Float(ser2, s + 0x4c, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<float*>(s + 0x4c), nullptr);   // B.3.4 bridge
 
     // Natural resource flag (+0x50) as bool
-    g_fn_Serialize_Bool(ser2, s + 0x50, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<bool*>(s + 0x50), nullptr);   // B.3.4 bridge
 
     // Total quantity (+0x40) as int
-    g_fn_Serialize_Int(ser2, s + 0x40, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(s + 0x40), nullptr);   // B.3.4 bridge
 
     // Place near flag (+0x51) as bool
-    g_fn_Serialize_Bool(ser2, s + 0x51, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<bool*>(s + 0x51), nullptr);   // B.3.4 bridge
 
     // Version > 0: secondary entity IBP (+0x30)
-    int version = g_fn_Serializer_GetVersion(ser2);
+    int version = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
     if (version > 0) {
         fn_InternalBasePtr_Serialize(s + 0x30, ser2);
         if (*(void**)(s + 0x30) != nullptr) {
@@ -324,15 +326,15 @@ void CreateRawMaterial_Serialize_Impl(CreateRawMaterial* self, void* stream) {
     }
 
     // Version < 2: default placement flags; >= 2: serialize uint (+0x48)
-    version = g_fn_Serializer_GetVersion(ser2);
+    version = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
     if (version < 2) {
         *(uint32_t*)(s + 0x48) = 4;
     } else {
-        s_fn_Serialize_UInt(ser2, s + 0x48, nullptr);
+        reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x48), nullptr);   // B.3.4 bridge
     }
 
     // Version > 2: tertiary entity IBP (+0x38)
-    version = g_fn_Serializer_GetVersion(ser2);
+    version = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
     if (version > 2) {
         fn_InternalBasePtr_Serialize(s + 0x38, ser2);
         if (*(void**)(s + 0x38) != nullptr) {
@@ -342,7 +344,7 @@ void CreateRawMaterial_Serialize_Impl(CreateRawMaterial* self, void* stream) {
         }
     }
 
-    g_fn_Serializer_Dtor(ser2);
+    reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
 }
 
 

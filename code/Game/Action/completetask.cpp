@@ -11,10 +11,12 @@
 #include "CompleteTask.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <new>
 
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (heal .rdata type-ids)
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -145,16 +147,16 @@ void CompleteTask_Serialize_Impl(CompleteTask* self, void* stream) {
     // has to touch — an exe-ctor-built action arrives here with the file
     // statics still null. Lazy-resolve like the other entry points do.
     CompleteTask_ResolveFuncs();
-    uint8_t ser1[24];
-    uint8_t ser2[24];
+    alignas(8) uint8_t ser1[24];
+    alignas(8) uint8_t ser2[24];
 
     // Serialize status (version 0)
-    g_fn_Serializer_Ctor(ser1, stream, 0);
-    g_fn_Serialize_Bool(ser1, &self->status, nullptr);
-    g_fn_Serializer_Dtor(ser1);
+    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(&self->status), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     // Serialize entity refs + task fields (version 1)
-    g_fn_Serializer_Ctor(ser2, stream, 1);
+    ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
 
     // Work entity ref (+0x20) with type validation. The IBP::Serialize slot and the
     // .rdata type-id may be unavailable in the standalone exe (Serialize-only deps, not
@@ -176,15 +178,15 @@ void CompleteTask_Serialize_Impl(CompleteTask* self, void* stream) {
     }
 
     // Task param (+0x34)
-    g_fn_Serialize_Int(ser2, &self->taskParam, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(&self->taskParam), nullptr);   // B.3.4 bridge
 
     // Task index (+0x30) — versioned, only in version >= 1
-    int version = g_fn_Serializer_GetVersion(ser2);
+    int version = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
     if (version > 0) {
-        g_fn_Serialize_Int(ser2, &self->taskIndex, nullptr);
+        reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(&self->taskIndex), nullptr);   // B.3.4 bridge
     }
 
-    g_fn_Serializer_Dtor(ser2);
+    reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

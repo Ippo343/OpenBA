@@ -15,7 +15,9 @@
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
+#include <new>
 
 // ============================================================
 // Resolved function pointers (local to this translation unit)
@@ -182,9 +184,9 @@ void AutoPickupWork_Serialize(AutoPickupWork* self, void* stream) {
 
     // Create and immediately destroy a serializer block (version 0)
     // This establishes the versioned block for derived types to extend
-    uint8_t serializer[24]; // IO::Serializer is ~16-24 bytes
-    g_fn_Serializer_Ctor(serializer, stream, 0);
-    g_fn_Serializer_Dtor(serializer);
+    alignas(8) uint8_t serializer[24]; // IO::Serializer is ~16-24 bytes
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

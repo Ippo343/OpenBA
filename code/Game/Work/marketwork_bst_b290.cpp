@@ -32,6 +32,7 @@
 #include "Work/marketwork_bst_b290.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
 
 // ============================================================
@@ -122,7 +123,7 @@ void MarketBst_b5f0(int64_t* arr, void* serializer) {
     // The stack slot is what gets read back on load — the array's own count field is
     // NOT the serialize target; the resize below is what commits it.
     int count = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(arr) + 0x08);
-    s_fn_SerializeInt(serializer, &count, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&count), nullptr);   // B.3.4 bridge
 
     // 14002b618..b628
     if (SerIsLoading(serializer)) {
@@ -134,7 +135,7 @@ void MarketBst_b5f0(int64_t* arr, void* serializer) {
     uintptr_t p = static_cast<uintptr_t>(static_cast<uint64_t>(arr[0]));
     for (int i = 0; i < count; ++i) {
         Reimpl_ExternalPtr_Serialize_StringTable(reinterpret_cast<void*>(p), serializer);
-        s_fn_SerializeInt(serializer, reinterpret_cast<int*>(p + 0x08), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(p + 0x08), nullptr);   // B.3.4 bridge
         p += kPayloadStride;
     }
 }
@@ -193,7 +194,7 @@ void MarketBst_b290(int64_t* tree, void* serializer) {
 
     // 14002b2b0..b2c0: node count in/out.
     int nodeCount = *reinterpret_cast<int32_t*>(hdr + 0x08);
-    s_fn_SerializeInt(serializer, &nodeCount, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&nodeCount), nullptr);   // B.3.4 bridge
 
     if (SerIsLoading(serializer)) {
         // ---------------- LOAD: rebuild the tree, node by node ----------------
@@ -293,7 +294,7 @@ void MarketBst_b290(int64_t* tree, void* serializer) {
             // 14002b527..b582: the payload block, written INLINE rather than by calling
             // 0x14002b5f0 — same wire format, the compiler just duplicated the body.
             int count = *reinterpret_cast<int32_t*>(node + 0x10);
-            s_fn_SerializeInt(serializer, &count, nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&count), nullptr);   // B.3.4 bridge
             if (SerIsLoading(serializer)) {
                 // 14002b540..b54c. Dead in this arm (we only get here when NOT loading),
                 // but present in retail, so it is kept rather than "cleaned up".
@@ -302,7 +303,7 @@ void MarketBst_b290(int64_t* tree, void* serializer) {
             uintptr_t p = *reinterpret_cast<uintptr_t*>(node + 0x08);
             for (int i = 0; i < count; ++i) {
                 Reimpl_ExternalPtr_Serialize_StringTable(reinterpret_cast<void*>(p), serializer);
-                s_fn_SerializeInt(serializer, reinterpret_cast<int*>(p + 0x08), nullptr);
+                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(p + 0x08), nullptr);   // B.3.4 bridge
                 p += kPayloadStride;
             }
 

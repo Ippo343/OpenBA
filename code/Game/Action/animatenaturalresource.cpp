@@ -11,8 +11,10 @@
 #include "AnimateNaturalResource.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdio>
 #include <cstdint>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
@@ -118,16 +120,16 @@ void AnimateNaturalResource_Serialize_Impl(AnimateNaturalResource* self, void* s
     // has to touch — an exe-ctor-built action arrives here with the file
     // statics still null. Lazy-resolve like the other entry points do.
     AnimateNaturalResource_ResolveFuncs();
-    uint8_t ser1[24];
-    uint8_t ser2[24];
+    alignas(8) uint8_t ser1[24];
+    alignas(8) uint8_t ser2[24];
 
     // Serialize status (version 0)
-    g_fn_Serializer_Ctor(ser1, stream, 0);
-    g_fn_Serialize_Bool(ser1, &self->status, nullptr);
-    g_fn_Serializer_Dtor(ser1);
+    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(&self->status), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     // Serialize entity ref + extra fields (version 0)
-    g_fn_Serializer_Ctor(ser2, stream, 0);
+    ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Entity ref (+0x20) with type validation
     s_fn_IBP_Serialize(&self->_field20, ser2);
@@ -138,12 +140,12 @@ void AnimateNaturalResource_Serialize_Impl(AnimateNaturalResource* self, void* s
     }
 
     // Animation index (+0x28)
-    g_fn_Serialize_Int(ser2, &self->animIndex, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(&self->animIndex), nullptr);   // B.3.4 bridge
 
     // Wait for anim flag (+0x2C)
-    g_fn_Serialize_Bool(ser2, &self->waitForAnim, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<bool*>(&self->waitForAnim), nullptr);   // B.3.4 bridge
 
-    g_fn_Serializer_Dtor(ser2);
+    reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

@@ -18,8 +18,10 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 // ============================================================
 // Local function pointers (resolved once by TendArea_ResolveFuncs)
@@ -630,16 +632,16 @@ void TendArea_Serialize_Impl(TendArea* self, void* stream) {
     s_fn_Work_Serialize(self, stream);
 
     // Create serializer (version block, version=0)
-    uint8_t serializerBuf[24] = {0};
-    s_fn_Serializer_Ctor(serializerBuf, stream, 0);
+    alignas(8) uint8_t serializerBuf[24] = {0};
+    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize BST at +0x48
     s_fn_BST_Serialize((void*)(selfAddr + 0x48), serializerBuf);
 
     // Serialize int at +0x58 (tendMode)
-    s_fn_Serializer_Serialize(serializerBuf, reinterpret_cast<int*>(&self->tendMode), nullptr);
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->tendMode), nullptr);   // B.3.4 bridge
 
-    s_fn_Serializer_Dtor(serializerBuf);
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
 
 

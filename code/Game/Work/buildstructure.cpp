@@ -22,10 +22,12 @@
 #include "Work/buildstructure_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
 #include <cstdio>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
@@ -248,18 +250,18 @@ void BuildStructure_Serialize(BuildStructure* self, void* stream) {
     fn_Work_SerializeBase(self, stream);
 
     // IO::Serializer block (version 0)
-    uint8_t serBuf[24];
-    g_fn_Serializer_Ctor(serBuf, stream, 0);
+    alignas(8) uint8_t serBuf[24];
+    ::new (static_cast<void*>(serBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize bool at +0x48
-    g_fn_Serialize_Bool(serBuf, &self->field_48, nullptr);
+    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(*reinterpret_cast<bool*>(&self->field_48), nullptr);   // B.3.4 bridge
 
     // Serialize BST at +0x60 (InternalBasePtr tree)
     fn_BST_SerializeHelper(&self->field_60, serBuf);
 
     // Serialize count (+0x58), resize array on load
     int count = self->field_58;
-    g_fn_Serialize_Int(serBuf, &count, nullptr);
+    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(*reinterpret_cast<int*>(&count), nullptr);   // B.3.4 bridge
 
     // Check if loading: first qword of serializer -> *(int*)(ptr + 8) == 0 means loading
     int64_t serFirst = *(int64_t*)serBuf;
@@ -268,12 +270,12 @@ void BuildStructure_Serialize(BuildStructure* self, void* stream) {
     }
 
     // Bulk serialize the byte array (one byte per build position)
-    fn_Serializer_SerializeBulk(serBuf, count, self->field_50, nullptr);
+    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(count, reinterpret_cast<unsigned char*>(self->field_50), nullptr);   // B.3.4 bridge
 
     // Serialize rotating scan index at +0x4C
-    g_fn_Serialize_Int(serBuf, &self->field_4c, nullptr);
+    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(*reinterpret_cast<int*>(&self->field_4c), nullptr);   // B.3.4 bridge
 
-    g_fn_Serializer_Dtor(serBuf);
+    reinterpret_cast<IO::Serializer*>(serBuf)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

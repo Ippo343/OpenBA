@@ -30,8 +30,10 @@
 #include "ConsumeRawMaterial.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdio>
 #include <cstdint>
+#include <new>
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -106,16 +108,16 @@ void ConsumeRawMaterial_Serialize_Impl(ConsumeRawMaterial* self, void* stream) {
     // CompleteRoad once roads started being built; these four are the same shape.
     ConsumeRawMaterial_ResolveFuncs();
     uint8_t* s = (uint8_t*)self;
-    uint8_t ser1[24];
-    uint8_t ser2[24];
+    alignas(8) uint8_t ser1[24];
+    alignas(8) uint8_t ser2[24];
 
     // Serialize status byte (+0x18)
-    g_fn_Serializer_Ctor(ser1, stream, 0);
-    g_fn_Serialize_Bool(ser1, s + 0x18, nullptr);
-    g_fn_Serializer_Dtor(ser1);
+    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x18), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     // Versioned serializer (version 2)
-    g_fn_Serializer_Ctor(ser2, stream, 2);
+    ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 2);   // B.3.4 bridge
 
     // Serialize target entity (+0x20) with ComponentEntity type check
     fn_InternalBasePtr_Serialize(s + 0x20, ser2);
@@ -126,18 +128,18 @@ void ConsumeRawMaterial_Serialize_Impl(ConsumeRawMaterial* self, void* stream) {
     }
 
     // Check version for format selection
-    int version = g_fn_Serializer_GetVersion(ser2);
+    int version = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
 
     if (version == 0) {
         // Legacy v0 format: single ExternalPtr + int (no material list)
         uintptr_t legacyExtPtr = 0;
         fn_ExternalPtr_BuildSerialize(&legacyExtPtr, ser2);
         uint32_t legacyCount;
-        g_fn_Serialize_Int(ser2, &legacyCount, nullptr);
+        reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(&legacyCount), nullptr);   // B.3.4 bridge
     } else {
         // v1+ format: material count + material list array
         uint32_t matCount = *(uint32_t*)(s + 0x30);
-        g_fn_Serialize_Int(ser2, &matCount, nullptr);
+        reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(&matCount), nullptr);   // B.3.4 bridge
 
         // If loading, resize the material array
         if (*(int*)(*(uintptr_t*)ser2 + 8) == 0) {
@@ -150,7 +152,7 @@ void ConsumeRawMaterial_Serialize_Impl(ConsumeRawMaterial* self, void* stream) {
             uint64_t remaining = (uint64_t)matCount;
             do {
                 fn_ExternalPtr_BuildSerialize(matList, ser2);
-                g_fn_Serialize_Int(ser2, (void*)((uintptr_t)matList + 8), nullptr);
+                reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(((uintptr_t)matList + 8)), nullptr);   // B.3.4 bridge
                 matList = (uintptr_t*)((uintptr_t)matList + 0x10);
                 remaining--;
             } while (remaining != 0);
@@ -158,12 +160,12 @@ void ConsumeRawMaterial_Serialize_Impl(ConsumeRawMaterial* self, void* stream) {
     }
 
     // v2+: serialize consume mode flag (+0x38)
-    int ver2 = g_fn_Serializer_GetVersion(ser2);
+    int ver2 = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
     if (ver2 > 1) {
-        g_fn_Serialize_Bool(ser2, s + 0x38, nullptr);
+        reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<bool*>(s + 0x38), nullptr);   // B.3.4 bridge
     }
 
-    g_fn_Serializer_Dtor(ser2);
+    reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
