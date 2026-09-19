@@ -151,9 +151,13 @@ char*)` — i.e. retail declares 22 of these 26 as `Serialize` OVERLOADS.
 2. **`IO::Serializer`'s NON-virtual forwarders keep the public name `Serialize` and ARE real
    C++ overloads.** Retail's 22 exported members are all `QEAA`/`QEBA`
    (`?Serialize@Serializer@IO@@QEAAXAEAHPEBD@Z` and friends, `serializer.cpp:361-388`); none is
-   virtual, each tail-jumps into the ReaderWriter's table. So callers write
-   `ser.Serialize(x, "name")` and overload resolution picks the width — which is what makes the
-   861-site caller batch mechanical (§7.2).
+   virtual, each tail-jumps into the ReaderWriter's table. So a caller in a CONVERTED class,
+   holding a typed member, writes `ser.Serialize(x, "name")` and overload resolution picks the
+   width. **That is the END state, not the B.3.4 caller batches' rule** (coordinator amendment,
+   2026-09-19): today's 861 call sites mostly pass untyped `s + 0xNN` byte pointers through
+   `void*` doors, so in the batches the DOOR names the type and the type is spelled at the call
+   — §7.3. The batch is still mechanical; it is mechanical on the door's name, not on the
+   argument's type.
 3. **Slot 0 is `DeletingDtor(unsigned)` and `~ReaderWriter()` is NON-virtual** (decision 2).
    `tests/unit/io_vtable_abi_test.cpp`'s
    `a_virtual_destructor_would_shift_every_ReaderWriter_slot` is the guard: Itanium spends two
@@ -807,8 +811,10 @@ Its judgement calls are the `Serializer` ctor/dtor pairs (§7.3) and the
 
 The 861 are the real bulk of the step and they are **mechanical after block 3**, because the
 receiver becomes a real `IO::Serializer` and the member is a real overload set:
-`g_fn_Serialize_Int(ser, &x, name)` → `Ser(ser)->Serialize(x, name)`, and overload resolution
-picks the width. Per-site bridge cast, `// B.3.4 bridge` comment (§7.2). They split across
+`g_fn_Serialize_Int(ser, &x, name)` → `Ser(ser)->Serialize(x, name)` — **with the DOOR's type
+spelled at the call, never inferred from the argument (§7.3's coordinator amendment: most
+arguments are untyped `s + 0xNN` pointers, and overload resolution on them would pick the
+one-byte overload).** Per-site bridge cast, `// B.3.4 bridge` comment (§7.2). They split across
 batches A-F by directory.
 
 The 130 are **NOT this step's caller work.** Their receiver is an `Object::ExternalPtr<T>` /
@@ -991,14 +997,40 @@ reinterpret_cast<IO::Serializer*>(ser)->Serialize(x, "name");   // B.3.4 bridge
 
 g_fn_Serialize_Bool(ser, &b, nullptr);
 reinterpret_cast<IO::Serializer*>(ser)->Serialize(b, nullptr);  // B.3.4 bridge
-// Overload resolution picks the width from the reference's type. That is why
 // `Serialize` stays ONE name on the Serializer (§1.2.2) while the 22 VIRTUALS
 // it forwards to get 22 distinct names (§1.2.1).
+//
+// *** COORDINATOR AMENDMENT (2026-09-19, after block 3) — THE DOOR DECIDES THE OVERLOAD,
+// *** NEVER THE ARGUMENT'S DECLARED TYPE. An earlier revision said "overload resolution
+// *** picks the width from the reference's type". That is WRONG FOR THIS TREE and would
+// *** corrupt saves: the old doors take `void*`, and measured on main the argument is
+// *** usually an UNTYPED byte-offset pointer — `s + 0x28` (13 sites), `At(self, …)` (13),
+// *** `(void*)(s + 0x30)` … — not a typed field. `*(s + 0x28)` is an `unsigned char&`, so
+// *** overload resolution would pick Serialize(unsigned char&) (slot +0xB8, ONE byte) where
+// *** retail's call was the int door (slot +0xA0, FOUR bytes). Even a TYPED field can sit
+// *** behind the "wrong" door on purpose (a uint32_t or an enum serialized through the Int
+// *** door): letting its type choose moves the call to a different retail slot.
+// *** RULE: spell the door's own type at the call, always:
+g_fn_Serialize_Int(ser, s + 0x28, nullptr);
+reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);  // B.3.4 bridge
+// ***   g_fn_Serialize_Int            -> int&            (+0xA0)
+// ***   g_fn_Serialize_Bool           -> bool&           (+0x78)
+// ***   fn_Serializer_Serialize_Float -> float&          (+0x80)
+// ***   any other door                -> the type in ITS mangled name / IO::Serializer's
+// ***                                      declaration comment (each overload's comment in
+// ***                                      runtime/types/io/Serializer.h names its +0xNN slot)
+// *** The cast may be dropped ONLY when the argument expression's type is ALREADY exactly the
+// *** door's type (`int count; … &count` through the Int door). `int32_t` is `int` on this
+// *** toolchain; `long`/`DWORD`/an enum/`uint32_t` are NOT `int` — cast. A batch reports, per
+// *** door, how many sites needed the cast; "0 needed" on a file full of `s + 0xNN` is a lie.
 
 // --- the encoding v-call: 37 sites, 22 files, batch A ----------------------
 SerializerEncodingVCall(serializer_24bytes, 0x98, &field);
 //                                          ^^^^ rw_vtbl::kScalarUInt
-reinterpret_cast<IO::Serializer*>(serializer_24bytes)->Serialize(field, nullptr);
+reinterpret_cast<IO::Serializer*>(serializer_24bytes)
+    ->Serialize(*reinterpret_cast<unsigned int*>(&field), nullptr);   // 0x98 = uint door
+// (same amendment as above: the OFFSET names the door, the door names the type, and the
+//  type is spelled at the call — never inferred from `field`'s declaration.)
 // ONE RULE HERE: the offset argument is the WIDTH. Map it through §1.2's table
 // (0x78 bool, 0x80 float, 0x98 uint, 0xA0 int, ...), never by eye. A site whose
 // offset is not in that table is not a serialize call — stop and report it.
