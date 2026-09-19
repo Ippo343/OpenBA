@@ -142,3 +142,17 @@ UNIT_TREE_SRCS += runtime/src/system/crc.cpp
 # runtime/types/object/External.h, whose linkable half (external_class.cpp) is
 # already on this list.
 UNIT_TREE_SRCS +=
+
+# ENDGAME B.3.5 block C — the ImageBuffer chain / RenderState ABI proof
+# (tests/unit/video_imagebuffer_abi_test.cpp). NO tree sources link, for the same
+# reason block A's list gives: `Video::ImageBuffer`, the three
+# `Graphics::*ImageBuffer` classes and `Video::RenderState` are declarations plus
+# layout pins, and their bodies are registered doors in `runtime/src/video/` and
+# `runtime/src/graphics/` that stand on the port registry, the address registry
+# and `Collection::Array`'s allocator seam. The test checks the real classes'
+# `sizeof`/`offsetof`/`is_base_of` directly (no instantiation needed) and the
+# twelve-slot ABI of the three-level chain on mirror classes declared in the test,
+# exactly as tests/unit/io_vtable_abi_test.cpp does with `TestReaderWriter`.
+# `Object::External` / `CompiledExternal`'s linkable half (external_class.cpp) is
+# already on this list, which is all the layout asserts in these headers need.
+UNIT_TREE_SRCS +=
