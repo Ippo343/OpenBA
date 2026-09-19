@@ -73,21 +73,12 @@ extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* s
 // MemAlloc/MemFree are dispatch slots 0x140152b60/0x140152b68 in retail; we reach the
 // same Runtime exports through the canonical fn_MemAllocStatic / fn_MemFreeStatic
 // wrappers, exactly as work_leaf_market.cpp does.
-typedef void (*MB_SerializeInt_t)(void* serializer, int* value, const char* name);
-typedef void (*MB_IBP_Serialize_t)(void* ibp, void* serializer);
-
-static MB_SerializeInt_t  s_fn_SerializeInt = nullptr;   // slot 0x140152ac8
-static MB_IBP_Serialize_t s_fn_IBP_Serialize = nullptr;  // slot 0x140152aa0
 static uint32_t*          s_TypeId_1401c7158 = nullptr;  // DAT_1401c7158
 static bool               s_resolved = false;
 
 static void MarketBst_b290_ResolveFuncs() {
     if (s_resolved) return;
     s_resolved = true;
-    uintptr_t slot = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (slot) s_fn_SerializeInt = *reinterpret_cast<MB_SerializeInt_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152aa0);
-    if (slot) s_fn_IBP_Serialize = *reinterpret_cast<MB_IBP_Serialize_t*>(slot);
     s_TypeId_1401c7158 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));
 }
 

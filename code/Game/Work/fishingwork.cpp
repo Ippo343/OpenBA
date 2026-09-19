@@ -80,13 +80,6 @@ static void (*s_fn_Work_Serialize)(void* self, void* stream) = nullptr;
 // their two call sites below to GameColl::AsArray<T> member calls, so their
 // resolved-pointer stand-ins are gone.
 
-// Object::InternalBasePtr::Serialize (dispatch slot 0x140152aa0)
-static void (*s_fn_IBP_Serialize)(void* ibp, void* serializer) = nullptr;
-
-// IO::Serializer::Serialize for int array (dispatch slot 0x140151278)
-// (serializer, count, int_array_ptr, name)
-static void (*s_fn_Serialize_IntArray)(void* serializer, int count, int* array, const char* name) = nullptr;
-
 // FUN_140002e10 — find PositionComponent on entity (for Slot10/GetTarget)
 static void* (*s_fn_FindComp_PositionEntity)(uintptr_t entity, void* outIBP) = nullptr;
 
@@ -141,18 +134,6 @@ bool FishingWork_ResolveFuncs() {
     s_fn_Work_Serialize = reinterpret_cast<void(*)(void*, void*)>(
         ResolveAddr(Module::Exe, 0x1400f7400));
 
-    // InternalBasePtr::Serialize via dispatch slot 0x140152aa0
-    {
-        uintptr_t slot = ResolveAddr(Module::Exe, 0x140152aa0);
-        if (slot) s_fn_IBP_Serialize = *reinterpret_cast<void(**)(void*, void*)>(slot);
-    }
-
-    // Serialize int array via dispatch slot 0x140151278
-    {
-        uintptr_t slot = ResolveAddr(Module::Exe, 0x140151278);
-        if (slot) s_fn_Serialize_IntArray = *reinterpret_cast<void(**)(void*, int, int*, const char*)>(slot);
-    }
-
     // FUN_140002e10 — find PositionComponent on entity
     s_fn_FindComp_PositionEntity = reinterpret_cast<void*(*)(uintptr_t, void*)>(
         ResolveAddr(Module::Exe, 0x140002e10));
@@ -174,7 +155,6 @@ bool FishingWork_ResolveFuncs() {
               s_fn_FishingAction_Ctor && s_fn_PlayAnimation_Action_Ctor &&
               s_fn_TryAssignToSpot &&
               s_fn_Work_Serialize &&
-              s_fn_IBP_Serialize && s_fn_Serialize_IntArray &&
               s_fn_FindComp_PositionEntity && s_fn_CancelPendingActions &&
               s_typeId_1401c7660 && s_typeId_1401c7698 &&
               s_typeId_1401c4870 && s_typeId_1401c7e78 && s_typeId_1401c8070 &&
@@ -183,8 +163,7 @@ bool FishingWork_ResolveFuncs() {
               fn_IsDerivedFrom && fn_MemFreeStatic && fn_MemAlloc &&
               fn_Map_CheckPassable && fn_Work_CanStartWork &&
               fn_CitizenAI_LongTermPlan && fn_Random_RandTol &&
-              g_pGameWorldSingleton && g_pMemAllocSingleton && g_fUVScale &&
-              g_fn_Serializer_Ctor && g_fn_Serializer_Dtor && g_fn_Serialize_Int;
+              g_pGameWorldSingleton && g_pMemAllocSingleton && g_fUVScale;
 
 #ifdef _DEBUG
     printf("[FishingWork] ResolveFuncs: FindMesh=%p FindPos=%p GetSpotPos=%p SetVis=%p\n",
@@ -197,9 +176,8 @@ bool FishingWork_ResolveFuncs() {
            (void*)s_typeId_1401c7660, (void*)s_typeId_1401c7698,
            (void*)s_typeId_1401c4870, (void*)s_typeId_1401c7e78, (void*)s_typeId_1401c8070,
            (void*)s_typeId_1401c7158);
-    printf("[FishingWork]   WorkSer=%p IBPSer=%p IntArrSer=%p\n",
-           (void*)s_fn_Work_Serialize, (void*)s_fn_IBP_Serialize,
-           (void*)s_fn_Serialize_IntArray);
+    printf("[FishingWork]   WorkSer=%p\n",
+           (void*)s_fn_Work_Serialize);
     printf("[FishingWork]   FindPosEnt=%p CancelPending=%p\n",
            (void*)s_fn_FindComp_PositionEntity, (void*)s_fn_CancelPendingActions);
     if (!ok) printf("[FishingWork] ERROR: some function pointers not resolved!\n");

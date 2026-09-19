@@ -39,21 +39,6 @@ namespace Object { uint32_t GetTypeIdByName(const char* name); }  // factory_reg
 typedef void (*GRM_WorkSerialize_t)(void* self, void* stream);
 static GRM_WorkSerialize_t s_fn_Work_Serialize = nullptr;
 
-// IO::Serializer ctor/dtor
-typedef void (*GRM_SerializerCtor_t)(void* self, void* stream, int version);
-static GRM_SerializerCtor_t s_fn_Serializer_Ctor = nullptr;
-
-typedef void (*GRM_SerializerDtor_t)(void* self);
-static GRM_SerializerDtor_t s_fn_Serializer_Dtor = nullptr;
-
-// IO::Serializer::Serialize for int
-typedef void (*GRM_SerializeInt_t)(void* self, void* field, const char* name);
-static GRM_SerializeInt_t s_fn_SerializeInt = nullptr;
-
-// IO::Serializer::Serialize for int bulk (count, ptr, name)
-typedef void (*GRM_SerializeIntBulk_t)(void* self, int count, void* ptr, const char* name);
-static GRM_SerializeIntBulk_t s_fn_SerializeIntBulk = nullptr;
-
 // 0x1400021d0 (int-array SetSize) is the exe-side Collection::Array<int32>
 // monomorphisation -- ENDGAME B.3.2 step 2 converted its two call sites below to
 // GameColl::AsArray<GameColl::I32NoInit> member calls, so its resolved-pointer stand-in
@@ -234,28 +219,6 @@ bool GatherRawMaterials_ResolveFuncs() {
     s_vtable_Work = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x140161a80));
 
-    // Dispatch slots (indirect through IAT)
-    uintptr_t iatSerCtor = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (iatSerCtor)
-        s_fn_Serializer_Ctor = *reinterpret_cast<GRM_SerializerCtor_t*>(iatSerCtor);
-
-    uintptr_t iatSerDtor = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (iatSerDtor)
-        s_fn_Serializer_Dtor = *reinterpret_cast<GRM_SerializerDtor_t*>(iatSerDtor);
-
-    uintptr_t iatSerInt = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (iatSerInt)
-        s_fn_SerializeInt = *reinterpret_cast<GRM_SerializeInt_t*>(iatSerInt);
-
-    // 0x1401528c0 is UI::Dialog::CreateElement, not a serializer — the old address
-    // here was a misnomer that happened to be harmless only while the slot was
-    // unregistered. Retail's GatherRawMaterials::Serialize (0x1400EC560) calls
-    // CALL [0x140151278] twice: the IO::Serializer INT-ARRAY overload.
-    // See [[reference-serializer-byte-vs-int-array-overload]].
-    uintptr_t iatSerIntBulk = ResolveAddr(Module::Exe, 0x140151278);
-    if (iatSerIntBulk)
-        s_fn_SerializeIntBulk = *reinterpret_cast<GRM_SerializeIntBulk_t*>(iatSerIntBulk);
-
     // MemAlloc/MemFree — resolve via the canonical Runtime exports (static size/align &
     // ptr forms). The exe IAT dispatch slots (0x1401527e8/0x1401527f0) are UNREGISTERED in
     // the standalone exe AND mislabelled (they index the _rng/Lerp imports, not
@@ -300,8 +263,7 @@ bool GatherRawMaterials_ResolveFuncs() {
         s_typeId_PosDesc = &s_tidPosDescVal;
     }
 
-    bool ok = s_fn_Work_Serialize && s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
-              s_fn_SerializeInt && s_fn_SerializeIntBulk &&
+    bool ok = s_fn_Work_Serialize &&
               s_fn_TreeSerialize &&
               s_fn_TreeRemoveByKey && s_fn_TreeRemoveNode &&
               s_fn_StateMachineRelease && s_fn_CanStartWork &&
@@ -322,10 +284,6 @@ bool GatherRawMaterials_ResolveFuncs() {
     printf("[GatherRawMaterials] ResolveFuncs: %s\n", ok ? "OK" : "FAILED");
     if (!ok) {
         if (!s_fn_Work_Serialize) printf("  MISSING: s_fn_Work_Serialize\n");
-        if (!s_fn_Serializer_Ctor) printf("  MISSING: s_fn_Serializer_Ctor\n");
-        if (!s_fn_Serializer_Dtor) printf("  MISSING: s_fn_Serializer_Dtor\n");
-        if (!s_fn_SerializeInt) printf("  MISSING: s_fn_SerializeInt\n");
-        if (!s_fn_SerializeIntBulk) printf("  MISSING: s_fn_SerializeIntBulk\n");
         if (!s_fn_TreeSerialize) printf("  MISSING: s_fn_TreeSerialize\n");
         if (!s_fn_TreeRemoveByKey) printf("  MISSING: s_fn_TreeRemoveByKey\n");
         if (!s_fn_TreeRemoveNode) printf("  MISSING: s_fn_TreeRemoveNode\n");

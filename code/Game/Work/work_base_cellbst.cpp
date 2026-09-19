@@ -245,7 +245,7 @@ void WorkCellBST_Remove_ca60(uintptr_t* root, void* nodeArg) {
 // parent-walk writing each node's key(int @+0) then IBP(@+8). Caller: void fn(root, ser).
 void WorkCellBST_Serialize_9de0(uintptr_t* root, void* serializer) {
     int count = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(root) + 8);
-    if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&count), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&count), nullptr);   // B.3.4 bridge
     bool loading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
     uint32_t citTid = g_TypeId_CitizenComponent_FC ? *g_TypeId_CitizenComponent_FC : 0;
 
@@ -253,9 +253,9 @@ void WorkCellBST_Serialize_9de0(uintptr_t* root, void* serializer) {
         struct CellKeyRec { int key; int pad; uint64_t ibp; };
         for (int i = 0; i < count; i++) {
             CellKeyRec rec; rec.key = 0; rec.pad = 0; rec.ibp = 0;
-            if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&rec.key), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&rec.key), nullptr);   // B.3.4 bridge
             uintptr_t keyIBP = 0;
-            if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(&keyIBP)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
+            reinterpret_cast<Object::InternalBasePtr*>(&keyIBP)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             if (keyIBP != 0 && fn_IsDerivedFrom && citTid &&
                 !fn_IsDerivedFrom(reinterpret_cast<void*>(keyIBP), citTid))
                 keyIBP = 0;
@@ -273,8 +273,8 @@ void WorkCellBST_Serialize_9de0(uintptr_t* root, void* serializer) {
     do { pIVar7 = pIVar5; pIVar5 = *reinterpret_cast<uintptr_t*>(pIVar7 + 0x18); } while (pIVar5 != 0);  // leftmost
 joined:
     while ((pIVar5 = pIVar7) != 0) {
-        if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(pIVar5), nullptr);   // key @+0   (B.3.4 bridge)
-        if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(reinterpret_cast<void*>(pIVar5 + 8))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));  // IBP @+8   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(pIVar5), nullptr);   // key @+0   (B.3.4 bridge)
+        reinterpret_cast<Object::InternalBasePtr*>(reinterpret_cast<void*>(pIVar5 + 8))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));  // IBP @+8   // B.3.4 bridge
         if (*reinterpret_cast<uintptr_t*>(pIVar5 + 8) != 0 && fn_IsDerivedFrom && citTid &&
             !fn_IsDerivedFrom(*reinterpret_cast<void**>(pIVar5 + 8), citTid))
             *reinterpret_cast<uint64_t*>(pIVar5 + 8) = 0;

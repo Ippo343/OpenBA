@@ -49,9 +49,6 @@ static void (*s_fn_ObjectInternal_Dtor)(void* self) = nullptr;
 // Object::InternalBasePtr::DeletePtr — clears entity ref during dtor
 static void (*s_fn_IBP_DeletePtr)(void* self) = nullptr;
 
-// Object::InternalBasePtr::Serialize(this, serializer) — via IAT at 0x140152aa0
-static void (*s_fn_IBP_Serialize)(void* basePtr, void* serializer) = nullptr;
-
 // FUN_140002340 — ExternalPtr_BuildSerialize (for resource type at +0x28)
 // Already in engine_funcs.h as fn_ExternalPtr_BuildSerialize
 
@@ -90,10 +87,6 @@ bool DropOffRawMaterial_ResolveFuncs() {
     // InternalBasePtr::DeletePtr
     s_fn_IBP_DeletePtr = (void(*)(void*))fn_InternalBasePtr_DeletePtr;
 
-    // InternalBasePtr::Serialize via IAT at 0x140152aa0
-    uintptr_t iatIBPSer = ResolveAddr(Module::Exe, 0x140152aa0);
-    if (iatIBPSer) s_fn_IBP_Serialize = *reinterpret_cast<void(**)(void*, void*)>(iatIBPSer);
-
     // DropOffRawMaterial_Serialize_sub_7620 — resource transfer helper
     s_fn_DropOffSub = (s_fn_DropOffSub_t)ResolveAddr(Module::Exe, 0x1400c7620);
 
@@ -113,20 +106,18 @@ bool DropOffRawMaterial_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x1401c5f38));
 
     bool ok = s_fn_ObjectInternal_Dtor && s_fn_IBP_DeletePtr &&
-              s_fn_IBP_Serialize && s_fn_DropOffSub &&
+              s_fn_DropOffSub &&
               s_fn_DropAllInventory &&
               s_typeId_1401c7158 && g_TypeId_ComponentEntity &&
               s_vtable_DropOffRawMaterial && s_vtable_Action &&
               s_typeInfo_DropOffRawMaterial &&
               fn_IsDerivedFrom &&
-              fn_MemFreeStatic && fn_ExternalPtr_BuildSerialize &&
-              g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
-              g_fn_Serialize_Bool && g_fn_Serialize_Int;
+              fn_MemFreeStatic && fn_ExternalPtr_BuildSerialize;
 
 #ifdef _DEBUG
-    printf("[DropOffRawMaterial] ResolveFuncs: ObjDtor=%p IBPDel=%p IBPSer=%p DropSub=%p\n",
+    printf("[DropOffRawMaterial] ResolveFuncs: ObjDtor=%p IBPDel=%p DropSub=%p\n",
            (void*)s_fn_ObjectInternal_Dtor, (void*)s_fn_IBP_DeletePtr,
-           (void*)s_fn_IBP_Serialize, (void*)s_fn_DropOffSub);
+           (void*)s_fn_DropOffSub);
     printf("[DropOffRawMaterial]   DropAll=%p typeId7158=%p CompEnt=%p\n",
            (void*)s_fn_DropAllInventory,
            (void*)s_typeId_1401c7158, (void*)g_TypeId_ComponentEntity);

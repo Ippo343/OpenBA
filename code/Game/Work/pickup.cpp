@@ -35,13 +35,6 @@
 
 // Work::Serialize
 typedef void  (*PiW_Work_Serialize_t)(void* self, void* stream);
-// IO::Serializer ctor/dtor/Serialize/GetVersion
-typedef void* (*PiW_Serializer_Ctor_t)(void* self, void* stream, int version);
-typedef void  (*PiW_Serializer_Dtor_t)(void* self);
-typedef void  (*PiW_Serializer_Serialize_t)(void* self, int* value, const char* name);
-typedef int   (*PiW_Serializer_GetVersion_t)(void* self);
-// Object::InternalBasePtr::Serialize
-typedef void  (*PiW_InternalBasePtr_Serialize_t)(void* basePtr, void* serializer);
 // FUN_140018020 -- array/list serialization helper
 typedef void  (*PiW_ArraySerialize_t)(void* arr, void* serializer);
 // FUN_1400f7100 -- validate work entity
@@ -56,11 +49,6 @@ typedef void  (*PiW_MemFreeStatic_t)(void* ptr);
 typedef int   (*PiW_Slot4_Original_t)(void* self, void* entityIBP, uint64_t param3, uint64_t param4);
 
 static PiW_Work_Serialize_t            s_fn_Work_Serialize = nullptr;
-static PiW_Serializer_Ctor_t           s_fn_Serializer_Ctor = nullptr;
-static PiW_Serializer_Dtor_t           s_fn_Serializer_Dtor = nullptr;
-static PiW_Serializer_Serialize_t      s_fn_Serializer_Serialize = nullptr;
-static PiW_Serializer_GetVersion_t     s_fn_Serializer_GetVersion = nullptr;
-static PiW_InternalBasePtr_Serialize_t s_fn_InternalBasePtr_Serialize = nullptr;
 static PiW_ArraySerialize_t            s_fn_ArraySerialize = nullptr;
 static PiW_ValidateEntity_t            s_fn_ValidateEntity = nullptr;
 static PiW_CancelAllWork_t             s_fn_CancelAllWork = nullptr;
@@ -103,30 +91,6 @@ bool Pickup_ResolveFuncs() {
     s_fn_Slot4_Original = reinterpret_cast<PiW_Slot4_Original_t>(
         ResolveAddr(Module::Exe, 0x1400f2f00));
 
-    // Dispatch slots (indirect through .rdata)
-    // Serializer ctor/dtor -- use same slots as Pickup's Serialize (0x140152ad8/0x140152ad0)
-    uintptr_t iatSerCtor = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (iatSerCtor)
-        s_fn_Serializer_Ctor = *reinterpret_cast<PiW_Serializer_Ctor_t*>(iatSerCtor);
-    uintptr_t iatSerDtor = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (iatSerDtor)
-        s_fn_Serializer_Dtor = *reinterpret_cast<PiW_Serializer_Dtor_t*>(iatSerDtor);
-
-    // Serializer::Serialize
-    uintptr_t iatSer = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (iatSer)
-        s_fn_Serializer_Serialize = *reinterpret_cast<PiW_Serializer_Serialize_t*>(iatSer);
-
-    // Serializer::GetVersion (correct IAT slot verified from original disasm)
-    uintptr_t iatGetVer = ResolveAddr(Module::Exe, 0x140152a48);
-    if (iatGetVer)
-        s_fn_Serializer_GetVersion = *reinterpret_cast<PiW_Serializer_GetVersion_t*>(iatGetVer);
-
-    // InternalBasePtr::Serialize
-    uintptr_t iatBPSer = ResolveAddr(Module::Exe, 0x140152aa0);
-    if (iatBPSer)
-        s_fn_InternalBasePtr_Serialize = *reinterpret_cast<PiW_InternalBasePtr_Serialize_t*>(iatBPSer);
-
     // fn_MemFreeStatic from engine_funcs
     s_fn_MemFreeStatic = reinterpret_cast<PiW_MemFreeStatic_t>(fn_MemFreeStatic);
 
@@ -146,9 +110,7 @@ bool Pickup_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x140161a80));
 
     // Verify critical pointers
-    bool ok = s_fn_Work_Serialize && s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
-              s_fn_Serializer_Serialize && s_fn_Serializer_GetVersion &&
-              s_fn_InternalBasePtr_Serialize && s_fn_ArraySerialize &&
+    bool ok = s_fn_Work_Serialize && s_fn_ArraySerialize &&
               s_fn_ValidateEntity && s_fn_CancelAllWork &&
               s_fn_Slot4_Original &&
               fn_InternalBasePtr_Ctor &&
@@ -161,11 +123,6 @@ bool Pickup_ResolveFuncs() {
     printf("[Pickup] ResolveFuncs: %s\n", ok ? "OK" : "FAILED");
     if (!ok) {
         if (!s_fn_Work_Serialize) printf("  MISSING: Work_Serialize\n");
-        if (!s_fn_Serializer_Ctor) printf("  MISSING: Serializer_Ctor\n");
-        if (!s_fn_Serializer_Dtor) printf("  MISSING: Serializer_Dtor\n");
-        if (!s_fn_Serializer_Serialize) printf("  MISSING: Serializer_Serialize\n");
-        if (!s_fn_Serializer_GetVersion) printf("  MISSING: Serializer_GetVersion\n");
-        if (!s_fn_InternalBasePtr_Serialize) printf("  MISSING: InternalBasePtr_Serialize\n");
         if (!s_fn_ArraySerialize) printf("  MISSING: ArraySerialize\n");
         if (!s_fn_ValidateEntity) printf("  MISSING: ValidateEntity\n");
         if (!s_fn_CancelAllWork) printf("  MISSING: CancelAllWork\n");

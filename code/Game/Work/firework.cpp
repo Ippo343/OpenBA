@@ -661,7 +661,6 @@ int FireWork_Serialize_Impl(FireWork* self, void* stream) {
         s_bstSer  = reinterpret_cast<FW_BSTSerialize_t>(ResolveAddr(Module::Exe, 0x1400296b0));
 
     if (s_workSer) s_workSer(self, stream);
-    if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int) return 0;
 
     alignas(8) uint8_t ser[24];
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge

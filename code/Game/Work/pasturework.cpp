@@ -60,9 +60,6 @@ typedef void* (*PW_FindComp_Family2_t)(uintptr_t entity, void* outIBP);  // Enti
 
 // Work::Serialize
 typedef void  (*PW_Work_Serialize_t)(void* self, void* stream);
-// IO::Serializer ctor/dtor
-typedef void* (*PW_Serializer_Ctor_t)(void* self, void* stream, int version);
-typedef void  (*PW_Serializer_Dtor_t)(void* self);
 // BST serialization
 typedef void  (*PW_BST_Serialize_t)(void* bstRoot, void* serializer);
 
@@ -122,8 +119,6 @@ static PW_FindComp_Position_t          s_fn_FindComp_Position = nullptr;
 static PW_FindComp_Family_t            s_fn_FindComp_Family = nullptr;   // FUN_1400223c0
 static PW_FindComp_Family2_t           s_fn_FindComp_Family2 = nullptr;  // Entity_FindComponent_Family @ 0x1400012d0
 static PW_Work_Serialize_t             s_fn_Work_Serialize = nullptr;
-static PW_Serializer_Ctor_t            s_fn_Serializer_Ctor = nullptr;
-static PW_Serializer_Dtor_t            s_fn_Serializer_Dtor = nullptr;
 static PW_BST_Serialize_t              s_fn_BST_Serialize = nullptr;
 static PW_ValidateEntity_t             s_fn_ValidateEntity = nullptr;
 static PW_MemAlloc_t                   s_fn_MemAlloc = nullptr;
@@ -261,14 +256,6 @@ bool PastureWork_ResolveFuncs() {
     if (iatRandTol)
         s_fn_Random_RandTol = *reinterpret_cast<PW_Random_RandTol_t*>(iatRandTol);
 
-    // Serializer ctor/dtor from dispatch slots
-    uintptr_t iatSerCtorSlot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (iatSerCtorSlot)
-        s_fn_Serializer_Ctor = *reinterpret_cast<PW_Serializer_Ctor_t*>(iatSerCtorSlot);
-    uintptr_t iatSerDtorSlot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (iatSerDtorSlot)
-        s_fn_Serializer_Dtor = *reinterpret_cast<PW_Serializer_Dtor_t*>(iatSerDtorSlot);
-
     // Static MemAlloc/MemFree. These previously read exe dispatch slots 0x140151460 /
     // 0x140151468; 0x140151460 is NOT MemAlloc, it is Graphics::Geometry::GetTransform
     // (see placementtool.cpp:78). Since that slot is registered, the pointer was
@@ -310,8 +297,7 @@ bool PastureWork_ResolveFuncs() {
               s_fn_FindComp_Pasture && s_fn_GetAreaComponent &&
               s_fn_Map_CalcDistance && s_fn_Map_FindNearestPassable &&
               s_fn_Map_CanPathTo && s_fn_FindComp_NatRes &&
-              s_fn_Work_Serialize && s_fn_Serializer_Ctor &&
-              s_fn_Serializer_Dtor && s_fn_BST_Serialize &&
+              s_fn_Work_Serialize && s_fn_BST_Serialize &&
               s_fn_ValidateEntity && s_fn_BSTRemove &&
               s_fn_BSTFindRemove && s_fn_CancelAllWork &&
               s_fn_FindSubEntity && s_fn_TreeNodeCleanup &&
@@ -348,8 +334,6 @@ bool PastureWork_ResolveFuncs() {
         if (!s_fn_Map_CanPathTo) printf("  MISSING: Map_CanPathTo\n");
         if (!s_fn_FindComp_NatRes) printf("  MISSING: FindComp_NatRes\n");
         if (!s_fn_Work_Serialize) printf("  MISSING: Work_Serialize\n");
-        if (!s_fn_Serializer_Ctor) printf("  MISSING: Serializer_Ctor\n");
-        if (!s_fn_Serializer_Dtor) printf("  MISSING: Serializer_Dtor\n");
         if (!s_fn_BST_Serialize) printf("  MISSING: BST_Serialize\n");
         if (!s_fn_ValidateEntity) printf("  MISSING: ValidateEntity\n");
         if (!s_fn_BSTRemove) printf("  MISSING: BSTRemove\n");

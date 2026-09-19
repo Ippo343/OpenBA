@@ -185,7 +185,7 @@ extern "C" void* TradeWork_Insert_c710(int64_t* param_1, void** param_2, int64_t
 extern "C" void TradeWork_Serialize_c8a0(int64_t* param_1, void* param_2) {
     // Serialize the node count (read or write).
     int32_t count = *reinterpret_cast<int32_t*>(reinterpret_cast<int64_t>(param_1) + 0x08);
-    if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(param_2)->Serialize(*reinterpret_cast<int*>(&count), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(param_2)->Serialize(*reinterpret_cast<int*>(&count), nullptr);   // B.3.4 bridge
 
     bool readMode = (static_cast<int>(reinterpret_cast<IO::Serializer*>(param_2)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
 
@@ -196,8 +196,7 @@ extern "C" void TradeWork_Serialize_c8a0(int64_t* param_1, void* param_2) {
             uint64_t rec[3];
             rec[0] = 0; rec[1] = 0; rec[2] = 0;
 
-            if (fn_InternalBasePtr_Serialize)
-                reinterpret_cast<Object::InternalBasePtr*>(&rec[0])->Serialize(*reinterpret_cast<IO::Serializer*>(param_2));   // B.3.4 bridge
+            reinterpret_cast<Object::InternalBasePtr*>(&rec[0])->Serialize(*reinterpret_cast<IO::Serializer*>(param_2));   // B.3.4 bridge
             // Validate the deserialized object against CitizenAIComponent; null on fail.
             // Skip when the type-id is unresolved (0) — cascade-safe (keep the object).
             if (rec[0] != 0 && g_tid_TradeWork_CitizenComponent != 0 && fn_IsDerivedFrom &&
@@ -206,8 +205,7 @@ extern "C" void TradeWork_Serialize_c8a0(int64_t* param_1, void* param_2) {
                 rec[0] = 0;
             }
             // int payload at record +0x10.
-            if (g_fn_Serialize_Int)
-                reinterpret_cast<IO::Serializer*>(param_2)->Serialize(*reinterpret_cast<int*>(&rec[2]), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(param_2)->Serialize(*reinterpret_cast<int*>(&rec[2]), nullptr);   // B.3.4 bridge
             // ExternalPtr at record +0x08 (0x140002340 = fn_ExternalPtr_BuildSerialize).
             if (fn_ExternalPtr_BuildSerialize)
                 fn_ExternalPtr_BuildSerialize(&rec[1], param_2);
@@ -229,16 +227,14 @@ extern "C" void TradeWork_Serialize_c8a0(int64_t* param_1, void* param_2) {
 
         while (node != 0) {
             // Serialize this node's IBP (+0x00), int (+0x10), ExternalPtr (+0x08).
-            if (fn_InternalBasePtr_Serialize)
-                reinterpret_cast<Object::InternalBasePtr*>(reinterpret_cast<void*>(node))->Serialize(*reinterpret_cast<IO::Serializer*>(param_2));   // B.3.4 bridge
+            reinterpret_cast<Object::InternalBasePtr*>(reinterpret_cast<void*>(node))->Serialize(*reinterpret_cast<IO::Serializer*>(param_2));   // B.3.4 bridge
             if (*reinterpret_cast<int64_t*>(node) != 0 && g_tid_TradeWork_CitizenComponent != 0 &&
                 fn_IsDerivedFrom &&
                 !fn_IsDerivedFrom(*reinterpret_cast<void**>(node),
                                   g_tid_TradeWork_CitizenComponent)) {
                 *reinterpret_cast<int64_t*>(node) = 0;
             }
-            if (g_fn_Serialize_Int)
-                reinterpret_cast<IO::Serializer*>(param_2)->Serialize(*reinterpret_cast<int*>(node + 0x10), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(param_2)->Serialize(*reinterpret_cast<int*>(node + 0x10), nullptr);   // B.3.4 bridge
             if (fn_ExternalPtr_BuildSerialize)
                 fn_ExternalPtr_BuildSerialize(reinterpret_cast<void*>(node + 0x08), param_2);
 

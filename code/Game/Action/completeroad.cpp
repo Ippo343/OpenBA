@@ -21,10 +21,6 @@
 // (NOT in engine_funcs.h -- CompleteRoad-specific helpers)
 // ============================================================
 
-// IO::Serializer::Serialize(unsigned char) -- via export
-typedef void (*fn_Serialize_UChar_t)(void* self, void* field, const char* name);
-static fn_Serialize_UChar_t s_fn_Serialize_UChar = nullptr;
-
 // FUN_14009c640 -- complete road tile
 // Params: terrain*, tileIndex, direction, roadType
 static void (*s_fn_CompleteRoadTile)(void* terrain, int tileIndex, uint8_t direction, uint32_t roadType) = nullptr;
@@ -43,23 +39,11 @@ bool CompleteRoad_ResolveFuncs() {
     s_pGameState = (void**)ResolveAddr(Module::Exe, 0x1401c3dd8);
     s_fn_CompleteRoadTile = reinterpret_cast<void(*)(void*, int, uint8_t, uint32_t)>(
         ResolveAddr(Module::Exe, 0x14009c640));
-    s_fn_Serialize_UChar = reinterpret_cast<fn_Serialize_UChar_t>(
-        // MSVC mangling for `unsigned char&` is AEAE (C=signed char, D=char, E=unsigned
-        // char). The old name here spelled the parameter "AEAuchar", which is not a
-        // valid mangled fragment at all, so ResolveExport returned null every time and
-        // this pointer was permanently 0. ResolveFuncs reported ok=false and Serialize
-        // called it anyway -- an EXEC of 0 the moment a save caught a CompleteRoad in
-        // flight. Verified against the Runtime export table (ordinal 3733).
-        ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z"));
-
-    bool ok = s_pGameState && s_fn_CompleteRoadTile && s_fn_Serialize_UChar &&
-              g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
-              g_fn_Serialize_Bool && g_fn_Serialize_Int;
+    bool ok = s_pGameState && s_fn_CompleteRoadTile;
 
 #ifdef _DEBUG
-    printf("[CompleteRoad] ResolveFuncs: GameState=%p CompleteRoadTile=%p SerUChar=%p\n",
-           (void*)s_pGameState, (void*)s_fn_CompleteRoadTile,
-           (void*)s_fn_Serialize_UChar);
+    printf("[CompleteRoad] ResolveFuncs: GameState=%p CompleteRoadTile=%p\n",
+           (void*)s_pGameState, (void*)s_fn_CompleteRoadTile);
     if (!ok) printf("[CompleteRoad] ERROR: some function pointers not resolved!\n");
 #endif
 

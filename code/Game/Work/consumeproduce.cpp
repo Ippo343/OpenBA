@@ -44,19 +44,8 @@ static void (*s_fn_ObjectInternal_Dtor)(void* self) = nullptr;
 // Work::Serialize(this, stream) -- base class serialize at 0x1400f7400
 static void (*s_fn_Work_Serialize)(void* self, void* stream) = nullptr;
 
-// IO::Serializer ctor/dtor -- via IAT
-static void (*s_fn_Serializer_Ctor)(void* self, void* stream, int version) = nullptr;
-static void (*s_fn_Serializer_Dtor)(void* self) = nullptr;
-
-// Object::InternalBasePtr::Serialize(this, serializer) -- via IAT at 0x140152aa0
-static void (*s_fn_IBP_Serialize)(void* basePtr, void* serializer) = nullptr;
-
 // Object::Type::Serialize(type*, serializer) -- via IAT at 0x1401516b0
 static void (*s_fn_Type_Serialize)(void* type, void* serializer) = nullptr;
-
-// IO::Serializer::Serialize(serializer, count, intBuffer, name) -- bulk int serialize
-// via IAT at 0x140151278
-static void (*s_fn_Serializer_SerializeIntBulk)(void* ser, int count, void* buf, const char* name) = nullptr;
 
 // 0x1400032e0 (Array<Ptr8>::SetSize) and 0x1400021d0 (Array<int32>::SetSize) are
 // exe-side Collection::Array<T> monomorphisations -- ENDGAME B.3.2 step 2 converted
@@ -126,23 +115,9 @@ bool ConsumeProduce_ResolveFuncs() {
     s_fn_Work_Serialize = reinterpret_cast<void(*)(void*, void*)>(
         ResolveAddr(Module::Exe, 0x1400f7400));
 
-    // IO::Serializer ctor/dtor via IAT
-    uintptr_t iatSerCtor = ResolveAddr(Module::Exe, 0x140152ad8);
-    uintptr_t iatSerDtor = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (iatSerCtor) s_fn_Serializer_Ctor = *reinterpret_cast<void(**)(void*, void*, int)>(iatSerCtor);
-    if (iatSerDtor) s_fn_Serializer_Dtor = *reinterpret_cast<void(**)(void*)>(iatSerDtor);
-
-    // InternalBasePtr::Serialize via IAT at 0x140152aa0
-    uintptr_t iatIBPSer = ResolveAddr(Module::Exe, 0x140152aa0);
-    if (iatIBPSer) s_fn_IBP_Serialize = *reinterpret_cast<void(**)(void*, void*)>(iatIBPSer);
-
     // Object::Type::Serialize -- via IAT at 0x1401516b0
     uintptr_t iatTypeSer = ResolveAddr(Module::Exe, 0x1401516b0);
     if (iatTypeSer) s_fn_Type_Serialize = *reinterpret_cast<void(**)(void*, void*)>(iatTypeSer);
-
-    // IO::Serializer::Serialize bulk ints -- via IAT at 0x140151278
-    uintptr_t iatBulkSer = ResolveAddr(Module::Exe, 0x140151278);
-    if (iatBulkSer) s_fn_Serializer_SerializeIntBulk = *reinterpret_cast<void(**)(void*, int, void*, const char*)>(iatBulkSer);
 
     // Work::ValidateTask (FUN_1400f7100)
     s_fn_Work_ValidateTask = reinterpret_cast<uint8_t(*)(void*, void*, void*, void**)>(
@@ -181,9 +156,7 @@ bool ConsumeProduce_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x1400bef70));
 
     bool ok = s_fn_ObjectInternal_Ctor && s_fn_ObjectInternal_Dtor &&
-              s_fn_Work_Serialize && s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
-              s_fn_IBP_Serialize && s_fn_Type_Serialize &&
-              s_fn_Serializer_SerializeIntBulk &&
+              s_fn_Work_Serialize && s_fn_Type_Serialize &&
               s_fn_Work_ValidateTask && s_fn_TaskListCleanup &&
               s_fn_FindPositionComponent &&
               s_typeId_1401c7158 &&
@@ -193,7 +166,6 @@ bool ConsumeProduce_ResolveFuncs() {
               s_fn_SetupWorkChain &&
               fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom && fn_MemFreeStatic &&
-              g_fn_Serialize_Int && g_fn_Serialize_Bool &&
               fn_GetActiveProductIndex &&
               fn_FindStorageForResource && fn_Map_CheckPassable &&
               fn_Storage_FindSlot && fn_Random_Rand &&
@@ -212,10 +184,8 @@ bool ConsumeProduce_ResolveFuncs() {
     printf("[ConsumeProduce] ResolveFuncs: ObjCtor=%p ObjDtor=%p WorkSer=%p\n",
            (void*)s_fn_ObjectInternal_Ctor, (void*)s_fn_ObjectInternal_Dtor,
            (void*)s_fn_Work_Serialize);
-    printf("[ConsumeProduce]   SerCtor=%p SerDtor=%p IBPSer=%p TypeSer=%p BulkSer=%p\n",
-           (void*)s_fn_Serializer_Ctor, (void*)s_fn_Serializer_Dtor,
-           (void*)s_fn_IBP_Serialize, (void*)s_fn_Type_Serialize,
-           (void*)s_fn_Serializer_SerializeIntBulk);
+    printf("[ConsumeProduce]   TypeSer=%p\n",
+           (void*)s_fn_Type_Serialize);
     printf("[ConsumeProduce]   ValidateTask=%p TaskClean=%p\n",
            (void*)s_fn_Work_ValidateTask, (void*)s_fn_TaskListCleanup);
     printf("[ConsumeProduce]   FindPos=%p typeId=%p vtWork=%p vtCP=%p\n",

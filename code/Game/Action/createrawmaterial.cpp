@@ -70,12 +70,6 @@ static void* (*s_fn_FindComponent_RD)(int64_t entity, void* retbuf) = nullptr;
 // System::Random::RandTol via IAT at 0x1401512f0
 static int (*s_fn_Random_RandTol)(void* random, int range) = nullptr;
 
-// IO::Serializer::Serialize(float) via IAT at 0x140152a60
-static void (*s_fn_Serialize_Float)(void* self, void* field, const char* name) = nullptr;
-
-// IO::Serializer::Serialize(uint) via IAT at 0x140152a50
-static void (*s_fn_Serialize_UInt)(void* self, void* field, const char* name) = nullptr;
-
 // TypeId for entity validation: 0x1401c7158 (used for +0x28 IBP)
 static uint32_t* s_typeId_1401c7158 = nullptr;
 
@@ -136,14 +130,6 @@ bool CreateRawMaterial_ResolveFuncs() {
     uintptr_t iatRandTol = ResolveAddr(Module::Exe, 0x1401512f0);
     if (iatRandTol) s_fn_Random_RandTol = *reinterpret_cast<int(**)(void*, int)>(iatRandTol);
 
-    // IO::Serializer::Serialize(float) via IAT at 0x140152a60
-    uintptr_t iatSerFloat = ResolveAddr(Module::Exe, 0x140152a60);
-    if (iatSerFloat) s_fn_Serialize_Float = *reinterpret_cast<void(**)(void*, void*, const char*)>(iatSerFloat);
-
-    // IO::Serializer::Serialize(uint) via IAT at 0x140152a50
-    uintptr_t iatSerUInt = ResolveAddr(Module::Exe, 0x140152a50);
-    if (iatSerUInt) s_fn_Serialize_UInt = *reinterpret_cast<void(**)(void*, void*, const char*)>(iatSerUInt);
-
     s_typeId_1401c7158 = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7158));
     s_typeId_ComponentEntity = reinterpret_cast<uint32_t*>(
@@ -160,16 +146,11 @@ bool CreateRawMaterial_ResolveFuncs() {
               s_fn_RegisterRawMaterial && s_fn_RegisterEntity &&
               s_fn_GetChildEntities && s_fn_FindComponent_RD &&
               s_fn_Random_RandTol &&
-              s_fn_Serialize_Float && s_fn_Serialize_UInt &&
               s_typeId_1401c7158 && s_typeId_ComponentEntity &&
               s_typeId_RawMatDesc && s_typeId_1401c7c80 && s_typeId_1401c8118 &&
               fn_ObjectInternal_Dtor && fn_InternalBasePtr_DeletePtr &&
               fn_MemFreeStatic &&
               fn_InternalBasePtr_Ctor && fn_IsDerivedFrom &&
-              fn_InternalBasePtr_Serialize &&
-              g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
-              g_fn_Serialize_Bool && g_fn_Serialize_Int &&
-              g_fn_Serializer_GetVersion &&
               g_pGameWorldSingleton && fn_MemAlloc && g_pMemAllocSingleton;
 
 #ifdef _DEBUG
@@ -179,9 +160,9 @@ bool CreateRawMaterial_ResolveFuncs() {
     printf("[CreateRawMaterial]   PosEnt=%p RegRM=%p RegEnt=%p GetChild=%p\n",
            (void*)s_fn_PositionEntity, (void*)s_fn_RegisterRawMaterial,
            (void*)s_fn_RegisterEntity, (void*)s_fn_GetChildEntities);
-    printf("[CreateRawMaterial]   FindRD=%p RandTol=%p SerFloat=%p SerUInt=%p\n",
+    printf("[CreateRawMaterial]   FindRD=%p RandTol=%p\n",
            (void*)s_fn_FindComponent_RD,
-           (void*)s_fn_Random_RandTol, (void*)s_fn_Serialize_Float, (void*)s_fn_Serialize_UInt);
+           (void*)s_fn_Random_RandTol);
     if (!ok) printf("[CreateRawMaterial] ERROR: some function pointers not resolved!\n");
 #endif
 

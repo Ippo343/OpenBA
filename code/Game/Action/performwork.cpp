@@ -37,9 +37,6 @@
 // (NOT in engine_funcs.h -- PerformWork-specific helpers)
 // ============================================================
 
-// Object::InternalBasePtr::Serialize -- via IAT at 0x140152aa0
-static void (*s_fn_IBP_Serialize)(void* ibp, void* serializer) = nullptr;
-
 // Object::InternalBasePtr::DeletePtr -- via export
 static void (*s_fn_IBP_DeletePtr)(void* ibp) = nullptr;
 
@@ -48,9 +45,6 @@ static void (*s_fn_ObjectInternal_Dtor)(void* self) = nullptr;
 
 // System::Time::Serialize(this, Serializer&) -- via export
 static void (*s_fn_Time_Serialize)(void* time, void* serializer) = nullptr;
-
-// IO::Serializer::Serialize(float&, const char*) -- via IAT at 0x140152a60
-static void (*s_fn_Serialize_Float)(void* serializer, void* field, const char* name) = nullptr;
 
 // Entity_FindComponent_Family (0x1400012d0)
 static void* (*s_fn_FindFamily)(void* entity, void* outIBP) = nullptr;
@@ -111,10 +105,6 @@ static bool s_funcs_resolved = false;
 bool PerformWork_ResolveFuncs() {
     if (s_funcs_resolved) return true;
 
-    // IBP::Serialize via IAT at [0x140152aa0]
-    uintptr_t iatIBPSer = ResolveAddr(Module::Exe, 0x140152aa0);
-    if (iatIBPSer) s_fn_IBP_Serialize = *reinterpret_cast<void(**)(void*, void*)>(iatIBPSer);
-
     // IBP::DeletePtr
     s_fn_IBP_DeletePtr = (void(*)(void*))fn_InternalBasePtr_DeletePtr;
 
@@ -125,10 +115,6 @@ bool PerformWork_ResolveFuncs() {
     // Time::Serialize via export
     s_fn_Time_Serialize = reinterpret_cast<void(*)(void*, void*)>(
         ResolveExport("?Serialize@Time@System@@QEAAXAEAVSerializer@IO@@@Z"));
-
-    // Serialize_Float via IAT at [0x140152a60]
-    uintptr_t iatSerFloat = ResolveAddr(Module::Exe, 0x140152a60);
-    if (iatSerFloat) s_fn_Serialize_Float = *reinterpret_cast<void(**)(void*, void*, const char*)>(iatSerFloat);
 
     // FindFamily (0x1400012d0)
     s_fn_FindFamily = reinterpret_cast<void*(*)(void*, void*)>(
@@ -188,16 +174,14 @@ bool PerformWork_ResolveFuncs() {
             s_tid_CitizenComponent = &s_tid_CitizenComponent_storage;
     }
 
-    bool ok = s_fn_IBP_Serialize && s_fn_IBP_DeletePtr &&
+    bool ok = s_fn_IBP_DeletePtr &&
               s_fn_ObjectInternal_Dtor && s_fn_Time_Serialize &&
-              s_fn_Serialize_Float && s_fn_FindFamily &&
+              s_fn_FindFamily &&
               s_fn_SetAnimation && s_fn_SetFacingDirection &&
               s_fn_FromYawPitch && s_fn_CitizenBreakCheck &&
               s_fConst1 && s_fYawMin && s_fYawMax &&
               s_vtable_PerformWork && s_vtable_Action &&
               s_tid_CitizenComponent &&
-              g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
-              g_fn_Serialize_Bool && g_fn_Serialize_Int &&
               fn_IsDerivedFrom && fn_MemFreeStatic;
 
 #ifdef _DEBUG
@@ -211,11 +195,9 @@ bool PerformWork_ResolveFuncs() {
         if (!s_reported) {
             s_reported = true;
             struct { const char* name; const void* p; } kDeps[] = {
-                { "IBP_Serialize",         (const void*)s_fn_IBP_Serialize },
                 { "IBP_DeletePtr",         (const void*)s_fn_IBP_DeletePtr },
                 { "ObjectInternal_Dtor",   (const void*)s_fn_ObjectInternal_Dtor },
                 { "Time_Serialize",        (const void*)s_fn_Time_Serialize },
-                { "Serialize_Float",       (const void*)s_fn_Serialize_Float },
                 { "FindFamily",            (const void*)s_fn_FindFamily },
                 { "SetAnimation",          (const void*)s_fn_SetAnimation },
                 { "SetFacingDirection",    (const void*)s_fn_SetFacingDirection },
@@ -228,10 +210,6 @@ bool PerformWork_ResolveFuncs() {
                 { "vtable_Action",         (const void*)s_vtable_Action },
                 { "TypeId_CitizenComponent (0x1401c7158 / by-name)",
                                            (const void*)s_tid_CitizenComponent },
-                { "Serializer_Ctor",       (const void*)g_fn_Serializer_Ctor },
-                { "Serializer_Dtor",       (const void*)g_fn_Serializer_Dtor },
-                { "Serialize_Bool",        (const void*)g_fn_Serialize_Bool },
-                { "Serialize_Int",         (const void*)g_fn_Serialize_Int },
                 { "IsDerivedFrom",         (const void*)fn_IsDerivedFrom },
                 { "MemFreeStatic",         (const void*)fn_MemFreeStatic },
             };

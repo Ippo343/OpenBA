@@ -27,9 +27,6 @@
 // (NOT in engine_funcs.h — CompleteTask-specific helpers)
 // ============================================================
 
-// Object::InternalBasePtr::Serialize(this, serializer) — via IAT at 0x140152aa0
-static void (*s_fn_IBP_Serialize)(void* ibp, void* serializer) = nullptr;
-
 // FUN_1400f8760 — try complete task
 static bool (*s_fn_TryCompleteTask)(void* taskMgr, void* entityRef, int taskIdx, void* targetRef, uint32_t taskParam) = nullptr;
 
@@ -54,10 +51,6 @@ static bool s_funcs_resolved = false;
 // ============================================================
 bool CompleteTask_ResolveFuncs() {
     if (s_funcs_resolved) return true;
-
-    // IBP::Serialize via IAT
-    uintptr_t iatIBPSer = ResolveAddr(Module::Exe, 0x140152aa0);
-    if (iatIBPSer) s_fn_IBP_Serialize = *reinterpret_cast<void(**)(void*, void*)>(iatIBPSer);
 
     // Task functions
     s_fn_TryCompleteTask = reinterpret_cast<bool(*)(void*, void*, int, void*, uint32_t)>(
@@ -98,11 +91,9 @@ bool CompleteTask_ResolveFuncs() {
                   fn_InternalBasePtr_DeletePtr && fn_ObjectInternal_Dtor && fn_MemFreeStatic;
 
 #ifdef _DEBUG
-    bool serializeOk = s_fn_IBP_Serialize && s_TypeId_1401c7158 && s_TypeId_ComponentEntity &&
-                       g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
-                       g_fn_Serialize_Bool && g_fn_Serialize_Int && g_fn_Serializer_GetVersion;
-    printf("[CompleteTask] ResolveFuncs: execOk=%d serializeOk=%d IBPSer=%p TryComplete=%p TaskCleanup=%p TaskReassign=%p\n",
-           (int)execOk, (int)serializeOk, (void*)s_fn_IBP_Serialize, (void*)s_fn_TryCompleteTask,
+    bool serializeOk = s_TypeId_1401c7158 && s_TypeId_ComponentEntity;
+    printf("[CompleteTask] ResolveFuncs: execOk=%d serializeOk=%d TryComplete=%p TaskCleanup=%p TaskReassign=%p\n",
+           (int)execOk, (int)serializeOk, (void*)s_fn_TryCompleteTask,
            (void*)s_fn_TaskCleanup, (void*)s_fn_TaskReassign);
     printf("[CompleteTask]   TypeId1=%p TypeIdCE=%p GameState=%p\n",
            (void*)s_TypeId_1401c7158, (void*)s_TypeId_ComponentEntity,
@@ -158,11 +149,10 @@ void CompleteTask_Serialize_Impl(CompleteTask* self, void* stream) {
     // Serialize entity refs + task fields (version 1)
     ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
 
-    // Work entity ref (+0x20) with type validation. The IBP::Serialize slot and the
-    // .rdata type-id may be unavailable in the standalone exe (Serialize-only deps, not
-    // part of the exec gate) — null-guard so a save/load can't hard-fault; validation is
-    // simply skipped when the type-id can't be resolved.
-    if (s_fn_IBP_Serialize) reinterpret_cast<Object::InternalBasePtr*>(&self->workEntity)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
+    // Work entity ref (+0x20) with type validation. The .rdata type-id may be unavailable
+    // in the standalone exe (a Serialize-only dep, not part of the exec gate) — validation
+    // is simply skipped when the type-id can't be resolved.
+    reinterpret_cast<Object::InternalBasePtr*>(&self->workEntity)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (self->workEntity != nullptr && s_TypeId_1401c7158 && *s_TypeId_1401c7158) {
         if (!fn_IsDerivedFrom(self->workEntity, *s_TypeId_1401c7158)) {
             self->workEntity = nullptr;
@@ -170,7 +160,7 @@ void CompleteTask_Serialize_Impl(CompleteTask* self, void* stream) {
     }
 
     // Target entity ref (+0x28) with type validation
-    if (s_fn_IBP_Serialize) reinterpret_cast<Object::InternalBasePtr*>(&self->targetEntity)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
+    reinterpret_cast<Object::InternalBasePtr*>(&self->targetEntity)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (self->targetEntity != nullptr && s_TypeId_ComponentEntity && *s_TypeId_ComponentEntity) {
         if (!fn_IsDerivedFrom(self->targetEntity, *s_TypeId_ComponentEntity)) {
             self->targetEntity = nullptr;

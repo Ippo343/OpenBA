@@ -55,13 +55,8 @@ typedef int   (*HW_Random_RandTol_t)(void* rng, int range);
 
 // Work::Serialize
 typedef void  (*HW_Work_Serialize_t)(void* self, void* stream);
-// IO::Serializer ctor/dtor
-typedef void* (*HW_Serializer_Ctor_t)(void* self, void* stream, int version);
-typedef void  (*HW_Serializer_Dtor_t)(void* self);
 // CitizenAI_impl_96b0 — BST serialization
 typedef void  (*HW_BST_Serialize_t)(void* bstRoot, void* serializer);
-// IO::Serializer::Serialize(int*)
-typedef void  (*HW_Serializer_SerializeInt_t)(void* serializer, int* value, char* name);
 
 // FUN_1400f7100 — validate work entity
 typedef bool  (*HW_ValidateEntity_t)(uintptr_t work, void* citizenIBP, void* entityIBP, void* outTask);
@@ -103,10 +98,7 @@ static HW_FindComp_Storage_t           s_fn_FindComp_Storage = nullptr;
 static HW_StorageQueryCount_t          s_fn_StorageQueryCount = nullptr;
 static HW_Random_RandTol_t             s_fn_Random_RandTol = nullptr;
 static HW_Work_Serialize_t             s_fn_Work_Serialize = nullptr;
-static HW_Serializer_Ctor_t            s_fn_Serializer_Ctor = nullptr;
-static HW_Serializer_Dtor_t            s_fn_Serializer_Dtor = nullptr;
 static HW_BST_Serialize_t              s_fn_BST_Serialize = nullptr;
-static HW_Serializer_SerializeInt_t    s_fn_Serializer_SerializeInt = nullptr;
 static HW_ValidateEntity_t             s_fn_ValidateEntity = nullptr;
 static HW_MemAlloc_t                   s_fn_MemAlloc = nullptr;
 static HW_MemFree_t                    s_fn_MemFree = nullptr;
@@ -211,17 +203,6 @@ bool HerbalistWork_ResolveFuncs() {
         s_fn_Random_RandTol = *reinterpret_cast<HW_Random_RandTol_t*>(iatRandTol);
     // CheckPtr already from engine_funcs.h (no local copy needed)
 
-    // Serializer ctor/dtor from dispatch slots (verified from original disasm at 0x1400EEBB0)
-    uintptr_t iatSerCtorSlot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (iatSerCtorSlot)
-        s_fn_Serializer_Ctor = *reinterpret_cast<HW_Serializer_Ctor_t*>(iatSerCtorSlot);
-    uintptr_t iatSerDtorSlot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (iatSerDtorSlot)
-        s_fn_Serializer_Dtor = *reinterpret_cast<HW_Serializer_Dtor_t*>(iatSerDtorSlot);
-    uintptr_t iatSerInt = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (iatSerInt)
-        s_fn_Serializer_SerializeInt = *reinterpret_cast<HW_Serializer_SerializeInt_t*>(iatSerInt);
-
     // Static MemAlloc/MemFree. These previously read exe dispatch slots 0x140151460 /
     // 0x140151468; 0x140151460 is NOT MemAlloc, it is Graphics::Geometry::GetTransform
     // (see placementtool.cpp:78). Since that slot is registered, the pointer was
@@ -267,8 +248,6 @@ bool HerbalistWork_ResolveFuncs() {
               s_fn_CitizenAI_LongTermPlan && s_fn_FindComp_Storage &&
               s_fn_StorageQueryCount && s_fn_Random_RandTol &&
               s_fn_Work_Serialize &&
-              s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
-              s_fn_Serializer_SerializeInt &&
               s_fn_ValidateEntity && s_fn_BSTRemove &&
               s_fn_BSTFindRemove && s_fn_CancelAllWork &&
               s_fn_FindSubEntity && s_fn_TreeNodeCleanup &&
@@ -303,9 +282,6 @@ bool HerbalistWork_ResolveFuncs() {
         if (!s_fn_StorageQueryCount) printf("  MISSING: StorageQueryCount\n");
         if (!s_fn_Random_RandTol) printf("  MISSING: Random_RandTol\n");
         if (!s_fn_Work_Serialize) printf("  MISSING: Work_Serialize\n");
-        if (!s_fn_Serializer_Ctor) printf("  MISSING: Serializer_Ctor\n");
-        if (!s_fn_Serializer_Dtor) printf("  MISSING: Serializer_Dtor\n");
-        if (!s_fn_Serializer_SerializeInt) printf("  MISSING: Serializer_SerializeInt\n");
         if (!s_fn_ValidateEntity) printf("  MISSING: ValidateEntity\n");
         if (!s_fn_BSTRemove) printf("  MISSING: BSTRemove\n");
         if (!s_fn_BSTFindRemove) printf("  MISSING: BSTFindRemove\n");

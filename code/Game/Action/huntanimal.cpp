@@ -47,9 +47,6 @@
 // Object::Internal::~Internal(this) -- via IAT at 0x140152770
 static void (*s_fn_ObjectInternal_Dtor)(void* self) = nullptr;
 
-// Object::InternalBasePtr::Serialize(this, serializer) -- via IAT at 0x140152aa0
-static void (*s_fn_IBP_Serialize)(void* basePtr, void* serializer) = nullptr;
-
 // HuntAnimal_helper_2a80 (0x140122a80) -- checks if animal has been held long enough
 // Returns true if entity's time at +0x50 >= description's holdTime * 300.0
 static bool (*s_fn_IsAnimalReady)(void* animalEntity) = nullptr;
@@ -123,10 +120,6 @@ bool HuntAnimal_ResolveFuncs() {
     uintptr_t iatDtor = ResolveAddr(Module::Exe, 0x140152770);
     if (iatDtor) s_fn_ObjectInternal_Dtor = *reinterpret_cast<void(**)(void*)>(iatDtor);
 
-    // InternalBasePtr::Serialize via IAT at 0x140152aa0
-    uintptr_t iatIBPSer = ResolveAddr(Module::Exe, 0x140152aa0);
-    if (iatIBPSer) s_fn_IBP_Serialize = *reinterpret_cast<void(**)(void*, void*)>(iatIBPSer);
-
     // Helpers
     s_fn_IsAnimalReady = (bool(*)(void*))ResolveAddr(Module::Exe, 0x140122a80);
     s_fn_SpatialQuery = (s_fn_SpatialQuery_t)ResolveAddr(Module::Exe, 0x140092260);
@@ -156,7 +149,7 @@ bool HuntAnimal_ResolveFuncs() {
     s_searchRadius = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401721a8));
     s_halfOffset = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
 
-    bool ok = s_fn_ObjectInternal_Dtor && s_fn_IBP_Serialize &&
+    bool ok = s_fn_ObjectInternal_Dtor &&
               s_fn_IsAnimalReady && s_fn_SpatialQuery &&
               s_fn_GetModelComp && s_fn_FindPathCost &&
               s_fn_CheckPathValid && s_fn_GridToWorld &&
@@ -168,13 +161,11 @@ bool HuntAnimal_ResolveFuncs() {
               s_searchRadius && s_halfOffset &&
               fn_InternalBasePtr_DeletePtr &&
               fn_InternalBasePtr_Ctor && fn_IsDerivedFrom &&
-              fn_MemFreeStatic &&
-              g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
-              g_fn_Serialize_Bool && g_pGameWorldSingleton;
+              fn_MemFreeStatic && g_pGameWorldSingleton;
 
 #ifdef _DEBUG
-    printf("[HuntAnimal] ResolveFuncs: ObjDtor=%p IBPSer=%p IsReady=%p SpatialQ=%p\n",
-           (void*)s_fn_ObjectInternal_Dtor, (void*)s_fn_IBP_Serialize,
+    printf("[HuntAnimal] ResolveFuncs: ObjDtor=%p IsReady=%p SpatialQ=%p\n",
+           (void*)s_fn_ObjectInternal_Dtor,
            (void*)s_fn_IsAnimalReady, (void*)s_fn_SpatialQuery);
     printf("[HuntAnimal]   GetModel=%p PathCost=%p PathValid=%p GridToWorld=%p\n",
            (void*)s_fn_GetModelComp, (void*)s_fn_FindPathCost,

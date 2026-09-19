@@ -25,14 +25,8 @@
 // (NOT in engine_funcs.h — SendComponentMessage-specific helpers)
 // ============================================================
 
-// Object::InternalBasePtr::Serialize(this, serializer) — via IAT at 0x140152aa0
-static void (*s_fn_IBP_Serialize)(void* ibp, void* serializer) = nullptr;
-
 // Object::Type::Serialize(this, serializer) — via dispatch slot at 0x1401516b0
 static void (*s_fn_Type_Serialize)(void* typeField, void* serializer) = nullptr;
-
-// IO::Serializer::Serialize(uint&, const char*) — via dispatch slot at 0x140152a50
-static void (*s_fn_Serialize_UInt)(void* serializer, void* field, const char* name) = nullptr;
 
 // TypeInfo for ComponentEntity — at 0x1401c5d70
 // (Note: SendComponentMessage uses 0x1401c5d70, not 0x1401c4218)
@@ -46,33 +40,23 @@ static bool s_funcs_resolved = false;
 bool SendComponentMessage_ResolveFuncs() {
     if (s_funcs_resolved) return true;
 
-    // IBP::Serialize via IAT
-    uintptr_t iatIBPSer = ResolveAddr(Module::Exe, 0x140152aa0);
-    if (iatIBPSer) s_fn_IBP_Serialize = *reinterpret_cast<void(**)(void*, void*)>(iatIBPSer);
-
     // Object::Type::Serialize via dispatch slot
     uintptr_t slotTypeSer = ResolveAddr(Module::Exe, 0x1401516b0);
     if (slotTypeSer) s_fn_Type_Serialize = *reinterpret_cast<void(**)(void*, void*)>(slotTypeSer);
 
-    // Serialize(uint&) via dispatch slot
-    uintptr_t slotSerUInt = ResolveAddr(Module::Exe, 0x140152a50);
-    if (slotSerUInt) s_fn_Serialize_UInt = *reinterpret_cast<void(**)(void*, void*, const char*)>(slotSerUInt);
-
     // TypeInfo
     s_TypeId_Entity = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5d70));
 
-    bool ok = s_fn_IBP_Serialize && s_fn_Type_Serialize && s_fn_Serialize_UInt &&
+    bool ok = s_fn_Type_Serialize &&
               s_TypeId_Entity &&
               fn_IsDerivedFrom &&
               fn_InternalBasePtr_DeletePtr && fn_InternalBasePtr_Ctor &&
-              fn_ObjectInternal_Dtor && fn_MemFreeStatic &&
-              g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
-              g_fn_Serialize_Bool && g_fn_Serialize_Int;
+              fn_ObjectInternal_Dtor && fn_MemFreeStatic;
 
 #ifdef _DEBUG
-    printf("[SendComponentMessage] ResolveFuncs: IBPSer=%p TypeSer=%p SerUInt=%p TypeId=%p\n",
-           (void*)s_fn_IBP_Serialize, (void*)s_fn_Type_Serialize,
-           (void*)s_fn_Serialize_UInt, (void*)s_TypeId_Entity);
+    printf("[SendComponentMessage] ResolveFuncs: TypeSer=%p TypeId=%p\n",
+           (void*)s_fn_Type_Serialize,
+           (void*)s_TypeId_Entity);
     if (!ok) printf("[SendComponentMessage] ERROR: some function pointers not resolved!\n");
 #endif
 

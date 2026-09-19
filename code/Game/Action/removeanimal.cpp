@@ -39,9 +39,6 @@
 // Object::Internal::~Internal(this) -- via IAT at 0x140152770
 static void (*s_fn_ObjectInternal_Dtor)(void* self) = nullptr;
 
-// Object::InternalBasePtr::Serialize(this, serializer) -- via IAT at 0x140152aa0
-static void (*s_fn_IBP_Serialize)(void* basePtr, void* serializer) = nullptr;
-
 // FUN_1400c2ea0 -- marks entity for removal (sets bit 10 of flags at +0x40)
 static void (*s_fn_MarkEntityRemoval)(void* entity) = nullptr;
 
@@ -82,10 +79,6 @@ bool RemoveAnimal_ResolveFuncs() {
     uintptr_t iatDtor = ResolveAddr(Module::Exe, 0x140152770);
     if (iatDtor) s_fn_ObjectInternal_Dtor = *reinterpret_cast<void(**)(void*)>(iatDtor);
 
-    // InternalBasePtr::Serialize via IAT at 0x140152aa0
-    uintptr_t iatIBPSer = ResolveAddr(Module::Exe, 0x140152aa0);
-    if (iatIBPSer) s_fn_IBP_Serialize = *reinterpret_cast<void(**)(void*, void*)>(iatIBPSer);
-
     // FUN_1400c2ea0 -- mark entity removal
     s_fn_MarkEntityRemoval = (void(*)(void*))ResolveAddr(Module::Exe, 0x1400c2ea0);
 
@@ -107,7 +100,7 @@ bool RemoveAnimal_ResolveFuncs() {
     s_vtable_RemoveAnimal = ResolveAddr(Module::Exe, 0x14015ffe0);
     s_vtable_Action = ResolveAddr(Module::Exe, 0x14015faa0);
 
-    bool ok = s_fn_ObjectInternal_Dtor && s_fn_IBP_Serialize &&
+    bool ok = s_fn_ObjectInternal_Dtor &&
               s_fn_MarkEntityRemoval &&
               s_fn_GetModelComp && s_fn_NotifyEntityChanged &&
               s_typeId_ComponentEntity && s_typeInfo_RemoveAnimal &&
@@ -115,12 +108,11 @@ bool RemoveAnimal_ResolveFuncs() {
               s_vtable_RemoveAnimal && s_vtable_Action &&
               fn_InternalBasePtr_DeletePtr &&
               fn_IsDerivedFrom && fn_MemFreeStatic &&
-              g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
-              g_fn_Serialize_Bool && g_pGameWorldSingleton;
+              g_pGameWorldSingleton;
 
 #ifdef _DEBUG
-    printf("[RemoveAnimal] ResolveFuncs: ObjDtor=%p IBPSer=%p MarkRemove=%p\n",
-           (void*)s_fn_ObjectInternal_Dtor, (void*)s_fn_IBP_Serialize,
+    printf("[RemoveAnimal] ResolveFuncs: ObjDtor=%p MarkRemove=%p\n",
+           (void*)s_fn_ObjectInternal_Dtor,
            (void*)s_fn_MarkEntityRemoval);
     printf("[RemoveAnimal]   GetModel=%p Notify=%p typeIdCE=%p typeInfoRA=%p\n",
            (void*)s_fn_GetModelComp, (void*)s_fn_NotifyEntityChanged,
