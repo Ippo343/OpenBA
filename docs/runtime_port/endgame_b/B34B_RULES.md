@@ -215,7 +215,7 @@ class had to be tested rather than assumed.
 | `System::Error` | **class, ALL-STATIC** | 3 × `SA`, 3 × `0…A` | SYSTEM (4) |
 | `System::Configuration` | **class with instance state** | 5 × `QEAA` over `this+0x10` (a map) and `this+0x20` | not yet |
 | `System::Compression` | **class with instance state** | `??0` + `QEAA Compress`; an 8-byte heap instance | not yet |
-| `System::WideString` | **class with instance state** | one `wchar_t* data`; 6 × `QEAA`, 1 × `AEAA`, 1 × `SA` | not yet |
+| `System::WideString` | **class with instance state** | one `wchar_t* data`; 6 × `QEAA`, 1 × `AEAA`, 1 × `SA` | SYSTEM (4a) |
 | `System::MemoryAllocator` | **class with instance state** | 0x670 bytes | deferred, §6 |
 | `System::Debug` | class, but **nothing ported** | one `0_NA` static, no function anywhere | nothing to do |
 | `System::StackCriticalSection` | class, but **nothing ported** | `??0`/`??1` only, zero readers | nothing to do |
@@ -225,6 +225,47 @@ and are still classes — `Timer`, `CRC` and `Error` each declare `class X { pub
 with the bodies moved and the doors delegating, which is the established shape for that case.
 Their *data* statics are a separate question and are governed by rule B4b-4 (§4.1), not by
 this table.
+
+### 1.3 SYSTEM (4a) — `System::WideString`: what converted, what did not, and why
+
+**Verdict: a class with instance state**, by the §1.2 test: seven `this`-carrying members
+(6 × `QEAA` + 1 × `AEAA` on the private `SetLength`) plus one `SA` static, `?StrLength@`. A
+free function cannot carry a class-scoped mangling and a `SA` row cannot exist without the
+class, so retail named it and hung `StrLength` off it.
+
+| converted | not converted, and why |
+|---|---|
+| the three constructors (0x1800cab50 / 0x18000a6e0 / 0x1800cb110), the destructor (0x18000a730), `Set`, `AsUTF8`, `SetLength`, `StrLength` — **all eight bodies moved onto members** | the 21 other exports of the class: no caller anywhere in `code/`, `engine/`, `runtime/`, `standalone/` or `dx11/`, and an uncalled port is an unverified port |
+
+**It is the first 4b class to take REAL CONSTRUCTORS AND A REAL DESTRUCTOR, and that is the
+one place it departs from `Random`/`Time`/`Color`/`DateTime`.** Those four deferred their
+constructors for a stated reason each (§1.1 and `Value.h`'s banner): a by-value holder that
+would be seeded twice, 132 raw-buffer call sites still to convert, or — for `Color` and
+`DateTime` — no ported body to move at all. **None of those reasons exists here.** All four of
+WideString's lifecycle exports have bodies in this tree today and all four are registered, and
+B34_RULES §4.3's test passes vacuously because the class has no vtable. So the doors
+placement-new the class into the caller's raw bytes and call `~WideString()` explicitly,
+which is exactly `System::String`'s B.3.1 step-1 shape one type over.
+
+**RULE B4b-1 DOES NOT FIRE.** The POD is `RtSystem::WideString` and has been since Wave 9: it
+never occupied the class's name, so nothing is renamed and no by-value holder changes
+spelling. The four files that hold one by value and drive it through the doors —
+`runtime/src/application/platform_startup_win.cpp`, `application_win.cpp`,
+`runtime/src/engine/updateloop_loadresources.cpp` and `runtime/src/system/value_types.cpp` —
+are untouched by this commit.
+
+> **The asymmetry this class introduces, and it is asserted in both directions.** The POD stays
+> **trivially destructible** (those four holders release by hand through the `??1` door; a
+> second, implicit release at scope exit is the `RtSystem::String` double-free) while the CLASS
+> is deliberately **NOT** trivially destructible (it owns retail's release idiom). Two types
+> over the same eight bytes where exactly one destroys. `WideString.h` asserts both, and
+> `tests/unit/system_abi_test.cpp` PART G restates both at runtime, so a "tidy" in either
+> direction fails rather than boots.
+
+The layout moved from `runtime/src/system/widestring.h` to
+**`runtime/types/system/WideString.h`**, which is where a type header belongs and where the
+unit test can reach it; `widestring.h` keeps the POD spelling and the eight door declarations
+for its four includers, so no include changes.
 
 ---
 

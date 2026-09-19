@@ -188,12 +188,13 @@ int Utf16EncodeOne(int32_t codepoint, uint8_t* dst) {
 }
 
 // The release idiom, over the SAME header String uses. Cast, do not re-derive.
-// ENDGAME B.3.1 step 2 leaves this cast standing: `System::WideString` is a
-// THIRD POD over these eight bytes and is NOT one of the types step 1 made a
-// class, so this is a bridged not-yet-converted case (B31_RULES, "members of
-// not-yet-converted structs keep their POD type"). It goes when WideString
-// becomes a class of its own.
-inline void WideReleaseInline(WideString* self) {
+// ENDGAME B.3.4b SYSTEM (4a): the parameter is the CLASS now — every one of
+// the three callers is a `System::WideString` member body. The cast itself
+// stays, and stays here: `System::String` and `System::WideString` are the
+// same eight bytes with the same allocation header, which is the fact this
+// whole file is built on, and `RtString_ReleaseInline` is String's own
+// primitive.
+inline void WideReleaseInline(System::WideString* self) {
     RtString_ReleaseInline(reinterpret_cast<String*>(self));
 }
 
@@ -238,13 +239,7 @@ bool SameText(const char* a, const char* b) {
 // undefined, so a byte compare is meaningless. It is proved instead by its two
 // callers, both of which have real oracles.
 void RtSystem_WideString_SetLength(WideString* self, int len) {
-    WideReleaseInline(self);
-    int32_t* block = static_cast<int32_t*>(RtMemAlloc(
-        static_cast<uint64_t>(8 + (static_cast<int64_t>(len) + 1) * 2),
-        kStringAllocAlign));
-    self->data = reinterpret_cast<wchar_t*>(block + 2);
-    block[0] = len;
-    block[1] = 1;
+    Sys(self)->SetLength(len);
 }
 
 // ============================================================================
@@ -263,17 +258,70 @@ void RtSystem_WideString_SetLength(WideString* self, int len) {
 //     as written rather than folded, because folding it would silently change
 //     what happens if a caller ever mutated `src` between the two walks.
 void RtSystem_WideString_Set(WideString* self, const wchar_t* src) {
+    Sys(self)->Set(src);
+}
 
-    // Snapshot BEFORE we touch `self`: the oracle below replays onto a scratch
+// ============================================================================
+// ?AsUTF8@WideString@System@@QEBA?AVString@2@XZ            retail 0x1800cacd0
+// ============================================================================
+// Two passes over the UTF-16 buffer: the first only counts the UTF-8 bytes,
+// the second writes them. Between them retail allocates `total + 1` RAW bytes
+// (NOT a String block) and NUL-terminates at [total]; at the end it hands the
+// raw buffer to String::Set, which makes the real String, and frees it.
+//
+// The three guards inside the write loop are retail's and are kept verbatim:
+// `written > total` (the second pass measured more than the first — impossible
+// for a stable input, and a silent truncation if it ever happened), a null
+// buffer, and a non-positive encode result. The last one is the one that
+// matters: a lone surrogate encodes to ZERO bytes, so a malformed UTF-16
+// buffer loses that character rather than corrupting the output.
+// ENDGAME B.3.4b SYSTEM (4a): THIS DOOR IS A HIDDEN-RETSLOT DOOR. `ret` is the
+// caller's RAW BYTES — an uninitialised `RtSystem::String` local — so the
+// member's prvalue is placement-CONSTRUCTED into it and never assigned to; an
+// assignment would Release() whatever garbage pointer the caller's stack
+// happened to hold. Same shape as `string.cpp`'s `RtSystem_String_SubString`.
+String* RtSystem_WideString_AsUTF8(const WideString* self, String* ret) {
+    new (Sys(ret)) System::String(Sys(self)->AsUTF8());
+    return ret;
+}
+
+}  // namespace RtSystem
+
+// ============================================================================
+// ENDGAME B.3.4b SYSTEM (4a) — the `System::WideString` member BODIES.
+// ============================================================================
+// Defined at GLOBAL scope with qualified names rather than inside a
+// `namespace System { ... }` block: rule B4b-5, because `RtSystem::WideString`
+// and `System::WideString` are layout-identical and a bare `WideString` inside
+// such a block would bind the class silently. Every body below is the one that
+// used to sit in the door of the same name above, moved VERBATIM — the only
+// edits are `self->data` becoming `_data`, the two internal calls becoming
+// member calls, and the anonymous-namespace helpers picking up their `RtSystem::`
+// qualification (reachable from here in the same TU, B34_BRIEFS §A.2).
+// ============================================================================
+
+void System::WideString::SetLength(int len) {
+    RtSystem::WideReleaseInline(this);
+    int32_t* block = static_cast<int32_t*>(RtSystem::RtMemAlloc(
+        static_cast<uint64_t>(8 + (static_cast<int64_t>(len) + 1) * 2),
+        RtSystem::kStringAllocAlign));
+    _data = reinterpret_cast<wchar_t*>(block + 2);
+    block[0] = len;
+    block[1] = 1;
+}
+
+void System::WideString::Set(const wchar_t* src) {
+
+    // Snapshot BEFORE we touch `this`: the oracle below replays onto a scratch
     // object, and a replay whose input our own write has already destroyed is
     // how a correct port reads as a 10% divergence
     // (reference_oracle_must_snapshot_aliased_inputs.md).
-    wchar_t* const before = self->data;
+    wchar_t* const before = _data;
 
     if (src == nullptr) {
-        WideReleaseInline(self);
+        RtSystem::WideReleaseInline(this);
     } else {
-        const wchar_t* cur = self->data;
+        const wchar_t* cur = _data;
         bool unchanged = false;
         if (cur != nullptr) {
             int i = 0;
@@ -290,12 +338,12 @@ void RtSystem_WideString_Set(WideString* self, const wchar_t* src) {
             unchanged = (cur[i] == src[i]);
         }
         if (!unchanged) {
-            const int len = WideStrLen(src);
-            RtSystem_WideString_SetLength(self, len);
-            wchar_t* dst = self->data;
+            const int len = RtSystem::WideStrLen(src);
+            SetLength(len);
+            wchar_t* dst = _data;
 
             const int n1   = len + 1;                 // R14D
-            const int len2 = WideStrLen(src) + 1;     // EBX, retail's re-walk
+            const int len2 = RtSystem::WideStrLen(src) + 1;  // EBX, retail's re-walk
             const int copy = (n1 < len2) ? n1 : len2; // CMOVL — the MINIMUM
             std::memcpy(dst, src, static_cast<size_t>(copy) * 2);
             if (len2 >= n1) dst[n1 - 1] = 0;
@@ -318,33 +366,34 @@ void RtSystem_WideString_Set(WideString* self, const wchar_t* src) {
 // buffer, and a non-positive encode result. The last one is the one that
 // matters: a lone surrogate encodes to ZERO bytes, so a malformed UTF-16
 // buffer loses that character rather than corrupting the output.
-String* RtSystem_WideString_AsUTF8(const WideString* self, String* ret) {
+System::String System::WideString::AsUTF8() const {
 
-    const uint8_t* p   = reinterpret_cast<const uint8_t*>(self->data);
-    const uint8_t* end = p + static_cast<size_t>(WideLength(self->data)) * 2;
+    const uint8_t* p   = reinterpret_cast<const uint8_t*>(_data);
+    const uint8_t* end = p + static_cast<size_t>(RtSystem::WideLength(_data)) * 2;
 
     int total = 0;
     for (const uint8_t* q = p; q < end;) {
         int32_t cp = -1;
-        q += Utf16DecodeOne(q, end, &cp);
+        q += RtSystem::Utf16DecodeOne(q, end, &cp);
         if (cp >= 0) {
             uint8_t scratch[4];
-            total += Utf8EncodeOne(cp, scratch);
+            total += RtSystem::Utf8EncodeOne(cp, scratch);
         }
     }
 
     uint8_t* buf = static_cast<uint8_t*>(
-        RtMemAlloc(static_cast<uint64_t>(total) + 1, kStringAllocAlign));
+        RtSystem::RtMemAlloc(static_cast<uint64_t>(total) + 1,
+                             RtSystem::kStringAllocAlign));
     buf[total] = 0;
 
     uint8_t* out    = buf;
     int      written = 0;
     for (const uint8_t* q = p; q < end;) {
         int32_t cp = -1;
-        q += Utf16DecodeOne(q, end, &cp);
+        q += RtSystem::Utf16DecodeOne(q, end, &cp);
         if (cp < 0) continue;
         uint8_t scratch[4];
-        const int m = Utf8EncodeOne(cp, scratch);
+        const int m = RtSystem::Utf8EncodeOne(cp, scratch);
         written += m;
         if (written > total) continue;
         if (buf == nullptr)  continue;
@@ -354,13 +403,16 @@ String* RtSystem_WideString_AsUTF8(const WideString* self, String* ret) {
     }
 
     // ENDGAME B.3.1 step 2: retail's `*ret = 0` is the default ctor
-    // (0x180006760) and `ret` is the hidden return slot — raw bytes — so the
-    // String is placement-constructed into it before Set (0x1800c95d0) runs.
-    new (Sys(ret)) System::String();
-    Sys(ret)->Set(reinterpret_cast<const char*>(buf));
-    if (buf != nullptr) RtMemFree(buf);
+    // (0x180006760) and the result is the hidden return slot — raw bytes — so
+    // the String was placement-constructed into it before Set (0x1800c95d0)
+    // ran. B.3.4b SYSTEM (4a): the hidden slot is the COMPILER's business now,
+    // so the member holds an ordinary local and returns it; the DOOR is what
+    // still placement-constructs into a caller-supplied slot.
+    System::String ret;
+    ret.Set(reinterpret_cast<const char*>(buf));
+    if (buf != nullptr) RtSystem::RtMemFree(buf);
 
-    // `self` is const and nothing in the body touches it, so the shipped body
+    // `this` is const and nothing in the body touches it, so the shipped body
     // runs on identical input. Its result is a freshly allocated String, so
     // ours and theirs never share a pointer — compare by TEXT.
     return ret;
@@ -376,15 +428,14 @@ String* RtSystem_WideString_AsUTF8(const WideString* self, String* ret) {
 // count handed to SetLength is that halved. So a supplementary codepoint
 // correctly costs TWO characters, and the terminator is written at
 // `data[bytes/2]`.
-WideString* RtSystem_WideString_CtorFromString(WideString* self, const String* src) {
+System::WideString::WideString(const System::String& s) {
 
-    self->data = nullptr;
+    _data = nullptr;
 
-    // ENDGAME B.3.1 step 2: `src` is the POD parameter of a registered entry
-    // point, so it reaches the class through the one bridge (pod_bridge.h).
-    // `GetLength()` (0x1800063c0) IS the null-guarded stored-length read this
-    // line used to spell by hand.
-    const System::String& s = Sys(*src);
+    // ENDGAME B.3.1 step 2's bridge is gone from this body: `s` IS the class
+    // now, because the parameter is the class. `GetLength()` (0x1800063c0) is
+    // still the null-guarded stored-length read this line used to spell by
+    // hand; the POD-to-class conversion moved up into the door.
 
     const uint8_t* p   = reinterpret_cast<const uint8_t*>(s._data);
     const uint8_t* end = p + static_cast<size_t>(s.GetLength());
@@ -392,28 +443,28 @@ WideString* RtSystem_WideString_CtorFromString(WideString* self, const String* s
     int totalBytes = 0;
     for (const uint8_t* q = p; q < end;) {
         int32_t cp = -1;
-        q += Utf8DecodeOne(q, end, &cp);
+        q += RtSystem::Utf8DecodeOne(q, end, &cp);
         if (cp >= 0) {
             uint8_t scratch[4];
-            totalBytes += Utf16EncodeOne(cp, scratch);
+            totalBytes += RtSystem::Utf16EncodeOne(cp, scratch);
         }
     }
 
     const int chars = totalBytes >> 1;
-    RtSystem_WideString_SetLength(self, chars);
+    SetLength(chars);
 
     // Retail RE-READS `src->data` here rather than reusing `p`; kept.
     const uint8_t* r    = reinterpret_cast<const uint8_t*>(s._data);
     const uint8_t* rend = r + static_cast<size_t>(s.GetLength());
-    uint8_t* const base = reinterpret_cast<uint8_t*>(self->data);
+    uint8_t* const base = reinterpret_cast<uint8_t*>(_data);
     uint8_t*       out  = base;
     int            written = 0;
     for (const uint8_t* q = r; q < rend;) {
         int32_t cp = -1;
-        q += Utf8DecodeOne(q, rend, &cp);
+        q += RtSystem::Utf8DecodeOne(q, rend, &cp);
         if (cp < 0) continue;
         uint8_t scratch[4];
-        const int m = Utf16EncodeOne(cp, scratch);
+        const int m = RtSystem::Utf16EncodeOne(cp, scratch);
         written += m;
         if (written > totalBytes) continue;
         if (base == nullptr)      continue;
@@ -421,9 +472,8 @@ WideString* RtSystem_WideString_CtorFromString(WideString* self, const String* s
         std::memcpy(out, scratch, static_cast<size_t>(m));
         out += m;
     }
-    self->data[chars] = 0;
+    _data[chars] = 0;
 
-    return self;
 }
 
 // ============================================================================
@@ -466,9 +516,9 @@ WideString* RtSystem_WideString_CtorFromString(WideString* self, const String* s
 // class name it hands to RegisterClassW and CreateWindowExW. Wave 9 lane FS
 // ported four of this class's constructors and left this one, because nothing
 // in the tree called it then.
-WideString* RtSystem_WideString_CtorFromChars(WideString* self, const char* src) {
+System::WideString::WideString(const char* src) {
 
-    self->data = nullptr;
+    _data = nullptr;
 
     // 0x1800cb132: the first inline strlen. `R8D` counts, `RSI = RDX + count`.
     int srcLen = 0;
@@ -480,17 +530,17 @@ WideString* RtSystem_WideString_CtorFromChars(WideString* self, const char* src)
     int totalBytes = 0;
     for (const uint8_t* q = p; q < end;) {
         int32_t cp = -1;
-        q += Utf8DecodeOne(q, end, &cp);
+        q += RtSystem::Utf8DecodeOne(q, end, &cp);
         if (cp >= 0) {
             uint8_t scratch[4];
-            totalBytes += Utf16EncodeOne(cp, scratch);
+            totalBytes += RtSystem::Utf16EncodeOne(cp, scratch);
         }
     }
 
     // 0x1800cb1ab: `SAR EAX,1` — the accumulator is in BYTES, the length handed
     // to SetLength is in CHARACTERS.
     const int chars = totalBytes >> 1;
-    RtSystem_WideString_SetLength(self, chars);
+    SetLength(chars);
 
     // 0x1800cb1c3: retail's SECOND inline strlen, over the ORIGINAL pointer.
     int srcLen2 = 0;
@@ -498,15 +548,15 @@ WideString* RtSystem_WideString_CtorFromChars(WideString* self, const char* src)
 
     const uint8_t* const r    = reinterpret_cast<const uint8_t*>(src);
     const uint8_t* const rend = r + static_cast<size_t>(srcLen2);
-    uint8_t* const base = reinterpret_cast<uint8_t*>(self->data);
+    uint8_t* const base = reinterpret_cast<uint8_t*>(_data);
     uint8_t*       out  = base;
     int            written = 0;
     for (const uint8_t* q = r; q < rend;) {
         int32_t cp = -1;
-        q += Utf8DecodeOne(q, rend, &cp);
+        q += RtSystem::Utf8DecodeOne(q, rend, &cp);
         if (cp < 0) continue;
         uint8_t scratch[4];
-        const int m = Utf16EncodeOne(cp, scratch);
+        const int m = RtSystem::Utf16EncodeOne(cp, scratch);
         written += m;
         if (written > totalBytes) continue;   // 0x1800cb236  CMP R15D,R14D ; JG
         if (base == nullptr)      continue;   // 0x1800cb23b  TEST R12,R12  ; JZ
@@ -514,35 +564,70 @@ WideString* RtSystem_WideString_CtorFromChars(WideString* self, const char* src)
         std::memcpy(out, scratch, static_cast<size_t>(m));
         out += m;
     }
-    self->data[chars] = 0;                    // 0x1800cb275
+    _data[chars] = 0;                         // 0x1800cb275
 
-    return self;
 }
 
 // ??0WideString@System@@QEAA@PEB_W@Z                       retail 0x18000a6e0
 // `this->data = 0; Set(this, src);` and nothing else — eight instructions.
-WideString* RtSystem_WideString_CtorFromWide(WideString* self, const wchar_t* src) {
-    self->data = nullptr;
-    RtSystem_WideString_Set(self, src);
-    return self;
+System::WideString::WideString(const wchar_t* src) {
+    _data = nullptr;
+    Set(src);
 }
 
 // ??1WideString@System@@QEAA@XZ                            retail 0x18000a730
 // Byte-for-byte the String release idiom, asymmetry included: the freeing
 // branch leaves `data - 8` in the object (`ADD qword [RCX],-8` then a TAIL JMP
 // to MemFree), the sharing branch nulls it.
-void RtSystem_WideString_Dtor(WideString* self) {
-    WideReleaseInline(self);
+System::WideString::~WideString() {
+    RtSystem::WideReleaseInline(this);
 }
 
 // ?StrLength@WideString@System@@SAHPEB_W@Z                 retail 0x1800cab20
 // wcslen, and NOT null-tolerant: retail's first instruction after the zeroing
 // XOR is `CMP word ptr [RCX],AX`, an unguarded load. Kept unguarded — a null
 // here is an upstream fault to find, not one to paper over.
-int RtSystem_WideString_StrLength(const wchar_t* s) {
+int System::WideString::StrLength(const wchar_t* s) {
     int n = 0;
     while (s[n] != 0) ++n;
     return n;
+}
+
+// ============================================================================
+// The remaining doors — every name, signature and registration row unchanged.
+// ============================================================================
+// These four could not sit with the others above, because a door that
+// placement-constructs the class has to be written after the class's own
+// constructors are defined for the reader, not for the compiler. Each is a
+// CONSTRUCTOR door: `self` is the caller's RAW BYTES (an uninitialised
+// `RtSystem::WideString` local in platform_startup_win.cpp,
+// application_win.cpp, updateloop_loadresources.cpp and value_types.cpp), so
+// the class is placement-constructed into it, never assigned — an assignment
+// would first run the destructor over whatever garbage the caller's stack held.
+// The return value is retail's `MOV RAX,RCX`, i.e. `self` itself.
+namespace RtSystem {
+
+WideString* RtSystem_WideString_CtorFromString(WideString* self, const String* src) {
+    new (Sys(self)) System::WideString(*Sys(src));
+    return self;
+}
+
+WideString* RtSystem_WideString_CtorFromWide(WideString* self, const wchar_t* src) {
+    new (Sys(self)) System::WideString(src);
+    return self;
+}
+
+WideString* RtSystem_WideString_CtorFromChars(WideString* self, const char* src) {
+    new (Sys(self)) System::WideString(src);
+    return self;
+}
+
+void RtSystem_WideString_Dtor(WideString* self) {
+    Sys(self)->~WideString();
+}
+
+int RtSystem_WideString_StrLength(const wchar_t* s) {
+    return System::WideString::StrLength(s);
 }
 
 }  // namespace RtSystem
