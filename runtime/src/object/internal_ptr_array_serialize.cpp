@@ -29,11 +29,15 @@
 #include "../../types/object/Internal.h"
 
 using RtObject::InternalBasePtr;
-using RtObject::SerializerLite;
 
 // Both are C++-linkage bodies in namespace RtObject (internal.cpp, type_system.cpp).
+// B.3.4 block 3: the serializer parameter is the REAL `IO::Serializer`; it was
+// `RtObject::SerializerLite`, which died with this block. Spelled `::IO::` in
+// full so the declaration cannot drift from internal.cpp's definition — a
+// mismatch here would be a link error, not a silent one, but naming it exactly
+// is cheaper than proving that each time.
 namespace RtObject {
-void RtObject_InternalBasePtr_Serialize(InternalBasePtr* self, SerializerLite* ser);
+void RtObject_InternalBasePtr_Serialize(InternalBasePtr* self, ::IO::Serializer* ser);
 bool RtObject_Base_IsDerivedFrom(const void* self, uint32_t typeId);
 }
 
@@ -56,7 +60,7 @@ bool InternalPtrIsDerivedFrom(const void* obj, uint32_t typeId) {
 }
 }  // namespace Object
 
-extern "C" void RtObject_InternalPtrArray_Serialize(SerializerLite* ser, int count,
+extern "C" void RtObject_InternalPtrArray_Serialize(::IO::Serializer* ser, int count,
                                                     InternalBasePtr* elems, uint32_t typeId) {
     // TRANSITIONAL CAST (B31_RULES "not-yet-converted structs"): the callers
     // still spell the POD; it goes with the POD in step 2.
@@ -65,7 +69,7 @@ extern "C" void RtObject_InternalPtrArray_Serialize(SerializerLite* ser, int cou
 }
 
 #define INTPTR_ARRAY_THUNK(fnName, mangledTypeInfo)                             \
-    extern "C" void fnName(SerializerLite* ser, int count, InternalBasePtr* elems) { \
+    extern "C" void fnName(::IO::Serializer* ser, int count, InternalBasePtr* elems) { \
         using TypeInfoPtr = const uint32_t*;                                    \
         const uint32_t* ti = RT_DATA_SLOT(TypeInfoPtr, mangledTypeInfo);        \
         if (ti == nullptr) {                                                    \

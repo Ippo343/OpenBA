@@ -575,7 +575,10 @@ void RtObject_InternalFactory_ResetPersistState(InternalFactory* self, void* str
 // out-of-line half (`Object::InternalBasePtrSerializeBody`) sits at the bottom
 // of this file, next to `Factory()` and the `PersistObject` name door it needs.
 // This is the registered shim.
-void RtObject_InternalBasePtr_Serialize(InternalBasePtr* self, SerializerLite* ser) {
+// B.3.4 block 3: the parameter is the REAL `IO::Serializer` now — it was
+// `RtObject::SerializerLite`, a fourth declaration of the same 16 bytes, which
+// died with this block. Same bytes, same ABI, one spelling.
+void RtObject_InternalBasePtr_Serialize(InternalBasePtr* self, ::IO::Serializer* ser) {
     AsClass(self)->Serialize(*ser);
 }
 
@@ -620,14 +623,20 @@ void RtObject_InternalBasePtr_Serialize(InternalBasePtr* self, SerializerLite* s
 // ============================================================================
 namespace Object {
 
+// B.3.4 block 3 — the parameter is the REAL `IO::Serializer`, and the three
+// slot constants are `rt::io::rw_vtbl::k*` instead of the identical
+// `RtObject::kEncSerialize*` that died with `SerializerLite`. Same three retail
+// offsets (0x78 / 0x98 / 0xa0), one spelling. The RAW slot calls STAY: the
+// ReaderWriter reached here still wears a MINTED table (B34_RULES §3.1, §4.2),
+// so this is not the step that turns them into member calls.
 void InternalBasePtrSerializeBody(RtObject::Internal** self,
-                                  RtObject::SerializerLite& ser) {
-    void*  enc     = ser.readerWriter;
+                                  ::IO::Serializer& ser) {
+    void*  enc     = ser._readerWriter;
     void** encVtbl = *reinterpret_cast<void***>(enc);
 
     char present = (*self != nullptr) ? 1 : 0;
     reinterpret_cast<void (*)(void*, char*, const char*)>(
-        encVtbl[RtObject::kEncSerializeBool / 8])(enc, &present, nullptr);
+        encVtbl[rt::io::rw_vtbl::kScalarBool / 8])(enc, &present, nullptr);
     if (present == 0) {
         *self = nullptr;
         return;
@@ -648,11 +657,11 @@ void InternalBasePtrSerializeBody(RtObject::Internal** self,
     const uint32_t gen = (*self != nullptr) ? (*self)->generation : 0u;
 
     reinterpret_cast<void (*)(void*, int*, const char*)>(
-        encVtbl[RtObject::kEncSerializeInt / 8])(enc, &index, nullptr);
+        encVtbl[rt::io::rw_vtbl::kScalarInt / 8])(enc, &index, nullptr);
     reinterpret_cast<void (*)(void*, uint32_t*, const char*)>(
-        encVtbl[RtObject::kEncSerializeUint / 8])(enc, const_cast<uint32_t*>(&gen), nullptr);
+        encVtbl[rt::io::rw_vtbl::kScalarUInt / 8])(enc, const_cast<uint32_t*>(&gen), nullptr);
     reinterpret_cast<void (*)(void*, uint32_t*, const char*)>(
-        encVtbl[RtObject::kEncSerializeUint / 8])(enc, &type, nullptr);
+        encVtbl[rt::io::rw_vtbl::kScalarUInt / 8])(enc, &type, nullptr);
 
     // The REGISTRY door, not the raw DLL door: PersistObject is ported
     // (internalfactory_persist.cpp) and with the DLL absent the raw door is
@@ -668,7 +677,7 @@ void InternalBasePtrSerializeBody(RtObject::Internal** self,
     // takes the POD alias.
     *self = persist(reinterpret_cast<RtObject::InternalFactory*>(
                         ::Object::InternalFactory::Get()),
-                    ser.stream, gen, index, type);
+                    ser._stream, gen, index, type);
 }
 
 }  // namespace Object

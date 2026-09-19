@@ -35,6 +35,12 @@
 
 #include "../collection/Collection.h"
 #include "../system/Value.h"          // ::Random (0x9c4 bytes, index + mt[624])
+// ENDGAME B.3.4 block 3: `RtObject::SerializerLite` — a fourth spelling of
+// IO::Serializer's 16 bytes, declared here so that runtime/src/object/ need not
+// depend on runtime/types/io/ — is GONE, and this is the dependency it was
+// avoiding. GLOBAL SCOPE, above `namespace RtObject {`, never inside an `#if`
+// (B31 hygiene).
+#include "../io/Serializer.h"
 // ENDGAME B.3.3 step 7: internal_class.h is merged back in below, so this
 // header needs Object::Base / BaseTypeInfo / DECLARE_TYPE. GLOBAL SCOPE —
 // the split existed only because External.h used to include TypeInfo.h from
@@ -177,58 +183,30 @@ static_assert(sizeof(InternalFactory) == 0x9e8,
               "Object::InternalFactory: 0x9e4 bytes of fields, padded to 0x9e8 by alignof 8");
 
 // ============================================================
-// IO::Serializer, the 16 bytes of it that ResetPersistState needs.
+// `RtObject::SerializerLite` AND `kEncSerialize{Bool,Uint,Int}` LIVED HERE AND
+// ARE GONE — ENDGAME B.3.4 block 3.
 //
-// Reproduced here rather than taken from a Wave 4 header, which does not exist
-// yet. Pinned by ??0Serializer@IO@@QEAA@AEAVStream@1@H@Z (0x1800b9960) and by
-// runtime/src/io/serializer.cpp's forwarder table:
-//   +0x00  IO::Stream*    the stream (what PersistObject is handed)
-//   +0x08  IO::Encoding*  a BinaryReader on load / BinaryWriter on save; every
-//                         Serialize<T> forwarder is `jmp [encoding->vtbl+N]`
-// The `int version` argument of the constructor is IGNORED by the body.
+// `SerializerLite` was a FOURTH declaration of IO::Serializer's 16 bytes
+// (beside `rt::io::Serializer`, `RtIo::Serializer` and the class itself), made
+// so that runtime/src/object/ need not include runtime/types/io/. `IO::Serializer`
+// is now a real, non-polymorphic class in runtime/types/io/Serializer.h, this
+// header includes it at global scope above, and the five files that used the
+// alias take the real class. B34_RULES §1.5.4 / §3.3.
 //
-// The Stream fields the inlined constructor reads:
-//   stream + 0x08  int   mode: 0 == reading (create a decoder), else writing
-//   stream + 0x10  Encoding factory object; its vtable slot 3 (+0x18) makes the
-//                  reader and slot 4 (+0x20) makes the writer
-// The encoding is destroyed through its own vtable slot 0 with flag 1.
+// The three constants were the RETAIL `ReaderWriter` vtable byte offsets under
+// a second spelling. They are now `rt::io::rw_vtbl::kScalarBool` (0x78),
+// `kScalarUInt` (0x98) and `kScalarInt` (0xa0) — ONE spelling, in the header
+// that pins the whole 26-slot table. *** The warning they carried is still
+// live and now belongs to `rw_vtbl`: these offsets DIFFER BETWEEN BUILDS. The
+// PROFILE build's `InternalBasePtr::Serialize` (0x18008c460) uses +0x90 /
+// +0xb0 / +0xb8 for the same three calls, because its ReaderWriter vtable
+// carries extra virtuals. Transcribing the profile numbers writes the right
+// values through the wrong slots and desyncs every save. ***
 //
-// NOT PINNED: anything else in Stream or Encoding. Wave 4 owns those; this
-// header claims only the four offsets above, each of which is a literal in the
-// disassembly of 0x1800b9960 and 0x1800bfe40.
+// `rw_vtbl` itself STAYS for the whole of B.3.4: 54 files across eleven
+// runtime/src/* directories spell those offsets, and their classes are B.3
+// steps 5-8 (§3.3).
 // ============================================================
-// NAME CORRECTED 2026-09-07 (Wave 9). +0x08 is the READER/WRITER, not the
-// Encoding -- Wave 4 established that (`Serializer+0x08 is a ReaderWriter*`,
-// one of the three recorded facts it disproved), and the slot offsets this
-// file goes on to use (0x78 bool / 0x98 uint / 0xa0 int) are `rw_vtbl`'s, not
-// the Encoding's. The Encoding is reached from the STREAM, at Stream+0x10.
-//
-// The port was always correct -- the offsets are right and it never touched a
-// real Encoding -- so this is a name that was right about the MECHANISM and
-// wrong about the OWNER, which PLAN.md §6 step 8 names as its own error class
-// and which cost this project months elsewhere (the `str-4`/`str-8` header).
-// The old name is kept in the comment so a reader who meets it elsewhere
-// recognises it.
-struct SerializerLite {
-    void* stream;         // +0x00  IO::Stream*
-    void* readerWriter;   // +0x08  IO::ReaderWriter*  (was named `encoding`)
-};
-static_assert(sizeof(SerializerLite) == 0x10, "IO::Serializer is 16 bytes");
-
-// Encoding vtable byte offsets used by InternalBasePtr::Serialize, taken from
-// the RETAIL disassembly (0x1800c0180) and cross-checked against the forwarder
-// table in runtime/src/io/serializer.cpp.
-//
-// *** These differ between builds. *** The PROFILE build's Serialize
-// (0x18008c460) uses +0x90 / +0xb0 / +0xb8 for the same three calls, because
-// its Encoding vtable carries extra virtuals. A port MUST use the retail
-// numbers below; copying them out of a profile decompile writes the right
-// values through the wrong slots.
-enum : int {
-    kEncSerializeBool = 0x78,   // Serialize(bool&,  const char*)
-    kEncSerializeUint = 0x98,   // Serialize(uint&,  const char*)
-    kEncSerializeInt  = 0xa0,   // Serialize(int&,   const char*)
-};
 
 // Object::Internal vtable slot byte offsets (see the vtable dump above).
 enum : int {
@@ -294,7 +272,7 @@ namespace Object {
 // (SMARTPTR_INVENTORY.md section 4), so the body keeps reaching them exactly as
 // the C body does.
 void InternalBasePtrSerializeBody(RtObject::Internal** self,
-                                  RtObject::SerializerLite& ser);
+                                  ::IO::Serializer& ser);
 // Object::Base::IsDerivedFrom's ancestor walk, reached by name from
 // runtime/src/object/type_system.cpp -- the typed half of InternalPtr<T>.
 bool InternalPtrIsDerivedFrom(const void* obj, uint32_t typeId);
@@ -345,7 +323,7 @@ public:
     // ?Serialize@... 0x1800c0180. Writes/reads {present, index, generation,
     // type} through the ReaderWriter vtable and resolves the triple back
     // through InternalFactory::PersistObject on load.
-    void Serialize(RtObject::SerializerLite& ser) {
+    void Serialize(::IO::Serializer& ser) {
         InternalBasePtrSerializeBody(&_ptr, ser);
     }
 
@@ -410,14 +388,14 @@ public:
     T& operator*()  const { return *Get(); }
 
     // 0x180009a20 / 0x180009fa0 -- the one array body, per element.
-    void Serialize(RtObject::SerializerLite& ser, uint32_t typeId) {
+    void Serialize(::IO::Serializer& ser, uint32_t typeId) {
         InternalBasePtr::Serialize(ser);
         void* obj = InternalBasePtr::Get();
         if (obj != nullptr && !InternalPtrIsDerivedFrom(obj, typeId))
             _ptr = nullptr;   // retail nulls the element on total mismatch
     }
 
-    static void SerializeArray(RtObject::SerializerLite& ser, int count,
+    static void SerializeArray(::IO::Serializer& ser, int count,
                                InternalPtr* elems, uint32_t typeId) {
         for (int i = 0; i < count; ++i)
             elems[i].Serialize(ser, typeId);
