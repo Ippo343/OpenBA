@@ -566,3 +566,60 @@ static_assert(std::is_trivially_destructible<RtIo::BinaryFileStream>::value,
               "the POD must stay trivially destructible while both views are live");
 
 }  // namespace IO
+
+// ===========================================================================
+// ENDGAME B.3.4 block 4 (STREAMS) — `IO::CompressedFileStream`.
+// ===========================================================================
+// It lives in THIS header rather than beside its base in Stream.h for one
+// reason: it holds an `IO::BinaryFileStream` by value, and that class is
+// declared here. Stream.h cannot include FileStream.h (FileStream.h already
+// includes Stream.h), so the class follows its member.
+//
+// Section D binds it: this is the class `Object::External::Load` stack-builds,
+// and it sits directly on the intermittent compressed-load defect. The one
+// body that moved (slot 7, `Close`) moved byte-faithfully.
+
+namespace IO {
+
+// ---------------------------------------------------------------------------
+// IO::CompressedFileStream — vtable 0x1801555f0, 9 slots, 0xb8 bytes.
+// ---------------------------------------------------------------------------
+// THE SAME SHAPE ONE CLASS OVER: a CompressedStream whose `_source` is a
+// concrete stream embedded in the same object, here a `BinaryFileStream` at
+// +0x68 (0x68 + 0x50 == 0xb8, the measured stride, no padding).
+//
+// IT OVERRIDES EXACTLY ONE SLOT. Slot 7 is its own `Close` (0x1800a9490);
+// slot 8 `PreCommit` is CompressedStream's (0x1800aa8c0), inherited. That
+// asymmetry with CompressedMemoryStream, which overrides both, is retail's.
+//
+// ⚠ ITS CONSTRUCTION SITES ARE NOT IN THIS BLOCK'S FILE SET. Retail inlines
+// this constructor into `External::Save`, `IsCurrent` and `Load`, and our port
+// reproduces that as a stack local plus a bare vptr stamp in
+// `runtime/src/object/external_load.cpp` — a file block 4 does not own, and one
+// that is itself on the section D loader path. That is the fact that makes
+// section 4.3's "no real constructors" non-negotiable rather than cautious.
+class CompressedFileStream : public CompressedStream {
+public:
+    Stream* DeletingDtor(unsigned flags) override = 0;   // slot 0  0x180024100
+    void Close() override;                               // slot 7  0x1800a9490
+    // slot 8 PreCommit is NOT overridden: 0x1801555f0[8] is 0x1800aa8c0.
+
+    BinaryFileStream _file;    // +0x68 — a MEMBER, not a second base
+
+protected:
+    ~CompressedFileStream() = default;
+};
+
+static_assert(offsetof(CompressedFileStream, _file) == 0x68,
+              "ctor 0x1800a93c8: `LEA RCX,[RBX+0x68]` before the BinaryFileStream ctor");
+static_assert(sizeof(CompressedFileStream) == 0xb8,
+              "0xb8 is the eh_vector_dtor element stride at 0x180024100");
+
+static_assert(sizeof(CompressedFileStream) == sizeof(RtIo::CompressedFileStream),
+              "IO::CompressedFileStream and its POD stay interchangeable");
+static_assert(offsetof(CompressedFileStream, _file) ==
+                  offsetof(RtIo::CompressedFileStream, file), "alias member");
+static_assert(std::is_trivially_destructible<RtIo::CompressedFileStream>::value,
+              "the POD must stay trivially destructible while both views are live");
+
+}  // namespace IO

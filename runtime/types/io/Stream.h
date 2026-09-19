@@ -558,3 +558,161 @@ static_assert(std::is_trivially_destructible<RtIo::MemoryStream>::value,
               "the POD must stay trivially destructible while both views are live");
 
 }  // namespace IO
+
+// ===========================================================================
+// ENDGAME B.3.4 block 4 (STREAMS) — `IO::CompressedStream` and its two
+// concrete subclasses.
+// ===========================================================================
+//
+// Design: B34_RULES.md section 1.3 (the slot lists), section 4.3 (no real
+// constructors — stated in full in this header's `namespace IO` banner above),
+// and B34_BRIEFS.md section D, which BINDS this family in particular.
+//
+// ---------------------------------------------------------------------------
+// SECTION D: THIS IS THE COMPRESSED-LOAD PATH, AND IT HAS A LIVE DEFECT
+// ---------------------------------------------------------------------------
+// A pre-existing, intermittent defect lives on this path: roughly two boots in
+// six load a resource as NULL, and one of those has been seen to hang in
+// teardown with the loader thread still executing inside
+// `CompressedStream::Read` 45 seconds after Quit — a spin, measured on an
+// UNCHANGED tree. A separate agent is root-causing it.
+//
+// So the bodies below moved onto these members **byte-faithfully**: no added
+// lock, no retry, no loop bound, no null check, no reordering — and equally no
+// SILENT REMOVAL of whatever makes the read spin. If a conversion here made the
+// symptom stop reproducing that would be a RED FLAG to report, not a win: it
+// would mean the conversion changed timing or control flow somewhere nobody
+// intended.
+//
+// ---------------------------------------------------------------------------
+// NINE SLOTS: THIS BRANCH ADDS `Close` AT 7 AND `PreCommit` AT 8
+// ---------------------------------------------------------------------------
+// `IO::FileStream` puts `Open` at slot 7 and stops at eight slots. This branch
+// puts `Close` at 7 and adds a ninth, `PreCommit`. Same offsets, different
+// meanings, and FileStream.h says the same thing from its side.
+//
+// ---------------------------------------------------------------------------
+// WHAT THIS BLOCK DOES NOT CONVERT, AND WHY IT IS NOT AN OVERSIGHT
+// ---------------------------------------------------------------------------
+// The family's NON-virtual members — `Open`, `Create`, `Release`, `Commit`,
+// `CompressWindow`, `SetWindow`, `SetWindowCount`, `GetAvailableWindow`,
+// `DecompressFromSource`, `GetMemoryStream` and the two `CompressedMemoryStream`
+// helpers — are NOT declared here and keep their registered free-function
+// doors. Only the NINE VTABLE SLOTS move, because the vtable is what a real
+// class is for and what nothing else in the build can check. Declaring a member
+// whose body had not moved would be a link hazard for no gain, and moving those
+// eleven bodies as well would have meant editing
+// `compressed_stream_open.cpp` and `compressed_stream_read.cpp` far beyond the
+// two slots they own — on the exact path section D says to leave alone. They
+// convert when the defect is understood.
+// ===========================================================================
+
+namespace IO {
+
+// ---------------------------------------------------------------------------
+// IO::CompressedStream — vtable 0x180155640, 9 slots, 0x68 bytes.
+// ---------------------------------------------------------------------------
+// A Stream that codes a windowed, block-compressed byte stream onto ANOTHER
+// Stream (`_source`). ABSTRACT: slot 0 (0x180023fd0) is an `RT_DELDTOR` row
+// section 4.2 keeps, and nothing holds a `CompressedStream` by value.
+//
+// Slot 1 is NOT overridden — 0x180155640[1] is `IO::Stream`'s own 0x18000c6a0.
+class CompressedStream : public Stream {
+public:
+    Stream*  DeletingDtor(unsigned flags) override = 0;  // slot 0 +0x00  0x180023fd0
+    bool     Write(int n, const void* src) override;     // slot 2 +0x10  0x1800aa6c0
+    bool     Read(int n, void* dst) override;            // slot 3 +0x18  0x1800aa780
+    bool     SetCurrentPos(int pos) override;            // slot 4 +0x20  0x1800aa830
+    uint32_t GetCurrentPos() const override;             // slot 5 +0x28  0x1800aa850
+    uint32_t GetSize() const override;                   // slot 6 +0x30  0x1800aa860
+    virtual void Close();                                // slot 7 +0x38  0x1800aa8d0
+    virtual void PreCommit();                            // slot 8 +0x40  0x1800aa8c0
+
+    // ---- the 0x68 bytes, at retail's offsets -------------------------------
+    // `_unknown18` and `_unknown24` are the two gaps `??0CompressedStream`
+    // (0x1800aa3d0) leaves unwritten. They are recorded as unknown rather than
+    // guessed, and zeroing them would be a behavioural difference from retail.
+    uint32_t _unknown18;      // +0x18  never initialised by the ctor
+    int32_t  _position;       // +0x1c  logical position in the DECOMPRESSED stream
+    int32_t  _activeWindow;   // +0x20  ctor writes -1
+    uint32_t _unknown24;      // +0x24  never initialised by the ctor
+    Stream*  _source;         // +0x28  the stream the compressed bytes live on
+    void*    _windowData;     // +0x30  Array<Window>::_data
+    int32_t  _windowSize;     // +0x38  Array<Window>::_size
+    int32_t  _windowCap;      // +0x3c
+    void*    _headerData;     // +0x40  Array<Header>::_data
+    int32_t  _headerSize;     // +0x48  Array<Header>::_size   <-- the dtor's guard
+    int32_t  _headerCap;      // +0x4c
+    void*    _blockData;      // +0x50
+    int32_t  _blockSize;      // +0x58
+    int32_t  _blockCap;       // +0x5c
+    void*    _compression;    // +0x60  System::Compression*, owned
+
+protected:
+    ~CompressedStream() = default;
+};
+
+static_assert(sizeof(CompressedStream) == 0x68, "IO::CompressedStream is 0x68 bytes");
+static_assert(offsetof(CompressedStream, _position)     == 0x1c, "+0x1c");
+static_assert(offsetof(CompressedStream, _activeWindow) == 0x20, "ctor: -1");
+static_assert(offsetof(CompressedStream, _source)       == 0x28, "?Create@ stores the arg");
+static_assert(offsetof(CompressedStream, _windowData)   == 0x30, "Array<Window>::_data");
+static_assert(offsetof(CompressedStream, _windowSize)   == 0x38, "?Close@ strides on it");
+static_assert(offsetof(CompressedStream, _headerData)   == 0x40, "Array<Header>::_data");
+static_assert(offsetof(CompressedStream, _headerSize)   == 0x48, "the guard field");
+static_assert(offsetof(CompressedStream, _blockData)    == 0x50, "Array<void*>::_data");
+static_assert(offsetof(CompressedStream, _compression)  == 0x60, "System::Compression*");
+
+// ---------------------------------------------------------------------------
+// IO::CompressedMemoryStream — vtable 0x180155560, 9 slots, 0x98 bytes.
+// ---------------------------------------------------------------------------
+// A CompressedStream whose `_source` is its own embedded MemoryStream:
+// compressed bytes are produced into, or consumed from, a buffer that lives
+// inside the same object. The +0x68 member offset is pinned three times over
+// (the ctor's `LEA RCX,[RBX+0x68]`, `?Create@`/`?Open@` passing `this+0x68` as
+// the base's `Stream&`, and `?GetMemoryStream@` being literally
+// `LEA RAX,[RCX+0x68]; RET`), and independently by the profile build.
+//
+// IT OVERRIDES EXACTLY TWO SLOTS, 7 and 8. Slots 2..6 are the base's, which is
+// why a raw call on the ENCLOSING object reaches CompressedStream's Read while
+// a raw call on the MEMBER at +0x68 reaches MemoryStream's — two vtables in one
+// object at two different offsets, each sub-object carrying its own.
+class CompressedMemoryStream : public CompressedStream {
+public:
+    Stream* DeletingDtor(unsigned flags) override = 0;   // slot 0  0x1800244a0
+    void Close() override;                               // slot 7  0x1800a9620
+    void PreCommit() override;                           // slot 8  0x1800a9660
+
+    // +0x68 — a MEMBER, not a second base. See B34_BRIEFS section A.3: this is
+    // the by-value containment that forces `IO::MemoryStream` to be concrete
+    // with a public destructor, and that this class must be a `friend` of to
+    // reach its protected default constructor at all.
+    MemoryStream _memoryStream;
+
+protected:
+    ~CompressedMemoryStream() = default;
+};
+
+static_assert(offsetof(CompressedMemoryStream, _memoryStream) == 0x68,
+              "?GetMemoryStream@ 0x180024350 is `LEA RAX,[RCX+0x68]; RET`");
+static_assert(sizeof(CompressedMemoryStream) == 0x98,
+              "0x98 is the eh_vector_dtor element stride at 0x1800244a0");
+
+// ---- the duplicate-POD cross-asserts --------------------------------------
+static_assert(sizeof(CompressedStream) == sizeof(RtIo::CompressedStream), "POD agrees");
+static_assert(sizeof(CompressedMemoryStream) == sizeof(RtIo::CompressedMemoryStream),
+              "POD agrees");
+static_assert(offsetof(CompressedStream, _position) ==
+                  offsetof(RtIo::CompressedStream, position), "alias position");
+static_assert(offsetof(CompressedStream, _source) ==
+                  offsetof(RtIo::CompressedStream, source), "alias source");
+static_assert(offsetof(CompressedStream, _headerSize) ==
+                  offsetof(RtIo::CompressedStream, headerSize), "alias headerSize");
+static_assert(offsetof(CompressedMemoryStream, _memoryStream) ==
+                  offsetof(RtIo::CompressedMemoryStream, memoryStream), "alias member");
+static_assert(std::is_trivially_destructible<RtIo::CompressedStream>::value,
+              "the POD must stay trivially destructible while both views are live");
+static_assert(std::is_trivially_destructible<RtIo::CompressedMemoryStream>::value,
+              "the POD must stay trivially destructible while both views are live");
+
+}  // namespace IO

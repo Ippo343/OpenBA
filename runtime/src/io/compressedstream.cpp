@@ -341,21 +341,8 @@ extern "C" bool RtIo_CompressedMemoryStream_Open(CompressedMemoryStream* self) {
 // This is the function that turns the written windows into the compressed byte
 // image sitting in _memoryStream, so SaveRestore must call it before Store.
 extern "C" void RtIo_CompressedMemoryStream_Close(CompressedMemoryStream* self) {
-
-    const bool committed =
-        self->base.headerSize > 0 && self->base.base.direction == 1;
-    if (committed)
-        RT_EXPORT_ONCE(VoidThisFn, "?Commit@CompressedStream@IO@@QEAAXXZ")(&self->base);
-
-    CallStreamCloseVirtual(&self->memoryStream);
-
-    // ---- PARTIAL (presence only) -------------------------------------------
-    // Be honest about this one: it proves nothing about equivalence. Calling the
-    // original afterwards would Commit a second time and corrupt the save, and
-    // the Commit decision reads the same two fields in both implementations, so
-    // asserting it here is circular. The site exists so the summary's `calls=`
-    // column shows the save path was actually taken and reports which branch it
-    // took; the equivalence argument for this body rests on the decompile.
+    reinterpret_cast<IO::CompressedMemoryStream*>(self)
+        ->IO::CompressedMemoryStream::Close();
 }
 
 // ============================================================================
@@ -779,6 +766,47 @@ extern "C" CompressedStream* RtIo_CompressedStream_Ctor(CompressedStream* self) 
 
     return self;
 }
+
+// ============================================================================
+// `IO::CompressedMemoryStream::Close` — B.3.4 block 4 (STREAMS)
+// ============================================================================
+namespace IO {
+
+// ?Close@CompressedMemoryStream@IO@@UEAAXXZ                  retail 0x1800a9620
+//     if (headerSize > 0 && direction == 1) Commit(this);    // CompressedStream::Close
+//     _memoryStream.Close();                                 // virtual, +0x38
+// Retail tail-JMPs the virtual call, which is why Ghidra reports "could not
+// recover jumptable" at 0x1800a9647; it is an ordinary tail call, not a switch.
+//
+// This is the function that turns the written windows into the compressed byte
+// image sitting in _memoryStream, so SaveRestore must call it before Store.
+//
+// THE MEMBER'S `Close` IS DISPATCHED VIRTUALLY, DELIBERATELY, and that is not
+// the recursion hazard the qualified-call rule is about. `_memoryStream` is a
+// DIFFERENT OBJECT at +0x68 carrying its OWN vptr — retail does
+// `MOV RAX,[RDI]; CALL [RAX+0x38]` on it — so the dispatch lands on
+// MemoryStream's table, not on this class's. Qualifying it would change what
+// retail calls, which is the opposite of what the rule asks for.
+void CompressedMemoryStream::Close() {
+
+    const bool committed = _headerSize > 0 && _direction == 1;
+    if (committed)
+        RT_EXPORT_ONCE(::VoidThisFn, "?Commit@CompressedStream@IO@@QEAAXXZ")(
+            static_cast<CompressedStream*>(this));
+
+    ::CallStreamCloseVirtual(
+        reinterpret_cast<RtIo::MemoryStream*>(&_memoryStream));
+
+    // ---- PARTIAL (presence only) -------------------------------------------
+    // Be honest about this one: it proves nothing about equivalence. Calling the
+    // original afterwards would Commit a second time and corrupt the save, and
+    // the Commit decision reads the same two fields in both implementations, so
+    // asserting it here is circular. The site exists so the summary's `calls=`
+    // column shows the save path was actually taken and reports which branch it
+    // took; the equivalence argument for this body rests on the decompile.
+}
+
+}  // namespace IO
 
 // RegisterRuntimeExport flips every ResolveExport call site in our tree; the
 // paired RegisterRuntimeAddr covers anything that asks for the same function by
