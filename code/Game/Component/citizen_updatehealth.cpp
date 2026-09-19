@@ -563,14 +563,14 @@ extern "C" void CitizenComp_CatchDisease(void* self) {
     EnsureInit();
     void* gw = GameWorld();
     if (!self || !gw || !fn_IsDerivedFrom || !fn_ExternalList_GetResourceCount ||
-        !fn_Random_RandFloat || s_tidDisease == 0) {
+        s_tidDisease == 0) {
         // One-shot: this is a structural condition, true for every citizen every tick.
         static bool once = false;
         if (PlagueTraceOn() && !once && (once = true))
             fprintf(stderr, "[Plague] CATCH bail=unresolved citizen=%p gw=%p IsDerivedFrom=%p "
-                    "GetResourceCount=%p RandFloat=%p tidDisease=%u\n",
+                    "GetResourceCount=%p tidDisease=%u\n",
                     self, gw, (void*)fn_IsDerivedFrom, (void*)fn_ExternalList_GetResourceCount,
-                    (void*)fn_Random_RandFloat, s_tidDisease), fflush(stderr);
+                    s_tidDisease), fflush(stderr);
         return;
     }
     if (CitizenComp_AnyCitizenSick(*(void**)((uintptr_t)gw + 0xf0))) {
@@ -642,7 +642,7 @@ extern "C" void CitizenComp_SpreadDisease(void* self) {
     EnsureInit();
     u8* s = (u8*)self;
     void* gw = GameWorld();
-    if (!self || !gw || !fn_Random_RandFloat) return;
+    if (!self || !gw) return;
     void* disease = *(void**)(s + 0x68);
     if (!disease) return;
 
@@ -713,7 +713,7 @@ extern "C" char CitizenComp_RecoverOrDie(void* self) {
     EnsureInit();
     u8* s = (u8*)self;
     void* gw = GameWorld();
-    if (!self || !gw || !fn_Random_RandFloat) return 1;
+    if (!self || !gw) return 1;
 
     float r = reinterpret_cast<System::Random*>(*(void**)((uintptr_t)gw + 0xd8))->RandFloat();   // B.3.4b bridge
     u8* desc = *(u8**)(s + 0x288);
@@ -788,11 +788,11 @@ extern "C" char CitizenComp_UpdateHealth(void* self, int64_t* dt) {
             PlagueCensusTick();
             return 1;
         }
-        float elapsed = fn_Time_AsSeconds ? reinterpret_cast<const System::Time*>(s + 0x60)->AsSeconds() : 0.0f;   // B.3.4b bridge
+        float elapsed = reinterpret_cast<const System::Time*>(s + 0x60)->AsSeconds();   // B.3.4b bridge
         *(int64_t*)(s + 0x60) = 0;
         float denom = A * MonthsPerYear() * SecsPerMonth() * B;
         float ratio = elapsed / denom;
-        float r = fn_Random_RandFloat ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 1.0f;   // B.3.4b bridge
+        float r = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
         s_rollChanceSum += (double)ratio;
         if (ratio > s_rollChanceMax) s_rollChanceMax = ratio;
         // [Plague] ROLL-INPUTS -- diagnostic only. The census reported meanChance and

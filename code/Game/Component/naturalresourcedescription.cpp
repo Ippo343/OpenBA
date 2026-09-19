@@ -84,7 +84,7 @@ static void* NaturalResourceDescription_Ctor_Impl(void* mem) {
 }
 
 void NaturalResourceDescription_Serialize(void* self, void* stream) {
-    if (!fn_ExternalPtr_BuildSerialize || !g_fn_Time_Serialize) {
+    if (!fn_ExternalPtr_BuildSerialize) {
         return;
     }
     uint8_t* s = reinterpret_cast<uint8_t*>(self);

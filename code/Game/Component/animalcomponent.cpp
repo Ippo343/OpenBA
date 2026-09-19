@@ -467,7 +467,7 @@ void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {
     if (!self || !deltaTime) return;
 
     // ---- 1. aging + death ------------------------------------------------
-    const float dtSeconds = fn_Time_AsSeconds ? reinterpret_cast<const System::Time*>(deltaTime)->AsSeconds()   /* B.3.4b bridge */ : 0.0f;
+    const float dtSeconds = reinterpret_cast<const System::Time*>(deltaTime)->AsSeconds();   // B.3.4b bridge
     const float prevAge = At<float>(self, 0x44);
     const float age = dtSeconds * AgeRate() + prevAge;
     At<float>(self, 0x44) = age;
@@ -542,7 +542,7 @@ void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {
             }
         } else {
             const float interval = At<float>(desc, 0x34);
-            const float roll = (rng && fn_Random_RandFloat) ? reinterpret_cast<System::Random*>(rng)->RandFloat()   /* B.3.4b bridge */ : 0.0f;
+            const float roll = rng ? reinterpret_cast<System::Random*>(rng)->RandFloat()   /* B.3.4b bridge */ : 0.0f;
             seconds = (roll * interval + interval) * HoursToSec();
         }
 
@@ -643,7 +643,7 @@ void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {
         if (!repath) {
             // NOTE: retail keeps the roll in the same register it later passes as
             // the idle-animation id, so a non-zero roll becomes the wander dir.
-            wanderDir = (rng && fn_Random_Rand) ? reinterpret_cast<System::Random*>(rng)->Rand(4u)   /* B.3.4b bridge */ : 1;
+            wanderDir = rng ? reinterpret_cast<System::Random*>(rng)->Rand(4u)   /* B.3.4b bridge */ : 1;
             repath = (wanderDir == 0);
         }
 
@@ -678,9 +678,9 @@ void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {
                 const int d = *g;
                 if (d <= 0) return;
 
-                const uint32_t ry = (rng && fn_Random_Rand) ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(At<short>(self, 0x3e)))   /* B.3.4b bridge */ : 0;
+                const uint32_t ry = rng ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(At<short>(self, 0x3e)))   /* B.3.4b bridge */ : 0;
                 const short   by = At<short>(self, 0x3a);
-                const uint32_t rx = (rng && fn_Random_Rand) ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(At<short>(self, 0x3c)))   /* B.3.4b bridge */ : 0;
+                const uint32_t rx = rng ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(At<short>(self, 0x3c)))   /* B.3.4b bridge */ : 0;
                 const int candidate =
                     static_cast<int>(rx) + At<short>(self, 0x38) +
                     (static_cast<int>(ry) + static_cast<int>(by)) * d;
@@ -768,12 +768,12 @@ void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {
             }
 
             // No walkable destination after 100 tries — idle and try again later.
-            wanderDir = ((rng && fn_Random_Rand) ? reinterpret_cast<System::Random*>(rng)->Rand(3u)   /* B.3.4b bridge */ : 0) + 1;
+            wanderDir = (rng ? reinterpret_cast<System::Random*>(rng)->Rand(3u)   /* B.3.4b bridge */ : 0) + 1;
         }
     }
 
     const float retry = At<float>(desc, 0x40);
-    const float roll = (rng && fn_Random_RandFloat) ? reinterpret_cast<System::Random*>(Rng())->RandFloat()   /* B.3.4b bridge */ : 0.0f;
+    const float roll = rng ? reinterpret_cast<System::Random*>(Rng())->RandFloat()   /* B.3.4b bridge */ : 0.0f;
     AnimalComponent_SetWanderTimer(self, wanderDir, roll * retry + retry);
 }
 

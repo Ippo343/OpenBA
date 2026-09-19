@@ -445,7 +445,7 @@ namespace {
 // Note the Time lives at calendar+8 and the YEAR is the int at calendar+0 (see the
 // event-4 handler, which stamps it into the component's +0x4c).
 int OrchardCurrentMonth() {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton || !fn_Time_AsSeconds) return 0;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
     uintptr_t cal = *reinterpret_cast<uintptr_t*>(
         reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x128);
     if (!cal) return 0;

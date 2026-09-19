@@ -30,38 +30,10 @@
 // Resolved helpers for Update
 // ============================================================
 
-// System::Time::AsSeconds(Time*) -> float
-// Dispatch slot at 0x140152a70
-typedef float (*fn_Time_AsSeconds_t)(void* time);
-static fn_Time_AsSeconds_t s_fn_Time_AsSeconds = nullptr;
-
 // System::Time::Time(float seconds) — construct Time from seconds
 // Dispatch slot at 0x140152a80
 typedef void (*fn_Time_FromSeconds_t)(void* outTime, float seconds);
 static fn_Time_FromSeconds_t s_fn_Time_FromSeconds = nullptr;
-
-// System::Random::RandFloat(Random*) -> float
-//
-// ENDGAME B.3.4a closing: this said "Dispatch slot at 0x140152a60" and that
-// was simply the wrong slot. 0x140152a60 is
-// `?Serialize@Serializer@IO@@QEAAXAEAMPEBD@Z` -- IO::Serializer::Serialize
-// (float&, const char*) -- which is why `engine_funcs.h` binds
-// `fn_Serializer_Serialize_Float` to it and B34_RULES 6.5(b) lists it as one
-// of the two ALIASED slots. The authority for this pointer's address is the
-// resolve site in EnsureHelpers, not this banner; the banner named a slot it
-// does not use, next to a paragraph about a pointer that was never assigned,
-// which is exactly the pair of mistakes that makes a comment worth deleting.
-// [2026-07-26] This was DECLARED and null-checked but NEVER ASSIGNED — the same class of
-// bug as the s_fn_FindPartner gap below. Both of its call sites silently took their
-// fallback constant instead of a random number:
-//   * the delivery roll fell back to 1.0f, so `pMaternalDeath <= roll` was always true and
-//     death in childbirth could never happen;
-//   * the post-partum cooldown fell back to 0.5f, so every mother got exactly
-//     0.5*desc+0x60 + desc+0x5C = 4500 — which is why two mothers who delivered on the
-//     same tick showed byte-identical +0x4C values in the census.
-// EnsureHelpers now binds it to the resolved engine function.
-typedef float (*fn_RandFloat_t)(void* random);
-static fn_RandFloat_t s_fn_RandFloat = nullptr;
 
 // CitizenComponent_TryEnrolInSchool(self, outIBP) -> char (bool)
 // At 0x140111840. Ghidra called it TryFindPartner for months; it is school enrolment
@@ -224,14 +196,7 @@ static bool s_helpersResolved = false;
 static void EnsureHelpers() {
     if (s_helpersResolved) return;
 
-    // Dispatch slot for Time::AsSeconds. The correct slot is 0x140151318 (verified
-    // in Ghidra: the first indirect CALL in CitizenComponent::Update @0x140112eb4 is
-    // `CALL qword ptr [0x140151318]` -> System::Time::AsSeconds). The previous value
-    // (0x140152a70) actually resolves to Math::Vector3::operator== — with that wrong
-    // slot, s_fn_Time_AsSeconds was NULL in standalone (unregistered) so dt_sec fell
-    // back to 0.0f every tick and hunger/thirst/age never accumulated (Phase-3 bug).
-    uintptr_t slot = ResolveAddr(Module::Exe, 0x140151318);
-    if (slot) s_fn_Time_AsSeconds = *reinterpret_cast<fn_Time_AsSeconds_t*>(slot);
+    uintptr_t slot;
 
     // Dispatch slot for Time::Time(float) (seconds -> Time ticks). Correct slot is
     // 0x140152b00 (Ghidra: the food/fuel-consume loops call `CALL qword ptr
@@ -283,8 +248,6 @@ static void EnsureHelpers() {
     // (Was opt-in as BANISHED_LIVE_CITIZEN_FAMILY; graduated 2026-09-13.)
     s_fn_FindPartner = reinterpret_cast<fn_FindPartner_t>(
         ResolveAddr(Module::Exe, 0x14010fe40));
-    // See the declaration: this binding was missing entirely.
-    s_fn_RandFloat = reinterpret_cast<fn_RandFloat_t>(fn_Random_RandFloat);
     s_fn_CheckStorageCapacity = reinterpret_cast<fn_CheckStorageCapacity_t>(
         ResolveAddr(Module::Exe, 0x14012a4f0));
     s_fn_FindCompStorage = reinterpret_cast<fn_FindCompStorage_t>(
@@ -326,7 +289,7 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
     int64_t desc = GetDescription(self);
 
     // Convert Time to seconds
-    float dt_sec = s_fn_Time_AsSeconds ? reinterpret_cast<const System::Time*>(deltaTime)->AsSeconds() : 0.0f;   // B.3.4b bridge
+    float dt_sec = reinterpret_cast<const System::Time*>(deltaTime)->AsSeconds();   // B.3.4b bridge
     int64_t dt_ticks = *reinterpret_cast<int64_t*>(deltaTime);
 
     // Check if citizen is adult (age >= adult threshold) and not in education
@@ -984,7 +947,7 @@ LAB_140113873:
 
                     void* random = *reinterpret_cast<void**>(
                         reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xD8);
-                    float roll = s_fn_RandFloat ? reinterpret_cast<System::Random*>(random)->RandFloat() : 1.0f;   // B.3.4b bridge
+                    float roll = reinterpret_cast<System::Random*>(random)->RandFloat();   // B.3.4b bridge
 
                     float pMaternalDeath = (health / maxHealth) *
                                            (deathChanceAtMaxHealth - deathChanceAtZeroHealth) +
@@ -1002,7 +965,7 @@ LAB_140113873:
                         desc = GetDescription(self);
                         void* random2 = *reinterpret_cast<void**>(
                             reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xD8);
-                        float roll2 = s_fn_RandFloat ? reinterpret_cast<System::Random*>(random2)->RandFloat() : 0.5f;   // B.3.4b bridge
+                        float roll2 = reinterpret_cast<System::Random*>(random2)->RandFloat();   // B.3.4b bridge
                         float timerBase = *reinterpret_cast<float*>(desc + 0x5C);
                         float timerRange = *reinterpret_cast<float*>(desc + 0x60);
                         // The post-birth cooldown is stored NEGATIVE: retail is
@@ -2471,7 +2434,7 @@ int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* par
     }
     if (eligible == 0) { *param_2 = 0; return param_2; }
 
-    if (static_cast<int>(chosen) < 0 && fn_Random_Rand)
+    if (static_cast<int>(chosen) < 0)
         chosen = reinterpret_cast<System::Random*>(*reinterpret_cast<void**>(gw + 0xd8))->Rand(static_cast<uint32_t>(eligible));   // B.3.4b bridge
 
     // Pass 2: walk again, returning the chosen eligible slot's IBP.

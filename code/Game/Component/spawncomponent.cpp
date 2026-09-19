@@ -49,10 +49,8 @@ static uint32_t* s_pSpawnTemplateTypeId = nullptr;    // DAT_1401c77e8 = GrowthD
 
 // ---- stream-serialize helpers (vtable slot [3], see SpawnComponent_Serialize) ----
 typedef void (*fn_ComponentSerialize_t)(void* self, void* stream);
-typedef void (*fn_TimeSerialize_t)(void* time, void* ser);
 typedef bool (*fn_IsDerived_t)(void* obj, uint32_t typeId);
 static fn_ComponentSerialize_t s_fn_ComponentSerialize = nullptr;  // 0x1401189b0
-static fn_TimeSerialize_t      s_fn_TimeSerialize       = nullptr;  // slot 0x140152aa8
 static fn_IsDerived_t          s_fn_IsDerived           = nullptr;  // slot 0x140152a98
 
 static bool s_initialized = false;
@@ -303,8 +301,6 @@ void SpawnComponent_InitFuncs() {
         ResolveAddr(Module::Exe, 0x1401189b0));
     {
         uintptr_t slot;
-        slot = ResolveAddr(Module::Exe, 0x140152aa8);
-        if (slot) s_fn_TimeSerialize = *reinterpret_cast<fn_TimeSerialize_t*>(slot);
         slot = ResolveAddr(Module::Exe, 0x140152a98);
         if (slot) s_fn_IsDerived = *reinterpret_cast<fn_IsDerived_t*>(slot);
     }
@@ -379,7 +375,7 @@ extern "C" void SpawnComponent_Serialize(void* self, void* stream) {
 
     uint8_t* timer = *reinterpret_cast<uint8_t**>(comp + 0x28);
     int n = *reinterpret_cast<int*>(comp + 0x30);
-    for (int i = 0; i < n && timer && s_fn_TimeSerialize; ++i, timer += 8)
+    for (int i = 0; i < n && timer; ++i, timer += 8)
         reinterpret_cast<System::Time*>(timer)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
 
     if (Loading(stream)) {
@@ -407,8 +403,6 @@ extern "C" void SpawnComponent_Serialize(void* self, void* stream) {
 // template's density (g_fUVScale / templ+0x48) decides whether to spawn; the tile is
 // chosen by RandTol jitter around the owner tile and validated, then a copy of the
 // template entity is instantiated, placed, oriented, and registered.
-typedef float (*fn_SC_RandFloat_t)(void* random);                 // slot 0x1401512f8
-typedef int   (*fn_SC_RandTol_t)(void* random, int tol);          // slot 0x1401512f0
 typedef void* (*fn_SC_FindMap_t)(uintptr_t entity, void* retbuf); // 0x140004680
 typedef char  (*fn_SC_CanPlace_t)(int* grid, int x, int y, int kind,
                                   float a, float b, float c,
@@ -420,8 +414,6 @@ typedef void* (*fn_SC_FindLinkB_t)(int64_t ibp, void* retbuf);    // 0x14000c460
 typedef void  (*fn_SC_SetTile_t)(int64_t entity, int tileIndex);  // 0x140126540
 typedef void  (*fn_SC_SetOrient_t)(int64_t entity, float v);      // 0x140120db0
 typedef void  (*fn_SC_Register_t)(void* list, void* ibp, int idx); // 0x1400c48a0
-static fn_SC_RandFloat_t s_sc_RandFloat = nullptr;
-static fn_SC_RandTol_t   s_sc_RandTol = nullptr;
 static fn_SC_FindMap_t   s_sc_FindMap = nullptr;
 static fn_SC_CanPlace_t  s_sc_CanPlace = nullptr;
 static fn_SC_TileFree_t  s_sc_TileFree = nullptr;
@@ -437,19 +429,6 @@ static float* s_sc_pConstB = nullptr;    // 0x140172248
 static bool s_scSpawnResolved = false;
 static void EnsureSpawnHelpers() {
     if (s_scSpawnResolved) return;
-    // RandFloat (0x1401512f8) / RandTol (0x1401512f0) are .rdata dispatch slots that
-    // the original CALLs indirectly. Those slots are NOT registered in standalone, so
-    // prefer the slot if present, else fall back to the backing Runtime exports via
-    // engine_funcs (System::Random::RandFloat / RandTol — the same path
-    // growthcomponent.cpp's SpawnSubResource uses). Without this the density roll would
-    // default to 1.0 and DoSpawn would never fire at all.
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x1401512f8);
-    if (slot) s_sc_RandFloat = *reinterpret_cast<fn_SC_RandFloat_t*>(slot);
-    if (!s_sc_RandFloat) s_sc_RandFloat = reinterpret_cast<fn_SC_RandFloat_t>(fn_Random_RandFloat);
-    slot = ResolveAddr(Module::Exe, 0x1401512f0);
-    if (slot) s_sc_RandTol = *reinterpret_cast<fn_SC_RandTol_t*>(slot);
-    if (!s_sc_RandTol) s_sc_RandTol = reinterpret_cast<fn_SC_RandTol_t>(fn_Random_RandTol);
     s_sc_FindMap   = reinterpret_cast<fn_SC_FindMap_t>(ResolveAddr(Module::Exe, 0x140004680));
     s_sc_CanPlace  = reinterpret_cast<fn_SC_CanPlace_t>(ResolveAddr(Module::Exe, 0x14009f5d0));
     s_sc_TileFree  = reinterpret_cast<fn_SC_TileFree_t>(ResolveAddr(Module::Exe, 0x140120c30));
@@ -540,7 +519,7 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
     if (!templ) { ++g_doSpawn.noTemplate; return; }
 
     // Density roll
-    float roll = s_sc_RandFloat ? reinterpret_cast<System::Random*>(random)->RandFloat() : 1.0f;   // B.3.4b bridge
+    float roll = reinterpret_cast<System::Random*>(random)->RandFloat();   // B.3.4b bridge
     float density = s_sc_pUVScale ? (*s_sc_pUVScale / (float)*(int*)((uintptr_t)templ + 0x48)) : 0.0f;
     if (roll > density) { ++g_doSpawn.densityRoll; return; }
 
@@ -552,8 +531,8 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
     int16_t baseY = *(int16_t*)(mapComp + 0x2a);
 
     int tol = *(int*)((uintptr_t)templ + 0x4c);
-    int x = baseX + (s_sc_RandTol ? reinterpret_cast<System::Random*>(random)->RandTol(static_cast<int32_t>(tol)) : 0);   // B.3.4b bridge
-    int y = baseY + (s_sc_RandTol ? reinterpret_cast<System::Random*>(random)->RandTol(static_cast<int32_t>(tol)) : 0);   // B.3.4b bridge
+    int x = baseX + reinterpret_cast<System::Random*>(random)->RandTol(static_cast<int32_t>(tol));   // B.3.4b bridge
+    int y = baseY + reinterpret_cast<System::Random*>(random)->RandTol(static_cast<int32_t>(tol));   // B.3.4b bridge
     if (x < 0 || y < 0) { ++g_doSpawn.offMap; return; }
     int mapSize = *grid;
     if (x >= mapSize || y >= mapSize) { ++g_doSpawn.offMap; return; }
@@ -618,7 +597,7 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
         if (p2 && *(int64_t*)p2 != 0) {
             int64_t b3 = 0;
             void* p3 = s_sc_FindLinkB ? s_sc_FindLinkB(entityIbp, &b3) : nullptr;
-            float rf = s_sc_RandFloat ? reinterpret_cast<System::Random*>(random)->RandFloat() : 0.0f;   // B.3.4b bridge
+            float rf = reinterpret_cast<System::Random*>(random)->RandFloat();   // B.3.4b bridge
             if (p3 && s_sc_SetOrient) s_sc_SetOrient(*(int64_t*)p3, rf);
         }
     }

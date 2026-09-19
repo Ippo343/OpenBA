@@ -689,7 +689,7 @@ uint64_t Helper_7550(int64_t param_1, void** param_2) {
 
     // Random start index in [0, n)
     void* rng = *reinterpret_cast<void**>(GW() + 0xd8);
-    uint32_t r = fn_Random_Rand ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(n)) : 0;   // B.3.4b bridge
+    uint32_t r = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(n));   // B.3.4b bridge
 
     // walk from buf[r*8] byte-by-byte until a negative (0xFF) terminator
     unsigned char* pc = buf + static_cast<int>(r) * 8;

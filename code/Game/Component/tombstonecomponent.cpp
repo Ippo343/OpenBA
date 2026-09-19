@@ -29,17 +29,9 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-// System::Time::Serialize(this, serializer)
-typedef void (*fn_Time_Serialize_t)(void* time, void* serializer);
-static fn_Time_Serialize_t s_fn_Time_Serialize = nullptr;
-
 // Base::IsDerivedFrom — dispatched through [0x140152a98]
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* self, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_d = nullptr;
-
-// System::Random::RandFloat(random)
-typedef float (*fn_RandFloat_t)(void* random);
-static fn_RandFloat_t s_fn_RandFloat = nullptr;
 
 // FUN_1400c2ea0 — mark entity for removal
 typedef void (*fn_MarkForRemoval_t)(void* entity);
@@ -71,8 +63,7 @@ void TombstoneComponent_Shutdown(TombstoneComponent* self, void* stream) {
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 2);   // B.3.4 bridge
 
     int64_t* pTime = (int64_t*)&self->field28;
-    if (s_fn_Time_Serialize)
-        reinterpret_cast<System::Time*>(pTime)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(pTime)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4b bridge
 
     int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
     if (version < 2) {
@@ -99,9 +90,7 @@ void TombstoneComponent_Serialize(TombstoneComponent* self) {
 
     // Random float in [0, 1)
     void* rng = *(void**)((uintptr_t)*s_pGameState + 0xD8);
-    float randVal = 0.0f;
-    if (s_fn_RandFloat)
-        randVal = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
+    float randVal = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
 
     // Compute lifetime: (randVal * max + min) * tickMultiplier
     float minTime = *(float*)((uintptr_t)buildingData + 0x20);
@@ -140,12 +129,9 @@ void TombstoneComponent_Startup(TombstoneComponent* self) {
     if (!buildingData) return;
     if (!s_pGameState || !*s_pGameState) return;
 
-    // Random float in [0,1) from the world RNG (world+0xD8). Prefer the project-wide
-    // engine func (always resolved); fall back to the dispatch-slot pointer.
+    // Random float in [0,1) from the world RNG (world+0xD8).
     void* rng = *(void**)((uintptr_t)*s_pGameState + 0xD8);
-    float randVal = 0.0f;
-    if (fn_Random_RandFloat) randVal = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
-    else if (s_fn_RandFloat)  randVal = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
+    float randVal = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
 
     // lifetime seconds = (rand * maxTime + minTime) * secondsPerTickMul  (DAT_140172234).
     float minTime = *(float*)((uintptr_t)buildingData + 0x20);
@@ -221,14 +207,8 @@ void TombstoneComponent_InitFuncs() {
 
     uintptr_t slot;
 
-    slot = ResolveAddr(Module::Exe, 0x140152aa8);
-    if (slot) s_fn_Time_Serialize = *reinterpret_cast<fn_Time_Serialize_t*>(slot);
-
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_d = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x1401512f8);
-    if (slot) s_fn_RandFloat = *reinterpret_cast<fn_RandFloat_t*>(slot);
 
     s_initialized = true;
 }

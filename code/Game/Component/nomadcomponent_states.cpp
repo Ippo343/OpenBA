@@ -241,7 +241,7 @@ extern "C" char Nomad_State1_Tick(void* data, void* /*sm*/, void* time) {
             if (*reinterpret_cast<uint8_t*>(tiles + static_cast<uintptr_t>(c) * 0x30 + 0x29) < 3) cand[nc++] = c;
         }
     }
-    if (nc != 0 && fn_Random_Rand && fn_MapGetTerrainPos) {
+    if (nc != 0 && fn_MapGetTerrainPos) {
         uint32_t pick = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(nc));   // B.3.4b bridge
         float jx = fn_Random_RandFloatTol(rng) * kWanderJitter;   // fVar18
         float jy = fn_Random_RandFloatTol(rng) * kWanderJitter;   // fVar19

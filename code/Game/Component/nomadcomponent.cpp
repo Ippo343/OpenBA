@@ -29,10 +29,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-// System::Time::Serialize
-typedef void (*fn_Time_Serialize_t)(void* time, void* serializer);
-static fn_Time_Serialize_t s_fn_Time_Serialize = nullptr;
-
 // IsDerivedFrom
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_d = nullptr;
@@ -92,8 +88,7 @@ void NomadComponent_Shutdown(NomadComponent* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>(selfAddr + 0x50), nullptr);   // B.3.4 bridge
 
     // Serialize Time at +0x48
-    if (s_fn_Time_Serialize)
-        reinterpret_cast<System::Time*>((void*)(selfAddr + 0x48))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4b bridge
+    reinterpret_cast<System::Time*>((void*)(selfAddr + 0x48))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4b bridge
 
     reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();                                       // B.3.4 bridge
 }
@@ -523,8 +518,6 @@ void NomadComponent_InitFuncs() {
     uintptr_t slot;
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_d = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152aa8);
-    if (slot) s_fn_Time_Serialize = *reinterpret_cast<fn_Time_Serialize_t*>(slot);
 
     s_initialized = true;
 }

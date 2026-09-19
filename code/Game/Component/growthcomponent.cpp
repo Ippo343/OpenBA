@@ -501,10 +501,6 @@ static fn_RegisterEntity_t s_fn_RegisterEntity = nullptr;
 // entity (the GrowthComponent::Startup +0x30 accessor). Returns IBP via out-param.
 typedef void* (*fn_FindSibling_3f60_t)(uintptr_t owner, void* outIBP);
 static fn_FindSibling_3f60_t s_fn_FindSibling_3f60 = nullptr;
-// System::Random::RandFloatTol (.rdata dispatch slot 0x140151400) -- used only by
-// GrowthComponent::Startup for the growthScale randomization (config+0x20 > 0 path).
-typedef float (*fn_RandFloatTol_t)(void* random);
-static fn_RandFloatTol_t s_fn_RandFloatTol = nullptr;
 // AnimateNaturalResource_helper_6440 (FUN_140126440) -- animation kick.
 typedef void (*fn_AnimateNatRes_t)(void* comp, int kind);
 static fn_AnimateNatRes_t s_fn_AnimateNatRes = nullptr;
@@ -528,10 +524,6 @@ static void EnsureSubHelpers() {
     s_fn_AnimateNatRes   = reinterpret_cast<fn_AnimateNatRes_t>(ResolveAddr(Module::Exe, 0x140126440));
     s_fn_CompEntityCopy  = reinterpret_cast<fn_CompEntityCopy_t>(ResolveAddr(Module::Exe, 0x1400c3720));
     s_fn_FindSibling_3f60= reinterpret_cast<fn_FindSibling_3f60_t>(ResolveAddr(Module::Exe, 0x140003f60));
-    // RandFloatTol lives behind a .rdata dispatch slot (slot storage holds the
-    // resolved Runtime fn ptr); deref the slot, matching herdcomponent.cpp.
-    uintptr_t randSlot = ResolveAddr(Module::Exe, 0x140151400);
-    if (randSlot) s_fn_RandFloatTol = *reinterpret_cast<fn_RandFloatTol_t*>(randSlot);
     s_fUVScale           = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172140));
     s_fInst248           = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172248));
     s_subHelpersResolved = true;
@@ -616,7 +608,7 @@ void GrowthComponent_Startup(GrowthComponent* self) {
         float range = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(config) + 0x24);
         float r = 0.0f;
         uintptr_t world = WorldSingleton();
-        if (s_fn_RandFloatTol && world) {
+        if (world) {
             void* rng = *reinterpret_cast<void**>(world + 0xd8);
             r = reinterpret_cast<System::Random*>(rng)->RandFloatTol();   // B.3.4b bridge
         }
@@ -699,7 +691,7 @@ void GrowthComponent_SpawnSubResource(void* growthComp, void* config) {
     // world flag bit 10 must be clear
     if ((*reinterpret_cast<uint32_t*>(world + 0xD0) >> 10 & 1) != 0) return;
 
-    float roll = fn_Random_RandFloat ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 1.0f;   // B.3.4b bridge
+    float roll = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
     float uvScale = s_fUVScale ? *s_fUVScale : 1.0f;
     int spawnChanceDenom = *reinterpret_cast<int*>(cfg + 0x48);
     if (spawnChanceDenom == 0) return;
@@ -712,8 +704,8 @@ void GrowthComponent_SpawnSubResource(void* growthComp, void* config) {
     int16_t baseY = *reinterpret_cast<int16_t*>(resIBP + 0x2a);
 
     int tol = *reinterpret_cast<int*>(cfg + 0x4c);
-    int x = (int)baseX + (fn_Random_RandTol ? reinterpret_cast<System::Random*>(rng)->RandTol(static_cast<int32_t>(tol)) : 0);   // B.3.4b bridge
-    int y = (int)baseY + (fn_Random_RandTol ? reinterpret_cast<System::Random*>(rng)->RandTol(static_cast<int32_t>(tol)) : 0);   // B.3.4b bridge
+    int x = (int)baseX + reinterpret_cast<System::Random*>(rng)->RandTol(static_cast<int32_t>(tol));   // B.3.4b bridge
+    int y = (int)baseY + reinterpret_cast<System::Random*>(rng)->RandTol(static_cast<int32_t>(tol));   // B.3.4b bridge
     if (!(x >= 0 && y >= 0 && x < *mapW && y < *mapW)) return;
 
     float inst248 = s_fInst248 ? *s_fInst248 : 0.0f;
@@ -762,25 +754,9 @@ void GrowthComponent_SpawnSubResource(void* growthComp, void* config) {
     void* variantWrite = *reinterpret_cast<void**>(&acc4);
 
     uint32_t range = s_fn_VariantRange ? s_fn_VariantRange(variantTarget, (int)variantSeed) : 0;
-    uint32_t roll2 = 0;
-    // System::Random::Rand(this, range) — resolve once, BY NAME.
-    //
-    // This asked by ADDRESS for 0x1800c7cf0 until 2026-09-07, and that was wrong
-    // twice over. Retail's call site (FUN_14011fba0 at 0x14011fe2c) is
-    // `CALL [0x1401512e8]`, an import slot that dispatch_slot_map resolves to
-    // ?Rand@Random@System@@QEAAII@Z = 0x1800c8040. 0x1800c7cf0 is
-    // ?Serialize@Random@System@@QEAAXAEAVSerializer@IO@@@Z, which dereferences
-    // RDX as a Serializer ([RDX+8] -> vtable -> +0x98) — so the old code would
-    // have faulted on the first spawn that reached it, using `range` as an
-    // object pointer. Nothing caught it because this line never executed in any
-    // of lane 0's nine residue cells.
-    // Asking by NAME also reaches our Wave 2 port (runtime/src/system/
-    // value_types.cpp:403); ResolveAddr consults the ADDRESS registry only, so
-    // the by-address form went around the port into the DLL.
-    typedef uint32_t (*fn_Rand_t)(void* self, uint32_t n);
-    static fn_Rand_t s_fn_Rand =
-        reinterpret_cast<fn_Rand_t>(ResolveExport("?Rand@Random@System@@QEAAII@Z"));
-    if (s_fn_Rand) roll2 = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(range));   // B.3.4b bridge
+    // Retail's call site (FUN_14011fba0 at 0x14011fe2c) is `CALL [0x1401512e8]`,
+    // the import slot for ?Rand@Random@System@@QEAAII@Z — the uint overload.
+    uint32_t roll2 = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(range));   // B.3.4b bridge
     if (s_fn_SetVariant) s_fn_SetVariant(variantWrite, variantSeed, (short)roll2);
 
     int64_t regArg = newIBP;

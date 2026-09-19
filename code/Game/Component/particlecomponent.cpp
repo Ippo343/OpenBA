@@ -65,10 +65,6 @@ static fn_SceneRemoveObject_t s_fn_SceneRemoveObject = nullptr;
 typedef void (*fn_EntityFlagUpdate_t)(void* entity);
 static fn_EntityFlagUpdate_t s_fn_EntityFlagUpdate = nullptr;
 
-// System::Time::AsSeconds
-typedef float (*fn_TimeAsSeconds_t)(void* time);
-static fn_TimeAsSeconds_t s_fn_TimeAsSeconds = nullptr;
-
 // FUN_140053660 — emitter startup
 typedef void (*fn_EmitterStartup_t)(void* self, int index);
 static fn_EmitterStartup_t s_fn_EmitterStartup = nullptr;
@@ -196,9 +192,7 @@ void ParticleComponent_Draw(ParticleComponent* self) {
         // Get timing from desc: entry array slot
         uintptr_t descArr2 = *(uintptr_t*)((uintptr_t)descCheck + 0x28);
         uintptr_t timeAddr = descArr2 + ((uintptr_t)i * 5 + 4) * 8;
-        float timeSecs = 0.0f;
-        if (s_fn_TimeAsSeconds)
-            timeSecs = reinterpret_cast<const System::Time*>((void*)timeAddr)->AsSeconds();   // B.3.4b bridge
+        float timeSecs = reinterpret_cast<const System::Time*>((void*)timeAddr)->AsSeconds();   // B.3.4b bridge
 
         // Set emitter timing: uvScale / timeSecs
         *(float*)(geoEntry + 0x10) = uvScale / timeSecs;
@@ -605,7 +599,7 @@ extern "C" void ParticleComponent_StartEmitterFade(ParticleComponent* self, int 
     PCGeoEntry* ge = &geoArr[index];
 
     uint8_t* elem = *(uint8_t**)((uintptr_t)desc + 0x28) + (size_t)index * 0x28;
-    float t1 = s_fn_TimeAsSeconds ? reinterpret_cast<const System::Time*>(elem + 0x20)->AsSeconds() : 1.0f;   // B.3.4b bridge
+    float t1 = reinterpret_cast<const System::Time*>(elem + 0x20)->AsSeconds();   // B.3.4b bridge
     ge->fadeRate = PC_UVScale() / t1;
 
     if (ge->geo) {
@@ -724,7 +718,7 @@ extern "C" void ParticleComponent_UpdateTick(ParticleComponent* self, void* time
             uintptr_t g = (uintptr_t)ge->geo;
             float op = *(float*)(g + 0x7c);
             if (ge->fadeRate != 0.0f) {
-                float dt = s_fn_TimeAsSeconds ? reinterpret_cast<const System::Time*>(time)->AsSeconds() : 0.0f;   // B.3.4b bridge
+                float dt = reinterpret_cast<const System::Time*>(time)->AsSeconds();   // B.3.4b bridge
                 op += dt * ge->fadeRate;
                 if (op > uvScale) {
                     ge->fadeRate = 0.0f;
@@ -774,7 +768,7 @@ extern "C" void ParticleComponent_Event(ParticleComponent* self, int eventCode) 
         if (eventCode == 2) {
             ParticleComponent_StartEmitterFade(self, i);
         } else if (eventCode == 3) {
-            float t1 = s_fn_TimeAsSeconds ? reinterpret_cast<const System::Time*>(elem + 0x20)->AsSeconds() : 1.0f;   // B.3.4b bridge
+            float t1 = reinterpret_cast<const System::Time*>(elem + 0x20)->AsSeconds();   // B.3.4b bridge
             geoArr[i].fadeRate = -(PC_UVScale() / t1);
         }
     }
@@ -814,8 +808,6 @@ void ParticleComponent_InitFuncs() {
 
     s_fn_SceneRemoveObject = reinterpret_cast<fn_SceneRemoveObject_t>(
         ResolveExport("?RemoveObject@Scene@Graphics@@QEAAXI@Z"));
-    s_fn_TimeAsSeconds = reinterpret_cast<fn_TimeAsSeconds_t>(
-        ResolveExport("?AsSeconds@Time@System@@QEBAMXZ"));
 
     // --- deps for the full helper-closure ports ---
     slot = ResolveAddr(Module::Exe, 0x140152970);   // GraphicsMesh::GetNodeIndexFromName

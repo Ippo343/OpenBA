@@ -78,7 +78,7 @@ extern "C" void* ParticleDescription_Ctor_Impl(void* mem) {
 
 // Serialize (vtable +0x28, exe 0x140053460)
 extern "C" void ParticleDescription_Serialize(void* self, void* stream) {
-    if (!g_fn_Time_Serialize || !fn_ExternalPtr_Serialize3) {
+    if (!fn_ExternalPtr_Serialize3) {
         return;
     }
     uint8_t* s = reinterpret_cast<uint8_t*>(self);

@@ -93,7 +93,6 @@ typedef void  (*fn_PickRebuild_t)(void* pickingComp);                  // 0x1401
 typedef void  (*fn_SetMesh_t)(void* meshInstance, void* mesh);         // slot 0x140151498
 typedef void* (*fn_GetMaterialList_t)(void* graphicsMesh, int setIdx); // slot 0x140152288
 typedef void  (*fn_SetMaterialInst_t)(void* meshInst, int idx, void* extPtr); // slot 0x140151408
-typedef uint32_t (*fn_Rand_t)(void* rng, uint32_t range);              // slot 0x1401512e8
 
 static fn_FindIBP_t         s_findModel     = nullptr;  // 0x140003f60 (ModelComponent)
 static fn_FindIBP_t         s_findStorage   = nullptr;  // 0x140006270 (StorageComponent)
@@ -103,7 +102,6 @@ static fn_PickRebuild_t     s_pickRebuild   = nullptr;
 static fn_SetMesh_t         s_setMesh       = nullptr;
 static fn_GetMaterialList_t s_getMatList    = nullptr;
 static fn_SetMaterialInst_t s_setMatInst    = nullptr;
-static fn_Rand_t            s_rand          = nullptr;
 static uint32_t*            s_tidDestroyDesc = nullptr;  // 0x1401c7628
 static uint32_t*            s_tidModelDesc   = nullptr;  // 0x1401c7a88
 static uint32_t*            s_tidDecalComp   = nullptr;  // 0x1401c7580
@@ -125,7 +123,6 @@ static void EnsureResolved() {
     s_setMesh       = reinterpret_cast<fn_SetMesh_t>(ReadSlot(0x140151498));
     s_getMatList    = reinterpret_cast<fn_GetMaterialList_t>(ReadSlot(0x140152288));
     s_setMatInst    = reinterpret_cast<fn_SetMaterialInst_t>(ReadSlot(0x140151408));
-    s_rand          = reinterpret_cast<fn_Rand_t>(ReadSlot(0x1401512e8));
     s_tidDestroyDesc = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7628));
     s_tidModelDesc   = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a88));
     s_tidDecalComp   = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7580));
@@ -570,7 +567,7 @@ extern "C" char Destroy_State6Update_d400(void* data, void* /*sm*/) {
     if (*reinterpret_cast<int64_t*>(comp + 0x48) > 0)
         Destroy_RubbleStep_d5d0(data);
 
-    if (s_rand && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
         void* rng = *reinterpret_cast<void**>(
             reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8);
         if (rng && reinterpret_cast<System::Random*>(rng)->Rand(2u) == 0) Destroy_RubbleStep_d5d0(data);   // B.3.4b bridge

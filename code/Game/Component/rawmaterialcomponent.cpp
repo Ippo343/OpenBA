@@ -32,10 +32,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-// System::Time::Serialize(this, serializer)
-typedef void (*fn_Time_Serialize_t)(void* timePtr, void* serializer);
-static fn_Time_Serialize_t s_fn_Time_Serialize = nullptr;
-
 // FUN_140018020 — serialize field30 (version >= 2)
 typedef void (*fn_SerializeField30_t)(void* fieldPtr, void* serializer);
 static fn_SerializeField30_t s_fn_SerializeField30 = nullptr;
@@ -97,14 +93,6 @@ static void EnsureHelpers() {
         ResolveAddr(Module::Exe, 0x1401189b0));
 
     uintptr_t slot;
-
-    // System::Time::Serialize — via export or dispatch slot
-    s_fn_Time_Serialize = reinterpret_cast<fn_Time_Serialize_t>(
-        ResolveExport("?Serialize@Time@System@@QEAAXAEAVSerializer@IO@@@Z"));
-    if (!s_fn_Time_Serialize) {
-        slot = ResolveAddr(Module::Exe, 0x140152b08);
-        if (slot) s_fn_Time_Serialize = *reinterpret_cast<fn_Time_Serialize_t*>(slot);
-    }
 
     s_fn_SerializeField30 = reinterpret_cast<fn_SerializeField30_t>(
         ResolveAddr(Module::Exe, 0x140018020));
@@ -169,9 +157,7 @@ void RawMaterialComponent_Shutdown(RawMaterialComponent* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->field28), nullptr);   // B.3.4 bridge
 
     // Serialize field38 (Time accumulator)
-    if (s_fn_Time_Serialize) {
-        reinterpret_cast<System::Time*>(&self->field38)->Serialize(*reinterpret_cast<IO::Serializer*>(serializerBuf));   // B.3.4b bridge
-    }
+    reinterpret_cast<System::Time*>(&self->field38)->Serialize(*reinterpret_cast<IO::Serializer*>(serializerBuf));   // B.3.4b bridge
 
     // Version >= 2: serialize field30
     int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
@@ -445,9 +431,9 @@ void RawMaterialComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
     printf("[RawMaterialComponent] Funcs resolved: Component_Serialize=%p "
-           "Time_Serialize=%p RegisterRawMaterial=%p "
+           "RegisterRawMaterial=%p "
            "GetPickupCategory=%p MemAlloc=%p PostWork=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_Time_Serialize,
+           (void*)s_fn_Component_Serialize,
            (void*)s_fn_RegisterRawMaterial,
            (void*)s_fn_GetPickupCategory, (void*)fn_MemAlloc,
            (void*)s_fn_PostWork);
