@@ -27,15 +27,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-typedef void* (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-typedef void (*fn_SerializeInt_t)(void* self, int* value, const char* name);
-static fn_SerializeInt_t s_fn_SerializeInt = nullptr;
-
 // Terrain helpers for the OnRemove restore + the completion passes
 // CitizenAI_impl_b150 (0x1400ab150) — terrain region-dirty recalc around (x,y).
 // NOTE: the literal was previously 0x1400a4b50 (a dropped/transposed digit) which
@@ -75,13 +66,12 @@ void TerraformComponent_Shutdown(TerraformComponent* self, void* stream) {
         s_fn_Component_Serialize(self, stream);
 
     alignas(8) uint8_t serializer[24];
-    if (s_fn_Serializer_Ctor) ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize Vector3 count from +0x30
     uint32_t count = *(uint32_t*)(selfAddr + 0x30);
     uint32_t localCount = count;
-    if (s_fn_SerializeInt)
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
 
     // If loading, resize the Vector3 array
     // B.3.2 bridge: FUN_14000d030 is Collection::Array<Vector3>::SetSize(n)
@@ -100,7 +90,7 @@ void TerraformComponent_Shutdown(TerraformComponent* self, void* stream) {
         }
     }
 
-    if (s_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -209,14 +199,6 @@ void TerraformComponent_InitFuncs() {
         ResolveAddr(Module::Exe, 0x1400a6fe0));
     s_pHeightScale = reinterpret_cast<float*>(
         ResolveAddr(Module::Exe, 0x140172230));
-
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (slot) s_fn_SerializeInt = *reinterpret_cast<fn_SerializeInt_t*>(slot);
 
     TerraformDeformResolve();
 

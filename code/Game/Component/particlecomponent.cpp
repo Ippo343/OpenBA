@@ -38,19 +38,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-typedef void* (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-typedef void (*fn_SerializeInt_t)(void* self, int* value, const char* name);
-static fn_SerializeInt_t s_fn_SerializeInt = nullptr;
-
-// Serialize(serializer, count, boolArray, name) — overload for bool arrays
-typedef void (*fn_SerializeBoolArray_t)(void* self, int count, bool* array, const char* name);
-static fn_SerializeBoolArray_t s_fn_SerializeBoolArray = nullptr;
-
 // FUN_14000a590 — resize bool array
 
 // IsDerivedFrom
@@ -140,11 +127,10 @@ void ParticleComponent_Shutdown(ParticleComponent* self, void* stream) {
         s_fn_Component_Serialize(self, stream);
 
     alignas(8) uint8_t serializer[24];
-    if (s_fn_Serializer_Ctor) ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     int localCount = *(int*)(selfAddr + 0x30);
-    if (s_fn_SerializeInt)
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(localCount, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(localCount, nullptr);   // B.3.4 bridge
 
     // If loading, resize bool array
     // B.3.2 bridge: FUN_14000a590 is Collection::Array<uint8_t>::SetSize(n)
@@ -153,10 +139,9 @@ void ParticleComponent_Shutdown(ParticleComponent* self, void* stream) {
     }
 
     // Serialize bool array
-    if (s_fn_SerializeBoolArray)
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(localCount, *(bool**)(selfAddr + 0x28), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(localCount, *(bool**)(selfAddr + 0x28), nullptr);   // B.3.4 bridge
 
-    if (s_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -823,12 +808,6 @@ void ParticleComponent_InitFuncs() {
         ResolveAddr(Module::Exe, 0x140172234));  // g_fUVScale
 
     uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (slot) s_fn_SerializeInt = *reinterpret_cast<fn_SerializeInt_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_d = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
 
@@ -836,37 +815,6 @@ void ParticleComponent_InitFuncs() {
         ResolveExport("?RemoveObject@Scene@Graphics@@QEAAXI@Z"));
     s_fn_TimeAsSeconds = reinterpret_cast<fn_TimeAsSeconds_t>(
         ResolveExport("?AsSeconds@Time@System@@QEBAMXZ"));
-    // IO::Serializer::Serialize(serializer, count, boolArray, name) — the ARRAY
-    // overload, distinct from the single-bool one.
-    //
-    // Two bugs lived on this line and they compounded (fixed 2026-09-04):
-    //   1. WRONG SLOT. Retail's call site is `CALL qword ptr [0x140151458]`
-    //      (disassembly of ParticleComponent::Shutdown 0x140053270). This read
-    //      0x140152a58 — a digit transposition of a completely different slot.
-    //   2. ONE DEREF SHORT. 0x14015xxxx addresses are .rdata DISPATCH SLOTS, and
-    //      ResolveAddr returns the address OF the slot, not the function pointer
-    //      inside it. Every other serializer binding here derefs (see the `slot =
-    //      ResolveAddr(...); *reinterpret_cast<T*>(slot)` pairs above); this one
-    //      used the raw result as the callee, so the CALL jumped into .rdata
-    //      storage. See [[reference_one_deref_short_vcall]].
-    //
-    // Symptom: every SAVE crashed with `EXEC of <data address>` in
-    // ParticleComponent_Shutdown, via ComponentEntity_Serialize <- EntityList_Serialize
-    // <- GameUpdateLoop_SaveRestore. Any world containing a particle emitter — i.e.
-    // every world — could not be saved. Proven independent of that session's other
-    // work by an A/B (identical crash with the state-machine fix reverted).
-    slot = ResolveAddr(Module::Exe, 0x140151458);
-    if (slot) s_fn_SerializeBoolArray = *reinterpret_cast<fn_SerializeBoolArray_t*>(slot);
-    if (!s_fn_SerializeBoolArray) {
-        // Skipping this call is NOT a safe fallback: it is a stream DESYNC that our
-        // own round trip can never detect, because both legs would skip the same
-        // bytes. Say so loudly rather than write a short record.
-        // See [[reference_null_guard_on_a_serializer_call_is_a_desync]].
-        fprintf(stderr, "[ParticleComp] FATAL-ISH: bool-array Serialize slot 0x140151458 "
-                        "is unregistered — every particle record will be short by "
-                        "count bytes and the save stream will desync.\n");
-        fflush(stderr);
-    }
 
     // --- deps for the full helper-closure ports ---
     slot = ResolveAddr(Module::Exe, 0x140152970);   // GraphicsMesh::GetNodeIndexFromName

@@ -20,12 +20,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-typedef void* (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
 static bool s_initialized = false;
 
 // ============================================================
@@ -37,10 +31,8 @@ void QuarryComponent_Shutdown(QuarryComponent* self, void* stream) {
         s_fn_Component_Serialize(self, stream);
 
     alignas(8) uint8_t serializer[24];
-    if (s_fn_Serializer_Ctor)
-        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    if (s_fn_Serializer_Dtor)
-        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
 }
 
 // ============================================================
@@ -51,13 +43,6 @@ void QuarryComponent_InitFuncs() {
 
     s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1401189b0));
-
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
 
     s_initialized = true;
 }

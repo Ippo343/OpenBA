@@ -93,9 +93,6 @@ constexpr int kPathNodes = kPathLast + 1;   // 129
 // ============================================================
 
 typedef void  (*fn_ComponentSerialize_t)(void* self, void* stream);
-typedef void* (*fn_SerializerCtor_t)(void* self, void* stream, int version);
-typedef void  (*fn_SerializerDtor_t)(void* self);
-typedef void  (*fn_SerializeInt_t)(void* self, int* value, const char* name);
 typedef void  (*fn_TimeSerialize_t)(void* time, void* serializer);
 
 // Entity component finders. All take (entity, InternalBasePtr* out) and write the
@@ -122,9 +119,6 @@ typedef void  (*fn_GeometrySetTransform_t)(void* geometry, void* transform);    
 
 struct Helpers {
     fn_ComponentSerialize_t   componentSerialize   = nullptr;
-    fn_SerializerCtor_t       serializerCtor       = nullptr;
-    fn_SerializerDtor_t       serializerDtor       = nullptr;
-    fn_SerializeInt_t         serializeInt         = nullptr;
     fn_TimeSerialize_t        timeSerialize        = nullptr;
 
     fn_Finder_t               findParticle         = nullptr;  // 0x140005200
@@ -216,9 +210,6 @@ void TornadoComponent_InitFuncs() {
     g_h.componentSerialize = reinterpret_cast<fn_ComponentSerialize_t>(
         ResolveAddr(Module::Exe, 0x1401189b0));
 
-    g_h.serializerCtor = ResolveSlotPtr<fn_SerializerCtor_t>(0x140152ad8);
-    g_h.serializerDtor = ResolveSlotPtr<fn_SerializerDtor_t>(0x140152ad0);
-    g_h.serializeInt   = ResolveSlotPtr<fn_SerializeInt_t>(0x140152ac8);
     g_h.timeSerialize  = ResolveSlotPtr<fn_TimeSerialize_t>(0x140152aa8);
 
     g_h.findParticle        = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140005200));
@@ -298,16 +289,13 @@ void TornadoComponent_Shutdown(TornadoComponent* self, void* stream) {
     if (g_h.componentSerialize) g_h.componentSerialize(self, stream);
 
     alignas(8) uint8_t serializer[24];
-    if (g_h.serializerCtor)
-        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     reinterpret_cast<Math::Vector3*>(s + 0x30)->Serialize(serializer);   // B.3.1 bridge
-    if (g_h.serializeInt)
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x50), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x50), nullptr);   // B.3.4 bridge
 
     int pathCount = *reinterpret_cast<int*>(s + 0x48);
-    if (g_h.serializeInt)
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(pathCount, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(pathCount, nullptr);   // B.3.4 bridge
 
     // stream+8 == 0 means "loading": grow the array before reading the waypoints.
     // B.3.2 bridge: FUN_14000d030 is Collection::Array<Vector3>::SetSize(n)
@@ -325,7 +313,7 @@ void TornadoComponent_Shutdown(TornadoComponent* self, void* stream) {
     if (g_h.timeSerialize) g_h.timeSerialize(reinterpret_cast<void*>(s + 0x28), serializer);
     reinterpret_cast<Math::Vector3*>(s + 0x58)->Serialize(serializer);   // B.3.1 bridge
 
-    if (g_h.serializerDtor) reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

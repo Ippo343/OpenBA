@@ -27,10 +27,6 @@
 // Resolved helpers
 // ============================================================
 
-// IO::Serializer::Serialize(uint*) — dispatch slot at 0x140152a50
-typedef void (*fn_Serialize_UInt_t)(void* serializer, uint32_t* field, const char* name);
-static fn_Serialize_UInt_t s_fn_Serialize_UInt = nullptr;
-
 // UI::SpriteSheet::GetSpriteCount — dispatch slot at 0x1401529b0
 typedef int (*fn_SpriteSheet_GetSpriteCount_t)(void* spriteSheet);
 static fn_SpriteSheet_GetSpriteCount_t s_fn_SpriteSheet_GetSpriteCount = nullptr;
@@ -75,8 +71,6 @@ static void EnsureHelpers() {
     uintptr_t slot;
 
     // Dispatch slots
-    slot = ResolveAddr(Module::Exe, 0x140152a50);
-    if (slot) s_fn_Serialize_UInt = *reinterpret_cast<fn_Serialize_UInt_t*>(slot);
 
     slot = ResolveAddr(Module::Exe, 0x1401529b0);
     if (slot) s_fn_SpriteSheet_GetSpriteCount = *reinterpret_cast<fn_SpriteSheet_GetSpriteCount_t*>(slot);
@@ -188,9 +182,7 @@ void StatusIconComponent_Shutdown(StatusIconComponent* self, void* stream) {
 
     // Serialize fieldF0 as uint (copy to local, serialize, write back on load)
     uint32_t iconVal = *(uint32_t*)(s + 0xF0);
-    if (s_fn_Serialize_UInt) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(iconVal, nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(iconVal, nullptr);   // B.3.4 bridge
 
     // On load: write value back to field
     // Check serializer direction: *(int*)(serializer[0] + 8) == 0 means loading
@@ -377,9 +369,9 @@ void StatusIconComponent_OnUpdate2(StatusIconComponent* self) {
 void StatusIconComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[StatusIconComponent] Funcs resolved: SerializeUInt=%p SpriteCount=%p "
+    printf("[StatusIconComponent] Funcs resolved: SpriteCount=%p "
            "Helper_a440=%p AddObj=%p RemoveObj=%p OnRemoveOrig=%p\n",
-           (void*)s_fn_Serialize_UInt, (void*)s_fn_SpriteSheet_GetSpriteCount,
+           (void*)s_fn_SpriteSheet_GetSpriteCount,
            (void*)s_fn_StatusIconHelper_a440,
            (void*)s_fn_Scene_AddObject, (void*)s_fn_Scene_RemoveObject,
            (void*)s_fn_OnRemove_Original);

@@ -62,8 +62,7 @@ extern "C" void* PickingDescription_Ctor_Impl(void* mem) {
 
 // Serialize (vtable +0x28, exe 0x140128d00)
 extern "C" void PickingDescription_Serialize(void* self, void* stream) {
-    if (!g_fn_Serializer_Ctor || !g_fn_Serialize_Int || !g_fn_Serialize_Bool ||
-        !fn_Array_Serialize_External_GraphicsMesh || !fn_ExternalPtr_Serialize3) {
+    if (!fn_Array_Serialize_External_GraphicsMesh || !fn_ExternalPtr_Serialize3) {
         return;
     }
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
@@ -98,7 +97,7 @@ extern "C" void PickingDescription_Serialize(void* self, void* stream) {
     fn_ExternalPtr_Serialize3(s + 0x30, ser);              // meshRef (+0x30)
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(s + 0x38), nullptr);           // B.3.4 bridge  (enabled, +0x38)
 
-    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // Dtor (vtable +0x00, exe 0x140036f40)

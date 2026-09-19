@@ -29,16 +29,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-// IO::Serializer::Serializer(stream, version) -- dispatch slot at 0x140152ad8
-typedef void* (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-typedef fn_Serializer_Ctor_t fn_SerCtor_t;
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-// IO::Serializer::~Serializer() -- dispatch slot at 0x140152ad0
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-typedef fn_Serializer_Dtor_t fn_SerDtor_t;
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
 // Graphics::Scene::RemoveObject(scene, objectId) -- dispatch slot at 0x140151360
 typedef void (*fn_Scene_RemoveObject_t)(void* scene, uint32_t objectId);
 static fn_Scene_RemoveObject_t s_fn_Scene_RemoveObject = nullptr;
@@ -53,14 +43,6 @@ static void EnsureHelpers() {
 
     s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1401189b0));
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = reinterpret_cast<fn_Serializer_Ctor_t>(
-        *reinterpret_cast<uintptr_t*>(slot));
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = reinterpret_cast<fn_Serializer_Dtor_t>(
-        *reinterpret_cast<uintptr_t*>(slot));
 
     slot = ResolveAddr(Module::Exe, 0x140151360);
     if (slot) s_fn_Scene_RemoveObject = reinterpret_cast<fn_Scene_RemoveObject_t>(

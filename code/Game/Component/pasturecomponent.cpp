@@ -29,23 +29,9 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-// IO::Serializer ctor/dtor via dispatch slots
-typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-// IO::Serializer::Serialize(this, int*, name)
-typedef void (*fn_Serializer_SerializeInt_t)(void* self, int* value, const char* name);
-static fn_Serializer_SerializeInt_t s_fn_Serializer_SerializeInt = nullptr;
-
 // fn_IsDerivedFrom — dispatch slot at 0x140152a98
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
-
-// Object::InternalBasePtr::Serialize
-typedef void (*fn_IBP_Serialize_t)(void* self, void* serializer);
-static fn_IBP_Serialize_t s_fn_IBP_Serialize = nullptr;
 
 // FUN_140002340 — serialize InternalBasePtr array
 typedef void (*fn_SerializeIBPArray_t)(void* arrayPtr, void* serializer);
@@ -87,19 +73,9 @@ static void EnsureHelpers() {
         ResolveAddr(Module::Exe, 0x1401189b0));
 
     uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (slot) s_fn_Serializer_SerializeInt = *reinterpret_cast<fn_Serializer_SerializeInt_t*>(slot);
 
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    s_fn_IBP_Serialize = fn_InternalBasePtr_Serialize;
 
     s_fn_SerializeIBPArray = reinterpret_cast<fn_SerializeIBPArray_t>(
         ResolveAddr(Module::Exe, 0x140002340));
@@ -337,18 +313,12 @@ void PastureComponent_Shutdown(PastureComponent* self, void* stream) {
 
     // Empty serializer block (version 0, immediately destroyed)
     alignas(8) uint8_t emptySerializer[24];
-    if (s_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(emptySerializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
-    if (s_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(emptySerializer)->~Serializer();                                       // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(emptySerializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(emptySerializer)->~Serializer();                                       // B.3.4 bridge
 
     // Main serializer block (version 0)
     alignas(8) uint8_t serializer[16];
-    if (s_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize InternalBasePtr array at +0x28
     if (s_fn_SerializeIBPArray) {
@@ -358,9 +328,7 @@ void PastureComponent_Shutdown(PastureComponent* self, void* stream) {
     // Serialize entity count from +0x38
     int entityCount = *(int*)((uintptr_t)self + 0x38);
     int countBuf = entityCount;
-    if (s_fn_Serializer_SerializeInt) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(countBuf, nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(countBuf, nullptr);   // B.3.4 bridge
 
     // On load, resize entity array. Retail reads the direction flag from the
     // STREAM (+8) through the serializer's first field — `*(int*)(ser[0] + 8)`
@@ -378,9 +346,7 @@ void PastureComponent_Shutdown(PastureComponent* self, void* stream) {
     if (count > 0 && entityArray) {
         uintptr_t ptr = (uintptr_t)entityArray;
         for (int64_t i = 0; i < count; i++) {
-            if (s_fn_IBP_Serialize) {
-                reinterpret_cast<Object::InternalBasePtr*>((void*)ptr)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-            }
+            reinterpret_cast<Object::InternalBasePtr*>((void*)ptr)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             void* obj = *(void**)ptr;
             if (obj != nullptr && s_fn_IsDerivedFrom_dispatch && s_TypeId_PastureAnimal) {
                 bool valid = s_fn_IsDerivedFrom_dispatch(obj, *s_TypeId_PastureAnimal);
@@ -393,14 +359,10 @@ void PastureComponent_Shutdown(PastureComponent* self, void* stream) {
     }
 
     // Serialize int fields at +0x40 and +0x44
-    if (s_fn_Serializer_SerializeInt) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(int*)((uintptr_t)self + 0x40), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(int*)&self->field44, nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(int*)((uintptr_t)self + 0x40), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(int*)&self->field44, nullptr);   // B.3.4 bridge
 
-    if (s_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
 }
 
 // ============================================================

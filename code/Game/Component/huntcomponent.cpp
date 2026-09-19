@@ -134,26 +134,20 @@ void HuntComponent_InitFuncs() {
 // accumulated hunt progress is silently dropped across a save/load. It was the last
 // slot on HuntComponent still holding the inert stub.
 extern "C" void HuntComponent_ShutdownVSlot(void* selfP, void* stream) {
-    static void* (*s_serCtor)(void*, void*, int) = nullptr;
-    static void  (*s_serDtor)(void*)             = nullptr;
     static void  (*s_parentShutdown)(void*, void*) = nullptr;
     static bool s_res = false;
     if (!s_res) {
         s_parentShutdown = reinterpret_cast<void(*)(void*, void*)>(
             ResolveAddr(Module::Exe, 0x14012b4a0));
-        uintptr_t slot = ResolveAddr(Module::Exe, 0x140152ad8);
-        if (slot) s_serCtor = *reinterpret_cast<void*(**)(void*, void*, int)>(slot);
-        slot = ResolveAddr(Module::Exe, 0x140152ad0);
-        if (slot) s_serDtor = *reinterpret_cast<void(**)(void*)>(slot);
         s_res = true;
     }
     if (s_parentShutdown) s_parentShutdown(selfP, stream);
 
     alignas(8) uint8_t serializer[24];
-    if (s_serCtor) ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     if (g_fn_Time_Serialize)
         g_fn_Time_Serialize(reinterpret_cast<uint8_t*>(selfP) + 0x50, serializer);
-    if (s_serDtor) reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // NOTE on slot 9: HuntComponent::Update is already implemented above

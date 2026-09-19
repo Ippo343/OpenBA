@@ -62,8 +62,7 @@ extern "C" void* HighlightDescription_Ctor_Impl(void* mem) {
 
 // Serialize (vtable +0x28, exe 0x14004c9d0)
 extern "C" void HighlightDescription_Serialize(void* self, void* stream) {
-    if (!g_fn_Serializer_Ctor || !g_fn_Serialize_Int ||
-        !fn_Array_Serialize_External_GraphicsMesh || !fn_ExternalPtr_Serialize3) {
+    if (!fn_Array_Serialize_External_GraphicsMesh || !fn_ExternalPtr_Serialize3) {
         return;
     }
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
@@ -98,7 +97,7 @@ extern "C" void HighlightDescription_Serialize(void* self, void* stream) {
     fn_ExternalPtr_Serialize3(s + 0x30, ser);              // ref0 (+0x30)
     fn_ExternalPtr_Serialize3(s + 0x38, ser);              // ref1 (+0x38)
 
-    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // Dtor (vtable +0x00, exe 0x140006fe0)

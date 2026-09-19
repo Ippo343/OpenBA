@@ -53,7 +53,6 @@ static void WorkPlaceDescription_Init(void* self) {
 // ============================================================
 void WorkPlaceDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor) return;
     alignas(8) uint8_t serializer[24];
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     Reimpl_ExternalPtr_Serialize_StringTable(s + 0x20, serializer);  // Profession ref

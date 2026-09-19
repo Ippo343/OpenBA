@@ -32,18 +32,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-// IO::Serializer::Serializer(stream, version) -- dispatch slot at 0x140152ad8
-typedef void* (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-// IO::Serializer::~Serializer() -- dispatch slot at 0x140152ad0
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-// IO::Serializer::Serialize(bool*) -- dispatch slot at 0x140152a58
-typedef void (*fn_Serializer_SerializeBool_t)(void* self, bool* value, const char* name);
-static fn_Serializer_SerializeBool_t s_fn_Serializer_SerializeBool = nullptr;
-
 // 0x140002cc0 DynArray8_EraseByValue -- REMOVES every element equal to *value, shifting
 // the tail down and decrementing the count. It is NOT a push, despite the name this
 // typedef carried until 2026-08-25; the append counterpart is DynArray8_ResizeFill
@@ -103,18 +91,6 @@ static void EnsureHelpers() {
     s_pGameWorld = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x1401c3dd8));
 
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = reinterpret_cast<fn_Serializer_Ctor_t>(
-        *reinterpret_cast<uintptr_t*>(slot));
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = reinterpret_cast<fn_Serializer_Dtor_t>(
-        *reinterpret_cast<uintptr_t*>(slot));
-
-    slot = ResolveAddr(Module::Exe, 0x140152a58);
-    if (slot) s_fn_Serializer_SerializeBool = reinterpret_cast<fn_Serializer_SerializeBool_t>(
-        *reinterpret_cast<uintptr_t*>(slot));
-
     s_fn_GetJobHost = reinterpret_cast<fn_GetJobHost_t>(
         ResolveAddr(Module::Exe, 0x140002e10));
     s_fn_FindStorage = reinterpret_cast<fn_FindStorage_t>(
@@ -150,22 +126,14 @@ void HappinessComponent_Shutdown(HappinessComponent* self, void* stream) {
 
     // Empty serializer block (controller compat)
     alignas(8) uint8_t serializer1[24];
-    if (s_fn_Serializer_Ctor && s_fn_Serializer_Dtor) {
-        ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();                                       // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();                                       // B.3.4 bridge
 
     // Serialize happinessFlag (bool at +0x28)
     alignas(8) uint8_t serializer2[24];
-    if (s_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
-    if (s_fn_Serializer_SerializeBool) {
-        reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<bool*>(&self->happinessFlag), nullptr);   // B.3.4 bridge
-    }
-    if (s_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<bool*>(&self->happinessFlag), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

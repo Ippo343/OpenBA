@@ -30,31 +30,13 @@
 typedef void (*fn_ResourceProduceComponent_Shutdown_t)(void* self, void* stream);
 static fn_ResourceProduceComponent_Shutdown_t s_fn_ParentShutdown = nullptr;
 
-// IO::Serializer::Serializer(stream, version) -- dispatch slot at 0x140152ad8
-typedef void* (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-// IO::Serializer::~Serializer() -- dispatch slot at 0x140152ad0
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
 static bool s_initialized = false;
 
 static void EnsureHelpers() {
     if (s_initialized) return;
 
-    uintptr_t slot;
-
     s_fn_ParentShutdown = reinterpret_cast<fn_ResourceProduceComponent_Shutdown_t>(
         ResolveAddr(Module::Exe, 0x14012b4a0));
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = reinterpret_cast<fn_Serializer_Ctor_t>(
-        *reinterpret_cast<uintptr_t*>(slot));
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = reinterpret_cast<fn_Serializer_Dtor_t>(
-        *reinterpret_cast<uintptr_t*>(slot));
 
     s_initialized = true;
 }
@@ -75,10 +57,8 @@ void HerbalistComponent_Shutdown(HerbalistComponent* self, void* stream) {
 
     // Empty serializer block (subclass compat)
     alignas(8) uint8_t serializer[24];
-    if (s_fn_Serializer_Ctor && s_fn_Serializer_Dtor) {
-        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

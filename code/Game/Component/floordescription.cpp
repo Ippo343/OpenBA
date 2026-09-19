@@ -34,7 +34,6 @@ static void FloorDescription_Init(void* self) {
 
 void FloorDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Bool) return;
     ExtPtrRefSerialize_t extSer =
         (ExtPtrRefSerialize_t)ResolveAddr(Module::Exe, kExtPtrRefSerialize);
     alignas(8) uint8_t serializer[24];

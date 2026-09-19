@@ -29,22 +29,6 @@
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
 
-// IO::Serializer::Serialize(short*) — dispatch slot at 0x140152468
-typedef void (*fn_Serialize_Short_t)(void* serializer, int16_t* field, const char* name);
-static fn_Serialize_Short_t s_fn_Serialize_Short = nullptr;
-
-// IO::Serializer::Serialize(int*) — dispatch slot at 0x140152ac8
-typedef void (*fn_Serialize_Int_dispatch_t)(void* serializer, int32_t* field, const char* name);
-static fn_Serialize_Int_dispatch_t s_fn_Serialize_Int_dispatch = nullptr;
-
-// IO::Serializer::Serializer(stream, version) — dispatch slot at 0x140152ad8
-typedef void (*fn_Serializer_Ctor_dispatch_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_dispatch_t s_fn_Serializer_Ctor_dispatch = nullptr;
-
-// IO::Serializer::~Serializer() — dispatch slot at 0x140152ad0
-typedef void (*fn_Serializer_Dtor_dispatch_t)(void* self);
-static fn_Serializer_Dtor_dispatch_t s_fn_Serializer_Dtor_dispatch = nullptr;
-
 // Component_Serialize (base class) — at 0x1401189b0
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
@@ -74,18 +58,6 @@ static void EnsureHelpers() {
     // Dispatch slots — read function pointer from .rdata slot at runtime
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152468);
-    if (slot) s_fn_Serialize_Short = *reinterpret_cast<fn_Serialize_Short_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (slot) s_fn_Serialize_Int_dispatch = *reinterpret_cast<fn_Serialize_Int_dispatch_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor_dispatch = *reinterpret_cast<fn_Serializer_Ctor_dispatch_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor_dispatch = *reinterpret_cast<fn_Serializer_Dtor_dispatch_t*>(slot);
 
     // Direct exe addresses
     s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
@@ -166,27 +138,19 @@ void MapComponent_Shutdown(MapComponent* self, void* stream) {
 
     // Create local IO::Serializer (24 bytes on stack)
     alignas(8) uint8_t serializer[24];
-    if (s_fn_Serializer_Ctor_dispatch) {
-        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize 4 uint16 tile coords as shorts
-    if (s_fn_Serialize_Short) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&self->tileX0), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&self->tileY0), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&self->tileX1), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&self->tileY1), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&self->tileX0), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&self->tileY0), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&self->tileX1), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&self->tileY1), nullptr);   // B.3.4 bridge
 
     // Serialize extra int at +0x30
-    if (s_fn_Serialize_Int_dispatch) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->extraField, nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->extraField, nullptr);   // B.3.4 bridge
 
     // Destroy serializer
-    if (s_fn_Serializer_Dtor_dispatch) {
-        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -271,9 +235,9 @@ void MapComponent_OnCreate(MapComponent* self) {
 void MapComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[MapComponent] Funcs resolved: IsDerivedFrom=%p Serialize_Short=%p "
+    printf("[MapComponent] Funcs resolved: IsDerivedFrom=%p "
            "MapUpdateOverlay=%p MapInit=%p TerrainClear=%p\n",
-           (void*)s_fn_IsDerivedFrom_dispatch, (void*)s_fn_Serialize_Short,
+           (void*)s_fn_IsDerivedFrom_dispatch,
            (void*)s_fn_MapUpdateOverlay, (void*)s_fn_MapInit,
            (void*)s_fn_TerrainClear);
 #endif

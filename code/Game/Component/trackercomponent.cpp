@@ -25,15 +25,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-typedef void* (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-typedef void (*fn_SerializeInt_t)(void* self, int* value, const char* name);
-static fn_SerializeInt_t s_fn_SerializeInt = nullptr;
-
 // FUN_14000da70 — resize paired (IBP+int) array
 typedef void (*fn_ResizePairedArray_t)(void* arrayPtr, int newCount);
 static fn_ResizePairedArray_t s_fn_ResizePairedArray = nullptr;
@@ -61,13 +52,12 @@ void TrackerComponent_Shutdown(TrackerComponent* self, void* stream) {
         s_fn_Component_Serialize(self, stream);
 
     alignas(8) uint8_t serializer[24];
-    if (s_fn_Serializer_Ctor) ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // === Array 1 at +0x28/+0x30 ===
     int count1 = *(int*)(selfAddr + 0x30);
     int localCount1 = count1;
-    if (s_fn_SerializeInt)
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(localCount1, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(localCount1, nullptr);   // B.3.4 bridge
 
     // If loading, resize array
     if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0 && s_fn_ResizePairedArray) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
@@ -81,8 +71,7 @@ void TrackerComponent_Shutdown(TrackerComponent* self, void* stream) {
         for (int i = 0; i < localCount1; i++) {
             if (s_fn_SerializeIBPEntry)
                 s_fn_SerializeIBPEntry((void*)entryPtr, serializer);
-            if (s_fn_SerializeInt)
-                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(entryPtr + 8), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(entryPtr + 8), nullptr);   // B.3.4 bridge
             entryPtr += 16;  // sizeof(IBP) + sizeof(int) = 8 + 8
         }
     }
@@ -90,8 +79,7 @@ void TrackerComponent_Shutdown(TrackerComponent* self, void* stream) {
     // === Array 2 at +0x38/+0x40 ===
     int count2 = *(int*)(selfAddr + 0x40);
     int localCount2 = count2;
-    if (s_fn_SerializeInt)
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(localCount2, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(localCount2, nullptr);   // B.3.4 bridge
 
     if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0 && s_fn_ResizePairedArray) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
         s_fn_ResizePairedArray((void*)(selfAddr + 0x38), localCount2);
@@ -103,17 +91,15 @@ void TrackerComponent_Shutdown(TrackerComponent* self, void* stream) {
         for (int i = 0; i < localCount2; i++) {
             if (s_fn_SerializeIBPEntry)
                 s_fn_SerializeIBPEntry((void*)entryPtr, serializer);
-            if (s_fn_SerializeInt)
-                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(entryPtr + 8), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(entryPtr + 8), nullptr);   // B.3.4 bridge
             entryPtr += 16;
         }
     }
 
     // Serialize trackerId at +0x48
-    if (s_fn_SerializeInt)
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(selfAddr + 0x48), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(selfAddr + 0x48), nullptr);   // B.3.4 bridge
 
-    if (s_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -128,14 +114,6 @@ void TrackerComponent_InitFuncs() {
         ResolveAddr(Module::Exe, 0x14000da70));
     s_fn_SerializeIBPEntry = reinterpret_cast<fn_SerializeIBPEntry_t>(
         ResolveAddr(Module::Exe, 0x140002340));
-
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (slot) s_fn_SerializeInt = *reinterpret_cast<fn_SerializeInt_t*>(slot);
 
     s_initialized = true;
 }

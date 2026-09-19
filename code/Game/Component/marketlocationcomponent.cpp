@@ -25,13 +25,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-// IO::Serializer ctor/dtor via dispatch slots
-typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
 // FUN_140002cc0 = DynArray8_EraseByValue — linear scan of an 8-byte-stride DynArray
 // (+0x00 data, +0x08 count, +0x0C capacity), shift-down removing EVERY slot equal to
 // *value. It is the UNREGISTER primitive, not the append one (append counterpart:
@@ -47,13 +40,6 @@ static void EnsureHelpers() {
 
     s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1401189b0));
-
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
 
     s_fn_ListEraseByValue = reinterpret_cast<fn_ListEraseByValue_t>(
         ResolveAddr(Module::Exe, 0x140002cc0));
@@ -84,15 +70,13 @@ void MarketLocationComponent_Shutdown(MarketLocationComponent* self, void* strea
     }
 
     // Two empty serializer blocks (version 0)
-    if (s_fn_Serializer_Ctor && s_fn_Serializer_Dtor) {
-        alignas(8) uint8_t serializerBuf1[24];
-        ::new (static_cast<void*>(serializerBuf1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializerBuf1)->~Serializer();                                       // B.3.4 bridge
+    alignas(8) uint8_t serializerBuf1[24];
+    ::new (static_cast<void*>(serializerBuf1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf1)->~Serializer();                                       // B.3.4 bridge
 
-        alignas(8) uint8_t serializerBuf2[24];
-        ::new (static_cast<void*>(serializerBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializerBuf2)->~Serializer();                                       // B.3.4 bridge
-    }
+    alignas(8) uint8_t serializerBuf2[24];
+    ::new (static_cast<void*>(serializerBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf2)->~Serializer();                                       // B.3.4 bridge
 }
 
 // ============================================================
@@ -139,9 +123,9 @@ void MarketLocationComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
     printf("[MarketLocationComponent] Funcs resolved: Component_Serialize=%p "
-           "Ctor=%p Dtor=%p RegisterEntity=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_Serializer_Ctor,
-           (void*)s_fn_Serializer_Dtor, (void*)s_fn_ListEraseByValue);
+           "RegisterEntity=%p\n",
+           (void*)s_fn_Component_Serialize,
+           (void*)s_fn_ListEraseByValue);
 #endif
 }
 

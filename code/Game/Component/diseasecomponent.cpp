@@ -123,16 +123,8 @@ static fn_ExternalPtrSerialize_t s_extPtrSerialize = nullptr; // 0x140002340
 static fn_SetAnimIndex_t        s_setAnimIndex  = nullptr;  // 0x140126440
 
 // Serializer .rdata dispatch slots (same set DiseaseComponent::Serialize calls).
-typedef void (*fn_SerCtor_t)(void* self, void* stream, int mode);   // [0x140152ad8]
-typedef void (*fn_SerInt_t)(void* self, void* value, const char* n);// [0x140152ac8]
 typedef void (*fn_SerTime_t)(void* time, void* serializer);         // [0x140152aa8]
-typedef int  (*fn_SerGetVer_t)(void* self);                         // [0x140152a48]
-typedef void (*fn_SerDtor_t)(void* self);                           // [0x140152ad0]
-static fn_SerCtor_t   s_serCtor   = nullptr;
-static fn_SerInt_t    s_serInt    = nullptr;
 static fn_SerTime_t   s_serTime   = nullptr;
-static fn_SerGetVer_t s_serGetVer = nullptr;
-static fn_SerDtor_t   s_serDtor   = nullptr;
 
 // Event-log leaves exported from code/Game/Game/eventlog.cpp.
 extern "C" void EventLog_ArrayGrow_Reg(void* arrBase, int newCount, const void* newEntry);
@@ -181,11 +173,7 @@ static void EnsureInit() {
     s_extPtrSerialize = R<fn_ExternalPtrSerialize_t>(0x140002340);
     s_setAnimIndex  = R<fn_SetAnimIndex_t>(0x140126440);
 
-    s_serCtor   = reinterpret_cast<fn_SerCtor_t>(RSlot(0x140152ad8));
-    s_serInt    = reinterpret_cast<fn_SerInt_t>(RSlot(0x140152ac8));
     s_serTime   = reinterpret_cast<fn_SerTime_t>(RSlot(0x140152aa8));
-    s_serGetVer = reinterpret_cast<fn_SerGetVer_t>(RSlot(0x140152a48));
-    s_serDtor   = reinterpret_cast<fn_SerDtor_t>(RSlot(0x140152ad0));
 
     s_pMonthsPerYear = R<const float*>(0x1401721b8);
     s_pSecsPerMonth  = R<const float*>(0x140172234);
@@ -922,12 +910,11 @@ extern "C" void DiseaseComponent_OnRemoved(DiseaseComponent* self) {
 extern "C" void DiseaseComponent_Serialize(DiseaseComponent* self, void* stream) {
     EnsureInit();
     if (s_compSerialize) s_compSerialize(self, stream);
-    if (!s_serCtor || !s_serDtor) return;
 
     alignas(8) uint8_t ser[24] = {0};
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
     if (s_extPtrSerialize) s_extPtrSerialize(&self->curedIdentity, ser);
-    if (s_serInt)  reinterpret_cast<IO::Serializer*>(ser)->Serialize(self->isPasture, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(self->isPasture, nullptr);   // B.3.4 bridge
     if (s_serTime) {
         s_serTime(&self->rollAccum,   ser);
         s_serTime(&self->duration,    ser);
@@ -935,8 +922,7 @@ extern "C" void DiseaseComponent_Serialize(DiseaseComponent* self, void* stream)
         s_serTime(&self->spreadAccum, ser);
     }
     // Version-0 saves predate the registry, so re-run OnAdded (vtable +0x30 = slot 6).
-    if (s_serGetVer && reinterpret_cast<IO::Serializer*>(ser)->GetVersion() == 0 &&   // B.3.4 bridge
-        static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
+    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() == 0 && static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
         void** vt = *reinterpret_cast<void***>(self);
         typedef void (*fn_slot6_t)(void*);
         if (vt && vt[6]) reinterpret_cast<fn_slot6_t>(vt[6])(self);

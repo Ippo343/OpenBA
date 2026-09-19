@@ -32,15 +32,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-typedef void* (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-typedef int (*fn_Serializer_GetVersion_t)(void* self);
-static fn_Serializer_GetVersion_t s_fn_Serializer_GetVersion = nullptr;
-
 // FUN_140088e20 — zone map registration
 typedef void (*fn_ZoneMapAdd_t)(void* zoneMap, void* entityPtr);
 static fn_ZoneMapAdd_t s_fn_ZoneMapAdd = nullptr;
@@ -91,20 +82,18 @@ void ZoneComponent_Shutdown(ZoneComponent* self, void* stream) {
         s_fn_Component_Serialize(self, stream);
 
     alignas(8) uint8_t serializer[24];
-    if (s_fn_Serializer_Ctor) ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
 
-    if (s_fn_Serializer_GetVersion) {
-        int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
-        if (version == 0 && static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
-            void* entityPtr = self->owner;
-            if (s_pGameState && *s_pGameState && s_fn_ZoneMapAdd) {
-                void* zoneMap = *(void**)((uintptr_t)*s_pGameState + 0xF0);
-                s_fn_ZoneMapAdd(zoneMap, &entityPtr);
-            }
+    int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
+    if (version == 0 && static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
+        void* entityPtr = self->owner;
+        if (s_pGameState && *s_pGameState && s_fn_ZoneMapAdd) {
+            void* zoneMap = *(void**)((uintptr_t)*s_pGameState + 0xF0);
+            s_fn_ZoneMapAdd(zoneMap, &entityPtr);
         }
     }
 
-    if (s_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -318,14 +307,6 @@ static void EnsureZoneHelpers() {
         ResolveAddr(Module::Exe, 0x140002cc0));
     s_pZoneDescTypeId = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7a18));
-
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152a48);
-    if (slot) s_fn_Serializer_GetVersion = *reinterpret_cast<fn_Serializer_GetVersion_t*>(slot);
 
     s_initialized = true;
 }

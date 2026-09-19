@@ -36,8 +36,7 @@ static void RadiusDescription_Init(void* self) {
 
 void RadiusDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor ||
-        !g_fn_Serialize_Int || !fn_ExternalPtr_Serialize3) {
+    if (!fn_ExternalPtr_Serialize3) {
         return;
     }
     alignas(8) uint8_t serializer[24];

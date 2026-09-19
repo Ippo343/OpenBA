@@ -68,8 +68,7 @@ extern "C" void* DecalDescription_Ctor_Impl(void* mem) {
 
 // Serialize (vtable +0x28, exe 0x14011b980)
 extern "C" void DecalDescription_Serialize(void* self, void* stream) {
-    if (!g_fn_Serializer_Ctor || !g_fn_Serialize_Int || !g_fn_Serialize_Bool ||
-        !fn_Serializer_Serialize_Float || !fn_Array_Serialize_External_GraphicsMesh) {
+    if (!fn_Array_Serialize_External_GraphicsMesh) {
         return;
     }
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
@@ -113,7 +112,7 @@ extern "C" void DecalDescription_Serialize(void* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(s + 0x24), nullptr);           // flagA   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(s + 0x25), nullptr);           // flagB   // B.3.4 bridge
 
-    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // Dtor (vtable +0x00, exe 0x1400338a0)

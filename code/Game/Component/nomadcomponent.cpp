@@ -28,19 +28,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-typedef void* (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-typedef void (*fn_Serializer_SerializeInt_t)(void* self, int* value, const char* name);
-static fn_Serializer_SerializeInt_t s_fn_Serializer_SerializeInt = nullptr;
-
-// Object::InternalBasePtr::Serialize
-typedef void (*fn_IBP_Serialize_t)(void* ibp, void* serializer);
-static fn_IBP_Serialize_t s_fn_IBP_Serialize = nullptr;
-
 // System::Time::Serialize
 typedef void (*fn_Time_Serialize_t)(void* time, void* serializer);
 static fn_Time_Serialize_t s_fn_Time_Serialize = nullptr;
@@ -76,16 +63,15 @@ void NomadComponent_Shutdown(NomadComponent* self, void* stream) {
 
     // Empty controller serializer block
     alignas(8) uint8_t serializer1[24];
-    if (s_fn_Serializer_Ctor) ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    if (s_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();                                       // B.3.4 bridge
+    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();                                       // B.3.4 bridge
 
     // Main data serializer
     alignas(8) uint8_t serializer2[24];
-    if (s_fn_Serializer_Ctor) ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize IBP at +0x28
-    if (s_fn_IBP_Serialize)
-        reinterpret_cast<Object::InternalBasePtr*>((void*)(selfAddr + 0x28))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4 bridge
+    reinterpret_cast<Object::InternalBasePtr*>((void*)(selfAddr + 0x28))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4 bridge
 
     // Validate IBP after deserialize
     void* ibpVal = *(void**)(selfAddr + 0x28);
@@ -102,14 +88,13 @@ void NomadComponent_Shutdown(NomadComponent* self, void* stream) {
     reinterpret_cast<Math::Vector3*>(selfAddr + 0x3C)->Serialize(serializer2);   // B.3.1 bridge
 
     // Serialize int at +0x50
-    if (s_fn_Serializer_SerializeInt)
-        reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>(selfAddr + 0x50), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>(selfAddr + 0x50), nullptr);   // B.3.4 bridge
 
     // Serialize Time at +0x48
     if (s_fn_Time_Serialize)
         s_fn_Time_Serialize((void*)(selfAddr + 0x48), serializer2);
 
-    if (s_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();                                       // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();                                       // B.3.4 bridge
 }
 
 // ============================================================
@@ -535,19 +520,10 @@ void NomadComponent_InitFuncs() {
         ResolveAddr(Module::Exe, 0x1401c72e8));
 
     uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (slot) s_fn_Serializer_SerializeInt = *reinterpret_cast<fn_Serializer_SerializeInt_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_d = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152aa8);
     if (slot) s_fn_Time_Serialize = *reinterpret_cast<fn_Time_Serialize_t*>(slot);
-
-    s_fn_IBP_Serialize = reinterpret_cast<fn_IBP_Serialize_t>(
-        ResolveExport("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z"));
 
     s_initialized = true;
 }

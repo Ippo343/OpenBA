@@ -28,22 +28,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-// IO::Serializer::Serializer(stream, version) -- dispatch slot at 0x140152ad8
-typedef void* (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-// IO::Serializer::~Serializer() -- dispatch slot at 0x140152ad0
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-// IO::Serializer::Serialize(int*) -- dispatch slot at 0x140152ac8
-typedef void (*fn_Serializer_SerializeInt_t)(void* self, int* value, const char* name);
-static fn_Serializer_SerializeInt_t s_fn_Serializer_SerializeInt = nullptr;
-
-// IO::Serializer::Serialize(bool*) -- dispatch slot at 0x140152a58
-typedef void (*fn_Serializer_SerializeBool_t)(void* self, bool* value, const char* name);
-static fn_Serializer_SerializeBool_t s_fn_Serializer_SerializeBool = nullptr;
-
 // System::Time::Serialize -- dispatch slot at 0x140152aa8
 typedef void (*fn_Time_Serialize_t)(void* time, void* serializer);
 static fn_Time_Serialize_t s_fn_Time_Serialize = nullptr;
@@ -72,22 +56,6 @@ static void EnsureHelpers() {
         ResolveAddr(Module::Exe, 0x1401c7628));
 
     uintptr_t slot;
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = reinterpret_cast<fn_Serializer_Ctor_t>(
-        *reinterpret_cast<uintptr_t*>(slot));
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = reinterpret_cast<fn_Serializer_Dtor_t>(
-        *reinterpret_cast<uintptr_t*>(slot));
-
-    slot = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (slot) s_fn_Serializer_SerializeInt = reinterpret_cast<fn_Serializer_SerializeInt_t>(
-        *reinterpret_cast<uintptr_t*>(slot));
-
-    slot = ResolveAddr(Module::Exe, 0x140152a58);
-    if (slot) s_fn_Serializer_SerializeBool = reinterpret_cast<fn_Serializer_SerializeBool_t>(
-        *reinterpret_cast<uintptr_t*>(slot));
 
     slot = ResolveAddr(Module::Exe, 0x140152aa8);
     if (slot) s_fn_Time_Serialize = reinterpret_cast<fn_Time_Serialize_t>(
@@ -120,41 +88,29 @@ void DestroyComponent_Shutdown(DestroyComponent* self, void* stream) {
 
     // Empty serializer block (controller format compat)
     alignas(8) uint8_t serializer1[24];
-    if (s_fn_Serializer_Ctor && s_fn_Serializer_Dtor) {
-        ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
 
     // Serialize destroy state fields
     alignas(8) uint8_t serializer2[24];
-    if (s_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
-    if (s_fn_Serializer_SerializeInt) {
-        reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>(&self->field54), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>((uintptr_t)self + 0x58), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>(&self->field54), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>((uintptr_t)self + 0x58), nullptr);   // B.3.4 bridge
 
-    if (s_fn_Serializer_SerializeBool) {
-        reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<bool*>((uintptr_t)self + 0x51), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<bool*>((uintptr_t)self + 0x51), nullptr);   // B.3.4 bridge
 
     if (s_fn_SerializeInternalBasePtr) {
         s_fn_SerializeInternalBasePtr((void*)((uintptr_t)self + 0x60), serializer2);
     }
 
-    if (s_fn_Serializer_SerializeBool) {
-        reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<bool*>(&self->destroyFlags), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<bool*>(&self->destroyFlags), nullptr);   // B.3.4 bridge
 
     if (s_fn_Time_Serialize) {
         s_fn_Time_Serialize((void*)&self->field48, serializer2);
     }
 
-    if (s_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

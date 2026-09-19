@@ -67,7 +67,7 @@ static void* DestroyDescription_Ctor_Impl(void* mem) {
 void DestroyDescription_Serialize(void* self, void* stream) {
     uintptr_t s = (uintptr_t)self;
     alignas(8) uint8_t serializer[24];
-    if (!g_fn_Serializer_Ctor || !g_fn_Serialize_Int || !fn_ExternalPtr_BuildSerialize) {
+    if (!fn_ExternalPtr_BuildSerialize) {
         return;
     }
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
@@ -86,7 +86,7 @@ void DestroyDescription_Serialize(void* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x2c), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);   // B.3.4 bridge
 
-    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // Dtor (vtable +0x00, FUN_140033d70) — scalar fields only, no heap.

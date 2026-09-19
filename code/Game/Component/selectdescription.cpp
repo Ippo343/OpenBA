@@ -47,7 +47,7 @@ static void SelectDescription_Init(void* self) {
 
 void SelectDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !fn_ExternalPtr_Serialize || !fn_ExternalPtr_Serialize2) {
+    if (!fn_ExternalPtr_Serialize || !fn_ExternalPtr_Serialize2) {
         return;
     }
     alignas(8) uint8_t serializer[24];

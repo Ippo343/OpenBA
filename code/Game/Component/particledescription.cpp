@@ -77,8 +77,7 @@ extern "C" void* ParticleDescription_Ctor_Impl(void* mem) {
 
 // Serialize (vtable +0x28, exe 0x140053460)
 extern "C" void ParticleDescription_Serialize(void* self, void* stream) {
-    if (!g_fn_Serializer_Ctor || !g_fn_Serialize_Int || !g_fn_Serialize_Bool ||
-        !g_fn_Time_Serialize || !fn_ExternalPtr_Serialize3) {
+    if (!g_fn_Time_Serialize || !fn_ExternalPtr_Serialize3) {
         return;
     }
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
@@ -120,7 +119,7 @@ extern "C" void ParticleDescription_Serialize(void* self, void* stream) {
 
     fn_ExternalPtr_Serialize3(s + 0x20, ser);              // materialRef (+0x20)
 
-    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // Dtor (vtable +0x00, exe 0x14000a500)
