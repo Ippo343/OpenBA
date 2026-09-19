@@ -131,45 +131,43 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 // that shared header, which this batch does not own.
 namespace rtcoll { extern const ArraySpec kSpec_InnerArrayU8; }
 
+// The door over `Video::ImageBuffer::PlatformSerialize`, which is PRIVATE in
+// retail (`AEAA`) and `protected` on the class. See the banner on
+// `struct ImageBufferDoorAccess;` in runtime/types/video/ImageBuffer.h — the
+// class friends it, and `imagebuffer_vtable.cpp` declares the same struct to
+// call the same member from `Serialize`. Two translation units, one global type,
+// one friend declaration.
+struct ImageBufferDoorAccess {
+    static void PlatformSerialize(Video::ImageBuffer* p, IO::Serializer& ser) {
+        p->Video::ImageBuffer::PlatformSerialize(ser);
+    }
+};
+
 namespace {
 
-// IO::Serializer is { Stream* +0x00, ReaderWriter* +0x08 } — Serializer.h.
-// Addressed by byte offset here so this file does not have to agree with that
-// header's namespace spelling, and asserted against it below.
-struct SerializerRaw {
-    void* stream;
-    void* readerWriter;
-};
-static_assert(sizeof(SerializerRaw) == 0x10, "IO::Serializer is 0x10 bytes");
+// ---------------------------------------------------------------------------
+// ENDGAME B.3.5 block C — FOUR duplicate views are GONE from this file.
+// ---------------------------------------------------------------------------
+//   * `struct SerializerRaw { void* stream; void* readerWriter; }` and its size
+//     assert: the member takes the REAL `IO::Serializer&` (B.3.4 block 3) and
+//     reads `_stream` / `_readerWriter` by name.
+//   * `kStreamDirection` / `kStreamEncoding`: `IO::Stream::GetDirection()` and
+//     `IO::Stream::GetEncoding()` say the same thing from `runtime/types/io/
+//     Stream.h`, which owns the evidence.
+//   * `kRwScalarInt` (+0xa0) / `kRwArrayUChar` (+0x60) and their two `using`
+//     typedefs: `IO::Serializer::Serialize(int&, name)` and
+//     `Serialize(int, unsigned char*, name)` are the non-virtual forwarders that
+//     reach exactly those two slots. This file was the last caller spelling
+//     either offset.
+//   * `kImageBufferCreateSlot` (+0x48) and `CreateFn`: slot 9 is
+//     `Video::ImageBuffer::Create`, so `self->Create(...)` IS retail's
+//     `CALL [R10+0x48]` — a C++ virtual call reads the object's own vptr, which
+//     on every live image is still the MINTED table, so the dispatch is
+//     unchanged and the slot INDEX is now checked by the compiler instead of by
+//     a comment.
+// ---------------------------------------------------------------------------
 
-// IO::Stream field offsets, from Stream.h. Repeated as named constants rather
-// than re-derived; the header owns the evidence.
-constexpr size_t kStreamDirection = 0x08;   // 0 = READING, 1 = writing
-constexpr size_t kStreamEncoding  = 0x10;
-
-// IO::ReaderWriter vtable slots, from Serializer.h's own table.
-constexpr int kRwScalarInt  = 0xA0;   // (int&,        name)
-constexpr int kRwArrayUChar = 0x60;   // (n, uchar*,   name)
-
-// Video::ImageBuffer vtable slot 9 is ?Create@ImageBuffer@Video@@UEAA_N…,
-// which buffers.cpp already ports and registers at 0x1800f2680. Reaching it
-// through the object's own vtable is what retail does (`CALL [R10+0x48]`), and
-// it is also what routes the call to our port on any object whose table the
-// dx11 seam owns.
-constexpr int kImageBufferCreateSlot = 0x48;
-
-using CreateFn = bool (*)(void* self, int32_t imageType, int32_t usage,
-                          int32_t format, uint32_t flags, int32_t width,
-                          int32_t height, int32_t filter, int32_t addrU,
-                          int32_t addrV, int32_t addrW, void* initialData);
-using ScalarIntFn  = void (*)(void* rw, int32_t* value, const char* name);
-using ArrayUCharFn = void (*)(void* rw, int32_t count, void* data, const char* name);
-using EncodingGateFn = bool (*)(void* encoding);
 using SetSizeFn = void (*)(rtcoll::ArrayHdr* self, int32_t newSize);
-
-int32_t StreamDirection(void* stream) {
-    return *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(stream) + kStreamDirection);
-}
 
 // ENDGAME B.3.2 step 2 — both forwarders above (`OuterSetSize`, `InnerSetSize`)
 // are GONE. STALE COMMENT KEPT FOR THE RECORD: "0x180053f00 ... unported
@@ -200,26 +198,22 @@ int32_t StreamDirection(void* stream) {
 //
 // Note the `name` argument is NULL at every one of retail's call sites here
 // (`XOR R8D,R8D` / `XOR R9D,R9D`), so the blobs are unnamed in the stream.
-void SerializeLevelBlobs(SerializerRaw* ser, int32_t count, rtcoll::ArrayHdr* elems) {
+void SerializeLevelBlobs(IO::Serializer& ser, int32_t count, rtcoll::ArrayHdr* elems) {
     if (count <= 0) return;                       // TEST EDX,EDX / JLE
     const int64_t n = count;                      // MOVSXD
     for (int64_t i = 0; i < n; ++i) {
         rtcoll::ArrayHdr* e = elems + i;          // ADD RBX,0x10
         int32_t size = e->GetSize();               // MOV EAX,[RBX+8]
 
-        void* rw = ser->readerWriter;
-        void** rwVt = *reinterpret_cast<void***>(rw);
-        reinterpret_cast<ScalarIntFn>(rwVt[kRwScalarInt / 8])(rw, &size, nullptr);
+        ser.Serialize(size, nullptr);              // rw slot +0xa0, kScalarInt
 
-        // Retail RE-READS ser->stream here rather than caching it.
+        // Retail RE-READS ser->stream here rather than caching it — reproduced
+        // by reading it through the Serializer again rather than a cached local.
         // retail 0x180029630 — kSpec_Bool == SpecFor<uint8_t>(); trait-derived.
-        if (StreamDirection(ser->stream) == 0)    // READING
+        if (ser._stream->GetDirection() == IO::kReading)
             e->SetSize(size);
 
-        rw = ser->readerWriter;
-        rwVt = *reinterpret_cast<void***>(rw);
-        reinterpret_cast<ArrayUCharFn>(rwVt[kRwArrayUChar / 8])(
-            rw, size, e->GetData(), nullptr);
+        ser.Serialize(size, e->GetData(), nullptr);  // rw slot +0x60, kArrayUChar
     }
 }
 
@@ -233,20 +227,25 @@ static_assert(kV_LevelBlob.offs[0] + 16u <= kV_LevelBlob.stride, "kV_LevelBlob f
 // The eleven-argument Create call, spelled once so the two arms cannot drift.
 // `kind` is a PARAMETER rather than a field read, because the two arms source
 // it differently — see the banner.
-void RecreateFromFields(::ImageBuffer* self, int32_t kind, void* initialData) {
-    void** vt = *reinterpret_cast<void***>(self);
-    reinterpret_cast<CreateFn>(vt[kImageBufferCreateSlot / 8])(
-        self,
-        self->dimension,   // EDX            +0x28  ImageType
+//
+// ENDGAME B.3.5 block C: this is now slot 9 by NAME. `Create` is a virtual of
+// the real `Video::ImageBuffer`, declared at index 9, so `self->Create(...)` is
+// retail's `CALL [R10+0x48]` with the index checked by the compiler. The virtual
+// call reads the object's own vptr, which on every live image is the MINTED
+// table, so the dispatch is exactly what it was.
+void RecreateFromFields(Video::ImageBuffer* self, int32_t kind,
+                        Video::ImageBuffer::LevelArray* initialData) {
+    self->Create(
+        self->_dimension,  // EDX            +0x28  ImageType
         kind,              // R8D            +0x2c  Usage
-        static_cast<int32_t>(self->format),  // R9D  +0x30  Format
-        self->flags,       // [RSP+0x20]     +0x34
-        self->width,       // [RSP+0x28]     +0x20
-        self->height,      // [RSP+0x30]     +0x24
-        self->filter,      // [RSP+0x38]     +0x44  FilterMode
-        self->addressU,    // [RSP+0x40]     +0x38
-        self->addressV,    // [RSP+0x48]     +0x3c
-        self->addressW,    // [RSP+0x50]     +0x40
+        self->_format,     // R9D            +0x30  Format
+        self->_flags,      // [RSP+0x20]     +0x34
+        self->_width,      // [RSP+0x28]     +0x20
+        self->_height,     // [RSP+0x30]     +0x24
+        self->_filter,     // [RSP+0x38]     +0x44  FilterMode
+        self->_addressU,   // [RSP+0x40]     +0x38
+        self->_addressV,   // [RSP+0x48]     +0x3c
+        self->_addressW,   // [RSP+0x50]     +0x40
         initialData);      // [RSP+0x58]
 }
 
@@ -259,31 +258,45 @@ void RecreateFromFields(::ImageBuffer* self, int32_t kind, void* initialData) {
 }  // namespace
 
 // ============================================================================
-// The body
+// The body — now a MEMBER of the real `Video::ImageBuffer` (B.3.5 block C).
 // ============================================================================
-extern "C" void Video_ImageBuffer_PlatformSerialize(::ImageBuffer* self, void* serializer) {
-    SerializerRaw* ser = static_cast<SerializerRaw*>(serializer);
+namespace Video {
 
+void ImageBuffer::PlatformSerialize(IO::Serializer& ser) {
     // 0x1800f3154: read ONCE, at entry. The generated/rendered arm reuses this
     // value; the pixel arm reloads. See the banner.
-    const int32_t kindAtEntry = self->kind;
-    void* stream = ser->stream;
+    const int32_t kindAtEntry = _kind;
+    IO::Stream* stream = ser._stream;
 
     // ---- the generated / rendered arm --------------------------------------
     // `LEA EAX,[R8-4] / CMP EAX,1 / JBE` — an UNSIGNED compare, so this is
     // exactly kind == 4 || kind == 5, i.e. IsGenerated() || IsRendered().
     if (static_cast<uint32_t>(kindAtEntry - 4) <= 1u) {
-        if (StreamDirection(stream) != 0) {          // 0x1800f32d5: saving
+        if (stream->GetDirection() != IO::kReading) {  // 0x1800f32d5: saving
             return;
         }
-        RecreateFromFields(self, kindAtEntry, nullptr);
+        RecreateFromFields(this, kindAtEntry, nullptr);
         return;
     }
 
     // ---- the gate ----------------------------------------------------------
-    void* encoding = *reinterpret_cast<void**>(static_cast<uint8_t*>(stream) + kStreamEncoding);
-    void** encVt = *reinterpret_cast<void***>(encoding);
-    if (!reinterpret_cast<EncodingGateFn>(encVt[0])(encoding)) {
+    // ENDGAME B.3.5 block C FINDING — THE GATE HAS A NAME, and this file's
+    // banner (written before `IO::Encoding` was a class) says it does not.
+    // `stream->encoding->vtable[0]()` returning a bool is slot 0 of
+    // `??_7…Encoding@IO@@6B@`, and B.3.4 block 1 named all five of those slots
+    // from the three concrete tables: slot 0 is
+    // `?IsBinary@Encoding@IO@@UEBA_NXZ` (`BinaryEncoding` 0x1800a81e0 returns
+    // true, `TextEncoding` 0x1800b9ab0 and `VisitorEncoding` 0x1800bafd0 return
+    // false — runtime/types/io/Serializer.h). So the gate is "carry the
+    // per-mip-level pixel blobs only for a BINARY encoding", which is what the
+    // behaviour always was: text serialization is stripped from the shipped DLL
+    // and the Visitor pass is the resource-reference discovery pass, and neither
+    // has any business moving pixels. The banner's caution was right for its
+    // instrument and is now superseded by a read, not by a guess.
+    // `MOV RCX,[stream+0x10]` then `CALL [[RCX]]`: retail loads the encoding off
+    // the stream itself rather than through `?GetEncoding@Serializer@IO@@`, so
+    // this reads `_encoding` directly too.
+    if (!stream->_encoding->IsBinary()) {
         return;
     }
 
@@ -298,14 +311,12 @@ extern "C" void Video_ImageBuffer_PlatformSerialize(::ImageBuffer* self, void* s
     // "corrected" to the level count: this is what the shipped body emits.
     int32_t count = levels.GetSize();
 
-    void* rw = ser->readerWriter;
-    void** rwVt = *reinterpret_cast<void***>(rw);
-    reinterpret_cast<ScalarIntFn>(rwVt[kRwScalarInt / 8])(rw, &count, nullptr);
+    ser.Serialize(count, nullptr);                   // rw slot +0xa0, kScalarInt
 
     // 0x1800f31a8 RE-READS ser->stream rather than reusing the pointer it
-    // loaded at entry. Reproduced. retail 0x180053f00 — kSpec_InnerArrayU8;
-    // see the banner above.
-    if (StreamDirection(ser->stream) == 0)           // READING
+    // loaded at entry. Reproduced — `ser._stream`, not the `stream` local above.
+    // retail 0x180053f00 — kSpec_InnerArrayU8; see the banner.
+    if (ser._stream->GetDirection() == IO::kReading)
         rtcoll::AsArray<&rtcoll::kSpec_InnerArrayU8>(&levels)->SetSize(count);
 
     SerializeLevelBlobs(ser, count,
@@ -313,7 +324,8 @@ extern "C" void Video_ImageBuffer_PlatformSerialize(::ImageBuffer* self, void* s
 
     // 0x1800f31e2: the field reads for Create happen HERE, after the
     // serialization, and `kind` is RELOADED. Both are faithful.
-    RecreateFromFields(self, self->kind, &levels);
+    RecreateFromFields(this, _kind,
+                       reinterpret_cast<LevelArray*>(&levels));   // B.3.5 bridge
 
     // ---- destroy the temporary --------------------------------------------
     // DESTROYS EVERY ELEMENT and then frees the block, in that order: the
@@ -332,8 +344,19 @@ extern "C" void Video_ImageBuffer_PlatformSerialize(::ImageBuffer* self, void* s
     // `destroy` is null. Calling a spec-aware `~Array()` here (with
     // `kSpec_InnerArrayU8`) would re-run the inner-buffer free a second time —
     // a double free `FreeInnerArraysCore` already discharged.
+}
 
+}  // namespace Video
 
+// ============================================================================
+// The registered door — a QUALIFIED non-virtual delegation through the friend
+// helper, because `PlatformSerialize` is `protected` (retail's `AEAA`, private).
+// Name and address are UNCHANGED.
+// ============================================================================
+extern "C" void Video_ImageBuffer_PlatformSerialize(Video::ImageBuffer* self,
+                                                    void* serializer) {
+    ImageBufferDoorAccess::PlatformSerialize(
+        self, *reinterpret_cast<IO::Serializer*>(serializer));   // B.3.5 bridge
 }
 
 // ============================================================================

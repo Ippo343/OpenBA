@@ -90,3 +90,118 @@ constexpr uintptr_t kVtFrameCopyImageBuffer = 0x180154f00ull;
 constexpr uintptr_t kVtGeneratedImageBuffer = 0x180154f60ull;
 
 }  // namespace RtGraphics
+
+// ############################################################################
+// THE REAL CLASS — `Graphics::FrameCopyImageBuffer`.
+// ENDGAME B.3.5 block C. The POD above STAYS: `runtime/src/graphics/
+// wave23_lane_gfxbody.cpp` (block H1's) holds this class's ctor, dtor, `Create`
+// and `Generate` and still spells it `RtGraphics::FrameCopyImageBuffer`.
+// ############################################################################
+
+#include "GeneratedImageBuffer.h"
+
+namespace Graphics {
+
+// ============================================================
+// Graphics::FrameCopyImageBuffer — 0x88 bytes, TWELVE slots
+// (`??_7FrameCopyImageBuffer@Graphics@@6B@` @ 0x180154f00, B35_SLOTS.md).
+//
+// Parent `Graphics::GeneratedImageBuffer`, from
+// `?_ParentTypeName@FrameCopyImageBuffer@Graphics@@` (0x18001ef80) -> the
+// literal "GeneratedImageBuffer", NO namespace — which is RULE B5-15's point:
+// this branch's three `_TypeName`/`_ParentTypeName` strings are
+// "FrameCopyImageBuffer", "GeneratedImageBuffer" and (on the parent)
+// "Video::ImageBuffer", i.e. namespaced iff the parent is in another namespace,
+// and a `#Parent` stringisation of the C++ base name would produce
+// "Graphics::GeneratedImageBuffer" here and change the type-id CRC.
+//
+// *** WHICH SLOTS THIS CLASS OVERRIDES — AND B35_RULES 2.3 ITEM 5 IS WRONG
+// *** ABOUT ONE OF THEM. The rules sheet says FrameCopy and Reflection "override
+// 6,7,8,10,11 but INHERIT slot 9 (?Create@ImageBuffer@Video@@)". That is true of
+// `ReflectionImageBuffer` and FALSE of this class: B35_SLOTS.md's own byte read
+// puts `?Create@FrameCopyImageBuffer@Graphics@@…` (0x1800a3b70) at slot 9 here,
+// and the shipped export table carries that symbol. `?Create@
+// ReflectionImageBuffer@` does not exist. So this class overrides
+// 1,2,3,5,6,7,8,9,10,11 and inherits only slot 4; Reflection overrides
+// 1,2,3,5,6,7,8,10,11 and inherits 4 AND 9. Copied from B35_SLOTS, per the
+// brief's "COPY from it; do not reconstruct".
+//
+// *** NOT CONSTRUCTIBLE IN B.3.5 *** and NO VIRTUAL DESTRUCTOR — the same two
+// statements `Video::ImageBuffer` carries, for the same two reasons.
+// ============================================================
+class FrameCopyImageBuffer : public GeneratedImageBuffer {
+public:
+    // Slot 0's body is a `runtime/src/object/deleting_dtor.cpp` table row
+    // (0x18001eee0's sibling for this class) and is defined in no translation
+    // unit, so it stays PURE — see `Video::ImageBuffer`'s slot-0 banner for why
+    // a non-pure declaration does not link.
+    Object::Base*     DeletingDtor(unsigned flags) override = 0;  // [ 0]
+    const char*       TypeName() const override;                  // [ 1] 0x18001efb0
+    uint32_t          Type() const override;                      // [ 2] 0x18001ef90
+    int32_t           GetFileVersion() const override;             // [ 3] 0x1800a3c70 — 0x1007
+    bool              Serialize(void* stream) override;            // [ 5] 0x1800a3c40
+    Object::External* Reconstruct() override;                      // [ 6] 0x18001f130
+    void              Destruct() override;                         // [ 7] 0x18001f160
+    Object::External* Construct() override;                        // [ 8] 0x18001f150
+    // [ 9] 0x1800a3b70 — ITS OWN, see the banner. PURE here because the body is
+    // in `wave23_lane_gfxbody.cpp` (block H1's) and is not a member yet.
+    bool Create(ImageType type, Usage usage, Format format, uint32_t flags,
+                int32_t width, int32_t height, FilterMode filter,
+                AddressMode addressU, AddressMode addressV,
+                AddressMode addressW, LevelArray* levels) override = 0;
+    // [10] 0x1800a3b20 — likewise `wave23_lane_gfxbody.cpp`'s.
+    void Generate(void* context, int32_t generation) const override = 0;
+    // [11] 0x1800a3b10 — `RET`. One byte in the shipped build, ported as an
+    // empty body (reference_retail_ships_empty_bodies.md).
+    void Render(void* renderer, const void* scene, const void* camera,
+                int32_t generation) const override;
+
+protected:
+    FrameCopyImageBuffer() = default;   // see "NOT CONSTRUCTIBLE"
+    ~FrameCopyImageBuffer();            // ??1… 0x1800a3c80 — body in wave23_lane_gfxbody.cpp
+
+    // RULE B5-15, both COPIED from B35_SLOTS section 3:
+    //   0x18001ef70  ?_TypeName@       -> "FrameCopyImageBuffer"
+    //   0x18001ef80  ?_ParentTypeName@ -> "GeneratedImageBuffer"   (NO namespace)
+    static const char* _TypeName();
+    static const char* _ParentTypeName();
+
+public:
+    static uint32_t      TypeId();                              // ?TypeId@
+    static Object::Base* CreateNewObject();                     // rt_factories_*.inc
+    static Object::Base* CreateInPlaceObject(void* storage);     // rt_factories_*.inc
+    static void*         operator new(size_t size);             // ??2 — reached by name
+    static void*         operator new(size_t size, void* storage);
+    static void          operator delete(void* p);              // ??3
+    FrameCopyImageBuffer(const FrameCopyImageBuffer& other);            // ??0…AEBV01 — not ported
+    FrameCopyImageBuffer& operator=(const FrameCopyImageBuffer& other); // ??4…      — not ported
+
+    // ---- the 0x18 bytes FrameCopyImageBuffer adds -------------------------
+    // WHAT THE THREE OWNED POINTERS ARE FOR: the POD's banner at the top of this
+    // file, which is the byte read. `_backBufferImage` is typed
+    // `Video::ImageBuffer*` now, which is what lets its teardown be
+    // `_backBufferImage->DeletingDtor(1)` instead of a hand-indexed slot 0; the
+    // two `Video::RenderBuffer*` stay `void*` because `Video::RenderBuffer` is
+    // still a POD in `Device.h` and is block D2's to convert.
+    Video::ImageBuffer* _backBufferImage;  // +0x70  owned; deleted via ITS slot 0, flags 1
+    void*               _sourceTarget;     // +0x78  Video::RenderBuffer* (owned; colour = _backBufferImage)
+    void*               _destTarget;       // +0x80  Video::RenderBuffer* (owned; colour = this)
+};
+
+static_assert(sizeof(FrameCopyImageBuffer) == 0x88,
+              "Graphics::FrameCopyImageBuffer is 0x88 bytes (saveload_draw.cpp:451 "
+              "allocates 0x88; ctor 0x1800a3d10 writes nothing past +0x80)");
+static_assert(alignof(FrameCopyImageBuffer) == 8, "qword-aligned");
+static_assert(sizeof(FrameCopyImageBuffer) == sizeof(RtGraphics::FrameCopyImageBuffer),
+              "the real class and the POD describe the same bytes");
+static_assert(offsetof(FrameCopyImageBuffer, _backBufferImage) == 0x70, "_backBufferImage @ +0x70");
+static_assert(offsetof(FrameCopyImageBuffer, _sourceTarget)    == 0x78, "_sourceTarget @ +0x78");
+static_assert(offsetof(FrameCopyImageBuffer, _destTarget)      == 0x80, "_destTarget @ +0x80");
+static_assert(offsetof(FrameCopyImageBuffer, _backBufferImage)
+                  == offsetof(RtGraphics::FrameCopyImageBuffer, _backBufferImage), "alias");
+static_assert(offsetof(FrameCopyImageBuffer, _sourceTarget)
+                  == offsetof(RtGraphics::FrameCopyImageBuffer, _sourceTarget), "alias");
+static_assert(offsetof(FrameCopyImageBuffer, _destTarget)
+                  == offsetof(RtGraphics::FrameCopyImageBuffer, _destTarget), "alias");
+
+}  // namespace Graphics

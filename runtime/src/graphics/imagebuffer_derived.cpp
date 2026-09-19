@@ -49,14 +49,16 @@
 #include "../../types/graphics/FrameCopyImageBuffer.h"
 #include "../../types/graphics/GeneratedImageBuffer.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"
 #include "../collection/array_internal.h"
 
-using rt::io::Encoding;
-using rt::io::ReaderWriter;
-using rt::io::Serializer;
-using rt::io::Stream;
-using RtGraphics::GeneratedImageBuffer;
-using RtGraphics::ReflectionImageBuffer;
+// ENDGAME B.3.5 block C — the three real classes. The `RtGraphics::*` PODs are
+// no longer used by this file at all; `FrameCopyImageBuffer.h`'s stays for
+// `wave23_lane_gfxbody.cpp` (block H1's) and `GeneratedImageBuffer.h`'s two for
+// the layout those mirrors embed.
+using Graphics::FrameCopyImageBuffer;
+using Graphics::GeneratedImageBuffer;
+using Graphics::ReflectionImageBuffer;
 
 // Declared here rather than pulled in from standalone/resolve.h: that header
 // drags in <windows.h>, and PLAN §4.1 requires runtime/src/ to stay
@@ -104,7 +106,7 @@ const char* ReadTypeName(const uint8_t* node) {
 using VoidThisFn = void  (*)(void*);
 using PtrThisFn  = void* (*)(void*);
 using NewFn      = void* (*)(uint64_t);
-using SerializeFn = bool (*)(void*, Stream*);
+using SerializeFn = bool (*)(void*, void*);
 using RbCreateFn = bool  (*)(void*, const void*, const void*);
 
 // `??0ImageBuffer@Video@@QEAA@XZ` 0x1800f2580 — PORTED (video/buffers.cpp).
@@ -118,10 +120,17 @@ void ImageBufferCtor(void* p) {
 void ImageBufferDtor(void* p) {
     RT_EXPORT_ONCE(VoidThisFn, "??1ImageBuffer@Video@@UEAA@XZ")(p);
 }
-bool ImageBufferSerialize(void* self, Stream* s) {
-    return RT_EXPORT_ONCE(SerializeFn,
-        "?Serialize@ImageBuffer@Video@@UEAA_NAEAVStream@IO@@@Z")(self, s);
-}
+// ENDGAME B.3.5 block C — the `?Serialize@ImageBuffer@Video@@` (0x1800f26f0)
+// name door is GONE from this file. All three bodies below reach it as their
+// BASE-CLASS arm, which a real class expresses as the qualified non-virtual call
+// `this->Video::ImageBuffer::Serialize(stream)`; the member is defined in
+// `runtime/src/video/imagebuffer_vtable.cpp`, also this block's, so the call
+// cannot land anywhere else. The door itself stays registered there for the raw
+// callers outside this block.
+//
+// `??0ImageBuffer@Video@@` and `??1ImageBuffer@Video@@` KEEP their doors below:
+// their bodies are in `runtime/src/video/buffers.cpp`, which is block D2's file,
+// so the door is still what decides which body runs.
 void* ImageBufferOperatorNew(uint64_t n) {
     return RT_EXPORT_ONCE(NewFn, "??2ImageBuffer@Video@@SAPEAX_K@Z")(n);
 }
@@ -168,47 +177,31 @@ void* VtReflection() {
 }
 
 // ---------------------------------------------------------------------------
-// The Serializer prologue/epilogue, identical to imagebuffer_vtable.cpp's
-// `MakeCodec` / `DestroyCodec`, which in turn are identical to
-// achievement/goal_serialize.cpp's. Four lines each; not shared through a
-// header because both existing copies keep them file-local and a header per
-// free function is a header per function (external_set.cpp's rule).
+// ENDGAME B.3.5 block C — `MakeCodec`, `DestroyCodec` and `EmitFloatArray` are
+// GONE, and with them this file's third copy of the encoding-factory prologue
+// and its three `rt::io::*_vtbl` byte offsets (`kCreateReader`/`kCreateWriter`,
+// `kDtor`, `kArrayFloat` +0x28).
 //
-// The third argument of the factory is the save-format VERSION and it is ZERO:
-// retail zeroes R8D before the `CMP [RDX+8],R8D` and never reloads it
-// (0x1800a6f3d / 0x1800a6f4d in ReflectionImageBuffer::Serialize).
+// The REAL `IO::Serializer` (B.3.4 block 3) is that prologue: its constructor
+// takes the reading or the writing factory slot off the stream's encoding and
+// stores the result, and its destructor is `if (rw) rw->slot0(rw, 1)`. The third
+// factory argument is the save-format VERSION and it is ZERO — retail zeroes R8D
+// before the `CMP [RDX+8],R8D` and never reloads it (0x1800a6f3d / 0x1800a6f4d in
+// `ReflectionImageBuffer::Serialize`) — so the local is `IO::Serializer ser(s, 0)`
+// and its SCOPE is what places both stream operations at retail's positions.
+// `EmitFloatArray` is `ser.Serialize(4, &_planeX, nullptr)`, the non-virtual
+// forwarder that reaches +0x28.
 // ---------------------------------------------------------------------------
-ReaderWriter* MakeCodec(Stream* stream, Serializer* ser) {
-    ser->stream = stream;
-    ser->readerWriter = nullptr;
-
-    Encoding* enc = stream->encoding;
-    void** encVt = enc->vtable;
-    const int slot = (stream->direction == rt::io::kDirectionReading)
-                         ? rt::io::encoding_vtbl::kCreateReader
-                         : rt::io::encoding_vtbl::kCreateWriter;
-    using FactoryFn = ReaderWriter* (*)(Encoding*, Serializer*, int);
-    ReaderWriter* rw = reinterpret_cast<FactoryFn>(encVt[slot / 8])(enc, ser, 0);
-    ser->readerWriter = rw;
-    return rw;
-}
-
-void DestroyCodec(ReaderWriter* rw) {
-    if (!rw) return;
-    using DtorFn = void (*)(ReaderWriter*, int);
-    reinterpret_cast<DtorFn>(rw->vtable[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
-}
-
-// `+0x28` is `kArrayFloat`, `(n, float*, name)` — runtime/types/io/Serializer.h,
-// RETAIL offsets. `EDX = 4` and `R8 = this+0x80` at 0x1800a6f6c/0x1800a6f62.
-void EmitFloatArray(ReaderWriter* rw, int n, float* p) {
-    using Fn = void (*)(ReaderWriter*, int, float*, const char*);
-    reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kArrayFloat / 8])(rw, n, p, nullptr);
-}
 
 // The object's OWN vtable slot 0, the vector deleting destructor, with the
 // flags byte spelled out at each call site. Read through the object rather than
-// through a resolved symbol because a derived class must reach ITS OWN slot 0.
+// through a resolved symbol because a derived class must reach ITS OWN slot 0 —
+// and because the live object wears the MINTED table, so the call has to go
+// through its vptr rather than through a C++ vtable GCC would resolve against
+// its own. Kept as a raw read for exactly that reason; where the receiver IS a
+// typed `Video::ImageBuffer*` the virtual call `p->DeletingDtor(flags)` says the
+// same thing with the slot index checked by the compiler, and the two owned-image
+// teardowns below use that form.
 void DeleteThrough(void* obj, unsigned flags) {
     void** vt = *reinterpret_cast<void***>(obj);
     reinterpret_cast<void* (*)(void*, unsigned)>(vt[0])(obj, flags);
@@ -217,49 +210,25 @@ void DeleteThrough(void* obj, unsigned flags) {
 }  // namespace
 
 // ############################################################################
-// Graphics::GeneratedImageBuffer
+// THE MEMBERS — `Graphics::GeneratedImageBuffer` and
+// `Graphics::FrameCopyImageBuffer`. ENDGAME B.3.5 block C.
+//
+// This block is at `namespace Graphics` scope and comes AFTER the anonymous
+// namespace closes, per B34_BRIEFS A.2: a member of `Graphics::X` cannot be
+// defined inside a sibling namespace, and the anonymous-namespace helpers are
+// still reachable here by unqualified name because they are members of the
+// global namespace's declarative region.
 // ############################################################################
-
-// ============================================================================
-// ??0GeneratedImageBuffer@Graphics@@QEAA@XZ          retail 0x1800a3e70
-//
-//     CALL 0x1800f2580              ; ??0ImageBuffer@Video@@
-//     LEA RAX,[0x180154f60]         ; ??_7GeneratedImageBuffer@Graphics@@6B@
-//     MOV [RBX],RAX
-//     MOV dword [RBX+0x68],0
-//     MOV RAX,RBX                   ; returns `this`
-// ============================================================================
-extern "C" void* RtGraphics_GeneratedImageBuffer_Ctor(void* self) {
-    GeneratedImageBuffer* const p = static_cast<GeneratedImageBuffer*>(self);
-    ImageBufferCtor(p);
-    p->base.vtable = VtGenerated();
-    p->_generation = 0;
-    return self;
-}
-
-// ============================================================================
-// ??1GeneratedImageBuffer@Graphics@@UEAA@XZ          retail 0x1800a3e40
-//
-//     LEA RAX,[0x180154f60] ; MOV [RCX],RAX ; JMP 0x1800f2610
-//
-// Restamp and hand back to the base. Nothing of its own to release: +0x68 is a
-// plain int.
-// ============================================================================
-extern "C" void RtGraphics_GeneratedImageBuffer_Dtor(void* self) {
-    GeneratedImageBuffer* const p = static_cast<GeneratedImageBuffer*>(self);
-    p->base.vtable = VtGenerated();
-    ImageBufferDtor(p);                          // tail JMP ??1ImageBuffer
-}
+namespace Graphics {
 
 // slot 2 — `MOV EAX,dword ptr [0x1801f9a20]` (= ?_typeInfo@… + 0x00)
-extern "C" uint32_t RtGraphics_GeneratedImageBuffer_Type(const void* self) {
-    (void)self;                                  // retail never touches RCX
-    return ReadTypeId(TypeInfoGenerated());
+uint32_t GeneratedImageBuffer::Type() const {
+    return ReadTypeId(TypeInfoGenerated());      // retail never touches RCX
 }
+uint32_t GeneratedImageBuffer::TypeId() { return ReadTypeId(TypeInfoGenerated()); }
 
 // slot 1 — `MOV RAX,qword ptr [0x1801f9a28]` (= ?_typeInfo@… + 0x08)
-extern "C" const char* RtGraphics_GeneratedImageBuffer_TypeName(const void* self) {
-    (void)self;
+const char* GeneratedImageBuffer::TypeName() const {
     return ReadTypeName(TypeInfoGenerated());
 }
 
@@ -267,10 +236,15 @@ extern "C" const char* RtGraphics_GeneratedImageBuffer_TypeName(const void* self
 // version of this class. It happens to equal Video::ImageBuffer's 7 and that is
 // a coincidence of the two classes' histories, not a rule — FrameCopy's and
 // Reflection's are both 0x1007. Spelled as its own constant for that reason.
-extern "C" int32_t RtGraphics_GeneratedImageBuffer_GetFileVersion(const void* self) {
-    (void)self;
-    return 7;
-}
+int32_t GeneratedImageBuffer::GetFileVersion() const { return 7; }
+
+// RULE B5-15 — COPIED from B35_SLOTS section 3, and this class is the reason the
+// rule is stated the way it is: the two literals for ONE class disagree about
+// namespacing.
+//   0x18001eda0  ?_TypeName@       -> "GeneratedImageBuffer"   (no namespace)
+//   0x18001edb0  ?_ParentTypeName@ -> "Video::ImageBuffer"     (namespaced)
+const char* GeneratedImageBuffer::_TypeName()       { return "GeneratedImageBuffer"; }
+const char* GeneratedImageBuffer::_ParentTypeName() { return "Video::ImageBuffer"; }
 
 // ============================================================================
 // slot 5 — ?Serialize@GeneratedImageBuffer@Graphics@@UEAA_NAEAVStream@IO@@@Z
@@ -283,33 +257,34 @@ extern "C" int32_t RtGraphics_GeneratedImageBuffer_GetFileVersion(const void* se
 // as they were passed. There is NO failure path and the base's return value is
 // DISCARDED — `MOV AL,1` overwrites whatever it returned. Transcribed as
 // written; returning the base's result instead would be a different function.
+//
+// `CALL 0x1800f26f0` is the BASE-CLASS arm, which a real class spells as a
+// qualified non-virtual call. It must stay qualified: an unqualified
+// `Serialize(stream)` would be a recursive virtual call into this very slot.
 // ============================================================================
-extern "C" bool RtGraphics_GeneratedImageBuffer_Serialize(void* self, Stream* stream) {
-    ImageBufferSerialize(self, stream);
+bool GeneratedImageBuffer::Serialize(void* stream) {
+    Video::ImageBuffer::Serialize(stream);
     return true;
 }
 
 // ############################################################################
-// Graphics::FrameCopyImageBuffer — the nine slots wave23 did not port
+// Graphics::FrameCopyImageBuffer — the eight slots wave23 did not port
 // ############################################################################
 
 // slot 2 — `MOV EAX,dword ptr [0x1801f99e8]`
-extern "C" uint32_t RtGraphics_FrameCopyImageBuffer_Type(const void* self) {
-    (void)self;
-    return ReadTypeId(TypeInfoFrameCopy());
-}
-
+uint32_t FrameCopyImageBuffer::Type() const { return ReadTypeId(TypeInfoFrameCopy()); }
+uint32_t FrameCopyImageBuffer::TypeId()     { return ReadTypeId(TypeInfoFrameCopy()); }
 // slot 1 — `MOV RAX,qword ptr [0x1801f99f0]`
-extern "C" const char* RtGraphics_FrameCopyImageBuffer_TypeName(const void* self) {
-    (void)self;
+const char* FrameCopyImageBuffer::TypeName() const {
     return ReadTypeName(TypeInfoFrameCopy());
 }
-
 // slot 3 — `MOV EAX,0x1007 ; RET`
-extern "C" int32_t RtGraphics_FrameCopyImageBuffer_GetFileVersion(const void* self) {
-    (void)self;
-    return 0x1007;
-}
+int32_t FrameCopyImageBuffer::GetFileVersion() const { return 0x1007; }
+
+// RULE B5-15, COPIED: 0x18001ef70 -> "FrameCopyImageBuffer",
+// 0x18001ef80 -> "GeneratedImageBuffer" (NO namespace).
+const char* FrameCopyImageBuffer::_TypeName()       { return "FrameCopyImageBuffer"; }
+const char* FrameCopyImageBuffer::_ParentTypeName() { return "GeneratedImageBuffer"; }
 
 // ============================================================================
 // slot 5 — ?Serialize@FrameCopyImageBuffer@Graphics@@UEAA_NAEAVStream@IO@@@Z
@@ -328,37 +303,37 @@ extern "C" int32_t RtGraphics_FrameCopyImageBuffer_GetFileVersion(const void* se
 // leaves a loaded object with the file's `kind` instead of 4.
 // Video::ImageBuffer::IsGenerated() is `kind == 4`, which is what 4 means here.
 // ============================================================================
-extern "C" bool RtGraphics_FrameCopyImageBuffer_Serialize(void* self, Stream* stream) {
-    RtGraphics::FrameCopyImageBuffer* const p =
-        static_cast<RtGraphics::FrameCopyImageBuffer*>(self);
-    p->base.kind = 4;
-    ImageBufferSerialize(self, stream);
-    p->base.kind = 4;
+bool FrameCopyImageBuffer::Serialize(void* stream) {
+    _kind = 4;
+    Video::ImageBuffer::Serialize(stream);
+    _kind = 4;
     return true;                                  // MOV AL,1; no failure path
 }
 
 // slot 7 — ?Destruct@ ... retail 0x18001f160.  `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`
-extern "C" void RtGraphics_FrameCopyImageBuffer_Destruct(void* self) {
-    DeleteThrough(self, 0u);                      // flags 0 = destroy, DO NOT free
+void FrameCopyImageBuffer::Destruct() {
+    DeleteThrough(this, 0u);                      // flags 0 = destroy, DO NOT free
 }
 
 // slot 8 — ?Construct@ ... retail 0x18001f150.
 // `TEST RCX,RCX; JNZ 0x1800a3d10; XOR EAX,EAX; RET` — MSVC's placement-new
 // codegen. The null test looks unreachable for a virtual and is transcribed
-// anyway: "obviously unreachable" is not a licence to drop a branch.
-extern "C" void* RtGraphics_FrameCopyImageBuffer_Construct(void* self) {
-    if (self == nullptr) return nullptr;
-    FrameCopyCtor(self);
-    return self;                                  // the ctor's `MOV RAX,RSI`
+// anyway: "obviously unreachable" is not a licence to drop a branch. It lives in
+// the DOOR below rather than here, because `this == nullptr` inside a member is a
+// comparison GCC folds and warns about, and the door is where retail's test is
+// observable.
+Object::External* FrameCopyImageBuffer::Construct() {
+    FrameCopyCtor(this);
+    return this;                                  // the ctor's `MOV RAX,RSI`
 }
 
 // slot 6 — ?Reconstruct@ ... retail 0x18001f130. Destroy in place through slot
 // 0 with flags 0, then tail-jump the constructor onto the SAME storage: the
 // device-lost recovery primitive.
-extern "C" void* RtGraphics_FrameCopyImageBuffer_Reconstruct(void* self) {
-    DeleteThrough(self, 0u);
-    FrameCopyCtor(self);
-    return self;
+Object::External* FrameCopyImageBuffer::Reconstruct() {
+    DeleteThrough(this, 0u);
+    FrameCopyCtor(this);
+    return this;
 }
 
 // ============================================================================
@@ -372,10 +347,112 @@ extern "C" void* RtGraphics_FrameCopyImageBuffer_Reconstruct(void* self) {
 // (reference_retail_ships_empty_bodies.md) — a slot left as an abort trap is
 // not the same thing, because the trap fires where retail returns.
 // ============================================================================
+void FrameCopyImageBuffer::Render(void* renderer, const void* scene,
+                                  const void* camera, int32_t generation) const {
+    (void)renderer; (void)scene; (void)camera; (void)generation;
+}
+
+}  // namespace Graphics
+
+// ############################################################################
+// The registered doors for the two classes above — every one a QUALIFIED
+// non-virtual delegation. Names and addresses UNCHANGED.
+// ############################################################################
+
+// ============================================================================
+// ??0GeneratedImageBuffer@Graphics@@QEAA@XZ          retail 0x1800a3e70
+//
+//     CALL 0x1800f2580              ; ??0ImageBuffer@Video@@
+//     LEA RAX,[0x180154f60]         ; ??_7GeneratedImageBuffer@Graphics@@6B@
+//     MOV [RBX],RAX
+//     MOV dword [RBX+0x68],0
+//     MOV RAX,RBX                   ; returns `this`
+//
+// STAYS A DOOR, not a real constructor (B4b-2 / B35_RULES 11): the LEA operand is
+// the MINTED vtable address, which a C++ constructor chain cannot write — it
+// would stamp GCC's table on an object the rest of the tree reads through the
+// minted one. So the vptr store stays explicit and last, exactly as retail's is.
+// ============================================================================
+extern "C" void* RtGraphics_GeneratedImageBuffer_Ctor(void* self) {
+    Graphics::GeneratedImageBuffer* const p =
+        reinterpret_cast<Graphics::GeneratedImageBuffer*>(self);   // B.3.5 bridge
+    ImageBufferCtor(p);
+    *reinterpret_cast<void**>(p) = VtGenerated();
+    p->_generation = 0;
+    return self;
+}
+
+// ============================================================================
+// ??1GeneratedImageBuffer@Graphics@@UEAA@XZ          retail 0x1800a3e40
+//
+//     LEA RAX,[0x180154f60] ; MOV [RCX],RAX ; JMP 0x1800f2610
+//
+// Restamp and hand back to the base. Nothing of its own to release: +0x68 is a
+// plain int. STAYS A DOOR for two reasons at once: the restamp is the MINTED
+// address, and `??1ImageBuffer@Video@@` is still a door in block D2's
+// `buffers.cpp`, so a real `~GeneratedImageBuffer()` would need a
+// `Video::ImageBuffer::~ImageBuffer()` that is defined nowhere.
+// ============================================================================
+extern "C" void RtGraphics_GeneratedImageBuffer_Dtor(void* self) {
+    Graphics::GeneratedImageBuffer* const p =
+        reinterpret_cast<Graphics::GeneratedImageBuffer*>(self);   // B.3.5 bridge
+    *reinterpret_cast<void**>(p) = VtGenerated();
+    ImageBufferDtor(p);                          // tail JMP ??1ImageBuffer
+}
+
+extern "C" uint32_t RtGraphics_GeneratedImageBuffer_Type(const void* self) {
+    return reinterpret_cast<const Graphics::GeneratedImageBuffer*>(self)
+        ->Graphics::GeneratedImageBuffer::Type();                  // B.3.5 bridge
+}
+extern "C" const char* RtGraphics_GeneratedImageBuffer_TypeName(const void* self) {
+    return reinterpret_cast<const Graphics::GeneratedImageBuffer*>(self)
+        ->Graphics::GeneratedImageBuffer::TypeName();              // B.3.5 bridge
+}
+extern "C" int32_t RtGraphics_GeneratedImageBuffer_GetFileVersion(const void* self) {
+    return reinterpret_cast<const Graphics::GeneratedImageBuffer*>(self)
+        ->Graphics::GeneratedImageBuffer::GetFileVersion();        // B.3.5 bridge
+}
+extern "C" bool RtGraphics_GeneratedImageBuffer_Serialize(void* self, void* stream) {
+    return reinterpret_cast<Graphics::GeneratedImageBuffer*>(self)
+        ->Graphics::GeneratedImageBuffer::Serialize(stream);       // B.3.5 bridge
+}
+
+extern "C" uint32_t RtGraphics_FrameCopyImageBuffer_Type(const void* self) {
+    return reinterpret_cast<const Graphics::FrameCopyImageBuffer*>(self)
+        ->Graphics::FrameCopyImageBuffer::Type();                  // B.3.5 bridge
+}
+extern "C" const char* RtGraphics_FrameCopyImageBuffer_TypeName(const void* self) {
+    return reinterpret_cast<const Graphics::FrameCopyImageBuffer*>(self)
+        ->Graphics::FrameCopyImageBuffer::TypeName();              // B.3.5 bridge
+}
+extern "C" int32_t RtGraphics_FrameCopyImageBuffer_GetFileVersion(const void* self) {
+    return reinterpret_cast<const Graphics::FrameCopyImageBuffer*>(self)
+        ->Graphics::FrameCopyImageBuffer::GetFileVersion();        // B.3.5 bridge
+}
+extern "C" bool RtGraphics_FrameCopyImageBuffer_Serialize(void* self, void* stream) {
+    return reinterpret_cast<Graphics::FrameCopyImageBuffer*>(self)
+        ->Graphics::FrameCopyImageBuffer::Serialize(stream);       // B.3.5 bridge
+}
+extern "C" void RtGraphics_FrameCopyImageBuffer_Destruct(void* self) {
+    reinterpret_cast<Graphics::FrameCopyImageBuffer*>(self)
+        ->Graphics::FrameCopyImageBuffer::Destruct();              // B.3.5 bridge
+}
+// The retail null-`this` test lives HERE. See the member's banner.
+extern "C" void* RtGraphics_FrameCopyImageBuffer_Construct(void* self) {
+    if (self == nullptr) return nullptr;
+    return reinterpret_cast<Graphics::FrameCopyImageBuffer*>(self)
+        ->Graphics::FrameCopyImageBuffer::Construct();             // B.3.5 bridge
+}
+extern "C" void* RtGraphics_FrameCopyImageBuffer_Reconstruct(void* self) {
+    return reinterpret_cast<Graphics::FrameCopyImageBuffer*>(self)
+        ->Graphics::FrameCopyImageBuffer::Reconstruct();           // B.3.5 bridge
+}
 extern "C" void RtGraphics_FrameCopyImageBuffer_Render(const void* self, void* renderer,
                                                        const void* scene, const void* camera,
                                                        int generation) {
-    (void)self; (void)renderer; (void)scene; (void)camera; (void)generation;
+    reinterpret_cast<const Graphics::FrameCopyImageBuffer*>(self)
+        ->Graphics::FrameCopyImageBuffer::Render(renderer, scene, camera,
+                                                generation);      // B.3.5 bridge
 }
 
 // ############################################################################
@@ -396,10 +473,10 @@ namespace {
 // and a later change that inserts anything between the two wants retail's own
 // ordering rather than this file's opinion of it.
 void ReflectionCtorBody(ReflectionImageBuffer* p) {
-    ImageBufferCtor(p);                 // CALL 0x1800f2580
-    p->base.vtable = VtGenerated();     // LEA 0x180154f60
+    ImageBufferCtor(p);                                 // CALL 0x1800f2580
+    *reinterpret_cast<void**>(p) = VtGenerated();        // LEA 0x180154f60
     p->_generation = 0;
-    p->base.vtable = VtReflection();    // LEA 0x180155190
+    *reinterpret_cast<void**>(p) = VtReflection();       // LEA 0x180155190
     p->_depth  = nullptr;
     p->_target = nullptr;
     // ONE eight-byte store covers x and y, another covers z and d:
@@ -413,9 +490,11 @@ void ReflectionCtorBody(ReflectionImageBuffer* p) {
 
 }  // namespace
 
-// ??0ReflectionImageBuffer@Graphics@@QEAA@XZ         retail 0x1800a7130
+// ??0ReflectionImageBuffer@Graphics@@QEAA@XZ         retail 0x1800a7130.
+// STAYS A DOOR, not a real constructor: the two LEA operands are MINTED vtable
+// addresses (B4b-2 / B35_RULES 11).
 extern "C" void* RtGraphics_ReflectionImageBuffer_Ctor(void* self) {
-    ReflectionCtorBody(static_cast<ReflectionImageBuffer*>(self));
+    ReflectionCtorBody(reinterpret_cast<ReflectionImageBuffer*>(self));  // B.3.5 bridge
     return self;                                   // MOV RAX,RBX
 }
 
@@ -437,56 +516,59 @@ extern "C" void* RtGraphics_ReflectionImageBuffer_Ctor(void* self) {
 // The plane at +0x80..+0x8c is NOT touched — it is four floats.
 // ============================================================================
 extern "C" void RtGraphics_ReflectionImageBuffer_Dtor(void* self) {
-    ReflectionImageBuffer* const p = static_cast<ReflectionImageBuffer*>(self);
+    ReflectionImageBuffer* const p =
+        reinterpret_cast<ReflectionImageBuffer*>(self);   // B.3.5 bridge
 
-    p->base.vtable = VtReflection();
-    if (p->_depth != nullptr) DeleteThrough(p->_depth, 1u);   // EDX = 1: free it too
+    *reinterpret_cast<void**>(p) = VtReflection();
+    // `_depth` is a typed `Video::ImageBuffer*` now, so this is a virtual call
+    // on slot 0 with the index checked by the compiler. It still reads the live
+    // object's vptr — the MINTED table — which is what makes it the same call.
+    if (p->_depth != nullptr) p->_depth->DeletingDtor(1u);   // EDX = 1: free it too
     if (p->_target != nullptr) {
         RenderBufferPlatformDestruct(p->_target);
         RenderBufferOperatorDelete(p->_target);
     }
-    p->base.vtable = VtGenerated();
+    *reinterpret_cast<void**>(p) = VtGenerated();
     ImageBufferDtor(p);                            // tail JMP ??1ImageBuffer
 }
 
-// slot 2 — `MOV EAX,dword ptr [0x1801f9a90]`
-extern "C" uint32_t RtGraphics_ReflectionImageBuffer_Type(const void* self) {
-    (void)self;
-    return ReadTypeId(TypeInfoReflection());
-}
+namespace Graphics {
 
+// slot 2 — `MOV EAX,dword ptr [0x1801f9a90]`
+uint32_t ReflectionImageBuffer::Type() const { return ReadTypeId(TypeInfoReflection()); }
+uint32_t ReflectionImageBuffer::TypeId()     { return ReadTypeId(TypeInfoReflection()); }
 // slot 1 — `MOV RAX,qword ptr [0x1801f9a98]`
-extern "C" const char* RtGraphics_ReflectionImageBuffer_TypeName(const void* self) {
-    (void)self;
+const char* ReflectionImageBuffer::TypeName() const {
     return ReadTypeName(TypeInfoReflection());
 }
-
 // slot 3 — `MOV EAX,0x1007 ; RET`
-extern "C" int32_t RtGraphics_ReflectionImageBuffer_GetFileVersion(const void* self) {
-    (void)self;
-    return 0x1007;
-}
+int32_t ReflectionImageBuffer::GetFileVersion() const { return 0x1007; }
+
+// RULE B5-15, COPIED: 0x180022190 -> "ReflectionImageBuffer",
+// 0x1800221a0 -> "GeneratedImageBuffer" (NO namespace).
+const char* ReflectionImageBuffer::_TypeName()       { return "ReflectionImageBuffer"; }
+const char* ReflectionImageBuffer::_ParentTypeName() { return "GeneratedImageBuffer"; }
 
 // slot 7 — retail 0x1800224c0, byte-identical to FrameCopy's.
-extern "C" void RtGraphics_ReflectionImageBuffer_Destruct(void* self) {
-    DeleteThrough(self, 0u);
-}
+void ReflectionImageBuffer::Destruct() { DeleteThrough(this, 0u); }
 
 // slot 8 — retail 0x180022450. The ctor is INLINED here rather than tail-called
 // (unlike FrameCopy's, which jumps to 0x1800a3d10), which is why this goes
-// through `ReflectionCtorBody` and not through a name door.
-extern "C" void* RtGraphics_ReflectionImageBuffer_Construct(void* self) {
-    if (self == nullptr) return nullptr;           // TEST RCX,RCX / XOR EAX,EAX
-    ReflectionCtorBody(static_cast<ReflectionImageBuffer*>(self));
-    return self;
+// through `ReflectionCtorBody` and not through a name door. The `TEST RCX,RCX /
+// XOR EAX,EAX` arm lives in the DOOR, for the reason FrameCopy's does.
+Object::External* ReflectionImageBuffer::Construct() {
+    ReflectionCtorBody(this);
+    return this;
 }
 
 // slot 6 — retail 0x1800223e0. Slot 0 with flags 0, then the inlined ctor.
-extern "C" void* RtGraphics_ReflectionImageBuffer_Reconstruct(void* self) {
-    DeleteThrough(self, 0u);
-    ReflectionCtorBody(static_cast<ReflectionImageBuffer*>(self));
-    return self;
+Object::External* ReflectionImageBuffer::Reconstruct() {
+    DeleteThrough(this, 0u);
+    ReflectionCtorBody(this);
+    return this;
 }
+
+}  // namespace Graphics
 
 // ============================================================================
 // slot 10 — ?Generate@ReflectionImageBuffer@Graphics@@UEBAXAEAVContext@Video@@H@Z
@@ -499,10 +581,11 @@ extern "C" void* RtGraphics_ReflectionImageBuffer_Reconstruct(void* self) {
 // GeneratedImageBuffer "generate" arm to do. Ported as empty
 // (reference_retail_ships_empty_bodies.md).
 // ============================================================================
-extern "C" void RtGraphics_ReflectionImageBuffer_Generate(const void* self, void* context,
-                                                          int generation) {
-    (void)self; (void)context; (void)generation;
+namespace Graphics {
+void ReflectionImageBuffer::Generate(void* context, int32_t generation) const {
+    (void)context; (void)generation;
 }
+}  // namespace Graphics
 
 // ============================================================================
 // slot 5 — ?Serialize@ReflectionImageBuffer@Graphics@@UEAA_NAEAVStream@IO@@@Z
@@ -532,68 +615,76 @@ extern "C" void RtGraphics_ReflectionImageBuffer_Generate(const void* self, void
 // walks into `MOV R10,[RCX]` at 0x1800a6fc2 and dies. Per CLAUDE.md that is
 // reproduced, not guarded: the deref is load-bearing.
 // ============================================================================
-extern "C" bool RtGraphics_ReflectionImageBuffer_Serialize(void* self, Stream* stream) {
-    ReflectionImageBuffer* const p = static_cast<ReflectionImageBuffer*>(self);
+namespace Graphics {
 
-    p->base.kind = 5;
-    ImageBufferSerialize(self, stream);
+bool ReflectionImageBuffer::Serialize(void* stream) {
+    // B.3.5 bridge: the slot's parameter is `IO::Stream&` in retail, but
+    // `Object::External::Serialize` is declared `bool(void*)` across the whole
+    // External family and that signature is not this block's to change.
+    IO::Stream& s = *reinterpret_cast<IO::Stream*>(stream);
 
-    Serializer ser;
-    ReaderWriter* rw = MakeCodec(stream, &ser);
-    EmitFloatArray(rw, 4, &p->_planeX);            // the plane: n, nx, ny, nz, d
-    p->base.kind = 5;
+    _kind = 5;
+    Video::ImageBuffer::Serialize(stream);         // the BASE-CLASS arm, qualified
 
-    if (stream->direction == rt::io::kDirectionReading) {
-        // --- the depth target -------------------------------------------------
-        if (p->_depth != nullptr) DeleteThrough(p->_depth, 1u);
+    {
+        IO::Serializer ser(s, 0);
+        ser.Serialize(4, &_planeX, nullptr);       // the plane: n, nx, ny, nz, d
+        _kind = 5;
 
-        void* const img = ImageBufferOperatorNew(0x68);
-        if (img != nullptr) ImageBufferCtor(img);
-        p->_depth = img;                           // never the ctor's return
+        if (s.GetDirection() == IO::kReading) {
+            // --- the depth target ---------------------------------------------
+            if (_depth != nullptr) _depth->DeletingDtor(1u);
 
-        // `CALL qword ptr [R10+0x48]` = slot 9, Video::ImageBuffer::Create. The
-        // eleven arguments in retail's own order, read from 0x1800a6fc5 ..
-        // 0x1800a7005 — NOT assumed from the field order, which they do not
-        // follow (the same trap wave23 documented on FrameCopy::Create):
-        //   ImageType 0, Usage 1, Format 7,
-        //   flags = this->flags, width = this->width, height = this->height,
-        //   FilterMode 0, AddressMode 1, 1, 1, levels = nullptr.
-        // Usage 1 is what makes this member a DEPTH buffer
-        // (Video::ImageBuffer::IsDepthBuffer() is `kind == 1`).
-        {
-            void** const vt = *reinterpret_cast<void***>(img);   // faithful: unguarded
-            using CreateFn = bool (*)(void*, int32_t, int32_t, int32_t, uint32_t,
-                                      int32_t, int32_t, int32_t,
-                                      int32_t, int32_t, int32_t, void*);
-            reinterpret_cast<CreateFn>(vt[9])(
-                img, 0, 1, 7,
-                p->base.flags, p->base.width, p->base.height,
-                0, 1, 1, 1, nullptr);
+            void* const img = ImageBufferOperatorNew(0x68);
+            if (img != nullptr) ImageBufferCtor(img);
+            // B.3.5 bridge: `??2ImageBuffer` hands back raw storage and
+            // `??0ImageBuffer` is still a door in block D2's `buffers.cpp`, so the
+            // object is typed only here. Never the ctor's return value — see the
+            // `ImageBufferCtor` banner.
+            _depth = reinterpret_cast<Video::ImageBuffer*>(img);
+
+            // `CALL qword ptr [R10+0x48]` = slot 9, Video::ImageBuffer::Create.
+            // With the real class that is `_depth->Create(...)`, a virtual call at
+            // index 9 through the object's own (minted) vptr — the same
+            // instruction, with the index checked by the compiler. The deref is
+            // UNGUARDED in retail and stays unguarded here: if `??2ImageBuffer`
+            // returned null, retail walks into `MOV R10,[RCX]` at 0x1800a6fc2 and
+            // dies, and per CLAUDE.md that is reproduced, not guarded.
+            //
+            // The eleven arguments in retail's own order, read from 0x1800a6fc5 ..
+            // 0x1800a7005 — NOT assumed from the field order, which they do not
+            // follow (the same trap wave23 documented on FrameCopy::Create):
+            //   ImageType 0, Usage 1, Format 7,
+            //   flags = this->flags, width = this->width, height = this->height,
+            //   FilterMode 0, AddressMode 1, 1, 1, levels = nullptr.
+            // Usage 1 is what makes this member a DEPTH buffer
+            // (Video::ImageBuffer::IsDepthBuffer() is `kind == 1`).
+            _depth->Create(0, 1, 7, _flags, _width, _height, 0, 1, 1, 1, nullptr);
+
+            // --- the render target --------------------------------------------
+            if (_target != nullptr) {
+                RenderBufferPlatformDestruct(_target);
+                RenderBufferOperatorDelete(_target);
+            }
+            void* const rb = RenderBufferOperatorNew(0x30);
+            if (rb != nullptr) {
+                reinterpret_cast<uint64_t*>(rb)[0] = 0;
+                reinterpret_cast<uint64_t*>(rb)[1] = 0;
+                reinterpret_cast<uint64_t*>(rb)[2] = 0;
+                RenderBufferPlatformConstruct(rb);
+            }
+            _target = rb;
+
+            // `MOV R8,[RDI+0x70]; MOV RDX,RDI; MOV RCX,RBX` — colour is THIS
+            // image, depth is the buffer just built. The argument order is
+            // Create(this, colour, depth), so the reflection renders INTO us.
+            RenderBufferCreate(rb, this, _depth);
         }
-
-        // --- the render target ------------------------------------------------
-        if (p->_target != nullptr) {
-            RenderBufferPlatformDestruct(p->_target);
-            RenderBufferOperatorDelete(p->_target);
-        }
-        void* const rb = RenderBufferOperatorNew(0x30);
-        if (rb != nullptr) {
-            reinterpret_cast<uint64_t*>(rb)[0] = 0;
-            reinterpret_cast<uint64_t*>(rb)[1] = 0;
-            reinterpret_cast<uint64_t*>(rb)[2] = 0;
-            RenderBufferPlatformConstruct(rb);
-        }
-        p->_target = rb;
-
-        // `MOV R8,[RDI+0x70]; MOV RDX,RDI; MOV RCX,RBX` — colour is THIS image,
-        // depth is the buffer just built. The argument order is
-        // Create(this, colour, depth), so the reflection renders INTO us.
-        RenderBufferCreate(rb, p, p->_depth);
-    }
-
-    DestroyCodec(rw);
+    }   // ~Serializer: `if (rw) rw->slot0(rw, 1)` at 0x1800a7068
     return true;                                   // MOV AL,1
 }
+
+}  // namespace Graphics
 
 // ============================================================================
 // slot 11 — ?Render@ReflectionImageBuffer@Graphics@@UEBAXAEAVRenderer@2@
@@ -711,11 +802,18 @@ constexpr uint32_t kGroupSize  = 0x110;  // the Array stride, two ways (see abov
 
 }  // namespace
 
-extern "C" void RtGraphics_ReflectionImageBuffer_Render(void* self, void* renderer,
-                                                        const void* scene,
-                                                        const void* camera,
-                                                        int generation) {
-    ReflectionImageBuffer* const p = static_cast<ReflectionImageBuffer*>(self);
+namespace Graphics {
+
+void ReflectionImageBuffer::Render(void* renderer, const void* scene,
+                                   const void* camera, int32_t generation) const {
+    // `?Render@` is `UEBA` — CONST — and the body's last act WRITES `_generation`
+    // (0x1800a6e91). Retail's own signature and retail's own body disagree, which
+    // MSVC source can only have expressed with a cast too. The const-ness is
+    // transcribed because it is what the slot's mangled name says, and the write
+    // is spelled with the cast at the one site rather than by making the field
+    // `mutable`, which would hide the disagreement in the declaration.
+    ReflectionImageBuffer* const p = const_cast<ReflectionImageBuffer*>(this);
+
     if (p->_generation == generation) return;      // CMP [RCX+0x68],ESI / JZ
 
     // ---- the reflection transform (three rows + translation) ----------------
@@ -768,6 +866,55 @@ extern "C" void RtGraphics_ReflectionImageBuffer_Render(void* self, void* render
     // retail 0x18001c750 — the temporary's own Array<uint8_t> header, freed.
     reinterpret_cast<rtcoll::ArrayHdr*>(group + 0x100)->~Array();
     p->_generation = generation;                    // MOV [RDI+0x68],ESI
+}
+
+}  // namespace Graphics
+
+// ############################################################################
+// The registered doors for `Graphics::ReflectionImageBuffer`.
+// ############################################################################
+extern "C" uint32_t RtGraphics_ReflectionImageBuffer_Type(const void* self) {
+    return reinterpret_cast<const Graphics::ReflectionImageBuffer*>(self)
+        ->Graphics::ReflectionImageBuffer::Type();                 // B.3.5 bridge
+}
+extern "C" const char* RtGraphics_ReflectionImageBuffer_TypeName(const void* self) {
+    return reinterpret_cast<const Graphics::ReflectionImageBuffer*>(self)
+        ->Graphics::ReflectionImageBuffer::TypeName();             // B.3.5 bridge
+}
+extern "C" int32_t RtGraphics_ReflectionImageBuffer_GetFileVersion(const void* self) {
+    return reinterpret_cast<const Graphics::ReflectionImageBuffer*>(self)
+        ->Graphics::ReflectionImageBuffer::GetFileVersion();       // B.3.5 bridge
+}
+extern "C" void RtGraphics_ReflectionImageBuffer_Destruct(void* self) {
+    reinterpret_cast<Graphics::ReflectionImageBuffer*>(self)
+        ->Graphics::ReflectionImageBuffer::Destruct();             // B.3.5 bridge
+}
+// The retail `TEST RCX,RCX / XOR EAX,EAX` arm lives HERE.
+extern "C" void* RtGraphics_ReflectionImageBuffer_Construct(void* self) {
+    if (self == nullptr) return nullptr;
+    return reinterpret_cast<Graphics::ReflectionImageBuffer*>(self)
+        ->Graphics::ReflectionImageBuffer::Construct();            // B.3.5 bridge
+}
+extern "C" void* RtGraphics_ReflectionImageBuffer_Reconstruct(void* self) {
+    return reinterpret_cast<Graphics::ReflectionImageBuffer*>(self)
+        ->Graphics::ReflectionImageBuffer::Reconstruct();          // B.3.5 bridge
+}
+extern "C" void RtGraphics_ReflectionImageBuffer_Generate(const void* self, void* context,
+                                                          int generation) {
+    reinterpret_cast<const Graphics::ReflectionImageBuffer*>(self)
+        ->Graphics::ReflectionImageBuffer::Generate(context, generation);  // B.3.5 bridge
+}
+extern "C" bool RtGraphics_ReflectionImageBuffer_Serialize(void* self, void* stream) {
+    return reinterpret_cast<Graphics::ReflectionImageBuffer*>(self)
+        ->Graphics::ReflectionImageBuffer::Serialize(stream);      // B.3.5 bridge
+}
+extern "C" void RtGraphics_ReflectionImageBuffer_Render(void* self, void* renderer,
+                                                        const void* scene,
+                                                        const void* camera,
+                                                        int generation) {
+    reinterpret_cast<const Graphics::ReflectionImageBuffer*>(self)
+        ->Graphics::ReflectionImageBuffer::Render(renderer, scene, camera,
+                                                 generation);     // B.3.5 bridge
 }
 
 // ============================================================================
