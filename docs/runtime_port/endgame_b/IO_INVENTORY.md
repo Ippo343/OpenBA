@@ -238,10 +238,25 @@ adjacency side and are included for context):
 
 None of these rows' `RT_MINT_UNNAMED` slots is a bare guess — each carries a comment
 justifying the slot count (adjacency, a ctor's own `LEA`, or a byte-boundary argument).
-`RT_MINT_UNNAMED` vs `RT_MINT_NAMED` split not tallied per-row this pass (would need
-reading all 19 `kVSlotsNN[]` bodies individually) — UNKNOWN, flagged rather than guessed.
+~~`RT_MINT_UNNAMED` vs `RT_MINT_NAMED` split not tallied per-row this pass~~ —
+**CORRECTED 2026-09-18 by B.3.4 step 1: the split is now measured, per row, in
+`B34_RULES.md` §4.2. Totals: 231 slots, 138 NAMED, 93 UNNAMED/PURECALL.** The finding that
+matters is that **every one of the fourteen IO deleting-dtor addresses (the 8 `RT_DELDTOR`
+rows AND the 6 registered directly in `runtime/src/io/`) is the fill address of an
+`RT_MINT_UNNAMED` slot 0**, so none of them may retire in step 4 — see `B34_RULES.md` §4.2 for
+the per-class table of who still stamps each vtable.
 
-### The two unexported `IO::Encoding` tables (Visitor 0x1801559f8, Text 0x1801559d0)
+### The ~~two~~ **THREE** unexported `IO::Encoding` tables (Binary 0x1801554a8, Text 0x1801559d0, Visitor 0x1801559f8)
+
+**CORRECTED 2026-09-18 by B.3.4 step 1.** This section called the Binary table at 0x1801554a8
+"the shared Binary table" without saying it is also UNEXPORTED — it is, and it is the one every
+concrete stream's constructor installs. All three tables are unexported and all fifteen bodies
+are registered by ADDRESS only. The Binary row's three constant slots were decoded from raw
+bytes this pass and are `{IsBinary: true, IsText: false, GetKind: 2}` (0x1800a81e0
+`MOV AL,1; RET` / 0x1800a81d0 `XOR AL,AL; RET` / 0x1800a81c0 `MOV EAX,2; RET`), completing the
+`{false,true,1}` / `{false,false,3}` pair below. **Slot 0 of an Encoding table is `IsBinary`,
+NOT a deleting destructor** — see `B34_RULES.md` §1.1, which is the design fact this section's
+"same 5-slot shape" phrasing leaves implicit.
 Both fully read from `encoding_visitor_text.cpp` (135 lines, whole file). Same 5-slot shape
 as the shared Binary table (0x1801554a8, ported in `encoding.cpp`): `IsBinary`/`IsText`/
 `GetKind` constants, then `CreateReader`(+0x18)/`CreateWriter`(+0x20). Visitor:
@@ -320,12 +335,14 @@ zero hits). Three REAL idioms found instead:
    `runtime/src/object/`.
 2. **`rt::io::rw_vtbl::kXxx` named constants over a real `ReaderWriter*`** — defined in
    `runtime/types/io/Serializer.h:187-214` (26 named slot constants, `kDtor`..
-   `kSerializeBytes`). Used via `grep -rl "rw_vtbl::"` in **50 files**, overwhelmingly
+   `kSerializeBytes`). Used via `grep -rl "rw_vtbl::"` in ~~50~~ **54 files**
+   (**CORRECTED 2026-09-18 by B.3.4 step 1**),  overwhelmingly
    outside `runtime/src/io/` itself: `runtime/src/achievement/` (3), `runtime/src/audio/`
    (3), `runtime/src/collision2d/` (2), `runtime/src/graphics/` (7), `runtime/src/object/`
    (2: `external_ptr_serialize.cpp`, `external_reftable.cpp`), `runtime/src/pathfinding/`
-   (1), `runtime/src/picking/` (1), `runtime/src/save/` (2), `runtime/src/ui/` (21),
-   `runtime/src/video/` (5), plus `runtime/types/ui/Dialog.h`. **This is the dominant
+   (1), `runtime/src/picking/` (1), `runtime/src/save/` (2), `runtime/src/ui/` (**23**, not
+   21), `runtime/src/video/` (**6**, not 5), **`runtime/src/io/` (3) — omitted entirely from
+   the original count**, plus `runtime/types/ui/Dialog.h`. **This is the dominant
    idiom by user count** — every class's own `Serialize` body that reaches a
    `ReaderWriter` (not a `SerializerLite`) uses these named constants, not a bare hex
    literal.
@@ -527,6 +544,22 @@ underscore, or reached only via IAT-cached IO-side wrappers as B.3.3 found for
 `InternalBasePtr`). **Flagged as UNKNOWN / needs a follow-up grep with the real spellings**,
 not asserted as "these classes have few callers".
 
+> **CORRECTED 2026-09-18 by B.3.4 step 1 — this table is a NAMING ARTEFACT and must not be
+> used to size any batch.** The suspicion above is right and the cause is now known: for
+> `System::Thread` and `System::CriticalSection` there is no global `fn_*` pointer at all.
+> Five `code/Game` files resolve them by MANGLED NAME into file-static `s_fn_*` caches that
+> bypass `engine/funcs/engine_funcs.h` entirely — `action_pf_astar.cpp`,
+> `keystone_a_zone.cpp` (`??0Thread@System@@`, `??1Thread@System@@`, `?Start@Thread@System@@`,
+> `?WaitForFinish@Thread@System@@`), `pathfinder_seed.cpp`, `tornado.cpp`,
+> `keystone_a_gamedtor.cpp` (`??0CriticalSection@System@@`, `??1CriticalSection@System@@`,
+> `?Lock@`, `?Unlock@`), plus three `standalone/` files in resolver context. `MemoryAllocator`
+> additionally has THREE independent surfaces (member `fn_MemAlloc`, static
+> `fn_MemAllocStatic`, and a per-file `s_fn_MemAllocSA` cache of the same static export).
+> **RULE (`B34_RULES.md` §6.5d): scope a `System` batch by sweeping
+> `ResolveExport("…@System@@…")` DIRECTLY, never by reading `engine_funcs.h`** — an
+> `engine_funcs.h`-anchored sweep reports "zero callers", which is the one wrong answer that
+> authorises a deletion.
+
 ## 9. Unported/pending items named in NEXT_SESSION.md §2a
 
 ### 9.1 `Internal::Clone` (0x1800bfb10)
@@ -559,6 +592,17 @@ real `IO::Stream` type; if a file-local struct is meant, it may refer to `self`'
 (`ExternalFactory*`, declared in `runtime/types/object/External.h`, not file-local either)
 or to something this pass didn't locate. Flagged as a discrepancy for the step owner to
 resolve, not resolved here.
+
+> **RESOLVED 2026-09-18 by B.3.4 step 1 (`B34_RULES.md` §6.5e). NEXT_SESSION was imprecise,
+> not wrong, and it names a real problem.** The 2nd parameter's type is `rt::io::Stream`
+> (`external_reftable.cpp:124` `using rt::io::Stream;`, from `runtime/types/io/Serializer.h:234`)
+> — which is the lane-A **DUPLICATE POD**, not `RtIo::Stream` from `Stream.h:70` and not a
+> real class. So the scope is header-local to `Serializer.h` rather than file-local to
+> `external_reftable.cpp`, but the substance holds: there are TWO independently-declared
+> 0x18-byte `Stream` structs in two namespaces and neither header includes the other.
+> `B34_RULES.md` §1.5.2 collapses both into `IO::Stream`, and the signature becomes
+> `Object::ExternalFactory::SerializeReferenceTable(IO::Stream&)` in block 4. The file is on
+> the `ExternalFactory::Add` loader-race path, so its prompt carries `B34_RULES.md` §0.
 
 ### 9.3 `IO::MemoryStream`'s port state
 **Fully ported at the body level**, contradicting the implication that it's a blocking
@@ -605,9 +649,17 @@ port.
    §risk, corrected item 4 in B33_RULES §9 step 7).
 6. **`IO::PackageFile` is the only IO class with a `?_typeInfo@` mint row** — every other
    IO class has no reflection record at all in the mint tables, unlike Object's five
-   (`Base`/`External`/`ExternalList`/`CompiledExternal`/`Internal`). Whether `PackageFile`
+   (`Base`/`External`/`ExternalList`/`CompiledExternal`/`Internal`). ~~Whether `PackageFile`
    even needs `DECLARE_TYPE`/`DEFINE_TYPE` treatment when it converts, or whether that one
-   row is inert/orphaned, was not determined this pass — flag for the step-4 owner.
+   row is inert/orphaned, was not determined this pass~~ — **ANSWERED 2026-09-18 by B.3.4
+   step 1 (`B34_RULES.md` §1.4): the row is LIVE and not orphaned. `??_7PackageFile@IO@@6B@`
+   (0x180155700) read out of retail is 9 slots whose slots 1..7 are `Object::External`'s
+   `TypeName`/`Type`/`GetFileVersion`/`Compile`/`Serialize`/`Reconstruct`/`Destruct` in
+   External's exact order, so `IO::PackageFile : public Object::External` and it IS a
+   reflected type. (Slot 8, 0x1800252f0, Ghidra-named `Construct` returning `External*`, is
+   PackageFile's own addition and is flagged UNRESOLVED there.) It takes
+   `DECLARE_TYPE`/`DEFINE_TYPE` eventually, but its record stays MINTED for now for the same
+   reason B.3.3's closing pass left the five Object `?_typeInfo@` rows minted.**
 7. **No `runtime/types/io/PackageFile.h` exists** despite `PackageFile` being the
    single largest-by-registration-count file in the directory (24/24 in `package_file.cpp`
    alone) — its layout is scattered across `FileSystem.h`'s `PackageFileView`/
