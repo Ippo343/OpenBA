@@ -233,10 +233,22 @@ using SetBonesFn = void (*)(void* ctx, int32_t count, const void* matrices);
 // vtable slot 4 (`+0x20` = `UpdateAttached`); then walk `Geometry::_attached`
 // (+0x18 data, +0x20 count) and call each child's vtable slot 1 (`+0x8`).
 // ============================================================================
-extern "C" void RtGraphics_MeshInstance_Update(MeshInstance* self, const void* time) {
+// ENDGAME B.3.5 block E: BODY MOVED onto `Graphics::MeshInstance::Update` below.
+// The door keeps its name and its registration and delegates with a QUALIFIED
+// non-virtual call, which is what stops it re-entering itself through the minted
+// table's slot 1 (B34_BRIEFS §A.1).
+extern "C" void RtGraphics_MeshInstance_Update(void* self, const void* time) {
+    reinterpret_cast<::Graphics::MeshInstance*>(self)
+        ->::Graphics::MeshInstance::Update(*reinterpret_cast<const System::Time*>(time));
+}
+
+namespace Graphics {
+
+void MeshInstance::Update(const System::Time& timeRef) {
     ++g_miUpdate;
 
-    uint8_t* const me = B(static_cast<void*>(self));
+    const void* const time = reinterpret_cast<const void*>(&timeRef);   // B.3.5 bridge
+    uint8_t* const me = B(static_cast<void*>(this));
 
     uint32_t* const guard = UpdateInitGuard();
     Transform28* const ident = IdentityTable();
@@ -310,31 +322,37 @@ extern "C" void RtGraphics_MeshInstance_Update(MeshInstance* self, const void* t
                                true);                   // arg 8 (note 4)
 
     if (!ok) {                                          // 0x180100906
-        UpdateHierarchyFn uh = reinterpret_cast<UpdateHierarchyFn>(
-            ResolveExport("?UpdateHierarchy@MeshInstance@Graphics@@QEAAXXZ"));
-        if (uh) uh(me);
+        // ENDGAME B.3.5 block E: this was
+        // `ResolveExport("?UpdateHierarchy@MeshInstance@Graphics@@QEAAXXZ")` — a
+        // runtime-internal caller reaching its own class through the port
+        // registry. The body is now a member (`mesh.cpp`), so the call is direct
+        // and QUALIFIED, and the resolve and its null check are gone.
+        this->MeshInstance::UpdateHierarchy();
     }
 
     // ---- this instance's OWN vtable slot 4, UpdateAttached (0x180100916) ----
-    // A virtual dispatch through the object, NOT a direct call: a subclass
+    // A VIRTUAL dispatch through the object, NOT a direct call: a subclass
     // override must win, and this is the one line that makes the difference
-    // observable.
-    {
-        void** const vt = *reinterpret_cast<void***>(me);
-        typedef void (*UpdateAttachedFn)(void*);
-        reinterpret_cast<UpdateAttachedFn>(vt[4])(me);
-    }
+    // observable. ENDGAME B.3.5 block E: this was a hand-inlined
+    // `(*(void***)me)[4]`, and an ordinary UNqualified C++ virtual call is the
+    // same instruction on the same vptr — including when that vptr is the MINTED
+    // table, whose slot 4 holds scene.cpp's registered `UpdateAttached` door.
+    // tests/unit/graphics_geometry_abi_test.cpp PART D is that equivalence.
+    UpdateAttached();
 
     // ---- the attached-geometry loop (0x180100919 .. 0x18010093c) -----------
     // Count RELOADED from +0x20 every iteration (0x180100939 compares against
     // memory, not a cached register), so a child that appends during its own
-    // Update is visited. The data pointer at +0x18 is also reloaded each pass.
-    for (int32_t i = 0; i < Rd<int32_t>(me, 0x20); ++i) {
-        uint8_t* const arr = Rd<uint8_t*>(me, 0x18);
-        void* const child = *reinterpret_cast<void**>(arr + i * 8);
-        void** const cvt = *reinterpret_cast<void***>(child);
-        typedef void (*ChildUpdateFn)(void*, const void*);
-        reinterpret_cast<ChildUpdateFn>(cvt[1])(child, time);
+    // Update is visited. The data pointer at +0x18 is also reloaded each pass —
+    // reading `_attached._size` / `_attached._data` inside the loop is that same
+    // reload, one spelling up.
+    //
+    // The child call was a hand-inlined `(*(void***)child)[1]`; it is now the
+    // virtual `Update` on the real `Graphics::Geometry*` the array holds, which
+    // is the same dispatch through the same slot.
+    for (int32_t i = 0; i < _attached._size; ++i) {
+        Geometry* const child = _attached._data[i];
+        child->Update(timeRef);
         ++g_miUpdateChild;
     }
 
@@ -405,11 +423,12 @@ extern "C" void RtGraphics_MeshInstance_Update(MeshInstance* self, const void* t
 // three instructions. A port that returned the bone count on the working path
 // would be a plausible reading of the shape and is wrong.
 // ============================================================================
-extern "C" int32_t RtGraphics_MeshInstance_SetSharedInstanceData(
-        const MeshInstance* self, void* ctx, int32_t packed, float t) {
+int32_t MeshInstance::SetSharedInstanceData(Video::Context& context, int32_t packed,
+                                            float t) const {
     ++g_miSSID;
 
-    const uint8_t* const me = B(static_cast<const void*>(self));
+    void* const ctx = reinterpret_cast<void*>(&context);              // B.3.5 bridge
+    const uint8_t* const me = B(static_cast<const void*>(this));
 
     const int64_t wide = static_cast<int64_t>(packed);      // movsxd r9,r8d
     const uint32_t lo  = static_cast<uint32_t>(wide) & 0xfffu;
@@ -452,6 +471,20 @@ extern "C" int32_t RtGraphics_MeshInstance_SetSharedInstanceData(
     setBones(ctx, n, bones);                                 // 0x180101768
 
     return 0;                                                // ALWAYS 0 — see banner
+}
+
+}  // namespace Graphics
+
+// ENDGAME B.3.5 block E: the slot-7 door, delegating to the member above.
+// `?GetBones@MeshInstance@Graphics@@` is declared on the real class but is NOT
+// PORTED anywhere in the tree, so the member body above still reaches it — and
+// `?SetBones@Context@Video@@`, which is block D's — through `ResolveExport`.
+// Those two doors convert with their own owners, not here.
+extern "C" int32_t RtGraphics_MeshInstance_SetSharedInstanceData(
+        const void* self, void* ctx, int32_t packed, float t) {
+    return reinterpret_cast<const ::Graphics::MeshInstance*>(self)
+               ->::Graphics::MeshInstance::SetSharedInstanceData(
+                     *reinterpret_cast<Video::Context*>(ctx), packed, t);
 }
 
 // ============================================================================

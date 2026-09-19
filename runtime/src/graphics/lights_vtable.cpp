@@ -52,6 +52,12 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/math/Math.h"
+// ENDGAME B.3.5 block E: the real `Graphics::Light` / `AmbientLight` /
+// `SpotLight` / `SunLight`. `Light.h` is AUTHORED FROM THE BODIES IN THIS FILE —
+// every offset in the "Layout constants" block below is one of its field pins,
+// and the header cites this file as its first source.
+#include "../../types/graphics/Light.h"
+#include "../../types/graphics/SunLight.h"
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -481,10 +487,40 @@ extern "C" void RtGraphics_AmbientLight_Dtor(void* self) {
     GeometryDtor(self);
 }
 
+// ############################################################################
+// ENDGAME B.3.5 block E — the Light-branch bodies, MOVED ONTO THE MEMBERS
+// ############################################################################
+//
+// Every body below moved onto `Graphics::AmbientLight`, `Graphics::SpotLight` or
+// `Graphics::SunLight`; each registered door keeps its name and its address and
+// delegates with a QUALIFIED non-virtual call.
+//
+// RULE B5-17 IS APPLIED HERE. Retail names slot 2 and slot 10 both `Draw`. Slot
+// 2 keeps the retail spelling; slot 10 is `DrawLight`. Both mangled names are
+// unchanged in every registration, so nothing outside this file moves. The doors
+// keep their existing distinct C names (`..._DrawItem` for slot 2 and `..._Draw`
+// for slot 10), which is the same distinction one layer down.
+//
+// WHAT DID NOT MOVE: `??0AmbientLight`, `??1AmbientLight`, `??0SpotLight` and
+// `??1SpotLight`. ENDGAME B.1 decision 2 and B35_RULES section 11 keep the
+// constructor and destructor doors, and both classes are ABSTRACT (slot 0's body
+// is a `deleting_dtor.cpp` row), so a door cannot placement-new one. The
+// destructors additionally must not move: SpotLight's destroys three owned
+// resources through two different idioms and then tail-jumps ~Geometry, and
+// AmbientLight's IS a five-instruction linker-folded thunk onto ~Geometry.
+//
+// The `Video::Context&` and `Graphics::Renderer&` parameters are the real retail
+// types, forward-declared: blocks D and F own those classes, so each body takes
+// the reference and reads its offsets through ONE bridge cast, which is where it
+// read them before.
+// ############################################################################
+
 // slot 1 — `RET`. Empty in the shipped build; an ambient light has nothing to
 // tick (reference_retail_ships_empty_bodies.md).
 extern "C" void RtGraphics_AmbientLight_Update(const void* self, const void* time) {
-    (void)self; (void)time;
+    const_cast<::Graphics::AmbientLight*>(
+        reinterpret_cast<const ::Graphics::AmbientLight*>(self))
+        ->::Graphics::AmbientLight::Update(*reinterpret_cast<const System::Time*>(time));
 }
 
 // slot 2 — `RET`. The per-item Draw arm; an ambient light emits no draw items,
@@ -492,14 +528,20 @@ extern "C" void RtGraphics_AmbientLight_Update(const void* self, const void* tim
 extern "C" void RtGraphics_AmbientLight_DrawItem(const void* self, void* ctx,
                                                  const void* camera, void* material,
                                                  float a, int32_t b, int32_t c, int32_t d) {
-    (void)self; (void)ctx; (void)camera; (void)material;
-    (void)a; (void)b; (void)c; (void)d;
+    RtGraphics::ExternalPtr mat; mat.p = material;
+    reinterpret_cast<const ::Graphics::AmbientLight*>(self)
+        ->::Graphics::AmbientLight::Draw(*reinterpret_cast<Video::Context*>(ctx),
+                                         *reinterpret_cast<const ::Graphics::Camera*>(camera),
+                                         mat, a, b, c, d);
 }
 
 // slot 9 — `RET`. An ambient light casts no shadow.
 extern "C" void RtGraphics_AmbientLight_DrawShadowMap(const void* self, void* ctx,
                                                       void* renderer, int32_t a, int32_t b) {
-    (void)self; (void)ctx; (void)renderer; (void)a; (void)b;
+    reinterpret_cast<const ::Graphics::AmbientLight*>(self)
+        ->::Graphics::AmbientLight::DrawShadowMap(
+              *reinterpret_cast<Video::Context*>(ctx),
+              *reinterpret_cast<::Graphics::Renderer*>(renderer), a, b);
 }
 
 // ============================================================================
@@ -523,8 +565,35 @@ extern "C" void RtGraphics_AmbientLight_DrawShadowMap(const void* self, void* ct
 // ============================================================================
 extern "C" void RtGraphics_AmbientLight_AddDrawItems(void* self, const void* scene,
                                                      void* renderer) {
+    reinterpret_cast<const ::Graphics::AmbientLight*>(self)
+        ->::Graphics::AmbientLight::AddDrawItems(
+              *reinterpret_cast<const ::Graphics::Scene*>(scene),
+              *reinterpret_cast<::Graphics::Renderer*>(renderer));
+}
+
+namespace Graphics {
+
+void AmbientLight::Update(const System::Time& time) { (void)time; }
+
+void AmbientLight::Draw(Video::Context& context, const Camera& camera,
+                        ExternalPtrHandle material, float opacity,
+                        int a, int b, int c) const {
+    (void)context; (void)camera; (void)material; (void)opacity;
+    (void)a; (void)b; (void)c;
+}
+
+void AmbientLight::DrawShadowMap(Video::Context& context, Renderer& renderer,
+                                 int a, int b) const {
+    (void)context; (void)renderer; (void)a; (void)b;
+}
+
+void AmbientLight::AddDrawItems(const Scene& scene, Renderer& renderer) const {
     (void)scene;                                   // retail never touches RDX
-    uint8_t* const r = static_cast<uint8_t*>(renderer);
+    uint8_t* const r = reinterpret_cast<uint8_t*>(&renderer);     // B.3.5 bridge
+    // Retail keeps `this` in RBX and stores it into the {Light*, int} pair; the
+    // slot is a non-const `Light*` in the array element, so the const is cast
+    // away exactly where retail's `UEBA` (const member) does the same store.
+    void* const self = const_cast<AmbientLight*>(this);
 
     const int32_t groupIndex = *reinterpret_cast<const int32_t*>(r + 0x30);
     const int32_t lightId    = *reinterpret_cast<const int32_t*>(r + 0x28);
@@ -560,22 +629,36 @@ extern "C" void RtGraphics_AmbientLight_AddDrawItems(void* self, const void* sce
 // forwarded — retail OVERWRITES its own arg5 home slot with arg7 to make the
 // stack argument land, which is the idiom the banner describes.
 // ============================================================================
-extern "C" void RtGraphics_AmbientLight_Draw(void* self, void* ctx, void* renderer,
-                                             int32_t a4, int32_t a5, int32_t a6, int32_t a7) {
+void AmbientLight::DrawLight(Video::Context& context, Renderer& renderer,
+                             int a4, int a5, int a6, int a7) const {
     (void)a5;                                      // consumed only as the ABI slot
-    uint8_t* const d = static_cast<uint8_t*>(self);
+    void* const ctx = reinterpret_cast<void*>(&context);          // B.3.5 bridge
 
     float zeroV3a[3] = { 0.0f, 0.0f, 0.0f };
     float zeroV3b[3] = { 0.0f, 0.0f, 0.0f };
     float zeroV4 [4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
+    // The two values that come from the object are now named members: the
+    // Vector4 colour at +0xc0 and the 10.0f intensity at +0xd0.
     ContextSetLight(ctx, zeroV3a, zeroV3b, zeroV4,
-                    reinterpret_cast<const float*>(d + 0xc0),
+                    reinterpret_cast<const float*>(&_colour),
                     0.0f,
-                    *reinterpret_cast<const float*>(d + 0xd0),
+                    _intensity,
                     1);
 
-    RendererDrawItemList(renderer, ctx, a4, a6, a7);
+    RendererDrawItemList(&renderer, ctx, a4, a6, a7);
+}
+
+}  // namespace Graphics
+
+// slot 10 — the door. RULE B5-17: retail's name is `Draw`; the member is
+// `DrawLight`, eight slots away from the slot-2 `Draw` above.
+extern "C" void RtGraphics_AmbientLight_Draw(void* self, void* ctx, void* renderer,
+                                             int32_t a4, int32_t a5, int32_t a6, int32_t a7) {
+    reinterpret_cast<const ::Graphics::AmbientLight*>(self)
+        ->::Graphics::AmbientLight::DrawLight(
+              *reinterpret_cast<Video::Context*>(ctx),
+              *reinterpret_cast<::Graphics::Renderer*>(renderer), a4, a5, a6, a7);
 }
 
 // ############################################################################
@@ -649,14 +732,31 @@ extern "C" void RtGraphics_SpotLight_Dtor(void* self) {
 
 // slot 1 / slot 2 — both `RET`, like AmbientLight's.
 extern "C" void RtGraphics_SpotLight_Update(const void* self, const void* time) {
-    (void)self; (void)time;
+    const_cast<::Graphics::SpotLight*>(reinterpret_cast<const ::Graphics::SpotLight*>(self))
+        ->::Graphics::SpotLight::Update(*reinterpret_cast<const System::Time*>(time));
 }
 extern "C" void RtGraphics_SpotLight_DrawItem(const void* self, void* ctx,
                                               const void* camera, void* material,
                                               float a, int32_t b, int32_t c, int32_t d) {
-    (void)self; (void)ctx; (void)camera; (void)material;
-    (void)a; (void)b; (void)c; (void)d;
+    RtGraphics::ExternalPtr mat; mat.p = material;
+    reinterpret_cast<const ::Graphics::SpotLight*>(self)
+        ->::Graphics::SpotLight::Draw(*reinterpret_cast<Video::Context*>(ctx),
+                                      *reinterpret_cast<const ::Graphics::Camera*>(camera),
+                                      mat, a, b, c, d);
 }
+
+namespace Graphics {
+
+void SpotLight::Update(const System::Time& time) { (void)time; }
+
+void SpotLight::Draw(Video::Context& context, const Camera& camera,
+                     ExternalPtrHandle material, float opacity,
+                     int a, int b, int c) const {
+    (void)context; (void)camera; (void)material; (void)opacity;
+    (void)a; (void)b; (void)c;
+}
+
+}  // namespace Graphics
 
 // ============================================================================
 // slot 3 — ?AddDrawItems@SpotLight@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
@@ -682,21 +782,39 @@ extern "C" void RtGraphics_SpotLight_DrawItem(const void* self, void* ctx,
 // ============================================================================
 extern "C" void RtGraphics_SpotLight_AddDrawItems(void* self, const void* scene,
                                                   void* renderer) {
-    uint8_t* const d = static_cast<uint8_t*>(self);
-    if (*reinterpret_cast<void**>(d + 0x148) == nullptr) return;
-    if (*reinterpret_cast<void**>(d + 0x150) == nullptr) return;
+    reinterpret_cast<const ::Graphics::SpotLight*>(self)
+        ->::Graphics::SpotLight::AddDrawItems(
+              *reinterpret_cast<const ::Graphics::Scene*>(scene),
+              *reinterpret_cast<::Graphics::Renderer*>(renderer));
+}
+
+namespace Graphics {
+
+void SpotLight::AddDrawItems(const Scene& sceneRef, Renderer& rendererRef) const {
+    // Bridges, at the one place the foreign objects' offsets are read.
+    const void* const scene = reinterpret_cast<const void*>(&sceneRef);      // B.3.5 bridge
+    void* const renderer    = reinterpret_cast<void*>(&rendererRef);         // B.3.5 bridge
+
+    // THE WHOLE BODY IS BEHIND `_shadowMap && _shadowDepth` — retail's own
+    // guard, not one added here. A spot light whose targets failed to allocate
+    // contributes nothing rather than crashing.
+    if (_shadowMap == nullptr) return;
+    if (_shadowDepth == nullptr) return;
 
     float xform[7];                                 // Math::Transform, 0x1c
-    std::memcpy(xform, d + 0x84, sizeof xform);
+    std::memcpy(xform, &_transform, sizeof xform);
     float asT3[12];                                 // Math::Transform3, 0x30
     void* const t3 = TransformAsTransform3(xform, asT3);
 
     alignas(8) uint8_t camera[0xd8];
-    CameraFromFrustum(camera, d + 0xc0, t3, true);  // MOV R9B,1
+    // `_frustum` is the `Volume::Frustum` at +0xc0 this class's header pins; it
+    // is handed over as `const Frustum&`, which is the independent corroboration
+    // of that field (Light.h's third source).
+    CameraFromFrustum(camera, &_frustum, t3, true);  // MOV R9B,1
 
-    RendererAddLight(renderer, self);
+    RendererAddLight(renderer, this);
 
-    int32_t id = RendererBeginDrawGroup(renderer, *reinterpret_cast<void**>(d + 0x158),
+    int32_t id = RendererBeginDrawGroup(renderer, _shadowTarget,
                                         camera, camera, 1, 1u);
     SceneAddGlobalDrawItems(scene, renderer);
     if (*reinterpret_cast<const int32_t*>(static_cast<uint8_t*>(renderer) + 0x48) != 0)
@@ -711,6 +829,8 @@ extern "C" void RtGraphics_SpotLight_AddDrawItems(void* self, const void* scene,
         SceneAddCulledDrawItems(scene, renderer);
     RendererEndDrawGroup(renderer, id);
 }
+
+}  // namespace Graphics
 
 // ============================================================================
 // slot 9 — ?DrawShadowMap@SpotLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HH@Z
@@ -727,23 +847,37 @@ extern "C" void RtGraphics_SpotLight_AddDrawItems(void* self, const void* scene,
 // ============================================================================
 extern "C" void RtGraphics_SpotLight_DrawShadowMap(void* self, void* ctx, void* renderer,
                                                    int32_t a4, int32_t a5) {
-    uint8_t* const d = static_cast<uint8_t*>(self);
+    reinterpret_cast<const ::Graphics::SpotLight*>(self)
+        ->::Graphics::SpotLight::DrawShadowMap(
+              *reinterpret_cast<Video::Context*>(ctx),
+              *reinterpret_cast<::Graphics::Renderer*>(renderer), a4, a5);
+}
 
-    void* const target = *reinterpret_cast<void**>(d + 0x158);
+namespace Graphics {
+
+void SpotLight::DrawShadowMap(Video::Context& context, Renderer& renderer,
+                              int a4, int a5) const {
+    void* const ctx = reinterpret_cast<void*>(&context);          // B.3.5 bridge
+
+    void* const target = _shadowTarget;
     void** const slot = reinterpret_cast<void**>(static_cast<uint8_t*>(ctx) + kCtxTarget);
     if (*slot != target) {
         *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(ctx) + kCtxDirty) |= 1u;
         *slot = target;
     }
 
-    const void* const image = *reinterpret_cast<void**>(d + 0x148);
+    const void* const image = _shadowMap;
     const int32_t h = ImageHeight(image);           // read FIRST in retail
     const int32_t w = ImageWidth(image);
     SetRect(ctx, kCtxViewport, 0, 0, w, h, 0x200u);
 
     RenderStateSlot4(ctx);
-    RendererDrawItemList(renderer, ctx, a4, 0, a5);
+    // The fifth value is THIS FUNCTION'S OWN arg5, passed through untouched —
+    // retail tail-jumps without writing its arg5 home slot.
+    RendererDrawItemList(&renderer, ctx, a4, 0, a5);
 }
+
+}  // namespace Graphics
 
 // ============================================================================
 // slot 10 — ?Draw@SpotLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HHHH@Z
@@ -766,8 +900,21 @@ extern "C" void RtGraphics_SpotLight_DrawShadowMap(void* self, void* ctx, void* 
 // ============================================================================
 extern "C" void RtGraphics_SpotLight_Draw(void* self, void* ctx, void* renderer,
                                           int32_t a4, int32_t a5, int32_t a6, int32_t a7) {
+    reinterpret_cast<const ::Graphics::SpotLight*>(self)
+        ->::Graphics::SpotLight::DrawLight(
+              *reinterpret_cast<Video::Context*>(ctx),
+              *reinterpret_cast<::Graphics::Renderer*>(renderer), a4, a5, a6, a7);
+}
+
+namespace Graphics {
+
+void SpotLight::DrawLight(Video::Context& context, Renderer& rendererRef,
+                          int a4, int a5, int a6, int a7) const {
     (void)a4;                                       // R9D, never read by retail
-    uint8_t* const d = static_cast<uint8_t*>(self);
+    void* const ctx = reinterpret_cast<void*>(&context);          // B.3.5 bridge
+    void* const renderer = reinterpret_cast<void*>(&rendererRef); // B.3.5 bridge
+
+    // The draw-group index is arg5, NOT arg4.
     const uint8_t* const g = DrawGroup(renderer, a5);
 
     float bias[16];
@@ -780,10 +927,10 @@ extern "C" void RtGraphics_SpotLight_Draw(void* self, void* ctx, void* renderer,
 
     WriteShadowMatrix(ctx, projection, viewXform, bias);
 
-    BindImage(ctx, kCtxImage50, *reinterpret_cast<void**>(d + 0x160), 0x10u);
-    BindImage(ctx, kCtxImage58, *reinterpret_cast<void**>(d + 0x150), 0x20u);
+    BindImage(ctx, kCtxImage50, _boundImage, 0x10u);
+    BindImage(ctx, kCtxImage58, _shadowDepth, 0x20u);
 
-    const int32_t dim = ImageWidth(*reinterpret_cast<void**>(d + 0x150));
+    const int32_t dim = ImageWidth(_shadowDepth);
 
     float v3a[3], v3b[3];
     std::memcpy(v3a, g + 0x90, sizeof v3a);         // RDX
@@ -791,14 +938,17 @@ extern "C" void RtGraphics_SpotLight_Draw(void* self, void* ctx, void* renderer,
     const float zeroV4[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
     ContextSetLight(ctx, v3a, v3b,
-                    reinterpret_cast<const float*>(d + 0x138),
+                    reinterpret_cast<const float*>(&_colour),
                     zeroV4,
-                    *reinterpret_cast<const float*>(d + 0x130),
-                    *reinterpret_cast<const float*>(d + 0x134),
+                    _spotScalarA,
+                    _spotScalarB,
                     dim);
 
+    // Note the `+ 1`, which SunLight's tail does not have.
     RendererDrawItemList(renderer, ctx, a5 + 1, a6, a7);
 }
+
+}  // namespace Graphics
 
 // ############################################################################
 // Graphics::SunLight — the two slots sunlight.cpp did not port
@@ -824,7 +974,18 @@ extern "C" void RtGraphics_SpotLight_Draw(void* self, void* ctx, void* renderer,
 // ============================================================================
 extern "C" void RtGraphics_SunLight_Draw(void* self, void* ctx, void* renderer,
                                          int32_t a4, int32_t a5, int32_t a6, int32_t a7) {
-    uint8_t* const d = static_cast<uint8_t*>(self);
+    reinterpret_cast<const ::Graphics::SunLight*>(self)
+        ->::Graphics::SunLight::DrawLight(
+              *reinterpret_cast<Video::Context*>(ctx),
+              *reinterpret_cast<::Graphics::Renderer*>(renderer), a4, a5, a6, a7);
+}
+
+namespace Graphics {
+
+void SunLight::DrawLight(Video::Context& context, Renderer& rendererRef,
+                         int a4, int a5, int a6, int a7) const {
+    void* const ctx = reinterpret_cast<void*>(&context);          // B.3.5 bridge
+    void* const renderer = reinterpret_cast<void*>(&rendererRef); // B.3.5 bridge
     const uint8_t* const g = DrawGroup(renderer, a5);
 
     // `MOV RCX,[Device+0x100]; MOV RAX,[RCX]; CALL [RAX+0x38]` — slot 7 of
@@ -847,19 +1008,21 @@ extern "C" void RtGraphics_SunLight_Draw(void* self, void* ctx, void* renderer,
 
     WriteShadowMatrix(ctx, projection, viewXform, bias);
 
-    BindImage(ctx, kCtxImage58, *reinterpret_cast<void**>(d + 0xf8), 0x20u);
+    BindImage(ctx, kCtxImage58, _depthTarget, 0x20u);
 
-    const int32_t dim = ImageWidth(*reinterpret_cast<void**>(d + 0xf8));
+    const int32_t dim = ImageWidth(_depthTarget);
 
+    // The three vectors come from the OBJECT here, not from the draw group: the
+    // direction Vector3 at +0xc0, the sun Vector4 at +0xcc and the ambient
+    // Vector4 at +0xdc — the three `?Set@SunLight@` writes, under their names.
     const float zeroV3[3] = { 0.0f, 0.0f, 0.0f };
-    ContextSetLight(ctx, zeroV3,
-                    reinterpret_cast<const float*>(d + 0xc0),
-                    reinterpret_cast<const float*>(d + 0xcc),
-                    reinterpret_cast<const float*>(d + 0xdc),
-                    0.0f, 1.0f, dim);
+    ContextSetLight(ctx, zeroV3, &_dirX, &_sunR, &_ambientR, 0.0f, 1.0f, dim);
 
+    // arg4 here, where SpotLight used arg5 + 1.
     RendererDrawItemList(renderer, ctx, a4, a6, a7);
 }
+
+}  // namespace Graphics
 
 // ============================================================================
 // slot 9 — ?DrawShadowMap@SunLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HH@Z
@@ -889,11 +1052,25 @@ extern "C" void RtGraphics_SunLight_Draw(void* self, void* ctx, void* renderer,
 // ============================================================================
 extern "C" void RtGraphics_SunLight_DrawShadowMap(void* self, void* ctx, void* renderer,
                                                   int32_t a4, int32_t a5) {
-    uint8_t* const d = static_cast<uint8_t*>(self);
+    reinterpret_cast<const ::Graphics::SunLight*>(self)
+        ->::Graphics::SunLight::DrawShadowMap(
+              *reinterpret_cast<Video::Context*>(ctx),
+              *reinterpret_cast<::Graphics::Renderer*>(renderer), a4, a5);
+}
+
+namespace Graphics {
+
+void SunLight::DrawShadowMap(Video::Context& context, Renderer& rendererRef,
+                             int a4, int a5) const {
+    void* const ctx = reinterpret_cast<void*>(&context);          // B.3.5 bridge
+    void* const renderer = reinterpret_cast<void*>(&rendererRef); // B.3.5 bridge
+
+    // THE WHOLE BODY IS BEHIND `renderer->[0x3c] != 0`: with no shadow-casting
+    // items queued there is nothing to draw and even the Context is left alone.
     if (*reinterpret_cast<const int32_t*>(static_cast<uint8_t*>(renderer) + 0x3c) == 0)
         return;
 
-    void* const target = *reinterpret_cast<void**>(d + 0x100);
+    void* const target = _renderBuffer;
     void** const slot = reinterpret_cast<void**>(static_cast<uint8_t*>(ctx) + kCtxTarget);
     if (*slot != target) {
         *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(ctx) + kCtxDirty) |= 1u;
@@ -901,13 +1078,13 @@ extern "C" void RtGraphics_SunLight_DrawShadowMap(void* self, void* ctx, void* r
     }
 
     {
-        const void* const image = *reinterpret_cast<void**>(d + 0xf8);
+        const void* const image = _depthTarget;
         const int32_t h = ImageHeight(image);
         const int32_t w = ImageWidth(image);
         SetRect(ctx, kCtxViewport, 0, 0, w, h, 0x200u);
     }
     {
-        const void* const image = *reinterpret_cast<void**>(d + 0xf8);   // re-read
+        const void* const image = _depthTarget;   // re-read
         const int32_t h = ImageHeight(image);
         const int32_t w = ImageWidth(image);
         SetRect(ctx, kCtxScissor, 0, 0, w, h, 0x400u);
@@ -916,23 +1093,21 @@ extern "C" void RtGraphics_SunLight_DrawShadowMap(void* self, void* ctx, void* r
     RenderStateSlot4(ctx);
 
     {
-        const void* const image = *reinterpret_cast<void**>(d + 0xf8);   // re-read
+        const void* const image = _depthTarget;   // re-read
         const int32_t h = ImageHeight(image) - 2;
         const int32_t w = ImageWidth(image) - 2;
         SetRect(ctx, kCtxViewport, 1, 1, w, h, 0x200u);
     }
 
-    const int32_t dim = ImageWidth(*reinterpret_cast<void**>(d + 0xf8));  // re-read
+    const int32_t dim = ImageWidth(_depthTarget);  // re-read
 
     const float zeroV3[3] = { 0.0f, 0.0f, 0.0f };
-    ContextSetLight(ctx, zeroV3,
-                    reinterpret_cast<const float*>(d + 0xc0),
-                    reinterpret_cast<const float*>(d + 0xcc),
-                    reinterpret_cast<const float*>(d + 0xdc),
-                    0.0f, 1.0f, dim);
+    ContextSetLight(ctx, zeroV3, &_dirX, &_sunR, &_ambientR, 0.0f, 1.0f, dim);
 
     RendererDrawItemList(renderer, ctx, a4, 0, a5);
 }
+
+}  // namespace Graphics
 
 // ============================================================================
 // Registration — name AND address for every body.

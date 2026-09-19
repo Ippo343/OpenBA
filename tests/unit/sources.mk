@@ -130,6 +130,22 @@ UNIT_TREE_SRCS += runtime/src/io/serializer_class.cpp
 # registry and stay verified by the real run.
 UNIT_TREE_SRCS += runtime/src/system/crc.cpp
 
+# ENDGAME B.3.5 step 5 block H1 — the REAL Graphics animation classes
+# (tests/unit/graphics_animation_abi_test.cpp). NO TREE SOURCE IS LINKED, and
+# that is deliberate: every body of `Graphics::AnimationEvent`,
+# `Graphics::AnimationGroup`, `Graphics::Animation`, `Graphics::AnimationState`
+# and `Graphics::AnimationManager` lives in `runtime/src/graphics/animation.cpp`,
+# `animationstate.cpp` and `vtbatch7_animgroup_particlesystem.cpp`, which stand
+# on `RegisterRuntimeExport` / `RT_DATA_SLOT` / `ResolveAddr` / `rtcoll::MemAlloc`
+# and cannot link here (the same reason `external_class_doors.cpp` is kept out).
+# The two polymorphic classes' key-function bodies are therefore defined AT THE
+# BOTTOM OF THE TEST FILE as markers, which is what lets GCC emit their vtables
+# in that translation unit and lets the probes raw-call every slot. The test is
+# an ABI test — slot order, sizes, offsets and the class/POD cross-asserts — so
+# marker bodies are the right bodies. The serializers and the pose maths are
+# verified by the real run.
+UNIT_TREE_SRCS +=
+
 # ENDGAME B.3.5 block A — the Video companion/VertexLayout ABI proof
 # (tests/unit/video_data_abi_test.cpp). NO tree sources link: the twelve
 # `Video::*Data` bases and `Video::VertexLayout` are declarations plus layout
@@ -155,4 +171,22 @@ UNIT_TREE_SRCS +=
 # exactly as tests/unit/io_vtable_abi_test.cpp does with `TestReaderWriter`.
 # `Object::External` / `CompiledExternal`'s linkable half (external_class.cpp) is
 # already on this list, which is all the layout asserts in these headers need.
+UNIT_TREE_SRCS +=
+
+# ENDGAME B.3.5 block D1 — the Video::Context / Viewport / ConstantBuffer ABI
+# proof (tests/unit/video_context_abi_test.cpp). NO tree sources link, and the
+# reason is specific rather than the usual one: all three classes are
+# NON-polymorphic, so there is no slot table to drive, and every ported member
+# is a registered door in `runtime/src/video/context*.cpp`,
+# `constant_buffer.cpp` or `batchc_context_setlight.cpp`. Those translation
+# units stand on the port registry, the address registry and — for the nine
+# backend forwarders — a live `Video::ContextData` vtable owned by dx11, so
+# none of them can link into a host test. What the test checks instead is what
+# breaking would be SILENT: the 0x2168 layout at the raw offsets four other
+# files hard-code, the 0x48 ConstantBuffer stride against the seven embedded
+# instances that are its only evidence, RULE B5-4's trivial copyability, and
+# the `reinterpret_cast`-onto-MemAlloc'd-bytes round trip every door performs.
+# `Video::Viewport`'s two comparison operators are checked on a mirror declared
+# in the test, the same posture io_vtable_abi_test.cpp takes with
+# `TestReaderWriter`.
 UNIT_TREE_SRCS +=

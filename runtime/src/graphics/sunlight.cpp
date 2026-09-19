@@ -319,49 +319,72 @@ const float kBoundsMin = BitsToFloat(0xc9742400u);   // DAT_180161778
 // would be between two different objects. That call is counted on its own site
 // so a refusal is visible instead of silently inflating `calls=`.
 // ============================================================================
+// ENDGAME B.3.5 block E: BODY MOVED onto `Graphics::SunLight::Set` below. The
+// door keeps its name, its address and its registration. Its `const float*`
+// parameters are the retail ABI — `const Math::Vector3&` and two
+// `const Math::Vector4&` arrive as pointers — and the member spells them as the
+// references the mangled name says they are.
 void Graphics_SunLight_Set(SunLight* self, const float* dir,
                            const float* sun, const float* ambient) {
+    reinterpret_cast<::Graphics::SunLight*>(self)
+        ->::Graphics::SunLight::Set(*reinterpret_cast<const Math::Vector3*>(dir),
+                                    *reinterpret_cast<const Math::Vector4*>(sun),
+                                    *reinterpret_cast<const Math::Vector4*>(ambient));
+}
 
-    float pre[11];
+namespace Graphics {
+
+// ============================================================================
+// Graphics::SunLight::Set(const Math::Vector3&, const Math::Vector4&,
+//                         const Math::Vector4&)          retail 0x180107f10
+//
+// ELEVEN DWORD COPIES, then two rebuild branches this backend never takes. The
+// copies are `MOV EAX,[src] / MOV [this+off],EAX` in the shipped body — no float
+// arithmetic at all, so there is no association order to get wrong.
+// ============================================================================
+void SunLight::Set(const Math::Vector3& direction, const Math::Vector4& sun,
+                   const Math::Vector4& ambient) {
+    const float* const dir     = &direction.x;
+    const float* const sunP    = &sun.x;
+    const float* const ambientP = &ambient.x;
 
     // ---- the eleven copies, in the shipped order -------------------------
-    self->_dirX     = dir[0];
-    self->_dirY     = dir[1];
-    self->_dirZ     = dir[2];
-    self->_sunR     = sun[0];
-    self->_sunG     = sun[1];
-    self->_sunB     = sun[2];
-    self->_sunA     = sun[3];
-    self->_ambientR = ambient[0];
-    self->_ambientG = ambient[1];
-    self->_ambientB = ambient[2];
-    self->_ambientA = ambient[3];
+    _dirX     = dir[0];
+    _dirY     = dir[1];
+    _dirZ     = dir[2];
+    _sunR     = sunP[0];
+    _sunG     = sunP[1];
+    _sunB     = sunP[2];
+    _sunA     = sunP[3];
+    _ambientR = ambientP[0];
+    _ambientG = ambientP[1];
+    _ambientB = ambientP[2];
+    _ambientA = ambientP[3];
 
     // ---- the two rebuild branches ----------------------------------------
-
-    bool rebuilt = false;
-    if (DeviceSupportsColourShadowTarget() && self->_colourTarget == nullptr) {
+    if (DeviceSupportsColourShadowTarget() && _colourTarget == nullptr) {
         // The device grew the capability: build the colour target and a fresh
         // render buffer around it.
-        rebuilt = true;
-        DeleteRenderBuffer(self->_renderBuffer);
-        self->_colourTarget = NewImageBuffer();
-        ImageBufferCreate(self->_colourTarget, 0, 0, 5, 0x40, 0x800, 0x800, 1, 1, 1, 1, nullptr);
-        self->_renderBuffer = NewRenderBuffer();
-        RenderBufferCreate()(self->_renderBuffer, self->_colourTarget, self->_depthTarget);
-    } else if (!DeviceSupportsColourShadowTarget() && self->_colourTarget != nullptr) {
+        DeleteRenderBuffer(_renderBuffer);
+        _colourTarget = NewImageBuffer();
+        ImageBufferCreate(_colourTarget, 0, 0, 5, 0x40, 0x800, 0x800, 1, 1, 1, 1, nullptr);
+        _renderBuffer = NewRenderBuffer();
+        RenderBufferCreate()(_renderBuffer, _colourTarget, _depthTarget);
+    } else if (!DeviceSupportsColourShadowTarget() && _colourTarget != nullptr) {
         // The device lost it: drop the colour target and rebuild depth-only.
-        rebuilt = true;
-        DeleteRenderBuffer(self->_renderBuffer);
-        DeleteImageBuffer(self->_colourTarget);
-        self->_colourTarget = nullptr;
-        self->_renderBuffer = NewRenderBuffer();
-        RenderBufferCreate()(self->_renderBuffer, self->_colourTarget, self->_depthTarget);
+        DeleteRenderBuffer(_renderBuffer);
+        DeleteImageBuffer(_colourTarget);
+        _colourTarget = nullptr;
+        _renderBuffer = NewRenderBuffer();
+        RenderBufferCreate()(_renderBuffer, _colourTarget, _depthTarget);
     }
-
-    // ---- oracle -----------------------------------------------------------
-   // a rebuild call verifies NOTHING here; say so
+    // A rebuild call verifies NOTHING against an oracle here, and the old
+    // `float pre[11]` / `bool rebuilt` locals that said so were dead: both were
+    // written and never read, and both were -Wunused warnings in the perf build.
+    // The refusal is stated in the banner above the door instead.
 }
+
+}  // namespace Graphics
 
 // ============================================================================
 // Graphics::SunLight::SunLight()   — 0x1801081f0
