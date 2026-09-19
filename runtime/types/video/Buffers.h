@@ -80,9 +80,13 @@ public:
     // ?Set@IndexBuffer@Video@@QEAA_NHHPEAX@Z      0x1800f38a0  buffers.cpp
     //   A trampoline into IndexBufferData slot 2 (+0x10).
     bool Set(int offset, int count, void* data);
-    // ?Lock@IndexBuffer@Video@@QEAAPEAXHAEAH@Z    0x1800f34e0  NOT PORTED  (slot 3, +0x18)
+    // ?Lock@IndexBuffer@Video@@QEAAPEAXHAEAH@Z    0x1800f34e0  companion_data.cpp
+    //   (IndexBufferData slot 3, +0x18). ENDGAME B.3.5 block VC: the body had been
+    //   in block A's companion_data.cpp since Wave 6 lane C while this header said
+    //   NOT PORTED; neither block owned the edge, so it is moved here now.
     void* Lock(int sizeBytes, int& outByteOffset);
-    // ?Unlock@IndexBuffer@Video@@QEAAXXZ          0x1800f34c0  NOT PORTED  (slot 4, +0x20)
+    // ?Unlock@IndexBuffer@Video@@QEAAXXZ          0x1800f34c0  companion_data.cpp
+    //   (IndexBufferData slot 4, +0x20). Block VC, as above.
     void  Unlock();
     // ?Bind@IndexBuffer@Video@@QEBAXAEAVContext@2@@Z 0x1800f3860  NOT PORTED (slot 5)
     void  Bind(Context& context) const;
@@ -131,9 +135,11 @@ public:
     bool Create(int count, bool dynamic, void* data);
     // ?Set@VertexBuffer@Video@@QEAA_NHHPEAX@Z      0x1800f5a00  buffers.cpp
     bool Set(int offset, int count, void* data);
-    // ?Lock@VertexBuffer@Video@@QEAAPEAXHAEAH@Z    0x1800f5640  NOT PORTED  (slot 3, +0x18)
+    // ?Lock@VertexBuffer@Video@@QEAAPEAXHAEAH@Z    0x1800f5640  companion_data.cpp
+    //   (VertexBufferData slot 3, +0x18). Block VC, as above.
     void* Lock(int sizeBytes, int& outByteOffset);
-    // ?Unlock@VertexBuffer@Video@@QEAAXXZ          0x1800f5620  NOT PORTED  (slot 4, +0x20)
+    // ?Unlock@VertexBuffer@Video@@QEAAXXZ          0x1800f5620  companion_data.cpp
+    //   (VertexBufferData slot 4, +0x20). Block VC, as above.
     void  Unlock();
     // ?Bind@VertexBuffer@Video@@QEBAXAEAVContext@2@HII@Z 0x1800f59c0 NOT PORTED (slot 5)
     void  Bind(Context& context, int slot, unsigned offsetBytes, unsigned strideBytes) const;
