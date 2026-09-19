@@ -57,6 +57,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/collection/Collection.h"
+#include "../../types/video/Buffers.h"   // ENDGAME B.3.5: Video::{Vertex,Index}Buffer
 #include "array_internal.h"
 #include "array_destroy_internal.h"
 
@@ -69,21 +70,22 @@ namespace gfxmesh {
 constexpr uint32_t kTriStride   = 0xb0;
 constexpr uint32_t kInnerStride = 0x10;
 
-// The four Video platform hooks. All four are EXPORTED and all four are
-// already PORTED, so RT_EXPORT_ONCE lands on our bodies.
-using VoidThisFn = void (*)(void*);
-
+// The four Video platform hooks. All four are members of the real
+// `Video::VertexBuffer` / `Video::IndexBuffer` (B.3.5), so these four wrappers
+// call them directly. They are the buffer's OWN members, not the element
+// ctor/dtor helpers B.3.2 left alone: the sub-object at +0x18/+0x38/+0x58/+0x78
+// IS a Video buffer, which is why the conversion applies here.
 void VertexBufferPlatformConstruct(void* p) {
-    RT_EXPORT_ONCE(VoidThisFn, "?PlatformConstruct@VertexBuffer@Video@@QEAAXXZ")(p);
+    reinterpret_cast<Video::VertexBuffer*>(p)->PlatformConstruct();  // B.3.5 bridge
 }
 void IndexBufferPlatformConstruct(void* p) {
-    RT_EXPORT_ONCE(VoidThisFn, "?PlatformConstruct@IndexBuffer@Video@@QEAAXXZ")(p);
+    reinterpret_cast<Video::IndexBuffer*>(p)->PlatformConstruct();   // B.3.5 bridge
 }
 void VertexBufferPlatformDestruct(void* p) {
-    RT_EXPORT_ONCE(VoidThisFn, "?PlatformDestruct@VertexBuffer@Video@@QEAAXXZ")(p);
+    reinterpret_cast<Video::VertexBuffer*>(p)->PlatformDestruct();   // B.3.5 bridge
 }
 void IndexBufferPlatformDestruct(void* p) {
-    RT_EXPORT_ONCE(VoidThisFn, "?PlatformDestruct@IndexBuffer@Video@@QEAAXXZ")(p);
+    reinterpret_cast<Video::IndexBuffer*>(p)->PlatformDestruct();    // B.3.5 bridge
 }
 
 // `Collection::Array<T>::operator=` for the 0x98 index array — retail

@@ -209,12 +209,16 @@ extern "C" void RtSave_SaveInfo_SetThumbnail(SaveInfo* row, void* pixels, int w,
     // Argument values are immediates in the shipped body and are transcribed,
     // not interpreted: type=0, usage=2, format=5, 0, w, h, filter=0,
     // addressU=addressV=addressW=1, no initial data.
-    using CreateFn = bool (*)(void* self, int type, int usage, int format,
-                              unsigned int a4, int width, int height,
-                              int filter, int addrU, int addrV, int addrW,
-                              void* initialData);
-    void** vt = *reinterpret_cast<void***>(img);
-    reinterpret_cast<CreateFn>(vt[9])(img, 0, 2, 5, 0u, w, h, 0, 1, 1, 1, nullptr);
+    // ENDGAME B.3.5: `img` is a PROVED `Video::ImageBuffer` — it is the 0x68-byte
+    // allocation `ImageBufferCtor` (0x1800f2580) just constructed two lines up,
+    // so the receiver is known from the code that produced the pointer and not
+    // from the variable's name. Slot 9 is therefore the virtual, called as one.
+    // The live object wears the MINTED `??_7ImageBuffer@Video@@6B@`, whose slot 9
+    // holds the registered `Video_ImageBuffer_Create` body; `Create` is `= 0` on
+    // the class for the reason ImageBuffer.h's slot-9 banner gives, and that
+    // changes nothing at a call site.
+    reinterpret_cast<Video::ImageBuffer*>(img)->Create(
+        0, 2, 5, 0u, w, h, 0, 1, 1, 1, nullptr);         // B.3.5 bridge
 
     // ---- the VIDEO DEVICE lock, open-coded in retail ----------------------
     // 0x1800c3eb4..0x1800c3eca is EnterCriticalSection(dev+0x60) /
@@ -229,10 +233,14 @@ extern "C" void RtSave_SaveInfo_SetThumbnail(SaveInfo* row, void* pixels, int w,
 
     // ImageBufferData vtable slot 5 (+0x28) — the pixel upload. PURECALL in
     // the base Video table; the live body is the DX11 override.
-    using UploadFn = void (*)(void* data, void* pixels, int w, int h);
-    void*  data   = img->platformData;                 // +0x60
-    void** dataVt = *reinterpret_cast<void***>(data);
-    reinterpret_cast<UploadFn>(dataVt[5])(data, pixels, w, h);
+    // `img->platformData` is the companion object the ctor/`Create` pair built
+    // for THIS ImageBuffer, so the receiver is proved. Slot 5 of the abstract
+    // `Video::ImageBufferData` is `bool Update(void*, int, int)`
+    // (CompanionData.h); retail ignores the result and so does this. The
+    // CONCRETE `*Data` subclass and the dx11 seam are a declared leave for step 5
+    // (B35_RULES 1.1 item 4 / section 11) — only the call converts.
+    void* data = img->platformData;                    // +0x60
+    reinterpret_cast<Video::ImageBufferData*>(data)->Update(pixels, w, h);  // B.3.5 bridge
 
     row->thumbPixels = pixels;   // +0x28
     row->thumbWidth  = w;        // +0x20

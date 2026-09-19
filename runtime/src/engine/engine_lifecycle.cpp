@@ -199,6 +199,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/engine/Engine.h"
+#include "../../types/video/Device.h"      // ENDGAME B.3.5: Video::Device / Configuration
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/system/String.h"
 
@@ -602,8 +603,8 @@ extern "C" unsigned RtEngine_Engine_Startup(Engine* self, const char* cmdLine,
     if (videoConfiguration)
         RT_EXPORT_ONCE(CtorFn, "??0Configuration@Video@@QEAA@XZ")(videoConfiguration);
     self->_videoConfiguration = videoConfiguration;
-    if (!RT_EXPORT_ONCE(BoolThisFn, "?Startup@Configuration@Video@@QEAA_NXZ")(
-            videoConfiguration)) {
+    if (!reinterpret_cast<Video::Configuration*>(videoConfiguration)
+             ->Startup()) {                                  // B.3.5 bridge
         g_startupFailAt = 7;
         return 0;
     }
@@ -627,8 +628,8 @@ extern "C" unsigned RtEngine_Engine_Startup(Engine* self, const char* cmdLine,
         RT_EXPORT_ONCE(CtorEnumFn, "??0Device@Video@@QEAA@W4DeviceType@01@@Z")(
             videoDevice, 0);
     self->_videoDevice = videoDevice;
-    (void)RT_EXPORT_ONCE(BoolThisFn, "?EnumerateVideoModes@Device@Video@@QEAA_NXZ")(
-            videoDevice);
+    (void)reinterpret_cast<Video::Device*>(videoDevice)
+        ->EnumerateVideoModes();                             // B.3.5 bridge
 
     // --- 0x1800dbd00: Audio::Configuration ----------------------------------
     void* audioConfiguration = MemAlloc(0x10, 4);
@@ -668,8 +669,8 @@ extern "C" unsigned RtEngine_Engine_Startup(Engine* self, const char* cmdLine,
     }
 
     // --- 0x1800dbdc0: Video::Device::PlatformStartup ------------------------
-    if (!RT_EXPORT_ONCE(BoolThisFn, "?PlatformStartup@Device@Video@@AEAA_NXZ")(
-            self->_videoDevice)) {
+    if (!reinterpret_cast<Video::Device*>(self->_videoDevice)
+             ->PlatformStartup()) {                          // B.3.5 bridge
         g_startupFailAt = 11;
         return 0;
     }
@@ -788,7 +789,7 @@ extern "C" void RtEngine_Engine_Shutdown(Engine* self) {
         RT_EXPORT_ONCE(VoidThisFn, "?Save@Configuration@Audio@@QEAAXXZ")(p); ++steps;
     }
     if (void* p = self->_videoDevice) {
-        RT_EXPORT_ONCE(VoidThisFn, "?PlatformShutdown@Device@Video@@AEAAXXZ")(p);
+        reinterpret_cast<Video::Device*>(p)->PlatformShutdown();  // B.3.5 bridge
         // 0x1800db5cd: three 0x18-byte plugin slots at device+0xb0; FreeLibrary
         // each non-null module and clear all three qwords of every slot,
         // whether or not it held one.
@@ -803,7 +804,7 @@ extern "C" void RtEngine_Engine_Shutdown(Engine* self) {
         ++steps;
     }
     if (void* p = self->_videoConfiguration) {
-        RT_EXPORT_ONCE(VoidThisFn, "?Save@Configuration@Video@@QEAAXXZ")(p); ++steps;
+        reinterpret_cast<Video::Configuration*>(p)->Save(); ++steps;  // B.3.5 bridge
     }
     if (void* p = self->_application) {
         RT_EXPORT_ONCE(VoidThisFn, "?PlatformShutdown@Application@1@AEAAXXZ")(p); ++steps;
