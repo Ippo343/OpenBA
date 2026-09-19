@@ -103,19 +103,54 @@ typedef void* (*WideStringCtorFn)(void*, const String*);
 //
 //   (this, hidden return slot, path) — see the banner.
 // ============================================================================
-uint64_t* RtIo_FileSystem_GetFileTimeStamp(const void* /*self*/,
+// ENDGAME B.3.4 PACKAGE+FS commit 5a: the body is now
+// `IO::FileSystem::GetFileTimeStamp`, below. The door keeps its name, its
+// (self, hidden return slot, path) signature and both registration lines, and
+// delegates. No qualified `IO::` call is needed: `IO::FileSystem` has no vtable
+// at all (runtime/types/io/FileSystem.h), so B34_BRIEFS section A.1's re-entry
+// hazard cannot arise.
+//
+// THE HIDDEN RETURN SLOT STAYS ON THE DOOR. The member returns the qword by
+// value (`System::DateTime` does not exist in this tree — FileSystem.h's
+// declaration comment says why one is not invented), and the door writes it
+// into RDX's slot and returns the slot in RAX, exactly as 0x1800ae334 does.
+uint64_t* RtIo_FileSystem_GetFileTimeStamp(const void* self,
                                            uint64_t* ret,
                                            const Filename* path) {
+    *ret = reinterpret_cast<const IO::FileSystem*>(self)->GetFileTimeStamp(*path);
+    return ret;
+}
+
+}  // namespace RtIO
+
+// ============================================================================
+// `IO::FileSystem::GetFileTimeStamp` — the member body
+// ============================================================================
+// Defined outside `namespace RtIO` because a member of `IO::X` must appear in a
+// namespace ENCLOSING the class (B34_BRIEFS section A.2); it reaches this
+// translation unit's `RtIO`-scoped names — including the anonymous-namespace
+// typedef — as `RtIO::X`.
+//
+// NOTHING ELSE CHANGED: same three Win32 calls in the same order, the same
+// release-the-WideString-before-testing-the-handle order, the same unsigned
+// two-value handle test, the same zero on every failure arm. `this` is still
+// read by nothing, exactly as retail's RCX is not.
+namespace IO {
+
+uint64_t FileSystem::GetFileTimeStamp(const RtSystem::Filename& pathRef) const {
+    const RtSystem::Filename* const path = &pathRef;
+
     // WideString ws(*path) — lane FS's port, reached through the name door so
     // a promotion of the row is followed.
     struct { void* data; } ws = { nullptr };                     // 0x1800ae28f
-    RT_EXPORT_ONCE(WideStringCtorFn, "??0WideString@System@@QEAA@AEBVString@1@@Z")(
-        &ws, reinterpret_cast<const String*>(path));             // 0x1800ae294
+    RT_EXPORT_ONCE(RtIO::WideStringCtorFn, "??0WideString@System@@QEAA@AEBVString@1@@Z")(
+        &ws, reinterpret_cast<const RtSystem::String*>(path));   // 0x1800ae294
 
     const HANDLE h = ::CreateFileW(static_cast<LPCWSTR>(ws.data),
                                    0x80000000u, 1u, nullptr, 3u, 0x80u, nullptr);
 
-    RtString_ReleaseInline(reinterpret_cast<String*>(&ws));      // 0x1800ae2c9
+    RtIO::RtString_ReleaseInline(
+        reinterpret_cast<RtSystem::String*>(&ws));               // 0x1800ae2c9
 
     // 0x1800ae2f5 — rejects exactly NULL and INVALID_HANDLE_VALUE. See banner.
     const uint64_t hm1 = reinterpret_cast<uint64_t>(h) - 1u;
@@ -123,17 +158,15 @@ uint64_t* RtIo_FileSystem_GetFileTimeStamp(const void* /*self*/,
         FILETIME lastWrite;                                      // [RSP+0x40]
         if (::GetFileTime(h, nullptr, nullptr, &lastWrite) != 0) {
             ::CloseHandle(h);                                    // 0x1800ae321
-            *ret = *reinterpret_cast<const uint64_t*>(&lastWrite);
-            return ret;
+            return *reinterpret_cast<const uint64_t*>(&lastWrite);
         }
         ::CloseHandle(h);                                        // 0x1800ae319
     }
 
-    *ret = 0;                                                    // 0x1800ae331
-    return ret;
+    return 0;                                                    // 0x1800ae331
 }
 
-}  // namespace RtIO
+}  // namespace IO
 
 // ============================================================================
 // Registration — BOTH DOORS. `QEBA` is public and the name is ordinal 2607 in

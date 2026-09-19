@@ -269,57 +269,95 @@ bool SameText(const char* a, const char* b) {
 // reproduced rather than papered over, because a failure of
 // GetModuleFileNameW on our own process is not a condition this port should
 // be inventing behaviour for.
+//
+// ENDGAME B.3.4 PACKAGE+FS commit 5a: the body is now
+// `IO::FileSystem::GetRootDirectory()`, at the bottom of this file. The door
+// keeps its name, its (self, hidden-return-slot) signature and both
+// registration lines, and delegates. No qualified `IO::` call is needed:
+// `IO::FileSystem` has no vtable at all, so B34_BRIEFS section A.1's re-entry
+// hazard cannot arise. `ret` IS retail's hidden return slot, so the member's
+// by-value result is CONSTRUCTED into it — one AddRef, exactly as before.
 Filename* RtIo_FileSystem_GetRootDirectory(FileSystem* self, Filename* ret) {
-    (void)self;   // retail loads RCX and never reads it
+    new (ret) System::Filename(
+        reinterpret_cast<IO::FileSystem*>(self)->GetRootDirectory());
+    return ret;
+}
+
+// ENDGAME B.3.4 PACKAGE+FS commit 5a: the body is now
+// `IO::FileSystem::SetupDirectories()`, at the bottom of this file. Same door
+// rules as above.
+void RtIo_FileSystem_SetupDirectories(FileSystem* self) {
+    reinterpret_cast<IO::FileSystem*>(self)->SetupDirectories();
+}
+
+}  // namespace RtIO
+
+// ============================================================================
+// `IO::FileSystem`'s member bodies for this file
+// ============================================================================
+// Defined outside `namespace RtIO` because a member of `IO::X` must appear in a
+// namespace ENCLOSING the class (B34_BRIEFS section A.2); these bodies reach
+// this translation unit's `RtIO`-scoped names — including the
+// anonymous-namespace helpers — as `RtIO::X`. Every POD is spelled `RtIO::` or
+// `RtSystem::` and every real class `System::` (B34_RULES section 7.2).
+//
+// NOTHING IN EITHER BODY CHANGED but the spelling of the receiver: same
+// callees, same order, same branches, same destructor order in the epilogue,
+// the same `if (cfg)` belt the file header explains and every dereference
+// retail makes unguarded still unguarded.
+namespace IO {
+
+System::Filename FileSystem::GetRootDirectory() {
 
     wchar_t buf[0x1000];
     ::GetModuleFileNameW(nullptr, buf, 0x1000);
 
-    WideString ws{nullptr};
-    RtSystem_WideString_Set(&ws, buf);
+    RtIO::WideString ws{nullptr};
+    RtIO::RtSystem_WideString_Set(&ws, buf);
 
     // AsUTF8's hidden return slot is still POD-shaped (System::WideString is
     // not a B.3.1 class), so the value lands in a POD and is then STOLEN into
     // the class: the move ctor is a pure pointer steal, so `utf8Pod` is left
     // null and exactly one release happens, `utf8`'s destructor.
-    String utf8Pod{nullptr};
-    RtSystem_WideString_AsUTF8(&ws, &utf8Pod);
-    System::String utf8(std::move(Sys(utf8Pod)));
+    RtSystem::String utf8Pod{nullptr};
+    RtIO::RtSystem_WideString_AsUTF8(&ws, &utf8Pod);
+    System::String utf8(std::move(RtIO::Sys(utf8Pod)));
 
     // `Filename f = utf8;` — retail's inlined Filename(const String&) at
     // 0x18000c780: adopt the buffer (AddRef, no copy), then normalise.
     System::Filename f(utf8);
 
-    // `ret` is the hidden return slot: raw, uninitialised bytes, so the value
-    // is CONSTRUCTED into it. GetPathDirectory (0x1800c6880) returns a prvalue,
-    // which C++17 materialises directly in the slot — no copy at all.
-    new (ret) System::Filename(f.GetPathDirectory());
+    // The by-value result. GetPathDirectory (0x1800c6880) returns a prvalue,
+    // which C++17 materialises directly in the caller's slot — the DOOR's
+    // placement-new above is retail's hidden-return-slot construction, and this
+    // is still exactly one AddRef.
+    System::Filename out(f.GetPathDirectory());
 
     // ~f and ~utf8 are retail's two releases at 0x1800ad6d1/0x1800ad6e3; only
     // the WideString, whose class does not exist yet, is still released by hand.
-    RtString_ReleaseInline(reinterpret_cast<String*>(&ws));
+    RtIO::RtString_ReleaseInline(reinterpret_cast<RtSystem::String*>(&ws));
 
     // Safe to replay: reads no FileSystem state and allocates a fresh buffer
     // every call, so ours and theirs never share a pointer and only the TEXT
     // can be compared — the same shape as GetSaveDirectory's oracle.
-    return ret;
+    return out;
 }
 
 // ============================================================================
 // ?SetupDirectories@FileSystem@IO@@QEAAXXZ                 retail 0x1800abd00
 // ============================================================================
-void RtIo_FileSystem_SetupDirectories(FileSystem* self) {
+void FileSystem::SetupDirectories() {
 
     // --- 0x1800abd28 -------------------------------------------------------
-    // GetRootDirectory is a REGISTERED entry point and keeps its retail
-    // (self, hidden-return-slot) signature, so the value lands in a POD and is
-    // then stolen into the class. The move leaves `rootPod` null: one release.
-    Filename rootPod{nullptr};
-    RtIo_FileSystem_GetRootDirectory(self, &rootPod);
-    System::Filename root(std::move(Sys(rootPod)));
+    // GetRootDirectory is retail's own member and is now ours, so this is the
+    // direct member call retail's `CALL 0x1800ad650` is. The POD round trip
+    // the free-function form needed (land in a `Filename`, steal into the
+    // class) is gone; C++17 constructs the result straight into `root`, which
+    // is the same single AddRef.
+    System::Filename root(GetRootDirectory());
 
     // --- 0x1800abd2e: R13 = Configuration::_singleton ----------------------
-    void* const cfg = ConfigurationSingleton();
+    void* const cfg = RtIO::ConfigurationSingleton();
 
     // --- 0x1800abd44: String cmdPath = root + "cmd.txt" --------------------
     // ??HSystem@@YA?AVString@0@AEBV10@PEBD@Z, 0x1800c92d0. Retail passes the
@@ -334,22 +372,23 @@ void RtIo_FileSystem_SetupDirectories(FileSystem* self) {
         // adopt-then-AdjustDelimiters == Filename(const String&), 0x18000c780.
         System::Filename f(cmdPath);
 
-        if (self->existsInPackfileGate != 0 &&
-            RT_EXPORT_ONCE(ExistsInPackfileFn,
-                "?ExistsInPackfile@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z")(self, &f)) {
+        if (_existsInPackfileGate != 0 &&
+            RT_EXPORT_ONCE(RtIO::ExistsInPackfileFn,
+                "?ExistsInPackfile@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z")(
+                    reinterpret_cast<const RtIO::FileSystem*>(this), &f)) {
             exists = true;
-        } else if (self->platformExistsGate == 0) {
+        } else if (_platformExistsGate == 0) {
             exists = false;
         } else {
             // System::WideString is not a B.3.1 class, so its ctor still takes
             // the POD String; the cast is the pre-existing one, now spelled
             // from the class side of the same eight bytes.
-            WideString ws{nullptr};
-            RtSystem_WideString_CtorFromString(&ws,
-                reinterpret_cast<const String*>(&f));
+            RtIO::WideString ws{nullptr};
+            RtIO::RtSystem_WideString_CtorFromString(&ws,
+                reinterpret_cast<const RtSystem::String*>(&f));
             // `CMP EAX,-1 ; SETNZ` — INVALID_FILE_ATTRIBUTES, not a HRESULT.
             exists = (::GetFileAttributesW(ws.data) != INVALID_FILE_ATTRIBUTES);
-            RtString_ReleaseInline(reinterpret_cast<String*>(&ws));
+            RtIO::RtString_ReleaseInline(reinterpret_cast<RtSystem::String*>(&ws));
         }
         // ~f is retail's release at 0x1800abe02.
     }
@@ -358,38 +397,39 @@ void RtIo_FileSystem_SetupDirectories(FileSystem* self) {
     // NOT REACHED on any boot of this project (there is no cmd.txt); the four
     // doors inside are unported and will name themselves if it ever is.
     if (exists) {
-        FileInfo fi;
+        RtIO::FileInfo fi;
         {
             // Filename(const String&) again, 0x18000c780; retail releases it
             // immediately after the OpenFile call (0x1800abe6a), which is what
             // this inner scope is.
             System::Filename f(cmdPath);
-            RT_EXPORT_ONCE(OpenFileFn,
+            RT_EXPORT_ONCE(RtIO::OpenFileFn,
                 "?OpenFile@FileSystem@IO@@QEAA?AUFileInfo@12@AEBVFilename@System@@@Z")(
-                    self, &fi, &f);
+                    reinterpret_cast<RtIO::FileSystem*>(this), &fi, &f);
         }
 
         if (fi.handle != -1) {
             const int size = static_cast<int>(static_cast<uint32_t>(fi.size));
             const int n    = size + 1;
             char* buf = static_cast<char*>(
-                RtMemAlloc(static_cast<uint64_t>(static_cast<int64_t>(n)), 4));
+                RtIO::RtMemAlloc(static_cast<uint64_t>(static_cast<int64_t>(n)), 4));
             std::memset(buf, 0, static_cast<size_t>(n));   // 0x1800881b0
-            RT_EXPORT_ONCE(ReadFileFn,
+            RT_EXPORT_ONCE(RtIO::ReadFileFn,
                 "?ReadFile@FileSystem@IO@@QEAA_NAEAUFileInfo@12@HPEAX@Z")(
-                    self, &fi, size, buf);
-            RT_EXPORT_ONCE(CloseFileFn,
-                "?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z")(self, &fi);
+                    reinterpret_cast<RtIO::FileSystem*>(this), &fi, size, buf);
+            RT_EXPORT_ONCE(RtIO::CloseFileFn,
+                "?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z")(
+                    reinterpret_cast<RtIO::FileSystem*>(this), &fi);
 
             System::String text(buf);
-            RT_EXPORT_ONCE(SetCommandLineFn,
+            RT_EXPORT_ONCE(RtIO::SetCommandLineFn,
                 "?SetCommandLine@Configuration@System@@QEAAXAEBVString@2@@Z")(cfg, &text);
-            RtMemFree(buf);
+            RtIO::RtMemFree(buf);
             // ~text is retail's release at 0x1800abf4b.
         }
         // ~FileInfo, reverse order — 0x1800abef2 then 0x1800abf23.
-        RtString_ReleaseInline(&fi._name1);
-        RtString_ReleaseInline(&fi._name0);
+        RtIO::RtString_ReleaseInline(&fi._name1);
+        RtIO::RtString_ReleaseInline(&fi._name0);
     }
 
     // --- 0x1800abf54-0x1800ac06a: `sub`, the "-bin" sub-directory ----------
@@ -397,10 +437,10 @@ void RtIo_FileSystem_SetupDirectories(FileSystem* self) {
     // String: `String::Set(&sub, "")` allocates a zero-length buffer, so
     // `sub.data` is non-null and the three Format calls below can pass it raw.
     System::String sub("");
-    if (ConfigHasKey(cfg, "bin")) {
+    if (RtIO::ConfigHasKey(cfg, "bin")) {
         System::String k("bin");
         System::String value;
-        RT_EXPORT_ONCE(GetCommandLineStringFn,
+        RT_EXPORT_ONCE(RtIO::GetCommandLineStringFn,
             "?GetCommandLineString@Configuration@System@@QEBA?AVString@2@AEBV32@@Z")(
                 cfg, &value, &k);
         sub = value;   // retail's inlined operator= at 0x1800ac0b2
@@ -417,12 +457,12 @@ void RtIo_FileSystem_SetupDirectories(FileSystem* self) {
                                       static_cast<const uint8_t*>(cfg) + 0x28) : 0;
     // Both are hidden-return-slot entry points owned by another file and still
     // POD-shaped, so the value lands in a POD and is stolen into the class.
-    String platformPod{nullptr};
-    RtSystem_Configuration_GetPlatformName(cfg, &platformPod, platformId);
-    System::String platform(std::move(Sys(platformPod)));
-    String buildPod{nullptr};
-    RtSystem_Configuration_GetBuildName(cfg, &buildPod, buildId);
-    System::String build(std::move(Sys(buildPod)));
+    RtSystem::String platformPod{nullptr};
+    RtIO::RtSystem_Configuration_GetPlatformName(cfg, &platformPod, platformId);
+    System::String platform(std::move(RtIO::Sys(platformPod)));
+    RtSystem::String buildPod{nullptr};
+    RtIO::RtSystem_Configuration_GetBuildName(cfg, &buildPod, buildId);
+    System::String build(std::move(RtIO::Sys(buildPod)));
 
     // --- 0x1800ac08c-0x1800ac0ef: sourceDirectory --------------------------
     // The four `%s` arguments are passed RAW, exactly as retail passes the
@@ -433,25 +473,25 @@ void RtIo_FileSystem_SetupDirectories(FileSystem* self) {
     // converted IO::FileSystem, so they are reached through the one
     // transitional bridge; `SysFile` is the reading-a-String-field-as-a-
     // Filename that retail performs by pointer cast (pod_bridge.h).
-    SysFile(self->sourceDirectory) =
+    RtIO::SysFile(_sourceDirectory) =
         System::String::Format("%s%s%s\\", root._data, sub._data, "..\\resource");
 
     // --- 0x1800ac119-0x1800ac186: dataDirectory ----------------------------
-    SysFile(self->dataDirectory) =
+    RtIO::SysFile(_dataDirectory) =
         System::String::Format("%s%s%s%s\\", root._data, sub._data,
                                platform._data, build._data);
 
     // --- 0x1800ac1b0-0x1800ac1f1: packDirectory = dataDirectory ------------
-    SysFile(self->packDirectory) = Sys(self->dataDirectory);
+    RtIO::SysFile(_packDirectory) = RtIO::Sys(_dataDirectory);
 
     // --- 0x1800ac1f1-0x1800ac5f0: the three command-line overrides ---------
     // `sub._data` is captured once by retail (RBX) and reused by all three.
-    ApplyPathOverride(cfg, "pathres", &SysFile(self->sourceDirectory),
-                      root._data, sub._data);
-    ApplyPathOverride(cfg, "pathdat", &SysFile(self->dataDirectory),
-                      root._data, sub._data);
-    ApplyPathOverride(cfg, "pathpkg", &SysFile(self->packDirectory),
-                      root._data, sub._data);
+    RtIO::ApplyPathOverride(cfg, "pathres", &RtIO::SysFile(_sourceDirectory),
+                            root._data, sub._data);
+    RtIO::ApplyPathOverride(cfg, "pathdat", &RtIO::SysFile(_dataDirectory),
+                            root._data, sub._data);
+    RtIO::ApplyPathOverride(cfg, "pathpkg", &RtIO::SysFile(_packDirectory),
+                            root._data, sub._data);
 
     // --- 0x1800ac5f0-0x1800ac6b4: the epilogue, in retail's order ----------
     // Retail releases build, platform, sub, cmdPath, root here. Those five are
@@ -486,7 +526,7 @@ void RtIo_FileSystem_SetupDirectories(FileSystem* self) {
     // the block. It is the difference between an oracle and a decoration.
 }
 
-}  // namespace RtIO
+}  // namespace IO
 
 // ============================================================================
 // Registration

@@ -349,15 +349,33 @@ static_assert(offsetof(FileSystem, packfileIndexCount)   == 0x48, "see field com
 //   filesystem_openfile_win.cpp   OpenFile, PlatformOpenFile        §D BINDING
 //   filesystem_packages.cpp       LoadPackages, ClosePackages,
 //                                 PackageFile::GetFileName/GetFileInfo §D BINDING
-//   filesystem_createfile_win.cpp CreatePath, CloseFile, PlatformCloseFile, ReadFile
-//   filesystem_find_win.cpp       the find/enumerate helpers
-//   filesystem_setupdirs_win.cpp  SetupDirectories, GetRootDirectory,
-//                                 GetSaveDirectory
-//   filesystem_startup.cpp        Startup
-//   filesystem_timestamp_win.cpp  GetFileTimeStamp
-//   filesystem_win.cpp            the platform helpers
-//   iobase_vtables.cpp            ??1FileSystem@IO@@  — NOT in PACKAGE+FS's
-//                                 file set; the destructor does not convert
+//   filesystem_find_win.cpp       the find/enumerate helpers        §D BINDING
+//   filesystem_win.cpp            the platform helpers (GetSaveDirectory)
+//
+// *** COMMIT 5a UPDATE (second PACKAGE+FS owner). *** The four NON-§D files are
+// converted: `filesystem_setupdirs_win.cpp` (SetupDirectories, GetRootDirectory),
+// `filesystem_startup.cpp` (Startup), `filesystem_timestamp_win.cpp`
+// (GetFileTimeStamp) and `filesystem_createfile_win.cpp` (CreatePath,
+// PlatformCreateFile, CreateFileW, PlatformCloseFile, CloseFile and the
+// DESTRUCTOR). The list above is what is LEFT.
+//
+// *** AND ONE FACT IN THE COMMIT-4 BANNER WAS WRONG, CORRECTED HERE. *** It said
+// `??1FileSystem@IO@@` lives in `iobase_vtables.cpp` and is outside PACKAGE+FS's
+// file set. It does not and it is not: `RtIo_FileSystem_Dtor` is, and always was,
+// in `filesystem_createfile_win.cpp` (which registers 0x1800ac6d0 there), and
+// `iobase_vtables.cpp` contains no occurrence of the string "FileSystem" at all
+// (grepped). B34_RULES §6.2 carried the same wrong attribution and is corrected
+// in the same commit. The destructor therefore DOES convert, and §4.3's "no real
+// constructors" rule is not in tension with that: that rule exists to stop a
+// ctor/dtor door swapping the vtable a live object wears, and `IO::FileSystem`
+// HAS NO VTABLE — it is the same exemption `IO::Serializer` gets in §4.3's own
+// table ("Serializer is NON-polymorphic. It has no vptr, so converting its ctor
+// cannot change any table").
+//
+// THE CONSTRUCTOR (`??0FileSystem@IO@@QEAA@XZ`, 0x1800ac7c0) IS STILL NOT PORTED
+// ANYWHERE IN THE TREE and is not invented here. `~FileSystem()` being real does
+// not make the class default-constructible into a valid state; every live
+// FileSystem is still the one the singleton points at.
 //
 // *** THE TWO CACHED SINGLETON POINTERS (§E.4) ARE NOT RECONCILED HERE, AND
 // *** THAT IS ON PURPOSE. *** `engine/funcs/engine_funcs.h` caches the same
@@ -397,6 +415,68 @@ public:
 
     // ?GetPackfileId@FileSystem@IO@@QEBAIAEBVFilename@System@@@Z  0x1800ab050
     uint32_t GetPackfileId(const RtSystem::Filename& path) const;
+
+    // ---- commit 5a: the members whose doors live in the four NON-§D files --
+    // Each keeps retail's name; the door keeps its own name, its registration
+    // lines and its signature (several are called cross-file by
+    // file_stream.cpp, text_file_stream_win.cpp, persistence_saveinfo_job.cpp
+    // and persistence_worker_win.cpp) and delegates here.
+
+    // -- filesystem_setupdirs_win.cpp ---------------------------------------
+    // ?GetRootDirectory@FileSystem@IO@@QEAA?AVFilename@System@@XZ 0x1800ad650
+    // NON-const (`QEAA`), and retail never reads `this` — kept as the signature
+    // says, exactly as the free function kept its unused `self`.
+    System::Filename GetRootDirectory();
+    // ?SetupDirectories@FileSystem@IO@@QEAAXXZ                    0x1800abd00
+    void SetupDirectories();
+
+    // -- filesystem_startup.cpp ---------------------------------------------
+    // ?Startup@FileSystem@IO@@QEAA_NXZ                            0x1800abc50
+    bool Startup();
+
+    // -- filesystem_timestamp_win.cpp ---------------------------------------
+    // ?GetFileTimeStamp@FileSystem@IO@@QEBA?AVDateTime@System@@AEBVFilename@4@@Z
+    //                                                             0x1800ae270
+    // Retail returns `System::DateTime` BY VALUE, which is one qword (the raw
+    // FILETIME). There is no `System::DateTime` class in this tree yet, so the
+    // member returns the qword itself and the door keeps the hidden return slot
+    // it has always had. Inventing a DateTime here to make the signature look
+    // like the mangling would be a new class with no layout evidence.
+    uint64_t GetFileTimeStamp(const RtSystem::Filename& path) const;
+
+    // -- filesystem_createfile_win.cpp --------------------------------------
+    // ?CreatePath@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z     0x1800ae430
+    bool CreatePath(const RtSystem::Filename& path) const;
+    // ?PlatformCreateFile@FileSystem@IO@@AEAA_NAEAUFileInfo@12@AEBVFilename@System@@@Z
+    //                                                             0x1800ade60
+    // ?PlatformCloseFile@FileSystem@IO@@AEAAXAEAUFileInfo@12@@Z    0x1800ae020
+    // Both are `AEAA` — PRIVATE in retail, and this DLL exports its private
+    // members (reference_aeaa_is_private_not_unexported.md). They are declared
+    // PUBLIC here because each has its OWN registered door (0x1800ade60 and
+    // 0x1800ae020 are separately registered by name and by address in
+    // filesystem_createfile_win.cpp) and a door is a free function, which a
+    // private member would not let in. Making the doors `friend`s instead would
+    // hide a real fact — that these two are reachable from outside the class in
+    // our tree — behind a keyword.
+    bool PlatformCreateFile(RtIO::FileInfo& info, const RtSystem::Filename& path);
+    void PlatformCloseFile(RtIO::FileInfo& info);
+    // ?CreateFileW@FileSystem@IO@@QEAA?AUFileInfo@12@AEBVFilename@System@@@Z
+    //                                                             0x1800acc50
+    // Retail returns `FileInfo` BY VALUE through a hidden return slot, and the
+    // member KEEPS THE OUT-PARAMETER rather than returning by value. That is not
+    // laziness: `RtIO::FileInfo` is a POD holding two `RtSystem::String` slots,
+    // so a by-value return would be a BITWISE copy with no AddRef and no
+    // release — the `RtSystem::String` double-free trap from the other side.
+    // The slot is raw bytes and the body placement-constructs the two Filenames
+    // into it, exactly as retail's 0x1800acc82/8e do.
+    RtIO::FileInfo* CreateFileW(RtIO::FileInfo* ret, const RtSystem::Filename& path);
+    // ?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z            0x1800accc0
+    void CloseFile(RtIO::FileInfo& info);
+    // ??1FileSystem@IO@@QEAA@XZ                                    0x1800ac6d0
+    // A REAL destructor — see the banner. It is `QEAA`, non-virtual, and the
+    // class has no vtable, so converting it cannot change what any live object
+    // wears. There is deliberately NO constructor: 0x1800ac7c0 is unported.
+    ~FileSystem();
 
     // ---- the pinned fields, at retail's offsets ---------------------------
     // PUBLIC for the same reason `IO::Serializer`'s two are: the fifteen
