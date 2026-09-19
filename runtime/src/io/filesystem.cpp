@@ -293,17 +293,46 @@ uint32_t RtIo_FileSystem_GetPackfileId(const void* fsVoid, const Filename* path)
 //
 // DIFF: full oracle. Read-only on both sides.
 // ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS commit 2: the body is now
+// `IO::Modification::Find(const RtSystem::Filename&)`, below. The door keeps
+// its name and both registrations and delegates. No qualified `IO::` call is
+// needed: `IO::Modification` has no vtable (Modification.h's banner), so
+// B34_BRIEFS §A.1's re-entry hazard cannot arise.
 int RtIo_Modification_Find(const void* modVoid, const Filename* path) {
-    const Modification* mod = static_cast<const Modification*>(modVoid);
+    return reinterpret_cast<const IO::Modification*>(modVoid)->Find(*path);
+}
 
+}  // namespace RtIO
+
+// ============================================================================
+// `IO::Modification::Find` — the member body.
+// ============================================================================
+// Defined outside `namespace RtIO` because a member of `IO::X` must appear in a
+// namespace ENCLOSING the class (B34_BRIEFS §A.2), and reaching this file's
+// `RtIO`-scoped helpers as `RtIO::X` is what lets it stay where it is rather
+// than moving to modification.cpp. It lives in filesystem.cpp because this is
+// where the door and its registration have always been.
+namespace IO {
+
+// ?Find@Modification@IO@@QEBAHAEBVFilename@System@@@Z       retail 0x1800aea10
+//
+//     int Modification::Find(const Filename& path) const
+//     { for each Mod, case-insensitively compare its file to path; return
+//       the index of the first match or -1. }
+//
+// Length-prefixed compare identical in shape to GetPackfileId's: compare
+// stored lengths first, then StriCmp only if they match. NO ADDED NULL GUARD
+// on `_mods` — this file's own banner records that Exists, GetPackfileId and
+// Find all deref fields unguarded because retail does.
+int Modification::Find(const RtSystem::Filename& path) const {
     int ours = -1;
-    const char* pathData = path->data;
-    const int pathLen = pathData ? StringLength(pathData) : 0;
+    const char* pathData = path.data;
+    const int pathLen = pathData ? RtIO::StringLength(pathData) : 0;
 
-    for (int i = 0; i < mod->count; ++i) {
-        const char* modData = mod->mods[i].file.data;
-        const int modLen = modData ? StringLength(modData) : 0;
-        if (modLen == pathLen && StriCmpAscii(modData, pathData) == 0) {
+    for (int i = 0; i < _count; ++i) {
+        const char* modData = _mods[i].file.data;
+        const int modLen = modData ? RtIO::StringLength(modData) : 0;
+        if (modLen == pathLen && RtIO::StriCmpAscii(modData, pathData) == 0) {
             ours = i;
             break;
         }
@@ -312,7 +341,7 @@ int RtIo_Modification_Find(const void* modVoid, const Filename* path) {
     return ours;
 }
 
-}  // namespace RtIO
+}  // namespace IO
 
 // ============================================================================
 // Registration
