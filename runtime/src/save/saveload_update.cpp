@@ -51,6 +51,7 @@
 #include "../../types/io/Persistence.h"
 #include "../../types/io/Modification.h"   // UpdateLoad reorders the mod list
 #include "../../types/collection/Collection.h"
+#include "../../types/video/CompanionData.h"  // ENDGAME B.3.5: Video::ImageBufferData
 #include "../collection/array_internal.h"   // rtcoll::AsArray, ArraySpec -- B.3.2 step 2
 #include "../system/string.h"              // RtString_ReleaseInline
 #include "resolve.h"   // ResolveAddr / Module -- the port-aware address door
@@ -104,7 +105,6 @@ using RecreateFn    = void (*)(void* imageBuffer);
 // ImageBuffer+0x60. Three real arguments follow `this`; the fourth operand in
 // Ghidra's C output is the SEH state word (`MOV qword ptr [RSP+0x20],-0x2` in
 // the prologue), not an argument.
-using ImageUploadFn = void (*)(void* self, void* pixels, uint32_t w, uint32_t h);
 
 // Wave 15 lane ORDER: was a frozen static (see saveload_internal.h's note).
 void** DeviceSingletonSlot() {
@@ -287,18 +287,20 @@ void OnVideoRestartBody(SaveLoad* self, RtSink& out) {
                       + static_cast<int64_t>(i) * 0x58;
         void*  target = *reinterpret_cast<void**>(row2 + 0x18);
         void*  obj    = *reinterpret_cast<void**>(static_cast<uint8_t*>(target) + 0x60);
-        void** vtbl   = *reinterpret_cast<void***>(obj);
-        ImageUploadFn upload = reinterpret_cast<ImageUploadFn>(vtbl[5]);
-
         void* pixels = *reinterpret_cast<void**>(row2 + 0x28);
         uint32_t w   = *reinterpret_cast<const uint32_t*>(row2 + 0x20);
         uint32_t h   = *reinterpret_cast<const uint32_t*>(row2 + 0x24);
 
-        if (out.Call("ImageBufferData::Upload [vtbl+0x28]", (const void*)upload,
-                     reinterpret_cast<int64_t>(obj),
-                     reinterpret_cast<int64_t>(pixels), w, h)) {
-            upload(obj, pixels, w, h);
-        }
+        // ENDGAME B.3.5: `vtbl+0x28` is slot 5 of the real abstract
+        // `Video::ImageBufferData`, `bool Update(void*, int, int)`
+        // (CompanionData.h). The receiver is PROVED by the code that produced it:
+        // `target` is the row's `Video::ImageBuffer*` and `obj` is its +0x60
+        // companion. Retail ignores the result and so does this. The
+        // `out.Call(label, target, ...)` wrapper went with the slot pointer it
+        // labelled: `RtSink::Call` ignores every argument and returns true
+        // unconditionally (rt_sink.h), so it guarded nothing.
+        reinterpret_cast<Video::ImageBufferData*>(obj)->Update(
+            pixels, static_cast<int>(w), static_cast<int>(h));  // B.3.5 bridge
 
         RtVideoDeviceUnlock(device);
     }

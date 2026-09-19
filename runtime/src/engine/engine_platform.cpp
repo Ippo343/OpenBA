@@ -84,6 +84,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/engine/Engine.h"
+#include "../../types/video/Device.h"      // ENDGAME B.3.5: Video::Device / Configuration
 #include "../../types/system/String.h"
 #include "../../types/io/Modification.h"
 #include "../system/string.h"
@@ -262,7 +263,7 @@ void ResetConfigurations(Engine* self) {
             if (void** s = VideoConfigSingletonSlot()) *s = p;
         }
         self->_videoConfiguration = p;
-        RT_EXPORT_ONCE(BoolThisFn, "?Startup@Configuration@Video@@QEAA_NXZ")(p);
+        reinterpret_cast<Video::Configuration*>(p)->Startup();  // B.3.5 bridge
     }
 
     // --- Audio::Configuration (0x10 bytes) ---------------------------------
@@ -330,8 +331,8 @@ extern "C" bool RtEngine_Engine_PlatformConfigure(Engine* self, bool configure,
         // 0x1800a1787: arm the bit, persist, and tell the caller to proceed.
         ++g_skippedDlg;
         *static_cast<uint8_t*>(self->_videoConfiguration) = 1;
-        RT_EXPORT_ONCE(VoidThisFn, "?Save@Configuration@Video@@QEAAXXZ")(
-            self->_videoConfiguration);
+        reinterpret_cast<Video::Configuration*>(self->_videoConfiguration)
+            ->Save();                                        // B.3.5 bridge
         RT_EXPORT_ONCE(VoidThisFn, "?WriteSettings@Persistence@IO@@QEBAXXZ")(
             self->_persistence);
         return true;
@@ -341,15 +342,23 @@ extern "C" bool RtEngine_Engine_PlatformConfigure(Engine* self, bool configure,
     ++g_shownDlg;
     {
         void** dslot = VideoDeviceSingletonSlot();
-        RT_EXPORT_ONCE(BoolThisFn, "?ValidateConfiguration@Device@Video@@QEAA_NXZ")(
-            dslot ? *dslot : nullptr);
+        // THE DOOR DECIDES THE OVERLOAD: the no-argument `_NXZ` spelling
+        // (0x1800f8830), not the eight-int-reference `XAEAH0000000@Z` one.
+        // The receiver is loaded through a `volatile`-free local rather than
+        // written as `dslot ? *dslot : nullptr` at the call: GCC constant-folds
+        // the null arm of the ternary and reports `-Wnonnull` on a member call
+        // that retail reaches with whatever the singleton holds. The value is
+        // identical; only the spelling keeps the diagnostic away.
+        Video::Device* device = dslot
+            ? reinterpret_cast<Video::Device*>(*dslot) : nullptr;
+        device->ValidateConfiguration();                     // B.3.5 bridge
     }
 
     const long long result = RtEnginePlatformShowLauncherDialog();
 
     *static_cast<uint8_t*>(self->_videoConfiguration) = 1;
-    RT_EXPORT_ONCE(VoidThisFn, "?Save@Configuration@Video@@QEAAXXZ")(
-        self->_videoConfiguration);
+    reinterpret_cast<Video::Configuration*>(self->_videoConfiguration)
+        ->Save();                                            // B.3.5 bridge
     RT_EXPORT_ONCE(VoidThisFn, "?WriteSettings@Persistence@IO@@QEBAXXZ")(
         self->_persistence);
 
