@@ -473,12 +473,29 @@ extern "C" bool RtGraphics_Particle_Serialize(void* selfv, void* streamv) {
 // opacity. A port that copied `m` wholesale and patched only +0x3c would leave
 // AsMatrix's w-row in place and hand the shader a different matrix.
 // ============================================================================
+// ENDGAME B.3.5 block E: BODY MOVED onto the member below; the door keeps its
+// name, its address and its registration and delegates with a QUALIFIED
+// non-virtual call (the qualification stops it re-entering itself through the
+// minted table, B34_BRIEFS section A.1).
+//
+// RULE B5-12: the hidden return slot is spelled OUT, in RETAIL ORDER, and
+// returned again. THIS is the slot the 2026-09-13 perf-only crash came through
+// (`1a4200c3`), and Geometry.h records why a C++ by-value return would be the
+// WRONG fix on a vtable slot under GCC.
 extern "C" Matrix* RtGraphics_ParticleInstance_GetInstanceTransform(
-        void* selfv, Matrix* out, int32_t /*index — ignored, see banner*/,
-        float alpha) {
+        void* selfv, Matrix* out, int32_t index, float alpha) {
+    return reinterpret_cast<const ::Graphics::ParticleInstance*>(selfv)
+               ->::Graphics::ParticleInstance::GetInstanceTransform(out, index, alpha);
+}
+
+namespace Graphics {
+
+Math::Matrix* ParticleInstance::GetInstanceTransform(Math::Matrix* out, int index,
+                                                     float alpha) const {
+    (void)index;         // ignored, see the banner above the door
     ++g_piGetInstanceXform;
 
-    const Geometry* self = static_cast<const Geometry*>(selfv);
+    const Geometry* self = this;
     const uint8_t*  cur  = B(&self->_transform);
     const uint8_t*  prv  = B(&self->_prevTransform);
 
@@ -528,6 +545,8 @@ extern "C" Matrix* RtGraphics_ParticleInstance_GetInstanceTransform(
     return out;
 }
 
+}  // namespace Graphics
+
 // ============================================================================
 // void Graphics::ParticleInstance::AddDrawItems(const Scene&, Renderer&) const
 // ?AddDrawItems@ParticleInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
@@ -567,12 +586,27 @@ extern "C" Matrix* RtGraphics_ParticleInstance_GetInstanceTransform(
 //    `NEG AL; SBB ECX,ECX; AND ECX,0x34`, a branchless mask, not a conditional.
 //    0x34 and not 0x34-something: the immediate is in the instruction.
 // ============================================================================
+// ENDGAME B.3.5 block E: BODY MOVED onto the member below; the door keeps its
+// name, its address and its registration and delegates with a QUALIFIED
+// non-virtual call (the qualification stops it re-entering itself through the
+// minted table, B34_BRIEFS section A.1).
 extern "C" void RtGraphics_ParticleInstance_AddDrawItems(
-        void* selfv, const void* /*scene — never read, see banner*/, void* rendererv) {
+        void* selfv, const void* scene, void* rendererv) {
+    reinterpret_cast<const ::Graphics::ParticleInstance*>(selfv)
+        ->::Graphics::ParticleInstance::AddDrawItems(
+              *reinterpret_cast<const ::Graphics::Scene*>(scene),
+              *reinterpret_cast<::Graphics::Renderer*>(rendererv));
+}
+
+namespace Graphics {
+
+void ParticleInstance::AddDrawItems(const Scene& scene, Renderer& renderer) const {
+    (void)scene;         // never read by retail -- see the banner above the door
+    void* const rendererv = reinterpret_cast<void*>(&renderer);   // B.3.5 bridge
     ++g_piAddDrawItems;
 
-    const Geometry*         self = static_cast<const Geometry*>(selfv);
-    const ParticleInstance* pi   = static_cast<const ParticleInstance*>(selfv);
+    const Geometry*         self = this;
+    const ParticleInstance* pi   = this;
     uint8_t*                rend = B(rendererv);
 
     const uint8_t* pool = B(pi->_boundsPtr);
@@ -624,9 +658,11 @@ extern "C" void RtGraphics_ParticleInstance_AddDrawItems(
     }
     if (!add) return;
 
-    add(rendererv, selfv, material, 0x8000, 0, distSq, opacity, flags, pool, 0);
+    add(rendererv, self, material, 0x8000, 0, distSq, opacity, flags, pool, 0);
     ++g_piAddDrawItemsEmit;
 }
+
+}  // namespace Graphics
 
 // ============================================================================
 // void Graphics::ParticleInstance::SetParticle(ExternalPtr<Particle>)
@@ -670,30 +706,38 @@ extern "C" void RtGraphics_ParticleInstance_AddDrawItems(
 // because this is its first use.
 extern "C" void* RtGraphics_ParticlePool_OperatorNew();
 
+// ENDGAME B.3.5 block E: BODY MOVED onto the member below; the door keeps its
+// name, its address and its registration and delegates with a QUALIFIED
+// non-virtual call (the qualification stops it re-entering itself through the
+// minted table, B34_BRIEFS section A.1).
 extern "C" void RtGraphics_ParticleInstance_SetParticle(void* selfv, void* particlev) {
+    RtGraphics::ExternalPtr h; h.p = particlev;
+    reinterpret_cast<::Graphics::ParticleInstance*>(selfv)
+        ->::Graphics::ParticleInstance::SetParticle(h);
+}
+
+namespace Graphics {
+
+void ParticleInstance::SetParticle(ExternalPtrHandle particle) {
+    void* const particlev = particle.p;
     ++g_piSetParticle;
 
-    ParticleInstance* pi   = static_cast<ParticleInstance*>(selfv);
-    Geometry*         self = static_cast<Geometry*>(selfv);
+    ParticleInstance* pi   = this;
+    Geometry*         self = this;
 
     // NAME DOOR — SYMBOL: ?RemoveState@ParticleInstance@Graphics@@IEAAXXZ
     // (retail 0x1801040b0). IEAA = PROTECTED, and this DLL exports its protected
-    // members (reference_aeaa_is_private_not_unexported.md), so a name door is
-    // the plain door. CONDITION/CONSEQUENCE: null means the previous pool is
-    // never detached and the old record leaks into the new instance; the message
-    // makes that visible rather than letting it read as a content bug.
-    using RemoveStateFn = void (*)(void*);
-    static RemoveStateFn removeState = nullptr;
-    static bool triedRemove = false;
-    if (!triedRemove) {
-        triedRemove = true;
-        removeState = reinterpret_cast<RemoveStateFn>(
-            ResolveExport("?RemoveState@ParticleInstance@Graphics@@IEAAXXZ"));
-        if (!removeState)
-            std::fprintf(stderr, "[GFXPART27] SetParticle: RemoveState resolved NULL "
-                                 "-- the previous particle pool is NOT released\n");
-    }
-    if (removeState) removeState(selfv);
+    // members (reference_aeaa_is_private_not_unexported.md), so a name door was
+    // the plain door, and null meant the previous pool was never detached and
+    // the old record leaked into the new instance. `RemoveStateFn` went with it.
+    // ENDGAME B.3.5 block E: this was
+    // `ResolveExport("?RemoveState@ParticleInstance@Graphics@@IEAAXXZ")` — a
+    // class reaching its OWN protected member through the port registry, with a
+    // null-resolve arm that silently leaked the previous pool. The body is now
+    // `Graphics::ParticleInstance::RemoveState` (wave28_lane_partsys.cpp), so
+    // this is a direct QUALIFIED member call and both the resolve and the leak
+    // arm are gone.
+    this->ParticleInstance::RemoveState();
 
     uint8_t* p = B(particlev);
     pi->_resource = static_cast<RtGraphics::ParticleResource*>(particlev);
@@ -758,6 +802,8 @@ extern "C" void RtGraphics_ParticleInstance_SetParticle(void* selfv, void* parti
     }
 }
 
+}  // namespace Graphics
+
 // ============================================================================
 // void Graphics::ParticleSystemInstance::SetParticle(ExternalPtr<Particle>)
 // ?SetParticle@ParticleSystemInstance@Graphics@@UEAAXV?$ExternalPtr@…@Z
@@ -793,16 +839,36 @@ extern "C" void RtGraphics_ParticleInstance_SetParticle(void* selfv, void* parti
 // (reference_basetypeinfo_name_is_content_only.md), and it is read through
 // ResolveExport so a minted copy is followed at cutover.
 // ============================================================================
+// ENDGAME B.3.5 block E: BODY MOVED onto the member below; the door keeps its
+// name, its address and its registration and delegates with a QUALIFIED
+// non-virtual call (the qualification stops it re-entering itself through the
+// minted table, B34_BRIEFS section A.1).
 extern "C" void RtGraphics_ParticleSystemInstance_SetParticle(void* selfv, void* particlev) {
+    RtGraphics::ExternalPtr h; h.p = particlev;
+    reinterpret_cast<::Graphics::ParticleSystemInstance*>(selfv)
+        ->::Graphics::ParticleSystemInstance::SetParticle(h);
+}
+
+namespace Graphics {
+
+void ParticleSystemInstance::SetParticle(ExternalPtrHandle particle) {
+    void* const particlev = particle.p;
     ++g_psiSetParticle;
 
-    ParticleSystemInstance* psi = static_cast<ParticleSystemInstance*>(selfv);
-    ParticleInstance*       pi  = &psi->base;
+    // ENDGAME B.3.5 block E: `psi->base` was the POD mirror's embedded
+    // `ParticleInstance base` member. It is a real BASE CLASS now, so the
+    // sub-object IS `this` -- same bytes, same address, one fewer indirection to
+    // get wrong.
+    ParticleSystemInstance* psi = this;
+    ParticleInstance*       pi  = this;
 
     // Retail CALLs 0x180104a00 directly, so this port calls OUR body directly
     // too: going through the registry here would let the two halves of one
     // class come from different builds.
-    RtGraphics_ParticleInstance_SetParticle(selfv, particlev);
+    // Retail CALLs 0x180104a00 directly, so this calls OUR body directly too --
+    // and it is now a QUALIFIED member call on the base, which is exactly what
+    // "the base's own body, not a virtual re-dispatch" means in C++.
+    this->ParticleInstance::SetParticle(particle);
 
     uint8_t* res = B(pi->_resource);
     if (res && res[kParticle_Active] == 0 && psi->_f_d8) {
@@ -879,6 +945,8 @@ extern "C" void RtGraphics_ParticleSystemInstance_SetParticle(void* selfv, void*
     psi->_f_d8 = m;
 }
 
+}  // namespace Graphics
+
 // ============================================================================
 // void Graphics::ParticleInstance::Draw(Video::Context&, const Camera&,
 //         ExternalPtr<MaterialInstance>, float, int, int, int) const
@@ -945,15 +1013,34 @@ const float kCornerOffset[8] = { -1.0f, 1.0f, 1.0f, 1.0f, 1.0f, -1.0f, -1.0f, -1
 
 }  // namespace
 
+// ENDGAME B.3.5 block E: BODY MOVED onto the member below; the door keeps its
+// name, its address and its registration and delegates with a QUALIFIED
+// non-virtual call (the qualification stops it re-entering itself through the
+// minted table, B34_BRIEFS section A.1).
 extern "C" void RtGraphics_ParticleInstance_Draw(
-        void* selfv, void* contextv, const void* /*camera — never read*/,
-        void* /*material ExternalPtr — never read*/, float alpha,
-        int32_t /*arg5 — never read*/, int32_t /*arg6 — never read*/,
-        int32_t instances) {
+        void* selfv, void* contextv, const void* camera,
+        void* material, float alpha, int32_t a5, int32_t a6, int32_t instances) {
+    RtGraphics::ExternalPtr mat; mat.p = material;
+    reinterpret_cast<const ::Graphics::ParticleInstance*>(selfv)
+        ->::Graphics::ParticleInstance::Draw(
+              *reinterpret_cast<Video::Context*>(contextv),
+              *reinterpret_cast<const ::Graphics::Camera*>(camera),
+              mat, alpha, a5, a6, instances);
+}
+
+namespace Graphics {
+
+void ParticleInstance::Draw(Video::Context& context, const Camera& camera,
+                            ExternalPtrHandle material, float alpha,
+                            int a5, int a6, int instances) const {
+    (void)camera;        // never read by retail
+    (void)material;      // never read by retail
+    (void)a5; (void)a6;  // never read by retail
+    void* const contextv = reinterpret_cast<void*>(&context);   // B.3.5 bridge
     ++g_piDraw;
 
-    const Geometry*         self = static_cast<const Geometry*>(selfv);
-    const ParticleInstance* pi   = static_cast<const ParticleInstance*>(selfv);
+    const Geometry*         self = this;
+    const ParticleInstance* pi   = this;
     uint8_t*                ctx  = B(contextv);
     const float             one  = One();
 
@@ -1100,6 +1187,8 @@ extern "C" void RtGraphics_ParticleInstance_Draw(
 
     reinterpret_cast<EndFn>(VSlot(ctxData, 0x98))(ctxData, 0);
 }
+
+}  // namespace Graphics
 
 // ============================================================================
 // The emitter's allocate / destroy / free trio   (cutover closure batch D1)

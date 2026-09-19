@@ -144,6 +144,8 @@
 #include "../../types/graphics/Geometry.h"
 #include "../../types/graphics/Particle.h"
 #include "../../types/graphics/ParticleInstance.h"
+// ENDGAME B.3.5 block E: the real `Graphics::SunLight` (and `Light`).
+#include "../../types/graphics/SunLight.h"
 #include "../../types/math/Math.h"
 
 using RtGraphics::Geometry;
@@ -525,10 +527,22 @@ Vec3f QuatRotate(float qx, float qy, float qz, float qw, const Vec3f& v) {
 //     diagnosis.
 //   * `this->_emitter` is dereferenced with no test.
 // ============================================================================
+// ENDGAME B.3.5 block E: BODY MOVED onto
+// `Graphics::ParticleSystemInstance::Update` (slot 1 — the class that finally
+// FILLS Geometry's pure slot 1). The door keeps its name and its registration.
 extern "C" void RtGraphics_ParticleSystemInstance_Update(void* selfv, const void* timev) {
+    reinterpret_cast<::Graphics::ParticleSystemInstance*>(selfv)
+        ->::Graphics::ParticleSystemInstance::Update(
+              *reinterpret_cast<const System::Time*>(timev));
+}
+
+namespace Graphics {
+
+void ParticleSystemInstance::Update(const System::Time& timeRef) {
     ++g_psiUpdate;
 
-    uint8_t* self = B(selfv);
+    const void* const timev = reinterpret_cast<const void*>(&timeRef);   // B.3.5 bridge
+    uint8_t* self = B(static_cast<void*>(this));
     const int64_t deltaTicks = I64(timev, 0);
 
     // --- A -----------------------------------------------------------------
@@ -918,6 +932,8 @@ extern "C" void RtGraphics_ParticleSystemInstance_Update(void* selfv, const void
     }
 }
 
+}  // namespace Graphics
+
 // ============================================================================
 // void Graphics::ParticleInstance::RemoveState()
 // ?RemoveState@ParticleInstance@Graphics@@IEAAXXZ   retail 0x1801040b0
@@ -936,10 +952,25 @@ extern "C" void RtGraphics_ParticleSystemInstance_Update(void* selfv, const void
 // safety check. The `movq $-2,0x20(%rsp)` at the top is the MSVC unwind
 // funclet's state slot and has no effect on the object.
 // ============================================================================
+// ENDGAME B.3.5 block E: BODY MOVED onto
+// `Graphics::ParticleInstance::RemoveState`. `IEAA` means PROTECTED, not
+// unexported — this DLL exports its protected members
+// (reference_aeaa_is_private_not_unexported.md) — so the member is `protected`
+// on the real class too and the door reaches it as a friend would: it does not,
+// it reaches it through the qualified call, which is legal because the door is
+// spelled inside this translation unit and the member is declared public-facing
+// for the registry's sake. See the header's note beside `RemoveState`.
 extern "C" void RtGraphics_ParticleInstance_RemoveState(void* selfv) {
+    reinterpret_cast<::Graphics::ParticleInstance*>(selfv)
+        ->::Graphics::ParticleInstance::RemoveState();
+}
+
+namespace Graphics {
+
+void ParticleInstance::RemoveState() {
     ++g_piRemoveState;
 
-    uint8_t* self = B(selfv);
+    uint8_t* self = B(static_cast<void*>(this));
     uint8_t* res  = *reinterpret_cast<uint8_t**>(self + 0xc0);
 
     if (res && res[kParticle_Active] == 0) {
@@ -964,6 +995,8 @@ extern "C" void RtGraphics_ParticleInstance_RemoveState(void* selfv) {
     *reinterpret_cast<void**>(self + 0xc8) = nullptr;
 }
 
+}  // namespace Graphics
+
 // ============================================================================
 // The two SunLight slots that are a bare RET
 //
@@ -976,15 +1009,43 @@ extern "C" void RtGraphics_ParticleInstance_RemoveState(void* selfv) {
 // The class overrides both purely to REPLACE the Light/Geometry behaviour with
 // nothing (SunLight's real work is in DrawShadowMap and the four-int Draw).
 // ============================================================================
-extern "C" void RtGraphics_SunLight_Update(void* /*self*/, const void* /*time*/) {
+// ENDGAME B.3.5 block E: all three bodies below MOVED onto the real
+// `Graphics::SunLight`; each door keeps its name and its registration and
+// delegates with a QUALIFIED non-virtual call.
+extern "C" void RtGraphics_SunLight_Update(void* self, const void* time) {
+    reinterpret_cast<::Graphics::SunLight*>(self)
+        ->::Graphics::SunLight::Update(*reinterpret_cast<const System::Time*>(time));
+}
+
+extern "C" void RtGraphics_SunLight_Draw_MHHH(void* self, void* context,
+                                              const void* camera, void* material,
+                                              float alpha, int a, int b, int c) {
+    RtGraphics::ExternalPtr mat; mat.p = material;
+    reinterpret_cast<const ::Graphics::SunLight*>(self)
+        ->::Graphics::SunLight::Draw(*reinterpret_cast<Video::Context*>(context),
+                                     *reinterpret_cast<const ::Graphics::Camera*>(camera),
+                                     mat, alpha, a, b, c);
+}
+
+namespace Graphics {
+
+// Both are `RET` in the shipped build. They are not stubs this port chose to
+// leave empty; the class overrides them purely to REPLACE the Light/Geometry
+// behaviour with nothing (SunLight's real work is DrawShadowMap and DrawLight).
+void SunLight::Update(const System::Time& time) {
+    (void)time;
     ++g_sunUpdate;
 }
 
-extern "C" void RtGraphics_SunLight_Draw_MHHH(void* /*self*/, void* /*context*/,
-                                              const void* /*camera*/, void* /*material*/,
-                                              float /*alpha*/, int /*a*/, int /*b*/, int /*c*/) {
+void SunLight::Draw(Video::Context& context, const Camera& camera,
+                    ExternalPtrHandle material, float opacity,
+                    int a, int b, int c) const {
+    (void)context; (void)camera; (void)material; (void)opacity;
+    (void)a; (void)b; (void)c;
     ++g_sunDrawMhhh;
 }
+
+}  // namespace Graphics
 
 // ============================================================================
 // void Graphics::SunLight::AddDrawItems(const Scene&, Renderer&) const
@@ -1022,12 +1083,23 @@ extern "C" void RtGraphics_SunLight_Draw_MHHH(void* /*self*/, void* /*context*/,
 // `Renderer&` is pushed out to R8.
 // ============================================================================
 extern "C" void RtGraphics_SunLight_AddDrawItems(void* selfv, const void* scenev, void* rendererv) {
+    reinterpret_cast<const ::Graphics::SunLight*>(selfv)
+        ->::Graphics::SunLight::AddDrawItems(
+              *reinterpret_cast<const ::Graphics::Scene*>(scenev),
+              *reinterpret_cast<::Graphics::Renderer*>(rendererv));
+}
+
+namespace Graphics {
+
+void SunLight::AddDrawItems(const Scene& sceneRef, Renderer& rendererRef) const {
     ++g_sunAddDrawItems;
 
-    uint8_t* self = B(selfv);
-    uint8_t* renderer = B(rendererv);
+    // Bridges, at the one place the foreign objects' offsets are read.
+    const void* const scenev = reinterpret_cast<const void*>(&sceneRef);   // B.3.5 bridge
+    const void* const self   = this;
+    uint8_t* renderer = B(reinterpret_cast<void*>(&rendererRef));          // B.3.5 bridge
 
-    if (*reinterpret_cast<void**>(self + 0xf8) == nullptr) return;
+    if (_depthTarget == nullptr) return;
     ++g_sunAddDrawEmit;
 
     using AddLightFn        = void (*)(void* renderer, const void* light);
@@ -1048,7 +1120,7 @@ extern "C" void RtGraphics_SunLight_AddDrawItems(void* selfv, const void* scenev
     const void* sceneCam = *reinterpret_cast<uint8_t**>(renderer + 0x10) + 8;
     const int group = RT_EXPORT_ONCE(BeginDrawGroupFn,
         "?BeginDrawGroup@Renderer@Graphics@@QEAAHPEBVRenderBuffer@Video@@AEBVCamera@2@1HI@Z")(
-            renderer, *reinterpret_cast<void**>(self + 0x100), sceneCam, cam, 1, 1u);
+            renderer, _renderBuffer, sceneCam, cam, 1, 1u);
 
     if (I32(renderer, 0x3c) != 0) {
         RT_EXPORT_ONCE(SceneDrawItemsFn,
@@ -1061,6 +1133,8 @@ extern "C" void RtGraphics_SunLight_AddDrawItems(void* selfv, const void* scenev
     RT_EXPORT_ONCE(EndDrawGroupFn,
         "?EndDrawGroup@Renderer@Graphics@@QEAAXH@Z")(renderer, group);
 }
+
+}  // namespace Graphics
 
 // ============================================================================
 // Registration
