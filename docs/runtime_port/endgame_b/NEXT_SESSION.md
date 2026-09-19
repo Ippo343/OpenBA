@@ -1,4 +1,4 @@
-# Next session plan (written 2026-09-19, at the B.3.4 close; §0 and §1 items 6, 10, 12 revised the same day after the open-defect pass)
+# Next session plan (written 2026-09-19, at the B.3.5 close)
 
 State and counts live in `../STATUS.md`; this file is only the plan. Delete it (or replace
 it) when the session it describes has started.
@@ -6,203 +6,232 @@ it) when the session it describes has started.
 ## 0. Sync (5 minutes)
 
 - `git log --oneline -8`, `git worktree list`, `git branch --no-merged main` (expect none).
-- `git worktree list` should show only the main tree (checked 2026-09-19 after the defect
-  pass). If agent worktrees have reappeared under `.claude/worktrees/`, prune the merged ones
-  (check each is clean; `git worktree remove` without `--force`, `git branch -d`) — they slow
-  every unscoped grep and a stale one is where an agent's "zero hits" comes from. Leftover
-  branches that are NOT this plan's: `endgame-a3`, `wave29/base`; `defects-open-5` is merged
-  and can go (local and `origin`).
+- Step 5 ran about 25 worktree agents. Prune the merged worktrees under `.claude/worktrees/`
+  (check each is clean; `git worktree remove` without `--force`, `git branch -d`): they slow
+  every unscoped grep and a stale one is where an agent's "zero hits" comes from. Step 5's
+  branches are all `b35-*` and all merged. Leftover branches that are NOT this plan's:
+  `endgame-a3`, `wave29/base`, `defects-open-5`.
 - Greps over `standalone/` or `tests/` exclude `standalone/build*/` and `tests/unit/build/`.
 - Open Ghidra (all four programs) BEFORE launching an agent that needs it. `switch_program`
   is GLOBAL state: every agent asserts `get_current_program_info` before each read batch
   (retail `Runtime-x64.dll` 15290 functions; the profile DLL, 16002, shares the image base and
-  is never a source of offsets; `Application-x64.exe` 11473) and switches BACK.
+  is never a source of offsets; `Application-x64.exe` 11473; `VideoDX11-x64.dll` 576) and
+  switches BACK. Ghidra scripts must be JAVA (no Python provider in this install); step 5's
+  dump scripts are in `b35_session/ghidra/` and are the model for a UI dump.
 
-## 1. Carry-overs (each its own gated change; none blocks step 5)
+## 1. Carry-overs (each its own gated change; none blocks step 6)
 
-From B.3.3, still open (unchanged by step 4):
-1. The IAT-cached `fn_InternalBasePtr_Ctor` / `_DeletePtr` callers in ten files
-   (`placementtool`, `edittool`, `removenaturalresource`, `performwork`, `dropoffrawmaterial`,
-   `work_act_perform`, `work_act_path`, `work_act_clear`, `pickup_gate`, `work_base_reimpl`).
+Unchanged from before step 5 (details in the B.3.4 block of `STATUS.md` and `B34B_RULES.md`):
+1. The IAT-cached `fn_InternalBasePtr_Ctor` / `_DeletePtr` callers in ten files.
 2. One `?_typeInfo@` record per name (`Base`, `External`, `ExternalList`, `CompiledExternal`,
-   `Internal`): owner task with the coordinator in the loop, needs `rt_data_mint.cpp` +
-   `rt_mint_gen.py` and a live type-table comparison.
+   `Internal`): owner task, needs `rt_data_mint.cpp` + `rt_mint_gen.py` and a live type-table
+   comparison.
 3. `ExternalList::Find`'s second parameter is `Object::Type` by value, not `uint32_t`.
-4. A menu-driver route that opens Options (the 6C `GetTypeIdFromName` conversions have build
-   coverage only).
+4. A menu-driver route that opens Options. NOW MORE USEFUL: step 5 converted
+   `Dialog/optionsdialog.cpp`'s twenty `Video::Device` / `Configuration` sites with build
+   coverage only (display-mode validation, `Configuration::Save`).
+5. `System::MemoryAllocator` — deferred on purpose (~1,146 sites). New related hazard found in
+   step 5, left byte-identical: `code/Game/Work/gatherrawmaterials.cpp:~232` and
+   `foresterwork.cpp` keep a fallback `ResolveAddr(Module::Exe, 0x1401527e8)` labelled
+   `iatMemAlloc`; that exe slot is `?_rng@Particle@Graphics@@` (a DATA import). It only runs if
+   the `MemAlloc` export fails to resolve. Fix it with the allocator work.
+6. The eleven `CUTOVER_REQUIRED` System statics + step 5's ten Video/Graphics statics
+   (`B35_RULES.md` section 9): `MintStorageCell` redirect owed at the class-static conversion,
+   the END of B.3.
+7. `System::Configuration::CurrentBuildId` (0x1800c4c60) stays a free door.
+8. The 125 call sites through the twelve `ExternalPtr` exe-side doors. Step 5 adds:
+   `Geometry.h`'s `Graphics::ExternalPtrHandle` alias serves FIVE element types, so retyping it
+   to `Object::ExternalPtr<T>` means about 30 uses across six headers — do it with this work.
+   Settled in step 5 from retail prologues (ten getters read): an `ExternalPtr<T>` RETURN is a
+   hidden-retslot return in retail; an `ExternalPtr<T>` ARGUMENT is a bare pointer in a register
+   and its pointer ctor does no AddRef.
+9. Small: eight direction reads with an unproved receiver (`d6ee7bfc`);
+   `standalone/res_load_lock.{h,cpp}` live-or-dead; `Time::AsSeconds` / the `Time` ctor reach
+   `System::Timer` by name although the members are static now.
 
-New from B.3.4 (details and anchors in `STATUS.md`'s B.3.4 block and `B34B_RULES.md`):
-5. **`System::MemoryAllocator` — deferred past step 4 on purpose** (~1,146 sites, three caller
-   surfaces, member vs static bodies lock differently; B.4 already lists the allocator among
-   what legitimately stays cast-heavy). Assessment: `B34B_RULES.md` §6.
-6. **The open defects were worked on 2026-09-19** (account in `STATUS.md`; on main `2788c108`).
-   (c) is fixed by retail's ordering (`MenuDLT::Shutdown` -> `Audio::Scene::StopAll`), which also
-   answers the Audio-step question: retail parks the music stream, and takes no lock.
-   (a) and (b) were NOT reproduced: (a) got retail's `LoaderLoop::Shutdown` join, (b) no change;
-   both are attributed to the two-loader race `96c17f47` removed. **A recurrence of either stack
-   is therefore a finding, not a known flake** — the crash dump prints the allocator singleton
-   cell (`5b332342`); read it first. What is left, none of it guarded:
-   - a quit DURING a splash loop reaches `~Engine` with a live loader (retail's splash
-     `Shutdown` is a RET too — same exposure), and our `WinMain` tail after `~Engine`
-     (`main.cpp:1587+`) is much longer than retail's, which widens any such window;
-   - `MenuDLT` `Stub_Shutdown` still skips the rest of retail's Shutdown (0x14009b280: scene,
-     renderer and SaveLoad teardown, `DialogLoopT::Shutdown`, `EnableCursor(false)`) — a leak,
-     not a race; belongs with the Audio/loop work;
-   - `FileSystem::ReadFile`'s packed arm copies the pack's `FileInfo` (two refcounted
-     `Filename`s, non-atomic counts) per read — identical to retail, harmless with one loader;
-   - `e353fb15` (`AllowsModChanges` FALSE off the menu) changed when the boot remount and the
-     game->menu `RefreshList` run; routes were gated once each, so watch the Mods routes.
-7. The eleven `CUTOVER_REQUIRED` System statics: `MintStorageCell` redirect owed at the
-   class-static conversion (end of B.3), tabled per row in `B34B_RULES.md` §4.1; Timer's five
-   move together or not at all.
-8. `System::Configuration::CurrentBuildId` (0x1800c4c60) stays a free door until someone reads
-   its prologue (it calls `String::Set` on an un-zeroed hidden return slot).
-9. The 125 call sites through the TWELVE `ExternalPtr` exe-side doors (template instantiations
-   ported as game-code bodies with their own guard set — NOT Runtime members): exe-phase,
-   receiver-side work. `fn_ExternalPtr_Serialize3` is the last reader of exe 0x140007140.
-10. Small, retail-read-shaped (`moddetailsdialog.cpp` Find-by-address is DONE, `94258ffc`): eight direction reads with an unproved
-    receiver (listed in `d6ee7bfc`); `dx11/src/buffers.cpp:271` reads a stream direction but
-    dx11 has no IO dependency; `standalone/res_load_lock.{h,cpp}`'s header rule is followed by
-    exactly one body — decide live or dead.
-11. System leftovers that are NOT oversights: about 150 `System::Time` ctor call sites (exe slot
-    0x140152b00) and the `Random` ctor sites stay doors by design (B4b-2); eight by-value `String`
-    returns write into an already-constructed `String`; `fn_Random_RandFloatTol` is an `extern "C"`
-    SHIM FUNCTION (`code/Game/Game/worldgen_f390_shims.cpp`), not a pointer — its ~29 call sites are
-    plain function calls and its body is the member call. The System guard-and-cache sweep
-    and the dead System globals were done inside step 4 (`b34_session/SYSTEM_GUARD_BRIEF.md`).
-    Still owed: `Time::AsSeconds` / the `Time` ctor reach `System::Timer` through
-    `RT_EXPORT_ONCE` by name although `Timer::TicksToSeconds` / `SecondsToTicks` are now static
-    members (a routing change, so it is its own gated commit).
-12. DONE (`59ca40dd`): the `?_singleton@Configuration@System@@` row now names only `?Get@`
-    as the blocker; disposition unchanged. The 2026-09-19 defect pass's owed routes (mods,
-    tutorial, perf build, (d) with a conflict) were run the same day — results in `../STATUS.md`.
+New from step 5 (details in `STATUS.md`'s B.3.5 block, `B35_RULES.md` and its dated corrections):
+10. **THE DEVICE-LOST / LOADER RACE NEEDS A DECISION, NOT A PATCH.**
+    `endgame_b/DEVICE_LOST_LOADER_RACE.md`: a device-lost that lands while the loader thread is
+    building the world kills the loader thread (four stack families, incl. the
+    `Factory::IsDerivedFrom` near-null one first seen in step 5 and the `GpuBuffer_Create` null
+    `d3dDevice`). PRE-EXISTING (pre-step exe 5/11, step-5 exe 1/11 with
+    `BANISHED_FORCE_DEVICE_LOST=400`; clean at `=2000`) and RETAIL HAS THE SAME WINDOW: all seven
+    `Device::Lock` sites are reproduced, retail releases the lock right after `Present` and runs
+    the whole recovery unlocked, `Create` and the load arm of `Serialize` take no lock, and
+    `LoaderLoop::OnVideoError` is a bare RET. Any fix (hold the lock across recovery, park the
+    loader, refuse to inject mid-build) DIVERGES from retail: the user decides. Cheap next move
+    that is not a divergence: print `Device::_singleton`, `activeDeviceData`, `d3dDevice`, lock
+    owner tid (+0x88) and depth (+0x8C) in the crash dump (a `standalone/` change). One step-5
+    run died with that stack at frame 357, BEFORE its frame-400 injection: still unexplained,
+    and a plain-route recurrence is a FINDING (the crash dump shows a live allocator and intact
+    free lists, so `B34B_RULES` 6.3's W2 / W2' are excluded for these stacks).
+11. The concrete dx11 `*Data` classes and the 84-slot seam (`Dx11SeamInstall`) are a declared
+    leave (RULE B5-8): converting them means re-deriving the seam's completeness guarantee that
+    device-lost recovery dispatches through. dx11's import table is down to 38 live rows:
+    allocator doors, ctor rows, the two singletons, and four `Application` rows that wait for
+    `Application` to become a class (step 7).
+12. Sixteen Video/Graphics ctor doors in `engine_funcs` and every `??0/??1/??2/??3` door stay
+    by design (B4b-2); mint rows, `RT_DELDTOR` rows and `_typeInfo` rows retire at the end of
+    B.3. 425 (a ceiling) Video/Graphics members are declared and defined nowhere: they are
+    UNPORTED retail members nobody calls — not debt of step 5; a caller that appears is a link
+    error, which is the point.
+13. Left with a reason in step 5 and worth a small pass each: `Camera.h`'s eight wrong POD
+    field names (PODs have users in eight files; the classes carry the right names);
+    `standalone/scene_watch.{h,cpp}`'s ~60 raw-offset reads of Scene/Geometry/Renderer/Camera;
+    `standalone/boot_window.cpp`'s `Configuration+0x42` write (deliberately header-free);
+    `InterpolatedStateT` vs `InterpolatedState<T>` (same layout, inheritance NOT proved);
+    the 11 hand-inlined slot calls left in `runtime/src/{video,graphics}` and 18 in `code/Game`
+    (unproved receivers); the nine int64 `ReaderWriter` slot calls (five left after step 5).
+14. From before, still open: the quit-during-splash exposure, `MenuDLT` `Stub_Shutdown` skipping
+    the rest of retail's Shutdown (a leak; belongs with step 7's Audio/loop work), `e353fb15`'s
+    Mods-route timing — watch the Mods routes.
 
-## 2. B.3 step 5 — `Video` and `Graphics` (dx11/ stays the plugin, implemented in-tree)
+## 2. B.3 step 6 — `UI`
 
-The session kit from B.3.4 — briefs, the guard-sweep spec, the binding-resolving sweep scripts,
-the per-file warning A/B and the coordinator's gate script — is in `b34_session/` (README there).
-Same shape that has now worked six times: read-only inventory -> committed rule sheet
-`B35_RULES.md` -> ONE owner for the question pass and the core -> coordinator gates each
-merge -> parallel blocks by DISJOINT file set -> caller batches by directory -> a closing
-pass that is specced by its predecessor and fanned out.
+Same shape that has now worked seven times: read-only inventory -> committed rule sheet
+`B36_RULES.md` (+ `B36_SLOTS.md`, `B36_FILEMAP.md`) -> ONE owner for the question pass ->
+class blocks by DISJOINT FILE SET on worktrees -> coordinator gates each merge -> fragment
+passes -> caller batches by directory (two rounds) -> one closing owner. The session kit is
+`b35_session/` (README there): `BLOCK_BRIEF.md`, `CALLER_BATCH_BRIEF.md`, the Ghidra dump
+scripts, `CLOSE_NUMBERS.md` as the measurement template; `b34_session/` still holds `gate.sh`,
+`reftable_diff.py`, `mods_route.sh`, `warn_ab2.sh` and the sweep scripts.
 
-### 2a. What is already measured (`VIDEO_GRAPHICS_INVENTORY.md` — a MAP, NOT EVIDENCE)
-- Video: 7 type headers / 31 sources / 19 minted vtables. Graphics: 10 / 26 / 20. 18 of the 39
-  classes have a `?_typeInfo@` row (so they sit over `Object::External`, converted in B.3.3);
-  the rest (`Context`, `Device`, the `*Data` family, the Light siblings) have UNCONFIRMED bases.
-- ~1,012 registrations (about double IO). Cutover manifest: Video 18 / Graphics 4 REQUIRED
-  storage rows — not the same tally as the 39 vtable rows; do not conflate them.
-- Callers: only 61 CALLs through `engine_funcs.h` doors, against 178 raw
-  `ResolveExport("…@Video@@/@Graphics@@…")` sites and 28 files caching into local statics. An
-  `engine_funcs.h`-anchored sweep would undercount by 4x. Hot spots: `minimap_paint.cpp`,
-  `gameupdateloop*.cpp`, `Scene::AddGlobalObject/AddObject`, `MeshInstance`, `Camera`.
-- Nine hand-inlined int64 slot calls on a raw `ReaderWriter*` live in the Graphics/Audio ports
-  (`graphics/animationstate.cpp:329-331`, `graphics/vtbatch7_animgroup_particlesystem.cpp:324/616/638/639`,
-  two in audio): receiver-side work; `IO::Serializer::Serialize(int64_t&)` now exists.
+### 2a. What is already measured (`UI_INVENTORY.md` — a MAP, NOT EVIDENCE; nothing in it was verified by the coordinator)
+- 68 polymorphic `UI::*` classes, ALL with a `_typeInfo` row: 28 `*Description` (incl. the base
+  `ElementDescription`), 28 `*Element` (incl. `Element`), 6 Dialog-family (`Dialog`,
+  `DialogController`, `DialogControllerConfig`, `DialogInstance`, `ComboDialog`,
+  `ToolTipDialog`), 6 other (`CharacterSet`, `Cursor`, `Font`, `SpriteCapture`, `SpriteSheet`,
+  `StringTable`); 67 `RT_DELDTOR` rows (one short, unreconciled); 4 non-polymorphic roots
+  (`UserInterface`, `SpriteContext`, `Sprite`, `UIString`). `ENDGAME.md`'s "53" reconciles
+  with neither 56 nor 68: settle the class list FIRST.
+- 1,663 registrations in `runtime/src/ui` (105 files, 46k lines): 1.6x step 5. The census's
+  largest namespace (1,625 DLL rows).
+- Callers: 118 `engine_funcs` globals bound to a `@UI@@` export (names are NOT reliably
+  `fn_UI_*`) with 1,434 call sites in `code/Game` (step 5 had 61); 155 `ResolveExport`; 184
+  `RT_EXPORT_ONCE` (all inside `runtime/src/ui`); 205 exe import slots resolve to a UI export;
+  417 hand-inlined `(*(void***)p)[N]` calls across 39 `code/Game/Dialog` files, `tradeui.cpp`
+  (150) and `townhallui.cpp` (95) alone 59% of it.
+- Type headers use FOUR namespace spellings (`RtUI`, `namespace UI`, bare, and a
+  `StringTableOffsets`-only shape); `UIString` has NO namespace wrapper at all.
 
-### 2b. Block 0 — the question pass (ONE opus owner, no ported code touched, into `B35_RULES.md`)
-1. Read `dx11/src/dx11_backend_access.h` in full: the inventory found only two real includes
-   of runtime type headers in dx11/ and suspects it DUPLICATES offsets locally — the
-   duplicate-POD hazard B34_RULES §1.5.2 found for `IO::Stream`. Decide the boundary: which
-   vtables are dx11's, which are Runtime's, who stamps what, and whether dx11 may include
-   `runtime/types/video/*.h` (it already compiles with `-Iruntime/types`).
-2. Per class, from the RETAIL DLL byte-wise (not the profile DLL, not decompiled C): slot list
-   and order, base class, size, who constructs it and where its vtable is stamped (by name or
-   BY ADDRESS), whether anything holds it BY VALUE. Known: `Video::Context` holds `Viewport`,
-   `ConstantBufferOpaque`, `MatrixRaw`, `Vector4Raw` by value — B34's by-value rule applies.
-3. File ownership: `videoprogram.cpp` vs `video_program.cpp`, `constant_buffer.cpp` vs
-   `buffers.cpp`, and the eleven `waveNN_lane_gfx*.cpp` files that cut across classes.
-   Blocks launch only once their file sets are PROVEN disjoint.
-4. Threading and device-lost handling in `runtime/src/video` + `dx11/src` (not yet searched).
-5. Re-read the three CLOSED Video/Graphics bugs in STATUS.md (`Device::InitializeInterfaces`
-   LoadLibrary; `Graphics::Geometry` copy ctor through a NULL raw door; `GraphicsMesh::
-   PlatformSerialize` registration stripped from the PERF build; a `Math::Matrix` returned BY
-   VALUE from a vtable slot) — the same files will be converted, and the same three shapes
-   (raw-door fallback, printf-stripped registration, by-value return through a slot) recur.
+### 2b. Block 0 — the question pass (ONE opus owner, no ported code touched, into `B36_RULES.md`)
+1. The class list and hierarchy from the RETAIL DLL byte-wise (the `_ParentTypeName` literals
+   settle it: all 68 classes have one — step 5 had 18 of 39), slot lists (copy from the mint
+   table, which is generated from retail and was right every time in step 5), `sizeof` from each
+   slot-0 deleting dtor's `MOV EDX,imm`, who constructs and stamps what.
+2. **The second POD tree**: `engine/types/ui/{DialogController,DialogInstance,Dialogs,Elements,
+   Panels}.h` + `engine/types/{Descriptions,DialogLoaderLoopT,DialogLoopT}.h` (~1,887 lines)
+   mirror `runtime/types/ui/`. Decide ONE definition per class and which tree owns it (the
+   duplicate-POD hazard; step 5 collapsed every dx11 view onto the runtime header).
+3. **The exe-side subclasses**: `DialogInstance` is the base of 22 exe dialog controllers;
+   `code/Game/Dialog/{dialog_controller_vtable,mod_dialog_vtables}.cpp` build vtables by an idiom
+   a hex-literal grep does not see; `tool_base_toolui.cpp:136-142` canonicalises `DialogInstance`'s
+   vtable 0x180156d70. Enumerate them all: they decide which bases can be abstract and where the
+   QUALIFIED-CALL rule bites (see 2d).
+4. Multiple inheritance / secondary vptrs (the `ControllerComponent` pattern starts in UI
+   controllers), overloaded virtuals, by-value holdings (`String`, `Color`, `Rectangle`, `Array`,
+   `ExternalPtr` members; element structs embedded in dialog structs), the ~12 hidden-retslot
+   exports (inventory: none through a vtable slot — CONFIRM), threading (the loader constructs
+   UI resources while the menu draws).
+5. File ownership: which of the 105 files serve more than one class (the wave/lane/batch files).
 
-### 2c. Proposed blocks after block 0 (inventory §6 — confirm disjointness first)
-1. Video small `*Data` family (proves the dx11 boundary on 3–7-slot classes).
-2. Video program/shader family (8–9 slots, all `External` subclasses — mechanical after one).
-3. Video `Context` / `Device` / `RenderState` / `ImageBuffer` (the big PODs; needs 2b.2).
-4. Graphics mesh / geometry / scene / camera (the highest caller traffic — after the pattern
-   is proven, not first).
-5. Graphics material / animation / particle / light (absorbs the wave-lane files).
-6. Renderer + `rt_factories_*` / `rt_*_port.cpp` stay with the owner.
-7. Caller batches by directory, `code/Game/Game` first.
+### 2c. Proposed blocks after block 0 (inventory section 6 — confirm disjointness first)
+1. `Element` + `ElementDescription` bases (serial, one owner; dominates caller traffic).
+2. `Dialog` / `DialogInstance` / `DialogController` / `DialogControllerConfig` / `ComboDialog` /
+   `ToolTipDialog` (serial; the 22-subclass constraint).
+3. The 27 leaf Description/Element pairs — FULLY PARALLEL, the cleanest fan-out B has offered;
+   batch them 4-5 pairs per agent by file set.
+4. `Sprite` / `SpriteSheet` / `SpriteCapture` / `SpriteContext` / `Font` / `CharacterSet` /
+   `StringTable` / `UIString` / `Cursor`.
+5. `UserInterface` + the owner files (`rt_factories_ui*`, `rt_ui_port.cpp`, typeinfo accessors).
+6. Fragment pass, then caller batches by directory: `code/Game/Dialog` split in three or four
+   (it holds most of the 1,434 sites), `tradeui.cpp` + `townhallui.cpp` as their own batch, then
+   the rest of `code/`, `engine` + `standalone`, `runtime/src` outside `ui`; a second round; one
+   closing owner (`engine_funcs` zero-caller sweep by BINDING, dead caches and guards, numbers).
 
-### 2d. Standing rules every prompt carries (B.3.3's list still holds; these are B.3.4's)
+### 2d. Standing rules every prompt carries (B.3.3/B.3.4's lists in `B34B_RULES.md` and the old plan in git history `bd483075` still hold; these are step 5's)
 Class shape
-- A POD that already OCCUPIES the retail name (it sat inside `namespace System`) moves to the
-  `Rt*` namespace in the same commit that declares the class (B4b-1). POD namespace spelling
-  is NOT uniform (`RtIO`, `RtIo`, `rt::io`, `RtSystem`): check the file.
-- Abstract (slot 0 pure) unless a REAL class holds it by value; then concrete + protected
-  `= default` ctor + `friend` the holder. A POD mirror holding the POD is not that case (B4b-3).
-- No real constructor on a polymorphic class, nor where a by-value holder is seeded through a
-  ctor DOOR (the `Random`/`InternalFactory` double-seed): assert it (B4b-2). Note
-  `is_trivially_default_constructible` stops working as that assert once a real dtor exists.
-- A non-polymorphic class may take its real ctor/dtor when every one has a ported, registered
-  body and no by-value holder would double-release (WideString, ~FileSystem, ~Persistence).
-- Assert `alignof` as well as `sizeof` (`uint64_t` for a FILETIME keeps 8 and changes 4->8).
-  All-static classes carry no layout asserts and SAY SO in the banner.
-- Doors delegate with a QUALIFIED non-virtual call on polymorphic classes (first executable
-  proof: `tests/unit/system_abi_test.cpp`). A retail null-`this` test lives in the door.
-- By-value `String`/`Filename`/`Matrix` returns are hidden-retslot doors: the door
-  placement-news the member's prvalue into the caller's slot; a caller converts only as "the
-  door body moved to the call site".
-Name lookup traps (each compiled CLEAN)
-- A BARE class name inside `namespace NS {` binds the class, not the POD (fired 3x in IO).
-  Define member bodies at GLOBAL scope with qualified names when class and POD are
-  field-identical. A global `using RtSystem::String;` still loses to `namespace System` inside
-  a member body.
-- Sweep FORWARD DECLARATIONS: GCC accepts `struct X;` for a class silently (B4b-5).
-Finding callers — by BINDING, never by name or comment. Eight spellings, each cost a miss:
-  1 `ResolveAddr(Module::Exe, slot)`; 2 helpers (`RSlot`, `ResolveSlotPtr<T>`, a file-local
-  `ResolveSlot(addr, cache, tried, tag)`, `loadExref` lambdas, `ResolveFn<T>`); 3
-  `ResolveExport` by mangled name — string literals INTACT, and wrapped over two lines; 4 a
-  two-statement `uintptr_t` scratch local, resolved POSITIONALLY (`moveto.cpp` rebinds one ten
-  times; a whole-file closure reported 136 calls where there were 5); 5 plain aliases and
-  `uintptr_t` round-trips; 6 globals bound in `engine_funcs.cpp` and called elsewhere; 7
-  handle-struct FIELDS (`g_h.x`); 8 inline `RT_EXPORT_ONCE(T, "…")(args)`.
-- THE DOOR DECIDES THE OVERLOAD, never the argument's type: arguments are untyped `s + 0xNN`.
-- `serializer + 8` is the ReaderWriter; nearly every hand-inlined site misnames it. A local's
-  name proves nothing about what object it is (`work_base_walkpos.cpp:86` is a COUNT).
-- An arity mismatch between a cache's typedef and its door is a finding, not a conversion
-  (the Harvest/Plant bool-array alias could never have executed — settle from retail).
+- **A by-value return through a VIRTUAL is declared `T* M(T* ret, args…)` in retail order.**
+  GCC's ms_abi passes the hidden return pointer BEFORE `this`; MSVC passes `this` first. A C++
+  by-value virtual writes the result THROUGH `this` when a retail-shaped caller (a minted row, a
+  hand-built exe vtable) calls it. Non-virtual by-value members are fine behind a door with the
+  explicit `(this, ret)` signature that placement-news the prvalue.
+- **A polymorphic class's slot 0 (`DeletingDtor`) is declared `= 0`** while its body is a
+  `deleting_dtor.cpp` row: a non-pure declaration puts an undefined symbol in GCC's vtable and
+  the exe does not link (seen in four blocks). So nearly every class is ABSTRACT, which is fine:
+  nothing constructs them as C++ objects. A class is concrete only when something holds it BY
+  VALUE (then protected `= default` ctor + `friend` the holder + trivially-copyable assert).
+- Ctors and dtors that stamp a MINTED vtable stay doors; a member dtor chain that would re-run
+  retail's out-of-line teardown (array frees, `PlatformDestruct`) is defined EMPTY or not at all.
+  A nested value type whose `Array<T>` helper destroys elements through an open-coded copy of
+  its dtor must NOT get real special members (`ShaderProgram::Parameter`: double release).
+- `Construct` is introduced PER BRANCH (slot 8 in Video/Graphics; `ParticleSystem` had it at 9
+  behind an inherited pure slot): read the slot list, never assume the index. `virtual`, not
+  `override`, on the branch's first class.
+- Type-name literals are copied from the binary per class, never derived from the C++ name:
+  retail qualifies a parent with its namespace only when it lives in a DIFFERENT namespace
+  (`"Particle"` but `"Video::ImageBuffer"`), and the CRC of the literal is what saves key on.
+- Declare EVERY exported member up front (unported ones `// not ported`, defined nowhere): other
+  blocks and the caller batches never edit your header, and an unported member that gains a
+  caller is a link error.
+- A converted call INSIDE a slot body of a hand-built exe-phase subclass must be QUALIFIED
+  (`->Graphics::Geometry::UpdateAttached()`): the base member is virtual and an unqualified call
+  dispatches back into the same function (seven sites in step 5; UI's 22 dialog controllers are
+  exactly this shape).
+- One definition per layout: where class and POD are field-identical the POD becomes an ALIAS of
+  the class (step 5 did this for `Context`, `Device`, the buffers) so files in other blocks
+  compile untouched. Two same-size structs with different members under one name is an ODR
+  defect that stays latent until one TU includes both (`InterpolatedTransform`).
+- Header comments are not evidence: step 5 found 23 wrong retail addresses in one header, a
+  22-parameter member that has 25, a parameter pair named backwards, a field map with two names
+  swapped, and "NOT PORTED" notes on members ported for months. Tokenise the mangled name; read
+  the export directory (`tools/pe_exports.py`).
+Finding callers — by BINDING; now TEN spellings
+- The eight in `B34B_RULES`, plus 9: a mangled name held as a `const char*` in an initialised
+  table resolved by a loop (dx11's import struct); plus 10: **an exe dispatch slot**
+  (`ResolveAddr(Module::Exe, 0x14015…)` + deref, often through a file-local `RSlot` / `Slot` /
+  `ReadSlot` / `ResolveSlot` / `resolveIAT` helper). Spelling 10 DOMINATES `code/Game` and is
+  invisible to name-anchored sweeps: map every `0x140…` literal through the exe's PE import table
+  (the source `tools/dispatch_slot_map.py` uses). It found 361 hits / 29 symbols that the
+  `ResolveExport` sweep had not, and a file with 18 bindings and no literal or mangled string.
+- `engine_funcs` globals are found by their INITIALISER, never their name: of 76 that bound a
+  Video/Graphics symbol ~20 were spelled `fn_Video_*`/`fn_Graphics_*`, and 3 were bound only BY
+  ADDRESS — one of those kept four live callers through three sweeps.
+- The inventory's per-directory `ResolveExport` counts for `engine/` and `standalone/` are
+  mostly registry rows and global initialisers, not callers (74 -> 0 and 36 -> 4 in step 5).
+- A per-door "converted" tally can read complete when it is not (a door called three times per
+  file, first site converted): finish with a line-by-line re-sweep of the final tree.
 Process
-- A queued message RESUMES a finished agent: send the predecessor an explicit STOP before
-  launching its successor. Forbid `git stash` (shared across worktrees). Killing a queued
-  lock `acquire` can orphan the lock: agents `release` after killing waiters.
-- The game dir is ONE resource. With more than three parties it starves: agents run static
-  gates only and the coordinator gates the merged tree. After `TaskStop` of a gate, release
-  the lock by hand.
-- File reservations for one agent are invisible to a directory sweep: list them in the sweep's
-  final pass (two reserved files carried the last four guards into pass 2d).
-- The warning A/B must run with the PERF flag set too (printf stripping is where new
-  `unused variable` warnings come from), must materialise the base copy BESIDE the real file
-  (relative includes), and must not run during a build (its temp file joins the source glob).
-  The coordinator's warning diff only sees RECOMPILED files: a clean rebuild at the close.
-- `standalone` (release) and `standalone-debug` SHARE `standalone/build/obj`. A true release
-  compile (empty the obj dir first, or it compiles nothing) must be FOLLOWED by `make clean`:
-  otherwise the next `standalone-debug` links a "debug" exe out of log-stripped -O3 objects
-  (10 MB instead of ~60 MB), stdout stops after ~120 lines and every log-based gate check
-  fails on a healthy run. Cost this session one false gate failure and a 14-file bisect.
-- A closing pass is bigger than its brief: B.3.4's was 45 globals + 369 file-local caches +
-  ~650 guards. Have the closing owner write a measured spec and fan it out by directory;
-  the globals' own declarations die LAST, in one pass, so the build proves the invariant.
-- A resave DIFF is classified by WHICH BYTES differ, never by size: only the count field at
-  +0x18 (either direction) or one/two whole resident rows incl. a DUPLICATE row is the old
-  loader race (`reftable_diff.py`; keep the DIFF image). After the single-loader fix
-  (`96c17f47`) neither signature should appear at all: one appearing is now a finding.
-  `[GUL::Load] redundant dispatch` reappearing means a second dispatcher is back.
+- Blocks own FILES, not classes. A body of someone else's class in your file stays a door and
+  goes on the coordinator's fragment list; a fragment pass per namespace side follows the class
+  blocks, then callers. Two caller rounds: round 1 leaves every site whose member is "declared
+  but not defined", the fragment passes define them, round 2 converts.
+- Conflicts are always "two blocks appended at the same spot" (`tests/unit/sources.mk`, a shared
+  include list): keep both sides. Better: tell blocks NOT to touch `sources.mk` (`UNIT_SRCS` is a
+  wildcard; the file only carries comments for test-only blocks).
+- More than three agents that run the game starve the game dir: caller batches are static-gate
+  only; class blocks run one route at the end. The coordinator gates every merge.
+- The gate's warning diff flags a standing warning whose TEXT changed (a type renamed
+  `RtVideo::Context` -> `Video::Context` in an unused-function signature): compare, then add the
+  respelling to the baseline.
+- A converted file that reaches `Volume.h` after `<windows.h>` no longer breaks (`Volume.h` uses
+  elaborated specifiers since step 5); ~40 files still carry a "runtime headers first" ordering
+  comment — harmless.
+- `rt_mint_gen.py --check` rewrites `standalone/rt_export_addrs.inc` line endings: `git checkout
+  --` it before merging or committing. A bash heredoc eats one level of backslashes even with a
+  quoted delimiter: write scripts and commit messages as FILES.
+- An agent that ends a verification run by killing the process loses the summary lines
+  (`[RtResolve]`, `[ExtLoad]`): let the pause-menu quit finish.
 
 ### 2e. The gate for every merge (coordinator only)
-debug + release + perf build exit 0 (`standalone` shares an obj dir with `standalone-debug`;
-perf is the real NDEBUG build) · new-warning set diff vs a clean-rebuild baseline · `make
-unit` · new game + pause-menu quit · tutorial · Load Game dialog · resave gate PASS x3
-consecutive (x5 for anything on a serialize or load path) · pointer-free type table vs
-baseline · `[RtResolve] 0 misses`, no `[RtMint] TRAP`, 0 GATE WARN, new-game `calls=5686` ·
+Unchanged: debug + release + perf build exit 0 · new-warning set diff vs a clean-rebuild
+baseline · `make unit` · new game + pause-menu quit · tutorial · Load Game dialog · resave gate
+PASS x3 (x5 for anything on a serialize or load path) · pointer-free type table vs baseline ·
+`[RtResolve] 0 misses`, no `[RtMint] TRAP`, 0 GATE WARN, new-game `calls=5686`, tutorial
+`calls=5776 openFileFail=15` (the Load Game route's count floats 4760-4789: not pinned) ·
 `dispatch_slot_map.py --check` 0 · cutover manifest gate · `rt_mint_gen --check` · `git diff
---stat` against the agent's file set before merging · at a step close also the Mods route with
-`.pkm` mounted (move them back), one functional `make sa-stress` (record, never chase), one
-true release compile from a clean obj dir, and a clean-rebuild warning diff. For step 5 add a
-rendering check that is NOT a pixel diff: `tools/trace_oracle/` (skill `camera-pin`).
+--stat` against the agent's file set. At a step close also: the Mods route with `.pkm` mounted,
+one functional `make sa-stress` (record, never chase), one true release compile from a clean obj
+dir FOLLOWED by `make clean`, a clean-rebuild warning diff. For UI add: the front-end menu route,
+the Load Game dialog, the Mods dialog, the tutorial (help/tutorial UI) and — owed since B.3.3 —
+an Options route; a UI step with no dialog route driven is not gated.

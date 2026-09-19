@@ -20,6 +20,116 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
+- **B.3.5 CLOSED (2026-09-19):** `Video` and `Graphics` are real classes under retail's names —
+  27 in `Video`, 32 in `Graphics` (`runtime/types/video/`, `runtime/types/graphics/`; list in
+  `endgame_b/b35_session/CLOSE_NUMBERS.md` section 7) — with their bodies moved onto members,
+  their callers converted and the dead doors deleted. 103 commits (63 non-merge), main `bd483075`
+  -> the close; 190 source files, +30.5k / -10.1k lines. Rule sheet `endgame_b/B35_RULES.md`
+  (rules B5-1..17, with dated corrections from the blocks), raw retail slot / literal / member
+  lists `B35_SLOTS.md`, file ownership `B35_FILEMAP.md`, the session's briefs, Ghidra dump
+  scripts and measurements `endgame_b/b35_session/`. Plan for step 6 (UI):
+  `endgame_b/NEXT_SESSION.md`, map `endgame_b/UI_INVENTORY.md`.
+  **Shape.** One question pass from the retail DLL (hierarchy proved by the `_ParentTypeName`
+  literals and shared slot targets; all 39 `sizeof` values from the slot-0 deleting dtors, 21 of
+  21 existing header asserts agreed) plus a parallel file map; eleven class blocks on worktrees
+  by DISJOINT FILE SET — A the twelve abstract `*Data` bases + `VertexLayout.h` authored, B
+  program/shader family (three different parents), C `ImageBuffer` chain (crosses the namespace
+  boundary) + `RenderState`, D1 `Context`/`Viewport`/`ConstantBuffer`, D2 `Device` + nested +
+  `Configuration` + the buffers, E the Geometry tree (nine classes, one block), F
+  `Camera`/`Renderer`/`Scene`, G `Material`/`MaterialInstance`/`GraphicsMesh`/`EdgeMesh`, H1
+  animation, H2 particles, J dx11's import table + the seam dispatches; two fragment passes
+  (bodies of a converted class that lived in another block's file); caller batches I1-I4 then
+  K1-K2 after the fragment passes defined the last members; one closing owner. The coordinator
+  gated every merge (19 gates).
+  **Numbers.** Caller sites converted: about 190 in round 1 + 115 (K1) in `code/`, 29 + 32 in
+  `runtime/src` outside the class blocks, 4 in `standalone/`, dx11's table 85 -> 38 live rows, 30
+  seam dispatches -> virtual calls on the abstract `*Data` classes. `engine_funcs`: 76 globals
+  bound a Video/Graphics symbol (about 20 spelled `fn_Video_*`/`fn_Graphics_*`, 3 bound only BY
+  ADDRESS); 60 deleted with typedef, extern, initialiser and dump line; the 16 left are ctor doors
+  kept by design. `ResolveExport` sites naming a Video/Graphics symbol 246 -> 108,
+  `RT_EXPORT_ONCE` 147 -> 54 (what remains: ctor/dtor/new/delete names, static storage, vtable
+  address reads), door call sites through `engine_funcs` 61 -> 0, hand-inlined slot calls in
+  `runtime/src/{video,graphics}` 49 -> 11. Every duplicate view of a Runtime object in dx11 is
+  collapsed onto the runtime header (nine views). Unit tests 260 -> 358, 0 failures (slot order
+  read back from GCC's tables, the retslot signatures, the qualified-call rule, sizes). Census:
+  Graphics 599 total / 92 called / 70 ported, Video 573 / 79 / 54. B.4 cast metric (lines):
+  **34,825** (code 23,760 · runtime 7,009 · standalone 2,889 · engine 756 · dx11 168 · tests
+  243), UP 769 from 34,056 while adding **911** `// B.3.5 bridge` casts (transitional: each dies
+  with its receiver's conversion); `engine` fell 67 with the door globals.
+  **Found on the way, all retail-backed.** (1) **GCC's ms_abi passes a hidden return pointer
+  BEFORE `this`; MSVC passes `this` first** — a C++ by-value VIRTUAL writes its result through
+  `this` when a retail-shaped caller calls it (block E's first unit test segfaulted so). Slots 5
+  and 6 of the Geometry family are declared `T* M(T* ret, …)`; non-virtual by-value members sit
+  behind explicit `(this, ret)` doors. The rule sheet had it backwards; amended. (2)
+  `ExternalPtr<T>` getters ARE hidden-retslot in retail (ten prologues read); an `ExternalPtr<T>`
+  ARGUMENT is a bare pointer in a register with no AddRef, so `EdgeMesh::SetMaterials` converts.
+  (3) `vertexlayout.cpp`'s `VertexElement` field names were permuted (`format` is +0x18, +0x0c is
+  the byte offset; the wire order was accidentally preserved); dx11's view was the right one.
+  (4) 23 retail addresses in `ImageBuffer.h` named no `ImageBuffer` export at all;
+  `0x180054080` had two bodies and the wrong owner; `0x180006a10`, registered as a Video buffer
+  `operator delete`, is a shared free with ~100 callers. (5) `EdgeMesh::Set` has 25 parameters,
+  not 22; `{Vertex,Index}Buffer::Set`'s two ints were named backwards in the header; `Adapter`
+  +0x2c/+0x30 are the DXGI adapter / output indices; `GraphicsMesh` +0x50 is an
+  `Array<DetailLevel>` (0xb0), not of `TriangleList`; three of `EdgeMesh`'s four buffer pairs were
+  misnamed; `Geometry` slot 1 is `Update`, not `Draw`; eight `Camera.h` field names. (6) A latent
+  ODR defect: two different `RtGraphics::InterpolatedTransform` definitions of the same size,
+  harmless only while no TU included both — one definition now. (7) `Volume.h`'s global
+  `Rectangle` is hidden by `<wingdi.h>`'s `Rectangle()` FUNCTION once `<windows.h>` is in, and
+  the failure prints as a bogus layout assert (`1 == 16`); fixed at the source with elaborated
+  specifiers. (8) `ParticleSystem` is the one class with `Construct` at slot 9 (behind the
+  inherited pure `CreateSystem`); pinned by a test. (9) Added retail members that had never been
+  ported: eleven `Renderer` accessors, five `Camera` members, `Scene::AddDrawItems`,
+  `ConstantBuffer::GetNextUploadIndex`, `Viewport` `==`/`!=`, `Graphics::InterpolatedState<T>`
+  with `Lerp`. (10) Dead instrument deleted: the `RT_GFX23_CORRUPT` seam (its probe tool does
+  not exist) and five replay captures.
+  **Deliberately NOT converted (reasons in `B35_RULES.md` section 11 and the headers):** no
+  Video/Graphics class has a C++ constructor, and destructors that would re-run retail's
+  out-of-line teardown are empty or stay doors (every live object wears the MINTED table; slot 0
+  is declared pure because its body is a `deleting_dtor.cpp` row, so nearly every class is
+  abstract); none of the 39 minted rows, `RT_DELDTOR` rows or `_typeInfo` rows retired (end of
+  B.3); the ten `CUTOVER_REQUIRED` Video/Graphics statics stay `RT_DATA_SLOT` reads
+  (`MintStorageCell` redirect owed, section 9; `Particle::_rng` is the double-seed case); the
+  concrete dx11 `*Data` classes and the 84-slot seam (RULE B5-8: the seam's completeness check is
+  what device-lost recovery stands on); `Device`'s `CRITICAL_SECTION` stays an opaque
+  hand-rolled recursive lock (B5-6); `Device::{Adapter,DisplayMode,RefreshRate,GraphicsInterface}`
+  and `ShaderProgram::Parameter` take no real special members (their `Array<T>` helpers destroy
+  elements through open-coded copies: a double release); `sizeof(Video::Configuration)` cannot
+  be measured (no allocation site; the header asserts a range); `Camera`'s copy/assign are
+  defaulted for trivial copyability while retail's partial copies stay the doors (three pad bytes
+  nothing reads); the exe-phase subclasses in `code/Game` (tornado, weather, status icons,
+  geometry_draw, the NoiseUI image buffers) — only their calls INTO base members converted, and
+  those are QUALIFIED; `enumerate_video_modes.cpp`'s SEH; at most 425 exported members are
+  declared and defined nowhere (unported retail members with no caller: a caller that appears is
+  a link error). Small leftovers are listed in `NEXT_SESSION.md` section 1 item 13.
+  **Open defect, characterised, NOT fixed — needs a decision:** a device-lost that lands while
+  the loader thread builds the world kills the loader thread (`BANISHED_FORCE_DEVICE_LOST=400`:
+  pre-step exe 5/11 runs, step-5 exe 1/11; clean at `=2000` and on the plain route on both).
+  PRE-EXISTING, and RETAIL HAS THE SAME WINDOW: all seven `Device::Lock` sites are reproduced,
+  retail unlocks right after `Present` and runs the whole recovery unlocked, `Create` and the load
+  arm of `Serialize` take no lock, `LoaderLoop::OnVideoError` is a bare RET.
+  `endgame_b/DEVICE_LOST_LOADER_RACE.md` has the run tables, the lock map and the three possible
+  fixes, each a deliberate divergence from retail. One run in this step died with the
+  `Factory::IsDerivedFrom` near-null stack at frame 357, before its frame-400 injection: not
+  explained; the coordinator's 57 route runs and 75 resaves never showed it.
+  **Gate at the close** (coordinator, on a `make clean` rebuild of `8d72408b`, 1,148 compile
+  lines per config): debug + perf + unit exit 0; distinct warnings 242 debug / 440 perf against
+  the step's 284 / 482 clean-rebuild baseline, 0 new; `dispatch_slot_map --check` 0/109; cutover
+  manifest OK (59 rows); mint tables UP TO DATE (152/104/48); new game + tutorial + Load Game
+  routes exit 0, `calls=5686` / `5776 openFileFail=15`, `[RtResolve] 0 misses`, no TRAP, 0 GATE
+  WARN; pointer-free type table == baseline; resave 5/5 PASS at 21,075,114 bytes; the forced
+  device-lost round trip COMPLETE (blocks D2, VC, J; mandatory for anything touching the seam's
+  callers). Mods route with both `.pkm` mounted (front-end Mods dialog, ModDetails, Apply): exit
+  0, empty crash log, `[RtResolve] 0 misses`, files back in `_mods_off/`. One functional
+  `sa-stress` (perf exe, label `b35_close`): exit 0, 6,000 sim frames, fps 139 -> 140, sim
+  ms/iter -1.4% against the baseline (inside the 5% plan gate); the tool flagged PostSim ms +39%
+  and private MB/min +52% and marked the machine BUSY (`make` ran during it) — recorded, not
+  chased. A TRUE release compile (-O3, obj dir emptied first): exit 0, 1,148 files, 7.7 MB exe,
+  followed by `make clean` and a debug rebuild (77 MB). Rendering, by command stream not pixels
+  (`tools/trace_oracle`, `b35_session/RENDER_CHECK.md`): pre-step exe `bd483075` against the
+  step's exe, two RenderDoc captures each (557 / 558 / 509 / 587 draws), selftest 19/19 caught;
+  the verdict-bearing screens S3 (floored), S4 and S6 read **0** with the control pair taken from
+  EITHER arm; the descriptive screens (S1 49 / 21, S2 3, S5 25 / 7) sit at or below the same-exe
+  band measured the same day (47 / 3 / 28).
 - **B.3.4 CLOSED (2026-09-19):** `IO` (Stream family, `Serializer`, `Encoding`/`ReaderWriter`,
   `Registry`, `Modification`, `PackageFile`, `FileSystem`, `Persistence`) and the `System` rest
   (`CriticalSection`, `Thread`, `Random`, `Time`, `Color`, `DateTime`, `Timer`, `CRC`, `Error`,
