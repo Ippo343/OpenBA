@@ -65,10 +65,18 @@ bool SkipEngineLoader() {
 // LoadResources -> recursive External::Load = thousands of Allocate calls), the
 // stub Update normally transitions IMMEDIATELY, so that thread loads the
 // achievement/scenario tree CONCURRENTLY with the main thread's menu-scene build.
-// MemoryAllocator::Allocate AND the internal Free both mutate the boundary-tag
-// free-list without a shared lock (only MemFree wraps Free with the CS), so the
-// two threads corrupt the free-list -> intermittent crash inside Free
-// (Runtime 0x1800c6c00). See [[project_menu_heap_crash]].
+// HISTORICAL (true when written, NOT true now): the raw member Allocate/Free
+// were then reachable without the allocator CS, so the two threads corrupted
+// the free-list -> intermittent crash inside Free (Runtime 0x1800c6c00), see
+// [[project_menu_heap_crash]]. Today every door into the free list is locked:
+// runtime/src/system/allocator.cpp's RegisterAllocatorExports/Addresses hand
+// out the composed stubs of standalone/alloc_cutover_arm.cpp for ?Allocate@/
+// ?Free@ (by name and by address), and MemAlloc/MemFree lock themselves. That
+// is retail's arrangement too: its Allocate call sites are an inlined
+// Enter(_singleton+0x640) / Allocate / Leave (checked: operator new
+// 0x18000107d/94/9f, String::SetLength 0x1800c827f/9d/a8, MemAlloc 0x1800c7a50).
+// The wait below stays for loader EXCLUSIVITY (LOADER_READ_SPIN.md), not heap
+// safety.
 //
 // Fix: block here until the loader finishes (Thread::WaitForFinish waits on the
 // loader thread's completion event). The main thread is parked (not allocating)
@@ -84,6 +92,30 @@ void WaitForEngineLoader() {
     printf("[EngineLoader] waiting for loader thread to finish (sync)...\n");
     reinterpret_cast<System::Thread*>(g_pLoader)->WaitForFinish();   // B.3.4 bridge
     printf("[EngineLoader] loader thread finished\n");
+}
+
+// Retail's LoaderLoop::Shutdown (Runtime 0x1800dc280), which BOTH exe tables
+// reach at +0x10 (0x140158870 and 0x1401588d0 hold thunk 0x14003a8dc ->
+// IAT 0x140152bb8 = ?Shutdown@LoaderLoop@Engine@@):
+//     mov  0x1801fe7e0(%rip),%rcx   ; _loader._thread.hFinished
+//     or   $-1,%edx                 ; INFINITE
+//     jmp  *WaitForSingleObject
+// It is UNCONDITIONAL, and it is retail's only join of the loader thread ahead
+// of teardown: MainLoop::Run calls the current loop's Shutdown on the way out,
+// and ~Engine (0x1800dbec0) then nulls MemoryAllocator::_singleton and deletes
+// the allocator critical section with no wait of its own. A loader thread still
+// inside External::Load at that point faults in MemAlloc on
+// EnterCriticalSection(null + 0x640) -- the open allocator defect's stack
+// (B34B_RULES 6.3, window W2). These two stubs used to print and return, so a
+// LoaderLoop that was quit mid-load, or run with BANISHED_SYNC_ENGINE_LOADER=0,
+// handed ~Engine a live loader. hFinished is created signalled (thread_win.cpp:
+// manual-reset, initially TRUE), so this cannot block when Loader::Load was
+// never kicked (BANISHED_SKIP_ENGINE_LOADER).
+void LoaderLoopShutdownWait() {
+    // Standalone-only guard: retail's _loader is a DLL static that always
+    // exists; ours is a resolved address that the Startup stubs already test.
+    if (!g_pLoader) return;
+    reinterpret_cast<System::Thread*>(g_pLoader)->WaitForFinish();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -119,6 +151,7 @@ void Inner_Startup(UpdateLoop* self) {
 
 void Inner_Shutdown(UpdateLoop* self) {
     printf("[InnerLL::Shutdown] self=%p\n", (void*)self);
+    LoaderLoopShutdownWait();
 }
 
 bool Inner_Update(UpdateLoop* self, void* time) {
@@ -230,6 +263,7 @@ void Outer_Startup(UpdateLoop* self) {
 
 void Outer_Shutdown(UpdateLoop* self) {
     printf("[OuterLL::Shutdown] self=%p\n", (void*)self);
+    LoaderLoopShutdownWait();
 }
 
 bool Outer_Update(UpdateLoop* self, void* time) {
