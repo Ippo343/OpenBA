@@ -133,9 +133,19 @@ enum : int {
 // ?Run@Loader@Engine@@UEAAXXZ (0x1800dbfc0) is the worker body: it runs
 // UpdateLoop::LoadResources(_loop) and then _loop->vtable[6] (Load) with
 // ExternalFactory::_loadEnabled held true across both.
+// ENDGAME B.3.4b (rule B4b-1 / B4b-3): the member is the POD `RtSystem::Thread`,
+// not the real `System::Thread` class. `RtEngine::Loader` is itself a POD mirror
+// of a retail class, and B34_BRIEFS §A.3/§A.4's "a class held BY VALUE must be
+// concrete" is about a REAL CLASS holding a REAL CLASS — a POD mirror holding
+// the POD is not that case. `System::Thread` is ABSTRACT (retail's slot 0 is
+// `_purecall`, and no base body exists to delegate to), so spelling this member
+// as the class would be ill-formed. `ConstructLoader`
+// (standalone/rt_data_mint.cpp:434-461) still builds this object through the
+// registered `??0Thread@System@@QEAA@I@Z` door and stamps
+// `??_7Loader@Engine@@6B@` over +0x00 itself; nothing about that moves.
 struct Loader {
-    System::Thread _thread;   // +0x00 .. +0x2f  (vtable, runFlags, 4 HANDLEs)
-    void*          _loop;     // +0x30  UpdateLoop* — the loop being loaded
+    RtSystem::Thread _thread; // +0x00 .. +0x2f  (vtable, runFlags, 4 HANDLEs)
+    void*            _loop;   // +0x30  UpdateLoop* — the loop being loaded
 };
 static_assert(sizeof(Loader) == 0x38, "Engine::Loader is 0x38 bytes");
 static_assert(offsetof(Loader, _loop) == 0x30, "Loader::_loop @ +0x30");

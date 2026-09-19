@@ -120,7 +120,13 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 void*     ResolveExport(const char* mangled_name);
 
 // System::Thread::Start, already ported by Wave 2 (thread_win.cpp).
-namespace System { struct Thread; }
+// ENDGAME B.3.4b: `System::Thread` is a real CLASS now
+// (runtime/types/system/Thread.h), so the forward declaration says `class`.
+// GCC accepts a struct/class tag mismatch silently, which is exactly why this
+// is corrected rather than left working. The door's signature is unchanged and
+// the cast at the call site below is unchanged — the class keeps the POD's
+// layout, cross-asserted field for field in the header.
+namespace System { class Thread; }
 void RtSystem_Thread_Start(System::Thread* self);
 
 using RtEngine::UpdateLoop;

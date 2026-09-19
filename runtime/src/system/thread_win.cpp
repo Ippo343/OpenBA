@@ -54,13 +54,47 @@
 #include <windows.h>
 #include <process.h>   // _beginthreadex, the CRT routine 0x18007fbfc is a copy of
 
-using System::CriticalSection;
-using System::Thread;
+// ============================================================================
+// ENDGAME B.3.4b — THE CLASSES ARE REAL; THE DOORS DELEGATE. READ THIS.
+// ============================================================================
+// `System::CriticalSection` and `System::Thread` are real C++ classes since
+// B.3.4b (runtime/types/system/Thread.h). The PODs moved to `RtSystem` in the
+// same commit (rule B4b-1) and are what the ctor/dtor doors below still operate
+// on, deliberately:
+//
+//   * Lock / Unlock / Start / WaitForFinish / OnCompleted / ThreadFunc are
+//     MEMBERS now; their registered doors keep their addresses, their names and
+//     their signatures, and delegate in one line.
+//   * The four ctor/dtor doors stay FREE FUNCTIONS over the POD and are NOT
+//     converted — B34_RULES §4.3 and B34B_RULES rule B4b-2. For `Thread` that is
+//     because all four constructing sites stamp a vtable over +0x00 and two of
+//     them are outside this step's file set (singleton_ctors.cpp,
+//     rt_data_mint.cpp). For `CriticalSection` it is because two of its three
+//     embedders (IO::Persistence, Audio::Stream) call raw
+//     InitializeCriticalSection and never reach the door at all, so a real
+//     constructor would leave those two constructed a second, different way.
+//     They take the POD precisely so they can write `self->vtable` — the class
+//     has no such field, the compiler owns +0x00 there.
+//
+// ⚠ `RtSystem_Thread_OnCompleted` delegates with a QUALIFIED call. Slot 1 of the
+// MINTED table 0x180155f20 resolves back to that door, so an unqualified virtual
+// call inside it would recurse forever (B34_BRIEFS §A.1). Start/WaitForFinish
+// are non-virtual and need no qualification.
+//
+// The member BODIES are defined at the bottom of this file inside
+// `namespace System { ... }`, because C++ requires a member definition to sit in
+// a namespace enclosing the class (B34_BRIEFS §A.2). They are byte-for-byte the
+// bodies that used to live in the doors; nothing was reordered.
+// ============================================================================
+
+using RtSystem::CriticalSection;
+using RtSystem::Thread;
 
 
 // ---- System::CriticalSection -----------------------------------------------
 
 // 0x18000c5c0  ??0CriticalSection@System@@QEAA@XZ
+// NOT a real constructor — see the banner above.
 CriticalSection* RtSystem_CriticalSection_Ctor(CriticalSection* self) {
     InitializeCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(self));
     SetCriticalSectionSpinCount(reinterpret_cast<LPCRITICAL_SECTION>(self), 5000);
@@ -68,18 +102,19 @@ CriticalSection* RtSystem_CriticalSection_Ctor(CriticalSection* self) {
 }
 
 // 0x18000c5b0  ??1CriticalSection@System@@QEAA@XZ
+// NOT a real destructor — see the banner above.
 void RtSystem_CriticalSection_Dtor(CriticalSection* self) {
     DeleteCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(self));
 }
 
 // 0x18000c700  ?Lock@CriticalSection@System@@QEAAXXZ
-void RtSystem_CriticalSection_Lock(CriticalSection* self) {
-    EnterCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(self));
+void RtSystem_CriticalSection_Lock(System::CriticalSection* self) {
+    self->Lock();
 }
 
 // 0x18000c6f0  ?Unlock@CriticalSection@System@@QEAAXXZ
-void RtSystem_CriticalSection_Unlock(CriticalSection* self) {
-    LeaveCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(self));
+void RtSystem_CriticalSection_Unlock(System::CriticalSection* self) {
+    self->Unlock();
 }
 
 // ---- System::Thread ---------------------------------------------------------
@@ -201,14 +236,15 @@ void RtSystem_Thread_Dtor(Thread* self) {
 }
 
 // 0x1800ca610  ?Start@Thread@System@@QEAAXXZ
-void RtSystem_Thread_Start(Thread* self) {
-    ResetEvent(reinterpret_cast<HANDLE>(self->hFinished));
-    SetEvent(reinterpret_cast<HANDLE>(self->hStart));
+// The parameter is the CLASS, unchanged from the spelling
+// `runtime/src/engine/loops.cpp:124` already forward-declares.
+void RtSystem_Thread_Start(System::Thread* self) {
+    self->Start();
 }
 
 // 0x1800ca5f0  ?WaitForFinish@Thread@System@@QEAAXXZ
-void RtSystem_Thread_WaitForFinish(Thread* self) {
-    WaitForSingleObject(reinterpret_cast<HANDLE>(self->hFinished), INFINITE);
+void RtSystem_Thread_WaitForFinish(System::Thread* self) {
+    self->WaitForFinish();
 }
 
 // ============================================================================
@@ -218,6 +254,12 @@ void RtSystem_Thread_WaitForFinish(Thread* self) {
 // Wave 9, lane P (tier 0). The worker body every System::Thread runs — the last
 // unported member of the class, so System::Thread is now COMPLETE (§4.1
 // decision 5).
+//
+// ENDGAME B.3.4b: THE BODY MOVED onto `System::Thread::ThreadFunc` at the
+// bottom of this file and what follows is the delegating door. This banner
+// stays here, with the door that carries the registered address, because it
+// documents the RETAIL bytes; the member body carries the note about why its
+// two slot calls stay raw.
 //
 // NO NEW LANE-D ROWS. Its only callees are Win32: WaitForMultipleObjects
 // through the DLL's IAT slot 0x18014b358 and SetEvent through 0x18014b368. We
@@ -256,29 +298,7 @@ void RtSystem_Thread_WaitForFinish(Thread* self) {
 // would call the wrong OnCompleted if it ever changed.
 // ============================================================================
 unsigned int __stdcall RtSystem_Thread_ThreadFunc(void* param) {
-    Thread* self = static_cast<Thread*>(param);
-
-    HANDLE handles[2] = { reinterpret_cast<HANDLE>(self->hStart),
-                          reinterpret_cast<HANDLE>(self->hStop) };
-
-    unsigned int r = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
-    while (r == 0) {
-        using WorkFn = void (*)(Thread*);
-
-        void** vt = static_cast<void**>(self->vtable);
-        self->runFlags |= 1u;
-        reinterpret_cast<WorkFn>(vt[0])(self);        // slot 0 — the work
-
-        void** vtAfter = static_cast<void**>(self->vtable);   // reloaded, as retail does
-        reinterpret_cast<WorkFn>(vtAfter[1])(self);   // slot 1 — OnCompleted
-
-        HANDLE finished = reinterpret_cast<HANDLE>(self->hFinished);
-        self->runFlags &= ~1u;
-        SetEvent(finished);
-
-        r = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
-    }
-    return (r == 1) ? 0u : 0xFFFFFFFFu;
+    return System::Thread::ThreadFunc(param);
 }
 
 // ============================================================================
@@ -297,10 +317,101 @@ unsigned int __stdcall RtSystem_Thread_ThreadFunc(void* param) {
 // the two while slot 1 is the same function. Lane C2's mint picks this up with
 // no regeneration.
 //
-void RtSystem_Thread_OnCompleted(Thread* self) {
-    (void)self;
-    // Retail's body, in full: the shipped 0x1800ca580 is a bare RET.
+// ENDGAME B.3.4b: the QUALIFIED call is load-bearing here and nowhere else in
+// this file. A live Thread wears the MINTED table 0x180155f20, whose slot 1
+// resolves back to THIS door; an unqualified `self->OnCompleted()` would
+// dispatch through that table straight back into this function (B34_BRIEFS
+// §A.1). `Start`/`WaitForFinish` are non-virtual, so their doors need none.
+void RtSystem_Thread_OnCompleted(System::Thread* self) {
+    self->System::Thread::OnCompleted();
 }
+
+// ============================================================================
+// ENDGAME B.3.4b — the member BODIES.
+// ============================================================================
+// They live in `namespace System` because C++ requires a member definition to
+// appear in a namespace ENCLOSING the class, and `RtSystem` is a SIBLING of
+// `System`, not a parent (B34_BRIEFS §A.2). Every body below is the one that
+// used to sit in the door directly above it: same control flow, same callees,
+// same order.
+//
+// ⚠ GREP HAZARD (B34_RULES §7.2): inside this block a bare `Thread` or
+// `CriticalSection` binds the CLASS. The PODs must be spelled `RtSystem::`.
+// ============================================================================
+
+namespace System {
+
+// 0x18000c700  ?Lock@CriticalSection@System@@QEAAXXZ
+void CriticalSection::Lock() {
+    EnterCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(this));
+}
+
+// 0x18000c6f0  ?Unlock@CriticalSection@System@@QEAAXXZ
+void CriticalSection::Unlock() {
+    LeaveCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(this));
+}
+
+// 0x1800ca610  ?Start@Thread@System@@QEAAXXZ
+void Thread::Start() {
+    ResetEvent(reinterpret_cast<HANDLE>(_hFinished));
+    SetEvent(reinterpret_cast<HANDLE>(_hStart));
+}
+
+// 0x1800ca5f0  ?WaitForFinish@Thread@System@@QEAAXXZ
+void Thread::WaitForFinish() {
+    WaitForSingleObject(reinterpret_cast<HANDLE>(_hFinished), INFINITE);
+}
+
+// 0x18000c590  ?OnCompleted@Thread@System@@UEAAXXZ  — slot 1
+void Thread::OnCompleted() {
+    // Retail's body, in full: the shipped 0x18000c590 is a bare RET.
+}
+
+// 0x1800ca440  ?ThreadFunc@Thread@System@@CAIPEAX@Z
+//
+// THE RAW SLOT CALLS STAY, DELIBERATELY (B34_RULES §3.1's rule, applied here).
+// `param` is a Thread-DERIVED object wearing a minted or a derived table —
+// `Engine::Loader` (0x180157a08), `IO::Persistence`'s worker (0x180155860),
+// `Audio::Stream`, the pathfinder (exe 0x14015ef18). Slot 0 is `Run`, which is
+// pure in this class, so there is nothing to virtual-call; slot 1 resolves back
+// to this file's own OnCompleted door, so a virtual call would be §A.1's
+// recursion. Both therefore keep reading the table by hand, exactly as retail's
+// 0x1800ca440 does.
+//
+// Retail RELOADS the vtable between slot 0 and slot 1 (0x1800ca48c); that
+// reload is reproduced faithfully, because a port that cached the vtable would
+// call the wrong OnCompleted if the work call re-stamped it.
+unsigned int __stdcall Thread::ThreadFunc(void* param) {
+    // Spelled as the POD: this body reads the vptr AS A FIELD, which is the one
+    // thing the class deliberately does not expose (+0x00 belongs to the
+    // compiler there). Same bytes either way -- the cross-asserts in Thread.h
+    // are what say so.
+    RtSystem::Thread* self = static_cast<RtSystem::Thread*>(param);
+
+    HANDLE handles[2] = { reinterpret_cast<HANDLE>(self->hStart),
+                          reinterpret_cast<HANDLE>(self->hStop) };
+
+    unsigned int r = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
+    while (r == 0) {
+        using WorkFn = void (*)(RtSystem::Thread*);
+
+        void** vt = static_cast<void**>(self->vtable);
+        self->runFlags |= 1u;
+        reinterpret_cast<WorkFn>(vt[0])(self);        // slot 0 — the work
+
+        void** vtAfter = static_cast<void**>(self->vtable);   // reloaded, as retail does
+        reinterpret_cast<WorkFn>(vtAfter[1])(self);   // slot 1 — OnCompleted
+
+        HANDLE finished = reinterpret_cast<HANDLE>(self->hFinished);
+        self->runFlags &= ~1u;
+        SetEvent(finished);
+
+        r = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
+    }
+    return (r == 1) ? 0u : 0xFFFFFFFFu;
+}
+
+}  // namespace System
 
 // ---- Registration ------------------------------------------------------------
 

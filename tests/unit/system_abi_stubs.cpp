@@ -1,0 +1,70 @@
+// ============================================================================
+// tests/unit/system_abi_stubs.cpp — the out-of-line members the REAL
+// `System::Thread` / `System::CriticalSection` own, defined for the host link.
+// ENDGAME B.3.4b SYSTEM (2).
+// ============================================================================
+//
+// WHY THIS FILE EXISTS, AND WHY IT IS NOT A MIRROR
+// ------------------------------------------------
+// `tests/unit/system_abi_test.cpp` pins the two-slot vtable order by
+// constructing a concrete probe subclass of `System::Thread`. Constructing one
+// runs the BASE's constructor, which stores the base's vptr — so the link needs
+// `vtable for System::Thread`.
+//
+// GCC emits a class's vtable in the translation unit that defines its KEY
+// FUNCTION (the first non-inline, non-pure virtual), and for `System::Thread`
+// that is `OnCompleted` — whose real body lives in
+// `runtime/src/system/thread_win.cpp`, a file that includes <windows.h> and
+// stands on the port registry, so it cannot link into a host test
+// (tests/unit/README.md, B31_RULES rule 6).
+//
+// THE CLASS IS STILL THE REAL ONE. What is defined here is only the BODY of
+// each member; the declarations, their ORDER and their signatures come from
+// `runtime/types/system/Thread.h`, which is exactly what the test is pinning.
+// This file re-declares nothing, so it is the opposite of a mirror — a mirror
+// would restate the slots and then test its own copy of the order.
+//
+// TWO KINDS OF BODY BELOW, and the difference is deliberate:
+//
+//   * `Thread::OnCompleted` is OBSERVABLE (it bumps a counter). It has to be,
+//     because it is the key function AND it is slot 1, and slot 1 is half of
+//     what the test measures. Retail's real body is a bare RET (0x18000c590),
+//     so the counter is a test double for an empty function and cannot mask a
+//     behavioural difference — there is no behaviour to mask.
+//   * everything else ABORTS. `Start`, `WaitForFinish` and `ThreadFunc` need
+//     live Win32 event HANDLEs and `CriticalSection::Lock`/`Unlock` need an
+//     initialised CRITICAL_SECTION; none can run on the host. Aborting means a
+//     test that accidentally reaches one fails loudly instead of quietly
+//     passing through a stub.
+// ============================================================================
+
+#include <cstdlib>
+
+#include "../../runtime/types/system/Thread.h"
+
+#include "system_abi_stubs.h"
+
+int g_systemStub_OnCompletedCalls = 0;
+
+namespace System {
+
+// 0x18000c590  ?OnCompleted@Thread@System@@UEAAXXZ — slot 1, and the KEY
+// FUNCTION that pulls `vtable for System::Thread` into this TU.
+void Thread::OnCompleted() {
+    ++g_systemStub_OnCompletedCalls;
+}
+
+// The three that cannot run on the host. Retail addresses kept so the reader
+// can find the real bodies: 0x1800ca610 / 0x1800ca5f0 / 0x1800ca440.
+void Thread::Start()         { std::abort(); }
+void Thread::WaitForFinish() { std::abort(); }
+
+unsigned int __stdcall Thread::ThreadFunc(void* /*param*/) {
+    std::abort();
+}
+
+// 0x18000c700 / 0x18000c6f0 — an uninitialised CRITICAL_SECTION on the host.
+void CriticalSection::Lock()   { std::abort(); }
+void CriticalSection::Unlock() { std::abort(); }
+
+}  // namespace System
