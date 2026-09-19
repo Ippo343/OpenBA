@@ -28,6 +28,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/graphics/GraphicsMesh.h"   // the real Graphics::GraphicsMesh
 
 using rt::io::Encoding;
 using rt::io::ReaderWriter;
@@ -41,41 +42,32 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 namespace {
 
 // ---------------------------------------------------------------------------
-// GRAPHICSMESH'S LAYOUT, 0x98 bytes, read from the constructor's stores
-// (0x1800ff181 .. 0x1800ff256) and cross-checked against the destructor and
-// Serialize. Spelled as offsets rather than as a struct because three of the
-// members are Collection::Array headers whose element types live in
-// array_graphics_mesh.cpp, and a struct here would duplicate that file's
-// authority over them.
+// GRAPHICSMESH'S LAYOUT — the eleven `constexpr uint32_t k*` offsets that used
+// to live here MOVED to `runtime/types/graphics/GraphicsMesh.h` as the real
+// `Graphics::GraphicsMesh` class's named fields (ENDGAME B.3.5 block G), and
+// with them the `+0x50 Array<TriangleList>` MISNOMER this file carried.
 //
-//   +0x00  vtable                (Base -> External -> CompiledExternal -> this)
-//   +0x08  |
-//   +0x10  |  Object::External's three zeroed qwords
-//   +0x18  |
-//   +0x20  System::String        the mesh name (refcounted; released by ~this)
-//   +0x28  float x3 = 1,1,1      \  two Vector3s; the ctor's six immediates
-//   +0x34  float x3 = -1,-1,-1   /
-//   +0x40  int32  = 1
-//   +0x44  float  = 1.0f
-//   +0x48  float  = 10000.0f     (0x461c4000)
-//   +0x50  Array<TriangleList>   stride 0xb0   (dtor: 0x180013fb0)
-//   +0x60  Array<Node>           stride 0x48   (dtor: 0x180014090)
-//   +0x70  Array<Array<T>>       stride 0x10   (dtor: 0x180014160)
-//   +0x80  float x3 =  1e8f      \  the bounding box, 0x4cbebc20 / 0xccbebc20
-//   +0x8c  float x3 = -1e8f      /
+// *** +0x50 IS NOT AN `Array<TriangleList>`. *** The element is 0xb0 bytes and
+// it is the DETAIL LEVEL: eight exported getters index it by
+// `IMUL R8,R8,0xb0` and name eight of its fields — a sub-mesh `String` at +0x00
+// (`?GetSubMeshName@` 0x180012770), an `ExternalPtr<Video::ImageBuffer>` at
+// +0x08 (`?GetImage@` 0x1800126e0), a distance at +0x10, FOUR
+// `VideoBufferHeader`s at +0x18/+0x38/+0x58/+0x78 (`?Get{,Skin}{Vertex,Index}
+// Buffer@`), an `Array<TriangleList>` at +0x98 (`?GetTriangleLists@`
+// 0x180012640, whose mangled return type is what names the element) and a
+// max-instance count at +0xa8. The `Array<TriangleList>` is INSIDE the detail
+// level, not the +0x50 array itself, and the 0x18-byte `TriangleList` is the
+// six-dword record `?Serialize@TriangleList@GraphicsMesh@Graphics@@`
+// (0x1800ff300) emits. `Mesh.h`'s `GraphicsMeshView` had it right all along
+// (`_detailLevels` at +0x50); this file's name for it did not. The header
+// records both readings and the disassembly behind each.
+//
+// The four sub-objects `TriangleListPass` below dispatches through — +0x40,
+// +0x20, +0x80, +0x60 of the record — are exactly the `_deviceData` qwords at
+// `+0x08` of those same four buffers, which is the independent cross-check that
+// fixes the whole 0xb0 layout.
 // ---------------------------------------------------------------------------
-constexpr uint32_t kName          = 0x20;
-constexpr uint32_t kBoundsMin     = 0x28;
-constexpr uint32_t kBoundsMax     = 0x34;
-constexpr uint32_t kInt40         = 0x40;
-constexpr uint32_t kFloat44       = 0x44;
-constexpr uint32_t kFloat48       = 0x48;
-constexpr uint32_t kTriangleLists = 0x50;
-constexpr uint32_t kNodes         = 0x60;
-constexpr uint32_t kInnerArrays   = 0x70;
-constexpr uint32_t kBoxMin        = 0x80;
-constexpr uint32_t kBoxMax        = 0x8c;
-constexpr uint32_t kGraphicsMeshSize = 0x98;
+using Graphics::GraphicsMesh;
 
 // The two constants the ctor writes as raw bit patterns. Spelled as bits and
 // then bit-cast, not as decimal floats: 0x461c4000 and 0x4cbebc20 are what the
@@ -152,7 +144,12 @@ void MemFree(void* p) {
 // cutover still needs": the body is two device-interface arms of the shape
 // runtime/src/video/shaderprogram.cpp already spelled out, and every helper it
 // drives (0x1800136f0, 0x180014850) was already ported.
-void PlatformSerialize(void* self, Serializer* ser) {
+// RENAMED `PlatformSerializeDoor` by ENDGAME B.3.5 block G: the real class now
+// DECLARES `Graphics::GraphicsMesh::PlatformSerialize`, so a helper of the same
+// bare name inside `namespace Graphics`'s member bodies would bind the MEMBER
+// silently — exactly the name-lookup trap B34_BRIEFS A.2 records. The door it
+// opens is unchanged.
+void PlatformSerializeDoor(void* self, Serializer* ser) {
     RT_EXPORT_ONCE(SerMemberFn,
         "?PlatformSerialize@GraphicsMesh@Graphics@@QEAAXAEAVSerializer@IO@@@Z")(self, ser);
 }
@@ -284,16 +281,27 @@ void CodecSkip(ReaderWriter* rw) {
     reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kSkip / 8])(rw);
 }
 
-// An Array<T> header, as the three members at +0x50/+0x60/+0x70 are shaped:
+// An Array<T> header, as the elements of the +0x70 array-of-arrays are shaped:
 // data, size, capacity. Only `data` and `size` are read here.
 struct ArrayHdrView { uint8_t* data; int32_t size; int32_t capacity; };
 static_assert(sizeof(ArrayHdrView) == 0x10, "Array<T> header is 0x10 bytes");
 
-ArrayHdrView* ArrayAt(void* self, uint32_t off) {
-    return reinterpret_cast<ArrayHdrView*>(static_cast<uint8_t*>(self) + off);
+// The ctor's immediates are spelled as BIT PATTERNS (see kBits_* above) and
+// bit-cast, never as decimal floats, so no rounding argument can arise.
+float FromBits(uint32_t bits) {
+    float f; std::memcpy(&f, &bits, sizeof f); return f;
+}
+::Vector3 Bits3(uint32_t bits) {
+    const float f = FromBits(bits);
+    ::Vector3 v; v.x = f; v.y = f; v.z = f; return v;
 }
 
-}  // namespace
+// Slot 0 of Object::Base is the deleting destructor: flag 0 destroys IN PLACE,
+// flag 1 destroys and frees. Dispatched virtually on purpose.
+void CallSlot0(void* self, unsigned flags) {
+    void** const vt = *reinterpret_cast<void***>(self);
+    reinterpret_cast<void* (*)(void*, unsigned)>(vt[0])(self, flags);
+}
 
 // ============================================================================
 // ??0GraphicsMesh@Graphics@@QEAA@XZ                  retail 0x1800ff170
@@ -309,48 +317,48 @@ ArrayHdrView* ArrayAt(void* self, uint32_t off) {
 // `??0CompiledExternal@Object@@` instead would run that body's OWN stores,
 // which are not these.
 //
+// AND THAT IS WHY THIS IS NOT A MEMBER (B4b-2, ENDGAME section B.1 decision 3):
+// the four stamps name the MINTED tables, which is right for every object that
+// reaches this body, and a real constructor would stamp GCC's instead.
+// `Graphics::GraphicsMesh::Construct()` and `Reconstruct()` call it.
+//
 // `MOV RAX,RCX` at the end: it returns `this`.
 // ============================================================================
-extern "C" void* RtGraphics_GraphicsMesh_Ctor(void* self) {
-    uint8_t* const d = static_cast<uint8_t*>(self);
+void ConstructBody(GraphicsMesh* self) {
+    void** const vp = reinterpret_cast<void**>(self);
 
-    *reinterpret_cast<void**>(d) = Vt(kVtBase);               // 0x1800ff181
-    *reinterpret_cast<void**>(d) = Vt(kVtExternal);           // 0x1800ff18b
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;               // LEA RAX,[RCX+8]; [RAX]=0
-    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x18) = 0;
-    *reinterpret_cast<void**>(d) = Vt(kVtCompiledExternal);   // 0x1800ff1ab
-    *reinterpret_cast<void**>(d) = Vt(kVtGraphicsMesh);       // 0x1800ff1b5
+    *vp = Vt(kVtBase);                                        // 0x1800ff181
+    *vp = Vt(kVtExternal);                                    // 0x1800ff18b
+    self->_path.data      = nullptr;                          // LEA RAX,[RCX+8]; [RAX]=0
+    self->_refs._data     = nullptr;                          // +0x10
+    self->_refs._size     = 0;                                // +0x18 (one qword with cap)
+    self->_refs._capacity = 0;
+    *vp = Vt(kVtCompiledExternal);                            // 0x1800ff1ab
+    *vp = Vt(kVtGraphicsMesh);                                // 0x1800ff1b5
 
-    *reinterpret_cast<uint64_t*>(d + kName) = 0;              // the String, null
+    self->_name.data = nullptr;                               // +0x20, the String
 
-    uint32_t* const w = reinterpret_cast<uint32_t*>(d);
-    w[(kBoundsMin + 0) / 4] = kBits_1_0;
-    w[(kBoundsMin + 4) / 4] = kBits_1_0;
-    w[(kBoundsMin + 8) / 4] = kBits_1_0;
-    w[(kBoundsMax + 0) / 4] = kBits_neg1_0;
-    w[(kBoundsMax + 4) / 4] = kBits_neg1_0;
-    w[(kBoundsMax + 8) / 4] = kBits_neg1_0;
-    w[kInt40 / 4]   = 1;
-    w[kFloat44 / 4] = kBits_1_0;
-    w[kFloat48 / 4] = kBits_10000;
+    self->_vector28 = Bits3(kBits_1_0);                       // +0x28  ( 1, 1, 1)
+    self->_vector34 = Bits3(kBits_neg1_0);                    // +0x34  (-1,-1,-1)
+    self->_field40         = 1;                               // +0x40
+    self->_scale           = FromBits(kBits_1_0);             // +0x44  1.0f
+    self->_maxDepthDistance = FromBits(kBits_10000);          // +0x48  10000.0f
 
-    *reinterpret_cast<uint64_t*>(d + kTriangleLists + 0) = 0; // three Array headers,
-    *reinterpret_cast<uint64_t*>(d + kTriangleLists + 8) = 0; // six qword zero stores
-    *reinterpret_cast<uint64_t*>(d + kNodes + 0)         = 0;
-    *reinterpret_cast<uint64_t*>(d + kNodes + 8)         = 0;
-    *reinterpret_cast<uint64_t*>(d + kInnerArrays + 0)   = 0;
-    *reinterpret_cast<uint64_t*>(d + kInnerArrays + 8)   = 0;
+    self->_detailLevels._data     = nullptr;                  // three Array headers,
+    self->_detailLevels._size     = 0;                        // six qword zero stores
+    self->_detailLevels._capacity = 0;
+    self->_nodes._data     = nullptr;
+    self->_nodes._size     = 0;
+    self->_nodes._capacity = 0;
+    self->_skinMaterials._data     = nullptr;
+    self->_skinMaterials._size     = 0;
+    self->_skinMaterials._capacity = 0;
 
-    w[(kBoxMin + 0) / 4] = kBits_1e8;
-    w[(kBoxMin + 4) / 4] = kBits_1e8;
-    w[(kBoxMin + 8) / 4] = kBits_1e8;
-    w[(kBoxMax + 0) / 4] = kBits_neg1e8;
-    w[(kBoxMax + 4) / 4] = kBits_neg1e8;
-    w[(kBoxMax + 8) / 4] = kBits_neg1e8;
-
-    return self;                                              // MOV RAX,RCX
+    self->_aabb.min = Bits3(kBits_1e8);                       // +0x80   1e8f x3
+    self->_aabb.max = Bits3(kBits_neg1e8);                    // +0x8c  -1e8f x3
 }
+
+}  // namespace
 
 // ============================================================================
 // ??1GraphicsMesh@Graphics@@UEAA@XZ                  retail 0x1800ff270
@@ -359,6 +367,13 @@ extern "C" void* RtGraphics_GraphicsMesh_Ctor(void* self) {
 // ORDER (+0x70, then +0x60, then +0x50 — the REVERSE of declaration order, as a
 // destructor should be, and the order is transcribed rather than re-derived),
 // release the name String, restamp to CompiledExternal and tail-jump its dtor.
+//
+// THIS STAYS A HAND-WRITTEN DOOR AND `~GraphicsMesh()` IS EMPTY — the
+// `Object::External` / `AnimationGroup` precedent. The two restamps name the
+// MINTED tables, which is right for the minted objects that are the only ones
+// alive today, and the three explicit `~Array` calls plus the `str-8` release
+// are retail's own decomposition: a compiler-emitted destructor chain would
+// stamp GCC's tables and run each `~Array` a SECOND time.
 //
 // THE STRING RELEASE IS THE `str-4` / `str-8` IDIOM and its two arms leave the
 // slot holding DIFFERENT THINGS — the asymmetry array_destroy.cpp's Body B
@@ -370,79 +385,150 @@ extern "C" void* RtGraphics_GraphicsMesh_Ctor(void* self) {
 // Writing `slot = nullptr` on both arms would leave a freed block's address
 // nowhere and would not match; writing neither would leave a dangling pointer.
 // ============================================================================
-extern "C" void RtGraphics_GraphicsMesh_Dtor(void* self) {
-    uint8_t* const d = static_cast<uint8_t*>(self);
+extern "C" void RtGraphics_GraphicsMesh_Dtor(void* selfv) {
+    GraphicsMesh* const self = reinterpret_cast<GraphicsMesh*>(selfv);  // B.3.5 bridge
 
-    *reinterpret_cast<void**>(d) = Vt(kVtGraphicsMesh);        // 0x1800ff286
+    *reinterpret_cast<void**>(self) = Vt(kVtGraphicsMesh);     // 0x1800ff286
 
-    ByAddr1(0x180014160ull, d + kInnerArrays);                 // ~Array<Array<T>>
-    ByAddr1(0x180014090ull, d + kNodes);                       // ~Array<Node>
-    ByAddr1(0x180013fb0ull, d + kTriangleLists);               // ~Array<TriangleList>
+    ByAddr1(0x180014160ull, &self->_skinMaterials);            // ~Array<Array<T>>
+    ByAddr1(0x180014090ull, &self->_nodes);                    // ~Array<Node>
+    ByAddr1(0x180013fb0ull, &self->_detailLevels);             // ~Array<DetailLevel>
 
-    uint8_t** const nameSlot = reinterpret_cast<uint8_t**>(d + kName);
-    uint8_t* const name = *nameSlot;
+    char* const name = self->_name.data;
     if (name != nullptr) {
         int32_t* const refs = reinterpret_cast<int32_t*>(name) - 1;
         --*refs;
         if (*refs == 0) {
-            *nameSlot = name - 8;                              // ADD qword [RBX+0x20],-8
-            MemFree(*nameSlot);
+            self->_name.data = name - 8;                       // ADD qword [RBX+0x20],-8
+            MemFree(self->_name.data);
         } else {
-            *nameSlot = nullptr;                               // MOV qword [RBX+0x20],0
+            self->_name.data = nullptr;                        // MOV qword [RBX+0x20],0
         }
     }
 
-    *reinterpret_cast<void**>(d) = Vt(kVtCompiledExternal);    // 0x1800ff2d8
+    *reinterpret_cast<void**>(self) = Vt(kVtCompiledExternal); // 0x1800ff2d8
     CompiledExternalDtor(self);                                // JMP 0x1800bc950
 }
 
-// slot 2 — `MOV EAX,dword ptr [0x1801fa708]`
-extern "C" uint32_t RtGraphics_GraphicsMesh_Type(const void* self) {
-    (void)self;
+// ############################################################################
+// `Graphics::GraphicsMesh`'s member bodies. Their own `namespace Graphics { }`
+// block, after the anonymous namespace has closed, because a member definition
+// has to appear in a namespace ENCLOSING the class (B34_BRIEFS A.2). The
+// anonymous namespace's helpers are reachable unqualified from here: they are
+// members of the global namespace's unnamed namespace, in this same TU.
+// ############################################################################
+namespace Graphics {
+
+// [2] ?Type@GraphicsMesh@Graphics@@UEBAIXZ  0x180012370
+//     `MOV EAX,dword ptr [0x1801fa708]` — the BaseTypeInfo record's +0x00.
+uint32_t GraphicsMesh::Type() const {
     uint32_t v = 0; std::memcpy(&v, TypeInfoGraphicsMesh(), sizeof v); return v;
 }
 
-// slot 1 — `MOV RAX,qword ptr [0x1801fa710]` (= ?_typeInfo@… + 8)
-extern "C" const char* RtGraphics_GraphicsMesh_TypeName(const void* self) {
-    (void)self;
+// [1] ?TypeName@GraphicsMesh@Graphics@@UEBAPEBDXZ  0x180012390
+//     `MOV RAX,qword ptr [0x1801fa710]` (= ?_typeInfo@… + 8).
+const char* GraphicsMesh::TypeName() const {
     const char* v = nullptr;
     std::memcpy(&v, TypeInfoGraphicsMesh() + 8, sizeof v);
     return v;
 }
 
-// slot 3 — `MOV EAX,0x3415 ; RET`. 13333 decimal; a LITERAL, and nothing in
-// this tree may derive it, for the reason graphics_typeinfo_accessors.cpp gives
-// about MaterialInstance's 4: a derived spelling would silently track OUR
-// format if this class's Serialize is ever revised, and retail's does not.
-extern "C" int32_t RtGraphics_GraphicsMesh_GetFileVersion(const void* self) {
-    (void)self;
-    return 0x3415;
+// [3] ?GetFileVersion@GraphicsMesh@Graphics@@UEBAHXZ  0x1800ff3a0
+//     `MOV EAX,0x3415 ; RET`. 13333 decimal; a LITERAL, and nothing in this tree
+//     may derive it, for the reason graphics_typeinfo_accessors.cpp gives about
+//     MaterialInstance's 4: a derived spelling would silently track OUR format if
+//     this class's Serialize is ever revised, and retail's does not.
+int32_t GraphicsMesh::GetFileVersion() const { return 0x3415; }
+
+// [7] ?Destruct@GraphicsMesh@Graphics@@UEAAXXZ  0x180012540
+//     `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]` — slot 0 with flags 0, dispatched
+//     VIRTUALLY on purpose: a subclass's deleting destructor is what has to run.
+void GraphicsMesh::Destruct() { CallSlot0(this, 0u); }
+
+// [8] ?Construct@GraphicsMesh@Graphics@@UEAAPEAVExternal@Object@@XZ 0x180012530
+//     `TEST RCX,RCX; JNZ 0x1800ff170; XOR EAX,EAX`. The null test lives in the
+//     DOOR, which is where retail put it.
+Object::External* GraphicsMesh::Construct() {
+    ConstructBody(this);
+    return this;
 }
 
-// slot 7 — retail 0x180012540. `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`.
-extern "C" void RtGraphics_GraphicsMesh_Destruct(void* self) {
-    void** vt = *reinterpret_cast<void***>(self);
-    reinterpret_cast<void* (*)(void*, unsigned)>(vt[0])(self, 0u);   // flags 0
+// [6] ?Reconstruct@GraphicsMesh@Graphics@@UEAAPEAVExternal@Object@@XZ 0x180012510
+//     Slot 0 with flags 0 (destroy IN PLACE, not free), then the ctor on the
+//     same storage. NO null test, unlike Construct one slot over; that asymmetry
+//     is retail's and is kept.
+Object::External* GraphicsMesh::Reconstruct() {
+    CallSlot0(this, 0u);
+    ConstructBody(this);
+    return this;
 }
 
-// slot 8 — retail 0x180012530. `TEST RCX,RCX; JNZ 0x1800ff170; XOR EAX,EAX`.
-extern "C" void* RtGraphics_GraphicsMesh_Construct(void* self) {
-    if (self == nullptr) return nullptr;
-    return RtGraphics_GraphicsMesh_Ctor(self);
+// ??1GraphicsMesh@Graphics@@UEAA@XZ  0x1800ff270 — EMPTY; see the door above.
+GraphicsMesh::~GraphicsMesh() {}
+
+}  // namespace Graphics
+
+// ============================================================================
+// THE DOORS. Each keeps its registered name and address and delegates with a
+// QUALIFIED non-virtual call. THE QUALIFICATION IS LOAD-BEARING (B34_BRIEFS
+// A.1): a live `GraphicsMesh` wears the MINTED `??_7GraphicsMesh@Graphics@@6B@`,
+// whose slots resolve back to these very doors, so an unqualified virtual call
+// inside a door would dispatch into itself instead of delegating.
+// ============================================================================
+extern "C" void* RtGraphics_GraphicsMesh_Ctor(void* selfv) {
+    ConstructBody(reinterpret_cast<GraphicsMesh*>(selfv));     // B.3.5 bridge
+    return selfv;                                              // MOV RAX,RCX
 }
 
-// slot 6 — retail 0x180012510. Slot 0 with flags 0, then the ctor, in place.
-extern "C" void* RtGraphics_GraphicsMesh_Reconstruct(void* self) {
-    void** vt = *reinterpret_cast<void***>(self);
-    reinterpret_cast<void* (*)(void*, unsigned)>(vt[0])(self, 0u);
-    return RtGraphics_GraphicsMesh_Ctor(self);
+extern "C" uint32_t RtGraphics_GraphicsMesh_Type(const void* selfv) {
+    return reinterpret_cast<const GraphicsMesh*>(selfv)         // B.3.5 bridge
+               ->Graphics::GraphicsMesh::Type();
+}
+
+extern "C" const char* RtGraphics_GraphicsMesh_TypeName(const void* selfv) {
+    return reinterpret_cast<const GraphicsMesh*>(selfv)         // B.3.5 bridge
+               ->Graphics::GraphicsMesh::TypeName();
+}
+
+extern "C" int32_t RtGraphics_GraphicsMesh_GetFileVersion(const void* selfv) {
+    return reinterpret_cast<const GraphicsMesh*>(selfv)         // B.3.5 bridge
+               ->Graphics::GraphicsMesh::GetFileVersion();
+}
+
+extern "C" void RtGraphics_GraphicsMesh_Destruct(void* selfv) {
+    reinterpret_cast<GraphicsMesh*>(selfv)                      // B.3.5 bridge
+        ->Graphics::GraphicsMesh::Destruct();
+}
+
+extern "C" void* RtGraphics_GraphicsMesh_Construct(void* selfv) {
+    if (selfv == nullptr) return nullptr;                       // retail's null test
+    return reinterpret_cast<GraphicsMesh*>(selfv)               // B.3.5 bridge
+               ->Graphics::GraphicsMesh::Construct();
+}
+
+extern "C" void* RtGraphics_GraphicsMesh_Reconstruct(void* selfv) {
+    return reinterpret_cast<GraphicsMesh*>(selfv)               // B.3.5 bridge
+               ->Graphics::GraphicsMesh::Reconstruct();
 }
 
 // ============================================================================
-// §T  GraphicsMesh::TriangleList::Serialize        retail 0x1800a4670
+// §T  the DETAIL LEVEL's inline-geometry pass        retail 0x1800a4670
 // ============================================================================
+// *** THE DOOR IS NAMED `RtGraphics_GraphicsMeshTriangleList_Serialize` AND
+// THAT NAME IS WRONG. IT IS KEPT ANYWAY. *** This body is NOT
+// `?Serialize@TriangleList@GraphicsMesh@Graphics@@` — that export exists, at
+// 0x1800ff300, and is a different function: six DWORD scalars at +0x00..+0x14 of
+// a 0x18-byte record, looped over by the array helper at 0x180014850 which THIS
+// body calls. What 0x1800a4670 serializes is the WHOLE 0xb0-byte DETAIL LEVEL's
+// inline geometry — its `Array<TriangleList>` at +0x98, its four video buffers
+// and its max-instance count at +0xa8 — which is why its argument is now spelled
+// `GraphicsMesh::DetailLevel*`. The door keeps its name and its single ADDRESS
+// registration (0x1800a4670) because renaming a registered door is a change to
+// the cutover surface and B35_RULES section 11 keeps that surface still in step
+// 5; the correction is recorded here and in `GraphicsMesh.h`'s banner instead.
+//
 // UNEXPORTED, and a NON-SLOT helper: `GraphicsMesh::Serialize` below calls it
-// per triangle list, so the class cannot round-trip without it.
+// per detail level, so the class cannot round-trip without it.
 //
 // THE SHAPE, and it is not the obvious one. The body runs the SAME nine-step
 // block TWICE, over two separately-created codecs on the same stream, under two
@@ -479,28 +565,41 @@ namespace {
 //         vtable slot +0x30 with (ptr, &ser). The order is retail's and is
 //         transcribed rather than sorted.
 //   8  kScalarInt on this+0xa8
-void TriangleListPass(void* self, Serializer* ser, ReaderWriter* rw) {
-    uint8_t* const t = static_cast<uint8_t*>(self);
-
-    int32_t n = *reinterpret_cast<const int32_t*>(t + 0xa0);
+//
+// ENDGAME B.3.5 block G — THE FOUR SUB-OBJECTS ARE NOW NAMED, and that is the
+// cross-check that fixed the 0xb0 layout: +0x40, +0x20, +0x80, +0x60 are exactly
+// `_indexBuffer`, `_vertexBuffer`, `_skinIndexBuffer`, `_skinVertexBuffer` plus
+// the 8 that `Video::{Vertex,Index}Buffer::PlatformConstruct` writes its
+// `_deviceData` qword at (`Mesh.h`'s `VideoBufferHeader` banner pins the same
+// idiom on EdgeMesh's eight buffers). So retail's "not ascending" order is INDEX
+// BEFORE VERTEX in each pair, the same order `EdgeMesh::Serialize` uses for its
+// eight, and it is transcribed rather than sorted.
+void TriangleListPass(GraphicsMesh::DetailLevel* level, Serializer* ser, ReaderWriter* rw) {
+    int32_t n = level->_triangleLists._size;                   // +0xa0
     EmitInt(rw, &n);
     if (ser->stream->direction == rt::io::kDirectionReading)
-        ByAddr2(0x1800136f0ull, t + 0x98, n);
-    ByAddrSerN(0x180014850ull, ser, n, *reinterpret_cast<void**>(t + 0x98));
+        ByAddr2(0x1800136f0ull, &level->_triangleLists, n);    // +0x98
+    ByAddrSerN(0x180014850ull, ser, n, level->_triangleLists._data);
 
-    static const uint32_t kSubObjects[4] = { 0x40, 0x20, 0x80, 0x60 };
-    for (uint32_t off : kSubObjects) {
-        void* const sub = *reinterpret_cast<void**>(t + off);   // faithful: unguarded
-        void** const vt = *reinterpret_cast<void***>(sub);
+    void* const kSubObjects[4] = {
+        level->_indexBuffer._deviceData,        // +0x38 + 8 = +0x40
+        level->_vertexBuffer._deviceData,       // +0x18 + 8 = +0x20
+        level->_skinIndexBuffer._deviceData,    // +0x78 + 8 = +0x80
+        level->_skinVertexBuffer._deviceData,   // +0x58 + 8 = +0x60
+    };
+    for (void* const sub : kSubObjects) {
+        void** const vt = *reinterpret_cast<void***>(sub);      // faithful: unguarded
         reinterpret_cast<void (*)(void*, Serializer*)>(vt[0x30 / 8])(sub, ser);
     }
 
-    EmitInt(rw, reinterpret_cast<int32_t*>(t + 0xa8));
+    EmitInt(rw, &level->_maxInstances);                         // +0xa8
 }
 
 }  // namespace
 
-extern "C" void RtGraphics_GraphicsMeshTriangleList_Serialize(void* self, Serializer* outer) {
+extern "C" void RtGraphics_GraphicsMeshTriangleList_Serialize(void* selfv, Serializer* outer) {
+    GraphicsMesh::DetailLevel* const self =
+        reinterpret_cast<GraphicsMesh::DetailLevel*>(selfv);     // B.3.5 bridge
     Stream* const stream = outer->stream;
     Encoding* const enc = stream->encoding;
 
@@ -550,15 +649,16 @@ extern "C" void RtGraphics_GraphicsMeshTriangleList_Serialize(void* self, Serial
 //   kScalarInt  (this+0x40)
 //   kScalarFloat(this+0x44)
 //   kScalarFloat(this+0x48)
-//   kScalarInt  (&n)  where n = this->_triangleLists._size
-//     if reading: Array<TriangleList>::SetSize(this+0x50, n)
+//   kScalarInt  (&n)  where n = this->_detailLevels._size
+//     if reading: Array<DetailLevel>::SetSize(this+0x50, n)
 //     for each of the n elements (stride 0xb0):
-//         kScalarFloat(e+0x10)
-//         String::Serialize(e+0x00, &ser)
-//         0x18005d0f0(e+0x08, &ser)
-//         *** if (codec->GetVersion() == 0) TriangleList::Serialize(e, &ser) ***
-//   kScalarInt  (&n)  where n = this->_innerArrays._size
-//     if reading: Array<Array<T>>::SetSize(this+0x70, n)
+//         kScalarFloat(e+0x10)                   ; DetailLevel::_distance
+//         String::Serialize(e+0x00, &ser)        ; DetailLevel::_name
+//         0x18005d0f0(e+0x08, &ser)              ; DetailLevel::_image, an
+//                                                  ExternalPtr<Video::ImageBuffer>
+//         *** if (codec->GetVersion() == 0) the inline-geometry pass(e, &ser) ***
+//   kScalarInt  (&n)  where n = this->_skinMaterials._size
+//     if reading: Array<Array<ExternalPtr<MaterialInstance>>>::SetSize(this+0x70, n)
 //     for each of the n elements (stride 0x10):
 //         kScalarInt(&m) where m = e->_size
 //         if reading: 0x18005cc60(e, m)
@@ -585,47 +685,49 @@ extern "C" void RtGraphics_GraphicsMeshTriangleList_Serialize(void* self, Serial
 //
 // `MOV AL,1` at 0x1800ff647: always true, no failure path.
 // ============================================================================
-extern "C" bool RtGraphics_GraphicsMesh_Serialize(void* self, Stream* stream) {
-    uint8_t* const d = static_cast<uint8_t*>(self);
+namespace Graphics {
+
+bool GraphicsMesh::Serialize(void* streamv) {
+    Stream* const stream = static_cast<Stream*>(streamv);
 
     Serializer ser;
     ReaderWriter* const rw = MakeCodec(stream, &ser, 1);
     const bool reading = (stream->direction == rt::io::kDirectionReading);
 
     *SerializeCounter()     = 0;
-    *SerializeCurrentMesh() = self;
+    *SerializeCurrentMesh() = this;
 
-    StringSerialize(d + kName, &ser);
-    EmitFloatArray(rw, 3, reinterpret_cast<float*>(d + kBoundsMin));
-    EmitFloatArray(rw, 3, reinterpret_cast<float*>(d + kBoundsMax));
-    EmitInt  (rw, reinterpret_cast<int32_t*>(d + kInt40));
-    EmitFloat(rw, reinterpret_cast<float*>(d + kFloat44));
-    EmitFloat(rw, reinterpret_cast<float*>(d + kFloat48));
+    StringSerialize(&_name, &ser);
+    EmitFloatArray(rw, 3, &_vector28.x);
+    EmitFloatArray(rw, 3, &_vector34.x);
+    EmitInt  (rw, &_field40);
+    EmitFloat(rw, &_scale);
+    EmitFloat(rw, &_maxDepthDistance);
 
-    // ---- the triangle lists -------------------------------------------------
+    // ---- the detail levels ---------------------------------------------------
     {
-        int32_t n = ArrayAt(self, kTriangleLists)->size;
+        int32_t n = _detailLevels._size;
         EmitInt(rw, &n);
-        if (reading) ByAddr2(0x18005d840ull, d + kTriangleLists, n);
+        if (reading) ByAddr2(0x18005d840ull, &_detailLevels, n);
 
-        uint8_t* e = ArrayAt(self, kTriangleLists)->data;
-        for (int32_t i = 0; i < n; ++i, e += 0xb0) {
-            EmitFloat(rw, reinterpret_cast<float*>(e + 0x10));
-            StringSerialize(e, &ser);
+        DetailLevel* e = reinterpret_cast<DetailLevel*>(_detailLevels._data);
+        for (int32_t i = 0; i < n; ++i, ++e) {     // ++e strides retail's 0xb0
+            EmitFloat(rw, &e->_distance);
+            StringSerialize(&e->_name, &ser);
             reinterpret_cast<SerMemberFn>(
-                ResolveAddr(Module::Runtime, 0x18005d0f0ull))(e + 8, &ser);
+                ResolveAddr(Module::Runtime, 0x18005d0f0ull))(&e->_image, &ser);
             if (CodecVersion(rw) == 0)
                 RtGraphics_GraphicsMeshTriangleList_Serialize(e, &ser);
         }
     }
 
-    // ---- the inner arrays ---------------------------------------------------
+    // ---- the per-skin material lists ----------------------------------------
     {
-        int32_t n = ArrayAt(self, kInnerArrays)->size;
+        int32_t n = _skinMaterials._size;
         EmitInt(rw, &n);
-        if (reading) ByAddr2(0x18005cda0ull, d + kInnerArrays, n);
+        if (reading) ByAddr2(0x18005cda0ull, &_skinMaterials, n);
 
-        ArrayHdrView* e = reinterpret_cast<ArrayHdrView*>(ArrayAt(self, kInnerArrays)->data);
+        ArrayHdrView* e = reinterpret_cast<ArrayHdrView*>(_skinMaterials._data);
         for (int64_t i = 0; i < static_cast<int64_t>(n); ++i, ++e) {
             int32_t m = e->size;
             EmitInt(rw, &m);
@@ -636,19 +738,26 @@ extern "C" bool RtGraphics_GraphicsMesh_Serialize(void* self, Stream* stream) {
 
     // ---- the nodes ----------------------------------------------------------
     {
-        int32_t n = ArrayAt(self, kNodes)->size;
+        int32_t n = _nodes._size;
         EmitInt(rw, &n);
-        if (reading) ByAddr2(0x18005aa30ull, d + kNodes, n);
-        ByAddrSerN(0x18005c120ull, &ser, n, ArrayAt(self, kNodes)->data);
+        if (reading) ByAddr2(0x18005aa30ull, &_nodes, n);
+        ByAddrSerN(0x18005c120ull, &ser, n, _nodes._data);
     }
 
-    EmitFloatArray(rw, 3, reinterpret_cast<float*>(d + kBoxMin));
-    EmitFloatArray(rw, 3, reinterpret_cast<float*>(d + kBoxMax));
+    EmitFloatArray(rw, 3, &_aabb.min.x);
+    EmitFloatArray(rw, 3, &_aabb.max.x);
 
-    if (CodecVersion(rw) >= 1) PlatformSerialize(self, &ser);
+    if (CodecVersion(rw) >= 1) PlatformSerializeDoor(this, &ser);
 
     DestroyCodec(rw);
     return true;                                              // MOV AL,1
+}
+
+}  // namespace Graphics
+
+extern "C" bool RtGraphics_GraphicsMesh_Serialize(void* selfv, Stream* stream) {
+    return reinterpret_cast<GraphicsMesh*>(selfv)              // B.3.5 bridge
+               ->Graphics::GraphicsMesh::Serialize(stream);
 }
 
 // ============================================================================

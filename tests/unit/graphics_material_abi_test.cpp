@@ -68,6 +68,15 @@
 #include "unit.h"
 
 #include "runtime/types/graphics/Material.h"
+#include "runtime/types/graphics/GraphicsMesh.h"
+// `Mesh.h` is included HERE and not from `GraphicsMesh.h`, so this file can
+// cross-assert the real class against lane E's `RtGraphics::GraphicsMeshView` /
+// `RtGraphics::MeshNode` overlays. `GraphicsMesh.h`'s include banner records why
+// it cannot do that itself: `Mesh.h` and `AnimationState.h` each define
+// `RtGraphics::InterpolatedTransform` with different members, so no translation
+// unit may include both, and `GraphicsMesh.h` has to reach
+// `runtime/src/graphics/animationstate.cpp`.
+#include "runtime/types/graphics/Mesh.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -131,6 +140,12 @@ struct MaterialProbe final : Graphics::Material {
 };
 
 struct MaterialInstanceProbe final : Graphics::MaterialInstance {
+    Object::Base* DeletingDtor(unsigned) override {
+        Note(this, kDeletingDtor / 8); return this;
+    }
+};
+
+struct GraphicsMeshProbe final : Graphics::GraphicsMesh {
     Object::Base* DeletingDtor(unsigned) override {
         Note(this, kDeletingDtor / 8); return this;
     }
@@ -381,6 +396,135 @@ UNIT_TEST(graphics_materialinstance_layout) {
     CHECK_EQ(*reinterpret_cast<const int32_t*>(bytes + 0x58), 6);
 }
 
+// ---------------------------------------------------------------------------
+// Graphics::GraphicsMesh — the ONE class of block G's four whose base is
+// `Object::CompiledExternal` (?_ParentTypeName@ @0x180012360 ->
+// "Object::CompiledExternal", and its ctor stamps FOUR tables where Material's
+// and MaterialInstance's stamp three).
+// ---------------------------------------------------------------------------
+UNIT_TEST(graphics_graphicsmesh_slot_order_is_retails) {
+    GraphicsMeshProbe probe;
+    void* raw = static_cast<void*>(&probe);
+
+    CheckExternalFamilySlots(raw);
+    CheckNineDistinctSlots(raw);
+
+    // Slot 4 is INHERITED `?Compile@External@Object@@` (0x1800066e0), the same
+    // body a bare `Object::External` leaf carries — `Object::CompiledExternal`
+    // does NOT override it, which is why the pointer must be identical even
+    // though the two probes sit on different bases.
+    BareExternalProbe bare;
+    CHECK(VTableOf(raw)[kCompile / 8] ==
+          VTableOf(static_cast<void*>(&bare))[kCompile / 8]);
+
+    CHECK(static_cast<void*>(static_cast<Object::CompiledExternal*>(&probe)) == raw);
+    CHECK(static_cast<void*>(static_cast<Object::External*>(&probe)) == raw);
+    CHECK(static_cast<void*>(static_cast<Object::Base*>(&probe)) == raw);
+}
+
+UNIT_TEST(graphics_graphicsmesh_layout) {
+    CHECK_EQ((int)sizeof(Graphics::GraphicsMesh), 0x98);
+    CHECK_EQ((int)alignof(Graphics::GraphicsMesh), 8);
+    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh, _name),             0x20);
+    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh, _vector28),         0x28);
+    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh, _vector34),         0x34);
+    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh, _field40),          0x40);
+    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh, _scale),            0x44);
+    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh, _maxDepthDistance), 0x48);
+    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh, _detailLevels),     0x50);
+    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh, _nodes),            0x60);
+    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh, _skinMaterials),    0x70);
+    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh, _aabb),             0x80);
+
+    // *** THE BASE SPLIT, ASSERTED IN BOTH DIRECTIONS. *** This is the
+    // `Video::VideoProgram` mistake of B35_RULES section 2.1, one namespace over:
+    // GraphicsMesh is a CompiledExternal and the other three are not.
+    CHECK((std::is_base_of<Object::CompiledExternal, Graphics::GraphicsMesh>::value));
+    CHECK((!std::is_base_of<Object::CompiledExternal, Graphics::Material>::value));
+    CHECK((!std::is_base_of<Object::CompiledExternal, Graphics::MaterialInstance>::value));
+    // …and `CompiledExternal` adds no bytes, so the derived fields still start
+    // where `Object::External`'s end.
+    CHECK_EQ((int)sizeof(Object::CompiledExternal), (int)sizeof(Object::External));
+    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh, _name),
+             (int)sizeof(Object::CompiledExternal));
+
+    CHECK(std::is_abstract<Graphics::GraphicsMesh>::value);
+
+    // The two nested value types, and the detail-level record the +0x50 array
+    // holds. `graphicsmesh_vtable.cpp` used to call that array an
+    // `Array<TriangleList>`; it is an `Array<DetailLevel>` and the
+    // `Array<TriangleList>` is INSIDE each level, at +0x98.
+    CHECK_EQ((int)sizeof(Graphics::GraphicsMesh::TriangleList), 0x18);
+    CHECK_EQ((int)sizeof(Graphics::GraphicsMesh::Node),         0x48);
+    CHECK_EQ((int)sizeof(Graphics::GraphicsMesh::DetailLevel),  0xb0);
+    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh::DetailLevel, _triangleLists), 0x98);
+    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh::DetailLevel, _maxInstances),  0xa8);
+
+    // The four `_deviceData` qwords `TriangleListPass` / `PlatformSerialize`
+    // dispatch through are the record's +0x40, +0x20, +0x80, +0x60 — which is
+    // the reading that fixed the whole 0xb0 layout, so it is a test.
+    CHECK_EQ((int)(offsetof(Graphics::GraphicsMesh::DetailLevel, _indexBuffer) +
+                   offsetof(Graphics::GraphicsMesh::DetailLevel::Buffer, _deviceData)), 0x40);
+    CHECK_EQ((int)(offsetof(Graphics::GraphicsMesh::DetailLevel, _vertexBuffer) +
+                   offsetof(Graphics::GraphicsMesh::DetailLevel::Buffer, _deviceData)), 0x20);
+    CHECK_EQ((int)(offsetof(Graphics::GraphicsMesh::DetailLevel, _skinIndexBuffer) +
+                   offsetof(Graphics::GraphicsMesh::DetailLevel::Buffer, _deviceData)), 0x80);
+    CHECK_EQ((int)(offsetof(Graphics::GraphicsMesh::DetailLevel, _skinVertexBuffer) +
+                   offsetof(Graphics::GraphicsMesh::DetailLevel::Buffer, _deviceData)), 0x60);
+
+    // `Node::_parent` is LEFT UNINITIALISED by retail's default constructor and
+    // the copy constructor DOES propagate it; nothing may zero it. The test that
+    // can be written for that here is that `Node` is not implicitly zeroing
+    // itself — it has no default member initialiser and no default constructor
+    // that would supply one.
+    CHECK(!std::is_trivially_copyable<Graphics::GraphicsMesh::Node>::value);
+    CHECK(!std::is_default_constructible<Graphics::GraphicsMesh::Node>::value);
+
+    GraphicsMeshProbe probe;
+    probe._scale = 2.0f;
+    probe._detailLevels._size = 3;
+    probe._skinMaterials._size = 5;
+    const uint8_t* bytes =
+        reinterpret_cast<const uint8_t*>(static_cast<Graphics::GraphicsMesh*>(&probe));
+    CHECK_EQ(*reinterpret_cast<const float*>(bytes + 0x44), 2.0f);
+    // +0x58 is what ?GetDetailLevelCount@ reads and +0x78 what ?GetSkinCount@
+    // reads — the `_size` halves of the arrays based at +0x50 and +0x70.
+    CHECK_EQ(*reinterpret_cast<const int32_t*>(bytes + 0x58), 3);
+    CHECK_EQ(*reinterpret_cast<const int32_t*>(bytes + 0x78), 5);
+}
+
+// ---------------------------------------------------------------------------
+// The cross-asserts `GraphicsMesh.h` cannot make itself (see its include
+// banner): lane E's `Mesh.h` overlays of the same bytes.
+// ---------------------------------------------------------------------------
+UNIT_TEST(graphics_graphicsmesh_aliases_lane_es_mesh_h_overlays) {
+    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh, _detailLevels),
+             (int)offsetof(RtGraphics::GraphicsMeshView, _detailLevels));
+    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh, _nodes),
+             (int)offsetof(RtGraphics::GraphicsMeshView, _nodes));
+    // The ONE place the two READINGS differ and the BYTES do not: the view calls
+    // +0x70 a `Array<ExternalPtr>*`, this class calls it an Array header whose
+    // `_data` is that pointer. ?GetMaterialList@…XZ is `MOV RAX,[RCX+0x70]` and
+    // ?GetSkinCount@ is `MOV EAX,[RCX+0x78]` — a _data/_size pair.
+    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh, _skinMaterials),
+             (int)offsetof(RtGraphics::GraphicsMeshView, _materialLists));
+    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh, _aabb),
+             (int)offsetof(RtGraphics::GraphicsMeshView, _aabb));
+
+    CHECK_EQ((int)sizeof(Graphics::GraphicsMesh::Node), (int)sizeof(RtGraphics::MeshNode));
+    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh::Node, _parent),
+             (int)offsetof(RtGraphics::MeshNode, _parent));
+    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh::Node, _local),
+             (int)offsetof(RtGraphics::MeshNode, _local));
+
+    // The embedded video buffer header is the same 0x20 bytes lane E pinned from
+    // EdgeMesh's eight, `_deviceData` included.
+    CHECK_EQ((int)sizeof(Graphics::GraphicsMesh::DetailLevel::Buffer),
+             (int)sizeof(RtGraphics::VideoBufferHeader));
+    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh::DetailLevel::Buffer, _deviceData),
+             (int)offsetof(RtGraphics::VideoBufferHeader, _deviceData));
+}
+
 }  // namespace
 
 // ############################################################################
@@ -412,5 +556,14 @@ Object::External* MaterialInstance::Reconstruct() { Note(this, kReconstruct / 8)
 void        MaterialInstance::Destruct() { Note(this, kDestruct / 8); }
 Object::External* MaterialInstance::Construct() { Note(this, kConstruct / 8); return this; }
 MaterialInstance::~MaterialInstance() {}
+
+const char* GraphicsMesh::TypeName() const { Note(this, kTypeName / 8); return "GraphicsMesh"; }
+uint32_t    GraphicsMesh::Type() const { Note(this, kType / 8); return 0u; }
+int32_t     GraphicsMesh::GetFileVersion() const { Note(this, kGetFileVersion / 8); return 0x3415; }
+bool        GraphicsMesh::Serialize(void*) { Note(this, kSerialize / 8); return true; }
+Object::External* GraphicsMesh::Reconstruct() { Note(this, kReconstruct / 8); return this; }
+void        GraphicsMesh::Destruct() { Note(this, kDestruct / 8); }
+Object::External* GraphicsMesh::Construct() { Note(this, kConstruct / 8); return this; }
+GraphicsMesh::~GraphicsMesh() {}
 
 }  // namespace Graphics
