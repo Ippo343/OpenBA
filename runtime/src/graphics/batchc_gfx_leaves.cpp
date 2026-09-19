@@ -95,6 +95,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/Camera.h"
+#include "../../types/graphics/GraphicsMesh.h"   // ENDGAME B.3.5 block G
 #include "../../types/graphics/Material.h"
 #include "../../types/graphics/Mesh.h"
 #include "../../types/io/Serializer.h"
@@ -767,17 +768,40 @@ int32_t ActiveInterface() {
     return *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(device) + 0xF8);
 }
 
-void SerializeBufferSlot(uint8_t* level, uint32_t off, Serializer* sub) {
-    void* obj = *reinterpret_cast<void**>(level + off);
+// ENDGAME B.3.5 block G: it now takes the OBJECT the caller loaded instead of a
+// (base, byte offset) pair, because `GraphicsMesh::DetailLevel` names all four
+// `_deviceData` qwords. The dereference is still unguarded, which is faithful.
+void SerializeBufferSlot(void* obj, Serializer* sub) {
     void** vt = *reinterpret_cast<void***>(obj);            // faithful: unguarded
     reinterpret_cast<BufSerFn>(vt[0x30 / 8])(obj, sub);
 }
 
 }  // namespace
 
-extern "C" void RtGraphics_GraphicsMesh_PlatformSerialize(void* selfv, void* serv) {
-    uint8_t* const self = static_cast<uint8_t*>(selfv);
-    Serializer* const outer = static_cast<Serializer*>(serv);
+// ############################################################################
+// ENDGAME B.3.5 step 5, block G - the body MOVED onto
+// `Graphics::GraphicsMesh::PlatformSerialize`, and every offset it walked by
+// hand is now a named field of `GraphicsMesh` / `GraphicsMesh::DetailLevel`
+// (`runtime/types/graphics/GraphicsMesh.h`, authored by this block). The eleven
+// `kLvl*` constants this file derived independently AGREE with that header field
+// for field - stride 0xb0, the Array<TriangleList> at +0x98/+0xa0, the four
+// buffer `_deviceData` qwords at +0x20/+0x40/+0x60/+0x80 and the tail int at
+// +0xa8 - which is the third independent reading of the 0xb0 record.
+//
+// *** RULE B5-11 LIVES ON THIS FUNCTION. *** Its registration was once stripped
+// from the PERF build because the `RtGraphicsBatchCLeavesRegister()` call that
+// made it sat inside a `printf` argument, whose whole expression
+// `standalone/log_strip.h` compiles to `((void)0)`; boot then died on a
+// VCALL-of-0 (defect 3, fixed `1a4200c3`). Nothing below introduces such a call,
+// and the perf build is a gate item for this commit.
+// ############################################################################
+namespace Graphics {
+
+void GraphicsMesh::PlatformSerialize(IO::Serializer& serializer) {
+    // The ported bodies in this file speak the `rt::io::Serializer` POD; the
+    // member takes retail's own `IO::Serializer&` so the header names the retail
+    // signature. The two describe the same bytes.
+    Serializer* const outer = reinterpret_cast<Serializer*>(&serializer);  // B.3.5 bridge
 
     // `if (!stream->encoding->vtable[0](encoding)) return;` — the encoding
     // policy object's "does this stream carry platform data at all" slot.
@@ -789,7 +813,7 @@ extern "C" void RtGraphics_GraphicsMesh_PlatformSerialize(void* selfv, void* ser
         }
     }
 
-    const int32_t levelCount = *reinterpret_cast<const int32_t*>(self + 0x58);
+    const int32_t levelCount = _detailLevels._size;                  // +0x58
 
     for (int arm = 0; arm < 2; ++arm) {
         Serializer sub = { outer->stream, nullptr };
@@ -813,16 +837,15 @@ extern "C" void RtGraphics_GraphicsMesh_PlatformSerialize(void* selfv, void* ser
             // `this->[0x50]` is RE-READ every iteration (0x1800a49a0 /
             // 0x1800a4b30), so a slot-0x30 handler that reallocates the level
             // array is seen. Not hoisted.
-            uint8_t* const level =
-                *reinterpret_cast<uint8_t**>(self + 0x50) +
-                static_cast<int64_t>(i) * kLvlStride;
+            DetailLevel* const level =
+                reinterpret_cast<DetailLevel*>(_detailLevels._data) + i;
 
-            int32_t n = *reinterpret_cast<const int32_t*>(level + kLvlTriCount);
+            int32_t n = level->_triangleLists._size;                  // +0xa0
             RwInt(rw, &n);
             if (IsReading(sub.stream))
-                RtAddr<SetSizeFn>(0x1800136f0ull)(level + kLvlTriData, n);   // Array<Triangle>::SetSize
+                RtAddr<SetSizeFn>(0x1800136f0ull)(&level->_triangleLists, n);  // +0x98
 
-            void* triData = *reinterpret_cast<void**>(level + kLvlTriData);
+            void* triData = level->_triangleLists._data;
             if (arm == 0) {
                 // 0x180014850 SerializeTriangleListArray(ctx, count, data) —
                 // PORTED (closure_batch2b.cpp) and registered by address.
@@ -841,21 +864,31 @@ extern "C" void RtGraphics_GraphicsMesh_PlatformSerialize(void* selfv, void* ser
                 }
             }
 
-            uint8_t* const lvl2 = *reinterpret_cast<uint8_t**>(self + 0x50) +
-                                  static_cast<int64_t>(i) * kLvlStride;
-            SerializeBufferSlot(lvl2, kLvlBuf40, &sub);
-            SerializeBufferSlot(lvl2, kLvlBuf20, &sub);
-            SerializeBufferSlot(lvl2, kLvlBuf80, &sub);
-            SerializeBufferSlot(lvl2, kLvlBuf60, &sub);
+            // The four buffers, INDEX BEFORE VERTEX in each pair, retail's
+            // order (+0x40, +0x20, +0x80, +0x60 = each header's +0x08).
+            DetailLevel* const lvl2 =
+                reinterpret_cast<DetailLevel*>(_detailLevels._data) + i;
+            SerializeBufferSlot(lvl2->_indexBuffer._deviceData,      &sub);
+            SerializeBufferSlot(lvl2->_vertexBuffer._deviceData,     &sub);
+            SerializeBufferSlot(lvl2->_skinIndexBuffer._deviceData,  &sub);
+            SerializeBufferSlot(lvl2->_skinVertexBuffer._deviceData, &sub);
 
-            uint8_t* const lvl3 = *reinterpret_cast<uint8_t**>(self + 0x50) +
-                                  static_cast<int64_t>(i) * kLvlStride;
-            RwInt(rw, lvl3 + kLvlTail);
+            DetailLevel* const lvl3 =
+                reinterpret_cast<DetailLevel*>(_detailLevels._data) + i;
+            RwInt(rw, &lvl3->_maxInstances);                          // +0xa8
         }
 
         DeleteRw(rw);
     }
+}
 
+}  // namespace Graphics
+
+// The registered door: name, address and retail argument order unchanged.
+extern "C" void RtGraphics_GraphicsMesh_PlatformSerialize(void* selfv, void* serv) {
+    reinterpret_cast<Graphics::GraphicsMesh*>(selfv)                 // B.3.5 bridge
+        ->Graphics::GraphicsMesh::PlatformSerialize(
+            *reinterpret_cast<IO::Serializer*>(serv));               // B.3.5 bridge
 }
 
 // ############################################################################

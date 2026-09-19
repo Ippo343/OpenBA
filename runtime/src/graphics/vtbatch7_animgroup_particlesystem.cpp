@@ -119,6 +119,26 @@
 // FORWARDING THUNKS", which was true of batch 7.)
 // 0x1800a55a0, the ParticleInstance ctor, is still reached by address: it is a
 // different class's row (wave28_lane_partsys.cpp owns that class).
+//
+// ---------------------------------------------------------------------------
+// ENDGAME B.3.5 step 5, block H2 — what changed in the ParticleSystem half
+// ---------------------------------------------------------------------------
+// The file-local `struct ParticleSystem` is gone: the real
+// `Graphics::ParticleSystem` (and its base `Graphics::Particle`) live in
+// `runtime/types/graphics/Particle.h`, and all eight non-destructor slot bodies
+// are MEMBERS. Every door above keeps its mangled name, its retail address and
+// its registration and delegates with a QUALIFIED non-virtual call. The ctor
+// door and the four hand-written vtable stamps STAY (B4b-2, B35_RULES section 11).
+//
+// *** THE SLOT ORDER IS RULE B5-16's ONE EXCEPTION IN THE WHOLE OF VIDEO AND
+// GRAPHICS, AND IT IS WHY THIS CLASS HAS ITS OWN UNIT TEST. *** `Particle`
+// introduces `CreateSystem` PURE at slot 8; `Construct` therefore enters the
+// branch at slot 9, behind it. The slot list above is the byte-read order and it
+// is the order the member declarations are in.
+// The three hand-inlined int64 `ReaderWriter*` slot calls in `Serialize` became
+// `IO::Serializer::Serialize(int64_t&)` member calls, closing this file's share
+// of the nine sites B35_RULES section 11 deferred as "receiver-side work"
+// (block H1 closed the fourth, in `AnimationGroup`'s clip loop).
 // ============================================================================
 
 #include <cstddef>
@@ -136,11 +156,13 @@
 // they moved into `runtime/types/graphics/AnimationGroup.h` and `Animation.h`
 // under retail's own names, with the same offsets and the same asserts.
 //
-// GREP HAZARD (B4b-5 / B34_BRIEFS A.7): inside the `namespace Graphics { }`
-// block below, a bare `Particle` binds NOTHING (the POD is `RtGraphics::
-// Particle`) but a bare `Animation`, `AnimationGroup` or `AnimationEvent` binds
-// the REAL CLASS. The `ParticleSystem` half of this file is deliberately left
-// byte-identical for block H2 and does not open that namespace at all.
+// GREP HAZARD (B4b-5 / B34_BRIEFS A.7), RESTATED FOR BLOCK H2: inside a
+// `namespace Graphics { }` block in this file, a bare `Animation`,
+// `AnimationGroup`, `AnimationEvent`, `Particle` OR `ParticleSystem` binds the
+// REAL CLASS. Block H1's note said a bare `Particle` bound nothing; that was
+// true only until block H2 added `Graphics::Particle` and
+// `Graphics::ParticleSystem` to `Particle.h`. Every POD spelling inside such a
+// block must be written `RtGraphics::`.
 #include "../../types/graphics/AnimationGroup.h"
 #include "../../types/graphics/Particle.h"
 #include "../object/deleting_dtor_internal.h"   // rtcoll::MemAlloc
@@ -525,37 +547,15 @@ extern "C" bool RtGraphics_AnimationGroup_Serialize(void* selfv, void* streamv) 
 // ============================================================================
 namespace {
 
-using RtGraphics::Particle;
-
-// Fields are declared in ASCENDING MEMORY ORDER (offsetof requires it); the
-// SERIALIZE ORDER retail actually uses is different (f78 before spreadX/Y/Z)
-// and is reproduced explicitly in RtGraphics_ParticleSystem_Serialize's call
-// sequence below, not by struct declaration order.
-struct ParticleSystem {
-    Particle base;                                    // +0x00 (0x48)
-    float f48, f4c, f50;                              // +0x48
-    int64_t i58;                                       // +0x58  kPS_DurationTicks
-    float emitDirX, emitDirY, emitDirZ;                // +0x60  kPS_EmitDir
-    float spreadX, spreadY, spreadZ;                    // +0x6c
-    float f78;                                           // +0x78  kPS_SpreadScale (SERIALIZED before spreadX/Y/Z)
-    float f7c, f80, f84, f88, f8c, f90, f94, f98,
-          f9c, fa0, fa4, fa8, fac, fb0, fb4;              // +0x7c..+0xb4 (15 floats)
-    float gravX, gravY, gravZ;                            // +0xb8
-    float fc4, fc8, fcc, fd0;                              // +0xc4..+0xd0
-    float colorT0, colorT1;                                 // +0xd4, +0xd8
-    uint32_t color0, color1;                                 // +0xdc, +0xe0 (packed bytes, kScalarUInt)
-    int64_t fadeInTicks, fadeOutTicks;                        // +0xe8, +0xf0
-    uint8_t tail[0x108 - 0xf8];                                // +0xf8.. (dynamic pool array, not modelled)
-};
-static_assert(offsetof(ParticleSystem, i58) == 0x58, "+0x58");
-static_assert(offsetof(ParticleSystem, emitDirX) == 0x60, "+0x60");
-static_assert(offsetof(ParticleSystem, spreadX) == 0x6c, "+0x6c");
-static_assert(offsetof(ParticleSystem, f78) == 0x78, "+0x78");
-static_assert(offsetof(ParticleSystem, gravX) == 0xb8, "+0xb8");
-static_assert(offsetof(ParticleSystem, colorT0) == 0xd4, "+0xd4");
-static_assert(offsetof(ParticleSystem, color0) == 0xdc, "+0xdc");
-static_assert(offsetof(ParticleSystem, fadeInTicks) == 0xe8, "+0xe8");
-static_assert(sizeof(ParticleSystem) == 0x108, "Graphics::ParticleSystem must be 0x108 bytes");
+// ENDGAME B.3.5 step 5, block H2: batch 7's file-local `struct ParticleSystem`
+// USED TO SIT HERE. It is GONE — it moved into
+// `runtime/types/graphics/Particle.h` as the real `Graphics::ParticleSystem`,
+// under retail's own name, with the same offsets, the same `static_assert`s and
+// every position name (`f4c`, `f78`, `fac`, …) replaced by the name
+// `wave28_lane_partsys.cpp` measured for the same offset as a READER. The only
+// fields that keep a position name are the ones no reader has identified. See
+// that header's banner for the two-witness argument.
+using ParticleSystem = ::Graphics::ParticleSystem;
 
 const uint8_t* ParticleSystemTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@ParticleSystem@Graphics@@0VBaseTypeInfo@Object@@A");
@@ -563,13 +563,25 @@ const uint8_t* ParticleSystemTypeInfo() {
 
 }  // namespace
 
-extern "C" uint32_t RtGraphics_ParticleSystem_Type(const void*) {
-    uint32_t v = 0; std::memcpy(&v, ParticleSystemTypeInfo(), sizeof v); return v;
+// ENDGAME B.3.5 block H2: ALL EIGHT NON-DESTRUCTOR SLOT BODIES MOVED onto the
+// members further down. Every registered door below keeps its mangled name AND
+// its retail address and is now a one-line QUALIFIED, non-virtual delegation.
+// THE QUALIFICATION IS LOAD-BEARING (B34_BRIEFS A.1): a live `ParticleSystem`
+// wears the MINTED `??_7ParticleSystem@Graphics@@6B@`, whose slots resolve back
+// to these very doors, so an unqualified virtual call inside a door would
+// dispatch into itself instead of delegating.
+extern "C" uint32_t RtGraphics_ParticleSystem_Type(const void* selfv) {
+    return reinterpret_cast<const ::Graphics::ParticleSystem*>(selfv)     // B.3.5 bridge
+               ->::Graphics::ParticleSystem::Type();
 }
-extern "C" const char* RtGraphics_ParticleSystem_TypeName(const void*) {
-    const char* v = nullptr; std::memcpy(&v, ParticleSystemTypeInfo() + 8, sizeof v); return v;
+extern "C" const char* RtGraphics_ParticleSystem_TypeName(const void* selfv) {
+    return reinterpret_cast<const ::Graphics::ParticleSystem*>(selfv)     // B.3.5 bridge
+               ->::Graphics::ParticleSystem::TypeName();
 }
-extern "C" int32_t RtGraphics_ParticleSystem_GetFileVersion(const void*) { return 0x1001; }
+extern "C" int32_t RtGraphics_ParticleSystem_GetFileVersion(const void* selfv) {
+    return reinterpret_cast<const ::Graphics::ParticleSystem*>(selfv)     // B.3.5 bridge
+               ->::Graphics::ParticleSystem::GetFileVersion();
+}
 
 // ============================================================================
 // ??0ParticleSystem@Graphics@@QEAA@XZ — retail 0x1800a5320, ord 302.
@@ -604,52 +616,67 @@ double SecondsPerTick() {
     return slot ? *slot : 1.0;
 }
 
+// THE FOUR VTABLE STAMPS STAY HAND-WRITTEN AND THEY STAY POINTED AT THE MINT —
+// the same decision, for the same reason, as `AnimGroupConstructBody` above
+// (B34_RULES section 4.3): `Construct` and `Reconstruct` run on an object that
+// ALREADY EXISTS and that the rest of the tree expects to be wearing
+// `??_7ParticleSystem@Graphics@@6B@` out of `rt_data_mint_tables.inc`. A member
+// constructor here would stamp GCC's tables instead, which is why B4b-2 keeps the
+// ctor door. The fields are spelled through `Graphics::ParticleSystem` now; the
+// STORES are byte for byte batch 7b's.
 void ParticleSystemConstructBody(ParticleSystem* self) {
     void** vp = reinterpret_cast<void**>(self);
     *vp = BaseVTable();                                   // 1800a5338  0x180154788
     *vp = ExternalVTable();                               // 1800a5342  0x1801547a0
-    self->base._f08 = 0;                                  // 1800a5350
-    self->base._f10 = 0;                                  // 1800a5353
-    self->base._f18 = 0;                                  // 1800a5357
+    self->_path.data      = nullptr;                      // 1800a5350  +0x08
+    self->_refs._data     = nullptr;                      // 1800a5353  +0x10
+    self->_refs._size     = 0;                            // 1800a5357  +0x18
+    self->_refs._capacity = 0;                            //            +0x1c
     *vp = ParticleVTable();                               // 1800a5362  0x180155130
-    self->base._active = 1;                               // 1800a5365  byte
-    self->base._f24    = 1;                               // 1800a5369
-    self->base._f28    = 0xf;                             // 1800a5370
-    self->base._f30    = 0;                               // 1800a5377
-    self->base._f38    = 0;                               // 1800a537b
-    self->base._f40    = 0;                               // 1800a537f
+    self->_active     = 1;                                // 1800a5365  byte
+    self->_recordCount = 1;                               // 1800a5369
+    self->_subCount   = 0xf;                              // 1800a5370
+    self->_material   = nullptr;                          // 1800a5377
+    self->_records._data     = nullptr;                   // 1800a537b
+    self->_records._size     = 0;                         // 1800a537f
+    self->_records._capacity = 0;                         //            one qword with _size
     *vp = ParticleSystemVTable();                         // 1800a538a  0x180155090
 
     const double spt = SecondsPerTick();
 
-    self->f48 = 5.0f;  self->f4c = 0.0f;                  // 1800a538d  one qword
-    self->f50 = 1.0f;                                     // 1800a5395
-    self->i58 = static_cast<int64_t>(-1.0 / spt);         // 1800a539c..b1
-    self->emitDirX = 0.0f; self->emitDirY = 0.0f;         // 1800a53b5  one qword
-    self->emitDirZ = 1.0f;                                // 1800a53b9
-    self->spreadX  = 1.0f;                                // 1800a53c0
-    self->spreadY  = 1.0f;                                // 1800a53c7
-    self->spreadZ  = 1.0f; self->f78 = 0.0f;              // 1800a53ce  one qword
-    self->f7c = 0.0f; self->f80 = 0.0f;                   // 1800a53d6  one qword
-    self->f84 = 1.0f; self->f88 = 0.0f;                   // 1800a53da  one qword
-    self->f8c = 0.0f;                                     // 1800a53e5
-    self->f90 = 1.0f; self->f94 = 0.0f;                   // 1800a53eb  one qword
-    self->f98 = 0.0f; self->f9c = 0.0f;                   // 1800a53f6  one qword
-    self->fa0 = 0.0f; self->fa4 = 0.0f;                   // 1800a53fd  one qword
-    self->fa8 = 1.0f;                                     // 1800a5404
-    self->fac = 3.0f; self->fb0 = 0.0f;                   // 1800a540e  one qword
-    self->fb4 = 1.0f; self->gravX = 0.0f;                 // 1800a5419  one qword
-    self->gravY = 0.0f;                                   // 1800a5424
-    self->gravZ = -9.8f;                                  // 1800a542a  0xc11ccccd
-    self->fc4 = 0.5f; self->fc8 = 0.0f;                   // 1800a5434  one qword
-    self->fcc = 0.0f;                                     // 1800a543f
-    self->fd0 = 1.0f; self->colorT0 = 0.0f;               // 1800a5445  one qword
-    self->colorT1 = 1.0f;                                 // 1800a5450
-    self->color0 = 0xffffffffu;                           // 1800a545a  one qword
-    self->color1 = 0xffffffffu;                           //            of -1
-    self->fadeInTicks  = static_cast<int64_t>(0.25 / spt);// 1800a5465..7d
-    self->fadeOutTicks = static_cast<int64_t>(0.25 / spt);// 1800a5484..91
-    std::memset(self->tail, 0, sizeof self->tail);        // 1800a5498/9f  +0xf8,+0x100
+    self->_f48 = 5.0f;  self->_rateAccelA = 0.0f;         // 1800a538d  one qword
+    self->_rateAccelB = 1.0f;                             // 1800a5395
+    self->_durationTicks = static_cast<int64_t>(-1.0 / spt); // 1800a539c..b1
+    self->_emitDirX = 0.0f; self->_emitDirY = 0.0f;       // 1800a53b5  one qword
+    self->_emitDirZ = 1.0f;                               // 1800a53b9
+    self->_spreadX  = 1.0f;                               // 1800a53c0
+    self->_spreadY  = 1.0f;                               // 1800a53c7
+    self->_spreadZ  = 1.0f; self->_spreadScale = 0.0f;    // 1800a53ce  one qword
+    self->_angleBRange = 0.0f; self->_angleARange = 0.0f; // 1800a53d6  one qword
+    self->_speedBase = 1.0f; self->_speedRange = 0.0f;    // 1800a53da  one qword
+    self->_accelScale = 0.0f;                             // 1800a53e5
+    self->_damping = 1.0f; self->_rotBase = 0.0f;         // 1800a53eb  one qword
+    self->_rotRange = 0.0f; self->_spinBase = 0.0f;       // 1800a53f6  one qword
+    self->_spinRange = 0.0f; self->_spinAccel = 0.0f;     // 1800a53fd  one qword
+    self->_spinDamp = 1.0f;                               // 1800a5404
+    self->_lifeBase = 3.0f; self->_lifeRange = 0.0f;      // 1800a540e  one qword
+    self->_gravScale = 1.0f; self->_gravX = 0.0f;         // 1800a5419  one qword
+    self->_gravY = 0.0f;                                  // 1800a5424
+    self->_gravZ = -9.8f;                                 // 1800a542a  0xc11ccccd
+    self->_sizeBase = 0.5f; self->_sizeRange = 0.0f;      // 1800a5434  one qword
+    self->_sizeAccel = 0.0f;                              // 1800a543f
+    self->_sizeDamp = 1.0f; self->_colorT0 = 0.0f;        // 1800a5445  one qword
+    self->_colorT1 = 1.0f;                                // 1800a5450
+    self->_color0 = 0xffffffffu;                          // 1800a545a  one qword
+    self->_color1 = 0xffffffffu;                          //            of -1
+    self->_fadeInTicks  = static_cast<int64_t>(0.25 / spt); // 1800a5465..7d
+    self->_fadeOutTicks = static_cast<int64_t>(0.25 / spt); // 1800a5484..91
+    // 1800a5498 / 1800a549f — two qword stores over +0xf8 and +0x100, i.e. the
+    // `_pool` Array header zeroed. Batch 7b spelled it `memset(tail, 0, 0x10)`
+    // over an unmodelled byte array; the three named fields are the same bytes.
+    self->_pool._data     = nullptr;                      // 1800a5498  +0xf8
+    self->_pool._size     = 0;                            // 1800a549f  +0x100
+    self->_pool._capacity = 0;                            //            +0x104
 }
 
 }  // namespace
@@ -660,18 +687,25 @@ extern "C" void* RtGraphics_ParticleSystem_Ctor(void* selfv) {
     return selfv;                                          // 1800a54a6  MOV RAX,RCX
 }
 
-// Construct/Reconstruct are the vtable slots; each is retail's `JMP 0x1800a5320`
-// (Construct) / `vtable[0](this,0)` then the same ctor (Reconstruct). They call
-// OUR ctor directly now rather than round-tripping through ResolveAddr.
+// Construct/Reconstruct/Destruct are vtable slots [9]/[6]/[7]; each is retail's
+// `JMP 0x1800a5320` (Construct) / `vtable[0](this,0)` then the same ctor
+// (Reconstruct) / a tail call to `vtable[0](this,0)` (Destruct). ENDGAME B.3.5
+// block H2: the bodies moved onto the members and each door is a one-line
+// QUALIFIED delegation. The retail null test in `Construct` stays IN THE DOOR
+// (B35 class-block brief).
 extern "C" void* RtGraphics_ParticleSystem_Construct(void* selfv) {
     if (!selfv) return nullptr;
-    return RtGraphics_ParticleSystem_Ctor(selfv);
+    return reinterpret_cast<::Graphics::ParticleSystem*>(selfv)           // B.3.5 bridge
+               ->::Graphics::ParticleSystem::Construct();
 }
 extern "C" void* RtGraphics_ParticleSystem_Reconstruct(void* selfv) {
-    CallSlot0(selfv, 0);
-    return RtGraphics_ParticleSystem_Ctor(selfv);
+    return reinterpret_cast<::Graphics::ParticleSystem*>(selfv)           // B.3.5 bridge
+               ->::Graphics::ParticleSystem::Reconstruct();
 }
-extern "C" void RtGraphics_ParticleSystem_Destruct(void* selfv) { CallSlot0(selfv, 0); }
+extern "C" void RtGraphics_ParticleSystem_Destruct(void* selfv) {
+    reinterpret_cast<::Graphics::ParticleSystem*>(selfv)                  // B.3.5 bridge
+        ->::Graphics::ParticleSystem::Destruct();
+}
 
 // ============================================================================
 // ?CreateSystem@ParticleSystem@Graphics@@ — retail 0x1800a5140, ord 2134.
@@ -702,52 +736,176 @@ extern "C" void RtGraphics_ParticleSystem_Destruct(void* selfv) { CallSlot0(self
 // registry first, so the day wave28_lane_partsys.cpp's class gets a ctor this
 // call site picks it up with no edit here.
 // ============================================================================
-extern "C" void* RtGraphics_ParticleSystem_CreateSystem(void* /*self, never read*/) {
-    void* inst = rtcoll::MemAlloc(0xe0, 8);                // 1800a5183
-    if (!inst) return nullptr;                             // 1800a519c -> XOR EAX,EAX
-    using CtorFn = void* (*)(void*);
-    return RtAddr<CtorFn>(0x1800a55a0ull)(inst);           // 1800a51a1
+// ENDGAME B.3.5 block H2: BODY MOVED onto the member. *** THIS IS SLOT 8, NOT
+// SLOT 9 — RULE B5-16's trap. *** `Particle` introduced `CreateSystem` PURE at
+// slot 8, so `Construct` sits one slot further along, at 9, on this class alone.
+// The return type is `ParticleInstance*`, NOT `Object::External*`; swapping the
+// two slots would produce a `CreateSystem` that hands callers an `External*`
+// through the right vtable index, which is silent.
+extern "C" void* RtGraphics_ParticleSystem_CreateSystem(void* selfv) {
+    return reinterpret_cast<const ::Graphics::ParticleSystem*>(selfv)      // B.3.5 bridge
+               ->::Graphics::ParticleSystem::CreateSystem();
 }
 
 extern "C" bool RtGraphics_ParticleSystem_Serialize(void* selfv, void* streamv) {
-    ParticleSystem* self = static_cast<ParticleSystem*>(selfv);
+    return reinterpret_cast<::Graphics::ParticleSystem*>(selfv)            // B.3.5 bridge
+               ->::Graphics::ParticleSystem::Serialize(streamv);
+}
+
+// ############################################################################
+// ENDGAME B.3.5 step 5, block H2 — `Graphics::ParticleSystem`'s member bodies.
+//
+// Their own `namespace Graphics { }` block, after the anonymous namespace above
+// has closed, because a member definition has to appear in a namespace ENCLOSING
+// the class and `Graphics` / `RtGraphics` are siblings (B34_BRIEFS section A.2).
+// The anonymous namespace's helpers — `ParticleSystemConstructBody`, `CallSlot0`,
+// `ParticleSystemTypeInfo`, `MakeReaderWriter`, `RwScalar`, `RwFloats`,
+// `IsReading`, `RtAddr` — are reachable from here unqualified.
+//
+// `Graphics::Particle` GETS NO BODIES HERE. Its `Serialize` and its three
+// type-info forwarders are in `wave27_lane_gfxpart.cpp` (also block H2's), which
+// is where that slot has always lived.
+// ############################################################################
+
+namespace Graphics {
+
+// [1] ?TypeName@ParticleSystem@Graphics@@UEBAPEBDXZ  0x1800203e0
+//     reads `?_typeInfo@ParticleSystem@Graphics@@` + 8 (BaseTypeInfo::name).
+const char* ParticleSystem::TypeName() const {
+    const char* v = nullptr; std::memcpy(&v, ParticleSystemTypeInfo() + 8, sizeof v); return v;
+}
+
+// [2] ?Type@ParticleSystem@Graphics@@UEBAIXZ  0x1800203c0 — the record's +0x00.
+uint32_t ParticleSystem::Type() const {
+    uint32_t v = 0; std::memcpy(&v, ParticleSystemTypeInfo(), sizeof v); return v;
+}
+
+// [3] ?GetFileVersion@ParticleSystem@Graphics@@UEBAHXZ  0x1800a4d10.
+//     0x1001 == 4097, and it is NOT `Particle`'s 0x1000 — the two were decoded
+//     separately and the difference is why each is its own literal (B35_RULES
+//     section 6.1: a wrong GetFileVersion silently drops content).
+int32_t ParticleSystem::GetFileVersion() const { return 0x1001; }
+
+// [9] ?Construct@ParticleSystem@Graphics@@UEAAPEAVExternal@Object@@XZ 0x180020580
+//     `JMP 0x1800a5320` — the constructor body, in place. SLOT NINE.
+Object::External* ParticleSystem::Construct() {
+    ParticleSystemConstructBody(this);
+    return this;
+}
+
+// [6] ?Reconstruct@ParticleSystem@Graphics@@UEAAPEAVExternal@Object@@XZ 0x180020560
+//     `vtable[0](this, 0)` then the same in-place construction. Slot 0 is called
+//     VIRTUALLY on purpose — retail dispatches it, and a subclass's deleting
+//     destructor is what has to run.
+Object::External* ParticleSystem::Reconstruct() {
+    CallSlot0(this, 0);
+    ParticleSystemConstructBody(this);
+    return this;
+}
+
+// [7] ?Destruct@ParticleSystem@Graphics@@UEAAXXZ  0x180020590
+void ParticleSystem::Destruct() { CallSlot0(this, 0); }
+
+// ??1ParticleSystem@Graphics@@UEAA@XZ  0x1800a51c0 — NOT ported anywhere in the
+// tree and not started here. EMPTY for `~AnimationGroup`'s reason: the retail
+// body stamps the MINTED table, which is right for a minted object and wrong for
+// a converted one, and a real destructor chain emits GCC's stamps for free.
+ParticleSystem::~ParticleSystem() {}
+
+// [8] ?CreateSystem@ParticleSystem@Graphics@@UEBAPEAVParticleInstance@2@XZ
+//     retail 0x1800a5140. `this` IS NEVER READ (see the banner above the door):
+//     retail ignores the ParticleSystem entirely and the returned instance is
+//     bound to its system later, by the caller.
+ParticleInstance* ParticleSystem::CreateSystem() const {
+    void* inst = rtcoll::MemAlloc(0xe0, 8);                // 1800a5183
+    if (!inst) return nullptr;                             // 1800a519c -> XOR EAX,EAX
+    // 0x1800a55a0 (`Graphics::ParticleInstance::ParticleInstance`) is NOT this
+    // block's row and is reached BY ADDRESS — ResolveAddr consults the port
+    // registry first, so it lands on `animation.cpp`'s ported ctor door. The
+    // result is reinterpreted rather than static_cast because `ParticleInstance`
+    // is only FORWARD-DECLARED in `Particle.h`: including `ParticleInstance.h`
+    // here would drag `Geometry.h` -> `Volume.h` into a translation unit that has
+    // already seen `<windows.h>`, which is the `Rectangle` collision block E
+    // measured.
+    using CtorFn = void* (*)(void*);
+    return reinterpret_cast<ParticleInstance*>(
+        RtAddr<CtorFn>(0x1800a55a0ull)(inst));             // 1800a51a1
+}
+
+// [5] ?Serialize@ParticleSystem@Graphics@@UEAA_NAEAVStream@IO@@@Z  0x1800a4d20.
+//
+// *** THE EMISSION ORDER IS RETAIL'S AND IT IS NOT THE DECLARATION ORDER. ***
+// `_spreadScale` (+0x78) goes out BEFORE `_spreadX/Y/Z` (+0x6c), which is why the
+// header declares the fields in ascending memory order and the order lives here.
+bool ParticleSystem::Serialize(void* streamv) {
     Stream* stream = static_cast<Stream*>(streamv);
 
-    // Particle::Serialize base call (0x180103f00) -- already ported? Not by
-    // this batch; reached by address (falls back to the DLL if unregistered).
+    // `Particle::Serialize` (0x180103f00) — the base slot, reached BY ADDRESS
+    // exactly as retail's `CALL` does. It IS ported now, as
+    // `Graphics::Particle::Serialize` in `wave27_lane_gfxpart.cpp` (also block
+    // H2's file), and ResolveAddr consults the port registry first
+    // (reference_resolveaddr_consults_port_registry_first.md), so this call site
+    // lands on that member's door with no edit here. It is deliberately NOT
+    // rewritten as `Particle::Serialize(streamv)`: retail's own instruction is an
+    // indirect call at that address, and a direct qualified call would bypass the
+    // registry — the one place where the door, not the C++ base, decides.
     using BaseSerFn = void (*)(void*, void*);
-    RtAddr<BaseSerFn>(0x180103f00ull)(self, stream);
+    RtAddr<BaseSerFn>(0x180103f00ull)(this, stream);
 
     Serializer ser{};
     ReaderWriter* rw = MakeReaderWriter(&ser, stream);
 
-    RwScalar(rw, rw_vtbl::kScalarFloat, &self->f48);
-    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &self->f4c);
-    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &self->f50);
-    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarInt64, &self->i58);
-    rw = ser.readerWriter; RwFloats(rw, 3, &self->emitDirX);
-    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &self->f78);   // retail's order: 0x78 before 0x6c
-    rw = ser.readerWriter; RwFloats(rw, 3, &self->spreadX);
+    RwScalar(rw, rw_vtbl::kScalarFloat, &_f48);
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &_rateAccelA);
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &_rateAccelB);
+    // ENDGAME B.3.5 block H2 — THE FIRST OF THE THREE HAND-INLINED int64 SLOT
+    // CALLS B35_RULES section 11 listed in this file as "receiver-side work".
+    // Block H2 owns this receiver, and `IO::Serializer::Serialize(int64_t&, const
+    // char*)` @ 0x180035000 is a real member, so it is spelled as a member call.
+    // That member's own body still calls the ReaderWriter's +0x90 slot
+    // (Serializer.h section 3.1: the 22 members keep their raw slot calls until
+    // the minted tables retire), so this is a spelling change and nothing else.
+    // The cast is the bridge from the POD `rt::io::Serializer` this body builds on
+    // the stack to the real class; block H1 converted its one site the same way.
+    reinterpret_cast<IO::Serializer*>(&ser)->Serialize(_durationTicks, nullptr);  // B.3.5 bridge
+    rw = ser.readerWriter; RwFloats(rw, 3, &_emitDirX);
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &_spreadScale); // retail's order: 0x78 before 0x6c
+    rw = ser.readerWriter; RwFloats(rw, 3, &_spreadX);
 
-    float* f7cArray = &self->f7c;
-    for (int i = 0; i < 15; ++i) {
-        rw = ser.readerWriter;
-        RwScalar(rw, rw_vtbl::kScalarFloat, &f7cArray[i]);
-    }
+    // The fifteen consecutive float scalars, +0x7c..+0xb4. Written out one field
+    // at a time rather than walked as `float*`: retail emits fifteen separate
+    // scalar calls, the names are what a reader needs, and `Particle.h` carries a
+    // `static_assert` that the run is still contiguous.
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &_angleBRange);
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &_angleARange);
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &_speedBase);
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &_speedRange);
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &_accelScale);
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &_damping);
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &_rotBase);
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &_rotRange);
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &_spinBase);
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &_spinRange);
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &_spinAccel);
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &_spinDamp);
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &_lifeBase);
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &_lifeRange);
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &_gravScale);
 
-    rw = ser.readerWriter; RwFloats(rw, 3, &self->gravX);
+    rw = ser.readerWriter; RwFloats(rw, 3, &_gravX);
 
-    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &self->fc4);
-    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &self->fc8);
-    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &self->fcc);
-    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &self->fd0);
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &_sizeBase);
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &_sizeRange);
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &_sizeAccel);
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &_sizeDamp);
 
-    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarUInt, &self->color0);
-    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarUInt, &self->color1);
-    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &self->colorT0);
-    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &self->colorT1);
-    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarInt64, &self->fadeInTicks);
-    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarInt64, &self->fadeOutTicks);
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarUInt, &_color0);
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarUInt, &_color1);
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &_colorT0);
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarFloat, &_colorT1);
+    // The second and third int64 sites — same conversion, same reason.
+    reinterpret_cast<IO::Serializer*>(&ser)->Serialize(_fadeInTicks, nullptr);   // B.3.5 bridge
+    reinterpret_cast<IO::Serializer*>(&ser)->Serialize(_fadeOutTicks, nullptr);  // B.3.5 bridge
 
     // READ-ONLY tail (retail 0x1800a505c..0x1800a5107): when reading and the
     // resource is active (Particle::_active, +0x20), rebuild the pool-pointer
@@ -774,20 +932,17 @@ extern "C" bool RtGraphics_ParticleSystem_Serialize(void* selfv, void* streamv) 
     // Enter/Allocate(0x18, align 8)/Leave triple on the same singleton, rather
     // than re-opening address doors onto 0x1801fc718+0x640 / 0x18014b390 /
     // 0x1800c6e60 / 0x18014b388 that array.cpp already owns.
-    if (IsReading(stream) && self->base._active != 0) {
+    if (IsReading(stream) && _active != 0) {
         using SetSizeFn = void (*)(void*, int32_t);
-        RtAddr<SetSizeFn>(0x180021220ull)(reinterpret_cast<uint8_t*>(self) + 0xf8,
-                                          self->base._f24);            // 1800a507a
-        uint8_t** poolArr = *reinterpret_cast<uint8_t***>(
-            reinterpret_cast<uint8_t*>(self) + 0xf8);                   // 1800a50f1
+        RtAddr<SetSizeFn>(0x180021220ull)(&_pool, _recordCount);        // 1800a507a
+        uint8_t** poolArr = reinterpret_cast<uint8_t**>(_pool._data);   // 1800a50f1
         SetSizeFn innerSetSize = RtAddr<SetSizeFn>(0x180020e90ull);
-        for (int32_t i = 0; i < self->base._f24; ++i) {                 // 1800a5103
+        for (int32_t i = 0; i < _recordCount; ++i) {                    // 1800a5103
             uint8_t* rec = static_cast<uint8_t*>(rtcoll::MemAlloc(0x18, 8));
             if (rec) {                                                  // 1800a50d4
                 std::memset(rec, 0, 0x10);                              // 1800a50d8/db
-                std::memcpy(rec + 0x10,                                 // 1800a50df/e2
-                            reinterpret_cast<const uint8_t*>(self) + 0x48, 4);
-                innerSetSize(rec, self->base._f28);                     // 1800a50eb
+                std::memcpy(rec + 0x10, &_f48, 4);                      // 1800a50df/e2
+                innerSetSize(rec, _subCount);                           // 1800a50eb
             }
             // Retail stores RDI unconditionally, so a failed allocation parks a
             // null in the slot rather than skipping the index.
@@ -798,6 +953,8 @@ extern "C" bool RtGraphics_ParticleSystem_Serialize(void* selfv, void* streamv) 
     DestroyReaderWriter(ser.readerWriter);
     return true;
 }
+
+}  // namespace Graphics
 
 int RtGraphicsBatch7AnimGroupParticleSystemRegister() {
     int n = 0;

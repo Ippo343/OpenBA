@@ -155,12 +155,15 @@ public:
     // `?GetSunCamera@SunLight@Graphics@@QEBA?AVCamera@2@AEAVRenderer@2@@Z`
     // @ 0x180107010 is PORTED (`runtime/src/graphics/sun_camera.cpp`) and is a
     // HIDDEN-RETSLOT export: it returns `Graphics::Camera` — 0xd8 — BY VALUE
-    // (B35_RULES §2.5). A by-value return needs the COMPLETE type, and
-    // `Graphics::Camera` is block F's class, so this member cannot be declared
-    // until `runtime/types/graphics/Camera.h` carries the real class. Its door
-    // keeps the registration and the body; block F adds:
-    //     Camera GetSunCamera(Renderer& renderer) const;   // 0x180107010
-    // Recorded here rather than left to be rediscovered.
+    // (B35_RULES §2.5).
+    //
+    // ENDGAME B.3.5 BLOCK F added this line and moved the body onto it. Block E
+    // recorded the declaration as a comment because a by-value return needs the
+    // COMPLETE type and `Graphics::Camera` was still a POD; the class exists now
+    // and `Light.h` (included above) includes `Camera.h`. NON-VIRTUAL, so the
+    // by-value return is correct C++; the door keeps retail's
+    // `(this, ret, renderer)` order and placement-news the prvalue.
+    Camera GetSunCamera(Renderer& renderer) const;   // 0x180107010
 
 protected:
     ~SunLight();     // 0x180108160  PORTED, body in sunlight.cpp

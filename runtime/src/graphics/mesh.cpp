@@ -130,6 +130,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/Mesh.h"
+#include "../../types/graphics/GraphicsMesh.h"   // ENDGAME B.3.5 block G
 
 using RtGraphics::ExternalPtr;
 using RtGraphics::Geometry;
@@ -393,13 +394,12 @@ template <typename T> T  Rd(const void* p, size_t off) {
 // both implementations can run on the live object and the two results compared
 // directly.
 // ============================================================================
+// ENDGAME B.3.5 block G: BODY MOVED to
+// `Graphics::GraphicsMesh::GetMaterialList(int32_t)`. The door keeps its name and
+// its registration and delegates with a QUALIFIED non-virtual call.
 static const void* RtGraphics_GraphicsMesh_GetMaterialList(const void* self, int index) {
-
-    const GraphicsMeshView* mesh = reinterpret_cast<const GraphicsMeshView*>(self);
-    const void* ours = reinterpret_cast<const uint8_t*>(mesh->_materialLists)
-                     + static_cast<int64_t>(index) * 0x10;
-
-    return ours;
+    return &reinterpret_cast<const Graphics::GraphicsMesh*>(self)      // B.3.5 bridge
+                ->Graphics::GraphicsMesh::GetMaterialList(index);
 }
 
 // ============================================================================
@@ -424,34 +424,11 @@ static const void* RtGraphics_GraphicsMesh_GetMaterialList(const void* self, int
 //
 // ORACLE: FULL. Const, no side effects.
 // ============================================================================
+// ENDGAME B.3.5 block G: BODY MOVED to
+// `Graphics::GraphicsMesh::GetNodeIndexFromName(const char*)`.
 static int RtGraphics_GraphicsMesh_GetNodeIndexFromName(const void* self, const char* name) {
-
-    const GraphicsMeshView* mesh = reinterpret_cast<const GraphicsMeshView*>(self);
-    const int count = mesh->_nodes._size;
-    const MeshNode* nodes = mesh->_nodes._data;
-
-    int ours = -1;
-    for (int i = 0; i < count; ++i) {
-        const char* nodeName = nodes[i]._name;
-        if (nodeName == nullptr) {
-            if (name == nullptr) { ours = i; break; }
-            continue;                       // named-vs-null: skip, do not deref
-        }
-        if (name == nullptr) continue;      // ditto, the other way round
-
-        // Retail's inlined strcmp: walk while the bytes agree and neither has
-        // hit its terminator, then subtract the two bytes at the stopping
-        // index. Reproduced literally so the returned "equal / not equal" is
-        // decided on the same index retail decides it on.
-        int64_t k = 0;
-        if (nodeName[0] == name[0]) {
-            while (nodeName[k] != '\0' && name[k] != '\0' && nodeName[k + 1] == name[k + 1])
-                ++k;
-        }
-        if (static_cast<int>(nodeName[k]) - static_cast<int>(name[k]) == 0) { ours = i; break; }
-    }
-
-    return ours;
+    return reinterpret_cast<const Graphics::GraphicsMesh*>(self)       // B.3.5 bridge
+               ->Graphics::GraphicsMesh::GetNodeIndexFromName(name);
 }
 
 // ============================================================================
@@ -1020,25 +997,40 @@ static void* RtGraphics_EdgeMesh_EdgeVertex_Ctor(void* self, const void* a, cons
 //    Graphics@@@Object@@000@Z
 //   retail 0x1800a2760, ordinal 3910
 //
-// Four stores — and THE MIDDLE TWO ARE CROSSED. Retail writes arg1 to +0x28,
+// Four stores — and THE MIDDLE TWO LOOK CROSSED. Retail writes arg1 to +0x28,
 // arg2 to +0x38, arg3 to +0x30 and arg4 to +0x40. That is not a decompiler
-// artefact (the four MOVs name their source registers explicitly) and it is not
-// something to tidy up: EdgeMeshInstance::SetMesh reads the same four slots and
-// would see a different assignment if this were "corrected". Reproduced as
-// shipped; the note is repeated in runtime/types/graphics/Mesh.h so a reader of
-// either file meets it.
+// artefact (the four MOVs name their source registers explicitly).
+//
+// *** ENDGAME B.3.5 BLOCK G: NOTHING IS CROSSED, AND THE FOUR GETTERS SAY SO. ***
+//     ?GetMaskMaterial@     0x180012ef0  MOV RAX,[RCX+0x28]
+//     ?GetSkinMaskMaterial@ 0x180012f10  MOV RAX,[RCX+0x30]
+//     ?GetEdgeMaterial@     0x180012f00  MOV RAX,[RCX+0x38]
+//     ?GetSkinEdgeMaterial@ 0x180012f20  MOV RAX,[RCX+0x40]
+// The FIELDS are laid out (mask, skinMask, edge, skinEdge) — each skin variant
+// next to its base — and the ARGUMENTS come in as (mask, edge, skinMask,
+// skinEdge). Two groupings of the same four things; no crossing to reproduce and
+// nothing to warn a future reader about. The member below names all four
+// parameters, so the pairing is visible at the call site instead of being a note.
 //
 // ORACLE: FULL by replay — four idempotent stores.
+//
+// ENDGAME B.3.5 block G: BODY MOVED to `Graphics::EdgeMesh::SetMaterials`.
 // ============================================================================
 static void RtGraphics_EdgeMesh_SetMaterials(void* self, ExternalPtr m0, ExternalPtr m1,
                                              ExternalPtr m2, ExternalPtr m3) {
-
-    EdgeMesh* em = reinterpret_cast<EdgeMesh*>(self);
-    em->_material0 = m0;    // +0x28  <- arg 1
-    em->_material2 = m1;    // +0x38  <- arg 2
-    em->_material1 = m2;    // +0x30  <- arg 3   (crossed, see above)
-    em->_material3 = m3;    // +0x40  <- arg 4
-
+    // The four `RtGraphics::ExternalPtr` handles and the four
+    // `Object::ExternalPtr<MaterialInstance>`s are the same eight bytes; the door
+    // keeps the POD spelling its registration was written with.
+    reinterpret_cast<Graphics::EdgeMesh*>(self)                     // B.3.5 bridge
+        ->Graphics::EdgeMesh::SetMaterials(
+            Object::ExternalPtr<Graphics::MaterialInstance>(
+                static_cast<Graphics::MaterialInstance*>(m0.p)),
+            Object::ExternalPtr<Graphics::MaterialInstance>(
+                static_cast<Graphics::MaterialInstance*>(m1.p)),
+            Object::ExternalPtr<Graphics::MaterialInstance>(
+                static_cast<Graphics::MaterialInstance*>(m2.p)),
+            Object::ExternalPtr<Graphics::MaterialInstance>(
+                static_cast<Graphics::MaterialInstance*>(m3.p)));
 }
 
 // ============================================================================
@@ -2923,6 +2915,109 @@ void EdgeMeshInstance::AddDrawItems(const Scene& scene, Renderer& renderer) cons
             ++g_addDrawItemsEdgeQ;
         }
     }
+}
+
+// ############################################################################
+// ENDGAME B.3.5 step 5, block G — `Graphics::GraphicsMesh`'s two members whose
+// live bodies were this file's doors. `GraphicsMesh` is block G's class; the two
+// doors above keep their registrations and now delegate here.
+// ############################################################################
+
+// ---------------------------------------------------------------------------
+// ?GetMaterialList@GraphicsMesh@Graphics@@QEBAAEBV?$Array@V?$ExternalPtr@
+//  VMaterialInstance@Graphics@@@Object@@@Collection@@H@Z   retail 0x1800126c0
+//
+// The whole body is `return *(mesh + 0x70) + index * 0x10`. `_skinMaterials` is
+// an `Array<Array<ExternalPtr<MaterialInstance>>>`, so `_data` is the buffer of
+// 0x10-byte Array HEADERS and `index` selects a header, not an element — the
+// distinction `Mesh.h`'s `GraphicsMeshView` banner says cost lane E its first
+// integration run. `_skinMaterials._size` is what `?GetSkinCount@` returns, i.e.
+// there is one material list per skin.
+//
+// ORACLE: FULL (pure pointer arithmetic on a const object, no side effects).
+// ---------------------------------------------------------------------------
+const Collection::Array<Object::ExternalPtr<MaterialInstance> >&
+GraphicsMesh::GetMaterialList(int32_t skin) const {
+    const uint8_t* const headers = _skinMaterials._data;
+    return *reinterpret_cast<const Collection::Array<Object::ExternalPtr<MaterialInstance> >*>(
+        headers + static_cast<int64_t>(skin) * 0x10);
+}
+
+// ---------------------------------------------------------------------------
+// ?GetNodeIndexFromName@GraphicsMesh@Graphics@@QEBAHPEBD@Z  retail 0x1800fee90
+//
+// A linear scan of `_nodes` comparing each node's name to `name`, with retail's
+// own inlined strcmp. Two details that are NOT ordinary strcmp and are
+// reproduced exactly rather than replaced with std::strcmp:
+//
+//  * NULL is a legal name on both sides and compares EQUAL to NULL. If a node's
+//    name is null the body returns that node's index when `name` is null too,
+//    and otherwise SKIPS the node without comparing — it never dereferences a
+//    null (`if (pcVar1 == 0) { if (param_1 == 0) return i; } else if (param_1
+//    != 0) {...}`). A null `name` against a named node therefore falls through
+//    to "not this one", not to a crash. This is not a guard retail lacks; it is
+//    retail's own control flow, and CLAUDE.md's rule about not inventing null
+//    checks cuts the other way here — inventing a std::strcmp would ADD a crash
+//    retail does not have.
+//  * The scan returns the FIRST match, and -1 when nothing matches.
+//
+// `_nodes` is the RAW `Array<uint8_t>` header the real class declares (see
+// `GraphicsMesh.h`: the element lifecycle belongs to the registered `kSpec_*`
+// rows), so the walk strides `sizeof(GraphicsMesh::Node)` explicitly — which the
+// header asserts is retail's 0x48.
+//
+// ORACLE: FULL. Const, no side effects.
+// ---------------------------------------------------------------------------
+int32_t GraphicsMesh::GetNodeIndexFromName(const char* name) const {
+    const int32_t count = _nodes._size;
+    const Node* const nodes = reinterpret_cast<const Node*>(_nodes._data);
+
+    int32_t ours = -1;
+    for (int32_t i = 0; i < count; ++i) {
+        const char* nodeName = nodes[i]._name.data;
+        if (nodeName == nullptr) {
+            if (name == nullptr) { ours = i; break; }
+            continue;                       // named-vs-null: skip, do not deref
+        }
+        if (name == nullptr) continue;      // ditto, the other way round
+
+        // Retail's inlined strcmp: walk while the bytes agree and neither has
+        // hit its terminator, then subtract the two bytes at the stopping
+        // index. Reproduced literally so the returned "equal / not equal" is
+        // decided on the same index retail decides it on.
+        int64_t k = 0;
+        if (nodeName[0] == name[0]) {
+            while (nodeName[k] != '\0' && name[k] != '\0' && nodeName[k + 1] == name[k + 1])
+                ++k;
+        }
+        if (static_cast<int>(nodeName[k]) - static_cast<int>(name[k]) == 0) { ours = i; break; }
+    }
+
+    return ours;
+}
+
+// ---------------------------------------------------------------------------
+// ?SetMaterials@EdgeMesh@Graphics@@QEAAXV?$ExternalPtr@VMaterialInstance@
+//  Graphics@@@Object@@000@Z                              retail 0x1800a2760
+//
+// Retail's four stores are arg1 -> +0x28, arg2 -> +0x38, arg3 -> +0x30,
+// arg4 -> +0x40, and the four exported getters name those four offsets
+// mask / edge / skinMask / skinEdge — see the door's banner above. Written out
+// with the parameters named, which is the same four stores and no longer needs a
+// warning attached.
+//
+// `EdgeMeshInstance::SetMesh` reads the four back in the order +0x38, +0x28,
+// +0x40, +0x30 when it ORs their material type flags; that is edge, mask,
+// skinEdge, skinMask, and it is unaffected by this spelling.
+// ---------------------------------------------------------------------------
+void EdgeMesh::SetMaterials(Object::ExternalPtr<MaterialInstance> mask,
+                            Object::ExternalPtr<MaterialInstance> edge,
+                            Object::ExternalPtr<MaterialInstance> skinMask,
+                            Object::ExternalPtr<MaterialInstance> skinEdge) {
+    _maskMaterial     = mask;       // +0x28  <- arg 1
+    _edgeMaterial     = edge;       // +0x38  <- arg 2
+    _skinMaskMaterial = skinMask;   // +0x30  <- arg 3
+    _skinEdgeMaterial = skinEdge;   // +0x40  <- arg 4
 }
 
 }  // namespace Graphics

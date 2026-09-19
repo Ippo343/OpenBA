@@ -57,11 +57,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <new>                 // placement new, for the Node copy-ctor door
 
 #include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
 #include "../../types/collection/Collection.h"
 #include "../../types/graphics/AnimationManager.h"
+#include "../../types/graphics/GraphicsMesh.h"   // ENDGAME B.3.5 block G
 // ENDGAME B.3.5 block H1: the real `Graphics::Animation` / `AnimationState` /
 // `AnimationManager` classes, and `System::Time` for the two tick parameters
 // `Animation::GetPoseAtTime` takes by reference. Value.h is what drags the ONE
@@ -183,22 +185,19 @@ bool IsReading(const Serializer* ser) {
 // raw MemAlloc memory — and is why Array<Node>::operator= can call it directly
 // on a buffer it has just allocated.
 //
-// *** +0x45..+0x47 IS NOT COPIED. *** The last store is a dword at +0x40; the
-// record is 0x48 bytes. Zeroing the tail here would be unfaithful and would
+// *** +0x44..+0x47 IS NOT COPIED. *** The last dword the loop writes is at
+// +0x40, so the copy covers +0x08..+0x43 and the tail dword at +0x44 keeps
+// whatever the destination held. Zeroing it here would be unfaithful and would
 // make a byte comparator fail on bytes neither side writes.
+//
+// ENDGAME B.3.5 block G: BODY MOVED to `Graphics::GraphicsMesh::Node`'s copy
+// constructor, at the bottom of this file's `namespace Graphics` block. The
+// fifteen-dword flat copy became three member assignments — `_parent` (4) +
+// `_local` (0x1c) + `_bind` (0x1c) is EXACTLY +0x08..+0x43 — which is also why
+// `_pad44` is left alone without a comment having to promise it.
 extern "C" void* RtGraphics_MeshNode_CopyCtor(void* dstv, const void* srcv) {
-    uint8_t* d = static_cast<uint8_t*>(dstv);
-    const uint8_t* s = static_cast<const uint8_t*>(srcv);
-
-    *reinterpret_cast<void**>(d) = nullptr;
-    uint8_t* name = *reinterpret_cast<uint8_t* const*>(s);
-    if (name != nullptr) {
-        *reinterpret_cast<uint8_t**>(d) = name;
-        ++*reinterpret_cast<int32_t*>(name - 4);       // System::String refcount at str-4
-    }
-    for (int off = 0x08; off <= 0x40; off += 4)
-        *reinterpret_cast<uint32_t*>(d + off) = *reinterpret_cast<const uint32_t*>(s + off);
-    return d;
+    return new (dstv) Graphics::GraphicsMesh::Node(                  // B.3.5 bridge
+        *reinterpret_cast<const Graphics::GraphicsMesh::Node*>(srcv));
 }
 
 // 0x18005b660 — Graphics::AnimationState's copy constructor.
@@ -725,6 +724,33 @@ void Animation::GetPoseAtTime(const System::Time& timeRef, const System::Time& d
     *reinterpret_cast<float*>(out + 0x10) *= scale;
     *reinterpret_cast<float*>(out + 0x14) *= scale;
     *reinterpret_cast<float*>(out + 0x18) *= scale;
+}
+
+// ---------------------------------------------------------------------------
+// ENDGAME B.3.5 step 5, block G - `Graphics::GraphicsMesh::Node`'s copy
+// constructor, the ONE `GraphicsMesh` fragment in this file (B35_FILEMAP.md:97).
+//   ??0Node@GraphicsMesh@Graphics@@QEAA@AEBU012@@Z      retail 0x1800127f0
+//
+// The name slot is stored ZERO FIRST and only then given the source's pointer:
+// that is what makes this safe to run into raw `MemAlloc` memory, and it is why
+// retail's `Array<Node>::operator=` calls it directly on a buffer it has just
+// allocated. A member-initialiser list would do the same thing, but the two
+// stores are written out in retail's order so the sequence stays visible.
+//
+// THE THREE ASSIGNMENTS ARE RETAIL'S FIFTEEN-DWORD FLAT COPY, exactly:
+// `_parent` (4) + `_local` (0x1c) + `_bind` (0x1c) = 0x3c bytes spanning
+// +0x08..+0x43, which is `for (off = 0x08; off <= 0x40; off += 4)`. `_pad44` is
+// NOT assigned, which is retail's own behaviour and not an omission.
+// ---------------------------------------------------------------------------
+GraphicsMesh::Node::Node(const Node& src) {
+    _name.data = nullptr;
+    if (src._name.data != nullptr) {
+        _name.data = src._name.data;
+        ++RtSystem::StringRefCount(_name.data);   // System::String refcount at str-4
+    }
+    _parent = src._parent;
+    _local  = src._local;
+    _bind   = src._bind;
 }
 
 }  // namespace Graphics

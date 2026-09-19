@@ -159,6 +159,70 @@ UNIT_TREE_SRCS +=
 # already on this list.
 UNIT_TREE_SRCS +=
 
+# ENDGAME B.3.5 step 5 block G -- the REAL Graphics material/mesh resource
+# classes (tests/unit/graphics_material_abi_test.cpp): `Graphics::Material`,
+# `MaterialInstance`, `GraphicsMesh` and `EdgeMesh`. NO TREE SOURCE IS LINKED,
+# for block H1's reason one line up: every body lives in
+# `runtime/src/graphics/material.cpp`, `graphicsmesh_vtable.cpp`,
+# `edgemesh_vtable.cpp`, `mesh.cpp` and the wave-lane files, all of which stand
+# on `RegisterRuntimeExport` / `RT_DATA_SLOT` / `ResolveAddr` and cannot link
+# here. The four classes' out-of-line key-function bodies are therefore defined
+# AT THE BOTTOM OF THE TEST FILE as markers, which is what lets GCC emit their
+# vtables in that translation unit so the probes can raw-call every slot. The
+# test is an ABI test -- slot order (including that slot 4 is INHERITED
+# `?Compile@External@Object@@` on three of the four and EdgeMesh's OWN body on
+# the fourth), sizes, offsets and the class/POD cross-asserts -- so marker
+# bodies are the right bodies. `Object::External` / `Object::CompiledExternal`
+# come through runtime/types/object/External.h, whose linkable half
+# (external_class.cpp) is already on this list.
+UNIT_TREE_SRCS +=
+
+# ENDGAME B.3.5 block F — `Graphics::Camera`, `Graphics::Renderer`,
+# `Graphics::Scene` and the four Renderer array element types
+# (tests/unit/graphics_renderer_abi_test.cpp). NO TREE SOURCE IS LINKED, and
+# unlike block E's Geometry test there are no marker bodies either: none of the
+# seven classes is polymorphic, so there is no vtable for a translation unit to
+# emit and nothing forces a key function to exist here. Every body lives in
+# `runtime/src/graphics/{renderer,scene,cull,sun_camera,wave9_lane_gfxd,
+# wave29_lane_gfxbody,closure_batch2b}.cpp`, which stand on
+# `RegisterRuntimeExport` / `ResolveAddr` / `RT_EXPORT_ONCE` / `RT_DATA_SLOT` and
+# cannot link here (the same reason `external_class_doors.cpp` is kept out), and
+# writing marker bodies for members that already have real ones would be a second
+# definition. So the test is LAYOUT plus two ABI properties — RULE B5-4's trivial
+# copyability in both directions, and the `(this, ret)` retslot door shape on a
+# NON-virtual by-value return, which is the other half of block E's ms_abi
+# finding. `Math::Transform3` / `Math::Matrix` / `::Frustum` are the real classes
+# (runtime/src/math/ is already on this list), so the copies it checks are real.
+# The arithmetic in `Camera::IsMirrored`, `SunLight::GetSunCamera` and
+# `Scene::Clean` is verified by the real run.
+UNIT_TREE_SRCS +=
+
+# ENDGAME B.3.5 step 5 block H2 — the REAL `Graphics::Particle` and
+# `Graphics::ParticleSystem` (tests/unit/graphics_particle_abi_test.cpp). NO TREE
+# SOURCE IS LINKED, for the reason block E's and block H1's graphics tests give:
+# every body of these two classes lives in
+# `runtime/src/graphics/wave27_lane_gfxpart.cpp` and
+# `vtbatch7_animgroup_particlesystem.cpp`, which stand on `RegisterRuntimeExport`,
+# `RT_DATA_SLOT`, `ResolveAddr` and `rtcoll::MemAlloc` and cannot link here.
+#
+# NOR ARE MARKER BODIES NEEDED, which is the one difference from block H1's file.
+# Both classes are ABSTRACT (slot 0 is `= 0` at every level, because its body is a
+# minted RT_DELDTOR row §11 forbids retiring), so nothing in the test instantiates
+# either one and GCC is never asked for their vtables: the real classes are used
+# for `sizeof`/`offsetof`/`is_same` claims only, and the slot ABI is measured on a
+# probe hierarchy declared in the test — exactly as tests/unit/io_vtable_abi_test.cpp
+# does with `TestReaderWriter`. `Object::External`'s size is read through
+# runtime/types/object/External.h, whose linkable half (external_class.cpp) is
+# already on this list.
+#
+# The test's reason to exist is RULE B5-16: `ParticleSystem` is the ONE class in
+# Video and Graphics where `Construct` is not slot 8 — `Particle` introduces
+# `CreateSystem` pure there, so `Construct` lands at 9 behind it. A swap of those
+# two indices compiles, links and runs, and hands `CreateSystem`'s callers an
+# `Object::External*`. PART B reads the GCC table back at byte offsets 0x40 and
+# 0x48 and pins which member each one is.
+UNIT_TREE_SRCS +=
+
 # ENDGAME B.3.5 block C — the ImageBuffer chain / RenderState ABI proof
 # (tests/unit/video_imagebuffer_abi_test.cpp). NO tree sources link, for the same
 # reason block A's list gives: `Video::ImageBuffer`, the three
