@@ -31,9 +31,11 @@
 #include "DropOffRawMaterial.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
+#include <new>
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -178,16 +180,16 @@ void DropOffRawMaterial_Serialize_Impl(DropOffRawMaterial* self, void* stream) {
     // statics still null. Lazy-resolve like the other entry points do.
     DropOffRawMaterial_ResolveFuncs();
     uint8_t* s = (uint8_t*)self;
-    uint8_t ser1[24];
-    uint8_t ser2[24];
+    alignas(8) uint8_t ser1[24];
+    alignas(8) uint8_t ser2[24];
 
     // Serialize status byte (+0x18)
-    g_fn_Serializer_Ctor(ser1, stream, 0);
-    g_fn_Serialize_Bool(ser1, s + 0x18, nullptr);
-    g_fn_Serializer_Dtor(ser1);
+    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x18), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     // Serialize entity refs, resource type, flag, and count
-    g_fn_Serializer_Ctor(ser2, stream, 0);
+    ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize target storage entity ref (+0x30)
     s_fn_IBP_Serialize(s + 0x30, ser2);
@@ -209,10 +211,10 @@ void DropOffRawMaterial_Serialize_Impl(DropOffRawMaterial* self, void* stream) {
     fn_ExternalPtr_BuildSerialize(s + 0x28, ser2);
 
     // Serialize flag (+0x20) and count (+0x24)
-    g_fn_Serialize_Bool(ser2, s + 0x20, nullptr);
-    g_fn_Serialize_Int(ser2, s + 0x24, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<bool*>(s + 0x20), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);   // B.3.4 bridge
 
-    g_fn_Serializer_Dtor(ser2);
+    reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

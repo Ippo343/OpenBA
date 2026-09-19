@@ -21,10 +21,12 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // Diagnostic trace for the harvest-completion investigation. Gated by
@@ -247,8 +249,8 @@ void ClearArea_Serialize(ClearArea* self, void* stream) {
     s_fn_Work_Serialize(self, stream);
 
     // Create Serializer with version=1
-    uint8_t serializerBuf[24];
-    s_fn_Serializer_Ctor(serializerBuf, stream, 1);
+    alignas(8) uint8_t serializerBuf[24];
+    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
 
     // Serialize entity BST at +0x48
     s_fn_BST_Serialize_IBP(&self->field_48, serializerBuf);
@@ -273,7 +275,7 @@ void ClearArea_Serialize(ClearArea* self, void* stream) {
     }
 
     // Destroy serializer
-    s_fn_Serializer_Dtor(serializerBuf);
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

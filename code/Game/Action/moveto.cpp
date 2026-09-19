@@ -31,10 +31,12 @@
 #include "engine_funcs.h"
 #include "perf_terrain.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "math/Math.h"
 #include <cstdio>
 #include <cstdint>
 #include <cmath>
+#include <new>
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -304,16 +306,16 @@ static inline int WorldToCell(int mapSize, float worldX, float worldY) {
 void MoveTo_Serialize_Impl(void* self, void* stream) {
     MoveTo_ResolveFuncs();
     uint8_t* s = (uint8_t*)self;
-    uint8_t ser0[24];
-    uint8_t ser1[24];
+    alignas(8) uint8_t ser0[24];
+    alignas(8) uint8_t ser1[24];
 
     // Version 0: serialize status byte at +0x18
-    s_fn_Serializer_Ctor(ser0, stream, 0);
-    s_fn_Serialize_Bool(ser0, s + 0x18, nullptr);
-    s_fn_Serializer_Dtor(ser0);
+    ::new (static_cast<void*>(ser0)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser0)->Serialize(*reinterpret_cast<bool*>(s + 0x18), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser0)->~Serializer();   // B.3.4 bridge
 
     // Version 1: serialize all movement data
-    s_fn_Serializer_Ctor(ser1, stream, 1);
+    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
 
     // Target entity IBP (+0x28)
     s_fn_IBP_Serialize(s + 0x28, ser1);
@@ -328,26 +330,26 @@ void MoveTo_Serialize_Impl(void* self, void* stream) {
     s_fn_ExternalPtr_Serialize(s + 0x30, ser1);
 
     // Path node count (+0x64) and current index (+0x60) as ints
-    s_fn_Serialize_Int(ser1, s + 0x64, nullptr);
-    s_fn_Serialize_Int(ser1, s + 0x60, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x64), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x60), nullptr);   // B.3.4 bridge
 
     // Path node array (+0x68), count from +0x64
-    s_fn_Serialize_IntArray(ser1, *(int32_t*)(s + 0x64), s + 0x68, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*(int32_t*)(s + 0x64), reinterpret_cast<int*>(s + 0x68), nullptr);   // B.3.4 bridge
 
     // Destination position (+0x38) as Vector3
     reinterpret_cast<Math::Vector3*>(s + 0x38)->Serialize(ser1);   // B.3.1 bridge
 
     // Terrain flags (+0x5c) as uint
-    s_fn_Serialize_UInt(ser1, s + 0x5c, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x5c), nullptr);   // B.3.4 bridge
 
     // Idle animation ID (+0x468) as int
-    s_fn_Serialize_Int(ser1, s + 0x468, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x468), nullptr);   // B.3.4 bridge
 
     // Walk animation ID (+0x46c) as int
-    s_fn_Serialize_Int(ser1, s + 0x46c, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x46c), nullptr);   // B.3.4 bridge
 
     // Version check for bridge flag
-    int version = s_fn_Serializer_GetVersion(ser1);
+    int version = reinterpret_cast<IO::Serializer*>(ser1)->GetVersion();   // B.3.4 bridge
     if (version == 0) {
         // Version 0 compatibility: deserialize and discard a legacy IBP field
         void* tempIBP = nullptr;
@@ -357,19 +359,19 @@ void MoveTo_Serialize_Impl(void* self, void* stream) {
         }
     } else {
         // Version > 0: serialize bridge flag (+0x470)
-        version = s_fn_Serializer_GetVersion(ser1);
+        version = reinterpret_cast<IO::Serializer*>(ser1)->GetVersion();   // B.3.4 bridge
         if (version > 0) {
-            s_fn_Serialize_Int(ser1, s + 0x470, nullptr);
+            reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x470), nullptr);   // B.3.4 bridge
         }
     }
 
     // Road flag (+0x474) as bool
-    s_fn_Serialize_Bool(ser1, s + 0x474, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x474), nullptr);   // B.3.4 bridge
 
     // Speed multiplier (+0x478) as float
-    s_fn_Serialize_Float(ser1, s + 0x478, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<float*>(s + 0x478), nullptr);   // B.3.4 bridge
 
-    s_fn_Serializer_Dtor(ser1);
+    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

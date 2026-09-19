@@ -22,10 +22,12 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <new>
 
 // ============================================================
 // Local function pointers (resolved once by PlantArea_ResolveFuncs)
@@ -836,15 +838,15 @@ void PlantArea_Serialize_Impl(PlantArea* self, void* stream) {
     s_fn_Work_Serialize(self, stream);
 
     // Create Serializer with version=0
-    uint8_t serializerBuf[24] = {0};
-    s_fn_Serializer_Ctor(serializerBuf, stream, 0);
+    alignas(8) uint8_t serializerBuf[24] = {0};
+    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize BST at +0x48
     s_fn_BST_Serialize((void*)(selfAddr + 0x48), serializerBuf);
 
     // Serialize field cell count at +0x60
     int cellCountBuf[2] = { *(int*)(selfAddr + 0x60), 0 };
-    s_fn_Serializer_SerializeInt(serializerBuf, cellCountBuf, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(cellCountBuf), nullptr);   // B.3.4 bridge
 
     // If reading (serializer mode == 0), resize validity array.
     // B.3.2 bridge: FUN_14000a590 == Collection::Array<uint8>::SetSize.
@@ -860,7 +862,7 @@ void PlantArea_Serialize_Impl(PlantArea* self, void* stream) {
     s_fn_ExternalRef_Serialize((void*)(selfAddr + 0x68), serializerBuf);
 
     // Destroy serializer
-    s_fn_Serializer_Dtor(serializerBuf);
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
 
 

@@ -19,8 +19,10 @@
 #include "Work/tradework_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 // ============================================================
 // Local function pointers (resolved once by TradeWork_ResolveFuncs)
@@ -857,13 +859,13 @@ void TradeWork_Serialize_Impl(TradeWork* self, void* stream) {
     s_fn_Work_Serialize(self, stream);
 
     // Create serializer (version block, version=0)
-    uint8_t serializerBuf[24] = {0};
-    s_fn_Serializer_Ctor(serializerBuf, stream, 0);
+    alignas(8) uint8_t serializerBuf[24] = {0};
+    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize extended BST at +0x48
     s_fn_BST_Serialize((void*)(selfAddr + 0x48), serializerBuf);
 
-    s_fn_Serializer_Dtor(serializerBuf);
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
 
 

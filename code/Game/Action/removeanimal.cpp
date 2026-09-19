@@ -23,10 +23,12 @@
 #include "RemoveAnimal.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/coll_bridge.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
@@ -184,16 +186,16 @@ void RemoveAnimal_Serialize_Impl(RemoveAnimal* self, void* stream) {
     // statics still null. Lazy-resolve like the other entry points do.
     RemoveAnimal_ResolveFuncs();
     uint8_t* s = (uint8_t*)self;
-    uint8_t localSerializer1[16];
-    uint8_t localSerializer2[24];
+    alignas(8) uint8_t localSerializer1[16];
+    alignas(8) uint8_t localSerializer2[24];
 
     // Serialize status byte (+0x18)
-    g_fn_Serializer_Ctor(localSerializer1, stream, 0);
-    g_fn_Serialize_Bool(localSerializer1, s + 0x18, nullptr);
-    g_fn_Serializer_Dtor(localSerializer1);
+    ::new (static_cast<void*>(localSerializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(localSerializer1)->Serialize(*reinterpret_cast<bool*>(s + 0x18), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(localSerializer1)->~Serializer();   // B.3.4 bridge
 
     // Serialize entity ref at +0x20
-    g_fn_Serializer_Ctor(localSerializer2, stream, 0);
+    ::new (static_cast<void*>(localSerializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     s_fn_IBP_Serialize(s + 0x20, localSerializer2);
 
     // Type-check: if the deserialized ptr is not a ComponentEntity, null it
@@ -204,7 +206,7 @@ void RemoveAnimal_Serialize_Impl(RemoveAnimal* self, void* stream) {
         }
     }
 
-    g_fn_Serializer_Dtor(localSerializer2);
+    reinterpret_cast<IO::Serializer*>(localSerializer2)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

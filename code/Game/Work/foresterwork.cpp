@@ -16,10 +16,12 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
@@ -1051,21 +1053,21 @@ void ForesterWork_Serialize_Impl(ForesterWork* self, void* stream) {
     s_fn_Work_Serialize(self, stream);
 
     // Create first serializer (version block, version=0)
-    uint8_t serializer1[24] = {0};
-    s_fn_Serializer_Ctor(serializer1, stream, 0);
-    s_fn_Serializer_Dtor(serializer1);
+    alignas(8) uint8_t serializer1[24] = {0};
+    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
 
     // Create second serializer (version=0) for BST + int
-    uint8_t serializer2[24] = {0};
-    s_fn_Serializer_Ctor(serializer2, stream, 0);
+    alignas(8) uint8_t serializer2[24] = {0};
+    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize BST at self+0x48
     s_fn_BST_Serialize((void*)(selfAddr + 0x48), serializer2);
 
     // Serialize int field at self+0x58
-    s_fn_SerializeInt(serializer2, (void*)(selfAddr + 0x58), nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>((selfAddr + 0x58)), nullptr);   // B.3.4 bridge
 
-    s_fn_Serializer_Dtor(serializer2);
+    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
 }
 
 

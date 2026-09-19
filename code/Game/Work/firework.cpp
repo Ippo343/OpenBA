@@ -24,9 +24,11 @@
 #include "Work/firework_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>
+#include <new>
 
 // ============================================================
 // Local sub-function pointers (resolved at runtime)
@@ -661,11 +663,11 @@ int FireWork_Serialize_Impl(FireWork* self, void* stream) {
     if (s_workSer) s_workSer(self, stream);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int) return 0;
 
-    uint8_t ser[24];
-    g_fn_Serializer_Ctor(ser, stream, 0);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     if (s_bstSer) s_bstSer(reinterpret_cast<void*>(s + 0x50), ser);
-    g_fn_Serialize_Int(ser, reinterpret_cast<void*>(s + 0x48), nullptr);
-    g_fn_Serializer_Dtor(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x48), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
     return 0;
 }
 

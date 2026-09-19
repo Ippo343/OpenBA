@@ -11,10 +11,12 @@
 #include "ShowTool.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "math/Math.h"
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
+#include <new>
 
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (SA type-id fallback)
 
@@ -183,22 +185,22 @@ void ShowTool_Serialize_Impl(void* self, void* stream) {
     // statics still null. Lazy-resolve like the other entry points do.
     ShowTool_ResolveFuncs();
     uint8_t* s = (uint8_t*)self;
-    uint8_t ser1[24];
-    uint8_t ser2[24];
+    alignas(8) uint8_t ser1[24];
+    alignas(8) uint8_t ser2[24];
 
-    g_fn_Serializer_Ctor(ser1, stream, 0);
-    g_fn_Serialize_Bool(ser1, s + 0x18, nullptr);
-    g_fn_Serializer_Dtor(ser1);
+    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x18), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
-    g_fn_Serializer_Ctor(ser2, stream, 0);
+    ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     s_fn_IBP_Serialize(s + 0x20, ser2);
     if (*(void**)(s + 0x20) != nullptr) {
         if (!fn_IsDerivedFrom(*(void**)(s + 0x20), *s_TypeInfo_ShowToolEntity)) {
             *(void**)(s + 0x20) = nullptr;
         }
     }
-    g_fn_Serialize_Int(ser2, s + 0x28, nullptr);
-    g_fn_Serializer_Dtor(ser2);
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

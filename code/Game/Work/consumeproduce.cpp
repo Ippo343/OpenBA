@@ -20,12 +20,14 @@
 #include "BuildActions.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/coll_bridge.h"
 #include "redzone_alloc.h"   // RedzoneAlloc_PrintBacktrace (wild-write diagnostic)
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
@@ -314,8 +316,8 @@ void ConsumeProduce_Serialize_Impl(ConsumeProduceAction* self, void* stream) {
     s_fn_Work_Serialize(self, stream);
 
     // Create IO::Serializer with version 0
-    uint8_t serializerBuf[24];
-    s_fn_Serializer_Ctor(serializerBuf, stream, 0);
+    alignas(8) uint8_t serializerBuf[24];
+    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Get the serializer's internal stream ptr (at offset +0x00)
     // Check if loading (stream+8 == 0 means loading)
@@ -327,7 +329,7 @@ void ConsumeProduce_Serialize_Impl(ConsumeProduceAction* self, void* stream) {
     // not directly into self->field_60). This avoids issues if ResizeIBPArray
     // modifies field_60 as a side-effect.
     int ibpCount = self->field_60;
-    g_fn_Serialize_Int(serializerBuf, &ibpCount, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&ibpCount), nullptr);   // B.3.4 bridge
 
     // If loading, resize the IBP array to match deserialized count.
     // B.3.2 bridge: FUN_1400032e0 == Collection::Array<Ptr8>::SetSize
@@ -374,7 +376,7 @@ void ConsumeProduce_Serialize_Impl(ConsumeProduceAction* self, void* stream) {
 
     // --- Serialize int array count (+0x70) ---
     int intCount = self->field_70;
-    g_fn_Serialize_Int(serializerBuf, &intCount, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&intCount), nullptr);   // B.3.4 bridge
 
     // If loading, resize the int array.
     // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize (retail
@@ -387,15 +389,15 @@ void ConsumeProduce_Serialize_Impl(ConsumeProduceAction* self, void* stream) {
 
     // Bulk-serialize the int array
     // Original: IO::Serializer::Serialize(serializer, count, intArrayPtr, name)
-    s_fn_Serializer_SerializeIntBulk(serializerBuf, intCount, self->field_68, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(intCount, reinterpret_cast<int*>(self->field_68), nullptr);   // B.3.4 bridge
 
     // --- Serialize ConsumeProduce fields ---
-    g_fn_Serialize_Bool(serializerBuf, &self->field_48, nullptr);   // bool at +0x48
-    g_fn_Serialize_Int(serializerBuf, &self->field_4c, nullptr);    // int at +0x4C
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<bool*>(&self->field_48), nullptr);   // bool at +0x48   (B.3.4 bridge)
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->field_4c), nullptr);    // int at +0x4C   (B.3.4 bridge)
     s_fn_Type_Serialize(&self->field_50, serializerBuf);            // Type at +0x50
-    g_fn_Serialize_Int(serializerBuf, &self->field_54, nullptr);    // int at +0x54
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->field_54), nullptr);    // int at +0x54   (B.3.4 bridge)
 
-    s_fn_Serializer_Dtor(serializerBuf);
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

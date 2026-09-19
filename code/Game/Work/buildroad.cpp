@@ -12,8 +12,10 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdio>
 #include <cstdint>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
@@ -228,8 +230,8 @@ void BuildRoad_Serialize_Impl(BuildRoad* self, void* stream) {
     s_fn_Work_Serialize(self, stream);
 
     // Create IO::Serializer with version 1
-    uint8_t serializerBuf[24];
-    s_fn_Serializer_Ctor(serializerBuf, stream, 1);
+    alignas(8) uint8_t serializerBuf[24];
+    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
 
     // Serialize road type (+0x5c) via stream's vtable call at +0x98
     // The Serializer stores stream ptr at offset +0x8
@@ -240,7 +242,7 @@ void BuildRoad_Serialize_Impl(BuildRoad* self, void* stream) {
     serVtFn(serStream, &self->field_5c);
 
     // Serialize cell index (+0x58) via IO::Serializer::Serialize
-    g_fn_Serialize_Int(serializerBuf, &self->field_58, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->field_58), nullptr);   // B.3.4 bridge
 
     // InternalBasePtr::Serialize for entity ref (+0x48)
     s_fn_IBP_Serialize(&self->field_48, serializerBuf);
@@ -257,7 +259,7 @@ void BuildRoad_Serialize_Impl(BuildRoad* self, void* stream) {
     fn_ExternalPtr_BuildSerialize(&self->field_50, serializerBuf);
 
     // Version-dependent fields
-    int version = s_fn_Serializer_GetVersion(serializerBuf);
+    int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
     if (version < 1) {
         // Default values for old save format
         self->field_60 = 0xff;
@@ -265,12 +267,12 @@ void BuildRoad_Serialize_Impl(BuildRoad* self, void* stream) {
         self->field_68 = 2;
     } else {
         // Serialize material fields
-        g_fn_Serialize_Int(serializerBuf, &self->field_60, nullptr);
-        g_fn_Serialize_Int(serializerBuf, &self->field_64, nullptr);
-        g_fn_Serialize_Int(serializerBuf, &self->field_68, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->field_60), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->field_64), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->field_68), nullptr);   // B.3.4 bridge
     }
 
-    s_fn_Serializer_Dtor(serializerBuf);
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
