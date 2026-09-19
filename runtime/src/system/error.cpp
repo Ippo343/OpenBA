@@ -113,6 +113,30 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+// ENDGAME B.3.4b SYSTEM (4): `System::Error` is a real class with two static
+// members (runtime/types/system/Error.h). The mangling is the evidence --
+// `?SetText@Error@System@@SA...` is a static member of a class named
+// `System::Error`, which a free function cannot carry.
+//
+// TWO BODIES MOVED onto members; the two registered doors keep their addresses
+// and delegate. Member bodies are defined at GLOBAL scope with qualified names,
+// the shape SYSTEM (3) adopted.
+//
+// NOT MOVED, AND NEITHER IS AN OVERSIGHT:
+//   * the THREE statics (`_errorString`, `_stopApplication`, `_hideDisplay`)
+//     stay `RT_DATA_SLOT` reads -- rule B4b-4. All three are CUTOVER_REQUIRED
+//     rows answered by a minted cell, and making one a real `static` member
+//     needs a redirect at `standalone/rt_data_mint.cpp`'s `MintStorageCell()`,
+//     which is another agent's file this step. Debt tabled per row in
+//     B34B_RULES section 4.1. `_errorString` is a 0x2000-byte BUFFER, not a
+//     pointer, so its redirect must hand back the array's address.
+//   * `RtSystem_String_StrAppend` is a `System::String` static hosted in this
+//     file only to avoid a concurrent edit to string.cpp. It is NOT an Error
+//     export, it is not declared in Error.h, and it does not move with this
+//     class.
+//   * `?HideErrorDisplay@Error@System@@SAX_N@Z` (0x1800c5f90) is documented
+//     dead by a prior four-binary sweep and stays unported.
+#include "../../types/system/Error.h"
 
 // ---- Wave 22 lane ERRCFG ---------------------------------------------------
 // `ResolveAddr` for the one address-keyed callee ?Display@ has (retail's CRT
@@ -286,7 +310,7 @@ extern "C" char* RtSystem_String_StrAppend(char* dst, int capacity, const char* 
 // written out that way here so the two `_stopApplication` stores stay on the
 // two arms retail put them on. Note the flag is written on BOTH arms, so a
 // caller that fills the buffer still gets the stop behaviour.
-extern "C" void RtSystem_Error_SetText(const char* text, bool stopApplication) {
+void System::Error::SetText(const char* text, bool stopApplication) {
 
     char* buf = ErrorStringBuffer();
     bool* stop = StopApplicationSlot();
@@ -494,7 +518,7 @@ void Utf8ToUtf16Clamped(uint8_t* dst, int limitBytes, const char* src) {
 
 }  // namespace
 
-extern "C" void RtSystem_Error_Display() {
+void System::Error::Display() {
 
     // 0x1800c6077 — retail's own kill switch, tested FIRST and skipping the
     // whole box. `_stopApplication` is still honoured below.
@@ -536,6 +560,22 @@ extern "C" void RtSystem_Error_Display() {
     // EFFECTIVENESS CONTROL. `work` counts the calls that actually reached the
     // message box; a run whose Display rows are all work=0 took the
     // `_hideDisplay` arm every time and has exercised none of the above.
+}
+
+// ============================================================================
+// ENDGAME B.3.4b — the two delegating DOORS.
+// ============================================================================
+// Each keeps the registered name and the retail address it always had.
+// `System::Error` has no vtable, so a plain static call cannot dispatch back
+// into the door and B34_BRIEFS §A.1's qualified-call rule does not apply.
+// `extern "C"` is kept: these are the symbols the registration below hands out
+// and other ported files reach by name.
+extern "C" void RtSystem_Error_SetText(const char* text, bool stopApplication) {
+    System::Error::SetText(text, stopApplication);
+}
+
+extern "C" void RtSystem_Error_Display() {
+    System::Error::Display();
 }
 
 // ============================================================================

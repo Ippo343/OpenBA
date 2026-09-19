@@ -29,9 +29,18 @@
 // Opened as an address door by io/persistence_saveinfo_job.cpp (batch 8b) and
 // closed here.
 // ============================================================================
+// ENDGAME B.3.4b SYSTEM (4): `System::CRC` is a real class with one static
+// member (runtime/types/system/Crc.h — the mangling `?Compute@CRC@System@@SA…`
+// is the evidence, and Crc.h's banner has the argument). The body moved onto
+// `System::CRC::Compute`; the registered door keeps its address and its name
+// and delegates. Defined at GLOBAL scope with a qualified name rather than
+// inside a `namespace System { ... }` block, for the reason B.3.4b SYSTEM (3)
+// gives: this file names no POD that the block could capture, and keeping the
+// two files consistent is worth more than two lines of nesting.
 #include <cstdint>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/system/Crc.h"
 
 namespace {
 
@@ -52,6 +61,11 @@ const uint32_t* CrcTable() {
 }  // namespace
 
 extern "C" uint32_t RtSystem_CRC_Compute(const void* data, int count, uint32_t crc) {
+    return System::CRC::Compute(data, count, crc);
+}
+
+// ?Compute@CRC@System@@SAIPEBXHI@Z  retail 0x1800c5490 — the member body.
+uint32_t System::CRC::Compute(const void* data, int count, uint32_t crc) {
     if (count > 0) {
         const uint32_t* const table = CrcTable();
         const uint8_t* p = static_cast<const uint8_t*>(data);

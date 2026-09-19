@@ -59,6 +59,9 @@
 
 #include "../../runtime/types/system/Thread.h"
 #include "../../runtime/types/system/Value.h"   // B.3.4b SYSTEM (3), PART E
+#include "../../runtime/types/system/Timer.h"   // B.3.4b SYSTEM (4), PART F
+#include "../../runtime/types/system/Crc.h"
+#include "../../runtime/types/system/Error.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -386,6 +389,66 @@ UNIT_TEST(the_value_classes_write_the_same_bytes_the_pods_read) {
     tpod.ticks = 0x0123456789abcdefLL;
     System::Time* tAsClass = reinterpret_cast<System::Time*>(&tpod);
     CHECK_EQ(tAsClass->_ticks, 0x0123456789abcdefLL);
+}
+
+// ===========================================================================
+// PART F — B.3.4b SYSTEM (4): the all-static classes.
+// ===========================================================================
+// `System::Timer`, `System::CRC` and `System::Error` are classes whose every
+// member is `static`. The mangling is the evidence and it is what separates
+// them from B.3.4a's `IO::TextCodec`, which came out the other way — four
+// receiverless free functions with NO exported class-scoped name, for which
+// nothing landed. `?Startup@Timer@System@@SA_NXZ`, `?Compute@CRC@System@@SAIPEBXHI@Z`
+// and `?SetText@Error@System@@SAXPEBD_N@Z` all carry `@<Class>@System@@` plus a
+// static-member mangling (`SA` public static, `CA` private static, `0` private
+// static data), which MSVC emits only for a member of a class of that name.
+//
+// They have NO instance state, so there is nothing to `offsetof` and no POD to
+// cross-assert against — the whole of PART A has no analogue here. What IS
+// worth pinning is that they stay empty and non-polymorphic, because a stray
+// data member or virtual would silently give them a layout they must not have.
+
+UNIT_TEST(the_all_static_system_classes_stay_empty_and_non_polymorphic) {
+    CHECK(std::is_empty<System::Timer>::value);
+    CHECK(std::is_empty<System::CRC>::value);
+    CHECK(std::is_empty<System::Error>::value);
+    CHECK(!std::is_polymorphic<System::Timer>::value);
+    CHECK(!std::is_polymorphic<System::CRC>::value);
+    CHECK(!std::is_polymorphic<System::Error>::value);
+    // `System::Timer::operator=` is retail's only non-static member
+    // (??4Timer@System@@QEAAAEAV01@AEBV01@@Z, 0x180007890, `MOV RAX,RCX; RET`).
+    // It copies nothing, so the class stays trivially copyable and empty.
+    CHECK(std::is_trivially_destructible<System::Timer>::value);
+    CHECK(std::is_copy_assignable<System::Timer>::value);
+}
+
+UNIT_TEST(system_crc_compute_matches_the_standard_crc32_check_vector) {
+    // THE ONE BEHAVIOURAL TEST IN THIS FILE, and it is possible because
+    // `crc.cpp` is the only one of B.3.4b's six converted files that links on
+    // the host: no <windows.h>, no RT_DATA_SLOT, no platform call, and its two
+    // registration calls are stubbed. So this runs the REAL
+    // `System::CRC::Compute` member, not a copy of it.
+    //
+    // "123456789" is the standard CRC-32 check vector and 0xCBF43926 is its
+    // documented result. Retail's Compute does NOT complement the seed on
+    // entry but DOES complement on exit (`NOT EAX` before the `RET`), so a
+    // caller wanting the standard answer passes 0xFFFFFFFF itself — which is
+    // exactly what this asserts, and what pins the entry/exit asymmetry that
+    // Crc.h's banner describes.
+    const char kCheck[] = "123456789";
+    CHECK_EQ(System::CRC::Compute(kCheck, 9, 0xFFFFFFFFu), 0xCBF43926u);
+
+    // The chaining convention `runtime/src/io/persistence_worker_win.cpp`'s
+    // `Crc32Chunked` uses: feed the complement of the previous result back in.
+    // Splitting the vector must reproduce the whole-buffer answer.
+    uint32_t part = System::CRC::Compute(kCheck, 4, 0xFFFFFFFFu);
+    CHECK_EQ(System::CRC::Compute(kCheck + 4, 5, ~part), 0xCBF43926u);
+
+    // `count <= 0` skips the loop and still complements — retail's
+    // `TEST EDX,EDX / JLE done`. Not an edge case nobody hits: it is the shape
+    // of an empty chunk on the persistence path.
+    CHECK_EQ(System::CRC::Compute(kCheck, 0, 0xFFFFFFFFu), 0x00000000u);
+    CHECK_EQ(System::CRC::Compute(kCheck, -1, 0x12345678u), ~0x12345678u);
 }
 
 UNIT_TEST(the_pod_and_the_class_agree_about_which_bytes_the_fields_are) {
