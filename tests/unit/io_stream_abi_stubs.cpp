@@ -83,4 +83,19 @@ bool     FileStream::Open(const System::Filename&) { StubReached("FileStream::Op
 // 0x180023d80 in file_stream.cpp.
 Stream* BinaryFileStream::DeletingDtor(unsigned) { StubReached("BinaryFileStream::DeletingDtor"); }
 
+// ---- IO::CompressedStream (compressed_stream_{write,read}.cpp) -------------
+// Slot 0 is PURE on all three compressed classes, so none of them needs one.
+bool     CompressedStream::Write(int, const void*) { StubReached("CompressedStream::Write"); }
+bool     CompressedStream::Read(int, void*)        { StubReached("CompressedStream::Read"); }
+bool     CompressedStream::SetCurrentPos(int)      { StubReached("CompressedStream::SetCurrentPos"); }
+uint32_t CompressedStream::GetCurrentPos() const   { StubReached("CompressedStream::GetCurrentPos"); }
+uint32_t CompressedStream::GetSize() const         { StubReached("CompressedStream::GetSize"); }
+void     CompressedStream::Close()                 { StubReached("CompressedStream::Close"); }
+void     CompressedStream::PreCommit()             { StubReached("CompressedStream::PreCommit"); }
+
+// ---- the two subclasses' overrides ----------------------------------------
+void CompressedMemoryStream::Close()     { StubReached("CompressedMemoryStream::Close"); }
+void CompressedMemoryStream::PreCommit() { StubReached("CompressedMemoryStream::PreCommit"); }
+void CompressedFileStream::Close()       { StubReached("CompressedFileStream::Close"); }
+
 }  // namespace IO

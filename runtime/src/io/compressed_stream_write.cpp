@@ -160,6 +160,8 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Stream.h"
+#include "../../types/io/FileStream.h"   // B.3.4 block 4: IO::CompressedFileStream
+#include "../../types/io/FileSystem.h"   //                 and RtIO::FileInfo
 #include "../../types/system/String.h"
 
 namespace RtIo {
@@ -181,6 +183,13 @@ constexpr int32_t kWin = kCompressedStreamWindowSize;   // 0x8000
 inline Window* Windows(CompressedStream* s) { return static_cast<Window*>(s->windowData); }
 inline Header* Headers(CompressedStream* s) { return static_cast<Header*>(s->headerData); }
 inline void**  Blocks (CompressedStream* s) { return static_cast<void**>(s->blockData);  }
+
+// B.3.4 block 4: the same two accessors over the REAL class. Overloads rather
+// than a signature change, because the NON-virtual bodies in this file
+// (CompressWindow, Commit, Create) still take the POD and are not part of this
+// block's conversion.
+inline Window* Windows(IO::CompressedStream* s) { return static_cast<Window*>(s->_windowData); }
+inline Header* Headers(IO::CompressedStream* s) { return static_cast<Header*>(s->_headerData); }
 
 // A header's stored length: compressedSize, or uncompressedSize when
 // compressedSize is 0. Zero is NOT "empty" — it is the STORED (uncompressed)
@@ -296,7 +305,8 @@ typedef void  (*CloseFileFn)(void*, void*);
 // two differ and Stream.h says so explicitly (+0x1c vs the embedded
 // MemoryStream's +0x8c); both are right for what they measure.
 extern "C" uint32_t RtIo_CompressedStream_GetCurrentPos(const CompressedStream* self) {
-    return static_cast<uint32_t>(self->position);        // 1800aa850
+    return reinterpret_cast<const IO::CompressedStream*>(self)
+               ->IO::CompressedStream::GetCurrentPos();
 }
 
 // ============================================================================
@@ -307,8 +317,8 @@ extern "C" uint32_t RtIo_CompressedStream_GetCurrentPos(const CompressedStream* 
 // value is DISCARDED: this returns true unconditionally even when SetWindow
 // failed. That is retail's behaviour and it is reproduced, not corrected.
 extern "C" bool RtIo_CompressedStream_SetCurrentPos(CompressedStream* self, int32_t pos) {
-    RtIo_CompressedStream_SetWindow(self, pos);          // 1800aa834
-    return true;                                         // 1800aa839  MOV AL,0x1
+    return reinterpret_cast<IO::CompressedStream*>(self)
+               ->IO::CompressedStream::SetCurrentPos(pos);
 }
 
 // ============================================================================
@@ -327,29 +337,8 @@ extern "C" bool RtIo_CompressedStream_SetCurrentPos(CompressedStream* self, int3
 //     spelled by retail as `(headerSize<<15) - 0x8000 + last`. Same value; the
 //     shift is on the SIGNED count, which is why headerSize is read MOVSXD.
 extern "C" uint32_t RtIo_CompressedStream_GetSize(const CompressedStream* self) {
-
-    CompressedStream* const s = const_cast<CompressedStream*>(self);
-    const int32_t nWin = s->windowSize;                  // 1800aa863
-    int32_t best = 0;                                    // 1800aa867  XOR EAX,EAX
-
-    if (nWin == 0) {                                     // 1800aa869/6b  JZ -> RET
-        return 0;
-    }
-    if (nWin > 0) {                                      // 1800aa870  JLE skips the loop
-        const Window* const w = Windows(s);
-        for (int32_t i = 0; i < nWin; ++i)               // 1800aa880
-            if (best <= w[i].end) best = w[i].end;       // CMP/CMOVLE — <=, not <
-    }
-
-    const int32_t nHdr = s->headerSize;                  // 1800aa88e
-    if (nHdr != 0) {                                     // 1800aa892/95  TEST/JZ
-        const Header* const h = Headers(s);
-        const int32_t last = h[nHdr - 1].uncompressedSize;   // 1800aa89b  [RCX+R10*8-2]
-        int32_t total = (nHdr << 15) - kWin + last;          // 1800aa8a1/a5/ac
-        if (total < best) total = best;                      // 1800aa8af/b1  CMOVG
-        best = total;
-    }
-    return static_cast<uint32_t>(best);
+    return reinterpret_cast<const IO::CompressedStream*>(self)
+               ->IO::CompressedStream::GetSize();
 }
 
 // ============================================================================
@@ -387,29 +376,8 @@ extern "C" uint32_t RtIo_CompressedStream_GetSize(const CompressedStream* self) 
 // compressed_stream_read.cpp §4. See §3 of this file's banner.
 extern "C" bool RtIo_CompressedStream_Write(CompressedStream* self, int32_t n,
                                             const void* src) {
-
-    const uint8_t* in = static_cast<const uint8_t*>(src);
-    const bool didWork = (n > 0);
-
-    while (n > 0) {                                      // 1800aa6d1 / 1800aa758
-        RtIo_CompressedStream_SetWindow(self, self->position);      // 1800aa6f6
-        Window* const w = &Windows(self)[self->activeWindow];       // 1800aa6fb..711
-        const int32_t pos = self->position;              // 1800aa6ff
-        int32_t chunk = n;                               // 1800aa70a  MOV EBX,EBP
-        const int32_t cap = w->start + kWin;             // 1800aa718  LEA ECX,[R8+0x8000]
-        if (pos + n > cap) chunk = cap - pos;            // 1800aa715/1f/23/25
-
-        std::memcpy(static_cast<uint8_t*>(w->buffer) + (pos - w->start),
-                    in, static_cast<size_t>(chunk));     // 1800aa727..3c
-
-        self->position += chunk;                         // 1800aa741
-        n  -= chunk;                                     // 1800aa747
-        in += chunk;                                     // 1800aa749
-        if (self->position > w->end)                     // 1800aa74c/50
-            w->end = self->position;                     // 1800aa752
-    }
-
-    return true;                                         // 1800aa769  MOV AL,0x1
+    return reinterpret_cast<IO::CompressedStream*>(self)
+               ->IO::CompressedStream::Write(n, src);
 }
 
 // ============================================================================
@@ -498,7 +466,8 @@ extern "C" void RtIo_CompressedStream_CompressWindow(CompressedStream* self, int
 // two trap slots. It is not a purecall and it is not a stub: Commit dispatches
 // slot 8 virtually and the base genuinely has nothing to do, because a plain
 // CompressedStream writes onto a source that is already the right size.
-extern "C" void RtIo_CompressedStream_PreCommit(CompressedStream* /*self*/) {
+extern "C" void RtIo_CompressedStream_PreCommit(CompressedStream* self) {
+    reinterpret_cast<IO::CompressedStream*>(self)->IO::CompressedStream::PreCommit();
 }
 
 // ============================================================================
@@ -519,20 +488,8 @@ extern "C" void RtIo_CompressedStream_PreCommit(CompressedStream* /*self*/) {
 // The tail jump means the bool is this function's return value even though the
 // slot is typed `void` — harmless, and reproduced by simply discarding it.
 extern "C" void RtIo_CompressedMemoryStream_PreCommit(CompressedStream* self) {
-
-    const int32_t n = self->headerSize;                  // 1800a9660  MOVSXD
-    uint32_t total = 4 + static_cast<uint32_t>(n) * 8;   // 1800a9667  LEA R8D,[4+RAX*8]
-    if (n > 0) {                                         // 1800a966f/71  TEST/JLE
-        const Header* const h = Headers(self);
-        for (int32_t k = 0; k < n; ++k)                  // 1800a9680
-            total += StoredLength(h[k]);                 // 1800a9683..93
-    }
-
-    // this + 0x68 is the embedded MemoryStream (Stream.h pins it three ways).
-    // NOT PORTED — a door this file opens; see §3 of the banner.
-    RT_EXPORT_ONCE(MemStreamCreateFn, "?Create@MemoryStream@IO@@QEAA_NH@Z")(
-        reinterpret_cast<uint8_t*>(self) + 0x68,
-        static_cast<int32_t>(total));                    // 1800a969b..a2  ADD RCX,0x68 ; JMP
+    reinterpret_cast<IO::CompressedMemoryStream*>(self)
+        ->IO::CompressedMemoryStream::PreCommit();
 }
 
 // ============================================================================
@@ -618,10 +575,7 @@ extern "C" void RtIo_CompressedStream_Commit(CompressedStream* self) {
 // safe to call unconditionally — and the `headerSize > 0` guard is Stream.h's
 // "has anything been written yet".
 extern "C" void RtIo_CompressedStream_Close(CompressedStream* self) {
-    if (self->headerSize > 0 && self->base.direction == 1) {   // 1800aa8d0/d6
-        RtIo_CompressedStream_Commit(self);              // 1800aa8da  JZ 0x1800a9ee0
-        return;
-    }
+    reinterpret_cast<IO::CompressedStream*>(self)->IO::CompressedStream::Close();
 }
 
 // ============================================================================
@@ -641,19 +595,8 @@ extern "C" void RtIo_CompressedStream_Close(CompressedStream* self) {
 // name; it becomes lane FILE's code the moment they register, with no change
 // here. This is the door §3 of the banner names.
 extern "C" void RtIo_CompressedFileStream_Close(CompressedStream* self) {
-
-    if (self->headerSize > 0 && self->base.direction == 1)     // 1800a9496/9f
-        RtIo_CompressedStream_Commit(self);                    // 1800a94a5
-
-    // The FileInfo lives at +0x88 and its first int is the sentinel.
-    void* const fileInfo = reinterpret_cast<uint8_t*>(self) + 0x88;   // 1800a94aa
-    if (*static_cast<const int32_t*>(fileInfo) != -1) {               // 1800a94b1/b4
-        void* const fs = *RT_DATA_SLOT(void**,
-            "?_singleton@FileSystem@IO@@0PEAV12@EA");               // 1800a94b6
-        RT_EXPORT_ONCE(CloseFileFn,
-            "?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z")(fs, fileInfo);  // 1800a94c2
-        return;
-    }
+    reinterpret_cast<IO::CompressedFileStream*>(self)
+        ->IO::CompressedFileStream::Close();
 }
 
 // ============================================================================
@@ -694,6 +637,228 @@ extern "C" bool RtIo_CompressedStream_Create(CompressedStream* self, Stream* src
 }
 
 }  // namespace RtIo
+
+// ============================================================================
+// The `IO::Compressed*` member bodies this file owns — B.3.4 block 4 (STREAMS)
+// ============================================================================
+// Six of the family's nine vtable slots. Every body below is the one that was
+// in the door above it, transcribed unchanged: same statements, same order,
+// same absent guards. B34_BRIEFS section D BINDS this file — the compressed
+// path carries a live intermittent defect that a separate agent is
+// root-causing, so nothing here may gain a lock, a retry, a loop bound, a null
+// check or a reordering, and nothing may quietly lose one either.
+//
+// `namespace IO` opens after the `RtIo` doors close, because a member of
+// `IO::X` cannot be defined inside the sibling namespace `RtIo` (section A.2).
+// The file-local helpers are reached as `RtIo::Windows` / `RtIo::Headers` —
+// anonymous-namespace members ARE reachable that way from elsewhere in the same
+// translation unit, which is what lets the bodies move without moving the
+// helpers.
+namespace IO {
+
+// ?GetCurrentPos@CompressedStream@IO@@UEBAIXZ                retail 0x1800aa850
+//     MOV EAX,[RCX+0x1c] ; RET
+// The LOGICAL position in the DECOMPRESSED stream, not the source cursor. The
+// two differ and this header says so explicitly (+0x1c versus the embedded
+// MemoryStream's +0x8c); both are right for what they measure.
+uint32_t CompressedStream::GetCurrentPos() const {
+    return static_cast<uint32_t>(_position);             // 1800aa850
+}
+
+// ?SetCurrentPos@CompressedStream@IO@@UEAA_NH@Z              retail 0x1800aa830
+//     SUB RSP,0x28 ; CALL 0x1800a9aa0 ; MOV AL,1 ; ADD RSP,0x28 ; RET
+// A tail-ish call into SetWindow with RCX and RDX untouched, and the return
+// value is DISCARDED: this returns true unconditionally even when SetWindow
+// failed. That is retail's behaviour and it is reproduced, not corrected.
+bool CompressedStream::SetCurrentPos(int pos) {
+    RtIo::RtIo_CompressedStream_SetWindow(
+        reinterpret_cast<RtIo::CompressedStream*>(this), pos);   // 1800aa834
+    return true;                                         // 1800aa839  MOV AL,0x1
+}
+
+// ?GetSize@CompressedStream@IO@@UEBAIXZ                      retail 0x1800aa860
+// max( the furthest window END currently in memory,
+//      the length the committed block directory implies )
+//
+// Two details that a paraphrase loses and the bytes do not:
+//
+//  1. `MOVSXD RCX,[RCX+0x38] ; TEST ECX,ECX ; JZ out` — a windowSize of EXACTLY
+//     zero returns 0 and NEVER reaches the header half. A NEGATIVE windowSize
+//     (`JLE` at 1800aa870) skips only the loop and does reach it. Those are
+//     different exits and they are kept different here.
+//  2. The directory length is `((headerSize-1) << 15) + lastUncompressedSize`,
+//     spelled by retail as `(headerSize<<15) - 0x8000 + last`. Same value; the
+//     shift is on the SIGNED count, which is why headerSize is read MOVSXD.
+uint32_t CompressedStream::GetSize() const {
+
+    CompressedStream* const s = const_cast<CompressedStream*>(this);
+    const int32_t nWin = s->_windowSize;                 // 1800aa863
+    int32_t best = 0;                                    // 1800aa867  XOR EAX,EAX
+
+    if (nWin == 0) {                                     // 1800aa869/6b  JZ -> RET
+        return 0;
+    }
+    if (nWin > 0) {                                      // 1800aa870  JLE skips the loop
+        const RtIo::CompressedStreamWindow* const w = RtIo::Windows(s);
+        for (int32_t i = 0; i < nWin; ++i)               // 1800aa880
+            if (best <= w[i].end) best = w[i].end;       // CMP/CMOVLE — <=, not <
+    }
+
+    const int32_t nHdr = s->_headerSize;                 // 1800aa88e
+    if (nHdr != 0) {                                     // 1800aa892/95  TEST/JZ
+        const RtIo::CompressedStreamHeader* const h = RtIo::Headers(s);
+        const int32_t last = h[nHdr - 1].uncompressedSize;   // 1800aa89b  [RCX+R10*8-2]
+        int32_t total = (nHdr << 15) - RtIo::kCompressedStreamWindowSize + last;  // 1800aa8a1/a5/ac
+        if (total < best) total = best;                      // 1800aa8af/b1  CMOVG
+        best = total;
+    }
+    return static_cast<uint32_t>(best);
+}
+
+// ?Write@CompressedStream@IO@@UEAA_NHPEBX@Z                  retail 0x1800aa6c0
+// The mirror of ?Read: page the window that covers `position` in, copy as much
+// of the caller's buffer as fits inside THAT window, extend the window's high
+// water mark, repeat.
+//
+// THREE THINGS THE DISASSEMBLY SAYS AND A SUMMARY WOULD NOT:
+//
+//  * The clamp is against `w->start + 0x8000`, the window's CAPACITY, not
+//    against `w->end`, its current extent. Writing past `end` is the normal
+//    case — that is what growing the stream IS. (Read clamps against `end`,
+//    because reading past it is not.)
+//  * SetWindow's bool is discarded here too (there is no TEST after the CALL at
+//    1800aa6f6), so a failed page-in silently writes into whatever window was
+//    active. Faithful; NOT guarded — CLAUDE.md's "don't fix a faithful crash
+//    with a null check", and this is not even a crash, it is retail's contract.
+//  * `n <= 0` writes nothing and returns true, without touching the object.
+//
+// AND THE ONE THING THIS BODY DOES NOT MAKE OURS: on the write path SetWindow
+// takes its GROW branch whenever `position >> 15 >= headerSize`, i.e. on the
+// first write into every new block, and that branch is DELEGATED — see section
+// 3 of this file's banner.
+bool CompressedStream::Write(int n, const void* src) {
+
+    RtIo::CompressedStream* const self = reinterpret_cast<RtIo::CompressedStream*>(this);
+    const uint8_t* in = static_cast<const uint8_t*>(src);
+
+    while (n > 0) {                                      // 1800aa6d1 / 1800aa758
+        RtIo::RtIo_CompressedStream_SetWindow(self, _position);     // 1800aa6f6
+        RtIo::CompressedStreamWindow* const w =
+            &RtIo::Windows(this)[_activeWindow];                    // 1800aa6fb..711
+        const int32_t pos = _position;                   // 1800aa6ff
+        int32_t chunk = n;                               // 1800aa70a  MOV EBX,EBP
+        const int32_t cap = w->start +
+                            RtIo::kCompressedStreamWindowSize;      // 1800aa718  LEA ECX,[R8+0x8000]
+        if (pos + n > cap) chunk = cap - pos;            // 1800aa715/1f/23/25
+
+        std::memcpy(static_cast<uint8_t*>(w->buffer) + (pos - w->start),
+                    in, static_cast<size_t>(chunk));     // 1800aa727..3c
+
+        _position += chunk;                              // 1800aa741
+        n  -= chunk;                                     // 1800aa747
+        in += chunk;                                     // 1800aa749
+        if (_position > w->end)                          // 1800aa74c/50
+            w->end = _position;                          // 1800aa752
+    }
+
+    return true;                                         // 1800aa769  MOV AL,0x1
+}
+
+// ?PreCommit@CompressedStream@IO@@UEAAXXZ                    retail 0x1800aa8c0
+// One instruction: `RET`. The base class's hook is EMPTY, and slot 8 of BOTH
+// ??_7CompressedStream@ and ??_7CompressedFileStream@ points at it — one body,
+// two rows. It is not a purecall and it is not a stub: Commit dispatches slot 8
+// virtually and the base genuinely has nothing to do, because a plain
+// CompressedStream writes onto a source that is already the right size.
+void CompressedStream::PreCommit() {
+}
+
+// ?PreCommit@CompressedMemoryStream@IO@@UEAAXXZ              retail 0x1800a9660
+// The memory subclass's source is its OWN embedded MemoryStream (+0x68), which
+// has to be sized before Commit writes the archive into it. So this computes
+// the archive's exact length and hands it to MemoryStream::Create:
+//
+//     total = 4 + headerSize*8 + sum(StoredLength(header[i]))
+//     return MemoryStream::Create(this + 0x68, total);        // TAIL JUMP
+//
+// `4 + n*8` is the four-byte count plus the directory — the same expression
+// ?Open@CompressedStream validates the source size against, and the same one
+// Commit uses to seed the first block's offset. Three independent sites agree
+// on the format, which is what makes it a format and not a guess.
+//
+// The tail jump means the bool is this function's return value even though the
+// slot is typed `void` — harmless, and reproduced by simply discarding it.
+void CompressedMemoryStream::PreCommit() {
+
+    const int32_t n = _headerSize;                       // 1800a9660  MOVSXD
+    uint32_t total = 4 + static_cast<uint32_t>(n) * 8;   // 1800a9667  LEA R8D,[4+RAX*8]
+    if (n > 0) {                                         // 1800a966f/71  TEST/JLE
+        const RtIo::CompressedStreamHeader* const h = RtIo::Headers(this);
+        for (int32_t k = 0; k < n; ++k)                  // 1800a9680
+            total += RtIo::StoredLength(h[k]);           // 1800a9683..93
+    }
+
+    // `this + 0x68` is the embedded MemoryStream, and it is now a real member
+    // rather than an offset — but ?Create@MemoryStream is NOT part of this
+    // block's conversion (it keeps its free-function door), so the call stays
+    // the door it was. Same target, same argument, one fewer literal offset.
+    RT_EXPORT_ONCE(RtIo::MemStreamCreateFn, "?Create@MemoryStream@IO@@QEAA_NH@Z")(
+        &_memoryStream, static_cast<int32_t>(total));    // 1800a969b..a2  ADD RCX,0x68 ; JMP
+}
+
+// ?Close@CompressedStream@IO@@UEAAXXZ                        retail 0x1800aa8d0
+//     if (headerSize > 0 && direction == 1) Commit(this);      // TAIL JUMP
+// Nothing else. Note it is `direction == 1` (writing), not `!= 0`: Stream.h
+// pins 1 == writing from ?Create and 0 == reading from ?Open. A stream that was
+// opened for READING and closed writes nothing back, which is what makes Close
+// safe to call unconditionally — and the `headerSize > 0` guard is Stream.h's
+// "has anything been written yet".
+void CompressedStream::Close() {
+    if (_headerSize > 0 && _direction == 1) {            // 1800aa8d0/d6
+        RtIo::RtIo_CompressedStream_Commit(
+            reinterpret_cast<RtIo::CompressedStream*>(this));   // 1800aa8da  JZ 0x1800a9ee0
+        return;
+    }
+}
+
+// ?Close@CompressedFileStream@IO@@UEAAXXZ                    retail 0x1800a9490
+//     if (headerSize > 0 && direction == 1) Commit(this);
+//     if (*(int*)(this+0x88) != -1)
+//         FileSystem::CloseFile(_singleton, (FileInfo*)(this+0x88));   // TAIL JUMP
+//
+// this+0x88 = 0x68 (the embedded BinaryFileStream) + 0x20 (its FileInfo, which
+// FileStream.h pins four ways). So this body independently corroborates that
+// +0x20 claim from a class that header does not discuss — and the `!= -1`
+// sentinel at FileInfo+0 is the same one ??1FileStream@IO@@ tests, one class
+// up. **Now that both are real classes the address arithmetic is gone**: the
+// expression is `_file._file`, and the two offsets it used to spell are pinned
+// by static_assert instead.
+void CompressedFileStream::Close() {
+
+    if (_headerSize > 0 && _direction == 1)              // 1800a9496/9f
+        RtIo::RtIo_CompressedStream_Commit(
+            reinterpret_cast<RtIo::CompressedStream*>(this));   // 1800a94a5
+
+    RtIO::FileInfo* const fileInfo = &_file._file;       // 1800a94aa  (== this+0x88)
+    if (fileInfo->handle != -1) {                        // 1800a94b1/b4
+        void* const fs = *RT_DATA_SLOT(void**,
+            "?_singleton@FileSystem@IO@@0PEAV12@EA");               // 1800a94b6
+        RT_EXPORT_ONCE(RtIo::CloseFileFn,
+            "?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z")(fs, fileInfo);  // 1800a94c2
+        return;
+    }
+}
+
+}  // namespace IO
+
+// The two offsets `?Close@CompressedFileStream` used to spell as the literal
+// +0x88, now pinned so the class expression above cannot drift from the body
+// the disassembly shows.
+static_assert(offsetof(IO::CompressedFileStream, _file) == 0x68, "the member");
+static_assert(offsetof(IO::CompressedFileStream, _file) +
+                  offsetof(IO::FileStream, _file) == 0x88,
+              "?Close@CompressedFileStream 0x1800a94aa reads this+0x88");
+
 
 // ============================================================================
 // Registration — BY NAME **AND** BY ADDRESS, every row
