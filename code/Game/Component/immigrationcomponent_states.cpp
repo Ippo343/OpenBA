@@ -155,7 +155,7 @@ uint8_t* ImmDesc(uintptr_t comp) {
 // The month of the in-game year: the clock at gw+0x128 holds {year int, Time-in-year}.
 int MonthOfYear(uint8_t* gw) {
     void* clock = *reinterpret_cast<void**>(gw + 0x128);
-    if (!clock || !fn_Time_AsSeconds) return 0;
+    if (!clock) return 0;
     float secs = reinterpret_cast<const System::Time*>(reinterpret_cast<uint8_t*>(clock) + 8)->AsSeconds();   // B.3.4b bridge
     int m = static_cast<int>((secs / kSecondsPerYear) * kMonthsPerYear);
     if (m > 11) m = 0;
@@ -240,7 +240,7 @@ extern "C" int Immigration_FindSpawnCell(void* compV, int x, int y, int hallCell
     uintptr_t comp = reinterpret_cast<uintptr_t>(compV);
     uint8_t* gw = GW();
     uint8_t* desc = ImmDesc(comp);
-    if (!gw || !desc || !fn_Random_RandTol) return -1;
+    if (!gw || !desc) return -1;
     void* rng = Rng(gw);
     int* grid = Grid(gw);
     const int W = *grid;
@@ -291,7 +291,7 @@ extern "C" void Nomad_Init(void* nomadV, void* ownerIBP, const float* spawnPos, 
     float* mp = reinterpret_cast<float*>(nomad + 0x3c);
     mp[0] = meetPos[0]; mp[1] = meetPos[1]; mp[2] = meetPos[2];
     void* rng = Rng(gw);
-    *reinterpret_cast<uint32_t*>(nomad + 0x50) = fn_Random_Rand ? reinterpret_cast<System::Random*>(rng)->Rand(2u) : 0;   // B.3.4b bridge
+    *reinterpret_cast<uint32_t*>(nomad + 0x50) = reinterpret_cast<System::Random*>(rng)->Rand(2u);   // B.3.4b bridge
 
     void* entity = *reinterpret_cast<void**>(nomad + 0x10);
     uint64_t modelIBP = 0;
@@ -320,7 +320,7 @@ extern "C" void Immigration_Spawn(void* compV) {
     uintptr_t comp = reinterpret_cast<uintptr_t>(compV);
     uint8_t* gw = GW();
     uint8_t* desc = ImmDesc(comp);
-    if (!gw || !desc || !fn_Random_Rand || !s_ResolvePos || !s_CopyCtor || !fn_MapGetTerrainPos) return;
+    if (!gw || !desc || !s_ResolvePos || !s_CopyCtor || !fn_MapGetTerrainPos) return;
     void* rng = Rng(gw);
     int* grid = Grid(gw);
     const int W = *grid;
@@ -358,7 +358,7 @@ extern "C" void Immigration_Spawn(void* compV) {
     uint8_t* tm = TownMgr(gw);
     const int pop = *reinterpret_cast<int*>(tm + 0xa8);
     const float fLo = *reinterpret_cast<float*>(desc + 0x40);
-    const float fRand = fn_Random_RandFloat ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 0.5f;   // B.3.4b bridge
+    const float fRand = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
     const float fHi = *reinterpret_cast<float*>(desc + 0x44);
 
     // Empty household slots across every registered house (townMgr+0x20/+0x28).
@@ -594,7 +594,7 @@ extern "C" char Imm_StateF_Enter(void* data, void* /*sm*/) {
     uint8_t* gw = GW();
     uint8_t* desc = ImmDesc(comp);
     if (!gw || !desc) return 0;
-    float r = fn_Random_RandFloat ? reinterpret_cast<System::Random*>(Rng(gw))->RandFloat() : 0.5f;   // B.3.4b bridge
+    float r = reinterpret_cast<System::Random*>(Rng(gw))->RandFloat();   // B.3.4b bridge
     float months = r * *reinterpret_cast<float*>(desc + 0x4c) + *reinterpret_cast<float*>(desc + 0x48);
     float secs = months * kSecondsPerMonth;
     int64_t t = 0;

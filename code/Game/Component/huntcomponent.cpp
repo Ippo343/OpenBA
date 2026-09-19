@@ -146,8 +146,7 @@ extern "C" void HuntComponent_ShutdownVSlot(void* selfP, void* stream) {
 
     alignas(8) uint8_t serializer[24];
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    if (g_fn_Time_Serialize)
-        reinterpret_cast<System::Time*>(reinterpret_cast<uint8_t*>(selfP) + 0x50)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(reinterpret_cast<uint8_t*>(selfP) + 0x50)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4b bridge
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 

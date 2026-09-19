@@ -42,10 +42,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-// System::Time::Serialize -- dispatch slot at 0x140152aa8
-typedef void (*fn_Time_Serialize_t)(void* time, void* serializer);
-static fn_Time_Serialize_t s_fn_Time_Serialize = nullptr;
-
 // Object::InternalBasePtr::Serialize is a direct member call since ENDGAME B.3.4 (batch G);
 // the engine_funcs global and its typedef were deleted in closing 2d.
 
@@ -71,10 +67,6 @@ static void EnsureHelpers() {
         ResolveAddr(Module::Exe, 0x1401189b0));
     s_pTypeId_ComponentEntity = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c5d70));
-
-    slot = ResolveAddr(Module::Exe, 0x140152aa8);
-    if (slot) s_fn_Time_Serialize = reinterpret_cast<fn_Time_Serialize_t>(
-        *reinterpret_cast<uintptr_t*>(slot));
 
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_d = reinterpret_cast<fn_IsDerivedFrom_dispatch_t>(
@@ -150,9 +142,7 @@ void ImmigrationComponent_Shutdown(ImmigrationComponent* self, void* stream) {
     }
 
     // Serialize Time at +0x48
-    if (s_fn_Time_Serialize) {
-        reinterpret_cast<System::Time*>((void*)&self->field48)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4b bridge
-    }
+    reinterpret_cast<System::Time*>((void*)&self->field48)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4b bridge
 
     // Destroy serializer
     reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge

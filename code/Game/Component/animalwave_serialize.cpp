@@ -46,14 +46,12 @@ namespace {
 
 // ---- resolved engine helpers (shared by all four bodies) -------------------
 typedef void (*fn_ComponentSerialize_t)(void* self, void* stream);
-typedef void (*fn_TimeSerialize_t)(void* time, void* ser);
 typedef bool (*fn_IsDerived_t)(void* obj, uint32_t typeId);
 // 0x1400032e0 was Collection::Array<void*>::SetSize(n) monomorphised into the
 // exe (ENDGAME B.3.2 step 2, ImmigrationComp_DynArrayResize body: stride 8,
 // align 8, zero tail) — the resolved pointer is gone, see the call sites below.
 
 fn_ComponentSerialize_t s_Base       = nullptr;  // 0x1401189b0
-fn_TimeSerialize_t      s_TimeSer    = nullptr;  // slot 0x140152aa8
 fn_IsDerived_t          s_IsDerived  = nullptr;  // slot 0x140152a98
 
 // type-id storage (null when the owning reg wave is off; see header note)
@@ -71,8 +69,6 @@ void Resolve() {
         ResolveAddr(Module::Exe, 0x1401189b0));
 
     uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152aa8);
-    if (slot) s_TimeSer = *reinterpret_cast<fn_TimeSerialize_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_IsDerived = *reinterpret_cast<fn_IsDerived_t*>(slot);
 
@@ -130,8 +126,8 @@ extern "C" void HerdComponent_Serialize(void* self, void* stream) {
         SerializeValidatedIBP(member, ser, s_tidWildAnimal);
 
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x48)), nullptr);   // B.3.4 bridge
-    if (s_TimeSer) reinterpret_cast<System::Time*>(At(self, 0x50))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    if (s_TimeSer) reinterpret_cast<System::Time*>(At(self, 0x58))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(At(self, 0x50))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(At(self, 0x58))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x4c)), nullptr);   // B.3.4 bridge
     SerializeValidatedIBP(At(self, 0x28), ser, s_tidPopulation);
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x30)), nullptr);   // B.3.4 bridge
@@ -154,12 +150,12 @@ extern "C" void AnimalComponent_Serialize(void* self, void* stream) {
     alignas(8) uint8_t ser[24];
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
 
-    if (s_TimeSer) reinterpret_cast<System::Time*>(At(self, 0x30))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(At(self, 0x30))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x28)), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x44)), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x48)), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x40)), nullptr);   // B.3.4 bridge
-    if (s_TimeSer) reinterpret_cast<System::Time*>(At(self, 0x50))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(At(self, 0x50))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(self, 0x38)), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(self, 0x3a)), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(self, 0x3c)), nullptr);   // B.3.4 bridge
@@ -189,7 +185,7 @@ extern "C" void LivestockComponent_Serialize(void* self, void* stream) {
     alignas(8) uint8_t ser[24];
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     SerializeValidatedIBP(At(self, 0x28), ser, s_tidPasture);
-    if (s_TimeSer) reinterpret_cast<System::Time*>(At(self, 0x30))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(At(self, 0x30))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
@@ -236,7 +232,7 @@ extern "C" void PopulationComponent_Serialize_Real(void* self, void* stream) {
     for (int i = 0; i < herds && herd; ++i, herd += 8)
         SerializeValidatedIBP(herd, ser, s_tidEntity);
 
-    if (s_TimeSer) reinterpret_cast<System::Time*>(At(self, 0x60))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(At(self, 0x60))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x68)), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x6c)), nullptr);   // B.3.4 bridge
 

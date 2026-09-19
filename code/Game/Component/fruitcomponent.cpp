@@ -177,7 +177,7 @@ void FruitComponent_Update(FruitComponent* self, int64_t* pDeltaTime) {
         if (s_pGameWorld && *s_pGameWorld) {
             uintptr_t world = (uintptr_t)*s_pGameWorld;
             void* seasonTime = (void*)(*(uintptr_t*)(world + 0x128) + 8);
-            float seasonSecs = fn_Time_AsSeconds ? reinterpret_cast<const System::Time*>(seasonTime)->AsSeconds() : 0.0f;   // B.3.4b bridge
+            float seasonSecs = reinterpret_cast<const System::Time*>(seasonTime)->AsSeconds();   // B.3.4b bridge
             float secsPerYear   = s_fSecsPerYear   ? *s_fSecsPerYear   : 3600.0f;
             float monthsPerYear = s_fMonthsPerYear ? *s_fMonthsPerYear : 12.0f;
             unsigned int monthIdx =
@@ -222,7 +222,7 @@ void FruitComponent_Update(FruitComponent* self, int64_t* pDeltaTime) {
     if (effRate >= fUV) effRate = fUV;
 
     // ripeness(+0x30) += dtSeconds * effRate * ripeningSpeed * growthFactor
-    float dtSeconds = fn_Time_AsSeconds ? reinterpret_cast<const System::Time*>(pDeltaTime)->AsSeconds() : 0.0f;   // B.3.4b bridge
+    float dtSeconds = reinterpret_cast<const System::Time*>(pDeltaTime)->AsSeconds();   // B.3.4b bridge
     float* pRipeness = reinterpret_cast<float*>(&self->field30);
     float newRipeness = dtSeconds * effRate * ripeningSpeed * growthFactor + *pRipeness;
     *pRipeness = newRipeness;

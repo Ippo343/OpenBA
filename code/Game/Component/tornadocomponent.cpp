@@ -94,7 +94,6 @@ constexpr int kPathNodes = kPathLast + 1;   // 129
 // ============================================================
 
 typedef void  (*fn_ComponentSerialize_t)(void* self, void* stream);
-typedef void  (*fn_TimeSerialize_t)(void* time, void* serializer);
 
 // Entity component finders. All take (entity, InternalBasePtr* out) and write the
 // component pointer (or null) into *out.
@@ -120,7 +119,6 @@ typedef void  (*fn_GeometrySetTransform_t)(void* geometry, void* transform);    
 
 struct Helpers {
     fn_ComponentSerialize_t   componentSerialize   = nullptr;
-    fn_TimeSerialize_t        timeSerialize        = nullptr;
 
     fn_Finder_t               findParticle         = nullptr;  // 0x140005200
     fn_Finder_t               findAudio            = nullptr;  // 0x140002280
@@ -210,8 +208,6 @@ void TornadoComponent_InitFuncs() {
 
     g_h.componentSerialize = reinterpret_cast<fn_ComponentSerialize_t>(
         ResolveAddr(Module::Exe, 0x1401189b0));
-
-    g_h.timeSerialize  = ResolveSlotPtr<fn_TimeSerialize_t>(0x140152aa8);
 
     g_h.findParticle        = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140005200));
     g_h.findAudio           = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140002280));
@@ -311,7 +307,7 @@ void TornadoComponent_Shutdown(TornadoComponent* self, void* stream) {
         }
     }
 
-    if (g_h.timeSerialize) reinterpret_cast<System::Time*>(reinterpret_cast<void*>(s + 0x28))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(reinterpret_cast<void*>(s + 0x28))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4b bridge
     reinterpret_cast<Math::Vector3*>(s + 0x58)->Serialize(serializer);   // B.3.1 bridge
 
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
@@ -908,7 +904,7 @@ void TornadoComponent_OnRemove(TornadoComponent* self, void* time) {
     }
 
     // --- integrate the position ---
-    const float secs = fn_Time_AsSeconds ? reinterpret_cast<const System::Time*>(const_cast<int64_t*>(dt))->AsSeconds() : 0.0f;   // B.3.4b bridge
+    const float secs = reinterpret_cast<const System::Time*>(const_cast<int64_t*>(dt))->AsSeconds();   // B.3.4b bridge
     const float step = secs * *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(desc) + 0x20);
     // Math::Vector3::operator+= (slot 0x1401514b8), inlined: a componentwise add
     // with no side effects.
@@ -1032,9 +1028,8 @@ extern "C" void Tornado_ParticleReverse_53720(void* particleComp, int index) {
 
     uintptr_t geoArray = *reinterpret_cast<uintptr_t*>(p + 0x38);
     uintptr_t entries  = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(desc) + 0x28);
-    const float duration = fn_Time_AsSeconds
-        ? reinterpret_cast<const System::Time*>(reinterpret_cast<void*>(entries + static_cast<uintptr_t>(index) * 0x28 + 0x20))->AsSeconds()   // B.3.4b bridge
-        : 1.0f;
+    const float duration = reinterpret_cast<const System::Time*>(
+        reinterpret_cast<void*>(entries + static_cast<uintptr_t>(index) * 0x28 + 0x20))->AsSeconds();   // B.3.4b bridge
     const float rate = 1.0f / duration;
     uint32_t bits = *reinterpret_cast<const uint32_t*>(&rate);
     bits ^= 0x80000000u;  // DAT_1401722c0 sign flip

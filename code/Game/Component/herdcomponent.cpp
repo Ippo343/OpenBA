@@ -37,10 +37,6 @@
 // Resolved helpers
 // ============================================================
 
-// System::Random::RandFloat(Random*) @ Runtime 0x1800c7d40
-typedef float (*fn_RandFloat_t)(void* random);
-static fn_RandFloat_t s_fn_RandFloat = nullptr;
-
 // FUN_140053f20 -- food availability check helper
 typedef float (*fn_CheckFood_t)(int64_t entityComp, int gridCell);
 static fn_CheckFood_t s_fn_CheckFood = nullptr;
@@ -74,12 +70,6 @@ static bool s_helpersResolved = false;
 static void EnsureHelpers() {
     if (s_helpersResolved) return;
 
-    // BY NAME (retail 0x1800c7d40): RandFloat is a Wave 2 port
-    // (runtime/src/system/value_types.cpp:405) and ResolveAddr consults the
-    // ADDRESS registry only, so asking by address went around it into the DLL.
-    s_fn_RandFloat = reinterpret_cast<fn_RandFloat_t>(
-        ResolveExport("?RandFloat@Random@System@@QEAAMXZ"));
-
     s_fn_CheckFood = reinterpret_cast<fn_CheckFood_t>(
         ResolveAddr(Module::Exe, 0x140053f20));
     s_fn_AdjustSize = reinterpret_cast<fn_AdjustSize_t>(
@@ -107,11 +97,6 @@ static void EnsureHelpers() {
 // ============================================================
 
 // Sub-helpers used by HerdComponent_AdjustSize (deep spawn path).
-// Random::Rand / RandFloatTol go through exe dispatch slots (not direct Runtime addrs).
-typedef int (*fn_Random_Rand_slot_t)(void* rng, int range);
-static fn_Random_Rand_slot_t s_fn_Rand = nullptr;
-typedef float (*fn_Random_RandFloatTol_t)(void* rng);
-static fn_Random_RandFloatTol_t s_fn_RandFloatTol = nullptr;
 typedef void* (*fn_ComponentEntity_CopyCtor_t)(void* mem, int64_t descr);
 static fn_ComponentEntity_CopyCtor_t s_fn_ComponentEntity_CopyCtor = nullptr;
 typedef void* (*fn_Vec3Ctor_local_t)(void* out, float x, float y, float z);
@@ -158,10 +143,6 @@ static bool s_herdExtraInit = false;
 static void EnsureHerdExtras() {
     if (s_herdExtraInit) return;
     uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x1401512e8);            // System::Random::Rand
-    if (slot) s_fn_Rand = *reinterpret_cast<fn_Random_Rand_slot_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140151400);            // System::Random::RandFloatTol
-    if (slot) s_fn_RandFloatTol = *reinterpret_cast<fn_Random_RandFloatTol_t*>(slot);
     s_fn_ComponentEntity_CopyCtor = reinterpret_cast<fn_ComponentEntity_CopyCtor_t>(
         ResolveAddr(Module::Exe, 0x1400c3720));
     slot = ResolveAddr(Module::Exe, 0x140152a30);            // Math::Vector3::Vector3
@@ -433,7 +414,7 @@ void HerdComponent_AdjustSize(void* herdComp, int targetSize) {
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     void* rng = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xd8);
     int* mapDimPtr = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
-    char altFlag = (s_fn_Rand && reinterpret_cast<System::Random*>(rng)->Rand(2u) == 0) ? 1 : 0;   // B.3.4b bridge
+    char altFlag = (reinterpret_cast<System::Random*>(rng)->Rand(2u) == 0) ? 1 : 0;   // B.3.4b bridge
     float spread = s_fSpread ? *s_fSpread : 0.0f;
     float half = s_fFoodThreshold ? *s_fFoodThreshold : 0.5f;
 
@@ -491,8 +472,8 @@ void HerdComponent_AdjustSize(void* herdComp, int targetSize) {
         if (s_fn_CharComp_f3e0)
             s_fn_CharComp_f3e0(mapDimPtr, worldPos, (float*)centreVec, 0, nullptr);
 
-        float rx = s_fn_RandFloatTol ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
-        float ry = s_fn_RandFloatTol ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
+        float rx = reinterpret_cast<System::Random*>(rng)->RandFloatTol();   // B.3.4b bridge
+        float ry = reinterpret_cast<System::Random*>(rng)->RandFloatTol();   // B.3.4b bridge
         uint8_t offVec[16] = {0};
         if (s_fn_Vec3Ctor_local)
             s_fn_Vec3Ctor_local(offVec, ry * (float)animalArea, rx * (float)animalArea, 0.0f);
@@ -504,7 +485,7 @@ void HerdComponent_AdjustSize(void* herdComp, int targetSize) {
                 *(float*)(worldPos + 4) + *(float*)(offVec + 4),
                 *(float*)(worldPos + 8) + *(float*)(offVec + 8));
 
-        float rz = s_fn_RandFloatTol ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
+        float rz = reinterpret_cast<System::Random*>(rng)->RandFloatTol();   // B.3.4b bridge
         HerdComponent_Helper7400((int64_t)animalRef, spawnVec, rz * spread, altFlag);
         altFlag = (altFlag == 0) ? 1 : 0;
 
@@ -677,7 +658,7 @@ void HerdComponent_Populate(int64_t herdComp, int count) {
     if (bw < 1) bw = 1;
     if (bh < 1) bh = 1;
 
-    char altPose = (s_fn_Rand && reinterpret_cast<System::Random*>(rng)->Rand(2u) == 0) ? 1 : 0;   // B.3.4b bridge
+    char altPose = (reinterpret_cast<System::Random*>(rng)->Rand(2u) == 0) ? 1 : 0;   // B.3.4b bridge
     float scatter = s_fScatter ? *s_fScatter : 0.0f;
     float yawScale = s_fSpread ? *s_fSpread : 0.0f;
     float half = s_fFoodThreshold ? *s_fFoodThreshold : 0.5f;
@@ -693,8 +674,8 @@ void HerdComponent_Populate(int64_t herdComp, int count) {
 
     int spawned = 0;
     for (int n = 0; n < count; n++) {
-        int rndX = s_fn_Rand ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(bw)) : 0;   // B.3.4b bridge
-        int rndY = s_fn_Rand ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(bh)) : 0;   // B.3.4b bridge
+        int rndX = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(bw));   // B.3.4b bridge
+        int rndY = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(bh));   // B.3.4b bridge
 
         void* mem = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8) : nullptr;
         void* ent = (mem && s_fn_ComponentEntity_CopyCtor)
@@ -729,8 +710,8 @@ void HerdComponent_Populate(int64_t herdComp, int count) {
         if (s_fn_CharComp_f3e0)
             s_fn_CharComp_f3e0(mapDimPtr, worldPos, (float*)cellVec, 0, nullptr);
 
-        float j1 = s_fn_RandFloatTol ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
-        float j2 = s_fn_RandFloatTol ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
+        float j1 = reinterpret_cast<System::Random*>(rng)->RandFloatTol();   // B.3.4b bridge
+        float j2 = reinterpret_cast<System::Random*>(rng)->RandFloatTol();   // B.3.4b bridge
         uint8_t offVec[16] = {0};
         if (s_fn_Vec3Ctor_local)
             s_fn_Vec3Ctor_local(offVec, j2 * scatter, j1 * scatter, 0.0f);
@@ -742,7 +723,7 @@ void HerdComponent_Populate(int64_t herdComp, int count) {
                 *(float*)(worldPos + 4) + *(float*)(offVec + 4),
                 *(float*)(worldPos + 8) + *(float*)(offVec + 8));
 
-        float yaw = s_fn_RandFloatTol ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
+        float yaw = reinterpret_cast<System::Random*>(rng)->RandFloatTol();   // B.3.4b bridge
         HerdComponent_Helper7400((int64_t)animalRef, spawnVec, yaw * yawScale, altPose);
         altPose = (altPose == 0) ? 1 : 0;
 
@@ -752,7 +733,7 @@ void HerdComponent_Populate(int64_t herdComp, int count) {
             void* animalDesc = (fn_IsDerivedFrom && s_pTypeId_1c6fd0 &&
                                 fn_IsDerivedFrom(aDescObj, *s_pTypeId_1c6fd0))
                                    ? aDescObj : nullptr;
-            float r = s_fn_RandFloat ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 0.0f;   // B.3.4b bridge
+            float r = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
             if (animalDesc)
                 *(float*)((uintptr_t)animalRef + 0x44) =
                     r * *(float*)((uintptr_t)animalDesc + 0x28);
@@ -773,7 +754,7 @@ void HerdComponent_Populate(int64_t herdComp, int count) {
     }
 
     // Arm the graze timer and enter the grazing phase.
-    float r = s_fn_RandFloat ? reinterpret_cast<System::Random*>(*(void**)(gw + 0xd8))->RandFloat() : 0.0f;   // B.3.4b bridge
+    float r = reinterpret_cast<System::Random*>(*(void**)(gw + 0xd8))->RandFloat();   // B.3.4b bridge
     int64_t grazeTicks = 0;
     if (fn_Time_Ctor_Float)
         fn_Time_Ctor_Float(&grazeTicks,

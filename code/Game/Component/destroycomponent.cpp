@@ -29,10 +29,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-// System::Time::Serialize -- dispatch slot at 0x140152aa8
-typedef void (*fn_Time_Serialize_t)(void* time, void* serializer);
-static fn_Time_Serialize_t s_fn_Time_Serialize = nullptr;
-
 // FUN_140002340 -- serialize InternalBasePtr (field60)
 typedef void (*fn_SerializeInternalBasePtr_t)(void* ptrField, void* serializer);
 static fn_SerializeInternalBasePtr_t s_fn_SerializeInternalBasePtr = nullptr;
@@ -57,10 +53,6 @@ static void EnsureHelpers() {
         ResolveAddr(Module::Exe, 0x1401c7628));
 
     uintptr_t slot;
-
-    slot = ResolveAddr(Module::Exe, 0x140152aa8);
-    if (slot) s_fn_Time_Serialize = reinterpret_cast<fn_Time_Serialize_t>(
-        *reinterpret_cast<uintptr_t*>(slot));
 
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_d = reinterpret_cast<fn_IsDerivedFrom_dispatch_t>(
@@ -107,9 +99,7 @@ void DestroyComponent_Shutdown(DestroyComponent* self, void* stream) {
 
     reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<bool*>(&self->destroyFlags), nullptr);   // B.3.4 bridge
 
-    if (s_fn_Time_Serialize) {
-        reinterpret_cast<System::Time*>((void*)&self->field48)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4b bridge
-    }
+    reinterpret_cast<System::Time*>((void*)&self->field48)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4b bridge
 
     reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
 }

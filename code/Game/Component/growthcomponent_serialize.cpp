@@ -50,11 +50,9 @@
 namespace {
 
 typedef void (*fn_ComponentSerialize_t)(void* self, void* stream);
-typedef void (*fn_TimeSerialize_t)(void* time, void* ser);
 typedef bool (*fn_IsDerived_t)(void* obj, uint32_t typeId);
 
 fn_ComponentSerialize_t s_Base   = nullptr;  // 0x1401189b0
-fn_TimeSerialize_t      s_TimeSer = nullptr; // slot 0x140152aa8
 fn_IsDerived_t           s_IsDerived = nullptr; // slot 0x140152a98
 
 const uint32_t* s_tidResource = nullptr;  // 0x1401c7b30  natural-resource sibling
@@ -68,8 +66,6 @@ void Resolve() {
         ResolveAddr(Module::Exe, 0x1401189b0));
 
     uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152aa8);
-    if (slot) s_TimeSer = *reinterpret_cast<fn_TimeSerialize_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_IsDerived = *reinterpret_cast<fn_IsDerived_t*>(slot);
 
@@ -106,7 +102,7 @@ extern "C" void GrowthComponent_Serialize2(void* self, void* stream) {
     SerializeValidatedIBP(At(self, 0x30), ser, s_tidModel);
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x48)), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x4c)), nullptr);   // B.3.4 bridge
-    if (s_TimeSer) reinterpret_cast<System::Time*>(At(self, 0x40))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(At(self, 0x40))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
 
     // Everything above is retail 0x1401207c0 field-for-field. What follows is a
     // deliberate, load-only repair -- see below for why it cannot be avoided.

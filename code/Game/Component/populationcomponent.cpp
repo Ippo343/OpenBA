@@ -42,9 +42,6 @@ static void** s_pGameWorld = nullptr;
 // ComponentEntity_CopyCtor(mem, description) — 0x1400c3720
 typedef void* (*fn_CopyCtor_t)(void* mem, int64_t description);
 static fn_CopyCtor_t s_fn_CopyCtor = nullptr;
-// System::Random::Rand(rng, range) via the exe dispatch slot 0x1401512e8
-typedef int (*fn_Rand_t)(void* rng, int range);
-static fn_Rand_t s_fn_Rand = nullptr;
 // EntityList_RegisterEntity(list, &entityIbp, categoryId) — 0x1400c48a0
 typedef void (*fn_RegisterEntity_t)(void* list, void* entityIbp, int categoryId);
 static fn_RegisterEntity_t s_fn_RegisterEntity = nullptr;
@@ -484,7 +481,7 @@ void PopulationComponent_Startup(PopulationComponent* selfC) {
         if (herdDesc) {
             int maxSize = *reinterpret_cast<int*>((uintptr_t)herdDesc + 0x28);
             int minSize = *reinterpret_cast<int*>((uintptr_t)herdDesc + 0x2c);
-            size = (s_fn_Rand ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(maxSize - minSize)) : 0) + minSize;   // B.3.4b bridge
+            size = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(maxSize - minSize)) + minSize;   // B.3.4b bridge
         }
         HerdComponent_Populate(reinterpret_cast<int64_t>(herd), size);
 
@@ -561,8 +558,6 @@ void PopulationComponent_InitFuncs() {
 
     s_fn_CopyCtor = reinterpret_cast<fn_CopyCtor_t>(
         ResolveAddr(Module::Exe, 0x1400c3720));
-    uintptr_t randSlot = ResolveAddr(Module::Exe, 0x1401512e8);
-    if (randSlot) s_fn_Rand = *reinterpret_cast<fn_Rand_t*>(randSlot);
     s_fn_RegisterEntity = reinterpret_cast<fn_RegisterEntity_t>(
         ResolveAddr(Module::Exe, 0x1400c48a0));
     s_fn_ArrErase = reinterpret_cast<fn_ArrErase_t>(
