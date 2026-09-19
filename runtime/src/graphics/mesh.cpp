@@ -474,26 +474,12 @@ static int RtGraphics_GraphicsMesh_GetNodeIndexFromName(const void* self, const 
 //
 // ORACLE: FULL. Const, no side effects.
 // ============================================================================
+// ENDGAME B.3.5 block E: the BODY MOVED to `Graphics::MeshInstance::IsAnimating`
+// at the bottom of this file. This door keeps its name and its registration and
+// delegates with a QUALIFIED non-virtual call.
 static bool RtGraphics_MeshInstance_IsAnimating(const void* self) {
-
-    const MeshInstance* mi = reinterpret_cast<const MeshInstance*>(self);
-    bool ours;
-    if (mi->_animation._layers._size == 0) {
-        ours = false;
-    } else {
-        const uint8_t* layer = mi->_animation._layers._data;
-        const void* group = Rd<void*>(layer, 0x00);
-        const int32_t animIndex = Rd<int32_t>(layer, 0x08);
-        const int64_t layerTime = Rd<int64_t>(layer, 0x18);
-
-        const uint8_t* anim = B(Rd<void*>(group, 0x20)) + static_cast<int64_t>(animIndex) * 0x70;
-        if (Rd<int8_t>(anim, 0x3c) != 0)
-            ours = true;
-        else
-            ours = layerTime < Rd<int64_t>(anim, 0x58);
-    }
-
-    return ours;
+    return reinterpret_cast<const ::Graphics::MeshInstance*>(self)
+               ->::Graphics::MeshInstance::IsAnimating();
 }
 
 namespace {
@@ -552,7 +538,11 @@ namespace {
 //     single star is the SECOND dereference, not the first. Doing only one
 //     lands `+ 0x20 + hi*0x30` inside the 0x9d8-byte AnimationManager itself,
 //     which yields a plausible-looking garbage bank rather than a fault.
-const uint8_t* RtInstancedPoolSlot(const MeshInstance* mi) {
+//
+// ENDGAME B.3.5 block E: retyped from `const RtGraphics::MeshInstance*` to the
+// REAL class. Its four callers were all doors in this file and all four are now
+// members of `Graphics::MeshInstance`, so the POD spelling had no user left.
+const uint8_t* RtInstancedPoolSlot(const ::Graphics::MeshInstance* mi) {
     const uint8_t* layers = mi->_animation._layers._data;
 
     // MOVSXD: the stored pool id is a SIGNED int32 widened to 64 bits.
@@ -602,46 +592,17 @@ const uint8_t* RtInstancedPoolSlot(const MeshInstance* mi) {
 // byte — the diff-oracle header's "functions that write through an out-parameter" case.
 // Never let the original write into live state.
 // ============================================================================
+// ENDGAME B.3.5 block E: the BODY MOVED to
+// `Graphics::MeshInstance::GetNodeToWorld(int)`. The door keeps the RETAIL ABI —
+// `this` in RCX, the caller's Math::Transform buffer in RDX, RAX = RDX on return
+// — because that is what its 246 by-name call sites and the `fn_*` typedefs
+// spell. The member returns by value, which is safe for a NON-virtual member
+// (both ends of a member call are this same GCC); see Geometry.h's B5-12 block
+// for why the same is NOT true of a vtable slot.
 static void* RtGraphics_MeshInstance_GetNodeToWorld(const void* self, void* ret, int node) {
-
-    const MeshInstance* mi = reinterpret_cast<const MeshInstance*>(self);
-    uint8_t* out = B(ret);
-
-    if (mi->_animation._instanced == 0) {
-        const uint8_t* src = B(mi->_nodes._data) + static_cast<int64_t>(node) * 0x38;
-        std::memcpy(out, src, 0x1c);            // seven dwords, _state[0]
-    } else {
-        // The geometry transform, copied into a local first exactly as retail
-        // does (it materialises all seven floats before either call).
-        uint8_t geomXf[0x1c];
-        std::memcpy(geomXf, B(self) + 0x84, 0x1c);
-
-        // slot + 0x38 is a POINTER to the pool entry's per-node pose array; the
-        // node index strides THAT, not the slot. See RtInstancedPoolSlot.
-        const uint8_t* poses = B(Rd<void*>(RtInstancedPoolSlot(mi), 0x38));
-        uint8_t poolXf[0x1c];
-        std::memcpy(poolXf, poses + static_cast<int64_t>(node) * 0x38, 0x1c);
-
-        // Retail seeds the return slot with the identity transform before the
-        // two calls: qword at +0x0c = 0x3f800000 (so +0x0c = 1.0f, +0x10 = 0),
-        // qword at +0x00 = 0, dword at +0x08 = 0, qword at +0x14 = 0.
-        std::memset(out, 0, 0x1c);
-        const float one = 1.0f;
-        std::memcpy(out + 0x0c, &one, 4);
-
-        // translation = geom.translation + Rotate(geom.rotation, pool.translation)
-        uint8_t rotated[16];
-        QuaternionRotate(geomXf /* rotation at +0x00 */, rotated, poolXf + 0x10);
-        for (int i = 0; i < 3; ++i) {
-            const float t = Rd<float>(geomXf, 0x10 + i * 4) + Rd<float>(rotated, i * 4);
-            std::memcpy(out + 0x10 + i * 4, &t, 4);
-        }
-        // rotation = geom.rotation * pool.rotation
-        uint8_t q[16];
-        QuaternionMultiply(geomXf, q, poolXf);
-        std::memcpy(out, q, 16);
-    }
-
+    *reinterpret_cast<Math::Transform*>(ret) =
+        reinterpret_cast<const ::Graphics::MeshInstance*>(self)
+            ->::Graphics::MeshInstance::GetNodeToWorld(node);
     return ret;
 }
 
@@ -666,17 +627,12 @@ static void* RtGraphics_MeshInstance_GetNodeToWorld(const void* self, void* ret,
 //
 // ORACLE: FULL, through a scratch buffer, same shape as GetNodeToWorld.
 // ============================================================================
+// ENDGAME B.3.5 block E: BODY MOVED to
+// `Graphics::MeshInstance::RootAnimationOffset()`.
 static void RtGraphics_MeshInstance_RootAnimationOffset(const void* self, void* ret) {
-
-    const MeshInstance* mi = reinterpret_cast<const MeshInstance*>(self);
-    uint8_t* out = B(ret);
-
-    if (mi->_animation._instanced == 0) {
-        std::memcpy(out, B(self) + 0x100, 12);
-    } else {
-        std::memcpy(out, RtInstancedPoolSlot(mi) + 0x18, 12);
-    }
-
+    *reinterpret_cast<Math::Vector3*>(ret) =
+        reinterpret_cast<const ::Graphics::MeshInstance*>(self)
+            ->::Graphics::MeshInstance::RootAnimationOffset();
 }
 
 // ============================================================================
@@ -745,89 +701,13 @@ static void RtGraphics_MeshInstance_RootAnimationOffset(const void* self, void* 
 // rewrite identically. This is the same "FULL (replay)" oracle Wave 5 lane D
 // used for Picking::Scene::SetTransform.
 // ============================================================================
+// ENDGAME B.3.5 block E: BODY MOVED to
+// `Graphics::MeshInstance::UpdateHierarchy()` at the bottom of this file. The
+// door keeps its name and its registration and resolves nothing per call, which
+// is what the PERF paragraph above is about.
 static void RtGraphics_MeshInstance_UpdateHierarchy(void* self) {
-
-    MeshInstance* mi = reinterpret_cast<MeshInstance*>(self);
-    const int count = mi->_nodes._size;
-    if (count != 0) {
-        uint8_t* xf = B(mi->_nodes._data);
-        const uint8_t* mesh = B(mi->_mesh.p);
-
-        // Node 0: the geometry's own transform, in both halves.
-        std::memcpy(xf, B(self) + 0x84, 0x1c);
-        std::memcpy(xf + 0x1c, xf, 0x1c);
-
-        const uint8_t* nodes = B(Rd<void*>(mesh, 0x60));
-        for (int i = 1; i < count; ++i) {
-            const uint8_t* node = nodes + static_cast<int64_t>(i) * 0x48;
-            const int32_t parent = Rd<int32_t>(node, 0x08);
-            const uint8_t* p = xf + static_cast<int64_t>(parent) * 0x38;   // parent world xf
-
-            const float qx = Rd<float>(p, 0x00);
-            const float qy = Rd<float>(p, 0x04);
-            const float qz = Rd<float>(p, 0x08);
-            const float qw = Rd<float>(p, 0x0c);
-            const float px = Rd<float>(p, 0x10);
-            const float py = Rd<float>(p, 0x14);
-            const float pz = Rd<float>(p, 0x18);
-
-            // The node's LOCAL transform lives at node + 0x0c; the rotation is
-            // the first 16 bytes and the translation the three floats at +0x10
-            // from there (i.e. node + 0x1c).
-            const uint8_t* localXf = node + 0x0c;
-            const float vx = Rd<float>(localXf, 0x10);
-            const float vy = Rd<float>(localXf, 0x14);
-            const float vz = Rd<float>(localXf, 0x18);
-
-            // Conjugate components, produced in retail by XORing the sign bit
-            // (DAT_1801617c0 = 0x80000000, read out of the shipped DLL). The w
-            // component is deliberately NOT negated.
-            const float cx = -qx, cy = -qy, cz = -qz;
-
-            // t = q * (v, 0)   -- association exactly as decompiled
-            const float tx = (qw * vx + qx * 0.0f + qz * vy) - qy * vz;
-            const float ty = (qy * 0.0f - qz * vx) + qw * vy + qx * vz;
-            const float tz = ((qy * vx + qz * 0.0f) - qx * vy) + qw * vz;
-            const float tw = ((qw * 0.0f - qx * vx) - qy * vy) - qz * vz;
-
-            // world.translation = p + (t * conj(q)).xyz
-            //
-            // *** THE PARENT TRANSLATION IS ADDED LAST, AFTER THE ROTATION SUM
-            // IS COMPLETE. *** Retail accumulates each component fully and only
-            // then does one ADDSS with p:
-            //     ffbf6 ADDSS XMM3,XMM1   / ffbfd SUBSS XMM3,XMM0  -> R_X
-            //     ffc04 ADDSS XMM8,XMM3                            -> p.x + R_X
-            //     ffc3d ADDSS XMM2,XMM1   / ffc41 ADDSS XMM2,XMM0  -> R_Y
-            //     ffc4f ADDSS XMM7,XMM2                            -> p.y + R_Y
-            //     ffc45 SUBSS XMM10,XMM11 / ffc4a ADDSS XMM10,XMM4 -> R_Z
-            //     ffc53 ADDSS XMM6,XMM10                           -> p.z + R_Z
-            // The first draft wrote `py + (a - b) + c + d`, which folds p.y into
-            // the running sum after the FIRST term instead of after the last —
-            // a reassociated float sum, the same defect Wave 1 found in
-            // `Transform::FromDirection` (WAVE1.md). It changes only the last
-            // bit, which is why it diverged on ~5% of nodes and not all of them,
-            // and why the X component — where the whole rotation sum already sat
-            // inside one pair of parentheses — was correct by accident.
-            const float rx = (qw * tx + tw * cx + tz * cy) - ty * cz;
-            const float ry = (qw * ty - tz * cx) + tw * cy + tx * cz;
-            const float rz = ((ty * cx + qw * tz) - tx * cy) + tw * cz;
-            const float wx = px + rx;
-            const float wy = py + ry;
-            const float wz = pz + rz;
-
-            // world.rotation = parentRotation * nodeLocalRotation
-            uint8_t q[16];
-            QuaternionMultiply(p, q, localXf);
-
-            uint8_t* dst = xf + static_cast<int64_t>(i) * 0x38;
-            std::memcpy(dst + 0x00, q, 16);
-            std::memcpy(dst + 0x10, &wx, 4);
-            std::memcpy(dst + 0x14, &wy, 4);
-            std::memcpy(dst + 0x18, &wz, 4);
-            std::memcpy(dst + 0x1c, dst, 0x1c);       // second half = first half
-        }
-    }
-
+    reinterpret_cast<::Graphics::MeshInstance*>(self)
+        ->::Graphics::MeshInstance::UpdateHierarchy();
 }
 
 // ============================================================================
@@ -842,11 +722,11 @@ static void RtGraphics_MeshInstance_UpdateHierarchy(void* self) {
 // ORACLE: FULL by replay. The store is idempotent, so running theirs after ours
 // writes the same qword to the same slot and the comparison is real.
 // ============================================================================
+// ENDGAME B.3.5 block E: BODY MOVED to
+// `Graphics::MeshInstance::SetMaterialInstance`.
 static void RtGraphics_MeshInstance_SetMaterialInstance(void* self, int index, ExternalPtr value) {
-
-    MeshInstance* mi = reinterpret_cast<MeshInstance*>(self);
-    mi->_materials._data[index] = value;
-
+    reinterpret_cast<::Graphics::MeshInstance*>(self)
+        ->::Graphics::MeshInstance::SetMaterialInstance(index, value);
 }
 
 // ============================================================================
@@ -881,52 +761,12 @@ static void RtGraphics_MeshInstance_SetMaterialInstance(void* self, int index, E
 // UpdateHierarchy is pure. So ours runs, the whole 0x120-byte object plus both
 // heap buffers are snapshotted, theirs runs, and the two are compared.
 // ============================================================================
+// ENDGAME B.3.5 block E: BODY MOVED to `Graphics::MeshInstance::SetMesh`,
+// including the "read the stars, not the offsets" note that cost the first
+// integration run.
 static void RtGraphics_MeshInstance_SetMesh(void* self, ExternalPtr mesh) {
-
-    MeshInstance* mi = reinterpret_cast<MeshInstance*>(self);
-
-    mi->_mesh = mesh;
-    // *** LOAD the pointer at mesh+0x70; do NOT pass the address of the field. ***
-    // Retail is `FUN_180014c70(this + 200, *(longlong **)(param_2 + 0x70))` — a
-    // DEREFERENCE. GraphicsMesh+0x70 is a POINTER to an array of Array headers
-    // (one per detail level), not an embedded Array, so the source of this copy
-    // is detail level 0's header, which is exactly what
-    // GetMaterialList(0) returns and what `_materialLists` names.
-    //
-    // Passing `B(mesh.p) + 0x70` instead crashed the first integration run, and
-    // it is worth recording WHY it looked plausible: the very next Runtime call
-    // in this function, and the one in PlayAnimation below, DO take the address
-    // of an embedded Array (`&mi->_nodes`, `mesh + 0x60`). The two shapes sit
-    // three lines apart. The tell is in the retail decompile every time — an
-    // embedded Array is passed as `(longlong *)(x + off)`, a pointer field as
-    // `*(longlong **)(x + off)` — so read the stars, not the offsets.
-    RtMatArrayCopy()(&mi->_materials, reinterpret_cast<const GraphicsMeshView*>(mesh.p)->_materialLists);
-
-    if (mi->_materials._size > 0) {
-        uint32_t flags = mi->_base._materialTypeFlags;
-        const ExternalPtr* mats = mi->_materials._data;
-        for (int32_t n = mi->_materials._size; n != 0; --n) {
-            const void* mat = mats->p;
-            ++mats;
-            flags |= 1u << (static_cast<uint8_t>(Rd<int32_t>(mat, 0x20)) & 0x1f);
-            mi->_base._materialTypeFlags = flags;
-        }
-    }
-
-    RtAnimReset()(&mi->_animation);
-    RtNodeArrayResize()(&mi->_nodes, Rd<int32_t>(mesh.p, 0x68));
-    RtGraphics_MeshInstance_UpdateHierarchy(self);
-
-    const uint8_t* m = B(mi->_mesh.p);           // re-read, as retail does
-    float* lb = reinterpret_cast<float*>(B(self) + 0x34);
-    if (lb[0] != Rd<float>(m, 0x80) || lb[1] != Rd<float>(m, 0x84) ||
-        lb[2] != Rd<float>(m, 0x88) || lb[3] != Rd<float>(m, 0x8c) ||
-        lb[4] != Rd<float>(m, 0x90) || lb[5] != Rd<float>(m, 0x94)) {
-        for (int i = 0; i < 6; ++i)
-            lb[i] = Rd<float>(m, 0x80 + i * 4);
-        mi->_base._dirtyFlags |= 2u;
-    }
-
+    reinterpret_cast<::Graphics::MeshInstance*>(self)
+        ->::Graphics::MeshInstance::SetMesh(mesh);
 }
 
 // ============================================================================
@@ -959,14 +799,12 @@ static void RtGraphics_MeshInstance_SetMesh(void* self, ExternalPtr mesh) {
 // three are declared unverified in WAVE6_LANE_E.md rather than covered by a
 // predicate that does not actually test them.
 // ============================================================================
+// ENDGAME B.3.5 block E: BODY MOVED to `Graphics::MeshInstance::PlayAnimation`.
 static void RtGraphics_MeshInstance_PlayAnimation(void* self, ExternalPtr group, int index,
                                                   const void* startTime, const void* blendTime,
                                                   float weight) {
-
-    MeshInstance* mi = reinterpret_cast<MeshInstance*>(self);
-    RtAnimPlay()(&mi->_animation, group, index, B(mi->_mesh.p) + 0x60,
-                 startTime, blendTime, weight, true);
-
+    reinterpret_cast<::Graphics::MeshInstance*>(self)
+        ->::Graphics::MeshInstance::PlayAnimation(group, index, startTime, blendTime, weight);
 }
 
 // ============================================================================
@@ -1449,21 +1287,12 @@ static void* RtGraphics_EdgeMeshInstance_CopyCtor(void* self, const void* other)
 // SetBounds — whose own body compares before it writes and only ORs a dirty bit
 // — so a second call changes nothing.
 // ============================================================================
+// ENDGAME B.3.5 block E: BODY MOVED to
+// `Graphics::EdgeMeshInstance::SetMesh`.
 static void RtGraphics_EdgeMeshInstance_SetMesh(void* self, ExternalPtr mesh, void* followed) {
-
-    EdgeMeshInstance* emi = reinterpret_cast<EdgeMeshInstance*>(self);
-    emi->_followed = reinterpret_cast<MeshInstance*>(followed);
-    emi->_mesh = mesh;
-
-    const size_t order[4] = { 0x38, 0x28, 0x40, 0x30 };
-    for (int i = 0; i < 4; ++i) {
-        const void* mat = Rd<void*>(mesh.p, order[i]);
-        emi->_base._materialTypeFlags |=
-            1u << (static_cast<uint8_t>(Rd<int32_t>(mat, 0x20)) & 0x1f);
-    }
-
-    RtGeometrySetBounds()(self, B(mesh.p) + 0x168);
-
+    reinterpret_cast<::Graphics::EdgeMeshInstance*>(self)
+        ->::Graphics::EdgeMeshInstance::SetMesh(
+              mesh, reinterpret_cast<::Graphics::MeshInstance*>(followed));
 }
 
 // ============================================================================
@@ -1546,31 +1375,22 @@ inline void* TransformAsMatrix(const void* xf, void* ret) {
     return ret;
 }
 
-// ?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AVTransform@Math@@HM@Z
-//   SYMBOL:      retail 0x180016c20, ordinal 2814 — the (int, float)
-//                INTERPOLATED overload, and a DIFFERENT function from the
-//                (int) overload at 0x180016a40 this file already ports. Both
-//                are exported; the two mangled names differ only in the
-//                trailing `M`, which is exactly the kind of pair
-//                reference_resolveexport_phantom_names.md warns about, so the
-//                VA was confirmed against the export directory with pefile
-//                rather than the name being assumed to exist.
-//   CONDITION:   it is NOT ported anywhere in this tree — grepped by mangled
-//                name and by address before this door was opened. It is reached
-//                by NAME through the port-aware resolver, so it becomes OUR
-//                body the moment any lane registers that name.
-//   CONSEQUENCE: until then it is the DLL's, and
-//                ?GetInstanceTransform@EdgeMeshInstance@ below makes it newly
-//                `called` (reference_porting_can_grow_the_cutover_surface.md).
-//                It is NOT claimed as ported by this lane and is named in
-//                docs/runtime_port/WAVE27_LANE_GFXMESH.md §6 as inherited
-//                cutover work.
-// HIDDEN RETURN SLOT in RDX; node in R8D, t in XMM3.
-typedef void* (*NodeToWorldInterpFn)(const void* self, void* ret, int node, float t);
-NodeToWorldInterpFn RtNodeToWorldInterp() {
-    return RT_EXPORT_ONCE(NodeToWorldInterpFn,
-        "?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AVTransform@Math@@HM@Z");
-}
+// ENDGAME B.3.5 block E: `RtNodeToWorldInterp` and its `NodeToWorldInterpFn`
+// typedef are DELETED. They were a `RT_EXPORT_ONCE` door onto
+// `?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AVTransform@Math@@HM@Z` (retail
+// 0x180016c20, ordinal 2814 — the (int, float) INTERPOLATED overload, a
+// DIFFERENT body from the (int) overload at 0x180016a40; the two mangled names
+// differ only in a trailing `M`, which is the pair
+// reference_resolveexport_phantom_names.md exists for).
+//
+// The old note said "it is NOT ported anywhere in this tree … until then it is
+// the DLL's" and named it in WAVE27_LANE_GFXMESH.md §6 as INHERITED CUTOVER
+// WORK. *** THAT ROW IS NOW CLOSED. *** It was ported in this same file (the
+// `RtGraphics_MeshInstance_GetNodeToWorldInterp` door registers 0x180016c20 by
+// name), and block E moved that body onto
+// `Graphics::MeshInstance::GetNodeToWorld(int, float)`. Its one caller,
+// `EdgeMeshInstance::GetInstanceTransform`, now calls the member directly and
+// qualified, so the registry hop is gone along with the door.
 
 // ?Lerp@Transform@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z — retail 0x18001d690,
 // ordinal 3193. ENDGAME B.3.1 step 2: `Math::Transform::Lerp`, called as the
@@ -1676,16 +1496,11 @@ void RtLerpTransformPair(const uint8_t* pair, float t, Transform* out) {
 // wave24_lane_gfxmat.cpp makes for the Serialize pair, for the same structural
 // reason. Attendance is recorded; no comparison is emitted.
 // ============================================================================
+// ENDGAME B.3.5 block E: BODY MOVED to `Graphics::EdgeMeshInstance::Update`.
 extern "C" void RtGraphics_EdgeMeshInstance_Update(void* selfv, const void* time) {
-    (void)time;   // RDX is clobbered by retail's first instruction
-
-    EdgeMeshInstance* emi = reinterpret_cast<EdgeMeshInstance*>(selfv);
-    MeshInstance* const followed = emi->_followed;
-    if (followed) {
-        Transform xf;
-        std::memcpy(&xf, &followed->_base._transform, 0x1c);   // seven dwords
-        RtGeometrySetTransform()(selfv, &xf);
-    }
+    reinterpret_cast<::Graphics::EdgeMeshInstance*>(selfv)
+        ->::Graphics::EdgeMeshInstance::Update(
+              *reinterpret_cast<const System::Time*>(time));
 }
 
 // ============================================================================
@@ -1720,17 +1535,15 @@ extern "C" void RtGraphics_EdgeMeshInstance_Update(void* selfv, const void* time
 // the comparison that body already makes, and doing it twice would report one
 // divergence as two.
 // ============================================================================
+// ENDGAME B.3.5 block E: BODY MOVED to
+// `Graphics::MeshInstance::GetSubTransform`. The door keeps retail's
+// `(this, ret, node)` order and `return ret;` — RULE B5-12, as corrected in
+// Geometry.h's banner.
 extern "C" void* RtGraphics_MeshInstance_GetSubTransform(const void* selfv, void* ret,
                                                         int node) {
-
-    if (node >= 0) {   // JNS: zero takes this arm
-        return RtGraphics_MeshInstance_GetNodeToWorld(selfv, ret, node);
-    }
-
-    const MeshInstance* mi = reinterpret_cast<const MeshInstance*>(selfv);
-    std::memcpy(ret, &mi->_base._transform, 0x1c);   // seven dwords
-
-    return ret;
+    return reinterpret_cast<const ::Graphics::MeshInstance*>(selfv)
+               ->::Graphics::MeshInstance::GetSubTransform(
+                     reinterpret_cast<Math::Transform*>(ret), node);
 }
 
 // ============================================================================
@@ -1786,31 +1599,15 @@ extern "C" void* RtGraphics_MeshInstance_GetSubTransform(const void* selfv, void
 // ORACLE: FULL. Pure read on both arms; both sides write private Matrix buffers
 // and all 64 bytes are compared.
 // ============================================================================
+// ENDGAME B.3.5 block E: BODY MOVED to
+// `Graphics::EdgeMeshInstance::GetInstanceTransform`. Retail's `(this, ret, …)`
+// order is kept in the door; RULE B5-12 as corrected in Geometry.h.
 extern "C" void* RtGraphics_EdgeMeshInstance_GetInstanceTransform(const void* selfv,
                                                                  void* ret,
                                                                  int packed, float t) {
-
-    const EdgeMeshInstance* emi = reinterpret_cast<const EdgeMeshInstance*>(selfv);
-    const int  index     = packed & 0x7fff;
-    const bool whichList = ((static_cast<uint32_t>(packed) >> 15) & 1u) != 0;
-
-    const uint8_t* const mesh = B(emi->_mesh.p);
-    const uint8_t* const listData =
-        B(Rd<void*>(mesh, whichList ? 0x158 : 0x148));
-    const uint8_t* const entry = listData + static_cast<int64_t>(index) * 0x18;
-    const int32_t node = Rd<int32_t>(entry, 0x14);   // plain MOV dword; see above
-
-    if (node >= 0 && emi->_followed != nullptr) {
-        Transform tmp;
-        void* const got = RtNodeToWorldInterp()(emi->_followed, &tmp, node, t);
-        TransformAsMatrix(got, ret);
-    } else {
-        Transform xf;
-        RtLerpTransformPair(B(&emi->_base._transform), t, &xf);
-        TransformAsMatrix(&xf, ret);
-    }
-
-    return ret;
+    return reinterpret_cast<const ::Graphics::EdgeMeshInstance*>(selfv)
+               ->::Graphics::EdgeMeshInstance::GetInstanceTransform(
+                     reinterpret_cast<Math::Matrix*>(ret), packed, t);
 }
 
 // ============================================================================
@@ -1891,47 +1688,15 @@ extern "C" void* RtGraphics_EdgeMeshInstance_GetInstanceTransform(const void* se
 // bytes are compared, the colour column included — it is the half of the result
 // a geometric check cannot see.
 // ============================================================================
+// ENDGAME B.3.5 block E: BODY MOVED to
+// `Graphics::MeshInstance::GetInstanceTransform`, the colour column included.
+// Retail's `(this, ret, packed, t)` order is kept in the door; RULE B5-12 as
+// corrected in Geometry.h.
 extern "C" void* RtGraphics_MeshInstance_GetInstanceTransform(const void* selfv, void* ret,
                                                              int packed, float t) {
-
-    const MeshInstance* mi = reinterpret_cast<const MeshInstance*>(selfv);
-
-    // MOVSXD then SAR: a SIGNED widening and an ARITHMETIC shift. See the banner.
-    const int64_t wide    = static_cast<int64_t>(packed);
-    const int64_t element = wide & 0xfff;
-    const int64_t level   = (wide >> 12) & 0xf;
-
-    const uint8_t* const mesh   = B(mi->_mesh.p);
-    const uint8_t* const levels = B(Rd<void*>(mesh, 0x50));
-    const uint8_t* const lists  = B(Rd<void*>(levels, level * 0xb0 + 0x98));
-    const int64_t node = Rd<int32_t>(lists, static_cast<size_t>(element) * 0x18 + 0x14);
-
-    const uint8_t* pair = nullptr;
-    if (node < 0) {
-        pair = B(&mi->_base._transform);          // +0x84 cur / +0xa0 prev
-    } else if (mi->_animation._instanced == 0) {
-        pair = B(mi->_nodes._data) + node * 0x38;
-    } else {
-        pair = B(Rd<void*>(RtInstancedPoolSlot(mi), 0x38)) + node * 0x38;
-    }
-
-    Transform xf;
-    RtLerpTransformPair(pair, t, &xf);
-
-    Matrix m;
-    TransformAsMatrix(&xf, &m);
-
-    // The twelve matrix stores, then the four colour stores. Written as retail
-    // emits them: three floats of each row from the matrix, the fourth from
-    // _color. `m.m[3]`, `m.m[7]`, `m.m[11]` and `m.m[15]` are deliberately
-    // never read.
-    float* const out = reinterpret_cast<float*>(ret);
-    out[0]  = m.m[0];  out[1]  = m.m[1];  out[2]  = m.m[2];   out[3]  = mi->_color[0];
-    out[4]  = m.m[4];  out[5]  = m.m[5];  out[6]  = m.m[6];   out[7]  = mi->_color[1];
-    out[8]  = m.m[8];  out[9]  = m.m[9];  out[10] = m.m[10];  out[11] = mi->_color[2];
-    out[12] = m.m[12]; out[13] = m.m[13]; out[14] = m.m[14];  out[15] = mi->_color[3];
-
-    return ret;
+    return reinterpret_cast<const ::Graphics::MeshInstance*>(selfv)
+               ->::Graphics::MeshInstance::GetInstanceTransform(
+                     reinterpret_cast<Math::Matrix*>(ret), packed, t);
 }
 
 // ============================================================================
@@ -2001,39 +1766,15 @@ extern "C" void* RtGraphics_MeshInstance_GetInstanceTransform(const void* selfv,
 // caller's real slot, theirs writes a private 0x1c buffer, and all seven dwords
 // are compared. Never let the original write into live state.
 // ============================================================================
+// ENDGAME B.3.5 block E: BODY MOVED to
+// `Graphics::MeshInstance::GetNodeToWorld(int, float)` -- the INTERPOLATED
+// overload. Non-virtual, so the member returns by value and the door keeps
+// retail's `(this, ret, node, t)` order.
 extern "C" void* RtGraphics_MeshInstance_GetNodeToWorldInterp(const void* self, void* ret,
                                                              int node, float t) {
-
-    const MeshInstance* mi = reinterpret_cast<const MeshInstance*>(self);
-    uint8_t* out = reinterpret_cast<uint8_t*>(ret);
-
-    if (mi->_animation._instanced == 0) {
-        const uint8_t* pair = B(mi->_nodes._data) + static_cast<int64_t>(node) * 0x38;
-        const Scalar s = { t };
-        TransformLerp(pair + 0x1c, ret, pair + 0x00, &s);
-    } else {
-        Transform geomXf;
-        RtLerpTransformPair(B(self) + 0x84, t, &geomXf);
-
-        const uint8_t* poses = B(Rd<void*>(RtInstancedPoolSlot(mi), 0x38));
-        Transform poolXf;
-        RtLerpTransformPair(poses + static_cast<int64_t>(node) * 0x38, t, &poolXf);
-
-        std::memset(out, 0, 0x1c);
-        const float one = 1.0f;
-        std::memcpy(out + 0x0c, &one, 4);
-
-        uint8_t rotated[16];
-        QuaternionRotate(&geomXf.rotation, rotated, &poolXf.translation);
-        for (int i = 0; i < 3; ++i) {
-            const float v = Rd<float>(&geomXf, 0x10 + i * 4) + Rd<float>(rotated, i * 4);
-            std::memcpy(out + 0x10 + i * 4, &v, 4);
-        }
-        uint8_t q[16];
-        QuaternionMultiply(&geomXf, q, &poolXf);
-        std::memcpy(out, q, 16);
-    }
-
+    *reinterpret_cast<Math::Transform*>(ret) =
+        reinterpret_cast<const ::Graphics::MeshInstance*>(self)
+            ->::Graphics::MeshInstance::GetNodeToWorld(node, t);
     return ret;
 }
 
@@ -2228,106 +1969,15 @@ uint64_t g_addDrawItemsEdgeQ  = 0;
 //   a port that computed arg10 and left arg8 alone would be wrong on every
 //   non-instanced skinned mesh while rendering every other mesh correctly.
 // ============================================================================
-extern "C" void RtGraphics_MeshInstance_AddDrawItems(const MeshInstance* self,
+// ENDGAME B.3.5 block E: BODY MOVED to
+// `Graphics::MeshInstance::AddDrawItems`.
+extern "C" void RtGraphics_MeshInstance_AddDrawItems(const void* self,
                                                      const void* scene,
                                                      void* renderer) {
-    (void)scene;                      // RDX is overwritten at 0x180100f65
-    ++g_addDrawItemsMesh;
-
-    const uint8_t* const mesh = B(Rd<void*>(self, 0xc0));      // 180100f32
-    const uint8_t* const rend = B(renderer);
-    const float alpha = Rd<float>(rend, 0x40);                 // Renderer::frameAlpha
-
-    int32_t level = 0;                                         // r15d
-    const int32_t levelCount = Rd<int32_t>(mesh, 0x58);        // 180100f57
-
-    if (levelCount > 1) {                                      // 180100f5b  JLE
-        const uint8_t* const groups = B(Rd<void*>(rend, 0x10));
-        const size_t gi = static_cast<size_t>(Rd<int32_t>(rend, 0x34)) * 0x1f0;
-        const uint8_t* const view = groups + gi + kDrawGroupViewPos;
-
-        const Geometry* g = &self->_base;
-        // max of the two maxima, min of the two minima. Retail's COMISS/JA pairs
-        // keep the FIRST operand when it does not compare above, which is what
-        // makes these max/min rather than the other way round.
-        const float maxZ = (Rd<float>(g, 0x78) > Rd<float>(g, 0x60)) ? Rd<float>(g, 0x78) : Rd<float>(g, 0x60);
-        const float maxY = (Rd<float>(g, 0x74) > Rd<float>(g, 0x5c)) ? Rd<float>(g, 0x74) : Rd<float>(g, 0x5c);
-        const float maxX = (Rd<float>(g, 0x70) > Rd<float>(g, 0x58)) ? Rd<float>(g, 0x70) : Rd<float>(g, 0x58);
-        const float minZ = (Rd<float>(g, 0x54) > Rd<float>(g, 0x6c)) ? Rd<float>(g, 0x6c) : Rd<float>(g, 0x54);
-        const float minY = (Rd<float>(g, 0x50) > Rd<float>(g, 0x68)) ? Rd<float>(g, 0x68) : Rd<float>(g, 0x50);
-        const float minX = (Rd<float>(g, 0x4c) > Rd<float>(g, 0x64)) ? Rd<float>(g, 0x64) : Rd<float>(g, 0x4c);
-
-        const float kHalf = 0.5f;                              // 0x180161694
-        const float cx = (minX + maxX) * kHalf;
-        const float cy = (minY + maxY) * kHalf;
-        const float cz = (minZ + maxZ) * kHalf;
-
-        float dx = Rd<float>(view, 0x00) - cx;
-        float dy = Rd<float>(view, 0x04) - cy;
-        float dz = Rd<float>(view, 0x08) - cz;
-        dx *= dx; dy *= dy; dz *= dz;
-        const float distSq = (dy + dx) + dz;                   // retail's order
-
-        const uint8_t* lvl = B(Rd<void*>(mesh, 0x50));
-        for (int32_t i = 0; i < levelCount; ++i) {             // 180101070
-            const float d = Rd<float>(lvl, i * kDetail_Stride + kDetail_SwitchDist);
-            if (d * d > distSq) { level = i; break; }          // COMISS / JA
-        }
-        // The `TEST EDX,EDX ; JS` that follows is unreachable — see the banner.
-    }
-
-    const uint8_t* const levels = B(Rd<void*>(mesh, 0x50));    // 18010109a
-    const size_t off = static_cast<size_t>(level) * kDetail_Stride;
-    const int32_t listCount = Rd<int32_t>(levels, off + kDetail_ListCount);
-    if (listCount <= 0) return;                                // 1801010c0
-
-    const uint16_t packedLevel = static_cast<uint16_t>(
-        static_cast<uint16_t>(level) << 12);                   // SHL $0xc,%r15w
-    const float kOne = 1.0f;                                   // 0x18016169c
-    const float oneMinusAlpha = kOne - alpha;                  // SUBSS XMM6,XMM10
-
-    AddDrawItemFn add = RtRendererAddDrawItem();
-    if (!add) return;
-
-    for (int32_t i = 0; i < listCount; ++i) {                  // 1801010f0
-        // BOTH re-read inside the loop, exactly as retail does.
-        const uint8_t* const meshNow = B(Rd<void*>(self, 0xc0));
-        const uint8_t* const lists   = B(Rd<void*>(levels, off + kDetail_Lists));
-        const size_t li = static_cast<size_t>(i) * kList_Stride;
-
-        uint32_t arg10 = 0xffffffffu;                          // OR $-1,%r10d
-        const uint8_t* const levelsNow = B(Rd<void*>(meshNow, 0x50));
-        int32_t arg8 = Rd<int32_t>(levelsNow, off + kDetail_DefaultArg8);
-
-        if (Rd<int32_t>(lists, li + kList_NodeFlag) < 0) {     // 180101103  JGE
-            if (self->_animation._instanced == 0) {            // 180101116
-                arg8 = 1;                                      // 180101138
-            } else {
-                arg10 = static_cast<uint32_t>(Rd<int32_t>(
-                    self->_animation._layers._data,
-                    static_cast<size_t>(self->_animation._layers._size) * 0x38 - 0x2c));
-            }
-        }
-
-        const int32_t matIndex = Rd<int32_t>(lists, li + kList_Material);
-        const void* material = Rd<void*>(Rd<void*>(self, 0xc8),
-                                         static_cast<size_t>(matIndex) * 8);
-
-        // 16-BIT add: `ADD 0x28(%rbx),%r9w`. It WRAPS; it does not promote.
-        const uint16_t arg4 = static_cast<uint16_t>(
-            static_cast<uint16_t>(self->_sortBias) +
-            static_cast<uint16_t>(Rd<int32_t>(self, 0x28)));
-
-        const uint16_t arg5 = static_cast<uint16_t>(packedLevel |
-                                                    static_cast<uint16_t>(i));
-
-        const float arg7 = (alpha * Rd<float>(self, 0x7c)) +
-                           (oneMinusAlpha * Rd<float>(self, 0x80));
-
-        add(renderer, self, material, arg4, arg5,
-            0.0f, arg7, arg8, meshNow, arg10);                 // 18010119e
-        ++g_addDrawItemsMeshQ;
-    }
+    reinterpret_cast<const ::Graphics::MeshInstance*>(self)
+        ->::Graphics::MeshInstance::AddDrawItems(
+              *reinterpret_cast<const ::Graphics::Scene*>(scene),
+              *reinterpret_cast<::Graphics::Renderer*>(renderer));
 }
 
 // ============================================================================
@@ -2358,61 +2008,15 @@ extern "C" void RtGraphics_MeshInstance_AddDrawItems(const MeshInstance* self,
 // THE MIDDLE TWO CROSSED; this body reads them in slot order and inherits that
 // note without re-deriving it.
 // ============================================================================
-extern "C" void RtGraphics_EdgeMeshInstance_AddDrawItems(const EdgeMeshInstance* self,
+// ENDGAME B.3.5 block E: BODY MOVED to
+// `Graphics::EdgeMeshInstance::AddDrawItems`.
+extern "C" void RtGraphics_EdgeMeshInstance_AddDrawItems(const void* self,
                                                          const void* scene,
                                                          void* renderer) {
-    (void)scene;
-    ++g_addDrawItemsEdge;
-
-    const float kOne = 1.0f;                                   // 0x18016169c
-
-    AddDrawItemFn add = RtRendererAddDrawItem();
-    if (!add) return;
-
-    // ---- pass 1: the triangle lists, sort key 0x2000 -----------------------
-    {
-        const uint8_t* const em = B(Rd<void*>(self, 0xc0));    // 1800a2fe2
-        const int32_t n = Rd<int32_t>(em, 0x150);
-        for (int32_t i = 0; i < n; ++i) {                      // 1800a3020
-            const uint8_t* const emNow = B(Rd<void*>(self, 0xc0));
-            const uint8_t* const lists = B(Rd<void*>(em, 0x148));
-            const size_t li = static_cast<size_t>(i) * kList_Stride;
-
-            const void* material =
-                (Rd<int32_t>(lists, li + kList_NodeFlag) >= 0)  // 1800a305f  JGE
-                    ? Rd<void*>(emNow, 0x28)                    // _material0
-                    : Rd<void*>(emNow, 0x30);                   // _material1
-
-            add(renderer, self, material,
-                0x2000, static_cast<uint16_t>(i),
-                0.0f, kOne, 1, nullptr, 0xffffffffu);           // 1800a3078
-            ++g_addDrawItemsEdgeQ;
-        }
-    }
-
-    // ---- pass 2: the edge lists, sort key 0x2001, index | 0x8000 -----------
-    {
-        const uint8_t* const em = B(Rd<void*>(self, 0xc0));    // 1800a3087 RELOAD
-        const int32_t n = Rd<int32_t>(em, 0x160);
-        for (int32_t i = 0; i < n; ++i) {                      // 1800a30b0
-            const uint8_t* const emNow = B(Rd<void*>(self, 0xc0));
-            const uint8_t* const lists = B(Rd<void*>(em, 0x158));
-            const size_t li = static_cast<size_t>(i) * kList_Stride;
-
-            const void* material =
-                (Rd<int32_t>(lists, li + kList_NodeFlag) >= 0)  // 1800a30ef  JGE
-                    ? Rd<void*>(emNow, 0x38)                    // _material2
-                    : Rd<void*>(emNow, 0x40);                   // _material3
-
-            const uint16_t arg5 =
-                static_cast<uint16_t>(static_cast<uint16_t>(i) | 0x8000u);
-
-            add(renderer, self, material,
-                0x2001, arg5,
-                0.0f, kOne, 1, nullptr, 0xffffffffu);           // 1800a310f
-            ++g_addDrawItemsEdgeQ;
-        }
-    }
+    reinterpret_cast<const ::Graphics::EdgeMeshInstance*>(self)
+        ->::Graphics::EdgeMeshInstance::AddDrawItems(
+              *reinterpret_cast<const ::Graphics::Scene*>(scene),
+              *reinterpret_cast<::Graphics::Renderer*>(renderer));
 }
 
 // WAVE 27 LANE GFXMESH registration — by NAME and by ADDRESS, both.
@@ -2712,3 +2316,613 @@ int RtGraphicsMeshRegister() {
 // run with BANISHED_SELECTION_OUTLINE=1 and a building selected, and read the
 // `calls=` column, not just `divergences=`.
 // ============================================================================
+
+// ############################################################################
+// ENDGAME B.3 step 5 (block E) — THE BODIES ABOVE, MOVED ONTO THE MEMBERS
+// ############################################################################
+//
+// Fifteen bodies in this file belong to `Graphics::MeshInstance` and
+// `Graphics::EdgeMeshInstance`, which are real C++ classes as of block E
+// (`runtime/types/graphics/Mesh.h`). Each body MOVED here; each registered door
+// above kept its name and its address and became a one-line delegation with a
+// QUALIFIED non-virtual call (`reinterpret_cast<Ns::C*>(self)->Ns::C::M(args)`).
+// The qualification is load-bearing, not decoration: a live instance in this
+// build wears the MINTED table out of `standalone/rt_data_mint_tables.inc`,
+// whose slots resolve back to these very doors, so an unqualified virtual call
+// inside a door would dispatch into itself (B34_BRIEFS §A.1).
+//
+// WHAT DID **NOT** MOVE, and why:
+//
+//  * `??0MeshInstance`, `??0MeshInstance(const&)`, `??1MeshInstance`,
+//    `??0EdgeMeshInstance`, `??0EdgeMeshInstance(const&)`. ENDGAME §B.1
+//    decision 2 and B35_RULES §11 keep the constructor and destructor doors:
+//    there is NO real constructor on a polymorphic class here, and the classes
+//    are ABSTRACT (slot 0's body is a minted row), so a door physically cannot
+//    placement-new one. The destructor additionally must not move: it frees the
+//    three `Array` buffers through retail's own out-of-line `~Array` and then
+//    runs `~Geometry`, and a compiler-emitted member/base destructor chain on
+//    top of that would be retail's own decomposition run twice (the
+//    `Object::External::_refs` discussion in External.h).
+//  * `GraphicsMesh::GetMaterialList`, `GraphicsMesh::GetNodeIndexFromName`,
+//    `EdgeMesh::*` (the two vertex ctors, `SetMaterials`, `EdgeMesh::EdgeMesh`,
+//    `EdgeMesh::Set`). `Graphics::GraphicsMesh` and `Graphics::EdgeMesh` are
+//    BLOCK G's classes; this file holds a fragment of them and the brief leaves
+//    such a body as a door untouched. All seven are listed in block E's report.
+//
+// NAME-LOOKUP HYGIENE (B34B_RULES §7.2, armed here for the first time in this
+// directory): inside `namespace Graphics` a bare `Geometry`, `MeshInstance`,
+// `EdgeMeshInstance` or `EdgeMesh` binds the REAL CLASS, not the `RtGraphics`
+// POD the `using` declarations at the top of this file introduce. Every POD
+// spelling below is therefore qualified `RtGraphics::`, and the file-local
+// helpers (`B`, `Rd`, `RtInstancedPoolSlot`, `RtLerpTransformPair`,
+// `QuaternionRotate`, `TransformAsMatrix`, `RtRendererAddDrawItem`, the
+// `kDetail_*`/`kList_*` constants and the four counters) are reached by
+// unqualified lookup falling through to the global unnamed namespace, which is
+// what B34_BRIEFS §A.2 records as the arrangement that works.
+// ############################################################################
+
+namespace Graphics {
+
+// ---------------------------------------------------------------------------
+// ?IsAnimating@MeshInstance@Graphics@@QEBA_NXZ            retail 0x1800ff7d0
+// ---------------------------------------------------------------------------
+bool MeshInstance::IsAnimating() const {
+    if (_animation._layers._size == 0)
+        return false;
+
+    const uint8_t* layer = _animation._layers._data;
+    const void*    group = Rd<void*>(layer, 0x00);
+    const int32_t  animIndex = Rd<int32_t>(layer, 0x08);
+    const int64_t  layerTime = Rd<int64_t>(layer, 0x18);
+
+    const uint8_t* anim = B(Rd<void*>(group, 0x20)) + static_cast<int64_t>(animIndex) * 0x70;
+    if (Rd<int8_t>(anim, 0x3c) != 0)
+        return true;
+    return layerTime < Rd<int64_t>(anim, 0x58);
+}
+
+// ---------------------------------------------------------------------------
+// ?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AVTransform@Math@@H@Z
+//                                                        retail 0x180016a40
+// NON-VIRTUAL, so the C++ by-value return is safe: it is never reached through
+// a vtable slot, both ends of every call are this same GCC, and the registered
+// door keeps retail's `(self, ret, node)` shape as a separate function. (A
+// VIRTUAL by-value return would NOT be safe — see Geometry.h's B5-12 block.)
+// ---------------------------------------------------------------------------
+Math::Transform MeshInstance::GetNodeToWorld(int node) const {
+    Math::Transform result;
+    uint8_t* const out = reinterpret_cast<uint8_t*>(&result);
+
+    if (_animation._instanced == 0) {
+        const uint8_t* src = B(_nodes._data) + static_cast<int64_t>(node) * 0x38;
+        std::memcpy(out, src, 0x1c);            // seven dwords, _state[0]
+    } else {
+        // The geometry transform, copied into a local first exactly as retail
+        // does (it materialises all seven floats before either call).
+        uint8_t geomXf[0x1c];
+        std::memcpy(geomXf, &_transform, 0x1c);
+
+        // slot + 0x38 is a POINTER to the pool entry's per-node pose array; the
+        // node index strides THAT, not the slot. See RtInstancedPoolSlot.
+        const uint8_t* poses = B(Rd<void*>(RtInstancedPoolSlot(this), 0x38));
+        uint8_t poolXf[0x1c];
+        std::memcpy(poolXf, poses + static_cast<int64_t>(node) * 0x38, 0x1c);
+
+        // Retail seeds the return slot with the identity transform before the
+        // two calls: qword at +0x0c = 0x3f800000, everything else zero.
+        std::memset(out, 0, 0x1c);
+        const float one = 1.0f;
+        std::memcpy(out + 0x0c, &one, 4);
+
+        // translation = geom.translation + Rotate(geom.rotation, pool.translation)
+        uint8_t rotated[16];
+        QuaternionRotate(geomXf /* rotation at +0x00 */, rotated, poolXf + 0x10);
+        for (int i = 0; i < 3; ++i) {
+            const float t = Rd<float>(geomXf, 0x10 + i * 4) + Rd<float>(rotated, i * 4);
+            std::memcpy(out + 0x10 + i * 4, &t, 4);
+        }
+        // rotation = geom.rotation * pool.rotation
+        uint8_t q[16];
+        QuaternionMultiply(geomXf, q, poolXf);
+        std::memcpy(out, q, 16);
+    }
+
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// ?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AVTransform@Math@@HM@Z
+//                                       retail 0x180016c20 — the INTERPOLATED
+// overload, a DIFFERENT body from the one above (the mangled names differ only
+// in the trailing `M`; both VAs were confirmed against the export directory).
+// Also non-virtual, so also a safe C++ by-value return.
+// ---------------------------------------------------------------------------
+Math::Transform MeshInstance::GetNodeToWorld(int node, float t) const {
+    Math::Transform result;
+    uint8_t* const out = reinterpret_cast<uint8_t*>(&result);
+
+    if (_animation._instanced == 0) {
+        const uint8_t* pair = B(_nodes._data) + static_cast<int64_t>(node) * 0x38;
+        const Scalar s = { t };
+        TransformLerp(pair + 0x1c, &result, pair + 0x00, &s);
+    } else {
+        Transform geomXf;
+        RtLerpTransformPair(B(&_transform), t, &geomXf);
+
+        const uint8_t* poses = B(Rd<void*>(RtInstancedPoolSlot(this), 0x38));
+        Transform poolXf;
+        RtLerpTransformPair(poses + static_cast<int64_t>(node) * 0x38, t, &poolXf);
+
+        std::memset(out, 0, 0x1c);
+        const float one = 1.0f;
+        std::memcpy(out + 0x0c, &one, 4);
+
+        uint8_t rotated[16];
+        QuaternionRotate(&geomXf.rotation, rotated, &poolXf.translation);
+        for (int i = 0; i < 3; ++i) {
+            const float v = Rd<float>(&geomXf, 0x10 + i * 4) + Rd<float>(rotated, i * 4);
+            std::memcpy(out + 0x10 + i * 4, &v, 4);
+        }
+        uint8_t q[16];
+        QuaternionMultiply(&geomXf, q, &poolXf);
+        std::memcpy(out, q, 16);
+    }
+
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// ?RootAnimationOffset@MeshInstance@Graphics@@QEBA?AVVector3@Math@@XZ
+//                                                        retail 0x180016ef0
+// ---------------------------------------------------------------------------
+Math::Vector3 MeshInstance::RootAnimationOffset() const {
+    Math::Vector3 result;
+    if (_animation._instanced == 0) {
+        std::memcpy(&result, &_rootAnimationOffset, 12);
+    } else {
+        std::memcpy(&result, RtInstancedPoolSlot(this) + 0x18, 12);
+    }
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// ?UpdateHierarchy@MeshInstance@Graphics@@QEAAXXZ         retail 0x1800ff910
+//
+// THE HOTTEST BODY IN THIS FILE. It resolves NOTHING per call and it does not
+// read `_rootOnlyUpdates` (retail's UpdateHierarchy does not either — the flag
+// is `MeshInstance::Update`'s, in wave29_lane_slots.cpp). Every float
+// association below is transcribed, including the two `* 0.0f` terms.
+// ---------------------------------------------------------------------------
+void MeshInstance::UpdateHierarchy() {
+    const int count = _nodes._size;
+    if (count == 0)
+        return;
+
+    uint8_t* xf = B(_nodes._data);
+    const uint8_t* mesh = B(_mesh.p);
+
+    // Node 0: the geometry's own transform, in both halves.
+    std::memcpy(xf, &_transform, 0x1c);
+    std::memcpy(xf + 0x1c, xf, 0x1c);
+
+    const uint8_t* nodes = B(Rd<void*>(mesh, 0x60));
+    for (int i = 1; i < count; ++i) {
+        const uint8_t* node   = nodes + static_cast<int64_t>(i) * 0x48;
+        const int32_t  parent = Rd<int32_t>(node, 0x08);
+        const uint8_t* p      = xf + static_cast<int64_t>(parent) * 0x38;
+
+        const float qx = Rd<float>(p, 0x00);
+        const float qy = Rd<float>(p, 0x04);
+        const float qz = Rd<float>(p, 0x08);
+        const float qw = Rd<float>(p, 0x0c);
+        const float px = Rd<float>(p, 0x10);
+        const float py = Rd<float>(p, 0x14);
+        const float pz = Rd<float>(p, 0x18);
+
+        const uint8_t* localXf = node + 0x0c;
+        const float vx = Rd<float>(localXf, 0x10);
+        const float vy = Rd<float>(localXf, 0x14);
+        const float vz = Rd<float>(localXf, 0x18);
+
+        // Conjugate components; the w component is deliberately NOT negated.
+        const float cx = -qx, cy = -qy, cz = -qz;
+
+        // t = q * (v, 0) -- association exactly as decompiled
+        const float tx = (qw * vx + qx * 0.0f + qz * vy) - qy * vz;
+        const float ty = (qy * 0.0f - qz * vx) + qw * vy + qx * vz;
+        const float tz = ((qy * vx + qz * 0.0f) - qx * vy) + qw * vz;
+        const float tw = ((qw * 0.0f - qx * vx) - qy * vy) - qz * vz;
+
+        // world.translation = p + (t * conj(q)).xyz, with p added LAST.
+        const float rx = (qw * tx + tw * cx + tz * cy) - ty * cz;
+        const float ry = (qw * ty - tz * cx) + tw * cy + tx * cz;
+        const float rz = ((ty * cx + qw * tz) - tx * cy) + tw * cz;
+        const float wx = px + rx;
+        const float wy = py + ry;
+        const float wz = pz + rz;
+
+        uint8_t q[16];
+        QuaternionMultiply(p, q, localXf);
+
+        uint8_t* dst = xf + static_cast<int64_t>(i) * 0x38;
+        std::memcpy(dst + 0x00, q, 16);
+        std::memcpy(dst + 0x10, &wx, 4);
+        std::memcpy(dst + 0x14, &wy, 4);
+        std::memcpy(dst + 0x18, &wz, 4);
+        std::memcpy(dst + 0x1c, dst, 0x1c);       // second half = first half
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ?SetMaterialInstance@MeshInstance@Graphics@@QEAAXHV?$ExternalPtr@…@Z
+//                                                        retail 0x1800ffe80
+// One store, no bounds check — retail has none and CLAUDE.md forbids adding one.
+// ---------------------------------------------------------------------------
+void MeshInstance::SetMaterialInstance(int index, ExternalPtrHandle value) {
+    _materials._data[index] = value;
+}
+
+// ---------------------------------------------------------------------------
+// ?SetMesh@MeshInstance@Graphics@@QEAAXV?$ExternalPtr@…@Z retail 0x1800ffea0
+//
+// The one trap this body cost an integration run for is preserved in the
+// comment at the array copy: GraphicsMesh+0x70 is a POINTER to an array of
+// Array headers, so the source of the copy is the LOADED value, not the address
+// of the field. Read the stars, not the offsets.
+// ---------------------------------------------------------------------------
+void MeshInstance::SetMesh(ExternalPtrHandle mesh) {
+    _mesh = mesh;
+    RtMatArrayCopy()(&_materials,
+                     reinterpret_cast<const RtGraphics::GraphicsMeshView*>(mesh.p)->_materialLists);
+
+    if (_materials._size > 0) {
+        uint32_t flags = _materialTypeFlags;
+        const RtGraphics::ExternalPtr* mats = _materials._data;
+        for (int32_t n = _materials._size; n != 0; --n) {
+            const void* mat = mats->p;
+            ++mats;
+            flags |= 1u << (static_cast<uint8_t>(Rd<int32_t>(mat, 0x20)) & 0x1f);
+            _materialTypeFlags = flags;          // retail stores back each time
+        }
+    }
+
+    RtAnimReset()(&_animation);
+    RtNodeArrayResize()(&_nodes, Rd<int32_t>(mesh.p, 0x68));
+    this->MeshInstance::UpdateHierarchy();
+
+    const uint8_t* m = B(_mesh.p);               // re-read, as retail does
+    float* lb = reinterpret_cast<float*>(&_localBounds);
+    if (lb[0] != Rd<float>(m, 0x80) || lb[1] != Rd<float>(m, 0x84) ||
+        lb[2] != Rd<float>(m, 0x88) || lb[3] != Rd<float>(m, 0x8c) ||
+        lb[4] != Rd<float>(m, 0x90) || lb[5] != Rd<float>(m, 0x94)) {
+        for (int i = 0; i < 6; ++i)
+            lb[i] = Rd<float>(m, 0x80 + i * 4);
+        _dirtyFlags |= 2u;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ?PlayAnimation@MeshInstance@Graphics@@QEAAXV?$ExternalPtr@…HAEBVTime@…1M@Z
+//                                                        retail 0x1800ff840
+// `startTime` and `blendTime` stay `const void*`: `System::Time` is block H's
+// neighbourhood and this body only forwards the two pointers. They are the
+// FIFTH and SIXTH arguments, which is exactly where the recorded
+// pointer-typed-as-int trap bites, so they are typed against the callee's
+// mangled name rather than guessed.
+// ---------------------------------------------------------------------------
+void MeshInstance::PlayAnimation(ExternalPtrHandle group, int index,
+                                 const void* startTime, const void* blendTime,
+                                 float weight) {
+    RtAnimPlay()(&_animation, group, index, B(_mesh.p) + 0x60,
+                 startTime, blendTime, weight, true);
+}
+
+// ---------------------------------------------------------------------------
+// ?GetSubTransform@MeshInstance@Graphics@@UEBA?AVTransform@Math@@H@Z  [slot 5]
+//                                                        retail 0x180101200
+// `JNS`, not `JG`: node == 0 takes the LOOKUP path.
+// The hidden return slot is spelled OUT, in retail's order — see Geometry.h.
+// ---------------------------------------------------------------------------
+Math::Transform* MeshInstance::GetSubTransform(Math::Transform* ret, int node) const {
+    if (node >= 0) {                              // JNS: zero takes this arm
+        *ret = this->MeshInstance::GetNodeToWorld(node);
+        return ret;
+    }
+    std::memcpy(ret, &_transform, 0x1c);          // seven dwords
+    return ret;
+}
+
+// ---------------------------------------------------------------------------
+// ?GetInstanceTransform@MeshInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z [slot 6]
+//                                                        retail 0x180101280
+//
+// THE PACKED ARGUMENT IS 12 + 4 AND IT IS SIGNED (MOVSXD then SAR), and THE
+// FOURTH COLUMN OF THE RETURNED MATRIX IS NOT PART OF THE MATRIX — it carries
+// the instance colour. Both findings are written out at the door above; neither
+// is re-derived here.
+// ---------------------------------------------------------------------------
+Math::Matrix* MeshInstance::GetInstanceTransform(Math::Matrix* ret, int packed,
+                                                 float t) const {
+    // MOVSXD then SAR: a SIGNED widening and an ARITHMETIC shift.
+    const int64_t wide    = static_cast<int64_t>(packed);
+    const int64_t element = wide & 0xfff;
+    const int64_t level   = (wide >> 12) & 0xf;
+
+    const uint8_t* const mesh   = B(_mesh.p);
+    const uint8_t* const levels = B(Rd<void*>(mesh, 0x50));
+    const uint8_t* const lists  = B(Rd<void*>(levels, level * 0xb0 + 0x98));
+    const int64_t node = Rd<int32_t>(lists, static_cast<size_t>(element) * 0x18 + 0x14);
+
+    const uint8_t* pair = nullptr;
+    if (node < 0) {
+        pair = B(&_transform);                    // +0x84 cur / +0xa0 prev
+    } else if (_animation._instanced == 0) {
+        pair = B(_nodes._data) + node * 0x38;
+    } else {
+        pair = B(Rd<void*>(RtInstancedPoolSlot(this), 0x38)) + node * 0x38;
+    }
+
+    Transform xf;
+    RtLerpTransformPair(pair, t, &xf);
+
+    Matrix m;
+    TransformAsMatrix(&xf, &m);
+
+    // Twelve matrix stores, then the four colour stores. `m.m[3]`, `m.m[7]`,
+    // `m.m[11]` and `m.m[15]` are deliberately never read.
+    float* const out = reinterpret_cast<float*>(ret);
+    out[0]  = m.m[0];  out[1]  = m.m[1];  out[2]  = m.m[2];   out[3]  = _color[0];
+    out[4]  = m.m[4];  out[5]  = m.m[5];  out[6]  = m.m[6];   out[7]  = _color[1];
+    out[8]  = m.m[8];  out[9]  = m.m[9];  out[10] = m.m[10];  out[11] = _color[2];
+    out[12] = m.m[12]; out[13] = m.m[13]; out[14] = m.m[14];  out[15] = _color[3];
+
+    return ret;
+}
+
+// ---------------------------------------------------------------------------
+// ?AddDrawItems@MeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z [slot 3]
+//                                                        retail 0x180100f20
+//
+// The `Scene&` argument is accepted and NEVER READ (RDX is overwritten at
+// 0x180100f65). `Renderer&` is still reached by offset: `Graphics::Renderer` is
+// block F's class, so it is taken by reference here and bridged at the one place
+// the offsets are read.
+// ---------------------------------------------------------------------------
+void MeshInstance::AddDrawItems(const Scene& scene, Renderer& renderer) const {
+    (void)scene;                      // RDX is overwritten at 0x180100f65
+    ++g_addDrawItemsMesh;
+
+    const uint8_t* const mesh = B(_mesh.p);                    // 180100f32
+    const uint8_t* const rend = reinterpret_cast<const uint8_t*>(&renderer);  // B.3.5 bridge
+    const float alpha = Rd<float>(rend, 0x40);                 // Renderer::frameAlpha
+
+    int32_t level = 0;                                         // r15d
+    const int32_t levelCount = Rd<int32_t>(mesh, 0x58);        // 180100f57
+
+    if (levelCount > 1) {                                      // 180100f5b  JLE
+        const uint8_t* const groups = B(Rd<void*>(rend, 0x10));
+        const size_t gi = static_cast<size_t>(Rd<int32_t>(rend, 0x34)) * 0x1f0;
+        const uint8_t* const view = groups + gi + kDrawGroupViewPos;
+
+        const void* const g = static_cast<const Geometry*>(this);
+        const float maxZ = (Rd<float>(g, 0x78) > Rd<float>(g, 0x60)) ? Rd<float>(g, 0x78) : Rd<float>(g, 0x60);
+        const float maxY = (Rd<float>(g, 0x74) > Rd<float>(g, 0x5c)) ? Rd<float>(g, 0x74) : Rd<float>(g, 0x5c);
+        const float maxX = (Rd<float>(g, 0x70) > Rd<float>(g, 0x58)) ? Rd<float>(g, 0x70) : Rd<float>(g, 0x58);
+        const float minZ = (Rd<float>(g, 0x54) > Rd<float>(g, 0x6c)) ? Rd<float>(g, 0x6c) : Rd<float>(g, 0x54);
+        const float minY = (Rd<float>(g, 0x50) > Rd<float>(g, 0x68)) ? Rd<float>(g, 0x68) : Rd<float>(g, 0x50);
+        const float minX = (Rd<float>(g, 0x4c) > Rd<float>(g, 0x64)) ? Rd<float>(g, 0x64) : Rd<float>(g, 0x4c);
+
+        const float kHalf = 0.5f;                              // 0x180161694
+        const float cx = (minX + maxX) * kHalf;
+        const float cy = (minY + maxY) * kHalf;
+        const float cz = (minZ + maxZ) * kHalf;
+
+        float dx = Rd<float>(view, 0x00) - cx;
+        float dy = Rd<float>(view, 0x04) - cy;
+        float dz = Rd<float>(view, 0x08) - cz;
+        dx *= dx; dy *= dy; dz *= dz;
+        const float distSq = (dy + dx) + dz;                   // retail's order
+
+        const uint8_t* lvl = B(Rd<void*>(mesh, 0x50));
+        for (int32_t i = 0; i < levelCount; ++i) {             // 180101070
+            const float d = Rd<float>(lvl, i * kDetail_Stride + kDetail_SwitchDist);
+            if (d * d > distSq) { level = i; break; }          // COMISS / JA
+        }
+        // The `TEST EDX,EDX ; JS` that follows is unreachable — see the door.
+    }
+
+    const uint8_t* const levels = B(Rd<void*>(mesh, 0x50));    // 18010109a
+    const size_t off = static_cast<size_t>(level) * kDetail_Stride;
+    const int32_t listCount = Rd<int32_t>(levels, off + kDetail_ListCount);
+    if (listCount <= 0) return;                                // 1801010c0
+
+    const uint16_t packedLevel = static_cast<uint16_t>(
+        static_cast<uint16_t>(level) << 12);                   // SHL $0xc,%r15w
+    const float kOne = 1.0f;                                   // 0x18016169c
+    const float oneMinusAlpha = kOne - alpha;                  // SUBSS XMM6,XMM10
+
+    AddDrawItemFn add = RtRendererAddDrawItem();
+    if (!add) return;
+
+    for (int32_t i = 0; i < listCount; ++i) {                  // 1801010f0
+        // BOTH re-read inside the loop, exactly as retail does.
+        const uint8_t* const meshNow = B(_mesh.p);
+        const uint8_t* const lists   = B(Rd<void*>(levels, off + kDetail_Lists));
+        const size_t li = static_cast<size_t>(i) * kList_Stride;
+
+        uint32_t arg10 = 0xffffffffu;                          // OR $-1,%r10d
+        const uint8_t* const levelsNow = B(Rd<void*>(meshNow, 0x50));
+        int32_t arg8 = Rd<int32_t>(levelsNow, off + kDetail_DefaultArg8);
+
+        if (Rd<int32_t>(lists, li + kList_NodeFlag) < 0) {     // 180101103  JGE
+            if (_animation._instanced == 0) {                  // 180101116
+                arg8 = 1;                                      // 180101138
+            } else {
+                arg10 = static_cast<uint32_t>(Rd<int32_t>(
+                    _animation._layers._data,
+                    static_cast<size_t>(_animation._layers._size) * 0x38 - 0x2c));
+            }
+        }
+
+        const int32_t matIndex = Rd<int32_t>(lists, li + kList_Material);
+        const void* material = Rd<void*>(_materials._data,
+                                         static_cast<size_t>(matIndex) * 8);
+
+        // 16-BIT add: `ADD 0x28(%rbx),%r9w`. It WRAPS; it does not promote.
+        const uint16_t arg4 = static_cast<uint16_t>(
+            static_cast<uint16_t>(_sortBias) +
+            static_cast<uint16_t>(_detailId));
+
+        const uint16_t arg5 = static_cast<uint16_t>(packedLevel |
+                                                    static_cast<uint16_t>(i));
+
+        const float arg7 = (alpha * _opacity) + (oneMinusAlpha * _opacityPrev);
+
+        add(&renderer, static_cast<const Geometry*>(this), material, arg4, arg5,
+            0.0f, arg7, arg8, meshNow, arg10);                 // 18010119e
+        ++g_addDrawItemsMeshQ;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ?Update@EdgeMeshInstance@Graphics@@UEAAXAEBVTime@System@@@Z          [slot 1]
+//                                                        retail 0x1800a39b0
+//
+// The `Time&` parameter is NEVER READ: RDX is overwritten by the first
+// instruction of the body. The NULL test on `_followed` is RETAIL'S OWN and is a
+// real case — Mesh.h records that the default constructor leaves +0xc8
+// uninitialised — so nothing is added to it (CLAUDE.md: never fix a faithful
+// crash with a null check). A non-null garbage pointer faults here exactly as it
+// faults in the DLL, and if it ever does the bug is the missing SetMesh upstream.
+// ---------------------------------------------------------------------------
+void EdgeMeshInstance::Update(const System::Time& time) {
+    (void)time;   // RDX is clobbered by retail's first instruction
+
+    MeshInstance* const followed = _followed;
+    if (followed) {
+        Transform xf;
+        std::memcpy(&xf, &followed->_transform, 0x1c);   // seven dwords
+        RtGeometrySetTransform()(this, &xf);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ?GetInstanceTransform@EdgeMeshInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z
+//                                              [slot 6]  retail 0x1800a3840
+//
+// THE PACKED ARGUMENT IS 15 + 1 HERE, not 12 + 4 — a different packing from
+// MeshInstance's, decoded separately. And note what this arm does NOT do: it
+// does not touch a colour. Carrying MeshInstance's four colour stores over here
+// would be silent, plausible and wrong.
+// ---------------------------------------------------------------------------
+Math::Matrix* EdgeMeshInstance::GetInstanceTransform(Math::Matrix* ret, int packed,
+                                                     float t) const {
+    const int  index     = packed & 0x7fff;
+    const bool whichList = ((static_cast<uint32_t>(packed) >> 15) & 1u) != 0;
+
+    const uint8_t* const mesh = B(_mesh.p);
+    const uint8_t* const listData = B(Rd<void*>(mesh, whichList ? 0x158 : 0x148));
+    const uint8_t* const entry = listData + static_cast<int64_t>(index) * 0x18;
+    const int32_t node = Rd<int32_t>(entry, 0x14);   // plain MOV dword; see the door
+
+    if (node >= 0 && _followed != nullptr) {
+        // ENDGAME B.3.5: `MeshInstance::GetNodeToWorld(int, float)` is now a
+        // member of the real class and the body is in this file, so retail's
+        // direct internal CALL becomes a direct member call — the port-registry
+        // door it used to go through is gone, along with its resolve.
+        const Transform got = _followed->MeshInstance::GetNodeToWorld(node, t);
+        TransformAsMatrix(&got, ret);
+    } else {
+        Transform xf;
+        RtLerpTransformPair(B(&_transform), t, &xf);
+        TransformAsMatrix(&xf, ret);
+    }
+
+    return ret;
+}
+
+// ---------------------------------------------------------------------------
+// ?SetMesh@EdgeMeshInstance@Graphics@@QEAAXV?$ExternalPtr@…PEAVMeshInstance@2@@Z
+//                                                        retail 0x1800a3a20
+// `_followed` is stored FIRST and the mesh handle second — retail's order. The
+// four OR's write `_materialTypeFlags` back after EACH one, which is observable
+// to a re-entrant reader, so the loop keeps that shape.
+// ---------------------------------------------------------------------------
+void EdgeMeshInstance::SetMesh(ExternalPtrHandle mesh, MeshInstance* followed) {
+    _followed = followed;
+    _mesh = mesh;
+
+    const size_t order[4] = { 0x38, 0x28, 0x40, 0x30 };
+    for (int i = 0; i < 4; ++i) {
+        const void* mat = Rd<void*>(mesh.p, order[i]);
+        _materialTypeFlags |= 1u << (static_cast<uint8_t>(Rd<int32_t>(mat, 0x20)) & 0x1f);
+    }
+
+    RtGeometrySetBounds()(this, B(mesh.p) + 0x168);
+}
+
+// ---------------------------------------------------------------------------
+// ?AddDrawItems@EdgeMeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+//                                              [slot 3]  retail 0x1800a2fd0
+//
+// TWO flat passes, triangles then edges. No LOD, no bounds, no opacity. The
+// counts come from a CACHED EdgeMesh pointer and the materials from a FRESH load
+// of `_mesh` on every iteration, and the second loop RELOADS `_mesh` before it
+// starts — all three asymmetries are retail's and are reproduced.
+// ---------------------------------------------------------------------------
+void EdgeMeshInstance::AddDrawItems(const Scene& scene, Renderer& renderer) const {
+    (void)scene;
+    ++g_addDrawItemsEdge;
+
+    const float kOne = 1.0f;                                   // 0x18016169c
+
+    AddDrawItemFn add = RtRendererAddDrawItem();
+    if (!add) return;
+
+    // ---- pass 1: the triangle lists, sort key 0x2000 -----------------------
+    {
+        const uint8_t* const em = B(_mesh.p);                  // 1800a2fe2
+        const int32_t n = Rd<int32_t>(em, 0x150);
+        for (int32_t i = 0; i < n; ++i) {                      // 1800a3020
+            const uint8_t* const emNow = B(_mesh.p);
+            const uint8_t* const lists = B(Rd<void*>(em, 0x148));
+            const size_t li = static_cast<size_t>(i) * kList_Stride;
+
+            const void* material =
+                (Rd<int32_t>(lists, li + kList_NodeFlag) >= 0)  // 1800a305f  JGE
+                    ? Rd<void*>(emNow, 0x28)                    // _material0
+                    : Rd<void*>(emNow, 0x30);                   // _material1
+
+            add(&renderer, static_cast<const Geometry*>(this), material,
+                0x2000, static_cast<uint16_t>(i),
+                0.0f, kOne, 1, nullptr, 0xffffffffu);           // 1800a3078
+            ++g_addDrawItemsEdgeQ;
+        }
+    }
+
+    // ---- pass 2: the edge lists, sort key 0x2001, index | 0x8000 -----------
+    {
+        const uint8_t* const em = B(_mesh.p);                  // 1800a3087 RELOAD
+        const int32_t n = Rd<int32_t>(em, 0x160);
+        for (int32_t i = 0; i < n; ++i) {                      // 1800a30b0
+            const uint8_t* const emNow = B(_mesh.p);
+            const uint8_t* const lists = B(Rd<void*>(em, 0x158));
+            const size_t li = static_cast<size_t>(i) * kList_Stride;
+
+            const void* material =
+                (Rd<int32_t>(lists, li + kList_NodeFlag) >= 0)  // 1800a30ef  JGE
+                    ? Rd<void*>(emNow, 0x38)                    // _material2
+                    : Rd<void*>(emNow, 0x40);                   // _material3
+
+            const uint16_t arg5 =
+                static_cast<uint16_t>(static_cast<uint16_t>(i) | 0x8000u);
+
+            add(&renderer, static_cast<const Geometry*>(this), material,
+                0x2001, arg5,
+                0.0f, kOne, 1, nullptr, 0xffffffffu);           // 1800a310f
+            ++g_addDrawItemsEdgeQ;
+        }
+    }
+}
+
+}  // namespace Graphics

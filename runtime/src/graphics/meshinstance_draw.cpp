@@ -65,6 +65,8 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/math/Math.h"
+// ENDGAME B.3.5 block E: the real `Graphics::MeshInstance` / `EdgeMeshInstance`.
+#include "../../types/graphics/Mesh.h"
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -121,7 +123,6 @@ using GetBonesFn  = int32_t (*)(const void* self, float t, const void* xform, vo
 using SetBonesFn  = void (*)(void* ctx, int32_t count, const void* matrices);
 using SetTfsFn    = void (*)(void* ctx, int32_t slot, const void* matrix,
                              const void* scale);
-using NodeToWorldFn = void* (*)(const void* self, void* ret, int32_t node, float t);
 
 // ENDGAME B.3.1 step 2: both are Math:: members. The `(self, ret, ...)` shape
 // stays because the call sites work on raw offsets into MeshInstance's untyped
@@ -153,11 +154,13 @@ void ContextSetTransformScale(void* ctx, int32_t slot, const void* matrix,
         "?SetTransformScale@Context@Video@@QEAAXHAEBVMatrix@Math@@AEBVVector4@4@@Z")
         (ctx, slot, matrix, scale);
 }
-void* MeshInstanceGetNodeToWorld(const void* self, void* ret, int32_t node, float t) {
-    return RT_EXPORT_ONCE(NodeToWorldFn,
-        "?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AVTransform@Math@@HM@Z")
-        (self, ret, node, t);
-}
+// ENDGAME B.3.5 block E: `MeshInstanceGetNodeToWorld` DELETED. It was a
+// `RT_EXPORT_ONCE` door onto `?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AV
+// Transform@Math@@HM@Z`, i.e. a runtime-internal caller reaching its own
+// neighbour through the port registry. That body is now a member of the real
+// `Graphics::MeshInstance` (`runtime/src/graphics/mesh.cpp`), so
+// `EdgeMeshInstance::Draw` calls it directly and qualified. Its `NodeToWorldFn`
+// typedef went with it.
 
 const uint8_t* VideoDevice() {
     return *RT_DATA_SLOT(const uint8_t* const*, "?_singleton@Device@Video@@0PEAV12@EA");
@@ -307,13 +310,43 @@ void IssueDraw(void* ctx, const uint8_t* rec, int32_t last) {
 // `+0x50`), re-read from the object EVERY time — four separate reloads in
 // retail, kept literal.
 // ============================================================================
+// ENDGAME B.3.5 block E: BODY MOVED onto the member at the bottom of this file.
+// The door keeps its name, its address and its registration and delegates with a
+// QUALIFIED non-virtual call — the qualification is load-bearing, because a live
+// MeshInstance wears the MINTED table whose slot 2 resolves back to this door.
 extern "C" void RtGraphics_MeshInstance_Draw(const void* self, void* ctx,
                                              const void* camera, void* material,
                                              float t, int32_t flags,
                                              int32_t mode, int32_t pass) {
-    (void)camera; (void)material;                  // R8/R9, never reloaded
+    RtGraphics::ExternalPtr mat;
+    mat.p = material;
+    reinterpret_cast<const ::Graphics::MeshInstance*>(self)
+        ->::Graphics::MeshInstance::Draw(
+              *reinterpret_cast<Video::Context*>(ctx),
+              *reinterpret_cast<const ::Graphics::Camera*>(camera),
+              mat, t, flags, mode, pass);
+}
 
-    const uint8_t* const d = static_cast<const uint8_t*>(self);
+namespace Graphics {
+
+// ============================================================================
+// void Graphics::MeshInstance::Draw(Video::Context&, const Camera&,
+//                                   ExternalPtr<MaterialInstance>, float,
+//                                   int, int, int) const           [slot 2]
+//                                                   retail 0x180100960
+// The banner above the door is the evidence for every offset below; it is not
+// repeated. `Video::Context` and `Graphics::Camera` are other blocks' classes and
+// are taken by REFERENCE under their real names; the offsets are read through the
+// one bridge cast at the top of the body, which is where they were read before.
+// ============================================================================
+void MeshInstance::Draw(Video::Context& context, const Camera& camera,
+                        ExternalPtrHandle material, float t, int32_t flags,
+                        int32_t mode, int32_t pass) const {
+    (void)camera; (void)material;                  // R8/R9, never reloaded
+    void* const ctx = reinterpret_cast<void*>(&context);            // B.3.5 bridge
+    const void* const self = this;
+
+    const uint8_t* const d = reinterpret_cast<const uint8_t*>(this);
 
     const int32_t node = (flags >> 12) & 0xf;      // SAR 0xc / AND 0xf
     const int64_t nodeOff = static_cast<int64_t>(node) * 0xb0;
@@ -398,6 +431,8 @@ extern "C" void RtGraphics_MeshInstance_Draw(const void* self, void* ctx,
     IssueDraw(ctx, rec, pass);
 }
 
+}  // namespace Graphics
+
 // ============================================================================
 // ?Draw@EdgeMeshInstance@Graphics@@UEBAX…            retail 0x1800a3150
 // ============================================================================
@@ -422,13 +457,29 @@ extern "C" void RtGraphics_MeshInstance_Draw(const void* self, void* ctx,
 //
 // The bone buffer's 48 matrices and the 0x18 record stride are the same.
 // ============================================================================
+// ENDGAME B.3.5 block E: BODY MOVED onto the member below; the door delegates.
 extern "C" void RtGraphics_EdgeMeshInstance_Draw(const void* self, void* ctx,
                                                  const void* camera, void* material,
                                                  float t, int32_t flags,
                                                  int32_t mode, int32_t pass) {
-    (void)camera; (void)material; (void)mode; (void)pass;
+    RtGraphics::ExternalPtr mat;
+    mat.p = material;
+    reinterpret_cast<const ::Graphics::EdgeMeshInstance*>(self)
+        ->::Graphics::EdgeMeshInstance::Draw(
+              *reinterpret_cast<Video::Context*>(ctx),
+              *reinterpret_cast<const ::Graphics::Camera*>(camera),
+              mat, t, flags, mode, pass);
+}
 
-    const uint8_t* const d = static_cast<const uint8_t*>(self);
+namespace Graphics {
+
+void EdgeMeshInstance::Draw(Video::Context& context, const Camera& camera,
+                            ExternalPtrHandle material, float t, int32_t flags,
+                            int32_t mode, int32_t pass) const {
+    (void)camera; (void)material; (void)mode; (void)pass;
+    void* const ctx = reinterpret_cast<void*>(&context);            // B.3.5 bridge
+
+    const uint8_t* const d = reinterpret_cast<const uint8_t*>(this);
 
     const bool edgePass = ((static_cast<uint32_t>(flags) >> 15) & 1u) != 0;   // SHR/AND
     const int64_t recOff = static_cast<int64_t>(flags & 0x7fff) * 0x18;
@@ -460,7 +511,14 @@ extern "C" void RtGraphics_EdgeMeshInstance_Draw(const void* self, void* ctx,
                     sizeof scale);
     } else if (poseSource != nullptr) {
         // --- RIGID, driven by the mesh instance ------------------------------
-        MeshInstanceGetNodeToWorld(poseSource, world, boneNode, t);
+        // ENDGAME B.3.5 block E: this was `RT_EXPORT_ONCE(…"?GetNodeToWorld@
+        // MeshInstance@Graphics@@QEBA?AVTransform@Math@@HM@Z")` — a runtime-
+        // internal caller reaching its own neighbour through the port registry.
+        // The body is now a member of the real class (`mesh.cpp`), so this is a
+        // direct qualified member call and the resolve is gone.
+        const Math::Transform got =
+            _followed->MeshInstance::GetNodeToWorld(boneNode, t);
+        std::memcpy(world, &got, sizeof world);
         std::memcpy(scale, static_cast<const uint8_t*>(poseSource) + 0x10c, sizeof scale);
     } else {
         // --- RIGID, standalone: lerp our own state and use a UNIT scale ------
@@ -503,6 +561,8 @@ extern "C" void RtGraphics_EdgeMeshInstance_Draw(const void* self, void* ctx,
 
     IssueDraw(ctx, rec, 1);                         // the LITERAL 1, not `pass`
 }
+
+}  // namespace Graphics
 
 // ============================================================================
 // Registration — name AND address for both.
