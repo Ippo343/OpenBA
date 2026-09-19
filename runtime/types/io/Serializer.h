@@ -397,4 +397,259 @@ static_assert(sizeof(VisitorEncoding) == 8, "no Encoding subclass adds a field")
 static_assert(rt::io::encoding_vtbl::kCreateReader == 0x18, "Encoding slot 3");
 static_assert(rt::io::encoding_vtbl::kCreateWriter == 0x20, "Encoding slot 4");
 
+// ===========================================================================
+// ENDGAME B.3.4 block 2 — the REAL `IO::ReaderWriter` hierarchy.
+// ===========================================================================
+//
+// Design: B34_RULES.md §1.2. 26 slots, confirmed FOUR independent ways:
+//   (a) `??_7ReaderWriter@IO@@6B@` @ 0x1801553b0 is slot 0 = 0x180023bd0 (the
+//       deleting dtor, also RT_DELDTOR(..., "IO::ReaderWriter")) followed by
+//       twenty-five `_purecall` (0x18007ec28);
+//   (b) the three concrete tables are adjacent and each is exactly 0xd0 bytes:
+//       0x180155210 + 0xd0 == 0x1801552e0 + 0xd0 == 0x1801553b0;
+//   (c) `rw_vtbl::kSerializeBytes == 0xC8`, so 0xC8/8 == 25 is the last index;
+//   (d) each ARRAY body's own virtual self-call displacement names the scalar
+//       slot for its type (serialize_family.cpp's header block re-derives all
+//       eleven this way).
+//
+// THE DISTINCT-NAME SCHEME, and why it makes the reversal rule moot.
+// ------------------------------------------------------------------
+// Retail declares 22 of these 26 as `Serialize` OVERLOADS, and MSVC groups
+// overloaded virtuals and REVERSES their declaration order. ENDGAME decision 2
+// says to give them distinct names so the issue cannot arise — so they are
+// declared HERE IN SLOT ORDER as `Serialize<Type>` / `Serialize<Type>Array`,
+// and the mapping to the retail byte offsets is a plain 1:1 that needs no
+// reversal argument at all. Anyone trying to recover retail's declaration order
+// from this list is recovering a fact we deliberately stopped depending on.
+//
+// `IO::Serializer`'s NON-virtual forwarders keep the public name `Serialize`
+// and stay real C++ overloads — that is block 3, and it is what lets the 861
+// caller sites read `ser.Serialize(x, "name")`.
+//
+// NO VIRTUAL DESTRUCTOR ANYWHERE. Itanium spends two slots on one, which would
+// push every slot after it and silently mis-aim the `rw_vtbl::k*` byte offsets
+// that 54 files under runtime/src still use.
+// `a_virtual_destructor_would_shift_every_ReaderWriter_slot` in
+// tests/unit/io_vtable_abi_test.cpp is the guard.
+//
+// THE SIGNATURES ARE RETAIL'S. The scalar slots take `T&` (mangled `AEAD`,
+// `AEA_N`, …) and the array slots take `(int, T*, const char*)` (`PEAD`, …).
+// The `const char* name` argument is accepted and IGNORED by every body in the
+// family: retail's scalar bodies CLOBBER R8 (which held `name`) with the value
+// pointer before the tail jump, and the array bodies pass `nullptr` to the
+// elements rather than forwarding it. The binary format carries no field names
+// and a reader depends entirely on ORDER. That is a property of the FORMAT.
+// ===========================================================================
+
+class ReaderWriter {
+public:
+    // slot 0  +0x00  rw_vtbl::kDtor        ReaderWriter's own is 0x180023bd0
+    virtual ReaderWriter* DeletingDtor(unsigned flags) = 0;
+    // slot 1  +0x08  rw_vtbl::kGetVersion
+    virtual int  GetVersion() const = 0;
+    // slot 2  +0x10  rw_vtbl::kSkip
+    virtual void Skip() = 0;
+
+    // slots 3..13 — the eleven ARRAY forms, +0x18 .. +0x68.
+    virtual void SerializeCharArray  (int n, char*          arr, const char* name) = 0;
+    virtual void SerializeBoolArray  (int n, bool*          arr, const char* name) = 0;
+    virtual void SerializeFloatArray (int n, float*         arr, const char* name) = 0;
+    virtual void SerializeUInt64Array(int n, uint64_t*      arr, const char* name) = 0;
+    virtual void SerializeInt64Array (int n, int64_t*       arr, const char* name) = 0;
+    virtual void SerializeUIntArray  (int n, uint32_t*      arr, const char* name) = 0;
+    virtual void SerializeIntArray   (int n, int32_t*       arr, const char* name) = 0;
+    virtual void SerializeUShortArray(int n, uint16_t*      arr, const char* name) = 0;
+    virtual void SerializeShortArray (int n, int16_t*       arr, const char* name) = 0;
+    virtual void SerializeUCharArray (int n, unsigned char* arr, const char* name) = 0;
+    virtual void SerializeSCharArray (int n, signed char*   arr, const char* name) = 0;
+
+    // slots 14..24 — the eleven SCALAR forms, +0x70 .. +0xC0.
+    virtual void SerializeChar  (char&          v, const char* name) = 0;
+    virtual void SerializeBool  (bool&          v, const char* name) = 0;
+    virtual void SerializeFloat (float&         v, const char* name) = 0;
+    virtual void SerializeUInt64(uint64_t&      v, const char* name) = 0;
+    virtual void SerializeInt64 (int64_t&       v, const char* name) = 0;
+    virtual void SerializeUInt  (uint32_t&      v, const char* name) = 0;
+    virtual void SerializeInt   (int32_t&       v, const char* name) = 0;
+    virtual void SerializeUShort(uint16_t&      v, const char* name) = 0;
+    virtual void SerializeShort (int16_t&       v, const char* name) = 0;
+    virtual void SerializeUChar (unsigned char& v, const char* name) = 0;
+    virtual void SerializeSChar (signed char&   v, const char* name) = 0;
+
+    // slot 25 +0xC8  rw_vtbl::kSerializeBytes
+    virtual void SerializeBytes(int n, void* buf, const char* name) = 0;
+
+    // Fields at the retail offsets `rt::io::ReaderWriter` already pins.
+    uint8_t allowCustomSerialize;   // +0x08
+    uint8_t _pad09[7];              // +0x09
+    void*   serializer;             // +0x10  the IO::Serializer that owns it
+    void*   stream;                 // +0x18  == serializer->stream
+
+protected:
+    ~ReaderWriter() = default;      // NON-virtual — there is no second slot
+};
+
+static_assert(sizeof(ReaderWriter) == 0x20, "IO::ReaderWriter is 0x20 bytes");
+static_assert(sizeof(ReaderWriter) == sizeof(rt::io::ReaderWriter),
+              "IO::ReaderWriter and the rt::io::ReaderWriter POD stay interchangeable");
+static_assert(rt::io::rw_vtbl::kDtor == 0x00, "slot 0");
+static_assert(rt::io::rw_vtbl::kSerializeBytes == 0xC8, "slot 25 is the last");
+static_assert(rt::io::rw_vtbl::kSerializeBytes / 8 == 25, "26 slots, 0..25");
+
+// ---------------------------------------------------------------------------
+// The three concretes.
+// ---------------------------------------------------------------------------
+// THERE IS DELIBERATELY NO `IO::BinaryCodec` CLASS. `rt::io::BinaryCodec` is
+// this project's grouping name for the shared 0x30-byte layout, not a retail
+// one — the recovered source tree has `IO\BinaryReader.cpp` and no Codec file —
+// and ENDGAME decision 5 says the classes take the ORIGINAL names. So
+// `BinaryReader` and `BinaryWriter` each declare the three fields, which is also
+// honest about the fact that `word20`/`word24` MEAN different things on the two
+// sides (reader: the back-patched record length and the position just after it,
+// whose sum `Skip()` seeks to; writer: two back-patch positions).
+//
+// ⚠ AND THE ONE TRAP IN THE FAMILY: `IO::Visitor`'s version is at +0x20, NOT
+// +0x28. `?GetVersion@Visitor@IO@@UEBAHXZ` (0x18002b670) is
+// `MOV EAX,[RCX+0x20]; RET` where both BinaryReader's (0x180023930) and
+// BinaryWriter's (0x180023ab0) read +0x28. A Visitor has no record framing to
+// carry, so its version lands eight bytes earlier. Three identically-named
+// GetVersion bodies where one reads a different offset is exactly the shape
+// someone "tidies" into uniformity, so the type system carries the fact.
+
+class BinaryReader final : public ReaderWriter {
+public:
+    ReaderWriter* DeletingDtor(unsigned flags) override = 0;               // 0x180023a10   (body: iobase_vtables.cpp)
+    int  GetVersion() const override { return version; }               // 0x180023930
+    void Skip() override;                                              // 0x1800a83f0
+    void SerializeCharArray  (int, char*,          const char*) override;
+    void SerializeBoolArray  (int, bool*,          const char*) override;
+    void SerializeFloatArray (int, float*,         const char*) override;
+    void SerializeUInt64Array(int, uint64_t*,      const char*) override;
+    void SerializeInt64Array (int, int64_t*,       const char*) override;
+    void SerializeUIntArray  (int, uint32_t*,      const char*) override;
+    void SerializeIntArray   (int, int32_t*,       const char*) override;
+    void SerializeUShortArray(int, uint16_t*,      const char*) override;
+    void SerializeShortArray (int, int16_t*,       const char*) override;
+    void SerializeUCharArray (int, unsigned char*, const char*) override;
+    void SerializeSCharArray (int, signed char*,   const char*) override;
+    void SerializeChar  (char&,          const char*) override;
+    void SerializeBool  (bool&,          const char*) override;
+    void SerializeFloat (float&,         const char*) override;
+    void SerializeUInt64(uint64_t&,      const char*) override;
+    void SerializeInt64 (int64_t&,       const char*) override;
+    void SerializeUInt  (uint32_t&,      const char*) override;
+    void SerializeInt   (int32_t&,       const char*) override;
+    void SerializeUShort(uint16_t&,      const char*) override;
+    void SerializeShort (int16_t&,       const char*) override;
+    void SerializeUChar (unsigned char&, const char*) override;
+    void SerializeSChar (signed char&,   const char*) override;
+    void SerializeBytes(int, void*, const char*) override;             // 0x1800a8970
+    ~BinaryReader() = default;
+
+    int32_t word20;    // +0x20  the back-patched record LENGTH, read from the stream
+    int32_t word24;    // +0x24  GetCurrentPos() just after it
+    int32_t version;   // +0x28
+    int32_t _pad2c;    // +0x2c
+};
+
+class BinaryWriter final : public ReaderWriter {
+public:
+    ReaderWriter* DeletingDtor(unsigned flags) override = 0;               // 0x180023b50   (body: iobase_vtables.cpp)
+    int  GetVersion() const override { return version; }               // 0x180023ab0
+    void Skip() override {}   // 0x1800a8b00 is a bare RET: a writer has nothing
+                              // ahead of the cursor to skip over. Faithful, not a stub.
+    void SerializeCharArray  (int, char*,          const char*) override;
+    void SerializeBoolArray  (int, bool*,          const char*) override;
+    void SerializeFloatArray (int, float*,         const char*) override;
+    void SerializeUInt64Array(int, uint64_t*,      const char*) override;
+    void SerializeInt64Array (int, int64_t*,       const char*) override;
+    void SerializeUIntArray  (int, uint32_t*,      const char*) override;
+    void SerializeIntArray   (int, int32_t*,       const char*) override;
+    void SerializeUShortArray(int, uint16_t*,      const char*) override;
+    void SerializeShortArray (int, int16_t*,       const char*) override;
+    void SerializeUCharArray (int, unsigned char*, const char*) override;
+    void SerializeSCharArray (int, signed char*,   const char*) override;
+    void SerializeChar  (char&,          const char*) override;
+    void SerializeBool  (bool&,          const char*) override;
+    void SerializeFloat (float&,         const char*) override;
+    void SerializeUInt64(uint64_t&,      const char*) override;
+    void SerializeInt64 (int64_t&,       const char*) override;
+    void SerializeUInt  (uint32_t&,      const char*) override;
+    void SerializeInt   (int32_t&,       const char*) override;
+    void SerializeUShort(uint16_t&,      const char*) override;
+    void SerializeShort (int16_t&,       const char*) override;
+    void SerializeUChar (unsigned char&, const char*) override;
+    void SerializeSChar (signed char&,   const char*) override;
+    void SerializeBytes(int, void*, const char*) override;             // 0x1800a9070
+    ~BinaryWriter() = default;
+
+    int32_t word20;    // +0x20  where the length placeholder lands, for back-patching
+    int32_t word24;    // +0x24  the position just after it
+    int32_t version;   // +0x28
+    int32_t _pad2c;    // +0x2c
+};
+
+// Every one of its 23 Serialize slots, and Skip, is a three-byte `RET` in the
+// shipped DLL (0x1800bacc0..0x1800bae30, sixteen bytes apart). That is the whole
+// body, not a stub: IO::Visitor is the resource-REFERENCE discovery pass, so
+// being blind to scalar data is the design.
+class Visitor final : public ReaderWriter {
+public:
+    ReaderWriter* DeletingDtor(unsigned flags) override = 0;               // 0x18002b710   (body: iobase_vtables.cpp)
+    int  GetVersion() const override { return version; }               // 0x18002b670
+    void Skip() override {}
+    void SerializeCharArray  (int, char*,          const char*) override {}
+    void SerializeBoolArray  (int, bool*,          const char*) override {}
+    void SerializeFloatArray (int, float*,         const char*) override {}
+    void SerializeUInt64Array(int, uint64_t*,      const char*) override {}
+    void SerializeInt64Array (int, int64_t*,       const char*) override {}
+    void SerializeUIntArray  (int, uint32_t*,      const char*) override {}
+    void SerializeIntArray   (int, int32_t*,       const char*) override {}
+    void SerializeUShortArray(int, uint16_t*,      const char*) override {}
+    void SerializeShortArray (int, int16_t*,       const char*) override {}
+    void SerializeUCharArray (int, unsigned char*, const char*) override {}
+    void SerializeSCharArray (int, signed char*,   const char*) override {}
+    void SerializeChar  (char&,          const char*) override {}
+    void SerializeBool  (bool&,          const char*) override {}
+    void SerializeFloat (float&,         const char*) override {}
+    void SerializeUInt64(uint64_t&,      const char*) override {}
+    void SerializeInt64 (int64_t&,       const char*) override {}
+    void SerializeUInt  (uint32_t&,      const char*) override {}
+    void SerializeInt   (int32_t&,       const char*) override {}
+    void SerializeUShort(uint16_t&,      const char*) override {}
+    void SerializeShort (int16_t&,       const char*) override {}
+    void SerializeUChar (unsigned char&, const char*) override {}
+    void SerializeSChar (signed char&,   const char*) override {}
+    void SerializeBytes(int, void*, const char*) override {}
+    ~Visitor() = default;
+
+    int32_t version;   // +0x20  NOT +0x28 — see the trap note above
+    int32_t _pad24;    // +0x24
+};
+
+static_assert(sizeof(BinaryReader) == 0x30, "the factory asks MemAlloc for 0x30");
+static_assert(sizeof(BinaryWriter) == 0x30, "the factory asks MemAlloc for 0x30");
+static_assert(sizeof(Visitor)      == 0x28, "the factory asks MemAlloc for 0x28");
+static_assert(sizeof(BinaryReader) == sizeof(rt::io::BinaryCodec), "POD agrees");
+static_assert(sizeof(BinaryWriter) == sizeof(rt::io::BinaryCodec), "POD agrees");
+static_assert(sizeof(Visitor)      == sizeof(rt::io::VisitorCodec), "POD agrees");
+
+// Every field pinned against the same retail instruction the POD is pinned
+// against. `-Wno-invalid-offsetof` has been in SA_CXXFLAGS and UNIT_CXXFLAGS
+// since B.3.3 (Makefile:59, :120), which is what lets a polymorphic type keep
+// decision 1's layout pins.
+static_assert(offsetof(ReaderWriter, allowCustomSerialize) == 0x08, "ReaderWriter+0x08");
+static_assert(offsetof(ReaderWriter, serializer)           == 0x10, "ReaderWriter+0x10");
+static_assert(offsetof(ReaderWriter, stream)               == 0x18, "ReaderWriter+0x18");
+static_assert(offsetof(BinaryReader, word20)  == 0x20, "BinaryReader+0x20");
+static_assert(offsetof(BinaryReader, word24)  == 0x24, "BinaryReader+0x24");
+static_assert(offsetof(BinaryReader, version) == 0x28, "0x180023930 MOV EAX,[RCX+0x28]");
+static_assert(offsetof(BinaryWriter, word20)  == 0x20, "BinaryWriter+0x20");
+static_assert(offsetof(BinaryWriter, word24)  == 0x24, "BinaryWriter+0x24");
+static_assert(offsetof(BinaryWriter, version) == 0x28, "0x180023ab0 MOV EAX,[RCX+0x28]");
+// THE TRAP, pinned so it cannot be "tidied" into uniformity with the other two:
+static_assert(offsetof(Visitor, version) == 0x20,
+              "0x18002b670 is MOV EAX,[RCX+0x20] -- Visitor's version is EIGHT "
+              "bytes earlier than BinaryReader's and BinaryWriter's");
+
 } // namespace IO

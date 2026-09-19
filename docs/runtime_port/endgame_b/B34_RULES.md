@@ -422,41 +422,43 @@ gate script tests the DEPLOYED exe, so a no-build run tests the previous binary.
 3 consecutive PASS in four runs). So the "×3" is not belt-and-braces, it is calibrated: a
 single run has a ~25% chance of reporting a DIFF that means nothing.
 
-**THREE known flake signatures. All of them mean RE-RUN, not FAIL:**
+**TWO known flake signatures. Both mean RE-RUN, not FAIL:**
 
 1. **A ONE-byte DIFF at +0x18 with identical file sizes** — `tools/resave_gate/README.md`'s
    documented flake, and the one the coordinator's baseline hit. Re-run.
-2. **A DIFF with count 5689 and exactly one extra `CropField.rsc:resource` row** — the
-   `ExternalFactory::Add` loader race (`reference_resave_gate_cropfield_row_flake.md`).
-   Re-run twice.
-3. **A DIFF where the resave is LARGER than the golden by a few tens of bytes and the
-   `[Roundtrip]` line's `tail=` grew by the same amount** — measured on block 1 as
-   `resaved=21075154` (golden 21075114, +40) with `tail=303` against the healthy `tail=263`,
-   and `diffBytes` ~16.5M against the healthy ~16.0M. **Re-run; three consecutive PASSes
-   followed.**
+2. **THE LOADER RACE: the resave's reference table differs from the golden's by extra or
+   missing RESIDENT-RESOURCE ROWS, and by nothing else** — the `ExternalFactory::Add` race
+   (`reference_resave_gate_cropfield_row_flake.md`). Re-run twice.
 
-**SIGNATURE 3 IS A CORRECTION TO THIS SECTION, AND IT COST A BISECT.** An earlier revision of
-this sheet said "a size difference … is real: stop and bisect". That rule is WRONG as written
-and it would have rejected a good commit: block 1's first run produced exactly that, the bisect
-against block 0 said block 0 passed, and then block 1 passed three times running on a rebuild
-of the same tree. The mechanism is the one the gate README already describes for signature 2 —
-the resave's reference table numbers every RESIDENT resource, so a run that leaves extra
-resources resident adds rows, grows the file and shifts every id after them. Signatures 2 and 3
-are the SAME loader race seen at two different magnitudes; only the row that leaks differs.
+   It presents at any magnitude, because the size delta is just "how many rows leaked times
+   the length of each path". Two measured instances of the SAME signature:
+   - count 5689 with exactly one extra `CropField.rsc:resource` row (the README's case);
+   - B.3.4 block 1's first run: `resaved=21075154` against the golden's 21075114 (+40, i.e.
+     one path row), `tail=303` against the healthy 263, `diffBytes` ~16.5M against ~16.0M.
 
-**What is still real, and still means stop and bisect:**
-- the resave is SMALLER than the golden, or differs by a size that does not match a
-  whole number of reference-table rows;
+**THE DISCRIMINATOR IS *WHICH ROWS DIFFER*, NOT THE BYTE COUNT.** A DIFF is a flake only when
+the reference tables differ by whole resident-resource rows plus the id shift behind them, and
+in nothing else. That is what keeps "re-run first" from degrading into "re-run until green":
+re-running is how you get a second sample, not a licence to accept the third verdict because
+it was the one you wanted. The coordinator is adding a row-level diff of the reference table to
+the gate so a DIFF prints the extra path(s) instead of a size; until that lands, the proxy
+signals below are what a self-check has, and they are a proxy, not the rule.
+
+**STILL REAL — stop and bisect:**
+- the resave is SMALLER than the golden, or differs by a size that is not a whole number of
+  path rows;
 - `tail=` is UNCHANGED at 263 and the bytes differ anyway;
 - a multi-byte diff with identical sizes;
-- the same DIFF reproduces on three consecutive runs of a rebuilt tree.
+- the same DIFF survives a rebuild and reproduces three times.
 
-**The discriminator is a RE-RUN, not the shape of the first verdict.** Because two of the three
-flake signatures look exactly like a real regression on a single run, the honest procedure is:
-never bisect on one DIFF; re-run first, and bisect only when the DIFF survives a rebuild and
-repeats. "Three PASSes" means three *consecutive* clean runs — a re-run after a flake restarts
-the count for that commit, and a commit that cannot produce three in a row is not mergeable
-however good its first run looked.
+**NEVER BISECT ON A SINGLE DIFF.** An earlier revision of this sheet said "a size difference …
+is real: stop and bisect", and that rule cost a bisect: block 1's first run produced exactly
+that, a detached rebuild of block 0 passed, the evidence pointed squarely at block 1 — and
+block 1 then passed three times running on a rebuild of the identical tree. Re-run first; treat
+a DIFF as real only when it survives a rebuild and repeats with content that does not fit the
+race. "Three PASSes" means three *consecutive* clean runs: a re-run after a flake restarts the
+count, and a commit that cannot produce three in a row is not mergeable however good its first
+run looked.
 
 Per move, the gate is run *after* the move and *before* the merge, and the coordinator runs it,
 not the agent. A move that cannot be gated is not a move: if a change is too small to reach the
