@@ -84,23 +84,53 @@ void ClearBlockPtrs(Persistence* p) {
 // see. Faithful transcription costs nothing; reasoning about the race costs
 // a wave.
 // ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS commit 6: the body is now
+// `IO::Persistence::BeginGetSaveGameInfo`, below. The door keeps its name, its
+// signature and both registration lines, and delegates. No qualified `IO::`
+// call is needed: `IO::Persistence` has no vtable of its own -- the vptr at
+// +0x10 is the EMBEDDED worker's -- so B34_BRIEFS section A.1's re-entry hazard
+// cannot arise.
 bool RtIo_Persistence_BeginGetSaveGameInfo(void* self, const void* nameRef, int count) {
+    return reinterpret_cast<IO::Persistence*>(self)->BeginGetSaveGameInfo(
+        *static_cast<const String*>(nameRef), count);
+}
 
-    auto* p = static_cast<Persistence*>(self);
-    if (p->flags & 1u) return false;
+// ============================================================================
+// `IO::Persistence::BeginGetSaveGameInfo` -- the member body
+// ============================================================================
+// Defined in `namespace IO` because a member of `IO::X` must appear in a
+// namespace ENCLOSING the class (B34_BRIEFS section A.2); the two file-local
+// array-teardown helpers live in this translation unit's GLOBAL anonymous
+// namespace and are reached as `::ClearBlockDescs` / `::ClearBlockPtrs`. Every
+// POD is spelled `RtIo::` or `RtSystem::` and every real class `System::`
+// (B34_RULES section 7.2); note this file's POD namespace is `RtIo`, LOWERCASE
+// o.
+//
+// NOTHING ELSE CHANGED: same callees in the same order, the refusal test on bit
+// 0 of `_flags` still first, the two array teardowns still between the filename
+// and the command fields, the guarded String assignment still guarded on the
+// BUFFER, and ResetEvent before SetEvent. The `GetSaveFilename` call, which was
+// already a DIRECT call into the sibling file's door (retail's 0x1800b789f is a
+// direct rel32 CALL), is now a direct MEMBER call of that same body -- so which
+// body runs is unchanged, and the POD-plus-move round trip it needed collapses
+// into one construction with the same single AddRef.
+namespace IO {
 
-    // GetSaveFilename is a registered entry point and keeps its retail
-    // (self, hidden-return-slot, ...) signature, so the value lands in a POD
-    // and is then stolen into the class -- a pure pointer steal, `fnPod` left
-    // null.
-    String fnPod{nullptr};
-    RtIo_Persistence_GetSaveFilename(self, &fnPod, nameRef);
-    System::String fn(std::move(Sys(fnPod)));
+bool Persistence::BeginGetSaveGameInfo(const RtSystem::String& nameRef, int count) {
+    const RtSystem::String* const name = &nameRef;
 
-    ClearBlockDescs(p);
-    ClearBlockPtrs(p);
+    if (_flags & 1u) return false;
 
-    p->command = 3;
+    // C++17 constructs GetSaveFilename's result STRAIGHT INTO `fn`.
+    // `AsString()` is the same eight bytes (Filename IS a String,
+    // layout-identically), which is what retail assigns from.
+    System::Filename fnFile(GetSaveFilename(*name));
+    const System::String& fn = fnFile.AsString();
+
+    ::ClearBlockDescs(reinterpret_cast<RtIo::Persistence*>(this));
+    ::ClearBlockPtrs(reinterpret_cast<RtIo::Persistence*>(this));
+
+    _command = 3;
 
     // The guarded String assignment at 0x1800b78be..0x1800b7903 IS
     // `String::operator=` (retail 0x1800c9810): retail skips the whole
@@ -109,19 +139,21 @@ bool RtIo_Persistence_BeginGetSaveGameInfo(void* self, const void* nameRef, int 
     // reference to the buffer it is about to re-adopt. `pendingFilename` is a
     // `RtSystem::String` member of the not-yet-converted `Persistence`,
     // reached through the one transitional bridge.
-    if (p->pendingFilename.data != fn._data) {
-        Sys(p->pendingFilename) = fn;
+    if (_pendingFilename.data != fn._data) {
+        ::Sys(_pendingFilename) = fn;
     }
 
-    p->status     = 0;
-    p->blockCount = count;
+    _status     = 0;
+    _blockCount = count;
 
-    ResetEvent(p->doneEvent);
-    SetEvent(p->workEvent);
+    ResetEvent(_doneEvent);
+    SetEvent(_workEvent);
 
-    // ~fn is retail's release.
+    // ~fnFile is retail's release.
     return true;
 }
+
+}  // namespace IO
 
 // ---------------------------------------------------------------------------
 int RtIoPersistenceSavesWinRegister() {

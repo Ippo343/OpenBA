@@ -50,7 +50,10 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <type_traits>   // B.3.4 PACKAGE+FS: the "IO::Persistence has no vptr" pins
+
 #include "../system/String.h"
+#include "../system/Filename.h"   // B.3.4: GetSaveFilename returns System::Filename
 
 namespace RtIo {
 
@@ -268,3 +271,234 @@ static_assert(offsetof(SaveGameInfo, name) == 0x08, "SaveGameInfo.name @ 0x08");
 static_assert(sizeof(SaveGameInfo) == 0x10, "sizeof(IO::Persistence::SaveGameInfo) == 0x10");
 
 }  // namespace RtIo
+
+// ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS commit 6 — the REAL `IO::Persistence`, PARTIAL
+// ============================================================================
+//
+// Design: B34_RULES.md §1.5 rules 1 and 3, §4.3; B34_BRIEFS.md §E.4.
+//
+// *** NOTE THE POD NAMESPACE IN THIS FILE IS `RtIo`, LOWERCASE o *** — not
+// `RtIO` as in `runtime/types/io/FileSystem.h`. B34_RULES §7.2's grep hazard is
+// spelled against whichever one the file actually uses, and this file uses
+// `RtIo` (as `Registry.h` does).
+//
+// *** IT HAS NO VTABLE OF ITS OWN. *** There is no `??_7Persistence@IO@@6B@` in
+// the retail export table, no row for it in `standalone/rt_data_mint_tables.inc`
+// and no `deleting_dtor.cpp` row. The ONLY Persistence row in the mint tables is
+// the SINGLETON POINTER `?_singleton@Persistence@IO@@0PEAV12@EA` (0x1801fc6b8),
+// which is a data symbol and not a table. Every exported member is
+// `QEAA`/`QEBA`/`AEBA`. So, exactly as for `IO::Serializer`, `IO::Registry` and
+// `IO::FileSystem`, converting a member here — the destructor included — cannot
+// change which table any live object wears.
+//
+// *** THE VPTR AT +0x10 BELONGS TO THE EMBEDDED WORKER, NOT TO THIS CLASS. ***
+// `??0Persistence@IO@@QEAA@XZ` (0x1800b8020) runs
+// `??0Thread@System@@QEAA@I@Z(this+0x10, 0x10000)` and then stamps the derived
+// worker table 0x180155860 over `this+0x10` — the field comment above says so
+// and pins it. So `IO::Persistence` EMBEDS a `System::Thread`-derived save/load
+// worker at +0x10; it does not derive from one, and +0x00 is a tree root, not a
+// vptr. `_workerVtable` therefore stays a plain `void*` FIELD, and
+// `persistence_worker_win.cpp`'s teardown re-stamp of the BASE `System::Thread`
+// vtable 0x180155f20 BY ADDRESS (:585-589) stays exactly as it is, as does
+// `engine/singleton_ctors.cpp`'s construction of the object: `System::Thread` is
+// B.3 step 4b and `singleton_ctors.cpp` is outside this block's file set.
+//
+// *** THIS DECLARATION IS DELIBERATELY PARTIAL AND CARRIES NO `sizeof` ASSERT
+// *** AGAINST A LITERAL, AND THAT IS THIS HEADER'S OWN STANDING RULE. *** The
+// POD above has none because NO function in the DLL enumerates Persistence's
+// members — contrast `IO::Registry`, whose member-wise copy constructor pins
+// 0x18 exactly and whose header says so explicitly. +0x0C, +0x1C, +0x6C, +0x7C
+// and +0x8C are UNKNOWN and stay opaque padding, and the header's top banner's
+// instruction stands: do not extend this struct from a decompile without a
+// fresh `static_assert`. A class MAY keep opaque padding; it may NEVER invent a
+// field. Every offset below is the POD's, cross-asserted against it, and the one
+// `sizeof` assert here is an EQUALITY WITH THE POD — not a literal — which is
+// what "the same bytes" means when the total is not independently pinned.
+//
+// *** THE TWO `RtSystem::String` MEMBERS STAY PODs. *** `_pendingFilename`
+// (+0x40) is released by the WORKER's destructor (0x1800b7740,
+// `persistence_worker_win.cpp`, which is not this class), and `_savePath`
+// (+0x90) is released BY HAND by `~Persistence` itself. Retyping either to
+// `System::String` would add an implicit member destructor running IN ADDITION
+// to those hand-written releases — the B31 `RtSystem::String` double-free.
+// `RtIo::SettingsMapNode`'s two fields stay PODs for the reason
+// `persistence.cpp` and `persistence_saves.cpp` already record at length: they
+// are shared with `closure_batch2b_win.cpp` and `engine/singleton_ctors.cpp`,
+// neither of which is in this block's file set.
+//
+// *** THERE IS NO CONSTRUCTOR. *** `??0Persistence@IO@@QEAA@XZ` (0x1800b8020)
+// is NOT ported here: it constructs the embedded `System::Thread` and stamps the
+// worker table, and both belong to step 4b and to `engine/singleton_ctors.cpp`.
+// The DESTRUCTOR does convert, because its door (0x1800b7fb0) is in
+// `persistence_saves.cpp`, which IS in this block's file set, and because the
+// class has no vtable to swap under anybody.
+//
+// MEMBERS, by the file their door lives in:
+//   persistence.cpp              Get(int&), Get(bool&), Set(int), Set(bool),
+//                                GetSavePath
+//   persistence_registry_win.cpp ReadSettings, WriteSettings
+//   persistence_saves.cpp        GetSaveCount, GetSaveInfo, GetSaveFilename,
+//                                BeginDelete, BeginLoad, ~Persistence
+//   persistence_saves_win.cpp    BeginGetSaveGameInfo
+//   persistence_startup.cpp      Startup
+//
+// NOT MEMBERS, AND NOT CONVERTED: every `RtIo_PersistenceWorker_*` body — the
+// enqueue helpers, `Run`, the save / load / list / info jobs and the worker
+// destructor. Their receiver is `&p->_workerVtable`, i.e. the EMBEDDED worker,
+// not the Persistence; they are `System::Thread`'s business and they are
+// untouched.
+// ============================================================================
+
+namespace IO {
+
+class Persistence {
+public:
+    // ?Get@Persistence@IO@@QEBA_NPEBD0AEAH@Z                 retail 0x1800b81e0
+    bool Get(const char* section, const char* key, int& out) const;
+    // ?Get@Persistence@IO@@QEBA_NPEBD0AEA_N@Z                retail 0x1800b8290
+    bool Get(const char* section, const char* key, bool& out) const;
+    // ?Set@Persistence@IO@@QEAAXPEBD0H@Z                     retail 0x1800b80c0
+    void Set(const char* section, const char* key, int value);
+    // ?Set@Persistence@IO@@QEAAXPEBD0_N@Z                    retail 0x1800b8380
+    void Set(const char* section, const char* key, bool value);
+    // ?GetSavePath@Persistence@IO@@QEBA?AVString@System@@XZ  retail 0x180007ad0
+    System::String GetSavePath() const;
+
+    // ?ReadSettings@Persistence@IO@@QEAAXXZ                  retail 0x1800b84b0
+    void ReadSettings();
+    // ?WriteSettings@Persistence@IO@@QEBAXXZ                 retail 0x1800b88e0
+    void WriteSettings() const;
+
+    // ?Startup@Persistence@IO@@QEAA_NXZ                      retail 0x1800b7ee0
+    bool Startup();
+
+    // ?GetSaveCount@Persistence@IO@@QEBAHXZ                  retail 0x1800b7c60
+    int GetSaveCount() const;
+    // ?GetSaveInfo@Persistence@IO@@QEBA?AUSaveGameInfo@12@H@Z
+    //                                                        retail 0x1800b7bd0
+    // Retail returns `SaveGameInfo` BY VALUE. The member keeps the
+    // OUT-PARAMETER, because `RtIo::SaveGameInfo` is a POD holding an
+    // `RtSystem::String` — a by-value return would be a BITWISE copy with no
+    // AddRef and no release. `ret` is raw bytes and the body
+    // placement-constructs the name into it, exactly as retail does.
+    RtIo::SaveGameInfo* GetSaveInfo(RtIo::SaveGameInfo* ret, int index) const;
+    // ?GetSaveFilename@Persistence@IO@@AEBA?AVFilename@System@@AEBVString@2@@Z
+    //                                                        retail 0x1800b7c80
+    // `AEBA` — PRIVATE in retail, and exported all the same (this DLL exports
+    // its private members). Declared PUBLIC here for the reason `IO::FileSystem`
+    // records for its two `Platform*` members: it has its OWN registered door
+    // and a door is a free function.
+    System::Filename GetSaveFilename(const RtSystem::String& name) const;
+    // ?BeginDelete@Persistence@IO@@QEAA_NAEBVString@System@@@Z
+    //                                                        retail 0x1800b7ab0
+    bool BeginDelete(const RtSystem::String& name);
+    // ?BeginLoad@Persistence@IO@@…                           retail 0x1800b7970
+    bool BeginLoad(const RtSystem::String& name, int blockCount,
+                   const RtIo::SaveBlock* blocks);
+    // ?BeginGetSaveGameInfo@Persistence@IO@@QEAA_NAEBVString@System@@H@Z
+    //                                                        retail 0x1800b7870
+    bool BeginGetSaveGameInfo(const RtSystem::String& name, int count);
+
+    // ??1Persistence@IO@@QEAA@XZ                             retail 0x1800b7fb0
+    // A REAL destructor — see the banner. It is `QEAA`, non-virtual, and the
+    // class has no vtable. There is deliberately NO constructor.
+    ~Persistence();
+
+    // ---- the pinned fields, at retail's offsets ---------------------------
+    // PUBLIC for the same reason `IO::Registry`'s and `IO::FileSystem`'s are:
+    // the unconverted worker bodies and the exe-side callers reach these
+    // offsets through `RtIo::Persistence`, and `offsetof` on them has to be
+    // well formed for the pins below. Field for field with the POD above, whose
+    // per-offset evidence comments are not repeated here.
+    void*               _settingsMapRoot;    // +0x00
+    int32_t             _settingsMapCount;   // +0x08
+    uint8_t             _pad0c[0x04];        // +0x0C — NOT pinned
+    void*               _workerVtable;       // +0x10 — the EMBEDDED worker's vptr
+    uint32_t            _flags;              // +0x18 — bit 0 == unavailable
+    uint8_t             _pad1c[0x04];        // +0x1C — NOT pinned
+    void*               _threadHandle;       // +0x20
+    void*               _workEvent;          // +0x28
+    void*               _readyEvent;         // +0x30
+    void*               _doneEvent;          // +0x38
+    RtSystem::String    _pendingFilename;    // +0x40 — POD; the WORKER frees it
+    int32_t             _status;             // +0x48
+    int32_t             _command;            // +0x4C
+    int32_t             _blockCount;         // +0x50
+    uint32_t            _fileHeader;         // +0x54
+    uint32_t            _magic;              // +0x58
+    uint32_t            _crc;                // +0x5C
+    void*               _blockDescData;      // +0x60
+    int32_t             _blockDescCount;     // +0x68
+    uint8_t             _pad6c[0x04];        // +0x6C — NOT pinned
+    void*               _blockPtrData;       // +0x70
+    int32_t             _blockPtrCount;      // +0x78
+    uint8_t             _pad7c[0x04];        // +0x7C — NOT pinned
+    RtIo::SaveGameInfo* _saves;              // +0x80
+    int32_t             _saveCount;          // +0x88
+    uint8_t             _pad8c[0x04];        // +0x8C — NOT pinned
+    RtSystem::String    _savePath;           // +0x90 — POD; ~Persistence frees it
+};
+
+// The `sizeof` assert is an EQUALITY WITH THE POD, never a literal: nothing in
+// the DLL enumerates this class's members, so the total is not independently
+// pinned and writing a number here would be inventing one. What IS asserted is
+// that the class and the POD describe the same bytes, offset for offset.
+static_assert(sizeof(Persistence) == sizeof(RtIo::Persistence),
+              "IO::Persistence and the RtIo::Persistence POD describe the same bytes");
+static_assert(offsetof(Persistence, _settingsMapRoot)  == 0x00, "see field comment");
+static_assert(offsetof(Persistence, _settingsMapCount) == 0x08, "see field comment");
+static_assert(offsetof(Persistence, _workerVtable)     == 0x10, "see field comment");
+static_assert(offsetof(Persistence, _flags)            == 0x18, "see field comment");
+static_assert(offsetof(Persistence, _threadHandle)     == 0x20, "see field comment");
+static_assert(offsetof(Persistence, _workEvent)        == 0x28, "see field comment");
+static_assert(offsetof(Persistence, _readyEvent)       == 0x30, "see field comment");
+static_assert(offsetof(Persistence, _doneEvent)        == 0x38, "see field comment");
+static_assert(offsetof(Persistence, _pendingFilename)  == 0x40, "see field comment");
+static_assert(offsetof(Persistence, _status)           == 0x48, "see field comment");
+static_assert(offsetof(Persistence, _command)          == 0x4c, "see field comment");
+static_assert(offsetof(Persistence, _blockCount)       == 0x50, "see field comment");
+static_assert(offsetof(Persistence, _fileHeader)       == 0x54, "see field comment");
+static_assert(offsetof(Persistence, _magic)            == 0x58, "see field comment");
+static_assert(offsetof(Persistence, _crc)              == 0x5c, "see field comment");
+static_assert(offsetof(Persistence, _blockDescData)    == 0x60, "see field comment");
+static_assert(offsetof(Persistence, _blockDescCount)   == 0x68, "see field comment");
+static_assert(offsetof(Persistence, _blockPtrData)     == 0x70, "see field comment");
+static_assert(offsetof(Persistence, _blockPtrCount)    == 0x78, "see field comment");
+static_assert(offsetof(Persistence, _saves)            == 0x80, "see field comment");
+static_assert(offsetof(Persistence, _saveCount)        == 0x88, "see field comment");
+static_assert(offsetof(Persistence, _savePath)         == 0x90, "see field comment");
+
+static_assert(offsetof(Persistence, _settingsMapRoot)  == offsetof(RtIo::Persistence, settingsMapRoot),  "alias");
+static_assert(offsetof(Persistence, _settingsMapCount) == offsetof(RtIo::Persistence, settingsMapCount), "alias");
+static_assert(offsetof(Persistence, _workerVtable)     == offsetof(RtIo::Persistence, workerVtable),     "alias");
+static_assert(offsetof(Persistence, _flags)            == offsetof(RtIo::Persistence, flags),            "alias");
+static_assert(offsetof(Persistence, _threadHandle)     == offsetof(RtIo::Persistence, threadHandle),     "alias");
+static_assert(offsetof(Persistence, _workEvent)        == offsetof(RtIo::Persistence, workEvent),        "alias");
+static_assert(offsetof(Persistence, _readyEvent)       == offsetof(RtIo::Persistence, readyEvent),       "alias");
+static_assert(offsetof(Persistence, _doneEvent)        == offsetof(RtIo::Persistence, doneEvent),        "alias");
+static_assert(offsetof(Persistence, _pendingFilename)  == offsetof(RtIo::Persistence, pendingFilename),  "alias");
+static_assert(offsetof(Persistence, _status)           == offsetof(RtIo::Persistence, status),           "alias");
+static_assert(offsetof(Persistence, _command)          == offsetof(RtIo::Persistence, command),          "alias");
+static_assert(offsetof(Persistence, _blockCount)       == offsetof(RtIo::Persistence, blockCount),       "alias");
+static_assert(offsetof(Persistence, _fileHeader)       == offsetof(RtIo::Persistence, fileHeader),       "alias");
+static_assert(offsetof(Persistence, _magic)            == offsetof(RtIo::Persistence, magic),            "alias");
+static_assert(offsetof(Persistence, _crc)              == offsetof(RtIo::Persistence, crc),              "alias");
+static_assert(offsetof(Persistence, _blockDescData)    == offsetof(RtIo::Persistence, blockDescData),    "alias");
+static_assert(offsetof(Persistence, _blockDescCount)   == offsetof(RtIo::Persistence, blockDescCount),   "alias");
+static_assert(offsetof(Persistence, _blockPtrData)     == offsetof(RtIo::Persistence, blockPtrData),     "alias");
+static_assert(offsetof(Persistence, _blockPtrCount)    == offsetof(RtIo::Persistence, blockPtrCount),    "alias");
+static_assert(offsetof(Persistence, _saves)            == offsetof(RtIo::Persistence, saves),            "alias");
+static_assert(offsetof(Persistence, _saveCount)        == offsetof(RtIo::Persistence, saveCount),        "alias");
+static_assert(offsetof(Persistence, _savePath)         == offsetof(RtIo::Persistence, savePath),         "alias");
+
+// The guard, stated as an assertion so a future `virtual` fails the build rather
+// than the boot: a vptr would push every field eight bytes down, under fifteen
+// doors and under every worker body that reaches `+0x10` as the worker.
+static_assert(!std::is_polymorphic<Persistence>::value,
+              "IO::Persistence must never acquire a vtable: retail has none for it, and the "
+              "vptr at +0x10 is the EMBEDDED worker's, not this class's");
+static_assert(std::is_standard_layout<Persistence>::value,
+              "the doors reach these fields through a reinterpret_cast");
+
+}  // namespace IO

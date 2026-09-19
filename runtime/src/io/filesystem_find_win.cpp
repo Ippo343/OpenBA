@@ -514,8 +514,41 @@ static void AppendFilename(FilenameArray* out, const System::Filename* value) {
 // ?ExistsInPackfile@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z  0x1800ab180
 // See §3. DIFF: full oracle — read-only on both sides.
 // ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS commit 5b: the three IO::FileSystem bodies in this
+// file move onto the class VERBATIM; the doors keep their names, their
+// signatures and every registration line, and delegate in one line each. No
+// qualified `IO::` call is needed: IO::FileSystem has no vtable at all. This
+// file is bound by B34_BRIEFS section D — nothing added, removed or reordered.
 bool RtIo_FileSystem_ExistsInPackfile(const void* fsVoid, const Filename* path) {
-    const FileSystem* fs = static_cast<const FileSystem*>(fsVoid);
+    return reinterpret_cast<const IO::FileSystem*>(fsVoid)->ExistsInPackfile(*path);
+}
+
+bool RtIo_FileSystem_PlatformExists(const void* fsVoid, const Filename* path) {
+    return reinterpret_cast<const IO::FileSystem*>(fsVoid)->PlatformExists(*path);
+}
+
+}  // namespace RtIO
+
+// ============================================================================
+// `IO::FileSystem`'s member bodies for this file — B34_BRIEFS section D BINDING
+// ============================================================================
+// Defined outside `namespace RtIO` because a member of `IO::X` must appear in a
+// namespace ENCLOSING the class (B34_BRIEFS section A.2); these bodies reach
+// this translation unit's `RtIO`-scoped names — `StriCmpAscii`, `AsString`,
+// `WideString` and the three `RtSystem_WideString_*` entry points — as
+// `RtIO::X`. Every POD is spelled `RtIO::` or `RtSystem::` and every real class
+// `System::` (B34_RULES section 7.2).
+//
+// *** VERBATIM. *** Identical control flow, identical callees, identical
+// statement order, identical comments; only the receiver's spelling changed.
+// `FindFilesImpl` — the file-local RECURSIVE half of FindFiles — is NOT moved
+// onto the class and NOT touched: it recurses into itself at 0x1800adb2c and
+// making it a member would change nothing but would put a live recursion inside
+// a section-D-bound body for no gain.
+namespace IO {
+
+bool FileSystem::ExistsInPackfile(const RtSystem::Filename& pathRef) const {
+    const RtSystem::Filename* const path = &pathRef;
 
     bool ours = false;
 
@@ -523,9 +556,9 @@ bool RtIo_FileSystem_ExistsInPackfile(const void* fsVoid, const Filename* path) 
     // `data-8` when data is non-null and are 0 otherwise, and the test is
     // `JLE`: proceed only when the path is STRICTLY longer.
     const char* pathData = path->data;
-    const int pathLen = pathData ? Sys(*path).GetLength() : 0;
-    const int dataDirLen = fs->dataDirectory.data
-                         ? Sys(fs->dataDirectory).GetLength() : 0;
+    const int pathLen = pathData ? RtIO::Sys(*path).GetLength() : 0;
+    const int dataDirLen = _dataDirectory.data
+                         ? RtIO::Sys(_dataDirectory).GetLength() : 0;
 
     if (dataDirLen < pathLen) {
         // 0x1800ab1d9: strip BY LENGTH ALONE — retail does no prefix compare
@@ -537,15 +570,15 @@ bool RtIo_FileSystem_ExistsInPackfile(const void* fsVoid, const Filename* path) 
         System::Filename relPath(pathData + dataDirLen);
 
         const char* str1 = relPath._data;
-        PackfileIndexNode* node = fs->packfileIndexRoot;
-        PackfileIndexNode* found = nullptr;
+        RtIO::PackfileIndexNode* node = _packfileIndexRoot;
+        RtIO::PackfileIndexNode* found = nullptr;
         while (node) {
             const char* key = node->key;
             // condA == "relPath >= key" in retail's null-extended ordering.
             bool condA;
             if (!key)       condA = true;
             else if (!str1) condA = false;
-            else            condA = StriCmpAscii(str1, key) >= 0;
+            else            condA = RtIO::StriCmpAscii(str1, key) >= 0;
 
             if (condA) {
                 // condB == "key >= relPath". Both true means equal, which is
@@ -553,7 +586,7 @@ bool RtIo_FileSystem_ExistsInPackfile(const void* fsVoid, const Filename* path) 
                 bool condB;
                 if (!str1)     condB = true;
                 else if (!key) condB = false;
-                else           condB = StriCmpAscii(key, str1) >= 0;
+                else           condB = RtIO::StriCmpAscii(key, str1) >= 0;
 
                 if (condB) { found = node; break; }
                 node = node->right;
@@ -575,16 +608,25 @@ bool RtIo_FileSystem_ExistsInPackfile(const void* fsVoid, const Filename* path) 
 // would resolve NULL forever. DIFF: full oracle; GetFileAttributesW is a stat,
 // so running both sides mutates nothing.
 // ============================================================================
-bool RtIo_FileSystem_PlatformExists(const void* fsVoid, const Filename* path) {
-    (void)fsVoid;   // retail never reads `this`; RCX is destroyed at 0x1800adc7f
+bool FileSystem::PlatformExists(const RtSystem::Filename& pathRef) const {
+    const RtSystem::Filename* const path = &pathRef;
+    // retail never reads `this`; RCX is destroyed at 0x1800adc7f
 
-    WideString ws{nullptr};
-    RtSystem_WideString_CtorFromString(&ws, AsString(path));
+    RtIO::WideString ws{nullptr};
+    RtIO::RtSystem_WideString_CtorFromString(&ws, RtIO::AsString(path));
     const bool ours = (::GetFileAttributesW(ws.data) != INVALID_FILE_ATTRIBUTES);
-    RtString_ReleaseInline(reinterpret_cast<String*>(&ws));
+    RtIO::RtString_ReleaseInline(reinterpret_cast<RtSystem::String*>(&ws));
 
     return ours;
 }
+
+}  // namespace IO
+
+// `FindFilesImpl` and the `FindFiles` door go back inside `namespace RtIO`:
+// the helper is file-local, recursive and RtIO-scoped, and reopening the
+// namespace keeps it exactly where it was rather than moving a section-D-bound
+// recursive body. `IO::FileSystem::FindFiles` follows, after it.
+namespace RtIO {
 
 // ============================================================================
 // ?FindFiles@FileSystem@IO@@QEBAX…                                0x1800ad7a0
@@ -692,16 +734,29 @@ static void FindFilesImpl(const void* fs, const System::String* dir,
 
 void RtIo_FileSystem_FindFiles(const void* fs, const String* dir, const String* pattern,
                                bool recursive, FilenameArray* out) {
+    reinterpret_cast<const IO::FileSystem*>(fs)->FindFiles(*dir, *pattern,
+                                                           recursive, out);
+}
+
+}  // namespace RtIO
+
+namespace IO {
+
+void FileSystem::FindFiles(const RtSystem::String& dirRef,
+                           const RtSystem::String& patternRef,
+                           bool recursive, RtIO::FilenameArray* out) const {
+    const RtSystem::String* const dir     = &dirRef;
+    const RtSystem::String* const pattern = &patternRef;
 
     const int32_t before = out->count;
     (void)before;
     // The registered signature is retail's, so the two POD parameters come
     // through the one transitional bridge (pod_bridge.h).
-    FindFilesImpl(fs, Sys(dir), Sys(pattern), recursive, out);
+    RtIO::FindFilesImpl(this, RtIO::Sys(dir), RtIO::Sys(pattern), recursive, out);
 
 }
 
-}  // namespace RtIO
+}  // namespace IO
 
 // ============================================================================
 // Registration

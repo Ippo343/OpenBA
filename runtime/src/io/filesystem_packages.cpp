@@ -501,14 +501,17 @@ PackfileIndexNode* IndexFind(PackfileIndexNode* node, const char* key) {
 //
 // What actually pins the field is the disassembly: `LEA RDX,[RCX+0x10]` at
 // 0x180007c2e. The oracle is a regression net, not the evidence.
+// ENDGAME B.3.4 PACKAGE+FS commit 5b: the three IO::FileSystem bodies in this
+// file move onto the class VERBATIM; the doors keep their names, their
+// `extern "C"` linkage, their signatures and every registration line, and
+// delegate in one line each. No qualified `IO::` call is needed: IO::FileSystem
+// has no vtable at all. This file is bound by B34_BRIEFS section D — nothing
+// added, removed or reordered on the package mount/unmount path.
 extern "C" Filename* RtIo_FileSystem_GetPackDirectory(const FileSystem* self, Filename* ret) {
-
-    // `ret` is the hidden return slot — raw bytes — so the copy ctor
-    // (0x1800067d0) is placement-constructed into it. `packDirectory` is a
-    // `RtSystem::String` member of the not-yet-converted IO::FileSystem, read
-    // as a Filename exactly as retail's `LEA RDX,[RCX+0x10]` does.
-    new (ret) System::Filename(SysFile(self->packDirectory));
-
+    // `ret` IS retail's hidden return slot, so the member's by-value result is
+    // CONSTRUCTED into it — one AddRef, exactly as the copy ctor at 0x1800067d0.
+    new (ret) System::Filename(
+        reinterpret_cast<const IO::FileSystem*>(self)->GetPackDirectory());
     return ret;
 }
 
@@ -614,23 +617,60 @@ static_assert(offsetof(PackfileIndexSet::Node, height) == offsetof(PackfileIndex
 }  // namespace
 
 extern "C" void RtIo_FileSystem_ClosePackages(FileSystem* self) {
-    const int32_t hadPackfiles = self->packfileCount;
-    const bool    hadIndex     = self->packfileIndexRoot != nullptr;
+    reinterpret_cast<IO::FileSystem*>(self)->ClosePackages();
+}
 
-    for (int32_t i = 0; i < self->packfileCount; ++i) {
+extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
+    reinterpret_cast<IO::FileSystem*>(self)->LoadPackages();
+}
+
+}  // namespace RtIO
+
+// ============================================================================
+// `IO::FileSystem`'s member bodies for this file — B34_BRIEFS section D BINDING
+// ============================================================================
+// Defined outside `namespace RtIO` because a member of `IO::X` must appear in a
+// namespace ENCLOSING the class (B34_BRIEFS section A.2); these bodies reach
+// this translation unit's `RtIO`-scoped names — the anonymous-namespace helpers
+// `AppendPackfile`, `IndexFind`, `PathStrICmp`, `FoundArray`,
+// `FileSystemSingletonSlot`, `PackfileIndexSet` and the door typedefs — as
+// `RtIO::X`. Every POD is spelled `RtIO::` or `RtSystem::` and every real class
+// `System::` (B34_RULES section 7.2).
+//
+// *** VERBATIM. *** Identical control flow, identical callees, identical
+// statement order, identical comments. The only change is the receiver's
+// spelling. In particular EVERY ONE of the RT_EXPORT_ONCE and ResolveAddr doors
+// below is untouched — including `?ClosePackages@` called BY NAME from inside
+// LoadPackages (0x1800ab48a), which is deliberately still a door call and NOT
+// turned into a member call: retail's own CALL goes through the export and a
+// direct member call would silently stop following a future promotion of that
+// row.
+namespace IO {
+
+System::Filename FileSystem::GetPackDirectory() const {
+    // `packDirectory` is a `RtSystem::String` member, read as a Filename
+    // exactly as retail's `LEA RDX,[RCX+0x10]` does.
+    return System::Filename(RtIO::SysFile(_packDirectory));
+}
+
+void FileSystem::ClosePackages() {
+    const int32_t hadPackfiles = _packfileCount;
+    const bool    hadIndex     = _packfileIndexRoot != nullptr;
+
+    for (int32_t i = 0; i < _packfileCount; ++i) {
         // Retail RELOADS the array base on every iteration and indexes it twice
         // (0x1800abae0 and 0x1800abafb) rather than caching the element. Kept:
         // the deleting destructor below could in principle write the array.
-        PackageFileView* pkg = self->packfiles[i];
+        RtIO::PackageFileView* pkg = _packfiles[i];
 
         // CloseFile(FileSystem::_singleton, &pkg->fileInfo). The FileInfo lives
         // at pkg+0xC0 (`ADD RDX,0xc0`) and the receiver is the SINGLETON, not
         // `this` — see FileSystemSingletonSlot()'s comment.
-        typedef void (*CloseFileFn)(FileSystem*, void*);
+        typedef void (*CloseFileFn)(RtIO::FileSystem*, void*);
         RT_EXPORT_ONCE(CloseFileFn, "?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z")(
-            *FileSystemSingletonSlot(), reinterpret_cast<uint8_t*>(pkg) + 0xC0);
+            *RtIO::FileSystemSingletonSlot(), reinterpret_cast<uint8_t*>(pkg) + 0xC0);
 
-        PackageFileView* again = self->packfiles[i];
+        RtIO::PackageFileView* again = _packfiles[i];
         if (again != nullptr) {
             // `MOV RAX,[RCX] ; MOV EDX,1 ; CALL qword ptr [RAX]` — vtable slot
             // 0, the VECTOR deleting destructor, flag 1 = also free the block.
@@ -639,20 +679,20 @@ extern "C" void RtIo_FileSystem_ClosePackages(FileSystem* self) {
             // not by address, because after the mint the object will carry OUR
             // table and this must follow it.
             void** vt = *reinterpret_cast<void***>(again);
-            reinterpret_cast<DeletingDtorFn>(vt[0])(again, 1u);
+            reinterpret_cast<RtIO::DeletingDtorFn>(vt[0])(again, 1u);
         }
     }
 
     // `if (p) { lock; Free; unlock }` with the null test inside 0x1800c7ad0.
-    RtMemFree(self->packfiles);
-    self->packfiles = nullptr;
+    RtIO::RtMemFree(_packfiles);
+    _packfiles = nullptr;
     // Retail zeroes +0x28 as ONE QWORD (`MOV qword ptr [RDI+0x28],RBP`), which
     // clears the count AND the capacity. Unlike Array::SetSize, this DOES
     // shrink capacity — the next LoadPackages therefore reallocates from 1.
-    self->packfileCount    = 0;
-    self->packfileCapacity = 0;
+    _packfileCount    = 0;
+    _packfileCapacity = 0;
 
-    PackfileIndexNode* const root = self->packfileIndexRoot;
+    RtIO::PackfileIndexNode* const root = _packfileIndexRoot;
     if (root != nullptr) {
         // ENDGAME B.3.2 step 2 — FUN_180008340, the recursive subtree free, IS
         // `Collection::Set<PackfileIndexPair>::DestroySubtree` (Collection.h):
@@ -669,12 +709,12 @@ extern "C" void RtIo_FileSystem_ClosePackages(FileSystem* self) {
         // under one call instead of the caller doing the root's half by hand.
         // The 0x180008340 row itself is UNCHANGED and stays registered in
         // avl_trees.cpp: `code/` still reaches it by address.
-        PackfileIndexSet::DestroySubtree(
-            reinterpret_cast<PackfileIndexSet::Node*>(root));
+        RtIO::PackfileIndexSet::DestroySubtree(
+            reinterpret_cast<RtIO::PackfileIndexSet::Node*>(root));
     }
     // Zeroed unconditionally, even when root was already null.
-    self->packfileIndexCount = 0;
-    self->packfileIndexRoot  = nullptr;
+    _packfileIndexCount = 0;
+    _packfileIndexRoot  = nullptr;
 
 }
 
@@ -682,19 +722,20 @@ extern "C" void RtIo_FileSystem_ClosePackages(FileSystem* self) {
 // ?LoadPackages@FileSystem@IO@@QEAAXXZ                       retail 0x1800ab460
 // ============================================================================
 // See §2 for the shape and §5 for why there is no oracle.
-extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
+void FileSystem::LoadPackages() {
 
     // 0x1800ab47f — the packfile gate. See §3: it is 1 by the time we get here,
     // set by FileSystem::Startup between SetupDirectories and this call, so the
     // early return is NOT the live path. It is transcribed because it IS the
     // body's first instruction, and because `-onlypkg` is not the only thing
     // that can clear the byte over the life of a process.
-    if (self->existsInPackfileGate == 0)
+    if (_existsInPackfileGate == 0)
         return;
 
-    RT_EXPORT_ONCE(VoidThisFn, "?ClosePackages@FileSystem@IO@@QEAAXXZ")(self);
+    RT_EXPORT_ONCE(RtIO::VoidThisFn, "?ClosePackages@FileSystem@IO@@QEAAXXZ")(
+        reinterpret_cast<RtIO::FileSystem*>(this));
 
-    FoundArray found;
+    RtIO::FoundArray found;
     found.data      = nullptr;   // MOV qword ptr [RBP-0x20],0
     found.count     = 0;         // MOV qword ptr [RBP-0x18],0
     found._capacity = 0;
@@ -708,21 +749,23 @@ extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
         // GetPackDirectory's hidden return slot keeps its retail POD signature
         // (it is a registered entry point), so the value lands in a POD and the
         // move ctor steals it, leaving `packDirPod` null: one release.
-        Filename packDirPod;
+        RtSystem::Filename packDirPod;
         packDirPod.data = nullptr;
-        RT_EXPORT_ONCE(GetPackDirectoryFn,
-            "?GetPackDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ")(self, &packDirPod);
-        System::Filename packDir(std::move(Sys(packDirPod)));
+        RT_EXPORT_ONCE(RtIO::GetPackDirectoryFn,
+            "?GetPackDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ")(
+                reinterpret_cast<const RtIO::FileSystem*>(this), &packDirPod);
+        System::Filename packDir(std::move(RtIO::Sys(packDirPod)));
 
         // FindFiles(dir, pattern, recursive=false, out). Retail passes the value
         // GetPackDirectory RETURNED (RAX) as RDX, which is the same pointer as
         // &packDir — the hidden return slot is handed straight on. Fifth argument
         // goes on the stack at [RSP+0x20].
-        typedef void (*FindFilesFn)(const FileSystem*, const System::Filename*,
-                                    const System::String*, bool, FoundArray*);
+        typedef void (*FindFilesFn)(const RtIO::FileSystem*, const System::Filename*,
+                                    const System::String*, bool, RtIO::FoundArray*);
         RT_EXPORT_ONCE(FindFilesFn,
             "?FindFiles@FileSystem@IO@@QEBAXAEBVString@System@@0_NAEAV?$Array@VFilename@System@@@Collection@@@Z")(
-                self, &packDir, &pattern, false, &found);
+                reinterpret_cast<const RtIO::FileSystem*>(this),
+                &packDir, &pattern, false, &found);
     }
 
     // ---- LOOP 1: one PackageFile per discovered *.pkg ---------------------
@@ -730,11 +773,11 @@ extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
     // constructor only `if (p)`, then ReadPackfile, then appends. `??0PackageFile`
     // and `?ReadPackfile@` are both UNPORTED (§4); ReadPackfile is 6,597 bytes
     // and is a lane of its own.
-    typedef PackageFileView* (*PackageFileCtorFn)(void*);
-    typedef bool             (*ReadPackfileFn)(PackageFileView*, const Filename*);
+    typedef RtIO::PackageFileView* (*PackageFileCtorFn)(void*);
+    typedef bool (*ReadPackfileFn)(RtIO::PackageFileView*, const RtSystem::Filename*);
     for (int32_t i = 0; i < found.count; ++i) {
-        void* block = RtMemAlloc(0xF0u, 8);
-        PackageFileView* pkg = nullptr;
+        void* block = RtIO::RtMemAlloc(0xF0u, 8);
+        RtIO::PackageFileView* pkg = nullptr;
         if (block != nullptr)
             pkg = RT_EXPORT_ONCE(PackageFileCtorFn, "??0PackageFile@IO@@QEAA@XZ")(block);
         // Unguarded on `pkg` — retail calls ReadPackfile with whatever the
@@ -743,7 +786,7 @@ extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
         RT_EXPORT_ONCE(ReadPackfileFn,
             "?ReadPackfile@PackageFile@IO@@QEAA_NAEBVFilename@System@@@Z")(
                 pkg, &found.data[i]);
-        AppendPackfile(self, pkg);
+        RtIO::AppendPackfile(reinterpret_cast<RtIO::FileSystem*>(this), pkg);
     }
 
     // ---- the packfile sort ------------------------------------------------
@@ -786,54 +829,55 @@ extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
     //
     // The call below is UNCHANGED: it still goes through the port-aware address
     // door, which now resolves to ours.
-    if (self->packfileCount > 1) {
-        using SortFn = void (*)(PackageFileView**, int32_t);
+    if (_packfileCount > 1) {
+        using SortFn = void (*)(RtIO::PackageFileView**, int32_t);
         static SortFn sortFn =
             reinterpret_cast<SortFn>(ResolveAddr(Module::Runtime, 0x1800264a0));
-        sortFn(self->packfiles, self->packfileCount);
+        sortFn(_packfiles, _packfileCount);
     }
 
     // ---- LOOP 2: the user/mod pack filenames already on the FileSystem -----
     // Same allocation and append as loop 1; the only difference is the source
     // (this->userPackFilenames[i], +0x30, bounded by +0x38) and that there is
     // NO sort afterwards — mods keep the order they were mounted in.
-    for (int32_t i = 0; i < self->userPackFilenameCount; ++i) {
-        void* block = RtMemAlloc(0xF0u, 8);
-        PackageFileView* pkg = nullptr;
+    for (int32_t i = 0; i < _userPackFilenameCount; ++i) {
+        void* block = RtIO::RtMemAlloc(0xF0u, 8);
+        RtIO::PackageFileView* pkg = nullptr;
         if (block != nullptr)
             pkg = RT_EXPORT_ONCE(PackageFileCtorFn, "??0PackageFile@IO@@QEAA@XZ")(block);
         RT_EXPORT_ONCE(ReadPackfileFn,
             "?ReadPackfile@PackageFile@IO@@QEAA_NAEBVFilename@System@@@Z")(
-                pkg, reinterpret_cast<const Filename*>(&self->userPackFilenames[i]));
-        AppendPackfile(self, pkg);
+                pkg, reinterpret_cast<const RtSystem::Filename*>(&_userPackFilenames[i]));
+        RtIO::AppendPackfile(reinterpret_cast<RtIO::FileSystem*>(this), pkg);
     }
 
     // ---- LOOP 3: the path -> {packIndex, fileIndex} index ------------------
     int64_t inserted = 0, overridden = 0, kept = 0;
-    for (int32_t pi = 0; pi < self->packfileCount; ++pi) {
-        PackageFileView* pkg = self->packfiles[pi];
+    for (int32_t pi = 0; pi < _packfileCount; ++pi) {
+        RtIO::PackageFileView* pkg = _packfiles[pi];
         const int32_t entries = pkg->entryCount;          // MOV EAX,[RCX+0xb8]
         for (int32_t fi = 0; fi < entries; ++fi) {
             // Retail RE-INDEXES the array here too rather than reusing `pkg`.
-            PackageFileView* owner = self->packfiles[pi];
+            RtIO::PackageFileView* owner = _packfiles[pi];
 
             // GetFileName writes through the hidden return slot and its callee
             // (the Filename copy ctor) zeroes the slot first, so `key` is
             // deliberately not pre-initialised — matching retail, which passes
             // an untouched [RBP+0x50].
-            Filename keyPod;
-            RT_EXPORT_ONCE(GetFileNameFn,
+            RtSystem::Filename keyPod;
+            RT_EXPORT_ONCE(RtIO::GetFileNameFn,
                 "?GetFileName@PackageFile@IO@@QEBA?AVFilename@System@@H@Z")(owner, &keyPod, fi);
             // The move ctor steals the pointer, leaving `keyPod` null, so the
             // one release is ~key at the bottom of the iteration.
-            System::Filename key(std::move(Sys(keyPod)));
+            System::Filename key(std::move(RtIO::Sys(keyPod)));
 
-            PackfileIndexNode* node = IndexFind(self->packfileIndexRoot, key._data);
+            RtIO::PackfileIndexNode* node =
+                RtIO::IndexFind(_packfileIndexRoot, key._data);
             if (node != nullptr) {
                 // The incumbent's OWN +0xAC decides, not the newcomer's: retail
                 // indexes packfiles[] with the FOUND NODE's packIndex
                 // (`MOV ECX,[RBX+0x8]`) and tests that object's byte.
-                PackageFileView* incumbent = self->packfiles[node->packIndex];
+                RtIO::PackageFileView* incumbent = _packfiles[node->packIndex];
                 if (incumbent->overridable != 0) {
                     // Retail merges these into ONE qword store at [RBX+8].
                     node->packIndex = static_cast<uint32_t>(pi);
@@ -870,14 +914,14 @@ extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
                 // `FilenameSetInsert` does) — not present on `Collection::Set`
                 // today, and not added here (no new members on Collection.h
                 // per B32_RULES). Left calling the shipped body by address.
-                using BstInsertFn = void* (*)(void*, PackfileIndexNode**,
+                using BstInsertFn = void* (*)(void*, RtIO::PackfileIndexNode**,
                                               const System::Filename*, const uint64_t*);
                 static BstInsertFn insertFn =
                     reinterpret_cast<BstInsertFn>(ResolveAddr(Module::Runtime, 0x180025a80));
                 const uint64_t value = (static_cast<uint64_t>(static_cast<uint32_t>(fi)) << 32) |
                                         static_cast<uint32_t>(pi);
-                PackfileIndexNode* out = nullptr;
-                insertFn(&self->packfileIndexRoot, &out, &key, &value);
+                RtIO::PackfileIndexNode* out = nullptr;
+                insertFn(&_packfileIndexRoot, &out, &key, &value);
                 ++inserted;
             }
 
@@ -893,15 +937,15 @@ extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
     // null test inside.
     const int32_t foundCount = found.count;   // the shadow below runs after the zeroing
     for (int64_t i = 0; i < static_cast<int64_t>(found.count); ++i)
-        Sys(found.data[i]).~Filename();
-    RtMemFree(found.data);
+        RtIO::Sys(found.data[i]).~Filename();
+    RtIO::RtMemFree(found.data);
     found.data  = nullptr;
     found.count = 0;
 
 
 }
 
-}  // namespace RtIO
+}  // namespace IO
 
 // ============================================================================
 // Registration

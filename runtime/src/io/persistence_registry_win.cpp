@@ -501,9 +501,38 @@ Registry::Registry(const char* subKey) {
 // ============================================================================
 // ?ReadSettings@Persistence@IO@@QEAAXXZ                    retail 0x1800b84b0
 // ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS commit 6: the body is now
+// `IO::Persistence::ReadSettings()`, below. The door keeps its name, its
+// `extern "C"` linkage and both registration lines, and delegates. No qualified
+// `IO::` call is needed: `IO::Persistence` has no vtable of its own -- the vptr
+// at +0x10 is the EMBEDDED worker's (runtime/types/io/Persistence.h) -- so
+// B34_BRIEFS section A.1's re-entry hazard cannot arise.
 extern "C" void RtIo_Persistence_ReadSettings(Persistence* self) {
+    reinterpret_cast<IO::Persistence*>(self)->ReadSettings();
+}
 
-    MapClear(self);                                            // 0x1800b84db
+// ============================================================================
+// `IO::Persistence::ReadSettings` -- the member body
+// ============================================================================
+// Defined in `namespace IO` because a member of `IO::X` must appear in a
+// namespace ENCLOSING the class (B34_BRIEFS section A.2); the file-local
+// helpers live in this translation unit's GLOBAL anonymous namespace and are
+// reached as `::MapClear` / `::MapInsert` / `::AssignFromWide` / `::kNameChars`
+// / `::kValueChars` / `::kValueBytes`. Every POD is spelled `RtIo::` or
+// `RtSystem::` and every real class `System::` (B34_RULES section 7.2); note
+// this file's POD namespace is `RtIo`, LOWERCASE o.
+//
+// NOTHING ELSE CHANGED: same callees in the same order, the same dead
+// `if (reg._key)` retained, the same ignored RegQueryValueExW return, the same
+// self-assignment guard on the BUFFER, and the same by-hand teardown of `name`,
+// `value` and the `IO::Registry` local at retail's own positions -- `reg` is
+// still a local of a class with NO destructor (Registry.h's banner), so nothing
+// implicit runs at scope exit and nothing can run twice.
+namespace IO {
+
+void Persistence::ReadSettings() {
+
+    ::MapClear(reinterpret_cast<RtIo::Persistence*>(this));    // 0x1800b84db
 
     // 0x1800b84e7 `Registry reg(nullptr)`. B.3.4 PACKAGE+FS commit 1: the local
     // is the REAL class now, constructed directly instead of through
@@ -522,46 +551,47 @@ extern "C" void RtIo_Persistence_ReadSettings(Persistence* self) {
     // shared with `WriteSettingsBody` (left in C shape -- see its own
     // comment); ownership is still proven and expressed through the
     // transitional bridge at each use.
-    String name{nullptr};                                      // 0x1800b84f4
-    String value{nullptr};                                     // 0x1800b84fc
+    RtSystem::String name{nullptr};                            // 0x1800b84f4
+    RtSystem::String value{nullptr};                           // 0x1800b84fc
 
     // Deliberately uninitialised — see banner point 4.
-    wchar_t nameBuf[kNameChars];
-    wchar_t valueBuf[kValueChars];
+    wchar_t nameBuf[::kNameChars];
+    wchar_t valueBuf[::kValueChars];
 
     for (;;) {
-        DWORD cchName = kNameChars;                            // 0x1800b8510
+        DWORD cchName = ::kNameChars;                          // 0x1800b8510
         const DWORD index = reg._enumIndex++;                   // 0x1800b851a
 
         if (RegEnumValueW(static_cast<HKEY>(reg._key), index, nameBuf, &cchName,
                           nullptr, nullptr, nullptr, nullptr) != ERROR_SUCCESS)
             break;                                             // 0x1800b8552
-        if (cchName > kNameChars)
+        if (cchName > ::kNameChars)
             break;                                             // 0x1800b8562
 
         if (reg._key != nullptr) {                              // 0x1800b8570, dead
             DWORD type    = REG_SZ;                            // 0x1800b8572, = 1
-            DWORD cbData  = kValueBytes;                       // 0x1800b857c
+            DWORD cbData  = ::kValueBytes;                     // 0x1800b857c
             // Return value IGNORED, exactly as at 0x1800b85b2.
             RegQueryValueExW(static_cast<HKEY>(reg._key), nameBuf, nullptr, &type,
                              reinterpret_cast<BYTE*>(valueBuf), &cbData);
         }
 
-        AssignFromWide(&name, nameBuf);                        // 0x1800b85b2..
-        AssignFromWide(&value, valueBuf);                      // 0x1800b86a5..
+        ::AssignFromWide(&name, nameBuf);                      // 0x1800b85b2..
+        ::AssignFromWide(&value, valueBuf);                    // 0x1800b86a5..
 
         void* node = nullptr;
-        MapInsert(self, &node, &name, &value);                 // 0x1800b87ad
+        ::MapInsert(reinterpret_cast<RtIo::Persistence*>(this),
+                    &node, &name, &value);                     // 0x1800b87ad
 
         // 0x1800b87b2-0x1800b882d. Map_Insert leaves an ALREADY-PRESENT key's
         // value untouched, so retail re-seats it by hand. The `!=` is the
         // self-assignment guard; see banner points 1 and 2.
         if (node != nullptr) {
-            SettingsMapNode* n = static_cast<SettingsMapNode*>(node);
+            RtIo::SettingsMapNode* n = static_cast<RtIo::SettingsMapNode*>(node);
             // `String::operator=` (retail 0x1800c9810), through the
             // transitional bridge on both not-yet-converted PODs.
             if (n->value.data != value.data) {
-                Sys(n->value) = Sys(value);
+                ::Sys(n->value) = ::Sys(value);
             }
         }
     }
@@ -571,16 +601,18 @@ extern "C" void RtIo_Persistence_ReadSettings(Persistence* self) {
     // here (see the declaration comment), so there is no outer RAII to run
     // this for us; retail's two releases are spelled as the destructors
     // themselves, through the bridge, in retail's own order.
-    Sys(value).~String();                                      // 0x1800b8837
-    Sys(name).~String();                                       // 0x1800b8859
+    ::Sys(value).~String();                                    // 0x1800b8837
+    ::Sys(name).~String();                                     // 0x1800b8859
 
     // ~Registry, inlined at 0x1800b887d. `reg` is a plain local (`Registry`
     // is not yet converted), so `path`'s release is spelled as the
     // destructor itself through the bridge.
     if (reg._key != nullptr) RegCloseKey(static_cast<HKEY>(reg._key));
     reg._key = nullptr;
-    Sys(reg._path).~String();                                   // 0x1800b8892
+    ::Sys(reg._path).~String();                                 // 0x1800b8892
 }
+
+}  // namespace IO
 
 // ============================================================================
 // ?WriteSettings@Persistence@IO@@QEBAXXZ                   retail 0x1800b88e0
@@ -993,9 +1025,23 @@ void WriteSettingsBody(const Persistence* self) {
 
 }  // namespace
 
+// ENDGAME B.3.4 PACKAGE+FS commit 6: the door now delegates to
+// `IO::Persistence::WriteSettings()`, which is itself the same one-line call
+// into `WriteSettingsBody` -- the 400-line C body that ENDGAME B.3.1
+// DELIBERATELY LEFT AS C (it carries the inlined `~Registry` teardowns the
+// Registry.h banner is about) is NOT moved and NOT touched. The door keeps its
+// name, its `extern "C"` linkage and both registration lines.
 extern "C" void RtIo_Persistence_WriteSettings(const Persistence* self) {
-    WriteSettingsBody(self);
+    reinterpret_cast<const IO::Persistence*>(self)->WriteSettings();
 }
+
+namespace IO {
+
+void Persistence::WriteSettings() const {
+    ::WriteSettingsBody(reinterpret_cast<const RtIo::Persistence*>(this));
+}
+
+}  // namespace IO
 
 // ============================================================================
 // Registration
