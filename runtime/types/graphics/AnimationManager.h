@@ -315,10 +315,13 @@ public:
 
     // ?GetInstanceId@AnimationManager@Graphics@@QEAAHV?$ExternalPtr@VAnimationGroup
     // @Graphics@@@Object@@HAEBV?$Array@UNode@GraphicsMesh@Graphics@@@Collection@@@Z
-    //   0x1800fb9d0. DECLARED, DELIBERATELY UNDEFINED: the live body is the
-    //   unchanged door in animationstate_transforms.cpp, kept there for the
-    //   scaffolding reason above (its banner's "NOT DIFFABLE: the body allocates
-    //   instances, bakes poses into them and moves reference counts").
+    //   0x1800fb9d0. PORTED — the body IS this member, in
+    //   animationstate_transforms.cpp's `namespace Graphics` block, and the door
+    //   delegates (ENDGAME B.3.5 block GC). It used to be "DECLARED, DELIBERATELY
+    //   UNDEFINED ... kept there for the scaffolding reason above"; the
+    //   "NOT DIFFABLE: the body allocates instances, bakes poses into them and
+    //   moves reference counts" note is DOCUMENTATION, it travelled with the body,
+    //   and there was no oracle machinery left to move out from under it.
     //
     //   `nodes` is retail's `const Array<GraphicsMesh::Node>&`, stride 0x48.
     //   `GraphicsMesh` is block G's class and is deliberately not named here.

@@ -51,6 +51,8 @@
 #include <cstdio>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/graphics/Animation.h"        // Graphics::Animation -- block GC
+#include "../../types/system/Value.h"             // System::Time, ditto
 #include "../../types/graphics/AnimationState.h"
 #include "../../types/graphics/Camera.h"
 #include "../../types/graphics/Material.h"
@@ -424,46 +426,20 @@ using EventFireFn = void (*)(void* event, const void* transform);
 
 }  // namespace
 
+// ENDGAME B.3.5 block GC: THE BODY MOVED onto `Graphics::Animation::ApplyEvents`
+// (block H1's class; this file is not block H1's, which is why Animation.h said
+// "door: wave28_lane_gfxbody.cpp (not ours)"). The door keeps its name, its
+// registration and its entry counter; the FIRED counter is a branch counter and
+// stays inside the member.
 extern "C" void RtGraphics_Animation_ApplyEvents(const void* self, const void* transform,
                                                  const int64_t* fromTime,
                                                  const int64_t* toTime) {
     Attend("Animation::ApplyEvents", g_applyEventsCalls);
-
-    const AnimationClipPrefix* const clip = static_cast<const AnimationClipPrefix*>(self);
-
-    const int64_t duration = clip->duration;            // MOV RBX,[RCX+0x58]
-    const int64_t fromWrapped = *fromTime - duration;   // SUB RDI,RBX
-    const int64_t toWrapped   = *toTime   - duration;   // SUB RSI,RBX
-
-    // CMP [RCX+0x8],EBP / JLE — count read from `this` on every iteration
-    // (0x1800faa6c re-reads it), so it is not hoisted.
-    for (int32_t i = 0; i < clip->eventCount; ++i) {
-        const AnimationEventEntry* const ev =
-            reinterpret_cast<const AnimationEventEntry*>(
-                *reinterpret_cast<void* const*>(clip)) + i;   // MOV RDX,[R15]
-
-        // +0x50 is the FRAME COUNT, not the frame rate -- corrected
-        // 2026-09-12 in AnimationState.h; the arithmetic is unchanged.
-        const float rate  = static_cast<float>(clip->frameCount);   // CVTDQ2PS
-        const float num   = static_cast<float>(ev->frame - clip->frameFirst);
-        const float den   = static_cast<float>(clip->frameLast - clip->frameFirst);
-        const float secs  = ((num / den) * rate) * clip->loopScale;
-        const int64_t t   = static_cast<int64_t>(
-            static_cast<double>(secs) / *g_Timer_secondsPerTick);
-
-        bool fire = false;
-        if (t >= *fromTime && t < *toTime) {
-            fire = true;                                 // the ordinary window
-        } else if (*toTime >= duration &&
-                   t >= fromWrapped && t < toWrapped) {
-            fire = true;                                 // the loop-wrap window
-        }
-        if (!fire) continue;
-
-        void* const e = ev->event;
-        (*reinterpret_cast<EventFireFn* const*>(e))[8](e, transform);
-        ++g_applyEventsFired;
-    }
+    reinterpret_cast<const Graphics::Animation*>(self)                   // B.3.5 bridge
+        ->Graphics::Animation::ApplyEvents(
+            *reinterpret_cast<const Math::Transform*>(transform),        // B.3.5 bridge
+            *reinterpret_cast<const System::Time*>(fromTime),
+            *reinterpret_cast<const System::Time*>(toTime));
 }
 
 // ============================================================================
@@ -1098,6 +1074,67 @@ int Renderer::BeginDrawGroup(const Video::RenderBuffer* renderBufferIn,
     rtgfxbody28::DrawItemArraysDestroy(temp + 0x1c0);
     ++r->field_38;                                     // INC [RDI+0x38] — NOT the size
     return prev;
+}
+
+// ---------------------------------------------------------------------------
+// ?ApplyEvents@Animation@Graphics@@QEBAXAEBVTransform@Math@@AEBVTime@System@@1@Z
+// retail 0x1800fa9a0 -- ENDGAME B.3.5 block GC. The ordinary and loop-wrap firing
+// windows, the re-read event count and the +0x50 frame-count correction are in the
+// banner beside the door.
+//
+// THE RECEIVER IS THE 0x70-BYTE CLIP RECORD and is still spelled
+// `RtGraphics::AnimationClipPrefix` through one bridge local: `Graphics::Animation`
+// IS that record, but only the eight fields the prefix names are proved, and the
+// POD has live users in `wave27_lane_gfxbig.cpp` and `animationstate_transforms.cpp`,
+// so B4b-1 keeps it.
+//
+// SLOT 8 OF THE EVENT OBJECT STAYS A HAND-INLINED VIRTUAL CALL. Its receiver is a
+// `Graphics::AnimationEvent` subclass defined in the EXE, reached through whatever
+// vtable that object wears, and slot 8 is `_purecall` in the abstract base -- there
+// is no member to call. Left as is, and named here rather than left to be
+// rediscovered.
+// ---------------------------------------------------------------------------
+void Animation::ApplyEvents(const Math::Transform& base, const System::Time& from,
+                            const System::Time& to) const {
+    const RtGraphics::AnimationClipPrefix* const clip =
+        reinterpret_cast<const RtGraphics::AnimationClipPrefix*>(this);   // B.3.5 bridge
+    const void* const transform = &base;
+    const int64_t* const fromTime = &from._ticks;
+    const int64_t* const toTime   = &to._ticks;
+
+    const int64_t duration = clip->duration;            // MOV RBX,[RCX+0x58]
+    const int64_t fromWrapped = *fromTime - duration;   // SUB RDI,RBX
+    const int64_t toWrapped   = *toTime   - duration;   // SUB RSI,RBX
+
+    // CMP [RCX+0x8],EBP / JLE — count read from `this` on every iteration
+    // (0x1800faa6c re-reads it), so it is not hoisted.
+    for (int32_t i = 0; i < clip->eventCount; ++i) {
+        const rtgfxbody28::AnimationEventEntry* const ev =
+            reinterpret_cast<const rtgfxbody28::AnimationEventEntry*>(
+                *reinterpret_cast<void* const*>(clip)) + i;   // MOV RDX,[R15]
+
+        // +0x50 is the FRAME COUNT, not the frame rate -- corrected
+        // 2026-09-12 in AnimationState.h; the arithmetic is unchanged.
+        const float rate  = static_cast<float>(clip->frameCount);   // CVTDQ2PS
+        const float num   = static_cast<float>(ev->frame - clip->frameFirst);
+        const float den   = static_cast<float>(clip->frameLast - clip->frameFirst);
+        const float secs  = ((num / den) * rate) * clip->loopScale;
+        const int64_t t   = static_cast<int64_t>(
+            static_cast<double>(secs) / *g_Timer_secondsPerTick);
+
+        bool fire = false;
+        if (t >= *fromTime && t < *toTime) {
+            fire = true;                                 // the ordinary window
+        } else if (*toTime >= duration &&
+                   t >= fromWrapped && t < toWrapped) {
+            fire = true;                                 // the loop-wrap window
+        }
+        if (!fire) continue;
+
+        void* const e = ev->event;
+        (*reinterpret_cast<rtgfxbody28::EventFireFn* const*>(e))[8](e, transform);
+        ++rtgfxbody28::g_applyEventsFired;
+    }
 }
 
 }  // namespace Graphics

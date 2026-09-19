@@ -290,299 +290,21 @@ extern "C" void RtGraphics_AnimationState_PlayAnimation(
 // layer 0 has the SMALLEST playback time (seeded with 10000.0f from
 // 0x180161734), and packs that state's index into the low byte. A state with no
 // layers scores 0.0f, which wins outright.
+// ENDGAME B.3.5 block GC: THE BODY MOVED onto
+// `Graphics::AnimationManager::GetInstanceId`, in this file's `namespace Graphics`
+// block. Block H1 left it a door for the "NOT DIFFABLE" scaffolding reason; the
+// NOT-DIFFABLE narrative is documentation and travelled with the body, and there
+// was no oracle machinery here to move out from under (the replay captures this
+// file carried went in block GC commit 2). The door keeps its name and its
+// registration.
 extern "C" int RtGraphics_AnimationManager_GetInstanceId(
     void* selfv, void* group, int animIndex, const void* nodesv) {
-    // NOT DIFFABLE: the body allocates instances, bakes poses into them and
-    // moves reference counts. A second run against the DLL would create a
-    // second instance and double every count.
-
-    AnimationManagerView* self = static_cast<AnimationManagerView*>(selfv);
-    const ArrayHdr* nodes = static_cast<const ArrayHdr*>(nodesv);
-
-    int32_t freeSlot = -1;
-    int32_t idx = 0;
-    bool found = false;
-
-    const int32_t count = self->_instances._size;
-    if (count > 0) {
-        uint8_t* p = self->_instances._data;
-        for (;;) {
-            void* g = *reinterpret_cast<void* const*>(p);
-            if (g == nullptr && freeSlot < 0) freeSlot = idx;   // CMOVS EAX,ESI
-            if (g == group && *reinterpret_cast<const int32_t*>(p + 0x08) == animIndex) {
-                found = true;
-                break;
-            }
-            ++idx;
-            p += kInstanceStride;
-            if (idx >= count) break;
-        }
-    }
-
-    if (!found) {
-        // A zeroed Instance on the stack, built the same way in both arms: the
-        // group and clip index filled in, the reference count 0 and both Array
-        // headers null. It is the FILL for the grow arm and the SOURCE of the
-        // two empty arrays for the reuse arm.
-        uint8_t tmp[kInstanceStride];
-        *reinterpret_cast<void**>(tmp + 0x00)   = group;
-        *reinterpret_cast<int32_t*>(tmp + 0x08) = animIndex;
-        *reinterpret_cast<int32_t*>(tmp + 0x0c) = 0;
-        *reinterpret_cast<uint64_t*>(tmp + 0x10) = 0;
-        *reinterpret_cast<uint64_t*>(tmp + 0x18) = 0;
-        *reinterpret_cast<uint64_t*>(tmp + 0x20) = 0;
-        *reinterpret_cast<uint64_t*>(tmp + 0x28) = 0;
-
-        if (count > 0 && freeSlot >= 0) {
-            idx = freeSlot;
-            uint8_t* inst = self->_instances._data +
-                            static_cast<int64_t>(freeSlot) * kInstanceStride;
-            *reinterpret_cast<void**>(inst + 0x00)   = group;
-            *reinterpret_cast<int32_t*>(inst + 0x08) = animIndex;
-            *reinterpret_cast<int32_t*>(inst + 0x0c) = 0;
-            AssignNodes()(inst + 0x10, tmp + 0x10);            // CALL 0x180013960
-            AssignStates()(inst + 0x20, tmp + 0x20);           // CALL 0x18005b130
-        } else {
-            idx = count;
-            SetSizeInstances()(self, self->_instances._size + 1, tmp);   // CALL 0x18005be30
-        }
-        DtorStates()(tmp + 0x20);                              // CALL 0x18005bbb0
-        DtorNodes()(tmp + 0x10);                               // CALL 0x180014090
-    }
-
-    if (!found) {
-        uint8_t* inst = self->_instances._data + static_cast<int64_t>(idx) * kInstanceStride;
-        uint8_t* instNodes  = inst + 0x10;
-        uint8_t* instStates = inst + 0x20;
-
-        AssignNodes()(instNodes, nodesv);                      // CALL 0x180013960
-
-        const uint8_t* clip =
-            *reinterpret_cast<const uint8_t* const*>(static_cast<uint8_t*>(group) +
-                                                     RtGraphics::anim_group::kClips) +
-            static_cast<int64_t>(animIndex) * kClipStride;
-
-        // *** THE STATE COUNT IS clip+0x28, NOT clip+0x50. *** +0x50 is the
-        // clip's keyframe count (AnimationManager.h); +0x28 is how many baked
-        // samples an instanced clip carries, and it is the bound of every loop
-        // below and of the final smallest-time sweep.
-        SetSizeStates()(instStates, *reinterpret_cast<const int32_t*>(clip + 0x28));
-
-        const int32_t frames = *reinterpret_cast<const int32_t*>(clip + 0x28);
-
-        // step = clipDurationSeconds * (1.0f / frames). Written as the three
-        // SSE ops retail emits — a CVTPD2PS of the double product, a reciprocal
-        // by DIVSS, then one MULSS — not as `dur / frames`.
-        const double durSec =
-            static_cast<double>(*reinterpret_cast<const int64_t*>(
-                clip + RtGraphics::anim_clip::kDuration)) * SecondsPerTick();
-        float dur = static_cast<float>(durSec);
-        const float fFrames = static_cast<float>(frames);
-        float inv = 1.0f;
-        inv = inv / fFrames;
-        float step = dur;
-        step = step * inv;
-
-        float t = 0.0f;
-        int32_t frame = 0;
-
-        if (frames > 0) {
-            int64_t stateOff = 0;
-            for (;;) {
-                uint8_t* st = *reinterpret_cast<uint8_t* const*>(instStates) + stateOff;
-
-                SetSizeInterp()(st + 0x38, nodes->_size);      // CALL 0x18005ac50
-                uint8_t* ip = *reinterpret_cast<uint8_t* const*>(st + 0x38);
-                // Node 0 is the identity transform, written field by field, and
-                // then copied over its own second half.
-                reinterpret_cast<float*>(ip)[0] = 0.0f;
-                reinterpret_cast<float*>(ip)[1] = 0.0f;
-                reinterpret_cast<float*>(ip)[2] = 0.0f;
-                reinterpret_cast<float*>(ip)[3] = 1.0f;
-                reinterpret_cast<float*>(ip)[4] = 0.0f;
-                reinterpret_cast<float*>(ip)[5] = 0.0f;
-                reinterpret_cast<float*>(ip)[6] = 0.0f;
-                Copy7Dwords(ip + kTransformStride, ip);
-
-                SetSizePose()(st + 0x28, nodes->_size);        // CALL 0x180059140
-
-                if (*reinterpret_cast<const int32_t*>(st + 0x40) > 1) {
-                    int64_t nodeOff   = kNodeStride;
-                    int64_t interpOff = kInterpStride;
-                    int32_t j = 1;
-                    for (;;) {
-                        const uint8_t* nd = nodes->_data;
-                        uint8_t* ipArr = *reinterpret_cast<uint8_t* const*>(st + 0x38);
-
-                        const int32_t parent =
-                            *reinterpret_cast<const int32_t*>(nd + nodeOff + 0x08);
-                        const uint8_t* P = ipArr + static_cast<int64_t>(parent) * kInterpStride;
-
-                        const float px = *reinterpret_cast<const float*>(P + 0x00);
-                        const float py = *reinterpret_cast<const float*>(P + 0x04);
-                        const float pz = *reinterpret_cast<const float*>(P + 0x08);
-                        const float pw = *reinterpret_cast<const float*>(P + 0x0c);
-                        const float tx = *reinterpret_cast<const float*>(P + 0x10);
-                        const float ty = *reinterpret_cast<const float*>(P + 0x14);
-                        const float tz = *reinterpret_cast<const float*>(P + 0x18);
-
-                        // The parent Transform, rebuilt on the stack because
-                        // that is the `this` retail hands to operator*.
-                        float parentXform[7] = { px, py, pz, pw, tx, ty, tz };
-
-                        const float* local =
-                            reinterpret_cast<const float*>(nd + nodeOff + 0x0c);
-                        const float vx = local[4];
-                        const float vy = local[5];
-                        const float vz = local[6];
-
-                        const float mpx = -px;   // XORPS with four -0.0f
-                        const float mpy = -py;
-                        const float mpz = -pz;
-
-                        // q * v, with v.w == 0 supplied as a literal 0.0f
-                        // wherever retail multiplies by its zero register.
-                        float A = pw * vx;
-                        float s0 = px * 0.0f;
-                        A = A + s0;
-                        float s1 = pz * vy;
-                        A = A + s1;
-                        float s2 = py * vz;
-                        A = A - s2;
-
-                        float B = py * 0.0f;
-                        float s3 = pz * vx;
-                        B = B - s3;
-                        float s4 = pw * vy;
-                        B = B + s4;
-                        float s5 = px * vz;
-                        B = B + s5;
-
-                        float C = py * vx;
-                        float s6 = pz * 0.0f;
-                        C = C + s6;
-                        float s7 = px * vy;
-                        C = C - s7;
-                        float s8 = pw * vz;
-                        C = C + s8;
-
-                        float D = pw * 0.0f;
-                        float s9 = px * vx;
-                        D = D - s9;
-                        float s10 = py * vy;
-                        D = D - s10;
-                        float s11 = pz * vz;
-                        D = D - s11;
-
-                        // (A,B,C,D) * conj(q)
-                        float rx = pw * A;
-                        float u0 = D * mpx;
-                        rx = rx + u0;
-                        float u1 = C * mpy;
-                        rx = rx + u1;
-                        float u2 = B * mpz;
-                        rx = rx - u2;
-
-                        float ry = pw * B;
-                        float u3 = C * mpx;
-                        ry = ry - u3;
-                        float u4 = D * mpy;
-                        ry = ry + u4;
-                        float u5 = A * mpz;
-                        ry = ry + u5;
-
-                        float rz = pw * C;
-                        float u6 = B * mpx;
-                        rz = rz + u6;
-                        float u7 = A * mpy;
-                        rz = rz - u7;
-                        float u8 = D * mpz;
-                        rz = rz + u8;
-
-                        float wx = tx;
-                        wx = wx + rx;
-                        float wy = ty;
-                        wy = wy + ry;
-                        float wz = tz;
-                        wz = wz + rz;
-
-                        float qret[4];
-                        const float* q = QuaternionMul(parentXform, qret, nd + nodeOff + 0x0c);
-
-                        float* dst = reinterpret_cast<float*>(ipArr + interpOff);
-                        dst[0] = q[0];
-                        dst[1] = q[1];
-                        dst[2] = q[2];
-                        dst[3] = q[3];
-                        dst[4] = wx;
-                        dst[5] = wy;
-                        dst[6] = wz;
-                        Copy7Dwords(ipArr + interpOff + kTransformStride, ipArr + interpOff);
-
-                        ++j;
-                        nodeOff   += kNodeStride;
-                        interpOff += kInterpStride;
-                        if (j >= *reinterpret_cast<const int32_t*>(st + 0x40)) break;
-                    }
-                }
-
-                // Seed the state: play the clip at `t` seconds with no fade,
-                // then run two zero-length Updates so both halves of every
-                // InterpolatedState hold the settled pose.
-                const int64_t zero = SecondsToTicks(0.0);
-                const int64_t at   = SecondsToTicks(static_cast<double>(t));
-                using PlayFn = void (*)(void*, void*, int, const void*,
-                                        const int64_t*, const int64_t*, float, bool);
-                RtAddr<PlayFn>(0x1800fdf50)(st, group, animIndex, nodesv,
-                                            &at, &zero, 1.0f, false);
-
-                for (int rep = 0; rep < 2; ++rep) {
-                    const int64_t z = SecondsToTicks(0.0);
-                    const float ident[7] = { 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f };
-                    AnimationStateUpdate()(st, &z, instNodes, ident,
-                                           *reinterpret_cast<void* const*>(st + 0x38),
-                                           *reinterpret_cast<void* const*>(st + 0x28),
-                                           reinterpret_cast<float*>(st + 0x18),
-                                           false, false);
-                }
-
-                ++frame;
-                stateOff += kStateStride;
-                t = t + step;
-                if (frame >= *reinterpret_cast<const int32_t*>(clip + 0x28)) break;
-            }
-        }
-    }
-
-    // ---- reference count and the smallest-playback-time sweep ----
-    const int64_t instOff = static_cast<int64_t>(idx) * kInstanceStride;
-    ++*reinterpret_cast<int32_t*>(self->_instances._data + instOff + 0x0c);
-
-    float best = 10000.0f;          // DAT_180161734
-    int32_t bestIdx = 0;
-    int32_t j = 0;
-    uint8_t* base = self->_instances._data;
-    if (*reinterpret_cast<const int32_t*>(base + instOff + 0x28) > 0) {
-        const int32_t n = *reinterpret_cast<const int32_t*>(base + instOff + 0x28);
-        const uint8_t* sp = *reinterpret_cast<uint8_t* const*>(base + instOff + 0x20) + 0x08;
-        const double spt = SecondsPerTick();
-        do {
-            float v;
-            if (*reinterpret_cast<const int32_t*>(sp + 0x08) == 0) {
-                v = 0.0f;
-            } else {
-                const uint8_t* ld = *reinterpret_cast<const uint8_t* const*>(sp);
-                v = static_cast<float>(
-                        static_cast<double>(*reinterpret_cast<const int64_t*>(ld + 0x18)) * spt);
-            }
-            // COMISS/JBE: an unordered compare skips, so a NaN never wins.
-            if (best > v) { bestIdx = j; best = v; }
-            ++j;
-            sp += kStateStride;
-        } while (j < n);
-    }
-
-    return (idx << 8) | bestIdx;
+    return reinterpret_cast<Graphics::AnimationManager*>(selfv)          // B.3.5 bridge
+        ->Graphics::AnimationManager::GetInstanceId(
+            Object::ExternalPtr<Graphics::AnimationGroup>(
+                reinterpret_cast<Graphics::AnimationGroup*>(group)),      // B.3.5 bridge
+            animIndex,
+            *reinterpret_cast<const Collection::Array<uint8_t>*>(nodesv));
 }
 
 // ============================================================================
@@ -898,12 +620,20 @@ void AnimationState::PlayAnimation(Object::ExternalPtr<AnimationGroup> groupHand
                                                  RtGraphics::anim_group::kClips);
     if (clips[static_cast<int64_t>(animIndex) * kClipStride +
               RtGraphics::anim_clip::kInstanced] != 0 && instanced) {
-        // CALL 0x1800fb9d0 — GetInstanceId, the body below. Through the address
-        // registry rather than as a direct C call so the seam stays one door.
-        using GetInstanceIdFn = int (*)(void*, void*, int, const void*);
+        // CALL 0x1800fb9d0 — GetInstanceId. ENDGAME B.3.5 block GC item 6: this was
+        // `RtAddr<GetInstanceIdFn>(0x1800fb9d0)`, an ADDRESS door onto the body in
+        // this very file, kept that way "so the seam stays one door".
+        // `Graphics::AnimationManager::GetInstanceId` is a MEMBER now, so this is a
+        // QUALIFIED non-virtual member call — retail's own direct CALL — and the
+        // registered door still serves every caller outside this file.
         *reinterpret_cast<int32_t*>(l0 + 0x0c) =
-            RtAddr<GetInstanceIdFn>(0x1800fb9d0)(
-                AnimationManagerSingleton(), group, animIndex, nodesv);
+            reinterpret_cast<Graphics::AnimationManager*>(              // B.3.5 bridge
+                AnimationManagerSingleton())
+                ->Graphics::AnimationManager::GetInstanceId(
+                    Object::ExternalPtr<Graphics::AnimationGroup>(
+                        reinterpret_cast<Graphics::AnimationGroup*>(group)),
+                    animIndex,
+                    *reinterpret_cast<const Collection::Array<uint8_t>*>(nodesv));
     } else {
         *reinterpret_cast<int32_t*>(l0 + 0x0c) = -1;
     }
@@ -1618,6 +1348,318 @@ int MeshInstance::GetBones(float t, const Math::Transform& rootRef,
     }
 
     return boneCount;
+}
+
+// ---------------------------------------------------------------------------
+// ?GetInstanceId@AnimationManager@Graphics@@  0x1800fb9d0 -- block GC.
+// The two-jobs-at-once search pass, the blank-slot reuse and the 10000.0f-seeded
+// smallest-playback-time sweep that picks the packed low byte are all documented
+// in the banner beside the door.
+//
+// The manager is still reached through `RtGraphics::AnimationManagerView` -- the
+// POD whose `_instances` is the same `Array<Instance>` at +0x00 that
+// `AnimationManager.h` names, cross-asserted there -- because every helper this
+// body shares with `PlayAnimation` takes that view, and B4b-1 keeps the POD until
+// its last user converts. `group` is retail's `ExternalPtr<AnimationGroup>` BY
+// VALUE: 8 bytes, trivially copyable, so it arrives in a register.
+// ---------------------------------------------------------------------------
+int32_t AnimationManager::GetInstanceId(Object::ExternalPtr<AnimationGroup> groupHandle,
+                                        int animIndex,
+                                        const Collection::Array<uint8_t>& nodesRef) {
+    // NOT DIFFABLE: the body allocates instances, bakes poses into them and
+    // moves reference counts. A second run against the DLL would create a
+    // second instance and double every count.
+
+    AnimationManagerView* const self =
+        reinterpret_cast<AnimationManagerView*>(this);   // B.3.5 bridge
+    void* const group = groupHandle.Get();
+    const void* const nodesv = &nodesRef;
+    const ArrayHdr* nodes = static_cast<const ArrayHdr*>(nodesv);
+
+    int32_t freeSlot = -1;
+    int32_t idx = 0;
+    bool found = false;
+
+    const int32_t count = self->_instances._size;
+    if (count > 0) {
+        uint8_t* p = self->_instances._data;
+        for (;;) {
+            void* g = *reinterpret_cast<void* const*>(p);
+            if (g == nullptr && freeSlot < 0) freeSlot = idx;   // CMOVS EAX,ESI
+            if (g == group && *reinterpret_cast<const int32_t*>(p + 0x08) == animIndex) {
+                found = true;
+                break;
+            }
+            ++idx;
+            p += kInstanceStride;
+            if (idx >= count) break;
+        }
+    }
+
+    if (!found) {
+        // A zeroed Instance on the stack, built the same way in both arms: the
+        // group and clip index filled in, the reference count 0 and both Array
+        // headers null. It is the FILL for the grow arm and the SOURCE of the
+        // two empty arrays for the reuse arm.
+        uint8_t tmp[kInstanceStride];
+        *reinterpret_cast<void**>(tmp + 0x00)   = group;
+        *reinterpret_cast<int32_t*>(tmp + 0x08) = animIndex;
+        *reinterpret_cast<int32_t*>(tmp + 0x0c) = 0;
+        *reinterpret_cast<uint64_t*>(tmp + 0x10) = 0;
+        *reinterpret_cast<uint64_t*>(tmp + 0x18) = 0;
+        *reinterpret_cast<uint64_t*>(tmp + 0x20) = 0;
+        *reinterpret_cast<uint64_t*>(tmp + 0x28) = 0;
+
+        if (count > 0 && freeSlot >= 0) {
+            idx = freeSlot;
+            uint8_t* inst = self->_instances._data +
+                            static_cast<int64_t>(freeSlot) * kInstanceStride;
+            *reinterpret_cast<void**>(inst + 0x00)   = group;
+            *reinterpret_cast<int32_t*>(inst + 0x08) = animIndex;
+            *reinterpret_cast<int32_t*>(inst + 0x0c) = 0;
+            AssignNodes()(inst + 0x10, tmp + 0x10);            // CALL 0x180013960
+            AssignStates()(inst + 0x20, tmp + 0x20);           // CALL 0x18005b130
+        } else {
+            idx = count;
+            SetSizeInstances()(self, self->_instances._size + 1, tmp);   // CALL 0x18005be30
+        }
+        DtorStates()(tmp + 0x20);                              // CALL 0x18005bbb0
+        DtorNodes()(tmp + 0x10);                               // CALL 0x180014090
+    }
+
+    if (!found) {
+        uint8_t* inst = self->_instances._data + static_cast<int64_t>(idx) * kInstanceStride;
+        uint8_t* instNodes  = inst + 0x10;
+        uint8_t* instStates = inst + 0x20;
+
+        AssignNodes()(instNodes, nodesv);                      // CALL 0x180013960
+
+        const uint8_t* clip =
+            *reinterpret_cast<const uint8_t* const*>(static_cast<uint8_t*>(group) +
+                                                     RtGraphics::anim_group::kClips) +
+            static_cast<int64_t>(animIndex) * kClipStride;
+
+        // *** THE STATE COUNT IS clip+0x28, NOT clip+0x50. *** +0x50 is the
+        // clip's keyframe count (AnimationManager.h); +0x28 is how many baked
+        // samples an instanced clip carries, and it is the bound of every loop
+        // below and of the final smallest-time sweep.
+        SetSizeStates()(instStates, *reinterpret_cast<const int32_t*>(clip + 0x28));
+
+        const int32_t frames = *reinterpret_cast<const int32_t*>(clip + 0x28);
+
+        // step = clipDurationSeconds * (1.0f / frames). Written as the three
+        // SSE ops retail emits — a CVTPD2PS of the double product, a reciprocal
+        // by DIVSS, then one MULSS — not as `dur / frames`.
+        const double durSec =
+            static_cast<double>(*reinterpret_cast<const int64_t*>(
+                clip + RtGraphics::anim_clip::kDuration)) * SecondsPerTick();
+        float dur = static_cast<float>(durSec);
+        const float fFrames = static_cast<float>(frames);
+        float inv = 1.0f;
+        inv = inv / fFrames;
+        float step = dur;
+        step = step * inv;
+
+        float t = 0.0f;
+        int32_t frame = 0;
+
+        if (frames > 0) {
+            int64_t stateOff = 0;
+            for (;;) {
+                uint8_t* st = *reinterpret_cast<uint8_t* const*>(instStates) + stateOff;
+
+                SetSizeInterp()(st + 0x38, nodes->_size);      // CALL 0x18005ac50
+                uint8_t* ip = *reinterpret_cast<uint8_t* const*>(st + 0x38);
+                // Node 0 is the identity transform, written field by field, and
+                // then copied over its own second half.
+                reinterpret_cast<float*>(ip)[0] = 0.0f;
+                reinterpret_cast<float*>(ip)[1] = 0.0f;
+                reinterpret_cast<float*>(ip)[2] = 0.0f;
+                reinterpret_cast<float*>(ip)[3] = 1.0f;
+                reinterpret_cast<float*>(ip)[4] = 0.0f;
+                reinterpret_cast<float*>(ip)[5] = 0.0f;
+                reinterpret_cast<float*>(ip)[6] = 0.0f;
+                Copy7Dwords(ip + kTransformStride, ip);
+
+                SetSizePose()(st + 0x28, nodes->_size);        // CALL 0x180059140
+
+                if (*reinterpret_cast<const int32_t*>(st + 0x40) > 1) {
+                    int64_t nodeOff   = kNodeStride;
+                    int64_t interpOff = kInterpStride;
+                    int32_t j = 1;
+                    for (;;) {
+                        const uint8_t* nd = nodes->_data;
+                        uint8_t* ipArr = *reinterpret_cast<uint8_t* const*>(st + 0x38);
+
+                        const int32_t parent =
+                            *reinterpret_cast<const int32_t*>(nd + nodeOff + 0x08);
+                        const uint8_t* P = ipArr + static_cast<int64_t>(parent) * kInterpStride;
+
+                        const float px = *reinterpret_cast<const float*>(P + 0x00);
+                        const float py = *reinterpret_cast<const float*>(P + 0x04);
+                        const float pz = *reinterpret_cast<const float*>(P + 0x08);
+                        const float pw = *reinterpret_cast<const float*>(P + 0x0c);
+                        const float tx = *reinterpret_cast<const float*>(P + 0x10);
+                        const float ty = *reinterpret_cast<const float*>(P + 0x14);
+                        const float tz = *reinterpret_cast<const float*>(P + 0x18);
+
+                        // The parent Transform, rebuilt on the stack because
+                        // that is the `this` retail hands to operator*.
+                        float parentXform[7] = { px, py, pz, pw, tx, ty, tz };
+
+                        const float* local =
+                            reinterpret_cast<const float*>(nd + nodeOff + 0x0c);
+                        const float vx = local[4];
+                        const float vy = local[5];
+                        const float vz = local[6];
+
+                        const float mpx = -px;   // XORPS with four -0.0f
+                        const float mpy = -py;
+                        const float mpz = -pz;
+
+                        // q * v, with v.w == 0 supplied as a literal 0.0f
+                        // wherever retail multiplies by its zero register.
+                        float A = pw * vx;
+                        float s0 = px * 0.0f;
+                        A = A + s0;
+                        float s1 = pz * vy;
+                        A = A + s1;
+                        float s2 = py * vz;
+                        A = A - s2;
+
+                        float B = py * 0.0f;
+                        float s3 = pz * vx;
+                        B = B - s3;
+                        float s4 = pw * vy;
+                        B = B + s4;
+                        float s5 = px * vz;
+                        B = B + s5;
+
+                        float C = py * vx;
+                        float s6 = pz * 0.0f;
+                        C = C + s6;
+                        float s7 = px * vy;
+                        C = C - s7;
+                        float s8 = pw * vz;
+                        C = C + s8;
+
+                        float D = pw * 0.0f;
+                        float s9 = px * vx;
+                        D = D - s9;
+                        float s10 = py * vy;
+                        D = D - s10;
+                        float s11 = pz * vz;
+                        D = D - s11;
+
+                        // (A,B,C,D) * conj(q)
+                        float rx = pw * A;
+                        float u0 = D * mpx;
+                        rx = rx + u0;
+                        float u1 = C * mpy;
+                        rx = rx + u1;
+                        float u2 = B * mpz;
+                        rx = rx - u2;
+
+                        float ry = pw * B;
+                        float u3 = C * mpx;
+                        ry = ry - u3;
+                        float u4 = D * mpy;
+                        ry = ry + u4;
+                        float u5 = A * mpz;
+                        ry = ry + u5;
+
+                        float rz = pw * C;
+                        float u6 = B * mpx;
+                        rz = rz + u6;
+                        float u7 = A * mpy;
+                        rz = rz - u7;
+                        float u8 = D * mpz;
+                        rz = rz + u8;
+
+                        float wx = tx;
+                        wx = wx + rx;
+                        float wy = ty;
+                        wy = wy + ry;
+                        float wz = tz;
+                        wz = wz + rz;
+
+                        float qret[4];
+                        const float* q = QuaternionMul(parentXform, qret, nd + nodeOff + 0x0c);
+
+                        float* dst = reinterpret_cast<float*>(ipArr + interpOff);
+                        dst[0] = q[0];
+                        dst[1] = q[1];
+                        dst[2] = q[2];
+                        dst[3] = q[3];
+                        dst[4] = wx;
+                        dst[5] = wy;
+                        dst[6] = wz;
+                        Copy7Dwords(ipArr + interpOff + kTransformStride, ipArr + interpOff);
+
+                        ++j;
+                        nodeOff   += kNodeStride;
+                        interpOff += kInterpStride;
+                        if (j >= *reinterpret_cast<const int32_t*>(st + 0x40)) break;
+                    }
+                }
+
+                // Seed the state: play the clip at `t` seconds with no fade,
+                // then run two zero-length Updates so both halves of every
+                // InterpolatedState hold the settled pose.
+                const int64_t zero = SecondsToTicks(0.0);
+                const int64_t at   = SecondsToTicks(static_cast<double>(t));
+                using PlayFn = void (*)(void*, void*, int, const void*,
+                                        const int64_t*, const int64_t*, float, bool);
+                RtAddr<PlayFn>(0x1800fdf50)(st, group, animIndex, nodesv,
+                                            &at, &zero, 1.0f, false);
+
+                for (int rep = 0; rep < 2; ++rep) {
+                    const int64_t z = SecondsToTicks(0.0);
+                    const float ident[7] = { 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f };
+                    AnimationStateUpdate()(st, &z, instNodes, ident,
+                                           *reinterpret_cast<void* const*>(st + 0x38),
+                                           *reinterpret_cast<void* const*>(st + 0x28),
+                                           reinterpret_cast<float*>(st + 0x18),
+                                           false, false);
+                }
+
+                ++frame;
+                stateOff += kStateStride;
+                t = t + step;
+                if (frame >= *reinterpret_cast<const int32_t*>(clip + 0x28)) break;
+            }
+        }
+    }
+
+    // ---- reference count and the smallest-playback-time sweep ----
+    const int64_t instOff = static_cast<int64_t>(idx) * kInstanceStride;
+    ++*reinterpret_cast<int32_t*>(self->_instances._data + instOff + 0x0c);
+
+    float best = 10000.0f;          // DAT_180161734
+    int32_t bestIdx = 0;
+    int32_t j = 0;
+    uint8_t* base = self->_instances._data;
+    if (*reinterpret_cast<const int32_t*>(base + instOff + 0x28) > 0) {
+        const int32_t n = *reinterpret_cast<const int32_t*>(base + instOff + 0x28);
+        const uint8_t* sp = *reinterpret_cast<uint8_t* const*>(base + instOff + 0x20) + 0x08;
+        const double spt = SecondsPerTick();
+        do {
+            float v;
+            if (*reinterpret_cast<const int32_t*>(sp + 0x08) == 0) {
+                v = 0.0f;
+            } else {
+                const uint8_t* ld = *reinterpret_cast<const uint8_t* const*>(sp);
+                v = static_cast<float>(
+                        static_cast<double>(*reinterpret_cast<const int64_t*>(ld + 0x18)) * spt);
+            }
+            // COMISS/JBE: an unordered compare skips, so a NaN never wins.
+            if (best > v) { bestIdx = j; best = v; }
+            ++j;
+            sp += kStateStride;
+        } while (j < n);
+    }
+
+    return (idx << 8) | bestIdx;
 }
 
 }  // namespace Graphics
