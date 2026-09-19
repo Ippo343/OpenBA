@@ -59,7 +59,16 @@
 #include "../../types/video/Context.h"
 #include "../../types/video/Device.h"
 
-using RtVideo::Context;
+// ENDGAME B.3.5 block D1. `?ClearResources@` MOVED onto `Video::Context`; its
+// door keeps its name and both its rows. THE TWO DESTRUCTORS DO NOT MOVE and
+// that is a rule, not a shortcut: `??1Context@Video@@` and
+// `??1ConstantBuffer@Video@@` stay registered DOORS over free functions, because
+// a user-provided destructor on either class would destroy
+// `std::is_trivially_copyable` — `Video::Context` holds seven ConstantBuffers by
+// value and nine files treat the 0x2168 bytes as a flat block (RULE B5-4, and
+// B4b-2 for the ctor side). Both asserts are in runtime/types/video/Context.h
+// and ConstantBuffer.h.
+using Video::Context;
 using RtVideo::Device;
 using RtVideo::RenderBuffer;
 
@@ -248,23 +257,29 @@ extern "C" void RtVideo_ConstEntryArrayDtor(void* arr) {
 // ============================================================================
 // ??1ConstantBuffer@Video@@QEAA@XZ — retail 0x1800eeee0, ordinal 558
 // ============================================================================
-// The seven ConstantBufferOpaque members embedded in a Context are destroyed
-// through this. Layout touched (0x48 bytes total, runtime/types/video/Context.h):
-//   +0x00, +0x08  refcounted System::String data pointers
-//   +0x28         Collection::Array<0x18-byte string-pair record>
-//   +0x40         the ConstantBufferData companion (deleting dtor, slot 0)
-// ORDER: companion, then the array, then +0x08, then +0x00. Kept.
+// The seven `Video::ConstantBuffer` members embedded in a Context are destroyed
+// through this. Layout touched (runtime/types/video/ConstantBuffer.h):
+//   _prefix (+0x00), _typeName (+0x08)   refcounted System::String data pointers
+//   _constantData.. (+0x28)              Array<ConstantInfo>, stride 0x18
+//   _platformData (+0x40)                the ConstantBufferData companion
+//                                        (deleting dtor, slot 0)
+// ORDER: companion, then the array, then _typeName, then _prefix. Kept.
+//
+// STILL A FREE FUNCTION, NOT `~ConstantBuffer()` (ENDGAME B.3.5 block D1). A real
+// destructor here would make `Video::ConstantBuffer` non-trivially-copyable and
+// `Video::Context` — which holds seven by value — with it; RULE B5-4 and the
+// `static_assert`s in both headers forbid exactly that. The offsets are now the
+// real members, which is what the conversion bought.
 // ============================================================================
-extern "C" void Video_ConstantBuffer_Dtor(void* self) {
-    uint8_t* b = static_cast<uint8_t*>(self);
+extern "C" void Video_ConstantBuffer_Dtor(void* selfRaw) {
+    Video::ConstantBuffer* self = static_cast<Video::ConstantBuffer*>(selfRaw);
 
-    void* companion = *reinterpret_cast<void**>(b + 0x40);
-    if (companion) DeletingDtor(companion);
+    if (void* companion = self->_platformData) DeletingDtor(companion);
 
-    StringPairArrayDtor(b + 0x28);
+    StringPairArrayDtor(&self->_constantData);
 
-    ReleaseString(reinterpret_cast<void**>(b + 0x08));
-    ReleaseString(reinterpret_cast<void**>(b + 0x00));
+    ReleaseString(&self->_typeName);
+    ReleaseString(&self->_prefix);
 }
 
 // ============================================================================
@@ -350,30 +365,35 @@ extern "C" void Video_Buffer_OperatorDelete(void* p)  { MemFree(p); }
 // reading bytes neither side wrote
 // (reference_oracle_must_not_compare_unwritten_bytes.md).
 // ============================================================================
-extern "C" void RtVideo_Context_ClearResources(Context* self) {
+void Video::Context::ClearResources() {
 
     uint32_t imageBit = 1;
     for (int i = 0; i < RtVideo::kImageBufferSlots; ++i) {
-        if (self->_imageBuffers[i] != nullptr) {
-            self->_dirty            |= RtVideo::kDirtyImageBuffers;
-            self->_imageBufferDirty |= imageBit;
-            self->_imageBuffers[i]   = nullptr;
+        if (_imageBuffers[i] != nullptr) {
+            _dirty            |= RtVideo::kDirtyImageBuffers;
+            _imageBufferDirty |= imageBit;
+            _imageBuffers[i]   = nullptr;
         }
         imageBit = (imageBit << 1) | (imageBit >> 31);   // ROL EAX,1
     }
 
     uint32_t vertexBit = 1;
     for (int i = 0; i < RtVideo::kVertexBufferSlots; ++i) {
-        if (self->_vertexBuffers[i] != nullptr) {
-            self->_dirty             |= RtVideo::kDirtyVertexBuffers;
-            self->_vertexBufferDirty |= vertexBit;
-            self->_vertexBuffers[i]   = nullptr;
-            self->_vertexOffsets[i]   = 0;
-            self->_vertexStrides[i]   = 0;
+        if (_vertexBuffers[i] != nullptr) {
+            _dirty             |= RtVideo::kDirtyVertexBuffers;
+            _vertexBufferDirty |= vertexBit;
+            _vertexBuffers[i]   = nullptr;
+            _vertexOffsets[i]   = 0;
+            _vertexStrides[i]   = 0;
         }
         vertexBit = (vertexBit << 1) | (vertexBit >> 31);   // ROL EDX,1
     }
 
+}
+
+// The door, unchanged name and unchanged registrations.
+extern "C" void RtVideo_Context_ClearResources(Context* self) {
+    self->Video::Context::ClearResources();
 }
 
 // ============================================================================
@@ -513,7 +533,13 @@ bool SameSnapshot(const ClearSnapshot& a, const ClearSnapshot& b) {
 // zero) binding, and seeds the pre-existing dirty state so the |= is exercised
 // against a non-zero starting value rather than always against 0.
 void BuildCase(Context* c, unsigned seed) {
-    std::memset(c, 0, sizeof(Context));
+    // `static_cast<void*>`: `Video::Context` is no longer trivially
+    // default-constructible (its `Math::Matrix` members have zeroing retail
+    // constructors), so `-Wclass-memaccess` objects to a bare memset. The probe
+    // wants bytes, which is what the cast says. Trivially COPYABLE — the
+    // property this and every other memcpy over a Context depends on — is
+    // asserted in Context.h and is unaffected.
+    std::memset(static_cast<void*>(c), 0, sizeof(Context));
     c->_dirty             = (seed & 1u) ? 0x00000040u : 0u;   // kDirtyVertexProgram
     c->_imageBufferDirty  = (seed & 2u) ? 0x00000080u : 0u;
     c->_vertexBufferDirty = (seed & 4u) ? 0x00004000u : 0u;

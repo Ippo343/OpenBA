@@ -170,7 +170,24 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/video/Context.h"
 
-using RtVideo::Context;
+// ENDGAME B.3.5 block D1. Both bodies MOVED onto `Video::Context`; the two
+// registered doors at the bottom kept their names, their mangled-name rows and
+// their address rows and became one-line QUALIFIED non-virtual delegations.
+//
+// THE RAW-OFFSET READS ARE NOW REAL FIELD ACCESSES, except in the three places
+// the disassembly reads bytes the struct cannot name:
+//   * +0x200, which is `_videoProgram` living inside `_pixelConstantStaging`
+//     (see that member's banner in Context.h — the array is left undivided so no
+//     other file's offsets move);
+//   * the QWORD clear over +0x20..+0x27, which covers `_transformCount` AND
+//     `_unknown0024` in ONE store (0x1800ef317) and is one of this file's
+//     negative controls;
+//   * the five constant-buffer STAGING sources at +0x208 / +0x248 / +0x328 /
+//     +0x3f8 / +0x1dd8, two of which start mid-array.
+// Everything else — including the five constant buffers' backend companions,
+// which used to be `Field<void*>(self, bufOffset + 0x40)` — now goes through the
+// real `Video::ConstantBuffer::_platformData` (runtime/types/video/ConstantBuffer.h).
+using Video::Context;
 using RtVideo::kContextSize;
 
 namespace {
@@ -289,30 +306,26 @@ int g_ctxBindDefect = 0;   // 0 = none; see the probe's table
 // pointer array. The mask and the index are two separate registers even though
 // one could be derived from the other; kept separate here for the same reason
 // lane VID2 kept ClearResources' two masks separate.
-extern "C" void RtVideo_Context_BindTextures(void* self) {
-    // Same split as BindResources: entered vs. did work. "Did work" here is
-    // whether ANY texture slot was dirty; the trailing clear runs either way,
-    // so a call with a zero mask still changes the object.
-    const bool didWork = Field<uint32_t>(self, kImageDirty) != 0;
+void Video::Context::BindTextures() {
 
     uint32_t mask = 1;
     for (int32_t i = 0; i < 16; ++i, mask = (mask << 1) | (mask >> 31)) {
-        if ((Field<uint32_t>(self, kImageDirty) & mask) == 0) continue;
+        if ((_imageBufferDirty & mask) == 0) continue;
 
-        void* img = Field<void*>(self, kImageBuffers + static_cast<size_t>(i) * 8);
+        void* img = _imageBuffers[i];
         if (img) {
             // 0x1800ef358: RCX = img->+0x60, RDX = ctx, R8D = i, vt[+0x20].
             void* companion = Field<void*>(img, kImageCompanion);
             reinterpret_cast<BindCtxIntFn>(VSlot(companion, kImageBindSlot))(
-                companion, self, i);
+                companion, this, i);
         } else {
             // 0x1800ef372: companion->BindTextureNone(i).
-            void* cd = Field<void*>(self, kContextData);
+            void* cd = _contextData;
             reinterpret_cast<VoidIntFn>(VSlot(cd, kSlotBindTextureNone))(cd, i);
         }
     }
     // 0x1800ef398 — AFTER the loop, unconditionally, even when no bit was set.
-    Field<uint32_t>(self, kImageDirty) = 0;
+    _imageBufferDirty = 0;
 }
 
 // ============================================================================
@@ -323,20 +336,12 @@ extern "C" void RtVideo_Context_BindTextures(void* self) {
 // check sits between the shader programs and the streams. Reordering them is
 // invisible in the final Context bytes and visible to any backend that cares
 // what was set when — which is why the probe compares the call SEQUENCE.
-extern "C" void RtVideo_Context_BindResources(void* self) {
-    // LIVENESS, and the two questions it has to keep apart. The probe above
-    // proves the body is RIGHT; it cannot prove anything CALLS it, and a
-    // registered port with no caller reports clean forever
-    // (reference_uncalled_port_is_not_verified.md). This site is placed BEFORE
-    // the early-out so `calls=` means "was entered", and the diff oracle carries
-    // "did work" separately — a shadow after the return would silently merge
-    // the two (reference_probe_needs_an_effectiveness_control.md).
-    const bool didWork = Field<uint32_t>(self, kDirty) != 0;
+void Video::Context::BindResources() {
 
     // 0x1800ef066: the whole body is inside `if (dirty != 0)`.
-    if (Field<uint32_t>(self, kDirty) == 0) return;
+    if (_dirty == 0) return;
 
-    void* cd = Field<void*>(self, kContextData);
+    void* cd = _contextData;
 
     // --- 0x00001 render buffer ---------------------------------------------
     // TWO DELIBERATE DEPARTURES FROM THE LITERAL BYTES, both stated rather than
@@ -354,144 +359,165 @@ extern "C" void RtVideo_Context_BindResources(void* self) {
     // Both are equivalences, not normalisations of observable behaviour: if
     // either were wrong the call log would differ, because a stale `cd` would
     // dispatch through the wrong table.
-    if (Field<uint32_t>(self, kDirty) & 0x1u)
+    if (_dirty & 0x1u)
         reinterpret_cast<VoidVoidFn>(VSlot(cd, kSlotBindRenderBuffer))(cd);
 
     // --- 0x00002 textures ---------------------------------------------------
-    if (Field<uint32_t>(self, kDirty) & 0x2u)
-        RtVideo_Context_BindTextures(self);
+    // A direct member call now, not the resolved door: retail's `CALL
+    // 0x1800ef330` at 0x1800ef08a is a near call to its own sibling body, and
+    // this is that same edge (B.3.5, runtime-internal caller inside the block).
+    if (_dirty & 0x2u)
+        this->Video::Context::BindTextures();
 
-    const int32_t detail = Field<int32_t>(self, kShaderDetail);
+    const int32_t detail = _shaderDetail;
 
     // --- 0x00040 vertex program --------------------------------------------
-    if (Field<uint32_t>(self, kDirty) & 0x40u) {
-        void* p = Field<void*>(self, kVertexProgram);
+    if (_dirty & 0x40u) {
+        void* p = _vertexProgram;
         void* c = Field<void*>(p, kProgCompanion50);
-        reinterpret_cast<BindCtxIntFn>(VSlot(c, kProgBindSlot))(c, self, detail);
+        reinterpret_cast<BindCtxIntFn>(VSlot(c, kProgBindSlot))(c, this, detail);
     }
 
     // --- 0x00080 pixel program ---------------------------------------------
-    if (Field<uint32_t>(self, kDirty) & 0x80u) {
-        void* p = Field<void*>(self, kPixelProgram);
+    if (_dirty & 0x80u) {
+        void* p = _pixelProgram;
         void* c = Field<void*>(p, kProgCompanion50);
-        reinterpret_cast<BindCtxIntFn>(VSlot(c, kProgBindSlot))(c, self, detail);
+        reinterpret_cast<BindCtxIntFn>(VSlot(c, kProgBindSlot))(c, this, detail);
     }
 
     // --- 0x00100 video program ---------------------------------------------
     // NOTE THE COMPANION OFFSET: +0x40, not +0x50. A VideoProgram's backend
     // companion sits one qword earlier than a Vertex/PixelProgram's. Copying
     // the line above would be a silent wrong-pointer read.
-    if (Field<uint32_t>(self, kDirty) & 0x100u) {
-        void* p = Field<void*>(self, kVideoProgram);
+    if (_dirty & 0x100u) {
+        // +0x200 by raw offset: `_videoProgram` is the first qword of
+        // `_pixelConstantStaging`, which Context.h keeps undivided on purpose.
+        void* p = Field<void*>(this, kVideoProgram);
         void* c = Field<void*>(p, kVideoCompanion40);
-        reinterpret_cast<BindCtxIntFn>(VSlot(c, kProgBindSlot))(c, self, detail);
+        reinterpret_cast<BindCtxIntFn>(VSlot(c, kProgBindSlot))(c, this, detail);
     }
 
     // --- 0x04000 transforms, OR a live transform count ----------------------
-    if ((Field<uint32_t>(self, kDirty) & 0x4000u) ||
-        Field<int32_t>(self, kTransformCount) > 0 ||
-        Field<int32_t>(self, kTransformCount + 4) > 0)
+    if ((_dirty & 0x4000u) || _transformCount > 0 || _unknown0024 > 0)
         reinterpret_cast<VoidVoidFn>(VSlot(cd, kSlotBindTransforms))(cd);
 
     // Negative control 1 hoists the vertex-layout arm to HERE, ahead of the
     // streams. Nothing in the Context bytes can tell the two orders apart, so
     // this control fails unless the oracle really is comparing the call
     // SEQUENCE and not just the end state.
-    if (g_ctxBindDefect == 1 && (Field<uint32_t>(self, kDirty) & 0x4u)) {
-        void* l = Field<void*>(self, kVertexLayout);
-        void* c = Field<void*>(l, kLayoutCompanion);
-        reinterpret_cast<BindCtxFn>(VSlot(c, kLayoutBindSlot))(c, self);
+    if (g_ctxBindDefect == 1 && (_dirty & 0x4u)) {
+        void* c = Field<void*>(_vertexLayout, kLayoutCompanion);
+        reinterpret_cast<BindCtxFn>(VSlot(c, kLayoutBindSlot))(c, this);
     }
 
     // --- 0x00008 the sixteen vertex streams ---------------------------------
-    if (Field<uint32_t>(self, kDirty) & 0x8u) {
+    if (_dirty & 0x8u) {
         uint32_t mask = 1;
         for (int32_t i = 0; i < 16; ++i, mask = (mask << 1) | (mask >> 31)) {
-            if ((Field<uint32_t>(self, kVertexDirty) & mask) == 0) continue;
+            if ((_vertexBufferDirty & mask) == 0) continue;
 
-            void* vb = Field<void*>(self, kVertexBuffers + static_cast<size_t>(i) * 8);
+            void* vb = _vertexBuffers[i];
             if (vb) {
                 // 0x1800ef15d: RCX = vb->+0x8, RDX = ctx, R8D = i,
                 // R9D = offsets[i] (+0x138), [RSP+0x20] = strides[i] (+0x178,
                 // reached as R15+0x40 off the offsets cursor).
                 void* c = Field<void*>(vb, kVBufCompanion);
                 reinterpret_cast<BindVBufFn>(VSlot(c, kVBufBindSlot))(
-                    c, self,
-                    i,
-                    Field<int32_t>(self, kVertexOffsets + static_cast<size_t>(i) * 4),
-                    Field<int32_t>(self, kVertexStrides + static_cast<size_t>(i) * 4));
+                    c, this, i, _vertexOffsets[i], _vertexStrides[i]);
             } else {
                 reinterpret_cast<VoidIntFn>(VSlot(cd, kSlotBindVertexNone))(cd, i);
             }
         }
         // 0x1800ef1af — inside the 0x8 arm only. A stream marked dirty while
         // bit 0x8 is clear stays marked.
-        Field<uint32_t>(self, kVertexDirty) = 0;
+        _vertexBufferDirty = 0;
     }
 
     // --- 0x00004 vertex layout ----------------------------------------------
     // Retail binds the layout AFTER the streams. Negative control 1 swaps
     // these two arms; nothing in the Context bytes can tell the difference.
     if (g_ctxBindDefect != 1) {
-        if (Field<uint32_t>(self, kDirty) & 0x4u) {
-            void* l = Field<void*>(self, kVertexLayout);
-            void* c = Field<void*>(l, kLayoutCompanion);
-            reinterpret_cast<BindCtxFn>(VSlot(c, kLayoutBindSlot))(c, self);
+        if (_dirty & 0x4u) {
+            void* c = Field<void*>(_vertexLayout, kLayoutCompanion);
+            reinterpret_cast<BindCtxFn>(VSlot(c, kLayoutBindSlot))(c, this);
         }
     }
 
     // --- 0x00010 index buffer -----------------------------------------------
-    if (Field<uint32_t>(self, kDirty) & 0x10u) {
-        void* ib = Field<void*>(self, kIndexBuffer);
+    if (_dirty & 0x10u) {
+        void* ib = _indexBuffer;
         if (ib) {
             void* c = Field<void*>(ib, kIBufCompanion);
-            reinterpret_cast<BindCtxFn>(VSlot(c, kIBufBindSlot))(c, self);
+            reinterpret_cast<BindCtxFn>(VSlot(c, kIBufBindSlot))(c, this);
         } else {
             reinterpret_cast<VoidVoidFn>(VSlot(cd, kSlotBindIndexNone))(cd);
         }
     }
 
     // --- 0x00020 render state -----------------------------------------------
-    if (Field<uint32_t>(self, kDirty) & 0x20u) {
-        void* rs = Field<void*>(self, kRenderState);
-        void* c = Field<void*>(rs, kStateCompanion);
-        reinterpret_cast<BindCtxFn>(VSlot(c, kStateBindSlot))(c, self);
+    if (_dirty & 0x20u) {
+        void* c = Field<void*>(_renderState, kStateCompanion);
+        reinterpret_cast<BindCtxFn>(VSlot(c, kStateBindSlot))(c, this);
     }
 
     // --- 0x00200 viewport / 0x00400 scissor ---------------------------------
-    if (Field<uint32_t>(self, kDirty) & 0x200u)
+    if (_dirty & 0x200u)
         reinterpret_cast<VoidVoidFn>(VSlot(cd, kSlotBindViewport))(cd);
-    if (Field<uint32_t>(self, kDirty) & 0x400u)
+    if (_dirty & 0x400u)
         reinterpret_cast<VoidVoidFn>(VSlot(cd, kSlotBindScissor))(cd);
 
     // --- the five constant-buffer uploads -----------------------------------
-    // Each is `buf->companion->vt[+0x10](companion, ctx, staging, 0, len)`. The
-    // fourth argument is an `XOR R9D,R9D` in all five; the fifth is the size
-    // immediate and is what negative control 3 corrupts.
-    struct Upload { uint32_t bit; size_t buf, src; int32_t len; };
-    static const Upload kUploads[5] = {
-        { 0x00800u, kGlobalBuffer,   kGlobalStaging,   kGlobalBytes   },
-        { 0x01000u, kInstanceBuffer, kInstanceStaging, kInstanceBytes },
-        { 0x02000u, kLightBuffer,    kLightStaging,    kLightBytes    },
-        { 0x08000u, kMaterialBuffer, kMaterialStaging, kMaterialBytes },
-        { 0x10000u, kPixelBuffer,    kPixelStaging,    kPixelBytes    },
+    // Each is `buf->_platformData->vt[+0x10](platformData, ctx, staging, 0,
+    // len)`. The fourth argument is an `XOR R9D,R9D` in all five; the fifth is
+    // the size immediate and is what negative control 3 corrupts.
+    //
+    // B.3.5: the companion used to be `Field<void*>(self, bufOffset + 0x40)`.
+    // `Video::ConstantBuffer` is a real class now, so the buffer is named and
+    // the +0x40 is `_platformData`. The STAGING source stays a raw offset —
+    // +0x208 and +0x248 start inside `_pixelConstantStaging`.
+    struct Upload { uint32_t bit; Video::ConstantBuffer* buf; size_t src; int32_t len; };
+    const Upload kUploads[5] = {
+        { 0x00800u, &_globalConstants,   kGlobalStaging,   kGlobalBytes   },
+        { 0x01000u, &_instanceConstants, kInstanceStaging, kInstanceBytes },
+        { 0x02000u, &_lightConstants,    kLightStaging,    kLightBytes    },
+        { 0x08000u, &_materialConstants, kMaterialStaging, kMaterialBytes },
+        { 0x10000u, &_pixelConstants,    kPixelStaging,    kPixelBytes    },
     };
     for (const Upload& u : kUploads) {
-        if ((Field<uint32_t>(self, kDirty) & u.bit) == 0) continue;
-        void* c = Field<void*>(self, u.buf + kBufCompanion);
+        if ((_dirty & u.bit) == 0) continue;
+        void* c = u.buf->_platformData;
         int32_t len = u.len;
         if (g_ctxBindDefect == 3 && u.bit == 0x800u) len = kInstanceBytes;
         reinterpret_cast<BindCBufFn>(VSlot(c, kCBufBindSlot))(
-            c, self, At(self, u.src), 0, len);
+            c, this, At(this, u.src), 0, len);
     }
 
     // 0x1800ef317 / 0x1800ef31b — a QWORD zero over +0x20..+0x27, then the
-    // dirty mask. Negative control 2 clears only the dword.
+    // dirty mask. That single store covers `_transformCount` AND `_unknown0024`,
+    // which is why it stays a raw write: clearing only the dword would leave a
+    // live transform binding that never re-binds again. Negative control 2 does
+    // exactly that.
     if (g_ctxBindDefect == 2)
-        Field<uint32_t>(self, kTransformCount) = 0;
+        _transformCount = 0;
     else
-        Field<uint64_t>(self, kTransformCount) = 0;
-    Field<uint32_t>(self, kDirty) = 0;
+        Field<uint64_t>(this, kTransformCount) = 0;
+    _dirty = 0;
+}
+
+// ============================================================================
+// THE TWO DOORS
+// ============================================================================
+// Unchanged names, unchanged registrations (see the bottom of this file), now
+// one-line QUALIFIED non-virtual delegations. The parameter stays `void*`
+// because `dx11/` reaches both through `Dx11ResolveRuntimeImport`, which hands
+// back a `void(*)(void*)`, and because the probe below drives them through a
+// `BindFn` of that shape over a raw `uint8_t[kContextSize]` subject.
+extern "C" void RtVideo_Context_BindTextures(void* self) {
+    static_cast<Video::Context*>(self)->Video::Context::BindTextures();
+}
+
+extern "C" void RtVideo_Context_BindResources(void* self) {
+    static_cast<Video::Context*>(self)->Video::Context::BindResources();
 }
 
 

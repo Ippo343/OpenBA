@@ -150,10 +150,24 @@
 #include "../../types/math/Math.h"
 #include "../../types/video/Context.h"
 
-using RtVideo::Context;
-using RtVideo::Viewport;
-using RtVideo::Vector4Raw;
-using RtVideo::MatrixRaw;
+// ENDGAME B.3.5 block D1. `Video::Context` and `Video::Viewport` are real
+// classes now (runtime/types/video/Context.h): every body below MOVED onto the
+// member, `self->x` became `x`, and each registered door kept its name, its
+// mangled-name row and its address row and became a one-line QUALIFIED
+// non-virtual delegation. Nothing is unregistered and nothing is retired
+// (B35_RULES 11).
+//
+// THE THREE B.3.1 BRIDGES IN THIS FILE ARE GONE WITH THE CONVERSION. `MatrixRaw`
+// and `Vector4Raw` were byte-identical stand-ins for `Math::Matrix` and
+// `Math::Vector4` that existed only because `Video::Context` was a POD; the
+// Context now holds the real classes by value (both are trivially copyable, as
+// Context.h asserts), so `MatrixInverse`, `MatrixMul`, `MatrixNotEqual`, their
+// three `reinterpret_cast`s and the `sizeof(MatrixRaw) == sizeof(Math::Matrix)`
+// bridge assert are all deleted rather than moved. `Matrix::Inverse`,
+// `operator*` and `operator!=` are called as members, which is what B.3.1 step 2
+// left them ready for.
+using Video::Context;
+using Video::Viewport;
 using RtVideo::RenderBufferPrefix;
 using RtVideo::kContextSize;
 
@@ -179,95 +193,59 @@ namespace {
 // not restore the behaviour, it would skip it. If this ever faults, the
 // ContextData was never created and that is the bug to find.
 template <typename Fn>
-inline Fn BackendSlot(Context* self, unsigned byteOffset) {
+inline Fn BackendSlot(const Context* self, unsigned byteOffset) {
     void* data = self->_contextData;
     void** vt = *reinterpret_cast<void***>(data);
     return reinterpret_cast<Fn>(vt[byteOffset / 8]);
 }
 
-// ============================================================================
-// Math dependencies of SetCamera
-// ============================================================================
-// `Math::Matrix::Inverse` and `Math::Matrix::operator*` are NOT ported (Wave 1
-// landed Matrix::operator* under ??DMatrix@Math@@QEBA?AV01@AEBV01@@Z but not
-// Inverse; either way this call site resolves through ResolveExport, so it
-// picks up whichever implementation is registered today).
-//
-// BOTH RETURN A STRUCT BY VALUE, so both carry a HIDDEN RETURN SLOT, and for a
-// non-static member function MSVC puts it in RDX — BETWEEN `this` and the
-// declared arguments, not before `this`. Getting that wrong is the wild-write
-// family: the function still returns the right answer, in RAX, pointing at the
-// memory it just corrupted (reference_hidden_retslot_wild_write.md). Confirmed
-// against the disassembly of SetCamera itself at 0x18001a165-0x18001a170:
-// `LEA RDX,[RSP+0x20] / MOV RCX,RDI / CALL 0x1800bb310`, i.e. RCX = the matrix,
-// RDX = the scratch return slot.
-// ENDGAME B.3.1 step 2: `Math::Matrix::Inverse` and `Math::Matrix::operator*`,
-// called as members. There is no resolve left, so the RT_EXPORT_ONCE-vs-frozen-
-// static argument this comment used to make no longer applies to either.
-//
-// B.3.1 bridge: `Context::_transforms`, `_inverseView` and `_viewProjection`
-// are `MatrixRaw` because Video::Context is not converted yet (B31_RULES,
-// "members of not-yet-converted structs"); the two are the same 64 bytes, as
-// the static_assert below states.
-MatrixRaw* MatrixInverse(const MatrixRaw* self, MatrixRaw* ret) {
-    *reinterpret_cast<Math::Matrix*>(ret) =
-        reinterpret_cast<const Math::Matrix*>(self)->Inverse();
-    return ret;
-}
-MatrixRaw* MatrixMul(const MatrixRaw* self, MatrixRaw* ret, const MatrixRaw* rhs) {
-    *reinterpret_cast<Math::Matrix*>(ret) =
-        *reinterpret_cast<const Math::Matrix*>(self) *
-        *reinterpret_cast<const Math::Matrix*>(rhs);
-    return ret;
-}
-
-// ENDGAME B.3.1 step 2: the sixteen-comparison body moved onto
-// `Math::Matrix::operator!=` (runtime/src/math/transform.cpp). This is the one
-// call it has in this file, kept as a named helper because SetTransform and
-// SetTransformScale both use it for their dirty check.
-//
-// B.3.1 bridge — `Context::_transforms` is `RtVideo::MatrixRaw` because
-// `RtVideo::Context` is not converted yet (B31_RULES, "members of
-// not-yet-converted structs"). The two are the same sixty-four bytes; the cast
-// dies when Context is converted.
-static_assert(sizeof(MatrixRaw) == sizeof(Math::Matrix),
-              "B.3.1 bridge: MatrixRaw and Math::Matrix must be the same bytes");
-inline bool MatrixNotEqual(const MatrixRaw* a, const MatrixRaw* b) {
-    return reinterpret_cast<const Math::Matrix&>(*a) !=
-           reinterpret_cast<const Math::Matrix&>(*b);   // B.3.1 bridge
-}
+// The hidden-return-slot note this file used to carry about
+// `Math::Matrix::Inverse` and `Math::Matrix::operator*` is settled and no longer
+// applies: both are real members of a real class compiled by this compiler
+// (runtime/types/math/Math.h), so the by-value return is just the C++ return and
+// the RDX/RAX shape is the compiler's problem, not the port's. The retail
+// disassembly of SetCamera at 0x18001a165-0x18001a170 (`LEA RDX,[RSP+0x20] /
+// MOV RCX,RDI / CALL 0x1800bb310`) is what proved the argument ORDER —
+// `_inverseView = view.Inverse()` and then `_viewProjection = _inverseView *
+// projection`, with the FIELD as the left operand — and that order is preserved
+// below.
 
 } // namespace
 
 // ============================================================================
-// The ports
+// THE MEMBERS — ENDGAME B.3.5 block D1
 // ============================================================================
 // Every body is byte-faithful to the retail decompilation. Where retail writes
 // a field it does not compare first, so do we; where retail compares before
 // writing (so the dirty bit is only set on a real change), so do we — that
 // early-out is observable state, not an optimisation.
+//
+// The bodies are UNCHANGED by the conversion except that `self->x` became `x`
+// and the three B.3.1 bridge helpers became direct member calls on
+// `Math::Matrix`. Each one's registered door is below, under its old name.
+namespace Video {
 
 // ---- ?SetColor@Context@Video@@QEAAXAEBVVector4@Math@@@Z  0x18001a8e0 -------
-void RtVideo_Context_SetColor(Context* self, const Vector4Raw* color) {
+void Context::SetColor(const Math::Vector4& color) {
 
-    if (self->_color.x != color->x || self->_color.y != color->y ||
-        self->_color.z != color->z || self->_color.w != color->w) {
-        self->_color = *color;
-        self->_dirty |= RtVideo::kDirtyMaterialConstants;
+    if (_color.x != color.x || _color.y != color.y ||
+        _color.z != color.z || _color.w != color.w) {
+        _color = color;
+        _dirty |= RtVideo::kDirtyMaterialConstants;
     }
 
 }
 
 // ---- ?SetInverseScale@Context@Video@@QEAAXMMMM@Z  0x18001a880 --------------
-void RtVideo_Context_SetInverseScale(Context* self, float x, float y, float z, float w) {
+void Context::SetInverseScale(float x, float y, float z, float w) {
 
-    if (x != self->_inverseScale.x || y != self->_inverseScale.y ||
-        z != self->_inverseScale.z || w != self->_inverseScale.w) {
-        self->_inverseScale.x = x;
-        self->_inverseScale.y = y;
-        self->_inverseScale.z = z;
-        self->_inverseScale.w = w;
-        self->_dirty |= RtVideo::kDirtyMaterialConstants;
+    if (x != _inverseScale.x || y != _inverseScale.y ||
+        z != _inverseScale.z || w != _inverseScale.w) {
+        _inverseScale.x = x;
+        _inverseScale.y = y;
+        _inverseScale.z = z;
+        _inverseScale.w = w;
+        _dirty |= RtVideo::kDirtyMaterialConstants;
     }
 
 }
@@ -275,13 +253,13 @@ void RtVideo_Context_SetInverseScale(Context* self, float x, float y, float z, f
 // ---- ?SetTime@Context@Video@@QEAAXM@Z  0x18001a330 ------------------------
 // Note there is no compare-first here: retail writes the four floats and ORs
 // the dirty bit unconditionally, and it shares bit 0x800 with SetCamera.
-void RtVideo_Context_SetTime(Context* self, float time) {
+void Context::SetTime(float time) {
 
-    self->_time.x = time;
-    self->_time.y = 0.0f;
-    self->_time.z = 0.0f;
-    self->_time.w = 0.0f;
-    self->_dirty |= RtVideo::kDirtyGlobalConstants;
+    _time.x = time;
+    _time.y = 0.0f;
+    _time.z = 0.0f;
+    _time.w = 0.0f;
+    _dirty |= RtVideo::kDirtyGlobalConstants;
 
 }
 
@@ -293,7 +271,7 @@ void RtVideo_Context_SetTime(Context* self, float time) {
 // The negation is a SIGN-BIT XOR (`XORPS XMM3,[0x1801617c0]`, a 16-byte
 // 0x80000000 quad), not `0 - nearZ`. Reproduced bitwise so that a fog plane at
 // exactly 0.0f yields -0.0f here, the same as retail.
-void RtVideo_Context_SetFog(Context* self, float nearZ, float farZ, const Vector4Raw* color) {
+void Context::SetFog(float nearZ, float farZ, const Math::Vector4& color) {
 
     uint32_t nearBits;
     std::memcpy(&nearBits, &nearZ, 4);
@@ -303,28 +281,32 @@ void RtVideo_Context_SetFog(Context* self, float nearZ, float farZ, const Vector
 
     const float invRange = 1.0f / (farZ - nearZ);
 
-    self->_fogParams.x = negNear;
-    self->_fogParams.y = invRange;
-    self->_fogParams.z = 0.0f;
-    self->_fogParams.w = 0.0f;
-    self->_fogColor = *color;
+    _fogParams.x = negNear;
+    _fogParams.y = invRange;
+    _fogParams.z = 0.0f;
+    _fogParams.w = 0.0f;
+    _fogColor = color;
 
     // The +0x258 duplicate, inside the pixel-constant staging block.
-    std::memcpy(self->_pixelConstantStaging + (0x258 - 0x200), color, sizeof(Vector4Raw));
+    std::memcpy(_pixelConstantStaging + (0x258 - 0x200), &color, sizeof(Math::Vector4));
 
-    self->_dirty |= (RtVideo::kDirtyGlobalConstants | RtVideo::kDirtyPixelConstants);
+    _dirty |= (RtVideo::kDirtyGlobalConstants | RtVideo::kDirtyPixelConstants);
 
 }
 
 // ---- ?SetViewport@Context@Video@@QEAAXAEBVViewport@2@@Z  0x18001a060 ------
-void RtVideo_Context_SetViewport(Context* self, const Viewport* vp) {
+// The comparison is OPEN-CODED, not a call to `??8Viewport@Video@@`: retail
+// compares the four dwords in line here (0x18001a060) and emits the operator as
+// a separate body at 0x180018240 that this function does not call. The two are
+// the same four compares; keeping them apart keeps the transcription honest.
+void Context::SetViewport(const Viewport& vp) {
 
-    if (self->_viewport.x != vp->x || self->_viewport.y != vp->y ||
-        self->_viewport.width != vp->width || self->_viewport.height != vp->height) {
+    if (_viewport.x != vp.x || _viewport.y != vp.y ||
+        _viewport.width != vp.width || _viewport.height != vp.height) {
         // Retail sets the dirty bit BEFORE copying; the order is not
         // observable from outside but is kept for byte-faithfulness.
-        self->_dirty |= RtVideo::kDirtyViewport;
-        self->_viewport = *vp;
+        _dirty |= RtVideo::kDirtyViewport;
+        _viewport = vp;
     }
 
 }
@@ -332,37 +314,37 @@ void RtVideo_Context_SetViewport(Context* self, const Viewport* vp) {
 // ---- ?SetImageBuffer@Context@Video@@QEAAXPEBVImageBuffer@2@H@Z  0x180019ed0 -
 // `1 << (slot & 0x1f)` is retail's own masking; with 16 slots it never wraps,
 // but the AND is in the shipped code and is kept.
-void RtVideo_Context_SetImageBuffer(Context* self, const void* image, int slot) {
+void Context::SetImageBuffer(const void* image, int32_t slot) {
 
-    if (image != self->_imageBuffers[slot]) {
-        self->_dirty |= RtVideo::kDirtyImageBuffers;
-        self->_imageBufferDirty |= 1u << (static_cast<unsigned>(slot) & 0x1fu);
-        self->_imageBuffers[slot] = const_cast<void*>(image);
+    if (image != _imageBuffers[slot]) {
+        _dirty |= RtVideo::kDirtyImageBuffers;
+        _imageBufferDirty |= 1u << (static_cast<unsigned>(slot) & 0x1fu);
+        _imageBuffers[slot] = const_cast<void*>(image);
     }
 
 }
 
 // ---- ?SetVertexBuffer@Context@Video@@QEAAXPEBVVertexBuffer@2@HHH@Z  0x180019f20
-void RtVideo_Context_SetVertexBuffer(Context* self, const void* vb, int slot,
-                                     int offset, int stride) {
+void Context::SetVertexBuffer(const void* vb, int32_t slot,
+                              int32_t offset, int32_t stride) {
 
-    if (vb != self->_vertexBuffers[slot] || offset != self->_vertexOffsets[slot] ||
-        stride != self->_vertexStrides[slot]) {
-        self->_dirty |= RtVideo::kDirtyVertexBuffers;
-        self->_vertexBufferDirty |= 1u << (static_cast<unsigned>(slot) & 0x1fu);
-        self->_vertexBuffers[slot] = const_cast<void*>(vb);
-        self->_vertexOffsets[slot] = offset;
-        self->_vertexStrides[slot] = stride;
+    if (vb != _vertexBuffers[slot] || offset != _vertexOffsets[slot] ||
+        stride != _vertexStrides[slot]) {
+        _dirty |= RtVideo::kDirtyVertexBuffers;
+        _vertexBufferDirty |= 1u << (static_cast<unsigned>(slot) & 0x1fu);
+        _vertexBuffers[slot] = const_cast<void*>(vb);
+        _vertexOffsets[slot] = offset;
+        _vertexStrides[slot] = stride;
     }
 
 }
 
 // ---- ?SetRenderBuffer@Context@Video@@QEAAXPEBVRenderBuffer@2@@Z  0x1800f2100
-void RtVideo_Context_SetRenderBuffer(Context* self, const void* rb) {
+void Context::SetRenderBuffer(const void* rb) {
 
-    if (self->_renderBuffer != rb) {
-        self->_dirty |= RtVideo::kDirtyRenderBuffer;
-        self->_renderBuffer = const_cast<void*>(rb);
+    if (_renderBuffer != rb) {
+        _dirty |= RtVideo::kDirtyRenderBuffer;
+        _renderBuffer = const_cast<void*>(rb);
     }
 
 }
@@ -372,9 +354,9 @@ void RtVideo_Context_SetRenderBuffer(Context* self, const void* rb) {
 // ctor may have allocated (+0x2138) without freeing it — retail leaks it
 // deliberately, because the caller owns the buffer it hands in. Faithfully
 // reproduced; do not add a delete here.
-void RtVideo_Context_SetDefaultRenderBuffer(Context* self, void* rb) {
+void Context::SetDefaultRenderBuffer(void* rb) {
 
-    self->_defaultRenderBuffer = rb;
+    _defaultRenderBuffer = rb;
 
 }
 
@@ -382,15 +364,19 @@ void RtVideo_Context_SetDefaultRenderBuffer(Context* self, void* rb) {
 // The transform-count update is OUTSIDE the change test: retail raises the
 // high-water mark even when the matrix is unchanged. That asymmetry is the
 // kind of thing a "tidied" port silently drops.
-void RtVideo_Context_SetTransform(Context* self, int slot, const MatrixRaw* m) {
+//
+// `operator!=` is `??9Matrix@Math@@QEBA_NAEBV01@@Z` (0x18001d850), a real
+// exported member of a real class since B.3.1 step 2 — the call at 0x18001a6d5
+// is exactly this one.
+void Context::SetTransform(int32_t slot, const Math::Matrix& m) {
 
-    MatrixRaw* dst = &self->_transforms[slot];
-    if (MatrixNotEqual(m, dst)) {
-        *dst = *m;
-        self->_dirty |= RtVideo::kDirtyTransformConstants;
+    Math::Matrix& dst = _transforms[slot];
+    if (m != dst) {
+        dst = m;
+        _dirty |= RtVideo::kDirtyTransformConstants;
     }
-    if (self->_transformCount < slot + 1) {
-        self->_transformCount = slot + 1;
+    if (_transformCount < slot + 1) {
+        _transformCount = slot + 1;
     }
 
 }
@@ -407,13 +393,13 @@ void RtVideo_Context_SetTransform(Context* self, int slot, const MatrixRaw* m) {
 // after the first iteration, since retail's own listing does exactly this).
 // A `count <= 0` call touches only `_unknown0024` and nothing else, matching
 // retail's `if (0 < param_1)` guard around the whole copy loop.
-void RtVideo_Context_SetBones(Context* self, int32_t count, const MatrixRaw* matrices) {
+void Context::SetBones(int32_t count, const Math::Matrix* matrices) {
 
-    self->_unknown0024 = count;
+    _unknown0024 = count;
     for (int32_t i = 0; i < count; ++i) {
-        std::memcpy(self->_boneAndProjectionStaging + static_cast<size_t>(i) * sizeof(MatrixRaw),
-                    &matrices[i], sizeof(MatrixRaw));
-        self->_dirty |= RtVideo::kDirtyTransformConstants;
+        std::memcpy(_boneAndProjectionStaging + static_cast<size_t>(i) * sizeof(Math::Matrix),
+                    &matrices[i], sizeof(Math::Matrix));
+        _dirty |= RtVideo::kDirtyTransformConstants;
     }
 
 }
@@ -440,34 +426,29 @@ void RtVideo_Context_SetBones(Context* self, int32_t count, const MatrixRaw* mat
 //
 // Everything after the build is SetTransform's tail verbatim:
 //   * the compare is `??9Matrix@Math@@QEBA_NAEBV01@@Z` (0x18001d850, the call
-//     at 0x18001a5b7), i.e. MatrixNotEqual -- store only on a real change,
+//     at 0x18001a5b7) -- store only on a real change,
 //   * the dirty bit is 0x4000 (`or [rdi+0x10],0x4000`) = kDirtyTransformConstants,
 //   * and the high-water update of `_transformCount` is OUTSIDE the change
 //     test (the `je` at 0x18001a5be lands ON the cmovg at 0x18001a64e), so the
 //     count rises even when the matrix is unchanged.  Same asymmetry, same
 //     reason it must not be tidied.
-//
-// `scale` is a Math::Vector4; MatrixRaw/float[4] is the same four consecutive
-// floats retail reads at r9+0x0/0x4/0x8/0xc, which is why the parameter is
-// typed as a bare float pointer rather than pulling a Vector4 type into this
-// file (the sibling ports here already treat Matrix as `MatrixRaw`).
-void RtVideo_Context_SetTransformScale(Context* self, int slot,
-                                       const MatrixRaw* m, const float* scale) {
+void Context::SetTransformScale(int32_t slot, const Math::Matrix& m,
+                               const Math::Vector4& scale) {
 
-    MatrixRaw built;
-    for (int i = 0; i < 16; ++i) built.m[i] = m->m[i];
-    built.m[3]  = scale[0];
-    built.m[7]  = scale[1];
-    built.m[11] = scale[2];
-    built.m[15] = scale[3];
+    Math::Matrix built;
+    for (int i = 0; i < 16; ++i) built.m[i] = m.m[i];
+    built.m[3]  = scale.x;
+    built.m[7]  = scale.y;
+    built.m[11] = scale.z;
+    built.m[15] = scale.w;
 
-    MatrixRaw* dst = &self->_transforms[slot];
-    if (MatrixNotEqual(&built, dst)) {
-        *dst = built;
-        self->_dirty |= RtVideo::kDirtyTransformConstants;
+    Math::Matrix& dst = _transforms[slot];
+    if (built != dst) {
+        dst = built;
+        _dirty |= RtVideo::kDirtyTransformConstants;
     }
-    if (self->_transformCount < slot + 1) {
-        self->_transformCount = slot + 1;
+    if (_transformCount < slot + 1) {
+        _transformCount = slot + 1;
     }
 
 }
@@ -479,18 +460,17 @@ void RtVideo_Context_SetTransformScale(Context* self, int slot,
 //                                                   was just written, not the
 //                                                   local result)
 // _cameraPosition = view row 3
-void RtVideo_Context_SetCamera(Context* self, const MatrixRaw* view, const MatrixRaw* projection) {
+void Context::SetCamera(const Math::Matrix& view, const Math::Matrix& projection) {
 
-    MatrixRaw scratch;
-    self->_inverseView = *MatrixInverse(view, &scratch);
-    self->_viewProjection = *MatrixMul(&self->_inverseView, &scratch, projection);
+    _inverseView    = view.Inverse();
+    _viewProjection = _inverseView * projection;
 
-    self->_cameraPosition.x = view->m[12];
-    self->_cameraPosition.y = view->m[13];
-    self->_cameraPosition.z = view->m[14];
-    self->_cameraPosition.w = view->m[15];
+    _cameraPosition.x = view.m[12];
+    _cameraPosition.y = view.m[13];
+    _cameraPosition.z = view.m[14];
+    _cameraPosition.w = view.m[15];
 
-    self->_dirty |= RtVideo::kDirtyGlobalConstants;
+    _dirty |= RtVideo::kDirtyGlobalConstants;
 
 }
 
@@ -504,9 +484,9 @@ void RtVideo_Context_SetCamera(Context* self, const MatrixRaw* view, const Matri
 // different value from one on a dirty Context; (2) the vertex-slot test also
 // fires when only the offset or stride is non-zero, while the image-slot test
 // looks at the pointer alone.
-void RtVideo_Context_Reset(Context* self) {
+void Context::Reset() {
 
-    self->_dirty = RtVideo::kDirtyAllConstants;
+    _dirty = RtVideo::kDirtyAllConstants;
 
     // Retail's three leading memsets. Their boundaries do NOT line up with
     // named fields: the first two start at +0x208 and +0x248 — eight bytes
@@ -514,88 +494,100 @@ void RtVideo_Context_Reset(Context* self) {
     // short of _materialConstants at +0x298, which Reset does not clear. They
     // are written as raw offsets for that reason, not out of laziness; naming
     // them through a field would have changed the region.
-    std::memset(reinterpret_cast<uint8_t*>(self) + 0x208, 0, 0x40);
-    std::memset(reinterpret_cast<uint8_t*>(self) + 0x248, 0, 0x50);
-    std::memset(reinterpret_cast<uint8_t*>(self) + 0x328, 0, 0xd0);
-    self->_inverseScale = Vector4Raw{ 0.0f, 0.0f, 0.0f, 0.0f };
-    self->_color        = Vector4Raw{ 0.0f, 0.0f, 0.0f, 0.0f };
-    std::memset(self->_boneAndProjectionStaging, 0, sizeof(self->_boneAndProjectionStaging));
-    std::memset(self->_transforms, 0, sizeof(self->_transforms));
-    std::memset(self->_lightStaging, 0, sizeof(self->_lightStaging));
+    std::memset(reinterpret_cast<uint8_t*>(this) + 0x208, 0, 0x40);
+    std::memset(reinterpret_cast<uint8_t*>(this) + 0x248, 0, 0x50);
+    std::memset(reinterpret_cast<uint8_t*>(this) + 0x328, 0, 0xd0);
+    _inverseScale = Math::Vector4();
+    _color        = Math::Vector4();
+    std::memset(_boneAndProjectionStaging, 0, sizeof(_boneAndProjectionStaging));
+    // `static_cast<void*>` here is not decoration: `Math::Matrix` has a retail
+    // default constructor that zeroes all sixteen cells (Math.h:218), so it is
+    // not trivially default-constructible and `-Wclass-memaccess` objects to a
+    // raw `memset` over an array of them. Retail does ONE memset; a
+    // value-initialising loop would write the same 0xd00 bytes but would stop
+    // being the single memset the disassembly shows. The cast says "yes, bytes"
+    // and keeps the transcription.
+    std::memset(static_cast<void*>(_transforms), 0, sizeof(_transforms));
+    std::memset(_lightStaging, 0, sizeof(_lightStaging));
 
-    self->_transformCount = 0;
-    self->_unknown0024    = 0;   // retail zeroes +0x20 as one qword
+    _transformCount = 0;
+    _unknown0024    = 0;   // retail zeroes +0x20 as one qword
 
     for (int i = 0; i < RtVideo::kImageBufferSlots; ++i) {
-        if (self->_imageBuffers[i] != nullptr) {
-            self->_dirty |= RtVideo::kDirtyImageBuffers;
-            self->_imageBufferDirty |= 1u << i;
-            self->_imageBuffers[i] = nullptr;
+        if (_imageBuffers[i] != nullptr) {
+            _dirty |= RtVideo::kDirtyImageBuffers;
+            _imageBufferDirty |= 1u << i;
+            _imageBuffers[i] = nullptr;
         }
     }
     for (int i = 0; i < RtVideo::kVertexBufferSlots; ++i) {
-        if (self->_vertexBuffers[i] != nullptr || self->_vertexOffsets[i] != 0 ||
-            self->_vertexStrides[i] != 0) {
-            self->_dirty |= RtVideo::kDirtyVertexBuffers;
-            self->_vertexBufferDirty |= 1u << i;
-            self->_vertexBuffers[i] = nullptr;
-            self->_vertexOffsets[i] = 0;
-            self->_vertexStrides[i] = 0;
+        if (_vertexBuffers[i] != nullptr || _vertexOffsets[i] != 0 ||
+            _vertexStrides[i] != 0) {
+            _dirty |= RtVideo::kDirtyVertexBuffers;
+            _vertexBufferDirty |= 1u << i;
+            _vertexBuffers[i] = nullptr;
+            _vertexOffsets[i] = 0;
+            _vertexStrides[i] = 0;
         }
     }
-    if (self->_indexBuffer != nullptr || self->_indexOffset != 0) {
-        self->_dirty |= RtVideo::kDirtyIndexBuffer;
-        self->_indexBuffer = nullptr;
-        self->_indexOffset = 0;
+    if (_indexBuffer != nullptr || _indexOffset != 0) {
+        _dirty |= RtVideo::kDirtyIndexBuffer;
+        _indexBuffer = nullptr;
+        _indexOffset = 0;
     }
-    if (self->_renderBuffer != nullptr) {
-        self->_dirty |= RtVideo::kDirtyRenderBuffer;
-        self->_renderBuffer = nullptr;
+    if (_renderBuffer != nullptr) {
+        _dirty |= RtVideo::kDirtyRenderBuffer;
+        _renderBuffer = nullptr;
     }
-    if (self->_vertexLayout != nullptr) {
-        self->_dirty |= RtVideo::kDirtyVertexLayout;
-        self->_vertexLayout = nullptr;
+    if (_vertexLayout != nullptr) {
+        _dirty |= RtVideo::kDirtyVertexLayout;
+        _vertexLayout = nullptr;
     }
-    if (self->_vertexProgram != nullptr) {
-        self->_dirty |= RtVideo::kDirtyVertexProgram;
-        self->_vertexProgram = nullptr;
+    if (_vertexProgram != nullptr) {
+        _dirty |= RtVideo::kDirtyVertexProgram;
+        _vertexProgram = nullptr;
     }
-    if (self->_pixelProgram != nullptr) {
-        self->_dirty |= RtVideo::kDirtyPixelProgram;
-        self->_pixelProgram = nullptr;
+    if (_pixelProgram != nullptr) {
+        _dirty |= RtVideo::kDirtyPixelProgram;
+        _pixelProgram = nullptr;
     }
 
     // Unguarded deref of _defaultRenderBuffer, exactly as retail: it is set by
     // the ctor (or by SetDefaultRenderBuffer) and Reset relies on it being
     // there. CLAUDE.md: do not "fix" this with a null check.
-    const RenderBufferPrefix* rb =
-        static_cast<const RenderBufferPrefix*>(self->_defaultRenderBuffer);
+    //
+    // `RtVideo::RenderBufferPrefix` is spelled with its namespace deliberately:
+    // inside `namespace Video` a bare `RenderBuffer*` would bind the real
+    // (forward-declared, incomplete) `Video::RenderBuffer`, which is block D2's
+    // class — see the comment on the view in Context.h.
+    const RtVideo::RenderBufferPrefix* rb =
+        static_cast<const RtVideo::RenderBufferPrefix*>(_defaultRenderBuffer);
     const int32_t w = rb->width;
     const int32_t h = rb->height;
 
-    if (self->_viewport.x != 0 || self->_viewport.y != 0 ||
-        self->_viewport.width != w || self->_viewport.height != h) {
-        self->_dirty |= RtVideo::kDirtyViewport;
-        self->_viewport.x = 0;
-        self->_viewport.y = 0;
-        self->_viewport.width  = w;
-        self->_viewport.height = h;
+    if (_viewport.x != 0 || _viewport.y != 0 ||
+        _viewport.width != w || _viewport.height != h) {
+        _dirty |= RtVideo::kDirtyViewport;
+        _viewport.x = 0;
+        _viewport.y = 0;
+        _viewport.width  = w;
+        _viewport.height = h;
     }
     // Retail re-reads the two dimensions from the render buffer here rather
     // than reusing the values above. Kept.
     const int32_t w2 = rb->width;
     const int32_t h2 = rb->height;
-    if (self->_scissor.x != 0 || self->_scissor.y != 0 ||
-        self->_scissor.width != w2 || self->_scissor.height != h2) {
-        self->_dirty |= RtVideo::kDirtyScissor;
-        self->_scissor.x = 0;
-        self->_scissor.y = 0;
-        self->_scissor.width  = w2;
-        self->_scissor.height = h2;
+    if (_scissor.x != 0 || _scissor.y != 0 ||
+        _scissor.width != w2 || _scissor.height != h2) {
+        _dirty |= RtVideo::kDirtyScissor;
+        _scissor.x = 0;
+        _scissor.y = 0;
+        _scissor.width  = w2;
+        _scissor.height = h2;
     }
-    if (self->_renderState != nullptr) {
-        self->_dirty |= RtVideo::kDirtyRenderState;
-        self->_renderState = nullptr;
+    if (_renderState != nullptr) {
+        _dirty |= RtVideo::kDirtyRenderState;
+        _renderState = nullptr;
     }
 
 }
@@ -612,11 +604,11 @@ void RtVideo_Context_Reset(Context* self) {
 // rather than a second, different write into live state. That is the one place
 // in this lane where the original touches something outside the scratch copy,
 // and it is deliberate: the alternative is no oracle at all.
-void RtVideo_Context_AddVertex(Context* self, const void* vertex) {
+void Context::AddVertex(const void* vertex) {
 
-    const size_t stride = static_cast<size_t>(self->_dynamicVertexStride);
-    std::memcpy(self->_dynamicVertexCursor, vertex, stride);
-    self->_dynamicVertexCursor += stride;
+    const size_t stride = static_cast<size_t>(_dynamicVertexStride);
+    std::memcpy(_dynamicVertexCursor, vertex, stride);
+    _dynamicVertexCursor += stride;
 
 }
 
@@ -625,11 +617,11 @@ void RtVideo_Context_AddVertex(Context* self, const void* vertex) {
 // which is what retail does (`IMUL` on the 32-bit registers before the
 // sign-extending move). A count large enough to overflow would wrap the same
 // way in both. Reproduced rather than promoted to 64-bit.
-void RtVideo_Context_AddVertices(Context* self, int count, const void* vertices) {
+void Context::AddVertices(int32_t count, const void* vertices) {
 
-    const int32_t bytes = count * self->_dynamicVertexStride;
-    std::memcpy(self->_dynamicVertexCursor, vertices, static_cast<size_t>(bytes));
-    self->_dynamicVertexCursor += bytes;
+    const int32_t bytes = count * _dynamicVertexStride;
+    std::memcpy(_dynamicVertexCursor, vertices, static_cast<size_t>(bytes));
+    _dynamicVertexCursor += bytes;
 
 }
 
@@ -640,56 +632,227 @@ void RtVideo_Context_AddVertices(Context* self, int count, const void* vertices)
 // offset named in runtime/types/video/Context.h. Their oracle is VerifyThunk,
 // run once at registration; there is no per-call comparison because running
 // the original as well would submit the draw twice.
+//
+// These are NOT converted to `_contextData->Clear(...)` on the real
+// `Video::ContextData` class (block A's, in CompanionData.h) even though it now
+// exists: `_contextData` is a `void*` field — the concrete `*Data` classes in
+// `dx11/` are RULE B5-8's declared leave and do not derive in C++, so the object
+// behind the pointer is a `VideoDX11::ContextData`, not a `Video::ContextData`.
+// The byte-offset dispatch is what the seam guarantees. That conversion belongs
+// to the dx11 caller batch (block J), after the seam.
 // ============================================================================
+
+void Context::Clear(uint32_t flags, uint32_t color, float depth, int32_t stencil) {
+    using Fn = void (*)(void*, unsigned, unsigned, float, int);
+    BackendSlot<Fn>(this, RtVideo::kSlotClear)(_contextData, flags, color, depth, stencil);
+}
+
+void Context::DrawIndexed(int32_t primitiveType, int32_t a, int32_t b,
+                          int32_t c, int32_t d, int32_t e) {
+    using Fn = void (*)(void*, int, int, int, int, int, int);
+    BackendSlot<Fn>(this, RtVideo::kSlotDrawIndexed)(_contextData, primitiveType,
+                                                     a, b, c, d, e);
+}
+
+int32_t Context::GetMaxDynamicInstances(int32_t a, int32_t b, int32_t c) const {
+    using Fn = int (*)(void*, int, int, int);
+    return BackendSlot<Fn>(this, RtVideo::kSlotGetMaxDynamicInstances)(_contextData, a, b, c);
+}
+
+bool Context::BeginVertices(int32_t count, int32_t stride) {
+    using Fn = bool (*)(void*, int, int);
+    return BackendSlot<Fn>(this, RtVideo::kSlotBeginVertices)(_contextData, count, stride);
+}
+
+void Context::EndVertices(int32_t primitiveType) {
+    using Fn = void (*)(void*, int);
+    BackendSlot<Fn>(this, RtVideo::kSlotEndVertices)(_contextData, primitiveType);
+}
+
+bool Context::BeginIndexedVertices(int32_t a, int32_t b, int32_t c) {
+    using Fn = bool (*)(void*, int, int, int);
+    return BackendSlot<Fn>(this, RtVideo::kSlotBeginIndexedVertices)(_contextData, a, b, c);
+}
+
+void Context::EndIndexedVertices(int32_t primitiveType) {
+    using Fn = void (*)(void*, int);
+    BackendSlot<Fn>(this, RtVideo::kSlotEndIndexedVertices)(_contextData, primitiveType);
+}
+
+bool Context::BeginInstancedIndexedVertices(int32_t a, int32_t b, int32_t c, int32_t d) {
+    using Fn = bool (*)(void*, int, int, int, int);
+    return BackendSlot<Fn>(this, RtVideo::kSlotBeginInstancedIndexedVertices)(
+        _contextData, a, b, c, d);
+}
+
+void Context::EndInstancedIndexedVertices(int32_t primitiveType) {
+    using Fn = void (*)(void*, int);
+    BackendSlot<Fn>(this, RtVideo::kSlotEndInstancedIndexedVertices)(_contextData,
+                                                                    primitiveType);
+}
+
+// ============================================================================
+// Video::Viewport's two comparison operators
+// ============================================================================
+// `??8Viewport@Video@@QEBA_NAEBV01@@Z` 0x180018240 and
+// `??9Viewport@Video@@QEBA_NAEBV01@@Z` 0x180018270, both read as disassembly
+// this pass. Retail emits TWO separate bodies rather than one plus a negation,
+// and each compares the four dwords in x / y / width / height order with a
+// short-circuit exit, so they are written that way: `??9` is not `!(*this ==
+// other)`. The four-dword shape is also what pins the field order, together
+// with the four-argument constructor at 0x180018220.
+//
+// These are the only two `Video::Viewport` exports this block ports. The two
+// constructors and `operator=` stay DOORS — see the triviality banner on the
+// class in Context.h: `Video::Context` holds two Viewports by value and must
+// stay trivially copyable and trivially default-constructible, and retail's own
+// default constructor ZEROES, so neither a user-provided body nor `= default`
+// is available here.
+bool Viewport::operator==(const Viewport& other) const {
+    if (x != other.x) return false;
+    if (y != other.y) return false;
+    if (width != other.width) return false;
+    if (height != other.height) return false;
+    return true;
+}
+
+bool Viewport::operator!=(const Viewport& other) const {
+    if (x != other.x) return true;
+    if (y != other.y) return true;
+    if (width != other.width) return true;
+    if (height != other.height) return true;
+    return false;
+}
+
+}  // namespace Video
+
+// ============================================================================
+// THE DOORS
+// ============================================================================
+// One line each, a QUALIFIED non-virtual call so that no future virtual (there
+// are none on this class, and never will be) can be reached by accident. The
+// names, the mangled-name rows and the address rows below are all unchanged
+// from before the conversion: `RegisterRuntimeExport` and `RegisterRuntimeAddr`
+// still hand out these symbols, and a caller that binds by either spelling
+// lands on the member.
+
+void RtVideo_Context_SetColor(Context* self, const Math::Vector4* color) {
+    self->Video::Context::SetColor(*color);
+}
+
+void RtVideo_Context_SetInverseScale(Context* self, float x, float y, float z, float w) {
+    self->Video::Context::SetInverseScale(x, y, z, w);
+}
+
+void RtVideo_Context_SetTime(Context* self, float time) {
+    self->Video::Context::SetTime(time);
+}
+
+void RtVideo_Context_SetFog(Context* self, float nearZ, float farZ,
+                            const Math::Vector4* color) {
+    self->Video::Context::SetFog(nearZ, farZ, *color);
+}
+
+void RtVideo_Context_SetViewport(Context* self, const Viewport* vp) {
+    self->Video::Context::SetViewport(*vp);
+}
+
+void RtVideo_Context_SetImageBuffer(Context* self, const void* image, int slot) {
+    self->Video::Context::SetImageBuffer(image, slot);
+}
+
+void RtVideo_Context_SetVertexBuffer(Context* self, const void* vb, int slot,
+                                     int offset, int stride) {
+    self->Video::Context::SetVertexBuffer(vb, slot, offset, stride);
+}
+
+void RtVideo_Context_SetRenderBuffer(Context* self, const void* rb) {
+    self->Video::Context::SetRenderBuffer(rb);
+}
+
+void RtVideo_Context_SetDefaultRenderBuffer(Context* self, void* rb) {
+    self->Video::Context::SetDefaultRenderBuffer(rb);
+}
+
+void RtVideo_Context_SetTransform(Context* self, int slot, const Math::Matrix* m) {
+    self->Video::Context::SetTransform(slot, *m);
+}
+
+void RtVideo_Context_SetBones(Context* self, int32_t count, const Math::Matrix* matrices) {
+    self->Video::Context::SetBones(count, matrices);
+}
+
+// The fourth argument is retail's `const Math::Vector4&`; the door used to take
+// a bare `const float*` because the file had no Vector4 type. It has one now.
+void RtVideo_Context_SetTransformScale(Context* self, int slot,
+                                       const Math::Matrix* m,
+                                       const Math::Vector4* scale) {
+    self->Video::Context::SetTransformScale(slot, *m, *scale);
+}
+
+void RtVideo_Context_SetCamera(Context* self, const Math::Matrix* view,
+                               const Math::Matrix* projection) {
+    self->Video::Context::SetCamera(*view, *projection);
+}
+
+void RtVideo_Context_Reset(Context* self) {
+    self->Video::Context::Reset();
+}
+
+void RtVideo_Context_AddVertex(Context* self, const void* vertex) {
+    self->Video::Context::AddVertex(vertex);
+}
+
+void RtVideo_Context_AddVertices(Context* self, int count, const void* vertices) {
+    self->Video::Context::AddVertices(count, vertices);
+}
 
 void RtVideo_Context_Clear(Context* self, unsigned flags, unsigned color,
                            float depth, int stencil) {
-    using Fn = void (*)(void*, unsigned, unsigned, float, int);
-    BackendSlot<Fn>(self, RtVideo::kSlotClear)(self->_contextData, flags, color, depth, stencil);
+    self->Video::Context::Clear(flags, color, depth, stencil);
 }
 
 void RtVideo_Context_DrawIndexed(Context* self, int primitiveType, int a, int b,
                                  int c, int d, int e) {
-    using Fn = void (*)(void*, int, int, int, int, int, int);
-    BackendSlot<Fn>(self, RtVideo::kSlotDrawIndexed)(self->_contextData, primitiveType,
-                                                     a, b, c, d, e);
+    self->Video::Context::DrawIndexed(primitiveType, a, b, c, d, e);
 }
 
 int RtVideo_Context_GetMaxDynamicInstances(Context* self, int a, int b, int c) {
-    using Fn = int (*)(void*, int, int, int);
-    return BackendSlot<Fn>(self, RtVideo::kSlotGetMaxDynamicInstances)(self->_contextData, a, b, c);
+    return self->Video::Context::GetMaxDynamicInstances(a, b, c);
 }
 
 bool RtVideo_Context_BeginVertices(Context* self, int count, int stride) {
-    using Fn = bool (*)(void*, int, int);
-    return BackendSlot<Fn>(self, RtVideo::kSlotBeginVertices)(self->_contextData, count, stride);
+    return self->Video::Context::BeginVertices(count, stride);
 }
 
 void RtVideo_Context_EndVertices(Context* self, int primitiveType) {
-    using Fn = void (*)(void*, int);
-    BackendSlot<Fn>(self, RtVideo::kSlotEndVertices)(self->_contextData, primitiveType);
+    self->Video::Context::EndVertices(primitiveType);
 }
 
 bool RtVideo_Context_BeginIndexedVertices(Context* self, int a, int b, int c) {
-    using Fn = bool (*)(void*, int, int, int);
-    return BackendSlot<Fn>(self, RtVideo::kSlotBeginIndexedVertices)(self->_contextData, a, b, c);
+    return self->Video::Context::BeginIndexedVertices(a, b, c);
 }
 
 void RtVideo_Context_EndIndexedVertices(Context* self, int primitiveType) {
-    using Fn = void (*)(void*, int);
-    BackendSlot<Fn>(self, RtVideo::kSlotEndIndexedVertices)(self->_contextData, primitiveType);
+    self->Video::Context::EndIndexedVertices(primitiveType);
 }
 
 bool RtVideo_Context_BeginInstancedIndexedVertices(Context* self, int a, int b, int c, int d) {
-    using Fn = bool (*)(void*, int, int, int, int);
-    return BackendSlot<Fn>(self, RtVideo::kSlotBeginInstancedIndexedVertices)(
-        self->_contextData, a, b, c, d);
+    return self->Video::Context::BeginInstancedIndexedVertices(a, b, c, d);
 }
 
 void RtVideo_Context_EndInstancedIndexedVertices(Context* self, int primitiveType) {
-    using Fn = void (*)(void*, int);
-    BackendSlot<Fn>(self, RtVideo::kSlotEndInstancedIndexedVertices)(self->_contextData,
-                                                                     primitiveType);
+    self->Video::Context::EndInstancedIndexedVertices(primitiveType);
+}
+
+// The two Viewport comparison doors. New rows: both symbols are exported by the
+// shipped DLL and neither had a port before B.3.5.
+bool RtVideo_Viewport_Equal(const Viewport* self, const Viewport* other) {
+    return self->Video::Viewport::operator==(*other);
+}
+
+bool RtVideo_Viewport_NotEqual(const Viewport* self, const Viewport* other) {
+    return self->Video::Viewport::operator!=(*other);
 }
 
 // ============================================================================
@@ -813,6 +976,19 @@ int RtVideoContextRegister() {
     // BATCH 8: SetBones — a plain public export, no vtable slot to verify.
     RegisterRuntimeExport("?SetBones@Context@Video@@QEAAXHPEBVMatrix@Math@@@Z", (void*)&RtVideo_Context_SetBones); ++count;
     RegisterRuntimeAddr(0x18001a780, (void*)&RtVideo_Context_SetBones);
+
+    // ENDGAME B.3.5 block D1 — `Video::Viewport`'s two comparison operators.
+    // NEW ROWS. Both names were read out of the shipped export directory and
+    // both bodies out of the shipped bytes this pass (0x180018240 / 0x180018270);
+    // neither had a port before, and neither address appeared anywhere in the
+    // tree (grepped across code/, engine/, runtime/, standalone/, dx11/ before
+    // the rows were written). The other three `Video::Viewport` exports — the two
+    // constructors 0x180018210 / 0x180018220 and `??4` 0x1800181f0 — stay
+    // unported DOORS for the triviality reason in Context.h's banner.
+    RegisterRuntimeExport("??8Viewport@Video@@QEBA_NAEBV01@@Z", (void*)&RtVideo_Viewport_Equal); ++count;
+    RegisterRuntimeAddr(0x180018240, (void*)&RtVideo_Viewport_Equal);
+    RegisterRuntimeExport("??9Viewport@Video@@QEBA_NAEBV01@@Z", (void*)&RtVideo_Viewport_NotEqual); ++count;
+    RegisterRuntimeAddr(0x180018270, (void*)&RtVideo_Viewport_NotEqual);
 
     return count;
 }

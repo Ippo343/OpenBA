@@ -158,3 +158,21 @@ UNIT_TREE_SRCS +=
 # runtime/types/object/External.h, whose linkable half (external_class.cpp) is
 # already on this list.
 UNIT_TREE_SRCS +=
+
+# ENDGAME B.3.5 block D1 — the Video::Context / Viewport / ConstantBuffer ABI
+# proof (tests/unit/video_context_abi_test.cpp). NO tree sources link, and the
+# reason is specific rather than the usual one: all three classes are
+# NON-polymorphic, so there is no slot table to drive, and every ported member
+# is a registered door in `runtime/src/video/context*.cpp`,
+# `constant_buffer.cpp` or `batchc_context_setlight.cpp`. Those translation
+# units stand on the port registry, the address registry and — for the nine
+# backend forwarders — a live `Video::ContextData` vtable owned by dx11, so
+# none of them can link into a host test. What the test checks instead is what
+# breaking would be SILENT: the 0x2168 layout at the raw offsets four other
+# files hard-code, the 0x48 ConstantBuffer stride against the seven embedded
+# instances that are its only evidence, RULE B5-4's trivial copyability, and
+# the `reinterpret_cast`-onto-MemAlloc'd-bytes round trip every door performs.
+# `Video::Viewport`'s two comparison operators are checked on a mirror declared
+# in the test, the same posture io_vtable_abi_test.cpp takes with
+# `TestReaderWriter`.
+UNIT_TREE_SRCS +=
