@@ -56,7 +56,6 @@ typedef void  (*fn_003110_t)(int64_t* tree, int key, void* ibp);                
 typedef void  (*fn_8d50_t)(int64_t map, void* retIBP, int cell);                 // RemovalTool_helper_8d50
 typedef void* (*fn_c3720_t)(void* mem, void* desc);                              // ComponentEntity_CopyCtor
 typedef void  (*fn_0223c0_t)(int64_t entity, void* retIBP);                      // FUN_1400223c0
-typedef int   (*fn_RandTol_t)(void* random, int n);                             // Random::RandTol
 typedef void  (*fn_9760_t)(int64_t comp, int cell, float amount);              // CreateRawMaterial_helper_9760
 typedef void  (*fn_022480_t)(int64_t target, void* ibp);                        // FUN_140022480
 typedef void  (*fn_88ef0_t)(int64_t mgr, void* retIBP, char flag, int64_t desc, int amount); // CreateRawMaterial_helper_8ef0
@@ -69,7 +68,6 @@ fn_003110_t  s_fn_003110  = nullptr;
 fn_8d50_t    s_fn_8d50    = nullptr;
 fn_c3720_t   s_fn_c3720   = nullptr;
 fn_0223c0_t  s_fn_0223c0  = nullptr;
-fn_RandTol_t s_fn_RandTol = nullptr;
 fn_9760_t    s_fn_9760    = nullptr;
 fn_022480_t  s_fn_022480  = nullptr;
 fn_88ef0_t   s_fn_88ef0   = nullptr;
@@ -79,9 +77,7 @@ fn_044810_t  s_fn_044810  = nullptr;
 
 // 0x140126540 closure sub-helpers.
 typedef float* (*fn_f3e0_t)(int* mapGrid, float* outA, float* inCell, char flag, void* extra); // CharacterComponent_impl_f3e0
-typedef float  (*fn_RandFloatTol_t)(void* random);                              // Random::RandFloatTol
 fn_f3e0_t        s_fn_f3e0        = nullptr;
-fn_RandFloatTol_t s_fn_RandFloatTol = nullptr;
 
 // 0x140126440 closure sub-helpers.
 typedef void (*fn_50f0_t)(int64_t comp, uint32_t animIdx, float a, float b, float c); // AnimalComponent_helper_50f0
@@ -145,9 +141,6 @@ void EnsureResolved() {
     s_fn_f3e0    = R<fn_f3e0_t>(0x14009f3e0);
     s_fn_50f0    = R<fn_50f0_t>(0x1401250f0);
 
-    // Random::RandTol / RandFloatTol via .rdata slots used by these helpers.
-    s_fn_RandTol      = reinterpret_cast<fn_RandTol_t>(RSlot(0x1401512f0));
-    s_fn_RandFloatTol = reinterpret_cast<fn_RandFloatTol_t>(RSlot(0x140151400));
     s_fn_Vec4         = reinterpret_cast<fn_Vec4_t>(RSlot(0x140152958));
     s_fn_Time         = reinterpret_cast<fn_Time_t>(RSlot(0x140152b00));
     s_fn_SetMesh      = reinterpret_cast<fn_SetMesh_t>(RSlot(0x140151498));
@@ -280,11 +273,8 @@ void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress) {
     }
 
     int64_t desc = *reinterpret_cast<int64_t*>(s + 0x38);
-    float rf = 0.0f;
-    if (fn_Random_RandFloat) {
-        void* rng = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8);
-        rf = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
-    }
+    void* rng = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8);
+    float rf = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
     float timeScale = s_p_DAT_140172234 ? *s_p_DAT_140172234 : 1.0f;
     uint8_t timeObj[8] = {0};
     if (s_fn_Time) s_fn_Time(timeObj, rf * static_cast<float>(*reinterpret_cast<int*>(desc + 0x50)) * timeScale);
@@ -424,13 +414,13 @@ uint64_t ActCNR_SetupModelAtCell_126540(int64_t self, int cellIndex) {
     float outPos[3] = { 0.0f, 0.0f, 0.0f };
     if (s_fn_f3e0) s_fn_f3e0(mapGrid, outPos, inCell, '\0', nullptr);
 
-    float r1 = s_fn_RandFloatTol ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
-    float r2 = s_fn_RandFloatTol ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
+    float r1 = reinterpret_cast<System::Random*>(rng)->RandFloatTol();   // B.3.4b bridge
+    float r2 = reinterpret_cast<System::Random*>(rng)->RandFloatTol();   // B.3.4b bridge
     float worldX = r1 * jitter + outPos[1];
     float worldY = r2 * jitter + outPos[0];
     float worldZ = outPos[2] + 0.0f;
     float yawScale = s_p_DAT_140172220 ? *s_p_DAT_140172220 : 1.0f;
-    float yaw = (s_fn_RandFloatTol ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f) * yawScale;   // B.3.4b bridge
+    float yaw = reinterpret_cast<System::Random*>(rng)->RandFloatTol() * yawScale;   // B.3.4b bridge
 
     int64_t posIBP = 0;
     int64_t modelIBP = 0;
@@ -556,7 +546,7 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
     int64_t rawMatIBP = 0;
     if (s_fn_0223c0) s_fn_0223c0(newIBP, &rawMatIBP);
     void* rng = *reinterpret_cast<void**>(gameWorld + 0xd8);
-    int rt = s_fn_RandTol ? reinterpret_cast<System::Random*>(rng)->RandTol(2) : 0;   // B.3.4b bridge
+    int rt = reinterpret_cast<System::Random*>(rng)->RandTol(2);   // B.3.4b bridge
     // DAT_140172204 = 90.0f (rotation scale). It resolves NULL in standalone (raw .rdata
     // constant) — use the real value, not 0 (see reference_standalone_rdata_null_fallback).
     float amtScale = s_p_DAT_140172204 ? *s_p_DAT_140172204 : 90.0f;

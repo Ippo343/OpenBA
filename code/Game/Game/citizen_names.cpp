@@ -41,7 +41,7 @@
 
 // System::Random::Rand(int min, int max)  (Runtime 0x1800c7d70) returns
 //   min + Rand() % ((max - min) + 1)   -- inclusive [min, max].
-// Built from the (self, N) overload we already resolve (fn_Random_Rand = Rand()%N).
+// Built from the (self, N) overload, which is Rand() % N.
 static inline int RandRange(void* rng, int lo, int hi) {
     if (hi < lo) return lo;
     return lo + (int)reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)(hi - lo + 1));   // B.3.4b bridge
@@ -209,7 +209,7 @@ static uintptr_t LoadNameDb(const char* path) {
 // caller owns). Returns true if a name of length >= minLen was produced. Faithful
 // minLen=3 / maxLen=10 (retail FUN_1400a4c60 passes 3, 10).
 extern "C" bool GenerateCitizenName(void* rng, bool female, char* out, int cap) {
-    if (!out || cap < 0x100 || !rng || !fn_Random_Rand) return false;
+    if (!out || cap < 0x100 || !rng) return false;
     uintptr_t db = LoadNameDb(female ? "Game/Names/Female.ndb" : "Game/Names/Male.ndb");
     if (!db) { out[0] = 0; return false; }
     GenerateName(db, rng, 3, 10, out);
@@ -233,7 +233,7 @@ extern "C" void* NameDB_GenerateName(void* retStr, void* db, void* rng,
                                      int minLen, int maxLen) {
     char buf[0x100];
     buf[0] = 0;
-    if (db && rng && fn_Random_Rand)
+    if (db && rng)
         GenerateName((uintptr_t)db, rng, minLen, maxLen, buf);
     // Retail constructs the result String in the caller's return slot.
     new (retStr) System::String(buf);
@@ -257,7 +257,7 @@ extern "C" void* NameDB_PickAndGenerate(void* retStr, void* rng, char female) {
     char buf[0x100];
     buf[0] = 0;
     uintptr_t db = LoadNameDb(female ? "Game/Names/Female.ndb" : "Game/Names/Male.ndb");
-    if (db && rng && fn_Random_Rand)
+    if (db && rng)
         GenerateName(db, rng, 3, 10, buf);
     new (retStr) System::String(buf);
     return retStr;

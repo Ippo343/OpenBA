@@ -163,7 +163,7 @@ bool FishingWork_ResolveFuncs() {
               fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom && fn_MemFreeStatic && fn_MemAlloc &&
               fn_Map_CheckPassable && fn_Work_CanStartWork &&
-              fn_CitizenAI_LongTermPlan && fn_Random_RandTol &&
+              fn_CitizenAI_LongTermPlan &&
               g_pGameWorldSingleton && g_pMemAllocSingleton && g_fUVScale;
 
 #ifdef _DEBUG

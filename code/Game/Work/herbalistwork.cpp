@@ -52,7 +52,6 @@ typedef void  (*HW_CitizenAI_RegisterWork_t)(void* citizenAISub, void* entityIBP
 typedef void  (*HW_CitizenAI_LongTermPlan_t)(void* citizenEntity);
 typedef void* (*HW_FindComp_Storage_t)(uintptr_t entity, void* outIBP);
 typedef int   (*HW_StorageQueryCount_t)(void* storageComp);
-typedef int   (*HW_Random_RandTol_t)(void* rng, int range);
 
 // Work::Serialize
 typedef void  (*HW_Work_Serialize_t)(void* self, void* stream);
@@ -97,7 +96,6 @@ static HW_CitizenAI_RegisterWork_t     s_fn_CitizenAI_RegisterWork = nullptr;
 static HW_CitizenAI_LongTermPlan_t     s_fn_CitizenAI_LongTermPlan = nullptr;
 static HW_FindComp_Storage_t           s_fn_FindComp_Storage = nullptr;
 static HW_StorageQueryCount_t          s_fn_StorageQueryCount = nullptr;
-static HW_Random_RandTol_t             s_fn_Random_RandTol = nullptr;
 static HW_Work_Serialize_t             s_fn_Work_Serialize = nullptr;
 static HW_BST_Serialize_t              s_fn_BST_Serialize = nullptr;
 static HW_ValidateEntity_t             s_fn_ValidateEntity = nullptr;
@@ -198,10 +196,6 @@ bool HerbalistWork_ResolveFuncs() {
     s_fn_TreeNodeCleanup = reinterpret_cast<HW_TreeNodeCleanup_t>(
         ResolveAddr(Module::Exe, 0x140014c30));
 
-    // Dispatch slots (indirect through .rdata)
-    uintptr_t iatRandTol = ResolveAddr(Module::Exe, 0x1401512f0);
-    if (iatRandTol)
-        s_fn_Random_RandTol = *reinterpret_cast<HW_Random_RandTol_t*>(iatRandTol);
     // CheckPtr already from engine_funcs.h (no local copy needed)
 
     // Static MemAlloc/MemFree. These previously read exe dispatch slots 0x140151460 /
@@ -247,7 +241,7 @@ bool HerbalistWork_ResolveFuncs() {
               s_fn_GetTerrainPos && s_fn_PerformWork_Ctor3 &&
               s_fn_PlayAnimation_Ctor && s_fn_CitizenAI_RegisterWork &&
               s_fn_CitizenAI_LongTermPlan && s_fn_FindComp_Storage &&
-              s_fn_StorageQueryCount && s_fn_Random_RandTol &&
+              s_fn_StorageQueryCount &&
               s_fn_Work_Serialize &&
               s_fn_ValidateEntity && s_fn_BSTRemove &&
               s_fn_BSTFindRemove && s_fn_CancelAllWork &&
@@ -281,7 +275,6 @@ bool HerbalistWork_ResolveFuncs() {
         if (!s_fn_CitizenAI_LongTermPlan) printf("  MISSING: CitizenAI_LongTermPlan\n");
         if (!s_fn_FindComp_Storage) printf("  MISSING: FindComp_Storage\n");
         if (!s_fn_StorageQueryCount) printf("  MISSING: StorageQueryCount\n");
-        if (!s_fn_Random_RandTol) printf("  MISSING: Random_RandTol\n");
         if (!s_fn_Work_Serialize) printf("  MISSING: Work_Serialize\n");
         if (!s_fn_ValidateEntity) printf("  MISSING: ValidateEntity\n");
         if (!s_fn_BSTRemove) printf("  MISSING: BSTRemove\n");

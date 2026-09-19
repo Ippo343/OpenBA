@@ -61,9 +61,6 @@ static void (*s_fn_NR_SetVariant)(int64_t* comp, uint16_t variant, int16_t subVa
 // FUN_1400c48a0 -- register entity with entity list
 static void (*s_fn_RegisterEntity)(void** entityList, void* entityIBP, int typeGroup) = nullptr;
 
-// System::Random::Rand -- via IAT at 0x1401512e8
-static uint32_t (*s_fn_Random_Rand)(void* random, uint32_t range) = nullptr;
-
 // TypeId for ComponentEntity validation (0x1401c5d70)
 static uint32_t* s_typeId_ComponentEntity = nullptr;
 
@@ -111,10 +108,6 @@ bool CreateNaturalResource_ResolveFuncs() {
     s_fn_RegisterEntity = reinterpret_cast<void(*)(void**, void*, int)>(
         ResolveAddr(Module::Exe, 0x1400c48a0));
 
-    // System::Random::Rand via IAT at 0x1401512e8
-    uintptr_t iatRand = ResolveAddr(Module::Exe, 0x1401512e8);
-    if (iatRand) s_fn_Random_Rand = *reinterpret_cast<uint32_t(**)(void*, uint32_t)>(iatRand);
-
     s_typeId_ComponentEntity = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c5d70));
 
@@ -124,7 +117,7 @@ bool CreateNaturalResource_ResolveFuncs() {
               s_fn_SetGrowthProgress && s_fn_FindComponent_NR &&
               s_fn_NR_GetVariantCount && s_fn_NR_GetSubVariantCount &&
               s_fn_NR_SetVariant && s_fn_RegisterEntity &&
-              s_fn_Random_Rand && s_typeId_ComponentEntity &&
+              s_typeId_ComponentEntity &&
               fn_ObjectInternal_Dtor && fn_InternalBasePtr_DeletePtr &&
               fn_MemFreeStatic &&
               fn_InternalBasePtr_Ctor && fn_IsDerivedFrom &&
@@ -140,8 +133,8 @@ bool CreateNaturalResource_ResolveFuncs() {
     printf("[CreateNaturalResource]   FindNR=%p NRVarCount=%p NRSubVar=%p NRSetVar=%p\n",
            (void*)s_fn_FindComponent_NR, (void*)s_fn_NR_GetVariantCount,
            (void*)s_fn_NR_GetSubVariantCount, (void*)s_fn_NR_SetVariant);
-    printf("[CreateNaturalResource]   Register=%p Rand=%p TypeId=%p\n",
-           (void*)s_fn_RegisterEntity, (void*)s_fn_Random_Rand,
+    printf("[CreateNaturalResource]   Register=%p TypeId=%p\n",
+           (void*)s_fn_RegisterEntity,
            (void*)s_typeId_ComponentEntity);
     if (!ok) printf("[CreateNaturalResource] ERROR: some function pointers not resolved!\n");
 #endif

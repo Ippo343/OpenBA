@@ -629,8 +629,8 @@ static int SeedAgriPool(uint8_t* sc, uint8_t* townMgr, void* rng,
     if (!pool || size <= 0 || count <= 0) return 0;
     int added = 0;
     for (int i = 0; i < count; ++i) {
-        uint32_t idx = (rng && fn_Random_Rand) ? reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)size)   // B.3.4b bridge
-                                               : (uint32_t)(i % size);
+        uint32_t idx = rng ? reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)size)   // B.3.4b bridge
+                           : (uint32_t)(i % size);
         uint8_t* entry = pool + (size_t)idx * POOLENTRY_STRIDE;
         void* tmpl = StartTown_ResolveTemplate(entry);
         if (!tmpl) continue;
@@ -1745,7 +1745,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                     int variantIdx = 0;
                     void* rng = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
                               ? *(void**)((uint8_t*)*g_pGameWorldSingleton + 0xd8) : nullptr;
-                    if (rng && fn_Random_Rand && groupCount > 1)
+                    if (rng && groupCount > 1)
                         variantIdx = (int)reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(groupCount));   // B.3.4b bridge
                     int subCount = *(int32_t*)((uint8_t*)groupArray + (int64_t)variantIdx * 0x18 + 0x10);
                     // Retail passes construction frame 0 here (XOR R8D,R8D at 0x1400a2677,
@@ -4412,7 +4412,7 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
 
         // Children: Rand(0.._maxChildCount) — alternating gender, child scale (0.66).
         int kids = 0;
-        if (rng && fn_Random_Rand && maxChildren >= 0)
+        if (rng && maxChildren >= 0)
             kids = (int)reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(maxChildren + 1));   // B.3.4b bridge
         for (int c = 0; c < kids; ++c) {
             uint8_t* kid = nullptr;
@@ -4937,7 +4937,7 @@ static void StartTown_GrowthInitResource(void* entity, uint32_t tidGrowth, void*
     // Sibling links populated only when GrowthComponent::Startup ran (LIVE build).
     if (!*(void**)(s + 0x28) || !*(void**)(s + 0x30) || !*(void**)(s + 0x38))
         return;   // inert → faithful no-op (matches the rest of the inert spawn path)
-    const float progress = (rng && fn_Random_RandFloat) ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 0.0f;   // B.3.4b bridge
+    const float progress = rng ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 0.0f;   // B.3.4b bridge
     ActCNR_SetGrowthProgress_120db0((int64_t)gIBP, progress);
 }
 
@@ -4999,7 +4999,7 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
     if (!fn_EntityFactory_CreateEntity || !fn_EntityList_RegisterEntity ||
         !fn_InternalBasePtr_Ctor || !fn_MemAlloc ||
         !fn_PerlinNoise_Ctor || !fn_PerlinNoise_Generate ||
-        !fn_Random_RandTol || !fn_Random_RandFloat || !fn_MapGetTerrainPos) {
+        !fn_MapGetTerrainPos) {
         fprintf(stderr, "[startTown::res] primitives unwired — skip\n"); fflush(stderr);
         return 0;
     }
@@ -5111,7 +5111,7 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
         uint8_t perlin[0x100] = {};
         fn_PerlinNoise_Ctor(perlin, persist, octaves, s2, s1);
 
-        const bool doVariant = hasVariants && modelDesc && variantCount > 0 && fn_Random_Rand;
+        const bool doVariant = hasVariants && modelDesc && variantCount > 0;
         fprintf(stderr, "[startTown::res] [%d] variants:has=%d count=%d thr=%.3f denom=%d "
                 "(scatter div=%.2f thr=%.3f dens=%.3f)\n",
                 e, (int)hasVariants, variantCount, vThresh, vOverrideDenom, div, threshold, density);

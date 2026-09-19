@@ -89,16 +89,10 @@ static constexpr uint32_t kSignMask   = 0x80000000u;// 0x1401722c0  (float-negat
 //   Math::Vector2::LengthSquared() const -> float
 //   Math::Vector2::Normalize()     -> Vector2& (returns self ptr; normalizes in place)
 // ============================================================
-typedef float    (*fn_RandFloatTol_t)(void* self);
-typedef uint32_t (*fn_Rand1_t)(void* self, int maxVal);
-typedef int      (*fn_Rand2_t)(void* self, int minVal, int maxVal);
 typedef float    (*fn_Vec2Length_t)(void* self);
 typedef float    (*fn_Vec2LengthSq_t)(void* self);
 typedef void*    (*fn_Vec2Normalize_t)(void* self);
 
-static fn_RandFloatTol_t  s_RandFloatTol  = nullptr;
-static fn_Rand1_t         s_Rand1         = nullptr;
-static fn_Rand2_t         s_Rand2         = nullptr;
 static fn_Vec2Length_t    s_Vec2Length    = nullptr;
 static fn_Vec2LengthSq_t  s_Vec2LengthSq  = nullptr;
 static fn_Vec2Normalize_t s_Vec2Normalize = nullptr;
@@ -132,15 +126,11 @@ static void* coast_vec2norm_real(void* self) {
 static void coastline_EnsureInit() {
     if (s_coastResolved) return;
     s_coastResolved = true;
-    s_RandFloatTol  = (fn_RandFloatTol_t)  ResolveExport("?RandFloatTol@Random@System@@QEAAMXZ");
-    s_Rand1         = (fn_Rand1_t)         ResolveExport("?Rand@Random@System@@QEAAII@Z");   // uint Rand(uint) — was wrong (HH=int/int -> null)
-    s_Rand2         = (fn_Rand2_t)         ResolveExport("?Rand@Random@System@@QEAAHHH@Z");
     s_Vec2Length    = &coast_vec2len_real;
     s_Vec2LengthSq  = &coast_vec2lensq_real;
     s_Vec2Normalize = &coast_vec2norm_real;
-    fprintf(stderr, "[worldgen] coastline resolves: RandFloatTol=%p Rand1=%p Rand2=%p "
+    fprintf(stderr, "[worldgen] coastline resolves: "
             "Vec2Norm=%p Vec2Len=%p Vec2LenSq=%p\n",
-            (void*)s_RandFloatTol, (void*)s_Rand1, (void*)s_Rand2,
             (void*)s_Vec2Normalize, (void*)s_Vec2Length, (void*)s_Vec2LengthSq);
     fflush(stderr);
 }
@@ -377,7 +367,7 @@ static void coastline_Subdivide_cc510(void* self, void** arrPtr, int lo, int hi,
         bool innerOK = false;
         float eHi[2], eLo[2];
         while (!innerOK) {
-            float t = (s_RandFloatTol ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f) * limB * kMidAmp_0_666;   // B.3.4b bridge
+            float t = reinterpret_cast<System::Random*>(rng)->RandFloatTol() * limB * kMidAmp_0_666;   // B.3.4b bridge
             candX = nX * t + midX;
             candY = nY * t + midY;
 
@@ -464,7 +454,7 @@ static int coastline_TryPlacePath_cc850(void* self, int nPts, float span,
         int lastIdx = cand._size - 1;
         float* pLast = (float*)(base + (size_t)lastIdx * PATHPT_STRIDE);
 
-        uint32_t which = s_Rand1 ? reinterpret_cast<System::Random*>(rng)->Rand(3) : 0;   // B.3.4b bridge
+        uint32_t which = reinterpret_cast<System::Random*>(rng)->Rand(3);   // B.3.4b bridge
         float spanHalf = span * kHalf;
         // Disasm cases (CONCAT44 packing):
         //  case 0: local_f8 = (ull)(uint)(span*0.5) << 0x20  -> x=0, y=span*0.5
@@ -486,8 +476,8 @@ static int coastline_TryPlacePath_cc850(void* self, int nPts, float span,
         // midpoint: random jitter, both lanes RandFloatTol * span * 0.125.
         // disasm: CONCAT44(jx, jy) -> low dword=jy (x lane), high dword=jx (y lane).
         midIdx = cand._size >> 1;
-        float jx = (s_RandFloatTol ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f) * span * kJitter_0_125;   // B.3.4b bridge
-        float jy = (s_RandFloatTol ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f) * span * kJitter_0_125;   // B.3.4b bridge
+        float jx = reinterpret_cast<System::Random*>(rng)->RandFloatTol() * span * kJitter_0_125;   // B.3.4b bridge
+        float jy = reinterpret_cast<System::Random*>(rng)->RandFloatTol() * span * kJitter_0_125;   // B.3.4b bridge
         float* pMid = (float*)(base + (size_t)midIdx * PATHPT_STRIDE);
         pMid[0] = jy;
         pMid[1] = jx;
@@ -501,14 +491,14 @@ static int coastline_TryPlacePath_cc850(void* self, int nPts, float span,
         int bi = (int)branchSel;
         int srcCount = *(int*)(outerData + (size_t)bi * 16 + 8);
         int q = (srcCount + ((srcCount >> 31) & 3)) >> 2;
-        int pick = s_Rand2 ? reinterpret_cast<System::Random*>(rng)->Rand(q, q * 3) : q;   // B.3.4b bridge
+        int pick = reinterpret_cast<System::Random*>(rng)->Rand(q, q * 3);   // B.3.4b bridge
         uint8_t* srcVec = *(uint8_t**)(outerData + (size_t)bi * 16);
         __builtin_memcpy((uint8_t*)cand._data, srcVec + (size_t)pick * PATHPT_STRIDE, 8); // point[0] = src[pick].xy
 
-        float rf = (s_RandFloatTol ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f) * span * kHalf;   // B.3.4b bridge
+        float rf = reinterpret_cast<System::Random*>(rng)->RandFloatTol() * span * kHalf;   // B.3.4b bridge
         int lastIdx = cand._size - 1;
         float* pLast = (float*)((uint8_t*)cand._data + (size_t)lastIdx * PATHPT_STRIDE);
-        uint32_t which = s_Rand1 ? reinterpret_cast<System::Random*>(rng)->Rand(4) : 0;   // B.3.4b bridge
+        uint32_t which = reinterpret_cast<System::Random*>(rng)->Rand(4);   // B.3.4b bridge
         // Retail CONCAT44 packing (verified 0x1400cc850, param_9>=0 block):
         //  which0: (x=rf,        y=span*0.5)   which1: (x=span*0.5,  y=rf)
         //  which2: (x=span*-0.5, y=rf)         which3: (x=rf,        y=span*-0.5)
@@ -656,9 +646,9 @@ extern "C" void wg_f390_coastline(void* hf) {
     uint8_t* h = (uint8_t*)hf;
     int gridSize = *(int*)(h + HF_GRIDSIZE);
 
-    // Guard: without RNG resolves the rejection sampler can't make progress;
+    // Guard: without the allocator the rejection sampler can't make progress;
     // bail rather than spin forever.
-    if (!s_RandFloatTol || !s_Rand1 || !fn_MemAlloc || !g_pMemAllocSingleton) return;
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return;
 
     // branchSel = -NAN in the original (negative-as-int). Use -1.0f:
     // (int)(-1.0f) = -1 < 0 selects the closed-ring branch.

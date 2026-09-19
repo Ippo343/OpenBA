@@ -38,12 +38,9 @@ namespace {
 // Runtime-DLL functions (resolved by mangled name; import strings verified in the exe .rdata).
 typedef void* (*fn_ThreadCtor_t)(void* self, unsigned int stackSize);   // ??0Thread@System@@QEAA@I@Z
 typedef void* (*fn_CSCtor_t)(void* self);                               // ??0CriticalSection@System@@QEAA@XZ
-typedef void  (*fn_CS_t)(void* cs);                                     // ?Lock/Unlock@CriticalSection@System@@QEAAXXZ
 typedef void  (*pf_fn_MemFree_t)(void* ptr);                            // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z
 static fn_ThreadCtor_t s_fn_ThreadCtor = nullptr;
 static fn_CSCtor_t     s_fn_CSCtor     = nullptr;
-static fn_CS_t         s_fn_CSLock     = nullptr;
-static fn_CS_t         s_fn_CSUnlock   = nullptr;
 static pf_fn_MemFree_t s_fn_MemFree    = nullptr;
 
 // --- Pathfinder System::Thread vtable (2 slots) ------------------------------------------
@@ -71,7 +68,7 @@ static void Pf_WorkerLoop_a6360(void* selfV) {
     int64_t  self = reinterpret_cast<int64_t>(selfV);
     int count = *reinterpret_cast<int*>(p + 0x70);
     while (count > 0) {
-        if (s_fn_CSLock) reinterpret_cast<System::CriticalSection*>(p + 0x30)->Lock();   // B.3.4b bridge
+        reinterpret_cast<System::CriticalSection*>(p + 0x30)->Lock();   // B.3.4b bridge
         uint64_t* node  = *reinterpret_cast<uint64_t**>(p + 0x68);    // head
         uint64_t  cmdLo = node[0];                                    // cmd {type, arg1}
         uint64_t  cmdHi = node[1];                                    // cmd {arg2, arg3}
@@ -85,7 +82,7 @@ static void Pf_WorkerLoop_a6360(void* selfV) {
         *reinterpret_cast<int*>(p + 0x70) = *reinterpret_cast<int*>(p + 0x70) - 1;
         if (s_fn_MemFree) s_fn_MemFree(node);
         uint64_t cmd[2] = { cmdLo, cmdHi };
-        if (s_fn_CSUnlock) reinterpret_cast<System::CriticalSection*>(p + 0x30)->Unlock();   // B.3.4b bridge
+        reinterpret_cast<System::CriticalSection*>(p + 0x30)->Unlock();   // B.3.4b bridge
         Pf_WorkerApplyCmd_a6430(self, reinterpret_cast<uint32_t*>(cmd), nullptr, nullptr);
         count = *reinterpret_cast<int*>(p + 0x70);
     }
@@ -131,8 +128,6 @@ extern "C" void Pathfinder_Seed(void* gameObjV, int dim) {
     if (!s_fn_ThreadCtor) {
         s_fn_ThreadCtor = reinterpret_cast<fn_ThreadCtor_t>(ResolveExport("??0Thread@System@@QEAA@I@Z"));
         s_fn_CSCtor     = reinterpret_cast<fn_CSCtor_t>(ResolveExport("??0CriticalSection@System@@QEAA@XZ"));
-        s_fn_CSLock     = reinterpret_cast<fn_CS_t>(ResolveExport("?Lock@CriticalSection@System@@QEAAXXZ"));
-        s_fn_CSUnlock   = reinterpret_cast<fn_CS_t>(ResolveExport("?Unlock@CriticalSection@System@@QEAAXXZ"));
         s_fn_MemFree    = reinterpret_cast<pf_fn_MemFree_t>(ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
     }
     if (!s_fn_ThreadCtor || !s_fn_CSCtor) {
@@ -192,8 +187,8 @@ extern "C" void Pathfinder_Seed(void* gameObjV, int dim) {
 
     // Priming is complete. Flip to ASYNC so runtime path queries (cmd 5 via a6c10) queue and
     // wake the worker thread instead of running the A* inline on the main thread. Requires the
-    // worker's CS Lock/Unlock + MemFree to be resolved; otherwise stay sync (safe fallback).
-    bool async = s_fn_CSLock && s_fn_CSUnlock && s_fn_MemFree;
+    // worker's MemFree to be resolved; otherwise stay sync (safe fallback).
+    bool async = s_fn_MemFree != nullptr;
     if (async) p[0x5c] = 0;
 
     fprintf(stderr, "[PfSeed] pathfinder seeded @ game+0x68 = %p (dim=%d, cells=%d, %s mode)\n",

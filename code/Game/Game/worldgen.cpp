@@ -183,9 +183,9 @@ static void wg_EnsureInit() {
     if (s_wgResolved) return;
     s_wgResolved = true;
     s_fn_Random_Seeded_Ctor = (fn_Random_Seeded_Ctor_t)ResolveExport("??0Random@System@@QEAA@I@Z");
-    fprintf(stderr, "[worldgen] resolves: RandSeed=%p PerlinCtor=%p PerlinGen=%p RandTol=%p\n",
+    fprintf(stderr, "[worldgen] resolves: RandSeed=%p PerlinCtor=%p PerlinGen=%p\n",
             (void*)s_fn_Random_Seeded_Ctor, (void*)fn_PerlinNoise_Ctor,
-            (void*)fn_PerlinNoise_Generate, (void*)fn_Random_RandTol);
+            (void*)fn_PerlinNoise_Generate);
     fflush(stderr);
 }
 
@@ -235,11 +235,11 @@ static void wg_BaseHeightmap_e5d0(int32_t* hf) {
     float* heightmap = *(float**)(p + HF_HEIGHTMAP);
     if (!heightmap) return;
 
-    if (!fn_PerlinNoise_Ctor || !fn_PerlinNoise_Generate || !fn_Random_RandTol) {
+    if (!fn_PerlinNoise_Ctor || !fn_PerlinNoise_Generate) {
         // Without noise we can't generate — leave a flat (zero) heightmap.
-        fprintf(stderr, "[worldgen] e5d0: noise/RNG unresolved (PerlinCtor=%p Gen=%p RandTol=%p) "
+        fprintf(stderr, "[worldgen] e5d0: noise unresolved (PerlinCtor=%p Gen=%p) "
                 "— flat heightmap\n", (void*)fn_PerlinNoise_Ctor,
-                (void*)fn_PerlinNoise_Generate, (void*)fn_Random_RandTol);
+                (void*)fn_PerlinNoise_Generate);
         fflush(stderr);
         return;
     }
@@ -392,11 +392,10 @@ static void* wg_BlendTexture_cf440(int32_t* hf) {
     const float* hm = *(const float**)((uint8_t*)hf + HF_HEIGHTMAP);
     void* rng = (uint8_t*)hf + HF_RANDOM;
     if (dim <= 0 || !hm || !fn_MemAlloc || !g_pMemAllocSingleton ||
-        !fn_PerlinNoise_Ctor || !fn_PerlinNoise_Generate || !fn_Random_RandTol) {
-        fprintf(stderr, "[worldgen] cf440: deps unresolved (hm=%p PerlinCtor=%p Gen=%p "
-                "RandTol=%p) — falling back to flat splat\n", (void*)hm,
-                (void*)fn_PerlinNoise_Ctor, (void*)fn_PerlinNoise_Generate,
-                (void*)fn_Random_RandTol);
+        !fn_PerlinNoise_Ctor || !fn_PerlinNoise_Generate) {
+        fprintf(stderr, "[worldgen] cf440: deps unresolved (hm=%p PerlinCtor=%p Gen=%p) "
+                "— falling back to flat splat\n", (void*)hm,
+                (void*)fn_PerlinNoise_Ctor, (void*)fn_PerlinNoise_Generate);
         fflush(stderr);
         return wg_BlendTexture_cf440_stub(hf);
     }

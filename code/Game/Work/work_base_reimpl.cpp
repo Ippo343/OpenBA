@@ -302,10 +302,8 @@ void WorkBase_Serialize_f7400(void* self, void* stream) {
     else
         reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);   // B.3.4 bridge
     if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 2) {   // B.3.4 bridge
-        if (g_fn_Time_Serialize) {
-            reinterpret_cast<System::Time*>(s + 0x30)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-            reinterpret_cast<System::Time*>(s + 0x38)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-        }
+        reinterpret_cast<System::Time*>(s + 0x30)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+        reinterpret_cast<System::Time*>(s + 0x38)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
         reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x40), nullptr);   // B.3.4 bridge
     }
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge

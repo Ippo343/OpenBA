@@ -24,9 +24,6 @@
 // (NOT in engine_funcs.h -- PlayAnimation-specific helpers)
 // ============================================================
 
-// System::Time::Serialize(this, Serializer&)
-static void (*s_fn_Time_Serialize)(void* time, void* serializer) = nullptr;
-
 // Entity_FindComponent_Family (0x1400012d0)
 static void (*s_fn_FindFamily)(void* entity, void* outIBP) = nullptr;
 
@@ -55,19 +52,16 @@ bool PlayAnimation_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x1400012d0));
     s_fn_SetAnimation = reinterpret_cast<void(*)(void*, uint32_t, float, float)>(
         ResolveAddr(Module::Exe, 0x14010a1f0));
-    s_fn_Time_Serialize = reinterpret_cast<void(*)(void*, void*)>(
-        ResolveExport("?Serialize@Time@System@@QEAAXAEAVSerializer@IO@@@Z"));
 
     bool ok = s_TypeInfo_ComponentEntity && s_AnimFloat &&
-              s_fn_FindFamily && s_fn_SetAnimation && s_fn_Time_Serialize &&
+              s_fn_FindFamily && s_fn_SetAnimation &&
               fn_IsDerivedFrom;
 
 #ifdef _DEBUG
     printf("[PlayAnimation] ResolveFuncs: FindFamily=%p SetAnim=%p AnimFloat=%p\n",
            (void*)s_fn_FindFamily,
            (void*)s_fn_SetAnimation, (void*)s_AnimFloat);
-    printf("[PlayAnimation]   TimeSer=%p TypeInfo=%p\n",
-           (void*)s_fn_Time_Serialize,
+    printf("[PlayAnimation]   TypeInfo=%p\n",
            (void*)s_TypeInfo_ComponentEntity);
     if (!ok) printf("[PlayAnimation] ERROR: some function pointers not resolved!\n");
 #endif

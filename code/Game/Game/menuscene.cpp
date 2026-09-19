@@ -512,20 +512,18 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
         // ?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x18001d360
         reinterpret_cast<Math::Vector4*>(
             reinterpret_cast<uint8_t*>(self) + 0x1B4)->Serialize(outer_ser);
-        if (fn_System_Color_Serialize) {
-            reinterpret_cast<System::Color*>(&self->ambientColor)->Serialize(*reinterpret_cast<IO::Serializer*>(outer_ser));   // B.3.4b bridge
-            reinterpret_cast<System::Color*>(&self->sunColor)->Serialize(*reinterpret_cast<IO::Serializer*>(outer_ser));   // B.3.4b bridge
-            reinterpret_cast<System::Color*>(&self->skyColor)->Serialize(*reinterpret_cast<IO::Serializer*>(outer_ser));   // B.3.4b bridge
-            // Color::Serialize from Runtime appears to write only the RGB
-            // bytes and leave alpha at zero; Init defaults use 0xFF and the
-            // renderer's uint32→Vector4 conversion treats the alpha byte as
-            // the 4th component (which downstream lighting/fog math may
-            // multiply against). Force opaque alpha so the deserialized
-            // colors land in the same range as the Init defaults.
-            self->ambientColor |= 0xFF000000;
-            self->sunColor     |= 0xFF000000;
-            self->skyColor     |= 0xFF000000;
-        }
+        reinterpret_cast<System::Color*>(&self->ambientColor)->Serialize(*reinterpret_cast<IO::Serializer*>(outer_ser));   // B.3.4b bridge
+        reinterpret_cast<System::Color*>(&self->sunColor)->Serialize(*reinterpret_cast<IO::Serializer*>(outer_ser));   // B.3.4b bridge
+        reinterpret_cast<System::Color*>(&self->skyColor)->Serialize(*reinterpret_cast<IO::Serializer*>(outer_ser));   // B.3.4b bridge
+        // Color::Serialize from Runtime appears to write only the RGB
+        // bytes and leave alpha at zero; Init defaults use 0xFF and the
+        // renderer's uint32→Vector4 conversion treats the alpha byte as
+        // the 4th component (which downstream lighting/fog math may
+        // multiply against). Force opaque alpha so the deserialized
+        // colors land in the same range as the Init defaults.
+        self->ambientColor |= 0xFF000000;
+        self->sunColor     |= 0xFF000000;
+        self->skyColor     |= 0xFF000000;
         reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->fogStart,         nullptr);   // B.3.4 bridge (cast dropped: fogStart is float)
         reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->fogEnd,           nullptr);   // B.3.4 bridge (cast dropped: fogEnd is float)
         reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->fogDensity,       nullptr);   // B.3.4 bridge (cast dropped: fogDensity is float)

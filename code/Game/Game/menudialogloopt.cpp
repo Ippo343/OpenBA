@@ -657,7 +657,7 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
     }
 
     // Required factory
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton || !fn_Random_Rand || !fn_IsDerivedFrom) {
+    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton || !fn_IsDerivedFrom) {
         printf("[MenuDLT::LoadScene] missing factory/filename helpers — bailing out\n");
         return false;
     }

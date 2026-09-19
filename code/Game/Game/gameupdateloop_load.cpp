@@ -94,8 +94,6 @@ typedef void* (*fn_AnimMgr_Ctor_t)(void* self);
 static fn_AnimMgr_Ctor_t s_fn_AnimMgr_Ctor = nullptr;               // ??0AnimationManager@Graphics@@QEAA@XZ
 typedef void* (*fn_SaveLoad_Ctor_t)(void* self);
 static fn_SaveLoad_Ctor_t s_fn_SaveLoad_Ctor = nullptr;             // ??0SaveLoad@Save@@QEAA@XZ
-typedef uint32_t (*fn_Random_RandFull_t)(void* self);
-static fn_Random_RandFull_t s_fn_Random_RandFull = nullptr;         // ?Rand@Random@System@@QEAAIXZ (no-arg)
 typedef void (*fn_SavedState_Dtor_t)(void* self);
 static fn_SavedState_Dtor_t s_fn_SavedState_Dtor = nullptr;         // ??1SavedState@Save@@QEAA@XZ
 
@@ -335,10 +333,9 @@ static void LoadEnsureInit() {
     s_fn_AnimMgr_Ctor       = (fn_AnimMgr_Ctor_t)ResolveExport("??0AnimationManager@Graphics@@QEAA@XZ");
     s_fn_SaveLoad_Ctor      = (fn_SaveLoad_Ctor_t)ResolveExport("??0SaveLoad@Save@@QEAA@XZ");
     s_fn_SavedState_Dtor    = (fn_SavedState_Dtor_t)ResolveExport("??1SavedState@Save@@QEAA@XZ");
-    s_fn_Random_RandFull    = (fn_Random_RandFull_t)ResolveExport("?Rand@Random@System@@QEAAIXZ");
-    fprintf(stderr, "[GUL::Load] resolves: RandSeed=%p Picking=%p UI=%p Anim=%p SaveLoad=%p RandFull=%p\n",
+    fprintf(stderr, "[GUL::Load] resolves: RandSeed=%p Picking=%p UI=%p Anim=%p SaveLoad=%p\n",
             (void*)s_fn_Random_Seeded_Ctor, (void*)s_fn_Picking_Scene_Ctor, (void*)s_fn_UI_Ctor,
-            (void*)s_fn_AnimMgr_Ctor, (void*)s_fn_SaveLoad_Ctor, (void*)s_fn_Random_RandFull);
+            (void*)s_fn_AnimMgr_Ctor, (void*)s_fn_SaveLoad_Ctor);
     fflush(stderr);
 }
 
@@ -663,11 +660,9 @@ static void* Reimpl_FUN_140093f60(void* selfMem) {
     uint32_t seed1 = 0, seed2 = 0;
     if (fn_Random_Default_Ctor) {
         fn_Random_Default_Ctor(rng1);
-        seed1 = s_fn_Random_RandFull ? reinterpret_cast<System::Random*>(rng1)->Rand()   // B.3.4b bridge
-                : (fn_Random_Rand ? reinterpret_cast<System::Random*>(rng1)->Rand(0xffffffffu) : 0u);   // B.3.4b bridge
+        seed1 = reinterpret_cast<System::Random*>(rng1)->Rand();   // B.3.4b bridge
         fn_Random_Default_Ctor(rng2);
-        seed2 = s_fn_Random_RandFull ? reinterpret_cast<System::Random*>(rng2)->Rand()   // B.3.4b bridge
-                : (fn_Random_Rand ? reinterpret_cast<System::Random*>(rng2)->Rand(0xffffffffu) : 0u);   // B.3.4b bridge
+        seed2 = reinterpret_cast<System::Random*>(rng2)->Rand();   // B.3.4b bridge
     }
     if (fn_PerlinNoise_Ctor)
         fn_PerlinNoise_Ctor((void*)(p + 0x34), 0.25f, 4.0f, (int)seed2, (int)seed1);

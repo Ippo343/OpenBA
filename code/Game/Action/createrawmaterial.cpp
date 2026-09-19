@@ -68,9 +68,6 @@ static void* (*s_fn_GetChildEntities)(int64_t entity, void* retbuf) = nullptr;
 // Member ABI: RCX=entity, RDX=retbuf
 static void* (*s_fn_FindComponent_RD)(int64_t entity, void* retbuf) = nullptr;
 
-// System::Random::RandTol via IAT at 0x1401512f0
-static int (*s_fn_Random_RandTol)(void* random, int range) = nullptr;
-
 // TypeId for entity validation: 0x1401c7158 (used for +0x28 IBP)
 static uint32_t* s_typeId_1401c7158 = nullptr;
 
@@ -127,10 +124,6 @@ bool CreateRawMaterial_ResolveFuncs() {
     // GameColl::AsArray<GameColl::I32> member call, so its resolved-pointer
     // stand-in is gone.
 
-    // System::Random::RandTol via IAT at 0x1401512f0
-    uintptr_t iatRandTol = ResolveAddr(Module::Exe, 0x1401512f0);
-    if (iatRandTol) s_fn_Random_RandTol = *reinterpret_cast<int(**)(void*, int)>(iatRandTol);
-
     s_typeId_1401c7158 = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7158));
     s_typeId_ComponentEntity = reinterpret_cast<uint32_t*>(
@@ -146,7 +139,6 @@ bool CreateRawMaterial_ResolveFuncs() {
               s_fn_FindPlacementCell && s_fn_PositionEntity &&
               s_fn_RegisterRawMaterial && s_fn_RegisterEntity &&
               s_fn_GetChildEntities && s_fn_FindComponent_RD &&
-              s_fn_Random_RandTol &&
               s_typeId_1401c7158 && s_typeId_ComponentEntity &&
               s_typeId_RawMatDesc && s_typeId_1401c7c80 && s_typeId_1401c8118 &&
               fn_ObjectInternal_Dtor && fn_InternalBasePtr_DeletePtr &&
@@ -161,9 +153,8 @@ bool CreateRawMaterial_ResolveFuncs() {
     printf("[CreateRawMaterial]   PosEnt=%p RegRM=%p RegEnt=%p GetChild=%p\n",
            (void*)s_fn_PositionEntity, (void*)s_fn_RegisterRawMaterial,
            (void*)s_fn_RegisterEntity, (void*)s_fn_GetChildEntities);
-    printf("[CreateRawMaterial]   FindRD=%p RandTol=%p\n",
-           (void*)s_fn_FindComponent_RD,
-           (void*)s_fn_Random_RandTol);
+    printf("[CreateRawMaterial]   FindRD=%p\n",
+           (void*)s_fn_FindComponent_RD);
     if (!ok) printf("[CreateRawMaterial] ERROR: some function pointers not resolved!\n");
 #endif
 

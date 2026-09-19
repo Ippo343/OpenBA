@@ -80,7 +80,6 @@ typedef void  (*fn_SerializeRefTable_t)(void* extFactory, void* stream);
 typedef void  (*fn_ResetPersist_t)(void* intFactory, void* stream);
 typedef void  (*fn_ClearPersist_t)(void* intFactory);
 typedef void  (*fn_SaveAllSettings_t)(void* ui);
-typedef void  (*fn_Random_Serialize_t)(void* random, void* serializer);
 typedef void  (*fn_AchMgr_Persist_t)(void* mgr, void* stream);
 typedef void  (*fn_AnimMgr_Serialize_t)(void* animMgr, void* serializer);
 typedef void  (*fn_AudioScene_Serialize_t)(void* scene, void* serializer);
@@ -97,7 +96,6 @@ static fn_SerializeRefTable_t   s_fn_SerializeRefTable = nullptr;
 static fn_ResetPersist_t        s_fn_ResetPersist = nullptr;
 static fn_ClearPersist_t        s_fn_ClearPersist = nullptr;
 static fn_SaveAllSettings_t     s_fn_SaveAllSettings = nullptr;
-static fn_Random_Serialize_t    s_fn_Random_Serialize = nullptr;
 static fn_AchMgr_Persist_t      s_fn_AchMgr_Persist = nullptr;
 static fn_AnimMgr_Serialize_t   s_fn_AnimMgr_Serialize = nullptr;
 static fn_AudioScene_Serialize_t s_fn_AudioScene_Serialize = nullptr;
@@ -159,8 +157,6 @@ void EnsureResolved() {
         ResolveExport("?ClearPersistState@InternalFactory@Object@@QEAAXXZ"));
     s_fn_SaveAllSettings = reinterpret_cast<fn_SaveAllSettings_t>(
         ResolveExport("?SaveAllSettings@UserInterface@UI@@QEAAXXZ"));
-    s_fn_Random_Serialize = reinterpret_cast<fn_Random_Serialize_t>(
-        ResolveExport("?Serialize@Random@System@@QEAAXAEAVSerializer@IO@@@Z"));
     s_fn_AchMgr_Persist = reinterpret_cast<fn_AchMgr_Persist_t>(
         ResolveExport("?Persist@AchievementManager@Achievement@@QEAAXAEAVStream@IO@@@Z"));
     s_fn_AnimMgr_Serialize = reinterpret_cast<fn_AnimMgr_Serialize_t>(
@@ -209,11 +205,11 @@ void EnsureResolved() {
     s_fn_AvlFixup_5920 = reinterpret_cast<fn_AvlFixup_5920_t>(R(0x140025920));
 
     fprintf(stderr, "[GUL::Serialize] resolved: refMode=%p refTable=%p persist=%p/%p "
-            "saveSettings=%p rand=%p achP=%p anim=%p audio=%p cms=%p/%p sst=%p/%p "
+            "saveSettings=%p achP=%p anim=%p audio=%p cms=%p/%p sst=%p/%p "
             "subs: cit=%p grid=%p goals=%p citPost=%p envPtr=%p\n",
             (void*)s_fn_EnableRefMode, (void*)s_fn_SerializeRefTable,
             (void*)s_fn_ResetPersist, (void*)s_fn_ClearPersist,
-            (void*)s_fn_SaveAllSettings, (void*)s_fn_Random_Serialize,
+            (void*)s_fn_SaveAllSettings,
             (void*)s_fn_AchMgr_Persist, (void*)s_fn_AnimMgr_Serialize,
             (void*)s_fn_AudioScene_Serialize, (void*)s_fn_CMS_Ctor,
             (void*)s_fn_CMS_Open, (void*)s_fn_SavedState_Store,

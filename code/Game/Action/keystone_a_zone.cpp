@@ -40,15 +40,9 @@ typedef unsigned int  uint;
 namespace {
 
 // ---- Runtime-DLL exports (resolved by mangled name, exactly as action_pf_astar.cpp).
-typedef void  (*fn_CSLock_t)(void* cs);
-typedef void  (*fn_CSUnlock_t)(void* cs);
-typedef void  (*fn_ThreadStart_t)(void* thread);
 typedef void* (*fn_MemAllocSA_t)(uint64_t size, int align);
 typedef void  (*fn_YieldToThreads_t)(void* app);
 
-static fn_CSLock_t        s_fn_CSLock      = nullptr;
-static fn_CSUnlock_t      s_fn_CSUnlock    = nullptr;
-static fn_ThreadStart_t   s_fn_ThreadStart = nullptr;
 static fn_MemAllocSA_t    s_fn_MemAllocSA  = nullptr;
 static fn_YieldToThreads_t s_fn_Yield      = nullptr;
 
@@ -71,9 +65,6 @@ static fn_CopyPath_t s_fn_CopyPath = nullptr;
 static bool s_init = false;
 static void EnsureFns() {
     if (s_init) return;
-    s_fn_CSLock      = reinterpret_cast<fn_CSLock_t>(ResolveExport("?Lock@CriticalSection@System@@QEAAXXZ"));
-    s_fn_CSUnlock    = reinterpret_cast<fn_CSUnlock_t>(ResolveExport("?Unlock@CriticalSection@System@@QEAAXXZ"));
-    s_fn_ThreadStart = reinterpret_cast<fn_ThreadStart_t>(ResolveExport("?Start@Thread@System@@QEAAXXZ"));
     s_fn_MemAllocSA  = reinterpret_cast<fn_MemAllocSA_t>(ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
     s_fn_Yield       = reinterpret_cast<fn_YieldToThreads_t>(ResolveExport("?YieldToThreads@Application@1@QEAAXXZ"));
 
@@ -87,7 +78,7 @@ static void EnsureFns() {
 
 // ---- Shared enqueue tail: identical to action_pf_astar.cpp's EnqueueNode. ----
 static void EnqueueNode(int64_t self, uint32_t* localCmd) {
-    if (s_fn_CSLock) reinterpret_cast<System::CriticalSection*>(self + 0x30)->Lock();   // B.3.4b bridge
+    reinterpret_cast<System::CriticalSection*>(self + 0x30)->Lock();   // B.3.4b bridge
     uint32_t* node = s_fn_MemAllocSA ? reinterpret_cast<uint32_t*>(s_fn_MemAllocSA(0x20, 8)) : nullptr;
     if (node != nullptr) {
         node[0] = localCmd[0];
@@ -105,9 +96,9 @@ static void EnqueueNode(int64_t self, uint32_t* localCmd) {
     }
     *reinterpret_cast<int*>(self + 0x70) = *reinterpret_cast<int*>(self + 0x70) + 1;
     *reinterpret_cast<uint32_t**>(self + 0x60) = node;
-    if (s_fn_CSUnlock) reinterpret_cast<System::CriticalSection*>(self + 0x30)->Unlock();   // B.3.4b bridge
+    reinterpret_cast<System::CriticalSection*>(self + 0x30)->Unlock();   // B.3.4b bridge
     if ((*reinterpret_cast<uint8_t*>(self + 8) & 1) == 0) {
-        if (s_fn_ThreadStart) reinterpret_cast<System::Thread*>(self)->Start();   // B.3.4b bridge
+        reinterpret_cast<System::Thread*>(self)->Start();   // B.3.4b bridge
     }
 }
 
@@ -166,12 +157,12 @@ int RoadTool_helper_6e30(int64_t param_1, uint param_2, uint64_t param_3,
         }
         // Application::Application::YieldToThreads(*g_pAppSingleton)
         if (s_fn_Yield && g_pAppSingleton) s_fn_Yield(*g_pAppSingleton);
-        if (s_fn_CSLock) reinterpret_cast<System::CriticalSection*>(param_1 + 0x30)->Lock();   // B.3.4b bridge
+        reinterpret_cast<System::CriticalSection*>(param_1 + 0x30)->Lock();   // B.3.4b bridge
         if (*reinterpret_cast<int*>(param_1 + 0x70) > 0 &&
             (*reinterpret_cast<uint8_t*>(param_1 + 8) & 1) == 0) {
-            if (s_fn_ThreadStart) reinterpret_cast<System::Thread*>(param_1)->Start();   // B.3.4b bridge
+            reinterpret_cast<System::Thread*>(param_1)->Start();   // B.3.4b bridge
         }
-        if (s_fn_CSUnlock) reinterpret_cast<System::CriticalSection*>(param_1 + 0x30)->Unlock();   // B.3.4b bridge
+        reinterpret_cast<System::CriticalSection*>(param_1 + 0x30)->Unlock();   // B.3.4b bridge
     } while (true);
 }
 

@@ -131,7 +131,7 @@ static System::String EventLog_YearString(void* gameWorld) {
 static System::String EventLog_SeasonString(void* gameWorld, void* eventLog) {
     void* clock = *(void**)((uintptr_t)gameWorld + 0x128);
     int idx = 0;
-    if (clock && fn_Time_AsSeconds) {
+    if (clock) {
         float secs = reinterpret_cast<const System::Time*>((char*)clock + 8)->AsSeconds();   // B.3.4b bridge
         idx = (int)(secs / 3600.0f * 12.0f);
         if (idx >= 12) idx = 0;

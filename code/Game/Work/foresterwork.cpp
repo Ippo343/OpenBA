@@ -82,7 +82,6 @@ typedef void  (*FW_CitizenAI_RegisterWork_t)(void* citizenAISub, void* entityIBP
 typedef void  (*FW_CitizenAI_LongTermPlan_t)(void* citizenEntity);
 typedef void* (*FW_FindComp_Storage_t)(uintptr_t entity, void* outIBP);
 typedef int   (*FW_StorageQueryCount_t)(void* storageComp);
-typedef int   (*FW_Random_RandTol_t)(void* rng, int range);
 
 static FW_AutoPickup_CheckAssignments_t s_fn_AutoPickup_CheckAssignments = nullptr;
 static FW_FindComp_MatDesc_t            s_fn_FindComp_MatDesc = nullptr;
@@ -108,7 +107,6 @@ static FW_CitizenAI_RegisterWork_t     s_fn_CitizenAI_RegisterWork = nullptr;
 static FW_CitizenAI_LongTermPlan_t     s_fn_CitizenAI_LongTermPlan = nullptr;
 static FW_FindComp_Storage_t           s_fn_FindComp_Storage = nullptr;
 static FW_StorageQueryCount_t          s_fn_StorageQueryCount = nullptr;
-static FW_Random_RandTol_t             s_fn_Random_RandTol = nullptr;
 static FW_Work_Serialize_t            s_fn_Work_Serialize = nullptr;
 static FW_BST_Serialize_t             s_fn_BST_Serialize = nullptr;
 static FW_ValidateEntity_t            s_fn_ValidateEntity = nullptr;
@@ -242,8 +240,8 @@ bool ForesterWork_ResolveFuncs() {
     s_vtable_Work = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x140161a80));
 
-    // MemAlloc / MemFree / RandTol — resolve via the canonical Runtime exports. The exe IAT
-    // dispatch slots these used (0x1401527e8/0x1401527f0/0x1401512f0) are UNREGISTERED in the
+    // MemAlloc / MemFree — resolve via the canonical Runtime exports. The exe IAT
+    // dispatch slots these used (0x1401527e8/0x1401527f0) are UNREGISTERED in the
     // standalone exe (ResolveAddr -> 0, so *slot never ran and these stayed null, failing
     // ResolveFuncs); the MemAlloc/MemFree slot addresses were also wrong (they index the
     // _rng/Lerp imports, not MemoryAllocator). ResolveExport reads the Runtime DLL exports
@@ -252,14 +250,6 @@ bool ForesterWork_ResolveFuncs() {
         ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));     // static (size,align)
     s_fn_MemFreeFunc = reinterpret_cast<FW_MemFreeFunc_t>(
         ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));        // static (ptr)
-    s_fn_Random_RandTol = reinterpret_cast<FW_Random_RandTol_t>(
-        ResolveExport("?RandTol@Random@System@@QEAAHH@Z"));                  // member (this,range)
-    // Keep the IAT-slot read as a fallback in case its slot is populated and the
-    // export lookup is ever unavailable.
-    if (!s_fn_Random_RandTol) {
-        uintptr_t iatRandTol = ResolveAddr(Module::Exe, 0x1401512f0);
-        if (iatRandTol) s_fn_Random_RandTol = *reinterpret_cast<FW_Random_RandTol_t*>(iatRandTol);
-    }
 
     // Type ID pointers
     s_typeId_WorkplaceComponent = reinterpret_cast<uint32_t*>(
@@ -308,7 +298,6 @@ bool ForesterWork_ResolveFuncs() {
               s_fn_PlayAnimation_Ctor && s_fn_PerformWork_Ctor3 &&
               s_fn_CitizenAI_RegisterWork && s_fn_CitizenAI_LongTermPlan &&
               s_fn_FindComp_Storage && s_fn_StorageQueryCount &&
-              s_fn_Random_RandTol &&
               s_fn_Work_Serialize && s_fn_BST_Serialize &&
               s_fn_ValidateEntity && s_fn_MemAlloc && s_fn_MemFreeFunc &&
               s_fn_BSTRemove && s_fn_BSTFindRemove &&
@@ -359,7 +348,6 @@ bool ForesterWork_ResolveFuncs() {
         if (!s_fn_CitizenAI_LongTermPlan) printf("  MISSING: s_fn_CitizenAI_LongTermPlan\n");
         if (!s_fn_FindComp_Storage) printf("  MISSING: s_fn_FindComp_Storage\n");
         if (!s_fn_StorageQueryCount) printf("  MISSING: s_fn_StorageQueryCount\n");
-        if (!s_fn_Random_RandTol) printf("  MISSING: s_fn_Random_RandTol\n");
         if (!s_fn_Work_Serialize) printf("  MISSING: s_fn_Work_Serialize\n");
         if (!s_fn_BST_Serialize) printf("  MISSING: s_fn_BST_Serialize\n");
         if (!s_fn_ValidateEntity) printf("  MISSING: s_fn_ValidateEntity\n");

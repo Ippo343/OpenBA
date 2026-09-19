@@ -18,9 +18,7 @@ extern "C" {
 
 // System::Random::RandFloatTol() — Runtime export; advances RNG state, returns ~[-1,1].
 float fn_Random_RandFloatTol(void* self) {
-    static auto p = reinterpret_cast<float (*)(void*)>(
-        ResolveExport("?RandFloatTol@Random@System@@QEAAMXZ"));
-    return p ? reinterpret_cast<System::Random*>(self)->RandFloatTol() : 0.0f;   // B.3.4b bridge
+    return reinterpret_cast<System::Random*>(self)->RandFloatTol();   // B.3.4b bridge
 }
 
 // vector<int> bucket deep-copy ({data@+0, count@+8, cap@+0xC}, stride-4 elements).

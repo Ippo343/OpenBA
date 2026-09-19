@@ -94,7 +94,6 @@ typedef void  (*fn_GridToWorld_t)(int* mapGrid, float* out3, float* in2, char fl
 // B.3.1: Math::Quaternion::Rotate [0x1401525f0] (3-arg — R8 = input vec; Ghidra dropped it),
 // Math::Vector3::Heading [0x1401512d8], Math::Transform::operator*(Vector3) [0x140151470]
 // and the Math::Vector3 splat ctor [0x140151320] are now direct members of the real classes.
-typedef uint32_t (*fn_RandomRand_t)(void* rng, uint32_t range);                                  // [0x1401512e8]
 
 static fn_RoadNormal_t        s_fn_RoadNormal      = nullptr;  // ae270
 static fn_RoadCornerBlend_t   s_fn_RoadCornerBlend = nullptr;  // ae180
@@ -111,8 +110,6 @@ static fn_EntityResolvePos_t  s_fn_EntityResolvePos= nullptr;  // 122e20
 static fn_ValidateCell_t      s_fn_ValidateCell    = nullptr;  // a00f0
 static fn_FindNearestCell_t   s_fn_FindNearestCell = nullptr;  // 008830
 static fn_GridToWorld_t       s_fn_GridToWorld     = nullptr;  // 9f3e0
-
-static fn_RandomRand_t        s_fn_RandomRand      = nullptr;  // [0x1401512e8]
 
 // Type-ID global + float .rdata constants used by the ports below.
 static const uint32_t* s_pTid_1c7938  = nullptr;  // DAT_1401c7938 (EntityResolvePos build-comp type)
@@ -143,9 +140,6 @@ static void EnsureInit() {
     s_fn_ValidateCell    = reinterpret_cast<fn_ValidateCell_t>(ResolveAddr(Module::Exe, 0x1400a00f0));
     s_fn_FindNearestCell = reinterpret_cast<fn_FindNearestCell_t>(ResolveAddr(Module::Exe, 0x140008830));
     s_fn_GridToWorld     = reinterpret_cast<fn_GridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
-
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x1401512e8); if (slot) s_fn_RandomRand     = *reinterpret_cast<fn_RandomRand_t*>(slot);
 
     s_pTid_1c7938 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7938));
     s_pUVScale    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401720b8));  // g_fUVScale
@@ -732,7 +726,7 @@ int Pf_PickReachableCell_edb0(int64_t param_1, uint32_t param_2, float* param_3)
     if (s_fn_FindCompPos) s_fn_FindCompPos(*reinterpret_cast<int64_t*>(param_1 + 0x10), &posIBP);
 
     uint32_t cnt = s_fn_PosCount ? static_cast<uint32_t>(s_fn_PosCount(posIBP, 0)) : 0;
-    uint32_t rnd = s_fn_RandomRand ? reinterpret_cast<System::Random*>(*reinterpret_cast<void**>(GameWorld() + 0xd8))->Rand(static_cast<uint32_t>(cnt)) : 0;   // B.3.4b bridge
+    uint32_t rnd = reinterpret_cast<System::Random*>(*reinterpret_cast<void**>(GameWorld() + 0xd8))->Rand(static_cast<uint32_t>(cnt));   // B.3.4b bridge
 
     float pos[3] = {0, 0, 0};   // local_28/24/20
     if (s_fn_EntityResolvePos)
@@ -797,7 +791,7 @@ int Pf_EntityAnchorCell_7fb0(void* param_1IBP, float* param_2) {
             int n2 = s_fn_PosCount ? s_fn_PosCount(posIBP, 0) : 0;
             if (1 < n2) {
                 uint32_t n3 = s_fn_PosCount ? static_cast<uint32_t>(s_fn_PosCount(posIBP, 0)) : 0;
-                if (s_fn_RandomRand) reinterpret_cast<System::Random*>(*reinterpret_cast<void**>(GameWorld() + 0xd8))->Rand(static_cast<uint32_t>(n3)); // result discarded  // B.3.4b bridge
+                reinterpret_cast<System::Random*>(*reinterpret_cast<void**>(GameWorld() + 0xd8))->Rand(static_cast<uint32_t>(n3)); // result discarded  // B.3.4b bridge
             }
             float pos[3] = {0, 0, 0};   // local_28/24/20
             if (s_fn_EntityResolvePos)

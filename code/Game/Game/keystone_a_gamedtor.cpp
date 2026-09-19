@@ -23,10 +23,6 @@
 //
 // Runtime-DLL exports used (resolved by mangled name, identical strings to the import
 // name table behind exe IAT dispatch slots 0x14015252x/253x/255x/256x):
-//   ?Lock@CriticalSection@System@@QEAAXXZ            (slot 0x140152540 via StackCS ctor)
-//   ?Unlock@CriticalSection@System@@QEAAXXZ          (slot 0x140152550 via StackCS dtor)
-//   ?Start@Thread@System@@QEAAXXZ                     (slot 0x140152558)
-//   ?WaitForFinish@Thread@System@@QEAAXXZ             (slot 0x140152568, a6690 tail-call)
 //   ?YieldToThreads@Application@1@QEAAXXZ             (slot 0x140152560)
 //   ??1CriticalSection@System@@QEAA@XZ               (slot 0x140152530, a6720 inner dtor)
 //   ??1Thread@System@@QEAA@XZ                         (slot 0x140152520, a6720 tail-call)
@@ -66,19 +62,11 @@
 namespace {
 
 // ---- Runtime-DLL exports (resolved by mangled name; same strings as keystone_a_zone.cpp).
-typedef void (*fn_CSLock_t)(void* cs);
-typedef void (*fn_CSUnlock_t)(void* cs);
-typedef void (*fn_ThreadStart_t)(void* thread);
-typedef void (*fn_WaitForFinish_t)(void* thread);
 typedef void (*fn_YieldToThreads_t)(void* app);
 typedef void (*fn_CSDtor_t)(void* cs);
 typedef void (*fn_ThreadDtor_t)(void* thread);
 typedef void (*fn_SceneDtor_t)(void* scene);
 
-static fn_CSLock_t        s_fn_CSLock       = nullptr;
-static fn_CSUnlock_t      s_fn_CSUnlock     = nullptr;
-static fn_ThreadStart_t   s_fn_ThreadStart  = nullptr;
-static fn_WaitForFinish_t s_fn_WaitFinish   = nullptr;
 static fn_YieldToThreads_t s_fn_Yield       = nullptr;
 static fn_CSDtor_t        s_fn_CSDtor       = nullptr;
 static fn_ThreadDtor_t    s_fn_ThreadDtor   = nullptr;
@@ -100,10 +88,6 @@ static fn_TreeFree14c30_t   s_fn_TreeFree14c30 = nullptr;
 static bool s_init = false;
 static void EnsureFns() {
     if (s_init) return;
-    s_fn_CSLock      = reinterpret_cast<fn_CSLock_t>(ResolveExport("?Lock@CriticalSection@System@@QEAAXXZ"));
-    s_fn_CSUnlock    = reinterpret_cast<fn_CSUnlock_t>(ResolveExport("?Unlock@CriticalSection@System@@QEAAXXZ"));
-    s_fn_ThreadStart = reinterpret_cast<fn_ThreadStart_t>(ResolveExport("?Start@Thread@System@@QEAAXXZ"));
-    s_fn_WaitFinish  = reinterpret_cast<fn_WaitForFinish_t>(ResolveExport("?WaitForFinish@Thread@System@@QEAAXXZ"));
     s_fn_Yield       = reinterpret_cast<fn_YieldToThreads_t>(ResolveExport("?YieldToThreads@Application@1@QEAAXXZ"));
     s_fn_CSDtor      = reinterpret_cast<fn_CSDtor_t>(ResolveExport("??1CriticalSection@System@@QEAA@XZ"));
     s_fn_ThreadDtor  = reinterpret_cast<fn_ThreadDtor_t>(ResolveExport("??1Thread@System@@QEAA@XZ"));
@@ -384,11 +368,11 @@ extern "C" void GameDtor_ThreadDtor_a6720(int64_t thread) {
 extern "C" void GameDtor_DrainQueue_a6690(int64_t thread) {
     EnsureFns();
     for (;;) {
-        if (s_fn_CSLock) reinterpret_cast<System::CriticalSection*>(reinterpret_cast<void*>(thread + 0x30))->Lock();   // B.3.4b bridge
+        reinterpret_cast<System::CriticalSection*>(reinterpret_cast<void*>(thread + 0x30))->Lock();   // B.3.4b bridge
         int count = *reinterpret_cast<int*>(thread + 0x70);
         if (count > 0) {
             if ((*reinterpret_cast<uint8_t*>(thread + 0x08) & 1) == 0) {
-                if (s_fn_ThreadStart) reinterpret_cast<System::Thread*>(reinterpret_cast<void*>(thread))->Start();   // B.3.4b bridge
+                reinterpret_cast<System::Thread*>(reinterpret_cast<void*>(thread))->Start();   // B.3.4b bridge
             }
             count = *reinterpret_cast<int*>(thread + 0x70);
         }
@@ -396,10 +380,10 @@ extern "C" void GameDtor_DrainQueue_a6690(int64_t thread) {
         // YieldToThreads(*g_pAppSingleton)
         if (s_fn_Yield && g_pAppSingleton)
             s_fn_Yield(*reinterpret_cast<void**>(g_pAppSingleton));
-        if (s_fn_CSUnlock) reinterpret_cast<System::CriticalSection*>(reinterpret_cast<void*>(thread + 0x30))->Unlock();   // B.3.4b bridge
+        reinterpret_cast<System::CriticalSection*>(reinterpret_cast<void*>(thread + 0x30))->Unlock();   // B.3.4b bridge
     }
-    if (s_fn_CSUnlock) reinterpret_cast<System::CriticalSection*>(reinterpret_cast<void*>(thread + 0x30))->Unlock();   // B.3.4b bridge
-    if (s_fn_WaitFinish) reinterpret_cast<System::Thread*>(reinterpret_cast<void*>(thread))->WaitForFinish(); // tail-call  B.3.4b bridge
+    reinterpret_cast<System::CriticalSection*>(reinterpret_cast<void*>(thread + 0x30))->Unlock();   // B.3.4b bridge
+    reinterpret_cast<System::Thread*>(reinterpret_cast<void*>(thread))->WaitForFinish(); // tail-call  B.3.4b bridge
 }
 
 // ============================================================================

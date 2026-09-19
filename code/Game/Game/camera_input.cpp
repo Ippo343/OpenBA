@@ -123,7 +123,7 @@ void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
 
     void* keyMap = CamKeyMap();
-    if (!keyMap || !fn_KeyMap_GetValue || !fn_KeyMap_Pressed || !fn_Time_AsSeconds) return;
+    if (!keyMap || !fn_KeyMap_GetValue || !fn_KeyMap_Pressed) return;
 
     uint8_t* ui = (uint8_t*)entityUI;
     uint8_t* pc = (uint8_t*)*(void**)((uintptr_t)*g_pGameWorldSingleton + 0xe0); // PlayerController

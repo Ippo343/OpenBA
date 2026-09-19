@@ -188,7 +188,7 @@ extern "C" void TownRegistry_ShuffleProfessionList(int64_t townMgr, uint64_t pro
 
     void* rng = *reinterpret_cast<void**>(
         reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8);
-    if (!rng || !fn_Random_Rand) return;
+    if (!rng) return;
 
     for (int64_t i = 0; i < static_cast<int>(count); ++i) {
         uint32_t j = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(count));   // B.3.4b bridge

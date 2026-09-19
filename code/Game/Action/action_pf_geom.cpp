@@ -33,13 +33,11 @@ namespace {
 // pointers were slot 0x140152a30 ctor(x,y,z), 0x140151320 splat ctor, 0x1401526a8 Cross,
 // 0x140151298 Dot, 0x1401512c0 Normalize) ----------------------------------------
 
-// System::MemoryAllocator static MemAlloc/MemFree + System::Random::Rand.
+// System::MemoryAllocator static MemAlloc/MemFree.
 typedef void* (*fn_MemAllocStatic_t)(uint64_t size, uint32_t align);  // real export is SAPEAX_KH (uint64 size, int align); SAPEAXII does not exist
 typedef void  (*fn_MemFreeStatic2_t)(void* ptr);                      // SAXPEAX
-typedef uint32_t (*fn_RandMax_t)(void* random, uint32_t max);         // QEAAII
 static fn_MemAllocStatic_t s_memAlloc = nullptr;  // slot 0x140152b60
 static fn_MemFreeStatic2_t s_memFree  = nullptr;  // slot 0x140152b68
-static fn_RandMax_t        s_rand     = nullptr;  // slot 0x1401512e8
 
 static bool s_init = false;
 static void EnsureFns() {
@@ -56,9 +54,6 @@ static void EnsureFns() {
     s_memFree = reinterpret_cast<fn_MemFreeStatic2_t>(slot(0x140152b68));
     if (!s_memFree) s_memFree = reinterpret_cast<fn_MemFreeStatic2_t>(
         ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
-    s_rand = reinterpret_cast<fn_RandMax_t>(slot(0x1401512e8));
-    if (!s_rand) s_rand = reinterpret_cast<fn_RandMax_t>(
-        ResolveExport("?Rand@Random@System@@QEAAII@Z"));
     s_init = true;
 }
 

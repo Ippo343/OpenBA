@@ -567,7 +567,6 @@ typedef int64_t* (*MW_PickDropTarget_t)(int64_t** town, int64_t* outEntity, uint
 typedef void*    (*MW_EntityResolvePos_t)(void* comp, float* outVec3, int p3, int p4, float* p5);
                                                                               // 0x140122e20
 typedef int      (*MW_RecursiveChildSum_t)(int64_t child, int mode);           // 0x140123070
-typedef uint32_t (*MW_Rand_t)(void* random, uint32_t max);        // dispatch slot 0x1401512e8
 typedef void     (*MW_QsortDemand_t)(void* base, int count);                   // 0x14002b680
 typedef void     (*MW_FindPath_t)(void* outResult, void* citizenIBP, int pathType,
                                   void* destEntityIBP, float* destPos, void* srcEntityIBP,
@@ -604,7 +603,6 @@ static MW_IbpCopy_t             s_fn_IbpCopy             = nullptr;
 static MW_PickDropTarget_t    s_fn_PickDropTarget    = nullptr;
 static MW_EntityResolvePos_t  s_fn_EntityResolvePos  = nullptr;
 static MW_RecursiveChildSum_t s_fn_RecursiveChildSum = nullptr;
-static MW_Rand_t              s_fn_Rand              = nullptr;
 static MW_QsortDemand_t       s_fn_QsortDemand       = nullptr;
 static MW_FindPath_t          s_fn_FindPath          = nullptr;
 static MW_CalcMaxWorkers_t    s_fn_CalcMaxWorkers    = nullptr;
@@ -661,10 +659,6 @@ static void MarketWork_Slot4_ResolveFuncs() {
     s_fn_RecursiveChildSum = reinterpret_cast<MW_RecursiveChildSum_t>(ResolveAddr(Module::Exe, 0x140123070));
     s_fn_QsortDemand       = reinterpret_cast<MW_QsortDemand_t      >(ResolveAddr(Module::Exe, 0x14002b680));
     s_fn_FindPath          = reinterpret_cast<MW_FindPath_t         >(ResolveAddr(Module::Exe, 0x1400bf790));
-    // Random::Rand is an .rdata dispatch SLOT, not a code address: read the
-    // function pointer out of the slot, as the Serializer ctor/dtor pair above does.
-    if (uintptr_t randSlot = ResolveAddr(Module::Exe, 0x1401512e8))
-        s_fn_Rand = *reinterpret_cast<MW_Rand_t*>(randSlot);
     s_fn_EntityAnchorCell     = reinterpret_cast<MW_EntityAnchorCell_t   >(ResolveAddr(Module::Exe, 0x140087fb0));
     s_fn_ZoneRefresh          = reinterpret_cast<MW_ZoneRefresh_t        >(ResolveAddr(Module::Exe, 0x14009c480));
     s_fn_IsDstReachable       = reinterpret_cast<MW_IsDstReachable_t     >(ResolveAddr(Module::Exe, 0x14009f810));

@@ -42,7 +42,6 @@ typedef void  (*HuW_MeshInstance_SetVisible_t)(void* meshInst, uint8_t group, ch
 typedef int   (*HuW_CalcMaxWorkers_t)(uintptr_t matDesc);
 typedef void* (*HuW_FindComp_Storage_t)(uintptr_t entity, void* outIBP);
 typedef int   (*HuW_StorageQueryCount_t)(void* storageComp);
-typedef int   (*HuW_Random_RandTol_t)(void* rng, int range);
 typedef float*(*HuW_GetTerrainPos_t)(int* mapGrid, float* outPos, float* gridPos,
                                      char param4, uint32_t* outNormal);
 typedef void  (*HuW_CreateHuntAction_t)(void* citizenEntityIBP, int priority, void* huntCompIBP,
@@ -88,7 +87,6 @@ static HuW_MeshInstance_SetVisible_t     s_fn_MeshInstance_SetVisible = nullptr;
 static HuW_CalcMaxWorkers_t              s_fn_CalcMaxWorkers = nullptr;
 static HuW_FindComp_Storage_t            s_fn_FindComp_Storage = nullptr;
 static HuW_StorageQueryCount_t           s_fn_StorageQueryCount = nullptr;
-static HuW_Random_RandTol_t              s_fn_Random_RandTol = nullptr;
 static HuW_GetTerrainPos_t              s_fn_GetTerrainPos = nullptr;
 static HuW_CreateHuntAction_t          s_fn_CreateHuntAction = nullptr;
 static HuW_CitizenAI_RegisterWork_t     s_fn_CitizenAI_RegisterWork = nullptr;
@@ -190,11 +188,6 @@ bool HuntWork_ResolveFuncs() {
     s_fn_TreeNodeCleanup = reinterpret_cast<HuW_TreeNodeCleanup_t>(
         ResolveAddr(Module::Exe, 0x140014c30));
 
-    // Dispatch slots (indirect through .rdata)
-    uintptr_t iatRandTol = ResolveAddr(Module::Exe, 0x1401512f0);
-    if (iatRandTol)
-        s_fn_Random_RandTol = *reinterpret_cast<HuW_Random_RandTol_t*>(iatRandTol);
-
     // Static MemAlloc/MemFree. These previously read exe dispatch slots 0x140151460 /
     // 0x140151468; 0x140151460 is NOT MemAlloc, it is Graphics::Geometry::GetTransform
     // (see placementtool.cpp:78). Since that slot is registered, the pointer was
@@ -226,7 +219,7 @@ bool HuntWork_ResolveFuncs() {
     bool ok = s_fn_AutoPickup_CheckAssignments && s_fn_FindComp_MatDesc &&
               s_fn_FindComp_MeshInstance && s_fn_MeshInstance_SetVisible &&
               s_fn_CalcMaxWorkers && s_fn_FindComp_Storage &&
-              s_fn_StorageQueryCount && s_fn_Random_RandTol &&
+              s_fn_StorageQueryCount &&
               s_fn_GetTerrainPos &&
               s_fn_CreateHuntAction && s_fn_CitizenAI_RegisterWork &&
               s_fn_CitizenAI_LongTermPlan && s_fn_FindComp_Hunt &&
@@ -252,7 +245,6 @@ bool HuntWork_ResolveFuncs() {
         if (!s_fn_CalcMaxWorkers) printf("  MISSING: CalcMaxWorkers\n");
         if (!s_fn_FindComp_Storage) printf("  MISSING: FindComp_Storage\n");
         if (!s_fn_StorageQueryCount) printf("  MISSING: StorageQueryCount\n");
-        if (!s_fn_Random_RandTol) printf("  MISSING: Random_RandTol\n");
         if (!s_fn_GetTerrainPos) printf("  MISSING: GetTerrainPos\n");
         if (!s_fn_CreateHuntAction) printf("  MISSING: PerformWork_Ctor3\n");
         if (!s_fn_CitizenAI_RegisterWork) printf("  MISSING: CitizenAI_RegisterWork\n");

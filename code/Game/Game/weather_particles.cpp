@@ -46,11 +46,9 @@ constexpr float kUVScale  = 1.0f;      // g_fUVScale
 // Local lazy-resolved Runtime helpers not in engine_funcs.h.
 typedef void  (*fn_Geo_SetBounds_t)(void* geo, void* box);        // ?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z
 typedef void  (*fn_Geo_BaseDtor_t)(void* geo);                    // ??1Geometry@Graphics@@UEAA@XZ  (Runtime 0x1800a41c0)
-typedef float (*fn_RandFloatTol_t)(void* rng);                    // ?RandFloatTol@Random@System@@QEAAMXZ (Runtime 0x1800c8000) -> [-1,1]
 
 fn_Geo_SetBounds_t      s_fnSetBounds    = nullptr;
 fn_Geo_BaseDtor_t       s_fnGeoBaseDtor  = nullptr;
-fn_RandFloatTol_t       s_fnRandFloatTol = nullptr;
 bool s_resolved = false;
 
 void EnsureResolved() {
@@ -60,8 +58,6 @@ void EnsureResolved() {
         ResolveExport("?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z"));
     s_fnGeoBaseDtor = reinterpret_cast<fn_Geo_BaseDtor_t>(
         ResolveExport("??1Geometry@Graphics@@UEAA@XZ"));
-    s_fnRandFloatTol = reinterpret_cast<fn_RandFloatTol_t>(
-        ResolveExport("?RandFloatTol@Random@System@@QEAAMXZ"));
 }
 
 inline uint8_t SettingsByte(int off) {
@@ -222,16 +218,16 @@ extern "C" void WeatherParticle_Config(void* geo, void* descriptor) {
         float* p = particles + (size_t)i * 9;   // stride 0x24 = 9 floats
 
         // Random position within the box: randTol per axis * size * 0.5.
-        float r0 = (rng && s_fnRandFloatTol) ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
-        float r1 = (rng && s_fnRandFloatTol) ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
-        float r2 = (rng && s_fnRandFloatTol) ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
+        float r0 = rng ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
+        float r1 = rng ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
+        float r2 = rng ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
         // Original order: Vector3(r2*size, size*r1, size*r0) then *0.5.
         p[0] = r2 * boxSize * kHalf;
         p[1] = r1 * boxSize * kHalf;
         p[2] = r0 * boxSize * kHalf;
 
         // Velocity = dir * (randTol*speedTol + speedBase).
-        float rs = (rng && s_fnRandFloatTol) ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
+        float rs = rng ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
         float speed = rs * speedTol + speedBase;
         p[6] = dir[0] * speed;
         p[7] = dir[1] * speed;
@@ -275,7 +271,7 @@ extern "C" void WeatherParticle_Config(void* geo, void* descriptor) {
 // carrying prevPos so motion-blur streaks stay continuous.
 // ============================================================
 extern "C" void WeatherParticle_Update(void* geo, void* time) {
-    if (!geo || !fn_Time_AsSeconds) return;
+    if (!geo) return;
     uint8_t* g = reinterpret_cast<uint8_t*>(geo);
     void* desc = *reinterpret_cast<void**>(g + 0xc8);
     if (!desc) return;
