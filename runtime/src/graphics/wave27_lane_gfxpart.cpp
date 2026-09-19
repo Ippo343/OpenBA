@@ -85,6 +85,9 @@
 #include "../../types/graphics/ParticleInstance.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/math/Math.h"
+#include "../../types/graphics/Camera.h"    // ENDGAME B.3.5 caller batch: Graphics::Renderer
+#include "../../types/graphics/Material.h"  // ENDGAME B.3.5 caller batch: Graphics::MaterialInstance
+#include "../../types/video/Context.h"      // ENDGAME B.3.5 caller batch: Video::Context
 
 using RtGraphics::Geometry;
 using RtGraphics::Particle;
@@ -690,28 +693,16 @@ void ParticleInstance::AddDrawItems(const Scene& scene, Renderer& renderer) cons
     const float one = One();
     const float opacity = ((one - a) * self->_opacityPrev) + (a * self->_opacity);
 
-    // NAME DOOR — SYMBOL:
-    // ?AddDrawItem@Renderer@Graphics@@QEAAXPEBVGeometry@2@PEBVMaterialInstance@2@GGMMHPEBXI@Z
-    // (retail 0x1801057b0). CONDITION: a public export; by NAME so that a port of
-    // it is reached rather than bypassed. CONSEQUENCE: null means this particle
-    // system is silently never queued, which looks like a content bug rather than
-    // a resolve failure — hence the one-shot message.
-    using AddDrawItemFn = void (*)(void*, const void*, const void*, uint16_t, uint16_t,
-                                   float, float, int32_t, const void*, uint32_t);
-    static AddDrawItemFn add = nullptr;
-    static bool tried = false;
-    if (!tried) {
-        tried = true;
-        add = reinterpret_cast<AddDrawItemFn>(ResolveExport(
-            "?AddDrawItem@Renderer@Graphics@@QEAAXPEBVGeometry@2@PEBVMaterialInstance@2@"
-            "GGMMHPEBXI@Z"));
-        if (!add)
-            std::fprintf(stderr, "[GFXPART27] AddDrawItems: Renderer::AddDrawItem "
-                                 "resolved NULL -- no particle system will draw\n");
-    }
-    if (!add) return;
-
-    add(rendererv, self, material, 0x8000, 0, distSq, opacity, flags, pool, 0);
+    // ENDGAME B.3.5 caller batch:
+    // `?AddDrawItem@Renderer@Graphics@@QEAAXPEBVGeometry@2@PEBVMaterialInstance@2@GGMMHPEBXI@Z`
+    // (retail 0x1801057b0) is a DEFINED member of the real `Graphics::Renderer`
+    // (wave9_lane_gfx.cpp:431), and `renderer` is already that class — so the
+    // `AddDrawItemFn` typedef, the `add`/`tried` cache, the one-shot NULL report
+    // and the `if (!add) return;` readiness guard are gone. Nine arguments after
+    // `this`, and the arity was checked against the member, not the decompiler.
+    renderer.Graphics::Renderer::AddDrawItem(
+        self, reinterpret_cast<const MaterialInstance*>(material),
+        0x8000, 0, distSq, opacity, flags, pool, 0);
     ++g_piAddDrawItemsEmit;
 }
 
@@ -1100,27 +1091,15 @@ void ParticleInstance::Draw(Video::Context& context, const Camera& camera,
     // ---- A: the single-instance transform --------------------------------
     if (instances <= 1) {
         // ENDGAME B.3.1 step 2: Quaternion::Lerp and Transform::AsMatrix are
-        // members now; only Video::Context::SetTransformScale is still a door.
-        // NAME DOOR — SYMBOL: ?SetTransformScale@Context@Video@@QEAAXHAEBVMatrix@Math@@
-        // AEBVVector4@4@@Z (0x18001a400), plus the two Math exports described at
-        // GetInstanceTransform above. CONDITION: all three are public exports and
-        // the Math pair is ported, so NAME reaches our bodies.
-        // CONSEQUENCE: a null skips part A only; parts B and C still run, which
-        // is worse than a crash to debug, so it is reported.
-        using SetTransformScaleFn = void (*)(void*, int32_t, const Matrix*,
-                                             const float*);
-        static SetTransformScaleFn setXform = nullptr;
-        static bool resolved = false;
-        if (!resolved) {
-            resolved = true;
-            setXform = reinterpret_cast<SetTransformScaleFn>(ResolveExport(
-                "?SetTransformScale@Context@Video@@QEAAXHAEBVMatrix@Math@@AEBVVector4@4@@Z"));
-            if (!setXform)
-                std::fprintf(stderr, "[GFXPART27] PI::Draw part A: "
-                                     "SetTransformScale=%p -- the particle transform is "
-                                     "NOT set\n", (void*)setXform);
-        }
-        if (setXform) {
+        // members now. ENDGAME B.3.5 caller batch: so is the last door here —
+        // `?SetTransformScale@Context@Video@@QEAAXHAEBVMatrix@Math@@AEBVVector4@4@@Z`
+        // (0x18001a400) is a DEFINED member of the real `Video::Context`
+        // (video/context.cpp:435), so the `SetTransformScaleFn` typedef, the
+        // function-local cache, the `resolved` flag, the one-shot NULL report and
+        // the `if (setXform)` readiness guard are ALL gone — a member call cannot
+        // be null, so there is nothing left to skip or to report. The `instances
+        // <= 1` test above is retail's own and stays.
+        {
             const uint8_t* cur = B(&self->_transform);
             const uint8_t* prv = B(&self->_prevTransform);
 
@@ -1145,7 +1124,8 @@ void ParticleInstance::Draw(Video::Context& context, const Camera& camera,
             const float v4[4] = { one, one, one,
                                   ((one - alpha) * self->_opacityPrev)
                                       + (alpha * self->_opacity) };
-            setXform(contextv, 0, &m, v4);
+            context.SetTransformScale(
+                0, m, *reinterpret_cast<const Vector4*>(v4));   // B.3.5 bridge
         }
     }
 

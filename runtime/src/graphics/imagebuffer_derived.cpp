@@ -50,6 +50,8 @@
 #include "../../types/graphics/GeneratedImageBuffer.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/io/Stream.h"
+#include "../../types/video/Device.h"       // ENDGAME B.3.5: Video::RenderBuffer
+#include "../../types/video/ImageBuffer.h"   // ENDGAME B.3.5: Video::ImageBuffer
 #include "../collection/array_internal.h"
 
 // ENDGAME B.3.5 block C — the three real classes. The `RtGraphics::*` PODs are
@@ -107,7 +109,6 @@ using VoidThisFn = void  (*)(void*);
 using PtrThisFn  = void* (*)(void*);
 using NewFn      = void* (*)(uint64_t);
 using SerializeFn = bool (*)(void*, void*);
-using RbCreateFn = bool  (*)(void*, const void*, const void*);
 
 // `??0ImageBuffer@Video@@QEAA@XZ` 0x1800f2580 — PORTED (video/buffers.cpp).
 // Declared returning void because that is how buffers.cpp spells it; the
@@ -137,18 +138,22 @@ void* ImageBufferOperatorNew(uint64_t n) {
 void* RenderBufferOperatorNew(uint64_t n) {
     return RT_EXPORT_ONCE(NewFn, "??2RenderBuffer@Video@@SAPEAX_K@Z")(n);
 }
+// ENDGAME B.3.5 caller batch: `PlatformConstruct`, `PlatformDestruct` and
+// `Create` are DEFINED members of the real `Video::RenderBuffer`, so all three
+// by-name doors become member calls. The `??3` operator delete stays a door.
 void RenderBufferPlatformConstruct(void* p) {
-    RT_EXPORT_ONCE(VoidThisFn, "?PlatformConstruct@RenderBuffer@Video@@AEAAXXZ")(p);
+    reinterpret_cast<Video::RenderBuffer*>(p)->PlatformConstruct();   // B.3.5 bridge
 }
 void RenderBufferPlatformDestruct(void* p) {
-    RT_EXPORT_ONCE(VoidThisFn, "?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ")(p);
+    reinterpret_cast<Video::RenderBuffer*>(p)->PlatformDestruct();    // B.3.5 bridge
 }
 void RenderBufferOperatorDelete(void* p) {
     RT_EXPORT_ONCE(VoidThisFn, "??3RenderBuffer@Video@@SAXPEAX@Z")(p);
 }
 bool RenderBufferCreate(void* rb, const void* colour, const void* depth) {
-    return RT_EXPORT_ONCE(RbCreateFn,
-        "?Create@RenderBuffer@Video@@QEAA_NPEBVImageBuffer@2@0@Z")(rb, colour, depth);
+    return reinterpret_cast<Video::RenderBuffer*>(rb)->Create(
+        reinterpret_cast<const Video::ImageBuffer*>(colour),
+        reinterpret_cast<const Video::ImageBuffer*>(depth));          // B.3.5 bridge
 }
 
 // `??0FrameCopyImageBuffer@Graphics@@QEAA@XZ` 0x1800a3d10 — PORTED

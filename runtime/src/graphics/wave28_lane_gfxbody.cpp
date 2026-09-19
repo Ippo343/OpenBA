@@ -56,6 +56,7 @@
 #include "../../types/graphics/AnimationState.h"
 #include "../../types/graphics/Camera.h"
 #include "../../types/graphics/Material.h"
+#include "../../types/video/ShaderProgram.h"   // ENDGAME B.3.5 caller batch: Video::ShaderProgram
 #include "../collection/array_internal.h"
 #include "../system/string.h"
 
@@ -155,7 +156,8 @@ unsigned long long g_cameraAssignCalls = 0;
 namespace {
 
 // RCX = ShaderProgram*, RDX = hidden return slot, R8D = index.
-using ShaderGetNameFn = String* (*)(void* shaderProgram, String* ret, int32_t index);
+// ENDGAME B.3.5 caller batch: `ShaderGetNameFn` is gone with the two retslot
+// doors it typed; both are member calls placement-new'd into the caller's slot.
 
 // `MOV RAX,[RCX+0x28] / MOVSXD RCX,<idx> / MOV RCX,[RAX+RCX*8]` — the pass
 // pointer array. MOVSXD, not a zero extension: Ghidra's C prints a MOVSXD as an
@@ -859,19 +861,29 @@ namespace Graphics {
 // the SAME chain and DOES test the shader program for null first. The asymmetry is
 // deliberate in the shipped code and is transcribed rather than "fixed".
 // ---------------------------------------------------------------------------
+// ENDGAME B.3.5 caller batch: both `Video::ShaderProgram::GetConstantName` and
+// `::GetTextureName` are DEFINED members (shader_program_names.cpp:313/326) and
+// both are HIDDEN-RETSLOT doors (B5-12). The conversion is the only shape the
+// brief allows for one — the DOOR BODY MOVED TO THE CALL SITE: exactly one
+// `System::String` is constructed, placement-new'd into the SAME caller storage
+// `ret` that the door pointer used to be handed, from the member's prvalue. That
+// is line for line what `RtVideo_ShaderProgram_GetConstantName` does, minus the
+// indirection, so the refcount arithmetic is unchanged. `ShaderGetNameFn` is gone.
 RtSystem::String* Material::GetConstantName(RtSystem::String* ret,
                                             int32_t pass, int32_t index) const {
-    RT_EXPORT_ONCE(rtgfxbody28::ShaderGetNameFn,
-        "?GetConstantName@ShaderProgram@Video@@QEBA?AVString@System@@H@Z")(
-            rtgfxbody28::PassShaderProgram(this, pass), ret, index);
+    new (ret) System::String(                                       // B.3.5 bridge
+        reinterpret_cast<const ::Video::ShaderProgram*>(
+            rtgfxbody28::PassShaderProgram(this, pass))
+            ->::Video::ShaderProgram::GetConstantName(index));
     return ret;                                   // MOV RAX,RBX
 }
 
 RtSystem::String* Material::GetTextureName(RtSystem::String* ret,
                                            int32_t pass, int32_t index) const {
-    RT_EXPORT_ONCE(rtgfxbody28::ShaderGetNameFn,
-        "?GetTextureName@ShaderProgram@Video@@QEBA?AVString@System@@H@Z")(
-            rtgfxbody28::PassShaderProgram(this, pass), ret, index);
+    new (ret) System::String(                                       // B.3.5 bridge
+        reinterpret_cast<const ::Video::ShaderProgram*>(
+            rtgfxbody28::PassShaderProgram(this, pass))
+            ->::Video::ShaderProgram::GetTextureName(index));
     return ret;
 }
 

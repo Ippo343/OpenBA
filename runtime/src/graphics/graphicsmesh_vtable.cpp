@@ -149,9 +149,13 @@ void MemFree(void* p) {
 // bare name inside `namespace Graphics`'s member bodies would bind the MEMBER
 // silently — exactly the name-lookup trap B34_BRIEFS A.2 records. The door it
 // opens is unchanged.
+// ENDGAME B.3.5 caller batch: `Graphics::GraphicsMesh::PlatformSerialize` is a
+// DEFINED member (batchc_gfx_leaves.cpp:789), so the by-name door is a member
+// call. The name stays `PlatformSerializeDoor` for the lookup reason above.
 void PlatformSerializeDoor(void* self, Serializer* ser) {
-    RT_EXPORT_ONCE(SerMemberFn,
-        "?PlatformSerialize@GraphicsMesh@Graphics@@QEAAXAEAVSerializer@IO@@@Z")(self, ser);
+    reinterpret_cast<::Graphics::GraphicsMesh*>(self)
+        ->::Graphics::GraphicsMesh::PlatformSerialize(
+            *reinterpret_cast<IO::Serializer*>(ser));          // B.3.5 bridge
 }
 
 // ---------------------------------------------------------------------------

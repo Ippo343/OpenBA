@@ -102,6 +102,10 @@
 #include "../../types/graphics/Mesh.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/video/Context.h"           // ENDGAME B.3.5 block GC
+// ENDGAME B.3.5 caller batch: the cross-class edges this file opens.
+#include "../../types/graphics/ParticleInstance.h"  // Graphics::ParticleInstance
+#include "../../types/video/Buffers.h"              // Video::{Index,Vertex}Buffer
+#include "../../types/video/Device.h"               // Video::RenderBuffer
 
 // standalone/resolve.h is deliberately NOT included: it drags in <windows.h>,
 // whose <wingdi.h> declares a function called `Rectangle` and whose <windef.h>
@@ -161,17 +165,19 @@ void ExternalDtor(void* p) { RT_EXPORT_ONCE(VoidThisFn, "??1External@Object@@UEA
 // `?RemoveState@ParticleInstance@Graphics@@IEAAXXZ` 0x1801040b0 — PORTED
 // (wave28_lane_partsys.cpp). IEAA is PROTECTED, and this DLL exports its
 // protected members (reference_aeaa_is_private_not_unexported.md).
+// ENDGAME B.3.5 caller batch: a DEFINED member (wave28_lane_partsys.cpp:1051).
 void ParticleInstanceRemoveState(void* p) {
-    RT_EXPORT_ONCE(VoidThisFn, "?RemoveState@ParticleInstance@Graphics@@IEAAXXZ")(p);
+    reinterpret_cast<Graphics::ParticleInstance*>(p)->RemoveState();   // B.3.5 bridge
 }
 
 // Video::{Index,Vertex}Buffer::PlatformDestruct — 0x1800f3760 / 0x1800f58c0,
 // both PORTED (video/buffers.cpp) and registered by name and address.
+// ENDGAME B.3.5 caller batch: both are DEFINED members, so both are member calls.
 void IndexBufferPlatformDestruct(void* p) {
-    RT_EXPORT_ONCE(VoidThisFn, "?PlatformDestruct@IndexBuffer@Video@@QEAAXXZ")(p);
+    reinterpret_cast<Video::IndexBuffer*>(p)->PlatformDestruct();   // B.3.5 bridge
 }
 void VertexBufferPlatformDestruct(void* p) {
-    RT_EXPORT_ONCE(VoidThisFn, "?PlatformDestruct@VertexBuffer@Video@@QEAAXXZ")(p);
+    reinterpret_cast<Video::VertexBuffer*>(p)->PlatformDestruct();  // B.3.5 bridge
 }
 
 // `??2ImageBuffer@Video@@SAPEAX_K@Z` / `??2RenderBuffer@Video@@SAPEAX_K@Z` —
@@ -187,34 +193,38 @@ void* RenderBufferOperatorNew(uint64_t n) {
     return RT_EXPORT_ONCE(NewFn, "??2RenderBuffer@Video@@SAPEAX_K@Z")(n);
 }
 void ImageBufferCtor(void* p) { RT_EXPORT_ONCE(VoidThisFn, "??0ImageBuffer@Video@@QEAA@XZ")(p); }
+// ENDGAME B.3.5 caller batch: DEFINED members of the real `Video::RenderBuffer`
+// (buffers.cpp / device.cpp). The `RbCreateFn` typedef went with its door.
 void RenderBufferPlatformConstruct(void* p) {
-    RT_EXPORT_ONCE(VoidThisFn, "?PlatformConstruct@RenderBuffer@Video@@AEAAXXZ")(p);
+    reinterpret_cast<Video::RenderBuffer*>(p)->PlatformConstruct();   // B.3.5 bridge
 }
-using RbCreateFn = bool (*)(void*, const void*, const void*);
 bool RenderBufferCreate(void* rb, const void* colour, const void* depth) {
-    return RT_EXPORT_ONCE(RbCreateFn,
-        "?Create@RenderBuffer@Video@@QEAA_NPEBVImageBuffer@2@0@Z")(rb, colour, depth);
+    return reinterpret_cast<Video::RenderBuffer*>(rb)->Create(
+        reinterpret_cast<const Video::ImageBuffer*>(colour),
+        reinterpret_cast<const Video::ImageBuffer*>(depth));           // B.3.5 bridge
 }
 
 // Video::Context setters DrawItemList drives. Both PORTED (video/context.cpp)
 // and registered by name and address.
-using SetCameraFn    = void (*)(void*, const void*, const void*);
-using SetTransformFn = void (*)(void*, int32_t, const void*);
+// ENDGAME B.3.5 caller batch: both are DEFINED members. THE DOOR DECIDED THE
+// OVERLOAD — `?SetTransform@…QEAAXHAEBVMatrix@Math@@@Z` 0x18001a6b0 is the
+// two-argument setter, NOT `SetTransformScale` (0x18001a400).
 void ContextSetCamera(void* ctx, const void* view, const void* proj) {
-    RT_EXPORT_ONCE(SetCameraFn,
-        "?SetCamera@Context@Video@@QEAAXAEBVMatrix@Math@@0@Z")(ctx, view, proj);
+    reinterpret_cast<Video::Context*>(ctx)->SetCamera(
+        *reinterpret_cast<const Math::Matrix*>(view),
+        *reinterpret_cast<const Math::Matrix*>(proj));                 // B.3.5 bridge
 }
 void ContextSetTransform(void* ctx, int32_t slot, const void* m) {
-    RT_EXPORT_ONCE(SetTransformFn,
-        "?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z")(ctx, slot, m);
+    reinterpret_cast<Video::Context*>(ctx)->SetTransform(
+        slot, *reinterpret_cast<const Math::Matrix*>(m));              // B.3.5 bridge
 }
 
 // `?Setup@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z` 0x180102c90 —
-// PORTED (wave21_lane_gfxbody.cpp).
-using MatSetupFn = void (*)(const void*, void*, int32_t);
+// PORTED (wave21_lane_gfxbody.cpp), and a DEFINED member since block GC, so this
+// is a member call (ENDGAME B.3.5 caller batch).
 void MaterialInstanceSetup(const void* mi, void* ctx, int32_t shader) {
-    RT_EXPORT_ONCE(MatSetupFn,
-        "?Setup@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z")(mi, ctx, shader);
+    reinterpret_cast<const Graphics::MaterialInstance*>(mi)
+        ->Setup(*reinterpret_cast<Video::Context*>(ctx), shader);       // B.3.5 bridge
 }
 
 // The `1.0f` at 0x18016169c, as a BIT PATTERN read out of the image rather

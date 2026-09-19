@@ -45,6 +45,8 @@
 #include "../../types/graphics/FrameCopyImageBuffer.h"
 #include "../../types/math/Math.h"                   // Math::Transform / Vector3
 #include "../../types/system/Value.h"                // System::Time
+#include "../../types/video/Device.h"                // ENDGAME B.3.5: Video::RenderBuffer
+#include "../../types/video/ImageBuffer.h"           // ENDGAME B.3.5: Video::ImageBuffer
 
 // ---------------------------------------------------------------------------
 // THE NEGATIVE-CONTROL SEAM IS GONE -- ENDGAME B.3.5 block GC.
@@ -137,7 +139,6 @@ void* MemAlloc(uint64_t bytes, int align) {
 // reach our ports where ports exist.
 // ---------------------------------------------------------------------------
 using VoidThisFn  = void (*)(void*);
-using RbCreateFn  = bool (*)(void*, const void*, const void*);
 
 void ImageBufferCtor(void* p) {
     RT_EXPORT_ONCE(VoidThisFn, "??0ImageBuffer@Video@@QEAA@XZ")(p);
@@ -145,18 +146,23 @@ void ImageBufferCtor(void* p) {
 void ImageBufferDtor(void* p) {
     RT_EXPORT_ONCE(VoidThisFn, "??1ImageBuffer@Video@@UEAA@XZ")(p);
 }
+// ENDGAME B.3.5 caller batch: `PlatformConstruct`, `PlatformDestruct` and
+// `Create` are DEFINED members of the real `Video::RenderBuffer` today, so the
+// three by-name doors become member calls and `RbCreateFn` goes with them. The
+// `??3` operator delete below stays a door (B4b-2 / B35_RULES section 11).
 void RenderBufferPlatformConstruct(void* p) {
-    RT_EXPORT_ONCE(VoidThisFn, "?PlatformConstruct@RenderBuffer@Video@@AEAAXXZ")(p);
+    reinterpret_cast<Video::RenderBuffer*>(p)->PlatformConstruct();   // B.3.5 bridge
 }
 void RenderBufferPlatformDestruct(void* p) {
-    RT_EXPORT_ONCE(VoidThisFn, "?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ")(p);
+    reinterpret_cast<Video::RenderBuffer*>(p)->PlatformDestruct();    // B.3.5 bridge
 }
 void RenderBufferOperatorDelete(void* p) {
     RT_EXPORT_ONCE(VoidThisFn, "??3RenderBuffer@Video@@SAXPEAX@Z")(p);
 }
 bool RenderBufferCreate(void* rb, const void* colour, const void* depth) {
-    return RT_EXPORT_ONCE(RbCreateFn,
-        "?Create@RenderBuffer@Video@@QEAA_NPEBVImageBuffer@2@0@Z")(rb, colour, depth);
+    return reinterpret_cast<Video::RenderBuffer*>(rb)->Create(
+        reinterpret_cast<const Video::ImageBuffer*>(colour),
+        reinterpret_cast<const Video::ImageBuffer*>(depth));          // B.3.5 bridge
 }
 
 // The two vtable addresses, rebased. `ResolveAddr(Module::Runtime, …)` on a
