@@ -260,3 +260,141 @@ static_assert(sizeof(Serializer) == 0x10, "Serializer is 0x10 bytes");
 
 } // namespace io
 } // namespace rt
+
+// ===========================================================================
+// ENDGAME B.3.4 block 1 — the REAL `IO::Encoding` hierarchy.
+// ===========================================================================
+//
+// Design: docs/runtime_port/endgame_b/B34_RULES.md §1.1 and §2.
+// Coexistence proof: tests/unit/io_vtable_abi_test.cpp.
+//
+// THE ONE SHAPE IN `IO` WHOSE SLOT 0 IS NOT A DESTRUCTOR
+// -----------------------------------------------------
+// Read byte-wise out of retail Runtime-x64.dll's .rdata on 2026-09-18. All
+// THREE Encoding tables are UNEXPORTED, five slots each, and none of them has
+// a deleting-destructor slot:
+//
+//   slot 0  +0x00  IsBinary()     Binary 0x1800a81e0 `MOV AL,1; RET`
+//                                 Text   0x1800b9ab0 `XOR AL,AL; RET`
+//                                 Visitor 0x1800bafe0 `XOR AL,AL; RET`
+//   slot 1  +0x08  IsText()       Binary 0x1800a81d0 / Text 0x1800b9aa0 (true)
+//                                 / Visitor 0x1800bafd0
+//   slot 2  +0x10  GetKind()      Binary 0x1800a81c0 -> 2
+//                                 Text   0x1800b9a90 -> 1
+//                                 Visitor 0x1800bafc0 -> 3
+//   slot 3  +0x18  CreateReader   Binary 0x1800a8120 / Text 0x1800b9a80 (NULL)
+//                                 / Visitor 0x1800baf00
+//   slot 4  +0x20  CreateWriter   Binary 0x1800a8080 / Text 0x1800b9a70 (NULL)
+//                                 / Visitor 0x1800bae40
+//
+// Bounding: 0x1801554a8 + 0x28 == 0x1801554d0 (??_7BinaryFileStream@IO@@6B@);
+// 0x1801559d0 + 0x28 == 0x1801559f8; 0x1801559f8 + 0x28 == 0x180155a20
+// (??_7VisitorStream@IO@@6B@).
+//
+// **`IsBinary()` MUST BE DECLARED FIRST AND THERE MUST BE NO `DeletingDtor`
+// SLOT.** A slot-0 destructor would push both factories down one slot and
+// `IO::Serializer`'s constructor would call `GetKind()` as a factory — a
+// build-clean, link-clean corruption of every save. The destructor here is
+// protected and NON-virtual, which is safe because nothing virtual-deletes an
+// Encoding: `IO::Stream`'s destructor frees `_encoding` with a direct
+// `MemoryAllocator::MemFree` (runtime/types/io/Stream.h:83-101).
+// `encoding_factory_slots_sit_at_0x18_and_0x20_with_arity_three` in
+// tests/unit/io_vtable_abi_test.cpp is the regression guard for all of this.
+//
+// THE CLASS NAMES ARE ATTESTED, NOT INVENTED
+// ------------------------------------------
+// `IO\BinaryEncoding.cpp`, `IO\TextEncoding.cpp` and `IO\VisitorEncoding.cpp`
+// are source-path strings in Runtime-x64-profile.dll (0x1801a0040, 0x1801a2d50,
+// 0x1801a4d18) and are also three of the rows in
+// docs/runtime_port/original_source_tree.txt. There is no `IO\Encoding.cpp`,
+// which is consistent with `IO::Encoding` being a pure interface with no
+// out-of-line body. ENDGAME decision 5: names are the original ones.
+//
+// The three SLOT names (`IsBinary`/`IsText`/`GetKind`) remain this project's
+// behaviour-derived reading — no export and no debug string names them. What IS
+// now attested is every return VALUE, decoded from the shipped bytes above, and
+// the class names. encoding.cpp's older banner called the whole reading
+// unattested; that was right when it was written and is now half-superseded.
+//
+// ARITY 3. `CreateReader`/`CreateWriter` take `(this, Serializer&, int)` —
+// pinned by R8D's liveness across the Serializer ctor 0x1800b9960 (see the
+// banner at the top of this header) and re-proved live in the unit test.
+// `this` is NEVER READ by any of the fifteen bodies: an Encoding is a stateless
+// policy tag. That is faithful, not an omission.
+// ===========================================================================
+
+namespace IO {
+
+// Forward declarations only. `IO::ReaderWriter` lands in B.3.4 block 2 and
+// `IO::Serializer` in block 3; declaring the retail signature NOW means these
+// five slots never change shape again, and the two blocks that follow delete a
+// bridge cast in encoding.cpp rather than editing this header.
+class ReaderWriter;
+class Serializer;
+
+class Encoding {
+public:
+    virtual bool IsBinary() const = 0;                            // slot 0 +0x00
+    virtual bool IsText() const = 0;                              // slot 1 +0x08
+    virtual int  GetKind() const = 0;                             // slot 2 +0x10
+    virtual ReaderWriter* CreateReader(Serializer& ser, int version) = 0;  // +0x18
+    virtual ReaderWriter* CreateWriter(Serializer& ser, int version) = 0;  // +0x20
+
+protected:
+    // NON-virtual and protected — see the banner. There is no slot for it.
+    ~Encoding() = default;
+};
+
+// 0x1801554a8 — the SHARED table every concrete stream's constructor installs.
+class BinaryEncoding final : public Encoding {
+public:
+    bool IsBinary() const override { return true; }   // 0x1800a81e0
+    bool IsText() const override { return false; }    // 0x1800a81d0
+    int  GetKind() const override { return 2; }       // 0x1800a81c0
+    ReaderWriter* CreateReader(Serializer& ser, int version) override;  // 0x1800a8120
+    ReaderWriter* CreateWriter(Serializer& ser, int version) override;  // 0x1800a8080
+    ~BinaryEncoding() = default;
+};
+
+// 0x1801559d0 — text serialization was STRIPPED from the shipped DLL: both
+// factory bodies are a bare `XOR EAX,EAX; RET`. Reproduced, not "fixed".
+class TextEncoding final : public Encoding {
+public:
+    bool IsBinary() const override { return false; }  // 0x1800b9ab0
+    bool IsText() const override { return true; }     // 0x1800b9aa0
+    int  GetKind() const override { return 1; }       // 0x1800b9a90
+    ReaderWriter* CreateReader(Serializer& ser, int version) override;  // 0x1800b9a80
+    ReaderWriter* CreateWriter(Serializer& ser, int version) override;  // 0x1800b9a70
+    ~TextEncoding() = default;
+};
+
+// 0x1801559f8 — the reference-VISIT pass's encoding. Its two factory bodies are
+// BYTE-IDENTICAL in retail (0x1800baf00 and 0x1800bae40), and neither consumes
+// nor emits a stream header, unlike the Binary pair.
+class VisitorEncoding final : public Encoding {
+public:
+    bool IsBinary() const override { return false; }  // 0x1800bafe0
+    bool IsText() const override { return false; }    // 0x1800bafd0
+    int  GetKind() const override { return 3; }       // 0x1800bafc0
+    ReaderWriter* CreateReader(Serializer& ser, int version) override;  // 0x1800baf00
+    ReaderWriter* CreateWriter(Serializer& ser, int version) override;  // 0x1800bae40
+    ~VisitorEncoding() = default;
+};
+
+// A vptr and nothing else, exactly like the POD it replaces. The old
+// `rt::io::Encoding` stays (B33 §7: the PODs are trivially destructible aliases
+// until their last user converts) and is cross-asserted against the class here,
+// which is what makes `reinterpret_cast` between the two views honest.
+static_assert(sizeof(Encoding) == 8, "IO::Encoding is one vptr");
+static_assert(sizeof(Encoding) == sizeof(rt::io::Encoding),
+              "IO::Encoding and the rt::io::Encoding POD must stay interchangeable");
+static_assert(sizeof(BinaryEncoding) == 8, "no Encoding subclass adds a field");
+static_assert(sizeof(TextEncoding) == 8, "no Encoding subclass adds a field");
+static_assert(sizeof(VisitorEncoding) == 8, "no Encoding subclass adds a field");
+
+// The two factory slots keep the byte offsets the 15 registered address doors
+// and every raw caller already use.
+static_assert(rt::io::encoding_vtbl::kCreateReader == 0x18, "Encoding slot 3");
+static_assert(rt::io::encoding_vtbl::kCreateWriter == 0x20, "Encoding slot 4");
+
+} // namespace IO

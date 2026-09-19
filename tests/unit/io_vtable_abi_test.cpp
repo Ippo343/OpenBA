@@ -502,6 +502,53 @@ UNIT_TEST(encoding_factory_slots_sit_at_0x18_and_0x20_with_arity_three) {
     CHECK_EQ(SlotAt<IntFn>(raw, 0x10)(raw), 2);       // GetKind == Binary
 }
 
+// ---------------------------------------------------------------------------
+// B.3.4 block 1 landed the REAL classes. `TestEncoding` above stays as the
+// executable ABI probe — it can be instantiated here, whereas the real
+// subclasses cannot, because their vtables reference `CreateReader`/
+// `CreateWriter` bodies that live in runtime/src/io/encoding*.cpp and stand on
+// the port registry, which `make unit` does not link. What CAN be checked
+// against the shipped header with no linking at all is the SHAPE, and the shape
+// is the thing that goes wrong silently.
+// ---------------------------------------------------------------------------
+UNIT_TEST(the_real_IO_Encoding_classes_have_the_probes_shape) {
+    // Same size as the probe, as the POD it replaces, and as retail's
+    // `Allocate(8,4)` request in every stream constructor.
+    static_assert(sizeof(IO::Encoding) == sizeof(TestEncoding), "probe matches the real base");
+    static_assert(sizeof(IO::Encoding) == 8, "one vptr, no fields");
+    static_assert(sizeof(IO::BinaryEncoding) == 8, "no subclass adds a field");
+    static_assert(sizeof(IO::TextEncoding) == 8, "no subclass adds a field");
+    static_assert(sizeof(IO::VisitorEncoding) == 8, "no subclass adds a field");
+    static_assert(sizeof(IO::Encoding) == sizeof(rt::io::Encoding),
+                  "the POD and the class stay interchangeable during coexistence");
+
+    // The base is abstract (all five slots pure) and the three concretes are
+    // not — which is exactly what says every one of the five slots is
+    // overridden, with no gap left for the compiler to fill.
+    static_assert(std::is_abstract<IO::Encoding>::value, "IO::Encoding is the interface");
+    static_assert(!std::is_abstract<IO::BinaryEncoding>::value, "all five slots overridden");
+    static_assert(!std::is_abstract<IO::TextEncoding>::value, "all five slots overridden");
+    static_assert(!std::is_abstract<IO::VisitorEncoding>::value, "all five slots overridden");
+
+    // THE GUARD THAT MATTERS: no virtual destructor anywhere in the hierarchy.
+    // Itanium would spend two slots on one, pushing CreateReader from +0x18 to
+    // +0x28 and CreateWriter from +0x20 to +0x30 — and `IO::Serializer`'s
+    // constructor, which reads those two byte offsets RAW, would then call
+    // `GetKind()` as a factory and store the int 2 as a ReaderWriter*.
+    static_assert(!std::has_virtual_destructor<IO::Encoding>::value, "B34_RULES §1.1");
+    static_assert(!std::has_virtual_destructor<IO::BinaryEncoding>::value, "B34_RULES §1.1");
+    static_assert(!std::has_virtual_destructor<IO::TextEncoding>::value, "B34_RULES §1.1");
+    static_assert(!std::has_virtual_destructor<IO::VisitorEncoding>::value, "B34_RULES §1.1");
+
+    // A concrete type destructible at namespace scope is what lets encoding.cpp
+    // and encoding_visitor_text.cpp hold one shared instance for their address
+    // doors to delegate through with a qualified, non-virtual call.
+    static_assert(std::is_destructible<IO::BinaryEncoding>::value, "door instance");
+    static_assert(std::is_destructible<IO::TextEncoding>::value, "door instance");
+    static_assert(std::is_destructible<IO::VisitorEncoding>::value, "door instance");
+    CHECK(true);
+}
+
 // ===========================================================================
 // PART C — `IO::Serializer`: layout-identical to BOTH legacy spellings, and a
 // live round trip through a fake stream reproducing the retail constructor.

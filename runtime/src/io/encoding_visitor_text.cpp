@@ -87,33 +87,102 @@ VisitorCodec* MakeVisitor(Serializer* ser, int32_t version) {
 
 }  // namespace
 
+// ---------------------------------------------------------------------------
+// ENDGAME B.3.4 block 1 — these ten slots are now `IO::VisitorEncoding`'s and
+// `IO::TextEncoding`'s methods (runtime/types/io/Serializer.h; the two Visitor
+// factory bodies are at the bottom of this file, everything else is inline in
+// the header). The ten doors keep their addresses and their registrations and
+// DELEGATE.
+//
+// The delegation is a QUALIFIED, non-virtual call for the same reason
+// encoding.cpp's is, and that banner has the full argument: a live Encoding
+// wears the MINTED table, whose slots resolve back to these doors, so a virtual
+// call here would recurse into itself instead of delegating. The two file-scope
+// instances exist only to give the non-static members a `this` that none of the
+// ten retail bodies ever reads.
+// ---------------------------------------------------------------------------
+IO::VisitorEncoding g_visitorEncoding;
+IO::TextEncoding    g_textEncoding;
+
 // ---- VISITOR encoding, 0x1801559f8 -----------------------------------------
-extern "C" bool RtIo_VisitorEncoding_IsBinary(void* self) { (void)self; return false; }  // 0x1800bafe0
-extern "C" bool RtIo_VisitorEncoding_IsText(void* self)   { (void)self; return false; }  // 0x1800bafd0
-extern "C" int32_t RtIo_VisitorEncoding_GetKind(void* self) { (void)self; return 3; }    // 0x1800bafc0
+extern "C" bool RtIo_VisitorEncoding_IsBinary(void* self) {                              // 0x1800bafe0
+    (void)self; return g_visitorEncoding.IO::VisitorEncoding::IsBinary();
+}
+extern "C" bool RtIo_VisitorEncoding_IsText(void* self) {                                // 0x1800bafd0
+    (void)self; return g_visitorEncoding.IO::VisitorEncoding::IsText();
+}
+extern "C" int32_t RtIo_VisitorEncoding_GetKind(void* self) {                            // 0x1800bafc0
+    (void)self; return g_visitorEncoding.IO::VisitorEncoding::GetKind();
+}
 extern "C" VisitorCodec* RtIo_VisitorEncoding_CreateReader(void* self, Serializer* ser,
                                                            int32_t version) {          // 0x1800baf00
     (void)self;
-    return MakeVisitor(ser, version);
+    return reinterpret_cast<VisitorCodec*>(
+        g_visitorEncoding.IO::VisitorEncoding::CreateReader(
+            reinterpret_cast<IO::Serializer&>(*ser), version));   // B.3.4 bridge
 }
 extern "C" VisitorCodec* RtIo_VisitorEncoding_CreateWriter(void* self, Serializer* ser,
                                                            int32_t version) {          // 0x1800bae40
     (void)self;
-    return MakeVisitor(ser, version);
+    return reinterpret_cast<VisitorCodec*>(
+        g_visitorEncoding.IO::VisitorEncoding::CreateWriter(
+            reinterpret_cast<IO::Serializer&>(*ser), version));   // B.3.4 bridge
 }
 
 // ---- TEXT encoding, 0x1801559d0 ----------------------------------------------
-extern "C" bool RtIo_TextEncoding_IsBinary(void* self) { (void)self; return false; }     // 0x1800b9ab0
-extern "C" bool RtIo_TextEncoding_IsText(void* self)   { (void)self; return true; }      // 0x1800b9aa0
-extern "C" int32_t RtIo_TextEncoding_GetKind(void* self) { (void)self; return 1; }       // 0x1800b9a90
+extern "C" bool RtIo_TextEncoding_IsBinary(void* self) {                                 // 0x1800b9ab0
+    (void)self; return g_textEncoding.IO::TextEncoding::IsBinary();
+}
+extern "C" bool RtIo_TextEncoding_IsText(void* self) {                                   // 0x1800b9aa0
+    (void)self; return g_textEncoding.IO::TextEncoding::IsText();
+}
+extern "C" int32_t RtIo_TextEncoding_GetKind(void* self) {                               // 0x1800b9a90
+    (void)self; return g_textEncoding.IO::TextEncoding::GetKind();
+}
 extern "C" void* RtIo_TextEncoding_CreateReader(void* self, Serializer* ser, int32_t version) {
-    (void)self; (void)ser; (void)version; return nullptr;                                // 0x1800b9a80
+    (void)self;                                                                          // 0x1800b9a80
+    return g_textEncoding.IO::TextEncoding::CreateReader(
+        reinterpret_cast<IO::Serializer&>(*ser), version);        // B.3.4 bridge
 }
 extern "C" void* RtIo_TextEncoding_CreateWriter(void* self, Serializer* ser, int32_t version) {
-    (void)self; (void)ser; (void)version; return nullptr;                                // 0x1800b9a70
+    (void)self;                                                                          // 0x1800b9a70
+    return g_textEncoding.IO::TextEncoding::CreateWriter(
+        reinterpret_cast<IO::Serializer&>(*ser), version);        // B.3.4 bridge
 }
 
 }  // namespace RtIo
+
+// ===========================================================================
+// IO::VisitorEncoding / IO::TextEncoding — the four factory bodies.
+// ===========================================================================
+// Unchanged in substance from the doors above: Visitor's two are the shared
+// `MakeVisitor` (retail's 0x1800baf00 and 0x1800bae40 are BYTE-IDENTICAL, which
+// is why one helper serves both), and Text's two are retail's bare
+// `XOR EAX,EAX; RET` — text serialization was stripped from the shipped DLL, so
+// returning null here is the faithful body and not a stub.
+namespace IO {
+
+ReaderWriter* VisitorEncoding::CreateReader(Serializer& ser, int version) {
+    return reinterpret_cast<ReaderWriter*>(                        // B.3.4 bridge
+        RtIo::MakeVisitor(reinterpret_cast<rt::io::Serializer*>(&ser), version));
+}
+
+ReaderWriter* VisitorEncoding::CreateWriter(Serializer& ser, int version) {
+    return reinterpret_cast<ReaderWriter*>(                        // B.3.4 bridge
+        RtIo::MakeVisitor(reinterpret_cast<rt::io::Serializer*>(&ser), version));
+}
+
+ReaderWriter* TextEncoding::CreateReader(Serializer& ser, int version) {
+    (void)ser; (void)version;
+    return nullptr;     // 0x1800b9a80 is `XOR EAX,EAX; RET`
+}
+
+ReaderWriter* TextEncoding::CreateWriter(Serializer& ser, int version) {
+    (void)ser; (void)version;
+    return nullptr;     // 0x1800b9a70 is `XOR EAX,EAX; RET`
+}
+
+}  // namespace IO
 
 // Address doors only: nothing here is exported. The minted tables resolve each
 // RT_MINT_UNNAMED slot through RtPortLookupAddr on its dllVa, so these ten
