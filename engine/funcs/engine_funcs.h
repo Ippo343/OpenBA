@@ -1229,31 +1229,11 @@ extern fn_Audio_Scene_Update_t fn_Audio_Scene_Update;
 typedef void (*fn_SaveLoad_Update_t)(void* saveLoad, void* time);
 extern fn_SaveLoad_Update_t fn_SaveLoad_Update;
 
-// IO::Persistence::GetSavePath(this, retval) -> String (non-trivial return ABI)
-// ?GetSavePath@Persistence@IO@@QEBA?AVString@System@@XZ   (retail 0x180007ad0)
-// MSVC x64 member: RCX=this, RDX=hidden_retval (String buffer)
-// Was documented as "?GetSavePath@...@QEAA?AVFilename@System@@XZ", returning a
-// Filename. Both halves were wrong -- QEAA vs QEBA, and Filename vs String --
-// and that name does not exist in the DLL, so ResolveExport returned NULL and
-// this pointer stayed null (an EXEC-of-0 on the saved-scenario branch every
-// tutorial takes). engine_funcs.cpp:2575 fixed the RESOLVE on 2026-08-30 and
-// records why; this comment was left behind until Wave 4 lane C found it
-// (lane D found the identical defect on GetDataDirectory below, independently).
-// String and Filename are both one pointer, so the ABI never complained.
-typedef void* (*fn_Persistence_GetSavePath_t)(void* self, void* retval);
-extern fn_Persistence_GetSavePath_t fn_Persistence_GetSavePath;
-
-// IO::FileSystem::GetDataDirectory(this, retval) -> Filename (non-trivial return ABI)
-// ?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ  (retail 0x180007bd0)
-// MSVC x64 member: RCX=this, RDX=hidden_retval (Filename buffer)
-// Was documented as "?GetDataDirectory@...@QEBAAEBVString@System@@XZ", a
-// reference-returning String overload that DOES NOT EXIST in the DLL -- the sole
-// export returns Filename BY VALUE. Same defect and same 2026-08-30 fix as
-// GetSavePath above (engine_funcs.cpp:2575); only the comment was stale.
-// The hidden return slot IS correctly declared below -- audited by Wave 4
-// lane D, 0 suspicious of 49 (tools/abi_retslot_audit.py).
-typedef void* (*fn_FileSystem_GetDataDirectory_t)(void* self, void* retval);
-extern fn_FileSystem_GetDataDirectory_t fn_FileSystem_GetDataDirectory;
+// IO::Persistence::GetSavePath and IO::FileSystem::GetDataDirectory — REMOVED,
+// ENDGAME B.3.4a closing 2d. Both doors ran out of callers once the caller
+// batches converted; pointer, typedef, definition, resolver and exe-slot
+// fallback all went together. Their exe dispatch slots (0x140151d38 /
+// 0x140151d30) were never registered and the rows stay as they were.
 
 // IO::FileSystem singleton
 extern void** g_pFileSystemSingleton2;  // separate exref for GetDataDirectory calls
@@ -2392,15 +2372,10 @@ extern fn_Configuration_GetVersionString_t fn_Configuration_GetVersionString;
 // Usage: Modification* mod = *(Modification**)g_ppModificationSingleton;
 extern void** g_ppModificationSingleton;
 
-// IO::Modification::GetCount(this) -> int
-// Too small to hook (4 bytes at 0x18000da90). Returns m_count.
-typedef int (*fn_Modification_GetCount_t)(void* self);
-extern fn_Modification_GetCount_t fn_Modification_GetCount;
-
-// IO::Modification::GetModification(this, index) -> Mod*
-// Too small to hook (12 bytes at 0x18000da80). Returns &m_mods[index].
-typedef void* (*fn_Modification_GetMod_t)(void* self, int index);
-extern fn_Modification_GetMod_t fn_Modification_GetMod;
+// IO::Modification::GetCount / ::GetModification — REMOVED, ENDGAME B.3.4a
+// closing 2d. Both were 0-CALL doors onto Runtime 0x18000da90 / 0x18000da80;
+// the ported bodies stay registered by address in runtime/src/io/modification.cpp
+// and callers reach them as real members. Only the readers died here.
 
 
 
@@ -2497,25 +2472,16 @@ extern fn_SavedState_Ctor_t fn_SavedState_Ctor;
 extern uintptr_t g_ReloadDialog_Vtable;
 
 // ============================================================
-// IO::Serializer — save/load serialization (shared globals)
+// IO::Serializer — save/load serialization (shared globals): ALL GONE
 // ============================================================
-// Note: Many reimpl files define local statics with names like
-// fn_Serializer_Ctor. These shared globals use g_ prefix to avoid conflicts.
-
-typedef void (*g_fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-extern g_fn_Serializer_Ctor_t g_fn_Serializer_Ctor;
-
-typedef void (*g_fn_Serializer_Dtor_t)(void* self);
-extern g_fn_Serializer_Dtor_t g_fn_Serializer_Dtor;
-
-typedef void (*g_fn_Serialize_Int_t)(void* self, void* field, const char* name);
-extern g_fn_Serialize_Int_t g_fn_Serialize_Int;
-
-typedef void (*g_fn_Serialize_Bool_t)(void* self, void* field, const char* name);
-extern g_fn_Serialize_Bool_t g_fn_Serialize_Bool;
-
-typedef int (*g_fn_Serializer_GetVersion_t)(void* self);
-extern g_fn_Serializer_GetVersion_t g_fn_Serializer_GetVersion;
+// ENDGAME B.3.4a closing 2d. The five shared doors g_fn_Serializer_Ctor /
+// _Dtor / g_fn_Serialize_Int / _Bool / g_fn_Serializer_GetVersion are removed:
+// IO::Serializer is a real C++ class now (runtime/src/io/serializer_class.cpp),
+// every call site constructs, destroys and Serialize()s it as a member, and the
+// readiness guards that were the pointers' last readers died in 2b/2c/2d.
+// The exe dispatch slots they aliased (0x140152ac8, 0x140152a58, ...) STAY
+// bound in standalone/address_registry.cpp: those are PE import slots that
+// unported, retail-shaped exe code still reads.
 
 // ============================================================
 // TownHallUI support functions
@@ -3536,16 +3502,7 @@ extern fn_InputConfig_Load_t fn_InputConfig_Load;
 extern void** g_pInputConfigSingleton;
 
 // --- IO::Persistence ---
-
-// IO::Persistence::WriteSettings(this) const
-// ?WriteSettings@Persistence@IO@@QEBAXXZ
-typedef void (*fn_Persistence_WriteSettings_t)(const void* self);
-extern fn_Persistence_WriteSettings_t fn_Persistence_WriteSettings;
-
-// IO::Persistence::ReadSettings(this)
-// ?ReadSettings@Persistence@IO@@QEAAXXZ
-typedef void (*fn_Persistence_ReadSettings_t)(void* self);
-extern fn_Persistence_ReadSettings_t fn_Persistence_ReadSettings;
+// WriteSettings / ReadSettings — REMOVED, ENDGAME B.3.4a closing 2d (0 CALLs).
 
 // --- Input::Device ---
 
@@ -3856,18 +3813,9 @@ extern fn_Sprite_Sprite_t fn_Sprite_Sprite;
 typedef void (*fn_Sprite_DefaultCtor2_t)(void* self);
 extern fn_Sprite_DefaultCtor2_t fn_Sprite_DefaultCtor2;
 
-// Serializer encoding virtual dispatch helper.
-// The Serializer struct (24 bytes) has an encoding sub-object at offset +0x08.
-// Calling encoding->vtable[0x98/8](encoding, &field) serializes an ExternalPtr
-// through the serializer's encoding layer.
-// Usage: SerializerEncodingVCall(serializer_24bytes, 0x98, &field);
-inline void SerializerEncodingVCall(void* serializer, int vtableOffset, void* field) {
-    void* encoding = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(serializer) + 8);
-    void* vtable = *reinterpret_cast<void**>(encoding);
-    typedef void (*VFunc_t)(void*, void*);
-    auto fn = *reinterpret_cast<VFunc_t*>(reinterpret_cast<uintptr_t>(vtable) + vtableOffset);
-    fn(encoding, field);
-}
+// SerializerEncodingVCall — REMOVED, ENDGAME B.3.4a closing 2d. It hand-rolled
+// a virtual dispatch through the 24-byte Serializer's encoding sub-object at
+// +0x08; it had no caller left once IO::Serializer became a real class.
 
 // FUN_14000bd30(ExternalPtr*, Serializer*) — ExternalPtr serialize helper (exe function)
 typedef void (*fn_ExternalPtr_Serialize_t)(void* externPtrField, void* serializer);
@@ -3886,9 +3834,9 @@ extern fn_ExternalPtr_Serialize3_t fn_ExternalPtr_Serialize3;
 typedef void (*fn_ExternalRefArray_Serialize_t)(void* serializer, int count, void* arrayBase, void* param4);
 extern fn_ExternalRefArray_Serialize_t fn_ExternalRefArray_Serialize;
 
-// IO::Serializer::Serialize(this, count, buffer, name) — bulk serialize bytes (exe dispatch)
-typedef void (*fn_Serializer_SerializeBulk_t)(void* self, int count, void* buffer, const char* name);
-extern fn_Serializer_SerializeBulk_t fn_Serializer_SerializeBulk;
+// IO::Serializer::Serialize(this, count, buffer, name) — bulk serialize bytes.
+// REMOVED, ENDGAME B.3.4a closing 2d (0 CALLs). Its slot 0x140152400 stays
+// registered in standalone/address_registry.cpp.
 
 // Component_Serialize(this, Stream*) — Component base serialize (exe function 0x14012e2a0 or similar)
 typedef void (*fn_ComponentBase_Serialize_t)(void* self, void* stream);
@@ -5157,10 +5105,8 @@ extern fn_GoalInstance_BaseDtor_t fn_GoalInstance_BaseDtor;
 typedef void (*fn_GoalInstance_Persist_t)(void* self, void* stream);
 extern fn_GoalInstance_Persist_t fn_GoalInstance_Persist;
 
-// Object::InternalBasePtr::Serialize (Runtime DLL export)
-// ?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z
-typedef void (*fn_InternalBasePtr_Serialize_t)(void* self, void* serializer);
-extern fn_InternalBasePtr_Serialize_t fn_InternalBasePtr_Serialize;
+// Object::InternalBasePtr::Serialize — REMOVED, ENDGAME B.3.4a closing 2d
+// (0 CALLs; every site is now a member call on a real InternalBasePtr).
 
 // UpdateLoop/Game IsRunning — dispatch slot 0x140152850
 // Used by PopulationGoal::Slot8 to check if game is active
@@ -5505,11 +5451,8 @@ extern fn_Video_IndexBuffer_Ctor_t fn_Video_IndexBuffer_Ctor;
 typedef void (*fn_System_Color_Serialize_t)(void* color, void* serializer);
 extern fn_System_Color_Serialize_t fn_System_Color_Serialize;
 
-// IO::Serializer::Serialize(float*, char* name) — single-float serialize. There
-// are several Serialize overloads on Serializer (int/uint/bool/float/etc.); this
-// is the (float*) variant, mangled as ?Serialize@Serializer@IO@@QEAAXAEAMPEBD@Z.
-typedef void (*fn_Serializer_Serialize_Float_t)(void* serializer, float* value, const char* name);
-extern fn_Serializer_Serialize_Float_t fn_Serializer_Serialize_Float;
+// IO::Serializer::Serialize(float&) — REMOVED, ENDGAME B.3.4a closing 2d
+// (0 CALLs). Slot 0x140152a60 stays registered in address_registry.cpp.
 
 // Dynamic-array resize helpers — three flavors that share the same capacity-
 // growth structure but differ by element stride. The argument is a pointer to a
@@ -5646,15 +5589,10 @@ extern fn_Array_Resize_t fn_Array_Resize_Stride16B;      // 0x14001ef10  M3.5 Pa
 // (resolved by mangled name; many already exist, listed here for reference)
 // ============================================================
 
-// IO::Serializer::GetEncoding — dispatch slot 0x1401529f8.
-// Returns Encoding* (used to query IsLoading/IsSaving via slot vtable+0x10).
-typedef void* (*fn_Serializer_GetEncoding_t)(void* self);
-extern fn_Serializer_GetEncoding_t fn_Serializer_GetEncoding;
-
-// IO::Serializer::Serialize(uint&, const char* name) — dispatch slot 0x140152a50.
-// (The bool variant at 0x140152a58 is already declared as g_fn_Serialize_Bool.)
-typedef void (*fn_Serializer_Serialize_Uint_t)(void* self, uint32_t* field, const char* name);
-extern fn_Serializer_Serialize_Uint_t fn_Serializer_Serialize_Uint;
+// IO::Serializer::GetEncoding (slot 0x1401529f8) and
+// IO::Serializer::Serialize(uint&) (slot 0x140152a50) — REMOVED, ENDGAME
+// B.3.4a closing 2d (0 CALLs). Both slots stay registered in
+// standalone/address_registry.cpp; only these readers died.
 
 // Object::ExternalFactory::IsReferenceModeEnabled — dispatch slot 0x140151218.
 
@@ -5822,19 +5760,17 @@ extern fn_TradeWork_sub_c780_t fn_TradeWork_sub_c780;  // 0x1400ac780  M3.5 Path
 // THE DISPATCH-SLOT ROWS THEMSELVES STAY BOUND (B34_RULES §6.5(g)): they are PE
 // import slots that retail-shaped exe code reads, not our call sites.
 //
-// ENDGAME B.3.4a closing — THREE MORE ARE GONE, for the opposite reason: they
+// ENDGAME B.3.4a closing — THE REST ARE GONE TOO, for the opposite reason: they
 // were never aliases, they simply ran out of CALLERS once the caller batches
 // converted. `fn_Ser_Slot_SerUShortArr_488` (0x140152488) and
-// `fn_Ser_Slot_SerByteArr_618` (0x140152618) had zero calls and zero guards, so
-// pointer, typedef, definition, resolver read and _DEBUG print all went
-// together; `fn_Ser_Slot_SerFloat_A60` went in step 0. The three below still
-// have readiness GUARDS in code/Game and retire with them, not before.
+// `fn_Ser_Slot_SerByteArr_618` (0x140152618) went in closing 2a;
+// `fn_Ser_Slot_SerFloat_A60` went in step 0; and closing 2d takes the last
+// three, `fn_Ser_Slot_SerByte_410` (0x140152410),
+// `fn_Ser_Slot_SerSizedRaw_3F8` (0x1401523f8) and `_400` (0x140152400),
+// together with the readiness guards in code/Game that were their last readers
+// and with the two typedefs `fn_Ser_SerByte_t` / `fn_Ser_SerSizedRaw_t`, which
+// had no other user. Nothing in this block survives but the history.
 // Same rule as above: the SLOT ROWS STAY BOUND in address_registry.cpp.
-typedef void (*fn_Ser_SerByte_t     )(void* serializer, uint8_t* field, const char* name);
-typedef void (*fn_Ser_SerSizedRaw_t )(void* serializer, int32_t bytes, void* ptr, const char* name);
-extern fn_Ser_SerByte_t      fn_Ser_Slot_SerByte_410;      // 0x140152410  M3.5 Path B session 8
-extern fn_Ser_SerSizedRaw_t  fn_Ser_Slot_SerSizedRaw_3F8;  // 0x1401523f8  M3.5 Path B session 8
-extern fn_Ser_SerSizedRaw_t  fn_Ser_Slot_SerSizedRaw_400;  // 0x140152400  M3.5 Path B session 8
 
 // ============================================================
 // M3.5 — Geometry vtable draw primitives (slot 0x14015f110)
