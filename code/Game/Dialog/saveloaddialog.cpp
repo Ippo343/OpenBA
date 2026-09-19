@@ -32,6 +32,11 @@
 //   +0x158 buttonDelete (InternalBasePtr)
 
 #include "Dialog/ui_dialogs.h"
+// ENDGAME B.3.5 batch K1: the runtime type headers come FIRST — they reach
+// runtime/types/volume/Volume.h, whose global-scope `struct Rectangle` is hidden by
+// <wingdi.h>'s `Rectangle()` once <windows.h> has been seen through resolve.h.
+#include "video/ImageBuffer.h"
+#include "graphics/Material.h"
 #include "Component/coll_bridge.h"
 #include "options.h"
 #include "engine_funcs.h"
@@ -245,15 +250,21 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
             // for all checks, but here we need the Material type. Since the original code
             // works correctly, the ExternalFactory::FindOrLoad result is passed directly.
             // The IsDerivedFrom is checking MaterialExternal type.
-            fn_MaterialInstance_SetMaterial(matInstFinal,
-                matExternal ? matExternal : nullptr);
+            reinterpret_cast<Graphics::MaterialInstance*>(matInstFinal)->SetMaterial(
+                Object::ExternalPtr<Graphics::Material>(
+                    reinterpret_cast<Graphics::Material*>(
+                        matExternal ? matExternal : nullptr)));   // B.3.5 bridge
 
             // Add texture: "diffuse" -> saveInfo's ImageBuffer at +0x18
             System::String diffuseStr("diffuse");
-            fn_MaterialInstance_AddTexture(matInstFinal, &diffuseStr,
-                *(void**)((uintptr_t)saveInfo + 0x18));
+            reinterpret_cast<Graphics::MaterialInstance*>(matInstFinal)->AddTexture(
+                *reinterpret_cast<const RtSystem::String*>(&diffuseStr),
+                Object::ExternalPtr<Video::ImageBuffer>(
+                    *reinterpret_cast<Video::ImageBuffer**>(
+                        (uintptr_t)saveInfo + 0x18)));   // B.3.5 bridge
 
-            fn_MaterialInstance_BuildParameters(matInstFinal);
+            reinterpret_cast<Graphics::MaterialInstance*>(matInstFinal)
+                ->BuildParameters();   // B.3.5 bridge
 
             // Allocate SpriteSheet (0x58 bytes)
             void* sheet = fn_MemAlloc(g_pMemAllocSingleton, 0x58, 8);
@@ -269,8 +280,10 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
 
             // Get image dimensions
             void* imageBuffer = *(void**)((uintptr_t)saveInfo + 0x18);
-            int imgHeight = fn_ImageBuffer_Height(imageBuffer);
-            int imgWidth = fn_ImageBuffer_Width(imageBuffer);
+            int imgHeight = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)
+                                ->Height();   // B.3.5 bridge
+            int imgWidth = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)
+                               ->Width();    // B.3.5 bridge
 
             // Set spritesheet dimensions (raw SpriteSheet fields; not our struct)
             System::String emptyStr1(""), emptyStr2("");

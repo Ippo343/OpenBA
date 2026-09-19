@@ -22,6 +22,9 @@
 // Geometry's retail vtable 0x180154e60 and hand-builds its own); it is NOT
 // converted. Only the calls it makes INTO Video::Context members are.
 #include "video/Context.h"
+#include "graphics/Geometry.h"   // ENDGAME B.3.5 batch K1 — same include-order reason
+#include "graphics/Material.h"
+#include "graphics/Camera.h"     // Graphics::Renderer
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
@@ -86,10 +89,12 @@ static void StatusIconGeom_AddDrawItems(void* geometry, void* /*scene*/, void* r
     void* sheet = *reinterpret_cast<void**>(g + 0xd0);
     void* material = sheet ? *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(sheet) + 0x30)
                            : nullptr;
-    if (fn_Renderer_AddDrawItem && material) {
-        // AddDrawItem(renderer, geom, material, 0x8000, 0, 0.0, uvScale, 1, null, 0)
-        fn_Renderer_AddDrawItem(renderer, geometry, material,
-                                0x8000, 0, 0.0f, kUVScale, 1, nullptr, 0);
+    if (material) {
+        // AddDrawItem(geom, material, 0x8000, 0, 0.0, uvScale, 1, null, 0)
+        reinterpret_cast<Graphics::Renderer*>(renderer)->AddDrawItem(
+            reinterpret_cast<const Graphics::Geometry*>(geometry),
+            reinterpret_cast<const Graphics::MaterialInstance*>(material),
+            0x8000, 0, 0.0f, kUVScale, 1, nullptr, 0);   // B.3.5 bridge
     }
 }
 

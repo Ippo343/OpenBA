@@ -37,6 +37,7 @@
 // whose global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
 // once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
 #include "video/Context.h"
+#include "graphics/Material.h"   // ENDGAME B.3.5 batch K1 — same include-order reason
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "system/Filename.h"
@@ -59,11 +60,11 @@ static inline float C_uvScale() { return 0.125f;       }  // DAT_1401720ec (0x3e
 static inline float C_deg2rad() { return 0.017453292f; }  // DAT_1401720cc (0x3c8efa35)
 static inline float C_hScale()  { return 0.00390625f;  }  // DAT_1401720bc (0x3b800000 = 1/256)
 
-// ---- Runtime-x64.dll exports used by the overlay render (resolved lazily). --------
-// Names recovered from the exe dispatch-slot name-table (0x1401c027e..).
-typedef void  (*fn_MatSetup_t)(void* mat, void* ctx, int flag);         // ?Setup@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z (slot 0x140152920)
-
-static fn_MatSetup_t       s_matSetup    = nullptr;
+// ENDGAME B.3.5 batch K1: the `s_matSetup` cache (exe dispatch slot 0x140152920,
+// with a `?Setup@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z` fallback)
+// went with its one caller below, which calls the member. THE DOOR DECIDES THE
+// OVERLOAD: that mangled name is `Graphics::MaterialInstance::Setup` (0x180102c90,
+// ported), NOT `Graphics::Material::Setup` (0x1801027e0, declared-undefined).
 
 // The record array is owned/freed by sub_1380. Uses the proven engine_funcs
 // allocator pair (fn_MemAlloc(singleton,size,align) + fn_MemFreeStatic(ptr)) — same
@@ -80,12 +81,8 @@ static fn_MatSetup_t       s_matSetup    = nullptr;
 static bool s_init = false;
 static void EnsureFns() {
     if (s_init) return;
-    auto slot = [](uintptr_t a) -> void* {
-        uintptr_t s = ResolveAddr(Module::Exe, a);
-        return s ? *reinterpret_cast<void**>(s) : nullptr;
-    };
-    s_matSetup = reinterpret_cast<fn_MatSetup_t>(slot(0x140152920));
-    if (!s_matSetup) s_matSetup = reinterpret_cast<fn_MatSetup_t>(ResolveExport("?Setup@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z"));
+    // The file-local `slot(addr)` reader went with the one cache it filled
+    // (MaterialInstance::Setup) — ENDGAME B.3.5 batch K1.
     s_init = true;
 }
 
@@ -212,7 +209,11 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
         }
     }
 
-    if (material && s_matSetup) s_matSetup(material, ctx, 0);
+    // B.3.5 bridge — `material` is a PROVED `Graphics::MaterialInstance`: the block
+    // above gates it through `fn_IsDerivedFrom(obj, **g_ppTypeInfo_MaterialInstance)`.
+    if (material)
+        reinterpret_cast<const Graphics::MaterialInstance*>(material)
+            ->Setup(*reinterpret_cast<Video::Context*>(ctx), 0);   // B.3.5 bridge
     {
         Math::Matrix matrix = Math::Matrix::Identity();
         reinterpret_cast<Video::Context*>(ctx)->SetTransform(0, matrix);   // B.3.5 bridge

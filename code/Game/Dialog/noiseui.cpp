@@ -18,6 +18,11 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_panels.h"
+// ENDGAME B.3.5 batch K1: the runtime type headers come FIRST — they reach
+// runtime/types/volume/Volume.h, whose global-scope `struct Rectangle` is hidden by
+// <wingdi.h>'s `Rectangle()` once <windows.h> has been seen through resolve.h.
+#include "video/ImageBuffer.h"
+#include "graphics/Material.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -90,13 +95,19 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
             material = ext;
         }
     }
-    fn_MaterialInstance_SetMaterial(*materialOut, material);
+    reinterpret_cast<Graphics::MaterialInstance*>(*materialOut)->SetMaterial(
+        Object::ExternalPtr<Graphics::Material>(
+            reinterpret_cast<Graphics::Material*>(material)));   // B.3.5 bridge
 
     // --- Add ImageBuffer as "diffuse" texture ---
     System::String diffuseStr("diffuse");
-    fn_MaterialInstance_AddTexture(*materialOut, &diffuseStr, imageBuffer);
+    reinterpret_cast<Graphics::MaterialInstance*>(*materialOut)->AddTexture(
+        *reinterpret_cast<const RtSystem::String*>(&diffuseStr),
+        Object::ExternalPtr<Video::ImageBuffer>(
+            reinterpret_cast<Video::ImageBuffer*>(imageBuffer)));   // B.3.5 bridge
 
-    fn_MaterialInstance_BuildParameters(*materialOut);
+    reinterpret_cast<Graphics::MaterialInstance*>(*materialOut)
+        ->BuildParameters();   // B.3.5 bridge
 
     // --- Allocate and construct SpriteSheet (0x58 bytes) ---
     void* sheet = fn_MemAlloc(g_pMemAllocSingleton, 0x58, 8);
@@ -112,8 +123,8 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
     *(void**)((uintptr_t)spriteSheet + 0x30) = *materialOut;
 
     // Get image dimensions
-    int imgW = fn_ImageBuffer_Width(imageBuffer);
-    int imgH = fn_ImageBuffer_Height(imageBuffer);
+    int imgW = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Width();    // B.3.5 bridge
+    int imgH = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Height();   // B.3.5 bridge
 
     // Set sprite sheet name/group strings (empty) and dimensions
     uintptr_t ss = (uintptr_t)*spriteSheetOut;
@@ -258,7 +269,8 @@ void NoiseUI_GenerateNoise(void* self) {
     }
 
     // Copy to ImageBuffer texture
-    fn_ImageBuffer_CopyToTexture(*(void**)(s + 0x30), pixels, 0x100, 0x100);
+    reinterpret_cast<Video::ImageBuffer*>(*(void**)(s + 0x30))
+        ->CopyToTexture(pixels, 0x100, 0x100);   // B.3.5 bridge
     fn_MemFreeStatic(pixels);
 }
 
@@ -291,14 +303,26 @@ void NoiseUI_Slot4(NoiseUI* self) {
     //                    Array<Array<uchar>>* levels=null)
     // The last parameter is a POINTER in a stack slot -- passing it as an int
     // leaves the high dword uninitialised (that exact bug crashed ModDialog).
-    typedef bool (*fn_ImageBuffer_Create_t)(void* self, int type, int usage, int format,
-                                             unsigned mip, int w, int h, int filter,
-                                             int addrU, int addrV, int addrW,
-                                             void* levels);
-    uintptr_t vtable = *(uintptr_t*)imageBuffer;
-    fn_ImageBuffer_Create_t fnCreate =
-        *(fn_ImageBuffer_Create_t*)(vtable + 0x48);
-    fnCreate(imageBuffer, 0, 2, 5, 0, 0x100, 0x100, 1, 1, 1, 1, nullptr);
+    //
+    // B.3.5 bridge — 0x48/8 == slot 9 of `Video::ImageBuffer`, which IS `Create`
+    // (B35_RULES 2.3 item 5). The receiver is PROVED a `Video::ImageBuffer`: the
+    // block above takes 0x68 bytes (== sizeof(Video::ImageBuffer)) from MemAlloc,
+    // runs them through `??0ImageBuffer@Video@@`, then stamps the exe's own NoiseUI
+    // ImageBuffer vtable — so the virtual call reads that live table at exactly the
+    // +0x48 the slot read did. Same shape as minimap_paint.cpp and
+    // serialize_image_upload.cpp (batch I1).
+    reinterpret_cast<Video::ImageBuffer*>(imageBuffer)->Create(
+        /*type     */ 0,
+        /*usage    */ 2,
+        /*format   */ 5,
+        /*flags    */ 0u,
+        /*width    */ 0x100,
+        /*height   */ 0x100,
+        /*filter   */ 1,
+        /*addressU */ 1,
+        /*addressV */ 1,
+        /*addressW */ 1,
+        /*levels   */ nullptr);   // B.3.5 bridge
 
     // Allocate 256*256 ARGB pixel buffer, fill with black (0xFF000000)
     uint32_t* pixels = (uint32_t*)fn_MemAlloc(g_pMemAllocSingleton, 0x40000, 4);
@@ -309,7 +333,8 @@ void NoiseUI_Slot4(NoiseUI* self) {
     }
 
     // Copy pixel data to ImageBuffer texture
-    fn_ImageBuffer_CopyToTexture(*(void**)(s + 0x30), pixels, 0x100, 0x100);
+    reinterpret_cast<Video::ImageBuffer*>(*(void**)(s + 0x30))
+        ->CopyToTexture(pixels, 0x100, 0x100);   // B.3.5 bridge
     fn_MemFreeStatic(pixels);
 
     // Setup MaterialInstance + SpriteSheet, find "noiseImage" element

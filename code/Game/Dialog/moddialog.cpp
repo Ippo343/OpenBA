@@ -30,6 +30,12 @@
 //   +0x48: MaterialInstance*
 //   +0x50: SpriteSheet*
 
+// ENDGAME B.3.5 batch K1: the runtime type headers come FIRST — they reach
+// runtime/types/volume/Volume.h, whose global-scope `struct Rectangle` is hidden by
+// <wingdi.h>'s `Rectangle()` once <windows.h> has been seen through resolve.h.
+#include "video/ImageBuffer.h"
+#include "video/Device.h"
+#include "graphics/Material.h"
 #include "ui/Dialogs.h"
 #include "options.h"
 #include "Dialog/ui_dialogs.h"
@@ -56,18 +62,16 @@ extern uintptr_t ThumbVtable_StampSpriteSheet(void* obj);
 typedef void* (*fn_ElementVt_Child_t)(void* self, void* retbuf, int index);
 typedef void  (*fn_ElementVt_Hide_t)(void* self, int hide);
 
-// ImageBuffer::Create: vtable+0x48 (via g_NoiseUI_ImageBufferVtable). Mangled:
+// ENDGAME B.3.5 batch K1: the hand-built `fn_ImageBuffer_Create_t` slot typedef for
+// vtable+0x48 went with the slot read below, which is now a virtual call on
+// `Video::ImageBuffer`. Keeping the history the typedef carried, because the member's
+// signature is what makes it safe: the LAST parameter of
 //   ?Create@ImageBuffer@Video@@UEAA_NW4ImageType@12@W4Usage@12@W4Format@12@IHHW4FilterMode@12@
 //   W4AddressMode@12@44PEAV?$Array@V?$Array@E@Collection@@@Collection@@@Z
-// i.e. (ImageType, Usage, Format, uint mip, int w, int h, FilterMode, AddressMode x3,
-//        Array<Array<uchar>>* levels). The LAST parameter is a POINTER: it lives in a
-// stack slot, and passing it as `int 0` writes only the low dword, leaving the high
-// dword as whatever was there (0x00007ffc... on the first Mods click) -- which
-// ImageBufferData_Create then dereferenced as `levels->count`.
-typedef bool (*fn_ImageBuffer_Create_t)(void* self, int type, int usage, int format,
-                                        unsigned mip, int w, int h,
-                                        int filter, int addrU, int addrV, int addrW,
-                                        void* levels);
+// is a POINTER (`Array<Array<uchar>>* levels`) living in a stack slot, and passing it as
+// `int 0` wrote only the low dword — leaving the high dword as whatever was there
+// (0x00007ffc... on the first Mods click), which ImageBufferData_Create then
+// dereferenced as `levels->count`. The C++ member types it, so that cannot recur.
 
 // ============================================================
 // Filename equality check — compares two System::Filename/String objects
@@ -202,14 +206,15 @@ conflict_done:
                                   hasConflict ? 1 : 0);   // clear bit 0 (visible) when conflict
 
         // Copy thumbnail texture (48x48)
-        if (fn_VideoDevice_Lock && fn_VideoDevice_Unlock && fn_ImageBuffer_CopyToTexture) {
+        {
             void* videoDevice = g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr;
             if (videoDevice) {
-                fn_VideoDevice_Lock(videoDevice);
+                reinterpret_cast<Video::Device*>(videoDevice)->Lock();   // B.3.5 bridge
                 void* imageBuffer = *(void**)(entry + 0x40);
                 void* thumbnailData = *(void**)(m + 0x30);  // mod->m_intArrayData (thumbnail pixels)
-                fn_ImageBuffer_CopyToTexture(imageBuffer, thumbnailData, 0x30, 0x30);
-                fn_VideoDevice_Unlock(videoDevice);
+                reinterpret_cast<Video::ImageBuffer*>(imageBuffer)
+                    ->CopyToTexture(thumbnailData, 0x30, 0x30);          // B.3.5 bridge
+                reinterpret_cast<Video::Device*>(videoDevice)->Unlock(); // B.3.5 bridge
             }
         }
     }
@@ -388,9 +393,13 @@ void ModDialog_Slot4(ModDialog* self) {
         if (imgBuf) {
             fn_ImageBuffer_Ctor(imgBuf);
             *(uintptr_t*)imgBuf = g_NoiseUI_ImageBufferVtable; // same vtable as NoiseUI
-            // Create: vtable[0x48/8]=vtable[9](self, 0, 2, 5, mip=0, w=48, h=48, 1,1,1,1, levels=null)
-            void** ivt = *(void***)imgBuf;
-            ((fn_ImageBuffer_Create_t)ivt[9])(imgBuf, 0, 2, 5, 0, 0x30, 0x30, 1, 1, 1, 1, nullptr);
+            // B.3.5 bridge — 0x48/8 == slot 9 of `Video::ImageBuffer`, which IS `Create`
+            // (B35_RULES 2.3 item 5). PROVED receiver: 0x68 bytes (== sizeof) from
+            // MemAlloc, run through `??0ImageBuffer@Video@@`, then stamped with the exe's
+            // own NoiseUI ImageBuffer vtable — so the virtual call reads that live table at
+            // exactly the +0x48 the slot read did.
+            reinterpret_cast<Video::ImageBuffer*>(imgBuf)->Create(
+                0, 2, 5, 0u, 0x30, 0x30, 1, 1, 1, 1, nullptr);   // B.3.5 bridge
             entry.imageBuffer = imgBuf;
         }
 
@@ -415,16 +424,22 @@ void ModDialog_Slot4(ModDialog* self) {
                 bool derived = fn_IsDerivedFrom(ext, g_TypeId_Material ? *g_TypeId_Material : 0);
                 if (derived) material = ext;
             }
-            fn_MaterialInstance_SetMaterial(matInst, material);
+            reinterpret_cast<Graphics::MaterialInstance*>(matInst)->SetMaterial(
+                Object::ExternalPtr<Graphics::Material>(
+                    reinterpret_cast<Graphics::Material*>(material)));   // B.3.5 bridge
         }
 
         // AddTexture("diffuse", imageBuffer)
         {
             System::String strBuf("diffuse");
-            fn_MaterialInstance_AddTexture(matInst, &strBuf, imgBuf);
+            reinterpret_cast<Graphics::MaterialInstance*>(matInst)->AddTexture(
+                *reinterpret_cast<const RtSystem::String*>(&strBuf),
+                Object::ExternalPtr<Video::ImageBuffer>(
+                    reinterpret_cast<Video::ImageBuffer*>(imgBuf)));   // B.3.5 bridge
         }
 
-        fn_MaterialInstance_BuildParameters(matInst);
+        reinterpret_cast<Graphics::MaterialInstance*>(matInst)
+            ->BuildParameters();   // B.3.5 bridge
 
         // --- Create SpriteSheet (0x58 bytes) ---
         void* sprSheet = fn_MemAlloc(g_pMemAllocSingleton, 0x58, 8);

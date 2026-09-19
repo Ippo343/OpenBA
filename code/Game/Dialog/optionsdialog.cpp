@@ -10,6 +10,11 @@
 //                  Dialog\OptionsDialog.cpp
 
 #include "Dialog/ui_dialogs.h"
+// ENDGAME B.3.5 batch K1: video/Device.h FIRST. It pulls no Volume.h itself, but the
+// house rule (a runtime type header ahead of anything that reaches <windows.h> through
+// resolve.h, whose <wingdi.h> `Rectangle()` hides Volume.h's global `struct Rectangle`)
+// is kept here too so a later include change cannot break it silently.
+#include "video/Device.h"       // Video::Device, Video::Configuration
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -307,7 +312,7 @@ static void OptionsDialog_PopulateFilterCombo(OptionsDialog* self);
 // to the Runtime DLL's _singleton slot in EngineFuncsInit, but keep this
 // guard as belt-and-braces so a future regression here can't crash the game.
 static void OptionsDialog_ValidateVideoConfig(OptionsDialog* self) {
-    if (!fn_VideoDevice_ValidateConfiguration || !g_pVideoDeviceSingleton) return;
+    if (!g_pVideoDeviceSingleton) return;
     if (self->savedRefreshDen == 0) {
         // Defaults from Video::Configuration ctor (Runtime @ 0x1800f6f10): 60/1.
         // Better to pretend "60Hz" than to crash; the next Apply will write
@@ -315,12 +320,16 @@ static void OptionsDialog_ValidateVideoConfig(OptionsDialog* self) {
         self->savedRefreshNum = 60;
         self->savedRefreshDen = 1;
     }
-    fn_VideoDevice_ValidateConfiguration(
-        *g_pVideoDeviceSingleton,
-        (int*)&self->savedRenderer, (int*)&self->savedAdapter,
-        (int*)&self->savedWidth,    (int*)&self->savedHeight,
-        (int*)&self->savedRefreshNum, (int*)&self->savedRefreshDen,
-        (int*)&self->savedAntialias, (int*)&self->savedAdapter);
+    // B.3.5 bridge — THE DOOR DECIDES THE OVERLOAD. `Video::Device` has TWO
+    // `ValidateConfiguration`s at adjacent ordinals; the global this call used is bound to
+    // `?ValidateConfiguration@Device@Video@@QEAAXAEAH0000000@Z` (0x1800f7370, the EIGHT
+    // `int&` out-parameter one), NOT `…QEAA_NXZ` (0x1800f8830, no arguments). Eight
+    // arguments are spelled here so overload resolution cannot pick the sibling.
+    reinterpret_cast<Video::Device*>(*g_pVideoDeviceSingleton)->ValidateConfiguration(
+        *(int*)&self->savedRenderer, *(int*)&self->savedAdapter,
+        *(int*)&self->savedWidth,    *(int*)&self->savedHeight,
+        *(int*)&self->savedRefreshNum, *(int*)&self->savedRefreshDen,
+        *(int*)&self->savedAntialias, *(int*)&self->savedAdapter);   // B.3.5 bridge
 }
 
 // ============================================================
@@ -398,12 +407,12 @@ static void OptionsDialog_PopulateAntialiasCombo(OptionsDialog* self) {
 
     void* stringTable = LoadStringTable("Dialog/StringTable.rsc:multiSample");
 
-    int modeCount = fn_VideoDevice_GetMultisampleModeCount
-                    ? fn_VideoDevice_GetMultisampleModeCount(vidDev) : 0;
+    int modeCount = reinterpret_cast<const Video::Device*>(vidDev)
+                        ->GetMultisampleModeCount();   // B.3.5 bridge
 
     for (int i = 0; i < modeCount; i++) {
-        bool supported = fn_VideoDevice_IsMultisampleModeSupported
-                         ? fn_VideoDevice_IsMultisampleModeSupported(vidDev, i) : false;
+        bool supported = reinterpret_cast<const Video::Device*>(vidDev)
+                             ->IsMultisampleModeSupported(i);   // B.3.5 bridge
         if (!supported) continue;
 
         int addedIdx;
@@ -440,7 +449,8 @@ static void OptionsDialog_PopulateRefreshCombo(OptionsDialog* self) {
     void* vidDev = g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr;
     if (!vidDev) return;
 
-    void* gfxIface = fn_VideoDevice_GetInterface(vidDev, (int)self->savedRenderer);
+    void* gfxIface = (void*)&reinterpret_cast<const Video::Device*>(vidDev)
+                         ->GetInterface((int)self->savedRenderer);   // B.3.5 bridge
     intptr_t adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
     intptr_t adapter = adapterArray + (intptr_t)(int)self->savedAdapter * 0x38;
 
@@ -491,7 +501,8 @@ static void OptionsDialog_PopulateResolutionCombo(OptionsDialog* self) {
     void* vidDev = g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr;
     if (!vidDev) return;
 
-    void* gfxIface = fn_VideoDevice_GetInterface(vidDev, (int)self->savedRenderer);
+    void* gfxIface = (void*)&reinterpret_cast<const Video::Device*>(vidDev)
+                         ->GetInterface((int)self->savedRenderer);   // B.3.5 bridge
     intptr_t adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
     intptr_t adapter = adapterArray + (intptr_t)(int)self->savedAdapter * 0x38;
     int modeCount = *(int*)(adapter + 0x10);
@@ -537,7 +548,8 @@ static void OptionsDialog_PopulateAdapterCombo(OptionsDialog* self) {
 
     fn_ComboElement_RemoveAllItems(self->comboAdapter);
 
-    void* gfxIface = fn_VideoDevice_GetInterface(vidDev, (int)self->savedRenderer);
+    void* gfxIface = (void*)&reinterpret_cast<const Video::Device*>(vidDev)
+                         ->GetInterface((int)self->savedRenderer);   // B.3.5 bridge
     int adapterCount = *(int*)((uintptr_t)gfxIface + 0x10);
     intptr_t adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
 
@@ -567,10 +579,12 @@ static void OptionsDialog_PopulateVideoComboBoxes(OptionsDialog* self) {
     // --- Renderer combo ---
     fn_ComboElement_RemoveAllItems(self->comboRenderer);
 
-    int ifaceCount = fn_VideoDevice_GetInterfaceCount(vidDev);
+    int ifaceCount = reinterpret_cast<const Video::Device*>(vidDev)
+                         ->GetInterfaceCount();   // B.3.5 bridge
     for (int i = 0; i < ifaceCount; i++) {
         // GraphicsInterface starts with a System::String (the interface name)
-        void* gfxIface = fn_VideoDevice_GetInterface(vidDev, i);
+        void* gfxIface = (void*)&reinterpret_cast<const Video::Device*>(vidDev)
+                             ->GetInterface(i);   // B.3.5 bridge
         uint8_t spriteBuf[16] = {};
         fn_Sprite_DefaultCtor(spriteBuf);
         fn_ComboElement_AddItem(self->comboRenderer, spriteBuf, gfxIface, (void*)(intptr_t)i);
@@ -979,7 +993,8 @@ static void OptionsDialog_ApplyVideoSettings(OptionsDialog* self) {
     int refItem = *(int*)((uintptr_t)*(void**)&self->comboRefresh + 0x118);
 
     // Look up actual width/height/refresh from the video interface data
-    void* gfxIface = fn_VideoDevice_GetInterface(vidDev, newRenderer);
+    void* gfxIface = (void*)&reinterpret_cast<const Video::Device*>(vidDev)
+                         ->GetInterface(newRenderer);   // B.3.5 bridge
     intptr_t adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
     intptr_t adapter = adapterArray + (intptr_t)newAdapter * 0x38;
     intptr_t modes = *(intptr_t*)(adapter + 8);
@@ -1043,8 +1058,8 @@ static void OptionsDialog_ApplyVideoSettings(OptionsDialog* self) {
         void* mainLoop = g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr;
         if (fn_MainLoop_OnVideoError && mainLoop)
             fn_MainLoop_OnVideoError(mainLoop);
-        if (fn_VideoDevice_ReleaseDynamic) fn_VideoDevice_ReleaseDynamic(vidDev);
-        if (fn_VideoDevice_Shutdown) fn_VideoDevice_Shutdown(vidDev);
+        reinterpret_cast<Video::Device*>(vidDev)->ReleaseDynamic();   // B.3.5 bridge
+        reinterpret_cast<Video::Device*>(vidDev)->Shutdown();         // B.3.5 bridge
     }
 
     // Write new settings to video config
@@ -1070,12 +1085,12 @@ static void OptionsDialog_ApplyVideoSettings(OptionsDialog* self) {
     bool success;
     if (!needsFullRestart) {
         // Same renderer+adapter: just apply changed settings
-        success = fn_VideoDevice_ApplyChangedSettings
-                  ? fn_VideoDevice_ApplyChangedSettings(vidDev) : false;
+        success = reinterpret_cast<Video::Device*>(vidDev)
+                      ->ApplyChangedSettings();   // B.3.5 bridge
     } else {
         // Full restart
-        success = fn_VideoDevice_Startup ? fn_VideoDevice_Startup(vidDev) : false;
-        if (fn_VideoDevice_RecreateDynamic) fn_VideoDevice_RecreateDynamic(vidDev);
+        success = reinterpret_cast<Video::Device*>(vidDev)->Startup();   // B.3.5 bridge
+        reinterpret_cast<Video::Device*>(vidDev)->RecreateDynamic();     // B.3.5 bridge
         void* mainLoop = g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr;
         if (fn_MainLoop_OnVideoRestart && mainLoop)
             fn_MainLoop_OnVideoRestart(mainLoop);
@@ -1084,7 +1099,7 @@ static void OptionsDialog_ApplyVideoSettings(OptionsDialog* self) {
 
     if (success) {
         // Save the new config
-        if (fn_VideoConfig_Save) fn_VideoConfig_Save(vidCfg);
+        reinterpret_cast<Video::Configuration*>(vidCfg)->Save();   // B.3.5 bridge
     } else {
         // Rollback to old config
         *(int*)((uintptr_t)vidCfg + 0x08) = oldAdapter;
@@ -1277,7 +1292,8 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
             void* resData = fn_ComboElement_GetItemData(self->comboResolution, curItem);
 
             int adapterIdx = self->savedAdapter;
-            void* gfxIface = fn_VideoDevice_GetInterface(*g_pVideoDeviceSingleton, self->savedRenderer);
+            void* gfxIface = (void*)&reinterpret_cast<const Video::Device*>(*g_pVideoDeviceSingleton)
+                                 ->GetInterface(self->savedRenderer);   // B.3.5 bridge
             int adapterIdx2 = self->savedAdapter;
 
             intptr_t adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
@@ -1286,7 +1302,8 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
 
             self->savedWidth = *(uint32_t*)modeEntry;
 
-            gfxIface = fn_VideoDevice_GetInterface(*g_pVideoDeviceSingleton, self->savedRenderer);
+            gfxIface = (void*)&reinterpret_cast<const Video::Device*>(*g_pVideoDeviceSingleton)
+                                 ->GetInterface(self->savedRenderer);   // B.3.5 bridge
             adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
             displayModes = *(intptr_t*)(adapterArray + (intptr_t)adapterIdx2 * 0x38 + 8);
             self->savedHeight = *(uint32_t*)(displayModes + (intptr_t)(int)(intptr_t)resData * 0x18 + 4);
@@ -1303,7 +1320,8 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
             void* refData = fn_ComboElement_GetItemData(self->comboRefresh, refItem);
 
             int adapterIdx = self->savedAdapter;
-            void* gfxIface = fn_VideoDevice_GetInterface(*g_pVideoDeviceSingleton, self->savedRenderer);
+            void* gfxIface = (void*)&reinterpret_cast<const Video::Device*>(*g_pVideoDeviceSingleton)
+                                 ->GetInterface(self->savedRenderer);   // B.3.5 bridge
             int adapterIdx2 = self->savedAdapter;
 
             intptr_t adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
@@ -1314,7 +1332,8 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
 
             self->savedRefreshNum = *(uint32_t*)refreshEntry;
 
-            gfxIface = fn_VideoDevice_GetInterface(*g_pVideoDeviceSingleton, self->savedRenderer);
+            gfxIface = (void*)&reinterpret_cast<const Video::Device*>(*g_pVideoDeviceSingleton)
+                                 ->GetInterface(self->savedRenderer);   // B.3.5 bridge
             adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
             displayMode = adapterArray + (intptr_t)adapterIdx2 * 0x38;
             modeEntry = *(intptr_t*)(displayMode + 8) + (intptr_t)(int)(intptr_t)resData * 0x18;

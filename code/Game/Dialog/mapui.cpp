@@ -11,6 +11,11 @@
 //   +0x48  overlaySpriteSheet (ptr): sprite sheet for overlay
 
 #include "Dialog/ui_panels.h"
+// ENDGAME B.3.5 batch K1: the runtime type headers come FIRST — they reach
+// runtime/types/volume/Volume.h, whose global-scope `struct Rectangle` is hidden by
+// <wingdi.h>'s `Rectangle()` once <windows.h> has been seen through resolve.h.
+#include "video/ImageBuffer.h"
+#include "graphics/Material.h"
 #include "options.h"
 #include "engine_funcs.h"
 #include "system/String.h"
@@ -49,11 +54,11 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
     // than fault. Also require the core primitives.
     if (!imageBuffer || !fn_MemAlloc || !g_pMemAllocSingleton ||
         !fn_MaterialInstance_Ctor || !fn_SpriteSheet_Ctor ||
-        !fn_ImageBuffer_Width || !fn_FindElement) {
+        !fn_FindElement) {
         if (trc) printf("[SetupImg] GUARD-RETURN elem=%s imgBuf=%p MemAlloc=%p Alloc*=%p "
-               "MatCtor=%p SSCtor=%p ImgW=%p FindElem=%p\n", elementName, imageBuffer,
+               "MatCtor=%p SSCtor=%p FindElem=%p\n", elementName, imageBuffer,
                (void*)fn_MemAlloc, g_pMemAllocSingleton, (void*)fn_MaterialInstance_Ctor,
-               (void*)fn_SpriteSheet_Ctor, (void*)fn_ImageBuffer_Width, (void*)fn_FindElement);
+               (void*)fn_SpriteSheet_Ctor, (void*)fn_FindElement);
         *materialOut = nullptr;
         *spriteSheetOut = nullptr;
         return;
@@ -84,15 +89,21 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
             material = ext;
         }
     }
-    fn_MaterialInstance_SetMaterial(*materialOut, material);
+    reinterpret_cast<Graphics::MaterialInstance*>(*materialOut)->SetMaterial(
+        Object::ExternalPtr<Graphics::Material>(
+            reinterpret_cast<Graphics::Material*>(material)));   // B.3.5 bridge
 
     // --- Add ImageBuffer as "diffuse" texture ---
     System::String diffuseStr("diffuse");
     MAPTRC("SetMaterial done, add diffuse texture");
-    fn_MaterialInstance_AddTexture(*materialOut, &diffuseStr, imageBuffer);
+    reinterpret_cast<Graphics::MaterialInstance*>(*materialOut)->AddTexture(
+        *reinterpret_cast<const RtSystem::String*>(&diffuseStr),
+        Object::ExternalPtr<Video::ImageBuffer>(
+            reinterpret_cast<Video::ImageBuffer*>(imageBuffer)));   // B.3.5 bridge
 
     MAPTRC("BuildParameters");
-    fn_MaterialInstance_BuildParameters(*materialOut);
+    reinterpret_cast<Graphics::MaterialInstance*>(*materialOut)
+        ->BuildParameters();   // B.3.5 bridge
     MAPTRC("BuildParameters done, alloc spritesheet");
 
     // --- Allocate and construct SpriteSheet (0x58 bytes) ---
@@ -110,8 +121,8 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
     *(void**)((uintptr_t)spriteSheet + 0x30) = *materialOut;
 
     // Get image dimensions
-    int imgW = fn_ImageBuffer_Width(imageBuffer);
-    int imgH = fn_ImageBuffer_Height(imageBuffer);
+    int imgW = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Width();    // B.3.5 bridge
+    int imgH = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Height();   // B.3.5 bridge
 
     // Set sprite sheet name/group strings (empty) and dimensions
     uintptr_t ss = (uintptr_t)*spriteSheetOut;
