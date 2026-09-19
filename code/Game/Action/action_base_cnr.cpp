@@ -18,6 +18,7 @@
 // whose global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
 // once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
 #include "graphics/Geometry.h"
+#include "graphics/Mesh.h"      // ENDGAME B.3.5 batch K1: reaches Volume.h, so BEFORE resolve.h
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "math/Math.h"
@@ -91,10 +92,8 @@ fn_50f0_t s_fn_50f0 = nullptr;
 // way the existing call sites read IAT slots).
 typedef void  (*fn_Vec4_t)(void* outVec4, const void* scalar);                  // Math::Vector4::Vector4 (slot 0x140152958)
 typedef void  (*fn_Time_t)(void* outTime, float seconds);                       // System::Time::Time (slot 0x140152b00)
-typedef void  (*fn_SetMesh_t)(void* meshInst, void* externalPtr);               // Graphics::MeshInstance::SetMesh (slot 0x140151498)
 fn_Vec4_t    s_fn_Vec4    = nullptr;
 fn_Time_t    s_fn_Time    = nullptr;
-fn_SetMesh_t s_fn_SetMesh = nullptr;
 
 // Float constants from the exe .rdata (read as globals).
 const float* s_p_DAT_1401720f4 = nullptr;  // divisor in FUN_140120db0
@@ -147,7 +146,6 @@ void EnsureResolved() {
 
     s_fn_Vec4         = reinterpret_cast<fn_Vec4_t>(RSlot(0x140152958));
     s_fn_Time         = reinterpret_cast<fn_Time_t>(RSlot(0x140152b00));
-    s_fn_SetMesh      = reinterpret_cast<fn_SetMesh_t>(RSlot(0x140151498));
 
     s_p_DAT_1401720f4 = R<const float*>(0x1401720f4);
     s_p_DAT_140172234 = R<const float*>(0x140172234);
@@ -349,7 +347,8 @@ void ActCNR_NR_SetVariant_1253d0(int64_t* comp, uint16_t variant, int16_t subVar
         int64_t subArr = *reinterpret_cast<int64_t*>(arr + static_cast<int64_t>(var) * 0x18 + 8);
         void* mesh = *reinterpret_cast<void**>(subArr + static_cast<int64_t>(sub) * 8);
         // Graphics::MeshInstance::SetMesh(this = comp+0x28, mesh)
-        if (s_fn_SetMesh) s_fn_SetMesh(reinterpret_cast<void*>(c + 0x28), mesh);
+        reinterpret_cast<Graphics::MeshInstance*>(c + 0x28)
+            ->SetMesh(Graphics::ExternalPtrHandle{mesh});   // B.3.5 bridge
         // vtable +0x30 — show/activate model (RCX = comp)
         (*reinterpret_cast<void(**)(int64_t*)>(*comp + 0x30))(comp);
     }

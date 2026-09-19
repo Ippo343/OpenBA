@@ -22,6 +22,10 @@
 // against the disassembly. Do NOT "improve" behavior.
 //
 
+// The runtime type header comes FIRST: graphics/Mesh.h reaches
+// runtime/types/volume/Volume.h, whose global-scope `struct Rectangle` is hidden
+// by <wingdi.h>'s `Rectangle()` once <windows.h> has been seen through resolve.h.
+#include "graphics/Mesh.h"                 // ENDGAME B.3.5 batch K1
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
@@ -84,19 +88,14 @@ bool ActMvDep_TimeCheck_a9290(void* timeV, float* pair, void* rng) {
 // pointer-sized value passed by value.
 namespace {
 typedef void (*fn_TimeCtor_t)(void* retTime, float seconds);                  // 0x140152b00
-typedef void (*fn_PlayAnimation_t)(void* meshInst, void* animData, int animId,
-                                   const void* tB, const void* tA, float p5);  // 0x140152988
 typedef void (*fn_Notify_c3470_t)(void* internal);                            // 0x1400c3470
 
 static fn_TimeCtor_t      s_TimeCtor      = nullptr;
-static fn_PlayAnimation_t s_PlayAnimation = nullptr;
 static fn_Notify_c3470_t  s_Notify_c3470  = nullptr;
 static bool s_50f0Init = false;
 static void Ensure_50f0() {
     if (s_50f0Init) return;
     s_TimeCtor      = reinterpret_cast<fn_TimeCtor_t>(ResolveExport("??0Time@System@@QEAA@M@Z"));
-    s_PlayAnimation = reinterpret_cast<fn_PlayAnimation_t>(ResolveExport(
-        "?PlayAnimation@MeshInstance@Graphics@@QEAAXV?$ExternalPtr@VAnimationGroup@Graphics@@@Object@@HAEBVTime@System@@1M@Z"));
     s_Notify_c3470  = reinterpret_cast<fn_Notify_c3470_t>(ResolveAddr(Module::Exe, 0x1400c3470));
     s_50f0Init = true;
 }
@@ -138,13 +137,14 @@ void ActMvDep_AnimHelper_50f0(uintptr_t self, uint32_t animId, float p3, float p
     // Defensive: the original reads *(animHolder+0x20) unconditionally (it relies on the
     // type always being derived here). Guard so a type miss in the inert standalone world
     // is a safe no-op rather than a null deref.
-    if (animHolder && s_PlayAnimation) {
+    if (animHolder) {
         short animIndex = *reinterpret_cast<short*>(self + 0x164);
         uintptr_t animArray = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(animHolder) + 0x20);
         void* animData = *reinterpret_cast<void**>(animArray + static_cast<uintptr_t>(animIndex) * 0x18);
         // PlayAnimation(meshInst=self+0x28, animData, animId, &tB=p3, &tA=p4, p5)
-        s_PlayAnimation(reinterpret_cast<void*>(self + 0x28), animData, static_cast<int>(animId),
-                        timeB, timeA, p5);
+        reinterpret_cast<Graphics::MeshInstance*>(self + 0x28)
+            ->PlayAnimation(Graphics::ExternalPtrHandle{animData}, static_cast<int>(animId),
+                            timeB, timeA, p5);   // B.3.5 bridge
     }
 
     uint32_t old = *reinterpret_cast<uint32_t*>(self + 0x20);

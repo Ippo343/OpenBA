@@ -9,6 +9,10 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "AnimateNaturalResource.h"
+// The runtime type header comes FIRST: graphics/Mesh.h reaches
+// runtime/types/volume/Volume.h, whose global-scope `struct Rectangle` is hidden
+// by <wingdi.h>'s `Rectangle()` once <windows.h> has been seen through resolve.h.
+#include "graphics/Mesh.h"   // ENDGAME B.3.5 batch K1
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
@@ -31,9 +35,6 @@ static void (*s_fn_SetAnimIndex)(void* nrComp, uint32_t animIdx) = nullptr;
 // FUN_140003f60 — get ModelComponent from entity
 static void* (*s_fn_GetModelComp)(void* entity, void* outIBP) = nullptr;
 
-// Graphics::MeshInstance::IsAnimating(meshInst) — via IAT at 0x1401514b0
-static bool (*s_fn_IsAnimating)(void* meshInst) = nullptr;
-
 // TypeInfo address
 static uint32_t* s_TypeId_ComponentEntity = nullptr;  // DAT_1401c5d70 — ComponentEntity
     // (was mistranscribed 0x1401c4218 = FireDescription; retail AnimateNaturalResource reads c5d70)
@@ -54,23 +55,22 @@ bool AnimateNaturalResource_ResolveFuncs() {
     s_fn_GetModelComp = reinterpret_cast<void*(*)(void*, void*)>(
         ResolveAddr(Module::Exe, 0x140003f60));
 
-    // IsAnimating via IAT
-    uintptr_t iatIsAnim = ResolveAddr(Module::Exe, 0x1401514b0);
-    if (iatIsAnim) s_fn_IsAnimating = *reinterpret_cast<bool(**)(void*)>(iatIsAnim);
+    // ENDGAME B.3.5 batch K1: the `Graphics::MeshInstance::IsAnimating` cache that
+    // used to be read out of exe dispatch slot 0x1401514b0 went with its one caller
+    // in Execute, which now calls the member.
 
     // TypeInfo
     s_TypeId_ComponentEntity = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5d70));
 
     bool ok = s_fn_GetNRComp && s_fn_SetAnimIndex &&
-              s_fn_GetModelComp && s_fn_IsAnimating && s_TypeId_ComponentEntity &&
+              s_fn_GetModelComp && s_TypeId_ComponentEntity &&
               fn_IsDerivedFrom &&
               fn_InternalBasePtr_DeletePtr && fn_ObjectInternal_Dtor && fn_MemFreeStatic;
 
 #ifdef _DEBUG
-    printf("[AnimateNaturalResource] ResolveFuncs: GetNR=%p SetAnim=%p GetModel=%p IsAnim=%p\n",
+    printf("[AnimateNaturalResource] ResolveFuncs: GetNR=%p SetAnim=%p GetModel=%p\n",
            (void*)s_fn_GetNRComp,
-           (void*)s_fn_SetAnimIndex, (void*)s_fn_GetModelComp,
-           (void*)s_fn_IsAnimating);
+           (void*)s_fn_SetAnimIndex, (void*)s_fn_GetModelComp);
     if (!ok) printf("[AnimateNaturalResource] ERROR: some function pointers not resolved!\n");
 #endif
 
@@ -173,7 +173,8 @@ int AnimateNaturalResource_Execute_Impl(AnimateNaturalResource* self, void* acti
     if (localIBP[0] == nullptr) return 0;
 
     // MeshInstance is at modelComp + 0x28, check if still animating
-    return s_fn_IsAnimating((uint8_t*)(localIBP[0]) + 0x28) ? 1 : 0;
+    return reinterpret_cast<const Graphics::MeshInstance*>(
+               (uint8_t*)(localIBP[0]) + 0x28)->IsAnimating() ? 1 : 0;   // B.3.5 bridge
 }
 
 // ============================================================
