@@ -181,6 +181,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Modification.h"
+#include "../../types/io/PackageFile.h"   // B.3.4 PACKAGE+FS: the real class
 #include "../../types/system/Filename.h"
 #include "../../types/collection/Collection.h"   // ENDGAME B.3.2 closing pass
 #include "../system/pod_bridge.h"
@@ -560,26 +561,18 @@ extern "C" void RtColl_ArrayModSetSizeFill_180028610(void* av, int n, const void
 // The element types come from the export names, not from the call site:
 // `?$Array@I` (unsigned int) for the icon, `?$Array@E` (unsigned char) for the
 // preview — which is why the two call different assigns.
+// ENDGAME B.3.4 PACKAGE+FS commit 3: both bodies are now members of the real
+// `IO::PackageFile`, at the bottom of this file. Both doors keep their names
+// and both registrations and delegate. Neither is a virtual slot -- they are
+// `QEBA` -- so the qualification below is for the reader, not for dispatch.
 extern "C" void* RtIo_PackageFile_GetIconData(const void* selfv, void* retv) {
-    ModArray* const ret = static_cast<ModArray*>(retv);
-    const uint8_t* const self = static_cast<const uint8_t*>(selfv);
-    const void* const member = self + 0x80;             // LEA RDX,[RCX+0x80]
-    ret->data = nullptr;                                // MOV [RBX],RAX
-    ret->size = 0;                                      // MOV [RBX+8],RAX — one qword,
-    ret->capacity = 0;                                  //   so capacity is zeroed too
-    if (ret != member) RtColl_ArrayI32Assign_180011110(ret, member);   // 0x180011110
-    return ret;
+    return reinterpret_cast<const IO::PackageFile*>(selfv)
+               ->IO::PackageFile::GetIconData(retv);
 }
 
 extern "C" void* RtIo_PackageFile_GetPreviewData(const void* selfv, void* retv) {
-    ModArray* const ret = static_cast<ModArray*>(retv);
-    const uint8_t* const self = static_cast<const uint8_t*>(selfv);
-    const void* const member = self + 0x98;             // LEA RDX,[RCX+0x98]
-    ret->data = nullptr;
-    ret->size = 0;
-    ret->capacity = 0;
-    if (ret != member) RtColl_ArrayU8Assign_180011220(ret, member);    // 0x180011220
-    return ret;
+    return reinterpret_cast<const IO::PackageFile*>(selfv)
+               ->IO::PackageFile::GetPreviewData(retv);
 }
 
 // ===========================================================================
@@ -1275,6 +1268,49 @@ void Modification::RefreshList() {
     // -----------------------------------------------------------------------
     // The oracle. See the banner for why running theirs SECOND is legal here.
     // -----------------------------------------------------------------------
+}
+
+}  // namespace IO
+
+// ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS — `IO::PackageFile`'s two counted-array getters
+// ============================================================================
+// Defined outside `namespace RtIO` because a member of `IO::X` must appear in a
+// namespace ENCLOSING the class (B34_BRIEFS section A.2). They stay in THIS
+// file because this is where their doors and their registrations have always
+// been, and because the two `Collection::Array<T>::operator=` instantiations
+// they call are this file's, reached by address.
+namespace IO {
+
+// The self-compare (`LEA RDX,[RCX+0x80]` / `CMP RBX,RDX`) can only be true if a
+// caller passes the member's own address as the return slot. Transcribed, not
+// dropped: it IS the guard, and neither Array::operator= carries one of its own
+// (only the Filename instantiation does -- modification.cpp).
+//
+// The element types come from the export names, not from the call site:
+// `?$Array@I` (unsigned int) for the icon, `?$Array@E` (unsigned char) for the
+// preview -- which is why the two call different assigns. The two offsets that
+// used to be spelled here as `self + 0x80` / `self + 0x98` are now the named
+// members `_iconData` / `_previewData`, each pinned by a static_assert in
+// runtime/types/io/PackageFile.h.
+void* PackageFile::GetIconData(void* retv) const {
+    RtIO::ModArray* const ret = static_cast<RtIO::ModArray*>(retv);
+    const void* const member = &_iconData;              // LEA RDX,[RCX+0x80]
+    ret->data = nullptr;                                // MOV [RBX],RAX
+    ret->size = 0;                                      // MOV [RBX+8],RAX — one qword,
+    ret->capacity = 0;                                  //   so capacity is zeroed too
+    if (ret != member) RtIO::RtColl_ArrayI32Assign_180011110(ret, member);  // 0x180011110
+    return ret;
+}
+
+void* PackageFile::GetPreviewData(void* retv) const {
+    RtIO::ModArray* const ret = static_cast<RtIO::ModArray*>(retv);
+    const void* const member = &_previewData;           // LEA RDX,[RCX+0x98]
+    ret->data = nullptr;
+    ret->size = 0;
+    ret->capacity = 0;
+    if (ret != member) RtIO::RtColl_ArrayU8Assign_180011220(ret, member);   // 0x180011220
+    return ret;
 }
 
 }  // namespace IO

@@ -205,6 +205,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/FileSystem.h"
+#include "../../types/io/PackageFile.h"   // B.3.4 PACKAGE+FS: the real class
 #include "../../types/io/Stream.h"
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
@@ -498,8 +499,73 @@ bool TextEqual(const char* a, const char* b) {
 // ============================================================================
 // ?ReadPackfile@PackageFile@IO@@QEAA_NAEBVFilename@System@@@Z  retail 0x1800b46b0
 // ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS commit 3: the body is now
+// `IO::PackageFile::ReadPackfile(const System::Filename&)`, at the bottom of
+// this file. The door keeps its name and both registrations and delegates.
+// Non-virtual (`QEAA`), so the qualification is for the reader, not dispatch.
+//
+// THIS IS ON THE PATH B34_BRIEFS section D BINDS. The move changed nothing but
+// field spellings: no lock, retry, loop bound, null check or reorder was added,
+// and nothing was removed.
 extern "C" bool RtIo_PackageFile_ReadPackfile(PackageFileView* self,
                                               const Filename* name) {
+    return reinterpret_cast<IO::PackageFile*>(self)
+               ->IO::PackageFile::ReadPackfile(*name);
+}
+
+}  // namespace RtIO
+
+// ============================================================================
+// Registration
+// ============================================================================
+// BOTH DOORS, as every row in this lane gets. The name was read out of
+// Runtime-x64.dll's own export directory with pefile (ordinal 3461,
+// 0x1800b46b0) rather than transcribed from a decompile — lane PKG2 nearly
+// shipped `SetWindowCount` with the private `AEAA` spelling when it is public
+// `QEAA`, and a name the DLL does not contain resolves NULL silently and
+// forever behind the ResolveAddr fallback.
+int RtIoPackageFileReadRegister() {
+    using namespace RtIO;
+    int n = 0;
+
+    // THE NAME IS SPELT OUT AS A LITERAL HERE, not as `kReadPackfile`, and that
+    // is not style. `tools/unsatisfied_export_scan.py` and
+    // `tools/runtime_census.py` match `RegisterRuntimeExport("` followed by a
+    // STRING; a named constant is invisible to both
+    // (reference_census_cannot_see_nonliteral_registrations.md, which cost six
+    // LANDED Wave 3 ports their visibility). The first version of this line used
+    // the constant and the scan duly reported ReadPackfile as still unsatisfied
+    // on a build where it was registered and running -- caught by the
+    // instrument, not by review, which is this wave's pattern.
+    RegisterRuntimeExport("?ReadPackfile@PackageFile@IO@@QEAA_NAEBVFilename@System@@@Z",
+                          (void*)&RtIo_PackageFile_ReadPackfile); ++n;
+    RegisterRuntimeAddr(0x1800b46b0, (void*)&RtIo_PackageFile_ReadPackfile);
+
+    // A LANE-OWNED IDENTITY MARKER, for the same reason package_file.cpp has
+    // one: tools/pkg2_run.sh gates on a banner the RUN wrote, and a banner that
+    // keys on a shared total moves whenever any other lane lands in IO.
+    printf("[RtPort]   IO::PackageFile::ReadPackfile (lane PKG3): "
+                "%d exports registered\n", n);
+    return n;
+}
+
+// ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS — `IO::PackageFile::ReadPackfile`'s member body
+// ============================================================================
+namespace IO {
+
+bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
+    // A member of `IO::X` must be DEFINED in a namespace ENCLOSING the class
+    // (B34_BRIEFS section A.2), so this body cannot live inside `namespace
+    // RtIO` where its helpers, typedefs and using-declarations do. ONE
+    // function-scope using-directive brings them in unchanged, which is what
+    // keeps this a MOVE and not a rewrite: BYTE-FAITHFULNESS ON THIS PATH IS
+    // BINDING (B34_BRIEFS section D -- no added lock, retry, loop bound, null
+    // check or reorder, and no silent removal either), so every line below is
+    // the line that was in the door, except the field reads that became
+    // members and the parameter that became a reference.
+    using namespace RtIO;
+    const Filename* const name = &nameRef;
 
     // ---- the re-entrancy flag (0x1800b46e8..0x1800b4795) -------------------
     // `fs->platformExistsGate` (+0x19) is Exists()'s second gate. ReadPackfile
@@ -511,7 +577,7 @@ extern "C" bool RtIo_PackageFile_ReadPackfile(PackageFileView* self,
     fs->platformExistsGate = 1;                                // 1800b46f9
 
     FileInfo* const fi =
-        reinterpret_cast<FileInfo*>(reinterpret_cast<uint8_t*>(self) + 0xC0);
+        &_file   /* +0xC0, the embedded FileInfo */;
 
     {
         // Deliberately uninitialised: retail hands OpenFile an untouched
@@ -582,85 +648,85 @@ extern "C" bool RtIo_PackageFile_ReadPackfile(PackageFileView* self,
     if (compressed >= 1) {                                     // 1800b48f0  CMP/JL
 
         RtIo::RtIo_CompressedStream_Read(cs, 4, &formatVersion);      // 1800b48fa
-        RtIo::RtIo_CompressedStream_Read(cs, 4, &self->version);      // 1800b4979  +0x68
-        RtIo::RtIo_CompressedStream_Read(cs, 4, &self->userVersion);  // 1800b49eb  +0x6c
-        RtIo::RtIo_CompressedStream_Read(cs, 4, &self->priority);     // 1800b4a5d  +0x70
-        RtIo::RtIo_CompressedStream_Read(cs, 4, &self->platform);     // 1800b4ad9  +0x74
+        RtIo::RtIo_CompressedStream_Read(cs, 4, &_version);      // 1800b4979  +0x68
+        RtIo::RtIo_CompressedStream_Read(cs, 4, &_userVersion);  // 1800b49eb  +0x6c
+        RtIo::RtIo_CompressedStream_Read(cs, 4, &_priority);     // 1800b4a5d  +0x70
+        RtIo::RtIo_CompressedStream_Read(cs, 4, &_platform);     // 1800b4ad9  +0x74
         // ONE BYTE — §92(a). `MOV ESI,0x1` at 0x1800b4b4b.
-        RtIo::RtIo_CompressedStream_Read(cs, 1, &self->overridable);  // 1800b4b4b  +0xac
-        RtIo::RtIo_CompressedStream_Read(cs, 4, &self->packfileId);   // 1800b4bc9  +0xa8
-        RtIo::RtIo_CompressedStream_Read(cs, 4, &self->iconWidth);    // 1800b4c49  +0x78
-        RtIo::RtIo_CompressedStream_Read(cs, 4, &self->iconHeight);   // 1800b4cc0  +0x7c
+        RtIo::RtIo_CompressedStream_Read(cs, 1, &_overridable);  // 1800b4b4b  +0xac
+        RtIo::RtIo_CompressedStream_Read(cs, 4, &_crc);   // 1800b4bc9  +0xa8
+        RtIo::RtIo_CompressedStream_Read(cs, 4, &_iconWidth);    // 1800b4c49  +0x78
+        RtIo::RtIo_CompressedStream_Read(cs, 4, &_iconHeight);   // 1800b4cc0  +0x7c
 
         // The icon pixel array. Retail sizes it from height*width and then
         // reads `array._size * 4` bytes — the array's OWN size, not the product
         // it just passed. Identical unless SetSize clamped; transcribed as
         // spelled.
-        uint8_t* const iconArr = reinterpret_cast<uint8_t*>(self) + 0x80;
+        uint8_t* const iconArr = reinterpret_cast<uint8_t*>(this) + 0x80;
         ArraySetSize(0x180029510, iconArr,
-                     self->iconHeight * self->iconWidth);      // 1800b4d27/d37
+                     _iconHeight * _iconWidth);      // 1800b4d27/d37
         RtIo::RtIo_CompressedStream_Read(
-            cs, ArrSize(self, 0x88) * 4, ArrData(self, 0x80)); // 1800b4d56  REAL CALL
+            cs, ArrSize(this, 0x88) * 4, ArrData(this, 0x80)); // 1800b4d56  REAL CALL
 
         if (formatVersion >= 2) {                              // 1800b4d62  CMP 2 / JL
             int32_t* const n90 =
-                reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(self) + 0x90);
+                &_previewByteCount;   /* +0x90 -- see PackageFile.h */
             RtIo::RtIo_CompressedStream_Read(cs, 4, n90);      // 1800b4d6c  +0x90
-            uint8_t* const flagArr = reinterpret_cast<uint8_t*>(self) + 0x98;
+            uint8_t* const flagArr = reinterpret_cast<uint8_t*>(this) + 0x98;
             ArraySetSize(0x180029630, flagArr, *n90);          // 1800b4dea/df1
             // NOTE the bound: retail reads `*n90` bytes, not the ARRAY's size.
-            RtIo::RtIo_CompressedStream_Read(cs, *n90, ArrData(self, 0x98));  // 1800b4e09
+            RtIo::RtIo_CompressedStream_Read(cs, *n90, ArrData(this, 0x98));  // 1800b4e09
         }
 
         String tmp;
         if (formatVersion <= 2) {
             // ---- PATH A (§81): UTF-16 metadata, with the §76 over-read -----
             ReadStringUtf16(cs, buf60, buf860, &tmp);      // 1800b4e1f  group 1
-            AssignStringField(&self->name, &tmp);              // 1800b5044  +0x40
+            AssignStringField(&_name, &tmp);              // 1800b5044  +0x40
             RtString_ReleaseInline(&tmp);                      // 1800b507b
 
             ReadStringUtf16(cs, buf60, buf860, &tmp);      // 1800b530d  group 2
-            AssignStringField(&self->author, &tmp);            // 1800b52b4  +0x48
+            AssignStringField(&_author, &tmp);            // 1800b52b4  +0x48
             RtString_ReleaseInline(&tmp);
 
             ReadStringUtf16(cs, buf60, buf860, &tmp);      // group 3
-            AssignStringField(&self->description, &tmp);       // 1800b5536  +0x50
+            AssignStringField(&_description, &tmp);       // 1800b5536  +0x50
             RtString_ReleaseInline(&tmp);
             // 1800b558e / 559a  JMP 0x1800b5b6c  (reloads formatVersion; §92(c))
         } else {
             // ---- PATH B (§81): the bytes are already UTF-8 -----------------
             ReadStringRaw(cs, buf60, &tmp);                // 1800b559f  group 4
-            AssignStringField(&self->name, &tmp);              // 1800b5726  +0x40
+            AssignStringField(&_name, &tmp);              // 1800b5726  +0x40
             RtString_ReleaseInline(&tmp);
 
             ReadStringRaw(cs, buf60, &tmp);                // 1800b5783  group 5
-            AssignStringField(&self->author, &tmp);            // 1800b58f6  +0x48
+            AssignStringField(&_author, &tmp);            // 1800b58f6  +0x48
             RtString_ReleaseInline(&tmp);
 
             ReadStringRaw(cs, buf60, &tmp);                // 1800b5953  group 6
-            AssignStringField(&self->description, &tmp);       // 1800b5ac6  +0x50
+            AssignStringField(&_description, &tmp);       // 1800b5ac6  +0x50
             RtString_ReleaseInline(&tmp);
             // 1800b5b1a / 5b23  JMP 0x1800b5b73
         }
     } else {
         // ---- the uncompressed default, 0x1800b5b25. §92(b): SEVEN stores. --
-        self->version = 0x010007ff;                            // 1800b5b25  dword
+        _version = 0x010007ff;                            // 1800b5b25  dword
         // `MOV qword ptr [R13+0x70],0x2710` — one store, two fields.
-        self->priority = 0x2710;                               // 1800b5b2d
-        self->platform = 0;
-        self->packfileId  = 0;                                 // 1800b5b35
-        self->overridable = 1;                                 // 1800b5b3c
-        self->iconWidth  = 1;                                  // 1800b5b49
-        self->iconHeight = 1;                                  // 1800b5b4d
-        uint8_t* const iconArr = reinterpret_cast<uint8_t*>(self) + 0x80;
+        _priority = 0x2710;                               // 1800b5b2d
+        _platform = 0;
+        _crc  = 0;                                 // 1800b5b35
+        _overridable = 1;                                 // 1800b5b3c
+        _iconWidth  = 1;                                  // 1800b5b49
+        _iconHeight = 1;                                  // 1800b5b4d
+        uint8_t* const iconArr = reinterpret_cast<uint8_t*>(this) + 0x80;
         ArraySetSize(0x180029510, iconArr, 1);                 // 1800b5b5a
-        *static_cast<uint32_t*>(ArrData(self, 0x80)) = 0xff000000u;   // 1800b5b66
+        *static_cast<uint32_t*>(ArrData(this, 0x80)) = 0xff000000u;   // 1800b5b66
         // falls into 0x1800b5b6c, which reloads formatVersion — still 0 here.
     }
 
     // ---- the entry directory (0x1800b5b73) ---------------------------------
     if (fileCount > 0) {                                       // 1800b5b73  TEST/JLE
-        uint8_t* const entriesArr = reinterpret_cast<uint8_t*>(self) + 0xb0;  // 1800b5b86
+        uint8_t* const entriesArr = reinterpret_cast<uint8_t*>(this) + 0xb0;  // 1800b5b86
 
         for (int32_t i = fileCount; i != 0; --i) {             // 1800b5b99 / 601a
 
@@ -726,7 +792,7 @@ extern "C" bool RtIo_PackageFile_ReadPackfile(PackageFileView* self,
             entry.size   = static_cast<uint32_t>(entrySize);   // 1800b5faa  §91
 
             ArraySetSizeFill(0x1800298f0, entriesArr,
-                             ArrSize(self, 0xb8) + 1, &entry); // 1800b5fb1..fbe
+                             ArrSize(this, 0xb8) + 1, &entry); // 1800b5fb1..fbe
 
             RtString_ReleaseInline(&entry.name);               // 1800b5fc4..5fe9
             RtString_ReleaseInline(&tmp);                      // 1800b5fed..6015
@@ -750,38 +816,4 @@ extern "C" bool RtIo_PackageFile_ReadPackfile(PackageFileView* self,
     return ours;
 }
 
-}  // namespace RtIO
-
-// ============================================================================
-// Registration
-// ============================================================================
-// BOTH DOORS, as every row in this lane gets. The name was read out of
-// Runtime-x64.dll's own export directory with pefile (ordinal 3461,
-// 0x1800b46b0) rather than transcribed from a decompile — lane PKG2 nearly
-// shipped `SetWindowCount` with the private `AEAA` spelling when it is public
-// `QEAA`, and a name the DLL does not contain resolves NULL silently and
-// forever behind the ResolveAddr fallback.
-int RtIoPackageFileReadRegister() {
-    using namespace RtIO;
-    int n = 0;
-
-    // THE NAME IS SPELT OUT AS A LITERAL HERE, not as `kReadPackfile`, and that
-    // is not style. `tools/unsatisfied_export_scan.py` and
-    // `tools/runtime_census.py` match `RegisterRuntimeExport("` followed by a
-    // STRING; a named constant is invisible to both
-    // (reference_census_cannot_see_nonliteral_registrations.md, which cost six
-    // LANDED Wave 3 ports their visibility). The first version of this line used
-    // the constant and the scan duly reported ReadPackfile as still unsatisfied
-    // on a build where it was registered and running -- caught by the
-    // instrument, not by review, which is this wave's pattern.
-    RegisterRuntimeExport("?ReadPackfile@PackageFile@IO@@QEAA_NAEBVFilename@System@@@Z",
-                          (void*)&RtIo_PackageFile_ReadPackfile); ++n;
-    RegisterRuntimeAddr(0x1800b46b0, (void*)&RtIo_PackageFile_ReadPackfile);
-
-    // A LANE-OWNED IDENTITY MARKER, for the same reason package_file.cpp has
-    // one: tools/pkg2_run.sh gates on a banner the RUN wrote, and a banner that
-    // keys on a shared total moves whenever any other lane lands in IO.
-    printf("[RtPort]   IO::PackageFile::ReadPackfile (lane PKG3): "
-                "%d exports registered\n", n);
-    return n;
-}
+}  // namespace IO

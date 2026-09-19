@@ -285,6 +285,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/FileSystem.h"
+#include "../../types/io/PackageFile.h"   // B.3.4 PACKAGE+FS: the real class
 #include "../../types/system/String.h"
 #include "../../src/system/string.h"
 #include "../../src/system/pod_bridge.h"
@@ -430,14 +431,21 @@ extern "C" PackageFileView* RtIo_PackageFile_Ctor(PackageFileView* self) {
 // Construct on whatever the allocator returned, including nullptr. Both
 // branches are driven by the sweep probe (§6).
 extern "C" void* RtIo_PackageFile_Construct(void* self) {
-    if (self == nullptr) {
-        return nullptr;
+    // *** THE NULL TEST LIVES HERE, IN THE DOOR, AND NOT IN THE MEMBER. ***
+    // Retail's 0x1800252f0 opens `TEST RCX,RCX ; JNZ ??0PackageFile ; XOR EAX,
+    // EAX ; RET` -- the factory calls Construct on whatever the allocator
+    // returned, including nullptr, so the branch is REAL and not defensive, and
+    // it must be reproduced. But it cannot be reproduced inside the member: a
+    // C++ `this` is non-null by definition, GCC says so
+    // (-Wnonnull-compare) and is entitled to delete the comparison. Putting it
+    // in the door keeps retail's control flow EXACTLY -- the test still happens
+    // before any field is touched, on the same pointer, with the same two
+    // outcomes -- while keeping the member well defined. It is a spelling move,
+    // not an added guard; the member's comment records the pairing.
+    if (self == nullptr) {                          // 1800252f0 TEST RCX,RCX
+        return nullptr;                             // 1800252f9 XOR EAX,EAX
     }
-    // The tail jump. Calling our own ported constructor rather than resolving
-    // ??0PackageFile again: it is the same body, and going through the door
-    // would make this site the one caller that could silently reach the DLL.
-    RtIo_PackageFile_Ctor(static_cast<PackageFileView*>(self));
-    return self;
+    return reinterpret_cast<IO::PackageFile*>(self)->IO::PackageFile::Construct();
 }
 
 // ============================================================================
@@ -446,27 +454,29 @@ extern "C" void* RtIo_PackageFile_Construct(void* self) {
 // addresses (the virtual and the static spelling), which is why they share a
 // body here and are still registered separately.
 // ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS commit 3: every body below is now a member of the
+// real `IO::PackageFile` (runtime/types/io/PackageFile.h); these doors keep
+// their names and both registrations and delegate.
+//
+// *** THE QUALIFIED `IO::PackageFile::` IS LOAD-BEARING ON THE EIGHT VIRTUAL
+// *** SLOTS AND IS NOT DECORATION. *** A live PackageFile in this build wears
+// the MINTED `??_7PackageFile@IO@@6B@`, whose nine rows resolve back to THESE
+// VERY DOORS. A plain virtual call in a door would dispatch through that minted
+// table straight back into itself -- infinite recursion, not delegation. The
+// qualification suppresses virtual dispatch (B34_BRIEFS section A.1, and
+// serialize_family.cpp / encoding.cpp established the pattern in blocks 1-2).
+// The non-virtual members below do not need it and carry it anyway, so that a
+// reader never has to check which is which.
 extern "C" uint32_t RtIo_PackageFile_Type(const void* self) {
-    (void)self;                       // 0x180025130 never reads RCX
-    const uint8_t* const ti = PackageFileTypeInfo();
-    uint32_t ours = 0;
-    std::memcpy(&ours, ti, sizeof ours);
-    return ours;
+    return reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::Type();
 }
 
 extern "C" uint32_t RtIo_PackageFile_TypeId() {
-    const uint8_t* const ti = PackageFileTypeInfo();
-    uint32_t ours = 0;
-    std::memcpy(&ours, ti, sizeof ours);
-    return ours;
+    return IO::PackageFile::TypeId();
 }
 
 extern "C" const char* RtIo_PackageFile_TypeName(const void* self) {
-    (void)self;                       // 0x180025150 never reads RCX
-    const uint8_t* const ti = PackageFileTypeInfo();
-    const char* ours = nullptr;
-    std::memcpy(&ours, ti + 8, sizeof ours);
-    return ours;
+    return reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::TypeName();
 }
 
 // ============================================================================
@@ -476,17 +486,16 @@ extern "C" const char* RtIo_PackageFile_TypeName(const void* self) {
 // accepts. A constant in the CODE, not a field — reading it off the object
 // would be wrong even though it would usually agree.
 extern "C" int32_t RtIo_PackageFile_GetFileVersion(const void* self) {
-    const int32_t ours = 5;
-    return ours;
+    return reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::GetFileVersion();
 }
 
 // 0x1800b6090: MOV EAX,0x1 ; RET. External::CompileResult, and the value is 1
 // on every path — a package is never "compiled", so the slot reports the same
 // result whatever Filename it is handed. The parameter is genuinely unread.
 extern "C" int32_t RtIo_PackageFile_Compile(void* self, const void* filename) {
-    (void)self; (void)filename;
-    const int32_t ours = 1;
-    return ours;
+    return static_cast<int32_t>(
+        reinterpret_cast<IO::PackageFile*>(self)->IO::PackageFile::Compile(
+            *reinterpret_cast<const System::Filename*>(filename)));
 }
 
 // ============================================================================
@@ -550,19 +559,11 @@ extern "C" int32_t RtIo_PackageFile_Compile(void* self, const void* filename) {
 typedef void* (*SlotZeroFn)(void*, unsigned);
 
 extern "C" void RtIo_PackageFile_Destruct(void* self) {
-    void** const vt = *reinterpret_cast<void***>(self);   // 180025300
-    reinterpret_cast<SlotZeroFn>(vt[0])(self, 0u);        // 180025305, flags 0
+    reinterpret_cast<IO::PackageFile*>(self)->IO::PackageFile::Destruct();
 }
 
 extern "C" void* RtIo_PackageFile_Reconstruct(void* self) {
-    void** const vt = *reinterpret_cast<void***>(self);   // 1800252d6
-    reinterpret_cast<SlotZeroFn>(vt[0])(self, 0u);        // 1800252de, flags 0
-    // The tail jump. Calling our own ported constructor directly rather than
-    // through a door, for the reason ?Construct@ above states at :511: a door
-    // would resolve to this same body and add one more resolve site the
-    // cutover census has to carry.
-    RtIo_PackageFile_Ctor(static_cast<PackageFileView*>(self));   // 1800252e8
-    return self;
+    return reinterpret_cast<IO::PackageFile*>(self)->IO::PackageFile::Reconstruct();
 }
 
 // ============================================================================
@@ -571,52 +572,64 @@ extern "C" void* RtIo_PackageFile_Reconstruct(void* self) {
 // transitional bridge (pod_bridge.h); `ret` is the raw hidden return slot, so
 // the copy ctor is constructed into it -- see the note above.
 // ============================================================================
+// The three getters return `System::String` BY VALUE, so retail's ABI puts the
+// hidden return slot in RDX and the door's `ret` IS that slot. The member's
+// by-value return fills it through the same ABI, so the door constructs the
+// member's result into it -- one AddRef and one release, exactly as before.
 extern "C" String* RtIo_PackageFile_GetName(const PackageFileView* self, String* ret) {
-    new (ret) System::String(Sys(self->name));          // +0x40
+    new (ret) System::String(
+        reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::GetName());
     return ret;
 }
 
 extern "C" String* RtIo_PackageFile_GetAuthor(const PackageFileView* self, String* ret) {
-    new (ret) System::String(Sys(self->author));         // +0x48
+    new (ret) System::String(
+        reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::GetAuthor());
     return ret;
 }
 
 extern "C" String* RtIo_PackageFile_GetDescription(const PackageFileView* self, String* ret) {
-    new (ret) System::String(Sys(self->description));    // +0x50
+    new (ret) System::String(
+        reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::GetDescription());
     return ret;
 }
 
 // ============================================================================
 // The scalar field reads. Each is one MOV; the offset IS the function.
 // ============================================================================
-#define RT_PKG2_SCALAR_GETTER(FN, SITE, FIELD, TYPE, ORACLE_FN, MANGLED)       \
+// Each door delegates to the like-named member. The third macro argument used
+// to be the POD FIELD; it is the MEMBER NAME now, because the offset is spelled
+// once, in the member body, and nowhere else.
+#define RT_PKG2_SCALAR_GETTER(FN, SITE, MEMBER, TYPE, ORACLE_FN, MANGLED)      \
     extern "C" TYPE FN(const PackageFileView* self) {                          \
-        return static_cast<TYPE>(self->FIELD);                                 \
+        return static_cast<TYPE>(                                              \
+            reinterpret_cast<const IO::PackageFile*>(self)                     \
+                ->IO::PackageFile::MEMBER());                                  \
     }
 
 RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetVersion, "IO::PackageFile::GetVersion",
-                      version, int32_t, I32ThisFn,
+                      GetVersion, int32_t, I32ThisFn,
                       "?GetVersion@PackageFile@IO@@QEBAHXZ")            // +0x68
 RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetUserVersion, "IO::PackageFile::GetUserVersion",
-                      userVersion, int32_t, I32ThisFn,
+                      GetUserVersion, int32_t, I32ThisFn,
                       "?GetUserVersion@PackageFile@IO@@QEBAHXZ")        // +0x6C
 RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetPlatform, "IO::PackageFile::GetPlatform",
-                      platform, int32_t, I32ThisFn,
+                      GetPlatform, int32_t, I32ThisFn,
                       "?GetPlatform@PackageFile@IO@@QEBAHXZ")           // +0x74
 RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetPriority, "IO::PackageFile::GetPriority",
-                      priority, int32_t, I32ThisFn,
+                      GetPriority, int32_t, I32ThisFn,
                       "?GetPriority@PackageFile@IO@@QEBAHXZ")           // +0x70
 RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetFileCount, "IO::PackageFile::GetFileCount",
-                      entryCount, int32_t, I32ThisFn,
+                      GetFileCount, int32_t, I32ThisFn,
                       "?GetFileCount@PackageFile@IO@@QEBAHXZ")          // +0xB8
 RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetCRC, "IO::PackageFile::GetCRC",
-                      packfileId, uint32_t, U32ThisFn,
+                      GetCRC, uint32_t, U32ThisFn,
                       "?GetCRC@PackageFile@IO@@QEBAIXZ")                // +0xA8
 RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetIconWidth, "IO::PackageFile::GetIconWidth",
-                      iconWidth, int32_t, I32ThisFn,
+                      GetIconWidth, int32_t, I32ThisFn,
                       "?GetIconWidth@PackageFile@IO@@QEBAHXZ")          // +0x78
 RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetIconHeight, "IO::PackageFile::GetIconHeight",
-                      iconHeight, int32_t, I32ThisFn,
+                      GetIconHeight, int32_t, I32ThisFn,
                       "?GetIconHeight@PackageFile@IO@@QEBAHXZ")         // +0x7C
 
 #undef RT_PKG2_SCALAR_GETTER
@@ -626,8 +639,7 @@ RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetIconHeight, "IO::PackageFile::GetIconH
 // LoadPackages' index pass tests, so a wrong width here would change package
 // precedence, not just a returned bool.
 extern "C" bool RtIo_PackageFile_CanOverride(const PackageFileView* self) {
-    const bool ours = (self->overridable != 0);
-    return ours;
+    return reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::CanOverride();
 }
 
 // ============================================================================
@@ -645,9 +657,8 @@ extern "C" bool RtIo_PackageFile_CanOverride(const PackageFileView* self) {
 // bounds check in either body, and none is added — the caller bounds it with
 // GetFileCount, and a guard here would skip work rather than restore it.
 extern "C" uint32_t RtIo_PackageFile_GetFileSize(const PackageFileView* self, int index) {
-    const PackageFileEntry* const e = static_cast<const PackageFileEntry*>(self->entries)
-                                    + static_cast<int64_t>(index);
-    const uint32_t ours = e->size;                                  // +0x0C
+    const uint32_t ours =
+        reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::GetFileSize(index);
     // the raw DLL door, not bare the raw DLL door: the sweep probe calls this once
     // per FILE in every package — tens of thousands of times — and the raw DLL door
     // is GetProcAddress under the loader lock on every call
@@ -657,10 +668,7 @@ extern "C" uint32_t RtIo_PackageFile_GetFileSize(const PackageFileView* self, in
 }
 
 extern "C" uint32_t RtIo_PackageFile_GetFileOffset(const PackageFileView* self, int index) {
-    const PackageFileEntry* const e = static_cast<const PackageFileEntry*>(self->entries)
-                                    + static_cast<int64_t>(index);
-    const uint32_t ours = e->offset;                                // +0x08
-    return ours;
+    return reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::GetFileOffset(index);
 }
 
 
@@ -809,3 +817,211 @@ int RtIoPackageFileRegister() {
     printf("[RtPort]   IO::PackageFile (lane PKG2): %d exports registered\n", n);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS — `IO::PackageFile`'s member bodies
+// ============================================================================
+//
+// A member of `IO::X` cannot be DEFINED inside `namespace RtIO` — `IO` and
+// `RtIO` are siblings, so a definition has to appear in a namespace ENCLOSING
+// the class (B34_BRIEFS section A.2). This block therefore sits after
+// `}  // namespace RtIO` and reaches that namespace's file-local helpers as
+// `RtIO::X`, which works for its anonymous-namespace members too in this same
+// translation unit.
+//
+// Inside `namespace IO` a bare `PackageFile` binds to the REAL CLASS and a bare
+// `String`, `Filename` or `Stream` would bind to whatever `IO` sees first, so
+// every POD is spelled `RtIO::` / `RtSystem::` and every real class `System::`
+// (B34_RULES section 7.2, THE GREP HAZARD).
+//
+// WHAT DID NOT MOVE, AND WHY. `??0PackageFile@IO@@` and `??1PackageFile@IO@@`
+// keep their transcribed bodies: the object is built by a factory-replay row
+// and by filesystem_packages.cpp's MemAlloc(0xF0) + ctor door, and it wears the
+// MINTED `??_7PackageFile@IO@@6B@` whose nine rows are LIVE (B34_RULES section
+// 4.2). A real constructor would stamp GCC's table under the replay, and the
+// destructor performs retail's base-to-derived-to-base restamp by hand. Slot 0
+// is left PURE here for the same reason, so the class is abstract and nothing
+// can construct one by accident.
+// ============================================================================
+
+namespace IO {
+
+// ---- the reflection triple, slots 1 and 2 plus the static companion --------
+// All three read the MINTED `?_typeInfo@PackageFile@IO@@` record at 0x1801f9ac8
+// through RT_DATA_SLOT. The row stays minted in this step -- the class does NOT
+// take DECLARE_TYPE/DEFINE_TYPE here, for the same reason B.3.3's closing pass
+// left the five Object `?_typeInfo@` rows minted (B34_RULES section 1.4).
+//
+// `?Type@` (0x180025130) and `?TypeId@` (0x180025140) are the SAME two
+// instructions at two addresses -- the virtual and the static spelling -- so
+// the virtual is written as a call to the static, which is what keeps the two
+// from drifting. Neither reads RCX.
+uint32_t PackageFile::TypeId() {
+    const uint8_t* const ti = RtIO::PackageFileTypeInfo();
+    uint32_t ours = 0;
+    std::memcpy(&ours, ti, sizeof ours);
+    return ours;
+}
+
+uint32_t PackageFile::Type() const {          // slot 2, 0x180025130
+    return PackageFile::TypeId();
+}
+
+const char* PackageFile::TypeName() const {   // slot 1, 0x180025150
+    const uint8_t* const ti = RtIO::PackageFileTypeInfo();
+    const char* ours = nullptr;
+    std::memcpy(&ours, ti + 8, sizeof ours);  // BaseTypeInfo::name @ +0x08
+    return ours;
+}
+
+// ---- slots 3 and 4: the two constant-returning slots -----------------------
+// 0x1800b6080: MOV EAX,0x5 ; RET. The .pkg format version this build writes and
+// accepts. A constant in the CODE, not a field -- reading it off the object
+// would be wrong even though it would usually agree.
+int32_t PackageFile::GetFileVersion() const {
+    return 5;
+}
+
+// 0x1800b6090: MOV EAX,0x1 ; RET. `External::CompileResult`, and the value is 1
+// on every path -- a package is never "compiled", so the slot reports the same
+// result whatever Filename it is handed and the parameter is genuinely unread.
+Object::External::CompileResult PackageFile::Compile(const System::Filename& path) {
+    (void)path;
+    return 1;
+}
+
+// ---- slots 6 and 7 ---------------------------------------------------------
+//   ?Destruct@        180025300  MOV RAX,qword ptr [RCX]   ; this->vtable
+//                     180025303  XOR EDX,EDX               ; flags = 0
+//                     180025305  JMP  qword ptr [RAX]      ; TAIL, slot 0
+//
+//   ?Reconstruct@     1800252d6  MOV RAX,qword ptr [RCX]   ; this->vtable
+//                     1800252d9  XOR EDX,EDX               ; flags = 0
+//                     1800252de  CALL qword ptr [RAX]      ; slot 0
+//                     1800252e8  JMP  0x1800b4440          ; TAIL, ??0PackageFile
+//
+// THE DISPATCH IS VIRTUAL AND IT STAYS VIRTUAL, AND IT IS THE ONE PLACE IN THIS
+// FILE THAT MUST NOT BE WRITTEN AS `this->DeletingDtor(0)`. Both bodies read
+// slot 0 out of the OBJECT'S OWN vtable, and the object's own vtable is the
+// MINTED one -- so the raw indirect call is what reaches the registered
+// deleting dtor, while a C++ virtual call would be a qualified call to a slot
+// this class declares PURE. Short-cutting to `RtDelDtor_PackageFile` would read
+// correct today and be wrong for anything derived from PackageFile, and it
+// would also hide which table is live.
+//
+// FLAGS = 0, which in the deleting-destructor family means DESTRUCT IN PLACE
+// AND DO NOT FREE: the object's storage belongs to the factory that owns it.
+// Passing 1 would free a block the caller still holds. The constant is read off
+// `XOR EDX,EDX` at both sites, not assumed.
+void PackageFile::Destruct() {
+    void** const vt = *reinterpret_cast<void***>(this);   // 180025300
+    reinterpret_cast<RtIO::SlotZeroFn>(vt[0])(this, 0u);  // 180025305, flags 0
+}
+
+// "Destroy in place, then run the constructor over the same storage." The
+// declared return is `Object::External*`; retail returns whatever the
+// tail-jumped constructor leaves in RAX, which `??0PackageFile@IO@@` sets to
+// `this`. The constructor is reached through the FILE-LOCAL ported body rather
+// than through a door: a door would resolve to that same body and add one more
+// resolve site the cutover census has to carry.
+Object::External* PackageFile::Reconstruct() {
+    void** const vt = *reinterpret_cast<void***>(this);   // 1800252d6
+    reinterpret_cast<RtIO::SlotZeroFn>(vt[0])(this, 0u);  // 1800252de, flags 0
+    RtIo_PackageFile_Ctor(reinterpret_cast<RtIO::PackageFileView*>(this));  // 1800252e8
+    return this;
+}
+
+// ---- slot 8: PackageFile's OWN virtual -------------------------------------
+//   1800252f0  TEST RCX,RCX
+//   1800252f3  JNZ 0x1800b4440      <- tail jump straight into the constructor
+//   1800252f9  XOR EAX,EAX / RET
+//
+// The null branch is real, not defensive: the factory calls Construct on
+// whatever the allocator returned, including nullptr. Reproduced exactly, and
+// NOT promoted into the door -- a guard in the door would be a second test on a
+// path retail tests once.
+//
+// See runtime/types/io/PackageFile.h's banner for the four pieces of retail
+// evidence that this virtual is declared on `IO::PackageFile` and not on an
+// unmodelled class between `Object::External` and it.
+// THE NULL BRANCH IS IN THE DOOR, NOT HERE, and that pairing is the whole of
+// the difference between this member and retail's body. See
+// `RtIo_PackageFile_Construct` above: `this` is non-null by definition in C++,
+// GCC warns on the comparison (-Wnonnull-compare) and may delete it, so the
+// test sits on the plain pointer one frame up where it is well defined. Retail
+// tests the same pointer at the same point in the flow with the same two
+// outcomes; nothing was added and nothing was skipped.
+Object::External* PackageFile::Construct() {
+    RtIo_PackageFile_Ctor(reinterpret_cast<RtIO::PackageFileView*>(this));  // 1800252e8 tail jump
+    return this;
+}
+
+// ---- the three String getters ----------------------------------------------
+// Retail's body is the null-then-AddRef idiom, which is `System::String`'s copy
+// constructor exactly (0x180006cb0): it nulls the return slot, loads the
+// member, and AddRefs only if it is non-null. The members keep the POD spelling
+// (PackageFile.h's banner says why), so each is reached through pod_bridge.h's
+// `Sys()`.
+//
+//   180025327  MOV qword ptr [RDX],RAX     ; RAX = 0, the return slot
+//   18002532a  MOV RAX,qword ptr [RCX+off]
+//   18002532e  TEST RAX,RAX / JZ
+//   180025333  MOV qword ptr [RDX],RAX
+//   180025336  INC dword ptr [RAX + -0x4]  ; the refcount, block+4
+System::String PackageFile::GetName() const {
+    return System::String(RtSystem::Sys(_name));               // +0x40
+}
+
+System::String PackageFile::GetAuthor() const {
+    return System::String(RtSystem::Sys(_author));             // +0x48
+}
+
+System::String PackageFile::GetDescription() const {
+    return System::String(RtSystem::Sys(_description));        // +0x50
+}
+
+// ---- the scalar field reads ------------------------------------------------
+// Each is one MOV; the offset IS the function, and these eight bodies are now
+// the ONLY place in the tree that spells it.
+int32_t  PackageFile::GetVersion() const     { return _version; }      // 0x1800253d0 +0x68
+int32_t  PackageFile::GetUserVersion() const { return _userVersion; }  // 0x1800253e0 +0x6c
+int32_t  PackageFile::GetPriority() const    { return _priority; }     // 0x1800254e0 +0x70
+int32_t  PackageFile::GetPlatform() const    { return _platform; }     // 0x1800253f0 +0x74
+int32_t  PackageFile::GetIconWidth() const   { return _iconWidth; }    // 0x180025510 +0x78
+int32_t  PackageFile::GetIconHeight() const  { return _iconHeight; }   // 0x180025520 +0x7c
+uint32_t PackageFile::GetCRC() const         { return _crc; }          // 0x180025500 +0xa8
+int32_t  PackageFile::GetFileCount() const   { return _entryCount; }   // 0x1800254d0 +0xb8
+
+// 0x1800254f0 is `MOVZX EAX,byte ptr [RCX+0xac]` -- a ZERO extension of the
+// byte, not a sign extension and not a dword read. The field is the same one
+// LoadPackages' index pass tests, so a wrong width here would change package
+// precedence, not just a returned bool.
+bool PackageFile::CanOverride() const {
+    return _overridable != 0;
+}
+
+// ---- the two index-taking entry accessors ----------------------------------
+//   1800254a0  MOV RAX,qword ptr [RCX+0xb0]
+//   1800254a7  MOVSXD R8,EDX          <- SIGN extension of the int index
+//   1800254aa  ADD R8,R8              <- *2, and the *8 is in the SIB scale
+//   1800254ad  MOV EAX,dword ptr [RAX + R8*0x8 + 0xc]
+//
+// So the address is `entries + index*16 + 0xc`, and the index is SIGN-extended.
+// Ghidra's C prints that MOVSXD as a zero extension
+// (reference_ghidra_c_output_vs_disassembly.md, three Wave 6 defects); it is
+// written as int64 here because that is what the instruction says. There is NO
+// bounds check in either body and none is added -- the caller bounds it with
+// GetFileCount, and a guard here would skip work rather than restore it.
+uint32_t PackageFile::GetFileSize(int index) const {
+    const RtIO::PackageFileEntry* const e =
+        static_cast<const RtIO::PackageFileEntry*>(_entries) + static_cast<int64_t>(index);
+    return e->size;                                             // +0x0C
+}
+
+uint32_t PackageFile::GetFileOffset(int index) const {
+    const RtIO::PackageFileEntry* const e =
+        static_cast<const RtIO::PackageFileEntry*>(_entries) + static_cast<int64_t>(index);
+    return e->offset;                                           // +0x08
+}
+
+}  // namespace IO

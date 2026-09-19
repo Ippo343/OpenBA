@@ -251,10 +251,44 @@ names. So **`IO::PackageFile : public Object::External`**, and `package_file_ser
 **Slot 8 is PackageFile's own.** `??_7External@Object@@6B@` @ 0x1801547a0 is 8 slots, bounded
 by a null qword at 0x1801547e0 (re-read this pass: 0x180006640, 0x1800066c0, 0x1800066d0,
 `_purecall`, 0x1800066e0, `_purecall`, `_purecall`, `_purecall`). So `Construct` at +0x40 is a
-virtual `IO::PackageFile` ADDS. **Flagged, not settled**: whether retail declared it on
-PackageFile or on an unmodelled class between External and PackageFile was not determined, and
-whoever converts PackageFile must re-read 0x1800252f0's callers before choosing. Until then,
-declare it on `IO::PackageFile`.
+virtual `IO::PackageFile` ADDS.
+
+**SETTLED 2026-09-19 by the PACKAGE+FS owner (B.3.4 commit 3/6): `Construct` IS DECLARED BY
+`IO::PackageFile` ITSELF, not by an unmodelled class between `External` and it.** The earlier
+revision of this paragraph flagged it as undetermined and told whoever converted PackageFile to
+re-read 0x1800252f0's callers first. That was done, in retail `Runtime-x64.dll`
+(`function_count` 15290, re-asserted before the reads), and it produced four independent pieces
+of evidence:
+
+1. **0x1800252f0 is reachable from exactly ONE vtable.** `get_xrefs_to(0x1800252f0)` returns
+   three references and no more: the export-table entry at 0x1801b26ec, the EXTERNAL
+   entry-point row, and **0x180155740**, which is `??_7PackageFile@IO@@6B@ + 0x40` — slot 8.
+   No other class's table holds this body, so no sibling shares it.
+2. **`Object::External`'s own table stops at eight**, re-read byte-wise this pass: the null
+   qword at 0x1801547e0 is immediately followed by the `"External"` type-name string.
+   `Construct` is absent from it.
+3. **Fifty-eight classes across nine namespaces each export their OWN
+   `?Construct@<Leaf>@<NS>@@UEAAPEAVExternal@Object@@XZ`** — UI (30), Graphics (8), Video (5),
+   Audio (2), Collision2D (2), Picking, Pathfinding, Achievement, `Object::ExternalList` and
+   this one — and **there is no `?Construct@` on any base class at all**. Each sits inside a
+   per-class reflection-boilerplate block whose members (`_TypeName`, `_ParentTypeName`,
+   `Type`, `TypeId`, `TypeName`, `CreateNewObject`, `CreateInPlaceObject`, `Reconstruct`,
+   `Construct`, `Destruct`) are emitted at CONSECUTIVE addresses — a macro expanded in each
+   class BODY, which is what puts the virtual in each class rather than in a shared base.
+4. **A second, independent 9-slot instance has the identical shape.**
+   `Achievement::Achievement`, a direct `External` subclass, has its table at **0x180154740**:
+   slots 1..7 in External's order (slot 4 is 0x1800066e0, External's own `Compile`, INHERITED),
+   slot 8 = 0x1800012f0 `Construct`, bounded by `Object::Base`'s table at 0x180154788. So
+   "External plus exactly one added virtual" is the family's general shape, not something
+   peculiar to `PackageFile`.
+
+This is also what B.3.3 already committed to for the same situation one class over:
+`runtime/types/object/External.h` declares `virtual External* Construct();  // [8] 0x1800075e0`
+on `Object::ExternalList` with the note "so `Construct` is ExternalList's OWN new virtual:
+External's table stops at eight". `IO::PackageFile` gets the same declaration for the same
+reason, and `tests/unit/io_vtable_abi_test.cpp`'s
+`package_file_adds_exactly_one_virtual_at_slot_8_over_External` is the regression guard.
+§6.2's row "`Object::External`'s slot-8 question | flagged, not resolved" is CLOSED by this.
 
 `IO::PackageFile` is the **only** IO class with a `?_typeInfo@` mint row
 (0x1801f9ac8, `rt_data_mint_tables.inc:4511`) — consistent with it being the only reflected

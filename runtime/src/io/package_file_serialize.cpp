@@ -126,6 +126,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/io/PackageFile.h"   // B.3.4 PACKAGE+FS: the real class
 
 using rt::io::Stream;
 using rt::io::Encoding;
@@ -258,51 +259,17 @@ inline void*   FieldAt(void* self, int off) {
 // ============================================================================
 // bool IO::PackageFile::Serialize(IO::Stream&)
 // ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS commit 3: the body is now
+// `IO::PackageFile::Serialize(void*)` -- vtable slot 5, i.e.
+// `Object::External::Serialize` -- at the bottom of this file. The door keeps
+// its name and both registrations and delegates.
+//
+// *** THE QUALIFIED `IO::PackageFile::` IS LOAD-BEARING. *** A live PackageFile
+// wears the MINTED `??_7PackageFile@IO@@6B@`, whose slot 5 resolves back to
+// THIS DOOR. A plain virtual call here would dispatch through that minted table
+// into itself -- infinite recursion, not delegation (B34_BRIEFS section A.1).
 extern "C" bool RtIo_PackageFile_Serialize(void* self, Stream* stream) {
-    Serializer ser;
-    ReaderWriter* const rw = MakeCodec(stream, &ser);
-
-    StringSerialize()(FieldAt(self, 0x40), &ser);   // 1800b60ea  name
-    StringSerialize()(FieldAt(self, 0x48), &ser);   // 1800b60ff  author
-    StringSerialize()(FieldAt(self, 0x50), &ser);   // 1800b610c  description
-    StringSerialize()(FieldAt(self, 0x58), &ser);   // 1800b6119  _string58
-    StringSerialize()(FieldAt(self, 0x60), &ser);   // 1800b6126  _string60
-
-    RecInt(rw, FieldAt(self, 0x6c));                // 1800b6139  userVersion
-    RecInt(rw, FieldAt(self, 0x70));                // 1800b614d  priority
-
-    // The three counted arrays. Each: copy the count to a local, serialize the
-    // LOCAL, size the array from it on the reading side only, then hand the
-    // element walker the count and the data pointer. See the banner.
-    {
-        int32_t n = CountAt(self, 0x28);                          // 1800b6153
-        RecInt(rw, &n);                                           // 1800b6167
-        if (ser.stream->direction == rt::io::kDirectionReading)    // 1800b6171
-            ArraySetSize(0x180029a80, ArrayAt(self, 0x20), n);     // 1800b617e
-        StringArraySerialize()(&ser, n, DataAt(self, 0x20));       // 1800b618e
-    }
-    {
-        int32_t m = CountAt(self, 0x38);                          // 1800b6193
-        RecInt(rw, &m);                                           // 1800b61a7
-        if (ser.stream->direction == rt::io::kDirectionReading)    // 1800b61b1
-            ArraySetSize(0x180029a80, ArrayAt(self, 0x30), m);     // 1800b61be
-        StringArraySerialize()(&ser, m, DataAt(self, 0x30));       // 1800b61ce
-    }
-
-    RecBool(rw, FieldAt(self, 0xac));               // 1800b61e4  overridable
-    RecInt(rw, FieldAt(self, 0x78));                // 1800b61f5  iconWidth
-    RecInt(rw, FieldAt(self, 0x7c));                // 1800b6209  iconHeight
-
-    {
-        int32_t k = CountAt(self, 0x88);                          // 1800b620f
-        RecInt(rw, &k);                                           // 1800b6226
-        if (ser.stream->direction == rt::io::kDirectionReading)    // 1800b6230
-            ArraySetSize(0x180029510, ArrayAt(self, 0x80), k);     // 1800b6240
-        RecArrayUInt(rw, k, DataAt(self, 0x80));                   // 1800b6259
-    }
-
-    DestroyCodec(rw);                               // 1800b626e
-    return true;                                    // 1800b6270  MOV AL,1
+    return reinterpret_cast<IO::PackageFile*>(self)->IO::PackageFile::Serialize(stream);
 }
 
 // ---- Registration ----------------------------------------------------------
@@ -329,3 +296,77 @@ int RtIoPackageFileSerializeRegister() {
                 "opens ONE new address door, 0x180029bb0 (unported)\n", n);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS — `IO::PackageFile::Serialize`, vtable slot 5
+// ============================================================================
+//
+// A member of `IO::X` must be DEFINED in a namespace ENCLOSING the class
+// (B34_BRIEFS section A.2), so it lives here rather than in the anonymous
+// namespace with its helpers.
+//
+// *** THIS FILE IS WHERE B34_RULES section 7.2's GREP HAZARD IS LIVE. *** It
+// carries `using rt::io::Stream; using rt::io::Serializer;` and friends at
+// GLOBAL scope, and inside `namespace IO` a bare `Serializer` or `Stream` would
+// bind to the REAL CLASS instead -- silently, and with a different size. So
+// every POD in this body is spelled `rt::io::X` in full, and there is
+// deliberately no `using namespace` anywhere in it.
+//
+// THE FIELD OFFSETS ARE GONE, AND THAT IS THE WIN. The body used to reach
+// eleven fields through `FieldAt(self, 0xNN)` / `CountAt(self, 0xNN)` /
+// `ArrayAt(self, 0xNN)` because no header named them. runtime/types/io/
+// PackageFile.h names them now, each with a static_assert on its offset, so the
+// record's SHAPE is checked by the compiler instead of by four spellings of a
+// hex constant. The record ORDER is retail's and is untouched: a Serialize body
+// that emits fields in a different order writes a different file.
+namespace IO {
+
+bool PackageFile::Serialize(void* streamv) {
+    rt::io::Stream* const stream = static_cast<rt::io::Stream*>(streamv);
+    rt::io::Serializer ser;
+    rt::io::ReaderWriter* const rw = MakeCodec(stream, &ser);
+
+    StringSerialize()(&_name,        &ser);   // 1800b60ea
+    StringSerialize()(&_author,      &ser);   // 1800b60ff
+    StringSerialize()(&_description, &ser);   // 1800b610c
+    StringSerialize()(&_string58,    &ser);   // 1800b6119
+    StringSerialize()(&_string60,    &ser);   // 1800b6126
+
+    RecInt(rw, &_userVersion);                // 1800b6139
+    RecInt(rw, &_priority);                   // 1800b614d
+
+    // The three counted arrays. Each: copy the count to a local, serialize the
+    // LOCAL, size the array from it on the reading side only, then hand the
+    // element walker the count and the data pointer. See the banner.
+    {
+        int32_t n = _stringArray20Count;                          // 1800b6153
+        RecInt(rw, &n);                                           // 1800b6167
+        if (ser.stream->direction == rt::io::kDirectionReading)    // 1800b6171
+            ArraySetSize(0x180029a80, &_stringArray20, n);         // 1800b617e
+        StringArraySerialize()(&ser, n, _stringArray20);           // 1800b618e
+    }
+    {
+        int32_t m = _stringArray30Count;                          // 1800b6193
+        RecInt(rw, &m);                                           // 1800b61a7
+        if (ser.stream->direction == rt::io::kDirectionReading)    // 1800b61b1
+            ArraySetSize(0x180029a80, &_stringArray30, m);         // 1800b61be
+        StringArraySerialize()(&ser, m, _stringArray30);           // 1800b61ce
+    }
+
+    RecBool(rw, &_overridable);               // 1800b61e4
+    RecInt(rw, &_iconWidth);                  // 1800b61f5
+    RecInt(rw, &_iconHeight);                 // 1800b6209
+
+    {
+        int32_t k = _iconCount;                                   // 1800b620f
+        RecInt(rw, &k);                                           // 1800b6226
+        if (ser.stream->direction == rt::io::kDirectionReading)    // 1800b6230
+            ArraySetSize(0x180029510, &_iconData, k);              // 1800b6240
+        RecArrayUInt(rw, k, _iconData);                            // 1800b6259
+    }
+
+    DestroyCodec(rw);                         // 1800b626e
+    return true;                              // 1800b6270  MOV AL,1
+}
+
+}  // namespace IO

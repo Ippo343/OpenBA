@@ -76,6 +76,7 @@
 #include "runtime/types/io/Serializer.h"
 #include "runtime/types/io/Stream.h"
 #include "runtime/types/object/Internal.h"
+#include "runtime/types/io/PackageFile.h"   // B.3.4 PACKAGE+FS
 
 #include <cstdint>
 #include <cstddef>
@@ -1273,6 +1274,167 @@ UNIT_TEST(the_real_Encoding_declares_its_5_slots_in_retail_order) {
             CHECK(vt[a] != vt[b]);
 
     static_assert(!std::has_virtual_destructor<IO::Encoding>::value, "B34_RULES 1.1");
+}
+
+
+// ===========================================================================
+// ENDGAME B.3.4 PACKAGE+FS — `IO::PackageFile`: 0xf0 bytes and NINE slots
+// ===========================================================================
+//
+// Two things need pinning and they need pinning in two different ways.
+//
+// THE LAYOUT is pinned on the REAL CLASS. `sizeof` and `offsetof` odr-use
+// nothing, so `runtime/types/io/PackageFile.h` can be included here and its own
+// static_asserts fire at compile time; the CHECKs below re-state the load-bearing
+// ones as a running test so a failure names the field.
+//
+// THE SLOT ORDER is pinned on a SHAPE-IDENTICAL PROBE, and that is a deliberate
+// compromise with a reason, not a shortcut. GCC emits a class's vtable in the
+// translation unit defining its KEY FUNCTION — the first non-pure, non-inline
+// virtual — and for `IO::PackageFile` that is `TypeName()`, whose body is in
+// `runtime/src/io/package_file.cpp`, a file that stands on `RT_DATA_SLOT` and
+// the port registry and therefore cannot link into `make unit`. Referring to
+// the real class's vtable here would drag that whole TU in. This is the SAME
+// constraint `tests/unit/sources.mk` already records for `Object::ExternalList`
+// ("external_class_doors.cpp is deliberately NOT here and must not be added …
+// it is also where ExternalList's vtable is emitted").
+//
+// So the probe reproduces the exact shape the claim is about — `Object::External`
+// (the REAL class, which does link, via external_class.cpp) plus EXACTLY ONE
+// added virtual — and asserts that the added virtual lands at index 8. That is
+// precisely the proposition B34_BRIEFS section E.2 left open and this block
+// closes; the four pieces of RETAIL evidence behind it are in
+// runtime/types/io/PackageFile.h's banner, and this test is what keeps the
+// DECLARATION from drifting away from them.
+
+namespace {
+
+int g_pkgMark = -1;
+void PkgNote(int slot) { g_pkgMark = slot; }
+
+// A CONCRETE subclass of the REAL `Object::External`, declaring its nine slots
+// in `IO::PackageFile`'s exact order: External's eight, then Construct.
+struct PkgOrderProbe : Object::External {
+    Object::Base* DeletingDtor(unsigned) override   { PkgNote(0); return this; }
+    const char*   TypeName() const override         { PkgNote(1); return "P"; }
+    uint32_t      Type() const override             { PkgNote(2); return 0x50u; }
+    int32_t       GetFileVersion() const override   { PkgNote(3); return 5; }
+    CompileResult Compile(const System::Filename&) override { PkgNote(4); return 1; }
+    bool          Serialize(void*) override         { PkgNote(5); return true; }
+    Object::External* Reconstruct() override        { PkgNote(6); return this; }
+    void          Destruct() override               { PkgNote(7); }
+    virtual Object::External* Construct()           { PkgNote(8); return this; }
+    ~PkgOrderProbe() = default;
+};
+
+template <typename Fn>
+Fn PkgSlot(const void* obj, int index) {
+    void* const* vt = *reinterpret_cast<void* const* const*>(obj);
+    return reinterpret_cast<Fn>(vt[index]);
+}
+
+}  // namespace
+
+UNIT_TEST(package_file_adds_exactly_one_virtual_at_slot_8_over_External) {
+    PkgOrderProbe probe;
+
+    // Raw slot calls at every index 0..8, each asserting its own marker. A
+    // mis-ordered declaration in PackageFile.h would land a call on the wrong
+    // body and the marker would disagree with the index.
+    g_pkgMark = -1;
+    PkgSlot<void* (*)(void*, unsigned)>(&probe, 0)(&probe, 0u);
+    CHECK_EQ(g_pkgMark, 0);
+    g_pkgMark = -1;
+    PkgSlot<const char* (*)(const void*)>(&probe, 1)(&probe);
+    CHECK_EQ(g_pkgMark, 1);
+    g_pkgMark = -1;
+    PkgSlot<uint32_t (*)(const void*)>(&probe, 2)(&probe);
+    CHECK_EQ(g_pkgMark, 2);
+    g_pkgMark = -1;
+    PkgSlot<int32_t (*)(const void*)>(&probe, 3)(&probe);
+    CHECK_EQ(g_pkgMark, 3);
+    g_pkgMark = -1;
+    PkgSlot<uint32_t (*)(void*, const void*)>(&probe, 4)(&probe, nullptr);
+    CHECK_EQ(g_pkgMark, 4);
+    g_pkgMark = -1;
+    PkgSlot<bool (*)(void*, void*)>(&probe, 5)(&probe, nullptr);
+    CHECK_EQ(g_pkgMark, 5);
+    g_pkgMark = -1;
+    PkgSlot<void* (*)(void*)>(&probe, 6)(&probe);
+    CHECK_EQ(g_pkgMark, 6);
+    g_pkgMark = -1;
+    PkgSlot<void (*)(void*)>(&probe, 7)(&probe);
+    CHECK_EQ(g_pkgMark, 7);
+
+    // *** THE ONE THAT MATTERS. *** Retail's ??_7PackageFile@IO@@6B@ has its
+    // `Construct` body (0x1800252f0) at +0x40, i.e. index 8, and
+    // ??_7External@Object@@6B@ is only eight slots long. If `Construct` were
+    // declared on an unmodelled class BETWEEN External and PackageFile, it
+    // would still land at 8 here — but External's own table would then be nine
+    // slots in retail, and it is not. So what this pins is the C++ side of the
+    // claim: External plus one added virtual puts that virtual at index 8.
+    g_pkgMark = -1;
+    PkgSlot<void* (*)(void*)>(&probe, 8)(&probe);
+    CHECK_EQ(g_pkgMark, 8);
+
+    // Nine DISTINCT entries and no more. A virtual destructor anywhere in the
+    // chain would spend two slots and shift everything after it (B33 section 4
+    // rule 2), which this catches as a duplicate or a wrong marker rather than
+    // as a corrupted package on disk.
+    void* const* vt = *reinterpret_cast<void* const* const*>(&probe);
+    for (int a = 0; a < 9; ++a)
+        for (int b = a + 1; b < 9; ++b)
+            CHECK(vt[a] != vt[b]);
+    static_assert(!std::has_virtual_destructor<Object::External>::value,
+                  "a virtual ~External would push Construct from slot 8 to slot 9");
+}
+
+UNIT_TEST(the_real_PackageFile_is_0xf0_bytes_with_retails_field_offsets) {
+    // The REAL class, not the probe. Every one of these is also a static_assert
+    // in runtime/types/io/PackageFile.h; they are restated as CHECKs so a
+    // regression names the field instead of failing the build with one message.
+    CHECK_EQ(sizeof(IO::PackageFile), static_cast<size_t>(0xf0));
+    CHECK_EQ(sizeof(Object::External), static_cast<size_t>(0x20));
+    CHECK_EQ(sizeof(RtIO::FileInfo), static_cast<size_t>(0x30));
+
+    CHECK_EQ(offsetof(IO::PackageFile, _stringArray20), static_cast<size_t>(0x20));
+    CHECK_EQ(offsetof(IO::PackageFile, _stringArray30), static_cast<size_t>(0x30));
+    CHECK_EQ(offsetof(IO::PackageFile, _name),          static_cast<size_t>(0x40));
+    CHECK_EQ(offsetof(IO::PackageFile, _author),        static_cast<size_t>(0x48));
+    CHECK_EQ(offsetof(IO::PackageFile, _description),   static_cast<size_t>(0x50));
+    CHECK_EQ(offsetof(IO::PackageFile, _string58),      static_cast<size_t>(0x58));
+    CHECK_EQ(offsetof(IO::PackageFile, _string60),      static_cast<size_t>(0x60));
+    CHECK_EQ(offsetof(IO::PackageFile, _version),       static_cast<size_t>(0x68));
+    CHECK_EQ(offsetof(IO::PackageFile, _userVersion),   static_cast<size_t>(0x6c));
+    CHECK_EQ(offsetof(IO::PackageFile, _priority),      static_cast<size_t>(0x70));
+    CHECK_EQ(offsetof(IO::PackageFile, _platform),      static_cast<size_t>(0x74));
+    CHECK_EQ(offsetof(IO::PackageFile, _iconWidth),     static_cast<size_t>(0x78));
+    CHECK_EQ(offsetof(IO::PackageFile, _iconHeight),    static_cast<size_t>(0x7c));
+    CHECK_EQ(offsetof(IO::PackageFile, _iconData),      static_cast<size_t>(0x80));
+    CHECK_EQ(offsetof(IO::PackageFile, _previewByteCount), static_cast<size_t>(0x90));
+    CHECK_EQ(offsetof(IO::PackageFile, _previewData),   static_cast<size_t>(0x98));
+    CHECK_EQ(offsetof(IO::PackageFile, _crc),           static_cast<size_t>(0xa8));
+    CHECK_EQ(offsetof(IO::PackageFile, _overridable),   static_cast<size_t>(0xac));
+    CHECK_EQ(offsetof(IO::PackageFile, _entries),       static_cast<size_t>(0xb0));
+    CHECK_EQ(offsetof(IO::PackageFile, _entryCount),    static_cast<size_t>(0xb8));
+    CHECK_EQ(offsetof(IO::PackageFile, _file),          static_cast<size_t>(0xc0));
+
+    // The partial POD view is NOT replaced and must not drift from the class:
+    // filesystem_packages.cpp, filesystem_find_win.cpp and filesystem.cpp all
+    // still read it (B33 section 7 -- the POD stays until its last user converts).
+    CHECK_EQ(offsetof(IO::PackageFile, _name),
+             offsetof(RtIO::PackageFileView, name));
+    CHECK_EQ(offsetof(IO::PackageFile, _crc),
+             offsetof(RtIO::PackageFileView, packfileId));
+    CHECK_EQ(offsetof(IO::PackageFile, _entries),
+             offsetof(RtIO::PackageFileView, entries));
+    CHECK_EQ(offsetof(IO::PackageFile, _entryCount),
+             offsetof(RtIO::PackageFileView, entryCount));
+
+    // 0xc0 + 0x30 == 0xf0: the embedded FileInfo is what closes the object, and
+    // it is also why the constructor's last store is at object offset 0xd8.
+    CHECK_EQ(offsetof(IO::PackageFile, _file) + sizeof(RtIO::FileInfo),
+             sizeof(IO::PackageFile));
 }
 
 }  // namespace
