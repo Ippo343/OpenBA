@@ -36,10 +36,6 @@
 // Local function pointers resolved once
 // ============================================================
 
-// IO::Serializer::Serialize(this, int*, name) — dispatch slot 0x140152ac8
-typedef void (*fn_Serializer_SerializeInt_t)(void* serializer, void* intPtr, const char* name);
-static fn_Serializer_SerializeInt_t s_fn_SerializeInt = nullptr;
-
 // System::String::Serialize(this, serializer) — dispatch slot 0x140151238
 typedef void (*fn_StringSerialize_t)(void* self, void* serializer);
 static fn_StringSerialize_t s_fn_StringSerialize = nullptr;
@@ -132,14 +128,13 @@ static void EnsureFuncsResolved() {
         return (slot && *slot) ? *slot : nullptr;
     };
 
-    s_fn_SerializeInt    = (fn_Serializer_SerializeInt_t) loadExref(0x140152ac8);
     s_fn_StringSerialize = (fn_StringSerialize_t)         loadExref(0x140151238);
     s_fn_FilenameCtor    = (fn_FilenameCtor_t)            loadExref(0x140151d40);
     s_fn_FilenameDtor    = (fn_FilenameDtor_t)            loadExref(0x1401529e8);
 
 #ifdef _DEBUG
-    printf("[TutorialSetupRestrictPlayer] SerializeInt=%p StringSerialize=%p\n",
-           (void*)s_fn_SerializeInt, (void*)s_fn_StringSerialize);
+    printf("[TutorialSetupRestrictPlayer] StringSerialize=%p\n",
+           (void*)s_fn_StringSerialize);
 #endif
 }
 
@@ -190,17 +185,14 @@ void TutorialSetupRestrictPlayer_Serialize(void* self, void* stream) {
 
     // Create serializer on stack
     alignas(8) uint8_t serializer[32];
-    if (g_fn_Serializer_Ctor)
-        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize 5 int32 fields: +0x20, +0x24, +0x28, +0x2C, +0x30
-    if (s_fn_SerializeInt) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x20), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x2C), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x20), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x2C), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);   // B.3.4 bridge
 
     // Serialize ExternalRef1 (tool restriction) at +0x38
     {
@@ -235,8 +227,7 @@ void TutorialSetupRestrictPlayer_Serialize(void* self, void* stream) {
     }
 
     // Destroy serializer
-    if (g_fn_Serializer_Dtor)
-        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

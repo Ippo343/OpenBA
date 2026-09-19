@@ -36,22 +36,6 @@
 typedef void (*fn_External_Ctor_t)(void* self);
 static fn_External_Ctor_t s_fn_External_Ctor = nullptr;
 
-// Serializer::Serialize(bool*) -- dispatch slot 0x140152a58
-typedef void (*fn_Serializer_SerializeBool_t)(void* serializer, void* boolPtr, const char* name);
-static fn_Serializer_SerializeBool_t s_fn_Serializer_SerializeBool = nullptr;
-
-// Serializer::Serialize(int*) -- dispatch slot 0x140152ac8
-typedef void (*fn_Serializer_SerializeInt_t)(void* serializer, void* intPtr, const char* name);
-static fn_Serializer_SerializeInt_t s_fn_Serializer_SerializeInt = nullptr;
-
-// Serializer::Ctor -- dispatch slot 0x140152ad8
-typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-// Serializer::Dtor -- dispatch slot 0x140152ad0
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
 // ExternalPtr<StringTable>::Serialize (0x14000bf40)
 typedef void (*fn_ExternalPtrSerialize_StringTable_t)(void* fieldPtr, void* serializer);
 static fn_ExternalPtrSerialize_StringTable_t s_fn_ExternalPtrSerialize_StringTable = nullptr;
@@ -85,19 +69,6 @@ static void EnsureResolved() {
     // External::External() constructor
     void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151e98));
     if (slot && *slot) s_fn_External_Ctor = reinterpret_cast<fn_External_Ctor_t>(*slot);
-
-    // Serializer dispatch slots
-    slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152a58));
-    if (slot && *slot) s_fn_Serializer_SerializeBool = reinterpret_cast<fn_Serializer_SerializeBool_t>(*slot);
-
-    slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152ac8));
-    if (slot && *slot) s_fn_Serializer_SerializeInt = reinterpret_cast<fn_Serializer_SerializeInt_t>(*slot);
-
-    slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152ad8));
-    if (slot && *slot) s_fn_Serializer_Ctor = reinterpret_cast<fn_Serializer_Ctor_t>(*slot);
-
-    slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152ad0));
-    if (slot && *slot) s_fn_Serializer_Dtor = reinterpret_cast<fn_Serializer_Dtor_t>(*slot);
 
     // String::Serialize dispatch slot
     slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151238));
@@ -227,16 +198,10 @@ void TutorialStep_Serialize(void* self, void* stream) {
 
     // Create Serializer on stack (24 bytes)
     alignas(8) uint8_t serializer[24];
-    if (s_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    } else {
-        return; // Can't serialize without a serializer
-    }
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // 1. Serialize bool at +0x20 (completed flag)
-    if (s_fn_Serializer_SerializeBool) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x20), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x20), nullptr);   // B.3.4 bridge
 
     // 2. Serialize ExternalPtr<StringTable> at +0x28
     if (s_fn_ExternalPtrSerialize_StringTable) {
@@ -257,9 +222,7 @@ void TutorialStep_Serialize(void* self, void* stream) {
     {
         int32_t count = *reinterpret_cast<int32_t*>(s + 0x48);
         int32_t localCount = count;
-        if (s_fn_Serializer_SerializeInt) {
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
-        }
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
         // On load: check if reading (serializer->encoding->mode == 0)
         if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
             // Reading: resize the array
@@ -278,9 +241,7 @@ void TutorialStep_Serialize(void* self, void* stream) {
     {
         int32_t count = *reinterpret_cast<int32_t*>(s + 0x58);
         int32_t localCount = count;
-        if (s_fn_Serializer_SerializeInt) {
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
-        }
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
         if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
             if (s_fn_DynArrayResize) {
                 s_fn_DynArrayResize(reinterpret_cast<void*>(s + 0x50), localCount);
@@ -296,9 +257,7 @@ void TutorialStep_Serialize(void* self, void* stream) {
     {
         int32_t count = *reinterpret_cast<int32_t*>(s + 0x68);
         int32_t localCount = count;
-        if (s_fn_Serializer_SerializeInt) {
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
-        }
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
         if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
             if (s_fn_DynArrayResize) {
                 s_fn_DynArrayResize(reinterpret_cast<void*>(s + 0x60), localCount);
@@ -311,9 +270,7 @@ void TutorialStep_Serialize(void* self, void* stream) {
     }
 
     // Destroy serializer
-    if (s_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

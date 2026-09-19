@@ -111,24 +111,19 @@ void TutorialImageToolbarIcon_Serialize(void* self, void* stream) {
 
     // First serializer block: serialize +0x28, +0x2C as ints, then ExternalPtr at +0x20
     alignas(8) uint8_t serializerBuf[32] = {};
-    if (g_fn_Serializer_Ctor)
-        ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
-    if (g_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(p + 0x28), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(p + 0x2C), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(p + 0x28), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(p + 0x2C), nullptr);   // B.3.4 bridge
 
     if (s_fn_ExternalPtr_SerializeImage)
         s_fn_ExternalPtr_SerializeImage(p + 0x20, serializerBuf);
 
-    if (g_fn_Serializer_Dtor)
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 
     // Second serializer block: Filename ctor, String::Serialize, conditional toolbar resolve
     alignas(8) uint8_t serializerBuf2[32] = {};
-    if (g_fn_Serializer_Ctor)
-        ::new (static_cast<void*>(serializerBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    ::new (static_cast<void*>(serializerBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Filename temp retail's compiler emitted for this scope.
     System::Filename filenameBuf;
@@ -148,8 +143,7 @@ void TutorialImageToolbarIcon_Serialize(void* self, void* stream) {
         }
     }
 
-    if (g_fn_Serializer_Dtor)
-        reinterpret_cast<IO::Serializer*>(serializerBuf2)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf2)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

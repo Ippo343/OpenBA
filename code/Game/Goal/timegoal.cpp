@@ -54,24 +54,16 @@ void TimeGoal_Slot5(TimeGoal* self, void* stream) {
 
     // Create serializer
     alignas(8) uint8_t serializerBuf[24];
-    if (g_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize requiredYears (+0x30)
-    if (g_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);   // B.3.4 bridge
 
     // Serialize requireOtherGoalsMet (+0x34)
-    if (g_fn_Serialize_Bool) {
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<bool*>(s + 0x34), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<bool*>(s + 0x34), nullptr);   // B.3.4 bridge
 
     // Destroy serializer
-    if (g_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

@@ -53,14 +53,10 @@ void FinishTutorialInstance_Slot3(FinishTutorialInstance* self, void* stream) {
 
     // Create Serializer on stack (24 bytes)
     alignas(8) uint8_t serializer[24];
-    if (g_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize InternalBasePtr at +0x20
-    if (fn_InternalBasePtr_Serialize) {
-        reinterpret_cast<Object::InternalBasePtr*>((void*)(s + 0x20))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-    }
+    reinterpret_cast<Object::InternalBasePtr*>((void*)(s + 0x20))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
 
     // Type-check: if deserialized object is not a TutorialInstance, null it out
     void* obj = *(void**)(s + 0x20);
@@ -94,9 +90,7 @@ void FinishTutorialInstance_Slot3(FinishTutorialInstance* self, void* stream) {
     }
 
     // Destroy Serializer
-    if (g_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
