@@ -134,8 +134,8 @@ bool Inner_Update(UpdateLoop* self, void* time) {
     StallDebug::Tick("InnerLL::Update");
     // Inner_Load is a noop in standalone (PlacementTool init is done lazily
     // from elsewhere), so there is no async work to wait for. Transition
-    // immediately to next (ShiningRockSplash). The splash itself uses our
-    // standalone AsyncLoader for its own next-loop load.
+    // immediately to next (ShiningRockSplash). The splash itself kicks the
+    // single Runtime Engine::Loader thread for its own next-loop load.
     LoaderLoop* ll = reinterpret_cast<LoaderLoop*>(self);
     UpdateLoop* next = ll->m_nextLoop;
     void* mainLoop = (g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr);

@@ -5,7 +5,9 @@
 // (Scene[0..9].rsc) — ~542ms of synchronous work. Running it from MenuDLT::
 // Stub_Startup blocks the main thread for that whole time. The PhaseB loop
 // can NOT run on a worker thread because Scene::AddObject mutates global
-// scene state in a non-thread-safe way (see async_loader.h notes).
+// scene state in a non-thread-safe way. It must therefore stay on the main
+// thread -- but it must NOT run while the Engine::Loader thread is loading
+// (splash_loop_stubs.cpp gates it on EngineLoader::IsBusy).
 //
 // Solution: split LoadScene_PhaseA into three pieces (LoadSceneA1 + chunked
 // PhaseB + LoadSceneA3) and drive PhaseB incrementally from MenuDLT::
