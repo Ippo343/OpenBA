@@ -66,9 +66,33 @@
 // the seam, and this is exactly the case where our standalone differs.
 // ============================================================================
 
+// ENDGAME B.3.4b SYSTEM (4): `System::Timer` is a real class with static
+// members (runtime/types/system/Timer.h). The mangling is the evidence —
+// `?X@Timer@System@@SA…` / `CA…` is a static member of a class named
+// `System::Timer`, which a free function cannot carry; Timer.h's banner has the
+// full argument and the contrast with B.3.4a's `IO::TextCodec`, which came out
+// the other way and landed nothing.
+//
+// TEN BODIES MOVED onto members; the ten registered doors keep their addresses
+// and their names and delegate, in the block above `RtSystemTimerRegister`.
+// Member bodies are defined at GLOBAL scope with qualified names rather than
+// inside a `namespace System { ... }` block — the shape SYSTEM (3) adopted.
+//
+// ⚠ THE FIVE STATICS DO NOT CONVERT, AND THAT IS RULE B4b-4, NOT AN OVERSIGHT.
+// `_ticksPerSecond`, `_secondsPerTick`, `_systemTicksPerSecond`,
+// `_systemInitialTick` and `_systemSecondsPerTick` are CUTOVER_REQUIRED rows
+// answered by minted storage cells; making one a real `static` member requires
+// a redirect at `standalone/rt_data_mint.cpp`'s `MintStorageCell()`, and
+// `standalone/` belongs to another agent this step. They stay file-scope
+// globals published through `PublishTimerStatics()` exactly as before, and the
+// redirect debt is tabled per row in B34B_RULES §4.1 — owed at the
+// class-static conversion, the end of B.3. See also the long banner at
+// :124-142: all five must be published at the same moment or the IDIV-by-zero
+// it was written about comes back.
 #include <cstdint>
 #include "../../funcs/rt_port.h"
 #include "timer.h"
+#include "../../types/system/Timer.h"
 
 // Provided by application_win.cpp's platform layer; declared here rather than
 // including <windows.h>, which PLAN §4.1 keeps out of runtime/src (see the long
@@ -182,7 +206,7 @@ void PublishTimerStatics() {
 // unreachable on every Windows version this game runs on (QPF has not been
 // able to fail since XP). We return false without the message and say so here
 // rather than reaching back into the DLL for one string on a dead path.
-bool RtSystem_Timer_PlatformStartup() {
+bool System::Timer::PlatformStartup() {
     int64_t freq = 0;
     if (!QueryPerformanceFrequency(&freq)) return false;
 
@@ -208,10 +232,10 @@ bool RtSystem_Timer_PlatformStartup() {
 // they are repeated here because this function's contract is to establish
 // them, and a caller that ran Shutdown first (a no-op in every shipped build,
 // see below) must still get a live Timer back.
-bool RtSystem_Timer_Startup() {
+bool System::Timer::Startup() {
     g_ticksPerSecond = 1000000;
     g_secondsPerTick = 1.0 / static_cast<double>(1000000);
-    const bool ok = RtSystem_Timer_PlatformStartup();
+    const bool ok = PlatformStartup();
     // Retail's Engine::Startup stores these two into 0x1801fe720/728
     // ITSELF, before it calls PlatformStartup, and does so whether or
     // not that succeeds. Publishing again here covers the QPF-failed
@@ -225,8 +249,8 @@ bool RtSystem_Timer_Startup() {
 // ?PlatformShutdown@Timer@System@@CAXXZ  retail 0x1800ca8e0 — `RET`, no body.
 // Both are a bare return in the shipped build. Ported as empty rather than
 // left unregistered so that neither is a missing symbol at cutover.
-void RtSystem_Timer_Shutdown() {}
-void RtSystem_Timer_PlatformShutdown() {}
+void System::Timer::Shutdown() {}
+void System::Timer::PlatformShutdown() {}
 
 // PlatformStartup is reached from Engine::Startup by a DIRECT internal call in
 // the shipped DLL, which cannot pass through the port registry (file header).
@@ -235,7 +259,7 @@ void RtSystem_Timer_PlatformShutdown() {}
 // over a faithful crash: retail's precondition ("Startup ran") is genuinely
 // broken by the seam, which is the one case CLAUDE.md's rule allows.
 void RtSystem::TimerEnsurePlatformStarted() {
-    if (g_systemTicksPerSecond == 0) RtSystem_Timer_PlatformStartup();
+    if (g_systemTicksPerSecond == 0) System::Timer::PlatformStartup();
 }
 
 // The five data-export accessors declared in timer.h. TicksPerSecond and
@@ -254,7 +278,7 @@ namespace { inline void EnsurePlatform() { RtSystem::TimerEnsurePlatformStarted(
 // ?GetTicks@Timer@System@@CA_KXZ  retail 0x1800ca840 (private static).
 // A raw QPC sample; the name's `_K` is unsigned but the OS writes a signed
 // LARGE_INTEGER and retail moves it straight out.
-uint64_t RtSystem_Timer_GetTicks() {
+uint64_t System::Timer::GetTicks() {
     int64_t now = 0;
     QueryPerformanceCounter(&now);
     return static_cast<uint64_t>(now);
@@ -280,7 +304,7 @@ uint64_t RtSystem_Timer_GetTicks() {
 // epoch again. **These two therefore land with calls=0 and are unverified** —
 // stated here rather than reported as clean, per
 // reference_uncalled_port_is_not_verified.md.
-int64_t RtSystem_Timer_CurrentTimeTicks() {
+int64_t System::Timer::CurrentTimeTicks() {
     EnsurePlatform();
     int64_t now = 0;
     QueryPerformanceCounter(&now);
@@ -291,7 +315,7 @@ int64_t RtSystem_Timer_CurrentTimeTicks() {
 // The same integer expression, then `(float)(ticks * _secondsPerTick)` —
 // CVTSI2SD, MULSD, CVTPD2PS, i.e. the multiply is done in double and rounded
 // to float exactly once. Same calls=0 / epoch caveat as above.
-float RtSystem_Timer_CurrentTime() {
+float System::Timer::CurrentTime() {
     EnsurePlatform();
     int64_t now = 0;
     QueryPerformanceCounter(&now);
@@ -303,7 +327,7 @@ float RtSystem_Timer_CurrentTime() {
 //   XORPS XMM1,XMM1 / CVTSS2SD XMM1,XMM0 / DIVSD XMM1,[_secondsPerTick]
 //   / CVTTSD2SI RAX,XMM1
 // float widened to double, divided in double, then TRUNCATED toward zero.
-int64_t RtSystem_Timer_SecondsToTicks(float seconds) {
+int64_t System::Timer::SecondsToTicks(float seconds) {
     int64_t ours = static_cast<int64_t>(static_cast<double>(seconds) / g_secondsPerTick);
     using Fn = int64_t (*)(float);
     return ours;
@@ -313,7 +337,7 @@ int64_t RtSystem_Timer_SecondsToTicks(float seconds) {
 //   CVTSI2SD XMM0,RCX / MULSD XMM0,[_secondsPerTick] / CVTPD2PS XMM0,XMM0
 // SIGNED widening (CVTSI2SD, not the unsigned pair), multiply in double, one
 // rounding to float at the end.
-float RtSystem_Timer_TicksToSeconds(int64_t ticks) {
+float System::Timer::TicksToSeconds(int64_t ticks) {
     return static_cast<float>(static_cast<double>(ticks) * g_secondsPerTick);
 }
 
@@ -322,7 +346,31 @@ float RtSystem_Timer_TicksToSeconds(int64_t ticks) {
 // has no instance state at all -- every one of its five statics is a file-scope
 // global -- so assignment copies nothing and returns `this`. Two instructions,
 // and it is the tenth and last export of the class.
-void* RtSystem_Timer_Assign(void* self, const void* /*other*/) { return self; }
+System::Timer& System::Timer::operator=(const System::Timer& /*other*/) { return *this; }
+
+// ============================================================================
+// ENDGAME B.3.4b — the ten delegating DOORS.
+// ============================================================================
+// Each keeps the registered name and retail address it always had and calls the
+// member. `System::Timer` has no vtable, so none of these needs the qualified
+// non-virtual call B34_BRIEFS §A.1 forces on a polymorphic receiver — a plain
+// static call cannot dispatch back into the door.
+bool     RtSystem_Timer_Startup()                   { return System::Timer::Startup(); }
+void     RtSystem_Timer_Shutdown()                  { System::Timer::Shutdown(); }
+bool     RtSystem_Timer_PlatformStartup()           { return System::Timer::PlatformStartup(); }
+void     RtSystem_Timer_PlatformShutdown()          { System::Timer::PlatformShutdown(); }
+uint64_t RtSystem_Timer_GetTicks()                  { return System::Timer::GetTicks(); }
+float    RtSystem_Timer_CurrentTime()               { return System::Timer::CurrentTime(); }
+int64_t  RtSystem_Timer_CurrentTimeTicks()          { return System::Timer::CurrentTimeTicks(); }
+int64_t  RtSystem_Timer_SecondsToTicks(float s)     { return System::Timer::SecondsToTicks(s); }
+float    RtSystem_Timer_TicksToSeconds(int64_t t)   { return System::Timer::TicksToSeconds(t); }
+
+// ??4Timer@System@@QEAAAEAV01@AEBV01@@Z — the door keeps retail's raw
+// `(this, other) -> this` shape; the member is a real `operator=`.
+void* RtSystem_Timer_Assign(void* self, const void* other) {
+    System::Timer* t = static_cast<System::Timer*>(self);
+    return &(*t = *static_cast<const System::Timer*>(other));
+}
 
 // ============================================================
 // RtSystemTimerRegister — called from RtSystemPortInit() (rt_system_port.cpp).
