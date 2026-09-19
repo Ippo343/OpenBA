@@ -58,7 +58,9 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/graphics/AnimationState.h"   // ENDGAME B.3.5 block GC
 #include "../../types/graphics/Mesh.h"
+#include "../../types/system/Value.h"              // System::Time, ditto
 
 using RtGraphics::MeshInstance;
 
@@ -155,9 +157,10 @@ const bool* RootOnlyUpdates() {
 // plus `this`, in the order its own mangled name gives them — the identical
 // typedef wave23_lane_gfxbody.cpp:543 uses, repeated rather than shared so this
 // file's call site can be read without opening that one.
-using AnimStateUpdateFn = bool (*)(void* self, const void* time, const void* nodes,
-                                   const void* base, void* interpA, void* interpB,
-                                   void* outVec3, bool flag7, bool flag8);
+// ENDGAME B.3.5 block GC: the typedef that used to sit here is GONE with the
+// resolve it served -- `AnimationState::Update` is a member now and the call site
+// is a qualified member call. The mangled name above is kept because it is what
+// settled the argument mapping, and the eight parameters are the member's.
 
 // ?UpdateHierarchy@MeshInstance@Graphics@@QEAAXXZ — retail 0x1800ff910, PORTED
 // (mesh.cpp:2903) and reached BY NAME for the same reason.
@@ -295,31 +298,38 @@ void MeshInstance::Update(const System::Time& timeRef) {
     // ---- the animator call (0x1801008b1 .. 0x1801008ff) --------------------
     void* const mesh = Rd<void*>(me, 0xc0);        // ExternalPtr<GraphicsMesh>: pointee @ +0
     void* const nodesArray = Rd<void*>(me, 0xf0);  // _nodes._data
-    AnimStateUpdateFn animUpdate = reinterpret_cast<AnimStateUpdateFn>(
-        ResolveExport("?Update@AnimationState@Graphics@@QEAA_NAEBVTime@System@@AEBV?$Array@"
-                      "UNode@GraphicsMesh@Graphics@@@Collection@@AEBVTransform@Math@@"
-                      "PEAV?$InterpolatedState@VTransform@Math@@@2@PEAV78@AEAVVector3@8@_N6@Z"));
-    if (!animUpdate) {
-        static bool said = false;
-        if (!said) { said = true;
-            std::fprintf(stderr, "[SLOTS29] MeshInstance::Update: "
-                                 "AnimationState::Update resolved NULL\n"); }
-        return;
-    }
+    // ENDGAME B.3.5 block GC item 6: this was a `ResolveExport` name door onto
+    // `?Update@AnimationState@Graphics@@` reaching OUR OWN body through the port
+    // registry, with a one-shot "resolved NULL" announcement behind it.
+    // `Graphics::AnimationState::Update` is a MEMBER as of block GC commit 2
+    // (body in `wave27_lane_gfxbig.cpp`), so the nine-argument resolve is a
+    // QUALIFIED non-virtual member call -- retail's own direct CALL to
+    // 0x1800fdb20 -- and the resolver, its cache and its null guard are gone with
+    // it (the block brief's "a file-local cache whose last caller you converted
+    // goes with its guard").
+    //
+    // `me + 0xd8` is `MeshInstance::_animation`, the 0x18-byte PREFIX of an
+    // `AnimationState` that `Mesh.h` embeds; the rest of the record lives in the
+    // AnimationManager's instance pool, and `AnimationState.h` pins the boundary
+    // at `offsetof(_rootOffset) == 0x18` so it cannot move silently. The cast is
+    // that prefix relationship, not a reinterpretation of the class.
 
     // r8 = mesh + 0x60 is `const Array<Node>&` — the ADDRESS of the embedded
     // array, not a loaded pointer. Mesh.h's own banner records that confusing
     // the embedded +0x60 with the pointer-to-array +0x70 cost Wave 6 an
     // integration run, and is silent whenever the garbage count reads 0.
-    const bool ok = animUpdate(me + 0xd8,               // &_animation
-                               time,
-                               B(mesh) + 0x60,          // &mesh->_nodes
-                               &base,
-                               nodesArray,              // arg 4: THIS instance's poses
-                               ident,                   // arg 5: the identity table
-                               me + 0x100,              // &_rootAnimationOffset
-                               *rootOnly,               // arg 7 (note 4)
-                               true);                   // arg 8 (note 4)
+    const bool ok =
+        reinterpret_cast<::Graphics::AnimationState*>(me + 0xd8)    // B.3.5 bridge
+            ->::Graphics::AnimationState::Update(
+                *reinterpret_cast<const System::Time*>(time),
+                *reinterpret_cast<const Collection::Array<uint8_t>*>(
+                    B(mesh) + 0x60),                   // &mesh->_nodes
+                *reinterpret_cast<const Math::Transform*>(&base),
+                nodesArray,                            // arg 4: THIS instance's poses
+                ident,                                 // arg 5: the identity table
+                *reinterpret_cast<Math::Vector3*>(me + 0x100),  // &_rootAnimationOffset
+                *rootOnly,                             // arg 7 (note 4)
+                true);                                 // arg 8 (note 4)
 
     if (!ok) {                                          // 0x180100906
         // ENDGAME B.3.5 block E: this was

@@ -621,17 +621,14 @@ void ParticleSystemInstance::Update(const System::Time& timeRef) {
     if (resActive && I32(pool, kPool_FrameTag) == frame) {
         // Retail TAIL-JUMPS to Geometry::SetBounds after unwinding its frame.
         ++g_psiUpdateEarly;
-        static SetBoundsFn setBounds = nullptr;
-        static bool tried = false;
-        if (!tried) {
-            tried = true;
-            // NAME DOOR — ?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z
-            // (0x180015700). Ported by Wave 6 lane D (scene.cpp) and registered
-            // by name, so ResolveExport lands in OUR body.
-            setBounds = reinterpret_cast<SetBoundsFn>(
-                ResolveExport("?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z"));
-        }
-        if (setBounds) setBounds(self, pool);
+        // ENDGAME B.3.5 block GC item 6: this was a `ResolveExport` name door onto
+        // `?SetBounds@Geometry@Graphics@@` (0x180015700) reaching OUR OWN ported
+        // body. `Graphics::Geometry` is a real class (block E) and `SetBounds` is a
+        // member, so retail's tail jump is a QUALIFIED non-virtual member call. The
+        // door in scene.cpp stays registered for callers outside this file.
+        reinterpret_cast<::Graphics::Geometry*>(self)                  // B.3.5 bridge
+            ->::Graphics::Geometry::SetBounds(
+                *reinterpret_cast<const ::Box*>(pool));               // B.3.5 bridge
         return;
     }
 
@@ -657,6 +654,34 @@ void ParticleSystemInstance::Update(const System::Time& timeRef) {
     uint8_t* sys = nullptr;
     if (isDerived && isDerived(resource, ParticleSystemTypeId())) sys = resource;
 
+    // ENDGAME B.3.5 block GC item 5. Past the run-time type test, `sys` is either a
+    // real `Graphics::ParticleSystem` or NULL, so the tuning reads below go through
+    // the class (block H2 authored it and `static_assert`ed every `kPS_*` constant
+    // in this file against it, which is what licenses the substitution) instead of
+    // through raw offsets.
+    //
+    // *** THE NULL CASE IS UNCHANGED AND STILL FAITHFUL. *** Retail's CMOVNE leaves
+    // the register null when the test fails and then reads `sys + 0x4c` two
+    // instructions later anyway; `ps->_rateAccelA` on a null `ps` is the SAME
+    // unguarded deref, not a new one, and CLAUDE.md's rule is that a guard here
+    // would skip retail's behaviour rather than restore it.
+    //
+    // *** TORNADO'S EXE-SIDE `Particle` SUBCLASS IS UNAFFECTED. *** The
+    // NON-ParticleSystem arm is untouched: `sys`/`ps` is simply null for it and
+    // every branch that guards on `sys` still guards on `sys`. Only the reads that
+    // were already behind a successful `IsDerivedFrom(ParticleSystem)` moved.
+    //
+    // FOUR KINDS OF READ STAY ON THE RAW SPELLING, each for a reason:
+    //   * `kPS_EmitDir + 0/4/8` -- three ADJACENT floats read as a vector. The
+    //     class names them `_emitDirX/Y/Z`, and they are spelled that way below.
+    //   * `B(sys)[kPS_Color0 + n]` -- `_color0`/`_color1` are ONE uint32 each,
+    //     read ONE PACKED BYTE AT A TIME in retail (BGRA order, alpha last).
+    //     Byte-addressing a member needs a cast that is strictly less readable
+    //     than the offset form, so those eight reads keep `B(sys)[...]` and the
+    //     constants they use keep their comments.
+    const ::Graphics::ParticleSystem* const ps =
+        reinterpret_cast<const ::Graphics::ParticleSystem*>(sys);   // B.3.5 bridge
+
     // --- C -----------------------------------------------------------------
     SetI64(pool, kPool_SpawnAccum, I64(pool, kPool_SpawnAccum) + deltaTicks);
     SetI64(pool, kPool_TotalTicks, I64(pool, kPool_TotalTicks) + deltaTicks);
@@ -666,8 +691,8 @@ void ParticleSystemInstance::Update(const System::Time& timeRef) {
         // rate += dt² * kPS_RateAccelA * kPS_RateAccelB, in retail's order:
         // the dt² register is multiplied by both fields, THEN added.
         float r = dt2;
-        r *= F(sys, kPS_RateAccelA);
-        r *= F(sys, kPS_RateAccelB);
+        r *= ps->_rateAccelA;
+        r *= ps->_rateAccelB;
         r += F(emitter, kEmit_Rate);
         SetF(emitter, kEmit_Rate, r);
     }
@@ -676,7 +701,7 @@ void ParticleSystemInstance::Update(const System::Time& timeRef) {
         const float rate = F(emitter, kEmit_Rate);
         bool zeroIt = (0.0f > rate);
         if (!zeroIt) {
-            const int64_t duration = I64(sys, kPS_DurationTicks);
+            const int64_t duration = ps->_durationTicks;
             if (duration > 0 && I64(pool, kPool_TotalTicks) > duration) zeroIt = true;
         }
         if (zeroIt) SetF(emitter, kEmit_Rate, 0.0f);
@@ -709,18 +734,18 @@ void ParticleSystemInstance::Update(const System::Time& timeRef) {
 
         // DRAW 1 @ 0x1800a5865 — lifetime
         {
-            const float life = (RngSigned(rng) * F(sys, kPS_LifeRange)) + F(sys, kPS_LifeBase);
+            const float life = (RngSigned(rng) * ps->_lifeRange) + ps->_lifeBase;
             SetI64(rec, kRec_Lifetime, SecondsToTicks(life));
         }
         // DRAWS 2,3,4 @ 0x1800a58fe / 0x1800a5981 / 0x1800a59fe — the spawn
         // offset. Each is `r * spreadScale * 0.5f`, and the axis each one feeds
         // is NOT in draw order: draw 2 -> Z, draw 3 -> Y, draw 4 -> X.
-        const float oZ = (RngSigned(rng) * F(sys, kPS_SpreadScale)) * kHalf;
-        const float oY = (RngSigned(rng) * F(sys, kPS_SpreadScale)) * kHalf;
-        const float oX = (RngSigned(rng) * F(sys, kPS_SpreadScale)) * kHalf;
-        const float px = F(sys, kPS_SpreadX) * oX;
-        const float py = F(sys, kPS_SpreadY) * oY;
-        const float pz = F(sys, kPS_SpreadZ) * oZ;
+        const float oZ = (RngSigned(rng) * ps->_spreadScale) * kHalf;
+        const float oY = (RngSigned(rng) * ps->_spreadScale) * kHalf;
+        const float oX = (RngSigned(rng) * ps->_spreadScale) * kHalf;
+        const float px = ps->_spreadX * oX;
+        const float py = ps->_spreadY * oY;
+        const float pz = ps->_spreadZ * oZ;
 
         const float c0 = static_cast<float>(B(sys)[kPS_Color0 + 2]) / k255;  // +0xde
         const float c1 = static_cast<float>(B(sys)[kPS_Color0 + 1]) / k255;  // +0xdd
@@ -742,19 +767,19 @@ void ParticleSystemInstance::Update(const System::Time& timeRef) {
 
         // DRAW 5 @ 0x1800a5b1a — rotation (degrees), cur == prev
         {
-            const float rot = (RngSigned(rng) * F(sys, kPS_RotRange)) + F(sys, kPS_RotBase);
+            const float rot = (RngSigned(rng) * ps->_rotRange) + ps->_rotBase;
             SetF(rec, kRec_Rot,     rot);
             SetF(rec, kRec_RotPrev, rot);
         }
         // DRAW 6 @ 0x1800a5bac — size, cur == prev
         {
-            const float size = (RngSigned(rng) * F(sys, kPS_SizeRange)) + F(sys, kPS_SizeBase);
+            const float size = (RngSigned(rng) * ps->_sizeRange) + ps->_sizeBase;
             SetF(rec, kRec_Size,     size);
             SetF(rec, kRec_SizePrev, size);
         }
         // DRAW 7 @ 0x1800a5c3e — spin rate, into the EXTRA record
         SetF(ext, kExt_RotRate,
-             (RngSigned(rng) * F(sys, kPS_SpinRange)) + F(sys, kPS_SpinBase));
+             (RngSigned(rng) * ps->_spinRange) + ps->_spinBase);
         // DRAW 8 @ 0x1800a5ccb — a COIN FLIP on the spin direction. Retail
         // TESTs bit 0 of the tempered word and flips the sign bit when it is
         // CLEAR; it does not use the word for anything else.
@@ -763,11 +788,11 @@ void ParticleSystemInstance::Update(const System::Time& timeRef) {
         SetF(ext, kExt_SizeRate, 0.0f);
 
         // DRAW 9 @ 0x1800a5d45 — speed
-        const float speed = (RngSigned(rng) * F(sys, kPS_SpeedRange)) + F(sys, kPS_SpeedBase);
+        const float speed = (RngSigned(rng) * ps->_speedRange) + ps->_speedBase;
         // DRAW 10 @ 0x1800a5dcf — elevation, as 90 degrees MINUS the draw
-        const float angleADeg = kNinety - (RngSigned(rng) * F(sys, kPS_AngleARange));
+        const float angleADeg = kNinety - (RngSigned(rng) * ps->_angleARange);
         // DRAW 11 @ 0x1800a5e55 — azimuth, already in radians
-        const float angleB = (RngSigned(rng) * F(sys, kPS_AngleBRange)) * kDegToRad;
+        const float angleB = (RngSigned(rng) * ps->_angleBRange) * kDegToRad;
         const float angleA = angleADeg * kDegToRad;
 
         // Retail calls the DLL's own sinf/cosf (0x180127d90 / 0x180126d10) in
@@ -787,9 +812,7 @@ void ParticleSystemInstance::Update(const System::Time& timeRef) {
         // (Geometry::_transform.rotation, +0x84..+0x90) and hand THAT to
         // FromDirection as the look direction — with a ZEROED Vector3 as the
         // second argument, the argument Ghidra dropped.
-        const Vec3f emitDir = { F(sys, kPS_EmitDir + 0),
-                                F(sys, kPS_EmitDir + 4),
-                                F(sys, kPS_EmitDir + 8) };
+        const Vec3f emitDir = { ps->_emitDirX, ps->_emitDirY, ps->_emitDirZ };
         const Vec3f dir = QuatRotate(F(self, 0x84), F(self, 0x88),
                                      F(self, 0x8c), F(self, 0x90), emitDir);
 
@@ -814,10 +837,10 @@ void ParticleSystemInstance::Update(const System::Time& timeRef) {
     // Retail hoists nine things out of the loop; they are hoisted here too, in
     // retail's own association, because folding them back into the loop body
     // would move the rounding.
-    const float accelScale = F(sys, kPS_AccelScale);
-    float aX = F(sys, kPS_GravScale); aX *= F(sys, kPS_GravX); aX *= accelScale; aX *= dt2;
-    float aY = F(sys, kPS_GravScale); aY *= F(sys, kPS_GravY); aY *= accelScale; aY *= dt2;
-    float aZ = F(sys, kPS_GravScale); aZ *= F(sys, kPS_GravZ); aZ *= accelScale; aZ *= dt2;
+    const float accelScale = ps->_accelScale;
+    float aX = ps->_gravScale; aX *= ps->_gravX; aX *= accelScale; aX *= dt2;
+    float aY = ps->_gravScale; aY *= ps->_gravY; aY *= accelScale; aY *= dt2;
+    float aZ = ps->_gravScale; aZ *= ps->_gravZ; aZ *= accelScale; aZ *= dt2;
 
     const float base0 = static_cast<float>(B(sys)[kPS_Color0 + 2]) / k255;  // +0xde
     const float base1 = static_cast<float>(B(sys)[kPS_Color0 + 1]) / k255;  // +0xdd
@@ -833,7 +856,7 @@ void ParticleSystemInstance::Update(const System::Time& timeRef) {
     // publishes an origin-centred degenerate box, which is retail's behaviour.
     for (size_t i = 0; i < 6; ++i) SetF(pool, kPool_BoxMin + i * 4, 0.0f);
 
-    const float colorSpan = F(sys, kPS_ColorT1) - F(sys, kPS_ColorT0);
+    const float colorSpan = ps->_colorT1 - ps->_colorT0;
     const float invColorSpan = kOne / colorSpan;
 
     const float delta0 = end0 - base0;
@@ -850,7 +873,7 @@ void ParticleSystemInstance::Update(const System::Time& timeRef) {
 
         SetI64(rec, kRec_Age, I64(rec, kRec_Age) + deltaTicks);
 
-        const float damping = F(sys, kPS_Damping);
+        const float damping = ps->_damping;
         const float vx = (aX + F(ext, kExt_Vel + 0)) * damping;
         const float vy = (aY + F(ext, kExt_Vel + 4)) * damping;
         const float vz = (aZ + F(ext, kExt_Vel + 8)) * damping;
@@ -890,9 +913,9 @@ void ParticleSystemInstance::Update(const System::Time& timeRef) {
 
         // Spin: rate' = (dt² * spinAccel + rate) * spinDamp; rot += rate' * dt
         {
-            float rate = dt2 * F(sys, kPS_SpinAccel);
+            float rate = dt2 * ps->_spinAccel;
             rate += F(ext, kExt_RotRate);
-            rate *= F(sys, kPS_SpinDamp);
+            rate *= ps->_spinDamp;
             SetF(ext, kExt_RotRate, rate);
             const float prev = F(rec, kRec_Rot);
             SetF(rec, kRec_RotPrev, prev);
@@ -900,9 +923,9 @@ void ParticleSystemInstance::Update(const System::Time& timeRef) {
         }
         // Size: identical shape on its own accel/damp pair
         {
-            float rate = dt2 * F(sys, kPS_SizeAccel);
+            float rate = dt2 * ps->_sizeAccel;
             rate += F(ext, kExt_SizeRate);
-            rate *= F(sys, kPS_SizeDamp);
+            rate *= ps->_sizeDamp;
             SetF(ext, kExt_SizeRate, rate);
             const float prev = F(rec, kRec_Size);
             SetF(rec, kRec_SizePrev, prev);
@@ -912,7 +935,7 @@ void ParticleSystemInstance::Update(const System::Time& timeRef) {
         // The colour parameter: (age/lifetime - t0) / (t1 - t0), clamped to
         // [0,1] with retail's COMISS ordering (0 first, then 1).
         float t = TicksToSeconds(I64(rec, kRec_Age)) / TicksToSeconds(I64(rec, kRec_Lifetime));
-        t -= F(sys, kPS_ColorT0);
+        t -= ps->_colorT0;
         t *= invColorSpan;
         if (0.0f > t) t = 0.0f;
         else if (t > kOne) t = kOne;
@@ -931,9 +954,9 @@ void ParticleSystemInstance::Update(const System::Time& timeRef) {
         {
             const int64_t age  = I64(rec, kRec_Age);
             const int64_t life = I64(rec, kRec_Lifetime);
-            const int64_t out  = I64(sys, kPS_FadeOutTicks);
+            const int64_t out  = ps->_fadeOutTicks;
 
-            const float fadeIn  = TicksToSeconds(age) / TicksToSeconds(I64(sys, kPS_FadeInTicks));
+            const float fadeIn  = TicksToSeconds(age) / TicksToSeconds(ps->_fadeInTicks);
             const float fadeOut = kOne - (TicksToSeconds((out - life) + age) / TicksToSeconds(out));
 
             float fade = (kOne < fadeIn) ? fadeOut : fadeIn;

@@ -129,6 +129,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/graphics/Camera.h"   // Graphics::Renderer -- ENDGAME B.3.5 block GC
 #include "../../types/graphics/Mesh.h"
 #include "../../types/graphics/GraphicsMesh.h"   // ENDGAME B.3.5 block G
 
@@ -1893,23 +1894,12 @@ const size_t kList_NodeFlag  = 0x14;   // int32; NEGATIVE means "skinned"
 //                body rather than the DLL's.
 //   CONSEQUENCE: null means nothing this instance owns is ever queued — a
 //                silent empty screen, which is why the miss is announced once.
-using AddDrawItemFn = void (*)(void* renderer, const void* geometry,
-                               const void* material, uint16_t a4, uint16_t a5,
-                               float a6, float a7, int32_t a8,
-                               const void* a9, uint32_t a10);
-
-AddDrawItemFn RtRendererAddDrawItem() {
-    static AddDrawItemFn fn = nullptr;
-    static bool tried = false;
-    if (!tried) {
-        tried = true;
-        fn = reinterpret_cast<AddDrawItemFn>(ResolveExport("?AddDrawItem@Renderer@Graphics@@QEAAXPEBVGeometry@2@PEBVMaterialInstance@2@GGMMHPEBXI@Z"));
-        if (!fn)
-            std::fprintf(stderr, "[GFXSLOTS28] AddDrawItems: Renderer::AddDrawItem "
-                                 "resolved NULL -- no mesh will draw\n");
-    }
-    return fn;
-}
+// The `AddDrawItemFn` typedef and the `RtRendererAddDrawItem()` resolver that
+// used to sit here are GONE -- block GC item 6. Their last two callers are
+// `MeshInstance::AddDrawItems` and `EdgeMeshInstance::AddDrawItems` below, and
+// both now call `Graphics::Renderer::AddDrawItem` as a member. The cache and its
+// one-shot NULL announcement went with the guard, per the block brief's "a
+// file-local cache whose last caller you converted goes with its guard".
 
 uint64_t g_addDrawItemsMesh   = 0;   // MeshInstance calls entered
 uint64_t g_addDrawItemsMeshQ  = 0;   // ... items actually queued
@@ -2733,8 +2723,13 @@ void MeshInstance::AddDrawItems(const Scene& scene, Renderer& renderer) const {
     const float kOne = 1.0f;                                   // 0x18016169c
     const float oneMinusAlpha = kOne - alpha;                  // SUBSS XMM6,XMM10
 
-    AddDrawItemFn add = RtRendererAddDrawItem();
-    if (!add) return;
+    // ENDGAME B.3.5 block GC item 6: the `ResolveExport` name door onto
+    // `?AddDrawItem@Renderer@Graphics@@` that used to be resolved here is GONE.
+    // `Graphics::Renderer::AddDrawItem` is a MEMBER as of block GC commit 3
+    // (body in `wave9_lane_gfx.cpp`), and `renderer` is already the real class,
+    // so the calls below are QUALIFIED non-virtual member calls -- retail's own
+    // direct CALLs to 0x1801057b0. The `resolved NULL -- no mesh will draw`
+    // announcement goes with the resolve: a member call cannot be null.
 
     for (int32_t i = 0; i < listCount; ++i) {                  // 1801010f0
         // BOTH re-read inside the loop, exactly as retail does.
@@ -2770,7 +2765,9 @@ void MeshInstance::AddDrawItems(const Scene& scene, Renderer& renderer) const {
 
         const float arg7 = (alpha * _opacity) + (oneMinusAlpha * _opacityPrev);
 
-        add(&renderer, static_cast<const Geometry*>(this), material, arg4, arg5,
+        renderer.Graphics::Renderer::AddDrawItem(
+                static_cast<const Geometry*>(this),
+                reinterpret_cast<const MaterialInstance*>(material)   /* B.3.5 bridge */, arg4, arg5,
             0.0f, arg7, arg8, meshNow, arg10);                 // 18010119e
         ++g_addDrawItemsMeshQ;
     }
@@ -2868,8 +2865,13 @@ void EdgeMeshInstance::AddDrawItems(const Scene& scene, Renderer& renderer) cons
 
     const float kOne = 1.0f;                                   // 0x18016169c
 
-    AddDrawItemFn add = RtRendererAddDrawItem();
-    if (!add) return;
+    // ENDGAME B.3.5 block GC item 6: the `ResolveExport` name door onto
+    // `?AddDrawItem@Renderer@Graphics@@` that used to be resolved here is GONE.
+    // `Graphics::Renderer::AddDrawItem` is a MEMBER as of block GC commit 3
+    // (body in `wave9_lane_gfx.cpp`), and `renderer` is already the real class,
+    // so the calls below are QUALIFIED non-virtual member calls -- retail's own
+    // direct CALLs to 0x1801057b0. The `resolved NULL -- no mesh will draw`
+    // announcement goes with the resolve: a member call cannot be null.
 
     // ---- pass 1: the triangle lists, sort key 0x2000 -----------------------
     {
@@ -2885,7 +2887,9 @@ void EdgeMeshInstance::AddDrawItems(const Scene& scene, Renderer& renderer) cons
                     ? Rd<void*>(emNow, 0x28)                    // _material0
                     : Rd<void*>(emNow, 0x30);                   // _material1
 
-            add(&renderer, static_cast<const Geometry*>(this), material,
+            renderer.Graphics::Renderer::AddDrawItem(
+                static_cast<const Geometry*>(this),
+                reinterpret_cast<const MaterialInstance*>(material)   /* B.3.5 bridge */,
                 0x2000, static_cast<uint16_t>(i),
                 0.0f, kOne, 1, nullptr, 0xffffffffu);           // 1800a3078
             ++g_addDrawItemsEdgeQ;
@@ -2909,7 +2913,9 @@ void EdgeMeshInstance::AddDrawItems(const Scene& scene, Renderer& renderer) cons
             const uint16_t arg5 =
                 static_cast<uint16_t>(static_cast<uint16_t>(i) | 0x8000u);
 
-            add(&renderer, static_cast<const Geometry*>(this), material,
+            renderer.Graphics::Renderer::AddDrawItem(
+                static_cast<const Geometry*>(this),
+                reinterpret_cast<const MaterialInstance*>(material)   /* B.3.5 bridge */,
                 0x2001, arg5,
                 0.0f, kOne, 1, nullptr, 0xffffffffu);           // 1800a310f
             ++g_addDrawItemsEdgeQ;
