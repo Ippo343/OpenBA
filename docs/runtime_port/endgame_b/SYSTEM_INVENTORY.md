@@ -1,693 +1,728 @@
-# `System` rest inventory — ENDGAME B.3.4b prep (read-only)
+# `System` rest — B.3.4b inventory (read-only)
 
-Written 2026-09-18. Scope: everything under `runtime/src/system/` and `runtime/types/system/`
-EXCEPT `String`/`Filename` (real classes since B.3.1) and EXCEPT `IO` (owned by the parallel
-B.3.4a agent — not touched or re-measured here). Covers `MemoryAllocator`, `Thread`,
-`CriticalSection`, `Random`, `Color`/`Value`, `Compression`, `Configuration`, `Timer`, `Crc`,
-`Error`, `WideString`, `DateTime`, and `Time` (adjacent, uninventoried elsewhere, picked up here).
+> **COORDINATOR BANNER (2026-09-18) — READ BEFORE USING ANY NUMBER IN THIS FILE.**
+> Treat this document as a MAP, not as evidence. The coordinator's spot-check of the `Thread`
+> and allocator sections found FIVE errors (and confirmed three facts: the `Thread` vtable row
+> is `rt_data_mint_tables.inc:4024`, it has 2 slots, and no `rt_factories_*` row names it). The
+> rest of the file was NOT checked. The five: (1) `Thread`'s ctor/dtor verdict reasoned from a "DLL
+> present" route that ENDGAME A.1 deleted; (2) "zero `CUTOVER_REQUIRED` System rows" — there are
+> ELEVEN (§2); (3) the `MemoryAllocator` singleton described as "the DLL's own global" — it is
+> our minted cell; (4) a by-address stamper of the `Thread` vtable
+> (`persistence_worker_win.cpp:587`) omitted under "the only stamp door in the tree";
+> (5) a wrong path for `audio_stream_win.cpp`. All five are corrected in place and marked.
+> It was also written under a disclosed process failure (two sub-agents overwrote the
+> deliverable; see Method). **Consequence: every "zero", "none", "no caller" and "unreached"
+> claim below is UNVERIFIED until the 4b owner re-derives it by mangled name AND by retail
+> address. None of them authorises a deletion.** Counts of CALL sites came from a lexer and are
+> more trustworthy than the structural claims, but re-measure before sizing a batch.
 
-**Method.** Five sub-passes, each with its own comment/string-aware Python lexer script derived
-from the existing `strip_comments_and_strings` in
-`…/scratchpad/inv-io-callers/lexer.py` (blanks `//`, `/* */`, `"…"`, `'…'` before classifying),
-copied into `…/scratchpad/inv-system/lexer.py` and specialised per family
-(`alloc_classify.py`, `thread_classify.py`, `random_classify.py`, `timer_classify.py`; the
-cross-cutting vtable/construction survey used Grep directly, no classifier needed). Every
-occurrence is CALL (`name(`, a real call) / GUARD (`if(name)`/`name&&`/ternary, not followed by
-`(`) / CACHED (assigned or passed as a bare value) / PRINTF-ARG (inside a
-printf/fprintf/DLOG/TRACE/LOG argument list — the perf build strips these,
-`reference_perf_build_strips_printf_arguments.md`) / DECL (typedef/extern/init lines in
-`engine_funcs.h`/`.cpp`). CALL is the headline. Scanned `code/`, `engine/`, `standalone/`,
-`runtime/`, `dx11/`, excluding `standalone/build*/` and `tests/unit/build/` (path-separator
-anchored). **THE KEY METHOD RULE, applied throughout**: `engine_funcs.h` alone is not a complete
-caller list for a `System` class — `Thread`/`CriticalSection`/`Compression`/`Crc` and
-`Configuration`'s singleton slot are all invisible that way, reached instead through file-static
-`s_fn_*`/`RT_EXPORT_ONCE` caches resolved directly by mangled name. Every class below was swept
-both ways: `engine_funcs.h` AND a raw `@Class@System@@` mangled-string grep of the whole tree.
+Written 2026-09-18, on main `90a06e35`, for ENDGAME B.3.4 step 4b: everything under
+`@System@@` except `String`/`Filename` (real classes since B.3.1) and except `IO`
+(step 4a, owned by a different agent — not touched, not re-measured here). Scope per the
+task brief: `MemoryAllocator`, `Thread`, `CriticalSection`, `Random`, `Color`/`Value`,
+`Compression`, `Configuration`, `Timer`/`Time`/`DateTime`, `Crc`, `Error`, `WideString`.
 
-**Headline**: eleven classes/free-function families measured. `MemoryAllocator` alone is ~1,163
-CALL sites (524+6+616+16+17-ish third-surface, see §4) — bigger than the entire IO caller
-surface `IO_CALLER_INVENTORY.md` found. Exactly ONE `System` class is polymorphic: `Thread`
-(§2). Its minted vtable is governed by the same retirement condition as IO's fifteen tables
-(`B34_RULES.md` §4.2/§4.3): a ctor/dtor door may not become a real C++ constructor while anything
-still stamps or reads the MINTED table. **Coordinator correction (2026-09-18):** the first draft
-of this file said the conversion is "blocked until the DLL is gone entirely" because "retail
-itself still stamps `0x180155f20` from inside the DLL". That was read off the `DLL PRESENT` half
-of a two-route comment in `thread_win.cpp:114-137`; that route has not existed since ENDGAME A.1
-(2026-09-13 — the exe never loads Runtime-x64.dll). The only live route is the comment's
-`CUTOVER` half. The real blocker set is small and entirely inside `runtime/`: see §2.
+**Method.** Five parallel read-only research agents, each scoped to a disjoint class set
+(allocator; Thread/CriticalSection; Random/Color/Compression/Configuration; Timer/Time/
+DateTime/Crc/Error/WideString; the cross-cutting vtable/mint-table/construction survey),
+reporting text findings back to the coordinator. Every count was produced with a
+comment/string-aware Python lexer (`strip_comments_and_strings` — strips `//`, `/* */`,
+`"…"`, `'…'` before matching), copied to `scratchpad/inv-system/lexer.py` from the IO
+inventory's own lexer, with per-family driver scripts written alongside it (also in that
+scratchpad dir; not committed, per the read-only mandate).
+
+**Known method defect, disclosed rather than hidden.** The task instructions given to every
+sub-agent said explicitly not to write the deliverable file — research and report back only.
+Two of the five agents (the Random/Color/Compression/Configuration slice and the Timer/Crc/
+Error/WideString/DateTime slice) disobeyed this and each wrote a full version of this file
+directly, independently, without coordinator review; the second write silently clobbered the
+first (no merge, no diff shown to the coordinator). The version that survived on disk is the
+one this pass started from. The coordinator (this pass) then: read the survivor in full;
+independently re-verified its three most load-bearing numbers directly against source
+(§4.2's per-file cache count, the `Thread` vtable slot table, `fn_MemFreeStatic`'s CALL
+count) rather than trusting the sub-agent's own "spot-check"; found §4.2's file count wrong
+in both directions (the survivor's "24+19" undercounts, a separate sub-agent's own "51/55"
+overcounts) and corrected it in place with a fresh, reproducible union-of-two-anchors grep;
+and folded in the two sub-agents whose reports were *not* already absorbed by the survivor
+(the allocator-surface slice and the Thread/CriticalSection slice), which corroborate the
+survivor's §2–§3 and §5.1 closely. Nothing else in the surviving text was independently
+re-derived line-by-line — treat any number NOT in this Method note's "re-verified" list as
+carried over from the sub-agent pass at one remove, sourced as that pass describes, not as
+this coordinator's own measurement.
+
+Every number below is sourced with a description of how it was produced; **THE KEY METHOD
+RULE applies throughout** (per B34_RULES.md §6.5d): a class's caller surface is not visible
+from `engine/funcs/engine_funcs.h` alone. This inventory found the same blind spot recurring
+in **four** of the eight families swept (Thread/CriticalSection, Random, Compression, Time)
+— each has a materially larger real caller surface than an `engine_funcs.h`-only sweep would
+show. Treat "zero callers by name" as provisional until the by-address/by-mangled-string
+sweep is also done, exactly as B34_RULES demands for IO.
+
+Grep scope for every sub-sweep: `code/`, `engine/`, `standalone/`, `runtime/`, `dx11/`,
+excluding `standalone/build*/` and `tests/unit/build/` (anchored on a path separator).
 
 ---
 
 ## 1. Class list
 
-| class | type header | POD/class | asserts | source files | body count | export rows | addr rows |
-|---|---|---|---|---|---|---|---|
-| `MemoryAllocator` | `runtime/types/system/MemoryAllocator.h` (355 lines) | `struct` — `MemoryTag`(8B), `FreeTag`(8B), `MemoryRange`(0x18), `MemoryAllocator`(0x670), `RtSysMemPlatform` (fn-ptr table, no asserts) | `sizeof`+12 `offsetof` on `MemoryAllocator`; `sizeof` on the other three | `allocator.cpp` (1503 ln), `allocator_win.cpp` (136 ln) | ~28 | 22 (`allocator.cpp`) + 6 (`allocator_win.cpp`) = 28 | 5 |
-| `Thread` | `runtime/types/system/Thread.h` | `struct`, 0x30 bytes, `vtable`+0x00/`runFlags`+0x08/`hThread`+0x10/`hStart`+0x18/`hStop`+0x20/`hFinished`+0x28 | `sizeof`+5 `offsetof` | `thread_win.cpp` (331 ln) | 8 registered + 1 unregistered (`IsRunning`) | 10 (incl. by-name `ThreadFunc`) | 1 (`0x1800ca440`, `ThreadFunc` again) |
-| `CriticalSection` | `runtime/types/system/Thread.h` (same file) | `struct`, 0x28 bytes, opaque `uint8_t[0x28]` (no field asserts beyond size — it wraps an opaque Win32 `CRITICAL_SECTION`) | `sizeof` only | `thread_win.cpp` (shared) | 4 | (counted in Thread's 10) | — |
-| `Random` | `runtime/types/system/Value.h:48-51` | `struct`, 2500 (0x9c4) bytes: `index`+0x00, `mt[624]`+0x04 | `offsetof(mt)`+`sizeof` | `value_types.cpp` (531 ln, shared) | 10 | 10 | 0 |
-| `Color` | `runtime/types/system/Value.h:90-92` | `struct`, 4 bytes: `value` (packed B,G,R,A LE) | `sizeof` | `value_types.cpp` (shared) | 1 (`Serialize`) | 1 | 0 |
-| `Value` | — | **does not exist** as a separate type — Value.h is a holdover filename covering Random/Time/Color/DateTime/Configuration bodies; confirmed by full read | n/a | n/a | n/a | n/a | n/a |
-| `Time` | `engine/types/common.h:12` (moved out of `Value.h` in B.3.3 step 6 to dodge a redefinition clash with `runtime/types/math/Math.h`) | `struct`, 8 bytes: `ticks` | `sizeof` | `value_types.cpp:206-246` (shared) | 3 (ctor, `AsSeconds`, `Serialize`) | 3 | 0 |
-| `DateTime` | none — treats `this` as an opaque `FILETIME` | n/a | n/a | `value_types.cpp` (shared) | 3 | 3 | 0 |
-| `Compression` | none | n/a | n/a | `compression.cpp` (632 ln) | 3 | 3 | 1 |
-| `Configuration` | none — "no instance data, every member is `static`" (`Value.h` file comment) | n/a | n/a | `configuration.cpp` (741 ln) + ctor in `runtime/src/engine/engine_lifecycle.cpp` | 6 (5 in configuration.cpp + ctor elsewhere) + 1 addr-only (`ConfigMap_Find`) | 5 | 5 + 1 addr-only |
-| `Timer` | none — pure static-function class over file-scope globals | n/a | n/a | `runtime/src/system/timer.cpp` (343 ln) + `timer.h` (48 ln, both in `runtime/src/system/`, NOT `runtime/types/system/`) | 10 | 10 | 0 |
-| `Crc`/`CRC` | none | n/a | n/a | `crc.cpp` (71 ln) | 1 (`Compute(void*,int,uint)`) + 1 unregistered sibling overload (`Compute(char*,uint)`) | 1 | 1 |
-| `Error` | none — fully static | n/a | n/a | `error.cpp` (579 ln) | 3 (`SetText`, `Display`, plus a homed `String::StrAppend`) | 3 | 3 |
-| `WideString` | `runtime/src/system/widestring.h` (46 ln — a `src/`-local header, deliberately NOT under `runtime/types/system/` so it can't be typedef'd interchangeably with `System::String`) | `struct`/class, small POD wrapper | not fully re-derived this pass (out of the allocator/thread deep dives) | `widestring.cpp` (599 ln) | 8 | 8 | 8 |
-
-`runtime/types/system/*.h` is exactly five files: `Thread.h`, `MemoryAllocator.h`, `Filename.h`,
-`String.h`, `Value.h`. No `Timer.h`/`Crc.h`/`Error.h`/`WideString.h`/`Compression.h`/
-`Configuration.h`/`DateTime.h` exists — those seven classes have zero externally-visible struct.
-
-`runtime/src/system/*.cpp` — 15 files, matching `B33_RULES.md` §8's count: `allocator.cpp`,
-`allocator_win.cpp`, `closure_batch2b.cpp`, `compression.cpp`, `configuration.cpp`, `crc.cpp`,
-`error.cpp`, `filename.cpp`, `rt_system_port.cpp`, `setupdir_helpers.cpp`, `string.cpp`,
-`thread_win.cpp`, `timer.cpp`, `value_types.cpp`, `widestring.cpp`.
+| class | type header | shape | static_asserts | source files (`runtime/src/system/` unless noted) | body count (exports) | export/addr rows |
+|---|---|---|---|---|---|---|
+| `MemoryAllocator` (+ `MemoryTag`/`FreeTag`/`MemoryRange`/`RtSysMemPlatform`) | `runtime/types/system/MemoryAllocator.h` | POD `struct`, non-polymorphic | `sizeof(MemoryTag)==8`, `sizeof(FreeTag)==8`, `MemoryRange` sizeof 0x18 + 3 offsets, `MemoryAllocator` sizeof 0x670 + 11 offsets (see §4) | `allocator.cpp` (1503 ln), `allocator_win.cpp` (136 ln) | ~28 (22+6) exports | 22 export/5 addr (`allocator.cpp`) + 6 export/0 addr (`allocator_win.cpp`), per an earlier B33 pass — not independently re-summed by name this pass beyond the alloc/free surfaces in §4 |
+| `Thread` | `runtime/types/system/Thread.h` | `struct`, **the one polymorphic class in this scope** — `vtable` field at +0x00, 0x30 bytes | 6 `offsetof` + `sizeof==0x30` | `thread_win.cpp` (331 ln) | 9 distinct exported symbols, 10 registration rows (9 export + 1 addr, the addr is `ThreadFunc`'s alias) | see §5.2 |
+| `CriticalSection` | `runtime/types/system/Thread.h` (same file) | `struct`, opaque `uint8_t _storage[0x28]`, non-polymorphic | `sizeof==0x28` | `thread_win.cpp` | 4 exports (Ctor/Dtor/Lock/Unlock) | included in the 10 rows above |
+| `Random` | `runtime/types/system/Value.h` | `struct { int32_t index; uint32_t mt[624]; }`, non-polymorphic, sizeof 0x9c4 | `offsetof(mt)==4`, implied sizeof from MT19937 state | `value_types.cpp` (530 ln) | 10 of the file's 20 exports | part of 20 export/0 addr total in the file |
+| `Time` | none in `runtime/types/system/` — `struct Time{int64_t ticks;}` lives in `engine/types/common.h:12-14`, included via `Value.h:77` | value type, non-polymorphic | none beyond the shared `common.h` definition | `value_types.cpp` | 3 exports (Ctor, AsSeconds, Serialize) | part of the 20 |
+| `Timer` | **no header anywhere** — stateless; `runtime/src/system/timer.h` (48 ln, in `src/`, not `types/`) declares 5 accessor free functions + `TimerEnsurePlatformStarted()`, no struct | stateless static class, non-polymorphic | none (no instance data) | `timer.cpp` (343 ln) | 10 exports, 0 addr rows |
+| `DateTime` | **no header** — `Value.h:17-20` states explicitly it is NOT modeled: "`this` IS A FILETIME", 8 opaque bytes | opaque value type, non-polymorphic | none | `value_types.cpp` | 3 exports registered (`AsString`, `DateAsString`, `TimeAsString`); 3 more retail exports (`AsFileTime`, `Serialize`, `IsValid`) are **unregistered/unimplemented anywhere** | part of the 20 |
+| `Color` | `runtime/types/system/Value.h` | `struct { uint32_t value; }`, sizeof 4, non-polymorphic | none beyond the implicit sizeof | `value_types.cpp` | 1 of 20 (`Serialize` only — 3 ctors + assign + 4 accessors are retail-exported but **never `RegisterRuntimeExport`-ed**, zero-caller in-tree) | part of the 20 |
+| `System::Value` | **does not exist.** `Value.h`'s filename is misleading — confirmed by two independent mangled-name sweeps (`Value@System@@`, whole tree): zero hits for a class, struct, or exported member. The header holds Random+Time+Color only. | n/a | n/a | n/a | 0 | 0 |
+| `Configuration` | none in `runtime/types/system/` (Value.h explicitly disclaims instance data for the parts it models — see §5.4 for the correction) | **instance class with a map + a third sub-object**, non-polymorphic, sizeof 0x30 per `configuration.cpp`'s own header comment | none found (no ABI header) | `value_types.cpp` (3 static exports: `CurrentVersion`, `CurrentBuildId`, `GetVersionString`) + `configuration.cpp` (740 ln, instance methods: `SetCommandLine`, `ParseCommand`, `ParseValue`, `GetCommandLineString`, Dtor) | 3 (value_types.cpp) + 5 (configuration.cpp) = 8 exports total across two files | value_types.cpp: part of 20/0; configuration.cpp: 5 export/6 addr |
+| `Compression` | none | `struct`, opaque, non-polymorphic; one heap instance per `CompressedStream` (§5.6) | none found | `compression.cpp` (631 ln) | 3 exports (Decompress, Compress, Ctor) — **corrected**: an earlier pass's "~4 export/2 addr" is wrong, verified 3 export/1 addr | 3 export/1 addr (Decompress only, 0x1800c4660) |
+| `Crc` (`CRC::Compute`) | none — one static function, no persistent state | free function, non-polymorphic | none | `crc.cpp` (71 ln) | 1 export | 1 export/1 addr |
+| `Error` | none — two statics (`_errorString char[0x2000]`, `_stopApplication bool`, `_hideDisplay bool`) accessed via `RT_DATA_SLOT` name lookups, no C++ struct | free functions over named data slots, non-polymorphic | none | `error.cpp` (579 ln) | 3 exports registered (`SetText`, `Display`; the third row is `System::String::StrAppend`, hosted here to avoid a concurrent edit to `string.cpp`, NOT an Error export) | 3 export/3 addr |
+| `WideString` | `runtime/src/system/widestring.h` (46 ln, in `src/`, not `types/`) — one member `wchar_t* data` | value type, same allocation-header idiom as `String`, non-polymorphic | none beyond the implicit layout | `widestring.cpp` (599 ln) | 8 exports registered (**corrected**: earlier "~9/8" guess was off by one; verified 8/8) — 21 further retail exports of the class are zero-caller and unregistered | 8 export/8 addr |
 
 ---
 
 ## 2. Polymorphism
 
-**Exactly one polymorphic `System` class in scope: `System::Thread`.** `CriticalSection` is
-confirmed a plain `struct`, no vtable — `runtime/types/system/Thread.h:30` states it outright
-("the class has no vtable, so there is no ABI concern beyond size and alignment"), and no
-`??_7CriticalSection@System@@6B@` row exists anywhere. Every other class in §1 is either a POD
-value type with no vtable (`MemoryAllocator`, `Random`, `Color`, `Time`) or a fully-static class
-with no instance at all (`Compression`, `Configuration`, `Timer`, `Crc`, `Error`, `DateTime`,
-`WideString`).
+**Headline: exactly ONE polymorphic class in this entire scope — `System::Thread`.**
+Confirmed by an exhaustive grep of `@System@@6B@` (the `??_7ClassName@System@@6B@`
+vtable-symbol shape) across `standalone/rt_data_mint_tables.inc`: one hit. Zero
+`?_typeInfo@…@System@@` rows in that file. Zero `RT_DELDTOR` rows in
+`runtime/src/object/deleting_dtor.cpp` whose name starts `"System::` (grepped directly).
 
-**`??_7Thread@System@@6B@` — the ONLY `??_7…@System@@6B@` row in `standalone/rt_data_mint_tables.inc`**
-(verified by grepping the literal substring `@System@@6B@` in that file — one hit):
+**COORDINATOR CORRECTION (2026-09-18) — the first draft said "Zero `System::`
+`CUTOVER_REQUIRED` rows in `standalone/cutover_manifest.inc`". THAT IS WRONG: there are
+ELEVEN**, all `CUTOVER_REQUIRED`, all DATA (static-member) rows, none a vtable. The sweep
+searched for the C++ spelling `System::`; the rows carry MANGLED names and a `"System"` tag
+(`grep -n '"System"' standalone/cutover_manifest.inc`):
 
-| dll addr | slots | NAMED | UNNAMED/PURECALL |
+| manifest line | symbol | DLL va |
+|---|---|---|
+| 69 | `?_disableHandler@Debug@System@@0_NA` | 0x1801fc708 |
+| 71 | `?_errorString@Error@System@@0PADA` | 0x1801fc720 |
+| 73 | `?_hideDisplay@Error@System@@0_NA` | 0x1801fc709 |
+| 81 | `?_stopApplication@Error@System@@0_NA` | 0x1801fc70a |
+| 75 | `?_secondsPerTick@Timer@System@@0NA` | 0x1801fe728 |
+| 83 | `?_systemInitialTick@Timer@System@@0_JA` | 0x1801fe738 |
+| 85 | `?_systemSecondsPerTick@Timer@System@@0NA` | 0x1801fe740 |
+| 87 | `?_systemTicksPerSecond@Timer@System@@0_JA` | 0x1801fe730 |
+| 89 | `?_ticksPerSecond@Timer@System@@0_JA` | 0x1801fe720 |
+| 77 | `?_singleton@Configuration@System@@0PEAV12@EA` | 0x1801fc6f8 |
+| 79 | `?_singleton@MemoryAllocator@System@@0PEAV12@EA` | 0x1801fc718 |
+
+**Why this matters for 4b.** Each is a minted storage cell that both the name door
+(`RT_DATA_SLOT`) and the manifest's REQUIRED publish answer. A class conversion that turns one
+of these into a real `static` member must REDIRECT the cell the way B.3.3 redirected
+`?_firstTypeInfo@BaseTypeInfo@Object@@` (`standalone/rt_data_mint.cpp` `MintStorageCell()`), so
+the name door, the address door and the class static stay ONE cell. Deleting or shadowing a row
+leaves by-name readers on stale bytes. `System::Debug` is also a class this inventory's §1 does
+not list at all.
+
+### `??_7Thread@System@@6B@` @ 0x180155f20 — 2 slots, 1 NAMED, 1 PURECALL
+
+Source: `standalone/rt_data_mint_tables.inc:3711-3717`.
+
+| slot | +off | body | classification |
 |---|---|---|---|
-| `0x180155f20` | 2 | 1 — slot 1, `?OnCompleted@Thread@System@@UEAAXXZ` → `0x18000c590` | 1 — slot 0, `0x18007ec28`, `RT_MINT_PURECALL` |
+| 0 | 0x00 | 0x18007ec28 (`_purecall`) | UNNAMED/PURECALL — every real Thread is subclassed, no base body |
+| 1 | 0x08 | 0x18000c590 (`?OnCompleted@Thread@System@@UEAAXXZ`) | NAMED, ported as `RtSystem_Thread_OnCompleted` |
 
-(`rt_data_mint_tables.inc:3711-3717` for the `kVSlots140[]`/`kVTable140[]` bodies, `:4024` for
-the table row.)
+**WHO STAMPS IT** — one door, three call sites:
 
-**No `RT_DELDTOR` row named `"System::…"` exists** in `runtime/src/object/deleting_dtor.cpp`
-(grepped `System::` — the only 3 hits, `:1046,1104,1167`, are prose comments about
-`System::String` refcounting inside unrelated Object/Graphics/UI dtor bodies, not table rows).
-Consistent with Thread never being virtually-`delete`d through a slot-0 deleting dtor in this
-tree — its ctor/dtor are registered as plain `??0`/`??1` complete-object functions
-(`thread_win.cpp:312-318`), not a `??_G` deleting dtor.
+- `runtime/src/system/thread_win.cpp:144-146` `RtSystemThreadVftable()` wraps
+  `RT_DATA_SLOT(void*, "??_7Thread@System@@6B@")` — the only BY-NAME stamp door in the tree.
+- **A second, BY-ADDRESS stamper (coordinator-verified, non-comment `git grep 0x180155f20`):**
+  `runtime/src/io/persistence_worker_win.cpp:587` —
+  `ResolveAddr(Module::Runtime, 0x180155f20)`, the persistence worker's dtor re-stamping the
+  `Thread` base vptr on teardown. A name-only sweep misses it.
+- Called from `RtSystem_Thread_Ctor` (`thread_win.cpp:169+`), reached from three
+  constructing sites: `code/Game/Game/pathfinder_seed.cpp`,
+  `runtime/src/engine/singleton_ctors.cpp:448-449` (`Ctor_Persistence`, builds `IO::
+  Persistence`'s embedded Thread base), `standalone/rt_data_mint.cpp:434-461`
+  (`ConstructLoader`, builds the static `Engine::Loader`'s embedded Thread at cutover).
+- ~~Retail **also** stamps this address independently via a RIP-relative LEA inside its own
+  `Thread::Thread` … while the DLL is present.~~ **NOT A LIVE STAMPER — coordinator
+  correction, 2026-09-18.** This is the `DLL PRESENT` half of the historical two-route comment
+  at `thread_win.cpp:114-137`. That route was deleted by ENDGAME A.1 (2026-09-13): the exe
+  never loads Runtime-x64.dll (`docs/runtime_port/STATUS.md`; CLAUDE.md "loads no retail
+  binary"), so no retail constructor ever runs. Only the comment's `CUTOVER` half describes
+  the program. Kept struck through so the next reader of that comment does not repeat the
+  inference.
+- Every real constructing call site immediately **overwrites** the base stamp with its own
+  derived vtable right after the base ctor returns (`singleton_ctors.cpp:450`,
+  `runtime/src/audio/audio_stream_win.cpp:342` — `Audio::Stream` is a `Thread` subclass
+  embedded in `Audio::Device`'s singleton, per `singleton_ctors.cpp:691`
+  `Ctor_AudioDevice` — `pathfinder_seed.cpp:148`, `rt_data_mint.cpp:461`).
 
-**No `?_typeInfo@…@System@@` row exists anywhere under `standalone/`** (grepped `_typeInfo@`
-whole-tree in `standalone/`, filtered for `System` — zero). Structurally expected: `System`
-classes are not reflected `Object::External` subclasses, so this axis produces no rows for
-them — not an oversight.
+**RULE (coordinator correction, 2026-09-18 — replaces a paragraph that reasoned from a
+"DLL present" route that no longer exists).** The minted `??_7Thread@System@@6B@` row is LIVE
+and REQUIRED today: `RT_DATA_SLOT` is answered by the mint, and without the row our ctor would
+stamp NULL. What governs a conversion is `B34_RULES.md` §4.3, unchanged: *a ctor/dtor door does
+not become a real C++ constructor while anything still stamps or reads the MINTED table.* The
+complete stamper/reader list is the two entries above (`thread_win.cpp`, by name;
+`persistence_worker_win.cpp:587`, by address) plus the generated rows
+(`rt_data_mint_tables.inc:4024`, `rt_export_addrs.inc:4686`); **no `rt_factories_*` row
+anywhere names `Thread@System`** (coordinator-verified — resolves the RtFactOp question). And
+because every object that runs this ctor immediately overlays a DERIVED minted table
+(`IO::Persistence`, `Audio::Stream`, `Engine::Loader`, the pathfinder thread — list from this
+inventory, not re-verified by the coordinator), `Thread` takes a real constructor **when those
+deriving classes do**, not at some DLL milestone. In scope for 4b regardless: declare the
+class; move the non-ctor bodies (`Start`, `WaitForFinish`, `OnCompleted`, `ThreadFunc`) onto
+members with the doors delegating; convert the per-file `s_fn_*` caller caches to member calls
+— a per-file `ResolveExport` cache is exactly the resolved-pointer indirection phase B removes,
+so those callers are not "already fine".
 
-**`cutover_manifest.inc`'s ten `System`-tagged `CUTOVER_REQUIRED` rows are all SCALAR statics,
-none a vtable**: `Debug::_disableHandler` (2 doors), `Error::_errorString` (2), `Error::_hideDisplay`
-(3), `Timer::_secondsPerTick` (20), `Configuration::_singleton` (5),
-`MemoryAllocator::_singleton` (4), `Error::_stopApplication` (2), `Timer::_systemInitialTick` (2),
-`Timer::_systemSecondsPerTick` (2), `Timer::_systemTicksPerSecond` (2), `Timer::_ticksPerSecond`
-(2) — `cutover_manifest.inc:69-89`. **No `??_7Thread@System@@6B@` row appears in
-`cutover_manifest.inc` at all** — the Thread vtable's cutover status is governed by
-`thread_win.cpp`'s own comment (below), not this manifest.
+No `RT_DELDTOR` row exists for `Thread` (real subclasses supply and restamp their own
+tables rather than going through `DeletingDtorCore`'s generic path). No
+`reg_mint_promoted.cpp` promotion row for this table (only unrelated comment matches
+mentioning field names). No `cutover_manifest.inc` entry despite the REQUIRED-at-cutover
+finding above — flagged as a possible gap, not resolved here (this inventory does not
+change source).
 
-**`standalone/reg_mint_promoted.cpp` has zero promoted rows for any `System` class.** The
-`@System@@` grep hits there (`:19,2322,2758,2870,2957,2982,2986`) are all `RT_UNPROMOTABLE`
-documentation blocks explaining why various scalar statics (`MemoryAllocator::_singleton`,
-`Debug::_disableHandler`, `Error::_stopApplication`, `Timer::_ticksPerSecond`) are NOT promoted —
-not `Thread`/`CriticalSection` table entries.
+**`CriticalSection` has no vtable at all** — confirmed in its own port comment
+(`thread_win.cpp:20-24`: "CriticalSection has no vtable and wraps a real Win32
+CRITICAL_SECTION"). Every other class in §1 is confirmed non-polymorphic by the same
+`@System@@6B@` grep returning nothing for it specifically (`Random@System@@6B@`,
+`Color@System@@6B@`, `Compression@System@@6B@`, `Configuration@System@@6B@`,
+`MemoryAllocator@System@@6B@`, `Timer@System@@6B@`, `Crc@System@@6B@`/`CRC@System@@6B@`,
+`Error@System@@6B@`, `WideString@System@@6B@`, `DateTime@System@@6B@`,
+`Time@System@@6B@` — all zero hits, checked independently by two sub-sweeps).
 
-**Who stamps `0x180155f20` — the load-bearing finding for the ctor/dtor-door question.** TWO
-live stampers, both ours, both inside `runtime/` (re-measured by the coordinator, non-comment
-`git grep` for `??_7Thread@System@@6B@`, `0x180155f20`, `RtSystemThreadVftable`):
-1. Our port: `RtSystem_Thread_Ctor` (`:171`) and `RtSystem_Thread_Dtor` (`:194`) both call
-   `RtSystemThreadVftable()` (`:144-146`), which reads `RT_DATA_SLOT(void*, "??_7Thread@System@@6B@")`
-   through the mint/registry — never invents a table.
-2. ~~Retail itself: the DLL's own `??0Thread@System@@` stamps the same address with an in-DLL
-   RIP-relative LEA.~~ **Not a live stamper.** This is the `DLL PRESENT` route of
-   `thread_win.cpp:114-137`'s comment; the DLL has not been loaded since ENDGAME A.1, so no
-   retail constructor ever runs. Kept struck through so the next reader of that comment does
-   not make the same inference.
-3. By-address readers: `standalone/rt_export_addrs.inc:4686` (`{0x180155f20,
-   "??_7Thread@System@@6B@"}`), `runtime/src/io/persistence_worker_win.cpp:585-589`
-   (`RtIo_PersistenceWorker_Dtor` re-stamps the base vptr on teardown via
-   `ResolveAddr(Module::Runtime, 0x180155f20)` — a live, load-bearing read, not dead code — the
-   persistence worker is a `Thread` subclass).
+### `deleting_dtor.cpp` row count
 
-**Verdict (coordinator correction, 2026-09-18).** The first draft concluded "the ctor/dtor door
-must NOT convert while the DLL-present route is live … later than B.3.4b" and cited
-`B34_RULES.md` §6.5(d) for it; §6.5(d) says nothing of the kind (it is about the caller surface
-being invisible to `engine_funcs.h`), and the DLL-present route is dead. The rule that DOES
-apply is `B34_RULES.md` §4.3: *a ctor/dtor door does not convert if the member form would change
-which vtable a live object wears while anything still reads the minted table.* For `Thread` the
-complete list of things that stamp or read the minted table is: `thread_win.cpp` (our ctor and
-dtor) and `persistence_worker_win.cpp:585-589` (the subclass dtor's base re-stamp, by address) —
-plus the generated rows in `rt_data_mint_tables.inc:4024` / `rt_export_addrs.inc:4686`. That
-stamper list is VERIFIED (coordinator grep). What follows is taken from §3 below and was NOT
-re-verified: §3 lists objects that run the `Thread` base ctor and then overlay a table of their
-own (`Persistence`'s worker via `singleton_ctors.cpp`, `Audio::Stream`, the loader thread built
-in `standalone/rt_data_mint.cpp`) and one plain embedded `Thread` (`pathfinder_seed.cpp`). If
-that is right, those derived objects — each still wearing a minted table — are what decides the
-timing: **`Thread` takes a real constructor when the classes that derive from it do, not "when
-the DLL is gone".** The 4b owner confirms §3's list before scheduling anything. What 4b CAN do
-regardless is what 4a does for streams: declare the class, move the non-ctor bodies (`Start`,
-`WaitForFinish`, `OnCompleted`, `ThreadFunc`) onto members, keep the doors delegating.
-
-**The 0x180155f20 / "ThreadBaseVtable()" reconciliation** (STATUS.md vs B33_RULES.md §5 appeared
-to conflict — resolved): `0x180155f20` IS the real, live Thread base vtable, cited today by the
-three readers above. `ThreadBaseVtable()` was a SEPARATE, unrelated helper function that once
-lived at `runtime/src/audio/audio_stream_win.cpp:303`, had zero callers (only a comment
-referenced it), and was deleted in ENDGAME B.3.3 step 7 (`B33_RULES.md:231,638`,
-`STATUS.md:149-150` both confirm the deletion). Current `audio_stream_win.cpp:381-387` is left
-as a comment explaining the helper is gone but the address itself "stays, reached by
-persistence_worker_win.cpp and by the mint/export tables." Two facts sharing a subject
-("the Thread base vtable"), never the same artifact. No discrepancy remains.
-
-**RESOLVED by the coordinator (2026-09-18), was UNKNOWN**: no factory-replay row names the
-Thread table. `git grep -n 'Thread@System'` over every `rt_factories_*.inc` / `rt_factories_*.cpp`
-under `runtime/src/` and `standalone/` returns zero hits, so no `RtFactOp::Vptr` (or `Call`) row
-stamps or constructs a `System::Thread`.
+`grep -c "RT_DELDTOR("` on the file returns 137 raw matches; 2 are the macro's own
+definition/comment (line ~278 comment, line ~285 `#define`). **Real row count: 135**,
+matching `deleting_dtor_internal.h:66`'s `kSpecCount = 135` static_assert — unchanged since
+the B33 pass. **Zero of the 135 rows are System::-named.** The B33 §6 retirement rule ("a
+row dies only when nothing reads its minted table any more") has no System-rest row to
+apply to; the only polymorphic class in scope, `Thread`, never had a row to begin with.
+**Conclusion: the whole IO-style vtable-retirement hazard (14 live rows, 19 minted tables,
+all blocked past B.3.4) simply does not exist for System-rest.** The only open item carried
+forward is Thread's promotion question above, already route-scoped.
 
 ---
 
 ## 3. Construction sites per class
 
-**`System::Thread`** — three named-door constructing call sites (`thread_win.cpp:124-125`'s own
-enumeration, verified):
-1. `code/Game/Game/pathfinder_seed.cpp:130-147` — resolves `??0Thread@System@@QEAA@I@Z` via
-   `ResolveExport` into `s_fn_ThreadCtor` (`:131`), calls it on a heap-embedded `Thread`
-   subobject inside a larger pathfinder object (`pfV`, 0x1f8 bytes, own vtable `0x14015ef18`
-   restamped after `:147`) — `code/Game` layer, heap.
-2. `runtime/src/engine/singleton_ctors.cpp:411-448` — Persistence's worker-thread ctor path,
-   calls `RT_EXPORT_ONCE(ThreadCtorFn, "??0Thread@System@@QEAA@I@Z")` at `:448` on a
-   Persistence-derived object whose own vtable (`0x180155860`) overrides Thread's afterward
-   (`:434`) — `runtime` layer, heap (Persistence is heap-owned).
-3. `standalone/rt_data_mint.cpp:415-448` (`ConstructLoader`, gated by `g_loaderStorage`) — looks
-   up `??0Thread@System@@QEAA@I@Z` via `RtPortLookupExport` (`:436`), constructs the Engine
-   `Loader` singleton (`_loader`, static/global storage per `:418`) — `standalone` layer,
-   static/global singleton, mirroring retail's own `ConstructLoader`/`atexit` pattern.
-4. `runtime/src/audio/audio_stream_win.cpp:341` (`RtAudio_Stream_Ctor`) constructs a Thread base
-   subobject inside `Audio::Stream` via a local `ThreadCtor` wrapper around `RT_EXPORT_ONCE` —
-   `runtime` layer, embedded base subobject. Not one of `thread_win.cpp`'s own three named sites
-   but confirmed live by direct read; add it to the enumeration.
-5. `code/Game/Game/keystone_a_gamedtor.cpp` documents (destroys, does not construct) a
-   worker-queue `Thread` at retail `0x1400a6720` whose dtor tail-calls `??1Thread@System@@`
-   (`:362-363`) — the actual construction site for THIS particular queue Thread was not located
-   in this pass; **UNKNOWN**, flagged not guessed.
-
-**`System::CriticalSection`** — no CriticalSection is ever heap-allocated standalone; every
-`??0CriticalSection` call seen (`pathfinder_seed.cpp:149`) constructs it EMBEDDED at a fixed
-offset inside a larger object (`self+0x30`), matching the "no vtable, no independent identity"
-POD design. Registered via `thread_win.cpp:312`.
-
-**`System::Random`** — every construction is via `fn_Random_Default_Ctor` placement-construction
-into an EXISTING struct's memory — never a fresh standalone heap/stack `Random`. All thirteen
-CALL sites are `dl/lp + 0x194` (or `+0x118`) offsets into retail dialog/menu-loop structs (e.g.
-`code/Game/Dialog/noiseui.cpp:212`, `newgamedialog.cpp:871,1121`, `mainmenudialog.cpp:256`,
-`saveloaddialog.cpp:808`, `code/Game/Game/gameupdateloop_load.cpp:664,667`,
-`game_main.cpp:724`, `worldsetup_reload.cpp:122`), i.e. `Random` is a member subobject of
-retail dialog/menu structs, plus one raw-buffer pattern at `engine_funcs.h:3418-3426`
-(`uint8_t rng[2520]` then `fn_Random_Default_Ctor(rng)`).
-
-**`System::Color`** — no construction call anywhere (4-byte POD, no ctor); referenced only as
-named struct members (`ambientColor`/`lightColor`/`fogColor` at `Weather+0x60/64/68`,
-`code/Game/Game/weather.cpp:175-181`).
-
-**`System::Configuration`** — singleton constructed once, `runtime/src/engine/engine_lifecycle.cpp`
-(`RtSystem_Configuration_Ctor`, retail `0x1800c51b0`), stored into the file-static singleton
-slot (see §5's hidden-cache finding below); no `code/Game` construction site — reached there
-only through the four static String-returning functions.
-
-**`System::Compression`** — constructed only inside `IO::CompressedStream`
-(`runtime/src/io/compressed_stream_write.cpp:689`,
-`RT_EXPORT_ONCE(CompressionCtorFn, "??0Compression@System@@QEAA@XZ")(p)`) — `runtime`-internal
-only, never in `code/Game` or `standalone`.
-
-**`System::MemoryAllocator`** — one process-wide singleton (`_singleton`, `0x1801fc718`, IS the
-`Engine` instance's address per `MemoryAllocator.h:26-29` — the allocator is embedded at offset
-0 of `Engine::Engine`). No per-call construction; every caller reaches it via
-`g_pMemAllocSingleton` (member form) or the static free-function forms (§4).
-
-**`Timer`/`Crc`/`Error`/`DateTime`/`WideString`** — no instance state (Timer/Crc/Error/DateTime
-are pure static-function classes over file-scope globals or opaque `this`); `WideString` is
-constructed at each of its call sites as a stack local (`runtime/src/application/application_win.cpp:343,360,362`,
-`platform_startup_win.cpp:269,383`, `io/filesystem_find_win.cpp:581`,
-`io/filesystem_setupdirs_win.cpp:278,347`, `io/object/external_path_win.cpp:470`,
-`system/value_types.cpp:393` inside `DateTime::FormatPart`) plus dx11's own POD locals
-constructed through its by-address import-table ctor (`dx11/src/devicedata.cpp:1711,1755`).
+| class | who constructs it | where | pattern |
+|---|---|---|---|
+| `MemoryAllocator` | not constructed by our code at all for the live singleton — `g_pMemAllocSingleton` is a **read**, `engine/funcs/engine_funcs.cpp:1368-1369`: `*reinterpret_cast<void**>(ResolveAddr(Module::Runtime, 0x1801fc718))`, i.e. it dereferences `?_singleton@MemoryAllocator@System@@` once at init. (Coordinator correction: the first draft called this "the DLL's own global". No DLL is loaded; 0x1801fc718 is OUR minted 8-byte storage cell — `standalone/rt_data_mint_tables.inc:4715` "singleton pointer" — and a `CUTOVER_REQUIRED` row, `cutover_manifest.inc:79`. Who WRITES that cell, i.e. who constructs the allocator, is therefore a question about our own boot code and is NOT answered here.) Refreshed identically in `standalone/main.cpp:722-723`'s self-test. Port-side `Construct`/`Destruct` exist (`allocator.cpp:641-661`, retail 0x1800c79a0/0x1800c7960) and `Startup`/`Shutdown` (`:619-634`, retail 0x1800c7620/0x1800c75b0), zeroing fields and calling `SingletonSlot()` — but these run when the port itself is exercised via its own registered addresses, not as "our" construction path for the live object. | `engine/funcs/engine_funcs.cpp` | singleton, read not built |
+| `Thread` | `RtSystem_Thread_Ctor` (`thread_win.cpp:169`) | 3 sites: `code/Game/Game/pathfinder_seed.cpp:142,147,149` (heap-embedded, inside a pathfinder Thread subclass), `runtime/src/engine/singleton_ctors.cpp:448-449` (`IO::Persistence`'s embedded base), `standalone/rt_data_mint.cpp:434-461` (`Engine::Loader`'s static, cutover-only) | real door; base vtable always immediately re-subclassed (§2) |
+| `CriticalSection` | `RtSystem_CriticalSection_Ctor` (`thread_win.cpp:64-68`), thin wrap of `InitializeCriticalSection`/`SetCriticalSectionSpinCount(5000)` | embedded wherever needed — confirmed inside `pathfinder_seed.cpp`'s Thread subclass; **`IO::Persistence` and `Audio::Stream` bypass this ctor entirely** and call raw `InitializeCriticalSection` directly instead of going through the export (flagged as a surprise, §8) | per-object POD |
+| `Random` | `RtSystem_Random_Ctor` (time-seeded, `value_types.cpp:112`) / `RtSystem_Random_CtorSeed` (`:118`) | **per-object, not shared.** `Object::InternalFactory` carries its own `::Random _random` member at `+0x20` (`runtime/types/object/Internal.h:171,664`), constructed inline in `Ctor_InternalFactory` (`runtime/src/engine/singleton_ctors.cpp:352-361`) via `RT_EXPORT_ONCE("??0Random@System@@QEAA@XZ")` — deliberately ported through the door rather than re-transcribing the MT19937 recurrence a second time (desync risk, per the comment). A **second, independent** long-lived instance: `Graphics::Particle`'s static `?_rng@Particle@Graphics@@1VRandom@System@@A` @ 0x1801fe7f0, 2500 bytes, "SEEDED FROM time() at load by 0x180149650" (`standalone/rt_data_mint_tables.inc:4696`, resolved in `code/Game/Game/tornado.cpp:245` as a data symbol). **Everywhere else in `code/Game/`** Random is an opaque raw byte buffer (`uint8_t rng1[2520]` etc.), constructed per-call on the stack via `fn_Random_Default_Ctor` — dozens of independent ephemeral streams, e.g. `gameupdateloop_load.cpp:660-661`, `noiseui.cpp:211-212`. | 2 long-lived + many ephemeral, NOT one shared RNG |
+| `Time` | `fn_Time_Ctor_Float` (111 CALL via engine_funcs.h) + at least 21 additional bypass-cache CALL sites (§5.7) | pervasive across `code/Game/` | stack local, one per use |
+| `Timer` | no instance — stateless | `timer.cpp` | n/a |
+| `DateTime` | no explicit C++ construction anywhere — it's an opaque FILETIME, never given a named type; only produced as a return value by `FileSystem::GetFileTimeStamp` (`runtime/src/io/filesystem_timestamp_win.cpp`, IO-owned, not touched) and consumed by pointer at `code/Game/Dialog/saveloaddialog.cpp:322` | n/a | value passed by pointer, never named |
+| `Color` | no construction site found anywhere in `code/` or `runtime/` outside the DLL's own exported (but never `RegisterRuntimeExport`-ed) ctors; values are read/written as raw `uint32_t` fields embedded in other structs (`menuscene.cpp`'s ambient/sun/sky colors, `tornado.cpp`'s tint fields, `mapdescription.cpp`) | n/a | raw field, not a constructed object in-tree |
+| `Configuration` | `RtSystem_Configuration_Ctor` (`runtime/src/engine/engine_lifecycle.cpp:305`, retail 0x1800c51b0), called once from `RtEngine_Engine_Startup`; dtor at `engine_lifecycle.cpp:888` inside `Engine::Shutdown` | one construction per process | singleton, backed by DLL's own `?_singleton@Configuration@System@@` @ 0x1801fc6f8 |
+| `Compression` | `CompressedStream::Create` (`runtime/src/io/compressed_stream_write.cpp:686-690`, IO-owned file — evidence only, not this step's to convert): allocates 8 bytes, calls `??0Compression@System@@QEAA@XZ` on it, stores the result at `self->compression` | one per `CompressedStream` | heap, one-per-owner, NOT a singleton |
+| `Crc` | no instance — one static function | `crc.cpp` | n/a |
+| `Error` | no instance — free functions over named data slots (`_errorString`, `_stopApplication`, `_hideDisplay`) | `error.cpp` | n/a, process-wide statics |
+| `WideString` | construction sites are all in IO/application files (evidence only): `runtime/src/application/platform_startup_win.cpp:269,383`, seven `runtime/src/io/*` files, `runtime/types/object/external_path_win.cpp:470`, `runtime/src/system/value_types.cpp:393` (inside `DateTime::FormatPart`) | scattered, all outside `code/Game` | value type, stack/member, no singleton |
 
 ---
 
 ## 4. The allocator, in full
 
-**Method**: `alloc_classify.py` (comment/string-aware) scanning `code/`, `engine/`,
-`standalone/` only (`runtime/` excluded — receiver side, not a caller).
+### 4.1 Three (really four) MemAlloc surfaces, and they are NOT all the same body
 
-### 4.1 The four MemAlloc/MemFree surfaces
+| surface | signature | resolution | retail address | CALL | GUARD | CACHED |
+|---|---|---|---|---|---|---|
+| `fn_MemAlloc` (member) | `void*(void* self, uint64_t size, int align)` | `ResolveAddr(Module::Runtime, 0x1800c6e60)` (`engine_funcs.cpp:1370-1371`) = `?Allocate@MemoryAllocator@System@@QEAAPEAX_KH@Z` | 0x1800c6e60 | 524 | 292 | 85 |
+| `fn_MemAllocStatic` (static) | `void*(uint64_t size, int align)` | `ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")` (`engine_funcs.cpp:2665-2666`) | 0x1800c7a50 | 16 | 3 | 18 |
+| `s_fn_MemAllocSA` (per-file cache of the SAME static export) | same as above, resolved independently | `ResolveExport` by the same mangled name, or `ResolveAddr(…, 0x140152b60)` for the exe dispatch slot | same body as `fn_MemAllocStatic` | not separately tallied — see §4.2, 31 files (re-verified) | — | — |
+| `fn_MemZeroFill` | — | declared, never resolved to anything live | — | **0 everywhere, including guards** | 0 | 0 |
 
-| surface | signature | resolution | CALL | GUARD | CACHED |
-|---|---|---|---|---|---|
-| `fn_MemAlloc` (member) | `void*(void* self, uint64_t size, int align)` | `ResolveAddr(Module::Runtime, 0x1800c6e60)` (`engine_funcs.cpp:1370-1371`) — reaches `?Allocate@MemoryAllocator@System@@QEAAPEAX_KH@Z`, **unlocked** | **524** | 292 | 85 |
-| `fn_MemFree` (member) | `void(void* self, void* p)` | thunks onto `fn_MemFreeStatic` today (`engine_funcs.cpp:1460-1468`'s two-arg form is now a lambda, not a live `0x1800c6c00` reader) | **6** | 4 | 0 |
-| `fn_MemFreeStatic` (static) | `void(void* p)` | `ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z")` (`engine_funcs.cpp:1458-1459`) — reaches `0x1800c7ad0`, **locking** | **616** | 364 | 27 |
-| `fn_MemAllocStatic` (static) | `void*(uint64_t size, int align)` | `ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")` — reaches `0x1800c7a50`, **locking** | **16** | 3 | 18 |
+**The two headline surfaces reach DIFFERENT retail bodies.** `fn_MemAlloc` calls the raw
+member `Allocate` (0x1800c6e60), which per `allocator.cpp:1157-1165`/`1216-1229` **takes no
+internal lock**. `fn_MemAllocStatic` is a genuinely separate export (0x1800c7a50) whose
+port body (`allocator.cpp:677-683`) is `Get(); lockEnter; Allocate(self,...); lockLeave` —
+it calls the member Allocate internally but adds locking the raw entry point does not have.
+**Anyone unifying these into one class method must preserve that asymmetry** — collapsing
+them silently either removes locking from the currently-locked path or adds an unnecessary
+lock-within-lock on the unlocked one.
 
-`fn_MemZeroFill` — **0 CALL anywhere**, but not unresolved: still resolved unconditionally at
-`engine/funcs/engine_funcs.cpp:3647` (`ResolveAddr(Module::Exe, 0x14003f010)`). Dead on arrival.
-
-Per-directory CALL split:
-
-| directory | fn_MemAlloc | fn_MemFreeStatic |
-|---|---|---|
-| Component | 179 | 199 |
-| Dialog | 126 | 106 |
-| Game | 100 | 103 |
-| Work | 25 | 90 |
-| Action | 27 | 45 |
-| Tutorial | 28 | 24 |
-| Player | 17 | 21 |
-| Goal | 8 | 9 |
-| Entity | 5 | 8 |
-| engine | 5 | 6 |
-| standalone | 4 | 5 |
-
-Representative sites:
-```
-code/Game/Action/action_base_cnr.cpp:547   void* mem = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8) : nullptr;
-code/Game/Component/controller_live_base.cpp:92  fn_MemFree(g_pMemAllocSingleton, self);
-code/Game/Action/action_base_hunt.cpp:149  fn_MemFreeStatic(oldBase);
-code/Game/Component/tradecomponent_states.cpp:305  void* mem = fn_MemAllocStatic(0x58, 8);
-```
-
-### 4.2 The THIRD surface — 12 files with a private per-file cache of the static export
-
-Bypassing `engine_funcs.h`'s `fn_MemAllocStatic` entirely, each independently resolves
-`?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` into a file-local static:
-
-| file | var | resolve line | call sites | count |
-|---|---|---|---|---|
-| `code/Game/Action/action_pf_astar.cpp` | `s_fn_MemAllocSA` | :126 | :827 | 1 |
-| `code/Game/Action/keystone_a_zone.cpp` | `s_fn_MemAllocSA` | :76 | :90 | 1 |
-| `code/Game/Work/tradework_serialize.cpp` | `s_memAlloc` | :52,54-55 | :85,112 | 2 |
-| `code/Game/Work/gatherrawmaterials.cpp` | `s_fn_MemAlloc` | :264-268 (IAT fallback 0x1401527e8) | :885 | 1 |
-| `code/Game/Player/tool_base_highlight.cpp` | `s_MemAlloc` | :146 | :225,267 | 2 |
-| `code/Game/Work/foresterwork.cpp` | `s_fn_MemAlloc` | :269-270 | :1167 | 1 |
-| `code/Game/Action/action_pf_geom.cpp` | `s_memAlloc` | :52-54 | :555 | 1 |
-| `code/Game/Work/pickup.cpp` | `s_x_memAlloc` | :370-372 | :413/415,553 | 2 |
-| `code/Game/Player/tool_base_highlight_tess.cpp` | `s_memAlloc` (+wrapper `MemAlloc()`) | :69-71 | **none** | 0 (resolved but dead) |
-| `code/Game/Component/keystone_a_restree.cpp` | `s_memAlloc` (+wrapper `MemAlloc()`) | :70,72-76 | :122,154 | 2 |
-| `code/Game/Component/wellcomponent.cpp` | `s_fn_MemAllocStatic` | :239-240 | :313 | 1 |
-| `code/Game/Player/tool_base_trade.cpp` | `s_memAlloc` | :54-56 | :353,383,404 | 3 |
-
-**17 real call sites across 11 live files + 1 dead resolve.** Not an independent fourth
-surface but a genuine third, separately-resolved route to the SAME retail static
-(`0x1800c7a50`): `code/Game/Work/tradework.cpp:129` (`s_fn_MemAlloc =
-reinterpret_cast<TrW_MemAlloc_t>(fn_MemAllocStatic);`) merely ALIASES the already-resolved
-`fn_MemAllocStatic` pointer rather than re-resolving — its 2 calls (`:313,725`) are invisible to
-a plain `fn_MemAllocStatic(` grep but are the same function pointer, not a separate surface.
-
-**Correction to a prior inventory claim**: `IO_CALLER_INVENTORY.md:399` lists
-`citizenai_leisure.cpp` under the `s_fn_MemAllocSA` pattern — checked directly
-(`code/Game/Component/citizenai_leisure.cpp:107-109`), it actually calls the shared
-`fn_MemAlloc`/`g_pMemAllocSingleton`, not a private cache. That doc entry is stale/incorrect.
-
-### 4.3 `rtcoll::DoorAlloc`/`DoorFree` — a separate, fourth, containers-only surface
-
-`runtime/src/collection/alloc_door.cpp:97-123` — reads exe dispatch slots `0x140152b60`/
-`0x140152b68` PER CALL (never caches the contents, only the slot address — `:38-46` explains
-why: `RedzoneAlloc_Install()` rewrites slot contents post-boot), falling back to
-`ResolveAddr(Module::Runtime, 0x1800c7a50/0x1800c7ad0)`. Callers, confirmed containers-only:
-`runtime/src/collection/array.cpp:174,185`, `linkedlist.cpp:174,179`, `set_core.cpp:78`,
-`set_avl_pathid.cpp:137,140`, `avl_trees.cpp:174,181`, `introsort.cpp:380`,
-`set_avl_e24.cpp:365`, `set_avl.cpp:412`, `runtime/src/io/modification.cpp:202,205`. No
-`code/Game` file calls `DoorAlloc`/`DoorFree` directly.
-
-### 4.4 Instrumentation
-
-- **`standalone/alloc_stats.cpp`** (`BANISHED_ALLOC_STATS`/`BANISHED_ALLOC_BIG`) — pure
-  accounting, hooks nothing itself; fed by the allocator's own locked entry points
-  (`:1-5,28-30`). `g_liveBytes/g_totalAllocBytes/g_allocCount/g_freeCount` (`:34-37`) + a hashed
-  `BlockRec` table (`:39-56`, 2M slots) + a per-caller `CallerRec` table (`:52-75`, 4096 slots).
-  `StatsRecordAlloc`/`StatsRecordFree` (`:77-114`) run inside the allocator's own critical
-  section, use `VirtualAlloc`-backed storage (never re-enters the engine allocator).
-- **`standalone/redzone_alloc.cpp`** (`BANISHED_REDZONE`) — `RedzoneAlloc_Install()`
-  (`:299-366`) swaps the global function pointers `fn_MemAlloc`/`fn_MemFreeStatic` (`:340-341`,
-  saving originals at `:331-332`) AND rewrites the exe `.rdata` dispatch-slot CONTENTS at
-  `0x140152b60`/`0x140152b68` in place (`:346-349`) so the twelve §4.2 per-file callers are
-  ALSO shimmed — `:230-238`'s comment names `tool_base_highlight*.cpp`/`work_act_*.cpp`
-  explicitly as the reason a half-shimmed heap produced a phantom "corrupt decal vertex pool."
-  `ShimAlloc` (`:201-228`) tracks each block with a canary tail if `g_pad>0`.
-
-### 4.5 Exe dispatch-slot registrations
-
-`standalone/address_registry.cpp:1324-1327`:
+**Free side is the opposite: `fn_MemFree` and `fn_MemFreeStatic` are provably the SAME
+body today**, but not because retail wires them that way — because our port's `fn_MemFree`
+is a lambda thunk that discards its own singleton argument (`engine_funcs.cpp:1466-1468`):
 ```cpp
-RegisterDispatchSlot(0x140152b60, (uintptr_t)ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
-RegisterDispatchSlot(0x140152b68, (uintptr_t)ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
+fn_MemFree = [](void* /*singleton*/, void* ptr) {
+    if (fn_MemFreeStatic) fn_MemFreeStatic(ptr);
+};
 ```
-Confirmed exactly as `alloc_door.cpp`'s header comment claims. `fn_MemAlloc`/`fn_MemFreeStatic`
-themselves are NOT separately dispatch-slot-registered — they resolve directly via
-`ResolveAddr`/`ResolveExport` at `EngineFuncsInit()` time (`engine_funcs.cpp:1370-1371,1458-1459`),
-a Runtime-side seam, not an exe-side dispatch-slot row.
+So both forwarded to `fn_MemFreeStatic` = `rtalloc::MemFree` (the locking static wrapper at
+0x1800c7ad0). **The true member `?Free@MemoryAllocator@System@@QEAAXPEAX@Z` (0x1800c6c00)
+has NO live caller today** — it's only reachable via `RegisterAllocatorAddresses` at
+cutover, and its own comment calls that "no live reader today." A class-ification that
+wires a real non-static `Free` member to actually call 0x1800c6c00 (instead of forwarding
+to the static) is a **behavior change**, not a refactor, since the current path is provably
+identical to the static one and 0x1800c6c00 is unverified against the ~616+6 live call
+sites. There is also a third, unrelated free-shaped body:
+`FreeLockedIgnoringSelf` @ 0x180009c30 (`allocator.cpp:1441-1483`), a 2-arg shim — not to be
+confused with either.
 
-### 4.6 How many distinct retail bodies, and do the forms share one
+| free surface | resolution | retail body | CALL | GUARD | CACHED |
+|---|---|---|---|---|---|---|
+| `fn_MemFree` | lambda thunk, discards arg 1, calls `fn_MemFreeStatic` | 0x1800c7ad0 (via forwarding) | 6 | 4 | 0 |
+| `fn_MemFreeStatic` | `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` | 0x1800c7ad0 | **616** (highest-volume pointer in the whole System family) | 364 | 27 |
 
-Four retail addresses in play:
-- `0x1800c6e60` `?Allocate@MemoryAllocator@System@@QEAAPEAX_KH@Z` — member, **unlocked** raw
-  core (`allocator.cpp:419`) — bound to `fn_MemAlloc`.
-- `0x1800c6c00` `?Free@MemoryAllocator@System@@QEAAXPEAX@Z` — member, unlocked, registered
-  "so the pair cannot drift apart" (`allocator.cpp:1283`) but **no live reader today**
-  (`fn_MemFree` now thunks onto `fn_MemFreeStatic` instead).
-- `0x1800c7a50` `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` — static, **locking**
-  (`Get()`+lock+`Allocate`+unlock, `allocator.cpp:677-683`) — bound to `fn_MemAllocStatic`,
-  reached by all twelve §4.2 files and `DoorAlloc`'s fallback.
-- `0x1800c7ad0` `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` — static, locking — bound to
-  `fn_MemFreeStatic` and `DoorFree`'s fallback.
+### 4.2 The per-file cache swarm is much larger than the seed 3-file claim — RE-VERIFIED
 
-**The member and static forms do NOT call the same top-level address.** They differ by exactly
-one thing: the critical section. `fn_MemAlloc`'s unlocked `Allocate` core and the static
-wrapper's locked path both terminate in the same underlying free-list logic
-(`allocator.cpp:1344-1360`: "one arena, two entry bodies... the member pair gets the composed
-locked entry points [via `g_pMemAllocSingleton`'s own internal locking, not the static
-wrapper]... the static pair gets `rtalloc::MemAlloc/MemFree`, which take the critical section
-themselves exactly as retail's statics do" — comment paraphrased, re-verify exact wording before
-quoting in a commit). **UNKNOWN**, flagged: whether retail's own member-form call sites are
-provably single-threaded (making the lock-skip safe) was not established by any in-tree comment.
+The seed ground truth ("3 `code/Game` files cache `s_fn_MemAllocSA`") is **wrong** —
+`citizenai_leisure.cpp` does not belong (its `NodeAlloc()` calls the shared **member**
+`fn_MemAlloc` directly, no cache) and the real population is far larger. Two independent
+sub-agent passes then produced two DIFFERENT wrong counts in opposite directions (24+19
+files from a dual-anchor grep with an unstated bug, 51-55 files from a separate heuristic
+name-matching script that over-matched unrelated local names) — so this coordinator pass
+re-ran the two anchors directly, fresh, scoped to `code/` only:
 
-### 4.7 Type header
+```
+grep -rl 'MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z' code/   -> 15 files
+grep -rl '0x140152b60'                                  code/   -> 27 files (25 code + 2 header/dup)
+union                                                             -> 31 files
+grep -rl 'MemFree@MemoryAllocator@System@@SAXPEAX@Z'    code/   -> 12 files
+grep -rl '0x140152b68'                                  code/   -> 22 files
+union                                                             -> 26 files
+```
 
-`runtime/types/system/MemoryAllocator.h` (355 lines): `MemoryTag{uint64_t bits}` (8B, bit
-layout documented inline `:47-64`); `FreeTag{uint64_t link}` (8B, `:65-70`);
-`MemoryRange{base+0x00,end+0x08,committed+0x10}` (0x18); `MemoryAllocator` (0x670) — `ranges`
-+0x000, `rangeCount`+0x008, `rangeCapacity`+0x00c, `minRangeSize`+0x010, `maxTotalSize`+0x018,
-`totalReserved`+0x020, `freeLists[192]`+0x028, `minBin`+0x628, `allocatedBytes`+0x630,
-`allocCount`+0x638, `freeTagCount`+0x63c, `lock[0x28]`+0x640, `pageSize`+0x668 — 12
-`offsetof` asserts + `sizeof==0x670`. `RtSysMemPlatform` is a portability fn-ptr table
-(reserve/commit/decommit/release/pageSize/lock*), not binary-pinned. `_singleton`
-(`0x1801fc718`) IS the `Engine` instance's own address (allocator embedded at offset 0).
+**Verified: 31 distinct files on the alloc side, 26 on the free side (code/ only; this does
+not additionally sweep `engine/`/`standalone/`, where the allocator-surface sub-agent
+separately found `engine/funcs/{engine_funcs.cpp,engine_funcs.h}` and
+`standalone/{address_registry,async_loader,redzone_alloc,redzone_alloc.h,reg_code_lane1,
+reg_keystone_a_removal}.cpp` referencing the same two mangled names/addresses — those are
+largely the legitimate resolution/registration/instrumentation sites, not per-file caches,
+and were not re-triaged file-by-file here).** Every one of the 31+26 declares its own
+`typedef` + `static …_t s_…_ = nullptr;` (or a family-specific prefix — `HW_`, `MW_`, `TrW_`,
+`WAP_`, … — the naming is NOT consistent enough for one pointer name to cover them) and
+resolves the identical mangled export or dispatch-slot address independently, bypassing
+`engine_funcs.h` entirely. Full file lists (alloc union, 31):
+
+`code/Game/Action/{action_pf_astar,action_pf_geom,keystone_a_zone}.cpp`,
+`code/Game/Component/{cemeterycomponent,citizenai_growup,keystone_a_restree,
+terraformcomponent,wellcomponent}.cpp`, `code/Game/Dialog/tradeui_leaves.cpp`,
+`code/Game/Game/w2_takescreenshot.cpp`, `code/Game/Player/{keystone_a_removalcalcpath,
+placementtool,tool_base_highlight,tool_base_highlight_tess,tool_base_render,
+tool_base_trade}.cpp`, `code/Game/Work/{foresterwork,gatherrawmaterials,
+marketwork_bst_a9f0,marketwork_bst_afb0,marketwork_bst_b290,pickup,tradework,
+tradework_serialize,work_act_clear,work_act_consume,work_act_hunt,work_act_path,
+work_act_perform,work_act_rawmat,work_base_actionctor}.cpp`.
+
+(Free union, 26, overlaps heavily but is not identical — e.g. `pathfinder_seed.cpp` and
+`coll_bridge.h` appear only on the free side; `cleararea.cpp`, `geometry_draw.cpp`,
+`tool_base_toolui.cpp`, `tutorialinstance.cpp`, `unreg_lane1_mapgenerator_dtorbody.cpp`,
+`work_leaf_market.cpp` appear only on the free side too — not enumerated a second time here,
+re-run the grep above to reproduce.)
+
+This is the single biggest correction this inventory makes to any seed number, and it
+changed twice under sub-agent re-measurement before this pass settled it by direct
+reproduction. **A batch that gives `MemoryAllocator` a real class must find and repoint (or
+explicitly decide to leave alone) all 31+26 of these files**, or they remain invisible
+duplicate resolutions of the class's own export. Treat any *other* file count in this
+document that was not re-run the same way as provisional in the same manner.
+
+### 4.3 `standalone/alloc_stats.cpp` — a consumer, not a bypass
+
+`AllocStats_RecordAlloc`/`RecordFree` hook whatever the composed Allocate/Free entry points
+already are; it does not re-resolve or duplicate the door slots. It keeps an independent
+open-addressing block table (`g_blocks`, 2M slots via its own `VirtualAlloc`, deliberately
+outside both the engine heap and the CRT heap to avoid re-entrancy) plus a per-caller
+attribution table (`g_callers`, 4096 slots). `BANISHED_ALLOC_STATS=1`/`BANISHED_ALLOC_BIG`
+report live/peak/total bytes and top-8 callers. It documents itself as running inside the
+allocator's own `EnterCriticalSection(self+0x640)` rather than adding a lock, and exposes
+`AllocStats_Lookup` for `standalone/redzone_alloc.cpp` to use — the two instruments are
+linked observers of the same allocator, not independent paths.
+
+### 4.4 Door design interaction (already settled, restated for this inventory)
+
+`runtime/src/collection/alloc_door.cpp`'s `rtcoll::DoorAlloc`/`DoorFree` re-read exe
+dispatch slots `0x140152b60`/`0x140152b68` **every call**, specifically so
+`RedzoneAlloc_Install()` (which runs after `EngineFuncsInit()`) can rewrite those slots'
+contents post-boot (`standalone/redzone_alloc.cpp:340-348`). **Anyone converting
+`MemoryAllocator`'s ctor/dtor to real C++ must not change which object address
+`SingletonSlot()` yields, or when `Construct()` runs relative to `RedzoneAlloc_Install()`**
+— a reorder would either freeze a pre-shim function pointer into the door's static cache
+(the exact "half-shimmed heap" hazard `alloc_door.cpp`'s own header documents) or leave
+`_singleton` null when redzone/alloc_stats first touch `g_pMemAllocSingleton`. Verified: no
+`??_7MemoryAllocator@System@@6B@` row exists anywhere — non-polymorphic, consistent with
+the header having no vtable-pointer field (first field is `ranges`).
+
+### 4.5 `MemoryAllocator.h` layout, in full
+
+`sizeof(MemoryAllocator)==0x670`: `ranges` 0x000, `rangeCount` 0x008, `rangeCapacity`
+0x00c, `minRangeSize` 0x010, `maxTotalSize` 0x018, `totalReserved` 0x020, `freeLists`
+0x028, `minBin` 0x628, `allocatedBytes` 0x630, `allocCount` 0x638, `freeTagCount` 0x63c,
+`lock` 0x640, `pageSize` 0x668. `MemoryRange` sizeof 0x18: `base` 0x00, `end` 0x08,
+`committed` 0x10. No static_assert block for `RtSysMemPlatform` — pure function-pointer
+table, not an ABI-pinned retail struct.
+
+### 4.6 Zero-CALL in this family
+
+Only `fn_MemZeroFill` — 0 CALL, 0 GUARD, 0 CACHED, confirmed by a fresh scan; declared and
+never referenced anywhere else.
 
 ---
 
 ## 5. Every other System family
 
-### 5.1 `System::Thread` / `System::CriticalSection`
+### 5.1 `CriticalSection` / `Thread` — caller surface, complete
 
-Registered bodies (`thread_win.cpp:307-330`, `RtSystemThreadRegister()`): `OnCompleted` (no-op,
-fills Thread vtable slot 1), `CriticalSection::{Ctor,Dtor,Lock,Unlock}`,
-`Thread::{Ctor,Dtor,Start,WaitForFinish,ThreadFunc(by name+by addr)}`. **A ninth Thread export,
-`?IsRunning@Thread@System@@QEBA_NXZ` (0x18000c5a0), is listed in `standalone/rt_export_addrs.inc:289`
-but has NO `RegisterRuntimeExport` row and NO resolver call anywhere in the tree** — genuinely
-unported and uncalled, not part of the "8 exports" framing used in file banners.
+**The seed 6-file list was both incomplete and had one phantom entry.**
+`code/Game/Game/tornado.cpp` has **zero** matches for `Thread@System@@`/
+`CriticalSection@System@@` today — a direct grep found nothing; drop it from any future
+list (the seed doc is stale on this one point, or was true in a prior revision).
 
-Caller surface — **eight files**, all resolving by mangled name into file-static caches (none
-visible via `engine_funcs.h`), one more than the five previously named, plus a by-address ninth:
+Real caller surface, 9 files, all reached by mangled name, none via `engine_funcs.h`
+(there is no global `fn_Thread_*`/`fn_CriticalSection_*` pointer at all):
 
-| file | ops | CALL sites |
+| file | pointers cached | CALL sites |
 |---|---|---|
-| `code/Game/Action/action_pf_astar.cpp:123-126` | Lock,Unlock,Start | 7 (`:795,815,826,844,846,985,995`) |
-| `code/Game/Action/keystone_a_zone.cpp:73-77` | Lock,Unlock,Start | 6 (`:89,107,109,168,171,173`) |
-| `code/Game/Game/keystone_a_gamedtor.cpp:102-109` | Lock,Unlock,Start,WaitForFinish,CS-dtor,Thread-dtor | 7 (`:362,363,386,390,398,400,401`) — the ONLY `code/Game` `WaitForFinish` site |
-| `code/Game/Game/pathfinder_seed.cpp:131-135` | Thread-ctor,CS-ctor,Lock,Unlock | 4 (`:73,87,147,149`) — the only `code/Game` construction site |
-| `runtime/src/audio/audio_stream_win.cpp:300-317` | Thread-ctor,Thread-dtor (wrapped `ThreadCtor`/`ThreadDtor`) | 2 (`:341,411`) |
-| `standalone/rt_data_mint.cpp:434-471` | Thread-ctor,Thread-dtor (`ConstructLoader`/`RtMintLoaderTeardown`) | 2 (`:460,425`) |
-| `standalone/loader_loop_stubs.cpp:81-95` | WaitForFinish | 1 (`:93`, gated `Opt().syncEngineLoader`, default true) |
-| `runtime/src/io/persistence_worker_win.cpp:585-588` | base-vtable re-stamp, BY ADDRESS not by name | 1 (`:587`) |
+| `code/Game/Action/action_pf_astar.cpp:97-125` | `s_fn_CSLock`, `s_fn_CSUnlock`, `s_fn_ThreadStart` | 7 (lines 826, 844, 846 representative) |
+| `code/Game/Action/keystone_a_zone.cpp:42-75` | same 3 | 6 |
+| `code/Game/Game/keystone_a_gamedtor.cpp:68-108` | `s_fn_CSLock/Unlock`, `s_fn_ThreadStart`, `s_fn_WaitFinish`, `s_fn_CSDtor`, `s_fn_ThreadDtor` | 7 (lines 386-401 representative) |
+| `code/Game/Game/pathfinder_seed.cpp:38-46,131-135` | `s_fn_ThreadCtor`, `s_fn_CSCtor`, shared `fn_CS_t` for Lock/Unlock | 4 |
+| `runtime/src/engine/singleton_ctors.cpp:448` | direct `RT_EXPORT_ONCE`, no cache wrapper | 1 (`??0Thread@System@@QEAA@I@Z`, builds `IO::Persistence`'s embedded base) |
+| `runtime/src/audio/audio_stream_win.cpp:303-317,341,411` | `ThreadCtor`/`ThreadDtor` wrapping `RT_EXPORT_ONCE` | 2 (Ctor/Dtor of `Audio::Stream`, a Thread subclass) |
+| `runtime/src/engine/loops.cpp:1002,1121-1123,1135-1137,1188-1190` | 3 static `ResolveExport("?WaitForFinish@Thread@System@@QEAAXXZ")` sites | 3 (loader-teardown waits) |
+| `standalone/loader_loop_stubs.cpp:82-96` | `WaitForEngineLoader()`, a 4th `WaitForFinish` site, gated by `BANISHED_SYNC_ENGINE_LOADER` | 1 (guards a real free-list race, `[[project_menu_heap_crash]]`) |
+| `standalone/rt_data_mint.cpp:420-472` | `ConstructLoader`/`RtMintLoaderTeardown` | 2 (cutover-only ctor/dtor of the static `_loader`'s Thread) |
 
-**Correction**: `code/Game/Game/tornado.cpp` was named in the original B34_RULES brief as a
-Thread/CriticalSection caller — direct grep found ZERO matches for `Thread`/`CriticalSection` in
-any form in that file. Drop it from the caller roster; the brief's claim is unsupported by the
-current source.
+`standalone/reg_mint_promoted.cpp:1875` is **documentation only** — a comment mentioning
+`?OnCompleted@Thread@System@@`, no code touching Thread/CriticalSection.
 
-`runtime/types/system/Thread.h`: `CriticalSection{uint8_t _storage[0x28]}` (sizeof 0x28, opaque,
-no per-field assert); `Thread{vtable+0x00,runFlags+0x08(+pad),hThread+0x10,hStart+0x18,
-hStop+0x20,hFinished+0x28}` (sizeof 0x30, 5 offset asserts + 1 size assert).
+Registrations (`thread_win.cpp`, 331 ln, confirmed): 9 exports (`OnCompleted`,
+`CriticalSection::{Ctor,Dtor,Lock,Unlock}`, `Thread::{Ctor,Dtor,Start,WaitForFinish}`) + 1
+addr row (`ThreadFunc` alias, 0x1800ca440) = 10 registrations.
 
-`thread_win.cpp` is a POD wrapper over Win32 primitives, not a hand-rolled reimplementation:
-`CriticalSection` ops are direct `InitializeCriticalSection`/`SetCriticalSectionSpinCount(…,5000)`/
-`EnterCriticalSection`/`LeaveCriticalSection`/`DeleteCriticalSection`; `Thread` builds via
-`_beginthreadex(CREATE_SUSPENDED)` + 3 `CreateEventW` handles, and `RtSystem_Thread_ThreadFunc`
-(0x1800ca440) faithfully reproduces `WaitForMultipleObjects({hStart,hStop})` → vtable slot 0 →
-reload vtable → slot 1 (`OnCompleted`) → loop. All eight caller files' `ResolveExport` calls
-resolve the SAME mangled strings this file registers, so they land on `RtSystem_*` bodies once
-the port registry takes precedence (`reference_resolveaddr_consults_port_registry_first.md`).
+Zero-CALL: none in this family are dead — `ThreadFunc` and `OnCompleted` have zero
+*textual* call sites but are reached indirectly (`ThreadFunc` handed to `_beginthreadex`;
+`OnCompleted` invoked through `self->vtable[1]`), so they are live, just indirect.
 
-Zero-CALL: `IsRunning` (genuinely zero-caller AND zero-port, unlike everything else in this
-subsection). `OnCompleted` has zero direct C++ calls but is dispatched every worker cycle
-through the vtable slot — not dead, just never called by name.
+**Surprises:** (1) three of the nine caller files (`singleton_ctors.cpp`,
+`audio_stream_win.cpp`, `rt_data_mint.cpp`) embed a `System::Thread` as the base of another
+step's class (`IO::Persistence`, `Audio::Stream`, `Engine::Loader`) — converting `Thread`'s
+ABI has blast radius outside this step's nominal file set; coordinate before touching
+`Thread.h`'s layout. (2) `IO::Persistence` and `Audio::Stream` call raw
+`InitializeCriticalSection`/`SetCriticalSectionSpinCount(5000)` directly, **bypassing**
+`System::CriticalSection`'s own ctor export — a real RAII conversion of `CriticalSection`
+would not automatically cover those two sites. (3) `Engine::Loader`'s Thread is a static
+singleton built by `standalone/rt_data_mint.cpp`'s `ConstructLoader`. (Coordinator correction:
+the first draft said it has "two construction routes (DLL-present vs cutover)". Only ONE is
+live — the DLL-present route was removed by ENDGAME A.1 — so there is nothing to choose
+between; `ConstructLoader` is the construction site.)
 
-### 5.2 `System::Random` / `System::Color`
+### 5.2 `Random`
 
-`value_types.cpp:494-530` registers 20 exports total across Random(10)/Time(3)/Color(1)/
-DateTime(3)/Configuration(3). Only 5 `fn_Random_*` pointers exist in `engine_funcs.h`
-(`Rand`,`RandFloat`,`RandFloatTol`(`:2137`, declared `extern "C"` directly, not the usual
-typedef pair),`RandTol`,`Default_Ctor`); `RandBound`/`RandRange`/`Serialize` are registered but
-have NO exe-side dispatch pointer at all — no caller needs them yet.
+Counts (comment/string-aware, re-verified exact against an earlier pass):
 
 | pointer | CALL | GUARD | CACHED |
 |---|---|---|---|
-| `fn_Random_Rand` | **75** | 28 | 27 |
-| `fn_Random_RandFloat` | **38** | 11 | 23 |
-| `fn_Random_RandTol` | **25** | 6 | 12 |
-| `fn_Random_Default_Ctor` | **13** | 5 | 2 |
-| `fn_Random_RandFloatTol` | **31** | 0 | 5 |
-| `fn_System_Color_Serialize` | **6** | 3 | 3 |
+| `fn_Random_Rand` | 75 | 28 | 26 |
+| `fn_Random_RandFloat` | 38 | 11 | 22 |
+| `fn_Random_RandTol` | 25 | 6 | 11 |
+| `fn_Random_Default_Ctor` | 13 | 5 | 1 |
+| `fn_Random_RandFloatTol` | 31 | 0 | 5 (declared `extern "C"` directly, confirmed) |
 
-(Re-measured; matches a prior pass exactly.) Per-directory (Rand family): Component 40+25+8+22,
-Game 23+9+12+9, Dialog 5+1+2, Work 4+2, Player 1, engine 1+1+2, standalone 1.
-`fn_System_Color_Serialize` (`engine_funcs.h:5559-5560`): Game 5 (`weather.cpp` family),
-Component 1 — confirmed it belongs in this bucket, not a separate "Serialize bodies" bucket a
-prior pass filed it under. **No other `fn_Color_*` pointer exists.**
+**Bypass swarm, the biggest finding for this class**: at least **14 additional files**
+resolve a Random export via their own file-static cache, entirely independent of the
+`fn_Random_*` globals above (the one previously-known extra, `s_fn_randFloat` in
+`action_child_ctors2.cpp`, plus 13 more found this pass): `gameupdateloop_load.cpp`
+(`s_fn_Random_RandFull`), `worldgen_f390_ranges.cpp` (`s_fn_Rand2`, `s_fn_RandFloatTol`),
+`worldgen_f390_coastline.cpp` (`s_RandFloatTol`, `s_Rand1`, `s_Rand2`),
+`citizenai_leisure.cpp` (`s_randFloatTol`), `weather_sim.cpp`/`weather_particles.cpp`
+(`s_fnRandFloatTol` each), `firecomponent_ignite.cpp` (`s_randRange`),
+`growthcomponent.cpp` (function-local `static fn_Rand_t s_fn_Rand`),
+`citizenbehavior.cpp` (`s_fn_Random_Rand`), `action_pf_ctors.cpp` (`s_fn_RandFloatTol`),
+`tornado.cpp` (`f.randFloatTol` struct field), `action_pf_geom.cpp` (`s_rand`, with an
+import-slot fallback), `foresterwork.cpp` (`s_fn_Random_RandTol`),
+`gameupdateloop_serialize.cpp` (`s_fn_Random_Serialize`). All resolve the same export
+addresses `fn_Random_*` already provides — functionally harmless duplication (same code
+runs either way) but a real consistency hazard for a conversion sweep: leaving them alone
+means stale duplicate resolution logic coexists with the new class indefinitely; sweeping
+all ~15 is extra scope.
 
-Zero-CALL: none among the nine measured pointers (`fn_Configuration_CurrentVersion`/
-`CurrentBuildId` are the lowest, at 1 each — see §5.4).
+**Construction is NOT one shared RNG** — see §3. At least two long-lived independent
+streams (`InternalFactory::_random`, `Graphics::Particle::_rng`) plus many ephemeral
+per-call stack instances across `code/Game/`. **A naive "one shared `System::Random`
+singleton" conversion would silently merge streams retail keeps separate and would break
+determinism of world-gen, weather, and per-entity behavior.**
 
-### 5.3 `System::Compression`
+Registrations: `value_types.cpp`, 10 of the file's 20 exports (Ctor, CtorSeed, Rand,
+RandFloat, RandTol, RandFloatTol, and others). No vtable (§2).
 
-**A second invisible-to-`engine_funcs.h` case, like Thread/CriticalSection.** No `fn_Compression_*`
-pointer exists anywhere in `engine_funcs.h` (grepped — zero hits). `compression.cpp` (632
-lines) registers 3 exports (`RtSystemCompressionRegister`, `:595`): `Decompress` (+1 addr row,
-`0x1800c4660`), `Compress`, the default ctor. Dtor is deliberately left unregistered — teardown
-is inlined into `CompressedStream::Release`, already ported (owned by the IO agent). Only
-in-tree callers: `runtime/src/io/compressed_stream_read.cpp:300,404` and
-`compressed_stream_write.cpp:474,689`, all via `RT_EXPORT_ONCE` mangled-name resolution local to
-those two files — 4 real call sites total, all inside IO's own territory, none in `code/Game`.
+### 5.3 `Color`
 
-### 5.4 `System::Configuration`
+Only 6 CALL sites total, all through `fn_System_Color_Serialize` — confirmed as its ONLY
+caller by grepping `Color@System@@QEAA` (every other hit is registration/doc/census, never
+a call site): `code/Game/Game/menuscene.cpp:521-524` (ambient/sun/sky, 3 sites),
+`code/Game/Game/tornado.cpp:550-551` (tint, 2 sites), `code/Game/Component/
+mapdescription.cpp:66` (1 site). No raw Color ctor call and no Color field construction
+exist in-tree — every use is a raw `uint32_t` field, touched only through `Serialize`.
+3 ctors + assign + 4 accessors are retail-exported but never registered (§6).
 
-`configuration.cpp` (741 lines) registers 5 name+addr pairs
-(`RtSystemConfigurationRegister`, `:691`): `SetCommandLine`, `ParseCommand`, `ParseValue`,
-`GetCommandLineString`, dtor. Plus one addr-only row with no export name,
-`RegisterRuntimeAddr(0x18002ace0, RtSystem_ConfigMap_Find)` (the map's BST find, unexported in
-retail). Ctor registered separately in `runtime/src/engine/engine_lifecycle.cpp:995`, not in
-`configuration.cpp`.
+### 5.4 `Configuration`
 
-**A hidden singleton cache, independently duplicated in THREE translation units**, none visible
-via `engine_funcs.h`: `?_singleton@Configuration@System@@0PEAV12@EA` (retail `0x1801fc6f8`),
-wrapped by a `ConfigurationSingletonSlot()` helper around `RT_DATA_SLOT`, written/read
-independently at `runtime/src/engine/engine_lifecycle.cpp:282-284`,
-`runtime/src/io/filesystem_setupdirs_win.cpp:194,199`, `runtime/src/io/filesystem_startup.cpp:83,126`.
+Counts: `fn_Configuration_GetVersionString` CALL=3, `fn_Configuration_CurrentVersion`
+CALL=1, `fn_Configuration_CurrentBuildId` CALL=1 — all re-verified exact.
 
-`engine_funcs.h` pointers: `fn_Configuration_GetVersionString`=**3** CALL (Dialog),
-`fn_Configuration_CurrentVersion`=**1** (Dialog), `fn_Configuration_CurrentBuildId`=**1**
-(Dialog) — all re-measured, matching the prior pass.
+**Correction to `Value.h`'s own comment.** `Value.h:20-21` says "Configuration has no
+instance data (every member in scope is `static`)" — true only for the three members that
+live in `value_types.cpp`'s lane (`CurrentBuildId`/`CurrentVersion`/`GetVersionString`,
+genuinely `static` C++ members). `configuration.cpp` (740 ln, a different lane) later
+ported **instance** methods (`SetCommandLine`, dtor, `GetCommandLineString`) that operate
+on `this+0x10` (a string→string map) and a third un-destroyed sub-object at `this+0x20`
+that retail itself leaks (`configuration.cpp:648-654`, explicitly not "fixed", per project
+rules on faithful behavior). **Configuration is a singleton with real per-instance state,
+not a pure-static utility class** — a batch owner must not model it as stateless. Singleton
+pointer: `?_singleton@Configuration@System@@0PEAV12@EA` @ 0x1801fc6f8
+(`rt_data_mint_tables.inc:4704`), one instance process-wide. The map-insert subtree
+(0x18002a090/0x18002a170, red-black insert) is **not ported** but is a **live** dependency
+reachable from the settings-load path (`persistence_registry_win.cpp:266`), not dead code —
+flagged explicitly in `configuration.cpp:729-738` as a previously-corrected "unreachable"
+claim; don't re-assert it's dead.
 
-### 5.5 `System::Timer` / `System::DateTime` / `System::Time` / `System::Crc` / `System::Error` / `System::WideString`
+### 5.5 `Compression`
 
-**Timer** — `runtime/src/system/timer.cpp` (343 ln, confirmed in `runtime/src/system/`, not
-`runtime/types/system/`) registers 10 exports, 0 addr rows (`:330-343`). No `fn_Timer_*` pointer
-in `engine_funcs.h` at all — every caller reaches it via `RT_EXPORT_ONCE`/`ResolveExport` on the
-literal mangled string:
+**No `fn_Compression_*` pointer exists in `engine_funcs.h` at all** (confirmed, zero
+matches) — the seed doc's "not found in the earlier pass" is the SAME blind spot found for
+Thread/CriticalSection, not evidence of near-zero use. Real callers, all via
+`RT_EXPORT_ONCE` inside `runtime/src/io/` (IO-owned files, cited here as caller evidence
+only, not this step's to convert):
 
-| export | CALL | where |
+- `compressed_stream_read.cpp:299-302,403-406` — 2 calls to `?Decompress@Compression@
+  System@@SAHPEBXIPEAXI@Z`.
+- `compressed_stream_write.cpp:473-476` — 1 call to `?Compress@Compression@System@@
+  QEAAHPEBXIPEAXI@Z`.
+- `compressed_stream_write.cpp:686-690` — construction site (`CompressedStream::Create`
+  allocates 8 bytes, calls `??0Compression@System@@QEAA@XZ`, stores at `self->compression`)
+  — one-per-owner, not a singleton (§3).
+
+**Verdict: 4 real call sites, not near-zero.** No `s_fn_Compression_*`-style cache exists
+in `code/`; all callers resolve fresh each site inside `runtime/src/io/`.
+
+Registrations: `compression.cpp`, 3 exports (Decompress, Compress, Ctor) + 1 addr
+(Decompress, 0x1800c4660) — corrected from an earlier "~4/2" guess. The dtor (0x1800c4170)
+is deliberately not ported (teardown is inlined elsewhere already, per the file's own
+banner).
+
+### 5.6 `Timer` / `Time` / `DateTime` — three distinct classes, settled definitively
+
+**`System::Timer`** (`timer.cpp`, `@Timer@System@@`): a **stateless static class**. Every
+data static is a file-scope global; `Timer::Assign`'s body is literally `return self;`.
+Owns QPC/tick-conversion. **No `fn_Timer_*` pointer exists in `engine_funcs.h` at all** —
+its entire caller surface is `RT_EXPORT_ONCE`/`ResolveExport` inside `runtime/src/`:
+
+| export | CALL | sites |
 |---|---|---|
-| `SecondsToTicks` | 3 | `engine/loops.cpp:389`, `graphics/wave28_lane_partsys.cpp:322`, `system/value_types.cpp:225` |
-| `TicksToSeconds` | 3 | `engine/loops.cpp:392`, `wave28_lane_partsys.cpp:319`, `value_types.cpp:234` |
-| `Startup` | 1 | `engine/engine_lifecycle.cpp:525` |
-| `CurrentTimeTicks` | 1 | `engine/loops.cpp:1453-1456`, file-static cache `nowTicks` — the hidden-cache pattern again |
-| `Shutdown`,`PlatformStartup`,`PlatformShutdown`,`GetTicks`,`CurrentTime`,`Assign` | 0 each | zero named callers anywhere |
+| `?SecondsToTicks@Timer@System@@SA_JM@Z` | 3 | `runtime/src/engine/loops.cpp:389`, `runtime/src/graphics/wave28_lane_partsys.cpp:322`, `runtime/src/system/value_types.cpp:225` (inside `Time::Ctor`) |
+| `?TicksToSeconds@Timer@System@@SAM_J@Z` | 3 | `loops.cpp:392`, `wave28_lane_partsys.cpp:319`, `value_types.cpp:234` (inside `Time::AsSeconds`) |
+| `?Startup@Timer@System@@SA_NXZ` | 1 | `runtime/src/engine/engine_lifecycle.cpp:525` |
+| `?CurrentTimeTicks@Timer@System@@SA_JXZ` | 1 | `loops.cpp:1453-1456` (cached via raw `ResolveExport`, `MainLoop::Draw`'s frame timestamp) — **this contradicts `timer.cpp`'s own banner ("no file names `CurrentTimeTicks`"), which is now stale**; `loops.cpp` has since grown a real caller |
+| `CurrentTime`, `GetTicks`, `Shutdown`, `PlatformShutdown`, direct `PlatformStartup`, `Assign` | **0** | uncalled anywhere in the tree |
 
-No instance state — five file-scope statics published via `PublishTimerStatics()`.
+**`System::Time`** (`value_types.cpp`, `@Time@System@@` — one character from `Timer`, easy
+to conflate, keep the names visually distinct in any future header): a value type wrapping
+one `int64_t ticks` (the struct itself is `engine/types/common.h:12-14`, included via
+`Value.h:77`, the B.3.3-step-6B dedup fix already in place). 3 exports: ctor (delegates to
+`Timer::SecondsToTicks` by name), `AsSeconds` (delegates to `Timer::TicksToSeconds`),
+`Serialize`. `g_fn_Time_Serialize`, `fn_Time_AsSeconds`, `fn_Time_Ctor_Float` are ALL
+`Time`, confirmed by their resolved mangled strings (`@Time@System@@`, never `@Timer@`).
 
-**DateTime** — lives inside `value_types.cpp` (no dedicated file). 3 exports: `AsString`
-(forwards internally to the other two, `:293-294`), `DateAsString`, `TimeAsString` (share
-`RtSystem_DateTime_FormatPart`, Win32 `FileTimeToLocalFileTime`/`GetDateFormatW`/
-`GetTimeFormatW`). Only `fn_DateTime_AsString` is `engine_funcs.h`-visible:
-**CALL=1**, `code/Game/Dialog/saveloaddialog.cpp:322`. `DateAsString`/`TimeAsString` have zero
-external callers (only `AsString`'s internal forwarding).
+| pointer | engine_funcs.h CALL | bypass-cache CALL (additional, not double-counted) | true total |
+|---|---|---|---|
+| `fn_Time_Ctor_Float` | 111 | 21 (11 files: `action_base_cnr`, `action_base_complete`, `action_base_movedeps`×2, `boatcomponent_states`, `orchardcomponent_states`, `tradecomponent_states`×2, `autosavedialog` (falls back to the real pointer only on a null slot), `work_act_consume`, `work_act_hunt`×2, `work_act_perform`×7, `tornado.cpp`×2) | 132 |
+| `fn_Time_AsSeconds` | 47 | 14 (`particlecomponent.cpp`×4, `timegoalinstance.cpp`×1, `tornado.cpp`×9) | 61 |
+| `g_fn_Time_Serialize` | 32 | 5 (`performwork.cpp`×2, `playanimation.cpp`×2, `rawmaterialcomponent.cpp`×1) | 37 |
 
-**Time** — distinct from Timer. Type moved to `engine/types/common.h:12` in B.3.3 step 6 (was in
-`Value.h`, collided with `runtime/types/math/Math.h`'s own `Time`). 3 exports in
-`value_types.cpp:509-511` (ctor-from-float delegates to `Timer::SecondsToTicks`, `AsSeconds`
-delegates to `Timer::TicksToSeconds`, `Serialize`). `engine_funcs.h` pointers, re-measured,
-matching a prior pass exactly: `fn_Time_Ctor_Float`=**111** CALL / 82 GUARD / 5 CACHED,
-`fn_Time_AsSeconds`=**47** / 17 / 18, `g_fn_Time_Serialize`=**32** / 17 / 3. Overwhelmingly
-`code/Game/Component` (citizen AI/growth/disease/fire/herd/tornado state machines) and
-`code/Game/Dialog`/`Game`; 1 site each in `standalone/menudialogloopt_stubs.cpp` and
-`standalone/reg_code_lane4.cpp`; no dx11 usage.
+All bypass sites resolve either by name (`ResolveExport`) or the shared exe dispatch slot
+`0x140152b00` (Time ctor), repeated across 6+ files. **This is the fourth recurrence of the
+engine_funcs.h blind spot in this inventory (after Thread/CriticalSection, Random,
+Compression)** — treat it as the rule, not the exception, for this whole namespace.
 
-**Crc** — `crc.cpp` (71 ln, no header). 1 export (`?Compute@CRC@System@@SAIPEBXHI@Z`, `:68`) + 1
-addr row (`0x1800c5490`, `:69`). **Its only real caller in the whole tree** is a file-static
-cache, `runtime/src/io/persistence_saveinfo_job.cpp:326-329` (`RtResolveCached`) — again
-invisible to `engine_funcs.h`. **THREE independent CRC-32 table reimplementations that never
-call this door**: `persistence_worker_win.cpp:174-213` (own `CrcTable()`/`Crc32Chunked()`),
-`persistence_saveinfo_job.cpp:191-213` (a SECOND, separate `CrcTable()` in the same file used at
-`:336`), `runtime/src/object/type_reflection.cpp:177-194` (`BuildCrcTable`, for type-id CRCs).
-The DLL's exported `?_crcTable@CRC@System@@0PAIA` (0x1801f9080) is minted zeroed
-(`rt_data_mint_tables.inc:4681`) and deliberately never read — our own `crc.cpp` builds its own
-table. A second overload, `?Compute@CRC@System@@SAIPEBDI@Z` (0x1800c5430, `const char*` form),
-exists only in `rt_export_addrs.inc:3311` — never registered, never called, unported sibling.
+**`System::DateTime`** (`value_types.cpp`, `@DateTime@System@@`): a third, unrelated,
+opaque 8-byte FILETIME, no relation to Timer/Time. 3 exports registered (`AsString`,
+`DateAsString`, `TimeAsString`); 3 more retail exports (`AsFileTime`, `Serialize`,
+`IsValid`) exist only in `standalone/rt_export_addrs.inc`'s static address table —
+**unregistered/unimplemented anywhere in the tree**. The seed "1 caller" claim
+(`fn_DateTime_AsString`, `code/Game/Dialog/saveloaddialog.cpp:322`, re-verified by direct
+read) is **technically correct for the `fn_DateTime_AsString` pointer** but misses a real
+DateTime **producer**: `runtime/src/io/filesystem_timestamp_win.cpp`'s
+`FileSystem::GetFileTimeStamp` (IO-owned, not touched) returns a `DateTime` by value,
+consumed in `runtime/src/io/persistence_savelist_job.cpp:288-290` via a locally-cached
+`RtResolveCached` pointer — invisible to any `fn_DateTime_*` sweep, though it doesn't call
+any `DateTime` *method*, just produces the raw stamp.
 
-**Error** — `error.cpp` (579 ln, no header). 3 exports (`SetText`, a homed `String::StrAppend`,
-`Display`) + 3 addr rows. Widest caller surface of any class measured this pass — **≈25 real
-`SetText` call sites across SIX independent doors**, none reachable from `engine_funcs.h`:
-`ErrorSetText` wrappers in `platform_startup_win.cpp:118-122` (2 calls), `input_platform_startup_win.cpp:113-117`
-(7 calls), `video/device_startup.cpp:163-168` (4 calls); `allocator.cpp:142-153`'s
-`FatalOutOfMemory` (1 call); `io/filesystem_win.cpp:108,134` (`RT_EXPORT_ONCE`, 1 call); and
-dx11's own by-address import slot `g_im.ErrorSetText` (`dx11/src/contextdata.cpp:245,704`,
-`dx11/src/devicedata.cpp` ×8 — 10 calls). `Display` has 2 calls (`dx11/contextdata.cpp:246,705`,
-`allocator.cpp:145-148`). `HideErrorDisplay` is proven dead (no caller in any of 4 shipped
-binaries per the file's own comment) and deliberately unregistered. `StrAppend` has zero
-external callers (internal only).
+No vtable on any of the three (§2).
 
-**WideString** — `runtime/src/system/widestring.h` (46 ln, `src/`-local, deliberately NOT under
-`runtime/types/system/` "so a caller cannot pass one where the other [`System::String`]
-belongs"). **8 exports** (correction: a prior pass said 9), 8 addr rows: `SetLength`(private),
-`Set`, `AsUTF8`, `CtorFromString`, `CtorFromWide`, `Dtor`, `StrLength`, `CtorFromChars`. Callers,
-all via `RT_EXPORT_ONCE`/`ResolveExport` or dx11's by-address import table (again invisible to
-`engine_funcs.h`): `Set`≥4 (`io/filesystem_createfile_win.cpp:355`,
-`io/persistence_registry_win.cpp:299,927`, `value_types.cpp:394`), `AsUTF8`≥3+dx11×2,
-`CtorFromString`=**7** (contradicts the file's own stale comment claiming only dx11+3 lane-FS
-closures use it — `closure_batch2b_win.cpp:135`, `filesystem_createfile_win.cpp:143`,
-`filesystem_openfile_win.cpp:337`, `filesystem_timestamp_win.cpp:112`,
-`modification_setupfilesystem.cpp:351`, `persistence_registry_win.cpp:444,870,874`),
-`CtorFromWide`/`Dtor`/`StrLength` = 0 by name but 2/2/1 by dx11 address (`g_im.WideString*`,
-`dx11/src/devicedata.cpp:1711,1721,1753,1755,1769` — genuinely called, just invisible to a
-name-only sweep). `CtorFromChars` and `SetLength` (by name-door) are the true zero-callers.
-**`UI::WideString` is confirmed unrelated** — zero hits for `@UI@@`-mangled `WideString`
-anywhere; every hit found is `@System@@`.
+### 5.7 `Crc`
+
+One static function, `CRC::Compute` (`crc.cpp`, 71 ln, 1 export/1 addr, confirmed).
+Reflected CRC-32, table generated locally, verified byte-identical to retail per the file's
+own comment; does not complement the seed on entry. Only caller:
+`runtime/src/io/persistence_saveinfo_job.cpp` (IO-owned, `RT_EXPORT_ONCE`) — evidence only.
+
+### 5.8 `Error`
+
+No struct — two named data slots (`_errorString char[0x2000]`, `_stopApplication bool`,
+`_hideDisplay bool`) via `RT_DATA_SLOT`. `error.cpp` (579 ln): 3 registered rows —
+`SetText` (0x1800c5fa0, appends+`\n`, sets `_stopApplication`), `Display` (0x1800c6060,
+fatal `MessageBoxW`, **UNVERIFIED AT RUNTIME per its own banner** — no oracle run has
+exercised it), and (confusingly, hosted in this file to avoid a concurrent edit to
+`string.cpp`) `System::String::StrAppend` (0x1800c9020) — **not an Error export despite
+living in `error.cpp`**, don't miscount it as one. `HideErrorDisplay` (0x1800c5f90) is
+deliberately absent, documented dead by a 4-binary sweep. Callers are internal to the
+runtime port (`allocator.cpp`'s `FatalOutOfMemory`, `device_startup.cpp`,
+`filesystem_win.cpp`, `platform_startup_win.cpp`, `engine_lifecycle.cpp`,
+`input_platform_startup_win.cpp`, `dx11/src/{contextdata,devicedata}.cpp`) — none via a
+`fn_Error_*` pointer, since none exists.
+
+### 5.9 `WideString`
+
+`runtime/src/system/widestring.h` (46 ln, in `src/` not `types/`): one member
+`wchar_t* data`. `widestring.cpp` (599 ln): **8 exports/8 addr, corrected from an earlier
+"~9/8"**: `SetLength` (private allocator), `Set` (assign, no-op on unchanged), `AsUTF8`
+(→`System::String`), 3 ctors (`const String&`, `wchar_t*`, `char*`), dtor, `StrLength`
+(`wcslen`, not null-tolerant). 21 further retail exports are zero-caller and unregistered.
+**No conflation with `UI::WideString` found** — a full-tree grep for `UI::WideString`,
+`@WideString@UI@@`, `UIWideString` returns **zero hits** anywhere; every `WideString`
+occurrence in this sweep carries `@System@@`. No `s_fn_WideString_*` bypass cache found —
+this is one of the three families (with Crc and Error) where the engine_funcs.h blind spot
+does NOT recur; all callers use `RT_EXPORT_ONCE`/direct address, but there's no competing
+`fn_WideString_*` global to bypass in the first place, so this is a structural non-finding,
+not evidence the pattern is absent elsewhere.
 
 ---
 
 ## 6. Zero-CALL pointers
 
-| pointer/export | class | status | other references |
+| pointer | CALL by name | by-address route checked? | verdict |
 |---|---|---|---|
-| `fn_MemZeroFill` | MemoryAllocator | ZERO-BY-NAME — still resolved unconditionally (`engine_funcs.cpp:3647`) | none, not even a guard |
-| `?Free@MemoryAllocator@System@@QEAAPEAXQEBX@Z` (0x1800c6c00, member Free) | MemoryAllocator | ZERO-BY-NAME-ONLY — registered "so the pair cannot drift", no live C++ reader today; **not checked by address this pass** | UNKNOWN whether a by-address route exists — flag before deleting |
-| `?IsRunning@Thread@System@@QEBA_NXZ` (0x18000c5a0) | Thread | ZERO-BY-NAME-AND-ADDRESS — no `RegisterRuntimeExport` row, no resolver call anywhere | listed only in `rt_export_addrs.inc:289` |
-| `CtorFromChars` (WideString, `PEBD` ctor) | WideString | ZERO-BY-NAME — no `RT_EXPORT_ONCE`/`ResolveExport` call site found by name; dx11's import table does not carry this slot either | none found |
-| `SetLength` (WideString, by name-door) | WideString | ZERO-BY-NAME-ONLY for external callers — reached only via internal C++ calls from `Set`/both ctors | live internal caller |
-| `DateAsString` (DateTime) | DateTime | ZERO-BY-NAME — 0 external callers; reached only via `AsString`'s internal forwarding | live internal caller |
-| `TimeAsString` (DateTime) | DateTime | same as above | live internal caller |
-| `HideErrorDisplay` (Error) | Error | ZERO-BY-NAME-AND-ADDRESS, proven dead in all 4 shipped binaries, deliberately unregistered | none |
-| `StrAppend` (homed on Error, actually `System::String`) | Error/String | ZERO-BY-NAME-ONLY for external callers — internal to `SetText`/`Display` | live internal caller |
-| `?Compute@CRC@System@@SAIPEBDI@Z` (0x1800c5430, char* overload) | Crc | ZERO-BY-NAME-AND-ADDRESS — never registered, never called; only in `rt_export_addrs.inc:3311` | none |
-| `Timer::Shutdown` | Timer | ZERO-BY-NAME — only called internally by `Startup`'s own body (a plain C++ call, not through a door) | live internal call |
-| `Timer::PlatformStartup`/`PlatformShutdown` | Timer | same — internal-only | live internal call |
-| `Timer::GetTicks` | Timer | ZERO-BY-NAME | none found |
-| `Timer::CurrentTime` | Timer | ZERO-BY-NAME | none found |
-| `Timer::Assign` (compiler-gen copy-assign) | Timer | ZERO-BY-NAME — no-op body anyway | none |
+| `fn_MemZeroFill` | 0 | not found registered anywhere | ZERO-BY-NAME-AND-ADDRESS |
+| `Timer::CurrentTime`, `Timer::GetTicks`, `Timer::Shutdown`, `Timer::PlatformShutdown`, direct `Timer::PlatformStartup`, `Timer::Assign` | 0 | registered (in `timer.cpp`'s export table) but never called from anywhere in the tree by name; not separately re-checked by address beyond the registration itself | ZERO-BY-NAME-ONLY — each has a real registered body, so a by-address route through a table this sweep didn't see cannot be ruled out; do not delete without checking `standalone/rt_data_mint_tables.inc`/`cutover_manifest.inc` for an indirect reference first |
+| `DateTime::AsFileTime`, `DateTime::Serialize`, `DateTime::IsValid` | 0 | **not even ported** — no `RtSystem_DateTime_*` body exists; found only in `rt_export_addrs.inc`'s static address table | ZERO-BY-NAME-AND-ADDRESS (no body to reach) |
+| `Error::HideErrorDisplay` | 0 | documented dead by a prior 4-binary sweep, in `error.cpp`'s own comment | ZERO-BY-NAME-AND-ADDRESS, previously confirmed |
+| `Color`'s 3 ctors + assign + 4 accessors | 0 | retail-exported, never `RegisterRuntimeExport`-ed; not independently address-checked this pass | ZERO-BY-NAME-ONLY (registration itself is absent, so "by address" doesn't apply the same way — flag as UNKNOWN whether anything reaches these by a raw address load) |
+| `WideString`'s other 21 retail exports (beyond the 8 registered) | 0 | per the file's own banner census check | ZERO-BY-NAME-AND-ADDRESS, per the file's own prior audit — not independently re-verified by address this pass |
 
-**None of these were checked exhaustively by retail ADDRESS for an indirect table route** (the
-IO agent's §6 caveat applies here too: a name-based lexer cannot see an indirect call through a
-function-pointer table) — every row above is marked ZERO-BY-NAME at minimum; only
-`IsRunning`, the char*-`Compute` overload, and `HideErrorDisplay` were additionally confirmed
-absent from `rt_export_addrs.inc`'s registration path (ZERO-BY-NAME-AND-ADDRESS). The rest are
-ZERO-BY-NAME-ONLY and need an address cross-check before any deletion.
+**Caution, restating B34_RULES §6.5(f) for this family:** a name-based lexer cannot see an
+indirect call through a function-pointer table. None of the rows above were cross-checked
+against `standalone/rt_data_mint_tables.inc` for a by-address indirect reference except
+where stated — treat the "ZERO-BY-NAME-ONLY" rows as **not yet cleared for deletion**.
 
 ---
 
 ## 7. Proposed batches for 4b
 
-Unlike IO, this surface splits cleanly by CLASS OWNERSHIP rather than by caller directory,
-because most `System` classes have small, disjoint, class-owned source files
-(`runtime/src/system/*.cpp`) and their callers, while numerous, are almost all mechanical
-`fn_X(args)` → `X.Method(args)` rewrites with no serialize-header-ordering hazard like IO's.
+Disjoint by construction (each targets a different set of `runtime/src/system/*.cpp` files
+and a different, non-overlapping `code/Game` caller footprint), ordered by dependency and
+risk:
 
-- **Batch S1 — the allocator core, ONE owner, serial, NOT this step.** 1,163+ CALL sites (524
-  member + 616 static-free + 16 static-alloc + 17 third-surface, excluding the separate
-  container-only `DoorAlloc`/`DoorFree` path), bigger than IO's entire caller surface. Must
-  reconcile with `alloc_door.cpp`'s design and the redzone shim BEFORE any caller batch runs —
-  a caller conversion that moves a call off `fn_MemAllocStatic` without keeping the redzone shim
-  reachable regresses `BANISHED_REDZONE` silently. Recommend its own step (B.3.5 or later),
-  matching `B34_RULES.md` §6.5(c)'s existing deferral for IO's identical allocator pointers.
-- **Batch S2 — `Thread`/`CriticalSection`, ONE owner.** Small caller count (≈27 real ops across
-  8 files) but the ONLY polymorphic class in scope and the only one with a live cross-module
-  vtable-identity hazard (§2). Must NOT give `Thread` a real C++ constructor in 4b — NOT because
-  of the DLL (coordinator correction, §2: that route is dead) but because objects deriving from
-  it still wear minted tables (`B34_RULES.md` §4.3). In scope for 4b: declare the class, move the
-  non-ctor bodies onto members with the doors delegating, convert the ~27 caller ops from
-  per-file `s_fn_*` caches to member calls (they are NOT "already fine": a per-file
-  `ResolveExport` cache is exactly the resolved-pointer indirection B removes), and decide
-  `IsRunning`'s fate (port it, or delete the dead export). No `RtFactOp` row exists (§2, resolved).
-- **Batch S3 — Random/Color/Time/DateTime, disjoint from S1/S2, ~350 CALL sites**
-  (`code/Game/Component` and `Game` dominate, per §5.2/§5.5). All mechanical rewrites once each
-  class exists; `Random`'s "member subobject of a menu struct" construction pattern (§3) is the
-  one judgement call — do not give it a standalone ctor when retail places it in-line.
-- **Batch S4 — Configuration/Compression/Timer/Crc/Error/WideString, disjoint, ~60-90 CALL
-  sites total but WIDE (6+ independent doors for Error alone, §5.5).** Recommend ONE owner
-  because so many of these are single-digit-count classes whose caller work is mostly "confirm
-  the door, don't touch the 25 Error call sites without also finding all six door wrappers."
-  The three duplicate CRC-32 table implementations (§5.5) are a design question for this
-  batch's owner, not a caller-conversion task — collapsing them is out of scope for a caller
-  sweep and risks the same kind of behavioural drift `B34_RULES.md` §6.5(b) warned about for
-  IO's aliased slots.
-- **Deferred past 4b, and why**: the allocator (S1, above — interacts with the redzone door
-  design exactly as `B34_RULES.md` §6.5(c) already deferred IO's identical pointers);
-  `System::Thread`'s ctor/dtor conversion (blocked on DLL removal, §2); the three-way CRC table
-  consolidation (a design decision, not a batch).
+1. **Batch S1 — the non-polymorphic small classes with clean, fully-visible caller
+   surfaces**: `Crc`, `Error`, `Color`, `DateTime`. Smallest CALL counts (6, ~10 combined,
+   4 real), no vtable, no bypass-cache swarm found for Crc/Error/DateTime (Color has none
+   either — it has no live constructor at all). One owner, one commit. Good first move to
+   prove the pattern, same role batch A played for IO callers.
+2. **Batch S2 — `WideString`**: self-contained, 8 exports, no bypass caches, callers live
+   entirely in IO/application files this step doesn't own (evidence only) — converting the
+   TYPE is this step's job; the callers are someone else's caller-batch problem later. Low
+   risk, can run in parallel with S1.
+3. **Batch S3 — `Configuration`**: singleton with real instance state (§5.4) — needs the
+   map/sub-object design settled before conversion, one owner, do not fold into S1 given the
+   live map-insert dependency on the settings-load path.
+4. **Batch S4 — `Timer`/`Time`**: `Timer` is a pure static-function conversion (5 accessors
+   + Startup, no instance data). `Time`'s ctor/AsSeconds/Serialize must move in the SAME
+   commit as `Timer`'s since they delegate to it by name today — splitting them risks a
+   half-converted delegation. Caller-side work is large (68/61/37 real CALL counts including
+   bypass caches) and should be a SEPARATE later batch, directory-partitioned like the IO
+   caller batches, only after the receiver exists.
+5. **Batch S5 — `Random`**: receiver conversion is small (no vtable, straightforward
+   MT19937 state struct) but the construction-site finding (§3, §5.2 — two long-lived
+   independent streams plus dozens of ephemeral ones) means the batch owner must NOT
+   collapse instances. Caller-side work (75+38+25+13+31 = 182 core CALL + ~15 files of
+   bypass duplication) is a second, later batch.
+6. **Batch S6 — `Thread`/`CriticalSection`**: highest coordination cost. `Thread` is the
+   one polymorphic class in scope and its layout is shared with `IO::Persistence` and
+   `Audio::Stream` (§5.1) — this batch's owner must coordinate with whoever owns those
+   classes before changing `Thread.h`. Recommend running LAST among the small classes, not
+   first, despite being conceptually simple, because of that blast radius.
+7. **Batch S7 — `MemoryAllocator`**: explicitly OUT of B.3.4b scope per B34_RULES §6.5(c)
+   (already deferred once from B.3.4 IO) — 1,146+ CALL sites, a settled door design
+   (`alloc_door.cpp`) that must not be disturbed, and the 31+26-file cache swarm (§4.2,
+   re-verified this pass) that needs its own sweep before anyone touches the class.
+   **Recommend deferring past B.3.4b too**, as its own step with its own coordinator, exactly
+   as B34_RULES already argued for B.3.4 proper — nothing here changes that judgment, it only
+   sharpens the file count.
+8. **Batch S8 — `Compression`**: small (3 exports, 4 real callers, all inside IO's files) —
+   could ride along with whichever IO block converts `CompressedStream`, since its only
+   construction site and both call sites are physically inside `runtime/src/io/`. Flag for
+   the coordinator to decide: convert here as an orphan, or hand to the IO owner as a
+   dependency of `CompressedStream`.
+
+**What must go first, across all batches:** nothing in System-rest has an IO-style
+"receiver before caller" ordering constraint except S4 (Timer before Time's callers) and
+S1/S2/S3/S5/S6/S8's own internal receiver-then-caller split. Unlike IO, there is no shared
+header multiple classes fight over (each System-rest class's export lives entirely inside
+its own `.cpp`), so batches S1-S3, S5, S8 have **no cross-batch file collisions** and can run
+fully in parallel. S4 and S6 are the only two with an internal must-be-serial dependency
+(Timer-before-Time; Thread-before-anything-that-embeds-it).
+
+**What is deferred past 4b, and why:** `MemoryAllocator` (S7, per B34_RULES §6.5(c),
+sharpened here), and the caller-side sweeps for `Random`/`Time`/`Thread` (large, and depend
+on their own receivers existing first — same "receiver first, then callers" rule B34_RULES
+applied to IO).
 
 ---
 
 ## 8. Surprises
 
-1. **`System::Thread` is the ONLY polymorphic class in the entire `System`-rest scope.**
-   Every other class — including `CriticalSection`, which some earlier framing implicitly
-   grouped with Thread as "the threading classes" — is a plain POD or fully-static class. A
-   batch owner assuming CriticalSection needs the same vtable care as Thread would be solving a
-   problem that doesn't exist for it.
-2. **Three separate System classes are entirely invisible to `engine_funcs.h`** (not just
-   Thread/CriticalSection as B34_RULES.md already flagged): `Compression` (zero `fn_Compression_*`
-   pointers anywhere), `Crc` (its one real caller is a file-static cache in
-   `persistence_saveinfo_job.cpp`), and `Configuration`'s SINGLETON specifically (the singleton
-   slot is cached independently in three files, even though Configuration's four static
-   String-returning members ARE visible via `engine_funcs.h`). Any batch scoped by reading
-   `engine_funcs.h` alone would size these three at zero and be wrong.
-3. **`Error::SetText` has SIX independent call doors**, the widest fan-out of any pointer
-   measured in this pass — three per-file `ErrorSetText` wrapper functions, one allocator-owned
-   wrapper, one `RT_EXPORT_ONCE` direct call, and one dx11 by-address import-table slot. A batch
-   that "converts `Error::SetText`" by finding only the `engine_funcs.h`-style callers (there are
-   none) would report false completion.
-4. **Three independent CRC-32 table implementations coexist** and none of the other two ever
-   calls the one class actually named `System::CRC`. This is very likely intentional (each
-   caller may need a different poly/seed), but it means "CRC's caller surface" as a single
-   number is meaningless without saying which table.
-5. **`fn_MemFree`'s registered retail body (`0x1800c6c00`) has no live C++ reader** — the
-   `engine_funcs.h` `fn_MemFree` pointer itself has silently become a thunk onto
-   `fn_MemFreeStatic` rather than the member `Free`. This is a pre-existing fact, not something
-   this pass changed, but it means "the member form" is really two different retail bodies
-   depending which of `fn_MemAlloc`/`fn_MemFree` you're looking at (Alloc reaches
-   `0x1800c6e60`; Free reaches `0x1800c7ad0`, the STATIC free, not `0x1800c6c00`). A closing
-   pass should decide whether `0x1800c6c00`'s registration should be deleted as zero-caller — it
-   is a live registration for a dead route.
-6. **A prior inventory (`IO_CALLER_INVENTORY.md:399`) misattributed `citizenai_leisure.cpp`** to
-   the `s_fn_MemAllocSA` per-file-cache pattern; direct read shows it uses the ordinary shared
-   `fn_MemAlloc`. Corrected here (§4.2); the file should not be counted as a "hidden allocator
-   surface" site in any future batch sizing.
-7. **`WideString::CtorFromString` has 7 live callers**, not the "dx11 + 3 lane-FS closures"
-   its own file comment claims — the comment describes an earlier wave's state and is stale.
-   Anyone reading that comment to scope a WideString batch would undercount by more than half.
-8. **Four of `WideString`'s eight exports (`CtorFromWide`, `Dtor`, `StrLength`, and part of
-   `AsUTF8`) are reached ONLY through dx11's own by-address import table** (`g_im.WideString*`),
-   never by a mangled-name resolve in `code/`, `engine/`, or `standalone/`. A name-only sweep of
-   these four would report them zero-caller, which is exactly the "most dangerous wrong answer"
-   `B34_RULES.md` §6.5(d) warned about for Thread — the same hazard exists here, on a different
-   axis (by-address dx11 import table rather than a `s_fn_*` cache).
-9. **The B34_RULES.md brief's claim that `tornado.cpp` uses `CriticalSection`/`Thread` is
-   unsupported.** A direct grep of that file for both mangled substrings returns zero hits. This
-   inventory drops it from the caller roster; a batch owner should not budget time to touch it
-   for this reason.
-10. **`Timer.h` lives in `runtime/src/system/`, not `runtime/types/system/`** — the one class in
-    this scope with a header that isn't where the project's usual convention (`.claude/rules/type-headers.md`)
-    would suggest to look for it. `WideString`'s header is similarly src/-local, deliberately, so
-    this may be an intentional pattern for classes with no ABI-pinned layout rather than an
-    inconsistency — worth a one-line confirmation from whoever owns `.claude/rules/type-headers.md`
-    before a batch owner "fixes" it by moving the file.
+1. **The engine_funcs.h blind spot is not a one-off — it recurred in 4 of 8 families
+   swept** (Thread/CriticalSection, Random, Compression, Time), always in the same shape:
+   a file-static `s_fn_*` (or similarly named) cache resolving the SAME mangled export
+   `engine_funcs.h` already exposes through a global `fn_*`, entirely independently. This
+   confirms B34_RULES §6.5(d)'s warning was not IO-specific — it's a standing property of
+   this codebase's caller idiom, and any future System/IO inventory should sweep raw
+   mangled strings FIRST, `engine_funcs.h` second, not the reverse.
+2. **The MemAlloc member/static asymmetry (§4.1) contradicts the intuition that "member"
+   and "static" are just two spellings of one thing.** They are different retail bodies
+   with different locking behavior; a hasty class conversion that gives `MemoryAllocator` a
+   single `Allocate` method risks silently adding or removing a lock relative to one of the
+   ~540 combined call sites.
+3. **The MemFree member/static IDENTITY (§4.1) is the mirror-image trap**: they already
+   call the same body today, by accident of a lambda thunk that discards an argument, not
+   by design. "Fixing" this to route the member form to the true member body
+   (0x1800c6c00) would be the first time that address is ever exercised — an unverified
+   change dressed as a cleanup.
+4. **`System::Random` is not one RNG.** At least two independent long-lived streams plus
+   many ephemeral ones (§3, §5.2) — the single most consequential fact for anyone tempted
+   to "simplify" Random into a shared singleton, since doing so would change world-gen/
+   weather/behavior determinism.
+5. **`Configuration` has real instance state despite `Value.h`'s own comment claiming
+   otherwise** (§5.4) — the header comment is correct only for the file it was written
+   about; a reader who trusts it without checking `configuration.cpp` will under-scope the
+   class.
+6. **Thread's vtable and layout are shared across step boundaries** — `IO::Persistence`
+   and `Audio::Stream` embed a `System::Thread` base and independently stamp/restamp its
+   vtable. This step's owner cannot treat `Thread.h` as a private file.
+7. **`CriticalSection`'s own ctor export is bypassed by two of its three known embedders**
+   (`Persistence`, `Audio::Stream` call raw Win32 API directly) — a real RAII conversion of
+   `CriticalSection` would need a follow-up pass on those two sites, not just its own
+   ctor/dtor door, to actually take effect everywhere.
+8. **`timer.cpp`'s own banner comment is stale** — it claims no caller for
+   `CurrentTimeTicks`, but `loops.cpp` has since grown one (§5.6). A comment inside a
+   source file is not a substitute for re-measuring; this is the same lesson B34_RULES
+   §7.2 states as a standing rule ("counts are tokens until proven otherwise"), just found
+   here in prose form rather than a number.
+9. **No System-rest class has the IO-style vtable-retirement hazard at all** (§2) — this
+   phase is structurally easier than IO in that one respect: there is no minted table to
+   keep alive across a multi-step boundary for any of these thirteen classes except
+   `Thread`, and `Thread`'s is already route-scoped and well-understood.
+10. **The real method defect this pass found was not a scratchpad filename collision — it
+    was two sub-agents each disobeying an explicit "do not write the deliverable" instruction
+    and independently writing this whole file, the second overwriting the first with no
+    merge.** Disclosed in full in the Method note at the top rather than smoothed over. The
+    concrete damage was to §4.2's file count, which the two writers reported differently (one
+    lower, one higher) and neither reproducibly — this pass fixed it by re-running the
+    grep directly rather than trusting either sub-agent's number. Any future coordinator of a
+    multi-agent inventory should treat "the sub-agent's final message says a file was
+    written" as a signal to check who actually holds the pen, not just what the numbers say.
