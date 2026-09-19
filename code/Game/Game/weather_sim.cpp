@@ -48,6 +48,11 @@
 // ClimateGenerator fields (real; ctor 0x1400930c0 defaults):
 //   +0x34 temperatureBase=50  +0x38 tempVariation=30  +0x3c precip=5  +0x40 wind=10
 
+// ENDGAME B.3.5 Video/Graphics caller batch: Graphics::Scene is a real class.
+// This header MUST precede "resolve.h": resolve.h pulls <windows.h>, whose
+// <wingdi.h> declares a global `Rectangle` FUNCTION that hides
+// `Volume::Rectangle`'s class name in Volume.h's own static_asserts.
+#include "graphics/Scene.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -87,21 +92,16 @@ const float kPerlinOctaves = 4.0f;             // DAT_140172194
 const float k1_12          = f32(0x3daaaaab);  // DAT_1401720e0 = 1/12
 const float kKfCount       = 48.0f;            // DAT_1401721e4
 
-// Scene::RemoveGlobalObject — not in engine_funcs; resolve lazily.
-typedef void  (*fn_RemoveGlobalObject_t)(void* scene, void* geo);
 // ComponentEntity_CopyCtor (0x1400c3720) — clone an entity from a template desc.
 typedef void* (*fn_EntityCopyCtor_t)(void* mem, void* templateDesc);
 // EntityList register (0x1400c48a0) — RCX=entityList(gameWorld+0xe8), RDX=IBP*, R8D=typeId.
 typedef void  (*fn_EntityRegister_t)(void* entityList, void* ibp, int typeId);
-fn_RemoveGlobalObject_t s_fnRemoveGlobalObject = nullptr;
 fn_EntityCopyCtor_t     s_fnEntityCopyCtor     = nullptr;
 fn_EntityRegister_t     s_fnEntityRegister     = nullptr;
 bool s_simResolved = false;
 void EnsureSimResolved() {
     if (s_simResolved) return;
     s_simResolved = true;
-    s_fnRemoveGlobalObject = reinterpret_cast<fn_RemoveGlobalObject_t>(
-        ResolveExport("?RemoveGlobalObject@Scene@Graphics@@QEAAXPEAVGeometry@2@@Z"));
     s_fnEntityCopyCtor = reinterpret_cast<fn_EntityCopyCtor_t>(
         ResolveAddr(Module::Exe, 0x1400c3720));
     s_fnEntityRegister = reinterpret_cast<fn_EntityRegister_t>(
@@ -240,9 +240,11 @@ extern "C" void Weather_ResetTime_Reimpl(void* weatherSelf, void* time) {
                     reinterpret_cast<void(*)(void*, void*)>(vt[1])(geo, time);
                 float intensity = *reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(geo) + 0xc0);
                 if (intensity == 0.0f || weatherSetting == 0) {
-                    if (s_fnRemoveGlobalObject) {
+                    {
                         void* scene = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(gw) + 0x60);
-                        if (scene) s_fnRemoveGlobalObject(scene, geo);
+                        if (scene)
+                            reinterpret_cast<Graphics::Scene*>(scene)->RemoveGlobalObject(
+                                reinterpret_cast<Graphics::Geometry*>(geo));   // B.3.5 bridge
                     }
                     if (vt && vt[0])   // +0x00 scalar-deleting dtor(geo, free=1)
                         reinterpret_cast<void*(*)(void*, uint32_t)>(vt[0])(geo, 1);

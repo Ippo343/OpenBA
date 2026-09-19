@@ -17,6 +17,11 @@
 //
 // Registered by standalone/reg_game_leaf.cpp.
 
+// ENDGAME B.3.5 Video/Graphics caller batch: Graphics::Scene is a real class.
+// Ahead of "resolve.h" on purpose — resolve.h pulls <windows.h>, and
+// <wingdi.h>'s global `Rectangle` function hides `Volume::Rectangle`'s class
+// name inside Volume.h's own static_asserts (Geometry.h includes Volume.h).
+#include "graphics/Scene.h"
 #include "engine_funcs.h"
 #include "system/Filename.h"
 #include "system/String.h"
@@ -220,13 +225,13 @@ void Game_WeatherDtor(void* self) {
     void** arr = *reinterpret_cast<void***>(b + 0x50);
     void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     void* scene = gw ? *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(gw) + 0x60) : nullptr;
-    static auto removeGlobal = reinterpret_cast<void(*)(void*, void*)>(
-        ResolveExport("?RemoveGlobalObject@Scene@Graphics@@QEAAXPEAVGeometry@2@@Z"));
     if (arr && count > 0) {
         for (int i = 0; i < count; ++i) {
             void* geom = arr[i];
             if (geom) {
-                if (removeGlobal && scene) removeGlobal(scene, geom);
+                if (scene)
+                    reinterpret_cast<Graphics::Scene*>(scene)->RemoveGlobalObject(
+                        reinterpret_cast<Graphics::Geometry*>(geom));   // B.3.5 bridge
                 // Retail: (**(code **)*puVar2)(puVar2, 1) — object -> vtable ->
                 // slot 0. Same one-deref-short bug as Game_ImageCaptureDtor above.
                 void** vtbl = *reinterpret_cast<void***>(geom);

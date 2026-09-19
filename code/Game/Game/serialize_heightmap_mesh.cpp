@@ -38,6 +38,11 @@
 // (The original disasm writes these in a fairly idiosyncratic order — see
 //  fAUC_1400ac880 below for line-for-line decompile.)
 
+// ENDGAME B.3.5 Video/Graphics caller batch: Video::{Vertex,Index}Buffer are
+// real classes. Ahead of "resolve.h" — resolve.h pulls <windows.h>, whose
+// <wingdi.h> declares a global `Rectangle` FUNCTION that hides
+// `Volume::Rectangle`'s class name inside Volume.h's own static_asserts.
+#include "video/Buffers.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -62,62 +67,27 @@ constexpr float kNormalDeltaStep = -1.0f / 256.0f; // 0x140172270 (-0.00390625f)
 constexpr float kNormalDefaultZ  = 2.0f;        // 0x140172174
 
 // ============================================================
-// Late-bound IAT slot resolution (Runtime DLL function pointers)
+// ENDGAME B.3.5 Video/Graphics caller batch — the four buffer doors are gone
 // ============================================================
 //
-// The original exe calls go through .rdata dispatch slots in the
-// 0x14015xxxx range, which are filled at startup by the Runtime DLL's name
-// resolution machinery. In standalone we either pre-fill those slots
-// (RegisterDispatchSlot in address_registry.cpp) or resolve fresh per-call
-// via mangled-name export lookup. We follow the moveto.cpp pattern: cache
-// once on first use, log a one-shot warning on miss.
-
-typedef bool (*VertexBufferCreate_t)(void* self, int sizeBytes, bool dynamic, void* initialData);
-typedef bool (*VertexBufferSet_t   )(void* self, int sizeBytes, int byteOffset, void* data);
-typedef bool (*IndexBufferCreate_t )(void* self, int sizeBytes, bool dynamic, void* initialData);
-typedef bool (*IndexBufferSet_t    )(void* self, int sizeBytes, int byteOffset, void* data);
-
-
-VertexBufferCreate_t s_VertexBufferCreate = nullptr;
-VertexBufferSet_t    s_VertexBufferSet    = nullptr;
-IndexBufferCreate_t  s_IndexBufferCreate  = nullptr;
-IndexBufferSet_t     s_IndexBufferSet     = nullptr;
-bool s_runtimeResolved = false;
-
-void ResolveRuntimePtrs() {
-    if (s_runtimeResolved) return;
-
-    // Try IAT dispatch slots first (filled by RegisterDispatchSlot).
-    auto loadSlot = [](uintptr_t slotAddr) -> void* {
-        void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, slotAddr));
-        return slot ? *slot : nullptr;
-    };
-
-    s_VertexBufferCreate = reinterpret_cast<VertexBufferCreate_t>(loadSlot(0x140152668));
-    s_VertexBufferSet    = reinterpret_cast<VertexBufferSet_t   >(loadSlot(0x140152690));
-    s_IndexBufferCreate  = reinterpret_cast<IndexBufferCreate_t >(loadSlot(0x140152660));
-    s_IndexBufferSet     = reinterpret_cast<IndexBufferSet_t    >(loadSlot(0x140152698));
-
-    // Fallback: resolve directly from Runtime DLL exports via mangled names.
-    if (!s_VertexBufferCreate) {
-        s_VertexBufferCreate = reinterpret_cast<VertexBufferCreate_t>(
-            ResolveExport("?Create@VertexBuffer@Video@@QEAA_NH_NPEAX@Z"));
-    }
-    if (!s_VertexBufferSet) {
-        s_VertexBufferSet = reinterpret_cast<VertexBufferSet_t>(
-            ResolveExport("?Set@VertexBuffer@Video@@QEAA_NHHPEAX@Z"));
-    }
-    if (!s_IndexBufferCreate) {
-        s_IndexBufferCreate = reinterpret_cast<IndexBufferCreate_t>(
-            ResolveExport("?Create@IndexBuffer@Video@@QEAA_NH_NPEAX@Z"));
-    }
-    if (!s_IndexBufferSet) {
-        s_IndexBufferSet = reinterpret_cast<IndexBufferSet_t>(
-            ResolveExport("?Set@IndexBuffer@Video@@QEAA_NHHPEAX@Z"));
-    }
-
-    s_runtimeResolved = true;
-}
+// This file used to reach `Video::{Vertex,Index}Buffer::{Create,Set}` through
+// four file-local caches, bound first from the exe's .rdata dispatch slots
+// (0x140152668 / 0x140152690 / 0x140152660 / 0x140152698) and then, on a miss,
+// from the mangled exports
+//   ?Create@VertexBuffer@Video@@QEAA_NH_NPEAX@Z
+//   ?Set@VertexBuffer@Video@@QEAA_NHHPEAX@Z
+//   ?Create@IndexBuffer@Video@@QEAA_NH_NPEAX@Z
+//   ?Set@IndexBuffer@Video@@QEAA_NHHPEAX@Z
+// All four are real members of block D's `Video::VertexBuffer` /
+// `Video::IndexBuffer` (runtime/types/video/Buffers.h, bodies in
+// runtime/src/video/buffers.cpp), so every call below is a direct member call
+// and the caches, their typedefs, the `loadSlot` lambda, the latch and the
+// three door-readiness guards went with the last caller.
+//
+// The two `int` arguments of `Set` are passed in exactly the order the door
+// took them; only the parameter NAMES differ between this file's old typedef
+// (`sizeBytes, byteOffset`) and Buffers.h (`offset, count`). That naming
+// disagreement is pre-existing and is reported, not "fixed", here.
 
 // ============================================================
 // Helper C — TradeWork_helper_e270 (vertex normal compute)
@@ -362,19 +332,7 @@ extern "C" void TradeWork_impl_sub_c1e0_Body(void* self) {
         return;
     }
 
-    ResolveRuntimePtrs();
-    if (!s_VertexBufferCreate || !s_VertexBufferSet ||
-        !s_IndexBufferCreate  || !s_IndexBufferSet) {
-        static bool s_warned = false;
-        if (!s_warned) {
-            printf("[sub_c1e0] VertexBuffer/IndexBuffer Runtime exports unresolved — "
-                   "skipping mesh build (cascade-safe no-op). Geometry will lack render data "
-                   "but menu can still launch.\n");
-            fflush(stdout);
-            s_warned = true;
-        }
-        return;
-    }
+    // B.3.5: the four-door readiness guard is gone with the doors.
 
     uint8_t* selfBytes = reinterpret_cast<uint8_t*>(self);
 
@@ -432,8 +390,9 @@ extern "C" void TradeWork_impl_sub_c1e0_Body(void* self) {
     //     Total size = vertsPerChunk * chunksPerSide² * 16 bytes.
     int totalVerts  = vertsPerChunk * chunksPerSide * chunksPerSide;
     int totalVbSize = totalVerts * 0x10;
-    bool createOk = s_VertexBufferCreate(selfBytes + 0x100, totalVbSize, /*dynamic=*/false,
-                                         /*initialData=*/nullptr);
+    bool createOk = reinterpret_cast<Video::VertexBuffer*>(selfBytes + 0x100)
+                        ->Create(totalVbSize, /*dynamic=*/false,
+                                 /*initialData=*/nullptr);   // B.3.5 bridge
 
     printf("[sub_c1e0] entry self=%p gridSize=%d chunkSize=%d chunksPerSide=%d "
            "vertsPerSide=%d vertsPerChunk=%d totalVbSize=%d (0x%x) createOk=%d\n",
@@ -468,7 +427,8 @@ extern "C" void TradeWork_impl_sub_c1e0_Body(void* self) {
 
                 int byteOffset = (chunkRow * chunksPerSide + chunkCol) * vertsPerChunk * 0x10;
                 int byteSize   = vertsPerChunk * 0x10;
-                bool ok = s_VertexBufferSet(selfBytes + 0x100, byteSize, byteOffset, vertScratch);
+                bool ok = reinterpret_cast<Video::VertexBuffer*>(selfBytes + 0x100)
+                              ->Set(byteSize, byteOffset, vertScratch);   // B.3.5 bridge
 
                 if (chunkRow == 0 && chunkCol == 0) {
                     firstSetReturned = ok ? 1 : 0;
@@ -512,8 +472,8 @@ extern "C" void TradeWork_impl_sub_c1e0_Body(void* self) {
     // skip emulating this dead branch.
 
     // (5) Allocate the master IndexBuffer at self+0x120 (idxBytes total).
-    s_IndexBufferCreate(selfBytes + 0x120, idxBytes, /*dynamic=*/false,
-                        /*initialData=*/nullptr);
+    reinterpret_cast<Video::IndexBuffer*>(selfBytes + 0x120)
+        ->Create(idxBytes, /*dynamic=*/false, /*initialData=*/nullptr);   // B.3.5 bridge
 
     // (6) Fill the index buffer — checkerboard quad winding.
     //     Two triangles per quad, alternating diagonal direction by parity.
@@ -552,7 +512,8 @@ extern "C" void TradeWork_impl_sub_c1e0_Body(void* self) {
         }
 
         // (7) Upload the indices.
-        bool ibSetOk = s_IndexBufferSet(selfBytes + 0x120, idxBytes, 0, idxBuf);
+        bool ibSetOk = reinterpret_cast<Video::IndexBuffer*>(selfBytes + 0x120)
+                           ->Set(idxBytes, 0, idxBuf);   // B.3.5 bridge
         printf("[sub_c1e0] IB Set returned %d (idxBytes=%d quadsPerChunk=%d)\n",
                ibSetOk ? 1 : 0, idxBytes, quadsPerChunk);
         fflush(stdout);
@@ -587,13 +548,7 @@ extern "C" void TradeWork_impl_sub_c1e0_Body(void* self) {
 extern "C" void WorldGen_BuildWaterMesh(void* self) {
     if (!self) return;
     if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_MemFreeStatic) return;
-    ResolveRuntimePtrs();
-    if (!s_VertexBufferCreate || !s_VertexBufferSet ||
-        !s_IndexBufferCreate  || !s_IndexBufferSet) {
-        fprintf(stderr, "[water] VB/IB Runtime exports unresolved — no water mesh\n");
-        fflush(stderr);
-        return;
-    }
+    // B.3.5: the four-door readiness guard is gone with the doors.
 
     uint8_t* sb = reinterpret_cast<uint8_t*>(self);
     int gridSize      = *reinterpret_cast<int*>(sb + 0xC0);
@@ -644,7 +599,8 @@ extern "C" void WorldGen_BuildWaterMesh(void* self) {
     // (1) VertexBuffer at +0x160 (same total size as terrain VB).
     int totalVerts  = vertsPerChunk * chunksPerSide * chunksPerSide;
     int totalVbSize = totalVerts * 0x10;
-    bool vbOk = s_VertexBufferCreate(sb + 0x160, totalVbSize, false, nullptr);
+    bool vbOk = reinterpret_cast<Video::VertexBuffer*>(sb + 0x160)
+                    ->Create(totalVbSize, false, nullptr);   // B.3.5 bridge
 
     for (int chunkRow = 0; chunkRow < chunksPerSide; ++chunkRow) {
         for (int chunkCol = 0; chunkCol < chunksPerSide; ++chunkCol) {
@@ -682,7 +638,8 @@ extern "C" void WorldGen_BuildWaterMesh(void* self) {
                 }
             }
             int byteOffset = (chunkRow * chunksPerSide + chunkCol) * vertsPerChunk * 0x10;
-            s_VertexBufferSet(sb + 0x160, vertsPerChunk * 0x10, byteOffset, vertScratch);
+            reinterpret_cast<Video::VertexBuffer*>(sb + 0x160)
+                ->Set(vertsPerChunk * 0x10, byteOffset, vertScratch);   // B.3.5 bridge
         }
     }
 
@@ -692,7 +649,8 @@ extern "C" void WorldGen_BuildWaterMesh(void* self) {
     int idxBytes      = quadsPerChunk * 12;
     int16_t* idxBuf = reinterpret_cast<int16_t*>(
         fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(idxCount) * 2, 2));
-    s_IndexBufferCreate(sb + 0x180, idxBytes, false, nullptr);
+    reinterpret_cast<Video::IndexBuffer*>(sb + 0x180)
+        ->Create(idxBytes, false, nullptr);   // B.3.5 bridge
     if (idxBuf) {
         int idx = 0;
         for (int row = 0; row < chunkSize; ++row) {
@@ -715,7 +673,8 @@ extern "C" void WorldGen_BuildWaterMesh(void* self) {
                 idx += 6;
             }
         }
-        s_IndexBufferSet(sb + 0x180, idxBytes, 0, idxBuf);
+        reinterpret_cast<Video::IndexBuffer*>(sb + 0x180)
+            ->Set(idxBytes, 0, idxBuf);   // B.3.5 bridge
         fn_MemFreeStatic(idxBuf);
     }
     fn_MemFreeStatic(vertScratch);
@@ -776,17 +735,7 @@ void GeometryChunkUpdate_Body(void* self) {
         return;
     }
 
-    ResolveRuntimePtrs();
-    if (!s_VertexBufferSet) {
-        static bool s_warned = false;
-        if (!s_warned) {
-            printf("[GeometryChunkUpdate] VertexBuffer::Set unresolved — "
-                   "dirty chunks will not upload (terrain stops updating)\n");
-            fflush(stdout);
-            s_warned = true;
-        }
-        return;
-    }
+    // B.3.5: the `VertexBuffer::Set` door-readiness guard is gone with the door.
 
     int gridSize       = *reinterpret_cast<int*>(selfBytes + 0xC0);
     int chunkSize      = *reinterpret_cast<int*>(selfBytes + 0xC8);
@@ -828,7 +777,8 @@ void GeometryChunkUpdate_Body(void* self) {
 
         int byteSize   = vertsPerChunk * 0x10;
         int byteOffset = (row * chunksPerSide + col) * vertsPerChunk * 0x10;
-        s_VertexBufferSet(selfBytes + 0x100, byteSize, byteOffset, vertScratch);
+        reinterpret_cast<Video::VertexBuffer*>(selfBytes + 0x100)
+            ->Set(byteSize, byteOffset, vertScratch);   // B.3.5 bridge
 
     };
 

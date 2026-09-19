@@ -18,6 +18,11 @@
 // Load then writes the result to PlayerController+0x1c/+0x20/+0x24 (verified at
 // the a3300 call site, 0x14009761d).
 
+// ENDGAME B.3.5 Video/Graphics caller batch: Graphics::MeshInstance is a real
+// class. AHEAD of "resolve.h" — resolve.h pulls <windows.h>, whose <wingdi.h>
+// declares a global `Rectangle` FUNCTION that hides `Volume::Rectangle`'s class
+// name inside Volume.h's own static_asserts (Mesh.h -> Geometry.h -> Volume.h).
+#include "graphics/Mesh.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "system/Filename.h"
@@ -4506,15 +4511,11 @@ static constexpr int RES_POOL_CAP = 0x7fffffff;
 // so worldgen runs this override to pick a real growth-stage mesh. Rocks/ore
 // have the +0x48 flag clear and render correctly with the default variant.
 
-// Graphics::MeshInstance::SetMesh — dispatch slot 0x140151498.
-static void (*s_fn_ResSetMesh)(void*, void*) = nullptr;
-static bool s_resSetMeshInit = false;
-static void EnsureResSetMesh() {
-    if (s_resSetMeshInit) return;
-    s_resSetMeshInit = true;
-    uintptr_t sl = ResolveAddr(Module::Exe, 0x140151498);
-    if (sl) s_fn_ResSetMesh = *reinterpret_cast<void (**)(void*, void*)>(sl);
-}
+// ENDGAME B.3.5: `Graphics::MeshInstance::SetMesh` used to arrive here through
+// exe dispatch slot 0x140151498 (address_registry.cpp registers
+// `?SetMesh@MeshInstance@Graphics@@QEAAXV?$ExternalPtr@VGraphicsMesh@Graphics@@@Object@@@Z`
+// into it). It is a real member now, so the cache, its latch and
+// `EnsureResSetMesh` went with their one caller.
 
 // Mesh lookup mirroring ModelComponent::GetMeshFromDescription and the inline
 // formula in FUN_1401253d0: groupArray[variantIdx].subArray[modelVariant].
@@ -4537,8 +4538,8 @@ static void* ResMeshFromModelDesc(void* modelDesc, int variantIdx, int modelVari
 // then does the single scene-add, rather than the original's remove/re-add.)
 static void ApplyResourceModelVariant(void* entity, uint32_t tidModel,
                                       int16_t variantIdx, int16_t modelVariant) {
-    EnsureResSetMesh();
-    if (!s_fn_ResSetMesh || !fn_InternalBasePtr_Ctor) return;
+    // B.3.5: the SetMesh readiness term went with the door.
+    if (!fn_InternalBasePtr_Ctor) return;
     void* mc = FindComponentOnEntity(entity, tidModel);
     if (!mc) return;
     uintptr_t mcIBP = 0;
@@ -4550,7 +4551,9 @@ static void ApplyResourceModelVariant(void* entity, uint32_t tidModel,
     *(int16_t*)(m + 0x166) = modelVariant;
     if (modelVariant >= 0) {
         void* mesh = ResMeshFromModelDesc(modelDesc, variantIdx, modelVariant);
-        if (mesh) s_fn_ResSetMesh((void*)(m + 0x28), mesh);
+        if (mesh)
+            reinterpret_cast<Graphics::MeshInstance*>(m + 0x28)->SetMesh(
+                Graphics::ExternalPtrHandle{mesh});   // B.3.5 bridge
     }
 }
 

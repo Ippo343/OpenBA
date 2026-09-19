@@ -59,6 +59,7 @@
 #include <windows.h>   // QueryPerformanceCounter for the BANISHED_SAVE_TIMING probe
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
+#include "graphics/AnimationManager.h"   // ENDGAME B.3.5 Video/Graphics caller batch
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 
 // code/Game/Game/minimap_upload.cpp — ports FUN_1400a4e80 + the CopyToTexture tail.
@@ -866,7 +867,12 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
     if (s_ppAchMgr && *s_ppAchMgr) {
         s_fn_AchMgr_Persist(*s_ppAchMgr, stream);
     }
-    s_fn_AnimMgr_Serialize(*(void**)(self + 0x68), ser);
+    // B.3.5 bridge — ?Serialize@AnimationManager@Graphics@@QEAAXAEAVSerializer@IO@@@Z.
+    // `s_fn_AnimMgr_Serialize` and its resolver STAY: the [GUL::Serialize]
+    // fprintf above still reads the pointer as a diagnostic (a pointer read,
+    // not a call), so this is not the cache's last user.
+    reinterpret_cast<Graphics::AnimationManager*>(*(void**)(self + 0x68))->Serialize(
+        *reinterpret_cast<IO::Serializer*>(ser));   // B.3.5 bridge
     s_fn_AudioScene_Serialize(*(void**)(self + 0x78), ser);
 
     fprintf(stderr, "[GUL::Serialize] core done — subsystems...\n"); fflush(stderr);
