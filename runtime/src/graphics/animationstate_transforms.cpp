@@ -87,6 +87,10 @@
 #include "../../types/graphics/AnimationManager.h"
 #include "../../types/graphics/AnimationState.h"   // ENDGAME B.3.5 block GC
 #include "../../types/graphics/Mesh.h"             // Graphics::MeshInstance, ditto
+#include "../../types/graphics/InterpolatedState.h"  // ENDGAME B.3.5 closing pass:
+                                                     // Graphics::InterpolatedState<T>
+#include <new>                                       // placement new, for the
+                                                     // hidden-retslot door below
 #include "../../types/system/Value.h"                // System::Time, ditto
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
@@ -410,6 +414,31 @@ extern "C" int RtGraphics_MeshInstance_GetBones(
 }
 
 // ============================================================================
+// ?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@
+//  AEBVScalar@4@@Z   retail 0x18001aff0 — PORTED by ENDGAME B.3.5's closing pass.
+//
+// Never ported before: three caller batches reported the class as "no such class
+// in runtime/types/graphics at all" and left two call sites on a resolved pointer.
+// `runtime/types/graphics/InterpolatedState.h` now declares it, with the layout
+// read from retail three ways and this body's own eleven instructions quoted.
+//
+// HIDDEN RETSLOT (`?AVTransform@Math@@` right after `QEBA`), so the door's
+// signature is `(this, ret, args)` and it placement-constructs the member's
+// prvalue into the caller's slot and returns the slot — B5-12's shape. Retail does
+// the same thing by handing RDX straight to `Math::Transform::Lerp` and returning
+// it in RAX; ours differs only in that the construction is spelled in C++.
+// ============================================================================
+extern "C" void* RtGraphics_InterpolatedState_Transform_Lerp(
+    const void* selfv, void* ret, const void* tv) {
+    const Graphics::InterpolatedState<Math::Transform>* self =            // B.3.5 bridge
+        reinterpret_cast<const Graphics::InterpolatedState<Math::Transform>*>(selfv);
+    ::new (ret) Math::Transform(
+        self->Graphics::InterpolatedState<Math::Transform>::Lerp(
+            *reinterpret_cast<const Math::Scalar*>(tv)));
+    return ret;
+}
+
+// ============================================================================
 // Registration. Unconditional (DIRECTION.md §2: a port registers, no flag).
 // ============================================================================
 int RtGraphicsAnimationTransformsRegister() {
@@ -447,6 +476,13 @@ int RtGraphicsAnimationTransformsRegister() {
         (void*)&RtGraphics_MeshInstance_GetBones);                              ++n;
     RegisterRuntimeAddr(0x180100070ull, (void*)&RtGraphics_MeshInstance_GetBones);
 
+    RegisterRuntimeExport(
+        "?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@"
+        "AEBVScalar@4@@Z",
+        (void*)&RtGraphics_InterpolatedState_Transform_Lerp);                   ++n;
+    RegisterRuntimeAddr(0x18001aff0ull,
+                        (void*)&RtGraphics_InterpolatedState_Transform_Lerp);
+
     return n;
 }
 
@@ -472,6 +508,18 @@ int RtGraphicsAnimationTransformsRegister() {
 // ############################################################################
 
 namespace Graphics {
+
+// ---------------------------------------------------------------------------
+// `Graphics::InterpolatedState<Math::Transform>::Lerp` (retail 0x18001aff0) is a
+// TEMPLATE member, so its explicit specialisation is defined `inline` in
+// `runtime/types/graphics/InterpolatedState.h`, next to the class -- where a
+// template's members belong, and where
+// `tests/unit/graphics_interpolatedstate_abi_test.cpp` can reach it without
+// linking this file's whole animation surface. The eleven retail instructions it
+// was read from are quoted at the definition. The registered DOOR stays HERE
+// (`RtGraphics_InterpolatedState_Transform_Lerp`, above), because this is the file
+// that owns the animation-transform registrations.
+// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // ?PlayAnimation@AnimationState@Graphics@@  0x1800fdf50 — ENDGAME B.3.5 block GC.

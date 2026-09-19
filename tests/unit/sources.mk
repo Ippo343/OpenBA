@@ -290,3 +290,13 @@ UNIT_TREE_SRCS +=
 # in through runtime/types, whose linkable halves (external_class.cpp, array
 # headers) are already on this list.
 UNIT_TREE_SRCS +=
+
+# ENDGAME B.3.5 closing pass — Graphics::InterpolatedState<T>
+# (tests/unit/graphics_interpolatedstate_abi_test.cpp). NO tree source links, and
+# for a different reason from blocks A and B: this class's one ported member is a
+# TEMPLATE specialisation, defined `inline` beside the template in
+# runtime/types/graphics/InterpolatedState.h. The registered door lives in
+# runtime/src/graphics/animationstate_transforms.cpp, which the test does not need
+# and could not link without the whole animation surface behind it. Math::Transform
+# and Math::Scalar come in through runtime/types/math/Math.h, already on this list.
+UNIT_TREE_SRCS +=

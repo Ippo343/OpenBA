@@ -555,7 +555,6 @@ fn_Box_Assign_t                    fn_Box_Assign = nullptr;
 fn_EdgeMesh_Ctor_t                 fn_EdgeMesh_Ctor = nullptr;
 fn_EdgeMesh_TriangleVertex_Ctor_t  fn_EdgeMesh_TriangleVertex_Ctor = nullptr;
 fn_EdgeMesh_EdgeVertex_Ctor_t      fn_EdgeMesh_EdgeVertex_Ctor = nullptr;
-fn_EdgeMesh_Set_t                  fn_EdgeMesh_Set = nullptr;
 fn_EdgeMeshInstance_Ctor_t         fn_EdgeMeshInstance_Ctor = nullptr;
 fn_TileRender_t fn_TileRender = nullptr;
 fn_TileValidityCheck_t fn_TileValidityCheck = nullptr;
@@ -1163,7 +1162,6 @@ fn_TradeWork_sub_c780_t fn_TradeWork_sub_c780 = nullptr;  // 0x1400ac780
 // M3.5 — Geometry vtable draw primitives (slot 0x14015f110)
 fn_Frustum_Contains_t                  fn_Frustum_Contains                 = nullptr;
 fn_Frustum_MulTransform3_t             fn_Frustum_MulTransform3            = nullptr;
-fn_InterpolatedState_Transform_Lerp_t  fn_InterpolatedState_Transform_Lerp = nullptr;
 
 // ============================================================
 // Initialization
@@ -2470,8 +2468,6 @@ bool EngineFuncsInit() {
         ResolveExport("??0TriangleVertex@EdgeMesh@Graphics@@QEAA@AEBVVector3@Math@@@Z"));
     fn_EdgeMesh_EdgeVertex_Ctor = reinterpret_cast<fn_EdgeMesh_EdgeVertex_Ctor_t>(
         ResolveExport("??0EdgeVertex@EdgeMesh@Graphics@@QEAA@AEBUTriangleVertex@12@0H@Z"));
-    fn_EdgeMesh_Set = reinterpret_cast<fn_EdgeMesh_Set_t>(
-        ResolveExport("?Set@EdgeMesh@Graphics@@QEAA_NHPEBUTriangleList@GraphicsMesh@2@H0HPEAGHPEAXHH1H2HH1H2HH1H2HAEBVBox@Volume@@@Z"));
     fn_EdgeMeshInstance_Ctor = reinterpret_cast<fn_EdgeMeshInstance_Ctor_t>(
         ResolveExport("??0EdgeMeshInstance@Graphics@@QEAA@XZ"));
     // NO FALLBACK. There used to be a `if (!fn_EdgeMeshInstance_Ctor)` branch here
@@ -3911,13 +3907,10 @@ bool EngineFuncsInit() {
         ResolveExport("?Contains@Frustum@Volume@@QEBAIAEBVBox@2@I@Z"));
     fn_Frustum_MulTransform3 = reinterpret_cast<fn_Frustum_MulTransform3_t>(
         ResolveExport("??DFrustum@Volume@@QEBA?AV01@AEBVTransform3@Math@@@Z"));
-    fn_InterpolatedState_Transform_Lerp = reinterpret_cast<fn_InterpolatedState_Transform_Lerp_t>(
-        ResolveExport("?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@AEBVScalar@4@@Z"));
 #ifdef _DEBUG
     printf("[EngineFuncs] M3.5 Geometry vtable draw primitives resolved\n");
     printf("  Frustum_Contains         = %p\n", (void*)fn_Frustum_Contains);
     printf("  Frustum_MulTransform3    = %p\n", (void*)fn_Frustum_MulTransform3);
-    printf("  InterpState_Trans_Lerp   = %p\n", (void*)fn_InterpolatedState_Transform_Lerp);
 #endif
 
     // Only Input::Device::Update and Timer globals are critical for first reimpl

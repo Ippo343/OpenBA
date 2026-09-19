@@ -5159,20 +5159,15 @@ extern fn_EdgeMesh_TriangleVertex_Ctor_t fn_EdgeMesh_TriangleVertex_Ctor;
 typedef void* (*fn_EdgeMesh_EdgeVertex_Ctor_t)(void* self, const void* tvA, const void* tvB, int flags);
 extern fn_EdgeMesh_EdgeVertex_Ctor_t fn_EdgeMesh_EdgeVertex_Ctor;
 
-// Graphics::EdgeMesh::Set(...) — 25 params. exe slot 0x140151380
-// ?Set@EdgeMesh@Graphics@@QEAA_NHPEBUTriangleList@GraphicsMesh@2@H0HPEAGHPEAXHH1H2HH1H2HH1H2HAEBVBox@Volume@@@Z
-// Layout: (this, int, const TriList*, int, const TriList*, then four
-//          {int,ushort*,int,void*,int} vertex/index streams, const Box&).
-typedef bool (*fn_EdgeMesh_Set_t)(
-    void* self,
-    int a0, const void* triList0,
-    int a1, const void* triList1,
-    int c0, void* p0, int c1, void* p1, int stride0,
-    int c2, void* p2, int c3, void* p3, int e2,
-    int c4, void* p4, int c5, void* p4b, int stride1,
-    int c6, void* p6, int c7, void* p7, int e6,
-    const void* box);
-extern fn_EdgeMesh_Set_t fn_EdgeMesh_Set;
+// Graphics::EdgeMesh::Set (?Set@EdgeMesh@Graphics@@QEAA_NHPEBUTriangleList@
+// GraphicsMesh@2@H0HPEAGHPEAXHH1H2HH1H2HH1H2HAEBVBox@Volume@@@Z, 0x1800a23e0, exe
+// slot 0x140151380) is GONE in ENDGAME B.3.5 (b35-close): it is a member of the
+// real `Graphics::EdgeMesh` now. This typedef held a SECOND transcription of the
+// same 25 slots, grouped symmetrically as four {int,ushort*,int,void*,int} streams;
+// the mangled name's own grouping is 6/5/5/4 because each group's trailing int is
+// the NEXT pair's index count. Both spellings are ABI-identical (every slot is an
+// int or a pointer), which is why nothing ever caught the difference -- see
+// runtime/types/graphics/Mesh.h for the tokenisation and the proof from the body.
 
 // ENDGAME B.3.5 (b35-K2): `fn_EdgeMeshInstance_SetMesh`
 // (?SetMesh@EdgeMeshInstance@Graphics@@, exe slot 0x140151368) is GONE — zero
@@ -5673,9 +5668,13 @@ extern fn_Frustum_MulTransform3_t fn_Frustum_MulTransform3;
 
 // ??0Vector3@Math@@QEAA@MMM@Z
 
-typedef void* (*fn_InterpolatedState_Transform_Lerp_t)(void* self, void* retval, void* scalar);
-extern fn_InterpolatedState_Transform_Lerp_t fn_InterpolatedState_Transform_Lerp;
-// ?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@AEBVScalar@4@@Z
+// ?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@
+// AEBVScalar@4@@Z (0x18001aff0) is GONE in ENDGAME B.3.5 (b35-close). Two caller
+// batches kept it with the reason "no such class exists in runtime/types/graphics
+// at all"; the closing pass authored the class
+// (runtime/types/graphics/InterpolatedState.h) and ported the member instead of
+// keeping the door, so both call sites -- geometry_draw.cpp and
+// Component/statusicon_geometry.cpp -- are member calls now.
 
 // ============================================================
 // Initialization

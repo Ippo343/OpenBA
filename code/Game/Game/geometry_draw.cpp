@@ -22,6 +22,8 @@
 #include "graphics/Geometry.h"
 #include "graphics/Camera.h"     // Graphics::Camera, Graphics::Renderer
 #include "graphics/Material.h"   // Graphics::MaterialInstance
+#include "graphics/InterpolatedState.h"   // ENDGAME B.3.5 closing pass --
+                                          // Graphics::InterpolatedState<Transform>
 #include "video/Context.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
@@ -323,25 +325,25 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
 
     auto* selfBytes = reinterpret_cast<uint8_t*>(self);
 
-    // ENDGAME B.3.5 batch K1: the two `Video::Context` terms left this aggregate with
-    // their call sites. `fn_InterpolatedState_Transform_Lerp` stays — there is no
-    // `Graphics::InterpolatedState<T>` class in runtime/types/graphics at all.
-    if (!fn_InterpolatedState_Transform_Lerp) {
-        static bool s_warned = false;
-        if (!s_warned) {
-            printf("[Geometry::ItemDraw] Runtime context primitives unwired — "
-                   "geometry won't render this frame\n");
-            fflush(stdout);
-            s_warned = true;
-        }
-        return;
-    }
+    // ENDGAME B.3.5 closing pass: the LAST term of this readiness aggregate is gone
+    // with the door it tested. `fn_InterpolatedState_Transform_Lerp` was kept by two
+    // batches because "there is no `Graphics::InterpolatedState<T>` class in
+    // runtime/types/graphics at all" -- true then, and fixed rather than worked
+    // around: `runtime/types/graphics/InterpolatedState.h` declares it, the layout is
+    // read from retail three ways, and `Lerp` is ported. The whole early-return and
+    // its "context primitives unwired" printf went with the term; nothing else was
+    // in the condition.
 
     // 1. Lerp the InterpolatedState<Transform> at self+0x84 with the alpha.
-    //    Original layout: scalar storage on stack at retbuf+0x28; we just
-    //    pass &param5 in.
-    Math::Transform lerpedTransform;
-    fn_InterpolatedState_Transform_Lerp(selfBytes + 0x84, &lerpedTransform, &param5);
+    // B.3.5 bridge -- ?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?A
+    // VTransform@Math@@AEBVScalar@4@@Z (0x18001aff0). A hidden-retslot door becomes a
+    // by-value C++ return: ONE construction, into the same named local the retbuf
+    // was. Retail stored the Scalar on its own stack at retbuf+0x28 and passed its
+    // address; `param5` is that float and the reference binds to it directly.
+    const Math::Transform lerpedTransform =
+        reinterpret_cast<const Graphics::InterpolatedState<Math::Transform>*>(
+            selfBytes + 0x84)->Lerp(
+                *reinterpret_cast<const Math::Scalar*>(&param5));   // B.3.5 bridge
 
     // 2. Convert to Matrix and SetTransform(0, matrix).
     //    ?AsMatrix@Transform@Math@@QEBA?AVMatrix@2@XZ  retail 0x18001e5f0

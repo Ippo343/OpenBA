@@ -79,7 +79,31 @@ public:
     bool Create(int count, bool dynamic, void* data);
     // ?Set@IndexBuffer@Video@@QEAA_NHHPEAX@Z      0x1800f38a0  buffers.cpp
     //   A trampoline into IndexBufferData slot 2 (+0x10).
-    bool Set(int offset, int count, void* data);
+    //
+    // THE TWO INTS ARE (sizeBytes, offsetBytes), NOT (offset, count). This header
+    // named them `(offset, count)` until ENDGAME B.3.5's closing pass while every
+    // game-side caller passed `(byteSize, byteOffset)` positionally. THE CALLERS
+    // WERE RIGHT; the names here were wrong, and only the names changed -- no call
+    // site, no argument order and no byte moved.
+    //
+    // Settled from the retail bytes, two independent ways:
+    //  1. The TRAMPOLINE. `0x1800f38a0` disassembles to exactly three
+    //     instructions -- `MOV RCX,[RCX+0x8] ; MOV RAX,[RCX] ; JMP [RAX+0x10]`
+    //     (and `0x1800f5a00`, VertexBuffer::Set, is byte-for-byte the same shape).
+    //     RDX, R8 and R9 are never touched, so argument 1 stays argument 1: this
+    //     function's parameters ARE slot 2's parameters.
+    //  2. THE CONSUMER. Slot 2 of `{Index,Vertex}BufferData` is `SetData`, whose
+    //     parameters `CompanionData.h` already spells `(int32_t sizeBytes,
+    //     int32_t offsetBytes, const void* src)` -- and dx11's port of the retail
+    //     body (`GpuBuffer_SetData`, dx11/src/buffers.cpp) proves the reading from
+    //     the D3D11 call it makes: `box.left = offsetBytes`,
+    //     `box.right = sizeBytes + offsetBytes`, and `srcRowPitch = sizeBytes`.
+    //     Swap the two and `box.left` would be a byte COUNT and the row pitch an
+    //     OFFSET, which no caller could survive.
+    // So a caller that believed the header would have uploaded to the wrong place
+    // with the wrong length. Nothing did, because every caller was written against
+    // the door's real behaviour.
+    bool Set(int sizeBytes, int offsetBytes, void* data);
     // ?Lock@IndexBuffer@Video@@QEAAPEAXHAEAH@Z    0x1800f34e0  companion_data.cpp
     //   (IndexBufferData slot 3, +0x18). ENDGAME B.3.5 block VC: the body had been
     //   in block A's companion_data.cpp since Wave 6 lane C while this header said
@@ -134,7 +158,10 @@ public:
     // ?Create@VertexBuffer@Video@@QEAA_NH_NPEAX@Z  0x1800f59e0  buffers.cpp
     bool Create(int count, bool dynamic, void* data);
     // ?Set@VertexBuffer@Video@@QEAA_NHHPEAX@Z      0x1800f5a00  buffers.cpp
-    bool Set(int offset, int count, void* data);
+    //   A trampoline into VertexBufferData slot 2 (+0x10). Same three-instruction
+    //   shape and the same `(sizeBytes, offsetBytes)` reading as IndexBuffer::Set
+    //   above -- see that member's note for the retail evidence.
+    bool Set(int sizeBytes, int offsetBytes, void* data);
     // ?Lock@VertexBuffer@Video@@QEAAPEAXHAEAH@Z    0x1800f5640  companion_data.cpp
     //   (VertexBufferData slot 3, +0x18). Block VC, as above.
     void* Lock(int sizeBytes, int& outByteOffset);

@@ -946,10 +946,23 @@ void AnimationState::UpdateRootOnly(float dt, Math::Vector3& rootOffsetOut) {
             const float secs = dt * L->speed;         // MULSS XMM0,[R8+0x10]
             const int64_t delta = static_cast<int64_t>(
                 static_cast<double>(secs) / *g_Timer_secondsPerTick);
-            rtgfxbody28::Transform7 tmp;
-            const rtgfxbody28::Transform7* const p = RT_EXPORT_ONCE(rtgfxbody28::GetRootPoseFn,
-                "?GetRootPoseAtTime@Animation@Graphics@@QEBA?AVTransform@Math@@"
-                "AEBVTime@System@@0@Z")(clip, &tmp, &L->time, &delta);
+            // B.3.5 bridge — ?GetRootPoseAtTime@Animation@Graphics@@QEBA?AVTransform@
+            // Math@@AEBVTime@System@@0@Z (0x1800faaa0). A HIDDEN-RETSLOT door, so the
+            // conversion uses the "door body moved to the call site" shape: EXACTLY
+            // ONE construction, into the SAME caller storage the retslot was handed,
+            // and `p` still points at it. `Transform7` is this lane's name for the
+            // 0x1c bytes of `Math::Transform` (its own static_assert says so), so the
+            // cast is a spelling, not a reinterpretation. The receiver is a
+            // `Graphics::Animation` — see wave27_lane_gfxbig.cpp's proof from
+            // ?GetAnimation@AnimationGroup@Graphics@@'s mangled return type and
+            // `imul $0x70`.
+            const Math::Transform tmp =
+                reinterpret_cast<const Graphics::Animation*>(clip)   // B.3.5 bridge
+                    ->Graphics::Animation::GetRootPoseAtTime(
+                        *reinterpret_cast<const System::Time*>(&L->time),
+                        *reinterpret_cast<const System::Time*>(&delta));
+            const rtgfxbody28::Transform7* const p =
+                reinterpret_cast<const rtgfxbody28::Transform7*>(&tmp);   // B.3.5 bridge
             accum.q[0] = p->q[0]; accum.q[1] = p->q[1];
             accum.q[2] = p->q[2]; accum.q[3] = p->q[3];
             ax = p->v[0]; ay = p->v[1]; az = p->v[2];
@@ -976,10 +989,23 @@ void AnimationState::UpdateRootOnly(float dt, Math::Vector3& rootOffsetOut) {
         } else {
             const float secs = dt * L->speed;
             const int64_t delta = static_cast<int64_t>(static_cast<double>(secs) / spt);
-            rtgfxbody28::Transform7 tmp;
-            const rtgfxbody28::Transform7* const p = RT_EXPORT_ONCE(rtgfxbody28::GetRootPoseFn,
-                "?GetRootPoseAtTime@Animation@Graphics@@QEBA?AVTransform@Math@@"
-                "AEBVTime@System@@0@Z")(clip, &tmp, &L->time, &delta);
+            // B.3.5 bridge — ?GetRootPoseAtTime@Animation@Graphics@@QEBA?AVTransform@
+            // Math@@AEBVTime@System@@0@Z (0x1800faaa0). A HIDDEN-RETSLOT door, so the
+            // conversion uses the "door body moved to the call site" shape: EXACTLY
+            // ONE construction, into the SAME caller storage the retslot was handed,
+            // and `p` still points at it. `Transform7` is this lane's name for the
+            // 0x1c bytes of `Math::Transform` (its own static_assert says so), so the
+            // cast is a spelling, not a reinterpretation. The receiver is a
+            // `Graphics::Animation` — see wave27_lane_gfxbig.cpp's proof from
+            // ?GetAnimation@AnimationGroup@Graphics@@'s mangled return type and
+            // `imul $0x70`.
+            const Math::Transform tmp =
+                reinterpret_cast<const Graphics::Animation*>(clip)   // B.3.5 bridge
+                    ->Graphics::Animation::GetRootPoseAtTime(
+                        *reinterpret_cast<const System::Time*>(&L->time),
+                        *reinterpret_cast<const System::Time*>(&delta));
+            const rtgfxbody28::Transform7* const p =
+                reinterpret_cast<const rtgfxbody28::Transform7*>(&tmp);   // B.3.5 bridge
             cur.q[0] = p->q[0]; cur.q[1] = p->q[1];
             cur.q[2] = p->q[2]; cur.q[3] = p->q[3];
             cx = p->v[0]; cy = p->v[1]; cz = p->v[2];
