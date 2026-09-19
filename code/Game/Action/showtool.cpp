@@ -9,6 +9,14 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "ShowTool.h"
+// The runtime type headers come FIRST: they reach runtime/types/volume/Volume.h,
+// whose global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
+// once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch K1.
+#include "graphics/Geometry.h"
+#include "graphics/Mesh.h"
+#include "graphics/GraphicsMesh.h"
+#include "graphics/Scene.h"
+#include "system/Value.h"       // System::Time, for Geometry::Update's argument
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
@@ -47,16 +55,14 @@ static uint32_t* s_TypeInfo_ShowToolEntity = nullptr;
 // 0x1401173b0; dispatch-slot identities confirmed via Ghidra external xrefs.
 // Math::Vector4 splat ctor (slot 0x140152958, ??0Vector4@Math@@QEAA@AEBVScalar@1@@Z) is a
 // direct member of the real class (B.3.1).
-typedef int          (*fn_GetNodeIndex_t)(void* graphicsMesh, const char* name); // 0x140152970
-typedef void         (*fn_GeomAttach_t)(void* geom, void* attach, int nodeIdx);  // 0x140152968
-typedef void         (*fn_MeshSetMesh_t)(void* meshInstance, void* mesh);        // 0x140151498
-typedef unsigned int (*fn_SceneAdd_t)(void* scene, void* geom);                  // 0x140151370
+// ENDGAME B.3.5 batch K1: the four caches that used to hold
+// GraphicsMesh::GetNodeIndexFromName (slot 0x140152970), Geometry::Attach
+// (0x140152968), MeshInstance::SetMesh (0x140151498) and Scene::AddObject
+// (0x140151370) went with their last callers in ShowTool_ShowCarried, which now
+// call the members. The MeshInstance default-CTOR door below stays: no
+// Video/Graphics class has a real constructor (B35_RULES section 11 / B4b-2).
 typedef void         (*fn_MIDefCtor_t)(void* meshInstance);                      // 0x140151490
 
-static fn_GetNodeIndex_t s_slot_GetNodeIndex = nullptr;
-static fn_GeomAttach_t   s_slot_GeomAttach = nullptr;
-static fn_MeshSetMesh_t  s_slot_SetMesh = nullptr;
-static fn_SceneAdd_t     s_slot_SceneAdd = nullptr;
 static fn_MIDefCtor_t    s_slot_MI_DefCtor = nullptr;
 
 // ModelDescription type-id (DAT_1401c7a88): .rdata resolves NULL in standalone, so fall back to the runtime registry.
@@ -138,19 +144,11 @@ bool ShowTool_ResolveFuncs() {
         uintptr_t s = ResolveAddr(Module::Exe, a);
         return s ? *reinterpret_cast<void**>(s) : nullptr;
     };
-    s_slot_GetNodeIndex = reinterpret_cast<fn_GetNodeIndex_t>(rslot(0x140152970));
-    s_slot_GeomAttach   = reinterpret_cast<fn_GeomAttach_t>(rslot(0x140152968));
-    s_slot_SetMesh      = reinterpret_cast<fn_MeshSetMesh_t>(rslot(0x140151498));
-    s_slot_SceneAdd     = reinterpret_cast<fn_SceneAdd_t>(rslot(0x140151370));
     s_slot_MI_DefCtor   = reinterpret_cast<fn_MIDefCtor_t>(rslot(0x140151490));
-    // The GetNodeIndexFromName / Geometry::Attach dispatch slots are NOT registered in
-    // standalone (the exe .rdata slot resolves to 0), so fall back to the Runtime-x64.dll
-    // functions directly (ASLR handled by ResolveAddr). Without these the held-item mesh
-    // could not be parented to the character's "tool" bone.
-    if (!s_slot_GetNodeIndex)
-        s_slot_GetNodeIndex = reinterpret_cast<fn_GetNodeIndex_t>(ResolveAddr(Module::Runtime, 0x1800fee90));
-    if (!s_slot_GeomAttach)
-        s_slot_GeomAttach = reinterpret_cast<fn_GeomAttach_t>(ResolveAddr(Module::Runtime, 0x1800a3fa0));
+    // ENDGAME B.3.5 batch K1: the GetNodeIndexFromName / Geometry::Attach dispatch
+    // slots were NOT registered in standalone, so this used to fall back to the two
+    // Runtime addresses 0x1800fee90 / 0x1800a3fa0. Both are members of real classes
+    // now, so neither the slot read nor the fallback is needed.
 
     bool ok = s_TypeInfo_ShowToolEntity &&
               s_fn_HideTool && s_fn_ShowToolOnEntity &&
@@ -274,7 +272,8 @@ static void ShowTool_ShowCarried(void* entityV) {
 
 
     // --- Assign the mesh to the citizen's held-item MeshInstance (entity+0xb8). ---
-    if (s_slot_SetMesh) s_slot_SetMesh(e + 0xb8, (void*)mesh);
+    reinterpret_cast<Graphics::MeshInstance*>(e + 0xb8)
+        ->SetMesh(Graphics::ExternalPtrHandle{(void*)mesh});   // B.3.5 bridge
 
     // Scale Vector4 (splat carryScale) -> entity+0x1c4..0x1d0.
     Math::Vector4 scaleVec((Math::Scalar(carryScale)));
@@ -285,22 +284,33 @@ static void ShowTool_ShowCarried(void* entityV) {
 
     // Attach the held-item geometry to the character mesh's "tool" node/bone.
     void* graphicsMesh = *(void**)(charMeshHolder + 0xe8);
-    int nodeIdx = (s_slot_GetNodeIndex && graphicsMesh)
-                ? s_slot_GetNodeIndex(graphicsMesh, "tool") : -1;
-    if (s_slot_GeomAttach) s_slot_GeomAttach((void*)(charMeshHolder + 0x28), e + 0xb8, nodeIdx);
+    int nodeIdx = graphicsMesh
+                ? reinterpret_cast<const Graphics::GraphicsMesh*>(graphicsMesh)
+                      ->GetNodeIndexFromName("tool")   // B.3.5 bridge
+                : -1;
+    reinterpret_cast<Graphics::Geometry*>(charMeshHolder + 0x28)
+        ->Attach(reinterpret_cast<Graphics::Geometry*>(e + 0xb8), nodeIdx);   // B.3.5 bridge
 
     // MeshInstance::Update(entity+0xb8, &time0) — vtable slot idx1 (+0x8).
+    // B.3.5 bridge — slot 1 of `Graphics::Geometry` IS `Update(const System::Time&)`,
+    // and the receiver is a PROVED `Graphics::MeshInstance`: entity+0xb8 was just run
+    // through `??0MeshInstance@Graphics@@` above and SetMesh'd as one. The `meshVt`
+    // test stays: it tests the OBJECT (a never-constructed held-item slot is zeroed),
+    // not a door pointer.
     uint8_t time0[16] = {0};
     void** meshVt = *(void***)(e + 0xb8);
     if (meshVt) {
-        typedef void (*upd_t)(void*, void*);
-        ((upd_t)meshVt[1])(e + 0xb8, time0);
+        reinterpret_cast<Graphics::Geometry*>(e + 0xb8)->Update(
+            *reinterpret_cast<const System::Time*>(time0));   // B.3.5 bridge
     }
 
     // Add the held-item geometry to the live Graphics::Scene (gameWorld+0x60).
     void* scene = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
                 ? *(void**)((uint8_t*)*g_pGameWorldSingleton + 0x60) : nullptr;
-    uint32_t objId = (scene && s_slot_SceneAdd) ? s_slot_SceneAdd(scene, e + 0xb8) : 0xffffffff;
+    uint32_t objId = scene
+                   ? reinterpret_cast<Graphics::Scene*>(scene)
+                         ->AddObject(reinterpret_cast<Graphics::Geometry*>(e + 0xb8))   // B.3.5 bridge
+                   : 0xffffffff;
     *(int*)(e + 0x1d8) = -2;                       // toolId (carry sentinel)
     *(uint32_t*)(e + 0x1dc) = objId;               // scene object handle
 }

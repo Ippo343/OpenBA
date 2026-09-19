@@ -40,6 +40,11 @@
 // through to the cleaned C body. Both functions self-resolve each Runtime
 // dispatch slot lazily on first use.
 
+// ENDGAME B.3.5 batch K1: the runtime type header comes FIRST. video/Buffers.h reaches
+// no Volume.h, but the house rule (a runtime type header ahead of resolve.h's
+// <windows.h>, whose <wingdi.h> `Rectangle()` hides Volume.h's global
+// `struct Rectangle`) is kept so a later include change cannot break it silently.
+#include "video/Buffers.h"   // Video::{Vertex,Index}Buffer
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
@@ -80,8 +85,7 @@ namespace {
 // first use and cache. This pattern matches session 4 / session 6 etc.
 
 typedef void  (*FnVector2Ser_t   )(void* self, void* serializer);
-typedef bool  (*FnVertexCreate_t )(void* self, int sizeBytes, bool dyn, void* initialData);
-typedef bool  (*FnIndexCreate_t  )(void* self, int sizeBytes, bool dyn, void* initialData);
+// ENDGAME B.3.5 batch K1: the two buffer-Create typedefs went with their caches.
 
 // Slot map (verified via Ghidra MCP `disassemble_function 0x1400b04d0 CALL`):
 // ENDGAME B.3.4a closing: every Serializer row is gone with its cache — the
@@ -89,8 +93,9 @@ typedef bool  (*FnIndexCreate_t  )(void* self, int sizeBytes, bool dyn, void* in
 // doors this body still goes through. The PE import slots themselves stay
 // registered in standalone/address_registry.cpp (B34_RULES §6.5(g)).
 constexpr uintptr_t kSlot_Vector2Ser       = 0x1401526b8;  // Math::Vector2::Serialize
-constexpr uintptr_t kSlot_VertexBufCreate  = 0x140152668;  // Video::VertexBuffer::Create
-constexpr uintptr_t kSlot_IndexBufCreate   = 0x140152660;  // Video::IndexBuffer::Create
+// 0x140152668 (Video::VertexBuffer::Create) and 0x140152660 (Video::IndexBuffer::Create)
+// were here until ENDGAME B.3.5 batch K1; both are members now. The PE import slots
+// themselves stay registered in standalone/address_registry.cpp (B34_RULES 6.5(g)).
 
 template <typename Fn>
 Fn ResolveSlot(uintptr_t exeAddr, Fn& cache, bool& triedOnce, const char* tag) {
@@ -163,12 +168,10 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
     // Resolve the remaining non-Serializer dispatch slots — cached statics,
     // one-shot warnings.
     static FnVector2Ser_t    s_vec2Ser = nullptr;       static bool t_vec2Ser = false;
-    static FnVertexCreate_t  s_vbCreate = nullptr;      static bool t_vbCreate = false;
-    static FnIndexCreate_t   s_ibCreate = nullptr;      static bool t_ibCreate = false;
-
+    // ENDGAME B.3.5 batch K1: the VertexBuffer::Create / IndexBuffer::Create caches,
+    // their typedefs, their two `kSlot_*` constants and their ResolveSlot lines went
+    // with their last callers in Step 14, which call the members.
     FnVector2Ser_t   vec2Ser   = ResolveSlot(kSlot_Vector2Ser,       s_vec2Ser,   t_vec2Ser,   "Vector2::Serialize");
-    FnVertexCreate_t vbCreate  = ResolveSlot(kSlot_VertexBufCreate,  s_vbCreate,  t_vbCreate,  "VertexBuffer::Create");
-    FnIndexCreate_t  ibCreate  = ResolveSlot(kSlot_IndexBufCreate,   s_ibCreate,  t_ibCreate,  "IndexBuffer::Create");
 
     auto serIntField = [&](void* field) {
         reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(field), nullptr);   // B.3.4 bridge
@@ -489,12 +492,14 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
         int32_t vertCount  = *reinterpret_cast<int32_t*>(selfBytes + 0x1A8);
         void*   idxData    = *reinterpret_cast<void**>(selfBytes + 0x1B0);
         void*   vertData   = *reinterpret_cast<void**>(selfBytes + 0x1A0);
-        if (ibCreate) {
-            ibCreate(selfBytes + 0x180, idxCount * 2, false, idxData);
-        }
-        if (vbCreate) {
-            vbCreate(selfBytes + 0x160, vertCount * 0x10, false, vertData);
-        }
+        // B.3.5 bridge — both `Create`s are members of block D's real classes now. The
+        // first `int` parameter is named `count` in Buffers.h and `sizeBytes` in the old
+        // game-side typedef; POSITIONAL order is unchanged by this commit, so behaviour
+        // is identical and the naming disagreement is pre-existing (batch I1 reported it).
+        reinterpret_cast<Video::IndexBuffer*>(selfBytes + 0x180)
+            ->Create(idxCount * 2, false, idxData);          // B.3.5 bridge
+        reinterpret_cast<Video::VertexBuffer*>(selfBytes + 0x160)
+            ->Create(vertCount * 0x10, false, vertData);     // B.3.5 bridge
         // Image-buffer heightmap upload (CASCADE: requires Runtime exports).
         Reimpl_TradeWork_sub_c780(self);
 

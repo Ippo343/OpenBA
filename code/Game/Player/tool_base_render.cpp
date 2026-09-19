@@ -69,6 +69,7 @@
 // once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
 #include "graphics/Scene.h"
 #include "graphics/Mesh.h"
+#include "graphics/Material.h"   // ENDGAME B.3.5 batch K1 — Graphics::MaterialInstance
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
@@ -460,10 +461,21 @@ void Impl_b930(int64_t self) {
     void* obj = *reinterpret_cast<void**>(self + 0x18);
     const uint32_t tidDesc = ResolveTid(0x1401c4448, "HighlightDescription", &s_tid_HighlightDesc);
     void* desc = (fn_IsDerivedFrom && fn_IsDerivedFrom(obj, tidDesc)) ? obj : nullptr;
-    if (mesh && desc && fn_EdgeMesh_SetMaterials) {
-        void* m0 = *reinterpret_cast<void**>(reinterpret_cast<int64_t>(desc) + 0x30);
-        void* m1 = *reinterpret_cast<void**>(reinterpret_cast<int64_t>(desc) + 0x38);
-        fn_EdgeMesh_SetMaterials(*reinterpret_cast<void**>(self + 0xf8), m0, m1, m0, m1);
+    // B.3.5 bridge — the four parameters are `Object::ExternalPtr<MaterialInstance>`
+    // BY VALUE, and constructing them from the raw pointers the HighlightDescription
+    // holds adds NO refcount traffic the door did not do: `ExternalPtr(T*)` is a bare
+    // `_ptr = p` store and its copy/assign/dtor are `= default` and MUST stay trivial
+    // (External.h's banner). The door's own body is four of these same constructions,
+    // so this reproduces it exactly. Argument order is (mask, edge, skinMask,
+    // skinEdge) — see Mesh.h's note; the fields are grouped differently.
+    if (mesh && desc) {
+        auto* m0 = *reinterpret_cast<Graphics::MaterialInstance**>(reinterpret_cast<int64_t>(desc) + 0x30);
+        auto* m1 = *reinterpret_cast<Graphics::MaterialInstance**>(reinterpret_cast<int64_t>(desc) + 0x38);
+        reinterpret_cast<Graphics::EdgeMesh*>(*reinterpret_cast<void**>(self + 0xf8))
+            ->SetMaterials(Object::ExternalPtr<Graphics::MaterialInstance>(m0),
+                           Object::ExternalPtr<Graphics::MaterialInstance>(m1),
+                           Object::ExternalPtr<Graphics::MaterialInstance>(m0),
+                           Object::ExternalPtr<Graphics::MaterialInstance>(m1));   // B.3.5 bridge
     }
 
     // fillIdx / fillVtx / edgeIdx / edgeVtx are released by ~Array at scope exit —

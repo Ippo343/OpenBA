@@ -862,14 +862,9 @@ void MenuDialogLoopT_DrawScene_PhaseA(void* self, float alpha, void* context) {
     void* menuScene = Field<void*>(self, MenuDLTOff::menuSceneExt_b90);
     if (!menuScene || !context) return;
 
-    // B.3.5: SunLight::Set and Context::SetFog are members now. Only
-    // `Graphics::Renderer::Draw` is still a door — it is declared in Camera.h and
-    // DEFINED NOWHERE (its body is wave27_lane_gfxbig.cpp's door).
-    if (!fn_Graphics_Renderer_Draw) {
-        printf("[MenuDLT::DrawScene] missing fn pointers — skipping\n");
-        return;
-    }
-
+    // B.3.5: SunLight::Set, Context::SetFog and — since batch K1 —
+    // `Graphics::Renderer::Draw` are all members. The readiness guard that tested
+    // nothing but the Draw door pointer went with it.
     void* transform = Field<void*>(self, MenuDLTOff::transform_bb8);
     void* renderer  = Field<void*>(self, MenuDLTOff::renderer_b98);
     void* sunLight  = Field<void*>(self, MenuDLTOff::sunLight_bb0);
@@ -966,7 +961,10 @@ void MenuDialogLoopT_DrawScene_PhaseA(void* self, float alpha, void* context) {
     // Camera lives inside the Transform at +0x34.
     void* camera = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(transform) + 0x34);
 
-    fn_Graphics_Renderer_Draw(renderer, context, alpha, gScene, camera);
+    reinterpret_cast<Graphics::Renderer*>(renderer)->Draw(
+        *reinterpret_cast<Video::Context*>(context), alpha,
+        *reinterpret_cast<const Graphics::Scene*>(gScene),
+        *reinterpret_cast<const Graphics::Camera*>(camera));   // B.3.5 bridge
 }
 
 // ============================================================

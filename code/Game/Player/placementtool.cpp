@@ -889,10 +889,8 @@ void PlacementTool_Draw_Impl(PlacementTool* self, void* context, char param3) {
 
 // Local function pointers for Startup (resolved from IAT dispatch slots)
 typedef void (*fn_MeshInstanceCtor_t)(void* self);
-typedef void (*fn_MeshInstanceSetMesh_t)(void* self, void* mesh);
 
 static fn_MeshInstanceCtor_t s_fn_MeshInstanceCtor = nullptr;
-static fn_MeshInstanceSetMesh_t s_fn_MeshInstanceSetMesh = nullptr;
 static uint32_t* s_pTypeId_RotationSetting = nullptr;
 static void** s_pMeshInstanceVtable = nullptr;
 static bool s_startupFuncsResolved = false;
@@ -908,7 +906,9 @@ static void EnsureStartupFuncs() {
     };
 
     s_fn_MeshInstanceCtor = (fn_MeshInstanceCtor_t)resolveIAT(0x140151490);
-    s_fn_MeshInstanceSetMesh = (fn_MeshInstanceSetMesh_t)resolveIAT(0x140151498);
+    // ENDGAME B.3.5 batch K1: the `MeshInstance::SetMesh` cache (slot 0x140151498) that
+    // sat beside it had NO caller left -- batch I2 converted its one call site and left
+    // the resolve behind, so it was dead on arrival. Typedef, static and resolve removed.
 
     // RotationSetting type ID at 0x1401c63c8 (read as uint32_t*)
     s_pTypeId_RotationSetting = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c63c8);

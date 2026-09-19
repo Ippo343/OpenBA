@@ -23,7 +23,11 @@
 // global `Rectangle` FUNCTION that hides `Volume::Rectangle`'s class name inside
 // Volume.h's own static_asserts (Scene.h -> Geometry.h -> Volume.h).
 #include "graphics/Scene.h"
+#include "graphics/Camera.h"          // ENDGAME B.3.5 batch K1 — Graphics::{Camera,Renderer}
+#include "graphics/AnimationManager.h"
 #include "video/Context.h"
+#include "video/Device.h"
+#include "video/ImageBuffer.h"
 #include "sampler.h"
 #include "options.h"
 #include "GameUpdateLoop.h"
@@ -124,8 +128,10 @@ static fn_RegionPairCacheTick_t fn_RegionPairCacheTick = nullptr;
 
 // Graphics::AnimationManager::Update(this, Time const&, bool rootOnly)
 // Runtime DLL export
-typedef void (*fn_AnimationManager_Update_t)(void* self, void* time, bool rootOnly);
-static fn_AnimationManager_Update_t fn_AnimationManager_Update = nullptr;
+// ENDGAME B.3.5 batch K1: the `fn_AnimationManager_Update` cache (read out of exe
+// dispatch slot 0x140152050) went with its one caller, which calls
+// `Graphics::AnimationManager::Update` directly. The member is DEFINED — the door in
+// runtime/src/graphics/wave23_lane_gfxbody.cpp:521 delegates to it.
 
 // EntityList::Update (FUN_1400c4090) — tick all entity components
 // RCX=entityList, RDX=time
@@ -216,8 +222,11 @@ static fn_UI_PausesGame_t fn_UI_PausesGame = nullptr;
 // resolve to the same Runtime export when both succeed; we keep the local static
 // here for backward-compat with the existing in-flight reimpl. Local static name
 // renamed to avoid the extern/static clash.)
-typedef void (*fn_Graphics_Renderer_Draw_local_t)(void* self, void* ctx, float alpha, void* scene, void* camera);
-static fn_Graphics_Renderer_Draw_local_t fn_Graphics_Renderer_Draw_local = nullptr;
+// ENDGAME B.3.5 batch K1: the `fn_Graphics_Renderer_Draw_local` alias (binding spelling
+// 5 — a plain `s_fn_X = fn_Y` with a corrected-mangled-name fallback) went with its one
+// caller, which calls `Graphics::Renderer::Draw` directly. The member is DEFINED — the
+// door in runtime/src/graphics/wave27_lane_gfxbig.cpp:567 delegates to it. The [FIX-M5]
+// history the fallback recorded is kept at the resolver site.
 
 // Graphics::Renderer::~Renderer(this)
 typedef void (*fn_Graphics_Renderer_Dtor_t)(void* self);
@@ -604,31 +613,19 @@ static void EnsureInit() {
     fn_EventNotifier_FireWithName = reinterpret_cast<fn_EventNotifier_FireWithName_t>(
         ResolveAddr(Module::Exe, 0x140095750));
 
-    // Runtime function pointers (resolved by mangled name)
-    // AnimationManager::Update — indirect via .rdata dispatch at 0x140152050.
-    // Same standalone-unregistered guard as the AchievementInstance slots above.
-    {
-        uintptr_t slot = ResolveAddr(Module::Exe, 0x140152050);
-        fn_AnimationManager_Update = slot
-            ? *reinterpret_cast<fn_AnimationManager_Update_t*>(slot) : nullptr;
-    }
     // Runtime functions — resolved via ResolveExport (by mangled name)
     // These resolve directly to Runtime-x64.dll function addresses.
     fn_UI_PausesGame = reinterpret_cast<fn_UI_PausesGame_t>(
         ResolveExport("?PausesGame@UserInterface@UI@@QEBA_NXZ"));
     // fn_Graphics_Scene_Clean is now resolved in engine_funcs.cpp (extern).
     // B.3.5: the Scene::RemoveGlobalObject resolve went with its cache.
-    // [FIX-M5] The mangled name here was wrong (AEAVScene/Camera@Math); the correct
-    // signature is const-ref Scene + Camera@Graphics (AEBVScene@2@ AEBVCamera@2@) —
-    // the same export engine_funcs resolves as fn_Graphics_Renderer_Draw. The wrong
-    // name resolved NULL → Draw's Renderer::Draw call crashed (EXEC of 0). Prefer the
-    // already-resolved global; fall back to the corrected mangled name.
-    fn_Graphics_Renderer_Draw_local = reinterpret_cast<fn_Graphics_Renderer_Draw_local_t>(
-        fn_Graphics_Renderer_Draw);
-    if (!fn_Graphics_Renderer_Draw_local) {
-        fn_Graphics_Renderer_Draw_local = reinterpret_cast<fn_Graphics_Renderer_Draw_local_t>(
-            ResolveExport("?Draw@Renderer@Graphics@@QEAAXAEAVContext@Video@@MAEBVScene@2@AEBVCamera@2@@Z"));
-    }
+    // [FIX-M5], kept for the record even though the binding is gone (ENDGAME B.3.5
+    // batch K1): this file used to alias `fn_Graphics_Renderer_Draw` into a local, with
+    // a ResolveExport fallback whose mangled name was WRONG (AEAVScene / Camera@Math).
+    // The correct signature is const-ref Scene + Camera@Graphics
+    // (`?Draw@Renderer@Graphics@@QEAAXAEAVContext@Video@@MAEBVScene@2@AEBVCamera@2@@Z`);
+    // the wrong name resolved NULL and Draw crashed (EXEC of 0). The call site is a
+    // member call now, so neither the alias nor a mangled name can be wrong again.
     fn_Graphics_Renderer_Dtor = reinterpret_cast<fn_Graphics_Renderer_Dtor_t>(
         ResolveExport("??1Renderer@Graphics@@QEAA@XZ"));
     fn_GUL_AudioSceneUpdate = reinterpret_cast<fn_GUL_AudioSceneUpdate_t>(
@@ -694,9 +691,7 @@ static void EnsureInit() {
     CHECK_FN(fn_AchievementInstance_HasFailed);
     CHECK_FN(fn_QuickSave);
     CHECK_FN(fn_CalcWindFactor);
-    CHECK_FN(fn_AnimationManager_Update);
     CHECK_FN(fn_UI_PausesGame);
-    CHECK_FN(fn_Graphics_Scene_Clean);
     CHECK_FN(fn_GUL_AudioSceneUpdate);
     CHECK_FN(fn_Audio_Scene_StopAll);
     CHECK_FN(fn_MainLoop_SetNextLoop);
@@ -1166,7 +1161,12 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
                 }
                 TRACE("[GameUpdateLoop::Update] calling AnimationManager::Update (rootOnly=%d)...\n", (int)rootOnly);
                 { PhaseTimer pt(kPhAnimation);
-                if (fn_AnimationManager_Update) fn_AnimationManager_Update(self->m_animationManager, time, rootOnly); // [GUARD-M5] slot 0x140152050 unregistered
+                // B.3.5 bridge — the exe dispatch slot 0x140152050 read and its
+                // [GUARD-M5] readiness guard went with the door. `time` is a
+                // `const System::Time*` here, so it is dereferenced at the call.
+                reinterpret_cast<Graphics::AnimationManager*>(self->m_animationManager)
+                    ->Update(*reinterpret_cast<const System::Time*>(time),
+                             rootOnly);   // B.3.5 bridge
                 }
                 TRACE("[GameUpdateLoop::Update] AnimationManager::Update done\n");
 
@@ -1605,13 +1605,14 @@ post_simulation:
         uint8_t* imageCapture = (uint8_t*)self->m_imageCapture;
         if (*(int64_t*)(imageCapture + 8) != 0 && *imageCapture != 0) {
             TRACE("[GameUpdateLoop::Update] processing image capture...\n");
-            fn_VideoDevice_Lock(*g_pVideoDeviceSingleton);
-            fn_ImageBuffer_CopyToTexture(
-                *(void**)(imageCapture + 0x10),
-                *(void**)(imageCapture + 0x28),
-                *(int32_t*)(imageCapture + 4),
-                *(int32_t*)(imageCapture + 4));
-            fn_VideoDevice_Unlock(*g_pVideoDeviceSingleton);
+            reinterpret_cast<Video::Device*>(*g_pVideoDeviceSingleton)
+                ->Lock();   // B.3.5 bridge
+            reinterpret_cast<Video::ImageBuffer*>(*(void**)(imageCapture + 0x10))
+                ->CopyToTexture(*(void**)(imageCapture + 0x28),
+                                *(int32_t*)(imageCapture + 4),
+                                *(int32_t*)(imageCapture + 4));   // B.3.5 bridge
+            reinterpret_cast<Video::Device*>(*g_pVideoDeviceSingleton)
+                ->Unlock();   // B.3.5 bridge
             *imageCapture = 0;
             TRACE("[GameUpdateLoop::Update] image capture done\n");
         }
@@ -1854,9 +1855,11 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
     {
         void* engine = *g_pEngineSingleton;
         void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
-        fn_Graphics_Renderer_Draw_local(self->m_renderer, videoCtx, alpha,
-                                  self->m_graphicsScene,
-                                  (void*)((uintptr_t)self->m_playerController + 0x34));
+        reinterpret_cast<Graphics::Renderer*>(self->m_renderer)->Draw(
+            *reinterpret_cast<Video::Context*>(videoCtx), alpha,
+            *reinterpret_cast<const Graphics::Scene*>(self->m_graphicsScene),
+            *reinterpret_cast<const Graphics::Camera*>(
+                (uintptr_t)self->m_playerController + 0x34));   // B.3.5 bridge
     }
     TRACE("[GameUpdateLoop::Draw] Renderer::Draw done\n");
 

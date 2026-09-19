@@ -1719,8 +1719,8 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                     // old approximation dropped (it assumed ModelComponent_Draw would push it
                     // later). Without this the Geometry/MeshInstance at +0x28 (and its derived
                     // world-pos +0x158) never picks up the +0x148 matrix, leaving it stale/0.
-                    if (fn_Geometry_SetTransform)
-                        fn_Geometry_SetTransform((void*)(mc + 0x28), (void*)(mc + 0x148));
+                    reinterpret_cast<Graphics::Geometry*>(mc + 0x28)->SetTransform(
+                        *reinterpret_cast<const Math::Transform*>(mc + 0x148));   // B.3.5 bridge
                 }
             }
         }
@@ -4915,8 +4915,8 @@ static void StartTown_PlaceResourceCell(void* entity, int cellIdx, void* game, v
         Math::Transform::FromYawPitchOffset(
             yaw, pitch, *reinterpret_cast<const Math::Vector3*>(off));
     *(float*)(m + 0x168) = yaw;
-    if (fn_Geometry_SetTransform)
-        fn_Geometry_SetTransform((void*)(m + 0x28), (void*)(m + 0x148));
+    reinterpret_cast<Graphics::Geometry*>(m + 0x28)->SetTransform(
+        *reinterpret_cast<const Math::Transform*>(m + 0x148));   // B.3.5 bridge
 }
 
 // FUN_140120db0 — growth/age + mesh-scale init on the GrowthComponent. Delegates to

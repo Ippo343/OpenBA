@@ -26,6 +26,8 @@
 // <windows.h>, whose <wingdi.h> declares a global `Rectangle` FUNCTION that
 // hides `Volume::Rectangle`'s class name inside Volume.h's own static_asserts.
 #include "graphics/Scene.h"     // also brings Graphics::Geometry
+#include "graphics/Camera.h"    // ENDGAME B.3.5 batch K1 — Graphics::Renderer
+#include "graphics/Material.h"  // Graphics::MaterialInstance
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
@@ -253,9 +255,9 @@ extern "C" void WeatherParticle_Config(void* geo, void* descriptor) {
     }
 
     // Identity transform + world bounds [-1024, 1024]^3.
-    if (fn_Geometry_SetTransform) {
+    {
         Math::Transform tf = Math::Transform::Identity();
-        fn_Geometry_SetTransform(geo, &tf);
+        reinterpret_cast<Graphics::Geometry*>(geo)->SetTransform(tf);   // B.3.5 bridge
     }
     {
         float box[6] = { kBoundLo, kBoundLo, kBoundLo, kBoundHi, kBoundHi, kBoundHi };
@@ -322,14 +324,19 @@ extern "C" void WeatherParticle_Update(void* geo, void* time) {
 // AddDrawItem (vtable +0x18) — port of FUN_1400d30b0(geo, unused, Renderer*).
 // ============================================================
 extern "C" void WeatherParticle_AddDrawItem(void* geo, void* /*unused*/, void* renderer) {
-    if (!geo || !renderer || !fn_Renderer_AddDrawItem) return;
+    // B.3.5 batch K1: the `!fn_Renderer_AddDrawItem` readiness term went with the door
+    // call below; the two object tests are retail's and stay.
+    if (!geo || !renderer) return;
     if (SettingsByte(0x16) == 0) return;   // weather effects disabled in settings
     uint8_t* g = reinterpret_cast<uint8_t*>(geo);
     void* desc = *reinterpret_cast<void**>(g + 0xc8);
     if (!desc) return;
     void* material = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(desc) + 0x20);
     if (!material) return;
-    fn_Renderer_AddDrawItem(renderer, geo, material, 0xffff, 0, 0.0f, kUVScale, 1, nullptr, 0);
+    reinterpret_cast<Graphics::Renderer*>(renderer)->AddDrawItem(
+        reinterpret_cast<const Graphics::Geometry*>(geo),
+        reinterpret_cast<const Graphics::MaterialInstance*>(material),
+        0xffff, 0, 0.0f, kUVScale, 1, nullptr, 0);   // B.3.5 bridge
 }
 
 // Draw (vtable +0x10) — big instanced-billboard port, in weather_particle_draw.cpp.

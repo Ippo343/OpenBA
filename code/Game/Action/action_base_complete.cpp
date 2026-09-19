@@ -28,6 +28,15 @@
 // resolves to null and the guarded graphics op is safely skipped.
 //
 
+// The runtime type headers come FIRST: they reach runtime/types/volume/Volume.h,
+// whose global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
+// once <windows.h> has been seen (through resolve.h and this file's own
+// <windows.h> below).  ENDGAME B.3.5 batch K1.
+#include "graphics/Geometry.h"
+#include "graphics/Mesh.h"
+#include "graphics/GraphicsMesh.h"
+#include "graphics/Scene.h"
+#include "system/Value.h"       // System::Time, for Geometry::Update's argument
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "math/Math.h"
@@ -322,26 +331,17 @@ void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
 // are NOT registered; an unresolved op is safely skipped (no tool mesh, no corruption).
 
 namespace {
-// Graphics dispatch slots used by 73b0 / 176e0.
-typedef void  (*fn_SetMesh_t)(void* meshInstance, void* meshPtr);          // 0x140151498 (registered)
-// Math::Vector4 splat ctor is a direct member of the real class (B.3.1); the old
-// s_Vector4Ctor pointer named 0x140152970, which is GetNodeIndexFromName, not a ctor.
-typedef void  (*fn_TimeCtor_t)(void* retTime, float seconds);             // 0x140152968
-typedef uint32_t (*fn_SceneAddObject_t)(void* scene, void* geometry);     // 0x140151370 (registered)
+// ENDGAME B.3.5 batch K1: the six Video/Graphics caches this block used to hold —
+// MeshInstance::SetMesh (exe slot 0x140151498), Scene::AddObject (0x140151370),
+// Geometry::Attach / Geometry::Detach / Scene::RemoveObject /
+// GraphicsMesh::GetNodeIndexFromName (all four by mangled name) — went with their
+// last callers below, which now call the members directly. What stays:
+// the System::Time ctor door (a System class, not this step's), and the
+// MeshInstance default-CTOR door (no Video/Graphics class has a real ctor,
+// B35_RULES section 11 / B4b-2).
+typedef void  (*fn_TimeCtor_t)(void* retTime, float seconds);            // 0x140152b00
 
-// Named Runtime graphics exports.
-typedef void (*fn_GeometryAttach_t)(void* dstGeom, void* srcGeom, int nodeIdx);
-typedef void (*fn_GeometryDetach_t)(void* dstGeom, void* srcGeom);
-typedef void (*fn_SceneRemoveObject_t)(void* scene, uint32_t objId);
-typedef int  (*fn_GetNodeIdx_t)(void* graphicsMesh, const char* name);
-
-static fn_SetMesh_t          s_SetMesh        = nullptr;
-static fn_TimeCtor_t         s_TimeCtorMesh   = nullptr;  // 0x140152968 (MeshInstance update arg)
-static fn_SceneAddObject_t   s_SceneAddObject = nullptr;
-static fn_GeometryAttach_t   s_GeomAttach     = nullptr;
-static fn_GeometryDetach_t   s_GeomDetach     = nullptr;
-static fn_SceneRemoveObject_t s_SceneRemove   = nullptr;
-static fn_GetNodeIdx_t       s_GetNodeIdx     = nullptr;
+static fn_TimeCtor_t         s_TimeCtorMesh   = nullptr;  // 0x140152b00 (MeshInstance update arg)
 typedef void (*fn_MIDefCtor_t)(void* meshInstance);       // 0x140151490 (MeshInstance default-ctor)
 static fn_MIDefCtor_t        s_MI_DefCtor     = nullptr;
 static float*                s_pUVScale       = nullptr;  // g_fUVScale (DAT_14017214c)
@@ -351,7 +351,6 @@ static bool                  s_showInit       = false;
 
 static void EnsureShow() {
     if (s_showInit) return;
-    s_SetMesh        = reinterpret_cast<fn_SetMesh_t>(ReadDispatchSlot(0x140151498));
     // ⚠ 0x140152970 is NOT a Vector4 ctor — the disasm at 0x14011765b shows that slot
     // family is Graphics: 0x140152970 = GraphicsMesh::GetNodeIndexFromName (returns int
     // in EAX). The uv-scale block used to sit behind a permanently-null s_Vector4Ctor
@@ -362,22 +361,13 @@ static void EnsureShow() {
     // 0x140152b00 (disasm 0x14011766c). Dormant until now only because 0x140152968 is
     // unregistered. Bind the REAL Time-from-float slot.
     s_TimeCtorMesh   = reinterpret_cast<fn_TimeCtor_t>(ReadDispatchSlot(0x140152b00));
-    s_SceneAddObject = reinterpret_cast<fn_SceneAddObject_t>(ReadDispatchSlot(0x140151370));
-    // PHANTOM NAMES, fixed 2026-09-07 (Wave 6). These two read `AEAV12@` (a
-    // Geometry REFERENCE) until today; the DLL only ever exported the POINTER
-    // spelling `PEAV12@` (Attach 0x1800a3fa0, Detach 0x1800a3f20). ResolveExport
-    // has NO address fallback, so both pointers were NULL and the two `if (s_Geom*)`
-    // guards below silently skipped every attach and detach this file performs --
-    // dead since the day they were written. Found by tools/export_name_audit.py.
-    // See reference_resolveexport_phantom_names.md.
-    s_GeomAttach     = reinterpret_cast<fn_GeometryAttach_t>(
-        ResolveExport("?Attach@Geometry@Graphics@@QEAAXPEAV12@H@Z"));
-    s_GeomDetach     = reinterpret_cast<fn_GeometryDetach_t>(
-        ResolveExport("?Detach@Geometry@Graphics@@QEAAXPEAV12@@Z"));
-    s_SceneRemove    = reinterpret_cast<fn_SceneRemoveObject_t>(
-        ResolveExport("?RemoveObject@Scene@Graphics@@QEAAXI@Z"));
-    s_GetNodeIdx     = reinterpret_cast<fn_GetNodeIdx_t>(
-        ResolveExport("?GetNodeIndexFromName@GraphicsMesh@Graphics@@QEBAHPEBD@Z"));
+    // The `Geometry::Attach` / `Geometry::Detach` pointers used to be resolved here by
+    // the PHANTOM names `AEAV12@` (a Geometry REFERENCE); the DLL only ever exported the
+    // POINTER spelling `PEAV12@` (Attach 0x1800a3fa0, Detach 0x1800a3f20), so both
+    // pointers were NULL and the two `if (s_Geom*)` guards silently skipped every attach
+    // and detach this file performs — dead since the day they were written (found by
+    // tools/export_name_audit.py; reference_resolveexport_phantom_names.md). Both are
+    // members of the real `Graphics::Geometry` now, so the phantom cannot come back.
     s_MI_DefCtor     = reinterpret_cast<fn_MIDefCtor_t>(ReadDispatchSlot(0x140151490));
     s_pUVScale       = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017214c));
     s_pTid_FenceDesc = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a88));
@@ -399,11 +389,13 @@ void ActCt_HideTool_1176e0(void* entityV) {
     if (*reinterpret_cast<int*>(e + 0x1dc) < 0) return;
 
     uintptr_t model = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(e + 0x278) + 0x68);
-    if (s_GeomDetach) s_GeomDetach(reinterpret_cast<void*>(model + 0x28), reinterpret_cast<void*>(e + 0xb8));
+    reinterpret_cast<Graphics::Geometry*>(model + 0x28)
+        ->Detach(reinterpret_cast<Graphics::Geometry*>(e + 0xb8));   // B.3.5 bridge
 
-    if (s_SceneRemove && g_pGameWorldSingleton) {
+    if (g_pGameWorldSingleton) {
         void* scene = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x60);
-        s_SceneRemove(scene, *reinterpret_cast<uint32_t*>(e + 0x1dc));
+        reinterpret_cast<Graphics::Scene*>(scene)
+            ->RemoveObject(*reinterpret_cast<uint32_t*>(e + 0x1dc));   // B.3.5 bridge
     }
     *reinterpret_cast<int64_t*>(e + 0x1d8) = -1;
 }
@@ -525,7 +517,8 @@ void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
     }
 
     // set mesh on the MeshInstance (entity+0xb8)
-    if (s_SetMesh) s_SetMesh(reinterpret_cast<void*>(e + 0xb8), meshPtr);
+    reinterpret_cast<Graphics::MeshInstance*>(e + 0xb8)
+        ->SetMesh(Graphics::ExternalPtrHandle{meshPtr});   // B.3.5 bridge
 
     // write the UV-scale vector (Vector4 broadcast of uvScale) to entity+0x1c4..+0x1d0
     // Retail 0x1401173b0 (Entity_impl_73b0): Math::Vector4::Vector4(local_58, &scalar)
@@ -540,21 +533,31 @@ void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
 
     // attach the tool geometry to the model's "tool" node
     void* graphicsMesh = *reinterpret_cast<void**>(model + 0xe8);
-    int nodeIdx = (s_GetNodeIdx && graphicsMesh) ? s_GetNodeIdx(graphicsMesh, "tool") : -1;
-    if (s_GeomAttach) s_GeomAttach(reinterpret_cast<void*>(model + 0x28), reinterpret_cast<void*>(e + 0xb8), nodeIdx);
+    int nodeIdx = graphicsMesh
+                ? reinterpret_cast<const Graphics::GraphicsMesh*>(graphicsMesh)
+                      ->GetNodeIndexFromName("tool")   // B.3.5 bridge
+                : -1;
+    reinterpret_cast<Graphics::Geometry*>(model + 0x28)
+        ->Attach(reinterpret_cast<Graphics::Geometry*>(e + 0xb8), nodeIdx);   // B.3.5 bridge
 
     // MeshInstance::Update(time=0) via vtable +0x8 (skip if the instance has no vtable)
     uint8_t timeVal[8];
     if (s_TimeCtorMesh && *reinterpret_cast<uintptr_t*>(e + 0xb8) != 0) {
         s_TimeCtorMesh(timeVal, 0.0f);
-        (*reinterpret_cast<void(**)(void*, void*)>(*reinterpret_cast<uintptr_t*>(e + 0xb8) + 8))(
-            reinterpret_cast<void*>(e + 0xb8), timeVal);
+        // B.3.5 bridge — vtable +0x8 is slot 1 of `Graphics::Geometry`, i.e.
+        // `Update(const System::Time&)`. The receiver is a PROVED
+        // `Graphics::MeshInstance`: entity+0xb8 was run through
+        // `??0MeshInstance@Graphics@@` just above and SetMesh'd as one. The
+        // `*(uintptr_t*)(e + 0xb8) != 0` test stays — it tests the OBJECT.
+        reinterpret_cast<Graphics::Geometry*>(e + 0xb8)->Update(
+            *reinterpret_cast<const System::Time*>(timeVal));   // B.3.5 bridge
     }
 
     // add to scene + record object id
-    if (s_SceneAddObject && g_pGameWorldSingleton) {
+    if (g_pGameWorldSingleton) {
         void* scene = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x60);
-        uint32_t objId = s_SceneAddObject(scene, reinterpret_cast<void*>(e + 0xb8));
+        uint32_t objId = reinterpret_cast<Graphics::Scene*>(scene)
+            ->AddObject(reinterpret_cast<Graphics::Geometry*>(e + 0xb8));   // B.3.5 bridge
         *reinterpret_cast<int*>(e + 0x1d8) = toolId;
         *reinterpret_cast<uint32_t*>(e + 0x1dc) = objId;
         SceneWatch_Note(objId, reinterpret_cast<void*>(e + 0xb8), "ShowTool 0x1401173b0");
