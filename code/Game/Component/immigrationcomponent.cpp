@@ -46,8 +46,8 @@ static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 typedef void (*fn_Time_Serialize_t)(void* time, void* serializer);
 static fn_Time_Serialize_t s_fn_Time_Serialize = nullptr;
 
-// Object::InternalBasePtr::Serialize -- resolved globally in engine_funcs
-// extern fn_InternalBasePtr_Serialize_t fn_InternalBasePtr_Serialize;
+// Object::InternalBasePtr::Serialize is a direct member call since ENDGAME B.3.4 (batch G);
+// the engine_funcs global and its typedef were deleted in closing 2d.
 
 // IsDerivedFrom -- dispatch slot at 0x140152a98
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* self, uint32_t typeId);
