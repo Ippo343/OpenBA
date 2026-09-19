@@ -25,6 +25,8 @@
 #include "graphics/Geometry.h"   // ENDGAME B.3.5 batch K1 — same include-order reason
 #include "graphics/Material.h"
 #include "graphics/Camera.h"     // Graphics::Renderer
+#include "graphics/InterpolatedState.h"   // ENDGAME B.3.5 closing pass --
+                                          // Graphics::InterpolatedState<Transform>
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
@@ -42,19 +44,15 @@ static const float kScale01   = 0.01f;
 static const float kHalf      = 0.5f;
 
 // ---- Resolved Runtime engine functions ----
-typedef void* (*fn_Lerp_t)(void* self, void* retbuf, const float* t);              // InterpolatedState<Transform>::Lerp
 typedef void  (*fn_GetUVs_t)(void* sheet, int idx, float* u0, float* v0, float* u1, float* v1); // SpriteSheet::GetUVs
 // cc!=0 camera-constant-screen-size projection uses the Math:: classes directly
 // (Transform3::Inverse / AsMatrix, Matrix::operator*(Matrix|Vector4)).
 
-static fn_Lerp_t              s_Lerp           = nullptr;
 static fn_GetUVs_t            s_GetUVs         = nullptr;
 static bool                   s_resolved       = false;
 
 static void EnsureDrawFuncs() {
     if (s_resolved) return;
-    s_Lerp = reinterpret_cast<fn_Lerp_t>(ResolveExport(
-        "?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@AEBVScalar@4@@Z"));
     s_GetUVs = reinterpret_cast<fn_GetUVs_t>(ResolveExport(
         "?GetUVs@SpriteSheet@UI@@QEBAXHAEAM000@Z"));
     s_resolved = true;
@@ -112,11 +110,20 @@ static void StatusIconGeom_Draw(void* geometry, void* ctx, void* camera,
     // 1) Model transform = Lerp(state, t) -> AsMatrix -> Context::SetTransform(0, M).
     //    Keep the Lerp'd Transform around: its position (+0x10) is the billboard origin
     //    used by the cc!=0 camera-constant-screen-size projection below.
-    Math::Transform xf;              // Lerp retbuf; .translation is the billboard origin
-    bool haveXf = false;
-    if (s_Lerp) {
-        s_Lerp(g + 0x84, &xf, &t);
-        haveXf = true;
+    // B.3.5 bridge -- ?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?A
+    // VTransform@Math@@AEBVScalar@4@@Z (0x18001aff0). The class did not exist in
+    // runtime/types/graphics until the closing pass authored
+    // `graphics/InterpolatedState.h`; it does now, and `geometry + 0x84` is one --
+    // the same 0x38-byte pair `Geometry`'s own GetInstanceTransform path reads as
+    // (cur @ +0x00, prev @ +0x1c). A hidden-retslot door became a by-value C++
+    // return, so `xf` is constructed ONCE, directly from the prvalue, in the same
+    // storage the retbuf occupied. `haveXf` is gone with the readiness guard: the
+    // transform is now unconditional, which is what the cc != 0 branch below always
+    // wanted.
+    const Math::Transform xf =        // .translation is the billboard origin
+        reinterpret_cast<const Graphics::InterpolatedState<Math::Transform>*>(g + 0x84)
+            ->Lerp(*reinterpret_cast<const Math::Scalar*>(&t));   // B.3.5 bridge
+    {
         Math::Matrix mat = xf.AsMatrix();
         reinterpret_cast<Video::Context*>(ctx)->SetTransform(0, mat);   // B.3.5 bridge
     }
@@ -152,7 +159,7 @@ static void StatusIconGeom_Draw(void* geometry, void* ctx, void* camera,
     //    of the FUN_1400a9c10 cc!=0 block (AsVector3/Vector ctors inlined).
     float    fVar9 = *reinterpret_cast<float*>(g + 0xc0);   // iconSize
     uint8_t  cc    = *reinterpret_cast<uint8_t*>(g + 0xcc);
-    if (cc != 0 && haveXf) {
+    if (cc != 0) {
         const Math::Matrix& proj =
             *reinterpret_cast<const Math::Matrix*>(reinterpret_cast<uint8_t*>(camera) + 0x94);   // B.3.1 bridge: 4x4 projection
         Math::Transform3 invView =

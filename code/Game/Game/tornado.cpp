@@ -219,11 +219,14 @@ static_assert(offsetof(TornadoPool, spawnAccum) == 0x30, "TornadoPool spawnAccum
 // 0x1401525e8, 0x1401527a8, 0x1401527d0, 0x1401527e0, 0x1401527e8,
 // 0x1401527f0) are NOT in standalone/address_registry.cpp, so ResolveAddr would hand
 // back a null slot.
-typedef bool   (*fn_PIUpdate_t)(void* self);                      // ParticleInstance::Update
+// ENDGAME B.3.5 closing pass: the `ParticleInstance::Update` and
+// `Geometry::SetBounds` door typedefs, struct members, resolves, readiness terms
+// and diagnostic `%p`s are GONE. Both call sites are member calls (:289, :475),
+// so the only thing left reading the two pointers was the readiness aggregate
+// and the trace that printed them -- neither is a caller.
 typedef bool   (*fn_IsDerived_t)(const void* obj, uint32_t tid);  // Object::Base::IsDerivedFrom
 typedef void   (*fn_TimeCtor_t)(void* retTime, float seconds);
 typedef void*  (*fn_BoxExtend_t)(const void* box, void* ret, const float* v3);
-typedef void   (*fn_SetBounds_t)(void* geometry, const void* box);
 
 // ENDGAME B.3.5: `baseUpdate` and `setBounds` are no longer CALLED — both sites
 // now call the members. The two fields, their resolves, the `f.ok` aggregate and
@@ -231,11 +234,9 @@ typedef void   (*fn_SetBounds_t)(void* geometry, const void* box);
 // cache is not dead and is not removed here (the closing pass takes it with the
 // remaining three non-Graphics doors).
 struct TornadoInstFuncs {
-    fn_PIUpdate_t     baseUpdate;
     fn_IsDerived_t    isDerived;
     fn_TimeCtor_t     timeCtor;
     fn_BoxExtend_t    boxExtend;
-    fn_SetBounds_t    setBounds;
     void*             rng;        // Graphics::Particle::_rng, the static the retail body uses
     bool              ok;
 };
@@ -245,21 +246,17 @@ const TornadoInstFuncs& InstFuncs() {
     static bool done = false;
     if (done) return f;
     done = true;
-    f.baseUpdate   = (fn_PIUpdate_t)    ResolveExport("?Update@ParticleInstance@Graphics@@QEAA_NXZ");
     f.isDerived    = (fn_IsDerived_t)   ResolveExport("?IsDerivedFrom@Base@Object@@QEBA_NI@Z");
     f.timeCtor     = (fn_TimeCtor_t)    ResolveExport("??0Time@System@@QEAA@M@Z");
     f.boxExtend    = (fn_BoxExtend_t)   ResolveExport("?Extend@Box@Volume@@QEBA?AV12@AEBVVector3@Math@@@Z");
-    f.setBounds    = (fn_SetBounds_t)   ResolveExport("?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z");
     f.rng          =                    ResolveExport("?_rng@Particle@Graphics@@1VRandom@System@@A");
-    f.ok = f.baseUpdate && f.isDerived && f.timeCtor &&
-           f.boxExtend && f.setBounds && f.rng;
+    f.ok = f.isDerived && f.timeCtor && f.boxExtend && f.rng;
     if (!f.ok) {
-        fprintf(stderr, "[Tornado/particle] Update UNRESOLVED leaf: baseUpdate=%p isDerived=%p "
-                "timeCtor=%p extend=%p setBounds=%p "
+        fprintf(stderr, "[Tornado/particle] Update UNRESOLVED leaf: isDerived=%p "
+                "timeCtor=%p extend=%p "
                 "rng=%p -- the funnel will stand still\n",
-                (void*)f.baseUpdate, (void*)f.isDerived, (void*)f.timeCtor,
-                (void*)f.boxExtend,
-                (void*)f.setBounds, f.rng);
+                (void*)f.isDerived, (void*)f.timeCtor,
+                (void*)f.boxExtend, f.rng);
         fflush(stderr);
     }
     return f;

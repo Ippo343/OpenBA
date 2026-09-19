@@ -443,18 +443,31 @@ void Impl_b930(int64_t self) {
     uint32_t triList0[6] = {0, (uint32_t)fillVtx._size, 0, (uint32_t)fillIdx._size, 0, 0};
     uint32_t triList1[6] = {0, (uint32_t)edgeVtx._size, 0, (uint32_t)edgeIdx._size, 0, 0};
 
-    if (mesh && fn_EdgeMesh_Set) {
-        fn_EdgeMesh_Set(
-            mesh,
+    // B.3.5 bridge -- ?Set@EdgeMesh@Graphics@@QEAA_NHPEBUTriangleList@GraphicsMesh@2@
+    // H0HPEAGHPEAXHH1H2HH1H2HH1H2HAEBVBox@Volume@@@Z (0x1800a23e0). The member was
+    // deliberately undeclared until the closing pass -- Mesh.h now carries the
+    // 25-slot list tokenised out of the mangled name and the body lives on the
+    // member. THE ARGUMENTS ARE UNCHANGED, POSITION FOR POSITION: this call site
+    // groups them (count, data, vcount, vdata, stride) x4, and the mangled name
+    // groups them 6/5/5/4 with each group's trailing int belonging to the NEXT
+    // pair; the two spellings describe the same 25 slots and the same bytes, which
+    // is why the door's 25 arguments move over verbatim. `box` was a `const void*`
+    // at the door and is `const ::Box&` on the member, as the mangled name says.
+    // `if (mesh)` is an OBJECT test and stays; only the `fn_EdgeMesh_Set` readiness
+    // term came out.
+    if (mesh) {
+        reinterpret_cast<Graphics::EdgeMesh*>(mesh)->Set(
             1, triList0,
             1, triList1,
             // fill stream: short indices + 8-byte TriangleVertex, stride 8
-            fillIdx._size, fillIdx._data, fillVtx._size, fillVtx._data, 8,
+            fillIdx._size, reinterpret_cast<uint16_t*>(fillIdx._data),
+            fillVtx._size, fillVtx._data, 8,
             0, nullptr, 0, nullptr, 0,
             // edge stream: short indices + 16-byte EdgeVertex, stride 0x10
-            edgeIdx._size, edgeIdx._data, edgeVtx._size, edgeVtx._data, 0x10,
+            edgeIdx._size, reinterpret_cast<uint16_t*>(edgeIdx._data),
+            edgeVtx._size, edgeVtx._data, 0x10,
             0, nullptr, 0, nullptr, 0,
-            box);
+            *reinterpret_cast<const ::Box*>(box));   // B.3.5 bridge
     }
 
     // Materials from the HighlightDescription (self+0x18): +0x30, +0x38 (yellow).

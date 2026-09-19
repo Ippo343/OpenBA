@@ -84,10 +84,15 @@ constexpr float kNormalDefaultZ  = 2.0f;        // 0x140172174
 // and the caches, their typedefs, the `loadSlot` lambda, the latch and the
 // three door-readiness guards went with the last caller.
 //
-// The two `int` arguments of `Set` are passed in exactly the order the door
-// took them; only the parameter NAMES differ between this file's old typedef
-// (`sizeBytes, byteOffset`) and Buffers.h (`offset, count`). That naming
-// disagreement is pre-existing and is reported, not "fixed", here.
+// The two `int` arguments of `Set` are passed in exactly the order the door took
+// them. This file's old typedef named them `(sizeBytes, byteOffset)` while
+// Buffers.h named them `(offset, count)`; ENDGAME B.3.5's closing pass settled it
+// from the retail bytes -- the three-instruction trampoline at 0x1800f38a0 passes
+// RDX and R8 through untouched to `{Index,Vertex}BufferData` slot 2, whose
+// parameters are `(sizeBytes, offsetBytes, src)`, and dx11's port of that slot
+// builds `box.left = offsetBytes`, `box.right = sizeBytes + offsetBytes`,
+// `srcRowPitch = sizeBytes`. THIS FILE WAS RIGHT; Buffers.h's names were wrong and
+// are now fixed. No argument order changed anywhere.
 
 // ============================================================
 // Helper C — TradeWork_helper_e270 (vertex normal compute)

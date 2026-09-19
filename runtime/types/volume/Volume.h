@@ -16,6 +16,33 @@
 // MEMORY: the caller passes a hidden return-slot pointer in RDX (after `this`
 // in RCX) and the callee returns that same pointer in RAX. Ports here are
 // plain free functions with the hidden slot as an explicit parameter.
+//
+// ----------------------------------------------------------------------------
+// THE <windows.h> NAME CLASH, AND WHY THIS HEADER IS NOW ORDER-FREE
+// ----------------------------------------------------------------------------
+// `Box`, `Rectangle` and `Frustum` are declared at GLOBAL scope here, matching
+// retail's `Volume::` namespace only in spirit (see the note at the bottom).
+// `<wingdi.h>`, pulled in by `<windows.h>` and therefore by `standalone/resolve.h`,
+// declares a global FUNCTION `Rectangle(HDC,int,int,int,int)`. A function name and
+// a class name may coexist in one scope, but the function HIDES the class name for
+// ordinary lookup — so a plain `sizeof(Rectangle)` after `<windows.h>` is a hard
+// error ("expected primary-expression"), and for a long time roughly forty caller
+// files carried an ordering workaround: "runtime headers FIRST, before resolve.h".
+//
+// ENDGAME B.3.5 (b35-close) fixed it AT THE SOURCE instead. Every place in this
+// header that names one of the three classes uses the ELABORATED type specifier
+// (`struct Rectangle`, `struct Box`, `struct Frustum`), which is exactly what C++
+// provides for a class name hidden by a function: elaborated-type-specifier lookup
+// ignores non-type names ([basic.lookup.elab]). This header therefore compiles
+// with `<windows.h>` included BEFORE it or after it, and no caller needs an
+// include order for THIS header's sake any more.
+//
+// WHAT IS NOT FIXED BY THIS, and what the ~40 existing comments still describe:
+// a CALLER that itself writes `Rectangle` unelaborated after `<windows.h>` hits the
+// same hiding, in its own translation unit, and no change here can help it. Such a
+// caller must either spell `struct Rectangle` or keep including this header first.
+// The existing ordering comments in those files were deliberately left in place:
+// they are still true statements about their own TUs and they are harmless.
 // ============================================================================
 
 #include <cstdint>
@@ -34,8 +61,8 @@ struct Box {
     Vector3 min;   // +0x00
     Vector3 max;   // +0x0c
 };
-static_assert(sizeof(Box) == 0x18, "Volume::Box must be 0x18 (24) bytes");
-static_assert(offsetof(Box, max) == 0x0c, "Volume::Box::max @ +0x0c");
+static_assert(sizeof(struct Box) == 0x18, "Volume::Box must be 0x18 (24) bytes");
+static_assert(offsetof(struct Box, max) == 0x0c, "Volume::Box::max @ +0x0c");
 
 // ============================================================
 // Volume::Rectangle — axis-aligned 2D rectangle.
@@ -46,8 +73,8 @@ struct Rectangle {
     Vector2 min;   // +0x00
     Vector2 max;   // +0x08
 };
-static_assert(sizeof(Rectangle) == 0x10, "Volume::Rectangle must be 0x10 (16) bytes");
-static_assert(offsetof(Rectangle, max) == 0x08, "Volume::Rectangle::max @ +0x08");
+static_assert(sizeof(struct Rectangle) == 0x10, "Volume::Rectangle must be 0x10 (16) bytes");
+static_assert(offsetof(struct Rectangle, max) == 0x08, "Volume::Rectangle::max @ +0x08");
 
 // ============================================================
 // Volume::Frustum — six clip planes plus a projection-kind flag.
@@ -96,5 +123,5 @@ struct Frustum {
     bool    isOrthographic;  // +0x60
     // +0x61..+0x63: compiler alignment padding, not read by any known caller.
 };
-static_assert(sizeof(Frustum) == 0x64, "Volume::Frustum must be 0x64 (100) bytes");
-static_assert(offsetof(Frustum, isOrthographic) == 0x60, "Volume::Frustum::isOrthographic @ +0x60");
+static_assert(sizeof(struct Frustum) == 0x64, "Volume::Frustum must be 0x64 (100) bytes");
+static_assert(offsetof(struct Frustum, isOrthographic) == 0x60, "Volume::Frustum::isOrthographic @ +0x60");

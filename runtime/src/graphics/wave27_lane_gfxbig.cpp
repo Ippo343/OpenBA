@@ -107,6 +107,9 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/AnimationState.h"
+#include "../../types/graphics/Animation.h"   // ENDGAME B.3.5 closing pass:
+                                              // Graphics::Animation, the clip record
+                                              // ApplyEvents is called on
 #include "../../types/system/Value.h"   // System::Time -- ENDGAME B.3.5 block GC
 #include "../../types/graphics/Camera.h"
 #include "../../types/graphics/Scene.h"   // ENDGAME B.3.5 caller batch: Graphics::Scene
@@ -916,11 +919,11 @@ void MaterialInstance::BuildParameters() {
 // QUALIFIED non-virtual member calls instead of three resolver hits. Their
 // registered doors are untouched and still serve every caller outside this file.
 //
-// `?ApplyEvents@Animation@Graphics@@` STAYS a resolver edge: its receiver here is
-// the 0x70-byte CLIP record inside the group's table, reached as
-// `AnimationClipPrefix`, and the clip is NOT a `Graphics::Animation` object -- it
-// is an element of the group's clip array. Converting that edge needs the
-// receiver's own type settled, which is not this block's.
+// `?ApplyEvents@Animation@Graphics@@` IS CONVERTED (ENDGAME B.3.5 closing pass).
+// The note that used to stand here said the receiver was "NOT a
+// `Graphics::Animation` object -- it is an element of the group's clip array", as
+// though those were alternatives. They are the same thing: see the proof at the
+// call site below.
 // ---------------------------------------------------------------------------
 bool AnimationState::Update(const System::Time& timeRef,
                             const Collection::Array<uint8_t>& nodesRef,
@@ -1027,15 +1030,31 @@ bool AnimationState::Update(const System::Time& timeRef,
         int64_t newTime = advance + L->time;
 
         if (applyEvents && li == 0 && clip->eventCount > 0) {
-            // ApplyEvents(base, fromTime, toTime) — fromTime is the address of
-            // the layer's CURRENT time field and toTime a local holding the new
-            // one, so retail hands it a pointer INTO the layer and a pointer to
-            // its own stack. The order matters: the store of `newTime` into the
-            // layer happens AFTER this call (0x1800fdd80), so the callee sees the
-            // old value through its third argument.
-            RT_EXPORT_ONCE(rtgfxbig::ApplyEventsFn,
-                "?ApplyEvents@Animation@Graphics@@QEBAXAEBVTransform@Math@@"
-                "AEBVTime@System@@1@Z")(clip, baseTransform, &L->time, &newTime);
+            // ApplyEvents(base, fromTime, toTime) — fromTime is the layer's
+            // CURRENT time and toTime a local holding the new one, so retail hands
+            // it a reference INTO the layer and a reference to its own stack. The
+            // order matters: the store of `newTime` into the layer happens AFTER
+            // this call (0x1800fdd80), so the callee sees the OLD value through its
+            // third argument -- and it still does here, because `L->time` is bound
+            // as a reference at the call and `L->time = newTime` is the next
+            // statement.
+// THE CLIP RECORD *IS* A `Graphics::Animation`, and the note that used to say
+// otherwise is withdrawn. The proof is retail's own mangled RETURN TYPE:
+//   ?GetAnimation@AnimationGroup@Graphics@@QEBAAEBVAnimation@2@H@Z  0x180016660
+// is the element helper over `AnimationGroup::_clips` and its body is an
+// `imul $0x70` -- so retail names the element type `Graphics::Animation` and fixes
+// the stride at 0x70 in the same symbol. `AnimationGroup.h:185/195` asserts the
+// array at +0x20, `Animation.h:453` asserts `sizeof(Graphics::Animation) == 0x70`
+// (block H1 measured it three ways), and this lane's own `LayerClip()` computes
+// exactly `*(uint8_t**)(group + 0x20) + clipIndex * 0x70` -- i.e. `&_clips[i]` of
+// that same array. Receiver settled; the `AnimationClipPrefix` POD stays, because
+// the hand-inlined FIELD reads around the call are not doors and stay
+// byte-identical.
+            reinterpret_cast<const Graphics::Animation*>(clip)   // B.3.5 bridge
+                ->Graphics::Animation::ApplyEvents(
+                    *reinterpret_cast<const Math::Transform*>(baseTransform),
+                    *reinterpret_cast<const System::Time*>(&L->time),
+                    *reinterpret_cast<const System::Time*>(&newTime));
         }
 
         L->time = newTime;

@@ -29,6 +29,7 @@
 
 #include "Dialog/ui_dialogs.h"
 #include "Component/coll_bridge.h"
+#include "graphics/Camera.h"   // ENDGAME B.3.5 closing pass -- Graphics::Camera
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -901,12 +902,16 @@ extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys) {
 
         // Convert compact Transform to Transform3 (48 bytes) and set on camera
         // ?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ  retail 0x18001fcd0
-        if (fn_Camera_SetCameraToWorld) {
-            Math::Transform3 transform3 =
-                reinterpret_cast<const Math::Transform*>(result)->AsTransform3();
-            // Camera object is at cameraSys+0x34
-            fn_Camera_SetCameraToWorld((void*)((uintptr_t)cameraSys + 0x34), &transform3);
-        }
+        Math::Transform3 transform3 =
+            reinterpret_cast<const Math::Transform*>(result)->AsTransform3();
+        // B.3.5 bridge -- ?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z.
+        // The Camera sits BY VALUE at cameraSys+0x34, and cameraSys is gameWorld+0xE0
+        // == GameUpdateLoop::m_playerController, whose ctor
+        // (Reimpl_FUN_1400985b0, gameupdateloop_load.cpp) runs
+        // `??0Camera@Graphics@@` on exactly `p + 0x34`. The readiness `if` went with
+        // the door pointer: it tested nothing but that pointer.
+        reinterpret_cast<Graphics::Camera*>((uintptr_t)cameraSys + 0x34)
+            ->SetCameraToWorld(transform3);   // B.3.5 bridge
     }
 
     // Step 4: Load "Dialog/Pause.rsc" resource

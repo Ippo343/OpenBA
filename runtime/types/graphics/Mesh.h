@@ -802,12 +802,49 @@ public:
                       Object::ExternalPtr<MaterialInstance> skinEdge);   // 0x1800a2760
 
     // `?Set@EdgeMesh@Graphics@@QEAA_NHPEBUTriangleList@GraphicsMesh@2@H0H
-    //  PEAGHPEAXHH1H2HH1H2HH1H2HAEBVBox@Volume@@@Z` 0x1800a23e0 — PORTED.
-    // Twenty-two arguments. The door in `mesh.cpp` carries the whole signature
-    // and its own transcription notes; the member is declared here in the door's
-    // shape so no caller batch has to edit this header, and it is deliberately
-    // left to the door (a twenty-two-parameter member declaration copied by hand
-    // is a liability, and nothing in the tree calls it as a member).
+    //  PEAGHPEAXHH1H2HH1H2HH1H2HAEBVBox@Volume@@@Z` 0x1800a23e0 — PORTED, and a
+    // real member since ENDGAME B.3.5's closing pass.
+    //
+    // TWENTY-FIVE arguments, not twenty-two: the earlier note here said 22, and
+    // both that number and the "deliberately left to the door" decision are
+    // withdrawn. The list below was copied MECHANICALLY from the mangled name by
+    // tokenising the argument string, never retyped from the decompiler's
+    // parameter list (the recorded rule for anything past the fourth argument):
+    //
+    //   H                                  -> int                          (1)
+    //   PEBUTriangleList@GraphicsMesh@2@   -> const TriangleList*  [bref 0] (2)
+    //   H                                  -> int                          (3)
+    //   0                                  -> const TriangleList*          (4)
+    //   H PEAG H PEAX H H                  -> int, ushort*[bref 1], int,
+    //                                         void*[bref 2], int, int    (5..10)
+    //   1 H 2 H H                          -> ushort*, int, void*, int, int
+    //                                                                  (11..15)
+    //   1 H 2 H H                          -> same five               (16..20)
+    //   1 H 2 H                            -> ushort*, int, void*, int (21..24)
+    //   AEBVBox@Volume@@                   -> const Volume::Box&        (25)
+    //
+    // The grouping is DELIBERATELY ASYMMETRIC and that is not a transcription
+    // slip: the first group carries a LEADING int and the last group has NO
+    // trailing int, because each group's trailing int is the NEXT pair's index
+    // COUNT. The body proves it — pair 0's index byte count is `i0 * 2` (group
+    // 1's leading int) while pair 1's is `v0x * 2` (group 1's trailing int).
+    // Retail's parameter packing straddles the four (index, vertex) pairs, so a
+    // "four identical groups of six" reading is wrong by construction and only
+    // happens to work because every slot is an int or a pointer.
+    //
+    // `TriangleList` has no C++ type here on purpose: the arrays it fills are
+    // `Collection::Array<uint8_t>` walked at a 0x18 stride (see `_triangleLists`
+    // below), so the parameter stays `const void*` exactly as the door had it.
+    // `engine/funcs/engine_funcs.h` carried a SECOND transcription of these same
+    // 25 slots in a symmetric "four groups of five" shape; it is ABI-identical
+    // and it retires with its last caller.
+    bool Set(int triCount, const void* triLists,
+             int edgeCount, const void* edgeLists,
+             int i0, uint16_t* ib0, int v0s, void* vb0, int v0n, int v0x,
+             uint16_t* ib1, int v1s, void* vb1, int v1n, int v1x,
+             uint16_t* ib2, int v2s, void* vb2, int v2n, int v2x,
+             uint16_t* ib3, int v3s, void* vb3, int v3n,
+             const ::Box& box);                                  // 0x1800a23e0
 
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
     // The eight buffer getters. Each is `LEA RAX,[RCX + <off>]` and nothing

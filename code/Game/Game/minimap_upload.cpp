@@ -104,16 +104,17 @@ extern "C" void Minimap_CreateAndUpload(void* mapObj) {
     static bool s_trace = Opt().mapTrace != nullptr;
 
     // ENDGAME B.3.5 batch K1: the CopyToTexture / Device::Lock / Device::Unlock terms
-    // went with their call sites. `fn_ImageBuffer_Ctor` is a CTOR door and stays.
+    // went with their call sites; the closing pass took their two remaining `%p`s
+    // below and the three globals themselves, which those `%p`s were the last thing
+    // reading. `fn_ImageBuffer_Ctor` is a CTOR door and stays.
     if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_ImageBuffer_Ctor ||
         g_NoiseUI_ImageBufferVtable == 0 ||
         !g_pVideoDeviceSingleton || !*g_pVideoDeviceSingleton) {
         static bool warned = false;
         if (!warned) {
             printf("[Minimap] primitives unresolved — skipping upload "
-                   "(MemAlloc=%p Ctor=%p CopyToTex=%p Lock=%p vtbl=%p dev=%p)\n",
+                   "(MemAlloc=%p Ctor=%p vtbl=%p dev=%p)\n",
                    (void*)fn_MemAlloc, (void*)fn_ImageBuffer_Ctor,
-                   (void*)fn_ImageBuffer_CopyToTexture, (void*)fn_VideoDevice_Lock,
                    (void*)g_NoiseUI_ImageBufferVtable,
                    g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr);
             fflush(stdout);

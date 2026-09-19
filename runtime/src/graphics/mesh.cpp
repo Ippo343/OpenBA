@@ -1132,6 +1132,12 @@ static void* RtGraphics_EdgeMesh_Ctor(void* self) {
 // body that is this port's own arithmetic — and leaves the eight virtual
 // uploads to the return value, which the caller already tests.
 // ============================================================================
+// ENDGAME B.3.5 closing pass: BODY MOVED to `Graphics::EdgeMesh::Set` (defined
+// beside the class's other members, below). Mesh.h declares the member with the
+// 25-slot list tokenised out of the mangled name; this door keeps its
+// registration and its address and delegates with the QUALIFIED non-virtual call.
+// `Set` is not virtual, so the qualification is belt-and-braces, not a recursion
+// guard -- but it is the shape every other moved body in this file uses.
 static bool RtGraphics_EdgeMesh_Set(void* self,
                                     int triCount,  const void* triLists,
                                     int edgeCount, const void* edgeLists,
@@ -1140,45 +1146,14 @@ static bool RtGraphics_EdgeMesh_Set(void* self,
                                     uint16_t* ib2, int v2s, void* vb2, int v2n, int v2x,
                                     uint16_t* ib3, int v3s, void* vb3, int v3n,
                                     const void* box) {
-
-    EdgeMesh* em = reinterpret_cast<EdgeMesh*>(self);
-
-    for (int i = 0; i < 6; ++i)
-        std::memcpy(B(self) + 0x168 + i * 4, B(box) + i * 4, 4);
-
-    RtTriListArrayResize()(&em->_triangleLists, triCount);
-    for (int i = 0; i < em->_triangleLists._size; ++i)
-        std::memcpy(em->_triangleLists._data + i * 0x18, B(triLists) + i * 0x18, 0x18);
-
-    RtTriListArrayResize()(&em->_edgeLists, edgeCount);
-    for (int i = 0; i < em->_edgeLists._size; ++i)
-        std::memcpy(em->_edgeLists._data + i * 0x18, B(edgeLists) + i * 0x18, 0x18);
-
-    // vt[1] = Create(bytes, flags, data=null); vt[2] = SetData(bytes, flags, data).
-    typedef bool (*BufCreateFn)(void* buf, int bytes, int flags, void* data);
-    struct Upload {
-        size_t   headerOff;   // the buffer OBJECT pointer, header + 0x08
-        int      bytes;
-        void*    data;
-    };
-    const Upload uploads[8] = {
-        { 0x70, i0  * 2,   ib0 },  { 0x50, v0s * v0n, vb0 },
-        { 0xb0, v0x * 2,   ib1 },  { 0x90, v1s * v1n, vb1 },
-        { 0xf0, v1x * 2,   ib2 },  { 0xd0, v2s * v2n, vb2 },
-        { 0x130, v2x * 2,  ib3 },  { 0x110, v3s * v3n, vb3 },
-    };
-
-    bool ours = true;
-    for (int i = 0; i < 8 && ours; ++i) {
-        void* buf = Rd<void*>(self, uploads[i].headerOff);
-        void** vt = *reinterpret_cast<void***>(buf);
-        BufCreateFn create = reinterpret_cast<BufCreateFn>(vt[1]);   // vt + 0x08
-        BufCreateFn fill   = reinterpret_cast<BufCreateFn>(vt[2]);   // vt + 0x10
-        ours = create(buf, uploads[i].bytes, 0, nullptr)
-            && fill(buf, uploads[i].bytes, 0, uploads[i].data);
-    }
-
-    return ours;
+    return reinterpret_cast<Graphics::EdgeMesh*>(self)   // B.3.5 bridge
+        ->Graphics::EdgeMesh::Set(
+        triCount, triLists, edgeCount, edgeLists,
+        i0, ib0, v0s, vb0, v0n, v0x,
+        ib1, v1s, vb1, v1n, v1x,
+        ib2, v2s, vb2, v2n, v2x,
+        ib3, v3s, vb3, v3n,
+        *reinterpret_cast<const ::Box*>(box));
 }
 
 // ============================================================================
@@ -3021,6 +2996,68 @@ int32_t GraphicsMesh::GetNodeIndexFromName(const char* name) const {
 // +0x40, +0x30 when it ORs their material type flags; that is edge, mask,
 // skinEdge, skinMask, and it is unaffected by this spelling.
 // ---------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// bool Graphics::EdgeMesh::Set(25 args)   retail 0x1800a23e0, ordinal 3813
+//
+// Body MOVED here from `RtGraphics_EdgeMesh_Set` by ENDGAME B.3.5's closing pass,
+// unchanged except that `self` became `this` and the `const void* box` parameter
+// became the `const ::Box&` the mangled name says it is (`AEBVBox@Volume@@`). The
+// door above it now delegates. Mesh.h carries the argument-by-argument
+// tokenisation of the mangled name and the note on why the four (index, vertex)
+// groups are asymmetric.
+//
+// Copy the bounds box, resize and fill the two TriangleList arrays, then upload
+// four (index, vertex) buffer pairs and return whether every upload succeeded.
+// Each upload is two VIRTUAL calls on the embedded Video buffer object: slot 1 at
+// vt+0x08 to size it and slot 2 at vt+0x10 to fill it, and any false
+// short-circuits the whole chain -- a failure at pair 2 leaves pairs 3 and 4
+// untouched. That early-out is retail behaviour, not an optimisation.
+// ----------------------------------------------------------------------------
+bool EdgeMesh::Set(int triCount, const void* triLists,
+                   int edgeCount, const void* edgeLists,
+                   int i0, uint16_t* ib0, int v0s, void* vb0, int v0n, int v0x,
+                   uint16_t* ib1, int v1s, void* vb1, int v1n, int v1x,
+                   uint16_t* ib2, int v2s, void* vb2, int v2n, int v2x,
+                   uint16_t* ib3, int v3s, void* vb3, int v3n,
+                   const ::Box& box) {
+    for (int i = 0; i < 6; ++i)
+        std::memcpy(B(this) + 0x168 + i * 4, B(&box) + i * 4, 4);
+
+    RtTriListArrayResize()(&_triangleLists, triCount);
+    for (int i = 0; i < _triangleLists._size; ++i)
+        std::memcpy(_triangleLists._data + i * 0x18, B(triLists) + i * 0x18, 0x18);
+
+    RtTriListArrayResize()(&_edgeLists, edgeCount);
+    for (int i = 0; i < _edgeLists._size; ++i)
+        std::memcpy(_edgeLists._data + i * 0x18, B(edgeLists) + i * 0x18, 0x18);
+
+    // vt[1] = Create(bytes, flags, data=null); vt[2] = SetData(bytes, flags, data).
+    typedef bool (*BufCreateFn)(void* buf, int bytes, int flags, void* data);
+    struct Upload {
+        size_t   headerOff;   // the buffer OBJECT pointer, header + 0x08
+        int      bytes;
+        void*    data;
+    };
+    const Upload uploads[8] = {
+        { 0x70, i0  * 2,   ib0 },  { 0x50, v0s * v0n, vb0 },
+        { 0xb0, v0x * 2,   ib1 },  { 0x90, v1s * v1n, vb1 },
+        { 0xf0, v1x * 2,   ib2 },  { 0xd0, v2s * v2n, vb2 },
+        { 0x130, v2x * 2,  ib3 },  { 0x110, v3s * v3n, vb3 },
+    };
+
+    bool ours = true;
+    for (int i = 0; i < 8 && ours; ++i) {
+        void* buf = Rd<void*>(this, uploads[i].headerOff);
+        void** vt = *reinterpret_cast<void***>(buf);
+        BufCreateFn create = reinterpret_cast<BufCreateFn>(vt[1]);   // vt + 0x08
+        BufCreateFn fill   = reinterpret_cast<BufCreateFn>(vt[2]);   // vt + 0x10
+        ours = create(buf, uploads[i].bytes, 0, nullptr)
+            && fill(buf, uploads[i].bytes, 0, uploads[i].data);
+    }
+
+    return ours;
+}
+
 void EdgeMesh::SetMaterials(Object::ExternalPtr<MaterialInstance> mask,
                             Object::ExternalPtr<MaterialInstance> edge,
                             Object::ExternalPtr<MaterialInstance> skinMask,

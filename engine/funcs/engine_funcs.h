@@ -23,6 +23,13 @@
 #include "object/External.h"    // ::Object::ExternalFactory
 #include "object/Internal.h"    // ::Object::InternalBasePtr
 #include "object/TypeInfo.h"    // ::Object::Factory
+// ENDGAME B.3.5 closing pass: the camera-snap inline body below was one of the
+// four callers of `fn_Camera_SetCameraToWorld`. It calls the real class now.
+// GLOBAL SCOPE, never inside an #if. Safe AFTER the `<windows.h>` at the top of
+// this header only because Volume.h (which Camera.h pulls for `Frustum`) became
+// order-free in the same pass -- before that, `<wingdi.h>`'s `Rectangle()`
+// function hid Volume.h's class of that name and this include could not be made.
+#include "graphics/Camera.h"   // ::Graphics::Camera
 
 // ============================================================
 // Timer globals (in Runtime-x64.dll .data section)
@@ -150,15 +157,10 @@ extern void* g_pMemAllocSingleton;
 // Video::Device::_singleton
 extern void** g_pVideoDeviceSingleton;
 
-// Video::Device::Lock(this) — enters critical section, increments lock count
-// Ordinal 3214: ?Lock@Device@Video@@QEAAXXZ
-typedef void (*fn_VideoDevice_Lock_t)(void* self);
-extern fn_VideoDevice_Lock_t fn_VideoDevice_Lock;
-
-// Video::Device::Unlock(this) — decrements lock count, leaves critical section
-// Ordinal 4462: ?Unlock@Device@Video@@QEAAXXZ
-typedef void (*fn_VideoDevice_Unlock_t)(void* self);
-extern fn_VideoDevice_Unlock_t fn_VideoDevice_Unlock;
+// Video::Device::Lock / ::Unlock (ordinals 3214 / 4462) are GONE in ENDGAME
+// B.3.5 (b35-close): both are members of the real `Video::Device`. Lock outlived
+// Unlock by one commit because minimap_upload.cpp's readiness printf was still
+// reading its address; that `%p` went with it.
 
 // ============================================================
 // System::String function pointers
@@ -237,9 +239,6 @@ extern fn_ListCleanup_t fn_ListCleanup;
 // Mod entry lifecycle (for Modification::Swap)
 // ============================================================
 
-
-
-
 // ============================================================
 // Collection::Map (AVL tree) — for Configuration command-line accessors
 // ============================================================
@@ -280,8 +279,6 @@ extern fn_ParseValue_t fn_ParseValue;
 // Persistence::_singleton pointer
 extern void** g_pPersistenceSingleton;
 
-
-
 // ============================================================
 // System::Filename helpers
 // ============================================================
@@ -289,7 +286,6 @@ extern void** g_pPersistenceSingleton;
 // ============================================================
 // Dynamic array operations (for Mod array management)
 // ============================================================
-
 
 // ============================================================
 // Engine globals (resolved pointers into Runtime-x64.dll data)
@@ -1265,15 +1261,10 @@ extern fn_ImageBuffer_Ctor_t fn_ImageBuffer_Ctor;
 // (??1ImageBuffer@Video@@UEAA@XZ, 0x1800f2610) is GONE — zero callers tree-wide.
 // The registered door in runtime/src/video/ is untouched.
 
-// ImageBuffer::CopyToTexture(this, data, width, height) -> bool
-// ?CopyToTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z (0x1800f3380, ordinal 1869)
-typedef bool (*fn_ImageBuffer_CopyToTexture_t)(void* self, void* data, int width, int height);
-extern fn_ImageBuffer_CopyToTexture_t fn_ImageBuffer_CopyToTexture;
-
-// ImageBuffer::CopyFromTexture(this, data, width, height) -> bool
-// ?CopyFromTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z (0x1800f33a0, ordinal 1866)
-typedef bool (*fn_ImageBuffer_CopyFromTexture_t)(void* self, void* data, int width, int height);
-extern fn_ImageBuffer_CopyFromTexture_t fn_ImageBuffer_CopyFromTexture;
+// ImageBuffer::CopyToTexture (0x1800f3380, ordinal 1869) and ::CopyFromTexture
+// (0x1800f33a0, ordinal 1866) are GONE in ENDGAME B.3.5 (b35-close): both are
+// members of the real `Video::ImageBuffer`. Their last readers were two diagnostic
+// `%p`s (minimap_upload.cpp and w2_takescreenshot.cpp), not calls.
 
 // ============================================================
 // Achievement::GoalList / GoalInstance (Runtime DLL exports)
@@ -1646,10 +1637,11 @@ extern fn_EntityPanel_SyncTracking_t fn_EntityPanel_SyncTracking;
 typedef void* (*fn_CameraSys_ComputeViewTransform_t)(void* cameraSys, void* outTransform);
 extern fn_CameraSys_ComputeViewTransform_t fn_CameraSys_ComputeViewTransform;
 
-// Graphics::Camera::SetCameraToWorld — sets camera world transform from Transform3
-// Runtime export: ?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z
-typedef void (*fn_Camera_SetCameraToWorld_t)(void* camera, void* transform3);
-extern fn_Camera_SetCameraToWorld_t fn_Camera_SetCameraToWorld;
+// Graphics::Camera::SetCameraToWorld (?SetCameraToWorld@Camera@Graphics@@QEAAX
+// AEBVTransform3@Math@@@Z, Runtime 0x1800feb00) is GONE in ENDGAME B.3.5
+// (b35-close): it is a member of the real `Graphics::Camera`. This row was the LAST
+// Video/Graphics door in this file bound BY ADDRESS rather than by mangled name,
+// which is why three name-anchored caller sweeps walked past its four callers.
 
 // Toolbar_CenterOnEntity_Impl — defined at end of file (needs all declarations above it)
 
@@ -2170,22 +2162,6 @@ extern uint32_t* g_TypeId_TerrainGenerator;  // DAT_1401c5b40
 // OptionsDialog support — Runtime DLL exports for video/audio config
 // ============================================================
 
-// Video::Device::ValidateConfiguration(this, &renderer, &adapter, &width, &height,
-//                                       &refreshNum, &refreshDen, &antialias, &adapter2)
-// ?ValidateConfiguration@Device@Video@@QEAAXAEAH0000000@Z
-typedef void (*fn_VideoDevice_ValidateConfiguration_t)(void* self, int*, int*, int*, int*, int*, int*, int*, int*);
-extern fn_VideoDevice_ValidateConfiguration_t fn_VideoDevice_ValidateConfiguration;
-
-// Video::Device::GetMultisampleModeCount(this) -> int
-// ?GetMultisampleModeCount@Device@Video@@QEBAHXZ
-typedef int (*fn_VideoDevice_GetMultisampleModeCount_t)(void* self);
-extern fn_VideoDevice_GetMultisampleModeCount_t fn_VideoDevice_GetMultisampleModeCount;
-
-// Video::Device::IsMultisampleModeSupported(this, mode) -> bool
-// ?IsMultisampleModeSupported@Device@Video@@QEBA_NH@Z
-typedef bool (*fn_VideoDevice_IsMultisampleModeSupported_t)(void* self, int mode);
-extern fn_VideoDevice_IsMultisampleModeSupported_t fn_VideoDevice_IsMultisampleModeSupported;
-
 // OptionsDialog::OnOk/OnCancel/OnApply — REMOVED: reimplemented in code/Game/Dialog/optionsdialog.cpp
 typedef void (*fn_OptionsDialog_SimpleFunc_t)(void* self);  // kept for PopulateInputBindList
 // OptionsDialog::PopulateInputBindList — REIMPLEMENTED in code/Game/Dialog/optionsdialog.cpp
@@ -2203,14 +2179,6 @@ extern void** g_pAudioConfigSingleton;  // resolved from _singleton_exref in sli
 
 // Video::Configuration singleton — contains current video settings
 extern void** g_pVideoConfigSingleton;  // resolved from _singleton_exref in Startup
-
-// Video::Device::GetInterface(this, index) -> GraphicsInterface*
-typedef void* (*fn_VideoDevice_GetInterface_t)(void* self, int index);
-extern fn_VideoDevice_GetInterface_t fn_VideoDevice_GetInterface;
-
-// Video::Device::GetInterfaceCount(this) -> int
-typedef int (*fn_VideoDevice_GetInterfaceCount_t)(void* self);
-extern fn_VideoDevice_GetInterfaceCount_t fn_VideoDevice_GetInterfaceCount;
 
 // UI::Sprite::Sprite() — default constructor, zeroes 16 bytes
 typedef void* (*fn_Sprite_DefaultCtor_t)(void* self);
@@ -2340,7 +2308,6 @@ extern fn_DialogInstance_GetRoot_t fn_DialogInstance_GetRoot;
 typedef void (*fn_Element_Hide_t)(void* self, bool hide);
 extern fn_Element_Hide_t fn_Element_Hide;
 
-
 // System::Configuration::GetVersionString(retval, version, isBeta) -> String
 // Static with hidden return: RCX=retval(String*), RDX=version(uint), R8B=isBeta(bool)
 // ?GetVersionString@Configuration@System@@SA?AVString@2@I_N@Z
@@ -2361,10 +2328,6 @@ extern void** g_ppModificationSingleton;
 // closing 2d. Both were 0-CALL doors onto Runtime 0x18000da90 / 0x18000da80;
 // the ported bodies stay registered by address in runtime/src/io/modification.cpp
 // and callers reach them as real members. Only the readers died here.
-
-
-
-
 
 // ============================================================
 // UI::DialogInstance::OnElementEvent
@@ -2930,13 +2893,6 @@ extern fn_Graphics_Particle_Ctor_t fn_Graphics_Particle_Ctor;
 // so this static MUST be advanced once per render frame or baked particle systems
 // stop simulating after their first update. Whoever calls it now calls the member.
 
-// Graphics::Scene::Clean(this) — walks scene objects and calls Geometry::Clean
-// (vtable +0x40) on each that has a dirty bit set. Must be called once per
-// frame after all per-instance Update calls; without it, transform/bounds
-// updates don't propagate to the renderer's per-frame state, causing flicker.
-typedef void (*fn_Graphics_Scene_Clean_t)(void* scene);
-extern fn_Graphics_Scene_Clean_t fn_Graphics_Scene_Clean;
-
 // ============================================================
 // MenuScene 3D rendering — Runtime DLL Graphics::/Math::/Volume:: functions
 // Used by code/Game/Game/menudialogloopt.cpp (Phase A scene background).
@@ -2965,11 +2921,6 @@ extern fn_Graphics_MeshInstance_Ctor_t fn_Graphics_MeshInstance_Ctor;
 // ENDGAME B.3.5 (b35-K2): `fn_Graphics_MeshInstance_SetMesh`
 // (?SetMesh@MeshInstance@Graphics@@) is GONE — zero callers. It had FOUR in
 // B35_RULES section 7's table.
-
-// Graphics::Renderer::Draw(context, alpha, scene, camera) — main render call.
-// RCX=Renderer*, RDX=Video::Context*, XMM2=alpha, R9=Scene*, [stack+0x20]=Camera*.
-typedef void (*fn_Graphics_Renderer_Draw_t)(void* self, void* context, float alpha, void* scene, void* camera);
-extern fn_Graphics_Renderer_Draw_t fn_Graphics_Renderer_Draw;
 
 // ENDGAME B.3.5 (b35-K2): `fn_Video_Context_SetFog` (?SetFog@Context@Video@@) is
 // GONE — zero callers.
@@ -3334,21 +3285,6 @@ inline void* GetLoadingSoundString(void* retStr) {
 typedef void* (*fn_MaterialInstance_Ctor_t)(void* self);
 extern fn_MaterialInstance_Ctor_t fn_MaterialInstance_Ctor;
 
-// Graphics::MaterialInstance::SetMaterial(this, material)
-// Dispatch table at 0x140151870
-typedef void (*fn_MaterialInstance_SetMaterial_t)(void* self, void* material);
-extern fn_MaterialInstance_SetMaterial_t fn_MaterialInstance_SetMaterial;
-
-// Graphics::MaterialInstance::AddTexture(this, name, imageBuffer)
-// Dispatch table at 0x140151878
-typedef void (*fn_MaterialInstance_AddTexture_t)(void* self, void* nameStr, void* imageBuffer);
-extern fn_MaterialInstance_AddTexture_t fn_MaterialInstance_AddTexture;
-
-// Graphics::MaterialInstance::BuildParameters(this)
-// Dispatch table at 0x140151880
-typedef void (*fn_MaterialInstance_BuildParameters_t)(void* self);
-extern fn_MaterialInstance_BuildParameters_t fn_MaterialInstance_BuildParameters;
-
 // UI::SpriteSheet::SpriteSheet(this) — ctor (0x58 bytes)
 // Dispatch table at 0x140151848
 typedef void* (*fn_SpriteSheet_Ctor_t)(void* self);
@@ -3372,16 +3308,6 @@ extern fn_SpriteSheet_SetSpriteInfo_t fn_SpriteSheet_SetSpriteInfo;
 // Returns retval (16-byte Sprite struct)
 typedef void* (*fn_Sprite_Ctor_ByIndex_t)(void* retval, void* spriteSheet, int index);
 extern fn_Sprite_Ctor_ByIndex_t fn_Sprite_Ctor_ByIndex;
-
-// Video::ImageBuffer::Width(this) -> int — returns pixel width
-// Dispatch table at 0x140151a00 (ordinal 0xD0)
-typedef int (*fn_ImageBuffer_Width_t)(void* self);
-extern fn_ImageBuffer_Width_t fn_ImageBuffer_Width;
-
-// Video::ImageBuffer::Height(this) -> int — returns pixel height
-// Dispatch table at 0x140151a08 (ordinal 0xCF)
-typedef int (*fn_ImageBuffer_Height_t)(void* self);
-extern fn_ImageBuffer_Height_t fn_ImageBuffer_Height;
 
 // Custom vtables set on per-mod thumbnail objects (exe .rdata)
 // ModDialog MaterialInstance vtable (0x14015c400)
@@ -3428,7 +3354,6 @@ extern fn_UI_EndSpriteCapture_t fn_UI_EndSpriteCapture;
 // IO::FileSystem singleton — exref at 0x140151d18 (ordinal 0x161 _singleton)
 extern void** g_pFileSystemSingleton;
 
-
 // Object::External::SaveText(this, path, subdir) -> bool
 // ?SaveText@External@Object@@QEAA_NAEBVFilename@System@@0@Z (0x1800bb9d0, ordinal 364)
 
@@ -3448,12 +3373,8 @@ extern fn_AudioConfig_Save_t fn_AudioConfig_Save;
 typedef bool (*fn_AudioConfig_Startup_t)(void* self);
 extern fn_AudioConfig_Startup_t fn_AudioConfig_Startup;
 
-// --- Video::Configuration ---
-
-// Video::Configuration::Save(this)
-// ?Save@Configuration@Video@@QEAAXXZ
-typedef void (*fn_VideoConfig_Save_t)(void* self);
-extern fn_VideoConfig_Save_t fn_VideoConfig_Save;
+// --- Video::Configuration --- EMPTY since ENDGAME B.3.5 (b35-close):
+// `Configuration::Save` is a member of the real `Video::Configuration`.
 
 // --- Input::Configuration ---
 
@@ -3485,32 +3406,12 @@ extern fn_InputDevice_EnableMouseClipping_t fn_InputDevice_EnableMouseClipping;
 typedef void (*fn_InputDevice_ResetState_t)(void* self);
 extern fn_InputDevice_ResetState_t fn_InputDevice_ResetState;
 
-// --- Video::Device ---
-
-// Video::Device::ApplyChangedSettings(this) -> bool
-// ?ApplyChangedSettings@Device@Video@@QEAA_NXZ
-typedef bool (*fn_VideoDevice_ApplyChangedSettings_t)(void* self);
-extern fn_VideoDevice_ApplyChangedSettings_t fn_VideoDevice_ApplyChangedSettings;
-
-// Video::Device::Startup(this) -> bool
-// ?Startup@Device@Video@@QEAA_NXZ
-typedef bool (*fn_VideoDevice_Startup_t)(void* self);
-extern fn_VideoDevice_Startup_t fn_VideoDevice_Startup;
-
-// Video::Device::RecreateDynamic(this)
-// ?RecreateDynamic@Device@Video@@QEAAXXZ
-typedef void (*fn_VideoDevice_RecreateDynamic_t)(void* self);
-extern fn_VideoDevice_RecreateDynamic_t fn_VideoDevice_RecreateDynamic;
-
-// Video::Device::ReleaseDynamic(this)
-// ?ReleaseDynamic@Device@Video@@QEAAXXZ
-typedef void (*fn_VideoDevice_ReleaseDynamic_t)(void* self);
-extern fn_VideoDevice_ReleaseDynamic_t fn_VideoDevice_ReleaseDynamic;
-
-// Video::Device::Shutdown(this)
-// ?Shutdown@Device@Video@@QEAAXXZ
-typedef void (*fn_VideoDevice_Shutdown_t)(void* self);
-extern fn_VideoDevice_Shutdown_t fn_VideoDevice_Shutdown;
+// --- Video::Device --- EMPTY since ENDGAME B.3.5 (b35-close): every door this
+// section held (`Startup`, `Shutdown`, `ApplyChangedSettings`, `RecreateDynamic`,
+// `ReleaseDynamic`, `ValidateConfiguration`, `GetMultisampleModeCount`,
+// `IsMultisampleModeSupported`, `GetInterface`, `GetInterfaceCount`, `Unlock`) is a
+// member of the real `Video::Device`. `g_pVideoDeviceSingleton` above stays: a
+// static-storage read, not a door (B35_RULES section 9).
 
 // --- Engine::MainLoop ---
 
@@ -3814,7 +3715,6 @@ extern fn_ComponentBase_Serialize_t fn_ComponentBase_Serialize;
 // FUN_14000a590(arrayPtr, newCount) — dynamic array resize (exe function)
 typedef void (*fn_DynArray_Resize_t)(void* arrayPtr, int newCount);
 extern fn_DynArray_Resize_t fn_DynArray_Resize;
-
 
 // FUN_140028860(arrayPtr, newCount) — String array resize for ToolbarDescription (exe)
 typedef void (*fn_StringArray_Resize_t)(void* arrayPtr, int newCount);
@@ -4697,12 +4597,16 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
         void* result = fn_CameraSys_ComputeViewTransform((void*)cameraSys, &viewTransform);
 
         // ?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ  retail 0x18001fcd0
-        if (fn_Camera_SetCameraToWorld) {
-            Math::Transform3 transform3 =
-                reinterpret_cast<const Math::Transform*>(result)->AsTransform3();
-            // Camera object embedded at cameraSys + 0x34 (offset 0xD * sizeof(uint32_t))
-            fn_Camera_SetCameraToWorld((void*)(cameraSys + 0x34), &transform3);
-        }
+        Math::Transform3 transform3 =
+            reinterpret_cast<const Math::Transform*>(result)->AsTransform3();
+        // B.3.5 bridge -- ?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z.
+        // The Camera is embedded BY VALUE at cameraSys + 0x34; the proof is the
+        // writer, not the name: Reimpl_FUN_1400985b0
+        // (code/Game/Game/gameupdateloop_load.cpp) constructs it there with
+        // `??0Camera@Graphics@@` on this same +0xE0 object. The readiness `if` went
+        // with the door pointer -- it tested nothing else.
+        reinterpret_cast<Graphics::Camera*>(cameraSys + 0x34)
+            ->SetCameraToWorld(transform3);   // B.3.5 bridge
     }
 
     // === Section 4: Select entity in EditTool ===
@@ -4929,7 +4833,6 @@ extern fn_Work_SerializeBase_t fn_Work_SerializeBase;
 typedef void (*fn_BST_SerializeHelper_t)(void* bstRoot, void* serializer);
 extern fn_BST_SerializeHelper_t fn_BST_SerializeHelper;
 
-
 // Entity::FindComponent by type ID — various component lookups on entities.
 
 // FindComponent_Position (0x140002ed0) — type DWORD_1401c7900
@@ -5001,7 +4904,6 @@ extern fn_SetupBuildActions_t fn_SetupBuildActions;
 // Note: same address as fn_CitizenAI_RegisterWork, different typedef
 typedef void* (*fn_BST_Insert_t)(void* bstRoot, void* entityIBP, void* citizenIBP);
 extern fn_BST_Insert_t fn_BST_Insert;
-
 
 // CitizenComponent_CheckWorkplaceValid (0x1401158d0) — checks if workplace is reachable
 // RCX=CitizenComponent*, RDX=&workplaceEntityIBP. Returns bool (char).
@@ -5207,11 +5109,6 @@ extern fn_SceneAddObject_t fn_SceneAddObject;
 typedef void (*fn_SceneRemoveObject_t)(void* scene, uint32_t objectId);
 extern fn_SceneRemoveObject_t fn_SceneRemoveObject;
 
-// Graphics::Geometry::SetTransform — apply transform to geometry/mesh
-// IAT dispatch slot 0x1401512e0. RCX=Geometry*, RDX=Transform*
-typedef void (*fn_Geometry_SetTransform_t)(void* geometry, void* transform);
-extern fn_Geometry_SetTransform_t fn_Geometry_SetTransform;
-
 // Graphics::MeshInstance::UpdateHierarchy — update mesh bone/transform hierarchy
 // IAT dispatch slot 0x140152888. RCX=MeshInstance*
 typedef void (*fn_MeshInstance_UpdateHierarchy_t)(void* mesh);
@@ -5262,25 +5159,15 @@ extern fn_EdgeMesh_TriangleVertex_Ctor_t fn_EdgeMesh_TriangleVertex_Ctor;
 typedef void* (*fn_EdgeMesh_EdgeVertex_Ctor_t)(void* self, const void* tvA, const void* tvB, int flags);
 extern fn_EdgeMesh_EdgeVertex_Ctor_t fn_EdgeMesh_EdgeVertex_Ctor;
 
-// Graphics::EdgeMesh::Set(...) — 25 params. exe slot 0x140151380
-// ?Set@EdgeMesh@Graphics@@QEAA_NHPEBUTriangleList@GraphicsMesh@2@H0HPEAGHPEAXHH1H2HH1H2HH1H2HAEBVBox@Volume@@@Z
-// Layout: (this, int, const TriList*, int, const TriList*, then four
-//          {int,ushort*,int,void*,int} vertex/index streams, const Box&).
-typedef bool (*fn_EdgeMesh_Set_t)(
-    void* self,
-    int a0, const void* triList0,
-    int a1, const void* triList1,
-    int c0, void* p0, int c1, void* p1, int stride0,
-    int c2, void* p2, int c3, void* p3, int e2,
-    int c4, void* p4, int c5, void* p4b, int stride1,
-    int c6, void* p6, int c7, void* p7, int e6,
-    const void* box);
-extern fn_EdgeMesh_Set_t fn_EdgeMesh_Set;
-
-// Graphics::EdgeMesh::SetMaterials(m0,m1,m2,m3) — ExternalPtr<MaterialInstance> by value (8B each).
-// ?SetMaterials@EdgeMesh@Graphics@@QEAAXV?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@000@Z  slot 0x140151388
-typedef void (*fn_EdgeMesh_SetMaterials_t)(void* self, void* m0, void* m1, void* m2, void* m3);
-extern fn_EdgeMesh_SetMaterials_t fn_EdgeMesh_SetMaterials;
+// Graphics::EdgeMesh::Set (?Set@EdgeMesh@Graphics@@QEAA_NHPEBUTriangleList@
+// GraphicsMesh@2@H0HPEAGHPEAXHH1H2HH1H2HH1H2HAEBVBox@Volume@@@Z, 0x1800a23e0, exe
+// slot 0x140151380) is GONE in ENDGAME B.3.5 (b35-close): it is a member of the
+// real `Graphics::EdgeMesh` now. This typedef held a SECOND transcription of the
+// same 25 slots, grouped symmetrically as four {int,ushort*,int,void*,int} streams;
+// the mangled name's own grouping is 6/5/5/4 because each group's trailing int is
+// the NEXT pair's index count. Both spellings are ABI-identical (every slot is an
+// int or a pointer), which is why nothing ever caught the difference -- see
+// runtime/types/graphics/Mesh.h for the tokenisation and the proof from the body.
 
 // ENDGAME B.3.5 (b35-K2): `fn_EdgeMeshInstance_SetMesh`
 // (?SetMesh@EdgeMeshInstance@Graphics@@, exe slot 0x140151368) is GONE — zero
@@ -5672,9 +5559,6 @@ extern fn_Geometry_ChunkUpdate_t  fn_Geometry_ChunkUpdate;   // 0x1400aad50  M3.
 //
 // All Runtime primitives needed are ALREADY wired in engine_funcs.h:
 //   fn_ImageBuffer_Ctor          (??0ImageBuffer@Video@@QEAA@XZ)
-//   fn_ImageBuffer_CopyToTexture (?CopyToTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z)
-//   fn_VideoDevice_Lock          (?Lock@Device@Video@@QEAAXXZ, ordinal 3214)
-//   fn_VideoDevice_Unlock        (?Unlock@Device@Video@@QEAAXXZ, ordinal 4462)
 //   g_pVideoDeviceSingleton      (Runtime 0x1801fe7a8)
 //   g_NoiseUI_ImageBufferVtable  (exe 0x14015c8c0, set in Phase Q)
 //
@@ -5755,31 +5639,18 @@ extern fn_TradeWork_sub_c780_t fn_TradeWork_sub_c780;  // 0x1400ac780  M3.5 Path
 //   +0x38  SetSharedInstanceData       (Runtime IAT thunk → 0x140152278)
 //   +0x40  Clean                       (Runtime IAT thunk → 0x140152190)
 //
-// Runtime export pointers for the per-item / collect Draw bodies. All are
-// resolved via ResolveExport in EngineFuncsInit (fall back to dispatch slot
-// reads when ResolveExport fails). Both DLL and standalone modes use these.
-
-// Renderer / Camera / Frustum primitives (used by collect Draw)
-typedef void* (*fn_Renderer_GetCullCamera_t)(void* renderer);
-extern fn_Renderer_GetCullCamera_t fn_Renderer_GetCullCamera;
-// ?GetCullCamera@Renderer@Graphics@@QEAAAEBVCamera@2@XZ
-
-typedef void  (*fn_Renderer_AddDrawItem_t)(void* renderer, void* geometry,
-                                           void* material, uint16_t key1,
-                                           uint16_t key2, float depth,
-                                           float uvScale, int flag,
-                                           void* extraPtr, uint32_t extraInt);
-extern fn_Renderer_AddDrawItem_t fn_Renderer_AddDrawItem;
-// ?AddDrawItem@Renderer@Graphics@@QEAAXPEBVGeometry@2@PEBVMaterialInstance@2@GGMMHPEBXI@Z
-
-typedef int   (*fn_Renderer_GetShader_t)(void* renderer);
-extern fn_Renderer_GetShader_t fn_Renderer_GetShader;
-// ?GetShader@Renderer@Graphics@@QEBAHXZ
-
-// Member fns with hidden return: RCX=this, RDX=retval, R8+=args
-typedef void* (*fn_Camera_GetFrustum_t)(void* camera, void* retval);
-extern fn_Camera_GetFrustum_t fn_Camera_GetFrustum;
-// ?GetFrustum@Camera@Graphics@@QEBA?AVFrustum@Volume@@XZ
+// Runtime export pointers for the per-item / collect Draw bodies.
+//
+// ENDGAME B.3.5 (b35-close): the VIDEO and GRAPHICS pointers of this block are
+// GONE — `Renderer::{GetCullCamera, AddDrawItem, GetShader}`,
+// `Camera::GetFrustum`, `Geometry::{GetTransform, UpdateAttached,
+// GetSubTransform, GetInstanceTransform, SetSharedInstanceData, Clean}` and the
+// seven `Video::Context` primitives are all members of real C++ classes now, and
+// `code/Game/Game/geometry_draw.cpp` calls them as members (batch b35-K1). What
+// remains in this block is the `Volume::Frustum` pair, the `Math` helpers and
+// `Graphics::InterpolatedState<Transform>::Lerp`, whose receivers are not part of
+// step 5. The nine vtable slots above still describe the derived exe-phase
+// Geometry class, which is deliberately NOT converted (B35_RULES section 11).
 
 typedef uint32_t (*fn_Frustum_Contains_t)(void* frustum, void* box, uint32_t mask);
 extern fn_Frustum_Contains_t fn_Frustum_Contains;
@@ -5789,11 +5660,6 @@ typedef void* (*fn_Frustum_MulTransform3_t)(void* frustum, void* retval, void* x
 extern fn_Frustum_MulTransform3_t fn_Frustum_MulTransform3;
 // ??DFrustum@Volume@@QEBA?AV01@AEBVTransform3@Math@@@Z (operator*)
 
-// Math primitives (member fn hidden retval where applicable)
-typedef void* (*fn_Geometry_GetTransform_t)(void* geometry, void* retval);
-extern fn_Geometry_GetTransform_t fn_Geometry_GetTransform;
-// ?GetTransform@Geometry@Graphics@@QEBA?AVTransform@Math@@XZ
-
 // ?Inverse@Transform@Math@@QEBA?AV12@XZ
 
 // ?AsMatrix@Transform@Math@@QEBA?AVMatrix@2@XZ
@@ -5802,67 +5668,13 @@ extern fn_Geometry_GetTransform_t fn_Geometry_GetTransform;
 
 // ??0Vector3@Math@@QEAA@MMM@Z
 
-typedef void* (*fn_InterpolatedState_Transform_Lerp_t)(void* self, void* retval, void* scalar);
-extern fn_InterpolatedState_Transform_Lerp_t fn_InterpolatedState_Transform_Lerp;
-// ?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@AEBVScalar@4@@Z
-
-// Video::Context primitives (used by per-item Draw)
-typedef void  (*fn_Context_SetTransform_t)(void* context, int slot, void* matrix);
-extern fn_Context_SetTransform_t fn_Context_SetTransform;
-// ?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z
-
-typedef void  (*fn_Context_SetColor_t)(void* context, void* vector4);
-extern fn_Context_SetColor_t fn_Context_SetColor;
-// ?SetColor@Context@Video@@QEAAXAEBVVector4@Math@@@Z
-
-typedef void  (*fn_Context_SetVertexBuffer_t)(void* context, void* vb,
-                                              int p0, int p1, int stride);
-extern fn_Context_SetVertexBuffer_t fn_Context_SetVertexBuffer;
-// ?SetVertexBuffer@Context@Video@@QEAAXPEBVVertexBuffer@2@HHH@Z
-
-typedef void  (*fn_Context_SetImageBuffer_t)(void* context, void* img, int slot);
-extern fn_Context_SetImageBuffer_t fn_Context_SetImageBuffer;
-// ?SetImageBuffer@Context@Video@@QEAAXPEBVImageBuffer@2@H@Z
-
-typedef bool  (*fn_Context_BeginIndexedVertices_t)(void* context, int p0, int p1, int p2);
-extern fn_Context_BeginIndexedVertices_t fn_Context_BeginIndexedVertices;
-// ?BeginIndexedVertices@Context@Video@@QEAA_NHHH@Z
-
-typedef void  (*fn_Context_EndIndexedVertices_t)(void* context, int primType);
-extern fn_Context_EndIndexedVertices_t fn_Context_EndIndexedVertices;
-// ?EndIndexedVertices@Context@Video@@QEAAXW4PrimitiveType@12@@Z
-
-typedef void  (*fn_Context_DrawIndexed_t)(void* context, int primType,
-                                          int a, int b, int c, int d, int e);
-extern fn_Context_DrawIndexed_t fn_Context_DrawIndexed;
-// ?DrawIndexed@Context@Video@@QEAAXW4PrimitiveType@12@HHHHH@Z
-
-// Inherited base methods of Graphics::Geometry (used by +0x20..+0x40 thunks).
-// These are dispatched via .rdata IAT slots in the original; in standalone we
-// resolve them once and call directly. Signatures inferred from Runtime export
-// mangled names — none are heavily used by the menu-scene render path so the
-// arg layouts are best-effort.
-typedef void  (*fn_Geometry_UpdateAttached_t)(void* self);
-extern fn_Geometry_UpdateAttached_t fn_Geometry_UpdateAttached;
-// ?UpdateAttached@Geometry@Graphics@@UEAAXXZ
-
-typedef void* (*fn_Geometry_GetSubTransform_t)(void* self, void* retval, int idx);
-extern fn_Geometry_GetSubTransform_t fn_Geometry_GetSubTransform;
-// ?GetSubTransform@Geometry@Graphics@@UEBA?AVTransform@Math@@H@Z
-
-typedef void* (*fn_Geometry_GetInstanceTransform_t)(void* self, void* retval,
-                                                    int idx, float t);
-extern fn_Geometry_GetInstanceTransform_t fn_Geometry_GetInstanceTransform;
-// ?GetInstanceTransform@Geometry@Graphics@@UEBA?AVMatrix@Math@@HM@Z
-
-typedef int   (*fn_Geometry_SetSharedInstanceData_t)(void* self, void* context,
-                                                     int idx, float t);
-extern fn_Geometry_SetSharedInstanceData_t fn_Geometry_SetSharedInstanceData;
-// ?SetSharedInstanceData@Geometry@Graphics@@UEBAHAEAVContext@Video@@HM@Z
-
-typedef bool  (*fn_Geometry_Clean_t)(void* self);
-extern fn_Geometry_Clean_t fn_Geometry_Clean;
-// ?Clean@Geometry@Graphics@@UEAA_NXZ
+// ?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@
+// AEBVScalar@4@@Z (0x18001aff0) is GONE in ENDGAME B.3.5 (b35-close). Two caller
+// batches kept it with the reason "no such class exists in runtime/types/graphics
+// at all"; the closing pass authored the class
+// (runtime/types/graphics/InterpolatedState.h) and ported the member instead of
+// keeping the door, so both call sites -- geometry_draw.cpp and
+// Component/statusicon_geometry.cpp -- are member calls now.
 
 // ============================================================
 // Initialization

@@ -999,15 +999,6 @@ void MenuDialogLoopT_UpdateCamera_PhaseA(void* self, float deltaSeconds) {
     void* transform = Field<void*>(self, MenuDLTOff::transform_bb8);
     if (!transform) return;
 
-    if (!fn_Camera_SetCameraToWorld) {
-        static int warned = 0;
-        if (warned++ < 3) {
-            printf("[MenuDLT::UpdateCamera] missing fn ptrs (SetCTW=%p) — skipping\n",
-                   (void*)fn_Camera_SetCameraToWorld);
-        }
-        return;
-    }
-
     // 1. Animate yaw at MenuDLT+0xb78 (live) using cached scrollX at +0xb7c.
     //    Constants from the original exe (verified via Ghidra read_memory):
     //      DAT_1401721b4 = 11.25  (yaw spin rate, *degrees* per AsSeconds unit)
@@ -1060,8 +1051,15 @@ void MenuDialogLoopT_UpdateCamera_PhaseA(void* self, float deltaSeconds) {
     // 3. Convert to Transform3 (48B = 3x4 matrix) and apply to Camera at +0x34.
     Math::Transform3 t3Buf =
         reinterpret_cast<const Math::Transform*>(transform)->AsTransform3();
-    void* camera = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(transform) + 0x34);
-    fn_Camera_SetCameraToWorld(camera, &t3Buf);
+    // B.3.5 bridge -- ?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z.
+    // The receiver is proved by this file's own writer: MenuScene setup at :169-170
+    // runs `??0Camera@Graphics@@` on `transformObj + 0x34`, and `transform` here is
+    // the same MenuDLT+0xbb8 field. The whole readiness `if` and its
+    // "missing fn ptrs (SetCTW=%p)" printf went with the door pointer -- the `if`
+    // tested nothing else, and `!menuScene` / `!transform` above are object tests
+    // and stay.
+    reinterpret_cast<Graphics::Camera*>(
+        reinterpret_cast<uintptr_t>(transform) + 0x34)->SetCameraToWorld(t3Buf);   // B.3.5 bridge
 
     // Diagnostic: log the first few frames so we can verify the camera transform
     // is non-identity (the underlying bug we're fixing).

@@ -987,10 +987,15 @@ bool Video::IndexBuffer::Create(int count, bool isDynamic, void* data) {
                         static_cast<uint8_t>(isDynamic ? 1 : 0), data);
 }
 
-bool Video::IndexBuffer::Set(int offset, int count, void* data) {
+// ENDGAME B.3.5 closing pass: the two ints are RENAMED, not reordered, to the
+// `(sizeBytes, offsetBytes)` the retail trampoline and dx11's slot-2 consumer both
+// say they are -- Buffers.h carries the evidence. The forwarding was already
+// correct: `SetData`'s own parameters are spelled `(sizeBytes, offsetBytes, src)`
+// in CompanionData.h, so the old names disagreed with the call one line below them.
+bool Video::IndexBuffer::Set(int sizeBytes, int offsetBytes, void* data) {
     // B.3.5 bridge — platformData is a pinned void* field.
     return reinterpret_cast<Video::IndexBufferData*>(platformData)
-               ->SetData(offset, count, data);
+               ->SetData(sizeBytes, offsetBytes, data);
 }
 
 bool Video::VertexBuffer::Create(int count, bool isDynamic, void* data) {
@@ -1000,26 +1005,26 @@ bool Video::VertexBuffer::Create(int count, bool isDynamic, void* data) {
                         static_cast<uint8_t>(isDynamic ? 1 : 0), data);
 }
 
-bool Video::VertexBuffer::Set(int offset, int count, void* data) {
+bool Video::VertexBuffer::Set(int sizeBytes, int offsetBytes, void* data) {
     // B.3.5 bridge — platformData is a pinned void* field.
     return reinterpret_cast<Video::VertexBufferData*>(platformData)
-               ->SetData(offset, count, data);
+               ->SetData(sizeBytes, offsetBytes, data);
 }
 
 bool Video_IndexBuffer_Create(IndexBuffer* self, int count, bool dynamic, void* data) {
     return self->Video::IndexBuffer::Create(count, dynamic, data);
 }
 
-bool Video_IndexBuffer_Set(IndexBuffer* self, int offset, int count, void* data) {
-    return self->Video::IndexBuffer::Set(offset, count, data);
+bool Video_IndexBuffer_Set(IndexBuffer* self, int sizeBytes, int offsetBytes, void* data) {
+    return self->Video::IndexBuffer::Set(sizeBytes, offsetBytes, data);
 }
 
 bool Video_VertexBuffer_Create(VertexBuffer* self, int count, bool dynamic, void* data) {
     return self->Video::VertexBuffer::Create(count, dynamic, data);
 }
 
-bool Video_VertexBuffer_Set(VertexBuffer* self, int offset, int count, void* data) {
-    return self->Video::VertexBuffer::Set(offset, count, data);
+bool Video_VertexBuffer_Set(VertexBuffer* self, int sizeBytes, int offsetBytes, void* data) {
+    return self->Video::VertexBuffer::Set(sizeBytes, offsetBytes, data);
 }
 
 // ============================================================================
