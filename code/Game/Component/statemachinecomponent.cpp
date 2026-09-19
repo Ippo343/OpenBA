@@ -41,11 +41,6 @@ static fn_StateMachine_Tick_t s_fn_Tick = nullptr;
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-// IO::Serializer::Serialize(this, char*, const char*) -- byte serialize
-// Dispatch slot 0x140152418 in exe .rdata
-typedef void (*fn_Serialize_Char_t)(void* self, void* field, const char* name);
-static fn_Serialize_Char_t s_fn_Serialize_Char = nullptr;
-
 // System::Time::Time(retval, float) -- construct Time from float
 // Already in engine_funcs as fn_Time_Ctor_Float
 
@@ -83,13 +78,6 @@ void StateMachineComponent_ResolveHelpers() {
     s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1401189b0));
 
-    // Resolve byte serializer from dispatch slot
-    {
-        void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152418));
-        if (slot && *slot)
-            s_fn_Serialize_Char = reinterpret_cast<fn_Serialize_Char_t>(*slot);
-    }
-
     s_TypeId_ControllerComponent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c73c0));
 
@@ -108,10 +96,9 @@ void StateMachineComponent_ResolveHelpers() {
     s_resolved = true;
 
 #ifdef _DEBUG
-    printf("[SMC] Helpers resolved: Tick=%p CompSerialize=%p SerializeChar=%p "
+    printf("[SMC] Helpers resolved: Tick=%p CompSerialize=%p "
            "TypeCtrl=%p TypeSMC=%p\n",
            (void*)s_fn_Tick, (void*)s_fn_Component_Serialize,
-           (void*)s_fn_Serialize_Char,
            (void*)s_TypeId_ControllerComponent, (void*)s_TypeId_SMC);
 #endif
 }
@@ -173,23 +160,17 @@ void StateMachineComponent_Shutdown(StateMachineComponent* self, void* stream) {
 
     // Create IO::Serializer with version 0
     alignas(8) uint8_t serializer[24]; // IO::Serializer is 24 bytes (stack local)
-    if (g_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize 4 individual bytes from stateFlags at +0x50, +0x51, +0x52, +0x53
     uint8_t* base = reinterpret_cast<uint8_t*>(self);
-    if (s_fn_Serialize_Char) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned char*>(base + 0x50), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned char*>(base + 0x51), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned char*>(base + 0x52), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned char*>(base + 0x53), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned char*>(base + 0x50), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned char*>(base + 0x51), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned char*>(base + 0x52), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned char*>(base + 0x53), nullptr);   // B.3.4 bridge
 
     // Destroy serializer
-    if (g_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

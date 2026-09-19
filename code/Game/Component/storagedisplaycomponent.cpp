@@ -75,12 +75,6 @@ static uint32_t SDD_RawMatDescTypeId() {
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-// IO::Serializer ctor/dtor
-typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
 // Graphics::Scene::RemoveObject(scene, objectId) via dispatch slot 0x140151360
 typedef void (*fn_Scene_RemoveObject_t)(void* scene, uint32_t objectId);
 static fn_Scene_RemoveObject_t s_fn_Scene_RemoveObject = nullptr;
@@ -127,12 +121,6 @@ static void EnsureHelpers() {
         ResolveAddr(Module::Exe, 0x1401189b0));
 
     uintptr_t slot;
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
 
     slot = ResolveAddr(Module::Exe, 0x140151360);
     if (slot) s_fn_Scene_RemoveObject = *reinterpret_cast<fn_Scene_RemoveObject_t*>(slot);
@@ -187,10 +175,8 @@ void StorageDisplayComponent_Shutdown(StorageDisplayComponent* self, void* strea
     }
 
     alignas(8) uint8_t serializerBuf[24];
-    if (s_fn_Serializer_Ctor && s_fn_Serializer_Dtor) {
-        ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

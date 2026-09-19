@@ -30,22 +30,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-// IO::Serializer::Serializer(stream, version)
-typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-// IO::Serializer::~Serializer()
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-// IO::Serializer::Serialize(int*)
-typedef void (*fn_Serialize_Int_t)(void* serializer, int32_t* field, const char* name);
-static fn_Serialize_Int_t s_fn_Serialize_Int = nullptr;
-
-// Object::InternalBasePtr::Serialize(this, Serializer*)
-typedef void (*fn_IBP_Serialize_t)(void* self, void* serializer);
-static fn_IBP_Serialize_t s_fn_IBP_Serialize = nullptr;
-
 // IsDerivedFrom -- dispatch slot
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
@@ -75,24 +59,8 @@ static void EnsureHelpers() {
     s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1401189b0));
 
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (slot) s_fn_Serialize_Int = *reinterpret_cast<fn_Serialize_Int_t*>(slot);
-
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    // Shared mangled-name resolve — 0x1800c0210 (previously used here) is
-    // MID-FUNCTION (real InternalBasePtr::Serialize starts at 0x1800c0180);
-    // calling it silently mis-read the stream and desynced everything after
-    // this component on load (save/load wave 2026-08-28).
-    s_fn_IBP_Serialize = reinterpret_cast<fn_IBP_Serialize_t>(
-        reinterpret_cast<uintptr_t>(fn_InternalBasePtr_Serialize));
 
     s_fn_IBP_Ctor = reinterpret_cast<fn_IBP_Ctor_t>(
         reinterpret_cast<uintptr_t>(fn_InternalBasePtr_Ctor));
@@ -140,16 +108,12 @@ void InteractComponent_Shutdown(InteractComponent* self, void* stream) {
 
     // Create local IO::Serializer (24 bytes on stack)
     alignas(8) uint8_t serializer[24];
-    if (s_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize count
     int32_t count = *reinterpret_cast<int32_t*>(
         reinterpret_cast<uint8_t*>(self) + 0x30);
-    if (s_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
 
     // "Am I loading?" is `*(int32*)(*(void**)serializer + 8) == 0` -- deref the
     // Serializer to reach its STREAM, then read the stream's +8. This read was
@@ -172,9 +136,7 @@ void InteractComponent_Shutdown(InteractComponent* self, void* stream) {
         uint8_t* element = arrayBase + i * 8;
 
         // Serialize InternalBasePtr
-        if (s_fn_IBP_Serialize) {
-            reinterpret_cast<Object::InternalBasePtr*>(element)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-        }
+        reinterpret_cast<Object::InternalBasePtr*>(element)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
 
         // Validate with IsDerivedFrom
         void* ptr = *reinterpret_cast<void**>(element);
@@ -189,9 +151,7 @@ void InteractComponent_Shutdown(InteractComponent* self, void* stream) {
     }
 
     // Destroy serializer
-    if (s_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -308,9 +268,9 @@ void InteractComponent_InitFuncs() {
     EnsureHelpers();
 
 #ifdef _DEBUG
-    printf("[InteractComponent] Funcs resolved: Serialize=%p IBP_Serialize=%p "
+    printf("[InteractComponent] Funcs resolved: Serialize=%p "
            "FindWorkplace=%p TypeId=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_IBP_Serialize,
+           (void*)s_fn_Component_Serialize,
            (void*)s_fn_FindMultiObjComp,
            (void*)s_TypeId_Interact);
 #endif

@@ -29,17 +29,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-// IO::Serializer ctor/dtor via dispatch slots
-typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-// IO::Serializer::Serialize(int*) — dispatch slot at 0x140152ac8
-typedef void (*fn_Serialize_Int_t)(void* serializer, int* field, const char* name);
-static fn_Serialize_Int_t s_fn_Serialize_Int = nullptr;
-
 // ResidenceComponent_Controller_sub_7ad0 — resize resident array at +0x50
 // Takes (longlong* arrayField, int newCount)
 typedef void (*fn_ResizeResidentArray_t)(void* arrayFieldPtr, int newCount);
@@ -78,14 +67,6 @@ static void EnsureHelpers() {
         ResolveAddr(Module::Exe, 0x1401189b0));
 
     uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (slot) s_fn_Serialize_Int = *reinterpret_cast<fn_Serialize_Int_t*>(slot);
 
     s_fn_ResizeResidentArray = reinterpret_cast<fn_ResizeResidentArray_t>(
         ResolveAddr(Module::Exe, 0x140037ad0));
@@ -141,26 +122,21 @@ void ResidenceComponent_Shutdown(ResidenceComponent* self, void* stream) {
     }
 
     // Empty serializer block (version 0)
-    if (s_fn_Serializer_Ctor && s_fn_Serializer_Dtor) {
-        alignas(8) uint8_t serBuf1[24];
-        ::new (static_cast<void*>(serBuf1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serBuf1)->~Serializer();                                       // B.3.4 bridge
-    }
+    alignas(8) uint8_t serBuf1[24];
+    ::new (static_cast<void*>(serBuf1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serBuf1)->~Serializer();                                       // B.3.4 bridge
 
     // Versioned serializer block (version 0) with resident data
     alignas(8) uint8_t serBuf2[24];
     int64_t* pSerData = (int64_t*)serBuf2;
 
-    if (!s_fn_Serializer_Ctor || !s_fn_Serializer_Dtor) return;
     ::new (static_cast<void*>(serBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize resident count via local copy
     // (same pattern as ConsumeProduceComponent — local copy needed so resize
     // sees old vs new count correctly)
     int localCount = *(int*)((uintptr_t)self + 0x58);
-    if (s_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(serBuf2)->Serialize(localCount, nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serBuf2)->Serialize(localCount, nullptr);   // B.3.4 bridge
 
     // On load (direction == 0): resize resident array
     if (*(int*)(pSerData[0] + 8) == 0) {
@@ -264,8 +240,6 @@ void ResidenceComponent_OnCreate(ResidenceComponent* self) {
 typedef void (*fn_Resident_MoveElem_t)(void* dst, void* src);
 static fn_Resident_MoveElem_t s_fn_Resident_MoveElem = nullptr;
 // Object::InternalBasePtr::Serialize(this, serializer)
-typedef void (*fn_IBP_Serialize_t)(void* self, void* serializer);
-static fn_IBP_Serialize_t s_fn_IBP_Serialize = nullptr;
 // DWORD_1401c7158 — CitizenComponent (resident) type ID
 static uint32_t* s_TypeId_Resident = nullptr;
 // FindComponent(MeshInstance/...) + worker assignment helpers used by ResidenceInit
@@ -281,8 +255,6 @@ static void EnsureResidentHelpers() {
     if (s_residentHelpersResolved) return;
     s_fn_Resident_MoveElem = reinterpret_cast<fn_Resident_MoveElem_t>(
         ResolveAddr(Module::Exe, 0x140007960));
-    s_fn_IBP_Serialize = reinterpret_cast<fn_IBP_Serialize_t>(
-        ResolveExport("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z"));
     s_TypeId_Resident = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7158));
     s_fn_Entity_FindComponent_MeshInstance = reinterpret_cast<fn_FindComp_t>(
@@ -409,7 +381,7 @@ void ResidenceComponent_SerializeResidentArray(void* serializer, int count, void
     int64_t* entry = (int64_t*)arrayPtr;
     for (int o = 0; o < count; o++) {
         int innerCount = (int)entry[1];
-        if (s_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(innerCount, nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(innerCount, nullptr);   // B.3.4 bridge
         // On load (serializer internal +8 == 0): resize the inner array
         // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
         if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
@@ -418,7 +390,7 @@ void ResidenceComponent_SerializeResidentArray(void* serializer, int count, void
         uintptr_t inner = (uintptr_t)entry[0];
         for (int i = 0; i < innerCount; i++) {
             void* ibp = (void*)(inner + (uintptr_t)i * 8);
-            if (s_fn_IBP_Serialize) reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
+            reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             void* val = *(void**)ibp;
             // Require the VALUE, not just the pointer: with 0x1401c7158 registered the
             // slot exists from startup but only holds the CRC after FillTypeIdGlobals_citizenai.

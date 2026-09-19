@@ -75,8 +75,7 @@ extern "C" void* StorageDescription_Ctor_Impl(void* mem) {
 // Serialize (vtable +0x28, exe 0x14012c9a0)
 // ============================================================
 extern "C" void StorageDescription_Serialize(void* self, void* stream) {
-    if (!g_fn_Serializer_Ctor || !g_fn_Serialize_Int || !g_fn_Serialize_Bool ||
-        !fn_ExternalPtr_Serialize2) {
+    if (!fn_ExternalPtr_Serialize2) {
         return;
     }
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
@@ -107,7 +106,7 @@ extern "C" void StorageDescription_Serialize(void* self, void* stream) {
         fn_ExternalPtr_Serialize2(e, ser);                 // External* ref (elem+0)
     }
 
-    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

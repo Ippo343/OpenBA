@@ -39,16 +39,8 @@
 namespace {
 
 typedef void (*fn_ComponentSerialize_t)(void* self, void* stream);
-typedef void (*fn_SerCtor_t)(void* ser, void* stream, int version);
-typedef void (*fn_SerDtor_t)(void* ser);
-typedef void (*fn_SerInt_t)(void* ser, void* field, const char* name);
-typedef void (*fn_SerByteArray_t)(void* ser, int count, void* data, const char* name);
 
 fn_ComponentSerialize_t s_Base     = nullptr;  // 0x1401189b0
-fn_SerCtor_t            s_Ctor     = nullptr;  // slot 0x140152ad8
-fn_SerDtor_t            s_Dtor     = nullptr;  // slot 0x140152ad0
-fn_SerInt_t             s_Int      = nullptr;  // slot 0x140152ac8
-fn_SerByteArray_t       s_ByteArr  = nullptr;  // slot 0x140152400
 
 bool s_resolved = false;
 
@@ -59,16 +51,6 @@ void Resolve() {
     if (s_resolved) return;
     s_Base = reinterpret_cast<fn_ComponentSerialize_t>(
         ResolveAddr(Module::Exe, 0x1401189b0));
-
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_Ctor = *reinterpret_cast<fn_SerCtor_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_Dtor = *reinterpret_cast<fn_SerDtor_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (slot) s_Int = *reinterpret_cast<fn_SerInt_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152400);
-    if (slot) s_ByteArr = *reinterpret_cast<fn_SerByteArray_t*>(slot);
 
     s_resolved = true;
 }
@@ -90,7 +72,7 @@ inline uint8_t* At(void* self, ptrdiff_t off) {
 // ============================================================
 extern "C" void UIComponent_Serialize(void* self, void* stream) {
     Resolve();
-    if (!self || !stream || !s_Ctor || !s_Dtor || !s_Int) return;
+    if (!self || !stream) return;
     if (s_Base) s_Base(self, stream);
 
     alignas(8) uint8_t ser[24];
@@ -101,10 +83,8 @@ extern "C" void UIComponent_Serialize(void* self, void* stream) {
     // B.3.2 bridge: FUN_14000a590 is Collection::Array<uint8_t>::SetSize(n)
     if (Loading(ser)) GameColl::AsArray<GameColl::U8>(At(self, 0x28)).SetSize(count);
 
-    if (s_ByteArr) {
-        uint8_t* ptr = *reinterpret_cast<uint8_t**>(At(self, 0x28));
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, ptr, nullptr);   // B.3.4 bridge
-    }
+    uint8_t* ptr = *reinterpret_cast<uint8_t**>(At(self, 0x28));
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, ptr, nullptr);   // B.3.4 bridge
 
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }

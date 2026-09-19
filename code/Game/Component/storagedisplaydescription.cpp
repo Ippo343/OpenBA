@@ -34,10 +34,9 @@ extern "C" void* StorageDisplayDescription_Ctor_Impl(void* mem) {
 // Serialize (vtable +0x28, exe 0x140056a80) — no fields.
 extern "C" void StorageDisplayDescription_Serialize(void* self, void* stream) {
     (void)self;
-    if (!g_fn_Serializer_Ctor) return;
     alignas(8) uint8_t ser[24];
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // Dtor (vtable +0x00, exe 0x14000c8e0)

@@ -48,15 +48,9 @@ static uint32_t* s_pSpawnTemplateTypeId = nullptr;    // DAT_1401c77e8 = GrowthD
 
 // ---- stream-serialize helpers (vtable slot [3], see SpawnComponent_Serialize) ----
 typedef void (*fn_ComponentSerialize_t)(void* self, void* stream);
-typedef void (*fn_SerCtor_t)(void* ser, void* stream, int version);
-typedef void (*fn_SerDtor_t)(void* ser);
-typedef void (*fn_SerInt_t)(void* ser, void* field, const char* name);
 typedef void (*fn_TimeSerialize_t)(void* time, void* ser);
 typedef bool (*fn_IsDerived_t)(void* obj, uint32_t typeId);
 static fn_ComponentSerialize_t s_fn_ComponentSerialize = nullptr;  // 0x1401189b0
-static fn_SerCtor_t            s_fn_SerCtor            = nullptr;  // slot 0x140152ad8
-static fn_SerDtor_t            s_fn_SerDtor            = nullptr;  // slot 0x140152ad0
-static fn_SerInt_t             s_fn_SerInt              = nullptr;  // slot 0x140152ac8
 static fn_TimeSerialize_t      s_fn_TimeSerialize       = nullptr;  // slot 0x140152aa8
 static fn_IsDerived_t          s_fn_IsDerived           = nullptr;  // slot 0x140152a98
 
@@ -308,12 +302,6 @@ void SpawnComponent_InitFuncs() {
         ResolveAddr(Module::Exe, 0x1401189b0));
     {
         uintptr_t slot;
-        slot = ResolveAddr(Module::Exe, 0x140152ad8);
-        if (slot) s_fn_SerCtor = *reinterpret_cast<fn_SerCtor_t*>(slot);
-        slot = ResolveAddr(Module::Exe, 0x140152ad0);
-        if (slot) s_fn_SerDtor = *reinterpret_cast<fn_SerDtor_t*>(slot);
-        slot = ResolveAddr(Module::Exe, 0x140152ac8);
-        if (slot) s_fn_SerInt = *reinterpret_cast<fn_SerInt_t*>(slot);
         slot = ResolveAddr(Module::Exe, 0x140152aa8);
         if (slot) s_fn_TimeSerialize = *reinterpret_cast<fn_TimeSerialize_t*>(slot);
         slot = ResolveAddr(Module::Exe, 0x140152a98);
@@ -370,7 +358,7 @@ void SpawnComponent_Startup(SpawnComponent* self) {
 //   match the description currently in effect.
 extern "C" void SpawnComponent_Serialize(void* self, void* stream) {
     SpawnComponent_InitFuncs();
-    if (!self || !stream || !s_fn_SerCtor || !s_fn_SerDtor || !s_fn_SerInt) return;
+    if (!self || !stream) return;
     if (s_fn_ComponentSerialize) s_fn_ComponentSerialize(self, stream);
 
     uint8_t* comp = reinterpret_cast<uint8_t*>(self);
@@ -406,7 +394,7 @@ extern "C" void SpawnComponent_Serialize(void* self, void* stream) {
             GameColl::AsArray<GameColl::Ptr8>(comp + 0x28).SetSize(descCount);
     }
 
-    if (s_fn_SerDtor) reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

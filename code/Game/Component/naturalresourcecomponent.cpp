@@ -26,18 +26,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-typedef void* (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-typedef void (*fn_SerializeFloat_t)(void* self, float* value, const char* name);
-static fn_SerializeFloat_t s_fn_SerializeFloat = nullptr;
-
-typedef void (*fn_SerializeBool_t)(void* self, bool* value, const char* name);
-static fn_SerializeBool_t s_fn_SerializeBool = nullptr;
-
 // Entity_ClearPathQueue(entity, outIBP)
 typedef void (*fn_ClearPathQueue_t)(void* entity, void* outIBP);
 static fn_ClearPathQueue_t s_fn_ClearPathQueue = nullptr;
@@ -69,21 +57,18 @@ void NaturalResourceComponent_Shutdown(NaturalResourceComponent* self, void* str
         s_fn_Component_Serialize(self, stream);
 
     alignas(8) uint8_t serializer[24];
-    if (s_fn_Serializer_Ctor) ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
-    if (s_fn_SerializeFloat)
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->resourceScale, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->resourceScale, nullptr);   // B.3.4 bridge
 
     // resourceFlags is uint16_t at +0x2C; the original serializes
     // the two bytes individually as bool at +0x2C and +0x2D
     bool* flagLow  = reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(self) + 0x2C);
     bool* flagHigh = reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(self) + 0x2D);
-    if (s_fn_SerializeBool) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*flagLow, nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*flagHigh, nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*flagLow, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*flagHigh, nullptr);   // B.3.4 bridge
 
-    if (s_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -194,15 +179,6 @@ void NaturalResourceComponent_InitFuncs() {
     s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1401189b0));
 
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152a60);
-    if (slot) s_fn_SerializeFloat = *reinterpret_cast<fn_SerializeFloat_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152a58);
-    if (slot) s_fn_SerializeBool = *reinterpret_cast<fn_SerializeBool_t*>(slot);
     s_fn_ClearPathQueue = reinterpret_cast<fn_ClearPathQueue_t>(
         ResolveAddr(Module::Exe, 0x140005200));  // Entity_ClearPathQueue used in decomp
     s_fn_IsAnimating = reinterpret_cast<fn_IsAnimating_t>(

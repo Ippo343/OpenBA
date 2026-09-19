@@ -82,7 +82,7 @@ static void* InteractDescription_Ctor_Impl(void* mem) {
 void InteractDescription_Serialize(void* self, void* stream) {
     uintptr_t s = (uintptr_t)self;
     alignas(8) uint8_t serializer[24];
-    if (!g_fn_Serializer_Ctor || !fn_ExternalPtr_Serialize2) {
+    if (!fn_ExternalPtr_Serialize2) {
         return;
     }
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
@@ -126,7 +126,7 @@ void InteractDescription_Serialize(void* self, void* stream) {
         }
     }
 
-    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // Dtor (vtable +0x00, FUN_140035280) — frees the three node-array buffers.

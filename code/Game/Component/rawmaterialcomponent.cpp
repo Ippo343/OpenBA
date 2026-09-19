@@ -31,16 +31,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-// IO::Serializer ctor/dtor
-typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-typedef void (*fn_Serialize_Int_t)(void* self, int* value, const char* name);
-static fn_Serialize_Int_t s_fn_Serialize_Int = nullptr;
-typedef int (*fn_Serializer_GetVersion_t)(void* self);
-static fn_Serializer_GetVersion_t s_fn_Serializer_GetVersion = nullptr;
-
 // System::Time::Serialize(this, serializer)
 typedef void (*fn_Time_Serialize_t)(void* timePtr, void* serializer);
 static fn_Time_Serialize_t s_fn_Time_Serialize = nullptr;
@@ -107,18 +97,6 @@ static void EnsureHelpers() {
 
     uintptr_t slot;
 
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (slot) s_fn_Serialize_Int = *reinterpret_cast<fn_Serialize_Int_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152a48);
-    if (slot) s_fn_Serializer_GetVersion = *reinterpret_cast<fn_Serializer_GetVersion_t*>(slot);
-
     // System::Time::Serialize — via export or dispatch slot
     s_fn_Time_Serialize = reinterpret_cast<fn_Time_Serialize_t>(
         ResolveExport("?Serialize@Time@System@@QEAAXAEAVSerializer@IO@@@Z"));
@@ -184,14 +162,10 @@ void RawMaterialComponent_Shutdown(RawMaterialComponent* self, void* stream) {
     }
 
     alignas(8) uint8_t serializerBuf[24];
-    if (s_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 2);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 2);   // B.3.4 bridge
 
     // Serialize field28 (resource type ID)
-    if (s_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->field28), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->field28), nullptr);   // B.3.4 bridge
 
     // Serialize field38 (Time accumulator)
     if (s_fn_Time_Serialize) {
@@ -199,16 +173,12 @@ void RawMaterialComponent_Shutdown(RawMaterialComponent* self, void* stream) {
     }
 
     // Version >= 2: serialize field30
-    if (s_fn_Serializer_GetVersion) {
-        int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
-        if (version >= 2 && s_fn_SerializeField30) {
-            s_fn_SerializeField30(&self->field30, serializerBuf);
-        }
+    int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
+    if (version >= 2 && s_fn_SerializeField30) {
+        s_fn_SerializeField30(&self->field30, serializerBuf);
     }
 
-    if (s_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();                                       // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();                                       // B.3.4 bridge
 }
 
 // ============================================================

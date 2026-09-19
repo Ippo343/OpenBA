@@ -27,20 +27,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-// IO::Serializer ctor/dtor via dispatch slots
-typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-// IO::Serializer::Serialize(this, int*, name)
-typedef void (*fn_Serializer_Serialize_t)(void* self, int* value, const char* name);
-static fn_Serializer_Serialize_t s_fn_Serializer_Serialize = nullptr;
-
-// IO::Serializer::GetVersion(this) -> int
-typedef int (*fn_Serializer_GetVersion_t)(void* self);
-static fn_Serializer_GetVersion_t s_fn_Serializer_GetVersion = nullptr;
-
 // FUN_14012e5c0 — compute work capacity for this component
 typedef int (*fn_ComputeWorkCapacity_t)(void* self);
 static fn_ComputeWorkCapacity_t s_fn_ComputeWorkCapacity = nullptr;
@@ -60,19 +46,6 @@ static void EnsureHelpers() {
 
     s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1401189b0));
-
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (slot) s_fn_Serializer_Serialize = *reinterpret_cast<fn_Serializer_Serialize_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152a48);
-    if (slot) s_fn_Serializer_GetVersion = *reinterpret_cast<fn_Serializer_GetVersion_t*>(slot);
 
     s_fn_ComputeWorkCapacity = reinterpret_cast<fn_ComputeWorkCapacity_t>(
         ResolveAddr(Module::Exe, 0x14012e5c0));
@@ -103,14 +76,10 @@ void WorkComponent_Shutdown(WorkComponent* self, void* stream) {
     }
 
     alignas(8) uint8_t serializerBuf[24];
-    if (s_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge
 
     // Always serialize workId
-    if (s_fn_Serializer_Serialize) {
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(self->workId, nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(self->workId, nullptr);   // B.3.4 bridge
 
     // Legacy: version < 3 had a bool field (no longer used).
     // ⚠ It is a BOOL, so it must go through the bool overload
@@ -121,44 +90,25 @@ void WorkComponent_Shutdown(WorkComponent* self, void* stream) {
     // branch is live there): our reader ended 3 bytes PAST the start of the
     // next record. Our own saves hid it because the save leg wrote the same 4
     // bytes it read back -- only a retail-authored save can catch this.
-    if (s_fn_Serializer_GetVersion) {
-        int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
-        if (version < 3) {
-            bool legacyBool = false;
-            if (g_fn_Serialize_Bool) {
-                reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(legacyBool, nullptr);   // B.3.4 bridge
-            } else {
-                static bool s_warned = false;
-                if (!s_warned) {
-                    s_warned = true;
-                    fprintf(stderr, "[WorkComponent::Ser] *** Serialize(bool) is NULL "
-                                    "-- the legacy version<3 byte is NOT being read "
-                                    "and the stream is now DESYNCED.\n");
-                    fflush(stderr);
-                }
-            }
-        }
+    int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
+    if (version < 3) {
+        bool legacyBool = false;
+        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(legacyBool, nullptr);   // B.3.4 bridge
     }
 
     // Version >= 1: serialize workState
-    if (s_fn_Serializer_GetVersion) {
-        int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
-        if (version >= 1) {
-            reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(self->workState, nullptr);   // B.3.4 bridge
-        }
+    version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
+    if (version >= 1) {
+        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(self->workState, nullptr);   // B.3.4 bridge
     }
 
     // Version >= 2: serialize workFlags
-    if (s_fn_Serializer_GetVersion) {
-        int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
-        if (version >= 2) {
-            reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->workFlags), nullptr);   // B.3.4 bridge
-        }
+    version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
+    if (version >= 2) {
+        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->workFlags), nullptr);   // B.3.4 bridge
     }
 
-    if (s_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -323,9 +273,9 @@ void WorkComponent_RegisterWorkSlot(void* selfP) {
 void WorkComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[WorkComponent] Funcs resolved: Component_Serialize=%p Serializer_Ctor=%p "
+    printf("[WorkComponent] Funcs resolved: Component_Serialize=%p "
            "ComputeWorkCapacity=%p CheckWorkSlot=%p RegisterWorkSlot=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_Serializer_Ctor,
+           (void*)s_fn_Component_Serialize,
            (void*)s_fn_ComputeWorkCapacity, (void*)s_fn_CheckWorkSlot,
            (void*)s_fn_RegisterWorkSlot);
 #endif

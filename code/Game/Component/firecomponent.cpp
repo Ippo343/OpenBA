@@ -127,7 +127,6 @@ void FireComponent_Shutdown(FireComponent* self, void* stream) {
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
 
     if (fn_ComponentBase_Serialize) fn_ComponentBase_Serialize(self, stream);
-    if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int) return;
 
     alignas(8) uint8_t ser[24];
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
@@ -136,7 +135,7 @@ void FireComponent_Shutdown(FireComponent* self, void* stream) {
         g_fn_Time_Serialize(reinterpret_cast<void*>(s + 0x38), ser);
     }
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
-    if (g_fn_Serializer_GetVersion && reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 0)   // B.3.4 bridge
+    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 0)   // B.3.4 bridge
         reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x2c), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }

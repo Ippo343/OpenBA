@@ -49,19 +49,11 @@
 namespace {
 
 typedef void (*fn_ComponentSerialize_t)(void* self, void* stream);
-typedef void (*fn_SerCtor_t)(void* ser, void* stream, int version);
-typedef void (*fn_SerDtor_t)(void* ser);
-typedef void (*fn_SerFloat_t)(void* ser, float* field, const char* name);
 typedef void (*fn_TimeSerialize_t)(void* time, void* ser);
-typedef void (*fn_IBPSerialize_t)(void* ibp, void* ser);
 typedef bool (*fn_IsDerived_t)(void* obj, uint32_t typeId);
 
 fn_ComponentSerialize_t s_Base   = nullptr;  // 0x1401189b0
-fn_SerCtor_t            s_Ctor   = nullptr;  // slot 0x140152ad8
-fn_SerDtor_t            s_Dtor   = nullptr;  // slot 0x140152ad0
-fn_SerFloat_t            s_Float  = nullptr;  // slot 0x140152a60
 fn_TimeSerialize_t      s_TimeSer = nullptr; // slot 0x140152aa8
-fn_IBPSerialize_t       s_IBPSer  = nullptr; // slot 0x140152aa0
 fn_IsDerived_t           s_IsDerived = nullptr; // slot 0x140152a98
 
 const uint32_t* s_tidResource = nullptr;  // 0x1401c7b30  natural-resource sibling
@@ -75,16 +67,8 @@ void Resolve() {
         ResolveAddr(Module::Exe, 0x1401189b0));
 
     uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_Ctor = *reinterpret_cast<fn_SerCtor_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_Dtor = *reinterpret_cast<fn_SerDtor_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152a60);
-    if (slot) s_Float = *reinterpret_cast<fn_SerFloat_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152aa8);
     if (slot) s_TimeSer = *reinterpret_cast<fn_TimeSerialize_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152aa0);
-    if (slot) s_IBPSer = *reinterpret_cast<fn_IBPSerialize_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_IsDerived = *reinterpret_cast<fn_IsDerived_t*>(slot);
 
@@ -94,7 +78,7 @@ void Resolve() {
 }
 
 inline void SerializeValidatedIBP(void* ibp, void* ser, const uint32_t* tid) {
-    if (s_IBPSer) reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
+    reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
     void* obj = *reinterpret_cast<void**>(ibp);
     if (obj && s_IsDerived && tid && *tid && !s_IsDerived(obj, *tid))
         *reinterpret_cast<uint64_t*>(ibp) = 0;
@@ -111,7 +95,7 @@ inline uint8_t* At(void* self, ptrdiff_t off) {
 // ============================================================
 extern "C" void GrowthComponent_Serialize2(void* self, void* stream) {
     Resolve();
-    if (!self || !stream || !s_Ctor || !s_Dtor) return;
+    if (!self || !stream) return;
     if (s_Base) s_Base(self, stream);
 
     alignas(8) uint8_t ser[24];
@@ -119,10 +103,8 @@ extern "C" void GrowthComponent_Serialize2(void* self, void* stream) {
 
     SerializeValidatedIBP(At(self, 0x28), ser, s_tidResource);
     SerializeValidatedIBP(At(self, 0x30), ser, s_tidModel);
-    if (s_Float) {
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x48)), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x4c)), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x48)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x4c)), nullptr);   // B.3.4 bridge
     if (s_TimeSer) s_TimeSer(At(self, 0x40), ser);
 
     // Everything above is retail 0x1401207c0 field-for-field. What follows is a

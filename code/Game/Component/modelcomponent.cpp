@@ -32,14 +32,6 @@
 // Resolved helpers
 // ============================================================
 
-// IO::Serializer::Serialize(short*) — dispatch slot at 0x140152468
-typedef void (*fn_Serialize_Short_t)(void* serializer, int16_t* field, const char* name);
-static fn_Serialize_Short_t s_fn_Serialize_Short = nullptr;
-
-// IO::Serializer::Serialize(float*) — dispatch slot at 0x140152a60
-typedef void (*fn_Serialize_Float_t)(void* serializer, float* field, const char* name);
-static fn_Serialize_Float_t s_fn_Serialize_Float = nullptr;
-
 // Graphics::MeshInstance::Serialize — dispatch slot at 0x140152990
 typedef void (*fn_MeshInstance_Serialize_t)(void* meshInstance, void* serializer);
 static fn_MeshInstance_Serialize_t s_fn_MeshInstance_Serialize = nullptr;
@@ -101,11 +93,6 @@ static void EnsureHelpers() {
     uintptr_t slot;
 
     // Dispatch slots — read function pointer from .rdata slot at runtime
-    slot = ResolveAddr(Module::Exe, 0x140152468);
-    if (slot) s_fn_Serialize_Short = *reinterpret_cast<fn_Serialize_Short_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152a60);
-    if (slot) s_fn_Serialize_Float = *reinterpret_cast<fn_Serialize_Float_t*>(slot);
 
     slot = ResolveAddr(Module::Exe, 0x140152990);
     if (slot) s_fn_MeshInstance_Serialize = *reinterpret_cast<fn_MeshInstance_Serialize_t*>(slot);
@@ -284,18 +271,14 @@ void ModelComponent_Shutdown(ModelComponent* self, void* stream) {
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize variant index (+0x164 as short) and model variant (+0x166 as short)
-    if (s_fn_Serialize_Short) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(s + 0x164), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(s + 0x166), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(s + 0x164), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(s + 0x166), nullptr);   // B.3.4 bridge
 
     // Serialize Math::Transform at +0x148 (slot 0x1401522e0)
     reinterpret_cast<Math::Transform*>(s + 0x148)->Serialize(serializer);   // B.3.1 bridge
 
     // Serialize scale float at +0x168
-    if (s_fn_Serialize_Float) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x168), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x168), nullptr);   // B.3.4 bridge
 
     // On load: if model variant >= 0, restore mesh from description
     if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)

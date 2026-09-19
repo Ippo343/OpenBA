@@ -53,8 +53,7 @@ static void MapDescription_Init(void* self) {
 // ============================================================
 void MapDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor ||
-        !g_fn_Serialize_Bool || !fn_System_Color_Serialize) {
+    if (!fn_System_Color_Serialize) {
         return;
     }
     alignas(8) uint8_t serializer[24];

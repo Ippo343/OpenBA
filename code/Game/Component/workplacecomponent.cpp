@@ -31,31 +31,9 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-// IO::Serializer ctor/dtor via dispatch slots
-typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-// IO::Serializer::Serialize(this, int*, name)
-typedef void (*fn_Serializer_SerializeInt_t)(void* self, int* value, const char* name);
-static fn_Serializer_SerializeInt_t s_fn_Serializer_SerializeInt = nullptr;
-
-// IO::Serializer::Serialize(this, bool*, name)
-typedef void (*fn_Serializer_SerializeBool_t)(void* self, bool* value, const char* name);
-static fn_Serializer_SerializeBool_t s_fn_Serializer_SerializeBool = nullptr;
-
-// IO::Serializer::GetVersion(this) -> int
-typedef int (*fn_Serializer_GetVersion_t)(void* self);
-static fn_Serializer_GetVersion_t s_fn_Serializer_GetVersion = nullptr;
-
 // fn_IsDerivedFrom — dispatch slot at 0x140152a98
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
-
-// Object::InternalBasePtr::Serialize
-typedef void (*fn_IBP_Serialize_t)(void* self, void* serializer);
-static fn_IBP_Serialize_t s_fn_IBP_Serialize = nullptr;
 
 
 // FUN_140018020 — serialize InternalBasePtr field (version >= 1 path)
@@ -86,25 +64,9 @@ static void EnsureHelpers() {
         ResolveAddr(Module::Exe, 0x1401189b0));
 
     uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (slot) s_fn_Serializer_SerializeInt = *reinterpret_cast<fn_Serializer_SerializeInt_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152a58);
-    if (slot) s_fn_Serializer_SerializeBool = *reinterpret_cast<fn_Serializer_SerializeBool_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152a48);
-    if (slot) s_fn_Serializer_GetVersion = *reinterpret_cast<fn_Serializer_GetVersion_t*>(slot);
 
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    s_fn_IBP_Serialize = fn_InternalBasePtr_Serialize;
 
     s_fn_SerializeIBP = reinterpret_cast<fn_SerializeIBP_t>(
         ResolveAddr(Module::Exe, 0x140018020));
@@ -877,25 +839,17 @@ void WorkPlaceComponent_Shutdown(WorkPlaceComponent* self, void* stream) {
 
     // Empty serializer block (version 0, immediately destroyed)
     alignas(8) uint8_t emptySerializer[24];
-    if (s_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(emptySerializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
-    if (s_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(emptySerializer)->~Serializer();   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(emptySerializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(emptySerializer)->~Serializer();   // B.3.4 bridge
 
     // Main serializer block (version 1)
     alignas(8) uint8_t serializer[16];  // Ghidra shows local_30[2] = 16 bytes
-    if (s_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
 
     // Serialize worker count from +0x60
     int workerCount = *(int*)((uintptr_t)self + 0x60);
     int countBuf = workerCount;
-    if (s_fn_Serializer_SerializeInt) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(countBuf, nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(countBuf, nullptr);   // B.3.4 bridge
 
     // On load, resize the worker array to the count just read.
     //
@@ -924,9 +878,7 @@ void WorkPlaceComponent_Shutdown(WorkPlaceComponent* self, void* stream) {
     if (count > 0 && workerArray) {
         uintptr_t ptr = (uintptr_t)workerArray;
         for (int64_t i = 0; i < count; i++) {
-            if (s_fn_IBP_Serialize) {
-                reinterpret_cast<Object::InternalBasePtr*>((void*)ptr)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-            }
+            reinterpret_cast<Object::InternalBasePtr*>((void*)ptr)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             // Validate: if ptr dereferences to non-null, check IsDerivedFrom
             void* obj = *(void**)ptr;
             // s_TypeId_WorkerType must hold a CRC, not merely be a registered slot —
@@ -943,34 +895,28 @@ void WorkPlaceComponent_Shutdown(WorkPlaceComponent* self, void* stream) {
     }
 
     // Serialize isAccepting bool at +0x50
-    if (s_fn_Serializer_SerializeBool) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&self->isAccepting), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&self->isAccepting), nullptr);   // B.3.4 bridge
 
     // Version check for +0x48 field
-    if (s_fn_Serializer_GetVersion) {
-        int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
-        if (version < 1) {
-            // Legacy path: read from description component via IsDerivedFrom
-            void* obj = self->_unk18;
-            if (s_fn_IsDerivedFrom_dispatch && s_TypeId_WorkPlaceDesc) {
-                bool derived = s_fn_IsDerivedFrom_dispatch(obj, *s_TypeId_WorkPlaceDesc);
-                void* descComp = derived ? obj : nullptr;
-                if (descComp) {
-                    *(uint64_t*)&self->workerData = *(uint64_t*)((uintptr_t)descComp + 0x20);
-                }
+    int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
+    if (version < 1) {
+        // Legacy path: read from description component via IsDerivedFrom
+        void* obj = self->_unk18;
+        if (s_fn_IsDerivedFrom_dispatch && s_TypeId_WorkPlaceDesc) {
+            bool derived = s_fn_IsDerivedFrom_dispatch(obj, *s_TypeId_WorkPlaceDesc);
+            void* descComp = derived ? obj : nullptr;
+            if (descComp) {
+                *(uint64_t*)&self->workerData = *(uint64_t*)((uintptr_t)descComp + 0x20);
             }
-        } else {
-            // Version >= 1: serialize via FUN_140018020
-            if (s_fn_SerializeIBP) {
-                s_fn_SerializeIBP((void*)((uintptr_t)self + 0x48), serializer);
-            }
+        }
+    } else {
+        // Version >= 1: serialize via FUN_140018020
+        if (s_fn_SerializeIBP) {
+            s_fn_SerializeIBP((void*)((uintptr_t)self + 0x48), serializer);
         }
     }
 
-    if (s_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -1043,9 +989,9 @@ void WorkPlaceComponent_OnCreate(WorkPlaceComponent* self) {
 void WorkPlaceComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[WorkPlaceComponent] Funcs resolved: Component_Serialize=%p Serializer_Ctor=%p "
+    printf("[WorkPlaceComponent] Funcs resolved: Component_Serialize=%p "
            "AddToList=%p OnCreateFallback=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_Serializer_Ctor,
+           (void*)s_fn_Component_Serialize,
            (void*)s_fn_RemoveFromList,
            (void*)s_fn_OnCreateFallback);
 #endif

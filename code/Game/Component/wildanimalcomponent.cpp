@@ -38,18 +38,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-// IO::Serializer::Serializer(stream, version) -- dispatch slot
-typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-// IO::Serializer::~Serializer()
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-// Object::InternalBasePtr::Serialize(this, Serializer*)
-typedef void (*fn_IBP_Serialize_t)(void* self, void* serializer);
-static fn_IBP_Serialize_t s_fn_IBP_Serialize = nullptr;
-
 // IsDerivedFrom -- dispatch slot at 0x140152a98
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
@@ -79,23 +67,9 @@ static void EnsureHelpers() {
         ResolveAddr(Module::Exe, 0x1401189b0));
 
     // Dispatch slots
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
 
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    // InternalBasePtr::Serialize — via the shared mangled-name resolve
-    // (engine_funcs fn_InternalBasePtr_Serialize). The raw address previously
-    // used here, 0x1800c0210, is MID-FUNCTION (the real Serialize starts at
-    // 0x1800c0180) — calling it executed from halfway through the body with
-    // garbage registers: sometimes an EXEC-of-heap crash (save/load wave
-    // 2026-08-28), otherwise a silent mis-read that desynced the stream.
-    s_fn_IBP_Serialize = reinterpret_cast<fn_IBP_Serialize_t>(
-        reinterpret_cast<uintptr_t>(fn_InternalBasePtr_Serialize));
 
     // InternalBasePtr::Ctor -- global
     s_fn_IBP_Ctor = reinterpret_cast<fn_IBP_Ctor_t>(
@@ -137,14 +111,10 @@ void WildAnimalComponent_Serialize(WildAnimalComponent* self, void* stream) {
 
     // Create local IO::Serializer (24 bytes on stack)
     alignas(8) uint8_t serializer[24];
-    if (s_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize InternalBasePtr at +0x28
-    if (s_fn_IBP_Serialize) {
-        reinterpret_cast<Object::InternalBasePtr*>(reinterpret_cast<uint8_t*>(self) + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-    }
+    reinterpret_cast<Object::InternalBasePtr*>(reinterpret_cast<uint8_t*>(self) + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
 
     // Post-deserialize type validation
     if (self->data28 != 0) {
@@ -158,9 +128,7 @@ void WildAnimalComponent_Serialize(WildAnimalComponent* self, void* stream) {
     }
 
     // Destroy serializer
-    if (s_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -227,9 +195,9 @@ void WildAnimalComponent_OnRemove(WildAnimalComponent* self) {
 void WildAnimalComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[WildAnimalComponent] Funcs resolved: Serialize=%p IBP_Serialize=%p "
+    printf("[WildAnimalComponent] Funcs resolved: Serialize=%p "
            "EraseFromList=%p HerdTypeId=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_IBP_Serialize,
+           (void*)s_fn_Component_Serialize,
            (void*)s_fn_EraseFromComponentList,
            (void*)s_TypeId_HerdComponent);
 #endif

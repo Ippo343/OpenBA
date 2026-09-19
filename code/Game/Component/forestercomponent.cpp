@@ -25,16 +25,6 @@
 typedef void (*fn_ResourceProduceShutdown_t)(void* self, void* stream);
 static fn_ResourceProduceShutdown_t s_fn_ResourceProduceShutdown = nullptr;
 
-// IO::Serializer ctor/dtor via dispatch slots
-typedef void* (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-// IO::Serializer::Serialize(this, bool*, name)
-typedef void (*fn_Serializer_SerializeBool_t)(void* self, bool* value, const char* name);
-static fn_Serializer_SerializeBool_t s_fn_Serializer_SerializeBool = nullptr;
-
 static bool s_initialized = false;
 
 static void EnsureHelpers() {
@@ -42,16 +32,6 @@ static void EnsureHelpers() {
 
     s_fn_ResourceProduceShutdown = reinterpret_cast<fn_ResourceProduceShutdown_t>(
         ResolveAddr(Module::Exe, 0x14012b4a0));
-
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152a58);
-    if (slot) s_fn_Serializer_SerializeBool = *reinterpret_cast<fn_Serializer_SerializeBool_t*>(slot);
 
     s_initialized = true;
 }
@@ -75,21 +55,15 @@ void ForesterComponent_Shutdown(ForesterComponent* self, void* stream) {
 
     // Serialize ForesterComponent's own fields
     alignas(8) uint8_t serializer[24];
-    if (s_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // foresterFlags at +0x50 is uint16, serialized as two individual bools
-    if (s_fn_Serializer_SerializeBool) {
-        bool* flagLow  = reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(self) + 0x50);
-        bool* flagHigh = reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(self) + 0x51);
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*flagLow, nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*flagHigh, nullptr);  // B.3.4 bridge
-    }
+    bool* flagLow  = reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(self) + 0x50);
+    bool* flagHigh = reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(self) + 0x51);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*flagLow, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*flagHigh, nullptr);  // B.3.4 bridge
 
-    if (s_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -98,10 +72,8 @@ void ForesterComponent_Shutdown(ForesterComponent* self, void* stream) {
 void ForesterComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[ForesterComponent] Funcs resolved: ResourceProduceShutdown=%p "
-           "Serializer_Ctor=%p SerializeBool=%p\n",
-           (void*)s_fn_ResourceProduceShutdown, (void*)s_fn_Serializer_Ctor,
-           (void*)s_fn_Serializer_SerializeBool);
+    printf("[ForesterComponent] Funcs resolved: ResourceProduceShutdown=%p\n",
+           (void*)s_fn_ResourceProduceShutdown);
 #endif
 }
 

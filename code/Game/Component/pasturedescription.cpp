@@ -26,13 +26,12 @@ static void PastureDescription_Init(void* self) {
 
 void PastureDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor) return;
     alignas(8) uint8_t serializer[24];
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     // enum +0x20 is VERSION-GATED in the original (0x140128220): only read when
     // Serializer::GetVersion() > 0. Reading it unconditionally over-reads past a
     // version-0 resource -> CompressedStream::Read zero-progress spin.
-    if (g_fn_Serializer_GetVersion && reinterpret_cast<IO::Serializer*>(serializer)->GetVersion() > 0) {   // B.3.4 bridge
+    if (reinterpret_cast<IO::Serializer*>(serializer)->GetVersion() > 0) {   // B.3.4 bridge
         reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x20), nullptr);   // B.3.4 bridge (enum +0x20)
     }
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge

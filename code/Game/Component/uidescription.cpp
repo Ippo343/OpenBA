@@ -77,7 +77,7 @@ void UIDescription_Serialize(void* self, void* stream) {
     EnsureResolved();
     uintptr_t s = (uintptr_t)self;
     alignas(8) uint8_t serializer[24];
-    if (!g_fn_Serializer_Ctor || !g_fn_Serialize_Int || !fn_ExternalPtr_Serialize2) {
+    if (!fn_ExternalPtr_Serialize2) {
         return;
     }
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
@@ -142,7 +142,7 @@ void UIDescription_Serialize(void* self, void* stream) {
     // 6. int (+0x20)
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x20), nullptr);   // B.3.4 bridge
 
-    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // Dtor (vtable +0x00, FUN_140039700 / element cleanup FUN_1400397d0).

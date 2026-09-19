@@ -23,13 +23,6 @@
 typedef void (*fn_ParentShutdown_t)(void* self, void* stream);
 static fn_ParentShutdown_t s_fn_ParentShutdown = nullptr;
 
-// IO::Serializer ctor/dtor via dispatch slots
-typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
 static bool s_initialized = false;
 
 static void EnsureHelpers() {
@@ -37,13 +30,6 @@ static void EnsureHelpers() {
 
     s_fn_ParentShutdown = reinterpret_cast<fn_ParentShutdown_t>(
         ResolveAddr(Module::Exe, 0x14012b4a0));
-
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
 
     s_initialized = true;
 }
@@ -69,11 +55,9 @@ void MarketComponent_Shutdown(MarketComponent* self, void* stream) {
     }
 
     // Empty serializer block (version 0)
-    if (s_fn_Serializer_Ctor && s_fn_Serializer_Dtor) {
-        alignas(8) uint8_t serializerBuf[24];
-        ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
-    }
+    alignas(8) uint8_t serializerBuf[24];
+    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -82,9 +66,8 @@ void MarketComponent_Shutdown(MarketComponent* self, void* stream) {
 void MarketComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[MarketComponent] Funcs resolved: ParentShutdown=%p Ctor=%p Dtor=%p\n",
-           (void*)s_fn_ParentShutdown, (void*)s_fn_Serializer_Ctor,
-           (void*)s_fn_Serializer_Dtor);
+    printf("[MarketComponent] Funcs resolved: ParentShutdown=%p\n",
+           (void*)s_fn_ParentShutdown);
 #endif
 }
 

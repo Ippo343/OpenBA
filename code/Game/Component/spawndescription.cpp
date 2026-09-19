@@ -43,8 +43,7 @@ static void SpawnDescription_Init(void* self) {
 
 void SpawnDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int ||
-        !fn_Serializer_Serialize_Float || !fn_ExternalPtr_BuildSerialize) return;
+    if (!fn_ExternalPtr_BuildSerialize) return;
     SpawnArrayResize_t resize =
         (SpawnArrayResize_t)ResolveAddr(Module::Exe, kSpawnArrayResize);
 

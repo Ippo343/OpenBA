@@ -31,20 +31,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-// IO::Serializer ctor/dtor — dispatch slots
-typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-// IO::Serializer::Serialize(int*) — dispatch slot 0x140152ac8
-typedef void (*fn_Serialize_Int_t)(void* serializer, int* field, const char* name);
-static fn_Serialize_Int_t s_fn_Serialize_Int = nullptr;
-
-// IO::Serializer::GetVersion — dispatch slot 0x140152a48
-typedef int (*fn_Serializer_GetVersion_t)(void* self);
-static fn_Serializer_GetVersion_t s_fn_Serializer_GetVersion = nullptr;
-
 // FUN_140002340 — serialize External reference (item type ptr)
 typedef void (*fn_SerializeExternalRef_t)(void* refPtr, void* serializer);
 static fn_SerializeExternalRef_t s_fn_SerializeExternalRef = nullptr;
@@ -73,20 +59,6 @@ static void EnsureHelpers() {
 
     s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1401189b0));
-
-    uintptr_t slot;
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (slot) s_fn_Serialize_Int = *reinterpret_cast<fn_Serialize_Int_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152a48);
-    if (slot) s_fn_Serializer_GetVersion = *reinterpret_cast<fn_Serializer_GetVersion_t*>(slot);
 
     s_fn_SerializeExternalRef = reinterpret_cast<fn_SerializeExternalRef_t>(
         ResolveAddr(Module::Exe, 0x140002340));
@@ -169,17 +141,13 @@ void StorageComponent_Shutdown(StorageComponent* self, void* stream) {
 
     // Create local IO::Serializer (version 1)
     alignas(8) uint8_t serializer[24];
-    if (s_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
 
     // Serialize slot count
     uintptr_t selfAddr = (uintptr_t)self;
     int slotCount = *(int*)(selfAddr + 0x30);
     int serSlotCount = slotCount;
-    if (s_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(serSlotCount, nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(serSlotCount, nullptr);   // B.3.4 bridge
 
     // If loading (encoding direction == 0), resize the slot array
     int encodingDir = static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
@@ -195,10 +163,8 @@ void StorageComponent_Shutdown(StorageComponent* self, void* stream) {
         for (int i = 0; i < serSlotCount; i++) {
             uintptr_t slotEntry = slotBase + (uintptr_t)i * 0x10;
             // Serialize two int fields at slot+0x08 and slot+0x0C
-            if (s_fn_Serialize_Int) {
-                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(slotEntry + 0x08), nullptr);   // B.3.4 bridge
-                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(slotEntry + 0x0C), nullptr);   // B.3.4 bridge
-            }
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(slotEntry + 0x08), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(slotEntry + 0x0C), nullptr);   // B.3.4 bridge
             // Serialize External reference at slot+0x00
             if (s_fn_SerializeExternalRef) {
                 s_fn_SerializeExternalRef((void*)slotEntry, serializer);
@@ -207,9 +173,7 @@ void StorageComponent_Shutdown(StorageComponent* self, void* stream) {
     }
 
     // Serialize field38 (int at self+0x38)
-    if (s_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(selfAddr + 0x38), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(selfAddr + 0x38), nullptr);   // B.3.4 bridge
 
     // Serialize field3c through the object at Serializer+0x08 — NOT the Stream at
     // Serializer+0x00. IO::Serializer::Serializer (Runtime 0x1800b9960) lays it out as
@@ -234,20 +198,16 @@ void StorageComponent_Shutdown(StorageComponent* self, void* stream) {
 
 
     // Version 0 migration: if loading and version==0, copy from StorageDescription
-    if (s_fn_Serializer_GetVersion) {
-        int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
-        if (version == 0 && encodingDir == 0) {
-            void* storageDesc = GetStorageDescription(self);
-            if (storageDesc) {
-                *(uint32_t*)(selfAddr + 0x3c) = *(uint32_t*)((uintptr_t)storageDesc + 0x28);
-            }
+    int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
+    if (version == 0 && encodingDir == 0) {
+        void* storageDesc = GetStorageDescription(self);
+        if (storageDesc) {
+            *(uint32_t*)(selfAddr + 0x3c) = *(uint32_t*)((uintptr_t)storageDesc + 0x28);
         }
     }
 
     // Destroy serializer
-    if (s_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -477,9 +437,9 @@ void StorageComponent_DynArrayResize(void* arrayBase, int newCount) {
 void StorageComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[StorageComponent] Funcs resolved: Component_Serialize=%p Serializer_Ctor=%p "
+    printf("[StorageComponent] Funcs resolved: Component_Serialize=%p "
            "StorageAddSlot=%p TypeId_StorageDesc=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_Serializer_Ctor,
+           (void*)s_fn_Component_Serialize,
            (void*)s_fn_StorageAddSlot,
            (void*)s_TypeId_StorageDescription);
 #endif

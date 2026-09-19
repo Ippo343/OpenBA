@@ -218,8 +218,7 @@ void* TradeBst_NewNode(uint64_t key, int64_t value, void* parent) {
 // tree (saving, no mutation).
 void TradeComp_BstSerialize(void* treeHdr, void* ser) {
     int32_t count = *reinterpret_cast<int32_t*>(At(treeHdr, 0x08));
-    if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
-    if (!g_fn_Serialize_Int) return;
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
 
     if (Loading(ser)) {
         for (int32_t i = 0; i < count; ++i) {
@@ -349,7 +348,6 @@ extern "C" void TradeStock_SeedForTest(void* tradeComp, void* resourceEntity, in
 extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream) {
     if (!self || !stream) return;
     if (fn_ComponentBase_Serialize) fn_ComponentBase_Serialize(self, stream);
-    if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int) return;
 
     // Retail 0x14005bd50 opens TWO Serializer scopes: an EMPTY one that is
     // constructed and immediately destroyed (the controller-section stub), and
@@ -436,10 +434,10 @@ extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream) {
     if (g_fn_Time_Serialize) g_fn_Time_Serialize(At(self, 0x78), ser);
 
     // +0x71: bool.
-    if (g_fn_Serialize_Bool) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x71)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x71)), nullptr);   // B.3.4 bridge
 
     // +0x80: InternalBasePtr, validated against ComponentEntity.
-    if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(At(self, 0x80))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
+    reinterpret_cast<Object::InternalBasePtr*>(At(self, 0x80))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
     {
         void* obj = *reinterpret_cast<void**>(At(self, 0x80));
         if (obj && fn_IsDerivedFrom && g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity &&
@@ -448,7 +446,7 @@ extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream) {
     }
 
     // +0x70: bool.
-    if (g_fn_Serialize_Bool) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x70)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x70)), nullptr);   // B.3.4 bridge
 
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }

@@ -83,9 +83,7 @@ static void* NaturalResourceDescription_Ctor_Impl(void* mem) {
 }
 
 void NaturalResourceDescription_Serialize(void* self, void* stream) {
-    if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor ||
-        !fn_Serializer_Serialize_Float || !g_fn_Serialize_Bool ||
-        !g_fn_Serialize_Int || !fn_ExternalPtr_BuildSerialize || !g_fn_Time_Serialize) {
+    if (!fn_ExternalPtr_BuildSerialize || !g_fn_Time_Serialize) {
         return;
     }
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
