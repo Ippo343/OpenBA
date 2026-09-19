@@ -20,6 +20,113 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
+- **B.3.4 CLOSED (2026-09-19):** `IO` (Stream family, `Serializer`, `Encoding`/`ReaderWriter`,
+  `Registry`, `Modification`, `PackageFile`, `FileSystem`, `Persistence`) and the `System` rest
+  (`CriticalSection`, `Thread`, `Random`, `Time`, `Color`, `DateTime`, `Timer`, `CRC`, `Error`,
+  `WideString`, `Compression`, `Configuration`) are real classes under retail's names, with
+  their callers converted and the dead doors deleted. About 135 commits, main `523f8566` -> the close.
+  Rule sheets: `endgame_b/B34_RULES.md` (IO, with two coordinator amendments),
+  `B34_BRIEFS.md`, `B34B_RULES.md` (System — incl. the verdict table for all thirteen System
+  classes and rules B4b-1..5). Plan for step 5: `endgame_b/NEXT_SESSION.md`.
+  **Shape.** Phase 1 + blocks 0–3 by one core owner (Encoding 5 slots / ReaderWriter 26 slots /
+  `IO::Serializer` 0x10 bytes, ctor consumes the 12-byte stream header via the Encoding factory,
+  dtor patches 4 bytes — lifetime position is load-bearing); STREAMS 1–6 and PACKAGE+FS 1–6 in
+  parallel on disjoint file sets (two owners each, handed over at commit boundaries); caller
+  batches A (+residual), B, C, D, G, H, P; a four-commit closing pass that then SPECCED its own
+  guard sweep (`endgame_b/b34_session/GUARD_SWEEP_SPEC.md`; that directory keeps the session's
+  briefs, sweep scripts and the coordinator's gate)
+  for five directory agents plus a last `engine_funcs`-only pass (2d); System: one owner for the
+  rule sheet + nine classes, a second for three + the int64 overload, four caller batches, then
+  the same guard-and-cache sweep in small (three directory agents + a last `engine_funcs` pass).
+  **Numbers.** Serializer callers: A 852 (+8 residual), B 343, C 252, D 146, closing 17;
+  `InternalBasePtr::Serialize` 84 (G); hand-inlined ReaderWriter slot calls / direction reads /
+  Harvest door 125 (H); Modification/Persistence/FileSystem 29 (P); System callers 381.
+  Deleted: 18 + 20 Serializer-family and 6 System door globals in `engine_funcs.{h,cpp}`, ~370 file-local door caches (typedef +
+  static + resolver) and on the order of a thousand readiness-guard lines across `code/Game`, `SerializerLite`,
+  `NoteSlotDispatch` and its counter family, `standalone/async_loader.{h,cpp}`.
+  `engine_funcs` keeps 20 `fn_*Serialize*` pointers and NONE is an `IO::Serializer` door (10
+  ExternalPtr exe doors, 3 exe array helpers, 7 other classes' bodies). System-family globals that
+  remain are alive on purpose: the `Time` / `Random` ctor doors, four by-value `String` return
+  doors, the allocator doors, the `g_Timer_*` data pointers and the `fn_Random_RandFloatTol` shim
+  FUNCTION. Unit tests: 260, 0 failures (the step added ~45, incl. the first executable proof of the
+  qualified-call rule and a behavioural CRC-32 check vector). Census: IO 407 total / 210 called
+  / 203 ported, 96.7% called-covered; System 262 / 78 / 61 (no registration
+  added or retired: `called` and `ported` each fell by 8 because eight ported doors lost their last
+  by-name caller to a direct member call — the number measures the registry, not the code). Added retail members that had never been ported:
+  `IO::Serializer::GetDirection` 0x180006210, `IO::Stream::GetDirection` 0x180006200,
+  `IO::Serializer::Serialize(int64_t&)` 0x180035000, `Object::Internal::Clone` 0x1800bfb10,
+  `ExternalFactory::SerializeReferenceTable(IO::Stream&)` (forwards; `external_reftable.cpp`
+  untouched). B.4 cast metric: **34,052** (code 23,463 · runtime 6,607 · standalone 2,890 ·
+  engine 823 · dx11 149 · tests 120), down 757 from 34,809 while ADDING 2,258
+  `// B.3.4 bridge` casts (transitional: each dies with its receiver's conversion); B.3.3's
+  1,048 are unchanged (counted on the final tree `1b5eb639`).
+  **Deliberately NOT converted (each with its reason in the header or commit):** no stream class
+  has a C++ constructor and none of the 19 minted IO rows / 14 deleting-dtor registrations
+  retired (B34_RULES §4.3/§4.2 — 13 of 15 IO tables are stamped from outside `runtime/src/io`;
+  retirement is the end of B.3); the compressed family's eleven non-virtual members and
+  `TextFileStream`'s four non-vtable accessors (on the loader open/read path); `IO::
+  CompressedCopyFileStream` (no live construction path anywhere — recorded, declined);
+  `??0FileSystem` 0x1800ac7c0 and `??0Persistence` 0x1800b8020 (unported / builds the embedded
+  Thread worker), every `PersistenceWorker_*` body incl. the by-address restamp of Thread vtable
+  0x180155f20 (`persistence_worker_win.cpp:585-589`); `WriteSettingsBody`; `IO::Registry`'s
+  destructor (three hand-inlined teardowns); `IO::TextCodec` — NOT A CLASS (four receiverless
+  unexported free functions + `IO::SerializeStringArray`); ctor/dtor doors of `Random`, `Time`,
+  `Color`, `DateTime`, `Thread`, `CriticalSection`, `Compression`, `Configuration` (B4b-2: a
+  by-value holder seeded through the ctor door would double-seed — about 150 `Time` ctor call sites
+  on slot 0x140152b00 stay doors by design); `Configuration::CurrentBuildId` 0x1800c4c60 (writes
+  through an un-zeroed hidden return slot — needs its prologue read); eight by-value `String`
+  returns into an already-constructed `String`; `System::MemoryAllocator` — **deferred past
+  step 4 by decision** (~1,146 sites, assessment in `B34B_RULES.md` §6); `System::Debug` and
+  `System::StackCriticalSection` found unported, nothing to convert; the eleven
+  `CUTOVER_REQUIRED` System statics stay `RT_DATA_SLOT` reads, `MintStorageCell` redirect owed
+  at the class-static conversion (tabled per row, §4.1; Timer's five together); the **125 sites
+  through twelve `ExternalPtr` exe-side doors** — exe template instantiations ported as
+  game-code bodies with their own guard set, NOT Runtime members (exe-phase, receiver-side;
+  `fn_ExternalPtr_Serialize3` is the last reader of exe 0x140007140).
+  **Found and fixed on the way, all retail-backed.** (1) **The two-loader defect** — our
+  invented `standalone/async_loader` ran a second resource loader beside `Engine::Loader`, and a
+  third main-thread loader (`ChunkedSceneLoader`) on the splash; every byte goes through
+  `FileSystem::ReadFile`'s packed arm (`SetFilePointer`+`ReadFile` on ONE handle, no lock — and
+  retail takes none, because retail has one loader: the exe does not import `Engine::Loader` at
+  all). Torn reads gave NULL resources (`[GUL::Help] topics=-1`), bad magic, a
+  `CompressedStream::Read` spin, an `ExternalFactory::FindNext` spin, and BOTH resave-gate flake
+  signatures. Fix `96c17f47`: single loader, no lock, no guard, no timeout; new-game defects
+  4/12 -> 0/24, `[GUL::Load] redundant dispatch` 12/12 -> 0/24, `calls` pinned at 5686.
+  `endgame_b/LOADER_READ_SPIN.md` §9 + `LOADER_READ_SPIN_GHIDRA.md` Q5. **The resave gate has
+  not DIFFed once since** (about 90 coordinator runs plus the agents' own); a count-field or resident-row DIFF is now a finding, and
+  so is a `redundant dispatch` line. (2) `HarvestArea`/`HarvestOrchard`/`PlantArea`/
+  `PlantOrchard::Serialize` aliased the four-argument bool-array door onto the three-argument
+  `Serialize(int&)` slot — a guaranteed AV that had never executed on the gate save; retail
+  calls 0x140151458. (3) `AmbientEmitterDescription` / `ToolbarDescription::Serialize` read
+  `ReaderWriter+8` (always 0) as the direction, so `loading` was stuck TRUE; retail reads
+  `serializer+0 -> +8`. (4) ~60 null guards of OURS at hand-inlined ReaderWriter calls dropped
+  with a per-site argument (retail's `StatGoal::Serialize` 0x1400da8e2 has no test).
+  (5) `completeroad.cpp`'s uchar door cache was permanently NULL (misspelled mangled fragment),
+  hidden by its guard.
+  **OPEN, unguarded, with stacks (carry into step 5; `NEXT_SESSION.md` §1):** (a) allocator
+  `LockEnter` on a near-null lock = `MemoryAllocator::Get()` returned null (W2: `rtalloc::
+  Destruct` from `~Engine` while an unparked loader thread allocates; W2′: unlocked free-list
+  mutation -> wild write on the minted `.bss` cell). The crash dump now prints the cell
+  (`5b332342`). (b) `SaveLoadDialog_PopulateFileList` null deref, load-a-save route, 2 in 7
+  under load, never since. (c) the AUDIO STREAM thread faulting in `FileSystem::ReadFile`
+  (`_packfiles[packIndex]`) while `Engine::Loader::Load` runs `Modification::SetupFileSystem`
+  (package remount) on the caller thread — once in ~60 resaves. (d) `moddetailsdialog.cpp:206/
+  :262` passes a `Filename` element by VALUE where `Modification::Find` takes its address (only
+  with conflicting mods). (e) `standalone/reg_mint_promoted.cpp:3026`'s `RT_UNPROMOTABLE` note
+  says `??0Configuration@System@@` is unported; it is registered (`engine_lifecycle.cpp:995`).
+  Left unedited: it is a tool-parsed tagged row scoped to the DLL-present world.
+  **Gate at the close** (coordinator; the final tree `1b5eb639` gated 0 problems with resave 5/5, and
+  the numbers below are from the `make clean` run on `282cd55b` — 1,993 debug / 2,433 perf compile
+  lines — before the System closing sweep, which was then gated per merge): debug + perf + unit exit 0; distinct warnings 284 debug / 482 perf
+  against a 294 / 494 clean-rebuild baseline, 0 new; `dispatch_slot_map --check` 0/109; cutover
+  manifest OK (59 rows); mint tables UP TO DATE (152/104/48); new game + tutorial + Load Game
+  routes exit 0, `calls=5686`, `openCompFail=0`, `[RtResolve] 0 misses`, no TRAP, 0 GATE WARN;
+  pointer-free type table == baseline (312 registered, 417/417); resave 5/5 PASS at 21,075,114
+  bytes; a TRUE release compile (-O3, obj dir emptied first — `standalone` shares its obj dir
+  with `standalone-debug`, so the usual release build compiles nothing) exit 0; Mods route with
+  both `.pkm` mounted clean (run at the IO close); one functional `sa-stress`
+  (perf exe, label `b34_close`): clean self-quit, no crash or hang log, fps 139 -> 140, sim ms/iter
+  +3.6% against the baseline (inside the 5% plan gate; taken under load) — recorded, not chased.
 - **B.3.2 CLOSED (2026-09-18):** `Collection::Array<T>`, `Set<T, Compare>` and
   `LinkedList<T>` are real templates under retail's names
   (`runtime/types/collection/Collection.h`) wrapping the ported cores; three core
