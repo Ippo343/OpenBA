@@ -769,10 +769,16 @@ bool IndexBufferData_SetData(IndexBufferData* self, int32_t sizeBytes,
 //   48 ff a0 98.. jmp  [rax+0x98]           ; IASetIndexBuffer
 //
 // The hard-coded R16_UINT is what proves Banished indices are always 16-bit.
-void IndexBufferData_Bind(IndexBufferData* self) {
+// ENDGAME B.3.5 block J: the SLOT takes a second argument this body never reads.
+// `?BindResources@Context@Video@@`'s index-buffer arm sets RDX to the Context
+// (0x1800ef1e2) before dispatching here, so the parameter is spelled out now --
+// `Video::IndexBufferData::Bind(void*)` in runtime/types/video/CompanionData.h,
+// corrected this pass from a no-argument declaration. Ignoring it is retail's
+// behaviour; not declaring it was this file's.
+void IndexBufferData_Bind(IndexBufferData* self, void* /*context, never read*/) {
     if (!EnsureDeps()) {
-        typedef void (*Orig_t)(IndexBufferData*);
-        reinterpret_cast<Orig_t>(Dx11OriginalSlot(Vt::IndexBufferData, 5))(self);
+        typedef void (*Orig_t)(IndexBufferData*, void*);
+        reinterpret_cast<Orig_t>(Dx11OriginalSlot(Vt::IndexBufferData, 5))(self, nullptr);
         return;
     }
     ActiveContext()->IASetIndexBuffer(
@@ -940,12 +946,19 @@ bool ConstantBufferData_Create(ConstantBufferData* self) {
 // Picks the ladder rung that fits, re-binds only when the rung changed (that
 // `activeIndex != idx` guard is the whole point of the class), then pushes the
 // payload with a full-resource UpdateSubresource.
-void ConstantBufferData_Bind(ConstantBufferData* self, void* /*unused*/,
-                             const void* srcData, void* /*unused*/, int32_t sizeBytes) {
+// ENDGAME B.3.5 block J: the fourth argument is an INT, not a pointer. Retail's
+// owner-side trampoline is
+// `?Bind@ConstantBuffer@Video@@QEAAXAEAVContext@2@PEAXHH@Z` = (Context&, void*,
+// int, int), and all five dispatches in `?BindResources@Context@Video@@` build it
+// with `XOR R9D,R9D` -- a DWORD zero. `Video::ConstantBufferData::Bind` in
+// CompanionData.h is corrected to match; neither ignored argument is read here.
+void ConstantBufferData_Bind(ConstantBufferData* self, void* /*context, never read*/,
+                             const void* srcData, int32_t /*first, never read*/,
+                             int32_t sizeBytes) {
     if (!EnsureDeps()) {
-        typedef void (*Orig_t)(ConstantBufferData*, void*, const void*, void*, int32_t);
+        typedef void (*Orig_t)(ConstantBufferData*, void*, const void*, int32_t, int32_t);
         reinterpret_cast<Orig_t>(Dx11OriginalSlot(Vt::ConstantBufferData, 2))(
-            self, nullptr, srcData, nullptr, sizeBytes);
+            self, nullptr, srcData, 0, sizeBytes);
         return;
     }
 

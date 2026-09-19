@@ -279,7 +279,18 @@ public:
     // `levels` is a `Collection::Array<ImageLevel>`-shaped header; dx11 spells
     // it `ImageLevelArray`.
     virtual bool Create(const void* levels) = 0;                 // [3]
-    virtual void Bind(void* unknownArg, unsigned slot) = 0;      // [4]
+    // ENDGAME B.3.5 block J, SIGNATURE CORRECTED. `unknownArg` was not unknown:
+    // it is the `Video::Context*`. Read as DISASSEMBLY this pass from the only
+    // caller, `?BindTextures@Context@Video@@` 0x1800ef330 --
+    //   1800ef360  MOV RCX,[RCX+0x60]   ; img->_data, the companion
+    //   1800ef364  MOV R8D,EDI          ; the slot index
+    //   1800ef367  MOV RDX,RSI          ; `this`, the Context
+    //   1800ef36d  CALL [RAX+0x20]      ; slot 4
+    // -- so RDX carries the Context, exactly as it does on the six other Bind
+    // slots. VideoDX11's body ignores it (dx11/src/imagebufferdata.cpp says so at
+    // the parameter); the CALLER still sets it, and the name should say what the
+    // register holds rather than that one implementation does not read it.
+    virtual void Bind(void* context, unsigned slot) = 0;         // [4]
     virtual bool Update(void* data, int width, int height) = 0;  // [5]
     virtual bool Read(void* dst, int width, int height) = 0;     // [6]
 
@@ -305,7 +316,19 @@ public:
     // instruction tail-call trampolines into these two, +0x18 and +0x20.
     virtual void* Lock(int32_t sizeBytes, int32_t* outByteOffset) = 0;  // [3] +0x18
     virtual void  Unlock() = 0;                                  // [4] +0x20
-    virtual void  Bind() = 0;                                    // [5]
+    // ENDGAME B.3.5 block J, SIGNATURE CORRECTED -- this slot takes the Context.
+    // It was declared `Bind()` because VideoDX11's body (0x180003380) reads only
+    // `this`. But the ABSTRACT slot is what the CALLER dispatches through, and
+    // `?BindResources@Context@Video@@`'s index-buffer arm sets RDX, read as
+    // disassembly this pass --
+    //   1800ef1de  MOV RCX,[RCX+0x8]    ; ib->platformData
+    //   1800ef1e2  MOV RDX,RBX          ; `this`, the Context
+    //   1800ef1e8  CALL [RAX+0x28]      ; slot 5
+    // -- so the argument exists and one implementation declining to read it is not
+    // the slot's arity. RULE B5-14 / the caller brief: THE SLOT DECIDES, and the
+    // arity comes from retail. (VertexBufferData's slot 5, below, takes four; that
+    // is still the one slot where the two shapes differ.)
+    virtual void  Bind(void* context) = 0;                       // [5]
     virtual void  Serialize(void* serializer) = 0;               // [6]
 
     ~IndexBufferData();     // ??1IndexBufferData@Video@@UEAA@XZ  0x1800f8df0
@@ -340,7 +363,25 @@ public:
     virtual bool Create() = 0;                                   // [1]
     // `Video::ConstantBuffer::Bind` (0x1800eef70) tail-jumps into this one
     // through +0x10, off the owner's +0x40.
-    virtual void Bind(void* unused, const void* srcData, void* unused2,
+    // ENDGAME B.3.5 block J, SIGNATURE CORRECTED IN TWO PLACES. `unused` is the
+    // `Video::Context*`, and `unused2` is NOT A POINTER -- it is a 32-bit int.
+    // Two independent proofs:
+    //   * retail's mangling of the owner-side trampoline,
+    //     `?Bind@ConstantBuffer@Video@@QEAAXAEAVContext@2@PEAXHH@Z`
+    //     = (Context&, void*, int, int), which tail-jumps straight into this slot;
+    //   * the five call sites in `?BindResources@Context@Video@@`, read as
+    //     disassembly this pass (0x1800ef249, ef274, ef29f, ef2ca, ef2f5), each of
+    //     which is
+    //       MOV  RCX,[RBX+<buf>+0x40]   ; the companion
+    //       LEA  R8,[RBX+<staging>]     ; the payload
+    //       XOR  R9D,R9D                ; <-- a DWORD zero, i.e. an int 0
+    //       MOV  RDX,RBX                ; `this`, the Context
+    //       MOV  dword [RSP+0x20],<len>
+    //       CALL [RAX+0x10]             ; slot 2
+    // A `void*` fourth parameter would have been `XOR R9,R9`. Declaring it as one
+    // is the kind of quiet type error a caller conversion has to pass an ugly cast
+    // through, which is how it was found. VideoDX11 reads neither argument.
+    virtual void Bind(void* context, const void* srcData, int32_t first,
                       int32_t sizeBytes) = 0;                    // [2] +0x10
     virtual int32_t SlotIndexPlusOne() = 0;                      // [3]
 
@@ -421,7 +462,22 @@ class VideoProgramData {
 public:
     virtual VideoProgramData* DeletingDtor(unsigned flags) = 0;       // [0] 0x180058610
     virtual bool Slot1() = 0;                                    // [1] dx11: returns true
-    virtual void Slot2() = 0;                                     // [2] dx11: void stub
+    // ENDGAME B.3.5 block J, SLOT NAMED AND SIGNATURE CORRECTED. It was `Slot2()`
+    // because VideoDX11 implements it as a bare `RET` (0x180001190), so the label
+    // block A copied from the seam said nothing. The CALLER says what it is:
+    // `?BindResources@Context@Video@@`'s video-program arm, read as disassembly
+    // this pass --
+    //   1800ef0dd  MOV RAX,[RBX+0x200]  ; the Video::VideoProgram
+    //   1800ef0e4  MOV R8D,[RBX+0xc]    ; the Context's shader-detail level
+    //   1800ef0e8  MOV RDX,RBX          ; `this`, the Context
+    //   1800ef0eb  MOV RCX,[RAX+0x40]   ; the companion -- +0x40, NOT the
+    //                                   ; +0x50 a Vertex/PixelProgram uses
+    //   1800ef0f2  CALL [RAX+0x10]      ; slot 2
+    // -- which is the SAME three-argument shape as `VertexProgramData::Bind` and
+    // `PixelProgramData::Bind` at the same slot index. So slot 2 is `Bind`, and
+    // this backend simply implements no video-program binding (dx11/src/
+    // smallclasses.cpp: "VideoProgramData really is inert").
+    virtual void Bind(void* context, int detail) = 0;             // [2] dx11: inert stub
 
     ~VideoProgramData();    // ??1VideoProgramData@Video@@UEAA@XZ  0x1800f8d90
 
