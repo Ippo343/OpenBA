@@ -149,6 +149,9 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/math/Math.h"
 #include "../../types/video/Context.h"
+// ENDGAME B.3.5 block J: the real Video::ContextData, block A's abstract base,
+// whose twenty slots the nine backend forwarders below now dispatch through.
+#include "../../types/video/CompanionData.h"
 
 // ENDGAME B.3.5 block D1. `Video::Context` and `Video::Viewport` are real
 // classes now (runtime/types/video/Context.h): every body below MOVED onto the
@@ -185,19 +188,42 @@ void* ResolveExport(const char* mangled_name);
 
 namespace {
 
-// Call the backend through the ContextData vtable, exactly as the retail thunk
-// does: `this` becomes the ContextData, every other argument is untouched.
+// ENDGAME B.3.5 block J — `BackendSlot<Fn>(this, byteOffset)` IS GONE. It read
+// the vptr at `_contextData+0x00` by hand and indexed it at `byteOffset / 8`;
+// `Video::ContextData` (block A, runtime/types/video/CompanionData.h) declares all
+// twenty slots in retail order, so a VIRTUAL CALL through it reads THE SAME live
+// vptr at THE SAME byte offset and is the same dispatch, with the index checked by
+// the compiler instead of by a comment. The `kSlot*` byte-offset enum in Context.h
+// stays as the documentation of what each index is, and the nine asserts below pin
+// each one to its slot so the mapping is checked rather than stated in prose.
+//
+// The object behind the pointer is a `VideoDX11::ContextData` wearing dx11's
+// vtable, which does not derive from `Video::ContextData` in C++ (RULE B5-8's
+// declared leave), so the receiver takes one `// B.3.5 bridge` cast. That is
+// exactly what `video_resources.cpp` (blocks A/D2/VC) already does for
+// `RenderBufferData`, `ImageBufferData` and `DeviceData`.
 //
 // NO NULL CHECK ON _contextData — retail has none (`MOV RCX,[RCX+0x2160]` then
 // `MOV RAX,[RCX]` unguarded), and CLAUDE.md's rule applies: a guard here would
 // not restore the behaviour, it would skip it. If this ever faults, the
-// ContextData was never created and that is the bug to find.
-template <typename Fn>
-inline Fn BackendSlot(const Context* self, unsigned byteOffset) {
-    void* data = self->_contextData;
-    void** vt = *reinterpret_cast<void***>(data);
-    return reinterpret_cast<Fn>(vt[byteOffset / 8]);
+// ContextData was never created and that is the bug to find. The virtual call is
+// the same unguarded double deref.
+inline Video::ContextData* Backend(const Context* self) {
+    return reinterpret_cast<Video::ContextData*>(self->_contextData);  // B.3.5 bridge
 }
+
+// The nine byte offsets this file dispatched through, each pinned to the slot
+// index `Video::ContextData` declares it at. A slot that moved in the header would
+// break the build here instead of silently calling its neighbour.
+static_assert(RtVideo::kSlotClear                         / 8 ==  4, "ContextData::Clear is slot 4");
+static_assert(RtVideo::kSlotDrawIndexed                   / 8 == 12, "ContextData::DrawIndexed is slot 12");
+static_assert(RtVideo::kSlotGetMaxDynamicInstances        / 8 == 13, "ContextData::GetMaxDynamicInstances is slot 13");
+static_assert(RtVideo::kSlotBeginVertices                 / 8 == 14, "ContextData::BeginVertices is slot 14");
+static_assert(RtVideo::kSlotEndVertices                   / 8 == 15, "ContextData::EndVertices is slot 15");
+static_assert(RtVideo::kSlotBeginIndexedVertices          / 8 == 16, "ContextData::BeginIndexedVertices is slot 16");
+static_assert(RtVideo::kSlotEndIndexedVertices            / 8 == 17, "ContextData::EndIndexedVertices is slot 17");
+static_assert(RtVideo::kSlotBeginInstancedIndexedVertices / 8 == 18, "ContextData::BeginInstancedIndexedVertices is slot 18");
+static_assert(RtVideo::kSlotEndInstancedIndexedVertices   / 8 == 19, "ContextData::EndInstancedIndexedVertices is slot 19");
 
 // The hidden-return-slot note this file used to carry about
 // `Math::Matrix::Inverse` and `Math::Matrix::operator*` is settled and no longer
@@ -633,62 +659,58 @@ void Context::AddVertices(int32_t count, const void* vertices) {
 // run once at registration; there is no per-call comparison because running
 // the original as well would submit the draw twice.
 //
-// These are NOT converted to `_contextData->Clear(...)` on the real
-// `Video::ContextData` class (block A's, in CompanionData.h) even though it now
-// exists: `_contextData` is a `void*` field — the concrete `*Data` classes in
-// `dx11/` are RULE B5-8's declared leave and do not derive in C++, so the object
-// behind the pointer is a `VideoDX11::ContextData`, not a `Video::ContextData`.
-// The byte-offset dispatch is what the seam guarantees. That conversion belongs
-// to the dx11 caller batch (block J), after the seam.
+// ENDGAME B.3.5 block J, COORDINATOR RULING: THESE NINE ARE CONVERTED. Block D1
+// left them hand-inlined, on the reading that `_contextData` points at a
+// `VideoDX11::ContextData` rather than a `Video::ContextData` because the concrete
+// side does not derive in C++ (RULE B5-8's declared leave). That is true and it is
+// not an obstacle: a virtual call through the abstract `Video::ContextData*` reads
+// the LIVE vptr at the same byte offset and indexes the same array, so it IS the
+// same dispatch — the seam is still what fills the slots, and it still fills all
+// twenty. What changes is that the slot INDEX is now checked by the compiler and
+// the argument list by the declaration, instead of by a `using Fn = ...` typedef
+// nobody could diff against the header. Slots 17 and 19 remain two names for one
+// dx11 body; that is the seam's business, not this file's.
+//
+// THE SLOT DECIDES, and each index was checked against `Video::ContextData`'s
+// declaration order and against `dx11/src/contextdata.cpp`'s twenty
+// `DX11_REGISTER_SLOT` rows; the nine `static_assert`s above pin the byte offsets.
 // ============================================================================
 
 void Context::Clear(uint32_t flags, uint32_t color, float depth, int32_t stencil) {
-    using Fn = void (*)(void*, unsigned, unsigned, float, int);
-    BackendSlot<Fn>(this, RtVideo::kSlotClear)(_contextData, flags, color, depth, stencil);
+    Backend(this)->Clear(flags, color, depth, stencil);
 }
 
 void Context::DrawIndexed(int32_t primitiveType, int32_t a, int32_t b,
                           int32_t c, int32_t d, int32_t e) {
-    using Fn = void (*)(void*, int, int, int, int, int, int);
-    BackendSlot<Fn>(this, RtVideo::kSlotDrawIndexed)(_contextData, primitiveType,
-                                                     a, b, c, d, e);
+    Backend(this)->DrawIndexed(primitiveType, a, b, c, d, e);
 }
 
 int32_t Context::GetMaxDynamicInstances(int32_t a, int32_t b, int32_t c) const {
-    using Fn = int (*)(void*, int, int, int);
-    return BackendSlot<Fn>(this, RtVideo::kSlotGetMaxDynamicInstances)(_contextData, a, b, c);
+    return Backend(this)->GetMaxDynamicInstances(a, b, c);
 }
 
 bool Context::BeginVertices(int32_t count, int32_t stride) {
-    using Fn = bool (*)(void*, int, int);
-    return BackendSlot<Fn>(this, RtVideo::kSlotBeginVertices)(_contextData, count, stride);
+    return Backend(this)->BeginVertices(count, stride);
 }
 
 void Context::EndVertices(int32_t primitiveType) {
-    using Fn = void (*)(void*, int);
-    BackendSlot<Fn>(this, RtVideo::kSlotEndVertices)(_contextData, primitiveType);
+    Backend(this)->EndVertices(primitiveType);
 }
 
 bool Context::BeginIndexedVertices(int32_t a, int32_t b, int32_t c) {
-    using Fn = bool (*)(void*, int, int, int);
-    return BackendSlot<Fn>(this, RtVideo::kSlotBeginIndexedVertices)(_contextData, a, b, c);
+    return Backend(this)->BeginIndexedVertices(a, b, c);
 }
 
 void Context::EndIndexedVertices(int32_t primitiveType) {
-    using Fn = void (*)(void*, int);
-    BackendSlot<Fn>(this, RtVideo::kSlotEndIndexedVertices)(_contextData, primitiveType);
+    Backend(this)->EndIndexedVertices(primitiveType);
 }
 
 bool Context::BeginInstancedIndexedVertices(int32_t a, int32_t b, int32_t c, int32_t d) {
-    using Fn = bool (*)(void*, int, int, int, int);
-    return BackendSlot<Fn>(this, RtVideo::kSlotBeginInstancedIndexedVertices)(
-        _contextData, a, b, c, d);
+    return Backend(this)->BeginInstancedIndexedVertices(a, b, c, d);
 }
 
 void Context::EndInstancedIndexedVertices(int32_t primitiveType) {
-    using Fn = void (*)(void*, int);
-    BackendSlot<Fn>(this, RtVideo::kSlotEndInstancedIndexedVertices)(_contextData,
-                                                                    primitiveType);
+    Backend(this)->EndInstancedIndexedVertices(primitiveType);
 }
 
 // ============================================================================
