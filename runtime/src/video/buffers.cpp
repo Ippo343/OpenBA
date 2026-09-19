@@ -29,6 +29,7 @@
 #include "../../types/video/ImageBuffer.h"
 #include "../../types/video/Buffers.h"
 #include "../../types/video/Device.h"   // Wave 9 lane W: the lock and +0x100
+#include "../../types/video/CompanionData.h"  // ENDGAME B.3.5: Video::{Index,Vertex}BufferData
 
 #include <cstdio>
 #include <cstddef>
@@ -727,52 +728,47 @@ void Video_ImageBuffer_PlatformDestruct(ImageBuffer* self) {
 
 }
 
-void Video_IndexBuffer_PlatformConstruct(IndexBuffer* self) {
+// ENDGAME B.3.5 block D2 — the four buffer `Platform*` bodies are members of the
+// real `Video::IndexBuffer` / `Video::VertexBuffer` now. The shared
+// `PlatformConstructBody`/`PlatformDestructBody` pair stays exactly as it is: it
+// is the ONE argument tuple Wave 9 lane W's empty-list probe proved, and it is
+// also ImageBuffer's (b35-C's class), so it is not specialised per class here.
+void Video::IndexBuffer::PlatformConstruct() {
     void** first = IndexBufferFirstBuffer();
+    (void)PlatformConstructBody(this, 0x60, offsetof(IndexBuffer, platformData), first, kBufferLinks);
+}
 
-    LinkState pre{};
-    void* preCompanion = nullptr;
+void Video::IndexBuffer::PlatformDestruct() {
+    void** first = IndexBufferFirstBuffer();
+    (void)PlatformDestructBody(this, offsetof(IndexBuffer, platformData),
+                               /*nullCompanionAfterRelease=*/true, first, kBufferLinks);
+}
 
-    const LinkBranch br = PlatformConstructBody(self, 0x60, offsetof(IndexBuffer, platformData), first, kBufferLinks);
+void Video::VertexBuffer::PlatformConstruct() {
+    void** first = VertexBufferFirstBuffer();
+    (void)PlatformConstructBody(this, 0x68, offsetof(VertexBuffer, platformData), first, kBufferLinks);
+}
 
-    // The empty-list probe, once. Fired from HERE rather than from init because
-    // this is the earliest point at which Video::Device and its DeviceData are
-    // guaranteed to exist -- see ProbeEmptyList's header.
+void Video::VertexBuffer::PlatformDestruct() {
+    void** first = VertexBufferFirstBuffer();
+    (void)PlatformDestructBody(this, offsetof(VertexBuffer, platformData),
+                               /*nullCompanionAfterRelease=*/true, first, kBufferLinks);
+}
 
+void Video_IndexBuffer_PlatformConstruct(IndexBuffer* self) {
+    self->Video::IndexBuffer::PlatformConstruct();
 }
 
 void Video_IndexBuffer_PlatformDestruct(IndexBuffer* self) {
-    void** first = IndexBufferFirstBuffer();
-
-    LinkState pre{};
-
-    const UnlinkBranch br = PlatformDestructBody(self, offsetof(IndexBuffer, platformData),
-                                                 /*nullCompanionAfterRelease=*/true, first, kBufferLinks);
-
+    self->Video::IndexBuffer::PlatformDestruct();
 }
 
 void Video_VertexBuffer_PlatformConstruct(VertexBuffer* self) {
-    void** first = VertexBufferFirstBuffer();
-
-    LinkState pre{};
-    void* preCompanion = nullptr;
-
-    const LinkBranch br = PlatformConstructBody(self, 0x68, offsetof(VertexBuffer, platformData), first, kBufferLinks);
-
-    // The empty-list probe, once. Fired from HERE rather than from init because
-    // this is the earliest point at which Video::Device and its DeviceData are
-    // guaranteed to exist -- see ProbeEmptyList's header.
-
+    self->Video::VertexBuffer::PlatformConstruct();
 }
 
 void Video_VertexBuffer_PlatformDestruct(VertexBuffer* self) {
-    void** first = VertexBufferFirstBuffer();
-
-    LinkState pre{};
-
-    const UnlinkBranch br = PlatformDestructBody(self, offsetof(VertexBuffer, platformData),
-                                                 /*nullCompanionAfterRelease=*/true, first, kBufferLinks);
-
+    self->Video::VertexBuffer::PlatformDestruct();
 }
 
 // ============================================================================
@@ -804,26 +800,24 @@ void Video_VertexBuffer_PlatformDestruct(VertexBuffer* self) {
 // process.
 // ============================================================================
 
-void Video_RenderBuffer_PlatformConstruct(RtVideo::RenderBuffer* self) {
+void Video::RenderBuffer::PlatformConstruct() {
     void** first = RenderBufferFirstRenderBuffer();
+    (void)PlatformConstructBody(this, 0x98, offsetof(Video::RenderBuffer, platformData),
+                                first, kRenderLinks);
+}
 
-    LinkState pre{};
-    void* preCompanion = nullptr;
+void Video::RenderBuffer::PlatformDestruct() {
+    void** first = RenderBufferFirstRenderBuffer();
+    (void)PlatformDestructBody(this, offsetof(Video::RenderBuffer, platformData),
+                               /*nullCompanionAfterRelease=*/false, first, kRenderLinks);
+}
 
-    const LinkBranch br = PlatformConstructBody(self, 0x98, offsetof(RtVideo::RenderBuffer, platformData),
-                                                first, kRenderLinks);
-
-
+void Video_RenderBuffer_PlatformConstruct(RtVideo::RenderBuffer* self) {
+    self->Video::RenderBuffer::PlatformConstruct();
 }
 
 void Video_RenderBuffer_PlatformDestruct(RtVideo::RenderBuffer* self) {
-    void** first = RenderBufferFirstRenderBuffer();
-
-    LinkState pre{};
-
-    const UnlinkBranch br = PlatformDestructBody(self, offsetof(RtVideo::RenderBuffer, platformData),
-                                                 /*nullCompanionAfterRelease=*/false, first, kRenderLinks);
-
+    self->Video::RenderBuffer::PlatformDestruct();
 }
 
 // ============================================================================
@@ -835,44 +829,69 @@ void Video_RenderBuffer_PlatformDestruct(RtVideo::RenderBuffer* self) {
 // diverge from, since that vtable is dx11's and dx11 is already ours.
 // ============================================================================
 
+// ENDGAME B.3.5 block D2. The two constructors stay DOORS and do NOT become real
+// `IndexBuffer()` / `VertexBuffer()`: the `PlatformConstruct` they tail into
+// publishes `this` into the `_firstBuffer` intrusive list, whose head is an
+// `RT_DATA_SLOT` read rather than a C++ static (RULE B4b-4 / B35_RULES §9). What
+// converted inside them is the hand-off, now a qualified member call.
 void Video_IndexBuffer_Ctor(IndexBuffer* self) {
     self->size = 0;
     self->dynamic = false;
-    Video_IndexBuffer_PlatformConstruct(self);
+    self->Video::IndexBuffer::PlatformConstruct();
 }
 
 void Video_VertexBuffer_Ctor(VertexBuffer* self) {
     self->size = 0;
     self->dynamic = false;
-    Video_VertexBuffer_PlatformConstruct(self);
+    self->Video::VertexBuffer::PlatformConstruct();
+}
+
+// Create/Set are pure trampolines into the companion at +0x08. ENDGAME B.3.5:
+// the hand-inlined `*(vtable + 0x08)` / `+ 0x10` dispatches became VIRTUAL CALLS
+// on block A's real `Video::{Index,Vertex}BufferData`, whose slots 1 and 2 are
+// `Create` and `SetData` (runtime/types/video/CompanionData.h, +0x08 and +0x10 —
+// the same two byte offsets, now spelled as the slots they are). `platformData`
+// stays a `void*` field, so each receiver takes one marked bridge cast.
+bool Video::IndexBuffer::Create(int count, bool isDynamic, void* data) {
+    // B.3.5 bridge — platformData is a pinned void* field.
+    return reinterpret_cast<Video::IndexBufferData*>(platformData)
+               ->Create(static_cast<uint32_t>(count),
+                        static_cast<uint8_t>(isDynamic ? 1 : 0), data);
+}
+
+bool Video::IndexBuffer::Set(int offset, int count, void* data) {
+    // B.3.5 bridge — platformData is a pinned void* field.
+    return reinterpret_cast<Video::IndexBufferData*>(platformData)
+               ->SetData(offset, count, data);
+}
+
+bool Video::VertexBuffer::Create(int count, bool isDynamic, void* data) {
+    // B.3.5 bridge — platformData is a pinned void* field.
+    return reinterpret_cast<Video::VertexBufferData*>(platformData)
+               ->Create(static_cast<uint32_t>(count),
+                        static_cast<uint8_t>(isDynamic ? 1 : 0), data);
+}
+
+bool Video::VertexBuffer::Set(int offset, int count, void* data) {
+    // B.3.5 bridge — platformData is a pinned void* field.
+    return reinterpret_cast<Video::VertexBufferData*>(platformData)
+               ->SetData(offset, count, data);
 }
 
 bool Video_IndexBuffer_Create(IndexBuffer* self, int count, bool dynamic, void* data) {
-    using Fn = bool (*)(void*, int, bool, void*);
-    Fn slot = *reinterpret_cast<Fn*>(static_cast<uint8_t*>(*reinterpret_cast<void**>(self->platformData)) + 0x08);
-    bool ours = slot(self->platformData, count, dynamic, data);
-    return ours;
+    return self->Video::IndexBuffer::Create(count, dynamic, data);
 }
 
 bool Video_IndexBuffer_Set(IndexBuffer* self, int offset, int count, void* data) {
-    using Fn = bool (*)(void*, int, int, void*);
-    Fn slot = *reinterpret_cast<Fn*>(static_cast<uint8_t*>(*reinterpret_cast<void**>(self->platformData)) + 0x10);
-    bool ours = slot(self->platformData, offset, count, data);
-    return ours;
+    return self->Video::IndexBuffer::Set(offset, count, data);
 }
 
 bool Video_VertexBuffer_Create(VertexBuffer* self, int count, bool dynamic, void* data) {
-    using Fn = bool (*)(void*, int, bool, void*);
-    Fn slot = *reinterpret_cast<Fn*>(static_cast<uint8_t*>(*reinterpret_cast<void**>(self->platformData)) + 0x08);
-    bool ours = slot(self->platformData, count, dynamic, data);
-    return ours;
+    return self->Video::VertexBuffer::Create(count, dynamic, data);
 }
 
 bool Video_VertexBuffer_Set(VertexBuffer* self, int offset, int count, void* data) {
-    using Fn = bool (*)(void*, int, int, void*);
-    Fn slot = *reinterpret_cast<Fn*>(static_cast<uint8_t*>(*reinterpret_cast<void**>(self->platformData)) + 0x10);
-    bool ours = slot(self->platformData, offset, count, data);
-    return ours;
+    return self->Video::VertexBuffer::Set(offset, count, data);
 }
 
 // ============================================================================

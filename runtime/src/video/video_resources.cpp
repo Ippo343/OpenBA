@@ -109,6 +109,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/video/Device.h"
 #include "../../types/video/ImageBuffer.h"
+#include "../../types/video/CompanionData.h"   // ENDGAME B.3.5: Video::{Device,RenderBuffer}Data
 #include "../collection/array_internal.h"
 #include "../collection/array_destroy_internal.h"
 
@@ -311,18 +312,24 @@ extern "C" void RtVideo_ArrayInterfaceElemDestroy(void* /*array, spilled and
 // `height`. Writing them as two ints is the same bytes; it is spelled as two
 // named fields because that is what Device.h pins.
 //
-// The CALL goes through RT_EXPORT_ONCE, not a direct C++ call to our own
-// `Video_RenderBuffer_PlatformConstruct`: retail's is an in-DLL rel32 that our
-// registry cannot intercept, so the port-aware door is what makes
-// RT_VIDBUFFERS=0 actually route this arm back to the DLL. A direct
-// call would make the kill switch a lie for this path — the shape
-// reference_off_by_default_was_not_true.md is about.
+// ENDGAME B.3.5 block D2. The CALL used to go through `RT_EXPORT_ONCE` on
+// `?PlatformConstruct@RenderBuffer@Video@@AEAAXXZ`, on the argument that the
+// port-aware door was "what makes RT_VIDBUFFERS=0 route this arm back to the
+// DLL". There is no `RT_VIDBUFFERS` and there are no live feature gates
+// (DIRECTION.md §2: a port registers unconditionally), and `PlatformConstruct`
+// is now a MEMBER of this class — so this is a direct, qualified, non-virtual
+// member call. The registered door for `?PlatformConstruct@` (buffers.cpp) is
+// unchanged and still answers every other caller.
+//
+// THIS CTOR STAYS A DOOR (no real `RenderBuffer::RenderBuffer()`): it publishes
+// `this` into the `_firstRenderBuffer` intrusive list, whose head is an
+// `RT_DATA_SLOT` read rather than a C++ static — see Device.h's banner.
 RenderBuffer* Video_RenderBuffer_Ctor(RenderBuffer* self) {
     self->colorBuffer = nullptr;                       // MOV [RCX],RAX
     self->depthBuffer = nullptr;                       // MOV [RCX+8],RAX
     self->width  = 0;                                  // MOV [RCX+0x10],RAX,
     self->height = 0;                                  //   one store, two fields
-    RT_EXPORT_ONCE(VoidThisFn, "?PlatformConstruct@RenderBuffer@Video@@AEAAXXZ")(self);
+    self->Video::RenderBuffer::PlatformConstruct();
     return self;                                       // MOV RAX,RBX
 }
 
@@ -342,8 +349,11 @@ RenderBuffer* Video_RenderBuffer_Ctor(RenderBuffer* self) {
 // asymmetry" and reproduces it deliberately). That destination has been ported
 // and oracle-verified since Wave 9 lane GFX2, with a link-state comparator and
 // a three-branch counter; this row adds no new memory operation of its own.
+// ENDGAME B.3.5 block D2: a direct qualified member call, for the reason the
+// constructor above gives. Still a DOOR and not a real `~RenderBuffer()` — the
+// unlink it delegates to is what a real destructor could not publish.
 void Video_RenderBuffer_Dtor(RenderBuffer* self) {
-    RT_EXPORT_ONCE(VoidThisFn, "?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ")(self);
+    self->Video::RenderBuffer::PlatformDestruct();
 }
 
 // ============================================================================
@@ -362,10 +372,17 @@ void Video_RenderBuffer_Dtor(RenderBuffer* self) {
 // The deref of `platformData` is unguarded in retail and is left unguarded
 // here. A null there means PlatformConstruct never ran on this object, which is
 // an upstream defect to find, not one to paper over.
+// ENDGAME B.3.5 block D2: the hand-inlined `(*(void***)pd)[2]` became a VIRTUAL
+// CALL on `Video::RenderBufferData`, whose slot 2 block A named `Bind(void*)`
+// (runtime/types/video/CompanionData.h). `platformData` stays a `void*` field —
+// dx11 reads it at +0x28 — so the receiver needs one marked bridge cast.
+void Video::RenderBuffer::Bind(Context& context) const {
+    // B.3.5 bridge — platformData is a pinned void* field.
+    reinterpret_cast<Video::RenderBufferData*>(platformData)->Bind(&context);
+}
+
 void Video_RenderBuffer_Bind(const RenderBuffer* self, void* context) {
-    void*  pd  = self->platformData;
-    void** vt  = *reinterpret_cast<void***>(pd);
-    reinterpret_cast<void (*)(void*, void*)>(vt[2])(pd, context);
+    self->Video::RenderBuffer::Bind(*reinterpret_cast<Video::Context*>(context));
 }
 
 // ============================================================================
@@ -483,12 +500,18 @@ void Video_Configuration_Dtor(void* self) {
 // file) already does the correct thing for a split layout: it builds a
 // temporary `ArrayHdr` view over the three adjacent words for exactly this
 // call, which is what a member call would do internally anyway.
+// ENDGAME B.3.5 block D2: this stays a DOOR and not a real `~Device()` — RULE
+// B5-6, because `InitializeCriticalSection` is retail's `Device::Startup` and the
+// singleton cell it clears is an `RT_DATA_SLOT` read, not a C++ static. What DID
+// convert is step 1's hand-inlined slot-0 dispatch, now a virtual call on block
+// A's real `Video::DeviceData`.
 void Video_Device_Dtor(Device* self) {
     // ---- 1 & 2: the DeviceData companion -----------------------------------
     void* dd = self->deviceData;
     if (dd) {
-        void** vt = *reinterpret_cast<void***>(dd);
-        reinterpret_cast<void (*)(void*, int)>(vt[0])(dd, 1);   // scalar deleting dtor
+        // B.3.5 bridge — deviceData is a pinned void* field (+0x100, read by dx11).
+        // Slot 0 with the delete flag set: the companion is destroyed AND freed.
+        (void)reinterpret_cast<Video::DeviceData*>(dd)->DeletingDtor(1);
     }
     self->deviceData = nullptr;
 

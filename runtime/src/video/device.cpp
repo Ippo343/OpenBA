@@ -71,6 +71,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/video/Device.h"
 #include "../../types/video/ImageBuffer.h"
+#include "../../types/video/CompanionData.h"   // ENDGAME B.3.5: Video::RenderBufferData
 
 using RtVideo::Adapter;
 using RtVideo::Configuration;
@@ -129,9 +130,9 @@ constexpr const char* kRenderBufferCreate       = "?Create@RenderBuffer@Video@@Q
 constexpr const char* kRenderStateDataDtor      = "??1RenderStateData@Video@@UEAA@XZ";
 constexpr const char* kConfigurationSave        = "?Save@Configuration@Video@@QEAAXXZ";
 constexpr const char* kConfigurationStartup     = "?Startup@Configuration@Video@@QEAA_NXZ";
-// NOT ported by this lane, only CALLED — see the banner above
-// ValidateConfigurationBody.
-constexpr const char* kGetDefaultResolution     = "?GetDefaultResolution@Device@Video@@QEBAHAEBUAdapter@12@@Z";
+// `?GetDefaultResolution@Device@Video@@QEBAHAEBUAdapter@12@@Z` used to be spelled
+// here for an `RT_EXPORT_ONCE` lookup. ENDGAME B.3.5 block D2 made that call a
+// direct member call (see ValidateConfiguration below), so the literal is gone.
 
 // ---- The three singletons these bodies read --------------------------------
 // Exported DATA symbols: the export address IS the pointer slot.
@@ -168,10 +169,12 @@ void** PersistenceSingletonSlot() {
 //   1800d3b0  MOV EAX, dword ptr [RCX + 0x48]
 //   1800d3b4  RET
 // ============================================================================
+int Video::Device::GetInterfaceCount() const {
+    return interfaceCount;
+}
+
 int Video_Device_GetInterfaceCount(const Device* self) {
-    const int ours = self->interfaceCount;
-    using Fn = int (*)(const Device*);
-    return ours;
+    return self->Video::Device::GetInterfaceCount();
 }
 
 // ============================================================================
@@ -183,21 +186,28 @@ int Video_Device_GetInterfaceCount(const Device* self) {
 // GetInterfaceCount straight back in). A guard here would not be faithful and
 // would not help — see CLAUDE.md "Don't 'fix' a faithful crash with a null
 // check".
+//
+// The MEMBER returns the reference retail's `AEBU` mangling says it returns; the
+// DOOR keeps the pointer its callers have always received, which is the same
+// eight bytes on this ABI.
 // ============================================================================
+const Video::Device::GraphicsInterface& Video::Device::GetInterface(int index) const {
+    return interfaceData[index];
+}
+
 const GraphicsInterface* Video_Device_GetInterface(const Device* self, int index) {
-    const GraphicsInterface* ours = self->interfaceData + index;
-    using Fn = const GraphicsInterface* (*)(const Device*, int);
-    const void* oursAsPtr = ours;
-    return ours;
+    return &self->Video::Device::GetInterface(index);
 }
 
 // ============================================================================
 // Video::Device::GetMultisampleModeCount  —  retail 0x18000d450, ordinal 2803
 // ============================================================================
+int Video::Device::GetMultisampleModeCount() const {
+    return multisampleCount;
+}
+
 int Video_Device_GetMultisampleModeCount(const Device* self) {
-    const int ours = self->multisampleCount;
-    using Fn = int (*)(const Device*);
-    return ours;
+    return self->Video::Device::GetMultisampleModeCount();
 }
 
 // ============================================================================
@@ -209,10 +219,12 @@ int Video_Device_GetMultisampleModeCount(const Device* self) {
 // 0/1 would propagate. Reproduced with uint8_t + `!= 0` — MSVC's `bool` return
 // is the low byte either way, and every producer of this array stores 0 or 1.
 // ============================================================================
+bool Video::Device::IsMultisampleModeSupported(int mode) const {
+    return multisampleData[mode] != 0;
+}
+
 bool Video_Device_IsMultisampleModeSupported(const Device* self, int mode) {
-    const bool ours = self->multisampleData[mode] != 0;
-    using Fn = bool (*)(const Device*, int);
-    return ours;
+    return self->Video::Device::IsMultisampleModeSupported(mode);
 }
 
 // ============================================================================
@@ -247,8 +259,6 @@ bool Video_Device_IsMultisampleModeSupported(const Device* self, int mode) {
 // scratch ints, the original would see a different world from ours and report
 // a divergence that is an artifact of the harness.
 // ============================================================================
-namespace {
-
 // ----------------------------------------------------------------------------
 // Video::Device::GetDefaultResolution — retail 0x1800f7540, ordinal 2559.
 //
@@ -273,37 +283,38 @@ namespace {
 //
 // The concrete hazard is cutover: the raw DLL door returns NULL with
 // Runtime-x64.dll absent, so raw here is a null call on the fallback path.
-// GetDefaultResolution is unported today, so nothing about which body runs
-// changes with this edit.
+// ENDGAME B.3.5 block D2: `GetDefaultResolution` IS ported and registered today
+// (runtime/src/video/device_startup.cpp, by name AND by address), and it is a
+// member of this very class — so the resolution fallback below is now a DIRECT
+// MEMBER CALL instead of an `RT_EXPORT_ONCE` lookup. That is the step-5 rule for
+// a runtime-internal caller inside the block's own file set, and it makes the
+// dependency a link-time fact rather than a name resolved at run time. The
+// argument order is unchanged: retail passes `this` in RCX even though
+// 0x1800f7540's first instruction is `MOV RDI,RDX` and RCX is dead from there.
 // ----------------------------------------------------------------------------
-int CallGetDefaultResolution(const Device* self, const Adapter* adapter) {
-    using Fn = int (*)(const Device*, const Adapter*);
-    return RT_EXPORT_ONCE(Fn, kGetDefaultResolution)(self, adapter);
-}
 
-void ValidateConfigurationBody(const Device* self,
-                               int* renderer, int* adapterIdx,
-                               int* width, int* height,
-                               int* refreshNum, int* refreshDen,
-                               int* antialias, int* filter) {
-    if (*renderer < 0 || self->interfaceCount <= *renderer)
-        *renderer = 0;
-    const GraphicsInterface* iface = self->interfaceData + *renderer;
+void Video::Device::ValidateConfiguration(int& renderer, int& adapterIdx,
+                                          int& width, int& height,
+                                          int& refreshNum, int& refreshDen,
+                                          int& antialias, int& filter) {
+    if (renderer < 0 || interfaceCount <= renderer)
+        renderer = 0;
+    const GraphicsInterface* iface = interfaceData + renderer;
 
-    if (*adapterIdx < 0 || iface->adapterCount <= *adapterIdx)
-        *adapterIdx = 0;
-    const Adapter* adapter = iface->adapterData + *adapterIdx;
+    if (adapterIdx < 0 || iface->adapterCount <= adapterIdx)
+        adapterIdx = 0;
+    const Adapter* adapter = iface->adapterData + adapterIdx;
 
     // Find the display mode matching the requested width/height.
     int modeIndex = -1;
     for (int i = 0; i < adapter->modeCount; ++i) {
         const DisplayMode* m = adapter->modeData + i;
-        if (*width == m->width && *height == m->height) { modeIndex = i; break; }
+        if (width == m->width && height == m->height) { modeIndex = i; break; }
     }
     if (modeIndex == -1) {
-        modeIndex = CallGetDefaultResolution(self, adapter);
-        *width  = adapter->modeData[modeIndex].width;
-        *height = adapter->modeData[modeIndex].height;
+        modeIndex = Video::Device::GetDefaultResolution(*adapter);
+        width  = adapter->modeData[modeIndex].width;
+        height = adapter->modeData[modeIndex].height;
     }
 
     const DisplayMode* mode = adapter->modeData + modeIndex;
@@ -313,44 +324,35 @@ void ValidateConfigurationBody(const Device* self,
     bool exact = false;
     for (int i = 0; i < mode->refreshCount; ++i) {
         const RefreshRate* r = mode->refreshData + i;
-        if (r->numerator == *refreshNum && r->denominator == *refreshDen) { exact = true; break; }
+        if (r->numerator == refreshNum && r->denominator == refreshDen) { exact = true; break; }
     }
     if (!exact) {
         // Otherwise take the first entry with the same integer Hz, else entry 0.
         int pick = 0;
         for (int i = 0; i < mode->refreshCount; ++i) {
             const RefreshRate* r = mode->refreshData + i;
-            if (r->numerator / r->denominator == *refreshNum / *refreshDen) { pick = i; break; }
+            if (r->numerator / r->denominator == refreshNum / refreshDen) { pick = i; break; }
             pick = 0;
         }
-        *refreshNum = mode->refreshData[pick].numerator;
-        *refreshDen = mode->refreshData[pick].denominator;
+        refreshNum = mode->refreshData[pick].numerator;
+        refreshDen = mode->refreshData[pick].denominator;
     }
 
-    if (adapter->multisampleData[*antialias] == 0)
-        *antialias = 0;
-    if (adapter->maxFilterLevel < *filter)
-        *filter = adapter->maxFilterLevel;
+    if (adapter->multisampleData[antialias] == 0)
+        antialias = 0;
+    if (adapter->maxFilterLevel < filter)
+        filter = adapter->maxFilterLevel;
 }
-
-}  // namespace
 
 void Video_Device_ValidateConfiguration(Device* self,
                                         int* renderer, int* adapterIdx,
                                         int* width, int* height,
                                         int* refreshNum, int* refreshDen,
                                         int* antialias, int* filter) {
-
-    int* args[8] = { renderer, adapterIdx, width, height,
-                     refreshNum, refreshDen, antialias, filter };
-
-    // Snapshot the inputs, and the caller's aliasing, BEFORE ours runs.
-    int  scratchStore[8] = {0,0,0,0,0,0,0,0};
-    int* scratchArgs[8] = {nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr};
-
-    ValidateConfigurationBody(self, renderer, adapterIdx, width, height,
-                              refreshNum, refreshDen, antialias, filter);
-
+    self->Video::Device::ValidateConfiguration(*renderer, *adapterIdx,
+                                               *width, *height,
+                                               *refreshNum, *refreshDen,
+                                               *antialias, *filter);
 }
 
 // ============================================================================
@@ -370,30 +372,27 @@ void Video_Device_ValidateConfiguration(Device* self,
 // The mode search does NOT break on a match and does NOT reset the index when
 // nothing matches: displayModeIndex keeps whatever it had. Both are retail.
 // ============================================================================
-bool Video_Device_ApplyChangedSettings(Device* self) {
-
-    // Snapshot the whole object BEFORE ours runs, so the original can be run
-    // on a private replica afterwards. The replica shares the mode array by
-    // pointer, which is safe: this function only reads it.
-    Device scratch{};
-
+bool Video::Device::ApplyChangedSettings() {
     const Configuration* cfg = *ConfigSingletonSlot();
 
     const int width  = cfg->fullscreen ? cfg->width  : cfg->windowWidth;
-    self->backBufferWidth = width;
+    backBufferWidth = width;
     const int height = cfg->fullscreen ? cfg->height : cfg->windowHeight;
-    self->backBufferHeight = height;
+    backBufferHeight = height;
 
-    for (int i = 0; i < self->modeCount; ++i) {
-        const DisplayMode* m = self->modeData + i;
+    for (int i = 0; i < modeCount; ++i) {
+        const DisplayMode* m = modeData + i;
         if (width == m->width && height == m->height)
-            self->displayModeIndex = i;
+            displayModeIndex = i;
     }
 
-    self->settingsChanged = 1;
-
+    settingsChanged = 1;
 
     return true;
+}
+
+bool Video_Device_ApplyChangedSettings(Device* self) {
+    return self->Video::Device::ApplyChangedSettings();
 }
 
 // ============================================================================
@@ -430,40 +429,43 @@ int RenderBufferExtent(uint32_t flags,
     return v;
 }
 
-bool CallPlatformCreate(RenderBuffer* self) {
-    void* data = self->platformData;
-    void** vtbl = *reinterpret_cast<void***>(data);
-    using Slot1 = bool (*)(void*);
-    return reinterpret_cast<Slot1>(vtbl[1])(data);
-}
-
-// The stub platform object the diff harness hands the original, so that
-// running it a second time cannot create a second GPU resource. Slot 1 is the
-// only slot Create touches.
-bool DiffStubCreate(void*) { return true; }
-
 }  // namespace
 
-bool Video_RenderBuffer_Create(RenderBuffer* self,
-                               const ImageBuffer* color, const ImageBuffer* depth) {
-
-    RenderBuffer scratch{};
-    void*        stubVtbl[2] = { nullptr, reinterpret_cast<void*>(&DiffStubCreate) };
-    void*        stubData    = &stubVtbl[0];
-
-    self->colorBuffer = const_cast<ImageBuffer*>(color);
-    self->depthBuffer = const_cast<ImageBuffer*>(depth);
+// ENDGAME B.3.5 block D2. Two things moved with the body:
+//
+//  * The hand-inlined `(*(void***)platformData)[1]` tail call became a VIRTUAL
+//    CALL on `Video::RenderBufferData`, which block A made a real abstract class
+//    with `Slot1()` at slot 1 (runtime/types/video/CompanionData.h). The
+//    `reinterpret_cast` is the `// B.3.5 bridge` shape the brief asks for,
+//    because `platformData` is still a `void*` field (its layout is pinned and
+//    dx11 reads it at +0x28).
+//  * The `ImageBuffer` parameters keep the SIGNATURE retail's mangling gives
+//    them (`PEBVImageBuffer@2@` — `Video::ImageBuffer`), but the field reads go
+//    through the global POD, because `runtime/types/video/ImageBuffer.h` is
+//    b35-C's file and `Video::ImageBuffer` is not a complete type here yet. One
+//    bridge cast, marked, to be deleted by the ImageBuffer caller batch.
+bool Video::RenderBuffer::Create(const ImageBuffer* color, const ImageBuffer* depth) {
+    colorBuffer = static_cast<void*>(const_cast<ImageBuffer*>(color));
+    depthBuffer = static_cast<void*>(const_cast<ImageBuffer*>(depth));
 
     const Device*        dev = *DeviceSingletonSlot();
     const Configuration* cfg = *ConfigSingletonSlot();
-    const ImageBuffer*   src = color ? color : depth;
+    // B.3.5 bridge — b35-C owns Video::ImageBuffer's definition.
+    const ::ImageBuffer* src = reinterpret_cast<const ::ImageBuffer*>(color ? color : depth);
     const uint32_t       flags = src->flags;
 
-    self->width  = RenderBufferExtent(flags, src->width,  dev->backBufferWidth,  cfg);
-    self->height = RenderBufferExtent(flags, src->height, dev->backBufferHeight, cfg);
+    width  = RenderBufferExtent(flags, src->width,  dev->backBufferWidth,  cfg);
+    height = RenderBufferExtent(flags, src->height, dev->backBufferHeight, cfg);
 
+    // B.3.5 bridge — platformData stays void* (pinned at +0x28, read by dx11).
+    return reinterpret_cast<Video::RenderBufferData*>(platformData)->Slot1();
+}
 
-    return CallPlatformCreate(self);
+bool Video_RenderBuffer_Create(RenderBuffer* self,
+                               const ::ImageBuffer* color, const ::ImageBuffer* depth) {
+    return self->Video::RenderBuffer::Create(
+        reinterpret_cast<const Video::ImageBuffer*>(color),
+        reinterpret_cast<const Video::ImageBuffer*>(depth));
 }
 
 // ============================================================================
@@ -582,19 +584,20 @@ bool FieldBool(const Configuration* c, uint16_t off) {
 
 }  // namespace
 
-void Video_Configuration_Save(Configuration* self) {
-
+void Video::Configuration::Save() {
     void* persistence = *PersistenceSingletonSlot();
-
 
     for (int i = 0; i < kSaveFieldCount; ++i) {
         const SaveField& f = kSaveFields[i];
         if (f.isBool)
-            PersistSetBool()(persistence, kSectionVideo, f.key, FieldBool(self, f.offset));
+            PersistSetBool()(persistence, kSectionVideo, f.key, FieldBool(this, f.offset));
         else
-            PersistSetInt()(persistence, kSectionVideo, f.key, FieldInt(self, f.offset));
+            PersistSetInt()(persistence, kSectionVideo, f.key, FieldInt(this, f.offset));
     }
+}
 
+void Video_Configuration_Save(Configuration* self) {
+    self->Video::Configuration::Save();
 }
 
 // ============================================================================
@@ -643,19 +646,13 @@ void Video_Configuration_Save(Configuration* self) {
 //  * The return value is unconditionally `true` (0x1800f6ce4 `MOV AL,0x1`).
 //    Nothing here can fail, including a completely empty registry.
 // ============================================================================
-bool Video_Configuration_Startup(Configuration* self) {
-
+bool Video::Configuration::Startup() {
     void* persistence = *PersistenceSingletonSlot();
-
-    // Snapshot BEFORE any store: the input is also the output, and the oracle
-    // below has to hand retail the object in the state we were handed it in
-    // (reference_oracle_must_snapshot_aliased_inputs.md).
-    Configuration orig = *self;
 
     int found = 0;
     for (int i = 0; i < kSaveFieldCount; ++i) {
         const SaveField& f = kSaveFields[i];
-        auto* field = reinterpret_cast<uint8_t*>(self) + f.offset;
+        auto* field = reinterpret_cast<uint8_t*>(this) + f.offset;
         if (f.isBool) {
             bool v = (*field != 0);
             if (RtIo_Persistence_GetBool(persistence, kSectionVideo, f.key, &v)) ++found;
@@ -667,8 +664,11 @@ bool Video_Configuration_Startup(Configuration* self) {
         }
     }
 
-
     return true;   // 0x1800f6ce4: MOV AL,0x1 — unconditional
+}
+
+bool Video_Configuration_Startup(Configuration* self) {
+    return self->Video::Configuration::Startup();
 }
 
 // ============================================================================

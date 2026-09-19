@@ -56,6 +56,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <new>       // ENDGAME B.3.5: the hidden-retslot door placement-news (RULE B5-12)
 
 #include "../../funcs/rt_port.h"
 #include "../../types/video/Device.h"
@@ -68,6 +69,11 @@ using RtSystem::WideString;
 using System::String;
 using RtVideo::Device;
 using RtVideo::InterfaceSlot;
+
+// standalone/video_interface.cpp. Declared at FILE scope (it used to be a
+// block-scope `extern` inside the body; inside a `Video::Device` member that
+// would name `Video::VideoInterfaceFillDx9Placeholder` and fail at link).
+void VideoInterfaceFillDx9Placeholder(void* device);
 
 namespace {
 
@@ -127,13 +133,18 @@ inline InterfaceSlot* SlotAt(Device* self, int i) {
 // release. So `GetDLLForInterface(7)` returns **"-x64.dll"** — a name, not an
 // empty string and not a failure. Reproduced exactly; the probe below tests it.
 // ============================================================================
-extern "C" String* RtVideo_Device_GetDLLForInterface(const Device* /*this, never read*/,
-                                                     String* ret, int32_t index) {
-
-    // The hidden return slot stays in the SIGNATURE because this body is still
-    // reached through its two registry rows below; retail constructs into an
-    // uninitialised slot, so the first thing it does is null it.
-    ret->_data = nullptr;                         // 0x1800f7b44
+// ENDGAME B.3.5 block D2, RULE B5-12. The MEMBER returns the `System::String` by
+// value, which is what `?AVString@System@@` says and what GCC's Microsoft-ABI
+// lowering implements with the same hidden slot in RDX. The DOOR keeps the
+// explicit three-parameter shape its two registry rows have always had: it
+// placement-constructs the member's prvalue into the caller's UNINITIALISED slot
+// (C++17 builds it in place — no copy, and no read of the caller's garbage) and
+// returns that slot pointer in RAX.
+System::String Video::Device::GetDLLForInterface(int index) const {
+    // `this` IS NEVER READ — `MOV [RSP+0x10],RDX` at 0x1800f7b20 spills the RET
+    // SLOT, not RCX, and RCX is dead from the first instruction. The member keeps
+    // `this` for ABI fidelity and reads nothing through it.
+    String ret;                                   // 0x1800f7b44 nulls the slot
 
     const char* base = nullptr;
     if (index == 0)      base = kNameDX9;         // 0x1800f7c01
@@ -143,17 +154,22 @@ extern "C" String* RtVideo_Device_GetDLLForInterface(const Device* /*this, never
     if (base != nullptr) {
         String tmp;                               // the [RBP+0x38] local
         tmp.Set(base);                            // 0x1800c95d0
-        *ret = tmp;                               // the inlined operator=
+        ret = tmp;                                // the inlined operator=
     }                                             // 0x1800f7c4c — tmp's release
 
     // 0x1800f7c6c and 0x1800f7ca2 — two `operator+=(const char*)` calls whose
     // RETURNED TEMPORARIES ARE DISCARDED. Retail materialises each into the
     // same [RBP+0x38] slot and releases it immediately; discarding the by-value
     // result of `operator+=` is exactly that, temporary and release included.
-    *ret += kSuffixArch;
-    *ret += kSuffixExt;
+    ret += kSuffixArch;
+    ret += kSuffixExt;
 
     return ret;                                   // 0x1800f7cd8 MOV RAX,RDI
+}
+
+extern "C" String* RtVideo_Device_GetDLLForInterface(const Device* self,
+                                                     String* ret, int32_t index) {
+    return new (ret) String(self->Video::Device::GetDLLForInterface(index));
 }
 
 // ============================================================================
@@ -209,15 +225,14 @@ extern "C" String* RtVideo_Device_GetDLLForInterface(const Device* /*this, never
 // matters and that a bad port would break, checked against the pre-fill's own
 // detector.
 // ============================================================================
-extern "C" void RtVideo_Device_InitializeInterfaces(Device* self) {
-
+void Video::Device::InitializeInterfaces() {
     // *** THE LINE THE TREE HAS BEEN ASKING FOR. ***
     // standalone/video_interface.cpp:158 and its DETOUR FAILED message both
     // name this call as the thing that must exist once this function is ported.
     // It fills slot 1 with our own CreateDeviceData/GetDeviceName so the loop
     // below SKIPS it — byte-for-byte what WrapInitializeInterfaces does today,
     // minus the detour that cannot exist at cutover.
-    VideoInterfaceFillDx11Slot(self);
+    VideoInterfaceFillDx11Slot(this);
 
     int skipped = 0, loaded = 0, rejected = 0;
 
@@ -238,7 +253,7 @@ extern "C" void RtVideo_Device_InitializeInterfaces(Device* self) {
     // from the pre-fill above and is skipped; slot 0 gets the placeholder
     // below; slot 2 (VideoGL) has no shipped DLL at all.
     for (int i = 0; i < kSlotCount; ++i) {            // 0x1800f7afd / 0x1800f7b03
-        InterfaceSlot* const slot = SlotAt(self, i);
+        InterfaceSlot* const slot = &dllSlots[i];
         if (slot->module != nullptr) {                // 0x1800f7a14
             ++skipped;
             continue;
@@ -246,8 +261,9 @@ extern "C" void RtVideo_Device_InitializeInterfaces(Device* self) {
 
         SetErrorMode(SEM_FAILCRITICALERRORS);         // 0x1800f7a23, ECX = 1
 
-        String name;
-        RtVideo_Device_GetDLLForInterface(self, &name, i);   // 0x1800f7a34
+        // ENDGAME B.3.5: a direct qualified member call where the body used to go
+        // through the hidden-retslot door by hand (0x1800f7a34).
+        String name = Video::Device::GetDLLForInterface(i);
 
         // 0x1800f7a44..0x1800f7ac9 was the WideString conversion, the
         // LoadLibraryW, the two GetProcAddress calls and the FreeLibrary
@@ -263,10 +279,15 @@ extern "C" void RtVideo_Device_InitializeInterfaces(Device* self) {
     // configuration's interface index and the Options dialog's
     // GetInterface(cfgIndex) assume. Fill slot 0 with the zero-adapter
     // placeholder (dx11/src/devicedata.cpp explains the invariant).
-    if (SlotAt(self, 0)->module == nullptr) {
-        extern void VideoInterfaceFillDx9Placeholder(void* device);
-        VideoInterfaceFillDx9Placeholder(self);
+    if (dllSlots[0].module == nullptr) {
+        // Declared at file scope, not block scope: inside a `Video::Device`
+        // member a block-scope `extern` would name `Video::…` and link-fail.
+        ::VideoInterfaceFillDx9Placeholder(this);
     }
+}
+
+extern "C" void RtVideo_Device_InitializeInterfaces(Device* self) {
+    self->Video::Device::InitializeInterfaces();
 }
 
 // ============================================================================

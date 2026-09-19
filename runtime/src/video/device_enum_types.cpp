@@ -81,6 +81,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <new>       // ENDGAME B.3.5: the hidden-retslot door placement-news (RULE B5-12)
 
 #include "../../funcs/rt_port.h"
 #include "../../types/video/Device.h"
@@ -522,39 +523,42 @@ extern "C" void RtVideo_Adapter_Dtor(void* selfv) {
 // that started at 0 and only increments, so it always takes the jump. Kept as
 // the unconditional it provably is, rather than transcribed as a live branch.
 // ============================================================================
-extern "C" void RtVideo_Adapter_FindOrAddMode(void* selfv, const void* modev,
-                                              const void* ratev) {
-    Adapter* self = static_cast<Adapter*>(selfv);
-    const DisplayMode* mode = static_cast<const DisplayMode*>(modev);
-    const RefreshRate* rate = static_cast<const RefreshRate*>(ratev);
-
+void Video::Device::Adapter::FindOrAddMode(const DisplayMode& mode,
+                                           const RefreshRate& rate) {
     int32_t idx = 0;
     bool found = false;
-    const int64_t n = self->modeCount;
+    const int64_t n = modeCount;
     if (n > 0) {
-        const DisplayMode* p = self->modeData;
+        const DisplayMode* p = modeData;
         for (int64_t i = 0; i < n; ++i, ++idx, ++p) {
-            if (p->width == mode->width && p->height == mode->height) { found = true; break; }
+            if (p->width == mode.width && p->height == mode.height) { found = true; break; }
         }
     }
     if (!found) {
-        idx = self->modeCount;
-        RtVideo_ArrayModeSetSize(&self->modeData, self->modeCount + 1, mode);
+        idx = modeCount;
+        RtVideo_ArrayModeSetSize(&modeData, modeCount + 1, &mode);
     }
 
-    DisplayMode* m = self->modeData + idx;   // reloaded: SetSize may have moved it
+    DisplayMode* m = modeData + idx;   // reloaded: SetSize may have moved it
     bool rfound = false;
     const int64_t rn = m->refreshCount;
     if (rn > 0) {
         const RefreshRate* q = m->refreshData;
         for (int64_t i = 0; i < rn; ++i, ++q) {
-            if (q->numerator == rate->numerator &&
-                q->denominator == rate->denominator) { rfound = true; break; }
+            if (q->numerator == rate.numerator &&
+                q->denominator == rate.denominator) { rfound = true; break; }
         }
     }
     if (!rfound) {
-        RtVideo_ArrayRefreshSetSize(&m->refreshData, m->refreshCount + 1, rate);
+        RtVideo_ArrayRefreshSetSize(&m->refreshData, m->refreshCount + 1, &rate);
     }
+}
+
+extern "C" void RtVideo_Adapter_FindOrAddMode(void* selfv, const void* modev,
+                                              const void* ratev) {
+    static_cast<Adapter*>(selfv)->Video::Device::Adapter::FindOrAddMode(
+        *static_cast<const DisplayMode*>(modev),
+        *static_cast<const RefreshRate*>(ratev));
 }
 
 // ============================================================================
@@ -571,17 +575,36 @@ extern "C" void RtVideo_Adapter_FindOrAddMode(void* selfv, const void* modev,
 // and then assigned, so the caller owns its own refresh list and must destroy
 // it. Retail, 0x18000d41b-0x18000d426.
 // ============================================================================
+// ENDGAME B.3.5 block D2, RULE B5-12: the MEMBER returns the `DisplayMode` BY
+// VALUE, which is what retail's `?AVDisplayMode@12@` mangling says, and GCC's
+// Microsoft-ABI lowering gives it the same hidden slot in RDX and the same RAX
+// return. The DOOR keeps the explicit three-parameter shape its two registry rows
+// have always had, placement-constructs the member's prvalue into the caller's
+// slot (C++17 guarantees that is built in place, not copied) and returns the slot
+// pointer — `MOV RAX,RDI` at 0x18000d42e.
+Video::Device::DisplayMode Video::Device::GetDisplayMode(int index) const {
+    const DisplayMode* m = modeData + index;
+
+    DisplayMode out;
+    out.width  = m->width;
+    out.height = m->height;
+    out.refreshData = nullptr;
+    *reinterpret_cast<uint64_t*>(&out.refreshCount) = 0;
+    RtVideo_ArrayRefreshAssign(&out.refreshData, &m->refreshData);
+    return out;
+}
+
 extern "C" void* RtVideo_Device_GetDisplayMode(const void* selfv, void* retv, int32_t index) {
     const Device* self = static_cast<const Device*>(selfv);
-    DisplayMode* ret = static_cast<DisplayMode*>(retv);
-    const DisplayMode* m = self->modeData + index;
+    return new (retv) DisplayMode(self->Video::Device::GetDisplayMode(index));
+}
 
-    ret->width  = m->width;
-    ret->height = m->height;
-    ret->refreshData = nullptr;
-    *reinterpret_cast<uint64_t*>(&ret->refreshCount) = 0;
-    RtVideo_ArrayRefreshAssign(&ret->refreshData, &m->refreshData);
-    return ret;
+// ENDGAME B.3.5 block D2: `AdjustDisplay`'s body is `EnumDisplaySettingsW` and
+// `ChangeDisplaySettingsExW` in device_adjustdisplay_win.cpp, a TU that cannot
+// include Device.h (PLAN §4.1 decision 1). The member is a one-line forward so
+// C++ callers exist; the REGISTERED DOOR stays the `_win` function itself.
+void Video::Device::AdjustDisplay() {
+    RtVideo_Device_AdjustDisplay(this);
 }
 
 // ============================================================================

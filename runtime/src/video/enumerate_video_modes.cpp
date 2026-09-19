@@ -83,6 +83,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/video/Device.h"
+#include "../../types/video/CompanionData.h"   // ENDGAME B.3.5: Video::DeviceData
 
 using RtVideo::Adapter;
 using RtVideo::Device;
@@ -121,37 +122,42 @@ inline void* const* VtblOf(void* obj) {
 }  // namespace
 
 // ============================================================================
-extern "C" bool RtVideo_Device_EnumerateVideoModes(Device* self) {
-
-    RtVideo_Device_InitializeInterfaces(self);          // 0x1800f8627
+// ENDGAME B.3.5 block D2. `InitializeInterfaces` is a sibling member now, and the
+// two hand-inlined `DeviceData` vtable dispatches became virtual calls on block
+// A's real `Video::DeviceData` (slot 1 `EnumerateInterfaces`, slot 0
+// `DeletingDtor`). The file's `__try`/`__except` structure and every branch are
+// untouched — B35_RULES §6.1 and §B.1.7 put SEH last, and the unguarded deref at
+// 0x1800f8678 is what that SEH region exists for.
+bool Video::Device::EnumerateVideoModes() {
+    Video::Device::InitializeInterfaces();              // 0x1800f8627
 
     uint8_t* const disableHandler = DebugDisableHandlerSlot();
 
     int created = 0, enumerated = 0;
     for (int i = 0; i < kSlotCount; ++i) {              // 0x1800f862e / 0x1800f8635
-        InterfaceSlot* const s = SlotAt(self, i);
+        InterfaceSlot* const s = &dllSlots[i];
         if (s->module == nullptr)           continue;   // 0x1800f8641
         CreateDeviceDataFn create =
             reinterpret_cast<CreateDeviceDataFn>(s->createDeviceData);
         if (create == nullptr)              continue;   // 0x1800f8654
         if (s->getDeviceName == nullptr)    continue;   // 0x1800f8659, tested, never called
 
-        void* data = create(self);                      // 0x1800f8667
+        void* data = create(this);                      // 0x1800f8667
         ++created;
 
         if (disableHandler) *disableHandler = 1;        // 0x1800f8671
 
         // 0x1800f8678: `MOV RDX,[RAX]` — UNGUARDED. Retail relies on the SEH
-        // region here, not on a null test; see the banner.
-        EnumerateFn enumerate = reinterpret_cast<EnumerateFn>(VtblOf(data)[1]);
-        enumerate(data);                                // 0x1800f867e
+        // region here, not on a null test; see the banner. The virtual call keeps
+        // that: a null receiver faults on the vptr load exactly as retail does.
+        (void)reinterpret_cast<Video::DeviceData*>(data)->EnumerateInterfaces();  // B.3.5 bridge
         ++enumerated;
 
         if (disableHandler) *disableHandler = 0;        // 0x1800f8697
 
         if (data != nullptr) {                          // 0x1800f869e — guarded HERE
-            DeletingDtorFn dtor = reinterpret_cast<DeletingDtorFn>(VtblOf(data)[0]);
-            dtor(data, 1);                              // 0x1800f86ab, the deleting flag
+            // 0x1800f86ab, the deleting flag.
+            (void)reinterpret_cast<Video::DeviceData*>(data)->DeletingDtor(1);   // B.3.5 bridge
         }
     }
 
@@ -162,8 +168,8 @@ extern "C" bool RtVideo_Device_EnumerateVideoModes(Device* self) {
     // Every stride and offset is the one runtime/types/video/Device.h already
     // pins from other bodies, which is why this file asserts none of its own.
     int adaptersSeen = 0, modesSorted = 0, refreshSorted = 0;
-    for (int32_t gi = 0; gi < self->interfaceCount; ++gi) {      // 0x1800f86c0
-        GraphicsInterface* const iface = self->interfaceData + gi;
+    for (int32_t gi = 0; gi < interfaceCount; ++gi) {            // 0x1800f86c0
+        GraphicsInterface* const iface = interfaceData + gi;
         for (int32_t ai = 0; ai < iface->adapterCount; ++ai) {   // 0x1800f86ec
             Adapter* const adapter = iface->adapterData + ai;
             ++adaptersSeen;
@@ -188,6 +194,10 @@ extern "C" bool RtVideo_Device_EnumerateVideoModes(Device* self) {
     }
 
     return true;                                        // 0x1800f8790 MOV AL,1
+}
+
+extern "C" bool RtVideo_Device_EnumerateVideoModes(Device* self) {
+    return self->Video::Device::EnumerateVideoModes();
 }
 
 int RtVideoEnumerateModesRegister() {
