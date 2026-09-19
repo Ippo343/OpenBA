@@ -83,6 +83,9 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/video/Buffers.h"
 #include "../../types/video/CompanionData.h"
+// ENDGAME B.3.5 block D1 — `Video::Context`, for the one line
+// `Video::ConstantBuffer::Bind` takes it by reference in.
+#include "../../types/video/Context.h"
 #include "../../types/video/Device.h"
 
 using RtVideo::CompanionData;
@@ -365,12 +368,15 @@ void Video_VertexBuffer_Unlock(VertexBuffer* self) {
 // stack; retail's tail JMP preserves the frame and so does an ordinary call
 // here, since the signature matches exactly.
 // ============================================================================
+// ENDGAME B.3.5 block D1: the BODY moved onto `Video::ConstantBuffer::Bind`
+// (runtime/src/video/constant_buffer.cpp), because `Video::ConstantBuffer` is
+// block D1's class and the member belongs with the rest of it. This door keeps
+// its name and BOTH its registrations below — nothing moved out of this file but
+// the four lines of body — and is now a one-line QUALIFIED non-virtual call.
 void Video_ConstantBuffer_Bind(ConstantBuffer* self, void* context, void* data,
                                int first, int count) {
-    using Fn = void (*)(void*, void*, void*, int, int);
-    Fn slot = *reinterpret_cast<Fn*>(
-        static_cast<uint8_t*>(*reinterpret_cast<void**>(self->platformData)) + 0x10);
-    slot(self->platformData, context, data, first, count);
+    self->Video::ConstantBuffer::Bind(*static_cast<Video::Context*>(context),
+                                      data, first, count);
 }
 
 // ============================================================================

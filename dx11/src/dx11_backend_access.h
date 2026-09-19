@@ -7,8 +7,11 @@
 //   1. The walk from the Video::Device singleton down to ID3D11Device /
 //      ID3D11DeviceContext, reproduced exactly as the shipped DLL does it.
 //   2. Partial, offset-pinned views of the *Runtime-side* owner objects
-//      (Video::VertexLayout, Video::ShaderProgram, Video::RenderBuffer,
-//      Video::ImageBuffer) that the ported slots read fields out of.
+//      (Video::ShaderProgram, Video::RenderBuffer) that the ported slots read
+//      fields out of. `Video::VertexLayout`'s view went in ENDGAME B.3.5 block A
+//      and `Video::ImageBuffer`'s in block C (RULE B5-2): both are real classes
+//      in `runtime/types/video/` now, and this file includes those headers
+//      instead of restating four offsets.
 //
 // It deliberately does NOT live in dx11/types/VideoDX11Data.h: that file is the
 // home of the twelve VideoDX11-defined *Data layouts and is being edited
@@ -33,6 +36,16 @@
 // (`-Iruntime/types -Iruntime/funcs`), so no Makefile change is needed and this
 // is the fifth `runtime/types` header dx11 includes.
 #include "video/VertexLayout.h"
+// ENDGAME B.3.5 block B — the real `Video::ShaderProgram` / `VertexProgram` /
+// `PixelProgram`, which replace this file's former `ShaderProgramOwner` view.
+#include "video/ShaderProgram.h"
+// ENDGAME B.3.5 block C, RULE B5-2.1 — the real `Video::ImageBuffer`, which
+// replaces this file's former `ImageBufferOwner` view. Sixth `runtime/types`
+// header dx11 includes.
+#include "video/ImageBuffer.h"
+// ENDGAME B.3.5 block D2, RULE B5-2.3 — the real `Video::RenderBuffer`
+// (0x30 bytes), which replaces this file's former `RenderBufferOwner` view.
+#include "video/Device.h"
 #include "VideoDX11Data.h"
 #include "dx11_seam.h"   // Vt / VtGhidraAddr, used by Dx11VtableAddress
 #include "resolve.h"
@@ -164,15 +177,20 @@ static_assert(offsetof(RtByteCodeBlob, _capacity) == 0x0C, "Array::_capacity @ +
 // i.e. ShaderProgram+0x40 is a Collection::Array<Collection::Array<uint8>> —
 // one compiled byte-code blob per shader permutation, at most 4 of which the
 // DX11 backend ever creates.
-struct ShaderProgramOwner {
-    uint8_t        opaque00[0x40];  // +0x00  parameters, constants, textures, ...
-    RtByteCodeList byteCode;        // +0x40  Array<Array<uint8>>, one blob per permutation
-};
-static_assert(offsetof(ShaderProgramOwner, byteCode) == 0x40,
-              "Video::ShaderProgram byte-code array @ +0x40 (0x1800041a0)");
-// The count the loop compares against is byteCode.length at +0x48.
-static_assert(offsetof(ShaderProgramOwner, byteCode) + offsetof(RtByteCodeBlob, _size) == 0x48,
-              "Video::ShaderProgram permutation count @ +0x48 (0x1800041a0)");
+// ENDGAME B.3.5 block B, RULE B5-2.1 — `ShaderProgramOwner` IS GONE. It was a
+// partial, offset-pinned view (`opaque00[0x40]` + `byteCode` @ +0x40) of a
+// Runtime-side class that is now real: `Video::ShaderProgram`
+// (runtime/types/video/ShaderProgram.h), where the same two offsets are pinned
+// by the same 0x1800041a0 reads plus the Runtime-side evidence, and where
+// `byteCode` is spelled `_byteCode` as retail's own accessors name it. Its two
+// users in `dx11/src/shaderprograms.cpp` name `Video::ShaderProgram` directly —
+// exactly the way B.3.2 step 2 replaced this file's private `RtArray` POD with
+// the real `Collection::Array<T>` (see the note above `RtByteCodeBlob`) and the
+// way block A retired `VertexLayoutOwner`.
+//
+// The view's two `static_assert`s are not lost: they are
+// `offsetof(ShaderProgram, _byteCode) == 0x40` and the `_size` sum == 0x48 in
+// that header, alongside the retail `sizeof` of 0x50 the view could not state.
 
 // The DX11 backend creates at most this many shader permutations, regardless of
 // how many byte-code blobs the program actually carries: the loop in
@@ -259,25 +277,25 @@ void Dx11TrackConstantBuffer(ConstantBufferData* p);
 void Dx11UntrackConstantBuffer(ConstantBufferData* p);
 void Dx11InvalidateConstantBufferBindings();
 
-// ENDGAME B.3.5 block A, RULE B5-2.3 — the `sizeof(RenderBufferOwner) == 0x10`
-// assertion that used to sit here IS DELETED. `Video::RenderBuffer` is 0x30
-// bytes (`runtime/types/video/Device.h:311`, which asserts it); this view pins
-// only its leading pair. A size assert on a prefix view is a false witness: it
-// cannot fail, because it describes the view rather than the class, and it
-// states something about the class that is untrue. The two OFFSETS are the real
-// claim and they are kept.
+// ENDGAME B.3.5, RULE B5-2.3 — COLLAPSED. Block A deleted the
+// `sizeof(RenderBufferOwner) == 0x10` assertion (a size assert on a prefix view
+// of a 0x30-byte class: it could not fail, because it described the view rather
+// than the class, and what it said about the class was untrue) and left the view
+// itself for "the block that converts RenderBuffer". This is that block: the
+// duplicate two-pointer POD is GONE and the name is now an ALIAS of the real
+// `Video::RenderBuffer` (runtime/types/video/Device.h), which carries the true
+// 0x30 and all seven offsets. Two of the three views of this one class are now
+// one definition; the third, `Context.h`'s `RtVideo::RenderBufferPrefix`, is
+// b35-D1's file and is theirs to collapse.
 //
-// The view itself stays for now: collapsing it — together with `Context.h`'s
-// third view, `RtVideo::RenderBufferPrefix` — into `Device.h`'s
-// `RtVideo::RenderBuffer` belongs to the block that converts `RenderBuffer`
-// (B.3.5 block D), because `contextdata.cpp` is its other user and touching
-// that file requires the `BANISHED_FORCE_DEVICE_LOST` route (RULE B5-8).
-struct RenderBufferOwner {
-    void* color;   // +0x00  Video::ImageBuffer* (may be null)
-    void* depth;   // +0x08  Video::ImageBuffer* (may be null)
-};
-static_assert(offsetof(RenderBufferOwner, color) == 0x00, "RenderBuffer::color");
-static_assert(offsetof(RenderBufferOwner, depth) == 0x08, "RenderBuffer::depth");
+// The FIELD NAMES change with the type: `color`/`depth` become the class's
+// `colorBuffer`/`depthBuffer`. The two use sites in `smallclasses.cpp` and the
+// four in `contextdata.cpp` are re-spelled; nothing else in dx11 named the view.
+using RenderBufferOwner = ::Video::RenderBuffer;
+static_assert(offsetof(RenderBufferOwner, colorBuffer) == 0x00, "RenderBuffer::colorBuffer");
+static_assert(offsetof(RenderBufferOwner, depthBuffer) == 0x08, "RenderBuffer::depthBuffer");
+static_assert(sizeof(RenderBufferOwner) == 0x30,
+              "RULE B5-2.3: the real class, not a 0x10-byte prefix view");
 
 // Video::ImageBuffer+0x60 is the backend companion object, i.e. the
 // VideoDX11::ImageBufferData whose layout is in dx11/types/VideoDX11Data.h.
@@ -292,33 +310,40 @@ static_assert(offsetof(RenderBufferOwner, depth) == 0x08, "RenderBuffer::depth")
 //     CALL [dev+0x48] (index  9 = CreateRenderTargetView)   -> this+0x20
 //     CALL [dev+0x50] (index 10 = CreateDepthStencilView)   -> this+0x28
 // and 0x180002580, which stores the swap-chain colour texture into this+0x18.
-struct ImageBufferOwner {
-    uint8_t opaque00[0x60];  // +0x00
-    void*   data;            // +0x60  VideoDX11::ImageBufferData*
-};
-static_assert(offsetof(ImageBufferOwner, data) == 0x60,
-              "Video::ImageBuffer backend data @ +0x60 (0x180001070)");
-
+// ENDGAME B.3.5 block C, RULE B5-2.1 — THE `ImageBufferOwner` VIEW IS GONE.
+// It was `uint8_t opaque00[0x60]` plus `void* data` at +0x60, a partial,
+// offset-pinned duplicate of a Runtime-side layout. `Video::ImageBuffer` is now a
+// real class (runtime/types/video/ImageBuffer.h, included above) whose `_data`
+// member is that same +0x60, asserted against the retail ctor there rather than
+// against this file's one instruction. The three helpers below lose their cast
+// through the view; they keep their `const void*` signatures, because their
+// callers hold the owner as an opaque pointer out of a `*Data` object's
+// `imageBuffer` field.
+//
 // ImageBufferData fields this lane reads. L2 derived these offsets from
 // RenderBufferData slots 2/3 (0x180001070, 0x1800010e0) while L3 derived them
 // independently from ImageBufferData slots 1/2/3 — the two lanes agreed
 // exactly, so +0x18/+0x20/+0x28 are texture/RTV/DSV on two separate proofs.
 // L3 owns the struct and has now named them; these helpers just spell out which
 // view each caller wants.
+//
+// `_data` is a `Video::ImageBufferData*` — Runtime's ABSTRACT base (block A) —
+// and the concrete `VideoDX11::ImageBufferData` does not derive from it in C++
+// (RULE B5-8's declared leave), so the step across is a `reinterpret_cast`.
+inline ImageBufferData* Dx11ImageBackend(const void* imageBuffer) {
+    const Video::ImageBuffer* img = static_cast<const Video::ImageBuffer*>(imageBuffer);
+    return reinterpret_cast<ImageBufferData*>(img->_data);   // B.3.5 bridge
+}
 inline ID3D11Resource* Dx11ImageTexture(const void* imageBuffer) {
-    const ImageBufferOwner* img = static_cast<const ImageBufferOwner*>(imageBuffer);
-    return static_cast<ID3D11Resource*>(
-        static_cast<ImageBufferData*>(img->data)->texture);
+    return static_cast<ID3D11Resource*>(Dx11ImageBackend(imageBuffer)->texture);
 }
 inline ID3D11RenderTargetView* Dx11ImageRtv(const void* imageBuffer) {
-    const ImageBufferOwner* img = static_cast<const ImageBufferOwner*>(imageBuffer);
     return static_cast<ID3D11RenderTargetView*>(
-        static_cast<ImageBufferData*>(img->data)->renderTargetView);
+        Dx11ImageBackend(imageBuffer)->renderTargetView);
 }
 inline ID3D11DepthStencilView* Dx11ImageDsv(const void* imageBuffer) {
-    const ImageBufferOwner* img = static_cast<const ImageBufferOwner*>(imageBuffer);
     return static_cast<ID3D11DepthStencilView*>(
-        static_cast<ImageBufferData*>(img->data)->depthStencilView);
+        Dx11ImageBackend(imageBuffer)->depthStencilView);
 }
 
 // ============================================================

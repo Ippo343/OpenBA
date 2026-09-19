@@ -260,12 +260,25 @@ bool ImageBufferIsDynamicResource(const ImageBuffer* p) {
 // retail's exported Lock stores the depth BEFORE the owner id while the inline
 // copy stores the owner first. buffers_win.cpp keeps both orders.
 // ============================================================================
+// ENDGAME B.3.5 block D2: real members of `Video::Device`. RULE B5-6 — the lock
+// itself stays the opaque `uint8_t lock[0x28]` at +0x60 with the hand-rolled
+// recursive acquire in `buffers_win.cpp`; these two do NOT become a `std::mutex`
+// or a scoped guard, because dx11/src/contextdata.cpp and the four `Platform*`
+// bodies read the owner-tid and depth words at pinned +0x88/+0x8c.
+void Video::Device::Lock() {
+    RtVideoDeviceLockThis(this);
+}
+
+void Video::Device::Unlock() {
+    RtVideoDeviceUnlockThis(this);
+}
+
 extern "C" void Video_Device_Lock(void* self) {
-    RtVideoDeviceLockThis(self);
+    reinterpret_cast<Video::Device*>(self)->Video::Device::Lock();   // B.3.5 bridge
 }
 
 extern "C" void Video_Device_Unlock(void* self) {
-    RtVideoDeviceUnlockThis(self);
+    reinterpret_cast<Video::Device*>(self)->Video::Device::Unlock(); // B.3.5 bridge
 }
 
 // ============================================================================
@@ -405,17 +418,34 @@ void BufferReleaseDynamic(Buf** head) {
 
 }  // namespace
 
-extern "C" void Video_IndexBuffer_RecreateDynamic() {
+// ENDGAME B.3.5 block D2: the four class statics are real `static` members now.
+// The two list heads stay `RT_DATA_SLOT` reads (RULE B4b-4 / B35_RULES §9, three
+// by-name doors each) — the `MintStorageCell()` redirect that would make them
+// C++ statics is OWED at the end of B.3, not here.
+void Video::IndexBuffer::RecreateDynamic() {
     BufferRecreateDynamic(FirstIndexBufferSlot(), 0x60);
 }
-extern "C" void Video_IndexBuffer_ReleaseDynamic() {
+void Video::IndexBuffer::ReleaseDynamic() {
     BufferReleaseDynamic(FirstIndexBufferSlot());
 }
-extern "C" void Video_VertexBuffer_RecreateDynamic() {
+void Video::VertexBuffer::RecreateDynamic() {
     BufferRecreateDynamic(FirstVertexBufferSlot(), 0x68);
 }
-extern "C" void Video_VertexBuffer_ReleaseDynamic() {
+void Video::VertexBuffer::ReleaseDynamic() {
     BufferReleaseDynamic(FirstVertexBufferSlot());
+}
+
+extern "C" void Video_IndexBuffer_RecreateDynamic() {
+    Video::IndexBuffer::RecreateDynamic();
+}
+extern "C" void Video_IndexBuffer_ReleaseDynamic() {
+    Video::IndexBuffer::ReleaseDynamic();
+}
+extern "C" void Video_VertexBuffer_RecreateDynamic() {
+    Video::VertexBuffer::RecreateDynamic();
+}
+extern "C" void Video_VertexBuffer_ReleaseDynamic() {
+    Video::VertexBuffer::ReleaseDynamic();
 }
 
 // ============================================================================
@@ -437,21 +467,28 @@ extern "C" void Video_VertexBuffer_ReleaseDynamic() {
 // [RCX+0x34] unconditionally). A RenderBuffer with neither attachment never
 // reaches this function, because nothing puts one on the list.
 // ============================================================================
-extern "C" void Video_RenderBuffer_Recreate(RenderBuffer* self) {
-    void* companion = MakeCompanion(0x98, self);
-    self->platformData = companion;
+void Video::RenderBuffer::Recreate() {
+    void* companion = MakeCompanion(0x98, this);
+    platformData = companion;
     {
         // Unguarded, as retail is (0x1800f41a0 reads [RAX] with no test).
         using Fn = void (*)(void*);
         CompanionSlot<Fn>(companion, 0x08)(companion);
     }
 
-    ImageBuffer* source = static_cast<ImageBuffer*>(self->colorBuffer);
+    // `Video::ImageBuffer::Width`/`Height` are b35-C's class; these two doors
+    // stay free-function calls until that block lands, and the two attachment
+    // fields stay `void*` (their layout is pinned and dx11 reads them).
+    ::ImageBuffer* source = static_cast<::ImageBuffer*>(colorBuffer);
     if (source == nullptr)
-        source = static_cast<ImageBuffer*>(self->depthBuffer);
+        source = static_cast<::ImageBuffer*>(depthBuffer);
 
-    self->width  = Video_ImageBuffer_Width(source);
-    self->height = Video_ImageBuffer_Height(source);
+    width  = Video_ImageBuffer_Width(source);
+    height = Video_ImageBuffer_Height(source);
+}
+
+extern "C" void Video_RenderBuffer_Recreate(RenderBuffer* self) {
+    self->Video::RenderBuffer::Recreate();
 }
 
 // ============================================================================
@@ -463,14 +500,14 @@ extern "C" void Video_RenderBuffer_Recreate(RenderBuffer* self) {
 // 0x1800f4120 compare against `[_firstRenderBuffer]`, not a cached register),
 // unlike the other three classes — so both loops below re-read it too.
 // ============================================================================
-extern "C" void Video_RenderBuffer_RecreateDynamic() {
+void Video::RenderBuffer::RecreateDynamic() {
     RtVideoDeviceLock(reinterpret_cast<void**>(DeviceSlot()));
 
     RenderBuffer** head = FirstRenderBufferSlot();
     RenderBuffer*  p    = *head;
     if (p != nullptr) {
         do {
-            Video_RenderBuffer_Recreate(p);
+            p->Video::RenderBuffer::Recreate();
             p = LinkStep(p, kRenderLink);
         } while (p != *head);
     }
@@ -478,7 +515,7 @@ extern "C" void Video_RenderBuffer_RecreateDynamic() {
     RtVideoDeviceUnlock(reinterpret_cast<void**>(DeviceSlot()));
 }
 
-extern "C" void Video_RenderBuffer_ReleaseDynamic() {
+void Video::RenderBuffer::ReleaseDynamic() {
     RtVideoDeviceLock(reinterpret_cast<void**>(DeviceSlot()));
 
     RenderBuffer** head = FirstRenderBufferSlot();
@@ -491,6 +528,14 @@ extern "C" void Video_RenderBuffer_ReleaseDynamic() {
     }
 
     RtVideoDeviceUnlock(reinterpret_cast<void**>(DeviceSlot()));
+}
+
+extern "C" void Video_RenderBuffer_RecreateDynamic() {
+    Video::RenderBuffer::RecreateDynamic();
+}
+
+extern "C" void Video_RenderBuffer_ReleaseDynamic() {
+    Video::RenderBuffer::ReleaseDynamic();
 }
 
 // ============================================================================
@@ -509,18 +554,37 @@ extern "C" void Video_RenderBuffer_ReleaseDynamic() {
 // what the bodies do, and dx11's import table types them as `void (*)(void*)`,
 // which passes an argument the callee ignores. Both spellings interoperate.
 // ============================================================================
-extern "C" void Video_Device_RecreateDynamic() {
-    Video_IndexBuffer_RecreateDynamic();
-    Video_VertexBuffer_RecreateDynamic();
+// ENDGAME B.3.5 block D2: real members. Three of the four callees are members
+// now; `Video::ImageBuffer::{Recreate,Release}Dynamic` is b35-C's class, so those
+// two stay free-function calls and convert with that block.
+void Video::Device::RecreateDynamic() {
+    Video::IndexBuffer::RecreateDynamic();
+    Video::VertexBuffer::RecreateDynamic();
     Video_ImageBuffer_RecreateDynamic();
-    Video_RenderBuffer_RecreateDynamic();
+    Video::RenderBuffer::RecreateDynamic();
 }
 
-extern "C" void Video_Device_ReleaseDynamic() {
-    Video_RenderBuffer_ReleaseDynamic();
+void Video::Device::ReleaseDynamic() {
+    Video::RenderBuffer::ReleaseDynamic();
     Video_ImageBuffer_ReleaseDynamic();
-    Video_VertexBuffer_ReleaseDynamic();
-    Video_IndexBuffer_ReleaseDynamic();
+    Video::VertexBuffer::ReleaseDynamic();
+    Video::IndexBuffer::ReleaseDynamic();
+}
+
+// Both are `QEAAXXZ` — non-static members with a `this` in RCX that NEITHER body
+// reads (0x1800f80b0 goes straight to `SUB RSP,0x28` and never touches RCX). The
+// doors previously took no parameter at all; they now take the `void* self` that
+// dx11's import table has always typed them with (`void (*)(void*)`, see this
+// file's banner), so the delegation has a receiver to qualify against. Both
+// spellings interoperate on the Microsoft x64 ABI, nothing in this tree calls
+// either door as a C++ symbol, and `self` is never dereferenced — exactly as
+// retail never dereferences RCX.
+extern "C" void Video_Device_RecreateDynamic(void* self) {
+    reinterpret_cast<Video::Device*>(self)->Video::Device::RecreateDynamic();  // B.3.5 bridge
+}
+
+extern "C" void Video_Device_ReleaseDynamic(void* self) {
+    reinterpret_cast<Video::Device*>(self)->Video::Device::ReleaseDynamic();   // B.3.5 bridge
 }
 
 // ============================================================================

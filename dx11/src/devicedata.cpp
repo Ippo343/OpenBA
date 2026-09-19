@@ -125,6 +125,12 @@
 #include "system/String.h"   // -Iruntime/types
 #include "system/Error.h"    // ENDGAME B.3.4b System callers: System::Error
 #include "system/WideString.h"  // ENDGAME B.3.4b System callers: System::WideString
+// ENDGAME B.3.5 block D2 / B35_FILEMAP §3f: the real `Video::Device` and its four
+// nested value types, replacing this file's four local name-and-layout mirrors.
+#include "video/Device.h"
+// RULE B5-3: the real `Video::DeviceData` abstract base, whose destructor the
+// scalar deleting dtor calls by qualified name.
+#include "video/CompanionData.h"
 #include <new>
 
 namespace VideoDX11 {
@@ -428,74 +434,47 @@ inline void* AppOf(const Imports* im)    { return *im->appSingleton; }
 // ============================================================
 // Runtime value types this file constructs on the stack
 //
-// Sizes are exact (they are the strides the original walks with); the interiors
-// are opaque because every operation on them goes through a Runtime export.
+// ENDGAME B.3.5 block D2, B35_FILEMAP §3f — THE FOUR LOCAL MIRRORS ARE GONE.
+// This file used to re-declare `DisplayMode`, `RefreshRate`, `Adapter` and
+// `GraphicsInterface` as byte-for-byte name-and-layout duplicates of
+// `runtime/types/video/Device.h`'s, each with its own `static_assert`s repeating
+// the Runtime-side ones. That is B34_RULES §1.5.2's duplicate-POD hazard four
+// times over: two independent descriptions of one layout, either of which could
+// drift. They are now ALIASES of the real nested classes
+// `Video::Device::{DisplayMode,RefreshRate,Adapter,GraphicsInterface}`, so there
+// is ONE description and dx11 gets the class's own field names. RULE B5-1.2 /
+// B35_RULES §1.2: dx11 compiles with the shared include set, so this needs no
+// Makefile change and is simply another `runtime/types` header included here.
+//
+// WHAT THIS FILE PROVED THAT THE RUNTIME SIDE COULD NOT, and it is now recorded
+// in the header instead of here: `Adapter+0x2c`/`+0x30`, which Wave 6 lane B
+// could only describe as "ctor = -1, meaning not recovered", are the DXGI
+// enumeration coordinates. `DeviceData_EnumerateInterfaces` below is the WRITER
+// (`EnumAdapters1`'s loop counter and `EnumOutputs`'s), and `Dev::kAdapterIndex`
+// / `Dev::kOutputIndex` (Device+0x14/+0x18, the copies `ValidateConfiguration`
+// makes) are where this file READS them back. Header fields renamed to
+// `dxgiAdapterIndex` / `dxgiOutputIndex` accordingly.
+//
+// The sizes and every offset are still asserted — by Device.h, once, against the
+// Runtime bodies AND against this file's strides (0x180004c43 for Adapter,
+// 0x180005b00 for GraphicsInterface). The two strides agree with the Runtime
+// side's, which is what made the collapse safe rather than hopeful.
 // ============================================================
 
-// Video::Device::DisplayMode — 0x18 bytes.
-//   +0x00 int width, +0x04 int height   (read by FillSwapChainDesc's caller and
-//                                        by the resize helper at 0x180004401)
-//   +0x08 RefreshRate[] , +0x10 count, +0x14 capacity
-// The 0x18 stride is corroborated from the Runtime side: ValidateConfiguration
-// (0x1800f7370) walks the adapter's mode array with `piVar2 += 6` and reads
-// mode+0x10 as the refresh count.
-struct DisplayMode {
-    int32_t  width;     // +0x00
-    int32_t  height;    // +0x04
-    void*    rates;     // +0x08  RefreshRate[] {int num; int den;}
-    int32_t  rateCount; // +0x10
-    int32_t  rateCap;   // +0x14
-};
+using DisplayMode       = ::Video::Device::DisplayMode;
+using RefreshRate       = ::Video::Device::RefreshRate;
+using Adapter           = ::Video::Device::Adapter;
+using GraphicsInterface = ::Video::Device::GraphicsInterface;
+
+// Re-stated here, from THIS file's own instruments, so the collapse is checked
+// rather than assumed: if Device.h ever disagreed with the strides dx11 walks,
+// the build breaks here.
+static_assert(sizeof(Adapter) == 0x38,
+              "Video::Device::Adapter stride — dx11's array grower at 0x180004c43");
+static_assert(sizeof(GraphicsInterface) == 0x18,
+              "GraphicsInterface stride — dx11 at 0x180005b00");
 static_assert(sizeof(DisplayMode) == 0x18, "Video::Device::DisplayMode stride");
-
-struct RefreshRate { int32_t numerator; int32_t denominator; };
 static_assert(sizeof(RefreshRate) == 8, "RefreshRate stride (Device+0x10 scales by 8)");
-
-// Video::Device::Adapter — 0x38 bytes (the stride slot 1's array grower uses at
-// 0x180004c43). Field roles proven from BOTH sides:
-//   +0x00 System::String name        — slot 1 assigns and appends to it
-//   +0x08 DisplayMode[] modes        — ValidateConfiguration reads it with stride 0x18
-//   +0x10 int modeCount              — slot 1's "did this output have any modes" test
-//                                      (0x180004a61) and ValidateConfiguration's bound
-//   +0x14 int modeCapacity
-//   +0x18 unsigned char[] msaaSupported — ValidateConfiguration indexes it by the
-//                                      multisample setting (`*(char*)(*param_7 + adapter[0x18])`)
-//   +0x20 int msaaCount (always 32)
-//   +0x24 int msaaCapacity
-//   +0x28 int maxAnisotropy = 16     — slot 1 writes 0x10; ValidateConfiguration
-//                                      clamps the texture-filter setting to it
-//   +0x2c int dxgiAdapterIndex
-//   +0x30 int dxgiOutputIndex
-struct Adapter {
-    void*    name;            // +0x00  System::String (one refcounted char*)
-    void*    modes;           // +0x08
-    int32_t  modeCount;       // +0x10
-    int32_t  modeCapacity;    // +0x14
-    void*    msaaSupported;   // +0x18
-    int32_t  msaaCount;       // +0x20
-    int32_t  msaaCapacity;    // +0x24
-    int32_t  maxAnisotropy;   // +0x28
-    int32_t  adapterIndex;    // +0x2c
-    int32_t  outputIndex;     // +0x30
-    int32_t  pad34;           // +0x34
-};
-static_assert(sizeof(Adapter) == 0x38, "Video::Device::Adapter stride (0x180004c43)");
-static_assert(offsetof(Adapter, modeCount)     == 0x10, "Adapter::modeCount");
-static_assert(offsetof(Adapter, msaaSupported) == 0x18, "Adapter::msaaSupported");
-static_assert(offsetof(Adapter, msaaCount)     == 0x20, "Adapter::msaaCount");
-static_assert(offsetof(Adapter, maxAnisotropy) == 0x28, "Adapter::maxAnisotropy");
-static_assert(offsetof(Adapter, adapterIndex)  == 0x2c, "Adapter::adapterIndex");
-static_assert(offsetof(Adapter, outputIndex)   == 0x30, "Adapter::outputIndex");
-
-// Video::Device::GraphicsInterface — 0x18 bytes (the stride 0x180005b00 uses).
-struct GraphicsInterface {
-    void*    name;          // +0x00  System::String — "DirectX 11"
-    Adapter* adapters;      // +0x08
-    int32_t  adapterCount;  // +0x10
-    int32_t  adapterCap;    // +0x14
-};
-static_assert(sizeof(GraphicsInterface) == 0x18, "GraphicsInterface stride (0x180005b00)");
-static_assert(offsetof(GraphicsInterface, adapterCount) == 0x10, "GraphicsInterface::adapterCount");
 
 // System::String is a single pointer to a refcounted char buffer (refcount at
 // [-4], allocation base at [-8] — visible in Video::Configuration::Startup's
@@ -611,7 +590,9 @@ void FillSwapChainDesc(DeviceData* self, DXGI_SWAP_CHAIN_DESC* desc, const Impor
     desc->BufferDesc.Width  = static_cast<UINT>(Field<int32_t>(dev, Dev::kWidth));
     desc->BufferDesc.Height = static_cast<UINT>(Field<int32_t>(dev, Dev::kHeight));
 
-    const RefreshRate* rates = static_cast<const RefreshRate*>(mode.rates);
+    // ENDGAME B.3.5: `mode` is the real `Video::Device::DisplayMode` now, so its
+    // refresh array is already typed and the cast is gone.
+    const RefreshRate* rates = mode.refreshData;
     const int rateIndex = Field<int32_t>(dev, Dev::kRefreshIndex);
     desc->BufferDesc.RefreshRate.Numerator   = static_cast<UINT>(rates[rateIndex].numerator);
     desc->BufferDesc.RefreshRate.Denominator = static_cast<UINT>(rates[rateIndex].denominator);
@@ -962,7 +943,7 @@ int DeviceData_Resize(DeviceData* self) {
     RememberGoodSize(Field<int32_t>(dev, Dev::kWidth),
                      Field<int32_t>(dev, Dev::kHeight));
 
-    const RefreshRate* rates = static_cast<const RefreshRate*>(mode.rates);
+    const RefreshRate* rates = mode.refreshData;   // ENDGAME B.3.5: typed, no cast
     const int rateIndex = Field<int32_t>(dev, Dev::kRefreshIndex);
 
     DXGI_MODE_DESC target;
@@ -1121,7 +1102,16 @@ DeviceData* DeviceData_Dtor(DeviceData* self, unsigned flags) {
     self->trackedCount    = 0;
     self->trackedCapacity = 0;
 
-    im->DeviceDataBaseDtor(self);
+    // ENDGAME B.3.5 block D2, RULE B5-3: `Video::DeviceData` is a real abstract
+    // class (block A), so the base-dtor call is a QUALIFIED NON-VIRTUAL member
+    // call, not a resolved import and never `DeletingDtor(0)` — that would
+    // re-enter this slot. The cast is the bridge the declared leave (RULE B5-8)
+    // requires: this class mirrors the base's two fields rather than deriving.
+    // `Imports::DeviceDataBaseDtor` and its table row STAY: the row is what makes
+    // `g_imOk` false when the Runtime side is absent, and that all-or-nothing
+    // test is the seam's only fallback guarantee (RULE B5-8).
+    reinterpret_cast<Video::DeviceData*>(self)
+        ->Video::DeviceData::~DeviceData();   // B.3.5 bridge
 
     if (flags & 1)
         im->MemFree(self);
@@ -1564,21 +1554,21 @@ void AdapterArraySetLength(GraphicsInterface* gi, int newCount,
     const int oldCount = gi->adapterCount;
     if (newCount == oldCount) return;
 
-    Adapter* oldBase = gi->adapters;
+    Adapter* oldBase = gi->adapterData;
     gi->adapterCount = newCount;
 
-    if (newCount > gi->adapterCap) {
+    if (newCount > gi->adapterCapacity) {
         int cap = newCount;
-        gi->adapterCap = cap;
+        gi->adapterCapacity = cap;
         if (newCount == oldCount + 1 && oldCount != 0) {
             cap = newCount * 3;
-            gi->adapterCap = cap;
+            gi->adapterCapacity = cap;
         }
-        gi->adapters = static_cast<Adapter*>(
+        gi->adapterData = static_cast<Adapter*>(
             im->MemAlloc(static_cast<size_t>(cap) * sizeof(Adapter), 8));
     }
 
-    Adapter* base = gi->adapters;
+    Adapter* base = gi->adapterData;
     int i = (oldBase == base) ? oldCount : 0;
     for (; i < newCount; ++i) {
         Adapter* dst = base + i;
@@ -1717,9 +1707,13 @@ static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
                 }
                 reinterpret_cast<System::WideString*>(&w)->~WideString();   // B.3.4 bridge
             }
-            rec.maxAnisotropy = 0x10;
-            rec.adapterIndex  = static_cast<int32_t>(adapterIndex);
-            rec.outputIndex   = static_cast<int32_t>(outputIndex);
+            // ENDGAME B.3.5 block D2: the real class's field names. These three
+            // stores are the EVIDENCE that Adapter+0x28/+0x2c/+0x30 are the
+            // anisotropy cap and the two DXGI enumeration coordinates; Device.h
+            // records that and renames its two "meaning not recovered" fields.
+            rec.maxFilterLevel   = 0x10;
+            rec.dxgiAdapterIndex = static_cast<int32_t>(adapterIndex);
+            rec.dxgiOutputIndex  = static_cast<int32_t>(outputIndex);
 
             IDXGIOutput* output = nullptr;
             if (dxgiAdapter->EnumOutputs(outputIndex, &output) == DXGI_ERROR_NOT_FOUND) {
@@ -1809,29 +1803,30 @@ static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
                     // Grow the MSAA table to 32 bytes. Same growth rule as the
                     // other two arrays; from a fresh Adapter this is a plain
                     // MemAlloc(32, 1) with nothing to carry over.
-                    if (rec.msaaCount != 0x20) {
-                        void* oldBase = rec.msaaSupported;
-                        const int oldCount = rec.msaaCount;
-                        rec.msaaCount = 0x20;
-                        if (rec.msaaCapacity < 0x20) {
+                    if (rec.multisampleCount != 0x20) {
+                        uint8_t* oldBase = rec.multisampleData;
+                        const int oldCount = rec.multisampleCount;
+                        rec.multisampleCount = 0x20;
+                        if (rec.multisampleCap < 0x20) {
                             int cap = 0x20;
-                            rec.msaaCapacity = cap;
+                            rec.multisampleCap = cap;
                             if (oldCount + 1 == 0x20 && oldCount != 0) {
                                 cap = 0x60;
-                                rec.msaaCapacity = cap;
+                                rec.multisampleCap = cap;
                             }
-                            rec.msaaSupported = im->MemAlloc(static_cast<size_t>(cap), 1);
+                            rec.multisampleData = static_cast<uint8_t*>(
+                                im->MemAlloc(static_cast<size_t>(cap), 1));
                         }
-                        unsigned char* base = static_cast<unsigned char*>(rec.msaaSupported);
-                        int i = (oldBase == rec.msaaSupported) ? oldCount : 0;
+                        unsigned char* base = rec.multisampleData;
+                        int i = (oldBase == rec.multisampleData) ? oldCount : 0;
                         for (; i < 0x20; ++i)
                             if (i < oldCount)
-                                base[i] = static_cast<const unsigned char*>(oldBase)[i];
-                        if (oldBase != rec.msaaSupported)
+                                base[i] = oldBase[i];
+                        if (oldBase != rec.multisampleData)
                             im->MemFree(oldBase);
                     }
 
-                    unsigned char* msaa = static_cast<unsigned char*>(rec.msaaSupported);
+                    unsigned char* msaa = rec.multisampleData;
                     for (int sampleCount = 1; sampleCount <= 0x20; ++sampleCount) {
                         UINT quality = 0;
                         probeDev->CheckMultisampleQualityLevels(

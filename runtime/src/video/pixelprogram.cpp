@@ -33,6 +33,20 @@
 // Everything said in vertexprogram.cpp about the v0 block applies here too:
 // it can only run when reading a pre-v1 file and it keeps nothing.
 //
+// ============================================================================
+// ENDGAME B.3.5 BLOCK B — THE BODIES MOVED INTO THE MEMBERS.
+// ============================================================================
+// Read vertexprogram.cpp's banner of the same name: `Video::PixelProgram` is the
+// twin conversion, member for member. The bodies are members of the real class
+// (runtime/types/video/ShaderProgram.h), defined in the `namespace Video` block
+// at the bottom of this file; each registered door is a one-line QUALIFIED
+// non-virtual delegation through a `reinterpret_cast` bridge; ~PixelProgram
+// writes only the minted ??_7PixelProgram stamp and PlatformDestruct, and
+// ~ShaderProgram / ~CompiledExternal / ~External are the destructor CHAIN, which
+// is exactly retail's inlined teardown at 0x1800f3a00. The
+// `RtVideo_ShaderProgram_DestroyArrays` and `??1External@Object@@UEAA@XZ`
+// bindings are retired here too. The ctor stays a DOOR (B4b-2).
+//
 // CORRECTION (cutover closure batch D1, 2026-09-12). This banner used to end
 // "...are reached through ResolveAddr and RESOLVE TO NOTHING ONCE THE DLL IS
 // GONE". All four are now ported and registered: 0x1800547e0 and 0x180054a20
@@ -59,20 +73,16 @@ enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 extern "C" void  RtVideo_ShaderProgram_ConstructBody(void* self);   // shaderprogram.cpp
-extern "C" void  RtVideo_ShaderProgram_DestroyArrays(void* self);   // shaderprogram.cpp
-extern "C" bool  RtVideo_ShaderProgram_Serialize(void* self, void* stream);
 
 namespace {
 
 using rt::io::Serializer;
 using rt::io::Stream;
 using rt::io::ReaderWriter;
-using rt::video::PixelProgram;
+using Video::PixelProgram;
 namespace ddvt = rt::video::devicedata_vtbl;
 namespace pdvt = rt::video::programdata_vtbl;
 
-void* CompiledExternalVTable() { return RT_DATA_SLOT(void*, "??_7CompiledExternal@Object@@6B@"); }
-void* ShaderProgramVTable()    { return RT_DATA_SLOT(void*, "??_7ShaderProgram@Video@@6B@"); }
 void* PixelProgramVTable()     { return RT_DATA_SLOT(void*, "??_7PixelProgram@Video@@6B@"); }
 const uint8_t* PixelProgramTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@PixelProgram@Video@@0VBaseTypeInfo@Object@@A");
@@ -112,32 +122,13 @@ struct ArrayHdr { void* data; int32_t size; int32_t capacity; };
 
 void MemFree(void* p) { RtAddr<MemFreeFn>(0x1800c7ad0ull)(p); }
 
-// ?PlatformConstruct@PixelProgram@Video@@AEAAXXZ (0x1800f3e40)
-void PlatformConstruct(PixelProgram* self) {
-    void* dd = DeviceData();
-    if (dd == nullptr) { self->_data = nullptr; return; }
-    using CreateFn = void* (*)(void*, void*);
-    void** vt = *reinterpret_cast<void***>(dd);
-    self->_data = reinterpret_cast<CreateFn>(vt[ddvt::kCreatePixelProgramData / 8])(dd, self);
-}
-// ?PlatformCreate@PixelProgram@Video@@AEAA_NXZ (0x1800f3eb0)
-bool PlatformCreate(PixelProgram* self) {
-    using Fn = bool (*)(void*);
-    void** vt = *reinterpret_cast<void***>(self->_data);
-    return reinterpret_cast<Fn>(vt[pdvt::kCreate / 8])(self->_data);
-}
-// ?PlatformDestruct@PixelProgram@Video@@AEAAXXZ (0x1800f3e90)
-void PlatformDestruct(PixelProgram* self) {
-    if (self->_data == nullptr) return;
-    using Fn = void (*)(void*, int);
-    void** vt = *reinterpret_cast<void***>(self->_data);
-    reinterpret_cast<Fn>(vt[pdvt::kDeletingDtor / 8])(self->_data, 1);
-}
-
+// The ctor DOOR's body: retail's ??0PixelProgram (0x1800f3950), which is
+// ??0ShaderProgram inlined, then this class's own vtable stamp, then
+// PlatformConstruct. Not a constructor (B4b-2 — it writes the MINTED vptr).
 void ConstructBody(PixelProgram* self) {
     RtVideo_ShaderProgram_ConstructBody(self);
     *reinterpret_cast<void**>(self) = PixelProgramVTable();
-    PlatformConstruct(self);                            // +0x50
+    self->Video::PixelProgram::PlatformConstruct();      // +0x50
 }
 
 // ---- the version-0 legacy block -------------------------------------------
@@ -203,75 +194,173 @@ void SerializeLegacyV0(Serializer* ser) {
 
 }  // namespace
 
-extern "C" uint32_t RtVideo_PixelProgram_Type(const void*) {
-    uint32_t v = 0; std::memcpy(&v, PixelProgramTypeInfo(), sizeof v); return v;
+// ---------------------------------------------------------------------------
+// The registered doors. Each is one line over the member of the same name.
+// ---------------------------------------------------------------------------
+extern "C" uint32_t RtVideo_PixelProgram_Type(const void* selfv) {
+    return reinterpret_cast<const PixelProgram*>(selfv)
+               ->Video::PixelProgram::Type();                         // B.3.5 bridge
 }
 extern "C" uint32_t RtVideo_PixelProgram_TypeId() {
-    uint32_t v = 0; std::memcpy(&v, PixelProgramTypeInfo(), sizeof v); return v;
+    return Video::PixelProgram::TypeId();
 }
-extern "C" const char* RtVideo_PixelProgram_TypeName(const void*) {
-    const char* v = nullptr; std::memcpy(&v, PixelProgramTypeInfo() + 8, sizeof v); return v;
+extern "C" const char* RtVideo_PixelProgram_TypeName(const void* selfv) {
+    return reinterpret_cast<const PixelProgram*>(selfv)
+               ->Video::PixelProgram::TypeName();                     // B.3.5 bridge
 }
-// .rdata literals at 0x180157a50 / 0x180157a28 / 0x180157a38.
-extern "C" const char* RtVideo_PixelProgram_StaticTypeName() { return "PixelProgram"; }
-extern "C" const char* RtVideo_PixelProgram_ParentTypeName() { return "ShaderProgram"; }
-extern "C" const char* RtVideo_PixelProgram_FileExtension()  { return "srsl"; }
-extern "C" int32_t     RtVideo_PixelProgram_GetFileVersion(const void*) { return 5; }
+// .rdata literals at 0x180157a50 / 0x180157a28 / 0x180157a38. RULE B5-15: each
+// is the EXACT retail literal, copied, never derived from the C++ base name.
+extern "C" const char* RtVideo_PixelProgram_StaticTypeName() { return Video::PixelProgram::_TypeName(); }
+extern "C" const char* RtVideo_PixelProgram_ParentTypeName() { return Video::PixelProgram::_ParentTypeName(); }
+extern "C" const char* RtVideo_PixelProgram_FileExtension()  { return Video::PixelProgram::_FileExtension(); }
+extern "C" int32_t     RtVideo_PixelProgram_GetFileVersion(const void* selfv) {
+    return reinterpret_cast<const PixelProgram*>(selfv)
+               ->Video::PixelProgram::GetFileVersion();               // B.3.5 bridge
+}
 
+// ??0PixelProgram@Video@@QEAA@XZ (0x1800f3950) — a ctor DOOR, not a ctor.
 extern "C" void* RtVideo_PixelProgram_Ctor(void* selfv) {
-    ConstructBody(static_cast<PixelProgram*>(selfv)); return selfv;
+    ConstructBody(reinterpret_cast<PixelProgram*>(selfv));            // B.3.5 bridge
+    return selfv;
 }
 extern "C" void* RtVideo_PixelProgram_Construct(void* selfv) {
+    // Retail's null test stays in the door — see vertexprogram.cpp's twin for why
+    // it cannot live in the member.
     if (selfv == nullptr) return nullptr;
-    ConstructBody(static_cast<PixelProgram*>(selfv)); return selfv;
+    return reinterpret_cast<PixelProgram*>(selfv)
+               ->Video::PixelProgram::Construct();                    // B.3.5 bridge
 }
 extern "C" void* RtVideo_PixelProgram_Reconstruct(void* selfv) {
-    CallSlot0(selfv, 0);
-    ConstructBody(static_cast<PixelProgram*>(selfv)); return selfv;
+    return reinterpret_cast<PixelProgram*>(selfv)
+               ->Video::PixelProgram::Reconstruct();                  // B.3.5 bridge
 }
-extern "C" void RtVideo_PixelProgram_Destruct(void* selfv) { CallSlot0(selfv, 0); }
+extern "C" void RtVideo_PixelProgram_Destruct(void* selfv) {
+    reinterpret_cast<PixelProgram*>(selfv)
+        ->Video::PixelProgram::Destruct();                            // B.3.5 bridge
+}
 
-// ??1PixelProgram@Video@@UEAA@XZ (0x1800f3a00) — ~ShaderProgram inlined.
+// ??1PixelProgram@Video@@UEAA@XZ (0x1800f3a00)
 extern "C" void RtVideo_PixelProgram_Dtor(void* selfv) {
-    PixelProgram* self = static_cast<PixelProgram*>(selfv);
-    void** vp = reinterpret_cast<void**>(self);
-    *vp = PixelProgramVTable();
-    PlatformDestruct(self);
-    *vp = ShaderProgramVTable();
-    RtVideo_ShaderProgram_DestroyArrays(self);
-    *vp = CompiledExternalVTable();
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(self);
+    reinterpret_cast<PixelProgram*>(selfv)
+        ->Video::PixelProgram::~PixelProgram();                       // B.3.5 bridge
 }
 
 extern "C" const void* RtVideo_PixelProgram_GetData(const void* selfv) {
-    return static_cast<const PixelProgram*>(selfv)->_data;
+    return reinterpret_cast<const PixelProgram*>(selfv)
+               ->Video::PixelProgram::GetData();                      // B.3.5 bridge
 }
-// ?Bind@PixelProgram@Video@@QEBAXAEAVContext@2@H@Z (0x1800f3ed0)
 extern "C" void RtVideo_PixelProgram_Bind(const void* selfv, void* context, int index) {
-    void* data = static_cast<const PixelProgram*>(selfv)->_data;
-    using Fn = void (*)(void*, void*, int);
-    void** vt = *reinterpret_cast<void***>(data);
-    reinterpret_cast<Fn>(vt[pdvt::kBind / 8])(data, context, index);
+    reinterpret_cast<const PixelProgram*>(selfv)
+        ->Video::PixelProgram::Bind(context, index);                  // B.3.5 bridge
 }
 
 // See vertexprogram.cpp: `AEAA` is private, not unexported.
 extern "C" void RtVideo_PixelProgram_PlatformConstructExport(void* selfv) {
-    PlatformConstruct(static_cast<PixelProgram*>(selfv));
+    reinterpret_cast<PixelProgram*>(selfv)
+        ->Video::PixelProgram::PlatformConstruct();                   // B.3.5 bridge
 }
 extern "C" bool RtVideo_PixelProgram_PlatformCreateExport(void* selfv) {
-    return PlatformCreate(static_cast<PixelProgram*>(selfv));
+    return reinterpret_cast<PixelProgram*>(selfv)
+               ->Video::PixelProgram::PlatformCreate();               // B.3.5 bridge
 }
 extern "C" void RtVideo_PixelProgram_PlatformDestructExport(void* selfv) {
-    PlatformDestruct(static_cast<PixelProgram*>(selfv));
+    reinterpret_cast<PixelProgram*>(selfv)
+        ->Video::PixelProgram::PlatformDestruct();                    // B.3.5 bridge
 }
 
 // ?Serialize@PixelProgram@Video@@UEAA_NAEAVStream@IO@@@Z (0x1800f3a90)
 extern "C" bool RtVideo_PixelProgram_Serialize(void* selfv, void* streamv) {
-    PixelProgram* self = static_cast<PixelProgram*>(selfv);
+    return reinterpret_cast<PixelProgram*>(selfv)
+               ->Video::PixelProgram::Serialize(streamv);             // B.3.5 bridge
+}
+
+// ============================================================================
+// THE MEMBER BODIES — `Video::PixelProgram::*`. At `namespace Video` scope and
+// AFTER the anonymous namespace (B34_BRIEFS A.2).
+// ============================================================================
+namespace Video {
+
+const char* PixelProgram::TypeName() const {
+    const char* v = nullptr; std::memcpy(&v, PixelProgramTypeInfo() + 8, sizeof v); return v;
+}
+uint32_t PixelProgram::Type() const {
+    uint32_t v = 0; std::memcpy(&v, PixelProgramTypeInfo(), sizeof v); return v;
+}
+uint32_t PixelProgram::TypeId() {
+    uint32_t v = 0; std::memcpy(&v, PixelProgramTypeInfo(), sizeof v); return v;
+}
+// RULE B5-15: read out of .rdata, not derived from the C++ base name.
+const char* PixelProgram::_TypeName()       { return "PixelProgram"; }
+const char* PixelProgram::_ParentTypeName() { return "ShaderProgram"; }
+const char* PixelProgram::_FileExtension()  { return "srsl"; }
+
+// slot 3 — 0x1800f3a80 is `MOV EAX,5 ; RET`.
+int32_t PixelProgram::GetFileVersion() const { return 5; }
+
+// slot 8 — 0x18004ea80, the ctor body; retail's leading null test lives in the
+// DOOR. `virtual`, not `override`: this branch introduces the slot (RULE B5-16).
+Object::External* PixelProgram::Construct() {
+    ConstructBody(this);
+    return this;
+}
+
+// slots 6 / 7 — 0x18004ea60 / 0x18004ea90. On why the slot-0 call is spelled
+// `CallSlot0` and not `DeletingDtor(0)`, see vertexprogram.cpp's Reconstruct.
+Object::External* PixelProgram::Reconstruct() {
+    CallSlot0(this, 0);
+    ConstructBody(this);
+    return this;
+}
+void PixelProgram::Destruct() { CallSlot0(this, 0); }
+
+// ??1PixelProgram@Video@@UEAA@XZ (0x1800f3a00) — ~ShaderProgram's array teardown
+// and ~External are the CHAIN's.
+PixelProgram::~PixelProgram() {
+    *reinterpret_cast<void**>(this) = PixelProgramVTable();
+    this->Video::PixelProgram::PlatformDestruct();
+}
+
+// ?GetData@PixelProgram@Video@@QEBAPEBVPixelProgramData@2@XZ (0x18004eaa0)
+const void* PixelProgram::GetData() const { return _data; }
+
+// ?Bind@PixelProgram@Video@@QEBAXAEAVContext@2@H@Z (0x1800f3ed0)
+void PixelProgram::Bind(void* context, int32_t permutation) const {
+    using Fn = void (*)(void*, void*, int);
+    void** vt = *reinterpret_cast<void***>(_data);
+    reinterpret_cast<Fn>(vt[pdvt::kBind / 8])(_data, context, permutation);
+}
+
+// ?PlatformConstruct@PixelProgram@Video@@AEAAXXZ (0x1800f3e40). THE SLOT IS
+// +0x80, NOT +0x78: CreatePixelProgramData, not CreateVertexProgramData. Swapping
+// the two produces a PixelProgramData behind a VertexProgram's vtable, which
+// fails only on the first Bind.
+void PixelProgram::PlatformConstruct() {
+    void* dd = DeviceData();
+    if (dd == nullptr) { _data = nullptr; return; }
+    using CreateFn = void* (*)(void*, void*);
+    void** vt = *reinterpret_cast<void***>(dd);
+    _data = reinterpret_cast<CreateFn>(vt[ddvt::kCreatePixelProgramData / 8])(dd, this);
+}
+// ?PlatformCreate@PixelProgram@Video@@AEAA_NXZ (0x1800f3eb0)
+bool PixelProgram::PlatformCreate() {
+    using Fn = bool (*)(void*);
+    void** vt = *reinterpret_cast<void***>(_data);
+    return reinterpret_cast<Fn>(vt[pdvt::kCreate / 8])(_data);
+}
+// ?PlatformDestruct@PixelProgram@Video@@AEAAXXZ (0x1800f3e90)
+void PixelProgram::PlatformDestruct() {
+    if (_data == nullptr) return;
+    using Fn = void (*)(void*, int);
+    void** vt = *reinterpret_cast<void***>(_data);
+    reinterpret_cast<Fn>(vt[pdvt::kDeletingDtor / 8])(_data, 1);
+}
+
+// slot 5 — ?Serialize@PixelProgram@Video@@UEAA_NAEAVStream@IO@@@Z (0x1800f3a90)
+bool PixelProgram::Serialize(void* streamv) {
     Stream* stream = static_cast<Stream*>(streamv);
 
-    RtVideo_ShaderProgram_Serialize(self, stream);
+    // Retail CALLs 0x1800f5110 here; the QUALIFIED spelling is that call.
+    this->ShaderProgram::Serialize(stream);
 
     Serializer ser = { stream, nullptr };
     void** encVt = *reinterpret_cast<void***>(stream->encoding);
@@ -286,7 +375,7 @@ extern "C" bool RtVideo_PixelProgram_Serialize(void* selfv, void* streamv) {
         SerializeLegacyV0(&ser);
 
     if (stream->direction == rt::io::kDirectionReading)
-        PlatformCreate(self);          // retail derefs _data unguarded
+        this->Video::PixelProgram::PlatformCreate();   // retail derefs _data unguarded
 
     if (rw != nullptr) {
         using DeleteFn = void (*)(ReaderWriter*, int);
@@ -294,6 +383,8 @@ extern "C" bool RtVideo_PixelProgram_Serialize(void* selfv, void* streamv) {
     }
     return true;
 }
+
+}  // namespace Video
 
 int RtVideoPixelProgramRegister() {
     int n = 0;

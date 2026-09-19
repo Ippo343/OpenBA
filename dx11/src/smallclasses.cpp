@@ -48,6 +48,16 @@
 
 #include "dx11_seam.h"
 #include "dx11_backend_access.h"
+// ENDGAME B.3.5, RULE B5-3: the real `Video::RenderBufferData` abstract base,
+// whose destructor the scalar deleting dtor below calls by qualified name.
+#include "video/CompanionData.h"
+
+// ENDGAME B.3.5 block B, RULE B5-3 — the real `Video::VideoProgramData` abstract
+// base (block A), so VideoProgramData_Dtor below can call its base destructor as a
+// qualified non-virtual member call instead of resolving a mangled name. The
+// CONCRETE `*Data` classes in this directory and the 84-slot seam remain the
+// declared leave of RULE B5-8.
+#include "video/CompanionData.h"
 
 namespace VideoDX11 {
 
@@ -66,10 +76,21 @@ namespace VideoDX11 {
 static void* VideoProgramData_Dtor(VideoProgramData* self, unsigned flags) {
     self->vptr = Dx11VtableAddress(Vt::VideoProgramData);
 
-    static Dx11BaseDtor_t base = reinterpret_cast<Dx11BaseDtor_t>(
-        Dx11ResolveRuntimeImport("??1VideoProgramData@Video@@UEAA@XZ",
-                                 0x180013498));
-    if (base) base(self);
+    // ENDGAME B.3.5 block B, RULE B5-3. Was a `Dx11ResolveRuntimeImport
+    // ("??1VideoProgramData@Video@@UEAA@XZ", 0x180013498)` + indirect call —
+    // spelling 9 of the nine caller bindings (RULE B5-14), one of dx11's 76
+    // mangled-name literals. `Video::VideoProgramData` is a real class (block A),
+    // so this is the MSVC derived-destructor idiom written as C++: a QUALIFIED
+    // non-virtual call on the base subobject, reached through the bridge cast
+    // because `VideoDX11::VideoProgramData` is the declared leave of RULE B5-8 and
+    // does not inherit in C++.
+    //
+    // It must NOT be `DeletingDtor(0)`: that re-enters slot 0, i.e. this function.
+    //
+    // RenderBufferData_Dtor below is UNCHANGED and is block D2's — this commit
+    // touches only the VideoProgramData half of this file.
+    reinterpret_cast< ::Video::VideoProgramData*>(self)
+        -> ::Video::VideoProgramData::~VideoProgramData();   // B.3.5 bridge
 
     if (flags & 1) Dx11MemFree(self);
     return self;
@@ -102,10 +123,15 @@ static void VideoProgramData_StubVoid(void* /*self*/) {
 static void* RenderBufferData_Dtor(RenderBufferData* self, unsigned flags) {
     self->vptr = Dx11VtableAddress(Vt::RenderBufferData);
 
-    static Dx11BaseDtor_t base = reinterpret_cast<Dx11BaseDtor_t>(
-        Dx11ResolveRuntimeImport("??1RenderBufferData@Video@@UEAA@XZ",
-                                 0x1800134a8));
-    if (base) base(self);
+    // ENDGAME B.3.5 block D2, RULE B5-3: `Video::RenderBufferData` is a real
+    // abstract class (block A), so the base-dtor call is now a QUALIFIED
+    // NON-VIRTUAL member call instead of a resolved import. It must NOT become
+    // `DeletingDtor(0)` — that would re-enter this very slot. The
+    // `reinterpret_cast` is the bridge the declared leave (RULE B5-8) requires:
+    // `VideoDX11::RenderBufferData` does not derive from the Runtime base in C++,
+    // it mirrors its first two fields.
+    reinterpret_cast<Video::RenderBufferData*>(self)
+        ->Video::RenderBufferData::~RenderBufferData();   // B.3.5 bridge
 
     if (flags & 1) Dx11MemFree(self);
     return self;
@@ -149,14 +175,16 @@ static bool RenderBufferData_StubTrue(void* /*self*/) {
 // the vtable-numbering note in shaderprograms.cpp.
 static void RenderBufferData_Bind(RenderBufferData* self,
                                   void* /*Video::Context& — ignored*/) {
+    // ENDGAME B.3.5 block D2, RULE B5-2.3: `RenderBufferOwner` is now the real
+    // `Video::RenderBuffer`, so these are its own field names.
     const RenderBufferOwner* rb =
         static_cast<const RenderBufferOwner*>(self->renderBuffer);
 
     ID3D11RenderTargetView* rtv = nullptr;
-    if (rb->color) rtv = Dx11ImageRtv(rb->color);
+    if (rb->colorBuffer) rtv = Dx11ImageRtv(rb->colorBuffer);
 
     ID3D11DepthStencilView* dsv = nullptr;
-    if (rb->depth) dsv = Dx11ImageDsv(rb->depth);
+    if (rb->depthBuffer) dsv = Dx11ImageDsv(rb->depthBuffer);
 
     Dx11Context()->OMSetRenderTargets(1, &rtv, dsv);
 }
@@ -198,8 +226,8 @@ static void RenderBufferData_Resolve(RenderBufferData* self,
     const RenderBufferOwner* src =
         static_cast<const RenderBufferOwner*>(other);
 
-    Dx11Context()->ResolveSubresource(Dx11ImageTexture(dst->color), 0,
-                                      Dx11ImageTexture(src->color), 0,
+    Dx11Context()->ResolveSubresource(Dx11ImageTexture(dst->colorBuffer), 0,
+                                      Dx11ImageTexture(src->colorBuffer), 0,
                                       DXGI_FORMAT_B8G8R8A8_UNORM);
 }
 static_assert(static_cast<int>(DXGI_FORMAT_B8G8R8A8_UNORM) == 0x57,

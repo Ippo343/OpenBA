@@ -141,13 +141,41 @@
 // attendance and for why GFXBODY's own counter could not be read.
 // ============================================================================
 
+// ============================================================================
+// ENDGAME B.3.5 BLOCK B — THE TWO BODIES MOVED INTO THE MEMBERS, AND THE HIDDEN
+// SLOT IS NOW THE LANGUAGE'S
+// ============================================================================
+// `Video::ShaderProgram::GetTextureName` / `GetConstantName` are members of the
+// real class (runtime/types/video/ShaderProgram.h) and RETURN `System::String`
+// BY VALUE. GCC's Microsoft-ABI lowering of a by-value class return produces the
+// SAME hidden slot in RDX and the SAME `MOV RAX,RDX` that retail's `?AV`
+// mangling describes — which is the point of using a real class here (RULE
+// B5-12) rather than keeping the slot hand-written forever.
+//
+// Each registered DOOR keeps its exact three-argument signature — `(self, ret,
+// index)`, hidden slot included — so no caller moves, and becomes the
+// placement-new form B5-12 prescribes: it constructs the member's PRVALUE
+// directly in the caller's slot and returns that pointer. Under C++17 (the
+// build's `-std=c++17`) initialising an object from a prvalue of the same type
+// is guaranteed elision, so there is NO copy, NO extra refcount bump and NO
+// temporary destructor — the member's return object IS the caller's slot. If
+// this were C++14 the copy would be a bump-and-release pair that nets to zero
+// but is observable to a watchpoint, which is why the standard version matters
+// enough to name.
+//
+// The attendance counters moved INTO the members with the branch they count: a
+// hit counter in the door could not see the non-null arm.
+// ============================================================================
+
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../system/string.h"
+#include "../../types/video/ShaderProgram.h"
 
 namespace rtvidshadername {
 
@@ -168,42 +196,42 @@ unsigned long long g_texHits    = 0;   // BRANCH: name was non-null
 
 // `MOVSXD RAX,R8D / SHL RAX,0x4 / ADD RAX,[RCX+disp] / MOV RCX,[RAX]`.
 // int64_t, so the sign extension is the C-level MOVSXD.
-inline char* NameAt(const void* self, int32_t index, unsigned disp) {
-    uint8_t* const base =
-        *reinterpret_cast<uint8_t* const*>(static_cast<const uint8_t*>(self) + disp);
-    return *reinterpret_cast<char* const*>(base + static_cast<int64_t>(index) * 16);
+//
+// B.3.5: the displacement argument is GONE — the two members name their own
+// array member instead, and `Parameter` is a real 0x10-byte type, so the
+// `SHL RAX,0x4` is now `array._data[index]` and the stride is `sizeof(Parameter)`
+// (asserted 0x10 in the header). The MOVSXD survives as the `int64_t` cast: a
+// NEGATIVE index walks BACKWARD from the array base in retail and must here too
+// — `(uint32_t)index * 16` would read 64 GB away. Ghidra's C prints a MOVSXD as
+// an unsigned widening, which is why this was read off the disassembly.
+inline char* NameAt(const Collection::Array<Video::ShaderProgram::Parameter>& arr,
+                    int32_t index) {
+    const Video::ShaderProgram::Parameter* const e =
+        arr._data + static_cast<int64_t>(index);
+    return static_cast<char*>(e->name);
 }
 
 }  // namespace
 
-// ---- ?GetConstantName@ShaderProgram@Video@@QEBA?AVString@System@@H@Z -------
+// ---- the two registered DOORS, one line each over the member --------------
+//
+// ?GetConstantName@ShaderProgram@Video@@QEBA?AVString@System@@H@Z  0x18004e4b0
 extern "C" String* RtVideo_ShaderProgram_GetConstantName(const void* self,
                                                          String* ret,
                                                          int32_t index) {
-    ++g_constCalls;
-    ret->data = nullptr;                        // MOV [RDX],R9   -- QWORD, always
-    char* const name = NameAt(self, index, 0x30);
-    if (name) {                                 // TEST RCX,RCX / JZ
-        ++g_constHits;
-        ret->data = name;                       // MOV [RDX],RCX
-        ++StringRefCount(name);                 // INC dword [RCX-0x4]
-    }
+    new (ret) System::String(                                     // B.3.5 bridge
+        reinterpret_cast<const Video::ShaderProgram*>(self)
+            ->Video::ShaderProgram::GetConstantName(index));
     return ret;                                 // MOV RAX,RDX
 }
 
-// ---- ?GetTextureName@ShaderProgram@Video@@QEBA?AVString@System@@H@Z --------
-// The +0x20/+0x30 displacement is the ONLY difference; see the byte diff above.
+// ?GetTextureName@ShaderProgram@Video@@QEBA?AVString@System@@H@Z   0x18004e420
 extern "C" String* RtVideo_ShaderProgram_GetTextureName(const void* self,
                                                         String* ret,
                                                         int32_t index) {
-    ++g_texCalls;
-    ret->data = nullptr;
-    char* const name = NameAt(self, index, 0x20);
-    if (name) {
-        ++g_texHits;
-        ret->data = name;
-        ++StringRefCount(name);
-    }
+    new (ret) System::String(                                     // B.3.5 bridge
+        reinterpret_cast<const Video::ShaderProgram*>(self)
+            ->Video::ShaderProgram::GetTextureName(index));
     return ret;
 }
 
@@ -252,6 +280,61 @@ NameGetterReport g_nameGetterReport;
 }  // namespace
 
 }  // namespace rtvidshadername
+
+// ============================================================================
+// THE MEMBER BODIES — `Video::ShaderProgram::Get{Texture,Constant}Name`.
+//
+// At `namespace Video` scope and OUTSIDE `namespace rtvidshadername`, per
+// B34_BRIEFS A.2: a member of `Video::X` cannot be defined inside a sibling
+// namespace. The helpers are reached as `rtvidshadername::…` — an anonymous
+// namespace's members are members of the ENCLOSING namespace's declarative
+// region, so that spelling works from here in the same translation unit.
+//
+// THE UNCONDITIONAL `*ret = nullptr` IS NOT DEAD, and it is the default
+// construction of the return object: `System::String name;` below. It is what
+// makes the null-name case return the EMPTY string rather than leaving the
+// caller's slot untouched. A port that only assigned on the non-null path would
+// pass every test whose `ret` happened to start zeroed.
+//
+// `Adopt` is the AddRef half of retail's copy constructor — `_data = src;
+// ++src[-4]` — i.e. exactly the `MOV [RDX],RCX ; INC dword [RCX-0x4]` pair, with
+// the DWORD width the disassembly shows and runtime/types/system/String.h
+// already spells `int32_t`. It is reached through `StringPrivateAccess` because
+// retail's own bodies write String's privates the same way; assigning
+// `System::String(name)` instead would run the `const char*` constructor and
+// ALLOCATE A COPY of the characters, which is a different function.
+//
+// NO NULL CHECK ON `this` OR ON THE ARRAY BASE, transcribed rather than "fixed"
+// (CLAUDE.md: retail's unguarded derefs are load-bearing). The element's NAME is
+// checked because retail checks it; nothing else is.
+// ============================================================================
+namespace Video {
+
+System::String ShaderProgram::GetConstantName(int32_t index) const {
+    ++rtvidshadername::g_constCalls;
+    System::String name;                                   // MOV [RDX],R9
+    char* const p = rtvidshadername::NameAt(_constants, index);
+    if (p) {                                               // TEST RCX,RCX / JZ
+        ++rtvidshadername::g_constHits;
+        System::StringPrivateAccess::Adopt(name, p);       // MOV [RDX],RCX ; INC [RCX-4]
+    }
+    return name;
+}
+
+// The `_textures`/`_constants` member is the ONLY difference between the two —
+// the byte diff above proved it is the one differing disp8 and nothing else.
+System::String ShaderProgram::GetTextureName(int32_t index) const {
+    ++rtvidshadername::g_texCalls;
+    System::String name;
+    char* const p = rtvidshadername::NameAt(_textures, index);
+    if (p) {
+        ++rtvidshadername::g_texHits;
+        System::StringPrivateAccess::Adopt(name, p);
+    }
+    return name;
+}
+
+}  // namespace Video
 
 // The two seams rt_video_port.cpp calls, at global scope with C++ linkage, the
 // same shape as every other Video lane's (`extern int RtVideoBuffersRegister();`).
