@@ -26,6 +26,8 @@
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include <new>
 
 // TownManager::AbortCitizenActionsFor (exe 0x140089e30) - ported in
 // code/Game/Component/destroycomponent_state6.cpp.
@@ -279,9 +281,9 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
     uintptr_t s = (uintptr_t)self;
 
     // Create Serializer on stack (24 bytes)
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (g_fn_Serializer_Ctor) {
-        g_fn_Serializer_Ctor(serializer, stream, 0);
+        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
 
     // Serialize description ExternalPtr at +0x28
@@ -292,7 +294,7 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
     // Serialize component count
     uint32_t compCount = (uint32_t)self->componentCount;
     if (g_fn_Serialize_Int) {
-        g_fn_Serialize_Int(serializer, (void*)&compCount, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>((void*)&compCount), nullptr);   // B.3.4 bridge
     }
 
     // Check if loading (encoding mode == 0)
@@ -462,7 +464,7 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
 
     // Serialize entityFlags at +0x40
     if (g_fn_Serialize_Int) {
-        g_fn_Serialize_Int(serializer, (void*)(s + 0x40), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x40), nullptr);   // B.3.4 bridge
     }
 
     // On load: create missing components from description
@@ -579,7 +581,7 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
 
     // Destroy Serializer
     if (g_fn_Serializer_Dtor) {
-        g_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     }
 }
 
@@ -624,18 +626,18 @@ void* ComponentEntity_Slot5(ComponentEntity* self, uint32_t flags) {
 void ComponentEntity_Slot8(ComponentEntity* self, void* stream) {
     uintptr_t s = (uintptr_t)self;
 
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (g_fn_Serializer_Ctor) {
-        g_fn_Serializer_Ctor(serializer, stream, 0);
+        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
 
     // Serialize entityId at +0x18
     if (g_fn_Serialize_Int) {
-        g_fn_Serialize_Int(serializer, (void*)(s + 0x18), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x18), nullptr);   // B.3.4 bridge
     }
 
     if (g_fn_Serializer_Dtor) {
-        g_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     }
 }
 

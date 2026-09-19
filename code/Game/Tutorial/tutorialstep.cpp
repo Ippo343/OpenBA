@@ -25,6 +25,8 @@
 #include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include <new>
 
 // ============================================================
 // Local function pointers (resolved lazily, not in engine_funcs.h)
@@ -224,16 +226,16 @@ void TutorialStep_Serialize(void* self, void* stream) {
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
 
     // Create Serializer on stack (24 bytes)
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (s_fn_Serializer_Ctor) {
-        s_fn_Serializer_Ctor(serializer, stream, 0);
+        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     } else {
         return; // Can't serialize without a serializer
     }
 
     // 1. Serialize bool at +0x20 (completed flag)
     if (s_fn_Serializer_SerializeBool) {
-        s_fn_Serializer_SerializeBool(serializer, reinterpret_cast<void*>(s + 0x20), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x20), nullptr);   // B.3.4 bridge
     }
 
     // 2. Serialize ExternalPtr<StringTable> at +0x28
@@ -256,7 +258,7 @@ void TutorialStep_Serialize(void* self, void* stream) {
         int32_t count = *reinterpret_cast<int32_t*>(s + 0x48);
         int32_t localCount = count;
         if (s_fn_Serializer_SerializeInt) {
-            s_fn_Serializer_SerializeInt(serializer, &localCount, nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
         }
         // On load: check if reading (serializer->encoding->mode == 0)
         uintptr_t serPtr = *reinterpret_cast<uintptr_t*>(serializer);
@@ -278,7 +280,7 @@ void TutorialStep_Serialize(void* self, void* stream) {
         int32_t count = *reinterpret_cast<int32_t*>(s + 0x58);
         int32_t localCount = count;
         if (s_fn_Serializer_SerializeInt) {
-            s_fn_Serializer_SerializeInt(serializer, &localCount, nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
         }
         uintptr_t serPtr = *reinterpret_cast<uintptr_t*>(serializer);
         if (*reinterpret_cast<int32_t*>(serPtr + 8) == 0) {
@@ -297,7 +299,7 @@ void TutorialStep_Serialize(void* self, void* stream) {
         int32_t count = *reinterpret_cast<int32_t*>(s + 0x68);
         int32_t localCount = count;
         if (s_fn_Serializer_SerializeInt) {
-            s_fn_Serializer_SerializeInt(serializer, &localCount, nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
         }
         uintptr_t serPtr = *reinterpret_cast<uintptr_t*>(serializer);
         if (*reinterpret_cast<int32_t*>(serPtr + 8) == 0) {
@@ -313,7 +315,7 @@ void TutorialStep_Serialize(void* self, void* stream) {
 
     // Destroy serializer
     if (s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     }
 }
 

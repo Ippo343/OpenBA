@@ -24,6 +24,8 @@
 #include <cstdlib>
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include <new>
 
 
 // ============================================================
@@ -2017,19 +2019,19 @@ void TownHallUI_Update(TownHallUI* self, void* stream) {
     int combo4 = *(int*)(*(uintptr_t*)(s + 0x168) + 0x118);
     int combo5 = *(int*)(*(uintptr_t*)(s + 0x170) + 0x118);
 
-    uint64_t serializer[3] = {0, 0, 0};
-    g_fn_Serializer_Ctor(serializer, stream, 1);
+    alignas(8) uint64_t serializer[3] = {0, 0, 0};
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
 
-    g_fn_Serialize_Int(serializer, &tabIndex, nullptr);
-    g_fn_Serialize_Int(serializer, &combo1, nullptr);
-    g_fn_Serialize_Int(serializer, &combo2, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&tabIndex), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&combo1), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&combo2), nullptr);   // B.3.4 bridge
 
-    int version = g_fn_Serializer_GetVersion(serializer);
+    int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
     if (version > 0) {
-        g_fn_Serialize_Int(serializer, &combo3, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&combo3), nullptr);   // B.3.4 bridge
     }
-    g_fn_Serialize_Int(serializer, &combo4, nullptr);
-    g_fn_Serialize_Int(serializer, &combo5, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&combo4), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&combo5), nullptr);   // B.3.4 bridge
 
     if (*(int*)(serializer[0] + 8) == 0) {
         fn_TabElement_SetActiveTab(*(void**)(s + 0x30), tabIndex);
@@ -2041,7 +2043,7 @@ void TownHallUI_Update(TownHallUI* self, void* stream) {
         TownHallUI_UpdateGraph(self);
     }
 
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

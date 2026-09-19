@@ -19,6 +19,8 @@
 #include "Goal/goal_exe_helpers.h"
 #include "resolve.h"
 #include <cstdint>
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include <new>
 
 // Vtable pointer for PopulationGoal (resolved at runtime)
 static void* s_vtable_PopulationGoal = nullptr;
@@ -69,19 +71,19 @@ int PopulationGoal_Slot5(PopulationGoal* self, void* stream) {
     }
 
     // Create Serializer on stack (24 bytes)
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (g_fn_Serializer_Ctor) {
-        g_fn_Serializer_Ctor(serializer, stream, 0);
+        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
 
     // Serialize targetPop at +0x30
     if (g_fn_Serialize_Int) {
-        g_fn_Serialize_Int(serializer, (void*)(s + 0x30), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);   // B.3.4 bridge
     }
 
     // Destroy Serializer
     if (g_fn_Serializer_Dtor) {
-        g_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     }
 
     return 1;

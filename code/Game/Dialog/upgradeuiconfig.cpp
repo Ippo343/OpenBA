@@ -34,6 +34,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include <new>
 
 static const uintptr_t kUpgradeUIConfigVtable = 0x14015df60;
 
@@ -54,12 +56,12 @@ static uint32_t UpgradeUIConfig_GetTypeId(void*) {
 // vtable +0x28 (0x140086fb0): deserialize the target-template reference.
 static void UpgradeUIConfig_Serialize(void* self, void* stream) {
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor) return;
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     ExternalPtrSerializeGeneric(
         reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(self) + 0x20),
         serializer, g_TypeId_ComponentEntity, "ComponentEntity");
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 static void* UpgradeUIConfig_Dtor(void* self, uint32_t flags) {

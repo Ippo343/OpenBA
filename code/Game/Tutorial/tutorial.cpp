@@ -17,6 +17,8 @@
 #include "resolve.h"
 #include "collection/Collection.h"
 #include <cstdint>
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include <new>
 
 // ============================================================
 // Local function pointers (resolved lazily)
@@ -196,9 +198,9 @@ void Tutorial_Serialize(void* self, void* stream) {
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
 
     // Create Serializer on stack (24 bytes)
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (s_fn_Serializer_Ctor) {
-        s_fn_Serializer_Ctor(serializer, stream, 0);
+        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     } else {
         return;
     }
@@ -206,7 +208,7 @@ void Tutorial_Serialize(void* self, void* stream) {
     // 1. Serialize step count (+0x30)
     int32_t localCount = *reinterpret_cast<int32_t*>(s + 0x30);
     if (s_fn_Serializer_SerializeInt) {
-        s_fn_Serializer_SerializeInt(serializer, &localCount, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
     }
 
     // 2. On load: resize steps array
@@ -231,12 +233,12 @@ void Tutorial_Serialize(void* self, void* stream) {
 
     // 5. Serialize currentStep at +0x38
     if (s_fn_Serializer_SerializeInt) {
-        s_fn_Serializer_SerializeInt(serializer, reinterpret_cast<void*>(s + 0x38), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x38), nullptr);   // B.3.4 bridge
     }
 
     // Destroy Serializer
     if (s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     }
 }
 

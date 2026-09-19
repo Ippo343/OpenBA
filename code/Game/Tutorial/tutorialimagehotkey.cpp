@@ -24,6 +24,8 @@
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include <new>
 
 // hotkeytooltipui.cpp - the existing byte-faithful port of exe 0x140099c20.
 namespace Game { void Hotkey_BuildKeyName(void* retval, int device, int keyIndex); }
@@ -102,19 +104,19 @@ void TutorialImageHotKey_Serialize(void* self, void* stream) {
     EnsureFuncsResolved();
 
     // Phase 1: Base TutorialImage fields
-    uint8_t ser1[32];
+    alignas(8) uint8_t ser1[32];
     if (g_fn_Serializer_Ctor) {
-        g_fn_Serializer_Ctor(ser1, stream, 0);
+        ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
 
     // Serialize int at +0x28
     if (g_fn_Serialize_Int) {
-        g_fn_Serialize_Int(ser1, (void*)(s + 0x28), nullptr);
+        reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
     }
 
     // Serialize int at +0x2c
     if (g_fn_Serialize_Int) {
-        g_fn_Serialize_Int(ser1, (void*)(s + 0x2c), nullptr);
+        reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x2c), nullptr);   // B.3.4 bridge
     }
 
     // Serialize external ref at +0x20
@@ -123,13 +125,13 @@ void TutorialImageHotKey_Serialize(void* self, void* stream) {
     }
 
     if (g_fn_Serializer_Dtor) {
-        g_fn_Serializer_Dtor(ser1);
+        reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
     }
 
     // Phase 2: HotKey-specific fields
-    uint8_t ser2[32];
+    alignas(8) uint8_t ser2[32];
     if (g_fn_Serializer_Ctor) {
-        g_fn_Serializer_Ctor(ser2, stream, 0);
+        ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
 
     // Serialize String at +0x30
@@ -137,7 +139,7 @@ void TutorialImageHotKey_Serialize(void* self, void* stream) {
 
     // If loading (version == 0), resolve the hotkey string to an External ref
     if (g_fn_Serializer_GetVersion) {
-        int version = g_fn_Serializer_GetVersion(ser2);
+        int version = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
         if (version == 0) {
             if (s_fn_ResolveHotkeyRef) {
                 s_fn_ResolveHotkeyRef((void*)(s + 0x30));
@@ -146,7 +148,7 @@ void TutorialImageHotKey_Serialize(void* self, void* stream) {
     }
 
     if (g_fn_Serializer_Dtor) {
-        g_fn_Serializer_Dtor(ser2);
+        reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
     }
 }
 
