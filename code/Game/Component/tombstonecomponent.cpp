@@ -14,10 +14,12 @@
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -73,23 +75,23 @@ void TombstoneComponent_Shutdown(TombstoneComponent* self, void* stream) {
     if (s_fn_Component_Serialize)
         s_fn_Component_Serialize(self, stream);
 
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (s_fn_Serializer_Ctor)
-        s_fn_Serializer_Ctor(serializer, stream, 2);
+        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 2);   // B.3.4 bridge
 
     int64_t* pTime = (int64_t*)&self->field28;
     if (s_fn_Time_Serialize)
         s_fn_Time_Serialize(pTime, serializer);
 
     if (s_fn_Serializer_GetVersion) {
-        int version = s_fn_Serializer_GetVersion(serializer);
+        int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
         if (version < 2) {
             *pTime = *pTime / 2;
         }
     }
 
     if (s_fn_Serializer_Dtor)
-        s_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

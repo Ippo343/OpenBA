@@ -21,8 +21,10 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstring>
+#include <new>
 
 namespace {
 constexpr uintptr_t kVtable = 0x1401647a0;
@@ -81,15 +83,15 @@ extern "C" void StorageDescription_Serialize(void* self, void* stream) {
         return;
     }
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    uint8_t ser[24];
-    g_fn_Serializer_Ctor(ser, stream, 0);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     SerializeEnum(ser, s + 0x28);                          // rawMaterialFlags (enum)
-    g_fn_Serialize_Bool(ser, s + 0x20, nullptr);           // flagA
-    g_fn_Serialize_Bool(ser, s + 0x21, nullptr);           // flagB
-    g_fn_Serialize_Int(ser, s + 0x24, nullptr);            // pickupValue
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(s + 0x20), nullptr);   // B.3.4 bridge (flagA)
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(s + 0x21), nullptr);   // B.3.4 bridge (flagB)
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);   // B.3.4 bridge (pickupValue)
 
-    g_fn_Serialize_Int(ser, s + 0x38, nullptr);            // volumeCount
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x38), nullptr);   // B.3.4 bridge (volumeCount)
     int count = *(int32_t*)(s + 0x38);
 
     bool loading = (*(int32_t*)(*(uintptr_t*)ser + 8) == 0);
@@ -104,11 +106,11 @@ extern "C" void StorageDescription_Serialize(void* self, void* stream) {
         e = *(uint8_t**)(s + 0x30);
     }
     for (int i = 0; i < count; ++i, e += 0x10) {
-        g_fn_Serialize_Int(ser, e + 8, nullptr);           // int field (elem+8)
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(e + 8), nullptr);   // B.3.4 bridge (int field, elem+8)
         fn_ExternalPtr_Serialize2(e, ser);                 // External* ref (elem+0)
     }
 
-    if (g_fn_Serializer_Dtor) g_fn_Serializer_Dtor(ser);
+    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

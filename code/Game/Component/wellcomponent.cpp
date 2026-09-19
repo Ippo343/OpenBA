@@ -25,6 +25,8 @@
 #include <cstdint>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -85,18 +87,18 @@ void WellComponent_Shutdown(WellComponent* self, void* stream) {
         s_fn_Component_Serialize(self, stream);
 
     // First empty serializer block (component section)
-    uint8_t serializer1[24];
+    alignas(8) uint8_t serializer1[24];
     if (s_fn_Serializer_Ctor)
-        s_fn_Serializer_Ctor(serializer1, stream, 0);
+        ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     if (s_fn_Serializer_Dtor)
-        s_fn_Serializer_Dtor(serializer1);
+        reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
 
     // Second empty serializer block (controller section)
-    uint8_t serializer2[24];
+    alignas(8) uint8_t serializer2[24];
     if (s_fn_Serializer_Ctor)
-        s_fn_Serializer_Ctor(serializer2, stream, 0);
+        ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     if (s_fn_Serializer_Dtor)
-        s_fn_Serializer_Dtor(serializer2);
+        reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

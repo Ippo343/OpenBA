@@ -25,7 +25,9 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 namespace {
 constexpr uintptr_t kVtable = 0x140159a10;
@@ -65,10 +67,10 @@ extern "C" void HighlightDescription_Serialize(void* self, void* stream) {
         return;
     }
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    uint8_t ser[24];
-    g_fn_Serializer_Ctor(ser, stream, 0);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
-    g_fn_Serialize_Int(ser, s + 0x28, nullptr);            // groupCount
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);            // groupCount   // B.3.4 bridge
     int count = *(int32_t*)(s + 0x28);
 
     bool loading = (*(int32_t*)(*(uintptr_t*)ser + 8) == 0);
@@ -84,7 +86,7 @@ extern "C" void HighlightDescription_Serialize(void* self, void* stream) {
     }
 
     for (int i = 0; i < count; ++i, e += 0x10) {
-        g_fn_Serialize_Int(ser, e + 8, nullptr);            // refCount (elem+8)
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(e + 8), nullptr);            // refCount (elem+8)   // B.3.4 bridge
         int refCount = *(int32_t*)(e + 8);
         if (loading) {
             uint8_t* r = reinterpret_cast<uint8_t*>(AllocArray(e, refCount, 8));
@@ -96,7 +98,7 @@ extern "C" void HighlightDescription_Serialize(void* self, void* stream) {
     fn_ExternalPtr_Serialize3(s + 0x30, ser);              // ref0 (+0x30)
     fn_ExternalPtr_Serialize3(s + 0x38, ser);              // ref1 (+0x38)
 
-    if (g_fn_Serializer_Dtor) g_fn_Serializer_Dtor(ser);
+    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // Dtor (vtable +0x00, exe 0x140006fe0)

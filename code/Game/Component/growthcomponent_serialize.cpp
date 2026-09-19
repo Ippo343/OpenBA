@@ -41,7 +41,9 @@
 //   * After serializing an InternalBasePtr, retail validates the pointee with
 //     IsDerivedFrom(ptr, typeId) and nulls the ref on mismatch.
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 namespace {
 
@@ -111,14 +113,14 @@ extern "C" void GrowthComponent_Serialize2(void* self, void* stream) {
     if (!self || !stream || !s_Ctor || !s_Dtor) return;
     if (s_Base) s_Base(self, stream);
 
-    uint8_t ser[24];
-    s_Ctor(ser, stream, 0);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     SerializeValidatedIBP(At(self, 0x28), ser, s_tidResource);
     SerializeValidatedIBP(At(self, 0x30), ser, s_tidModel);
     if (s_Float) {
-        s_Float(ser, reinterpret_cast<float*>(At(self, 0x48)), nullptr);
-        s_Float(ser, reinterpret_cast<float*>(At(self, 0x4c)), nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x48)), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x4c)), nullptr);   // B.3.4 bridge
     }
     if (s_TimeSer) s_TimeSer(At(self, 0x40), ser);
 
@@ -127,7 +129,7 @@ extern "C" void GrowthComponent_Serialize2(void* self, void* stream) {
     const bool loading =
         (*reinterpret_cast<int32_t*>(*reinterpret_cast<uintptr_t*>(ser) + 8) == 0);
 
-    s_Dtor(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 
     // config@+0x38 is NOT in the stream: retail's serialize (above) persists only
     // +0x28, +0x30, +0x48, +0x4c and +0x40. Its one writer is GrowthComponent's

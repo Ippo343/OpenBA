@@ -13,7 +13,9 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 static const uintptr_t kForesterDescriptionVtable = 0x140163510;
 
@@ -29,12 +31,13 @@ void ForesterDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor ||
         !g_fn_Serializer_GetVersion || !fn_ExternalPtr_BuildSerialize) return;
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 1);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
     fn_ExternalPtr_BuildSerialize(s + 0x20, serializer);   // ExternalPtr +0x20
-    if (g_fn_Serializer_GetVersion(serializer) > 0)
-        SerializerEncodingVCall(serializer, 0x98, s + 0x28); // enum +0x28
-    g_fn_Serializer_Dtor(serializer);
+    if (reinterpret_cast<IO::Serializer*>(serializer)->GetVersion() > 0)   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)
+            ->Serialize(*reinterpret_cast<unsigned int*>(s + 0x28), nullptr);   // B.3.4 bridge  (enum +0x28)
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 void* ForesterDescription_Dtor(void* self, uint32_t flags) {

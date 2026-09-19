@@ -30,10 +30,12 @@
 #include "system/String.h"
 #include "math/Math.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
+#include <new>
 
 namespace {
 constexpr uintptr_t kVtable  = 0x140163930;
@@ -78,11 +80,11 @@ static void* InteractDescription_Ctor_Impl(void* mem) {
 // Serialize (vtable +0x28, FUN_140123500)
 void InteractDescription_Serialize(void* self, void* stream) {
     uintptr_t s = (uintptr_t)self;
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (!g_fn_Serializer_Ctor || !fn_ExternalPtr_Serialize2) {
         return;
     }
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // ---- stream-accurate: single ExternalPtr (+0x20) ----
     fn_ExternalPtr_Serialize2((void*)(s + 0x20), serializer);
@@ -123,7 +125,7 @@ void InteractDescription_Serialize(void* self, void* stream) {
         }
     }
 
-    if (g_fn_Serializer_Dtor) g_fn_Serializer_Dtor(serializer);
+    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // Dtor (vtable +0x00, FUN_140035280) — frees the three node-array buffers.

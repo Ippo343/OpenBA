@@ -16,9 +16,11 @@
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <new>
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (SA type-id fallback)
 
 // ============================================================
@@ -118,25 +120,25 @@ void DecalComponent_Shutdown(DecalComponent* self, void* stream) {
     if (s_fn_Component_Serialize)
         s_fn_Component_Serialize(self, stream);
 
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (!s_fn_Serializer_Ctor) return;
-    s_fn_Serializer_Ctor(serializer, stream, 1);
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
 
     // Serialize decalScale (float at +0x30)
     if (s_fn_Serialize_Float)
-        s_fn_Serialize_Float(serializer, &self->decalScale, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->decalScale, nullptr);   // B.3.4 bridge
 
     // Version-gated: if version > 0, also serialize decalState
     if (s_fn_Serializer_GetVersion) {
-        int version = s_fn_Serializer_GetVersion(serializer);
+        int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
         if (version > 0) {
             if (s_fn_Serialize_Int)
-                s_fn_Serialize_Int(serializer, (int*)&self->decalState, nullptr);
+                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&self->decalState), nullptr);   // B.3.4 bridge
         }
     }
 
     if (s_fn_Serializer_Dtor)
-        s_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

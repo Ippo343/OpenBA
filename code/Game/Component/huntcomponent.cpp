@@ -12,8 +12,10 @@
 #include "Component/huntcomponent_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -147,11 +149,11 @@ extern "C" void HuntComponent_ShutdownVSlot(void* selfP, void* stream) {
     }
     if (s_parentShutdown) s_parentShutdown(selfP, stream);
 
-    uint8_t serializer[24];
-    if (s_serCtor) s_serCtor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    if (s_serCtor) ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     if (g_fn_Time_Serialize)
         g_fn_Time_Serialize(reinterpret_cast<uint8_t*>(selfP) + 0x50, serializer);
-    if (s_serDtor) s_serDtor(serializer);
+    if (s_serDtor) reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // NOTE on slot 9: HuntComponent::Update is already implemented above

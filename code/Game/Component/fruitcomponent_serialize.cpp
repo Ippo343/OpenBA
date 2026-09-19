@@ -26,7 +26,9 @@
 //   * After serializing an InternalBasePtr, retail validates the pointee with
 //     IsDerivedFrom(ptr, typeId) and nulls the ref on mismatch.
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 namespace {
 
@@ -94,12 +96,12 @@ extern "C" void FruitComponent_Serialize(void* self, void* stream) {
     if (!self || !stream || !s_Ctor || !s_Dtor) return;
     if (s_Base) s_Base(self, stream);
 
-    uint8_t ser[24];
-    s_Ctor(ser, stream, 0);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     SerializeValidatedIBP(At(self, 0x28), ser, s_tidResource);
-    if (s_Float) s_Float(ser, reinterpret_cast<float*>(At(self, 0x30)), nullptr);
-    if (s_Bool)  s_Bool(ser, At(self, 0x34), nullptr);
+    if (s_Float) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x30)), nullptr);   // B.3.4 bridge
+    if (s_Bool)  reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x34)), nullptr);   // B.3.4 bridge
 
-    s_Dtor(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }

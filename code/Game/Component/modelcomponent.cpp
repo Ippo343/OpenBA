@@ -21,6 +21,7 @@
 #include "math/Math.h"
 #include "resolve.h"
 #include "perf_experimental.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -279,13 +280,13 @@ void ModelComponent_Shutdown(ModelComponent* self, void* stream) {
     fn_ComponentBase_Serialize(self, stream);
 
     // Create IO::Serializer (version 0)
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize variant index (+0x164 as short) and model variant (+0x166 as short)
     if (s_fn_Serialize_Short) {
-        s_fn_Serialize_Short(serializer, (int16_t*)(s + 0x164), nullptr);
-        s_fn_Serialize_Short(serializer, (int16_t*)(s + 0x166), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(s + 0x164), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(s + 0x166), nullptr);   // B.3.4 bridge
     }
 
     // Serialize Math::Transform at +0x148 (slot 0x1401522e0)
@@ -293,7 +294,7 @@ void ModelComponent_Shutdown(ModelComponent* self, void* stream) {
 
     // Serialize scale float at +0x168
     if (s_fn_Serialize_Float) {
-        s_fn_Serialize_Float(serializer, (float*)(s + 0x168), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x168), nullptr);   // B.3.4 bridge
     }
 
     // On load: if model variant >= 0, restore mesh from description
@@ -317,7 +318,7 @@ void ModelComponent_Shutdown(ModelComponent* self, void* stream) {
 
     // Serialize bool flag: modelId >= 0
     bool hasModelId = (self->modelId >= 0);
-    g_fn_Serialize_Bool(serializer, &hasModelId, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(hasModelId, nullptr);   // B.3.4 bridge
 
     // On load: if flag was set, call vtable Draw (+0x30) to re-register in scene
     serFirst = *(int64_t*)serializer;
@@ -331,7 +332,7 @@ void ModelComponent_Shutdown(ModelComponent* self, void* stream) {
     }
 
     // Destroy serializer
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

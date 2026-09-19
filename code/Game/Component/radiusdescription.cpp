@@ -18,7 +18,9 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 static const uintptr_t kRadiusDescriptionVtable = 0x14015a580;
 
@@ -38,11 +40,11 @@ void RadiusDescription_Serialize(void* self, void* stream) {
         !g_fn_Serialize_Int || !fn_ExternalPtr_Serialize3) {
         return;
     }
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
-    g_fn_Serialize_Int(serializer, s + 0x28, nullptr);   // int         +0x28
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // int +0x28 // B.3.4 bridge
     fn_ExternalPtr_Serialize3(s + 0x20, serializer);     // ExternalPtr +0x20
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
 }
 
 void* RadiusDescription_Dtor(void* self, uint32_t flags) {

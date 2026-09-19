@@ -21,6 +21,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -87,11 +89,11 @@ void ZoneComponent_Shutdown(ZoneComponent* self, void* stream) {
     if (s_fn_Component_Serialize)
         s_fn_Component_Serialize(self, stream);
 
-    uint8_t serializer[24];
-    if (s_fn_Serializer_Ctor) s_fn_Serializer_Ctor(serializer, stream, 1);
+    alignas(8) uint8_t serializer[24];
+    if (s_fn_Serializer_Ctor) ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
 
     if (s_fn_Serializer_GetVersion) {
-        int version = s_fn_Serializer_GetVersion(serializer);
+        int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
         if (version == 0 && *(int*)((uintptr_t)stream + 8) == 0) {
             void* entityPtr = self->owner;
             if (s_pGameState && *s_pGameState && s_fn_ZoneMapAdd) {
@@ -101,7 +103,7 @@ void ZoneComponent_Shutdown(ZoneComponent* self, void* stream) {
         }
     }
 
-    if (s_fn_Serializer_Dtor) s_fn_Serializer_Dtor(serializer);
+    if (s_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

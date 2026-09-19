@@ -76,9 +76,11 @@
 #include "engine_funcs.h"
 #include "Game/serialize_externals.h"
 #include "system/String.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdlib>
 #include <cstdio>
+#include <new>
 
 extern void Component_SerializeReimpl(void* self, void* stream);
 extern "C" void Reimpl_ExternalPtrArray_Serialize(void* serializer, int count,
@@ -165,21 +167,21 @@ extern "C" void CitizenComponent_Serialize(void* self, void* stream) {
 
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor) return;
 
-    uint8_t ser[24];
-    g_fn_Serializer_Ctor(ser, stream, 3);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge
 
     reinterpret_cast<System::String*>(At(self, 0x28))->Serialize(ser);   // B.3.1 bridge
-    if (g_fn_Serialize_Int) g_fn_Serialize_Int(ser, At(self, 0x38), nullptr);
+    if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x38)), nullptr);   // B.3.4 bridge
     if (fn_Serializer_Serialize_Float) {
-        fn_Serializer_Serialize_Float(ser, reinterpret_cast<float*>(At(self, 0x3c)), nullptr);
-        fn_Serializer_Serialize_Float(ser, reinterpret_cast<float*>(At(self, 0x40)), nullptr);
-        fn_Serializer_Serialize_Float(ser, reinterpret_cast<float*>(At(self, 0x44)), nullptr);
-        fn_Serializer_Serialize_Float(ser, reinterpret_cast<float*>(At(self, 0x48)), nullptr);
-        fn_Serializer_Serialize_Float(ser, reinterpret_cast<float*>(At(self, 0x4c)), nullptr);
-        fn_Serializer_Serialize_Float(ser, reinterpret_cast<float*>(At(self, 0x50)), nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x3c)), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x40)), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x44)), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x48)), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x4c)), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x50)), nullptr);   // B.3.4 bridge
     }
     if (fn_Serializer_Serialize_Uint)
-        fn_Serializer_Serialize_Uint(ser, reinterpret_cast<uint32_t*>(At(self, 0x54)), nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(At(self, 0x54)), nullptr);   // B.3.4 bridge
     if (g_fn_Time_Serialize) {
         g_fn_Time_Serialize(At(self, 0x58), ser);
         g_fn_Time_Serialize(At(self, 0x60), ser);
@@ -197,13 +199,13 @@ extern "C" void CitizenComponent_Serialize(void* self, void* stream) {
         g_fn_Time_Serialize(At(self, 0x78), ser);
     }
     if (fn_Serializer_Serialize_Float)
-        fn_Serializer_Serialize_Float(ser, reinterpret_cast<float*>(At(self, 0x80)), nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x80)), nullptr);   // B.3.4 bridge
     if (fn_Serializer_Serialize_Uint)
-        fn_Serializer_Serialize_Uint(ser, reinterpret_cast<uint32_t*>(At(self, 0x88)), nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(At(self, 0x88)), nullptr);   // B.3.4 bridge
     if (g_fn_Time_Serialize) g_fn_Time_Serialize(At(self, 0x90), ser);
 
     int arrCount = *reinterpret_cast<int*>(At(self, 0xa0));
-    if (g_fn_Serialize_Int) g_fn_Serialize_Int(ser, &arrCount, nullptr);
+    if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(ser)->Serialize(arrCount, nullptr);   // B.3.4 bridge
     if (Loading(stream))
         ResizeCitizenExternalArray(reinterpret_cast<int64_t*>(At(self, 0x98)), arrCount);
     Reimpl_ExternalPtrArray_Serialize(ser, arrCount,
@@ -217,18 +219,18 @@ extern "C" void CitizenComponent_Serialize(void* self, void* stream) {
     }
 
     if (g_fn_Serialize_Int) {
-        g_fn_Serialize_Int(ser, At(self, 0xac), nullptr);
-        g_fn_Serialize_Int(ser, At(self, 0x1d8), nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0xac)), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x1d8)), nullptr);   // B.3.4 bridge
     }
     if (g_fn_Serializer_GetVersion) {
-        int v = g_fn_Serializer_GetVersion(ser);
-        if (v > 0 && g_fn_Serialize_Int) g_fn_Serialize_Int(ser, At(self, 0xa8), nullptr);
+        int v = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
+        if (v > 0 && g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0xa8)), nullptr);   // B.3.4 bridge
     }
-    if (g_fn_Serialize_Int) g_fn_Serialize_Int(ser, At(self, 0x1e4), nullptr);
+    if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x1e4)), nullptr);   // B.3.4 bridge
     if (g_fn_Time_Serialize) g_fn_Time_Serialize(At(self, 0x1e8), ser);
     if (g_fn_Serializer_GetVersion) {
-        int v = g_fn_Serializer_GetVersion(ser);
-        if (v > 1 && g_fn_Serialize_Int) g_fn_Serialize_Int(ser, At(self, 0x1e0), nullptr);
+        int v = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
+        if (v > 1 && g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x1e0)), nullptr);   // B.3.4 bridge
     }
 
     // +0xb0 is a PLAIN UINT, not a MeshInstance (save/load wave 2026-08-28).
@@ -239,12 +241,12 @@ extern "C" void CitizenComponent_Serialize(void* self, void* stream) {
     // a MeshInstance "this" and corrupted the round-trip from +0xb0 onward
     // (wrong citizen clothing after load was the visible symptom).
     if (fn_Serializer_Serialize_Uint)
-        fn_Serializer_Serialize_Uint(ser, reinterpret_cast<uint32_t*>(At(self, 0xb0)), nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(At(self, 0xb0)), nullptr);   // B.3.4 bridge
 
-    if (g_fn_Serialize_Int) g_fn_Serialize_Int(ser, At(self, 0x30), nullptr);
+    if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x30)), nullptr);   // B.3.4 bridge
 
     SerializeValidatedIBP(At(self, 0x238), ser, 0x1401c5d70);
-    if (g_fn_Serialize_Int) g_fn_Serialize_Int(ser, At(self, 0x240), nullptr);
+    if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x240)), nullptr);   // B.3.4 bridge
     SerializeValidatedIBP(At(self, 0x250), ser, 0x1401c7158);
     SerializeValidatedIBP(At(self, 0x258), ser, 0x1401c7158);
     SerializeValidatedIBP(At(self, 0x260), ser, 0x1401c7158);
@@ -260,12 +262,12 @@ extern "C" void CitizenComponent_Serialize(void* self, void* stream) {
     }
 
     SerializeValidatedIBP(At(self, 0x208), ser, 0x1401c3f40);
-    if (g_fn_Serialize_Int) g_fn_Serialize_Int(ser, At(self, 0x210), nullptr);
+    if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x210)), nullptr);   // B.3.4 bridge
     if (g_fn_Serializer_GetVersion) {
-        int v = g_fn_Serializer_GetVersion(ser);
+        int v = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
         if (v > 2 && g_fn_Time_Serialize) g_fn_Time_Serialize(At(self, 0x218), ser);
     }
-    if (g_fn_Serialize_Bool) g_fn_Serialize_Bool(ser, At(self, 0x220), nullptr);
+    if (g_fn_Serialize_Bool) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x220)), nullptr);   // B.3.4 bridge
     SerializeValidatedIBP(At(self, 0x228), ser, 0x1401c3f40);
     SerializeValidatedIBP(At(self, 0x230), ser, 0x1401c3f40);
     SerializeValidatedIBP(At(self, 0x278), ser, 0x1401c7078);
@@ -278,8 +280,8 @@ extern "C" void CitizenComponent_Serialize(void* self, void* stream) {
                                     tidDesc, "CitizenDescription");
     }
 
-    if (g_fn_Serialize_Int) g_fn_Serialize_Int(ser, At(self, 0x34), nullptr);
+    if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x34)), nullptr);   // B.3.4 bridge
 
 
-    g_fn_Serializer_Dtor(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }

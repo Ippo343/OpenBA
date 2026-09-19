@@ -17,9 +17,11 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -166,9 +168,9 @@ void StorageComponent_Shutdown(StorageComponent* self, void* stream) {
     }
 
     // Create local IO::Serializer (version 1)
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (s_fn_Serializer_Ctor) {
-        s_fn_Serializer_Ctor(serializer, stream, 1);
+        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
     }
 
     // Serialize slot count
@@ -176,7 +178,7 @@ void StorageComponent_Shutdown(StorageComponent* self, void* stream) {
     int slotCount = *(int*)(selfAddr + 0x30);
     int serSlotCount = slotCount;
     if (s_fn_Serialize_Int) {
-        s_fn_Serialize_Int(serializer, &serSlotCount, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(serSlotCount, nullptr);   // B.3.4 bridge
     }
 
     // If loading (encoding direction == 0), resize the slot array
@@ -194,8 +196,8 @@ void StorageComponent_Shutdown(StorageComponent* self, void* stream) {
             uintptr_t slotEntry = slotBase + (uintptr_t)i * 0x10;
             // Serialize two int fields at slot+0x08 and slot+0x0C
             if (s_fn_Serialize_Int) {
-                s_fn_Serialize_Int(serializer, (int*)(slotEntry + 0x08), nullptr);
-                s_fn_Serialize_Int(serializer, (int*)(slotEntry + 0x0C), nullptr);
+                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(slotEntry + 0x08), nullptr);   // B.3.4 bridge
+                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(slotEntry + 0x0C), nullptr);   // B.3.4 bridge
             }
             // Serialize External reference at slot+0x00
             if (s_fn_SerializeExternalRef) {
@@ -206,7 +208,7 @@ void StorageComponent_Shutdown(StorageComponent* self, void* stream) {
 
     // Serialize field38 (int at self+0x38)
     if (s_fn_Serialize_Int) {
-        s_fn_Serialize_Int(serializer, (int*)(selfAddr + 0x38), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(selfAddr + 0x38), nullptr);   // B.3.4 bridge
     }
 
     // Serialize field3c through the serializer's ENCODING object at Serializer+0x08 —
@@ -236,7 +238,7 @@ void StorageComponent_Shutdown(StorageComponent* self, void* stream) {
 
     // Version 0 migration: if loading and version==0, copy from StorageDescription
     if (s_fn_Serializer_GetVersion) {
-        int version = s_fn_Serializer_GetVersion(serializer);
+        int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
         if (version == 0 && encodingDir == 0) {
             void* storageDesc = GetStorageDescription(self);
             if (storageDesc) {
@@ -247,7 +249,7 @@ void StorageComponent_Shutdown(StorageComponent* self, void* stream) {
 
     // Destroy serializer
     if (s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     }
 }
 

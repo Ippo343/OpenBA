@@ -25,8 +25,10 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 static constexpr uintptr_t kVtableAddr = 0x14015e0c0;
 static constexpr int       kSize       = 0x30;
@@ -68,15 +70,15 @@ extern "C" void AnimAudioEvent_Serialize(void* self, void* stream) {
     if (!self) return;
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor) return;
-    uint8_t serBuf[24];
-    g_fn_Serializer_Ctor(serBuf, stream, 0);
+    alignas(8) uint8_t serBuf[24];
+    ::new (static_cast<void*>(serBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     // +0x20 external audio reference (stream-identical generic external-ptr serialize)
     if (fn_ExternalPtr_BuildSerialize)
         fn_ExternalPtr_BuildSerialize(s + OFF_REF, serBuf);
     // +0x28 float
     if (fn_Serializer_Serialize_Float)
-        fn_Serializer_Serialize_Float(serBuf, (float*)(s + OFF_FLOAT), nullptr);
-    if (g_fn_Serializer_Dtor) g_fn_Serializer_Dtor(serBuf);
+        reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(*(float*)(s + OFF_FLOAT), nullptr);   // B.3.4 bridge
+    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serBuf)->~Serializer();                                       // B.3.4 bridge
 }
 
 extern "C" void* AnimAudioEvent_Dtor(void* self, uint32_t flags) {

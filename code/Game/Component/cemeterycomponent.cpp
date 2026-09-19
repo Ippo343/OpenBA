@@ -19,6 +19,8 @@
 #include <cstdint>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -94,20 +96,20 @@ void CemeteryComponent_Shutdown(CemeteryComponent* self, void* stream) {
         s_fn_Component_Serialize(self, stream);
 
     // Empty serializer block (controller compat stub)
-    uint8_t serializer1[24];
+    alignas(8) uint8_t serializer1[24];
     if (s_fn_Serializer_Ctor && s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Ctor(serializer1, stream, 0);
-        s_fn_Serializer_Dtor(serializer1);
+        ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
     }
 
     // Serialize tile index array
-    uint8_t serializer2[24];
+    alignas(8) uint8_t serializer2[24];
     if (!s_fn_Serializer_Ctor) return;
-    s_fn_Serializer_Ctor(serializer2, stream, 0);
+    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     int localCount = *(int*)(selfAddr + 0x50);
     if (s_fn_Serialize_Int)
-        s_fn_Serialize_Int(serializer2, &localCount, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(localCount, nullptr);   // B.3.4 bridge
 
     // If reading, resize array
     uintptr_t serializerObj = *(uintptr_t*)serializer2;
@@ -122,10 +124,10 @@ void CemeteryComponent_Shutdown(CemeteryComponent* self, void* stream) {
     // Bulk-serialize all int elements
     int* array = *(int**)(selfAddr + 0x48);
     if (s_fn_Serialize_IntArray)
-        s_fn_Serialize_IntArray(serializer2, localCount, array, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(localCount, array, nullptr);   // B.3.4 bridge
 
     if (s_fn_Serializer_Dtor)
-        s_fn_Serializer_Dtor(serializer2);
+        reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

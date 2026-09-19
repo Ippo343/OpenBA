@@ -18,8 +18,10 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeNameById (pre-fault report)
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
@@ -444,15 +446,15 @@ extern "C" void AttendanceComponent_SerializeSlot(void* selfP, void* stream) {
     if (!s_fn_Serializer_Ctor || !s_fn_Serializer_Dtor) return;
 
     // Empty block — retail opens and closes a Serializer with nothing in it.
-    uint8_t empty[24];
-    s_fn_Serializer_Ctor(empty, stream, 0);
-    s_fn_Serializer_Dtor(empty);
+    alignas(8) uint8_t empty[24];
+    ::new (static_cast<void*>(empty)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(empty)->~Serializer();                                       // B.3.4 bridge
 
-    uint8_t ser[24];
-    s_fn_Serializer_Ctor(ser, stream, 0);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     int32_t count = *reinterpret_cast<int32_t*>(self + 0x30);
-    if (s_fn_Serializer_SerializeInt) s_fn_Serializer_SerializeInt(ser, &count, nullptr);
+    if (s_fn_Serializer_SerializeInt) reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
 
     // The queue array has to be grown to the deserialized count before the
     // per-entry loop writes into it.
@@ -479,7 +481,7 @@ extern "C" void AttendanceComponent_SerializeSlot(void* selfP, void* stream) {
             *q = 0;
     }
 
-    s_fn_Serializer_Dtor(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();                                       // B.3.4 bridge
 }
 
 // ============================================================

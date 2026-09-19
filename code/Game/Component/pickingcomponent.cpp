@@ -12,10 +12,12 @@
 #include "Component/pickingcomponent_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -59,8 +61,8 @@ void PickingComponent_Shutdown(PickingComponent* self, void* stream) {
     if (s_fn_Component_Serialize)
         s_fn_Component_Serialize(self, stream);
 
-    uint8_t serializer[24];
-    if (s_fn_Serializer_Ctor) s_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    if (s_fn_Serializer_Ctor) ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize IBP at +0x30
     if (s_fn_IBP_Serialize)
@@ -74,7 +76,7 @@ void PickingComponent_Shutdown(PickingComponent* self, void* stream) {
         }
     }
 
-    if (s_fn_Serializer_Dtor) s_fn_Serializer_Dtor(serializer);
+    if (s_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

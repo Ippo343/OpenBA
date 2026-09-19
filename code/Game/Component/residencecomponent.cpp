@@ -15,8 +15,10 @@
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
@@ -140,24 +142,24 @@ void ResidenceComponent_Shutdown(ResidenceComponent* self, void* stream) {
 
     // Empty serializer block (version 0)
     if (s_fn_Serializer_Ctor && s_fn_Serializer_Dtor) {
-        uint8_t serBuf1[24];
-        s_fn_Serializer_Ctor(serBuf1, stream, 0);
-        s_fn_Serializer_Dtor(serBuf1);
+        alignas(8) uint8_t serBuf1[24];
+        ::new (static_cast<void*>(serBuf1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serBuf1)->~Serializer();                                       // B.3.4 bridge
     }
 
     // Versioned serializer block (version 0) with resident data
-    uint8_t serBuf2[24];
+    alignas(8) uint8_t serBuf2[24];
     int64_t* pSerData = (int64_t*)serBuf2;
 
     if (!s_fn_Serializer_Ctor || !s_fn_Serializer_Dtor) return;
-    s_fn_Serializer_Ctor(serBuf2, stream, 0);
+    ::new (static_cast<void*>(serBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize resident count via local copy
     // (same pattern as ConsumeProduceComponent — local copy needed so resize
     // sees old vs new count correctly)
     int localCount = *(int*)((uintptr_t)self + 0x58);
     if (s_fn_Serialize_Int) {
-        s_fn_Serialize_Int(serBuf2, &localCount, nullptr);
+        reinterpret_cast<IO::Serializer*>(serBuf2)->Serialize(localCount, nullptr);   // B.3.4 bridge
     }
 
     // On load (direction == 0): resize resident array
@@ -178,7 +180,7 @@ void ResidenceComponent_Shutdown(ResidenceComponent* self, void* stream) {
         s_fn_Time_Serialize((void*)((uintptr_t)self + 0x48), serBuf2);
     }
 
-    s_fn_Serializer_Dtor(serBuf2);
+    reinterpret_cast<IO::Serializer*>(serBuf2)->~Serializer();                                       // B.3.4 bridge
 }
 
 // ============================================================
@@ -407,7 +409,7 @@ void ResidenceComponent_SerializeResidentArray(void* serializer, int count, void
     int64_t* entry = (int64_t*)arrayPtr;
     for (int o = 0; o < count; o++) {
         int innerCount = (int)entry[1];
-        if (s_fn_Serialize_Int) s_fn_Serialize_Int(serializer, &innerCount, nullptr);
+        if (s_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(innerCount, nullptr);   // B.3.4 bridge
         // On load (serializer internal +8 == 0): resize the inner array
         // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
         if (*(int*)(*(int64_t*)serializer + 8) == 0) {

@@ -29,7 +29,9 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 static const uintptr_t kMapDescriptionVtable = 0x140163b20;
 
@@ -55,16 +57,16 @@ void MapDescription_Serialize(void* self, void* stream) {
         !g_fn_Serialize_Bool || !fn_System_Color_Serialize) {
         return;
     }
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     // enum @ +0x20 via the serializer's encoding vtable +0x98 dispatch
-    SerializerEncodingVCall(serializer, 0x98, s + 0x20);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x20), nullptr);   // B.3.4 bridge
     reinterpret_cast<System::String*>(s + 0x28)->Serialize(serializer);             // B.3.1 bridge: String  +0x28
-    g_fn_Serialize_Bool(serializer, s + 0x30, nullptr);      // bool    +0x30
-    g_fn_Serialize_Bool(serializer, s + 0x31, nullptr);      // bool    +0x31
-    g_fn_Serialize_Bool(serializer, s + 0x32, nullptr);      // bool    +0x32
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x30), nullptr);   // B.3.4 bridge: bool +0x30
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x31), nullptr);   // B.3.4 bridge: bool +0x31
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x32), nullptr);   // B.3.4 bridge: bool +0x32
     fn_System_Color_Serialize(s + 0x34, serializer);         // Color   +0x34
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
 }
 
 // ============================================================

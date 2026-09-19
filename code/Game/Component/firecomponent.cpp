@@ -27,8 +27,10 @@
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 // Leaf bodies (firecomponent_ignite.cpp).
 extern "C" void FireComponent_Ignite_610(void* self);
@@ -127,16 +129,16 @@ void FireComponent_Shutdown(FireComponent* self, void* stream) {
     if (fn_ComponentBase_Serialize) fn_ComponentBase_Serialize(self, stream);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int) return;
 
-    uint8_t ser[24];
-    g_fn_Serializer_Ctor(ser, stream, 1);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
     if (g_fn_Time_Serialize) {
         g_fn_Time_Serialize(reinterpret_cast<void*>(s + 0x30), ser);
         g_fn_Time_Serialize(reinterpret_cast<void*>(s + 0x38), ser);
     }
-    g_fn_Serialize_Int(ser, reinterpret_cast<void*>(s + 0x28), nullptr);
-    if (g_fn_Serializer_GetVersion && g_fn_Serializer_GetVersion(ser) > 0)
-        g_fn_Serialize_Int(ser, reinterpret_cast<void*>(s + 0x2c), nullptr);
-    g_fn_Serializer_Dtor(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
+    if (g_fn_Serializer_GetVersion && reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 0)   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x2c), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

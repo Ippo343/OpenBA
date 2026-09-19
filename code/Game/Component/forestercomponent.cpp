@@ -12,8 +12,10 @@
 #include "Component/forestercomponent_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -72,21 +74,21 @@ void ForesterComponent_Shutdown(ForesterComponent* self, void* stream) {
     }
 
     // Serialize ForesterComponent's own fields
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (s_fn_Serializer_Ctor) {
-        s_fn_Serializer_Ctor(serializer, stream, 0);
+        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
 
     // foresterFlags at +0x50 is uint16, serialized as two individual bools
     if (s_fn_Serializer_SerializeBool) {
         bool* flagLow  = reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(self) + 0x50);
         bool* flagHigh = reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(self) + 0x51);
-        s_fn_Serializer_SerializeBool(serializer, flagLow, nullptr);
-        s_fn_Serializer_SerializeBool(serializer, flagHigh, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*flagLow, nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*flagHigh, nullptr);  // B.3.4 bridge
     }
 
     if (s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     }
 }
 

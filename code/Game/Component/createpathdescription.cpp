@@ -14,7 +14,9 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 static const uintptr_t kCreatePathDescriptionVtable = 0x140159210;
 
@@ -28,9 +30,9 @@ static void CreatePathDescription_Init(void* self) {
 void CreatePathDescription_Serialize(void* self, void* stream) {
     (void)self;
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor) return;
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
-    g_fn_Serializer_Dtor(serializer);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
 }
 
 void* CreatePathDescription_Dtor(void* self, uint32_t flags) {

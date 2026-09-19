@@ -13,8 +13,10 @@
 #include "Component/naturalresourcecomponent_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
@@ -66,22 +68,22 @@ void NaturalResourceComponent_Shutdown(NaturalResourceComponent* self, void* str
     if (s_fn_Component_Serialize)
         s_fn_Component_Serialize(self, stream);
 
-    uint8_t serializer[24];
-    if (s_fn_Serializer_Ctor) s_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    if (s_fn_Serializer_Ctor) ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     if (s_fn_SerializeFloat)
-        s_fn_SerializeFloat(serializer, &self->resourceScale, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->resourceScale, nullptr);   // B.3.4 bridge
 
     // resourceFlags is uint16_t at +0x2C; the original serializes
     // the two bytes individually as bool at +0x2C and +0x2D
     bool* flagLow  = reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(self) + 0x2C);
     bool* flagHigh = reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(self) + 0x2D);
     if (s_fn_SerializeBool) {
-        s_fn_SerializeBool(serializer, flagLow, nullptr);
-        s_fn_SerializeBool(serializer, flagHigh, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*flagLow, nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*flagHigh, nullptr);   // B.3.4 bridge
     }
 
-    if (s_fn_Serializer_Dtor) s_fn_Serializer_Dtor(serializer);
+    if (s_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

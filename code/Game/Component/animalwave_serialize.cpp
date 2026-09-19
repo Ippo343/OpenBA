@@ -36,7 +36,9 @@
 #include "Component/coll_bridge.h"
 #include "Game/serialize_externals.h"          // ExternalPtrSerializeGeneric
 #include "Component/populationcomponent_funcs.h" // PopulationComponent_ResizeCells
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 namespace {
 
@@ -145,11 +147,11 @@ extern "C" void HerdComponent_Serialize(void* self, void* stream) {
     if (!self || !stream || !s_Ctor || !s_Dtor || !s_Int) return;
     if (s_Base) s_Base(self, stream);
 
-    uint8_t ser[24];
-    s_Ctor(ser, stream, 0);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     int count = *reinterpret_cast<int*>(At(self, 0x40));
-    s_Int(ser, &count, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
     // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
     if (Loading(ser)) GameColl::AsArray<GameColl::Ptr8>(At(self, 0x38)).SetSize(count);
 
@@ -157,14 +159,14 @@ extern "C" void HerdComponent_Serialize(void* self, void* stream) {
     for (int i = 0; i < count && member; ++i, member += 8)
         SerializeValidatedIBP(member, ser, s_tidWildAnimal);
 
-    if (s_Bool)    s_Bool(ser, At(self, 0x48), nullptr);
+    if (s_Bool)    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x48)), nullptr);   // B.3.4 bridge
     if (s_TimeSer) s_TimeSer(At(self, 0x50), ser);
     if (s_TimeSer) s_TimeSer(At(self, 0x58), ser);
-    s_Int(ser, At(self, 0x4c), nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x4c)), nullptr);   // B.3.4 bridge
     SerializeValidatedIBP(At(self, 0x28), ser, s_tidPopulation);
-    s_Int(ser, At(self, 0x30), nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x30)), nullptr);   // B.3.4 bridge
 
-    s_Dtor(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -179,22 +181,22 @@ extern "C" void AnimalComponent_Serialize(void* self, void* stream) {
     if (!self || !stream || !s_Ctor || !s_Dtor || !s_Int) return;
     if (s_Base) s_Base(self, stream);
 
-    uint8_t ser[24];
-    s_Ctor(ser, stream, 1);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
 
     if (s_TimeSer) s_TimeSer(At(self, 0x30), ser);
-    s_Int(ser, At(self, 0x28), nullptr);
-    if (s_Float) s_Float(ser, reinterpret_cast<float*>(At(self, 0x44)), nullptr);
-    if (s_Float) s_Float(ser, reinterpret_cast<float*>(At(self, 0x48)), nullptr);
-    if (s_Bool)  s_Bool(ser, At(self, 0x40), nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x28)), nullptr);   // B.3.4 bridge
+    if (s_Float) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x44)), nullptr);   // B.3.4 bridge
+    if (s_Float) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x48)), nullptr);   // B.3.4 bridge
+    if (s_Bool)  reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x40)), nullptr);   // B.3.4 bridge
     if (s_TimeSer) s_TimeSer(At(self, 0x50), ser);
     if (s_Short) {
-        s_Short(ser, At(self, 0x38), nullptr);
-        s_Short(ser, At(self, 0x3a), nullptr);
-        s_Short(ser, At(self, 0x3c), nullptr);
-        s_Short(ser, At(self, 0x3e), nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(self, 0x38)), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(self, 0x3a)), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(self, 0x3c)), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(self, 0x3e)), nullptr);   // B.3.4 bridge
     }
-    if (s_GetVersion && s_GetVersion(ser) == 0) {
+    if (s_GetVersion && reinterpret_cast<IO::Serializer*>(ser)->GetVersion() == 0) {   // B.3.4 bridge
         // v0 compatibility: read-and-discard one IBP (retail probes the type
         // and drops the value; the local never leaves the frame).
         uint64_t legacy = 0;
@@ -203,7 +205,7 @@ extern "C" void AnimalComponent_Serialize(void* self, void* stream) {
             s_IsDerived(reinterpret_cast<void*>(legacy), *s_tidPopulation);
     }
 
-    s_Dtor(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -216,11 +218,11 @@ extern "C" void LivestockComponent_Serialize(void* self, void* stream) {
     if (!self || !stream || !s_Ctor || !s_Dtor) return;
     if (s_Base) s_Base(self, stream);
 
-    uint8_t ser[24];
-    s_Ctor(ser, stream, 0);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     SerializeValidatedIBP(At(self, 0x28), ser, s_tidPasture);
     if (s_TimeSer) s_TimeSer(At(self, 0x30), ser);
-    s_Dtor(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -238,28 +240,28 @@ extern "C" void PopulationComponent_Serialize_Real(void* self, void* stream) {
     if (!self || !stream || !s_Ctor || !s_Dtor || !s_Int) return;
     if (s_Base) s_Base(self, stream);
 
-    uint8_t ser[24];
-    s_Ctor(ser, stream, 0);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     ExternalPtrSerializeGeneric(reinterpret_cast<void**>(At(self, 0x28)), ser,
                                 s_tidPopDesc, "PopulationDescription");
-    s_Int(ser, At(self, 0x30), nullptr);
-    s_Int(ser, At(self, 0x48), nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x30)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x48)), nullptr);   // B.3.4 bridge
 
     int cells = *reinterpret_cast<int*>(At(self, 0x40));
-    s_Int(ser, &cells, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(cells, nullptr);   // B.3.4 bridge
     if (Loading(ser))
         PopulationComponent_ResizeCells(
             reinterpret_cast<int64_t*>(At(self, 0x38)), cells);
     uint8_t* cell = *reinterpret_cast<uint8_t**>(At(self, 0x38));
     for (int i = 0; i < cells && cell; ++i, cell += 0xc) {
-        s_Int(ser, cell + 0x0, nullptr);
-        s_Int(ser, cell + 0x8, nullptr);
-        s_Int(ser, cell + 0x4, nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(cell + 0x0), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(cell + 0x8), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(cell + 0x4), nullptr);   // B.3.4 bridge
     }
 
     int herds = *reinterpret_cast<int*>(At(self, 0x58));
-    s_Int(ser, &herds, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(herds, nullptr);   // B.3.4 bridge
     // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
     if (Loading(ser)) GameColl::AsArray<GameColl::Ptr8>(At(self, 0x50)).SetSize(herds);
     uint8_t* herd = *reinterpret_cast<uint8_t**>(At(self, 0x50));
@@ -267,8 +269,8 @@ extern "C" void PopulationComponent_Serialize_Real(void* self, void* stream) {
         SerializeValidatedIBP(herd, ser, s_tidEntity);
 
     if (s_TimeSer) s_TimeSer(At(self, 0x60), ser);
-    s_Int(ser, At(self, 0x68), nullptr);
-    s_Int(ser, At(self, 0x6c), nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x68)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x6c)), nullptr);   // B.3.4 bridge
 
-    s_Dtor(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }

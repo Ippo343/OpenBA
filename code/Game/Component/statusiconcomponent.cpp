@@ -18,8 +18,10 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "perf_experimental.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -181,13 +183,13 @@ void StatusIconComponent_Shutdown(StatusIconComponent* self, void* stream) {
     fn_ComponentBase_Serialize(self, stream);
 
     // Create IO::Serializer (version 0)
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize fieldF0 as uint (copy to local, serialize, write back on load)
     uint32_t iconVal = *(uint32_t*)(s + 0xF0);
     if (s_fn_Serialize_UInt) {
-        s_fn_Serialize_UInt(serializer, &iconVal, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(iconVal, nullptr);   // B.3.4 bridge
     }
 
     // On load: write value back to field
@@ -198,7 +200,7 @@ void StatusIconComponent_Shutdown(StatusIconComponent* self, void* stream) {
     }
 
     // Destroy serializer
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

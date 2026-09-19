@@ -78,7 +78,9 @@
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 // TradeComponent's own array-resize helpers (tradecomponent.cpp, file-scope,
 // external linkage — not declared in tradecomponent_funcs.h).
@@ -218,7 +220,7 @@ void* TradeBst_NewNode(uint64_t key, int64_t value, void* parent) {
 // tree (saving, no mutation).
 void TradeComp_BstSerialize(void* treeHdr, void* ser) {
     int32_t count = *reinterpret_cast<int32_t*>(At(treeHdr, 0x08));
-    if (g_fn_Serialize_Int) g_fn_Serialize_Int(ser, &count, nullptr);
+    if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
     if (!g_fn_Serialize_Int) return;
 
     if (Loading(ser)) {
@@ -226,7 +228,7 @@ void TradeComp_BstSerialize(void* treeHdr, void* ser) {
             uint64_t key = 0;
             if (fn_ExternalPtr_BuildSerialize) fn_ExternalPtr_BuildSerialize(&key, ser);
             int64_t value = 0;
-            g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(&value), nullptr);
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(&value), nullptr);   // B.3.4 bridge
 
             uint8_t* root = *reinterpret_cast<uint8_t**>(treeHdr);
             if (!root) {
@@ -272,7 +274,7 @@ void TradeComp_BstSerialize(void* treeHdr, void* ser) {
     while (uint8_t* l = *reinterpret_cast<uint8_t**>(n + 0x18)) n = l;
     while (n) {
         if (fn_ExternalPtr_BuildSerialize) fn_ExternalPtr_BuildSerialize(n, ser);
-        g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(n + 0x08), nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(n + 0x08), nullptr);   // B.3.4 bridge
 
         uint8_t* r = *reinterpret_cast<uint8_t**>(n + 0x20);
         if (r) {
@@ -366,36 +368,36 @@ extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream) {
     // and nameCount decoded as poison, and TradeComponent_ResizeNames walked a
     // garbage array. Same trap as the two empty scopes in AbsorbResourceComponent
     // and HealerComponent.
-    uint8_t serStub[24] = {0};
-    g_fn_Serializer_Ctor(serStub, stream, 0);
-    g_fn_Serializer_Dtor(serStub);
+    alignas(8) uint8_t serStub[24] = {0};
+    ::new (static_cast<void*>(serStub)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serStub)->~Serializer();                                       // B.3.4 bridge
 
-    uint8_t ser[24] = {0};
-    g_fn_Serializer_Ctor(ser, stream, 0);
+    alignas(8) uint8_t ser[24] = {0};
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);        // B.3.4 bridge
 
     // +0x50/+0x58: ComponentRef table, stride 0x10 {ComponentRef, int, int}.
     int32_t refCount = *reinterpret_cast<int32_t*>(At(self, 0x58));
-    g_fn_Serialize_Int(ser, &refCount, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(refCount, nullptr);   // B.3.4 bridge
     if (Loading(ser) && fn_SummaryArray_Init)
         fn_SummaryArray_Init(At(self, 0x50), refCount);
     {
         uint8_t* elem = *reinterpret_cast<uint8_t**>(At(self, 0x50));
         for (int32_t i = 0; i < refCount && elem; ++i, elem += 0x10) {
             if (fn_ExternalPtr_BuildSerialize) fn_ExternalPtr_BuildSerialize(elem + 0x0, ser);
-            g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(elem + 0x8), nullptr);
-            g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(elem + 0xc), nullptr);
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(elem + 0x8), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(elem + 0xc), nullptr);   // B.3.4 bridge
         }
     }
 
     // +0x2c: selected-merchant index.
-    g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(At(self, 0x2c)), nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(At(self, 0x2c)), nullptr);   // B.3.4 bridge
 
     // +0x60: AVL tree, ComponentRef -> int.
     TradeComp_BstSerialize(At(self, 0x60), ser);
 
     // +0x30/+0x38: trade-name array, stride 0x20.
     int32_t nameCount = *reinterpret_cast<int32_t*>(At(self, 0x38));
-    g_fn_Serialize_Int(ser, &nameCount, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(nameCount, nullptr);   // B.3.4 bridge
     if (Loading(ser))
         TradeComponent_ResizeNames(reinterpret_cast<int64_t*>(At(self, 0x30)), nameCount);
     {
@@ -403,7 +405,7 @@ extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream) {
         for (int32_t i = 0; i < nameCount && elem; ++i, elem += 0x20) {
             reinterpret_cast<System::String*>(elem + 0x0)->Serialize(ser);   // B.3.1 bridge
             int32_t innerCount = *reinterpret_cast<int32_t*>(elem + 0x18);
-            g_fn_Serialize_Int(ser, &innerCount, nullptr);
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(innerCount, nullptr);   // B.3.4 bridge
             // B.3.2: Collection::Array<T>::SetSize — retail 0x140001bb0, stride 8 align 8,
             // new tail zeroed. Element is the 8-byte ExternalPtr<ComponentDescription>.
             if (Loading(ser))
@@ -411,32 +413,32 @@ extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream) {
             if (fn_ExternalRefArray_Serialize)
                 fn_ExternalRefArray_Serialize(ser, innerCount,
                     *reinterpret_cast<void**>(elem + 0x10), nullptr);
-            g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(elem + 0x8), nullptr);
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(elem + 0x8), nullptr);   // B.3.4 bridge
         }
     }
 
     // +0x40/+0x48: item table, stride 0xc {resourceId(enum), index, spare}.
     int32_t itemCount = *reinterpret_cast<int32_t*>(At(self, 0x48));
-    g_fn_Serialize_Int(ser, &itemCount, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(itemCount, nullptr);   // B.3.4 bridge
     if (Loading(ser))
         TradeComponent_ResizeItems(reinterpret_cast<int64_t*>(At(self, 0x40)), itemCount);
     {
         uint8_t* elem = *reinterpret_cast<uint8_t**>(At(self, 0x40));
         for (int32_t i = 0; i < itemCount && elem; ++i, elem += 0xc) {
             SerializeEnumField(ser, elem + 0x0);
-            g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(elem + 0x8), nullptr);
-            g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(elem + 0x4), nullptr);
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(elem + 0x8), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(elem + 0x4), nullptr);   // B.3.4 bridge
         }
     }
 
     // +0x28: plain int.
-    g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(At(self, 0x28)), nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(At(self, 0x28)), nullptr);   // B.3.4 bridge
 
     // +0x78: Time.
     if (g_fn_Time_Serialize) g_fn_Time_Serialize(At(self, 0x78), ser);
 
     // +0x71: bool.
-    if (g_fn_Serialize_Bool) g_fn_Serialize_Bool(ser, At(self, 0x71), nullptr);
+    if (g_fn_Serialize_Bool) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x71)), nullptr);   // B.3.4 bridge
 
     // +0x80: InternalBasePtr, validated against ComponentEntity.
     if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(At(self, 0x80), ser);
@@ -448,7 +450,7 @@ extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream) {
     }
 
     // +0x70: bool.
-    if (g_fn_Serialize_Bool) g_fn_Serialize_Bool(ser, At(self, 0x70), nullptr);
+    if (g_fn_Serialize_Bool) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x70)), nullptr);   // B.3.4 bridge
 
-    g_fn_Serializer_Dtor(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }

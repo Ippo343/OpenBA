@@ -27,7 +27,9 @@
 // rest of the save/load wave for when the driver lands.
 #include "resolve.h"
 #include "math/Math.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 namespace {
 
@@ -76,14 +78,14 @@ extern "C" void AmbientEnvironmentComponent_Serialize(void* self, void* stream) 
     if (!self || !stream || !s_Ctor || !s_Dtor || !s_Int) return;
     if (s_Base) s_Base(self, stream);
 
-    uint8_t ser[24];
-    s_Ctor(ser, stream, 0);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     reinterpret_cast<Math::Vector3*>(At(self, 0x38))->Serialize(ser);   // B.3.1 bridge
-    s_Int(ser, At(self, 0x28), nullptr);
-    s_Int(ser, At(self, 0x2c), nullptr);
-    s_Int(ser, At(self, 0x30), nullptr);
-    s_Int(ser, At(self, 0x34), nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x28)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x2c)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x30)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x34)), nullptr);   // B.3.4 bridge
 
-    s_Dtor(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }

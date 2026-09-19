@@ -11,8 +11,10 @@
 #include "Component/orchardcomponent_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
@@ -70,13 +72,13 @@ void OrchardComponent_Shutdown(OrchardComponent* self, void* stream) {
         s_fn_Component_Serialize(self, stream);
 
     // Empty controller serializer block
-    uint8_t serializer1[24];
-    if (s_fn_Serializer_Ctor) s_fn_Serializer_Ctor(serializer1, stream, 0);
-    if (s_fn_Serializer_Dtor) s_fn_Serializer_Dtor(serializer1);
+    alignas(8) uint8_t serializer1[24];
+    if (s_fn_Serializer_Ctor) ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    if (s_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
 
     // Main data serializer
-    uint8_t serializer2[24];
-    if (s_fn_Serializer_Ctor) s_fn_Serializer_Ctor(serializer2, stream, 0);
+    alignas(8) uint8_t serializer2[24];
+    if (s_fn_Serializer_Ctor) ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Validate entity references
     if (s_fn_ValidateOrchardRefs)
@@ -84,16 +86,16 @@ void OrchardComponent_Shutdown(OrchardComponent* self, void* stream) {
 
     // Serialize orchardFlag (bool at +0x48)
     if (s_fn_SerializeBool)
-        s_fn_SerializeBool(serializer2, (bool*)(selfAddr + 0x48), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<bool*>(selfAddr + 0x48), nullptr);   // B.3.4 bridge
 
     // Serialize orchardId (int at +0x4C)
     if (s_fn_SerializeInt)
-        s_fn_SerializeInt(serializer2, (int*)(selfAddr + 0x4C), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>(selfAddr + 0x4C), nullptr);   // B.3.4 bridge
 
     // Serialize entity ref count from +0x58, resize +0x50 if loading
     int localCount = *(int*)(selfAddr + 0x58);
     if (s_fn_SerializeInt)
-        s_fn_SerializeInt(serializer2, &localCount, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(localCount, nullptr);   // B.3.4 bridge
 
     if (*(int*)((uintptr_t)stream + 8) == 0 && s_fn_ResizeRefArray) {
         s_fn_ResizeRefArray((void*)(selfAddr + 0x50), localCount);
@@ -107,7 +109,7 @@ void OrchardComponent_Shutdown(OrchardComponent* self, void* stream) {
     if (s_fn_SerializeIBPArray)
         s_fn_SerializeIBPArray((void*)(selfAddr + 0x60), serializer2);
 
-    if (s_fn_Serializer_Dtor) s_fn_Serializer_Dtor(serializer2);
+    if (s_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -200,8 +202,8 @@ void OrchardComponent_SerializeRefEntries(void* serializer, int count, void* arr
     if (count <= 0) return;
     uint8_t* e = reinterpret_cast<uint8_t*>(arrayBase);
     for (int i = 0; i < count; ++i) {
-        if (s_fn_SerializeInt) s_fn_SerializeInt(serializer, reinterpret_cast<int*>(e + 0), nullptr);
-        if (s_fn_SerializeInt) s_fn_SerializeInt(serializer, reinterpret_cast<int*>(e + 4), nullptr);
+        if (s_fn_SerializeInt) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(e + 0), nullptr);   // B.3.4 bridge
+        if (s_fn_SerializeInt) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(e + 4), nullptr);   // B.3.4 bridge
 
         if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(e + 8, serializer);
         if (*reinterpret_cast<void**>(e + 8) != nullptr && s_pTypeComponentEntity &&
@@ -218,7 +220,7 @@ void OrchardComponent_SerializeRefEntries(void* serializer, int count, void* arr
             !(fn_IsDerivedFrom && fn_IsDerivedFrom(*reinterpret_cast<void**>(e + 0x18), *s_pType4250)))
             *reinterpret_cast<void**>(e + 0x18) = nullptr;
 
-        if (s_fn_SerializeBool) s_fn_SerializeBool(serializer, reinterpret_cast<bool*>(e + 0x20), nullptr);
+        if (s_fn_SerializeBool) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(e + 0x20), nullptr);   // B.3.4 bridge
         e += 0x28;
     }
 }

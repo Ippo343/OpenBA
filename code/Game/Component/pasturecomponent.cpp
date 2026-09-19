@@ -15,8 +15,10 @@
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
@@ -334,18 +336,18 @@ void PastureComponent_Shutdown(PastureComponent* self, void* stream) {
     }
 
     // Empty serializer block (version 0, immediately destroyed)
-    uint8_t emptySerializer[24];
+    alignas(8) uint8_t emptySerializer[24];
     if (s_fn_Serializer_Ctor) {
-        s_fn_Serializer_Ctor(emptySerializer, stream, 0);
+        ::new (static_cast<void*>(emptySerializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
     if (s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Dtor(emptySerializer);
+        reinterpret_cast<IO::Serializer*>(emptySerializer)->~Serializer();                                       // B.3.4 bridge
     }
 
     // Main serializer block (version 0)
-    uint8_t serializer[16];
+    alignas(8) uint8_t serializer[16];
     if (s_fn_Serializer_Ctor) {
-        s_fn_Serializer_Ctor(serializer, stream, 0);
+        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
 
     // Serialize InternalBasePtr array at +0x28
@@ -357,7 +359,7 @@ void PastureComponent_Shutdown(PastureComponent* self, void* stream) {
     int entityCount = *(int*)((uintptr_t)self + 0x38);
     int countBuf = entityCount;
     if (s_fn_Serializer_SerializeInt) {
-        s_fn_Serializer_SerializeInt(serializer, &countBuf, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(countBuf, nullptr);   // B.3.4 bridge
     }
 
     // On load, resize entity array. Retail reads the direction flag from the
@@ -392,12 +394,12 @@ void PastureComponent_Shutdown(PastureComponent* self, void* stream) {
 
     // Serialize int fields at +0x40 and +0x44
     if (s_fn_Serializer_SerializeInt) {
-        s_fn_Serializer_SerializeInt(serializer, (int*)((uintptr_t)self + 0x40), nullptr);
-        s_fn_Serializer_SerializeInt(serializer, (int*)&self->field44, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(int*)((uintptr_t)self + 0x40), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(int*)&self->field44, nullptr);   // B.3.4 bridge
     }
 
     if (s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
     }
 }
 

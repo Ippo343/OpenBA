@@ -22,8 +22,10 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"          // GetTypeIdByName
 #include "Component/component_factory_base.h"     // the live gate + inert factory helpers
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // BANISHED_FLOOR_TRACE (code/Game/Game/mapquery.cpp) — shared with the consumer side.
@@ -135,15 +137,15 @@ void FloorComponent_Shutdown(FloorComponent* self, void* stream) {
         s_fn_Component_Serialize(self, stream);
     }
 
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (s_fn_Serializer_Ctor) {
-        s_fn_Serializer_Ctor(serializer, stream, 0);
+        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
     if (s_fn_Serializer_SerializeBool) {
-        s_fn_Serializer_SerializeBool(serializer, (bool*)&self->floorFlag, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&self->floorFlag), nullptr);   // B.3.4 bridge
     }
     if (s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     }
 }
 

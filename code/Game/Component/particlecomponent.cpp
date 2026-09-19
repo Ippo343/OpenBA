@@ -21,10 +21,12 @@
 #include "math/Math.h"
 #include "resolve.h"
 #include "perf_experimental.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <new>
 
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (SA type-id fallback)
 
@@ -136,12 +138,12 @@ void ParticleComponent_Shutdown(ParticleComponent* self, void* stream) {
     if (s_fn_Component_Serialize)
         s_fn_Component_Serialize(self, stream);
 
-    uint8_t serializer[24];
-    if (s_fn_Serializer_Ctor) s_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    if (s_fn_Serializer_Ctor) ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     int localCount = *(int*)(selfAddr + 0x30);
     if (s_fn_SerializeInt)
-        s_fn_SerializeInt(serializer, &localCount, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(localCount, nullptr);   // B.3.4 bridge
 
     // If loading, resize bool array
     // B.3.2 bridge: FUN_14000a590 is Collection::Array<uint8_t>::SetSize(n)
@@ -151,9 +153,9 @@ void ParticleComponent_Shutdown(ParticleComponent* self, void* stream) {
 
     // Serialize bool array
     if (s_fn_SerializeBoolArray)
-        s_fn_SerializeBoolArray(serializer, localCount, *(bool**)(selfAddr + 0x28), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(localCount, *(bool**)(selfAddr + 0x28), nullptr);   // B.3.4 bridge
 
-    if (s_fn_Serializer_Dtor) s_fn_Serializer_Dtor(serializer);
+    if (s_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

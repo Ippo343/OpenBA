@@ -12,8 +12,10 @@
 #include "Component/marketlocationcomponent_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -83,13 +85,13 @@ void MarketLocationComponent_Shutdown(MarketLocationComponent* self, void* strea
 
     // Two empty serializer blocks (version 0)
     if (s_fn_Serializer_Ctor && s_fn_Serializer_Dtor) {
-        uint8_t serializerBuf1[24];
-        s_fn_Serializer_Ctor(serializerBuf1, stream, 0);
-        s_fn_Serializer_Dtor(serializerBuf1);
+        alignas(8) uint8_t serializerBuf1[24];
+        ::new (static_cast<void*>(serializerBuf1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializerBuf1)->~Serializer();                                       // B.3.4 bridge
 
-        uint8_t serializerBuf2[24];
-        s_fn_Serializer_Ctor(serializerBuf2, stream, 0);
-        s_fn_Serializer_Dtor(serializerBuf2);
+        alignas(8) uint8_t serializerBuf2[24];
+        ::new (static_cast<void*>(serializerBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializerBuf2)->~Serializer();                                       // B.3.4 bridge
     }
 }
 

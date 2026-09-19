@@ -30,7 +30,9 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayBase);
 
@@ -64,13 +66,13 @@ void TradeDescription_Serialize(void* self, void* stream) {
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int ||
         !fn_Serializer_Serialize_Float ||
         !fn_ExternalPtr_BuildSerialize || !fn_MemAlloc || !g_pMemAllocSingleton) return;
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 1);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
 
     fn_ExternalPtr_BuildSerialize(s + 0x30, serializer);   // ExternalPtr +0x30
 
     // merchant array @ +0x48 (count @ +0x50, element stride 0x48)
-    g_fn_Serialize_Int(serializer, s + 0x50, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x50), nullptr);   // B.3.4 bridge
     int merchN = *(int32_t*)(s + 0x50);
     if (TD_SerStreamErr(serializer) == 0 && merchN > 0) TD_AllocArray(self, s + 0x48, merchN, 0x48);
     if (merchN > 0) {
@@ -79,36 +81,40 @@ void TradeDescription_Serialize(void* self, void* stream) {
             fn_ExternalPtr_BuildSerialize(m + 0x00, serializer);  // ExternalPtr
             reinterpret_cast<System::String*>(m + 0x08)->Serialize(serializer);          // B.3.1 bridge: String
             // ext-ref array @ m+0x20 (count @ m+0x28, stride 8)
-            g_fn_Serialize_Int(serializer, m + 0x28, nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(m + 0x28), nullptr);   // B.3.4 bridge
             int extN = *(int32_t*)(m + 0x28);
             if (TD_SerStreamErr(serializer) == 0 && extN > 0) TD_AllocArray(self, m + 0x20, extN, 8);
             Desc_LoadExternalArray(serializer, extN, *(void**)(m + 0x20));
             // int array @ m+0x30 (count @ m+0x38, stride 4) per-elem enum vcall +0x98
-            g_fn_Serialize_Int(serializer, m + 0x38, nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(m + 0x38), nullptr);   // B.3.4 bridge
             int intN = *(int32_t*)(m + 0x38);
             if (TD_SerStreamErr(serializer) == 0 && intN > 0) TD_AllocArray(self, m + 0x30, intN, 4);
             uint8_t* ia = *(uint8_t**)(m + 0x30);
             for (int j = 0; j < intN && ia; ++j, ia += 4)
-                SerializerEncodingVCall(serializer, 0x98, ia);
-            g_fn_Serialize_Int(serializer, m + 0x40, nullptr);    // int @+0x40
-            SerializerEncodingVCall(serializer, 0x98, m + 0x10);  // enum @+0x10
-            SerializerEncodingVCall(serializer, 0x98, m + 0x14);  // enum @+0x14
-            SerializerEncodingVCall(serializer, 0x98, m + 0x18);  // enum @+0x18
+                reinterpret_cast<IO::Serializer*>(serializer)
+                    ->Serialize(*reinterpret_cast<unsigned int*>(ia), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(m + 0x40), nullptr);    // int @+0x40   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)
+                ->Serialize(*reinterpret_cast<unsigned int*>(m + 0x10), nullptr);  // enum @+0x10   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)
+                ->Serialize(*reinterpret_cast<unsigned int*>(m + 0x14), nullptr);  // enum @+0x14   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)
+                ->Serialize(*reinterpret_cast<unsigned int*>(m + 0x18), nullptr);  // enum @+0x18   // B.3.4 bridge
         }
     }
 
     // price array @ +0x58 (count @ +0x60, element stride 0x14)
-    g_fn_Serialize_Int(serializer, s + 0x60, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x60), nullptr);   // B.3.4 bridge
     int priceN = *(int32_t*)(s + 0x60);
     if (TD_SerStreamErr(serializer) == 0 && priceN > 0) TD_AllocArray(self, s + 0x58, priceN, 0x14);
     if (priceN > 0) {
         uint8_t* p = *(uint8_t**)(s + 0x58);
         for (int i = 0; i < priceN && p; ++i, p += 0x14) {
-            g_fn_Serialize_Int(serializer, p + 0x00, nullptr);
-            fn_Serializer_Serialize_Float(serializer, (float*)(p + 0x04), nullptr);
-            fn_Serializer_Serialize_Float(serializer, (float*)(p + 0x08), nullptr);
-            g_fn_Serialize_Int(serializer, p + 0x0c, nullptr);
-            g_fn_Serialize_Int(serializer, p + 0x10, nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(p + 0x00), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(p + 0x04), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(p + 0x08), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(p + 0x0c), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(p + 0x10), nullptr);   // B.3.4 bridge
         }
     }
 
@@ -116,21 +122,22 @@ void TradeDescription_Serialize(void* self, void* stream) {
     fn_ExternalPtr_BuildSerialize(s + 0x28, serializer);   // ExternalPtr +0x28
 
     // string-pair array @ +0x38 (count @ +0x40, element stride 0x18)
-    g_fn_Serialize_Int(serializer, s + 0x40, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x40), nullptr);   // B.3.4 bridge
     int spN = *(int32_t*)(s + 0x40);
     if (TD_SerStreamErr(serializer) == 0 && spN > 0) TD_AllocArray(self, s + 0x38, spN, 0x18);
     if (spN > 0) {
         uint8_t* sp = *(uint8_t**)(s + 0x38);
         for (int i = 0; i < spN && sp; ++i, sp += 0x18) {
-            SerializerEncodingVCall(serializer, 0x98, sp + 0x00); // enum @+0x00
+            reinterpret_cast<IO::Serializer*>(serializer)
+                ->Serialize(*reinterpret_cast<unsigned int*>(sp + 0x00), nullptr); // enum @+0x00   // B.3.4 bridge
             reinterpret_cast<System::String*>(sp + 0x08)->Serialize(serializer);         // B.3.1 bridge: String @+0x08
             reinterpret_cast<System::String*>(sp + 0x10)->Serialize(serializer);         // B.3.1 bridge: String @+0x10
         }
     }
 
-    fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x68), nullptr);
-    g_fn_Serialize_Int(serializer, s + 0x6c, nullptr);
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x68), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x6c), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 void* TradeDescription_Dtor(void* self, uint32_t flags) {

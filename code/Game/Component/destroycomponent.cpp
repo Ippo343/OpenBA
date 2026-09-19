@@ -15,8 +15,10 @@
 #include "Component/destroycomponent_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -117,25 +119,25 @@ void DestroyComponent_Shutdown(DestroyComponent* self, void* stream) {
     }
 
     // Empty serializer block (controller format compat)
-    uint8_t serializer1[24];
+    alignas(8) uint8_t serializer1[24];
     if (s_fn_Serializer_Ctor && s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Ctor(serializer1, stream, 0);
-        s_fn_Serializer_Dtor(serializer1);
+        ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
     }
 
     // Serialize destroy state fields
-    uint8_t serializer2[24];
+    alignas(8) uint8_t serializer2[24];
     if (s_fn_Serializer_Ctor) {
-        s_fn_Serializer_Ctor(serializer2, stream, 0);
+        ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
 
     if (s_fn_Serializer_SerializeInt) {
-        s_fn_Serializer_SerializeInt(serializer2, (int*)&self->field54, nullptr);
-        s_fn_Serializer_SerializeInt(serializer2, (int*)((uintptr_t)self + 0x58), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>(&self->field54), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>((uintptr_t)self + 0x58), nullptr);   // B.3.4 bridge
     }
 
     if (s_fn_Serializer_SerializeBool) {
-        s_fn_Serializer_SerializeBool(serializer2, (bool*)((uintptr_t)self + 0x51), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<bool*>((uintptr_t)self + 0x51), nullptr);   // B.3.4 bridge
     }
 
     if (s_fn_SerializeInternalBasePtr) {
@@ -143,7 +145,7 @@ void DestroyComponent_Shutdown(DestroyComponent* self, void* stream) {
     }
 
     if (s_fn_Serializer_SerializeBool) {
-        s_fn_Serializer_SerializeBool(serializer2, (bool*)&self->destroyFlags, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<bool*>(&self->destroyFlags), nullptr);   // B.3.4 bridge
     }
 
     if (s_fn_Time_Serialize) {
@@ -151,7 +153,7 @@ void DestroyComponent_Shutdown(DestroyComponent* self, void* stream) {
     }
 
     if (s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Dtor(serializer2);
+        reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
     }
 }
 

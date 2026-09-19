@@ -27,8 +27,10 @@
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -117,27 +119,27 @@ void ImmigrationComponent_Shutdown(ImmigrationComponent* self, void* stream) {
     }
 
     // Empty serializer block (controller compat)
-    uint8_t serializer1[24];
+    alignas(8) uint8_t serializer1[24];
     if (s_fn_Serializer_Ctor && s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Ctor(serializer1, stream, 0);
-        s_fn_Serializer_Dtor(serializer1);
+        ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();                                       // B.3.4 bridge
     }
 
     // Main serializer block
-    uint8_t serializer2[24];
+    alignas(8) uint8_t serializer2[24];
     if (s_fn_Serializer_Ctor) {
-        s_fn_Serializer_Ctor(serializer2, stream, 0);
+        ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
 
     // Serialize field50 (int)
     if (s_fn_Serializer_SerializeInt) {
-        s_fn_Serializer_SerializeInt(serializer2, (int*)&self->field50, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>(&self->field50), nullptr);   // B.3.4 bridge
     }
 
     // Serialize array count from field60
     int arrayCount = *(int*)&self->field60;
     if (s_fn_Serializer_SerializeInt) {
-        s_fn_Serializer_SerializeInt(serializer2, &arrayCount, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(arrayCount, nullptr);   // B.3.4 bridge
     }
 
     // "Am I loading?" is `*(int32*)(*(void**)serializer + 8) == 0` -- deref the
@@ -186,7 +188,7 @@ void ImmigrationComponent_Shutdown(ImmigrationComponent* self, void* stream) {
 
     // Destroy serializer
     if (s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Dtor(serializer2);
+        reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
     }
 }
 

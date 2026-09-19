@@ -31,7 +31,9 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Component/coll_bridge.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 static const uintptr_t kCreateRemovalDescriptionVtable = 0x140162d80;
 
@@ -55,13 +57,13 @@ void CreateRemovalDescription_Serialize(void* self, void* stream) {
         !fn_ExternalPtr_BuildSerialize) {
         return;
     }
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
-    g_fn_Serialize_Bool(serializer, s + 0x20, nullptr);   // bool +0x20
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x20), nullptr);   // bool +0x20   // B.3.4 bridge
 
     int count = *(int*)(s + 0x30);
-    g_fn_Serialize_Int(serializer, &count, nullptr);      // int count
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);      // int count   // B.3.4 bridge
 
     // On load (stream mode == 0): resize the heap ExternalPtr array at +0x28.
     void* serField0 = *(void**)serializer;
@@ -74,12 +76,12 @@ void CreateRemovalDescription_Serialize(void* self, void* stream) {
     fn_ExternalRefArray_Serialize(serializer, count, *(void**)(s + 0x28), nullptr); // ExtPtr[count]
     fn_ExternalPtr_BuildSerialize(s + 0x38, serializer);  // ExternalPtr +0x38
 
-    g_fn_Serialize_Bool(serializer, s + 0x40, nullptr);   // bool +0x40
-    g_fn_Serialize_Bool(serializer, s + 0x41, nullptr);   // bool +0x41
-    g_fn_Serialize_Bool(serializer, s + 0x42, nullptr);   // bool +0x42
-    g_fn_Serialize_Bool(serializer, s + 0x43, nullptr);   // bool +0x43
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x40), nullptr);   // bool +0x40   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x41), nullptr);   // bool +0x41   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x42), nullptr);   // bool +0x42   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x43), nullptr);   // bool +0x43   // B.3.4 bridge
 
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 void* CreateRemovalDescription_Dtor(void* self, uint32_t flags) {

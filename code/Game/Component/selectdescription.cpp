@@ -26,7 +26,9 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 static const uintptr_t kSelectDescriptionVtable = 0x14015a5f0;
 
@@ -48,14 +50,15 @@ void SelectDescription_Serialize(void* self, void* stream) {
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !fn_ExternalPtr_Serialize || !fn_ExternalPtr_Serialize2) {
         return;
     }
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     fn_ExternalPtr_Serialize(s + 0x20, serializer);          // ExternalPtr +0x20
     reinterpret_cast<System::String*>(s + 0x28)->Serialize(serializer);             // B.3.1 bridge: String      +0x28
     fn_ExternalPtr_Serialize2(s + 0x30, serializer);         // ExternalPtr +0x30
     reinterpret_cast<System::String*>(s + 0x38)->Serialize(serializer);             // B.3.1 bridge: String      +0x38
-    SerializerEncodingVCall(serializer, 0x98, s + 0x40);     // enum        +0x40
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)
+        ->Serialize(*reinterpret_cast<unsigned int*>(s + 0x40), nullptr);     // B.3.4 bridge  (enum +0x40)
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 void* SelectDescription_Dtor(void* self, uint32_t flags) {

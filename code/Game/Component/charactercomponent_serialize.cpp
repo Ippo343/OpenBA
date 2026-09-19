@@ -49,7 +49,9 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "Component/coll_bridge.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 extern void Component_SerializeReimpl(void* self, void* stream);
@@ -108,20 +110,20 @@ extern "C" void CharacterComponent_Serialize(void* self, void* stream) {
 
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor) return;
 
-    uint8_t ser[24];
-    g_fn_Serializer_Ctor(ser, stream, 0);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // ?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800150e0
     reinterpret_cast<Math::Vector3*>(At(self, 0x2c))->Serialize(ser);
     if (fn_Serializer_Serialize_Float) {
-        fn_Serializer_Serialize_Float(ser, reinterpret_cast<float*>(At(self, 0x3c)), nullptr);
-        fn_Serializer_Serialize_Float(ser, reinterpret_cast<float*>(At(self, 0x38)), nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x3c)), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x38)), nullptr);   // B.3.4 bridge
     }
-    if (g_fn_Serialize_Bool) g_fn_Serialize_Bool(ser, At(self, 0x28), nullptr);
-    if (g_fn_Serialize_Int)  g_fn_Serialize_Int(ser, At(self, 0x60), nullptr);
+    if (g_fn_Serialize_Bool) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x28)), nullptr);   // B.3.4 bridge
+    if (g_fn_Serialize_Int)  reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x60)), nullptr);    // B.3.4 bridge
 
     int count = *reinterpret_cast<int*>(At(self, 0x50));
-    if (g_fn_Serialize_Int) g_fn_Serialize_Int(ser, &count, nullptr);
+    if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
     // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
     if (Loading(stream)) GameColl::AsArray<GameColl::Ptr8>(At(self, 0x48)).SetSize(count);
 
@@ -154,5 +156,5 @@ extern "C" void CharacterComponent_Serialize(void* self, void* stream) {
         }
     }
 
-    g_fn_Serializer_Dtor(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }

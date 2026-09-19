@@ -22,6 +22,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (SA type-id fallback)
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include <new>
 
 // ============================================================
 // Pile-rendering bring-up (BANISHED_LIVE_STORAGEDISPLAY, default OFF)
@@ -184,10 +186,10 @@ void StorageDisplayComponent_Shutdown(StorageDisplayComponent* self, void* strea
         s_fn_Component_Serialize(self, stream);
     }
 
-    uint8_t serializerBuf[24];
+    alignas(8) uint8_t serializerBuf[24];
     if (s_fn_Serializer_Ctor && s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Ctor(serializerBuf, stream, 0);
-        s_fn_Serializer_Dtor(serializerBuf);
+        ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
     }
 }
 

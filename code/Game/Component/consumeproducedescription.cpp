@@ -40,7 +40,9 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 static const uintptr_t kConsumeProduceDescriptionVtable = 0x140162b30;
 static const uintptr_t kSlot_TypeSerialize = 0x1401516b0; // Object::Type::Serialize dispatch slot
@@ -70,13 +72,13 @@ void ConsumeProduceDescription_Serialize(void* self, void* stream) {
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int ||
         !fn_Serializer_Serialize_Float ||
         !fn_ExternalPtr_BuildSerialize || !fn_MemAlloc || !g_pMemAllocSingleton) return;
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     fn_ExternalPtr_BuildSerialize(s + 0x20, serializer);   // ExternalPtr +0x20
 
     // outer recipe array @ +0x28 (count @ +0x30, element stride 0x28)
-    g_fn_Serialize_Int(serializer, s + 0x30, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);   // B.3.4 bridge
     int outerN = *(int32_t*)(s + 0x30);
     if (CP_SerStreamErr(serializer) == 0 && outerN > 0) {
         void* buf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)outerN * 0x28, 8);
@@ -88,7 +90,7 @@ void ConsumeProduceDescription_Serialize(void* self, void* stream) {
         uint8_t* e = *(uint8_t**)(s + 0x28);
         for (int i = 0; i < outerN && e; ++i, e += 0x28) {
             // inner array @ e+0x00 (count @ e+0x08, element stride 0x10)
-            g_fn_Serialize_Int(serializer, e + 0x08, nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(e + 0x08), nullptr);   // B.3.4 bridge
             int innerN = *(int32_t*)(e + 0x08);
             if (CP_SerStreamErr(serializer) == 0 && innerN > 0) {
                 void* ibuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)innerN * 0x10, 8);
@@ -98,16 +100,16 @@ void ConsumeProduceDescription_Serialize(void* self, void* stream) {
             uint8_t* ie = *(uint8_t**)(e + 0x00);
             for (int j = 0; j < innerN && ie; ++j, ie += 0x10) {
                 fn_ExternalPtr_BuildSerialize(ie + 0x00, serializer); // ExternalPtr
-                g_fn_Serialize_Int(serializer, ie + 0x08, nullptr);   // int
+                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(ie + 0x08), nullptr);   // B.3.4 bridge
             }
             fn_ExternalPtr_BuildSerialize(e + 0x10, serializer);      // ExternalPtr +0x10
-            SerializerEncodingVCall(serializer, 0x98, e + 0x18);      // enum +0x18
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(e + 0x18), nullptr);   // B.3.4 bridge (enum +0x18)
             reinterpret_cast<System::String*>(e + 0x20)->Serialize(serializer);              // B.3.1 bridge: String +0x20
         }
     }
 
-    g_fn_Serialize_Int(serializer, s + 0x40, nullptr);
-    SerializerEncodingVCall(serializer, 0x98, s + 0x50);   // enum +0x50
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x40), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x50), nullptr);   // B.3.4 bridge (enum +0x50)
 
     // Type @ +0x38 via Object::Type::Serialize dispatch slot 0x1401516b0
     {
@@ -118,11 +120,11 @@ void ConsumeProduceDescription_Serialize(void* self, void* stream) {
         // else: slot unwired in standalone — Type read skipped (would desync; see header note)
     }
 
-    g_fn_Serialize_Int(serializer, s + 0x3c, nullptr);
-    fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x44), nullptr);
-    g_fn_Serialize_Int(serializer, s + 0x48, nullptr);
-    g_fn_Serialize_Int(serializer, s + 0x4c, nullptr);
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x3c), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x44), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x48), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x4c), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 void* ConsumeProduceDescription_Dtor(void* self, uint32_t flags) {

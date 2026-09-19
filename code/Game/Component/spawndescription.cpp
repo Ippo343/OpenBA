@@ -17,7 +17,9 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 static const uintptr_t kSpawnDescriptionVtable = 0x14015a6f0;
 // Exe-internal spawn-array resize helper (resizes the 16-byte-stride vector at
@@ -46,11 +48,11 @@ void SpawnDescription_Serialize(void* self, void* stream) {
     SpawnArrayResize_t resize =
         (SpawnArrayResize_t)ResolveAddr(Module::Exe, kSpawnArrayResize);
 
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     int count = *(int32_t*)(s + 0x28);
-    g_fn_Serialize_Int(serializer, &count, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
     if (Spawn_SerStreamErr(serializer) == 0 && resize) {
         resize(s + 0x20, count);   // header at +0x20 {ptr, count, cap}
     }
@@ -58,11 +60,11 @@ void SpawnDescription_Serialize(void* self, void* stream) {
         uint8_t* elem = *(uint8_t**)(s + 0x20);
         for (int i = 0; i < count && elem; ++i, elem += 0x10) {
             fn_ExternalPtr_BuildSerialize(elem + 0x00, serializer);
-            fn_Serializer_Serialize_Float(serializer, (float*)(elem + 0x08), nullptr);
-            fn_Serializer_Serialize_Float(serializer, (float*)(elem + 0x0c), nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(elem + 0x08), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(elem + 0x0c), nullptr);   // B.3.4 bridge
         }
     }
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 void* SpawnDescription_Dtor(void* self, uint32_t flags) {

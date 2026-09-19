@@ -32,7 +32,9 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Component/coll_bridge.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 namespace {
 constexpr uintptr_t kVtableAddr    = 0x140162600;
@@ -101,14 +103,14 @@ void CitizenDescription_Serialize(void* self, void* stream) {
         return;
     }
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     auto F = [&](uintptr_t off) {
-        fn_Serializer_Serialize_Float(serializer, reinterpret_cast<float*>(s + off), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + off), nullptr);   // B.3.4 bridge
     };
     auto I = [&](uintptr_t off) {
-        g_fn_Serialize_Int(serializer, s + off, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + off), nullptr);   // B.3.4 bridge
     };
 
     F(0x44);
@@ -135,7 +137,7 @@ void CitizenDescription_Serialize(void* self, void* stream) {
     // dynamic External* array (count at +0x140, ptr at +0x138)
     {
         int32_t count = *reinterpret_cast<int32_t*>(s + 0x140);
-        g_fn_Serialize_Int(serializer, &count, nullptr);   // local temp (mirrors local_res8)
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge (local temp, mirrors local_res8)
         // If loading (serializer version field == 0) resize the array to `count`.
         void* serObj = *reinterpret_cast<void**>(serializer);  // local_20[0]
         bool loading = serObj && (*reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(serObj) + 8) == 0);
@@ -169,7 +171,7 @@ void CitizenDescription_Serialize(void* self, void* stream) {
     I(0xf8); I(0xfc); I(0x100); I(0x104); I(0x108);
     F(0x10c);
 
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 void* CitizenDescription_Dtor(void* self, uint32_t flags) {

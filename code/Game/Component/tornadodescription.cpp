@@ -19,7 +19,9 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 static const uintptr_t kTornadoDescriptionVtable = 0x14015ab00;
 
@@ -38,14 +40,14 @@ void TornadoDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int ||
         !fn_Serializer_Serialize_Float || !g_fn_Time_Serialize) return;
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
-    fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x20), nullptr);  // float +0x20
-    g_fn_Serialize_Int(serializer, s + 0x24, nullptr);                       // int   +0x24
-    g_fn_Serialize_Int(serializer, s + 0x30, nullptr);                       // int   +0x30
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x20), nullptr);  // float +0x20   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);                       // int   +0x24   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);                       // int   +0x30   // B.3.4 bridge
     g_fn_Time_Serialize(s + 0x28, serializer);                               // Time  +0x28
-    g_fn_Serialize_Int(serializer, s + 0x34, nullptr);                       // int   +0x34
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x34), nullptr);                       // int   +0x34   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 void* TornadoDescription_Dtor(void* self, uint32_t flags) {

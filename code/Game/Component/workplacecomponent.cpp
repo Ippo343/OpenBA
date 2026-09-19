@@ -15,9 +15,11 @@
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <new>
 #include "scene_watch.h"
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
@@ -874,25 +876,25 @@ void WorkPlaceComponent_Shutdown(WorkPlaceComponent* self, void* stream) {
     }
 
     // Empty serializer block (version 0, immediately destroyed)
-    uint8_t emptySerializer[24];
+    alignas(8) uint8_t emptySerializer[24];
     if (s_fn_Serializer_Ctor) {
-        s_fn_Serializer_Ctor(emptySerializer, stream, 0);
+        ::new (static_cast<void*>(emptySerializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
     if (s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Dtor(emptySerializer);
+        reinterpret_cast<IO::Serializer*>(emptySerializer)->~Serializer();   // B.3.4 bridge
     }
 
     // Main serializer block (version 1)
-    uint8_t serializer[16];  // Ghidra shows local_30[2] = 16 bytes
+    alignas(8) uint8_t serializer[16];  // Ghidra shows local_30[2] = 16 bytes
     if (s_fn_Serializer_Ctor) {
-        s_fn_Serializer_Ctor(serializer, stream, 1);
+        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
     }
 
     // Serialize worker count from +0x60
     int workerCount = *(int*)((uintptr_t)self + 0x60);
     int countBuf = workerCount;
     if (s_fn_Serializer_SerializeInt) {
-        s_fn_Serializer_SerializeInt(serializer, &countBuf, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(countBuf, nullptr);   // B.3.4 bridge
     }
 
     // On load, resize the worker array to the count just read.
@@ -942,12 +944,12 @@ void WorkPlaceComponent_Shutdown(WorkPlaceComponent* self, void* stream) {
 
     // Serialize isAccepting bool at +0x50
     if (s_fn_Serializer_SerializeBool) {
-        s_fn_Serializer_SerializeBool(serializer, (bool*)&self->isAccepting, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&self->isAccepting), nullptr);   // B.3.4 bridge
     }
 
     // Version check for +0x48 field
     if (s_fn_Serializer_GetVersion) {
-        int version = s_fn_Serializer_GetVersion(serializer);
+        int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
         if (version < 1) {
             // Legacy path: read from description component via IsDerivedFrom
             void* obj = self->_unk18;
@@ -967,7 +969,7 @@ void WorkPlaceComponent_Shutdown(WorkPlaceComponent* self, void* stream) {
     }
 
     if (s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     }
 }
 

@@ -37,9 +37,11 @@
 #include "system/String.h"
 #include "options.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <new>
 
 namespace {
 constexpr uintptr_t kVtable  = 0x140164a70;
@@ -74,19 +76,19 @@ static void* UIDescription_Ctor_Impl(void* mem) {
 void UIDescription_Serialize(void* self, void* stream) {
     EnsureResolved();
     uintptr_t s = (uintptr_t)self;
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (!g_fn_Serializer_Ctor || !g_fn_Serialize_Int || !fn_ExternalPtr_Serialize2) {
         return;
     }
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // 1. _descRef ExternalPtr (+0x28). FUN_140028650 — identical stream layout
     //    to the registered Serialize2 (typeId trusted in standalone).
     fn_ExternalPtr_Serialize2((void*)(s + 0x28), serializer);
     // 2. int (+0x40)
-    g_fn_Serialize_Int(serializer, (void*)(s + 0x40), nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x40), nullptr);   // B.3.4 bridge
     // 3. count (+0x38)
-    g_fn_Serialize_Int(serializer, (void*)(s + 0x38), nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x38), nullptr);   // B.3.4 bridge
     int count = *(int32_t*)(s + 0x38);
 
     // 4. on load, allocate/zero the element array (+0x30), stride 0x28.
@@ -138,9 +140,9 @@ void UIDescription_Serialize(void* self, void* stream) {
     }
 
     // 6. int (+0x20)
-    g_fn_Serialize_Int(serializer, (void*)(s + 0x20), nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x20), nullptr);   // B.3.4 bridge
 
-    if (g_fn_Serializer_Dtor) g_fn_Serializer_Dtor(serializer);
+    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // Dtor (vtable +0x00, FUN_140039700 / element cleanup FUN_1400397d0).
