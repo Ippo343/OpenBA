@@ -90,7 +90,6 @@ void* g_pMemAllocSingleton = nullptr;
 void** g_pVideoDeviceSingleton = nullptr;
 
 // Video::Device Lock/Unlock
-fn_VideoDevice_Lock_t fn_VideoDevice_Lock = nullptr;
 
 // ExternalFactory
 void** g_pExternalFactorySingleton = nullptr;
@@ -328,8 +327,6 @@ fn_OrchardGetGrowth_t fn_OrchardGetGrowth = nullptr;
 // Video::ImageBuffer (Runtime DLL exports)
 // ============================================================
 fn_ImageBuffer_Ctor_t fn_ImageBuffer_Ctor = nullptr;
-fn_ImageBuffer_CopyToTexture_t fn_ImageBuffer_CopyToTexture = nullptr;
-fn_ImageBuffer_CopyFromTexture_t fn_ImageBuffer_CopyFromTexture = nullptr;
 
 // ============================================================
 // Phase F: Dialog/UI Runtime functions
@@ -1250,10 +1247,6 @@ bool EngineFuncsInit() {
     g_pVideoDeviceSingleton = reinterpret_cast<void**>(
         ResolveAddr(Module::Runtime, 0x1801fe7a8));
 
-    // Video::Device Lock/Unlock (retail ordinals 3214 / 4462)
-    fn_VideoDevice_Lock = reinterpret_cast<fn_VideoDevice_Lock_t>(
-        ResolveExport("?Lock@Device@Video@@QEAAXXZ"));
-
     // --- ExternalFactory ---
     g_pExternalFactorySingleton = reinterpret_cast<void**>(
         ResolveAddr(Module::Runtime, 0x1801fc6c8));
@@ -1709,12 +1702,6 @@ bool EngineFuncsInit() {
     // ================================================================
     fn_ImageBuffer_Ctor = reinterpret_cast<fn_ImageBuffer_Ctor_t>(
         ResolveExport("??0ImageBuffer@Video@@QEAA@XZ"));
-
-    fn_ImageBuffer_CopyToTexture = reinterpret_cast<fn_ImageBuffer_CopyToTexture_t>(
-        ResolveExport("?CopyToTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z"));
-
-    fn_ImageBuffer_CopyFromTexture = reinterpret_cast<fn_ImageBuffer_CopyFromTexture_t>(
-        ResolveExport("?CopyFromTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z"));
 
     // --- Phase F: Dialog/UI Runtime functions ---
     fn_ImageElement_SetRotation = reinterpret_cast<fn_ImageElement_SetRotation_t>(
@@ -3170,8 +3157,6 @@ bool EngineFuncsInit() {
     // DestroyComponent_Reclaim/Rebuild/Destroy: now implemented as statics in destroyui.cpp
     printf("[EngineFuncs] Video::ImageBuffer:\n");
     printf("  ImageBuffer::Ctor         = %p\n", (void*)fn_ImageBuffer_Ctor);
-    printf("  ImageBuffer::CopyToTex    = %p\n", (void*)fn_ImageBuffer_CopyToTexture);
-    printf("  ImageBuffer::CopyFromTex  = %p\n", (void*)fn_ImageBuffer_CopyFromTexture);
     printf("[EngineFuncs] Globals:\n");
     printf("  _loader                   = %p\n", g_pLoader);
     printf("  _loader.m_flags           = %p -> 0x%x\n", (void*)g_pLoaderFlags,
@@ -3894,9 +3879,9 @@ bool EngineFuncsInit() {
     // Geometry::Serialize that allocates a Video::ImageBuffer at self+0x148,
     // sets the custom NoiseUI vtable, and uploads the heightmap raw bytes
     // (self+0x140) into a texture via Device::Lock + CopyToTexture +
-    // Device::Unlock. All Runtime primitives + the exe vtable address are
-    // already wired (fn_ImageBuffer_*, fn_VideoDevice_Lock/Unlock,
-    // g_pVideoDeviceSingleton, g_NoiseUI_ImageBufferVtable).
+    // Device::Unlock. Those three are members of the real Video classes since
+    // ENDGAME B.3.5; what is still wired here is fn_ImageBuffer_Ctor (a ctor door),
+    // g_pVideoDeviceSingleton and g_NoiseUI_ImageBufferVtable.
     fn_TradeWork_sub_c780 = reinterpret_cast<fn_TradeWork_sub_c780_t>(
         ResolveAddr(Module::Exe, 0x1400ac780));
 #ifdef _DEBUG

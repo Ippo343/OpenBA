@@ -93,15 +93,12 @@ typedef void  (*MemFreeS_t)(void* ptr);                              // 0x140152
 typedef void* (*FCIB_Ctor_t)(void* self);                            // 0x140151f40
 typedef void  (*FCIB_Dtor_t)(void* self);                            // 0x140151f48
 
-// ?Create@FrameCopyImageBuffer@Graphics@@UEAA_N ...                 // 0x1401520b0
-// (ImageType, Usage, Format, uint mip, int w, int h, FilterMode,
-//  AddressMode, AddressMode, AddressMode, Collection::Array<...>*)
-typedef bool (*FCIB_Create_t)(void* self, int imageType, int usage, int format,
-                              unsigned int mip, int width, int height,
-                              int filterMode, int addr0, int addr1, int addr2,
-                              void* initialData);
-// ?Generate@FrameCopyImageBuffer@Graphics@@UEBAX AEAVContext@Video@@ H @Z
-typedef void (*FCIB_Generate_t)(const void* self, void* videoContext, int flag); // 0x1401520b8
+// ENDGAME B.3.5 closing pass: the `Create` (0x1401520b0) and `Generate`
+// (0x1401520b8) door typedefs and their two caches are GONE with the last thing
+// that read them -- both are virtual members of `Graphics::FrameCopyImageBuffer`
+// now (batch K1 converted the calls; the closing pass took the readiness terms and
+// the diagnostic that still printed the two addresses). The registrations and the
+// exe dispatch slots are unaffected.
 
 // ENDGAME B.3.4a closing 4/4: the GetSaveDirectory and Exists door typedefs,
 // their file-statics, their resolver lines, their two `s_ok` conjuncts and
@@ -124,15 +121,13 @@ typedef void* (*FN_AssignString_t)(void* self, const void* str);     // 0x140152
 typedef void  (*FN_Dtor_t)(void* self);                              // 0x1401529e8
 
 // ?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z — STATIC
-typedef bool (*SaveImageToFile_t)(const void* filename, int width, int height,
-                                  unsigned int* pixels);             // 0x1401520e0
+// Door typedef and cache GONE in the closing pass: it is a class static of the
+// real `Video::ImageBuffer` and the call site below spells it so.
 
 MemAllocS_t           s_MemAlloc          = nullptr;
 MemFreeS_t            s_MemFree           = nullptr;
 FCIB_Ctor_t           s_FCIB_Ctor         = nullptr;
 FCIB_Dtor_t           s_FCIB_Dtor         = nullptr;
-FCIB_Create_t         s_FCIB_Create       = nullptr;
-FCIB_Generate_t       s_FCIB_Generate     = nullptr;
 StrPlusCStr_t         s_StrPlusCStr       = nullptr;
 StrPlusStr_t          s_StrPlusStr        = nullptr;
 StrFormat_t           s_StrFormat         = nullptr;
@@ -141,7 +136,6 @@ FN_CtorDefault_t      s_Filename_Ctor     = nullptr;
 FN_CtorString_t       s_Filename_CtorStr  = nullptr;
 FN_AssignString_t     s_Filename_Assign   = nullptr;
 FN_Dtor_t             s_Filename_Dtor     = nullptr;
-SaveImageToFile_t     s_SaveImageToFile   = nullptr;
 
 void** s_pFileSystemSingleton = nullptr;   // ?_singleton@FileSystem@IO@@0PEAV12@EA
 
@@ -156,11 +150,6 @@ bool ResolveFuncs() {
     s_MemFree          = (MemFreeS_t)           ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
     s_FCIB_Ctor        = (FCIB_Ctor_t)          ResolveExport("??0FrameCopyImageBuffer@Graphics@@QEAA@XZ");
     s_FCIB_Dtor        = (FCIB_Dtor_t)          ResolveExport("??1FrameCopyImageBuffer@Graphics@@UEAA@XZ");
-    s_FCIB_Create      = (FCIB_Create_t)        ResolveExport(
-        "?Create@FrameCopyImageBuffer@Graphics@@UEAA_NW4ImageType@ImageBuffer@Video@@W4Usage@45@"
-        "W4Format@45@IHHW4FilterMode@45@W4AddressMode@45@44PEAV?$Array@V?$Array@E@Collection@@@Collection@@@Z");
-    s_FCIB_Generate    = (FCIB_Generate_t)      ResolveExport(
-        "?Generate@FrameCopyImageBuffer@Graphics@@UEBAXAEAVContext@Video@@H@Z");
     s_StrPlusCStr      = (StrPlusCStr_t)        ResolveExport("??HSystem@@YA?AVString@0@AEBV10@PEBD@Z");
     s_StrPlusStr       = (StrPlusStr_t)         ResolveExport("??HSystem@@YA?AVString@0@AEBV10@0@Z");
     s_StrFormat        = (StrFormat_t)          ResolveExport("?Format@String@System@@SA?AV12@PEBDZZ");
@@ -169,35 +158,37 @@ bool ResolveFuncs() {
     s_Filename_CtorStr = (FN_CtorString_t)      ResolveExport("??0Filename@System@@QEAA@AEBVString@1@@Z");
     s_Filename_Assign  = (FN_AssignString_t)    ResolveExport("??4Filename@System@@QEAAAEAV01@AEBVString@1@@Z");
     s_Filename_Dtor    = (FN_Dtor_t)            ResolveExport("??1Filename@System@@QEAA@XZ");
-    s_SaveImageToFile  = (SaveImageToFile_t)    ResolveExport("?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z");
 
     s_pFileSystemSingleton = (void**)ResolveExport("?_singleton@FileSystem@IO@@0PEAV12@EA");
 
-    // ENDGAME B.3.5 batch K1: `s_FCIB_Create` / `s_FCIB_Generate` KEEP their resolves
-    // and their two terms here, even though both call sites converted — the
-    // [TakeScreenshot] printf below still reports the pointers, so the converted call
-    // was not the cache's last user (the same reason `s_SaveImageToFile` stayed).
-    s_ok = s_MemAlloc && s_MemFree && s_FCIB_Ctor && s_FCIB_Dtor && s_FCIB_Create &&
-           s_FCIB_Generate && s_StrPlusCStr &&
+    // ENDGAME B.3.5 closing pass: the `Create`, `Generate` and `SaveImageToFile`
+    // readiness terms are gone with their caches. Batch K1 converted all three call
+    // sites and kept the caches only because this `s_ok` chain and the printf below
+    // still read the pointers; a readiness test on a door nobody calls, and a
+    // diagnostic that prints its address, are not users worth keeping a cache for.
+    // The ctor and dtor doors (`s_FCIB_Ctor` / `s_FCIB_Dtor`) STAY -- no
+    // Video/Graphics class has a real ctor or dtor (B35_RULES section 11) -- and so
+    // does every System::String / Filename / MemoryAllocator term, not this step's.
+    s_ok = s_MemAlloc && s_MemFree && s_FCIB_Ctor && s_FCIB_Dtor && s_StrPlusCStr &&
            s_StrPlusStr && s_StrFormat && s_StrDtor && s_Filename_Ctor &&
            s_Filename_CtorStr && s_Filename_Assign && s_Filename_Dtor &&
-           s_SaveImageToFile && s_pFileSystemSingleton &&
-           // from engine_funcs.h — both are exref-backed and could be null:
-           // B.3.5: the CopyFromTexture readiness term went with its door (the
-           // global itself stays, and the printf below still reports it).
+           s_pFileSystemSingleton &&
+           // from engine_funcs.h -- both are exref-backed and could be null:
+           // B.3.5: `fn_ImageBuffer_CopyFromTexture`'s readiness term went with its
+           // door in batch K1, and the closing pass took the global and this
+           // printf's `copyFromTex=%p` with it.
            g_pVideoDeviceSingleton && g_pEngineSingleton;
 
     if (!s_ok) {
         printf("[TakeScreenshot] primitives unresolved — screenshot disabled\n"
-                    "  alloc=%p free=%p ctor=%p dtor=%p create=%p gen=%p\n"
-                    "  s+c=%p s+s=%p fmt=%p ~str=%p fn()=%p fn(s)=%p fn==%p ~fn=%p save=%p fs=%p\n"
-                    "  copyFromTex=%p device=%p mainloop=%p\n",
+                    "  alloc=%p free=%p ctor=%p dtor=%p\n"
+                    "  s+c=%p s+s=%p fmt=%p ~str=%p fn()=%p fn(s)=%p fn==%p ~fn=%p fs=%p\n"
+                    "  device=%p mainloop=%p\n",
                     (void*)s_MemAlloc, (void*)s_MemFree, (void*)s_FCIB_Ctor, (void*)s_FCIB_Dtor,
-                    (void*)s_FCIB_Create, (void*)s_FCIB_Generate,
                     (void*)s_StrPlusCStr, (void*)s_StrPlusStr, (void*)s_StrFormat,
                     (void*)s_StrDtor, (void*)s_Filename_Ctor, (void*)s_Filename_CtorStr,
-                    (void*)s_Filename_Assign, (void*)s_Filename_Dtor, (void*)s_SaveImageToFile,
-                    (void*)s_pFileSystemSingleton, (void*)fn_ImageBuffer_CopyFromTexture,
+                    (void*)s_Filename_Assign, (void*)s_Filename_Dtor,
+                    (void*)s_pFileSystemSingleton,
                     (void*)g_pVideoDeviceSingleton, (void*)g_pEngineSingleton);
         std::fflush(stdout);
     }
@@ -301,8 +292,8 @@ extern "C" void GameUpdateLoop_TakeScreenshot(void* self) {
         pixels, width, height);   // B.3.5 bridge
     // B.3.5 bridge — ?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z
     // is STATIC (`SA_N`), so there is no receiver: the door's first argument was
-    // the Filename, not a `this`. `s_SaveImageToFile` and its resolve STAY — the
-    // `s_ok` aggregate and the [TakeScreenshot] printf still read the pointer.
+    // the Filename, not a `this`. `s_SaveImageToFile`, its typedef, its resolve, its
+    // `s_ok` term and its `save=%p` all went in the closing pass.
     Video::ImageBuffer::SaveImageToFile(
         *reinterpret_cast<const System::Filename*>(&path),
         width, height, pixels);   // B.3.5 bridge

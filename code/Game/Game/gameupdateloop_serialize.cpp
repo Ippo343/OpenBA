@@ -82,7 +82,6 @@ typedef void  (*fn_ResetPersist_t)(void* intFactory, void* stream);
 typedef void  (*fn_ClearPersist_t)(void* intFactory);
 typedef void  (*fn_SaveAllSettings_t)(void* ui);
 typedef void  (*fn_AchMgr_Persist_t)(void* mgr, void* stream);
-typedef void  (*fn_AnimMgr_Serialize_t)(void* animMgr, void* serializer);
 typedef void  (*fn_AudioScene_Serialize_t)(void* scene, void* serializer);
 typedef void* (*fn_CMS_Ctor_t)(void* self);
 typedef void  (*fn_CMS_Dtor_t)(void* self);
@@ -98,7 +97,6 @@ static fn_ResetPersist_t        s_fn_ResetPersist = nullptr;
 static fn_ClearPersist_t        s_fn_ClearPersist = nullptr;
 static fn_SaveAllSettings_t     s_fn_SaveAllSettings = nullptr;
 static fn_AchMgr_Persist_t      s_fn_AchMgr_Persist = nullptr;
-static fn_AnimMgr_Serialize_t   s_fn_AnimMgr_Serialize = nullptr;
 static fn_AudioScene_Serialize_t s_fn_AudioScene_Serialize = nullptr;
 static fn_CMS_Ctor_t            s_fn_CMS_Ctor = nullptr;
 static fn_CMS_Dtor_t            s_fn_CMS_Dtor = nullptr;
@@ -160,8 +158,6 @@ void EnsureResolved() {
         ResolveExport("?SaveAllSettings@UserInterface@UI@@QEAAXXZ"));
     s_fn_AchMgr_Persist = reinterpret_cast<fn_AchMgr_Persist_t>(
         ResolveExport("?Persist@AchievementManager@Achievement@@QEAAXAEAVStream@IO@@@Z"));
-    s_fn_AnimMgr_Serialize = reinterpret_cast<fn_AnimMgr_Serialize_t>(
-        ResolveExport("?Serialize@AnimationManager@Graphics@@QEAAXAEAVSerializer@IO@@@Z"));
     s_fn_AudioScene_Serialize = reinterpret_cast<fn_AudioScene_Serialize_t>(
         ResolveExport("?Serialize@Scene@Audio@@QEAAXAEAVSerializer@IO@@@Z"));
     s_fn_CMS_Ctor = reinterpret_cast<fn_CMS_Ctor_t>(
@@ -206,12 +202,12 @@ void EnsureResolved() {
     s_fn_AvlFixup_5920 = reinterpret_cast<fn_AvlFixup_5920_t>(R(0x140025920));
 
     fprintf(stderr, "[GUL::Serialize] resolved: refMode=%p refTable=%p persist=%p/%p "
-            "saveSettings=%p achP=%p anim=%p audio=%p cms=%p/%p sst=%p/%p "
+            "saveSettings=%p achP=%p audio=%p cms=%p/%p sst=%p/%p "
             "subs: cit=%p grid=%p goals=%p citPost=%p envPtr=%p\n",
             (void*)s_fn_EnableRefMode, (void*)s_fn_SerializeRefTable,
             (void*)s_fn_ResetPersist, (void*)s_fn_ClearPersist,
             (void*)s_fn_SaveAllSettings,
-            (void*)s_fn_AchMgr_Persist, (void*)s_fn_AnimMgr_Serialize,
+            (void*)s_fn_AchMgr_Persist,
             (void*)s_fn_AudioScene_Serialize, (void*)s_fn_CMS_Ctor,
             (void*)s_fn_CMS_Open, (void*)s_fn_SavedState_Store,
             (void*)s_fn_SavedState_Retrieve, (void*)s_fn_CitList_8f760,
@@ -868,9 +864,9 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
         s_fn_AchMgr_Persist(*s_ppAchMgr, stream);
     }
     // B.3.5 bridge — ?Serialize@AnimationManager@Graphics@@QEAAXAEAVSerializer@IO@@@Z.
-    // `s_fn_AnimMgr_Serialize` and its resolver STAY: the [GUL::Serialize]
-    // fprintf above still reads the pointer as a diagnostic (a pointer read,
-    // not a call), so this is not the cache's last user.
+    // The `s_fn_AnimMgr_Serialize` cache, its typedef, its resolver and the
+    // `anim=%p` it fed the [GUL::Serialize] fprintf all went in the closing pass:
+    // a diagnostic that prints the address of a door nobody calls reports nothing.
     reinterpret_cast<Graphics::AnimationManager*>(*(void**)(self + 0x68))->Serialize(
         *reinterpret_cast<IO::Serializer*>(ser));   // B.3.5 bridge
     s_fn_AudioScene_Serialize(*(void**)(self + 0x78), ser);

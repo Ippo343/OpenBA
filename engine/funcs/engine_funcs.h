@@ -150,10 +150,10 @@ extern void* g_pMemAllocSingleton;
 // Video::Device::_singleton
 extern void** g_pVideoDeviceSingleton;
 
-// Video::Device::Lock(this) — enters critical section, increments lock count
-// Ordinal 3214: ?Lock@Device@Video@@QEAAXXZ
-typedef void (*fn_VideoDevice_Lock_t)(void* self);
-extern fn_VideoDevice_Lock_t fn_VideoDevice_Lock;
+// Video::Device::Lock / ::Unlock (ordinals 3214 / 4462) are GONE in ENDGAME
+// B.3.5 (b35-close): both are members of the real `Video::Device`. Lock outlived
+// Unlock by one commit because minimap_upload.cpp's readiness printf was still
+// reading its address; that `%p` went with it.
 
 // ============================================================
 // System::String function pointers
@@ -1254,15 +1254,10 @@ extern fn_ImageBuffer_Ctor_t fn_ImageBuffer_Ctor;
 // (??1ImageBuffer@Video@@UEAA@XZ, 0x1800f2610) is GONE — zero callers tree-wide.
 // The registered door in runtime/src/video/ is untouched.
 
-// ImageBuffer::CopyToTexture(this, data, width, height) -> bool
-// ?CopyToTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z (0x1800f3380, ordinal 1869)
-typedef bool (*fn_ImageBuffer_CopyToTexture_t)(void* self, void* data, int width, int height);
-extern fn_ImageBuffer_CopyToTexture_t fn_ImageBuffer_CopyToTexture;
-
-// ImageBuffer::CopyFromTexture(this, data, width, height) -> bool
-// ?CopyFromTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z (0x1800f33a0, ordinal 1866)
-typedef bool (*fn_ImageBuffer_CopyFromTexture_t)(void* self, void* data, int width, int height);
-extern fn_ImageBuffer_CopyFromTexture_t fn_ImageBuffer_CopyFromTexture;
+// ImageBuffer::CopyToTexture (0x1800f3380, ordinal 1869) and ::CopyFromTexture
+// (0x1800f33a0, ordinal 1866) are GONE in ENDGAME B.3.5 (b35-close): both are
+// members of the real `Video::ImageBuffer`. Their last readers were two diagnostic
+// `%p`s (minimap_upload.cpp and w2_takescreenshot.cpp), not calls.
 
 // ============================================================
 // Achievement::GoalList / GoalInstance (Runtime DLL exports)
@@ -5557,8 +5552,6 @@ extern fn_Geometry_ChunkUpdate_t  fn_Geometry_ChunkUpdate;   // 0x1400aad50  M3.
 //
 // All Runtime primitives needed are ALREADY wired in engine_funcs.h:
 //   fn_ImageBuffer_Ctor          (??0ImageBuffer@Video@@QEAA@XZ)
-//   fn_ImageBuffer_CopyToTexture (?CopyToTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z)
-//   fn_VideoDevice_Lock          (?Lock@Device@Video@@QEAAXXZ, ordinal 3214)
 //   g_pVideoDeviceSingleton      (Runtime 0x1801fe7a8)
 //   g_NoiseUI_ImageBufferVtable  (exe 0x14015c8c0, set in Phase Q)
 //

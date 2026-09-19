@@ -825,19 +825,15 @@ static inline void* AllocSub(uint64_t size, int align) {
 // sky as a Scene global object (step-33 tail) feeds the reflection pass for
 // free, exactly like retail. Opt out for A/B with BANISHED_NO_SKYMESH=1.
 typedef void (*fn_MeshInstance_Ctor_t)(void* self);
-typedef void (*fn_MeshInstance_SetMesh_t)(void* self, void* meshExtPtr);
 typedef void (*fn_Time_Ctor_t)(void* self, float seconds);
 
 static void BuildSkyMesh_Step28(uint8_t* p) {
     static bool s_res = false;
     static fn_MeshInstance_Ctor_t    s_Ctor     = nullptr;
-    static fn_MeshInstance_SetMesh_t s_SetMesh  = nullptr;
     static fn_Time_Ctor_t            s_TimeCtor = nullptr;
     if (!s_res) {
         s_res = true;
         s_Ctor    = (fn_MeshInstance_Ctor_t)ResolveExport("??0MeshInstance@Graphics@@QEAA@XZ");
-        s_SetMesh = (fn_MeshInstance_SetMesh_t)ResolveExport(
-            "?SetMesh@MeshInstance@Graphics@@QEAAXV?$ExternalPtr@VGraphicsMesh@Graphics@@@Object@@@Z");
         s_TimeCtor = (fn_Time_Ctor_t)ResolveExport("??0Time@System@@QEAA@M@Z");
     }
 
@@ -861,10 +857,10 @@ static void BuildSkyMesh_Step28(uint8_t* p) {
         meshRes = const_cast<::Object::External*>(efactory->FindOrLoad(fname));  // B.3.3 bridge
     }
 
-    // B.3.5 bridge — ?SetMesh@MeshInstance@Graphics@@…. `s_SetMesh` and its
-    // resolve STAY: the [GUL::SkyMesh] fprintf below still reads the pointer as a
-    // diagnostic, so this was not the cache's last user. Only the readiness term
-    // came out of the guard; `meshRes` is an object test and stays.
+    // B.3.5 bridge — ?SetMesh@MeshInstance@Graphics@@…. The `s_SetMesh` cache, its
+    // typedef, its resolve and the `SetMesh=%p` it fed the [GUL::SkyMesh] fprintf
+    // all went in the closing pass: a diagnostic that prints the address of a door
+    // nobody calls any more reports nothing. `meshRes` is an object test and stays.
     if (meshRes)
         reinterpret_cast<Graphics::MeshInstance*>(mem)->SetMesh(
             Graphics::ExternalPtrHandle{meshRes});   // B.3.5 bridge
@@ -882,8 +878,8 @@ static void BuildSkyMesh_Step28(uint8_t* p) {
     }
     *(uint32_t*)((uint8_t*)mem + 0x28) = 0;
 
-    fprintf(stderr, "[GUL::SkyMesh] built skyMesh=%p meshRes=%p (SetMesh=%p TimeCtor=%p)\n",
-            mem, meshRes, (void*)s_SetMesh, (void*)s_TimeCtor);
+    fprintf(stderr, "[GUL::SkyMesh] built skyMesh=%p meshRes=%p (TimeCtor=%p)\n",
+            mem, meshRes, (void*)s_TimeCtor);
     fflush(stderr);
 }
 
