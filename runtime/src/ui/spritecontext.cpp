@@ -283,9 +283,9 @@ void RtUi_SpriteContext_Begin(UI::SpriteContext* self, float scale,
     // memset, and -Wclass-memaccess is not tripped.
     Matrix identity;
     identity.m[0] = 1.0f; identity.m[5] = 1.0f; identity.m[10] = 1.0f; identity.m[15] = 1.0f;
-    using SetTransformFn = void (*)(RtVideo::Context*, int32_t, const Matrix*);
-    RT_EXPORT_ONCE(SetTransformFn, "?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z")(
-        ctx, 0, &identity);
+    // THE DOOR DECIDES THE OVERLOAD: `?SetTransform@…QEAAXHAEBVMatrix@Math@@@Z`
+    // (0x18001a6b0) — the (slot, Matrix&) pair, not `SetTransformScale`.
+    reinterpret_cast<Video::Context*>(ctx)->SetTransform(0, identity);  // B.3.5 bridge
 
     self->_scale = scale;
 }

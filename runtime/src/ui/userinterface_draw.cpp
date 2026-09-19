@@ -170,7 +170,6 @@ inline void** InputConfigSingleton() {          // 0x1801fe768
 // unexported, and both `Flush` and `AddSpriteDraw` are `AEAA` names that the DLL
 // exports all the same (reference_aeaa_is_private_not_unexported.md).
 const char* const kCameraCtor  = "??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z";
-const char* const kSetCamera   = "?SetCamera@Context@Video@@QEAAXAEBVMatrix@Math@@0@Z";
 const char* const kBegin       = "?Begin@SpriteContext@UI@@QEAAXMPEAVSpriteCapture@2@PEAVViewport@Video@@@Z";
 const char* const kFlush       = "?Flush@SpriteContext@UI@@AEAAXXZ";
 const char* const kAddSprite   = "?AddSpriteDraw@SpriteContext@UI@@AEAAXAEBUSpriteDraw@12@@Z";
@@ -191,7 +190,6 @@ const char* const kMemFree     = "?MemFree@MemoryAllocator@System@@SAXPEAX@Z";
 constexpr uintptr_t kSpriteDrawSetSize0Addr = 0x1800783d0;
 
 using CameraCtorFn = void* (*)(void*, const Frustum*, const Transform3*, bool);
-using SetCameraFn  = void  (*)(void*, const Matrix*, const Matrix*);
 using BeginFn      = void  (*)(void*, float, void*, void*);
 using FlushFn      = void  (*)(void*);
 using AddSpriteFn  = void  (*)(void*, const SpriteDraw*);
@@ -317,9 +315,13 @@ void DrawBody(UserInterface* self, void* ctx, RtSink& out) {
         // so the argument is a copy, not a pointer into the camera.
         Matrix proj = cam.projection;
 
-        SetCameraFn setCam = RT_EXPORT_ONCE(SetCameraFn, kSetCamera);
-        if (out.Call("Video::Context::SetCamera", (const void*)setCam))
-            setCam(ctx, &view, &proj);
+        // ENDGAME B.3.5: `?SetCamera@Context@Video@@QEAAXAEBVMatrix@Math@@0@Z`
+        // (0x18001a150) is a member of the real `Video::Context`. The
+        // `out.Call(label, target)` wrapper went with the door pointer it
+        // labelled: `RtSink::Call` ignores every argument and returns true
+        // unconditionally (rt_sink.h), so it guarded nothing and dropping it
+        // changes no behaviour.
+        reinterpret_cast<Video::Context*>(ctx)->SetCamera(view, proj);  // B.3.5 bridge
     }
 
     // ---- 0x180121cad: the SpriteContext, built on the stack ---------------

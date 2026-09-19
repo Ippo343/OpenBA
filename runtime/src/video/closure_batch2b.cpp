@@ -2,37 +2,89 @@
 // runtime/src/video/closure_batch2b.cpp — cutover closure batch 2b
 // ============================================================================
 //
-//   0x180054080  Video_ShaderProgram_SerializeBlobArray   127 B  (unexported)
+//   0x180054080  RtVideo_SerializeBlobArray               127 B  (unexported)
 //   0x1800f8fb0  Volume_Frustum_SelectBoxSupportVertices  467 B  (unexported)
 // ============================================================================
+//
+// ATTRIBUTION CORRECTED, ENDGAME B.3.5 block VC. 0x180054080 was called
+// `Video_ShaderProgram_SerializeBlobArray` and described as the blob half of
+// `Video::*Program::PlatformSerialize` with "its caller 0x180053ea0". IT HAS
+// THREE CALLERS, read with Ghidra `getReferencesTo` on the retail DLL (15290
+// functions) this pass:
+//
+//   0x180053d90  in FUN_180053d40   (unexported; only .rdata 0x180207840 names it)
+//   0x180053eeb  in FUN_180053ea0   (unexported; only .rdata 0x180207858 names it)
+//   0x1800f31d0  in ?PlatformSerialize@ImageBuffer@Video@@   <-- a DIFFERENT class
+//
+// plus one DATA reference at 0x180207870. Three adjacent `.rdata` qwords naming
+// three adjacent bodies is a dispatch table, not a private helper. So this is the
+// SHARED `Array<Array<uint8>>` blob serializer — one template instantiation two
+// unrelated classes reach — and it is renamed accordingly.
+//
+// AND IT WAS DEFINED TWICE IN THIS TREE.
+// `runtime/src/video/imagebuffer_platform_serialize.cpp` carried its own
+// `SerializeLevelBlobs`, with a banner saying 0x180054080 "is this function's own
+// helper, nothing else in the tree resolves it" and "is deliberately NOT
+// registered". Both halves were false: this file registers it, and
+// `ImageBuffer::PlatformSerialize` is only one of its three callers. Two bodies of
+// one address that agreed by luck is the drift this tree keeps warning about, so
+// that copy is gone and that file CALLS this one — which is what retail's
+// `CALL 0x180054080` at 0x1800f31d0 is.
 
 #include <cstdint>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/collection/Collection.h"  // ENDGAME B.3.2 step 2: real Array<uint8_t>
+// ENDGAME B.3.5 block VC: the real `IO::Serializer` / `IO::ReaderWriter`, which
+// replace this file's two hand-inlined ReaderWriter slot offsets.
+#include "../../types/io/Serializer.h"
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 // ============================================================================
-// 0x180054080 — the blob half of `Video::*Program::PlatformSerialize`.
+// 0x180054080 — the SHARED blob half of an `Array<Array<uint8>>` serialize.
 //
-// Its caller 0x180053ea0 is the whole pattern in four lines: serialize the
-// outer count, resize the outer `Array<Array<uint8>>` if reading, then hand
-// this function (ctx, count, data) to read or write every blob's bytes.
+// Each of its three callers (see the file banner) is the same four-line pattern:
+// serialize the outer count, resize the outer `Array<Array<uint8>>` if reading,
+// then hand this function (ctx, count, data) to read or write every blob's bytes.
 //
 // Per element (stride 0x10 — `{uint8* data, int size, int capacity}`, i.e. a
 // `Collection::Array<uint8>` header):
 //
 //   1. copy `element->_size` into a STACK dword and serialize THAT through the
-//      encoding's +0xa0 slot with (encoding, &tmp, 0). The stack copy matters:
+//      ReaderWriter's +0xa0 slot with (rw, &tmp, 0). The stack copy matters:
 //      on a read the slot writes the incoming size into `tmp`, NOT into the
 //      array header, so the array's own `_size` is untouched until step 2.
 //   2. if `*(int*)((char*)ctx->0 + 8) == 0` — the "reading" test, `CMP [RAX+8],0
 //      / JNZ` at 0x1800540bf — call 0x180029630(element, tmp), the
 //      `Array<uint8>::SetSize` that allocates the buffer.
-//   3. serialize the bytes through slot +0x60 with (encoding, tmp,
+//   3. serialize the bytes through slot +0x60 with (rw, tmp,
 //      element->_data, 0).
+//
+// A NAME CORRECTION, ENDGAME B.3.5 block VC. `ctx + 8` WAS CALLED "the encoding"
+// here and IT IS THE ReaderWriter. The two slot offsets say so on their own:
+// `rt::io::rw_vtbl::kScalarInt == 0xA0` and `kArrayUChar == 0x60`
+// (runtime/types/io/Serializer.h), against `encoding_vtbl`'s five slots which stop
+// at +0x20. So `ctx` is an `IO::Serializer` -- `{Stream*, ReaderWriter*}`, +0x00
+// and +0x08 -- and `*(int*)(stream + 8)` is `Stream::direction`, which is exactly
+// what `IO::Serializer::GetDirection()` (retail 0x180006210) returns. All three
+// steps are now real calls on the real classes, so the two byte offsets and the
+// two local function-pointer typedefs are gone with the mis-naming.
+//
+// (This also corrects b35-C's claim that imagebuffer_platform_serialize.cpp "was
+// the last caller in the tree spelling either ReaderWriter offset". It was not:
+// this file spelled both, and now nothing does.)
+//
+// NOT MADE A MEMBER OF ANY CLASS, on purpose and now with a second reason.
+// 0x180054080 is UNEXPORTED -- no mangled name in the shipped export directory --
+// so there is no evidence it is a member rather than a free template helper, and
+// B35_RULES' shape rule is that a header declares the EXPORTED members. The
+// three-caller read above settles it the other way round: two of its callers are
+// unexported table entries and the third is `Video::ImageBuffer`'s, so it belongs
+// to no one class. (`Video::ShaderProgram::PlatformSerialize` inlines the same
+// logic as `PlatformSerializeArm` in runtime/src/video/shaderprogram.cpp, which is
+// where retail inlines it for that class.)
 //
 // `TEST EDX,EDX / JLE` at entry: a count of zero does nothing. `MOVSXD RSI,EDX`
 // — the counter IS sign-extended here (unlike 0x180014850's zero-extension),
@@ -41,11 +93,6 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 // 0x180029630 is not on this batch's worklist and is reached by ADDRESS, so the
 // day it is ported this call follows it (ResolveAddr is registry-first).
 // ============================================================================
-namespace {
-using EncodeFieldFn = void (*)(void* encoding, void* field, int flags);
-using EncodeBytesFn = void (*)(void* encoding, int size, void* data, int flags);
-}  // namespace
-
 // ENDGAME B.3.2 step 2 — `ArrayU8SetSize` (0x180029630) is GONE: each element
 // `e` walked below IS a `Collection::Array<uint8_t>` header (the stride-0x10
 // `{data,size,capacity}` triple the banner above names), and `kSpec_Bool`
@@ -53,34 +100,30 @@ using EncodeBytesFn = void (*)(void* encoding, int size, void* data, int flags);
 // trait-derived, so a direct `.SetSize()` on the reinterpreted element is that
 // exact body.
 
-extern "C" void RtVideo_ShaderProgram_SerializeBlobArray(void* ctx, int count,
-                                                          void* data) {
+extern "C" void RtVideo_SerializeBlobArray(void* ctx, int count, void* data) {
     if (count <= 0) return;                                   // TEST EDX,EDX / JLE
-    uint8_t* e = static_cast<uint8_t*>(data);
+    // B.3.5 bridge — the registered ABI's first parameter is untyped.
+    IO::Serializer* ser = reinterpret_cast<IO::Serializer*>(ctx);
+    Collection::Array<uint8_t>* e = reinterpret_cast<Collection::Array<uint8_t>*>(data);
     int64_t n = count;                                        // MOVSXD RSI,EDX
     do {
-        int tmp = *reinterpret_cast<const int32_t*>(e + 8);   // MOV EAX,[RBX+8]
-        {
-            void* enc = *reinterpret_cast<void**>(static_cast<uint8_t*>(ctx) + 8);
-            void* vt  = *reinterpret_cast<void**>(enc);
-            EncodeFieldFn f = reinterpret_cast<EncodeFieldFn>(
-                *reinterpret_cast<void**>(static_cast<uint8_t*>(vt) + 0xa0));
-            f(enc, &tmp, 0);
-        }
-        {
-            void* first = *reinterpret_cast<void**>(ctx);      // MOV RAX,[RDI]
-            if (*reinterpret_cast<const int32_t*>(static_cast<uint8_t*>(first) + 8) == 0)
-                // retail 0x180029630 — kSpec_Bool == SpecFor<uint8_t>().
-                reinterpret_cast<Collection::Array<uint8_t>*>(e)->SetSize(tmp);
-        }
-        {
-            void* enc = *reinterpret_cast<void**>(static_cast<uint8_t*>(ctx) + 8);
-            void* vt  = *reinterpret_cast<void**>(enc);
-            EncodeBytesFn f = reinterpret_cast<EncodeBytesFn>(
-                *reinterpret_cast<void**>(static_cast<uint8_t*>(vt) + 0x60));
-            f(enc, tmp, *reinterpret_cast<void**>(e), 0);
-        }
-        e += 0x10;
+        // The STACK copy is load-bearing: on a read the slot writes the incoming
+        // size into `tmp` and not into the array header, so `_size` is untouched
+        // until `SetSize` below. `Serialize(int&)` is retail 0x1800061d0, which
+        // forwards to `rw_vtbl::kScalarInt` (+0xa0) — the offset this file used
+        // to spell by hand.
+        int32_t tmp = e->_size;                               // MOV EAX,[RBX+8]
+        ser->Serialize(tmp, nullptr);
+
+        // `CMP [RAX+8],0 / JNZ` at 0x1800540bf, i.e. Stream::direction == 0.
+        if (ser->GetDirection() == IO::kReading)
+            e->SetSize(tmp);                                  // retail 0x180029630
+
+        // `Serialize(int, unsigned char*, const char*)` is retail 0x180054160,
+        // which forwards to `rw_vtbl::kArrayUChar` (+0x60).
+        ser->Serialize(tmp, e->_data, nullptr);
+
+        ++e;                                                  // ADD RBX,0x10
     } while (--n);
 }
 
@@ -131,7 +174,7 @@ extern "C" void RtVolume_Frustum_SelectBoxSupportVertices(const float* n,
 int RtClosure2bVideoRegister() {
     int n = 0;
     RegisterRuntimeAddr(0x180054080,
-                        (void*)&RtVideo_ShaderProgram_SerializeBlobArray);    ++n;
+                        (void*)&RtVideo_SerializeBlobArray);    ++n;
     RegisterRuntimeAddr(0x1800f8fb0,
                         (void*)&RtVolume_Frustum_SelectBoxSupportVertices);   ++n;
     return n;

@@ -83,6 +83,11 @@
 // RULE B5-2: the real `Video::{Index,Vertex}Buffer`, which `GpuBufferOwner` below
 // is now an alias of rather than a two-field prefix view of both.
 #include "video/Buffers.h"
+// ENDGAME B.3.5 block VC: `Video::ConstantBuffer` (which replaces this file's fifth
+// view of it) and `IO::Serializer` (which replaces `SerializerStreamMode`'s
+// hand-read offsets — B35_RULES §5.5).
+#include "video/ConstantBuffer.h"
+#include "io/Serializer.h"
 
 #include "resolve.h"
 
@@ -246,33 +251,48 @@ static_assert(sizeof(::Video::IndexBuffer) == sizeof(::Video::VertexBuffer) &&
 static_assert(offsetof(GpuBufferOwner, size)    == 0x00, "GpuBufferOwner::size");
 static_assert(offsetof(GpuBufferOwner, dynamic) == 0x04, "GpuBufferOwner::dynamic");
 
-// Video::ConstantBuffer. Proven by ConstantBufferData slots 1, 2 and 3.
-struct ConstantBufferOwner {
-    uint8_t  pad00[0x14];
-    int32_t  slotIndex;       // +0x14  D3D11 constant-buffer register (StartSlot)
-    uint8_t  bindToVertex;    // +0x18  0 -> PSSetConstantBuffers, else VSSetConstantBuffers
-    uint8_t  banked;          // +0x19  0 -> one buffer, else a ladder of growing buffers
-    uint8_t  pad1a[2];
-    int32_t  registerCount;   // +0x1c  <<4 == total byte size (float4 registers)
-    int32_t  bankStride;      // +0x20  bytes per bank in the ladder
-    uint8_t  pad24[4];
-    void*    entries;         // +0x28  stride 0x18; [+0x10] size in, [+0x14] offset out
-    int32_t  entryCount;      // +0x30
-    uint8_t  pad34[4];
-    void*    device;          // +0x38  Video::Device*
-};
-static_assert(offsetof(ConstantBufferOwner, slotIndex)     == 0x14, "ConstantBufferOwner::slotIndex");
-static_assert(offsetof(ConstantBufferOwner, bindToVertex)  == 0x18, "ConstantBufferOwner::bindToVertex");
-static_assert(offsetof(ConstantBufferOwner, banked)        == 0x19, "ConstantBufferOwner::banked");
-static_assert(offsetof(ConstantBufferOwner, registerCount) == 0x1c, "ConstantBufferOwner::registerCount");
-static_assert(offsetof(ConstantBufferOwner, bankStride)    == 0x20, "ConstantBufferOwner::bankStride");
-static_assert(offsetof(ConstantBufferOwner, entries)       == 0x28, "ConstantBufferOwner::entries");
-static_assert(offsetof(ConstantBufferOwner, entryCount)    == 0x30, "ConstantBufferOwner::entryCount");
-static_assert(offsetof(ConstantBufferOwner, device)        == 0x38, "ConstantBufferOwner::device");
-
-constexpr int kConstantEntryStride     = 0x18;
-constexpr int kConstantEntrySizeField  = 0x10;
-constexpr int kConstantEntryOffsetField= 0x14;
+// Video::ConstantBuffer — ENDGAME B.3.5 block VC, RULE B5-2's duplicate-view
+// collapse. This was the FIFTH view of this one class: a 0x40-byte prefix with its
+// own eight `offsetof` asserts repeating the Runtime-side ones, and no `sizeof`
+// assert because only the leading fields were thought known.
+// `Video::ConstantBuffer` is real now (runtime/types/video/ConstantBuffer.h,
+// 0x48 bytes, every field named and asserted, with `ConstantInfo` as a NESTED
+// STRUCT carrying the retail name), so the name is an ALIAS instead of a sixth
+// description of the layout.
+//
+// THE FIELD NAMES THE VIEW CHOSE AND WHAT THEY REALLY ARE — each pair is the same
+// offset, so this is a rename and not a re-aim:
+//   slotIndex     +0x14 -> _uploadIndex     (?GetUploadIndex@ 0x1800182c0; it IS
+//                                            the D3D11 StartSlot, so the dx11-side
+//                                            name was right about the meaning)
+//   bindToVertex  +0x18 -> _bindToVertex
+//   banked        +0x19 -> _banked
+//   registerCount +0x1c -> _registerCount
+//   bankStride    +0x20 -> _bankStride
+//   entries       +0x28 -> _constantData    (`ConstantInfo*`, not `void*`)
+//   entryCount    +0x30 -> _constantCount
+//   device        +0x38 -> _device
+//
+// The three `kConstantEntry*` byte constants go with it: the element is
+// `Video::ConstantBuffer::ConstantInfo` and `size` / `offset` are its named
+// fields. The asserts below keep the facts dx11 depends on checked against the
+// SHARED definition, so if the two sides ever disagreed this file stops compiling
+// instead of reading the wrong field.
+//
+// The 84-slot seam and the concrete `*Data` classes remain the DECLARED LEAVE of
+// RULE B5-8; this commit changes no slot.
+using ConstantBufferOwner = ::Video::ConstantBuffer;
+using ConstantEntry       = ::Video::ConstantBuffer::ConstantInfo;
+static_assert(offsetof(ConstantBufferOwner, _uploadIndex)   == 0x14, "ConstantBuffer::_uploadIndex");
+static_assert(offsetof(ConstantBufferOwner, _bindToVertex)  == 0x18, "ConstantBuffer::_bindToVertex");
+static_assert(offsetof(ConstantBufferOwner, _banked)        == 0x19, "ConstantBuffer::_banked");
+static_assert(offsetof(ConstantBufferOwner, _registerCount) == 0x1c, "ConstantBuffer::_registerCount");
+static_assert(offsetof(ConstantBufferOwner, _bankStride)    == 0x20, "ConstantBuffer::_bankStride");
+static_assert(offsetof(ConstantBufferOwner, _constantData)  == 0x28, "ConstantBuffer::_constantData");
+static_assert(offsetof(ConstantBufferOwner, _constantCount) == 0x30, "ConstantBuffer::_constantCount");
+static_assert(offsetof(ConstantBufferOwner, _device)        == 0x38, "ConstantBuffer::_device");
+static_assert(sizeof(ConstantEntry) == 0x18,
+              "the entry stride dx11 used to walk by hand as kConstantEntryStride");
 
 // IO::Serializer+0x00 is the IO::Stream* it is attached to; +0x08 on that
 // stream is an int the DLL compares against 0 and 1.
@@ -286,16 +306,27 @@ constexpr int kConstantEntryOffsetField= 0x14;
 //   anything -> same as 1 but WITHOUT the CopyResource, so whatever is mapped is
 //   else        undefined memory. Most plausibly a size-counting pass, but that
 //               is a guess and is not relied on here.
-// ENDGAME B.3.4 callers batch H LEFT THIS ONE ALONE. It is the same
-// `IO::Serializer::GetDirection()` (retail 0x180006210) that the batch
-// converted 61 times elsewhere, but this translation unit includes no
-// runtime/types header at all — only dx11's own and <windows.h>/<d3d11.h> —
-// so converting it would mean pulling `runtime/types/io/Serializer.h` into the
-// VideoDX11 replacement for one expression. That is a module-boundary
-// decision, not a caller batch's. Reported instead.
+// ENDGAME B.3.4 callers batch H LEFT THIS ONE ALONE, because "this translation
+// unit includes no runtime/types header at all, so converting it would mean
+// pulling runtime/types/io/Serializer.h into the VideoDX11 replacement for one
+// expression — a module-boundary decision, not a caller batch's".
+//
+// B35_RULES §5.5 SETTLES THAT DECISION and block VC acts on it: dx11 now includes
+// seven runtime/types headers, this file four of them, so the boundary argument no
+// longer holds. The body is `IO::Serializer::GetDirection()` (retail 0x180006210,
+// `MOV RAX,[RCX] / MOV EAX,[RAX+8] / RET` — exactly the two loads that were
+// written out here), and that retires a SIXTH duplicate offset view.
+//
+// THE RETURN TYPE STAYS `int32_t` and the two comparisons below stay against 0 and
+// 1 rather than against `IO::kReading` / `IO::kWriting`, deliberately: the enum's
+// full value set is NOT PROVEN — the case list above has a third behaviour for
+// "anything else" — and naming only two of an unknown set would assert more than
+// is known.
 inline int32_t SerializerStreamMode(void* serializer) {
-    uint8_t* stream = *reinterpret_cast<uint8_t**>(serializer);
-    return *reinterpret_cast<int32_t*>(stream + 8);
+    // B.3.5 bridge — the slot's registered ABI hands the serializer across the
+    // seam as a `void*`.
+    return static_cast<int32_t>(
+        reinterpret_cast< ::IO::Serializer*>(serializer)->GetDirection());
 }
 
 // ============================================================
@@ -848,23 +879,22 @@ bool ConstantBufferData_Create(ConstantBufferData* self) {
     // 1. offsets. (The original re-loads owner->entries and owner->entryCount
     // on every iteration; neither can change, so the loop is hoisted here.)
     int32_t running = 0;
-    for (int i = 0; i < owner->entryCount; ++i) {
-        uint8_t* entry = reinterpret_cast<uint8_t*>(owner->entries) +
-                         static_cast<int64_t>(i) * kConstantEntryStride;
-        *reinterpret_cast<int32_t*>(entry + kConstantEntryOffsetField) = running;
-        running += *reinterpret_cast<int32_t*>(entry + kConstantEntrySizeField);
+    for (int i = 0; i < owner->_constantCount; ++i) {
+        ConstantEntry& entry = owner->_constantData[i];
+        entry.offset = running;
+        running += entry.size;
     }
 
-    const int32_t totalBytes = owner->registerCount << 4;
+    const int32_t totalBytes = owner->_registerCount << 4;
 
-    uint8_t* ownerDevice = reinterpret_cast<uint8_t*>(owner->device);
+    uint8_t* ownerDevice = reinterpret_cast<uint8_t*>(owner->_device);
     DeviceData* dd = *reinterpret_cast<DeviceData**>(ownerDevice + 0x100);
     ID3D11Device* dev = reinterpret_cast<ID3D11Device*>(dd->d3dDevice);
     // No device yet -> nothing to build, and the original reports success.
     if (!dev) return true;
 
     HRESULT hr;
-    if (!owner->banked) {
+    if (!owner->_banked) {
         ArraySetLength(BufferArray(self), 1);
 
         D3D11_BUFFER_DESC desc = {};
@@ -878,14 +908,14 @@ bool ConstantBufferData_Create(ConstantBufferData* self) {
         hr = dev->CreateBuffer(&desc, nullptr,
                                reinterpret_cast<ID3D11Buffer**>(self->buffers));
     } else {
-        ArraySetLength(BufferArray(self), totalBytes / owner->bankStride);
+        ArraySetLength(BufferArray(self), totalBytes / owner->_bankStride);
 
         // Seeded to a failure value so an empty ladder reports false, matching
         // the `or eax, 0xffffffff` before the loop.
         hr = -1;
         for (int i = 0; i < self->bufferCount; ++i) {
             D3D11_BUFFER_DESC desc = {};
-            desc.ByteWidth           = static_cast<UINT>(owner->bankStride * (i + 1));
+            desc.ByteWidth           = static_cast<UINT>(owner->_bankStride * (i + 1));
             desc.Usage               = D3D11_USAGE_DEFAULT;
             desc.BindFlags           = D3D11_BIND_CONSTANT_BUFFER;
             desc.CPUAccessFlags      = 0;
@@ -921,15 +951,15 @@ void ConstantBufferData_Bind(ConstantBufferData* self, void* /*unused*/,
         reinterpret_cast<ConstantBufferOwner*>(self->constantBuffer);
     ID3D11DeviceContext* ctx = ActiveContext();
 
-    const int32_t index = owner->banked ? (sizeBytes / owner->bankStride - 1) : 0;
+    const int32_t index = owner->_banked ? (sizeBytes / owner->_bankStride - 1) : 0;
 
     if (self->activeIndex != index) {
         self->activeIndex = index;
         ID3D11Buffer** slot = reinterpret_cast<ID3D11Buffer**>(self->buffers) + index;
-        if (owner->bindToVertex == 0) {
-            ctx->PSSetConstantBuffers(static_cast<UINT>(owner->slotIndex), 1, slot);
+        if (owner->_bindToVertex == 0) {
+            ctx->PSSetConstantBuffers(static_cast<UINT>(owner->_uploadIndex), 1, slot);
         } else {
-            ctx->VSSetConstantBuffers(static_cast<UINT>(owner->slotIndex), 1, slot);
+            ctx->VSSetConstantBuffers(static_cast<UINT>(owner->_uploadIndex), 1, slot);
         }
     }
 
@@ -938,11 +968,11 @@ void ConstantBufferData_Bind(ConstantBufferData* self, void* /*unused*/,
         0, nullptr, srcData, 0, 0);
 }
 
-// 0x180001450 — slot 3: `return owner->slotIndex + 1`.
+// 0x180001450 — slot 3: `return owner->_uploadIndex + 1`.
 //
 // Not a Ghidra function; a 10-byte tail after ~ConstantBufferData. Bytes:
 //   48 8b 41 08   mov eax-path: rax = [rcx+8]     ; owner
-//   8b 40 14      mov eax, [rax+0x14]             ; owner->slotIndex
+//   8b 40 14      mov eax, [rax+0x14]             ; owner->_uploadIndex
 //   ff c0         inc eax
 //   c3            ret
 //
@@ -953,7 +983,7 @@ int32_t ConstantBufferData_SlotIndexPlusOne(ConstantBufferData* self) {
     // No Runtime dependency and no D3D11 call, so no fallback path is needed.
     const ConstantBufferOwner* owner =
         reinterpret_cast<const ConstantBufferOwner*>(self->constantBuffer);
-    return owner->slotIndex + 1;
+    return owner->_uploadIndex + 1;
 }
 
 }  // namespace

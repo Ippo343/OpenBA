@@ -763,6 +763,18 @@ public:
     // ?ReleaseDynamic@RenderBuffer@Video@@SAXXZ   0x1800f40c0  dynamic_resources.cpp
     static void ReleaseDynamic();
 
+    // ---- the two class allocation operators --------------------------------
+    // ENDGAME B.3.5 block VC. Both are STATIC members and neither changes a
+    // triviality trait, so the `is_trivially_copyable<RenderBuffer>` assert below
+    // still holds (and is what proves it). The mangled names are what attribute
+    // them to this class rather than a name prefix.
+    //   ??2RenderBuffer@Video@@SAPEAX_K@Z  0x18001f2e0  context_ctor.cpp
+    static void* operator new(size_t size);
+    //   ??3RenderBuffer@Video@@SAXPEAX@Z   0x18001f360  context_lifecycle.cpp
+    static void  operator delete(void* p);
+    //   ??2RenderBuffer@Video@@SAPEAX_KPEAX@Z 0x18001f350 — NOT PORTED
+    static void* operator new(size_t size, void* storage);
+
     // ---- private platform half; DOORS in buffers.cpp -----------------------
     // ?PlatformConstruct@RenderBuffer@Video@@AEAAXXZ 0x1800f4320  buffers.cpp
     void PlatformConstruct();

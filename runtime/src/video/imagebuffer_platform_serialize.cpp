@@ -53,14 +53,25 @@
 // `direction` tests readable: the generated/rendered arm does nothing on save,
 // and the outer array is sized only on load.
 //
-// THE ENCODING GATE IS NOT NAMED, AND THIS FILE DOES NOT PRETEND OTHERWISE.
-// `stream->encoding->vtable[0]()` returns a bool and the whole pixel path hangs
-// off it. No `??_7…Encoding@IO@@6B@` is exported under any name, so this lane
-// could not put a name to slot 0 the way `Serializer.h` names slots 3 and 4
-// (the reader/writer factories). It is reproduced as "call slot 0, obey the
-// bool" — which is what the instruction stream says — and it is called out here
-// rather than guessed at, because a plausible-sounding name for an unidentified
-// virtual is how a wrong model gets into a header and stays.
+// THE ENCODING GATE IS `IO::Encoding::IsBinary()`, SLOT 0.
+//
+// This banner used to carry a caution here — "the gate is not named, and this
+// file does not pretend otherwise" — on the grounds that no
+// `??_7…Encoding@IO@@6B@` is exported under any name, so slot 0 could not be
+// named the way `Serializer.h` names slots 3 and 4. THAT CAUTION IS RETIRED
+// (ENDGAME B.3.5 block C, confirmed by block VC): B.3.4 block 1 recovered all
+// five `Encoding` slots from the three CONCRETE tables instead of from an export,
+// and slot 0 is `?IsBinary@Encoding@IO@@UEBA_NXZ` — `BinaryEncoding` 0x1800a81e0
+// returns true, `TextEncoding` 0x1800b9ab0 and `VisitorEncoding` 0x1800bafd0
+// return false (`runtime/types/io/Serializer.h`). So the gate reads "carry the
+// per-mip-level pixel blobs only for a BINARY encoding", which is what the
+// behaviour always was: text serialization is stripped from the shipped DLL and
+// the Visitor pass is resource-reference discovery, and neither has any business
+// moving pixels.
+//
+// The caution was right for its instrument and is superseded by a READ, not by a
+// guess — which is the distinction it was written to protect. The call site below
+// says the same thing next to the code.
 //
 // ---------------------------------------------------------------------------
 // A FAITHFULNESS DETAIL THAT LOOKS LIKE A TIDY-UP AND IS NOT
@@ -99,12 +110,15 @@
 // So this row grows the cutover surface by exactly ONE address, and that
 // address has an owner (`reference_porting_can_grow_the_cutover_surface.md`).
 //
-// The per-element serialize loop at 0x180054080 IS written out below rather
-// than called by address: it is 20 instructions, it is this function's own
-// helper, and nothing else in the tree resolves it. It is deliberately NOT
-// registered, for the reason `array_destroy.cpp` gives for the eight helpers it
-// also declines to register — a registration with no caller dilutes the
-// census's dead-port signal.
+// THE CLAIM THAT USED TO STAND HERE WAS WRONG, TWICE OVER, AND IS WITHDRAWN
+// (ENDGAME B.3.5 block VC). It read: "The per-element serialize loop at
+// 0x180054080 IS written out below rather than called by address: it is 20
+// instructions, it is this function's own helper, and nothing else in the tree
+// resolves it. It is deliberately NOT registered." In fact
+// `runtime/src/video/closure_batch2b.cpp` registers it at that address, and it has
+// THREE retail callers of which this function is only one. It is a SHARED helper
+// and there is now exactly one body of it. See the note at `SerializeLevelBlobs`
+// below for the full read.
 // ============================================================================
 
 #include <cstdint>
@@ -192,29 +206,32 @@ using SetSizeFn = void (*)(rtcoll::ArrayHdr* self, int32_t newSize);
 
 // ---- 0x180054080 — serialize N per-level byte blobs ------------------------
 //
-// Per element of an Array<Array<uint8>> (stride 0x10): serialize the element's
-// own size as an int, size the element on the READ path only, then serialize
-// that many raw bytes through the uchar-array slot.
+// ENDGAME B.3.5 block VC: THE SECOND BODY OF THIS ADDRESS IS GONE. This file used
+// to write the loop out, on the strength of a banner claim that 0x180054080 "is
+// this function's own helper, nothing else in the tree resolves it" and "is
+// deliberately NOT registered". BOTH HALVES WERE FALSE.
+// `runtime/src/video/closure_batch2b.cpp` registers it at that exact address, and
+// Ghidra `getReferencesTo` on the retail DLL (15290 functions) gives it THREE
+// callers -- 0x180053d90 in FUN_180053d40, 0x180053eeb in FUN_180053ea0, and
+// 0x1800f31d0 in this very function -- plus a `.rdata` reference at 0x180207870.
+// Two of the three are unexported entries of a three-qword dispatch table at
+// 0x180207840/858/870, so it is the SHARED `Array<Array<uint8>>` blob serializer
+// and belongs to no one class.
 //
-// Note the `name` argument is NULL at every one of retail's call sites here
-// (`XOR R8D,R8D` / `XOR R9D,R9D`), so the blobs are unnamed in the stream.
-void SerializeLevelBlobs(IO::Serializer& ser, int32_t count, rtcoll::ArrayHdr* elems) {
-    if (count <= 0) return;                       // TEST EDX,EDX / JLE
-    const int64_t n = count;                      // MOVSXD
-    for (int64_t i = 0; i < n; ++i) {
-        rtcoll::ArrayHdr* e = elems + i;          // ADD RBX,0x10
-        int32_t size = e->GetSize();               // MOV EAX,[RBX+8]
+// The two bodies were behaviourally identical, which is the dangerous case: two
+// spellings of one address that agree by luck are one edit from disagreeing, and
+// this tree has paid for exactly that shape before (the shadowed
+// `RenderBuffer::PlatformDestruct` copy, context_lifecycle.cpp's Wave 20 note).
+// So there is ONE body now, `RtVideo_SerializeBlobArray`, and the call below IS
+// retail's `CALL 0x180054080` at 0x1800f31d0.
+//
+// Retail passes a NULL `name` at every call site (`XOR R8D,R8D` / `XOR R9D,R9D`),
+// so the blobs are unnamed in the stream; the one body reproduces that.
+extern "C" void RtVideo_SerializeBlobArray(void* ctx, int count, void* data);
 
-        ser.Serialize(size, nullptr);              // rw slot +0xa0, kScalarInt
-
-        // Retail RE-READS ser->stream here rather than caching it — reproduced
-        // by reading it through the Serializer again rather than a cached local.
-        // retail 0x180029630 — kSpec_Bool == SpecFor<uint8_t>(); trait-derived.
-        if (ser._stream->GetDirection() == IO::kReading)
-            e->SetSize(size);
-
-        ser.Serialize(size, e->GetData(), nullptr);  // rw slot +0x60, kArrayUChar
-    }
+inline void SerializeLevelBlobs(IO::Serializer& ser, int32_t count,
+                                rtcoll::ArrayHdr* elems) {
+    RtVideo_SerializeBlobArray(&ser, count, elems);
 }
 
 // The element-destroy spec for the outer array: free the inner buffer at +0x00
