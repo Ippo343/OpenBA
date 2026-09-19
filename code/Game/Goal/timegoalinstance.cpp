@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <cstdint>
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include "system/Value.h"    // ENDGAME B.3.4b System callers: System::Time
 #include <new>
 
 // ============================================================
@@ -129,7 +130,7 @@ void TimeGoalInstance_Slot3(TimeGoalInstance* self, void* stream) {
 
     // Serialize elapsed time (+0x20) via System::Time::Serialize
     if (s_fn_TimeSerialize) {
-        s_fn_TimeSerialize((void*)(s + 0x20), serializerBuf);
+        reinterpret_cast<System::Time*>((void*)(s + 0x20))->Serialize(*reinterpret_cast<IO::Serializer*>(serializerBuf));   // B.3.4 bridge
     }
 
     // Destroy serializer
@@ -209,7 +210,7 @@ int TimeGoalInstance_Slot6(TimeGoalInstance* self) {
     // Convert elapsed time to seconds
     float elapsedSeconds = 0.0f;
     if (s_fn_TimeAsSeconds) {
-        elapsedSeconds = s_fn_TimeAsSeconds((void*)(s + 0x20));
+        elapsedSeconds = reinterpret_cast<const System::Time*>((void*)(s + 0x20))->AsSeconds();   // B.3.4 bridge
     }
 
     // Compare against required time

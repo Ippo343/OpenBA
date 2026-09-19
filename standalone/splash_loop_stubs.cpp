@@ -39,6 +39,7 @@
 #include <cstdio>
 #include <cstdint>
 #include "system/String.h"   // -Iruntime/types
+#include "system/Value.h"    // ENDGAME B.3.4b System callers: System::Random
 #include <windows.h>
 
 // Defined in code/Game/Game/gameupdateloop_load.cpp. Returns true once the
@@ -104,7 +105,7 @@ void SetRandomLoadingTip(DialogLoaderLoopT* self) {
     int count = fn_StringTable_GetCount(table);
     if (count <= 0) { TipBail("StringTable count<=0", table); return; }
     void* rng = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(self) + 0x194);
-    uint32_t idx = fn_Random_Rand(rng, static_cast<uint32_t>(count - 1));
+    uint32_t idx = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(count - 1));   // B.3.4 bridge
 
     uint8_t uiStr[16];
     fn_UIString_Ctor_Index(uiStr, reinterpret_cast<uint64_t>(table),

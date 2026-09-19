@@ -143,6 +143,7 @@
 #include "dx11_seam.h"
 #include "options.h"
 #include "dx11_backend_access.h"
+#include "system/Error.h"   // ENDGAME B.3.4b System callers: System::Error (-Iruntime/types)
 
 #include <windows.h>
 #include <d3d11.h>
@@ -701,8 +702,8 @@ void ContextData_Finish(ContextData* self) {
         else if (hr == DXGI_ERROR_DEVICE_RESET)           msg = "D3D11 Error: DXGI_ERROR_DEVICE_RESET!";
         else if (hr == DXGI_ERROR_DRIVER_INTERNAL_ERROR)  msg = "D3D11 Error: DXGI_ERROR_DRIVER_INTERNAL_ERROR!";
         else                                              msg = "D3D11 Error: UNKNOWN!";
-        im->ErrorSetText(msg, true);
-        im->ErrorDisplay();
+        System::Error::SetText(msg, true);   // B.3.4 bridge
+        System::Error::Display();            // B.3.4 bridge
         return;
     }
 

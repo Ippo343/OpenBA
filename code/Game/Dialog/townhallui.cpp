@@ -25,6 +25,7 @@
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include "system/Value.h"    // ENDGAME B.3.4b System callers: System::Time
 #include <new>
 
 
@@ -1006,7 +1007,7 @@ void TownHallUI_UpdateGeneral(TownHallUI* self) {
     fn_NumberElement_SetValueInt(*(void**)(s + 0x60), year);
 
     // Month
-    float seconds = fn_Time_AsSeconds((void*)(*(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0x128) + 8));
+    float seconds = reinterpret_cast<const System::Time*>((void*)(*(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0x128) + 8))->AsSeconds();   // B.3.4 bridge
     int monthIdx = (int)((seconds / 3600.0f) * 12.0f);
     if (monthIdx > 11) monthIdx = 0;
 
@@ -1095,7 +1096,7 @@ void TownHallUI_UpdateProfessions(TownHallUI* self) {
 
     int* timePtr = *(int**)(*(uintptr_t*)g_pGameSingleton + 0x128);
     int currentYearTick = timePtr[0] * 0x30 - 0x30;
-    float secs = fn_Time_AsSeconds((void*)(timePtr + 2));
+    float secs = reinterpret_cast<const System::Time*>((void*)(timePtr + 2))->AsSeconds();   // B.3.4 bridge
     uint32_t monthTick = (uint32_t)((secs / 3600.0f) * 48.0f);
     if ((int)monthTick > 0x2f) monthTick = 0;
     int endTick = monthTick + currentYearTick;

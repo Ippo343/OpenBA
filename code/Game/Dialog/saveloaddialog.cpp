@@ -46,6 +46,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"      // ENDGAME B.3.4b System callers: System::Time
 
 // Thumbnail vtable stamps — see code/Game/Dialog/thumb_vtables.cpp.
 extern uintptr_t ThumbVtable_StampMaterialInstance(void* obj);
@@ -693,7 +694,7 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
     // Phase 1: accumulate spinner rotation while I/O is in progress
     int operation = fn_SaveLoad_GetOperation(saveLoad);
     if (operation != 0) {
-        float elapsed = fn_Time_AsSeconds(time);
+        float elapsed = reinterpret_cast<const System::Time*>(time)->AsSeconds();   // B.3.4 bridge
         *(float*)(s + 0xC8) += elapsed * 180.0f;
     }
 

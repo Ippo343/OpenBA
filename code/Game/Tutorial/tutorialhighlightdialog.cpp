@@ -1,6 +1,7 @@
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
 #include "system/String.h"
+#include "system/Value.h"   // ENDGAME B.3.4b System callers: System::Time
 #include <cstdint>
 
 // TutorialHighlightDialog::Startup (0x1400E0020)
@@ -84,7 +85,7 @@ void EnsureHighlightFuncs() {
 // sinf(elapsed * pi) * 8 — the shared bob offset both helpers apply.
 float ArrowBob(uintptr_t self) {
     if (!fn_Time_AsSeconds) return 0.0f;
-    float t = fn_Time_AsSeconds(reinterpret_cast<void*>(self + 0xB8));
+    float t = reinterpret_cast<const System::Time*>(reinterpret_cast<void*>(self + 0xB8))->AsSeconds();   // B.3.4 bridge
     return std::sin(t * 3.14159274f) * 8.0f;
 }
 

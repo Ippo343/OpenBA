@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"      // ENDGAME B.3.4b System callers: System::Time
 
 // ============================================================
 // LoaderDialog::Slot4 (0x1400B2D90) — vtable +0x20, Setup
@@ -37,7 +38,7 @@ void LoaderDialog_Slot6(LoaderDialog* self) {
 // Accumulates rotation angle from elapsed time at 180 degrees/sec.
 void LoaderDialog_Slot7(LoaderDialog* self, void* time) {
     uintptr_t s = (uintptr_t)self;
-    float elapsed = fn_Time_AsSeconds(time);
+    float elapsed = reinterpret_cast<const System::Time*>(time)->AsSeconds();   // B.3.4 bridge
     *(float*)(s + 0xC0) += elapsed * 180.0f;
 }
 

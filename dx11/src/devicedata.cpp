@@ -123,6 +123,9 @@
 #include <cstdio>
 #include <cstring>
 #include "system/String.h"   // -Iruntime/types
+#include "system/Error.h"    // ENDGAME B.3.4b System callers: System::Error
+#include "system/WideString.h"  // ENDGAME B.3.4b System callers: System::WideString
+#include <new>
 
 namespace VideoDX11 {
 namespace {
@@ -1261,7 +1264,7 @@ bool DeviceData_CreateDevice(DeviceData* self) {
     StallDebug::Mark("  DX11 CreateDevice: entry");
 
     if (createFactory(kIID_IDXGIFactory1, &self->unk10) != 0) {
-        im->ErrorSetText("VideoDX11: Couldn't create a dxgi factory!", false);
+        System::Error::SetText("VideoDX11: Couldn't create a dxgi factory!", false);   // B.3.4 bridge
         return false;
     }
     IDXGIFactory1* factory = static_cast<IDXGIFactory1*>(self->unk10);
@@ -1269,14 +1272,14 @@ bool DeviceData_CreateDevice(DeviceData* self) {
     IDXGIAdapter1* adapter = nullptr;
     if (factory->EnumAdapters1(static_cast<UINT>(Field<int32_t>(dev, Dev::kAdapterIndex)),
                                &adapter) == DXGI_ERROR_NOT_FOUND) {
-        im->ErrorSetText("VideoDX11: Unable to query adapter for dx11 interface!", false);
+        System::Error::SetText("VideoDX11: Unable to query adapter for dx11 interface!", false);   // B.3.4 bridge
         return false;
     }
 
     IDXGIOutput* output = nullptr;
     if (adapter->EnumOutputs(static_cast<UINT>(Field<int32_t>(dev, Dev::kOutputIndex)),
                              &output) == DXGI_ERROR_NOT_FOUND) {
-        im->ErrorSetText("VideoDX11: Unable to query output for dx11 display!", false);
+        System::Error::SetText("VideoDX11: Unable to query output for dx11 display!", false);   // B.3.4 bridge
         return false;
     }
 
@@ -1345,8 +1348,8 @@ bool DeviceData_CreateDevice(DeviceData* self) {
                      levels, 3, D3D11_SDK_VERSION,
                      reinterpret_cast<ID3D11Device**>(&self->d3dDevice), &granted,
                      reinterpret_cast<ID3D11DeviceContext**>(&self->d3dContext)) != 0) {
-        im->ErrorSetText("VideoDX11: Could not initialize the DX11 device! "
-                         "D3D_FEATURE_LEVEL_10_0 is required!", false);
+        System::Error::SetText("VideoDX11: Could not initialize the DX11 device! "
+                         "D3D_FEATURE_LEVEL_10_0 is required!", false);   // B.3.4 bridge
         return false;
     }
 
@@ -1358,16 +1361,16 @@ bool DeviceData_CreateDevice(DeviceData* self) {
     UINT support = 0;
     d3d->CheckFormatSupport(DXGI_FORMAT_B8G8R8A8_UNORM, &support);
     if ((support & D3D11_FORMAT_SUPPORT_RENDER_TARGET) == 0) {
-        im->ErrorSetText("VideoDX11: Graphics hardware doesn't support "
-                         "DXGI_FORMAT_B8G8R8A8_UNORM as a render target format!", false);
+        System::Error::SetText("VideoDX11: Graphics hardware doesn't support "
+                         "DXGI_FORMAT_B8G8R8A8_UNORM as a render target format!", false);   // B.3.4 bridge
         return false;
     }
 
     // 12
     d3d->CheckFormatSupport(DXGI_FORMAT_D24_UNORM_S8_UINT, &support);
     if ((support & D3D11_FORMAT_SUPPORT_DEPTH_STENCIL) == 0) {
-        im->ErrorSetText("VideoDX11: Graphics hardware doesn't support "
-                         "DXGI_FORMAT_D24_UNORM_S8_UINT as a depth stencil format!", false);
+        System::Error::SetText("VideoDX11: Graphics hardware doesn't support "
+                         "DXGI_FORMAT_D24_UNORM_S8_UINT as a depth stencil format!", false);   // B.3.4 bridge
         return false;
     }
 
@@ -1378,7 +1381,7 @@ bool DeviceData_CreateDevice(DeviceData* self) {
     // 14
     if (factory->CreateSwapChain(d3d, &desc,
                                  reinterpret_cast<IDXGISwapChain**>(&self->swapChain)) != 0) {
-        im->ErrorSetText("VideoDX11: Could not initialize the swap chain!", false);
+        System::Error::SetText("VideoDX11: Could not initialize the swap chain!", false);   // B.3.4 bridge
         return false;
     }
 
@@ -1396,7 +1399,7 @@ bool DeviceData_CreateDevice(DeviceData* self) {
             "DXGI_FORMAT_B8G8R8A8_UNORM [%ix%i %ixAA]",
             Field<int32_t>(dev, Dev::kWidth),
             Field<int32_t>(dev, Dev::kHeight), aa);
-        im->ErrorSetText(msg._data, false);
+        System::Error::SetText(msg._data, false);   // B.3.4 bridge
         return false;
     }
     if (!CreateDepthBuffer(self, im)) {
@@ -1406,7 +1409,7 @@ bool DeviceData_CreateDevice(DeviceData* self) {
             "DXGI_FORMAT_D24_UNORM_S8_UINT [%ix%i %AA]!",
             Field<int32_t>(dev, Dev::kWidth),
             Field<int32_t>(dev, Dev::kHeight), aa);
-        im->ErrorSetText(msg._data, false);
+        System::Error::SetText(msg._data, false);   // B.3.4 bridge
         return false;
     }
 
@@ -1708,7 +1711,7 @@ static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
             im->AdapterCtor(&rec);
             {
                 WideStringStorage w;
-                im->WideStringCtor(&w, adapterDesc.Description);
+                ::new (static_cast<void*>(&w)) System::WideString(adapterDesc.Description);   // B.3.4 bridge
                 {
                     // System::WideString is not a B.3.1 class, so AsUTF8 stays
                     // an import; its RESULT is a real System::String, and the
@@ -1718,7 +1721,7 @@ static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
                     im->WideStringAsUTF8(&w, &utf8);
                     reinterpret_cast<System::String&>(rec) = utf8;  // B.3.1 bridge
                 }
-                im->WideStringDtor(&w);
+                reinterpret_cast<System::WideString*>(&w)->~WideString();   // B.3.4 bridge
             }
             rec.maxAnisotropy = 0x10;
             rec.adapterIndex  = static_cast<int32_t>(adapterIndex);
@@ -1750,9 +1753,9 @@ static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
                 // its explicit dtor call, placed where the shipped one is.
                 const System::String prefix(" (Display ");
                 {
-                    const int len = im->WideStringStrLength(mi.szDevice);
+                    const int len = System::WideString::StrLength(mi.szDevice);   // B.3.4 bridge
                     WideStringStorage tailW;
-                    im->WideStringCtor(&tailW, mi.szDevice + (len - 1));
+                    ::new (static_cast<void*>(&tailW)) System::WideString(mi.szDevice + (len - 1));   // B.3.4 bridge
                     {
                         System::String tailU;
                         im->WideStringAsUTF8(&tailW, &tailU);
@@ -1766,7 +1769,7 @@ static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
                             (void)t3;
                         }                       // t3, t2, t1
                     }                           // tailU
-                    im->WideStringDtor(&tailW);
+                    reinterpret_cast<System::WideString*>(&tailW)->~WideString();   // B.3.4 bridge
                 }
                                                 // prefix
             }

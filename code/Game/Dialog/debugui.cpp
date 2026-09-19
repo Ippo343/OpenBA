@@ -22,6 +22,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"      // ENDGAME B.3.4b System callers: System::Time / System::Random
 
 // ============================================================
 // Static inline implementations (replaces fn_* exe pointer calls)
@@ -31,7 +32,7 @@
 // Converts weather manager time to month index 0-11.
 // param_1 = weatherMgr ptr; time stored at +8.
 static int DebugUI_GetMonthFromTime_Impl(void* weatherMgr) {
-    float seconds = fn_Time_AsSeconds((void*)((uintptr_t)weatherMgr + 8));
+    float seconds = reinterpret_cast<const System::Time*>((void*)((uintptr_t)weatherMgr + 8))->AsSeconds();   // B.3.4 bridge
     int month = (int)((seconds / 3600.0f) * 12.0f);  // 3600s/yr (DAT_14017225c), 12 months
     if (month > 11) month = 0;
     return month;
@@ -540,7 +541,7 @@ found_residence:
                             int savedSpawnedTotal = spawnedTotal;
 
                             // Random gender
-                            uint32_t gender = fn_Random_Rand(randomPtr, 2);
+                            uint32_t gender = reinterpret_cast<System::Random*>(randomPtr)->Rand(static_cast<uint32_t>(2));   // B.3.4 bridge
                             uint32_t genderFlag = (gender != 0) ? 1 : 0;
 
                             // Load citizen template
@@ -623,7 +624,7 @@ found_ai:
                             // Read age range from CitizenDescription
                             citizenAI = aiCompIBP;
                             float minAge = *(float*)((uintptr_t)citDesc + 0x50);
-                            float randAge = fn_Random_RandFloat(randomPtr);
+                            float randAge = reinterpret_cast<System::Random*>(randomPtr)->RandFloat();   // B.3.4 bridge
                             float maxAge = *(float*)((uintptr_t)citDesc + 0x54);
                             float age = randAge * (maxAge - minAge) + minAge;
 
@@ -671,7 +672,7 @@ static void DebugUI_TriggerDisasterOnBuilding_Impl(DebugUI* self) {
     uint32_t buildingCount = *(uint32_t*)(entityListBase + 0xA8);
     if (buildingCount == 0) return;
     void* randomPtr = *(void**)(game + 0xD8);
-    uint32_t randIdx = fn_Random_Rand(randomPtr, buildingCount);
+    uint32_t randIdx = reinterpret_cast<System::Random*>(randomPtr)->Rand(static_cast<uint32_t>(buildingCount));   // B.3.4 bridge
 
     // Get disease description from combo selection
     void* combo = *(void**)(s + 0x30);
@@ -705,7 +706,7 @@ static void Game_StartRandomFire_Impl() {
     if (buildingCount == 0) return;
 
     void* randomPtr = *(void**)(game + 0xD8);
-    uint32_t randIdx = fn_Random_Rand(randomPtr, buildingCount);
+    uint32_t randIdx = reinterpret_cast<System::Random*>(randomPtr)->Rand(static_cast<uint32_t>(buildingCount));   // B.3.4 bridge
 
     // Get random building entity
     void* building = *(void**)(*(uintptr_t*)(entityListBase + 0x20) + (uintptr_t)randIdx * 8);
@@ -772,7 +773,7 @@ static void Game_InfectRandomCitizen_Impl() {
     if (citizenCount == 0) return;
 
     void* randomPtr = *(void**)(game + 0xD8);
-    uint32_t randIdx = fn_Random_Rand(randomPtr, citizenCount);
+    uint32_t randIdx = reinterpret_cast<System::Random*>(randomPtr)->Rand(static_cast<uint32_t>(citizenCount));   // B.3.4 bridge
 
     // Get random citizen
     uintptr_t citizenArray = *(uintptr_t*)(entityListBase + 0xF0);
@@ -838,8 +839,8 @@ void DebugUI_Slot8(DebugUI* self) {
     // Original: *(*(g_pEngineSingleton_exref) + 0x68) and + 0x58
     int64_t frameTimeTicks = *(int64_t*)(engineObj + 0x68);
     int64_t totalTimeTicks = *(int64_t*)(engineObj + 0x58);
-    float frameSeconds = fn_Time_AsSeconds(&frameTimeTicks);
-    float totalSeconds = fn_Time_AsSeconds(&totalTimeTicks);
+    float frameSeconds = reinterpret_cast<const System::Time*>(&frameTimeTicks)->AsSeconds();   // B.3.4 bridge
+    float totalSeconds = reinterpret_cast<const System::Time*>(&totalTimeTicks)->AsSeconds();   // B.3.4 bridge
 
     // Exponential moving average smoothing constants
     const float alpha = 0.95f;
@@ -1448,7 +1449,7 @@ void DebugUI_Slot4(DebugUI* self) {
         // would fault. SetDayLighting derefs **(gw+0x130) (the weather table), also
         // null-able — only call it when that chain is live.
         uintptr_t weatherTime = *(uintptr_t*)((uintptr_t)gameWorld + 0x128);
-        float timeSeconds = weatherTime ? fn_Time_AsSeconds((void*)(weatherTime + 8)) : 0.0f;
+        float timeSeconds = weatherTime ? reinterpret_cast<const System::Time*>((void*)(weatherTime + 8))->AsSeconds() : 0.0f;   // B.3.4 bridge
         // Convert time to month index: (seconds / secondsPerYear) * monthsPerYear
         // DAT_14017225c = 3600.0f, DAT_1401721b8 = 12.0f
         int monthIndex = (int)(timeSeconds / 3600.0f * 12.0f);

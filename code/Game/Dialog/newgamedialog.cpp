@@ -27,6 +27,7 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
+#include "system/Value.h"      // ENDGAME B.3.4b System callers: System::Random
 
 // ============================================================
 // Helper: find element by name, returns raw element pointer
@@ -271,7 +272,7 @@ static void GenerateRandomSeed(void* editSeedPtr, void* random) {
         return;
     }
 
-    uint32_t seed = fn_Random_Rand(random, (uint32_t)(maxVal + 1));
+    uint32_t seed = reinterpret_cast<System::Random*>(random)->Rand((uint32_t)(maxVal + 1));   // B.3.4 bridge
     fn_NumberEditElement_SetValue(seedElem, seed);
     fprintf(stderr, "[NewGameDialog] BANISHED_SEED unset -> world seed RANDOMISED to %u\n",
             seed);

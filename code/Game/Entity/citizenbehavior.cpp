@@ -21,6 +21,7 @@
 #include <cstring>
 #include <windows.h>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"      // ENDGAME B.3.4b System callers: System::Random
 
 // Tick-driven Builder pool (builder_pool_driver.cpp). No-op unless BANISHED_BUILDER_NATURAL
 // is set. Called at the end of CitizenBehavior_Update.
@@ -315,7 +316,7 @@ void CitizenBehavior_ShuffleSchools(CitizenBehaviorRaw* self) {
     if (!schoolArray) return;
 
     for (uint32_t i = 0; i < count; i++) {
-        uint32_t j = s_fn_Random_Rand(random, count);
+        uint32_t j = reinterpret_cast<System::Random*>(random)->Rand(static_cast<uint32_t>(count));   // B.3.4 bridge
         if (i != j) {
             uint64_t tmp = schoolArray[i];
             schoolArray[i] = schoolArray[j];
@@ -362,7 +363,7 @@ void CitizenBehavior_ShuffleEntities(CitizenBehaviorRaw* self, uint64_t profId) 
 
             uint64_t* entities = reinterpret_cast<uint64_t*>(node[1]); // array at +0x08
             for (uint32_t i = 0; i < count; i++) {
-                uint32_t j = s_fn_Random_Rand(random, count);
+                uint32_t j = reinterpret_cast<System::Random*>(random)->Rand(static_cast<uint32_t>(count));   // B.3.4 bridge
                 if (i != j) {
                     uint64_t tmp = entities[i];
                     entities[i] = entities[j];

@@ -4,6 +4,7 @@
 #include <cstddef>
 #include "engine_funcs.h"
 #include "system/String.h"
+#include "system/Value.h"   // ENDGAME B.3.4b System callers: System::Time
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -163,7 +164,7 @@ void AutoSaveDialog_Slot6(AutoSaveDialog* self) {
 // Wraps angle to stay within [0, 360).
 void AutoSaveDialog_Slot7(AutoSaveDialog* self, void* time) {
     uintptr_t s = (uintptr_t)self;
-    float elapsed = fn_Time_AsSeconds(time);
+    float elapsed = reinterpret_cast<const System::Time*>(time)->AsSeconds();   // B.3.4 bridge
     float angle = *(float*)(s + 0xC8);
 
     angle += elapsed * 90.0f;
