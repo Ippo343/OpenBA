@@ -372,8 +372,47 @@ inline void Slot7(void* self) {
 // ============================================================================
 // ?SetupFileSystem@Modification@IO@@QEAAXXZ                 retail 0x1800aebb0
 // ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS commit 2: the body is now
+// `IO::Modification::SetupFileSystem()`, at the bottom of this file. The door
+// keeps its name, its by-name AND by-address registration, and delegates. No
+// qualified `IO::` call: `IO::Modification` has no vtable at all, so
+// B34_BRIEFS section A.1's re-entry hazard cannot arise.
 void RtIo_Modification_SetupFileSystem(Modification* self) {
-    if (self->dirty == 0) return;                              // 0x1800aebd8
+    reinterpret_cast<IO::Modification*>(self)->SetupFileSystem();
+}
+
+}  // namespace RtIO
+
+// ============================================================================
+// Registration — BOTH DOORS. `QEAA` is public and the name is ordinal 4030 in
+// the retail export directory, verified with pefile before this was written.
+// Both spelled as LITERALS so tools/runtime_census.py can see them.
+// ============================================================================
+int RtIoModificationSetupFileSystemRegister() {
+    int n = 0;
+    RegisterRuntimeExport("?SetupFileSystem@Modification@IO@@QEAAXXZ",
+                          (void*)&RtIO::RtIo_Modification_SetupFileSystem); ++n;
+    RegisterRuntimeAddr(0x1800aebb0,
+                        (void*)&RtIO::RtIo_Modification_SetupFileSystem);
+    return n;
+}
+
+// ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS — `IO::Modification::SetupFileSystem`'s member body
+// ============================================================================
+namespace IO {
+
+void Modification::SetupFileSystem() {
+    // A member of `IO::X` must be DEFINED in a namespace ENCLOSING the class
+    // (B34_BRIEFS section A.2), so this body cannot live inside `namespace
+    // RtIO`, where every helper it calls sits in a nested anonymous namespace.
+    // ONE function-scope using-directive brings them in unchanged and keeps
+    // this a MOVE rather than a rewrite. Safe against B34_RULES section 7.2's
+    // grep hazard: the only name the two namespaces share is `Modification`,
+    // and inside a member the injected-class-name wins outright, so a collision
+    // would be a compile error, never a silent rebind.
+    using namespace RtIO;
+    if (_dirty == 0) return;                              // 0x1800aebd8
 
     // The three singletons, all exported DATA symbols, so the NAME door is the
     // right door and the three addresses in the listing (0x1801fc6a8,
@@ -473,8 +512,8 @@ void RtIo_Modification_SetupFileSystem(Modification* self) {
             ResolveAddr(Module::Runtime, 0x180026880));
 
         // BACKWARDS, and `order` is stamped on every mod — see the banner.
-        for (int32_t i = self->count - 1; i >= 0; --i) {       // 0x1800aed49
-            Mod* const m = &self->mods[i];
+        for (int32_t i = _count - 1; i >= 0; --i) {       // 0x1800aed49
+            Mod* const m = &_mods[i];
             m->order = i;                                      // 0x1800aed64
             if (m->enabled != 0)                               // 0x1800aed68
                 append(&fs->userPackFilenames,
@@ -607,7 +646,7 @@ void RtIo_Modification_SetupFileSystem(Modification* self) {
     }
 
     // ========================= ACT 5 — TEARDOWN =============================
-    self->dirty = 0;                                           // 0x1800af447
+    _dirty = 0;                                           // 0x1800af447
 
     // Each surviving entry's Filename dtor, 0x1800af460 -- the queue's own
     // storage is raw bytes (see ReloadEntry's banner), so the release is
@@ -635,18 +674,4 @@ void RtIo_Modification_SetupFileSystem(Modification* self) {
     }
 }
 
-}  // namespace RtIO
-
-// ============================================================================
-// Registration — BOTH DOORS. `QEAA` is public and the name is ordinal 4030 in
-// the retail export directory, verified with pefile before this was written.
-// Both spelled as LITERALS so tools/runtime_census.py can see them.
-// ============================================================================
-int RtIoModificationSetupFileSystemRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?SetupFileSystem@Modification@IO@@QEAAXXZ",
-                          (void*)&RtIO::RtIo_Modification_SetupFileSystem); ++n;
-    RegisterRuntimeAddr(0x1800aebb0,
-                        (void*)&RtIO::RtIo_Modification_SetupFileSystem);
-    return n;
-}
+}  // namespace IO

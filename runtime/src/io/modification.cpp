@@ -638,8 +638,7 @@ using fn_SaveList_t = void (*)(void*);
 // ?GetCount@Modification@IO@@QEBAHXZ   retail 0x18000da90
 //     MOV EAX,[RCX+0x10] ; RET
 int RtIo_Modification_GetCount(const void* selfv) {
-    const int ours = static_cast<const Modification*>(selfv)->count;
-    return ours;
+    return reinterpret_cast<const IO::Modification*>(selfv)->GetCount();
 }
 
 // ?GetModification@Modification@IO@@QEBAAEBUMod@12@H@Z   retail 0x18000da80
@@ -651,10 +650,7 @@ int RtIo_Modification_GetCount(const void* selfv) {
 // index -1 into an 8-GB forward offset. `static_cast<int64_t>` is the sign
 // extension, and it is load-bearing.
 const void* RtIo_Modification_GetMod(const void* selfv, int index) {
-    const Modification* self = static_cast<const Modification*>(selfv);
-    const void* ours = reinterpret_cast<const uint8_t*>(self->mods)
-                     + (static_cast<int64_t>(index) << 7);
-    return ours;
+    return &reinterpret_cast<const IO::Modification*>(selfv)->GetModification(index);
 }
 
 // ?Enable@Modification@IO@@QEAAXH_N@Z   retail 0x1800aeab0
@@ -667,17 +663,7 @@ const void* RtIo_Modification_GetMod(const void* selfv, int index) {
 // mod already held. Nothing in our tree depends on that, but a "no-op returns
 // early" tidy-up would be a real behaviour change to IsDirty.
 void RtIo_Modification_Enable(void* selfv, int index, bool value) {
-    Modification* self = static_cast<Modification*>(selfv);
-
-    // A full byte oracle, safe ONLY because this body allocates nothing: run
-    // ours, photograph, restore, run theirs, memcmp. See the banner.
-    uint8_t pre[0x28 + 0x80];
-    uint8_t post[0x28 + 0x80];
-    Mod* rec = nullptr;
-
-    self->dirty = 1;
-    self->mods[index].enabled = static_cast<uint8_t>(value);
-
+    reinterpret_cast<IO::Modification*>(selfv)->Enable(index, value);
 }
 
 // ?Swap@Modification@IO@@QEAAXHH@Z   retail 0x1800aeb20
@@ -694,24 +680,7 @@ void RtIo_Modification_Enable(void* selfv, int index, bool value) {
 // RBX,R8D) before the shift and `a` separately (MOVSXD RDI,EDX); both strides
 // are `<< 7`.
 void RtIo_Modification_Swap(void* selfv, int a, int b) {
-    Modification* self = static_cast<Modification*>(selfv);
-    if (a == b) return;
-
-    // Pre-image for the shadow. Byte copies of the two records: their POINTER
-    // members are what the post-condition is stated over, so a shallow
-    // photograph is the right one and a deep one would be comparing a copy of
-    // our own work.
-    Mod preA, preB;
-
-    self->dirty = 1;
-
-    uint8_t tmpStorage[sizeof(Mod)];
-    Mod* tmp = reinterpret_cast<Mod*>(tmpStorage);
-    RtIo_Mod_CopyCtor_1800101e0(tmp, self->mods + a);
-    RtIo_Mod_Assign_180026ef0(self->mods + a, self->mods + b);
-    RtIo_Mod_Assign_180026ef0(self->mods + b, tmp);
-    RtIo_Mod_Dtor_180011460(tmp);
-
+    reinterpret_cast<IO::Modification*>(selfv)->Swap(a, b);
 }
 
 // ?SaveList@Modification@IO@@QEAAXXZ   retail 0x1800b05f0
@@ -737,61 +706,7 @@ void RtIo_Modification_Swap(void* selfv, int a, int b) {
 // value; transcribed as written so a future change to the first store cannot
 // silently desynchronise the two.
 void RtIo_Modification_SaveList(void* selfv) {
-    Modification* self = static_cast<Modification*>(selfv);
-
-    if (!self->savingSettings) {
-        // 0x1800b0619: LEA RDX,[RCX+8] ; ADD RCX,0x18 ; CALL 0x180010110
-        RtColl_ArrayModAssign_180010110(&self->savedMods, &self->mods);
-        return;
-    }
-
-    using SetBoolFn = void (*)(void*, const char*, const char*, bool);
-    using SetIntFn  = void (*)(void*, const char*, const char*, int);
-    // File-local typedef for a call OUT through a resolve door (not a
-    // registered entry point this file owns), so it names the class that
-    // occupies the same eight bytes rather than the POD (B31_RULES.md /
-    // filesystem_setupdirs_win.cpp's exemplar treatment of local Fn typedefs).
-    using GetPathFilenameFn = System::Filename* (*)(const System::Filename*,
-                                                     System::Filename*, bool);
-    using PersistenceSlot = void**;
-
-    void** pslot = RT_DATA_SLOT(PersistenceSlot,
-                                "?_singleton@Persistence@IO@@0PEAV12@EA");
-    void* p = pslot ? *pslot : nullptr;
-
-    for (int i = 0; i < self->count; ++i) {
-        Mod* m = self->mods + i;
-        m->order = i;
-
-        // The hidden return slot of GetPathFilename. `tmp` holds null here, so
-        // the callee constructing into the slot overwrites nothing (the same
-        // idiom as ApplyPathOverride's `value` in filesystem_setupdirs_win.cpp).
-        // `m->file` is a `RtSystem::Filename` MEMBER of the not-yet-converted
-        // `Mod`, so it is reached through the transitional bridge.
-        char* ref;
-        {
-            System::Filename tmp;
-            RT_EXPORT_ONCE(GetPathFilenameFn,
-                "?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z")(
-                    &Sys(m->file), &tmp, true);
-
-            // 0x1800b0676..0x1800b06be: take a REFERENCE to the returned
-            // buffer, then release the temporary. `ref` outlives the scope
-            // deliberately; the inner block's close is retail's release.
-            ref = tmp._data;
-            if (ref != nullptr) ++RefCount(ref);
-        }  // ~tmp releases here, exactly where retail's release sat
-
-        RT_EXPORT_ONCE(SetBoolFn, "?Set@Persistence@IO@@QEAAXPEBD0_N@Z")(
-            p, "ModEnabled_", ref, m->enabled != 0);
-        RT_EXPORT_ONCE(SetIntFn, "?Set@Persistence@IO@@QEAAXPEBD0H@Z")(
-            p, "ModIndex_", ref, m->order);
-
-        if (ref != nullptr) {
-            if (--RefCount(ref) == 0) ModMemFree(ref - 8);
-        }
-    }
-
+    reinterpret_cast<IO::Modification*>(selfv)->SaveList();
 }
 
 // ============================================================================
@@ -875,3 +790,168 @@ int RtIoModificationRegister() {
 }
 
 }  // namespace RtIO
+
+// ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS — `IO::Modification`'s member bodies
+// ============================================================================
+//
+// A member of `IO::X` cannot be DEFINED inside `namespace RtIO` — `IO` and
+// `RtIO` are siblings, so the definition has to appear in a namespace enclosing
+// the class (B34_BRIEFS §A.2). This block therefore sits AFTER
+// `}  // namespace RtIO`, and reaches that namespace's helpers as `RtIO::X` —
+// which works for its anonymous-namespace and `static` members too, in this
+// same translation unit.
+//
+// Inside this block a bare `Modification`, `Mod` or `Filename` would bind to
+// whatever `namespace IO` sees first, so every POD is spelled `RtIO::` and every
+// real class `System::` (B34_RULES §7.2, THE GREP HAZARD).
+//
+// NO QUALIFIED `IO::Modification::` CALL IS NEEDED IN THE DOORS ABOVE, and that
+// is worth saying because a reader coming from blocks 1-2 will look for it:
+// §A.1's recursion hazard is about a POLYMORPHIC receiver whose live instances
+// wear a MINTED table whose slots resolve back to the doors. `IO::Modification`
+// has no vtable at all (Modification.h's banner), so a member call on it is
+// already a direct call.
+// ============================================================================
+
+namespace IO {
+
+// ?GetCount@Modification@IO@@QEBAHXZ                        retail 0x18000da90
+//     MOV EAX,[RCX+0x10] ; RET
+int Modification::GetCount() const {
+    return _count;
+}
+
+// ?GetModification@Modification@IO@@QEBAAEBUMod@12@H@Z      retail 0x18000da80
+//     MOVSXD RAX,EDX ; SHL RAX,7 ; ADD RAX,[RCX+8] ; RET
+//
+// MOVSXD, not a zero extension: a NEGATIVE index strides BACKWARDS off the
+// array. Ghidra's C prints this as a zero extension
+// (reference_ghidra_c_output_vs_disassembly.md), which would silently turn
+// index -1 into an 8-GB forward offset. `static_cast<int64_t>` is the sign
+// extension, and it is load-bearing. Unbounded, exactly as retail is.
+const RtIO::Mod& Modification::GetModification(int index) const {
+    return *reinterpret_cast<const RtIO::Mod*>(
+        reinterpret_cast<const uint8_t*>(_mods) + (static_cast<int64_t>(index) << 7));
+}
+
+// ?Enable@Modification@IO@@QEAAXH_N@Z                       retail 0x1800aeab0
+//
+//     MOV RAX,[RCX+8] ; MOVSXD RDX,EDX ; MOV byte [RCX],1
+//     SHL RDX,7 ; MOV byte [RDX+RAX+0x50],R8B ; RET
+//
+// The dirty flag is set BEFORE the bounds-free indexed store, and
+// unconditionally — Enable(i, x) marks the list dirty even when x is what the
+// mod already held. Nothing in our tree depends on that, but a "no-op returns
+// early" tidy-up would be a real behaviour change to IsDirty.
+void Modification::Enable(int index, bool value) {
+    _dirty = 1;
+    _mods[index].enabled = static_cast<uint8_t>(value);
+}
+
+// ?Swap@Modification@IO@@QEAAXHH@Z                          retail 0x1800aeb20
+//
+//     if (a == b) return;                      // CMP EDX,EBX ; JZ epilogue
+//     this->dirty = 1;
+//     Mod tmp;  Mod::Mod(&tmp, &mods[a]);      // 0x1800101e0
+//     mods[a] = mods[b];                       // 0x180026ef0
+//     mods[b] = tmp;                           // 0x180026ef0
+//     tmp.~Mod();                              // 0x180011460
+//
+// The equality test is on the two INDICES and happens before the dirty flag is
+// touched, so Swap(i, i) is a complete no-op. `b` is sign-extended (MOVSXD
+// RBX,R8D) before the shift and `a` separately (MOVSXD RDI,EDX); both strides
+// are `<< 7`, which is what `RtIO::Mod*` arithmetic gives (sizeof is 0x80).
+void Modification::Swap(int a, int b) {
+    if (a == b) return;
+
+    _dirty = 1;
+
+    uint8_t tmpStorage[sizeof(RtIO::Mod)];
+    RtIO::Mod* tmp = reinterpret_cast<RtIO::Mod*>(tmpStorage);
+    RtIO::RtIo_Mod_CopyCtor_1800101e0(tmp, _mods + a);
+    RtIO::RtIo_Mod_Assign_180026ef0(_mods + a, _mods + b);
+    RtIO::RtIo_Mod_Assign_180026ef0(_mods + b, tmp);
+    RtIO::RtIo_Mod_Dtor_180011460(tmp);
+}
+
+// ?SaveList@Modification@IO@@QEAAXXZ                        retail 0x1800b05f0
+//
+//     if (!this->savingSettings) { Array<Mod>::operator=(&savedMods, &mods);
+//                                  return; }
+//     Persistence* p = *(0x1801fc6b8);
+//     for (int i = 0; i < this->count; ++i) {
+//         mods[i].order = i;
+//         Filename tmp = mods[i].file.GetPathFilename(true);   // 0x1800c6740
+//         char* nameRef = tmp.data;  addref;                   // then release tmp
+//         p->Set("ModEnabled_", nameRef, mods[i].enabled);     // 0x1800b8380
+//         p->Set("ModIndex_",   nameRef, mods[i].order);       // 0x1800b80c0
+//         release nameRef;
+//     }
+//
+// The two literals are at 0x1801557f8 ("ModEnabled_") and 0x180155808
+// ("ModIndex_"), read out of .rdata; they are the same prefixes RefreshList
+// formats back with "%s%s" (0x1801551f8) when it reads the settings in.
+//
+// `mods[i].order` is re-read from the record for the second Set rather than
+// reusing the loop counter — retail does `MOV R9D,[RBP+R14+0x20]`. Identical in
+// value; transcribed as written so a future change to the first store cannot
+// silently desynchronise the two.
+void Modification::SaveList() {
+    if (!_savingSettings) {
+        // 0x1800b0619: LEA RDX,[RCX+8] ; ADD RCX,0x18 ; CALL 0x180010110
+        RtIO::RtColl_ArrayModAssign_180010110(&_savedMods, &_mods);
+        return;
+    }
+
+    using SetBoolFn = void (*)(void*, const char*, const char*, bool);
+    using SetIntFn  = void (*)(void*, const char*, const char*, int);
+    // File-local typedef for a call OUT through a resolve door (not a
+    // registered entry point this file owns), so it names the class that
+    // occupies the same eight bytes rather than the POD (B31_RULES.md /
+    // filesystem_setupdirs_win.cpp's exemplar treatment of local Fn typedefs).
+    using GetPathFilenameFn = System::Filename* (*)(const System::Filename*,
+                                                     System::Filename*, bool);
+    using PersistenceSlot = void**;
+
+    void** pslot = RT_DATA_SLOT(PersistenceSlot,
+                                "?_singleton@Persistence@IO@@0PEAV12@EA");
+    void* p = pslot ? *pslot : nullptr;
+
+    for (int i = 0; i < _count; ++i) {
+        RtIO::Mod* m = _mods + i;
+        m->order = i;
+
+        // The hidden return slot of GetPathFilename. `tmp` holds null here, so
+        // the callee constructing into the slot overwrites nothing (the same
+        // idiom as ApplyPathOverride's `value` in filesystem_setupdirs_win.cpp).
+        // `m->file` is a `RtSystem::Filename` MEMBER of the not-yet-converted
+        // `Mod`, so it is reached through the transitional bridge.
+        char* ref;
+        {
+            System::Filename tmp;
+            RT_EXPORT_ONCE(GetPathFilenameFn,
+                "?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z")(
+                    &RtIO::Sys(m->file), &tmp, true);
+
+            // 0x1800b0676..0x1800b06be: take a REFERENCE to the returned
+            // buffer, then release the temporary. `ref` outlives the scope
+            // deliberately; the inner block's close is retail's release.
+            ref = tmp._data;
+            if (ref != nullptr) ++RtIO::RefCount(ref);
+        }  // ~tmp releases here, exactly where retail's release sat
+
+        RT_EXPORT_ONCE(SetBoolFn, "?Set@Persistence@IO@@QEAAXPEBD0_N@Z")(
+            p, "ModEnabled_", ref, m->enabled != 0);
+        RT_EXPORT_ONCE(SetIntFn, "?Set@Persistence@IO@@QEAAXPEBD0H@Z")(
+            p, "ModIndex_", ref, m->order);
+
+        if (ref != nullptr) {
+            if (--RtIO::RefCount(ref) == 0) RtIO::ModMemFree(ref - 8);
+        }
+    }
+
+}
+
+
+}  // namespace IO
