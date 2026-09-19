@@ -278,9 +278,45 @@ extern "C" BinaryCodec* RtIo_BinaryWriter_Ctor(BinaryCodec* self, Serializer* se
 }
 
 // ---------------------------------------------------------------------------
+// THE FIVE BINARY-ENCODING SLOTS ARE NOW `IO::BinaryEncoding`'s METHODS.
+// ---------------------------------------------------------------------------
+// ENDGAME B.3.4 block 1. The bodies moved into the class (declared in
+// runtime/types/io/Serializer.h, defined at the bottom of this file for the two
+// factories; the three constants are inline in the header). The five `extern
+// "C"` doors below KEEP their addresses and their registrations and now
+// DELEGATE — the two-step shim pattern from B31_RULES.
+//
+// THE DELEGATION IS A **QUALIFIED**, NON-VIRTUAL CALL, AND IT HAS TO BE.
+// A live `IO::Encoding` in this build is 8 bytes allocated by a stream
+// constructor (`Allocate(8,4)`) and stamped with the MINTED table 0x1801554a8,
+// whose five slots resolve back to these very doors. So a door that made a
+// VIRTUAL call on that object would dispatch through the minted table straight
+// back into itself — an infinite recursion, not a delegation. Every door
+// therefore calls `g_binaryEncoding.IO::BinaryEncoding::Method(...)`: the
+// `Class::` qualification suppresses virtual dispatch, and the file-scope
+// instance exists only to give the non-static member a `this` it never reads.
+//
+// That `this` really is never read: all five retail bodies overwrite RCX before
+// first use (see the CreateReader/CreateWriter notes below), which is why
+// routing every door through ONE shared instance changes no behaviour.
+//
+// WHAT B.3.4 DELIBERATELY DOES NOT DO HERE (B34_RULES §4.3): nothing in this
+// commit changes WHO constructs an Encoding or WHICH vtable it wears. The
+// stream constructors still stamp the minted 0x1801554a8 through
+// `ResolveAddr(Module::Runtime, 0x1801554a8ull)`. The doors die, and the class
+// becomes the only route, when the last reader of that minted table converts —
+// which is the end of B.3, not this step.
+//
+// ---------------------------------------------------------------------------
 // Slots 0, 1 and 2 of the shared BINARY encoding vtable 0x1801554a8 — Wave 21
 // lane ENC, item 1. NONE of the three is exported; no debug string names them,
-// so the names below are DESCRIPTIVE (behaviour-derived), not attested.
+// so the SLOT names are DESCRIPTIVE (behaviour-derived), not attested. The
+// CLASS names, however, now are: `IO\BinaryEncoding.cpp` / `IO\TextEncoding.cpp`
+// / `IO\VisitorEncoding.cpp` are source-path strings in
+// Runtime-x64-profile.dll (0x1801a0040 / 0x1801a2d50 / 0x1801a4d18) and rows in
+// docs/runtime_port/original_source_tree.txt. So the paragraph below is now
+// half-superseded: the return VALUES and the CLASS names are attested; only the
+// three member names remain this project's reading.
 //
 // Transcribed straight from the shipped bytes (read via pefile against
 // Runtime-x64.dll, RETAIL, not the profile build — this table has no
@@ -311,17 +347,22 @@ extern "C" BinaryCodec* RtIo_BinaryWriter_Ctor(BinaryCodec* self, Serializer* se
 // choice, called out so a later lane does not mistake the names for an
 // attested fact.
 // ---------------------------------------------------------------------------
+// The one shared instance the doors delegate through. Stateless, 8 bytes, and
+// never handed to anything outside this file — a live Encoding is still the
+// minted-vtable object a stream constructor allocated.
+IO::BinaryEncoding g_binaryEncoding;
+
 extern "C" bool RtIo_Encoding_IsBinary(void* self) {
-    (void)self;
-    return true;
+    (void)self;   // retail never reads RCX
+    return g_binaryEncoding.IO::BinaryEncoding::IsBinary();
 }
 extern "C" bool RtIo_Encoding_IsText(void* self) {
     (void)self;
-    return false;
+    return g_binaryEncoding.IO::BinaryEncoding::IsText();
 }
 extern "C" int32_t RtIo_Encoding_GetKind(void* self) {
     (void)self;
-    return 2;
+    return g_binaryEncoding.IO::BinaryEncoding::GetKind();
 }
 
 // ---------------------------------------------------------------------------
@@ -332,24 +373,58 @@ extern "C" int32_t RtIo_Encoding_GetKind(void* self) {
 extern "C" BinaryCodec* RtIo_Encoding_CreateReader(void* self, Serializer* ser,
                                                    int32_t version) {
     (void)self;
-    ++g_encCounts.createReader;
-    void* p = RT_EXPORT_ONCE(MemAllocFn,
-        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(sizeof(BinaryCodec), 4);
-    if (p == nullptr) return nullptr;    // retail's XOR EAX,EAX path
-    return RtIo_BinaryReader_Ctor(static_cast<BinaryCodec*>(p), ser, version);
+    return reinterpret_cast<BinaryCodec*>(
+        g_binaryEncoding.IO::BinaryEncoding::CreateReader(
+            reinterpret_cast<IO::Serializer&>(*ser), version));   // B.3.4 bridge
 }
 
 extern "C" BinaryCodec* RtIo_Encoding_CreateWriter(void* self, Serializer* ser,
                                                    int32_t version) {
     (void)self;
-    ++g_encCounts.createWriter;
-    void* p = RT_EXPORT_ONCE(MemAllocFn,
-        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(sizeof(BinaryCodec), 4);
-    if (p == nullptr) return nullptr;    // retail's XOR EAX,EAX path
-    return RtIo_BinaryWriter_Ctor(static_cast<BinaryCodec*>(p), ser, version);
+    return reinterpret_cast<BinaryCodec*>(
+        g_binaryEncoding.IO::BinaryEncoding::CreateWriter(
+            reinterpret_cast<IO::Serializer&>(*ser), version));   // B.3.4 bridge
 }
 
 }  // namespace RtIo
+
+// ===========================================================================
+// IO::BinaryEncoding — the two factory bodies.
+// ===========================================================================
+// Byte-for-byte what the two `extern "C"` doors held before B.3.4 block 1; only
+// the enclosing declaration changed. `this` is accepted and ignored because
+// retail's 0x1800a8120 / 0x1800a8080 overwrite RCX before first use.
+//
+// The two `reinterpret_cast`s in each body are B.3.4 bridges and they are
+// TRANSITIONAL BY CONSTRUCTION: `IO::ReaderWriter` becomes a real class in
+// block 2 and `IO::Serializer` in block 3, and each block deletes one of them
+// without touching this file's logic or the header's five signatures. The casts
+// are honest because `Serializer.h` cross-asserts every layout involved.
+namespace IO {
+
+ReaderWriter* BinaryEncoding::CreateReader(Serializer& ser, int version) {
+    ++RtIo::g_encCounts.createReader;
+    void* p = RT_EXPORT_ONCE(RtIo::MemAllocFn,
+        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(sizeof(rt::io::BinaryCodec), 4);
+    if (p == nullptr) return nullptr;    // retail's XOR EAX,EAX path, unguarded
+    return reinterpret_cast<ReaderWriter*>(                         // B.3.4 bridge
+        RtIo::RtIo_BinaryReader_Ctor(static_cast<rt::io::BinaryCodec*>(p),
+                                     reinterpret_cast<rt::io::Serializer*>(&ser),
+                                     version));
+}
+
+ReaderWriter* BinaryEncoding::CreateWriter(Serializer& ser, int version) {
+    ++RtIo::g_encCounts.createWriter;
+    void* p = RT_EXPORT_ONCE(RtIo::MemAllocFn,
+        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(sizeof(rt::io::BinaryCodec), 4);
+    if (p == nullptr) return nullptr;    // retail's XOR EAX,EAX path, unguarded
+    return reinterpret_cast<ReaderWriter*>(                         // B.3.4 bridge
+        RtIo::RtIo_BinaryWriter_Ctor(static_cast<rt::io::BinaryCodec*>(p),
+                                     reinterpret_cast<rt::io::Serializer*>(&ser),
+                                     version));
+}
+
+}  // namespace IO
 
 // ============================================================================
 // Registration

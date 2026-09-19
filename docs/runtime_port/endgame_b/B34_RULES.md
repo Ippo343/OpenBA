@@ -417,21 +417,46 @@ The constants are retired by the class that owns each body, not by a sweep.
 **three consecutive PASSes** for anything touching IO — i.e. every commit in this step. The
 gate script tests the DEPLOYED exe, so a no-build run tests the previous binary.
 
-**The flake rate is ~1 in 4, measured on UNCHANGED main f978b983** (coordinator's baseline:
-3 PASS + 1 DIFF in four runs). So the "×3" is not belt-and-braces, it is calibrated: a single
-run has a ~25% chance of reporting a DIFF that means nothing. **Two known flake signatures,
-and both mean RE-RUN, not FAIL:**
+**The flake rate is ~1 in 4, measured twice independently**: on UNCHANGED main f978b983
+(coordinator's baseline, 3 PASS + 1 DIFF in four runs) and again on B.3.4 block 1 (1 DIFF then
+3 consecutive PASS in four runs). So the "×3" is not belt-and-braces, it is calibrated: a
+single run has a ~25% chance of reporting a DIFF that means nothing.
+
+**THREE known flake signatures. All of them mean RE-RUN, not FAIL:**
 
 1. **A ONE-byte DIFF at +0x18 with identical file sizes** — `tools/resave_gate/README.md`'s
-   documented flake, and the one the baseline hit. Re-run.
+   documented flake, and the one the coordinator's baseline hit. Re-run.
 2. **A DIFF with count 5689 and exactly one extra `CropField.rsc:resource` row** — the
    `ExternalFactory::Add` loader race (`reference_resave_gate_cropfield_row_flake.md`).
    Re-run twice.
+3. **A DIFF where the resave is LARGER than the golden by a few tens of bytes and the
+   `[Roundtrip]` line's `tail=` grew by the same amount** — measured on block 1 as
+   `resaved=21075154` (golden 21075114, +40) with `tail=303` against the healthy `tail=263`,
+   and `diffBytes` ~16.5M against the healthy ~16.0M. **Re-run; three consecutive PASSes
+   followed.**
 
-**Anything else is real: stop and bisect.** Specifically — 5690+ rows, several rows, a row that
-is not `CropField.rsc:resource`, a size difference, or a multi-byte diff anywhere including at
-+0x18. And "three PASSes" means three *consecutive* clean runs, not three runs of which some
-passed: a re-run after a flake restarts the count for that commit.
+**SIGNATURE 3 IS A CORRECTION TO THIS SECTION, AND IT COST A BISECT.** An earlier revision of
+this sheet said "a size difference … is real: stop and bisect". That rule is WRONG as written
+and it would have rejected a good commit: block 1's first run produced exactly that, the bisect
+against block 0 said block 0 passed, and then block 1 passed three times running on a rebuild
+of the same tree. The mechanism is the one the gate README already describes for signature 2 —
+the resave's reference table numbers every RESIDENT resource, so a run that leaves extra
+resources resident adds rows, grows the file and shifts every id after them. Signatures 2 and 3
+are the SAME loader race seen at two different magnitudes; only the row that leaks differs.
+
+**What is still real, and still means stop and bisect:**
+- the resave is SMALLER than the golden, or differs by a size that does not match a
+  whole number of reference-table rows;
+- `tail=` is UNCHANGED at 263 and the bytes differ anyway;
+- a multi-byte diff with identical sizes;
+- the same DIFF reproduces on three consecutive runs of a rebuilt tree.
+
+**The discriminator is a RE-RUN, not the shape of the first verdict.** Because two of the three
+flake signatures look exactly like a real regression on a single run, the honest procedure is:
+never bisect on one DIFF; re-run first, and bisect only when the DIFF survives a rebuild and
+repeats. "Three PASSes" means three *consecutive* clean runs — a re-run after a flake restarts
+the count for that commit, and a commit that cannot produce three in a row is not mergeable
+however good its first run looked.
 
 Per move, the gate is run *after* the move and *before* the merge, and the coordinator runs it,
 not the agent. A move that cannot be gated is not a move: if a change is too small to reach the
@@ -668,22 +693,31 @@ on our stack), but it is the honest answer to "what did we drop".
 
 ## 6. Scope and order of work
 
-### 6.0 Honest sizing: **"IO + System rest" is TWO steps, not one**
+### 6.0 Honest sizing: the step runs as **4a then 4b**, in that order
 
-Measured: `runtime/src/io/` is 44 files / 22,220 lines / ~593 registration rows and eleven
-polymorphic classes; `runtime/src/system/` is 15 files / 8,224 lines. The caller surface behind
-them is ~2,870 CALL sites, of which **1,146 are the allocator alone**.
+ENDGAME §B.3 defines step 4 as "`IO` (Stream, CompressedStream, Serializer, Encoding,
+Package), `System` rest", and that is the whole of what this step delivers. **The `System` rest
+is not dropped — it is sequenced.** Measured: `runtime/src/io/` is 44 files / 22,220 lines /
+~593 registration rows and eleven polymorphic classes; `runtime/src/system/` is 15 files /
+8,224 lines. The caller surface behind them is ~2,870 CALL sites, of which **1,146 are the
+allocator alone**.
 
-**B.3.4 PROPER = the `IO` namespace**, §6.1 blocks 1-3 plus §6.4 caller batches A-F restricted
-to the `Serializer`/`Encoding`/`Stream`/`Persistence`/`FileSystem`/`Modification` pointers.
-That is one session for the core with a coordinator and three to five caller agents.
+- **B.3.4a = the `IO` namespace.** §6.1 blocks 0-5 plus §6.4 caller batches A-G, restricted to
+  the `Serializer`/`Encoding`/`Stream`/`Persistence`/`FileSystem`/`Modification` pointers.
+- **B.3.4b = the `System` rest**, run AFTER 4a closes and **separately gated**:
+  `MemoryAllocator` (§6.5c), `Thread`/`CriticalSection` (§6.5d), `Random`, `Color`/`Value`,
+  `Compression`, `Configuration`, `Timer`, `Crc`, `Error`, `WideString`. §6.5(c) and §6.5(d)
+  are its design input and should be read as 4b's brief, not as a deferral.
 
-**CARRIES OVER to B.3.4b (or folds into B.3.5)**: the `System` rest —
-`MemoryAllocator` (§6.5c), `Thread`/`CriticalSection` (§6.5d), `Random`, `Color`/`Value`,
-`Compression`, `Configuration`, `Timer`, `Crc`, `Error`, `WideString`. Reason: none of it
-depends on the IO design question, all of it is independently gateable, and putting the
-allocator's 1,146 sites in the same step as the serializer's 991 means one resave-gate failure
-cannot be attributed. Keeping them apart is the instrument, not caution.
+**Why the order, and why separately gated.** The safety net for all of this is one instrument —
+the resave gate — and it returns a single verdict. Put the allocator's 1,146 sites in the same
+commit range as the serializer's 991 and a DIFF cannot be attributed to either. None of the
+`System` rest depends on the IO design question, so nothing is lost by sequencing and the
+attribution is gained. 4b may also run in parallel with 4a in a separate worktree if the
+coordinator wants throughput, provided its commits gate independently.
+
+Whether 4b can close in one session is a question for STATUS when 4a closes, not a decision to
+pre-empt here.
 
 ### 6.1 The core — ONE owner, serial, three blocks
 
@@ -968,31 +1002,63 @@ reinterpret_cast<IO::Serializer*>(serializer_24bytes)->Serialize(field, nullptr)
 // offset is not in that table is not a serialize call — stop and report it.
 
 // --- the ctor/dtor pair: 187 + 187 sites, batches A-F ---------------------
+// THE DEFAULT, AND IT IS THE ONLY SHAPE A CALLER BATCH MAY USE.
+// Measured: every exe-side site constructs into a RAW BYTE BUFFER, never a
+// typed local — `uint8_t ser1[24]`, `uint8_t serializer[32]`. So the conversion
+// is placement-new into the SAME buffer with an explicit destructor at the SAME
+// position, which is exactly what B.3.3 did for the 815 fn_InternalBasePtr_Ctor
+// sites. 1:1 per call, no lifetime judgement, and a raw buffer has no implicit
+// destructor, so nothing can run twice.
+alignas(8) uint8_t ser1[24];                    // <- alignas ADDED in the same edit
 g_fn_Serializer_Ctor(ser1, stream, 0);
 ...
 g_fn_Serializer_Dtor(ser1);
-// becomes a stack object ONLY where scope and lifetime are byte-for-byte the same:
-IO::Serializer ser1(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+// becomes:
+alignas(8) uint8_t ser1[24];
+::new (ser1) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+...
+reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();                   // B.3.4 bridge
 ```
 
-**THE CONSTRAINT ON THAT LAST SHAPE, and it is the one judgement call in the whole caller
-surface.** Constructing an `IO::Serializer` is **not** a cheap wrapper construction:
+**`x.~Serializer()` ON A TYPED LOCAL IS FORBIDDEN**, and the typed stack-object form
+(`IO::Serializer ser1(stream, 0);`) is **not available to a caller batch at all** — it is
+optional polish for the receiver's own class conversion in B.3 steps 5-8. The reason is the
+`RtSystem::String` double-free trap in a new costume: on a typed local, an explicit destructor
+call plus the implicit one at scope exit destroys the object **twice**, and
+`IO::Serializer::~Serializer` is **not idempotent** — it reads 4 more bytes on the read side
+and back-patches the placeholder on the write side. An early-return path is exactly where an
+agent would reach for that shape, and the resave gate would report it as "the save changed"
+with no pointer to the site.
+
+**Why the order matters at all.** Constructing an `IO::Serializer` is not a cheap wrapper
+construction:
 
 - `BinaryReader::BinaryReader` (0x1800a8340) calls the stream's `Read` three times with
-  count 4 and `SetCurrentPos`/slot +0x28 once — it **consumes a 12-byte header**.
+  count 4 and slot +0x28 once — it **consumes a 12-byte header**.
 - `BinaryWriter::BinaryWriter` (0x1800a8a30) calls `Write` three times with count 4 and slot
   +0x28 twice — it **emits a 12-byte header** and records a back-patch position.
 - `~BinaryReader` (0x1800a82f0) **reads a further 4 bytes**; the writer's destructor patches
   the placeholder.
 
-So **destruction ORDER and POSITION relative to other stream operations are load-bearing.**
-Convert to a stack object only when the explicit `Dtor` call is the last statement of the same
-block the `Ctor` opened AND nothing between them opens a second Serializer on the same stream.
-Otherwise **leave the explicit pair**, converted to `ser1.~Serializer()` / placement-new or —
-preferably — left as the `g_fn_*` calls, with a `// B.3.4: explicit lifetime, see B34_RULES
-§7.3` comment naming the reason. A site where the pair straddles a branch, a loop, or another
-`Serializer`'s lifetime is a REPORT, not a conversion. The resave gate will catch a reordering,
-but it will catch it as "the save changed" with no pointer to the site.
+So **destruction ORDER and POSITION relative to other stream operations are load-bearing**, and
+placement-new preserves both by construction: each call converts in place, and a path that
+skips the `Dtor` today still skips it (faithful, not "fixed").
+
+**THE `alignas(8)` RULE.** The buffers are `uint8_t[24]`, alignment 1. Placement-new of an
+8-aligned `IO::Serializer` into an under-aligned buffer is undefined behaviour even though x64
+stack slots happen to be 16-aligned in practice — correct today by accident, one inlining
+decision away from being wrong. So `alignas(8)` goes on the buffer declaration **in the same
+edit as the placement-new**. It changes no offset and no code, only the slot's alignment
+guarantee. **Two exceptions, both of which are a REPORT and not a conversion:**
+
+1. **The buffer is a MEMBER of a layout-asserted struct, or an element of a larger byte array
+   carved up by offset.** `alignas` there could move a field. Do not add it; report the site.
+2. **The buffer is SMALLER than 0x10 bytes.** Stop and report — `IO::Serializer` is 16 bytes
+   and a smaller buffer means the site was never what it looked like. (A buffer LARGER than
+   0x10, which `[24]` and `[32]` both are, is fine: the object simply does not fill it.)
+
+The survey found every site is a plain local, so expect zero reports — but a batch that finds
+one must not guess.
 
 ---
 
