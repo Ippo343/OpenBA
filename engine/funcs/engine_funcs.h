@@ -122,8 +122,13 @@ extern fn_DynArrayPush_t fn_PostUpdatePush;
 // (CreateVideoContext 0x1800dd500 / ReleaseVideoContext / ~MainLoop), so these
 // three pointers plus fn_VideoCtx_ClearResources exist only for the
 // EngineFuncsDump() diagnostic at engine_funcs.cpp:4123-4141.
-// fn_VideoCtx_Reset is the one member of this group with a live caller
-// (standalone/main.cpp:1321). Note the resolve MECHANISM differs per row: the
+// fn_VideoCtx_Reset used to be the one member of this group with a live caller
+// (standalone/main.cpp's FSE-refocus recovery); ENDGAME B.3.5 (batch b35-I3)
+// converted that call site to `Video::Context::Reset()` on the real class, so
+// ALL FIVE of the group (Ctor, Dtor, Delete, ClearResources, Reset) are now
+// resolved-and-never-called, and the whole group retires with the closing pass.
+// runtime/src/video/context.cpp:1018-1020 still says Reset has a live caller:
+// that note is now stale. Note the resolve MECHANISM differs per row: the
 // ctor and operator delete come from ResolveAddr(Module::Runtime, ...)
 // (engine_funcs.cpp:1620, :1628), not from a mangled name.
 // Video::Context::Context(this, Device*, int, int, int, RenderBuffer*)
