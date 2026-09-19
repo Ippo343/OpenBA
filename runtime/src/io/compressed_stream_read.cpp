@@ -152,6 +152,11 @@ inline Header* Headers(CompressedStream* s) {
     return static_cast<Header*>(s->headerData);
 }
 
+// B.3.4 block 4: the same accessor over the REAL class. An OVERLOAD, not a
+// signature change: the other bodies in this file are not part of this block's
+// conversion (section D keeps this file's edits to the one vtable slot it owns).
+inline Window* Windows(IO::CompressedStream* s) { return static_cast<Window*>(s->_windowData); }
+
 typedef void* (*MemAllocFn)(uint64_t, int32_t);
 typedef void  (*MemFreeFn)(void*);
 
@@ -422,21 +427,62 @@ extern "C" bool RtIo_CompressedStream_SetWindow(CompressedStream* self, int32_t 
 // Note the loop re-enters SetWindow every iteration with the UPDATED position,
 // which is what makes a read spanning several blocks work.
 extern "C" bool RtIo_CompressedStream_Read(CompressedStream* self, int32_t n, void* dst) {
+    return reinterpret_cast<IO::CompressedStream*>(self)
+               ->IO::CompressedStream::Read(n, dst);
+}
 
+int64_t RtIo_CompressedStreamGrowDelegations() { return g_swBranch.grow; }
+
+}  // namespace RtIo
+
+// ============================================================================
+// `IO::CompressedStream::Read` — B.3.4 block 4 (STREAMS), and SECTION D
+// ============================================================================
+// THE ONE SLOT THIS FILE OWNS, AND THE MOST CONSTRAINED BODY IN THE BLOCK.
+//
+// B34_BRIEFS section D: an intermittent defect on the compressed-load path has
+// been measured on an UNCHANGED tree — roughly two boots in six load a resource
+// as NULL, and one of those hung in teardown with the loader thread still
+// EXECUTING inside this very function 45 seconds after Quit. A separate agent
+// is root-causing it.
+//
+// So the body below is the door's former body, transcribed statement for
+// statement, with only `self->X` becoming the member's own field. Nothing was
+// added: no lock, no retry, no loop bound, no null check, no reordering. And
+// nothing was quietly removed — in particular the loop's exit condition and the
+// unguarded `SetWindow` failure return are exactly as they were, because
+// whatever makes the read spin must still be able to.
+//
+// If this conversion made the symptom STOP reproducing, that is a red flag to
+// report, not a win.
+namespace IO {
+
+// ?Read@CompressedStream@IO@@UEAA_NHPEAX@Z                   retail 0x1800aa780
+//   while (n > 0) {
+//       if (!SetWindow(position)) return false;
+//       chunk = min(n, window.end - position);
+//       memcpy(dst, window.buffer + (position - window.start), chunk);
+//       position += chunk; n -= chunk; dst += chunk;
+//   }
+// Note the loop re-enters SetWindow every iteration with the UPDATED position,
+// which is what makes a read spanning several blocks work.
+bool CompressedStream::Read(int n, void* dst) {
+
+    RtIo::CompressedStream* const self = reinterpret_cast<RtIo::CompressedStream*>(this);
     uint8_t* out = static_cast<uint8_t*>(dst);
-    const bool didWork = (n > 0);
 
     while (n > 0) {                                     // 1800aa7a2 / 1800aa806
-        if (!RtIo_CompressedStream_SetWindow(self, self->position)) {  // 1800aa7b6
+        if (!RtIo::RtIo_CompressedStream_SetWindow(self, _position)) {  // 1800aa7b6
             return false;                               // 1800aa825
         }
-        const Window* const w = &Windows(self)[self->activeWindow];  // 1800aa7bf
+        const RtIo::CompressedStreamWindow* const w =
+            &RtIo::Windows(this)[_activeWindow];        // 1800aa7bf
         int32_t chunk = n;                              // 1800aa7c3  ESI = EBP
-        const int32_t pos = self->position;             // 1800aa7d5
+        const int32_t pos = _position;                  // 1800aa7d5
         if (pos + n > w->end) chunk = w->end - pos;     // 1800aa7db/7df/7e1
         std::memcpy(out, static_cast<const uint8_t*>(w->buffer) + (pos - w->start),
                     static_cast<size_t>(chunk));        // 1800aa7e3..f7
-        self->position += chunk;                        // 1800aa7fc
+        _position += chunk;                             // 1800aa7fc
         n   -= chunk;                                   // 1800aa7ff
         out += chunk;                                   // 1800aa801
     }
@@ -444,9 +490,8 @@ extern "C" bool RtIo_CompressedStream_Read(CompressedStream* self, int32_t n, vo
     return true;                                        // 1800aa808
 }
 
-int64_t RtIo_CompressedStreamGrowDelegations() { return g_swBranch.grow; }
+}  // namespace IO
 
-}  // namespace RtIo
 
 // ============================================================================
 // Registration
