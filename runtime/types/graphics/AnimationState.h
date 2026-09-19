@@ -384,12 +384,15 @@ public:
     // @Graphics@@@Object@@HAEBV?$Array@UNode@GraphicsMesh@Graphics@@@Collection@@
     // AEBVTime@System@@2M_N@Z   0x1800fdf50
     //
-    // FORWARDS to the unchanged door in animationstate_transforms.cpp. That body
-    // carries its lane's diff-oracle scaffolding ("NOT DIFFABLE" note and the
-    // reference-count mutation argument), and moving a body out from under its
-    // own scaffolding is a second change riding on this one — the reason
-    // `runtime/src/object/external_class_doors.cpp` gives for the same call on
-    // `ExternalFactory`'s members. It moves when that scaffolding retires.
+    // PORTED — the body IS this member, in animationstate_transforms.cpp's
+    // `namespace Graphics` block, and the registered door delegates to it
+    // (ENDGAME B.3.5 block GC). This note used to say the body stayed put
+    // because it carried its lane's diff-oracle scaffolding and "moving a body
+    // out from under its own scaffolding is a second change riding on this one".
+    // THAT SCAFFOLDING IS GONE: the five replay captures in that file had no
+    // reader anywhere in the tree — they were its five -Wunused-variable
+    // warnings — so the move is a move again. The narrative that explains WHY a
+    // replay against the DLL would be destructive is kept at the body.
     //
     // THE 5th AND 6th PARAMETERS ARE NEVER READ (the fade comes from the group's
     // own table, the speed is the literal 1.0f). Kept for retail's arity.
@@ -404,9 +407,10 @@ public:
                        float speed, bool instanced);
 
     // ?Update@AnimationState@Graphics@@QEAA_N…   0x1800fdb20
-    //   DECLARED, DELIBERATELY UNDEFINED — the live body is
-    //   `runtime/src/graphics/wave27_lane_gfxbig.cpp`'s registered door, which is
-    //   NOT block H1's file set. Same rule as `PlayAnimation` above.
+    //   PORTED — the body IS this member, in wave27_lane_gfxbig.cpp's
+    //   `namespace Graphics` block (ENDGAME B.3.5 block GC). Its three calls onto
+    //   this class's own `CopyInstancedToUnique` / `UpdateRootOnly` /
+    //   `UpdateNodes` are QUALIFIED member calls now, not three resolver hits.
     bool Update(const System::Time& dt, const Collection::Array<uint8_t>& nodes,
                 const Math::Transform& root, void* interp38, void* interp28,
                 Math::Vector3& rootOffsetOut, bool rootOnly, bool flag8);
@@ -433,11 +437,23 @@ public:
     // ?IsInstanced@                  0x1800168a0  NOT PORTED
     bool IsInstanced() const;
 
-private:
     // The three `AEAA`/`AEBA` members — retail PRIVATE, and the mangling says so
-    // (`A` is the private access code). All three are DECLARED AND DELIBERATELY
-    // UNDEFINED, for the same scaffolding reason `PlayAnimation` is: the live
-    // bodies are the registered doors, and none of the three is virtual.
+    // (`A` is the private access code). This DLL exports its private members
+    // (reference_aeaa_is_private_not_unexported.md).
+    //
+    // THEY ARE PUBLIC HERE, not private, and block GC changed that when it moved
+    // their bodies onto the members: each one's registered door is an
+    // `extern "C"` FREE function that has to make the qualified call, and a free
+    // function cannot be a friend of this class without a declaration this
+    // header does not need. That is exactly the reason and the wording block G
+    // recorded for `MaterialInstance::FindConstant` / `FindTexture`
+    // (`wave28_lane_gfxbody.cpp`), and retail's own access code is kept in the
+    // comment rather than in the C++.
+    //
+    // ALL THREE BODIES ARE NOW MEMBERS. `CopyInstancedToUnique` and
+    // `UpdateNodes` are in `animationstate_transforms.cpp`, `UpdateRootOnly` in
+    // `wave28_lane_gfxbody.cpp` — each in that file's `namespace Graphics` block,
+    // with its lane's attendance counters left in the door.
     //
     // ?CopyInstancedToUnique@ 0x1800fd4c0 — `this` IS NEVER READ (RCX is
     //   overwritten four instructions in); the parameter stays for the ABI.
@@ -448,10 +464,9 @@ private:
     void UpdateNodes(float speed, const Collection::Array<uint8_t>& nodes,
                      const Math::Transform& root, void* interp, void* pose,
                      Math::Vector3& rootOffsetOut);
-    // ?UpdateRootOnly@ 0x1800fc870 — body in wave28_lane_gfxbody.cpp (not ours)
+    // ?UpdateRootOnly@ 0x1800fc870 — body in wave28_lane_gfxbody.cpp
     void UpdateRootOnly(float speed, Math::Vector3& rootOffsetOut);
 
-public:
     // ---- the 0x48 bytes ----------------------------------------------------
     // PUBLIC for the same reason `IO::Serializer`'s are: unconverted bodies
     // across `runtime/src/graphics/` reach them at these offsets through a cast.

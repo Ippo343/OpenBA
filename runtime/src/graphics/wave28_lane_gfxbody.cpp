@@ -741,95 +741,32 @@ inline const void* LayerClip(const RtGraphics::AnimationLayer* L) {
 
 }  // namespace
 
+// ENDGAME B.3.5 block GC: THE BODY MOVED to
+// `Graphics::AnimationState::UpdateRootOnly`, in this file's trailing
+// `namespace Graphics` block — it cannot live here, because everything above is
+// inside `namespace rtgfxbody28` and `Graphics` is its SIBLING, not its child
+// (B34_BRIEFS A.2). Block H1 left the body here because it is wrapped in this
+// lane's attendance counters; the counters stay in the door, where they belong,
+// and the door keeps its name and its registration.
+//
+// `AnimationState.h`'s declaration takes `Math::Vector3&` (retail's
+// `AEAVVector3@Math@@`); the body's `out` is that reference's three floats. The
+// three fields the body reads are the real class's: `_layers._size` is the
+// POD's `layerCount` (+0x10) and `_layers._data` its `layers` (+0x08), both
+// welded by AnimationState.h's own `static_assert`s. The LAYER record is still
+// spelled `RtGraphics::AnimationLayer`, because that POD has live users outside
+// this file and B4b-1 keeps it until the last one converts; it is field-for-field
+// `Graphics::AnimationState::Layer` and the header cross-asserts the two.
+
+// The registered door: name, address and retail argument order unchanged, and it
+// keeps the entry counter — the per-layer counter stays in the loop, inside the
+// member, because it measures the loop and not the call.
 extern "C" void RtGraphics_AnimationState_UpdateRootOnly(void* self, float dt, float* out) {
-    Attend("AnimationState::UpdateRootOnly", g_updateRootCalls);
-
-    RtGraphics::AnimationState* const s = static_cast<RtGraphics::AnimationState*>(self);
-
-    Transform7 accum;                                 // the [RSP+0x30] local
-    float ax, ay, az;                                 // XMM7 / XMM8 / XMM9
-
-    {   // ---- seed from the LAST layer --------------------------------------
-        RtGraphics::AnimationLayer* const L = &s->layers[s->layerCount - 1];
-        const void* const clip = LayerClip(L);
-        s->needsUniqueCopy = 0;                       // MOV BYTE PTR [RDI],0x0
-
-        if (L->handle >= 0) {                         // TEST EAX,EAX / JS
-            accum.q[0] = 0.0f; accum.q[1] = 0.0f;     // XORPS XMM6,XMM6
-            accum.q[2] = 0.0f; accum.q[3] = 1.0f;     // [0x18016169c] == 00 00 80 3f
-            const float* const v = StaticRootVector(L->handle);
-            ax = v[0]; ay = v[1]; az = v[2];
-        } else {
-            const float secs = dt * L->speed;         // MULSS XMM0,[R8+0x10]
-            const int64_t delta = static_cast<int64_t>(
-                static_cast<double>(secs) / *g_Timer_secondsPerTick);
-            Transform7 tmp;
-            const Transform7* const p = RT_EXPORT_ONCE(GetRootPoseFn,
-                "?GetRootPoseAtTime@Animation@Graphics@@QEBA?AVTransform@Math@@"
-                "AEBVTime@System@@0@Z")(clip, &tmp, &L->time, &delta);
-            accum.q[0] = p->q[0]; accum.q[1] = p->q[1];
-            accum.q[2] = p->q[2]; accum.q[3] = p->q[3];
-            ax = p->v[0]; ay = p->v[1]; az = p->v[2];
-        }
-        accum.v[0] = ax; accum.v[1] = ay; accum.v[2] = az;
-    }
-
-    // ---- blend the rest, BACKWARD from layerCount-2 -------------------------
-    // `_secondsPerTick` is hoisted into XMM10 before the loop (0x1800fc9e6) and
-    // RE-LOADED after every GetRootPoseAtTime call (0x1800fca9f) because XMM10
-    // is volatile. A single local is the same thing.
-    const double spt = *g_Timer_secondsPerTick;
-    for (int32_t i = s->layerCount - 2; i >= 0; --i) {
-        RtGraphics::AnimationLayer* const L = &s->layers[i];   // re-read each pass
-        const void* const clip = LayerClip(L);
-
-        Transform7 cur;
-        float cx, cy, cz;                              // XMM3 / XMM4 / XMM5
-        if (L->handle >= 0) {
-            cur.q[0] = 0.0f; cur.q[1] = 0.0f;
-            cur.q[2] = 0.0f; cur.q[3] = 1.0f;
-            const float* const v = StaticRootVector(L->handle);
-            cx = v[0]; cy = v[1]; cz = v[2];
-        } else {
-            const float secs = dt * L->speed;
-            const int64_t delta = static_cast<int64_t>(static_cast<double>(secs) / spt);
-            Transform7 tmp;
-            const Transform7* const p = RT_EXPORT_ONCE(GetRootPoseFn,
-                "?GetRootPoseAtTime@Animation@Graphics@@QEBA?AVTransform@Math@@"
-                "AEBVTime@System@@0@Z")(clip, &tmp, &L->time, &delta);
-            cur.q[0] = p->q[0]; cur.q[1] = p->q[1];
-            cur.q[2] = p->q[2]; cur.q[3] = p->q[3];
-            cx = p->v[0]; cy = p->v[1]; cz = p->v[2];
-        }
-        cur.v[0] = cx; cur.v[1] = cy; cur.v[2] = cz;
-
-        // The weight is the NEXT layer's fade. See the banner.
-        const RtGraphics::AnimationLayer* const N = &s->layers[i + 1];
-        const float t = static_cast<float>(static_cast<double>(N->fadeRemaining) * spt) /
-                        static_cast<float>(static_cast<double>(N->fadeLength)    * spt);
-
-        // SUBSS then MULSS then ADDSS, in that order, on the ACCUMULATOR minus
-        // the current layer — `cur + (accum - cur) * t`.
-        const float dx = (ax - cx) * t;
-        const float dy = (ay - cy) * t;
-        const float dz = (az - cz) * t;
-        ax = cx + dx; ay = cy + dy; az = cz + dz;
-
-        // FOUR floats out of Lerp, and only four. B.3.1 bridge: `cur.q` and
-        // `accum.q` are float[4] slots in this file's own scratch layout.
-        const Math::Quaternion q =
-            reinterpret_cast<const Math::Quaternion*>(cur.q)->Lerp(
-                *reinterpret_cast<const Math::Quaternion*>(accum.q),
-                reinterpret_cast<const Math::Scalar&>(t));
-        accum.q[0] = q.x; accum.q[1] = q.y;
-        accum.q[2] = q.z; accum.q[3] = q.w;
-        accum.v[0] = ax; accum.v[1] = ay; accum.v[2] = az;
-        ++g_updateRootLayers;
-    }
-
-    out[0] = ax; out[1] = ay; out[2] = az;             // MOVSS [R14], ...
+    rtgfxbody28::Attend("AnimationState::UpdateRootOnly", rtgfxbody28::g_updateRootCalls);
+    reinterpret_cast<Graphics::AnimationState*>(self)                   // B.3.5 bridge
+        ->Graphics::AnimationState::UpdateRootOnly(
+            dt, *reinterpret_cast<Math::Vector3*>(out));                // B.3.5 bridge
 }
-
 // ============================================================================
 // §6.  Camera::operator=  — retail 0x180017c40, ordinal 1060, 460 bytes.
 // ============================================================================
@@ -1024,5 +961,105 @@ int32_t MaterialInstance::FindTexture(const RtSystem::String& name) const {
                       _textures._size, &name,
                       static_cast<int32_t>(sizeof(RtGraphics::MaterialTexture)));
 }
+
+// ---------------------------------------------------------------------------
+// ?UpdateRootOnly@AnimationState@Graphics@@AEAAXMAEAVVector3@Math@@@Z 0x1800fc870
+// ENDGAME B.3.5 block GC. The evidence — the backward loop, the next-layer blend
+// weight, the single-precision delta, and above all "count the stores: Lerp
+// supplies only FOUR of the seven floats" — is in the banner beside the door.
+// ---------------------------------------------------------------------------
+// `_layers._data` is RE-READ at every use, never hoisted into a local: retail
+// reloads it (`MOV RAX,[RDI+8]`) at the top of the loop and again for the
+// next-layer weight, and `GetRootPoseAtTime` is a call between those reloads.
+#define RTGC_LAYERS() (reinterpret_cast<RtGraphics::AnimationLayer*>(_layers._data))
+
+void AnimationState::UpdateRootOnly(float dt, Math::Vector3& rootOffsetOut) {
+    float* const out = reinterpret_cast<float*>(&rootOffsetOut);
+
+    rtgfxbody28::Transform7 accum;                                 // the [RSP+0x30] local
+    float ax, ay, az;                                 // XMM7 / XMM8 / XMM9
+
+    {   // ---- seed from the LAST layer --------------------------------------
+        RtGraphics::AnimationLayer* const L = &RTGC_LAYERS()[_layers._size - 1];
+        const void* const clip = rtgfxbody28::LayerClip(L);
+        _needsUniqueCopy = 0;                         // MOV BYTE PTR [RDI],0x0
+
+        if (L->handle >= 0) {                         // TEST EAX,EAX / JS
+            accum.q[0] = 0.0f; accum.q[1] = 0.0f;     // XORPS XMM6,XMM6
+            accum.q[2] = 0.0f; accum.q[3] = 1.0f;     // [0x18016169c] == 00 00 80 3f
+            const float* const v = rtgfxbody28::StaticRootVector(L->handle);
+            ax = v[0]; ay = v[1]; az = v[2];
+        } else {
+            const float secs = dt * L->speed;         // MULSS XMM0,[R8+0x10]
+            const int64_t delta = static_cast<int64_t>(
+                static_cast<double>(secs) / *g_Timer_secondsPerTick);
+            rtgfxbody28::Transform7 tmp;
+            const rtgfxbody28::Transform7* const p = RT_EXPORT_ONCE(rtgfxbody28::GetRootPoseFn,
+                "?GetRootPoseAtTime@Animation@Graphics@@QEBA?AVTransform@Math@@"
+                "AEBVTime@System@@0@Z")(clip, &tmp, &L->time, &delta);
+            accum.q[0] = p->q[0]; accum.q[1] = p->q[1];
+            accum.q[2] = p->q[2]; accum.q[3] = p->q[3];
+            ax = p->v[0]; ay = p->v[1]; az = p->v[2];
+        }
+        accum.v[0] = ax; accum.v[1] = ay; accum.v[2] = az;
+    }
+
+    // ---- blend the rest, BACKWARD from layerCount-2 -------------------------
+    // `_secondsPerTick` is hoisted into XMM10 before the loop (0x1800fc9e6) and
+    // RE-LOADED after every GetRootPoseAtTime call (0x1800fca9f) because XMM10
+    // is volatile. A single local is the same thing.
+    const double spt = *g_Timer_secondsPerTick;
+    for (int32_t i = _layers._size - 2; i >= 0; --i) {
+        RtGraphics::AnimationLayer* const L = &RTGC_LAYERS()[i];   // re-read each pass
+        const void* const clip = rtgfxbody28::LayerClip(L);
+
+        rtgfxbody28::Transform7 cur;
+        float cx, cy, cz;                              // XMM3 / XMM4 / XMM5
+        if (L->handle >= 0) {
+            cur.q[0] = 0.0f; cur.q[1] = 0.0f;
+            cur.q[2] = 0.0f; cur.q[3] = 1.0f;
+            const float* const v = rtgfxbody28::StaticRootVector(L->handle);
+            cx = v[0]; cy = v[1]; cz = v[2];
+        } else {
+            const float secs = dt * L->speed;
+            const int64_t delta = static_cast<int64_t>(static_cast<double>(secs) / spt);
+            rtgfxbody28::Transform7 tmp;
+            const rtgfxbody28::Transform7* const p = RT_EXPORT_ONCE(rtgfxbody28::GetRootPoseFn,
+                "?GetRootPoseAtTime@Animation@Graphics@@QEBA?AVTransform@Math@@"
+                "AEBVTime@System@@0@Z")(clip, &tmp, &L->time, &delta);
+            cur.q[0] = p->q[0]; cur.q[1] = p->q[1];
+            cur.q[2] = p->q[2]; cur.q[3] = p->q[3];
+            cx = p->v[0]; cy = p->v[1]; cz = p->v[2];
+        }
+        cur.v[0] = cx; cur.v[1] = cy; cur.v[2] = cz;
+
+        // The weight is the NEXT layer's fade. See the banner.
+        const RtGraphics::AnimationLayer* const N = &RTGC_LAYERS()[i + 1];
+        const float t = static_cast<float>(static_cast<double>(N->fadeRemaining) * spt) /
+                        static_cast<float>(static_cast<double>(N->fadeLength)    * spt);
+
+        // SUBSS then MULSS then ADDSS, in that order, on the ACCUMULATOR minus
+        // the current layer — `cur + (accum - cur) * t`.
+        const float dx = (ax - cx) * t;
+        const float dy = (ay - cy) * t;
+        const float dz = (az - cz) * t;
+        ax = cx + dx; ay = cy + dy; az = cz + dz;
+
+        // FOUR floats out of Lerp, and only four. B.3.1 bridge: `cur.q` and
+        // `accum.q` are float[4] slots in this file's own scratch layout.
+        const Math::Quaternion q =
+            reinterpret_cast<const Math::Quaternion*>(cur.q)->Lerp(
+                *reinterpret_cast<const Math::Quaternion*>(accum.q),
+                reinterpret_cast<const Math::Scalar&>(t));
+        accum.q[0] = q.x; accum.q[1] = q.y;
+        accum.q[2] = q.z; accum.q[3] = q.w;
+        accum.v[0] = ax; accum.v[1] = ay; accum.v[2] = az;
+        ++rtgfxbody28::g_updateRootLayers;
+    }
+
+    out[0] = ax; out[1] = ay; out[2] = az;             // MOVSS [R14], ...
+}
+
+#undef RTGC_LAYERS
 
 }  // namespace Graphics
