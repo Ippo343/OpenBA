@@ -245,15 +245,18 @@ void ExternalFactory::ForceUnload(const System::Filename& path) {
     RtObject::RtObject_ExternalFactory_ForceUnload(Pod(this), PodF(path));
 }
 // `SerializeReferenceTable` (0x1800bcb60) IS NOT DECLARED ON THE CLASS, and the
-// reason is a type that cannot cross a file boundary rather than a decision
-// about the method: `RtObject_ExternalFactory_SerializeReferenceTable`'s second
-// parameter is external_reftable.cpp's own file-local `Stream` struct, so it
-// cannot be named from here and the entry point cannot be forwarded to without
-// editing that file's signature. Its real parameter is `IO::Stream&`, which is
-// B.3 step 4's type (B33_RULES §0 keeps every Serialize body on
-// `RtObject::SerializerLite` and the RETAIL Encoding offsets until then), so
-// the method lands with the IO conversion and not before. The registered entry
-// point is untouched and every caller of it still works.
+// reason is a type that is not a class yet rather than a decision about the
+// method: `RtObject_ExternalFactory_SerializeReferenceTable`'s second parameter
+// is `rt::io::Stream` — the DUPLICATE POD declared in
+// runtime/types/io/Serializer.h, the one `RtIo::Stream` (Stream.h) shadows —
+// so the entry point cannot be forwarded to without editing that file's
+// signature. Its real parameter is `IO::Stream&`.
+//
+// B.3.4 block 3 landed `IO::Serializer` and deleted `RtObject::SerializerLite`,
+// but it did NOT land `IO::Stream`: that is block 4 (STREAMS), which collapses
+// the two duplicate PODs into the one class (B34_RULES §1.5.2). So this method
+// still lands with the STREAM conversion and not before, and the registered
+// entry point is untouched — every caller of it still works.
 
 // ?GetCompiledPath@ExternalFactory@Object@@SA?AVFilename@System@@AEBV34@@Z
 //   retail 0x1800bec10 — a STATIC returning by value, so RCX is the hidden
@@ -325,11 +328,13 @@ int32_t ExternalList::GetFileVersion() const { return 3; }
 
 // slot 5 — ?Serialize@ExternalList@Object@@UEAA_NAEAVStream@IO@@@Z  0x1800bfa20
 //
-// The body stays in external_list.cpp and stays on `RtObject::SerializerLite`
-// and the RETAIL Encoding vtable byte offsets. B33_RULES §0: `IO::Serializer`
-// is B.3 step 4, after Object, and those offsets DIFFER in the profile build —
-// so this body is never to be cross-checked against the profile disassembly and
-// never to be "modernised" here.
+// The body stays in external_list.cpp. B.3.4 block 3 landed `IO::Serializer`
+// and deleted `RtObject::SerializerLite`, so what that body stands on now is
+// the RETAIL ReaderWriter vtable byte offsets under their one remaining
+// spelling, `rt::io::rw_vtbl::k*`. Those offsets DIFFER in the profile build,
+// so this body is never to be cross-checked against the profile disassembly;
+// and its parameter is still a stream, which is block 4's type, so it is not
+// "modernised" here either.
 bool ExternalList::Serialize(void* stream) {
     return RtObject::RtObject_ExternalList_Serialize(this, stream);
 }

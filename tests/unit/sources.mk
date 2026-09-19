@@ -101,3 +101,16 @@ UNIT_TREE_SRCS += runtime/src/object/external_class.cpp
 # type_reflection.cpp (above) supplies `Object::Base` and `BaseTypeInfo`, and
 # array.cpp (above) supplies `~Array` for the two handle-table arrays.
 UNIT_TREE_SRCS += runtime/src/object/internal_class.cpp
+
+# ENDGAME B.3.4 block 3 — the REAL `IO::Serializer` (tests/unit/io_vtable_abi_test.cpp).
+# serializer_class.cpp is registry-free BY CONSTRUCTION, which is why it exists
+# as its own translation unit: the 22 registered `RtSerializer_*` doors and
+# `RtIoSerializerRegister()` stay in runtime/src/io/serializer.cpp, which stands
+# on `RegisterRuntimeExport` and cannot link here. None of the 22 BODIES needs
+# the registry — the constructor reaches the encoding factory through the
+# stream's vtable, every Serialize member through the ReaderWriter's, and the
+# destructor through slot 0 — so the class itself links, and the lifetime test
+# placement-constructs the REAL `IO::Serializer` rather than a local mirror of
+# it. A mirror tests itself. Same split as type_reflection.cpp (B.3.3 step 3).
+# No other tree source is needed: the file's only include is the layout header.
+UNIT_TREE_SRCS += runtime/src/io/serializer_class.cpp

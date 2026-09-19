@@ -84,6 +84,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <type_traits>   // B.3.4 block 3: the "IO::Serializer has no vptr" pins
 
 namespace rt {
 namespace io {
@@ -325,12 +326,20 @@ static_assert(sizeof(Serializer) == 0x10, "Serializer is 0x10 bytes");
 
 namespace IO {
 
-// Forward declarations only. `IO::ReaderWriter` lands in B.3.4 block 2 and
+// Forward declarations only. `IO::ReaderWriter` landed in B.3.4 block 2 and
 // `IO::Serializer` in block 3; declaring the retail signature NOW means these
 // five slots never change shape again, and the two blocks that follow delete a
 // bridge cast in encoding.cpp rather than editing this header.
+//
+// `IO::Stream` is STILL only a forward declaration: the real stream family is
+// B.3.4 block 4 (STREAMS). It is declared here so that `IO::Serializer`'s
+// constructor can carry retail's FINAL signature `(Stream&, int)` from block 3
+// onward — block 4 deletes the `rt::io::Stream` bridge casts in
+// serializer_class.cpp and changes no signature. Block 2 did exactly this for
+// `IO::ReaderWriter`, so the pattern is proven rather than invented.
 class ReaderWriter;
 class Serializer;
+class Stream;
 
 class Encoding {
 public:
@@ -651,5 +660,165 @@ static_assert(offsetof(BinaryWriter, version) == 0x28, "0x180023ab0 MOV EAX,[RCX
 static_assert(offsetof(Visitor, version) == 0x20,
               "0x18002b670 is MOV EAX,[RCX+0x20] -- Visitor's version is EIGHT "
               "bytes earlier than BinaryReader's and BinaryWriter's");
+
+// ===========================================================================
+// ENDGAME B.3.4 block 3 — the REAL `IO::Serializer`.
+// ===========================================================================
+//
+// Design: B34_RULES.md §1.2 rule 2, §3.1, §4.3, §7.3. Bodies:
+// runtime/src/io/serializer_class.cpp (registry-free). Doors + registration:
+// runtime/src/io/serializer.cpp.
+//
+// *** IT HAS NO VTABLE AND MUST NEVER GET ONE. ***
+// -----------------------------------------------
+// All 22 exported members are `QEAA`/`QEBA` — non-virtual — and each one
+// tail-jumps into the ReaderWriter's table. A vptr here would make the class
+// 0x18 bytes instead of 0x10 and every one of the 861 `g_fn_Serializer_*`
+// caller sites would write through the wrong offsets. The `static_assert`s
+// below and `Serializer_is_layout_identical_to_both_legacy_spellings` in
+// tests/unit/io_vtable_abi_test.cpp are the guards.
+//
+// Being non-polymorphic is also what lets this ONE class convert its
+// constructor while every stream class must not (§4.3): converting a ctor is
+// dangerous only when it changes which vtable a live object wears, and this
+// object wears none.
+//
+// *** THE LIFETIME IS THE WHOLE RISK OF THIS CLASS. ***
+// ----------------------------------------------------
+// Retail 0x1800b9960, re-read from the shipped bytes on 2026-09-19:
+//
+//     MOV [RCX],RDX                 _stream = &stream
+//     MOV qword [RCX+0x08],0        _readerWriter = nullptr
+//     CMP dword [RDX+0x08],0        stream.direction
+//     MOV RCX,[RDX+0x10]            the Encoding (policy object)
+//     MOV RAX,[RCX]                 its vtable
+//     MOV RDX,RBX                   arg 2 = this
+//     JNZ writing
+//     CALL [RAX+0x18] / [RAX+0x20]  arg 3 = R8D = version, NEVER TOUCHED
+//     MOV [RBX+0x08],RAX
+//     MOV RAX,RBX ; RET
+//
+// and 0x1800b99b0:
+//
+//     MOV RCX,[RCX+0x08] ; TEST RCX,RCX ; JZ out
+//     MOV RAX,[RCX] ; MOV EDX,1 ; JMP [RAX]     ; slot 0, flags == 1
+//
+// The ReaderWriter that constructor creates CONSUMES (reader) or EMITS
+// (writer) a TWELVE-BYTE stream header in its own constructor, and
+// `~BinaryReader` reads a FURTHER FOUR BYTES on the way out while
+// `~BinaryWriter` back-patches its placeholder. So constructing and destroying
+// an `IO::Serializer` are STREAM OPERATIONS with a position in a sequence, not
+// cheap wrapper lifetime events:
+//
+//   * `~Serializer()` is NOT IDEMPOTENT. Destroying twice reads or patches
+//     twice and desyncs the file from that point on. That is why the copy
+//     constructor and copy assignment are DELETED, and why §7.3 forbids an
+//     explicit destructor call on a typed local (the implicit one at scope
+//     exit would then be the second).
+//   * Moving a construction or a destruction one statement relative to any
+//     other stream operation IS A SAVE-FORMAT CHANGE. No guard, no early-out
+//     and no reorder may be added anywhere in this class (CLAUDE.md: retail's
+//     unguarded derefs are load-bearing).
+//
+// THE PUBLIC NON-VIRTUAL DESTRUCTOR is deliberate and is not decision 2's
+// protected-base shape: nothing derives from `Serializer`, callers own one by
+// value or in a raw buffer, and `runtime/src/object/internal_class.cpp`
+// destroys one explicitly at the exact retail position.
+//
+// THE 22 MEMBERS KEEP THEIR RAW `rw_vtbl::k*` SLOT CALLS (§3.1). They do NOT
+// become `_readerWriter->SerializeInt(v, name)`. The member call is correct
+// only once nothing hands a Serializer a MINTED-table ReaderWriter any more,
+// and §4.2 says that is the end of B.3, not this step. A faithful partial
+// beats a complete-looking deletion. The win is already banked: these bodies
+// are the LAST place a caller spells those byte offsets.
+// ===========================================================================
+
+class Serializer {
+public:
+    // ??0Serializer@IO@@QEAA@AEAVStream@1@H@Z   0x1800b9960
+    // `version` is NOT ignored: it reaches the factory as the THIRD argument
+    // and `BinaryWriter` writes it into the file. See the banner at the top of
+    // this header for R8D's liveness proof.
+    Serializer(Stream& stream, int version);
+
+    // ??1Serializer@IO@@QEAA@XZ                 0x1800b99b0
+    // NON-virtual (there is no vtable) and PUBLIC. Retail does NOT null
+    // `_readerWriter` afterwards; neither do we.
+    ~Serializer();
+
+    // A copy would destroy the same ReaderWriter twice — see the banner.
+    Serializer(const Serializer&) = delete;
+    Serializer& operator=(const Serializer&) = delete;
+
+    // ---- the 17 ported `Serialize` OVERLOADS -------------------------------
+    // ONE name, real C++ overloads, because retail's are (§1.2 rule 2) and
+    // because that is what makes the 861 caller sites mechanical: overload
+    // resolution picks the width from the reference's type. The 22 VIRTUALS
+    // they forward to are the ones that need distinct names.
+    //
+    // Retail also exports `Serialize(char&)` (0x18007c3e0, +0x70) and the
+    // int64/uint64 scalar and array forms. They are ABSENT ON PURPOSE: no call
+    // site in this tree reaches them, and an uncalled port is an unverified
+    // port. Adding one is a porting decision, not a tidy-up.
+    void Serialize(bool&          v, const char* name);   // 0x1800061e0  +0x78
+    void Serialize(signed char&   v, const char* name);   // 0x18007c3b0  +0xC0
+    void Serialize(unsigned char& v, const char* name);   // 0x180055c80  +0xB8
+    void Serialize(short&         v, const char* name);   // 0x18007c3c0  +0xB0
+    void Serialize(unsigned short&v, const char* name);   // 0x1800675a0  +0xA8
+    void Serialize(int&           v, const char* name);   // 0x1800061d0  +0xA0
+    void Serialize(unsigned int&  v, const char* name);   // 0x1800061f0  +0x98
+    void Serialize(float&         v, const char* name);   // 0x180021660  +0x80
+
+    void Serialize(int n, char*           d, const char* name);  // 0x180034fd0 +0x18
+    void Serialize(int n, signed char*    d, const char* name);  // 0x18007c3f0 +0x68
+    void Serialize(int n, bool*           d, const char* name);  // 0x180052920 +0x20
+    void Serialize(int n, unsigned char*  d, const char* name);  // 0x180054160 +0x60
+    void Serialize(int n, short*          d, const char* name);  // 0x18007c400 +0x58
+    void Serialize(int n, unsigned short* d, const char* name);  // 0x180034fe0 +0x50
+    void Serialize(int n, int*            d, const char* name);  // 0x180077660 +0x48
+    void Serialize(int n, unsigned int*   d, const char* name);  // 0x180029e60 +0x40
+    void Serialize(int n, float*          d, const char* name);  // 0x1800150d0 +0x28
+
+    // ?SerializeBytes@Serializer@IO@@QEAAXHPEAXPEBD@Z  0x1800346d0  +0xC8
+    // Its own name in retail, not a `Serialize` overload, because the payload
+    // is `void*` and would otherwise swallow every pointer.
+    void SerializeBytes(int n, void* buf, const char* name);
+
+    // ?GetVersion@Serializer@IO@@QEBAHXZ               0x1800070b0  +0x08
+    int GetVersion() const;
+
+    // ?GetEncoding@Serializer@IO@@QEAAAEBVEncoding@2@XZ 0x180006290
+    // `MOV RAX,[RCX]; MOV RAX,[RAX+0x10]; RET` — two loads, no dispatch. It
+    // returns the STREAM's encoding policy object, not this Serializer's
+    // ReaderWriter. The reference return is retail's (`AEBVEncoding@2@`).
+    const Encoding& GetEncoding();
+
+    // ---- the 16 bytes, at retail's offsets ---------------------------------
+    // PUBLIC for the same reason `Object::Internal`'s are: unconverted bodies
+    // across the tree read them at these offsets through a cast, and
+    // `offsetof` on them has to be well formed for the pins below.
+    Stream*       _stream;        // +0x00
+    ReaderWriter* _readerWriter;  // +0x08
+};
+
+static_assert(sizeof(Serializer) == 0x10, "IO::Serializer is 16 bytes");
+static_assert(sizeof(Serializer) == sizeof(rt::io::Serializer),
+              "IO::Serializer and the rt::io::Serializer POD stay interchangeable");
+static_assert(offsetof(Serializer, _stream)       == 0x00, "Serializer.stream @ 0x00");
+static_assert(offsetof(Serializer, _readerWriter) == 0x08, "Serializer.readerWriter @ 0x08");
+static_assert(offsetof(Serializer, _stream) == offsetof(rt::io::Serializer, stream),
+              "alias stream");
+static_assert(offsetof(Serializer, _readerWriter) == offsetof(rt::io::Serializer, readerWriter),
+              "alias readerWriter");
+// THE GUARD. `offsetof` above is already unconditionally well formed only
+// because this type is standard layout — i.e. because it has no vptr. Said
+// again as an assertion so a future `virtual` fails the build rather than the
+// save file.
+static_assert(!std::is_polymorphic<Serializer>::value,
+              "IO::Serializer must never acquire a vtable: it would become 0x18 "
+              "bytes and every g_fn_Serializer_* caller site would write "
+              "through the wrong offsets");
+static_assert(std::is_standard_layout<Serializer>::value,
+              "the 861 caller sites reach these two fields through a cast");
 
 } // namespace IO

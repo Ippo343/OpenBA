@@ -10,6 +10,9 @@
 //
 //   * `RtObject::SerializerLite` + `kEncSerialize{Bool,Uint,Int}`
 //     (runtime/types/object/Internal.h) — 16 hits, all in runtime/{src,types}/object.
+//     *** GONE as of B.3.4 block 3: all five files take the real
+//     `IO::Serializer` and the one `rw_vtbl` spelling. The idiom below is what
+//     they use now. ***
 //   * `rt::io::rw_vtbl::k*` named byte offsets over a `ReaderWriter*`
 //     (runtime/types/io/Serializer.h:187-214) — 54 files under runtime/src.
 //   * `SerializerEncodingVCall(ser, off, field)` (engine/funcs/engine_funcs.h)
@@ -288,12 +291,23 @@ UNIT_TEST(the_ReaderWriter_table_is_exactly_26_distinct_slots) {
     static_assert(rw_vtbl::kScalarUInt  == 0x98, "RETAIL uint  (profile build: 0xb0)");
     static_assert(rw_vtbl::kScalarInt   == 0xA0, "RETAIL int   (profile build: 0xb8)");
 
-    // The three `RtObject::SerializerLite` constants are the SAME three retail
-    // offsets under a second spelling (Internal.h:227-231). If B.3.4 ever moves
-    // one and not the other, this is where it is caught.
-    static_assert((int)RtObject::kEncSerializeBool == rw_vtbl::kScalarBool, "SerializerLite bool");
-    static_assert((int)RtObject::kEncSerializeUint == rw_vtbl::kScalarUInt, "SerializerLite uint");
-    static_assert((int)RtObject::kEncSerializeInt  == rw_vtbl::kScalarInt,  "SerializerLite int");
+    // B.3.4 block 3: `RtObject::kEncSerialize{Bool,Uint,Int}` USED TO BE
+    // ASSERTED HERE, as a second spelling of these same three retail offsets.
+    // They are deleted — `rw_vtbl` is now the only spelling — so the assert
+    // that tied the two together has nothing left to tie and is replaced by
+    // the pins on `rw_vtbl` alone. The three numbers themselves are unchanged
+    // and still build-specific: the PROFILE build's ReaderWriter vtable puts
+    // them at +0x90 / +0xb0 / +0xb8.
+    static_assert(rw_vtbl::kScalarBool == 0x78, "the old kEncSerializeBool");
+    static_assert(rw_vtbl::kScalarUInt == 0x98, "the old kEncSerializeUint");
+    static_assert(rw_vtbl::kScalarInt  == 0xA0, "the old kEncSerializeInt");
+
+    // And the ladder they sit on is contiguous and 8-byte strided across all
+    // 26, which is the property the deleted cross-assert was really protecting:
+    // a slot inserted anywhere would move at least one of the three.
+    static_assert(rw_vtbl::kScalarBool - rw_vtbl::kScalarChar == 8, "14 -> 15");
+    static_assert(rw_vtbl::kScalarInt  - rw_vtbl::kScalarUInt == 8, "19 -> 20");
+    static_assert(rw_vtbl::kSerializeBytes - rw_vtbl::kScalarSChar == 8, "24 -> 25");
 }
 
 // ---------------------------------------------------------------------------
@@ -596,8 +610,11 @@ UNIT_TEST(Serializer_is_layout_identical_to_both_legacy_spellings) {
     static_assert(sizeof(TestSerializer) == 0x10, "IO::Serializer is 16 bytes");
     static_assert(sizeof(rt::io::Serializer) == sizeof(TestSerializer),
                   "rt::io::Serializer (Serializer.h:253) agrees");
-    static_assert(sizeof(RtObject::SerializerLite) == sizeof(TestSerializer),
-                  "RtObject::SerializerLite (Internal.h:212) agrees");
+    // B.3.4 block 3: the fourth spelling, `RtObject::SerializerLite`, is gone.
+    // What stands in its place is the REAL class, which this file now links
+    // against (runtime/src/io/serializer_class.cpp) rather than mirroring.
+    static_assert(sizeof(IO::Serializer) == sizeof(TestSerializer),
+                  "the REAL IO::Serializer agrees with the probe");
 
     // A non-polymorphic class, so `offsetof` is unconditionally supported here
     // — and it must stay non-polymorphic: a vptr would make it 0x18 bytes and
@@ -607,12 +624,16 @@ UNIT_TEST(Serializer_is_layout_identical_to_both_legacy_spellings) {
     static_assert(offsetof(TestSerializer, readerWriter) == 0x08, "Serializer.readerWriter");
     static_assert(offsetof(rt::io::Serializer, stream)       == 0x00, "rt::io agrees");
     static_assert(offsetof(rt::io::Serializer, readerWriter) == 0x08, "rt::io agrees");
-    static_assert(offsetof(RtObject::SerializerLite, stream)       == 0x00, "Lite agrees");
-    static_assert(offsetof(RtObject::SerializerLite, readerWriter) == 0x08, "Lite agrees");
+    static_assert(offsetof(IO::Serializer, _stream)       == 0x00, "the real class agrees");
+    static_assert(offsetof(IO::Serializer, _readerWriter) == 0x08, "the real class agrees");
+    static_assert(std::is_standard_layout<IO::Serializer>::value,
+                  "and it is still non-polymorphic, which is what makes those "
+                  "two offsets meaningful at all");
 
-    // And therefore the three views alias cleanly — which is what lets the 16
-    // `SerializerLite` users and the 37 `SerializerEncodingVCall` sites keep
-    // working against a real `IO::Serializer` for the whole of B.3.4. The live
+    // And therefore the remaining views alias cleanly — which is what lets the
+    // 37 `SerializerEncodingVCall` sites and every unconverted `fn_*` caller
+    // keep working against a real `IO::Serializer` for the rest of B.3.4 (the
+    // 16 `SerializerLite` sites no longer need to: they hold one). The live
     // proof of the aliasing is the round trip in the next test; here it is
     // enough that the compiler agrees on all six offsets and all three sizes.
     static_assert(std::is_standard_layout<TestSerializer>::value,
@@ -830,6 +851,428 @@ UNIT_TEST(a_derived_stream_is_reachable_through_the_base_slot_indices) {
     CHECK_EQ(g_lastMark, 500);
     CHECK_EQ(g_lastArg, 4LL);
     CHECK(g_lastSelf == raw);   // single inheritance: no this-adjustment
+}
+
+// ===========================================================================
+// PART E — ENDGAME B.3.4 block 3. The REAL `IO::Serializer`'s LIFETIME.
+//
+// THIS DRIVES THE REAL CLASS, NOT A MIRROR. `TestSerializer` in PART C is a
+// transcription, and a transcription can only ever test itself: it would keep
+// passing while the shipped constructor drifted. `IO::Serializer`'s member
+// bodies therefore live in a REGISTRY-FREE translation unit
+// (runtime/src/io/serializer_class.cpp, in tests/unit/sources.mk) so that this
+// file links the shipped code, exactly as B.3.3 did with type_reflection.cpp.
+// PART C stays as the ABI probe; this is the behavioural one.
+//
+// WHAT IT PINS, and why each clause is load-bearing:
+//
+//   * Constructing consumes (reading) or emits (writing) a 12-BYTE STREAM
+//     HEADER — `??0BinaryReader@IO@@` (0x1800a8340) calls the stream's Read
+//     three times with count 4 and GetCurrentPos once; `??0BinaryWriter@IO@@`
+//     (0x1800a8a30) calls Write three times with count 4 and GetCurrentPos
+//     twice. EXACTLY ONCE each, on exactly one of the two factory slots.
+//   * Destroying reads or back-patches FOUR MORE BYTES through the
+//     ReaderWriter's slot 0 with flags == 1. EXACTLY ONCE.
+//   * So `~Serializer` IS NOT IDEMPOTENT and construction is not free. The
+//     double-construction hazard is asserted as a COUNTED FACT below rather
+//     than left as a comment: two constructions into one buffer really do
+//     consume two headers, and the file is desynced from that point on.
+//
+// The caller shape mirrored here is B34_RULES §7.3's: placement-new into an
+// `alignas(8) uint8_t buf[24]` with an explicit destructor at the same
+// position. That is the shape the 187 exe-side ctor sites convert to, the shape
+// runtime/src/object/internal_class.cpp's `ResetPersistState` now uses, and the
+// shape the registered `RtSerializer_Ctor` door itself uses.
+// ===========================================================================
+
+namespace lifetime {
+
+struct Counters {
+    int readCalls, readBytes;
+    int writeCalls, writeBytes;
+    int getPosCalls, setPosCalls;
+    int createReader, createWriter;
+    int tailReads, tailWrites, deletingDtors;
+    int lastVersion;
+};
+Counters g_c{};
+void ResetCounters() { g_c = Counters{}; }
+
+// The stream. Slot order is `??_7Stream@IO@@6B@`'s: [2] Write +0x10,
+// [3] Read +0x18, [4] SetCurrentPos +0x20, [5] GetCurrentPos +0x28. The
+// Serializer's own constructor never calls a stream slot — it only reads the
+// POD fields — so every count below is the ReaderWriter's doing, which is
+// precisely the thing whose position must not move.
+struct CountingStream final : TestStream {
+    ~CountingStream() = default;
+    bool Write(int n, const void*) override { ++g_c.writeCalls; g_c.writeBytes += n; return true; }
+    bool Read (int n, void*)       override { ++g_c.readCalls;  g_c.readBytes  += n; return true; }
+    void SetCurrentPos(uint32_t)   override { ++g_c.setPosCalls; }
+    uint32_t GetCurrentPos() const override { ++g_c.getPosCalls; return 0; }
+};
+
+// A CONCRETE subclass of the REAL `IO::ReaderWriter` — every one of the 26
+// slots overridden, because the base declares all 26 pure. Only slot 0 has
+// behaviour here: it is the 4-byte tail that `~Serializer` triggers.
+struct TailReaderWriter final : IO::ReaderWriter {
+    CountingStream* src = nullptr;
+    bool writing = false;
+
+    IO::ReaderWriter* DeletingDtor(unsigned flags) override {
+        ++g_c.deletingDtors;
+        CHECK_EQ((int)flags, 1);          // retail's `MOV EDX,1`
+        if (writing) { src->Write(4, nullptr); ++g_c.tailWrites; }
+        else         { src->Read (4, nullptr); ++g_c.tailReads;  }
+        return this;
+    }
+    int  GetVersion() const override { return 0; }
+    void Skip() override {}
+    void SerializeCharArray  (int, char*,          const char*) override {}
+    void SerializeBoolArray  (int, bool*,          const char*) override {}
+    void SerializeFloatArray (int, float*,         const char*) override {}
+    void SerializeUInt64Array(int, uint64_t*,      const char*) override {}
+    void SerializeInt64Array (int, int64_t*,       const char*) override {}
+    void SerializeUIntArray  (int, uint32_t*,      const char*) override {}
+    void SerializeIntArray   (int, int32_t*,       const char*) override {}
+    void SerializeUShortArray(int, uint16_t*,      const char*) override {}
+    void SerializeShortArray (int, int16_t*,       const char*) override {}
+    void SerializeUCharArray (int, unsigned char*, const char*) override {}
+    void SerializeSCharArray (int, signed char*,   const char*) override {}
+    void SerializeChar  (char&,          const char*) override {}
+    void SerializeBool  (bool&,          const char*) override {}
+    void SerializeFloat (float&,         const char*) override {}
+    void SerializeUInt64(uint64_t&,      const char*) override {}
+    void SerializeInt64 (int64_t&,       const char*) override {}
+    void SerializeUInt  (uint32_t&,      const char*) override {}
+    void SerializeInt   (int32_t&,       const char*) override {}
+    void SerializeUShort(uint16_t&,      const char*) override {}
+    void SerializeShort (int16_t&,       const char*) override {}
+    void SerializeUChar (unsigned char&, const char*) override {}
+    void SerializeSChar (signed char&,   const char*) override {}
+    void SerializeBytes(int, void*, const char*) override {}
+    ~TailReaderWriter() = default;
+};
+
+// A CONCRETE subclass of the REAL `IO::Encoding`, whose two factory bodies
+// reproduce the retail codec constructors' STREAM TRAFFIC and nothing else.
+// Three fixed ReaderWriters so a second construction gets its own.
+struct HeaderEncoding final : IO::Encoding {
+    CountingStream* src = nullptr;
+    TailReaderWriter rw[3];
+    int handed = 0;
+
+    bool IsBinary() const override { return true; }
+    bool IsText() const override { return false; }
+    int  GetKind() const override { return 2; }
+
+    IO::ReaderWriter* CreateReader(IO::Serializer&, int version) override {
+        ++g_c.createReader; g_c.lastVersion = version;
+        src->Read(4, nullptr); src->Read(4, nullptr); src->Read(4, nullptr);  // 12 bytes
+        src->GetCurrentPos();
+        TailReaderWriter* r = &rw[handed++ % 3];
+        r->src = src; r->writing = false;
+        return r;
+    }
+    IO::ReaderWriter* CreateWriter(IO::Serializer&, int version) override {
+        ++g_c.createWriter; g_c.lastVersion = version;
+        src->Write(4, nullptr); src->Write(4, nullptr); src->Write(4, nullptr); // 12 bytes
+        src->GetCurrentPos(); src->GetCurrentPos();
+        TailReaderWriter* w = &rw[handed++ % 3];
+        w->src = src; w->writing = true;
+        return w;
+    }
+    ~HeaderEncoding() = default;
+};
+
+// Wire a `CountingStream` up as the POD the (still unconverted) `IO::Stream`
+// is today, and hand it out as the class the constructor's signature names.
+// This pair of casts is precisely what block 4 deletes.
+IO::Stream& AsIoStream(CountingStream& cs, HeaderEncoding& enc, int32_t direction) {
+    TestStream* base = static_cast<TestStream*>(&cs);
+    base->direction = direction;
+    base->encoding  = static_cast<void*>(static_cast<IO::Encoding*>(&enc));
+    enc.src = &cs;
+    return *reinterpret_cast<IO::Stream*>(base);
+}
+
+}  // namespace lifetime
+
+UNIT_TEST(the_real_Serializer_consumes_one_12_byte_header_and_one_4_byte_tail) {
+    using namespace lifetime;
+
+    // ---- READING: direction 0 takes CreateReader (encoding slot 3, +0x18) --
+    {
+        CountingStream cs;
+        HeaderEncoding enc;
+        IO::Stream& s = AsIoStream(cs, enc, rt::io::kDirectionReading);
+
+        ResetCounters();
+        alignas(8) uint8_t buf[24];      // the exe-side caller shape, §7.3
+        IO::Serializer* ser = ::new (static_cast<void*>(buf)) IO::Serializer(s, 17);
+
+        // Exactly ONE factory call, and it was the READ one.
+        CHECK_EQ(g_c.createReader, 1);
+        CHECK_EQ(g_c.createWriter, 0);
+        CHECK_EQ(g_c.lastVersion, 17);   // arg 3 reached the factory
+        // Exactly TWELVE bytes, in three 4-byte reads, and nothing written.
+        CHECK_EQ(g_c.readCalls, 3);
+        CHECK_EQ(g_c.readBytes, 12);
+        CHECK_EQ(g_c.getPosCalls, 1);
+        CHECK_EQ(g_c.writeCalls, 0);
+        // The object is wired the way retail wires it.
+        CHECK(ser->_stream == &s);
+        CHECK(ser->_readerWriter == static_cast<IO::ReaderWriter*>(&enc.rw[0]));
+        CHECK(static_cast<void*>(ser) == static_cast<void*>(buf));
+
+        // ---- the tail, on destruction, exactly once --------------------
+        ser->~Serializer();
+        CHECK_EQ(g_c.deletingDtors, 1);
+        CHECK_EQ(g_c.tailReads, 1);
+        CHECK_EQ(g_c.readCalls, 4);      // 3 header + 1 tail
+        CHECK_EQ(g_c.readBytes, 16);     // 12 + 4
+        CHECK_EQ(g_c.tailWrites, 0);
+    }
+
+    // ---- WRITING: any non-zero direction takes CreateWriter (+0x20) --------
+    {
+        CountingStream cs;
+        HeaderEncoding enc;
+        IO::Stream& s = AsIoStream(cs, enc, 1);
+
+        ResetCounters();
+        alignas(8) uint8_t buf[24];
+        IO::Serializer* ser = ::new (static_cast<void*>(buf)) IO::Serializer(s, 18);
+
+        CHECK_EQ(g_c.createWriter, 1);
+        CHECK_EQ(g_c.createReader, 0);
+        CHECK_EQ(g_c.lastVersion, 18);
+        CHECK_EQ(g_c.writeCalls, 3);
+        CHECK_EQ(g_c.writeBytes, 12);
+        CHECK_EQ(g_c.getPosCalls, 2);    // the writer records a back-patch pos
+        CHECK_EQ(g_c.readCalls, 0);
+
+        ser->~Serializer();
+        CHECK_EQ(g_c.deletingDtors, 1);
+        CHECK_EQ(g_c.tailWrites, 1);
+        CHECK_EQ(g_c.writeCalls, 4);
+        CHECK_EQ(g_c.writeBytes, 16);
+    }
+}
+
+UNIT_TEST(constructing_a_Serializer_twice_consumes_two_headers) {
+    using namespace lifetime;
+
+    // THE HAZARD, AS A COUNTED FACT rather than a comment in a rule sheet.
+    // This is why §7.3 forbids `x.~Serializer()` on a TYPED local (the implicit
+    // destructor at scope exit would be a second one) and why the caller
+    // conversion is placement-new into a RAW buffer, which has no implicit
+    // destructor of its own. Nothing here is a bug being demonstrated — it is
+    // the measurement that says a second construction is not free, so a
+    // conversion that accidentally doubles one shifts every record after it.
+    CountingStream cs;
+    HeaderEncoding enc;
+    IO::Stream& s = AsIoStream(cs, enc, rt::io::kDirectionReading);
+
+    ResetCounters();
+    alignas(8) uint8_t buf[24];
+
+    IO::Serializer* a = ::new (static_cast<void*>(buf)) IO::Serializer(s, 3);
+    CHECK_EQ(g_c.readBytes, 12);
+
+    // Same bytes, second construction. The stream has now given up 24.
+    IO::Serializer* b = ::new (static_cast<void*>(buf)) IO::Serializer(s, 3);
+    CHECK_EQ(g_c.createReader, 2);
+    CHECK_EQ(g_c.readCalls, 6);
+    CHECK_EQ(g_c.readBytes, 24);      // <- the desync, measured
+    CHECK(a == b);                    // into the same storage, at one address
+
+    // The first ReaderWriter is now unreachable and its 4-byte tail will never
+    // be consumed: one destruction cannot undo two constructions. Faithful, and
+    // exactly why the destructor is not idempotent.
+    b->~Serializer();
+    CHECK_EQ(g_c.deletingDtors, 1);
+    CHECK_EQ(g_c.readBytes, 28);      // 24 + one tail, NOT 24 + two
+}
+
+// ===========================================================================
+// PART F — ENDGAME B.3.4 block 3. PIN THE REAL CLASSES' VTABLE ORDER.
+//
+// WHY THIS TEST HAS TO EXIST. Nothing else in the tree exercises the real
+// `IO::ReaderWriter`/`IO::Encoding` vtable ORDER: every registered door calls
+// qualified or non-virtually, and every live object wears a MINTED table out of
+// `standalone/rt_data_mint_tables.inc`. So a mis-ordered declaration in
+// runtime/types/io/Serializer.h would stay invisible right through B.3.4 and
+// surface only when B.3 steps 5-8 retire the minted tables — as a corrupted
+// save file, with no recent change to blame. The order was checked by eye at
+// the block-2 close and is right. This is so it STAYS right.
+//
+// PARTS A and B probe TRANSCRIPTIONS (`TestReaderWriter`, `TestEncoding`),
+// which prove the ABI rule but not the shipped declaration. These probe the
+// SHIPPED classes: a concrete subclass of each, every slot overridden with its
+// own marker, then a raw call at every `rw_vtbl::k*` / `encoding_vtbl::k*` byte
+// offset asserting that the marker equals offset/8.
+//
+// Two compiler facts, so the next reader does not fight them:
+//   * `IO::ReaderWriter`'s destructor is protected, so the probe must be a
+//     SUBCLASS (it is) and must give itself a public one.
+//   * `IO::BinaryReader`/`BinaryWriter`/`Visitor` are `final` AND abstract
+//     (slot 0 is left pure; its body is registered by address in
+//     iobase_vtables.cpp), so they can be neither subclassed nor instantiated.
+//     The BASE is the right thing to probe anyway: it is the table whose order
+//     the 54 `rw_vtbl::` files depend on.
+// ===========================================================================
+
+namespace order {
+
+struct OrderProbe final : IO::ReaderWriter {
+    IO::ReaderWriter* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+    int  GetVersion() const override { Note(this, 1); return 0; }
+    void Skip() override { Note(this, 2); }
+    void SerializeCharArray  (int, char*,          const char*) override { Note(this, 3); }
+    void SerializeBoolArray  (int, bool*,          const char*) override { Note(this, 4); }
+    void SerializeFloatArray (int, float*,         const char*) override { Note(this, 5); }
+    void SerializeUInt64Array(int, uint64_t*,      const char*) override { Note(this, 6); }
+    void SerializeInt64Array (int, int64_t*,       const char*) override { Note(this, 7); }
+    void SerializeUIntArray  (int, uint32_t*,      const char*) override { Note(this, 8); }
+    void SerializeIntArray   (int, int32_t*,       const char*) override { Note(this, 9); }
+    void SerializeUShortArray(int, uint16_t*,      const char*) override { Note(this, 10); }
+    void SerializeShortArray (int, int16_t*,       const char*) override { Note(this, 11); }
+    void SerializeUCharArray (int, unsigned char*, const char*) override { Note(this, 12); }
+    void SerializeSCharArray (int, signed char*,   const char*) override { Note(this, 13); }
+    void SerializeChar  (char&,          const char*) override { Note(this, 14); }
+    void SerializeBool  (bool&,          const char*) override { Note(this, 15); }
+    void SerializeFloat (float&,         const char*) override { Note(this, 16); }
+    void SerializeUInt64(uint64_t&,      const char*) override { Note(this, 17); }
+    void SerializeInt64 (int64_t&,       const char*) override { Note(this, 18); }
+    void SerializeUInt  (uint32_t&,      const char*) override { Note(this, 19); }
+    void SerializeInt   (int32_t&,       const char*) override { Note(this, 20); }
+    void SerializeUShort(uint16_t&,      const char*) override { Note(this, 21); }
+    void SerializeShort (int16_t&,       const char*) override { Note(this, 22); }
+    void SerializeUChar (unsigned char&, const char*) override { Note(this, 23); }
+    void SerializeSChar (signed char&,   const char*) override { Note(this, 24); }
+    void SerializeBytes(int, void*, const char*) override { Note(this, 25); }
+    ~OrderProbe() = default;          // public: the base's is protected
+};
+
+struct EncOrderProbe final : IO::Encoding {
+    bool IsBinary() const override { Note(this, 0); return true; }
+    bool IsText() const override { Note(this, 1); return false; }
+    int  GetKind() const override { Note(this, 2); return 2; }
+    IO::ReaderWriter* CreateReader(IO::Serializer&, int) override { Note(this, 3); return nullptr; }
+    IO::ReaderWriter* CreateWriter(IO::Serializer&, int) override { Note(this, 4); return nullptr; }
+    ~EncOrderProbe() = default;
+};
+
+}  // namespace order
+
+UNIT_TEST(the_real_ReaderWriter_declares_its_26_slots_in_retail_order) {
+    order::OrderProbe p;
+    void* raw = static_cast<void*>(static_cast<IO::ReaderWriter*>(&p));
+
+    // The three singular shapes first.
+    Reset();
+    using DtorFn = void* (*)(void*, unsigned);
+    SlotAt<DtorFn>(raw, rw_vtbl::kDtor)(raw, 1u);
+    CHECK_EQ(g_lastMark, rw_vtbl::kDtor / 8);
+    CHECK(g_lastSelf == raw);                       // `this` unadjusted
+
+    Reset();
+    using IntFn = int (*)(void*);
+    SlotAt<IntFn>(raw, rw_vtbl::kGetVersion)(raw);
+    CHECK_EQ(g_lastMark, rw_vtbl::kGetVersion / 8);
+
+    Reset();
+    using VoidFn = void (*)(void*);
+    SlotAt<VoidFn>(raw, rw_vtbl::kSkip)(raw);
+    CHECK_EQ(g_lastMark, rw_vtbl::kSkip / 8);
+
+    // The eleven ARRAY slots, (int, T*, const char*) — one shape, eleven
+    // offsets, each asserted to land on the override declared at that index.
+    const int arrayOffsets[11] = {
+        rw_vtbl::kArrayChar,   rw_vtbl::kArrayBool,   rw_vtbl::kArrayFloat,
+        rw_vtbl::kArrayUInt64, rw_vtbl::kArrayInt64,  rw_vtbl::kArrayUInt,
+        rw_vtbl::kArrayInt,    rw_vtbl::kArrayUShort, rw_vtbl::kArrayShort,
+        rw_vtbl::kArrayUChar,  rw_vtbl::kArraySChar,
+    };
+    uint8_t scratch[8] = {0};
+    using ArrFn = void (*)(void*, int, void*, const char*);
+    for (int i = 0; i < 11; ++i) {
+        Reset();
+        SlotAt<ArrFn>(raw, arrayOffsets[i])(raw, 1, scratch, "n");
+        CHECK_EQ(g_lastMark, arrayOffsets[i] / 8);
+        CHECK_EQ(g_lastMark, 3 + i);          // contiguous, slots 3..13
+    }
+
+    // The eleven SCALAR slots, (T&, const char*).
+    const int scalarOffsets[11] = {
+        rw_vtbl::kScalarChar,   rw_vtbl::kScalarBool,   rw_vtbl::kScalarFloat,
+        rw_vtbl::kScalarUInt64, rw_vtbl::kScalarInt64,  rw_vtbl::kScalarUInt,
+        rw_vtbl::kScalarInt,    rw_vtbl::kScalarUShort, rw_vtbl::kScalarShort,
+        rw_vtbl::kScalarUChar,  rw_vtbl::kScalarSChar,
+    };
+    using ScaFn = void (*)(void*, void*, const char*);
+    for (int i = 0; i < 11; ++i) {
+        Reset();
+        SlotAt<ScaFn>(raw, scalarOffsets[i])(raw, scratch, "n");
+        CHECK_EQ(g_lastMark, scalarOffsets[i] / 8);
+        CHECK_EQ(g_lastMark, 14 + i);         // contiguous, slots 14..24
+    }
+
+    Reset();
+    SlotAt<ArrFn>(raw, rw_vtbl::kSerializeBytes)(raw, 8, scratch, "b");
+    CHECK_EQ(g_lastMark, rw_vtbl::kSerializeBytes / 8);
+    CHECK_EQ(g_lastMark, 25);                 // the last slot in the table
+
+    // 26 distinct entries, on the REAL class this time — no slot shared, and
+    // in particular no pair of same-named virtuals collapsed into one.
+    void* const* vt = *reinterpret_cast<void* const* const*>(raw);
+    for (int a = 0; a < 26; ++a)
+        for (int b = a + 1; b < 26; ++b)
+            CHECK(vt[a] != vt[b]);
+
+    // No virtual destructor anywhere in the shipped hierarchy: one would spend
+    // two Itanium slots and mis-aim every offset above by one and a half.
+    static_assert(!std::has_virtual_destructor<IO::ReaderWriter>::value, "B34_RULES 1.2.3");
+    static_assert(!std::has_virtual_destructor<IO::BinaryReader>::value, "B34_RULES 1.2.3");
+    static_assert(!std::has_virtual_destructor<IO::BinaryWriter>::value, "B34_RULES 1.2.3");
+    static_assert(!std::has_virtual_destructor<IO::Visitor>::value,      "B34_RULES 1.2.3");
+}
+
+UNIT_TEST(the_real_Encoding_declares_its_5_slots_in_retail_order) {
+    order::EncOrderProbe e;
+    void* raw = static_cast<void*>(static_cast<IO::Encoding*>(&e));
+
+    // Slot 0 is `IsBinary`, NOT a destructor. This is the assertion that keeps
+    // `IO::Serializer`'s constructor calling a FACTORY at +0x18/+0x20 rather
+    // than `GetKind()` — which would build-clean, link-clean store the int 2 as
+    // a ReaderWriter* and corrupt every save.
+    using BoolFn = bool (*)(void*);
+    using IntFn  = int (*)(void*);
+    Reset(); CHECK(SlotAt<BoolFn>(raw, 0x00)(raw) == true);  CHECK_EQ(g_lastMark, 0);
+    Reset(); CHECK(SlotAt<BoolFn>(raw, 0x08)(raw) == false); CHECK_EQ(g_lastMark, 1);
+    Reset(); CHECK_EQ(SlotAt<IntFn>(raw, 0x10)(raw), 2);     CHECK_EQ(g_lastMark, 2);
+
+    // The two factories, at the byte offsets the Serializer constructor reads
+    // RAW, with retail's arity 3.
+    int marker = 0;
+    using MakeRw = void* (*)(void*, void*, int);
+    Reset();
+    CHECK(SlotAt<MakeRw>(raw, enc_vtbl::kCreateReader)(raw, &marker, 11) == nullptr);
+    CHECK_EQ(g_lastMark, enc_vtbl::kCreateReader / 8);
+    CHECK_EQ(g_lastMark, 3);
+    Reset();
+    CHECK(SlotAt<MakeRw>(raw, enc_vtbl::kCreateWriter)(raw, &marker, 12) == nullptr);
+    CHECK_EQ(g_lastMark, enc_vtbl::kCreateWriter / 8);
+    CHECK_EQ(g_lastMark, 4);
+
+    // Five distinct entries and no more: the table is bounded at 5 in retail by
+    // the adjacency ladder (0x1801554a8 + 0x28 == 0x1801554d0).
+    void* const* vt = *reinterpret_cast<void* const* const*>(raw);
+    for (int a = 0; a < 5; ++a)
+        for (int b = a + 1; b < 5; ++b)
+            CHECK(vt[a] != vt[b]);
+
+    static_assert(!std::has_virtual_destructor<IO::Encoding>::value, "B34_RULES 1.1");
 }
 
 }  // namespace

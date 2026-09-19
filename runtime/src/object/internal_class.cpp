@@ -35,11 +35,13 @@
 //     next reader does not re-derive that it is missing, and it is NOT declared
 //     on the class, because a declared method with no body is a link error
 //     waiting for its first caller.
-//   * Every `Serialize`/persist body still goes through `RtObject::SerializerLite`
-//     and the **retail** ReaderWriter/Encoding vtable byte offsets. Those DIFFER
-//     in the profile build (Internal.h:209-218). Nothing here is cross-checked
-//     against the profile disassembly and nothing is modernised into
-//     `IO::Serializer` — that is B.3 step 4.
+//   * B.3.4 block 3 LANDED `IO::Serializer`, so every `Serialize`/persist body
+//     here now goes through the real class instead of `RtObject::SerializerLite`
+//     (which is deleted). What did NOT change is the numbers: the **retail**
+//     ReaderWriter vtable byte offsets, now spelled `rt::io::rw_vtbl::k*`,
+//     still DIFFER in the profile build, and the raw slot calls stay raw until
+//     nothing hands a Serializer a minted-table ReaderWriter (B34_RULES §3.1,
+//     §4.2). Nothing here is cross-checked against the profile disassembly.
 //
 // No C++ exceptions anywhere in this file (PLAN.md §4.3 risk 5).
 // PORTABILITY: no <windows.h> (PLAN.md §4.1 decision 1).
@@ -47,6 +49,8 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <new>       // B.3.4 block 3: ResetPersistState placement-constructs
+                     // its IO::Serializer (see the note there)
 
 #include "../../types/object/Internal.h"
 
@@ -492,29 +496,48 @@ void InternalFactory::ClearPersistState() {
 // port pinned the same arity from the out-of-line 0x1800b9960, where
 // BinaryWriter STORES that int and writes it to the stream.
 //
-// *** THE READERWRITER VTABLE OFFSETS ARE BUILD-SPECIFIC. *** 0xa0 below is the
-// RETAIL number (Internal.h's kEncSerializeInt). The PROFILE build uses 0xb8 for
-// the same call. Copying the profile number writes the right value through the
-// wrong slot and desyncs every save.
+// *** THE READERWRITER VTABLE OFFSETS ARE BUILD-SPECIFIC. *** `kScalarInt`
+// below is 0xa0, the RETAIL number. The PROFILE build uses 0xb8 for the same
+// call. Copying the profile number writes the right value through the wrong
+// slot and desyncs every save.
+//
+// ENDGAME B.3.4 block 3 — THE INLINED SERIALIZER IS NOW A REAL `IO::Serializer`,
+// AND ITS CTOR/DTOR POSITIONS ARE UNCHANGED. That was the precondition for
+// converting it at all (block 3's brief: convert only if the positions are
+// PROVABLY identical), and it holds here because the function is straight-line
+// with no early return:
+//
+//   * CONSTRUCTION replaces the hand-inlined `{store stream, null the
+//     readerWriter, read direction, read encoding, call factory slot 3 or 4
+//     with (factory, &ser, 0)}` — which is instruction for instruction what
+//     `IO::Serializer::Serializer(Stream&, int)` does. The literal `0` version
+//     is retail's `XOR R8D,R8D` at 0x1800bfe6c and still reaches the factory as
+//     the third argument.
+//   * DESTRUCTION replaces the trailing `if (enc) encVtbl[0](enc, 1)` at the
+//     SAME statement position — `~Serializer()` is that call, guard included
+//     (the guard is retail's own `TEST RCX,RCX`, not one we added).
+//
+// It is PLACEMENT-NEW into a raw buffer, not a typed local, which is
+// B34_RULES §7.3's mandated shape and not a stylistic choice: a typed local
+// would put the destruction at scope exit, which is the same place TODAY but
+// stops being so the moment anyone adds an early return — and
+// `~IO::Serializer` is NOT idempotent (it reads four more bytes on the read
+// side and back-patches the placeholder on the write side). The explicit call
+// on a raw buffer keeps the position welded to the statement, and a raw buffer
+// has no implicit destructor, so nothing can run twice.
 void InternalFactory::ResetPersistState(void* stream) {
-    RtObject::SerializerLite ser;
-    ser.stream       = stream;
-    ser.readerWriter = nullptr;
-
-    char*  s       = static_cast<char*>(stream);
-    void*  factory = *reinterpret_cast<void**>(s + 0x10);
-    void** fvtbl   = *reinterpret_cast<void***>(factory);
-    const int mode = *reinterpret_cast<int*>(s + 0x08);
     const int kSerializerVersion = 0;   // retail's XOR R8D,R8D at 0x1800bfe6c
-    ser.readerWriter = reinterpret_cast<void* (*)(void*, void*, int)>(
-        fvtbl[(mode == 0 ? 0x18 : 0x20) / 8])(factory, &ser, kSerializerVersion);
 
-    void*  enc     = ser.readerWriter;
+    alignas(8) uint8_t serStorage[sizeof(::IO::Serializer)];
+    ::IO::Serializer* ser = ::new (static_cast<void*>(serStorage))   // B.3.4 bridge
+        ::IO::Serializer(*reinterpret_cast<::IO::Stream*>(stream), kSerializerVersion);
+
+    void*  enc     = ser->_readerWriter;
     void** encVtbl = *reinterpret_cast<void***>(enc);
 
     int count = _objects._size;
     reinterpret_cast<void (*)(void*, int*, const char*)>(
-        encVtbl[RtObject::kEncSerializeInt / 8])(enc, &count, nullptr);
+        encVtbl[rt::io::rw_vtbl::kScalarInt / 8])(enc, &count, nullptr);
 
     detail::ArrayIntSetSize(&_persistIds, count);
     detail::ArrayPtrReserve(&_objects, count);
@@ -524,8 +547,7 @@ void InternalFactory::ResetPersistState(void* stream) {
     for (int i = 0; i < _persistIds._size; ++i)
         _persistIds._data[i] = -1;
 
-    if (enc != nullptr)
-        reinterpret_cast<void (*)(void*, int)>(encVtbl[0])(enc, 1);
+    ser->~Serializer();
 }
 
 // ============================================================================

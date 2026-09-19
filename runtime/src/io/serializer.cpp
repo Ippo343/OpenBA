@@ -40,10 +40,21 @@
 // DLL's export directory with pefile on 2026-09-06 (all 22 names verified
 // present — reference_resolveexport_phantom_names.md).
 // Right column: the tail-jump displacement decoded from that function's own
-// three instructions in the shipped binary. Each one is cross-checked at
-// registration time by VerifyForwarder() below, so a DLL whose slots differ
-// (a different build, or the profile DLL's +0x90/+0xb0/+0xb8 layout) disables
-// the port instead of silently desyncing the save stream.
+// three instructions in the shipped binary.
+//
+// *** `VerifyForwarder()` NO LONGER EXISTS, AND THIS BANNER USED TO CLAIM IT
+// DID. *** (Corrected in B.3.4 block 3.) It was a registration-time
+// cross-check that re-decoded each retail forwarder's tail-jump displacement
+// out of the loaded DLL and refused the whole family if any of them disagreed
+// with the constant we had transcribed. It went when the DLL went: with no
+// Runtime-x64.dll in the process there are no retail bytes left to read, so the
+// check had nothing to compare against and was deleted rather than left
+// returning a constant `true`. Nothing was left behind — the only traces were
+// these two comment references, which is why a reader of block 3's brief was
+// sent looking for a function that is not here. What replaces it is static:
+// the slot constants are `rt::io::rw_vtbl::k*`, each pinned by a
+// `static_assert` in runtime/types/io/Serializer.h and re-proved executably by
+// tests/unit/io_vtable_abi_test.cpp.
 //
 //   0x1800b9960 ord 381   ctor(Stream&,int)          (see the ctor body)
 //   0x1800b99b0 ord 675   ~Serializer()              rw vtable +0x00, arg 1
@@ -99,6 +110,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <new>       // the ctor door placement-constructs into the caller's bytes
 
 using rt::io::Encoding;
 using rt::io::ReaderWriter;
@@ -107,58 +119,57 @@ using rt::io::Stream;
 namespace rw_vtbl = rt::io::rw_vtbl;
 
 // ============================================================================
-// Body helpers
-// ============================================================================
-namespace {
-
-// The `JMP [RAX+off]` target. Faithfully unguarded: retail derefs
-// self->readerWriter and its vtable with no null check, and that fault is how a
-// Serializer used before construction announces itself.
-inline void* RwSlot(const ReaderWriter* rw, int byteOffset) {
-    const uint8_t* vt = reinterpret_cast<const uint8_t*>(rw->vtable);
-    return *reinterpret_cast<void* const*>(vt + byteOffset);
-}
-
-} // namespace
-
-// ============================================================================
-// The forwarders
+// ENDGAME B.3.4 block 3 — THIS FILE IS NOW DOORS ONLY
 // ============================================================================
 //
-// WHAT THE PER-CALL DIFF SITE PROVES, AND WHAT IT DOES NOT
+// The 22 bodies moved onto the real class `IO::Serializer`
+// (runtime/types/io/Serializer.h, bodies in serializer_class.cpp, which is
+// registry-free so `make unit` can drive the real class). What is left here is
+// the 22 registered entry points and `RtIoSerializerRegister()`.
+//
+// *** EVERY DOOR DELEGATES WITH A PLAIN, UNQUALIFIED CALL, AND THAT IS NOT AN
+// OVERSIGHT. *** Blocks 1 and 2 had to write the delegation qualified —
+// `reinterpret_cast<IO::BinaryReader*>(self)->IO::BinaryReader::SerializeInt(...)`
+// — because a live `BinaryReader` wears the MINTED table 0x1801552e0 whose
+// slots resolve back to these very doors, so a virtual call inside a door would
+// dispatch through the minted table INTO ITSELF: infinite recursion, not
+// delegation. `IO::Serializer` has NO VTABLE AT ALL (B34_RULES §1.2 rule 2 /
+// §3.1), so there is nothing to dispatch through and `Ser(self)->Serialize(...)`
+// is already a direct call. A reader arriving from blocks 1-2 should expect the
+// `Class::` and not find it — this is why.
+//
+// THE 22 REGISTRATION LINES BELOW DO NOT MOVE AND DO NOT CHANGE. They are the
+// door every unconverted caller still uses, `tools/runtime_census.py` can only
+// see a LITERAL mangled name at a `RegisterRuntimeExport(` call, and the 14 exe
+// dispatch slots at 0x1401524xx (standalone/address_registry.cpp:1628-1645) are
+// PE IMPORT slots bound to these same function pointers. Converting the
+// Serializer changes the TARGET's spelling, never a row.
+//
+// WHAT THE PER-CALL SITE PROVES, AND WHAT IT DOES NOT
 //
 // These functions MUTATE THE STREAM. There is no "call ours, call theirs,
 // compare" for them: running the original as an oracle would write the record
 // a second time and desync every record after it — precisely
-// reference_slot3_wrapper_must_resolve_first.md. So the per-call site does NOT
-// call the original. It reports two things:
-//
-//   * the registration-time proof that our slot constant equals the shipped
-//     DLL's own tail-jump displacement (see VerifyForwarder above). This is
-//     the strong claim, and it is complete for the slot choice — but it is
-//     established ONCE, at init, not per call.
-//   * a genuinely per-call invariant registration cannot see: that
-//     self->readerWriter and the slot in its vtable are both non-null.
-//
-// Read `divergences=0` on these sites as "it executed and its ReaderWriter was
-// live", NOT as "the bytes agreed with the DLL". What proves the bytes is the
-// save/load pass: a wrong slot consumes or emits the wrong number of bytes and
-// the damage shows up later, on an innocent-looking record.
+// reference_slot3_wrapper_must_resolve_first.md. So no site here calls an
+// original, and none ever did. What proves the bytes is the save/load pass: a
+// wrong slot consumes or emits the wrong number of bytes and the damage shows
+// up later, on an innocent-looking record. That is what the resave gate is.
+
+// `self` arrives as the POD view every unconverted caller spells. The two
+// views are cross-asserted field for field in runtime/types/io/Serializer.h,
+// which is what makes this cast honest rather than hopeful.
+static inline IO::Serializer* Ser(Serializer* self) {          // B.3.4 bridge
+    return reinterpret_cast<IO::Serializer*>(self);
+}
 
 #define RT_SER_SCALAR(FN, T, SLOT, LABEL, MANGLED)                             \
     void FN(Serializer* self, T* v, const char* name) {                        \
-        ReaderWriter* rw = self->readerWriter;                                 \
-        void* target = RwSlot(rw, SLOT);                                       \
-        using Fn = void (*)(ReaderWriter*, T*, const char*);                   \
-        reinterpret_cast<Fn>(target)(rw, v, name);                             \
+        Ser(self)->Serialize(*v, name);                                        \
     }
 
 #define RT_SER_ARRAY(FN, T, SLOT, LABEL, MANGLED)                              \
     void FN(Serializer* self, int n, T* d, const char* name) {                 \
-        ReaderWriter* rw = self->readerWriter;                                 \
-        void* target = RwSlot(rw, SLOT);                                       \
-        using Fn = void (*)(ReaderWriter*, int, T*, const char*);              \
-        reinterpret_cast<Fn>(target)(rw, n, d, name);                          \
+        Ser(self)->Serialize(n, d, name);                                      \
     }
 
 extern "C" {
@@ -219,13 +230,10 @@ RT_SER_ARRAY(RtSerializer_Serialize_FloatArr,  float,    rw_vtbl::kArrayFloat,
              "?Serialize@Serializer@IO@@QEAAXHPEAMPEBD@Z")
 
 // ---- SerializeBytes --------------------------------------------------------
-// Same three instructions, but the payload pointer is void* so the array macro
-// does not fit.
+// Its own retail name, not an overload: the payload is `void*`, which would
+// otherwise swallow every pointer argument.
 void RtSerializer_SerializeBytes(Serializer* self, int size, void* ptr, const char* name) {
-    ReaderWriter* rw = self->readerWriter;
-    void* target = RwSlot(rw, rw_vtbl::kSerializeBytes);
-    using Fn = void (*)(ReaderWriter*, int, void*, const char*);
-    reinterpret_cast<Fn>(target)(rw, size, ptr, name);
+    Ser(self)->SerializeBytes(size, ptr, name);
 }
 
 // ============================================================================
@@ -239,9 +247,7 @@ void RtSerializer_SerializeBytes(Serializer* self, int size, void* ptr, const ch
 // If a third ReaderWriter subclass ever gives that slot a side effect this
 // site becomes unsound.
 int RtSerializer_GetVersion(Serializer* self) {
-    ReaderWriter* rw = self->readerWriter;
-    using Fn = int (*)(ReaderWriter*);
-    return reinterpret_cast<Fn>(RwSlot(rw, rw_vtbl::kGetVersion))(rw);
+    return Ser(self)->GetVersion();
 }
 
 // ============================================================================
@@ -250,8 +256,11 @@ int RtSerializer_GetVersion(Serializer* self) {
 // Retail 0x180006290 is `MOV RAX,[RCX]; MOV RAX,[RAX+0x10]; RET` — two loads,
 // no dispatch, no side effect. It returns the Stream's IO::Encoding (the
 // policy object), NOT the Serializer's ReaderWriter. Diffing it is free.
+// The member returns a REFERENCE, because retail's mangling does
+// (`AEBVEncoding@2@`); the door keeps the pointer its callers already take. The
+// round trip emits no code.
 const Encoding* RtSerializer_GetEncoding(Serializer* self) {
-    return self->stream->encoding;
+    return reinterpret_cast<const Encoding*>(&Ser(self)->GetEncoding());
 }
 
 // ============================================================================
@@ -300,23 +309,17 @@ const Encoding* RtSerializer_GetEncoding(Serializer* self) {
 // encoding would produce some other ReaderWriter subclass and trip that clause
 // without anything being wrong. The log line prints the vtable pointer so the
 // two cases are distinguishable.
+//
+// B.3.4 block 3: the body is now `IO::Serializer::Serializer(Stream&, int)`
+// (serializer_class.cpp). The door PLACEMENT-CONSTRUCTS into the caller's own
+// bytes, which is the only shape that preserves what matters here: the caller
+// supplied the storage, the storage keeps its address, and the 12-byte header
+// is consumed or emitted at exactly this point in the caller's stream
+// sequence — not one statement earlier or later. It is also the shape
+// B34_RULES §7.3 gives the 187 exe-side call sites, so door and caller agree.
 Serializer* RtSerializer_Ctor(Serializer* self, Stream* stream, int version) {
-
-    self->stream = stream;
-    self->readerWriter = nullptr;
-
-    Encoding* factory = stream->encoding;
-    void** fvt = factory->vtable;
-    const int slot = (stream->direction == rt::io::kDirectionReading)
-                         ? rt::io::encoding_vtbl::kCreateReader
-                         : rt::io::encoding_vtbl::kCreateWriter;
-    using MakeRw = ReaderWriter* (*)(Encoding*, Serializer*, int);
-    ReaderWriter* rw = reinterpret_cast<MakeRw>(
-        *reinterpret_cast<void* const*>(reinterpret_cast<const uint8_t*>(fvt) + slot))(
-        factory, self, version);
-    self->readerWriter = rw;
-
-
+    ::new (static_cast<void*>(self))                              // B.3.4 bridge
+        IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), version);
     return self;   // MOV RAX,RBX
 }
 
@@ -334,11 +337,7 @@ Serializer* RtSerializer_Ctor(Serializer* self, Stream* stream, int version) {
 //
 // Note retail does NOT null self->readerWriter afterwards. Kept.
 void RtSerializer_Dtor(Serializer* self) {
-    ReaderWriter* rw = self->readerWriter;
-    if (rw) {
-        using Fn = void (*)(ReaderWriter*, int);
-        reinterpret_cast<Fn>(RwSlot(rw, rw_vtbl::kDtor))(rw, 1);
-    }
+    Ser(self)->~Serializer();
 }
 
 } // extern "C"
