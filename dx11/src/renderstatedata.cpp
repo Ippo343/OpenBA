@@ -87,6 +87,15 @@
 #include "VideoDX11Data.h"
 #include "resolve.h"
 
+// ENDGAME B.3.5 block C, RULE B5-3 — the real `Video::RenderStateData` abstract
+// base (block A), so this file's destructor can call its base destructor as a
+// qualified non-virtual member call instead of resolving a mangled name.
+// B35_RULES 1.2: `dx11/` compiles with the shared include set
+// (`-Iruntime/types -Iruntime/funcs`), so no Makefile change is needed. The
+// twelve CONCRETE `*Data` classes and the 84-slot seam remain the declared leave
+// of RULE B5-8; only the Runtime-side base is a class.
+#include "video/CompanionData.h"
+
 namespace VideoDX11 {
 namespace {
 
@@ -288,17 +297,22 @@ static_assert(offsetof(D3D11_RASTERIZER_DESC, MultisampleEnable)    == 0x20, "RS
 // Resolved here, in this lane's own translation unit, rather than in the shared
 // engine/funcs/engine_funcs.h — six lanes are editing that file concurrently.
 //
-// Both are *by-name* imports of the shipped DLL, read straight out of its
-// import name table, so the mangled strings are exact rather than reconstructed:
-//   [0x180013348] -> ??1RenderStateData@Video@@UEAA@XZ            (hint 0x295)
+// The remaining one is a *by-name* import of the shipped DLL, read straight out
+// of its import name table, so the mangled string is exact rather than
+// reconstructed:
 //   [0x1800134d0] -> ?MemFree@MemoryAllocator@System@@SAXPEAX@Z   (hint 0xc9b)
+//
+// ENDGAME B.3.5 block C, RULE B5-3: the second import,
+// `[0x180013348] -> ??1RenderStateData@Video@@UEAA@XZ` (hint 0x295), is GONE. It
+// was spelling 9 of the nine caller bindings (RULE B5-14) — a mangled name
+// resolved into this struct and called indirectly, one of dx11's 76 literals. The
+// Runtime base is now a real class, so the call is a qualified non-virtual member
+// call; see the destructor below.
 // ============================================================================
-typedef void (*fn_RenderStateDataBaseDtor_t)(void* self);
 typedef void (*fn_MemFree_t)(void* p);
 
 struct RuntimeDeps {
     void**                       deviceSingleton = nullptr;  // Video::Device**
-    fn_RenderStateDataBaseDtor_t baseDtor        = nullptr;
     fn_MemFree_t                 memFree         = nullptr;
     bool                         tried           = false;
     bool                         ok              = false;
@@ -314,14 +328,10 @@ RuntimeDeps& Deps() {
         d.deviceSingleton =
             reinterpret_cast<void**>(ResolveAddr(Module::Runtime, 0x1801fe7a8));
 
-        d.baseDtor = reinterpret_cast<fn_RenderStateDataBaseDtor_t>(
-            ResolveExport("??1RenderStateData@Video@@UEAA@XZ"));
-
         d.memFree = reinterpret_cast<fn_MemFree_t>(
             ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
 
-        d.ok = (d.deviceSingleton != nullptr) && (d.baseDtor != nullptr) &&
-               (d.memFree != nullptr);
+        d.ok = (d.deviceSingleton != nullptr) && (d.memFree != nullptr);
     }
     return d;
 }
@@ -390,7 +400,19 @@ RenderStateData* RenderStateData_ScalarDeletingDtor(RenderStateData* self, unsig
         static_cast<ID3D11RasterizerState*>(self->rasterizerState)->Release();
     }
 
-    d.baseDtor(self);
+    // ENDGAME B.3.5 block C, RULE B5-3. Was `d.baseDtor(self)`, an indirect call
+    // through a resolved `??1RenderStateData@Video@@UEAA@XZ`.
+    // `Video::RenderStateData` is now a real class, so this is the MSVC
+    // derived-destructor idiom written as C++: a QUALIFIED non-virtual call on the
+    // base subobject, reached through the bridge cast because
+    // `VideoDX11::RenderStateData` is still the declared leave of RULE B5-8 and
+    // does not inherit in C++.
+    //
+    // It must NOT be `DeletingDtor(0)`: that re-enters slot 0, i.e. this very
+    // function. The base destructor is in no slot, which is exactly why the
+    // qualification is safe and the virtual call is not.
+    reinterpret_cast< ::Video::RenderStateData*>(self)
+        -> ::Video::RenderStateData::~RenderStateData();   // B.3.5 bridge
 
     if (flags & 1u) {
         d.memFree(self);

@@ -3,13 +3,18 @@
 // (original file: code\Runtime\Video\RenderState.h)
 // ============================================================================
 //
+// ENDGAME B.3.5 block C. `Video::RenderState` is now a REAL C++ class
+// (runtime/types/video/RenderState.h) and every body below has MOVED INTO a
+// member of it; each registered door is a one-line delegation with a QUALIFIED
+// non-virtual call, so no registration, address or mangled name changed.
+//
 // ??_7RenderState@Video@@6B@ (retail 0x180157720), nine slots:
 //
 //   0  deleting dtor        0x18004b9d0  runtime/src/object/deleting_dtor.cpp
 //   1  TypeName             0x18004b570  here
 //   2  Type                 0x18004b550  here
 //   3  GetFileVersion       0x1800f4c80  here  (returns 3)
-//   4  External::Compile    0x1800066e0  already ported
+//   4  External::Compile    0x1800066e0  already ported, INHERITED
 //   5  Serialize            0x1800f4c90  here
 //   6  Reconstruct          0x18004b6f0  here
 //   7  Destruct             0x18004b720  here
@@ -26,28 +31,58 @@
 // runtime/types/video/RenderState.h.
 //
 // ---------------------------------------------------------------------------
+// WHAT THE CLASS CONVERSION CHANGED, AND WHAT IT DID NOT
+// ---------------------------------------------------------------------------
+// CHANGED — three families of hand-written indirection are gone, each replaced
+// by the call the bytes were already making:
+//
+//   * `_data` is a real `Video::RenderStateData*` (block A, RULE B5-1), so
+//     `PlatformCreate` / `PlatformDestruct` / `Bind` call `Create()`,
+//     `DeletingDtor(1)` and `Bind(context)` as VIRTUALS instead of indexing
+//     `programdata_vtbl::kCreate / kDeletingDtor / kBind` by byte offset. The
+//     three offsets were +0x08, +0x00 and +0x10, i.e. slots 1, 0 and 2 — which
+//     is exactly the order `CompanionData.h` declares them in.
+//   * `PlatformConstruct` calls `Video::DeviceData::CreateRenderStateData`,
+//     slot 17 (+0x88), by name.
+//   * `Serialize` and the three sub-serializers use the REAL `IO::Serializer`
+//     (B.3.4 block 3) and its `Serialize(T&, const char*)` overloads, so the
+//     file no longer carries its own copy of the encoding-factory prologue, the
+//     `rw_vtbl::k*` byte offsets, or the codec teardown. `IO::Serializer`'s
+//     constructor IS the prologue (version 0, which is retail's `XOR R8D,R8D`
+//     at 0x1800f4cc1) and its destructor IS `if (rw) rw->slot0(rw, 1)`. The
+//     scope of the local is chosen so both run at retail's positions: the
+//     construction before the first emission, the destruction after the
+//     reading-direction PlatformCreate. Moving either one relative to another
+//     stream operation is a save-format change (Serializer.h's banner).
+//
+// NOT CHANGED — the vtable stamps in `RenderState::RenderState`'s DOOR. The
+// door writes Base's, External's and RenderState's MINTED addresses by hand and
+// keeps doing so: a real constructor chain would stamp GCC's tables, and the
+// rest of the tree reads this object through the minted one until the mint rows
+// retire at the end of B.3 (B35_RULES 11). `~RenderState` is the mirror case and
+// is the one place that DOES now rely on the chain — see its own note.
+//
+// ---------------------------------------------------------------------------
 // Serialize (0x1800f4c90) INLINES TWO OF THE THREE SUB-SERIALIZERS
 // ---------------------------------------------------------------------------
 // AlphaBlend's five fields and Depth's five are emitted straight into the body;
 // only Stencil is a real `CALL 0x1800f48e0`. The two inlined runs are field for
 // field identical to the exported sub-serializers they came from — checked
 // against 0x1800f4aa0 and 0x1800f4a00 — so this file expresses them as calls to
-// the same three functions it registers. That is the same code; what it is NOT
+// the same three members it registers. That is the same code; what it is NOT
 // is an invitation to "simplify" Stencil into the other two, because Stencil
 // serializes its write mask as a UChar (+0x08) among eight UInts, and a UInt
 // there would move the next eight fields by three bytes.
-//
-// The reader/writer is built with version 0 (`XOR R8D,R8D` at 0x1800f4cc1) —
-// unlike the shader programs above, which pass 1.
 // ============================================================================
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"
 #include "../../types/video/RenderState.h"
-#include "../../types/video/ShaderProgram.h"   // devicedata_vtbl / programdata_vtbl
 
 // standalone/resolve.h is DELIBERATELY NOT INCLUDED — it drags in <windows.h>,
 // and <wingdi.h> declares a function called `AlphaBlend`, which would make
@@ -57,17 +92,33 @@
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
-namespace {
+// The four registered doors over `Video::RenderState`'s protected surface:
+// `?PlatformConstruct@` / `?PlatformCreate@` / `?PlatformDestruct@` (private in
+// retail, `AEAA`) and `??1RenderState@Video@@` (non-virtual, protected). An
+// `extern "C"` function cannot name a protected member, so the class friends
+// THIS struct (B34_BRIEFS A.4 — friend the holder rather than widen the access,
+// so the header keeps saying what retail says). Declared at global scope because
+// that is where the header's `friend struct ::RenderStateDoorAccess;` names it —
+// it must NOT go in the anonymous namespace, where it would be a different type.
+// It has no fields and is never instantiated.
+struct RenderStateDoorAccess {
+    static void PlatformConstruct(Video::RenderState* p) {
+        p->Video::RenderState::PlatformConstruct();
+    }
+    static void PlatformCreate(Video::RenderState* p) {
+        p->Video::RenderState::PlatformCreate();
+    }
+    static void PlatformDestruct(Video::RenderState* p) {
+        p->Video::RenderState::PlatformDestruct();
+    }
+    // A QUALIFIED non-virtual destructor call, never `DeletingDtor(0)` — that
+    // would re-enter slot 0.
+    static void Dtor(Video::RenderState* p) {
+        p->Video::RenderState::~RenderState();
+    }
+};
 
-using rt::io::Serializer;
-using rt::io::Stream;
-using rt::io::ReaderWriter;
-using rt::video::RenderState;
-using rt::video::AlphaBlend;
-using rt::video::Depth;
-using rt::video::Stencil;
-namespace ddvt = rt::video::devicedata_vtbl;
-namespace pdvt = rt::video::programdata_vtbl;
+namespace {
 
 void* BaseVTable()        { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
 void* ExternalVTable()    { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
@@ -75,252 +126,372 @@ void* RenderStateVTable() { return RT_DATA_SLOT(void*, "??_7RenderState@Video@@6
 const uint8_t* RenderStateTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@RenderState@Video@@0VBaseTypeInfo@Object@@A");
 }
-void* DeviceData() {
+
+// `?_singleton@Device@Video@@0PEAV12@EA` -> `Device+0x100` -> the live
+// `Video::DeviceData*`. B35_RULES section 9: the static row stays an
+// `RT_DATA_SLOT` read for the whole of step 5 and is OWED a `MintStorageCell()`
+// redirect at the class-static conversion (RULE B4b-4), not here.
+Video::DeviceData* ActiveDeviceData() {
     void** slot = RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
     void* device = slot ? *slot : nullptr;
     if (!device) return nullptr;
-    return *reinterpret_cast<void**>(static_cast<uint8_t*>(device) + 0x100);
+    // B.3.5 bridge: `Video::Device` is block D2's class and is still a POD, so
+    // its `deviceData` member at +0x100 is reached by offset.
+    return reinterpret_cast<Video::DeviceData*>(
+        *reinterpret_cast<void**>(static_cast<uint8_t*>(device) + 0x100));
 }
 
-using Slot0Fn = void* (*)(void* self, int flag);
-void CallSlot0(void* self, int flag) {
+// The object's OWN vtable slot 0 with the flags byte spelled out. Read through
+// the object rather than through a resolved symbol because `Destruct` and
+// `Reconstruct` are INHERITED by nothing here but are reached on the live
+// object, whose table is the minted one.
+void CallSlot0(void* self, unsigned flags) {
     void** vt = *reinterpret_cast<void***>(self);
-    reinterpret_cast<Slot0Fn>(vt[0])(self, flag);
+    reinterpret_cast<void* (*)(void*, unsigned)>(vt[0])(self, flags);
 }
 
-using ScalarFn = void (*)(ReaderWriter*, void*, const char*);
-inline void RwBool (ReaderWriter* rw, void* p) {
-    reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarBool  / 8])(rw, p, nullptr);
-}
-inline void RwUInt (ReaderWriter* rw, void* p) {
-    reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarUInt  / 8])(rw, p, nullptr);
-}
-inline void RwUChar(ReaderWriter* rw, void* p) {
-    reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarUChar / 8])(rw, p, nullptr);
-}
-inline void RwFloat(ReaderWriter* rw, void* p) {
-    reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarFloat / 8])(rw, p, nullptr);
-}
-
-// ?PlatformConstruct@RenderState@Video@@AEAAXXZ (0x1800f4e30)
-void PlatformConstruct(RenderState* self) {
-    void* dd = DeviceData();
-    if (dd == nullptr) { self->_data = nullptr; return; }
-    using CreateFn = void* (*)(void*, void*);
-    void** vt = *reinterpret_cast<void***>(dd);
-    self->_data = reinterpret_cast<CreateFn>(vt[ddvt::kCreateRenderStateData / 8])(dd, self);
-}
-// ?PlatformCreate@RenderState@Video@@AEAAXXZ (0x1800f4ea0) — returns void here,
-// unlike the shader programs' `_N` (bool) form. The mangling says so and so
-// does the tail-jump's discarded result.
-void PlatformCreate(RenderState* self) {
-    using Fn = void (*)(void*);
-    void** vt = *reinterpret_cast<void***>(self->_data);
-    reinterpret_cast<Fn>(vt[pdvt::kCreate / 8])(self->_data);
-}
-// ?PlatformDestruct@RenderState@Video@@AEAAXXZ (0x1800f4e80)
-void PlatformDestruct(RenderState* self) {
-    if (self->_data == nullptr) return;
-    using Fn = void (*)(void*, int);
-    void** vt = *reinterpret_cast<void***>(self->_data);
-    reinterpret_cast<Fn>(vt[pdvt::kDeletingDtor / 8])(self->_data, 1);
-}
-
-// ??0RenderState@Video@@QEAA@XZ (0x1800f4b60). The defaults are the three
-// sub-struct ctors inlined, in field order.
-void ConstructBody(RenderState* self) {
+// ??0RenderState@Video@@QEAA@XZ (0x1800f4b60). The three vtable stamps are the
+// MINTED addresses, by hand — see this file's banner. The field defaults are the
+// three sub-struct ctors inlined, in field order, and they are expressed as
+// those ctors so the constants live in exactly one place.
+void ConstructBody(Video::RenderState* self) {
     void** vp = reinterpret_cast<void**>(self);
     *vp = BaseVTable();
     *vp = ExternalVTable();
-    self->base._path.data      = nullptr;   // +0x08
-    self->base._refs._data     = nullptr;   // +0x10
-    self->base._refs._size     = 0;         // +0x18
-    self->base._refs._capacity = 0;
-    *vp = RenderStateVTable();              // no CompiledExternal stamp — see the header
+    self->_path.data      = nullptr;   // +0x08
+    self->_refs._data     = nullptr;   // +0x10
+    self->_refs._size     = 0;         // +0x18
+    self->_refs._capacity = 0;
+    *vp = RenderStateVTable();         // no CompiledExternal stamp — see the header
 
-    self->_alphaBlend.enabled   = 0;        // +0x20  (a BYTE store; +0x21..+0x23 untouched)
-    self->_alphaBlend.srcBlend  = 1;        // +0x24
-    self->_alphaBlend.dstBlend  = 0;        // +0x28
-    self->_alphaBlend.blendOp   = 0;        // +0x2c
-    self->_alphaBlend.writeMask = 0xf;      // +0x30
-    self->_depth.test           = 1;        // +0x34  (a WORD store of 0x0101)
-    self->_depth.write          = 1;        // +0x35
-    self->_depth.func           = 4;        // +0x38
-    self->_depth.bias           = 0.0f;     // +0x3c
-    self->_depth.slopeBias      = 0.0f;     // +0x40
-    self->_stencil.enabled      = 0;        // +0x44  (a WORD store of 0)
-    self->_stencil.twoSided     = 0;        // +0x45
-    self->_stencil.readMask     = 0;        // +0x48
-    self->_stencil.writeMask    = 0;        // +0x4c  (a BYTE store)
-    self->_stencil.func         = 0;        // +0x50
-    self->_stencil.failOp       = 0;        // +0x54
-    self->_stencil.depthFailOp  = 0;        // +0x58
-    self->_stencil.passOp       = 0;        // +0x5c
-    self->_stencil.backFunc     = 0;        // +0x60
-    self->_stencil.reference    = 0;        // +0x64
-    self->_cullMode             = 1;        // +0x68
-    self->_fillMode             = 0;        // +0x6c
-    self->_flag70               = 0;        // +0x70
-    PlatformConstruct(self);                // +0x78
+    self->_alphaBlend = Video::RenderState::AlphaBlend();   // +0x20 .. +0x33
+    self->_depth      = Video::RenderState::Depth();        // +0x34 .. +0x43
+    self->_stencil    = Video::RenderState::Stencil();      // +0x44 .. +0x67
+    self->_cullMode   = 1;                                  // +0x68
+    self->_fillMode   = 0;                                  // +0x6c
+    self->_flag70     = 0;                                  // +0x70
+    RenderStateDoorAccess::PlatformConstruct(self);      // +0x78
 }
 
 }  // namespace
 
-// ---- the three sub-structs, all exported ----------------------------------
-extern "C" void* RtVideo_RenderState_AlphaBlend_Ctor(void* p) {   // 0x1800f4b30
-    AlphaBlend* a = static_cast<AlphaBlend*>(p);
-    a->enabled = 0; a->srcBlend = 1; a->dstBlend = 0; a->blendOp = 0; a->writeMask = 0xf;
-    return p;
-}
-extern "C" void* RtVideo_RenderState_Depth_Ctor(void* p) {        // 0x1800f4a80
-    Depth* d = static_cast<Depth*>(p);
-    d->test = 1; d->write = 1; d->func = 4; d->bias = 0.0f; d->slopeBias = 0.0f;
-    return p;
-}
-extern "C" void* RtVideo_RenderState_Stencil_Ctor(void* p) {      // 0x1800f49d0
-    Stencil* s = static_cast<Stencil*>(p);
-    s->enabled = 0; s->twoSided = 0; s->readMask = 0; s->writeMask = 0;
-    s->func = 0; s->failOp = 0; s->depthFailOp = 0; s->passOp = 0;
-    s->backFunc = 0; s->reference = 0;
-    return p;
+// ############################################################################
+// The members
+// ############################################################################
+
+namespace Video {
+
+// What the `reinterpret_cast<bool&>` in the three sub-serializers stands on.
+static_assert(sizeof(bool) == 1,
+              "the Bool ReaderWriter slot is handed the address of ONE byte");
+
+// ---- the three nested value types -----------------------------------------
+// ??0AlphaBlend@RenderState@Video@@QEAA@XZ  0x1800f4b30
+RenderState::AlphaBlend::AlphaBlend()
+    : enabled(0), _pad01{}, srcBlend(1), dstBlend(0), blendOp(0), writeMask(0xf) {}
+// ??0Depth@RenderState@Video@@QEAA@XZ       0x1800f4a80
+RenderState::Depth::Depth()
+    : test(1), write(1), _pad02{}, func(4), bias(0.0f), slopeBias(0.0f) {}
+// ??0Stencil@RenderState@Video@@QEAA@XZ     0x1800f49d0 — zeroes the whole 0x24
+RenderState::Stencil::Stencil()
+    : enabled(0), twoSided(0), _pad02{}, readMask(0), writeMask(0), _pad09{},
+      func(0), failOp(0), depthFailOp(0), passOp(0), backFunc(0), reference(0) {}
+
+// ?Serialize@AlphaBlend@RenderState@Video@@QEAAXAEAVSerializer@IO@@@Z  0x1800f4aa0
+void RenderState::AlphaBlend::Serialize(IO::Serializer& ser) {
+    // The third argument of every emitter is the field NAME and retail passes
+    // NULL (`XOR R8D,R8D` before each one); a text encoding would write those
+    // names into the file, so inventing them would change the format.
+    //
+    // THE `bool&` CASTS ARE NOT A CONVENIENCE. Retail hands the Bool slot the
+    // ADDRESS of the one byte at this offset, and on the READING direction the
+    // codec writes that byte back through the pointer. Copying into a local
+    // `bool` and normalising the result to 0/1 afterwards would change which
+    // byte value a load leaves behind for any file that stored something other
+    // than 0 or 1. `sizeof(bool) == 1` on this ABI (asserted once below), so
+    // the cast is the same byte the bytes name.
+    ser.Serialize(reinterpret_cast<bool&>(enabled), nullptr);
+    ser.Serialize(srcBlend, nullptr);
+    ser.Serialize(dstBlend, nullptr);
+    ser.Serialize(blendOp, nullptr);
+    ser.Serialize(writeMask, nullptr);
 }
 
-extern "C" void RtVideo_RenderState_AlphaBlend_Serialize(void* p, void* serv) {  // 0x1800f4aa0
-    AlphaBlend* a = static_cast<AlphaBlend*>(p);
-    ReaderWriter* rw = static_cast<Serializer*>(serv)->readerWriter;
-    RwBool(rw, &a->enabled);
-    RwUInt(rw, &a->srcBlend);
-    RwUInt(rw, &a->dstBlend);
-    RwUInt(rw, &a->blendOp);
-    RwUInt(rw, &a->writeMask);
-}
-extern "C" void RtVideo_RenderState_Depth_Serialize(void* p, void* serv) {       // 0x1800f4a00
-    Depth* d = static_cast<Depth*>(p);
-    ReaderWriter* rw = static_cast<Serializer*>(serv)->readerWriter;
-    RwBool (rw, &d->test);
-    RwBool (rw, &d->write);
-    RwUInt (rw, &d->func);
-    RwFloat(rw, &d->bias);
-    RwFloat(rw, &d->slopeBias);
-}
-extern "C" void RtVideo_RenderState_Stencil_Serialize(void* p, void* serv) {     // 0x1800f48e0
-    Stencil* s = static_cast<Stencil*>(p);
-    ReaderWriter* rw = static_cast<Serializer*>(serv)->readerWriter;
-    RwBool (rw, &s->enabled);
-    RwBool (rw, &s->twoSided);
-    RwUInt (rw, &s->readMask);
-    RwUChar(rw, &s->writeMask);     // UChar, not UInt — see this file's banner
-    RwUInt (rw, &s->func);
-    RwUInt (rw, &s->failOp);
-    RwUInt (rw, &s->depthFailOp);
-    RwUInt (rw, &s->passOp);
-    RwUInt (rw, &s->backFunc);
-    RwUInt (rw, &s->reference);
+// ?Serialize@Depth@RenderState@Video@@QEAAXAEAVSerializer@IO@@@Z  0x1800f4a00
+void RenderState::Depth::Serialize(IO::Serializer& ser) {
+    ser.Serialize(reinterpret_cast<bool&>(test), nullptr);
+    ser.Serialize(reinterpret_cast<bool&>(write), nullptr);
+    ser.Serialize(func, nullptr);
+    ser.Serialize(bias, nullptr);
+    ser.Serialize(slopeBias, nullptr);
 }
 
-extern "C" uint32_t RtVideo_RenderState_Type(const void*) {
+// ?Serialize@Stencil@RenderState@Video@@QEAAXAEAVSerializer@IO@@@Z  0x1800f48e0
+void RenderState::Stencil::Serialize(IO::Serializer& ser) {
+    ser.Serialize(reinterpret_cast<bool&>(enabled), nullptr);
+    ser.Serialize(reinterpret_cast<bool&>(twoSided), nullptr);
+    ser.Serialize(readMask, nullptr);
+    ser.Serialize(writeMask, nullptr);   // UChar, not UInt — see this file's banner
+    ser.Serialize(func, nullptr);
+    ser.Serialize(failOp, nullptr);
+    ser.Serialize(depthFailOp, nullptr);
+    ser.Serialize(passOp, nullptr);
+    ser.Serialize(backFunc, nullptr);
+    ser.Serialize(reference, nullptr);
+}
+
+// ---- the three private platform halves ------------------------------------
+// ?PlatformConstruct@RenderState@Video@@AEAAXXZ (0x1800f4e30)
+void RenderState::PlatformConstruct() {
+    DeviceData* dd = ActiveDeviceData();
+    if (dd == nullptr) { _data = nullptr; return; }
+    // `CALL [dd_vtable+0x88]` — slot 17, `CreateRenderStateData(this)`.
+    _data = static_cast<RenderStateData*>(dd->CreateRenderStateData(this));
+}
+// ?PlatformCreate@RenderState@Video@@AEAAXXZ (0x1800f4ea0). Returns void, unlike
+// the shader programs' `_N` (bool) form; retail discards the slot's result.
+void RenderState::PlatformCreate() {
+    _data->Create();          // slot 1, +0x08 — retail derefs _data unguarded
+}
+// ?PlatformDestruct@RenderState@Video@@AEAAXXZ (0x1800f4e80)
+void RenderState::PlatformDestruct() {
+    if (_data == nullptr) return;
+    _data->DeletingDtor(1);   // slot 0, +0x00, flags 1 = destroy AND free
+    // Retail does NOT null `_data` afterwards. Neither do we.
+}
+
+// ---- the vtable slots ------------------------------------------------------
+// slot 2 — `MOV EAX,dword ptr [_typeInfo + 0x00]`
+uint32_t RenderState::Type() const {
     uint32_t v = 0; std::memcpy(&v, RenderStateTypeInfo(), sizeof v); return v;
 }
-extern "C" uint32_t RtVideo_RenderState_TypeId() {
-    uint32_t v = 0; std::memcpy(&v, RenderStateTypeInfo(), sizeof v); return v;
-}
-extern "C" const char* RtVideo_RenderState_TypeName(const void*) {
+// slot 1 — `MOV RAX,qword ptr [_typeInfo + 0x08]`, i.e. `BaseTypeInfo::name`.
+// CONTENT-only: never compared by pointer
+// (reference_basetypeinfo_name_is_content_only.md).
+const char* RenderState::TypeName() const {
     const char* v = nullptr; std::memcpy(&v, RenderStateTypeInfo() + 8, sizeof v); return v;
 }
-// .rdata literals at 0x180157710 / 0x1801544f0. The parent really is
-// "Object::External" and not "Object::CompiledExternal"; see the header.
-extern "C" const char* RtVideo_RenderState_StaticTypeName() { return "RenderState"; }
-extern "C" const char* RtVideo_RenderState_ParentTypeName() { return "Object::External"; }
-extern "C" int32_t     RtVideo_RenderState_GetFileVersion(const void*) { return 3; }
+uint32_t RenderState::TypeId() {
+    uint32_t v = 0; std::memcpy(&v, RenderStateTypeInfo(), sizeof v); return v;
+}
+// slot 3 — `MOV EAX,0x3; RET`. A LITERAL in the shipped code: the on-disk
+// format version of this class, and getting it wrong silently changes which
+// branch the loader takes on every render state in the game.
+int32_t RenderState::GetFileVersion() const { return 3; }
 
-extern "C" void* RtVideo_RenderState_Ctor(void* selfv) {
-    ConstructBody(static_cast<RenderState*>(selfv)); return selfv;
+// RULE B5-15: the .rdata literals at 0x180157710 / 0x1801544f0. The parent
+// really is "Object::External" and not "Object::CompiledExternal".
+const char* RenderState::_TypeName()       { return "RenderState"; }
+const char* RenderState::_ParentTypeName() { return "Object::External"; }
+
+// slot 8 — ?Construct@ 0x18004b710.
+// `TEST RCX,RCX; JNZ <ctor>; XOR EAX,EAX; RET` — MSVC's placement-new codegen.
+// The null test on `this` looks unreachable for a virtual and is transcribed
+// anyway: "obviously unreachable" is not a licence to drop a branch — and the
+// branch STAYS IN THE DOOR (`RtVideo_RenderState_Construct` below) rather than
+// here, because `this == nullptr` inside a member is a comparison GCC folds and
+// warns about. The door is where retail's test is observable, so that is where
+// it lives.
+Object::External* RenderState::Construct() {
+    ConstructBody(this);
+    return this;
 }
-extern "C" void* RtVideo_RenderState_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;
-    ConstructBody(static_cast<RenderState*>(selfv)); return selfv;
+
+// slot 6 — ?Reconstruct@ 0x18004b6f0. Destroy in place through slot 0 with
+// flags 0 ("destroy, do NOT free" — the argument Ghidra's C output drops), then
+// re-construct on the SAME storage: `Object::External`'s device-lost primitive.
+Object::External* RenderState::Reconstruct() {
+    CallSlot0(this, 0u);
+    ConstructBody(this);
+    return this;
 }
-extern "C" void* RtVideo_RenderState_Reconstruct(void* selfv) {
-    CallSlot0(selfv, 0);
-    ConstructBody(static_cast<RenderState*>(selfv)); return selfv;
-}
-extern "C" void RtVideo_RenderState_Destruct(void* selfv) { CallSlot0(selfv, 0); }
+
+// slot 7 — ?Destruct@ 0x18004b720. `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`.
+void RenderState::Destruct() { CallSlot0(this, 0u); }
 
 // ??1RenderState@Video@@UEAA@XZ (0x1800f4c30)
-extern "C" void RtVideo_RenderState_Dtor(void* selfv) {
-    RenderState* self = static_cast<RenderState*>(selfv);
-    *reinterpret_cast<void**>(self) = RenderStateVTable();
-    PlatformDestruct(self);
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(self);
+//
+// Retail's order: stamp RenderState's vtable, PlatformDestruct, then TAIL-JMP
+// ~External. The first and the last are BOTH the destructor chain's now — GCC
+// emits the vptr store on entry to `~RenderState` and runs `~External()` on the
+// way out — and neither is hand-written, for the reason
+// `runtime/src/object/external_class.cpp`'s `~External` records: a hand-written
+// store would name the MINTED table where a converted object carries the
+// compiler's, which is the whole point of the class. The one line left is the
+// body retail actually has.
+RenderState::~RenderState() { PlatformDestruct(); }
+
+// ---- the exported non-virtual members --------------------------------------
+bool RenderState::IsWireframe() const { return _fillMode == 1; }
+
+// ?Bind@RenderState@Video@@QEBAXAEAVContext@2@@Z (0x1800f4ec0)
+void RenderState::Bind(void* context) const {
+    _data->Bind(context);     // slot 2, +0x10 — retail derefs _data unguarded
 }
 
-extern "C" bool RtVideo_RenderState_IsWireframe(const void* selfv) {
-    return static_cast<const RenderState*>(selfv)->_fillMode == 1;
-}
-// ?Bind@RenderState@Video@@QEBAXAEAVContext@2@@Z (0x1800f4ec0)
-extern "C" void RtVideo_RenderState_Bind(const void* selfv, void* context) {
-    void* data = static_cast<const RenderState*>(selfv)->_data;
-    using Fn = void (*)(void*, void*);
-    void** vt = *reinterpret_cast<void***>(data);
-    reinterpret_cast<Fn>(vt[pdvt::kBind / 8])(data, context);
-}
 // ?Initialize@RenderState@Video@@ (0x1800f4840): a field-by-field copy, then
 // PlatformCreate. Retail copies dword by dword and therefore also copies the
 // three padding bytes after AlphaBlend::enabled and the two after Depth::test;
-// the struct assignments below copy the same 0x14 / 0x10 / 0x24 byte extents.
+// the struct assignments below copy the same 0x14 / 0x10 / 0x24 byte extents,
+// which is sound because all three are trivially copyable (asserted in the
+// header).
+void RenderState::Initialize(const AlphaBlend& alphaBlend, const Depth& depth,
+                             const Stencil& stencil, CullMode cullMode,
+                             FillMode fillMode, bool flag) {
+    _alphaBlend = alphaBlend;
+    _depth      = depth;
+    _stencil    = stencil;
+    _fillMode   = fillMode;     // retail stores fillMode BEFORE cullMode
+    _cullMode   = cullMode;
+    _flag70     = flag ? 1 : 0;
+    PlatformCreate();           // retail derefs _data unguarded
+}
+
+// slot 5 — ?Serialize@RenderState@Video@@UEAA_NAEAVStream@IO@@@Z (0x1800f4c90)
+//
+// The reader/writer is built with version 0 (`XOR R8D,R8D` at 0x1800f4cc1) —
+// unlike the shader programs, which pass 1. `IO::Serializer`'s constructor is
+// that prologue and its destructor is the codec teardown at the end of the
+// body, so the local's SCOPE is what places both; see this file's banner.
+bool RenderState::Serialize(void* stream) {
+    // B.3.5 bridge: the slot's parameter is `IO::Stream&` in retail, but
+    // `Object::External::Serialize` is declared `bool(void*)` across the whole
+    // External family and that signature is not this block's to change.
+    IO::Stream& s = *reinterpret_cast<IO::Stream*>(stream);
+    {
+        IO::Serializer ser(s, 0);
+
+        _alphaBlend.Serialize(ser);    // inlined by retail
+        _depth.Serialize(ser);         // inlined by retail
+        _stencil.Serialize(ser);       // a real CALL 0x1800f48e0
+        ser.Serialize(_cullMode, nullptr);
+        ser.Serialize(_fillMode, nullptr);
+        ser.Serialize(reinterpret_cast<bool&>(_flag70), nullptr);
+
+        if (s.GetDirection() == IO::kReading)
+            PlatformCreate();          // retail derefs _data unguarded
+    }   // ~Serializer: `if (rw) rw->slot0(rw, 1)` at 0x1800f4e0f
+    return true;                       // MOV AL,1 — there is no failure path
+}
+
+}  // namespace Video
+
+// ############################################################################
+// The registered doors — every one a QUALIFIED non-virtual delegation.
+// Names and addresses are UNCHANGED; nothing is retired (B35_RULES 11).
+// ############################################################################
+
+extern "C" void* RtVideo_RenderState_AlphaBlend_Ctor(void* p) {   // 0x1800f4b30
+    return ::new (p) Video::RenderState::AlphaBlend();
+}
+extern "C" void* RtVideo_RenderState_Depth_Ctor(void* p) {        // 0x1800f4a80
+    return ::new (p) Video::RenderState::Depth();
+}
+extern "C" void* RtVideo_RenderState_Stencil_Ctor(void* p) {      // 0x1800f49d0
+    return ::new (p) Video::RenderState::Stencil();
+}
+
+extern "C" void RtVideo_RenderState_AlphaBlend_Serialize(void* p, void* serv) {  // 0x1800f4aa0
+    reinterpret_cast<Video::RenderState::AlphaBlend*>(p)
+        ->Video::RenderState::AlphaBlend::Serialize(
+            *reinterpret_cast<IO::Serializer*>(serv));           // B.3.5 bridge
+}
+extern "C" void RtVideo_RenderState_Depth_Serialize(void* p, void* serv) {       // 0x1800f4a00
+    reinterpret_cast<Video::RenderState::Depth*>(p)
+        ->Video::RenderState::Depth::Serialize(
+            *reinterpret_cast<IO::Serializer*>(serv));           // B.3.5 bridge
+}
+extern "C" void RtVideo_RenderState_Stencil_Serialize(void* p, void* serv) {     // 0x1800f48e0
+    reinterpret_cast<Video::RenderState::Stencil*>(p)
+        ->Video::RenderState::Stencil::Serialize(
+            *reinterpret_cast<IO::Serializer*>(serv));           // B.3.5 bridge
+}
+
+extern "C" uint32_t RtVideo_RenderState_Type(const void* selfv) {
+    return reinterpret_cast<const Video::RenderState*>(selfv)
+        ->Video::RenderState::Type();                            // B.3.5 bridge
+}
+extern "C" uint32_t RtVideo_RenderState_TypeId() {
+    return Video::RenderState::TypeId();
+}
+extern "C" const char* RtVideo_RenderState_TypeName(const void* selfv) {
+    return reinterpret_cast<const Video::RenderState*>(selfv)
+        ->Video::RenderState::TypeName();                        // B.3.5 bridge
+}
+extern "C" int32_t RtVideo_RenderState_GetFileVersion(const void* selfv) {
+    return reinterpret_cast<const Video::RenderState*>(selfv)
+        ->Video::RenderState::GetFileVersion();                  // B.3.5 bridge
+}
+
+// `?_TypeName@` / `?_ParentTypeName@` are `protected static` on the class
+// (retail's `CA` = private static), so the doors are members' friends by being
+// this file — `Video::RenderState::_TypeName()` is reachable from a member
+// definition's enclosing scope but not from an `extern "C"` free function, so
+// the two literals are repeated here rather than the access widened. RULE
+// B5-15: both are the bytes at 0x18004b530 / 0x18004b540, copied.
+extern "C" const char* RtVideo_RenderState_StaticTypeName() { return "RenderState"; }
+extern "C" const char* RtVideo_RenderState_ParentTypeName() { return "Object::External"; }
+
+extern "C" void* RtVideo_RenderState_Ctor(void* selfv) {
+    ConstructBody(static_cast<Video::RenderState*>(selfv)); return selfv;
+}
+extern "C" void* RtVideo_RenderState_Construct(void* selfv) {
+    if (selfv == nullptr) return nullptr;
+    return reinterpret_cast<Video::RenderState*>(selfv)
+        ->Video::RenderState::Construct();                       // B.3.5 bridge
+}
+extern "C" void* RtVideo_RenderState_Reconstruct(void* selfv) {
+    return reinterpret_cast<Video::RenderState*>(selfv)
+        ->Video::RenderState::Reconstruct();                     // B.3.5 bridge
+}
+extern "C" void RtVideo_RenderState_Destruct(void* selfv) {
+    reinterpret_cast<Video::RenderState*>(selfv)
+        ->Video::RenderState::Destruct();                        // B.3.5 bridge
+}
+// ??1RenderState@Video@@UEAA@XZ (0x1800f4c30) — a QUALIFIED non-virtual
+// destructor call, never `DeletingDtor(0)`: that would re-enter slot 0.
+extern "C" void RtVideo_RenderState_Dtor(void* selfv) {
+    RenderStateDoorAccess::Dtor(
+        reinterpret_cast<Video::RenderState*>(selfv));            // B.3.5 bridge
+}
+
+extern "C" bool RtVideo_RenderState_IsWireframe(const void* selfv) {
+    return reinterpret_cast<const Video::RenderState*>(selfv)
+        ->Video::RenderState::IsWireframe();                     // B.3.5 bridge
+}
+extern "C" void RtVideo_RenderState_Bind(const void* selfv, void* context) {
+    reinterpret_cast<const Video::RenderState*>(selfv)
+        ->Video::RenderState::Bind(context);                     // B.3.5 bridge
+}
 extern "C" void RtVideo_RenderState_Initialize(void* selfv, const void* ab, const void* dp,
                                                const void* st, uint32_t cull, uint32_t fill,
                                                bool flag) {
-    RenderState* self = static_cast<RenderState*>(selfv);
-    std::memcpy(&self->_alphaBlend, ab, sizeof(AlphaBlend));
-    std::memcpy(&self->_depth,      dp, sizeof(Depth));
-    std::memcpy(&self->_stencil,    st, sizeof(Stencil));
-    self->_fillMode = fill;     // retail stores fillMode BEFORE cullMode
-    self->_cullMode = cull;
-    self->_flag70   = flag ? 1 : 0;
-    PlatformCreate(self);       // retail derefs _data unguarded
+    reinterpret_cast<Video::RenderState*>(selfv)->Video::RenderState::Initialize(
+        *reinterpret_cast<const Video::RenderState::AlphaBlend*>(ab),
+        *reinterpret_cast<const Video::RenderState::Depth*>(dp),
+        *reinterpret_cast<const Video::RenderState::Stencil*>(st),
+        cull, fill, flag);                                       // B.3.5 bridge
 }
 
+// The three Platform* doors reach PROTECTED members through
+// `RenderStateDoorAccess` (declared at the top of this file with its
+// reasoning).
 extern "C" void RtVideo_RenderState_PlatformConstructExport(void* selfv) {
-    PlatformConstruct(static_cast<RenderState*>(selfv));
+    RenderStateDoorAccess::PlatformConstruct(
+        reinterpret_cast<Video::RenderState*>(selfv));            // B.3.5 bridge
 }
 extern "C" void RtVideo_RenderState_PlatformCreateExport(void* selfv) {
-    PlatformCreate(static_cast<RenderState*>(selfv));
+    RenderStateDoorAccess::PlatformCreate(
+        reinterpret_cast<Video::RenderState*>(selfv));            // B.3.5 bridge
 }
 extern "C" void RtVideo_RenderState_PlatformDestructExport(void* selfv) {
-    PlatformDestruct(static_cast<RenderState*>(selfv));
+    RenderStateDoorAccess::PlatformDestruct(
+        reinterpret_cast<Video::RenderState*>(selfv));            // B.3.5 bridge
 }
 
-// ?Serialize@RenderState@Video@@UEAA_NAEAVStream@IO@@@Z (0x1800f4c90)
 extern "C" bool RtVideo_RenderState_Serialize(void* selfv, void* streamv) {
-    RenderState* self = static_cast<RenderState*>(selfv);
-    Stream* stream = static_cast<Stream*>(streamv);
-
-    Serializer ser = { stream, nullptr };
-    void** encVt = *reinterpret_cast<void***>(stream->encoding);
-    const int slot = (stream->direction == rt::io::kDirectionReading)
-                         ? rt::io::encoding_vtbl::kCreateReader
-                         : rt::io::encoding_vtbl::kCreateWriter;
-    using MakeRwFn = ReaderWriter* (*)(void*, Serializer*, int);
-    ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 0);
-    ser.readerWriter = rw;
-
-    RtVideo_RenderState_AlphaBlend_Serialize(&self->_alphaBlend, &ser);   // inlined by retail
-    RtVideo_RenderState_Depth_Serialize     (&self->_depth,      &ser);   // inlined by retail
-    RtVideo_RenderState_Stencil_Serialize   (&self->_stencil,    &ser);   // a real CALL
-    RwUInt(rw, &self->_cullMode);
-    RwUInt(rw, &self->_fillMode);
-    RwBool(rw, &self->_flag70);
-
-    if (stream->direction == rt::io::kDirectionReading)
-        PlatformCreate(self);          // retail derefs _data unguarded
-
-    if (rw != nullptr) {
-        using DeleteFn = void (*)(ReaderWriter*, int);
-        reinterpret_cast<DeleteFn>(rw->vtable[0])(rw, 1);
-    }
-    return true;
+    return reinterpret_cast<Video::RenderState*>(selfv)
+        ->Video::RenderState::Serialize(streamv);                 // B.3.5 bridge
 }
 
 int RtVideoRenderStateRegister() {
