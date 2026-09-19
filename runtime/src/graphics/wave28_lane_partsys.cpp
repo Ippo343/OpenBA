@@ -421,6 +421,21 @@ constexpr size_t kExt_SizeRate= 0x10;  // float
 // This lane does NOT own this class's layout and does not declare a struct for
 // it — every field below is a MEASURED offset with the instruction that reads
 // it, exactly the shape Wave 27 used for kPool_*.
+//
+// *** ENDGAME B.3.5 block H2: THE CLASS NOW EXISTS, AND THESE CONSTANTS ARE
+// CHECKED AGAINST IT. *** `runtime/types/graphics/Particle.h` carries the real
+// `Graphics::ParticleSystem`, authored from the WRITER side (the disassembled
+// constructor 0x1800a5320 and `Serialize`'s emission order, in
+// `vtbatch7_animgroup_particlesystem.cpp`) and NAMED from this lane's reader
+// measurements. The `static_assert` block below turns "two independent witnesses
+// agreed" into a COMPILE-TIME check, so a later edit to either side fails the
+// build rather than drifting. The `kPS_*` constants themselves are LEFT IN PLACE
+// and this body still reads through them: `ParticleSystemInstance::Update` is
+// block E's converted member and its receiver here is a `void*` that may be any
+// `Particle` subclass (Tornado included), not necessarily a `ParticleSystem` —
+// the `isDerived` test below is what decides, at run time. Rewriting 400 lines of
+// offset reads into member reads is a CALLER conversion behind a run-time type
+// test, which belongs to the caller batches, not to this class block.
 constexpr size_t kPS_RateAccelA   = 0x4c;  // MULSS 0x4c(%rdi) @ 0x1800a5758
 constexpr size_t kPS_RateAccelB   = 0x50;  // MULSS 0x50(%rdi) @ 0x1800a5764
 constexpr size_t kPS_DurationTicks= 0x58;  // MOV 0x58(%rdi),%rcx @ 0x1800a5781 (int64)
@@ -457,6 +472,49 @@ constexpr size_t kPS_Color0       = 0xdc;  // bytes +0xdc,+0xdd,+0xde,+0xdf
 constexpr size_t kPS_Color1       = 0xe0;  // bytes +0xe0,+0xe1,+0xe2,+0xe3
 constexpr size_t kPS_FadeInTicks  = 0xe8;  // CVTSI2SDQ 0xe8(%rdi) @ 0x1800a675c (int64)
 constexpr size_t kPS_FadeOutTicks = 0xf0;  // MOV 0xf0(%rdi),%rcx @ 0x1800a672a (int64)
+
+// ENDGAME B.3.5 block H2 — the reader's offsets against the real class's fields.
+// One assert per named field; the two sides were measured independently and in
+// opposite directions, and nothing had to be reconciled.
+static_assert(offsetof(::Graphics::ParticleSystem, _rateAccelA)    == kPS_RateAccelA,    "+0x4c");
+static_assert(offsetof(::Graphics::ParticleSystem, _rateAccelB)    == kPS_RateAccelB,    "+0x50");
+static_assert(offsetof(::Graphics::ParticleSystem, _durationTicks) == kPS_DurationTicks, "+0x58");
+static_assert(offsetof(::Graphics::ParticleSystem, _emitDirX)      == kPS_EmitDir,       "+0x60");
+static_assert(offsetof(::Graphics::ParticleSystem, _spreadX)       == kPS_SpreadX,       "+0x6c");
+static_assert(offsetof(::Graphics::ParticleSystem, _spreadY)       == kPS_SpreadY,       "+0x70");
+static_assert(offsetof(::Graphics::ParticleSystem, _spreadZ)       == kPS_SpreadZ,       "+0x74");
+static_assert(offsetof(::Graphics::ParticleSystem, _spreadScale)   == kPS_SpreadScale,   "+0x78");
+static_assert(offsetof(::Graphics::ParticleSystem, _angleBRange)   == kPS_AngleBRange,   "+0x7c");
+static_assert(offsetof(::Graphics::ParticleSystem, _angleARange)   == kPS_AngleARange,   "+0x80");
+static_assert(offsetof(::Graphics::ParticleSystem, _speedBase)     == kPS_SpeedBase,     "+0x84");
+static_assert(offsetof(::Graphics::ParticleSystem, _speedRange)    == kPS_SpeedRange,    "+0x88");
+static_assert(offsetof(::Graphics::ParticleSystem, _accelScale)    == kPS_AccelScale,    "+0x8c");
+static_assert(offsetof(::Graphics::ParticleSystem, _damping)       == kPS_Damping,       "+0x90");
+static_assert(offsetof(::Graphics::ParticleSystem, _rotBase)       == kPS_RotBase,       "+0x94");
+static_assert(offsetof(::Graphics::ParticleSystem, _rotRange)      == kPS_RotRange,      "+0x98");
+static_assert(offsetof(::Graphics::ParticleSystem, _spinBase)      == kPS_SpinBase,      "+0x9c");
+static_assert(offsetof(::Graphics::ParticleSystem, _spinRange)     == kPS_SpinRange,     "+0xa0");
+static_assert(offsetof(::Graphics::ParticleSystem, _spinAccel)     == kPS_SpinAccel,     "+0xa4");
+static_assert(offsetof(::Graphics::ParticleSystem, _spinDamp)      == kPS_SpinDamp,      "+0xa8");
+static_assert(offsetof(::Graphics::ParticleSystem, _lifeBase)      == kPS_LifeBase,      "+0xac");
+static_assert(offsetof(::Graphics::ParticleSystem, _lifeRange)     == kPS_LifeRange,     "+0xb0");
+static_assert(offsetof(::Graphics::ParticleSystem, _gravScale)     == kPS_GravScale,     "+0xb4");
+static_assert(offsetof(::Graphics::ParticleSystem, _gravX)         == kPS_GravX,         "+0xb8");
+static_assert(offsetof(::Graphics::ParticleSystem, _gravY)         == kPS_GravY,         "+0xbc");
+static_assert(offsetof(::Graphics::ParticleSystem, _gravZ)         == kPS_GravZ,         "+0xc0");
+static_assert(offsetof(::Graphics::ParticleSystem, _sizeBase)      == kPS_SizeBase,      "+0xc4");
+static_assert(offsetof(::Graphics::ParticleSystem, _sizeRange)     == kPS_SizeRange,     "+0xc8");
+static_assert(offsetof(::Graphics::ParticleSystem, _sizeAccel)     == kPS_SizeAccel,     "+0xcc");
+static_assert(offsetof(::Graphics::ParticleSystem, _sizeDamp)      == kPS_SizeDamp,      "+0xd0");
+static_assert(offsetof(::Graphics::ParticleSystem, _colorT0)       == kPS_ColorT0,       "+0xd4");
+static_assert(offsetof(::Graphics::ParticleSystem, _colorT1)       == kPS_ColorT1,       "+0xd8");
+static_assert(offsetof(::Graphics::ParticleSystem, _color0)        == kPS_Color0,        "+0xdc");
+static_assert(offsetof(::Graphics::ParticleSystem, _color1)        == kPS_Color1,        "+0xe0");
+static_assert(offsetof(::Graphics::ParticleSystem, _fadeInTicks)   == kPS_FadeInTicks,   "+0xe8");
+static_assert(offsetof(::Graphics::ParticleSystem, _fadeOutTicks)  == kPS_FadeOutTicks,  "+0xf0");
+// And the two `Graphics::Particle` fields this body reads, against the real base.
+static_assert(offsetof(::Graphics::Particle, _active)  == kParticle_Active, "Particle::_active @ +0x20");
+static_assert(offsetof(::Graphics::Particle, _records) == kParticle_Boxes,  "Particle::_records @ +0x38");
 
 // ---------------------------------------------------------------------------
 // `q * (v,0) * conj(q)`, in retail's EXACT association order.

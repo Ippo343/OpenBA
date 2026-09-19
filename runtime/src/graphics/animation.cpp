@@ -117,6 +117,15 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/Animation.h"
 #include "../../types/graphics/Particle.h"
+// ENDGAME B.3.5 block H2: the real `Graphics::ParticleInstance` (block E's
+// class), needed because the two non-constructor particle bodies in this file —
+// `ParticleInstance::Update` and `ParticleInstance::IncrementInstanceIndex` —
+// are now its MEMBERS. The header was declared for them by block E and needed no
+// edit. It reaches `Geometry.h` and therefore `Volume.h`, which is safe HERE for
+// the reason this file forward-declares `ResolveAddr` instead of including
+// `standalone/resolve.h`: no `<windows.h>` is in this translation unit, so
+// `Volume::Rectangle` does not collide with `<wingdi.h>`'s `Rectangle`.
+#include "../../types/graphics/ParticleInstance.h"
 
 using RtGraphics::AnimationEvent;
 using RtGraphics::AnimationManager;
@@ -489,24 +498,17 @@ extern "C" ParticleInstance* RtGraphics_ParticleInstance_Ctor(ParticleInstance* 
 // was never attached, retail crashes, and so does this port. Neither guard
 // is added.
 // ============================================================================
+// ENDGAME B.3.5 block H2: BODY MOVED onto the member at the bottom of this file
+// (`Graphics::ParticleInstance::Update`, the NON-VIRTUAL `bool Update()` block E
+// declared in `ParticleInstance.h`). The door keeps its mangled name, its
+// address and its registration and delegates with a QUALIFIED non-virtual call
+// — the qualification stops it re-entering itself through the minted table
+// (B34_BRIEFS section A.1), and it also picks the right one of retail's TWO
+// members called `Update` on this class (the other is the PURE slot-1
+// `Update(const System::Time&)`; see ParticleInstance.h's name-hiding note).
 extern "C" bool RtGraphics_ParticleInstance_Update(ParticleInstance* self) {
-
-    ParticleResource* resource = self->_resource;             // +0xc0, unguarded
-    if (resource->_active != 0) {                              // +0x20, unguarded
-        self->_boundsPtr = resource->_boxes[self->_index];     // +0x38 array, +0xd0 index
-    }
-
-    int* frameIndex = RtFrameIndexSlot();
-    bool needsUpdate;
-    if (resource->_active != 0 && self->_boundsPtr->frameTag == *frameIndex) {
-        RtGeometrySetBounds(&self->base, self->_boundsPtr);
-        needsUpdate = false;
-    } else {
-        self->_boundsPtr->frameTag = *frameIndex;              // unguarded, faithful
-        needsUpdate = true;
-    }
-
-    return needsUpdate;
+    return reinterpret_cast<::Graphics::ParticleInstance*>(self)     // B.3.5 bridge
+               ->::Graphics::ParticleInstance::Update();
 }
 
 // ============================================================================
@@ -526,12 +528,11 @@ extern "C" bool RtGraphics_ParticleInstance_Update(ParticleInstance* self) {
 // from independent snapshots restored around the calls so neither call's
 // result depends on the other having run first.
 // ============================================================================
+// ENDGAME B.3.5 block H2: BODY MOVED onto the member at the bottom of this file.
+// It is a CLASS STATIC (`SAXXZ`), so the door has no receiver to cast and the
+// delegation is a plain qualified call on the class.
 extern "C" void RtGraphics_ParticleInstance_IncrementInstanceIndex() {
-
-    int* slot = RtFrameIndexSlot();
-    const int before = slot ? *slot : 0;
-    if (slot) *slot = before + 1;
-
+    ::Graphics::ParticleInstance::IncrementInstanceIndex();
 }
 
 // ============================================================================
@@ -629,6 +630,74 @@ uint32_t AnimationEvent::Type() const {
 // `~External` (the chain emits that on exit). Writing either by hand would name
 // the minted table, which is the one thing a converted object must not carry.
 AnimationEvent::~AnimationEvent() {}
+
+// ############################################################################
+// ENDGAME B.3.5 step 5, block H2 — the two NON-CONSTRUCTOR particle bodies this
+// file owns, moved onto `Graphics::ParticleInstance`'s members.
+//
+// WHAT MOVED AND WHAT DELIBERATELY DID NOT:
+//
+//  * `bool ParticleInstance::Update()` (retail 0x180104180, `QEAA_NXZ`) and
+//    `static void ParticleInstance::IncrementInstanceIndex()` (0x1800201f0,
+//    `SAXXZ`) moved. Both were declared by block E in `ParticleInstance.h`; no
+//    header edit was needed.
+//
+//  * THE FIVE CONSTRUCTORS AND THE THREE VTABLE STAMPS STAY EXACTLY AS THEY ARE
+//    (B4b-2 / ENDGAME section B.1 decision 3). `RtGraphics_Particle_Ctor`,
+//    `_ParticleInstance_Ctor` and `_ParticleSystemInstance_Ctor` are called on
+//    memory that already exists and that the rest of the tree expects to be
+//    wearing the MINTED `??_7` table out of `rt_data_mint_tables.inc`; a member
+//    constructor would stamp GCC's tables instead. The mint rows are not retired
+//    in this step either (B35_RULES section 11). They keep the POD spelling and
+//    their diff oracles' byte ranges unchanged.
+//
+//  * `?_frameIndex@ParticleInstance@Graphics@@1HA` (0x1801fe77c) STAYS AN
+//    `RT_DATA_SLOT`-style read through `RtFrameIndexSlot()` and does NOT become
+//    a real `static int` member — B35_RULES section 9 / RULE B4b-4: the redirect
+//    is owed at the class-static conversion, the END of B.3, not in step 5.
+// ############################################################################
+
+// ?Update@ParticleInstance@Graphics@@QEAA_NXZ  retail 0x180104180.
+//
+// FAITHFULLY UNGUARDED, per CLAUDE.md "don't fix a faithful crash with a null
+// check": retail dereferences `_resource->_active` with NO null test on
+// `_resource`, and on the "needs update" arm writes through `_boundsPtr` with no
+// test either. Neither guard is added; the full evidence and the oracle's
+// limits are in the banner above the door.
+//
+// `RtGraphics::` IS LOAD-BEARING ON THE TWO POD SPELLINGS BELOW (B4b-5): inside
+// this `namespace Graphics` block a bare `ParticleResource` or
+// `ParticleBoundsRecord` would look up in `Graphics` first, and as of block H2 a
+// bare `Particle` binds the REAL CLASS rather than nothing.
+bool ParticleInstance::Update() {
+    RtGraphics::ParticleResource* resource = _resource;     // +0xc0, unguarded
+    if (resource->_active != 0) {                            // +0x20, unguarded
+        _boundsPtr = resource->_boxes[_index];               // +0x38 array, +0xd0 index
+    }
+
+    int* frameIndex = RtFrameIndexSlot();
+    bool needsUpdate;
+    if (resource->_active != 0 && _boundsPtr->frameTag == *frameIndex) {
+        // `Geometry::SetBounds(const Volume::Box&)` at its own export, exactly as
+        // retail does. `this` IS the Geometry base (offset zero), so the cast the
+        // POD form needed is gone.
+        RtGeometrySetBounds(this, _boundsPtr);
+        needsUpdate = false;
+    } else {
+        _boundsPtr->frameTag = *frameIndex;                  // unguarded, faithful
+        needsUpdate = true;
+    }
+
+    return needsUpdate;
+}
+
+// ?IncrementInstanceIndex@ParticleInstance@Graphics@@SAXXZ  retail 0x1800201f0.
+// One line: `_frameIndex += 1`, on the SAME live static the DLL itself reads.
+void ParticleInstance::IncrementInstanceIndex() {
+    int* slot = RtFrameIndexSlot();
+    const int before = slot ? *slot : 0;
+    if (slot) *slot = before + 1;
+}
 
 }  // namespace Graphics
 

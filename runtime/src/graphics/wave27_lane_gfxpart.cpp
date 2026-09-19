@@ -367,18 +367,39 @@ void SerScalar(ReaderWriter* rw, size_t slot, void* field) {
 //
 // THREE ADDRESS DOORS, all commented at their call sites below.
 // ============================================================================
+// ENDGAME B.3.5 block H2: the three type-info doors `Graphics::Particle`'s
+// slots 1/2/3 forward to. They are defined in
+// `runtime/src/graphics/graphics_typeinfo_accessors.cpp` (NOT this block's file
+// set) and registered there; declared here at NAMESPACE scope with `extern "C"`
+// so the member definitions below bind to that file's C-linkage symbols and not
+// to a mangled name in this translation unit's anonymous namespace.
+extern "C" uint32_t    RtGraphics_Particle_Type(const void* self);
+extern "C" const char* RtGraphics_Particle_TypeName(const void* self);
+extern "C" int32_t     RtGraphics_Particle_GetFileVersion(const void* self);
+
+// ENDGAME B.3.5 block H2: BODY MOVED onto the member below; the door keeps its
+// name, its address and its registration and delegates with a QUALIFIED
+// non-virtual call (the qualification stops it re-entering itself through the
+// minted table, B34_BRIEFS section A.1). Retail has no null test on `this` here
+// (`MOV [RSP+0x10],RBX` then a straight `MOV RBX,RDX`), so none is added.
 extern "C" bool RtGraphics_Particle_Serialize(void* selfv, void* streamv) {
+    return reinterpret_cast<::Graphics::Particle*>(selfv)          // B.3.5 bridge
+               ->::Graphics::Particle::Serialize(streamv);
+}
+
+namespace Graphics {
+
+bool Particle::Serialize(void* streamv) {
     ++g_particleSerialize;
 
-    uint8_t* self  = B(selfv);
     Stream*  stream = static_cast<Stream*>(streamv);
 
     Serializer ser;
     ReaderWriter* rw = MakeCodec(stream, &ser);
 
-    SerScalar(rw, rt::io::rw_vtbl::kScalarBool, self + kParticle_Active);
-    SerScalar(rw, rt::io::rw_vtbl::kScalarInt,  self + kParticle_Count);
-    SerScalar(rw, rt::io::rw_vtbl::kScalarInt,  self + kParticle_SubCount);
+    SerScalar(rw, rt::io::rw_vtbl::kScalarBool, &_active);
+    SerScalar(rw, rt::io::rw_vtbl::kScalarInt,  &_recordCount);
+    SerScalar(rw, rt::io::rw_vtbl::kScalarInt,  &_subCount);
 
     // ADDRESS DOOR — SYMBOL: the `Object::ExternalBasePtr::Serialize` template
     // instantiation at retail 0x180014520 (UNNAMED in the export directory,
@@ -394,14 +415,14 @@ extern "C" bool RtGraphics_Particle_Serialize(void* selfv, void* streamv) {
     using PtrSerializeFn = void (*)(void*, Serializer*);
     PtrSerializeFn extPtrSerialize = RtAddr<PtrSerializeFn>(0x180014520ull);
     if (extPtrSerialize) {
-        extPtrSerialize(self + kParticle_Material, &ser);
+        extPtrSerialize(&_material, &ser);
     } else {
         std::fprintf(stderr, "[GFXPART27] Particle::Serialize: 0x180014520 unresolved -- "
                              "the material ExternalPtr record is NOT consumed and this "
                              "stream is now desynchronised\n");
     }
 
-    if (stream->direction == rt::io::kDirectionReading && self[kParticle_Active] != 0) {
+    if (stream->direction == rt::io::kDirectionReading && _active != 0) {
         // ADDRESS DOOR — SYMBOL: `Collection::Array<void*>::SetSize(this, int)`
         // at retail 0x180062110, UNNAMED (checked by VA). Its body reads
         // `SHL RCX,3 / MOV EDX,8` with a plain qword copy loop whose else-arm is
@@ -431,11 +452,15 @@ extern "C" bool RtGraphics_Particle_Serialize(void* selfv, void* streamv) {
                                  "the particle pool is NOT rebuilt on this load\n",
                          (void*)setSize, (void*)recordCtor);
         } else {
-            setSize(self + kParticle_RecordArray, I32(self, kParticle_Count));
-            for (int32_t i = 0; i < I32(self, kParticle_Count); ++i) {
+            // The loop bound is RE-READ from `_recordCount` at the bottom and the
+            // array base RE-READ from `_records._data` at the top of each
+            // iteration, exactly as retail does (point 2 of the banner). Spelling
+            // them as members changes neither read.
+            setSize(&_records, _recordCount);
+            for (int32_t i = 0; i < _recordCount; ++i) {
                 void* p = rtcoll::MemAlloc(0x40, 8);
-                void* v = p ? recordCtor(p, self) : nullptr;
-                void** base = *reinterpret_cast<void***>(self + kParticle_RecordArray);
+                void* v = p ? recordCtor(p, this) : nullptr;
+                void** base = reinterpret_cast<void**>(_records._data);
                 base[i] = v;
                 ++g_particleSerRecords;
             }
@@ -445,6 +470,38 @@ extern "C" bool RtGraphics_Particle_Serialize(void* selfv, void* streamv) {
     DestroyCodec(rw);
     return true;
 }
+
+// ---------------------------------------------------------------------------
+// `Graphics::Particle`'s three type-info slots and its destructor.
+//
+// SLOTS 1, 2 and 3 ARE MEMBERS THAT FORWARD, not doors that delegate. Their
+// bodies are `RtGraphics_Particle_TypeName` / `_Type` / `_GetFileVersion` in
+// `runtime/src/graphics/graphics_typeinfo_accessors.cpp`, which is NOT block
+// H2's file set, so the direction is reversed for these three: the registered
+// door is untouched and the member calls it. Exactly the split
+// `runtime/src/object/external_class_doors.cpp` documents and block H1 used for
+// `Graphics::AnimationEvent`.
+//
+// `~Particle()` IS EMPTY AND THE DOOR SITUATION IS UNCHANGED. Retail's
+// `??1Particle@Graphics@@UEAA@XZ` (0x180103c70) stamps the MINTED table and
+// walks `_records` freeing each element; it is not ported anywhere in the tree,
+// and nothing here starts porting it. The member exists so the class has the
+// destructor its declaration promises; writing the stamp by hand would name the
+// minted table, which is the one thing a converted object must not carry
+// (B34_RULES section 4.3, the `Object::External` precedent).
+// ---------------------------------------------------------------------------
+const char* Particle::TypeName() const {
+    return RtGraphics_Particle_TypeName(this);
+}
+uint32_t Particle::Type() const {
+    return RtGraphics_Particle_Type(this);
+}
+int32_t Particle::GetFileVersion() const {
+    return RtGraphics_Particle_GetFileVersion(this);
+}
+Particle::~Particle() {}
+
+}  // namespace Graphics
 
 // ============================================================================
 // Math::Matrix Graphics::ParticleInstance::GetInstanceTransform(int, float) const
@@ -1193,6 +1250,21 @@ void ParticleInstance::Draw(Video::Context& context, const Camera& camera,
 // ============================================================================
 // The emitter's allocate / destroy / free trio   (cutover closure batch D1)
 // ============================================================================
+// *** ENDGAME B.3.5 block H2 CHECKED THE EXPORT TABLE: "Emitter" AND
+// "ParticlePool" ARE NOT RETAIL CLASSES. *** `standalone/rt_export_addrs.inc`
+// contains no `@Emitter@Graphics@@`, no `Pool@Graphics@@` and no mangled name at
+// any of 0x1800205a0 / 0x180020600 / 0x180020d60 / 0x180061a80 / 0x180103bf0 —
+// the only `Emitter` symbols in the whole DLL are `Audio::Scene`'s
+// `AddEmitter` / `MoveEmitter` / `RemoveEmitter` / `GetEmitterCount` /
+// `SetEmitterVolume`, which are a different subsystem. So these five bodies are
+// UNEXPORTED per-TU helpers — a per-class `operator new`, a per-class
+// `operator delete`, a scalar deleting destructor and two allocation
+// wrappers — and `Emitter` / `ParticlePool` are THIS FILE'S OWN NAMES for them,
+// not retail's. They stay file-local free functions with address-only
+// registrations: there is no class here to convert, and inventing
+// `Graphics::Emitter` would put a name in `runtime/types/` that the binary does
+// not contain (reference_resolveexport_phantom_names.md's failure, one level up).
+//
 // SetParticle above already reaches two of these by address (0x1800205a0 to
 // make an emitter, 0x180020d60 to release one). All three were read out of
 // their own disassembly:
