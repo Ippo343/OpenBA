@@ -448,7 +448,6 @@ fn_FindDialogByControllerType_t fn_FindDialogByControllerType = nullptr;
 uint32_t* g_TypeId_MultiObjectComponent = nullptr;
 fn_EntityPanel_SyncTracking_t fn_EntityPanel_SyncTracking = nullptr;
 fn_CameraSys_ComputeViewTransform_t fn_CameraSys_ComputeViewTransform = nullptr;
-fn_Camera_SetCameraToWorld_t fn_Camera_SetCameraToWorld = nullptr;
 // fn_ToolbarDialog_CloseSubDialog — inlined as ToolbarDialog_CloseSubDialog_Impl in toolbardialog.cpp
 // fn_ToolbarDialog_ChangeSpeed — inlined as ToolbarDialog_ChangeSpeed_Impl in toolbardialog.cpp
 // fn_ToolbarDialog_UpdateButtons — inlined as ToolbarDialog_UpdateButtons_Impl in toolbardialog.cpp
@@ -2061,8 +2060,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1400666b0));
     fn_CameraSys_ComputeViewTransform = reinterpret_cast<fn_CameraSys_ComputeViewTransform_t>(
         ResolveAddr(Module::Exe, 0x1400983f0));
-    fn_Camera_SetCameraToWorld = reinterpret_cast<fn_Camera_SetCameraToWorld_t>(
-        ResolveAddr(Module::Runtime, 0x1800feb00));
     // fn_ToolbarDialog_CloseSubDialog — inlined as ToolbarDialog_CloseSubDialog_Impl in toolbardialog.cpp
     // fn_ToolbarDialog_ChangeSpeed — inlined as ToolbarDialog_ChangeSpeed_Impl in toolbardialog.cpp
     // fn_ToolbarDialog_UpdateButtons — REPLACED with inline impl in toolbardialog.cpp

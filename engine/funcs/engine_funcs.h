@@ -23,6 +23,13 @@
 #include "object/External.h"    // ::Object::ExternalFactory
 #include "object/Internal.h"    // ::Object::InternalBasePtr
 #include "object/TypeInfo.h"    // ::Object::Factory
+// ENDGAME B.3.5 closing pass: the camera-snap inline body below was one of the
+// four callers of `fn_Camera_SetCameraToWorld`. It calls the real class now.
+// GLOBAL SCOPE, never inside an #if. Safe AFTER the `<windows.h>` at the top of
+// this header only because Volume.h (which Camera.h pulls for `Frustum`) became
+// order-free in the same pass -- before that, `<wingdi.h>`'s `Rectangle()`
+// function hid Volume.h's class of that name and this include could not be made.
+#include "graphics/Camera.h"   // ::Graphics::Camera
 
 // ============================================================
 // Timer globals (in Runtime-x64.dll .data section)
@@ -1630,10 +1637,11 @@ extern fn_EntityPanel_SyncTracking_t fn_EntityPanel_SyncTracking;
 typedef void* (*fn_CameraSys_ComputeViewTransform_t)(void* cameraSys, void* outTransform);
 extern fn_CameraSys_ComputeViewTransform_t fn_CameraSys_ComputeViewTransform;
 
-// Graphics::Camera::SetCameraToWorld — sets camera world transform from Transform3
-// Runtime export: ?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z
-typedef void (*fn_Camera_SetCameraToWorld_t)(void* camera, void* transform3);
-extern fn_Camera_SetCameraToWorld_t fn_Camera_SetCameraToWorld;
+// Graphics::Camera::SetCameraToWorld (?SetCameraToWorld@Camera@Graphics@@QEAAX
+// AEBVTransform3@Math@@@Z, Runtime 0x1800feb00) is GONE in ENDGAME B.3.5
+// (b35-close): it is a member of the real `Graphics::Camera`. This row was the LAST
+// Video/Graphics door in this file bound BY ADDRESS rather than by mangled name,
+// which is why three name-anchored caller sweeps walked past its four callers.
 
 // Toolbar_CenterOnEntity_Impl — defined at end of file (needs all declarations above it)
 
@@ -4589,12 +4597,16 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
         void* result = fn_CameraSys_ComputeViewTransform((void*)cameraSys, &viewTransform);
 
         // ?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ  retail 0x18001fcd0
-        if (fn_Camera_SetCameraToWorld) {
-            Math::Transform3 transform3 =
-                reinterpret_cast<const Math::Transform*>(result)->AsTransform3();
-            // Camera object embedded at cameraSys + 0x34 (offset 0xD * sizeof(uint32_t))
-            fn_Camera_SetCameraToWorld((void*)(cameraSys + 0x34), &transform3);
-        }
+        Math::Transform3 transform3 =
+            reinterpret_cast<const Math::Transform*>(result)->AsTransform3();
+        // B.3.5 bridge -- ?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z.
+        // The Camera is embedded BY VALUE at cameraSys + 0x34; the proof is the
+        // writer, not the name: Reimpl_FUN_1400985b0
+        // (code/Game/Game/gameupdateloop_load.cpp) constructs it there with
+        // `??0Camera@Graphics@@` on this same +0xE0 object. The readiness `if` went
+        // with the door pointer -- it tested nothing else.
+        reinterpret_cast<Graphics::Camera*>(cameraSys + 0x34)
+            ->SetCameraToWorld(transform3);   // B.3.5 bridge
     }
 
     // === Section 4: Select entity in EditTool ===

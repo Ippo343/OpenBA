@@ -1379,7 +1379,13 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
             // AsTransform3 on the result, then SetCameraToWorld
             Math::Transform3 t3 =
                 reinterpret_cast<const Math::Transform*>(result)->AsTransform3();
-            fn_Camera_SetCameraToWorld((void*)((uintptr_t)playerCtrl + 0x34), &t3);
+            // B.3.5 bridge -- ?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z.
+            // `playerCtrl` is `m_playerController` (+0xE0, GameUpdateLoop.h:115) and
+            // its ctor Reimpl_FUN_1400985b0 (gameupdateloop_load.cpp:591) constructs
+            // a `Graphics::Camera` at `p + 0x34` -- the receiver is proved by the
+            // writer, not by the variable's name. There was no readiness guard here.
+            reinterpret_cast<Graphics::Camera*>((uintptr_t)playerCtrl + 0x34)
+                ->SetCameraToWorld(t3);   // B.3.5 bridge
         }
         TRACE("[GameUpdateLoop::Update] camera transform done\n");
     }
