@@ -39,6 +39,14 @@
 // as its first statement; the old byte-patch detour on the DLL's own body went
 // with the DLL (ENDGAME.md A.1/A.3).
 
+// ENDGAME B.3.5 caller batch — INCLUDE ORDER IS LOAD-BEARING HERE. The runtime
+// type headers come FIRST, before `resolve.h`: resolve.h pulls in <windows.h>,
+// and <wingdi.h>'s global `Rectangle()` FUNCTION then hides `Volume.h`'s global
+// `struct Rectangle`, which breaks any runtime/types header that reaches Volume.h
+// (batch I3 hit exactly this in main.cpp and perf_experimental.cpp). Do not
+// reorder these two blocks.
+#include "video/Device.h"    // Video::Device, Video::Device::InterfaceSlot
+
 #include "resolve.h"
 #include "dx11_seam.h"
 
@@ -58,13 +66,19 @@ const char* Dx9Placeholder_GetDeviceName();
 
 namespace {
 
-// Video::Device interface-slot layout (decomp/videodx11.md "How Runtime loads it").
-constexpr uintptr_t kSlot0        = 0xb0;   // DX9
-constexpr uintptr_t kSlotStride   = 0x18;
-constexpr uintptr_t kOffModule    = 0x00;
-constexpr uintptr_t kOffGetName   = 0x08;
-constexpr uintptr_t kOffCreate    = 0x10;
-constexpr int       kInterfaceDX11 = 1;
+// ENDGAME B.3.5 caller batch: the four raw-offset constexprs that used to sit
+// here — `kSlot0 = 0xb0`, `kSlotStride = 0x18`, `kOffModule/kOffGetName/kOffCreate
+// = 0x00/0x08/0x10` — are GONE. `runtime/types/video/Device.h` declares exactly
+// this record as `Video::Device::InterfaceSlot dllSlots[3]` at +0xB0 and asserts
+// all five numbers (sizeof 0x18, alignof 8, and the three field offsets), and its
+// banner names THIS FILE as the hand-writer it was documenting. The two fills
+// below index the named array and write the named fields, so the compiler checks
+// what the comments used to assert. Two of the three slots stay UNTOUCHED, which
+// is RULE B5-9: `InitializeInterfaces` keeps its deleted `LoadLibraryW` arm and
+// this pre-fill loads NOTHING — no `LoadLibraryW` of a plugin, no
+// `GetProcAddress`, `loaded`/`rejected` still 0.
+constexpr int kInterfaceDX9  = 0;
+constexpr int kInterfaceDX11 = 1;
 
 bool g_filled = false;
 
@@ -101,12 +115,11 @@ void VideoInterfaceFillDx11Slot(void* device) { FillDx11Slot(device); }
 // machine. Called by the ported InitializeInterfaces after its LoadLibraryW of
 // VideoDX9-x64.dll failed, and only with the Runtime DLL absent.
 void VideoInterfaceFillDx9Placeholder(void* device) {
-    uint8_t* slot = static_cast<uint8_t*>(device) + kSlot0;   // slot 0 = DX9
-    *reinterpret_cast<HMODULE*>(slot + kOffModule)  = SentinelModule();
-    *reinterpret_cast<void**>  (slot + kOffGetName) =
-        reinterpret_cast<void*>(&VideoDX11::Dx9Placeholder_GetDeviceName);
-    *reinterpret_cast<void**>  (slot + kOffCreate)  =
-        reinterpret_cast<void*>(&VideoDX11::Dx9Placeholder_CreateDeviceData);
+    Video::Device::InterfaceSlot& slot =                              // B.3.5 bridge
+        reinterpret_cast<Video::Device*>(device)->dllSlots[kInterfaceDX9];
+    slot.module           = reinterpret_cast<void*>(SentinelModule());
+    slot.getDeviceName    = reinterpret_cast<void*>(&VideoDX11::Dx9Placeholder_GetDeviceName);
+    slot.createDeviceData = reinterpret_cast<void*>(&VideoDX11::Dx9Placeholder_CreateDeviceData);
     printf("[VideoInterface] DX9 slot filled with the cutover PLACEHOLDER on Device %p "
            "(VideoDX9-x64.dll cannot load without Runtime-x64.dll)\n", device);
 }
@@ -114,14 +127,11 @@ void VideoInterfaceFillDx9Placeholder(void* device) {
 namespace {
 
 void FillDx11Slot(void* device) {
-    uint8_t* slot = static_cast<uint8_t*>(device) + kSlot0
-                  + kInterfaceDX11 * kSlotStride;
-
-    *reinterpret_cast<HMODULE*>(slot + kOffModule)  = SentinelModule();
-    *reinterpret_cast<void**>  (slot + kOffGetName) =
-        reinterpret_cast<void*>(&VideoDX11::Dx11_GetDeviceName);
-    *reinterpret_cast<void**>  (slot + kOffCreate)  =
-        reinterpret_cast<void*>(&VideoDX11::Dx11_CreateDeviceData);
+    Video::Device::InterfaceSlot& slot =                              // B.3.5 bridge
+        reinterpret_cast<Video::Device*>(device)->dllSlots[kInterfaceDX11];
+    slot.module           = reinterpret_cast<void*>(SentinelModule());
+    slot.getDeviceName    = reinterpret_cast<void*>(&VideoDX11::Dx11_GetDeviceName);
+    slot.createDeviceData = reinterpret_cast<void*>(&VideoDX11::Dx11_CreateDeviceData);
 
     g_filled = true;
     printf("[VideoInterface] DX11 slot pre-filled on Device %p: "

@@ -160,9 +160,18 @@ void FlushCulled() {
         if (Cfg().geomCull)
             reinterpret_cast<::Graphics::Geometry*>(s + 0x28)->SetTransform(
                 *reinterpret_cast<const Math::Transform*>(s + 0x148));  // B.3.5 bridge
-        typedef void (*fn_MeshUpdate_t)(void*, void*);
-        fn_MeshUpdate_t upd = *reinterpret_cast<fn_MeshUpdate_t*>(*reinterpret_cast<uintptr_t*>(s + 0x28) + 0x8);
-        if (upd) upd(reinterpret_cast<void*>(s + 0x28), &zeroTime);
+        // ENDGAME B.3.5 caller batch, COORDINATOR RULING. This was a hand-inlined
+        // read of slot 1 (`vt + 0x8`) on the same proved `Graphics::Geometry` at
+        // owner+0x28, guarded by `if (upd)` — a test of the OBJECT'S OWN VTABLE
+        // SLOT, not of a door pointer. Slot 1 is `_purecall` only on the abstract
+        // bases, and every live Geometry in this process wears a complete minted
+        // table (`[RtMint] 152 of 152 vtables COMPLETE`), so that guard tested
+        // nothing that can happen and it goes with the inlined dispatch. It is now
+        // the virtual call it always was. The OBJECT-pointer reasoning above — the
+        // receiver is proved from the code that produced it, not from its name —
+        // is unchanged, and `Cfg().geomCull` still guards the SetTransform above.
+        reinterpret_cast<::Graphics::Geometry*>(s + 0x28)                // B.3.5 bridge
+            ->Update(*reinterpret_cast<const System::Time*>(&zeroTime));
     }
     if (Cfg().trace)
         std::fprintf(stderr, "[PerfX] flushed %zu culled poses (sim idle)\n", s_culledModels.size());
