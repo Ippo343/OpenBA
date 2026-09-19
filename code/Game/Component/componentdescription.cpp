@@ -145,14 +145,9 @@ extern "C" void ComponentDescription_Serialize(void* self, void* stream) {
     if (!g_fn_Serializer_Ctor || !g_fn_Serialize_Int) return;
     ::new (static_cast<void*>(serBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
-    // category enum (+0x20) via serializer vtable+0x98 (enum serialize)
-    void* serObj = *(void**)(serBuf + 8);
-    if (serObj) {
-        void* vt = *(void**)serObj;
-        typedef void (*fnEnum_t)(void*, void*, const char*);
-        fnEnum_t serEnum = *(fnEnum_t*)((uint8_t*)vt + 0x98);
-        if (serEnum) serEnum(serObj, s + OFF_CATEGORY, nullptr);
-    }
+    // category enum (+0x20) through the UINT door. `serBuf + 8` was the
+    // ReaderWriter, not an Encoding, and vtable +0x98 is rw_vtbl::kScalarUInt.
+    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(*reinterpret_cast<unsigned int*>(s + OFF_CATEGORY), nullptr);   // B.3.4 bridge  (0x98 = uint door)
 
     // sub-description count (+0x30) + fresh array resize (+0x28, stride 8)
     reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(*reinterpret_cast<int*>(s + OFF_COUNT), nullptr);   // B.3.4 bridge

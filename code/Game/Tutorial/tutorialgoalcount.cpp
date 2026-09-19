@@ -206,17 +206,12 @@ void TutorialGoalCount_Serialize(void* self, void* stream) {
         ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
 
-    // Serialize ExternalPtr at +0x20 via serializer vtable +0x98
-    // The serializer object has a pointer to its vtable-like structure at offset +0x08
-    uintptr_t serObj = *(uintptr_t*)(ser + 0x08);
-    if (serObj != 0) {
-        uintptr_t serVtable = *(uintptr_t*)serObj;
-        typedef void (*SerializeExternalPtr_t)(uintptr_t serObj, void* fieldPtr);
-        SerializeExternalPtr_t serExtPtr = (SerializeExternalPtr_t)(*(uintptr_t*)(serVtable + 0x98));
-        if (serExtPtr) {
-            serExtPtr(serObj, (void*)(s + 0x20));
-        }
-    }
+    // +0x20 through the UINT door. `ser + 0x08` was the READERWRITER
+    // (IO::Serializer::_readerWriter), not "the serializer object", and its
+    // vtable +0x98 is rw_vtbl::kScalarUInt — a four-byte scalar, which is what
+    // the old two-argument call form actually reached (the missing third
+    // argument is the `const char* name` every retail body ignores).
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x20), nullptr);   // B.3.4 bridge  (0x98 = uint door)
 
     // Serialize targetCount (+0x24) as int
     if (g_fn_Serialize_Int) {

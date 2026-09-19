@@ -95,7 +95,7 @@ static void MarketBst_b290_ResolveFuncs() {
 // Retail re-reads it from memory at every use site; we do the same rather than
 // caching, because the read is what the original does.
 static inline bool SerIsLoading(void* serializer) {
-    return *reinterpret_cast<int32_t*>(*reinterpret_cast<uintptr_t*>(serializer) + 8) == 0;
+    return static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0;   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
 }
 
 // Payload element = 0x10 bytes: { ExternalPtr ref @+0x00, int32 value @+0x08 }.

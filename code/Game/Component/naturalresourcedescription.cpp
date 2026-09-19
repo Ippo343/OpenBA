@@ -92,9 +92,6 @@ void NaturalResourceDescription_Serialize(void* self, void* stream) {
     alignas(8) uint8_t serializer[24];
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
-    // The serializer object pointer is stored at serializer+8 (see Ser ctor).
-    void* serObj = *reinterpret_cast<void**>(serializer + 8);
-
     // +0x20 ExternalPtr<BuildingDescription>
     fn_ExternalPtr_BuildSerialize(s + 0x20, serializer);
 
@@ -123,13 +120,10 @@ void NaturalResourceDescription_Serialize(void* self, void* stream) {
     g_fn_Time_Serialize(s + 0x68, serializer);
     g_fn_Time_Serialize(s + 0x70, serializer);
 
-    // +0x80 enum via serializer vtable +0x98 (same dispatch StatGoal uses)
-    if (serObj) {
-        typedef void (*fn_SerEnum_t)(void* self, void* field, const char* name);
-        void* vtbl = *reinterpret_cast<void**>(serObj);
-        fn_SerEnum_t serEnum = *reinterpret_cast<fn_SerEnum_t*>(reinterpret_cast<uintptr_t>(vtbl) + 0x98);
-        if (serEnum) serEnum(serObj, s + 0x80, nullptr);
-    }
+    // +0x80 enum through the UINT door (the same dispatch StatGoal uses).
+    // `serializer + 8` was the READERWRITER, not an Encoding, and vtable +0x98
+    // is rw_vtbl::kScalarUInt.
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x80), nullptr);   // B.3.4 bridge  (0x98 = uint door)
 
     // +0x78 ExternalRef<Profession> (exe FUN_140018020). Resolved via ResolveAddr;
     // works once 0x140018020 is registered.

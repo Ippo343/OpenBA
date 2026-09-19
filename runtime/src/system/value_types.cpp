@@ -51,6 +51,7 @@
 #include <new>          // placement new into the retail hidden return slot
 #include "../../types/system/Value.h"
 #include "../../types/system/String.h"
+#include "../../types/io/Serializer.h"   // ENDGAME B.3.4 callers batch H
 #include "../../funcs/rt_port.h"
 #include "widestring.h"
 
@@ -186,21 +187,20 @@ int32_t RtSystem_Random_RandTol(Random* self, int32_t tol) {
 }
 
 // ?Serialize@Random@System@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800c7cf0
-// Two calls through the stream's vtable: slot +0x98 serializes the plain
-// `index` int (same slot Color::Serialize uses for its own 4-byte scalar),
-// slot +0x40 serializes the 624-entry uint32 array. I/O side effect on a
-// live stream — not diffed, same rationale as Vector2::operator*= in
-// vector.cpp (running the original would mean writing the record twice).
+// Two calls: slot +0x98 serializes the plain `index` (same slot
+// Color::Serialize uses for its own 4-byte scalar), slot +0x40 serializes the
+// 624-entry uint32 array. I/O side effect on a live stream — not diffed, same
+// rationale as Vector2::operator*= in vector.cpp (running the original would
+// mean writing the record twice).
+//
+// ENDGAME B.3.4 callers batch H. `serializer + 8` was called "the stream"
+// here; it is the READERWRITER (the Stream is at Serializer+0x00). +0x98 is
+// rw_vtbl::kScalarUInt and +0x40 is rw_vtbl::kArrayUInt, so the doors name the
+// types: `unsigned int&` and `(int, unsigned int*)`. The old trailing `0` was
+// the ignored `const char* name`.
 void RtSystem_Random_Serialize(Random* self, void* serializer) {
-    void* stream = *reinterpret_cast<void**>(reinterpret_cast<char*>(serializer) + 8);
-    void* vtbl = *reinterpret_cast<void**>(stream);
-    using SerializeIntFn = void(*)(void*, void*, int);
-    SerializeIntFn serializeIndex = *reinterpret_cast<SerializeIntFn*>(reinterpret_cast<char*>(vtbl) + 0x98);
-    serializeIndex(stream, &self->index, 0);
-
-    using SerializeArrayFn = void(*)(void*, int, void*, int);
-    SerializeArrayFn serializeMt = *reinterpret_cast<SerializeArrayFn*>(reinterpret_cast<char*>(vtbl) + 0x40);
-    serializeMt(stream, 0x270, self->mt, 0);
+    reinterpret_cast<::IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(&self->index), nullptr);   // B.3.4 bridge  (0x98 = uint door)
+    reinterpret_cast<::IO::Serializer*>(serializer)->Serialize(0x270, reinterpret_cast<unsigned int*>(self->mt), nullptr);   // B.3.4 bridge  (0x40 = uint-array door)
 }
 
 // ============================================================
@@ -237,6 +237,17 @@ float RtSystem_Time_AsSeconds(const Time* self) {
 // ?Serialize@Time@System@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800ca740
 // Slot +0x90 serializes the 8-byte `ticks`. Not diffed (I/O side effect, see
 // Random::Serialize above).
+//
+// ENDGAME B.3.4 callers batch H LEFT THIS ONE BYTE-IDENTICAL, deliberately.
+// `serializer + 8` is the READERWRITER here too, and +0x90 is
+// rw_vtbl::kScalarInt64 — but `IO::Serializer` does NOT declare the int64
+// scalar overload. runtime/types/io/Serializer.h says why: retail's int64 and
+// uint64 forms "are ABSENT ON PURPOSE: no call site in this tree reaches them,
+// and an uncalled port is an unverified port. Adding one is a porting
+// decision, not a tidy-up." This site is that call site, so the overload is
+// now justified — but minting it is a receiver change, not a caller batch's,
+// and it belongs with whoever next opens `IO::Serializer`. Reported, not
+// converted, and not "fixed" by routing the 8 bytes through a 4-byte door.
 void RtSystem_Time_Serialize(Time* self, void* serializer) {
     void* stream = *reinterpret_cast<void**>(reinterpret_cast<char*>(serializer) + 8);
     void* vtbl = *reinterpret_cast<void**>(stream);
@@ -252,12 +263,10 @@ void RtSystem_Time_Serialize(Time* self, void* serializer) {
 // ?Serialize@Color@System@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800c4150
 // Slot +0x98 serializes the packed 4-byte `value` (same slot Random uses for
 // its plain int). Not diffed (I/O side effect, see Random::Serialize above).
+// ENDGAME B.3.4 callers batch H: `serializer + 8` is the READERWRITER, +0x98
+// is rw_vtbl::kScalarUInt, and the trailing `0` was the ignored `name`.
 void RtSystem_Color_Serialize(Color* self, void* serializer) {
-    void* stream = *reinterpret_cast<void**>(reinterpret_cast<char*>(serializer) + 8);
-    void* vtbl = *reinterpret_cast<void**>(stream);
-    using SerializeUInt32Fn = void(*)(void*, void*, int);
-    SerializeUInt32Fn fn = *reinterpret_cast<SerializeUInt32Fn*>(reinterpret_cast<char*>(vtbl) + 0x98);
-    fn(stream, &self->value, 0);
+    reinterpret_cast<::IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(&self->value), nullptr);   // B.3.4 bridge  (0x98 = uint door)
 }
 
 // ============================================================

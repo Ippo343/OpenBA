@@ -84,14 +84,11 @@ void ExternalPtrSerializeGeneric_7140(void** refField, void* serializer,
         }
     }
 
-    void* encoding = const_cast<IO::Encoding*>(
+    IO::Encoding* encoding = const_cast<IO::Encoding*>(
         &reinterpret_cast<IO::Serializer*>(serializer)->GetEncoding());   // B.3.4 bridge
     if (!encoding) return;
-    using EncodingStateFn = int (*)(void*);
-    EncodingStateFn getStateFn = reinterpret_cast<EncodingStateFn>(
-        *reinterpret_cast<void**>(
-            reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(encoding)) + 0x10));
-    int encState = getStateFn ? getStateFn(encoding) : 0;
+    // Encoding vtable +0x10 is slot 2 == IO::Encoding::GetKind() (B34_RULES §1.1).
+    int encState = encoding->GetKind();   // B.3.4 bridge  (+0x10 = Encoding::GetKind)
 
     if (encState == 3) {
         // Path-export (read-only) mode.

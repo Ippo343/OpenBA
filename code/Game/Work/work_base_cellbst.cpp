@@ -245,7 +245,7 @@ void WorkCellBST_Remove_ca60(uintptr_t* root, void* nodeArg) {
 void WorkCellBST_Serialize_9de0(uintptr_t* root, void* serializer) {
     int count = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(root) + 8);
     if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&count), nullptr);   // B.3.4 bridge
-    bool loading = (*reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(serializer) + 8) == 0);
+    bool loading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
     uint32_t citTid = g_TypeId_CitizenComponent_FC ? *g_TypeId_CitizenComponent_FC : 0;
 
     if (loading) {

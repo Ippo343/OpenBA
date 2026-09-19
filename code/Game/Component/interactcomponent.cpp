@@ -127,7 +127,7 @@ static void EnsureHelpers() {
 // dereferencing the Serializer to its stream first. Same idiom as
 // marketwork_bst_b290.cpp's SerIsLoading and pasturecomponent.cpp et al.
 static inline bool SerializerIsLoading(void* serializer) {
-    return *reinterpret_cast<int32_t*>(*reinterpret_cast<uintptr_t*>(serializer) + 8) == 0;
+    return static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0;   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
 }
 
 void InteractComponent_Shutdown(InteractComponent* self, void* stream) {

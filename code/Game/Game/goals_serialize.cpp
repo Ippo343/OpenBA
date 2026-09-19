@@ -395,7 +395,7 @@ extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serial
     int32_t count = static_cast<int32_t>(treeField[1]);
     if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
 
-    bool loading = (*reinterpret_cast<int32_t*>(*reinterpret_cast<uint8_t**>(serializer) + 8) == 0);
+    bool loading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
     if (loading) {
         for (int32_t i = 0; i < count; ++i) {
             // Retail re-reads *param_1 on every iteration — the previous insertion
@@ -485,7 +485,7 @@ extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serial
 
 extern "C" void Goals_TreeArray_Serialize_d060(void* serializer, int32_t count, int64_t* arrayBase, int32_t* /*outParam*/) {
     EnsureDeps();
-    bool loading = (*reinterpret_cast<int32_t*>(*reinterpret_cast<uint8_t**>(serializer) + 8) == 0);
+    bool loading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
     int64_t* slot = arrayBase;
     for (int32_t s = 0; s < count; ++s, slot += 2) {
         int32_t slotCount = static_cast<int32_t>(slot[1]);
@@ -573,7 +573,7 @@ extern "C" void Goals_WorkTree_Serialize_d5f0(int64_t* treeField, void* serializ
     int32_t count = static_cast<int32_t>(treeField[1]);
     if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
 
-    bool loading = (*reinterpret_cast<int32_t*>(*reinterpret_cast<uint8_t**>(serializer) + 8) == 0);
+    bool loading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
     if (loading) {
         for (int32_t i = 0; i < count; ++i) {
             // Record layout (retail's local_40/local_38/local_30 triple):

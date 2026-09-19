@@ -141,7 +141,7 @@ void AmbientEnvironmentDescription_Serialize(void* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);     // int count +0x28   // B.3.4 bridge
 
     // On load: resize the 0x28-byte-element array at +0x20.
-    if (*(int*)(*(uintptr_t*)serializer + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         if (s_fn_AmbientArrayResize) s_fn_AmbientArrayResize(s + 0x20, count);
     }
 

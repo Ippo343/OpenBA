@@ -78,7 +78,7 @@ void EnvironmentDescription_Serialize(void* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&count), nullptr);       // B.3.4 bridge  (int count +0x30)
 
     // On load: resize the dynamic weather-entry array.
-    if (*(int*)(*(uintptr_t*)serializer + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         fn_WeatherResize(s + 0x28, (int)count);
     }
 

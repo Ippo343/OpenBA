@@ -148,7 +148,7 @@ void ImmigrationComponent_Shutdown(ImmigrationComponent* self, void* stream) {
     // below never ran and the element loop walked a NULL array with a non-zero
     // count straight off the stream. Same trap as interactcomponent.cpp and
     // reference_serializer_plus8_is_encoding_not_loading_flag.
-    if (*(int32_t*)(*(uintptr_t*)serializer2 + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer2)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
         GameColl::AsArray<GameColl::Ptr8>((void*)&self->field58).SetSize(arrayCount);
     }

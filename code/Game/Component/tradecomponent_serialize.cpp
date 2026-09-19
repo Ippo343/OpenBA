@@ -94,19 +94,16 @@ inline uint8_t* At(void* self, ptrdiff_t off) { return reinterpret_cast<uint8_t*
 // True when the serializer is READING — same double-dereference pattern used
 // by every other slot-3 body in this project (see animalwave_serialize.cpp).
 inline bool Loading(void* ser) {
-    return *reinterpret_cast<int32_t*>(*reinterpret_cast<uintptr_t*>(ser) + 8) == 0;
+    return static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection()) == 0;   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
 }
 
-// The "enum" dispatch: the serializer's field+8 holds a live encoding object
-// whose vtable slot +0x98 handles compact int/enum fields. Identical idiom to
-// storagedescription.cpp's SerializeEnum, ported from the same retail shape.
+// The enum field, through the UINT door. `ser + 8` is NOT "a live encoding
+// object" as this comment used to say — it is the READERWRITER
+// (IO::Serializer::_readerWriter); IO::Encoding lives at stream+0x10 and has a
+// five-slot table. Vtable +0x98 is rw_vtbl::kScalarUInt. Identical idiom to
+// storagedescription.cpp's SerializeEnum, converted with it.
 inline void SerializeEnumField(void* ser, void* field) {
-    void* serObj = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(ser) + 8);
-    if (!serObj) return;
-    typedef void (*fn_t)(void* self, void* field, const char* name);
-    void* vt = *reinterpret_cast<void**>(serObj);
-    fn_t fn = *reinterpret_cast<fn_t*>(reinterpret_cast<uint8_t*>(vt) + 0x98);
-    if (fn) fn(serObj, field, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(field), nullptr);   // B.3.4 bridge  (0x98 = uint door)
 }
 
 // ============================================================================

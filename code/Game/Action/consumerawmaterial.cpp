@@ -142,7 +142,7 @@ void ConsumeRawMaterial_Serialize_Impl(ConsumeRawMaterial* self, void* stream) {
         reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(&matCount), nullptr);   // B.3.4 bridge
 
         // If loading, resize the material array
-        if (*(int*)(*(uintptr_t*)ser2 + 8) == 0) {
+        if (static_cast<int>(reinterpret_cast<IO::Serializer*>(ser2)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
             s_fn_ArrayResize16((void*)(s + 0x28), (int)matCount);
         }
 

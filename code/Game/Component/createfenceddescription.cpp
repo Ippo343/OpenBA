@@ -36,14 +36,15 @@
 
 static const uintptr_t kCreateFencedDescriptionVtable = 0x1401591a0;
 
-// 3-arg encoding vcall variant: (**(*encoding + 0x98))(encoding, field, extra)
+// The enum field, through the UINT door. `serializer + 8` was never an
+// "encoding": it is the READERWRITER (`IO::Serializer::_readerWriter`), and
+// vtable +0x98 is rw_vtbl::kScalarUInt. `extra` landed in R8, the register
+// retail's own `XOR R8D,R8D` fills with the ignored `const char* name`; the
+// sole call site passes 0, so `nullptr` is wire- AND register-identical.
+// The parameter is kept so the call site is untouched.
 static inline void FencedEncodingVCall3(void* serializer, void* field, int extra) {
-    void* encoding = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(serializer) + 8);
-    if (!encoding) return;
-    void* vtable = *reinterpret_cast<void**>(encoding);
-    typedef void (*VFunc_t)(void*, void*, int);
-    auto fn = *reinterpret_cast<VFunc_t*>(reinterpret_cast<uintptr_t>(vtable) + 0x98);
-    fn(encoding, field, extra);
+    (void)extra;
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(field), nullptr);   // B.3.4 bridge  (0x98 = uint door)
 }
 
 static void CreateFencedDescription_Init(void* self) {

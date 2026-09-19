@@ -230,7 +230,7 @@ void WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, void* ser) {
     if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(&count), nullptr);   // B.3.4 bridge
 
     // serializer mode lives at *(*ser + 8); 0 => reading.
-    int mode = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(ser) + 8);
+    int mode = static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
 
     const uint32_t* tidEntity =
         g_TypeId_ComponentEntity;          // DAT_1401c5d70

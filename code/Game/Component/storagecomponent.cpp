@@ -182,7 +182,7 @@ void StorageComponent_Shutdown(StorageComponent* self, void* stream) {
     }
 
     // If loading (encoding direction == 0), resize the slot array
-    int encodingDir = *(int*)(*(uintptr_t*)serializer + 8);
+    int encodingDir = static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
     if (encodingDir == 0) {
         // B.3.2 bridge: FUN_14000f090 is Collection::Array<Bytes<0x10,8>>::SetSize(n)
         GameColl::AsArray<GameColl::Bytes<0x10, 8>>((void*)(selfAddr + 0x28))
@@ -211,10 +211,13 @@ void StorageComponent_Shutdown(StorageComponent* self, void* stream) {
         reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(selfAddr + 0x38), nullptr);   // B.3.4 bridge
     }
 
-    // Serialize field3c through the serializer's ENCODING object at Serializer+0x08 —
-    // NOT the Stream at Serializer+0x00. IO::Serializer::Serializer (Runtime 0x1800b9960)
-    // lays it out as { Stream* @+0x00, Encoding* @+0x08 }, and retail dispatches off the
-    // ENCODING (0x14012c7fc: MOV RCX,[RSP+0x30] = serializer+8; CALL [RAX+0x98]).
+    // Serialize field3c through the object at Serializer+0x08 — NOT the Stream at
+    // Serializer+0x00. IO::Serializer::Serializer (Runtime 0x1800b9960) lays it out as
+    // { Stream* @+0x00, ReaderWriter* @+0x08 }, and retail dispatches off the
+    // READERWRITER (0x14012c7fc: MOV RCX,[RSP+0x30] = serializer+8; CALL [RAX+0x98]).
+    // The comment below called that object the "Encoding"; it never was one —
+    // IO::Encoding lives at stream+0x10 and has a five-slot table. +0x98 is
+    // rw_vtbl::kScalarUInt on the ReaderWriter, i.e. IO::Serializer::Serialize(unsigned int&).
     //
     // ⚠ This read +0x00, so it called the STREAM's vtable slot 0x98 with this=Stream —
     // a different class, same slot index. Measured: the two slots resolve to different
@@ -227,13 +230,7 @@ void StorageComponent_Shutdown(StorageComponent* self, void* stream) {
     // 0x00002000076e40be -> 0x0000200000000000 (low dword zeroed = an 8-byte write).
     //
     // Third arg mirrors retail's XOR R8D,R8D.
-    uintptr_t encoding = *(uintptr_t*)((uintptr_t)serializer + 8);
-    if (encoding) {
-        uintptr_t encVtable = *(uintptr_t*)encoding;
-        typedef void (*fn_EncSer98_t)(void* enc, void* field, const char* name);
-        fn_EncSer98_t encSer98 = *(fn_EncSer98_t*)(encVtable + 0x98);
-        if (encSer98) encSer98((void*)encoding, (void*)(selfAddr + 0x3c), nullptr);
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(selfAddr + 0x3c), nullptr);   // B.3.4 bridge  (0x98 = uint door)
 
 
     // Version 0 migration: if loading and version==0, copy from StorageDescription

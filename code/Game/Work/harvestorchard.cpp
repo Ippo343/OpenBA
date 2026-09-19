@@ -829,12 +829,26 @@ void HarvestOrchard_Serialize_Impl(HarvestOrchard* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializerBuf2)->Serialize(*reinterpret_cast<int*>(cellCountBuf), nullptr);   // B.3.4 bridge
 
     // B.3.2 bridge: FUN_14000a590 == Collection::Array<uint8>::SetSize.
-    if (*(int*)(*(uintptr_t*)serializerBuf2 + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializerBuf2)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         GameColl::AsArray<GameColl::U8>((void*)(selfAddr + 0x58)).SetSize(cellCountBuf[0]);
     }
 
-    s_fn_Serializer_SerializeBoolArray(serializerBuf2, cellCountBuf[0],
-                                        *(void**)(selfAddr + 0x58), nullptr);
+    // Serialize validity array through the BOOL-ARRAY door.
+    //
+    // ENDGAME B.3.4 callers batch H — SETTLED FROM RETAIL. HarvestOrchard's
+    // Serialize (Application-x64.exe 0x1400edea0) is instruction-for-instruction
+    // the same as HarvestArea's at this site:
+    //     1400edf2d  XOR R9D,R9D                    ; name = nullptr
+    //     1400edf30  MOV R8,qword ptr [RDI + 0x58]  ; the buffer
+    //     1400edf34  MOV EDX,dword ptr [RSP + 0x60] ; the count
+    //     1400edf38  LEA RCX,[RSP + 0x28]           ; the Serializer
+    //     1400edf3d  CALL qword ptr [0x140151458]
+    // 0x140151458 is the four-parameter (int n, bool*, const char*) array door,
+    // not the three-parameter `Serialize(int&)` scalar door 0x140152ac8 that
+    // `s_fn_Serializer_SerializeBoolArray` is aliased onto above. See
+    // harvestarea.cpp for the full argument.
+    reinterpret_cast<IO::Serializer*>(serializerBuf2)->Serialize(
+        cellCountBuf[0], reinterpret_cast<bool*>(*(void**)(selfAddr + 0x58)), nullptr);   // B.3.4 bridge  (slot 0x140151458 = bool-array door)
 
     reinterpret_cast<IO::Serializer*>(serializerBuf2)->~Serializer();   // B.3.4 bridge
 }

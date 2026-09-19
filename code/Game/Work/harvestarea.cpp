@@ -914,13 +914,27 @@ void HarvestArea_Serialize_Impl(HarvestArea* self, void* stream) {
 
     // If reading (serializer mode == 0), resize validity array.
     // B.3.2 bridge: FUN_14000a590 == Collection::Array<uint8>::SetSize.
-    if (*(int*)(*(uintptr_t*)serializerBuf2 + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializerBuf2)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         GameColl::AsArray<GameColl::U8>((void*)(selfAddr + 0x58)).SetSize(cellCountBuf[0]);
     }
 
-    // Serialize validity array (byte array)
-    s_fn_Serializer_SerializeBoolArray(serializerBuf2, cellCountBuf[0],
-                                        *(void**)(selfAddr + 0x58), nullptr);
+    // Serialize validity array through the BOOL-ARRAY door.
+    //
+    // ENDGAME B.3.4 callers batch H — SETTLED FROM RETAIL, not from the alias.
+    // Retail HarvestArea::Serialize (Application-x64.exe 0x1400ed350) ends with
+    //     1400ed3dd  XOR R9D,R9D                    ; name = nullptr
+    //     1400ed3e0  MOV R8,qword ptr [RDI + 0x58]  ; the buffer
+    //     1400ed3e4  MOV EDX,dword ptr [RSP + 0x60] ; the count
+    //     1400ed3e8  LEA RCX,[RSP + 0x28]           ; the Serializer
+    //     1400ed3ed  CALL qword ptr [0x140151458]
+    // 0x140151458 is `?Serialize@Serializer@IO@@QEAAXHPEA_NPEBD@Z`
+    // (address_registry.cpp:1163), the four-parameter (int n, bool*, const char*)
+    // array door at rw_vtbl::kArrayBool. It is NOT 0x140152ac8, which is what
+    // `s_fn_Serializer_SerializeBoolArray` is aliased onto above — that is the
+    // THREE-parameter `Serialize(int&)` scalar door, so the old call put the
+    // COUNT in the register the scalar body dereferences as `int*`.
+    reinterpret_cast<IO::Serializer*>(serializerBuf2)->Serialize(
+        cellCountBuf[0], reinterpret_cast<bool*>(*(void**)(selfAddr + 0x58)), nullptr);   // B.3.4 bridge  (slot 0x140151458 = bool-array door)
 
     // Destroy serializer
     reinterpret_cast<IO::Serializer*>(serializerBuf2)->~Serializer();   // B.3.4 bridge

@@ -233,13 +233,12 @@ void BuildRoad_Serialize_Impl(BuildRoad* self, void* stream) {
     alignas(8) uint8_t serializerBuf[24];
     ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
 
-    // Serialize road type (+0x5c) via stream's vtable call at +0x98
-    // The Serializer stores stream ptr at offset +0x8
-    void* serStream = *(void**)(serializerBuf + 8);
-    void* streamVtable = *(void**)serStream;
-    typedef void (*SerializeVt_t)(void* stream, void* field);
-    SerializeVt_t serVtFn = *(SerializeVt_t*)((uintptr_t)streamVtable + 0x98);
-    serVtFn(serStream, &self->field_5c);
+    // Serialize road type (+0x5c) through the UINT door. Serializer+0x08 is the
+    // READERWRITER, not the stream (the Stream is at +0x00), and its vtable
+    // +0x98 is rw_vtbl::kScalarUInt. The old two-argument call form left the
+    // `const char* name` register unset; every retail body ignores it, so
+    // passing nullptr is wire-identical.
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<unsigned int*>(&self->field_5c), nullptr);   // B.3.4 bridge  (0x98 = uint door)
 
     // Serialize cell index (+0x58) via IO::Serializer::Serialize
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->field_58), nullptr);   // B.3.4 bridge

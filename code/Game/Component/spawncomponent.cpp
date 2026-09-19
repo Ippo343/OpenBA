@@ -380,7 +380,7 @@ extern "C" void SpawnComponent_Serialize(void* self, void* stream) {
     // True when the serializer is READING (retail reads the stream's own +8
     // field for this component, equivalent to the serializer's first field).
     auto Loading = [](void* s) {
-        return *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(s) + 8) == 0;
+        return static_cast<int>(reinterpret_cast<IO::Serializer*>(s)->GetDirection()) == 0;   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
     };
 
     int count = *reinterpret_cast<int*>(comp + 0x30);

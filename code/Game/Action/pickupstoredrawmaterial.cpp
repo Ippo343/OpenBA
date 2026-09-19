@@ -190,7 +190,7 @@ void PickupStoredRawMaterial_Serialize_Impl(PickupStoredRawMaterial* self, void*
     reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(&matCount), nullptr);   // B.3.4 bridge
 
     // If loading (version check: ser2 internal stream offset+8 == 0), resize material array
-    if (*(int*)(*(uintptr_t*)ser2 + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(ser2)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         s_fn_ArrayResize16((void*)(s + 0x30), (int)matCount);
     }
 
