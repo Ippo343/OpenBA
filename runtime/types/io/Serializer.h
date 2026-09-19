@@ -331,12 +331,13 @@ namespace IO {
 // five slots never change shape again, and the two blocks that follow delete a
 // bridge cast in encoding.cpp rather than editing this header.
 //
-// `IO::Stream` is STILL only a forward declaration: the real stream family is
-// B.3.4 block 4 (STREAMS). It is declared here so that `IO::Serializer`'s
-// constructor can carry retail's FINAL signature `(Stream&, int)` from block 3
-// onward — block 4 deletes the `rt::io::Stream` bridge casts in
-// serializer_class.cpp and changes no signature. Block 2 did exactly this for
-// `IO::ReaderWriter`, so the pattern is proven rather than invented.
+// `IO::Stream` IS a real class as of B.3.4 block 4 (STREAMS) — it lives in
+// runtime/types/io/Stream.h, which includes THIS header for `IO::Encoding`.
+// The forward declaration therefore STAYS: reversing the include would make
+// the pair cyclic, and `IO::Serializer` only ever needs `Stream&` / `Stream*`.
+// `serializer_class.cpp` includes Stream.h and reads `_direction` /
+// `_encoding` off the class; block 4 deleted the `rt::io::Stream` bridge casts
+// and moved NO signature, exactly as block 2 did for `IO::ReaderWriter`.
 class ReaderWriter;
 class Serializer;
 class Stream;

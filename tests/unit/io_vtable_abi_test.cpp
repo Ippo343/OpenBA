@@ -75,6 +75,7 @@
 // local copies, so a test failure means the header and the ABI disagree.
 #include "runtime/types/io/Serializer.h"
 #include "runtime/types/io/Stream.h"
+#include "runtime/types/io/FileStream.h"
 #include "runtime/types/object/Internal.h"
 #include "runtime/types/io/PackageFile.h"   // B.3.4 PACKAGE+FS
 
@@ -1276,6 +1277,325 @@ UNIT_TEST(the_real_Encoding_declares_its_5_slots_in_retail_order) {
     static_assert(!std::has_virtual_destructor<IO::Encoding>::value, "B34_RULES 1.1");
 }
 
+// ===========================================================================
+// PART G — ENDGAME B.3.4 block 4 (STREAMS). PIN THE REAL STREAM CLASSES'
+// VTABLE ORDER, and their layout against BOTH duplicate PODs.
+//
+// Same argument as PART F, one family over. Every live stream in this build
+// wears a MINTED table out of `standalone/rt_data_mint_tables.inc` and every
+// registered door calls QUALIFIED, so nothing else compiles a real
+// `IO::Stream` vtable at all. A slot declared one line out of place in
+// runtime/types/io/Stream.h or FileStream.h would stay invisible until B.3
+// steps 5-8 retire the minted rows, and then surface as a stream that reads
+// through `Close` or seeks through `Open`.
+//
+// HOW SLOT 1 IS PINNED WITHOUT CALLING IT. `GetSource` returns a
+// `System::String` BY VALUE, so it carries a hidden return pointer, and the
+// registered door (`RtIo_Stream_GetSource`, iobase_vtables.cpp) spells that
+// slot in MSVC's argument order while a C++ member compiled here uses the
+// compiler's. Raw-calling it from the test would be asserting a calling
+// convention, not a slot order. So slot 1 is pinned BY ELIMINATION instead:
+// every OTHER slot is raw-called and lands on its own marker, and all the
+// entries in the table are asserted distinct. With n distinct entries and n-1
+// of them pinned, the remaining one is at the remaining index. That is a
+// complete proof of the order and it depends on no convention at all.
+// ===========================================================================
+
+namespace streamorder {
+
+// Byte offsets, spelled once. `IO::Stream` is 7 slots; the concrete classes
+// append theirs (B34_RULES section 1.3).
+constexpr int kDtor          = 0x00;
+constexpr int kGetSource     = 0x08;
+constexpr int kWrite         = 0x10;
+constexpr int kRead          = 0x18;
+constexpr int kSetCurrentPos = 0x20;
+constexpr int kGetCurrentPos = 0x28;
+constexpr int kGetSize       = 0x30;
+constexpr int kSlot7         = 0x38;   // Close on MemoryStream, Open on FileStream
+
+struct StreamProbe final : IO::Stream {
+    IO::Stream* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+    System::String GetSource() const override { Note(this, 1); return System::String(); }
+    bool     Write(int, const void*) override  { Note(this, 2); return true; }
+    bool     Read(int, void*) override         { Note(this, 3); return true; }
+    bool     SetCurrentPos(int) override       { Note(this, 4); return true; }
+    uint32_t GetCurrentPos() const override    { Note(this, 5); return 0; }
+    uint32_t GetSize() const override          { Note(this, 6); return 0; }
+    ~StreamProbe() = default;          // public: the base's is protected
+};
+
+struct MemoryStreamProbe final : IO::MemoryStream {
+    IO::Stream* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+    System::String GetSource() const override { Note(this, 1); return System::String(); }
+    bool     Write(int, const void*) override  { Note(this, 2); return true; }
+    bool     Read(int, void*) override         { Note(this, 3); return true; }
+    bool     SetCurrentPos(int) override       { Note(this, 4); return true; }
+    uint32_t GetCurrentPos() const override    { Note(this, 5); return 0; }
+    uint32_t GetSize() const override          { Note(this, 6); return 0; }
+    void     Close() override                  { Note(this, 7); }
+    ~MemoryStreamProbe() = default;
+};
+
+// The six slots every Stream in the family shares, raw-called at their retail
+// byte offsets. `raw` is the object; each CHECK says the entry at that offset
+// is the override declared at offset/8, with `this` unadjusted.
+void CheckSharedStreamSlots(void* raw) {
+    uint8_t scratch[8] = {0};
+
+    Reset();
+    using DtorFn = void* (*)(void*, unsigned);
+    SlotAt<DtorFn>(raw, kDtor)(raw, 0u);
+    CHECK_EQ(g_lastMark, kDtor / 8);
+    CHECK(g_lastSelf == raw);
+
+    Reset();
+    using WriteFn = bool (*)(void*, int, const void*);
+    CHECK(SlotAt<WriteFn>(raw, kWrite)(raw, 8, scratch) == true);
+    CHECK_EQ(g_lastMark, kWrite / 8);
+
+    Reset();
+    using ReadFn = bool (*)(void*, int, void*);
+    CHECK(SlotAt<ReadFn>(raw, kRead)(raw, 8, scratch) == true);
+    CHECK_EQ(g_lastMark, kRead / 8);
+
+    Reset();
+    using SeekFn = bool (*)(void*, int);
+    CHECK(SlotAt<SeekFn>(raw, kSetCurrentPos)(raw, 3) == true);
+    CHECK_EQ(g_lastMark, kSetCurrentPos / 8);
+
+    Reset();
+    using U32Fn = uint32_t (*)(void*);
+    SlotAt<U32Fn>(raw, kGetCurrentPos)(raw);
+    CHECK_EQ(g_lastMark, kGetCurrentPos / 8);
+
+    Reset();
+    SlotAt<U32Fn>(raw, kGetSize)(raw);
+    CHECK_EQ(g_lastMark, kGetSize / 8);
+}
+
+// n distinct entries — which is what turns "every slot but one is pinned" into
+// "slot 1 is `GetSource`".
+void CheckDistinctSlots(void* raw, int n) {
+    void* const* vt = *reinterpret_cast<void* const* const*>(raw);
+    for (int a = 0; a < n; ++a)
+        for (int b = a + 1; b < n; ++b)
+            CHECK(vt[a] != vt[b]);
+}
+
+}  // namespace streamorder
+
+UNIT_TEST(the_real_Stream_declares_its_7_slots_in_retail_order) {
+    streamorder::StreamProbe p;
+    void* raw = static_cast<void*>(static_cast<IO::Stream*>(&p));
+
+    streamorder::CheckSharedStreamSlots(raw);
+    streamorder::CheckDistinctSlots(raw, 7);
+
+    // Slot 1 by elimination (see the banner), and confirmed to be a virtual at
+    // all by an ordinary C++ call through the base.
+    Reset();
+    { const IO::Stream& s = p; (void)s.GetSource(); }
+    CHECK_EQ(g_lastMark, streamorder::kGetSource / 8);
+
+    // No virtual destructor: Itanium spends TWO slots on one, which would push
+    // `Write` out of slot 2 and mis-aim every raw caller in the tree.
+    static_assert(!std::has_virtual_destructor<IO::Stream>::value,
+                  "IO::Stream must not acquire a virtual destructor");
+    static_assert(!std::has_virtual_destructor<IO::MemoryStream>::value,
+                  "IO::MemoryStream must not acquire a virtual destructor");
+}
+
+UNIT_TEST(the_real_MemoryStream_adds_Close_at_slot_7_and_no_PreCommit) {
+    streamorder::MemoryStreamProbe p;
+    void* raw = static_cast<void*>(static_cast<IO::Stream*>(&p));
+
+    streamorder::CheckSharedStreamSlots(raw);
+
+    // Slot 7 is `Close` (0x1800ae9e0) and MemoryStream adds NOTHING after it —
+    // the nine-slot shape with `PreCommit` at +0x40 belongs to the Compressed
+    // branch. The same +0x38 means `Open` on the FileStream branch.
+    Reset();
+    using VoidFn = void (*)(void*);
+    SlotAt<VoidFn>(raw, streamorder::kSlot7)(raw);
+    CHECK_EQ(g_lastMark, streamorder::kSlot7 / 8);
+    CHECK_EQ(g_lastMark, 7);
+
+    streamorder::CheckDistinctSlots(raw, 8);
+
+    Reset();
+    { const IO::Stream& s = p; (void)s.GetSource(); }
+    CHECK_EQ(g_lastMark, 1);
+
+    // `this` is unadjusted through the single-inheritance chain: the raw slot
+    // callers all over runtime/src hand the same pointer to base and derived.
+    CHECK(static_cast<void*>(static_cast<IO::Stream*>(&p)) ==
+          static_cast<void*>(static_cast<IO::MemoryStream*>(&p)));
+}
+
+UNIT_TEST(the_real_Stream_family_is_layout_identical_to_both_duplicate_PODs) {
+    // B34_RULES section 1.5.2: there are TWO `Stream` PODs, declared either
+    // side of the Wave-4 lane boundary in two namespaces, and neither header
+    // includes the other. `IO::Stream` replaces both, and both stay alive and
+    // trivially destructible until their last user converts. If any of the
+    // three ever drifts, this fails here rather than in a save file.
+    static_assert(sizeof(IO::Stream) == 0x18, "IO::Stream is 0x18");
+    static_assert(sizeof(IO::Stream) == sizeof(RtIo::Stream), "RtIo POD agrees");
+    static_assert(sizeof(IO::Stream) == sizeof(rt::io::Stream), "rt::io POD agrees");
+    static_assert(sizeof(IO::MemoryStream) == 0x30, "IO::MemoryStream is 0x30");
+    static_assert(sizeof(IO::MemoryStream) == sizeof(RtIo::MemoryStream), "POD agrees");
+
+    CHECK_EQ((int)offsetof(IO::Stream, _direction), 0x08);
+    CHECK_EQ((int)offsetof(IO::Stream, _encoding),  0x10);
+    CHECK_EQ((int)offsetof(IO::MemoryStream, _data),     0x18);
+    CHECK_EQ((int)offsetof(IO::MemoryStream, _ownsData), 0x20);
+    CHECK_EQ((int)offsetof(IO::MemoryStream, _cursor),   0x24);
+    CHECK_EQ((int)offsetof(IO::MemoryStream, _size),     0x28);
+
+    // A field write through the CLASS is visible through BOTH PODs at the same
+    // bytes — the property every `reinterpret_cast` in runtime/src/io relies on.
+    streamorder::MemoryStreamProbe p;
+    p._cursor = 0x1234;
+    p._size   = 0x5678;
+    p._direction = 1;
+    const RtIo::MemoryStream* a =
+        reinterpret_cast<const RtIo::MemoryStream*>(static_cast<IO::MemoryStream*>(&p));
+    const rt::io::Stream* b =
+        reinterpret_cast<const rt::io::Stream*>(static_cast<IO::Stream*>(&p));
+    CHECK_EQ((int)a->cursor, 0x1234);
+    CHECK_EQ((int)a->size,   0x5678);
+    CHECK_EQ((int)a->base.direction, 1);
+    CHECK_EQ((int)b->direction, 1);
+}
+
+// ---------------------------------------------------------------------------
+// The FileStream branch, where slot 7 means something ELSE.
+// ---------------------------------------------------------------------------
+namespace streamorder {
+
+struct FileStreamProbe final : IO::FileStream {
+    IO::Stream* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+    System::String GetSource() const override { Note(this, 1); return System::String(); }
+    bool     Write(int, const void*) override  { Note(this, 2); return true; }
+    bool     Read(int, void*) override         { Note(this, 3); return true; }
+    bool     SetCurrentPos(int) override       { Note(this, 4); return true; }
+    uint32_t GetCurrentPos() const override    { Note(this, 5); return 0; }
+    uint32_t GetSize() const override          { Note(this, 6); return 0; }
+    bool     Open(const System::Filename&) override { Note(this, 7); return true; }
+    ~FileStreamProbe() = default;
+};
+
+// BinaryFileStream differs from FileStream in slot 0 ONLY, so probing it is
+// probing that claim: the same eight overrides must land at the same eight
+// offsets through a table one class further down.
+struct BinaryFileStreamProbe final : IO::BinaryFileStream {
+    IO::Stream* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+    System::String GetSource() const override { Note(this, 1); return System::String(); }
+    bool     Write(int, const void*) override  { Note(this, 2); return true; }
+    bool     Read(int, void*) override         { Note(this, 3); return true; }
+    bool     SetCurrentPos(int) override       { Note(this, 4); return true; }
+    uint32_t GetCurrentPos() const override    { Note(this, 5); return 0; }
+    uint32_t GetSize() const override          { Note(this, 6); return 0; }
+    bool     Open(const System::Filename&) override { Note(this, 7); return true; }
+    ~BinaryFileStreamProbe() = default;
+};
+
+}  // namespace streamorder
+
+UNIT_TEST(the_real_FileStream_puts_Open_at_slot_7_not_Close) {
+    streamorder::FileStreamProbe p;
+    void* raw = static_cast<void*>(static_cast<IO::Stream*>(&p));
+
+    streamorder::CheckSharedStreamSlots(raw);
+
+    // THE TRAP IN THE FAMILY, asserted rather than commented. `IO::Stream`
+    // declares seven virtuals, so slot 7 is whatever the derived class declares
+    // FIRST: `Close()` on the MemoryStream/Compressed branch, `Open(Filename)`
+    // here. A port that dispatched +0x38 on a FileStream expecting `Close`
+    // would call `Open` — same offset, same table shape, and nothing else in
+    // the build would diagnose it.
+    Reset();
+    using OpenFn = bool (*)(void*, const void*);
+    System::Filename fn;
+    CHECK(SlotAt<OpenFn>(raw, streamorder::kSlot7)(raw, &fn) == true);
+    CHECK_EQ(g_lastMark, streamorder::kSlot7 / 8);
+    CHECK_EQ(g_lastMark, 7);
+
+    streamorder::CheckDistinctSlots(raw, 8);
+
+    Reset();
+    { const IO::Stream& s = p; (void)s.GetSource(); }
+    CHECK_EQ(g_lastMark, 1);
+
+    // FileStream's slot-7 override takes a Filename and MemoryStream's takes
+    // nothing: the two branches genuinely disagree about +0x38, and the type
+    // system now carries that rather than a comment.
+    static_assert(!std::has_virtual_destructor<IO::FileStream>::value,
+                  "IO::FileStream must not acquire a virtual destructor");
+    static_assert(!std::has_virtual_destructor<IO::BinaryFileStream>::value,
+                  "IO::BinaryFileStream must not acquire a virtual destructor");
+}
+
+UNIT_TEST(BinaryFileStream_differs_from_FileStream_in_slot_0_only) {
+    streamorder::FileStreamProbe fs;
+    streamorder::BinaryFileStreamProbe bfs;
+    void* rawBfs = static_cast<void*>(static_cast<IO::Stream*>(&bfs));
+
+    // All eight slots land where FileStream's do.
+    streamorder::CheckSharedStreamSlots(rawBfs);
+    Reset();
+    using OpenFn = bool (*)(void*, const void*);
+    System::Filename fn;
+    SlotAt<OpenFn>(rawBfs, streamorder::kSlot7)(rawBfs, &fn);
+    CHECK_EQ(g_lastMark, 7);
+    streamorder::CheckDistinctSlots(rawBfs, 8);
+
+    // The class adds NO state — which is the whole content of the retail fact
+    // that `??_7BinaryFileStream@` and `??_7FileStream@` are byte-identical in
+    // slots 1..7 and differ only at slot 0.
+    static_assert(sizeof(IO::BinaryFileStream) == sizeof(IO::FileStream),
+                  "BinaryFileStream exists to swap slot 0, not to add a field");
+    static_assert(sizeof(IO::BinaryFileStream) == 0x50, "0x50, the eh_vector stride");
+
+    // `this` is unadjusted two levels down, which is what every raw slot caller
+    // in runtime/src assumes when it hands the same pointer to either type.
+    CHECK(static_cast<void*>(static_cast<IO::Stream*>(&bfs)) ==
+          static_cast<void*>(static_cast<IO::FileStream*>(&bfs)));
+    CHECK(static_cast<void*>(static_cast<IO::FileStream*>(&bfs)) ==
+          static_cast<void*>(static_cast<IO::BinaryFileStream*>(&bfs)));
+
+    // And the two probes' tables are DIFFERENT objects, so the test is not
+    // accidentally reading one table twice.
+    void* const* vtFs  = *reinterpret_cast<void* const* const*>(
+        static_cast<void*>(static_cast<IO::Stream*>(&fs)));
+    void* const* vtBfs = *reinterpret_cast<void* const* const*>(rawBfs);
+    CHECK(vtFs != vtBfs);
+}
+
+UNIT_TEST(the_FileStream_pair_is_layout_identical_to_its_PODs) {
+    static_assert(sizeof(IO::FileStream) == sizeof(RtIo::FileStream), "POD agrees");
+    static_assert(sizeof(IO::BinaryFileStream) == sizeof(RtIo::BinaryFileStream),
+                  "POD agrees");
+    CHECK_EQ((int)offsetof(IO::FileStream, _filename), 0x18);
+    CHECK_EQ((int)offsetof(IO::FileStream, _file),     0x20);
+    // The three offsets FileStream.h pins THROUGH the embedded FileInfo, which
+    // is what identified it at +0x20 in the first place.
+    CHECK_EQ((int)(offsetof(IO::FileStream, _file) +
+                   offsetof(RtIO::FileInfo, cursor)), 0x2c);
+    CHECK_EQ((int)(offsetof(IO::FileStream, _file) +
+                   offsetof(RtIO::FileInfo, size)), 0x28);
+    CHECK_EQ((int)(offsetof(IO::FileStream, _file) +
+                   offsetof(RtIO::FileInfo, winHandle)), 0x38);
+
+    streamorder::BinaryFileStreamProbe p;
+    p._filename = nullptr;
+    p._file.cursor = 0x99;
+    const RtIo::BinaryFileStream* pod =
+        reinterpret_cast<const RtIo::BinaryFileStream*>(
+            static_cast<IO::BinaryFileStream*>(&p));
+    CHECK_EQ((int)pod->base.file.cursor, 0x99);
+    CHECK(pod->base.filename == nullptr);
+}
 
 // ===========================================================================
 // ENDGAME B.3.4 PACKAGE+FS — `IO::PackageFile`: 0xf0 bytes and NINE slots

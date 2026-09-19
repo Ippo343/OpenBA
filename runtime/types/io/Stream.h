@@ -30,6 +30,16 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <type_traits>   // B.3.4 block 4: the "the PODs stay trivial" pins
+
+// ENDGAME B.3.4 block 4 (STREAMS). `IO::Stream` carries an `IO::Encoding*` at
+// +0x10 and `IO::Stream::GetSource()` returns a `System::String` by value, so
+// the two class headers come in at GLOBAL scope, above every `namespace`
+// below (B31 hygiene, B34_BRIEFS section A.8). Serializer.h does NOT include
+// this header back — it keeps its `class Stream;` forward declaration, which
+// is what keeps the pair acyclic.
+#include "Serializer.h"
+#include "../system/String.h"
 
 namespace RtIo {
 
@@ -318,3 +328,233 @@ static_assert(sizeof(CompressedMemoryStream) == 0x98,
 constexpr size_t kStreamVtblCloseSlot = 7;
 
 }  // namespace RtIo
+
+// ===========================================================================
+// ENDGAME B.3.4 block 4 (STREAMS) — the REAL `IO::Stream` and
+// `IO::MemoryStream`.
+// ===========================================================================
+//
+// Design: B34_RULES.md section 1.3 (the slot lists), section 1.5.2 (the two
+// duplicate PODs), section 4.3 (no real constructors). Bodies:
+// runtime/src/io/memory_stream.cpp.
+//
+// ---------------------------------------------------------------------------
+// THERE ARE NO CONSTRUCTORS HERE, AND THAT IS THE RULE, NOT AN OMISSION
+// ---------------------------------------------------------------------------
+// B34_RULES section 4.3: a stream class gets real members and a real
+// declaration in this step; it does NOT get a C++ constructor. Thirteen of the
+// fifteen IO vtables are stamped from OUTSIDE `runtime/src/io/` — by
+// `Object::External`'s load / add / save-text paths, `Save`'s metadata reader,
+// `UI` and `Achievement::Goal` — so every live stream object wears the MINTED
+// table, and every construction site keeps stamping
+// `RT_DATA_SLOT("??_7...@IO@@6B@")`. Two of those sites are stack locals in
+// `runtime/src/object/`, which block 4 does not own. A C++ constructor here
+// would swap the table under an object built in a file we do not touch.
+//
+// The consequence for this header: the classes are reached ONLY through
+// `reinterpret_cast` plus a QUALIFIED, non-virtual call from a registered
+// door. A plain virtual call inside a door would dispatch through the minted
+// table straight back into that same door — infinite recursion, not
+// delegation (B34_BRIEFS section A.1). `sizeof` and `offsetof` work on an
+// abstract class, so the layout pins below hold regardless.
+//
+// ---------------------------------------------------------------------------
+// WHICH CLASSES ARE ABSTRACT, AND WHY `MemoryStream` IS NOT
+// ---------------------------------------------------------------------------
+// Slot 0 (`DeletingDtor`) is left PURE wherever it can be: its body is a
+// registered `RT_DELDTOR` / by-address row that section 4.2 forbids retiring
+// in this step, and block 2 established the shape (BinaryReader and friends
+// are `final` AND abstract).
+//
+// `IO::MemoryStream` is the EXCEPTION, and it is forced, not chosen:
+// `IO::CompressedMemoryStream` holds one BY VALUE at +0x68 (section 2 finding
+// 6, pinned three ways in the banner above). A member of abstract type is
+// ill-formed, so MemoryStream must be concrete — which means BOTH inherited
+// pure virtuals it does not override must be real:
+//
+//   * slot 0 is a one-line delegation to `RtIo_MemoryStream_DeletingDtor`
+//     (0x1800242a0), the body `iobase_vtables.cpp` already registers. Nothing
+//     is re-registered, re-implemented or retired; the class simply names the
+//     door that is already there.
+//   * slot 1 `GetSource` is not overridden by MemoryStream at all — its table
+//     carries `IO::Stream`'s own 0x18000c6a0 — so `IO::Stream::GetSource` is
+//     the one base slot with a real body (see the note on it below).
+//
+// And section A.3's rule applies for the same reason: a class held BY VALUE
+// needs a PUBLIC destructor, so `~MemoryStream` is public and still NON-virtual
+// (`IO::Stream`'s stays protected). The same pair of facts will hold for
+// `IO::BinaryFileStream` inside `IO::CompressedFileStream`.
+// ===========================================================================
+
+namespace IO {
+
+// ---------------------------------------------------------------------------
+// IO::Stream — vtable 0x1801549a0, 7 slots, 0x18 bytes.
+// ---------------------------------------------------------------------------
+// The slot list is B34_RULES section 1.3: slot 0 is the deleting dtor
+// (0x18000c610), slot 1 `GetSource` has a real body (0x18000c6a0) and slots
+// 2..6 are `_purecall` in the shipped table — i.e. retail's own base really is
+// abstract in exactly those five places.
+//
+// FIELD NAMES AND OFFSETS come from the `RtIo::Stream` POD above, which is
+// pinned by `??0Stream@IO@@QEAA@XZ` (0x1800b99d0). Nothing moves.
+class Stream {
+public:
+    // slot 0  +0x00  0x18000c610 — PURE ON PURPOSE. The body is the registered
+    // `RT_DELDTOR` row in `deleting_dtor.cpp` that fills slot 0 of the LIVE
+    // minted table 0x1801549a0; section 4.2 keeps it until the last stamper of
+    // that table converts, which is the end of B.3.
+    virtual Stream* DeletingDtor(unsigned flags) = 0;
+
+    // slot 1  +0x08  0x18000c6a0 — `String GetSource() const { return String(); }`
+    //
+    // The nine shipped instructions read NOTHING from `this`: RCX is never
+    // touched, and the whole body is `*ret = nullptr`, i.e. a default
+    // `System::String`. `iobase_vtables.cpp` carries the registered door
+    // (`RtIo_Stream_GetSource`, hidden return slot spelled out because that is
+    // the shape a raw slot caller uses) and that file is not block 4's to edit,
+    // so the class states the same one-line body rather than reaching for it.
+    // Two transcriptions of `return String()` is not a divergence risk; a
+    // reference across a file boundary we may not touch would be.
+    //
+    // ⚠ NEVER VIRTUAL-CALL THIS ON AN OBJECT WEARING A MINTED TABLE. MinGW GCC
+    // passes the hidden return pointer as the FIRST argument and `this` second;
+    // the registered door's signature is `(self, ret)`, MSVC's order. Both are
+    // self-consistent — our C++ callers reach the member, raw slot callers
+    // reach the door — but a virtual call from ported C++ onto a minted vptr
+    // would cross between them and write the String through `this`. No caller
+    // in the tree does; this comment is so none starts.
+    virtual System::String GetSource() const { return System::String(); }
+
+    // slots 2..6 — `_purecall` in retail's own table (0x18007ec28 five times).
+    virtual bool     Write(int n, const void* src) = 0;   // slot 2 +0x10
+    virtual bool     Read(int n, void* dst) = 0;          // slot 3 +0x18
+    virtual bool     SetCurrentPos(int pos) = 0;          // slot 4 +0x20
+    virtual uint32_t GetCurrentPos() const = 0;           // slot 5 +0x28
+    virtual uint32_t GetSize() const = 0;                 // slot 6 +0x30
+
+    // ---- the 0x18 bytes, at retail's offsets -------------------------------
+    // PUBLIC during the migration for the same reason `IO::Serializer`'s two
+    // fields are: the unconverted tree reads these through a cast to one of the
+    // two PODs, and `offsetof` on them has to be well formed for the pins.
+    int32_t   _direction;   // +0x08  0 == reading/decode, non-zero == writing
+    uint32_t  _pad0c;       // +0x0C  never written by any ctor
+    Encoding* _encoding;    // +0x10  the encoding POLICY object, owned
+
+protected:
+    // Decision 2's base shape: non-virtual (Itanium spends TWO slots on a
+    // virtual destructor, which would shift every slot after it) and protected,
+    // because nothing deletes a Stream through this type.
+    ~Stream() = default;
+};
+
+static_assert(sizeof(Stream) == 0x18, "IO::Stream is 0x18 bytes");
+static_assert(offsetof(Stream, _direction) == 0x08, "??0Stream@IO@@ 0x1800b99d0: +0x08 = 0");
+static_assert(offsetof(Stream, _pad0c)     == 0x0c, "the gap the ctor never writes");
+static_assert(offsetof(Stream, _encoding)  == 0x10, "?SetEncoding@Stream@IO@@ writes +0x10");
+
+// ---------------------------------------------------------------------------
+// IO::MemoryStream — vtable 0x1801555b0, 8 slots, 0x30 bytes.
+// ---------------------------------------------------------------------------
+// Slot 7 is `Close` (0x1800ae9e0) and MemoryStream adds NO `PreCommit` — the
+// Compressed branch is the one with nine slots. Note that the SAME slot 7 is
+// `Open` on the FileStream branch (B34_RULES section 1.3); the two are not the
+// same slot meaning and `FileStream.h` says so again from its side.
+// ⚠⚠ NOT CONSTRUCTIBLE IN B.3.4 — live objects are built by the ported ctor
+// doors and wear the MINTED table; see B34_RULES section 4.3. ⚠⚠
+//
+// This class is CONCRETE (see the banner above: CompressedMemoryStream holds
+// one by value), and a concrete polymorphic class would otherwise have an
+// implicit PUBLIC default constructor — so `IO::MemoryStream ms;` would compile
+// and stamp GCC's vtable on an object the rest of the tree expects to be
+// wearing 0x1801555b0. That is the one thing section 4.3 forbids, and it would
+// produce no build error at all.
+//
+// So the default constructor is PROTECTED. `IO::MemoryStream ms;` and
+// `new IO::MemoryStream` are now COMPILE ERRORS, while the two things that must
+// keep working still do:
+//   * a probe SUBCLASS (tests/unit/io_vtable_abi_test.cpp PART G) reaches a
+//     protected constructor through inheritance;
+//   * `IO::CompressedMemoryStream`, which holds one BY VALUE, reaches it as a
+//     FRIEND. Without the friendship its own implicit constructor would be
+//     defined as deleted and its order probe could not be built.
+// It is `= default`, so the class stays trivially default-constructible and no
+// layout pin moves.
+class MemoryStream : public Stream {
+public:
+    // slot 0  +0x00  0x1800242a0 — delegates to the registered thunk, see the
+    // banner. NOT pure, because CompressedMemoryStream embeds this class.
+    Stream* DeletingDtor(unsigned flags) override;
+    // slot 1 is NOT overridden: 0x1801555b0[1] is IO::Stream's own 0x18000c6a0.
+    bool     Write(int n, const void* src) override;   // slot 2 +0x10  0x1800ae8f0
+    bool     Read(int n, void* dst) override;          // slot 3 +0x18  0x1800ae950
+    bool     SetCurrentPos(int pos) override;          // slot 4 +0x20  0x1800ae9b0
+    uint32_t GetCurrentPos() const override;           // slot 5 +0x28  0x1800ae9c0
+    uint32_t GetSize() const override;                 // slot 6 +0x30  0x1800ae9d0
+    // slot 7 +0x38 — MemoryStream's own first virtual. A BARE RET in retail.
+    virtual void Close();                              //              0x1800ae9e0
+
+    // PUBLIC and non-virtual (B34_BRIEFS section A.3): CompressedMemoryStream
+    // holds one by value, and a protected destructor would make the enclosing
+    // class uninstantiable. There is no C++ constructor to pair it with — the
+    // ported ctor/dtor doors in compressedstream.cpp stay exactly as they are.
+    ~MemoryStream() = default;
+
+    void*    _data;        // +0x18  the buffer
+    uint8_t  _ownsData;    // +0x20  free _data in the dtor door
+    uint8_t  _pad21[3];    // +0x21
+    uint32_t _cursor;      // +0x24  position IN THE BUFFER
+    uint32_t _size;        // +0x28  bytes valid in _data
+    uint32_t _pad2c;       // +0x2C
+
+protected:
+    MemoryStream() = default;      // see the banner — NOT public on purpose
+    friend class CompressedMemoryStream;   // the by-value holder, +0x68
+};
+
+static_assert(sizeof(MemoryStream) == 0x30, "IO::MemoryStream is 0x30 bytes");
+static_assert(offsetof(MemoryStream, _data)     == 0x18, "MemoryStream.data @ 0x18");
+static_assert(offsetof(MemoryStream, _ownsData) == 0x20, "MemoryStream.ownsData @ 0x20");
+static_assert(offsetof(MemoryStream, _cursor)   == 0x24, "?Read@MemoryStream 0x1800ae95d");
+static_assert(offsetof(MemoryStream, _size)     == 0x28, "?GetSize@MemoryStream 0x1800ae9d0");
+
+// ---------------------------------------------------------------------------
+// THE DUPLICATE-POD CROSS-ASSERTS (B34_RULES section 1.5.2 / 1.5.3)
+// ---------------------------------------------------------------------------
+// There are TWO independently declared `Stream` PODs — `RtIo::Stream` in this
+// header and `rt::io::Stream` in `Serializer.h` — written either side of the
+// Wave-4 lane boundary, in two namespaces, with neither header including the
+// other. `IO::Stream` replaces both. They STAY, trivially destructible, until
+// their last user converts (B33 section 7: giving a POD a destructor runs a
+// second one — the `RtSystem::String` double-free lesson), and they are pinned
+// field for field against the class here, which is what makes every
+// `reinterpret_cast` between the three views honest.
+//
+// GREP BOTH NAMES before declaring any `Stream` caller converted.
+static_assert(sizeof(Stream) == sizeof(RtIo::Stream),
+              "IO::Stream and the RtIo::Stream POD stay interchangeable");
+static_assert(sizeof(Stream) == sizeof(rt::io::Stream),
+              "IO::Stream and the rt::io::Stream POD stay interchangeable");
+static_assert(offsetof(Stream, _direction) == offsetof(RtIo::Stream, direction), "alias direction");
+static_assert(offsetof(Stream, _direction) == offsetof(rt::io::Stream, direction), "alias direction");
+static_assert(offsetof(Stream, _encoding)  == offsetof(RtIo::Stream, encoding),  "alias encoding");
+static_assert(offsetof(Stream, _encoding)  == offsetof(rt::io::Stream, encoding), "alias encoding");
+static_assert(std::is_trivially_destructible<RtIo::Stream>::value,
+              "the PODs must stay trivially destructible while both views are live");
+static_assert(std::is_trivially_destructible<rt::io::Stream>::value,
+              "the PODs must stay trivially destructible while both views are live");
+
+static_assert(sizeof(MemoryStream) == sizeof(RtIo::MemoryStream),
+              "IO::MemoryStream and the RtIo::MemoryStream POD stay interchangeable");
+static_assert(offsetof(MemoryStream, _data) ==
+                  offsetof(RtIo::MemoryStream, data), "alias data");
+static_assert(offsetof(MemoryStream, _ownsData) ==
+                  offsetof(RtIo::MemoryStream, ownsData), "alias ownsData");
+static_assert(offsetof(MemoryStream, _cursor) ==
+                  offsetof(RtIo::MemoryStream, cursor), "alias cursor");
+static_assert(offsetof(MemoryStream, _size) ==
+                  offsetof(RtIo::MemoryStream, size), "alias size");
+static_assert(std::is_trivially_destructible<RtIo::MemoryStream>::value,
+              "the POD must stay trivially destructible while both views are live");
+
+}  // namespace IO
