@@ -204,6 +204,9 @@
 
 #include "../math/Math.h"
 #include "ConstantBuffer.h"
+// ENDGAME B.3.5 block D2, RULE B5-2.3: the real `Video::RenderBuffer`, which
+// `RtVideo::RenderBufferPrefix` below is now an alias of rather than a third view.
+#include "Device.h"
 
 namespace Video {
 
@@ -648,28 +651,34 @@ using Vector4Raw = ::Math::Vector4;
 // loads *(int*)(rb + 0x10) and *(int*)(rb + 0x14) as the width/height it resets
 // the viewport and scissor to.
 //
-// *** B35_RULES 1.3 / RULE B5-2: THIS IS THE THIRD OF THREE VIEWS OF ONE CLASS.
-// Its twin is `RtVideo::RenderBuffer` in runtime/types/video/Device.h (sizeof
-// 0x30, `colorBuffer` @+0x00, `depthBuffer` @+0x08), which is ENDGAME B.3.5
-// block D2's class; the second was dx11's `RenderBufferOwner`, whose false
-// `static_assert(sizeof == 0x10)` block A deleted. This prefix view is LEFT IN
-// PLACE on purpose: `Reset`, `wave27_lane_gfxbig.cpp`, `saveload_draw.cpp` and
-// `spritecontext.cpp` all read the render buffer through it, three of those four
-// files are outside this block, and collapsing it belongs to the block that owns
-// `Device.h`. It is on this block's list for the CLOSING PASS. ***
+// *** RULE B5-2.3: COLLAPSED. This was the THIRD OF THREE VIEWS OF ONE CLASS,
+// and it is the last of the three to go. Block A deleted dx11's
+// `RenderBufferOwner`'s false `static_assert(sizeof == 0x10)`; ENDGAME B.3.5
+// block D2 made `Video::RenderBuffer` a real 0x30-byte class
+// (runtime/types/video/Device.h) and turned that dx11 view into an alias of it;
+// this prefix view is now an alias too, so ONE definition of the layout remains
+// where there were three.
 //
-// There is also a FOURTH, unrelated-looking duplicate of `Video::Viewport`
-// itself, at runtime/src/ui/clipregionelement.cpp:73 (`struct Viewport { int32_t
-// x, y, w, h; }`), and a fifth at dx11/src/contextdata.cpp:425 — both listed for
-// the closing pass.
+// ZERO CALLERS CHANGE, which is what made it safe to do here rather than in a
+// caller batch: all four consumers read `rb->width` / `rb->height`, and those
+// are real fields of the real class at exactly +0x10 and +0x14. They are
+// `?Reset@Context@` (runtime/src/video/context.cpp),
+// `runtime/src/graphics/wave27_lane_gfxbig.cpp`,
+// `runtime/src/save/saveload_draw.cpp` and `runtime/src/ui/spritecontext.cpp`;
+// three of those four are outside both b35-D1's and b35-D2's file sets and are
+// untouched. Landed in b35-D2 with b35-D1's agreement on the record, because
+// b35-D1 was already merged and adding this include there would have
+// manufactured a merge-order dependency.
+//
+// STILL OPEN, both handed to the closing pass: two more duplicates of
+// `Video::Viewport` itself, at runtime/src/ui/clipregionelement.cpp:73
+// (`struct Viewport { int32_t x, y, w, h; }`) and dx11/src/contextdata.cpp:425.
 // ----------------------------------------------------------------------------
-struct RenderBufferPrefix {
-    uint8_t _head[0x10];
-    int32_t width;    // +0x10
-    int32_t height;   // +0x14
-};
+using RenderBufferPrefix = ::Video::RenderBuffer;
 static_assert(offsetof(RenderBufferPrefix, width)  == 0x10, "RenderBuffer::width");
 static_assert(offsetof(RenderBufferPrefix, height) == 0x14, "RenderBuffer::height");
+static_assert(sizeof(RenderBufferPrefix) == 0x30,
+              "RULE B5-2.3: the real class, not a 0x18-byte prefix view");
 
 // The number of transform slots is 0xd00 / 0x40 = 52, from the byte count
 // Reset (0x1800f1e50) memsets over the array at +0x10d8.

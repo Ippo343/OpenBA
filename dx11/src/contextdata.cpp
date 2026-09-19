@@ -792,7 +792,9 @@ void ContextData_Clear(ContextData* self, unsigned flags, unsigned color,
         };
         const void* rb = Field<void*>(self->context, Ctx::kRenderBuffer);
         Ctx3D(self)->ClearRenderTargetView(
-            Dx11ImageRtv(static_cast<const RenderBufferOwner*>(rb)->color), rgba);
+            // ENDGAME B.3.5 block D2, RULE B5-2.3: `RenderBufferOwner` is now an
+            // alias of the real `Video::RenderBuffer`, hence its field name.
+            Dx11ImageRtv(static_cast<const RenderBufferOwner*>(rb)->colorBuffer), rgba);
     }
 
     UINT clearFlags = (flags & 2) ? D3D11_CLEAR_DEPTH : 0;
@@ -801,7 +803,7 @@ void ContextData_Clear(ContextData* self, unsigned flags, unsigned color,
     if (clearFlags) {
         const void* rb = Field<void*>(self->context, Ctx::kRenderBuffer);
         Ctx3D(self)->ClearDepthStencilView(
-            Dx11ImageDsv(static_cast<const RenderBufferOwner*>(rb)->depth),
+            Dx11ImageDsv(static_cast<const RenderBufferOwner*>(rb)->depthBuffer),
             clearFlags, depth, static_cast<UINT8>(stencil));
     }
 }
@@ -838,7 +840,7 @@ void ContextData_BindRenderBuffer(ContextData* self) {
         void* bound = Field<void*>(ctx, Ctx::kTextures + static_cast<size_t>(i) * 8);
         const RenderBufferOwner* rb =
             Field<const RenderBufferOwner*>(ctx, Ctx::kRenderBuffer);
-        if (bound == rb->color || bound == rb->depth)
+        if (bound == rb->colorBuffer || bound == rb->depthBuffer)
             im->CtxSetImageBuffer(ctx, nullptr, i);
     }
 

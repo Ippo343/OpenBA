@@ -43,6 +43,9 @@
 // replaces this file's former `ImageBufferOwner` view. Sixth `runtime/types`
 // header dx11 includes.
 #include "video/ImageBuffer.h"
+// ENDGAME B.3.5 block D2, RULE B5-2.3 — the real `Video::RenderBuffer`
+// (0x30 bytes), which replaces this file's former `RenderBufferOwner` view.
+#include "video/Device.h"
 #include "VideoDX11Data.h"
 #include "dx11_seam.h"   // Vt / VtGhidraAddr, used by Dx11VtableAddress
 #include "resolve.h"
@@ -274,25 +277,25 @@ void Dx11TrackConstantBuffer(ConstantBufferData* p);
 void Dx11UntrackConstantBuffer(ConstantBufferData* p);
 void Dx11InvalidateConstantBufferBindings();
 
-// ENDGAME B.3.5 block A, RULE B5-2.3 — the `sizeof(RenderBufferOwner) == 0x10`
-// assertion that used to sit here IS DELETED. `Video::RenderBuffer` is 0x30
-// bytes (`runtime/types/video/Device.h:311`, which asserts it); this view pins
-// only its leading pair. A size assert on a prefix view is a false witness: it
-// cannot fail, because it describes the view rather than the class, and it
-// states something about the class that is untrue. The two OFFSETS are the real
-// claim and they are kept.
+// ENDGAME B.3.5, RULE B5-2.3 — COLLAPSED. Block A deleted the
+// `sizeof(RenderBufferOwner) == 0x10` assertion (a size assert on a prefix view
+// of a 0x30-byte class: it could not fail, because it described the view rather
+// than the class, and what it said about the class was untrue) and left the view
+// itself for "the block that converts RenderBuffer". This is that block: the
+// duplicate two-pointer POD is GONE and the name is now an ALIAS of the real
+// `Video::RenderBuffer` (runtime/types/video/Device.h), which carries the true
+// 0x30 and all seven offsets. Two of the three views of this one class are now
+// one definition; the third, `Context.h`'s `RtVideo::RenderBufferPrefix`, is
+// b35-D1's file and is theirs to collapse.
 //
-// The view itself stays for now: collapsing it — together with `Context.h`'s
-// third view, `RtVideo::RenderBufferPrefix` — into `Device.h`'s
-// `RtVideo::RenderBuffer` belongs to the block that converts `RenderBuffer`
-// (B.3.5 block D), because `contextdata.cpp` is its other user and touching
-// that file requires the `BANISHED_FORCE_DEVICE_LOST` route (RULE B5-8).
-struct RenderBufferOwner {
-    void* color;   // +0x00  Video::ImageBuffer* (may be null)
-    void* depth;   // +0x08  Video::ImageBuffer* (may be null)
-};
-static_assert(offsetof(RenderBufferOwner, color) == 0x00, "RenderBuffer::color");
-static_assert(offsetof(RenderBufferOwner, depth) == 0x08, "RenderBuffer::depth");
+// The FIELD NAMES change with the type: `color`/`depth` become the class's
+// `colorBuffer`/`depthBuffer`. The two use sites in `smallclasses.cpp` and the
+// four in `contextdata.cpp` are re-spelled; nothing else in dx11 named the view.
+using RenderBufferOwner = ::Video::RenderBuffer;
+static_assert(offsetof(RenderBufferOwner, colorBuffer) == 0x00, "RenderBuffer::colorBuffer");
+static_assert(offsetof(RenderBufferOwner, depthBuffer) == 0x08, "RenderBuffer::depthBuffer");
+static_assert(sizeof(RenderBufferOwner) == 0x30,
+              "RULE B5-2.3: the real class, not a 0x10-byte prefix view");
 
 // Video::ImageBuffer+0x60 is the backend companion object, i.e. the
 // VideoDX11::ImageBufferData whose layout is in dx11/types/VideoDX11Data.h.
