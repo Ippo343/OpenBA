@@ -79,32 +79,15 @@ namespace {
 // All slots in the 0x14015xxxx range. We resolve them via ResolveAddr at
 // first use and cache. This pattern matches session 4 / session 6 etc.
 
-typedef void  (*FnSerInt_t       )(void* serializer, int32_t* field, const char* name);
-typedef void  (*FnSerByte_t      )(void* serializer, uint8_t* field, const char* name);
-typedef void  (*FnSerBool_t      )(void* serializer, bool*    field, const char* name);
-typedef void  (*FnSerFloat_t     )(void* serializer, float*   field, const char* name);
-typedef int   (*FnGetVer_t       )(void* serializer);
-typedef void  (*FnSerUShortArr_t )(void* serializer, int32_t count, uint16_t* data, const char* name);
-typedef void  (*FnSerSizedRaw_t  )(void* serializer, int32_t bytes, void* ptr, const char* name);
-typedef void  (*FnSerByteArr_t   )(void* serializer, int32_t count, void* ptr, const char* name);
-typedef void  (*FnSerCtor_t      )(void* self, void* stream, int version);
-typedef void  (*FnSerDtor_t      )(void* self);
 typedef void  (*FnVector2Ser_t   )(void* self, void* serializer);
 typedef bool  (*FnVertexCreate_t )(void* self, int sizeBytes, bool dyn, void* initialData);
 typedef bool  (*FnIndexCreate_t  )(void* self, int sizeBytes, bool dyn, void* initialData);
 
 // Slot map (verified via Ghidra MCP `disassemble_function 0x1400b04d0 CALL`):
-constexpr uintptr_t kSlot_SerCtor          = 0x140152ad8;  // ??0Serializer@IO
-constexpr uintptr_t kSlot_SerDtor          = 0x140152ad0;  // ??1Serializer@IO
-constexpr uintptr_t kSlot_SerInt           = 0x140152ac8;
-constexpr uintptr_t kSlot_SerByte          = 0x140152410;
-constexpr uintptr_t kSlot_SerBool          = 0x140152a58;
-constexpr uintptr_t kSlot_SerFloat         = 0x140152a60;
-constexpr uintptr_t kSlot_GetVer           = 0x140152a48;
-constexpr uintptr_t kSlot_SerUShortArr     = 0x140152488;  // bulk uint16 array
-constexpr uintptr_t kSlot_SerSizedRaw_3F8  = 0x1401523f8;  // Serialize(int,short*,name)
-constexpr uintptr_t kSlot_SerSizedRaw_400  = 0x140152400;  // Serialize(int,void*,name) variant
-constexpr uintptr_t kSlot_SerByteArr_618   = 0x140152618;  // SerializeBytes(int,void*,name)
+// ENDGAME B.3.4a closing: every Serializer row is gone with its cache — the
+// calls are real IO::Serializer members. The rows below are the non-Serializer
+// doors this body still goes through. The PE import slots themselves stay
+// registered in standalone/address_registry.cpp (B34_RULES §6.5(g)).
 constexpr uintptr_t kSlot_Vector2Ser       = 0x1401526b8;  // Math::Vector2::Serialize
 constexpr uintptr_t kSlot_VertexBufCreate  = 0x140152668;  // Video::VertexBuffer::Create
 constexpr uintptr_t kSlot_IndexBufCreate   = 0x140152660;  // Video::IndexBuffer::Create
@@ -177,29 +160,18 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
     uint64_t local_ser[3] = {0, 0, 0};
     void* serializer = static_cast<void*>(local_ser);
 
-    // Resolve all dispatch slots up front — cached statics, one-shot warnings.
-    static FnSerInt_t        s_serInt = nullptr;        static bool t_serInt = false;
-    static FnSerBool_t       s_serBool = nullptr;       static bool t_serBool = false;
-    static FnSerFloat_t      s_serFloat = nullptr;      static bool t_serFloat = false;
-    static FnGetVer_t        s_getVer = nullptr;        static bool t_getVer = false;
-    static FnSerUShortArr_t  s_serUSArr = nullptr;      static bool t_serUSArr = false;
-    static FnSerByteArr_t    s_serByteArr = nullptr;    static bool t_serByteArr = false;
+    // Resolve the remaining non-Serializer dispatch slots — cached statics,
+    // one-shot warnings.
     static FnVector2Ser_t    s_vec2Ser = nullptr;       static bool t_vec2Ser = false;
     static FnVertexCreate_t  s_vbCreate = nullptr;      static bool t_vbCreate = false;
     static FnIndexCreate_t   s_ibCreate = nullptr;      static bool t_ibCreate = false;
 
-    FnSerInt_t       serInt    = ResolveSlot(kSlot_SerInt,           s_serInt,    t_serInt,    "Serialize_Int");
-    FnSerBool_t      serBool   = ResolveSlot(kSlot_SerBool,          s_serBool,   t_serBool,   "Serialize_Bool");
-    FnSerFloat_t     serFloat  = ResolveSlot(kSlot_SerFloat,         s_serFloat,  t_serFloat,  "Serialize_Float");
-    FnGetVer_t       getVer    = ResolveSlot(kSlot_GetVer,           s_getVer,    t_getVer,    "GetVersion");
-    FnSerUShortArr_t serUSArr  = ResolveSlot(kSlot_SerUShortArr,     s_serUSArr,  t_serUSArr,  "Serialize_UShortArr");
-    FnSerByteArr_t   serByteArr= ResolveSlot(kSlot_SerByteArr_618,   s_serByteArr,t_serByteArr,"SerializeBytes_618");
     FnVector2Ser_t   vec2Ser   = ResolveSlot(kSlot_Vector2Ser,       s_vec2Ser,   t_vec2Ser,   "Vector2::Serialize");
     FnVertexCreate_t vbCreate  = ResolveSlot(kSlot_VertexBufCreate,  s_vbCreate,  t_vbCreate,  "VertexBuffer::Create");
     FnIndexCreate_t  ibCreate  = ResolveSlot(kSlot_IndexBufCreate,   s_ibCreate,  t_ibCreate,  "IndexBuffer::Create");
 
     auto serIntField = [&](void* field) {
-        if (serInt) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(field), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(field), nullptr);   // B.3.4 bridge
     };
 
     RZ_CHECK("geom 04d0 entry");
@@ -222,13 +194,13 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
     // Verified original disasm @ 0x1400b0589..0x1400b05ce: local_count is the
     // ELEMENT count (no shift). Both resize and serialize use it directly.
     // The original calls slot 0x1401523f8 (F = short*); slot 0x140152488
-    // (G = ushort*) reads identical bytes, so we route through serUSArr.
+    // (G = ushort*) reads identical bytes, so we route through the ushort overload.
     int32_t local_count = *reinterpret_cast<int32_t*>(selfBytes + 0xE0);
     serIntField(&local_count);
     if (SerializerInner(serializer) == 0) {
         Reimpl_Array_Resize_Stride02(selfBytes + 0xD8, local_count);
     }
-    if (serUSArr) {
+    {
         uint16_t* arr16 = *reinterpret_cast<uint16_t**>(selfBytes + 0xD8);
         if (arr16) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(local_count, arr16, nullptr);   // B.3.4 bridge
     }
@@ -264,35 +236,35 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
     } else {
         heightBuf = *reinterpret_cast<void**>(selfBytes + 0x140);
     }
-    // Serialize raw heightmap bytes.
-    if (serByteArr && heightBuf && byteCount > 0) {
+    // Serialize raw heightmap bytes. ENDGAME B.3.4a closing: the `else if` arm
+    // was the SerializeBulk (slot 0x140152400) fallback for "the 0x140152618
+    // SerializeBytes door did not resolve". Retail calls the 618 door; with the
+    // door gone that state cannot occur, so the compensating arm goes with it.
+    if (heightBuf && byteCount > 0) {
         reinterpret_cast<IO::Serializer*>(serializer)->SerializeBytes(byteCount, heightBuf, nullptr);   // B.3.4 bridge
-    } else if (fn_Serializer_SerializeBulk && heightBuf && byteCount > 0) {
-        // Fallback to the SerializeBulk variant from engine_funcs.
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(byteCount, reinterpret_cast<unsigned char*>(heightBuf), nullptr);   // B.3.4 bridge
     }
 
     RZ_CHECK("geom 04d0 after step5 (sub_c1e0 mesh build + heightBuf)");
 
     // ---- Step 6: Version-gated mesh-vert/idx buffer block. ----
-    int version = getVer ? reinterpret_cast<IO::Serializer*>(serializer)->GetVersion() : 6;   // B.3.4 bridge
+    int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
     if (version < 3) {
         // OLD format: bool + uint count + raw bytes for both vert + idx buffers.
         bool flag = false;
         int32_t cnt = 0;
-        if (serBool) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(flag, nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(flag, nullptr);   // B.3.4 bridge
         serIntField(&cnt);
         // Mesh-vertex resize (16-byte stride): cnt >> 4.
         Reimpl_Array_Resize_Stride16B(selfBytes + 0x1A0, cnt >> 4);
-        if (serByteArr) {
+        {
             void* vertData = *reinterpret_cast<void**>(selfBytes + 0x1A0);
             if (vertData) reinterpret_cast<IO::Serializer*>(serializer)->SerializeBytes(cnt, vertData, nullptr);   // B.3.4 bridge
         }
-        if (serBool) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(flag, nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(flag, nullptr);   // B.3.4 bridge
         serIntField(&cnt);
         // Index buffer resize (uint16 stride): cnt >> 1.
         Reimpl_Array_Resize_Stride02(selfBytes + 0x1B0, cnt >> 1);
-        if (serByteArr) {
+        {
             void* idxData = *reinterpret_cast<void**>(selfBytes + 0x1B0);
             if (idxData) reinterpret_cast<IO::Serializer*>(serializer)->SerializeBytes(cnt, idxData, nullptr);   // B.3.4 bridge
         }
@@ -309,21 +281,13 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
         //            Serialize(4, elem+0, name);
         // Element pointer walks from (vertdata + 0xC) i.e., 12 into each 16-byte vert.
         if (vcount > 0) {
-            static FnSerSizedRaw_t s_rawA = nullptr; static bool t_rawA = false;
-            static FnSerSizedRaw_t s_rawB = nullptr; static bool t_rawB = false;
-            FnSerSizedRaw_t rawA = ResolveSlot(kSlot_SerSizedRaw_3F8, s_rawA, t_rawA, "Serialize(int,short*)_3f8");
-            FnSerSizedRaw_t rawB = ResolveSlot(kSlot_SerSizedRaw_400, s_rawB, t_rawB, "Serialize(int,void*)_400");
             uint8_t* vbase = *reinterpret_cast<uint8_t**>(selfBytes + 0x1A0);
             if (vbase) {
                 uint8_t* p = vbase + 0xC;
                 for (int i = 0; i < vcount; ++i) {
-                    if (rawA) {
-                        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(4, reinterpret_cast<short*>(p - 0xC), nullptr);   // B.3.4 bridge
-                        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(2, reinterpret_cast<short*>(p - 4), nullptr);     // B.3.4 bridge
-                    }
-                    if (rawB) {
-                        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(4, reinterpret_cast<unsigned char*>(p), nullptr);   // B.3.4 bridge
-                    }
+                    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(4, reinterpret_cast<short*>(p - 0xC), nullptr);   // B.3.4 bridge
+                    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(2, reinterpret_cast<short*>(p - 4), nullptr);     // B.3.4 bridge
+                    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(4, reinterpret_cast<unsigned char*>(p), nullptr);   // B.3.4 bridge
                     p += 0x10;
                 }
             }
@@ -334,7 +298,7 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
         if (SerializerInner(serializer) == 0) {
             Reimpl_Array_Resize_Stride02(selfBytes + 0x1B0, icount);
         }
-        if (serUSArr) {
+        {
             uint16_t* iarr = *reinterpret_cast<uint16_t**>(selfBytes + 0x1B0);
             if (iarr) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(icount, iarr, nullptr);   // B.3.4 bridge
         }
@@ -464,10 +428,7 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
         // Slot 0x140151278 = `IO::Serializer::Serialize(int count, int* data, name)` —
         // bulk INT array (4 bytes per element). Slot 0x140152488 is the bulk
         // uint16 variant — wrong stride for stride-04 int array.
-        typedef void (*FnSerIntArr_t)(void* serializer, int32_t count, int32_t* data, const char* name);
-        static FnSerIntArr_t s_serIntArr = nullptr; static bool t_serIntArr = false;
-        FnSerIntArr_t serIntArr = ResolveSlot(0x140151278, s_serIntArr, t_serIntArr, "Serialize_IntArr");
-        if (serIntArr) {
+        {
             int32_t* iarr = *reinterpret_cast<int32_t**>(selfBytes + 0x220);
             if (iarr) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(c, iarr, nullptr);   // B.3.4 bridge
         }
@@ -565,13 +526,8 @@ void TradeWork_impl_f1a0_Body(void* self, void* stream) {
     uint64_t local_ser[3] = {0, 0, 0};
     void* serializer = static_cast<void*>(local_ser);
 
-    static FnSerInt_t s_serInt = nullptr;        static bool t_serInt = false;
-    static FnGetVer_t s_getVer = nullptr;        static bool t_getVer = false;
-    FnSerInt_t serInt = ResolveSlot(kSlot_SerInt, s_serInt, t_serInt, "Serialize_Int");
-    FnGetVer_t getVer = ResolveSlot(kSlot_GetVer, s_getVer, t_getVer, "GetVersion");
-
     auto serIntField = [&](void* field) {
-        if (serInt) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(field), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(field), nullptr);   // B.3.4 bridge
     };
 
     RZ_CHECK("geom f1a0 entry");
@@ -604,7 +560,7 @@ void TradeWork_impl_f1a0_Body(void* self, void* stream) {
     }
 
     // ---- Step 4: Version 0-2 backfill into +0x210 from +0x200. ----
-    int version = getVer ? reinterpret_cast<IO::Serializer*>(serializer)->GetVersion() : 4;   // B.3.4 bridge
+    int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
     if (version < 3 && SerializerInner(serializer) == 0) {
         int32_t srcCount = *reinterpret_cast<int32_t*>(selfBytes + 0x208);
         if (fn_Array_Resize_Stride08) {

@@ -523,19 +523,18 @@ bool Tornado_Serialize(void* self, void* stream) {
     baseSer_t base = reinterpret_cast<baseSer_t>(s_baseVtable[5]);
     if (base) base(self, stream);            // retail discards the base return
 
-    if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !fn_Serializer_Serialize_Float ||
-        !fn_System_Color_Serialize || !g_fn_Time_Serialize) {
+    if (!fn_System_Color_Serialize || !g_fn_Time_Serialize) {
         // Any missing leaf leaves the body unread and the load fails exactly as it did
         // before this slot existed -- so say which one, rather than regress in silence.
+        // (The Serializer ctor/dtor/float conjuncts are gone with their doors: the
+        // serializer is a real IO::Serializer now. Time::Serialize is B.3 step 4b.)
         static bool warned = false;
         if (!warned) {
             warned = true;
-            fprintf(stderr, "[Tornado/particle] Serialize UNRESOLVED leaf: serCtor=%p "
-                    "serDtor=%p float=%p color=%p time=%p -- Tornado.rsc will fail to "
+            fprintf(stderr, "[Tornado/particle] Serialize UNRESOLVED leaf: color=%p "
+                    "time=%p -- Tornado.rsc will fail to "
                     "load and its ExternalPtr will stay null\n",
-                    (void*)g_fn_Serializer_Ctor, (void*)g_fn_Serializer_Dtor,
-                    (void*)fn_Serializer_Serialize_Float, (void*)fn_System_Color_Serialize,
-                    (void*)g_fn_Time_Serialize);
+                    (void*)fn_System_Color_Serialize, (void*)g_fn_Time_Serialize);
             fflush(stderr);
         }
         return true;

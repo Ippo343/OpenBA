@@ -90,8 +90,6 @@ typedef bool  (*fn_CMS_Create_t)(void* self);
 typedef void  (*fn_CMS_Close_t)(void* self);
 typedef void* (*fn_CMS_GetMemStream_t)(void* self);
 typedef void  (*fn_SavedState_Xfer_t)(void* state, void* memStream);
-typedef void  (*fn_Ser_BoolArr_t)(void* ser, int count, void* data, const char* name);
-typedef void  (*fn_Ser_UintArr_t)(void* ser, int count, void* data, const char* name);
 
 static fn_EnableRefMode_t       s_fn_EnableRefMode = nullptr;
 static fn_SerializeRefTable_t   s_fn_SerializeRefTable = nullptr;
@@ -110,8 +108,6 @@ static fn_CMS_Close_t           s_fn_CMS_Close = nullptr;
 static fn_CMS_GetMemStream_t    s_fn_CMS_GetMemStream = nullptr;
 static fn_SavedState_Xfer_t     s_fn_SavedState_Store = nullptr;
 static fn_SavedState_Xfer_t     s_fn_SavedState_Retrieve = nullptr;
-static fn_Ser_BoolArr_t         s_fn_Ser_BoolArr = nullptr;
-static fn_Ser_UintArr_t         s_fn_Ser_UintArr = nullptr;
 static void**                   s_ppIntFactory = nullptr;   // InternalFactory::_singleton cell
 static void**                   s_ppAchMgr = nullptr;       // AchievementManager::_singleton cell
 static const uint32_t*          s_pAchInstTypeId = nullptr; // AchievementInstance BaseTypeInfo (typeId at +0)
@@ -186,10 +182,6 @@ void EnsureResolved() {
         ResolveExport("?Store@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z"));
     s_fn_SavedState_Retrieve = reinterpret_cast<fn_SavedState_Xfer_t>(
         ResolveExport("?Retrieve@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z"));
-    s_fn_Ser_BoolArr = reinterpret_cast<fn_Ser_BoolArr_t>(
-        ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEA_NPEBD@Z"));
-    s_fn_Ser_UintArr = reinterpret_cast<fn_Ser_UintArr_t>(
-        ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAIPEBD@Z"));
     s_ppIntFactory = reinterpret_cast<void**>(
         ResolveExport("?_singleton@InternalFactory@Object@@0PEAV12@EA"));
     s_ppAchMgr = reinterpret_cast<void**>(
@@ -330,7 +322,7 @@ extern "C" void EventLog_Serialize_952c0(void* selfVoid, void* stream) {
 
     alignas(8) uint8_t ser[24];
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
-    if (s_fn_Ser_BoolArr) reinterpret_cast<IO::Serializer*>(ser)->Serialize(6, reinterpret_cast<bool*>(self + 0x10), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(6, reinterpret_cast<bool*>(self + 0x10), nullptr);   // B.3.4 bridge
     if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 0) {   // B.3.4 bridge
         uint32_t total = *(uint32_t*)(self + 0x20);
         uint32_t capped = (int)total > 200 ? 200u : total;
@@ -633,13 +625,13 @@ extern "C" void Minimap_Serialize_a57f0(void* selfVoid, void* stream) {
     int n = *(int*)(self + 0x30);
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(n, nullptr);   // B.3.4 bridge
     if (!IsSaving(stream)) s_fn_IntArrResize((void*)(self + 0x28), n);
-    if (s_fn_Ser_UintArr) reinterpret_cast<IO::Serializer*>(ser)->Serialize(n, reinterpret_cast<unsigned int*>(*(void**)(self + 0x28)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(n, reinterpret_cast<unsigned int*>(*(void**)(self + 0x28)), nullptr);   // B.3.4 bridge
 
     // terrain array (+0x18)
     n = *(int*)(self + 0x20);
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(n, nullptr);   // B.3.4 bridge
     if (!IsSaving(stream)) s_fn_IntArrResize((void*)(self + 0x18), n);
-    if (s_fn_Ser_UintArr) reinterpret_cast<IO::Serializer*>(ser)->Serialize(n, reinterpret_cast<unsigned int*>(*(void**)(self + 0x18)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(n, reinterpret_cast<unsigned int*>(*(void**)(self + 0x18)), nullptr);   // B.3.4 bridge
 
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(self + 0x4), nullptr);   // B.3.4 bridge
 

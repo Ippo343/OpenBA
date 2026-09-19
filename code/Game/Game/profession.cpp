@@ -24,18 +24,6 @@
 // Local function pointers resolved at init time
 // ============================================================
 
-// IO::Serializer::Ctor(self, stream, version)
-static void (*s_fn_Serializer_Ctor)(void* self, void* stream, int version) = nullptr;
-// IO::Serializer::Dtor(self)
-static void (*s_fn_Serializer_Dtor)(void* self) = nullptr;
-
-// IO::Serializer::Serialize(int*) via IAT at 0x140152ac8
-static void (*s_fn_Serialize_Int)(void* ser, void* field, const char* name) = nullptr;
-// IO::Serializer::Serialize(bool*) via IAT at 0x140152a58
-static void (*s_fn_Serialize_Bool)(void* ser, void* field, const char* name) = nullptr;
-// IO::Serializer::Serialize(float*) via IAT at 0x140152a60
-static void (*s_fn_Serialize_Float)(void* ser, void* field, const char* name) = nullptr;
-
 // FUN_14000bf40(ExternalPtr*, Serializer*) -- ExternalPtr serialize variant
 static void (*s_fn_ExternalPtr_Serialize2)(void* field, void* serializer) = nullptr;
 // FUN_14000bd30(ExternalPtr*, Serializer*) -- ExternalPtr serialize
@@ -50,44 +38,19 @@ void Profession_InitFuncs() {
     if (s_funcsInited) return;
     s_funcsInited = true;
 
-    uintptr_t iat;
-
-    // Serializer ctor/dtor
-    iat = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (iat) s_fn_Serializer_Ctor = *reinterpret_cast<void(**)(void*, void*, int)>(iat);
-    iat = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (iat) s_fn_Serializer_Dtor = *reinterpret_cast<void(**)(void*)>(iat);
-
-    // Serialize overloads
-    iat = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (iat) s_fn_Serialize_Int = *reinterpret_cast<void(**)(void*, void*, const char*)>(iat);
-    iat = ResolveAddr(Module::Exe, 0x140152a58);
-    if (iat) s_fn_Serialize_Bool = *reinterpret_cast<void(**)(void*, void*, const char*)>(iat);
-    iat = ResolveAddr(Module::Exe, 0x140152a60);
-    if (iat) s_fn_Serialize_Float = *reinterpret_cast<void(**)(void*, void*, const char*)>(iat);
-
     // ExternalPtr serialize helpers (direct exe functions)
     s_fn_ExternalPtr_Serialize2 = reinterpret_cast<void(*)(void*, void*)>(
         ResolveAddr(Module::Exe, 0x14000bf40));
     s_fn_ExternalPtr_Serialize = reinterpret_cast<void(*)(void*, void*)>(
         ResolveAddr(Module::Exe, 0x14000bd30));
 
-    // Standalone fallbacks: the exe IAT dispatch slots above resolve to NULL when
-    // the original exe isn't mapped (standalone). Fall back to the Runtime-resolved
-    // engine_funcs globals so the SAME Serialize works in the standalone exe. The
-    // ExternalPtr variants are stream-identical to fn_ExternalPtr_BuildSerialize.
-    if (!s_fn_Serializer_Ctor)  s_fn_Serializer_Ctor  = reinterpret_cast<void(*)(void*, void*, int)>((uintptr_t)g_fn_Serializer_Ctor);
-    if (!s_fn_Serializer_Dtor)  s_fn_Serializer_Dtor  = reinterpret_cast<void(*)(void*)>((uintptr_t)g_fn_Serializer_Dtor);
-    if (!s_fn_Serialize_Int)    s_fn_Serialize_Int    = reinterpret_cast<void(*)(void*, void*, const char*)>((uintptr_t)g_fn_Serialize_Int);
-    if (!s_fn_Serialize_Bool)   s_fn_Serialize_Bool   = reinterpret_cast<void(*)(void*, void*, const char*)>((uintptr_t)g_fn_Serialize_Bool);
-    if (!s_fn_Serialize_Float)  s_fn_Serialize_Float  = reinterpret_cast<void(*)(void*, void*, const char*)>((uintptr_t)fn_Serializer_Serialize_Float);
+    // Standalone fallbacks: the exe doors above resolve to NULL when the original
+    // exe isn't mapped (standalone). The ExternalPtr variants are stream-identical
+    // to fn_ExternalPtr_BuildSerialize.
     if (!s_fn_ExternalPtr_Serialize2) s_fn_ExternalPtr_Serialize2 = reinterpret_cast<void(*)(void*, void*)>((uintptr_t)fn_ExternalPtr_BuildSerialize);
     if (!s_fn_ExternalPtr_Serialize)  s_fn_ExternalPtr_Serialize  = reinterpret_cast<void(*)(void*, void*)>((uintptr_t)fn_ExternalPtr_BuildSerialize);
 
 #ifdef _DEBUG
-    printf("[Profession] InitFuncs: SerCtor=%p SerDtor=%p SerInt=%p SerBool=%p SerFloat=%p\n",
-           (void*)s_fn_Serializer_Ctor, (void*)s_fn_Serializer_Dtor,
-           (void*)s_fn_Serialize_Int, (void*)s_fn_Serialize_Bool, (void*)s_fn_Serialize_Float);
     printf("[Profession] InitFuncs: ExtPtrSer=%p ExtPtrSer2=%p\n",
            (void*)s_fn_ExternalPtr_Serialize, (void*)s_fn_ExternalPtr_Serialize2);
 #endif
@@ -187,11 +150,7 @@ void* Profession_Slot8(Profession* self) {
 // Original: 0x1400a8f10
 // Creates a Serializer(stream, version=0), then serializes each field.
 void Profession_Serialize(Profession* self, void* stream) {
-    Profession_InitFuncs();   // idempotent; ensures serializer fns resolved (standalone)
-    if (!s_fn_Serializer_Ctor || !s_fn_Serializer_Dtor) {
-        // Cannot serialize without serializer functions
-        return;
-    }
+    Profession_InitFuncs();   // idempotent; ensures the ExternalPtr doors are resolved
 
     // Stack-allocated serializer (24 bytes)
     alignas(8) uint8_t serializer[24];
@@ -211,28 +170,18 @@ void Profession_Serialize(Profession* self, void* stream) {
     reinterpret_cast<System::String*>(&self->stringTool)->Serialize(serializer);  // +0x40
 
     // Serialize numeric fields
-    if (s_fn_Serialize_Int) {
-        // field48 declared int32_t == int door type: cast dropped
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->field48, nullptr);     // +0x48   // B.3.4 bridge
-    }
-    if (s_fn_Serialize_Bool) {
-        // field4C/field4D declared uint8_t, not exactly bool: cast kept
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&self->field4C), nullptr);    // +0x4C   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&self->field4D), nullptr);    // +0x4D   // B.3.4 bridge
-    }
-    if (s_fn_Serialize_Float) {
-        // skillMult1/2 declared float == float door type: cast dropped
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->skillMult1, nullptr); // +0x54   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->skillMult2, nullptr); // +0x58   // B.3.4 bridge
-    }
-    if (s_fn_Serialize_Int) {
-        // priority declared int32_t == int door type: cast dropped
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->priority, nullptr);     // +0x50   // B.3.4 bridge
-    }
-    if (s_fn_Serialize_Bool) {
-        // isAvailable declared uint8_t, not exactly bool: cast kept
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&self->isAvailable), nullptr); // +0x4E   // B.3.4 bridge
-    }
+    // field48 declared int32_t == int door type: cast dropped
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->field48, nullptr);     // +0x48   // B.3.4 bridge
+    // field4C/field4D declared uint8_t, not exactly bool: cast kept
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&self->field4C), nullptr);    // +0x4C   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&self->field4D), nullptr);    // +0x4D   // B.3.4 bridge
+    // skillMult1/2 declared float == float door type: cast dropped
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->skillMult1, nullptr); // +0x54   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->skillMult2, nullptr); // +0x58   // B.3.4 bridge
+    // priority declared int32_t == int door type: cast dropped
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->priority, nullptr);     // +0x50   // B.3.4 bridge
+    // isAvailable declared uint8_t, not exactly bool: cast kept
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&self->isAvailable), nullptr); // +0x4E   // B.3.4 bridge
 
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }

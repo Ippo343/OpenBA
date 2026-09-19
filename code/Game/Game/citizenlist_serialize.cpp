@@ -366,21 +366,7 @@ void ResizeStride08Pair(void* hdr, int newCount) {
 // 0x140151278. Distinct from fn_Serializer_SerializeBulk (slot 0x140152400),
 // which is the BYTE-width overload.
 void SerializeIntArray(void* serializer, int32_t count, void* data) {
-    typedef void (*FnSerIntArr_t)(void*, int, void*, const char*);
-    static FnSerIntArr_t s_fn = nullptr;
-    static bool s_tried = false;
-    if (!s_fn && !s_tried) {
-        s_tried = true;
-        void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151278));
-        if (slot && *slot) s_fn = reinterpret_cast<FnSerIntArr_t>(*slot);
-        else {
-            std::fprintf(stderr, "[CitizenList::Serialize] dispatch slot 0x140151278 "
-                    "(Serialize int-array) unresolved — int-assoc arrays will "
-                    "desync the rest of the stream\n");
-            std::fflush(stderr);
-        }
-    }
-    if (s_fn) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, reinterpret_cast<int*>(data), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, reinterpret_cast<int*>(data), nullptr);   // B.3.4 bridge
 }
 
 void SerializeIntAssocArray(uint8_t* hdr, void* serializer) {

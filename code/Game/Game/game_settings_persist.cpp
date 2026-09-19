@@ -34,32 +34,6 @@
 
 namespace {
 
-// IO::Persistence accessors. Get is a const read that returns whether the key
-// existed; Set stores. Both take (section, key) as plain C strings.
-typedef bool (*fn_Get_Int_t)(const void* self, const char* sec, const char* key, int* out);
-typedef bool (*fn_Get_Bool_t)(const void* self, const char* sec, const char* key, bool* out);
-typedef void (*fn_Set_Int_t)(void* self, const char* sec, const char* key, int value);
-typedef void (*fn_Set_Bool_t)(void* self, const char* sec, const char* key, bool value);
-
-fn_Get_Int_t  s_getInt;
-fn_Get_Bool_t s_getBool;
-fn_Set_Int_t  s_setInt;
-fn_Set_Bool_t s_setBool;
-bool s_resolved;
-
-void ResolveFuncs() {
-    if (s_resolved) return;
-    s_resolved = true;
-    s_getInt  = reinterpret_cast<fn_Get_Int_t>(
-        ResolveExport("?Get@Persistence@IO@@QEBA_NPEBD0AEAH@Z"));
-    s_getBool = reinterpret_cast<fn_Get_Bool_t>(
-        ResolveExport("?Get@Persistence@IO@@QEBA_NPEBD0AEA_N@Z"));
-    s_setInt  = reinterpret_cast<fn_Set_Int_t>(
-        ResolveExport("?Set@Persistence@IO@@QEAAXPEBD0H@Z"));
-    s_setBool = reinterpret_cast<fn_Set_Bool_t>(
-        ResolveExport("?Set@Persistence@IO@@QEAAXPEBD0_N@Z"));
-}
-
 void* PersistenceSingleton() {
     return (g_pPersistenceSingleton && *g_pPersistenceSingleton) ? *g_pPersistenceSingleton
                                                                  : nullptr;
@@ -96,11 +70,9 @@ const BoolKey kBoolKeys[] = {
 // GameSettings_Load — faithful port of 0x140098b60.
 extern "C" void GameSettings_Load(int32_t* settings) {
     if (!settings) return;
-    ResolveFuncs();
     void* p = PersistenceSingleton();
-    if (!p || !s_getInt || !s_getBool) {
-        fprintf(stderr, "[GameSettings] Load SKIPPED — persistence=%p getInt=%p getBool=%p\n",
-                p, (void*)s_getInt, (void*)s_getBool);
+    if (!p) {
+        fprintf(stderr, "[GameSettings] Load SKIPPED — persistence=%p\n", p);
         return;
     }
     // ENDGAME B.3.4a closing: onto IO::Persistence::Get. The DOOR names the
@@ -128,11 +100,9 @@ extern "C" void GameSettings_Load(int32_t* settings) {
 // GameSettings_Save — faithful port of 0x140098970.
 extern "C" void GameSettings_Save(int32_t* settings) {
     if (!settings) return;
-    ResolveFuncs();
     void* p = PersistenceSingleton();
-    if (!p || !s_setInt || !s_setBool) {
-        fprintf(stderr, "[GameSettings] Save SKIPPED — persistence=%p setInt=%p setBool=%p\n",
-                p, (void*)s_setInt, (void*)s_setBool);
+    if (!p) {
+        fprintf(stderr, "[GameSettings] Save SKIPPED — persistence=%p\n", p);
         return;
     }
     // ENDGAME B.3.4a closing: onto IO::Persistence::Set, DOOR-typed as above.

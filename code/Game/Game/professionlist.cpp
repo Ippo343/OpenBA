@@ -27,11 +27,6 @@
 // Local function pointers resolved at init time
 // ============================================================
 
-// IO::Serializer::Ctor(self, stream, version)
-static void (*s_fn_Serializer_Ctor)(void* self, void* stream, int version) = nullptr;
-// IO::Serializer::Dtor(self)
-static void (*s_fn_Serializer_Dtor)(void* self) = nullptr;
-
 // FUN_140018020(ExternalPtr<Profession>*, Serializer*) -- typed ExternalPtr serialize
 // This is a specialized serializer that checks IsDerivedFrom(TypeInfo_Profession).
 static void (*s_fn_ExternalPtrProf_Serialize)(void* field, void* serializer) = nullptr;
@@ -45,28 +40,16 @@ void ProfessionList_InitFuncs() {
     if (s_funcsInited) return;
     s_funcsInited = true;
 
-    uintptr_t iat;
-
-    // Serializer ctor/dtor via IAT
-    iat = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (iat) s_fn_Serializer_Ctor = *reinterpret_cast<void(**)(void*, void*, int)>(iat);
-    iat = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (iat) s_fn_Serializer_Dtor = *reinterpret_cast<void(**)(void*)>(iat);
-
     // FUN_140018020 -- specialized ExternalPtr<Profession> serialize (direct exe function)
     s_fn_ExternalPtrProf_Serialize = reinterpret_cast<void(*)(void*, void*)>(
         ResolveAddr(Module::Exe, 0x140018020));
 
-    // Standalone fallbacks: the exe IAT dispatch slots resolve to NULL when the
-    // original exe isn't mapped. Fall back to the Runtime-resolved engine_funcs
-    // globals so the SAME Serialize works in the standalone exe.
-    if (!s_fn_Serializer_Ctor) s_fn_Serializer_Ctor = reinterpret_cast<void(*)(void*, void*, int)>((uintptr_t)g_fn_Serializer_Ctor);
-    if (!s_fn_Serializer_Dtor) s_fn_Serializer_Dtor = reinterpret_cast<void(*)(void*)>((uintptr_t)g_fn_Serializer_Dtor);
+    // Standalone fallback: the exe door resolves to NULL when the original exe
+    // isn't mapped.
     if (!s_fn_ExternalPtrProf_Serialize) s_fn_ExternalPtrProf_Serialize = reinterpret_cast<void(*)(void*, void*)>((uintptr_t)fn_ExternalPtr_BuildSerialize);
 
 #ifdef _DEBUG
-    printf("[ProfessionList] InitFuncs: SerCtor=%p SerDtor=%p ExtPtrProfSer=%p\n",
-           (void*)s_fn_Serializer_Ctor, (void*)s_fn_Serializer_Dtor,
+    printf("[ProfessionList] InitFuncs: ExtPtrProfSer=%p\n",
            (void*)s_fn_ExternalPtrProf_Serialize);
 #endif
 }
@@ -164,10 +147,7 @@ void* ProfessionList_Slot8(ProfessionList* self) {
 // External::Load may read as the Serialize result. Return a full int so EAX is
 // fully defined.
 int ProfessionList_Serialize(ProfessionList* self, void* stream) {
-    ProfessionList_InitFuncs();   // idempotent; ensures serializer fns resolved (standalone)
-    if (!s_fn_Serializer_Ctor || !s_fn_Serializer_Dtor) {
-        return 1;
-    }
+    ProfessionList_InitFuncs();   // idempotent; ensures the ExternalPtr door is resolved
 
     // Stack-allocated serializer (24 bytes)
     alignas(8) uint8_t serializer[24];

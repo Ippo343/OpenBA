@@ -42,70 +42,22 @@ static constexpr uintptr_t kResizeArr2 = 0x14001c890;  // stride 0x2
 static constexpr uintptr_t kResizeArr3 = 0x14000a590;  // stride 0x1 (byte)
 static constexpr uintptr_t kResizeArr4 = 0x1400021d0;  // stride 0x4
 
-// IO::Serializer dispatch slots used by NameDatabase::Serialize.
-typedef void  (*Ser_Ctor_t)(void* self, void* stream, int version);
-typedef void  (*Ser_Dtor_t)(void* self);
-typedef void  (*Ser_Int_t)(void* ser, void* field, const char* name);     // Serialize(int&)
-typedef void  (*Ser_Byte_t)(void* ser, void* field, const char* name);    // Serialize(uchar&)
-typedef void  (*Ser_UInt_t)(void* ser, void* field, const char* name);    // Serialize(uint&)
-typedef void  (*Ser_Bytes_t)(void* ser, int count, void* data, const char* name);   // SerializeBytes
-typedef void  (*Ser_BulkUShort_t)(void* ser, int count, void* data, const char* name);
-typedef void  (*Ser_BulkByte_t)(void* ser, int count, void* data, const char* name);
-typedef void  (*Ser_BulkInt_t)(void* ser, int count, void* data, const char* name);
 typedef void  (*Resize_t)(void* arrayHeader, int newCount);
 
-static Ser_Ctor_t       s_ctor       = nullptr;
-static Ser_Dtor_t       s_dtor       = nullptr;
-static Ser_Int_t        s_int        = nullptr;
-static Ser_Byte_t       s_byte       = nullptr;
-static Ser_UInt_t       s_uint       = nullptr;
-static Ser_Bytes_t      s_bytes      = nullptr;
-static Ser_BulkUShort_t s_bulkUShort = nullptr;
-static Ser_BulkByte_t   s_bulkByte   = nullptr;
-static Ser_BulkInt_t    s_bulkInt    = nullptr;
 static Resize_t         s_resize1    = nullptr;
 static Resize_t         s_resize2    = nullptr;
 static Resize_t         s_resize3    = nullptr;
 static Resize_t         s_resize4    = nullptr;
 static bool             s_resolved   = false;
 
-template <typename T>
-static T ResolveSlot(uintptr_t slot) {
-    uintptr_t iat = ResolveAddr(Module::Exe, slot);
-    return iat ? *reinterpret_cast<T*>(iat) : nullptr;
-}
-
 static void NameDatabase_ResolveFuncs() {
     if (s_resolved) return;
     s_resolved = true;
-
-    s_ctor       = ResolveSlot<Ser_Ctor_t>(0x140152ad8);
-    s_dtor       = ResolveSlot<Ser_Dtor_t>(0x140152ad0);
-    s_int        = ResolveSlot<Ser_Int_t>(0x140152ac8);
-    s_byte       = ResolveSlot<Ser_Byte_t>(0x140152418);
-    s_uint       = ResolveSlot<Ser_UInt_t>(0x140152a50);
-    s_bytes      = ResolveSlot<Ser_Bytes_t>(0x140152478);
-    s_bulkUShort = ResolveSlot<Ser_BulkUShort_t>(0x140152488);
-    s_bulkByte   = ResolveSlot<Ser_BulkByte_t>(0x140152490);
-    s_bulkInt    = ResolveSlot<Ser_BulkInt_t>(0x140151278);
 
     s_resize1 = reinterpret_cast<Resize_t>(ResolveAddr(Module::Exe, kResizeArr1));
     s_resize2 = reinterpret_cast<Resize_t>(ResolveAddr(Module::Exe, kResizeArr2));
     s_resize3 = reinterpret_cast<Resize_t>(ResolveAddr(Module::Exe, kResizeArr3));
     s_resize4 = reinterpret_cast<Resize_t>(ResolveAddr(Module::Exe, kResizeArr4));
-
-    // Standalone fallbacks via Runtime exports for the serialize overloads that
-    // have no engine_funcs global (the IAT dispatch above already covers both
-    // modes once the slots are registered, but resolve defensively by name too).
-    if (!s_ctor)  s_ctor  = reinterpret_cast<Ser_Ctor_t>((uintptr_t)g_fn_Serializer_Ctor);
-    if (!s_dtor)  s_dtor  = reinterpret_cast<Ser_Dtor_t>((uintptr_t)g_fn_Serializer_Dtor);
-    if (!s_int)   s_int   = reinterpret_cast<Ser_Int_t>((uintptr_t)g_fn_Serialize_Int);
-    if (!s_byte)  s_byte  = reinterpret_cast<Ser_Byte_t>(ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z"));
-    if (!s_uint)  s_uint  = reinterpret_cast<Ser_UInt_t>(ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAIPEBD@Z"));
-    if (!s_bytes) s_bytes = reinterpret_cast<Ser_Bytes_t>(ResolveExport("?SerializeBytes@Serializer@IO@@QEAAXHPEAXPEBD@Z"));
-    if (!s_bulkUShort) s_bulkUShort = reinterpret_cast<Ser_BulkUShort_t>(ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAGPEBD@Z"));
-    if (!s_bulkByte)   s_bulkByte   = reinterpret_cast<Ser_BulkByte_t>(ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAEPEBD@Z"));
-    if (!s_bulkInt)    s_bulkInt    = reinterpret_cast<Ser_BulkInt_t>(ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAHPEBD@Z"));
 }
 
 // ============================================================
@@ -128,7 +80,6 @@ static void NameDatabase_Init(void* mem) {
 extern "C" void NameDatabase_Serialize(void* self, void* stream) {
     if (!self) return;
     NameDatabase_ResolveFuncs();
-    if (!s_ctor || !s_dtor || !s_int) return;
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
 
     alignas(8) uint8_t ser[24];
@@ -148,11 +99,11 @@ extern "C" void NameDatabase_Serialize(void* self, void* stream) {
         uint8_t* p = *(uint8_t**)(s + 0x20);   // element0
         for (int i = 0; i < c1; ++i) {
             // field0: 4 raw bytes
-            if (s_bytes) reinterpret_cast<IO::Serializer*>(ser)->SerializeBytes(4, p + 0x0, nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(ser)->SerializeBytes(4, p + 0x0, nullptr);   // B.3.4 bridge
             // field1: uchar
-            if (s_byte)  reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned char*>(p + 0x4), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned char*>(p + 0x4), nullptr);   // B.3.4 bridge
             // field2: uint
-            if (s_uint)  reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(p + 0x8), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(p + 0x8), nullptr);   // B.3.4 bridge
             p += 0xc;
         }
     }
@@ -161,19 +112,19 @@ extern "C" void NameDatabase_Serialize(void* self, void* stream) {
     int c2 = *(int*)(s + 0x38);
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(c2, nullptr);   // B.3.4 bridge
     if (isLoading() && s_resize2) s_resize2(s + 0x30, c2);
-    if (s_bulkUShort) reinterpret_cast<IO::Serializer*>(ser)->Serialize(c2, reinterpret_cast<unsigned short*>(*(void**)(s + 0x30)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(c2, reinterpret_cast<unsigned short*>(*(void**)(s + 0x30)), nullptr);   // B.3.4 bridge
 
     // --- array3: stride 0x1 (byte buffer) — bulk ---
     int c3 = *(int*)(s + 0x48);
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(c3, nullptr);   // B.3.4 bridge
     if (isLoading() && s_resize3) s_resize3(s + 0x40, c3);
-    if (s_bulkByte) reinterpret_cast<IO::Serializer*>(ser)->Serialize(c3, reinterpret_cast<unsigned char*>(*(void**)(s + 0x40)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(c3, reinterpret_cast<unsigned char*>(*(void**)(s + 0x40)), nullptr);   // B.3.4 bridge
 
     // --- array4: stride 0x4 (int) — bulk ---
     int c4 = *(int*)(s + 0x58);
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(c4, nullptr);   // B.3.4 bridge
     if (isLoading() && s_resize4) s_resize4(s + 0x50, c4);
-    if (s_bulkInt) reinterpret_cast<IO::Serializer*>(ser)->Serialize(c4, reinterpret_cast<int*>(*(void**)(s + 0x50)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(c4, reinterpret_cast<int*>(*(void**)(s + 0x50)), nullptr);   // B.3.4 bridge
 
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }

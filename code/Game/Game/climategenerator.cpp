@@ -35,29 +35,13 @@
 #include <new>
 
 // ============================================================
-// Local function pointers (resolved once)
-// ============================================================
-
-// IO::Serializer::Serialize(float&, const char*) -- via IAT at 0x140152a60
-static void (*s_fn_Serialize_Float)(void* serializer, void* field, const char* name) = nullptr;
-
-// IO::Serializer::Serialize(int count, void* buffer, const char* name) -- bulk serialize
-// Via IAT at 0x140151ea8 (used for climate data block)
-static void (*s_fn_SerializeBulk)(void* serializer, int count, void* buffer, const char* name) = nullptr;
-
-// ============================================================
 // ClimateGenerator_InitFuncs -- resolve local function pointers
 // ============================================================
+// ENDGAME B.3.4a closing: the float and bulk-float Serializer door caches this
+// resolved are gone -- the calls are real IO::Serializer members now. The
+// function itself is declared in climategenerator_funcs.h, so the (now empty)
+// shell stays until that declaration is retired.
 void ClimateGenerator_InitFuncs() {
-    // Float serialize via IAT dispatch slot
-    uintptr_t iatSerFloat = ResolveAddr(Module::Exe, 0x140152a60);
-    if (iatSerFloat)
-        s_fn_Serialize_Float = *reinterpret_cast<void(**)(void*, void*, const char*)>(iatSerFloat);
-
-    // Bulk serialize via IAT dispatch slot (for climate data array)
-    uintptr_t iatSerBulk = ResolveAddr(Module::Exe, 0x140151ea8);
-    if (iatSerBulk)
-        s_fn_SerializeBulk = *reinterpret_cast<void(**)(void*, int, void*, const char*)>(iatSerBulk);
 }
 
 // ============================================================
@@ -116,7 +100,7 @@ void ClimateGenerator_Serialize(ClimateGenerator* self, void* stream) {
     EnsureInit();
     // Create Serializer on stack (24 bytes)
     alignas(8) uint8_t serializer[24];
-    if (g_fn_Serializer_Ctor) ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize ExternalPtr at +0x20
     if (fn_ExternalPtr_Serialize2)
@@ -126,32 +110,26 @@ void ClimateGenerator_Serialize(ClimateGenerator* self, void* stream) {
     reinterpret_cast<System::String*>(reinterpret_cast<uint8_t*>(self) + 0x28)->Serialize(serializer);
 
     // Serialize bool at +0x30 — declared uint8_t, not exactly bool: cast kept
-    if (g_fn_Serialize_Bool)
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(self) + 0x30), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(self) + 0x30), nullptr);   // B.3.4 bridge
 
     // Serialize float fields: temperatureBase(+0x34), tempVariation(+0x38),
     // precipitation(+0x3C), windSpeed(+0x40) — all declared float: cast dropped
-    if (s_fn_Serialize_Float) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->temperatureBase, nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->tempVariation, nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->precipitation, nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->windSpeed, nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->temperatureBase, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->tempVariation, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->precipitation, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->windSpeed, nullptr);   // B.3.4 bridge
 
     // Serialize climate data block: 0x30 (48) floats = 0xC0 bytes at +0x44 — declared
     // uint8_t[0xC0]: reinterpret to float* per the float-array door
-    if (s_fn_SerializeBulk)
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(0x30, reinterpret_cast<float*>(self->_climateData), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(0x30, reinterpret_cast<float*>(self->_climateData), nullptr);   // B.3.4 bridge
 
     // Serialize float fields at end: field104(+0x104), field108(+0x108), field10C(+0x10C) — declared float: cast dropped
-    if (s_fn_Serialize_Float) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field104, nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field108, nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field10C, nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field104, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field108, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field10C, nullptr);   // B.3.4 bridge
 
     // Destroy serializer
-    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
