@@ -195,11 +195,26 @@ RT_COMPANION_CTOR(DeviceData,         Device)
 // is the mirror of this: comparing a field neither side writes is the failure,
 // and so is writing one retail leaves.
 // ============================================================================
+// ENDGAME B.3.5 block A — THE BODY MOVED INTO THE MEMBER. `~XData()` is now a
+// real, non-virtual, public destructor on the real abstract class
+// (runtime/types/video/CompanionData.h); the twelve member bodies are at the
+// bottom of this file, inside `namespace Video`, and each door below is a
+// one-line QUALIFIED non-virtual delegation.
+//
+// WHY THE QUALIFICATION IS LOAD-BEARING HERE TOO (B34_BRIEFS A.1): a live
+// `*Data` object wears dx11's vtable, whose slot 0 is the derived scalar
+// deleting destructor, which is what CALLS this door. An unqualified virtual
+// call would dispatch back into it. `~XData()` is not in any slot, so the
+// qualification is what keeps this a base-subobject destructor call and not a
+// re-entry — the same reason RULE B5-3 forbids `DeletingDtor(0)` on the dx11
+// side.
+//
+// The receiver is still a `CompanionData*` because the ctor doors above hand
+// out that view and dx11 hands us a raw pointer, so each door bridges with a
+// `reinterpret_cast` (`// B.3.5 bridge`, which is what the B.4 metric counts).
 #define RT_COMPANION_DTOR(CLASS)                                               \
     void Video_##CLASS##_Dtor(CompanionData* self) {                           \
-                          \
-        self->vtable = Vt_##CLASS();                                           \
-                                                                      \
+        reinterpret_cast<Video::CLASS*>(self)->Video::CLASS::~CLASS();  /* B.3.5 bridge */ \
     }
 
 RT_COMPANION_DTOR(RenderBufferData)
@@ -214,6 +229,76 @@ RT_COMPANION_DTOR(ContextData)
 RT_COMPANION_DTOR(DeviceData)
 
 #undef RT_COMPANION_DTOR
+
+// ============================================================================
+// The twelve member bodies — `Video::XData::~XData()`.
+//
+// This block is at `namespace Video` scope and comes AFTER the `RtVideo`
+// using-declarations and the anonymous namespace, per B34_BRIEFS A.2: a member
+// of `Video::X` cannot be defined inside a sibling namespace, and the
+// anonymous-namespace helpers above are still reachable here by unqualified
+// name because they are members of the global namespace's declarative region.
+//
+// THE WHOLE BODY IS THE BASE-CLASS VPTR RE-STAMP, as retail's is:
+//
+//   1800f8cf0  LEA RAX,[0x180158c30]      ; ??_7DeviceData@Video@@6B@
+//   1800f8cf7  MOV qword ptr [RCX],RAX
+//   1800f8cfa  RET
+//
+// the standard MSVC idiom of running a destructor body under its OWN class's
+// vtable rather than a derived override. There is nothing else to free — these
+// bases own no memory; the derived dx11 object's scalar deleting destructor
+// does the `MemFree`, and it calls this as its base-destructor step.
+//
+// THE STORE IS WRITTEN OUT BY HAND AND IS NOT LEFT TO THE COMPILER. GCC emits
+// its own vptr store at the top of a polymorphic destructor, but it stores
+// GCC's vtable for the class — and these twelve objects are expected by the
+// rest of the tree, by `standalone/rt_data_mint_tables.inc` and by the
+// `RT_DELDTOR` rows to be wearing the MINTED `??_7XData@Video@@6B@` address
+// (B35_RULES 11 keeps those rows for the whole of step 5). So the address the
+// accessors above resolve is stored explicitly, last, exactly as retail's LEA
+// operand does. The per-class operand table is in this file's banner and every
+// one of the twelve was checked against its own ctor AND dtor.
+//
+// The `owner` field at +0x08 is deliberately LEFT ALONE. Retail does not clear
+// it and neither do we — reference_oracle_must_not_compare_unwritten_bytes.md
+// is the mirror of this: comparing a field neither side writes is the failure,
+// and so is writing one retail leaves.
+// ============================================================================
+namespace Video {
+
+#define RT_COMPANION_DTOR_BODY(CLASS)                                          \
+    CLASS::~CLASS() {                                                          \
+        *reinterpret_cast<void**>(this) = Vt_##CLASS();                        \
+    }
+
+RT_COMPANION_DTOR_BODY(RenderBufferData)
+RT_COMPANION_DTOR_BODY(VideoProgramData)
+RT_COMPANION_DTOR_BODY(PixelProgramData)
+RT_COMPANION_DTOR_BODY(VertexProgramData)
+RT_COMPANION_DTOR_BODY(VertexLayoutData)
+RT_COMPANION_DTOR_BODY(VertexBufferData)
+RT_COMPANION_DTOR_BODY(IndexBufferData)
+RT_COMPANION_DTOR_BODY(ConstantBufferData)
+RT_COMPANION_DTOR_BODY(ContextData)
+RT_COMPANION_DTOR_BODY(DeviceData)
+
+// The remaining two. Their registered DOORS are elsewhere and this block does
+// NOT touch them: `??1ImageBufferData` is `Video_ImageBufferData_Dtor` in
+// `buffers.cpp` (Wave 6 lane C) and `??1RenderStateData` is in `device.cpp`
+// (Wave 6 lane B) — see this file's banner on why registering a name twice is
+// silent. The member has to exist for all twelve or `Video::ImageBufferData`
+// would be a class whose declared destructor never links, so the bodies live
+// here with the other ten and those two doors become one-line delegations when
+// block C takes `buffers.cpp` and block D takes `device.cpp`. Until then the
+// same three-instruction store exists in two places, which is a duplicate of
+// four instructions and not of a decision.
+RT_COMPANION_DTOR_BODY(ImageBufferData)
+RT_COMPANION_DTOR_BODY(RenderStateData)
+
+#undef RT_COMPANION_DTOR_BODY
+
+}  // namespace Video
 
 // ============================================================================
 // Video::IndexBuffer::Lock / Unlock  —  0x1800f34e0 / 0x1800f34c0

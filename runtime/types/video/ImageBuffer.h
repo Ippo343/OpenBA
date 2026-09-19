@@ -45,6 +45,10 @@
 #include <cstdint>
 #include <cstddef>
 
+// ENDGAME B.3.5 block A — `Video::ImageBufferData` and its POD view live here
+// now, with the other eleven companion bases (RULE B5-1 / B4b-1).
+#include "CompanionData.h"
+
 // ============================================================
 // Object::CompiledExternal base (0x20 bytes)
 // Ctor @ 0x1800bb920 (??0CompiledExternal@Object@@QEAA@XZ)
@@ -135,23 +139,12 @@ static_assert(offsetof(ImageBuffer, field58) == 0x58, "field58 at +0x58");
 static_assert(offsetof(ImageBuffer, platformData) == 0x60, "platformData at +0x60");
 
 // ============================================================
-// Video::ImageBufferData — the RUNTIME-side abstract base (0x10 bytes).
-// This is NOT dx11::ImageBufferData (dx11/types/VideoDX11Data.h); it is the
-// pure-virtual base Runtime-x64.dll itself defines, that dx11's derived
-// class inherits from. Runtime owns exactly one method on it in this lane:
-// the dtor, which resets the vtable pointer to this base and does nothing
-// else (the MSVC "restore this class's vptr" idiom — see rt_diff notes in
-// buffers.cpp).
+// Video::ImageBufferData — MOVED OUT OF THIS FILE by ENDGAME B.3.5 block A.
 //
-// Decompiled from:
-//   Ctor(ImageBuffer*):  0x1800f8c90 (??0ImageBufferData@Video@@QEAA@PEAVImageBuffer@1@@Z) — NOT this lane's scope
-//   Copy ctor:           0x18007dd80 (??0ImageBufferData@Video@@QEAA@AEBV01@@Z) — NOT this lane's scope
-//   Dtor:                0x1800f8e10 (??1ImageBufferData@Video@@UEAA@XZ)
+// The retail name is now the real abstract class `Video::ImageBufferData` in
+// CompanionData.h, along with the other eleven `*Data` bases (RULE B5-1), and this
+// file's former POD lives there as `RtVideo::ImageBufferData` (RULE B4b-1).
+// There is ONE definition of the two fields; the alias below keeps the global
+// spelling `ImageBufferData` that `runtime/src/video/buffers.cpp` uses.
 // ============================================================
-struct ImageBufferData {
-    void* vtable;       // +0x00
-    void* imageBuffer;  // +0x08  owning Video::ImageBuffer* (set by the ctor, untouched by the dtor)
-};
-static_assert(sizeof(ImageBufferData) == 0x10, "ImageBufferData must be 0x10 bytes");
-static_assert(offsetof(ImageBufferData, vtable) == 0x00, "vtable at +0x00");
-static_assert(offsetof(ImageBufferData, imageBuffer) == 0x08, "imageBuffer at +0x08");
+using RtVideo::ImageBufferData;
