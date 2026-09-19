@@ -259,19 +259,19 @@ void ClearArea_Serialize(ClearArea* self, void* stream) {
     s_fn_IBP_Serialize(&self->field_68, serializerBuf);
 
     // Serialize clearTrees bool at +0x70
-    s_fn_Serialize_Bool(serializerBuf, &self->field_70, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<bool*>(&self->field_70), nullptr);   // B.3.4 bridge
 
     // Version >= 1: serialize additional fields
-    int version = s_fn_Serializer_GetVersion(serializerBuf);
+    int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
     if (version > 0) {
         // Serialize cell BST at +0x58
         s_fn_BST_Serialize_Cell(&self->field_58, serializerBuf);
 
         // Serialize clearGround bool at +0x71
-        s_fn_Serialize_Bool(serializerBuf, &self->field_71, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<bool*>(&self->field_71), nullptr);   // B.3.4 bridge
 
         // Serialize clearBuildings bool at +0x72
-        s_fn_Serialize_Bool(serializerBuf, &self->field_72, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<bool*>(&self->field_72), nullptr);   // B.3.4 bridge
     }
 
     // Destroy serializer

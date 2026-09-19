@@ -28,6 +28,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Persistence.h"   // ENDGAME B.3.4a closing: Persistence::Get/Set members
 #include <cstdint>
 #include <cstdio>
 
@@ -102,11 +103,15 @@ extern "C" void GameSettings_Load(int32_t* settings) {
                 p, (void*)s_getInt, (void*)s_getBool);
         return;
     }
+    // ENDGAME B.3.4a closing: onto IO::Persistence::Get. The DOOR names the
+    // overload (int& / bool&), as §7.3 requires — the bool keys are one byte at
+    // settings+0xC/+0x14/+0x18 and must not pick the int& overload.
     for (const auto& k : kIntKeys)
-        s_getInt(p, "Game", k.key, &settings[k.index]);
+        reinterpret_cast<const IO::Persistence*>(p)->Get("Game", k.key, settings[k.index]);   // B.3.4 bridge
     for (const auto& k : kBoolKeys)
-        s_getBool(p, "Game", k.key,
-                  reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(settings) + k.byteOffset));
+        reinterpret_cast<const IO::Persistence*>(p)->Get(
+            "Game", k.key,
+            *reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(settings) + k.byteOffset));   // B.3.4 bridge
 
     fprintf(stderr, "[GameSettings] Load: LastTerrain=%d LastMapSize=%d LastClimate=%d "
             "LastStart=%d LastDisaster=%d (UIScale=%d AutosaveInterval=%d)\n",
@@ -130,11 +135,13 @@ extern "C" void GameSettings_Save(int32_t* settings) {
                 p, (void*)s_setInt, (void*)s_setBool);
         return;
     }
+    // ENDGAME B.3.4a closing: onto IO::Persistence::Set, DOOR-typed as above.
     for (const auto& k : kIntKeys)
-        s_setInt(p, "Game", k.key, settings[k.index]);
+        reinterpret_cast<IO::Persistence*>(p)->Set("Game", k.key, settings[k.index]);   // B.3.4 bridge
     for (const auto& k : kBoolKeys)
-        s_setBool(p, "Game", k.key,
-                  *(reinterpret_cast<uint8_t*>(settings) + k.byteOffset) != 0);
+        reinterpret_cast<IO::Persistence*>(p)->Set(
+            "Game", k.key,
+            *(reinterpret_cast<uint8_t*>(settings) + k.byteOffset) != 0);   // B.3.4 bridge
 
     fprintf(stderr, "[GameSettings] Save: LastTerrain=%d LastMapSize=%d LastClimate=%d "
             "LastStart=%d LastDisaster=%d\n",

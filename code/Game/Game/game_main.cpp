@@ -27,6 +27,7 @@
 #include "resolve.h"
 #include "io/Modification.h"   // ENDGAME B.3.4 caller batch P
 #include "io/Persistence.h"    // ENDGAME B.3.4 caller batch P
+#include "io/FileSystem.h"     // ENDGAME B.3.4a closing: FileSystem::ClosePackages
 #include "UpdateLoop.h"
 #include "Game/game.h"
 #include "Game/inputbindings.h"
@@ -400,10 +401,12 @@ static void ShutdownEngineStaged(void* engineP) {
     }
 
     // 13. FileSystem::ClosePackages
+    // ENDGAME B.3.4a closing: onto IO::FileSystem::ClosePackages. The
+    // ResolveFn readiness guard is left in place for now, exactly as batch P
+    // left step 12's — guard and door retire together in the next commit.
     if (void* fs = load_ptr(0x670)) {
-        if (auto fn = ResolveFn<void(*)(void*)>(
-                "?ClosePackages@FileSystem@IO@@QEAAXXZ"))
-            fn(fs);
+        if (ResolveFn<void(*)(void*)>("?ClosePackages@FileSystem@IO@@QEAAXXZ"))
+            reinterpret_cast<IO::FileSystem*>(fs)->ClosePackages();   // B.3.4 bridge
     }
 
     // (14+ deliberately omitted — see header comment.)

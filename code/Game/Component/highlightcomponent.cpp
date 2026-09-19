@@ -16,6 +16,8 @@
 #include "Component/highlightcomponent_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4a closing: the stream-scope ctor/dtor pair
+#include <new>
 #include <cstdint>
 #include <cstdio>
 
@@ -89,24 +91,16 @@ void HighlightComponent_Shutdown(HighlightComponent* self, void* stream) {
     // for every object after this one. Use the globals engine_funcs resolves
     // (the same ones ComponentEntity::Serialize uses) and say so loudly if
     // they are missing. See reference_null_guard_on_a_serializer_call_is_a_desync.
-    uint8_t serializer[24];
-    fn_SerCtor_t  ctor = s_fn_Serializer_Ctor ? s_fn_Serializer_Ctor
-                                              : (fn_SerCtor_t)g_fn_Serializer_Ctor;
-    fn_SerDtor_t  dtor = s_fn_Serializer_Dtor ? s_fn_Serializer_Dtor
-                                              : (fn_SerDtor_t)g_fn_Serializer_Dtor;
-    if (ctor && dtor) {
-        ctor(serializer, stream, 0);
-        dtor(serializer);
-    } else {
-        static bool s_warned = false;
-        if (!s_warned) {
-            s_warned = true;
-            fprintf(stderr, "[HighlightComp::Ser] *** Serializer ctor/dtor NULL -- "
-                            "the 16-byte scope is NOT being read and the stream is "
-                            "now DESYNCED.\n");
-            fflush(stderr);
-        }
-    }
+    //
+    // ENDGAME B.3.4a closing: the ternary picked the file-static door, else the
+    // global door; the else arm printed the desync warning when BOTH were null.
+    // `IO::Serializer` is a real class, so the scope is emitted unconditionally
+    // and the "ctor/dtor NULL" state the else arm reported no longer exists.
+    // The warning is deleted for that reason — the scope it warned about being
+    // skipped is now the only path.
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

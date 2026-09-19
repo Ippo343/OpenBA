@@ -284,12 +284,12 @@ void WorkBase_Serialize_f7400(void* self, void* stream) {
     if (!g_fn_Serializer_Ctor) return;
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge
 
-    if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(reinterpret_cast<void*>(s + 0x10), ser);
+    if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(s + 0x10)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
     if (*reinterpret_cast<void**>(s + 0x10) && fn_IsDerivedFrom && g_TypeId_ComponentEntity) {
         if (!fn_IsDerivedFrom(*reinterpret_cast<void**>(s + 0x10), *g_TypeId_ComponentEntity))
             *reinterpret_cast<void**>(s + 0x10) = nullptr;
     }
-    if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(reinterpret_cast<void*>(s + 0x18), ser);
+    if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(s + 0x18)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
     if (*reinterpret_cast<void**>(s + 0x18) && fn_IsDerivedFrom && s_pTid_3050) {
         if (!fn_IsDerivedFrom(*reinterpret_cast<void**>(s + 0x18), *s_pTid_3050))
             *reinterpret_cast<void**>(s + 0x18) = nullptr;

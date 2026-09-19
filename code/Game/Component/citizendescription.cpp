@@ -119,14 +119,14 @@ void CitizenDescription_Serialize(void* self, void* stream) {
     F(0xc0);
     F(0xd8);
 
-    // float[3] bulk at +0xdc (dispatch slot 0x140151ea8)
-    {
-        fn_SerFloatArray_t f = nullptr;
-        uintptr_t slot = ResolveAddr(Module::Exe, 0x140151ea8);
-        if (slot) f = *reinterpret_cast<fn_SerFloatArray_t*>(slot);
-        if (f) f(serializer, 3, reinterpret_cast<float*>(s + 0xdc), nullptr);
-        else { F(0xdc); F(0xe0); F(0xe4); }  // stream-equivalent fallback
-    }
+    // float[3] bulk at +0xdc (was dispatch slot 0x140151ea8).
+    // ENDGAME B.3.4a closing: the else arm was a *stream-equivalent* fallback —
+    // three scalar floats write the same bytes as one float[3] — taken only
+    // when the door failed to resolve. `IO::Serializer::Serialize(int, float*,
+    // const char*)` is a member now and cannot fail to resolve, so the bulk
+    // form is the only path and the three-scalar spelling of the same bytes
+    // goes with the door that made it necessary.
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(3, reinterpret_cast<float*>(s + 0xdc), nullptr);   // B.3.4 bridge
 
     F(0x48); F(0x4c); F(0x50); F(0x54); F(0x58); F(0x5c); F(0x60);
     F(0xc4); F(0xd4); F(0xc8); F(0xcc); F(0xd0);
