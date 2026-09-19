@@ -66,6 +66,9 @@
 #include "../../types/system/String.h"
 #include "../../types/video/Context.h"        // Video::Context::AssignConstants
 #include "../../types/video/ConstantBuffer.h"  // Video::ConstantBuffer
+// ENDGAME B.3.5 block J: the real Video::ConstantBufferData, block A's abstract
+// base, whose four slots this file dispatches through.
+#include "../../types/video/CompanionData.h"
 
 // ENDGAME B.3.5 block D1. `Video::ConstantBuffer` and `Video::Context` are real
 // classes now; all five bodies below MOVED onto their members and every
@@ -425,13 +428,29 @@ void ComputeOffsets(Video::ConstantBuffer* self) {
         running += data[i].size;
     }
 }
-using CompanionFn1 = bool (*)(void*);
+// ENDGAME B.3.5 block J, COORDINATOR RULING: the four hand-inlined companion
+// dispatches in this file are VIRTUAL CALLS on `Video::ConstantBufferData` (block
+// A, runtime/types/video/CompanionData.h). `_platformData` stays a pinned `void*`
+// at +0x40 that dx11 reads, and the object behind it is a
+// `VideoDX11::ConstantBufferData` that does not derive in C++ (RULE B5-8's declared
+// leave), so each receiver takes one `// B.3.5 bridge` cast — but the DISPATCH is
+// unchanged: the same live vptr at +0x00, indexed at the same byte offset, with the
+// index checked by the compiler now. `vt[1]` is slot 1 `Create()`, `vt[3]` is slot 3
+// `SlotIndexPlusOne()`, and `vt[+0x10]` is slot 2 `Bind(...)`.
+//
+// The `CompanionFn1` typedef is gone with its two users.
+}  // namespace
+
+namespace {
+// B.3.5 bridge — `_platformData` is a pinned `void*` field, by ABI.
+inline Video::ConstantBufferData* Companion(void* platformData) {
+    return reinterpret_cast<Video::ConstantBufferData*>(platformData);
+}
 }  // namespace
 
 bool Video::ConstantBuffer::PlatformCreate() {
     if (void* companion = _platformData) {
-        void** vt = *reinterpret_cast<void***>(companion);
-        return reinterpret_cast<CompanionFn1>(vt[1])(companion);   // tail JMP +0x08
+        return Companion(companion)->Create();                     // tail JMP +0x08
     }
     ComputeOffsets(this);
     return true;                                                   // MOV AL,1
@@ -439,8 +458,7 @@ bool Video::ConstantBuffer::PlatformCreate() {
 
 void Video::ConstantBuffer::EndConstants(int32_t /*unread*/) {
     if (void* companion = _platformData) {
-        void** vt = *reinterpret_cast<void***>(companion);
-        (void)reinterpret_cast<CompanionFn1>(vt[1])(companion);
+        (void)Companion(companion)->Create();
         return;
     }
     ComputeOffsets(this);
@@ -467,8 +485,7 @@ void Video::ConstantBuffer::EndConstants(int32_t /*unread*/) {
 int32_t Video::ConstantBuffer::GetNextUploadIndex() const {
     void* companion = _platformData;
     if (!companion) return _uploadIndex + 1;
-    void** vt = *reinterpret_cast<void***>(companion);
-    return reinterpret_cast<int32_t (*)(void*)>(vt[3])(companion);
+    return Companion(companion)->SlotIndexPlusOne();   // +0x18, slot 3
 }
 
 // ============================================================================
@@ -485,17 +502,21 @@ int32_t Video::ConstantBuffer::GetNextUploadIndex() const {
 // are still registered by `companion_data.cpp`, exactly where B35_FILEMAP says
 // they are.
 //
-// The dispatch is NOT `_platformData->Bind(...)` on the real
-// `Video::ConstantBufferData` class (block A's, CompanionData.h) even though it
-// now exists: the object behind the pointer is a `VideoDX11::ConstantBufferData`,
-// which is RULE B5-8's declared leave and does not derive in C++. The byte-offset
-// dispatch is what the seam guarantees; converting it belongs to block J.
+// ENDGAME B.3.5 block J: this IS block J, and it converts. `+0x10` is slot 2 of
+// `Video::ConstantBufferData`, which CompanionData.h names `Bind`; the virtual call
+// reads the same live vptr at the same offset. The receiver keeps its bridge cast
+// because `_platformData` is a pinned `void*`.
+//
+// AND THE SLOT'S DECLARED SIGNATURE WAS WRONG, which this conversion is what
+// found. CompanionData.h had the fourth parameter as `void* unused2`; retail's own
+// mangling of THIS function — `?Bind@ConstantBuffer@Video@@QEAAXAEAVContext@2@PEAXHH@Z`
+// — says `(Context&, void*, int, int)`, and `?BindResources@Context@Video@@`'s five
+// dispatches build that argument with `XOR R9D,R9D`, a DWORD zero. Corrected there
+// (with the disassembly), so `first` passes as the int it always was instead of
+// through a pointer cast.
 void Video::ConstantBuffer::Bind(Context& context, void* data,
                                 int32_t first, int32_t count) {
-    using Fn = void (*)(void*, void*, void*, int, int);
-    Fn slot = *reinterpret_cast<Fn*>(
-        static_cast<uint8_t*>(*reinterpret_cast<void**>(_platformData)) + 0x10);
-    slot(_platformData, &context, data, first, count);
+    Companion(_platformData)->Bind(&context, data, first, count);
 }
 
 extern "C" bool RtVideo_ConstantBuffer_PlatformCreate(void* self) {

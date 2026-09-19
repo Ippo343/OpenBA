@@ -151,6 +151,9 @@
 // CONCRETE `*Data` classes and the 84-slot seam remain the declared leave of
 // RULE B5-8; only the Runtime-side base is a class.
 #include "video/CompanionData.h"
+// ENDGAME B.3.5 block J, RULE B5-14: the real `Video::ImageBuffer`, whose nine
+// query members replace nine of this file's table-driven Runtime imports.
+#include "video/ImageBuffer.h"
 
 #include <windows.h>
 #include <d3d11.h>
@@ -172,15 +175,19 @@ namespace {
 // DLL resolves.
 // ============================================================
 struct Imports {
-    int   (*Width)(void*);           // ?Width@ImageBuffer@Video@@QEBAHXZ
-    int   (*Height)(void*);          // ?Height@ImageBuffer@Video@@QEBAHXZ
-    bool  (*IsDynamic)(void*);       // ?IsDynamic@ImageBuffer@Video@@QEBA_NXZ
-    bool  (*IsCompressed)(void*);    // ?IsCompressed@ImageBuffer@Video@@QEBA_NXZ
-    bool  (*IsRenderBuffer)(void*);  // ?IsRenderBuffer@ImageBuffer@Video@@QEBA_NXZ
-    bool  (*IsDepthBuffer)(void*);   // ?IsDepthBuffer@ImageBuffer@Video@@QEBA_NXZ
-    int   (*GetLevelCount)(void*);   // ?GetLevelCount@ImageBuffer@Video@@QEBAHXZ
-    bool  (*IsRendered)(void*);      // ?IsRendered@ImageBuffer@Video@@QEBA_NXZ
-    bool  (*IsGenerated)(void*);     // ?IsGenerated@ImageBuffer@Video@@QEBA_NXZ
+    // ENDGAME B.3.5 block J, RULE B5-14 — THE NINE `Video::ImageBuffer` ROWS ARE
+    // GONE. Each was a mangled name resolved into a function pointer and called
+    // indirectly; `Video::ImageBuffer` is a real class (runtime/types/video/
+    // ImageBuffer.h, bodies in runtime/src/video/buffers.cpp) and every one of
+    // them is a const member call now, through the one `ImgOf` bridge below:
+    //   ?Width@ ?Height@ ?GetLevelCount@   -> int  members
+    //   ?IsDynamic@ ?IsCompressed@ ?IsRenderBuffer@ ?IsDepthBuffer@
+    //   ?IsRendered@ ?IsGenerated@         -> bool members
+    // `MemAlloc`/`MemFree` and the two singleton reads STAY (the allocator is a
+    // door; the singletons are RULE B4b-4 static-storage reads), so `g_imOk` is
+    // still an all-or-nothing test over everything this file resolves at run time
+    // and every `if (!GetImports())` guard stays. The 84-slot seam and
+    // `Dx11SeamInstall()`'s completeness check are untouched (RULE B5-8).
     // ENDGAME B.3.5 block C, RULE B5-3: `void (*BaseDtor)(void*)` —
     // `??1ImageBufferData@Video@@UEAA@XZ` — is GONE from this struct. It was
     // spelling 9 of the nine caller bindings (RULE B5-14), a mangled name
@@ -204,15 +211,6 @@ const Imports* GetImports() {
         g_imResolved = true;
         std::memset(&g_im, 0, sizeof(g_im));
 
-        g_im.Width          = (int  (*)(void*))ResolveExport("?Width@ImageBuffer@Video@@QEBAHXZ");
-        g_im.Height         = (int  (*)(void*))ResolveExport("?Height@ImageBuffer@Video@@QEBAHXZ");
-        g_im.IsDynamic      = (bool (*)(void*))ResolveExport("?IsDynamic@ImageBuffer@Video@@QEBA_NXZ");
-        g_im.IsCompressed   = (bool (*)(void*))ResolveExport("?IsCompressed@ImageBuffer@Video@@QEBA_NXZ");
-        g_im.IsRenderBuffer = (bool (*)(void*))ResolveExport("?IsRenderBuffer@ImageBuffer@Video@@QEBA_NXZ");
-        g_im.IsDepthBuffer  = (bool (*)(void*))ResolveExport("?IsDepthBuffer@ImageBuffer@Video@@QEBA_NXZ");
-        g_im.GetLevelCount  = (int  (*)(void*))ResolveExport("?GetLevelCount@ImageBuffer@Video@@QEBAHXZ");
-        g_im.IsRendered     = (bool (*)(void*))ResolveExport("?IsRendered@ImageBuffer@Video@@QEBA_NXZ");
-        g_im.IsGenerated    = (bool (*)(void*))ResolveExport("?IsGenerated@ImageBuffer@Video@@QEBA_NXZ");
         g_im.MemAlloc       = (void* (*)(uint64_t, int))ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z");
         g_im.MemFree        = (void  (*)(void*))ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
         g_im.deviceSingleton = (void**)ResolveExport("?_singleton@Device@Video@@0PEAV12@EA");
@@ -232,6 +230,15 @@ const Imports* GetImports() {
 inline int32_t  IbI32(void* ib, size_t off) { return *reinterpret_cast<int32_t*> (static_cast<uint8_t*>(ib) + off); }
 inline uint32_t IbU32(void* ib, size_t off) { return *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(ib) + off); }
 inline void     IbSet(void* ib, size_t off, int32_t v) { *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ib) + off) = v; }
+
+// ENDGAME B.3.5 block J — the bridge cast the nine converted `Video::ImageBuffer`
+// calls go through. `ImageBufferData::imageBuffer` (+0x08) is a
+// `Video::ImageBuffer*` held as a `void*` on this side of the seam (RULE B5-8's
+// declared leave), so the step across is a reinterpret_cast, named once.
+// The FIELD reads above stay raw offsets: they are not doors.
+inline const ::Video::ImageBuffer* ImgOf(void* imageBuffer) {
+    return reinterpret_cast<const ::Video::ImageBuffer*>(imageBuffer);  // B.3.5 bridge
+}
 
 // Video::Device* (never null once the video interface exists — the shipped code
 // does not check either).
@@ -378,7 +385,7 @@ void CreateSamplerState(ImageBufferData* self, const Imports* im) {
     desc.BorderColor[3] = 0.0f;
     desc.MinLOD         = 0.0f;
     // 0x180018c50 = 1.0f (verified: bytes 00 00 80 3f).
-    desc.MaxLOD         = (flags & 1) ? (static_cast<float>(im->GetLevelCount(ib)) - 1.0f) : 0.0f;
+    desc.MaxLOD         = (flags & 1) ? (static_cast<float>(ImgOf(ib)->GetLevelCount()) - 1.0f) : 0.0f;
 
     D3DDevice(ActiveDeviceData(device))
         ->CreateSamplerState(&desc, reinterpret_cast<ID3D11SamplerState**>(&self->sampler));
@@ -397,7 +404,7 @@ void Destructor(ImageBufferData* self, const Imports* im) {
     void* const ib = self->imageBuffer;
 
     // Untrack. Note bits 4|5|6 = 0x70 here, unlike slot 3 which only tests bit 6.
-    if (im->IsGenerated(ib) || (IbU32(ib, 0x34) & 0x70) != 0 || im->IsRendered(ib))
+    if (ImgOf(ib)->IsGenerated() || (IbU32(ib, 0x34) & 0x70) != 0 || ImgOf(ib)->IsRendered())
         UntrackImageBuffer(ActiveDeviceData(VideoDevice(im)), ib);
 
     ReleaseInterfaces(self);
@@ -576,17 +583,17 @@ bool ImageBufferData_Create(ImageBufferData* self, const ImageLevelArray* levels
     }
 
     void* const ib = self->imageBuffer;
-    const int width  = im->Width(ib);
-    const int height = im->Height(ib);
+    const int width  = ImgOf(ib)->Width();
+    const int height = ImgOf(ib)->Height();
 
     // Degenerate, non-generated, non-rendered buffer: succeed and do nothing.
-    if (!im->IsGenerated(ib) && !im->IsRendered(ib) && (width == 0 || height == 0))
+    if (!ImgOf(ib)->IsGenerated() && !ImgOf(ib)->IsRendered() && (width == 0 || height == 0))
         return true;
 
     DeviceData* const dd = ActiveDeviceData(VideoDevice(im));
 
     // Add to the reset registry. Only bit 6 here (the dtor also honours 4 and 5).
-    if (im->IsGenerated(ib) || im->IsRendered(ib) || ((IbU32(ib, 0x34) >> 6) & 1) != 0)
+    if (ImgOf(ib)->IsGenerated() || ImgOf(ib)->IsRendered() || ((IbU32(ib, 0x34) >> 6) & 1) != 0)
         TrackImageBuffer(dd, ib, im);
 
     ReleaseInterfaces(self);
@@ -632,7 +639,7 @@ bool ImageBufferData_Create(ImageBufferData* self, const ImageLevelArray* levels
             // Row length in pixels, or in 4x4 blocks for a BC format. The
             // original is `(w + (w<0 ? 3 : 0)) >> 2`, i.e. C truncating /4.
             int rowUnits = levelWidth;
-            if (im->IsCompressed(ib)) rowUnits = levelWidth / 4;
+            if (ImgOf(ib)->IsCompressed()) rowUnits = levelWidth / 4;
             entry.SysMemPitch      = static_cast<UINT>(kFormatBytes[IbI32(ib, 0x30)] * rowUnits);
             entry.SysMemSlicePitch = 0;   // hoisted out of the loop by the original
 
@@ -642,8 +649,8 @@ bool ImageBufferData_Create(ImageBufferData* self, const ImageLevelArray* levels
             // mip chain is exhausted, restart it — that is how the six faces of
             // a cube map are walked with one flat counter.
             levelWidth >>= 1;
-            if (im->IsCompressed(ib) && levelWidth < 4) levelWidth = 4;
-            if (++levelIndex == im->GetLevelCount(ib)) {
+            if (ImgOf(ib)->IsCompressed() && levelWidth < 4) levelWidth = 4;
+            if (++levelIndex == ImgOf(ib)->GetLevelCount()) {
                 levelWidth = IbI32(ib, 0x20);
                 levelIndex = 0;
             }
@@ -658,7 +665,7 @@ bool ImageBufferData_Create(ImageBufferData* self, const ImageLevelArray* levels
         D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
         D3D11_SHADER_RESOURCE_VIEW_DESC* srvDescPtr = nullptr;
 
-        if (im->IsDepthBuffer(ib)) {
+        if (ImgOf(ib)->IsDepthBuffer()) {
             // Hard-coded: a depth texture is always read as R24_UNORM_X8.
             // GAP: format index 6 (R32_TYPELESS) would need R32_FLOAT here, so
             // either index 6 is unused or IsDepthBuffer implies index 7. The
@@ -671,7 +678,7 @@ bool ImageBufferData_Create(ImageBufferData* self, const ImageLevelArray* levels
         } else if (IbI32(ib, 0x28) == 1) {
             srvDesc.Format                      = static_cast<DXGI_FORMAT>(kFormatToDxgi[IbI32(ib, 0x30)]);
             srvDesc.ViewDimension               = D3D11_SRV_DIMENSION_TEXTURECUBE; // 9
-            srvDesc.TextureCube.MipLevels       = static_cast<UINT>(im->GetLevelCount(ib));
+            srvDesc.TextureCube.MipLevels       = static_cast<UINT>(ImgOf(ib)->GetLevelCount());
             srvDesc.TextureCube.MostDetailedMip = 0;
             srvDescPtr = &srvDesc;
         }
@@ -683,8 +690,8 @@ bool ImageBufferData_Create(ImageBufferData* self, const ImageLevelArray* levels
 
         // --- render-target / depth-stencil view ----------------------------
         // Only for non-cube render buffers.
-        if (hr == 0 && IbI32(ib, 0x28) == 0 && im->IsRenderBuffer(ib)) {
-            if (im->IsDepthBuffer(ib)) {
+        if (hr == 0 && IbI32(ib, 0x28) == 0 && ImgOf(ib)->IsRenderBuffer()) {
+            if (ImgOf(ib)->IsDepthBuffer()) {
                 D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc;
                 dsvDesc.Format             = static_cast<DXGI_FORMAT>(0x2d); // D24_UNORM_S8_UINT
                 dsvDesc.ViewDimension      = D3D11_DSV_DIMENSION_TEXTURE2D;  // 3
@@ -746,7 +753,7 @@ bool ImageBufferData_Update(ImageBufferData* self, void* data, int width, int he
 
     ID3D11DeviceContext* const ctx = D3DContext(ActiveDeviceData(VideoDevice(im)));
 
-    if (im->IsDynamic(self->imageBuffer)) {
+    if (ImgOf(self->imageBuffer)->IsDynamic()) {
         D3D11_MAPPED_SUBRESOURCE mapped;
         ctx->Map(static_cast<ID3D11Resource*>(self->texture), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
         // Note: copies width*height*4 into the mapped block *without* honouring

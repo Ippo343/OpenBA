@@ -102,7 +102,15 @@ static bool VideoProgramData_StubTrue(void* /*self*/) {
 }
 
 // 0x180001190 — `ret`
-static void VideoProgramData_StubVoid(void* /*self*/) {
+// ENDGAME B.3.5 block J: slot 2 is `Bind(Context*, int detail)` and takes two
+// arguments this stub never reads. `?BindResources@Context@Video@@`'s
+// video-program arm loads RDX with the Context and R8D with the shader-detail
+// level (0x1800ef0e4 / 0x1800ef0e8) before dispatching here, which is the same
+// three-argument shape Vertex/PixelProgramData::Bind has at the same index. The
+// slot is NAMED in runtime/types/video/CompanionData.h now, corrected this pass
+// from `Slot2()`; this backend really does implement no video-program binding.
+static void VideoProgramData_StubVoid(void* /*self*/, void* /*context*/,
+                                      int /*detail*/) {
 }
 
 // ============================================================
