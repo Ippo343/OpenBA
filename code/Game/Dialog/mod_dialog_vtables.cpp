@@ -383,7 +383,11 @@ extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf) {
     // list, where the perf build strips it (reference_perf_build_strips_printf_
     // arguments). Hoisted to a local first, then converted; the `? :` guard went
     // with the door pointer it tested.
-    const int modCount =
+    // `[[maybe_unused]]` is load-bearing, not decoration: the perf build defines
+    // BANISHED_STRIP_LOGS and this printf's arguments disappear with it, so the
+    // local is read only in the debug build. The CALL stays either way — that is
+    // the whole point of hoisting it out of the argument list.
+    [[maybe_unused]] const int modCount =
         reinterpret_cast<const IO::Modification*>(*g_ppModificationSingleton)->GetCount();   // B.3.4 bridge
     printf("[ModDialog] opened + AddDialog'd (dlg=%p mods=%d)\n", dlg, modCount);
 }

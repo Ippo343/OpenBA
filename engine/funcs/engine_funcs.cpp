@@ -114,10 +114,6 @@ uint32_t* g_pExternalTypeId = nullptr;
 fn_UpdateLoop_LoadResources_t fn_UpdateLoop_LoadResources = nullptr;
 fn_ListCleanup_t fn_ListCleanup = nullptr;
 
-// Mod entry lifecycle
-fn_ModEntry_CopyCtor_t fn_ModEntry_CopyCtor = nullptr;
-fn_ModEntry_Assign_t fn_ModEntry_Assign = nullptr;
-fn_ModEntry_Dtor_t fn_ModEntry_Dtor = nullptr;
 
 // Map::Find (AVL tree lookup)
 fn_Map_Find_t fn_Map_Find = nullptr;
@@ -131,11 +127,7 @@ fn_ParseValue_t fn_ParseValue = nullptr;
 
 // Persistence
 void** g_pPersistenceSingleton = nullptr;
-fn_Persistence_SetBool_t fn_Persistence_SetBool = nullptr;
-fn_Persistence_SetInt_t fn_Persistence_SetInt = nullptr;
 
-// Array<Mod> copy
-fn_ModArrayCopy_t fn_ModArrayCopy = nullptr;
 
 // UI infrastructure (existing)
 fn_DialogController_Dtor_t fn_DialogController_Dtor = nullptr;
@@ -601,7 +593,6 @@ fn_HighlightRemove_t fn_HighlightRemove = nullptr;
 
 // ModDetailsDialog support
 fn_Element_Hide_t fn_Element_Hide = nullptr;
-fn_Modification_Find_t fn_Modification_Find = nullptr;
 fn_Configuration_GetVersionString_t fn_Configuration_GetVersionString = nullptr;
 // ModDetails_StringArrayPush — now static inline in moddetailsdialog.cpp
 
@@ -641,10 +632,6 @@ void** g_GoalDialog_Vtable = nullptr;
 void** g_ppModificationSingleton = nullptr;
 fn_Modification_GetCount_t fn_Modification_GetCount = nullptr;
 fn_Modification_GetMod_t fn_Modification_GetMod = nullptr;
-fn_Modification_Swap_t fn_Modification_Swap = nullptr;
-fn_Modification_Enable_t fn_Modification_Enable = nullptr;
-fn_Modification_RefreshList_t fn_Modification_RefreshList = nullptr;
-fn_Modification_SaveList_t fn_Modification_SaveList = nullptr;
 fn_DialogInstance_OnElementEvent_t fn_DialogInstance_OnElementEvent = nullptr;
 // fn_DialogInstance_AddController removed — see engine_funcs.h (Wave 7 lane B)
 fn_DialogInstance_OnUpdateLayout_t fn_DialogInstance_OnUpdateLayout = nullptr;
@@ -868,7 +855,6 @@ fn_Input_Device_GetValue_t fn_Input_Device_GetValue = nullptr;
 fn_Input_Device_Pressed_t  fn_Input_Device_Pressed  = nullptr;
 fn_UI_EndSpriteCapture_t   fn_UI_EndSpriteCapture   = nullptr;
 void** g_pFileSystemSingleton = nullptr;
-fn_FileSystem_GetSourceDirectory_t fn_FileSystem_GetSourceDirectory = nullptr;
 
 // ============================================================
 // Engine globals
@@ -945,7 +931,6 @@ fn_ExternalRefArray_Serialize_t fn_ExternalRefArray_Serialize = nullptr;
 fn_Serializer_SerializeBulk_t fn_Serializer_SerializeBulk = nullptr;
 fn_ComponentBase_Serialize_t fn_ComponentBase_Serialize = nullptr;
 fn_DynArray_Resize_t fn_DynArray_Resize = nullptr;
-fn_MemZeroFill_t fn_MemZeroFill = nullptr;
 fn_StringArray_Resize_t fn_StringArray_Resize = nullptr;
 fn_ExternalPtr_BuildSerialize_t fn_ExternalPtr_BuildSerialize = nullptr;
 fn_WeatherResize_t fn_WeatherResize = nullptr;
@@ -1232,9 +1217,6 @@ uint32_t** g_ppTypeInfo_MaterialInstance = nullptr;
 fn_Array_Resize_t fn_Array_Resize_Stride02       = nullptr;  // 0x14001c890
 fn_Array_Resize_t fn_Array_Resize_Stride16B      = nullptr;  // 0x14001ef10
 
-// M3.5 Path B session 4 — per-element 0x60B serialize + typed-ExternalPtr
-// array serialize (Geometry::Serialize cascade points 10 + 13).
-fn_Struct60B_Serialize_t                fn_Struct60B_Serialize                       = nullptr;  // 0x14001ffa0
 
 // M3.5 Path B session 6 — heightmap mesh-build path helpers.
 fn_TradeWork_sub_c1e0_t    fn_TradeWork_sub_c1e0    = nullptr;  // 0x1400ac1e0
@@ -1245,18 +1227,13 @@ fn_Geometry_ChunkUpdate_t  fn_Geometry_ChunkUpdate  = nullptr;  // 0x1400aad50  
 // M3.5 Path B session 7 — image-buffer heightmap upload helper.
 fn_TradeWork_sub_c780_t fn_TradeWork_sub_c780 = nullptr;  // 0x1400ac780
 
-// M3.5 Path B session 8 — Geometry::Serialize body + extra serialize.
-fn_TradeWork_impl_04d0_t fn_TradeWork_impl_04d0 = nullptr;  // 0x1400b04d0
-fn_TradeWork_impl_f1a0_t fn_TradeWork_impl_f1a0 = nullptr;  // 0x1400af1a0
 
 // M3.5 Path B session 8 — promoted IO::Serializer dispatch slots.
 // `SerInt_AC8` and `SerFloat_A60` retired in ENDGAME B.3.4 step 0; see the
 // banner on the typedef block in engine_funcs.h for why.
 fn_Ser_SerByte_t      fn_Ser_Slot_SerByte_410      = nullptr;  // 0x140152410
-fn_Ser_SerUShortArr_t fn_Ser_Slot_SerUShortArr_488 = nullptr;  // 0x140152488
 fn_Ser_SerSizedRaw_t  fn_Ser_Slot_SerSizedRaw_3F8  = nullptr;  // 0x1401523f8
 fn_Ser_SerSizedRaw_t  fn_Ser_Slot_SerSizedRaw_400  = nullptr;  // 0x140152400
-fn_Ser_SerByteArr_t   fn_Ser_Slot_SerByteArr_618   = nullptr;  // 0x140152618
 
 // M3.5 — Geometry vtable draw primitives (slot 0x14015f110)
 fn_Renderer_GetCullCamera_t            fn_Renderer_GetCullCamera           = nullptr;
@@ -1410,13 +1387,6 @@ bool EngineFuncsInit() {
     fn_ListCleanup = reinterpret_cast<fn_ListCleanup_t>(
         ResolveAddr(Module::Runtime, 0x180010ab0));
 
-    // --- Mod entry lifecycle (for Modification::Swap) ---
-    fn_ModEntry_CopyCtor = reinterpret_cast<fn_ModEntry_CopyCtor_t>(
-        ResolveAddr(Module::Runtime, 0x1800101e0));
-    fn_ModEntry_Assign = reinterpret_cast<fn_ModEntry_Assign_t>(
-        ResolveAddr(Module::Runtime, 0x180026ef0));
-    fn_ModEntry_Dtor = reinterpret_cast<fn_ModEntry_Dtor_t>(
-        ResolveAddr(Module::Runtime, 0x180011460));
 
     // --- Map::Find / Map::Insert (AVL tree for Configuration) ---
     fn_Map_Find = reinterpret_cast<fn_Map_Find_t>(
@@ -1434,15 +1404,8 @@ bool EngineFuncsInit() {
     g_pPersistenceSingleton = reinterpret_cast<void**>(
         ResolveAddr(Module::Runtime, 0x1801fc6b8));
 
-    fn_Persistence_SetBool = reinterpret_cast<fn_Persistence_SetBool_t>(
-        ResolveExport("?Set@Persistence@IO@@QEAAXPEBD0_N@Z"));
 
-    fn_Persistence_SetInt = reinterpret_cast<fn_Persistence_SetInt_t>(
-        ResolveExport("?Set@Persistence@IO@@QEAAXPEBD0H@Z"));
 
-    // --- Array<Mod>::operator= (deep copy with CopyCtor per element) ---
-    fn_ModArrayCopy = reinterpret_cast<fn_ModArrayCopy_t>(
-        ResolveAddr(Module::Runtime, 0x180010110));
 
     // --- UI infrastructure ---
 
@@ -2720,8 +2683,6 @@ bool EngineFuncsInit() {
     // --- ModDetailsDialog support ---
     fn_Element_Hide = reinterpret_cast<fn_Element_Hide_t>(
         ResolveExport("?Hide@Element@UI@@QEAAX_N@Z"));
-    fn_Modification_Find = reinterpret_cast<fn_Modification_Find_t>(
-        ResolveExport("?Find@Modification@IO@@QEBAHAEBVFilename@System@@@Z"));
     fn_Configuration_GetVersionString = reinterpret_cast<fn_Configuration_GetVersionString_t>(
         ResolveExport("?GetVersionString@Configuration@System@@SA?AVString@2@I_N@Z"));
 
@@ -2750,14 +2711,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Runtime, 0x18000da90));
     fn_Modification_GetMod = reinterpret_cast<fn_Modification_GetMod_t>(
         ResolveAddr(Module::Runtime, 0x18000da80));
-    fn_Modification_Swap = reinterpret_cast<fn_Modification_Swap_t>(
-        ResolveAddr(Module::Runtime, 0x1800aeb20));
-    fn_Modification_Enable = reinterpret_cast<fn_Modification_Enable_t>(
-        ResolveAddr(Module::Runtime, 0x1800aeab0));
-    fn_Modification_RefreshList = reinterpret_cast<fn_Modification_RefreshList_t>(
-        ResolveAddr(Module::Runtime, 0x1800af5f0));
-    fn_Modification_SaveList = reinterpret_cast<fn_Modification_SaveList_t>(
-        ResolveAddr(Module::Runtime, 0x1800b05f0));
 
     // --- DialogInstance::OnElementEvent (exe dispatch table) ---
     // TWO overloads exist. The exe's dispatch slot 0x140151a30 (tools/dispatch_slot_map.py)
@@ -3365,18 +3318,12 @@ bool EngineFuncsInit() {
            g_pExternalTypeId ? *g_pExternalTypeId : 0);
     printf("  UpdateLoop::LoadResources = %p\n", (void*)fn_UpdateLoop_LoadResources);
     printf("  ListCleanup               = %p\n", (void*)fn_ListCleanup);
-    printf("  ModEntry::CopyCtor        = %p\n", (void*)fn_ModEntry_CopyCtor);
-    printf("  ModEntry::Assign          = %p\n", (void*)fn_ModEntry_Assign);
-    printf("  ModEntry::Dtor            = %p\n", (void*)fn_ModEntry_Dtor);
     printf("  Map::Find                 = %p\n", (void*)fn_Map_Find);
     printf("  Map::Insert               = %p\n", (void*)fn_Map_Insert);
     printf("  ParseCommand              = %p\n", (void*)fn_ParseCommand);
     printf("  ParseValue                = %p\n", (void*)fn_ParseValue);
     printf("  Persistence::_singleton   = %p -> %p\n", (void*)g_pPersistenceSingleton,
            g_pPersistenceSingleton ? *g_pPersistenceSingleton : nullptr);
-    printf("  Persistence::SetBool      = %p\n", (void*)fn_Persistence_SetBool);
-    printf("  Persistence::SetInt       = %p\n", (void*)fn_Persistence_SetInt);
-    printf("  ModArrayCopy              = %p\n", (void*)fn_ModArrayCopy);
     printf("[EngineFuncs] UI infrastructure:\n");
     printf("  DialogController::~Dtor   = %p\n", (void*)fn_DialogController_Dtor);
     printf("  MemFreeStatic             = %p\n", (void*)fn_MemFreeStatic);
@@ -3468,8 +3415,6 @@ bool EngineFuncsInit() {
             g_pFileSystemSingleton = *exref;
     }
 
-    fn_FileSystem_GetSourceDirectory = reinterpret_cast<fn_FileSystem_GetSourceDirectory_t>(
-        ResolveExport("?GetSourceDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ"));
 
 
     // --- Stage 3: OptionsDialog Runtime exports ---
@@ -3644,8 +3589,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1401189b0));
     fn_DynArray_Resize = reinterpret_cast<fn_DynArray_Resize_t>(
         ResolveAddr(Module::Exe, 0x14000a590));
-    fn_MemZeroFill = reinterpret_cast<fn_MemZeroFill_t>(
-        ResolveAddr(Module::Exe, 0x14003f010));
     fn_StringArray_Resize = reinterpret_cast<fn_StringArray_Resize_t>(
         ResolveAddr(Module::Exe, 0x140028860));
     fn_ExternalPtr_BuildSerialize = reinterpret_cast<fn_ExternalPtr_BuildSerialize_t>(
@@ -4169,14 +4112,8 @@ bool EngineFuncsInit() {
     // ============================================================
     // M3.5 Path B session 4 — per-element 0x60B + typed-ExternalPtr-array.
     // ============================================================
-    // FUN_14001ffa0 — 0x60B per-element serialize (calls FUN_140007140 inside,
-    // followed by 14 primitive serializes + version-gated extras + sub_f9c0).
-    fn_Struct60B_Serialize = reinterpret_cast<fn_Struct60B_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x14001ffa0));
 #ifdef _DEBUG
     printf("[EngineFuncs] M3.5 Path B session 4 (0x60B serialize) resolved\n");
-    printf("  Struct60B_Serialize             = %p\n",
-        (void*)fn_Struct60B_Serialize);
 #endif
 
     // ============================================================
@@ -4226,15 +4163,6 @@ bool EngineFuncsInit() {
     // ============================================================
     // M3.5 Path B session 8 — Geometry::Serialize body + extra.
     // ============================================================
-    // Top-level pair driven from MenuScene::Serialize. Both bodies are also
-    // reimplemented in code/Game/Game/geometry_serialize.cpp; the address
-    // registry maps these exe addresses to the reimpl entry points so
-    // standalone mode runs the cleaned C body when the function pointer here
-    // resolves to NULL.
-    fn_TradeWork_impl_04d0 = reinterpret_cast<fn_TradeWork_impl_04d0_t>(
-        ResolveAddr(Module::Exe, 0x1400b04d0));
-    fn_TradeWork_impl_f1a0 = reinterpret_cast<fn_TradeWork_impl_f1a0_t>(
-        ResolveAddr(Module::Exe, 0x1400af1a0));
 
     // M3.5 Path B session 8 — promoted IO::Serializer dispatch slots.
     {
@@ -4245,24 +4173,16 @@ bool EngineFuncsInit() {
         // standalone/address_registry.cpp:1628-1629 (PE imports).
         sp = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152410));
         if (sp && *sp) fn_Ser_Slot_SerByte_410 = reinterpret_cast<fn_Ser_SerByte_t>(*sp);
-        sp = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152488));
-        if (sp && *sp) fn_Ser_Slot_SerUShortArr_488 = reinterpret_cast<fn_Ser_SerUShortArr_t>(*sp);
         sp = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401523f8));
         if (sp && *sp) fn_Ser_Slot_SerSizedRaw_3F8 = reinterpret_cast<fn_Ser_SerSizedRaw_t>(*sp);
         sp = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152400));
         if (sp && *sp) fn_Ser_Slot_SerSizedRaw_400 = reinterpret_cast<fn_Ser_SerSizedRaw_t>(*sp);
-        sp = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152618));
-        if (sp && *sp) fn_Ser_Slot_SerByteArr_618 = reinterpret_cast<fn_Ser_SerByteArr_t>(*sp);
     }
 #ifdef _DEBUG
     printf("[EngineFuncs] M3.5 Path B session 8 (Geometry::Serialize) resolved\n");
-    printf("  TradeWork_impl_04d0     = %p\n", (void*)fn_TradeWork_impl_04d0);
-    printf("  TradeWork_impl_f1a0     = %p\n", (void*)fn_TradeWork_impl_f1a0);
     printf("  Ser slot SerByte_410    = %p\n", (void*)fn_Ser_Slot_SerByte_410);
-    printf("  Ser slot SerUShortArr   = %p\n", (void*)fn_Ser_Slot_SerUShortArr_488);
     printf("  Ser slot SerSizedRaw_3F8= %p\n", (void*)fn_Ser_Slot_SerSizedRaw_3F8);
     printf("  Ser slot SerSizedRaw_400= %p\n", (void*)fn_Ser_Slot_SerSizedRaw_400);
-    printf("  Ser slot SerByteArr_618 = %p\n", (void*)fn_Ser_Slot_SerByteArr_618);
 #endif
 
     // ============================================================
