@@ -41,18 +41,20 @@ void RtVideoDeviceUnlock(void** deviceSingleton);
 
 namespace {
 
-using DtorFn              = void (*)(void*);
 using MemFreeFn           = void (*)(void*);
 
 
-// Object::External::~External — the base class ImageBuffer's dtor tail-calls
-// after this lane's own body finishes. Wave 3 (Object) territory, not this
-// lane's; called through.
-DtorFn ObjectExternalDtor() {
-    // RT_EXPORT_ONCE (Wave 9 lane R): ~External is ported (object/external.cpp:680)
-    // and this is a dependency call, not an oracle.
-    return RT_EXPORT_ONCE(DtorFn, "??1External@Object@@UEAA@XZ");
-}
+// ENDGAME B.3.5 block VC — `ObjectExternalDtor()` IS GONE. It was an
+// `RT_EXPORT_ONCE(DtorFn, "??1External@Object@@UEAA@XZ")` (binding spelling 3)
+// that `~ImageBuffer` used to reach its own base destructor with, next to a
+// hand-written stamp of `??_7CompiledExternal@Object@@6B@`. Both are the
+// DESTRUCTOR CHAIN now: `Video::ImageBuffer` really derives from
+// `Object::CompiledExternal`, so `~CompiledExternal()` and then `~External()`
+// run after the member body with no resolver on the path — the same retirement
+// `Video::VertexLayout` made in b35-B, and `Object::External`'s own banner
+// (`runtime/src/object/external_class.cpp:128-135`) is the settled rule for why
+// the two base vptr stores are the compiler's and not hand-written on a
+// converted object.
 
 // REGISTRY door, not the raw DLL door. The raw door reads the DLL's export
 // table directly and is NULL with the DLL absent: the 2026-09-12 cutover walk
@@ -70,10 +72,12 @@ void* ImageBufferVtable() {
     static void* v = ResolveExport("??_7ImageBuffer@Video@@6B@");
     return v;
 }
-void* ImageBufferDataVtable() {
-    static void* v = ResolveExport("??_7ImageBufferData@Video@@6B@");
-    return v;
-}
+// `ImageBufferDataVtable()` used to live here, as the whole body of
+// `??1ImageBufferData@Video@@`. ENDGAME B.3.5 block VC: that door delegates to
+// `Video::ImageBufferData::~ImageBufferData()`, whose body — the same
+// `??_7ImageBufferData@Video@@6B@` re-stamp — is in `companion_data.cpp` with the
+// other eleven, so the second copy of the resolver went with the second copy of
+// the store.
 
 // Video::Device::_singleton / Video::Configuration::_singleton — data
 // exports, resolved once and cached exactly like a function pointer. Both are
@@ -304,6 +308,11 @@ void* MakeCompanion(void* self, size_t vtSlot) {
 // used to call ImageBufferPlatformConstruct() &co, which is the raw DLL door
 // and therefore a call through null the moment Runtime-x64.dll is gone. Those
 // four resolvers survive as the diff oracle's door and nothing else.
+//
+// ENDGAME B.3.5 block VC: `Video::ImageBuffer::Platform{Construct,Destruct}` are
+// MEMBERS now, so the two ImageBuffer rows below are the registered DOORS over
+// them rather than the bodies, and the two forward declarations are only needed
+// because the doors are registered from `RtVideoBuffersRegister` at the bottom.
 // ----------------------------------------------------------------------------
 void Video_ImageBuffer_PlatformConstruct(ImageBuffer* self);
 void Video_ImageBuffer_PlatformDestruct(ImageBuffer* self);
@@ -323,6 +332,12 @@ void Video_VertexBuffer_PlatformDestruct(VertexBuffer* self);
 // verify anything). the diff oracle instead asserts the constants we just
 // wrote are exactly what retail writes.
 // ============================================================================
+// ENDGAME B.3.5 block VC: STILL A DOOR, and for B4b-2's reason — it runs on raw
+// `operator new` bytes whose first field it then writes with the MINTED vtable,
+// `Video::ImageBuffer` is abstract in C++ (slot 0 is a `deleting_dtor.cpp` table
+// row), and `context_ctor.cpp` reaches it for the two default render images. What
+// converted inside it is the hand-off to `PlatformConstruct`, now a qualified
+// member call.
 void Video_ImageBuffer_Ctor(ImageBuffer* self) {
 
     self->vtable = ImageBufferVtable();       // Base->External->CompiledExternal->ImageBuffer chain,
@@ -344,7 +359,9 @@ void Video_ImageBuffer_Ctor(ImageBuffer* self) {
     self->pixelData = nullptr;
     // field50/field58: not written by the ctor (undefined scope for this lane).
 
-    Video_ImageBuffer_PlatformConstruct(self);
+    // B.3.5 bridge — the door's parameter is the POD view.
+    reinterpret_cast<Video::ImageBuffer*>(self)
+        ->Video::ImageBuffer::PlatformConstruct();
 
 }
 
@@ -356,113 +373,67 @@ void Video_ImageBuffer_Ctor(ImageBuffer* self) {
 // double-free — there is no safe way to run "theirs" without mutating shared
 // allocator state. Reproduced field-for-field from the decompile.
 // ============================================================================
+// ENDGAME B.3.5 block VC — THE BODY IS `Video::ImageBuffer::~ImageBuffer()`, at
+// `namespace Video` scope below. Retail's last two steps are gone from the body
+// and are the CHAIN's: the `??_7CompiledExternal@Object@@6B@` stamp is what
+// `~CompiledExternal()` emits and the `??1External@Object@@UEAA@XZ` call is
+// `~External()`, both of which now run because the class really derives.
 void Video_ImageBuffer_Dtor(ImageBuffer* self) {
-    self->vtable = ImageBufferVtable();
-    Video_ImageBuffer_PlatformDestruct(self);
-
-    if (self->pixelData != nullptr) {
-        int32_t* refcount = reinterpret_cast<int32_t*>(static_cast<uint8_t*>(self->pixelData) - 4);
-        *refcount -= 1;
-        if (*refcount == 0) {
-            void* block = static_cast<uint8_t*>(self->pixelData) - 8;
-            self->pixelData = block;
-            MemFree()(self->pixelData);
-        } else {
-            self->pixelData = nullptr;
-        }
-    }
-
-    // CompiledExternal has no dtor of its own (no export named
-    // ~CompiledExternal takes a body beyond the vtable stamp retail performs
-    // here); the observable effect is entirely the vtable write plus the
-    // External base dtor below.
-    static void* compiledExternalVtable = ResolveExport("??_7CompiledExternal@Object@@6B@");
-    self->vtable = compiledExternalVtable;
-    ObjectExternalDtor()(self);
+    // B.3.5 bridge — the registered door's parameter is the POD view.
+    reinterpret_cast<Video::ImageBuffer*>(self)
+        ->Video::ImageBuffer::~ImageBuffer();
 }
 
 // ============================================================================
-// Video::ImageBuffer accessors — pure reads, FULL oracle (call both, compare).
+// Video::ImageBuffer accessors — pure reads. Bodies are the MEMBERS below; each
+// door is a one-line QUALIFIED non-virtual delegation through a bridge cast.
+// (The `using Fn = …` typedefs that used to sit unused at the bottom of each
+// door were the retired differential oracle's, and went with the bodies.)
 // ============================================================================
 
 int Video_ImageBuffer_Width(ImageBuffer* self) {
-    void** device = DeviceSingletonPtr();
-    void** config = ConfigurationSingletonPtr();
-    int ours;
-    if ((self->flags >> 8) & 1) {
-        ours = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(*device) + 4);
-    } else if ((self->flags >> 9) & 1) {
-        ours = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(*device) + 4) / 2;
-    } else {
-        ours = self->width;
-        if ((self->flags >> 6) & 1) {
-            uint32_t shift = *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(*config) + 0x2c) & 0x1f;
-            ours >>= shift;
-        }
-    }
-    using Fn = int (*)(void*);
-    return ours;
+    return reinterpret_cast<const Video::ImageBuffer*>(self)
+               ->Video::ImageBuffer::Width();                    // B.3.5 bridge
 }
 
 int Video_ImageBuffer_Height(ImageBuffer* self) {
-    void** device = DeviceSingletonPtr();
-    void** config = ConfigurationSingletonPtr();
-    int ours;
-    if ((self->flags >> 8) & 1) {
-        ours = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(*device) + 8);
-    } else if ((self->flags >> 9) & 1) {
-        ours = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(*device) + 8) / 2;
-    } else {
-        ours = self->height;
-        if ((self->flags >> 6) & 1) {
-            uint32_t shift = *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(*config) + 0x2c) & 0x1f;
-            ours >>= shift;
-        }
-    }
-    using Fn = int (*)(void*);
-    return ours;
+    return reinterpret_cast<const Video::ImageBuffer*>(self)
+               ->Video::ImageBuffer::Height();                   // B.3.5 bridge
 }
 
 int Video_ImageBuffer_GetLevelCount(ImageBuffer* self) {
-    int ours = self->GetLevelCount();
-    using Fn = int (*)(void*);
-    return ours;
+    return reinterpret_cast<const Video::ImageBuffer*>(self)
+               ->Video::ImageBuffer::GetLevelCount();            // B.3.5 bridge
 }
 
 bool Video_ImageBuffer_IsCompressed(ImageBuffer* self) {
-    bool ours = self->IsCompressed();
-    using Fn = bool (*)(void*);
-    return ours;
+    return reinterpret_cast<const Video::ImageBuffer*>(self)
+               ->Video::ImageBuffer::IsCompressed();             // B.3.5 bridge
 }
 
 bool Video_ImageBuffer_IsDepthBuffer(ImageBuffer* self) {
-    bool ours = self->IsDepthBuffer();
-    using Fn = bool (*)(void*);
-    return ours;
+    return reinterpret_cast<const Video::ImageBuffer*>(self)
+               ->Video::ImageBuffer::IsDepthBuffer();            // B.3.5 bridge
 }
 
 bool Video_ImageBuffer_IsDynamic(ImageBuffer* self) {
-    bool ours = self->IsDynamic();
-    using Fn = bool (*)(void*);
-    return ours;
+    return reinterpret_cast<const Video::ImageBuffer*>(self)
+               ->Video::ImageBuffer::IsDynamic();                // B.3.5 bridge
 }
 
 bool Video_ImageBuffer_IsGenerated(ImageBuffer* self) {
-    bool ours = self->IsGenerated();
-    using Fn = bool (*)(void*);
-    return ours;
+    return reinterpret_cast<const Video::ImageBuffer*>(self)
+               ->Video::ImageBuffer::IsGenerated();              // B.3.5 bridge
 }
 
 bool Video_ImageBuffer_IsRenderBuffer(ImageBuffer* self) {
-    bool ours = self->IsRenderBuffer();
-    using Fn = bool (*)(void*);
-    return ours;
+    return reinterpret_cast<const Video::ImageBuffer*>(self)
+               ->Video::ImageBuffer::IsRenderBuffer();           // B.3.5 bridge
 }
 
 bool Video_ImageBuffer_IsRendered(ImageBuffer* self) {
-    bool ours = self->IsRendered();
-    using Fn = bool (*)(void*);
-    return ours;
+    return reinterpret_cast<const Video::ImageBuffer*>(self)
+               ->Video::ImageBuffer::IsRendered();               // B.3.5 bridge
 }
 
 // ============================================================================
@@ -479,20 +450,19 @@ bool Video_ImageBuffer_IsRendered(ImageBuffer* self) {
 // and the diff summary) without invoking the original a second time, which
 // would upload/download the texture twice.
 // ============================================================================
+// ENDGAME B.3.5 block VC: the two hand-inlined `pd->vtable + 0x28` / `+ 0x30`
+// dispatches are VIRTUAL CALLS on block A's real `Video::ImageBufferData` now,
+// whose slots 5 and 6 that header names `Update` and `Read` — the same two byte
+// offsets (0x28/8 == 5, 0x30/8 == 6), spelled as the slots they are, with the
+// index checked by the compiler instead of by a comment.
 bool Video_ImageBuffer_CopyToTexture(ImageBuffer* self, void* data, int width, int height) {
-    using Fn = bool (*)(void*, void*, int, int);
-    ImageBufferData* pd = static_cast<ImageBufferData*>(self->platformData);
-    Fn slot = *reinterpret_cast<Fn*>(static_cast<uint8_t*>(pd->vtable) + 0x28);
-    bool ours = slot(pd, data, width, height);
-    return ours;
+    return reinterpret_cast<Video::ImageBuffer*>(self)
+               ->Video::ImageBuffer::CopyToTexture(data, width, height);   // B.3.5 bridge
 }
 
 bool Video_ImageBuffer_CopyFromTexture(ImageBuffer* self, void* data, int width, int height) {
-    using Fn = bool (*)(void*, void*, int, int);
-    ImageBufferData* pd = static_cast<ImageBufferData*>(self->platformData);
-    Fn slot = *reinterpret_cast<Fn*>(static_cast<uint8_t*>(pd->vtable) + 0x30);
-    bool ours = slot(pd, data, width, height);
-    return ours;
+    return reinterpret_cast<Video::ImageBuffer*>(self)
+               ->Video::ImageBuffer::CopyFromTexture(data, width, height); // B.3.5 bridge
 }
 
 // ============================================================================
@@ -511,28 +481,20 @@ bool Video_ImageBuffer_CopyFromTexture(ImageBuffer* self, void* data, int width,
 // int32_t so this file does not need to invent enumerator names Runtime
 // never exports.
 // ============================================================================
-struct ImageLevelArray { void* data; int32_t count; int32_t capacity; };
-
+// ENDGAME B.3.5 block VC — SLOT 9 IS A MEMBER, so `ImageBuffer.h`'s `= 0` came
+// off this declaration (block C's banner said exactly this would happen once the
+// body moved). The local `struct ImageLevelArray` view is gone: the parameter is
+// `Video::ImageBuffer::LevelArray*`, i.e. the real
+// `Collection::Array<Collection::Array<uint8_t>>` the retail mangling spells, and
+// the `pd->vtable + 0x18` dispatch is `Video::ImageBufferData` slot 3, `Create`.
 bool Video_ImageBuffer_Create(ImageBuffer* self, int32_t imageType, int32_t usage, int32_t format,
                                uint32_t flags, int width, int height, int32_t filter,
                                int32_t addressU, int32_t addressV, int32_t addressW,
-                               ImageLevelArray* levels) {
-    self->dimension = imageType;
-    self->width = width;
-    self->kind = usage;
-    self->height = height;
-    self->format = format;
-    self->flags = flags;
-    self->filter = filter;
-    self->addressU = addressU;
-    self->addressV = addressV;
-    self->addressW = addressW;
-
-    using Fn = bool (*)(void*, ImageLevelArray*);
-    ImageBufferData* pd = static_cast<ImageBufferData*>(self->platformData);
-    Fn slot = *reinterpret_cast<Fn*>(static_cast<uint8_t*>(pd->vtable) + 0x18);
-    bool ours = slot(pd, levels);
-    return ours;
+                               Video::ImageBuffer::LevelArray* levels) {
+    return reinterpret_cast<Video::ImageBuffer*>(self)
+               ->Video::ImageBuffer::Create(imageType, usage, format, flags, width, height,
+                                            filter, addressU, addressV, addressW,
+                                            levels);                        // B.3.5 bridge
 }
 
 // ============================================================================
@@ -544,8 +506,18 @@ bool Video_ImageBuffer_Create(ImageBuffer* self, int32_t imageType, int32_t usag
 // `im->BaseDtor(self)` — porting it here is what makes that tail call land on
 // us instead of the DLL, with no change to dx11's own file.
 // ============================================================================
+// ENDGAME B.3.5 block VC — ONE OF THE TWO DOORS block A LEFT BEHIND. All twelve
+// `~XData()` member bodies live in `runtime/src/video/companion_data.cpp`; ten of
+// the twelve doors were converted there and these two (`ImageBufferData` here,
+// `RenderStateData` in `device.cpp`) were left because their doors are in other
+// blocks' files. That duplicate of the three-instruction vptr store is gone: this
+// is a one-line QUALIFIED non-virtual delegation like the other ten, and the
+// qualification is load-bearing for the same reason (a live `*Data` wears dx11's
+// vtable, whose slot 0 is the derived deleting dtor that CALLS this door — an
+// unqualified virtual call would dispatch straight back into it).
 void Video_ImageBufferData_Dtor(ImageBufferData* self) {
-    self->vtable = ImageBufferDataVtable();
+    reinterpret_cast<Video::ImageBufferData*>(self)
+        ->Video::ImageBufferData::~ImageBufferData();               // B.3.5 bridge
 }
 
 // ============================================================================
@@ -704,28 +676,184 @@ static_assert(offsetof(RtVideo::RenderBuffer, prev) == 0x20, "kRenderLinks.prev"
 
 }  // namespace
 
-void Video_ImageBuffer_PlatformConstruct(ImageBuffer* self) {
+// ============================================================================
+// ENDGAME B.3.5 block VC — THE `Video::ImageBuffer` MEMBER BODIES.
+//
+// At `namespace Video` scope and AFTER both anonymous namespaces (B34_BRIEFS
+// A.2); the helpers above stay reachable by unqualified name because an
+// anonymous namespace's members are members of the global namespace's
+// declarative region. `Video::ImageBuffer` was made a real class by b35-C, which
+// had to leave every one of these bodies where it was because this file is
+// b35-D2's; this is the pass that moves them.
+//
+// THE FIELD READS DID NOT CHANGE, and two of them are deliberately still raw:
+// `Width()`/`Height()` read `Device+4`/`+8` and `Configuration+0x2c` through the
+// two singleton slots, as retail's inlined ladder does. Retyping those two
+// receivers is `Video::Device`'s and `Video::Configuration`'s business, not this
+// member's, and both singletons stay `RT_DATA_SLOT` reads (RULE B4b-4).
+// ============================================================================
+namespace Video {
+
+// ??1ImageBuffer@Video@@UEAA@XZ — 0x1800f2610, ordinal 608.
+//
+// POST-STATE only (there is no safe way to run "theirs" a second time over the
+// same refcount). Retail's four steps, and where each one is now:
+//   1. stamp ImageBuffer's own vtable          — written by hand, below, at the
+//      MINTED address, because a live object wears the minted table and GCC's
+//      emitted store would name GCC's
+//   2. PlatformDestruct                        — the qualified member call
+//   3. release the `_sourceName` String by hand — below; `_sourceName` keeps the
+//      `void*` type precisely so the compiler does NOT release it a second time
+//   4. stamp CompiledExternal's vtable, then tail-jump ~External
+//                                              — the DESTRUCTOR CHAIN, which is
+//      what replaced this file's `ObjectExternalDtor()` resolver
+ImageBuffer::~ImageBuffer() {
+    *reinterpret_cast<void**>(this) = ImageBufferVtable();
+    PlatformDestruct();
+
+    if (_sourceName != nullptr) {
+        int32_t* refcount = reinterpret_cast<int32_t*>(static_cast<uint8_t*>(_sourceName) - 4);
+        *refcount -= 1;
+        if (*refcount == 0) {
+            _sourceName = static_cast<uint8_t*>(_sourceName) - 8;
+            MemFree()(_sourceName);
+        } else {
+            _sourceName = nullptr;
+        }
+    }
+}
+
+// ?Width@ImageBuffer@Video@@QEBAHXZ  0x1800f2530
+// Bit 8 = the live device width, bit 9 = half of it, otherwise the stored value
+// right-shifted by `Configuration+0x2c & 0x1f` when bit 6 is set.
+int32_t ImageBuffer::Width() const {
+    void** device = DeviceSingletonPtr();
+    void** config = ConfigurationSingletonPtr();
+    if ((_flags >> 8) & 1)
+        return *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(*device) + 4);
+    if ((_flags >> 9) & 1)
+        return *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(*device) + 4) / 2;
+    int32_t v = _width;
+    if ((_flags >> 6) & 1) {
+        const uint32_t shift =
+            *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(*config) + 0x2c) & 0x1f;
+        v >>= shift;
+    }
+    return v;
+}
+
+// ?Height@ImageBuffer@Video@@QEBAHXZ  0x1800f24e0 — the same ladder on +8.
+int32_t ImageBuffer::Height() const {
+    void** device = DeviceSingletonPtr();
+    void** config = ConfigurationSingletonPtr();
+    if ((_flags >> 8) & 1)
+        return *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(*device) + 8);
+    if ((_flags >> 9) & 1)
+        return *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(*device) + 8) / 2;
+    int32_t v = _height;
+    if ((_flags >> 6) & 1) {
+        const uint32_t shift =
+            *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(*config) + 0x2c) & 0x1f;
+        v >>= shift;
+    }
+    return v;
+}
+
+// ?GetLevelCount@ImageBuffer@Video@@QEBAHXZ  0x1800f2420 — the mip ladder, which
+// halves BOTH dimensions with a floor of 1 and counts until both reach 1.
+int32_t ImageBuffer::GetLevelCount() const {
+    int32_t count = 1;
+    if (HasMipMaps()) {
+        int32_t w = _width;
+        int32_t h = _height;
+        while (w > 1 || h > 1) {
+            h >>= 1; if (h == 0) h = 1;
+            w >>= 1; if (w == 0) w = 1;
+            ++count;
+        }
+    }
+    return count;
+}
+
+// The five `_kind` tests and the format test, each one `CMP` against retail's
+// own constant. `IsRenderBuffer` is `_kind & ~0b101 == 0`, i.e. `_kind` in
+// {0,1,4,5} — deliberately NOT the same set as `dynamic_resources.cpp`'s
+// per-element guard, which also admits 3.
+bool ImageBuffer::IsCompressed() const   { return _format < 3; }
+bool ImageBuffer::HasMipMaps() const     { return (_flags & 1u) != 0; }
+bool ImageBuffer::IsDepthBuffer() const  { return _kind == 1; }
+bool ImageBuffer::IsDynamic() const      { return _kind == 3; }
+bool ImageBuffer::IsGenerated() const    { return _kind == 4; }
+bool ImageBuffer::IsRendered() const     { return _kind == 5; }
+bool ImageBuffer::IsRenderBuffer() const {
+    return (static_cast<uint32_t>(_kind) & 0xfffffffau) == 0;
+}
+
+// ?CopyToTexture@ / ?CopyFromTexture@ — 0x1800f3380 / 0x1800f33a0, two-
+// instruction tail-call trampolines in retail: `this = this->_data; jmp
+// [vtable + N]`. Slots 5 and 6 of `Video::ImageBufferData`, i.e. +0x28 and +0x30.
+// Both land in dx11/src/imagebufferdata.cpp, which is ours on both sides of the
+// port, so there is nothing on the far side to diverge from.
+bool ImageBuffer::CopyToTexture(void* dst, int32_t width, int32_t height) {
+    return _data->Update(dst, width, height);
+}
+
+bool ImageBuffer::CopyFromTexture(void* src, int32_t width, int32_t height) {
+    return _data->Read(src, width, height);
+}
+
+// slot 9 — ?Create@ImageBuffer@Video@@UEAA_N…  0x1800f2680.
+// Ten descriptor field stores in retail's order (note it interleaves
+// dimension/width and kind/height), then a genuine two-argument call into
+// `Video::ImageBufferData` slot 3.
+bool ImageBuffer::Create(ImageType type, Usage usage, Format format, uint32_t flags,
+                         int32_t width, int32_t height, FilterMode filter,
+                         AddressMode addressU, AddressMode addressV,
+                         AddressMode addressW, LevelArray* levels) {
+    _dimension = type;
+    _width     = width;
+    _kind      = usage;
+    _height    = height;
+    _format    = format;
+    _flags     = flags;
+    _filter    = filter;
+    _addressU  = addressU;
+    _addressV  = addressV;
+    _addressW  = addressW;
+
+    return _data->Create(levels);
+}
+
+// ?PlatformConstruct@ImageBuffer@Video@@AEAAXXZ  0x1800f2f40, ordinal 3337
+// ?PlatformDestruct@ImageBuffer@Video@@AEAAXXZ   0x1800f3020, ordinal 3365
+//
+// The shared `PlatformConstructBody`/`PlatformDestructBody` pair is NOT
+// specialised per class here: it is the ONE argument tuple Wave 9 lane W's
+// empty-list probe proved, and it is also `{Index,Vertex,Render}Buffer`'s. The
+// ImageBuffer arm is the one that does NOT null the companion field after
+// releasing it — that asymmetry is in the shipped bytes of all four and is
+// reproduced rather than tidied.
+void ImageBuffer::PlatformConstruct() {
     void** first = ImageBufferFirstSurface();
+    (void)PlatformConstructBody(this, 0x50, offsetof(ImageBuffer, _data), first, kImageLinks);
+}
 
-    LinkState pre{};
-    void* preCompanion = nullptr;
+void ImageBuffer::PlatformDestruct() {
+    void** first = ImageBufferFirstSurface();
+    (void)PlatformDestructBody(this, offsetof(ImageBuffer, _data),
+                               /*nullCompanionAfterRelease=*/false, first, kImageLinks);
+}
 
-    const LinkBranch br = PlatformConstructBody(self, 0x50, offsetof(ImageBuffer, platformData), first, kImageLinks);
+}  // namespace Video
 
-    // The empty-list probe, once. Fired from HERE rather than from init because
-    // this is the earliest point at which Video::Device and its DeviceData are
-    // guaranteed to exist -- see ProbeEmptyList's header.
-
+void Video_ImageBuffer_PlatformConstruct(ImageBuffer* self) {
+    reinterpret_cast<Video::ImageBuffer*>(self)
+        ->Video::ImageBuffer::PlatformConstruct();                // B.3.5 bridge
 }
 
 void Video_ImageBuffer_PlatformDestruct(ImageBuffer* self) {
-    void** first = ImageBufferFirstSurface();
-
-    LinkState pre{};
-
-    const UnlinkBranch br = PlatformDestructBody(self, offsetof(ImageBuffer, platformData),
-                                                 /*nullCompanionAfterRelease=*/false, first, kImageLinks);
-
+    reinterpret_cast<Video::ImageBuffer*>(self)
+        ->Video::ImageBuffer::PlatformDestruct();                 // B.3.5 bridge
 }
 
 // ENDGAME B.3.5 block D2 — the four buffer `Platform*` bodies are members of the
