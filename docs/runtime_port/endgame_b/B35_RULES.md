@@ -301,6 +301,15 @@ headers are trustworthy on size.
 5. `Video::ImageBuffer` slot 9 is `Create`; `GeneratedImageBuffer` adds `Generate`(10) and
    `Render`(11) as PURE. `FrameCopy`/`Reflection` override 6,7,8,10,11 but **inherit slot 9**
    (`?Create@ImageBuffer@Video@@`) — `GeneratedImageBuffer` also inherits 6,7,8 from `ImageBuffer`.
+
+   > **CORRECTION (block C, restated by block GC, 2026-09-19).** The `FrameCopy`/`Reflection`
+   > sentence is WRONG for ONE of the two: **`FrameCopyImageBuffer` OVERRIDES slot 9.**
+   > B35_SLOTS.md's own byte read puts `?Create@FrameCopyImageBuffer@Graphics@@…` (0x1800a3b70) at
+   > slot 9, and the shipped export table carries that symbol; `?Create@ReflectionImageBuffer@`
+   > does not exist. So FrameCopy overrides 1,2,3,5,6,7,8,**9**,10,11 and inherits only slot 4,
+   > while Reflection overrides 1,2,3,5,6,7,8,10,11 and inherits 4 AND 9.
+   > `FrameCopyImageBuffer.h` carries the same correction beside the declaration, and block GC
+   > turned that slot into a real member definition.
 6. `Graphics::EdgeMeshInstance` overrides slot 6 only of the two retslot slots; slot 5
    (`GetSubTransform`) stays `Geometry`'s. `MeshInstance` overrides both.
 
@@ -322,7 +331,7 @@ marked INFERRED and goes on the §13 list.
 | `Video::Viewport` | 0x10 | Context.h:171 ✓ | **YES** — trivial four ints, and retail exports both `??0Viewport@Video@@QEAA@XZ` and `??0Viewport@Video@@QEAA@HHHH@Z`. Held by value in `Context` and returned by value (§2.5). |
 | `Graphics::Camera` | 0xd8 | Camera.h:72 ✓ | NO — **held BY VALUE inside two array element types** (§3) |
 | `Graphics::Scene` | 0x78 | Scene.h:116 ✓ | NO (by-value holder unproven; see §13) |
-| `Graphics::Renderer` | 0x50 | Camera.h:208 ✓ | NO — **the ctor leaves +0x3c and +0x4c UNWRITTEN** (§6 rule B5-9) |
+| `Graphics::Renderer` | 0x50 | Camera.h:208 ✓ | NO — **the ctor leaves +0x3c and +0x4c UNWRITTEN** (§6.1 rule **B5-13**; the "B5-9" in this cell was a typo — B5-9 is `InitializeInterfaces`. CORRECTION, block GC 2026-09-19) |
 | `Graphics::Animation` | **undocumented** | — | see §13 |
 | `Graphics::AnimationManager` | 0x9d8 | Animation.h:131 ✓ | NO — singleton (`?_singleton@AnimationManager@Graphics@@`) |
 | `Graphics::AnimationState` | 0x48 | AnimationState.h:235 ✓ | NO — a 0x18-byte prefix of it is embedded in `MeshInstance` as `MeshAnimationState` (Mesh.h:139) |
@@ -617,8 +626,31 @@ found no other `void` port.
 > §2.5's "eighteen `ExternalPtr<T>` getters are retslot" is DOUBTFUL — the diffed ports pass
 > `ExternalPtr` in a register, i.e. MSVC treats it as trivially copyable, and an 8-byte trivially
 > copyable class returns in RAX. Settle per getter from its retail prologue before writing a door.
+>
+> **CORRECTION (blocks B and G, recorded by block GC, 2026-09-19): THE DOUBT IS RESOLVED AND
+> §2.5 WAS RIGHT — the `ExternalPtr<T>` getters ARE hidden-retslot in retail.** Both blocks read
+> the PROLOGUES rather than inferring from the type: the getter takes the caller's storage in RDX
+> and returns it in RAX, which is the retslot shape, notwithstanding that `ExternalPtr<T>` is one
+> trivially copyable pointer. MSVC's rule at the boundary is the `?AV`/`?AU` mangled return, not
+> the triviality of the type. A door for one of the eighteen therefore places the prvalue into the
+> caller's slot and returns that pointer, exactly as B5-12's general sentence says. Block E's
+> "settle it from the prologue" instruction stands as the METHOD; its verdict does not.
 
 ### 6.1 Also carried forward (from STATUS.md and the inventory, same sweep)
+
+> **ADDED (block D2, recorded by block GC, 2026-09-19).** `Video::Device::Adapter`'s **+0x2c and
+> +0x30 are the DXGI ADAPTER INDEX and OUTPUT INDEX** — the two ordinals `IDXGIFactory::
+> EnumAdapters` and `IDXGIAdapter::EnumOutputs` take. §2.4 lists `Adapter` as a 0x38-byte nested
+> value type without naming its fields; these two are named now, from `dx11/`'s own enumeration
+> calls, and `Device.h` carries them.
+
+> **STALE, and answered (block GC, 2026-09-19).** §2.2's and `Camera.h`'s framing of "the four
+> unported / undefined `Renderer` big bodies" no longer describes the tree. `Renderer::Draw`,
+> `::DrawItemList`, `::AddDrawItem` and `::BeginDrawGroup` were never unPORTED — each had a
+> registered, ported door in a file block F could not touch — and as of block GC all four are
+> MEMBERS of `Graphics::Renderer`, with their doors delegating. The same goes for
+> `SpotLight::CreateTargets`, `MeshInstance::GetBones`, `Animation::GetRootPoseAtTime` and
+> `FrameCopyImageBuffer::Create`/`::Generate`.
 
 - **`Renderer`'s ctor leaves +0x3c and +0x4c unwritten**, and `RendererDrawItem` leaves `_pad24`
   and `_pad34` unwritten on every append (Camera.h's two "TWO GAPS ARE REAL" banners). **RULE
@@ -874,6 +906,14 @@ Makefile include set, `cutover_manifest.inc`'s 22 V/G rows, the vtable-address g
 1. **`sizeof(Video::Configuration)` is 0x44 INFERRED**, never measured. `Device.h:240-243` says so
    itself: no body that lane read allocates one, which is why there is no `static_assert`. The
    `Device`/`Configuration` block must find an allocation site or a `MOV EDX` and add the assert.
+
+   > **CORRECTION (block D2, recorded by block GC, 2026-09-19).** The gap CANNOT be closed the way
+   > this item asks. There is **no allocation site anywhere in the retail image**: the object is the
+   > singleton `?_singleton@Configuration@Video@@`, published rather than allocated through a sized
+   > `operator new`, so there is no `MOV EDX,imm` to read — and the class is non-polymorphic, so
+   > there is no slot-0 deleting dtor to read one from either. `Device.h` therefore asserts a RANGE
+   > rather than an exact size, and that is the honest answer, not a deferral. The item stays on
+   > this list as "unmeasurable with the instruments this sheet names", not as "not yet done".
 2. **`Graphics::Animation`'s layout is undocumented.** No `struct Animation`, no size. It has 22
    exports and a non-virtual ctor/dtor at 0x1800fb1d0/0x1800fb290. Block H must author it.
 3. **Six more layouts are undocumented** (no `struct`, no `sizeof` assert), though this pass read
@@ -884,14 +924,32 @@ Makefile include set, `cutover_manifest.inc`'s 22 V/G rows, the vtable-address g
    `uint8_t[0x48]`; `CompanionData.h:70` names only +0x38 and +0x40). 0x48 is a measured size but
    not a measured *total* — `CompanionData.h` says the ctor's last write is +0x40, so anything
    between +0x41 and +0x47 is unproven.
+
+   > **CORRECTION (block D1, recorded by block GC, 2026-09-19).** The last sentence is wrong about
+   > the WIDTH of that store: **the write at +0x40 is a QWORD**, so it covers +0x40..+0x47 and
+   > NOTHING between +0x41 and +0x47 is unproven — the constructor's writes reach the end of the
+   > 0x48 bytes, and 0x48 is a measured *total* after all. The rest of the item stands: the
+   > interior below +0x38 stays opaque on purpose.
 5. **Whether anything holds `Graphics::Scene` or `Video::Context` by value is NOT established.**
    I found no by-value holder of either; that is an absence of evidence from a grep over
    `runtime/types` + `engine/types` only, not a proof. A block converting `Scene` or `Context`
    must repeat the search over `code/` and `standalone/`.
+
+   > **CLOSED (blocks D1 and F, recorded by block GC, 2026-09-19).** Both searches were repeated
+   > over `code/`, `standalone/`, `engine/` and `dx11/`: **there is no by-value holder of
+   > `Graphics::Scene` and none of `Video::Context`.** Every live one is reached through a pointer
+   > or a reference. So neither class needs B5-4's concrete + protected-`= default` + `friend`
+   > treatment on that ground, and both stay as their blocks converted them.
 6. **`ParticleInstance`'s and `Particle`'s slot 6/7/8 identities are INFERRED**, not read:
    Particle's slots 6,7,8 are `_purecall`, and I assigned them `Reconstruct`/`Destruct`/
    `CreateSystem` from `ParticleSystem`'s concrete overrides at the same indices. Sound, but it is
    an inference; `ParticleSystem`'s slot list is the byte-read part.
+
+   > **CLOSED (block H2, recorded by block GC, 2026-09-19): the inference is CONFIRMED.** Block H2
+   > pinned slots 6, 7 and 8 slot-by-slot with a concrete probe subclass whose vtable is read back
+   > at each retail byte offset (`tests/unit/graphics_particle_abi_test.cpp`), and the assignment
+   > `Reconstruct`(6) / `Destruct`(7) / `CreateSystem`(8) holds — including B5-16's trap that
+   > `Construct` enters the branch at slot 9 on `ParticleSystem`, behind `CreateSystem`.
 7. **`Object::External`'s and `CompiledExternal`'s slot-8 NULL.** Both retail arrays are 8 entries
    and External's ninth qword reads 0. I did not establish whether that null is an MSVC artifact
    or a ninth declared-but-unimplemented slot. It does not change step 5 (each Video/Graphics leaf
@@ -909,6 +967,15 @@ Makefile include set, `cutover_manifest.inc`'s 22 V/G rows, the vtable-address g
 10. **`Graphics::Renderer`'s `field_38`** is read by `standalone/scene_watch.h:73` as "draw groups
     used this frame"; `Camera.h:208`'s banner says no ported function touches it, so that reading
     is neither confirmed nor contradicted.
+
+    > **CLOSED (block F, recorded by block GC, 2026-09-19): `scene_watch.h` was RIGHT.** The WRITER
+    > settles it. `?BeginDrawGroup@Renderer@Graphics@@` (0x180104fd0) reads `[RCX+0x38]` as the
+    > index of the group it is about to open, writes that to `_currentDrawGroup` (+0x34), compares
+    > it against `_drawGroups._size` to choose grow-versus-reuse, and then either
+    > `INC dword ptr [RDI+0x38]` or stores `index + 1`. The field is `_drawGroupsUsed`. The "no
+    > ported function touches it" half was stale even when written — `BeginDrawGroup` was ported in
+    > `wave28_lane_gfxbody.cpp` — and block GC has since moved that body onto the member, so the
+    > writer is a member of the class `Camera.h` declares.
 11. **`External`'s +0x2c** is `_capacity` by plausibility only (`External.h:318`) — B.3.3's gap,
     inherited by every Video/Graphics external.
 12. **I did not build, run or gate anything**, per the brief. No claim here is backed by an

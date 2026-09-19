@@ -280,13 +280,17 @@ public:
     static AnimationManager* Get();
 
     // ?Update@AnimationManager@Graphics@@QEAAXAEBVTime@System@@_N@Z 0x1800fc240
-    //   DECLARED, DELIBERATELY UNDEFINED. The live body is the unchanged door in
-    //   `wave23_lane_gfxbody.cpp`. That body
-    //   is wrapped in its lane's `RT_GFX23_CORRUPT(n)` effectiveness-probe
-    //   scaffolding and its `Attend()`/`g_animUpdStates` counters, which
-    //   `standalone/scene_watch.cpp` reads; moving the body out from under its
-    //   own probes is a second change riding on this one — the call
-    //   `runtime/src/object/external_class_doors.cpp` makes for the same reason.
+    //   PORTED — the body is this member, in `wave23_lane_gfxbody.cpp`'s
+    //   `namespace Graphics` block; the registered door delegates and keeps both
+    //   counters (ENDGAME B.3.5 block GC).
+    //
+    //   TWO CORRECTIONS TO WHAT THIS NOTE USED TO SAY. (1) The lane's
+    //   `RT_GFX23_CORRUPT(n)` effectiveness-probe scaffolding is DELETED, not
+    //   worked around: it was guarded by `GFXBODY23_PROBE`, which nothing in the
+    //   tree defines, and the `tools/gfxbody23_probe` it named does not exist.
+    //   (2) `standalone/scene_watch.cpp` does NOT read `Attend()` or
+    //   `g_animUpdStates` — that was wrong. Their one reader is the lane's own
+    //   `RtGraphicsWave23GfxbodySummary()` printf, and both counters stay.
     void Update(const System::Time& time, bool rootOnly);
 
     // ?Serialize@AnimationManager@Graphics@@QEAAXAEAVSerializer@IO@@@Z 0x1800fc190
@@ -311,10 +315,13 @@ public:
 
     // ?GetInstanceId@AnimationManager@Graphics@@QEAAHV?$ExternalPtr@VAnimationGroup
     // @Graphics@@@Object@@HAEBV?$Array@UNode@GraphicsMesh@Graphics@@@Collection@@@Z
-    //   0x1800fb9d0. DECLARED, DELIBERATELY UNDEFINED: the live body is the
-    //   unchanged door in animationstate_transforms.cpp, kept there for the
-    //   scaffolding reason above (its banner's "NOT DIFFABLE: the body allocates
-    //   instances, bakes poses into them and moves reference counts").
+    //   0x1800fb9d0. PORTED — the body IS this member, in
+    //   animationstate_transforms.cpp's `namespace Graphics` block, and the door
+    //   delegates (ENDGAME B.3.5 block GC). It used to be "DECLARED, DELIBERATELY
+    //   UNDEFINED ... kept there for the scaffolding reason above"; the
+    //   "NOT DIFFABLE: the body allocates instances, bakes poses into them and
+    //   moves reference counts" note is DOCUMENTATION, it travelled with the body,
+    //   and there was no oracle machinery left to move out from under it.
     //
     //   `nodes` is retail's `const Array<GraphicsMesh::Node>&`, stride 0x48.
     //   `GraphicsMesh` is block G's class and is deliberately not named here.

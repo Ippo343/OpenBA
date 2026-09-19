@@ -80,12 +80,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <vector>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/math/Math.h"
 #include "../../types/collection/Collection.h"
 #include "../../types/graphics/AnimationManager.h"
+#include "../../types/graphics/AnimationState.h"   // ENDGAME B.3.5 block GC
+#include "../../types/graphics/Mesh.h"             // Graphics::MeshInstance, ditto
+#include "../../types/system/Value.h"                // System::Time, ditto
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -248,21 +250,257 @@ void Copy7Dwords(void* dst, const void* src) {
 // caller passes, and the new layer's speed is the literal 1.0f, never the
 // caller's `float`. Both stay in the signature because retail's callers push
 // them and the registered entry point must have retail's arity.
+// ENDGAME B.3.5 block GC: THE BODY MOVED to
+// `Graphics::AnimationState::PlayAnimation`, in this file's `namespace Graphics`
+// block at the bottom. The door keeps its name, its registration and retail's
+// arity, including the two parameters retail never reads.
 extern "C" void RtGraphics_AnimationState_PlayAnimation(
     void* selfv, void* group, int animIndex, const void* nodesv,
-    const int64_t* startTime, const int64_t* /*fadeTime, unread*/,
-    float /*speed, unread*/, bool instanced) {
+    const int64_t* startTime, const int64_t* fadeTime,
+    float speed, bool instanced) {
+    reinterpret_cast<Graphics::AnimationState*>(selfv)                  // B.3.5 bridge
+        ->Graphics::AnimationState::PlayAnimation(
+            Object::ExternalPtr<Graphics::AnimationGroup>(
+                reinterpret_cast<Graphics::AnimationGroup*>(group)),    // B.3.5 bridge
+            animIndex,
+            *reinterpret_cast<const Collection::Array<uint8_t>*>(nodesv),
+            *reinterpret_cast<const System::Time*>(startTime),
+            *reinterpret_cast<const System::Time*>(fadeTime),
+            speed, instanced);
+}
+
+// ============================================================================
+// ?GetInstanceId@AnimationManager@Graphics@@  (0x1800fb9d0)
+// ============================================================================
+//
+// Find — or bake — the shared instance for (group, clip) and return its packed
+// handle. Baking is the expensive half: for every frame of the clip it builds
+// the skeleton's world pose once and stores it, so that a hundred citizens
+// playing the same walk cycle sample a table instead of each running the
+// hierarchy.
+//
+// THE SEARCH PASS DOES TWO THINGS AT ONCE. It looks for a live entry whose
+// group and clip index match, and in the same sweep remembers the FIRST entry
+// whose group is null — the slot ResetAnimationState/PlayAnimation blanked when
+// its last reference went away. A hit returns immediately; a miss reuses that
+// blank slot, and only if there is none does the array grow by one.
+//
+// THE SECOND RETURN COMPONENT IS NOT ALWAYS ZERO. After bumping the reference
+// count the body sweeps the instance's baked states looking for the one whose
+// layer 0 has the SMALLEST playback time (seeded with 10000.0f from
+// 0x180161734), and packs that state's index into the low byte. A state with no
+// layers scores 0.0f, which wins outright.
+// ENDGAME B.3.5 block GC: THE BODY MOVED onto
+// `Graphics::AnimationManager::GetInstanceId`, in this file's `namespace Graphics`
+// block. Block H1 left it a door for the "NOT DIFFABLE" scaffolding reason; the
+// NOT-DIFFABLE narrative is documentation and travelled with the body, and there
+// was no oracle machinery here to move out from under (the replay captures this
+// file carried went in block GC commit 2). The door keeps its name and its
+// registration.
+extern "C" int RtGraphics_AnimationManager_GetInstanceId(
+    void* selfv, void* group, int animIndex, const void* nodesv) {
+    return reinterpret_cast<Graphics::AnimationManager*>(selfv)          // B.3.5 bridge
+        ->Graphics::AnimationManager::GetInstanceId(
+            Object::ExternalPtr<Graphics::AnimationGroup>(
+                reinterpret_cast<Graphics::AnimationGroup*>(group)),      // B.3.5 bridge
+            animIndex,
+            *reinterpret_cast<const Collection::Array<uint8_t>*>(nodesv));
+}
+
+// ============================================================================
+// ?CopyInstancedToUnique@AnimationState@Graphics@@  (0x1800fd4c0)
+// ============================================================================
+//
+// Re-root a baked, shared pose onto one instance's own node array: walk the
+// skeleton once, composing each node's baked local transform with its parent's
+// freshly computed world transform, and write the result into the caller's
+// InterpolatedState array (shifting each entry's current value into its
+// previous half first, which is what keeps interpolation continuous).
+//
+// *** `this` IS NEVER READ. *** RCX is overwritten with the root transform four
+// instructions in. The method is declared const and private and takes
+// everything it needs as arguments; the parameter stays for the ABI.
+//
+// Node 0 is done with the two real Math CALLs retail makes (Quaternion::Rotate
+// then operator*); nodes 1..n-1 have the rotate INLINED, and that inlined form
+// is the one whose schedule is transcribed below.
+// ENDGAME B.3.5 block GC: THE BODY MOVED to
+// `Graphics::AnimationState::CopyInstancedToUnique`, at the bottom of this file.
+// The door keeps its name, its registration and retail's `this` parameter, which
+// the body still never reads.
+extern "C" void RtGraphics_AnimationState_CopyInstancedToUnique(
+    const void* selfv, const void* nodesv, const void* rootv,
+    void* interpv, int handle) {
+    reinterpret_cast<const Graphics::AnimationState*>(selfv)            // B.3.5 bridge
+        ->Graphics::AnimationState::CopyInstancedToUnique(
+            *reinterpret_cast<const Collection::Array<uint8_t>*>(nodesv),
+            *reinterpret_cast<const Math::Transform*>(rootv),
+            interpv, handle);
+}
+
+// ============================================================================
+// ?UpdateNodes@AnimationState@Graphics@@  (0x1800fcc20)
+// ============================================================================
+//
+// Resolve every layer of a playing animation into one pose, then push that pose
+// through the skeleton.
+//
+// Three phases, in order:
+//   1. Sample the LAST layer into `pose`, either from its shared baked instance
+//      (GetPose) or by sampling the clip directly (GetPoseAtTime).
+//   2. Walk the remaining layers BACKWARDS, from count-2 down to 0. Each one is
+//      sampled into a 48-entry scratch and `pose` is lerped FROM that scratch
+//      TOWARDS its current value by `fadeRemaining / fadeLength` of the layer
+//      ABOVE it — so as that layer's fade runs out the blend lands on the lower
+//      layer's pose.
+//   3. Hand pose[0]'s translation back as the root offset, reset pose[0] to the
+//      identity, and compose every node's pose with its parent's, writing the
+//      hierarchy into `interp`.
+//
+// *** THE SCRATCH IS 48 TRANSFORMS AND THE BOUND IS NEVER CHECKED. *** Retail
+// re-initialises exactly 48 identity transforms at the top of every layer
+// iteration and then fills `nodeCount` of them. A mesh with more than 48 nodes
+// overruns it in retail too; the array here is the same 48 so that a build with
+// more nodes fails the same way rather than differently.
+// ENDGAME B.3.5 block GC: THE BODY MOVED to
+// `Graphics::AnimationState::UpdateNodes`, at the bottom of this file. The door
+// keeps its name, its registration and retail's argument order.
+extern "C" void RtGraphics_AnimationState_UpdateNodes(
+    void* selfv, float speed, const void* nodesv, const void* rootv,
+    void* interpv, void* posev, float* rootOffset) {
+    reinterpret_cast<Graphics::AnimationState*>(selfv)                  // B.3.5 bridge
+        ->Graphics::AnimationState::UpdateNodes(
+            speed,
+            *reinterpret_cast<const Collection::Array<uint8_t>*>(nodesv),
+            *reinterpret_cast<const Math::Transform*>(rootv),
+            interpv, posev,
+            *reinterpret_cast<Math::Vector3*>(rootOffset));             // B.3.5 bridge
+}
+
+// ============================================================================
+// ?GetBones@MeshInstance@Graphics@@  (0x180100070)
+// ============================================================================
+//
+// Produce one skinning matrix per bone and return the bone count.
+//
+// Per bone: interpolate between the InterpolatedState's two halves by `t`,
+// compose that with the node's BIND transform, compose THAT with the instance's
+// root transform, and convert to a Matrix.
+//
+// THE TWO BRANCHES ON MeshInstance+0xd8 ARE THE SAME QUESTION ASKED TWICE.
+// Non-zero means the instance is playing a shared, instanced clip: the node
+// states come out of the AnimationManager's pool through the last layer's
+// packed handle, and the root transform used is the IDENTITY. Zero means the
+// instance owns its nodes (+0xf0) and the root transform is the INVERSE of the
+// one the caller passed. Retail tests the byte three separate times rather than
+// keeping the answer; reproduced.
+//
+// The root quaternion's four `q * 0.0f` products are hoisted out of the loop by
+// MSVC and are kept hoisted here, because they are what the second rotate's
+// accumulators are SEEDED with.
+// ENDGAME B.3.5 block GC: THE BODY MOVED onto
+// `Graphics::MeshInstance::GetBones` (block E's class; this file is not block
+// E's). The door keeps its name and its registration.
+extern "C" int RtGraphics_MeshInstance_GetBones(
+    const void* selfv, float t, const void* rootv, void* outv) {
+    return reinterpret_cast<const Graphics::MeshInstance*>(selfv)        // B.3.5 bridge
+        ->Graphics::MeshInstance::GetBones(
+            t, *reinterpret_cast<const Math::Transform*>(rootv),
+            static_cast<Math::Matrix*>(outv));                           // B.3.5 bridge
+}
+
+// ============================================================================
+// Registration. Unconditional (DIRECTION.md §2: a port registers, no flag).
+// ============================================================================
+int RtGraphicsAnimationTransformsRegister() {
+    int n = 0;
+
+    RegisterRuntimeExport(
+        "?PlayAnimation@AnimationState@Graphics@@QEAAXV?$ExternalPtr@VAnimationGroup@"
+        "Graphics@@@Object@@HAEBV?$Array@UNode@GraphicsMesh@Graphics@@@Collection@@"
+        "AEBVTime@System@@2M_N@Z",
+        (void*)&RtGraphics_AnimationState_PlayAnimation);                       ++n;
+    RegisterRuntimeAddr(0x1800fdf50ull, (void*)&RtGraphics_AnimationState_PlayAnimation);
+
+    RegisterRuntimeExport(
+        "?GetInstanceId@AnimationManager@Graphics@@QEAAHV?$ExternalPtr@VAnimationGroup@"
+        "Graphics@@@Object@@HAEBV?$Array@UNode@GraphicsMesh@Graphics@@@Collection@@@Z",
+        (void*)&RtGraphics_AnimationManager_GetInstanceId);                     ++n;
+    RegisterRuntimeAddr(0x1800fb9d0ull, (void*)&RtGraphics_AnimationManager_GetInstanceId);
+
+    RegisterRuntimeExport(
+        "?CopyInstancedToUnique@AnimationState@Graphics@@AEBAXAEBV?$Array@UNode@"
+        "GraphicsMesh@Graphics@@@Collection@@AEBVTransform@Math@@PEAV?$InterpolatedState@"
+        "VTransform@Math@@@2@H@Z",
+        (void*)&RtGraphics_AnimationState_CopyInstancedToUnique);               ++n;
+    RegisterRuntimeAddr(0x1800fd4c0ull, (void*)&RtGraphics_AnimationState_CopyInstancedToUnique);
+
+    RegisterRuntimeExport(
+        "?UpdateNodes@AnimationState@Graphics@@AEAAXMAEBV?$Array@UNode@GraphicsMesh@"
+        "Graphics@@@Collection@@AEBVTransform@Math@@PEAV?$InterpolatedState@VTransform@"
+        "Math@@@2@PEAV56@AEAVVector3@6@@Z",
+        (void*)&RtGraphics_AnimationState_UpdateNodes);                         ++n;
+    RegisterRuntimeAddr(0x1800fcc20ull, (void*)&RtGraphics_AnimationState_UpdateNodes);
+
+    RegisterRuntimeExport(
+        "?GetBones@MeshInstance@Graphics@@QEBAHMAEBVTransform@Math@@PEAVMatrix@4@@Z",
+        (void*)&RtGraphics_MeshInstance_GetBones);                              ++n;
+    RegisterRuntimeAddr(0x180100070ull, (void*)&RtGraphics_MeshInstance_GetBones);
+
+    return n;
+}
+
+// ############################################################################
+// ENDGAME B.3.5 step 5, block GC — the `Graphics::AnimationState` member bodies
+// whose live doors are the `extern "C"` functions above.
+//
+// Their own `namespace Graphics { }` block: a member definition has to appear in
+// a namespace ENCLOSING the class, and `Graphics` / `RtGraphics` are siblings
+// (B34_BRIEFS A.2). Every helper this file defines sits in the GLOBAL unnamed
+// namespace, so unqualified lookup from here reaches all of them.
+//
+// Block H1 left these three bodies where they were because each carried its
+// lane's diff-oracle scaffolding and "moving a body out from under its own
+// scaffolding is a second change riding on this one". THE SCAFFOLDING IS GONE,
+// and that is why the move is now a move and not two changes: the oracle
+// captures (`replay`, `replayBytes`, `replayPose`, `replayInterp`,
+// `replayOffset`, `poseBytes`, `interpBytes`) had NO READER anywhere in the tree
+// — they were this file's five -Wunused-variable warnings — so they are deleted
+// with the `<vector>` include they needed. The narrative paragraphs that explain
+// WHY a replay against the DLL would be destructive are kept, because that is
+// still true of the members.
+// ############################################################################
+
+namespace Graphics {
+
+// ---------------------------------------------------------------------------
+// ?PlayAnimation@AnimationState@Graphics@@  0x1800fdf50 — ENDGAME B.3.5 block GC.
+// The four arms, the two unread parameters and the store-order asymmetry between
+// arm A and arm B are all documented in the banner beside the door above.
+//
+// `group` is retail's `Object::ExternalPtr<AnimationGroup>` BY VALUE (8 bytes,
+// trivially copyable, so it arrives in a register); the body reads it as the raw
+// pointer retail does, because `Graphics::AnimationGroup`'s own fields are
+// reached here through `RtGraphics::anim_group::k*`, not as members.
+// ---------------------------------------------------------------------------
+void AnimationState::PlayAnimation(Object::ExternalPtr<AnimationGroup> groupHandle,
+                                   int animIndex,
+                                   const Collection::Array<uint8_t>& nodesRef,
+                                   const System::Time& startTime,
+                                   const System::Time& /*fadeTime, unread*/,
+                                   float /*speed, unread*/, bool instanced) {
     // NOT DIFFABLE against the DLL. The body mutates the layer array AND the
     // AnimationManager's shared instance pool (reference counts, SetSize);
     // running the original a second time on the same inputs would double every
     // one of those. the diff-oracle header names this case explicitly. The site is still
     // registered so the summary carries its `entered` count.
 
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    ArrayHdr* layers = reinterpret_cast<ArrayHdr*>(self + 0x08);
+    void* const group = groupHandle.Get();
+    const void* const nodesv = &nodesRef;
+    ArrayHdr* layers = &_layers;              // self + 0x08
 
     if (animIndex < 0) {
-        for (int32_t i = 0; i < *reinterpret_cast<const int32_t*>(self + 0x10); ++i) {
+        for (int32_t i = 0; i < _layers._size; ++i) {
             const int32_t handle =
                 *reinterpret_cast<const int32_t*>(layers->_data + i * kLayerStride + 0x0c);
             if (handle < 0) continue;                       // TEST ECX,ECX / JS
@@ -281,7 +519,7 @@ extern "C" void RtGraphics_AnimationState_PlayAnimation(
         return;
     }
 
-    const int32_t count = *reinterpret_cast<const int32_t*>(self + 0x10);
+    const int32_t count = _layers._size;
 
     if (count > 0) {
         uint8_t* l0 = layers->_data;
@@ -344,12 +582,12 @@ extern "C" void RtGraphics_AnimationState_PlayAnimation(
             *reinterpret_cast<int64_t*>(l + 0x20) = ticks;
             *reinterpret_cast<int64_t*>(layers->_data + 0x28) = ticks;
 
-            SetSizeLayers()(layers, *reinterpret_cast<const int32_t*>(self + 0x10) + 1);
+            SetSizeLayers()(layers, _layers._size + 1);
 
             // Shift layers[k] -> layers[k+1] for k = oldCount-1 .. 0, as seven
             // qword moves per record, re-reading the buffer each iteration
             // exactly as retail does.
-            int64_t n = *reinterpret_cast<const int32_t*>(self + 0x10) - 1;
+            int64_t n = _layers._size - 1;
             if (n >= 1) {
                 int64_t off = n * kLayerStride;
                 do {
@@ -375,52 +613,767 @@ extern "C" void RtGraphics_AnimationState_PlayAnimation(
     *reinterpret_cast<int64_t*>(l0 + 0x28) = SecondsToTicks(0.0);
     *reinterpret_cast<uint32_t*>(l0 + 0x10) = 0x3f800000u;   // speed = 1.0f
     l0[0x30] = 0;                                            // restarted = false
-    *reinterpret_cast<int64_t*>(l0 + 0x18) = *startTime;
+    *reinterpret_cast<int64_t*>(l0 + 0x18) = startTime._ticks;
 
     const uint8_t* clips =
         *reinterpret_cast<const uint8_t* const*>(static_cast<uint8_t*>(group) +
                                                  RtGraphics::anim_group::kClips);
     if (clips[static_cast<int64_t>(animIndex) * kClipStride +
               RtGraphics::anim_clip::kInstanced] != 0 && instanced) {
-        // CALL 0x1800fb9d0 — GetInstanceId, the body below. Through the address
-        // registry rather than as a direct C call so the seam stays one door.
-        using GetInstanceIdFn = int (*)(void*, void*, int, const void*);
+        // CALL 0x1800fb9d0 — GetInstanceId. ENDGAME B.3.5 block GC item 6: this was
+        // `RtAddr<GetInstanceIdFn>(0x1800fb9d0)`, an ADDRESS door onto the body in
+        // this very file, kept that way "so the seam stays one door".
+        // `Graphics::AnimationManager::GetInstanceId` is a MEMBER now, so this is a
+        // QUALIFIED non-virtual member call — retail's own direct CALL — and the
+        // registered door still serves every caller outside this file.
         *reinterpret_cast<int32_t*>(l0 + 0x0c) =
-            RtAddr<GetInstanceIdFn>(0x1800fb9d0)(
-                AnimationManagerSingleton(), group, animIndex, nodesv);
+            reinterpret_cast<Graphics::AnimationManager*>(              // B.3.5 bridge
+                AnimationManagerSingleton())
+                ->Graphics::AnimationManager::GetInstanceId(
+                    Object::ExternalPtr<Graphics::AnimationGroup>(
+                        reinterpret_cast<Graphics::AnimationGroup*>(group)),
+                    animIndex,
+                    *reinterpret_cast<const Collection::Array<uint8_t>*>(nodesv));
     } else {
         *reinterpret_cast<int32_t*>(l0 + 0x0c) = -1;
     }
 }
 
-// ============================================================================
-// ?GetInstanceId@AnimationManager@Graphics@@  (0x1800fb9d0)
-// ============================================================================
+// ---------------------------------------------------------------------------
+// ?CopyInstancedToUnique@AnimationState@Graphics@@  0x1800fd4c0 — block GC.
 //
-// Find — or bake — the shared instance for (group, clip) and return its packed
-// handle. Baking is the expensive half: for every frame of the clip it builds
-// the skeleton's world pose once and stores it, so that a hundred citizens
-// playing the same walk cycle sample a table instead of each running the
-// hierarchy.
+// *** `this` IS STILL NEVER READ. *** RCX is overwritten with the root transform
+// four instructions in. The member is `const` and takes everything it needs as
+// arguments; retail's receiver stays in the signature for the ABI and for the
+// door, and the body below does not touch a single field of this class.
+// The node-0-versus-node-n schedule difference is in the door's banner.
+// ---------------------------------------------------------------------------
+void AnimationState::CopyInstancedToUnique(const Collection::Array<uint8_t>& nodesRef,
+                                           const Math::Transform& rootRef,
+                                           void* interpv, int handle) const {
+    const ArrayHdr* nodes = &nodesRef;
+    const uint8_t* root = reinterpret_cast<const uint8_t*>(&rootRef);
+    uint8_t* interp = static_cast<uint8_t*>(interpv);
+
+    const uint8_t* instData = AnimationManagerSingleton()->_instances._data;
+    const uint8_t* states = *reinterpret_cast<const uint8_t* const*>(
+        instData + static_cast<int64_t>((handle >> 8) & 0xff) * kInstanceStride + 0x20);
+    const uint8_t* pose = *reinterpret_cast<const uint8_t* const*>(
+        states + static_cast<int64_t>(handle & 0xff) * kStateStride + 0x28);
+
+    // ---- node 0, through the two real calls ----
+    float rotated[3];
+    const float* rot = QuaternionRotate(root, rotated, pose + 0x10);
+
+    float ry = *reinterpret_cast<const float*>(root + 0x14);
+    float rz = *reinterpret_cast<const float*>(root + 0x18);
+    float rx = rot[0];
+    ry = ry + rot[1];
+    rz = rz + rot[2];
+    rx = rx + *reinterpret_cast<const float*>(root + 0x10);
+
+    float q0ret[4];
+    const float* q0 = QuaternionMul(root, q0ret, pose);
+
+    Copy7Dwords(interp + kTransformStride, interp);
+    {
+        float* dst = reinterpret_cast<float*>(interp);
+        dst[0] = q0[0];
+        dst[1] = q0[1];
+        dst[2] = q0[2];
+        dst[3] = q0[3];
+        dst[4] = rx;
+        dst[5] = ry;
+        dst[6] = rz;
+    }
+
+    // ---- nodes 1..n-1, rotate inlined ----
+    for (int32_t i = 1; i < nodes->_size; ++i) {
+        const uint8_t* posei = pose + static_cast<int64_t>(i) * kTransformStride;
+        const int64_t nodeOff = static_cast<int64_t>(i) * kNodeStride;
+
+        const float vy = *reinterpret_cast<const float*>(posei + 0x14);
+        const float vx = *reinterpret_cast<const float*>(posei + 0x10);
+        const float vz = *reinterpret_cast<const float*>(posei + 0x18);
+
+        const int32_t parent =
+            *reinterpret_cast<const int32_t*>(nodes->_data + nodeOff + 0x08);
+        const uint8_t* P = interp + static_cast<int64_t>(parent) * kInterpStride;
+
+        const float px = *reinterpret_cast<const float*>(P + 0x00);
+        const float pw = *reinterpret_cast<const float*>(P + 0x0c);
+        const float pz = *reinterpret_cast<const float*>(P + 0x08);
+        const float py = *reinterpret_cast<const float*>(P + 0x04);
+
+        const float mpx = -px;
+        const float mpz = -pz;
+        const float mpy = -py;
+
+        const float tx = *reinterpret_cast<const float*>(P + 0x10);
+        const float ty = *reinterpret_cast<const float*>(P + 0x14);
+        const float tz = *reinterpret_cast<const float*>(P + 0x18);
+
+        float parentXform[7] = { px, py, pz, pw, tx, ty, tz };
+
+        float A = pw * vx;
+        float C = py * vx;
+        float B = py * 0.0f;
+        float k1 = py * vz;
+        float k2 = py * vy;
+        float k3 = px * 0.0f;
+        A = A + k3;
+        float k4 = pz * vy;
+        A = A + k4;
+        A = A - k1;
+        float k5 = pz * vx;
+        float k6 = pw * vy;
+        B = B - k5;
+        float k7 = px * vz;
+        B = B + k6;
+        float k8 = pw * vz;
+        B = B + k7;
+        float k9 = pz * 0.0f;
+        float k10 = pz * vz;
+        C = C + k9;
+        float k11 = px * vy;
+        float k12 = px * vx;
+        C = C - k11;
+        C = C + k8;
+
+        float rxi = pw * A;
+        float D = pw * 0.0f;
+        float u1 = C * mpy;
+        D = D - k12;
+        D = D - k2;
+        D = D - k10;
+        float u0 = D * mpx;
+        rxi = rxi + u0;
+        rxi = rxi + u1;
+        float ryi = pw * B;
+        float u2 = B * mpz;
+        float rzi = pw * C;
+        float u6 = B * mpx;
+        rxi = rxi - u2;
+        rzi = rzi + u6;
+        float u3 = C * mpx;
+        float u4 = D * mpy;
+        float u5 = D * mpz;
+        float wx = tx;
+        wx = wx + rxi;
+        ryi = ryi - u3;
+        float u7 = A * mpz;
+        ryi = ryi + u4;
+        float u8 = A * mpy;
+        ryi = ryi + u7;
+        rzi = rzi - u8;
+        rzi = rzi + u5;
+        float wy = ty;
+        wy = wy + ryi;
+        float wz = tz;
+        wz = wz + rzi;
+
+        float qret[4];
+        const float* q = QuaternionMul(parentXform, qret, posei);
+
+        uint8_t* slot = interp + static_cast<int64_t>(i) * kInterpStride;
+        Copy7Dwords(slot + kTransformStride, slot);
+        float* dst = reinterpret_cast<float*>(slot);
+        dst[0] = q[0];
+        dst[1] = q[1];
+        dst[2] = q[2];
+        dst[3] = q[3];
+        dst[4] = wx;
+        dst[5] = wy;
+        dst[6] = wz;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ?UpdateNodes@AnimationState@Graphics@@  0x1800fcc20 — ENDGAME B.3.5 block GC.
+// The two phases, the backward blend, the 48-entry scratch that retail also
+// overruns, and the next-layer fade weight are documented beside the door.
 //
-// THE SEARCH PASS DOES TWO THINGS AT ONCE. It looks for a live entry whose
-// group and clip index match, and in the same sweep remembers the FIRST entry
-// whose group is null — the slot ResetAnimationState/PlayAnimation blanked when
-// its last reference went away. A hit returns immediately; a miss reuses that
-// blank slot, and only if there is none does the array grow by one.
+// `_layers._data` and `_layers._size` are the POD's `layers` (+0x08) and
+// `layerCount` (+0x10); both are RE-READ at every use here exactly as they were
+// through `self`, because retail reloads them and the callees could grow the
+// array.
+// ---------------------------------------------------------------------------
+void AnimationState::UpdateNodes(float speed,
+                                 const Collection::Array<uint8_t>& nodesRef,
+                                 const Math::Transform& rootRef,
+                                 void* interpv, void* posev,
+                                 Math::Vector3& rootOffsetOut) {
+    const ArrayHdr* nodes = &nodesRef;
+    const uint8_t* root = reinterpret_cast<const uint8_t*>(&rootRef);
+    float* const rootOffset = reinterpret_cast<float*>(&rootOffsetOut);
+    uint8_t* interp = static_cast<uint8_t*>(interpv);
+    uint8_t* pose = static_cast<uint8_t*>(posev);
+
+    const int64_t nodeCount = nodes->_size;
+
+    // ---- phase 1: the last layer ----
+    {
+        const int32_t last = _layers._size - 1;
+        uint8_t* layer = _layers._data +
+                         static_cast<int64_t>(last) * kLayerStride;
+        const uint8_t* group = *reinterpret_cast<const uint8_t* const*>(layer);
+        const uint8_t* clip =
+            *reinterpret_cast<const uint8_t* const*>(group + RtGraphics::anim_group::kClips) +
+            static_cast<int64_t>(*reinterpret_cast<const int32_t*>(layer + 0x08)) * kClipStride;
+        const int32_t handle = *reinterpret_cast<const int32_t*>(layer + 0x0c);
+        if (handle >= 0) {
+            GetPose()(AnimationManagerSingleton(), handle, pose,
+                      static_cast<int>(nodeCount));
+        } else {
+            float scaled = speed;
+            scaled = scaled * *reinterpret_cast<const float*>(layer + 0x10);
+            const int64_t delta = SecondsToTicks(static_cast<double>(scaled));
+            GetPoseAtTime()(clip, reinterpret_cast<const int64_t*>(layer + 0x18), &delta,
+                            pose, static_cast<int>(nodeCount));
+        }
+    }
+
+    // ---- phase 2: every earlier layer, blended in backwards ----
+    float scratch[48][7];
+    for (int32_t i = _layers._size - 2; i >= 0; --i) {
+        for (int s = 0; s < 48; ++s) {
+            scratch[s][0] = 0.0f; scratch[s][1] = 0.0f; scratch[s][2] = 0.0f;
+            scratch[s][3] = 1.0f;
+            scratch[s][4] = 0.0f; scratch[s][5] = 0.0f; scratch[s][6] = 0.0f;
+        }
+
+        uint8_t* layers = _layers._data;
+        uint8_t* layer = layers + static_cast<int64_t>(i) * kLayerStride;
+        const uint8_t* group = *reinterpret_cast<const uint8_t* const*>(layer);
+        const uint8_t* clip =
+            *reinterpret_cast<const uint8_t* const*>(group + RtGraphics::anim_group::kClips) +
+            static_cast<int64_t>(*reinterpret_cast<const int32_t*>(layer + 0x08)) * kClipStride;
+        const int32_t handle = *reinterpret_cast<const int32_t*>(layer + 0x0c);
+
+        if (handle >= 0) {
+            // Inlined GetPose, straight out of the instance pool into the
+            // scratch: retail does NOT call 0x1800fb8e0 on this arm.
+            const uint8_t* instData = AnimationManagerSingleton()->_instances._data;
+            const uint8_t* states = *reinterpret_cast<const uint8_t* const*>(
+                instData + static_cast<int64_t>((handle >> 8) & 0xff) * kInstanceStride + 0x20);
+            if (nodeCount > 0) {
+                const uint8_t* src = *reinterpret_cast<const uint8_t* const*>(
+                    states + static_cast<int64_t>(handle & 0xff) * kStateStride + 0x28);
+                for (int64_t k = 0; k < nodeCount; ++k) {
+                    const uint32_t* s = reinterpret_cast<const uint32_t*>(
+                        src + k * kTransformStride);
+                    uint32_t* d = reinterpret_cast<uint32_t*>(&scratch[k][0]);
+                    d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3];
+                    d[4] = s[4]; d[5] = s[5]; d[6] = s[6];
+                }
+            }
+        } else {
+            float scaled = speed;
+            scaled = scaled * *reinterpret_cast<const float*>(layer + 0x10);
+            const int64_t delta = SecondsToTicks(static_cast<double>(scaled));
+            GetPoseAtTime()(clip, reinterpret_cast<const int64_t*>(layer + 0x18), &delta,
+                            &scratch[0][0], static_cast<int>(nodeCount));
+        }
+
+        // t = layer[i+1].fadeRemaining / layer[i+1].fadeLength, both converted
+        // to seconds as doubles first and narrowed before the DIVSS.
+        const double spt = SecondsPerTick();
+        uint8_t* lbase = _layers._data;
+        const double remSec =
+            static_cast<double>(*reinterpret_cast<const int64_t*>(
+                lbase + static_cast<int64_t>(i) * kLayerStride + 0x60)) * spt;
+        const double lenSec =
+            static_cast<double>(*reinterpret_cast<const int64_t*>(
+                lbase + static_cast<int64_t>(i) * kLayerStride + 0x58)) * spt;
+        float t = static_cast<float>(remSec);
+        const float len = static_cast<float>(lenSec);
+        t = t / len;
+
+        if (nodeCount > 0) {
+            for (int64_t k = 0; k < nodeCount; ++k) {
+                uint8_t* dst = pose + k * kTransformStride;
+                const float* from = &scratch[k][0];
+
+                float bx = *reinterpret_cast<const float*>(dst + 0x10);
+                float by = *reinterpret_cast<const float*>(dst + 0x14);
+                float bz = *reinterpret_cast<const float*>(dst + 0x18);
+                bx = bx - from[4];
+                by = by - from[5];
+                bz = bz - from[6];
+                bx = bx * t;
+                by = by * t;
+                bz = bz * t;
+                bx = bx + from[4];
+                by = by + from[5];
+                bz = bz + from[6];
+
+                float qret[4];
+                const float* q = QuaternionLerp(from, qret, dst, &t);
+                reinterpret_cast<uint32_t*>(dst)[0] = reinterpret_cast<const uint32_t*>(q)[0];
+                reinterpret_cast<uint32_t*>(dst)[1] = reinterpret_cast<const uint32_t*>(q)[1];
+                reinterpret_cast<uint32_t*>(dst)[2] = reinterpret_cast<const uint32_t*>(q)[2];
+                reinterpret_cast<uint32_t*>(dst)[3] = reinterpret_cast<const uint32_t*>(q)[3];
+                *reinterpret_cast<float*>(dst + 0x10) = bx;
+                *reinterpret_cast<float*>(dst + 0x14) = by;
+                *reinterpret_cast<float*>(dst + 0x18) = bz;
+            }
+        }
+    }
+
+    // ---- phase 3: hand out the root offset, then build the hierarchy ----
+    rootOffset[0] = *reinterpret_cast<const float*>(pose + 0x10);
+    rootOffset[1] = *reinterpret_cast<const float*>(pose + 0x14);
+    rootOffset[2] = *reinterpret_cast<const float*>(pose + 0x18);
+
+    *reinterpret_cast<float*>(pose + 0x00) = 0.0f;
+    *reinterpret_cast<float*>(pose + 0x04) = 0.0f;
+    *reinterpret_cast<float*>(pose + 0x08) = 0.0f;
+    *reinterpret_cast<float*>(pose + 0x0c) = 1.0f;
+    *reinterpret_cast<float*>(pose + 0x10) = 0.0f;
+    *reinterpret_cast<float*>(pose + 0x14) = 0.0f;
+    *reinterpret_cast<float*>(pose + 0x18) = 0.0f;
+
+    {
+        // Node 0. Its translation was JUST zeroed, so MSVC folded the vector
+        // into its zero register — every `* 0.0f` below is a real MULSS in the
+        // instruction stream and is kept rather than folded away, because the
+        // sign of a zero product still reaches the sums.
+        const float qx = *reinterpret_cast<const float*>(root + 0x00);
+        const float qy = *reinterpret_cast<const float*>(root + 0x04);
+        const float qz = *reinterpret_cast<const float*>(root + 0x08);
+        const float qw = *reinterpret_cast<const float*>(root + 0x0c);
+        const float mqx = -qx;
+        const float mqy = -qy;
+        const float mqz = -qz;
+
+        float ka = 0.0f * qy;
+        float A = 0.0f * qw;
+        float C = 0.0f * qy;
+        float B = qy * 0.0f;
+        float kb = qx * 0.0f;
+        float D = qw * 0.0f;
+        A = A + kb;
+        float kc = 0.0f * qz;
+        A = A + kc;
+        A = A - ka;
+        float kd = 0.0f * qz;
+        float ke = 0.0f * qw;
+        B = B - kd;
+        float kf = 0.0f * qx;
+        float rx = A;
+        B = B + ke;
+        rx = rx * qw;
+        B = B + kf;
+        float kg = 0.0f * qw;
+        float kh = qz * 0.0f;
+        C = C + kh;
+        float ki = 0.0f * qx;
+        C = C - ki;
+        C = C + kg;
+        float kj = 0.0f * qx;
+        float kk = 0.0f * qy;
+        D = D - kj;
+        float kl = 0.0f * qz;
+        D = D - kk;
+        float u1 = C * mqy;
+        D = D - kl;
+        float u0 = D * mqx;
+        rx = rx + u0;
+        rx = rx + u1;
+        float u2 = B * mqz;
+        float ry = B;
+        ry = ry * qw;
+        float u3 = D * mqy;
+        float u4 = D * mqz;
+        rx = rx - u2;
+        rx = rx + *reinterpret_cast<const float*>(root + 0x10);
+        float u5 = C * mqx;
+        float rz = C;
+        rz = rz * qw;
+        float u6 = B * mqx;
+        ry = ry - u5;
+        rz = rz + u6;
+        ry = ry + u3;
+        float u7 = A * mqz;
+        float u8 = A * mqy;
+        rz = rz - u8;
+        ry = ry + u7;
+        ry = ry + *reinterpret_cast<const float*>(root + 0x14);
+        rz = rz + u4;
+        rz = rz + *reinterpret_cast<const float*>(root + 0x18);
+
+        float qret[4];
+        const float* q = QuaternionMul(root, qret, pose);
+
+        Copy7Dwords(interp + kTransformStride, interp);
+        float* dst = reinterpret_cast<float*>(interp);
+        dst[0] = q[0];
+        dst[1] = q[1];
+        dst[2] = q[2];
+        dst[3] = q[3];
+        dst[4] = rx;
+        dst[5] = ry;
+        dst[6] = rz;
+    }
+
+    for (int64_t k = 1; k < nodeCount; ++k) {
+        const uint8_t* posek = pose + k * kTransformStride;
+        const int64_t nodeOff = k * kNodeStride;
+
+        const float vx = *reinterpret_cast<const float*>(posek + 0x10);
+        const float vy = *reinterpret_cast<const float*>(posek + 0x14);
+        const float vz = *reinterpret_cast<const float*>(posek + 0x18);
+
+        const int32_t parent =
+            *reinterpret_cast<const int32_t*>(nodes->_data + nodeOff + 0x08);
+        const uint8_t* P = interp + static_cast<int64_t>(parent) * kInterpStride;
+
+        const float py = *reinterpret_cast<const float*>(P + 0x04);
+        const float pz = *reinterpret_cast<const float*>(P + 0x08);
+        const float px = *reinterpret_cast<const float*>(P + 0x00);
+        const float pw = *reinterpret_cast<const float*>(P + 0x0c);
+        const float tx = *reinterpret_cast<const float*>(P + 0x10);
+        const float ty = *reinterpret_cast<const float*>(P + 0x14);
+        const float tz = *reinterpret_cast<const float*>(P + 0x18);
+
+        const float mpy = -py;
+        const float mpx = -px;
+        const float mpz = -pz;
+
+        float parentXform[7] = { px, py, pz, pw, tx, ty, tz };
+
+        float k1 = vz * py;
+        float B = py * 0.0f;
+        float A = vx * pw;
+        float k2 = px * 0.0f;
+        float C = vx * py;
+        A = A + k2;
+        float k3 = vy * pz;
+        A = A + k3;
+        float k4 = vx * px;
+        float k5 = vx * pz;
+        A = A - k1;
+        B = B - k5;
+        float k6 = vy * pw;
+        float k7 = vz * px;
+        B = B + k6;
+        B = B + k7;
+        float k8 = vz * pw;
+        float k9 = vz * pz;
+        float k10 = pz * 0.0f;
+        C = C + k10;
+        float k11 = vy * py;
+        float k12 = vy * px;
+        float rx = A;
+        rx = rx * pw;
+        C = C - k12;
+        C = C + k8;
+        float D = pw * 0.0f;
+        float u1 = C * mpy;
+        D = D - k4;
+        D = D - k11;
+        D = D - k9;
+        float u0 = D * mpx;
+        rx = rx + u0;
+        rx = rx + u1;
+        float u2 = B * mpz;
+        float ry = B;
+        ry = ry * pw;
+        float u3 = D * mpy;
+        float u4 = D * mpz;
+        rx = rx - u2;
+        float u5 = C * mpx;
+        rx = rx + tx;
+        float rz = C;
+        rz = rz * pw;
+        float u6 = B * mpx;
+        ry = ry - u5;
+        rz = rz + u6;
+        ry = ry + u3;
+        float u7 = A * mpz;
+        float u8 = A * mpy;
+        rz = rz - u8;
+        ry = ry + u7;
+        ry = ry + ty;
+        rz = rz + u4;
+        rz = rz + tz;
+
+        float qret[4];
+        const float* q = QuaternionMul(parentXform, qret, posek);
+
+        uint8_t* slot = interp + k * kInterpStride;
+        Copy7Dwords(slot + kTransformStride, slot);
+        float* dst = reinterpret_cast<float*>(slot);
+        dst[0] = q[0];
+        dst[1] = q[1];
+        dst[2] = q[2];
+        dst[3] = q[3];
+        dst[4] = rx;
+        dst[5] = ry;
+        dst[6] = rz;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ?GetBones@MeshInstance@Graphics@@  0x180100070 -- ENDGAME B.3.5 block GC.
+// The +0xd8 byte tested three separate times, the identity-versus-inverse root
+// choice and MSVC's hoisted `q * 0.0f` seeds are all in the door's banner.
 //
-// THE SECOND RETURN COMPONENT IS NOT ALWAYS ZERO. After bumping the reference
-// count the body sweeps the instance's baked states looking for the one whose
-// layer 0 has the SMALLEST playback time (seeded with 10000.0f from
-// 0x180161734), and packs that state's index into the low byte. A state with no
-// layers scores 0.0f, which wins outright.
-extern "C" int RtGraphics_AnimationManager_GetInstanceId(
-    void* selfv, void* group, int animIndex, const void* nodesv) {
+// The MeshInstance fields are still reached at their raw offsets through one
+// bridge local rather than through Mesh.h's names: this body reads +0xc0, +0xd8,
+// +0xe0, +0xe8 and +0xf0, and every one of them is an offset the surrounding
+// helpers in this file also use. Renaming them is a separate mechanical pass.
+// ---------------------------------------------------------------------------
+int MeshInstance::GetBones(float t, const Math::Transform& rootRef,
+                           Math::Matrix* out_) const {
+    const uint8_t* self = reinterpret_cast<const uint8_t*>(this);  // B.3.5 bridge
+    const void* const rootv = &rootRef;
+    void* const outv = out_;
+    const uint8_t* mesh = *reinterpret_cast<const uint8_t* const*>(self + 0xc0);
+    const int32_t boneCount = *reinterpret_cast<const int32_t*>(mesh + 0x68);
+    uint8_t* out = static_cast<uint8_t*>(outv);
+
+    // The body writes only the caller's matrix buffer and returns the bone count;
+    // nothing it reads is modified. (The two dead oracle captures that used to
+    // sit here went with the rest of this file's replay scaffolding — block GC.)
+
+    float identity[7];
+    float inverse[7];
+    const float* rootT;
+    if (self[0xd8] != 0) {
+        identity[0] = 0.0f; identity[1] = 0.0f; identity[2] = 0.0f;
+        identity[3] = 1.0f;
+        identity[4] = 0.0f; identity[5] = 0.0f; identity[6] = 0.0f;
+        rootT = identity;
+    } else {
+        rootT = TransformInverse(rootv, inverse);
+    }
+
+    const float rqx = rootT[0];
+    const float rqy = rootT[1];
+    const float rqz = rootT[2];
+    const float rqw = rootT[3];
+    const float rtx = rootT[4];
+    const float rty = rootT[5];
+    const float rtz = rootT[6];
+
+    // The root transform, rebuilt as the `this` retail hands to operator*.
+    const float rootXform[7] = { rqx, rqy, rqz, rqw, rtx, rty, rtz };
+
+    const uint8_t* interp;
+    if (self[0xd8] != 0) {
+        const uint8_t* layers = *reinterpret_cast<const uint8_t* const*>(self + 0xe0);
+        const int64_t lcount = *reinterpret_cast<const int32_t*>(self + 0xe8);
+        const int32_t handle =
+            *reinterpret_cast<const int32_t*>(layers + lcount * kLayerStride - 0x2c);
+        const uint8_t* instData = AnimationManagerSingleton()->_instances._data;
+        const uint8_t* states = *reinterpret_cast<const uint8_t* const*>(
+            instData + static_cast<int64_t>((handle >> 8) & 0xff) * kInstanceStride + 0x20);
+        interp = *reinterpret_cast<const uint8_t* const*>(
+            states + static_cast<int64_t>(handle & 0xff) * kStateStride + 0x38);
+    } else {
+        interp = *reinterpret_cast<const uint8_t* const*>(self + 0xf0);
+    }
+
+    if (boneCount <= 0) return boneCount;
+
+    const float rqx0 = rqx * 0.0f;
+    const float rqy0 = rqy * 0.0f;
+    const float rqz0 = rqz * 0.0f;
+    const float rqw0 = rqw * 0.0f;
+    const float mrqx = -rqx;
+    const float mrqy = -rqy;
+    const float mrqz = -rqz;
+
+    for (int64_t k = 0; k < boneCount; ++k) {
+        const uint8_t* ip = interp + k * kInterpStride;
+
+        // Lerp the node's two stored transforms by `t`.
+        float sx = *reinterpret_cast<const float*>(ip + 0x2c);
+        float fx = *reinterpret_cast<const float*>(ip + 0x10);
+        float sy = *reinterpret_cast<const float*>(ip + 0x30);
+        float fy = *reinterpret_cast<const float*>(ip + 0x14);
+        float sz = *reinterpret_cast<const float*>(ip + 0x34);
+        float fz = *reinterpret_cast<const float*>(ip + 0x18);
+        fx = fx - sx;
+        fy = fy - sy;
+        fz = fz - sz;
+        fx = fx * t;
+        fy = fy * t;
+        fz = fz * t;
+        sx = sx + fx;
+        sy = sy + fy;
+        sz = sz + fz;
+
+        float lqret[4];
+        const float* lq = QuaternionLerp(ip + kTransformStride, lqret, ip, &t);
+
+        const uint8_t* bind =
+            *reinterpret_cast<const uint8_t* const*>(mesh + 0x60) + k * kNodeStride + 0x28;
+
+        // ---- stage 1: rotate the bind translation by the lerped rotation ----
+        const float lqx = lq[0];
+        const float lqw = lq[3];
+        const float lqz = lq[2];
+        const float lqy = lq[1];
+        const float bvx = *reinterpret_cast<const float*>(bind + 0x10);
+        const float bvy = *reinterpret_cast<const float*>(bind + 0x14);
+        const float bvz = *reinterpret_cast<const float*>(bind + 0x18);
+        const float mlqx = -lqx;
+        const float mlqy = -lqy;
+        const float mlqz = -lqz;
+
+        const float ka = lqx * 0.0f;
+        float B = lqy * 0.0f;
+        float A = bvx * lqw;
+        const float kb = bvz * lqy;
+        float C = bvx * lqy;
+        A = A + ka;
+        const float kc = bvy * lqz;
+        A = A + kc;
+        const float kd = bvx * lqz;
+        A = A - kb;
+        const float ke = bvy * lqw;
+        B = B - kd;
+        const float kf = bvz * lqx;
+        B = B + ke;
+        const float kg = bvz * lqw;
+        B = B + kf;
+        const float kh = lqz * 0.0f;
+        float D = lqw * 0.0f;
+        C = C + kh;
+        const float ki = bvy * lqx;
+        C = C - ki;
+        C = C + kg;
+        const float kj = bvy * lqy;
+        const float kk = bvz * lqz;
+        float rx = A * lqw;
+        const float u1 = C * mlqy;
+        float ry = B * lqw;
+        const float kl = bvx * lqx;
+        D = D - kl;
+        D = D - kj;
+        D = D - kk;
+        const float u0 = D * mlqx;
+        rx = u0 + rx;
+        const float u6 = B * mlqx;
+        const float u2 = B * mlqz;
+        rx = rx + u1;
+        rx = rx - u2;
+        const float u3 = D * mlqy;
+        const float u4 = D * mlqz;
+        const float u5 = C * mlqx;
+        rx = rx + sx;
+        float rz = C * lqw;
+        ry = ry - u5;
+        rz = u6 + rz;
+        const float u7 = A * mlqz;
+        const float u8 = A * mlqy;
+        ry = ry + u3;
+        rz = rz - u8;
+        rz = rz + u4;
+        ry = ry + u7;
+        rz = rz + sz;
+        ry = ry + sy;
+
+        const float lerped[7] = { lqx, lqy, lqz, lqw, sx, sy, sz };
+        float q1ret[4];
+        const float* q1 = QuaternionMul(lerped, q1ret, bind);
+        const float composedQ[4] = { q1[0], q1[1], q1[2], q1[3] };
+
+        // ---- stage 2: the same shape again against the root rotation. The
+        // four accumulators are SEEDED with the hoisted `rq * 0.0f` products,
+        // which is why those are computed once outside the loop. ----
+        float A2 = rx * rqw;
+        A2 = A2 + rqx0;
+        float C2 = rx * rqy;
+        float B2 = rqy0;
+        C2 = C2 + rqz0;
+        const float m0 = ry * rqz;
+        A2 = A2 + m0;
+        const float m1 = rz * rqy;
+        const float m2 = rx * rqz;
+        A2 = A2 - m1;
+        const float m3 = ry * rqw;
+        B2 = B2 - m2;
+        const float m4 = rz * rqx;
+        B2 = B2 + m3;
+        B2 = B2 + m4;
+        const float m5 = ry * rqx;
+        float D2 = rqw0;
+        C2 = C2 - m5;
+        const float m6 = rx * rqx;
+        const float m7 = ry * rqy;
+        D2 = D2 - m6;
+        float Rx = A2 * rqw;
+        const float m8 = rz * rqw;
+        float Ry = B2 * rqw;
+        C2 = C2 + m8;
+        D2 = D2 - m7;
+        const float m9 = rz * rqz;
+        const float v1 = C2 * mrqy;
+        D2 = D2 - m9;
+        const float v0 = D2 * mrqx;
+        Rx = v0 + Rx;
+        const float v2 = B2 * mrqz;
+        const float v6 = B2 * mrqx;
+        Rx = Rx + v1;
+        const float v3 = D2 * mrqy;
+        Rx = Rx - v2;
+        const float v4 = D2 * mrqz;
+        const float v5 = C2 * mrqx;
+        Rx = Rx + rtx;
+        float Rz = C2 * rqw;
+        Ry = Ry - v5;
+        Rz = v6 + Rz;
+        const float v7 = A2 * mrqz;
+        const float v8 = A2 * mrqy;
+        Ry = Ry + v3;
+        Rz = Rz - v8;
+        Rz = Rz + v4;
+        Ry = Ry + v7;
+        Ry = Ry + rty;
+        Rz = Rz + rtz;
+
+        float q2ret[4];
+        const float* q2 = QuaternionMul(rootXform, q2ret, composedQ);
+
+        const float finalXform[7] = { q2[0], q2[1], q2[2], q2[3], Rx, Ry, Rz };
+        float matrix[16];
+        const float* m = TransformAsMatrix(finalXform, matrix);
+
+        uint8_t* dst = out + k * 0x40;
+        for (int w = 0; w < 16; ++w)
+            reinterpret_cast<uint32_t*>(dst)[w] = reinterpret_cast<const uint32_t*>(m)[w];
+    }
+
+    return boneCount;
+}
+
+// ---------------------------------------------------------------------------
+// ?GetInstanceId@AnimationManager@Graphics@@  0x1800fb9d0 -- block GC.
+// The two-jobs-at-once search pass, the blank-slot reuse and the 10000.0f-seeded
+// smallest-playback-time sweep that picks the packed low byte are all documented
+// in the banner beside the door.
+//
+// The manager is still reached through `RtGraphics::AnimationManagerView` -- the
+// POD whose `_instances` is the same `Array<Instance>` at +0x00 that
+// `AnimationManager.h` names, cross-asserted there -- because every helper this
+// body shares with `PlayAnimation` takes that view, and B4b-1 keeps the POD until
+// its last user converts. `group` is retail's `ExternalPtr<AnimationGroup>` BY
+// VALUE: 8 bytes, trivially copyable, so it arrives in a register.
+// ---------------------------------------------------------------------------
+int32_t AnimationManager::GetInstanceId(Object::ExternalPtr<AnimationGroup> groupHandle,
+                                        int animIndex,
+                                        const Collection::Array<uint8_t>& nodesRef) {
     // NOT DIFFABLE: the body allocates instances, bakes poses into them and
     // moves reference counts. A second run against the DLL would create a
     // second instance and double every count.
 
-    AnimationManagerView* self = static_cast<AnimationManagerView*>(selfv);
+    AnimationManagerView* const self =
+        reinterpret_cast<AnimationManagerView*>(this);   // B.3.5 bridge
+    void* const group = groupHandle.Get();
+    const void* const nodesv = &nodesRef;
     const ArrayHdr* nodes = static_cast<const ArrayHdr*>(nodesv);
 
     int32_t freeSlot = -1;
@@ -709,805 +1662,4 @@ extern "C" int RtGraphics_AnimationManager_GetInstanceId(
     return (idx << 8) | bestIdx;
 }
 
-// ============================================================================
-// ?CopyInstancedToUnique@AnimationState@Graphics@@  (0x1800fd4c0)
-// ============================================================================
-//
-// Re-root a baked, shared pose onto one instance's own node array: walk the
-// skeleton once, composing each node's baked local transform with its parent's
-// freshly computed world transform, and write the result into the caller's
-// InterpolatedState array (shifting each entry's current value into its
-// previous half first, which is what keeps interpolation continuous).
-//
-// *** `this` IS NEVER READ. *** RCX is overwritten with the root transform four
-// instructions in. The method is declared const and private and takes
-// everything it needs as arguments; the parameter stays for the ABI.
-//
-// Node 0 is done with the two real Math CALLs retail makes (Quaternion::Rotate
-// then operator*); nodes 1..n-1 have the rotate INLINED, and that inlined form
-// is the one whose schedule is transcribed below.
-extern "C" void RtGraphics_AnimationState_CopyInstancedToUnique(
-    const void* /*self, unread*/, const void* nodesv, const void* rootv,
-    void* interpv, int handle) {
-
-    const ArrayHdr* nodes = static_cast<const ArrayHdr*>(nodesv);
-    const uint8_t* root = static_cast<const uint8_t*>(rootv);
-    uint8_t* interp = static_cast<uint8_t*>(interpv);
-
-    // Full oracle: the only thing this body writes is the caller's interp
-    // array, so snapshot it, run ours live, then run the DLL's body on the copy
-    // and compare. Nothing else in the process is touched.
-    std::vector<uint8_t> replay;
-    const size_t replayBytes =
-        static_cast<size_t>(nodes->_size > 0 ? nodes->_size : 0) * kInterpStride;
-
-    const uint8_t* instData = AnimationManagerSingleton()->_instances._data;
-    const uint8_t* states = *reinterpret_cast<const uint8_t* const*>(
-        instData + static_cast<int64_t>((handle >> 8) & 0xff) * kInstanceStride + 0x20);
-    const uint8_t* pose = *reinterpret_cast<const uint8_t* const*>(
-        states + static_cast<int64_t>(handle & 0xff) * kStateStride + 0x28);
-
-    // ---- node 0, through the two real calls ----
-    float rotated[3];
-    const float* rot = QuaternionRotate(root, rotated, pose + 0x10);
-
-    float ry = *reinterpret_cast<const float*>(root + 0x14);
-    float rz = *reinterpret_cast<const float*>(root + 0x18);
-    float rx = rot[0];
-    ry = ry + rot[1];
-    rz = rz + rot[2];
-    rx = rx + *reinterpret_cast<const float*>(root + 0x10);
-
-    float q0ret[4];
-    const float* q0 = QuaternionMul(root, q0ret, pose);
-
-    Copy7Dwords(interp + kTransformStride, interp);
-    {
-        float* dst = reinterpret_cast<float*>(interp);
-        dst[0] = q0[0];
-        dst[1] = q0[1];
-        dst[2] = q0[2];
-        dst[3] = q0[3];
-        dst[4] = rx;
-        dst[5] = ry;
-        dst[6] = rz;
-    }
-
-    // ---- nodes 1..n-1, rotate inlined ----
-    for (int32_t i = 1; i < nodes->_size; ++i) {
-        const uint8_t* posei = pose + static_cast<int64_t>(i) * kTransformStride;
-        const int64_t nodeOff = static_cast<int64_t>(i) * kNodeStride;
-
-        const float vy = *reinterpret_cast<const float*>(posei + 0x14);
-        const float vx = *reinterpret_cast<const float*>(posei + 0x10);
-        const float vz = *reinterpret_cast<const float*>(posei + 0x18);
-
-        const int32_t parent =
-            *reinterpret_cast<const int32_t*>(nodes->_data + nodeOff + 0x08);
-        const uint8_t* P = interp + static_cast<int64_t>(parent) * kInterpStride;
-
-        const float px = *reinterpret_cast<const float*>(P + 0x00);
-        const float pw = *reinterpret_cast<const float*>(P + 0x0c);
-        const float pz = *reinterpret_cast<const float*>(P + 0x08);
-        const float py = *reinterpret_cast<const float*>(P + 0x04);
-
-        const float mpx = -px;
-        const float mpz = -pz;
-        const float mpy = -py;
-
-        const float tx = *reinterpret_cast<const float*>(P + 0x10);
-        const float ty = *reinterpret_cast<const float*>(P + 0x14);
-        const float tz = *reinterpret_cast<const float*>(P + 0x18);
-
-        float parentXform[7] = { px, py, pz, pw, tx, ty, tz };
-
-        float A = pw * vx;
-        float C = py * vx;
-        float B = py * 0.0f;
-        float k1 = py * vz;
-        float k2 = py * vy;
-        float k3 = px * 0.0f;
-        A = A + k3;
-        float k4 = pz * vy;
-        A = A + k4;
-        A = A - k1;
-        float k5 = pz * vx;
-        float k6 = pw * vy;
-        B = B - k5;
-        float k7 = px * vz;
-        B = B + k6;
-        float k8 = pw * vz;
-        B = B + k7;
-        float k9 = pz * 0.0f;
-        float k10 = pz * vz;
-        C = C + k9;
-        float k11 = px * vy;
-        float k12 = px * vx;
-        C = C - k11;
-        C = C + k8;
-
-        float rxi = pw * A;
-        float D = pw * 0.0f;
-        float u1 = C * mpy;
-        D = D - k12;
-        D = D - k2;
-        D = D - k10;
-        float u0 = D * mpx;
-        rxi = rxi + u0;
-        rxi = rxi + u1;
-        float ryi = pw * B;
-        float u2 = B * mpz;
-        float rzi = pw * C;
-        float u6 = B * mpx;
-        rxi = rxi - u2;
-        rzi = rzi + u6;
-        float u3 = C * mpx;
-        float u4 = D * mpy;
-        float u5 = D * mpz;
-        float wx = tx;
-        wx = wx + rxi;
-        ryi = ryi - u3;
-        float u7 = A * mpz;
-        ryi = ryi + u4;
-        float u8 = A * mpy;
-        ryi = ryi + u7;
-        rzi = rzi - u8;
-        rzi = rzi + u5;
-        float wy = ty;
-        wy = wy + ryi;
-        float wz = tz;
-        wz = wz + rzi;
-
-        float qret[4];
-        const float* q = QuaternionMul(parentXform, qret, posei);
-
-        uint8_t* slot = interp + static_cast<int64_t>(i) * kInterpStride;
-        Copy7Dwords(slot + kTransformStride, slot);
-        float* dst = reinterpret_cast<float*>(slot);
-        dst[0] = q[0];
-        dst[1] = q[1];
-        dst[2] = q[2];
-        dst[3] = q[3];
-        dst[4] = wx;
-        dst[5] = wy;
-        dst[6] = wz;
-    }
-
-}
-
-// ============================================================================
-// ?UpdateNodes@AnimationState@Graphics@@  (0x1800fcc20)
-// ============================================================================
-//
-// Resolve every layer of a playing animation into one pose, then push that pose
-// through the skeleton.
-//
-// Three phases, in order:
-//   1. Sample the LAST layer into `pose`, either from its shared baked instance
-//      (GetPose) or by sampling the clip directly (GetPoseAtTime).
-//   2. Walk the remaining layers BACKWARDS, from count-2 down to 0. Each one is
-//      sampled into a 48-entry scratch and `pose` is lerped FROM that scratch
-//      TOWARDS its current value by `fadeRemaining / fadeLength` of the layer
-//      ABOVE it — so as that layer's fade runs out the blend lands on the lower
-//      layer's pose.
-//   3. Hand pose[0]'s translation back as the root offset, reset pose[0] to the
-//      identity, and compose every node's pose with its parent's, writing the
-//      hierarchy into `interp`.
-//
-// *** THE SCRATCH IS 48 TRANSFORMS AND THE BOUND IS NEVER CHECKED. *** Retail
-// re-initialises exactly 48 identity transforms at the top of every layer
-// iteration and then fills `nodeCount` of them. A mesh with more than 48 nodes
-// overruns it in retail too; the array here is the same 48 so that a build with
-// more nodes fails the same way rather than differently.
-extern "C" void RtGraphics_AnimationState_UpdateNodes(
-    void* selfv, float speed, const void* nodesv, const void* rootv,
-    void* interpv, void* posev, float* rootOffset) {
-
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    const ArrayHdr* nodes = static_cast<const ArrayHdr*>(nodesv);
-    const uint8_t* root = static_cast<const uint8_t*>(rootv);
-    uint8_t* interp = static_cast<uint8_t*>(interpv);
-    uint8_t* pose = static_cast<uint8_t*>(posev);
-
-    const int64_t nodeCount = nodes->_size;
-
-    // Full oracle: the three out-parameters are the whole of this body's
-    // effect. `this` is only read (no store to it exists in the disassembly)
-    // and neither GetPose nor GetPoseAtTime mutates the manager.
-    std::vector<uint8_t> replayPose, replayInterp;
-    float replayOffset[3] = { 0.0f, 0.0f, 0.0f };
-    const size_t poseBytes   = static_cast<size_t>(nodeCount > 0 ? nodeCount : 0) * kTransformStride;
-    const size_t interpBytes = static_cast<size_t>(nodeCount > 0 ? nodeCount : 0) * kInterpStride;
-
-    // ---- phase 1: the last layer ----
-    {
-        const int32_t last = *reinterpret_cast<const int32_t*>(self + 0x10) - 1;
-        uint8_t* layer = *reinterpret_cast<uint8_t* const*>(self + 0x08) +
-                         static_cast<int64_t>(last) * kLayerStride;
-        const uint8_t* group = *reinterpret_cast<const uint8_t* const*>(layer);
-        const uint8_t* clip =
-            *reinterpret_cast<const uint8_t* const*>(group + RtGraphics::anim_group::kClips) +
-            static_cast<int64_t>(*reinterpret_cast<const int32_t*>(layer + 0x08)) * kClipStride;
-        const int32_t handle = *reinterpret_cast<const int32_t*>(layer + 0x0c);
-        if (handle >= 0) {
-            GetPose()(AnimationManagerSingleton(), handle, pose,
-                      static_cast<int>(nodeCount));
-        } else {
-            float scaled = speed;
-            scaled = scaled * *reinterpret_cast<const float*>(layer + 0x10);
-            const int64_t delta = SecondsToTicks(static_cast<double>(scaled));
-            GetPoseAtTime()(clip, reinterpret_cast<const int64_t*>(layer + 0x18), &delta,
-                            pose, static_cast<int>(nodeCount));
-        }
-    }
-
-    // ---- phase 2: every earlier layer, blended in backwards ----
-    float scratch[48][7];
-    for (int32_t i = *reinterpret_cast<const int32_t*>(self + 0x10) - 2; i >= 0; --i) {
-        for (int s = 0; s < 48; ++s) {
-            scratch[s][0] = 0.0f; scratch[s][1] = 0.0f; scratch[s][2] = 0.0f;
-            scratch[s][3] = 1.0f;
-            scratch[s][4] = 0.0f; scratch[s][5] = 0.0f; scratch[s][6] = 0.0f;
-        }
-
-        uint8_t* layers = *reinterpret_cast<uint8_t* const*>(self + 0x08);
-        uint8_t* layer = layers + static_cast<int64_t>(i) * kLayerStride;
-        const uint8_t* group = *reinterpret_cast<const uint8_t* const*>(layer);
-        const uint8_t* clip =
-            *reinterpret_cast<const uint8_t* const*>(group + RtGraphics::anim_group::kClips) +
-            static_cast<int64_t>(*reinterpret_cast<const int32_t*>(layer + 0x08)) * kClipStride;
-        const int32_t handle = *reinterpret_cast<const int32_t*>(layer + 0x0c);
-
-        if (handle >= 0) {
-            // Inlined GetPose, straight out of the instance pool into the
-            // scratch: retail does NOT call 0x1800fb8e0 on this arm.
-            const uint8_t* instData = AnimationManagerSingleton()->_instances._data;
-            const uint8_t* states = *reinterpret_cast<const uint8_t* const*>(
-                instData + static_cast<int64_t>((handle >> 8) & 0xff) * kInstanceStride + 0x20);
-            if (nodeCount > 0) {
-                const uint8_t* src = *reinterpret_cast<const uint8_t* const*>(
-                    states + static_cast<int64_t>(handle & 0xff) * kStateStride + 0x28);
-                for (int64_t k = 0; k < nodeCount; ++k) {
-                    const uint32_t* s = reinterpret_cast<const uint32_t*>(
-                        src + k * kTransformStride);
-                    uint32_t* d = reinterpret_cast<uint32_t*>(&scratch[k][0]);
-                    d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3];
-                    d[4] = s[4]; d[5] = s[5]; d[6] = s[6];
-                }
-            }
-        } else {
-            float scaled = speed;
-            scaled = scaled * *reinterpret_cast<const float*>(layer + 0x10);
-            const int64_t delta = SecondsToTicks(static_cast<double>(scaled));
-            GetPoseAtTime()(clip, reinterpret_cast<const int64_t*>(layer + 0x18), &delta,
-                            &scratch[0][0], static_cast<int>(nodeCount));
-        }
-
-        // t = layer[i+1].fadeRemaining / layer[i+1].fadeLength, both converted
-        // to seconds as doubles first and narrowed before the DIVSS.
-        const double spt = SecondsPerTick();
-        uint8_t* lbase = *reinterpret_cast<uint8_t* const*>(self + 0x08);
-        const double remSec =
-            static_cast<double>(*reinterpret_cast<const int64_t*>(
-                lbase + static_cast<int64_t>(i) * kLayerStride + 0x60)) * spt;
-        const double lenSec =
-            static_cast<double>(*reinterpret_cast<const int64_t*>(
-                lbase + static_cast<int64_t>(i) * kLayerStride + 0x58)) * spt;
-        float t = static_cast<float>(remSec);
-        const float len = static_cast<float>(lenSec);
-        t = t / len;
-
-        if (nodeCount > 0) {
-            for (int64_t k = 0; k < nodeCount; ++k) {
-                uint8_t* dst = pose + k * kTransformStride;
-                const float* from = &scratch[k][0];
-
-                float bx = *reinterpret_cast<const float*>(dst + 0x10);
-                float by = *reinterpret_cast<const float*>(dst + 0x14);
-                float bz = *reinterpret_cast<const float*>(dst + 0x18);
-                bx = bx - from[4];
-                by = by - from[5];
-                bz = bz - from[6];
-                bx = bx * t;
-                by = by * t;
-                bz = bz * t;
-                bx = bx + from[4];
-                by = by + from[5];
-                bz = bz + from[6];
-
-                float qret[4];
-                const float* q = QuaternionLerp(from, qret, dst, &t);
-                reinterpret_cast<uint32_t*>(dst)[0] = reinterpret_cast<const uint32_t*>(q)[0];
-                reinterpret_cast<uint32_t*>(dst)[1] = reinterpret_cast<const uint32_t*>(q)[1];
-                reinterpret_cast<uint32_t*>(dst)[2] = reinterpret_cast<const uint32_t*>(q)[2];
-                reinterpret_cast<uint32_t*>(dst)[3] = reinterpret_cast<const uint32_t*>(q)[3];
-                *reinterpret_cast<float*>(dst + 0x10) = bx;
-                *reinterpret_cast<float*>(dst + 0x14) = by;
-                *reinterpret_cast<float*>(dst + 0x18) = bz;
-            }
-        }
-    }
-
-    // ---- phase 3: hand out the root offset, then build the hierarchy ----
-    rootOffset[0] = *reinterpret_cast<const float*>(pose + 0x10);
-    rootOffset[1] = *reinterpret_cast<const float*>(pose + 0x14);
-    rootOffset[2] = *reinterpret_cast<const float*>(pose + 0x18);
-
-    *reinterpret_cast<float*>(pose + 0x00) = 0.0f;
-    *reinterpret_cast<float*>(pose + 0x04) = 0.0f;
-    *reinterpret_cast<float*>(pose + 0x08) = 0.0f;
-    *reinterpret_cast<float*>(pose + 0x0c) = 1.0f;
-    *reinterpret_cast<float*>(pose + 0x10) = 0.0f;
-    *reinterpret_cast<float*>(pose + 0x14) = 0.0f;
-    *reinterpret_cast<float*>(pose + 0x18) = 0.0f;
-
-    {
-        // Node 0. Its translation was JUST zeroed, so MSVC folded the vector
-        // into its zero register — every `* 0.0f` below is a real MULSS in the
-        // instruction stream and is kept rather than folded away, because the
-        // sign of a zero product still reaches the sums.
-        const float qx = *reinterpret_cast<const float*>(root + 0x00);
-        const float qy = *reinterpret_cast<const float*>(root + 0x04);
-        const float qz = *reinterpret_cast<const float*>(root + 0x08);
-        const float qw = *reinterpret_cast<const float*>(root + 0x0c);
-        const float mqx = -qx;
-        const float mqy = -qy;
-        const float mqz = -qz;
-
-        float ka = 0.0f * qy;
-        float A = 0.0f * qw;
-        float C = 0.0f * qy;
-        float B = qy * 0.0f;
-        float kb = qx * 0.0f;
-        float D = qw * 0.0f;
-        A = A + kb;
-        float kc = 0.0f * qz;
-        A = A + kc;
-        A = A - ka;
-        float kd = 0.0f * qz;
-        float ke = 0.0f * qw;
-        B = B - kd;
-        float kf = 0.0f * qx;
-        float rx = A;
-        B = B + ke;
-        rx = rx * qw;
-        B = B + kf;
-        float kg = 0.0f * qw;
-        float kh = qz * 0.0f;
-        C = C + kh;
-        float ki = 0.0f * qx;
-        C = C - ki;
-        C = C + kg;
-        float kj = 0.0f * qx;
-        float kk = 0.0f * qy;
-        D = D - kj;
-        float kl = 0.0f * qz;
-        D = D - kk;
-        float u1 = C * mqy;
-        D = D - kl;
-        float u0 = D * mqx;
-        rx = rx + u0;
-        rx = rx + u1;
-        float u2 = B * mqz;
-        float ry = B;
-        ry = ry * qw;
-        float u3 = D * mqy;
-        float u4 = D * mqz;
-        rx = rx - u2;
-        rx = rx + *reinterpret_cast<const float*>(root + 0x10);
-        float u5 = C * mqx;
-        float rz = C;
-        rz = rz * qw;
-        float u6 = B * mqx;
-        ry = ry - u5;
-        rz = rz + u6;
-        ry = ry + u3;
-        float u7 = A * mqz;
-        float u8 = A * mqy;
-        rz = rz - u8;
-        ry = ry + u7;
-        ry = ry + *reinterpret_cast<const float*>(root + 0x14);
-        rz = rz + u4;
-        rz = rz + *reinterpret_cast<const float*>(root + 0x18);
-
-        float qret[4];
-        const float* q = QuaternionMul(root, qret, pose);
-
-        Copy7Dwords(interp + kTransformStride, interp);
-        float* dst = reinterpret_cast<float*>(interp);
-        dst[0] = q[0];
-        dst[1] = q[1];
-        dst[2] = q[2];
-        dst[3] = q[3];
-        dst[4] = rx;
-        dst[5] = ry;
-        dst[6] = rz;
-    }
-
-    for (int64_t k = 1; k < nodeCount; ++k) {
-        const uint8_t* posek = pose + k * kTransformStride;
-        const int64_t nodeOff = k * kNodeStride;
-
-        const float vx = *reinterpret_cast<const float*>(posek + 0x10);
-        const float vy = *reinterpret_cast<const float*>(posek + 0x14);
-        const float vz = *reinterpret_cast<const float*>(posek + 0x18);
-
-        const int32_t parent =
-            *reinterpret_cast<const int32_t*>(nodes->_data + nodeOff + 0x08);
-        const uint8_t* P = interp + static_cast<int64_t>(parent) * kInterpStride;
-
-        const float py = *reinterpret_cast<const float*>(P + 0x04);
-        const float pz = *reinterpret_cast<const float*>(P + 0x08);
-        const float px = *reinterpret_cast<const float*>(P + 0x00);
-        const float pw = *reinterpret_cast<const float*>(P + 0x0c);
-        const float tx = *reinterpret_cast<const float*>(P + 0x10);
-        const float ty = *reinterpret_cast<const float*>(P + 0x14);
-        const float tz = *reinterpret_cast<const float*>(P + 0x18);
-
-        const float mpy = -py;
-        const float mpx = -px;
-        const float mpz = -pz;
-
-        float parentXform[7] = { px, py, pz, pw, tx, ty, tz };
-
-        float k1 = vz * py;
-        float B = py * 0.0f;
-        float A = vx * pw;
-        float k2 = px * 0.0f;
-        float C = vx * py;
-        A = A + k2;
-        float k3 = vy * pz;
-        A = A + k3;
-        float k4 = vx * px;
-        float k5 = vx * pz;
-        A = A - k1;
-        B = B - k5;
-        float k6 = vy * pw;
-        float k7 = vz * px;
-        B = B + k6;
-        B = B + k7;
-        float k8 = vz * pw;
-        float k9 = vz * pz;
-        float k10 = pz * 0.0f;
-        C = C + k10;
-        float k11 = vy * py;
-        float k12 = vy * px;
-        float rx = A;
-        rx = rx * pw;
-        C = C - k12;
-        C = C + k8;
-        float D = pw * 0.0f;
-        float u1 = C * mpy;
-        D = D - k4;
-        D = D - k11;
-        D = D - k9;
-        float u0 = D * mpx;
-        rx = rx + u0;
-        rx = rx + u1;
-        float u2 = B * mpz;
-        float ry = B;
-        ry = ry * pw;
-        float u3 = D * mpy;
-        float u4 = D * mpz;
-        rx = rx - u2;
-        float u5 = C * mpx;
-        rx = rx + tx;
-        float rz = C;
-        rz = rz * pw;
-        float u6 = B * mpx;
-        ry = ry - u5;
-        rz = rz + u6;
-        ry = ry + u3;
-        float u7 = A * mpz;
-        float u8 = A * mpy;
-        rz = rz - u8;
-        ry = ry + u7;
-        ry = ry + ty;
-        rz = rz + u4;
-        rz = rz + tz;
-
-        float qret[4];
-        const float* q = QuaternionMul(parentXform, qret, posek);
-
-        uint8_t* slot = interp + k * kInterpStride;
-        Copy7Dwords(slot + kTransformStride, slot);
-        float* dst = reinterpret_cast<float*>(slot);
-        dst[0] = q[0];
-        dst[1] = q[1];
-        dst[2] = q[2];
-        dst[3] = q[3];
-        dst[4] = rx;
-        dst[5] = ry;
-        dst[6] = rz;
-    }
-
-}
-
-// ============================================================================
-// ?GetBones@MeshInstance@Graphics@@  (0x180100070)
-// ============================================================================
-//
-// Produce one skinning matrix per bone and return the bone count.
-//
-// Per bone: interpolate between the InterpolatedState's two halves by `t`,
-// compose that with the node's BIND transform, compose THAT with the instance's
-// root transform, and convert to a Matrix.
-//
-// THE TWO BRANCHES ON MeshInstance+0xd8 ARE THE SAME QUESTION ASKED TWICE.
-// Non-zero means the instance is playing a shared, instanced clip: the node
-// states come out of the AnimationManager's pool through the last layer's
-// packed handle, and the root transform used is the IDENTITY. Zero means the
-// instance owns its nodes (+0xf0) and the root transform is the INVERSE of the
-// one the caller passed. Retail tests the byte three separate times rather than
-// keeping the answer; reproduced.
-//
-// The root quaternion's four `q * 0.0f` products are hoisted out of the loop by
-// MSVC and are kept hoisted here, because they are what the second rotate's
-// accumulators are SEEDED with.
-extern "C" int RtGraphics_MeshInstance_GetBones(
-    const void* selfv, float t, const void* rootv, void* outv) {
-
-    const uint8_t* self = static_cast<const uint8_t*>(selfv);
-    const uint8_t* mesh = *reinterpret_cast<const uint8_t* const*>(self + 0xc0);
-    const int32_t boneCount = *reinterpret_cast<const int32_t*>(mesh + 0x68);
-    uint8_t* out = static_cast<uint8_t*>(outv);
-
-    // Full oracle: the body writes only the caller's matrix buffer and returns
-    // the bone count. Nothing it reads is modified.
-    std::vector<uint8_t> replay;
-    const size_t replayBytes = static_cast<size_t>(boneCount > 0 ? boneCount : 0) * 0x40;
-
-    float identity[7];
-    float inverse[7];
-    const float* rootT;
-    if (self[0xd8] != 0) {
-        identity[0] = 0.0f; identity[1] = 0.0f; identity[2] = 0.0f;
-        identity[3] = 1.0f;
-        identity[4] = 0.0f; identity[5] = 0.0f; identity[6] = 0.0f;
-        rootT = identity;
-    } else {
-        rootT = TransformInverse(rootv, inverse);
-    }
-
-    const float rqx = rootT[0];
-    const float rqy = rootT[1];
-    const float rqz = rootT[2];
-    const float rqw = rootT[3];
-    const float rtx = rootT[4];
-    const float rty = rootT[5];
-    const float rtz = rootT[6];
-
-    // The root transform, rebuilt as the `this` retail hands to operator*.
-    const float rootXform[7] = { rqx, rqy, rqz, rqw, rtx, rty, rtz };
-
-    const uint8_t* interp;
-    if (self[0xd8] != 0) {
-        const uint8_t* layers = *reinterpret_cast<const uint8_t* const*>(self + 0xe0);
-        const int64_t lcount = *reinterpret_cast<const int32_t*>(self + 0xe8);
-        const int32_t handle =
-            *reinterpret_cast<const int32_t*>(layers + lcount * kLayerStride - 0x2c);
-        const uint8_t* instData = AnimationManagerSingleton()->_instances._data;
-        const uint8_t* states = *reinterpret_cast<const uint8_t* const*>(
-            instData + static_cast<int64_t>((handle >> 8) & 0xff) * kInstanceStride + 0x20);
-        interp = *reinterpret_cast<const uint8_t* const*>(
-            states + static_cast<int64_t>(handle & 0xff) * kStateStride + 0x38);
-    } else {
-        interp = *reinterpret_cast<const uint8_t* const*>(self + 0xf0);
-    }
-
-    if (boneCount <= 0) return boneCount;
-
-    const float rqx0 = rqx * 0.0f;
-    const float rqy0 = rqy * 0.0f;
-    const float rqz0 = rqz * 0.0f;
-    const float rqw0 = rqw * 0.0f;
-    const float mrqx = -rqx;
-    const float mrqy = -rqy;
-    const float mrqz = -rqz;
-
-    for (int64_t k = 0; k < boneCount; ++k) {
-        const uint8_t* ip = interp + k * kInterpStride;
-
-        // Lerp the node's two stored transforms by `t`.
-        float sx = *reinterpret_cast<const float*>(ip + 0x2c);
-        float fx = *reinterpret_cast<const float*>(ip + 0x10);
-        float sy = *reinterpret_cast<const float*>(ip + 0x30);
-        float fy = *reinterpret_cast<const float*>(ip + 0x14);
-        float sz = *reinterpret_cast<const float*>(ip + 0x34);
-        float fz = *reinterpret_cast<const float*>(ip + 0x18);
-        fx = fx - sx;
-        fy = fy - sy;
-        fz = fz - sz;
-        fx = fx * t;
-        fy = fy * t;
-        fz = fz * t;
-        sx = sx + fx;
-        sy = sy + fy;
-        sz = sz + fz;
-
-        float lqret[4];
-        const float* lq = QuaternionLerp(ip + kTransformStride, lqret, ip, &t);
-
-        const uint8_t* bind =
-            *reinterpret_cast<const uint8_t* const*>(mesh + 0x60) + k * kNodeStride + 0x28;
-
-        // ---- stage 1: rotate the bind translation by the lerped rotation ----
-        const float lqx = lq[0];
-        const float lqw = lq[3];
-        const float lqz = lq[2];
-        const float lqy = lq[1];
-        const float bvx = *reinterpret_cast<const float*>(bind + 0x10);
-        const float bvy = *reinterpret_cast<const float*>(bind + 0x14);
-        const float bvz = *reinterpret_cast<const float*>(bind + 0x18);
-        const float mlqx = -lqx;
-        const float mlqy = -lqy;
-        const float mlqz = -lqz;
-
-        const float ka = lqx * 0.0f;
-        float B = lqy * 0.0f;
-        float A = bvx * lqw;
-        const float kb = bvz * lqy;
-        float C = bvx * lqy;
-        A = A + ka;
-        const float kc = bvy * lqz;
-        A = A + kc;
-        const float kd = bvx * lqz;
-        A = A - kb;
-        const float ke = bvy * lqw;
-        B = B - kd;
-        const float kf = bvz * lqx;
-        B = B + ke;
-        const float kg = bvz * lqw;
-        B = B + kf;
-        const float kh = lqz * 0.0f;
-        float D = lqw * 0.0f;
-        C = C + kh;
-        const float ki = bvy * lqx;
-        C = C - ki;
-        C = C + kg;
-        const float kj = bvy * lqy;
-        const float kk = bvz * lqz;
-        float rx = A * lqw;
-        const float u1 = C * mlqy;
-        float ry = B * lqw;
-        const float kl = bvx * lqx;
-        D = D - kl;
-        D = D - kj;
-        D = D - kk;
-        const float u0 = D * mlqx;
-        rx = u0 + rx;
-        const float u6 = B * mlqx;
-        const float u2 = B * mlqz;
-        rx = rx + u1;
-        rx = rx - u2;
-        const float u3 = D * mlqy;
-        const float u4 = D * mlqz;
-        const float u5 = C * mlqx;
-        rx = rx + sx;
-        float rz = C * lqw;
-        ry = ry - u5;
-        rz = u6 + rz;
-        const float u7 = A * mlqz;
-        const float u8 = A * mlqy;
-        ry = ry + u3;
-        rz = rz - u8;
-        rz = rz + u4;
-        ry = ry + u7;
-        rz = rz + sz;
-        ry = ry + sy;
-
-        const float lerped[7] = { lqx, lqy, lqz, lqw, sx, sy, sz };
-        float q1ret[4];
-        const float* q1 = QuaternionMul(lerped, q1ret, bind);
-        const float composedQ[4] = { q1[0], q1[1], q1[2], q1[3] };
-
-        // ---- stage 2: the same shape again against the root rotation. The
-        // four accumulators are SEEDED with the hoisted `rq * 0.0f` products,
-        // which is why those are computed once outside the loop. ----
-        float A2 = rx * rqw;
-        A2 = A2 + rqx0;
-        float C2 = rx * rqy;
-        float B2 = rqy0;
-        C2 = C2 + rqz0;
-        const float m0 = ry * rqz;
-        A2 = A2 + m0;
-        const float m1 = rz * rqy;
-        const float m2 = rx * rqz;
-        A2 = A2 - m1;
-        const float m3 = ry * rqw;
-        B2 = B2 - m2;
-        const float m4 = rz * rqx;
-        B2 = B2 + m3;
-        B2 = B2 + m4;
-        const float m5 = ry * rqx;
-        float D2 = rqw0;
-        C2 = C2 - m5;
-        const float m6 = rx * rqx;
-        const float m7 = ry * rqy;
-        D2 = D2 - m6;
-        float Rx = A2 * rqw;
-        const float m8 = rz * rqw;
-        float Ry = B2 * rqw;
-        C2 = C2 + m8;
-        D2 = D2 - m7;
-        const float m9 = rz * rqz;
-        const float v1 = C2 * mrqy;
-        D2 = D2 - m9;
-        const float v0 = D2 * mrqx;
-        Rx = v0 + Rx;
-        const float v2 = B2 * mrqz;
-        const float v6 = B2 * mrqx;
-        Rx = Rx + v1;
-        const float v3 = D2 * mrqy;
-        Rx = Rx - v2;
-        const float v4 = D2 * mrqz;
-        const float v5 = C2 * mrqx;
-        Rx = Rx + rtx;
-        float Rz = C2 * rqw;
-        Ry = Ry - v5;
-        Rz = v6 + Rz;
-        const float v7 = A2 * mrqz;
-        const float v8 = A2 * mrqy;
-        Ry = Ry + v3;
-        Rz = Rz - v8;
-        Rz = Rz + v4;
-        Ry = Ry + v7;
-        Ry = Ry + rty;
-        Rz = Rz + rtz;
-
-        float q2ret[4];
-        const float* q2 = QuaternionMul(rootXform, q2ret, composedQ);
-
-        const float finalXform[7] = { q2[0], q2[1], q2[2], q2[3], Rx, Ry, Rz };
-        float matrix[16];
-        const float* m = TransformAsMatrix(finalXform, matrix);
-
-        uint8_t* dst = out + k * 0x40;
-        for (int w = 0; w < 16; ++w)
-            reinterpret_cast<uint32_t*>(dst)[w] = reinterpret_cast<const uint32_t*>(m)[w];
-    }
-
-
-    return boneCount;
-}
-
-// ============================================================================
-// Registration. Unconditional (DIRECTION.md §2: a port registers, no flag).
-// ============================================================================
-int RtGraphicsAnimationTransformsRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport(
-        "?PlayAnimation@AnimationState@Graphics@@QEAAXV?$ExternalPtr@VAnimationGroup@"
-        "Graphics@@@Object@@HAEBV?$Array@UNode@GraphicsMesh@Graphics@@@Collection@@"
-        "AEBVTime@System@@2M_N@Z",
-        (void*)&RtGraphics_AnimationState_PlayAnimation);                       ++n;
-    RegisterRuntimeAddr(0x1800fdf50ull, (void*)&RtGraphics_AnimationState_PlayAnimation);
-
-    RegisterRuntimeExport(
-        "?GetInstanceId@AnimationManager@Graphics@@QEAAHV?$ExternalPtr@VAnimationGroup@"
-        "Graphics@@@Object@@HAEBV?$Array@UNode@GraphicsMesh@Graphics@@@Collection@@@Z",
-        (void*)&RtGraphics_AnimationManager_GetInstanceId);                     ++n;
-    RegisterRuntimeAddr(0x1800fb9d0ull, (void*)&RtGraphics_AnimationManager_GetInstanceId);
-
-    RegisterRuntimeExport(
-        "?CopyInstancedToUnique@AnimationState@Graphics@@AEBAXAEBV?$Array@UNode@"
-        "GraphicsMesh@Graphics@@@Collection@@AEBVTransform@Math@@PEAV?$InterpolatedState@"
-        "VTransform@Math@@@2@H@Z",
-        (void*)&RtGraphics_AnimationState_CopyInstancedToUnique);               ++n;
-    RegisterRuntimeAddr(0x1800fd4c0ull, (void*)&RtGraphics_AnimationState_CopyInstancedToUnique);
-
-    RegisterRuntimeExport(
-        "?UpdateNodes@AnimationState@Graphics@@AEAAXMAEBV?$Array@UNode@GraphicsMesh@"
-        "Graphics@@@Collection@@AEBVTransform@Math@@PEAV?$InterpolatedState@VTransform@"
-        "Math@@@2@PEAV56@AEAVVector3@6@@Z",
-        (void*)&RtGraphics_AnimationState_UpdateNodes);                         ++n;
-    RegisterRuntimeAddr(0x1800fcc20ull, (void*)&RtGraphics_AnimationState_UpdateNodes);
-
-    RegisterRuntimeExport(
-        "?GetBones@MeshInstance@Graphics@@QEBAHMAEBVTransform@Math@@PEAVMatrix@4@@Z",
-        (void*)&RtGraphics_MeshInstance_GetBones);                              ++n;
-    RegisterRuntimeAddr(0x180100070ull, (void*)&RtGraphics_MeshInstance_GetBones);
-
-    return n;
-}
+}  // namespace Graphics

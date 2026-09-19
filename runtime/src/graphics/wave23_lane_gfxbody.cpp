@@ -40,26 +40,30 @@
 #include <cstdio>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/graphics/AnimationManager.h"   // ENDGAME B.3.5 block GC
+#include "../../types/graphics/AnimationState.h"     // ditto
 #include "../../types/graphics/FrameCopyImageBuffer.h"
+#include "../../types/math/Math.h"                   // Math::Transform / Vector3
+#include "../../types/system/Value.h"                // System::Time
 
 // ---------------------------------------------------------------------------
-// NEGATIVE-CONTROL SEAM — COMPILED ONLY INTO tools/gfxbody23_probe.
+// THE NEGATIVE-CONTROL SEAM IS GONE -- ENDGAME B.3.5 block GC.
 //
-// The shipping build never defines GFXBODY23_PROBE, so not one byte of the
-// control machinery reaches reimpl-x64.exe. The probe defines it and drives
-// `GfxbodyProbeCorrupt()` from its own `--corrupt N` flag; at N == 0 every
-// guarded site is `if (0 == <literal>)`, which the optimiser deletes, so the
-// probe's measured body and the shipped body differ only in code that is
-// provably dead on the measured run. Said out loud because Wave 21 lane
-// GFXBODY closed with the opposite: "the binary measured in §7 is not the one
-// described in §4".
+// This file used to carry a `GFXBODY23_PROBE` / `RT_GFX23_CORRUPT(n)` seam that
+// wrapped seven sites inside `AnimationManager::Update` so a probe binary could
+// corrupt one of them at a time. THE PROBE IT WAS WRITTEN FOR DOES NOT EXIST:
+// a repo-wide search for `GFXBODY23_PROBE`, `gfxbody23` and
+// `GfxbodyProbeCorrupt` finds nothing outside this file except one stale
+// sentence in AnimationManager.h -- no `tools/gfxbody23_probe`, no Makefile
+// target. So every guarded site expanded to `(false)` in every build this tree
+// can produce, and the seam documented a measurement nobody can re-run.
+//
+// It is deleted with the body's move onto `Graphics::AnimationManager::Update`,
+// which is the block brief's "may be deleted if and only if nothing references
+// it" arm; the seven sites are now their live arms, written plainly. THE
+// ATTENDANCE COUNTERS ARE A DIFFERENT THING AND THEY STAY: `g_animUpdCalls` and
+// `g_animUpdStates` have a live reader in `RtGraphicsWave23GfxbodySummary()`.
 // ---------------------------------------------------------------------------
-#ifdef GFXBODY23_PROBE
-extern "C" int GfxbodyProbeCorrupt();
-#  define RT_GFX23_CORRUPT(n) (GfxbodyProbeCorrupt() == (n))
-#else
-#  define RT_GFX23_CORRUPT(n) (false)
-#endif
 
 using RtGraphics::FrameCopyImageBuffer;
 
@@ -336,6 +340,10 @@ extern "C" void RtGraphics_FrameCopyImageBuffer_Dtor(void* self) {
 // instruction from 0x1800a3b87-0x1800a3bc9, cross-checked against the field
 // names runtime/types/video/ImageBuffer.h recovered from the DX11 side.
 // ============================================================================
+// ENDGAME B.3.5 block GC: THE BODY MOVED onto
+// `Graphics::FrameCopyImageBuffer::Create` -- vtable SLOT 9, which this class
+// OVERRIDES (the header's correction to B35_RULES 2.3 item 5). The door keeps its
+// name, its registration and its entry counter.
 extern "C" bool RtGraphics_FrameCopyImageBuffer_Create(
         void* self,
         int32_t imageType, int32_t usage, int32_t format,
@@ -344,52 +352,17 @@ extern "C" bool RtGraphics_FrameCopyImageBuffer_Create(
         int32_t addressU, int32_t addressV, int32_t addressW,
         void* levels) {
     Attend("FrameCopyImageBuffer::Create", g_createCalls);
-
-    FrameCopyImageBuffer* const p = static_cast<FrameCopyImageBuffer*>(self);
-
-    p->base.dimension = imageType;      // +0x28  <- EDX      (0x1800a3b87)
-    p->base.kind      = usage;          // +0x2c  <- R8D      (0x1800a3b8a)
-    p->base.format    = static_cast<uint32_t>(format);   // +0x30 <- R9D (0x1800a3b8e)
-    p->base.width     = width;          // +0x20  <- arg5     (0x1800a3b92)
-    p->base.height    = height;         // +0x24  <- arg6     (0x1800a3b99)
-    p->base.flags     = flags;          // +0x34  <- arg4     (0x1800a3ba0)
-    p->base.filter    = filterMode;     // +0x44  <- arg7     (0x1800a3ba7)
-    p->base.addressU  = addressU;       // +0x38  <- arg8     (0x1800a3bae)
-    p->base.addressV  = addressV;       // +0x3c  <- arg9     (0x1800a3bb8)
-    p->base.addressW  = addressW;       // +0x40  <- arg10    (0x1800a3bc2)
-
-    // `MOV RCX,[RCX+0x60]; MOV RAX,[RCX]; MOV RDX,<arg11>; CALL [RAX+0x18]` —
-    // slot 3 of the platform companion, "create the texture and all its views"
-    // (dx11/src/imagebufferdata.cpp:13), taking the level-descriptor array.
-    // TWO arguments: retail sets RCX and RDX and nothing else.
-    void* const data = *reinterpret_cast<void**>(
-        reinterpret_cast<uint8_t*>(self) + 0x60);       // faithful: unguarded
-    void** const vt = *reinterpret_cast<void***>(data);
-    const bool ok = reinterpret_cast<bool (*)(void*, void*)>(vt[3])(data, levels);
-    if (!ok) return false;                              // TEST AL,AL / JZ -> return AL
-
-    // The second RenderBuffer, this time with `this` as the colour attachment.
-    // Here retail calls `??2RenderBuffer@Video@@SAPEAX_K@Z` (0x18001f2e0) as a
-    // REAL CALL rather than inlining it — `MOV ECX,0x30; CALL 0x18001f2e0` at
-    // 0x1800a3be2. Same five instructions as the inlined form in the ctor, and
-    // MemAlloc(0x30, 8) is that body (see the MemAlloc note above), so this is
-    // spelled the same way for one arena and one reader.
-    void* const rb = MemAlloc(0x30, 8);
-    if (rb != nullptr) {
-        reinterpret_cast<uint64_t*>(rb)[0] = 0;
-        reinterpret_cast<uint64_t*>(rb)[1] = 0;
-        reinterpret_cast<uint64_t*>(rb)[2] = 0;
-        RenderBufferPlatformConstruct(rb);
-    }
-    p->_destTarget = rb;                                // +0x80
-
-    // `XOR R8D,R8D; MOV RDX,RDI; MOV RCX,RBX` — colour is THIS, depth is null.
-    // Note RDX is `this`, NOT `this->_backBufferImage`: that is the difference
-    // between the ctor's RenderBuffer and this one, and it is the whole point
-    // of the class (copy FROM the back-buffer alias INTO our own texture).
-    RenderBufferCreate(rb, self, nullptr);
-
-    return true;                                        // MOV AL,0x1
+    return reinterpret_cast<Graphics::FrameCopyImageBuffer*>(self)       // B.3.5 bridge
+        ->Graphics::FrameCopyImageBuffer::Create(
+            static_cast<Video::ImageBuffer::ImageType>(imageType),
+            static_cast<Video::ImageBuffer::Usage>(usage),
+            static_cast<Video::ImageBuffer::Format>(format),
+            flags, width, height,
+            static_cast<Video::ImageBuffer::FilterMode>(filterMode),
+            static_cast<Video::ImageBuffer::AddressMode>(addressU),
+            static_cast<Video::ImageBuffer::AddressMode>(addressV),
+            static_cast<Video::ImageBuffer::AddressMode>(addressW),
+            static_cast<Video::ImageBuffer::LevelArray*>(levels));
 }
 
 // ============================================================================
@@ -406,23 +379,15 @@ extern "C" bool RtGraphics_FrameCopyImageBuffer_Create(
 // takes (this, Context*, RenderBuffer*, bool). saveload_draw.cpp:75 records the
 // same class of defect on the call INTO this function, found the same way.
 // ============================================================================
+// ENDGAME B.3.5 block GC: THE BODY MOVED onto
+// `Graphics::FrameCopyImageBuffer::Generate` -- vtable slot 10. The door keeps its
+// name, its registration and the ENTRY counter; the BLIT counter is a branch
+// counter and stays inside the member, where the branch is.
 extern "C" void RtGraphics_FrameCopyImageBuffer_Generate(
         void* self, void* context, int32_t generation) {
     Attend("FrameCopyImageBuffer::Generate", g_generateCalls);
-
-    FrameCopyImageBuffer* const p = static_cast<FrameCopyImageBuffer*>(self);
-    if (p->_generation == generation) return;           // CMP [RCX+0x68],R8D / JZ
-
-    Attend("FrameCopyImageBuffer::Generate BLIT", g_generateCopies);
-
-    // rax = _destTarget (+0x80); rcx = rax->platformData (+0x28); r8 = _sourceTarget.
-    void* const data = *reinterpret_cast<void**>(
-        reinterpret_cast<uint8_t*>(p->_destTarget) + 0x28);   // faithful: unguarded
-    void** const vt = *reinterpret_cast<void***>(data);
-    reinterpret_cast<void (*)(void*, void*, void*, bool)>(vt[3])(
-        data, context, p->_sourceTarget, true);
-
-    p->_generation = generation;                        // MOV [RBX+0x68],EDI
+    reinterpret_cast<const Graphics::FrameCopyImageBuffer*>(self)        // B.3.5 bridge
+        ->Graphics::FrameCopyImageBuffer::Generate(context, generation);
 }
 
 // ============================================================================
@@ -536,93 +501,25 @@ struct AnimTransform {      // Math::Transform — Quaternion then Vector3, 0x1c
 };
 static_assert(sizeof(AnimTransform) == 0x1c, "Math::Transform is 28 bytes");
 
-// ?Update@AnimationState@Graphics@@QEAA_NAEBVTime@System@@AEBV?$Array@UNode@GraphicsMesh@Graphics@@@Collection@@AEBVTransform@Math@@PEAV?$InterpolatedState@VTransform@Math@@@2@PEAV78@AEAVVector3@8@_N6@Z
-// retail 0x1800fdb20, ordinal 4474. Eight parameters plus `this`, in the order
-// its own mangled name gives them.
-using AnimStateUpdateFn = bool (*)(void* self, const void* time, const void* nodes,
-                                   const AnimTransform* base, void* interp38,
-                                   void* interp28, void* outVec3,
-                                   bool flag7, bool flag8);
-
-bool AnimationStateUpdate(void* self, const void* time, const void* nodes,
-                          const AnimTransform* base, void* interp38, void* interp28,
-                          void* outVec3, bool flag7, bool flag8) {
-    // RT_EXPORT_ONCE only — NOT wrapped in a second function-local static. The
-    // macro already caches a HIT and deliberately retries a MISS; an outer
-    // `static Fn fn` would reinstate exactly the freeze-a-null behaviour
-    // rt_resolve_cache.cpp was written to remove.
-    return RT_EXPORT_ONCE(AnimStateUpdateFn,
-        "?Update@AnimationState@Graphics@@QEAA_NAEBVTime@System@@AEBV?$Array@UNode@GraphicsMesh@"
-        "Graphics@@@Collection@@AEBVTransform@Math@@PEAV?$InterpolatedState@VTransform@Math@@@2@"
-        "PEAV78@AEAVVector3@8@_N6@Z")(
-            self, time, nodes, base, interp38, interp28, outVec3, flag7, flag8);
-}
+// The nine-argument `RT_EXPORT_ONCE` forwarder onto
+// `?Update@AnimationState@Graphics@@` that used to sit here is GONE: block GC
+// made that a real member of `Graphics::AnimationState`, so the call site is a
+// QUALIFIED member call. The mangled name -- which is what settled the argument
+// mapping, and is a stronger source than any prologue read -- is kept at the
+// call site.
 
 }  // namespace
 
+// ENDGAME B.3.5 block GC: THE BODY MOVED to
+// `Graphics::AnimationManager::Update`, in this file's `namespace Graphics` block
+// at the bottom. The door keeps its name, its registration and BOTH counters --
+// the entry count here and the per-state count inside the loop, which the file's
+// summary line prints and which measure different things.
 extern "C" void RtGraphics_AnimationManager_Update(void* self, const void* time, bool rootOnly) {
     Attend("AnimationManager::Update", g_animUpdCalls);
-
-    uint8_t* const mgr = static_cast<uint8_t*>(self);
-
-    int32_t groupIndex = 0;
-    if (*reinterpret_cast<const int32_t*>(mgr + 8) <= 0) return;   // Array::_size
-
-    for (;;) {
-        uint8_t* const groupBase = *reinterpret_cast<uint8_t**>(mgr);   // reloaded each pass
-        AnimGroup* const g = reinterpret_cast<AnimGroup*>(groupBase + groupIndex * 0x30);
-
-        if (g->_f00 != nullptr && g->_stateCount > 0) {
-            // Control 5 hoists this bound. It is the EFFECTIVENESS control and
-            // is EXPECTED TO REPORT NOT CAUGHT: nothing reachable here grows the
-            // array, so the hoist is genuinely unobservable and a control set in
-            // which every control fires proves only that the controls were
-            // picked to fire (reference_probe_needs_an_effectiveness_control.md).
-            const int32_t hoisted = g->_stateCount;
-            for (int32_t i = 0; i < (RT_GFX23_CORRUPT(5) ? hoisted : g->_stateCount); ++i) {
-                uint8_t* const state =
-                    static_cast<uint8_t*>(g->_states)
-                    + static_cast<int64_t>(i) * (RT_GFX23_CORRUPT(4) ? 0x40 : 0x48);
-
-                // Rebuilt inside the loop, exactly as retail does (the callee
-                // takes it by const reference and could keep the address).
-                AnimTransform base;
-                base.q[0] = 0.0f; base.q[1] = 0.0f; base.q[2] = 0.0f;
-                base.q[3] = 1.0f;                      // [0x18016169c] == 00 00 80 3f
-                base.t[0] = 0.0f; base.t[1] = 0.0f; base.t[2] = 0.0f;
-
-                void* interp38 = *reinterpret_cast<void**>(state + 0x38);  // 5th arg
-                void* interp28 = *reinterpret_cast<void**>(state + 0x28);  // 6th arg
-                void* const outVec3 = state + 0x18;                        // 7th arg
-
-                if (RT_GFX23_CORRUPT(1)) { void* t = interp38; interp38 = interp28; interp28 = t; }
-                if (RT_GFX23_CORRUPT(3)) base.q[3] = 0.0f;
-
-                AnimationStateUpdate(state, time, &g->_nodes, &base,
-                                     interp38, interp28, outVec3,
-                                     RT_GFX23_CORRUPT(2) ? false : rootOnly,
-                                                      // 8th: the bool this function was given
-                                     false);          // 9th: literal 0 (MOV byte [RSP+0x40],0)
-
-                // Write the identity-rotation Transform carrying the Vector3 the
-                // callee produced into *state->_interp28. `_interp28` is RE-READ
-                // (`MOV RAX,[RDI+0x28]` at 0x1800fc33b) rather than reused.
-                uint8_t* const dst = *reinterpret_cast<uint8_t**>(state + 0x28);
-                const uint32_t* const src = reinterpret_cast<const uint32_t*>(
-                    RT_GFX23_CORRUPT(7) ? (state + 0x1c) : (state + 0x18));
-                float* const dq = reinterpret_cast<float*>(dst);
-                dq[0] = 0.0f; dq[1] = 0.0f; dq[2] = 0.0f;
-                dq[3] = RT_GFX23_CORRUPT(6) ? 0.0f : 1.0f;
-                uint32_t* const dt = reinterpret_cast<uint32_t*>(dst + 0x10);
-                dt[0] = src[0]; dt[1] = src[1]; dt[2] = src[2];   // integer moves, see §5.3
-
-                ++g_animUpdStates;
-            }
-        }
-
-        ++groupIndex;
-        if (groupIndex >= *reinterpret_cast<const int32_t*>(mgr + 8)) break;
-    }
+    reinterpret_cast<Graphics::AnimationManager*>(self)                 // B.3.5 bridge
+        ->Graphics::AnimationManager::Update(
+            *reinterpret_cast<const System::Time*>(time), rootOnly);    // B.3.5 bridge
 }
 
 // ============================================================================
@@ -698,3 +595,185 @@ void RtGraphicsWave23GfxbodySummary() {
            g_ctorCalls, g_dtorCalls, g_createCalls, g_generateCalls, g_generateCopies,
            g_animUpdCalls, g_animUpdStates);
 }
+
+// ############################################################################
+// ENDGAME B.3.5 step 5, block GC -- `Graphics::AnimationManager::Update`'s body,
+// whose live door is the `extern "C"` function above.
+//
+// Its own `namespace Graphics { }` block, because a member definition has to
+// appear in a namespace ENCLOSING the class and `Graphics` / `RtGraphics` are
+// siblings (B34_BRIEFS A.2). This file's helpers are in the GLOBAL unnamed
+// namespace and are spelled `::` here, because inside `namespace Graphics` a
+// bare `AnimGroup` or `AnimTransform` would look inside `Graphics` first.
+// ############################################################################
+
+namespace Graphics {
+
+// ---------------------------------------------------------------------------
+// ?Update@AnimationManager@Graphics@@QEAAXAEBVTime@System@@_N@Z 0x1800fc240
+// ENDGAME B.3.5 block GC. The group/state offsets, the identity-transform
+// constant, the integer copy and the re-read bounds are all in the banner beside
+// the door above.
+//
+// `_instances` is the `Array<Instance>` at +0x00, so retail's `[RCX]` and
+// `[RCX+8]` are `_instances._data` and `_instances._size` -- the same two loads,
+// now held by AnimationManager.h's own `static_assert`s. The GROUP record is
+// still this file's `AnimGroup` POD: it is field-for-field
+// `Graphics::AnimationManager::Instance` and its four asserts stay, because the
+// POD has live users outside this file and B4b-1 keeps it until the last one
+// converts.
+//
+// THE CALLEE EDGE IS NO LONGER A RESOLVER HIT (block GC item 6). The nine-argument
+// `RT_EXPORT_ONCE` onto `?Update@AnimationState@Graphics@@` is a QUALIFIED
+// non-virtual member call on `Graphics::AnimationState`, whose body block GC also
+// moved onto its member (`wave27_lane_gfxbig.cpp`). Its registered door is
+// untouched and still serves every caller outside this file. The nine-argument
+// mangled name that settled the argument mapping is kept in the comment: that is
+// what the banner's "a stronger source than either" sentence was about.
+// ---------------------------------------------------------------------------
+void AnimationManager::Update(const System::Time& time, bool rootOnly) {
+    int32_t groupIndex = 0;
+    if (_instances._size <= 0) return;             // [RCX+8], Array::_size
+
+    for (;;) {
+        uint8_t* const groupBase = _instances._data;    // [RCX], reloaded each pass
+        ::AnimGroup* const g = reinterpret_cast<::AnimGroup*>(groupBase + groupIndex * 0x30);
+
+        if (g->_f00 != nullptr && g->_stateCount > 0) {
+            // Control 5 hoists this bound. It is the EFFECTIVENESS control and
+            // is EXPECTED TO REPORT NOT CAUGHT: nothing reachable here grows the
+            // array, so the hoist is genuinely unobservable and a control set in
+            // which every control fires proves only that the controls were
+            // picked to fire (reference_probe_needs_an_effectiveness_control.md).
+            for (int32_t i = 0; i < g->_stateCount; ++i) {
+                uint8_t* const state =
+                    static_cast<uint8_t*>(g->_states)
+                    + static_cast<int64_t>(i) * 0x48;
+
+                // Rebuilt inside the loop, exactly as retail does (the callee
+                // takes it by const reference and could keep the address).
+                ::AnimTransform base;
+                base.q[0] = 0.0f; base.q[1] = 0.0f; base.q[2] = 0.0f;
+                base.q[3] = 1.0f;                      // [0x18016169c] == 00 00 80 3f
+                base.t[0] = 0.0f; base.t[1] = 0.0f; base.t[2] = 0.0f;
+
+                void* interp38 = *reinterpret_cast<void**>(state + 0x38);  // 5th arg
+                void* interp28 = *reinterpret_cast<void**>(state + 0x28);  // 6th arg
+                void* const outVec3 = state + 0x18;                        // 7th arg
+
+                // ?Update@AnimationState@Graphics@@QEAA_NAEBVTime@System@@AEBV?$Array@
+                // UNode@GraphicsMesh@Graphics@@@Collection@@AEBVTransform@Math@@PEAV?$
+                // InterpolatedState@VTransform@Math@@@2@PEAV78@AEAVVector3@8@_N6@Z
+                // retail 0x1800fdb20 -- eight parameters plus `this`, in the order
+                // that mangled name gives them. The 9th is retail's literal 0
+                // (MOV byte [RSP+0x40],0), NOT the bool this function was given.
+                reinterpret_cast<Graphics::AnimationState*>(state)      // B.3.5 bridge
+                    ->Graphics::AnimationState::Update(
+                        time,
+                        *reinterpret_cast<const Collection::Array<uint8_t>*>(&g->_nodes),
+                        *reinterpret_cast<const Math::Transform*>(&base),
+                        interp38, interp28,
+                        *reinterpret_cast<Math::Vector3*>(outVec3),
+                        rootOnly, false);
+
+                // Write the identity-rotation Transform carrying the Vector3 the
+                // callee produced into *state->_interp28. `_interp28` is RE-READ
+                // (`MOV RAX,[RDI+0x28]` at 0x1800fc33b) rather than reused.
+                uint8_t* const dst = *reinterpret_cast<uint8_t**>(state + 0x28);
+                const uint32_t* const src =
+                    reinterpret_cast<const uint32_t*>(state + 0x18);
+                float* const dq = reinterpret_cast<float*>(dst);
+                dq[0] = 0.0f; dq[1] = 0.0f; dq[2] = 0.0f;
+                dq[3] = 1.0f;
+                uint32_t* const dt = reinterpret_cast<uint32_t*>(dst + 0x10);
+                dt[0] = src[0]; dt[1] = src[1]; dt[2] = src[2];   // integer moves, see §5.3
+
+                ++::g_animUpdStates;
+            }
+        }
+
+        ++groupIndex;
+        if (groupIndex >= _instances._size) break;     // the bound is RE-READ
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ?Create@FrameCopyImageBuffer@Graphics@@  0x1800a3b70 -- SLOT 9, ENDGAME B.3.5
+// block GC. The argument-to-offset map, the two-argument platform slot 3 call and
+// the "RDX is `this`, NOT `_backBufferImage`" note are in the door's banner.
+//
+// Ten raw `base.*` POD writes became the real `Video::ImageBuffer` fields, which
+// is what the inheritance chain is for; `self + 0x60` is `_data`.
+// ---------------------------------------------------------------------------
+bool FrameCopyImageBuffer::Create(ImageType imageType, Usage usage, Format format,
+                                  uint32_t flags, int32_t width, int32_t height,
+                                  FilterMode filterMode,
+                                  AddressMode addressU, AddressMode addressV,
+                                  AddressMode addressW, LevelArray* levels) {
+    _dimension = imageType;            // +0x28  <- EDX      (0x1800a3b87)
+    _kind      = usage;                    // +0x2c  <- R8D      (0x1800a3b8a)
+    _format    = format;            // +0x30 <- R9D (0x1800a3b8e)
+    _width     = width;                    // +0x20  <- arg5     (0x1800a3b92)
+    _height    = height;                  // +0x24  <- arg6     (0x1800a3b99)
+    _flags     = flags;                    // +0x34  <- arg4     (0x1800a3ba0)
+    _filter    = filterMode;          // +0x44  <- arg7     (0x1800a3ba7)
+    _addressU  = addressU;              // +0x38  <- arg8     (0x1800a3bae)
+    _addressV  = addressV;              // +0x3c  <- arg9     (0x1800a3bb8)
+    _addressW  = addressW;              // +0x40  <- arg10    (0x1800a3bc2)
+
+    // `MOV RCX,[RCX+0x60]; MOV RAX,[RCX]; MOV RDX,<arg11>; CALL [RAX+0x18]` —
+    // slot 3 of the platform companion, "create the texture and all its views"
+    // (dx11/src/imagebufferdata.cpp:13), taking the level-descriptor array.
+    // TWO arguments: retail sets RCX and RDX and nothing else.
+    void* const data = _data;                          // +0x60
+    void** const vt = *reinterpret_cast<void***>(data);
+    const bool ok = reinterpret_cast<bool (*)(void*, void*)>(vt[3])(data, levels);
+    if (!ok) return false;                              // TEST AL,AL / JZ -> return AL
+
+    // The second RenderBuffer, this time with `this` as the colour attachment.
+    // Here retail calls `??2RenderBuffer@Video@@SAPEAX_K@Z` (0x18001f2e0) as a
+    // REAL CALL rather than inlining it — `MOV ECX,0x30; CALL 0x18001f2e0` at
+    // 0x1800a3be2. Same five instructions as the inlined form in the ctor, and
+    // MemAlloc(0x30, 8) is that body (see the MemAlloc note above), so this is
+    // spelled the same way for one arena and one reader.
+    void* const rb = MemAlloc(0x30, 8);
+    if (rb != nullptr) {
+        reinterpret_cast<uint64_t*>(rb)[0] = 0;
+        reinterpret_cast<uint64_t*>(rb)[1] = 0;
+        reinterpret_cast<uint64_t*>(rb)[2] = 0;
+        RenderBufferPlatformConstruct(rb);
+    }
+    _destTarget = rb;                                   // +0x80
+
+    // `XOR R8D,R8D; MOV RDX,RDI; MOV RCX,RBX` — colour is THIS, depth is null.
+    // Note RDX is `this`, NOT `this->_backBufferImage`: that is the difference
+    // between the ctor's RenderBuffer and this one, and it is the whole point
+    // of the class (copy FROM the back-buffer alias INTO our own texture).
+    RenderBufferCreate(rb, this, nullptr);
+
+    return true;                                        // MOV AL,0x1
+}
+
+// ---------------------------------------------------------------------------
+// ?Generate@FrameCopyImageBuffer@Graphics@@  0x1800a3b20 -- slot 10, block GC.
+// `UEBA` is CONST and the body still writes `_generation` through it; the
+// `const_cast` is at the site rather than hidden in a `mutable`, which is
+// GeneratedImageBuffer.h's own rule for exactly these two slots. The
+// four-argument platform slot-3 call (`MOV R9B,0x1`) is unchanged.
+// ---------------------------------------------------------------------------
+void FrameCopyImageBuffer::Generate(void* context, int32_t generation) const {
+    if (_generation == generation) return;              // CMP [RCX+0x68],R8D / JZ
+
+    Attend("FrameCopyImageBuffer::Generate BLIT", g_generateCopies);
+
+    // rax = _destTarget (+0x80); rcx = rax->platformData (+0x28); r8 = _sourceTarget.
+    void* const data = *reinterpret_cast<void**>(
+        reinterpret_cast<uint8_t*>(_destTarget) + 0x28);   // faithful: unguarded
+    void** const vt = *reinterpret_cast<void***>(data);
+    reinterpret_cast<void (*)(void*, void*, void*, bool)>(vt[3])(
+        data, context, _sourceTarget, true);
+
+    const_cast<FrameCopyImageBuffer*>(this)->_generation = generation;  // [RBX+0x68]
+}
+
+}  // namespace Graphics

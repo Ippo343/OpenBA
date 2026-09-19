@@ -32,6 +32,8 @@
 // must not re-declare it: two definitions of RtGraphics::Geometry in one
 // namespace across two translation units is an ODR violation, and the drift
 // between them would be invisible until a field moved.
+#include "AnimationState.h"                 // RtGraphics::InterpolatedTransform — the ONE
+                                           // definition (ENDGAME B.3.5 block GC)
 #include "Geometry.h"                       // RtGraphics::Geometry (lane D)
 // ENDGAME B.3.5 block G: the real `Graphics::EdgeMesh` at the bottom of this
 // file derives from `Object::External` and holds four `Object::ExternalPtr<T>`.
@@ -75,9 +77,14 @@ namespace RtGraphics {
 // (PREVIOUS), which is the ordinary render-interpolation arrangement and agrees
 // with GetNodeToWorld reading the first one.
 // ============================================================================
-struct InterpolatedTransform {
-    Transform _state[2];   // [0] = +0x00 CURRENT, [1] = +0x1c PREVIOUS
-};
+// THE DUPLICATE DEFINITION THAT USED TO SIT HERE IS GONE — ENDGAME B.3.5 block
+// GC. `RtGraphics::InterpolatedTransform` is defined ONCE, in `AnimationState.h`,
+// which this header now includes; the reading above (+0x00 CURRENT, +0x1c
+// PREVIOUS) travelled with it and is what that one definition records. The two
+// spellings were a LATENT ODR DEFECT — same 0x38, same offsets, DIFFERENT member
+// names, neither guarding against the other — and only an accident of include
+// graphs kept them apart. `GraphicsMesh.h`'s banner records block G routing
+// around it; block GC hit it for real and collapsed it.
 static_assert(sizeof(InterpolatedTransform) == 0x38,
               "InterpolatedState<Transform> must be 0x38 bytes");
 
@@ -502,6 +509,17 @@ public:
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined -
     // Each is one to a dozen instructions in retail over offsets this header
     // already pins. Declared so no later block or caller batch edits this file.
+    //
+    // *** TWO OF THE MEMBERS UNDER THIS HEADING ARE PORTED, AND THE HEADING WAS
+    // *** STALE. Corrected by ENDGAME B.3.5 block GC, 2026-09-19:
+    //   `Serialize`  (0x1800ff680) is a MEMBER, in `wave28_lane_gfxbody.cpp` —
+    //                block G moved it and recorded that this note was stale but
+    //                belonged to block E's header, so it left it for a closing
+    //                pass. This is that pass.
+    //   `GetBones`   (0x180100070) is a MEMBER, in
+    //                `animationstate_transforms.cpp` — block GC moved it.
+    // Both keep their registered doors, which delegate. Every OTHER declaration
+    // under this heading really is undefined on purpose.
     ExternalPtrHandle GetMesh() const;                       // 0x180016a20
     int      GetNodeCount() const;                           // 0x180016a30
     void     SetVisualScale(const Math::Vector4& scale);     // 0x180016fa0

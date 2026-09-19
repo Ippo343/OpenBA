@@ -38,7 +38,9 @@
 
 #include "../../types/math/Math.h"
 #include "../../types/graphics/Camera.h"
+#include "../../types/graphics/GeneratedImageBuffer.h"
 #include "../../types/graphics/Material.h"
+#include "../../types/graphics/Scene.h"
 
 using RtGraphics::MaterialInstance;
 using RtGraphics::Renderer;
@@ -235,42 +237,27 @@ Transform* RtGraphics_InterpolatedStateTransform_Lerp(const void* self,
 //     (0x180102e83), not hoisted, so a slot-58 handler that appends a texture
 //     is seen. Hoisting it would change behaviour in exactly that case.
 // ============================================================================
+// ENDGAME B.3.5 block GC: THE BODY MOVED to
+// `Graphics::MaterialInstance::RenderTextures`, at the bottom of this file. The
+// door keeps its name and both its registrations (by name and at 0x180102df0).
+//
+// THE DEAD EFFECTIVENESS CONTROL IS GONE. The body opened with
+// `const bool didWork = (hasRenderedTexture != 0) && (textures._size > 0);` and
+// NOTHING ever read it — no counter, no printf, no summary line, and a repo-wide
+// grep for `didWork` found this one declaration and no consumer. It was a
+// warning, not a measurement, so it is deleted rather than carried into the
+// member (the block brief's "dead scaffolding nobody reads" arm).
 void RtGraphics_MaterialInstance_RenderTextures(const MaterialInstance* self,
                                                 void* renderer,
                                                 const void* scene,
                                                 const void* camera,
                                                 int arg) {
-
-    // Effectiveness control: how many calls got past BOTH early-outs and could
-    // have dispatched anything at all. A green `calls=` column on a site that
-    // always returned at 0x180102e0c would mean nothing
-    // (reference_probe_needs_an_effectiveness_control.md).
-    const bool didWork = (self->hasRenderedTexture != 0) && (self->textures._size > 0);
-
-    if (self->hasRenderedTexture == 0)
-        return;
-    if (self->textures._size <= 0)
-        return;
-
-    const uint32_t typeId = GeneratedImageBufferTypeId();
-
-    for (int32_t i = 0; i < self->textures._size; ++i) {
-        const uint8_t* entry =
-            reinterpret_cast<const uint8_t*>(self->textures._data) +
-            static_cast<int64_t>(i) * 0x10;
-        void* obj = *reinterpret_cast<void* const*>(entry + 8);
-
-        if (*reinterpret_cast<const int32_t*>(static_cast<const uint8_t*>(obj) + 0x2c) != 5)
-            continue;
-        if (!CallIsDerivedFrom(obj, typeId))
-            continue;
-        if (obj == nullptr)      // retail's order: after the deref above
-            continue;
-
-        void** vt = *reinterpret_cast<void***>(obj);
-        using Slot58 = void (*)(void*, void*, const void*, const void*, int);
-        reinterpret_cast<Slot58>(vt[0x58 / 8])(obj, renderer, scene, camera, arg);
-    }
+    reinterpret_cast<const Graphics::MaterialInstance*>(self)      // B.3.5 bridge
+        ->Graphics::MaterialInstance::RenderTextures(
+            *reinterpret_cast<Graphics::Renderer*>(renderer),      // B.3.5 bridge
+            *reinterpret_cast<const Graphics::Scene*>(scene),      // B.3.5 bridge
+            *reinterpret_cast<const Graphics::Camera*>(camera),    // B.3.5 bridge
+            arg);
 }
 
 // ============================================================================
@@ -328,6 +315,10 @@ void RtGraphics_MaterialInstance_RenderTextures(const MaterialInstance* self,
 // that included them would fail on garbage neither side wrote
 // (reference_oracle_must_not_compare_unwritten_bytes.md).
 // ============================================================================
+// ENDGAME B.3.5 block GC: THE BODY MOVED onto
+// `Graphics::Renderer::AddDrawItem` (block F's class, not block F's file). The
+// door keeps its name and both its registrations, and retail's ten-argument
+// arity.
 void RtGraphics_Renderer_AddDrawItem(Renderer* self,
                                      const void* geometry,
                                      const MaterialInstance* material,
@@ -338,14 +329,120 @@ void RtGraphics_Renderer_AddDrawItem(Renderer* self,
                                      int32_t arg8,
                                      const void* arg9,
                                      uint32_t arg10) {
+    reinterpret_cast<Graphics::Renderer*>(self)                          // B.3.5 bridge
+        ->Graphics::Renderer::AddDrawItem(
+            reinterpret_cast<const Graphics::Geometry*>(geometry),        // B.3.5 bridge
+            reinterpret_cast<const Graphics::MaterialInstance*>(material),// B.3.5 bridge
+            arg4, arg5, arg6, arg7, arg8, arg9, arg10);
+}
 
+// ============================================================================
+// Registration
+// ============================================================================
+int RtGraphicsWave9GfxRegister() {
+    int n = 0;
+
+    RegisterRuntimeExport(
+        "?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@AEBVScalar@4@@Z",
+        (void*)&RtGraphics_InterpolatedStateTransform_Lerp); ++n;
+    RegisterRuntimeAddr(0x18001aff0, (void*)&RtGraphics_InterpolatedStateTransform_Lerp);
+
+    RegisterRuntimeExport(
+        "?RenderTextures@MaterialInstance@Graphics@@QEBAXAEAVRenderer@2@AEBVScene@2@AEBVCamera@2@H@Z",
+        (void*)&RtGraphics_MaterialInstance_RenderTextures); ++n;
+    RegisterRuntimeAddr(0x180102df0, (void*)&RtGraphics_MaterialInstance_RenderTextures);
+
+    RegisterRuntimeExport(
+        "?AddDrawItem@Renderer@Graphics@@QEAAXPEBVGeometry@2@PEBVMaterialInstance@2@GGMMHPEBXI@Z",
+        (void*)&RtGraphics_Renderer_AddDrawItem); ++n;
+    RegisterRuntimeAddr(0x1801057b0, (void*)&RtGraphics_Renderer_AddDrawItem);
+
+    return n;
+}
+
+// ############################################################################
+// ENDGAME B.3.5 step 5, block GC — the member bodies whose live doors are the
+// functions above. Their own `namespace Graphics { }` block (B34_BRIEFS A.2:
+// `Graphics` and `RtGraphics` are siblings, so a member body cannot live inside
+// the `Rt*` one). This file's helpers are in the GLOBAL unnamed namespace, so
+// unqualified lookup from here reaches them.
+// ############################################################################
+
+namespace Graphics {
+
+// ---------------------------------------------------------------------------
+// ?RenderTextures@MaterialInstance@Graphics@@QEBAXAEAVRenderer@2@AEBVScene@2@
+//                AEBVCamera@2@H@Z            retail 0x180102df0
+//
+// The door's banner above carries the transcription evidence and the two
+// faithful uglinesses; both survive here unchanged — the `+0x2c` read still
+// happens BEFORE the null test, and the loop bound is still re-read.
+//
+// TWO RAW BINDINGS BECAME TYPED ONES (block GC item 6):
+//  * `textures._data + i*0x10`, then `+0x08`, is `_textures._data[i].image` —
+//    the same two offsets, now held by `Material.h`'s own asserts.
+//  * the hand-inlined `(*(void***)obj)[0x58/8]` is slot ELEVEN of
+//    `Graphics::GeneratedImageBuffer`, which block C made a real class:
+//    `Render(renderer, scene, camera, generation)`. It stays a VIRTUAL call, so
+//    it still dispatches through whatever table the object wears — the minted
+//    one for every object alive today — and 0x58/8 == 11 is checked against
+//    GeneratedImageBuffer.h's slot list rather than asserted here.
+//    `IsDerivedFrom(GeneratedImageBuffer)` is what licenses the cast, and it is
+//    the test retail itself makes one line earlier.
+// ---------------------------------------------------------------------------
+void MaterialInstance::RenderTextures(Renderer& renderer, const Scene& scene,
+                                      const Camera& camera, int32_t arg) const {
+    if (_hasRenderedTexture == 0)
+        return;
+    if (_textures._size <= 0)
+        return;
+
+    const uint32_t typeId = GeneratedImageBufferTypeId();
+
+    for (int32_t i = 0; i < _textures._size; ++i) {
+        void* obj = _textures._data[i].image;
+
+        if (*reinterpret_cast<const int32_t*>(static_cast<const uint8_t*>(obj) + 0x2c) != 5)
+            continue;
+        if (!CallIsDerivedFrom(obj, typeId))
+            continue;
+        if (obj == nullptr)      // retail's order: after the deref above
+            continue;
+
+        // Slot 11 (0x58/8) — a virtual call on the real class.
+        reinterpret_cast<const GeneratedImageBuffer*>(obj)          // B.3.5 bridge
+            ->Render(&renderer, &scene, &camera, arg);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ?AddDrawItem@Renderer@Graphics@@QEAAXPEBVGeometry@2@PEBVMaterialInstance@2@GGMMHPEBXI@Z
+// retail 0x1801057b0 -- ENDGAME B.3.5 block GC. The argument-slot count, the three
+// silent drops and RULE B5-13's two unwritten pads are in the door's banner, and
+// the record is STILL not value-initialised for exactly that reason.//
+// THE POD SPELLING OF THE *ELEMENT* RECORDS IS KEPT, DELIBERATELY. `this` is the
+// real `Graphics::Renderer`; the draw-group / scene-entry / draw-item records it
+// indexes are still spelled `RtGraphics::*` through one bridge local, because
+// those PODs have live users in files outside this block and B4b-1 keeps a POD
+// until its LAST user converts. Camera.h cross-asserts every one of their offsets
+// against the real classes', so the two descriptions cannot drift, and renaming
+// ~200 field accesses in a body this size is a second change, not this one.
+// ---------------------------------------------------------------------------
+void Renderer::AddDrawItem(const Geometry* geometryIn, const MaterialInstance* materialIn,
+                           uint16_t arg4, uint16_t arg5, float arg6, float arg7, int arg8,
+                           const void* arg9, uint32_t arg10) {
+    RtGraphics::Renderer* const self =
+        reinterpret_cast<RtGraphics::Renderer*>(this);              // B.3.5 bridge
+    const void* const geometry = geometryIn;
+    const RtGraphics::MaterialInstance* const material =
+        reinterpret_cast<const RtGraphics::MaterialInstance*>(materialIn);  // B.3.5 bridge
     // MOVSXD, both of them — Ghidra's C prints these as zero extensions and
     // that misreading produced three Wave 6 defects including a crash
     // (reference_ghidra_c_output_vs_disassembly.md).
     const int64_t groupIdx = static_cast<int32_t>(self->currentDrawGroup);   // +0x34
     const int64_t pass     = static_cast<int32_t>(material->shaderClass);    // +0x20
 
-    RendererDrawGroup* group = reinterpret_cast<RendererDrawGroup*>(
+    RtGraphics::RendererDrawGroup* group = reinterpret_cast<RtGraphics::RendererDrawGroup*>(
         reinterpret_cast<uint8_t*>(self->drawGroups._data) + groupIdx * 0x1f0);
 
     // (a) BT EAX,R11D — 32-bit BT masks the bit index to 5 bits.
@@ -380,7 +477,7 @@ void RtGraphics_Renderer_AddDrawItem(Renderer* self,
     // and +0x24 / +0x34 are never stored to before the helper copies all seven
     // qwords out of it. Zeroing them here would be a "tidier" port that no
     // longer reproduces what lands in the array.
-    RendererDrawItem rec;
+    RtGraphics::RendererDrawItem rec;
 
     // 0x18010584d: 0x8000 unless the 7th argument is exactly 1.0f. The compare
     // is UCOMISS + JP/JNZ, so a NaN takes the not-equal path — which `!=` in
@@ -403,8 +500,8 @@ void RtGraphics_Renderer_AddDrawItem(Renderer* self,
     // the same address, but `items` is declared [3] and retail applies NO bound
     // check — spelling it as an array index would let the compiler assume
     // pass < 3 and is undefined behaviour on the path retail simply takes.
-    Collection::Array<RendererDrawItem>* list =
-        reinterpret_cast<Collection::Array<RendererDrawItem>*>(
+    Collection::Array<RtGraphics::RendererDrawItem>* list =
+        reinterpret_cast<Collection::Array<RtGraphics::RendererDrawItem>*>(
             reinterpret_cast<uint8_t*>(group) + 0x1c0 + pass * 0x10);
     const int32_t oldSize = list->_size;
     DrawItemArrayResize(list, oldSize + 1, &rec);
@@ -423,26 +520,4 @@ void RtGraphics_Renderer_AddDrawItem(Renderer* self,
     }
 }
 
-// ============================================================================
-// Registration
-// ============================================================================
-int RtGraphicsWave9GfxRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport(
-        "?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@AEBVScalar@4@@Z",
-        (void*)&RtGraphics_InterpolatedStateTransform_Lerp); ++n;
-    RegisterRuntimeAddr(0x18001aff0, (void*)&RtGraphics_InterpolatedStateTransform_Lerp);
-
-    RegisterRuntimeExport(
-        "?RenderTextures@MaterialInstance@Graphics@@QEBAXAEAVRenderer@2@AEBVScene@2@AEBVCamera@2@H@Z",
-        (void*)&RtGraphics_MaterialInstance_RenderTextures); ++n;
-    RegisterRuntimeAddr(0x180102df0, (void*)&RtGraphics_MaterialInstance_RenderTextures);
-
-    RegisterRuntimeExport(
-        "?AddDrawItem@Renderer@Graphics@@QEAAXPEBVGeometry@2@PEBVMaterialInstance@2@GGMMHPEBXI@Z",
-        (void*)&RtGraphics_Renderer_AddDrawItem); ++n;
-    RegisterRuntimeAddr(0x1801057b0, (void*)&RtGraphics_Renderer_AddDrawItem);
-
-    return n;
-}
+}  // namespace Graphics

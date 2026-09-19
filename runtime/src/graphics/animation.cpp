@@ -604,24 +604,14 @@ extern "C" ParticleSystemInstance* RtGraphics_ParticleSystemInstance_Ctor(
 //    stamps its own subclass table; the class has no real constructor at all.
 // ############################################################################
 
-extern "C" uint32_t    RtGraphics_AnimationEvent_Type(const void*);
-extern "C" const char* RtGraphics_AnimationEvent_TypeName(const void*);
-
 namespace Graphics {
 
-// [1] ?TypeName@AnimationEvent@Graphics@@UEBAPEBDXZ  retail 0x1800116f0
-//     `MOV RAX,qword ptr [?_typeInfo@AnimationEvent@Graphics@@ + 8]; RET`
-//     — `BaseTypeInfo::name`, CONTENT-only (never compared by pointer).
-const char* AnimationEvent::TypeName() const {
-    return RtGraphics_AnimationEvent_TypeName(this);
-}
-
-// [2] ?Type@AnimationEvent@Graphics@@UEBAIXZ  retail 0x1800116d0
-//     `MOV EAX,dword ptr [?_typeInfo@AnimationEvent@Graphics@@ + 0]; RET` —
-//     0xFFFFFFFF until `Object::Factory::Startup` runs.
-uint32_t AnimationEvent::Type() const {
-    return RtGraphics_AnimationEvent_Type(this);
-}
+// `AnimationEvent::TypeName` (slot 1, 0x1800116f0) and `::Type` (slot 2,
+// 0x1800116d0) USED TO BE DEFINED HERE, forwarding INTO the `extern "C"` doors in
+// `graphics_typeinfo_accessors.cpp`. ENDGAME B.3.5 block GC flipped that: the
+// member IS the body now, in that file, beside the byte decode that is its
+// evidence, and its door is the one-line qualified delegation. Nothing moved out
+// of this file except two forwarders.
 
 // ??1AnimationEvent@Graphics@@UEAA@XZ  retail 0x1800a2120.
 //

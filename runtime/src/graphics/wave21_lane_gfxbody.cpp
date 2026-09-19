@@ -261,49 +261,16 @@ extern "C" void* RtGraphics_MaterialInstance_OperatorNew(uint64_t bytes) {
 // same shape one step further on). Its verification tier is stated honestly in
 // the lane doc and is not VERIFIED.
 // ============================================================================
+// ENDGAME B.3.5 block GC: THE BODY MOVED to `Graphics::MaterialInstance::Setup`
+// at the bottom of this file. The door keeps its name, its registration and its
+// attendance counter and delegates with a QUALIFIED non-virtual call.
 extern "C" void RtGraphics_MaterialInstance_Setup(const MaterialInstance* self,
                                                   Context* ctx,
                                                   int32_t shader) {
     Attend("MaterialInstance::Setup", g_setupCalls);
-
-    // mat = this->material (ExternalPtr<Material>, by value);
-    // prog = ((VideoProgram**)(mat + 0x28))[shader]
-    void*  mat      = Field<void*>(const_cast<MaterialInstance*>(self), 0x28);
-    void** programs = Field<void**>(mat, 0x28);
-    SetupShaders(programs[shader], ctx);
-
-    // set = parameters._data + shader*0x20   (SHL RDI,5 ; ADD RDI,[RSI+0x30])
-    MaterialParameterSet* set = self->parameters._data + shader;
-
-    // ---- phase 2: textures ------------------------------------------------
-    for (int32_t i = 0; i < set->textures._size; ++i) {
-        const MaterialBinding& b = set->textures._data[i];
-        void* image = self->textures._data[b.sourceIndex].image;
-        int32_t slot = b.shaderSlot;
-        if (ctx->_imageBuffers[slot] != image) {
-            ctx->_dirty            |= kDirtyImageBuffersBit;
-            ctx->_imageBufferDirty |= (1u << (static_cast<uint32_t>(slot) & 31u));  // (b)
-            ctx->_imageBuffers[slot] = image;
-        }
-    }
-
-    // ---- phase 3: constants -----------------------------------------------
-    for (int32_t i = 0; i < set->constants._size; ++i) {
-        const MaterialBinding& b = set->constants._data[i];
-        const float* src = self->constants._data[b.sourceIndex].value;
-        float* dst = reinterpret_cast<float*>(
-            &ctx->_pixelConstantStaging[kMaterialStagingOffset + b.shaderSlot * 0x10]);
-
-        // (c) unordered counts as different, and all four are compared before
-        // any is written — retail bails to the copy on the FIRST mismatch and
-        // then copies all four, which is the same set of stores.
-        if (dst[0] == src[0] && dst[1] == src[1] &&
-            dst[2] == src[2] && dst[3] == src[3]) {
-            continue;
-        }
-        std::memcpy(dst, src, 4 * sizeof(float));       // (d) integer moves
-        ctx->_dirty |= kDirtyMaterialStagingBit;
-    }
+    reinterpret_cast<const Graphics::MaterialInstance*>(self)      // B.3.5 bridge
+        ->Graphics::MaterialInstance::Setup(
+            *reinterpret_cast<Video::Context*>(ctx), shader);      // B.3.5 bridge
 }
 
 // ============================================================================
@@ -353,3 +320,70 @@ int RtGraphicsWave21GfxbodyRegister() {
 
     return count;   // 3
 }
+
+// ############################################################################
+// ENDGAME B.3.5 step 5, block GC — `Graphics::MaterialInstance::Setup`'s body,
+// whose live door is `RtGraphics_MaterialInstance_Setup` above.
+//
+// Its own `namespace Graphics { }` block, because a member definition has to
+// appear in a namespace ENCLOSING the class and `Graphics` / `RtGraphics` are
+// siblings (B34_BRIEFS A.2). This file's helpers sit in the GLOBAL unnamed
+// namespace, so unqualified lookup from here DOES reach them (the reachable half
+// of the A.2 trap; wave28_lane_gfxbody.cpp:957 records the other half).
+//
+// The transcription notes (a)-(d) in the door's banner above are unchanged and
+// still describe this body — only the spelling of the receiver changed.
+//
+// TWO RAW OFFSET READS BECAME MEMBER CHAINS, which is item 6 of this block:
+// `Field<void*>(self, 0x28)` is `_material` (an `Object::ExternalPtr<Material>`
+// held BY VALUE) and `Field<void**>(mat, 0x28)` is that `Material`'s `_passes`
+// array data pointer. Retail's `MOV RAX,[RCX+0x28] ; MOV RAX,[RAX+0x28] ;
+// MOV RCX,[RAX+RDI*8]` is now spelled with the three names the two real classes
+// give those bytes, and `Material.h`'s own `static_assert`s are what keep the
+// spelling and the offsets welded together.
+// ############################################################################
+
+namespace Graphics {
+
+void MaterialInstance::Setup(Video::Context& context, int32_t shader) const {
+    // prog = _material->_passes._data[shader]   (MOV RAX,[RCX+0x28] ;
+    //                                            MOV RAX,[RAX+0x28] ;
+    //                                            MOV RCX,[RAX+RDI*8])
+    SetupShaders(_material.Get()->_passes._data[shader].Get(),
+                 reinterpret_cast<RtVideo::Context*>(&context));   // B.3.5 bridge
+
+    // set = _parameters._data + shader*0x20  (SHL RDI,5 ; ADD RDI,[RSI+0x30])
+    const RtGraphics::MaterialParameterSet* set = _parameters._data + shader;
+
+    // ---- phase 2: textures ------------------------------------------------
+    for (int32_t i = 0; i < set->textures._size; ++i) {
+        const RtGraphics::MaterialBinding& b = set->textures._data[i];
+        void* image = _textures._data[b.sourceIndex].image;
+        int32_t slot = b.shaderSlot;
+        if (context._imageBuffers[slot] != image) {
+            context._dirty            |= kDirtyImageBuffersBit;
+            context._imageBufferDirty |= (1u << (static_cast<uint32_t>(slot) & 31u));  // (b)
+            context._imageBuffers[slot] = image;
+        }
+    }
+
+    // ---- phase 3: constants -----------------------------------------------
+    for (int32_t i = 0; i < set->constants._size; ++i) {
+        const RtGraphics::MaterialBinding& b = set->constants._data[i];
+        const float* src = _constants._data[b.sourceIndex].value;
+        float* dst = reinterpret_cast<float*>(
+            &context._pixelConstantStaging[kMaterialStagingOffset + b.shaderSlot * 0x10]);
+
+        // (c) unordered counts as different, and all four are compared before
+        // any is written — retail bails to the copy on the FIRST mismatch and
+        // then copies all four, which is the same set of stores.
+        if (dst[0] == src[0] && dst[1] == src[1] &&
+            dst[2] == src[2] && dst[3] == src[3]) {
+            continue;
+        }
+        std::memcpy(dst, src, 4 * sizeof(float));       // (d) integer moves
+        context._dirty |= kDirtyMaterialStagingBit;
+    }
+}
+
+}  // namespace Graphics

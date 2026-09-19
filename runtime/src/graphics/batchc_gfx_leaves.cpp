@@ -95,10 +95,13 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/Camera.h"
+#include "../../types/graphics/GeneratedImageBuffer.h"  // ENDGAME B.3.5 block GC
 #include "../../types/graphics/GraphicsMesh.h"   // ENDGAME B.3.5 block G
+#include "../../types/graphics/Light.h"          // Graphics::SpotLight -- block GC
 #include "../../types/graphics/Material.h"
 #include "../../types/graphics/Mesh.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/video/Context.h"           // ENDGAME B.3.5 block GC
 
 // standalone/resolve.h is deliberately NOT included: it drags in <windows.h>,
 // whose <wingdi.h> declares a function called `Rectangle` and whose <windef.h>
@@ -277,32 +280,20 @@ extern "C" void RtGraphics_Particle_Dtor(void* selfv);
 // body afterwards would render a second time. the diff oracle is the effectiveness
 // control — almost every call returns at the +0x24 test.
 // ############################################################################
+// ENDGAME B.3.5 block GC: THE BODY MOVED to
+// `Graphics::MaterialInstance::GenerateTextures`, in this file's existing
+// `namespace Graphics` block below. The door keeps its name and both its
+// registrations (by name and at 0x180102eb0).
+//
+// THE DEAD EFFECTIVENESS CONTROL IS GONE, for the same reason its sibling's was
+// in wave9_lane_gfx.cpp: `const bool didWork = …` had no reader anywhere in the
+// tree. The banner above still calls it "the diff oracle", and that sentence was
+// describing a variable nothing printed.
 extern "C" void RtGraphics_MaterialInstance_GenerateTextures(const void* selfv,
                                                              void* ctx, int32_t arg) {
-    const MaterialInstance* self = static_cast<const MaterialInstance*>(selfv);
-
-    const bool didWork = (self->hasRenderTexture != 0) && (self->textures._size > 0);
-
-    if (self->hasRenderTexture == 0) {
-        return;
-    }
-
-    for (int32_t i = 0; i < self->textures._size; ++i) {
-        const uint8_t* entry =
-            reinterpret_cast<const uint8_t*>(self->textures._data) +
-            static_cast<int64_t>(i) * 0x10;
-        void* obj = *reinterpret_cast<void* const*>(entry + 8);
-
-        if (*reinterpret_cast<const int32_t*>(static_cast<const uint8_t*>(obj) + 0x2c) != 4)
-            continue;
-        if (obj == nullptr)                      // retail's order: after the deref
-            continue;
-
-        void** vt = *reinterpret_cast<void***>(obj);
-        using Slot50 = void (*)(void*, void*, int32_t);
-        reinterpret_cast<Slot50>(vt[0x50 / 8])(obj, ctx, arg);
-    }
-
+    reinterpret_cast<const Graphics::MaterialInstance*>(selfv)      // B.3.5 bridge
+        ->Graphics::MaterialInstance::GenerateTextures(
+            *reinterpret_cast<Video::Context*>(ctx), arg);          // B.3.5 bridge
 }
 
 // ############################################################################
@@ -637,51 +628,13 @@ extern "C" void RtGraphics_EdgeMesh_Dtor(void* selfv) {
 // to null and `MOV RAX,[RCX]` at 0x1801060d2 immediately reads through it.
 // Retail faults there; so does this.
 // ############################################################################
+// ENDGAME B.3.5 block GC: THE BODY MOVED onto
+// `Graphics::SpotLight::CreateTargets` (block E's class; this file is not block
+// E's, which is why Light.h says "its body stays where it is"). The door keeps its
+// name and both its registrations.
 extern "C" void RtGraphics_SpotLight_CreateTargets(void* selfv) {
-    uint8_t* const self = static_cast<uint8_t*>(selfv);
-
-    using CreateFn = bool (*)(void*, int32_t, int32_t, int32_t, uint32_t,
-                              int32_t, int32_t, int32_t,
-                              int32_t, int32_t, int32_t, void*);
-
-    // ---- +0x148, the shadow colour image ----------------------------------
-    {
-        void* p = ImageBufferOperatorNew(0x68);
-        if (p != nullptr) ImageBufferCtor(p);
-        *reinterpret_cast<void**>(self + 0x148) = p;
-        void* const img = *reinterpret_cast<void**>(self + 0x148);
-        void** const vt = *reinterpret_cast<void***>(img);      // faithful: unguarded
-        reinterpret_cast<CreateFn>(vt[9])(img, 0, 0, 5,
-                                          0x40u, 0x400, 0x400,
-                                          1, 1, 1, 1, nullptr);
-    }
-
-    // ---- +0x150, the shadow depth image ------------------------------------
-    {
-        void* p = ImageBufferOperatorNew(0x68);
-        if (p != nullptr) ImageBufferCtor(p);
-        *reinterpret_cast<void**>(self + 0x150) = p;
-        void* const img = *reinterpret_cast<void**>(self + 0x150);
-        void** const vt = *reinterpret_cast<void***>(img);
-        reinterpret_cast<CreateFn>(vt[9])(img, 0, 1, 7,
-                                          0x40u, 0x400, 0x400,
-                                          1, 1, 1, 1, nullptr);
-    }
-
-    // ---- +0x158, the render target -----------------------------------------
-    void* rb = RenderBufferOperatorNew(0x30);
-    if (rb != nullptr) {
-        reinterpret_cast<uint64_t*>(rb)[0] = 0;
-        reinterpret_cast<uint64_t*>(rb)[1] = 0;
-        reinterpret_cast<uint64_t*>(rb)[2] = 0;
-        RenderBufferPlatformConstruct(rb);
-    }
-    *reinterpret_cast<void**>(self + 0x158) = rb;
-
-    RenderBufferCreate(rb,
-                       *reinterpret_cast<void**>(self + 0x148),
-                       *reinterpret_cast<void**>(self + 0x150));   // JMP 0x1800f3f10
-
+    reinterpret_cast<Graphics::SpotLight*>(selfv)                        // B.3.5 bridge
+        ->Graphics::SpotLight::CreateTargets();
 }
 
 // ############################################################################
@@ -797,6 +750,42 @@ void SerializeBufferSlot(void* obj, Serializer* sub) {
 // ############################################################################
 namespace Graphics {
 
+// ---------------------------------------------------------------------------
+// ?GenerateTextures@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z
+// retail 0x180102eb0 — ENDGAME B.3.5 block GC. The evidence, the two faithful
+// uglinesses and the oracle note are in the door's banner above.
+//
+// TWO RAW BINDINGS BECAME TYPED ONES (item 6), exactly as in the sibling
+// `RenderTextures`: the `textures._data + i*0x10` then `+0x08` walk is
+// `_textures._data[i].image`, and the hand-inlined `(*(void***)obj)[0x50/8]` is
+// slot TEN of `Graphics::GeneratedImageBuffer` — `Generate(context, generation)`
+// — still dispatched VIRTUALLY, so an object wearing the minted table is reached
+// the same way it was. 0x50/8 == 10 is checked against
+// GeneratedImageBuffer.h's slot list.
+//
+// NOTE THE ASYMMETRY WITH ITS SIBLING, WHICH IS RETAIL'S: `RenderTextures` tests
+// `_textures._size <= 0` before the loop and this one does NOT — it goes
+// straight from the `+0x24` test into the loop, whose own bound then ends it.
+// ---------------------------------------------------------------------------
+void MaterialInstance::GenerateTextures(Video::Context& context, int32_t arg) const {
+    if (_hasRenderTexture == 0) {
+        return;
+    }
+
+    for (int32_t i = 0; i < _textures._size; ++i) {
+        void* obj = _textures._data[i].image;
+
+        if (*reinterpret_cast<const int32_t*>(static_cast<const uint8_t*>(obj) + 0x2c) != 4)
+            continue;
+        if (obj == nullptr)                      // retail's order: after the deref
+            continue;
+
+        // Slot 10 (0x50/8) — a virtual call on the real class.
+        reinterpret_cast<const GeneratedImageBuffer*>(obj)           // B.3.5 bridge
+            ->Generate(&context, arg);
+    }
+}
+
 void GraphicsMesh::PlatformSerialize(IO::Serializer& serializer) {
     // The ported bodies in this file speak the `rt::io::Serializer` POD; the
     // member takes retail's own `IO::Serializer&` so the header names the retail
@@ -882,79 +871,85 @@ void GraphicsMesh::PlatformSerialize(IO::Serializer& serializer) {
     }
 }
 
-}  // namespace Graphics
+// ---------------------------------------------------------------------------
+// ?CreateTargets@SpotLight@Graphics@@AEAAXXZ  0x180106050 -- block GC.
+// `AEAA` is PRIVATE and this DLL exports its private members; the member is
+// PUBLIC in Light.h for the reason block G recorded on MaterialInstance's two
+// private finders (an `extern "C"` door cannot be a friend).
+//
+// The four SpotLight target pointers are still reached at their raw offsets
+// through one bridge local: Light.h names them, but every store here is an
+// inlined `operator new` plus an unguarded vtable slot-9 `Create`, and the
+// arithmetic is what the banner above documents.
+// ---------------------------------------------------------------------------
+void SpotLight::CreateTargets() {
+    uint8_t* const self = reinterpret_cast<uint8_t*>(this);   // B.3.5 bridge
 
-// The registered door: name, address and retail argument order unchanged.
-extern "C" void RtGraphics_GraphicsMesh_PlatformSerialize(void* selfv, void* serv) {
-    reinterpret_cast<Graphics::GraphicsMesh*>(selfv)                 // B.3.5 bridge
-        ->Graphics::GraphicsMesh::PlatformSerialize(
-            *reinterpret_cast<IO::Serializer*>(serv));               // B.3.5 bridge
+    using CreateFn = bool (*)(void*, int32_t, int32_t, int32_t, uint32_t,
+                              int32_t, int32_t, int32_t,
+                              int32_t, int32_t, int32_t, void*);
+
+    // ---- +0x148, the shadow colour image ----------------------------------
+    {
+        void* p = ImageBufferOperatorNew(0x68);
+        if (p != nullptr) ImageBufferCtor(p);
+        *reinterpret_cast<void**>(self + 0x148) = p;
+        void* const img = *reinterpret_cast<void**>(self + 0x148);
+        void** const vt = *reinterpret_cast<void***>(img);      // faithful: unguarded
+        reinterpret_cast<CreateFn>(vt[9])(img, 0, 0, 5,
+                                          0x40u, 0x400, 0x400,
+                                          1, 1, 1, 1, nullptr);
+    }
+
+    // ---- +0x150, the shadow depth image ------------------------------------
+    {
+        void* p = ImageBufferOperatorNew(0x68);
+        if (p != nullptr) ImageBufferCtor(p);
+        *reinterpret_cast<void**>(self + 0x150) = p;
+        void* const img = *reinterpret_cast<void**>(self + 0x150);
+        void** const vt = *reinterpret_cast<void***>(img);
+        reinterpret_cast<CreateFn>(vt[9])(img, 0, 1, 7,
+                                          0x40u, 0x400, 0x400,
+                                          1, 1, 1, 1, nullptr);
+    }
+
+    // ---- +0x158, the render target -----------------------------------------
+    void* rb = RenderBufferOperatorNew(0x30);
+    if (rb != nullptr) {
+        reinterpret_cast<uint64_t*>(rb)[0] = 0;
+        reinterpret_cast<uint64_t*>(rb)[1] = 0;
+        reinterpret_cast<uint64_t*>(rb)[2] = 0;
+        RenderBufferPlatformConstruct(rb);
+    }
+    *reinterpret_cast<void**>(self + 0x158) = rb;
+
+    RenderBufferCreate(rb,
+                       *reinterpret_cast<void**>(self + 0x148),
+                       *reinterpret_cast<void**>(self + 0x150));   // JMP 0x1800f3f10
 }
 
-// ############################################################################
-// Graphics::Renderer::DrawItemList
-// ?DrawItemList@Renderer@Graphics@@QEBAXAEAVContext@Video@@HHH@Z
-// retail 0x180105240, ordinal 2279
-// ############################################################################
-//
-// FIVE VALUES: (this, Context&, int group, int list, int shader). The fifth
-// travels in its own home slot at [RBP+0xc0] and is the SHADER INDEX — see
-// point 1 of this file's banner, and lights_vtable.cpp's own note about the
-// three Draw arms that write their arg5 home slot before tail-jumping here.
-//
-// SHAPE
-//   group = this->_drawGroups._data + group*0x1f0
-//   SetCamera(ctx, Matrix(group->cullCamera.cameraToWorld), group->cullCamera.projection)
-//   items = group->items[list]                  ; group + 0x1c0 + list*0x10
-//   for (i = 0; i < items._size; ) {
-//       item = items._data + i*0x38
-//       step = 1
-//       if (shader >= 0 && shader < item->material->_programCount) {
-//           prog = item->material->_programs[shader]
-//           if (prog->[0x20] && prog->[0x28] && prog->[0x28]->[0x48] > 0
-//                            && prog->[0x30] && prog->[0x30]->[0x48] > 0) {
-//               if (shader == 0 && item->instance->hasRenderTexture)
-//                   GenerateTextures(item->instance, ctx, this->contextSerial)
-//               MaterialInstance::Setup(item->instance, ctx, shader)
-//               if (item->arg8 > 1) { ...the instancing batch, below... }
-//               item->geometry->vt[2](geometry, ctx, &group->cullCamera,
-//                                     item->instance, this->frameAlpha,
-//                                     item->arg5, shader, batchCount)
-//           }
-//       }
-//       emitted += step; i += step
-//   }
-//
-// THE FIVE SILENT DROPS are AddDrawItem's own list (wave9_lane_gfx.cpp) read
-// from the other end: a negative or out-of-range shader index, and a selected
-// VideoProgram with a null +0x20, a null-or-empty +0x28, or a null-or-empty
-// +0x30. On every one of them `step` stays 1 and nothing is drawn.
-//
-// THE INSTANCING BATCH (`item->arg8 > 1`) is the part no decompile shows
-// honestly. It calls the geometry's slot 7 to reserve N instance transform
-// slots, then walks forward over CONSECUTIVE items that agree on all four of
-// (instance, arg5, userData, arg10), asking each one's slot 6 for a Matrix and
-// pushing it with Context::SetTransform. It stops on the first mismatch, on
-// `item->arg8` items, or when the running index would pass the list's size.
-// `step` is then the number of items consumed, so the outer loop skips the
-// whole batch and the single Draw below carries them all.
-//
-// ORACLE: NONE, and that is stated rather than faked. Every arm of this body
-// ends in a real GPU draw through the geometry's vtable; running the shipped
-// copy afterwards would submit every draw a second time. the diff oracle records
-// how many calls reached a Draw at all, which is the number that matters — a
-// green `calls=` column on a body that dropped every item would mean nothing.
-// ############################################################################
-extern "C" void RtGraphics_Renderer_DrawItemList(const void* selfv, void* ctx,
-                                                 int32_t groupIndex, int32_t listIndex,
-                                                 int32_t shaderIndex) {
-    const Renderer* const self = static_cast<const Renderer*>(selfv);
-
+// ---------------------------------------------------------------------------
+// ?DrawItemList@Renderer@Graphics@@QEBAXAEAVContext@Video@@HHH@Z 0x180105240
+// ENDGAME B.3.5 block GC. The five-value argument list, the two stack-built 4x4
+// matrices and the instancing batch are documented in the banner above.//
+// THE POD SPELLING OF THE *ELEMENT* RECORDS IS KEPT, DELIBERATELY. `this` is the
+// real `Graphics::Renderer`; the draw-group / scene-entry / draw-item records it
+// indexes are still spelled `RtGraphics::*` through one bridge local, because
+// those PODs have live users in files outside this block and B4b-1 keeps a POD
+// until its LAST user converts. Camera.h cross-asserts every one of their offsets
+// against the real classes', so the two descriptions cannot drift, and renaming
+// ~200 field accesses in a body this size is a second change, not this one.
+// ---------------------------------------------------------------------------
+void Renderer::DrawItemList(Video::Context& context, int groupIndex, int listIndex,
+                            int shaderIndex) const {
+    const RtGraphics::Renderer* const self =
+        reinterpret_cast<const RtGraphics::Renderer*>(this);   // B.3.5 bridge
+    void* const ctx = &context;
     uint8_t* const groupBase = reinterpret_cast<uint8_t*>(self->drawGroups._data);
-    const int64_t groupOffset = static_cast<int64_t>(groupIndex) * sizeof(RendererDrawGroup);
-    const Camera* const cam =
-        reinterpret_cast<const Camera*>(groupBase + groupOffset +
-                                        offsetof(RendererDrawGroup, cullCamera));
+    const int64_t groupOffset = static_cast<int64_t>(groupIndex) * sizeof(RtGraphics::RendererDrawGroup);
+    const RtGraphics::Camera* const cam =
+        reinterpret_cast<const RtGraphics::Camera*>(groupBase + groupOffset +
+                                        offsetof(RtGraphics::RendererDrawGroup, cullCamera));
 
     // ---- the two matrices, built on the stack ------------------------------
     // view = the cull camera's Transform3 expanded to a 4x4 with an explicit
@@ -975,9 +970,9 @@ extern "C" void RtGraphics_Renderer_DrawItemList(const void* selfv, void* ctx,
     ContextSetCamera(ctx, view, proj);
 
     // ---- the item list ------------------------------------------------------
-    const Collection::Array<RendererDrawItem>* const items =
-        reinterpret_cast<const Collection::Array<RendererDrawItem>*>(
-            groupBase + groupOffset + offsetof(RendererDrawGroup, items) +
+    const Collection::Array<RtGraphics::RendererDrawItem>* const items =
+        reinterpret_cast<const Collection::Array<RtGraphics::RendererDrawItem>*>(
+            groupBase + groupOffset + offsetof(RtGraphics::RendererDrawGroup, items) +
             static_cast<int64_t>(listIndex) * 0x10);
 
     const int32_t count = items->_size;
@@ -996,8 +991,8 @@ extern "C" void RtGraphics_Renderer_DrawItemList(const void* selfv, void* ctx,
     while (i < count) {
         const uint8_t* const itemBase = reinterpret_cast<const uint8_t*>(items->_data);
         int64_t itemOff = i * 0x38;
-        const RendererDrawItem* const item =
-            reinterpret_cast<const RendererDrawItem*>(itemBase + itemOff);
+        const RtGraphics::RendererDrawItem* const item =
+            reinterpret_cast<const RtGraphics::RendererDrawItem*>(itemBase + itemOff);
 
         int32_t step = 1;
         int32_t batchCount = 1;
@@ -1079,7 +1074,7 @@ extern "C" void RtGraphics_Renderer_DrawItemList(const void* selfv, void* ctx,
             void** const gvt = *reinterpret_cast<void** const*>(geom);
             reinterpret_cast<GeomDrawFn>(gvt[0x10 / 8])(
                 geom, ctx,
-                groupBase + groupOffset + offsetof(RendererDrawGroup, cullCamera),
+                groupBase + groupOffset + offsetof(RtGraphics::RendererDrawGroup, cullCamera),
                 item->instance,
                 self->frameAlpha,
                 static_cast<int32_t>(item->arg5),
@@ -1091,7 +1086,81 @@ extern "C" void RtGraphics_Renderer_DrawItemList(const void* selfv, void* ctx,
         emitted += step;
         i += step;
     }
+}
 
+}  // namespace Graphics
+
+// The registered door: name, address and retail argument order unchanged.
+extern "C" void RtGraphics_GraphicsMesh_PlatformSerialize(void* selfv, void* serv) {
+    reinterpret_cast<Graphics::GraphicsMesh*>(selfv)                 // B.3.5 bridge
+        ->Graphics::GraphicsMesh::PlatformSerialize(
+            *reinterpret_cast<IO::Serializer*>(serv));               // B.3.5 bridge
+}
+
+// ############################################################################
+// Graphics::Renderer::DrawItemList
+// ?DrawItemList@Renderer@Graphics@@QEBAXAEAVContext@Video@@HHH@Z
+// retail 0x180105240, ordinal 2279
+// ############################################################################
+//
+// FIVE VALUES: (this, Context&, int group, int list, int shader). The fifth
+// travels in its own home slot at [RBP+0xc0] and is the SHADER INDEX — see
+// point 1 of this file's banner, and lights_vtable.cpp's own note about the
+// three Draw arms that write their arg5 home slot before tail-jumping here.
+//
+// SHAPE
+//   group = this->_drawGroups._data + group*0x1f0
+//   SetCamera(ctx, Matrix(group->cullCamera.cameraToWorld), group->cullCamera.projection)
+//   items = group->items[list]                  ; group + 0x1c0 + list*0x10
+//   for (i = 0; i < items._size; ) {
+//       item = items._data + i*0x38
+//       step = 1
+//       if (shader >= 0 && shader < item->material->_programCount) {
+//           prog = item->material->_programs[shader]
+//           if (prog->[0x20] && prog->[0x28] && prog->[0x28]->[0x48] > 0
+//                            && prog->[0x30] && prog->[0x30]->[0x48] > 0) {
+//               if (shader == 0 && item->instance->hasRenderTexture)
+//                   GenerateTextures(item->instance, ctx, this->contextSerial)
+//               MaterialInstance::Setup(item->instance, ctx, shader)
+//               if (item->arg8 > 1) { ...the instancing batch, below... }
+//               item->geometry->vt[2](geometry, ctx, &group->cullCamera,
+//                                     item->instance, this->frameAlpha,
+//                                     item->arg5, shader, batchCount)
+//           }
+//       }
+//       emitted += step; i += step
+//   }
+//
+// THE FIVE SILENT DROPS are AddDrawItem's own list (wave9_lane_gfx.cpp) read
+// from the other end: a negative or out-of-range shader index, and a selected
+// VideoProgram with a null +0x20, a null-or-empty +0x28, or a null-or-empty
+// +0x30. On every one of them `step` stays 1 and nothing is drawn.
+//
+// THE INSTANCING BATCH (`item->arg8 > 1`) is the part no decompile shows
+// honestly. It calls the geometry's slot 7 to reserve N instance transform
+// slots, then walks forward over CONSECUTIVE items that agree on all four of
+// (instance, arg5, userData, arg10), asking each one's slot 6 for a Matrix and
+// pushing it with Context::SetTransform. It stops on the first mismatch, on
+// `item->arg8` items, or when the running index would pass the list's size.
+// `step` is then the number of items consumed, so the outer loop skips the
+// whole batch and the single Draw below carries them all.
+//
+// ORACLE: NONE, and that is stated rather than faked. Every arm of this body
+// ends in a real GPU draw through the geometry's vtable; running the shipped
+// copy afterwards would submit every draw a second time. the diff oracle records
+// how many calls reached a Draw at all, which is the number that matters — a
+// green `calls=` column on a body that dropped every item would mean nothing.
+// ############################################################################
+// ENDGAME B.3.5 block GC: THE BODY MOVED onto
+// `Graphics::Renderer::DrawItemList` (block F's class, not block F's file). The
+// door keeps its name and both its registrations.
+extern "C" void RtGraphics_Renderer_DrawItemList(const void* selfv, void* ctx,
+                                                 int32_t groupIndex, int32_t listIndex,
+                                                 int32_t shaderIndex) {
+    reinterpret_cast<const Graphics::Renderer*>(selfv)                   // B.3.5 bridge
+        ->Graphics::Renderer::DrawItemList(
+            *reinterpret_cast<Video::Context*>(ctx),                     // B.3.5 bridge
+            groupIndex, listIndex, shaderIndex);
 }
 
 // ============================================================================

@@ -490,15 +490,11 @@ bool Particle::Serialize(void* streamv) {
 // minted table, which is the one thing a converted object must not carry
 // (B34_RULES section 4.3, the `Object::External` precedent).
 // ---------------------------------------------------------------------------
-const char* Particle::TypeName() const {
-    return RtGraphics_Particle_TypeName(this);
-}
-uint32_t Particle::Type() const {
-    return RtGraphics_Particle_Type(this);
-}
-int32_t Particle::GetFileVersion() const {
-    return RtGraphics_Particle_GetFileVersion(this);
-}
+// `Particle::TypeName` (slot 1), `::Type` (slot 2) and `::GetFileVersion`
+// (slot 3) USED TO BE DEFINED HERE, forwarding INTO the `extern "C"` doors in
+// `graphics_typeinfo_accessors.cpp`. ENDGAME B.3.5 block GC flipped that: the
+// members ARE the bodies now, in that file, beside the byte decode that is their
+// evidence, and each door is a one-line qualified delegation.
 Particle::~Particle() {}
 
 }  // namespace Graphics

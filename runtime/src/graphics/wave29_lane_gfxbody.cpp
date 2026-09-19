@@ -164,9 +164,11 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/graphics/Animation.h"   // Graphics::Animation -- ENDGAME B.3.5 block GC
 #include "../../types/graphics/Camera.h"   // Renderer, RendererDrawGroup, RendererDrawable
 #include "../../types/graphics/Scene.h"    // Scene, _globals @ +0x60
 #include "../../types/math/Math.h"         // Math::Transform (0x1c), GLOBAL scope
+#include "../../types/system/Value.h"      // System::Time -- ENDGAME B.3.5 block GC
 
 // Byte-identical to standalone/resolve.h's declaration; the linker checks the
 // two against each other. Not included, for the <wingdi.h> `Rectangle` reason
@@ -539,101 +541,25 @@ void RtGraphics_Renderer_EndDrawGroup(Renderer* self, int group) {
 // so the ordinary spelling below reproduces both arms without a special case —
 // stated because it looks like an omission.
 // ============================================================================
+// ENDGAME B.3.5 block GC: THE BODY MOVED onto
+// `Graphics::Animation::GetRootPoseAtTime` (block H1's class; this file is not
+// block H1's, which is why block F left it). The door keeps its name, its
+// registration and its counter, and it is a HIDDEN-RETSLOT door: retail returns
+// `Math::Transform` BY VALUE, the caller's storage arrives in the second
+// argument, and RAX must carry it back at every exit (RULE B5-12). The member is
+// NON-VIRTUAL, so it returns by value in C++ and the door places the prvalue into
+// the caller's slot -- which is exactly B5-12's shape for a non-slot retslot
+// export, and the amendment's register-order hazard does not apply.
 Transform* RtGraphics_Animation_GetRootPoseAtTime(const void* self,
                                                   Transform* ret,
                                                   const int64_t* t0,
                                                   const int64_t* t1) {
     ++g_rootPose;
-
-    const uint8_t* a = static_cast<const uint8_t*>(self);
-    const int32_t frameFirst = *reinterpret_cast<const int32_t*>(a + 0x30);
-    const int32_t frameLast  = *reinterpret_cast<const int32_t*>(a + 0x34);
-    const uint8_t looping    = *(a + 0x3c);
-    const int32_t loopFrame  = *reinterpret_cast<const int32_t*>(a + 0x40);
-    const float   rate       = *reinterpret_cast<const float*>(a + 0x44);
-    const int32_t perKey     = *reinterpret_cast<const int32_t*>(a + 0x4c);
-    const int32_t keyCount   = *reinterpret_cast<const int32_t*>(a + 0x50);
-    const uint8_t* keys      = *reinterpret_cast<const uint8_t* const*>(a + 0x60);
-
-    // The loop-start KEY INDEX. Retail short-circuits the whole fraction to 0
-    // when loopFrame is zero rather than computing it.
-    int32_t loopKey = 0;
-    if (loopFrame != 0) {
-        const float num = static_cast<float>(loopFrame - frameFirst);
-        const float den = static_cast<float>(frameLast - frameFirst);
-        loopKey = static_cast<int32_t>((num / den) * static_cast<float>(keyCount));
-    }
-
-    const double secondsPerTick = SecondsPerTick();
-
-    // NARROW, THEN SCALE — see the banner. cvtsi2sd / mulsd / cvtpd2ps / mulss.
-    float keyPos = static_cast<float>(static_cast<double>(*t0) * secondsPerTick);
-    keyPos *= rate;
-
-    const int32_t rawKey = static_cast<int32_t>(keyPos);   // cvttss2si, truncates
-
-    // Clamp or wrap the first key.
-    int32_t k0 = rawKey;
-    if (k0 >= keyCount) {
-        if (looping == 0) {
-            k0 = keyCount - 1;
-        } else {
-            k0 = loopKey + (rawKey % (keyCount - loopKey));
-        }
-    }
-
-    // ...and the second, which is k0+1 BEFORE wrapping, not k0's successor
-    // after it. Retail computes `LEA R11D,[R9+1]` from the ALREADY-wrapped k0.
-    int32_t k1 = k0 + 1;
-    if (k1 >= keyCount) {
-        if (looping == 0) {
-            k1 = keyCount - 1;
-        } else {
-            k1 = loopKey + (k1 % (keyCount - loopKey));
-        }
-    }
-
-    // The fraction uses the RAW truncation, not the wrapped index.
-    const float frac = keyPos - static_cast<float>(rawKey);
-
-    float x, y, z;
-    if (k0 == k1 || frac == 0.0f) {
-        const uint8_t* e = keys + static_cast<int64_t>(perKey * k0) * 0x1c;
-        x = *reinterpret_cast<const float*>(e + 0x10);
-        y = *reinterpret_cast<const float*>(e + 0x14);
-        z = *reinterpret_cast<const float*>(e + 0x18);
-        ++g_rootPoseSingle;
-    } else {
-        const uint8_t* e0 = keys + static_cast<int64_t>(perKey * k0) * 0x1c;
-        const uint8_t* e1 = keys + static_cast<int64_t>(perKey * k1) * 0x1c;
-        const float ax = *reinterpret_cast<const float*>(e0 + 0x10);
-        const float ay = *reinterpret_cast<const float*>(e0 + 0x14);
-        const float az = *reinterpret_cast<const float*>(e0 + 0x18);
-        const float bx = *reinterpret_cast<const float*>(e1 + 0x10);
-        const float by = *reinterpret_cast<const float*>(e1 + 0x14);
-        const float bz = *reinterpret_cast<const float*>(e1 + 0x18);
-        // a + (b - a) * t, in retail's association. NOT a*(1-t) + b*t.
-        x = ax + (bx - ax) * frac;
-        y = ay + (by - ay) * frac;
-        z = az + (bz - az) * frac;
-        ++g_rootPoseLerped;
-    }
-
-    // The second Time scales the sampled translation. Same narrow-then-scale
-    // order as the first.
-    float scale = static_cast<float>(static_cast<double>(*t1) * secondsPerTick);
-    scale *= rate;
-
-    // Rotation is the IDENTITY quaternion: retail stores XMM4 (zeroed by
-    // `XORPS XMM4,XMM4`) into +0x00/+0x04/+0x08 and the lifted 1.0f into +0x0c.
-    ret->rotation.x = 0.0f;
-    ret->rotation.y = 0.0f;
-    ret->rotation.z = 0.0f;
-    ret->rotation.w = kOne;
-    ret->translation.x = x * scale;
-    ret->translation.y = y * scale;
-    ret->translation.z = z * scale;
-    return ret;
+    *ret = reinterpret_cast<const Graphics::Animation*>(self)            // B.3.5 bridge
+               ->Graphics::Animation::GetRootPoseAtTime(
+                   *reinterpret_cast<const System::Time*>(t0),
+                   *reinterpret_cast<const System::Time*>(t1));
+    return ret;                                   // RAX carries the slot back
 }
 
 // ============================================================================
@@ -820,6 +746,110 @@ void Renderer::EndDrawGroup(int group) {
         }
     }
     _currentDrawGroup = group;
+}
+
+// ---------------------------------------------------------------------------
+// ?GetRootPoseAtTime@Animation@Graphics@@QEBA?AVTransform@Math@@AEBVTime@System@@0@Z
+// retail 0x1800faaa0 -- ENDGAME B.3.5 block GC. The key-index arithmetic, the
+// short-circuited loop fraction and the "single iff the two indices coincide OR
+// the fraction is exactly 0.0f" arm selection are in the door's banner.
+// ---------------------------------------------------------------------------
+Math::Transform Animation::GetRootPoseAtTime(const System::Time& time,
+                                             const System::Time& delta) const {
+    Transform out;
+    Transform* const ret = &out;
+    const int64_t* const t0 = &time._ticks;
+    const int64_t* const t1 = &delta._ticks;
+    const uint8_t* a = reinterpret_cast<const uint8_t*>(this);   // B.3.5 bridge
+    const int32_t frameFirst = *reinterpret_cast<const int32_t*>(a + 0x30);
+    const int32_t frameLast  = *reinterpret_cast<const int32_t*>(a + 0x34);
+    const uint8_t looping    = *(a + 0x3c);
+    const int32_t loopFrame  = *reinterpret_cast<const int32_t*>(a + 0x40);
+    const float   rate       = *reinterpret_cast<const float*>(a + 0x44);
+    const int32_t perKey     = *reinterpret_cast<const int32_t*>(a + 0x4c);
+    const int32_t keyCount   = *reinterpret_cast<const int32_t*>(a + 0x50);
+    const uint8_t* keys      = *reinterpret_cast<const uint8_t* const*>(a + 0x60);
+
+    // The loop-start KEY INDEX. Retail short-circuits the whole fraction to 0
+    // when loopFrame is zero rather than computing it.
+    int32_t loopKey = 0;
+    if (loopFrame != 0) {
+        const float num = static_cast<float>(loopFrame - frameFirst);
+        const float den = static_cast<float>(frameLast - frameFirst);
+        loopKey = static_cast<int32_t>((num / den) * static_cast<float>(keyCount));
+    }
+
+    const double secondsPerTick = rtgfxbody29::SecondsPerTick();
+
+    // NARROW, THEN SCALE — see the banner. cvtsi2sd / mulsd / cvtpd2ps / mulss.
+    float keyPos = static_cast<float>(static_cast<double>(*t0) * secondsPerTick);
+    keyPos *= rate;
+
+    const int32_t rawKey = static_cast<int32_t>(keyPos);   // cvttss2si, truncates
+
+    // Clamp or wrap the first key.
+    int32_t k0 = rawKey;
+    if (k0 >= keyCount) {
+        if (looping == 0) {
+            k0 = keyCount - 1;
+        } else {
+            k0 = loopKey + (rawKey % (keyCount - loopKey));
+        }
+    }
+
+    // ...and the second, which is k0+1 BEFORE wrapping, not k0's successor
+    // after it. Retail computes `LEA R11D,[R9+1]` from the ALREADY-wrapped k0.
+    int32_t k1 = k0 + 1;
+    if (k1 >= keyCount) {
+        if (looping == 0) {
+            k1 = keyCount - 1;
+        } else {
+            k1 = loopKey + (k1 % (keyCount - loopKey));
+        }
+    }
+
+    // The fraction uses the RAW truncation, not the wrapped index.
+    const float frac = keyPos - static_cast<float>(rawKey);
+
+    float x, y, z;
+    if (k0 == k1 || frac == 0.0f) {
+        const uint8_t* e = keys + static_cast<int64_t>(perKey * k0) * 0x1c;
+        x = *reinterpret_cast<const float*>(e + 0x10);
+        y = *reinterpret_cast<const float*>(e + 0x14);
+        z = *reinterpret_cast<const float*>(e + 0x18);
+        ++rtgfxbody29::g_rootPoseSingle;
+    } else {
+        const uint8_t* e0 = keys + static_cast<int64_t>(perKey * k0) * 0x1c;
+        const uint8_t* e1 = keys + static_cast<int64_t>(perKey * k1) * 0x1c;
+        const float ax = *reinterpret_cast<const float*>(e0 + 0x10);
+        const float ay = *reinterpret_cast<const float*>(e0 + 0x14);
+        const float az = *reinterpret_cast<const float*>(e0 + 0x18);
+        const float bx = *reinterpret_cast<const float*>(e1 + 0x10);
+        const float by = *reinterpret_cast<const float*>(e1 + 0x14);
+        const float bz = *reinterpret_cast<const float*>(e1 + 0x18);
+        // a + (b - a) * t, in retail's association. NOT a*(1-t) + b*t.
+        x = ax + (bx - ax) * frac;
+        y = ay + (by - ay) * frac;
+        z = az + (bz - az) * frac;
+        ++rtgfxbody29::g_rootPoseLerped;
+    }
+
+    // The second Time scales the sampled translation. Same narrow-then-scale
+    // order as the first.
+    float scale = static_cast<float>(static_cast<double>(*t1) * secondsPerTick);
+    scale *= rate;
+
+    // Rotation is the IDENTITY quaternion: retail stores XMM4 (zeroed by
+    // `XORPS XMM4,XMM4`) into +0x00/+0x04/+0x08 and the lifted 1.0f into +0x0c.
+    ret->rotation.x = 0.0f;
+    ret->rotation.y = 0.0f;
+    ret->rotation.z = 0.0f;
+    ret->rotation.w = rtgfxbody29::kOne;
+    ret->translation.x = x * scale;
+    ret->translation.y = y * scale;
+    ret->translation.z = z * scale;
+    (void)ret;
+    return out;
 }
 
 }  // namespace Graphics

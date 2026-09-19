@@ -361,7 +361,11 @@ public:
     // ??4Animation@Graphics@@QEAAAEAV01@AEBV01@@Z   0x180016190  NOT PORTED
     Animation& operator=(const Animation&);
 
-    // ?ApplyEvents@   0x1800fa9a0  door: wave28_lane_gfxbody.cpp (not ours)
+    // ?ApplyEvents@   0x1800fa9a0  PORTED — the body IS this member, in
+    //   `wave28_lane_gfxbody.cpp`'s `namespace Graphics` block, and the registered
+    //   door delegates (ENDGAME B.3.5 block GC). This note used to read "door:
+    //   wave28_lane_gfxbody.cpp (not ours)", which was true of block H1 and is no
+    //   longer true of the tree.
     void ApplyEvents(const Math::Transform& base, const System::Time& from,
                      const System::Time& to) const;
     // ?GetEndTime@    0x180015fe0  NOT PORTED  (`MOV EAX,[RCX+0x34]`)
