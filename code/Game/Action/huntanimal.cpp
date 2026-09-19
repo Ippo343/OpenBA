@@ -252,7 +252,7 @@ void HuntAnimal_Serialize_Impl(HuntAnimal* self, void* stream) {
     ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize animal entity ref (+0x20) with AnimalEntity type check
-    s_fn_IBP_Serialize(s + 0x20, ser2);
+    reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (*(void**)(s + 0x20) != nullptr) {
         if (!fn_IsDerivedFrom(*(void**)(s + 0x20), *s_typeId_AnimalEntity)) {
             *(void**)(s + 0x20) = nullptr;
@@ -260,7 +260,7 @@ void HuntAnimal_Serialize_Impl(HuntAnimal* self, void* stream) {
     }
 
     // Serialize herd entity ref (+0x28) with HerdEntity type check
-    s_fn_IBP_Serialize(s + 0x28, ser2);
+    reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (*(void**)(s + 0x28) != nullptr) {
         if (!fn_IsDerivedFrom(*(void**)(s + 0x28), *s_typeId_HerdEntity)) {
             *(void**)(s + 0x28) = nullptr;

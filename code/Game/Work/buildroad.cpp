@@ -245,7 +245,7 @@ void BuildRoad_Serialize_Impl(BuildRoad* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->field_58), nullptr);   // B.3.4 bridge
 
     // InternalBasePtr::Serialize for entity ref (+0x48)
-    s_fn_IBP_Serialize(&self->field_48, serializerBuf);
+    reinterpret_cast<Object::InternalBasePtr*>(&self->field_48)->Serialize(*reinterpret_cast<IO::Serializer*>(serializerBuf));   // B.3.4 bridge
 
     // Validate entity ref type after deserialize
     if (self->field_48 != nullptr) {

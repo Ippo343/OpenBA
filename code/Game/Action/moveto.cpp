@@ -37,6 +37,7 @@
 #include <cstdint>
 #include <cmath>
 #include <new>
+#include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -318,7 +319,7 @@ void MoveTo_Serialize_Impl(void* self, void* stream) {
     ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
 
     // Target entity IBP (+0x28)
-    s_fn_IBP_Serialize(s + 0x28, ser1);
+    reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser1));   // B.3.4 bridge
     if (*(void**)(s + 0x28) != nullptr) {
         bool valid = s_fn_IsDerivedFrom(*(void**)(s + 0x28), *s_typeId_1401c7078);
         if (!valid) {
@@ -353,7 +354,7 @@ void MoveTo_Serialize_Impl(void* self, void* stream) {
     if (version == 0) {
         // Version 0 compatibility: deserialize and discard a legacy IBP field
         void* tempIBP = nullptr;
-        s_fn_IBP_Serialize(&tempIBP, ser1);
+        reinterpret_cast<Object::InternalBasePtr*>(&tempIBP)->Serialize(*reinterpret_cast<IO::Serializer*>(ser1));   // B.3.4 bridge
         if (tempIBP != nullptr) {
             s_fn_IsDerivedFrom(tempIBP, *s_typeId_1401c4790);
         }

@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <new>
+#include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 
 // ============================================================
 // Resolved helpers
@@ -140,7 +141,7 @@ void Component_SerializeReimpl(void* selfP, void* stream) {
     alignas(8) uint8_t ser[24];
     if (s_cs_Ctor) ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
-    if (s_cs_IBPSer) s_cs_IBPSer((void*)(self + 0x10), ser);
+    if (s_cs_IBPSer) reinterpret_cast<Object::InternalBasePtr*>((void*)(self + 0x10))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
     void* owner = *(void**)(self + 0x10);
     if (owner && s_cs_IsDerived && s_cs_pTId_CompEntity &&
         !s_cs_IsDerived(owner, *s_cs_pTId_CompEntity)) {

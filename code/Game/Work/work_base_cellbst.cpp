@@ -22,6 +22,7 @@
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 
 // ============================================================
 // Internal AVL primitives (static; not registered)
@@ -254,7 +255,7 @@ void WorkCellBST_Serialize_9de0(uintptr_t* root, void* serializer) {
             CellKeyRec rec; rec.key = 0; rec.pad = 0; rec.ibp = 0;
             if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&rec.key), nullptr);   // B.3.4 bridge
             uintptr_t keyIBP = 0;
-            if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(&keyIBP, serializer);
+            if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(&keyIBP)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             if (keyIBP != 0 && fn_IsDerivedFrom && citTid &&
                 !fn_IsDerivedFrom(reinterpret_cast<void*>(keyIBP), citTid))
                 keyIBP = 0;
@@ -273,7 +274,7 @@ void WorkCellBST_Serialize_9de0(uintptr_t* root, void* serializer) {
 joined:
     while ((pIVar5 = pIVar7) != 0) {
         if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(pIVar5), nullptr);   // key @+0   (B.3.4 bridge)
-        if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(reinterpret_cast<void*>(pIVar5 + 8), serializer);  // IBP @+8
+        if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(reinterpret_cast<void*>(pIVar5 + 8))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));  // IBP @+8   // B.3.4 bridge
         if (*reinterpret_cast<uintptr_t*>(pIVar5 + 8) != 0 && fn_IsDerivedFrom && citTid &&
             !fn_IsDerivedFrom(*reinterpret_cast<void**>(pIVar5 + 8), citTid))
             *reinterpret_cast<uint64_t*>(pIVar5 + 8) = 0;

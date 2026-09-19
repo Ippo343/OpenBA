@@ -162,7 +162,7 @@ void CompleteTask_Serialize_Impl(CompleteTask* self, void* stream) {
     // .rdata type-id may be unavailable in the standalone exe (Serialize-only deps, not
     // part of the exec gate) — null-guard so a save/load can't hard-fault; validation is
     // simply skipped when the type-id can't be resolved.
-    if (s_fn_IBP_Serialize) s_fn_IBP_Serialize(&self->workEntity, ser2);
+    if (s_fn_IBP_Serialize) reinterpret_cast<Object::InternalBasePtr*>(&self->workEntity)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (self->workEntity != nullptr && s_TypeId_1401c7158 && *s_TypeId_1401c7158) {
         if (!fn_IsDerivedFrom(self->workEntity, *s_TypeId_1401c7158)) {
             self->workEntity = nullptr;
@@ -170,7 +170,7 @@ void CompleteTask_Serialize_Impl(CompleteTask* self, void* stream) {
     }
 
     // Target entity ref (+0x28) with type validation
-    if (s_fn_IBP_Serialize) s_fn_IBP_Serialize(&self->targetEntity, ser2);
+    if (s_fn_IBP_Serialize) reinterpret_cast<Object::InternalBasePtr*>(&self->targetEntity)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (self->targetEntity != nullptr && s_TypeId_ComponentEntity && *s_TypeId_ComponentEntity) {
         if (!fn_IsDerivedFrom(self->targetEntity, *s_TypeId_ComponentEntity)) {
             self->targetEntity = nullptr;

@@ -200,7 +200,7 @@ void Pickup_Serialize_Impl(Pickup* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->status), nullptr);   // B.3.4 bridge
 
     // Serialize InternalBasePtr at +0x50
-    s_fn_InternalBasePtr_Serialize(&self->citizenIBP, serializerBuf);
+    reinterpret_cast<Object::InternalBasePtr*>(&self->citizenIBP)->Serialize(*reinterpret_cast<IO::Serializer*>(serializerBuf));   // B.3.4 bridge
 
     // Validate the deserialized ptr against Pickup type
     if (self->citizenIBP != nullptr) {

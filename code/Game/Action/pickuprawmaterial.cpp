@@ -33,6 +33,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <new>
+#include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -121,7 +122,7 @@ void PickupRawMaterial_Serialize_Impl(PickupRawMaterial* self, void* stream) {
     ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize source building (+0x20) with type check
-    fn_InternalBasePtr_Serialize(s + 0x20, ser2);
+    reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (*(void**)(s + 0x20) != nullptr) {
         if (!fn_IsDerivedFrom(*(void**)(s + 0x20), *s_typeId_1401c7158)) {
             *(void**)(s + 0x20) = nullptr;
@@ -129,7 +130,7 @@ void PickupRawMaterial_Serialize_Impl(PickupRawMaterial* self, void* stream) {
     }
 
     // Serialize source entity (+0x28) with ComponentEntity type check
-    fn_InternalBasePtr_Serialize(s + 0x28, ser2);
+    reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (*(void**)(s + 0x28) != nullptr) {
         if (!fn_IsDerivedFrom(*(void**)(s + 0x28), *g_TypeId_ComponentEntity)) {
             *(void**)(s + 0x28) = nullptr;

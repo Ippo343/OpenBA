@@ -19,6 +19,7 @@
 #include <new>
 
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (SA type-id fallback)
+#include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -193,7 +194,7 @@ void ShowTool_Serialize_Impl(void* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    s_fn_IBP_Serialize(s + 0x20, ser2);
+    reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (*(void**)(s + 0x20) != nullptr) {
         if (!fn_IsDerivedFrom(*(void**)(s + 0x20), *s_TypeInfo_ShowToolEntity)) {
             *(void**)(s + 0x20) = nullptr;

@@ -59,7 +59,7 @@ void FinishTutorialInstance_Slot3(FinishTutorialInstance* self, void* stream) {
 
     // Serialize InternalBasePtr at +0x20
     if (fn_InternalBasePtr_Serialize) {
-        fn_InternalBasePtr_Serialize((void*)(s + 0x20), serializer);
+        reinterpret_cast<Object::InternalBasePtr*>((void*)(s + 0x20))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
     }
 
     // Type-check: if deserialized object is not a TutorialInstance, null it out

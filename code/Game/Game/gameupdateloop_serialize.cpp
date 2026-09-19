@@ -495,7 +495,7 @@ extern "C" void IbpTree_Serialize_e470(void* treeVoid, void* serializer) {
             void* key = nullptr;
             int a = 0, b = 0;
             bool used = false;
-            fn_InternalBasePtr_Serialize(&key, serializer);
+            reinterpret_cast<Object::InternalBasePtr*>(&key)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             if (key && s_tidCompEnt && !fn_IsDerivedFrom(key, s_tidCompEnt)) key = nullptr;
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(a, nullptr);   // B.3.4 bridge
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(b, nullptr);   // B.3.4 bridge
@@ -554,7 +554,7 @@ extern "C" void IbpTree_Serialize_e470(void* treeVoid, void* serializer) {
         if (!cur) return;
         while (*(uintptr_t*)(cur + 0x20)) cur = *(uintptr_t*)(cur + 0x20);
         while (cur) {
-            fn_InternalBasePtr_Serialize((void*)cur, serializer);
+            reinterpret_cast<Object::InternalBasePtr*>((void*)cur)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             if (*(void**)cur && s_tidCompEnt && !fn_IsDerivedFrom(*(void**)cur, s_tidCompEnt))
                 *(void**)cur = nullptr;
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(cur + 0x8), nullptr);   // B.3.4 bridge
@@ -724,7 +724,7 @@ extern "C" void BucketTree_Serialize_21ba0(void* serializer, void* /*unused*/,
         }
         uint8_t* slot = *(uint8_t**)hdr;
         for (int i = 0; i < count; i++, slot += 8) {
-            fn_InternalBasePtr_Serialize(slot, serializer);
+            reinterpret_cast<Object::InternalBasePtr*>(slot)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             if (*(void**)slot != nullptr && s_tidCompEnt &&
                 !fn_IsDerivedFrom(*(void**)slot, s_tidCompEnt)) {
                 *(void**)slot = nullptr;
@@ -859,7 +859,7 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
     // retail returns early here and this IBP is NOT the one that faults. Kept
     // out of the live path — the PersistObject probe reports the same thing
     // without replacing any retail code.
-    fn_InternalBasePtr_Serialize((void*)(self + 0x150), ser);
+    reinterpret_cast<Object::InternalBasePtr*>((void*)(self + 0x150))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
     if (*(void**)(self + 0x150) != nullptr) {
         uint32_t achTid = s_pAchInstTypeId ? *s_pAchInstTypeId : 0;
         if (!achTid || !fn_IsDerivedFrom(*(void**)(self + 0x150), achTid))

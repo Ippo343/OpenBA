@@ -251,7 +251,7 @@ void LocationWork_Serialize_Impl(LocationWork* self, void* stream) {
     ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize InternalBasePtr at +0x48
-    s_fn_InternalBasePtr_Serialize(&self->_field48, serializerBuf);
+    reinterpret_cast<Object::InternalBasePtr*>(&self->_field48)->Serialize(*reinterpret_cast<IO::Serializer*>(serializerBuf));   // B.3.4 bridge
 
     // Validate: if _field48 is non-null, check IsDerivedFrom
     if (self->_field48 != nullptr) {

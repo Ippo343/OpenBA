@@ -347,7 +347,7 @@ void ConsumeProduce_Serialize_Impl(ConsumeProduceAction* self, void* stream) {
     }
 #endif
     for (int i = 0; i < ibpCount; i++) {
-        s_fn_IBP_Serialize(&ibpArray[i], serializerBuf);
+        reinterpret_cast<Object::InternalBasePtr*>(&ibpArray[i])->Serialize(*reinterpret_cast<IO::Serializer*>(serializerBuf));   // B.3.4 bridge
 
         // After deserialize, validate the entity type.
         //

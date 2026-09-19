@@ -472,7 +472,7 @@ extern "C" void AttendanceComponent_SerializeSlot(void* selfP, void* stream) {
 
     int64_t* q = *reinterpret_cast<int64_t**>(self + 0x28);
     for (int32_t i = 0; i < count && q; ++i, ++q) {
-        if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(q, ser);
+        if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(q)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
         if (*q == 0) continue;
         // Value check, not just pointer: a registered-but-unfilled slot reads 0 and
         // IsDerivedFrom(x, 0) would drop every attendee.

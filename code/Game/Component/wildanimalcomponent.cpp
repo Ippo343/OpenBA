@@ -28,6 +28,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <new>
+#include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 
 // ============================================================
 // Resolved helpers
@@ -142,7 +143,7 @@ void WildAnimalComponent_Serialize(WildAnimalComponent* self, void* stream) {
 
     // Serialize InternalBasePtr at +0x28
     if (s_fn_IBP_Serialize) {
-        s_fn_IBP_Serialize(reinterpret_cast<uint8_t*>(self) + 0x28, serializer);
+        reinterpret_cast<Object::InternalBasePtr*>(reinterpret_cast<uint8_t*>(self) + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
     }
 
     // Post-deserialize type validation

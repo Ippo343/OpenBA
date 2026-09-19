@@ -39,6 +39,7 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>
+#include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 
 namespace {
 
@@ -123,7 +124,7 @@ inline bool Loading(void* ser) {
 // Serialize one InternalBasePtr and apply retail's post-load type validation
 // (null the ref when the pointee is not derived from *tid).
 inline void SerializeValidatedIBP(void* ibp, void* ser, const uint32_t* tid) {
-    if (s_IBPSer) s_IBPSer(ibp, ser);
+    if (s_IBPSer) reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
     void* obj = *reinterpret_cast<void**>(ibp);
     if (obj && s_IsDerived && tid && *tid && !s_IsDerived(obj, *tid))
         *reinterpret_cast<uint64_t*>(ibp) = 0;
@@ -200,7 +201,7 @@ extern "C" void AnimalComponent_Serialize(void* self, void* stream) {
         // v0 compatibility: read-and-discard one IBP (retail probes the type
         // and drops the value; the local never leaves the frame).
         uint64_t legacy = 0;
-        if (s_IBPSer) s_IBPSer(&legacy, ser);
+        if (s_IBPSer) reinterpret_cast<Object::InternalBasePtr*>(&legacy)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
         if (legacy && s_IsDerived && s_tidPopulation && *s_tidPopulation)
             s_IsDerived(reinterpret_cast<void*>(legacy), *s_tidPopulation);
     }

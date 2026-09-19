@@ -85,7 +85,7 @@ void NomadComponent_Shutdown(NomadComponent* self, void* stream) {
 
     // Serialize IBP at +0x28
     if (s_fn_IBP_Serialize)
-        s_fn_IBP_Serialize((void*)(selfAddr + 0x28), serializer2);
+        reinterpret_cast<Object::InternalBasePtr*>((void*)(selfAddr + 0x28))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4 bridge
 
     // Validate IBP after deserialize
     void* ibpVal = *(void**)(selfAddr + 0x28);
