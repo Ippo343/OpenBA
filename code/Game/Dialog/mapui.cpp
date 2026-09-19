@@ -134,16 +134,16 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
     *(uint8_t*)(ss + 0x50) = 0;
 
     // Add sprite info: empty name, empty group, full image rect
-    imgW = fn_ImageBuffer_Width(imageBuffer);
-    imgH = fn_ImageBuffer_Height(imageBuffer);
+    imgW = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Width();    // B.3.5 bridge
+    imgH = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Height();   // B.3.5 bridge
     System::String nameEmpty, groupEmpty;
     MAPTRC("AddSpriteInfo");
     fn_SpriteSheet_AddSpriteInfo(*spriteSheetOut, &nameEmpty, &groupEmpty, 0, 0, imgW, imgH);
     MAPTRC("AddSpriteInfo done");
 
     // Set sprite info with UV scale
-    imgW = fn_ImageBuffer_Width(imageBuffer);
-    imgH = fn_ImageBuffer_Height(imageBuffer);
+    imgW = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Width();    // B.3.5 bridge
+    imgH = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Height();   // B.3.5 bridge
     float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
     fn_SpriteSheet_SetSpriteInfo(*spriteSheetOut, 0, imgW, imgH, 0.0f, 0.0f, uvScale, uvScale);
 

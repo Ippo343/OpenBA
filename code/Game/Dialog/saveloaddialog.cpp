@@ -297,15 +297,19 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
             System::String nameStr1(""), nameStr2("");
 
             imageBuffer = *(void**)((uintptr_t)saveInfo + 0x18);
-            imgHeight = fn_ImageBuffer_Height(imageBuffer);
-            imgWidth = fn_ImageBuffer_Width(imageBuffer);
+            imgHeight = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)
+                            ->Height();   // B.3.5 bridge
+            imgWidth = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)
+                           ->Width();     // B.3.5 bridge
             fn_SpriteSheet_AddSpriteInfo(sheetFinal, &nameStr1, &nameStr2,
                                           0, 0, imgWidth, imgHeight);
 
             // Set sprite info with UV coordinates
             imageBuffer = *(void**)((uintptr_t)saveInfo + 0x18);
-            int h = fn_ImageBuffer_Height(imageBuffer);
-            int w = fn_ImageBuffer_Width(imageBuffer);
+            int h = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)
+                        ->Height();   // B.3.5 bridge
+            int w = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)
+                        ->Width();    // B.3.5 bridge
             fn_SpriteSheet_SetSpriteInfo(sheetFinal, 0, w, h,
                                           0.0f, 0.0f, uvScale, uvScale);
 
