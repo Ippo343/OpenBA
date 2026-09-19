@@ -245,20 +245,8 @@ extern fn_ListCleanup_t fn_ListCleanup;
 // Mod entry lifecycle (for Modification::Swap)
 // ============================================================
 
-// Mod copy constructor (0x1800101e0) — copy-constructs a 0x80-byte Mod entry
-// RCX=dest, RDX=src, returns dest
-typedef void* (*fn_ModEntry_CopyCtor_t)(void* dest, const void* src);
-extern fn_ModEntry_CopyCtor_t fn_ModEntry_CopyCtor;
 
-// Mod assignment operator (0x180026ef0) — assigns one Mod entry to another
-// RCX=dest, RDX=src, returns dest
-typedef void* (*fn_ModEntry_Assign_t)(void* dest, const void* src);
-extern fn_ModEntry_Assign_t fn_ModEntry_Assign;
 
-// Mod destructor (0x180011460) — destroys a Mod entry (decrements string refcounts, frees arrays)
-// RCX=self
-typedef void (*fn_ModEntry_Dtor_t)(void* self);
-extern fn_ModEntry_Dtor_t fn_ModEntry_Dtor;
 
 // ============================================================
 // Collection::Map (AVL tree) — for Configuration command-line accessors
@@ -300,16 +288,7 @@ extern fn_ParseValue_t fn_ParseValue;
 // Persistence::_singleton pointer
 extern void** g_pPersistenceSingleton;
 
-// Persistence::Set(this, prefix, suffix, bool) — store bool setting
-// Key = prefix + suffix (e.g., "ModEnabled_" + "ModName")
-// RCX=this, RDX=prefix(const char*), R8=suffix(const char*), R9B=value(bool)
-typedef void (*fn_Persistence_SetBool_t)(void* self, const char* prefix, const char* suffix, bool value);
-extern fn_Persistence_SetBool_t fn_Persistence_SetBool;
 
-// Persistence::Set(this, prefix, suffix, int) — store int setting
-// RCX=this, RDX=prefix(const char*), R8=suffix(const char*), R9D=value(int)
-typedef void (*fn_Persistence_SetInt_t)(void* self, const char* prefix, const char* suffix, int value);
-extern fn_Persistence_SetInt_t fn_Persistence_SetInt;
 
 // ============================================================
 // System::Filename helpers
@@ -319,11 +298,6 @@ extern fn_Persistence_SetInt_t fn_Persistence_SetInt;
 // Dynamic array operations (for Mod array management)
 // ============================================================
 
-// Array<Mod>::operator= — deep copies source array to dest (0x80-byte elements)
-// Uses fn_ModEntry_CopyCtor per element, handles reallocation.
-// RCX=dest(ArrayHeader*), RDX=src(const ArrayHeader*)
-typedef void* (*fn_ModArrayCopy_t)(void* dest, const void* src);
-extern fn_ModArrayCopy_t fn_ModArrayCopy;
 
 // ============================================================
 // Engine globals (resolved pointers into Runtime-x64.dll data)
@@ -2401,10 +2375,6 @@ extern fn_DialogInstance_GetRoot_t fn_DialogInstance_GetRoot;
 typedef void (*fn_Element_Hide_t)(void* self, bool hide);
 extern fn_Element_Hide_t fn_Element_Hide;
 
-// IO::Modification::Find(this, Filename const&) -> int (mod index, -1 if not found)
-// ?Find@Modification@IO@@QEBAHAEBVFilename@System@@@Z
-typedef int (*fn_Modification_Find_t)(void* self, const void* filename);
-extern fn_Modification_Find_t fn_Modification_Find;
 
 // System::Configuration::GetVersionString(retval, version, isBeta) -> String
 // Static with hidden return: RCX=retval(String*), RDX=version(uint), R8B=isBeta(bool)
@@ -2432,25 +2402,9 @@ extern fn_Modification_GetCount_t fn_Modification_GetCount;
 typedef void* (*fn_Modification_GetMod_t)(void* self, int index);
 extern fn_Modification_GetMod_t fn_Modification_GetMod;
 
-// IO::Modification::Swap(this, idx1, idx2)
-// Hooked at 0x1800aeb20. Swaps two mod entries by index.
-typedef void (*fn_Modification_Swap_t)(void* self, int idx1, int idx2);
-extern fn_Modification_Swap_t fn_Modification_Swap;
 
-// IO::Modification::Enable(this, index, enabled)
-// Hooked at 0x1800aeab0. Sets enabled flag.
-typedef void (*fn_Modification_Enable_t)(void* self, int index, bool enabled);
-extern fn_Modification_Enable_t fn_Modification_Enable;
 
-// IO::Modification::RefreshList(this)
-// Hooked at 0x1800af5f0. Scans filesystem for .pkm packages.
-typedef void (*fn_Modification_RefreshList_t)(void* self);
-extern fn_Modification_RefreshList_t fn_Modification_RefreshList;
 
-// IO::Modification::SaveList(this)
-// Hooked at 0x1800b05f0. Persists mod state.
-typedef void (*fn_Modification_SaveList_t)(void* self);
-extern fn_Modification_SaveList_t fn_Modification_SaveList;
 
 // ============================================================
 // UI::DialogInstance::OnElementEvent
@@ -3539,11 +3493,6 @@ extern fn_UI_EndSpriteCapture_t fn_UI_EndSpriteCapture;
 // IO::FileSystem singleton — exref at 0x140151d18 (ordinal 0x161 _singleton)
 extern void** g_pFileSystemSingleton;
 
-// IO::FileSystem::GetSourceDirectory(this, retval) — non-trivial return (Filename by value)
-// RCX=this(FileSystem*), RDX=retval(Filename*, 8 bytes). Returns retval ptr.
-// ?GetSourceDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ (0x180007b90, ordinal 2922)
-typedef void* (*fn_FileSystem_GetSourceDirectory_t)(void* self, void* retval);
-extern fn_FileSystem_GetSourceDirectory_t fn_FileSystem_GetSourceDirectory;
 
 // Object::External::SaveText(this, path, subdir) -> bool
 // ?SaveText@External@Object@@QEAA_NAEBVFilename@System@@0@Z (0x1800bb9d0, ordinal 364)
@@ -3949,9 +3898,6 @@ extern fn_ComponentBase_Serialize_t fn_ComponentBase_Serialize;
 typedef void (*fn_DynArray_Resize_t)(void* arrayPtr, int newCount);
 extern fn_DynArray_Resize_t fn_DynArray_Resize;
 
-// FUN_14003f010(ptr, val, count) — memset-like zero fill (exe function)
-typedef void (*fn_MemZeroFill_t)(void* ptr, int val, int count);
-extern fn_MemZeroFill_t fn_MemZeroFill;
 
 // FUN_140028860(arrayPtr, newCount) — String array resize for ToolbarDescription (exe)
 typedef void (*fn_StringArray_Resize_t)(void* arrayPtr, int newCount);
@@ -5746,23 +5692,6 @@ extern uint32_t** g_ppTypeInfo_MaterialInstance;  // .rdata slot 0x140151350
 // M3.5 Path B session 4 — per-element 0x60B serialize + typed-ExternalPtr
 // array serialize (Geometry::Serialize step 10 + step 13 cascades)
 // ============================================================
-//
-// TradeWork_impl_ffa0 (0x14001ffa0) — ~70 instructions. Per-element serializer
-// for the 0x60B struct array at MenuScene::geometry +0x200 (and the version-
-// gated +0x1F0 array). For each 0x60-byte element it:
-//   1. CALL FUN_140007140(elem+0x00, serializer)  — typed ExternalPtr serialize
-//      (Graphics::MaterialInstance via slot 0x140151350) — CASCADE.
-//   2. Serialize 5 ints (+0x28 .. +0x38)
-//   3. Serialize 1 byte (+0x3c)
-//   4. Serialize 1 int (+0x40)
-//   5. Serialize 1 bool (+0x44)
-//   6. Serialize 5 floats (+0x48 .. +0x58)
-//   7. Serialize 1 bool (+0x5c)
-//   8. version >= 2: Serialize 1 bool (+0x5d)
-//   9. version >= 1: TradeWork_impl_sub_f9c0 — uint16-stride sub-array serialize
-//      (count + raw bytes) reading from the elem+0x08 array header.
-typedef void (*fn_Struct60B_Serialize_t)(void* serializer, int count, void* arrayBase);
-extern fn_Struct60B_Serialize_t fn_Struct60B_Serialize;  // 0x14001ffa0  M3.5 Path B session 4
 
 // TradeWork_impl_sub_0150 (0x140020150) — ~150 instructions, byte-identical
 // shape to FUN_14001bcc0/FUN_14001bff0 (Array_Serialize_External). Loops
@@ -5866,31 +5795,6 @@ extern fn_TradeWork_sub_c780_t fn_TradeWork_sub_c780;  // 0x1400ac780  M3.5 Path
 // ============================================================
 // M3.5 Path B session 8 — final assembly: Geometry::Serialize body + extra
 // ============================================================
-//
-// Two top-level serializers driven from MenuScene::Serialize @ 0x1400a3630
-// (callsites verified via Ghidra disassembly):
-//
-//   0x1400a36d5: CALL 0x1400b04d0   ; TradeWork_impl_04d0  — Geometry::Serialize body
-//   0x1400a36f0: CALL 0x1400af1a0   ; TradeWork_impl_f1a0  — version-gated extra
-//
-// `TradeWork_impl_04d0` (~700 bytes) walks 15 steps that own the heightmap,
-// vertex/index buffers, image-buffer upload, two parallel int4 arrays, an
-// array-of-arrays, the 0x60B struct array, and four typed-ExternalPtr
-// cascades (MaterialInstance via FUN_140007140 and FUN_140020150).
-// `TradeWork_impl_f1a0` (~196 bytes) is the version-gated extra schema-stream
-// (constructs a separate IO::Serializer with version 4) reading the OLD
-// schema's +0x1F0 + +0x200 arrays before the new-schema +0x210.
-//
-// Both call into the M3.5 session 2-7 helper graph plus IO::Serializer's
-// dispatch slots (0x140152ad8 ctor, 0x140152ad0 dtor, 0x140152ac8 int,
-// 0x140152410 byte, 0x140152a58 bool, 0x140152a60 float, 0x140152a48 GetVer,
-// 0x140152488 ushort-array, 0x1401523f8 / 0x140152400 sized-raw,
-// 0x140152618 SerializeBytes, 0x1401526b8 Vector2::Serialize). The cleaned-C
-// body resolves these slots lazily and per-step soft-fails on cascade misses.
-typedef void (*fn_TradeWork_impl_04d0_t)(void* self, void* stream);
-extern fn_TradeWork_impl_04d0_t fn_TradeWork_impl_04d0;  // 0x1400b04d0  M3.5 Path B session 8
-typedef void (*fn_TradeWork_impl_f1a0_t)(void* self, void* stream);
-extern fn_TradeWork_impl_f1a0_t fn_TradeWork_impl_f1a0;  // 0x1400af1a0  M3.5 Path B session 8
 
 // First-class typedefs for the IO::Serializer dispatch slots that session 8
 // exercises heavily. Session 4 had these as locally-cached lazy-resolve
@@ -5917,15 +5821,20 @@ extern fn_TradeWork_impl_f1a0_t fn_TradeWork_impl_f1a0;  // 0x1400af1a0  M3.5 Pa
 // argument 2 and are ABI-identical), and `SerFloat_A60` was already zero-CALL.
 // THE DISPATCH-SLOT ROWS THEMSELVES STAY BOUND (B34_RULES §6.5(g)): they are PE
 // import slots that retail-shaped exe code reads, not our call sites.
+//
+// ENDGAME B.3.4a closing — THREE MORE ARE GONE, for the opposite reason: they
+// were never aliases, they simply ran out of CALLERS once the caller batches
+// converted. `fn_Ser_Slot_SerUShortArr_488` (0x140152488) and
+// `fn_Ser_Slot_SerByteArr_618` (0x140152618) had zero calls and zero guards, so
+// pointer, typedef, definition, resolver read and _DEBUG print all went
+// together; `fn_Ser_Slot_SerFloat_A60` went in step 0. The three below still
+// have readiness GUARDS in code/Game and retire with them, not before.
+// Same rule as above: the SLOT ROWS STAY BOUND in address_registry.cpp.
 typedef void (*fn_Ser_SerByte_t     )(void* serializer, uint8_t* field, const char* name);
-typedef void (*fn_Ser_SerUShortArr_t)(void* serializer, int32_t count, uint16_t* data, const char* name);
 typedef void (*fn_Ser_SerSizedRaw_t )(void* serializer, int32_t bytes, void* ptr, const char* name);
-typedef void (*fn_Ser_SerByteArr_t  )(void* serializer, int32_t count, void* ptr, const char* name);
 extern fn_Ser_SerByte_t      fn_Ser_Slot_SerByte_410;      // 0x140152410  M3.5 Path B session 8
-extern fn_Ser_SerUShortArr_t fn_Ser_Slot_SerUShortArr_488; // 0x140152488  M3.5 Path B session 8
 extern fn_Ser_SerSizedRaw_t  fn_Ser_Slot_SerSizedRaw_3F8;  // 0x1401523f8  M3.5 Path B session 8
 extern fn_Ser_SerSizedRaw_t  fn_Ser_Slot_SerSizedRaw_400;  // 0x140152400  M3.5 Path B session 8
-extern fn_Ser_SerByteArr_t   fn_Ser_Slot_SerByteArr_618;   // 0x140152618  M3.5 Path B session 8
 
 // ============================================================
 // M3.5 — Geometry vtable draw primitives (slot 0x14015f110)
