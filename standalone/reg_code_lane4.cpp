@@ -19,6 +19,7 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "system/Value.h"     // ENDGAME B.3.4b System callers: System::Time
 #include <cstdint>
 
 // ------------------------------------------------------------------
@@ -101,8 +102,8 @@ static void* Lane4_KeyMap_BuildKeyName(void* /*keyMapContainer*/, void* retval,
 // ------------------------------------------------------------------
 static int Lane4_Game_GetMonthFromTime(void* weatherMgr) {
     if (!fn_Time_AsSeconds) return 0;
-    float seconds = fn_Time_AsSeconds(reinterpret_cast<void*>(
-        reinterpret_cast<uintptr_t>(weatherMgr) + 8));
+    float seconds = reinterpret_cast<const System::Time*>(
+        reinterpret_cast<uintptr_t>(weatherMgr) + 8)->AsSeconds();   // B.3.4b bridge
     int month = static_cast<int>((seconds / 3600.0f) * 12.0f);
     if (month > 11) month = 0;
     return month;

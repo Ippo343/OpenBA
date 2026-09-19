@@ -562,6 +562,18 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
     CrashLogf("Registry: %zu registered, %zu stubs hit\n",
               stats.registered, stats.stubs);
 
+    // B34B_RULES 6.3 (open defect): the allocator "LockEnter on a NULL lock" crash is
+    // Get() returning null, i.e. EnterCriticalSection(0x640). Two windows fit that stack
+    // and only this value separates them: a NULL cell with a sane heap is W2 (Destruct
+    // nulled it while another thread still allocates); a NULL cell with a corrupted free
+    // list is W2' (a wild write landed on the minted .bss cell). Diagnostic only.
+    {
+        void** const cell = reinterpret_cast<void**>(
+            ResolveAddr(Module::Runtime, 0x1801fc718));  // ?_singleton@MemoryAllocator@System@@
+        CrashLogf("MemoryAllocator::_singleton cell=%p value=%p\n",
+                  static_cast<void*>(cell), cell ? *cell : nullptr);
+    }
+
     // Free-list poisoning diagnosis: walk the engine allocator's boundary tags
     // and dump the corrupted block + its physical predecessor's vtable (= the
     // class whose buffer overflowed). Output is mirrored to the WRITE-THROUGH
