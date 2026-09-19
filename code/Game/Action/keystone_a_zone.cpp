@@ -32,6 +32,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Thread.h"     // ENDGAME B.3.4b System callers
 
 // Match the action_pf_*.cpp decompile token aliases.
 typedef unsigned int  uint;
@@ -86,7 +87,7 @@ static void EnsureFns() {
 
 // ---- Shared enqueue tail: identical to action_pf_astar.cpp's EnqueueNode. ----
 static void EnqueueNode(int64_t self, uint32_t* localCmd) {
-    if (s_fn_CSLock) s_fn_CSLock(reinterpret_cast<void*>(self + 0x30));
+    if (s_fn_CSLock) reinterpret_cast<System::CriticalSection*>(self + 0x30)->Lock();   // B.3.4b bridge
     uint32_t* node = s_fn_MemAllocSA ? reinterpret_cast<uint32_t*>(s_fn_MemAllocSA(0x20, 8)) : nullptr;
     if (node != nullptr) {
         node[0] = localCmd[0];
@@ -104,9 +105,9 @@ static void EnqueueNode(int64_t self, uint32_t* localCmd) {
     }
     *reinterpret_cast<int*>(self + 0x70) = *reinterpret_cast<int*>(self + 0x70) + 1;
     *reinterpret_cast<uint32_t**>(self + 0x60) = node;
-    if (s_fn_CSUnlock) s_fn_CSUnlock(reinterpret_cast<void*>(self + 0x30));
+    if (s_fn_CSUnlock) reinterpret_cast<System::CriticalSection*>(self + 0x30)->Unlock();   // B.3.4b bridge
     if ((*reinterpret_cast<uint8_t*>(self + 8) & 1) == 0) {
-        if (s_fn_ThreadStart) s_fn_ThreadStart(reinterpret_cast<void*>(self));
+        if (s_fn_ThreadStart) reinterpret_cast<System::Thread*>(self)->Start();   // B.3.4b bridge
     }
 }
 
@@ -165,12 +166,12 @@ int RoadTool_helper_6e30(int64_t param_1, uint param_2, uint64_t param_3,
         }
         // Application::Application::YieldToThreads(*g_pAppSingleton)
         if (s_fn_Yield && g_pAppSingleton) s_fn_Yield(*g_pAppSingleton);
-        if (s_fn_CSLock) s_fn_CSLock(reinterpret_cast<void*>(param_1 + 0x30));
+        if (s_fn_CSLock) reinterpret_cast<System::CriticalSection*>(param_1 + 0x30)->Lock();   // B.3.4b bridge
         if (*reinterpret_cast<int*>(param_1 + 0x70) > 0 &&
             (*reinterpret_cast<uint8_t*>(param_1 + 8) & 1) == 0) {
-            if (s_fn_ThreadStart) s_fn_ThreadStart(reinterpret_cast<void*>(param_1));
+            if (s_fn_ThreadStart) reinterpret_cast<System::Thread*>(param_1)->Start();   // B.3.4b bridge
         }
-        if (s_fn_CSUnlock) s_fn_CSUnlock(reinterpret_cast<void*>(param_1 + 0x30));
+        if (s_fn_CSUnlock) reinterpret_cast<System::CriticalSection*>(param_1 + 0x30)->Unlock();   // B.3.4b bridge
     } while (true);
 }
 

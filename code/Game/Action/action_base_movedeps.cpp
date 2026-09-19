@@ -25,6 +25,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
+#include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include <cstdint>
 
 // ============================================================
@@ -60,9 +61,9 @@ bool ActMvDep_TimeCheck_a9290(void* timeV, float* pair, void* rng) {
     float k1 = s_pK1 ? *s_pK1 : 1.0f;
     float k2 = s_pK2 ? *s_pK2 : 1.0f;
     float denom = pair[0] * k1 * k2;
-    float secs = fn_Time_AsSeconds ? fn_Time_AsSeconds(timeV) : 0.0f;
+    float secs = fn_Time_AsSeconds ? reinterpret_cast<const System::Time*>(timeV)->AsSeconds() : 0.0f;   // B.3.4b bridge
     *reinterpret_cast<uint64_t*>(timeV) = 0;
-    float roll = fn_Random_RandFloat ? fn_Random_RandFloat(rng) : 0.0f;
+    float roll = fn_Random_RandFloat ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 0.0f;   // B.3.4b bridge
     return roll < secs / (denom * weight);
 }
 

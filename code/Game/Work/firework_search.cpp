@@ -56,6 +56,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"      // ENDGAME B.3.4b System callers
 
 // ---------------------------------------------------------------------------
 // Lazily-resolved sub-helpers (resolve once; in standalone -> our registered ports). Mirrors action_pf_road.cpp's style.
@@ -367,7 +368,7 @@ int64_t FireWork_SpiralSearch_81d0(int64_t param_1, uint32_t param_2, int param_
     uint32_t count = s_childSum ? static_cast<uint32_t>(s_childSum(static_cast<int64_t>(chosenIBP), 0)) : 0;
     void* rng = *reinterpret_cast<void**>(
         reinterpret_cast<int64_t>(*g_pGameWorldSingleton) + 0xd8);
-    uint32_t randIdx = s_rand ? s_rand(rng, count) : 0;
+    uint32_t randIdx = s_rand ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(count)) : 0;   // B.3.4b bridge
 
     float resolved[3] = {0.0f, 0.0f, 0.0f};
     if (s_resolvePos)

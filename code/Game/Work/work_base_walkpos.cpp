@@ -25,6 +25,7 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
+#include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include <cstdint>
 #include <cmath>
 
@@ -196,8 +197,8 @@ uint64_t WorkImpl_BuildStructureStep_6ef0(uintptr_t param_1, void* param_2IBP,
                 *reinterpret_cast<int64_t*>(param_1 + 0x30) = cap;
             }
 
-            float accSec = fn_Time_AsSeconds ? fn_Time_AsSeconds(reinterpret_cast<void*>(param_1 + 0x30)) : 0.0f;
-            float nowSec = fn_Time_AsSeconds ? fn_Time_AsSeconds(param_5Time) : 1.0f;
+            float accSec = fn_Time_AsSeconds ? reinterpret_cast<const System::Time*>(param_1 + 0x30)->AsSeconds() : 0.0f;   // B.3.4b bridge
+            float nowSec = fn_Time_AsSeconds ? reinterpret_cast<const System::Time*>(param_5Time)->AsSeconds() : 1.0f;   // B.3.4b bridge
             uint32_t progress = static_cast<uint32_t>(((accSec / nowSec) / static_cast<float>(field104 * 300))
                                 * static_cast<float>(field100 - field0fc)) + static_cast<uint32_t>(field0fc);
 

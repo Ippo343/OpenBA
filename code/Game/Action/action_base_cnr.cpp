@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"      // ENDGAME B.3.4b System callers
 
 // ============================================================
 // Lazily-resolved exe sub-helpers and type-ID globals (shared by this batch).
@@ -282,7 +283,7 @@ void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress) {
     float rf = 0.0f;
     if (fn_Random_RandFloat) {
         void* rng = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8);
-        rf = fn_Random_RandFloat(rng);
+        rf = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
     }
     float timeScale = s_p_DAT_140172234 ? *s_p_DAT_140172234 : 1.0f;
     uint8_t timeObj[8] = {0};
@@ -423,13 +424,13 @@ uint64_t ActCNR_SetupModelAtCell_126540(int64_t self, int cellIndex) {
     float outPos[3] = { 0.0f, 0.0f, 0.0f };
     if (s_fn_f3e0) s_fn_f3e0(mapGrid, outPos, inCell, '\0', nullptr);
 
-    float r1 = s_fn_RandFloatTol ? s_fn_RandFloatTol(rng) : 0.0f;
-    float r2 = s_fn_RandFloatTol ? s_fn_RandFloatTol(rng) : 0.0f;
+    float r1 = s_fn_RandFloatTol ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
+    float r2 = s_fn_RandFloatTol ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
     float worldX = r1 * jitter + outPos[1];
     float worldY = r2 * jitter + outPos[0];
     float worldZ = outPos[2] + 0.0f;
     float yawScale = s_p_DAT_140172220 ? *s_p_DAT_140172220 : 1.0f;
-    float yaw = (s_fn_RandFloatTol ? s_fn_RandFloatTol(rng) : 0.0f) * yawScale;
+    float yaw = (s_fn_RandFloatTol ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f) * yawScale;   // B.3.4b bridge
 
     int64_t posIBP = 0;
     int64_t modelIBP = 0;
@@ -555,7 +556,7 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
     int64_t rawMatIBP = 0;
     if (s_fn_0223c0) s_fn_0223c0(newIBP, &rawMatIBP);
     void* rng = *reinterpret_cast<void**>(gameWorld + 0xd8);
-    int rt = s_fn_RandTol ? s_fn_RandTol(rng, 2) : 0;
+    int rt = s_fn_RandTol ? reinterpret_cast<System::Random*>(rng)->RandTol(2) : 0;   // B.3.4b bridge
     // DAT_140172204 = 90.0f (rotation scale). It resolves NULL in standalone (raw .rdata
     // constant) — use the real value, not 0 (see reference_standalone_rdata_null_fallback).
     float amtScale = s_p_DAT_140172204 ? *s_p_DAT_140172204 : 90.0f;

@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
+#include "system/Value.h"      // ENDGAME B.3.4b System callers
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -293,8 +294,8 @@ void PerformWork_Serialize_Impl(PerformWork* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(s + 0x2C), nullptr);   // B.3.4 bridge
 
     // Serialize required time (+0x30) and elapsed time (+0x38) as Time
-    s_fn_Time_Serialize(s + 0x30, ser2);
-    s_fn_Time_Serialize(s + 0x38, ser2);
+    reinterpret_cast<System::Time*>(s + 0x30)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(s + 0x38)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4b bridge
 
     // Serialize use tool flag (+0x40) as bool
     reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<bool*>(s + 0x40), nullptr);   // B.3.4 bridge

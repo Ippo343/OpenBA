@@ -32,6 +32,7 @@
 #include <cstdio>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"      // ENDGAME B.3.4b System callers
 
 // ============================================================
 // Local function pointers (resolved once by MarketWork_ResolveFuncs)
@@ -1385,7 +1386,7 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
             }
             void* rng = *reinterpret_cast<void**>(
                 reinterpret_cast<uintptr_t>(*s_pGameWorldSingleton) + 0xd8);
-            const uint32_t roll = s_fn_Rand(rng, weight);
+            const uint32_t roll = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(weight));   // B.3.4b bridge
             float marketPos[3] = {0.0f, 0.0f, 0.0f};
             s_fn_EntityResolvePos(reinterpret_cast<void*>(interactIBP[0]), marketPos, 0,
                                   static_cast<int>(roll), nullptr);
@@ -1675,7 +1676,7 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
         }
         void* rng2 = *reinterpret_cast<void**>(
             reinterpret_cast<uintptr_t>(*s_pGameWorldSingleton) + 0xd8);
-        const uint32_t roll2 = s_fn_Rand(rng2, weight);
+        const uint32_t roll2 = reinterpret_cast<System::Random*>(rng2)->Rand(static_cast<uint32_t>(weight));   // B.3.4b bridge
         float marketPos2[3] = {0.0f, 0.0f, 0.0f};
         s_fn_EntityResolvePos(reinterpret_cast<void*>(mktInteract[0]), marketPos2, 0,
                               static_cast<int>(roll2), nullptr);

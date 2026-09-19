@@ -40,6 +40,7 @@
 #include <cstdlib>
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"      // ENDGAME B.3.4b System callers
 
 namespace {
 
@@ -149,7 +150,7 @@ extern "C" void BuildStructure_SetupBuildActions(void* citizenIBPptr, uint32_t p
     {
         uintptr_t gw = g_pGameWorldSingleton ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
         void* rng = gw ? *reinterpret_cast<void**>(gw + 0xd8) : nullptr;
-        if (rng && fn_Random_Rand) uVar2 = fn_Random_Rand(rng, 2);
+        if (rng && fn_Random_Rand) uVar2 = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(2));   // B.3.4b bridge
     }
 
     // --- CompleteTask (0x38) -> PUSH ---

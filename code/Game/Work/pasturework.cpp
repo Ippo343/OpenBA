@@ -23,6 +23,7 @@
 #include "math/Math.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
+#include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -624,8 +625,8 @@ int PastureWork_Slot4_Impl(PastureWork* self, void* entityIBP, uint64_t param3, 
         short sVar2 = *(short*)(areaIBP + 0x2a);
         short sVar3 = *(short*)(areaIBP + 0x2c);
 
-        uint32_t uVar11 = (uint32_t)s_fn_Random_RandTol(rng, (int)*(short*)(areaIBP + 0x2e));
-        uint32_t uVar13 = (uint32_t)s_fn_Random_RandTol(rng, (int)sVar3);
+        uint32_t uVar11 = (uint32_t)reinterpret_cast<System::Random*>(rng)->RandTol((int)*(short*)(areaIBP + 0x2e));   // B.3.4b bridge
+        uint32_t uVar13 = (uint32_t)reinterpret_cast<System::Random*>(rng)->RandTol((int)sVar3);   // B.3.4b bridge
         int randCell = ((int)sVar2 + uVar11) * *piVar4 + uVar13 + (int)sVar1;
 
         // Update local_res20 with randCell (low 32 bits)

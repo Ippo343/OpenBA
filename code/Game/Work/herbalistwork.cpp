@@ -18,6 +18,7 @@
 #include "math/Math.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
+#include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include <cstdint>
 #include <cstdio>
 #include <cmath>
@@ -527,8 +528,8 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
             // Generate random position within radius (rejection sampling)
             do {
                 do {
-                    randX = s_fn_Random_RandTol(rng, workplaceRadius);
-                    randY = s_fn_Random_RandTol(rng, workplaceRadius);
+                    randX = reinterpret_cast<System::Random*>(rng)->RandTol(workplaceRadius);   // B.3.4b bridge
+                    randY = reinterpret_cast<System::Random*>(rng)->RandTol(workplaceRadius);   // B.3.4b bridge
                     testCellX = cellCol + randX;
                     testCellY = cellRow + randY;
                 } while (randY * randY + randX * randX > radiusSq);

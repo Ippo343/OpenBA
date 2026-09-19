@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"      // ENDGAME B.3.4b System callers
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -332,7 +333,7 @@ int CreateNaturalResource_AbstractImpl_Impl(CreateNaturalResource* self, void* a
     void* nrCompIBP1 = nullptr;
     s_fn_FindComponent_NR(entityIBP, &nrCompIBP1);
     uint32_t variantCount = s_fn_NR_GetVariantCount(*(int64_t*)&nrCompIBP1);
-    uint32_t variant = s_fn_Random_Rand(randomPtr, variantCount);
+    uint32_t variant = reinterpret_cast<System::Random*>(randomPtr)->Rand(static_cast<uint32_t>(variantCount));   // B.3.4b bridge
 
     void* nrCompIBP2 = nullptr;
     s_fn_FindComponent_NR(entityIBP, &nrCompIBP2);
@@ -343,7 +344,7 @@ int CreateNaturalResource_AbstractImpl_Impl(CreateNaturalResource* self, void* a
     int64_t* nrCompPtr = *(int64_t**)&nrCompIBP3;
 
     uint32_t subVariantCount = s_fn_NR_GetSubVariantCount(nrComp, (int)variant);
-    uint32_t subVariant = s_fn_Random_Rand(randomPtr, subVariantCount);
+    uint32_t subVariant = reinterpret_cast<System::Random*>(randomPtr)->Rand(static_cast<uint32_t>(subVariantCount));   // B.3.4b bridge
     s_fn_NR_SetVariant(nrCompPtr, (uint16_t)variant, (int16_t)subVariant);
 
     // Register entity with the entity list

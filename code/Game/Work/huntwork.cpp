@@ -18,6 +18,7 @@
 #include "math/Math.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
+#include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -398,8 +399,8 @@ int HuntWork_Slot4_Impl(HuntWork* self, void* entityIBP, uint64_t /*param3*/, ui
 
     do {
         do {
-            randX = s_fn_Random_RandTol(rng, areaRadius);
-            randY = s_fn_Random_RandTol(rng, areaRadius);
+            randX = reinterpret_cast<System::Random*>(rng)->RandTol(areaRadius);   // B.3.4b bridge
+            randY = reinterpret_cast<System::Random*>(rng)->RandTol(areaRadius);   // B.3.4b bridge
             testCellX = cellCol + randX;
             testCellY = cellRow + randY;
         } while (radiusSq < randY * randY + randX * randX);

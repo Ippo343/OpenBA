@@ -20,6 +20,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"      // ENDGAME B.3.4b System callers
 
 namespace {
 static uintptr_t s_vt_Action       = 0;  // 0x14015faa0
@@ -491,7 +492,7 @@ uint64_t WeightedRandomIndex_119470(int64_t param_1) {
             void* random = g_pGameWorldSingleton
                 ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8)
                 : nullptr;
-            float r = (s_fn_randFloat && random) ? s_fn_randFloat(random) : 0.0f;
+            float r = (s_fn_randFloat && random) ? reinterpret_cast<System::Random*>(random)->RandFloat() : 0.0f;   // B.3.4b bridge
             result = 0;
             if (0 < n) {
                 float* w = *reinterpret_cast<float**>(param_1 + 0x58);

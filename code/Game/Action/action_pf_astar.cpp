@@ -55,6 +55,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Component/coll_bridge.h"
+#include "system/Thread.h"     // ENDGAME B.3.4b System callers
 #include <cstdint>
 #include <cstdio>    // [FLOODDIAG] diagnostic reporting
 #include <cstdlib>
@@ -792,7 +793,7 @@ void Pf_WorkerApplyCmd_a6430(int64_t param_1, uint32_t* param_2, void* param_3, 
         // the lock held for the whole commit makes the worker's write and a6240's grow
         // mutually exclusive. Extra hold time is negligible (the expensive A* already ran
         // outside the lock) and widening a lock can only remove races, never add them.
-        if (s_fn_CSLock) s_fn_CSLock(reinterpret_cast<void*>(param_1 + 0x30));
+        if (s_fn_CSLock) reinterpret_cast<System::CriticalSection*>(param_1 + 0x30)->Lock();   // B.3.4b bridge
         // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize. I32NoInit —
         // the grown tail stays as the allocation found it, as retail's helper leaves it
         // (1400a6582). Safe: the cell loop immediately below writes all iVar2 elements
@@ -812,7 +813,7 @@ void Pf_WorkerApplyCmd_a6430(int64_t param_1, uint32_t* param_2, void* param_3, 
         }
         *reinterpret_cast<uint8_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x160) +
                 static_cast<uint64_t>(static_cast<uint>(param_2[3])) * 0x18) = 1;
-        if (s_fn_CSUnlock) s_fn_CSUnlock(reinterpret_cast<void*>(param_1 + 0x30));
+        if (s_fn_CSUnlock) reinterpret_cast<System::CriticalSection*>(param_1 + 0x30)->Unlock();   // B.3.4b bridge
         return;
     }
     (void)param_3;
@@ -823,7 +824,7 @@ void Pf_WorkerApplyCmd_a6430(int64_t param_1, uint32_t* param_2, void* param_3, 
 // Mirrors the identical tail in a6fe0/a68b0/a6a30/a6b20/a6c10 EXACTLY.
 namespace {
 static void EnqueueNode(int64_t self, uint32_t* localCmd) {
-    if (s_fn_CSLock) s_fn_CSLock(reinterpret_cast<void*>(self + 0x30));
+    if (s_fn_CSLock) reinterpret_cast<System::CriticalSection*>(self + 0x30)->Lock();   // B.3.4b bridge
     uint32_t* node = s_fn_MemAllocSA ? reinterpret_cast<uint32_t*>(s_fn_MemAllocSA(0x20, 8)) : nullptr;
     if (node != nullptr) {
         node[0] = localCmd[0];
@@ -841,9 +842,9 @@ static void EnqueueNode(int64_t self, uint32_t* localCmd) {
     }
     *reinterpret_cast<int*>(self + 0x70) = *reinterpret_cast<int*>(self + 0x70) + 1;
     *reinterpret_cast<uint32_t**>(self + 0x60) = node;
-    if (s_fn_CSUnlock) s_fn_CSUnlock(reinterpret_cast<void*>(self + 0x30));
+    if (s_fn_CSUnlock) reinterpret_cast<System::CriticalSection*>(self + 0x30)->Unlock();   // B.3.4b bridge
     if ((*reinterpret_cast<uint8_t*>(self + 8) & 1) == 0) {
-        if (s_fn_ThreadStart) s_fn_ThreadStart(reinterpret_cast<void*>(self));
+        if (s_fn_ThreadStart) reinterpret_cast<System::Thread*>(self)->Start();   // B.3.4b bridge
     }
 }
 } // namespace
@@ -982,7 +983,7 @@ int* Pf_AllocTradeSlot_a6240(int64_t param_1, int* param_2) {
             piVar4 = piVar4 + 6;  // stride 0x18 (6 ints)
         } while (iVar5 < iVar2);
     }
-    if (s_fn_CSLock) s_fn_CSLock(reinterpret_cast<void*>(param_1 + 0x30));
+    if (s_fn_CSLock) reinterpret_cast<System::CriticalSection*>(param_1 + 0x30)->Lock();   // B.3.4b bridge
     for (int i = 0; i < 0x18; ++i) local_30[i] = 0;   // {flag,token,vec.ptr,vec.count,vec.cap} = 0
     if (s_fn_TradeResize)
         s_fn_TradeResize(reinterpret_cast<int64_t*>(param_1 + 0x160),
@@ -992,7 +993,7 @@ int* Pf_AllocTradeSlot_a6240(int64_t param_1, int* param_2) {
     fn_MemFreeStatic(*reinterpret_cast<void**>(local_30 + 8));
     *reinterpret_cast<void**>(local_30 + 8) = nullptr;
     *reinterpret_cast<uint64_t*>(local_30 + 0x10) = 0;
-    if (s_fn_CSUnlock) s_fn_CSUnlock(reinterpret_cast<void*>(param_1 + 0x30));
+    if (s_fn_CSUnlock) reinterpret_cast<System::CriticalSection*>(param_1 + 0x30)->Unlock();   // B.3.4b bridge
     iVar5 = iVar2;
 LAB_1400a62f5:
     plVar6 = reinterpret_cast<int64_t*>(param_1 + 0x160);

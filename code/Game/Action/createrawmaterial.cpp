@@ -30,6 +30,7 @@
 #include <cstdint>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"      // ENDGAME B.3.4b System callers
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -460,7 +461,7 @@ int CreateRawMaterial_AbstractImpl_Impl(CreateRawMaterial* self, void* actionSta
 
             // Position entity at cell with random rotation
             void* randomPtr = *(void**)(gameWorld + 0xd8);
-            int randVal = s_fn_Random_RandTol(randomPtr, 2);
+            int randVal = reinterpret_cast<System::Random*>(randomPtr)->RandTol(2);   // B.3.4b bridge
             s_fn_PositionEntity(compIBP, cellIndex, (float)randVal * ROTATION_SCALE);
 
             // Handle secondary entity (+0x30) if present
