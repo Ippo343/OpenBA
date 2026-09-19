@@ -197,7 +197,6 @@ static void MusicList_Init(void* mem) {
 extern "C" void MusicList_Serialize(void* self, void* stream) {
     if (!self) return;
     MusicList_ResolveFuncs();
-    if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int) return;
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
 
     alignas(8) uint8_t ser[24];
@@ -225,10 +224,8 @@ extern "C" void MusicList_Serialize(void* self, void* stream) {
         for (int i = 0; i < count; ++i) {
             // ORDER IS LOAD-BEARING: float@+0x08, float@+0x0c, int@+0x10,
             // int@+0x14, then String@+0x00.
-            if (fn_Serializer_Serialize_Float)
-                reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(elem + 0x08), nullptr);   // B.3.4 bridge
-            if (fn_Serializer_Serialize_Float)
-                reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(elem + 0x0c), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(elem + 0x08), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(elem + 0x0c), nullptr);   // B.3.4 bridge
             reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(elem + 0x10), nullptr);   // B.3.4 bridge
             reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(elem + 0x14), nullptr);   // B.3.4 bridge
             // +0x00 is an Object::External REFERENCE (the track's audio resource),

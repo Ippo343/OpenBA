@@ -105,8 +105,6 @@ void Weather_Init(Weather* self) {
 // Original: 0x1400d3c90
 
 // Local function pointers resolved on first call (not in engine_funcs.h)
-// IO::Serializer::Serialize(float&, const char*) via IAT at 0x140152a60
-static void (*s_fn_Serialize_Float)(void* serializer, void* field, const char* name) = nullptr;
 // System::Color::Serialize(this, serializer) via IAT at 0x140151ee0
 static void (*s_fn_Color_Serialize)(void* color, void* serializer) = nullptr;
 
@@ -117,10 +115,6 @@ static void Weather_Serialize_InitFuncs() {
     s_weather_serialize_inited = true;
 
     uintptr_t iat;
-
-    // Serialize_Float via IAT at [0x140152a60]
-    iat = ResolveAddr(Module::Exe, 0x140152a60);
-    if (iat) s_fn_Serialize_Float = *reinterpret_cast<void(**)(void*, void*, const char*)>(iat);
 
     // Color::Serialize via IAT at [0x140151ee0]
     iat = ResolveAddr(Module::Exe, 0x140151ee0);

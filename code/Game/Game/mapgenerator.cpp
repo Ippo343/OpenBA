@@ -359,7 +359,7 @@ void MG_Resize(void* header, int newCount, int stride) {
 // resizing only on the load leg. Returns the count to iterate.
 int MG_SerializeCount(void* serializer, void* header, void* countField, int stride) {
     int n = *(int32_t*)countField;
-    if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(n, nullptr);   // B.3.4 bridge (cast dropped: n is int)
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(n, nullptr);   // B.3.4 bridge (cast dropped: n is int)
     if (MG_IsLoading(serializer)) MG_Resize(header, n, stride);
     return n;
 }
@@ -380,9 +380,8 @@ void MapGenerator_Serialize(MapGenerator* self, void* stream) {
     EnsureFuncsResolved();
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     alignas(8) uint8_t serializer[24];
-    if (!g_fn_Serializer_Ctor || !g_fn_Serialize_Int ||
-        !g_fn_Serialize_Bool || !fn_Serializer_Serialize_Float || !fn_ExternalPtr_Serialize2) {
-        return;  // missing a Runtime serialize primitive — can't proceed
+    if (!fn_ExternalPtr_Serialize2) {
+        return;  // missing the ExternalPtr exe door — can't proceed
     }
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
@@ -455,7 +454,7 @@ void MapGenerator_Serialize(MapGenerator* self, void* stream) {
     reinterpret_cast<System::String*>(s + 0x158)->Serialize(serializer);       // descRef3 (vegetation)
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x170), nullptr);   // B.3.4 bridge
 
-    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     return;
 }
 

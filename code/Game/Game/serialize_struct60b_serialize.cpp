@@ -351,8 +351,7 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
     if (!serializer || count <= 0 || !arrayBase) return;
 
     // Required Runtime primitives. If any are missing, log once and bail.
-    if (!fn_Serializer_GetEncoding ||
-        !fn_IsDerivedFrom || !fn_Serializer_Serialize_Uint || !g_fn_Serialize_Bool ||
+    if (!fn_IsDerivedFrom ||
         !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
         static bool s_warned = false;
         if (!s_warned) {

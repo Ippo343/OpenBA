@@ -394,7 +394,7 @@ extern "C" void Goals_SavePrepass_8270(void* selfV) {
 extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serializer) {
     EnsureDeps();
     int32_t count = static_cast<int32_t>(treeField[1]);
-    if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
 
     bool loading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
     if (loading) {
@@ -406,9 +406,9 @@ extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serial
             // overwrites the single root node instead of building the tree.
             int32_t* root = reinterpret_cast<int32_t*>(treeField[0]);
             int32_t key = 0;
-            if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(key, nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(key, nullptr);   // B.3.4 bridge
             void* payload = nullptr;
-            if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(&payload)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
+            reinterpret_cast<Object::InternalBasePtr*>(&payload)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, g_tid_Work)) {
                 payload = nullptr;
             }
@@ -466,8 +466,8 @@ extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serial
     } else {
         uint8_t* root = *reinterpret_cast<uint8_t**>(treeField);
         for (uint8_t* node = BstLeftmostB(root); node; node = BstNextB(node)) {
-            if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int32_t*>(node), nullptr);   // B.3.4 bridge
-            if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(node + 0x08)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int32_t*>(node), nullptr);   // B.3.4 bridge
+            reinterpret_cast<Object::InternalBasePtr*>(node + 0x08)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             void* payload = *reinterpret_cast<void**>(node + 0x08);
             if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, g_tid_Work)) {
                 *reinterpret_cast<void**>(node + 0x08) = nullptr;
@@ -490,14 +490,14 @@ extern "C" void Goals_TreeArray_Serialize_d060(void* serializer, int32_t count, 
     int64_t* slot = arrayBase;
     for (int32_t s = 0; s < count; ++s, slot += 2) {
         int32_t slotCount = static_cast<int32_t>(slot[1]);
-        if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(slotCount, nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(slotCount, nullptr);   // B.3.4 bridge
 
         if (loading) {
             for (int32_t i = 0; i < slotCount; ++i) {
                 int32_t key = 0;
-                if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(key, nullptr);   // B.3.4 bridge
+                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(key, nullptr);   // B.3.4 bridge
                 void* payload = nullptr;
-                if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(&payload)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
+                reinterpret_cast<Object::InternalBasePtr*>(&payload)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
                 if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, g_tid_Work)) {
                     payload = nullptr;
                 }
@@ -555,8 +555,8 @@ extern "C" void Goals_TreeArray_Serialize_d060(void* serializer, int32_t count, 
         } else {
             uint8_t* root = reinterpret_cast<uint8_t*>(slot[0]);
             for (uint8_t* node = BstLeftmostB(root); node; node = BstNextB(node)) {
-                if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int32_t*>(node), nullptr);   // B.3.4 bridge
-                if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(node + 0x08)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
+                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int32_t*>(node), nullptr);   // B.3.4 bridge
+                reinterpret_cast<Object::InternalBasePtr*>(node + 0x08)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
                 void* payload = *reinterpret_cast<void**>(node + 0x08);
                 if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, g_tid_Work)) {
                     *reinterpret_cast<void**>(node + 0x08) = nullptr;
@@ -572,7 +572,7 @@ extern "C" void Goals_TreeArray_Serialize_d060(void* serializer, int32_t count, 
 extern "C" void Goals_WorkTree_Serialize_d5f0(int64_t* treeField, void* serializer) {
     EnsureDeps();
     int32_t count = static_cast<int32_t>(treeField[1]);
-    if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
 
     bool loading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
     if (loading) {
@@ -642,26 +642,22 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
     uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
 
     alignas(8) uint8_t serializerBuf[24];
-    if (g_fn_Serializer_Ctor) ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge
+    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge
 
     bool saving = (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 1);   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
     if (saving) {
         Goals_SavePrepass_8270(selfV);
     }
 
-    int32_t version = g_fn_Serializer_GetVersion ? reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion() : 0;   // B.3.4 bridge
+    int32_t version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
     int32_t slotCount = (version > 2) ? 0xf : 0xe;
 
     Goals_TreeArray_Serialize_d060(serializerBuf, slotCount, reinterpret_cast<int64_t*>(self + 0x30), outParam);
     Goals_WorkTree_Serialize_d5f0(reinterpret_cast<int64_t*>(self + 0x120), serializerBuf);
 
-    if (g_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int32_t*>(self + 0x00), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int32_t*>(self + 0x04), nullptr);   // B.3.4 bridge
-    }
-    if (fn_Serializer_Serialize_Uint) {
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<uint32_t*>(self + 0x08), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int32_t*>(self + 0x00), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int32_t*>(self + 0x04), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<uint32_t*>(self + 0x08), nullptr);   // B.3.4 bridge
 
     bool loading = (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
     if (loading) {
@@ -677,11 +673,11 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
                 void* entity = *reinterpret_cast<void**>(ibpField);
                 void* vtbl = *reinterpret_cast<void**>(entity);
 
-                if (g_fn_Serializer_GetVersion) reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion(); // discarded, matches retail   // B.3.4 bridge
+                reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion(); // discarded, matches retail   // B.3.4 bridge
                 typedef void (*fn_Vtbl60_t)(void*);
                 reinterpret_cast<fn_Vtbl60_t>(*reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(vtbl) + 0x60))(entity);
 
-                int32_t ver = g_fn_Serializer_GetVersion ? reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion() : 0;   // B.3.4 bridge
+                int32_t ver = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
                 if (ver == 2) {
                     int32_t counter = *reinterpret_cast<int32_t*>(self + 0x18);
                     uint32_t hi = *reinterpret_cast<uint32_t*>(*reinterpret_cast<uint8_t**>(ibpField) + 0x20);
@@ -859,7 +855,7 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
         (void)localFoundCount;
     }
 
-    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

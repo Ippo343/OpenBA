@@ -34,9 +34,6 @@ static const uintptr_t kDiseaseVtable = 0x14015e190;
 // ============================================================
 // Local serializer function pointers (resolved lazily; standalone fallbacks)
 // ============================================================
-static void  (*s_fn_Serializer_Ctor)(void* self, void* stream, int version) = nullptr;
-static void  (*s_fn_Serializer_Dtor)(void* self) = nullptr;
-static void  (*s_fn_Serialize_Float)(void* ser, void* field, const char* name) = nullptr;
 static void  (*s_fn_ExternalPtr_Serialize2)(void* field, void* serializer) = nullptr;
 static bool  s_funcsInited = false;
 
@@ -44,24 +41,12 @@ static void Disease_InitFuncs() {
     if (s_funcsInited) return;
     s_funcsInited = true;
 
-    uintptr_t iat;
-    // Serializer ctor/dtor + float serialize via the exe IAT dispatch slots
-    iat = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (iat) s_fn_Serializer_Ctor = *reinterpret_cast<void(**)(void*, void*, int)>(iat);
-    iat = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (iat) s_fn_Serializer_Dtor = *reinterpret_cast<void(**)(void*)>(iat);
-    iat = ResolveAddr(Module::Exe, 0x140152a60);
-    if (iat) s_fn_Serialize_Float = *reinterpret_cast<void(**)(void*, void*, const char*)>(iat);
-
     s_fn_ExternalPtr_Serialize2 = reinterpret_cast<void(*)(void*, void*)>(
         ResolveAddr(Module::Exe, 0x14000bf40));
 
-    // Standalone fallbacks: the exe IAT slots resolve to NULL when the original
-    // exe isn't mapped. Fall back to the Runtime-resolved engine_funcs globals so
-    // the SAME Serialize works in the standalone exe.
-    if (!s_fn_Serializer_Ctor) s_fn_Serializer_Ctor = reinterpret_cast<void(*)(void*, void*, int)>((uintptr_t)g_fn_Serializer_Ctor);
-    if (!s_fn_Serializer_Dtor) s_fn_Serializer_Dtor = reinterpret_cast<void(*)(void*)>((uintptr_t)g_fn_Serializer_Dtor);
-    if (!s_fn_Serialize_Float) s_fn_Serialize_Float = reinterpret_cast<void(*)(void*, void*, const char*)>((uintptr_t)fn_Serializer_Serialize_Float);
+    // Standalone fallback: the exe door resolves to NULL when the original exe
+    // isn't mapped. Fall back to the Runtime-resolved engine_funcs global so the
+    // SAME Serialize works in the standalone exe.
     if (!s_fn_ExternalPtr_Serialize2) s_fn_ExternalPtr_Serialize2 = reinterpret_cast<void(*)(void*, void*)>((uintptr_t)fn_ExternalPtr_BuildSerialize);
 }
 
@@ -86,7 +71,6 @@ static void Disease_Init(void* self) {
 // ============================================================
 void Disease_Serialize(void* self, void* stream) {
     Disease_InitFuncs();
-    if (!s_fn_Serializer_Ctor || !s_fn_Serializer_Dtor) return;
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
 
     alignas(8) uint8_t serializer[24];
@@ -94,14 +78,12 @@ void Disease_Serialize(void* self, void* stream) {
     if (s_fn_ExternalPtr_Serialize2) s_fn_ExternalPtr_Serialize2((void*)(s + 0x20), serializer);
     // B.3.1 bridge: Disease is still an untyped byte struct.
     reinterpret_cast<System::String*>(s + 0x28)->Serialize(serializer);
-    if (s_fn_Serialize_Float) {
-        // Untyped byte struct: field pointers are uint8_t*, not float — cast kept.
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x30), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x34), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x38), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x3c), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x40), nullptr);   // B.3.4 bridge
-    }
+    // Untyped byte struct: field pointers are uint8_t*, not float — cast kept.
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x30), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x34), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x38), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x3c), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x40), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 

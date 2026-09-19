@@ -39,8 +39,7 @@ void ExternalPtrSerializeGeneric(void** refField, void* serializer,
                                  const char* typeName) {
     if (!refField || !serializer) return;
 
-    if (!fn_Serializer_GetEncoding ||
-        !fn_IsDerivedFrom || !fn_Serializer_Serialize_Uint || !g_fn_Serialize_Bool ||
+    if (!fn_IsDerivedFrom ||
         !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
         static bool s_warned = false;
         if (!s_warned) {

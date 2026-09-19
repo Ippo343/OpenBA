@@ -71,9 +71,7 @@ void Toolbar_Serialize(Toolbar* self, void* stream) {
 
     // Create serializer on stack (24 bytes), version 0
     alignas(8) uint8_t serializer[24];
-    if (g_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // ExternalPtr fields
     if (fn_ExternalPtr_Serialize2) {
@@ -106,21 +104,15 @@ void Toolbar_Serialize(Toolbar* self, void* stream) {
         *reinterpret_cast<unsigned int*>((void*)((uintptr_t)self + 0x40)), nullptr);   // B.3.4 bridge  (0x98 = uint door)
 
     // Bool fields
-    if (g_fn_Serialize_Bool) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field45, nullptr);   // B.3.4 bridge (cast dropped: _field45 is bool)
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field44, nullptr);   // B.3.4 bridge (cast dropped: _field44 is bool)
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field45, nullptr);   // B.3.4 bridge (cast dropped: _field45 is bool)
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field44, nullptr);   // B.3.4 bridge (cast dropped: _field44 is bool)
 
     // Int fields
-    if (g_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->selectedIndex, nullptr);   // B.3.4 bridge (cast dropped: selectedIndex is int32_t)
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field50, nullptr);   // B.3.4 bridge (cast dropped: _field50 is int32_t)
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->selectedIndex, nullptr);   // B.3.4 bridge (cast dropped: selectedIndex is int32_t)
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field50, nullptr);   // B.3.4 bridge (cast dropped: _field50 is int32_t)
 
     // Destroy serializer
-    if (g_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

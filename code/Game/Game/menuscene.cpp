@@ -341,12 +341,12 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
     //   ?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z(&self+0x20, outer)
     uint64_t outer_ser[3] = {0, 0, 0};
     bool outer_ctored = false;
-    if (stream && g_fn_Serializer_Ctor) {
+    if (stream) {
         ::new (static_cast<void*>(outer_ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 2);   // B.3.4 bridge
         outer_ctored = true;
         reinterpret_cast<System::String*>(&self->_field20)->Serialize(outer_ser);
     } else {
-        printf("[MenuScene::Slot5_Serialize] Serializer ctor unavailable — "
+        printf("[MenuScene::Slot5_Serialize] no stream — "
                "skipping outer prelude (terrain will be missing)\n");
         fflush(stdout);
     }
@@ -418,52 +418,43 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
         // Transform::SerializeWrapper (exe 0x1400988c0) resolves to a
         // NOT_IMPLEMENTED stub via the address registry — DON'T call it, use
         // the inline path.
-        if (g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
-                   fn_Serializer_Serialize_Float) {
-            // Inline the FUN_1400988c0 body: inner Serializer (v=0) wraps
-            // stream; serialize Math::Transform (28B) + Math::Vector3 (12B at
-            // +0x1c) + 3 floats (+0x28, +0x2C, +0x30); dtor.
-            uint64_t inner_ser[3] = {0, 0, 0};
-            ::new (static_cast<void*>(inner_ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-            // ?Serialize@Transform@Math@@QEAAXAEAVSerializer@IO@@@Z  0x180059b90
-            reinterpret_cast<Math::Transform*>(xform)->Serialize(inner_ser);
-            // ?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z    0x1800150e0
-            reinterpret_cast<Math::Vector3*>(
-                reinterpret_cast<uint8_t*>(xform) + 0x1C)->Serialize(inner_ser);
-            reinterpret_cast<IO::Serializer*>(inner_ser)->Serialize(
-                *reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(xform) + 0x28),
-                nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(inner_ser)->Serialize(
-                *reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(xform) + 0x2C),
-                nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(inner_ser)->Serialize(
-                *reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(xform) + 0x30),
-                nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(inner_ser)->~Serializer();   // B.3.4 bridge
-            static bool s_logged = false;
-            if (!s_logged) {
-                const float* xf = reinterpret_cast<const float*>(xform);
-                printf("[MenuScene::Slot5_Serialize] camera Transform "
-                       "deserialized: pos=(%.2f, %.2f, %.2f) "
-                       "qrot=(%.3f, %.3f, %.3f, %.3f) +0x1c=(%.2f,%.2f,%.2f) "
-                       "+0x28=%.2f +0x2c=%.2f +0x30=%.2f\n",
-                       xf[0], xf[1], xf[2],
-                       xf[3], xf[4], xf[5], xf[6],
-                       xf[7], xf[8], xf[9],
-                       xf[10], xf[11], xf[12]);
-                fflush(stdout);
-                s_logged = true;
-            }
-        } else {
-            static bool s_warned = false;
-            if (!s_warned) {
-                printf("[MenuScene::Slot5_Serialize] Transform serialize primitives "
-                       "unwired (SerFloat=%p) — "
-                       "camera will stay at identity, screen black\n",
-                       (void*)fn_Serializer_Serialize_Float);
-                fflush(stdout);
-                s_warned = true;
-            }
+        // ENDGAME B.3.4a closing: the ctor/dtor/float readiness guard is gone and
+        // with it the else arm, which existed only to report "the Serializer
+        // primitives did not resolve" — a state a real IO::Serializer cannot be in.
+        //
+        // Inline the FUN_1400988c0 body: inner Serializer (v=0) wraps
+        // stream; serialize Math::Transform (28B) + Math::Vector3 (12B at
+        // +0x1c) + 3 floats (+0x28, +0x2C, +0x30); dtor.
+        uint64_t inner_ser[3] = {0, 0, 0};
+        ::new (static_cast<void*>(inner_ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+        // ?Serialize@Transform@Math@@QEAAXAEAVSerializer@IO@@@Z  0x180059b90
+        reinterpret_cast<Math::Transform*>(xform)->Serialize(inner_ser);
+        // ?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z    0x1800150e0
+        reinterpret_cast<Math::Vector3*>(
+            reinterpret_cast<uint8_t*>(xform) + 0x1C)->Serialize(inner_ser);
+        reinterpret_cast<IO::Serializer*>(inner_ser)->Serialize(
+            *reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(xform) + 0x28),
+            nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(inner_ser)->Serialize(
+            *reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(xform) + 0x2C),
+            nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(inner_ser)->Serialize(
+            *reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(xform) + 0x30),
+            nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(inner_ser)->~Serializer();   // B.3.4 bridge
+        static bool s_logged = false;
+        if (!s_logged) {
+            const float* xf = reinterpret_cast<const float*>(xform);
+            printf("[MenuScene::Slot5_Serialize] camera Transform "
+                   "deserialized: pos=(%.2f, %.2f, %.2f) "
+                   "qrot=(%.3f, %.3f, %.3f, %.3f) +0x1c=(%.2f,%.2f,%.2f) "
+                   "+0x28=%.2f +0x2c=%.2f +0x30=%.2f\n",
+                   xf[0], xf[1], xf[2],
+                   xf[3], xf[4], xf[5], xf[6],
+                   xf[7], xf[8], xf[9],
+                   xf[10], xf[11], xf[12]);
+            fflush(stdout);
+            s_logged = true;
         }
     }
 
@@ -485,7 +476,7 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
     //   Math::Vector4::Serialize(field+0x1B4, outer)
     //   System::Color::Serialize(field+0x194, outer)  x3
     //   Serializer::Serialize_Float(outer, field+0x1A0, NULL) x5
-    if (outer_ctored && g_fn_Serialize_Int) {
+    if (outer_ctored) {
         // ----- Array #1 (+0x30, stride 0x20) -----
         int count38 = static_cast<int>(reinterpret_cast<uintptr_t>(self->_field38) & 0xFFFFFFFF);
         reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(count38, nullptr);   // B.3.4 bridge (cast dropped: count38 is int)
@@ -534,13 +525,11 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
             self->sunColor     |= 0xFF000000;
             self->skyColor     |= 0xFF000000;
         }
-        if (fn_Serializer_Serialize_Float) {
-            reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->fogStart,         nullptr);   // B.3.4 bridge (cast dropped: fogStart is float)
-            reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->fogEnd,           nullptr);   // B.3.4 bridge (cast dropped: fogEnd is float)
-            reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->fogDensity,       nullptr);   // B.3.4 bridge (cast dropped: fogDensity is float)
-            reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->sunIntensity,     nullptr);   // B.3.4 bridge (cast dropped: sunIntensity is float)
-            reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->ambientIntensity, nullptr);   // B.3.4 bridge (cast dropped: ambientIntensity is float)
-        }
+        reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->fogStart,         nullptr);   // B.3.4 bridge (cast dropped: fogStart is float)
+        reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->fogEnd,           nullptr);   // B.3.4 bridge (cast dropped: fogEnd is float)
+        reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->fogDensity,       nullptr);   // B.3.4 bridge (cast dropped: fogDensity is float)
+        reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->sunIntensity,     nullptr);   // B.3.4 bridge (cast dropped: sunIntensity is float)
+        reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->ambientIntensity, nullptr);   // B.3.4 bridge (cast dropped: ambientIntensity is float)
 
         // ----- v2-gated tail: Weather extPtr + +0x78 float + particle array
         //                       + particle resource exrefs ----------------
@@ -551,10 +540,8 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
             // Weather externalPtr at +0x80 (FUN_1400196a0).
             fn_ExternalPtr_Serialize_Weather(&self->_field80, outer_ser);
         }
-        if (fn_Serializer_Serialize_Float) {
-            // Single float at +0x78 (the v2-only "scene-time" or similar).
-            reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->_field78, nullptr);   // B.3.4 bridge (cast dropped: _field78 is float)
-        }
+        // Single float at +0x78 (the v2-only "scene-time" or similar).
+        reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->_field78, nullptr);   // B.3.4 bridge (cast dropped: _field78 is float)
 
         // ----- Particle element array (+0x50, stride 0x14: 4 floats + 1 int) -----
         int count58 = static_cast<int>(reinterpret_cast<uintptr_t>(self->_field58) & 0xFFFFFFFF);
@@ -563,7 +550,7 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
             fn_Array_Resize_Stride14(&self->_field50, count58);
         }
         // Per-element serialize (inlined in original; not a separate helper).
-        if (count58 > 0 && self->_field50 && fn_Serializer_Serialize_Float) {
+        if (count58 > 0 && self->_field50) {
             uint8_t* base = reinterpret_cast<uint8_t*>(self->_field50);
             for (int i = 0; i < count58; ++i) {
                 uint8_t* elem = base + static_cast<size_t>(i) * 0x14;
@@ -623,16 +610,15 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
         static bool s_warnedTail = false;
         if (!s_warnedTail) {
             printf("[MenuScene::Slot5_Serialize] tail unwired "
-                   "(outer_ctored=%d Ser_Int=%p) — atmosphere left at Init defaults\n",
-                   outer_ctored ? 1 : 0,
-                   (void*)g_fn_Serialize_Int);
+                   "(outer_ctored=%d) — atmosphere left at Init defaults\n",
+                   outer_ctored ? 1 : 0);
             fflush(stdout);
             s_warnedTail = true;
         }
     }
 
     // (5) Dtor the outer Serializer.
-    if (outer_ctored && g_fn_Serializer_Dtor) {
+    if (outer_ctored) {
         reinterpret_cast<IO::Serializer*>(outer_ser)->~Serializer();   // B.3.4 bridge
     }
     RZ_CHECK("Slot5 exit");

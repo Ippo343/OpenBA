@@ -82,28 +82,6 @@ extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* s
 // registered in code/Game/Action/action_pf_road.cpp / standalone/reg_pf_road.cpp.
 void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2);
 
-// ============================================================
-// Local dispatch-slot resolution -- the two IO::Serializer scalar overloads
-// this function needs (ushort, signed char) aren't in engine_funcs.h yet.
-// Resolved the same way address_registry.cpp resolves every other Serializer
-// dispatch slot: by mangled Runtime DLL export name.
-// ============================================================
-typedef void (*fn_Ser_SerUShort_t)(void* serializer, uint16_t* field, const char* name);
-typedef void (*fn_Ser_SerSChar_t)(void* serializer, int8_t* field, const char* name);
-
-static fn_Ser_SerUShort_t s_fn_SerUShort = nullptr;  // 0x140152408
-static fn_Ser_SerSChar_t  s_fn_SerSChar  = nullptr;  // 0x140152418
-static bool s_localSlotsResolved = false;
-
-static void EnsureLocalSlots() {
-    if (s_localSlotsResolved) return;
-    s_localSlotsResolved = true;
-    s_fn_SerUShort = reinterpret_cast<fn_Ser_SerUShort_t>(
-        ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAGPEBD@Z"));
-    s_fn_SerSChar = reinterpret_cast<fn_Ser_SerSChar_t>(
-        ResolveExport("?Serialize@Serializer@IO@@QEAAXAEACPEBD@Z"));
-}
-
 // 0x14009e8c0 region/pathfinder rebuild -- large, out of scope (see file header
 // DEVIATION note). Resolved via ResolveAddr; unregistered today, so this stays
 // a guarded no-op until it gets its own port.
@@ -200,22 +178,17 @@ void GameGrid_ResizeCellArray_aa90(int64_t* header, int32_t newCount) {
 // ============================================================
 void GameGrid_SerializeCellArray_ac10(void* serializer, int32_t count, int64_t arrayBase) {
     if (count <= 0) return;
-    EnsureLocalSlots();
 
     uint8_t* elem = reinterpret_cast<uint8_t*>(arrayBase);
     for (int32_t i = 0; i < count; ++i) {
-        if (fn_InternalBasePtr_Serialize) {
-            reinterpret_cast<Object::InternalBasePtr*>(elem + 0x00)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-        }
+        reinterpret_cast<Object::InternalBasePtr*>(elem + 0x00)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
         void* refA = *reinterpret_cast<void**>(elem + 0x00);
         if (refA != nullptr && fn_IsDerivedFrom && g_TypeId_ComponentEntity &&
             !fn_IsDerivedFrom(refA, *g_TypeId_ComponentEntity)) {
             *reinterpret_cast<void**>(elem + 0x00) = nullptr;
         }
 
-        if (fn_InternalBasePtr_Serialize) {
-            reinterpret_cast<Object::InternalBasePtr*>(elem + 0x08)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-        }
+        reinterpret_cast<Object::InternalBasePtr*>(elem + 0x08)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
         void* refB = *reinterpret_cast<void**>(elem + 0x08);
         if (refB != nullptr && fn_IsDerivedFrom && g_TypeId_ComponentEntity &&
             !fn_IsDerivedFrom(refB, *g_TypeId_ComponentEntity)) {
@@ -224,35 +197,25 @@ void GameGrid_SerializeCellArray_ac10(void* serializer, int32_t count, int64_t a
 
         Reimpl_ExternalPtr_Serialize_StringTable(elem + 0x10, serializer);
 
-        if (fn_Ser_Slot_SerSizedRaw_400) {
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(9, elem + 0x1c, nullptr);   // B.3.4 bridge
-        }
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(9, elem + 0x1c, nullptr);   // B.3.4 bridge
 
-        if (s_fn_SerUShort) {
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<uint16_t*>(elem + 0x26), nullptr);   // B.3.4 bridge
-        }
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<uint16_t*>(elem + 0x26), nullptr);   // B.3.4 bridge
 
-        int version = g_fn_Serializer_GetVersion ? reinterpret_cast<IO::Serializer*>(serializer)->GetVersion() : 4;   // B.3.4 bridge
+        int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
         if (version < 3) {
             // Retail reads/writes a throwaway ushort here for old save versions
             // (a field that no longer exists past version 3); we mirror that
             // with a scratch local so the stream position stays in sync.
             uint16_t scratch = 0;
-            if (s_fn_SerUShort) {
-                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(scratch, nullptr);   // B.3.4 bridge
-            }
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(scratch, nullptr);   // B.3.4 bridge
         }
 
-        if (fn_Ser_Slot_SerByte_410) {
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(elem[0x28], nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(elem[0x29], nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(elem[0x2a], nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(elem[0x2b], nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(elem[0x2c], nullptr);   // B.3.4 bridge
-        }
-        if (s_fn_SerSChar) {
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<signed char*>(elem + 0x2d), nullptr);   // B.3.4 bridge
-        }
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(elem[0x28], nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(elem[0x29], nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(elem[0x2a], nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(elem[0x2b], nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(elem[0x2c], nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<signed char*>(elem + 0x2d), nullptr);   // B.3.4 bridge
 
         elem += 0x30;
     }
@@ -266,20 +229,14 @@ extern "C" void GameGrid_Serialize_9f100(void* selfPtr, void* stream) {
 
     alignas(8) uint8_t serializerStorage[24];
     void* serializer = serializerStorage;
-    if (g_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(serializerStorage)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 4);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializerStorage)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 4);   // B.3.4 bridge
 
-    if (g_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int32_t*>(self + 0x00), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int32_t*>(self + 0x00), nullptr);   // B.3.4 bridge
 
     // Cell-array header at self+0x80: +0x00 base ptr, +0x08 count, +0x0c capacity.
     uint8_t* header = self + 0x80;
     int32_t cellCount = *reinterpret_cast<int32_t*>(header + 0x08);
-    if (g_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(cellCount, nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(cellCount, nullptr);   // B.3.4 bridge
 
     bool isSaving = static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) != 0;   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
     if (!isSaving) {
@@ -290,15 +247,13 @@ extern "C" void GameGrid_Serialize_9f100(void* selfPtr, void* stream) {
     GameGrid_SerializeCellArray_ac10(serializer, cellCount, arrayBase);
 
     // 9 shorts at self+0x90.
-    if (fn_Ser_Slot_SerSizedRaw_3F8) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(9, reinterpret_cast<short*>(self + 0x90), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(9, reinterpret_cast<short*>(self + 0x90), nullptr);   // B.3.4 bridge
 
     if (!isSaving) {
         // ---- LOAD-only fixup block ----
         self[0xa2] = 1;
 
-        int version = g_fn_Serializer_GetVersion ? reinterpret_cast<IO::Serializer*>(serializer)->GetVersion() : 4;   // B.3.4 bridge
+        int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
 
         if (version < 2) {
             int32_t width = *reinterpret_cast<int32_t*>(self + 0x00);
@@ -376,9 +331,7 @@ extern "C" void GameGrid_Serialize_9f100(void* selfPtr, void* stream) {
         }
     }
 
-    if (g_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

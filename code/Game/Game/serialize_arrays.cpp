@@ -206,24 +206,10 @@ extern "C" void RegisterGeometryVtable() {
 extern "C" void Reimpl_Transform_SerializeWrapper(void* transform, void* stream) {
     if (!transform || !stream) return;
 
-    if (!g_fn_Serializer_Ctor ||
-        !fn_Serializer_Serialize_Float ||
-        !g_fn_Serializer_Dtor) {
-        static bool s_warned = false;
-        if (!s_warned) {
-            s_warned = true;
-            fprintf(stderr,
-                    "[Transform::SerializeWrapper] *** a callee is NULL "
-                    "(ctor=%p float=%p dtor=%p) — the "
-                    "transform record is NOT being read and the stream is now "
-                    "DESYNCED for everything after it.\n",
-                    (void*)g_fn_Serializer_Ctor,
-                    (void*)fn_Serializer_Serialize_Float, (void*)g_fn_Serializer_Dtor);
-            fflush(stderr);
-        }
-        return;
-    }
-
+    // ENDGAME B.3.4a closing: the ctor/float/dtor readiness guard and its
+    // "a callee is NULL, the stream is DESYNCED" report are gone with the doors
+    // — the serializer below is a real IO::Serializer and its members cannot be
+    // null.
     const uintptr_t t = (uintptr_t)transform;
     alignas(8) uint8_t ser[24];
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
@@ -423,19 +409,9 @@ extern "C" void Reimpl_Array_Serialize_Stride20(void* serializer,
                                                 void* arrayBase) {
     if (!serializer || !arrayBase || count == 0) return;
 
-    if (!g_fn_Serialize_Bool /* unused, just confirms serialize plumbing */) {
-        // Soft-fail: we have no Serializer_Serialize_* primitives wired.
-        // Returning early at least prevents memory corruption.
-        static bool s_warned = false;
-        if (!s_warned) {
-            printf("[Array::Serialize_S20] no float-serialize primitive — skipping %u elems\n",
-                   count);
-            fflush(stdout);
-            s_warned = true;
-        }
-        return;
-    }
-
+    // ENDGAME B.3.4a closing: the `!g_fn_Serialize_Bool` probe (it never called
+    // that door, it only "confirmed serialize plumbing") and its soft-fail arm
+    // are gone with the door.
     auto* base = reinterpret_cast<uint8_t*>(arrayBase);
     for (uint32_t i = 0; i < count; ++i) {
         uint8_t* elem = base + static_cast<size_t>(i) * 0x20;
@@ -443,19 +419,15 @@ extern "C" void Reimpl_Array_Serialize_Stride20(void* serializer,
         // through the same encoder-vtable slot for raw types. Original passes
         // them as floats, but the wire format is identical for (uint32, float).
         for (int off = 0; off < 7; ++off) {
-            if (fn_Serializer_Serialize_Uint) {
-                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(
-                    *reinterpret_cast<uint32_t*>(elem + off * 4), nullptr);   // B.3.4 bridge
-            }
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(
+                *reinterpret_cast<uint32_t*>(elem + off * 4), nullptr);   // B.3.4 bridge
         }
         // Two shorts at +0x1c and +0x1e — Serializer has a short overload
         // (slot vtable+0x80 in the original). For lack of a dedicated wired
         // primitive, treat them as a single uint32 for now. This is a TODO
         // if tests reveal endianness issues.
-        if (fn_Serializer_Serialize_Uint) {
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(
-                *reinterpret_cast<uint32_t*>(elem + 0x1c), nullptr);   // B.3.4 bridge
-        }
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(
+            *reinterpret_cast<uint32_t*>(elem + 0x1c), nullptr);   // B.3.4 bridge
     }
 }
 
@@ -479,8 +451,7 @@ void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
     if (!serializer || count <= 0 || !arrayBase) return;
 
     // Required Runtime primitives. If any are missing, log once and bail.
-    if (!fn_Serializer_GetEncoding ||
-        !fn_IsDerivedFrom || !fn_Serializer_Serialize_Uint || !g_fn_Serialize_Bool ||
+    if (!fn_IsDerivedFrom ||
         !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
         static bool s_warned = false;
         if (!s_warned) {

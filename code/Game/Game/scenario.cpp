@@ -155,15 +155,11 @@ void Scenario_Serialize(Scenario* self, void* stream) {
 
     // Create serializer on stack (24 bytes), version 0
     alignas(8) uint8_t serializer[24];
-    if (g_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize Scenario-specific fields
-    if (g_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field60, nullptr);   // B.3.4 bridge (cast dropped: _field60 is int32_t)
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field64, nullptr);   // B.3.4 bridge (cast dropped: _field64 is int32_t)
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field60, nullptr);   // B.3.4 bridge (cast dropped: _field60 is int32_t)
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field64, nullptr);   // B.3.4 bridge (cast dropped: _field64 is int32_t)
 
     reinterpret_cast<System::String*>(&self->scenarioName)->Serialize(serializer);
 
@@ -181,15 +177,11 @@ void Scenario_Serialize(Scenario* self, void* stream) {
 
     reinterpret_cast<System::String*>(&self->_field88)->Serialize(serializer);
 
-    if (g_fn_Serialize_Bool) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field68, nullptr);   // B.3.4 bridge (cast dropped: _field68 is bool)
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field69, nullptr);   // B.3.4 bridge (cast dropped: _field69 is bool)
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field68, nullptr);   // B.3.4 bridge (cast dropped: _field68 is bool)
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field69, nullptr);   // B.3.4 bridge (cast dropped: _field69 is bool)
 
     // Destroy serializer
-    if (g_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
