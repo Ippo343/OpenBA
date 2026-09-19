@@ -103,9 +103,10 @@ extern "C" void Minimap_CreateAndUpload(void* mapObj) {
 
     static bool s_trace = Opt().mapTrace != nullptr;
 
+    // ENDGAME B.3.5 batch K1: the CopyToTexture / Device::Lock / Device::Unlock terms
+    // went with their call sites. `fn_ImageBuffer_Ctor` is a CTOR door and stays.
     if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_ImageBuffer_Ctor ||
-        !fn_ImageBuffer_CopyToTexture || !fn_VideoDevice_Lock ||
-        !fn_VideoDevice_Unlock || g_NoiseUI_ImageBufferVtable == 0 ||
+        g_NoiseUI_ImageBufferVtable == 0 ||
         !g_pVideoDeviceSingleton || !*g_pVideoDeviceSingleton) {
         static bool warned = false;
         if (!warned) {

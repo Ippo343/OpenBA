@@ -4915,8 +4915,8 @@ static void StartTown_PlaceResourceCell(void* entity, int cellIdx, void* game, v
         Math::Transform::FromYawPitchOffset(
             yaw, pitch, *reinterpret_cast<const Math::Vector3*>(off));
     *(float*)(m + 0x168) = yaw;
-    if (fn_Geometry_SetTransform)
-        fn_Geometry_SetTransform((void*)(m + 0x28), (void*)(m + 0x148));
+    reinterpret_cast<Graphics::Geometry*>(m + 0x28)->SetTransform(
+        *reinterpret_cast<const Math::Transform*>(m + 0x148));   // B.3.5 bridge
 }
 
 // FUN_140120db0 — growth/age + mesh-scale init on the GrowthComponent. Delegates to
