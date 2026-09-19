@@ -619,7 +619,14 @@ dereference it once each at init.
 
 ### 6.3 OPEN DEFECT — the allocator `LockEnter` crash, and a mechanism from the code
 
-> **STATUS: OPEN. Not fixed, not reproduced on demand, not to be null-checked.**
+> **UPDATE 2026-09-19 (defect pass, `a9873f47`; account in `../STATUS.md`): W2′ below is NOT
+> live** — every door into the free list takes the allocator lock, as retail's inlined
+> Enter/Allocate/Leave; the "unlocked Allocate/Free" premise came from a stale comment in
+> `standalone/loader_loop_stubs.cpp`, since rewritten. W2 fits the stack; retail's only loader
+> join ahead of `~Engine` is `LoaderLoop::Shutdown` (0x1800dc280), which our stubs now perform.
+> Still not reproduced — a recurrence is a finding. The text below is kept as written.
+>
+> **STATUS (as written): OPEN. Not fixed, not reproduced on demand, not to be null-checked.**
 > Recorded here verbatim at the coordinator's request (2026-09-19) with its file:line anchors,
 > because it is the one piece of 4b evidence that outlives 4b. Owner: the loader defect
 > (B34_BRIEFS §D / `[[project_menu_heap_crash]]`), **not** this step.

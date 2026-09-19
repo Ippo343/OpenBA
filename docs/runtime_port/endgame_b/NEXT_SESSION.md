@@ -1,4 +1,4 @@
-# Next session plan (written 2026-09-19, at the B.3.4 close)
+# Next session plan (written 2026-09-19, at the B.3.4 close; §0 and §1 items 6, 10, 12 revised the same day after the open-defect pass)
 
 State and counts live in `../STATUS.md`; this file is only the plan. Delete it (or replace
 it) when the session it describes has started.
@@ -6,9 +6,12 @@ it) when the session it describes has started.
 ## 0. Sync (5 minutes)
 
 - `git log --oneline -8`, `git worktree list`, `git branch --no-merged main` (expect none).
-- Prune the merged agent worktrees under `.claude/worktrees/` (B.3.4 left ~30; check each is
-  clean first; `git worktree remove` without `--force`, `git branch -d`) — they slow every
-  unscoped grep and a stale one is where an agent's "zero hits" comes from.
+- `git worktree list` should show only the main tree (checked 2026-09-19 after the defect
+  pass). If agent worktrees have reappeared under `.claude/worktrees/`, prune the merged ones
+  (check each is clean; `git worktree remove` without `--force`, `git branch -d`) — they slow
+  every unscoped grep and a stale one is where an agent's "zero hits" comes from. Leftover
+  branches that are NOT this plan's: `endgame-a3`, `wave29/base`; `defects-open-5` is merged
+  and can go (local and `origin`).
 - Greps over `standalone/` or `tests/` exclude `standalone/build*/` and `tests/unit/build/`.
 - Open Ghidra (all four programs) BEFORE launching an agent that needs it. `switch_program`
   is GLOBAL state: every agent asserts `get_current_program_info` before each read batch
@@ -32,16 +35,23 @@ New from B.3.4 (details and anchors in `STATUS.md`'s B.3.4 block and `B34B_RULES
 5. **`System::MemoryAllocator` — deferred past step 4 on purpose** (~1,146 sites, three caller
    surfaces, member vs static bodies lock differently; B.4 already lists the allocator among
    what legitimately stays cast-heavy). Assessment: `B34B_RULES.md` §6.
-6. **Three open defects, none guarded, all recorded with stacks:**
-   (a) the allocator `LockEnter`-on-near-null crash (`Get()` returned null → `EnterCriticalSection(0x640)`;
-   W2 teardown vs W2′ unlocked free-list wild write; discriminator = print `_singleton` in the
-   crash dump — a small `standalone/` change, do it first);
-   (b) `SaveLoadDialog_PopulateFileList` null deref on the load-a-save route (seen 2 in 7 under
-   load, never since);
-   (c) the AUDIO STREAM thread faulting in `IO::FileSystem::ReadFile` (`_packfiles[packIndex]`)
-   while `Engine::Loader::Load` runs `Modification::SetupFileSystem` (package remount) on the
-   caller thread — seen once in ~60 resave runs. Question for the Audio step: does retail park
-   the music stream before a load, or skip the remount when the mod list is clean?
+6. **The open defects were worked on 2026-09-19** (account in `STATUS.md`; on main `2788c108`).
+   (c) is fixed by retail's ordering (`MenuDLT::Shutdown` -> `Audio::Scene::StopAll`), which also
+   answers the Audio-step question: retail parks the music stream, and takes no lock.
+   (a) and (b) were NOT reproduced: (a) got retail's `LoaderLoop::Shutdown` join, (b) no change;
+   both are attributed to the two-loader race `96c17f47` removed. **A recurrence of either stack
+   is therefore a finding, not a known flake** — the crash dump prints the allocator singleton
+   cell (`5b332342`); read it first. What is left, none of it guarded:
+   - a quit DURING a splash loop reaches `~Engine` with a live loader (retail's splash
+     `Shutdown` is a RET too — same exposure), and our `WinMain` tail after `~Engine`
+     (`main.cpp:1587+`) is much longer than retail's, which widens any such window;
+   - `MenuDLT` `Stub_Shutdown` still skips the rest of retail's Shutdown (0x14009b280: scene,
+     renderer and SaveLoad teardown, `DialogLoopT::Shutdown`, `EnableCursor(false)`) — a leak,
+     not a race; belongs with the Audio/loop work;
+   - `FileSystem::ReadFile`'s packed arm copies the pack's `FileInfo` (two refcounted
+     `Filename`s, non-atomic counts) per read — identical to retail, harmless with one loader;
+   - `e353fb15` (`AllowsModChanges` FALSE off the menu) changed when the boot remount and the
+     game->menu `RefreshList` run; routes were gated once each, so watch the Mods routes.
 7. The eleven `CUTOVER_REQUIRED` System statics: `MintStorageCell` redirect owed at the
    class-static conversion (end of B.3), tabled per row in `B34B_RULES.md` §4.1; Timer's five
    move together or not at all.

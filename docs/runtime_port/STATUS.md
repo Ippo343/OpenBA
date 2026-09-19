@@ -103,7 +103,8 @@ built them wrong, and callbacks stored in data.
   with a per-site argument (retail's `StatGoal::Serialize` 0x1400da8e2 has no test).
   (5) `completeroad.cpp`'s uchar door cache was permanently NULL (misspelled mangled fragment),
   hidden by its guard.
-  **The five defects left open at the close — worked 2026-09-19 (branch `defects-open-5`):**
+  **The five defects left open at the close — worked 2026-09-19 (merged, main `2788c108`; what is
+  still exposed is listed in `endgame_b/NEXT_SESSION.md` §1.6):**
   (a) allocator `LockEnter` on a near-null lock: NOT reproduced, cause inferred. W2′ (unlocked
   free list) is not live — every door into the allocator is locked, as retail's inlined
   Enter/Allocate/Leave. W2 fits the stack; retail's only loader join ahead of `~Engine` is
