@@ -129,3 +129,16 @@ UNIT_TREE_SRCS += runtime/src/io/serializer_class.cpp
 # `thread_win.cpp` and `value_types.cpp` all stand on the platform or the
 # registry and stay verified by the real run.
 UNIT_TREE_SRCS += runtime/src/system/crc.cpp
+
+# ENDGAME B.3.5 block A — the Video companion/VertexLayout ABI proof
+# (tests/unit/video_data_abi_test.cpp). NO tree sources link: the twelve
+# `Video::*Data` bases and `Video::VertexLayout` are declarations plus layout
+# pins, and their bodies are registered doors in `runtime/src/video/` and
+# `dx11/src/` that stand on the port registry, the address registry,
+# <windows.h> and D3D11. The test checks the real classes' `sizeof`/`offsetof`
+# directly (no instantiation needed) and the SLOT ABI on mirror classes
+# declared in the test, exactly as tests/unit/io_vtable_abi_test.cpp does with
+# `TestReaderWriter`. `Object::CompiledExternal`'s size is read through
+# runtime/types/object/External.h, whose linkable half (external_class.cpp) is
+# already on this list.
+UNIT_TREE_SRCS +=

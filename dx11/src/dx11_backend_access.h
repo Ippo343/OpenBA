@@ -27,6 +27,12 @@
 #include <cstddef>
 
 #include "collection/Collection.h"   // Collection::Array<T> (runtime/types)
+// ENDGAME B.3.5 block A — the real `Video::VertexLayout` (runtime/types), which
+// replaces this file's former `VertexLayoutOwner` / `VertexLayoutElement`
+// views. B35_RULES 1.2: `dx11/` compiles with the shared include set
+// (`-Iruntime/types -Iruntime/funcs`), so no Makefile change is needed and this
+// is the fifth `runtime/types` header dx11 includes.
+#include "video/VertexLayout.h"
 #include "VideoDX11Data.h"
 #include "dx11_seam.h"   // Vt / VtGhidraAddr, used by Dx11VtableAddress
 #include "resolve.h"
@@ -196,51 +202,27 @@ static_assert(sizeof(PixelProgramData::variants) / sizeof(void*) == kShaderVaria
 //     MOVSXD RDX, dword ptr [R9 + 0x40] ; input-signature length
 // ENDGAME B.3.2 step 2 — both members are the real `Collection::Array<T>`, with
 // the element type spelled out instead of a `void*` the reader had to cast.
-struct VertexLayoutElement;
-struct VertexLayoutOwner {
-    uint8_t opaque00[0x20];                        // +0x00
-    Collection::Array<VertexLayoutElement> elements;   // +0x20  stride 0x20
-    uint8_t opaque30[0x08];                        // +0x30
-    Collection::Array<uint8_t> signature;          // +0x38  the vertex-shader input signature
-};
-static_assert(offsetof(VertexLayoutOwner, elements) == 0x20,
-              "Video::VertexLayout element array @ +0x20 (0x180003ff0)");
-static_assert(offsetof(VertexLayoutOwner, elements) + offsetof(RtByteCodeBlob, _size) == 0x28,
-              "Video::VertexLayout element count @ +0x28 (0x180003ff0)");
-static_assert(offsetof(VertexLayoutOwner, signature) == 0x38,
-              "Video::VertexLayout input signature @ +0x38 (0x180003ff0)");
-static_assert(offsetof(VertexLayoutOwner, signature) + offsetof(RtByteCodeBlob, _size) == 0x40,
-              "Video::VertexLayout input-signature length @ +0x40 (0x180003ff0)");
-
-// Video::VertexLayout::Element — 0x20 bytes.
 //
-// Runtime's ?Add@VertexLayout@Video@@QEAAXHHW4Usage@12@HW4Format@12@@Z is
-//     void VertexLayout::Add(int, int, Usage, int, Format)
-// so an Element carries at least {stream, offset, usage, usageIndex, format}.
-// VideoDX11 reads exactly three of those:
+// ENDGAME B.3.5 block A, RULE B5-2.2 — `VertexLayoutOwner` and
+// `VertexLayoutElement` ARE GONE. Both were partial, offset-pinned views of a
+// Runtime-side class that had no header anywhere in the tree; that header now
+// exists, with the four offsets above folded in and their proofs kept:
+// `runtime/types/video/VertexLayout.h`. The two users in
+// `dx11/src/vertexlayoutdata.cpp` name `Video::VertexLayout` and
+// `Video::VertexLayout::Element` directly, exactly the way B.3.2 step 2
+// replaced this file's private `RtArray` POD with the real
+// `Collection::Array<T>` (see the note above `RtByteCodeBlob`).
 //
-//     MOVZX ECX, word ptr [RAX + RDX - 0x18]  ; +0x08, u16 -> InputSlot
-//     MOVZX ECX, word ptr [RAX + RDX - 0x14]  ; +0x0C, u16 -> AlignedByteOffset
-//     MOVSXD RCX, dword ptr [RAX + RDX - 0x8] ; +0x18, i32 -> Format enum
+// ONE FIELD NAME CHANGED, AND IT WAS A CORRECTION, NOT A RENAME: this view's
+// `byteOffset` @ +0x0C is `Element::offset`, and this view was RIGHT about it
+// (as it was about `stream` @ +0x08 and `format` @ +0x18). The banner in
+// VertexLayout.h records the retail reads that settle it, and which of the two
+// pre-existing views of this class was wrong about the other three fields.
 //
-// (RDX walks in 0x20 steps and is pre-biased by +0x20, hence the negative
-// displacements.) The `usage` / `usageIndex` fields are somewhere in the opaque
-// regions; the DX11 backend never looks at them — see the semantic-name note in
-// vertexlayoutdata.cpp.
-struct VertexLayoutElement {
-    uint8_t  opaque00[0x08];  // +0x00
-    uint16_t stream;          // +0x08  -> D3D11_INPUT_ELEMENT_DESC::InputSlot
-    uint8_t  opaque0a[0x02];  // +0x0A
-    uint16_t byteOffset;      // +0x0C  -> D3D11_INPUT_ELEMENT_DESC::AlignedByteOffset
-    uint8_t  opaque0e[0x0A];  // +0x0E  (Usage / usageIndex live in here)
-    int32_t  format;          // +0x18  Video::VertexLayout::Format, 0..8
-    uint8_t  opaque1c[0x04];  // +0x1C
-};
-static_assert(sizeof(VertexLayoutElement) == 0x20,
-              "Video::VertexLayout::Element stride (0x180003ff0 walks in 0x20 steps)");
-static_assert(offsetof(VertexLayoutElement, stream)     == 0x08, "Element::stream");
-static_assert(offsetof(VertexLayoutElement, byteOffset) == 0x0C, "Element::byteOffset");
-static_assert(offsetof(VertexLayoutElement, format)     == 0x18, "Element::format");
+// The narrowing this file's loop performs is retail's, not a consequence of
+// the view: 0x180003ff0 reads +0x08 and +0x0C with `MOVZX ...,word`, i.e. the
+// low 16 bits of two int32 fields. `vertexlayoutdata.cpp` now spells that
+// truncation out.
 
 // ============================================================
 // Video::RenderBuffer / Video::ImageBuffer — owners reached by RenderBufferData
@@ -277,11 +259,24 @@ void Dx11TrackConstantBuffer(ConstantBufferData* p);
 void Dx11UntrackConstantBuffer(ConstantBufferData* p);
 void Dx11InvalidateConstantBufferBindings();
 
+// ENDGAME B.3.5 block A, RULE B5-2.3 — the `sizeof(RenderBufferOwner) == 0x10`
+// assertion that used to sit here IS DELETED. `Video::RenderBuffer` is 0x30
+// bytes (`runtime/types/video/Device.h:311`, which asserts it); this view pins
+// only its leading pair. A size assert on a prefix view is a false witness: it
+// cannot fail, because it describes the view rather than the class, and it
+// states something about the class that is untrue. The two OFFSETS are the real
+// claim and they are kept.
+//
+// The view itself stays for now: collapsing it — together with `Context.h`'s
+// third view, `RtVideo::RenderBufferPrefix` — into `Device.h`'s
+// `RtVideo::RenderBuffer` belongs to the block that converts `RenderBuffer`
+// (B.3.5 block D), because `contextdata.cpp` is its other user and touching
+// that file requires the `BANISHED_FORCE_DEVICE_LOST` route (RULE B5-8).
 struct RenderBufferOwner {
     void* color;   // +0x00  Video::ImageBuffer* (may be null)
     void* depth;   // +0x08  Video::ImageBuffer* (may be null)
 };
-static_assert(sizeof(RenderBufferOwner) == 0x10, "Video::RenderBuffer color/depth pair");
+static_assert(offsetof(RenderBufferOwner, color) == 0x00, "RenderBuffer::color");
 static_assert(offsetof(RenderBufferOwner, depth) == 0x08, "RenderBuffer::depth");
 
 // Video::ImageBuffer+0x60 is the backend companion object, i.e. the
