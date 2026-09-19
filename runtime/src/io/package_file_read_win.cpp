@@ -572,7 +572,14 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
     // forces it to 1 across the OPEN so the file is found on disk rather than
     // through the (still empty) packfile index, then restores the SAVED byte.
     // Retail RE-READS the singleton before restoring; reproduced.
-    FileSystem* fs = *FileSystemSingletonCell();               // 1800b46e8
+    // *** `RtIO::` IN FULL, AND THE COMPILER IS WHY. *** Inside this
+    // `namespace IO` block a bare `FileSystem` binds to the REAL CLASS
+    // `IO::FileSystem` (B.3.4 PACKAGE+FS commit 4) instead of to the POD the
+    // singleton cell and the two OpenFile/ReadFile doors are typed with. That
+    // is B34_RULES section 7.2's grep hazard, and it presents here as a build
+    // error rather than a silent rebind -- which is the whole reason the rule
+    // says to spell the POD namespace out.
+    RtIO::FileSystem* fs = *FileSystemSingletonCell();          // 1800b46e8
     const uint8_t savedGate = fs->platformExistsGate;          // 1800b46ef
     fs->platformExistsGate = 1;                                // 1800b46f9
 

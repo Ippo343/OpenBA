@@ -829,7 +829,9 @@ Then, still serial but parallelisable at the coordinator's discretion:
 | retiring ANY of the 14 IO deleting dtors or 19 minted rows | §4.2 — the condition is not met |
 | `IO::Serializer`'s member bodies becoming `rw->SerializeInt(...)` | §3.1 — waits on the minted-table readers |
 | the `rw_vtbl::k*` constants | §3.3 — they retire with UI/Graphics/Video/Audio, steps 5-8 |
-| `Object::External`'s slot-8 question | §1.4 — flagged, not resolved; re-read 0x1800252f0's callers when PackageFile converts |
+| `Object::External`'s slot-8 question | §1.4 — **CLOSED 2026-09-19**: `Construct` is declared by `IO::PackageFile` itself; four pieces of retail evidence in §1.4 |
+| the fifteen `IO::FileSystem` members OUTSIDE `filesystem.cpp` | PACKAGE+FS commit 4 declares the class with its full pinned layout and converts only the four members whose doors live in `filesystem.cpp`. Nine of the remaining fifteen sit on the OPEN/READ path §D binds while the loader-defect investigation runs, and `??1FileSystem@IO@@` lives in `iobase_vtables.cpp`, which is the core owner's. `runtime/types/io/FileSystem.h`'s banner lists which member is in which file. |
+| `IO::Persistence` and `IO::TextCodec` | not reached in B.3.4 PACKAGE+FS; see that block's hand-over |
 
 ### 6.3 Parallel agents, disjoint file sets
 
