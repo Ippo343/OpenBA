@@ -27,7 +27,9 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 namespace {
 constexpr uintptr_t kVtable = 0x140163c20;
@@ -67,10 +69,10 @@ extern "C" void ModelDescription_Serialize(void* self, void* stream) {
         return;
     }
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    uint8_t ser[24];
-    g_fn_Serializer_Ctor(ser, stream, 0);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
-    g_fn_Serialize_Int(ser, s + 0x28, nullptr);            // meshGroupCount
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);            // B.3.4 bridge  (meshGroupCount)
     int count = *(int32_t*)(s + 0x28);
 
     bool loading = (*(int32_t*)(*(uintptr_t*)ser + 8) == 0);
@@ -89,7 +91,7 @@ extern "C" void ModelDescription_Serialize(void* self, void* stream) {
     for (int i = 0; i < count; ++i, e += 0x18) {
         fn_ExternalPtr_Serialize_GraphicsMesh(e, ser);      // mesh ref (elem+0)
 
-        g_fn_Serialize_Int(ser, e + 0x10, nullptr);         // materialCount (elem+0x10)
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(e + 0x10), nullptr);         // B.3.4 bridge  (materialCount, elem+0x10)
         int matCount = *(int32_t*)(e + 0x10);
 
         if (loading) {
@@ -100,11 +102,11 @@ extern "C" void ModelDescription_Serialize(void* self, void* stream) {
         fn_Array_Serialize_External_GraphicsMesh(ser, matCount, *(void**)(e + 8));
     }
 
-    g_fn_Serialize_Int(ser, s + 0x30, nullptr);            // lod0
-    g_fn_Serialize_Int(ser, s + 0x34, nullptr);            // lod1
-    g_fn_Serialize_Bool(ser, s + 0x38, nullptr);           // castShadow
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);            // B.3.4 bridge  (lod0)
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x34), nullptr);            // B.3.4 bridge  (lod1)
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(s + 0x38), nullptr);           // B.3.4 bridge  (castShadow)
 
-    if (g_fn_Serializer_Dtor) g_fn_Serializer_Dtor(ser);
+    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // Dtor (vtable +0x00, exe 0x140035a70)

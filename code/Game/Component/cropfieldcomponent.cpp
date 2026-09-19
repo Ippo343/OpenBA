@@ -17,6 +17,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -263,8 +265,8 @@ void CropFieldComponent_SerializeEntityList(void* serializer, int count, uintptr
     uintptr_t entry = arrayPtr;
     for (int i = 0; i < count; i++) {
         if (s_fn_Serializer_SerializeInt) {
-            s_fn_Serializer_SerializeInt(serializer, (int*)(entry + 0), nullptr);
-            s_fn_Serializer_SerializeInt(serializer, (int*)(entry + 4), nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(int*)(entry + 0), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(int*)(entry + 4), nullptr);   // B.3.4 bridge
         }
         // IBP #1 -> ComponentEntity
         if (s_fn_IBP_Serialize2) s_fn_IBP_Serialize2((void*)(entry + 8), serializer);
@@ -279,7 +281,7 @@ void CropFieldComponent_SerializeEntityList(void* serializer, int count, uintptr
             *(uint64_t*)(entry + 0x10) = 0;
         }
         if (s_fn_Serializer_SerializeBool)
-            s_fn_Serializer_SerializeBool(serializer, (bool*)(entry + 0x18), nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(bool*)(entry + 0x18), nullptr);   // B.3.4 bridge
         entry += 0x20;
     }
 }
@@ -307,18 +309,18 @@ void CropFieldComponent_Shutdown(CropFieldComponent* self, void* stream) {
     }
 
     // Empty serializer block (version 0, immediately destroyed)
-    uint8_t emptySerializer[24];
+    alignas(8) uint8_t emptySerializer[24];
     if (s_fn_Serializer_Ctor) {
-        s_fn_Serializer_Ctor(emptySerializer, stream, 0);
+        ::new (static_cast<void*>(emptySerializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
     if (s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Dtor(emptySerializer);
+        reinterpret_cast<IO::Serializer*>(emptySerializer)->~Serializer();   // B.3.4 bridge
     }
 
     // Main serializer block (version 0)
-    uint8_t serializer[16];
+    alignas(8) uint8_t serializer[16];
     if (s_fn_Serializer_Ctor) {
-        s_fn_Serializer_Ctor(serializer, stream, 0);
+        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
 
     // Validate entity references
@@ -328,8 +330,8 @@ void CropFieldComponent_Shutdown(CropFieldComponent* self, void* stream) {
 
     // Serialize cropFlags as two bools (+0x48 and +0x49)
     if (s_fn_Serializer_SerializeBool) {
-        s_fn_Serializer_SerializeBool(serializer, (bool*)((uintptr_t)self + 0x48), nullptr);
-        s_fn_Serializer_SerializeBool(serializer, (bool*)((uintptr_t)self + 0x49), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(bool*)((uintptr_t)self + 0x48), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(bool*)((uintptr_t)self + 0x49), nullptr);   // B.3.4 bridge
     }
 
     // Serialize InternalBasePtr array at +0x50
@@ -341,7 +343,7 @@ void CropFieldComponent_Shutdown(CropFieldComponent* self, void* stream) {
     int entityCount = *(int*)((uintptr_t)self + 0x60);
     int countBuf = entityCount;
     if (s_fn_Serializer_SerializeInt) {
-        s_fn_Serializer_SerializeInt(serializer, &countBuf, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(countBuf, nullptr);   // B.3.4 bridge
     }
 
     // On load, resize the entity list to the count just read.
@@ -365,7 +367,7 @@ void CropFieldComponent_Shutdown(CropFieldComponent* self, void* stream) {
     }
 
     if (s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     }
 }
 

@@ -11,7 +11,9 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 static const uintptr_t kAutoPickupDescriptionVtable = 0x140158e70;
 
@@ -25,10 +27,10 @@ static void AutoPickupDescription_Init(void* self) {
 void AutoPickupDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Bool) return;
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
-    g_fn_Serialize_Bool(serializer, s + 0x20, nullptr);   // bool +0x20
-    g_fn_Serializer_Dtor(serializer);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x20), nullptr);   // bool +0x20   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
 }
 
 void* AutoPickupDescription_Dtor(void* self, uint32_t flags) {

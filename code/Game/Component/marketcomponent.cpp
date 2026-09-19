@@ -10,8 +10,10 @@
 #include "Component/marketcomponent_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -68,9 +70,9 @@ void MarketComponent_Shutdown(MarketComponent* self, void* stream) {
 
     // Empty serializer block (version 0)
     if (s_fn_Serializer_Ctor && s_fn_Serializer_Dtor) {
-        uint8_t serializerBuf[24];
-        s_fn_Serializer_Ctor(serializerBuf, stream, 0);
-        s_fn_Serializer_Dtor(serializerBuf);
+        alignas(8) uint8_t serializerBuf[24];
+        ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
     }
 }
 

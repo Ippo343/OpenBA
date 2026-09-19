@@ -40,7 +40,9 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "Object/factory_registration.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 extern void Component_SerializeReimpl(void* self, void* stream);
 
@@ -65,8 +67,8 @@ extern "C" void CitizenAIComponent_Serialize(void* self, void* stream) {
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serializer_GetVersion)
         return;
 
-    uint8_t ser[24];
-    g_fn_Serializer_Ctor(ser, stream, 5);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 5);   // B.3.4 bridge
 
     if (fn_InternalBasePtr_Serialize) {
         fn_InternalBasePtr_Serialize(At(self, 0x38), ser);
@@ -78,9 +80,9 @@ extern "C" void CitizenAIComponent_Serialize(void* self, void* stream) {
         }
     }
 
-    if (g_fn_Serialize_Int) g_fn_Serialize_Int(ser, At(self, 0x2c), nullptr);
+    if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x2c)), nullptr);   // B.3.4 bridge
 
-    int version = g_fn_Serializer_GetVersion(ser);
+    int version = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
     uint8_t* timer = At(self, 0x40);
     if (version < 5) {
         for (int i = 0; i < 14; ++i, timer += 8)
@@ -94,17 +96,17 @@ extern "C" void CitizenAIComponent_Serialize(void* self, void* stream) {
             if (g_fn_Time_Serialize) g_fn_Time_Serialize(timer, ser);
     }
 
-    version = g_fn_Serializer_GetVersion(ser);
+    version = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
     if (version > 0 && g_fn_Serialize_Bool) {
-        g_fn_Serialize_Bool(ser, At(self, 0x30), nullptr);
-        g_fn_Serialize_Bool(ser, At(self, 0x31), nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x30)), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x31)), nullptr);   // B.3.4 bridge
     }
-    version = g_fn_Serializer_GetVersion(ser);
-    if (version > 1 && g_fn_Serialize_Int) g_fn_Serialize_Int(ser, At(self, 0x28), nullptr);
-    version = g_fn_Serializer_GetVersion(ser);
+    version = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
+    if (version > 1 && g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x28)), nullptr);   // B.3.4 bridge
+    version = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
     if (version > 2 && g_fn_Time_Serialize) g_fn_Time_Serialize(At(self, 0xc0), ser);
-    version = g_fn_Serializer_GetVersion(ser);
+    version = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
     if (version > 3 && g_fn_Time_Serialize) g_fn_Time_Serialize(At(self, 0xc8), ser);
 
-    g_fn_Serializer_Dtor(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }

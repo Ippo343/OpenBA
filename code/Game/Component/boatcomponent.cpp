@@ -15,8 +15,10 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -81,16 +83,16 @@ void BoatComponent_Shutdown(BoatComponent* self, void* stream) {
         s_fn_Component_Serialize(self, stream);
 
     // Empty serializer block (format compat)
-    uint8_t serializer1[24];
+    alignas(8) uint8_t serializer1[24];
     if (s_fn_Serializer_Ctor && s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Ctor(serializer1, stream, 0);
-        s_fn_Serializer_Dtor(serializer1);
+        ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();                                       // B.3.4 bridge
     }
 
     // Main serializer block
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (!s_fn_Serializer_Ctor) return;
-    s_fn_Serializer_Ctor(serializer, stream, 0);
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize InternalBasePtr at +0x28 (entity ref)
     if (s_fn_IBP_Serialize)
@@ -111,7 +113,7 @@ void BoatComponent_Shutdown(BoatComponent* self, void* stream) {
 
     // Serialize float at +0x4c
     if (s_fn_Serialize_Float)
-        s_fn_Serialize_Float(serializer, (float*)(selfAddr + 0x4c), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(selfAddr + 0x4c), nullptr);   // B.3.4 bridge
 
     // Serialize InternalBasePtr at +0x30
     if (s_fn_IBP_Serialize)
@@ -146,12 +148,12 @@ void BoatComponent_Shutdown(BoatComponent* self, void* stream) {
 
     // Serialize int at +0x70 (dock ID)
     if (s_fn_Serialize_Int)
-        s_fn_Serialize_Int(serializer, (int*)(selfAddr + 0x70), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(selfAddr + 0x70), nullptr);   // B.3.4 bridge
 
     // Serialize Vector3 array at +0x60 (count at +0x68)
     uint32_t localCount = *(uint32_t*)(selfAddr + 0x68);
     if (s_fn_Serialize_Int)
-        s_fn_Serialize_Int(serializer, (int*)&localCount, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
 
     // If loading, resize array
     uintptr_t serializerObj = *(uintptr_t*)serializer;
@@ -171,7 +173,7 @@ void BoatComponent_Shutdown(BoatComponent* self, void* stream) {
     }
 
     if (s_fn_Serializer_Dtor)
-        s_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

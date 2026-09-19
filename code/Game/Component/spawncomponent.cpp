@@ -20,6 +20,8 @@
 #include <cstdlib>
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -372,8 +374,8 @@ extern "C" void SpawnComponent_Serialize(void* self, void* stream) {
     if (s_fn_ComponentSerialize) s_fn_ComponentSerialize(self, stream);
 
     uint8_t* comp = reinterpret_cast<uint8_t*>(self);
-    uint8_t ser[24];
-    s_fn_SerCtor(ser, stream, 0);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // True when the serializer is READING (retail reads the stream's own +8
     // field for this component, equivalent to the serializer's first field).
@@ -382,7 +384,7 @@ extern "C" void SpawnComponent_Serialize(void* self, void* stream) {
     };
 
     int count = *reinterpret_cast<int*>(comp + 0x30);
-    s_fn_SerInt(ser, &count, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
     if (Loading(ser))
         GameColl::AsArray<GameColl::Ptr8>(comp + 0x28).SetSize(count);  // also writes comp+0x30 = count
 
@@ -404,7 +406,7 @@ extern "C" void SpawnComponent_Serialize(void* self, void* stream) {
             GameColl::AsArray<GameColl::Ptr8>(comp + 0x28).SetSize(descCount);
     }
 
-    if (s_fn_SerDtor) s_fn_SerDtor(ser);
+    if (s_fn_SerDtor) reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

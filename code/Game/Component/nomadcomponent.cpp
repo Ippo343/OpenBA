@@ -14,9 +14,11 @@
 #include "resolve.h"
 #include "math/Math.h"
 #include "ui/UserInterface.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
@@ -73,13 +75,13 @@ void NomadComponent_Shutdown(NomadComponent* self, void* stream) {
         s_fn_Component_Serialize(self, stream);
 
     // Empty controller serializer block
-    uint8_t serializer1[24];
-    if (s_fn_Serializer_Ctor) s_fn_Serializer_Ctor(serializer1, stream, 0);
-    if (s_fn_Serializer_Dtor) s_fn_Serializer_Dtor(serializer1);
+    alignas(8) uint8_t serializer1[24];
+    if (s_fn_Serializer_Ctor) ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    if (s_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();                                       // B.3.4 bridge
 
     // Main data serializer
-    uint8_t serializer2[24];
-    if (s_fn_Serializer_Ctor) s_fn_Serializer_Ctor(serializer2, stream, 0);
+    alignas(8) uint8_t serializer2[24];
+    if (s_fn_Serializer_Ctor) ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize IBP at +0x28
     if (s_fn_IBP_Serialize)
@@ -101,13 +103,13 @@ void NomadComponent_Shutdown(NomadComponent* self, void* stream) {
 
     // Serialize int at +0x50
     if (s_fn_Serializer_SerializeInt)
-        s_fn_Serializer_SerializeInt(serializer2, (int*)(selfAddr + 0x50), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>(selfAddr + 0x50), nullptr);   // B.3.4 bridge
 
     // Serialize Time at +0x48
     if (s_fn_Time_Serialize)
         s_fn_Time_Serialize((void*)(selfAddr + 0x48), serializer2);
 
-    if (s_fn_Serializer_Dtor) s_fn_Serializer_Dtor(serializer2);
+    if (s_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();                                       // B.3.4 bridge
 }
 
 // ============================================================

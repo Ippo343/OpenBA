@@ -16,9 +16,11 @@
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
@@ -181,14 +183,14 @@ void RawMaterialComponent_Shutdown(RawMaterialComponent* self, void* stream) {
         s_fn_Component_Serialize(self, stream);
     }
 
-    uint8_t serializerBuf[24];
+    alignas(8) uint8_t serializerBuf[24];
     if (s_fn_Serializer_Ctor) {
-        s_fn_Serializer_Ctor(serializerBuf, stream, 2);
+        ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 2);   // B.3.4 bridge
     }
 
     // Serialize field28 (resource type ID)
     if (s_fn_Serialize_Int) {
-        s_fn_Serialize_Int(serializerBuf, (int*)&self->field28, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->field28), nullptr);   // B.3.4 bridge
     }
 
     // Serialize field38 (Time accumulator)
@@ -198,14 +200,14 @@ void RawMaterialComponent_Shutdown(RawMaterialComponent* self, void* stream) {
 
     // Version >= 2: serialize field30
     if (s_fn_Serializer_GetVersion) {
-        int version = s_fn_Serializer_GetVersion(serializerBuf);
+        int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
         if (version >= 2 && s_fn_SerializeField30) {
             s_fn_SerializeField30(&self->field30, serializerBuf);
         }
     }
 
     if (s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Dtor(serializerBuf);
+        reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();                                       // B.3.4 bridge
     }
 }
 

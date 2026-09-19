@@ -16,8 +16,10 @@
 #include "options.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -163,27 +165,27 @@ void MapComponent_Shutdown(MapComponent* self, void* stream) {
     }
 
     // Create local IO::Serializer (24 bytes on stack)
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (s_fn_Serializer_Ctor_dispatch) {
-        s_fn_Serializer_Ctor_dispatch(serializer, stream, 0);
+        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
 
     // Serialize 4 uint16 tile coords as shorts
     if (s_fn_Serialize_Short) {
-        s_fn_Serialize_Short(serializer, (int16_t*)&self->tileX0, nullptr);
-        s_fn_Serialize_Short(serializer, (int16_t*)&self->tileY0, nullptr);
-        s_fn_Serialize_Short(serializer, (int16_t*)&self->tileX1, nullptr);
-        s_fn_Serialize_Short(serializer, (int16_t*)&self->tileY1, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&self->tileX0), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&self->tileY0), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&self->tileX1), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&self->tileY1), nullptr);   // B.3.4 bridge
     }
 
     // Serialize extra int at +0x30
     if (s_fn_Serialize_Int_dispatch) {
-        s_fn_Serialize_Int_dispatch(serializer, &self->extraField, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->extraField, nullptr);   // B.3.4 bridge
     }
 
     // Destroy serializer
     if (s_fn_Serializer_Dtor_dispatch) {
-        s_fn_Serializer_Dtor_dispatch(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     }
 }
 

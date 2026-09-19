@@ -25,6 +25,8 @@
 #include <cstdint>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include <new>
 
 // ============================================================
 // Locally resolved function pointers
@@ -170,23 +172,23 @@ void StateMachineComponent_Shutdown(StateMachineComponent* self, void* stream) {
     }
 
     // Create IO::Serializer with version 0
-    uint8_t serializer[24]; // IO::Serializer is 24 bytes (stack local)
+    alignas(8) uint8_t serializer[24]; // IO::Serializer is 24 bytes (stack local)
     if (g_fn_Serializer_Ctor) {
-        g_fn_Serializer_Ctor(serializer, stream, 0);
+        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
 
     // Serialize 4 individual bytes from stateFlags at +0x50, +0x51, +0x52, +0x53
     uint8_t* base = reinterpret_cast<uint8_t*>(self);
     if (s_fn_Serialize_Char) {
-        s_fn_Serialize_Char(serializer, base + 0x50, nullptr);
-        s_fn_Serialize_Char(serializer, base + 0x51, nullptr);
-        s_fn_Serialize_Char(serializer, base + 0x52, nullptr);
-        s_fn_Serialize_Char(serializer, base + 0x53, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned char*>(base + 0x50), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned char*>(base + 0x51), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned char*>(base + 0x52), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned char*>(base + 0x53), nullptr);   // B.3.4 bridge
     }
 
     // Destroy serializer
     if (g_fn_Serializer_Dtor) {
-        g_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     }
 }
 

@@ -11,8 +11,10 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Game/serialize_externals.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -48,17 +50,17 @@ void AbsorbResourceComponent_Shutdown(AbsorbResourceComponent* self, void* strea
         s_fn_Component_Serialize(self, stream);
 
     // First empty serializer block (version 0)
-    uint8_t serializerBuf1[24];
+    alignas(8) uint8_t serializerBuf1[24];
     if (s_fn_Serializer_Ctor && s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Ctor(serializerBuf1, stream, 0);
-        s_fn_Serializer_Dtor(serializerBuf1);
+        ::new (static_cast<void*>(serializerBuf1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializerBuf1)->~Serializer();                                       // B.3.4 bridge
     }
 
     // Second empty serializer block (version 0)
-    uint8_t serializerBuf2[24];
+    alignas(8) uint8_t serializerBuf2[24];
     if (s_fn_Serializer_Ctor && s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Ctor(serializerBuf2, stream, 0);
-        s_fn_Serializer_Dtor(serializerBuf2);
+        ::new (static_cast<void*>(serializerBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializerBuf2)->~Serializer();                                       // B.3.4 bridge
     }
 }
 
@@ -135,8 +137,8 @@ void Component_SerializeReimpl(void* selfP, void* stream) {
 
     if (s_cs_Persist) s_cs_Persist(selfP, stream);
 
-    uint8_t ser[24];
-    if (s_cs_Ctor) s_cs_Ctor(ser, stream, 0);
+    alignas(8) uint8_t ser[24];
+    if (s_cs_Ctor) ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     if (s_cs_IBPSer) s_cs_IBPSer((void*)(self + 0x10), ser);
     void* owner = *(void**)(self + 0x10);
@@ -145,10 +147,10 @@ void Component_SerializeReimpl(void* selfP, void* stream) {
         *(uint64_t*)(self + 0x10) = 0;
     }
 
-    if (s_cs_SerUint) s_cs_SerUint(ser, (uint32_t*)(self + 0x20), nullptr);
+    if (s_cs_SerUint) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(self + 0x20), nullptr);   // B.3.4 bridge
     if (s_cs_Helper1d10) s_cs_Helper1d10((void*)(self + 0x18), ser);
 
-    if (s_cs_Dtor) s_cs_Dtor(ser);
+    if (s_cs_Dtor) reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

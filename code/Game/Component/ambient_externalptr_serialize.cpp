@@ -26,6 +26,7 @@
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 
 namespace {
@@ -37,7 +38,7 @@ inline int SerializerMode(void* serializer) {
 
 inline int EncodingType(void* serializer) {
     if (!fn_Serializer_GetEncoding) return 0;
-    void* enc = fn_Serializer_GetEncoding(serializer);
+    void* enc = const_cast<IO::Encoding*>(&reinterpret_cast<IO::Serializer*>(serializer)->GetEncoding());   // B.3.4 bridge
     if (!enc) return 0;
     void** vt = *reinterpret_cast<void***>(enc);           // Encoding vtable
     return reinterpret_cast<int(*)(void*)>(vt[2])(enc);    // +0x10 GetType
@@ -83,7 +84,7 @@ extern "C" void AmbientExternalPtrSerialize_Reimpl(void* fieldPtr, void* seriali
                 reinterpret_cast<const ::Object::External*>(*field));  // B.3.3 bridge
         // Serialize the reference id (matches the exe's guarded Serialize(uint)).
         if (fn_Serializer_Serialize_Uint)
-            fn_Serializer_Serialize_Uint(serializer, &refId, nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(&refId), nullptr);   // B.3.4 bridge
         if ((int)refId != -1) {
             if (loading) {
                 pathBuf = efactory->GetPathForReferenceId(refId);
@@ -94,7 +95,7 @@ extern "C" void AmbientExternalPtrSerialize_Reimpl(void* fieldPtr, void* seriali
         // Non-reference mode: bool "present" flag, then the path string.
         uint8_t present = (*field != nullptr) ? 1 : 0;
         if (g_fn_Serialize_Bool)
-            g_fn_Serialize_Bool(serializer, &present, nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&present), nullptr);   // B.3.4 bridge
         if (present) {
             if (*field != nullptr)
                 pathBuf = reinterpret_cast<const ::Object::External*>(*field)->GetPath();  // B.3.3 bridge — save: fill path from object

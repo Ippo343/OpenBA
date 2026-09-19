@@ -28,7 +28,9 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 namespace {
 constexpr uintptr_t kVtableAddr    = 0x140163e90;
@@ -87,8 +89,8 @@ void NaturalResourceDescription_Serialize(void* self, void* stream) {
         return;
     }
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // The serializer object pointer is stored at serializer+8 (see Ser ctor).
     void* serObj = *reinterpret_cast<void**>(serializer + 8);
@@ -96,26 +98,26 @@ void NaturalResourceDescription_Serialize(void* self, void* stream) {
     // +0x20 ExternalPtr<BuildingDescription>
     fn_ExternalPtr_BuildSerialize(s + 0x20, serializer);
 
-    fn_Serializer_Serialize_Float(serializer, reinterpret_cast<float*>(s + 0x28), nullptr);
-    fn_Serializer_Serialize_Float(serializer, reinterpret_cast<float*>(s + 0x2c), nullptr);
-    fn_Serializer_Serialize_Float(serializer, reinterpret_cast<float*>(s + 0x30), nullptr);
-    fn_Serializer_Serialize_Float(serializer, reinterpret_cast<float*>(s + 0x34), nullptr);
-    fn_Serializer_Serialize_Float(serializer, reinterpret_cast<float*>(s + 0x38), nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x28), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x2c), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x30), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x34), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x38), nullptr);   // B.3.4 bridge
 
-    g_fn_Serialize_Bool(serializer, s + 0x48, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x48), nullptr);   // B.3.4 bridge
 
-    fn_Serializer_Serialize_Float(serializer, reinterpret_cast<float*>(s + 0x4c), nullptr);
-    fn_Serializer_Serialize_Float(serializer, reinterpret_cast<float*>(s + 0x50), nullptr);
-    fn_Serializer_Serialize_Float(serializer, reinterpret_cast<float*>(s + 0x54), nullptr);
-    fn_Serializer_Serialize_Float(serializer, reinterpret_cast<float*>(s + 0x58), nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x4c), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x50), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x54), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x58), nullptr);   // B.3.4 bridge
 
-    g_fn_Serialize_Int(serializer, s + 0x5c, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x5c), nullptr);   // B.3.4 bridge
 
-    fn_Serializer_Serialize_Float(serializer, reinterpret_cast<float*>(s + 0x3c), nullptr);
-    fn_Serializer_Serialize_Float(serializer, reinterpret_cast<float*>(s + 0x40), nullptr);
-    fn_Serializer_Serialize_Float(serializer, reinterpret_cast<float*>(s + 0x44), nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x3c), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x40), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x44), nullptr);   // B.3.4 bridge
 
-    g_fn_Serialize_Bool(serializer, s + 0x64, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x64), nullptr);   // B.3.4 bridge
 
     // +0x68, +0x70 System::Time::Serialize
     g_fn_Time_Serialize(s + 0x68, serializer);
@@ -138,9 +140,9 @@ void NaturalResourceDescription_Serialize(void* self, void* stream) {
     }
 
     // +0x60 float
-    fn_Serializer_Serialize_Float(serializer, reinterpret_cast<float*>(s + 0x60), nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x60), nullptr);   // B.3.4 bridge
 
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
 }
 
 void* NaturalResourceDescription_Dtor(void* self, uint32_t flags) {

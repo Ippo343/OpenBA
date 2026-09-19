@@ -30,7 +30,9 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 static const uintptr_t kCreateFencedDescriptionVtable = 0x1401591a0;
 
@@ -67,17 +69,17 @@ void CreateFencedDescription_Serialize(void* self, void* stream) {
         !fn_ExternalPtr_BuildSerialize) {
         return;
     }
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     FencedEncodingVCall3(serializer, s + 0x20, 0);                  // enum +0x20
     fn_ExternalRefArray_Serialize(serializer, 6, s + 0x28, nullptr);// ExtPtr[6] +0x28
-    g_fn_Serialize_Int (serializer, s + 0x58, nullptr);            // int  +0x58
-    g_fn_Serialize_Int (serializer, s + 0x5c, nullptr);            // int  +0x5c
-    g_fn_Serialize_Int (serializer, s + 0x60, nullptr);            // int  +0x60
-    g_fn_Serialize_Int (serializer, s + 0x64, nullptr);            // int  +0x64
-    g_fn_Serialize_Bool(serializer, s + 0x68, nullptr);            // bool +0x68
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x58), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x5c), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x60), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x64), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x68), nullptr);   // B.3.4 bridge
     fn_ExternalPtr_BuildSerialize(s + 0x70, serializer);          // ExtPtr +0x70
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 void* CreateFencedDescription_Dtor(void* self, uint32_t flags) {

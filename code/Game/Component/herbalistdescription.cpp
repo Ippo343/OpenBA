@@ -14,7 +14,9 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayBase);
 
@@ -37,11 +39,11 @@ static void HerbalistDescription_Init(void* self) {
 void HerbalistDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int) return;
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // External*-array @ +0x20 (count @ +0x28, stride 8)
-    g_fn_Serialize_Int(serializer, s + 0x28, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
     int n = *(int32_t*)(s + 0x28);
     if (HD_SerStreamErr(serializer) == 0 && n > 0 && fn_MemAlloc && g_pMemAllocSingleton) {
         void* buf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)n * 8, 8);
@@ -51,8 +53,8 @@ void HerbalistDescription_Serialize(void* self, void* stream) {
     }
     Desc_LoadExternalArray(serializer, n, *(void**)(s + 0x20));
 
-    SerializerEncodingVCall(serializer, 0x98, s + 0x30);   // enum +0x30
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x30), nullptr);   // B.3.4 bridge (enum +0x30)
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 void* HerbalistDescription_Dtor(void* self, uint32_t flags) {

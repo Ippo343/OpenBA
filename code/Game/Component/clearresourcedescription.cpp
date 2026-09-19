@@ -9,7 +9,9 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 static const uintptr_t kClearResourceDescriptionVtable = 0x1401628d0;
 
@@ -20,10 +22,10 @@ static void ClearResourceDescription_Init(void* self) {
 
 void ClearResourceDescription_Serialize(void* self, void* stream) {
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor) return;
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     // No payload fields.
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
 }
 
 void* ClearResourceDescription_Dtor(void* self, uint32_t flags) {

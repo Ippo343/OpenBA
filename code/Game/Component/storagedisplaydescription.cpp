@@ -12,7 +12,9 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 namespace {
 constexpr uintptr_t kVtable = 0x14015a800;
@@ -33,9 +35,9 @@ extern "C" void* StorageDisplayDescription_Ctor_Impl(void* mem) {
 extern "C" void StorageDisplayDescription_Serialize(void* self, void* stream) {
     (void)self;
     if (!g_fn_Serializer_Ctor) return;
-    uint8_t ser[24];
-    g_fn_Serializer_Ctor(ser, stream, 0);
-    if (g_fn_Serializer_Dtor) g_fn_Serializer_Dtor(ser);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // Dtor (vtable +0x00, exe 0x14000c8e0)

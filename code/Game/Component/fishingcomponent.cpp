@@ -13,8 +13,10 @@
 #include "Component/fishingcomponent_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -80,22 +82,22 @@ void FishingComponent_Shutdown(FishingComponent* self, void* stream) {
     }
 
     // Serialize FishingComponent's own fields
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (s_fn_Serializer_Ctor) {
-        s_fn_Serializer_Ctor(serializer, stream, 0);
+        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
 
     if (s_fn_Serializer_SerializeBool) {
         bool* pFishingFlag = reinterpret_cast<bool*>(&self->fishingFlag);
-        s_fn_Serializer_SerializeBool(serializer, pFishingFlag, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*pFishingFlag, nullptr);   // B.3.4 bridge
     }
 
     if (s_fn_Serializer_SerializeFloat) {
-        s_fn_Serializer_SerializeFloat(serializer, &self->fishingRate, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->fishingRate, nullptr);   // B.3.4 bridge
     }
 
     if (s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     }
 }
 

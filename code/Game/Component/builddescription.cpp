@@ -36,7 +36,9 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* serializer);
 
@@ -62,8 +64,8 @@ void BuildDescription_Serialize(void* self, void* stream) {
         !g_fn_Serialize_Bool || !fn_MemAlloc || !g_pMemAllocSingleton) {
         return;
     }
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Preserve any already-populated requirement array across re-loads. The engine
     // re-invokes this Serialize for an already-loaded resource.
@@ -99,7 +101,7 @@ void BuildDescription_Serialize(void* self, void* stream) {
     bool oldPopulated = (oldArr && oldCount > 0 && *(uint64_t*)oldArr != 0);
 
     // count @ +0x28 (read from stream)
-    g_fn_Serialize_Int(serializer, s + 0x28, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
     int count = *(int32_t*)(s + 0x28);
 
     // Fresh-load: alloc count * 0x10 element buffer. Each element = {External* @0,
@@ -115,14 +117,14 @@ void BuildDescription_Serialize(void* self, void* stream) {
     for (int i = 0; i < count; ++i, e += 0x10) {
         *(uint64_t*)(e + 0)  = 0;   // External* (resolved ref)
         *(int32_t*) (e + 8)  = 0;   // int cost qty
-        g_fn_Serialize_Int(serializer, e + 8, nullptr);                 // int  @ elem+0x08
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(e + 8), nullptr);   // B.3.4 bridge  (int @ elem+0x08)
         Reimpl_ExternalPtr_Serialize_StringTable(e + 0, serializer);    // ref  @ elem+0x00
     }
 
-    g_fn_Serialize_Int (serializer, s + 0x30, nullptr);  // int  +0x30
-    g_fn_Serialize_Bool(serializer, s + 0x34, nullptr);  // bool +0x34
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);   // B.3.4 bridge  (int +0x30)
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x34), nullptr);   // B.3.4 bridge  (bool +0x34)
 
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 
     // Commit, keeping a populated array over an empty re-load.
     bool newPopulated = (count > 0 && arr && *(uint64_t*)arr != 0);

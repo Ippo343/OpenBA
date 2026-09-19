@@ -25,8 +25,10 @@
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 static constexpr uintptr_t kVtableAddr = 0x140162a00;
 static constexpr int       kSize       = 0x38;
@@ -63,7 +65,7 @@ extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayB
     ::Object::ExternalFactory* efactory =
         reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
 
-    void* encoding = fn_Serializer_GetEncoding(serializer);
+    void* encoding = const_cast<IO::Encoding*>(&reinterpret_cast<IO::Serializer*>(serializer)->GetEncoding());   // B.3.4 bridge
     if (!encoding) return;
     using EncFn = int (*)(void*);
     EncFn getState = reinterpret_cast<EncFn>(
@@ -91,7 +93,7 @@ extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayB
                 reinterpret_cast<const ::Object::External*>(*slot));  // B.3.3 bridge
             bool needsPath = false;
             if (!*slot || SerStreamErr(serializer) != 0 || refId != 0xFFFFFFFFu) {
-                fn_Serializer_Serialize_Uint(serializer, &refId, nullptr);
+                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(refId, nullptr);   // B.3.4 bridge
                 if (refId != 0xFFFFFFFFu) {
                     if (SerStreamErr(serializer) == 0) {
                         System::Filename tmpFn = efactory->GetPathForReferenceId(refId);
@@ -100,14 +102,14 @@ extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayB
                     needsPath = true;
                 }
             } else {
-                fn_Serializer_Serialize_Uint(serializer, &refId, nullptr);
+                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(refId, nullptr);   // B.3.4 bridge
             }
             if (needsPath && SerStreamErr(serializer) == 0) {
                 *slot = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fnameBuf)));
             }
         } else {
             bool hasRef = (*slot != nullptr);
-            g_fn_Serialize_Bool(serializer, &hasRef, nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(hasRef, nullptr);   // B.3.4 bridge
             if (hasRef) {
                 if (*slot) {
                     fnameBuf = reinterpret_cast<const ::Object::External*>(*slot)->GetPath();  // B.3.3 bridge
@@ -139,9 +141,9 @@ extern "C" void* ComponentDescription_CtorImpl(void* mem) {
 extern "C" void ComponentDescription_Serialize(void* self, void* stream) {
     if (!self) return;
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    uint8_t serBuf[24];
+    alignas(8) uint8_t serBuf[24];
     if (!g_fn_Serializer_Ctor || !g_fn_Serialize_Int) return;
-    g_fn_Serializer_Ctor(serBuf, stream, 0);
+    ::new (static_cast<void*>(serBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // category enum (+0x20) via serializer vtable+0x98 (enum serialize)
     void* serObj = *(void**)(serBuf + 8);
@@ -153,7 +155,7 @@ extern "C" void ComponentDescription_Serialize(void* self, void* stream) {
     }
 
     // sub-description count (+0x30) + fresh array resize (+0x28, stride 8)
-    g_fn_Serialize_Int(serBuf, s + OFF_COUNT, nullptr);
+    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(*reinterpret_cast<int*>(s + OFF_COUNT), nullptr);   // B.3.4 bridge
     int count = *(int32_t*)(s + OFF_COUNT);
     if (SerStreamErr(serBuf) == 0 && count > 0 && fn_MemAlloc && g_pMemAllocSingleton) {
         void* buf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * 8, 8);
@@ -165,7 +167,7 @@ extern "C" void ComponentDescription_Serialize(void* self, void* stream) {
     // load each sub-description (FUN_140032090)
     Desc_LoadExternalArray(serBuf, count, *(void**)(s + OFF_ARRAY));
 
-    if (g_fn_Serializer_Dtor) g_fn_Serializer_Dtor(serBuf);
+    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serBuf)->~Serializer();   // B.3.4 bridge
 }
 
 extern "C" void* ComponentDescription_Dtor(void* self, uint32_t flags) {

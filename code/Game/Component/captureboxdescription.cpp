@@ -22,7 +22,9 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 static const uintptr_t kCaptureBoxDescriptionVtable = 0x14015d4a0;
 
@@ -43,11 +45,11 @@ void CaptureBoxDescription_Serialize(void* self, void* stream) {
         return;
     }
     fn_ElementDescription_Serialize(self, stream);           // base
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     fn_ExternalPtr_Serialize(s + 0x68, serializer);          // ExternalPtr +0x68
     reinterpret_cast<System::String*>(s + 0x70)->Serialize(serializer);             // B.3.1 bridge: String      +0x70
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
 }
 
 void* CaptureBoxDescription_Dtor(void* self, uint32_t flags) {

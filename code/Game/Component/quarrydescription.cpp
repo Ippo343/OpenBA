@@ -15,7 +15,9 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 static const uintptr_t kQuarryDescriptionVtable = 0x14015a510;
 
@@ -32,12 +34,12 @@ void QuarryDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor ||
         !fn_Serializer_Serialize_Float || !fn_ExternalPtr_BuildSerialize) return;
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
-    fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x2c), nullptr);
-    fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x28), nullptr);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x2c), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x28), nullptr);   // B.3.4 bridge
     fn_ExternalPtr_BuildSerialize(s + 0x20, serializer);   // ExternalPtr +0x20
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 void* QuarryDescription_Dtor(void* self, uint32_t flags) {

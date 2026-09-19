@@ -40,6 +40,7 @@
 #include "system/String.h"
 #include <new>
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #if defined(_DEBUG)
 #include <cstdio>
@@ -124,11 +125,11 @@ extern "C" void ToolbarDescription_StringArrayResize(void* hdr, unsigned newCoun
 // Serialize (vtable +0x28, 0x14012da30)
 void ToolbarDescription_Serialize(void* self, void* stream) {
     uintptr_t s = (uintptr_t)self;
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (!g_fn_Serializer_Ctor || !g_fn_Serialize_Int || !fn_ExternalPtr_Serialize2) {
         return;
     }
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // +0x20 in the exe uses FUN_14000bd30; +0x30 uses FUN_14000bf40. Both have
     // a byte-identical stream layout (only the validated typeId differs, trusted
@@ -146,7 +147,7 @@ void ToolbarDescription_Serialize(void* self, void* stream) {
     //    skip the allocation (leaving +0x50 NULL — the "cost ???" bug). The resize
     //    itself writes +0x58 once it has grown the buffer.
     int count = *(int32_t*)(s + 0x58);
-    g_fn_Serialize_Int(serializer, &count, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
 
     // 8. on load, resize the String array (+0x50) to count. ResolveAddr(Exe, 0x140028860)
     //    is NULL in the standalone exe, so
@@ -168,10 +169,10 @@ void ToolbarDescription_Serialize(void* self, void* stream) {
     }
 
     // 10/11. two ints (note: +0x64 BEFORE +0x60 in the original stream)
-    g_fn_Serialize_Int(serializer, (void*)(s + 0x64), nullptr);
-    g_fn_Serialize_Int(serializer, (void*)(s + 0x60), nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x64), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x60), nullptr);   // B.3.4 bridge
 
-    if (g_fn_Serializer_Dtor) g_fn_Serializer_Dtor(serializer);
+    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 
 #if defined(_DEBUG)
     if (loading && count > 0) {

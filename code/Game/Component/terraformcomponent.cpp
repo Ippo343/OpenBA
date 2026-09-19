@@ -14,8 +14,10 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -71,14 +73,14 @@ void TerraformComponent_Shutdown(TerraformComponent* self, void* stream) {
     if (s_fn_Component_Serialize)
         s_fn_Component_Serialize(self, stream);
 
-    uint8_t serializer[24];
-    if (s_fn_Serializer_Ctor) s_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    if (s_fn_Serializer_Ctor) ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize Vector3 count from +0x30
     uint32_t count = *(uint32_t*)(selfAddr + 0x30);
     uint32_t localCount = count;
     if (s_fn_SerializeInt)
-        s_fn_SerializeInt(serializer, (int*)&localCount, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
 
     // If loading, resize the Vector3 array
     // B.3.2 bridge: FUN_14000d030 is Collection::Array<Vector3>::SetSize(n)
@@ -97,7 +99,7 @@ void TerraformComponent_Shutdown(TerraformComponent* self, void* stream) {
         }
     }
 
-    if (s_fn_Serializer_Dtor) s_fn_Serializer_Dtor(serializer);
+    if (s_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

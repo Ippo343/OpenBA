@@ -14,8 +14,10 @@
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -73,18 +75,18 @@ void AutoPickupComponent_Shutdown(AutoPickupComponent* self, void* stream) {
     if (s_fn_Component_Serialize)
         s_fn_Component_Serialize(self, stream);
 
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (!s_fn_Serializer_Ctor) return;
-    s_fn_Serializer_Ctor(serializer, stream, 0);
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize isEnabled bool at +0x28
     if (s_fn_Serialize_Bool)
-        s_fn_Serialize_Bool(serializer, (bool*)(selfAddr + 0x28), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(selfAddr + 0x28), nullptr);   // B.3.4 bridge
 
     // Read count from +0x38, serialize it
     int localCount = *(int*)(selfAddr + 0x38);
     if (s_fn_Serialize_Int)
-        s_fn_Serialize_Int(serializer, &localCount, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(localCount, nullptr);   // B.3.4 bridge
 
     // If loading (stream mode == 0), resize array at +0x30
     uintptr_t serializerObj = *(uintptr_t*)serializer;
@@ -101,10 +103,10 @@ void AutoPickupComponent_Shutdown(AutoPickupComponent* self, void* stream) {
     // Bulk-serialize int array
     int* arrayPtr = *(int**)(selfAddr + 0x30);
     if (s_fn_Serialize_IntArray)
-        s_fn_Serialize_IntArray(serializer, localCount, arrayPtr, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(localCount, arrayPtr, nullptr);   // B.3.4 bridge
 
     if (s_fn_Serializer_Dtor)
-        s_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
 }
 
 // ============================================================

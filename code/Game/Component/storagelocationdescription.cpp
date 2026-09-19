@@ -12,7 +12,9 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 namespace {
 constexpr uintptr_t kVtable = 0x140164910;
@@ -43,10 +45,10 @@ extern "C" void* StorageLocationDescription_Ctor_Impl(void* mem) {
 extern "C" void StorageLocationDescription_Serialize(void* self, void* stream) {
     if (!g_fn_Serializer_Ctor) return;
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    uint8_t ser[24];
-    g_fn_Serializer_Ctor(ser, stream, 0);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     SerializeEnum(ser, s + 0x20);                 // locationType (enum)
-    if (g_fn_Serializer_Dtor) g_fn_Serializer_Dtor(ser);
+    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(ser)->~Serializer();              // B.3.4 bridge
 }
 
 // Dtor (vtable +0x00, exe 0x140038f60)

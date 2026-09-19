@@ -13,8 +13,10 @@
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -63,17 +65,17 @@ void MultiObjectComponent_Shutdown(MultiObjectComponent* self, void* stream) {
         s_fn_Component_Serialize(self, stream);
 
     // First empty serializer block (controller section)
-    uint8_t serializer1[24];
-    if (s_fn_Serializer_Ctor) s_fn_Serializer_Ctor(serializer1, stream, 0);
-    if (s_fn_Serializer_Dtor) s_fn_Serializer_Dtor(serializer1);
+    alignas(8) uint8_t serializer1[24];
+    if (s_fn_Serializer_Ctor) ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    if (s_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
 
     // Second serializer block with entity array + multiCount
-    uint8_t serializer2[24];
-    if (s_fn_Serializer_Ctor) s_fn_Serializer_Ctor(serializer2, stream, 0);
+    alignas(8) uint8_t serializer2[24];
+    if (s_fn_Serializer_Ctor) ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     int localCount = *(int*)((uintptr_t)self + 0x50);
     if (s_fn_Serializer_SerializeInt)
-        s_fn_Serializer_SerializeInt(serializer2, &localCount, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(localCount, nullptr);   // B.3.4 bridge
 
     // If loading (stream+8 == 0), resize array
     // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
@@ -101,7 +103,7 @@ void MultiObjectComponent_Shutdown(MultiObjectComponent* self, void* stream) {
 
     // Serialize multiCount at +0x58
     if (s_fn_Serializer_SerializeInt)
-        s_fn_Serializer_SerializeInt(serializer2, (int*)((uintptr_t)self + 0x58), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>((uintptr_t)self + 0x58), nullptr);   // B.3.4 bridge
 
     // On load: compact array — remove null entries
     if (*(int*)((uintptr_t)stream + 8) == 0) {
@@ -127,7 +129,7 @@ void MultiObjectComponent_Shutdown(MultiObjectComponent* self, void* stream) {
         }
     }
 
-    if (s_fn_Serializer_Dtor) s_fn_Serializer_Dtor(serializer2);
+    if (s_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

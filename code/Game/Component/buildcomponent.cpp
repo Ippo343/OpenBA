@@ -20,10 +20,12 @@
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <new>
 
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -96,22 +98,22 @@ void BuildComponent_Shutdown(BuildComponent* self, void* stream) {
     fn_ComponentBase_Serialize(self, stream);
 
     // Version 0 block (empty — just opens and closes)
-    uint8_t ser0[24];
-    g_fn_Serializer_Ctor(ser0, stream, 0);
-    g_fn_Serializer_Dtor(ser0);
+    alignas(8) uint8_t ser0[24];
+    ::new (static_cast<void*>(ser0)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser0)->~Serializer();                                       // B.3.4 bridge
 
     // Version 1 block
-    uint8_t ser1[24];
-    g_fn_Serializer_Ctor(ser1, stream, 1);
+    alignas(8) uint8_t ser1[24];
+    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
 
     // Serialize buildState (+0x48), buildProgress (+0x4C), buildFlag (+0x50)
-    g_fn_Serialize_Int(ser1, (int*)(s + 0x48), nullptr);
-    g_fn_Serialize_Int(ser1, (int*)(s + 0x4C), nullptr);
-    g_fn_Serialize_Bool(ser1, (bool*)(s + 0x50), nullptr);
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x48), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x4C), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x50), nullptr);   // B.3.4 bridge
 
     // Serialize entityArray1 count (+0x60)
     int count1 = *(int*)(s + 0x60);
-    g_fn_Serialize_Int(ser1, &count1, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(count1, nullptr);   // B.3.4 bridge
 
     // On load: resize array
     int64_t serFirst = *(int64_t*)ser1;
@@ -140,7 +142,7 @@ void BuildComponent_Shutdown(BuildComponent* self, void* stream) {
 
     // Serialize entityArray2 count (+0x70)
     int count2 = *(int*)(s + 0x70);
-    g_fn_Serialize_Int(ser1, &count2, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(count2, nullptr);   // B.3.4 bridge
 
     // On load: resize array2
     serFirst = *(int64_t*)ser1;
@@ -167,7 +169,7 @@ void BuildComponent_Shutdown(BuildComponent* self, void* stream) {
         }
     }
 
-    g_fn_Serializer_Dtor(ser1);
+    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();                                       // B.3.4 bridge
 }
 
 // ============================================================

@@ -33,6 +33,7 @@
 #include "system/String.h"
 #include <new>
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 
 namespace {
@@ -81,10 +82,10 @@ extern "C" void ParticleDescription_Serialize(void* self, void* stream) {
         return;
     }
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    uint8_t ser[24];
-    g_fn_Serializer_Ctor(ser, stream, 0);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
-    g_fn_Serialize_Int(ser, s + 0x30, nullptr);            // emitterCount
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);            // emitterCount   // B.3.4 bridge
     int count = *(int32_t*)(s + 0x30);
 
     bool loading = (*(int32_t*)(*(uintptr_t*)ser + 8) == 0);
@@ -109,17 +110,17 @@ extern "C" void ParticleDescription_Serialize(void* self, void* stream) {
     for (int i = 0; i < count; ++i, e += 0x28) {
         fn_ExternalPtr_Serialize3(e + 0x00, ser);           // ref (elem+0)
         reinterpret_cast<System::String*>(e + 0x08)->Serialize(ser);               // B.3.1 bridge: String (elem+8)
-        g_fn_Serialize_Bool(ser, e + 0x10, nullptr);
-        g_fn_Serialize_Bool(ser, e + 0x11, nullptr);
-        g_fn_Serialize_Bool(ser, e + 0x12, nullptr);
-        g_fn_Serialize_Bool(ser, e + 0x13, nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(e + 0x10), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(e + 0x11), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(e + 0x12), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(e + 0x13), nullptr);   // B.3.4 bridge
         g_fn_Time_Serialize(e + 0x20, ser);                 // t1 (elem+0x20) FIRST
         g_fn_Time_Serialize(e + 0x18, ser);                 // t0 (elem+0x18) SECOND
     }
 
     fn_ExternalPtr_Serialize3(s + 0x20, ser);              // materialRef (+0x20)
 
-    if (g_fn_Serializer_Dtor) g_fn_Serializer_Dtor(ser);
+    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // Dtor (vtable +0x00, exe 0x14000a500)

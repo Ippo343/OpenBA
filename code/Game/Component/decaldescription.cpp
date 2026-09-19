@@ -28,7 +28,9 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 namespace {
 constexpr uintptr_t kVtable = 0x140163050;
@@ -71,13 +73,13 @@ extern "C" void DecalDescription_Serialize(void* self, void* stream) {
         return;
     }
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    uint8_t ser[24];
-    g_fn_Serializer_Ctor(ser, stream, 0);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
-    fn_Serializer_Serialize_Float(ser, (float*)(s + 0x20), nullptr);   // sizeA
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(s + 0x20), nullptr);   // sizeA   // B.3.4 bridge
 
     // --- refArray (External* pool) at +0x28 ---
-    g_fn_Serialize_Int(ser, s + 0x30, nullptr);            // refCount
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);            // refCount   // B.3.4 bridge
     int refCount = *(int32_t*)(s + 0x30);
     bool loading = (*(int32_t*)(*(uintptr_t*)ser + 8) == 0);
     if (loading) {
@@ -86,10 +88,10 @@ extern "C" void DecalDescription_Serialize(void* self, void* stream) {
     }
     fn_Array_Serialize_External_GraphicsMesh(ser, refCount, *(void**)(s + 0x28));
 
-    fn_Serializer_Serialize_Float(ser, (float*)(s + 0x48), nullptr);   // sizeB
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(s + 0x48), nullptr);   // sizeB   // B.3.4 bridge
 
     // --- quadArray (4-float entries) at +0x38 ---
-    g_fn_Serialize_Int(ser, s + 0x40, nullptr);            // quadCount
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x40), nullptr);            // quadCount   // B.3.4 bridge
     int quadCount = *(int32_t*)(s + 0x40);
     uint8_t* q;
     if (loading) {
@@ -102,16 +104,16 @@ extern "C" void DecalDescription_Serialize(void* self, void* stream) {
         q = *(uint8_t**)(s + 0x38);
     }
     for (int i = 0; i < quadCount; ++i, q += 0x10) {
-        fn_Serializer_Serialize_Float(ser, (float*)(q + 0x0), nullptr);
-        fn_Serializer_Serialize_Float(ser, (float*)(q + 0x4), nullptr);
-        fn_Serializer_Serialize_Float(ser, (float*)(q + 0x8), nullptr);
-        fn_Serializer_Serialize_Float(ser, (float*)(q + 0xc), nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(q + 0x0), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(q + 0x4), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(q + 0x8), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(q + 0xc), nullptr);   // B.3.4 bridge
     }
 
-    g_fn_Serialize_Bool(ser, s + 0x24, nullptr);           // flagA
-    g_fn_Serialize_Bool(ser, s + 0x25, nullptr);           // flagB
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(s + 0x24), nullptr);           // flagA   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(s + 0x25), nullptr);           // flagB   // B.3.4 bridge
 
-    if (g_fn_Serializer_Dtor) g_fn_Serializer_Dtor(ser);
+    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // Dtor (vtable +0x00, exe 0x1400338a0)

@@ -40,9 +40,11 @@
 #include "system/String.h"
 #include "resolve.h"
 #include "Component/coll_bridge.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <new>
 
 extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* serializer);
 
@@ -78,11 +80,11 @@ void CreatePlacedDescription_Serialize(void* self, void* stream) {
         !fn_MemAlloc || !g_pMemAllocSingleton) {
         return;
     }
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // enum @ +0x20
-    SerializerEncodingVCall(serializer, 0x98, s + 0x20);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x20), nullptr);   // B.3.4 bridge
 
     // int[] count @ +0x38, base @ +0x30 (stride 4).
     //
@@ -109,7 +111,7 @@ void CreatePlacedDescription_Serialize(void* self, void* stream) {
     // with them zero, `code` is 0 for every footprint cell, no terrain type is ever
     // allowed, and the building can never be placed anywhere.
     int count = *(int32_t*)(s + 0x38);
-    g_fn_Serialize_Int(serializer, &count, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
 
     // Retail gates the resize on its load flag: `if (*(int*)(local_20 + 8) == 0)`, where
     // local_20 is the Serializer's first qword = the Stream, so the test is stream+8
@@ -153,16 +155,16 @@ void CreatePlacedDescription_Serialize(void* self, void* stream) {
     }
     uint8_t* e = arr;
     for (int i = 0; i < count && arr; ++i, e += 4) {
-        SerializerEncodingVCall(serializer, 0x98, e);   // enum element
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(e), nullptr);   // B.3.4 bridge (enum element)
     }
 
     reinterpret_cast<System::String*>(s + 0x28)->Serialize(serializer);                   // B.3.1 bridge: String +0x28
-    g_fn_Serialize_Int(serializer, s + 0x44, nullptr);             // int    +0x44
-    g_fn_Serialize_Int(serializer, s + 0x48, nullptr);             // int    +0x48
-    g_fn_Serialize_Int(serializer, s + 0x40, nullptr);             // int    +0x40
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x44), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x48), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x40), nullptr);   // B.3.4 bridge
     Reimpl_ExternalPtr_Serialize_StringTable(s + 0x50, serializer);// ref    +0x50
 
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

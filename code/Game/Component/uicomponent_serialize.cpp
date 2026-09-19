@@ -32,7 +32,9 @@
 // today; it brings the class to parity with the rest of the save/load wave.
 #include "resolve.h"
 #include "Component/coll_bridge.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 namespace {
 
@@ -91,18 +93,18 @@ extern "C" void UIComponent_Serialize(void* self, void* stream) {
     if (!self || !stream || !s_Ctor || !s_Dtor || !s_Int) return;
     if (s_Base) s_Base(self, stream);
 
-    uint8_t ser[24];
-    s_Ctor(ser, stream, 0);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     int count = *reinterpret_cast<int*>(At(self, 0x30));
-    s_Int(ser, &count, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
     // B.3.2 bridge: FUN_14000a590 is Collection::Array<uint8_t>::SetSize(n)
     if (Loading(ser)) GameColl::AsArray<GameColl::U8>(At(self, 0x28)).SetSize(count);
 
     if (s_ByteArr) {
         uint8_t* ptr = *reinterpret_cast<uint8_t**>(At(self, 0x28));
-        s_ByteArr(ser, count, ptr, nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, ptr, nullptr);   // B.3.4 bridge
     }
 
-    s_Dtor(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }

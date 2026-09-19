@@ -19,7 +19,9 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 namespace {
 constexpr uintptr_t kVtable  = 0x1401646a0;
@@ -41,21 +43,21 @@ static void* StatusIconDescription_Ctor_Impl(void* mem) {
 // Serialize (vtable +0x28, FUN_14012c180)
 void StatusIconDescription_Serialize(void* self, void* stream) {
     uintptr_t s = (uintptr_t)self;
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (!g_fn_Serializer_Ctor || !fn_Serializer_Serialize_Float || !g_fn_Serialize_Bool ||
         !fn_ExternalPtr_Serialize2) {
         return;
     }
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // 1. ExternalPtr (+0x20) — see ClearAreaDescription note re: typeId trust.
     fn_ExternalPtr_Serialize2((void*)(s + 0x20), serializer);
     // 2. float (+0x28)
-    fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x28), nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x28), nullptr);   // B.3.4 bridge
     // 3. bool (+0x30)
-    g_fn_Serialize_Bool(serializer, (void*)(s + 0x30), nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x30), nullptr);   // B.3.4 bridge
 
-    if (g_fn_Serializer_Dtor) g_fn_Serializer_Dtor(serializer);
+    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // Dtor (vtable +0x00, FUN_140038a60) — scalar fields only, no heap.

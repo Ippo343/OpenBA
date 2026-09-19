@@ -12,9 +12,11 @@
 #include "Component/workcomponent_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
@@ -100,14 +102,14 @@ void WorkComponent_Shutdown(WorkComponent* self, void* stream) {
         s_fn_Component_Serialize(self, stream);
     }
 
-    uint8_t serializerBuf[24];
+    alignas(8) uint8_t serializerBuf[24];
     if (s_fn_Serializer_Ctor) {
-        s_fn_Serializer_Ctor(serializerBuf, stream, 3);
+        ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge
     }
 
     // Always serialize workId
     if (s_fn_Serializer_Serialize) {
-        s_fn_Serializer_Serialize(serializerBuf, &self->workId, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(self->workId, nullptr);   // B.3.4 bridge
     }
 
     // Legacy: version < 3 had a bool field (no longer used).
@@ -120,11 +122,11 @@ void WorkComponent_Shutdown(WorkComponent* self, void* stream) {
     // next record. Our own saves hid it because the save leg wrote the same 4
     // bytes it read back -- only a retail-authored save can catch this.
     if (s_fn_Serializer_GetVersion) {
-        int version = s_fn_Serializer_GetVersion(serializerBuf);
+        int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
         if (version < 3) {
             bool legacyBool = false;
             if (g_fn_Serialize_Bool) {
-                g_fn_Serialize_Bool(serializerBuf, &legacyBool, nullptr);
+                reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(legacyBool, nullptr);   // B.3.4 bridge
             } else {
                 static bool s_warned = false;
                 if (!s_warned) {
@@ -140,22 +142,22 @@ void WorkComponent_Shutdown(WorkComponent* self, void* stream) {
 
     // Version >= 1: serialize workState
     if (s_fn_Serializer_GetVersion) {
-        int version = s_fn_Serializer_GetVersion(serializerBuf);
+        int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
         if (version >= 1) {
-            s_fn_Serializer_Serialize(serializerBuf, &self->workState, nullptr);
+            reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(self->workState, nullptr);   // B.3.4 bridge
         }
     }
 
     // Version >= 2: serialize workFlags
     if (s_fn_Serializer_GetVersion) {
-        int version = s_fn_Serializer_GetVersion(serializerBuf);
+        int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
         if (version >= 2) {
-            s_fn_Serializer_Serialize(serializerBuf, (int*)&self->workFlags, nullptr);
+            reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->workFlags), nullptr);   // B.3.4 bridge
         }
     }
 
     if (s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Dtor(serializerBuf);
+        reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
     }
 }
 

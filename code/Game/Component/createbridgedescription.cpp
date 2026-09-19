@@ -28,7 +28,9 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 static const uintptr_t kCreateBridgeDescriptionVtable = 0x140162c30;
 
@@ -48,16 +50,16 @@ void CreateBridgeDescription_Serialize(void* self, void* stream) {
         !fn_ExternalRefArray_Serialize) {
         return;
     }
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
-    SerializerEncodingVCall(serializer, 0x98, s + 0x20);   // enum +0x20
-    SerializerEncodingVCall(serializer, 0x98, s + 0x28);   // enum +0x28
-    SerializerEncodingVCall(serializer, 0x98, s + 0x2c);   // enum +0x2c
-    SerializerEncodingVCall(serializer, 0x98, s + 0x24);   // enum +0x24
-    SerializerEncodingVCall(serializer, 0x98, s + 0x30);   // enum +0x30
-    g_fn_Serialize_Int(serializer, s + 0x34, nullptr);     // int  +0x34
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x20), nullptr);   // B.3.4 bridge  (enum +0x20)
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x28), nullptr);   // B.3.4 bridge  (enum +0x28)
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x2c), nullptr);   // B.3.4 bridge  (enum +0x2c)
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x24), nullptr);   // B.3.4 bridge  (enum +0x24)
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x30), nullptr);   // B.3.4 bridge  (enum +0x30)
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x34), nullptr);   // B.3.4 bridge  (int +0x34)
     fn_ExternalRefArray_Serialize(serializer, 5, s + 0x38, nullptr); // ExtPtr[5] +0x38
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 void* CreateBridgeDescription_Dtor(void* self, uint32_t flags) {

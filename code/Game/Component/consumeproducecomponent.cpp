@@ -12,8 +12,10 @@
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -116,13 +118,13 @@ void ConsumeProduceComponent_Shutdown(ConsumeProduceComponent* self, void* strea
     if (!s_fn_Serializer_Ctor || !s_fn_Serializer_Dtor) return;
 
     // Create versioned serializer (version 1)
-    uint8_t serBuf[24];
+    alignas(8) uint8_t serBuf[24];
     int64_t* pSerData = (int64_t*)serBuf;
-    s_fn_Serializer_Ctor(serBuf, stream, 1);
+    ::new (static_cast<void*>(serBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
 
     // Serialize consumeResourceId at +0x50
     if (s_fn_Serialize_Int) {
-        s_fn_Serialize_Int(serBuf, &self->consumeResourceId, nullptr);
+        reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(self->consumeResourceId, nullptr);   // B.3.4 bridge
     }
 
     // Copy consume count to local (original uses local_res8, NOT direct field access).
@@ -131,7 +133,7 @@ void ConsumeProduceComponent_Shutdown(ConsumeProduceComponent* self, void* strea
     // make old == new, causing resize to skip reallocation.
     int localCount = self->consumeCount;
     if (s_fn_Serialize_Int) {
-        s_fn_Serialize_Int(serBuf, &localCount, nullptr);
+        reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(localCount, nullptr);   // B.3.4 bridge
     }
 
     // On load (direction == 0): resize array if needed
@@ -143,17 +145,17 @@ void ConsumeProduceComponent_Shutdown(ConsumeProduceComponent* self, void* strea
 
     // Serialize float array using local count and rates pointer
     if (s_fn_Serialize_FloatArray) {
-        s_fn_Serialize_FloatArray(serBuf, localCount, self->consumeRates, nullptr);
+        reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(localCount, self->consumeRates, nullptr);   // B.3.4 bridge
     }
 
     // Serialize consumeState at +0x68
     if (s_fn_Serialize_Int) {
-        s_fn_Serialize_Int(serBuf, &self->consumeState, nullptr);
+        reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(self->consumeState, nullptr);   // B.3.4 bridge
     }
 
     // Version-0 migration: on load, if consumeResourceId < 0, reset to 0
     if (s_fn_Serializer_GetVersion) {
-        int version = s_fn_Serializer_GetVersion(serBuf);
+        int version = reinterpret_cast<IO::Serializer*>(serBuf)->GetVersion();   // B.3.4 bridge
         if (version == 0 && self->consumeResourceId < 0) {
             // Check if we're loading (stream direction == 0)
             if (*(int*)((uintptr_t)stream + 8) == 0) {
@@ -162,7 +164,7 @@ void ConsumeProduceComponent_Shutdown(ConsumeProduceComponent* self, void* strea
         }
     }
 
-    s_fn_Serializer_Dtor(serBuf);
+    reinterpret_cast<IO::Serializer*>(serBuf)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -311,13 +313,13 @@ void ResourceProduceComponent_BaseShutdown(void* self, void* stream) {
     if (!s_fn_Serializer_Ctor || !s_fn_Serializer_Dtor) return;
 
     // Empty version-0 block
-    uint8_t ser0[24];
-    s_fn_Serializer_Ctor(ser0, stream, 0);
-    s_fn_Serializer_Dtor(ser0);
+    alignas(8) uint8_t ser0[24];
+    ::new (static_cast<void*>(ser0)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser0)->~Serializer();                                       // B.3.4 bridge
 
     // Version-0 block with a single bool at +0x48
-    uint8_t ser1[24];
-    s_fn_Serializer_Ctor(ser1, stream, 0);
+    alignas(8) uint8_t ser1[24];
+    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     // bool serialize: reuse the int-serialize dispatch is wrong; use the serializer
     // vtable bool path via the dedicated dispatch slot 0x140152a58.
     {
@@ -327,9 +329,9 @@ void ResourceProduceComponent_BaseShutdown(void* self, void* stream) {
             uintptr_t slot = ResolveAddr(Module::Exe, 0x140152a58);
             if (slot) s_serBool = *reinterpret_cast<fn_SerBool_t*>(slot);
         }
-        if (s_serBool) s_serBool(ser1, (bool*)((uintptr_t)self + 0x48), nullptr);
+        if (s_serBool) reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>((uintptr_t)self + 0x48), nullptr);   // B.3.4 bridge
     }
-    s_fn_Serializer_Dtor(ser1);
+    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

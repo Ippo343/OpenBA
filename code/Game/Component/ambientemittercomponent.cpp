@@ -15,9 +15,11 @@
 #include "math/Math.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -157,9 +159,9 @@ void AmbientEmitterComponent_Shutdown(AmbientEmitterComponent* self, void* strea
     if (s_fn_Component_Serialize)
         s_fn_Component_Serialize(self, stream);
 
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (!s_fn_Serializer_Ctor) return;
-    s_fn_Serializer_Ctor(serializer, stream, 1);
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
 
     uintptr_t selfAddr = (uintptr_t)self;
 
@@ -169,7 +171,7 @@ void AmbientEmitterComponent_Shutdown(AmbientEmitterComponent* self, void* strea
     // Read count from +0x40 into local, serialize it
     uint32_t localCount = *(uint32_t*)(selfAddr + 0x40);
     if (s_fn_Serialize_Int)
-        s_fn_Serialize_Int(serializer, (int*)&localCount, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
 
     // If loading (stream mode == 0), resize emitter array
     uintptr_t serializerObj = *(uintptr_t*)serializer;
@@ -191,16 +193,16 @@ void AmbientEmitterComponent_Shutdown(AmbientEmitterComponent* self, void* strea
             // Serialize InternalBasePtr at pfVar4+1 (offset +4 from pfVar4)
             s_fn_IBP_Serialize((void*)(pfVar4 + 1), serializer);
             // Serialize uint at pfVar4-1 (offset -4 from pfVar4)
-            s_fn_Serialize_Int(serializer, (int*)(pfVar4 - 1), nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(pfVar4 - 1), nullptr);   // B.3.4 bridge
             // Serialize float at pfVar4
-            s_fn_Serialize_Float(serializer, pfVar4, nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*pfVar4, nullptr);   // B.3.4 bridge
             pfVar4 += 4; // advance 16 bytes
         }
     }
 
     // Version-gated: if version==0, resize from building data
     if (s_fn_Serializer_GetVersion) {
-        int version = s_fn_Serializer_GetVersion(serializer);
+        int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
         if (version == 0) {
             void* building = GetBuildingData(self);
             if (building && s_fn_ResizeEmitterArray) {
@@ -211,7 +213,7 @@ void AmbientEmitterComponent_Shutdown(AmbientEmitterComponent* self, void* strea
     }
 
     if (s_fn_Serializer_Dtor)
-        s_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

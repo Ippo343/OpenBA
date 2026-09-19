@@ -18,7 +18,9 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 static const uintptr_t kHappinessDescriptionVtable = 0x140159660;
 
@@ -35,14 +37,16 @@ void HappinessDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor ||
         !g_fn_Serialize_Bool || !g_fn_Serialize_Int) return;
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
-    SerializerEncodingVCall(serializer, 0x98, s + 0x20);     // enum +0x20
-    g_fn_Serialize_Bool(serializer, s + 0x24, nullptr);      // bool +0x24
-    g_fn_Serialize_Bool(serializer, s + 0x25, nullptr);      // bool +0x25
-    SerializerEncodingVCall(serializer, 0x98, s + 0x28);     // enum +0x28
-    g_fn_Serialize_Int(serializer, s + 0x2c, nullptr);       // int  +0x2c
-    g_fn_Serializer_Dtor(serializer);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)
+        ->Serialize(*reinterpret_cast<unsigned int*>(s + 0x20), nullptr);   // enum +0x20   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x24), nullptr);      // bool +0x24   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x25), nullptr);      // bool +0x25   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)
+        ->Serialize(*reinterpret_cast<unsigned int*>(s + 0x28), nullptr);   // enum +0x28   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x2c), nullptr);       // int  +0x2c   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 void* HappinessDescription_Dtor(void* self, uint32_t flags) {

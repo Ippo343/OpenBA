@@ -13,7 +13,9 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 static const uintptr_t kHuntDescriptionVtable = 0x140163820;
 
@@ -29,12 +31,13 @@ void HuntDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor ||
         !g_fn_Serializer_GetVersion || !fn_Serializer_Serialize_Float) return;
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 1);
-    fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x20), nullptr);
-    if (g_fn_Serializer_GetVersion(serializer) > 0)
-        SerializerEncodingVCall(serializer, 0x98, s + 0x24);  // enum +0x24
-    g_fn_Serializer_Dtor(serializer);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x20), nullptr);   // B.3.4 bridge
+    if (reinterpret_cast<IO::Serializer*>(serializer)->GetVersion() > 0)   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)
+            ->Serialize(*reinterpret_cast<unsigned int*>(s + 0x24), nullptr);  // B.3.4 bridge  (enum +0x24)
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 void* HuntDescription_Dtor(void* self, uint32_t flags) {

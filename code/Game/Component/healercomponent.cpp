@@ -14,8 +14,10 @@
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
@@ -87,16 +89,16 @@ void HealerComponent_Shutdown(HealerComponent* self, void* stream) {
     }
 
     // Two empty serializer blocks (component section + controller section)
-    uint8_t serializer1[24];
+    alignas(8) uint8_t serializer1[24];
     if (s_fn_Serializer_Ctor && s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Ctor(serializer1, stream, 0);
-        s_fn_Serializer_Dtor(serializer1);
+        ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
     }
 
-    uint8_t serializer2[24];
+    alignas(8) uint8_t serializer2[24];
     if (s_fn_Serializer_Ctor && s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Ctor(serializer2, stream, 0);
-        s_fn_Serializer_Dtor(serializer2);
+        ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
     }
 }
 

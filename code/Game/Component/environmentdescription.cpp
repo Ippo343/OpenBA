@@ -30,7 +30,9 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 static const uintptr_t kEnvironmentDescriptionVtable = 0x14015e1f0;
 
@@ -67,13 +69,13 @@ void EnvironmentDescription_Serialize(void* self, void* stream) {
         !fn_ExternalPtr_BuildSerialize || !fn_WeatherResize || !fn_WeatherExternalSerialize) {
         return;
     }
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     fn_ExternalPtr_BuildSerialize(s + 0x20, serializer);   // ExternalPtr +0x20
 
     uint32_t count = *(uint32_t*)(s + 0x30);
-    g_fn_Serialize_Int(serializer, &count, nullptr);       // int count +0x30
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&count), nullptr);       // B.3.4 bridge  (int count +0x30)
 
     // On load: resize the dynamic weather-entry array.
     if (*(int*)(*(uintptr_t*)serializer + 8) == 0) {
@@ -90,18 +92,18 @@ void EnvironmentDescription_Serialize(void* self, void* stream) {
     // 12 inline weather entries @ +0x38, each 0x20 bytes: 3 Colors + 5 floats (all 4-byte).
     uintptr_t entry = (uintptr_t)s + 0x38;
     for (int i = 0; i < 12; ++i) {
-        g_fn_Serialize_Int(serializer, (void*)(entry + 0x00), nullptr);
-        g_fn_Serialize_Int(serializer, (void*)(entry + 0x04), nullptr);
-        g_fn_Serialize_Int(serializer, (void*)(entry + 0x08), nullptr);
-        g_fn_Serialize_Int(serializer, (void*)(entry + 0x0c), nullptr);
-        g_fn_Serialize_Int(serializer, (void*)(entry + 0x10), nullptr);
-        g_fn_Serialize_Int(serializer, (void*)(entry + 0x14), nullptr);
-        g_fn_Serialize_Int(serializer, (void*)(entry + 0x18), nullptr);
-        g_fn_Serialize_Int(serializer, (void*)(entry + 0x1c), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(entry + 0x00), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(entry + 0x04), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(entry + 0x08), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(entry + 0x0c), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(entry + 0x10), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(entry + 0x14), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(entry + 0x18), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(entry + 0x1c), nullptr);   // B.3.4 bridge
         entry += 0x20;
     }
 
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 void* EnvironmentDescription_Dtor(void* self, uint32_t flags) {

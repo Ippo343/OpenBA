@@ -15,9 +15,11 @@
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
@@ -137,16 +139,16 @@ void InteractComponent_Shutdown(InteractComponent* self, void* stream) {
     }
 
     // Create local IO::Serializer (24 bytes on stack)
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (s_fn_Serializer_Ctor) {
-        s_fn_Serializer_Ctor(serializer, stream, 0);
+        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
 
     // Serialize count
     int32_t count = *reinterpret_cast<int32_t*>(
         reinterpret_cast<uint8_t*>(self) + 0x30);
     if (s_fn_Serialize_Int) {
-        s_fn_Serialize_Int(serializer, &count, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
     }
 
     // "Am I loading?" is `*(int32*)(*(void**)serializer + 8) == 0` -- deref the
@@ -188,7 +190,7 @@ void InteractComponent_Shutdown(InteractComponent* self, void* stream) {
 
     // Destroy serializer
     if (s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     }
 }
 

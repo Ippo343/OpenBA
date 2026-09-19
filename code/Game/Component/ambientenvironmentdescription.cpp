@@ -37,7 +37,9 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 static const uintptr_t kAmbientEnvironmentDescriptionVtable = 0x140158bf0;
 
@@ -132,11 +134,11 @@ void AmbientEnvironmentDescription_Serialize(void* self, void* stream) {
     }
     AmbientEnvironmentDescription_EnsureHelpers();
 
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     int count = *(int*)(s + 0x28);
-    g_fn_Serialize_Int(serializer, &count, nullptr);     // int count +0x28
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);     // int count +0x28   // B.3.4 bridge
 
     // On load: resize the 0x28-byte-element array at +0x20.
     if (*(int*)(*(uintptr_t*)serializer + 8) == 0) {
@@ -147,18 +149,19 @@ void AmbientEnvironmentDescription_Serialize(void* self, void* stream) {
     if (count > 0 && s_fn_AmbientExternalPtr) {
         uint8_t* elem = *(uint8_t**)(s + 0x20);
         for (int i = 0; i < count; ++i, elem += 0x28) {
-            SerializerEncodingVCall(serializer, 0x98, elem + 0x00);  // enum
+            reinterpret_cast<IO::Serializer*>(serializer)
+                ->Serialize(*reinterpret_cast<unsigned int*>(elem + 0x00), nullptr);   // B.3.4 bridge  (enum)
             fn_ExternalPtr_BuildSerialize(elem + 0x08, serializer);  // ExternalPtr
             s_fn_AmbientExternalPtr(elem + 0x10, serializer);        // ExternalPtr
             s_fn_AmbientExternalPtr(elem + 0x18, serializer);        // ExternalPtr
-            g_fn_Serialize_Int(serializer, elem + 0x20, nullptr);    // int
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(elem + 0x20), nullptr);    // B.3.4 bridge  (int)
         }
     }
 
-    g_fn_Serialize_Int(serializer, s + 0x30, nullptr);   // float +0x30 (4-byte serialize)
-    g_fn_Serialize_Int(serializer, s + 0x34, nullptr);   // float +0x34
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);   // B.3.4 bridge  (float +0x30, 4-byte serialize)
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x34), nullptr);   // B.3.4 bridge  (float +0x34)
 
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 void* AmbientEnvironmentDescription_Dtor(void* self, uint32_t flags) {

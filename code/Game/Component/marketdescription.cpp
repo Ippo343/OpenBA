@@ -15,7 +15,9 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include <new>
 
 static const uintptr_t kMarketDescriptionVtable = 0x140159cf0;
 
@@ -37,13 +39,13 @@ void MarketDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int ||
         !fn_Serializer_Serialize_Float) return;
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
-    fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x20), nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x20), nullptr);   // B.3.4 bridge
 
     // array @ +0x28 (count @ +0x30, element stride 8: {enum @+0, float @+4})
-    g_fn_Serialize_Int(serializer, s + 0x30, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);   // B.3.4 bridge
     int n = *(int32_t*)(s + 0x30);
     if (MD_SerStreamErr(serializer) == 0 && n > 0 && fn_MemAlloc && g_pMemAllocSingleton) {
         void* buf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)n * 8, 8);
@@ -54,11 +56,13 @@ void MarketDescription_Serialize(void* self, void* stream) {
     if (n > 0) {
         uint8_t* e = *(uint8_t**)(s + 0x28);
         for (int i = 0; i < n && e; ++i, e += 8) {
-            SerializerEncodingVCall(serializer, 0x98, e + 0);      // enum @+0
-            fn_Serializer_Serialize_Float(serializer, (float*)(e + 4), nullptr); // float @+4
+            reinterpret_cast<IO::Serializer*>(serializer)
+                ->Serialize(*reinterpret_cast<unsigned int*>(e + 0), nullptr);      // B.3.4 bridge  (enum @+0)
+            reinterpret_cast<IO::Serializer*>(serializer)
+                ->Serialize(*reinterpret_cast<float*>(e + 4), nullptr); // B.3.4 bridge  (float @+4)
         }
     }
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 void* MarketDescription_Dtor(void* self, uint32_t flags) {
