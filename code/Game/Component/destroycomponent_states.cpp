@@ -79,6 +79,7 @@
 
 #include "Component/controller_state_table.h"
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 // ============================================================
 // Resolved helpers (once)
@@ -466,7 +467,7 @@ static void Destroy_ScatterContents_c530(int64_t comp, int baseX, int baseY,
                         ActRm_FindComponent_223c0(static_cast<uintptr_t>(entIBP), &rmIBP);
                         if (rmIBP) {
                             int yaw = (fn_Random_RandTol && random)
-                                          ? fn_Random_RandTol(random, 2) : 0;
+                                          ? reinterpret_cast<System::Random*>(random)->RandTol(2) : 0;   // B.3.4b bridge
                             if (s_pos9760)
                                 s_pos9760(rmIBP, cell, static_cast<float>(yaw) * kYawScale);
                             *reinterpret_cast<int*>(rmIBP + 0x28) = per;

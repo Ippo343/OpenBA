@@ -41,6 +41,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 // EventLog::AddEvent (0x140095580) — ported by the tornado lane (eventlog.cpp).
 extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, void* entityIBP);
@@ -399,8 +400,7 @@ extern "C" void FireComponent_Ignite_610(void* self) {
     const int64_t burnFull = MakeTime(
         *reinterpret_cast<float*>(d + FireDescriptionField::BurnScale) * K300() +
         *reinterpret_cast<float*>(d + FireDescriptionField::BurnBase));
-    const float   burnSecs = fn_Time_AsSeconds ? fn_Time_AsSeconds(
-                                 const_cast<int64_t*>(&burnFull)) : 0.0f;
+    const float   burnSecs = fn_Time_AsSeconds ? reinterpret_cast<const System::Time*>(const_cast<int64_t*>(&burnFull))->AsSeconds() : 0.0f;   // B.3.4b bridge
     const int64_t burnHalf = MakeTime(burnSecs * Half());
 
     if (!FireComponent_BeginBurning_11e7b0(destroyComp, &burnHalf)) {
@@ -556,8 +556,8 @@ extern "C" void FireComponent_Spread_130(void* self) {
             *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(myDesc) +
                                       FireDescriptionField::SpreadInterval) * K300());
 
-        int cx = s_randRange ? s_randRange(rng, xMin, xMax) : xMin;
-        int cy = s_randRange ? s_randRange(rng, oy - pad, yMax) : yMin;
+        int cx = s_randRange ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<int32_t>(xMin), static_cast<int32_t>(xMax)) : xMin;   // B.3.4b bridge
+        int cy = s_randRange ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<int32_t>(oy - pad), static_cast<int32_t>(yMax)) : yMin;   // B.3.4b bridge
 
         // Fine-cell array at grid+0x80, stride 0x30; +0x00 is the occupant.
         int64_t occupant = *reinterpret_cast<int64_t*>(
@@ -595,7 +595,7 @@ extern "C" void FireComponent_Spread_130(void* self) {
                 *reinterpret_cast<int32_t*>(s + 0x28) - *reinterpret_cast<int32_t*>(s + 0x2c))
                 chance *= Half();
 
-            const float roll = fn_Random_RandFloat ? fn_Random_RandFloat(rng) : 1.0f;
+            const float roll = fn_Random_RandFloat ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 1.0f;   // B.3.4b bridge
             const bool caught = roll < chance;
             if (caught) {
                 FireComponent_Ignite_610(reinterpret_cast<void*>(neighbourFire));

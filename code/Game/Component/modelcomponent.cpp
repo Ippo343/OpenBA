@@ -27,6 +27,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <new>
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 // ============================================================
 // Resolved helpers
@@ -234,7 +235,7 @@ extern "C" int ModelComponent_RandomizeVariant(void* modelComp, int forceIdx) {
     } else {
         void* randomPtr = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xd8);
         if (!randomPtr) return -1;
-        variantIdx = (int16_t)s_fn_Random_Rand(randomPtr, count);
+        variantIdx = (int16_t)reinterpret_cast<System::Random*>(randomPtr)->Rand(static_cast<uint32_t>(count));   // B.3.4b bridge
     }
     *(int16_t*)(s + 0x164) = variantIdx;
 
@@ -338,7 +339,7 @@ void ModelComponent_Serialize(ModelComponent* self) {
         if (g_pGameWorldSingleton && *g_pGameWorldSingleton && s_fn_Random_Rand) {
             void* randomPtr = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xd8);
             uint32_t range = *(uint32_t*)(d + 0x28);
-            uint32_t randVal = s_fn_Random_Rand(randomPtr, range);
+            uint32_t randVal = reinterpret_cast<System::Random*>(randomPtr)->Rand(static_cast<uint32_t>(range));   // B.3.4b bridge
             *(int16_t*)(s + 0x164) = (int16_t)randVal;
         }
     }

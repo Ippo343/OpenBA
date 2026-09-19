@@ -45,6 +45,7 @@
 #include <cstdint>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 namespace {
 
@@ -105,7 +106,7 @@ extern "C" void GrowthComponent_Serialize2(void* self, void* stream) {
     SerializeValidatedIBP(At(self, 0x30), ser, s_tidModel);
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x48)), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x4c)), nullptr);   // B.3.4 bridge
-    if (s_TimeSer) s_TimeSer(At(self, 0x40), ser);
+    if (s_TimeSer) reinterpret_cast<System::Time*>(At(self, 0x40))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
 
     // Everything above is retail 0x1401207c0 field-for-field. What follows is a
     // deliberate, load-only repair -- see below for why it cannot be avoided.

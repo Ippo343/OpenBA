@@ -32,6 +32,7 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 static const uintptr_t kMapDescriptionVtable = 0x140163b20;
 
@@ -64,7 +65,7 @@ void MapDescription_Serialize(void* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x30), nullptr);   // B.3.4 bridge: bool +0x30
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x31), nullptr);   // B.3.4 bridge: bool +0x31
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x32), nullptr);   // B.3.4 bridge: bool +0x32
-    fn_System_Color_Serialize(s + 0x34, serializer);         // Color   +0x34
+    reinterpret_cast<System::Color*>(s + 0x34)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));         // Color   +0x34   // B.3.4b bridge
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
 }
 

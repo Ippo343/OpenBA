@@ -79,6 +79,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "scene_watch.h"
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 namespace {
 
@@ -381,7 +382,7 @@ static void SelectAndTransfer(int64_t found, int64_t pathResult, int capLeft) {
         if (matchCount == 0) return;
         if (chosenIdx < 0) {
             void* rng = *reinterpret_cast<void**>(GW() + 0xd8);
-            chosenIdx = (rng && fn_Random_Rand) ? (int)fn_Random_Rand(rng, (uint32_t)matchCount) : 0;
+            chosenIdx = (rng && fn_Random_Rand) ? (int)reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)matchCount) : 0;   // B.3.4b bridge
         }
 
         // pass 2: find the chosenIdx-th match

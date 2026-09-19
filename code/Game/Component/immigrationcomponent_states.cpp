@@ -67,6 +67,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, void* entityIBP);
 
@@ -155,7 +156,7 @@ uint8_t* ImmDesc(uintptr_t comp) {
 int MonthOfYear(uint8_t* gw) {
     void* clock = *reinterpret_cast<void**>(gw + 0x128);
     if (!clock || !fn_Time_AsSeconds) return 0;
-    float secs = fn_Time_AsSeconds(reinterpret_cast<uint8_t*>(clock) + 8);
+    float secs = reinterpret_cast<const System::Time*>(reinterpret_cast<uint8_t*>(clock) + 8)->AsSeconds();   // B.3.4b bridge
     int m = static_cast<int>((secs / kSecondsPerYear) * kMonthsPerYear);
     if (m > 11) m = 0;
     return m;
@@ -245,8 +246,8 @@ extern "C" int Immigration_FindSpawnCell(void* compV, int x, int y, int hallCell
     const int W = *grid;
     const int reach = *reinterpret_cast<int*>(desc + 0x5c);
     for (int t = 0; t < 50; ++t) {
-        int cx = x + fn_Random_RandTol(rng, reach);
-        int cy = y + fn_Random_RandTol(rng, reach);
+        int cx = x + reinterpret_cast<System::Random*>(rng)->RandTol(static_cast<int32_t>(reach));   // B.3.4b bridge
+        int cy = y + reinterpret_cast<System::Random*>(rng)->RandTol(static_cast<int32_t>(reach));   // B.3.4b bridge
         if (cx < 0) cx = 0; else if (cx >= W) cx = W - 1;
         if (cy < 0) cy = 0; else if (cy >= W) cy = W - 1;
         int c = W * cy + cx;
@@ -290,7 +291,7 @@ extern "C" void Nomad_Init(void* nomadV, void* ownerIBP, const float* spawnPos, 
     float* mp = reinterpret_cast<float*>(nomad + 0x3c);
     mp[0] = meetPos[0]; mp[1] = meetPos[1]; mp[2] = meetPos[2];
     void* rng = Rng(gw);
-    *reinterpret_cast<uint32_t*>(nomad + 0x50) = fn_Random_Rand ? fn_Random_Rand(rng, 2) : 0;
+    *reinterpret_cast<uint32_t*>(nomad + 0x50) = fn_Random_Rand ? reinterpret_cast<System::Random*>(rng)->Rand(2u) : 0;   // B.3.4b bridge
 
     void* entity = *reinterpret_cast<void**>(nomad + 0x10);
     uint64_t modelIBP = 0;
@@ -330,12 +331,12 @@ extern "C" void Immigration_Spawn(void* compV) {
 
     int x = 0, y = 0, hallCell = 0, cell = -1;
     for (int t = 0; t < 10; ++t) {
-        uint32_t r = fn_Random_Rand(rng, 4);
+        uint32_t r = reinterpret_cast<System::Random*>(rng)->Rand(4u);   // B.3.4b bridge
         if (static_cast<int>(r) < 2) {
             x = (r == 0) ? edge : (W - edge) - 1;
-            y = static_cast<int>(fn_Random_Rand(rng, W));
+            y = static_cast<int>(reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(W)));   // B.3.4b bridge
         } else {
-            x = static_cast<int>(fn_Random_Rand(rng, W));
+            x = static_cast<int>(reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(W)));   // B.3.4b bridge
             y = (r == 2) ? edge : (W - edge) - 1;
         }
         float hp[3] = {0, 0, 0};
@@ -357,7 +358,7 @@ extern "C" void Immigration_Spawn(void* compV) {
     uint8_t* tm = TownMgr(gw);
     const int pop = *reinterpret_cast<int*>(tm + 0xa8);
     const float fLo = *reinterpret_cast<float*>(desc + 0x40);
-    const float fRand = fn_Random_RandFloat ? fn_Random_RandFloat(rng) : 0.5f;
+    const float fRand = fn_Random_RandFloat ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 0.5f;   // B.3.4b bridge
     const float fHi = *reinterpret_cast<float*>(desc + 0x44);
 
     // Empty household slots across every registered house (townMgr+0x20/+0x28).
@@ -378,7 +379,7 @@ extern "C" void Immigration_Spawn(void* compV) {
         }
     }
     // Retail calls Rand(emptySlots*2) unguarded; skipped only when the range is 0.
-    int extra = (emptySlots > 0) ? static_cast<int>(fn_Random_Rand(rng, static_cast<uint32_t>(emptySlots * 2))) : 0;
+    int extra = (emptySlots > 0) ? static_cast<int>(reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(emptySlots * 2))) : 0;   // B.3.4b bridge
     int n = extra + static_cast<int>(static_cast<float>(pop) * (fRand * (fHi - fLo) + fLo));
     if (n < 2) n = 2;
 
@@ -397,7 +398,7 @@ extern "C" void Immigration_Spawn(void* compV) {
             int64_t* child = reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(pc + 0x28) + static_cast<uintptr_t>(ci) * 8);
             if (s_ChildSum) nPts += static_cast<uint32_t>(s_ChildSum(*child, 2));
         }
-        uint32_t ptIdx = fn_Random_Rand(rng, nPts);
+        uint32_t ptIdx = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(nPts));   // B.3.4b bridge
         float meet[3] = {0, 0, 0};
         s_ResolvePos(reinterpret_cast<void*>(posIBP), meet, 2, static_cast<int>(ptIdx), nullptr);
 
@@ -487,9 +488,9 @@ extern "C" void* Nomad_ConvertToCitizen(void* nomadV, uint64_t* outIBP, uint64_t
     float age;
     float aLo = cdesc ? *reinterpret_cast<float*>(cdesc + 0x50) : 0.0f;
     float aHi = cdesc ? *reinterpret_cast<float*>(cdesc + 0x54) : 0.0f;
-    if (isChild == 0) age = fn_Random_RandFloat(rng) * (aHi - aLo) + aLo;
-    else              age = fn_Random_RandFloat(rng) * aLo;
-    uint32_t r = fn_Random_Rand(rng, 1);
+    if (isChild == 0) age = reinterpret_cast<System::Random*>(rng)->RandFloat() * (aHi - aLo) + aLo;   // B.3.4b bridge
+    else              age = reinterpret_cast<System::Random*>(rng)->RandFloat() * aLo;   // B.3.4b bridge
+    uint32_t r = reinterpret_cast<System::Random*>(rng)->Rand(1u);   // B.3.4b bridge
     char flag = (r == 0 || isChild != 0) ? 0 : 1;
     int64_t key = *reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(gw + 0xb0) + 0x30);
     int64_t parent = static_cast<int64_t>(*parentIBP);
@@ -593,7 +594,7 @@ extern "C" char Imm_StateF_Enter(void* data, void* /*sm*/) {
     uint8_t* gw = GW();
     uint8_t* desc = ImmDesc(comp);
     if (!gw || !desc) return 0;
-    float r = fn_Random_RandFloat ? fn_Random_RandFloat(Rng(gw)) : 0.5f;
+    float r = fn_Random_RandFloat ? reinterpret_cast<System::Random*>(Rng(gw))->RandFloat() : 0.5f;   // B.3.4b bridge
     float months = r * *reinterpret_cast<float*>(desc + 0x4c) + *reinterpret_cast<float*>(desc + 0x48);
     float secs = months * kSecondsPerMonth;
     int64_t t = 0;

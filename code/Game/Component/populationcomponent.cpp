@@ -21,6 +21,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 // ============================================================
 // Resolved helpers
@@ -483,7 +484,7 @@ void PopulationComponent_Startup(PopulationComponent* selfC) {
         if (herdDesc) {
             int maxSize = *reinterpret_cast<int*>((uintptr_t)herdDesc + 0x28);
             int minSize = *reinterpret_cast<int*>((uintptr_t)herdDesc + 0x2c);
-            size = (s_fn_Rand ? s_fn_Rand(rng, maxSize - minSize) : 0) + minSize;
+            size = (s_fn_Rand ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(maxSize - minSize)) : 0) + minSize;   // B.3.4b bridge
         }
         HerdComponent_Populate(reinterpret_cast<int64_t>(herd), size);
 

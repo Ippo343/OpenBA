@@ -42,6 +42,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 namespace {
 
@@ -241,7 +242,7 @@ extern "C" char Nomad_State1_Tick(void* data, void* /*sm*/, void* time) {
         }
     }
     if (nc != 0 && fn_Random_Rand && fn_MapGetTerrainPos) {
-        uint32_t pick = fn_Random_Rand(rng, static_cast<uint32_t>(nc));
+        uint32_t pick = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(nc));   // B.3.4b bridge
         float jx = fn_Random_RandFloatTol(rng) * kWanderJitter;   // fVar18
         float jy = fn_Random_RandFloatTol(rng) * kWanderJitter;   // fVar19
         int c = cand[pick];

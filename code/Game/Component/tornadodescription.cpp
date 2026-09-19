@@ -22,6 +22,7 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 static const uintptr_t kTornadoDescriptionVtable = 0x14015ab00;
 
@@ -44,7 +45,7 @@ void TornadoDescription_Serialize(void* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x20), nullptr);  // float +0x20   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);                       // int   +0x24   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);                       // int   +0x30   // B.3.4 bridge
-    g_fn_Time_Serialize(s + 0x28, serializer);                               // Time  +0x28
+    reinterpret_cast<System::Time*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));                               // Time  +0x28   // B.3.4b bridge
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x34), nullptr);                       // int   +0x34   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }

@@ -61,6 +61,7 @@
 #include <cstdint>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 namespace {
 
@@ -178,7 +179,7 @@ extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl,
 
     // ONE Rand(2) before the loop, flipped every iteration, so a purchase of 8 comes
     // out 4/4 rather than 8 independent coin flips.
-    bool female = (fn_Random_Rand ? fn_Random_Rand(rng, 2) : 0u) == 0u;
+    bool female = (fn_Random_Rand ? reinterpret_cast<System::Random*>(rng)->Rand(2u) : 0u) == 0u;   // B.3.4b bridge
 
     if (static_cast<int>(qty) <= 0) return;
 
@@ -233,8 +234,8 @@ extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl,
         // CROSSED, per the disassembly: r1 scales Y, r2 scales X. Both are drawn even
         // when there is no AnimalComponent to place — the shared world RNG must advance
         // exactly as often as retail advances it.
-        const float r1 = fn_Random_RandFloat ? fn_Random_RandFloat(rng) : 0.0f;
-        const float r2 = fn_Random_RandFloat ? fn_Random_RandFloat(rng) : 0.0f;
+        const float r1 = fn_Random_RandFloat ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 0.0f;   // B.3.4b bridge
+        const float r2 = fn_Random_RandFloat ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 0.0f;   // B.3.4b bridge
         const float pos[3] = {
             a[0] + (b[0] - a[0]) * r2,
             a[1] + (b[1] - a[1]) * r1,
@@ -269,7 +270,7 @@ extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl,
 
             const float span = *reinterpret_cast<float*>(an + 0x48);
             *reinterpret_cast<float*>(an + 0x44) =
-                (fn_Random_RandFloat ? fn_Random_RandFloat(rng) : 0.0f) * span * phaseScale;
+                (fn_Random_RandFloat ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 0.0f) * span * phaseScale;   // B.3.4b bridge
             if (s_AnimalBehav) s_AnimalBehav(reinterpret_cast<void*>(an));
         }
 

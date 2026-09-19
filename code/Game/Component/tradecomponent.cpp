@@ -20,6 +20,7 @@
 #include <cstdio>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 // ============================================================
 // Resolved helpers
@@ -314,7 +315,7 @@ void TradeComponent_Setup(void* selfP) {
     int nameCount = *(int*)(self + 0x38);
     void* random = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xd8);
     for (int i = 0; i < nameCount; i++) {
-        uint32_t r = s_tc_Rand ? s_tc_Rand(random, 2) : 0;
+        uint32_t r = s_tc_Rand ? reinterpret_cast<System::Random*>(random)->Rand(2u) : 0;   // B.3.4b bridge
         uint8_t strBuf[8] = {0};
         if (s_tc_GenName) s_tc_GenName(strBuf, random, (char)(r == 0));
         void* dst = (void*)((int64_t)i * 0x20 + *(int64_t*)(self + 0x30));

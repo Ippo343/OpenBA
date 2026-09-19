@@ -82,6 +82,7 @@
 #include <cstdio>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 extern void Component_SerializeReimpl(void* self, void* stream);
 extern "C" void Reimpl_ExternalPtrArray_Serialize(void* serializer, int count,
@@ -179,8 +180,8 @@ extern "C" void CitizenComponent_Serialize(void* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x50)), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(At(self, 0x54)), nullptr);   // B.3.4 bridge
     if (g_fn_Time_Serialize) {
-        g_fn_Time_Serialize(At(self, 0x58), ser);
-        g_fn_Time_Serialize(At(self, 0x60), ser);
+        reinterpret_cast<System::Time*>(At(self, 0x58))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+        reinterpret_cast<System::Time*>(At(self, 0x60))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
     }
 
     {
@@ -191,12 +192,12 @@ extern "C" void CitizenComponent_Serialize(void* self, void* stream) {
     }
 
     if (g_fn_Time_Serialize) {
-        g_fn_Time_Serialize(At(self, 0x70), ser);
-        g_fn_Time_Serialize(At(self, 0x78), ser);
+        reinterpret_cast<System::Time*>(At(self, 0x70))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+        reinterpret_cast<System::Time*>(At(self, 0x78))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
     }
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x80)), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(At(self, 0x88)), nullptr);   // B.3.4 bridge
-    if (g_fn_Time_Serialize) g_fn_Time_Serialize(At(self, 0x90), ser);
+    if (g_fn_Time_Serialize) reinterpret_cast<System::Time*>(At(self, 0x90))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
 
     int arrCount = *reinterpret_cast<int*>(At(self, 0xa0));
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(arrCount, nullptr);   // B.3.4 bridge
@@ -219,7 +220,7 @@ extern "C" void CitizenComponent_Serialize(void* self, void* stream) {
         if (v > 0) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0xa8)), nullptr);   // B.3.4 bridge
     }
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x1e4)), nullptr);   // B.3.4 bridge
-    if (g_fn_Time_Serialize) g_fn_Time_Serialize(At(self, 0x1e8), ser);
+    if (g_fn_Time_Serialize) reinterpret_cast<System::Time*>(At(self, 0x1e8))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
     {
         int v = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
         if (v > 1) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x1e0)), nullptr);   // B.3.4 bridge
@@ -256,7 +257,7 @@ extern "C" void CitizenComponent_Serialize(void* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x210)), nullptr);   // B.3.4 bridge
     {
         int v = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
-        if (v > 2 && g_fn_Time_Serialize) g_fn_Time_Serialize(At(self, 0x218), ser);
+        if (v > 2 && g_fn_Time_Serialize) reinterpret_cast<System::Time*>(At(self, 0x218))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
     }
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x220)), nullptr);   // B.3.4 bridge
     SerializeValidatedIBP(At(self, 0x228), ser, 0x1401c3f40);

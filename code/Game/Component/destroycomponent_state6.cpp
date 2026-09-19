@@ -70,6 +70,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 // ============================================================
 // Tracing
@@ -572,7 +573,7 @@ extern "C" char Destroy_State6Update_d400(void* data, void* /*sm*/) {
     if (s_rand && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
         void* rng = *reinterpret_cast<void**>(
             reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8);
-        if (rng && s_rand(rng, 2) == 0) Destroy_RubbleStep_d5d0(data);
+        if (rng && reinterpret_cast<System::Random*>(rng)->Rand(2u) == 0) Destroy_RubbleStep_d5d0(data);   // B.3.4b bridge
     }
     return 1;
 }

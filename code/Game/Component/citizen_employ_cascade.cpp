@@ -32,6 +32,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 // ---- deps ported elsewhere (link to them) ----
 struct CitizenComponent;   // opaque — only for matching the AssignHousing mangled name
@@ -128,7 +129,7 @@ void Shuffle896a0(int64_t townMgr) {
     void* rng = *reinterpret_cast<void**>(GW() + 0xd8);
     if ((int)n <= 1) return;
     for (int64_t i = 0; (int64_t)i < (int)n; ++i) {
-        uint32_t j = fn_Random_Rand ? fn_Random_Rand(rng, n) : 0;
+        uint32_t j = fn_Random_Rand ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(n)) : 0;   // B.3.4b bridge
         if ((uint32_t)i != j) {
             int64_t base = *reinterpret_cast<int64_t*>(townMgr + 0x20);
             int64_t tmp = *reinterpret_cast<int64_t*>(base + i * 8);

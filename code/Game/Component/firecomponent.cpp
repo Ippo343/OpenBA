@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <new>
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 // Leaf bodies (firecomponent_ignite.cpp).
 extern "C" void FireComponent_Ignite_610(void* self);
@@ -131,8 +132,8 @@ void FireComponent_Shutdown(FireComponent* self, void* stream) {
     alignas(8) uint8_t ser[24];
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
     if (g_fn_Time_Serialize) {
-        g_fn_Time_Serialize(reinterpret_cast<void*>(s + 0x30), ser);
-        g_fn_Time_Serialize(reinterpret_cast<void*>(s + 0x38), ser);
+        reinterpret_cast<System::Time*>(reinterpret_cast<void*>(s + 0x30))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+        reinterpret_cast<System::Time*>(reinterpret_cast<void*>(s + 0x38))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
     }
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
     if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 0)   // B.3.4 bridge

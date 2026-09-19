@@ -31,6 +31,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 namespace {
 
@@ -225,7 +226,7 @@ bool CitizenAI_State_Wander(int64_t param_1) {
                 : nullptr;
 
     if (*reinterpret_cast<int64_t*>(target + 0x250) != 0 &&
-        fn_Random_Rand && rng && fn_Random_Rand(rng, 1) == 0) {
+        fn_Random_Rand && rng && reinterpret_cast<System::Random*>(rng)->Rand(1u) == 0) {   // B.3.4b bridge
         target = *reinterpret_cast<int64_t*>(target + 0x250);
     }
 
@@ -274,7 +275,7 @@ bool CitizenAI_State_Wander(int64_t param_1) {
     if (s_fn_terrainPos) s_fn_terrainPos(grid, worldPos, inVec, '\0', nullptr);
 
     int64_t citizenIBP = *self;   // raw CitizenComponent ptr in a stack IBP holder
-    float r = (fn_Random_RandFloat && rng) ? fn_Random_RandFloat(rng) : 0.0f;
+    float r = (fn_Random_RandFloat && rng) ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 0.0f;   // B.3.4b bridge
     float animTime = r * (s_pf_1721a0 ? *s_pf_1721a0 : 7.0f) + (s_pf_172180 ? *s_pf_172180 : 3.0f);
     CitizenAI_PlayAnimationActionCtor5(&citizenIBP, worldPos, animTime);
 

@@ -35,6 +35,7 @@
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 namespace {
 constexpr uintptr_t kVtable = 0x14015a310;
@@ -113,8 +114,8 @@ extern "C" void ParticleDescription_Serialize(void* self, void* stream) {
         reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(e + 0x11), nullptr);   // B.3.4 bridge
         reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(e + 0x12), nullptr);   // B.3.4 bridge
         reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(e + 0x13), nullptr);   // B.3.4 bridge
-        g_fn_Time_Serialize(e + 0x20, ser);                 // t1 (elem+0x20) FIRST
-        g_fn_Time_Serialize(e + 0x18, ser);                 // t0 (elem+0x18) SECOND
+        reinterpret_cast<System::Time*>(e + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));                 // t1 (elem+0x20) FIRST   // B.3.4b bridge
+        reinterpret_cast<System::Time*>(e + 0x18)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));                 // t0 (elem+0x18) SECOND   // B.3.4b bridge
     }
 
     fn_ExternalPtr_Serialize3(s + 0x20, ser);              // materialRef (+0x20)

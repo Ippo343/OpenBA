@@ -24,6 +24,7 @@
 #include <cstring>
 #include "scene_watch.h"
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 // ============================================================
 // Resolved helpers for Update
@@ -325,7 +326,7 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
     int64_t desc = GetDescription(self);
 
     // Convert Time to seconds
-    float dt_sec = s_fn_Time_AsSeconds ? s_fn_Time_AsSeconds(deltaTime) : 0.0f;
+    float dt_sec = s_fn_Time_AsSeconds ? reinterpret_cast<const System::Time*>(deltaTime)->AsSeconds() : 0.0f;   // B.3.4b bridge
     int64_t dt_ticks = *reinterpret_cast<int64_t*>(deltaTime);
 
     // Check if citizen is adult (age >= adult threshold) and not in education
@@ -983,7 +984,7 @@ LAB_140113873:
 
                     void* random = *reinterpret_cast<void**>(
                         reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xD8);
-                    float roll = s_fn_RandFloat ? s_fn_RandFloat(random) : 1.0f;
+                    float roll = s_fn_RandFloat ? reinterpret_cast<System::Random*>(random)->RandFloat() : 1.0f;   // B.3.4b bridge
 
                     float pMaternalDeath = (health / maxHealth) *
                                            (deathChanceAtMaxHealth - deathChanceAtZeroHealth) +
@@ -1001,7 +1002,7 @@ LAB_140113873:
                         desc = GetDescription(self);
                         void* random2 = *reinterpret_cast<void**>(
                             reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xD8);
-                        float roll2 = s_fn_RandFloat ? s_fn_RandFloat(random2) : 0.5f;
+                        float roll2 = s_fn_RandFloat ? reinterpret_cast<System::Random*>(random2)->RandFloat() : 0.5f;   // B.3.4b bridge
                         float timerBase = *reinterpret_cast<float*>(desc + 0x5C);
                         float timerRange = *reinterpret_cast<float*>(desc + 0x60);
                         // The post-birth cooldown is stored NEGATIVE: retail is
@@ -1940,10 +1941,10 @@ void CitizenComp_helper_1b90(int64_t selfV) {
     void* randPtr = *reinterpret_cast<void**>(gw + 0xd8);
     uint32_t gender;
     if (eligible != 0) {
-        float r = fn_Random_RandFloat(randPtr);
+        float r = reinterpret_cast<System::Random*>(randPtr)->RandFloat();   // B.3.4b bridge
         gender = (uint32_t)((float)mature / (float)eligible <= r);
     } else {
-        gender = fn_Random_Rand(randPtr, 2);
+        gender = reinterpret_cast<System::Random*>(randPtr)->Rand(2u);   // B.3.4b bridge
     }
 
     // allocate + copy-construct the child entity
@@ -2471,7 +2472,7 @@ int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* par
     if (eligible == 0) { *param_2 = 0; return param_2; }
 
     if (static_cast<int>(chosen) < 0 && fn_Random_Rand)
-        chosen = fn_Random_Rand(*reinterpret_cast<void**>(gw + 0xd8), eligible);
+        chosen = reinterpret_cast<System::Random*>(*reinterpret_cast<void**>(gw + 0xd8))->Rand(static_cast<uint32_t>(eligible));   // B.3.4b bridge
 
     // Pass 2: walk again, returning the chosen eligible slot's IBP.
     uint32_t cur = 0;

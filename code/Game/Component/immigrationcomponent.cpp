@@ -32,6 +32,7 @@
 #include <cstdio>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 // ============================================================
 // Resolved helpers
@@ -150,7 +151,7 @@ void ImmigrationComponent_Shutdown(ImmigrationComponent* self, void* stream) {
 
     // Serialize Time at +0x48
     if (s_fn_Time_Serialize) {
-        s_fn_Time_Serialize((void*)&self->field48, serializer2);
+        reinterpret_cast<System::Time*>((void*)&self->field48)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4b bridge
     }
 
     // Destroy serializer

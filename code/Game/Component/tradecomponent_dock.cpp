@@ -65,6 +65,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 // Layer 1 leaf, used by the manifest generator to pick the merchant's price tier.
 extern "C" int TradeComponent_PickMerchantTier(void* self);   // 0x14005b4f0
@@ -362,7 +363,7 @@ extern "C" void TradeComponent_BuildMerchantManifest(void* selfV) {
     // Roll which merchant arrived, and remember it: everything below indexes on it, and
     // so does the panel.
     const int merchantIdx = fn_Random_Rand
-        ? static_cast<int>(fn_Random_Rand(rng, *reinterpret_cast<uint32_t*>(desc + 0x50)))
+        ? static_cast<int>(reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(*reinterpret_cast<uint32_t*>(desc + 0x50))))   // B.3.4b bridge
         : 0;
     *reinterpret_cast<int32_t*>(comp + 0x2c) = merchantIdx;
 
@@ -437,7 +438,7 @@ extern "C" void TradeComponent_BuildMerchantManifest(void* selfV) {
 
     for (int r = 0; r < rolls; ++r) {
         const int pick = fn_Random_Rand
-            ? static_cast<int>(fn_Random_Rand(rng, static_cast<uint32_t>(values.count))) : 0;
+            ? static_cast<int>(reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(values.count))) : 0;   // B.3.4b bridge
         const uintptr_t vd = reinterpret_cast<uintptr_t>(
             reinterpret_cast<void**>(values.base)[pick]);
         if (!vd) {

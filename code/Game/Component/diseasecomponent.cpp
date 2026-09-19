@@ -89,6 +89,7 @@
 #include <cstdlib>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 namespace {
 
@@ -339,7 +340,7 @@ extern "C" void ParticleComponent_StopEmitterFade(void* self) {
 
     for (int i = 0; i < count; ++i) {
         float t = fn_Time_AsSeconds
-            ? fn_Time_AsSeconds(reinterpret_cast<void*>(elems + ((int64_t)i * 5 + 4) * 8))
+            ? reinterpret_cast<const System::Time*>(reinterpret_cast<void*>(elems + ((int64_t)i * 5 + 4) * 8))->AsSeconds()   // B.3.4b bridge
             : 1.0f;
         float rate = OneF() / t;
         uint32_t bits;
@@ -595,7 +596,7 @@ extern "C" void DiseaseComp_KillOnePlant(DiseaseComponent* self) {
     int attempts = 0;
     bool killed = false;
     for (;;) {
-        uint32_t idx = fn_Random_Rand ? fn_Random_Rand(rng, tileCount) : 0;
+        uint32_t idx = fn_Random_Rand ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(tileCount)) : 0;   // B.3.4b bridge
         int64_t entity = *reinterpret_cast<int64_t*>(list.data + (int64_t)idx * 0x10 + 8);
         int64_t natResIBP = 0;
         if (s_findNatRes) s_findNatRes(entity, &natResIBP);
@@ -639,7 +640,7 @@ extern "C" void DiseaseComp_KillOneAnimal(DiseaseComponent* self) {
     bool killed = false;
     do {
         uint32_t herd = *reinterpret_cast<uint32_t*>(pastureIBP + 0x38);
-        uint32_t idx = fn_Random_Rand ? fn_Random_Rand(rng, herd) : 0;
+        uint32_t idx = fn_Random_Rand ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(herd)) : 0;   // B.3.4b bridge
         int64_t member = *reinterpret_cast<int64_t*>(
             *reinterpret_cast<int64_t*>(pastureIBP + 0x30) + (int64_t)idx * 8);
         int64_t entity = *reinterpret_cast<int64_t*>(member + 0x10);
@@ -687,7 +688,7 @@ extern "C" void DiseaseComp_InfectionTick(DiseaseComponent* self, int64_t* delta
 
     void* clock = *reinterpret_cast<void**>((uintptr_t)gw + 0x128);
     float secs = (clock && fn_Time_AsSeconds)
-        ? fn_Time_AsSeconds((char*)clock + 8) : 0.0f;
+        ? reinterpret_cast<const System::Time*>((char*)clock + 8)->AsSeconds() : 0.0f;   // B.3.4b bridge
     int month = (int)((secs / SecsPerYear()) * MonthsPerYear());
     if (month > 0xB) month = 0;
 
@@ -716,7 +717,7 @@ extern "C" void DiseaseComp_InfectionTick(DiseaseComponent* self, int64_t* delta
                                                   (int64_t)self->curedIdentity);
         float years = sameCrop ? desc->yearsIfSame : desc->yearsIfChanged;
         float chance = OneF() / ((MonthsPerYear() / desc->rollMonths) * years);
-        float roll = fn_Random_RandFloat ? fn_Random_RandFloat(rng) : 1.0f;
+        float roll = fn_Random_RandFloat ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 1.0f;   // B.3.4b bridge
         bool passed = (roll < chance);
 
         if (CDTrace() && s_rollBudget < kRollBudget) {
@@ -781,8 +782,8 @@ extern "C" void DiseaseComp_ActiveDisease(DiseaseComponent* self, int64_t* delta
                      * width
                    + (*(const int16_t*)(mc + 0x2c) >> 1) + *(const int16_t*)(mc + 0x28);
 
-        int tx = centre % width + (fn_Random_RandTol ? fn_Random_RandTol(rng, desc->spreadRadius) : 0);
-        int ty = centre / width + (fn_Random_RandTol ? fn_Random_RandTol(rng, desc->spreadRadius) : 0);
+        int tx = centre % width + (fn_Random_RandTol ? reinterpret_cast<System::Random*>(rng)->RandTol(static_cast<int32_t>(desc->spreadRadius)) : 0);   // B.3.4b bridge
+        int ty = centre / width + (fn_Random_RandTol ? reinterpret_cast<System::Random*>(rng)->RandTol(static_cast<int32_t>(desc->spreadRadius)) : 0);   // B.3.4b bridge
         if (tx < 0) tx = 0;
         if (ty < 0) ty = 0;
         if (tx >= width) tx = width - 1;
@@ -916,10 +917,10 @@ extern "C" void DiseaseComponent_Serialize(DiseaseComponent* self, void* stream)
     if (s_extPtrSerialize) s_extPtrSerialize(&self->curedIdentity, ser);
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(self->isPasture, nullptr);   // B.3.4 bridge
     if (s_serTime) {
-        s_serTime(&self->rollAccum,   ser);
-        s_serTime(&self->duration,    ser);
-        s_serTime(&self->killAccum,   ser);
-        s_serTime(&self->spreadAccum, ser);
+        reinterpret_cast<System::Time*>(&self->rollAccum)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+        reinterpret_cast<System::Time*>(&self->duration)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+        reinterpret_cast<System::Time*>(&self->killAccum)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+        reinterpret_cast<System::Time*>(&self->spreadAccum)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
     }
     // Version-0 saves predate the registry, so re-run OnAdded (vtable +0x30 = slot 6).
     if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() == 0 && static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
