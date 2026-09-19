@@ -40,6 +40,7 @@
 #include "system/String.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
+#include "io/Modification.h"   // ENDGAME B.3.4 caller batch P
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -1019,10 +1020,11 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
     // Printed alongside so a non-zero CheckMod can be READ rather than guessed at.
     if (g_ppModificationSingleton && *g_ppModificationSingleton && fn_Modification_GetCount) {
         void* modSgl = *g_ppModificationSingleton;
-        int installed = fn_Modification_GetCount(modSgl);
+        int installed = reinterpret_cast<const IO::Modification*>(modSgl)->GetCount();   // B.3.4 bridge
         printf("[SaveLoadDialog::DoLoad] installed mod count=%d\n", installed);
         for (int mi = 0; mi < installed && fn_Modification_GetMod; mi++) {
-            void* m = fn_Modification_GetMod(modSgl, mi);
+            void* m = const_cast<RtIO::Mod*>(
+                &reinterpret_cast<const IO::Modification*>(modSgl)->GetModification(mi));   // B.3.4 bridge
             const char* path = m ? *(const char* const*)((uintptr_t)m + 0x58) : nullptr;
             printf("[SaveLoadDialog::DoLoad]   installed[%d] path=\"%s\"\n", mi, path ? path : "(null)");
         }

@@ -10,6 +10,10 @@
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
+#include "system/Filename.h"
+#include "io/Persistence.h"   // ENDGAME B.3.4 caller batch P
+#include "io/FileSystem.h"    // ENDGAME B.3.4 caller batch P
+#include <new>
 #include "Object/factory_registration.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
@@ -429,13 +433,25 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
         // sequence (Filename.h), so this was always safe, just misnamed.
         void* persistence = *g_pPersistenceSingleton;
         System::String savePathBuf;  // kept alive until after the SaveLoad::Update loop
-        fn_Persistence_GetSavePath(persistence, &savePathBuf);
+        // B.3.4 bridge. This IS the door's own body moved to the call site: the
+        // member returns `System::String` BY VALUE through MSVC's hidden return
+        // slot, and `&savePathBuf` is the slot the door was handed, so the
+        // prvalue is constructed straight into it (guaranteed elision) — exactly
+        // one AddRef, as before, and ~String at scope exit is the one release.
+        ::new (&savePathBuf) System::String(
+            reinterpret_cast<const IO::Persistence*>(persistence)->GetSavePath());
         // B.3.1 bridge: raw exe-struct SystemString field, not owned here.
         System::String& persistenceDataDir = *reinterpret_cast<System::String*>(*(uintptr_t*)g_pPersistenceSingleton + 0x90);
         {
             void* fileSystem = *g_pFileSystemSingleton2;
             System::String dataDirBuf;  // destroyed at the end of this block (matches retail's early release)
-            fn_FileSystem_GetDataDirectory(fileSystem, &dataDirBuf);
+            // B.3.4 bridge. The member returns `System::Filename` by value; the
+            // door placement-constructed it into this very slot, and a Filename
+            // and a String are the same 8 bytes with the same release sequence
+            // (Filename.h), which is what the comment above already records. One
+            // AddRef here, one ~String release at the end of the block.
+            ::new (reinterpret_cast<System::Filename*>(&dataDirBuf)) System::Filename(
+                reinterpret_cast<const IO::FileSystem*>(fileSystem)->GetDataDirectory());
             persistenceDataDir = dataDirBuf;
         }
 

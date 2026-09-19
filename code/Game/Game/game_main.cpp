@@ -25,6 +25,8 @@
 #include "system/Filename.h"
 #include "system/String.h"
 #include "resolve.h"
+#include "io/Modification.h"   // ENDGAME B.3.4 caller batch P
+#include "io/Persistence.h"    // ENDGAME B.3.4 caller batch P
 #include "UpdateLoop.h"
 #include "Game/game.h"
 #include "Game/inputbindings.h"
@@ -367,9 +369,12 @@ static void ShutdownEngineStaged(void* engineP) {
 
     // 11. Modification::SaveList
     if (void* mod = load_ptr(0x680)) {
-        if (auto fn = ResolveFn<void(*)(void*)>(
-                "?SaveList@Modification@IO@@QEAAXXZ"))
-            fn(mod);
+        // B.3.4 bridge. The guard keeps its condition EXACTLY — the same
+        // `ResolveFn` call, tested for the same truth — and only the `auto fn =`
+        // binding goes, because nothing calls through it any more and GCC warns
+        // on an unused condition-variable.
+        if (ResolveFn<void(*)(void*)>("?SaveList@Modification@IO@@QEAAXXZ"))
+            reinterpret_cast<IO::Modification*>(mod)->SaveList();
     }
 
     // 12. Persistence::WriteSettings (gated on engine[0x6f1] == 0)
@@ -383,7 +388,7 @@ static void ShutdownEngineStaged(void* engineP) {
             auto fn = ResolveFn<void(*)(void*)>(
                     "?WriteSettings@Persistence@IO@@QEBAXXZ");
             if (fn) {
-                fn(per);
+                reinterpret_cast<const IO::Persistence*>(per)->WriteSettings();   // B.3.4 bridge
                 printf("[Shutdown] Persistence::WriteSettings done\n");
             } else {
                 fprintf(stderr, "[Shutdown] ERROR: Persistence::WriteSettings "
