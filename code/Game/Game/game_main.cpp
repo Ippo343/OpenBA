@@ -370,12 +370,10 @@ static void ShutdownEngineStaged(void* engineP) {
 
     // 11. Modification::SaveList
     if (void* mod = load_ptr(0x680)) {
-        // B.3.4 bridge. The guard keeps its condition EXACTLY — the same
-        // `ResolveFn` call, tested for the same truth — and only the `auto fn =`
-        // binding goes, because nothing calls through it any more and GCC warns
-        // on an unused condition-variable.
-        if (ResolveFn<void(*)(void*)>("?SaveList@Modification@IO@@QEAAXXZ"))
-            reinterpret_cast<IO::Modification*>(mod)->SaveList();
+        // B.3.4 bridge. ENDGAME B.3.4a closing: the `ResolveFn` readiness probe
+        // is gone with the door — `SaveList` is a real IO::Modification member
+        // and the call reads no pointer the probe could have tested.
+        reinterpret_cast<IO::Modification*>(mod)->SaveList();
     }
 
     // 12. Persistence::WriteSettings (gated on engine[0x6f1] == 0)
@@ -386,27 +384,23 @@ static void ShutdownEngineStaged(void* engineP) {
     // look necessary. The failure is logged now rather than swallowed.
     if (void* per = load_ptr(0x678)) {
         if (*reinterpret_cast<uint8_t*>(base + 0x6f1) == 0) {
-            auto fn = ResolveFn<void(*)(void*)>(
-                    "?WriteSettings@Persistence@IO@@QEBAXXZ");
-            if (fn) {
-                reinterpret_cast<const IO::Persistence*>(per)->WriteSettings();   // B.3.4 bridge
-                printf("[Shutdown] Persistence::WriteSettings done\n");
-            } else {
-                fprintf(stderr, "[Shutdown] ERROR: Persistence::WriteSettings "
-                                "did not resolve — settings NOT persisted\n");
-            }
+            // ENDGAME B.3.4a closing: the ResolveFn probe and its "did not
+            // resolve — settings NOT persisted" else arm are gone with the
+            // door. That arm reported a null mangled-name lookup; WriteSettings
+            // is a real const member of IO::Persistence now, so the state it
+            // described cannot occur.
+            reinterpret_cast<const IO::Persistence*>(per)->WriteSettings();   // B.3.4 bridge
+            printf("[Shutdown] Persistence::WriteSettings done\n");
         } else {
             printf("[Shutdown] WriteSettings skipped (engine+0x6f1 set)\n");
         }
     }
 
     // 13. FileSystem::ClosePackages
-    // ENDGAME B.3.4a closing: onto IO::FileSystem::ClosePackages. The
-    // ResolveFn readiness guard is left in place for now, exactly as batch P
-    // left step 12's — guard and door retire together in the next commit.
+    // ENDGAME B.3.4a closing: onto IO::FileSystem::ClosePackages, and the
+    // ResolveFn readiness guard retires here with its door.
     if (void* fs = load_ptr(0x670)) {
-        if (ResolveFn<void(*)(void*)>("?ClosePackages@FileSystem@IO@@QEAAXXZ"))
-            reinterpret_cast<IO::FileSystem*>(fs)->ClosePackages();   // B.3.4 bridge
+        reinterpret_cast<IO::FileSystem*>(fs)->ClosePackages();   // B.3.4 bridge
     }
 
     // (14+ deliberately omitted — see header comment.)
