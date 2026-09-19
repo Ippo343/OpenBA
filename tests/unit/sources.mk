@@ -158,3 +158,29 @@ UNIT_TREE_SRCS +=
 # runtime/types/object/External.h, whose linkable half (external_class.cpp) is
 # already on this list.
 UNIT_TREE_SRCS +=
+
+# ENDGAME B.3.5 step 5 block H2 — the REAL `Graphics::Particle` and
+# `Graphics::ParticleSystem` (tests/unit/graphics_particle_abi_test.cpp). NO TREE
+# SOURCE IS LINKED, for the reason block E's and block H1's graphics tests give:
+# every body of these two classes lives in
+# `runtime/src/graphics/wave27_lane_gfxpart.cpp` and
+# `vtbatch7_animgroup_particlesystem.cpp`, which stand on `RegisterRuntimeExport`,
+# `RT_DATA_SLOT`, `ResolveAddr` and `rtcoll::MemAlloc` and cannot link here.
+#
+# NOR ARE MARKER BODIES NEEDED, which is the one difference from block H1's file.
+# Both classes are ABSTRACT (slot 0 is `= 0` at every level, because its body is a
+# minted RT_DELDTOR row §11 forbids retiring), so nothing in the test instantiates
+# either one and GCC is never asked for their vtables: the real classes are used
+# for `sizeof`/`offsetof`/`is_same` claims only, and the slot ABI is measured on a
+# probe hierarchy declared in the test — exactly as tests/unit/io_vtable_abi_test.cpp
+# does with `TestReaderWriter`. `Object::External`'s size is read through
+# runtime/types/object/External.h, whose linkable half (external_class.cpp) is
+# already on this list.
+#
+# The test's reason to exist is RULE B5-16: `ParticleSystem` is the ONE class in
+# Video and Graphics where `Construct` is not slot 8 — `Particle` introduces
+# `CreateSystem` pure there, so `Construct` lands at 9 behind it. A swap of those
+# two indices compiles, links and runs, and hands `CreateSystem`'s callers an
+# `Object::External*`. PART B reads the GCC table back at byte offsets 0x40 and
+# 0x48 and pins which member each one is.
+UNIT_TREE_SRCS +=
